@@ -116,7 +116,8 @@ CALLER owns and the caller keeps alive past `ctx.synchronize()`.
 """
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
-from std.memory import stack_allocation
+from std.memory import bitcast, stack_allocation
+from std.os import getenv
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -146,6 +147,7 @@ from checks.kernel_matrix import (
     lib_block_size_for,
     lib_hardware_ftz_fma_for,
     gemm_wide_split_for,
+    lib_lane_width_for,
     lib_smem_page_fits_for,
     lib_smem_pages_for,
 )
@@ -2643,9 +2645,759 @@ def identical_gemm_into[allow_vendor: Bool = True](
     comptime if allow_vendor and GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         if _fast_vendor_gemm(ctx, c, a, b, m, n, k, op):
             return
+    # DEVIATION 2542 -- THE GEMM STEP ARM HOOK. Compiled only under
+    # `-D MOJOLEARN_GEMM_ARM_TRIAL=1`. On a shipped build this block is not
+    # compiled and the dispatch below it is the shipped line, unchanged. On a
+    # trial build the arm MOJOLEARN_GEMM_ARM names takes the calls
+    # `choose_gemm_plan` sends to PLAN_TUNED_128_8X8 (every GEMM of the byte
+    # LM step at the target shape, brief section 2) and returns; every other
+    # call, and the `shipped` arm, falls through.
+    comptime if GEMM_ARM_TRIAL:
+        if _gemm_step_arm_hook(ctx, c, a, b, ws, m, n, k, op):
+            return
     identical_gemm_with_plan(
         ctx, c, a, b, ws, m, n, k, op, choose_gemm_plan(m, n, k)
     )
+
+
+# ===========================================================================
+# THE GEMM STEP ARMS (DEVIATIONS 2540 to 2542, 2026-09-11; brief
+# docs/lanes/BRIEF_gemm_step_2026-09-11.md sections 6 and 10)
+# ===========================================================================
+# `-D MOJOLEARN_GEMM_ARM_TRIAL=1` (never on a shipped build) makes
+# `identical_gemm_into` read the arm from the host environment on every call,
+# the MOJOLEARN_ATTN_ARM_TRIAL pattern:
+#
+#   MOJOLEARN_GEMM_ARM=shipped     the shipped plan (also: unset or empty)
+#   MOJOLEARN_GEMM_ARM=lfold       2540: 128x128 reg 8x8 KS 16, cell-serial fold
+#   MOJOLEARN_GEMM_ARM=half        2540: 64x128 reg 4x8, KS 32 where two pages
+#                                  fit the column's shared limit, else 16
+#   MOJOLEARN_GEMM_ARM=half_ks16   2540: 64x128 reg 4x8, KS 16 on every column
+#   MOJOLEARN_GEMM_ARM=quarter     2540: 64x64 reg 4x4, KS TUNED_64_KS
+#   MOJOLEARN_GEMM_ARM=head        2541: the three head calls on a 32x256
+#                                  (n >= m) or 256x32 (m > n) tile whose thread
+#                                  grid reads the lane width; other calls
+#                                  take the shipped plan
+#   MOJOLEARN_GEMM_ARM=half_head   2541: head calls take head, the rest half
+#   anything else                  RAISES; the harnesses rely on it
+#   MOJOLEARN_GEMM_ARM_SABOTAGE=1  the arm's sabotage instantiation: one cell
+#                                  per block moves (reach proof)
+#
+# Every arm applies only where `choose_gemm_plan` returns PLAN_TUNED_128_8X8.
+# Harnesses that alternate arms inside one process call
+# `identical_gemm_step_geometry_into` with a geometry explicitly. The arm
+# kernel and its launcher live in this file, not a module of their own,
+# because the hook above dispatches them and they reuse this file's private
+# helpers: a second module would import this one and be imported by it.
+#
+# The kernel's identity argument is brief section 10.1, written before this
+# code. Nothing here changes a default: only the trial-gated hook above and
+# the trial harnesses reference this section.
+comptime GEMM_ARM_TRIAL = is_defined["MOJOLEARN_GEMM_ARM_TRIAL"]()
+
+comptime GEMM_ARM_SHIPPED = 0
+comptime GEMM_ARM_LFOLD = 1
+comptime GEMM_ARM_HALF = 2
+comptime GEMM_ARM_HALF_KS16 = 3
+comptime GEMM_ARM_QUARTER = 4
+comptime GEMM_ARM_HEAD = 5
+comptime GEMM_ARM_HALF_HEAD = 6
+comptime GEMM_ARM_COUNT = 7
+#: OR'd into an arm by MOJOLEARN_GEMM_ARM_SABOTAGE=1.
+comptime GEMM_ARM_SABOTAGE = 16
+
+#: Geometry ids: what one launch actually runs. An arm maps a call to one.
+comptime GEMM_GEOM_SHIPPED = 0
+comptime GEMM_GEOM_LFOLD = 1
+comptime GEMM_GEOM_HALF = 2
+comptime GEMM_GEOM_HALF_KS16 = 3
+comptime GEMM_GEOM_QUARTER = 4
+comptime GEMM_GEOM_HEAD_N = 5
+comptime GEMM_GEOM_HEAD_M = 6
+comptime GEMM_GEOM_COUNT = 7
+
+#: `head` applies to calls with `max(m, n, k)` at least this: the step's
+#: three head calls (V = 50,257), and no per-layer call (at most 2,048).
+comptime GEMM_HEAD_MIN_DIM = 16384
+
+#: `half`'s K step: RAFT's Kblk where TWO pages of the 64x128 pair at KS 32
+#: (27,648 B a page) fit the column's shared limit (the AMD column), else 16.
+#: A matrix row read, never a vendor name.
+comptime GEMM_HALF_PAGE_BYTES_K32 = (
+    (TUNED_BM_WIDE + 2 * TUNED_BN_WIDE) * (TUNED_KBLK + TUNED_VECLEN) * 4
+)
+comptime GEMM_HALF_KS = (
+    TUNED_KBLK
+    if lib_smem_pages_for[TARGET_COLUMN, GEMM_HALF_PAGE_BYTES_K32]() == 2
+    else 16
+)
+
+#: The head tile's thread grid reads the column's lane width (AMD 64, NVIDIA
+#: and Apple 32) through the matrix; a width that is not a power of two in
+#: 8 .. 256, or a block that is not 256 threads, falls back to 16.
+comptime GEMM_HEAD_LANES = lib_lane_width_for[TARGET_COLUMN]()
+comptime GEMM_HEAD_W = (
+    GEMM_HEAD_LANES
+    if (
+        TUNED_TPB == 256
+        and GEMM_HEAD_LANES >= 8
+        and GEMM_HEAD_LANES <= 256
+        and (GEMM_HEAD_LANES & (GEMM_HEAD_LANES - 1)) == 0
+    )
+    else 16
+)
+comptime GEMM_HEAD_SHORT = 32
+comptime GEMM_HEAD_LONG = 256
+#: N-wide (n >= m): tile 32 x 256, thread columns = the lane width.
+comptime GEMM_HEADN_TC = GEMM_HEAD_W
+comptime GEMM_HEADN_RPT = GEMM_HEAD_SHORT // (TUNED_TPB // GEMM_HEAD_W)
+comptime GEMM_HEADN_CPT = GEMM_HEAD_LONG // GEMM_HEAD_W
+#: M-wide (m > n): tile 256 x 32, thread rows = the lane width. Brief 10.2:
+#: under this ownership rule a lane does NOT own consecutive long-axis rows.
+comptime GEMM_HEADM_TC = TUNED_TPB // GEMM_HEAD_W
+comptime GEMM_HEADM_RPT = GEMM_HEAD_LONG // GEMM_HEAD_W
+comptime GEMM_HEADM_CPT = GEMM_HEAD_SHORT // GEMM_HEADM_TC
+
+
+def gemm_step_arm_parse(name: String) raises -> Int:
+    """An arm name to its id. The empty name is `shipped`; an unknown name
+    RAISES."""
+    if name == "" or name == "shipped":
+        return GEMM_ARM_SHIPPED
+    if name == "lfold":
+        return GEMM_ARM_LFOLD
+    if name == "half":
+        return GEMM_ARM_HALF
+    if name == "half_ks16":
+        return GEMM_ARM_HALF_KS16
+    if name == "quarter":
+        return GEMM_ARM_QUARTER
+    if name == "head":
+        return GEMM_ARM_HEAD
+    if name == "half_head":
+        return GEMM_ARM_HALF_HEAD
+    raise Error(
+        "MOJOLEARN_GEMM_ARM='" + name + "' is not a GEMM step arm (shipped, lfold,"
+        + " half, half_ks16, quarter, head, half_head, or unset)"
+    )
+
+
+def gemm_step_arm_name(arm: Int) -> String:
+    """The name the environment would spell for `arm` (sabotage marked)."""
+    var which = arm & (GEMM_ARM_SABOTAGE - 1)
+    var name = String("arm") + String(which)
+    if which == GEMM_ARM_SHIPPED:
+        name = String("shipped")
+    elif which == GEMM_ARM_LFOLD:
+        name = String("lfold")
+    elif which == GEMM_ARM_HALF:
+        name = String("half")
+    elif which == GEMM_ARM_HALF_KS16:
+        name = String("half_ks16")
+    elif which == GEMM_ARM_QUARTER:
+        name = String("quarter")
+    elif which == GEMM_ARM_HEAD:
+        name = String("head")
+    elif which == GEMM_ARM_HALF_HEAD:
+        name = String("half_head")
+    if (arm & GEMM_ARM_SABOTAGE) != 0:
+        name += "+sabotage"
+    return name
+
+
+def gemm_step_arm_from_env() raises -> Int:
+    """The arm for THIS call, read on the host.
+
+    Trial builds read MOJOLEARN_GEMM_ARM (unknown raises) and
+    MOJOLEARN_GEMM_ARM_SABOTAGE (exactly "1" sets GEMM_ARM_SABOTAGE). Every
+    other build returns GEMM_ARM_SHIPPED without reading the environment."""
+    comptime if not GEMM_ARM_TRIAL:
+        return GEMM_ARM_SHIPPED
+    var arm = gemm_step_arm_parse(String(getenv("MOJOLEARN_GEMM_ARM")))
+    if String(getenv("MOJOLEARN_GEMM_ARM_SABOTAGE")) == "1":
+        arm = arm | GEMM_ARM_SABOTAGE
+    return arm
+
+
+def gemm_step_arm_geometry(arm: Int, m: Int, n: Int, k: Int) raises -> Int:
+    """The geometry `arm` runs at `(m, n, k)`: GEMM_GEOM_SHIPPED unless
+    `choose_gemm_plan` answers PLAN_TUNED_128_8X8. Reads `m`, `n`, `k` and
+    returns a geometry id, never a partition (contract 6.1)."""
+    var which = arm & (GEMM_ARM_SABOTAGE - 1)
+    if arm < 0 or arm >= 2 * GEMM_ARM_SABOTAGE or which >= GEMM_ARM_COUNT:
+        raise Error("gemm_step_arm_geometry: no GEMM step arm " + String(arm))
+    if which == GEMM_ARM_SHIPPED:
+        return GEMM_GEOM_SHIPPED
+    if choose_gemm_plan(m, n, k) != PLAN_TUNED_128_8X8:
+        return GEMM_GEOM_SHIPPED
+    if which == GEMM_ARM_LFOLD:
+        return GEMM_GEOM_LFOLD
+    if which == GEMM_ARM_HALF:
+        return GEMM_GEOM_HALF
+    if which == GEMM_ARM_HALF_KS16:
+        return GEMM_GEOM_HALF_KS16
+    if which == GEMM_ARM_QUARTER:
+        return GEMM_GEOM_QUARTER
+    var longest = m
+    if n > longest:
+        longest = n
+    if k > longest:
+        longest = k
+    if longest >= GEMM_HEAD_MIN_DIM:
+        if n >= m:
+            return GEMM_GEOM_HEAD_N
+        return GEMM_GEOM_HEAD_M
+    if which == GEMM_ARM_HALF_HEAD:
+        return GEMM_GEOM_HALF
+    return GEMM_GEOM_SHIPPED
+
+
+def gemm_step_geometry_tile(geom: Int) raises -> Tuple[Int, Int]:
+    """`(BM, BN)`, the output tile one block owns, from the same constants
+    the launcher binds."""
+    if geom == GEMM_GEOM_SHIPPED or geom == GEMM_GEOM_LFOLD:
+        return (2 * TUNED_BM_WIDE, 2 * TUNED_BN_WIDE)
+    if geom == GEMM_GEOM_HALF or geom == GEMM_GEOM_HALF_KS16:
+        return (TUNED_BM_WIDE, 2 * TUNED_BN_WIDE)
+    if geom == GEMM_GEOM_QUARTER:
+        return (TUNED_BM_WIDE, TUNED_BN_WIDE)
+    if geom == GEMM_GEOM_HEAD_N:
+        return (
+            GEMM_HEADN_RPT * (TUNED_TPB // GEMM_HEADN_TC),
+            GEMM_HEADN_CPT * GEMM_HEADN_TC,
+        )
+    if geom == GEMM_GEOM_HEAD_M:
+        return (
+            GEMM_HEADM_RPT * (TUNED_TPB // GEMM_HEADM_TC),
+            GEMM_HEADM_CPT * GEMM_HEADM_TC,
+        )
+    raise Error("gemm_step_geometry_tile: no geometry " + String(geom))
+
+
+def gemm_step_geometry_blocks(geom: Int, m: Int, n: Int) raises -> Int:
+    """Blocks `_tile_grid` launches for `geom` at `m x n`: the number of
+    cells a sabotage launch of that geometry moves."""
+    if m <= 0 or n <= 0:
+        return 0
+    var t = gemm_step_geometry_tile(geom)
+    return ((m + t[0] - 1) // t[0]) * ((n + t[1] - 1) // t[1])
+
+
+def _step_arm_geometry_name[
+    RPT: Int, CPT: Int, TC: Int, KS: Int, LFOLD: Bool
+](label: String) -> String:
+    """Built from the constants the launcher binds, never a literal."""
+    comptime TR = TUNED_TPB // TC
+    comptime BM = RPT * TR
+    comptime BN = CPT * TC
+    comptime PAGES = lib_smem_pages_for[
+        TARGET_COLUMN, (BM + BN) * (KS + TUNED_VECLEN) * 4
+    ]()
+    var s = label + " " + String(BM) + "x" + String(BN)
+    s += " reg" + String(RPT) + "x" + String(CPT) + " TC=" + String(TC)
+    s += " KS=" + String(KS) + " pages=" + String(PAGES) + " fold="
+    s += String("cell-serial") if LFOLD else String("lane-wide")
+    s += " local tpb=" + String(TUNED_TPB) + " hwftz=" + String(TUNED_HW_FTZ_FMA)
+    return s
+
+
+def gemm_step_geometry_name(geom: Int) -> String:
+    if geom == GEMM_GEOM_SHIPPED:
+        return String("shipped ") + gemm_plan_name(PLAN_TUNED_128_8X8)
+    var s = String("")
+    if geom == GEMM_GEOM_LFOLD:
+        s = _step_arm_geometry_name[TUNED_RPT * 2, TUNED_CPT * 2, TUNED_TC, 16, True]("lfold")
+    elif geom == GEMM_GEOM_HALF:
+        s = _step_arm_geometry_name[TUNED_RPT, TUNED_CPT * 2, TUNED_TC, GEMM_HALF_KS, True]("half")
+    elif geom == GEMM_GEOM_HALF_KS16:
+        s = _step_arm_geometry_name[TUNED_RPT, TUNED_CPT * 2, TUNED_TC, 16, True]("half_ks16")
+    elif geom == GEMM_GEOM_QUARTER:
+        s = _step_arm_geometry_name[TUNED_RPT, TUNED_CPT, TUNED_TC, TUNED_64_KS, True]("quarter")
+    elif geom == GEMM_GEOM_HEAD_N:
+        s = _step_arm_geometry_name[GEMM_HEADN_RPT, GEMM_HEADN_CPT, GEMM_HEADN_TC, 16, True]("head_n")
+    elif geom == GEMM_GEOM_HEAD_M:
+        s = _step_arm_geometry_name[GEMM_HEADM_RPT, GEMM_HEADM_CPT, GEMM_HEADM_TC, 16, True]("head_m")
+    else:
+        return String("GEOMETRY?") + String(geom)
+    comptime if not GEMM_ARM_TRIAL:
+        s += " (NOT RUN: no -D MOJOLEARN_GEMM_ARM_TRIAL=1, the shipped plan ran)"
+    return s
+
+
+@always_inline
+def _gemm_step_arm_sabotage(v: Float32) -> Float32:
+    """Reach (brief 6.3, 10.1 item 6): `+-0.0` becomes `+-2^-100` (a normal
+    no later seam flushes), any other bit pattern becomes the pattern plus
+    one. Always a different bit pattern."""
+    var bits = bitcast[DType.uint32](v)
+    if (bits & UInt32(0x7FFFFFFF)) == UInt32(0):
+        return bitcast[DType.float32](
+            (bits & UInt32(0x80000000)) | UInt32(0x0D800000)
+        )
+    return bitcast[DType.float32](bits + UInt32(1))
+
+
+def identical_gemm_step_arm_kernel[
+    RPT: Int, CPT: Int, TC: Int, KS: Int, PAGES: Int, LFOLD: Bool, SAB: Bool
+](
+    c: MutPointer[Float32, MutAnyOrigin],
+    a: MutPointer[Float32, MutAnyOrigin],
+    b: MutPointer[Float32, MutAnyOrigin],
+    m_in: Int32,
+    n_in: Int32,
+    k_in: Int32,
+    leaf_in: Int32,
+    p_in: Int32,
+    a_si_in: Int32,
+    a_sp_in: Int32,
+    b_sp_in: Int32,
+    b_sj_in: Int32,
+):
+    """DEVIATIONS 2540 and 2541: `identical_gemm_tuned_kernel`, trimmed.
+
+    `SPLIT = False`, `FS = TUNED_FOLD_SLOTS` and no swizzle are fixed; the
+    staging, the prefetch, both accumulate paths and the seams are the
+    shipped kernel's lines. `LFOLD = True` replaces the lane-wide leaf push
+    and drain with the cell-serial runtime walk of brief 6.1; `SAB = True`
+    moves one cell per block (6.3). The identity argument is brief section
+    10.1, item by item.
+
+    Every thread of the block reaches every `barrier()`: the loop bounds are
+    the shipped kernel's (functions of `leaf`, `k`, `p_count` and the
+    comptime `KS`), and the one added return (fold overflow, unreachable
+    under the profile cap) is a function of the leaf count alone, so it is
+    block uniform.
+    """
+    comptime NTH = TUNED_TPB
+    comptime TR = NTH // TC
+    comptime BM = RPT * TR
+    comptime BN = CPT * TC
+    comptime VEC = TUNED_VECLEN
+    comptime KV = KS // VEC
+    comptime SSTRIDE = KS + VEC
+    comptime APAGE = BM * SSTRIDE
+    comptime BPAGE = BN * SSTRIDE
+    comptime NCELL = RPT * CPT
+    comptime NR = RPT
+    comptime NCOL = CPT
+    comptime FS = TUNED_FOLD_SLOTS
+    comptime ASLOTS = (BM * KV + NTH - 1) // NTH
+    comptime BSLOTS = (BN * KV + NTH - 1) // NTH
+
+    comptime assert KS % VEC == 0, (
+        "identical_gemm_step_arm_kernel: KS must be a VEC multiple"
+    )
+    comptime assert NTH % TC == 0, (
+        "identical_gemm_step_arm_kernel: TC must divide the block size"
+    )
+    comptime assert (NCELL & (NCELL - 1)) == 0, (
+        "identical_gemm_step_arm_kernel: RPT * CPT must be a power of two"
+    )
+    comptime assert PAGES == 1 or PAGES == 2, (
+        "identical_gemm_step_arm_kernel: PAGES comes from lib_smem_pages_for"
+    )
+    comptime assert FS > 1, (
+        "identical_gemm_step_arm_kernel: the arms fold through the local stack"
+    )
+
+    var m = Int(m_in)
+    var n = Int(n_in)
+    var k = Int(k_in)
+    var leaf = Int(leaf_in)
+    var p_count = Int(p_in)
+    var a_si = Int(a_si_in)
+    var a_sp = Int(a_sp_in)
+    var b_sp = Int(b_sp_in)
+    var b_sj = Int(b_sj_in)
+    var a_outer_fast = a_sp != 1 and a_si == 1
+    var b_outer_fast = b_sp != 1 and b_sj == 1
+
+    var as_ = stack_allocation[
+        PAGES * APAGE,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var bs_ = stack_allocation[
+        PAGES * BPAGE,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+
+    var tiles_i = (m + BM - 1) // BM
+    var tiles_j = (n + BN - 1) // BN
+    var n_tiles = tiles_i * tiles_j
+    var raw = Int(block_idx.y) * Int(grid_dim.x) + Int(block_idx.x)
+    if raw >= n_tiles:
+        return
+    var ti = raw // tiles_j
+    var tj = raw - ti * tiles_j
+    var i0 = ti * BM
+    var j0 = tj * BN
+
+    var tid = Int(thread_idx.x)
+    var accrow = tid // TC
+    var acccol = tid - accrow * TC
+
+    var acc = SIMD[DType.float32, NCELL](0.0)
+    var fl = stack_allocation[FS * NCELL, Scalar[DType.float32]]()
+    var occ = 0
+
+    if p_count <= 0:
+        # `k == 0`, contract section 8: every cell is `+0.0`, STORED.
+        comptime for u0 in range(NR):
+            comptime for v0 in range(NCOL):
+                var zi = i0 + accrow + u0 * TR
+                var zj = j0 + acccol + v0 * TC
+                if zi < m and zj < n:
+                    var z = Float32(0.0)
+                    comptime if SAB:
+                        comptime if u0 == 0 and v0 == 0:
+                            if tid == 0:
+                                z = _gemm_step_arm_sabotage(z)
+                    c.unsafe_store(zi * n + zj, z)
+        return
+
+    var wpl = _tuned_windows_per_leaf[KS](leaf)
+    var w_end = p_count * wpl
+    var w = 0
+
+    # ---- PROLOGUE: the first window, DRAM to registers (shipped lines).
+    var w0 = _tuned_window[KS](w, wpl, leaf, k, p_count)
+    var pa = _tuned_g2r[ASLOTS, VEC, KV, BM, NTH](
+        a, a_si, a_sp, i0, m, w0[0], w0[1], tid
+    )
+    var pb = _tuned_g2r[BSLOTS, VEC, KV, BN, NTH](
+        b, b_sj, b_sp, j0, n, w0[0], w0[1], tid
+    )
+
+    while w < w_end:
+        var win = _tuned_window[KS](w, wpl, leaf, k, p_count)
+        var chunk = win[1]
+        var pgw = w % PAGES
+
+        # ---- REGISTERS TO SHARED, into page `w % PAGES` (shipped lines).
+        comptime for sa in range(ASLOTS):
+            if a_outer_fast:
+                comptime for ea0 in range(VEC):
+                    var ia0 = tid + (sa * VEC + ea0) * NTH
+                    if ia0 < BM * KS:
+                        as_.unsafe_store(
+                            pgw * APAGE + (ia0 % BM) * SSTRIDE + ia0 // BM,
+                            pa[sa * VEC + ea0],
+                        )
+            else:
+                var ia = tid + sa * NTH
+                if ia < BM * KV:
+                    var rra = ia // KV
+                    var cca = (ia - rra * KV) * VEC
+                    var va = SIMD[DType.float32, VEC](0.0)
+                    comptime for ea in range(VEC):
+                        va[ea] = pa[sa * VEC + ea]
+                    as_.unsafe_store(pgw * APAGE + rra * SSTRIDE + cca, va)
+        comptime for sb in range(BSLOTS):
+            if b_outer_fast:
+                comptime for eb0 in range(VEC):
+                    var ib0 = tid + (sb * VEC + eb0) * NTH
+                    if ib0 < BN * KS:
+                        bs_.unsafe_store(
+                            pgw * BPAGE + (ib0 % BN) * SSTRIDE + ib0 // BN,
+                            pb[sb * VEC + eb0],
+                        )
+            else:
+                var ib = tid + sb * NTH
+                if ib < BN * KV:
+                    var rrb = ib // KV
+                    var ccb = (ib - rrb * KV) * VEC
+                    var vb = SIMD[DType.float32, VEC](0.0)
+                    comptime for eb in range(VEC):
+                        vb[eb] = pb[sb * VEC + eb]
+                    bs_.unsafe_store(pgw * BPAGE + rrb * SSTRIDE + ccb, vb)
+        barrier()
+
+        # ---- PREFETCH window w+1 (shipped lines, DEVIATION 1256).
+        comptime if PAGES == 2:
+            if w + 1 < w_end:
+                var wn = _tuned_window[KS](w + 1, wpl, leaf, k, p_count)
+                pa = _tuned_g2r[ASLOTS, VEC, KV, BM, NTH](
+                    a, a_si, a_sp, i0, m, wn[0], wn[1], tid
+                )
+                pb = _tuned_g2r[BSLOTS, VEC, KV, BN, NTH](
+                    b, b_sj, b_sp, j0, n, wn[0], wn[1], tid
+                )
+
+        # ---- ACCUMULATE (shipped lines: contract 7.1, 4 and 5).
+        var abase = pgw * APAGE + accrow * SSTRIDE
+        var bbase = pgw * BPAGE + acccol * SSTRIDE
+        if chunk == KS:
+            comptime for kc in range(KV):
+                var ra = SIMD[DType.float32, RPT * VEC](0.0)
+                comptime for u in range(NR):
+                    var ta = as_.unsafe_load[width=VEC](
+                        abase + u * TR * SSTRIDE + kc * VEC
+                    )
+                    comptime for e in range(VEC):
+                        ra[u * VEC + e] = ta[e]
+                var rb = SIMD[DType.float32, CPT * VEC](0.0)
+                comptime for v in range(NCOL):
+                    var tb = bs_.unsafe_load[width=VEC](
+                        bbase + v * TC * SSTRIDE + kc * VEC
+                    )
+                    comptime for e2 in range(VEC):
+                        rb[v * VEC + e2] = tb[e2]
+                comptime for e3 in range(VEC):
+                    var bfl = SIMD[DType.float32, CPT](0.0)
+                    comptime for v2 in range(NCOL):
+                        bfl[v2] = _tuned_loaded_operand(rb[v2 * VEC + e3])
+                    comptime for u2 in range(NR):
+                        var afl = _tuned_loaded_operand(ra[u2 * VEC + e3])
+                        comptime for v3 in range(NCOL):
+                            acc[u2 * CPT + v3] = _tuned_step(
+                                afl, bfl[v3], acc[u2 * CPT + v3]
+                            )
+        else:
+            for cc in range(chunk):
+                var bfl2 = SIMD[DType.float32, CPT](0.0)
+                comptime for v4 in range(NCOL):
+                    bfl2[v4] = _tuned_loaded_operand(
+                        bs_.unsafe_load(bbase + v4 * TC * SSTRIDE + cc)
+                    )
+                comptime for u3 in range(NR):
+                    var afl2 = _tuned_loaded_operand(
+                        as_.unsafe_load(abase + u3 * TR * SSTRIDE + cc)
+                    )
+                    comptime for v5 in range(NCOL):
+                        acc[u3 * CPT + v5] = _tuned_step(
+                            afl2, bfl2[v5], acc[u3 * CPT + v5]
+                        )
+
+        comptime if PAGES == 1:
+            barrier()
+            if w + 1 < w_end:
+                var wn1 = _tuned_window[KS](w + 1, wpl, leaf, k, p_count)
+                pa = _tuned_g2r[ASLOTS, VEC, KV, BM, NTH](
+                    a, a_si, a_sp, i0, m, wn1[0], wn1[1], tid
+                )
+                pb = _tuned_g2r[BSLOTS, VEC, KV, BN, NTH](
+                    b, b_sj, b_sp, j0, n, wn1[0], wn1[1], tid
+                )
+
+        # ---- THE LEAF BOUNDARY. Fires exactly once per logical leaf.
+        if win[2] == 1:
+            comptime if LFOLD:
+                # 2540, brief 10.1 item 1: the merge depth once, then each
+                # cell walked in a runtime loop with `_fold_push_local`'s
+                # per-element merge, then `occ + 1`.
+                var depth = 0
+                while depth < FS and ((occ >> depth) & 1) == 1:
+                    depth += 1
+                if depth >= FS:
+                    # Fold overflow (P >= 2^16): unreachable under the
+                    # profile cap, block uniform, returns without writing.
+                    return
+                for e in range(NCELL):
+                    var val = ftz(acc[e])  # 5d, the leaf partial
+                    for d in range(depth):
+                        # 5e and 5f: the occupied slot holds the EARLIER
+                        # leaves, so it is the left operand.
+                        val = ftz(ftz(fl.unsafe_load(d * NCELL + e)) + ftz(val))
+                    fl.unsafe_store(depth * NCELL + e, val)
+                occ = occ + 1
+            else:
+                var part = SIMD[DType.float32, NCELL](0.0)
+                comptime for pe in range(NCELL):
+                    part[pe] = ftz(acc[pe])
+                _ = _fold_push_local[NCELL, FS](fl, occ, part)
+            acc = SIMD[DType.float32, NCELL](0.0)
+
+        w = w + 1
+
+    comptime if LFOLD:
+        # Brief 10.1 item 2: `_fold_drain_local`'s element expression per
+        # in-range cell, then the stored `ftz(root)` (5g).
+        for e in range(NCELL):
+            var ur = e // NCOL
+            var vc = e - ur * NCOL
+            var gi = i0 + accrow + ur * TR
+            var gj = j0 + acccol + vc * TC
+            if gi < m and gj < n:
+                var have = False
+                var root = Float32(0.0)
+                for d in range(FS):
+                    if ((occ >> d) & 1) == 1:
+                        if have:
+                            root = ftz(ftz(fl.unsafe_load(d * NCELL + e)) + ftz(root))
+                        else:
+                            root = fl.unsafe_load(d * NCELL + e)
+                            have = True
+                var out = ftz(root)
+                comptime if SAB:
+                    if tid == 0 and e == 0:
+                        out = _gemm_step_arm_sabotage(out)
+                c.unsafe_store(gi * n + gj, out)
+    else:
+        var outv = _fold_drain_local[NCELL, FS](fl, occ)
+        comptime for u4 in range(NR):
+            comptime for v6 in range(NCOL):
+                var gi2 = i0 + accrow + u4 * TR
+                var gj2 = j0 + acccol + v6 * TC
+                if gi2 < m and gj2 < n:
+                    var out2 = ftz(outv[u4 * CPT + v6])
+                    comptime if SAB:
+                        comptime if u4 == 0 and v6 == 0:
+                            if tid == 0:
+                                out2 = _gemm_step_arm_sabotage(out2)
+                    c.unsafe_store(gi2 * n + gj2, out2)
+
+
+def _launch_step_arm[
+    RPT: Int, CPT: Int, TC: Int, KS: Int, LFOLD: Bool, SAB: Bool
+](
+    ctx: DeviceContext,
+    mut c: DeviceBuffer[DType.float32],
+    mut a: DeviceBuffer[DType.float32],
+    mut b: DeviceBuffer[DType.float32],
+    m: Int,
+    n: Int,
+    k: Int,
+    leaf: Int,
+    p_count: Int,
+    st: Tuple[Int, Int, Int, Int],
+) raises:
+    """`_launch_tuned`'s twin for the arm kernel: PAGES from the matrix, the
+    grid from the IMPORTED `_tile_grid`, one launch."""
+    comptime NTH = TUNED_TPB
+    comptime TR = NTH // TC
+    comptime BM = RPT * TR
+    comptime BN = CPT * TC
+    comptime SSTRIDE = KS + TUNED_VECLEN
+    comptime PAGE_BYTES = (BM + BN) * SSTRIDE * 4
+    comptime PAGES = lib_smem_pages_for[TARGET_COLUMN, PAGE_BYTES]()
+    comptime assert lib_smem_page_fits_for[TARGET_COLUMN, PAGE_BYTES](), (
+        "_launch_step_arm: one shared page of this geometry exceeds the column's"
+        " shared limit"
+    )
+    comptime kern = identical_gemm_step_arm_kernel[RPT, CPT, TC, KS, PAGES, LFOLD, SAB]
+    var g = _tile_grid(m, n, BM, BN, False)
+    ctx.enqueue_function[kern](
+        c.unsafe_ptr(),
+        a.unsafe_ptr(),
+        b.unsafe_ptr(),
+        Int32(m),
+        Int32(n),
+        Int32(k),
+        Int32(leaf),
+        Int32(p_count),
+        Int32(st[0]),
+        Int32(st[1]),
+        Int32(st[2]),
+        Int32(st[3]),
+        grid_dim=(g[0], g[1], 1),
+        block_dim=(NTH, 1, 1),
+    )
+
+
+def _step_geometry_launch[
+    SAB: Bool
+](
+    ctx: DeviceContext,
+    mut c: DeviceBuffer[DType.float32],
+    mut a: DeviceBuffer[DType.float32],
+    mut b: DeviceBuffer[DType.float32],
+    m: Int,
+    n: Int,
+    k: Int,
+    op: Int,
+    geom: Int,
+) raises:
+    """THE NUMERICAL PLAN'S THREE LINES, as `identical_gemm_with_plan` spells
+    them, then a switch that chooses geometry and nothing else."""
+    var part = contract_partition(k)
+    var leaf = part[0]
+    var p_count = part[1]
+    var st = gemm_operand_strides(op, m, n, k)
+    if geom == GEMM_GEOM_LFOLD:
+        _launch_step_arm[TUNED_RPT * 2, TUNED_CPT * 2, TUNED_TC, 16, True, SAB](
+            ctx, c, a, b, m, n, k, leaf, p_count, st
+        )
+    elif geom == GEMM_GEOM_HALF:
+        _launch_step_arm[TUNED_RPT, TUNED_CPT * 2, TUNED_TC, GEMM_HALF_KS, True, SAB](
+            ctx, c, a, b, m, n, k, leaf, p_count, st
+        )
+    elif geom == GEMM_GEOM_HALF_KS16:
+        _launch_step_arm[TUNED_RPT, TUNED_CPT * 2, TUNED_TC, 16, True, SAB](
+            ctx, c, a, b, m, n, k, leaf, p_count, st
+        )
+    elif geom == GEMM_GEOM_QUARTER:
+        _launch_step_arm[TUNED_RPT, TUNED_CPT, TUNED_TC, TUNED_64_KS, True, SAB](
+            ctx, c, a, b, m, n, k, leaf, p_count, st
+        )
+    elif geom == GEMM_GEOM_HEAD_N:
+        _launch_step_arm[GEMM_HEADN_RPT, GEMM_HEADN_CPT, GEMM_HEADN_TC, 16, True, SAB](
+            ctx, c, a, b, m, n, k, leaf, p_count, st
+        )
+    elif geom == GEMM_GEOM_HEAD_M:
+        _launch_step_arm[GEMM_HEADM_RPT, GEMM_HEADM_CPT, GEMM_HEADM_TC, 16, True, SAB](
+            ctx, c, a, b, m, n, k, leaf, p_count, st
+        )
+    else:
+        raise Error("gemm step arm: no geometry " + String(geom))
+
+
+def identical_gemm_step_geometry_into(
+    ctx: DeviceContext,
+    mut c: DeviceBuffer[DType.float32],
+    mut a: DeviceBuffer[DType.float32],
+    mut b: DeviceBuffer[DType.float32],
+    mut ws: DeviceBuffer[DType.float32],
+    m: Int,
+    n: Int,
+    k: Int,
+    op: Int,
+    geom: Int,
+    sabotage: Bool,
+) raises:
+    """`C = op(A) . op(B)` on a NAMED step-arm geometry, forced (the
+    harnesses; `identical_gemm_into`'s hook reaches it through
+    `gemm_step_arm_geometry`). ASYNCHRONOUS like `identical_gemm_into`.
+
+    GEMM_GEOM_SHIPPED runs PLAN_TUNED_128_8X8. On a build without
+    `-D MOJOLEARN_GEMM_ARM_TRIAL=1` EVERY geometry runs PLAN_TUNED_128_8X8
+    and `sabotage` is ignored, so the arms check fails on reach there."""
+    if geom < 0 or geom >= GEMM_GEOM_COUNT:
+        raise Error("identical_gemm_step_geometry_into: no geometry " + String(geom))
+    if m <= 0 or n <= 0:
+        return
+    comptime if GEMM_ARM_TRIAL:
+        if geom != GEMM_GEOM_SHIPPED:
+            if sabotage:
+                _step_geometry_launch[True](ctx, c, a, b, m, n, k, op, geom)
+            else:
+                _step_geometry_launch[False](ctx, c, a, b, m, n, k, op, geom)
+            return
+    identical_gemm_with_plan(ctx, c, a, b, ws, m, n, k, op, PLAN_TUNED_128_8X8)
+
+
+def _gemm_step_arm_hook(
+    ctx: DeviceContext,
+    mut c: DeviceBuffer[DType.float32],
+    mut a: DeviceBuffer[DType.float32],
+    mut b: DeviceBuffer[DType.float32],
+    mut ws: DeviceBuffer[DType.float32],
+    m: Int,
+    n: Int,
+    k: Int,
+    op: Int,
+) raises -> Bool:
+    """DEVIATION 2542. True when an arm served the call. Raises on an
+    unknown MOJOLEARN_GEMM_ARM before anything is enqueued."""
+    var arm = gemm_step_arm_from_env()
+    var geom = gemm_step_arm_geometry(arm, m, n, k)
+    if geom == GEMM_GEOM_SHIPPED:
+        return False
+    identical_gemm_step_geometry_into(
+        ctx, c, a, b, ws, m, n, k, op, geom, (arm & GEMM_ARM_SABOTAGE) != 0
+    )
+    return True
 
 
 def _fast_vendor_gemm(
