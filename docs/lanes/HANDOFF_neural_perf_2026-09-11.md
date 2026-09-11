@@ -43,11 +43,14 @@ Declined on measurement (do not reopen without a new mechanism):
   reason: everyone else tunes to NVIDIA. IDENTICAL keeps the bits equal on
   every vendor, so this costs no correctness. Geometry that differs by
   vendor is a kernel matrix row, never an inline vendor branch.
-- Two ordinary corpora of different kind for every number: English text
-  (training/corpus/tinyshakespeare, committed) and source code
-  (training/corpus/cpython312_lib, fetched by
-  tools/fetch_corpus_cpython312_lib.sh, pinned by sha256). Step timing does
-  not depend on corpus size (each step reads 2,048 bytes).
+- Two benchmark corpora of different kind for every number (replaced
+  2026-09-11 night, ENGINEERING_RULES 9): English text
+  (training/corpus/enwik8, 100 MB, tools/fetch_corpus_enwik8.sh) and
+  source code (training/corpus/pile_github, 97 MB of the Pile's GitHub
+  component, tools/fetch_corpus_pile_github.sh), both pinned by sha256 and
+  fetched on the box. The H100 attention numbers above were measured on the
+  retired pair (tinyshakespeare, cpython312_lib). Step timing does not
+  depend on corpus size (each step reads 2,048 bytes).
 - Flip rule (ENGINEERING_RULES 9): the geometric mean of the two
   after/before step time ratios below 1, bits equal on both, flips the
   default in the same session without asking.
@@ -69,6 +72,23 @@ No AMD timing of this step exists at the target shape.
 
 ## 6. Plan, next steps in order
 
+0. DONE 2026-09-11 night (main 7c0a5af4, resumed session). Andrew's
+   corpus decision ("we should take 2 corpora that generalize and that have
+   benchmarks"): the two neural corpora are now enwik8 and the Pile's
+   GitHub component (ENGINEERING_RULES 9, training/corpus/enwik8 and
+   training/corpus/pile_github, fetch scripts pin both sha256);
+   tinyshakespeare and cpython312_lib are retired as timing corpora.
+   `tools/do_extra_leg.sh` now takes the shared lock itself and passes
+   MOJOLEARN_DO_EXTRA_ENV knobs to the body. `tools/attention_step_leg.sh`
+   is vendor-agnostic (steps 1 and 2 below are done except the paid run).
+   Dry runs green; torch harness Mac smoke green on both new corpora.
+   Lock order agreed with the trees and classical session (mojolearn-83):
+   release-0.8.1 holder, their amd-trees leg, our attention leg, their
+   GBDT A/B, our torch leg; wait 180 s after our own leg before retrying.
+   Lanes launched in worktrees, code only, nothing built: attention
+   DEVIATIONS 2528, 2531, 2533, 2530 (section 11 order) and GEMM
+   DEVIATIONS 2540 to 2544. AMD leg 1 invocation:
+   `MOJOLEARN_DO_TOKEN_FILE=$HOME/.mojolearn_do_token MOJOLEARN_GPU_ARCHS=gfx942 MOJOLEARN_GEMM_LEG_EXTRA=tools/attention_step_leg.sh MOJOLEARN_DO_EXTRA_ENV="MOJOLEARN_ATTN_LEG_ARMS=stash_tiled MOJOLEARN_ATTN_LEG_SKIP_TIMERS=1" MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/<UTC stamp>-amd-mi325x-attention-step bash tools/do_extra_leg.sh amd --minutes 60 --skip-gates`.
 1. The DigitalOcean runner is merged and its dry run is green (section 3);
    its first paid run is also its bring-up. Tuning on AMD is now a repo rule
    for every lane (ENGINEERING_RULES.md section 10), and the account allows
@@ -77,9 +97,7 @@ No AMD timing of this step exists at the target shape.
    (owner file inside with lane name and UTC time) before the create and
    removes it only after the destroy is verified; a lock older than 100
    minutes with zero droplets live may be broken. `tools/do_extra_leg.sh`
-   does NOT take this lock yet (its preflight only refuses while a GPU or
-   mojolearn droplet exists); add the lock to it, or take it by hand around
-   the run, before its first paid run. Rerun the dry run from the
+   takes this lock itself since main 7c0a5af4. Rerun the dry run from the
    clean checkout you launch from:
    `MOJOLEARN_GPU_ARCHS=gfx942 MOJOLEARN_GEMM_LEG_EXTRA=tools/attention_step_leg.sh bash tools/do_extra_leg.sh amd --dry-run`.
    The real command (from `git worktree add --detach`):
