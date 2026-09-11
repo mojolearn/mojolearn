@@ -1,0 +1,223 @@
+{
+ "environment": {
+  "gpu": "NVIDIA H100 80GB HBM3",
+  "driver": "580.126.09",
+  "cuml": "26.08.00",
+  "cupy": "14.2.0",
+  "numpy": "2.4.6",
+  "cuda_runtime": 12090,
+  "cuda_driver": 13000,
+  "python": "3.11.10",
+  "arm": "cuml-brute-force-NearestNeighbors-fast",
+  "note": "cuML's FAST arm: no deterministic configuration exists for brute kNN; distances are cuML's own (TF32-capable GEMM), so only the neighbour lists are compared",
+  "dataset": "higgs",
+  "dataset_source": {
+   "data_root": "/root/datasets/gbm-bench",
+   "gz_path": "/root/datasets/gbm-bench/higgs/HIGGS.csv.gz",
+   "cache_path": "/root/datasets/gbm-bench/higgs/higgs_knn_prefix_404000.npz",
+   "url": "https://archive.ics.uci.edu/ml/machine-learning-databases/00280/HIGGS.csv.gz",
+   "prefix_rows": 404000,
+   "features": 28,
+   "download": null,
+   "cache_hit": true,
+   "parse_seconds": null,
+   "parse": "gzip stream, first 404000 lines, numpy loadtxt float64 cast to float32; no shuffle, no scaling, no deduplication",
+   "gz_bytes": 2816407858,
+   "sha256_block": "17806734cbf7c2b851f6c910cac2372b4646d6f1d8fb67ae4286f10df1820466",
+   "prefetch_seconds": 0.12663811445236206,
+   "index_row_range_rule": "index = prefix rows [0, --index); queries = prefix rows [400000, 400000 + --queries)"
+  }
+ },
+ "results": [
+  {
+   "index": 400000,
+   "queries": 4000,
+   "k": 10,
+   "features": 28,
+   "rounds": 7,
+   "fixture": "higgs-prefix-404000",
+   "dataset": "higgs",
+   "index_rows": [
+    0,
+    400000
+   ],
+   "query_rows": [
+    400000,
+    404000
+   ],
+   "sha256_block": "17806734cbf7c2b851f6c910cac2372b4646d6f1d8fb67ae4286f10df1820466",
+   "sha256_index": "d253493ca49c2fbb470c2aa7c39cffcadb45a45a14bc04ada399c2e1f842f73a",
+   "sha256_queries": "09cf19b551d389918635e9543166f2421b7dac23461bdd147cd99c30346893f7",
+   "note_dataset": "REAL data, the second kind (DEVIATION 2524): HIGGS prefix, 28 raw float32 features, no shuffle, no scaling, no deduplication; the same bytes tools/knn_selection_gate.py's higgs fixture measures",
+   "request_ms": [
+    10.241970419883728,
+    10.163500905036926,
+    10.158956050872803,
+    10.10224036872387,
+    10.154936462640762,
+    10.166333988308907,
+    10.09870134294033
+   ],
+   "request_median_ms": 10.158956050872803,
+   "index_fnv1a64": 9253025405325577361,
+   "row0": [
+    [
+     268225,
+     1.9445534944534302
+    ],
+    [
+     323041,
+     2.07389497756958
+    ],
+    [
+     34300,
+     2.1171929836273193
+    ],
+    [
+     214522,
+     2.167259454727173
+    ],
+    [
+     166633,
+     2.1773812770843506
+    ],
+    [
+     361295,
+     2.216257333755493
+    ],
+    [
+     261588,
+     2.2427659034729004
+    ],
+    [
+     279174,
+     2.249701499938965
+    ],
+    [
+     150257,
+     2.265119791030884
+    ],
+    [
+     189999,
+     2.2758758068084717
+    ]
+   ],
+   "device_ms": [
+    9.588269516825676,
+    9.575694799423218,
+    9.576894342899323,
+    9.559527039527893,
+    9.948210790753365,
+    12.758130207657814,
+    9.974267333745956
+   ],
+   "device_median_ms": 9.588269516825676,
+   "device_vs_request_equal_indices": true
+  },
+  {
+   "index": 400000,
+   "queries": 4000,
+   "k": 15,
+   "features": 28,
+   "rounds": 7,
+   "fixture": "higgs-prefix-404000",
+   "dataset": "higgs",
+   "index_rows": [
+    0,
+    400000
+   ],
+   "query_rows": [
+    400000,
+    404000
+   ],
+   "sha256_block": "17806734cbf7c2b851f6c910cac2372b4646d6f1d8fb67ae4286f10df1820466",
+   "sha256_index": "d253493ca49c2fbb470c2aa7c39cffcadb45a45a14bc04ada399c2e1f842f73a",
+   "sha256_queries": "09cf19b551d389918635e9543166f2421b7dac23461bdd147cd99c30346893f7",
+   "note_dataset": "REAL data, the second kind (DEVIATION 2524): HIGGS prefix, 28 raw float32 features, no shuffle, no scaling, no deduplication; the same bytes tools/knn_selection_gate.py's higgs fixture measures",
+   "request_ms": [
+    10.262897238135338,
+    10.277075693011284,
+    10.269857943058014,
+    10.280512273311615,
+    10.2679543197155,
+    10.31261496245861,
+    10.267343372106552
+   ],
+   "request_median_ms": 10.269857943058014,
+   "index_fnv1a64": 3237068523830132060,
+   "row0": [
+    [
+     268225,
+     1.9445534944534302
+    ],
+    [
+     323041,
+     2.07389497756958
+    ],
+    [
+     34300,
+     2.1171929836273193
+    ],
+    [
+     214522,
+     2.167259454727173
+    ],
+    [
+     166633,
+     2.1773812770843506
+    ],
+    [
+     361295,
+     2.216257333755493
+    ],
+    [
+     261588,
+     2.2427659034729004
+    ],
+    [
+     279174,
+     2.249701499938965
+    ],
+    [
+     150257,
+     2.265119791030884
+    ],
+    [
+     189999,
+     2.2758758068084717
+    ],
+    [
+     361199,
+     2.285369873046875
+    ],
+    [
+     391318,
+     2.3275628089904785
+    ],
+    [
+     234812,
+     2.3335258960723877
+    ],
+    [
+     17497,
+     2.3553035259246826
+    ],
+    [
+     149448,
+     2.3573904037475586
+    ]
+   ],
+   "device_ms": [
+    9.748555719852448,
+    9.716494008898735,
+    9.70003753900528,
+    9.681208059191704,
+    9.718365967273712,
+    9.704168885946274,
+    9.694553911685944
+   ],
+   "device_median_ms": 9.704168885946274,
+   "device_vs_request_equal_indices": true
+  }
+ ]
+}

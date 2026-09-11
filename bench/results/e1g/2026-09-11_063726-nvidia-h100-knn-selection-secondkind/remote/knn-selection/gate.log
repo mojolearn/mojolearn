@@ -1,0 +1,130 @@
+[10:48:41] higgs prefetch: {'seconds_total': 0.16850511357188225, 'cache_hit': True, 'parse_seconds': None, 'download': None, 'gz_path': '/root/datasets/gbm-bench/higgs/HIGGS.csv.gz', 'cache_path': '/root/datasets/gbm-bench/higgs/higgs_knn_prefix_404000.npz', 'sha256_block': '17806734cbf7c2b851f6c910cac2372b4646d6f1d8fb67ae4286f10df1820466', 'note': 'download and decode of the real fixture, before the deadline was armed; never part of a timed request'}
+1506 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x73a880000000, nodemask=1)
+[10:48:41] library: {'mojolearn_version': '0.8.0', 'numeric_mode_used': 'identical', 'vendor_used': 'cuda', 'binding_path': '/root/mojolearn/python/mojolearn/identical/_mojolearn.so', 'binding_sha256': '0b3290b5050d72fa1d9298e43b89f3e549fd6b15d586d9fdcf2407319c7d91a5'}
+[10:48:45] fixtures built in 3.2 s: large 400000x32/4000, dyadic 400000x32/4000, ties 131079x32/700, divergent_tail 397156x32/600, higgs 400000x28/4000
+[10:48:46] large k10 arm uniform: 1057.754 ms (untimed correctness call)
+[10:48:46] phase timers not printed by this build (mode auto)
+[10:48:46] large k10 arm warpbound_guard: 30.189 ms (untimed correctness call)
+[10:48:46] large k10 arm default: 30.027 ms (untimed correctness call)
+[10:48:46] large k10: arms equal=True order=ok planted=ok oracle={'rows': 64, 'hard_mismatch_rows': [], 'ambiguous_rows': 0, 'distance_mismatch_rows': []}
+[10:48:46] large k10 reach uniform: sabotage flipped 38306 cells, restored=True
+[10:48:46] large k10 reach warpbound_guard: sabotage flipped 79362 cells, restored=True
+[10:48:46] large k10 reach default: sabotage flipped 79362 cells, restored=True
+[10:48:46] large k15 arm uniform: 35.925 ms (untimed correctness call)
+[10:48:46] large k15 arm warpbound_guard: 31.014 ms (untimed correctness call)
+[10:48:46] large k15 arm default: 30.896 ms (untimed correctness call)
+[10:48:47] large k15: arms equal=True order=ok planted=ok oracle={'rows': 64, 'hard_mismatch_rows': [], 'ambiguous_rows': 0, 'distance_mismatch_rows': []}
+[10:48:47] large k15 reach uniform: sabotage flipped 70635 cells, restored=True
+[10:48:47] large k15 reach warpbound_guard: sabotage flipped 119362 cells, restored=True
+[10:48:47] large k15 reach default: sabotage flipped 119362 cells, restored=True
+[10:48:47] dyadic k10 arm uniform: 32.766 ms (untimed correctness call)
+[10:48:47] dyadic k10 arm warpbound_guard: 29.942 ms (untimed correctness call)
+[10:48:47] dyadic k10 arm default: 28.891 ms (untimed correctness call)
+[10:48:47] dyadic k10: arms equal=True order=ok planted=ok oracle={'rows': 48, 'hard_mismatch_rows': [], 'ambiguous_rows': 0, 'distance_mismatch_rows': []}
+[10:48:47] dyadic k10 reach uniform: sabotage flipped 38045 cells, restored=True
+[10:48:47] dyadic k10 reach warpbound_guard: sabotage flipped 79444 cells, restored=True
+[10:48:47] dyadic k10 reach default: sabotage flipped 79444 cells, restored=True
+[10:48:47] dyadic k15 arm uniform: 35.817 ms (untimed correctness call)
+[10:48:47] dyadic k15 arm warpbound_guard: 30.781 ms (untimed correctness call)
+[10:48:47] dyadic k15 arm default: 30.785 ms (untimed correctness call)
+[10:48:48] dyadic k15: arms equal=True order=ok planted=ok oracle={'rows': 48, 'hard_mismatch_rows': [], 'ambiguous_rows': 0, 'distance_mismatch_rows': []}
+[10:48:48] dyadic k15 reach uniform: sabotage flipped 70423 cells, restored=True
+[10:48:48] dyadic k15 reach warpbound_guard: sabotage flipped 119444 cells, restored=True
+[10:48:48] dyadic k15 reach default: sabotage flipped 119444 cells, restored=True
+[10:48:48] ties k10 arm uniform: 4.280 ms (untimed correctness call)
+[10:48:48] ties k10 arm warpbound_guard: 3.889 ms (untimed correctness call)
+[10:48:48] ties k10 arm default: 3.295 ms (untimed correctness call)
+[10:48:49] ties k10: arms equal=True order=ok planted=ok oracle={'rows': 700, 'hard_mismatch_rows': [], 'ambiguous_rows': 1, 'distance_mismatch_rows': []}
+[10:48:49] ties k10 reach uniform: sabotage flipped 6509 cells, restored=True
+[10:48:49] ties k10 reach warpbound_guard: sabotage flipped 13892 cells, restored=True
+[10:48:49] ties k10 reach default: sabotage flipped 13892 cells, restored=True
+[10:48:49] ties k15 arm uniform: 3.831 ms (untimed correctness call)
+[10:48:49] ties k15 arm warpbound_guard: 3.498 ms (untimed correctness call)
+[10:48:49] ties k15 arm default: 3.484 ms (untimed correctness call)
+[10:48:50] ties k15: arms equal=True order=ok planted=ok oracle={'rows': 700, 'hard_mismatch_rows': [], 'ambiguous_rows': 1, 'distance_mismatch_rows': []}
+[10:48:50] ties k15 reach uniform: sabotage flipped 12172 cells, restored=True
+[10:48:50] ties k15 reach warpbound_guard: sabotage flipped 20892 cells, restored=True
+[10:48:50] ties k15 reach default: sabotage flipped 20892 cells, restored=True
+[10:48:50] divergent_tail k10 arm uniform: 10.295 ms (untimed correctness call)
+[10:48:50] divergent_tail k10 arm warpbound_guard: 9.815 ms (untimed correctness call)
+[10:48:50] divergent_tail k10 arm default: 8.540 ms (untimed correctness call)
+[10:48:50] divergent_tail k10: arms equal=True order=ok planted=ok oracle={'rows': 47, 'hard_mismatch_rows': [], 'ambiguous_rows': 0, 'distance_mismatch_rows': []}
+[10:48:50] divergent_tail k10 reach uniform: sabotage flipped 5165 cells, restored=True
+[10:48:50] divergent_tail k10 reach warpbound_guard: sabotage flipped 11900 cells, restored=True
+[10:48:50] divergent_tail k10 reach default: sabotage flipped 11900 cells, restored=True
+[10:48:50] divergent_tail k15 arm uniform: 9.051 ms (untimed correctness call)
+[10:48:50] divergent_tail k15 arm warpbound_guard: 8.305 ms (untimed correctness call)
+[10:48:50] divergent_tail k15 arm default: 8.271 ms (untimed correctness call)
+[10:48:50] divergent_tail k15: arms equal=True order=ok planted=ok oracle={'rows': 45, 'hard_mismatch_rows': [], 'ambiguous_rows': 0, 'distance_mismatch_rows': []}
+[10:48:50] divergent_tail k15 reach uniform: sabotage flipped 9681 cells, restored=True
+[10:48:50] divergent_tail k15 reach warpbound_guard: sabotage flipped 17900 cells, restored=True
+[10:48:50] divergent_tail k15 reach default: sabotage flipped 17900 cells, restored=True
+[10:48:50] higgs k10 arm uniform: 32.219 ms (untimed correctness call)
+[10:48:50] higgs k10 arm warpbound_guard: 28.851 ms (untimed correctness call)
+[10:48:50] higgs k10 arm default: 27.875 ms (untimed correctness call)
+[10:48:51] higgs k10: arms equal=True order=ok planted=ok oracle={'rows': 48, 'hard_mismatch_rows': [], 'ambiguous_rows': 0, 'distance_mismatch_rows': []}
+[10:48:51] higgs k10 reach uniform: sabotage flipped 38056 cells, restored=True
+[10:48:51] higgs k10 reach warpbound_guard: sabotage flipped 79442 cells, restored=True
+[10:48:51] higgs k10 reach default: sabotage flipped 79442 cells, restored=True
+[10:48:51] higgs k15 arm uniform: 35.204 ms (untimed correctness call)
+[10:48:51] higgs k15 arm warpbound_guard: 30.262 ms (untimed correctness call)
+[10:48:51] higgs k15 arm default: 30.252 ms (untimed correctness call)
+[10:48:51] higgs k15: arms equal=True order=ok planted=ok oracle={'rows': 48, 'hard_mismatch_rows': [], 'ambiguous_rows': 0, 'distance_mismatch_rows': []}
+[10:48:51] higgs k15 reach uniform: sabotage flipped 70468 cells, restored=True
+[10:48:51] higgs k15 reach warpbound_guard: sabotage flipped 119442 cells, restored=True
+[10:48:51] higgs k15 reach default: sabotage flipped 119442 cells, restored=True
+[10:48:51] large k10 warmup uniform: 33.022 ms
+[10:48:51] large k10 warmup warpbound_guard: 29.819 ms
+[10:48:51] large k10 order0 pair0: uniform 31.724 ms, warpbound_guard 27.853 ms, warpbound_guard/uniform 0.8780
+[10:48:51] large k10 order0 pair1: uniform 30.702 ms, warpbound_guard 28.656 ms, warpbound_guard/uniform 0.9334
+[10:48:52] large k10 order0 pair2: uniform 31.321 ms, warpbound_guard 27.680 ms, warpbound_guard/uniform 0.8837
+[10:48:52] large k10 order1 pair0: uniform 30.578 ms, warpbound_guard 27.649 ms, warpbound_guard/uniform 0.9042
+[10:48:52] large k10 order1 pair1: uniform 30.546 ms, warpbound_guard 27.721 ms, warpbound_guard/uniform 0.9075
+[10:48:52] large k10 order1 pair2: uniform 30.765 ms, warpbound_guard 28.599 ms, warpbound_guard/uniform 0.9296
+[10:48:52] large k10: uniform median 30.733 ms, warpbound_guard median 27.787 ms, paired median warpbound_guard/uniform 0.9059, 6/6 pairs favor warpbound_guard
+[10:48:52] large k15 warmup uniform: 35.928 ms
+[10:48:52] large k15 warmup warpbound_guard: 30.992 ms
+[10:48:52] large k15 order0 pair0: uniform 35.855 ms, warpbound_guard 30.935 ms, warpbound_guard/uniform 0.8628
+[10:48:52] large k15 order0 pair1: uniform 35.874 ms, warpbound_guard 30.876 ms, warpbound_guard/uniform 0.8607
+[10:48:52] large k15 order0 pair2: uniform 35.773 ms, warpbound_guard 30.830 ms, warpbound_guard/uniform 0.8618
+[10:48:52] large k15 order1 pair0: uniform 35.802 ms, warpbound_guard 30.804 ms, warpbound_guard/uniform 0.8604
+[10:48:52] large k15 order1 pair1: uniform 35.794 ms, warpbound_guard 30.814 ms, warpbound_guard/uniform 0.8609
+[10:48:52] large k15 order1 pair2: uniform 35.797 ms, warpbound_guard 30.849 ms, warpbound_guard/uniform 0.8618
+[10:48:52] large k15: uniform median 35.800 ms, warpbound_guard median 30.840 ms, paired median warpbound_guard/uniform 0.8613, 6/6 pairs favor warpbound_guard
+[10:48:52] dyadic k10 warmup uniform: 33.055 ms
+[10:48:52] dyadic k10 warmup warpbound_guard: 29.753 ms
+[10:48:52] dyadic k10 order0 pair0: uniform 31.669 ms, warpbound_guard 27.728 ms, warpbound_guard/uniform 0.8756
+[10:48:52] dyadic k10 order0 pair1: uniform 30.684 ms, warpbound_guard 27.707 ms, warpbound_guard/uniform 0.9030
+[10:48:52] dyadic k10 order0 pair2: uniform 30.606 ms, warpbound_guard 27.588 ms, warpbound_guard/uniform 0.9014
+[10:48:52] dyadic k10 order1 pair0: uniform 30.582 ms, warpbound_guard 27.620 ms, warpbound_guard/uniform 0.9031
+[10:48:53] dyadic k10 order1 pair1: uniform 30.628 ms, warpbound_guard 27.637 ms, warpbound_guard/uniform 0.9024
+[10:48:53] dyadic k10 order1 pair2: uniform 30.615 ms, warpbound_guard 27.629 ms, warpbound_guard/uniform 0.9025
+[10:48:53] dyadic k10: uniform median 30.621 ms, warpbound_guard median 27.633 ms, paired median warpbound_guard/uniform 0.9024, 6/6 pairs favor warpbound_guard
+[10:48:53] dyadic k15 warmup uniform: 35.853 ms
+[10:48:53] dyadic k15 warmup warpbound_guard: 30.955 ms
+[10:48:53] dyadic k15 order0 pair0: uniform 35.928 ms, warpbound_guard 30.927 ms, warpbound_guard/uniform 0.8608
+[10:48:53] dyadic k15 order0 pair1: uniform 35.798 ms, warpbound_guard 30.856 ms, warpbound_guard/uniform 0.8620
+[10:48:53] dyadic k15 order0 pair2: uniform 35.804 ms, warpbound_guard 30.840 ms, warpbound_guard/uniform 0.8614
+[10:48:53] dyadic k15 order1 pair0: uniform 36.015 ms, warpbound_guard 31.107 ms, warpbound_guard/uniform 0.8637
+[10:48:53] dyadic k15 order1 pair1: uniform 36.549 ms, warpbound_guard 32.782 ms, warpbound_guard/uniform 0.8969
+[10:48:53] dyadic k15 order1 pair2: uniform 35.814 ms, warpbound_guard 30.736 ms, warpbound_guard/uniform 0.8582
+[10:48:53] dyadic k15: uniform median 35.871 ms, warpbound_guard median 30.891 ms, paired median warpbound_guard/uniform 0.8617, 6/6 pairs favor warpbound_guard
+[10:48:53] higgs k10 warmup uniform: 31.849 ms
+[10:48:53] higgs k10 warmup warpbound_guard: 29.402 ms
+[10:48:53] higgs k10 order0 pair0: uniform 31.931 ms, warpbound_guard 27.638 ms, warpbound_guard/uniform 0.8656
+[10:48:53] higgs k10 order0 pair1: uniform 29.967 ms, warpbound_guard 26.983 ms, warpbound_guard/uniform 0.9004
+[10:48:53] higgs k10 order0 pair2: uniform 29.930 ms, warpbound_guard 26.935 ms, warpbound_guard/uniform 0.8999
+[10:48:53] higgs k10 order1 pair0: uniform 29.879 ms, warpbound_guard 26.997 ms, warpbound_guard/uniform 0.9035
+[10:48:53] higgs k10 order1 pair1: uniform 29.883 ms, warpbound_guard 26.965 ms, warpbound_guard/uniform 0.9023
+[10:48:53] higgs k10 order1 pair2: uniform 29.890 ms, warpbound_guard 26.926 ms, warpbound_guard/uniform 0.9008
+[10:48:53] higgs k10: uniform median 29.910 ms, warpbound_guard median 26.974 ms, paired median warpbound_guard/uniform 0.9006, 6/6 pairs favor warpbound_guard
+[10:48:54] higgs k15 warmup uniform: 35.233 ms
+[10:48:54] higgs k15 warmup warpbound_guard: 30.378 ms
+[10:48:54] higgs k15 order0 pair0: uniform 35.184 ms, warpbound_guard 30.167 ms, warpbound_guard/uniform 0.8574
+[10:48:54] higgs k15 order0 pair1: uniform 35.175 ms, warpbound_guard 30.181 ms, warpbound_guard/uniform 0.8580
+[10:48:54] higgs k15 order0 pair2: uniform 35.167 ms, warpbound_guard 30.201 ms, warpbound_guard/uniform 0.8588
+[10:48:54] higgs k15 order1 pair0: uniform 35.165 ms, warpbound_guard 30.204 ms, warpbound_guard/uniform 0.8589
+[10:48:54] higgs k15 order1 pair1: uniform 35.184 ms, warpbound_guard 30.143 ms, warpbound_guard/uniform 0.8567
+[10:48:54] higgs k15 order1 pair2: uniform 35.151 ms, warpbound_guard 30.180 ms, warpbound_guard/uniform 0.8586
+[10:48:54] higgs k15: uniform median 35.171 ms, warpbound_guard median 30.181 ms, paired median warpbound_guard/uniform 0.8583, 6/6 pairs favor warpbound_guard
+[10:48:54] PASSED

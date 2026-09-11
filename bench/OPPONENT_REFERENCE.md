@@ -236,8 +236,8 @@ them as a cached-reference ratio, never as a paired opponent measurement.
 
 | index | queries | k | features | cuML brute NearestNeighbors request ms | cuML device ms | GPU, driver, cuML | sha256_block | evidence |
 |---:|---:|---:|---:|---:|---:|---|---|---|
-| 400,000 (HIGGS rows 0..399,999) | 4,000 (rows 400,000..403,999) | 10 | 28 | OWED, measured once on the first leg | OWED | OWED | OWED | OWED |
-| 400,000 (HIGGS rows 0..399,999) | 4,000 (rows 400,000..403,999) | 15 | 28 | OWED, measured once on the first leg | OWED | OWED | OWED | OWED |
+| 400,000 (HIGGS rows 0..399,999) | 4,000 (rows 400,000..403,999) | 10 | 28 | 10.159 | 9.588 | H100 80GB HBM3, 580.126.09, cuML 26.08.00 (cupy 14.2.0, CUDA runtime 12.9) | 17806734cbf7c2b8 | `bench/results/e1g/2026-09-11_063726-nvidia-h100-knn-selection-secondkind/remote/knn-selection/opponent-higgs/cuml-reference-higgs.json` |
+| 400,000 (HIGGS rows 0..399,999) | 4,000 (rows 400,000..403,999) | 15 | 28 | 10.270 | 9.704 | same | same | same |
 
 The invocation that produces the tuple, on the box, after the gate phase
 (`tools/knn_selection_gate.sh` runs it as its optional `opponent` phase
@@ -259,7 +259,10 @@ The JSON (`opponent-higgs/cuml-reference-higgs.json`) names the dataset,
 `environment.dataset_source`; the `sha256_block` must equal
 `fixtures.higgs.sha256_block` in the gate JSON of the same leg. Fill the
 table from `request_median_ms` and `device_median_ms`, with the leg
-directory under `bench/results/e1g/` as evidence.
+directory under `bench/results/e1g/` as evidence. Measured 2026-09-11 (the
+leg above, seven rounds, sha256_block equal to the gate fixture of the same
+leg); our IDENTICAL request on the same bytes, `warpbound_guard` default,
+is 26.974 ms (k10, 2.66x the cached row) and 30.181 ms (k15, 2.94x).
 
 | UMAP (32 features, 15 neighbors, 2 components, 200 epochs) | cuML UMAP ms |
 |---|---:|

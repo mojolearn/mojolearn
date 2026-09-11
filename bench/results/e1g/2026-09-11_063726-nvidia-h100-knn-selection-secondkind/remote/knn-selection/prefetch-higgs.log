@@ -1,0 +1,41 @@
+downloading https://archive.ics.uci.edu/ml/machine-learning-databases/00280/HIGGS.csv.gz -> /root/datasets/gbm-bench/higgs/HIGGS.csv.gz (about 2.6 GB; a separate untimed step)
+downloaded 2816407858 bytes in 297.6 s
+knn_datasets: decoded the 404000-row HIGGS prefix in 4.9 s, cached at /root/datasets/gbm-bench/higgs/higgs_knn_prefix_404000.npz
+{
+ "dataset": "higgs",
+ "fixture": "higgs-prefix-404000",
+ "d": 28,
+ "index_rows": [
+  0,
+  400000
+ ],
+ "query_rows": [
+  400000,
+  404000
+ ],
+ "sha256_block": "17806734cbf7c2b851f6c910cac2372b4646d6f1d8fb67ae4286f10df1820466",
+ "sha256_index": "d253493ca49c2fbb470c2aa7c39cffcadb45a45a14bc04ada399c2e1f842f73a",
+ "sha256_queries": "09cf19b551d389918635e9543166f2421b7dac23461bdd147cd99c30346893f7",
+ "source": {
+  "data_root": "/root/datasets/gbm-bench",
+  "gz_path": "/root/datasets/gbm-bench/higgs/HIGGS.csv.gz",
+  "cache_path": "/root/datasets/gbm-bench/higgs/higgs_knn_prefix_404000.npz",
+  "url": "https://archive.ics.uci.edu/ml/machine-learning-databases/00280/HIGGS.csv.gz",
+  "prefix_rows": 404000,
+  "features": 28,
+  "download": {
+   "url": "https://archive.ics.uci.edu/ml/machine-learning-databases/00280/HIGGS.csv.gz",
+   "path": "/root/datasets/gbm-bench/higgs/HIGGS.csv.gz",
+   "bytes": 2816407858,
+   "seconds": 297.5830479916185
+  },
+  "cache_hit": false,
+  "parse_seconds": 4.900396687909961,
+  "parse": "gzip stream, first 404000 lines, numpy loadtxt float64 cast to float32; no shuffle, no scaling, no deduplication",
+  "gz_bytes": 2816407858,
+  "sha256_block": "17806734cbf7c2b851f6c910cac2372b4646d6f1d8fb67ae4286f10df1820466"
+ },
+ "distinct_index_rows": 399623,
+ "duplicate_index_rows": 377,
+ "prefetch_seconds": 302.8288906235248
+}

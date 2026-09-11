@@ -1,0 +1,17 @@
+deviation=2496
+started=2026-09-11T10:41:48Z
+root=/root/mojolearn
+arms=uniform,warpbound_guard
+timing_only_arms=
+phase_timers=0
+pairs=3
+cached_opponent=k10=10.225,k15=10.817
+cached_opponent_higgs=
+time_fixtures=(harness default)
+fixtures=(harness default)
+opponent=1
+data_root=/root/datasets/gbm-bench
+vendor=nvidia
+commit=ca69f3770b7493019b2b131aaad01fba0223874b
+python=pixi run python3
+finished=2026-09-11T10:50:50Z

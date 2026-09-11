@@ -1,0 +1,2 @@
+CUML_REF index=400000 queries=4000 k=10 request_median_ms=10.159 device_median_ms=9.588 dataset=higgs
+CUML_REF index=400000 queries=4000 k=15 request_median_ms=10.270 device_median_ms=9.704 dataset=higgs

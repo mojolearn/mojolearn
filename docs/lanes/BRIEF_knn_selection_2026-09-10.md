@@ -2828,3 +2828,30 @@ Later legs, once the HIGGS tuple is cached, add
 `export MOJOLEARN_KNN_SELECTION_CACHED_OPPONENT_HIGGS=k10=<ms>,k15=<ms>`
 to the wrapper so the `higgs` timing rows carry the cached-reference ratio
 the way the `dyadic` rows do (never a paired opponent measurement).
+
+### Step 10 result (H100 sm_90a, main ca69f377, 2026-09-11 06:37Z to 07:07Z, `bench/results/e1g/2026-09-11_063726-nvidia-h100-knn-selection-secondkind/remote/knn-selection/`)
+
+Gate PASSED on all five fixtures (arm equality, order, ties, oracle, reach);
+the `higgs` fixture at d 28 counted 377 duplicate index rows in the 400,000
+prefix (kept). Timing, `warpbound_guard` vs `uniform`, three pairs per
+order, every one of the six pairs favoring the guard on every fixture:
+
+| fixture | k | uniform median ms | warpbound_guard median ms | paired ratio |
+|---|---:|---:|---:|---:|
+| dyadic (generator) | 10 | 30.621 | 27.633 | 0.90 |
+| large (generator) | 10 | 30.733 | 27.787 | 0.90 |
+| higgs (REAL) | 10 | 29.910 | 26.974 | 0.90 |
+| dyadic (generator) | 15 | 35.871 | 30.891 | 0.86 |
+| large (generator) | 15 | 35.800 | 30.840 | 0.86 |
+| higgs (REAL) | 15 | 35.171 | 30.181 | 0.86 |
+
+Verdict: the second kind shows the same direction and the same size of win
+as the generators, so DEVIATION 2523's NVIDIA default is no longer
+provisional under ENGINEERING_RULES section 9. The one-time cuML row on the
+same HIGGS bytes (10.159 ms k10, 10.270 ms k15 request) is cached in
+bench/OPPONENT_REFERENCE.md; our request is 2.66x and 2.94x of it, the
+same band as on dyadic (2.69x, 2.95x after batching). Later legs pass
+`MOJOLEARN_KNN_SELECTION_CACHED_OPPONENT_HIGGS=k10=10.159,k15=10.270` and
+leave the opponent phase off. Apple and AMD timing of the guard, and the
+tighter bound, remain OWED; the lane is closed for this session by
+Andrew's order (2026-09-11, "wind down, just do neural").
