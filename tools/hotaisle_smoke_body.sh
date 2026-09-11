@@ -12,7 +12,7 @@ O=/root/gemm_leg_out/smoke.txt
     ls -l /dev/kfd /dev/dri 2>&1 | head -8
     [ -e /dev/kfd ] && echo KFD_PRESENT || echo KFD_ABSENT
     rocm-smi --showproductname 2>&1 | head -20
-    echo "rocminfo_gfx=$(rocminfo 2>/dev/null | grep -Eo 'gfx[0-9a-f]+' | sort -u | tr '\n' ' ')"
+    echo "rocminfo_gfx=$(rocminfo 2>/dev/null | awk '$1 == "Name:" && $2 ~ /^gfx[0-9a-f]+$/ {print $2}' | sort -u | tr '\n' ' ')"
     echo "MOJOLEARN_GPU_ARCHS=${MOJOLEARN_GPU_ARCHS:-<unset>} MOJOLEARN_TARGET_COLUMN=${MOJOLEARN_TARGET_COLUMN:-<unset>}"
     echo "== python"
     echo "python3: $(python3 --version 2>&1)"

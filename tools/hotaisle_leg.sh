@@ -871,14 +871,16 @@ echo "== rocm";      ls -d /opt/rocm* 2>&1 | head -3
 if command -v rocm-smi > /dev/null 2>&1; then echo ROCM_SMI_PRESENT; rocm-smi --showproductname 2>&1 | head -20; else echo ROCM_SMI_ABSENT; fi
 if command -v rocminfo > /dev/null 2>&1; then
     echo ROCMINFO_PRESENT
-    rocminfo 2>/dev/null | grep -Eo 'gfx[0-9a-f]+' | sort -u | sed 's/^/GFX=/'
+    # The agent Name: field only. A bare `grep -Eo 'gfx[0-9a-f]+'` also matched
+    # a stray "gfx9" on the MI300X (2026-09-11) and counted two archs.
+    rocminfo 2>/dev/null | awk '$1 == "Name:" && $2 ~ /^gfx[0-9a-f]+$/ {print "GFX=" $2}' | sort -u
 else
     echo ROCMINFO_ABSENT
 fi
 echo "== runtimes"
 if command -v docker > /dev/null 2>&1 && docker info > /dev/null 2>&1; then echo DOCKER_OK; docker --version; fi
 if command -v podman > /dev/null 2>&1 && podman info > /dev/null 2>&1; then echo PODMAN_OK; podman --version; fi
-command -v setsid timeout curl tar gzip sha256sum 2>&1
+for t in setsid timeout curl tar gzip sha256sum; do echo "TOOL_$t=$(command -v "$t" || echo ABSENT)"; done
 PROBE
 
 cat > "$TMPD/remote_unpack.sh.template" <<'REMOTE_UNPACK'
