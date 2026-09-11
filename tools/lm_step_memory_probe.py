@@ -24,6 +24,17 @@ resident sessions) and records, per step:
   * sha256 of the loss bits, the flat pre-update gradients, and the updated
     parameters, moments and flags, so a before/after change can be compared
     bit for bit.
+  * with --resident-lean (DEVIATION 2514, design section 2.1), the trainer
+    is constructed with resident=True, step_result='lean': train_step
+    returns loss, step, completed_steps, next_batch_index and flags, and
+    the gradient stays on the device. The witnesses then come from
+    export_gradients(named=False) and export_state(), taken ONCE after the
+    last untimed step (event `final_witness`, result.json `final_witness`)
+    or, under --witness-every-step, after every step exactly where the
+    'full' run hashes its result and state_dict(). Both exports are outside
+    the timed boundary, which stays the public train_step call. The hashes
+    are comparable with a 'full' run's per-step `step_end.sha256` records
+    (events.jsonl) and `step_witnesses` (result.json) on the same GPU.
   * with --component-timing, one extra step under
     MOJOLEARN_TRANSFORMER_TIMING=1 (DEVIATION 2499): every `timing <name>
     <value> <unit>` line the native step and the Python wrapper print is
@@ -57,7 +68,12 @@ import time
 
 CONTROL_SHAPE = [1, 2048, 384, 6, 6, 64, 1024, 8, 8192]
 TARGET_SHAPE = [1, 2048, 768, 12, 12, 64, 2048, 12, 50257]
-SCHEMA = 'mojolearn.lm-step-memory-probe.v2'
+SCHEMA = 'mojolearn.lm-step-memory-probe.v3'
+WITNESS_SOURCE = {
+    'full': "train_step result flat_gradients + state_dict() after every step",
+    'lean': "export_gradients(named=False) + export_state() after every step (outside the timed boundary)",
+    'lean-final': "export_gradients(named=False) + export_state() once after the last untimed step",
+}
 EXIT_LIMIT = 2
 # Names summed into component_timing_total_ms exclude these: `envelope.*`
 # lines wrap other itemized lines, and `attn.*` are the sub-phases of
@@ -195,6 +211,31 @@ def _sha(data):
     return hashlib.sha256(data).hexdigest()
 
 
+def _witness(trainer, result, step_result):
+    """sha256 of the last step's flat gradient and the committed state.
+
+    'full': from the train_step result and state_dict(), as before.
+    'lean': from export_gradients(named=False) and export_state()
+    (DEVIATION 2514); the same bytes by design section 2.1, so the hashes
+    compare with a 'full' run's. Returns (hashes, completed_steps, seconds
+    the exports and hashing took); that time is outside the step boundary.
+    """
+    start = time.perf_counter()
+    if step_result == 'lean':
+        gradients = trainer.export_gradients(named=False)['flat_gradients']
+        state = trainer.export_state()
+    else:
+        gradients = result['flat_gradients']
+        state = trainer.state_dict()
+    hashes = dict(gradients=_sha(gradients.tobytes()),
+                  parameters=_sha(state['parameters'].tobytes()),
+                  m=_sha(state['m'].tobytes()), v=_sha(state['v'].tobytes()),
+                  flags=_sha(state['flags'].tobytes()))
+    completed = state['completed_steps']
+    del gradients, state
+    return hashes, completed, time.perf_counter() - start
+
+
 def worker(args):
     import numpy as np
     from mojolearn import LanguageModelTrainer as Trainer, LanguageModelConfig as Shape
@@ -226,24 +267,34 @@ def worker(args):
             weights[entry['offset']:entry['offset'] + entry['size']] += np.float32(1)
     if args.attention_path:
         os.environ['MOJOLEARN_TRANSFORMER_ATTN_PATH'] = args.attention_path
-    trainer = Trainer(weights, shape=shape, resident=not args.no_resident,
+    resident = not args.no_resident
+    step_result = 'lean' if args.resident_lean else 'full'
+    trainer = Trainer(weights, shape=shape, resident=resident, step_result=step_result,
                       data_schedule={'fixture': 'lm step memory probe', 'seed': args.seed,
                                      'batches': 'synthetic uniform token ids, no corpus'})
+    runtime = trainer.run_metadata()
+    if runtime['step_result'] != step_result:
+        raise RuntimeError('trainer reports step_result=%r, requested %r' % (runtime['step_result'], step_result))
+    # 'full' witnesses every step from the result; 'lean' witnesses once
+    # after the last untimed step unless --witness-every-step.
+    witness_every_step = step_result == 'full' or args.witness_every_step
+    mode = dict(resident=resident, step_result=step_result, witness_every_step=witness_every_step,
+                witness_source=WITNESS_SOURCE[step_result if witness_every_step else 'lean-final'])
     sampler = DeviceMemorySampler(args.sample_interval, args.gpu_index)
     sampler.start()
     emit(dict(event='setup', schema=SCHEMA, shape=shape.to_dict(), profile=shape.profile,
               parameters=shape.n_total, n_tensors=shape.n_tensors, tokens_per_step=tokens_per_step,
-              resident=not args.no_resident, seed=args.seed, budget_seconds=args.budget_seconds,
+              seed=args.seed, budget_seconds=args.budget_seconds, **mode,
               attention_path_requested=os.environ.get('MOJOLEARN_TRANSFORMER_ATTN_PATH'),
               numeric_mode_env=os.environ.get('MOJOLEARN_NUMERIC_MODE'),
-              runtime=trainer.run_metadata(), initial_parameters_sha256=_sha(weights.tobytes()),
+              runtime=runtime, initial_parameters_sha256=_sha(weights.tobytes()),
               host_before_first_call=_rss_bytes(), device_tool=sampler.tool or 'unavailable',
               qualification='complete-step probe at the named shape; not an opponent ratio, not a default gate'))
     steps = []
     for index in range(args.steps):
         if over_budget('before step %d' % (index + 1)):
             sampler.stop()
-            _write_result(args, shape, steps, limited=True)
+            _write_result(args, shape, steps, limited=True, mode=mode)
             return EXIT_LIMIT
         ids = rng.integers(0, shape.vocab_size, (shape.batch, shape.length + 1), dtype=np.int32)
         sampler.window_reset()
@@ -253,28 +304,40 @@ def worker(args):
         start = time.perf_counter()
         result = trainer.train_step(ids)
         seconds = time.perf_counter() - start
-        state = trainer.state_dict()
+        sha256 = dict(loss=_sha(np.array([result['loss']], np.float32).tobytes()))
+        completed = result['completed_steps']
+        export_seconds = None
+        if witness_every_step:
+            hashes, completed, export_seconds = _witness(trainer, result, step_result)
+            sha256.update(hashes)
         record = dict(
             event='step_end', step=index + 1, seconds=seconds,
             tokens_per_second=tokens_per_step / seconds,
             first_call_includes_setup=(index == 0),
             timing_boundary='public train_step call; native binding synchronizes the context before '
                             'publishing outputs; includes host readbacks, validation and gradient copies',
+            step_result=step_result, witnessed=witness_every_step,
+            witness_export_seconds=export_seconds,
             loss=result['loss'],
-            sha256=dict(loss=_sha(np.array([result['loss']], np.float32).tobytes()),
-                        gradients=_sha(result['flat_gradients'].tobytes()),
-                        parameters=_sha(state['parameters'].tobytes()),
-                        m=_sha(state['m'].tobytes()), v=_sha(state['v'].tobytes()),
-                        flags=_sha(state['flags'].tobytes())),
-            completed_steps=state['completed_steps'],
+            sha256=sha256,
+            completed_steps=completed,
             host=_rss_bytes(), device=sampler.window_report())
         emit(record)
         steps.append(record)
-        del result, state
+        del result
         if over_budget('after step %d' % (index + 1)):
             sampler.stop()
-            _write_result(args, shape, steps, limited=True)
+            _write_result(args, shape, steps, limited=True, mode=mode)
             return EXIT_LIMIT
+    final_witness = None
+    if not witness_every_step:
+        # The one export of the lean run: the gradient of the last untimed
+        # step and the state after it, BEFORE the timing step below would
+        # advance the session (export_gradients is the LAST step's).
+        hashes, completed, export_seconds = _witness(trainer, None, step_result)
+        final_witness = dict(step=len(steps), completed_steps=completed, sha256=hashes,
+                             export_seconds=export_seconds, source=mode['witness_source'])
+        emit(dict(event='final_witness', **final_witness))
     timing_step_seconds = None
     if args.component_timing:
         # One extra step with the native phase printer on. Its
@@ -295,7 +358,8 @@ def worker(args):
         del os.environ['MOJOLEARN_TRANSFORMER_TIMING']
     sampler.stop()
     trainer.close()
-    _write_result(args, shape, steps, limited=False, timing_step_seconds=timing_step_seconds)
+    _write_result(args, shape, steps, limited=False, timing_step_seconds=timing_step_seconds,
+                  mode=mode, final_witness=final_witness)
     return 0
 
 
@@ -342,11 +406,22 @@ def component_timing_record(text, step_seconds):
     return record
 
 
-def _write_result(args, shape, steps, limited, timing_step_seconds=None):
+def _write_result(args, shape, steps, limited, timing_step_seconds=None, mode=None, final_witness=None):
     import statistics
     timed = [s['seconds'] for s in steps[1:]] if len(steps) > 1 else []
+    mode = mode or {}
     result = dict(
         schema=SCHEMA, shape=shape.to_dict(), parameters=shape.n_total, steps_completed=len(steps),
+        resident=mode.get('resident'), step_result=mode.get('step_result'),
+        witness_every_step=mode.get('witness_every_step'), witness_source=mode.get('witness_source'),
+        # Per-step witnesses (loss always; gradients/parameters/m/v/flags
+        # when the step was witnessed) so a lean run compares with a full
+        # run from result.json alone; the same records are in events.jsonl.
+        step_witnesses=[dict(step=s['step'], completed_steps=s['completed_steps'], sha256=s['sha256'])
+                        for s in steps],
+        # The lean run's one export after the last untimed step (None when
+        # every step was witnessed or the run was limited before it).
+        final_witness=final_witness,
         first_call_seconds=steps[0]['seconds'] if steps else None,
         steady_step_seconds=timed, steady_median_seconds=statistics.median(timed) if timed else None,
         steady_median_tokens_per_second=(shape.batch * shape.length / statistics.median(timed)) if timed else None,
@@ -375,6 +450,13 @@ def main():
                         help='deadline for setup plus all steps; exceeding it exits 2')
     parser.add_argument('--seed', type=int, default=93261)
     parser.add_argument('--no-resident', action='store_true', help='reconstruct device state per call')
+    parser.add_argument('--resident-lean', action='store_true',
+                        help="resident session with step_result='lean' (DEVIATION 2514): train_step returns "
+                             "loss/step/flags only; witnesses come from export_gradients()/export_state(), "
+                             "once after the last untimed step unless --witness-every-step")
+    parser.add_argument('--witness-every-step', action='store_true',
+                        help='with --resident-lean, export and hash after EVERY step (outside the timed '
+                             'boundary) so the hashes line up with a full run per step; no effect on full')
     parser.add_argument('--attention-path', choices=['fused', 'eager'], default=None,
                         help='sets MOJOLEARN_TRANSFORMER_ATTN_PATH for the worker (default: auto = fused)')
     parser.add_argument('--component-timing', action='store_true',
@@ -387,6 +469,8 @@ def main():
         args.shape = TARGET_SHAPE
     if args.steps < 1 or args.budget_seconds <= 0:
         parser.error('need at least one step and a positive budget')
+    if args.resident_lean and args.no_resident:
+        parser.error("--resident-lean needs a resident session (step_result='lean' refuses resident=False)")
     if os.environ.get('MOJOLEARN_NUMERIC_MODE') != 'identical':
         parser.error('requires MOJOLEARN_NUMERIC_MODE=identical in the environment')
     if args.worker:

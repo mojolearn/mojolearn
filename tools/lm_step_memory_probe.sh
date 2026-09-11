@@ -27,6 +27,18 @@
 #      `step.*` phases outside the blocks plus the Python wrapper) into
 #      result.json as component_timing_ms / component_bytes with the
 #      covered fraction of step_seconds. Not a timing sample.
+#   5. DEVIATION 2514 (design step 8, gate G5): the same control and target
+#      probes again with --resident-lean --witness-every-step, into
+#      control-lean/ and target-lean/, same step count and budget; the
+#      trainer then runs step_result='lean' (train_step returns
+#      loss/step/flags, nothing else crosses) and the per-step witnesses
+#      come from export_gradients()/export_state() after each step, outside
+#      the timed boundary, so they compare hash for hash with the full
+#      runs' step_end records on the same GPU;
+#   6. if the lean target completed, one lean target step with the phase
+#      printer into target-lean-timing/ (G5 reads its component_timing_ms
+#      for the phases that remain and the ones that are gone).
+# Full first, then lean, so the full numbers are the same boxes' baseline.
 # Outputs land under /root/gemm_leg_out/lm-step-memory/ and come home with
 # the leg's fetch. Everything is OUR IDENTICAL arm; no opponent runs.
 #
@@ -112,6 +124,16 @@ if probe target --target; then
     # summed by name in target-timing/result.json (DEVIATION 2499).
     # argparse keeps the last --steps, so this overrides the default count.
     probe target-timing --target --component-timing --steps 1
+fi
+
+# 5. LEAN (DEVIATION 2514): the same two shapes with step_result='lean',
+# witnesses exported after every step so they line up with 2. and 3.
+smi "$OUT/gpu_between_lean.txt"
+echo "lean arm: --resident-lean --witness-every-step (control-lean, target-lean, target-lean-timing)" >> "$ST"
+probe control-lean --shape 1 2048 384 6 6 64 1024 8 8192 --resident-lean --witness-every-step
+if probe target-lean --target --resident-lean --witness-every-step; then
+    # 6. G5's timed step: which phases remain on the lean path.
+    probe target-lean-timing --target --resident-lean --component-timing --steps 1
 fi
 
 smi "$OUT/gpu_after.txt"

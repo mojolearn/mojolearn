@@ -240,6 +240,10 @@ def _step(rec, trainer, tokens, label):
     rec.event('native_call_end', label=label,
               keep_context_env=os.environ.get('MOJOLEARN_BYTE_LM_KEEP_CONTEXT'),
               keeper_active=_keeper_active())
+    if trainer.run_metadata()['step_result'] == 'lean':
+        # DEVIATION 2514: the lean step leaves the gradient on the device;
+        # export it so hash_step's `flat_gradients` hash is the same bytes.
+        result = dict(result, **trainer.export_gradients(named=False))
     rec.hash_step(label, result, trainer.state_dict())
     return result
 

@@ -409,6 +409,11 @@ def main():
         ids = train_ids(raw, step)
         before = trainer.state_dict()
         result = trainer.train_step(ids)
+        if runtime['step_result'] == 'lean':
+            # DEVIATION 2514: the lean step leaves the gradient on the device;
+            # export it (the last completed step's, before the next call) so
+            # retain_step's `flat_gradients` read is the same bytes as 'full'.
+            result = dict(result, **trainer.export_gradients())
         after = trainer.state_dict()
         if before['completed_steps'] != step or after['completed_steps'] != step + 1:
             raise ValueError('training cursor mismatch')
