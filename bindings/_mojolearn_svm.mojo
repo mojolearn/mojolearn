@@ -494,10 +494,12 @@ def iforest_run_binding(
     var want = Int(py=params[15])
     if n_train <= 0 or n_features <= 0 or n_query <= 0:
         raise Error("iforest_run: n_train, n_features and n_query must all be positive")
+    # DEVIATION 2638: the training matrix is LENT by address (the Python
+    # caller keeps it alive through this synchronous call) and transposed
+    # into the pinned upload stage across the host pool; it is no longer
+    # appended cell by cell into a List and transposed again cell by cell.
     var train = List[Float32]()
     var query = List[Float32]()
-    for i in range(n_train * n_features):
-        train.append(tp.unsafe_load(i))
     for i in range(n_query * n_features):
         query.append(qp.unsafe_load(i))
     var res = IFRunOutputs()
@@ -507,7 +509,7 @@ def iforest_run_binding(
             max_samples_mode, max_samples_int, max_samples_frac, max_depth,
             max_features_mode, max_features_int, max_features_frac,
             bootstrap, random_state, contamination_auto, contamination,
-            want,
+            want, train_addr=Int(tp),
         )
     if want == IF_WANT_PREDICT:
         var oi = _i32_ptr(Int(py=out_i32_addr))

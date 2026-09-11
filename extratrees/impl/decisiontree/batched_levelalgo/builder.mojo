@@ -1993,6 +1993,9 @@ struct DeviceDataset(Movable):
     var n_classes: Int32
 
 
+from ensemble.host_layout import colmajor_from_rowmajor_f32, copy_f32_threaded
+
+
 def upload_dataset(
     ctx: DeviceContext,
     x_col_major: List[Float32],
@@ -2001,8 +2004,16 @@ def upload_dataset(
     n_cols: Int32,
     n_classes: Int32,
     x_addr: Int = 0,
+    x_row_major: Bool = False,
 ) raises -> DeviceDataset:
-    """Put the immutable half of the fit on the device, once. DEVIATION 184."""
+    """Put the immutable half of the fit on the device, once. DEVIATION 184.
+
+    DEVIATION 2637: `x_row_major` says the borrowed `x_addr` block is ROW-major
+    (the caller's C-order float32, untouched); it is transposed straight into
+    the pinned stage across the host pool, so the device receives the same
+    column-major bytes the column-major borrow gives. Only with `x_addr`."""
+    if x_row_major and x_addr == 0:
+        raise Error("upload_dataset: a row-major X must be a borrowed address")
     if x_addr == 0 and len(x_col_major) != Int(n_rows) * Int(n_cols):
         raise Error("x_col_major must be n_rows * n_cols long, column major")
     if len(class_ids) != Int(n_rows):
@@ -2024,7 +2035,12 @@ def upload_dataset(
         var source = MutPointer[Float32, MutUntrackedOrigin](
             unsafe_from_address=x_addr
         )
-        memcpy(dest=h_data.unsafe_ptr(), src=source, count=count)
+        # DEVIATION 2637: threaded pure moves into the pinned stage.
+        var stage = h_data.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+        if x_row_major:
+            colmajor_from_rowmajor_f32(source, stage, Int(n_rows), Int(n_cols))
+        else:
+            copy_f32_threaded(source, stage, count)
     else:
         memcpy(dest=h_data.unsafe_ptr(), src=x_col_major.unsafe_ptr(), count=count)
     memcpy(dest=h_labels.unsafe_ptr(), src=class_ids.unsafe_ptr(), count=Int(n_rows))
@@ -3819,6 +3835,12 @@ def train_forest_classification_device_timed(
         # trace (the differ's alignment invariant) while naming a position
         # in the ALGORITHM -- group N, cycle M -- never a machine property.
         var cyc = 0
+        # DEVIATION 2663: per-group tallies printed only under
+        # `-D MOJOLEARN_ET_CYCLE_STATS=1` (a measurement define, never set by a
+        # build script): searched nodes, DEVIATION 205 survey nodes, rescues.
+        var st_nodes = 0
+        var st_retry = 0
+        var st_rescued = 0
         # DEVIATION 466: the best-first carry between cycles -- the nodes
         # admitted-but-unsearched, and which queue each belongs to. Empty
         # and never read in depth-wise mode.
@@ -3882,6 +3904,7 @@ def train_forest_classification_device_timed(
                 for i in range(len(item_trees)):
                     item_trees[i] = item_trees[0]
             var n_nodes = len(work_items)
+            st_nodes += n_nodes
 
             clock.tick(ctx, PHASE_HOST_QUEUE)
             var found = search_batch(
@@ -3964,6 +3987,7 @@ def train_forest_classification_device_timed(
                     retry.append(i)
 
             if len(retry) > 0:
+                st_retry += len(retry)
                 var sub = List[NodeWorkItem]()
                 var sub_trees = List[Int32]()
                 for j in range(len(retry)):
@@ -4015,6 +4039,7 @@ def train_forest_classification_device_timed(
                     chosen_slot.append(retry[j])
 
                 if len(chosen_items) > 0:
+                    st_rescued += len(chosen_items)
                     var res2 = search_batch(
                         ctx, ws, dataset, d_row_ids, chosen_items, 1, params,
                         n_classes, n_rows, n_cols, chosen_trees, seed, False,
@@ -4301,6 +4326,13 @@ def train_forest_classification_device_timed(
                 ctx, String("g") + String(gi) + ".leaves", d_leaves
             )
         clock.tick(ctx, PHASE_LEAF)
+        # DEVIATION 2663's measurement define: what the group's level loop did.
+        comptime if is_defined["MOJOLEARN_ET_CYCLE_STATS"]():
+            print(
+                "ET_CYCLE_STATS group=", gi, " trees=", g, " cycles=", cyc,
+                " nodes=", st_nodes, " survey_nodes=", st_retry,
+                " rescued=", st_rescued, " max_batch=", params.max_batch_size,
+            )
         # Mojo frees a buffer at its LAST USE; these must outlive every
         # launch that read them, and every launch has synchronized above.
         _ = d_row_ids^

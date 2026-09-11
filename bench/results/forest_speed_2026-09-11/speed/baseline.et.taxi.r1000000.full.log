@@ -1,0 +1,27 @@
+FSPEED-NOTE lane=et arms=cpu metric=devices delta=1.000000 reason=NVIDIA box, lane et: no GPU ExtraTrees exists, so the CPU arm requested by name runs on all cores and is labeled CPU
+FSPEED-NOTE lane=et arms=ours metric=devices delta=1.000000 reason=devices=cpu (explicit); on an NVIDIA box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+3955 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x718580000000, nodemask=1)
+3955 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x390580000000, nodemask=2)
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=cuda path=/root/mojolearn/python/mojolearn/identical/_mojolearn_trees.so
+FSPEED-REFUSED lane=et arm=cuml-et-gpu reason=RuntimeError: cuML has no ExtraTrees estimator: its RandomForest searches quantile splits, not the uniform-random thresholds that define ExtraTrees. The like-for-like comparator for `et` is sklearn.
+FSPEED-SCALE stage=before rows=1000000 features=16 input_mib=61.0 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=et arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-HEADER family=forest lane=et arm=sklearn-et-cpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-WARMUP lane=et arm=ours shape=taxi-1000000x16 ms=2844.269
+FSPEED-WARMUP lane=et arm=sklearn-et-cpu shape=taxi-1000000x16 ms=4777.075
+FSPEED-ORDER lane=et round=1 arms=ours,sklearn-et-cpu
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=1 ms=2114.841 hash=e683f121d11f59dd
+FSPEED lane=et arm=sklearn-et-cpu shape=taxi-1000000x16 round=1 ms=4074.532 hash=5f662a5e037d8eb4
+FSPEED-ORDER lane=et round=2 arms=ours,sklearn-et-cpu
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=2 ms=2058.022 hash=e683f121d11f59dd
+FSPEED lane=et arm=sklearn-et-cpu shape=taxi-1000000x16 round=2 ms=3799.073 hash=c0d583caede53aa8
+FSPEED-ORDER lane=et round=3 arms=ours,sklearn-et-cpu
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=3 ms=2015.230 hash=e683f121d11f59dd
+FSPEED lane=et arm=sklearn-et-cpu shape=taxi-1000000x16 round=3 ms=4179.215 hash=f1c7899e6e609861
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.527541
+FSPEED-ACC lane=et arm=ours metric=auc value=0.608084
+FSPEED-ACC lane=et arm=sklearn-et-cpu metric=logloss value=0.527011
+FSPEED-ACC lane=et arm=sklearn-et-cpu metric=auc value=0.611206
+FSPEED-SCALE stage=after rows=1000000 features=16 input_mib=61.0 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.

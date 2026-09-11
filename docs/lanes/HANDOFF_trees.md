@@ -799,3 +799,33 @@ existing Apple JSON 81/81; the fold matched that baseline 81/81 on NVIDIA).
   was wound down by the orchestrator while its first RF cell was in flight
   (lightgbm-cuda at 470 s per fit ate the phase).
 - No flag flipped: nothing has an H100 timing with a log on disk.
+
+## 2026-09-11 night, lane forest-speed: DEVIATIONS 2637 and 2638 (source only, not built)
+
+DEVIATION 2637 (RandomForest and ExtraTrees). A C-order float32 X used to be
+transposed to column-major in one thread in Python (`as_f32_colmajor`) and
+copied again into pinned memory in one thread by the binding. The Sep 11
+Istella-S 1M stage log puts about 700 ms of a 2104 ms RF round outside
+`binding_total` and 159 ms in `bind_host_copy`. New `rf_*_fit_rowmajor` and
+`et_*_fit_rowmajor` entries take the caller's block and transpose it straight
+into the pinned stage across the host pool (`ensemble/host_layout.mojo`); for
+RF the builder's host view of X (`host_x_addr`) becomes the stage. Pure moves,
+so the forest bits are expected unchanged.
+
+DEVIATION 2638 (IsolationForest). The fit appended every training cell into a
+List, appended it again to transpose, scanned it and wrote it to pinned memory,
+all in one thread; the binding now lends the block by address and one threaded
+pass stages `ftz(cell)` in column-major order with the finite scan.
+
+BOTH WERE BUILT AND RUN on 2026-09-11 night by lane forest-finish, pod
+`8gsem9f3thnhvu` (NVIDIA H100 80GB HBM3, driver 580.126.09), against a main
+build (`4dc4346a`) made in a second checkout on the SAME pod. Identity:
+`identity_break` rf-clf, rf-reg, et-clf, et-reg, iforest read 45 of 45 cells
+stable on each set, the baseline-to-lane diff carried no DIVERGENT, MOVED or
+REFUSED row, `check-if` passed under IDENTICAL, and the non-finite refusal
+raised through the Python surface is byte-equal between the sets. Every model
+hash held one value in 3 of 3 timed rounds. The speed rows, the flip verdicts
+and the leg's own notes are in `bench/results/forest_finish_2026-09-11/`; the
+same-pod baseline taken before the earlier wind-down is in
+`bench/results/forest_speed_2026-09-11/`. RUN OWED: the same identity lanes on
+the Apple M4 and on an AMD box against this H100 set.

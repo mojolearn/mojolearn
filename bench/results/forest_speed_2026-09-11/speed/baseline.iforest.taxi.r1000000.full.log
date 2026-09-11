@@ -1,0 +1,18 @@
+FSPEED-NOTE lane=iforest arms=* metric=auc delta=0.765005 reason=proxy AUC: anomaly score against the minority class (label 0) of taxi, no planted anomalies
+FSPEED-NOTE lane=iforest arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on an NVIDIA box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+3655 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7be600000000, nodemask=2)
+FSPEED-REFUSED lane=iforest arm=ours reason=RuntimeError: native compiled-mode readback missing for _mojolearn
+FSPEED-REFUSED lane=iforest arm=sklearn-iforest-cpu reason=GPU-PATH-ONLY: sklearn-iforest-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare against the vendor's GPU path only; on AMD request cpu by name (ENGINEERING_RULES.md section 10).
+FSPEED-SCALE stage=before rows=1000000 features=16 input_mib=61.0 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=iforest arm=cuml-iforest-gpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-WARMUP lane=iforest arm=cuml-iforest-gpu shape=taxi-1000000x16 ms=345.303
+FSPEED-ORDER lane=iforest round=1 arms=cuml-iforest-gpu
+FSPEED lane=iforest arm=cuml-iforest-gpu shape=taxi-1000000x16 round=1 ms=124.712 hash=eb8c4d9983f1cf94
+FSPEED-ORDER lane=iforest round=2 arms=cuml-iforest-gpu
+FSPEED lane=iforest arm=cuml-iforest-gpu shape=taxi-1000000x16 round=2 ms=62.918 hash=eb8c4d9983f1cf94
+FSPEED-ORDER lane=iforest round=3 arms=cuml-iforest-gpu
+FSPEED lane=iforest arm=cuml-iforest-gpu shape=taxi-1000000x16 round=3 ms=58.667 hash=eb8c4d9983f1cf94
+FSPEED-ACC lane=iforest arm=cuml-iforest-gpu metric=auc value=0.553631
+FSPEED-SCALE stage=after rows=1000000 features=16 input_mib=61.0 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.

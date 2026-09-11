@@ -337,6 +337,7 @@ def fit_classification_device(
     bootstrap: Bool = BOOTSTRAP_DEFAULT,
     n_sampled_rows: Int32 = 0,
     x_addr: Int = 0,
+    x_row_major: Bool = False,  # DEVIATION 2637, see `upload_dataset`
 ) raises -> Forest:
     """`randomforest.cuh:155-195` again, with the split search on the GPU.
 
@@ -381,7 +382,8 @@ def fit_classification_device(
     # `train_classification_device_resident`, with the old name kept as a
     # wrapper for single-tree callers.
     var device_dataset = upload_dataset(
-        ctx, x_col_major, class_ids, n_rows, n_cols, n_classes, x_addr=x_addr
+        ctx, x_col_major, class_ids, n_rows, n_cols, n_classes, x_addr=x_addr,
+        x_row_major=x_row_major,
     )
 
     # The count is resolved (and a bad one refused BY NAME) once for the
@@ -473,6 +475,7 @@ def fit_regression_device(
     bootstrap: Bool = BOOTSTRAP_DEFAULT,
     n_sampled_rows: Int32 = 0,
     x_addr: Int = 0,
+    x_row_major: Bool = False,  # DEVIATION 2637, see `upload_dataset`
 ) raises -> Forest:
     """A regression forest with its split search on the GPU.
 
@@ -490,7 +493,8 @@ def fit_regression_device(
     error_checking(n_rows, n_cols, n_trees)
     validity_check(params)
     var dataset = upload_dataset(
-        ctx, x_col_major, labels_q, n_rows, n_cols, 1, x_addr=x_addr
+        ctx, x_col_major, labels_q, n_rows, n_cols, 1, x_addr=x_addr,
+        x_row_major=x_row_major,
     )
     # The count is resolved once for the forest; the rows are drawn on the
     # device (deviation 200's sequence kernel, DEVIATION 460's Philox draw).

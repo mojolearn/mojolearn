@@ -47,10 +47,14 @@ cmd_build() {
         gbdt) _script=bindings/build_gbdt.sh; _so=_mojolearn_gbdt.so ;;
         rf) _script=bindings/build_rf.sh; _so=_mojolearn_rf.so ;;
         trees) _script=bindings/build_trees.sh; _so=_mojolearn_trees.so ;;
+        # The isolation forest lives in the svm extension (bindings/build_svm.sh,
+        # lane forest-speed 2026-09-11); that script reads MOJOLEARN_BUILD_EXTRA_DEFINES.
+        svm) _script=bindings/build_svm.sh; _so=_mojolearn_svm.so ;;
         *) echo "unknown binding $_b"; exit 2 ;;
     esac
     echo "build $_set/$_b defines='$*' $(date -u +%H:%M:%S)"
     MOJOLEARN_SKIP_BUILD_GATE=1 MOJOLEARN_COMPILE_JOBS=4 MOJOLEARN_EXTRA_DEFINES="$*" \
+        MOJOLEARN_BUILD_EXTRA_DEFINES="$*" \
         timeout -k 30 1500 bash "$_script" > "$LOGS/build.$_set.$_b.log" 2>&1
     _rc=$?
     echo "build_exit $_set.$_b=$_rc $(date -u +%H:%M:%S)" | tee -a "$OUT/ab.txt"
