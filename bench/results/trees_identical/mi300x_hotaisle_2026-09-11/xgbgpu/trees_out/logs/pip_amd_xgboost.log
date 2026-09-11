@@ -1,0 +1,8 @@
+Looking in indexes: https://pypi.org/simple, https://pypi.amd.com/rocm-6.4.4/simple
+Collecting amd_xgboost
+  Downloading amd_xgboost-3.1.1-py3-none-manylinux_2_39_x86_64.whl (28.6 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 28.6/28.6 MB 70.9 MB/s  0:00:00
+Requirement already satisfied: numpy in /root/venv-gpu/lib/python3.12/site-packages (from amd_xgboost) (2.5.3)
+Requirement already satisfied: scipy in /root/venv-gpu/lib/python3.12/site-packages (from amd_xgboost) (1.18.1)
+Installing collected packages: amd_xgboost
+Successfully installed amd_xgboost-3.1.1

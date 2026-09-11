@@ -1,0 +1,15 @@
+t 17:36:44
+GPU[0]		: GPU use (%): 0
+GPU[0]		: GPU Memory Allocated (VRAM%): 0
+t 17:36:49
+GPU[0]		: GPU use (%): 43
+GPU[0]		: GPU Memory Allocated (VRAM%): 90
+t 17:36:54
+GPU[0]		: GPU use (%): 0
+GPU[0]		: GPU Memory Allocated (VRAM%): 90
+t 17:36:59
+GPU[0]		: GPU use (%): 43
+GPU[0]		: GPU Memory Allocated (VRAM%): 90
+t 17:37:05
+GPU[0]		: GPU use (%): 0
+GPU[0]		: GPU Memory Allocated (VRAM%): 90

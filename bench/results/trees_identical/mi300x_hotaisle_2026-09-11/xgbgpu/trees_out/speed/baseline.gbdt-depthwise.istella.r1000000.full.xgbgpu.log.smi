@@ -1,0 +1,36 @@
+t 17:37:52
+GPU[0]		: GPU use (%): 0
+GPU[0]		: GPU Memory Allocated (VRAM%): 90
+t 17:37:57
+GPU[0]		: GPU use (%): 1
+GPU[0]		: GPU Memory Allocated (VRAM%): 90
+t 17:38:02
+GPU[0]		: GPU use (%): 99
+GPU[0]		: GPU Memory Allocated (VRAM%): 90
+t 17:38:07
+GPU[0]		: GPU use (%): 0
+GPU[0]		: GPU Memory Allocated (VRAM%): 90
+t 17:38:12
+GPU[0]		: GPU use (%): 0
+GPU[0]		: GPU Memory Allocated (VRAM%): 90
+t 17:38:17
+GPU[0]		: GPU use (%): 0
+GPU[0]		: GPU Memory Allocated (VRAM%): 90
+t 17:38:22
+GPU[0]		: GPU use (%): 41
+GPU[0]		: GPU Memory Allocated (VRAM%): 90
+t 17:38:28
+GPU[0]		: GPU use (%): 0
+GPU[0]		: GPU Memory Allocated (VRAM%): 90
+t 17:38:33
+GPU[0]		: GPU use (%): 1
+GPU[0]		: GPU Memory Allocated (VRAM%): 90
+t 17:38:38
+GPU[0]		: GPU use (%): 2
+GPU[0]		: GPU Memory Allocated (VRAM%): 90
+t 17:38:43
+GPU[0]		: GPU use (%): 0
+GPU[0]		: GPU Memory Allocated (VRAM%): 90
+t 17:38:48
+GPU[0]		: GPU use (%): 0
+GPU[0]		: GPU Memory Allocated (VRAM%): 90
