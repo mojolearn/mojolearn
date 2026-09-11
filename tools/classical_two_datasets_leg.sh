@@ -106,6 +106,8 @@ MOJOLEARN_REPO_COMMIT=${COMMIT:-unknown}
 export MOJOLEARN_REPO_COMMIT
 VENDOR=$(sed -n 's/^vendor=//p' /root/gemm_leg_out/leg.txt 2>/dev/null | head -1)
 PROVIDER=$(sed -n 's/^provider=//p' /root/gemm_leg_out/leg.txt 2>/dev/null | head -1)
+# tools/gemm_remote_leg.sh writes no provider= line; the Hot Aisle body names it.
+[ -n "$PROVIDER" ] || PROVIDER=${MOJOLEARN_CTD_PROVIDER:-}
 if [ -z "$VENDOR" ]; then
     if [ -e /dev/kfd ] && { command -v rocm-smi || command -v rocminfo || command -v amd-smi; } > /dev/null 2>&1; then VENDOR=amd
     elif command -v nvidia-smi > /dev/null 2>&1; then VENDOR=nvidia

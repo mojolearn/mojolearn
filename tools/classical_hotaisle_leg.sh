@@ -16,6 +16,15 @@
 # A second lease runs only the cells the first skipped, in the order given:
 #   MOJOLEARN_HOTAISLE_EXTRA_ENV='MOJOLEARN_CTD_HOTAISLE_STAGE=rest MOJOLEARN_CTD_REST_CELLS=kde:istella,svc:istella'
 #
+# RunPod AMD MI300X (tools/pick_box.sh printed runpod-amd; same image, the
+# body runs natively in the pod after the gemm payload's device check and card;
+# no env passing, so STAGE is its default `all`). Rows from a RunPod pod go in
+# their own OPPONENT_REFERENCE subsection with that pod's CPU model and cores:
+#   MOJOLEARN_RUNPOD_KEY_FILE=~/.mojolearn_runpod_key MOJOLEARN_GPU_ARCHS=gfx942 \
+#   MOJOLEARN_GEMM_LEG_EXTRA=tools/classical_hotaisle_leg.sh \
+#   MOJOLEARN_GEMM_LEG_OUT=$HOME/mojolearn-evidence/classical-runpod-amd/leg1 \
+#   sh tools/gemm_remote_leg.sh amd --payload gemm --rent --minutes 60
+#
 # ONE DEADLINE (MOJOLEARN_CTD_BODY_SECONDS from the body's start, capped 150 s
 # inside the runner's own work bound, read from the container's PID 1
 # `timeout -k 30 <seconds> sh /root/gemm_leg.sh` and leg.txt's started=). A race
@@ -53,15 +62,38 @@ B="$MOJOLEARN_CTD_OUT/hotaisle_body.txt"
 [ "$(id -u)" = 0 ] || { echo "the body needs root (/root paths); id -u is $(id -u)" >> "$B"; exit 5; }
 
 # The runner's work bound: the body must end inside it, or the fetch sees a
-# killed body. Unreadable (a native runtime) leaves the default.
+# killed body. Both runners write started= in /root/gemm_leg_out/leg.txt first.
+#   Hot Aisle (tools/hotaisle_leg.sh): the container's PID 1 is
+#     `timeout -k 30 <work seconds> sh /root/gemm_leg.sh`; end 150 s inside it.
+#   RunPod (tools/gemm_remote_leg.sh --payload gemm): no timeout on the body;
+#     the Mac polls min(WORK_TIMEOUT 3000 + 240 s from started=, lease deadline
+#     - 300 s), and the lease deadline on the pod is the mtime of
+#     /tmp/mojolearn-lease.pid plus the `sleep N` of /tmp/mojolearn-lease.sh
+#     (tools/runpod_guard.sh). End 180 s inside the smaller.
 _work=$(tr '\0' ' ' < /proc/1/cmdline 2>/dev/null | sed -n 's|^timeout -k [0-9]* \([0-9][0-9]*\) sh /root/gemm_leg.sh.*|\1|p')
 _started=$(sed -n 's/^started=//p' /root/gemm_leg_out/leg.txt 2>/dev/null | head -1)
 _s0=$(date -d "$_started" +%s 2>/dev/null)
+_provider=unknown
+_cap=""
 if [ -n "$_work" ] && [ -n "$_s0" ]; then
+    _provider=hotaisle
     _cap=$(( _s0 + _work - 150 - MOJOLEARN_CTD_BODY_START ))
-    [ "$_cap" -lt "$MOJOLEARN_CTD_BODY_SECONDS" ] && MOJOLEARN_CTD_BODY_SECONDS=$_cap
+elif [ -f /tmp/mojolearn-lease.sh ] && [ -f /tmp/mojolearn-lease.pid ] && [ -n "$_s0" ]; then
+    _provider=runpod
+    _lsecs=$(sed -n 's/^sleep \([0-9][0-9]*\)$/\1/p' /tmp/mojolearn-lease.sh | head -1)
+    _larmed=$(stat -c %Y /tmp/mojolearn-lease.pid 2>/dev/null)
+    _cap=$(( _s0 + ${MOJOLEARN_CTD_RUNNER_WORK:-3000} + 240 - 180 - MOJOLEARN_CTD_BODY_START ))
+    if [ -n "$_lsecs" ] && [ -n "$_larmed" ]; then
+        _lcap=$(( _larmed + _lsecs - 300 - 180 - MOJOLEARN_CTD_BODY_START ))
+        [ "$_lcap" -lt "$_cap" ] && _cap=$_lcap
+    fi
+    _work="runpod lease=${_lsecs:-unread}s armed=${_larmed:-unread}"
 fi
-export MOJOLEARN_CTD_BODY_START MOJOLEARN_CTD_BODY_SECONDS MOJOLEARN_CTD_OUT MOJOLEARN_COMPILE_JOBS
+if [ -n "$_cap" ] && [ "$_cap" -lt "$MOJOLEARN_CTD_BODY_SECONDS" ]; then
+    MOJOLEARN_CTD_BODY_SECONDS=$_cap
+fi
+MOJOLEARN_CTD_PROVIDER=$_provider
+export MOJOLEARN_CTD_BODY_START MOJOLEARN_CTD_BODY_SECONDS MOJOLEARN_CTD_OUT MOJOLEARN_COMPILE_JOBS MOJOLEARN_CTD_PROVIDER
 
 # The IDENTICAL bindings build for the box's gfx target: the runner exports
 # MOJOLEARN_GPU_ARCHS (read from rocminfo's Name: field); this is the fallback.
