@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """gbdt-finish lane: before/after table and per-switch verdicts from the
-speed logs of body_ab.sh (RUNS ON THE POD: python3 summarize.py /root/trees_out).
+speed logs (RUNS ON THE POD: python3 summarize.py /root/trees_out).
 
-Pairs, each one switch:
-  2634  baseline -> a2634
-  2635  a2634    -> both
-  2636  both     -> all
-  all   baseline -> all   (the lane's total)
+Pairs, each one switch, each read from ITS OWN phase so a set timed in two
+heat windows is never compared across them:
+  2634  baseline -> a2634   (phase ab)
+  2635  a2634    -> both     (phase ab)
+  2636  both     -> all      (phase ab)
+  total baseline -> all      (phase ab, the lane's host-work total)
+  2661  all      -> a2661    (phase p2)
 Every log is one process of 5 timed fits; a cell's time is the median over
 every FSPEED line of that (set, lane, dataset) across the rounds. A shared
 switch has ONE default (ENGINEERING_RULES 9): its time gate is the geometric
@@ -23,11 +25,11 @@ import subprocess
 import sys
 
 OUT = sys.argv[1] if len(sys.argv) > 1 else "/root/trees_out"
-TAG = sys.argv[2] if len(sys.argv) > 2 else "ab"
 LANES = ("gbdt-symmetric", "gbdt-depthwise", "gbdt-lossguide")
 DATASETS = ("taxi", "istella")
-PAIRS = (("2634", "baseline", "a2634"), ("2635", "a2634", "both"),
-         ("2636", "both", "all"), ("total", "baseline", "all"))
+PAIRS = (("2634", "baseline", "a2634", "ab"), ("2635", "a2634", "both", "ab"),
+         ("2636", "both", "all", "ab"), ("total", "baseline", "all", "ab"),
+         ("2661", "all", "a2661", "p2"))
 REF = {("gbdt-symmetric", "taxi"): "90c3558501933f47",
        ("gbdt-depthwise", "taxi"): "40c1683b9e0eb151",
        ("gbdt-lossguide", "taxi"): "0dd8bcfc3c3a4a1d",
@@ -38,14 +40,14 @@ LINE = re.compile(r"^FSPEED lane=(\S+) arm=ours shape=\S+ round=\d+ ms=([\d.]+) 
 ACC = re.compile(r"^FSPEED-ACC lane=(\S+) arm=ours metric=(\S+) value=([-\d.eE+naif]+)")
 
 
-def logs(s, lane, ds):
-    return sorted(glob.glob("%s/speed/%s.%s.%s.r1000000.ours.%s.r*.log" % (OUT, s, lane, ds, TAG)))
+def logs(s, lane, ds, tag):
+    return sorted(glob.glob("%s/speed/%s.%s.%s.r1000000.ours.%s.r*.log" % (OUT, s, lane, ds, tag)))
 
 
-def cell(s, lane, ds):
+def cell(s, lane, ds, tag):
     ms, hashes, acc = [], collections.Counter(), collections.defaultdict(set)
     rounds = 0
-    for p in logs(s, lane, ds):
+    for p in logs(s, lane, ds, tag):
         rounds += 1
         for ln in open(p, errors="replace"):
             m = LINE.match(ln)
@@ -59,29 +61,31 @@ def cell(s, lane, ds):
 
 
 def main():
-    sets = sorted({os.path.basename(p).split(".")[0] for p in glob.glob(OUT + "/speed/*.ours.%s.r*.log" % TAG)})
-    print("# sets with logs: %s" % " ".join(sets))
+    want = sorted({(s, tag) for _, b, a, tag in PAIRS for s in (b, a)})
     cells = {}
-    print("| set | policy | dataset | rounds | fits | median ms | min..max | hashes (count) | ref hash held | logloss | auc |")
-    print("|---|---|---|---|---|---|---|---|---|---|---|")
-    for ds in DATASETS:
-        for lane in LANES:
-            for s in sets:
-                ms, hashes, acc, rounds = cell(s, lane, ds)
-                if not ms:
-                    continue
-                cells[(s, lane, ds)] = (statistics.median(ms), hashes, acc)
-                held = "yes" if set(hashes) == {REF[(lane, ds)]} else "NO"
-                print("| %s | %s | %s | %d | %d | %.1f | %.1f..%.1f | %s | %s | %s | %s |" % (
-                    s, lane.split("-")[1], ds, rounds, len(ms), statistics.median(ms), min(ms), max(ms),
-                    ",".join("%s(%d)" % kv for kv in hashes.items()), held,
-                    "/".join(sorted(acc.get("logloss", {"-"}))), "/".join(sorted(acc.get("auc", {"-"})))))
+    print("| phase | set | policy | dataset | rounds | fits | median ms | min..max | hashes (count) | ref hash held | logloss | auc |")
+    print("|---|---|---|---|---|---|---|---|---|---|---|---|")
+    for tagsel in ("ab", "p2"):
+        for ds in DATASETS:
+            for lane in LANES:
+                for s, tag in want:
+                    if tag != tagsel:
+                        continue
+                    ms, hashes, acc, rounds = cell(s, lane, ds, tag)
+                    if not ms:
+                        continue
+                    cells[(s, tag, lane, ds)] = (statistics.median(ms), hashes, acc)
+                    held = "yes" if set(hashes) == {REF[(lane, ds)]} else "NO"
+                    print("| %s | %s | %s | %s | %d | %d | %.1f | %.1f..%.1f | %s | %s | %s | %s |" % (
+                        tag, s, lane.split("-")[1], ds, rounds, len(ms), statistics.median(ms),
+                        min(ms), max(ms), ",".join("%s(%d)" % kv for kv in hashes.items()), held,
+                        "/".join(sorted(acc.get("logloss", {"-"}))), "/".join(sorted(acc.get("auc", {"-"})))))
     print()
-    for name, before, after in PAIRS:
+    for name, before, after, tag in PAIRS:
         ratios, notes = [], []
         for ds in DATASETS:
             for lane in LANES:
-                b, a = cells.get((before, lane, ds)), cells.get((after, lane, ds))
+                b, a = cells.get((before, tag, lane, ds)), cells.get((after, tag, lane, ds))
                 if not b or not a:
                     notes.append("missing %s %s" % (lane, ds))
                     continue
@@ -95,11 +99,13 @@ def main():
             print("switch %s six-cell geomean %.4f over %d cells%s -> %s" % (
                 name, g, len(ratios), (" (" + "; ".join(notes) + ")") if notes else "",
                 "FLIP" if g < 1.0 and len(ratios) == 6 else "NO FLIP"))
+        elif notes:
+            print("switch %s: no cells (%s)" % (name, "; ".join(notes[:3])))
         for lane in LANES:
             args = ["python3", "tools/flip_verdict.py", "--lane", lane]
             ok = True
             for ds in DATASETS:
-                bl, al = logs(before, lane, ds), logs(after, lane, ds)
+                bl, al = logs(before, lane, ds, tag), logs(after, lane, ds, tag)
                 if not bl or not al:
                     ok = False
                     break
