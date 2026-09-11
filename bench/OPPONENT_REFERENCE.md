@@ -1544,3 +1544,62 @@ byte-equal between the sets for C-order and F-order input alike.
 
 The iforest proxy AUC is an anomaly score against the minority class; neither
 dataset has planted anomalies, so it is a sanity column and not a benchmark.
+
+### H100 ExtraTrees frontier batch width, DEVIATION 2663 (2026-09-11 night, lane forest-finish)
+
+Same pod as the section above (`8gsem9f3thnhvu`, NVIDIA H100 80GB HBM3, driver
+580.126.09), IDENTICAL tier, 1,000,000 training rows, 100 trees, depth 16,
+seed 7. THIS IS OURS AGAINST OURS, not an opponent race: `ctl` is this lane's
+build at cuML's shipped `max_batch_size` of 4096 (`decisiontree.hpp:86-95`) and
+the trial sets are the same source built with
+`-D MOJOLEARN_ET_DEVICE_BATCH_16384=1` and `_32768=1`. Two passes per cell in
+rotated order, 3 rounds each (2 for istellareg), pooled medians. The opponent
+rows for these datasets are in the section above and did not change.
+
+| cell | columns sampled | ctl (4096) ms | 16384 ms | ratio | 32768 ms | ratio | hash (all widths) |
+|---|---|---|---|---|---|---|---|
+| et taxi | 4 of 16 | 1907.7 | 1616.3 | 0.847 | 1587.3 | 0.832 | `e683f121d11f59dd` |
+| et Istella-S | 14 of 220 | 5026.6 | 4596.3 | 0.914 | 4519.0 | 0.899 | `40b1c5b03ba40420` |
+| et taxireg | 11 of 11 | 5350.0 | 5292.7 | 0.989 | 5285.8 | 0.988 | `9844a40ba74bc375` |
+| et istellareg | 220 of 220 | 67051.0 | 67476.6 | 1.006 | 67293.4 | 1.004 | `59547e3a9db9ecd8` |
+
+Geometric means: the classification pair 0.880 / 0.865, ALL FOUR CELLS 0.9371
+at 16384 and 0.9280 at 32768, with quality equal in every cell (one model hash
+per cell across all three widths; `flip_verdict` deltas +0.000000). 16384 IS
+NOW THE DEFAULT; 32768 stays a measurement arm, because it wins by 0.97
+percent -- inside this lane's pre-registered 2 percent margin -- while doubling
+the level workspace (about 800 MB at 220 columns against 400 MB, and 100 MB at
+4096) on every vendor, for time measured on an 80 GB H100.
+`-D MOJOLEARN_ET_DEVICE_BATCH_4096=1` restores cuML's width for an A/B.
+
+THE ISTELLAREG CELL IS A LOSS, about half a percent at both widths, and it is
+reported rather than averaged away. The switch reaches four cells because the
+ExtraTrees regressor takes the same plan, and section 9 decides it on the
+geometric mean over all of them.
+
+WHY IT PAYS, AND ONLY ON CLASSIFICATION. The width was widened on the theory
+that a 4096-node frontier runs many level cycles, each ending in a drain and a
+host pass. `-D MOJOLEARN_ET_CYCLE_STATS=1` refuted that: a 100-tree Istella-S
+forest runs 266 cycles (67 trees then 33, DEVIATION 211's grouping), 3,836
+nodes per cycle, 94 percent of capacity, and the whole host family is about 3
+percent of the loop. What pays is DEVIATION 205's rescue. Taxi samples 4
+columns of 16, so 5.0 percent of its nodes draw an all-constant sample
+(Istella-S, sampling 14 of 220, sees 0.8 percent), and EVERY cycle carrying a
+retry runs two extra staged sub-batches -- the survey over all columns, then
+the k=1 rescue -- each restaging and draining. That cost scales with CYCLES, so
+a four-times wider batch pays it a quarter as often. At `max_features=1.0` a
+rescue needs every column constant at once, so the regression cells are flat.
+
+Identity: `identity_break` rf-clf, rf-reg, et-clf, et-reg, iforest read 45 of
+45 cells stable at 4096, at 16384, at 32768 AND at the rebuilt default, every
+diff against the lane build carrying 46 IDENTICAL rows with no DIVERGENT,
+MOVED or REFUSED, and the ExtraTrees fingerprints equal at every width
+(et-clf/base `c586b27a3b049614`, et-clf/wide `ee8b318d6bf698b2`, et-reg/base
+`754d8c127ecfc04d`, et-reg/wide `b745e53515f59cac`). `device_batched_check`
+PASSED with both sabotages moving thousands of nodes (scalar-tree 2688 / 2052
+clf/reg, shared-row-base 2499 / 2598). The width is a scheduling parameter and
+this is the evidence, not the argument.
+
+The shipped default was rebuilt with NO defines and re-timed: et taxi 1617.9 ms
+and et Istella-S 4634.7 ms, hashes `e683f121d11f59dd` and `40b1c5b03ba40420`,
+logloss 0.527541 and 0.188191 -- where the trial width landed.

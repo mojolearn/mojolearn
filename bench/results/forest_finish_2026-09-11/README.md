@@ -378,11 +378,24 @@ at 220 columns against 400 MB) on every vendor this library ships to, for time
 measured on an 80 GB H100. `-D MOJOLEARN_ET_DEVICE_BATCH_4096=1` restores
 cuML's shipped width for anyone A/B-ing it.
 
-### The default as it will ship (batch G)
+### The default as it ships (batch G)
 
-A trial binary carrying a define is not the binary that ships. Batch G rebuilds
-`_mojolearn_trees.so` from the edited source with NO defines, fingerprints it,
-diffs it against the lane set and re-times one cell per dataset.
+A trial binary carrying a define is not the binary that ships, so batch G
+rebuilt `_mojolearn_trees.so` from the edited source with NO defines
+(`45747d4935dd2f18...`), fingerprinted it, diffed it against the lane set and
+re-timed one cell per dataset:
+
+| check | result |
+|---|---|
+| build | exit 0, no defines, the width baked into `_et_device_batch` |
+| `identity_break` rf-clf, rf-reg, et-clf, et-reg, iforest | 45 of 45 cells stable |
+| diff against the lane set | 46 IDENTICAL rows, no DIVERGENT, MOVED or REFUSED |
+| et taxi, 3 rounds | 1617.9 ms, hash `e683f121d11f59dd`, logloss 0.527541 / AUC 0.608084 |
+| et Istella-S, 3 rounds | 4634.7 ms, hash `40b1c5b03ba40420`, logloss 0.188191 / AUC 0.938768 |
+
+The shipped default lands where its trial width landed (bw16k pooled 1616.3 and
+4596.3), on the same hashes and the same accuracy, which is what the rebuild
+was for.
 
 Big logs are outside the repo in
 `~/mojolearn-evidence/forest-finish-2026-09-11/`.
