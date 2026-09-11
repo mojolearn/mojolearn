@@ -1994,3 +1994,31 @@ arm only with the specialization row or
 `-D MOJOLEARN_KNN_IDENTICAL_SPECIALIZE_COMMON=1` in the build, and only
 after their own gate runs; both RUN OWED before any column other than
 NVIDIA takes the row.
+
+## Step 7 result: CAP = K is NEUTRAL; occupancy is not the limiter (H100, 2026-09-11 05:45Z, `bench/results/e1g/2026-09-11_014146-nvidia` and `_014151-nvidia`)
+
+Stats leg: capk_k10 40 registers, 6 blocks per SM, 75 percent occupancy
+(from 54 / 4 / 50 percent); capk_selp_k10 48 / 5 / 62.5 percent; the k15
+pair stays at 56 / 4 / 50 percent (the sixteenth slot was the only dead
+one). No local memory anywhere. Mechanism run: seven arms bit-equal with
+reach on every fixture; select_ms uniform 10.26 / 14.71 ms, capk 10.38 /
+14.65 ms. A 50 percent occupancy gain at k10 bought nothing, so the scan
+is not latency-bound on occupancy at this shape either. capk_selp was
+not timed (the gate times only the first pair of --arms; every arm needs
+a timed pair, fixed next).
+
+What is left: the per-element instruction count of the K-deep chain
+itself. Every arm that changed HOW OFTEN the chain runs (bounds, deferred)
+or HOW MANY registers it takes (capk) measured neutral, which is only
+consistent with the chain cost being paid on every element regardless
+(the compiler if-converts the admission branch and the whole predicated
+chain issues every step for every lane). The discriminating measurement is
+a timing-only arm `noshift`: the K-deep list is present and the admission
+compare runs, but an admitted key overwrites the last slot without the
+shift (output invalid). select_ms(uniform) minus select_ms(noshift) is the
+chain's own cost at k10 and k15; if it is the 0.80 ms per k, the fix is
+a branch the compiler cannot if-convert around the chain (a warp-uniform
+`vote.any` guard, which pays the chain only on steps where some lane
+admits) combined with the branch-free selp chain inside it, and the
+model says the admission rate per warp-step must be measured too
+(a `vote` counter arm gives it).

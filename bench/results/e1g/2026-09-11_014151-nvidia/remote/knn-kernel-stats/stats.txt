@@ -1,0 +1,12 @@
+deviation=2519
+started=2026-09-11T05:43:52Z
+root=/root/mojolearn
+jobs=2
+vendor=nvidia
+commit=b917c5ef8347dd83840a90a9cff08430ea958bd8
+cuda_toolkit=1
+binding_ptx_blobs=0
+binding_cuobjdump_list_exit=255
+driver_variant=stdout
+output_kb=900
+finished=2026-09-11T05:46:20Z

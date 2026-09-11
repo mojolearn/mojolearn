@@ -1,0 +1,11 @@
+KNN_KERNEL_STATS_DEVICE name=NVIDIA H100 80GB HBM3
+KNN_KERNEL_STATS label=cap16_k0_generic cap=16 k=0 regs=99 local=0 shared=2048 const=0 max_threads=512 blocks_per_sm_256=2
+KNN_KERNEL_STATS label=cap16_k10 cap=16 k=10 regs=54 local=0 shared=2048 const=0 max_threads=1024 blocks_per_sm_256=4
+KNN_KERNEL_STATS label=cap16_k15 cap=16 k=15 regs=56 local=0 shared=2048 const=0 max_threads=1024 blocks_per_sm_256=4
+KNN_KERNEL_STATS label=cap1_k1_scanonly1 cap=1 k=1 regs=31 local=0 shared=2048 const=0 max_threads=1024 blocks_per_sm_256=8
+KNN_KERNEL_STATS label=cap32_k0_generic cap=32 k=0 regs=107 local=0 shared=2048 const=0 max_threads=512 blocks_per_sm_256=2
+KNN_KERNEL_STATS label=cap64_k0_generic cap=64 k=0 regs=178 local=0 shared=2048 const=0 max_threads=256 blocks_per_sm_256=1
+KNN_KERNEL_STATS label=capk_k10 cap=10 k=10 regs=40 local=0 shared=2048 const=0 max_threads=1024 blocks_per_sm_256=6
+KNN_KERNEL_STATS label=capk_k15 cap=15 k=15 regs=56 local=0 shared=2048 const=0 max_threads=1024 blocks_per_sm_256=4
+KNN_KERNEL_STATS label=capk_selp_k10 cap=10 k=10 regs=48 local=0 shared=2048 const=0 max_threads=1024 blocks_per_sm_256=5
+KNN_KERNEL_STATS label=capk_selp_k15 cap=15 k=15 regs=56 local=0 shared=2048 const=0 max_threads=1024 blocks_per_sm_256=4

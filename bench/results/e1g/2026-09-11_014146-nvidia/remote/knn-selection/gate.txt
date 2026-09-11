@@ -1,0 +1,12 @@
+deviation=2496
+started=2026-09-11T05:44:07Z
+root=/root/mojolearn
+arms=uniform,capk,capk_selp
+timing_only_arms=
+phase_timers=1
+pairs=3
+cached_opponent=k10=10.225,k15=10.817
+vendor=nvidia
+commit=b917c5ef8347dd83840a90a9cff08430ea958bd8
+python=pixi run python3
+finished=2026-09-11T05:45:39Z
