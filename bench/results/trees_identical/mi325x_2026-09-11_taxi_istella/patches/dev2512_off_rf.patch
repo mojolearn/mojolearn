@@ -1,0 +1,20 @@
+diff --git a/ensemble/decisiontree/batched_levelalgo/builder.mojo b/ensemble/decisiontree/batched_levelalgo/builder.mojo
+index 51afe4f6..0444edec 100644
+--- a/ensemble/decisiontree/batched_levelalgo/builder.mojo
++++ b/ensemble/decisiontree/batched_levelalgo/builder.mojo
+@@ -1845,11 +1845,11 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
+         # the launch costs 10 us and writes the same zeros.
+         var t_h = instr.times.start()
+         log_launch("hist_zero")
+-        enqueue_zero_bytes(
+-            ctx,
+-            self._hist_ptr().unsafe_bitcast[UInt8](),
+-            size_of[Self.O.BinT]() * len_histograms,
++        # A/B PATCH ONLY: DEVIATION 2512 OFF, the pre-2512 prefix memset.
++        self.hist_view.ensure(
++            self.histograms, size_of[Self.O.BinT]() * len_histograms
+         )
++        ctx.enqueue_memset(self.hist_view.view, UInt8(0))
+         instr.times.stop_host("host_hist_zero", t_h)
+         t_h = instr.times.start()
+ 

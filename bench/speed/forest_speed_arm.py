@@ -153,7 +153,7 @@ def prepare_our_inputs(data):
 # The `ours` arm, one builder per lane.
 # --------------------------------------------------------------------------
 
-def our_gbdt_arm(lane, cfg, data):
+def our_gbdt_arm(lane, cfg, data, extra=None):
     """`mojolearn.GradientBoosting`, the CatBoost GPU tree learner implementation.
 
     These explicit controls are shared with the CatBoost arm. Other defaults
@@ -196,6 +196,9 @@ def our_gbdt_arm(lane, cfg, data):
     )
     if cfg["grow_policy"] == "Lossguide":
         params["max_leaves"] = cfg["max_leaves"]
+    if extra:
+        # `--ours-ab`: one estimator keyword changed, everything else equal.
+        params.update(extra)
 
     def make():
         return mojolearn.GradientBoosting(**params)
@@ -397,14 +400,21 @@ def verify_our_arm(arm):
                 vendor=vendor, path=binding.__file__)
 
 
-def build_ours(lane, cfg, data):
-    """Our verified arm, or an explicit import/mode/vendor refusal."""
+def build_ours(lane, cfg, data, name="ours", extra=None):
+    """Our verified arm, or an explicit import/mode/vendor refusal. `extra`
+    (the `--ours-ab` arm) changes one GBDT estimator keyword."""
     try:
-        arm = OUR_BUILDERS[lane](lane, cfg, data)
+        if extra:
+            if not lane.startswith("gbdt-"):
+                raise RuntimeError("--ours-ab reaches the GBDT lanes only")
+            arm = our_gbdt_arm(lane, cfg, data, extra=extra)
+            arm.name = name
+        else:
+            arm = OUR_BUILDERS[lane](lane, cfg, data)
         verify_our_arm(arm)
         return [arm]
     except Exception as exc:                       # noqa: BLE001
-        spec.emit_refused(lane, "ours", "%s: %s"
+        spec.emit_refused(lane, name, "%s: %s"
                           % (exc.__class__.__name__,
                              " ".join(str(exc).split())))
         return []
@@ -431,11 +441,30 @@ def build_parser():
     p.add_argument("--devices", default="auto",
                    help="which device arms of each opponent to run. `auto` "
                         "(the default) is GPU-ONLY wherever an accelerator "
-                        "is visible and cpu on the MacBook: on NVIDIA and "
-                        "AMD we compare against the vendor's GPU path only, "
-                        "because a GPU-versus-CPU ratio is not the claim "
-                        "this project makes. An explicit list still wins, "
-                        "and the refusal lines say when one was applied.")
+                        "is visible and cpu on the MacBook. On NVIDIA we "
+                        "compare against the vendor's GPU path only; on AMD "
+                        "(ENGINEERING_RULES.md section 10, 2026-09-11) a "
+                        "library with no AMD GPU path runs on the box's CPU "
+                        "when `cpu` is listed, labeled in the arm name. "
+                        "`opencl` selects LightGBM's USE_GPU learner. An "
+                        "explicit list still wins, and the refusal lines say "
+                        "when one was applied.")
+    p.add_argument("--arms", default=None,
+                   help="comma-separated opponent arm names to keep (a subset "
+                        "of the lane's roster, e.g. catboost-cpu,xgboost-gpu); "
+                        "a name asked for and not built is REFUSED by name. "
+                        "`ours` always runs; the filter reads opponents only.")
+    p.add_argument("--ours-ab", default=None, metavar="PARAM=VALUE",
+                   help="add a second ours arm, `ours-ab`, equal to `ours` "
+                        "except one GradientBoosting keyword (a Python "
+                        "literal, e.g. use_pointwise_searcher=True), timed "
+                        "round by round beside `ours` in this process; GBDT "
+                        "lanes only, and it runs under --ours-only too")
+    p.add_argument("--opponents-first", action="store_true",
+                   help="import and construct the opponents BEFORE our "
+                        "binding in this process (the import order that "
+                        "exposed the _buffer.py ctypes clash with cuML); the "
+                        "round rotation still starts with ours")
     p.add_argument("--rows", type=int, default=None,
                    help="cap the training rows. On `higgs` this IS the load "
                         "ladder: rungs are nested prefixes of the same "
@@ -484,17 +513,47 @@ def main(argv=None):
     # THE DEVICE POLICY IS ON THE CARD, not only in this file. A reader who
     # sees three arms where the Apple table had six has to be able to find
     # out why without reading the harness.
+    if spec.accel_vendor() == "amd":
+        policy = ("AMD box: an opponent with an AMD GPU path runs on the GPU, "
+                  "one without runs on this box's CPU on all cores "
+                  "(ENGINEERING_RULES.md section 10); the arm name says which")
+    else:
+        policy = ("on an NVIDIA box the vendors' CPU arms do not run, so a "
+                  "lane whose only opponent is a CPU library has NO legal "
+                  "opponent here and says so")
     spec.emit_note(lane, ["ours"], "devices", float(len(devices)),
-                   "devices=%s (%s); on a GPU vendor's box the vendors' CPU "
-                   "arms do not run, so a lane whose only opponent is a CPU "
-                   "library has NO legal opponent here and says so"
-                   % (",".join(devices), "auto" if devices_auto else "explicit"))
+                   "devices=%s (%s); %s"
+                   % (",".join(devices), "auto" if devices_auto else "explicit",
+                      policy))
+    opponents = []
+    if not args.ours_only and args.opponents_first:
+        print("FSPEED-IMPORT-ORDER lane=%s first=opponents" % lane, flush=True)
+        opponents = spec.build_opponents(lane, cfg, data, devices)
     arms = build_ours(lane, cfg, data)
+    if args.ours_ab:
+        import ast
+        key, _, raw = args.ours_ab.partition("=")
+        value = ast.literal_eval(raw)
+        print("FSPEED-AB lane=%s arm=ours-ab %s=%r (arm ours keeps the "
+              "estimator default)" % (lane, key.strip(), value), flush=True)
+        arms.extend(build_ours(lane, cfg, data, name="ours-ab",
+                               extra={key.strip(): value}))
     if not args.ours_only:
+        if not args.opponents_first:
+            opponents = spec.build_opponents(lane, cfg, data, devices)
+        if args.arms:
+            wanted = [n.strip() for n in args.arms.split(",") if n.strip()]
+            have = {a.name for a in opponents}
+            for name in wanted:
+                if name not in have:
+                    spec.emit_refused(lane, name,
+                                      "asked for by --arms and not built here; "
+                                      "built: %s" % ",".join(sorted(have)))
+            opponents = [a for a in opponents if a.name in wanted]
         # The opponents are appended AFTER ours so that the rotation starts
         # with our arm; the runner alternates from there and no arm ever runs
         # two rounds in a row.
-        arms.extend(spec.build_opponents(lane, cfg, data, devices))
+        arms.extend(opponents)
 
     if not arms:
         spec.emit_refused(lane, "all", "nothing could be constructed on this "

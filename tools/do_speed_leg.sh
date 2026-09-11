@@ -27,6 +27,9 @@
 # `no legal opponent on this vendor` rather than inventing one. What the
 # column is FOR is the absolute: our own arm's milliseconds on a third
 # vendor, beside the same arm's milliseconds on the other two.
+# CORRECTED 2026-09-11: XGBoost has an AMD ROCm build (amd_xgboost), and
+# ENGINEERING_RULES.md section 10 makes the box's CPU, all cores, labeled CPU,
+# the AMD opponent for a library with no AMD GPU path (tools/trees_amd_leg.sh).
 #
 # THE GUARDS ARE tools/e2_remote_leg.sh's, DELIBERATELY COPIED RATHER THAN
 # FACTORED OUT. DigitalOcean bills until a droplet is DESTROYED -- powering
