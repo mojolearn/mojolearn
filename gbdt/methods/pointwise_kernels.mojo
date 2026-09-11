@@ -190,6 +190,7 @@ from gbdt.gpu_data.grid_policy import (
     POLICY_ONE_BYTE,
 )
 from gbdt.methods.kernel.split_properties_helpers import (
+    PW_PRIVATE_DOC_SLOTS,
     PointwisePartOffsetsHelper,
     estimate_block_per_feature_multiplier,
     scan_pointwise_histograms_kernel,
