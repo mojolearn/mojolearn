@@ -219,3 +219,33 @@ So:
 
 Rule 7's sabotage requirement composes with this: sabotaging the default path
 proves nothing about the other one. **Reach is per-branch.**
+
+## 9. Two datasets, different in kind, before a number is a result
+
+Andrew, 2026-09-11, after the RandomForest board read 0.33 of cuML's time on
+one dataset. A ratio measured on one dataset is a fact about that dataset. A
+change whose win comes from the shape of the data (deep trees on a noisy
+binary target make many tiny pure leaves, DEVIATION 2502) will read
+differently on data of another shape, and a board that never shows the other
+shape cannot tell an optimization from a fit to the fixture.
+
+**Trees (gbdt, rf, trees): every speed or quality claim runs on TWO large
+datasets that differ in KIND, one low-feature and one high-feature, both at
+or above 1,000,000 rows.** Today those are HIGGS (28 features, binary; the
+low-feature set) and a high-feature set at or above 1,000,000 rows to be
+fixed in `bench/OPPONENT_REFERENCE.md` when its opponent rows are first
+measured (Bosch, 1.18M x 968, is the real candidate in the gbm-bench family;
+the harness's `synthclf` at 800k x 100 is a fallback, not the rule). Two
+datasets, not more: several sizes of one dataset are one dataset (the 1M/2M/5M
+rungs of HIGGS are the SAME kind), and a third kind buys less than it costs.
+A win that shows on one of the two and not the other is reported as exactly
+that, and is not flipped as a default until it is understood.
+
+**Neural (byte-LM, Mamba, transformer): every training or inference claim
+runs on TWO different kinds of data**, two corpora or two generating
+distributions, not two seeds of one corpus and not two lengths of one file.
+Same reason, same shape of the rule.
+
+The 1,000,000-row floor for tree timing (2026-09-01) stands underneath this
+rule; this one adds the second kind, and removes the size sweep as a
+substitute for it.
