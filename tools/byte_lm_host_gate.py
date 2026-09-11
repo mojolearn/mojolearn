@@ -56,10 +56,16 @@ def host_info():
             info['cpu'] = subprocess.run(['sysctl', '-n', 'machdep.cpu.brand_string'],
                                          capture_output=True, text=True, timeout=10).stdout.strip()
         else:
+            # A hypervisor can mask `model name` (DigitalOcean reports
+            # "DO-Premium-Intel"), so the numeric identity is kept too.
+            wanted = {'model name': 'cpu', 'cpu model': 'cpu', 'vendor_id': 'vendor',
+                      'cpu family': 'family', 'model': 'model', 'stepping': 'stepping',
+                      'cpu implementer': 'implementer', 'cpu part': 'part'}
             for line in Path('/proc/cpuinfo').read_text().splitlines():
-                if line.lower().startswith(('model name', 'cpu model')):
-                    info['cpu'] = line.split(':', 1)[1].strip()
-                    break
+                key, _, value = line.partition(':')
+                key = key.strip().lower()
+                if key in wanted and wanted[key] not in info:
+                    info[wanted[key]] = value.strip()
             flags = [l for l in Path('/proc/cpuinfo').read_text().splitlines()
                      if l.startswith(('flags', 'Features'))]
             if flags:

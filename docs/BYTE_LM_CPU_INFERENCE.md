@@ -76,4 +76,13 @@ excludes; see DEVIATION 2614 in `tools/do_extra_leg.sh`.
 
 | CPU | host | build | loss bytes equal | sabotage caught | evidence |
 |---|---|---|---|---|---|
-| none yet | | | | | |
+| Intel x86_64, DigitalOcean Premium Intel (model name masked by QEMU; AVX2, FMA), 4 vCPU | Ubuntu 24.04, Linux 6.8, Python 3.12.3 | `--target-cpu x86-64-v3`, Mojo 1.0.0, commit `146becba` | 33 of 33 (16 held-out, 17 training steps) | yes, 9 of 33 differ | `bench/results/e1g/2026-09-11_163928-cpu-intel-byte-lm-host` |
+
+Logits probes on the final parameters, for comparing CPUs with each other at
+full resolution (SHA-256 of the float32 bytes): held-out batch 00 `[2, 32]`
+`2e2408f47392b4a1b69a791cf4672cdf6e49fcc0f576e9bcd6b7018f0ffaa6c4`, its first
+token alone `[1, 1]`
+`8f46027a73524437c25bc9988e309fdc3f37a4210447a56577f2ed1a1401e839`.
+
+Operational timing on that box, not a benchmark: one `[2, 32]` forward plus
+the loss took 29 to 56 ms on one thread through the Python surface.
