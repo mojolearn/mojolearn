@@ -426,3 +426,224 @@ In group mode it stores `1.0e30` for thread `q mod 256`, register cell
 reach is the number of `(tile, q)` whose cell is in the output.
 `gemm_step_kpack_reach` counts both, and the checks require exact equality,
 which also names which mode and tile ran.
+
+## 6. What was built (written after the code)
+
+Nothing ran. Nothing flips a default. The shipped dispatch is byte for byte
+the lines it was. Every hunk in `gemm/checks/gemm_identical.mojo` sits in the
+trial arm sections: the arm comment list after `identical_gemm_into`, the arm
+and geometry ids, the arm selector functions, and a new section before
+`_fast_vendor_gemm`. `identical_gemm_into`'s body, `identical_gemm_shipped_into`,
+`choose_gemm_plan`, every shipped kernel and every kernel matrix value are
+unchanged. The new kernel is referenced only under `comptime if
+GEMM_ARM_TRIAL` and from the trial harnesses.
+
+- **`gemm/checks/gemm_identical.mojo`.**
+  - Arms `kpack` (10) and `kpack_wide` (11), geometries 10 and 11, both
+    counts now 12, with parse, name, tile, geometry name and plan label
+    entries. `gemm_step_arm_geometry` maps both arms to their geometry on
+    every call `choose_gemm_plan` sends to the 128x128 plan, and
+    `identical_gemm_step_geometry_into` dispatches them under the trial
+    define. `gemm_step_geometry_group_leaves` and `gemm_step_geometry_reach`
+    answer for them, so the launched-blocks and reach functions the
+    harnesses print already cover them.
+  - Constants: `GEMM_KPACK_PAGE_GUARD_BYTES` 1024; `GEMM_KPACK_*` (8, 8, KS
+    16, FS 16); `GEMM_KPACKW_*` (8, 16, FS 12, BM 128, BN 256), with
+    `GEMM_KPACKW_KS` 16 or 12 read through `lib_smem_pages_for`.
+  - `gemm_kpack_addr`, `gemm_kpack_stage_p` and `gemm_kpack_stage_outer`:
+    the one spelling of the packed address and of `_tuned_g2r`'s slot
+    content, called by the kernel and by the host check.
+  - `identical_gemm_kpack_kernel[RPT, CPT, TC, KS, FS, PAGES, GROUP, SAB]`,
+    the body of sections 4 and 5.
+  - Host side: `_kpack_launch`, `_kpack_run` (all leaves, or allocate,
+    group launch, `_ksplit_fold_launch` and synchronize),
+    `_kpack_geometry_run`, `identical_gemm_step_kpack_into`,
+    `identical_gemm_step_kpack_phase_into`.
+  - Rule and reach: `gemm_step_kpack_rule` (tile-parameterized),
+    `gemm_step_kpack_leaves` (`kpack` calls `gemm_step_ksplit_rule`
+    itself), `gemm_step_kpack_reach` and `_kpack_geometry_name`.
+- **`gemm/checks/gemm_step_arms_check.mojo`.** `kpack` and `kpack_wide` are
+  in the arm list, so the LM section runs both through `identical_gemm_into`
+  with bits against the old plan and reach per call. The ragged part forces
+  geometries 10 and 11 at every case with bits against the old plan and FLAT
+  and exact reach, as it does every geometry. `check_group_fold_is_the_contract_tree`
+  adds the FS 12 against FS 16 node parity. Two new host checks,
+  `check_kpack_page_is_a_bijection` and `check_kpack_rule_hand_counts`, run
+  before any device work. The banner names both geometries.
+- **`bench/gemm_step_price_main.mojo`.** PRICE and TABLE lines for the arms
+  come from the existing arm loop. Where an arm's rule takes a call, PHASEBITS
+  and PHASE lines with `phase_of=arm_kpack` time the allocation, the packed
+  group launch and the fold launch apart.
+- **`bench/gemm_step_resources_main.mojo`.** Rows `kpack_all`, `kpack_group`,
+  `kpack_wide_all` and `kpack_wide_group`, with registers, local, shared,
+  const, max threads and blocks per SM.
+- **`tools/gemm_kernel_leg.sh`.** The POSIX wrapper (passes `sh -n`), shown
+  in section 9.
+
+Departures from sections 4 and 5: none in the arithmetic. On the NVIDIA
+column (`TUNED_STAGE_FTZ` on), the full-window accumulate reads the two load
+registers directly. Elsewhere it copies B through `_tuned_loaded_operand`
+per step, as the shipped kernel does, because that function is the operand
+flush there.
+
+## 7. What the checks prove, and what they cannot
+
+- **Host, every column, before any device work.** The pack address is a
+  bijection for both geometries, both operands, both staging mappings and
+  both `kpack_wide` K steps. The kernel's staging helper names exactly
+  `_tuned_g2r`'s slot content. Every read address holds the pair its reader
+  expects. The 128x128 rule equals the shipped group rule at the twelve LM
+  calls, and the 128x256 counts match section 4.2. Group nodes at FS 12
+  equal FS 16 at every `P` in 1 to 1,100.
+- **Device, the M4 run** (`MOJOLEARN_GEMM_STEP_CHECK_LM=0`, 50 M flop
+  budget).
+  - Both geometries store the old plan's bits and FLAT's on all three ops,
+    ragged `m x n`, `k` in {0, 1, 128, 129, 300, 1000, 2049, 50257} under
+    the budget, and the subnormal kind.
+  - Reach is exact. The Apple trial row `S` is 0, so the rule takes the
+    finest split. At 257x520 with `k` 129 and 300 the group launch runs;
+    everywhere else the all-leaves launch runs, `k == 0` included.
+  - Metal runs `kpack` on one page (34,816 B guarded exceeds 32 KB for two)
+    and `kpack_wide` at KS 12 on one page.
+- **Device, the H100 check** adds the 400 M budget and the twelve LM calls
+  through the entry: two pages, `kpack_wide` at KS 12, group mode at the
+  step shapes.
+- **What no check proves.** That either arm is faster. That the kernel
+  matrix's page count holds at the real driver limit with the guard (the
+  launch would fail loudly). Anything about AMD at KS 16 for `kpack_wide`,
+  which no box here runs.
+
+## 8. RUN OWED, M4, light, run by the orchestrator one at a time
+
+1. **The trial step check.**
+   `pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_GEMM_ARM_TRIAL=1 -I . gemm/checks/gemm_step_arms_check.mojo -o /tmp/gemm-step-check`
+   then
+   `MOJOLEARN_GEMM_STEP_CHECK_LM=0 MOJOLEARN_GEMM_STEP_CHECK_FLOPS=50000000 /tmp/gemm-step-check`.
+   Expect:
+   - `check_group_fold_is_the_contract_tree: ... 0 disagree; ... group nodes at FS 12 against FS 16, 0 differ`;
+   - twelve `check_kpack_page_is_a_bijection [...] ... disagreements=0` lines and `check_kpack_page_is_a_bijection: 12 cases (...) 0 failures`;
+   - twelve `RULE_KPACK` lines and `check_kpack_rule_hand_counts: 0 failures`;
+   - `REACH ragged [kpack 128x128 ...] N/N` and `REACH ragged [kpack_wide 128x256 ...] N/N`, beside the existing geometries' lines unchanged;
+   - PASS.
+2. **The same check without the trial define.**
+   `pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . gemm/checks/gemm_step_arms_check.mojo -o /tmp/gemm-step-check-notrial`
+   then
+   `MOJOLEARN_GEMM_STEP_CHECK_LM=0 MOJOLEARN_GEMM_STEP_CHECK_FLOPS=50000000 /tmp/gemm-step-check-notrial`.
+   Expect FAIL, with `REACH ragged [kpack ...]: NOT RUN in N cases, bits
+   and reach unproven (this build lacks -D MOJOLEARN_GEMM_ARM_TRIAL=1 ...)`
+   and the same for `kpack_wide` beside the existing failure lines. The four
+   host checks still pass there.
+3. **The shipped device gates.**
+   `pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . gemm/checks/gemm_device_check.mojo -o /tmp/gemm-device-check && /tmp/gemm-device-check`.
+   Expect `all green [IDENTICAL]  (8 gates, sabotage: none)`, unchanged
+   (this lane touches no shipped path).
+4. **The price harness build** (no timing run):
+   `pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_GEMM_ARM_TRIAL=1 -I . bench/gemm_step_price_main.mojo -o /tmp/gemm-step-price`.
+   Optional, host only, no device work:
+   `MOJOLEARN_GEMM_STEP_LABEL_ONLY=1 MOJOLEARN_GEMM_ARM=kpack_wide /tmp/gemm-step-price`
+   prints a `PLANLABEL arm=kpack_wide label=kpack_wide: packed page 128x256 reg8x16 KS=12 ...` line.
+5. **The resources harness build** (no run):
+   `pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_GEMM_ARM_TRIAL=1 -I . bench/gemm_step_resources_main.mojo -o /tmp/gemm-step-resources`.
+
+## 9. The H100 leg
+
+From a `git worktree add --detach` checkout of the commit that carries this
+section, after section 8 is green. The Apple card comes first, at that commit:
+`tools/gemm_card.sh device /tmp/gemm-kernel-apple.card`.
+
+```sh
+MOJOLEARN_RUNPOD_KEY_FILE=$HOME/.mojolearn_runpod_key MOJOLEARN_GPU_ARCHS=sm_90a \
+MOJOLEARN_GEMM_LEG_EXTRA=tools/gemm_kernel_leg.sh \
+MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/$(date -u +%Y-%m-%d_%H%M%S)-nvidia-h100-gemm-kernel \
+sh tools/gemm_remote_leg.sh nvidia --payload gemm --rent --minutes 60 \
+    --gpu "NVIDIA H100 80GB HBM3" --local-card /tmp/gemm-kernel-apple.card
+```
+
+The wrapper's body, `tools/gemm_kernel_leg.sh`, exports
+`MOJOLEARN_GEMM_STEP_LEG_ARMS=shipped,kpack,kpack_wide`,
+`MOJOLEARN_GEMM_STEP_LEG_LM_ARMS=kpack,kpack_wide`,
+`MOJOLEARN_GEMM_STEP_LEG_LMTIMING=1` and
+`MOJOLEARN_GEMM_STEP_LEG_CHECK_ARMS=shipped,kpack,kpack_wide` when unset,
+writes under `/root/gemm_leg_out/gemm-kernel`, refuses an LM arm list of
+`shipped` alone, then runs `sh tools/gemm_step_leg.sh`.
+
+Read back from `<leg out>/remote/gemm-kernel/`:
+
+- `status.tsv`: every item exits 0; `gate.txt` and `plans.tsv` name
+  `shipped: default=ksplit(S=132) else tuned128` and both arm labels.
+- `device_check.log` green and the NVIDIA card equal to the Apple card
+  (no shipped path changed).
+- `step-check.log`: PASS; `REACH ragged` N/N for both geometries; OK `LM`
+  lines for `shipped`, `kpack` and `kpack_wide` on all twelve calls. The
+  `kpack` group reach at head_dA is 672 (the shipped default's), and
+  `kpack_wide`'s 624 (48 tiles by 13 groups). `kpack_wide` at head_fwd has
+  all-leaves reach 3,152.
+- `resources_lines.txt`: `kpack_all` and `kpack_group` against
+  `shipped_128x128` and `ksplit_128x128` (C3: registers at or below 255);
+  `kpack_wide_all` and `kpack_wide_group` (C4: registers, local bytes
+  beyond the 6,144-byte stack, blocks per SM).
+- `price_tables.txt` and `price_step.txt`: BITS EQUAL on every call and
+  PRICE per arm. The saturated calls (head_fwd, head_dB, and gateup_fwd and
+  down_dA for `kpack`) read the kernel's own TFLOP/s against section 2.
+  PHASE lines with `phase_of=arm_kpack` give the group and fold phases where
+  the rule took a call.
+- `lm_summary.tsv`: `witnesses_equal_baseline`, `ratio_vs_shipped` and one
+  verdict line per arm; `lmtiming-*` for the component breakdown.
+
+**The flip rule** (ENGINEERING_RULES 9): the geometric mean of the enwik8
+and pilegithub lean step ratios against the shipped default below 1, on the
+same pod, with every step witness equal on both corpora. A flip changes only
+the NVIDIA row. No such row exists yet. The flip would add one SCHEDULING row
+(for example `lib_gemm_kernel_pack_for`, NVIDIA on, every other column off)
+that `identical_gemm_shipped_into` reads to run the winning body in place of
+the tuned and ksplit kernels on the calls they serve, with the same group
+rule. That flip is its own commit after the verdict, not part of this lane.
+
+Reading the two arms together:
+
+| `kpack` | `kpack_wide` against `kpack` | what it says |
+|---|---|---|
+| faster | faster | C3 and C2 both bind; flip the faster one |
+| faster | slower, regs 255 with spills | C3 binds; the wide tile runs into C4 |
+| flat | faster | C2 binds, C3 does not |
+| flat | flat or slower | none of C2, C3 set the rate at these shapes; C1 or C4 remain |
+
+## 10. Risks only a build or a box can settle
+
+- **Syntax and API never compiled.**
+  - A Tuple returned by an inlined helper and reassigned inside a kernel
+    (`var sla = ...; if ...: sla = ...`).
+  - `unsafe_load[width=16]` from shared memory in a kernel (the width-16
+    precedent in the repo is host code).
+  - `SIMD[DType.float32, 128]` accumulators, and 128 inlined `_tuned_step`
+    calls per step times 12 steps in the `kpack_wide` full path (compile
+    time and PTX size).
+  - `var` declarations inside `comptime if GROUP` blocks.
+  - `_group_node[FS]` with a runtime `stack_allocation[FS * GROUP_NC, ...]`
+    on the host.
+- **Shared-memory limit at the edge.** `kpack` uses 32,768 B and `kpack_wide`
+  36,864 B on NVIDIA, both under the 48 KB row with the 1,024-byte guard per
+  page. The driver's real accounting is known only from one cuobjdump figure.
+- **Registers and local memory of `kpack_wide`.** 128 accumulators per
+  thread push past the 255 the shipped kernel reads. The compiler may
+  serialize or spill, and a spilled accumulator would pay local-memory
+  traffic per step (E-e is what that kind of traffic cost). The per-thread
+  local limit on the H100 is not in the repository.
+- **`kpack_wide` at KS 12 on NVIDIA.** 11 windows per 128-step leaf against 8,
+  with the last window on the ragged path (a runtime step loop). E-c prices
+  windows per step at a few percent; the ragged path's cost is unpriced.
+- **Compile time on the pod.** A trial build now instantiates the packed
+  kernel at two geometries, group and all-leaves, clean and sabotaged (8
+  specializations) in the check, the price harness and the byte LM binding,
+  plus 4 in the resources harness. If the lease is short, the knobs are
+  `MOJOLEARN_GEMM_STEP_LEG_SKIP_RESOURCES=1` and
+  `MOJOLEARN_GEMM_STEP_LEG_LMTIMING=0` through the runner, or a narrower arm
+  list.
+- **Per-call waits.** Where an arm's rule takes a call it allocates and
+  synchronizes twice inside `identical_gemm_into`, exactly as the shipped
+  default does on the same calls. `kpack_wide` takes gateup_fwd and down_dA
+  too (36 more calls per step than the default), so its LM ratio carries
+  36 more allocations and waits than its GEMM price does.
+- **The section 3 model is a reading.** C1 to C5 are competing causes named
+  from source and retained lines. None is measured as the cause, and the
+  arms were chosen to separate them, not on a prediction that either wins.
