@@ -1,0 +1,10 @@
+FSPEED-HEADER family=classical lane=kde arm=ours mode=IDENTICAL device=AMD_Instinct_MI300X_VF rounds=3 size=section9
+FSPEED-NOTE lane=kde arm=ours gemm_arm=tuned128 gemm_plan=tuned128:_the_old_TUNED_128x128_plan_forced_on_every_call_it_served block=1 dataset=taxi source=ctd data=/root/ctd-data rows=100000 features=11 test_rows=2000 x_sha256=3df831dcc01998b8 block=kde-taxi numeric_mode_used=identical vendor_used=hip smoke_max_rows=None mojolearn=/root/mojolearn/python/mojolearn/__init__.py
+FSPEED-NOTE lane=kde arm=ours context=bg=quiet
+FSPEED-NOTE lane=kde arm=ours gemm_entry=none (no call of this caller reaches identical_gemm_into under IDENTICAL; both arms run the same launches; a reach=not_called FSPEED-GEMM line is recorded only for its DISPATCH line)
+FSPEED-WARMUP lane=kde arm=ours shape=taxi-100000x11q2000-ctd ms=5434.442
+FSPEED lane=kde arm=ours shape=taxi-100000x11q2000-ctd round=1 ms=58.607 hash=aa8ac4159ad2cbfa
+FSPEED lane=kde arm=ours shape=taxi-100000x11q2000-ctd round=2 ms=58.062 hash=aa8ac4159ad2cbfa
+FSPEED lane=kde arm=ours shape=taxi-100000x11q2000-ctd round=3 ms=57.903 hash=aa8ac4159ad2cbfa
+FSPEED-ACC lane=kde arm=ours metric=mean_log_likelihood value=-9.58207196
+FSPEED-NOTE lane=kde arm=ours quality_extra rows_without_density=0

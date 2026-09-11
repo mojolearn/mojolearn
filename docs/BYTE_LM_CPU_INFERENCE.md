@@ -95,10 +95,12 @@ excludes, packed at its repository paths; the body unpacks it.
 | AMD x86_64, EPYC 9V45 (Zen 5, family 26 model 2; AVX2, FMA, AVX-512 present but not targeted), GitHub `ubuntu-24.04` | Ubuntu 24.04, Python 3.12 | `--target-cpu x86-64-v3`, Mojo 1.0.0, commit `5e10863b` | 33 of 33 on the reference AND threaded paths | yes, 9 of 33 on both paths | `bench/results/gh-actions/2026-09-11_165309-byte-lm-cpu-gate-run34624545221/byte-lm-cpu-gate-ubuntu-24.04` |
 | Intel x86_64, Xeon 6973P-C (Granite Rapids, family 6 model 173; AVX2, FMA, AVX-512 present but not targeted), GitHub `ubuntu-22.04` | Ubuntu 22.04, Linux 6.8, Python 3.12.14 | `--target-cpu x86-64-v3`, Mojo 1.0.0, commit `205b22fa` (main merged) | 33 of 33 on the reference AND threaded paths; plumbing tests 8 passed | yes, 9 of 33 on both paths | `bench/results/gh-actions/2026-09-11_1716-byte-lm-cpu-gate-run34626867783/byte-lm-cpu-gate-x86-e` |
 | Intel x86_64, Xeon Platinum 8573C (Emerald Rapids, family 6 model 207; AVX2, FMA, AVX-512 present but not targeted), GitHub `ubuntu-24.04` and `ubuntu-22.04` | Ubuntu 24.04 and 22.04, Python 3.12.14 | `--target-cpu x86-64-v3`, Mojo 1.0.0, commit `155f6195` | 33 of 33 on the reference AND threaded paths in two draws; plumbing tests 8 passed | yes, 9 of 33 on both paths | `bench/results/gh-actions/2026-09-11_1722-byte-lm-cpu-gate-run34627322685/byte-lm-cpu-gate-x86-b` and `x86-d` |
+| Intel x86_64, Xeon Platinum 8370C (Ice Lake, family 6 model 106; AVX2, FMA, AVX-512 present but not targeted), GitHub `ubuntu-24.04` | Ubuntu 24.04, Python 3.12.14 | `--target-cpu x86-64-v3`, Mojo 1.0.0, commit `b06cd442` (main) | 33 of 33 on the reference AND threaded paths; plumbing tests 8 passed | yes, 9 of 33 on both paths | `bench/results/gh-actions/2026-09-11_1727-byte-lm-cpu-gate-run34627708675/byte-lm-cpu-gate-x86-b` |
 | AMD x86_64, EPYC 7763 (Zen 3, family 25 model 1; AVX2, FMA), GitHub `ubuntu-24.04` and `ubuntu-22.04` | Ubuntu 24.04 and 22.04 | `--target-cpu x86-64-v3`, Mojo 1.0.0, commit `205b22fa` | 33 of 33 on both paths in six draws; plumbing tests 8 passed | yes, 9 of 33 on both paths | runs 34626868143 (x86-b, c, e) and 34626867783 (x86-a, b, d) |
 | AMD x86_64, EPYC 9V74 (Zen 4, family 25 model 17), GitHub `ubuntu-24.04` and `ubuntu-22.04` | Ubuntu 24.04 and 22.04 | `--target-cpu x86-64-v3`, Mojo 1.0.0, commit `205b22fa` | 33 of 33 on both paths in three draws; plumbing tests 8 passed | yes, 9 of 33 on both paths | runs 34626868143 (x86-a, d) and 34626867783 (x86-c) |
 | ARM64, Azure Cobalt 100 (Arm Neoverse N2, implementer 0x41 part 0xd49; ASIMD, SVE, SVE2), GitHub `ubuntu-24.04-arm` | Ubuntu 24.04, Python 3.12 | no CPU flag (aarch64 default), Mojo 1.0.0, commit `5e10863b` | 33 of 33 on both paths | yes, 9 of 33 on both paths | `.../byte-lm-cpu-gate-ubuntu-24.04-arm` |
 | Apple M1 (virtual), GitHub `macos-15` | macOS 15, Python 3.12 | `--target-cpu apple-m1`, Mojo 1.0.0, commit `5e10863b` | 33 of 33 on both paths | yes, 9 of 33 on both paths | `.../byte-lm-cpu-gate-macos-15` |
+| Apple M4, bare metal, 10 cores | macOS, Python 3.13.15 (pixi) | `--target-cpu apple-m1`, `mojo build -j 1`, Mojo 1.0.0, commit `68be1c79` (main) | **144 of 144** (all 128 training steps and 16 held-out batches) on both paths; the full user path through `from_checkpoint` passes | yes, 65 of 144 on both paths | `bench/results/local/2026-09-11_1436-apple-m4-byte-lm-cpu-certify` |
 
 The GitHub rows are run
 [34624545221](https://github.com/mojolearn/mojolearn/actions/runs/34624545221)
@@ -129,8 +131,29 @@ evidence `bench/results/gh-actions/2026-09-11_1722-byte-lm-cpu-gate-run346273226
 is green on all seven runners, ARM64 included: 33 of 33 on both paths, the
 control caught, plumbing tests 8 passed, the same logits hash.
 
-Not measured here: a Qualcomm CPU (no rentable cloud offers one), bare-metal
-Apple silicon, and a binary built on one CPU and run on another. The Intel
+The run on main `b06cd442` (run
+[34627708675](https://github.com/mojolearn/mojolearn/actions/runs/34627708675))
+is green on all seven runners, with an Intel Xeon Platinum 8370C among its
+x86-64 draws.
+
+**Bare-metal Apple M4, every step.** On main `68be1c79`, built on the M4 with
+one compiler job at the lowest priority and gated under `taskpolicy -c
+background`, the CPU binding reproduces all 144 recorded loss bytes (every one
+of the 128 training steps, not every 8th, and the 16 held-out batches) on the
+reference and threaded paths, and the reversed-fold control changes 65 of them
+on both. `certify_user_path.py` then takes the path a user takes:
+`LanguageModelInference.from_checkpoint` on the run's `final.checkpoint.json`
+yields exactly the step-128 parameters, all 8 held-out losses match their
+recorded bytes on both paths, their `math.fsum` mean equals the recorded
+2.8436418771743774 exactly, the logits hash is `2e2408f4...` on both paths, the
+package imports through the CPU-only path (`vendor()` is `cpu`), and an
+out-of-range token, an over-length input and a wrong loss shape are refused.
+The out-of-range token is refused by the native binding as a bare `Exception`
+rather than a `ValueError`.
+
+Not measured here: a Qualcomm CPU (no rentable cloud offers one), an installed
+wheel (the CPU binding is not packaged yet), and a binary built on one CPU and
+run on another. The Intel
 droplet leg for commit `5e10863b`
 (`bench/results/e1g/2026-09-11_165526-cpu-intel-byte-lm-host-threads`) never
 built: cloud-init held the apt lock, `build-essential` did not install, and the

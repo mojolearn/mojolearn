@@ -841,7 +841,7 @@ def attn_fwd_rows_per_block_for[column: Int]() -> Int:
 
 
 def attn_dkdv_keys_per_block_for[column: Int]() -> Int:
-    """SCHEDULING row (DEVIATION 2597, 2026-09-11, trial arm only; brief docs/lanes/BRIEF_attention_step_2026-09-11.md section 16): keys per 256-thread block of the fused attention's trial dk/dv folds over the stash (`fused_bwd_dkdv_r2_kernel`, and `fused_bwd_kvfold_r2_kernel` under the `_kvsplit` token), 64 (the shipped `fused_bwd_dkdv_tiled_pf_kernel` geometry) or 32, read by the bare `_kvgrid` arm token (`_kvgrid_r32` / `_kvgrid_r64` force it). At 32 keys a thread holds 8 dk and 8 dv accumulators instead of 16 and 16, and the joint page is `(2 * 16 * 64 + 2 * 16 * keys) * 4` bytes (16,384 B at 64, 12,288 B at 32; a `_kvsplit` fold page is half that). The keys per block are a schedule, never a numeric term: every dk and dv chain keeps its terms and its order (heads of the kv group ascending, queries ascending over the key's visible range) at either value. UNMEASURED on every column. AMD reads 32 because section 16's source reading names the tiled dk/dv thread state (32 accumulators and 10 operand registers per thread, twice the tiled dq fold's) as one candidate reason the tiled dk/dv fold costs 525 to 747 ms in the RunPod MI300X lean step against 64 ms for the baseline dk/dv, while the tiled dq fold costs 30 to 35 ms against 51; the AMD leg prices `_kvgrid_r32` and `_kvgrid_r64` by name and this row follows that measurement. Every other column 64. The shipped build reads it nowhere."""
+    """SCHEDULING row (DEVIATION 2597, 2026-09-11; brief docs/lanes/BRIEF_attention_step_2026-09-11.md sections 16 and 18): keys per 256-thread block of the fused attention's trial dk/dv folds over the stash (`fused_bwd_dkdv_r2_kernel`, and `fused_bwd_kvfold_r2_kernel` under the `_kvsplit` token), 64 (the shipped `fused_bwd_dkdv_tiled_pf_kernel` geometry) or 32, read by the bare `_kvgrid` arm token (`_kvgrid_r32` / `_kvgrid_r64` force it). At 32 keys a thread holds 8 dk and 8 dv accumulators instead of 16 and 16, and the joint page is `(2 * 16 * 64 + 2 * 16 * keys) * 4` bytes (16,384 B at 64, 12,288 B at 32; a `_kvsplit` fold page is half that). The keys per block are a schedule, never a numeric term: every dk and dv chain keeps its terms and its order (heads of the kv group ascending, queries ascending over the key's visible range) at either value. AMD 32, MEASURED: DigitalOcean MI325X leg bench/results/e1g/2026-09-11_180903-amd-mi325x-do-attention-dkdv (commit 5cc3b8df), `stash_tiled_fgrid_r32_qres_pf_kvgrid_r32` against `baseline` lean step 1.623 / 1.633 -> 1.376 / 1.370 s (enwik8 / Pile GitHub, FLIP geomean 0.8436, every step witness equal), in-step dk/dv 169.8 ms (baseline) -> 21.2 ms; section 16 had read 32 from the tiled dk/dv thread state (32 accumulators and 10 operand registers per thread, twice the tiled dq fold's). The AMD shipped default (`attn_default_arm_for`) forces the same 32 with `_kvgrid_r32` (brief section 18), so this row and the default agree on AMD and a bare `_kvgrid` resolves to the default's instantiation there. Every other column 64, unmeasured. A shipped build reads this row only for a default carrying bare `_kvgrid`, which no column's default does."""
     if column == COLUMN_AMD:
         return 32
     return 64
@@ -854,22 +854,36 @@ comptime ATTN_DEFAULT_WORD_STASH_TILED = 7
 comptime ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF = 3175
 """The attention arm word `stash_tiled_fgrid_r32_qres_pf`: stash_tiled (7) | 64 (fwd_grid, DEVIATION 2531) | 2048 (forward rows 32) | 32 (fwd_qres, DEVIATION 2530) | 1024 (preflush, DEVIATION 2533) = 3175. fused_attention.mojo asserts at build time that it equals its own composition."""
 
+comptime ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_KVGRID_R32 = 52327
+"""The attention arm word `stash_tiled_fgrid_r32_qres_pf_kvgrid_r32`: stash_tiled_fgrid_r32_qres_pf (3175) | 16384 (bwd_kvgrid, DEVIATION 2597) | 32768 (dk/dv keys per block 32) = 52327. fused_attention.mojo asserts at build time that it equals its own composition (`ATTN_ARM_R3_KVGRID_R32_DEFAULT`)."""
+
 
 def attn_default_arm_for[column: Int]() -> Int:
-    """ROUTING row (DEVIATION 2534, 2026-09-11; brief docs/lanes/BRIEF_attention_step_2026-09-11.md section 15): the attention arm word the SHIPPED build runs on this column (`ATTN_ARM_DEFAULT` in transformer/impl/llama/fused_attention.mojo; a `-D MOJOLEARN_ATTN_ARM_TRIAL=1` build runs it when MOJOLEARN_ATTN_ARM is unset and keeps every other arm selectable by name). Every arm is bit-equal to the eager oracle by the identity arguments of brief sections 4, 12 and 14, so this row picks a schedule and never a result. NVIDIA `stash_tiled_fgrid_r32_qres_pf`, MEASURED: H100 leg bench/results/e1g/2026-09-11_154257-nvidia-h100-80gb-hbm3-attention-round3 (commit 5bcfa71d), lean LM step 0.3845 / 0.3819 s under stash_tiled against 0.3346 / 0.3340 s (enwik8 / Pile GitHub), every step witness equal, fwd+bwd on real activations 1.41x of stash_tiled; ENGINEERING_RULES 9 flips it. AMD `baseline` (ATTN_DEFAULT_WORD_BASELINE), MEASURED on one RunPod MI300X pod against stash_tiled and stash_tiled_fgrid_r32_qres_pf, every step witness equal (the comment in the body names the evidence; the earlier AMD legs that had moved AMD to the round 3 arm compared it only against stash_tiled). Apple and every other column `stash_tiled` (unmeasured for the round 3 arms as a price). `-D MOJOLEARN_ATTN_DEFAULT_R3_EVERY_COLUMN=1` returns the NVIDIA word on every column, so a no-trial build on a Mac reaches the shipped round 3 branch (a check knob, the `MOJOLEARN_EXPERIMENTAL_SMALLK_IDENTICAL` pattern; never a shipped build)."""
+    """ROUTING row (DEVIATION 2534, 2026-09-11; brief docs/lanes/BRIEF_attention_step_2026-09-11.md sections 15 and 18): the attention arm word the SHIPPED build runs on this column (`ATTN_ARM_DEFAULT` in transformer/impl/llama/fused_attention.mojo; a `-D MOJOLEARN_ATTN_ARM_TRIAL=1` build runs it when MOJOLEARN_ATTN_ARM is unset and keeps every other arm selectable by name). Every arm is bit-equal to the eager oracle by the identity arguments of brief sections 4, 12, 14 and 16, so this row picks a schedule and never a result. NVIDIA `stash_tiled_fgrid_r32_qres_pf`, MEASURED: H100 leg bench/results/e1g/2026-09-11_154257-nvidia-h100-80gb-hbm3-attention-round3 (commit 5bcfa71d), lean LM step 0.3845 / 0.3819 s under stash_tiled against 0.3346 / 0.3340 s (enwik8 / Pile GitHub), every step witness equal, fwd+bwd on real activations 1.41x of stash_tiled; ENGINEERING_RULES 9 flips it. AMD `stash_tiled_fgrid_r32_qres_pf_kvgrid_r32` (ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_KVGRID_R32), MEASURED on the DigitalOcean MI325X against the previous AMD default `baseline`, every step witness equal (the comment in the body names the evidence and the verdict); a shipped build compiles its DEVIATION 2597 dk/dv kernel because the default carries it (brief section 18). Apple and every other column `stash_tiled` (unmeasured for the round 3 and 2597 arms as a price). `-D MOJOLEARN_ATTN_DEFAULT_R3_EVERY_COLUMN=1` returns the NVIDIA word on every column, so a no-trial build on a Mac reaches the shipped round 3 branch; `-D MOJOLEARN_ATTN_DEFAULT_KVGRID_EVERY_COLUMN=1` returns the AMD word on every column, so the same build reaches the shipped DEVIATION 2597 dk/dv branch (check knobs, the `MOJOLEARN_EXPERIMENTAL_SMALLK_IDENTICAL` pattern; never a shipped build; at most one of the two)."""
+    comptime assert not (is_defined["MOJOLEARN_ATTN_DEFAULT_R3_EVERY_COLUMN"]() and is_defined["MOJOLEARN_ATTN_DEFAULT_KVGRID_EVERY_COLUMN"]()), (
+        "MOJOLEARN_ATTN_DEFAULT_R3_EVERY_COLUMN and"
+        " MOJOLEARN_ATTN_DEFAULT_KVGRID_EVERY_COLUMN each name a different"
+        " default for every column; define at most one"
+    )
+    comptime if is_defined["MOJOLEARN_ATTN_DEFAULT_KVGRID_EVERY_COLUMN"]():
+        return ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_KVGRID_R32
     comptime if is_defined["MOJOLEARN_ATTN_DEFAULT_R3_EVERY_COLUMN"]():
         return ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF
     if column == COLUMN_NVIDIA:
         return ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF
     if column == COLUMN_AMD:
-        # Measured 2026-09-11 on ONE RunPod MI300X pod, all three arms, witnesses
-        # equal (e1g/2026-09-11_171959-amd-mi300x-runpod-attention-three): lean
-        # step baseline 2.192 / 2.166 s, stash_tiled 2.543 / 2.536 s (geomean
-        # 1.166), stash_tiled_fgrid_r32_qres_pf 2.213 / 2.325 s (1.041). The
-        # earlier AMD legs compared the round 3 winner only against stash_tiled,
-        # which itself loses to baseline on AMD. In the step the tiled dk/dv
-        # backward costs 525 to 627 ms against 64 ms for the baseline dk/dv.
-        return ATTN_DEFAULT_WORD_BASELINE
+        # Measured 2026-09-11 on the DigitalOcean MI325X against the previous
+        # AMD default baseline, commit 5cc3b8df, every step witness equal
+        # (bench/results/e1g/2026-09-11_180903-amd-mi325x-do-attention-dkdv):
+        #   verdict stash_tiled_fgrid_r32_qres_pf_kvgrid_r32 FLIP geomean=0.8436
+        #   enwik8=0.8478 pilegithub=0.8394 (vs baseline, DO MI325X, witnesses equal)
+        # Lean step 1.623 / 1.633 -> 1.376 / 1.370 s (enwik8 / Pile GitHub); in-step
+        # dk/dv 169.8 ms (baseline) -> 21.2 ms. The runners-up on the same leg:
+        # _kvsplit FLIP 0.8552, _kvrecompute FLIP 0.8652, and the round 3 arm
+        # without a dk/dv token NO FLIP 1.1400. ENGINEERING_RULES 9 flips the
+        # winner. Before it: baseline, from one RunPod MI300X pod
+        # (e1g/2026-09-11_171959-amd-mi300x-runpod-attention-three).
+        return ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_KVGRID_R32
     return ATTN_DEFAULT_WORD_STASH_TILED
 
 

@@ -35,10 +35,11 @@ formed removes it entirely.
 
 Identity [1] is not restricted to full row rank; `A^+ = A^T (A A^T)^+` holds
 for every `A`, and the `DivideByNonZero` guard supplies the `+` on `A A^T`.
-So a rank-deficient wide design lands on a pseudo-inverse cut at the
-absolute `OLS_NONZERO_THRESH` (`glm/NOT_IMPLEMENTED.tsv` row 10). CORRECTED
-2026-09-11: `lstsq_eig` no longer shares that threshold; it equilibrates and
-cuts relative (DEVIATIONS 2620, 2621), and this route was not changed.
+So a rank-deficient wide design lands on a pseudo-inverse. Since
+2026-09-11 (DEVIATION 2622) this route equilibrates `A A^T` by exact
+power-of-two scales and cuts at `n eps32 max|lam|`, the same two steps
+`lstsq_eig` took for `A^T A` (DEVIATIONS 2620, 2621); before that it cut at
+the absolute `OLS_NONZERO_THRESH`.
 
 WHAT THIS COSTS IN DIGITS, STATED HONESTLY
 -------------------------------------------
@@ -119,7 +120,15 @@ from decomposition.checks.jacobi_eigh_device import (
     JACOBI_TPB,
     jacobi_eigh_kernel,
 )
-from glm.impl.linalg.detail.lstsq import OLS_ELEM_TPB, OLS_NONZERO_THRESH
+from glm.impl.linalg.detail.lstsq import (
+    OLS_ELEM_TPB,
+    ols_equilibration_scale,
+    ols_pinv_threshold,
+)
+from glm.impl.matrix.math import (
+    matrix_vector_binary_mult_kernel,
+    row_vector_binary_mult_kernel,
+)
 
 
 def lstsq_min_norm(
@@ -203,6 +212,59 @@ def lstsq_min_norm_traced(
         ctx, "ols.mn.step1.AAt", gram, n_rows * n_rows
     )
 
+    # STEP 1b, DEVIATION 2622: EQUILIBRATE THE ROW GRAM BEFORE THE EIGENSOLVER.
+    #
+    # The tall route's DEVIATION 2620, applied to `A A^T`: `G_ii = m 2^e`
+    # gives `s_i = 2^-ceil(e / 2)` on the host from the bits
+    # (`ols_equilibration_scale`), then `G <- S G S` on the device. Every
+    # multiply is by a power of two, so it is EXACT. Step 4b undoes it on the
+    # pseudo-inverse, `(A A^T)^+ = S (S G S)^+ S`, which is an identity for a
+    # full-row-rank design (the usual wide case) and the same scaled
+    # pseudo-inverse the tall route keeps when a direction is dropped. Without
+    # it, rows whose norms span many octaves overflow the Jacobi's float32
+    # `||G||_F^2` exactly as Istella-S's columns did on the tall route
+    # (R^2 -115.6), and the relative cutoff below would drop the small rows.
+    var scale = ctx.enqueue_create_buffer[DType.float32](n_rows)
+    ctx.enqueue_function[diagonal_to_vector_kernel](
+        s_vec.unsafe_ptr(),
+        gram.unsafe_ptr(),
+        Int32(n_rows),
+        grid_dim=((n_rows + elem_tpb - 1) // elem_tpb, 1, 1),
+        block_dim=(elem_tpb, 1, 1),
+    )
+    var h_diag = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
+    ctx.enqueue_copy(dst_ptr=h_diag.unsafe_ptr(), src_buf=s_vec)
+    ctx.synchronize()
+    var h_scale = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
+    ctx.synchronize()
+    for i in range(n_rows):
+        h_scale.unsafe_ptr().unsafe_store(
+            i, ols_equilibration_scale(h_diag.unsafe_ptr().unsafe_load(i))
+        )
+    ctx.enqueue_copy(dst_buf=scale, src_ptr=h_scale.unsafe_ptr())
+    ctx.synchronize()
+    # `[[mojo-buffer-freed-at-last-use]]`
+    _ = h_diag^
+    _ = h_scale^
+    var cells = n_rows * n_rows
+    ctx.enqueue_function[row_vector_binary_mult_kernel](
+        gram.unsafe_ptr(),
+        scale.unsafe_ptr(),
+        Int32(n_rows),
+        Int32(n_rows),
+        grid_dim=((cells + elem_tpb - 1) // elem_tpb, 1, 1),
+        block_dim=(elem_tpb, 1, 1),
+    )
+    ctx.enqueue_function[matrix_vector_binary_mult_kernel](
+        gram.unsafe_ptr(),
+        scale.unsafe_ptr(),
+        Int32(n_rows),
+        Int32(n_rows),
+        grid_dim=((cells + elem_tpb - 1) // elem_tpb, 1, 1),
+        block_dim=(elem_tpb, 1, 1),
+    )
+    ctx.synchronize()
+
     # STEP 2. Q S Q^T <- G. Jacobi CONSUMES `gram` in place and leaves the
     # eigenvalues on its diagonal, which is why step 1 is recorded above and
     # not after this launch.
@@ -252,7 +314,24 @@ def lstsq_min_norm_traced(
         ctx, "ols.mn.step2.eigvecs", q, n_rows * n_rows
     )
     trace.record_device[DType.float32](ctx, "ols.mn.step2.info", info_buf, 3)
-    _record_rank(ctx, trace, s_vec, n_rows)
+
+    # STEP 2b, DEVIATION 2622: THE CUTOFF IS RELATIVE TO THE LARGEST
+    # EIGENVALUE (`ols_pinv_threshold`, scipy.linalg.pinvh's rtol), the tall
+    # route's DEVIATION 2621. The absolute 1e-10 this route used scaled with
+    # the square of the data: the same design had a different rank in other
+    # units, and an eigenvalue that is only float32 rounding was divided by.
+    var h_eig = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
+    ctx.enqueue_copy(dst_ptr=h_eig.unsafe_ptr(), src_buf=s_vec)
+    ctx.synchronize()
+    var max_abs = Float32(0.0)
+    for i in range(n_rows):
+        var mag = abs(h_eig.unsafe_ptr().unsafe_load(i))
+        if mag > max_abs:
+            max_abs = mag
+    var thresh = ols_pinv_threshold(max_abs, n_rows)
+    # `[[mojo-buffer-freed-at-last-use]]`
+    _ = h_eig^
+    _record_rank(ctx, trace, s_vec, n_rows, thresh)
 
     # STEP 3. QS <- Q invS, `DivideByNonZero` on the eigenvalues of A A^T.
     # This is where the pseudo-inverse in `w = A^T (A A^T)^+ b` comes from:
@@ -262,7 +341,7 @@ def lstsq_min_norm_traced(
         q.unsafe_ptr(),
         s_vec.unsafe_ptr(),
         Int32(n_rows),
-        OLS_NONZERO_THRESH,
+        thresh,
         grid_dim=((n_rows * n_rows + elem_tpb - 1) // elem_tpb, 1, 1),
         block_dim=(elem_tpb, 1, 1),
     )
@@ -270,8 +349,27 @@ def lstsq_min_norm_traced(
         ctx, "ols.mn.step3.QS", qs, n_rows * n_rows
     )
 
-    # STEP 4. inv <- QS Q^T == (A A^T)^+.
+    # STEP 4. inv <- QS Q^T == (S G S)^+.
     gemm_nt(ctx, inv, qs, q, n_rows, n_rows, n_rows)
+    ctx.synchronize()
+    # STEP 4b, DEVIATION 2622: inv <- S inv S == (A A^T)^+, the exact
+    # power-of-two scaling of step 1b undone before any rounding touches it.
+    ctx.enqueue_function[row_vector_binary_mult_kernel](
+        inv.unsafe_ptr(),
+        scale.unsafe_ptr(),
+        Int32(n_rows),
+        Int32(n_rows),
+        grid_dim=((cells + elem_tpb - 1) // elem_tpb, 1, 1),
+        block_dim=(elem_tpb, 1, 1),
+    )
+    ctx.enqueue_function[matrix_vector_binary_mult_kernel](
+        inv.unsafe_ptr(),
+        scale.unsafe_ptr(),
+        Int32(n_rows),
+        Int32(n_rows),
+        grid_dim=((cells + elem_tpb - 1) // elem_tpb, 1, 1),
+        block_dim=(elem_tpb, 1, 1),
+    )
     ctx.synchronize()
     trace.record_device[DType.float32](
         ctx, "ols.mn.step4.inv", inv, n_rows * n_rows
@@ -299,6 +397,7 @@ def lstsq_min_norm_traced(
     ctx.synchronize()
     trace.record_device[DType.float32](ctx, "ols.mn.step6.coef", w, n_cols)
     _ = info_buf
+    _ = scale
 
 
 def _record_rank(
@@ -306,6 +405,7 @@ def _record_rank(
     mut trace: IdentityTrace,
     mut s_vec: DeviceBuffer[DType.float32],
     n: Int,
+    thresh: Float32,
 ) raises:
     """The card's one INTEGER stage: how many directions survive step 3.
 
@@ -325,7 +425,7 @@ def _record_rank(
     var kept = 0
     for i in range(n):
         var lam = hs.unsafe_ptr().unsafe_load(i)
-        if lam > OLS_NONZERO_THRESH or lam < -OLS_NONZERO_THRESH:
+        if lam > thresh or lam < -thresh:
             kept += 1
     var one = List[Int32]()
     one.append(Int32(kept))

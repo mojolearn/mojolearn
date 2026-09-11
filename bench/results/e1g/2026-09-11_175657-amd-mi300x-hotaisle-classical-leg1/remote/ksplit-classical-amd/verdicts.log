@@ -1,0 +1,46 @@
+RULE a caller REGRESSES when geomean(default/tuned128 median ratio over taxi and Istella-S) > 1 + noise (the largest block-to-block spread of either arm's block medians on either dataset), or when a quality metric is WORSE; else it HOLDS. Every output hash must agree across arms and blocks (else IDENTITY-BREAK).
+== caller svc ==
+selected lane=svc arm=ours
+time taxi shape=taxi-10000x11-ctd: before median=1490.553 ms n=6, after median=1490.266 ms n=6, ratio=1.000
+quality taxi accuracy: before=0.767500 after=0.767500 delta=+0.000000 n=2/2 higher-is-better tol=7.67e-05 ok
+time istella shape=istella-10000x220-ctd: before median=119.460 ms n=6, after median=111.720 ms n=6, ratio=0.935
+quality istella accuracy: before=0.922200 after=0.922200 delta=+0.000000 n=2/2 higher-is-better tol=9.22e-05 ok
+time geomean=0.966967 (decided unrounded, below 1 wins)
+FLIP geomean=0.967 taxi=1.000 istella=0.935 quality=ok
+time svc taxi: default/tuned128=0.9998 block_noise=0.0083 blocks=2/2 witness=equal
+time svc istella: default/tuned128=0.9352 block_noise=0.0497 blocks=2/2 witness=equal
+caller=svc verdict=HOLDS reason=- geomean=0.9670 noise=0.0497 taxi=0.9998 istella=0.9352 witness_taxi=equal witness_istella=equal flip_verdict=[FLIP geomean=0.967 taxi=1.000 istella=0.935 quality=ok]
+== caller kmeans ==
+selected lane=kmeans arm=ours
+time taxi shape=taxi-4000000x11k64-ctd: before median=242.509 ms n=6, after median=242.424 ms n=6, ratio=1.000
+quality taxi inertia: before=120627657.000000 after=120627657.000000 delta=+0.000000 n=2/2 lower-is-better tol=1.21e+04 ok
+time istella shape=istella-2043304x220k64-ctd: before median=6208.811 ms n=6, after median=6248.269 ms n=6, ratio=1.006
+quality istella inertia: before=131284830000000000.000000 after=131284830000000000.000000 delta=+0.000000 n=2/2 lower-is-better tol=1.31e+13 ok
+time geomean=1.002997 (decided unrounded, below 1 wins)
+NO FLIP geomean=1.003 taxi=1.000 istella=1.006 reason=time
+time kmeans taxi: default/tuned128=0.9996 block_noise=0.0025 blocks=2/2 witness=equal
+time kmeans istella: default/tuned128=1.0064 block_noise=0.0088 blocks=2/2 witness=equal
+caller=kmeans verdict=HOLDS reason=- geomean=1.0030 noise=0.0088 taxi=0.9996 istella=1.0064 witness_taxi=equal witness_istella=equal flip_verdict=[NO FLIP geomean=1.003 taxi=1.000 istella=1.006 reason=time]
+== caller pca ==
+selected lane=pca arm=ours
+time taxi shape=taxi-4000000x11c8-ctd: before median=32.392 ms n=6, after median=32.469 ms n=6, ratio=1.002
+quality taxi explained_variance_ratio_sum: before=0.997861 after=0.997861 delta=+0.000000 n=2/2 higher-is-better tol=9.98e-05 ok
+time istella shape=istella-2043304x220c8-ctd: before median=675.601 ms n=6, after median=670.998 ms n=6, ratio=0.993
+quality istella explained_variance_ratio_sum: before=1.000000 after=1.000000 delta=+0.000000 n=2/2 higher-is-better tol=0.0001 ok
+time geomean=0.997764 (decided unrounded, below 1 wins)
+FLIP geomean=0.998 taxi=1.002 istella=0.993 quality=ok
+time pca taxi: default/tuned128=1.0024 block_noise=0.0032 blocks=2/2 witness=equal
+time pca istella: default/tuned128=0.9932 block_noise=0.0115 blocks=2/2 witness=equal
+caller=pca verdict=HOLDS reason=- geomean=0.9978 noise=0.0115 taxi=1.0024 istella=0.9932 witness_taxi=equal witness_istella=equal flip_verdict=[FLIP geomean=0.998 taxi=1.002 istella=0.993 quality=ok]
+== caller kde ==
+selected lane=kde arm=ours
+time taxi shape=taxi-100000x11q2000-ctd: before median=58.556 ms n=6, after median=58.552 ms n=6, ratio=1.000
+quality taxi mean_log_likelihood: before=-9.582072 after=-9.582072 delta=+0.000000 n=2/2 higher-is-better tol=0.000958 ok
+time istella shape=istella-100000x220q2000-ctd: before median=635.793 ms n=6, after median=616.693 ms n=6, ratio=0.970
+quality istella mean_log_likelihood: before=-212.117468 after=-212.117468 delta=+0.000000 n=2/2 higher-is-better tol=0.0212 ok
+time geomean=0.984823 (decided unrounded, below 1 wins)
+FLIP geomean=0.985 taxi=1.000 istella=0.970 quality=ok
+time kde taxi: default/tuned128=0.9999 block_noise=0.0184 blocks=2/2 witness=equal
+time kde istella: default/tuned128=0.9700 block_noise=0.0493 blocks=2/2 witness=equal
+caller=kde verdict=HOLDS reason=- geomean=0.9848 noise=0.0493 taxi=0.9999 istella=0.9700 witness_taxi=equal witness_istella=equal flip_verdict=[FLIP geomean=0.985 taxi=1.000 istella=0.970 quality=ok]
+CLASSICAL KSPLIT A/B svc=HOLDS kmeans=HOLDS pca=HOLDS kde=HOLDS

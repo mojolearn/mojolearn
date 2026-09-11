@@ -1,0 +1,4 @@
+== bench/gemm_step_price_main.mojo [IDENTICAL] arm=shipped trial=True column=3 rounds=7 warmups=2 controls=False ==
+DEFAULT gemm column=3 block_parallelism_row=110 ksplit_default=on trial_ksplit_S=110 shipped=[shipped DEFAULT ksplit (DEVIATION 2595, block parallelism row S=110 slack=4) where the group rule takes the call, else choose_gemm_plan's plan (TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=False (1-D grid, no swizzle) on the step's calls)]
+PLANLABEL arm=shipped label=shipped: default=ksplit(S=110) else tuned128
+LABEL ONLY (MOJOLEARN_GEMM_STEP_LABEL_ONLY=1): no device work

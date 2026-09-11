@@ -1,0 +1,2 @@
+shipped	shipped: default=ksplit(S=110) else tuned128
+tuned128	tuned128: the old TUNED 128x128 plan forced on every call it served

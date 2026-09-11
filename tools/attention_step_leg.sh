@@ -43,8 +43,9 @@
 # stash_tiled_fgrid_r32_qres_pf, stash_tiled_ztiled_r64_pf. The settings for
 # that leg live in tools/attention_round3_leg.sh, which calls this body.
 #
-# DEVIATIONS 2596 and 2597 (brief section 16, priced against `baseline`, the
-# shipped AMD default) add, after `_pf`, `_kvrecompute` (dk/dv by the shipped
+# DEVIATIONS 2596 and 2597 (brief section 16, priced against `baseline`, then
+# the shipped AMD default; AMD's default carries `_kvgrid_r32` since brief
+# section 18) add, after `_pf`, `_kvrecompute` (dk/dv by the shipped
 # recompute kernel with the stashes freed) or `_kvgrid`, `_kvgrid_r32`,
 # `_kvgrid_r64` (the tiled dk/dv fold's keys per block) and `_kvsplit` (that
 # fold as two kernels). The first price run also prints the harness's
@@ -61,7 +62,8 @@
 #
 # DEVIATION 2534 (brief section 15): the shipped default is a kernel-matrix
 # row per column (`attn_default_arm_for`: NVIDIA stash_tiled_fgrid_r32_qres_pf,
-# AMD baseline, every other column stash_tiled), and a trial binding runs it when
+# AMD stash_tiled_fgrid_r32_qres_pf_kvgrid_r32 since brief section 18, every
+# other column stash_tiled), and a trial binding runs it when
 # MOJOLEARN_ATTN_ARM is unset or empty. So that baseline, stash_tiled and the
 # default can never be confused in a result: the harness takes the name
 # `default` as an alias and prints only the explicit name (a `DEFAULT
@@ -298,7 +300,7 @@ if [ "${MOJOLEARN_ATTN_LEG_SHIPPED_CHECK:-0}" = "1" ]; then
         transformer/checks/transformer_fused_check.mojo -o "$OUT/bin/shipped-fused-check"
     if [ -x "$OUT/bin/shipped-fused-check" ]; then
         run shipped-fused-check timeout "$DEADLINE" "$OUT/bin/shipped-fused-check"
-        grep -h '^DEFAULT\|^ARM \|^transformer_fused_check:' "$OUT/shipped-fused-check.log" \
+        grep -h '^DEFAULT\|^ARM \|^DKDV \|^transformer_fused_check:' "$OUT/shipped-fused-check.log" \
             | sed 's/^/shipped_check: /' >> "$OUT/gate.txt"
     fi
 fi

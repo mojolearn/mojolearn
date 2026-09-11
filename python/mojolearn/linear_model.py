@@ -397,7 +397,9 @@ class LinearRegression(NumericModeMixin):
     see the `n_features > n` row below. On the tall route the Gram matrix is
     equilibrated by exact power-of-two column scales and its pseudo-inverse
     keeps eigenvalues above ``n_features * eps32 * max`` (DEVIATIONS 2620,
-    2621), so a column's units no longer change the model's rank.
+    2621), so a column's units no longer change the model's rank. The wide
+    route does the same to ``X @ X.T`` with row scales and an
+    ``n * eps32 * max`` cutoff (DEVIATION 2622).
 
     WHAT IS HONORED, WHAT IS REFUSED, AND WHY (measured row by row by
     `tools/e2u_matrix_fit.py`):

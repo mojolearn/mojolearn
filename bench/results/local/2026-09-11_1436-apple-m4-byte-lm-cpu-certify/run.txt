@@ -1,0 +1,4 @@
+machine=Apple M4 (bare metal, 10 cores), macOS 26.5.2
+commit=68be1c79422bcb3631a6e351b58b7cb09a3bc6df
+build=mojo build -j 1 at nice 19, --target-cpu apple-m1, IDENTICAL; gates and user path under taskpolicy -c background
+memory_pressure_level_during=2 (warn; never critical)

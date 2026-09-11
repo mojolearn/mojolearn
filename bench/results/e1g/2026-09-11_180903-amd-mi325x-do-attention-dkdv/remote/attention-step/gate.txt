@@ -1,0 +1,18 @@
+deviations=2525-2527
+started=2026-09-11T18:10:52Z
+root=/root/mojolearn
+arms=stash_tiled_fgrid_r32_qres_pf_kvrecompute,stash_tiled_fgrid_r32_qres_pf,stash_tiled_fgrid_r32_qres_pf_kvsplit,stash_tiled_fgrid_r32_qres_pf_kvgrid_r32,stash_tiled_fgrid_r32_qres_pf_kvgrid_r64,stash_tiled_fgrid_r32_qres_pf_kvgrid_r32_kvsplit
+lm_arms=baseline,stash_tiled_fgrid_r32_qres_pf_kvrecompute,stash_tiled_fgrid_r32_qres_pf,stash_tiled_fgrid_r32_qres_pf_kvsplit,stash_tiled_fgrid_r32_qres_pf_kvgrid_r32
+baseline_arm=baseline deviations_second_round=2528,2530,2531,2533 deviations_dkdv=2596,2597
+rounds=7 warmups=2 deadline=300
+vendor=amd gpu_archs=gfx942 column=amd jobs=8
+skip_timers=1 skip_lm=0
+vendor=amd
+commit=5cc3b8dfccdaef66742fe580242672c50c06dfcd
+provider=digitalocean
+size=gpu-mi325x1-256gb
+deviation_default_row=2534 shipped_check=0
+harness: DEFAULT column=amd arm=baseline source=kernel_matrix.attn_default_arm_for baseline_is_default=True candidate_is_default=False baseline_requested=baseline candidate_requested=stash_tiled_fgrid_r32_qres_pf
+corpora= enwik8=training/corpus/enwik8/input.txt pilegithub=training/corpus/pile_github/input.txt
+file_kinds=file:/root/gemm_leg_out/attention-step/operands-enwik8,file:/root/gemm_leg_out/attention-step/operands-pilegithub
+finished=2026-09-11T18:24:33Z

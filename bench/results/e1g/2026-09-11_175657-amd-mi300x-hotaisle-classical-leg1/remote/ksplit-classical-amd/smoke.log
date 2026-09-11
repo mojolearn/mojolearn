@@ -1,0 +1,5 @@
+mojolearn=/root/mojolearn/python/mojolearn/__init__.py mode_env=identical gemm_arm=
+pca explained_variance=[1.5507049560546875, 0.9294607043266296]
+kde score0=-5.651522636413574 mode=identical
+svc n_support=36 pred0=0.0
+kmeans inertia=185.04490661621094 mode=identical

@@ -93,7 +93,8 @@ stash_tiled_fgrid_r32_qres, stash_tiled_fgrid_r32_qres_pf),
 MOJOLEARN_ATTN_BASELINE (default baseline; stash_tiled is the baseline a
 second-round arm is priced against). Either name may be `default`, the
 column's shipped arm (kernel matrix `attn_default_arm_for`, DEVIATION 2534:
-NVIDIA stash_tiled_fgrid_r32_qres_pf, AMD baseline, every other column stash_tiled); the
+NVIDIA stash_tiled_fgrid_r32_qres_pf, AMD stash_tiled_fgrid_r32_qres_pf_kvgrid_r32
+since brief section 18, every other column stash_tiled); the
 harness prints the explicit name everywhere and a `DEFAULT` line beside the
 request. The two `PATH` lines print each arm's resolved kernels
 (`is_default`, `resolved_hd64`), and every correctness run prints a `RAN`

@@ -2536,3 +2536,264 @@ in gate.txt). Flip: 17.7. Reading against 17.2: the price `bwd (derived)` of
 `attn.bwd_zdot_stash_pf` (66.2 ms on the last pod). If the lease runs short,
 drop LM arms after the price lines rank them, never the default (the witness
 reference).
+
+### 17.10 Merge note (branch `lane/attention-zdot-h100-merged`, origin/main at afba564c, source only, nothing built)
+
+This lane was merged with section 18 (the AMD default
+`stash_tiled_fgrid_r32_qres_pf_kvgrid_r32`, word 52327). Main made the 2597
+bits shippable and compiles one clean
+`_launch_bwd_stash_tiled_kv[64, ATTN_DEFAULT_KV_KEYS, ATTN_DEFAULT_KV_SPLIT]`
+on a shipped build whose default carries them. That helper calls
+`_launch_bwd_stash_zdq_pf`, which this lane had given four runtime
+branches holding the zdot schedule kernels. So the merge puts those four
+branches under `comptime if ATTN_ARM_TRIAL`: a shipped build raises on a
+nonzero `zsched` and instantiates no DEVIATION 2598 kernel, and the shipped
+call site passes `zsched` 0 (a sixth call site beside 17.6 item 1's five). A
+trial build compiles and launches what this lane did. `ATTN_ARM_DEFAULT_REFUSED_BITS`
+is main's set plus `ATTN_ARM_ZSCHED_BITS`. The sabotage copies stay trial-only
+(section 18.2). The arms check is this lane's 21 arms (section 18's 18 plus
+the three 2598 arms), so 18.5 item 4's counts read as 17.8 item 2's on this
+branch. The fused check's `DKDV` and `DEFAULT` lines are main's. RUN OWED on
+the merged branch, the orchestrator's M4 light commands, one at a time:
+
+1. `nice -n 19 pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . transformer/checks/transformer_fused_check.mojo -o /tmp/fused-check && /tmp/fused-check`.
+   Expect PASS, `DEFAULT column=apple arm=stash_tiled word=7`, `DKDV ... shipped_kv_branch=False default_kv_keys=0` (18.5 item 1).
+2. `nice -n 19 pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_ATTN_DEFAULT_KVGRID_EVERY_COLUMN=1 -I . transformer/checks/transformer_fused_check.mojo -o /tmp/fused-check && /tmp/fused-check`.
+   Expect PASS, `DEFAULT column=apple arm=stash_tiled_fgrid_r32_qres_pf_kvgrid_r32 word=52327`, `DKDV ... shipped_kv_branch=True default_kv_keys=32` (18.5 item 2). This is the build that proves the shipped kv branch compiles with the zdot gating.
+3. `nice -n 19 pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_ATTN_DEFAULT_R3_EVERY_COLUMN=1 -I . transformer/checks/transformer_fused_check.mojo -o /tmp/fused-check && /tmp/fused-check`.
+   Expect PASS (18.5 item 3).
+4. `nice -n 19 pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_ATTN_ARM_TRIAL=1 -I . transformer/checks/transformer_attention_arms_check.mojo -o /tmp/arms-check && /tmp/arms-check`.
+   Expect `names: 39 spellings and 168 arm values round-trip, 35 invalid spellings refused`, the `REACH <arm>+sabotage_new` lines with `zdot_moved_even_rows=0` and `zdot_moved_odd_rows` above 0 for the three zdot arms only, and `transformer_attention_arms_check: PASS, names inverse, 15 cases x 21 arms` (17.8 item 2).
+5. The price harness at L 512, correctness only, against `default` (on the M4, stash_tiled):
+   `nice -n 19 pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_ATTN_ARM_TRIAL=1 -I . bench/attention_step_price_main.mojo -o /tmp/attn-price`,
+   then `MOJOLEARN_ATTN_BASELINE=default MOJOLEARN_ATTN_ARM=<arm> MOJOLEARN_ATTN_KINDS=hashed,heavytail MOJOLEARN_ATTN_TIMING=0 MOJOLEARN_ATTN_L=512 MOJOLEARN_ATTN_NH=4 MOJOLEARN_ATTN_NKV=2 nice -n 19 /tmp/attn-price`
+   for `<arm>` = `stash_tiled_fgrid_r32_qres_pf_zlag` (with `MOJOLEARN_ATTN_RESOURCES=1`), then `stash_tiled_fgrid_r32_qres_pf_zdefer` and `stash_tiled_fgrid_r32_qres_pf_zlag_kvgrid_r32` (with `MOJOLEARN_ATTN_ORACLE=0 MOJOLEARN_ATTN_RESOURCES=0`).
+   Expect every `BITS` MATCH, `REACH_Z ... forward_moved=0 zdot_moved_even_rows=0 zdot_moved_odd_rows=<above 0> dv_moved=0`, a `REACH_KV` line on the composed arm, and `attention_step_price: PASS (<arm> vs stash_tiled)` (17.8 item 3).
+6. `nice -n 19 pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . gemm/checks/gemm_device_check.mojo -o /tmp/gemm-device-check && /tmp/gemm-device-check`.
+   Expect its PASS line unchanged (18.5 item 5).
+
+## 18. The AMD dk/dv flip wired as the shipped default (2026-09-11, worktree lane `lane/attention-kv-default`, source built, nothing run)
+
+STATUS: 18.1 reads a leg already filed; everything from 18.2 on is source
+only. Nothing was compiled or run (no build on the Mac, by rule). The
+orchestrator's M4 commands in 18.5 are the first compile. No new deviation
+number: this is DEVIATION 2534's default mechanism extended to the
+DEVIATION 2597 arms.
+
+### 18.1 The AMD evidence
+
+`bench/results/e1g/2026-09-11_180903-amd-mi325x-do-attention-dkdv` (filed on
+main at db8a92ed). DigitalOcean `gpu-mi325x1-256gb`, AMD Instinct MI325X,
+commit 5cc3b8df, the 16.8 body (`tools/attention_dkdv_leg.sh`) against the
+then shipped AMD default `baseline`, every step witness equal on both
+corpora, every price verdict PASS against baseline.
+
+| arm | lean step enwik8 s | lean step Pile GitHub s | geomean over baseline | verdict |
+|---|---:|---:|---:|---|
+| baseline (shipped then) | 1.623 | 1.633 | 1.000 | |
+| stash_tiled_fgrid_r32_qres_pf | 1.846 | 1.865 | 1.1400 | NO FLIP |
+| `_kvrecompute` | 1.396 | 1.420 | 0.8652 | FLIP |
+| `_kvsplit` | 1.383 | 1.401 | 0.8552 | FLIP |
+| `_kvgrid_r32` | 1.376 | 1.370 | 0.8436 | FLIP, the winner |
+
+In-step dk/dv: baseline 169.8 ms, the round 3 tiled fold 406.2 ms,
+`_kvgrid_r32` 21.2 ms, `_kvsplit` 24.8 + 24.8 ms, `_kvrecompute` 170.6 ms.
+The verdict line:
+
+    verdict stash_tiled_fgrid_r32_qres_pf_kvgrid_r32 FLIP geomean=0.8436 enwik8=0.8478 pilegithub=0.8394 (vs baseline, DO MI325X, witnesses equal)
+
+The leg's smoke on that box printed `PATH candidate
+arm=stash_tiled_fgrid_r32_qres_pf_kvgrid_r32 ...
+resolved_hd64=stash_tiled_fgrid_r32_qres_pf_kvgrid_r32 ... fwd_rows=32
+preflush=True ... kv_keys=32 kv_split=False`: on the AMD column the forward
+Q residency page (15,232 B) and the joint 2597 page at 32 keys (12,288 B)
+both fit. By ENGINEERING_RULES 9 the AMD default becomes the winner. It could
+not until now because `ATTN_ARM_DEFAULT_REFUSED_BITS` refused every 2596 and
+2597 bit: a shipped build compiled none of their kernels.
+
+### 18.2 The change
+
+`checks/kernel_matrix.mojo`:
+
+- `ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_KVGRID_R32 = 52327`
+  (3175 | 16384 `_kvgrid` | 32768 keys 32).
+- `attn_default_arm_for`: the AMD row returns that word, with a comment citing
+  the evidence path and the verdict line. NVIDIA stays
+  `stash_tiled_fgrid_r32_qres_pf`, Apple and every other column
+  `stash_tiled`.
+- `-D MOJOLEARN_ATTN_DEFAULT_KVGRID_EVERY_COLUMN=1` returns the AMD word on
+  every column (a check knob, the `MOJOLEARN_ATTN_DEFAULT_R3_EVERY_COLUMN`
+  pattern; never a shipped build). A `comptime assert` refuses both knobs in
+  one build.
+- `attn_dkdv_keys_per_block_for`: AMD stays 32 and is now MEASURED (the
+  winning arm's `_r32`); every other column stays 64. The AMD default forces
+  32 with `_kvgrid_r32`, so the row and the default agree on AMD and a bare
+  `_kvgrid` resolves to the default's instantiation there.
+
+`transformer/impl/llama/fused_attention.mojo` (no vendor branch; no
+environment read on a shipped build; no kernel edited):
+
+- `ATTN_ARM_R3_KVGRID_R32_DEFAULT = ATTN_ARM_R3_DEFAULT | ATTN_ARM_BWD_KVGRID
+  | ATTN_ARM_KVROWS32`.
+- `ATTN_ARM_DEFAULT_REFUSED_BITS` loses `ATTN_ARM_BWD_KVGRID`,
+  `ATTN_ARM_KVROWS32`, `ATTN_ARM_KVROWS64` and `ATTN_ARM_BWD_KVSPLIT`. It keeps
+  the sabotages (`ATTN_ARM_SABOTAGE_KV` included), DEVIATION 2528 and
+  `ATTN_ARM_BWD_KVRECOMPUTE`. `_kvrecompute` was not free to include: it has
+  its own launcher (`_launch_bwd_stash_tiled_kvre`, an extra synchronize and a
+  stash free) and a sabotage that launches `_attn_flip_copy_kernel`, and it
+  priced third.
+- `_attn_kv_key(arm)`: which 2597 dk/dv instantiation an arm resolves to, as
+  `keys * 2 + split`, 0 when none (no 2597 token, `_kvrecompute`, or a page
+  that does not fit). The analogue of `_attn_fwd_r2_key`.
+- Module constants beside `ATTN_SHIPPED_BWD_PF`: `ATTN_DEFAULT_KV_KEYS =
+  fused_attention_kv_keys(ATTN_ARM_DEFAULT)`, `ATTN_DEFAULT_KV_SPLIT`,
+  `ATTN_DEFAULT_KV_KEY = _attn_kv_key(ATTN_ARM_DEFAULT)` and
+  `ATTN_SHIPPED_BWD_KV = ATTN_SHIPPED_BWD_PF and ATTN_DEFAULT_KV_KEY != 0`.
+- `fused_backward_launch_ran`: inside `comptime if ATTN_SHIPPED_BWD_PF`, a
+  `comptime if ATTN_SHIPPED_BWD_KV` branch before the plain `_pf` launch. When
+  the arm has the stash, the tiled fold, `_pf`, head_dim 64 and
+  `_attn_kv_key(arm) == ATTN_DEFAULT_KV_KEY`, it launches
+  `_launch_bwd_stash_tiled_kv[64, ATTN_DEFAULT_KV_KEYS, ATTN_DEFAULT_KV_SPLIT]`
+  with both sabotage flags False (on AMD `[64, 32, False]`), and reports
+  `bwd_stash_tiled_pf` plus `_attn_kv_ran_bits(arm, keys)`. Any other `_pf`
+  arm takes the plain `_pf` launch as before. This is the same helper the
+  trial tree calls.
+- The sabotage instantiations stay trial-only. `_launch_bwd_stash_zdq_pf` and
+  `_launch_bwd_stash_tiled_kv` chose them with a runtime `if zsab` / `if ksab`,
+  which would have instantiated both copies in any build that called them.
+  Each sabotage arm now sits under `comptime if ATTN_ARM_TRIAL` and raises on a
+  build without the define. The shipped caller passes False, and a trial
+  build compiles and launches exactly what it did before.
+- `fused_attention_arm_backward_resolved`: on a shipped build with
+  `ATTN_SHIPPED_BWD_KV`, an arm with `_pf` whose `_attn_kv_key` equals the
+  default's resolves to `bwd_stash_tiled_pf` plus the kv bits, the same
+  condition the launcher uses.
+- Build-time asserts in `fused_attention_arm_from_env` (every launcher calls
+  it), beside 2534's: the new literal word equals
+  `ATTN_ARM_R3_KVGRID_R32_DEFAULT`; a default with a 2597 token carries the
+  stash, the tiled fold and `_pf` (the parser's rule); a keys knob comes with
+  `_kvgrid` and never both knobs together; the default's 2597 page fits the
+  column (`ATTN_DEFAULT_KV_KEY != 0`); and a no-trial build with such a default
+  compiles the branch (`ATTN_SHIPPED_BWD_KV`). The forward half of the AMD
+  word is NVIDIA's and meets 2534's page assert. `_kvrecompute`, `_ztiled` and
+  the sabotages stay refused.
+
+How a shipped build decides which dk/dv kernels to compile: from the column
+default alone, at comptime. `ATTN_ARM_DEFAULT` comes from the matrix row.
+`fused_attention_kv_keys` resolves its keys (the `_kvgrid_r32` knob, else the
+row), and `_attn_kv_key` turns them into one instantiation key. If that key
+is not 0 and the build has no trial define, the backward launcher compiles
+that one clean `_launch_bwd_stash_tiled_kv` instantiation, which pulls in one
+2597 kernel (`fused_bwd_dkdv_r2_kernel[64, 32, False]` on AMD), plus the clean
+preflushed zdot stash and dq it already compiled through `_pf`. On NVIDIA and
+Apple the key is 0 and the shipped build compiles what it compiled before.
+
+`transformer/checks/transformer_fused_check.mojo`: a `DKDV default_hd64=<kernel>
+this_run_hd64=<kernel> shipped_kv_branch=<bool> default_kv_keys=<n>` line
+after the `ARM` line (the kernel is named from the resolved backward word by
+`dkdv_kernel_name`). Direct backward launches are counted (`bwd_launches`), and
+so are those that reported a 2596 / 2597 token (`kv_launches`). The check
+FAILS when the arm's resolved backward carries a kv token and no launch
+reported it, or when a launch reported one the arm does not resolve to.
+`require_ran` already fails on any mismatch per launch. The PASS line ends
+`; dk/dv <kernel> in <n> backward launches`. `run_case` gained two `mut`
+counters; the arms check does not import it.
+
+Also: `tools/attention_step_leg.sh` copies the `DKDV` line into gate.txt with
+the shipped check's `DEFAULT` and `ARM` lines. Stale "AMD baseline" comments
+there and in `bench/attention_step_price_main.mojo` now name the new default.
+
+### 18.3 Why no bit can move
+
+No kernel was written or edited. 16.4 B (the 2597 identity argument: every dk
+and dv chain from +0.0 with the shipped terms in the shipped order, keys per
+block a partition, two launches sharing no accumulator, the corner flag an OR
+of the same conditions, `_step_preflushed` equal to `_step` on these operands)
+is unchanged. On AMD the shipped path now launches the instantiation whose bit
+equality with eager 16.4 B argues. The MI325X leg measured it on the box: its
+arms check printed `transformer_attention_arms_check: PASS, names inverse, 15
+cases x 18 arms, every RAN buffer bit-identical to eager, ... reach proven per
+branch at head_dim 64`, its price run printed `BITS ...
+stash_tiled_fgrid_r32_qres_pf_kvgrid_r32_vs_baseline ... MATCH` on the dumped
+activations, and every step witness was equal. All of it went through the same
+generic launch helper the trial tree calls, with the same clean kernel
+instantiation. The M4 run of the 18-arm arms check is 16.7 item 2 and 18.5
+item 4. The only change is
+which kernels a shipped build compiles, and which of the bit-equal schedules it
+launches. The sabotage gating adds a `comptime if` around launches a shipped
+build never took, and changes nothing a trial build compiles or launches.
+
+### 18.4 Risks only a build or a box can settle
+
+1. Nothing was compiled. Likeliest faults: module-scope comptime evaluation of
+   `fused_attention_kv_keys(ATTN_ARM_DEFAULT)` and `_attn_kv_key` (the first
+   comptime use of `fused_attention_kv_keys`, which also names
+   `fused_rows_per_block`); `comptime if ATTN_ARM_TRIAL: ... else: raise`
+   inside a runtime `if` in the two launchers; a comptime global as a
+   parameter of `_launch_bwd_stash_tiled_kv`; `comptime assert` with
+   `is_defined` inside `attn_default_arm_for`.
+2. A shipped AMD build now compiles the round 3 forward copy, the preflushed
+   zdot stash and dq, and `fused_bwd_dkdv_r2_kernel[64, 32, False]`, where
+   before (`baseline`) it compiled no arm kernel. Build time grows on AMD.
+3. The trial LM probes on the MI325X used trial bindings. A shipped AMD binding's
+   step is argued, not measured, to match the trial run of the same name: both
+   launch `_launch_fwd_r2[64, 32, True, True, False]` and
+   `_launch_bwd_stash_tiled_kv[64, 32, False]` with clean flags.
+4. `ran` proves which branch launched, not what the kernel computed. Reach of
+   the kernel content stays the trial `+sabotage_kv` (arms check, harness).
+5. On a shipped build, a sabotage bit passed explicitly to
+   `fused_backward_launch_arm` on a kv arm now raises instead of silently
+   launching a sabotage kernel the shipped build compiled. No shipped caller
+   passes one.
+6. The winner was measured on one MI325X leg. No MI300X leg has priced the 2597
+   arms against baseline.
+
+### 18.5 RUN OWED on the M4 (the orchestrator's light commands, one at a time)
+
+1. The shipped path, no trial define, Apple's row (still stash_tiled):
+   `nice -n 19 pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . transformer/checks/transformer_fused_check.mojo -o /tmp/fused-check`
+   then `nice -n 19 /tmp/fused-check`. Expect
+   `DEFAULT column=apple arm=stash_tiled word=7`,
+   `ARM this_run=stash_tiled is_default=True forward_hd64=fwd_sstash backward_hd64=bwd_stash_tiled`,
+   `DKDV default_hd64=fused_bwd_dkdv_tiled_kernel[64] this_run_hd64=fused_bwd_dkdv_tiled_kernel[64] shipped_kv_branch=False default_kv_keys=0`
+   and `transformer_fused_check: PASS, 15 cases, ... 17 direct launches RAN fwd_sstash / bwd_stash_tiled at head_dim 64; dk/dv fused_bwd_dkdv_tiled_kernel[64] in 8 backward launches`.
+2. The shipped 2597 dk/dv branch on the M4, still no trial define:
+   `nice -n 19 pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_ATTN_DEFAULT_KVGRID_EVERY_COLUMN=1 -I . transformer/checks/transformer_fused_check.mojo -o /tmp/fused-check-kv`
+   then `nice -n 19 /tmp/fused-check-kv`. Expect
+   `DEFAULT column=apple arm=stash_tiled_fgrid_r32_qres_pf_kvgrid_r32 word=52327`,
+   `DEFAULT resolved_hd64=stash_tiled_fgrid_r32_qres_pf_kvgrid_r32`,
+   `ARM this_run=stash_tiled_fgrid_r32_qres_pf_kvgrid_r32 is_default=True forward_hd64=fwd_sstash_fgrid_r32_qres_pf backward_hd64=bwd_stash_tiled_pf_kvgrid_r32`,
+   `DKDV default_hd64=fused_bwd_dkdv_r2_kernel[64,32] this_run_hd64=fused_bwd_dkdv_r2_kernel[64,32] shipped_kv_branch=True default_kv_keys=32`,
+   every backward status line at head_dim 64 ending `ran bwd_stash_tiled_pf_kvgrid_r32`,
+   every buffer bit-identical, and
+   `transformer_fused_check: PASS, 15 cases, ... 17 direct launches RAN fwd_sstash_fgrid_r32_qres_pf / bwd_stash_tiled_pf_kvgrid_r32 at head_dim 64; dk/dv fused_bwd_dkdv_r2_kernel[64,32] in 8 backward launches`
+   (the 12,288 B page fits Metal's 32 KB).
+3. The round 3 knob still reaches its branch:
+   `nice -n 19 pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_ATTN_DEFAULT_R3_EVERY_COLUMN=1 -I . transformer/checks/transformer_fused_check.mojo -o /tmp/fused-check-r3`
+   then `nice -n 19 /tmp/fused-check-r3`. Expect 15.4 item 2's lines, plus
+   `DKDV default_hd64=fused_bwd_dkdv_tiled_pf_kernel[64] ... shipped_kv_branch=False default_kv_keys=0`
+   and a PASS naming `RAN fwd_sstash_fgrid_r32_qres_pf / bwd_stash_tiled_pf`
+   and `dk/dv fused_bwd_dkdv_tiled_pf_kernel[64] in 8 backward launches`.
+4. The arms gate, trial define, unchanged from 16.7 item 2:
+   `nice -n 19 pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_ATTN_ARM_TRIAL=1 -I . transformer/checks/transformer_attention_arms_check.mojo -o /tmp/arms-check`
+   then `nice -n 19 /tmp/arms-check`. Expect
+   `names: 33 spellings and 144 arm values round-trip, 27 invalid spellings refused`,
+   the five `REACH <arm>+sabotage_kv ...` lines with dk and dv moved and
+   zdot, dq and the forward held, and
+   `transformer_attention_arms_check: PASS, names inverse, 15 cases x 18 arms`.
+5. `checks/kernel_matrix.mojo` changed, so the GEMM device check must stay
+   green (the spelling in BRIEF_gemm_long_k_2026-09-11.md):
+   `nice -n 19 pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . gemm/checks/gemm_device_check.mojo -o /tmp/gemm-device-check`
+   then `nice -n 19 /tmp/gemm-device-check`. Expect its PASS line unchanged.
+
+### 18.6 The AMD confirmation leg (owed, waiting for Andrew's go)
+
+A shipped-default confirmation on AMD is owed: the no-trial fused check on
+the box (`MOJOLEARN_ATTN_LEG_SHIPPED_CHECK=1`, whose gate.txt must show
+`shipped_check: DEFAULT column=amd arm=stash_tiled_fgrid_r32_qres_pf_kvgrid_r32`,
+`shipped_check: DKDV default_hd64=fused_bwd_dkdv_r2_kernel[64,32] ... shipped_kv_branch=True default_kv_keys=32`
+and its PASS line), and an LM arm `default` beside `baseline` on both corpora,
+whose `lm_summary.tsv` rows must read
+`arm=stash_tiled_fgrid_r32_qres_pf_kvgrid_r32 arm_is_default=True` with
+witnesses equal. Andrew has moved new legs to RunPod NVIDIA, so this leg waits
+for his go. Nothing in this lane rents.

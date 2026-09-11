@@ -1,0 +1,4 @@
+Darwin iad20-eo1209-f12bbcb2-204e-452b-8409-ff01bbc220bc-0AE59B2999C4.local 24.6.0 Darwin Kernel Version 24.6.0: Tue Jul 21 20:51:34 PDT 2026; root:xnu-11417.140.69.711.44~1/RELEASE_ARM64_VMAPPLE arm64
+Python 3.12.10
+Apple M1 (Virtual)
+15.7.9

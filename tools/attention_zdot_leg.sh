@@ -5,8 +5,10 @@
 # that phase; `_zdefer`: the stores deferred only), on the shipped NVIDIA
 # default stash_tiled_fgrid_r32_qres_pf and priced against it (brief
 # docs/lanes/BRIEF_attention_step_2026-09-11.md section 17). The AMD dk/dv
-# arms `_kvgrid_r32` and `_kvsplit` (DEVIATION 2597, kernels unchanged) ride
-# the same pod for NVIDIA numbers, and `_zlag_kvgrid_r32` is the composed arm.
+# arms `_kvgrid_r32` and `_kvsplit` (DEVIATION 2597, kernels unchanged;
+# `stash_tiled_fgrid_r32_qres_pf_kvgrid_r32` is the shipped AMD default since
+# brief section 18, NVIDIA's default is unchanged) ride the same pod for
+# NVIDIA numbers, and `_zlag_kvgrid_r32` is the composed arm.
 #
 # A MOJOLEARN_GEMM_LEG_EXTRA body. tools/gemm_remote_leg.sh has no extra-env
 # plumbing, so the settings live here (that leg copies this file into the

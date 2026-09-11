@@ -1,0 +1,12 @@
+FSPEED-HEADER family=classical lane=kmeans arm=ours mode=IDENTICAL device=AMD_Instinct_MI300X_VF rounds=3 size=section9
+FSPEED-NOTE lane=kmeans arm=ours gemm_arm=default gemm_plan=shipped:_default=ksplit(S=110)_else_tuned128 block=2 dataset=istella source=ctd data=/root/ctd-data rows=2043304 features=220 test_rows=500000 x_sha256=4c25bd496cda0e88 block=big-istella numeric_mode_used=identical vendor_used=hip smoke_max_rows=None mojolearn=/root/mojolearn/python/mojolearn/__init__.py
+FSPEED-NOTE lane=kmeans arm=ours context=bg=quiet
+FSPEED-GEMM lane=kmeans caller=kmeans.lloyd_unfused_tile_not_called.istella op=NT m=32768 n=64 k=220 reach=not_called
+FSPEED-NOTE lane=kmeans arm=ours gemm_entry=none (no call of this caller reaches identical_gemm_into under IDENTICAL; both arms run the same launches; a reach=not_called FSPEED-GEMM line is recorded only for its DISPATCH line)
+FSPEED-WARMUP lane=kmeans arm=ours shape=istella-2043304x220k64-ctd ms=10480.625
+FSPEED lane=kmeans arm=ours shape=istella-2043304x220k64-ctd round=1 ms=6270.985 hash=7f720b0b76896308
+FSPEED lane=kmeans arm=ours shape=istella-2043304x220k64-ctd round=2 ms=6253.647 hash=7f720b0b76896308
+FSPEED lane=kmeans arm=ours shape=istella-2043304x220k64-ctd round=3 ms=6253.117 hash=7f720b0b76896308
+FSPEED-ACC lane=kmeans arm=ours metric=inertia value=1.3128483e+17
+FSPEED-NOTE lane=kmeans arm=ours quality_extra inertia_over_ours=1.0
+FSPEED-NOTE lane=kmeans arm=ours quality_extra n_iter=21

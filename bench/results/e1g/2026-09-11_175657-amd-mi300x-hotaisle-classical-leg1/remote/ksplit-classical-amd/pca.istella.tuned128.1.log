@@ -1,0 +1,9 @@
+FSPEED-HEADER family=classical lane=pca arm=ours mode=IDENTICAL device=AMD_Instinct_MI300X_VF rounds=3 size=section9
+FSPEED-NOTE lane=pca arm=ours gemm_arm=tuned128 gemm_plan=tuned128:_the_old_TUNED_128x128_plan_forced_on_every_call_it_served block=1 dataset=istella source=ctd data=/root/ctd-data rows=2043304 features=220 test_rows=500000 x_sha256=4c25bd496cda0e88 block=big-istella numeric_mode_used=identical vendor_used=hip smoke_max_rows=None mojolearn=/root/mojolearn/python/mojolearn/__init__.py
+FSPEED-NOTE lane=pca arm=ours context=bg=quiet
+FSPEED-GEMM lane=pca caller=pca.cov.istella op=TN m=220 n=220 k=2043304 reach=entry
+FSPEED-WARMUP lane=pca arm=ours shape=istella-2043304x220c8-ctd ms=4100.408
+FSPEED lane=pca arm=ours shape=istella-2043304x220c8-ctd round=1 ms=667.071 hash=e43f2f52f20f511a
+FSPEED lane=pca arm=ours shape=istella-2043304x220c8-ctd round=2 ms=678.934 hash=e43f2f52f20f511a
+FSPEED lane=pca arm=ours shape=istella-2043304x220c8-ctd round=3 ms=672.269 hash=e43f2f52f20f511a
+FSPEED-ACC lane=pca arm=ours metric=explained_variance_ratio_sum value=1.00000001
