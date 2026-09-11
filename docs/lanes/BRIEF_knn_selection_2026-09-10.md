@@ -944,3 +944,36 @@ record the `dyadic` medians against the cached rows in
 opponent measurement; cuML is not rerun). If warpbound is neutral or
 negative, record it beside C1 and close the bound family (C2, C3) in
 section 3 with the JSON path.
+
+## Step 3 result: C2 warpbound is NEGATIVE; the bound family is closed (H100, 2026-09-11 04:11Z, `bench/results/e1g/2026-09-11_000701-nvidia/remote/knn-selection`)
+
+Correctness: all four arms bit-equal on every fixture at k10 and k15, order
+ok, planted ok, oracle clean; reach proven for warpbound everywhere
+(79,362 / 119,362 / 79,444 / 119,444 / 13,892 / 20,892 / 11,900 / 17,900
+cells flipped, restored); the arms check passed on the box.
+
+| fixture | k | baseline median ms | warpbound median ms | delta |
+|---|---:|---:|---:|---:|
+| large | 10 | 30.96 | 32.33 | +1.37 |
+| large | 15 | 36.02 | 36.85 | +0.83 |
+| dyadic | 10 | 30.72 | 32.21 | +1.49 |
+| dyadic | 15 | 36.49 | 37.69 | +1.20 |
+
+A bound that costs five shuffles every second batch and no barrier still
+loses, so the saved insertions are worth less than the model said: the
+k-proportional cost of the selection is NOT the insertion chain. Both bound
+arms stay behind the trial define as measured negatives; C3 (cross-batch
+compaction) rests on the same premise and is closed with them.
+SMALLK_WARPBOUND_DEFAULT stays False.
+
+What the numbers say instead: the generic bucket's cost at k1 (16.1 ms) is
+already above the K-specialized k10 (10.3 ms), and the specialized slope of
+15.4 us per launch per k survives a bound that removes half the insertion
+events. The remaining k-proportional work is the rank phase (k exact
+minima, each a butterfly with a barrier, per row) and the k-dependent
+register list itself. Next: measure, do not model. A trial arm that skips
+the rank phase (timing only, output invalid) and one that skips the scan,
+under the same define, give the split directly; then the rank phase's k
+barrier rounds are the candidate (a single-pass bitonic or shuffle-based
+extraction of k minima with the same comparison order), which the brief's
+C5 already named and ranked too low on the wrong premise.

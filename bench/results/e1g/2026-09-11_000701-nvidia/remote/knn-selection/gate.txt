@@ -1,0 +1,10 @@
+deviation=2496
+started=2026-09-11T04:10:02Z
+root=/root/mojolearn
+arms=baseline,warpbound
+pairs=3
+cached_opponent=k10=10.225,k15=10.817
+vendor=nvidia
+commit=d54eba0dc9b8341bce26bd6e3332f117a433ac8c
+python=pixi run python3
+finished=2026-09-11T04:11:28Z

@@ -1,0 +1,1868 @@
+{
+ "deviation": 2496,
+ "tool": "tools/knn_selection_gate.py",
+ "status": "passed",
+ "quick": false,
+ "selftest": false,
+ "seed": 20260910,
+ "arm_env": "MOJOLEARN_KNN_SELECT",
+ "sabotage_env": "MOJOLEARN_KNN_SELECT_SABOTAGE",
+ "arms": [
+  "baseline",
+  "warpbound"
+ ],
+ "ks": [
+  10,
+  15
+ ],
+ "pairs_per_order": 3,
+ "deadline_s": 300,
+ "python": "3.14.7 | packaged by conda-forge | (main, Aug 19 2026, 15:32:49) [GCC 15.3.0]",
+ "platform": "Linux-6.8.0-106-generic-x86_64-with-glibc2.35",
+ "numpy": "2.5.2",
+ "started_utc": "2026-09-11T04:11:16Z",
+ "environment": {
+  "MOJOLEARN_KNN_SELECTION_ARMS": "baseline,warpbound",
+  "MOJOLEARN_KNN_SELECTION_SKIP_PROFILE": "1",
+  "MOJOLEARN_NUMERIC_MODE": "identical"
+ },
+ "fixtures": {
+  "large": {
+   "name": "large",
+   "n_index": 400000,
+   "n_queries": 4000,
+   "d": 32,
+   "exact": [
+    [
+     100,
+     0
+    ],
+    [
+     101,
+     1
+    ],
+    [
+     102,
+     255
+    ],
+    [
+     103,
+     256
+    ],
+    [
+     104,
+     2047
+    ],
+    [
+     105,
+     2048
+    ],
+    [
+     106,
+     65535
+    ],
+    [
+     107,
+     65536
+    ],
+    [
+     108,
+     65537
+    ],
+    [
+     109,
+     131071
+    ],
+    [
+     110,
+     131072
+    ],
+    [
+     111,
+     200000
+    ],
+    [
+     112,
+     393215
+    ],
+    [
+     113,
+     393216
+    ],
+    [
+     114,
+     399998
+    ],
+    [
+     115,
+     399999
+    ]
+   ],
+   "dup_groups": [],
+   "offset_groups": [],
+   "oracle": "sampled",
+   "timed": true,
+   "description": "hashed non-uniform 400k x 32 / 4k x 32 with 16 exact-match queries",
+   "sha256_index": "b68be4ee19d74e32599b0724e4005479c9ea218fc2e475390e46bffb084c6dd5",
+   "sha256_queries": "c6a4271900811e183426fcaad0f63bbdb5fade6c83e6fd51a92387e24c0976bd",
+   "distinct_rows": true
+  },
+  "dyadic": {
+   "name": "dyadic",
+   "n_index": 400000,
+   "n_queries": 4000,
+   "d": 32,
+   "exact": [],
+   "dup_groups": [],
+   "offset_groups": [],
+   "oracle": "sampled",
+   "timed": true,
+   "description": "dyadic-v1, the cached cuML opponent fixture (salts 0/593)",
+   "sha256_index": "f8bde93b13eeeb96f8787aa8a6e2e9ca42ca69b1e90b765aa79d2141e087bac3",
+   "sha256_queries": "98f9264b520b234e5f05b862744af1e04752441cc740848eb2e195033b88f63e",
+   "distinct_rows": true
+  },
+  "ties": {
+   "name": "ties",
+   "n_index": 131079,
+   "n_queries": 700,
+   "d": 32,
+   "exact": [
+    [
+     0,
+     [
+      42222,
+      73958,
+      96984
+     ]
+    ],
+    [
+     1,
+     [
+      62606,
+      111327,
+      126102
+     ]
+    ],
+    [
+     2,
+     [
+      33897,
+      65537,
+      107476
+     ]
+    ],
+    [
+     3,
+     [
+      34538,
+      96953,
+      128637
+     ]
+    ],
+    [
+     4,
+     [
+      888,
+      65534,
+      108301
+     ]
+    ],
+    [
+     5,
+     [
+      6590,
+      17676,
+      92157
+     ]
+    ],
+    [
+     6,
+     [
+      59051,
+      65536,
+      95566
+     ]
+    ],
+    [
+     7,
+     [
+      35024,
+      44550,
+      98722
+     ]
+    ],
+    [
+     8,
+     [
+      42387,
+      64165,
+      72082
+     ]
+    ],
+    [
+     9,
+     [
+      14619,
+      80053,
+      101979
+     ]
+    ],
+    [
+     10,
+     [
+      59762,
+      65264,
+      131075
+     ]
+    ],
+    [
+     11,
+     [
+      11722,
+      28766,
+      118284
+     ]
+    ],
+    [
+     12,
+     [
+      11806,
+      55828,
+      72415
+     ]
+    ],
+    [
+     13,
+     [
+      70141,
+      117516,
+      131074
+     ]
+    ],
+    [
+     14,
+     [
+      54263,
+      64199,
+      131071
+     ]
+    ],
+    [
+     15,
+     [
+      32341,
+      102043,
+      109084
+     ]
+    ],
+    [
+     16,
+     [
+      0,
+      64100,
+      76790
+     ]
+    ],
+    [
+     17,
+     [
+      1357,
+      108227,
+      131076
+     ]
+    ],
+    [
+     18,
+     [
+      89218,
+      107812,
+      131072
+     ]
+    ],
+    [
+     19,
+     [
+      6550,
+      104359,
+      108496
+     ]
+    ],
+    [
+     20,
+     [
+      13444,
+      32311,
+      70000
+     ]
+    ],
+    [
+     21,
+     [
+      27304,
+      88405,
+      131078
+     ]
+    ],
+    [
+     22,
+     [
+      50480,
+      97581,
+      105373
+     ]
+    ],
+    [
+     23,
+     [
+      4198,
+      10035,
+      78793
+     ]
+    ],
+    [
+     24,
+     [
+      4057,
+      21232,
+      91794
+     ]
+    ],
+    [
+     25,
+     [
+      54322,
+      107715,
+      131073
+     ]
+    ],
+    [
+     26,
+     [
+      14827,
+      23938,
+      58618
+     ]
+    ],
+    [
+     27,
+     [
+      27202,
+      38919,
+      112805
+     ]
+    ],
+    [
+     28,
+     [
+      3786,
+      65535,
+      66149
+     ]
+    ],
+    [
+     29,
+     [
+      35305,
+      57571,
+      110453
+     ]
+    ],
+    [
+     30,
+     [
+      18862,
+      75463,
+      109368
+     ]
+    ],
+    [
+     31,
+     [
+      5109,
+      9232,
+      131077
+     ]
+    ],
+    [
+     32,
+     [
+      49234,
+      95382,
+      116025
+     ]
+    ],
+    [
+     33,
+     [
+      1,
+      7374,
+      104965
+     ]
+    ],
+    [
+     34,
+     [
+      42924,
+      64442,
+      92843
+     ]
+    ],
+    [
+     35,
+     [
+      31181,
+      46326,
+      99358
+     ]
+    ],
+    [
+     36,
+     [
+      94803,
+      103366,
+      129664
+     ]
+    ],
+    [
+     37,
+     [
+      26157,
+      49831,
+      118695
+     ]
+    ],
+    [
+     38,
+     [
+      32878,
+      73099,
+      105896
+     ]
+    ],
+    [
+     39,
+     [
+      30281,
+      57265,
+      62068
+     ]
+    ]
+   ],
+   "dup_groups": [
+    [
+     42222,
+     73958,
+     96984
+    ],
+    [
+     62606,
+     111327,
+     126102
+    ],
+    [
+     33897,
+     65537,
+     107476
+    ],
+    [
+     34538,
+     96953,
+     128637
+    ],
+    [
+     888,
+     65534,
+     108301
+    ],
+    [
+     6590,
+     17676,
+     92157
+    ],
+    [
+     59051,
+     65536,
+     95566
+    ],
+    [
+     35024,
+     44550,
+     98722
+    ],
+    [
+     42387,
+     64165,
+     72082
+    ],
+    [
+     14619,
+     80053,
+     101979
+    ],
+    [
+     59762,
+     65264,
+     131075
+    ],
+    [
+     11722,
+     28766,
+     118284
+    ],
+    [
+     11806,
+     55828,
+     72415
+    ],
+    [
+     70141,
+     117516,
+     131074
+    ],
+    [
+     54263,
+     64199,
+     131071
+    ],
+    [
+     32341,
+     102043,
+     109084
+    ],
+    [
+     0,
+     64100,
+     76790
+    ],
+    [
+     1357,
+     108227,
+     131076
+    ],
+    [
+     89218,
+     107812,
+     131072
+    ],
+    [
+     6550,
+     104359,
+     108496
+    ],
+    [
+     13444,
+     32311,
+     70000
+    ],
+    [
+     27304,
+     88405,
+     131078
+    ],
+    [
+     50480,
+     97581,
+     105373
+    ],
+    [
+     4198,
+     10035,
+     78793
+    ],
+    [
+     4057,
+     21232,
+     91794
+    ],
+    [
+     54322,
+     107715,
+     131073
+    ],
+    [
+     14827,
+     23938,
+     58618
+    ],
+    [
+     27202,
+     38919,
+     112805
+    ],
+    [
+     3786,
+     65535,
+     66149
+    ],
+    [
+     35305,
+     57571,
+     110453
+    ],
+    [
+     18862,
+     75463,
+     109368
+    ],
+    [
+     5109,
+     9232,
+     131077
+    ],
+    [
+     49234,
+     95382,
+     116025
+    ],
+    [
+     1,
+     7374,
+     104965
+    ],
+    [
+     42924,
+     64442,
+     92843
+    ],
+    [
+     31181,
+     46326,
+     99358
+    ],
+    [
+     94803,
+     103366,
+     129664
+    ],
+    [
+     26157,
+     49831,
+     118695
+    ],
+    [
+     32878,
+     73099,
+     105896
+    ],
+    [
+     30281,
+     57265,
+     62068
+    ]
+   ],
+   "offset_groups": [
+    [
+     40,
+     [
+      42222,
+      73958,
+      96984
+     ]
+    ],
+    [
+     41,
+     [
+      62606,
+      111327,
+      126102
+     ]
+    ],
+    [
+     42,
+     [
+      33897,
+      65537,
+      107476
+     ]
+    ],
+    [
+     43,
+     [
+      34538,
+      96953,
+      128637
+     ]
+    ],
+    [
+     44,
+     [
+      888,
+      65534,
+      108301
+     ]
+    ],
+    [
+     45,
+     [
+      6590,
+      17676,
+      92157
+     ]
+    ],
+    [
+     46,
+     [
+      59051,
+      65536,
+      95566
+     ]
+    ],
+    [
+     47,
+     [
+      35024,
+      44550,
+      98722
+     ]
+    ],
+    [
+     48,
+     [
+      42387,
+      64165,
+      72082
+     ]
+    ],
+    [
+     49,
+     [
+      14619,
+      80053,
+      101979
+     ]
+    ],
+    [
+     50,
+     [
+      59762,
+      65264,
+      131075
+     ]
+    ],
+    [
+     51,
+     [
+      11722,
+      28766,
+      118284
+     ]
+    ],
+    [
+     52,
+     [
+      11806,
+      55828,
+      72415
+     ]
+    ],
+    [
+     53,
+     [
+      70141,
+      117516,
+      131074
+     ]
+    ],
+    [
+     54,
+     [
+      54263,
+      64199,
+      131071
+     ]
+    ],
+    [
+     55,
+     [
+      32341,
+      102043,
+      109084
+     ]
+    ],
+    [
+     56,
+     [
+      0,
+      64100,
+      76790
+     ]
+    ],
+    [
+     57,
+     [
+      1357,
+      108227,
+      131076
+     ]
+    ],
+    [
+     58,
+     [
+      89218,
+      107812,
+      131072
+     ]
+    ],
+    [
+     59,
+     [
+      6550,
+      104359,
+      108496
+     ]
+    ],
+    [
+     60,
+     [
+      13444,
+      32311,
+      70000
+     ]
+    ],
+    [
+     61,
+     [
+      27304,
+      88405,
+      131078
+     ]
+    ],
+    [
+     62,
+     [
+      50480,
+      97581,
+      105373
+     ]
+    ],
+    [
+     63,
+     [
+      4198,
+      10035,
+      78793
+     ]
+    ],
+    [
+     64,
+     [
+      4057,
+      21232,
+      91794
+     ]
+    ],
+    [
+     65,
+     [
+      54322,
+      107715,
+      131073
+     ]
+    ],
+    [
+     66,
+     [
+      14827,
+      23938,
+      58618
+     ]
+    ],
+    [
+     67,
+     [
+      27202,
+      38919,
+      112805
+     ]
+    ],
+    [
+     68,
+     [
+      3786,
+      65535,
+      66149
+     ]
+    ],
+    [
+     69,
+     [
+      35305,
+      57571,
+      110453
+     ]
+    ],
+    [
+     70,
+     [
+      18862,
+      75463,
+      109368
+     ]
+    ],
+    [
+     71,
+     [
+      5109,
+      9232,
+      131077
+     ]
+    ],
+    [
+     72,
+     [
+      49234,
+      95382,
+      116025
+     ]
+    ],
+    [
+     73,
+     [
+      1,
+      7374,
+      104965
+     ]
+    ],
+    [
+     74,
+     [
+      42924,
+      64442,
+      92843
+     ]
+    ],
+    [
+     75,
+     [
+      31181,
+      46326,
+      99358
+     ]
+    ],
+    [
+     76,
+     [
+      94803,
+      103366,
+      129664
+     ]
+    ],
+    [
+     77,
+     [
+      26157,
+      49831,
+      118695
+     ]
+    ],
+    [
+     78,
+     [
+      32878,
+      73099,
+      105896
+     ]
+    ],
+    [
+     79,
+     [
+      30281,
+      57265,
+      62068
+     ]
+    ]
+   ],
+   "oracle": "complete",
+   "timed": false,
+   "description": "carved last partition (2 x 65536 + 7), planted three-way exact and offset ties",
+   "sha256_index": "3b66eb6fb66675f8654668ec4c5500da4b802655cde4e90df7374926507348fc",
+   "sha256_queries": "1cd87d546ac8b7d2589628d610514df8ca46b456c717852200ce3667df451cbd",
+   "distinct_rows": null
+  },
+  "divergent_tail": {
+   "name": "divergent_tail",
+   "n_index": 397156,
+   "n_queries": 600,
+   "d": 32,
+   "exact": [],
+   "dup_groups": [],
+   "offset_groups": [],
+   "oracle": "sampled",
+   "timed": false,
+   "description": "last partition 3,940 columns: per-thread trip-count divergence in the unrolled scan",
+   "sha256_index": "950ac54c7552d9a44f3c2f482d008f53d5de78bc8ff6f5c61b92875764ae074a",
+   "sha256_queries": "dd9821628f12ad0cc303ef72a15c208fa9dfb2e1225154bb52e7aa1d6c79e7b9",
+   "distinct_rows": true
+  }
+ },
+ "correctness": [
+  {
+   "fixture": "large",
+   "k": 10,
+   "arms": {
+    "baseline": {
+     "equal_to_baseline": true,
+     "differing_cells": 0
+    },
+    "warpbound": {
+     "equal_to_baseline": true,
+     "differing_cells": 0
+    },
+    "default": {
+     "equal_to_baseline": true,
+     "differing_cells": 0
+    }
+   },
+   "row_order": [],
+   "planted": [],
+   "oracle": {
+    "rows": 64,
+    "hard_mismatch_rows": [],
+    "ambiguous_rows": 0,
+    "distance_mismatch_rows": []
+   },
+   "exact_zero_bits": 8
+  },
+  {
+   "fixture": "large",
+   "k": 15,
+   "arms": {
+    "baseline": {
+     "equal_to_baseline": true,
+     "differing_cells": 0
+    },
+    "warpbound": {
+     "equal_to_baseline": true,
+     "differing_cells": 0
+    },
+    "default": {
+     "equal_to_baseline": true,
+     "differing_cells": 0
+    }
+   },
+   "row_order": [],
+   "planted": [],
+   "oracle": {
+    "rows": 64,
+    "hard_mismatch_rows": [],
+    "ambiguous_rows": 0,
+    "distance_mismatch_rows": []
+   },
+   "exact_zero_bits": 8
+  },
+  {
+   "fixture": "dyadic",
+   "k": 10,
+   "arms": {
+    "baseline": {
+     "equal_to_baseline": true,
+     "differing_cells": 0
+    },
+    "warpbound": {
+     "equal_to_baseline": true,
+     "differing_cells": 0
+    },
+    "default": {
+     "equal_to_baseline": true,
+     "differing_cells": 0
+    }
+   },
+   "row_order": [],
+   "planted": [],
+   "oracle": {
+    "rows": 48,
+    "hard_mismatch_rows": [],
+    "ambiguous_rows": 0,
+    "distance_mismatch_rows": []
+   },
+   "exact_zero_bits": 0
+  },
+  {
+   "fixture": "dyadic",
+   "k": 15,
+   "arms": {
+    "baseline": {
+     "equal_to_baseline": true,
+     "differing_cells": 0
+    },
+    "warpbound": {
+     "equal_to_baseline": true,
+     "differing_cells": 0
+    },
+    "default": {
+     "equal_to_baseline": true,
+     "differing_cells": 0
+    }
+   },
+   "row_order": [],
+   "planted": [],
+   "oracle": {
+    "rows": 48,
+    "hard_mismatch_rows": [],
+    "ambiguous_rows": 0,
+    "distance_mismatch_rows": []
+   },
+   "exact_zero_bits": 0
+  },
+  {
+   "fixture": "ties",
+   "k": 10,
+   "arms": {
+    "baseline": {
+     "equal_to_baseline": true,
+     "differing_cells": 0
+    },
+    "warpbound": {
+     "equal_to_baseline": true,
+     "differing_cells": 0
+    },
+    "default": {
+     "equal_to_baseline": true,
+     "differing_cells": 0
+    }
+   },
+   "row_order": [],
+   "planted": [],
+   "oracle": {
+    "rows": 700,
+    "hard_mismatch_rows": [],
+    "ambiguous_rows": 1,
+    "distance_mismatch_rows": []
+   },
+   "exact_zero_bits": 26
+  },
+  {
+   "fixture": "ties",
+   "k": 15,
+   "arms": {
+    "baseline": {
+     "equal_to_baseline": true,
+     "differing_cells": 0
+    },
+    "warpbound": {
+     "equal_to_baseline": true,
+     "differing_cells": 0
+    },
+    "default": {
+     "equal_to_baseline": true,
+     "differing_cells": 0
+    }
+   },
+   "row_order": [],
+   "planted": [],
+   "oracle": {
+    "rows": 700,
+    "hard_mismatch_rows": [],
+    "ambiguous_rows": 1,
+    "distance_mismatch_rows": []
+   },
+   "exact_zero_bits": 26
+  },
+  {
+   "fixture": "divergent_tail",
+   "k": 10,
+   "arms": {
+    "baseline": {
+     "equal_to_baseline": true,
+     "differing_cells": 0
+    },
+    "warpbound": {
+     "equal_to_baseline": true,
+     "differing_cells": 0
+    },
+    "default": {
+     "equal_to_baseline": true,
+     "differing_cells": 0
+    }
+   },
+   "row_order": [],
+   "planted": [],
+   "oracle": {
+    "rows": 47,
+    "hard_mismatch_rows": [],
+    "ambiguous_rows": 0,
+    "distance_mismatch_rows": []
+   },
+   "exact_zero_bits": 0
+  },
+  {
+   "fixture": "divergent_tail",
+   "k": 15,
+   "arms": {
+    "baseline": {
+     "equal_to_baseline": true,
+     "differing_cells": 0
+    },
+    "warpbound": {
+     "equal_to_baseline": true,
+     "differing_cells": 0
+    },
+    "default": {
+     "equal_to_baseline": true,
+     "differing_cells": 0
+    }
+   },
+   "row_order": [],
+   "planted": [],
+   "oracle": {
+    "rows": 45,
+    "hard_mismatch_rows": [],
+    "ambiguous_rows": 0,
+    "distance_mismatch_rows": []
+   },
+   "exact_zero_bits": 0
+  }
+ ],
+ "reach": [
+  {
+   "fixture": "large",
+   "k": 10,
+   "arm": "baseline",
+   "sabotage_flipped_cells": 38306,
+   "clean_restored": true
+  },
+  {
+   "fixture": "large",
+   "k": 10,
+   "arm": "warpbound",
+   "sabotage_flipped_cells": 79362,
+   "clean_restored": true
+  },
+  {
+   "fixture": "large",
+   "k": 10,
+   "arm": "default",
+   "sabotage_flipped_cells": 38306,
+   "clean_restored": true
+  },
+  {
+   "fixture": "large",
+   "k": 15,
+   "arm": "baseline",
+   "sabotage_flipped_cells": 70635,
+   "clean_restored": true
+  },
+  {
+   "fixture": "large",
+   "k": 15,
+   "arm": "warpbound",
+   "sabotage_flipped_cells": 119362,
+   "clean_restored": true
+  },
+  {
+   "fixture": "large",
+   "k": 15,
+   "arm": "default",
+   "sabotage_flipped_cells": 70635,
+   "clean_restored": true
+  },
+  {
+   "fixture": "dyadic",
+   "k": 10,
+   "arm": "baseline",
+   "sabotage_flipped_cells": 38045,
+   "clean_restored": true
+  },
+  {
+   "fixture": "dyadic",
+   "k": 10,
+   "arm": "warpbound",
+   "sabotage_flipped_cells": 79444,
+   "clean_restored": true
+  },
+  {
+   "fixture": "dyadic",
+   "k": 10,
+   "arm": "default",
+   "sabotage_flipped_cells": 38045,
+   "clean_restored": true
+  },
+  {
+   "fixture": "dyadic",
+   "k": 15,
+   "arm": "baseline",
+   "sabotage_flipped_cells": 70423,
+   "clean_restored": true
+  },
+  {
+   "fixture": "dyadic",
+   "k": 15,
+   "arm": "warpbound",
+   "sabotage_flipped_cells": 119444,
+   "clean_restored": true
+  },
+  {
+   "fixture": "dyadic",
+   "k": 15,
+   "arm": "default",
+   "sabotage_flipped_cells": 70423,
+   "clean_restored": true
+  },
+  {
+   "fixture": "ties",
+   "k": 10,
+   "arm": "baseline",
+   "sabotage_flipped_cells": 6549,
+   "clean_restored": true
+  },
+  {
+   "fixture": "ties",
+   "k": 10,
+   "arm": "warpbound",
+   "sabotage_flipped_cells": 13892,
+   "clean_restored": true
+  },
+  {
+   "fixture": "ties",
+   "k": 10,
+   "arm": "default",
+   "sabotage_flipped_cells": 6509,
+   "clean_restored": true
+  },
+  {
+   "fixture": "ties",
+   "k": 15,
+   "arm": "baseline",
+   "sabotage_flipped_cells": 12234,
+   "clean_restored": true
+  },
+  {
+   "fixture": "ties",
+   "k": 15,
+   "arm": "warpbound",
+   "sabotage_flipped_cells": 20892,
+   "clean_restored": true
+  },
+  {
+   "fixture": "ties",
+   "k": 15,
+   "arm": "default",
+   "sabotage_flipped_cells": 12172,
+   "clean_restored": true
+  },
+  {
+   "fixture": "divergent_tail",
+   "k": 10,
+   "arm": "baseline",
+   "sabotage_flipped_cells": 5183,
+   "clean_restored": true
+  },
+  {
+   "fixture": "divergent_tail",
+   "k": 10,
+   "arm": "warpbound",
+   "sabotage_flipped_cells": 11900,
+   "clean_restored": true
+  },
+  {
+   "fixture": "divergent_tail",
+   "k": 10,
+   "arm": "default",
+   "sabotage_flipped_cells": 5165,
+   "clean_restored": true
+  },
+  {
+   "fixture": "divergent_tail",
+   "k": 15,
+   "arm": "baseline",
+   "sabotage_flipped_cells": 9717,
+   "clean_restored": true
+  },
+  {
+   "fixture": "divergent_tail",
+   "k": 15,
+   "arm": "warpbound",
+   "sabotage_flipped_cells": 17900,
+   "clean_restored": true
+  },
+  {
+   "fixture": "divergent_tail",
+   "k": 15,
+   "arm": "default",
+   "sabotage_flipped_cells": 9681,
+   "clean_restored": true
+  }
+ ],
+ "timing": [
+  {
+   "fixture": "large",
+   "k": 10,
+   "n_index": 400000,
+   "n_queries": 4000,
+   "d": 32,
+   "arm_a": "baseline",
+   "arm_b": "warpbound",
+   "pairs": [
+    {
+     "order": 0,
+     "pair": 0,
+     "ms": {
+      "baseline": 31.801631,
+      "warpbound": 32.314859
+     },
+     "ratio_b_over_a": 1.0161384175547474
+    },
+    {
+     "order": 0,
+     "pair": 1,
+     "ms": {
+      "baseline": 31.254476,
+      "warpbound": 32.573669
+     },
+     "ratio_b_over_a": 1.04220813044506
+    },
+    {
+     "order": 0,
+     "pair": 2,
+     "ms": {
+      "baseline": 30.869491,
+      "warpbound": 32.233904
+     },
+     "ratio_b_over_a": 1.0441994006315167
+    },
+    {
+     "order": 1,
+     "pair": 0,
+     "ms": {
+      "warpbound": 32.32328,
+      "baseline": 30.874821
+     },
+     "ratio_b_over_a": 1.0469139238086593
+    },
+    {
+     "order": 1,
+     "pair": 1,
+     "ms": {
+      "warpbound": 32.33149,
+      "baseline": 30.808862
+     },
+     "ratio_b_over_a": 1.0494217540394708
+    },
+    {
+     "order": 1,
+     "pair": 2,
+     "ms": {
+      "warpbound": 32.467864,
+      "baseline": 31.048019
+     },
+     "ratio_b_over_a": 1.045730614890438
+    }
+   ],
+   "median_ms": {
+    "baseline": 30.96142,
+    "warpbound": 32.327385
+   },
+   "min_ms": {
+    "baseline": 30.808862,
+    "warpbound": 32.233904
+   },
+   "median_ms_by_order": {
+    "baseline": {
+     "0": 31.254476,
+     "1": 30.874821
+    },
+    "warpbound": {
+     "0": 32.314859,
+     "1": 32.33149
+    }
+   },
+   "paired_ratio_median_b_over_a": 1.0449650077609773,
+   "pairs_favoring_b": 0,
+   "spread_pct": {
+    "baseline": 3.206471150225019,
+    "warpbound": 1.0510129415045475
+   },
+   "boundary": "public NearestNeighbors.kneighbors: host in, host out, includes query conversion, upload, norms, transpose, distance, selection, merge, download, index widening to int64"
+  },
+  {
+   "fixture": "large",
+   "k": 15,
+   "n_index": 400000,
+   "n_queries": 4000,
+   "d": 32,
+   "arm_a": "baseline",
+   "arm_b": "warpbound",
+   "pairs": [
+    {
+     "order": 0,
+     "pair": 0,
+     "ms": {
+      "baseline": 36.392123,
+      "warpbound": 37.002515
+     },
+     "ratio_b_over_a": 1.01677264060687
+    },
+    {
+     "order": 0,
+     "pair": 1,
+     "ms": {
+      "baseline": 36.013861,
+      "warpbound": 36.830819
+     },
+     "ratio_b_over_a": 1.0226845435983662
+    },
+    {
+     "order": 0,
+     "pair": 2,
+     "ms": {
+      "baseline": 36.022895,
+      "warpbound": 36.850537
+     },
+     "ratio_b_over_a": 1.0229754438114984
+    },
+    {
+     "order": 1,
+     "pair": 0,
+     "ms": {
+      "warpbound": 36.846036,
+      "baseline": 35.923572
+     },
+     "ratio_b_over_a": 1.0256785154883818
+    },
+    {
+     "order": 1,
+     "pair": 1,
+     "ms": {
+      "warpbound": 36.719954,
+      "baseline": 36.210647
+     },
+     "ratio_b_over_a": 1.014065117367276
+    },
+    {
+     "order": 1,
+     "pair": 2,
+     "ms": {
+      "warpbound": 36.865344,
+      "baseline": 35.860087
+     },
+     "ratio_b_over_a": 1.0280327540755827
+    }
+   ],
+   "median_ms": {
+    "baseline": 36.018378,
+    "warpbound": 36.8482865
+   },
+   "min_ms": {
+    "baseline": 35.860087,
+    "warpbound": 36.719954
+   },
+   "median_ms_by_order": {
+    "baseline": {
+     "0": 36.022895,
+     "1": 35.923572
+    },
+    "warpbound": {
+     "0": 36.850537,
+     "1": 36.846036
+    }
+   },
+   "paired_ratio_median_b_over_a": 1.0228299937049323,
+   "pairs_favoring_b": 0,
+   "spread_pct": {
+    "baseline": 1.477123706125795,
+    "warpbound": 0.76682263095192
+   },
+   "boundary": "public NearestNeighbors.kneighbors: host in, host out, includes query conversion, upload, norms, transpose, distance, selection, merge, download, index widening to int64"
+  },
+  {
+   "fixture": "dyadic",
+   "k": 10,
+   "n_index": 400000,
+   "n_queries": 4000,
+   "d": 32,
+   "arm_a": "baseline",
+   "arm_b": "warpbound",
+   "pairs": [
+    {
+     "order": 0,
+     "pair": 0,
+     "ms": {
+      "baseline": 31.721102,
+      "warpbound": 32.31835
+     },
+     "ratio_b_over_a": 1.0188280974601702
+    },
+    {
+     "order": 0,
+     "pair": 1,
+     "ms": {
+      "baseline": 30.769689,
+      "warpbound": 32.235264
+     },
+     "ratio_b_over_a": 1.047630478163104
+    },
+    {
+     "order": 0,
+     "pair": 2,
+     "ms": {
+      "baseline": 30.694725,
+      "warpbound": 32.427737
+     },
+     "ratio_b_over_a": 1.0564596034009102
+    },
+    {
+     "order": 1,
+     "pair": 0,
+     "ms": {
+      "warpbound": 32.19332,
+      "baseline": 30.750143
+     },
+     "ratio_b_over_a": 1.0469323671112682
+    },
+    {
+     "order": 1,
+     "pair": 1,
+     "ms": {
+      "warpbound": 32.179284,
+      "baseline": 30.693859
+     },
+     "ratio_b_over_a": 1.0483948597014145
+    },
+    {
+     "order": 1,
+     "pair": 2,
+     "ms": {
+      "warpbound": 32.153569,
+      "baseline": 30.669815
+     },
+     "ratio_b_over_a": 1.0483783159435425
+    }
+   ],
+   "median_ms": {
+    "baseline": 30.722434,
+    "warpbound": 32.214292
+   },
+   "min_ms": {
+    "baseline": 30.669815,
+    "warpbound": 32.153569
+   },
+   "median_ms_by_order": {
+    "baseline": {
+     "0": 30.769689,
+     "1": 30.693859
+    },
+    "warpbound": {
+     "0": 32.31835,
+     "1": 32.179284
+    }
+   },
+   "paired_ratio_median_b_over_a": 1.0480043970533233,
+   "pairs_favoring_b": 0,
+   "spread_pct": {
+    "baseline": 3.4218870809519797,
+    "warpbound": 0.8510756654220526
+   },
+   "boundary": "public NearestNeighbors.kneighbors: host in, host out, includes query conversion, upload, norms, transpose, distance, selection, merge, download, index widening to int64",
+   "cached_opponent_ms": 10.225,
+   "cached_opponent_ratio": {
+    "baseline": 3.00463902200489,
+    "warpbound": 3.1505420048899757
+   },
+   "cached_opponent_note": "cached cuML row from bench/OPPONENT_REFERENCE.md (H100 80GB HBM3, driver 580.126.09, dyadic-v1); admissible only if this box matches that tuple; not a paired opponent measurement"
+  },
+  {
+   "fixture": "dyadic",
+   "k": 15,
+   "n_index": 400000,
+   "n_queries": 4000,
+   "d": 32,
+   "arm_a": "baseline",
+   "arm_b": "warpbound",
+   "pairs": [
+    {
+     "order": 0,
+     "pair": 0,
+     "ms": {
+      "baseline": 36.227659,
+      "warpbound": 36.840566
+     },
+     "ratio_b_over_a": 1.0169182060590776
+    },
+    {
+     "order": 0,
+     "pair": 1,
+     "ms": {
+      "baseline": 35.911,
+      "warpbound": 38.012452
+     },
+     "ratio_b_over_a": 1.058518336999805
+    },
+    {
+     "order": 0,
+     "pair": 2,
+     "ms": {
+      "baseline": 39.404507,
+      "warpbound": 40.216926
+     },
+     "ratio_b_over_a": 1.0206174131299244
+    },
+    {
+     "order": 1,
+     "pair": 0,
+     "ms": {
+      "warpbound": 39.706368,
+      "baseline": 38.151617
+     },
+     "ratio_b_over_a": 1.0407519031237915
+    },
+    {
+     "order": 1,
+     "pair": 1,
+     "ms": {
+      "warpbound": 37.374011,
+      "baseline": 36.619352
+     },
+     "ratio_b_over_a": 1.0206082019146598
+    },
+    {
+     "order": 1,
+     "pair": 2,
+     "ms": {
+      "warpbound": 37.142678,
+      "baseline": 36.364307
+     },
+     "ratio_b_over_a": 1.0214048077418332
+    }
+   ],
+   "median_ms": {
+    "baseline": 36.491829499999994,
+    "warpbound": 37.6932315
+   },
+   "min_ms": {
+    "baseline": 35.911,
+    "warpbound": 36.840566
+   },
+   "median_ms_by_order": {
+    "baseline": {
+     "0": 36.227659,
+     "1": 36.619352
+    },
+    "warpbound": {
+     "0": 38.012452,
+     "1": 37.374011
+    }
+   },
+   "paired_ratio_median_b_over_a": 1.0210111104358788,
+   "pairs_favoring_b": 0,
+   "spread_pct": {
+    "baseline": 9.573395052719956,
+    "warpbound": 8.957470255634618
+   },
+   "boundary": "public NearestNeighbors.kneighbors: host in, host out, includes query conversion, upload, norms, transpose, distance, selection, merge, download, index widening to int64",
+   "cached_opponent_ms": 10.817,
+   "cached_opponent_ratio": {
+    "baseline": 3.3735628640103537,
+    "warpbound": 3.4846289636683
+   },
+   "cached_opponent_note": "cached cuML row from bench/OPPONENT_REFERENCE.md (H100 80GB HBM3, driver 580.126.09, dyadic-v1); admissible only if this box matches that tuple; not a paired opponent measurement"
+  }
+ ],
+ "failures": [],
+ "log": [
+  "[04:11:17] library: {'mojolearn_version': '0.8.0', 'numeric_mode_used': 'identical', 'vendor_used': 'cuda', 'binding_path': '/root/mojolearn/python/mojolearn/identical/_mojolearn.so', 'binding_sha256': '1b2bcf135eecd4cd76331bec33ee9fa6d53ad5c880bea6b7645e1548338d408a'}",
+  "[04:11:20] fixtures built in 3.0 s: large 400000x32/4000, dyadic 400000x32/4000, ties 131079x32/700, divergent_tail 397156x32/600",
+  "[04:11:21] large k10 arm baseline: 963.011 ms (untimed correctness call)",
+  "[04:11:21] large k10 arm warpbound: 34.880 ms (untimed correctness call)",
+  "[04:11:21] large k10 arm default: 32.869 ms (untimed correctness call)",
+  "[04:11:21] large k10: arms equal=True order=ok planted=ok oracle={'rows': 64, 'hard_mismatch_rows': [], 'ambiguous_rows': 0, 'distance_mismatch_rows': []}",
+  "[04:11:21] large k10 reach baseline: sabotage flipped 38306 cells, restored=True",
+  "[04:11:21] large k10 reach warpbound: sabotage flipped 79362 cells, restored=True",
+  "[04:11:21] large k10 reach default: sabotage flipped 38306 cells, restored=True",
+  "[04:11:21] large k15 arm baseline: 35.744 ms (untimed correctness call)",
+  "[04:11:21] large k15 arm warpbound: 36.674 ms (untimed correctness call)",
+  "[04:11:21] large k15 arm default: 35.824 ms (untimed correctness call)",
+  "[04:11:22] large k15: arms equal=True order=ok planted=ok oracle={'rows': 64, 'hard_mismatch_rows': [], 'ambiguous_rows': 0, 'distance_mismatch_rows': []}",
+  "[04:11:22] large k15 reach baseline: sabotage flipped 70635 cells, restored=True",
+  "[04:11:22] large k15 reach warpbound: sabotage flipped 119362 cells, restored=True",
+  "[04:11:22] large k15 reach default: sabotage flipped 70635 cells, restored=True",
+  "[04:11:22] dyadic k10 arm baseline: 33.039 ms (untimed correctness call)",
+  "[04:11:22] dyadic k10 arm warpbound: 34.133 ms (untimed correctness call)",
+  "[04:11:22] dyadic k10 arm default: 31.373 ms (untimed correctness call)",
+  "[04:11:22] dyadic k10: arms equal=True order=ok planted=ok oracle={'rows': 48, 'hard_mismatch_rows': [], 'ambiguous_rows': 0, 'distance_mismatch_rows': []}",
+  "[04:11:22] dyadic k10 reach baseline: sabotage flipped 38045 cells, restored=True",
+  "[04:11:22] dyadic k10 reach warpbound: sabotage flipped 79444 cells, restored=True",
+  "[04:11:22] dyadic k10 reach default: sabotage flipped 38045 cells, restored=True",
+  "[04:11:22] dyadic k15 arm baseline: 35.818 ms (untimed correctness call)",
+  "[04:11:22] dyadic k15 arm warpbound: 36.507 ms (untimed correctness call)",
+  "[04:11:23] dyadic k15 arm default: 35.699 ms (untimed correctness call)",
+  "[04:11:23] dyadic k15: arms equal=True order=ok planted=ok oracle={'rows': 48, 'hard_mismatch_rows': [], 'ambiguous_rows': 0, 'distance_mismatch_rows': []}",
+  "[04:11:23] dyadic k15 reach baseline: sabotage flipped 70423 cells, restored=True",
+  "[04:11:23] dyadic k15 reach warpbound: sabotage flipped 119444 cells, restored=True",
+  "[04:11:23] dyadic k15 reach default: sabotage flipped 70423 cells, restored=True",
+  "[04:11:23] ties k10 arm baseline: 4.217 ms (untimed correctness call)",
+  "[04:11:23] ties k10 arm warpbound: 4.115 ms (untimed correctness call)",
+  "[04:11:23] ties k10 arm default: 3.383 ms (untimed correctness call)",
+  "[04:11:24] ties k10: arms equal=True order=ok planted=ok oracle={'rows': 700, 'hard_mismatch_rows': [], 'ambiguous_rows': 1, 'distance_mismatch_rows': []}",
+  "[04:11:24] ties k10 reach baseline: sabotage flipped 6549 cells, restored=True",
+  "[04:11:24] ties k10 reach warpbound: sabotage flipped 13892 cells, restored=True",
+  "[04:11:24] ties k10 reach default: sabotage flipped 6509 cells, restored=True",
+  "[04:11:24] ties k15 arm baseline: 3.765 ms (untimed correctness call)",
+  "[04:11:24] ties k15 arm warpbound: 3.839 ms (untimed correctness call)",
+  "[04:11:24] ties k15 arm default: 3.768 ms (untimed correctness call)",
+  "[04:11:25] ties k15: arms equal=True order=ok planted=ok oracle={'rows': 700, 'hard_mismatch_rows': [], 'ambiguous_rows': 1, 'distance_mismatch_rows': []}",
+  "[04:11:25] ties k15 reach baseline: sabotage flipped 12234 cells, restored=True",
+  "[04:11:25] ties k15 reach warpbound: sabotage flipped 20892 cells, restored=True",
+  "[04:11:25] ties k15 reach default: sabotage flipped 12172 cells, restored=True",
+  "[04:11:25] divergent_tail k10 arm baseline: 10.227 ms (untimed correctness call)",
+  "[04:11:25] divergent_tail k10 arm warpbound: 10.472 ms (untimed correctness call)",
+  "[04:11:25] divergent_tail k10 arm default: 8.899 ms (untimed correctness call)",
+  "[04:11:25] divergent_tail k10: arms equal=True order=ok planted=ok oracle={'rows': 47, 'hard_mismatch_rows': [], 'ambiguous_rows': 0, 'distance_mismatch_rows': []}",
+  "[04:11:25] divergent_tail k10 reach baseline: sabotage flipped 5183 cells, restored=True",
+  "[04:11:25] divergent_tail k10 reach warpbound: sabotage flipped 11900 cells, restored=True",
+  "[04:11:25] divergent_tail k10 reach default: sabotage flipped 5165 cells, restored=True",
+  "[04:11:25] divergent_tail k15 arm baseline: 8.916 ms (untimed correctness call)",
+  "[04:11:25] divergent_tail k15 arm warpbound: 8.998 ms (untimed correctness call)",
+  "[04:11:25] divergent_tail k15 arm default: 8.877 ms (untimed correctness call)",
+  "[04:11:25] divergent_tail k15: arms equal=True order=ok planted=ok oracle={'rows': 45, 'hard_mismatch_rows': [], 'ambiguous_rows': 0, 'distance_mismatch_rows': []}",
+  "[04:11:26] divergent_tail k15 reach baseline: sabotage flipped 9717 cells, restored=True",
+  "[04:11:26] divergent_tail k15 reach warpbound: sabotage flipped 17900 cells, restored=True",
+  "[04:11:26] divergent_tail k15 reach default: sabotage flipped 9681 cells, restored=True",
+  "[04:11:26] large k10 warmup baseline: 33.100 ms",
+  "[04:11:26] large k10 warmup warpbound: 34.237 ms",
+  "[04:11:26] large k10 order0 pair0: baseline 31.802 ms, warpbound 32.315 ms, warpbound/baseline 1.0161",
+  "[04:11:26] large k10 order0 pair1: baseline 31.254 ms, warpbound 32.574 ms, warpbound/baseline 1.0422",
+  "[04:11:26] large k10 order0 pair2: baseline 30.869 ms, warpbound 32.234 ms, warpbound/baseline 1.0442",
+  "[04:11:26] large k10 order1 pair0: baseline 30.875 ms, warpbound 32.323 ms, warpbound/baseline 1.0469",
+  "[04:11:26] large k10 order1 pair1: baseline 30.809 ms, warpbound 32.331 ms, warpbound/baseline 1.0494",
+  "[04:11:26] large k10 order1 pair2: baseline 31.048 ms, warpbound 32.468 ms, warpbound/baseline 1.0457",
+  "[04:11:26] large k10: baseline median 30.961 ms, warpbound median 32.327 ms, paired median warpbound/baseline 1.0450, 0/6 pairs favor warpbound",
+  "[04:11:26] large k15 warmup baseline: 36.174 ms",
+  "[04:11:26] large k15 warmup warpbound: 37.522 ms",
+  "[04:11:26] large k15 order0 pair0: baseline 36.392 ms, warpbound 37.003 ms, warpbound/baseline 1.0168",
+  "[04:11:26] large k15 order0 pair1: baseline 36.014 ms, warpbound 36.831 ms, warpbound/baseline 1.0227",
+  "[04:11:26] large k15 order0 pair2: baseline 36.023 ms, warpbound 36.851 ms, warpbound/baseline 1.0230",
+  "[04:11:26] large k15 order1 pair0: baseline 35.924 ms, warpbound 36.846 ms, warpbound/baseline 1.0257",
+  "[04:11:26] large k15 order1 pair1: baseline 36.211 ms, warpbound 36.720 ms, warpbound/baseline 1.0141",
+  "[04:11:27] large k15 order1 pair2: baseline 35.860 ms, warpbound 36.865 ms, warpbound/baseline 1.0280",
+  "[04:11:27] large k15: baseline median 36.018 ms, warpbound median 36.848 ms, paired median warpbound/baseline 1.0228, 0/6 pairs favor warpbound",
+  "[04:11:27] dyadic k10 warmup baseline: 33.151 ms",
+  "[04:11:27] dyadic k10 warmup warpbound: 34.326 ms",
+  "[04:11:27] dyadic k10 order0 pair0: baseline 31.721 ms, warpbound 32.318 ms, warpbound/baseline 1.0188",
+  "[04:11:27] dyadic k10 order0 pair1: baseline 30.770 ms, warpbound 32.235 ms, warpbound/baseline 1.0476",
+  "[04:11:27] dyadic k10 order0 pair2: baseline 30.695 ms, warpbound 32.428 ms, warpbound/baseline 1.0565",
+  "[04:11:27] dyadic k10 order1 pair0: baseline 30.750 ms, warpbound 32.193 ms, warpbound/baseline 1.0469",
+  "[04:11:27] dyadic k10 order1 pair1: baseline 30.694 ms, warpbound 32.179 ms, warpbound/baseline 1.0484",
+  "[04:11:27] dyadic k10 order1 pair2: baseline 30.670 ms, warpbound 32.154 ms, warpbound/baseline 1.0484",
+  "[04:11:27] dyadic k10: baseline median 30.722 ms, warpbound median 32.214 ms, paired median warpbound/baseline 1.0480, 0/6 pairs favor warpbound",
+  "[04:11:27] dyadic k15 warmup baseline: 38.858 ms",
+  "[04:11:27] dyadic k15 warmup warpbound: 37.532 ms",
+  "[04:11:27] dyadic k15 order0 pair0: baseline 36.228 ms, warpbound 36.841 ms, warpbound/baseline 1.0169",
+  "[04:11:27] dyadic k15 order0 pair1: baseline 35.911 ms, warpbound 38.012 ms, warpbound/baseline 1.0585",
+  "[04:11:27] dyadic k15 order0 pair2: baseline 39.405 ms, warpbound 40.217 ms, warpbound/baseline 1.0206",
+  "[04:11:27] dyadic k15 order1 pair0: baseline 38.152 ms, warpbound 39.706 ms, warpbound/baseline 1.0408",
+  "[04:11:27] dyadic k15 order1 pair1: baseline 36.619 ms, warpbound 37.374 ms, warpbound/baseline 1.0206",
+  "[04:11:27] dyadic k15 order1 pair2: baseline 36.364 ms, warpbound 37.143 ms, warpbound/baseline 1.0214",
+  "[04:11:27] dyadic k15: baseline median 36.492 ms, warpbound median 37.693 ms, paired median warpbound/baseline 1.0210, 0/6 pairs favor warpbound"
+ ],
+ "git_commit": "unknown",
+ "nvidia_smi": "NVIDIA H100 80GB HBM3, 580.126.09, GPU-548147e1-8c40-73f8-ea53-cbf2c7d218c8",
+ "library": {
+  "mojolearn_version": "0.8.0",
+  "numeric_mode_used": "identical",
+  "vendor_used": "cuda",
+  "binding_path": "/root/mojolearn/python/mojolearn/identical/_mojolearn.so",
+  "binding_sha256": "1b2bcf135eecd4cd76331bec33ee9fa6d53ad5c880bea6b7645e1548338d408a"
+ },
+ "finished_utc": "2026-09-11T04:11:28Z"
+}

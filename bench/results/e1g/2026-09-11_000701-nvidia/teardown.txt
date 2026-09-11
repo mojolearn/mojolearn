@@ -1,0 +1,6 @@
+pod=amirbar4jyxmrr
+armed=1
+terminated=1
+deadman_pid=33502
+exit=1
+at=2026-09-11T04:11:44Z
