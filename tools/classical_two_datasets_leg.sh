@@ -40,10 +40,10 @@
 #   setup   env record; the opponents' Python (NVIDIA: the image's python3 with
 #           torch 2.4.1+cu124, plus scikit-learn, pyarrow and cuml-cu12==26.8.0
 #           from pypi.nvidia.com, the recipe of tools/trees_identical_remote.sh
-#           and the version of the existing H100 rows; AMD: a venv with the
-#           torch ROCm pin of tools/do_byte_lm_setup.sh and scikit-learn
-#           1.5.2); the downloads (Istella in the BACKGROUND, it writes
-#           istella.done; taxi after pyarrow); the IDENTICAL bindings
+#           and the version of the existing H100 rows; AMD: a Python 3.12 venv
+#           with the torch ROCm pin of tools/do_byte_lm_setup.sh and current
+#           scikit-learn); the raw fetches at t=0, each decode after pip and
+#           its own fetch (writes <dataset>.done); the IDENTICAL bindings
 #           (bindings/build.sh always, build_estimators.sh for pca/ols/kde,
 #           build_svm.sh for svc) with MOJOLEARN_GPU_ARCHS when set; the
 #           ours import read back as identical
@@ -63,6 +63,8 @@
 set -u
 ROOT=${MOJOLEARN_CTD_ROOT:-/root/mojolearn}
 OUT=${MOJOLEARN_CTD_OUT:-/root/gemm_leg_out/classical-two-datasets}
+# setup's markers (setup.started, <dataset>.done) live here, smoke or not.
+BASE_OUT=$OUT
 DATA=${MOJOLEARN_CTD_DATA:-/root/ctd-data}
 WORK=${MOJOLEARN_CTD_WORK:-/root/ctd-work}
 VENV=${MOJOLEARN_CTD_VENV:-/root/ctd-venv}
@@ -175,6 +177,7 @@ arms_for() {  # <lane>: the arms a race runs on this vendor
 # setup
 # ============================================================================
 if has_phase setup; then
+    : > "$OUT/setup.started"
     {
         echo "== date"; date -u
         echo "== uname"; uname -a
@@ -295,14 +298,26 @@ if has_phase setup; then
             # shellcheck disable=SC2086
             run wheels timeout -k 30 1200 "$VENV/bin/pip" install --disable-pip-version-check --no-input \
                 --only-binary=:all: $PIN numpy scipy scikit-learn threadpoolctl joblib pyarrow
-            # torch sees the GPU, or the second pin (PyTorch's own ROCm 6.2.4 wheel,
-            # ROCm libraries bundled) replaces it; torch_source.txt says which.
-            if "$VENV/bin/python" -c 'import sys, torch; sys.exit(0 if torch.cuda.is_available() else 3)' > "$OUT/torch_probe1.log" 2>&1; then
-                echo "torch_source=repo.radeon.com rocm-rel-6.4.1 torch 2.6.0 (cuda.is_available True)" > "$OUT/torch_source.txt"
+            # torch runs the harness's kernels on the GPU (is_available alone can
+            # be True on a wheel built without this gfx target), or the second pin
+            # (PyTorch's own ROCm 6.2.4 wheel, ROCm libraries bundled) replaces
+            # it; torch_source.txt says which.
+            TPROBE='import sys, torch
+print("available", torch.cuda.is_available(), "hip", torch.version.hip)
+if not torch.cuda.is_available(): sys.exit(3)
+a = torch.randn(4096, 64, device="cuda")
+w = torch.linalg.eigh(a.T @ a)[0]
+d = torch.cdist(a[:16], a).topk(10, largest=False)[0]
+s = torch.linalg.lstsq(a - a.mean(0), a[:, :1]).solution
+c = torch.addmm((a[:8] * a[:8]).sum(1)[None], a, a[:8].T, alpha=-2.0).argmin(1)
+torch.cuda.synchronize()
+print("device", torch.cuda.get_device_name(0), float(w[-1]), float(d.sum()), float(s.sum()), int(c.sum()))'
+            if timeout -k 10 300 "$VENV/bin/python" -c "$TPROBE" > "$OUT/torch_probe1.log" 2>&1; then
+                echo "torch_source=repo.radeon.com rocm-rel-6.4.1 torch 2.6.0 (probe ran eigh, cdist, topk, lstsq, addmm on the GPU)" > "$OUT/torch_source.txt"
             else
                 run torch-fallback timeout -k 30 1200 "$VENV/bin/pip" install --disable-pip-version-check --no-input \
                     --force-reinstall --index-url https://download.pytorch.org/whl/rocm6.2.4 'torch==2.6.0+rocm6.2.4'
-                "$VENV/bin/python" -c 'import sys, torch; sys.exit(0 if torch.cuda.is_available() else 3)' > "$OUT/torch_probe2.log" 2>&1
+                timeout -k 10 300 "$VENV/bin/python" -c "$TPROBE" > "$OUT/torch_probe2.log" 2>&1
                 echo "torch_source=download.pytorch.org rocm6.2.4 torch 2.6.0 (probe2 rc=$?; the repo.radeon.com pin did not see the GPU, torch_probe1.log)" > "$OUT/torch_source.txt"
             fi
         fi
@@ -378,6 +393,15 @@ fi
 # ============================================================================
 if has_phase prep; then
     for ds in $DATASETS; do
+        # A setup in this body decodes in the background: a second decode of the
+        # same cache is a torn file, so prep waits for this dataset's own marker.
+        if [ -f "$BASE_OUT/setup.started" ] && [ ! -f "$BASE_OUT/$ds.done" ]; then
+            _w0=$(date +%s)
+            while [ ! -f "$BASE_OUT/$ds.done" ] && [ $(( BODY_START + BODY_SECONDS - $(date +%s) )) -gt "$MIN_RACE" ]; do
+                sleep 10
+            done
+            record "wait-decode-$ds" "$( [ -f "$BASE_OUT/$ds.done" ] && echo 0 || echo DEADLINE)" "$(( $(date +%s) - _w0 ))"
+        fi
         if [ -n "$SMOKE" ]; then
             run "prep-$ds" timeout -k 30 1500 "$PY" tools/classical_two_datasets.py prep \
                 --data "$DATA" --lanes "$LANES" --datasets "$ds" --max-rows "$SMOKE"
