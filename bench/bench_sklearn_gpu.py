@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+# ENGINEERING_RULES.md section 9 (2026-09-11): the splitmix64 data here is a correctness and smoke fixture only; the classical timing path on taxi and Istella-S is tools/classical_two_datasets.py (DEVIATION 2570).
 """Does scikit-learn's Array API GPU path actually reach the Apple GPU?
 
 WHY THIS FILE EXISTS

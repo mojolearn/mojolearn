@@ -1,0 +1,307 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "pixi",
+        "run",
+        "python3",
+        "/root/mojolearn/tools/classical_two_datasets.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "svc",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/ctd-data"
+      ],
+      "digest_stable": true,
+      "digests": [
+        "2d85d6008566c340",
+        "2d85d6008566c340",
+        "2d85d6008566c340",
+        "2d85d6008566c340",
+        "2d85d6008566c340",
+        "2d85d6008566c340"
+      ],
+      "info": {
+        "device": "gpu",
+        "library": "mojolearn",
+        "numeric_mode_env": "identical",
+        "numeric_mode_used": "identical",
+        "vendor_used": "hip",
+        "version": "0.8.1"
+      },
+      "max_ms": 1585.063591001017,
+      "median_ms": 1559.1900819999864,
+      "min_ms": 1538.5910920012975,
+      "ms": [
+        1559.1900819999864,
+        1576.7587609989278,
+        1542.3573900006886,
+        1585.063591001017,
+        1538.5910920012975
+      ],
+      "status": "ok",
+      "warmup_ms": 5512.039821000144
+    },
+    "sklearn-cpu": {
+      "command": [
+        "/root/ctd-venv/bin/python",
+        "/root/mojolearn/tools/classical_two_datasets.py",
+        "worker",
+        "--arm",
+        "sklearn-cpu",
+        "--lane",
+        "svc",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/ctd-data"
+      ],
+      "digest_stable": true,
+      "digests": [
+        "4d3e33695c4a4e36",
+        "4d3e33695c4a4e36",
+        "4d3e33695c4a4e36",
+        "4d3e33695c4a4e36",
+        "4d3e33695c4a4e36",
+        "4d3e33695c4a4e36"
+      ],
+      "info": {
+        "config": "SVC(C=1.0, kernel='rbf', gamma=1/d, tol=1e-3, cache_size=2000); fit timed; libsvm is single-threaded",
+        "cpu_model": "AMD EPYC 9474F 48-Core Processor",
+        "device": "cpu",
+        "library": "scikit-learn",
+        "numpy": "2.5.3",
+        "os_cpu_count": 192,
+        "python": "3.12.14",
+        "sched_affinity_cpus": 192,
+        "scipy": "1.18.1",
+        "thread_env": {
+          "MKL_NUM_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "threadpools": [
+          {
+            "architecture": "SkylakeX",
+            "filepath": "libscipy_openblas64_-f48b354e.so",
+            "internal_api": "openblas",
+            "num_threads": 64,
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.34.106.0"
+          },
+          {
+            "architecture": "SkylakeX",
+            "filepath": "libscipy_openblas-5f890258.so",
+            "internal_api": "openblas",
+            "num_threads": 64,
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.31.dev"
+          },
+          {
+            "architecture": null,
+            "filepath": "libgomp-e985bcbb.so.1.0.0",
+            "internal_api": "openmp",
+            "num_threads": 192,
+            "threading_layer": null,
+            "user_api": "openmp",
+            "version": null
+          }
+        ],
+        "version": "1.9.1"
+      },
+      "max_ms": 2819.4877409987384,
+      "median_ms": 2775.9782199991605,
+      "min_ms": 2729.2903689995,
+      "ms": [
+        2729.2903689995,
+        2748.0787790009344,
+        2819.4877409987384,
+        2796.7964879990177,
+        2775.9782199991605
+      ],
+      "status": "ok",
+      "warmup_ms": 2885.318960999939
+    },
+    "sklearn-cpu-quota": {
+      "command": [
+        "/root/ctd-venv/bin/python",
+        "/root/mojolearn/tools/classical_two_datasets.py",
+        "worker",
+        "--arm",
+        "sklearn-cpu-quota",
+        "--lane",
+        "svc",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/ctd-data"
+      ],
+      "digest_stable": true,
+      "digests": [
+        "4d3e33695c4a4e36",
+        "4d3e33695c4a4e36",
+        "4d3e33695c4a4e36",
+        "4d3e33695c4a4e36",
+        "4d3e33695c4a4e36",
+        "4d3e33695c4a4e36"
+      ],
+      "info": {
+        "config": "SVC(C=1.0, kernel='rbf', gamma=1/d, tol=1e-3, cache_size=2000); fit timed; libsvm is single-threaded; threadpool_limits(limits=20) around construction and every call",
+        "cpu_model": "AMD EPYC 9474F 48-Core Processor",
+        "device": "cpu",
+        "library": "scikit-learn",
+        "numpy": "2.5.3",
+        "os_cpu_count": 192,
+        "python": "3.12.14",
+        "sched_affinity_cpus": 192,
+        "scipy": "1.18.1",
+        "thread_cap": {
+          "quota_cpus": 20.4,
+          "source": "cgroup v1 /sys/fs/cgroup/cpu/cpu.cfs_quota_us",
+          "threads": 20
+        },
+        "thread_env": {
+          "MKL_NUM_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "threadpools": [
+          {
+            "architecture": "SkylakeX",
+            "filepath": "libscipy_openblas64_-f48b354e.so",
+            "internal_api": "openblas",
+            "num_threads": 20,
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.34.106.0"
+          },
+          {
+            "architecture": "SkylakeX",
+            "filepath": "libscipy_openblas-5f890258.so",
+            "internal_api": "openblas",
+            "num_threads": 64,
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.31.dev"
+          },
+          {
+            "architecture": null,
+            "filepath": "libgomp-e985bcbb.so.1.0.0",
+            "internal_api": "openmp",
+            "num_threads": 192,
+            "threading_layer": null,
+            "user_api": "openmp",
+            "version": null
+          }
+        ],
+        "version": "1.9.1"
+      },
+      "max_ms": 2799.8790970013943,
+      "median_ms": 2735.2320530008,
+      "min_ms": 2725.585732001491,
+      "ms": [
+        2735.2320530008,
+        2725.585732001491,
+        2799.8790970013943,
+        2729.574712999238,
+        2780.1261079985125
+      ],
+      "status": "ok",
+      "warmup_ms": 2876.545803001136
+    }
+  },
+  "block": {
+    "arrays": {
+      "X": {
+        "dtype": "float32",
+        "sha256": "345902ee285b294e5f910cc1383a440dce667169954c7c08c89bc0897201ab92",
+        "shape": [
+          10000,
+          11
+        ]
+      },
+      "Xq": {
+        "dtype": "float32",
+        "sha256": "532db088fd84c7acf0c632f0af263af3b55eb448e4482e8a6c39adda6bdb00cc",
+        "shape": [
+          10000,
+          11
+        ]
+      },
+      "y": {
+        "dtype": "float32",
+        "sha256": "46fd2877c7d749970d135ed4685719517505e7a0a5f4443e160efe021646637e",
+        "shape": [
+          10000
+        ]
+      },
+      "yq": {
+        "dtype": "float32",
+        "sha256": "44b80055a9fefd64002feb605a8e345ef6d4f7bbbf41f1ae5627307a6f37b5d1",
+        "shape": [
+          10000
+        ]
+      }
+    },
+    "block": "svc",
+    "data_root": "/root/datasets/gbm-bench",
+    "dataset": "taxi",
+    "eval_rows": "stride sample of 10000 of 500000 test rows",
+    "fit_rows": "stride sample of 10000 of 4110786 train rows",
+    "lanes": [
+      "svc"
+    ],
+    "loader": "speed_gbdt_arm.load_taxi('shipped', regression=False) (card trips, tip >= 20%), TAXI_NUMERIC columns",
+    "positive_fraction_fit": 0.7601000070571899,
+    "rule": "ENGINEERING_RULES.md section 9; DEVIATION 2570",
+    "scaling": "standardized by the fit rows (float64 mean and std)",
+    "sentinel_cells_replaced": {
+      "X": 0,
+      "Xq": 0
+    },
+    "smoke_max_rows": null,
+    "svc": {
+      "C": 1.0,
+      "gamma": 0.09090909090909091,
+      "kernel": "rbf",
+      "tol": 0.001
+    },
+    "written": "2026-09-11T16:59:51Z"
+  },
+  "commit": "37480b23dff6c09adfbb21d67a7f492566d71c29",
+  "dataset": "taxi",
+  "finished": "2026-09-11T17:05:41Z",
+  "finished_rounds": "2026-09-11T17:05:41Z",
+  "lane": "svc",
+  "quality": {
+    "ours": {
+      "accuracy": 0.7675,
+      "n_support": 5527
+    },
+    "sklearn-cpu": {
+      "accuracy": 0.7675,
+      "n_support": 5675
+    },
+    "sklearn-cpu-quota": {
+      "accuracy": 0.7675,
+      "n_support": 5675
+    }
+  },
+  "ratios_ours_over": {
+    "sklearn-cpu": 0.5616723037547672,
+    "sklearn-cpu-quota": 0.570039415957199
+  },
+  "rounds_requested": 5,
+  "script": "tools/classical_two_datasets.py",
+  "started": "2026-09-11T17:04:23Z"
+}

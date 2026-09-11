@@ -1,0 +1,20 @@
+stage=all body_seconds=2985 runner_work_seconds=runpod lease=3600s armed=1789145660 runner_started=2026-09-11T16:54:53Z gpu_archs=gfx942 nproc=192 start=2026-09-11T16:56:08Z
+step=setup begin=16:56:08 left=2985s
+step=setup rc=0 end=16:58:25
+step=smoke-taxi begin=16:58:25 left=2848s
+step=smoke-taxi rc=0 end=16:59:50
+step=prep-taxi begin=16:59:50 left=2763s
+step=prep-taxi rc=0 end=16:59:51
+step=leg1-taxi begin=16:59:51 left=2762s
+step=leg1-taxi rc=0 end=17:02:39
+step=leg2-taxi begin=17:02:39 left=2594s
+step=leg2-taxi rc=0 end=17:05:41
+step=smoke-istella begin=17:05:41 left=2412s
+step=smoke-istella rc=0 end=17:07:14
+step=prep-istella begin=17:07:14 left=2319s
+step=prep-istella rc=0 end=17:07:20
+step=leg1-istella begin=17:07:20 left=2313s
+step=leg1-istella rc=0 end=17:13:26
+step=leg2-istella begin=17:13:26 left=1947s
+step=leg2-istella rc=0 end=17:29:37
+finished=2026-09-11T17:29:37Z
