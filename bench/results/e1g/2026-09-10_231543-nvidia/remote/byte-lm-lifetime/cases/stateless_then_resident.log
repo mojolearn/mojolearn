@@ -1,0 +1,6 @@
+[stateless_then_resident]   0.088s imported {"mojolearn_file": "/root/mojolearn/python/mojolearn/__init__.py", "version": "0.8.0"}
+[stateless_then_resident]   0.248s binding {"sha256": "9a81c0300ae8", "vendor": "cuda"}
+[stateless_then_resident]   0.250s native_call_begin {"completed_steps": 0, "label": "step1", "resident": false}
+[stateless_then_resident]   1.612s native_call_end {"label": "step1"}
+[stateless_then_resident]   1.613s hashed {"label": "step1", "loss": 5.548226833343506, "step": 1}
+[stateless_then_resident]   1.613s native_call_begin {"completed_steps": 0, "label": "step1_resident", "resident": true}

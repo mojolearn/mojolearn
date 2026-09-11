@@ -1,0 +1,8 @@
+[resident_close_reopen]   0.088s imported {"mojolearn_file": "/root/mojolearn/python/mojolearn/__init__.py", "version": "0.8.0"}
+[resident_close_reopen]   0.281s binding {"sha256": "9a81c0300ae8", "vendor": "cuda"}
+[resident_close_reopen]   0.283s native_call_begin {"completed_steps": 0, "label": "step1", "resident": true}
+[resident_close_reopen]   1.664s native_call_end {"label": "step1"}
+[resident_close_reopen]   1.665s hashed {"label": "step1", "loss": 5.548226833343506, "step": 1}
+[resident_close_reopen]   1.666s close_begin 
+[resident_close_reopen]   1.667s close_end {"session_released": true}
+[resident_close_reopen]   1.668s native_call_begin {"completed_steps": 1, "label": "step2", "resident": true}

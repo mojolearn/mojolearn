@@ -1,0 +1,4 @@
+numeric_mode 1
+vendor cuda
+profile mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1
+file /root/mojolearn/python/mojolearn/identical/_mojolearn_byte_lm.so

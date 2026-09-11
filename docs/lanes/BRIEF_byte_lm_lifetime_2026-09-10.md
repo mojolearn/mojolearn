@@ -370,3 +370,49 @@ What this does and does not say: at this commit, on an L40S, with the WP67
 hang. It does not clear the retained RTX 4090 capture; the 4090 run is in
 flight (`lifetime-4090`, pod started 03:16Z) and is the column that matters
 before any conclusion.
+
+## Run 3: the hang REPRODUCES on the RTX 4090 (2026-09-11 03:18Z to 03:39Z, `bench/results/e1g/2026-09-10_231543-nvidia`)
+
+Same commit as run 2 (a51b6150 plus the wrapper fix), same sm_89 build
+recipe, Mojo 1.0.0 (ed45d567), driver 580.159.04 with CUDA 13.0 (the L40S
+had 580.159.03, CUDA 13.0), host kernel 6.8.0-117 (L40S: 6.17.0-29).
+
+| case | L40S | RTX 4090 |
+|---|---|---|
+| stateless_x1 | pass | pass |
+| resident_x2 | pass | pass |
+| resident_then_stateless | pass | pass |
+| stateless_x2 | pass | HUNG |
+| stateless_then_resident | pass | HUNG |
+| resident_close_reopen | pass | HUNG |
+| restore_then_step | pass | HUNG |
+| failure_recovery | pass | HUNG |
+| resident_mismatch_recovery | pass | HUNG |
+| stateless_x2_default_profile | pass | HUNG |
+| stateless_x2_gc_pause | pass | HUNG |
+| stateless_x2_launch_blocking | pass | HUNG |
+
+Every hung child is BLOCKED, not spinning: CPU ticks frozen for the whole
+deadline, GPU at 0 percent, 398 MiB, 210 MHz idle clocks. The Python stack
+is inside the second native call (`_byte_lm_impl.py:457`). No native stack
+(neither gdb nor py-spy on the pod image). CUDA_LAUNCH_BLOCKING and a GC
+pause change nothing. The three passing cases are exactly the ones that
+never create a DeviceContext after a previous one was destroyed:
+resident_x2 reuses one context; resident_then_stateless creates the second
+while the first is alive (and never creates a third). Every hung case
+creates a context after the process has destroyed one.
+
+So the shape is: on this box, a DeviceContext created after another was
+destroyed in the same process never returns from its first use (or from
+creation). Not attributed further without a native stack; it is either the
+MAX runtime's destroy/recreate path on GeForce with this host kernel, or
+our teardown leaving something (a stream, a module, a pinned free) that the
+next context waits on. Discriminating control OWED: the same two-context
+sequence through a binding that is NOT the byte LM (two KMeans or
+ExtraTrees fits in one process), on the same box. If that hangs too, it is
+the runtime on that box and every estimator is affected there; if it does
+not, it is the byte LM's teardown.
+
+Mitigation to test (not the default until the control says which it is): a
+process-lifetime context keeper, so a live context always exists when the
+next one is created, which is the exact condition of the passing cases.
