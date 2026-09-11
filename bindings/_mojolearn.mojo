@@ -84,6 +84,7 @@ from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, u32_ptr
 from std.os import abort
 from std.math import isfinite
 from std.memory import memcpy
+from max.algorithm import sync_parallelize
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
@@ -999,13 +1000,63 @@ def column_mean_f64_binding(
             "column_mean_f64: cols must be positive, got " + String(nc)
         )
     with GILReleased(Python()):
+        # DEVIATION 2632 (2026-09-11, linear-cluster-speed): COLUMN GROUPS ON
+        # THE HOST THREAD POOL, THE SAME ADDITIONS IN THE SAME ORDER. Each
+        # column's total is its own sequential chain `acc[c] += x[r, c]` over
+        # r = 0, 1, 2, ...; no chain reads another column. So the columns are
+        # split into `_host_groups(nc)` groups, one task per group, and each
+        # task walks its rows in order, adding every column of its group per
+        # row. Every column sees exactly the definition's additions in the
+        # definition's order, so the bits are the sequential loop's by
+        # construction (no chain is split, merged or reordered). Measured on
+        # the H100 pod at 4,000,000 x 11: the sequential loop was 62 to 78 ms
+        # of a 244 to 272 ms LinearRegression fit whose device part is 25 ms.
         var acc = List[Float64](length=nc, fill=Float64(0.0))
-        for r in range(nr):
-            for c in range(nc):
-                acc[c] += Float64(xp.unsafe_load(r * nc + c))
+        var ap = acc.unsafe_ptr()
+        var groups = _host_groups(nc, nr * nc)
+        var per = (nc + groups - 1) // groups
+
+        def _col_group_task(g: Int) {imm xp, imm ap, imm nr, imm nc, imm per}:
+            var c0 = g * per
+            var c1 = min(nc, c0 + per)
+            if c1 <= c0:
+                return
+            # Task-local totals, written to the shared slab once at the end:
+            # adjacent tasks storing into one shared cache line on every row
+            # measured only 3.3x on 11 columns (false sharing). Same chain
+            # per column, same order, same bits.
+            var local = List[Float64](length=c1 - c0, fill=Float64(0.0))
+            var lp = local.unsafe_ptr()
+            for r in range(nr):
+                var row = r * nc
+                for c in range(c0, c1):
+                    lp.unsafe_store(
+                        c - c0, lp.unsafe_load(c - c0) + Float64(xp.unsafe_load(row + c))
+                    )
+            for c in range(c0, c1):
+                ap.unsafe_store(c, local[c - c0])
+
+        if groups == 1:
+            _col_group_task(0)
+        else:
+            sync_parallelize(_col_group_task, groups)
+        # `acc` is read after the join, so its owner outlives every task
+        # ([[mojo-parallelize-frees-captured-owner]]).
         for c in range(nc):
             op.unsafe_store(c, acc[c] / Float64(nr))
     return PythonObject(0)
+
+
+def _host_groups(items: Int, cells: Int) -> Int:
+    """DEVIATION 2632: how many host tasks an order-preserving helper splits
+    `items` (columns or rows) into. SCHEDULING ONLY: every caller keeps each
+    element's arithmetic, and each column's accumulation order, independent
+    of this number. Small inputs stay on the calling thread (below 2^20 cells
+    a pool dispatch costs more than it saves); large inputs take at most 64
+    tasks, which the runtime pool spreads over its cores."""
+    if cells < (1 << 20) or items <= 1:
+        return 1
+    return min(items, 64)
 
 
 # ---------------------------------------------------------------------------
@@ -1055,10 +1106,27 @@ def center_columns_f32_binding(
             + String(nr) + " x " + String(nc)
         )
     with GILReleased(Python()):
-        for r in range(nr):
-            for c in range(nc):
-                var d = Float64(xp.unsafe_load(r * nc + c)) - mp.unsafe_load(c)
-                op.unsafe_store(r * nc + c, Float32(d))
+        # DEVIATION 2632: row chunks on the host pool. Every cell is one
+        # widen, one binary64 subtract and one narrowing of its own operands,
+        # with no dependence on any other cell, so which thread computes a
+        # cell cannot reach its bits. Measured on the H100 pod: 138 to 141 ms
+        # of a 4,000,000 x 11 LinearRegression fit on the calling thread.
+        var chunks = _host_groups(nr, nr * nc)
+        var per = (nr + chunks - 1) // chunks
+
+        def _center_task(g: Int) {imm xp, imm mp, imm op, imm nr, imm nc, imm per}:
+            var r0 = g * per
+            var r1 = min(nr, r0 + per)
+            for r in range(r0, r1):
+                for c in range(nc):
+                    var d = Float64(xp.unsafe_load(r * nc + c)) - mp.unsafe_load(c)
+                    op.unsafe_store(r * nc + c, Float32(d))
+
+        if chunks <= 1:
+            if nr > 0:
+                _center_task(0)
+        else:
+            sync_parallelize(_center_task, chunks)
     return PythonObject(0)
 
 
@@ -1094,11 +1162,25 @@ def scale_rows_f32_binding(
             + String(nr) + " x " + String(nc)
         )
     with GILReleased(Python()):
-        for r in range(nr):
-            var w = Float64(wp.unsafe_load(r))
-            for c in range(nc):
-                var p = Float64(xp.unsafe_load(r * nc + c)) * w
-                op.unsafe_store(r * nc + c, Float32(p))
+        # DEVIATION 2632: row chunks on the host pool, the same per-cell
+        # arithmetic; see `center_columns_f32_binding`.
+        var chunks = _host_groups(nr, nr * nc)
+        var per = (nr + chunks - 1) // chunks
+
+        def _scale_task(g: Int) {imm xp, imm wp, imm op, imm nr, imm nc, imm per}:
+            var r0 = g * per
+            var r1 = min(nr, r0 + per)
+            for r in range(r0, r1):
+                var w = Float64(wp.unsafe_load(r))
+                for c in range(nc):
+                    var p = Float64(xp.unsafe_load(r * nc + c)) * w
+                    op.unsafe_store(r * nc + c, Float32(p))
+
+        if chunks <= 1:
+            if nr > 0:
+                _scale_task(0)
+        else:
+            sync_parallelize(_scale_task, chunks)
     return PythonObject(0)
 
 

@@ -104,6 +104,7 @@ WHAT IS NOT HERE YET, NAMED SO IT IS NOT MISTAKEN FOR DONE
   `python/mojolearn/cluster.py`); this sentence used to say it did not.
 """
 
+from max.algorithm import sync_parallelize
 from max.gpu.host import DeviceContext
 
 from cluster.impl.detail.kmeans_common import metric_is_sqrt
@@ -155,12 +156,50 @@ def plan_sum_scale(
     fit. This mirrors `plan_query_tile` in `neighbors/estimator.mojo` for the
     same two reasons.
     """
-    var worst = Float64(0.0)
-    for f in range(n_features):
-        var column = Float64(0.0)
+    # DEVIATION 2633 (2026-09-11, linear-cluster-speed): THE SAME PER-COLUMN
+    # SUMS, IN THE SAME ORDER, ON THE HOST POOL AND ROW-MAJOR. The loop here
+    # walked the matrix column by column, so every column pass strode the
+    # whole buffer (at 2,043,304 x 220 that is 220 passes over 1.64 GB on one
+    # thread). Each column total is still its own sequential float64 chain
+    # `column += abs(x[r, f])` over r = 0, 1, 2, ...; the columns are split
+    # into groups, one task per group walks its rows in order and adds every
+    # column of its group per row, and no chain is split, merged or
+    # reordered. The worst column is then chosen by the same sequential
+    # comparison over f as before, so `worst` (and the scale) keeps its bits
+    # by construction. SCHEDULING only: `groups` cannot reach any sum.
+    var totals = List[Float64](length=n_features, fill=Float64(0.0))
+    var tp = totals.unsafe_ptr()
+    var cells = n_samples * n_features
+    var groups = 1
+    if cells >= (1 << 20) and n_features > 1:
+        groups = min(n_features, 64)
+    var per = (n_features + groups - 1) // groups
+
+    def _abs_sum_task(g: Int) {imm x_ptr, imm tp, imm n_samples, imm n_features, imm per}:
+        var f0 = g * per
+        var f1 = min(n_features, f0 + per)
+        if f1 <= f0:
+            return
+        # Task-local totals, copied out once: no two tasks store into one
+        # cache line per row (false sharing). Same chains, same order.
+        var local = List[Float64](length=f1 - f0, fill=Float64(0.0))
+        var lp = local.unsafe_ptr()
         for r in range(n_samples):
-            var v = x_ptr.unsafe_load(r * n_features + f)
-            column += Float64(abs(v))
+            var row = r * n_features
+            for f in range(f0, f1):
+                var v = x_ptr.unsafe_load(row + f)
+                lp.unsafe_store(f - f0, lp.unsafe_load(f - f0) + Float64(abs(v)))
+        for f in range(f0, f1):
+            tp.unsafe_store(f, local[f - f0])
+
+    if groups == 1:
+        _abs_sum_task(0)
+    else:
+        sync_parallelize(_abs_sum_task, groups)
+    var worst = Float64(0.0)
+    # `totals` is read after the join ([[mojo-parallelize-frees-captured-owner]]).
+    for f in range(n_features):
+        var column = totals[f]
         if column > worst:
             worst = column
     return choose_scale(worst, n_samples)

@@ -1,0 +1,10 @@
+== /root/lane/python_base
+taxi mu64 8aa6d522864ed2b3 mu32 432a50206faba6de center 82a7440c3af04a62 scale 3bb2270b4e861097 ymean 18.356323336538143 ms_means=76.8 ms_center=143.6 ms_scale=1606.0
+planted_order mu64 c7ca02b4ec06cb8b mu32 03a11b2600c6d71a center 7424507143fbdb1e scale c0d97bc23530bb2d ms_means=14.7 ms_center=24.1 ms_scale=342.7
+wide mu64 f3a80568dff8cfab mu32 f842f3b5200d1323 center 03f33b4d1b0b267c scale b2664628597b0e1a ms_means=14.2 ms_center=4.9 ms_scale=11.6
+tiny mu64 b318e2d845beadc8 mu32 e55ccebbb057ca44 center e0ff368878f62f11 scale 379da470073462b7 ms_means=0.0 ms_center=0.0 ms_scale=0.1
+== /root/mojolearn/python
+taxi mu64 8aa6d522864ed2b3 mu32 432a50206faba6de center 82a7440c3af04a62 scale 3bb2270b4e861097 ymean 18.356323336538143 ms_means=51.8 ms_center=30.1 ms_scale=1379.9
+planted_order mu64 c7ca02b4ec06cb8b mu32 03a11b2600c6d71a center 7424507143fbdb1e scale c0d97bc23530bb2d ms_means=14.5 ms_center=14.7 ms_scale=335.8
+wide mu64 f3a80568dff8cfab mu32 f842f3b5200d1323 center 03f33b4d1b0b267c scale b2664628597b0e1a ms_means=13.1 ms_center=1.2 ms_scale=6.6
+tiny mu64 b318e2d845beadc8 mu32 e55ccebbb057ca44 center e0ff368878f62f11 scale 379da470073462b7 ms_means=0.1 ms_center=0.1 ms_scale=0.1
