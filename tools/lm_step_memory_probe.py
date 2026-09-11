@@ -238,6 +238,7 @@ class CorpusBatches:
         if self.sha256 != self.manifest.get('sha256') or len(raw) != self.manifest.get('bytes'):
             raise ValueError('pinned corpus length/SHA mismatch for %s' % self.path)
         self.manifest_sha256 = _sha(manifest_raw)
+        import numpy as np  # the worker's local import; the class is module level
         self.data = np.frombuffer(raw, dtype=np.uint8)
         self.batch = batch
         self.length = length
@@ -246,6 +247,7 @@ class CorpusBatches:
         self.modulus = len(raw) - length - 1
 
     def ids(self, step_index):
+        import numpy as np
         rows = []
         for b in range(self.batch):
             start = (step_index * self.batch * self.length + b * self.length) % self.modulus
