@@ -9,6 +9,76 @@ against each opponent's FAST arm on NVIDIA. Wind-down ordered by the
 orchestrator before tasks 4 and 5 were measured on the H100; everything
 below is either measured with a log path or marked not run.
 
+## 2026-09-10 night, Apple M4: RF host tax and pure nodes (branch `lane/trees-perf-0910b`)
+
+Evidence: `bench/results/rf_fast_mac_2026-09-10/` (README carries every
+number). HIGGS 1M, 100 trees, depth 16, the harness's RF config, M4, MAX
+26.5, wall time of `fit`, runs not interleaved with each other.
+
+### What the M4 fit was doing
+
+A 17.5 s IDENTICAL fit: device_wait 4.3 s, `other` 12.8 s (the H100's
+`other` was 0.49 s). Stamps inside the batch driver found 9.5 s of it in
+the per-round histogram `enqueue_memset`: under MAX 26.5 on Metal a memset
+between two kernel launches costs the host about 110 us more than the
+launches (microbenchmarks in the evidence directory), and this one, up to
+21 MB and 14,640 times per fit, averaged 650 us. A copy or a kernel in the
+same position pays nothing extra. MAX's own floors on the M4: 19 us per
+`enqueue_function`, 155 us per launch plus synchronize, one command buffer
+per launch.
+
+### DEVIATION 2500 (Python labels, on main since 59d7fbea)
+
+`sorted_classes(flatten_labels(y))` was 400 ms of pure Python per
+1,000,000-row classifier fit on the M4 (about 0.9 s of the H100's 2.3 s
+RF round). `encode_labels` runs the same ORDER RULE in the base binding
+for one numeric buffer: 8 ms. Forest hash unchanged. The H100 night leg
+measured its effect: RF 1M 2234 -> 1516, 2M 3743 -> 2283, ET 1M 3314 -> 2578.
+
+### DEVIATION 2501 (`core/device_zero.mojo`)
+
+The histogram zero rides a kernel launch. Hash unchanged
+(3ffa2951595422d4, 3 of 3), M4 FAST fit 12.4 s. `pixi run check-device-zero`.
+The same `enqueue_memset`-between-launches pattern exists in gbdt
+(`greedy_search_helper*.mojo` histogram memsets, `pointwise_scores_calcer`,
+`dynamic_boosting`) and is the first thing to try on the gbdt lanes on the
+M4; not yet measured there.
+
+### DEVIATION 2502 (a pure node is a leaf) -- CHANGES THE FOREST
+
+Rounds: 14,640 histogram rounds for 3,640 node batches per fit. Round 0
+processed 2.54M nodes over 1.59 billion rows; rounds 1 to 5 each re-ran
+about 527k nodes averaging 9 rows, 99.2% of which ended the batch with no
+split after every column was tried, all of them pure (leaf vectors
+audited). The other 0.8% were pure nodes with a numerically nonzero Gini
+gain that split into two pure children on a retry. The split kernel now
+writes the node's purity into the slot and the host treats a pure node as
+a leaf and never retries it (scikit-learn's rule). Rounds 3,627; M4 fit
+9.1 s FAST, 8.9 s IDENTICAL; hash efd14ab2c09ff57c on 8 of 8 FAST and 3 of
+3 IDENTICAL fits, FAST equals IDENTICAL; logloss 0.538850 -> 0.538817, AUC
+0.809906 -> 0.809830.
+
+The forest differs because the skipped splits shift later nodes' tree
+indices, which seed the column sampler. rf-reg fingerprints are unchanged
+(regression never marks a node); rf-clf moved on 9 of 9 fixtures
+(`bench/results/identity_break/apple-m4.identical.rf-2502-2026-09-10.json`).
+`-D MOJOLEARN_2502_RETRY_PURE=1` restores the previous forests exactly.
+`rf_perf_candidates_check` ALL ARMS GREEN under the IDENTICAL define.
+ANDREW DECIDES whether the default stays: it is a behavior change to the
+classifier's forest, shipped ON here because it removes 75% of the
+histogram rounds on every vendor.
+
+### RUN OWED
+
+- H100: RF 1M and 2M at this source (expect the round count to fall 4x;
+  the Sep 10 night RF stage split had 89 ms of retry enqueue and 761 ms of
+  device_wait at 1M). The rf-clf fingerprints will move to the 2502 set;
+  rf-reg, et, gbdt must not.
+- Apple M4: gbdt-symmetric, depthwise, lossguide FAST stage splits at 1M
+  to price their memsets (DEVIATION 2501 candidates); ET 1M stage split.
+- The nine-lane Apple identity JSON regeneration now has two reasons
+  (DEVIATION 2340 predict dtype, DEVIATION 2502 rf-clf).
+
 ## 2026-09-10 night H100 leg (branch `lane/nvidia-identical-trees-0910b`, source 7cebeecf)
 
 Box: RunPod NVIDIA H100 80GB HBM3 (81559 MiB), driver 580.126.09, kernel
@@ -190,8 +260,11 @@ patch (the scratch script hardcodes `empty()`); ignore it.
 
 ### RUN OWED
 
-- Apple M4 (orchestrator): identity_break on this branch's RF and gbdt
-  bindings (stamps are host-only and off by default, but the .so changed).
+- DONE 2026-09-11 (orchestrator, Apple M4, merged state 7356fb67):
+  identity_break gbdt-symmetric, gbdt-depthwise, gbdt-lossguide, gbdt-rmse,
+  rf-reg against the retained `apple-m4.identical.json`: 45 of 45
+  IDENTICAL. rf-clf moved on 9 of 9 by DEVIATION 2502 (below), not by the
+  stamps.
 - Symmetric 1M 533 vs Sep 10's 478 on a different pod: one interleaved RF +
   symmetric session on one H100 to separate drift from a gbdt-path change
   between deb01bcf and 7cebeecf.
