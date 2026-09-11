@@ -16,10 +16,19 @@
 # 400k x 32 / 4k / k10 = 10.225 ms, k15 = 10.817 ms, driver 580.126.09,
 # dyadic-v1) is an H100 tuple; on any other GPU the gate still runs and the
 # JSON still carries the ratio, labeled cached-reference, but it is not
-# admissible against that row. cuML is NOT rerun here: the tuple exists.
+# admissible against that row. cuML is NOT rerun for dyadic: the tuple
+# exists. THAT CACHED ROW IS DYADIC ONLY. The second kind (DEVIATION 2524,
+# ENGINEERING_RULES.md section 9), the real HIGGS prefix the gate's `higgs`
+# fixture times, has its own opponent tuple, measured ONCE on its first leg
+# by the optional `opponent` phase below and then cached in
+# bench/OPPONENT_REFERENCE.md ("kNN second kind (HIGGS rows)"); after that
+# the phase stays off and the gate quotes the cached HIGGS row through
+# MOJOLEARN_KNN_SELECTION_CACHED_OPPONENT_HIGGS (k10=ms,k15=ms; default
+# empty until the row exists).
 #
-# THREE PHASES, each with its own exit code in status.tsv; a later phase
-# runs even when an earlier one fails, because a red phase is a finding:
+# THREE PHASES plus an optional fourth, each with its own exit code in
+# status.tsv; a later phase runs even when an earlier one fails, because a
+# red phase is a finding:
 #
 #   profile   bench/knn_reference_price_main.mojo under IDENTICAL with
 #             -D MOJOLEARN_KNN_PHASE_TIMERS=1, 400k/4k/d32, at k = 1, 2, 5,
@@ -36,6 +45,32 @@
 #   gate      tools/knn_selection_gate.py against that binding: fixtures,
 #             arm equality, order/tie/oracle checks, reach by sabotage,
 #             then ordinary-request timing, under the 300 s deadline.
+#             Preceded by `prefetch-higgs` (tools/knn_datasets.py
+#             --prefetch higgs): the 2.6 GB HIGGS.csv.gz download when the
+#             box lacks it and the 404,000-line decode into the
+#             GBM_BENCH_DATA cache (default ~/datasets/gbm-bench, the trees
+#             lane's store), as its own status.tsv row and never inside the
+#             gate's deadline. The fresh gemm-leg pod has no volume, so a
+#             new pod pays the download once per leg.
+#   opponent  OPTIONAL, MOJOLEARN_KNN_SELECTION_OPPONENT=1 (default off):
+#             cuML brute-force NearestNeighbors on the SAME HIGGS prefix
+#             (tools/knn_cuml_reference.py --dataset higgs, index 400,000,
+#             queries 4,000, k 10 and 15, 7 rounds, request and device
+#             regions), in a venv built the way tools/knn_reference_leg.sh
+#             builds it (numpy==2.4.6 cupy-cuda12x==14.2.0 cuml-cu12==26.8.0
+#             from pypi.nvidia.com), AFTER the gate. Runs ONCE, on the first
+#             leg that needs the HIGGS tuple; its JSON lands in
+#             $OUT/opponent-higgs/ and its numbers go into
+#             bench/OPPONENT_REFERENCE.md, after which the switch stays off.
+#             MOJOLEARN_KNN_REF_PY names an existing cuML python to skip the
+#             venv, as in tools/knn_reference_leg.sh.
+#
+# FIXTURE SELECTION: MOJOLEARN_KNN_SELECTION_TIME_FIXTURES (default the
+# harness default, `dyadic,large,higgs` since DEVIATION 2524) is passed as
+# --time-fixtures; MOJOLEARN_KNN_SELECTION_FIXTURES (default the harness
+# default, `large,dyadic,ties,divergent_tail,higgs`) as --fixtures. Both
+# are passed only when set, so the harness's own defaults govern otherwise.
+# The prefetch is skipped when FIXTURES is set and does not name higgs.
 #
 # THE ARMS (MOJOLEARN_KNN_SELECTION_ARMS, default baseline,headbound):
 # `baseline` is the 2026-09-09 kernel, `uniform` is C4 alone (DEVIATION
@@ -81,11 +116,22 @@ TIMING_ONLY=${MOJOLEARN_KNN_SELECTION_TIMING_ONLY_ARMS:-}
 PHASE_TIMERS=${MOJOLEARN_KNN_SELECTION_PHASE_TIMERS:-0}
 PAIRS=${MOJOLEARN_KNN_SELECTION_PAIRS:-3}
 CACHED=${MOJOLEARN_KNN_SELECTION_CACHED_OPPONENT:-k10=10.225,k15=10.817}
+# The HIGGS opponent tuple (DEVIATION 2524): empty until measured once and
+# cached in bench/OPPONENT_REFERENCE.md; then k10=ms,k15=ms.
+CACHED_HIGGS=${MOJOLEARN_KNN_SELECTION_CACHED_OPPONENT_HIGGS:-}
+TIME_FIXTURES=${MOJOLEARN_KNN_SELECTION_TIME_FIXTURES:-}
+FIXTURES=${MOJOLEARN_KNN_SELECTION_FIXTURES:-}
+OPPONENT=${MOJOLEARN_KNN_SELECTION_OPPONENT:-0}
 JOBS=${MOJOLEARN_COMPILE_JOBS:-2}
 mkdir -p "$OUT/bin"
 cd "$ROOT" || exit 9
 export PATH="$HOME/.pixi/bin:$PATH"
 export OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 NUMEXPR_NUM_THREADS=2
+# One dataset store for the prefetch, the gate and the opponent: the trees
+# lane's (tools/speed_gbdt_arm.py::data_root), so a box that has HIGGS
+# already fetches nothing.
+GBM_BENCH_DATA=${GBM_BENCH_DATA:-$HOME/datasets/gbm-bench}
+export GBM_BENCH_DATA
 
 # MAX's bundled CUDA 13 assembler needs driver 580. Older-driver pods use
 # their installed assembler at BOTH build and runtime (tools/knn_selector_pod_run.sh).
@@ -119,6 +165,11 @@ run() {
     echo "phase_timers=$PHASE_TIMERS"
     echo "pairs=$PAIRS"
     echo "cached_opponent=$CACHED"
+    echo "cached_opponent_higgs=$CACHED_HIGGS"
+    echo "time_fixtures=${TIME_FIXTURES:-(harness default)}"
+    echo "fixtures=${FIXTURES:-(harness default)}"
+    echo "opponent=$OPPONENT"
+    echo "data_root=$GBM_BENCH_DATA"
     [ -f /root/gemm_leg_out/leg.txt ] && grep -E '^(commit|vendor)=' /root/gemm_leg_out/leg.txt
 } > "$OUT/gate.txt"
 nvidia-smi --query-gpu=name,driver_version,uuid,clocks.sm,temperature.gpu --format=csv > "$OUT/gpu_before.csv" 2>&1
@@ -202,13 +253,56 @@ if [ -z "$PY" ]; then
     printf 'gate\t9\t0s\n' >> "$OUT/status.tsv"
     rc=1
 else
+    # The real fixture's fetch and decode, OUTSIDE the gate's deadline and
+    # with its own status row (DEVIATION 2524). Skipped only when FIXTURES
+    # is set and leaves higgs out. Generous fence: this is a network fetch.
+    NEED_HIGGS=1
+    case ",$FIXTURES," in
+        ,,) ;;
+        *,higgs,*) ;;
+        *) NEED_HIGGS=0 ;;
+    esac
+    if [ "$NEED_HIGGS" = "1" ]; then
+        # shellcheck disable=SC2086
+        run prefetch-higgs timeout -k 30 1800 $PY tools/knn_datasets.py --prefetch higgs
+    fi
+    FIXTURE_FLAGS=""
+    [ -n "$TIME_FIXTURES" ] && FIXTURE_FLAGS="$FIXTURE_FLAGS --time-fixtures $TIME_FIXTURES"
+    [ -n "$FIXTURES" ] && FIXTURE_FLAGS="$FIXTURE_FLAGS --fixtures $FIXTURES"
+    [ -n "$CACHED_HIGGS" ] && FIXTURE_FLAGS="$FIXTURE_FLAGS --cached-opponent-higgs $CACHED_HIGGS"
     # `timeout` is a second fence outside the harness's own 300 s deadline.
     # shellcheck disable=SC2086
     PYTHONPATH="$ROOT/python" MOJOLEARN_NUMERIC_MODE=identical \
     run gate timeout 420 $PY tools/knn_selection_gate.py \
         --out "$OUT" --arms "$ARMS" --timing-only-arms "$TIMING_ONLY" \
         --pairs "$PAIRS" --deadline 300 $PHASE_FLAG \
-        --cached-opponent "$CACHED"
+        --cached-opponent "$CACHED" $FIXTURE_FLAGS
+fi
+
+# ---- opponent (optional): the HIGGS cuML row, measured ONCE --------------
+# ENGINEERING_RULES.md section 9: an opponent row is measured once per (GPU,
+# driver, opponent version, dataset) and cached; the second kind is a new
+# tuple. Same venv recipe as tools/knn_reference_leg.sh (system python3,
+# --system-site-packages, the pinned NVIDIA wheels); MOJOLEARN_KNN_REF_PY
+# names an existing cuML python instead. Runs after the gate so the gate's
+# GPU window is not shared with a 1 GB wheel install. The venv lives OUTSIDE
+# /root/gemm_leg_out: the leg tars that whole directory home over the Mac's
+# uplink, and a gigabyte of wheels is not evidence.
+if [ "$OPPONENT" = "1" ]; then
+    OPP_OUT="$OUT/opponent-higgs"
+    mkdir -p "$OPP_OUT"
+    OPY=${MOJOLEARN_KNN_REF_PY:-}
+    if [ -z "$OPY" ]; then
+        VENV=${MOJOLEARN_KNN_CUML_VENV:-/root/knn-cuml-venv}
+        run opponent-venv python3 -m venv --system-site-packages "$VENV"
+        OPY="$VENV/bin/python"
+        run opponent-wheels "$OPY" -m pip install --disable-pip-version-check --no-input --only-binary=:all: \
+            numpy==2.4.6 cupy-cuda12x==14.2.0 cuml-cu12==26.8.0 --extra-index-url https://pypi.nvidia.com
+    fi
+    run opponent-freeze "$OPY" -m pip freeze
+    run opponent timeout -k 30 1800 "$OPY" tools/knn_cuml_reference.py --dataset higgs \
+        --index 400000 --queries 4000 --k 10 15 --rounds 7 --out "$OPP_OUT"
+    [ -f "$OPP_OUT/cuml-reference-higgs.json" ] && grep -h 'CUML_REF ' "$OUT/opponent.log" > "$OPP_OUT/summary.txt" 2>/dev/null
 fi
 
 nvidia-smi --query-gpu=name,driver_version,uuid,clocks.sm,temperature.gpu --format=csv > "$OUT/gpu_after.csv" 2>&1

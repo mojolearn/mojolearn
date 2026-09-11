@@ -217,6 +217,48 @@ timed rounds. Admission compares neighbour indices; it does not assert
 bitwise equality of cuML distances. Request includes host transfers and
 device excludes them, as specified in `tools/knn_cuml_reference.py`.
 
+### kNN second kind (HIGGS rows)
+
+Every kNN row above is dyadic-v1, a generator, and the gate's `large`
+fixture is another generator of the same shape, so (ENGINEERING_RULES.md
+section 9) a selection win timed on both was timed on ONE kind. The second
+kind is REAL data, the HIGGS prefix `tools/knn_datasets.py::higgs_block`
+loads (UCI 00280, the first 404,000 rows of the gzip stream, the 28 raw
+float32 kinematic features, no shuffle, no scaling, no deduplication;
+prefix rows 0..399,999 are the index, 400,000..403,999 the queries), the
+same bytes `tools/knn_selection_gate.py`'s `higgs` fixture times. A second
+dataset is a new opponent tuple, measured ONCE on its first leg and never
+rerun; later gate legs pass the numbers through
+`MOJOLEARN_KNN_SELECTION_CACHED_OPPONENT_HIGGS=k10=<ms>,k15=<ms>` and quote
+them as a cached-reference ratio, never as a paired opponent measurement.
+
+| index | queries | k | features | cuML brute NearestNeighbors request ms | cuML device ms | GPU, driver, cuML | sha256_block | evidence |
+|---:|---:|---:|---:|---:|---:|---|---|---|
+| 400,000 (HIGGS rows 0..399,999) | 4,000 (rows 400,000..403,999) | 10 | 28 | OWED, measured once on the first leg | OWED | OWED | OWED | OWED |
+| 400,000 (HIGGS rows 0..399,999) | 4,000 (rows 400,000..403,999) | 15 | 28 | OWED, measured once on the first leg | OWED | OWED | OWED | OWED |
+
+The invocation that produces the tuple, on the box, after the gate phase
+(`tools/knn_selection_gate.sh` runs it as its optional `opponent` phase
+under `MOJOLEARN_KNN_SELECTION_OPPONENT=1`, in a venv built from
+`numpy==2.4.6 cupy-cuda12x==14.2.0 cuml-cu12==26.8.0` with
+`--extra-index-url https://pypi.nvidia.com`, the recipe of
+`tools/knn_reference_leg.sh`), seven timed rounds after two warmups,
+request and device regions as above.
+
+```
+GBM_BENCH_DATA=$HOME/datasets/gbm-bench python tools/knn_cuml_reference.py --dataset higgs \
+    --index 400000 --queries 4000 --k 10 15 --rounds 7 \
+    --out /root/gemm_leg_out/knn-selection/opponent-higgs
+```
+
+The JSON (`opponent-higgs/cuml-reference-higgs.json`) names the dataset,
+`sha256_block`, `sha256_index`, `sha256_queries`, `index_rows` and
+`query_rows` per result and the load record under
+`environment.dataset_source`; the `sha256_block` must equal
+`fixtures.higgs.sha256_block` in the gate JSON of the same leg. Fill the
+table from `request_median_ms` and `device_median_ms`, with the leg
+directory under `bench/results/e1g/` as evidence.
+
 | UMAP (32 features, 15 neighbors, 2 components, 200 epochs) | cuML UMAP ms |
 |---|---:|
 | 20k rows | 145.7 |
@@ -382,6 +424,10 @@ opponent here is torch `cdist` + `topk`, NOT cuML.
    below 1M).
 5. torch byte-LM training step time on H100 (the Sep 7 comparison in this
    tree is a correctness record with no torch timing).
+6. cuML brute-force kNN on the HIGGS prefix (the kNN second kind, DEVIATION
+   2524; the "kNN second kind (HIGGS rows)" table above), H100, k 10 and
+   15, measured once by `tools/knn_selection_gate.sh` under
+   `MOJOLEARN_KNN_SELECTION_OPPONENT=1`.
 
 ## Rows never to quote
 

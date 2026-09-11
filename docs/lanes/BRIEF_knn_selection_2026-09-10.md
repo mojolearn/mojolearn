@@ -2609,3 +2609,222 @@ lever is the admit rate: a tighter bound (the k-th smallest of the 32
 heads costs k rounds of shuffles, C2 rejected it as too expensive before
 the guard existed; with the guard it is worth pricing) or a two-level
 bound (warp then block, the block one rarely).
+
+## Step 10 (DEVIATION 2524): the second kind (source only, 2026-09-11)
+
+Nothing here was built or run (py_compile and `sh -n` of the tools only;
+no test, no native, no selftest, no download). ENGINEERING_RULES.md
+section 9, added at 71cf4420, requires every non-tree classical speed
+claim to be timed on two datasets that differ in kind at the lane's large
+shape, one real beside one generator. Step 9 timed `warpbound_guard`
+against `uniform` on `dyadic` and `large`, and both of those are 400,000 x
+32 synthetic generators, so the flip of `knn_selector_warpbound_guard_for`
+on NVIDIA was timed on ONE kind and is provisional under that rule. The
+worry is not abstract. The arm's whole mechanism is the admit rate of the
+insertion chain (step 8 read it at 0.90 to 0.96 of warp-steps under the
+per-lane threshold and step 9 at 0.462 under the warp bound), and the
+admit rate is a property of the data distribution, so a real dataset is
+exactly the thing that could show the win to be a fixture fit. The files
+touched follow (uncommitted, working tree).
+
+- `tools/knn_datasets.py` (new): the shared real-data loader.
+  `higgs_block(n_index, n_queries, data_root, download, log)` reads only
+  the first 404,000 lines of the HIGGS gzip stream (`gzip.open` plus
+  `itertools.islice`, numpy parse, the 2.6 GB file never in memory
+  whole), keeps the 28 features as float32, caches the block as
+  `higgs_knn_prefix_404000.npz` under the trees lane's store
+  (`GBM_BENCH_DATA`, default `~/datasets/gbm-bench/higgs/`, reusing the
+  `HIGGS.csv.gz` the trees lane downloads there), fetches a missing gzip
+  with urllib into a `.part` file renamed on completion, and returns the
+  index (prefix rows 0..n_index-1), the queries (prefix rows
+  400,000..400,000+n_queries-1), the row ranges, the sha256 of the whole
+  block and of each part, and the load record (cache hit, parse seconds,
+  download seconds and bytes). The cache is trusted only if it is
+  non-empty, loads, and has the prefix shape (the trees lane's zero-byte
+  stub lesson). `python3 tools/knn_datasets.py --prefetch higgs` does the
+  fetch and decode once, outside any timed run. Both harnesses call this
+  one function, so the bytes ours and the opponent measure cannot drift.
+- `tools/knn_selection_gate.py`: the fifth fixture `higgs` (rows above,
+  28 raw features, no shuffle, no scaling, no deduplication; duplicate
+  index rows are counted as `distinct_row_count` and `duplicate_rows`
+  and never dropped); `--fixtures` default gains `higgs` and
+  `--time-fixtures` default becomes `dyadic,large,higgs`; `--higgs-download
+  auto|never` and `--data-root`; `--cached-opponent-higgs k10=ms,k15=ms`
+  (empty until the HIGGS tuple is cached) reported as a cached-reference
+  ratio on the higgs rows only. The fixture is fetched and decoded in
+  `main` BEFORE the 300 s deadline is armed and recorded under
+  `fixtures_prefetch.higgs` as its own timed item, never inside a timed
+  request. Under `--selftest` an absent HIGGS skips the fixture (recorded
+  under `fixtures_prefetch.higgs.skipped` and `time_fixtures_not_built`),
+  so the Mac smoke never fetches 2.6 GB. `--quick` uses prefix rows
+  0..39,999 as the index and 400,000..400,399 as the queries. No timing
+  protocol, arm, or existing JSON field changed.
+- `tools/knn_cuml_reference.py`: `--dataset dyadic|higgs` (default
+  dyadic, unchanged behavior) and `--data-root`; the higgs records carry
+  `dataset`, `fixture`, `sha256_block`, `sha256_index`, `sha256_queries`,
+  `index_rows`, `query_rows`, and `environment.dataset_source` carries the
+  load record. `--out` also accepts a directory (then
+  `<out>/cuml-reference-<dataset>.json`).
+- `tools/knn_selection_gate.sh`: a `prefetch-higgs` status row before the
+  gate (outside the gate's deadline, 1800 s fence); `--time-fixtures` and
+  `--fixtures` pass through `MOJOLEARN_KNN_SELECTION_TIME_FIXTURES` and
+  `MOJOLEARN_KNN_SELECTION_FIXTURES` (harness defaults when unset);
+  `MOJOLEARN_KNN_SELECTION_CACHED_OPPONENT_HIGGS`; the optional fourth
+  phase `opponent` behind `MOJOLEARN_KNN_SELECTION_OPPONENT=1` (default
+  off), which builds the cuML venv the way `tools/knn_reference_leg.sh`
+  does (`numpy==2.4.6 cupy-cuda12x==14.2.0 cuml-cu12==26.8.0` from
+  pypi.nvidia.com, venv OUTSIDE `/root/gemm_leg_out` because the leg tars
+  that directory home) and runs `tools/knn_cuml_reference.py --dataset
+  higgs --index 400000 --queries 4000 --k 10 15 --rounds 7` AFTER the
+  gate, with its own status rows (`opponent-venv`, `opponent-wheels`,
+  `opponent-freeze`, `opponent`); `GBM_BENCH_DATA` exported once for all
+  three. Header comment updated (the cached cuML row is dyadic only; the
+  HIGGS row is measured once and cached).
+- `bench/OPPONENT_REFERENCE.md`: the "kNN second kind (HIGGS rows)"
+  subsection with the tuple marked OWED and the invocation that fills it.
+- this section.
+
+### Why HIGGS
+
+It is real, it is the trees lane's low-feature set already named in
+ENGINEERING_RULES.md section 9, and it is already in the store on any box
+that ran the trees ladder, so the second kind costs a 404,000-line decode
+rather than a new dataset decision. Its 28 features are raw kinematic
+quantities. Several take few distinct values (the b-tag columns are
+three-valued, the jet multiplicities near-discrete), several are
+heavy-tailed, and the columns are correlated, so the distance
+distribution a query sees is nothing like the two generators' (one
+lattice-valued, one log-uniform with cluster offsets). Exact ties and
+near-ties in the k-list are plentiful by construction, which is the
+regime where the pinned tie rule and the admission compare do the most
+work. The feature count is the data's, 28 not 32, so the harness does not
+pad; the distance and selection kernels see a d they were not timed at in
+steps 1 to 9. The arm-equality, row-order and sampled-oracle checks run
+on the fixture like on the others, so any d-dependent path that misbehaves
+fails the gate before a timing row is read.
+
+### What will be compared
+
+Arms `uniform,warpbound_guard`, timed on `dyadic`, `large` and `higgs` at
+k10 and k15, on the unserialized build (request level, the
+`NearestNeighbors.kneighbors` boundary), three pairs per order, exactly
+the step 9 promotion protocol with the third fixture added. Twelve
+request-level cells instead of eight. The verdict rule is the step 9 rule
+extended by the section 9 rule.
+
+- If all four `higgs` cells (both orders' medians, k10 and k15) favor
+  `warpbound_guard` like the eight generator cells did, the flip is
+  confirmed on NVIDIA and the word "provisional" comes off it in the
+  kernel-matrix comment and this brief.
+- If `higgs` splits or favors `uniform`, the win is a fixture fit or a
+  distribution-dependent one, it is reported as exactly that, and
+  `knn_selector_warpbound_guard_for` returns to the chain on NVIDIA in
+  the same session until the dependence is understood (a win on one kind
+  is not a default).
+- The `warpbound_count` admit rate on `higgs` (the optional mechanism leg
+  below, phase-timer build) says whether the event model transfers. On
+  the generators the bound halved the admitting steps (0.90 to 0.46). On
+  real data with plentiful ties the bound can be looser (many heads equal)
+  or tighter (clustered distances); either way the number is the
+  explanation of the timing row, not a promotion input.
+
+The opponent row for the new kind (cuML brute force on the same HIGGS
+prefix, k10 and k15) is measured ONCE, on the first leg that runs with
+`MOJOLEARN_KNN_SELECTION_OPPONENT=1`, and cached in
+`bench/OPPONENT_REFERENCE.md`; later legs pass it through
+`MOJOLEARN_KNN_SELECTION_CACHED_OPPONENT_HIGGS` and never rerun cuML.
+
+### RUN OWED (orchestrator; nothing ran)
+
+Step 0, on the Mac, numpy only, no native import, one light thing (the
+checker's own smoke). The Mac already holds
+`~/datasets/gbm-bench/higgs/HIGGS.csv.gz`, so the selftest decodes the
+404,000-line prefix once (seconds to a minute at nice 19, no download)
+and caches `higgs_knn_prefix_404000.npz` beside it. Expect `PASSED`, a
+`fixtures.higgs` entry with `d` 28, `index_rows [0, 40000]`,
+`query_rows [400000, 400400]`, `sha256_block`, `distinct_row_count` and
+`duplicate_rows`, a `fixtures_prefetch.higgs` record with `cache_hit`
+false on the first run and true on a second, and `timing` rows for
+`higgs` at k10 and k15 beside `dyadic` and `large`.
+
+```
+nice -n 19 python3 tools/knn_selection_gate.py --selftest --quick --out /tmp/knn-sel-selftest-higgs \
+    --arms uniform,warpbound_guard --pairs 1 --deadline 300
+grep -E '^(status|timing higgs)' /tmp/knn-sel-selftest-higgs/summary.txt
+python3 -c "import json; r=json.load(open('/tmp/knn-sel-selftest-higgs/knn_selection_gate.json')); print(r['fixtures_prefetch']); print({k: v for k, v in r['fixtures']['higgs'].items() if k != 'source'})"
+```
+
+Step 10a, the second-kind promotion run on the H100, with the opponent
+row measured once. Commit this pass first (the leg ships `git archive` of
+the COMMITTED tree, and `tools/knn_datasets.py` is a NEW file, so an
+uncommitted tree leaves the box without the loader). Arms
+`uniform,warpbound_guard`, phase timers OFF (request-level timing), profile
+skipped, opponent ON for this one leg only. The budget is the download,
+2.6 GB from UCI onto a fresh pod (the gemm-leg pod has no volume), commonly two to
+ten minutes, plus the cuML wheel install (about a gigabyte from
+pypi.nvidia.com, a few minutes); both are outside the gate's 300 s
+deadline and each has its own status row. 60 minutes is enough; 90 is
+safe.
+
+```
+cat > /tmp/knn_secondkind_extra.sh <<'SH'
+#!/bin/sh
+export MOJOLEARN_KNN_SELECTION_ARMS=uniform,warpbound_guard
+export MOJOLEARN_KNN_SELECTION_SKIP_PROFILE=1
+export MOJOLEARN_KNN_SELECTION_OPPONENT=1
+exec sh /root/mojolearn/tools/knn_selection_gate.sh
+SH
+MOJOLEARN_RUNPOD_KEY_FILE=$HOME/.mojolearn_runpod_key \
+MOJOLEARN_GEMM_LEG_EXTRA=/tmp/knn_secondkind_extra.sh \
+MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/$(date +%Y-%m-%d_%H%M%S)-nvidia-h100-knn-selection-secondkind \
+sh tools/gemm_remote_leg.sh nvidia --rent --minutes 90 \
+    --gpu "NVIDIA H100 80GB HBM3" \
+    --local-card bench/results/e1/2026-08-28_131651-runpod-nvidia/lanes/gemm.identical.card
+cat <leg>/remote/knn-selection/status.tsv
+cat <leg>/remote/knn-selection/summary.txt
+grep -h 'CUML_REF ' <leg>/remote/knn-selection/opponent.log
+python3 -c "import json; r=json.load(open('<leg>/remote/knn-selection/knn_selection_gate.json')); print(r['fixtures_prefetch']); print({k: v for k, v in r['fixtures']['higgs'].items() if k != 'source'})"
+```
+
+Verdict lines for step 10a. `status.tsv` rows `prefetch-higgs`, `gate`,
+`opponent-venv`, `opponent-wheels`, `opponent-freeze`, `opponent` all 0;
+in the gate JSON every fixture (large, dyadic, ties, divergent_tail,
+higgs) at k10 and k15 shows `warpbound_guard` and `default` equal to
+`uniform`, row order and oracle green, reach flipped > 0 on all five with
+clean bits restored; `fixtures.higgs.sha256_block` equal to
+`environment.dataset_source.sha256_block` in
+`opponent-higgs/cuml-reference-higgs.json` (the same bytes on both sides,
+by construction, checked anyway); twelve `timing` cells read against the
+rule above. Then the cuML request and device medians at k10 and k15 go
+into the "kNN second kind (HIGGS rows)" table in
+`bench/OPPONENT_REFERENCE.md` with the GPU, driver, cuML version and
+sha256, and the switch stays off from then on.
+
+Step 10b, optional, the mechanism run on `higgs` (phase-timer build,
+serialized; `select_ms` and `admit_rate` are the reading, request medians
+are not a price). Same wrapper with phase timers ON and the counter arm,
+opponent OFF (the row exists after 10a), profile skipped.
+
+```
+cat > /tmp/knn_secondkind_mech_extra.sh <<'SH'
+#!/bin/sh
+export MOJOLEARN_KNN_SELECTION_ARMS=uniform,warpbound_guard
+export MOJOLEARN_KNN_SELECTION_TIMING_ONLY_ARMS=warpbound_count
+export MOJOLEARN_KNN_SELECTION_PHASE_TIMERS=1
+export MOJOLEARN_KNN_SELECTION_SKIP_PROFILE=1
+export MOJOLEARN_KNN_SELECTION_TIME_FIXTURES=higgs
+exec sh /root/mojolearn/tools/knn_selection_gate.sh
+SH
+MOJOLEARN_RUNPOD_KEY_FILE=$HOME/.mojolearn_runpod_key \
+MOJOLEARN_GEMM_LEG_EXTRA=/tmp/knn_secondkind_mech_extra.sh \
+MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/$(date +%Y-%m-%d_%H%M%S)-nvidia-h100-knn-selection-secondkind-mech \
+sh tools/gemm_remote_leg.sh nvidia --rent --minutes 60 \
+    --gpu "NVIDIA H100 80GB HBM3" \
+    --local-card bench/results/e1/2026-08-28_131651-runpod-nvidia/lanes/gemm.identical.card
+grep -A6 '^timing_only' <leg>/remote/knn-selection/summary.txt
+```
+
+Later legs, once the HIGGS tuple is cached, add
+`export MOJOLEARN_KNN_SELECTION_CACHED_OPPONENT_HIGGS=k10=<ms>,k15=<ms>`
+to the wrapper so the `higgs` timing rows carry the cached-reference ratio
+the way the `dyadic` rows do (never a paired opponent measurement).

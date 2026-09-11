@@ -11,6 +11,24 @@ Two warmups, `--rounds` timed rounds, medians. With `--ours-dump DIR` the
 UInt32 neighbour lists `bench/knn_reference_price_main.mojo` wrote there
 are compared row by row (as sets, and as ordered lists).
 
+`--dataset higgs` (DEVIATION 2524; ENGINEERING_RULES.md section 9) prices
+the same opponent on the SECOND KIND, the real HIGGS prefix that
+`tools/knn_selection_gate.py`'s `higgs` fixture uses: the same
+`tools/knn_datasets.py::higgs_block` call, so the bytes are the gate's by
+construction (index = prefix rows [0, --index), queries = prefix rows
+[400,000, 400,000 + --queries), 28 raw float32 features, no shuffle, no
+scaling). The JSON names the dataset, the sha256 of the whole 404,000-row
+block and of the index and query parts, and the row ranges. That row is
+measured ONCE per (GPU, driver, cuML version, dataset) and cached in
+`bench/OPPONENT_REFERENCE.md`; later rounds run ours alone against it.
+`--dataset dyadic` (the default) is the unchanged behavior. A missing
+HIGGS.csv.gz is fetched (2.6 GB) before any timing, as its own untimed
+step, recorded under `environment.dataset_source`.
+
+`--out` is a JSON file path, or a directory (an existing one, or a path
+without a `.json` suffix), in which case the file is
+`<out>/cuml-reference-<dataset>.json`.
+
 Only the main lane runs this, on the rented box.
 """
 import argparse
@@ -22,6 +40,9 @@ import sys
 import time
 
 import numpy as np
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import knn_datasets  # noqa: E402  (tools/knn_datasets.py, the shared real-data loader)
 
 
 def coordinate_block(n_rows, n_features, salt):
@@ -57,19 +78,41 @@ def nvidia_smi():
         return "unknown", "unknown (%r)" % (exc,)
 
 
-def one_shape(n_index, n_queries, k, d, rounds, ours_dump):
+def fixture_blocks(dataset, n_index, n_queries, d, data_root=None):
+    """(xi, xq, record fields) for one shape. `dyadic` is the generator
+    (unchanged); `higgs` is the shared real prefix, whose feature count is
+    the data's (28), so `--features` is ignored for it and recorded."""
+    if dataset == "dyadic":
+        xi = np.ascontiguousarray(coordinate_block(n_index, d, 0))
+        xq = np.ascontiguousarray(coordinate_block(n_queries, d, 593))
+        return xi, xq, {"fixture": "dyadic-v1", "dataset": "dyadic"}
+    if dataset == "higgs":
+        block = knn_datasets.higgs_block(n_index, n_queries, data_root=data_root)
+        fields = {
+            "fixture": block["fixture"], "dataset": "higgs",
+            "index_rows": block["index_rows"], "query_rows": block["query_rows"],
+            "sha256_block": block["sha256_block"], "sha256_index": block["sha256_index"],
+            "sha256_queries": block["sha256_queries"],
+            "note_dataset": "REAL data, the second kind (DEVIATION 2524): HIGGS prefix, 28 raw float32 features, no shuffle, no scaling, no deduplication; the same bytes tools/knn_selection_gate.py's higgs fixture measures",
+        }
+        return block["index"], block["queries"], fields
+    raise ValueError("unknown dataset %r" % (dataset,))
+
+
+def one_shape(n_index, n_queries, k, d, rounds, ours_dump, dataset="dyadic", data_root=None):
     import cupy as cp
     from cuml.neighbors import NearestNeighbors
 
-    xi = np.ascontiguousarray(coordinate_block(n_index, d, 0))
-    xq = np.ascontiguousarray(coordinate_block(n_queries, d, 593))
+    xi, xq, fields = fixture_blocks(dataset, n_index, n_queries, d, data_root)
+    d = int(xi.shape[1])
 
     def sync():
         cp.cuda.Stream.null.synchronize()
         cp.cuda.runtime.deviceSynchronize()
 
     record = {"index": n_index, "queries": n_queries, "k": k, "features": d,
-              "rounds": rounds, "fixture": "dyadic-v1"}
+              "rounds": rounds}
+    record.update(fields)
 
     # request: host arrays both ways
     nn = NearestNeighbors(n_neighbors=k, algorithm="brute", metric="euclidean",
@@ -141,8 +184,26 @@ def main():
     ap.add_argument("--features", type=int, default=32)
     ap.add_argument("--rounds", type=int, default=7)
     ap.add_argument("--ours-dump", default="")
-    ap.add_argument("--out", required=True)
+    ap.add_argument("--dataset", choices=("dyadic", "higgs"), default="dyadic", help="dyadic: the dyadic-v1 generator (unchanged default); higgs: the real HIGGS prefix shared with tools/knn_selection_gate.py (DEVIATION 2524; --index <= 400000, --queries <= 4000, features fixed at 28)")
+    ap.add_argument("--data-root", default=None, help="higgs only: where HIGGS lives (default GBM_BENCH_DATA or ~/datasets/gbm-bench)")
+    ap.add_argument("--out", required=True, help="JSON file, or a directory (then <out>/cuml-reference-<dataset>.json)")
     args = ap.parse_args()
+
+    out_path = args.out
+    if os.path.isdir(out_path) or not out_path.endswith(".json"):
+        os.makedirs(out_path, exist_ok=True)
+        out_path = os.path.join(out_path, "cuml-reference-%s.json" % args.dataset)
+
+    dataset_source = None
+    if args.dataset == "higgs":
+        # The fetch and the decode happen here, ONCE, before any GPU work
+        # or timing; they are recorded, never timed as part of a request.
+        t0 = time.perf_counter()
+        _x, _y, dataset_source = knn_datasets.load_higgs_prefix(args.data_root)
+        dataset_source = dict(dataset_source)
+        dataset_source["prefetch_seconds"] = time.perf_counter() - t0
+        dataset_source["index_row_range_rule"] = "index = prefix rows [0, --index); queries = prefix rows [400000, 400000 + --queries)"
+        del _x, _y
 
     import cupy as cp
     import cuml
@@ -156,21 +217,24 @@ def main():
         "python": sys.version.split()[0],
         "arm": "cuml-brute-force-NearestNeighbors-fast",
         "note": "cuML's FAST arm: no deterministic configuration exists for brute kNN; distances are cuML's own (TF32-capable GEMM), so only the neighbour lists are compared",
+        "dataset": args.dataset,
+        "dataset_source": dataset_source,
     }
     results = []
     for n_index in args.index:
         for n_queries in args.queries:
             for k in args.k:
-                rec = one_shape(n_index, n_queries, k, args.features, args.rounds, args.ours_dump)
+                rec = one_shape(n_index, n_queries, k, args.features, args.rounds, args.ours_dump,
+                                dataset=args.dataset, data_root=args.data_root)
                 results.append(rec)
-                print("CUML_REF index=%d queries=%d k=%d request_median_ms=%.3f device_median_ms=%.3f" % (
-                    n_index, n_queries, k, rec["request_median_ms"], rec["device_median_ms"]), flush=True)
+                print("CUML_REF index=%d queries=%d k=%d request_median_ms=%.3f device_median_ms=%.3f dataset=%s" % (
+                    n_index, n_queries, k, rec["request_median_ms"], rec["device_median_ms"], args.dataset), flush=True)
                 if "rows_equal_as_set" in rec:
                     print("CUML_REF_VS_OURS index=%d queries=%d k=%d set_equal=%d ordered_equal=%d of %d" % (
                         n_index, n_queries, k, rec["rows_equal_as_set"], rec["rows_equal_ordered"], rec["rows_total"]), flush=True)
-    with open(args.out, "w") as fh:
-        json.dump({"environment": env, "results": results}, fh, indent=1)
-    print("CUML REFERENCE DONE", args.out)
+    with open(out_path, "w") as fh:
+        json.dump({"environment": env, "results": results}, fh, indent=1, default=str)
+    print("CUML REFERENCE DONE", out_path)
 
 
 if __name__ == "__main__":
