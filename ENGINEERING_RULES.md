@@ -303,13 +303,37 @@ runs on TWO different kinds of data**, two corpora or two generating
 distributions, not two seeds of one corpus and not two lengths of one file.
 Same reason, same shape of the rule. Andrew, 2026-09-11: "2 different but
 relatively normal things to train on, not edge cases; we build our
-software to handle GENERAL NORMAL CASES." So the two kinds are two
-ordinary training corpora that differ in what they are (today: English
-text, `training/corpus/tinyshakespeare`, and source code, to be pinned by
-sha256 and manifest the same way), never an adversarial or heavy-tailed
-fixture standing in as the second kind. Adversarial fixtures stay where
-they are, in the correctness checks; they are not what a kernel is TUNED
-on, and a timing or throughput claim quotes the two normal corpora only.
+software to handle GENERAL NORMAL CASES." Never an adversarial or
+heavy-tailed fixture standing in as the second kind. Adversarial fixtures
+stay where they are, in the correctness checks; they are not what a kernel
+is TUNED on, and a timing or throughput claim quotes the two corpora only.
+
+**The two neural corpora are medium-large, standard and benchmarked
+(2026-09-11 night).** Andrew: "we should be using 2 medium large data seeds
+to determine if we have speed wins or losses", then "is shakespeare a good
+file? what generalizes? what is the norm? what are the benchmarks? we
+should take 2 corpora that generalize and that have benchmarks". A toy file
+cannot say whether a win generalizes, and a corpus with no published
+numbers cannot say whether our quality is ordinary. So:
+
+- **English: enwik8** (`training/corpus/enwik8`, 100,000,000 bytes of
+  English Wikipedia, `tools/fetch_corpus_enwik8.sh`): the Hutter Prize file
+  and the standard byte-level language modeling benchmark, 90M/5M/5M split,
+  bits per character (Transformer-XL 1.06 at 12 layers).
+- **Code: the Pile's GitHub component** (`training/corpus/pile_github`,
+  97,124,565 bytes, every GitHub record of `monology/pile-uncopyrighted`
+  `val.jsonl.zst` at a pinned revision, `tools/fetch_corpus_pile_github.sh`):
+  ordinary GitHub code in many languages, bits per byte published for GPT-2,
+  GPT-3 and byte-level transformers.
+
+Both are pinned by manifest and sha256, fetched on the box without
+credentials, and never committed. Medium-large means large enough to be the
+real thing and small enough to fetch in a minute on a rented box; step time
+does not depend on corpus size, so nothing larger buys evidence.
+`training/corpus/tinyshakespeare` (a 1.1 MB quick-start demo with no
+leaderboard) and `training/corpus/cpython312_lib` (4.5 MB of one project)
+are RETIRED as timing corpora; their evidence stays readable and
+tinyshakespeare still pins the byte LM validation runs.
 
 The 1,000,000-row floor for tree timing (2026-09-01) stands underneath this
 rule; this one adds the second kind, and removes the size sweep as a

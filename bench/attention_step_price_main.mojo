@@ -27,8 +27,8 @@ INPUT KINDS (MOJOLEARN_ATTN_KINDS, comma separated):
               `-D MOJOLEARN_ATTN_OPERAND_DUMP=1` (the last layer's operands
               of the first step, on the corpus the step was fed); the
               shape is the dump's. The leg feeds two such directories, one
-              per corpus (English text, `training/corpus/tinyshakespeare`;
-              source code, `training/corpus/cpython312_lib`).
+              per corpus (English text, `training/corpus/enwik8`; source
+              code, `training/corpus/pile_github`; ENGINEERING_RULES 9).
   hashed      a cheap bit-equality SMOKE only: the k-NN gate's
               `hashed_block` profile in Mojo (log-uniform magnitudes over
               2.5 e-folds, per-column octave scales, twelve cluster

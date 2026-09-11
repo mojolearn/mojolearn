@@ -1,0 +1,35 @@
+{
+  "schema": "mojolearn.byte-lm.corpus.v1",
+  "source_url": "http://mattmahoney.net/dc/enwik8.zip",
+  "source_commit": "enwik8.zip, 36,445,475 bytes, sha256 547994d9980ebed1288380d652999f38a14fe291a6247c157c3d33d4932534bc",
+  "selection": "the single member enwik8 of the zip, all 100,000,000 bytes (the first 10^8 bytes of the English Wikipedia XML dump of 2006-03-03)",
+  "sha256": "2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8",
+  "md5": "a1fa5ffddb56f4953e226637dabbb36a",
+  "bytes": 100000000,
+  "encoding": "raw bytes; no normalization",
+  "train_range": [
+    0,
+    90000000
+  ],
+  "validation_range": [
+    90000000,
+    95000000
+  ],
+  "test_range": [
+    95000000,
+    100000000
+  ],
+  "vocabulary": 256,
+  "batch": 1,
+  "context": 2048,
+  "planned_steps": 3,
+  "train_batch_schedule": "step k zero-based, row b: bytes[(k*batch*2048 + b*2048) % (100000000 - 2049) : start+2049]; targets shifted one byte (tools/lm_step_memory_probe.py --corpus, tools/torch_lm_step_opponent.py); a timing run of a few steps reads inside train_range",
+  "validation_batch_starts": [],
+  "benchmark": {
+    "name": "enwik8 (Hutter Prize file), byte-level language modeling",
+    "metric": "bits per character on test_range",
+    "split": "90M train / 5M validation / 5M test, as in the Transformer-XL enwik8 script",
+    "published": "Transformer-XL 12 layers 1.06, 24 layers 0.99 (arXiv 1901.02860); T12 1.11 (arXiv 1808.04444); SHA-RNN 1.076 (arXiv 1911.11423)"
+  },
+  "scope": "English-text kind for the two-corpus neural rule (ENGINEERING_RULES section 9, from 2026-09-11 night); input.txt is fetched by tools/fetch_corpus_enwik8.sh and is not committed"
+}
