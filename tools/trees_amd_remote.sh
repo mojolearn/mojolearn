@@ -130,7 +130,17 @@ PY
 track_gpu_opponents() {
     while [ ! -f "$OUT/track_pip_base.done" ]; do sleep 10; done
     python3 -m venv --system-site-packages "$VENV" > "$LOGS/venv.log" 2>&1
-    echo "venv=$? $(date -u +%H:%M:%S)" >> "$OUT/setup.txt"
+    _vrc=$?
+    if [ "$_vrc" != 0 ]; then
+        # Leg 2 on 2026-09-11: apt fetched stale versions (404) and python3-venv
+        # never installed; virtualenv from pip needs no apt at all.
+        rm -rf "$VENV"
+        python3 -m pip install --break-system-packages --no-input --disable-pip-version-check virtualenv >> "$LOGS/venv.log" 2>&1
+        python3 -m virtualenv --system-site-packages "$VENV" >> "$LOGS/venv.log" 2>&1
+        _vrc=$?
+        echo "venv_via=virtualenv" >> "$OUT/setup.txt"
+    fi
+    echo "venv=$_vrc $(date -u +%H:%M:%S)" >> "$OUT/setup.txt"
     _rv="$(cut -d. -f1 /opt/rocm/.info/version 2>/dev/null)"
     if [ "$_rv" = 7 ]; then _idx=https://pypi.amd.com/rocm-7.0.2/simple; else _idx=https://pypi.amd.com/rocm-6.4.4/simple; fi
     echo "xgb_rocm_index=$_idx (rocm major '$_rv')" >> "$OUT/setup.txt"
