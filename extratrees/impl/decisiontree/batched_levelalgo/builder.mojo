@@ -3835,6 +3835,12 @@ def train_forest_classification_device_timed(
         # trace (the differ's alignment invariant) while naming a position
         # in the ALGORITHM -- group N, cycle M -- never a machine property.
         var cyc = 0
+        # DEVIATION 2663: per-group tallies printed only under
+        # `-D MOJOLEARN_ET_CYCLE_STATS=1` (a measurement define, never set by a
+        # build script): searched nodes, DEVIATION 205 survey nodes, rescues.
+        var st_nodes = 0
+        var st_retry = 0
+        var st_rescued = 0
         # DEVIATION 466: the best-first carry between cycles -- the nodes
         # admitted-but-unsearched, and which queue each belongs to. Empty
         # and never read in depth-wise mode.
@@ -3898,6 +3904,7 @@ def train_forest_classification_device_timed(
                 for i in range(len(item_trees)):
                     item_trees[i] = item_trees[0]
             var n_nodes = len(work_items)
+            st_nodes += n_nodes
 
             clock.tick(ctx, PHASE_HOST_QUEUE)
             var found = search_batch(
@@ -3980,6 +3987,7 @@ def train_forest_classification_device_timed(
                     retry.append(i)
 
             if len(retry) > 0:
+                st_retry += len(retry)
                 var sub = List[NodeWorkItem]()
                 var sub_trees = List[Int32]()
                 for j in range(len(retry)):
@@ -4031,6 +4039,7 @@ def train_forest_classification_device_timed(
                     chosen_slot.append(retry[j])
 
                 if len(chosen_items) > 0:
+                    st_rescued += len(chosen_items)
                     var res2 = search_batch(
                         ctx, ws, dataset, d_row_ids, chosen_items, 1, params,
                         n_classes, n_rows, n_cols, chosen_trees, seed, False,
@@ -4317,6 +4326,13 @@ def train_forest_classification_device_timed(
                 ctx, String("g") + String(gi) + ".leaves", d_leaves
             )
         clock.tick(ctx, PHASE_LEAF)
+        # DEVIATION 2663's measurement define: what the group's level loop did.
+        comptime if is_defined["MOJOLEARN_ET_CYCLE_STATS"]():
+            print(
+                "ET_CYCLE_STATS group=", gi, " trees=", g, " cycles=", cyc,
+                " nodes=", st_nodes, " survey_nodes=", st_retry,
+                " rescued=", st_rescued, " max_batch=", params.max_batch_size,
+            )
         # Mojo frees a buffer at its LAST USE; these must outlive every
         # launch that read them, and every launch has synchronized above.
         _ = d_row_ids^
