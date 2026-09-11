@@ -1183,6 +1183,283 @@ def gather_rows_bytes_binding(
     return PythonObject(0)
 
 
+# ===========================================================================
+# LABEL ENCODING, DEVIATION 2500 (2026-09-10).
+#
+# `python/mojolearn/_labels.py::sorted_classes` defines the `classes_` ORDER
+# RULE (DEVIATION 2340) and encodes `y` with one dict lookup per row. That is
+# O(rows) Python: measured at 1,000,000 float32 labels on the M4 it is 60 ms
+# to unpack the buffer into Python objects, 210 ms to group and encode and
+# 130 ms to pack the codes, about 400 ms of a 2.3 s RandomForest fit, and
+# more on a slower host CPU (the H100 leg's RF round was 2,343 ms of which
+# 1,406 ms was the Mojo fit). This helper is the SAME rule for the case of
+# one contiguous numeric buffer, computed in compiled code with the GIL
+# released; the Python routine stays for lists, strings and mixed objects.
+#
+# The rule, restated for one numeric dtype: classes are the distinct values
+# under numeric equality, sorted ascending; the representative kept is the
+# FIRST value seen (so `-0.0` and `0.0` are one class and the first spelling
+# wins); a NaN label is refused. Pass one keeps the distinct values in a
+# sorted insertion array (binary search per row; distinct labels are few),
+# pass two writes each row's index into that array. More distinct values
+# than `max_classes` returns -1 and the caller falls back to the Python
+# routine, so the O(k) insertion is bounded.
+# ===========================================================================
+
+
+def _encode_labels[dt: DType](
+    src: MutPointer[Scalar[dt], MutUntrackedOrigin], n: Int,
+    classes: MutPointer[Scalar[dt], MutUntrackedOrigin], max_classes: Int,
+    codes: MutPointer[Int32, MutUntrackedOrigin],
+) -> Int:
+    """n_classes, or -1 when more than `max_classes` distinct values were
+    seen, or -2 when a label compared unequal to itself (NaN)."""
+    var k = 0
+    var last = src.unsafe_load(0)
+    var have_last = False
+    for i in range(n):
+        var v = src.unsafe_load(i)
+        if v != v:
+            return -2
+        if have_last and v == last:
+            continue
+        var lo = 0
+        var hi = k
+        while lo < hi:
+            var mid = (lo + hi) // 2
+            if classes.unsafe_load(mid) < v:
+                lo = mid + 1
+            else:
+                hi = mid
+        last = v
+        have_last = True
+        if lo < k and classes.unsafe_load(lo) == v:
+            continue
+        if k == max_classes:
+            return -1
+        var j = k
+        while j > lo:
+            classes.unsafe_store(j, classes.unsafe_load(j - 1))
+            j -= 1
+        classes.unsafe_store(lo, v)
+        k += 1
+    var last_code = -1
+    for i in range(n):
+        var v = src.unsafe_load(i)
+        if last_code >= 0 and v == last:
+            codes.unsafe_store(i, Int32(last_code))
+            continue
+        var lo = 0
+        var hi = k
+        while lo < hi:
+            var mid = (lo + hi) // 2
+            if classes.unsafe_load(mid) < v:
+                lo = mid + 1
+            else:
+                hi = mid
+        codes.unsafe_store(i, Int32(lo))
+        last = v
+        last_code = lo
+    return k
+
+
+def _encode_labels_binding[dt: DType](
+    src_addr: PythonObject, n: PythonObject, classes_addr: PythonObject,
+    max_classes: PythonObject, codes_addr: PythonObject,
+) raises -> PythonObject:
+    """`_encode_labels` over `n` values of `dt` at `src_addr`; the sorted
+    distinct values land at `classes_addr` (capacity `max_classes`) and one
+    int32 code per row at `codes_addr`. Returns the class count, or -1 when
+    the cap was exceeded (nothing is promised about either output then).
+    A NaN label raises the ORDER RULE's own message."""
+    var count = Int(py=n)
+    var cap = Int(py=max_classes)
+    if count < 1:
+        raise Error("encode_labels: n must be positive, got " + String(count))
+    if cap < 1:
+        raise Error("encode_labels: max_classes must be positive")
+    if Int(py=src_addr) == 0 or Int(py=classes_addr) == 0 or Int(py=codes_addr) == 0:
+        raise Error("encode_labels: null buffer address")
+    var sp = MutPointer[Scalar[dt], MutUntrackedOrigin](unsafe_from_address=Int(py=src_addr))
+    var cp = MutPointer[Scalar[dt], MutUntrackedOrigin](unsafe_from_address=Int(py=classes_addr))
+    var dp = _i32_ptr(Int(py=codes_addr))
+    var k: Int
+    with GILReleased(Python()):
+        k = _encode_labels[dt](sp, count, cp, cap, dp)
+    if k == -2:
+        raise Error("mojolearn: y contains a NaN label; NaN is not a class")
+    return PythonObject(k)
+
+
+def encode_labels_f32_binding(
+    src_addr: PythonObject, n: PythonObject, classes_addr: PythonObject,
+    max_classes: PythonObject, codes_addr: PythonObject,
+) raises -> PythonObject:
+    return _encode_labels_binding[DType.float32](src_addr, n, classes_addr, max_classes, codes_addr)
+
+
+def encode_labels_f64_binding(
+    src_addr: PythonObject, n: PythonObject, classes_addr: PythonObject,
+    max_classes: PythonObject, codes_addr: PythonObject,
+) raises -> PythonObject:
+    return _encode_labels_binding[DType.float64](src_addr, n, classes_addr, max_classes, codes_addr)
+
+
+def encode_labels_i32_binding(
+    src_addr: PythonObject, n: PythonObject, classes_addr: PythonObject,
+    max_classes: PythonObject, codes_addr: PythonObject,
+) raises -> PythonObject:
+    return _encode_labels_binding[DType.int32](src_addr, n, classes_addr, max_classes, codes_addr)
+
+
+def encode_labels_i64_binding(
+    src_addr: PythonObject, n: PythonObject, classes_addr: PythonObject,
+    max_classes: PythonObject, codes_addr: PythonObject,
+) raises -> PythonObject:
+    return _encode_labels_binding[DType.int64](src_addr, n, classes_addr, max_classes, codes_addr)
+
+
+def encode_labels_u32_binding(
+    src_addr: PythonObject, n: PythonObject, classes_addr: PythonObject,
+    max_classes: PythonObject, codes_addr: PythonObject,
+) raises -> PythonObject:
+    return _encode_labels_binding[DType.uint32](src_addr, n, classes_addr, max_classes, codes_addr)
+
+
+def encode_labels_u8_binding(
+    src_addr: PythonObject, n: PythonObject, classes_addr: PythonObject,
+    max_classes: PythonObject, codes_addr: PythonObject,
+) raises -> PythonObject:
+    return _encode_labels_binding[DType.uint8](src_addr, n, classes_addr, max_classes, codes_addr)
+
+
+def gather_i64_binding(
+    table_addr: PythonObject, n_table: PythonObject, codes_addr: PythonObject,
+    n: PythonObject, dst_addr: PythonObject,
+) raises -> PythonObject:
+    """`dst[i] = table[codes[i]]` over int64 tables (DEVIATION 2500): the
+    decode half of label encoding, `classes_[code]` per predicted row.
+    A code outside `[0, n_table)` raises before any write."""
+    var count = Int(py=n)
+    var nt = Int(py=n_table)
+    if count < 0 or nt < 1:
+        raise Error("gather_i64: n must be non-negative and the table non-empty")
+    if count == 0:
+        return PythonObject(0)
+    if Int(py=table_addr) == 0 or Int(py=codes_addr) == 0 or Int(py=dst_addr) == 0:
+        raise Error("gather_i64: null buffer address")
+    var tp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=table_addr))
+    var cp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=codes_addr))
+    var dp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=dst_addr))
+    var bad = False
+    with GILReleased(Python()):
+        for i in range(count):
+            var c = Int(cp.unsafe_load(i))
+            if c < 0 or c >= nt:
+                bad = True
+                break
+        if not bad:
+            for i in range(count):
+                dp.unsafe_store(i, tp.unsafe_load(Int(cp.unsafe_load(i))))
+    if bad:
+        raise Error("gather_i64: code out of range")
+    return PythonObject(0)
+
+
+def gather_f64_binding(
+    table_addr: PythonObject, n_table: PythonObject, codes_addr: PythonObject,
+    n: PythonObject, dst_addr: PythonObject,
+) raises -> PythonObject:
+    """`gather_i64_binding` over a float64 table (int64 codes)."""
+    var count = Int(py=n)
+    var nt = Int(py=n_table)
+    if count < 0 or nt < 1:
+        raise Error("gather_f64: n must be non-negative and the table non-empty")
+    if count == 0:
+        return PythonObject(0)
+    if Int(py=table_addr) == 0 or Int(py=codes_addr) == 0 or Int(py=dst_addr) == 0:
+        raise Error("gather_f64: null buffer address")
+    var tp = _f64_ptr(Int(py=table_addr))
+    var cp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=codes_addr))
+    var dp = _f64_ptr(Int(py=dst_addr))
+    var bad = False
+    with GILReleased(Python()):
+        for i in range(count):
+            var c = Int(cp.unsafe_load(i))
+            if c < 0 or c >= nt:
+                bad = True
+                break
+        if not bad:
+            for i in range(count):
+                dp.unsafe_store(i, tp.unsafe_load(Int(cp.unsafe_load(i))))
+    if bad:
+        raise Error("gather_f64: code out of range")
+    return PythonObject(0)
+
+
+def argmax_rows_f32_binding(
+    scores_addr: PythonObject, n_rows: PythonObject, n_cols: PythonObject,
+    dst_addr: PythonObject,
+) raises -> PythonObject:
+    """Row-wise first-max-wins argmax over a C-order [n_rows, n_cols] float32
+    block into int64 codes (DEVIATION 2500), the rule of
+    `_labels.argmax_rows`: strictly greater replaces, so ties keep the
+    lowest column, and a NaN never replaces (every comparison with it is
+    false), so a row of NaN answers column 0 as the Python loop did."""
+    var rows = Int(py=n_rows)
+    var cols = Int(py=n_cols)
+    if rows < 0 or cols < 1:
+        raise Error("argmax_rows_f32: n_rows must be non-negative and n_cols positive")
+    if rows == 0:
+        return PythonObject(0)
+    var sp = _f32_ptr(Int(py=scores_addr))
+    if Int(py=dst_addr) == 0:
+        raise Error("argmax_rows_f32: null buffer address")
+    var dp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=dst_addr))
+    with GILReleased(Python()):
+        for r in range(rows):
+            var base = r * cols
+            var best = 0
+            var best_value = sp.unsafe_load(base)
+            for c in range(1, cols):
+                var value = sp.unsafe_load(base + c)
+                if value > best_value:
+                    best = c
+                    best_value = value
+            dp.unsafe_store(r, Int64(best))
+    return PythonObject(0)
+
+
+def argmax_rows_f64_binding(
+    scores_addr: PythonObject, n_rows: PythonObject, n_cols: PythonObject,
+    dst_addr: PythonObject,
+) raises -> PythonObject:
+    """`argmax_rows_f32_binding` over float64 scores."""
+    var rows = Int(py=n_rows)
+    var cols = Int(py=n_cols)
+    if rows < 0 or cols < 1:
+        raise Error("argmax_rows_f64: n_rows must be non-negative and n_cols positive")
+    if rows == 0:
+        return PythonObject(0)
+    var sp = _f64_ptr(Int(py=scores_addr))
+    if Int(py=dst_addr) == 0:
+        raise Error("argmax_rows_f64: null buffer address")
+    var dp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=dst_addr))
+    with GILReleased(Python()):
+        for r in range(rows):
+            var base = r * cols
+            var best = 0
+            var best_value = sp.unsafe_load(base)
+            for c in range(1, cols):
+                var value = sp.unsafe_load(base + c)
+                if value > best_value:
+                    best = c
+                    best_value = value
+            dp.unsafe_store(r, Int64(best))
+    return PythonObject(0)
+
+
+
 @export
 def PyInit__mojolearn() abi("C") -> PythonObject:
     try:
@@ -1214,6 +1491,17 @@ def PyInit__mojolearn() abi("C") -> PythonObject:
         m.def_function[scale_rows_f32_binding]("scale_rows_f32")
         m.def_function[probability_rows_f32_binding]("probability_rows_f32")
         m.def_function[gather_rows_bytes_binding]("gather_rows_bytes")
+        # DEVIATION 2500: label encode/decode and the class argmax, host side.
+        m.def_function[encode_labels_f32_binding]("encode_labels_f32")
+        m.def_function[encode_labels_f64_binding]("encode_labels_f64")
+        m.def_function[encode_labels_i32_binding]("encode_labels_i32")
+        m.def_function[encode_labels_i64_binding]("encode_labels_i64")
+        m.def_function[encode_labels_u32_binding]("encode_labels_u32")
+        m.def_function[encode_labels_u8_binding]("encode_labels_u8")
+        m.def_function[gather_i64_binding]("gather_i64")
+        m.def_function[gather_f64_binding]("gather_f64")
+        m.def_function[argmax_rows_f32_binding]("argmax_rows_f32")
+        m.def_function[argmax_rows_f64_binding]("argmax_rows_f64")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn module: ", e))

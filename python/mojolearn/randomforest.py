@@ -76,7 +76,7 @@ from ._buffer import (
 )
 from ._labels import (
     argmax_rows, classes_from_member, classes_member, decode_labels,
-    flat_view, flatten_labels, is_bool, sorted_classes,
+    encode_labels, flat_view, flatten_labels, is_bool, sorted_classes,
 )
 from ._mode import NumericModeMixin
 from ._forest_protocol import (ForestProtocol, forest_estimator,
@@ -636,12 +636,14 @@ class RandomForestClassifier(_RandomForestBase):
     def fit(self, X, y):
         self._refresh_config()
         self._capture_fit_mode()
-        self.classes_, codes = sorted_classes(flatten_labels(y))
+        # DEVIATION 2500: one native pass for a numeric buffer, the Python
+        # ORDER RULE for everything else; the codes cross as int32.
+        self.classes_, y32 = encode_labels(y)
         self.n_classes_ = int(len(self.classes_))
         if self.n_classes_ < 2:
             raise ValueError("y has fewer than 2 classes")
-        y32 = Array.from_list(codes, "<i4")
-        weights = _class_weight_rows(self.class_weight, self.classes_, codes)
+        weights = (None if self.class_weight is None else
+                   _class_weight_rows(self.class_weight, self.classes_, y32.tolist()))
         binding = self._bind("_mojolearn_rf")
         fit_fn = _forest_fit_function(binding, "rf_classifier_fit")
         if weights is not None:

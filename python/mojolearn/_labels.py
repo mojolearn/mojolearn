@@ -141,6 +141,82 @@ def sorted_classes(labels):
     return classes, [code[v] for v in labels]
 
 
+# DEVIATION 2500 (2026-09-10): the ORDER RULE for ONE numeric buffer, in
+# compiled code. `sorted_classes(flatten_labels(y))` is O(rows) Python three
+# times over (unpack to objects, group and encode, pack the codes): 400 ms
+# of a 2.3 s RandomForest fit at 1,000,000 rows on the M4, 0.9 s of the
+# H100 leg's 2.3 s round. The base binding's `encode_labels_<dtype>` computes
+# the same classes and codes for a contiguous buffer of one numeric dtype
+# (`bindings/_mojolearn.mojo`, the algorithm is written there); everything
+# else (lists, str labels, exotic dtypes, more than
+# `_NATIVE_ENCODE_MAX_CLASSES` distinct values) still takes the Python
+# routine, so the rule has one definition and one fast copy that
+# `tests/test_labels_native.py` holds equal to it.
+_NATIVE_ENCODE = {
+    "<f4": ("encode_labels_f32", "f", float),
+    "<f8": ("encode_labels_f64", "d", float),
+    "<i4": ("encode_labels_i32", "i", int),
+    "<i8": ("encode_labels_i64", "q", int),
+    "<u4": ("encode_labels_u32", "I", int),
+    "<u1": ("encode_labels_u8", "B", int),
+}
+_NATIVE_ENCODE_MAX_CLASSES = 4096
+
+
+def encode_labels(y):
+    """`(classes, codes)` under the ORDER RULE, `codes` an int32 `Array`
+    with one dense code per label. The native arm for a numeric buffer,
+    `sorted_classes(flatten_labels(y))` for everything else."""
+    fast = _encode_labels_native(y)
+    if fast is not None:
+        return fast
+    classes, codes = sorted_classes(flatten_labels(y))
+    return classes, Array.from_list(codes, "<i4")
+
+
+def _encode_labels_native(y):
+    from ._buffer import Buf, _has_buffer, _materialize, _native, _output_store, typestr_of
+
+    if isinstance(y, (list, tuple, str, bytes)):
+        return None
+    if not isinstance(y, Array) and not _has_buffer(y):
+        return None
+    bool_source = False
+    if not isinstance(y, Array):
+        with Buf(y, name="y") as b:
+            bool_source = typestr_of(b) == "|b1"
+    try:
+        arr, _ = _materialize(y, "y")
+    except (TypeError, ValueError):
+        return None  # the Python routine names the refusal
+    spec = _NATIVE_ENCODE.get(arr.dtype)
+    if spec is None or arr.size == 0:
+        return None
+    # `flatten_labels` reads the LOGICAL order; storage order equals it only
+    # for a vector (rank 1, or every other axis of length 1).
+    if arr.size != max(arr.shape):
+        return None
+    key, fmt, py = spec
+    fn = _native(key)
+    codes_store = _output_store("i", arr.size)
+    classes_store = _output_store(fmt, _NATIVE_ENCODE_MAX_CLASSES)
+    try:
+        k = int(fn(arr._addr, arr.size, classes_store.buffer_info()[0],
+                   _NATIVE_ENCODE_MAX_CLASSES, codes_store.buffer_info()[0]))
+    except Exception as exc:  # a Mojo Error crosses as a bare Exception
+        if "NaN label" in str(exc):
+            raise ValueError(str(exc)) from None
+        raise
+    del arr
+    if k < 0:
+        return None
+    if bool_source:
+        classes = [bool(classes_store[i]) for i in range(k)]
+    else:
+        classes = [py(classes_store[i]) for i in range(k)]
+    return classes, Array._owned(codes_store, (len(codes_store),), "<i4", "C")
+
+
 def label_kind(classes):
     """'int' if every class is an integer (bools excluded), 'float' if
     every class is a real number, else 'object'."""
@@ -156,16 +232,46 @@ def decode_labels(classes, codes):
     `Array`, real classes a float64 `Array`; str or bool classes give a
     Python list of the label objects, since no `Array` dtype holds them
     (DEVIATION 2340: an ndarray of labels used to come back)."""
-    values = [classes[int(c)] for c in codes]
     kind = label_kind(classes)
+    fast = _decode_labels_native(classes, codes, kind)
+    if fast is not None:
+        return fast
+    values = [classes[int(c)] for c in codes]
     try:
         if kind == "int":
             return Array.from_list([int(v) for v in values], "<i8")
         if kind == "float":
             return Array.from_list([float(v) for v in values], "<f8")
-    except OverflowError:
+    except (OverflowError, TypeError):
+        # `Array.from_list` reports an int outside int64 as a TypeError
+        # (pre-existing: only OverflowError was caught, so a 2**70 class
+        # raised instead of returning the label objects; fixed 2026-09-10)
         pass
     return values
+
+
+def _decode_labels_native(classes, codes, kind):
+    """DEVIATION 2500: `classes[code]` per row through the base binding's
+    `gather_i64` / `gather_f64` when `codes` is an int64 `Array` (what
+    `argmax_rows` returns) and the classes are all int or all float. The
+    dtype of the answer is the one `decode_labels` documents; a class that
+    does not fit int64 leaves the Python arm to raise and fall back."""
+    from ._buffer import _native, _output_store
+
+    if kind not in ("int", "float") or not isinstance(codes, Array):
+        return None
+    if codes.dtype != "<i8" or codes.ndim != 1 or not classes:
+        return None
+    try:
+        table = (Array.from_list([int(c) for c in classes], "<i8") if kind == "int"
+                 else Array.from_list([float(c) for c in classes], "<f8"))
+    except (OverflowError, TypeError):
+        return None  # a class outside int64: the Python arm returns the objects
+    n = int(codes.size)
+    store = _output_store("q" if kind == "int" else "d", n)
+    fn = _native("gather_i64" if kind == "int" else "gather_f64")
+    fn(table._addr, len(classes), codes._addr, n, store.buffer_info()[0])
+    return Array._owned(store, (n,), "<i8" if kind == "int" else "<f8", "C")
 
 
 def classes_member(classes):
@@ -208,6 +314,14 @@ def argmax_rows(scores):
     of float32 or float64 scores, as an int64 `Array`. O(rows * classes)
     Python: the argmax over class counts the contract permits."""
     n_rows, n_cols = scores.shape
+    if (isinstance(scores, Array) and scores.dtype in ("<f4", "<f8")
+            and scores._has_order("C") and n_rows and n_cols):
+        # DEVIATION 2500: the same first-max-wins scan in the base binding.
+        from ._buffer import _native, _output_store
+        fn = _native("argmax_rows_f32" if scores.dtype == "<f4" else "argmax_rows_f64")
+        store = _output_store("q", n_rows)
+        fn(scores._addr, n_rows, n_cols, store.buffer_info()[0])
+        return Array._owned(store, (n_rows,), "<i8", "C")
     view = flat_view(scores)
     out = []
     for r in range(n_rows):

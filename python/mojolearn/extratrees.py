@@ -89,7 +89,7 @@ from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, as_f32_colmajor, empty
 from ._labels import (
     argmax_rows, classes_from_member, classes_member, decode_labels,
-    flatten_labels, is_bool, sorted_classes,
+    encode_labels, flatten_labels, is_bool, sorted_classes,
 )
 from ._mode import NumericModeMixin
 from ._forest_protocol import (ForestProtocol, forest_estimator,
@@ -439,11 +439,11 @@ class ExtraTreesClassifier(_ExtraTreesBase):
         # label objects under `_labels.sorted_classes`'s order rule, and
         # the codes are one dict lookup per row (the permitted O(rows)
         # label-encoding loop). The codes cross as float32, as before.
-        self.classes_, codes = sorted_classes(flatten_labels(y))
+        self.classes_, codes = encode_labels(y)  # DEVIATION 2500, int32 codes
         self.n_classes_ = int(len(self.classes_))
         return self._fit_arrays(
             X,
-            Array.from_list([float(c) for c in codes], "<f4"),
+            codes.astype("<f4"),
             self.n_classes_,
             _forest_fit_function(self._bind("_mojolearn_trees"), "et_classifier_fit"),
         )
