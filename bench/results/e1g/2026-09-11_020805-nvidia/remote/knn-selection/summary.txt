@@ -1,0 +1,47 @@
+status: passed
+phase timers: READ from the binding (build with MOJOLEARN_KNN_PHASE_TIMERS); request medians below are SERIALIZED by the per-class synchronizations and are not comparable to untimed requests
+timing large k10 capk_selp vs uniform: uniform median 31.672193 ms (min 31.507290), capk_selp median 32.448354 ms (min 31.519237)
+  phases (median ms): uniform distance_ms 15.273 select_ms 10.228 merge_ms 0.456; capk_selp distance_ms 15.293 select_ms 10.241 merge_ms 0.458
+timing large k15 capk_selp vs uniform: uniform median 36.652908 ms (min 36.604950), capk_selp median 36.603843 ms (min 36.530150)
+  phases (median ms): uniform distance_ms 15.270 select_ms 14.600 merge_ms 0.454; capk_selp distance_ms 15.256 select_ms 14.549 merge_ms 0.450
+timing dyadic k10 capk_selp vs uniform: uniform median 31.498031 ms (min 31.446725), capk_selp median 31.489152 ms (min 31.432862)
+  phases (median ms): uniform distance_ms 15.248 select_ms 10.212 merge_ms 0.453; capk_selp distance_ms 15.248 select_ms 10.189 merge_ms 0.455
+  cached-reference ratios (NOT a paired opponent): uniform 3.080x, capk_selp 3.080x
+timing dyadic k15 capk_selp vs uniform: uniform median 36.760354 ms (min 36.640773), capk_selp median 36.827445 ms (min 36.548575)
+  phases (median ms): uniform distance_ms 15.257 select_ms 14.605 merge_ms 0.452; capk_selp distance_ms 15.243 select_ms 14.544 merge_ms 0.452
+  cached-reference ratios (NOT a paired opponent): uniform 3.398x, capk_selp 3.405x
+timing large k10 voteguard vs uniform: uniform median 31.404394 ms (min 31.371943), voteguard median 31.089916 ms (min 31.025654)
+  phases (median ms): uniform distance_ms 15.244 select_ms 10.209 merge_ms 0.448; voteguard distance_ms 15.239 select_ms 9.857 merge_ms 0.446
+timing large k15 voteguard vs uniform: uniform median 36.761829 ms (min 36.607932), voteguard median 36.573674 ms (min 36.413659)
+  phases (median ms): uniform distance_ms 15.282 select_ms 14.624 merge_ms 0.454; voteguard distance_ms 15.296 select_ms 14.400 merge_ms 0.454
+timing dyadic k10 voteguard vs uniform: uniform median 31.671110 ms (min 31.441468), voteguard median 31.241843 ms (min 31.172461)
+  phases (median ms): uniform distance_ms 15.243 select_ms 10.211 merge_ms 0.446; voteguard distance_ms 15.244 select_ms 9.866 merge_ms 0.446
+  cached-reference ratios (NOT a paired opponent): uniform 3.097x, voteguard 3.055x
+timing dyadic k15 voteguard vs uniform: uniform median 36.766426 ms (min 36.704007), voteguard median 36.668571 ms (min 36.407715)
+  phases (median ms): uniform distance_ms 15.260 select_ms 14.607 merge_ms 0.453; voteguard distance_ms 15.254 select_ms 14.386 merge_ms 0.457
+  cached-reference ratios (NOT a paired opponent): uniform 3.399x, voteguard 3.390x
+timing_only: OUTPUT INVALID; PHASE COST ONLY (never a correctness, reach or promotion input)
+timing_only large k10 noshift vs uniform (output invalid; phase cost only): uniform median 31.477435 ms (min 31.390686), noshift median 24.832960 ms (min 24.822055); noshift output differs from the reference in 79990 cells
+  phases (median ms): uniform distance_ms 15.255 select_ms 10.213 merge_ms 0.449; noshift distance_ms 15.240 select_ms 3.515 merge_ms 0.443
+  select_ms noshift/uniform = 0.3440 (paired median)
+timing_only large k15 noshift vs uniform (output invalid; phase cost only): uniform median 36.759320 ms (min 36.621323), noshift median 26.010941 ms (min 25.932034); noshift output differs from the reference in 119986 cells
+  phases (median ms): uniform distance_ms 15.293 select_ms 14.642 merge_ms 0.452; noshift distance_ms 15.242 select_ms 3.799 merge_ms 0.451
+  select_ms noshift/uniform = 0.2597 (paired median)
+timing_only dyadic k10 noshift vs uniform (output invalid; phase cost only): uniform median 32.508359 ms (min 32.085386), noshift median 25.634940 ms (min 25.503024); noshift output differs from the reference in 79964 cells
+  phases (median ms): uniform distance_ms 15.298 select_ms 10.269 merge_ms 0.495; noshift distance_ms 15.279 select_ms 3.571 merge_ms 0.494
+  select_ms noshift/uniform = 0.3475 (paired median)
+timing_only dyadic k15 noshift vs uniform (output invalid; phase cost only): uniform median 37.116560 ms (min 36.965466), noshift median 26.371858 ms (min 26.275592); noshift output differs from the reference in 119964 cells
+  phases (median ms): uniform distance_ms 15.256 select_ms 14.607 merge_ms 0.457; noshift distance_ms 15.221 select_ms 3.799 merge_ms 0.449
+  select_ms noshift/uniform = 0.2602 (paired median)
+timing_only large k10 votecount vs uniform (output valid; counter arm; time not a price): uniform median 32.628748 ms (min 31.536307), votecount median 33.469484 ms (min 32.793684); votecount output VALID (equal to the reference); its time is not a price
+  phases (median ms): uniform distance_ms 15.290 select_ms 10.279 merge_ms 0.505; votecount distance_ms 15.313 select_ms 11.563 merge_ms 0.477 admit_warp_steps 49920000.000 admit_any_admit 45065380.000 admit_rate 0.903
+  select_ms votecount/uniform = 1.1297 (paired median)
+timing_only large k15 votecount vs uniform (output valid; counter arm; time not a price): uniform median 36.807194 ms (min 36.634566), votecount median 38.999137 ms (min 38.285918); votecount output VALID (equal to the reference); its time is not a price
+  phases (median ms): uniform distance_ms 15.273 select_ms 14.604 merge_ms 0.460; votecount distance_ms 15.323 select_ms 16.154 merge_ms 0.471 admit_warp_steps 49920000.000 admit_any_admit 47940942.000 admit_rate 0.960
+  select_ms votecount/uniform = 1.1056 (paired median)
+timing_only dyadic k10 votecount vs uniform (output valid; counter arm; time not a price): uniform median 31.753393 ms (min 31.567293), votecount median 33.065640 ms (min 32.801629); votecount output VALID (equal to the reference); its time is not a price
+  phases (median ms): uniform distance_ms 15.239 select_ms 10.211 merge_ms 0.453; votecount distance_ms 15.305 select_ms 11.527 merge_ms 0.450 admit_warp_steps 49920000.000 admit_any_admit 45077928.000 admit_rate 0.903
+  select_ms votecount/uniform = 1.1279 (paired median)
+timing_only dyadic k15 votecount vs uniform (output valid; counter arm; time not a price): uniform median 36.973701 ms (min 36.751403), votecount median 38.425648 ms (min 38.291819); votecount output VALID (equal to the reference); its time is not a price
+  phases (median ms): uniform distance_ms 15.252 select_ms 14.603 merge_ms 0.456; votecount distance_ms 15.307 select_ms 16.073 merge_ms 0.466 admit_warp_steps 49920000.000 admit_any_admit 47947430.000 admit_rate 0.960
+  select_ms votecount/uniform = 1.1009 (paired median)

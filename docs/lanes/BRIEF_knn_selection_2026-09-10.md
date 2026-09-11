@@ -2261,3 +2261,33 @@ session. `noshift` and `votecount` never move anything.
 - Phase-timer builds serialize the queue: every select_ms here is a
   kernel-only time, comparable only with other phase-timer rows (steps 4
   to 7) and never with the qualified request numbers.
+
+## Step 8 result: the chain priced, and why every earlier arm was neutral (H100, 2026-09-11 06:15Z, `bench/results/e1g/2026-09-11_020805-nvidia/remote/knn-selection`)
+
+select_ms per arm (phase-timer build, paired medians, both fixtures agree):
+
+| arm | k10 | k15 | note |
+|---|---:|---:|---|
+| uniform (shipped) | 10.21 | 14.62 | |
+| noshift (timing only: list present, compare runs, NO chain) | 3.51 to 3.57 | 3.80 | the chain is 6.7 ms at k10 and 10.8 ms at k15, the whole K cost |
+| voteguard (warp-uniform ballot branch around the chain, bit-equal) | 9.86 | 14.40 | 3.4 and 1.5 percent |
+| votecount admit rate (fraction of warp-steps where some lane admits) | 0.903 | 0.960 | |
+| capk_selp (min/max carry chain) | 10.24 | 14.55 | neutral |
+
+So the chain costs 0.67 to 0.72 ms per unit of k per request, it issues on
+every warp-step where any of the 32 lanes admits, and that is 90 to 96
+percent of warp-steps under the shipped per-lane threshold. That is why the
+bounds (fewer per-lane admissions, chain still issued because it was
+if-converted), deferred insertion (drains still on nearly every batch), CAP
+= K (registers) and the branch alone (only 4 to 10 percent of steps to
+skip) all measured neutral or negative.
+
+The two levers now compose: the warp bound (C2) lowers the per-warp
+admission rate (its event model said 231 to 116 admitting steps per 256
+at k10, 246 to 138 at k15) and the ballot branch turns skipped steps into
+skipped chains. Expected: chain 6.7 to about 3.4 ms at k10 and 10.8 to
+about 6.1 ms at k15, minus the bound's measured cost (1.4 and 0.8 ms):
+about 2 ms at k10 and 4 ms at k15 per request, roughly 31 to 29 ms and 36
+to 32 ms. Arm `warpbound_guard` next, measured with votecount's admit
+rate under the bound so the model is checked, then the unserialized
+promotion run.
