@@ -774,7 +774,9 @@ if [ "@BARE@" != "1" ]; then
             > "$OUT/apt_curl.log" 2>&1 < /dev/null
     fi
     if [ ! -x "$HOME/.pixi/bin/pixi" ] && ! command -v pixi > /dev/null 2>&1; then
-        curl -fsSL https://pixi.sh/install.sh | sh > "$OUT/pixi_install.log" 2>&1 < /dev/null
+        # No `< /dev/null` on this sh: its stdin IS the installer (a redirect
+        # there made the first smoke install nothing, 2026-09-11).
+        curl -fsSL https://pixi.sh/install.sh | sh > "$OUT/pixi_install.log" 2>&1
     fi
     PATH="$HOME/.pixi/bin:$PATH"
     export PATH
