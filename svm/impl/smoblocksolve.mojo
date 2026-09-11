@@ -82,8 +82,11 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
 from checks.numerics import ftz, identical_mul_add
+from checks.kernel_matrix import TARGET_COLUMN, svm_block_solve_warp_folds_for
 from svm.checks.pinned_argreduce import (
     block_argext,
+    pinned_block_argmax,
+    pinned_block_argmin,
     sabotage_block_max_hw,
     sabotage_block_max_nokey,
 )
@@ -131,6 +134,10 @@ def smo_block_solve_kernel[
     var max_iter = Int(max_iter_in)
     var tid = Int(thread_idx.x)
     var active = tid < n_ws
+    # DEVIATION 2623: which schedule folds the three arg-reductions is a
+    # kernel-matrix row (warp butterflies, DEVIATION 2491, or the halving
+    # trees with a thread ballot); both select the same element.
+    comptime WARP_FOLDS = svm_block_solve_warp_folds_for[TARGET_COLUMN, WSIZE]()
 
     var Kd = stack_allocation[
         WSIZE, Scalar[DType.float32], address_space = AddressSpace.SHARED
@@ -176,9 +183,22 @@ def smo_block_solve_kernel[
         # DEVIATION 2491: the reduction returns the winning THREAD beside
         # the (value, key) pair; the ballot through threadgroup memory that
         # used to recover it (two barriers) is gone.
-        var res = block_argext[WSIZE, False](f_tmp, key)
-        var f_u = res[0]
-        var u = Int(res[2])
+        var f_u: Float32
+        var u: Int
+        comptime if WARP_FOLDS:
+            var res = block_argext[WSIZE, False](f_tmp, key)
+            f_u = res[0]
+            u = Int(res[2])
+        else:
+            # `u` is the THREAD holding the winning (value, key); one ballot
+            # through threadgroup memory recovers it (keys are unique).
+            var res = pinned_block_argmin[WSIZE](f_tmp, key)
+            f_u = res[0]
+            if active and key == res[1]:
+                sh_tmp[0] = Float32(tid)
+            barrier()
+            u = Int(sh_tmp[0])
+            barrier()
 
         # select f_max to check stopping condition
         f_tmp = neg_inf
@@ -197,8 +217,12 @@ def smo_block_solve_kernel[
         elif SAB_FMAX_HWMAX_SWAP:
             f_max = sabotage_block_max_hw[WSIZE, True](f_tmp)
         else:
-            var resm = block_argext[WSIZE, True](f_tmp, key)
-            f_max = resm[0]
+            comptime if WARP_FOLDS:
+                var resm = block_argext[WSIZE, True](f_tmp, key)
+                f_max = resm[0]
+            else:
+                var resm = pinned_block_argmax[WSIZE](f_tmp, key)
+                f_max = resm[0]
 
         # f_max - f_u is used to check stopping condition.
         var diff = ftz(f_max - f_u)
@@ -219,8 +243,17 @@ def smo_block_solve_kernel[
             f_tmp = ftz(ftz(d * d) / eta_ui)
         else:
             f_tmp = neg_inf
-        var res2 = block_argext[WSIZE, True](f_tmp, key)
-        var l = Int(res2[2])
+        var l: Int
+        comptime if WARP_FOLDS:
+            var res2 = block_argext[WSIZE, True](f_tmp, key)
+            l = Int(res2[2])
+        else:
+            var res2 = pinned_block_argmax[WSIZE](f_tmp, key)
+            if active and key == res2[1]:
+                sh_tmp[0] = Float32(tid)
+            barrier()
+            l = Int(sh_tmp[0])
+            barrier()
         var Kli = Float32(0.0)
         if active:
             Kli = kernel.unsafe_load(l * n_ws + tid)
