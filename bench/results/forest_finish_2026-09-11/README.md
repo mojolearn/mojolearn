@@ -114,6 +114,39 @@ Hashes held one value in 3 of 3 rounds and are equal before and after: RF taxi
 `e683f121d11f59dd`, ET Istella-S `40b1c5b03ba40420`, iforest taxi
 `6f68d48431290524`, iforest Istella-S `a1902225f8730abf`.
 
+## Where the ExtraTrees Istella-S fit actually spends its time
+
+One untimed stage replicate on the lane's build (`speed rowmajor et <ds>
+1000000 1 stage`, serialized by measurement, so the total runs long against an
+untimed fit). Istella-S, then taxi:
+
+| phase | Istella-S s | share | taxi s | share |
+|---|---|---|---|---|
+| score pass (init+score+finalize) | 2.258 | 45% | 0.656 | 34% |
+| range pass (init+range+decode+nonconst) | 1.621 | 32% | 0.458 | 24% |
+| stage + feature sampler | 0.668 | 13% | 0.448 | 23% |
+| partition (4 kernels) | 0.315 | 6% | 0.246 | 13% |
+| leaf pass | 0.058 | 1% | 0.041 | 2% |
+| candidate + reduce + splits readback | 0.026 | 1% | 0.019 | 1% |
+| host: queue push | 0.039 | 1% | 0.026 | 1% |
+| host: split records + pop/assembly + setup | 0.025 | <1% | 0.014 | <1% |
+| total (device loop) | 5.009 | | 1.907 | |
+
+Outside the loop, `boundary_dataset_upload` is 0.501 s on Istella-S and 0.442 s
+on taxi (that is DEVIATION 2637's staging, already the fast path here), and the
+whole binding call is 6.44 s / 2.57 s under the clock.
+
+THIS IS EVIDENCE AGAINST MY OWN DEVIATION 2663 HYPOTHESIS, recorded before its
+A/B finished. The batch width was widened on the argument that a 4096-node
+frontier runs many level cycles and each ends in a drain plus a host pass, so
+fewer, wider cycles would pay. On this H100 that whole family of costs --
+reduce readback, split records, pop and batch assembly, queue push -- is about
+3 percent of the loop (0.09 s of 5.0 s on Istella-S). Two thirds of the time is
+the range and score passes, which read the same cells whatever the batch width.
+What a wider batch can still move is `stage + feature sampler` (13 percent),
+which is per cycle, though it also makes each cycle's staging compare cover a
+larger capacity. So the honest prior is a small effect, and the A/B decides it.
+
 ## Results: DEVIATION 2663
 
 Pending: batch C's builds, identity and A/B, batch D's verdict, and (only if a
