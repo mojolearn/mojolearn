@@ -114,6 +114,30 @@ Hashes held one value in 3 of 3 rounds and are equal before and after: RF taxi
 `e683f121d11f59dd`, ET Istella-S `40b1c5b03ba40420`, iforest taxi
 `6f68d48431290524`, iforest Istella-S `a1902225f8730abf`.
 
+## Where the win comes from, line by line (Istella-S host split)
+
+`tools/forest_host_split.py`, 3 repetitions after a warm-up, both sets, the
+Python side of one fit wrapped call by call. Diagnostic clocks, not certifiable
+timings; the FSPEED rows above are those.
+
+| lane | set | `as_f32_colmajor` | inside the native call (`unwrapped`) | `fit_total` |
+|---|---|---|---|---|
+| RF | baseline (main) | 554..680 ms | 1484..1513 ms | 2072..2178 ms |
+| RF | rowmajor (lane) | NOT CALLED | 1293..1303 ms | 1299..1309 ms |
+| ET | baseline (main) | 558..571 ms | 5160..5193 ms | 5735..5748 ms |
+| ET | rowmajor (lane) | NOT CALLED | 4945..4971 ms | 4950..4976 ms |
+
+Two costs, both removed, and they add up to the FSPEED deltas rather than
+merely accompanying them. First, `as_f32_colmajor` -- the one-thread Python
+transpose of an 880 MB block -- is GONE from the lane's fits: the column-major
+entry is never reached for a C-order float32 X, so there is no line to report
+(the REACH table above is the other half of that statement). Second, the native
+call itself drops about 200 ms on RF (1484..1513 to 1293..1303), which is the
+second one-thread pass: the stage copy now runs across the host pool.
+
+`encode_labels` (5 to 7 ms) and `export_fit_result` (24 to 48 ms) are unchanged
+on both sets, which is what a staging change should leave alone.
+
 ## REACH: the row-major entries are the ones that ran
 
 An unchanged model hash proves nothing if the new path was never taken, so the
