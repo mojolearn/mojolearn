@@ -837,7 +837,7 @@ def train(
     if n_rows < 1 or n_features < 1:
         raise Error("train requires at least one row and one feature")
     var x_src: MutPointer[Float32, MutUntrackedOrigin]
-    if x_borrow:
+    if x_borrow.__bool__():
         if len(x_colmajor) != 0:
             raise Error("pass x_colmajor or x_borrow, not both")
         x_src = x_borrow.value()
