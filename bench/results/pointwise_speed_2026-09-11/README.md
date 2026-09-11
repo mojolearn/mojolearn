@@ -1,0 +1,87 @@
+# Pointwise searcher speed after DEVIATION 2624 (lane/pointwise-speed, 2026-09-11 night)
+
+One NVIDIA H100 80GB HBM3 on RunPod (pod `eqxtzdcpctpnkh`, driver 580.126.09),
+IDENTICAL tier, both trees built and timed ON THAT POD. Big logs live outside
+the repo in `~/mojolearn-evidence/pointwise-speed-2026-09-11/`.
+
+The question the lane was given: win back the time the opt-in pointwise
+searcher (`use_pointwise_searcher=True`, symmetric trees) lost to DEVIATION
+2624, **keeping 2624's bits**.
+
+## 1. DEVIATION 2669 is impossible, and this is the proof
+
+2669 was: split the document axis again, give every document block a private
+scratch slot, fold the slots in a fixed block order, and land exactly on the
+multiplier-1 cells.
+
+At `M = 1` an accumulator slot is one left-to-right float sum over the
+documents in stride order. At `M` blocks, block `b` sums the documents whose
+stride index is `b` mod `M`, starting from zero, and the fold adds those
+partials. In float32 with `x = (1e8, 1, -1e8, 1)`:
+
+    sequential   ((1e8 + 1) + -1e8) + 1 = 1     (1e8 + 1 rounds back to 1e8)
+    M = 2 fold   (1e8 + -1e8) + (1 + 1) = 2
+
+so the two differ on ordinary data, and no order of folding the partials
+repairs it, because each partial has already rounded without the other
+blocks' documents. The only exact schedule carries each block's running state
+into the next, which serializes the blocks and wins nothing. After tree 0 the
+Logloss gradients are real-valued (that is exactly what 2624's drift was), so
+there is no data-independent exact case to specialize on.
+
+**A same-bits win therefore cannot come from splitting the document axis.**
+
+## 2. DEVIATION 2670 (opt-in, NOT flipped): pinned multiplier, private slots
+
+`-D MOJOLEARN_2670_PW_PRIVATE_DOC_SLOTS=1`. The ordered tiers split the
+document axis at `EstimateBlockPerFeatureMultiplier` evaluated at a PINNED SM
+count (`PW_2670_PINNED_SM = 128`, kernel matrix row
+`pointwise_private_doc_slots_sm_for`) instead of the device's own; each
+document block stores its partial into its own slot of a zeroed scratch
+(`pw_private_doc_slot`), and `pw_fold_doc_slots_kernel` adds slots 0..M-1 onto
+`binSums` in block order. No atomics anywhere, and the multiplier no longer
+follows `MULTIPROCESSOR_COUNT`.
+
+New bits against 2624, one schedule on every vendor and at every launch
+geometry.
+
+### Gates on the H100 (2670 build, sha256 `dadf2458b9b0…`; main `7489c4bc03ad…`)
+
+| gate | result |
+|---|---|
+| `check-pointwise-identical-multiplier-2670` G1 | ok, 896 grids, multiplier independent of sm at every one, 832 of them split the document axis |
+| `check-pointwise-identical-multiplier-2670` G2 | ok, 55,290 cells bit-equal across sm 1/16/132/4096 and three repeats, three policies, full and partial pass |
+| `check-pointwise-dispatch-2670` F1..F7 | pass (integer stats against the host tally; F2 has the M = 4 run identical to the M = 1 run cell for cell, which is what sees a misfiled slot; F3 covers the partial pass) |
+| `check-pointwise-identical-multiplier` on main, same pod | PASS (the 2624 control) |
+
+### Synthetic fixture model hashes, 1M rows, 100 trees, 3 repeats each
+
+| fixture | main (2624) | 2670 | repeats |
+|---|---|---|---|
+| binary | 5dc6a9a1c1657d39 | **9551119e7f1120ed** | 3 of 3 stable, both trees |
+| halfbyte | 752e10a37cba36ca | 752e10a37cba36ca | 3 of 3 stable |
+| onebyte | 16bf618caba014bb | 16bf618caba014bb | 3 of 3 stable |
+| mixed | b753f4d9116a4935 | b753f4d9116a4935 | 3 of 3 stable |
+| wide220 | 8c5ac18e8e5547e9 | 8c5ac18e8e5547e9 | 3 of 3 stable |
+| greedy arm (all five) | unchanged | unchanged | 3 of 3 stable |
+
+The one-byte family accumulates in Int32 fixed point (DEVIATION 93), so its
+cells are integer multiples of `1 / fixed_scale` and fold exactly in any
+order; that is why the one-byte-dominated fixtures keep 2624's model hash
+while the binary fixture moves. 2670 is still a bit-moving change and is
+gated as one.
+
+## 3. Speed
+
+(filled in from the interleaved A/B below)
+
+## 4. What is NOT done
+
+- 2670 is opt-in and default OFF. Flipping it needs the Apple M4 and an AMD
+  box, because it moves pointwise IDENTICAL model hashes.
+- Same-bits ideas at multiplier 1 that were NOT tried: the half-byte
+  accumulator takes 16 block-wide `barrier()` calls per point while its shared
+  writes stay inside one warp slice, so a warp-scoped turn-taking sync is a
+  scheduling-only candidate. It is the code path of the AMD identity bug
+  (DEVIATION 2600) and Apple's `syncwarp()` carries no memory fence, so it
+  needs its own cross-vendor leg.
