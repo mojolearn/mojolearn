@@ -204,7 +204,10 @@ fi
 # track the kernel's parameter list, and the lane may not touch the kernel.
 # The shipped instantiations are exactly what smallk_select_launch reaches
 # with the build defaults (imported, not restated); the scanonly1 variant
-# is the timing-only CAP=1 / K=1 form from the trial hook.
+# is the timing-only CAP=1 / K=1 form from the trial hook; the capk_* rows
+# (DEVIATION 2521) are the CAP = K arms the trial launcher reaches under
+# MOJOLEARN_KNN_SELECT=capk / capk_selp, whose register count against
+# cap16_k10 / cap16_k15 is the number that arm exists to produce.
 DUMPDIR="$OUT/dumps"
 gen_path_fn() {
     # gen_path_fn <label>: two functions returning the dump paths.
@@ -243,9 +246,15 @@ EOF
 gen_call() {
     printf '    try:\n        stat_%s(ctx)\n    except e:\n        print("KNN_KERNEL_STATS_ERROR label=%s error=", e, sep="")\n' "$1" "$1"
 }
-DEFAULTS="SMALLK_UNIFORM_TRIP_DEFAULT, SMALLK_HEAD_BOUND_DEFAULT, False, SMALLK_WARPBOUND_DEFAULT, SMALLK_PHASE_FULL, SMALLK_DEFERRED_DEFAULT"
-SCANONLY="True, False, False, False, SMALLK_PHASE_SKIPRANK, False"
-LABELS="cap16_k0_generic cap16_k10 cap16_k15 cap1_k1_scanonly1 cap32_k0_generic cap64_k0_generic"
+DEFAULTS="SMALLK_UNIFORM_TRIP_DEFAULT, SMALLK_HEAD_BOUND_DEFAULT, False, SMALLK_WARPBOUND_DEFAULT, SMALLK_PHASE_FULL, SMALLK_DEFERRED_DEFAULT, SMALLK_SELP_DEFAULT"
+SCANONLY="True, False, False, False, SMALLK_PHASE_SKIPRANK, False, False"
+# DEVIATION 2521: the CAP = K arms, spelled out (not the defaults, so the
+# rows keep their meaning if a default flips): `capk` is the uniform scan
+# with the list exactly K deep (`smallk_bucket_kernel[K, K, True, ...]`),
+# `capk_selp` adds the branch-free min/max carry chain (the ninth parameter).
+CAPK="True, False, False, False, SMALLK_PHASE_FULL, False, False"
+CAPK_SELP="True, False, False, False, SMALLK_PHASE_FULL, False, True"
+LABELS="cap16_k0_generic cap16_k10 cap16_k15 cap1_k1_scanonly1 cap32_k0_generic cap64_k0_generic capk_k10 capk_k15 capk_selp_k10 capk_selp_k15"
 gen_driver() {
     # gen_driver <mode> > file
     _mode=$1
@@ -265,6 +274,7 @@ from neighbors.checks.select_smallk_identical_candidate import (
     SMALLK_HEAD_BOUND_DEFAULT,
     SMALLK_WARPBOUND_DEFAULT,
     SMALLK_DEFERRED_DEFAULT,
+    SMALLK_SELP_DEFAULT,
 )
 
 
@@ -278,6 +288,10 @@ EOF
     gen_stat "$_mode" cap1_k1_scanonly1 1 1 "$SCANONLY"
     gen_stat "$_mode" cap32_k0_generic 32 0 "$DEFAULTS"
     gen_stat "$_mode" cap64_k0_generic 64 0 "$DEFAULTS"
+    gen_stat "$_mode" capk_k10 10 10 "$CAPK"
+    gen_stat "$_mode" capk_k15 15 15 "$CAPK"
+    gen_stat "$_mode" capk_selp_k10 10 10 "$CAPK_SELP"
+    gen_stat "$_mode" capk_selp_k15 15 15 "$CAPK_SELP"
     cat <<'EOF'
 def main() raises:
     var ctx = DeviceContext()

@@ -38,7 +38,13 @@ verdict (the per-lane K-deep list is the k-proportional cost, and it is paid
 per element step whether or not a lane inserts) is what the fourth gated
 candidate answers: `deferred` (DEVIATION 2517) makes the per-element work
 K-independent by queueing admitted keys and running the K-chain only at
-warp-uniform drains.
+warp-uniform drains. Deferred measured NEGATIVE too, and the kernel stats
+leg (DEVIATION 2519) found the list register-resident at 54 to 56 registers
+and four blocks per SM; the fifth and sixth candidates act on that:
+`capk` (DEVIATION 2521) instantiates the K-specialized kernels with CAP = K
+(the list holds exactly the k keys the block's top-k can draw on) and
+`capk_selp` adds a branch-free min/max carry chain. See the comment above
+`_smallk_insert`.
 """
 from std.gpu import block_idx, thread_idx
 from std.os import getenv
@@ -278,7 +284,21 @@ comptime SMALLK_SCAN_SPAN = SMALLK_SCAN_UNROLL * SMALLK_BLOCK
 #                                    and a SMALLK_DEFER_Q-slot register
 #                                    queue; the K-chain runs at warp-uniform
 #                                    drains (every batch, and as soon as a
-#                                    `vote` says any lane's queue is full)
+#                                    `vote` says any lane's queue is full);
+#                                    NEGATIVE on the H100 2026-09-11
+#   MOJOLEARN_KNN_SELECT=capk        C4 with CAP = K (DEVIATION 2521): the
+#                                    K-specialized buckets run
+#                                    `smallk_bucket_kernel[K, K, ...]`, a
+#                                    list of exactly k slots instead of 16;
+#                                    the generic bucket has no such
+#                                    instantiation and RAISES under this
+#                                    name (see `_smallk_launch_bucket`)
+#   MOJOLEARN_KNN_SELECT=capk_selp   `capk` plus the branch-free carry
+#                                    chain (SELP: every step of the insert
+#                                    is one unsigned min and one unsigned
+#                                    max, no per-step branch); same
+#                                    restriction to the K-specialized
+#                                    buckets
 #   unset or empty                   the build default, SMALLK_ARM_DEFAULT
 #   anything else                    RAISES; the gate harness relies on it
 #   MOJOLEARN_KNN_SELECT_SABOTAGE=1  the chosen arm's SABOTAGE instantiation
@@ -319,12 +339,15 @@ comptime SMALLK_SCAN_SPAN = SMALLK_SCAN_UNROLL * SMALLK_BLOCK
 # refuses any other arm, and the only instantiations in the binary are
 # `smallk_bucket_kernel[CAP, K, SMALLK_UNIFORM_TRIP_DEFAULT,
 # SMALLK_HEAD_BOUND_DEFAULT, False, SMALLK_WARPBOUND_DEFAULT,
-# SMALLK_PHASE_FULL, SMALLK_DEFERRED_DEFAULT]`. With the two bound defaults
-# and the deferred default False (the state until a gate passes) that is the
-# [CAP, K] kernel of 2026-09-09 under C4's trip count: the `comptime if`
-# arms below fold away and the non-trial code path is the one that shipped.
+# SMALLK_PHASE_FULL, SMALLK_DEFERRED_DEFAULT, SMALLK_SELP_DEFAULT]` with
+# CAP the bucket capacity (16 / 32 / 64) unless SMALLK_CAPK_DEFAULT is on,
+# in which case the K-specialized buckets take CAP = K. With the two bound
+# defaults, the deferred default, the capk default and the selp default
+# False (the state until a gate passes) that is the [CAP, K] kernel of
+# 2026-09-09 under C4's trip count: the `comptime if` arms below fold away
+# and the non-trial code path is the one that shipped.
 #
-# THE DEFAULTS. Four comptime switches here rather than kernel-matrix rows,
+# THE DEFAULTS. Six comptime switches here rather than kernel-matrix rows,
 # because this lane may not edit `checks/kernel_matrix.mojo`; the flip that
 # promotes an arm moves them into a SCHEDULING row
 # (`knn_selector_head_bound_for[column, identical]`, brief section 4) in
@@ -333,13 +356,16 @@ comptime SMALLK_SCAN_SPAN = SMALLK_SCAN_UNROLL * SMALLK_BLOCK
 # `divergent_tail`; DONE 2026-09-11), then ONE candidate arm (arms
 # uniform,<arm>, equality plus the request-level price). Every candidate
 # arm requires UNIFORM; HEAD_BOUND, WARPBOUND and DEFERRED exclude each
-# other.
+# other; CAPK and SELP (DEVIATION 2521) are the uniform arm's scan with a
+# shorter list and exclude the three of them; SELP requires CAPK.
 # ---------------------------------------------------------------------------
 comptime SMALLK_SELECT_TRIAL = is_defined["MOJOLEARN_KNN_SELECT_TRIAL"]()
 comptime SMALLK_UNIFORM_TRIP_DEFAULT = True  # DEVIATION 2497: flipped 2026-09-11 on the H100 and M4 gates
 comptime SMALLK_HEAD_BOUND_DEFAULT = False  # DEVIATION 2498: NEGATIVE on the H100 2026-09-11, stays off
 comptime SMALLK_WARPBOUND_DEFAULT = False  # DEVIATION 2515: NEGATIVE on the H100 2026-09-11, stays off
-comptime SMALLK_DEFERRED_DEFAULT = False  # DEVIATION 2517: RUN OWED (brief, "Implementation pass, deferred")
+comptime SMALLK_DEFERRED_DEFAULT = False  # DEVIATION 2517: NEGATIVE on the H100 2026-09-11, stays off
+comptime SMALLK_CAPK_DEFAULT = False  # DEVIATION 2521: RUN OWED (brief, "Implementation pass, CAP = K")
+comptime SMALLK_SELP_DEFAULT = False  # DEVIATION 2521: RUN OWED; requires SMALLK_CAPK_DEFAULT
 
 comptime SMALLK_ARM_BASELINE = 0
 comptime SMALLK_ARM_UNIFORM = 1
@@ -351,6 +377,9 @@ comptime SMALLK_ARM_SKIPSCAN = 5
 comptime SMALLK_ARM_SCANONLY1 = 6
 # Deferred insertion (DEVIATION 2517); see the comment above `_smallk_drain`.
 comptime SMALLK_ARM_DEFERRED = 7
+# CAP = K and the branch-free chain (DEVIATION 2521); see `_smallk_insert`.
+comptime SMALLK_ARM_CAPK = 8
+comptime SMALLK_ARM_CAPK_SELP = 9
 # OR'd into the arm value; the launch strips it.
 comptime SMALLK_ARM_SABOTAGE = 16
 
@@ -363,7 +392,11 @@ comptime SMALLK_PHASE_SKIPSCAN = 2
 comptime SMALLK_ARM_DEFAULT = SMALLK_ARM_HEADBOUND if SMALLK_HEAD_BOUND_DEFAULT else (
     SMALLK_ARM_WARPBOUND if SMALLK_WARPBOUND_DEFAULT else (
         SMALLK_ARM_DEFERRED if SMALLK_DEFERRED_DEFAULT else (
-            SMALLK_ARM_UNIFORM if SMALLK_UNIFORM_TRIP_DEFAULT else SMALLK_ARM_BASELINE
+            SMALLK_ARM_CAPK_SELP if (SMALLK_CAPK_DEFAULT and SMALLK_SELP_DEFAULT) else (
+                SMALLK_ARM_CAPK if SMALLK_CAPK_DEFAULT else (
+                    SMALLK_ARM_UNIFORM if SMALLK_UNIFORM_TRIP_DEFAULT else SMALLK_ARM_BASELINE
+                )
+            )
         )
     )
 )
@@ -373,8 +406,8 @@ def smallk_select_arm_from_env() raises -> Int:
     """The selector arm for THIS request, read once on the host.
 
     Trial builds read `MOJOLEARN_KNN_SELECT` (baseline / uniform / headbound /
-    warpbound / deferred, the timing-only skiprank / skipscan / scanonly1,
-    unset = the build default, anything else raises) and
+    warpbound / deferred / capk / capk_selp, the timing-only skiprank /
+    skipscan / scanonly1, unset = the build default, anything else raises) and
     `MOJOLEARN_KNN_SELECT_SABOTAGE` (exactly "1" sets the SMALLK_ARM_SABOTAGE
     bit). Every other build returns SMALLK_ARM_DEFAULT without reading the
     environment at all.
@@ -401,33 +434,112 @@ def smallk_select_arm_from_env() raises -> Int:
         arm = SMALLK_ARM_SCANONLY1
     elif name == "deferred":
         arm = SMALLK_ARM_DEFERRED
+    elif name == "capk":
+        arm = SMALLK_ARM_CAPK
+    elif name == "capk_selp":
+        arm = SMALLK_ARM_CAPK_SELP
     else:
         raise Error(
             "MOJOLEARN_KNN_SELECT='" + name
             + "' is not a selector arm (baseline, uniform, headbound, warpbound,"
-            + " deferred, the timing-only skiprank, skipscan, scanonly1, or unset)"
+            + " deferred, capk, capk_selp, the timing-only skiprank, skipscan,"
+            + " scanonly1, or unset)"
         )
     if String(getenv("MOJOLEARN_KNN_SELECT_SABOTAGE")) == "1":
         arm = arm | SMALLK_ARM_SABOTAGE
     return arm
 
 
+# ---------------------------------------------------------------------------
+# CAP = K (DEVIATION 2521, arm `capk`) and the branch-free chain (`capk_selp`).
+#
+# WHAT THE STATS LEG SAID (brief, "Step 6 result"). The CAP = 16 list is
+# register-resident with no spills: 54 registers at K = 10 and 56 at K = 15,
+# four 256-thread blocks per SM (50 percent occupancy), against 31 registers
+# and eight blocks for the CAP = 1 control, on a scan whose 3.2 ms floor is
+# tile reads. So the K cost is instruction count plus occupancy, and the
+# sixteen-slot list carries dead weight at K = 10: slots 10 .. 15 are never
+# written by the insert (its `slot < k` guard folds them out) but the rank
+# phase's shift READS them (`local_keys[slot + 1]` up to slot 15), so they
+# stay live across the whole scan as twelve registers of the sentinel.
+#
+# THE MECHANISM. The K-specialized buckets are instantiated with CAP = K:
+# `smallk_bucket_kernel[10, 10, ...]` and `[15, 15, ...]`. Every touch of
+# the list is bounded by CAP (the insert chain, the threshold pick, the
+# skipscan fill, the digest, the rank phase's shift and its sentinel write),
+# so a CAP = K instantiation reads and writes exactly K slots. Mojo's SIMD
+# width must be a power of two (the repo pads every such queue, for example
+# `warp_topk.mojo`'s TQP), so the STORAGE is `SIMD[DType.uint64, STORE]`
+# with STORE the next power of two at or above CAP (16 for 10 and 15) and
+# lanes CAP .. STORE - 1 are never read or written after the sentinel fill:
+# they have no use in the compiled kernel and are dead (no phi, no copy, no
+# register), which is what CAP = K means at the register level. For every
+# existing instantiation STORE == CAP and the storage is what it was.
+# The helpers below take the storage width as an inferred parameter (`W`)
+# and the list depth as CAP, so their bodies are unchanged for W == CAP.
+#
+# WHY THE OUTPUT BITS ARE UNCHANGED. A lane's list holds its CAP smallest
+# keys of everything it scanned. Only a lane's k smallest can ever be in
+# the block's top-k: any other key of that lane has k same-lane keys below
+# it. With CAP = K the list holds exactly those k, so the union of the 256
+# lists still contains the row's true top-k after the scan; the rank phase
+# is textually the same loop (k exact UInt64 minima of the union, ties by
+# the index half of the same composite key, the winner's value gathered
+# from the same tile cell), and its shift moves slots 1 .. K - 1 down and
+# writes the sentinel at K - 1, which is the content slots 0 .. K - 1 had
+# under CAP = 16 after the same shift (slots K .. 15 were the sentinel).
+# The admission test is the same `pending < threshold` with the same
+# threshold (the lane's k-th smallest), so every lane admits the same keys
+# in the same order. Nothing depends on a spare slot: the insert's carry
+# runs off the end of a full list the same way at K as at 16.
+#
+# SELP (`capk_selp`, lever 2 of the stats leg). The carry chain's per-step
+# `if pending < local_keys[slot]: swap` is replaced by one unsigned minimum
+# into the slot and one unsigned maximum into the carry: the smaller of
+# (carry, slot) stays, the larger moves on, every step, no branch. That is
+# the same sorted list whichever way it is computed: at each step the
+# multiset {slot, carry} is preserved and the slot takes its minimum, so
+# after CAP steps the slots hold the CAP smallest of the old list plus the
+# new key, ascending, and the carry holds what fell off; with unique keys
+# the compare never ties on real keys, and a tie of two sentinels yields
+# the sentinel either way. SELP requires CAP == K (no `slot < k` guard in
+# the chain) and is the uniform scan form only; the admission branch
+# `pending < threshold` around the chain is kept, so a warp with no
+# admitting lane still skips it exactly as the uniform arm does.
+#
+# SABOTAGE (reach): both arms are the uniform scan form, so they carry the
+# uniform arm's flip (bit 0 of the index half on `u == 0` of every batch,
+# inside the uniform loop). A flip proves the arm's own launch branch and
+# its loop ran; the instantiation it ran is distinguished from the CAP = 16
+# uniform kernel by the stats leg's register count and by the gate's timing,
+# not by reach, since a depth-specific perturbation (dropping slot K - 1)
+# flips only when a row's whole top-k sits in one lane and is not reliable.
+# ---------------------------------------------------------------------------
 @always_inline
-def _smallk_insert[CAP: Int](
-    mut local_keys: SIMD[DType.uint64, CAP], mut threshold: UInt64,
+def _smallk_insert[W: Int, //, CAP: Int, SELP: Bool = False](
+    mut local_keys: SIMD[DType.uint64, W], mut threshold: UInt64,
     pending_in: UInt64, k: Int,
 ):
     """Carry-insert one key below `threshold` into the ascending local list
-    (slots `0 .. k-1` of CAP) and refresh `threshold = local_keys[k - 1]`.
+    (slots `0 .. k-1` of CAP, stored in the first CAP lanes of a W-wide
+    register vector, W >= CAP) and refresh `threshold = local_keys[k - 1]`.
     Every list index is a comptime constant, so the list stays in
-    registers."""
+    registers. SELP (DEVIATION 2521) is the branch-free min/max chain; it
+    requires CAP == k, which the kernel asserts at compile time."""
+    comptime assert W >= CAP, "the list's storage must hold its depth"
     var pending = pending_in
-    comptime for slot in range(CAP):
-        if slot < k:
-            if pending < local_keys[slot]:
-                var previous = local_keys[slot]
-                local_keys[slot] = pending
-                pending = previous
+    comptime if SELP:
+        comptime for slot in range(CAP):
+            var current = local_keys[slot]
+            local_keys[slot] = min(pending, current)
+            pending = max(pending, current)
+    else:
+        comptime for slot in range(CAP):
+            if slot < k:
+                if pending < local_keys[slot]:
+                    var previous = local_keys[slot]
+                    local_keys[slot] = pending
+                    pending = previous
     comptime for slot in range(CAP):
         if slot == k - 1:
             threshold = local_keys[slot]
@@ -642,8 +754,8 @@ comptime SMALLK_MASK_DT = DType.uint64 if SMALLK_LANES == 64 else DType.uint32
 
 
 @always_inline
-def _smallk_drain[CAP: Int, SABOTAGE: Bool](
-    mut local_keys: SIMD[DType.uint64, CAP], mut threshold: UInt64,
+def _smallk_drain[W: Int, //, CAP: Int, SABOTAGE: Bool](
+    mut local_keys: SIMD[DType.uint64, W], mut threshold: UInt64,
     queue: SIMD[DType.uint64, SMALLK_DEFER_Q], mut qcount: Int, k: Int,
 ):
     """Insert every queued key (slots `0 .. qcount - 1`, newest first) through
@@ -653,7 +765,7 @@ def _smallk_drain[CAP: Int, SABOTAGE: Bool](
     comptime for s in range(SMALLK_DEFER_Q):
         comptime if not (SABOTAGE and s == 0):
             if s < qcount:
-                _smallk_insert[CAP](local_keys, threshold, queue[s], k)
+                _smallk_insert[CAP=CAP](local_keys, threshold, queue[s], k)
     qcount = 0
 
 
@@ -672,6 +784,7 @@ def _smallk_append(mut queue: SIMD[DType.uint64, SMALLK_DEFER_Q], mut qcount: In
 def smallk_bucket_kernel[
     CAP: Int, K: Int = 0, UNIFORM: Bool = False, BOUND: Bool = False, SABOTAGE: Bool = False,
     WARPBOUND: Bool = False, PHASE: Int = SMALLK_PHASE_FULL, DEFERRED: Bool = False,
+    SELP: Bool = False,
 ](
     values: MutPointer[Float32, MutAnyOrigin],
     out_values: MutPointer[Float32, MutAnyOrigin],
@@ -709,7 +822,16 @@ def smallk_bucket_kernel[
     full queue in the warp). Requires UNIFORM (the vote must be convergent)
     and a fixed-lane-width column; excludes both bounds. See the comment
     above `_smallk_drain` for the argument and the sabotage.
+    CAP = K (DEVIATION 2521, arm `capk`): not a parameter of its own but the
+    instantiation `[K, K, ...]`; the list is exactly K deep and its storage
+    is the next power-of-two SIMD width (see the comment above
+    `_smallk_insert`). SELP (arm `capk_selp`): the branch-free min/max carry
+    chain in place of the per-step branch; requires CAP == K > 0 and the
+    uniform scan form, excludes both bounds, deferred and the timing-only
+    phases.
     """
+    comptime assert CAP >= 1 and CAP <= SMALLK_MAX_K, "the list depth is 1 .. SMALLK_MAX_K"
+    comptime assert K == 0 or K <= CAP, "a K-specialized list must hold K keys"
     comptime assert UNIFORM or not BOUND, "C1's in-loop barrier needs C4's block-uniform trip count"
     comptime assert UNIFORM or not WARPBOUND, "C2's in-loop shuffles need C4's block-uniform trip count"
     comptime assert not (BOUND and WARPBOUND), "one bound arm at most"
@@ -718,12 +840,29 @@ def smallk_bucket_kernel[
     comptime assert PHASE == SMALLK_PHASE_FULL or not DEFERRED, "the deferred arm is a full kernel, not a timing-only phase"
     comptime assert PHASE == SMALLK_PHASE_FULL or SMALLK_SELECT_TRIAL, "timing-only phases exist on trial builds only"
     comptime assert PHASE == SMALLK_PHASE_FULL or (UNIFORM and not BOUND and not WARPBOUND and not SABOTAGE), "a timing-only phase measures the uniform default: no bound, no sabotage"
+    comptime assert not SELP or (K > 0 and CAP == K), "the branch-free chain has no slot guard: it needs CAP == K"
+    comptime assert not SELP or (UNIFORM and not BOUND and not WARPBOUND and not DEFERRED and PHASE == SMALLK_PHASE_FULL), "the branch-free chain is the uniform scan form only"
+    # The list's storage width: Mojo's SIMD width must be a power of two, so
+    # a CAP of 10 or 15 (CAP = K, DEVIATION 2521) is stored in 16 lanes of
+    # which only the first CAP are ever touched after the fill below; the
+    # rest have no use and are dead in the compiled kernel. Written as a
+    # comptime conditional chain, not a bit trick, so it folds with
+    # certainty (`warp_topk.mojo`'s TQP). STORE == CAP for 1, 16, 32, 64.
+    comptime STORE = 1 if CAP <= 1 else (
+        2 if CAP <= 2 else (
+            4 if CAP <= 4 else (
+                8 if CAP <= 8 else (
+                    16 if CAP <= 16 else (32 if CAP <= 32 else 64)
+                )
+            )
+        )
+    )
     var length = Int(length_in)
     var k = K if K > 0 else Int(k_in)
     var tid = Int(thread_idx.x)
     var row = Int(block_idx.x)
     var sentinel = UInt64(18446744073709551615)
-    var local_keys = SIMD[DType.uint64, CAP](sentinel)
+    var local_keys = SIMD[DType.uint64, STORE](sentinel)
     # `local_keys[k - 1]`, kept in its own register so the reject test never
     # indexes the list at a runtime position.
     var threshold = sentinel
@@ -832,7 +971,7 @@ def smallk_bucket_kernel[
                     pending = pending ^ UInt64(1)
                 comptime if BOUND or WARPBOUND:
                     if pending < gate:
-                        _smallk_insert[CAP](local_keys, threshold, pending, k)
+                        _smallk_insert[CAP=CAP](local_keys, threshold, pending, k)
                         gate = threshold if threshold < bound else bound
                 elif DEFERRED:
                     # DEFERRED element step: key, compare, append. The
@@ -845,14 +984,14 @@ def smallk_bucket_kernel[
                     # append above is closed and the batch trip count is
                     # block-uniform (C4).
                     if vote[SMALLK_MASK_DT](qcount == SMALLK_DEFER_Q) != Scalar[SMALLK_MASK_DT](0):
-                        _smallk_drain[CAP, SABOTAGE](local_keys, threshold, queue, qcount, k)
+                        _smallk_drain[CAP=CAP, SABOTAGE=SABOTAGE](local_keys, threshold, queue, qcount, k)
                 else:
                     if pending < threshold:
-                        _smallk_insert[CAP](local_keys, threshold, pending, k)
+                        _smallk_insert[CAP=CAP, SELP=SELP](local_keys, threshold, pending, k)
             comptime if DEFERRED:
                 # Batch-end drain, block-uniform under C4: after it every
                 # lane's threshold is its true k-th of everything scanned.
-                _smallk_drain[CAP, SABOTAGE](local_keys, threshold, queue, qcount, k)
+                _smallk_drain[CAP=CAP, SABOTAGE=SABOTAGE](local_keys, threshold, queue, qcount, k)
             batch_base += SMALLK_SCAN_SPAN
             done += 1
             comptime if WARPBOUND and SMALLK_SHUFFLE:
@@ -1004,7 +1143,7 @@ def smallk_bucket_kernel[
             # this empty queue; a `vote` there would not be convergent (the
             # tail's trip count is per lane), and it holds at most eight
             # elements per lane.
-            _smallk_drain[CAP, SABOTAGE](local_keys, threshold, queue, qcount, k)
+            _smallk_drain[CAP=CAP, SABOTAGE=SABOTAGE](local_keys, threshold, queue, qcount, k)
         col = batch_base + tid
     else:
         # The 2026-09-09 form: the batch condition is per thread.
@@ -1019,17 +1158,17 @@ def smallk_bucket_kernel[
                     # carried by this loop form only.
                     pending = pending ^ UInt64(1)
                 if pending < threshold:
-                    _smallk_insert[CAP](local_keys, threshold, pending, k)
+                    _smallk_insert[CAP=CAP](local_keys, threshold, pending, k)
             col += SMALLK_SCAN_SPAN
     while col < scan_length:
         var pending = composite_key(values.unsafe_load(base + col), UInt32(col), select_min)
         comptime if BOUND or WARPBOUND:
             if pending < gate:
-                _smallk_insert[CAP](local_keys, threshold, pending, k)
+                _smallk_insert[CAP=CAP](local_keys, threshold, pending, k)
                 gate = threshold if threshold < bound else bound
         else:
             if pending < threshold:
-                _smallk_insert[CAP](local_keys, threshold, pending, k)
+                _smallk_insert[CAP=CAP, SELP=SELP](local_keys, threshold, pending, k)
         col += SMALLK_BLOCK
     comptime if PHASE == SMALLK_PHASE_SKIPRANK:
         # TIMING-ONLY `skiprank` (DEVIATION 2516): no rank phase. The scan's
@@ -1097,6 +1236,12 @@ def smallk_bucket_kernel[
                 out_indices.unsafe_store(row * k + rank, selected)
                 out_values.unsafe_store(row * k + rank, values.unsafe_load(row * length + Int(selected)))
             if mine == winner:
+                # The pop: slots 1 .. CAP - 1 move down, the last becomes
+                # the sentinel. This is the one place that reads slots at
+                # or above K on a CAP = 16, K < 16 kernel (they are the
+                # sentinel there, so slots 0 .. K - 1 end up the same as
+                # under CAP = K, DEVIATION 2521); it is also what keeps
+                # those lanes live across the scan on the shipped kernels.
                 comptime for slot in range(CAP - 1):
                     local_keys[slot] = local_keys[slot + 1]
                 local_keys[CAP - 1] = sentinel
@@ -1129,7 +1274,7 @@ def smallk_bucket_kernel[
 @always_inline
 def _smallk_enqueue[
     CAP: Int, K: Int, UNIFORM: Bool, BOUND: Bool, SABOTAGE: Bool, WARPBOUND: Bool = False,
-    PHASE: Int = SMALLK_PHASE_FULL, DEFERRED: Bool = False,
+    PHASE: Int = SMALLK_PHASE_FULL, DEFERRED: Bool = False, SELP: Bool = False,
 ](
     ctx: DeviceContext,
     values: MutPointer[Float32, MutAnyOrigin],
@@ -1137,7 +1282,7 @@ def _smallk_enqueue[
     out_indices: MutPointer[UInt32, MutAnyOrigin],
     rows: Int, length: Int, k: Int, select_min: Bool,
 ) raises:
-    ctx.enqueue_function[smallk_bucket_kernel[CAP, K, UNIFORM, BOUND, SABOTAGE, WARPBOUND, PHASE, DEFERRED]](
+    ctx.enqueue_function[smallk_bucket_kernel[CAP, K, UNIFORM, BOUND, SABOTAGE, WARPBOUND, PHASE, DEFERRED, SELP]](
         values, out_values, out_indices,
         Int32(length), Int32(k), Int32(select_min),
         grid_dim=(rows, 1, 1), block_dim=(SMALLK_BLOCK, 1, 1),
@@ -1154,9 +1299,24 @@ def _smallk_launch_bucket[CAP: Int, K: Int](
 ) raises:
     """One capacity bucket: the arm's instantiation on a trial build, the
     build default otherwise (any other arm is refused there, so a check
-    that asks for an arm cannot pass silently on a non-trial build)."""
+    that asks for an arm cannot pass silently on a non-trial build).
+
+    CAP = K (DEVIATION 2521): the `capk` arms instantiate `[K, K, ...]` on
+    the K-specialized buckets (K > 0). The generic bucket (K == 0) has no
+    CAP = K instantiation (k is a runtime value there) and the arms RAISE
+    on it rather than run the CAP = 16 uniform kernel under their name;
+    a column without the specialization row takes them only with
+    `-D MOJOLEARN_KNN_IDENTICAL_SPECIALIZE_COMMON=1`.
+    """
     comptime assert not (SMALLK_HEAD_BOUND_DEFAULT and SMALLK_WARPBOUND_DEFAULT), "one bound arm at most"
     comptime assert not (SMALLK_DEFERRED_DEFAULT and (SMALLK_HEAD_BOUND_DEFAULT or SMALLK_WARPBOUND_DEFAULT)), "the deferred default excludes both bound defaults"
+    comptime assert not (SMALLK_CAPK_DEFAULT and (SMALLK_HEAD_BOUND_DEFAULT or SMALLK_WARPBOUND_DEFAULT or SMALLK_DEFERRED_DEFAULT)), "the CAP = K default is the uniform arm's scan: no bound, no deferral"
+    comptime assert not SMALLK_SELP_DEFAULT or SMALLK_CAPK_DEFAULT, "the branch-free chain default requires the CAP = K default"
+    comptime assert not SMALLK_CAPK_DEFAULT or SMALLK_UNIFORM_TRIP_DEFAULT, "the CAP = K default is the uniform scan form"
+    # The default path's list depth: CAP = K on the K-specialized buckets
+    # once the capk gate flips SMALLK_CAPK_DEFAULT, the bucket capacity
+    # otherwise (today). K == 0 (the generic bucket) always keeps CAP.
+    comptime DEFAULT_CAP = K if (SMALLK_CAPK_DEFAULT and K > 0) else CAP
     comptime if SMALLK_SELECT_TRIAL:
         var sabotage = (arm & SMALLK_ARM_SABOTAGE) != 0
         var which = arm & (SMALLK_ARM_SABOTAGE - 1)
@@ -1201,6 +1361,31 @@ def _smallk_launch_bucket[CAP: Int, K: Int](
                 _smallk_enqueue[CAP, K, True, False, False, False, SMALLK_PHASE_FULL, True](
                     ctx, values, out_values, out_indices, rows, length, k, select_min
                 )
+        elif which == SMALLK_ARM_CAPK or which == SMALLK_ARM_CAPK_SELP:
+            # CAP = K (DEVIATION 2521): the uniform arm's kernel with the
+            # list exactly K deep; `capk_selp` adds the branch-free chain.
+            # Only a K-specialized bucket has a comptime K to fold into CAP.
+            comptime if K == 0:
+                raise Error(
+                    "small-k selector: the capk arms need a K-specialized bucket"
+                    + " (k 10 or 15 on a column with knn_selector_specialize_common_for,"
+                    + " or -D MOJOLEARN_KNN_IDENTICAL_SPECIALIZE_COMMON=1)"
+                )
+            else:
+                if which == SMALLK_ARM_CAPK_SELP:
+                    if sabotage:
+                        _smallk_enqueue[K, K, True, False, True, False, SMALLK_PHASE_FULL, False, True](
+                            ctx, values, out_values, out_indices, rows, length, k, select_min
+                        )
+                    else:
+                        _smallk_enqueue[K, K, True, False, False, False, SMALLK_PHASE_FULL, False, True](
+                            ctx, values, out_values, out_indices, rows, length, k, select_min
+                        )
+                else:
+                    if sabotage:
+                        _smallk_enqueue[K, K, True, False, True](ctx, values, out_values, out_indices, rows, length, k, select_min)
+                    else:
+                        _smallk_enqueue[K, K, True, False, False](ctx, values, out_values, out_indices, rows, length, k, select_min)
         elif which == SMALLK_ARM_SKIPRANK or which == SMALLK_ARM_SKIPSCAN or which == SMALLK_ARM_SCANONLY1:
             # TIMING-ONLY arms (DEVIATION 2516): the uniform default's scan
             # form, no bound, and never a sabotage instantiation (their
@@ -1232,8 +1417,8 @@ def _smallk_launch_bucket[CAP: Int, K: Int](
                 + " needs a build with -D MOJOLEARN_KNN_SELECT_TRIAL=1"
             )
         _smallk_enqueue[
-            CAP, K, SMALLK_UNIFORM_TRIP_DEFAULT, SMALLK_HEAD_BOUND_DEFAULT, False, SMALLK_WARPBOUND_DEFAULT,
-            SMALLK_PHASE_FULL, SMALLK_DEFERRED_DEFAULT,
+            DEFAULT_CAP, K, SMALLK_UNIFORM_TRIP_DEFAULT, SMALLK_HEAD_BOUND_DEFAULT, False, SMALLK_WARPBOUND_DEFAULT,
+            SMALLK_PHASE_FULL, SMALLK_DEFERRED_DEFAULT, SMALLK_SELP_DEFAULT,
         ](ctx, values, out_values, out_indices, rows, length, k, select_min)
 
 
