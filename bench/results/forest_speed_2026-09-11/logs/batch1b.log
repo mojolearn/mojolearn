@@ -1,0 +1,88 @@
+batch1b start 20:50:09
+speed baseline rf taxi 1000000 rounds=3 mode=full extra='--devices auto' 20:50:09
+speed_exit baseline.rf.taxi.r1000000.full=0 20:51:57
+FSPEED-REFUSED lane=rf arm=sklearn-rf-cpu reason=GPU-PATH-ONLY: sklearn-rf-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare against the vendor's GPU path only; on AMD request cpu by name (ENGINEERING_RULES.md section 10).
+FSPEED-REFUSED lane=rf arm=lightgbm-cpu reason=GPU-PATH-ONLY: lightgbm-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare against the vendor's GPU path only; on AMD request cpu by name (ENGINEERING_RULES.md section 10).
+FSPEED-HEADER family=forest lane=rf arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-HEADER family=forest lane=rf arm=cuml-rf-gpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-HEADER family=forest lane=rf arm=lightgbm-cuda mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-REFUSED lane=rf arm=lightgbm-cuda reason=LightGBMError during warm-up: CUDA Tree Learner was not enabled in this build. Please recompile with CMake option -DUSE_CUDA=1 (NVIDIA GPUs) or -DUSE_ROCM=1 (AMD GPUs)
+FSPEED lane=rf arm=ours shape=taxi-1000000x16 round=1 ms=913.703 hash=d8f64dae01de00bd
+FSPEED lane=rf arm=cuml-rf-gpu shape=taxi-1000000x16 round=1 ms=1979.674 hash=5b7c7ca8e872f417
+FSPEED lane=rf arm=ours shape=taxi-1000000x16 round=2 ms=875.676 hash=d8f64dae01de00bd
+FSPEED lane=rf arm=cuml-rf-gpu shape=taxi-1000000x16 round=2 ms=1984.403 hash=5b7c7ca8e872f417
+FSPEED lane=rf arm=ours shape=taxi-1000000x16 round=3 ms=876.921 hash=d8f64dae01de00bd
+FSPEED lane=rf arm=cuml-rf-gpu shape=taxi-1000000x16 round=3 ms=1942.089 hash=5b7c7ca8e872f417
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.525910
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.617154
+FSPEED-ACC lane=rf arm=cuml-rf-gpu metric=logloss value=0.525800
+FSPEED-ACC lane=rf arm=cuml-rf-gpu metric=auc value=0.617582
+speed baseline iforest taxi 1000000 rounds=3 mode=full extra='--devices auto' 20:51:57
+speed_exit baseline.iforest.taxi.r1000000.full=0 20:52:07
+FSPEED-REFUSED lane=iforest arm=ours reason=RuntimeError: native compiled-mode readback missing for _mojolearn
+FSPEED-REFUSED lane=iforest arm=sklearn-iforest-cpu reason=GPU-PATH-ONLY: sklearn-iforest-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare against the vendor's GPU path only; on AMD request cpu by name (ENGINEERING_RULES.md section 10).
+FSPEED-HEADER family=forest lane=iforest arm=cuml-iforest-gpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED lane=iforest arm=cuml-iforest-gpu shape=taxi-1000000x16 round=1 ms=124.712 hash=eb8c4d9983f1cf94
+FSPEED lane=iforest arm=cuml-iforest-gpu shape=taxi-1000000x16 round=2 ms=62.918 hash=eb8c4d9983f1cf94
+FSPEED lane=iforest arm=cuml-iforest-gpu shape=taxi-1000000x16 round=3 ms=58.667 hash=eb8c4d9983f1cf94
+FSPEED-ACC lane=iforest arm=cuml-iforest-gpu metric=auc value=0.553631
+speed baseline et taxi 1000000 rounds=3 mode=full extra='--devices cpu --arms sklearn-et-cpu' 20:52:08
+speed_exit baseline.et.taxi.r1000000.full=0 20:53:21
+FSPEED-REFUSED lane=et arm=cuml-et-gpu reason=RuntimeError: cuML has no ExtraTrees estimator: its RandomForest searches quantile splits, not the uniform-random thresholds that define ExtraTrees. The like-for-like comparator for `et` is sklearn.
+FSPEED-HEADER family=forest lane=et arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-HEADER family=forest lane=et arm=sklearn-et-cpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=1 ms=2114.841 hash=e683f121d11f59dd
+FSPEED lane=et arm=sklearn-et-cpu shape=taxi-1000000x16 round=1 ms=4074.532 hash=5f662a5e037d8eb4
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=2 ms=2058.022 hash=e683f121d11f59dd
+FSPEED lane=et arm=sklearn-et-cpu shape=taxi-1000000x16 round=2 ms=3799.073 hash=c0d583caede53aa8
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=3 ms=2015.230 hash=e683f121d11f59dd
+FSPEED lane=et arm=sklearn-et-cpu shape=taxi-1000000x16 round=3 ms=4179.215 hash=f1c7899e6e609861
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.527541
+FSPEED-ACC lane=et arm=ours metric=auc value=0.608084
+FSPEED-ACC lane=et arm=sklearn-et-cpu metric=logloss value=0.527011
+FSPEED-ACC lane=et arm=sklearn-et-cpu metric=auc value=0.611206
+B1B_TAXI_DONE 20:53:21
+speed baseline rf istella 1000000 rounds=3 mode=full extra='--devices auto' 20:53:46
+speed_exit baseline.rf.istella.r1000000.full=0 20:56:10
+FSPEED-REFUSED lane=rf arm=sklearn-rf-cpu reason=GPU-PATH-ONLY: sklearn-rf-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare against the vendor's GPU path only; on AMD request cpu by name (ENGINEERING_RULES.md section 10).
+FSPEED-REFUSED lane=rf arm=lightgbm-cpu reason=GPU-PATH-ONLY: lightgbm-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare against the vendor's GPU path only; on AMD request cpu by name (ENGINEERING_RULES.md section 10).
+FSPEED-HEADER family=forest lane=rf arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-HEADER family=forest lane=rf arm=cuml-rf-gpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-HEADER family=forest lane=rf arm=lightgbm-cuda mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-REFUSED lane=rf arm=lightgbm-cuda reason=LightGBMError during warm-up: CUDA Tree Learner was not enabled in this build. Please recompile with CMake option -DUSE_CUDA=1 (NVIDIA GPUs) or -DUSE_ROCM=1 (AMD GPUs)
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=1 ms=2113.063 hash=574b24d0d7af51d0
+FSPEED lane=rf arm=cuml-rf-gpu shape=istella-1000000x220 round=1 ms=3855.134 hash=afb10ad5da9e4921
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=2 ms=2170.082 hash=574b24d0d7af51d0
+FSPEED lane=rf arm=cuml-rf-gpu shape=istella-1000000x220 round=2 ms=3667.557 hash=afb10ad5da9e4921
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=3 ms=2099.699 hash=574b24d0d7af51d0
+FSPEED lane=rf arm=cuml-rf-gpu shape=istella-1000000x220 round=3 ms=3632.780 hash=afb10ad5da9e4921
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.145560
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.964538
+FSPEED-ACC lane=rf arm=cuml-rf-gpu metric=logloss value=0.145504
+FSPEED-ACC lane=rf arm=cuml-rf-gpu metric=auc value=0.964577
+speed baseline iforest istella 1000000 rounds=3 mode=full extra='--devices auto' 20:56:10
+speed_exit baseline.iforest.istella.r1000000.full=0 20:56:35
+FSPEED-REFUSED lane=iforest arm=ours reason=RuntimeError: native compiled-mode readback missing for _mojolearn
+FSPEED-REFUSED lane=iforest arm=sklearn-iforest-cpu reason=GPU-PATH-ONLY: sklearn-iforest-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare against the vendor's GPU path only; on AMD request cpu by name (ENGINEERING_RULES.md section 10).
+FSPEED-HEADER family=forest lane=iforest arm=cuml-iforest-gpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED lane=iforest arm=cuml-iforest-gpu shape=istella-1000000x220 round=1 ms=1911.351 hash=94d69b1532e576e2
+FSPEED lane=iforest arm=cuml-iforest-gpu shape=istella-1000000x220 round=2 ms=1477.083 hash=94d69b1532e576e2
+FSPEED lane=iforest arm=cuml-iforest-gpu shape=istella-1000000x220 round=3 ms=1526.375 hash=94d69b1532e576e2
+FSPEED-ACC lane=iforest arm=cuml-iforest-gpu metric=auc value=0.821218
+speed baseline et istella 1000000 rounds=3 mode=full extra='--devices cpu --arms sklearn-et-cpu' 20:56:35
+speed_exit baseline.et.istella.r1000000.full=0 20:59:18
+FSPEED-REFUSED lane=et arm=cuml-et-gpu reason=RuntimeError: cuML has no ExtraTrees estimator: its RandomForest searches quantile splits, not the uniform-random thresholds that define ExtraTrees. The like-for-like comparator for `et` is sklearn.
+FSPEED-HEADER family=forest lane=et arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-HEADER family=forest lane=et arm=sklearn-et-cpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=1 ms=6072.736 hash=40b1c5b03ba40420
+FSPEED lane=et arm=sklearn-et-cpu shape=istella-1000000x220 round=1 ms=16259.364 hash=17f0c49c20944134
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=2 ms=5976.839 hash=40b1c5b03ba40420
+FSPEED lane=et arm=sklearn-et-cpu shape=istella-1000000x220 round=2 ms=16301.528 hash=948596c25e896209
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=3 ms=6208.420 hash=40b1c5b03ba40420
+FSPEED lane=et arm=sklearn-et-cpu shape=istella-1000000x220 round=3 ms=15755.966 hash=edcf5198e08616ce
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.188191
+FSPEED-ACC lane=et arm=ours metric=auc value=0.938768
+FSPEED-ACC lane=et arm=sklearn-et-cpu metric=logloss value=0.187901
+FSPEED-ACC lane=et arm=sklearn-et-cpu metric=auc value=0.939528
+B1B_ISTELLA_DONE 20:59:18
+batch1b end 20:59:18

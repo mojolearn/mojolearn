@@ -1,0 +1,15 @@
+build_exit baseline.svm=0 20:39:34
+a427e5ee0cc5507dd76ef67e81a3cb5de29461255bf41257166d2e457a22985d  /root/bins/baseline/_mojolearn_svm.so
+B1_BUILD_DONE 20:39:34
+ib_exit baseline=0 20:39:45
+ib_diff sep11c_baseline vs baseline exit=0 20:39:45
+B1_IB_DONE 20:39:45
+batch1 stopped on wind-down 20:50:09
+speed_exit baseline.rf.taxi.r1000000.full=0 20:51:57
+speed_exit baseline.iforest.taxi.r1000000.full=0 20:52:07
+speed_exit baseline.et.taxi.r1000000.full=0 20:53:21
+B1B_TAXI_DONE 20:53:21
+speed_exit baseline.rf.istella.r1000000.full=0 20:56:10
+speed_exit baseline.iforest.istella.r1000000.full=0 20:56:35
+speed_exit baseline.et.istella.r1000000.full=0 20:59:18
+B1B_ISTELLA_DONE 20:59:18

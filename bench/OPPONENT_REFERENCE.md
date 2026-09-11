@@ -1447,3 +1447,38 @@ by 1 percent or less for ours pca, knn, kde and svc, 10 percent for ours ols
 span 168 to 621 ms). It was reaped at 16:57Z, before this pod's first race
 at 17:00Z. Both pods were verified gone (HTTP 404). This pod's gemm device card
 matched the Apple card at all 60 stages.
+
+### H100 forests same-pod baseline, taxi and Istella-S (2026-09-11 night, lane forest-speed)
+
+Pod f2zzlf4dj4it1p (verified gone, HTTP 404), NVIDIA H100 80GB HBM3, driver
+580.126.09, GPU-539422f5-3a31-9491-3564-da52a8f316de, runpod/pytorch:2.4.0-py3.11-cuda12.4.1
+container, Intel Xeon Platinum 8480+ (224 logical CPUs visible, cgroup quota
+23.8 CPUs, joblib cpu_count 24). Source 36ca51fd (main), IDENTICAL tier, the
+setup-built bindings plus the svm extension. Same process, arms alternating,
+1 warm-up plus 3 rounds, ms median (min..max), 1,000,000 training rows,
+logloss / AUC on the fixed test tail. Configs as the Istella-S rows above
+(100 trees, depth 16, sqrt features, 128 bins for RF, bootstrap for RF only,
+seed 7). Evidence: `bench/results/forest_speed_2026-09-11/`.
+
+| family | dataset | opponent | device | opponent ms | opponent logloss / AUC | ours IDENTICAL ms | ours logloss / AUC | ours / opponent |
+|---|---|---|---|---|---|---|---|---|
+| RF | taxi | cuML RandomForestClassifier 26.08.00 | GPU, H100 | 1980 (1942..1984) | 0.525800 / 0.617582 | 877 (876..914), hash d8f64dae01de00bd | 0.525910 / 0.617154 | 0.44x |
+| RF | Istella-S | cuML RandomForestClassifier 26.08.00 | GPU, H100 | 3668 (3633..3855) | 0.145504 / 0.964577 | 2113 (2100..2170), hash 574b24d0d7af51d0 | 0.145560 / 0.964538 | 0.58x |
+| ET | taxi | scikit-learn ExtraTreesClassifier 1.9.1 (cuML has none) | CPU, 24-core quota, n_jobs=-1 | 4075 (3799..4179) | 0.527011 / 0.611206 | 2058 (2015..2115), hash e683f121d11f59dd | 0.527541 / 0.608084 | 0.51x |
+| ET | Istella-S | scikit-learn ExtraTreesClassifier 1.9.1 | CPU, 24-core quota | 16259 (15756..16302) | 0.187901 / 0.939528 | 6073 (5977..6208), hash 40b1c5b03ba40420 | 0.188191 / 0.938768 | 0.37x |
+| IsolationForest | taxi | cuML IsolationForest 26.08.00 (`cuml.ensemble.isolation_forest`) | GPU, H100 | 63 (59..125) | proxy AUC 0.553631 | REFUSED by the harness (below) | - | owed |
+| IsolationForest | Istella-S | cuML IsolationForest 26.08.00 | GPU, H100 | 1526 (1477..1911) | proxy AUC 0.821218 | REFUSED by the harness | - | owed |
+
+cuML 26.08.00 does ship IsolationForest; the Aug 28 `cuml-iforest-gpu` row
+(85.159 ms) was that estimator against our arm labeled FAST. Our iforest arm
+was refused here by `verify_our_arm` ("native compiled-mode readback missing
+for _mojolearn": the class inherits `_BINDING = "_mojolearn"` while its code
+is in `_mojolearn_svm`), fixed on lane/forest-speed and not re-run. The
+iforest AUC is a proxy (anomaly score against the minority class; neither
+dataset has planted anomalies). Every ours hash held in 3 of 3 rounds; RF
+and ET hashes equal the AMD MI325X and MI300X rows above (and the Sep 11
+H100 Istella-S rows), so these four forests are cross-vendor identical on
+both datasets. `identity_break` rf-clf, rf-reg, et-clf, et-reg, iforest: 45
+of 45 cells stable, and the forest lanes IDENTICAL against the Sep 11 H100
+confirmation set. Setup's `check_buffer_foreign_argtypes.py --real-cuml`
+exited 0 on this pod (the 0.8.1 check owed on NVIDIA).
