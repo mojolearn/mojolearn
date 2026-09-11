@@ -44,6 +44,19 @@ resident sessions) and records, per step:
     itemized share of the step is explicit. Envelope lines (`envelope.*`)
     and the `attn.*` sub-phases of `block.attention_total` are kept in the
     dict but out of the total (they would double count).
+  * with --component-timing-steps N (DEVIATION 2630), the timed steps
+    are N consecutive steps under the switch (batches continue the
+    schedule after --steps). Every step prints the same lines in the same
+    order, so each name's lines split into N equal consecutive groups;
+    `component_timing_ms`, `component_bytes` and `component_counts` hold
+    the MEDIAN per step (for N = 1 that is the old sum) and
+    `component_timing_ms_per_step` keeps every step. Under
+    --witness-every-step each timed step is witnessed too, outside its
+    wall time and with the switch off for the exports, in
+    `component_timing_witnesses`. Lines with unit `count` (a
+    `-D MOJOLEARN_STEP_PHASE_TIMERS=1` build) fold into
+    `component_counts`; the sub-phase prefixes `fwd.`, `grad.` and
+    `gemm.` stay out of the total like `attn.`.
 
 The configuration is an argument; the default is the 20.45M control shape
 (B1 L2048 DM384 H6 KV6 HD64 FF1024, 8 layers, V8192). If setup plus the
@@ -79,7 +92,9 @@ EXIT_LIMIT = 2
 # Names summed into component_timing_total_ms exclude these: `envelope.*`
 # lines wrap other itemized lines, and `attn.*` are the sub-phases of
 # `block.attention_total` (modeling_llama.mojo prints both from one block).
-TIMING_TOTAL_EXCLUDED_PREFIXES = ('envelope.', 'attn.')
+# DEVIATION 2630: `fwd.*` and `grad.*` are sub-phases of the block and
+# backward parents, and `gemm.*` re-labels intervals already itemized.
+TIMING_TOTAL_EXCLUDED_PREFIXES = ('envelope.', 'attn.', 'fwd.', 'grad.', 'gemm.')
 
 
 def _proc_status():
@@ -423,27 +438,48 @@ def worker(args):
                              export_seconds=export_seconds, source=mode['witness_source'])
         emit(dict(event='final_witness', **final_witness))
     timing_step_seconds = None
+    timing_seconds_all = []
+    timing_witnesses = []
     if args.component_timing:
-        # One extra step with the native phase printer on. Its
+        # Extra steps with the native phase printer on. Their
         # `timing <phase> <ms>` lines land in this process's stdout (the
         # worker log); the PARENT sums them after this process exits (so
         # every native stdout buffer has been flushed) and writes them into
-        # result.json. The step's wall time is recorded ONLY as the
+        # result.json. The steps' wall times are recorded ONLY as the
         # denominator of the covered fraction: a timed run is not a timing
-        # sample (every tick adds a device wait).
-        os.environ['MOJOLEARN_TRANSFORMER_TIMING'] = '1'
-        ids = batch_ids(args.steps)
-        emit(dict(event='component_timing_step_start', note='MOJOLEARN_TRANSFORMER_TIMING=1; not a timing sample'))
-        start = time.perf_counter()
-        trainer.train_step(ids)
-        timing_step_seconds = time.perf_counter() - start
-        sys.stdout.flush()
-        emit(dict(event='component_timing_step_end', seconds=timing_step_seconds))
-        del os.environ['MOJOLEARN_TRANSFORMER_TIMING']
+        # sample (every tick adds a device wait). DEVIATION 2630:
+        # --component-timing-steps of them, batches continuing the schedule.
+        for timing_index in range(args.component_timing_steps):
+            os.environ['MOJOLEARN_TRANSFORMER_TIMING'] = '1'
+            ids = batch_ids(args.steps + timing_index)
+            emit(dict(event='component_timing_step_start', timing_step=timing_index + 1,
+                      note='MOJOLEARN_TRANSFORMER_TIMING=1; not a timing sample'))
+            start = time.perf_counter()
+            result = trainer.train_step(ids)
+            seconds = time.perf_counter() - start
+            sys.stdout.flush()
+            del os.environ['MOJOLEARN_TRANSFORMER_TIMING']
+            record = dict(event='component_timing_step_end', timing_step=timing_index + 1,
+                          seconds=seconds, loss=result['loss'])
+            if witness_every_step:
+                # Outside the wall time above and with the switch off, so the
+                # exports print no timing lines into the timed steps' groups.
+                hashes, completed, export_seconds = _witness(trainer, result, step_result)
+                sha256 = dict(loss=_sha(np.array([result['loss']], np.float32).tobytes()))
+                sha256.update(hashes)
+                witness = dict(step=len(steps) + timing_index + 1, completed_steps=completed, sha256=sha256)
+                timing_witnesses.append(witness)
+                record.update(witness_export_seconds=export_seconds, **witness)
+            emit(record)
+            timing_seconds_all.append(seconds)
+            del result
+        import statistics
+        timing_step_seconds = statistics.median(timing_seconds_all)
     sampler.stop()
     trainer.close()
     _write_result(args, shape, steps, limited=False, timing_step_seconds=timing_step_seconds,
-                  mode=mode, final_witness=final_witness)
+                  mode=mode, final_witness=final_witness, timing_seconds_all=timing_seconds_all,
+                  timing_witnesses=timing_witnesses)
     return 0
 
 
@@ -472,13 +508,62 @@ def parse_timing_lines(text):
     return ms, nbytes, count
 
 
-def component_timing_record(text, step_seconds):
-    ms, nbytes, count = parse_timing_lines(text)
+def parse_timing_occurrences(text):
+    """Every `timing <name> <value> <unit>` line in log order, by name:
+    {name: (unit, [values])} (DEVIATION 2630). The native lines of one
+    process share one stdout buffer and the Python lines another, so each
+    name's own lines keep their order even where the two interleave."""
+    out = {}
+    for line in text.splitlines():
+        parts = line.strip().split()
+        if len(parts) != 4 or parts[0] != 'timing':
+            continue
+        try:
+            value = float(parts[2])
+        except ValueError:
+            continue
+        out.setdefault(parts[1], (parts[3], []))[1].append(value)
+    return out
+
+
+def component_timing_record(text, step_seconds, n_steps=1):
+    """Per-step medians of the timed steps' lines (DEVIATION 2630). A name
+    whose line count is not a multiple of `n_steps` did not print the same
+    lines every step: its value is the mean per step and it is listed in
+    `component_timing_uneven`. For `n_steps == 1` every value is the sum,
+    as before."""
+    import statistics
+    n_steps = max(1, int(n_steps or 1))
+    ms, nbytes, counts, lines, per_step, uneven = {}, {}, {}, {}, {}, []
+    for name, (unit, values) in parse_timing_occurrences(text).items():
+        if unit not in ('ms', 'bytes', 'count'):
+            continue
+        if len(values) % n_steps == 0:
+            size = len(values) // n_steps
+            steps = [sum(values[k * size:(k + 1) * size]) for k in range(n_steps)]
+            value = statistics.median(steps)
+            lines[name] = size
+        else:
+            steps = None
+            value = sum(values) / n_steps
+            lines[name] = len(values) / n_steps
+            uneven.append(name)
+        if unit == 'ms':
+            ms[name] = value
+            per_step[name] = steps
+        elif unit == 'bytes':
+            nbytes[name] = int(value)
+        else:
+            counts[name] = value
     total = sum(v for k, v in ms.items() if not k.startswith(TIMING_TOTAL_EXCLUDED_PREFIXES))
     record = dict(
         component_timing_ms={k: ms[k] for k in sorted(ms)},
+        component_timing_ms_per_step={k: per_step[k] for k in sorted(per_step)},
         component_bytes={k: nbytes[k] for k in sorted(nbytes)},
-        component_line_counts={k: count[k] for k in sorted(count)},
+        component_counts={k: counts[k] for k in sorted(counts)},
+        component_line_counts={k: lines[k] for k in sorted(lines)},
+        component_timing_steps_parsed=n_steps,
+        component_timing_uneven=sorted(uneven),
         component_timing_total_ms=total,
         component_timing_excluded_from_total=sorted(
             k for k in ms if k.startswith(TIMING_TOTAL_EXCLUDED_PREFIXES)),
@@ -490,7 +575,8 @@ def component_timing_record(text, step_seconds):
     return record
 
 
-def _write_result(args, shape, steps, limited, timing_step_seconds=None, mode=None, final_witness=None):
+def _write_result(args, shape, steps, limited, timing_step_seconds=None, mode=None, final_witness=None,
+                  timing_seconds_all=None, timing_witnesses=None):
     import statistics
     timed = [s['seconds'] for s in steps[1:]] if len(steps) > 1 else []
     mode = mode or {}
@@ -527,6 +613,11 @@ def _write_result(args, shape, steps, limited, timing_step_seconds=None, mode=No
             * (1 if sys.platform == 'darwin' else 1024),
         budget_seconds=args.budget_seconds, limited=limited,
         component_timing_step_seconds=timing_step_seconds,
+        # DEVIATION 2630: every timed step's wall (the median above is the
+        # covered fraction's denominator) and their witnesses.
+        component_timing_steps=args.component_timing_steps if args.component_timing else 0,
+        component_timing_step_seconds_all=timing_seconds_all,
+        component_timing_witnesses=timing_witnesses,
         qualification='complete-step probe; device peak from a polled vendor tool; host RSS is a separate boundary; '
                       'no opponent, no default gate, no target-scale qualification claim')
     (args.out / 'result.json').write_text(json.dumps(result, indent=2) + '\n')
@@ -558,6 +649,9 @@ def main():
                         help='sets MOJOLEARN_TRANSFORMER_ATTN_PATH for the worker (default: auto = fused)')
     parser.add_argument('--component-timing', action='store_true',
                         help='one extra untimed step with MOJOLEARN_TRANSFORMER_TIMING=1 (phase prints in worker.log)')
+    parser.add_argument('--component-timing-steps', type=int, default=1,
+                        help='with --component-timing, this many consecutive steps under the switch '
+                             '(DEVIATION 2630); result.json then holds the median per step')
     parser.add_argument('--sample-interval', type=float, default=0.2, help='vendor tool polling seconds')
     parser.add_argument('--gpu-index', type=int, default=0)
     parser.add_argument('--worker', action='store_true', help=argparse.SUPPRESS)
@@ -566,6 +660,8 @@ def main():
         args.shape = TARGET_SHAPE
     if args.steps < 1 or args.budget_seconds <= 0:
         parser.error('need at least one step and a positive budget')
+    if args.component_timing_steps < 1:
+        parser.error('--component-timing-steps must be at least 1')
     if args.resident_lean and args.no_resident:
         parser.error("--resident-lean needs a resident session (step_result='lean' refuses resident=False)")
     if os.environ.get('MOJOLEARN_NUMERIC_MODE') != 'identical':
@@ -593,7 +689,8 @@ def main():
         if result_path.exists():
             result = json.loads(result_path.read_text())
             text = (args.out / 'worker.log').read_text(errors='replace')
-            result.update(component_timing_record(text, result.get('component_timing_step_seconds')))
+            result.update(component_timing_record(text, result.get('component_timing_step_seconds'),
+                                                  result.get('component_timing_steps') or 1))
             result_path.write_text(json.dumps(result, indent=2) + '\n')
     if status['limitation']:
         status['verdict'] = 'setup or a step exceeded the budget; recorded as a limitation, no smaller model substituted'

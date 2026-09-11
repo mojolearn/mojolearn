@@ -95,6 +95,14 @@ from std.os import getenv
 from std.sys.compile import is_defined
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext
+# DEVIATION 2630: the step phase timers and counters (core/step_phase.mojo;
+# compiled only under -D MOJOLEARN_STEP_PHASE_TIMERS=1).
+from core.step_phase import (
+    step_count_d2h,
+    step_count_host_alloc,
+    step_count_launch,
+    step_count_sync,
+)
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
@@ -1306,9 +1314,13 @@ def ce_refuse_device_inputs(
     if idx >= 0:
         var is_nan = device_classify_nonfinite(ctx, logits, idx)
         raise Error(ce_nonfinite_message("logits", idx, is_nan))
+    step_count_host_alloc()
     var ht = ctx.enqueue_create_host_buffer[DType.int32](n_rows)
+    step_count_sync()
     ctx.synchronize()
+    step_count_d2h()
     ctx.enqueue_copy(dst_ptr=ht.unsafe_ptr(), src_buf=targets)
+    step_count_sync()
     ctx.synchronize()
     var ht_l = List[Int32]()
     for i in range(n_rows):
@@ -1423,6 +1435,7 @@ def identical_ce_forward_into(
     # first, which is `_launch_tiled`'s spelling in `gemm_identical.mojo` and
     # the only one this tree has compiled.
     comptime max_kern = ce_row_max_kernel[CE_TPB]
+    step_count_launch()
     ctx.enqueue_function[max_kern](
         max_v.unsafe_ptr(),
         logits.unsafe_ptr(),
@@ -1432,6 +1445,7 @@ def identical_ce_forward_into(
     )
 
     # ---- L2 and L3, elementwise.
+    step_count_launch()
     ctx.enqueue_function[ce_shift_exp_kernel](
         shift.unsafe_ptr(),
         expo.unsafe_ptr(),
@@ -1445,6 +1459,7 @@ def identical_ce_forward_into(
 
     # ---- L4. ROUTED. The ones vector is the RIGHT operand here.
     comptime if SAB_DENOM_SERIAL_CHAIN:
+        step_count_launch()
         ctx.enqueue_function[ce_serial_fold_kernel](
             denom.unsafe_ptr(),
             expo.unsafe_ptr(),
@@ -1459,6 +1474,7 @@ def identical_ce_forward_into(
         )
 
     # ---- L5.
+    step_count_launch()
     ctx.enqueue_function[ce_logdenom_kernel](
         logdenom.unsafe_ptr(),
         denom.unsafe_ptr(),
@@ -1468,6 +1484,7 @@ def identical_ce_forward_into(
     )
 
     # ---- L6 and L7.
+    step_count_launch()
     ctx.enqueue_function[ce_nll_kernel](
         logp_target.unsafe_ptr(),
         nll.unsafe_ptr(),
@@ -1490,6 +1507,7 @@ def identical_ce_forward_into(
 
     if smoothing:
         # ---- L8.
+        step_count_launch()
         ctx.enqueue_function[ce_logp_kernel](
             logp.unsafe_ptr(),
             shift.unsafe_ptr(),
@@ -1505,6 +1523,7 @@ def identical_ce_forward_into(
         )
         # ---- L10. `tv[1]` is `T_OTHER`, which is `eps / V` -- the SABOTAGE
         # arm's folded constant, passed here and unused on the clean path.
+        step_count_launch()
         ctx.enqueue_function[ce_smooth_kernel](
             smooth.unsafe_ptr(),
             logp_sum.unsafe_ptr(),
@@ -1523,6 +1542,7 @@ def identical_ce_forward_into(
         var eps_here = ftz(cfg.eps)
         comptime if SAB_SMOOTH_FOLDED_CONSTANT:
             eps_here = Float32(1.0)
+        step_count_launch()
         ctx.enqueue_function[ce_row_smooth_kernel](
             row.unsafe_ptr(),
             nll.unsafe_ptr(),
@@ -1538,6 +1558,7 @@ def identical_ce_forward_into(
     else:
         # ---- L11, the `eps == 0` path. A DIFFERENT KERNEL and not a
         # bit-inert arm inside one kernel. Contract 6.2(c), DEVIATION 1155.
+        step_count_launch()
         ctx.enqueue_function[ce_row_nll_kernel](
             row.unsafe_ptr(),
             nll.unsafe_ptr(),
@@ -1555,6 +1576,7 @@ def identical_ce_forward_into(
     # ---- L12. ROUTED. The ones vector is the LEFT operand here, which is
     # `identical_gemm_backward_bias_into`'s own shape at `n == 1`.
     comptime if SAB_REDUCE_SERIAL:
+        step_count_launch()
         ctx.enqueue_function[ce_serial_fold_kernel](
             total.unsafe_ptr(),
             row.unsafe_ptr(),
@@ -1568,6 +1590,7 @@ def identical_ce_forward_into(
 
     # ---- L13. The divisor's ONE producer.
     var divisor = ce_divisor(cfg.reduction, count, cfg.num_items)
+    step_count_launch()
     ctx.enqueue_function[ce_divide_kernel](
         loss.unsafe_ptr(),
         total.unsafe_ptr(),
@@ -1629,6 +1652,7 @@ def identical_ce_backward_into(
     comptime if SAB_GRAD_DIVISOR_IS_N:
         divisor = Float32(n_rows)
 
+    step_count_launch()
     ctx.enqueue_function[ce_weights_kernel](
         weights.unsafe_ptr(),
         expo.unsafe_ptr(),
@@ -1639,6 +1663,7 @@ def identical_ce_backward_into(
         grid_dim=(_grid_for(cells), 1, 1),
         block_dim=(CE_TPB, 1, 1),
     )
+    step_count_launch()
     ctx.enqueue_function[ce_dlogits_kernel](
         dlogits.unsafe_ptr(),
         weights.unsafe_ptr(),

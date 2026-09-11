@@ -32,6 +32,13 @@ from std.time import perf_counter_ns
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+# DEVIATION 2630: the step phase timers and counters (core/step_phase.mojo;
+# compiled only under -D MOJOLEARN_STEP_PHASE_TIMERS=1).
+from core.step_phase import (
+    step_count_sync,
+    step_counts_now,
+    step_counts_report,
+)
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.vendor import COMPILED_VENDOR
 from training.checks.optimizer_oracle import OptimizerConfig
@@ -769,6 +776,10 @@ def byte_lm_session_step_binding(session: PythonObject, addresses: PythonObject,
     var loss = Float32(0)
     var result_step = completed
     var out_flags = List[Bool]()
+    # DEVIATION 2630: the step's launch, synchronize, copy and allocation
+    # counts (core/step_phase.mojo): zeros and no print on a build without
+    # -D MOJOLEARN_STEP_PHASE_TIMERS=1.
+    var counts0 = step_counts_now()
     owner[].busy = True
     try:
         with GILReleased(Python()):
@@ -787,8 +798,10 @@ def byte_lm_session_step_binding(session: PythonObject, addresses: PythonObject,
                 raise Error("byte LM: nonfinite returned loss")
             if len(out_flags) != n_tensors:
                 raise Error("byte LM: wrong flags length")
+            step_count_sync()
             ctx.synchronize()
             _btick(ton, tk, "step.bind_final_sync")
+            step_counts_report(counts0)
     except error:
         owner[].busy = False
         _mark_if_lost(owner[])

@@ -96,6 +96,15 @@ from std.sys import llvm_intrinsic
 from std.sys.compile import is_defined
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext
+# DEVIATION 2630: the step phase timers and counters (core/step_phase.mojo;
+# compiled only under -D MOJOLEARN_STEP_PHASE_TIMERS=1).
+from core.step_phase import (
+    step_count_d2h,
+    step_count_device_alloc,
+    step_count_host_alloc,
+    step_count_launch,
+    step_count_sync,
+)
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
@@ -1508,8 +1517,11 @@ def device_absmax(
     var blocks = (n + ABSMAX_TPB - 1) // ABSMAX_TPB
     if blocks > ABSMAX_BLOCKS:
         blocks = ABSMAX_BLOCKS
+    step_count_device_alloc()
     var part = ctx.enqueue_create_buffer[DType.float32](blocks)
+    step_count_sync()
     ctx.synchronize()
+    step_count_launch()
     ctx.enqueue_function[absmax_partial_kernel](
         part.unsafe_ptr(),
         buf.unsafe_ptr(),
@@ -1517,10 +1529,15 @@ def device_absmax(
         grid_dim=(blocks, 1, 1),
         block_dim=(ABSMAX_TPB, 1, 1),
     )
+    step_count_sync()
     ctx.synchronize()
+    step_count_host_alloc()
     var host = ctx.enqueue_create_host_buffer[DType.float32](blocks)
+    step_count_sync()
     ctx.synchronize()
+    step_count_d2h()
     ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=part)
+    step_count_sync()
     ctx.synchronize()
     var m = Float32(0.0)
     for i in range(blocks):
@@ -5149,9 +5166,13 @@ def fused_attn_forward_r2_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: B
 def _read_flag(
     ctx: DeviceContext, mut flag: DeviceBuffer[DType.float32]
 ) raises -> Bool:
+    step_count_host_alloc()
     var host = ctx.enqueue_create_host_buffer[DType.float32](1)
+    step_count_sync()
     ctx.synchronize()
+    step_count_d2h()
     ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=flag)
+    step_count_sync()
     ctx.synchronize()
     var v = host.unsafe_ptr().unsafe_load(0)
     _ = host^
@@ -5159,8 +5180,11 @@ def _read_flag(
 
 
 def _zero_flag(ctx: DeviceContext) raises -> DeviceBuffer[DType.float32]:
+    step_count_device_alloc()
     var f = ctx.enqueue_create_buffer[DType.float32](1)
+    step_count_launch()
     f.enqueue_fill(Float32(0.0))
+    step_count_sync()
     ctx.synchronize()
     return f^
 
@@ -5389,7 +5413,9 @@ def fused_forward_launch_ran(
         if want_sstash and not ran_arm:
             # DEVIATION 2526: the score/exp scratch, `[B, n_heads, L, S]`
             # at the call's packed stride, owned for this call.
+            step_count_device_alloc()
             var sstash = ctx.enqueue_create_buffer[DType.float32](b * nh * l * s)
+            step_count_sync()
             ctx.synchronize()
             _attn_tick(ctx, ton, tk, "fwd_scratch_alloc")
             blocks = b * nh * ((l + 63) // 64)
@@ -5397,6 +5423,7 @@ def fused_forward_launch_ran(
             if sabotage:
                 comptime if ATTN_ARM_TRIAL:
                     comptime ks = fused_attn_forward_regblocked_sstash_kernel[ATTN_STASH_HD, True]
+                    step_count_launch()
                     ctx.enqueue_function[ks](
                         ctxv.unsafe_ptr(), amax.unsafe_ptr(), denom.unsafe_ptr(),
                         corner.unsafe_ptr(), sstash.unsafe_ptr(), q_rope.unsafe_ptr(),
@@ -5407,6 +5434,7 @@ def fused_forward_launch_ran(
                     )
             else:
                 comptime kc = fused_attn_forward_regblocked_sstash_kernel[ATTN_STASH_HD, False]
+                step_count_launch()
                 ctx.enqueue_function[kc](
                     ctxv.unsafe_ptr(), amax.unsafe_ptr(), denom.unsafe_ptr(),
                     corner.unsafe_ptr(), sstash.unsafe_ptr(), q_rope.unsafe_ptr(),
@@ -5415,6 +5443,7 @@ def fused_forward_launch_ran(
                     Int32(window), scale,
                     grid_dim=(blocks, 1, 1), block_dim=(nt, 1, 1),
                 )
+            step_count_sync()
             ctx.synchronize()
             _attn_tick(ctx, ton, tk, "fwd_sstash_kernel")
             _ = sstash^
@@ -5423,6 +5452,7 @@ def fused_forward_launch_ran(
     if not ran_arm:
         if hd == 16:
             comptime k16 = fused_attn_forward_kernel[16, FUSED_THREADS // 16]
+            step_count_launch()
             ctx.enqueue_function[k16](
                 ctxv.unsafe_ptr(), amax.unsafe_ptr(), denom.unsafe_ptr(),
                 corner.unsafe_ptr(), q_rope.unsafe_ptr(), k_cache.unsafe_ptr(),
@@ -5432,6 +5462,7 @@ def fused_forward_launch_ran(
             )
         elif hd == 24:
             comptime k24 = fused_attn_forward_kernel[24, FUSED_THREADS // 24]
+            step_count_launch()
             ctx.enqueue_function[k24](
                 ctxv.unsafe_ptr(), amax.unsafe_ptr(), denom.unsafe_ptr(),
                 corner.unsafe_ptr(), q_rope.unsafe_ptr(), k_cache.unsafe_ptr(),
@@ -5443,6 +5474,7 @@ def fused_forward_launch_ran(
             comptime k64 = fused_attn_forward_regblocked_kernel[64]
             blocks = b * nh * ((l + 63) // 64)
             nt = FUSED_THREADS
+            step_count_launch()
             ctx.enqueue_function[k64](
                 ctxv.unsafe_ptr(), amax.unsafe_ptr(), denom.unsafe_ptr(),
                 corner.unsafe_ptr(), q_rope.unsafe_ptr(), k_cache.unsafe_ptr(),
@@ -5454,6 +5486,7 @@ def fused_forward_launch_ran(
             comptime k128 = fused_attn_forward_regblocked_kernel[128]
             blocks = b * nh * ((l + 15) // 16)
             nt = FUSED_THREADS
+            step_count_launch()
             ctx.enqueue_function[k128](
                 ctxv.unsafe_ptr(), amax.unsafe_ptr(), denom.unsafe_ptr(),
                 corner.unsafe_ptr(), q_rope.unsafe_ptr(), k_cache.unsafe_ptr(),
@@ -5462,6 +5495,7 @@ def fused_forward_launch_ran(
                 grid_dim=(blocks, 1, 1), block_dim=(nt, 1, 1),
             )
         _attn_tick(ctx, ton, tk, "fwd_kernel")
+    step_count_sync()
     ctx.synchronize()
     var hit = _read_flag(ctx, corner)
     _ = corner^
@@ -5530,6 +5564,7 @@ def _launch_bwd_shipped[HD: Int](
     comptime z = fused_bwd_zdot_kernel[HD, TQ]
     comptime q = fused_bwd_dq_kernel[HD, TQ]
     comptime kv = fused_bwd_dkdv_kernel[HD, TQ]
+    step_count_launch()
     ctx.enqueue_function[z](
         zdot.unsafe_ptr(), corner.unsafe_ptr(), q_rope.unsafe_ptr(),
         dctx.unsafe_ptr(), k_cache.unsafe_ptr(), v_cache.unsafe_ptr(),
@@ -5538,8 +5573,10 @@ def _launch_bwd_shipped[HD: Int](
         Int32(window), scale,
         grid_dim=(row_blocks, 1, 1), block_dim=(nt, 1, 1),
     )
+    step_count_sync()
     ctx.synchronize()
     _attn_tick(ctx, on, tk, "bwd_zdot")
+    step_count_launch()
     ctx.enqueue_function[q](
         dq.unsafe_ptr(), corner.unsafe_ptr(), q_rope.unsafe_ptr(),
         dctx.unsafe_ptr(), k_cache.unsafe_ptr(), v_cache.unsafe_ptr(),
@@ -5549,6 +5586,7 @@ def _launch_bwd_shipped[HD: Int](
         grid_dim=(row_blocks, 1, 1), block_dim=(nt, 1, 1),
     )
     _attn_tick(ctx, on, tk, "bwd_dq")
+    step_count_launch()
     ctx.enqueue_function[kv](
         dk.unsafe_ptr(), dv.unsafe_ptr(), corner.unsafe_ptr(),
         q_rope.unsafe_ptr(), dctx.unsafe_ptr(), k_cache.unsafe_ptr(),
@@ -5579,10 +5617,13 @@ def _launch_fwd_r2[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: Bool](
     `fused_attn_forward_r2_kernel[HD, TQ, QRES, PF, SABN]` at `TQ` rows per
     block. Generic, so a build that never calls it (every shipped build)
     instantiates none of it."""
+    step_count_device_alloc()
     var sstash = ctx.enqueue_create_buffer[DType.float32](b * nh * l * s)
+    step_count_sync()
     ctx.synchronize()
     _attn_tick(ctx, on, tk, "fwd_scratch_alloc")
     comptime kr = fused_attn_forward_r2_kernel[HD, TQ, QRES, PF, SABN]
+    step_count_launch()
     ctx.enqueue_function[kr](
         ctxv.unsafe_ptr(), amax.unsafe_ptr(), denom.unsafe_ptr(),
         corner.unsafe_ptr(), sstash.unsafe_ptr(), q_rope.unsafe_ptr(),
@@ -5594,6 +5635,7 @@ def _launch_fwd_r2[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: Bool](
     )
     # The scratch must outlive the enqueued kernel: synchronize, then the
     # explicit last use (a buffer is freed at its last use).
+    step_count_sync()
     ctx.synchronize()
     _attn_tick(ctx, on, tk, "fwd_r2_kernel")
     _ = sstash^
@@ -5627,11 +5669,15 @@ def _launch_bwd_stash_tiled_pf[HD: Int, ZSAB: Bool](
     them."""
     comptime TQ = FUSED_THREADS // HD
     var cells = b * nh * l * s
+    step_count_device_alloc()
     var y_st = ctx.enqueue_create_buffer[DType.float32](cells)
+    step_count_device_alloc()
     var dy_st = ctx.enqueue_create_buffer[DType.float32](cells)
+    step_count_sync()
     ctx.synchronize()
     _attn_tick(ctx, on, tk, "bwd_scratch_alloc")
     comptime zk = fused_bwd_zdot_stash_pf_kernel[HD, TQ, ZSAB]
+    step_count_launch()
     ctx.enqueue_function[zk](
         zdot.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
         dy_st.unsafe_ptr(), q_rope.unsafe_ptr(), dctx.unsafe_ptr(),
@@ -5641,11 +5687,13 @@ def _launch_bwd_stash_tiled_pf[HD: Int, ZSAB: Bool](
         grid_dim=(b * nh * ((l + TQ - 1) // TQ), 1, 1),
         block_dim=(FUSED_THREADS, 1, 1),
     )
+    step_count_sync()
     ctx.synchronize()
     _attn_tick(ctx, on, tk, "bwd_zdot_stash_pf")
     var dq_blocks = b * nh * ((l + 63) // 64)
     var kv_blocks = b * nkv * ((s + 63) // 64)
     comptime qp = fused_bwd_dq_tiled_pf_kernel[HD]
+    step_count_launch()
     ctx.enqueue_function[qp](
         dq.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
         dy_st.unsafe_ptr(), k_cache.unsafe_ptr(), zdot.unsafe_ptr(),
@@ -5655,6 +5703,7 @@ def _launch_bwd_stash_tiled_pf[HD: Int, ZSAB: Bool](
     )
     _attn_tick(ctx, on, tk, "bwd_dq_tiled_pf")
     comptime kvp = fused_bwd_dkdv_tiled_pf_kernel[HD]
+    step_count_launch()
     ctx.enqueue_function[kvp](
         dk.unsafe_ptr(), dv.unsafe_ptr(), corner.unsafe_ptr(),
         y_st.unsafe_ptr(), dy_st.unsafe_ptr(), q_rope.unsafe_ptr(),
@@ -5665,6 +5714,7 @@ def _launch_bwd_stash_tiled_pf[HD: Int, ZSAB: Bool](
     _attn_tick(ctx, on, tk, "bwd_dkdv_tiled_pf")
     # The stashes must outlive the enqueued kernels: synchronize, then the
     # explicit last use (a buffer is freed at its last use).
+    step_count_sync()
     ctx.synchronize()
     _ = y_st^
     _ = dy_st^
@@ -5725,6 +5775,7 @@ def _launch_bwd_stash_zdq_pf[HD: Int](
             var lag = zsched == ATTN_ARM_BWD_ZLAG
             if lag and zsab:
                 comptime zls = fused_bwd_zdot_sched_pf_kernel[HD, TQ, True, True]
+                step_count_launch()
                 ctx.enqueue_function[zls](
                     zdot.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
                     dy_st.unsafe_ptr(), q_rope.unsafe_ptr(), dctx.unsafe_ptr(),
@@ -5735,6 +5786,7 @@ def _launch_bwd_stash_zdq_pf[HD: Int](
                 )
             elif lag:
                 comptime zlc = fused_bwd_zdot_sched_pf_kernel[HD, TQ, True, False]
+                step_count_launch()
                 ctx.enqueue_function[zlc](
                     zdot.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
                     dy_st.unsafe_ptr(), q_rope.unsafe_ptr(), dctx.unsafe_ptr(),
@@ -5745,6 +5797,7 @@ def _launch_bwd_stash_zdq_pf[HD: Int](
                 )
             elif zsab:
                 comptime zds = fused_bwd_zdot_sched_pf_kernel[HD, TQ, False, True]
+                step_count_launch()
                 ctx.enqueue_function[zds](
                     zdot.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
                     dy_st.unsafe_ptr(), q_rope.unsafe_ptr(), dctx.unsafe_ptr(),
@@ -5755,6 +5808,7 @@ def _launch_bwd_stash_zdq_pf[HD: Int](
                 )
             else:
                 comptime zdc = fused_bwd_zdot_sched_pf_kernel[HD, TQ, False, False]
+                step_count_launch()
                 ctx.enqueue_function[zdc](
                     zdot.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
                     dy_st.unsafe_ptr(), q_rope.unsafe_ptr(), dctx.unsafe_ptr(),
@@ -5774,6 +5828,7 @@ def _launch_bwd_stash_zdq_pf[HD: Int](
         if zsab:
             comptime if ATTN_ARM_TRIAL:
                 comptime zks = fused_bwd_zdot_stash_pf_kernel[HD, TQ, True]
+                step_count_launch()
                 ctx.enqueue_function[zks](
                     zdot.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
                     dy_st.unsafe_ptr(), q_rope.unsafe_ptr(), dctx.unsafe_ptr(),
@@ -5789,6 +5844,7 @@ def _launch_bwd_stash_zdq_pf[HD: Int](
                 )
         else:
             comptime zkc = fused_bwd_zdot_stash_pf_kernel[HD, TQ, False]
+            step_count_launch()
             ctx.enqueue_function[zkc](
                 zdot.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
                 dy_st.unsafe_ptr(), q_rope.unsafe_ptr(), dctx.unsafe_ptr(),
@@ -5797,6 +5853,7 @@ def _launch_bwd_stash_zdq_pf[HD: Int](
                 Int32(s), Int32(pos0), Int32(key_lo), Int32(window), scale,
                 grid_dim=(z_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
             )
+    step_count_sync()
     ctx.synchronize()
     if zsched == ATTN_ARM_BWD_ZLAG:
         _attn_tick(ctx, on, tk, "bwd_zdot_zlag_pf")
@@ -5806,6 +5863,7 @@ def _launch_bwd_stash_zdq_pf[HD: Int](
         _attn_tick(ctx, on, tk, "bwd_zdot_stash_pf")
     var dq_blocks = b * nh * ((l + 63) // 64)
     comptime qp = fused_bwd_dq_tiled_pf_kernel[HD]
+    step_count_launch()
     ctx.enqueue_function[qp](
         dq.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
         dy_st.unsafe_ptr(), k_cache.unsafe_ptr(), zdot.unsafe_ptr(),
@@ -5843,8 +5901,11 @@ def _launch_bwd_stash_tiled_zsched_pf[HD: Int](
     rows of zdot). The shipped `_launch_bwd_stash_tiled_pf` is not edited.
     Generic, so a shipped build instantiates none of it."""
     var cells = b * nh * l * s
+    step_count_device_alloc()
     var y_st = ctx.enqueue_create_buffer[DType.float32](cells)
+    step_count_device_alloc()
     var dy_st = ctx.enqueue_create_buffer[DType.float32](cells)
+    step_count_sync()
     ctx.synchronize()
     _attn_tick(ctx, on, tk, "bwd_scratch_alloc")
     _launch_bwd_stash_zdq_pf[HD](
@@ -5854,6 +5915,7 @@ def _launch_bwd_stash_tiled_zsched_pf[HD: Int](
     )
     var kv_blocks = b * nkv * ((s + 63) // 64)
     comptime kvp = fused_bwd_dkdv_tiled_pf_kernel[HD]
+    step_count_launch()
     ctx.enqueue_function[kvp](
         dk.unsafe_ptr(), dv.unsafe_ptr(), corner.unsafe_ptr(),
         y_st.unsafe_ptr(), dy_st.unsafe_ptr(), q_rope.unsafe_ptr(),
@@ -5864,6 +5926,7 @@ def _launch_bwd_stash_tiled_zsched_pf[HD: Int](
     _attn_tick(ctx, on, tk, "bwd_dkdv_tiled_pf")
     # The stashes must outlive the enqueued kernels: synchronize, then the
     # explicit last use (a buffer is freed at its last use).
+    step_count_sync()
     ctx.synchronize()
     _ = y_st^
     _ = dy_st^
@@ -5898,8 +5961,11 @@ def _launch_bwd_stash_tiled_kvre[HD: Int](
     instantiates none of it."""
     comptime TQ = FUSED_THREADS // HD
     var cells = b * nh * l * s
+    step_count_device_alloc()
     var y_st = ctx.enqueue_create_buffer[DType.float32](cells)
+    step_count_device_alloc()
     var dy_st = ctx.enqueue_create_buffer[DType.float32](cells)
+    step_count_sync()
     ctx.synchronize()
     _attn_tick(ctx, on, tk, "bwd_scratch_alloc")
     _launch_bwd_stash_zdq_pf[HD](
@@ -5909,6 +5975,7 @@ def _launch_bwd_stash_tiled_kvre[HD: Int](
     )
     # Nothing reads the stashes after dq: wait for it, then free both before
     # dk/dv runs (a buffer is freed at its last use; these are the last uses).
+    step_count_sync()
     ctx.synchronize()
     _ = y_st^
     _ = dy_st^
@@ -5917,11 +5984,14 @@ def _launch_bwd_stash_tiled_kvre[HD: Int](
     var rows_n = b * nh * l
     comptime kvr = fused_bwd_dkdv_kernel[HD, TQ]
     if ksab:
+        step_count_device_alloc()
         var dflip = ctx.enqueue_create_buffer[DType.float32](rows_n)
+        step_count_launch()
         ctx.enqueue_function[_attn_flip_copy_kernel](
             dflip.unsafe_ptr(), denom.unsafe_ptr(), Int32(rows_n),
             grid_dim=((rows_n + 255) // 256, 1, 1), block_dim=(256, 1, 1),
         )
+        step_count_launch()
         ctx.enqueue_function[kvr](
             dk.unsafe_ptr(), dv.unsafe_ptr(), corner.unsafe_ptr(),
             q_rope.unsafe_ptr(), dctx.unsafe_ptr(), k_cache.unsafe_ptr(),
@@ -5930,9 +6000,11 @@ def _launch_bwd_stash_tiled_kvre[HD: Int](
             Int32(s), Int32(pos0), Int32(key_lo), Int32(window), scale,
             grid_dim=(key_blocks, 1, 1), block_dim=(HD * TQ, 1, 1),
         )
+        step_count_sync()
         ctx.synchronize()
         _ = dflip^
     else:
+        step_count_launch()
         ctx.enqueue_function[kvr](
             dk.unsafe_ptr(), dv.unsafe_ptr(), corner.unsafe_ptr(),
             q_rope.unsafe_ptr(), dctx.unsafe_ptr(), k_cache.unsafe_ptr(),
@@ -5975,8 +6047,11 @@ def _launch_bwd_stash_tiled_kv[HD: Int, BJ: Int, SPLIT: Bool](
     `ksab` False and `zsched` 0 (`ATTN_SHIPPED_BWD_KV`, brief section 18),
     and none on a column whose default names no 2597 token."""
     var cells = b * nh * l * s
+    step_count_device_alloc()
     var y_st = ctx.enqueue_create_buffer[DType.float32](cells)
+    step_count_device_alloc()
     var dy_st = ctx.enqueue_create_buffer[DType.float32](cells)
+    step_count_sync()
     ctx.synchronize()
     _attn_tick(ctx, on, tk, "bwd_scratch_alloc")
     _launch_bwd_stash_zdq_pf[HD](
@@ -5991,6 +6066,7 @@ def _launch_bwd_stash_tiled_kv[HD: Int, BJ: Int, SPLIT: Bool](
         if ksab:
             comptime if ATTN_ARM_TRIAL:
                 comptime fks = fused_bwd_kvfold_r2_kernel[HD, BJ, True]
+                step_count_launch()
                 ctx.enqueue_function[fks](
                     dk.unsafe_ptr(), corner.unsafe_ptr(), dy_st.unsafe_ptr(),
                     q_rope.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv),
@@ -5998,6 +6074,7 @@ def _launch_bwd_stash_tiled_kv[HD: Int, BJ: Int, SPLIT: Bool](
                     grid_dim=(kv_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
                 )
                 _attn_tick(ctx, on, tk, "bwd_kvsplit_dk_pf")
+                step_count_launch()
                 ctx.enqueue_function[fks](
                     dv.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
                     dctx.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv),
@@ -6013,6 +6090,7 @@ def _launch_bwd_stash_tiled_kv[HD: Int, BJ: Int, SPLIT: Bool](
                 )
         else:
             comptime fkc = fused_bwd_kvfold_r2_kernel[HD, BJ, False]
+            step_count_launch()
             ctx.enqueue_function[fkc](
                 dk.unsafe_ptr(), corner.unsafe_ptr(), dy_st.unsafe_ptr(),
                 q_rope.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv),
@@ -6020,6 +6098,7 @@ def _launch_bwd_stash_tiled_kv[HD: Int, BJ: Int, SPLIT: Bool](
                 grid_dim=(kv_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
             )
             _attn_tick(ctx, on, tk, "bwd_kvsplit_dk_pf")
+            step_count_launch()
             ctx.enqueue_function[fkc](
                 dv.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
                 dctx.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv),
@@ -6031,6 +6110,7 @@ def _launch_bwd_stash_tiled_kv[HD: Int, BJ: Int, SPLIT: Bool](
         if ksab:
             comptime if ATTN_ARM_TRIAL:
                 comptime jks = fused_bwd_dkdv_r2_kernel[HD, BJ, True]
+                step_count_launch()
                 ctx.enqueue_function[jks](
                     dk.unsafe_ptr(), dv.unsafe_ptr(), corner.unsafe_ptr(),
                     y_st.unsafe_ptr(), dy_st.unsafe_ptr(), q_rope.unsafe_ptr(),
@@ -6046,6 +6126,7 @@ def _launch_bwd_stash_tiled_kv[HD: Int, BJ: Int, SPLIT: Bool](
                 )
         else:
             comptime jkc = fused_bwd_dkdv_r2_kernel[HD, BJ, False]
+            step_count_launch()
             ctx.enqueue_function[jkc](
                 dk.unsafe_ptr(), dv.unsafe_ptr(), corner.unsafe_ptr(),
                 y_st.unsafe_ptr(), dy_st.unsafe_ptr(), q_rope.unsafe_ptr(),
@@ -6056,6 +6137,7 @@ def _launch_bwd_stash_tiled_kv[HD: Int, BJ: Int, SPLIT: Bool](
         _attn_tick(ctx, on, tk, "bwd_kvgrid_dkdv_pf")
     # The stashes must outlive the enqueued kernels: synchronize, then the
     # explicit last use (a buffer is freed at its last use).
+    step_count_sync()
     ctx.synchronize()
     _ = y_st^
     _ = dy_st^
@@ -6089,11 +6171,15 @@ def _launch_bwd_ztiled[HD: Int, TQZ: Int, ZSAB: Bool, PF: Bool](
     Generic, so a build that never calls it (every shipped build)
     instantiates none of the new kernels."""
     var cells = b * nh * l * s
+    step_count_device_alloc()
     var y_st = ctx.enqueue_create_buffer[DType.float32](cells)
+    step_count_device_alloc()
     var dy_st = ctx.enqueue_create_buffer[DType.float32](cells)
+    step_count_sync()
     ctx.synchronize()
     _attn_tick(ctx, on, tk, "bwd_scratch_alloc")
     comptime ka = fused_bwd_ydy_tiled_kernel[HD, TQZ, ZSAB]
+    step_count_launch()
     ctx.enqueue_function[ka](
         y_st.unsafe_ptr(), dy_st.unsafe_ptr(), q_rope.unsafe_ptr(),
         dctx.unsafe_ptr(), k_cache.unsafe_ptr(), v_cache.unsafe_ptr(),
@@ -6105,6 +6191,7 @@ def _launch_bwd_ztiled[HD: Int, TQZ: Int, ZSAB: Bool, PF: Bool](
     )
     _attn_tick(ctx, on, tk, "bwd_ydy_tiled")
     comptime kz = fused_bwd_zfold_kernel[FUSED_THREADS, PF]
+    step_count_launch()
     ctx.enqueue_function[kz](
         zdot.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
         dy_st.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(s),
@@ -6112,6 +6199,7 @@ def _launch_bwd_ztiled[HD: Int, TQZ: Int, ZSAB: Bool, PF: Bool](
         grid_dim=(b * nh * ((l + FUSED_THREADS - 1) // FUSED_THREADS), 1, 1),
         block_dim=(FUSED_THREADS, 1, 1),
     )
+    step_count_sync()
     ctx.synchronize()
     comptime if PF:
         _attn_tick(ctx, on, tk, "bwd_zfold_pf")
@@ -6121,6 +6209,7 @@ def _launch_bwd_ztiled[HD: Int, TQZ: Int, ZSAB: Bool, PF: Bool](
     var kv_blocks = b * nkv * ((s + 63) // 64)
     comptime if PF:
         comptime qp = fused_bwd_dq_tiled_pf_kernel[HD]
+        step_count_launch()
         ctx.enqueue_function[qp](
             dq.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
             dy_st.unsafe_ptr(), k_cache.unsafe_ptr(), zdot.unsafe_ptr(),
@@ -6130,6 +6219,7 @@ def _launch_bwd_ztiled[HD: Int, TQZ: Int, ZSAB: Bool, PF: Bool](
         )
         _attn_tick(ctx, on, tk, "bwd_dq_tiled_pf")
         comptime kvp = fused_bwd_dkdv_tiled_pf_kernel[HD]
+        step_count_launch()
         ctx.enqueue_function[kvp](
             dk.unsafe_ptr(), dv.unsafe_ptr(), corner.unsafe_ptr(),
             y_st.unsafe_ptr(), dy_st.unsafe_ptr(), q_rope.unsafe_ptr(),
@@ -6141,6 +6231,7 @@ def _launch_bwd_ztiled[HD: Int, TQZ: Int, ZSAB: Bool, PF: Bool](
     else:
         if fold_sabotage:
             comptime qs = fused_bwd_dq_tiled_kernel[HD, True]
+            step_count_launch()
             ctx.enqueue_function[qs](
                 dq.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
                 dy_st.unsafe_ptr(), k_cache.unsafe_ptr(), zdot.unsafe_ptr(),
@@ -6150,6 +6241,7 @@ def _launch_bwd_ztiled[HD: Int, TQZ: Int, ZSAB: Bool, PF: Bool](
             )
         else:
             comptime qc = fused_bwd_dq_tiled_kernel[HD, False]
+            step_count_launch()
             ctx.enqueue_function[qc](
                 dq.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
                 dy_st.unsafe_ptr(), k_cache.unsafe_ptr(), zdot.unsafe_ptr(),
@@ -6160,6 +6252,7 @@ def _launch_bwd_ztiled[HD: Int, TQZ: Int, ZSAB: Bool, PF: Bool](
         _attn_tick(ctx, on, tk, "bwd_dq_tiled")
         if fold_sabotage:
             comptime kvs = fused_bwd_dkdv_tiled_kernel[HD, True]
+            step_count_launch()
             ctx.enqueue_function[kvs](
                 dk.unsafe_ptr(), dv.unsafe_ptr(), corner.unsafe_ptr(),
                 y_st.unsafe_ptr(), dy_st.unsafe_ptr(), q_rope.unsafe_ptr(),
@@ -6169,6 +6262,7 @@ def _launch_bwd_ztiled[HD: Int, TQZ: Int, ZSAB: Bool, PF: Bool](
             )
         else:
             comptime kvc = fused_bwd_dkdv_tiled_kernel[HD, False]
+            step_count_launch()
             ctx.enqueue_function[kvc](
                 dk.unsafe_ptr(), dv.unsafe_ptr(), corner.unsafe_ptr(),
                 y_st.unsafe_ptr(), dy_st.unsafe_ptr(), q_rope.unsafe_ptr(),
@@ -6179,6 +6273,7 @@ def _launch_bwd_ztiled[HD: Int, TQZ: Int, ZSAB: Bool, PF: Bool](
         _attn_tick(ctx, on, tk, "bwd_dkdv_tiled")
     # The stashes must outlive the enqueued kernels: synchronize, then the
     # explicit last use (a buffer is freed at its last use).
+    step_count_sync()
     ctx.synchronize()
     _ = y_st^
     _ = dy_st^
@@ -6461,11 +6556,15 @@ def fused_backward_launch_ran(
             # n_heads, L, S]` at the call's packed stride, owned for this
             # call; dy becomes dcell after the dq kernel.
             var cells = b * nh * l * s
+            step_count_device_alloc()
             var y_st = ctx.enqueue_create_buffer[DType.float32](cells)
+            step_count_device_alloc()
             var dy_st = ctx.enqueue_create_buffer[DType.float32](cells)
+            step_count_sync()
             ctx.synchronize()
             _attn_tick(ctx, ton, tk, "bwd_scratch_alloc")
             comptime zk = fused_bwd_zdot_stash_kernel[HD, TQ]
+            step_count_launch()
             ctx.enqueue_function[zk](
                 zdot.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
                 dy_st.unsafe_ptr(), q_rope.unsafe_ptr(), dctx.unsafe_ptr(),
@@ -6474,6 +6573,7 @@ def fused_backward_launch_ran(
                 Int32(s), Int32(pos0), Int32(key_lo), Int32(window), scale,
                 grid_dim=(row_blocks, 1, 1), block_dim=(nt, 1, 1),
             )
+            step_count_sync()
             ctx.synchronize()
             _attn_tick(ctx, ton, tk, "bwd_zdot_stash")
             if want_tiled:
@@ -6482,6 +6582,7 @@ def fused_backward_launch_ran(
                 if sabotage:
                     comptime if ATTN_ARM_TRIAL:
                         comptime qs = fused_bwd_dq_tiled_kernel[HD, True]
+                        step_count_launch()
                         ctx.enqueue_function[qs](
                             dq.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
                             dy_st.unsafe_ptr(), k_cache.unsafe_ptr(), zdot.unsafe_ptr(),
@@ -6491,6 +6592,7 @@ def fused_backward_launch_ran(
                         )
                 else:
                     comptime qc = fused_bwd_dq_tiled_kernel[HD, False]
+                    step_count_launch()
                     ctx.enqueue_function[qc](
                         dq.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
                         dy_st.unsafe_ptr(), k_cache.unsafe_ptr(), zdot.unsafe_ptr(),
@@ -6502,6 +6604,7 @@ def fused_backward_launch_ran(
                 if sabotage:
                     comptime if ATTN_ARM_TRIAL:
                         comptime kvs = fused_bwd_dkdv_tiled_kernel[HD, True]
+                        step_count_launch()
                         ctx.enqueue_function[kvs](
                             dk.unsafe_ptr(), dv.unsafe_ptr(), corner.unsafe_ptr(),
                             y_st.unsafe_ptr(), dy_st.unsafe_ptr(), q_rope.unsafe_ptr(),
@@ -6511,6 +6614,7 @@ def fused_backward_launch_ran(
                         )
                 else:
                     comptime kvc = fused_bwd_dkdv_tiled_kernel[HD, False]
+                    step_count_launch()
                     ctx.enqueue_function[kvc](
                         dk.unsafe_ptr(), dv.unsafe_ptr(), corner.unsafe_ptr(),
                         y_st.unsafe_ptr(), dy_st.unsafe_ptr(), q_rope.unsafe_ptr(),
@@ -6523,6 +6627,7 @@ def fused_backward_launch_ran(
                 if sabotage:
                     comptime if ATTN_ARM_TRIAL:
                         comptime qs2 = fused_bwd_dq_stash_kernel[HD, TQ, True]
+                        step_count_launch()
                         ctx.enqueue_function[qs2](
                             dq.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
                             dy_st.unsafe_ptr(), k_cache.unsafe_ptr(), zdot.unsafe_ptr(),
@@ -6532,6 +6637,7 @@ def fused_backward_launch_ran(
                         )
                 else:
                     comptime qc2 = fused_bwd_dq_stash_kernel[HD, TQ, False]
+                    step_count_launch()
                     ctx.enqueue_function[qc2](
                         dq.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
                         dy_st.unsafe_ptr(), k_cache.unsafe_ptr(), zdot.unsafe_ptr(),
@@ -6543,6 +6649,7 @@ def fused_backward_launch_ran(
                 if sabotage:
                     comptime if ATTN_ARM_TRIAL:
                         comptime kvs2 = fused_bwd_dkdv_stash_kernel[HD, TQ, True]
+                        step_count_launch()
                         ctx.enqueue_function[kvs2](
                             dk.unsafe_ptr(), dv.unsafe_ptr(), corner.unsafe_ptr(),
                             y_st.unsafe_ptr(), dy_st.unsafe_ptr(), q_rope.unsafe_ptr(),
@@ -6552,6 +6659,7 @@ def fused_backward_launch_ran(
                         )
                 else:
                     comptime kvc2 = fused_bwd_dkdv_stash_kernel[HD, TQ, False]
+                    step_count_launch()
                     ctx.enqueue_function[kvc2](
                         dk.unsafe_ptr(), dv.unsafe_ptr(), corner.unsafe_ptr(),
                         y_st.unsafe_ptr(), dy_st.unsafe_ptr(), q_rope.unsafe_ptr(),
@@ -6560,6 +6668,7 @@ def fused_backward_launch_ran(
                         grid_dim=(key_blocks, 1, 1), block_dim=(nt, 1, 1),
                     )
                 _attn_tick(ctx, ton, tk, "bwd_dkdv_stash")
+            step_count_sync()
             ctx.synchronize()
             _ = y_st^
             _ = dy_st^
@@ -6592,6 +6701,7 @@ def fused_backward_launch_ran(
                 v_cache, amax, denom, b, l, nh, nkv, s, pos0, key_lo, window,
                 scale, row_blocks, key_blocks, nt,
             )
+    step_count_sync()
     ctx.synchronize()
     var hit = _read_flag(ctx, corner)
     _ = corner^

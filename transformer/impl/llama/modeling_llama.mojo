@@ -276,6 +276,18 @@ from std.os import getenv
 from std.time import perf_counter_ns
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
+# DEVIATION 2630: the step phase timers and counters (core/step_phase.mojo;
+# compiled only under -D MOJOLEARN_STEP_PHASE_TIMERS=1).
+from core.step_phase import (
+    StepPhaseClock,
+    step_count_d2d,
+    step_count_d2h,
+    step_count_device_alloc,
+    step_count_h2d,
+    step_count_host_alloc,
+    step_count_launch,
+    step_count_sync,
+)
 
 from core.identity_trace import IdentityTrace
 from gemm.checks.gemm_identical import identical_gemm
@@ -689,14 +701,19 @@ def _upload(
     var n_buf = n
     if n_buf < 1:
         n_buf = 1
+    step_count_device_alloc()
     var dev = ctx.enqueue_create_buffer[DType.float32](n_buf)
+    step_count_host_alloc()
     var host = ctx.enqueue_create_host_buffer[DType.float32](n_buf)
+    step_count_sync()
     ctx.synchronize()
     if n > 0:
         memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
     for i in range(n, n_buf):
         host.unsafe_ptr().unsafe_store(i, Float32(0.0))
+    step_count_h2d()
     ctx.enqueue_copy(dst_buf=dev, src_ptr=host.unsafe_ptr())
+    step_count_sync()
     ctx.synchronize()
     _ = host^
     return dev^
@@ -708,13 +725,18 @@ def _download(
     """The first `n` elements of a device buffer, as a host list. The gates
     read stages with this and DEVIATION 1027's refusal reads inputs with
     it."""
+    step_count_host_alloc()
     var host = ctx.enqueue_create_host_buffer[DType.float32](n)
+    step_count_sync()
     ctx.synchronize()
     if n == len(buf):
+        step_count_d2h()
         ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=buf)
     else:
         var view = buf.create_sub_buffer[DType.float32](0, n)
+        step_count_d2h()
         ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=view)
+    step_count_sync()
     ctx.synchronize()
     var out = List[Float32](length=n, fill=Float32(0.0))
     if n > 0:
@@ -727,8 +749,11 @@ def _zeros(ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.float32]:
     var n_buf = n
     if n_buf < 1:
         n_buf = 1
+    step_count_device_alloc()
     var dev = ctx.enqueue_create_buffer[DType.float32](n_buf)
+    step_count_launch()
     dev.enqueue_fill(Float32(0.0))
+    step_count_sync()
     ctx.synchronize()
     return dev^
 
@@ -776,9 +801,13 @@ def _plant_bits(
             + " bit patterns"
         )
     var n = len(buf)
+    step_count_host_alloc()
     var host = ctx.enqueue_create_host_buffer[DType.float32](n)
+    step_count_sync()
     ctx.synchronize()
+    step_count_d2h()
     ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=buf)
+    step_count_sync()
     ctx.synchronize()
     for i in range(len(plant_idx)):
         var j = plant_idx[i]
@@ -794,7 +823,9 @@ def _plant_bits(
         host.unsafe_ptr().unsafe_store(
             j, bitcast[DType.float32](plant_bits[i])
         )
+    step_count_h2d()
     ctx.enqueue_copy(dst_buf=buf, src_ptr=host.unsafe_ptr())
+    step_count_sync()
     ctx.synchronize()
     _ = host^
 
@@ -1402,6 +1433,7 @@ def llama_rms_norm(
     `llama_rms_norm_kernel` is deleted. This launcher exists so that the
     swap touches one function and no call site.
     """
+    step_count_launch()
     ctx.enqueue_function[llama_rms_norm_kernel](
         sumsq.unsafe_ptr(),
         out_buf.unsafe_ptr(),
@@ -1570,6 +1602,7 @@ struct LlamaRopeTable(Movable):
         )
         self.cos = _zeros(ctx, p_max * self.half)
         self.sin = _zeros(ctx, p_max * self.half)
+        step_count_launch()
         ctx.enqueue_function[llama_rope_table_kernel](
             self.cos.unsafe_ptr(),
             self.sin.unsafe_ptr(),
@@ -1579,6 +1612,7 @@ struct LlamaRopeTable(Movable):
             grid_dim=(_grid(p_max * self.half), 1, 1),
             block_dim=(LLAMA_TPB, 1, 1),
         )
+        step_count_sync()
         ctx.synchronize()
 
 
@@ -1693,6 +1727,7 @@ def apply_rotary_pos_emb(
 ) raises:
     """`apply_rotary_pos_emb(q, k, cos, sin)` (:138-160), one tensor per
     call. `n_h` is `n_heads` for q and `n_kv` for k. ASYNCHRONOUS."""
+    step_count_launch()
     ctx.enqueue_function[apply_rotary_pos_emb_kernel](
         out_buf.unsafe_ptr(),
         x.unsafe_ptr(),
@@ -2493,9 +2528,13 @@ def _refuse_nonfinite_device(
     if idx < 0:
         return
     var one = buf.create_sub_buffer[DType.float32](idx, 1)
+    step_count_host_alloc()
     var host = ctx.enqueue_create_host_buffer[DType.float32](1)
+    step_count_sync()
     ctx.synchronize()
+    step_count_d2h()
     ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=one)
+    step_count_sync()
     ctx.synchronize()
     var v = host.unsafe_ptr().unsafe_load(0)
     _ = host^
@@ -2849,6 +2888,7 @@ def attention_eager_core(
     for bb in range(b):
         for h in range(nh):
             var kvh = h // n_rep
+            step_count_launch()
             ctx.enqueue_function[gather_q_head_kernel](
                 stages.qbh.unsafe_ptr(),
                 stages.q_rope.unsafe_ptr(),
@@ -2861,6 +2901,7 @@ def attention_eager_core(
                 grid_dim=(_grid(l * hd), 1, 1),
                 block_dim=(LLAMA_TPB, 1, 1),
             )
+            step_count_launch()
             ctx.enqueue_function[gather_kv_head_kernel](
                 stages.kbh.unsafe_ptr(),
                 stages.k_cache.unsafe_ptr(),
@@ -2872,6 +2913,7 @@ def attention_eager_core(
                 grid_dim=(_grid(s * hd), 1, 1),
                 block_dim=(LLAMA_TPB, 1, 1),
             )
+            step_count_sync()
             ctx.synchronize()
             identical_gemm[False](
                 ctx,
@@ -2883,6 +2925,7 @@ def attention_eager_core(
                 hd,
                 _gemm_op_nt(),
             )
+            step_count_launch()
             ctx.enqueue_function[scatter_scores_kernel](
                 stages.scores.unsafe_ptr(),
                 stages.sbh.unsafe_ptr(),
@@ -2894,9 +2937,11 @@ def attention_eager_core(
                 grid_dim=(_grid(l * s), 1, 1),
                 block_dim=(LLAMA_TPB, 1, 1),
             )
+            step_count_sync()
             ctx.synchronize()
 
     # ---- S12 (:204's `* scaling`), applied to the FINISHED dot.
+    step_count_launch()
     ctx.enqueue_function[attn_scale_kernel](
         stages.scores.unsafe_ptr(),
         Int32(cells),
@@ -2904,6 +2949,7 @@ def attention_eager_core(
         grid_dim=(_grid(cells), 1, 1),
         block_dim=(LLAMA_TPB, 1, 1),
     )
+    step_count_sync()
     ctx.synchronize()
     # The score plant, injection point 1. Applied AFTER S12 and BEFORE the
     # stage is recorded, so the planted bits are IN `attn.scores` -- which
@@ -2923,6 +2969,7 @@ def attention_eager_core(
     )
 
     # ---- S13 (:206). An ADD, of -FLT_MAX or of +0.0. Not a select.
+    step_count_launch()
     ctx.enqueue_function[attn_mask_kernel](
         stages.masked.unsafe_ptr(),
         stages.scores.unsafe_ptr(),
@@ -2936,6 +2983,7 @@ def attention_eager_core(
         grid_dim=(_grid(cells), 1, 1),
         block_dim=(LLAMA_TPB, 1, 1),
     )
+    step_count_sync()
     ctx.synchronize()
     # The score plant, injection point 2. `PLANT_MASKED_ZERO_ROW` and any
     # other case whose separating value has to survive the mask lands here.
@@ -2953,6 +3001,7 @@ def attention_eager_core(
     )
 
     # ---- S14 (:208's row max). `identical_fmax`, fold shape free.
+    step_count_launch()
     ctx.enqueue_function[attn_max_kernel](
         stages.amax.unsafe_ptr(),
         stages.masked.unsafe_ptr(),
@@ -2963,12 +3012,14 @@ def attention_eager_core(
         grid_dim=(_grid(b * nh * l), 1, 1),
         block_dim=(LLAMA_TPB, 1, 1),
     )
+    step_count_sync()
     ctx.synchronize()
     trace.record_device[DType.float32](
         ctx, prefix + ".attn.max", stages.amax, b * nh * l
     )
 
     # ---- S15 and S16 (:208). `exp(s - m)`.
+    step_count_launch()
     ctx.enqueue_function[attn_exp_kernel](
         stages.aexp.unsafe_ptr(),
         stages.masked.unsafe_ptr(),
@@ -2978,12 +3029,14 @@ def attention_eager_core(
         grid_dim=(_grid(cells), 1, 1),
         block_dim=(LLAMA_TPB, 1, 1),
     )
+    step_count_sync()
     ctx.synchronize()
     trace.record_device[DType.float32](
         ctx, prefix + ".attn.exp", stages.aexp, cells
     )
 
     # ---- S17 (:208's denominator). SERIAL ASCENDING, ABSOLUTE index.
+    step_count_launch()
     ctx.enqueue_function[attn_denom_kernel](
         stages.denom.unsafe_ptr(),
         stages.aexp.unsafe_ptr(),
@@ -2995,12 +3048,14 @@ def attention_eager_core(
         grid_dim=(_grid(b * nh * l), 1, 1),
         block_dim=(LLAMA_TPB, 1, 1),
     )
+    step_count_sync()
     ctx.synchronize()
     trace.record_device[DType.float32](
         ctx, prefix + ".attn.denom", stages.denom, b * nh * l
     )
 
     # ---- S18 (:208's normalize). ONE DIVISION per weight.
+    step_count_launch()
     ctx.enqueue_function[attn_weights_kernel](
         stages.weights.unsafe_ptr(),
         stages.aexp.unsafe_ptr(),
@@ -3010,6 +3065,7 @@ def attention_eager_core(
         grid_dim=(_grid(cells), 1, 1),
         block_dim=(LLAMA_TPB, 1, 1),
     )
+    step_count_sync()
     ctx.synchronize()
     trace.record_device[DType.float32](
         ctx, prefix + ".attn.weights", stages.weights, cells
@@ -3025,6 +3081,7 @@ def attention_eager_core(
         for bb2 in range(b):
             for h2 in range(nh):
                 var kvh2 = h2 // n_rep
+                step_count_launch()
                 ctx.enqueue_function[gather_scores_head_kernel](
                     stages.sbh.unsafe_ptr(),
                     stages.weights.unsafe_ptr(),
@@ -3036,6 +3093,7 @@ def attention_eager_core(
                     grid_dim=(_grid(l * s), 1, 1),
                     block_dim=(LLAMA_TPB, 1, 1),
                 )
+                step_count_launch()
                 ctx.enqueue_function[gather_kv_head_kernel](
                     stages.kbh.unsafe_ptr(),
                     stages.v_cache.unsafe_ptr(),
@@ -3047,6 +3105,7 @@ def attention_eager_core(
                     grid_dim=(_grid(s * hd), 1, 1),
                     block_dim=(LLAMA_TPB, 1, 1),
                 )
+                step_count_sync()
                 ctx.synchronize()
                 identical_gemm[False](
                     ctx,
@@ -3058,6 +3117,7 @@ def attention_eager_core(
                     s,
                     _gemm_op_nn(),
                 )
+                step_count_launch()
                 ctx.enqueue_function[scatter_ctx_head_kernel](
                     stages.ctxv.unsafe_ptr(),
                     stages.qbh.unsafe_ptr(),
@@ -3069,8 +3129,10 @@ def attention_eager_core(
                     grid_dim=(_grid(l * hd), 1, 1),
                     block_dim=(LLAMA_TPB, 1, 1),
                 )
+                step_count_sync()
                 ctx.synchronize()
     else:
+        step_count_launch()
         ctx.enqueue_function[attn_context_kernel](
             stages.ctxv.unsafe_ptr(),
             stages.weights.unsafe_ptr(),
@@ -3084,6 +3146,7 @@ def attention_eager_core(
             grid_dim=(_grid(b * l * nh * hd), 1, 1),
             block_dim=(LLAMA_TPB, 1, 1),
         )
+        step_count_sync()
         ctx.synchronize()
 
 
@@ -3147,6 +3210,10 @@ def llama_attention_forward(
     var s = llama_key_span(s_old, l, window)
     var ton = timing_on()
     var tk = Int(perf_counter_ns())
+    # DEVIATION 2630 (core/step_phase.mojo): per-component ticks, compiled
+    # only under -D MOJOLEARN_STEP_PHASE_TIMERS=1; on any other build the
+    # clock stores three fields and every method returns at once.
+    var pc = StepPhaseClock(ctx)
 
     # ---- q_proj, k_proj, v_proj (:252-254). `nn.Linear(d_model, *,
     #      bias=attention_bias)` with `attention_bias` False, so weight
@@ -3160,18 +3227,21 @@ def llama_attention_forward(
     trace.record_device[DType.float32](
         ctx, prefix + ".q_proj.out", stages.q_proj, m * qw
     )
+    pc.tick(ctx, "fwd.q_proj", "proj_fwd")
     identical_gemm[False](
         ctx, stages.k_proj, stages.norm1_out, w.w_k, m, kw, dm, _gemm_op_nt()
     )
     trace.record_device[DType.float32](
         ctx, prefix + ".k_proj.out", stages.k_proj, m * kw
     )
+    pc.tick(ctx, "fwd.k_proj", "proj_fwd")
     identical_gemm[False](
         ctx, stages.v_proj, stages.norm1_out, w.w_v, m, kw, dm, _gemm_op_nt()
     )
     trace.record_device[DType.float32](
         ctx, prefix + ".v_proj.out", stages.v_proj, m * kw
     )
+    pc.tick(ctx, "fwd.v_proj", "proj_fwd")
     timing_tick(ctx, ton, tk, "attn.qkv_proj")
 
     # ---- the rotary table (:113-127). COMPUTED once per configuration,
@@ -3214,6 +3284,7 @@ def llama_attention_forward(
         hd,
         pos0,
     )
+    step_count_sync()
     ctx.synchronize()
     trace.record_device[DType.float32](
         ctx, prefix + ".q_rope.out", stages.q_rope, m * qw
@@ -3230,6 +3301,7 @@ def llama_attention_forward(
     #      from the ring plus this call's tokens; the ring itself is then
     #      updated in place. The recorded `kv.k_cache` stage is that span.
     if window == 0:
+        step_count_launch()
         ctx.enqueue_function[kv_append_kernel](
             stages.k_cache.unsafe_ptr(),
             kv.k.unsafe_ptr(),
@@ -3242,6 +3314,7 @@ def llama_attention_forward(
             grid_dim=(_grid(b * nkv * s * hd), 1, 1),
             block_dim=(LLAMA_TPB, 1, 1),
         )
+        step_count_launch()
         ctx.enqueue_function[kv_append_kernel](
             stages.v_cache.unsafe_ptr(),
             kv.v.unsafe_ptr(),
@@ -3255,6 +3328,7 @@ def llama_attention_forward(
             block_dim=(LLAMA_TPB, 1, 1),
         )
     else:
+        step_count_launch()
         ctx.enqueue_function[kv_window_gather_kernel](
             stages.k_cache.unsafe_ptr(),
             kv.k.unsafe_ptr(),
@@ -3270,6 +3344,7 @@ def llama_attention_forward(
             grid_dim=(_grid(b * nkv * s * hd), 1, 1),
             block_dim=(LLAMA_TPB, 1, 1),
         )
+        step_count_launch()
         ctx.enqueue_function[kv_window_gather_kernel](
             stages.v_cache.unsafe_ptr(),
             kv.v.unsafe_ptr(),
@@ -3285,6 +3360,7 @@ def llama_attention_forward(
             grid_dim=(_grid(b * nkv * s * hd), 1, 1),
             block_dim=(LLAMA_TPB, 1, 1),
         )
+    step_count_sync()
     ctx.synchronize()
     trace.record_device[DType.float32](
         ctx, prefix + ".kv.k_cache", stages.k_cache, b * nkv * s * hd
@@ -3298,10 +3374,13 @@ def llama_attention_forward(
     # of THIS call reads `stages.k_cache` and `stages.v_cache`, which hold
     # the same bits.
     if window == 0:
+        step_count_d2d()
         ctx.enqueue_copy(dst_buf=kv.k, src_buf=stages.k_cache)
+        step_count_d2d()
         ctx.enqueue_copy(dst_buf=kv.v, src_buf=stages.v_cache)
     else:
         # The ring takes this call's tokens AFTER the gather above read it.
+        step_count_launch()
         ctx.enqueue_function[kv_ring_write_kernel](
             kv.k.unsafe_ptr(),
             stages.k_rope.unsafe_ptr(),
@@ -3314,6 +3393,7 @@ def llama_attention_forward(
             grid_dim=(_grid(b * nkv * kv.cap * hd), 1, 1),
             block_dim=(LLAMA_TPB, 1, 1),
         )
+        step_count_launch()
         ctx.enqueue_function[kv_ring_write_kernel](
             kv.v.unsafe_ptr(),
             stages.v_proj.unsafe_ptr(),
@@ -3326,6 +3406,7 @@ def llama_attention_forward(
             grid_dim=(_grid(b * nkv * kv.cap * hd), 1, 1),
             block_dim=(LLAMA_TPB, 1, 1),
         )
+    step_count_sync()
     ctx.synchronize()
     kv.s = s_old + l
     timing_tick(ctx, ton, tk, "attn.rope_and_cache")
@@ -3350,6 +3431,7 @@ def llama_attention_forward(
         materialize,
     )
     timing_tick(ctx, ton, tk, "attn.core")
+    pc.mark(ctx)
 
     # ---- o_proj (:280). `nn.Linear(n_heads*head_dim, d_model,
     #      bias=attention_bias)`, no bias.
@@ -3360,6 +3442,7 @@ def llama_attention_forward(
     trace.record_device[DType.float32](
         ctx, prefix + ".o_proj.out", stages.o_proj, m * dm
     )
+    pc.tick(ctx, "fwd.o_proj", "proj_fwd")
     timing_tick(ctx, ton, tk, "attn.o_proj")
 
 
@@ -3388,6 +3471,10 @@ def llama_mlp_forward(
     var dims = stages.dims.copy()
     var dm = dims.d_model
     var it = dims.intermediate
+    # DEVIATION 2630 (core/step_phase.mojo): per-component ticks, compiled
+    # only under -D MOJOLEARN_STEP_PHASE_TIMERS=1; on any other build the
+    # clock stores three fields and every method returns at once.
+    var pc = StepPhaseClock(ctx)
 
     # ---- gate_proj and up_proj. C[M, it] = norm2_out[M, dm] . W[it, dm]^T.
     identical_gemm[False](
@@ -3403,6 +3490,7 @@ def llama_mlp_forward(
     trace.record_device[DType.float32](
         ctx, prefix + ".gate_proj.out", stages.gate_proj, m * it
     )
+    pc.tick(ctx, "fwd.gate_proj", "gateup_fwd")
     identical_gemm[False](
         ctx,
         stages.up_proj,
@@ -3416,8 +3504,10 @@ def llama_mlp_forward(
     trace.record_device[DType.float32](
         ctx, prefix + ".up_proj.out", stages.up_proj, m * it
     )
+    pc.tick(ctx, "fwd.up_proj", "gateup_fwd")
 
     # ---- act_fn (:175). S20.
+    step_count_launch()
     ctx.enqueue_function[silu_kernel](
         stages.silu_out.unsafe_ptr(),
         stages.gate_proj.unsafe_ptr(),
@@ -3425,12 +3515,15 @@ def llama_mlp_forward(
         grid_dim=(_grid(m * it), 1, 1),
         block_dim=(LLAMA_TPB, 1, 1),
     )
+    step_count_sync()
     ctx.synchronize()
     trace.record_device[DType.float32](
         ctx, prefix + ".silu.out", stages.silu_out, m * it
     )
+    pc.tick(ctx, "fwd.silu")
 
     # ---- the gate product (:175). S21.
+    step_count_launch()
     ctx.enqueue_function[mlp_gated_kernel](
         stages.gated.unsafe_ptr(),
         stages.silu_out.unsafe_ptr(),
@@ -3439,10 +3532,12 @@ def llama_mlp_forward(
         grid_dim=(_grid(m * it), 1, 1),
         block_dim=(LLAMA_TPB, 1, 1),
     )
+    step_count_sync()
     ctx.synchronize()
     trace.record_device[DType.float32](
         ctx, prefix + ".mlp.gated", stages.gated, m * it
     )
+    pc.tick(ctx, "fwd.gate_mul")
 
     # ---- down_proj (:175). C[M, dm] = gated[M, it] . w_down[dm, it]^T,
     #      `k = intermediate_size`. **THIS IS THE ONE CELL IN A SMALL
@@ -3464,6 +3559,7 @@ def llama_mlp_forward(
     trace.record_device[DType.float32](
         ctx, prefix + ".down_proj.out", stages.down_proj, m * dm
     )
+    pc.tick(ctx, "fwd.down_proj", "down_fwd")
 
 
 # ===========================================================================
@@ -3529,6 +3625,10 @@ def llama_decoder_layer_forward_planted(
     var m = b * l
     var ton = timing_on()
     var tk = Int(perf_counter_ns())
+    # DEVIATION 2630 (core/step_phase.mojo): per-component ticks, compiled
+    # only under -D MOJOLEARN_STEP_PHASE_TIMERS=1; on any other build the
+    # clock stores three fields and every method returns at once.
+    var pc = StepPhaseClock(ctx)
 
     if b <= 0 or l <= 0:
         raise Error(
@@ -3626,6 +3726,7 @@ def llama_decoder_layer_forward_planted(
     # differ in. `llama_refuse_bad_inputs` is unchanged and still walks all
     # thirteen names for anyone who wants them in one call.
     llama_refuse_bad_call(ctx, w, rope, x, kv, b, l)
+    pc.tick(ctx, "fwd.refuse_call")
 
     trace.record_device[DType.float32](ctx, prefix + ".input.x", x, m * dm)
 
@@ -3643,6 +3744,7 @@ def llama_decoder_layer_forward_planted(
         dm,
         w.eps,
     )
+    step_count_sync()
     ctx.synchronize()
     trace.record_device[DType.float32](
         ctx, prefix + ".norm1.sumsq", stages.norm1_sumsq, m
@@ -3652,6 +3754,7 @@ def llama_decoder_layer_forward_planted(
     )
 
     # ---- self.self_attn(...) (:308-316).
+    pc.tick(ctx, "fwd.norm1")
     timing_tick(ctx, ton, tk, "block.norm1")
     llama_attention_forward(
         ctx,
@@ -3670,9 +3773,11 @@ def llama_decoder_layer_forward_planted(
         materialize,
     )
     timing_tick(ctx, ton, tk, "block.attention_total")
+    pc.mark(ctx)
 
     # ---- residual + hidden_states (:317). S22. The mamba lane's S16
     #      kernel, IMPORTED (contract section 0).
+    step_count_launch()
     ctx.enqueue_function[residual_add_kernel](
         stages.residual1.unsafe_ptr(),
         x.unsafe_ptr(),
@@ -3681,10 +3786,12 @@ def llama_decoder_layer_forward_planted(
         grid_dim=(_grid(m * dm), 1, 1),
         block_dim=(LLAMA_TPB, 1, 1),
     )
+    step_count_sync()
     ctx.synchronize()
     trace.record_device[DType.float32](
         ctx, prefix + ".residual1.out", stages.residual1, m * dm
     )
+    pc.tick(ctx, "fwd.residual1_add")
 
     # ---- residual = hidden_states (:320), then
     #      self.post_attention_layernorm(...) (:321). S1-S4 again, the SAME
@@ -3699,6 +3806,7 @@ def llama_decoder_layer_forward_planted(
         dm,
         w.eps,
     )
+    step_count_sync()
     ctx.synchronize()
     trace.record_device[DType.float32](
         ctx, prefix + ".norm2.sumsq", stages.norm2_sumsq, m
@@ -3706,11 +3814,14 @@ def llama_decoder_layer_forward_planted(
     trace.record_device[DType.float32](
         ctx, prefix + ".norm2.out", stages.norm2_out, m * dm
     )
+    pc.tick(ctx, "fwd.norm2")
 
     # ---- self.mlp(...) (:322). S5, S20, S21.
     llama_mlp_forward(ctx, stages, w, m, trace, prefix)
+    pc.mark(ctx)
 
     # ---- residual + hidden_states (:323). S23, the same imported kernel.
+    step_count_launch()
     ctx.enqueue_function[residual_add_kernel](
         stages.residual2.unsafe_ptr(),
         stages.residual1.unsafe_ptr(),
@@ -3719,10 +3830,12 @@ def llama_decoder_layer_forward_planted(
         grid_dim=(_grid(m * dm), 1, 1),
         block_dim=(LLAMA_TPB, 1, 1),
     )
+    step_count_sync()
     ctx.synchronize()
     trace.record_device[DType.float32](
         ctx, prefix + ".residual2.out", stages.residual2, m * dm
     )
+    pc.tick(ctx, "fwd.residual2_add")
     timing_tick(ctx, ton, tk, "block.mlp_and_residuals")
 
 

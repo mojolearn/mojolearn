@@ -123,6 +123,14 @@ from std.os import getenv
 from std.sys.compile import is_defined
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext
+# DEVIATION 2630: the step phase timers and counters (core/step_phase.mojo;
+# compiled only under -D MOJOLEARN_STEP_PHASE_TIMERS=1).
+from core.step_phase import (
+    step_count_d2h,
+    step_count_host_alloc,
+    step_count_launch,
+    step_count_sync,
+)
 
 from gemm.checks.gemm_identical import (
     identical_gemm_into,
@@ -961,6 +969,7 @@ def identical_clip_grad_norm(
                 chunks = _grid_for(count)
                 if chunks > SAB_CHUNKS:
                     chunks = SAB_CHUNKS
+            step_count_launch()
             ctx.enqueue_function[sab_chunk_sumsq_kernel](
                 sab_partials.unsafe_ptr(),
                 grad.unsafe_ptr(),
@@ -970,6 +979,7 @@ def identical_clip_grad_norm(
                 grid_dim=(_grid_for(chunks), 1, 1),
                 block_dim=(OPT_TPB, 1, 1),
             )
+            step_count_launch()
             ctx.enqueue_function[sab_combine_kernel](
                 sumsq.unsafe_ptr(),
                 sab_partials.unsafe_ptr(),
@@ -978,6 +988,7 @@ def identical_clip_grad_norm(
                 grid_dim=(1, 1, 1),
                 block_dim=(1, 1, 1),
             )
+            step_count_sync()
             ctx.synchronize()
         else:
             # THE CLEAN PATH. Two views of the same range so that the two
@@ -987,6 +998,7 @@ def identical_clip_grad_norm(
             var gb = grad.create_sub_buffer[DType.float32](begin, count)
             var cv = sumsq.create_sub_buffer[DType.float32](slot, 1)
             identical_gemm_into(ctx, cv, ga, gb, ws, 1, 1, count, OP_NT)
+            step_count_sync()
             ctx.synchronize()
             # The keep-alives. Without these three the views are dead at
             # the `.unsafe_ptr()` inside the call above.
@@ -999,6 +1011,7 @@ def identical_clip_grad_norm(
     # `sqrt(sum_j sumsq_j)` -- the one-level form the reference does not
     # use. Contract 3.1. INERT at J == 1.
     comptime if SAB_CLIP_FLAT_NORM:
+        step_count_launch()
         ctx.enqueue_function[sab_combine_kernel](
             total_cell.unsafe_ptr(),
             sumsq.unsafe_ptr(),
@@ -1007,8 +1020,10 @@ def identical_clip_grad_norm(
             grid_dim=(1, 1, 1),
             block_dim=(1, 1, 1),
         )
+        step_count_sync()
         ctx.synchronize()
     else:
+        step_count_launch()
         ctx.enqueue_function[sqrt_vec_kernel](
             norms.unsafe_ptr(),
             sumsq.unsafe_ptr(),
@@ -1016,16 +1031,19 @@ def identical_clip_grad_norm(
             grid_dim=(_grid_for(j_count), 1, 1),
             block_dim=(OPT_TPB, 1, 1),
         )
+        step_count_sync()
         ctx.synchronize()
         var na = norms.create_sub_buffer[DType.float32](0, j_count)
         var nb = norms.create_sub_buffer[DType.float32](0, j_count)
         var tv = total_cell.create_sub_buffer[DType.float32](0, 1)
         identical_gemm_into(ctx, tv, na, nb, ws, 1, 1, j_count, OP_NT)
+        step_count_sync()
         ctx.synchronize()
         _ = na
         _ = nb
         _ = tv
 
+    step_count_launch()
     ctx.enqueue_function[clip_finish_kernel](
         out2.unsafe_ptr(),
         total_cell.unsafe_ptr(),
@@ -1033,10 +1051,14 @@ def identical_clip_grad_norm(
         grid_dim=(1, 1, 1),
         block_dim=(1, 1, 1),
     )
+    step_count_sync()
     ctx.synchronize()
 
+    step_count_host_alloc()
     var h = ctx.enqueue_create_host_buffer[DType.float32](2)
+    step_count_d2h()
     ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=out2)
+    step_count_sync()
     ctx.synchronize()
     var total_norm = h.unsafe_ptr().unsafe_load(0)
     var coef = h.unsafe_ptr().unsafe_load(1)
@@ -1045,6 +1067,7 @@ def identical_clip_grad_norm(
     # Contract 8a, on the one scalar this path can afford to inspect.
     refuse_nonfinite_scalar(String("clip.total_norm"), total_norm)
 
+    step_count_launch()
     ctx.enqueue_function[clip_scale_kernel](
         grad.unsafe_ptr(),
         Int32(offsets[j_count]),
@@ -1052,6 +1075,7 @@ def identical_clip_grad_norm(
         grid_dim=(_grid_for(offsets[j_count]), 1, 1),
         block_dim=(OPT_TPB, 1, 1),
     )
+    step_count_sync()
     ctx.synchronize()
     return coef
 
@@ -1361,6 +1385,7 @@ def identical_optimizer_step(
             var nest = Int32(0)
             if cfg.nesterov:
                 nest = Int32(1)
+            step_count_launch()
             ctx.enqueue_function[sgd_update_kernel](
                 param.unsafe_ptr(),
                 grad.unsafe_ptr(),
@@ -1377,6 +1402,7 @@ def identical_optimizer_step(
                 grid_dim=(_grid_for(count), 1, 1),
                 block_dim=(OPT_TPB, 1, 1),
             )
+        step_count_sync()
         ctx.synchronize()
         # PHASE 4. Per TENSOR, after the launches, never per element.
         if cfg.momentum != Float32(0.0):
@@ -1386,6 +1412,7 @@ def identical_optimizer_step(
         var is_adamw = Int32(0)
         if cfg.kind == OPT_ADAMW:
             is_adamw = Int32(1)
+        step_count_launch()
         ctx.enqueue_function[adam_update_kernel](
             param.unsafe_ptr(),
             grad.unsafe_ptr(),
@@ -1410,6 +1437,7 @@ def identical_optimizer_step(
             grid_dim=(_grid_for(n_total), 1, 1),
             block_dim=(OPT_TPB, 1, 1),
         )
+        step_count_sync()
         ctx.synchronize()
     _step_timing_tick(ctx, ton, tk, "step.optimizer")
 

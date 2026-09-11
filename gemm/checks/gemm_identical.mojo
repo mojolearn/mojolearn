@@ -119,6 +119,13 @@ from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import bitcast, stack_allocation
 from std.os import getenv
 from max.gpu.host import DeviceBuffer, DeviceContext
+# DEVIATION 2630: the step phase timers and counters (core/step_phase.mojo;
+# compiled only under -D MOJOLEARN_STEP_PHASE_TIMERS=1).
+from core.step_phase import (
+    step_count_device_alloc,
+    step_count_launch,
+    step_count_sync,
+)
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.sys import llvm_intrinsic
@@ -2089,6 +2096,7 @@ def _launch_split[
     comptime PAGES = lib_smem_pages_for[TARGET_COLUMN, PAGE_BYTES]()
     comptime kern = identical_gemm_tuned_kernel[RPT, CPT, TC, KS, 1, PAGES, True]
     var g = _tile_grid(m, n, BM, BN, False)
+    step_count_launch()
     ctx.enqueue_function[kern](
         ws.unsafe_ptr(),
         a.unsafe_ptr(),
@@ -2107,6 +2115,7 @@ def _launch_split[
         block_dim=(NTH, 1, 1),
     )
     if m * n <= SPLIT_BLOCK_FOLD_MAX_CELLS:
+        step_count_launch()
         ctx.enqueue_function[identical_gemm_fold_kernel[True]](
             c.unsafe_ptr(),
             ws.unsafe_ptr(),
@@ -2117,6 +2126,7 @@ def _launch_split[
             block_dim=(SPLITK_FOLD_TPB, 1, 1),
         )
         return
+    step_count_launch()
     ctx.enqueue_function[identical_gemm_fold_stack_kernel](
         c.unsafe_ptr(),
         ws.unsafe_ptr(),
@@ -2316,6 +2326,7 @@ def _launch_tiled[
 ) raises:
     comptime kern = identical_gemm_tiled_kernel[TM, TN, KS]
     var g = _tile_grid(m, n, TM, TN, two_d)
+    step_count_launch()
     ctx.enqueue_function[kern](
         c.unsafe_ptr(),
         a.unsafe_ptr(),
@@ -2372,6 +2383,7 @@ def _launch_tuned[
     comptime PAGES = lib_smem_pages_for[TARGET_COLUMN, PAGE_BYTES]()
     comptime kern = identical_gemm_tuned_kernel[RPT, CPT, TC, KS, FS, PAGES]
     var g = _tile_grid(m, n, BM, BN, two_d)
+    step_count_launch()
     ctx.enqueue_function[kern](
         c.unsafe_ptr(),
         a.unsafe_ptr(),
@@ -2430,6 +2442,7 @@ def identical_gemm_with_plan(
         var stride = p_count
         if staged:
             stride = fold_node_total(p_count)
+        step_count_launch()
         ctx.enqueue_function[identical_gemm_leaf_kernel](
             ws.unsafe_ptr(),
             a.unsafe_ptr(),
@@ -2452,6 +2465,7 @@ def identical_gemm_with_plan(
             block_dim=(SPLITK_LEAF_TPB, 1, 1),
         )
         if not staged:
+            step_count_launch()
             ctx.enqueue_function[identical_gemm_fold_kernel[False]](
                 c.unsafe_ptr(),
                 ws.unsafe_ptr(),
@@ -2470,6 +2484,7 @@ def identical_gemm_with_plan(
         for d in range(1, levels):
             var w_prev = fold_level_width(p_count, d - 1)
             var w_next = fold_level_width(p_count, d)
+            step_count_launch()
             ctx.enqueue_function[identical_gemm_fold_level_kernel](
                 ws.unsafe_ptr(),
                 Int32(m * n),
@@ -2485,6 +2500,7 @@ def identical_gemm_with_plan(
                 ),
                 block_dim=(SPLITK_LEAF_TPB, 1, 1),
             )
+        step_count_launch()
         ctx.enqueue_function[identical_gemm_emit_kernel](
             c.unsafe_ptr(),
             ws.unsafe_ptr(),
@@ -2585,6 +2601,7 @@ def identical_gemm_with_plan(
     # PLAN_FLAT, and the fallback for both SPLITK plans and the four SPLIT
     # plans at `k == 0` (there are no partials to write, and section 8 still requires `+0.0` to be
     # STORED rather than the store skipped).
+    step_count_launch()
     ctx.enqueue_function[identical_gemm_flat_kernel](
         c.unsafe_ptr(),
         a.unsafe_ptr(),
@@ -3369,6 +3386,7 @@ def _launch_step_arm[
     )
     comptime kern = identical_gemm_step_arm_kernel[RPT, CPT, TC, KS, PAGES, LFOLD, SAB]
     var g = _tile_grid(m, n, BM, BN, False)
+    step_count_launch()
     ctx.enqueue_function[kern](
         c.unsafe_ptr(),
         a.unsafe_ptr(),
@@ -3784,6 +3802,7 @@ def _ksplit_groups_launch[
     )
     comptime kern = identical_gemm_ksplit_kernel[RPT, CPT, TC, KS, PAGES, SAB]
     var g = _tile_grid(m, n, BM, BN, False)
+    step_count_launch()
     ctx.enqueue_function[kern](
         ws.unsafe_ptr(),
         a.unsafe_ptr(),
@@ -3815,6 +3834,7 @@ def _ksplit_fold_launch(
     """DEVIATION 2590, launch two: `_launch_split`'s fold dispatch with the
     group count as the count (brief 5.4)."""
     if m * n <= SPLIT_BLOCK_FOLD_MAX_CELLS:
+        step_count_launch()
         ctx.enqueue_function[identical_gemm_fold_kernel[True]](
             c.unsafe_ptr(),
             ws.unsafe_ptr(),
@@ -3825,6 +3845,7 @@ def _ksplit_fold_launch(
             block_dim=(SPLITK_FOLD_TPB, 1, 1),
         )
         return
+    step_count_launch()
     ctx.enqueue_function[identical_gemm_fold_stack_kernel](
         c.unsafe_ptr(),
         ws.unsafe_ptr(),
@@ -3897,12 +3918,15 @@ def _ksplit_run[
     if p_count <= 0:
         raise Error("_ksplit_run: k == 0 has no leaf groups (long-k brief section 5.5)")
     var st = gemm_operand_strides(op, m, n, k)
+    step_count_device_alloc()
     var gws = ctx.enqueue_create_buffer[DType.float32](m * n * rg[1])
+    step_count_sync()
     ctx.synchronize()
     _ksplit_groups_launch[
         GEMM_KSPLIT_RPT, GEMM_KSPLIT_CPT, TUNED_TC, GEMM_KSPLIT_KS, SAB
     ](ctx, gws, a, b, m, n, k, leaf, p_count, st, rg[0], rg[1])
     _ksplit_fold_launch(ctx, c, gws, m, n, rg[1])
+    step_count_sync()
     ctx.synchronize()
     _ = gws
 
@@ -4149,6 +4173,7 @@ def identical_gemm_step_ksplit_into(
                 _launch_step_arm[
                     GEMM_KSPLIT_RPT, GEMM_KSPLIT_CPT, TUNED_TC, GEMM_KSPLIT_KS, False, False
                 ](ctx, c, a, b, m, n, k, leaf, p_count, st)
+            step_count_sync()
             ctx.synchronize()
             return
         if sabotage:
@@ -4157,6 +4182,7 @@ def identical_gemm_step_ksplit_into(
             _ksplit_run[False](ctx, c, a, b, m, n, k, op, group_leaves)
         return
     identical_gemm_shipped_into(ctx, c, a, b, ws, m, n, k, op)
+    step_count_sync()
     ctx.synchronize()
 
 
@@ -4189,24 +4215,30 @@ def identical_gemm_step_ksplit_phase_into(
             _launch_step_arm[
                 GEMM_KSPLIT_RPT, GEMM_KSPLIT_CPT, TUNED_TC, GEMM_KSPLIT_KS, False, False
             ](ctx, c, a, b, m, n, k, leaf, p_count, st)
+            step_count_sync()
             ctx.synchronize()
             return (0, Int(perf_counter_ns() - tz), 0)
         var t0 = perf_counter_ns()
+        step_count_device_alloc()
         var gws = ctx.enqueue_create_buffer[DType.float32](m * n * rg[1])
+        step_count_sync()
         ctx.synchronize()
         var t1 = perf_counter_ns()
         _ksplit_groups_launch[
             GEMM_KSPLIT_RPT, GEMM_KSPLIT_CPT, TUNED_TC, GEMM_KSPLIT_KS, False
         ](ctx, gws, a, b, m, n, k, leaf, p_count, st, rg[0], rg[1])
+        step_count_sync()
         ctx.synchronize()
         var t2 = perf_counter_ns()
         _ksplit_fold_launch(ctx, c, gws, m, n, rg[1])
+        step_count_sync()
         ctx.synchronize()
         var t3 = perf_counter_ns()
         _ = gws
         return (Int(t1 - t0), Int(t2 - t1), Int(t3 - t2))
     var ts = perf_counter_ns()
     identical_gemm_shipped_into(ctx, c, a, b, ws, m, n, k, op)
+    step_count_sync()
     ctx.synchronize()
     return (0, Int(perf_counter_ns() - ts), 0)
 
@@ -4669,9 +4701,12 @@ def identical_gemm[allow_vendor: Bool = True](
         if _fast_vendor_gemm(ctx, c, a, b, m, n, k, op):
             return
     var nws = identical_gemm_workspace_max_floats(m, n, k)
+    step_count_device_alloc()
     var ws = ctx.enqueue_create_buffer[DType.float32](nws)
+    step_count_sync()
     ctx.synchronize()
     identical_gemm_into[allow_vendor](ctx, c, a, b, ws, m, n, k, op)
+    step_count_sync()
     ctx.synchronize()
     _ = ws
 

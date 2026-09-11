@@ -7,6 +7,17 @@ from std.time import perf_counter_ns
 from std.memory import bitcast, memcpy
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
+# DEVIATION 2630: the step phase timers and counters (core/step_phase.mojo;
+# compiled only under -D MOJOLEARN_STEP_PHASE_TIMERS=1).
+from core.step_phase import (
+    StepPhaseClock,
+    step_count_d2h,
+    step_count_device_alloc,
+    step_count_h2d,
+    step_count_host_alloc,
+    step_count_launch,
+    step_count_sync,
+)
 
 from core.identity_trace import IdentityTrace
 from gemm.checks.gemm_backward import (
@@ -94,14 +105,19 @@ def _upload(
     var n_buf = n
     if n_buf < 1:
         n_buf = 1
+    step_count_device_alloc()
     var dev = ctx.enqueue_create_buffer[DType.float32](n_buf)
+    step_count_host_alloc()
     var host = ctx.enqueue_create_host_buffer[DType.float32](n_buf)
+    step_count_sync()
     ctx.synchronize()
     if n > 0:
         memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
     for i in range(n, n_buf):
         host.unsafe_ptr().unsafe_store(i, Float32(0.0))
+    step_count_h2d()
     ctx.enqueue_copy(dst_buf=dev, src_ptr=host.unsafe_ptr())
+    step_count_sync()
     ctx.synchronize()
     _ = host^
     return dev^
@@ -111,13 +127,18 @@ def _download(
     ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int
 ) raises -> List[Float32]:
     """Read a device span for checks or nonfinite-error classification."""
+    step_count_host_alloc()
     var host = ctx.enqueue_create_host_buffer[DType.float32](n)
+    step_count_sync()
     ctx.synchronize()
     if n == len(buf):
+        step_count_d2h()
         ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=buf)
     else:
         var view = buf.create_sub_buffer[DType.float32](0, n)
+        step_count_d2h()
         ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=view)
+    step_count_sync()
     ctx.synchronize()
     var out = List[Float32]()
     for i in range(n):
@@ -130,8 +151,11 @@ def _zeros(ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.float32]:
     var n_buf = n
     if n_buf < 1:
         n_buf = 1
+    step_count_device_alloc()
     var dev = ctx.enqueue_create_buffer[DType.float32](n_buf)
+    step_count_launch()
     dev.enqueue_fill(Float32(0.0))
+    step_count_sync()
     ctx.synchronize()
     return dev^
 
@@ -149,8 +173,11 @@ def _fill_ones(
     var n_buf = n
     if n_buf < 1:
         n_buf = 1
+    step_count_device_alloc()
     var dev = ctx.enqueue_create_buffer[DType.float32](n_buf)
+    step_count_launch()
     dev.enqueue_fill(Float32(1.0))
+    step_count_sync()
     ctx.synchronize()
     return dev^
 
@@ -2048,6 +2075,7 @@ def bwd_attention_weight_grad(
     comptime if SAB_B10_DW_VIA_CHAIN:
         # SABOTAGE: the hand chain over head_dim. INERT at every
         # head_dim <= 128, which is every fixture in this profile.
+        step_count_launch()
         ctx.enqueue_function[bwd_dw_chain_kernel](
             bst.d_attn_weights.unsafe_ptr(),
             bst.d_attn_ctx.unsafe_ptr(),
@@ -2061,12 +2089,14 @@ def bwd_attention_weight_grad(
             grid_dim=(_grid(b * nh * l * s), 1, 1),
             block_dim=(BWD_TPB, 1, 1),
         )
+        step_count_sync()
         ctx.synchronize()
         return
 
     for bb in range(b):
         for h in range(nh):
             var kvh = h // n_rep
+            step_count_launch()
             ctx.enqueue_function[bwd_gather_ctx_head_kernel](
                 bst.head_a.unsafe_ptr(),
                 bst.d_attn_ctx.unsafe_ptr(),
@@ -2078,6 +2108,7 @@ def bwd_attention_weight_grad(
                 grid_dim=(_grid(l * hd), 1, 1),
                 block_dim=(BWD_TPB, 1, 1),
             )
+            step_count_launch()
             ctx.enqueue_function[bwd_gather_kv_head_kernel](
                 bst.head_b.unsafe_ptr(),
                 fwd.v_cache.unsafe_ptr(),
@@ -2089,10 +2120,12 @@ def bwd_attention_weight_grad(
                 grid_dim=(_grid(s * hd), 1, 1),
                 block_dim=(BWD_TPB, 1, 1),
             )
+            step_count_sync()
             ctx.synchronize()
             identical_gemm(
                 ctx, bst.head_c, bst.head_a, bst.head_b, l, s, hd, OP_NT
             )
+            step_count_launch()
             ctx.enqueue_function[bwd_scatter_head_ls_kernel](
                 bst.d_attn_weights.unsafe_ptr(),
                 bst.head_c.unsafe_ptr(),
@@ -2104,6 +2137,7 @@ def bwd_attention_weight_grad(
                 grid_dim=(_grid(l * s), 1, 1),
                 block_dim=(BWD_TPB, 1, 1),
             )
+            step_count_sync()
             ctx.synchronize()
 
 
@@ -2138,6 +2172,7 @@ def bwd_attention_grads(
         for bb in range(b):
             for h in range(nh):
                 var kvh = h // n_rep
+                step_count_launch()
                 ctx.enqueue_function[bwd_gather_head_ls_kernel](
                     bst.head_c.unsafe_ptr(),
                     bst.d_qk_cell.unsafe_ptr(),
@@ -2149,6 +2184,7 @@ def bwd_attention_grads(
                     grid_dim=(_grid(l * s), 1, 1),
                     block_dim=(BWD_TPB, 1, 1),
                 )
+                step_count_launch()
                 ctx.enqueue_function[bwd_gather_kv_head_kernel](
                     bst.head_b.unsafe_ptr(),
                     fwd.k_cache.unsafe_ptr(),
@@ -2160,10 +2196,12 @@ def bwd_attention_grads(
                     grid_dim=(_grid(s * hd), 1, 1),
                     block_dim=(BWD_TPB, 1, 1),
                 )
+                step_count_sync()
                 ctx.synchronize()
                 identical_gemm(
                     ctx, bst.head_a, bst.head_c, bst.head_b, l, hd, s, OP_NN
                 )
+                step_count_launch()
                 ctx.enqueue_function[bwd_scatter_q_head_kernel](
                     bst.d_q_rope.unsafe_ptr(),
                     bst.head_a.unsafe_ptr(),
@@ -2175,8 +2213,10 @@ def bwd_attention_grads(
                     grid_dim=(_grid(l * hd), 1, 1),
                     block_dim=(BWD_TPB, 1, 1),
                 )
+                step_count_sync()
                 ctx.synchronize()
     else:
+        step_count_launch()
         ctx.enqueue_function[bwd_dq_kernel](
             bst.d_q_rope.unsafe_ptr(),
             bst.d_qk_cell.unsafe_ptr(),
@@ -2191,6 +2231,7 @@ def bwd_attention_grads(
             grid_dim=(_grid(b * l * qw), 1, 1),
             block_dim=(BWD_TPB, 1, 1),
         )
+        step_count_sync()
         ctx.synchronize()
 
     # ---- dk ------------------------------------------------------------
@@ -2203,6 +2244,7 @@ def bwd_attention_grads(
             for kv2 in range(nkv):
                 for hh in range(n_rep):
                     var h2 = kv2 * n_rep + hh
+                    step_count_launch()
                     ctx.enqueue_function[bwd_gather_head_ls_kernel](
                         bst.head_c.unsafe_ptr(),
                         bst.d_qk_cell.unsafe_ptr(),
@@ -2214,6 +2256,7 @@ def bwd_attention_grads(
                         grid_dim=(_grid(l * s), 1, 1),
                         block_dim=(BWD_TPB, 1, 1),
                     )
+                    step_count_launch()
                     ctx.enqueue_function[bwd_gather_ctx_head_kernel](
                         bst.head_a.unsafe_ptr(),
                         bst.d_q_rope.unsafe_ptr(),
@@ -2225,6 +2268,7 @@ def bwd_attention_grads(
                         grid_dim=(_grid(l * hd), 1, 1),
                         block_dim=(BWD_TPB, 1, 1),
                     )
+                    step_count_sync()
                     ctx.synchronize()
                     identical_gemm(
                         ctx,
@@ -2239,6 +2283,7 @@ def bwd_attention_grads(
                     var first = 0
                     if hh == 0:
                         first = 1
+                    step_count_launch()
                     ctx.enqueue_function[bwd_accum_kv_head_kernel](
                         bst.d_k_cache.unsafe_ptr(),
                         bst.head_b.unsafe_ptr(),
@@ -2251,8 +2296,10 @@ def bwd_attention_grads(
                         grid_dim=(_grid(s * hd), 1, 1),
                         block_dim=(BWD_TPB, 1, 1),
                     )
+                    step_count_sync()
                     ctx.synchronize()
     else:
+        step_count_launch()
         ctx.enqueue_function[bwd_dk_kernel](
             bst.d_k_cache.unsafe_ptr(),
             bst.d_qk_cell.unsafe_ptr(),
@@ -2266,6 +2313,7 @@ def bwd_attention_grads(
             grid_dim=(_grid(b * nkv * s * hd), 1, 1),
             block_dim=(BWD_TPB, 1, 1),
         )
+        step_count_sync()
         ctx.synchronize()
 
     # ---- dv ------------------------------------------------------------
@@ -2276,6 +2324,7 @@ def bwd_attention_grads(
             for kv3 in range(nkv):
                 for hh3 in range(n_rep):
                     var h3 = kv3 * n_rep + hh3
+                    step_count_launch()
                     ctx.enqueue_function[bwd_gather_head_ls_kernel](
                         bst.head_c.unsafe_ptr(),
                         fwd.weights.unsafe_ptr(),
@@ -2287,6 +2336,7 @@ def bwd_attention_grads(
                         grid_dim=(_grid(l * s), 1, 1),
                         block_dim=(BWD_TPB, 1, 1),
                     )
+                    step_count_launch()
                     ctx.enqueue_function[bwd_gather_ctx_head_kernel](
                         bst.head_a.unsafe_ptr(),
                         bst.d_attn_ctx.unsafe_ptr(),
@@ -2298,6 +2348,7 @@ def bwd_attention_grads(
                         grid_dim=(_grid(l * hd), 1, 1),
                         block_dim=(BWD_TPB, 1, 1),
                     )
+                    step_count_sync()
                     ctx.synchronize()
                     identical_gemm(
                         ctx,
@@ -2312,6 +2363,7 @@ def bwd_attention_grads(
                     var first3 = 0
                     if hh3 == 0:
                         first3 = 1
+                    step_count_launch()
                     ctx.enqueue_function[bwd_accum_kv_head_kernel](
                         bst.d_v_cache.unsafe_ptr(),
                         bst.head_b.unsafe_ptr(),
@@ -2324,8 +2376,10 @@ def bwd_attention_grads(
                         grid_dim=(_grid(s * hd), 1, 1),
                         block_dim=(BWD_TPB, 1, 1),
                     )
+                    step_count_sync()
                     ctx.synchronize()
     else:
+        step_count_launch()
         ctx.enqueue_function[bwd_dv_kernel](
             bst.d_v_cache.unsafe_ptr(),
             fwd.weights.unsafe_ptr(),
@@ -2339,6 +2393,7 @@ def bwd_attention_grads(
             grid_dim=(_grid(b * nkv * s * hd), 1, 1),
             block_dim=(BWD_TPB, 1, 1),
         )
+        step_count_sync()
         ctx.synchronize()
 
 
@@ -2378,6 +2433,7 @@ def bwd_attention_eager_stages(
     # =====================================================================
     # STAGE 18-19. The softmax backward, ONE closed form. DEVIATION 1406.
     # =====================================================================
+    step_count_launch()
     ctx.enqueue_function[bwd_softmax_zdot_kernel](
         bst.attn_zdot.unsafe_ptr(),
         bst.d_attn_weights.unsafe_ptr(),
@@ -2389,8 +2445,10 @@ def bwd_attention_eager_stages(
         grid_dim=(_grid(b * nh * l), 1, 1),
         block_dim=(BWD_TPB, 1, 1),
     )
+    step_count_sync()
     ctx.synchronize()
     _rec(ctx, trace, prefix, 18, bst.attn_zdot, b * nh * l)
+    step_count_launch()
     ctx.enqueue_function[bwd_softmax_ds_kernel](
         bst.d_attn_masked.unsafe_ptr(),
         bst.d_attn_weights.unsafe_ptr(),
@@ -2401,12 +2459,14 @@ def bwd_attention_eager_stages(
         grid_dim=(_grid(cells), 1, 1),
         block_dim=(BWD_TPB, 1, 1),
     )
+    step_count_sync()
     ctx.synchronize()
     _rec(ctx, trace, prefix, 19, bst.d_attn_masked, cells)
 
     # =====================================================================
     # STAGE 20. S13's backward, an EXACT IDENTITY. DEVIATION 1414.
     # =====================================================================
+    step_count_launch()
     ctx.enqueue_function[bwd_mask_grad_kernel](
         bst.d_attn_scores.unsafe_ptr(),
         bst.d_attn_masked.unsafe_ptr(),
@@ -2420,12 +2480,14 @@ def bwd_attention_eager_stages(
         grid_dim=(_grid(cells), 1, 1),
         block_dim=(BWD_TPB, 1, 1),
     )
+    step_count_sync()
     ctx.synchronize()
     _rec(ctx, trace, prefix, 20, bst.d_attn_scores, cells)
 
     # =====================================================================
     # STAGE 21. S12's backward. DEVIATION 1415.
     # =====================================================================
+    step_count_launch()
     ctx.enqueue_function[bwd_scale_kernel](
         bst.d_qk_cell.unsafe_ptr(),
         bst.d_attn_scores.unsafe_ptr(),
@@ -2434,6 +2496,7 @@ def bwd_attention_eager_stages(
         grid_dim=(_grid(cells), 1, 1),
         block_dim=(BWD_TPB, 1, 1),
     )
+    step_count_sync()
     ctx.synchronize()
     _rec(ctx, trace, prefix, 21, bst.d_qk_cell, cells)
 
@@ -2450,7 +2513,7 @@ def bwd_attention_eager_stages(
 # ===========================================================================
 
 
-def bwd_rms_norm(
+def bwd_rms_norm[which: Int = 0](
     ctx: DeviceContext,
     mut dot_out: DeviceBuffer[DType.float32],
     mut dx_out: DeviceBuffer[DType.float32],
@@ -2486,6 +2549,12 @@ def bwd_rms_norm(
     (DEVIATION 851 becoming DEVIATION 1410). Its `k'` is `M`, THE TOKEN
     COUNT, so this output is not batch-composition invariant and the gate
     asserts that it MOVES."""
+    # DEVIATION 2630: `which` picks this call site's timer names at
+    # compile time (1 the input norm, 2 the post-attention norm, 0 any
+    # other caller) and nothing else; the ticks exist only under
+    # -D MOJOLEARN_STEP_PHASE_TIMERS=1 (core/step_phase.mojo).
+    var pc = StepPhaseClock(ctx)
+    step_count_launch()
     ctx.enqueue_function[bwd_norm_dh_kernel](
         dh.unsafe_ptr(),
         dy.unsafe_ptr(),
@@ -2495,7 +2564,9 @@ def bwd_rms_norm(
         grid_dim=(_grid(m * dm), 1, 1),
         block_dim=(BWD_TPB, 1, 1),
     )
+    step_count_sync()
     ctx.synchronize()
+    step_count_launch()
     ctx.enqueue_function[bwd_norm_dot_kernel](
         dot_out.unsafe_ptr(),
         rstd.unsafe_ptr(),
@@ -2509,7 +2580,9 @@ def bwd_rms_norm(
         grid_dim=(_grid(m), 1, 1),
         block_dim=(BWD_TPB, 1, 1),
     )
+    step_count_sync()
     ctx.synchronize()
+    step_count_launch()
     ctx.enqueue_function[bwd_norm_dx_kernel](
         dx_out.unsafe_ptr(),
         dprod.unsafe_ptr(),
@@ -2523,8 +2596,21 @@ def bwd_rms_norm(
         grid_dim=(_grid(m * dm), 1, 1),
         block_dim=(BWD_TPB, 1, 1),
     )
+    step_count_sync()
     ctx.synchronize()
+    comptime if which == 1:
+        pc.tick(ctx, "grad.norm1_kernels")
+    comptime if which == 2:
+        pc.tick(ctx, "grad.norm2_kernels")
+    comptime if which != 1 and which != 2:
+        pc.tick(ctx, "grad.rmsnorm_kernels")
     identical_gemm(ctx, dw_out, ones, dprod, 1, dm, m, OP_NN)
+    comptime if which == 1:
+        pc.tick(ctx, "grad.norm1_dW", "norm_dW")
+    comptime if which == 2:
+        pc.tick(ctx, "grad.norm2_dW", "norm_dW")
+    comptime if which != 1 and which != 2:
+        pc.tick(ctx, "grad.rmsnorm_dW", "norm_dW")
 
 
 # ===========================================================================
@@ -2551,6 +2637,7 @@ def llama_decoder_layer_backward(
     var d_in = _upload(ctx, d_out)
     llama_decoder_layer_backward_device(ctx, bst, fwd, w, cos_tab, sin_tab,
         x_dev, d_in, b, l, pos0, trace, prefix, materialize)
+    step_count_sync()
     ctx.synchronize()
     _ = d_in^
 
@@ -2622,6 +2709,13 @@ def llama_decoder_layer_backward_device(
     var key_lo = llama_key_lo(pos0, window)
     var s = llama_key_span(pos0, l, window)
     var cells = b * nh * l * s
+    # DEVIATION 2630 (core/step_phase.mojo): `pp` is the interval from
+    # entry to the attention (`bwd.mlp_through_oproj`), `pc` its leaves and
+    # the leaves after the attention. Compiled only under
+    # -D MOJOLEARN_STEP_PHASE_TIMERS=1; otherwise each clock stores three
+    # fields and every method returns at once.
+    var pp = StepPhaseClock(ctx)
+    var pc = StepPhaseClock(ctx)
 
     # ---- refusals, before ANY recorded stage --------------------------
     if l <= 0 or b <= 0 or pos0 < 0:
@@ -2684,6 +2778,7 @@ def llama_decoder_layer_backward_device(
             + " REFUSED (row 39)"
         )
 
+    pc.tick(ctx, "grad.refuse_scan")
     var scale = llama_attention_scale(hd)
 
     # =====================================================================
@@ -2691,6 +2786,7 @@ def llama_decoder_layer_backward_device(
     # arguments, so both branches take the incoming gradient unchanged. NO
     # ROUNDING: a copy, not a seam.
     # =====================================================================
+    step_count_launch()
     ctx.enqueue_function[bwd_copy_kernel](
         bst.in_d_residual2.unsafe_ptr(),
         d_out.unsafe_ptr(),
@@ -2698,6 +2794,7 @@ def llama_decoder_layer_backward_device(
         grid_dim=(_grid(m * dm), 1, 1),
         block_dim=(BWD_TPB, 1, 1),
     )
+    step_count_launch()
     ctx.enqueue_function[bwd_copy_kernel](
         bst.d_down_proj_out.unsafe_ptr(),
         d_out.unsafe_ptr(),
@@ -2705,9 +2802,11 @@ def llama_decoder_layer_backward_device(
         grid_dim=(_grid(m * dm), 1, 1),
         block_dim=(BWD_TPB, 1, 1),
     )
+    step_count_sync()
     ctx.synchronize()
     _rec(ctx, trace, prefix, 0, bst.in_d_residual2, m * dm)
     _rec(ctx, trace, prefix, 1, bst.d_down_proj_out, m * dm)
+    pc.tick(ctx, "grad.residual2_copy")
 
     # =====================================================================
     # STAGE 2-3. `down_proj`: forward `OP_NT` at `(m, dm, it)`. ROUTED.
@@ -2716,14 +2815,17 @@ def llama_decoder_layer_backward_device(
         ctx, bst.d_mlp_gated, bst.d_down_proj_out, w.w_down, OP_NT, m, dm, it
     )
     _rec(ctx, trace, prefix, 2, bst.d_mlp_gated, m * it)
+    pc.tick(ctx, "grad.down_dA", "down_dA")
     _route_b(
         ctx, bst.dw_down, bst.d_down_proj_out, fwd.gated, OP_NT, m, dm, it
     )
     _rec(ctx, trace, prefix, 3, bst.dw_down, dm * it)
+    pc.tick(ctx, "grad.down_dB", "down_dB")
 
     # =====================================================================
     # STAGE 4-5. S21's backward, two `pinned_mul`s. ROUTING.
     # =====================================================================
+    step_count_launch()
     ctx.enqueue_function[bwd_mul_kernel](
         bst.d_silu_out.unsafe_ptr(),
         bst.d_mlp_gated.unsafe_ptr(),
@@ -2732,6 +2834,7 @@ def llama_decoder_layer_backward_device(
         grid_dim=(_grid(m * it), 1, 1),
         block_dim=(BWD_TPB, 1, 1),
     )
+    step_count_launch()
     ctx.enqueue_function[bwd_mul_kernel](
         bst.d_up_proj_out.unsafe_ptr(),
         bst.d_mlp_gated.unsafe_ptr(),
@@ -2740,13 +2843,16 @@ def llama_decoder_layer_backward_device(
         grid_dim=(_grid(m * it), 1, 1),
         block_dim=(BWD_TPB, 1, 1),
     )
+    step_count_sync()
     ctx.synchronize()
     _rec(ctx, trace, prefix, 4, bst.d_silu_out, m * it)
     _rec(ctx, trace, prefix, 5, bst.d_up_proj_out, m * it)
+    pc.tick(ctx, "grad.gate_mul")
 
     # =====================================================================
     # STAGE 6. S20's backward. NEW ARITHMETIC. DEVIATION 1411.
     # =====================================================================
+    step_count_launch()
     ctx.enqueue_function[bwd_silu_backward_kernel](
         bst.d_gate_proj_out.unsafe_ptr(),
         bst.d_silu_out.unsafe_ptr(),
@@ -2756,8 +2862,10 @@ def llama_decoder_layer_backward_device(
         grid_dim=(_grid(m * it), 1, 1),
         block_dim=(BWD_TPB, 1, 1),
     )
+    step_count_sync()
     ctx.synchronize()
     _rec(ctx, trace, prefix, 6, bst.d_gate_proj_out, m * it)
+    pc.tick(ctx, "grad.silu")
 
     # =====================================================================
     # STAGE 7-9. `gate_proj` and `up_proj`: forward `OP_NT` at
@@ -2768,14 +2876,19 @@ def llama_decoder_layer_backward_device(
         ctx, bst.dw_gate, bst.d_gate_proj_out, fwd.norm2_out, OP_NT, m, it, dm
     )
     _rec(ctx, trace, prefix, 7, bst.dw_gate, it * dm)
+    pc.tick(ctx, "grad.gate_dB", "gateup_dB")
     _route_b(
         ctx, bst.dw_up, bst.d_up_proj_out, fwd.norm2_out, OP_NT, m, it, dm
     )
     _rec(ctx, trace, prefix, 8, bst.dw_up, it * dm)
+    pc.tick(ctx, "grad.up_dB", "gateup_dB")
     _route_a(
         ctx, bst.tmp0, bst.d_gate_proj_out, w.w_gate, OP_NT, m, it, dm
     )
+    pc.tick(ctx, "grad.gate_dA", "gateup_dA")
     _route_a(ctx, bst.tmp1, bst.d_up_proj_out, w.w_up, OP_NT, m, it, dm)
+    pc.tick(ctx, "grad.up_dA", "gateup_dA")
+    step_count_launch()
     ctx.enqueue_function[bwd_add2_kernel](
         bst.d_norm2_out.unsafe_ptr(),
         bst.tmp0.unsafe_ptr(),
@@ -2784,14 +2897,16 @@ def llama_decoder_layer_backward_device(
         grid_dim=(_grid(m * dm), 1, 1),
         block_dim=(BWD_TPB, 1, 1),
     )
+    step_count_sync()
     ctx.synchronize()
     _rec(ctx, trace, prefix, 9, bst.d_norm2_out, m * dm)
+    pc.tick(ctx, "grad.gateup_fanin")
 
     # =====================================================================
     # STAGE 10-12. `post_attention_layernorm` backward. Its forward INPUT is
     # `residual1.out`.
     # =====================================================================
-    bwd_rms_norm(
+    bwd_rms_norm[2](
         ctx,
         bst.norm2_dot,
         bst.norm2_dx,
@@ -2812,6 +2927,7 @@ def llama_decoder_layer_backward_device(
     _rec(ctx, trace, prefix, 10, bst.norm2_dot, m)
     _rec(ctx, trace, prefix, 11, bst.dw_norm2, dm)
     _rec(ctx, trace, prefix, 12, bst.norm2_dx, m * dm)
+    pc.mark(ctx)
 
     # =====================================================================
     # STAGE 13-14. S22's backward. `residual1.out` fans out into the norm
@@ -2819,6 +2935,7 @@ def llama_decoder_layer_backward_device(
     # the norm branch first. Two terms, so no order to pin -- stated rather
     # than assumed.
     # =====================================================================
+    step_count_launch()
     ctx.enqueue_function[bwd_add2_kernel](
         bst.d_residual1.unsafe_ptr(),
         bst.norm2_dx.unsafe_ptr(),
@@ -2827,8 +2944,11 @@ def llama_decoder_layer_backward_device(
         grid_dim=(_grid(m * dm), 1, 1),
         block_dim=(BWD_TPB, 1, 1),
     )
+    step_count_sync()
     ctx.synchronize()
     _rec(ctx, trace, prefix, 13, bst.d_residual1, m * dm)
+    pc.tick(ctx, "grad.residual1_add")
+    step_count_launch()
     ctx.enqueue_function[bwd_copy_kernel](
         bst.d_o_proj_out.unsafe_ptr(),
         bst.d_residual1.unsafe_ptr(),
@@ -2836,16 +2956,20 @@ def llama_decoder_layer_backward_device(
         grid_dim=(_grid(m * dm), 1, 1),
         block_dim=(BWD_TPB, 1, 1),
     )
+    step_count_sync()
     ctx.synchronize()
     _rec(ctx, trace, prefix, 14, bst.d_o_proj_out, m * dm)
+    pc.tick(ctx, "grad.o_copy")
 
     # =====================================================================
     # STAGE 15-16. `o_proj`: forward `OP_NT` at `(m, dm, qw)`. ROUTED.
     # =====================================================================
     _route_a(ctx, bst.d_attn_ctx, bst.d_o_proj_out, w.w_o, OP_NT, m, dm, qw)
     _rec(ctx, trace, prefix, 15, bst.d_attn_ctx, m * qw)
+    pc.tick(ctx, "grad.o_dA", "proj_dA")
     _route_b(ctx, bst.dw_o, bst.d_o_proj_out, fwd.ctxv, OP_NT, m, dm, qw)
     _rec(ctx, trace, prefix, 16, bst.dw_o, dm * qw)
+    pc.tick(ctx, "grad.o_dB", "proj_dB")
 
     # =====================================================================
     # STAGES 17-24, EAGER OR FUSED, ONE SET OF BITS. With the trace on the
@@ -2854,6 +2978,7 @@ def llama_decoder_layer_backward_device(
     # `d_v_cache`, and 22-24 are recorded FROM THE FUSED OUTPUT. With the
     # trace off only one path runs (see `eager_attention_forward`).
     # =====================================================================
+    pp.tick(ctx, "bwd.mlp_through_oproj")
     var ton = timing_on()
     var tk = Int(perf_counter_ns())
     timing_tick(ctx, ton, tk, "bwd.before_attention")
@@ -2879,10 +3004,12 @@ def llama_decoder_layer_backward_device(
     _rec(ctx, trace, prefix, 23, bst.d_k_cache, b * nkv * s * hd)
     _rec(ctx, trace, prefix, 24, bst.d_v_cache, b * nkv * s * hd)
     timing_tick(ctx, ton, tk, "bwd.attention")
+    pc.mark(ctx)
 
     # =====================================================================
     # STAGE 25-26. The KV append's backward: a SLICE, no arithmetic.
     # =====================================================================
+    step_count_launch()
     ctx.enqueue_function[bwd_kv_slice_kernel](
         bst.d_k_rope.unsafe_ptr(),
         bst.d_k_cache.unsafe_ptr(),
@@ -2895,6 +3022,7 @@ def llama_decoder_layer_backward_device(
         grid_dim=(_grid(m * kw), 1, 1),
         block_dim=(BWD_TPB, 1, 1),
     )
+    step_count_launch()
     ctx.enqueue_function[bwd_kv_slice_kernel](
         bst.d_v_proj_out.unsafe_ptr(),
         bst.d_v_cache.unsafe_ptr(),
@@ -2907,9 +3035,11 @@ def llama_decoder_layer_backward_device(
         grid_dim=(_grid(m * kw), 1, 1),
         block_dim=(BWD_TPB, 1, 1),
     )
+    step_count_sync()
     ctx.synchronize()
     _rec(ctx, trace, prefix, 25, bst.d_k_rope, m * kw)
     _rec(ctx, trace, prefix, 26, bst.d_v_proj_out, m * kw)
+    pc.tick(ctx, "grad.kv_slice")
 
     # =====================================================================
     # STAGE 27-28. The RoPE backward, on q and on k. DEVIATION 1412. ONE
@@ -2917,6 +3047,7 @@ def llama_decoder_layer_backward_device(
     # not pass through here -- easy to get wrong and impossible to see in
     # the output, because a rotated gradient is still a plausible gradient.
     # =====================================================================
+    step_count_launch()
     ctx.enqueue_function[bwd_rope_kernel](
         bst.d_q_proj_out.unsafe_ptr(),
         bst.d_q_rope.unsafe_ptr(),
@@ -2930,6 +3061,7 @@ def llama_decoder_layer_backward_device(
         grid_dim=(_grid(m * qw), 1, 1),
         block_dim=(BWD_TPB, 1, 1),
     )
+    step_count_launch()
     ctx.enqueue_function[bwd_rope_kernel](
         bst.d_k_proj_out.unsafe_ptr(),
         bst.d_k_rope.unsafe_ptr(),
@@ -2943,9 +3075,11 @@ def llama_decoder_layer_backward_device(
         grid_dim=(_grid(m * kw), 1, 1),
         block_dim=(BWD_TPB, 1, 1),
     )
+    step_count_sync()
     ctx.synchronize()
     _rec(ctx, trace, prefix, 27, bst.d_q_proj_out, m * qw)
     _rec(ctx, trace, prefix, 28, bst.d_k_proj_out, m * kw)
+    pc.tick(ctx, "grad.rope")
 
     # =====================================================================
     # STAGE 29-32. The three input projections. ROUTED, plus THE ONE
@@ -2953,13 +3087,20 @@ def llama_decoder_layer_backward_device(
     # =====================================================================
     _route_b(ctx, bst.dw_q, bst.d_q_proj_out, fwd.norm1_out, OP_NT, m, qw, dm)
     _rec(ctx, trace, prefix, 29, bst.dw_q, qw * dm)
+    pc.tick(ctx, "grad.q_dB", "proj_dB")
     _route_b(ctx, bst.dw_k, bst.d_k_proj_out, fwd.norm1_out, OP_NT, m, kw, dm)
     _rec(ctx, trace, prefix, 30, bst.dw_k, kw * dm)
+    pc.tick(ctx, "grad.k_dB", "proj_dB")
     _route_b(ctx, bst.dw_v, bst.d_v_proj_out, fwd.norm1_out, OP_NT, m, kw, dm)
     _rec(ctx, trace, prefix, 31, bst.dw_v, kw * dm)
+    pc.tick(ctx, "grad.v_dB", "proj_dB")
     _route_a(ctx, bst.tmp0, bst.d_q_proj_out, w.w_q, OP_NT, m, qw, dm)
+    pc.tick(ctx, "grad.q_dA", "proj_dA")
     _route_a(ctx, bst.tmp1, bst.d_k_proj_out, w.w_k, OP_NT, m, kw, dm)
+    pc.tick(ctx, "grad.k_dA", "proj_dA")
     _route_a(ctx, bst.tmp2, bst.d_v_proj_out, w.w_v, OP_NT, m, kw, dm)
+    pc.tick(ctx, "grad.v_dA", "proj_dA")
+    step_count_launch()
     ctx.enqueue_function[bwd_add3_kernel](
         bst.d_norm1_out.unsafe_ptr(),
         bst.tmp0.unsafe_ptr(),
@@ -2969,8 +3110,10 @@ def llama_decoder_layer_backward_device(
         grid_dim=(_grid(m * dm), 1, 1),
         block_dim=(BWD_TPB, 1, 1),
     )
+    step_count_sync()
     ctx.synchronize()
     _rec(ctx, trace, prefix, 32, bst.d_norm1_out, m * dm)
+    pc.tick(ctx, "grad.qkv_fanin")
 
     # =====================================================================
     # STAGE 33-35. `input_layernorm` backward. Its forward INPUT is the
@@ -2991,7 +3134,7 @@ def llama_decoder_layer_backward_device(
     # this argument. That is a one-line edit to a file this lane may not
     # touch.
     # =====================================================================
-    bwd_rms_norm(
+    bwd_rms_norm[1](
         ctx,
         bst.norm1_dot,
         bst.norm1_dx,
@@ -3012,11 +3155,13 @@ def llama_decoder_layer_backward_device(
     _rec(ctx, trace, prefix, 33, bst.norm1_dot, m)
     _rec(ctx, trace, prefix, 34, bst.dw_norm1, dm)
     _rec(ctx, trace, prefix, 35, bst.norm1_dx, m * dm)
+    pc.mark(ctx)
 
     # =====================================================================
     # STAGE 36. THE OUTPUT. `x` fans out into the norm (LDL:306) and into
     # the residual add (LDL:317); FORWARD-USE order puts the norm first.
     # =====================================================================
+    step_count_launch()
     ctx.enqueue_function[bwd_add2_kernel](
         bst.d_x.unsafe_ptr(),
         bst.norm1_dx.unsafe_ptr(),
@@ -3025,6 +3170,8 @@ def llama_decoder_layer_backward_device(
         grid_dim=(_grid(m * dm), 1, 1),
         block_dim=(BWD_TPB, 1, 1),
     )
+    step_count_sync()
     ctx.synchronize()
     _rec(ctx, trace, prefix, 36, bst.d_x, m * dm)
+    pc.tick(ctx, "grad.x_add")
     timing_tick(ctx, ton, tk, "bwd.after_attention")

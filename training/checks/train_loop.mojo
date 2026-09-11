@@ -117,6 +117,16 @@ from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 from std.os import getenv
 from max.gpu.host import DeviceBuffer, DeviceContext
+# DEVIATION 2630: the step phase timers and counters (core/step_phase.mojo;
+# compiled only under -D MOJOLEARN_STEP_PHASE_TIMERS=1).
+from core.step_phase import (
+    step_count_d2h,
+    step_count_device_alloc,
+    step_count_h2d,
+    step_count_host_alloc,
+    step_count_launch,
+    step_count_sync,
+)
 
 from core.identity_trace import FNV_OFFSET, IdentityTrace, fnv1a64_bytes
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -774,15 +784,21 @@ def download_f32(
     var out = List[Float32]()
     if n < 1:
         return out^
+    step_count_host_alloc()
     var h = ctx.enqueue_create_host_buffer[DType.float32](n)
+    step_count_sync()
     ctx.synchronize()
     if n == len(buf):
+        step_count_d2h()
         ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=buf)
     else:
         var view = buf.create_sub_buffer[DType.float32](0, n)
+        step_count_d2h()
         ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=view)
+        step_count_sync()
         ctx.synchronize()
         _ = view
+    step_count_sync()
     ctx.synchronize()
     for i in range(n):
         out.append(h.unsafe_ptr().unsafe_load(i))
@@ -1006,8 +1022,10 @@ def _zeros(ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.float32]:
     var k = n
     if k < 1:
         k = 1
+    step_count_device_alloc()
     var b = ctx.enqueue_create_buffer[DType.float32](k)
     ctx.enqueue_memset(b, Float32(0.0))
+    step_count_sync()
     ctx.synchronize()
     return b^
 
@@ -1016,8 +1034,10 @@ def _zeros_i32(ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.int32]:
     var k = n
     if k < 1:
         k = 1
+    step_count_device_alloc()
     var b = ctx.enqueue_create_buffer[DType.int32](k)
     ctx.enqueue_memset(b, Int32(0))
+    step_count_sync()
     ctx.synchronize()
     return b^
 
@@ -1028,12 +1048,17 @@ def _upload(
     var n = len(values)
     if n < 1:
         return _zeros(ctx, 1)
+    step_count_host_alloc()
     var h = ctx.enqueue_create_host_buffer[DType.float32](n)
+    step_count_sync()
     ctx.synchronize()
     for i in range(n):
         h.unsafe_ptr().unsafe_store(i, values[i])
+    step_count_device_alloc()
     var d = ctx.enqueue_create_buffer[DType.float32](n)
+    step_count_h2d()
     ctx.enqueue_copy(dst_buf=d, src_ptr=h.unsafe_ptr())
+    step_count_sync()
     ctx.synchronize()
     _ = h
     return d^
@@ -1045,12 +1070,17 @@ def _upload_i32(
     var n = len(values)
     if n < 1:
         return _zeros_i32(ctx, 1)
+    step_count_host_alloc()
     var h = ctx.enqueue_create_host_buffer[DType.int32](n)
+    step_count_sync()
     ctx.synchronize()
     for i in range(n):
         h.unsafe_ptr().unsafe_store(i, values[i])
+    step_count_device_alloc()
     var d = ctx.enqueue_create_buffer[DType.int32](n)
+    step_count_h2d()
     ctx.enqueue_copy(dst_buf=d, src_ptr=h.unsafe_ptr())
+    step_count_sync()
     ctx.synchronize()
     _ = h
     return d^
@@ -1269,6 +1299,7 @@ def _copy_into(
 ) raises:
     if count < 1:
         return
+    step_count_launch()
     ctx.enqueue_function[train_copy_range_kernel](
         dst.unsafe_ptr(),
         src.unsafe_ptr(),
@@ -1305,6 +1336,7 @@ def unpack_params(
     _copy_into(ctx, w.w_up, tb.param, 0, o[PID_W_UP], param_id_count(PID_W_UP))
     _copy_into(ctx, w.w_down, tb.param, 0, o[PID_W_DOWN], param_id_count(PID_W_DOWN))
     _copy_into(ctx, tb.lm_w, tb.param, 0, o[PID_LM_HEAD], param_id_count(PID_LM_HEAD))
+    step_count_sync()
     ctx.synchronize()
 
 
@@ -1332,6 +1364,7 @@ def pack_grads(
     _copy_into(ctx, tb.grad, bst.dw_up, o[PID_W_UP], 0, param_id_count(PID_W_UP))
     _copy_into(ctx, tb.grad, bst.dw_down, o[PID_W_DOWN], 0, param_id_count(PID_W_DOWN))
     _copy_into(ctx, tb.grad, tb.dw_lm, o[PID_LM_HEAD], 0, param_id_count(PID_LM_HEAD))
+    step_count_sync()
     ctx.synchronize()
 
 
@@ -1342,14 +1375,20 @@ def upload_batch(
     comptime M = TRAIN_B * TRAIN_L
     var inp = batch_inputs(ids)
     var tgt = batch_targets(ids)
+    step_count_host_alloc()
     var hi = ctx.enqueue_create_host_buffer[DType.int32](M)
+    step_count_host_alloc()
     var ht = ctx.enqueue_create_host_buffer[DType.int32](M)
+    step_count_sync()
     ctx.synchronize()
     for i in range(M):
         hi.unsafe_ptr().unsafe_store(i, inp[i])
         ht.unsafe_ptr().unsafe_store(i, tgt[i])
+    step_count_h2d()
     ctx.enqueue_copy(dst_buf=tb.ids, src_ptr=hi.unsafe_ptr())
+    step_count_h2d()
     ctx.enqueue_copy(dst_buf=tb.targets, src_ptr=ht.unsafe_ptr())
+    step_count_sync()
     ctx.synchronize()
     _ = hi
     _ = ht
@@ -1411,6 +1450,7 @@ def train_step(
     # ---- 2. embed ------------------------------------------------------
     # WRITTEN, NO GATE. Stage 2 of twelve.
     identical_embedding_forward_into(ctx, tb.x, tb.emb_w, tb.ids, M, emb_cfg)
+    step_count_sync()
     ctx.synchronize()
 
     # ---- 3. block forward ----------------------------------------------
@@ -1428,12 +1468,14 @@ def train_step(
         op_trace,
         String("fwd.") + step_tag(t),
     )
+    step_count_sync()
     ctx.synchronize()
 
     # ---- 4. lm_head. `logits[M, V] = residual2[M, DM] . lm_w[V, DM]^T` --
     identical_gemm_into(
         ctx, tb.logits, stages.residual2, tb.lm_w, tb.head_ws, M, V, DM, OP_NT
     )
+    step_count_sync()
     ctx.synchronize()
 
     # ---- 5 and 6. loss and its backward, enqueued back to back ----------
@@ -1474,6 +1516,7 @@ def train_step(
         M,
         ce_cfg,
     )
+    step_count_sync()
     ctx.synchronize()
 
     # `count` is the HOST integer `M`, and it is `M` because no row is ever
@@ -1501,6 +1544,7 @@ def train_step(
         DM,
         OP_NT,
     )
+    step_count_sync()
     ctx.synchronize()
 
     # ---- 8. block backward ----------------------------------------------
@@ -1528,6 +1572,7 @@ def train_step(
         op_trace,
         String("bwd.") + step_tag(t),
     )
+    step_count_sync()
     ctx.synchronize()
 
     # ---- 9. embedding backward -------------------------------------------
@@ -1546,6 +1591,7 @@ def train_step(
         M,
         emb_cfg,
     )
+    step_count_sync()
     ctx.synchronize()
 
     # ---- 10. pack ---------------------------------------------------------
@@ -1679,6 +1725,7 @@ def run_training(
         var us = String(getenv("MOJOLEARN_TRAIN_ULPS"))
         if us != "":
             nulps = Int(atol(us))
+        step_count_launch()
         ctx.enqueue_function[train_ulp_perturb_kernel](
             tb.param.unsafe_ptr(),
             Int32(idx),
@@ -1686,6 +1733,7 @@ def run_training(
             grid_dim=(1, 1, 1),
             block_dim=(1, 1, 1),
         )
+        step_count_sync()
         ctx.synchronize()
 
     run.param0 = download_f32(ctx, tb.param, tb.n_total)
