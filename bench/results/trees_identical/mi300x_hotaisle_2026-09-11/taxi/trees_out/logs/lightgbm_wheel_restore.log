@@ -1,0 +1,9 @@
+Collecting lightgbm==4.7.0
+  Using cached lightgbm-4.7.0-py3-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (18 kB)
+Using cached lightgbm-4.7.0-py3-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (3.5 MB)
+Installing collected packages: lightgbm
+  Attempting uninstall: lightgbm
+    Found existing installation: lightgbm 4.7.0
+    Uninstalling lightgbm-4.7.0:
+      Successfully uninstalled lightgbm-4.7.0
+Successfully installed lightgbm-4.7.0

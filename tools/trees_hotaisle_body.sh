@@ -2,8 +2,7 @@
 # RUNS ON THE HOT AISLE MI300X VM, as the leg body of tools/hotaisle_leg.sh
 # (lane trees-hotaisle, 2026-09-11). Mirrors tools/trees_amd_remote.sh and the
 # MI325X batches (bench/results/trees_identical/mi325x_2026-09-11_taxi_istella/
-# logs/) for ONE dataset per VM, because a VM lives 60 minutes and has no
-# shared volume:
+# logs/). A VM lives 60 minutes and has no shared volume.
 #
 #   MOJOLEARN_HOTAISLE_SPEC=13core MOJOLEARN_HOTAISLE_LANE=trees-hotaisle \
 #   MOJOLEARN_GEMM_LEG_EXTRA=tools/trees_hotaisle_body.sh \
@@ -11,27 +10,42 @@
 #   MOJOLEARN_HOTAISLE_EXTRA_ENV='MOJOLEARN_TREES_HA_LEG=taxi' \
 #   bash tools/hotaisle_leg.sh amd --rent --minutes 60 --skip-gates
 #
-#   MOJOLEARN_TREES_HA_LEG=taxi|istella     which dataset this VM measures
+#   MOJOLEARN_TREES_HA_LEG=taxi|istella|taxi,istella   datasets, in order
+#   MOJOLEARN_TREES_HA_CELLS=all|xgb   all (default): every cell below.
+#       xgb: only depthwise and lossguide against XGBoost on the GPU, ours
+#       interleaved, rocm-smi sampled per cell; refuses before any timing
+#       unless amd_xgboost installed and its probe ran on the GPU. AMD ships
+#       amd_xgboost only as manylinux_2_39 wheels, so the runtime needs glibc
+#       2.39 (MOJOLEARN_HOTAISLE_IMAGE=rocm/dev-ubuntu-24.04:6.4.1-complete);
+#       the default ubuntu-22.04 image has 2.35 and pip finds no wheel.
 #   MOJOLEARN_TREES_HA_LGBM_OPENCL=1|0      try the LightGBM OpenCL build (default 1)
 #   MOJOLEARN_TREES_HA_OUT=<dir>            default /root/gemm_leg_out (the runner fetches it)
 #
 # Setup (untimed, before any cell): box facts; the IDENTICAL bindings base,
-# gbdt, rf, trees and the FAST bindings gbdt, rf, trees; a Python 3.12 venv
-# with CatBoost, scikit-learn, LightGBM and AMD's ROCm XGBoost build
-# `amd_xgboost` (GPU probe beside rocm-smi); the ONE LightGBM retry
-# (min_child_weight 1e-3, an OpenCL build tried inside a 15 minute cap); the
-# dataset, sha256 checked against the Mac's copy. Then the cells, 1 warm-up
-# plus 5 rounds, arms interleaved round by round, opponents imported first:
-# RF 1M, ET 1M, RF 2M (scikit-learn CPU), symmetric (CatBoost CPU), depthwise
-# (CatBoost CPU, XGBoost GPU), lossguide (CatBoost CPU, XGBoost GPU,
-# LightGBM), then FAST beside IDENTICAL for the five lanes, ours only.
-# Our GBDT IDENTICAL arms are not deterministic on AMD today; the per-round
-# hashes in every FSPEED line are the record. POSIX sh.
+# gbdt, rf, trees and (cells all) the FAST bindings gbdt, rf, trees; a Python
+# 3.12 venv with CatBoost, scikit-learn, LightGBM and AMD's ROCm XGBoost build
+# `amd_xgboost` (GPU probe beside rocm-smi); (cells all) the ONE LightGBM
+# retry (min_child_weight 1e-3, an OpenCL build tried inside a 15 minute
+# cap); the datasets, sha256 checked against the Mac's copies. Then per
+# dataset, 1 warm-up plus 5 rounds, arms interleaved round by round,
+# opponents imported first: RF 1M, ET 1M, RF 2M (scikit-learn CPU),
+# symmetric (CatBoost CPU), depthwise (CatBoost CPU, XGBoost), lossguide
+# (CatBoost CPU, XGBoost, LightGBM), then FAST beside IDENTICAL for the five
+# lanes, ours only. Every FSPEED line carries its round's hash. POSIX sh.
 set -u
 LEG="${MOJOLEARN_TREES_HA_LEG:-}"
-case "$LEG" in
-    taxi|istella) ;;
-    *) echo "MOJOLEARN_TREES_HA_LEG must be taxi or istella (got '$LEG')"; exit 2 ;;
+LEGS="$(printf '%s' "$LEG" | tr ',' ' ')"
+[ -n "$LEGS" ] || { echo "MOJOLEARN_TREES_HA_LEG must name taxi, istella or taxi,istella"; exit 2; }
+for _d in $LEGS; do
+    case "$_d" in
+        taxi|istella) ;;
+        *) echo "MOJOLEARN_TREES_HA_LEG: unknown dataset '$_d' (taxi, istella)"; exit 2 ;;
+    esac
+done
+CELLS="${MOJOLEARN_TREES_HA_CELLS:-all}"
+case "$CELLS" in
+    all|xgb) ;;
+    *) echo "MOJOLEARN_TREES_HA_CELLS must be all or xgb (got '$CELLS')"; exit 2 ;;
 esac
 [ "$(id -u)" = 0 ] || { echo "the body needs root (/root paths); id -u is $(id -u)"; exit 5; }
 ROOT=/root/mojolearn
@@ -53,7 +67,7 @@ export DEBIAN_FRONTEND=noninteractive
 mkdir -p "$LOGS" "$DATA" "$OUT/speed"
 cd "$ROOT" || exit 9
 PATH="$HOME/.pixi/bin:$PATH"; export PATH
-echo "started=$(date -u +%Y-%m-%dT%H:%M:%SZ) leg=$LEG commit=$(cat SHIPPED_COMMIT.txt 2>/dev/null) gpu_archs=${MOJOLEARN_GPU_ARCHS:-} target_column=${MOJOLEARN_TARGET_COLUMN:-}" > "$OUT/setup.txt"
+echo "started=$(date -u +%Y-%m-%dT%H:%M:%SZ) datasets=$LEGS cells=$CELLS commit=$(cat SHIPPED_COMMIT.txt 2>/dev/null) gpu_archs=${MOJOLEARN_GPU_ARCHS:-} target_column=${MOJOLEARN_TARGET_COLUMN:-}" > "$OUT/setup.txt"
 
 # The Mac's copies (the MI325X leg uploaded the same taxi bytes).
 TAXI_SHA_01=c4d59da7bbc8abaeeeb1727947ee93d9891a71acb42854bd80db1571b2030510
@@ -84,6 +98,7 @@ box_facts() {
     free -g > "$OUT/free.txt" 2>&1
     uname -a > "$OUT/uname.txt"
     cat /etc/os-release > "$OUT/os.txt" 2>&1
+    { ldd --version 2>&1 | head -1; } > "$OUT/glibc.txt"
     df -h / /root > "$OUT/df.txt" 2>&1
 }
 
@@ -101,11 +116,13 @@ track_mojo() {
     ls -la python/mojolearn/identical/ > "$OUT/bindings_listing.txt" 2>&1
     mkdir -p /root/bins/baseline && cp python/mojolearn/identical/*.so /root/bins/baseline/
     sha256sum /root/bins/baseline/*.so > "$OUT/setup_so_sha256.txt" 2>&1
-    # FAST (base ships IDENTICAL only, DEVIATION 2490).
-    for _b in gbdt rf trees; do
-        step "build_fast_$_b" 1500 env MOJOLEARN_NUMERIC_MODE=fast bash "bindings/build_$_b.sh"
-    done
-    sha256sum python/mojolearn/*.so > "$OUT/fast_so_sha256.txt" 2>&1
+    if [ "$CELLS" = all ]; then
+        # FAST (base ships IDENTICAL only, DEVIATION 2490).
+        for _b in gbdt rf trees; do
+            step "build_fast_$_b" 1500 env MOJOLEARN_NUMERIC_MODE=fast bash "bindings/build_$_b.sh"
+        done
+        sha256sum python/mojolearn/*.so > "$OUT/fast_so_sha256.txt" 2>&1
+    fi
     : > "$OUT/track_mojo.done"
 }
 
@@ -179,19 +196,20 @@ track_py() {
     else
         echo "xgb_rocm_works=NO (install failed)" >> "$OUT/setup.txt"
     fi
-    if ! grep -q '^xgb_rocm_works=yes' "$OUT/setup.txt"; then
+    if ! grep -q '^xgb_rocm_works=yes' "$OUT/setup.txt" && [ "$CELLS" = all ]; then
         # No AMD GPU path installed: the PyPI build on the CPU, labeled CPU.
         step pip_xgboost_cpu 600 "$PY" -m pip install --no-input --disable-pip-version-check --force-reinstall xgboost
     fi
-    "$PY" -c "import sys, numpy, sklearn, catboost, lightgbm, xgboost, joblib; print('python', sys.version.split()[0]); print('numpy', numpy.__version__); print('sklearn', sklearn.__version__); print('catboost', catboost.__version__); print('lightgbm', lightgbm.__version__, lightgbm.__file__); print('xgboost', xgboost.__version__, xgboost.__file__); print('joblib.cpu_count', joblib.cpu_count())" > "$OUT/versions.txt" 2>&1
+    "$PY" -c "import sys, numpy, sklearn, catboost, lightgbm, joblib; print('python', sys.version.split()[0]); print('numpy', numpy.__version__); print('sklearn', sklearn.__version__); print('catboost', catboost.__version__); print('lightgbm', lightgbm.__version__, lightgbm.__file__); print('joblib.cpu_count', joblib.cpu_count())" > "$OUT/versions.txt" 2>&1
+    "$PY" -c "import xgboost; print('xgboost', xgboost.__version__, xgboost.__file__)" >> "$OUT/versions.txt" 2>&1
     : > "$OUT/track_py.done"
 }
 
 track_lgbm() {
     # THE ONE LightGBM RETRY, 15 minutes from here, no second attempt.
     wait_for "$OUT/track_py.done"
-    if [ "${MOJOLEARN_TREES_HA_LGBM_OPENCL:-1}" != 1 ]; then
-        echo "lightgbm_opencl_works=SKIPPED (MOJOLEARN_TREES_HA_LGBM_OPENCL=0: the one OpenCL attempt ran on the other leg)" >> "$OUT/setup.txt"
+    if [ "$CELLS" != all ] || [ "${MOJOLEARN_TREES_HA_LGBM_OPENCL:-1}" != 1 ]; then
+        echo "lightgbm_opencl_works=SKIPPED (cells=$CELLS, MOJOLEARN_TREES_HA_LGBM_OPENCL=${MOJOLEARN_TREES_HA_LGBM_OPENCL:-1}; the one OpenCL attempt ran on another leg)" >> "$OUT/setup.txt"
         : > "$OUT/track_lgbm.done"
         return 0
     fi
@@ -239,14 +257,13 @@ fetch_taxi() {
             && mv "$_d/yellow_tripdata_$_m.parquet.part" "$_d/yellow_tripdata_$_m.parquet"
     done > "$LOGS/fetch_taxi.log" 2>&1
     rm -f "$_d"/*.part
+    sha256sum "$_d"/*.parquet > "$OUT/taxi_parquet_sha256.txt" 2>&1
     if [ "$(sha_of "$_d/yellow_tripdata_2024-01.parquet")" = "$TAXI_SHA_01" ] \
        && [ "$(sha_of "$_d/yellow_tripdata_2024-02.parquet")" = "$TAXI_SHA_02" ]; then
         echo "taxi_fetch=cdn, sha256 of both months matches the Mac $(date -u +%H:%M:%S)" >> "$OUT/setup.txt"
-        sha256sum "$_d"/*.parquet > "$OUT/taxi_parquet_sha256.txt"
         return 0
     fi
     echo "taxi_fetch=FAILED or bytes differ from the Mac $(date -u +%H:%M:%S)" >> "$OUT/setup.txt"
-    sha256sum "$_d"/*.parquet > "$OUT/taxi_parquet_sha256.txt" 2>&1
     return 3
 }
 
@@ -272,13 +289,15 @@ fetch_istella() {
 }
 
 track_data() {
-    # The download needs no Python and starts at once; the decode waits for pip.
-    if "fetch_$LEG"; then
-        wait_for "$OUT/track_pip_base.done"
-        step "decode_$LEG" 1500 "$PY" tools/speed_gbdt_arm.py --download "$LEG"
-        if [ -s "$DATA/$LEG/${LEG}_speed.npz" ]; then : > "$OUT/data.ok"; fi
-    fi
-    ls -la "$DATA/$LEG" > "$OUT/datasets_listing.txt" 2>&1
+    # Downloads need no Python and start at once; each decode waits for pip.
+    for _d in $LEGS; do
+        if "fetch_$_d"; then
+            wait_for "$OUT/track_pip_base.done"
+            step "decode_$_d" 1500 "$PY" tools/speed_gbdt_arm.py --download "$_d"
+            if [ -s "$DATA/$_d/${_d}_speed.npz" ]; then : > "$OUT/data.ok.$_d"; fi
+        fi
+        ls -la "$DATA/$_d" >> "$OUT/datasets_listing.txt" 2>&1
+    done
     : > "$OUT/track_data.done"
 }
 
@@ -299,50 +318,66 @@ fi
 ( cd python && MOJOLEARN_NUMERIC_MODE=identical "$PY" -c "import mojolearn, numpy; print('import OK', mojolearn.__file__, mojolearn.vendor())" ) \
     > "$LOGS/import_identical.log" 2>&1
 echo "import_identical=$? $(date -u +%H:%M:%S)" >> "$OUT/setup.txt"
-( cd python && "$PY" -c "
+if [ "$CELLS" = all ]; then
+    ( cd python && "$PY" -c "
 import mojolearn
 for cls in (mojolearn.GradientBoosting, mojolearn.RandomForestClassifier, mojolearn.ExtraTreesClassifier):
     m = cls(numeric_mode='fast')
     print(cls.__name__, 'fast ->', m.numeric_mode_used(), m.vendor_used())
 " ) > "$LOGS/import_fast.log" 2>&1
-echo "import_fast=$? $(date -u +%H:%M:%S)" >> "$OUT/setup.txt"
+    echo "import_fast=$? $(date -u +%H:%M:%S)" >> "$OUT/setup.txt"
+fi
 echo "setup_finished=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$OUT/setup.txt"
 : > "$OUT/setup.done"
 cat "$OUT/setup.txt"
 grep -q '^import_identical=0' "$OUT/setup.txt" || { echo "import_identical failed"; tail -20 "$LOGS/import_identical.log"; exit 3; }
-[ -f "$OUT/data.ok" ] || { echo "no $LEG data; refusing (the loader would fall back to a synthetic fixture)"; exit 4; }
-
-# ---------------------------------------------------------------- cells
 XGB=xgboost-cpu; LGB=lightgbm-cpu
 grep -q '^xgb_rocm_works=yes' "$OUT/setup.txt" && XGB=xgboost-gpu
+if [ "$CELLS" = xgb ] && [ "$XGB" != xgboost-gpu ]; then
+    echo "cells=xgb REFUSED: amd_xgboost is not on the GPU here ($(grep '^xgb_rocm_works' "$OUT/setup.txt" | tail -1)); nothing timed"
+    exit 6
+fi
+
+# ---------------------------------------------------------------- cells
 LGB_PARAMS="min_child_weight=1e-3"
 if grep -q '^lightgbm_opencl_works=yes' "$OUT/setup.txt"; then
     LGB=lightgbm-opencl; LGB_PARAMS="min_child_weight=1e-3,gpu_use_dp=True"
 fi
-export MOJOLEARN_SPEED_PY="$PY" MOJOLEARN_SPEED_DEVICES=cpu,gpu,opencl MOJOLEARN_SPEED_OPPONENTS_FIRST=1
-echo "arms: xgboost=$XGB lightgbm=$LGB lightgbm_params=$LGB_PARAMS python=$PY" | tee -a "$OUT/ab.txt"
+export MOJOLEARN_SPEED_PY="$PY" MOJOLEARN_SPEED_DEVICES=cpu,gpu,opencl
+echo "arms: cells=$CELLS xgboost=$XGB lightgbm=$LGB lightgbm_params=$LGB_PARAMS python=$PY" | tee -a "$OUT/ab.txt"
 "$PY" -c "import catboost, sklearn, xgboost, lightgbm, numpy, sys; print('python', sys.version.split()[0]); print('catboost', catboost.__version__); print('sklearn', sklearn.__version__); print('xgboost', xgboost.__version__, xgboost.__file__); print('lightgbm', lightgbm.__version__, lightgbm.__file__); print('numpy', numpy.__version__)" > "$OUT/versions_used.txt" 2>&1
-full() {  # <lane> <rows> <arms>
-    echo "cell $1 $LEG $2 $(date -u +%T) load $(cut -d' ' -f1-3 /proc/loadavg)" >> "$OUT/ab.txt"
-    MOJOLEARN_SPEED_ARMS="$3" $AB speed baseline "$1" "$LEG" "$2" 5 full
+full() {  # <dataset> <lane> <rows> <arms>
+    echo "cell $2 $1 $3 $(date -u +%T) load $(cut -d' ' -f1-3 /proc/loadavg)" >> "$OUT/ab.txt"
+    MOJOLEARN_SPEED_OPPONENTS_FIRST=1 MOJOLEARN_SPEED_ARMS="$4" $AB speed baseline "$2" "$1" "$3" 5 full
 }
-full rf 1000000 sklearn-rf-cpu
-full et 1000000 sklearn-et-cpu
-mark PHASE_F1_DONE
-full rf 2000000 sklearn-rf-cpu
-mark PHASE_F2_DONE
-full gbdt-symmetric 1000000 catboost-cpu
-full gbdt-depthwise 1000000 "catboost-cpu,$XGB"
-MOJOLEARN_SPEED_LGBM_PARAMS="$LGB_PARAMS" full gbdt-lossguide 1000000 "catboost-cpu,$XGB,$LGB"
-mark PHASE_G_DONE
-
-# FAST beside IDENTICAL, ours only, interleaved in one process (ET, the
-# slowest, last).
-unset MOJOLEARN_SPEED_OPPONENTS_FIRST
-for L in rf gbdt-symmetric gbdt-depthwise gbdt-lossguide et; do
-    echo "cell fast.$L $LEG $(date -u +%T) load $(cut -d' ' -f1-3 /proc/loadavg)" >> "$OUT/ab.txt"
-    MOJOLEARN_SPEED_OURS_AB="numeric_mode='fast'" MOJOLEARN_SPEED_TAG=fastab \
-        $AB speed baseline "$L" "$LEG" 1000000 5 ours
+for DS in $LEGS; do
+    if [ ! -f "$OUT/data.ok.$DS" ]; then
+        echo "no $DS data; its cells are skipped (the loader would fall back to a synthetic fixture)" | tee -a "$OUT/ab.txt"
+        continue
+    fi
+    if [ "$CELLS" = xgb ]; then
+        # XGBoost on the GPU against ours, rocm-smi sampled beside each cell.
+        MOJOLEARN_SPEED_SMI_SAMPLE=1 MOJOLEARN_SPEED_TAG=xgbgpu full "$DS" gbdt-depthwise 1000000 "$XGB"
+        MOJOLEARN_SPEED_SMI_SAMPLE=1 MOJOLEARN_SPEED_TAG=xgbgpu full "$DS" gbdt-lossguide 1000000 "$XGB"
+        mark "PHASE_XGB_${DS}_DONE"
+        continue
+    fi
+    full "$DS" rf 1000000 sklearn-rf-cpu
+    full "$DS" et 1000000 sklearn-et-cpu
+    mark "PHASE_F1_${DS}_DONE"
+    full "$DS" rf 2000000 sklearn-rf-cpu
+    mark "PHASE_F2_${DS}_DONE"
+    full "$DS" gbdt-symmetric 1000000 catboost-cpu
+    full "$DS" gbdt-depthwise 1000000 "catboost-cpu,$XGB"
+    MOJOLEARN_SPEED_LGBM_PARAMS="$LGB_PARAMS" full "$DS" gbdt-lossguide 1000000 "catboost-cpu,$XGB,$LGB"
+    mark "PHASE_G_${DS}_DONE"
+    # FAST beside IDENTICAL, ours only, interleaved in one process (ET, the
+    # slowest, last).
+    for L in rf gbdt-symmetric gbdt-depthwise gbdt-lossguide et; do
+        echo "cell fast.$L $DS $(date -u +%T) load $(cut -d' ' -f1-3 /proc/loadavg)" >> "$OUT/ab.txt"
+        MOJOLEARN_SPEED_OURS_AB="numeric_mode='fast'" MOJOLEARN_SPEED_TAG=fastab \
+            $AB speed baseline "$L" "$DS" 1000000 5 ours
+    done
+    mark "PHASE_FAST_${DS}_DONE"
 done
-mark PHASE_FAST_DONE
 echo "body end $(date -u +%T)" | tee -a "$OUT/ab.txt"

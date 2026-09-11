@@ -1,0 +1,31 @@
+FSPEED-NOTE lane=rf arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); AMD box: an opponent with an AMD GPU path runs on the GPU, one without runs on this box's CPU on all cores (ENGINEERING_RULES.md section 10); the arm name says which
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=hip path=/root/mojolearn/python/mojolearn/identical/_mojolearn_rf.so
+FSPEED-AB lane=rf arm=ours-ab numeric_mode='fast' (arm ours keeps the estimator default)
+BENCH_BINDING arm=ours-ab requested=fast resolved=fast compiled=fast vendor=hip path=/root/mojolearn/python/mojolearn/_mojolearn_rf.so
+FSPEED-SCALE stage=before rows=1000000 features=16 input_mib=61.0 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=rf arm=ours mode=IDENTICAL device=AMD_Instinct_MI300X_VF rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=rf arm=ours-ab mode=IDENTICAL device=AMD_Instinct_MI300X_VF rounds=5 size=shipped
+FSPEED-WARMUP lane=rf arm=ours shape=taxi-1000000x16 ms=5900.766
+FSPEED-WARMUP lane=rf arm=ours-ab shape=taxi-1000000x16 ms=1315.356
+FSPEED-ORDER lane=rf round=1 arms=ours,ours-ab
+FSPEED lane=rf arm=ours shape=taxi-1000000x16 round=1 ms=1310.391 hash=d8f64dae01de00bd
+FSPEED lane=rf arm=ours-ab shape=taxi-1000000x16 round=1 ms=1295.295 hash=22b93d50f6939aa0
+FSPEED-ORDER lane=rf round=2 arms=ours,ours-ab
+FSPEED lane=rf arm=ours shape=taxi-1000000x16 round=2 ms=1285.340 hash=d8f64dae01de00bd
+FSPEED lane=rf arm=ours-ab shape=taxi-1000000x16 round=2 ms=1280.553 hash=22b93d50f6939aa0
+FSPEED-ORDER lane=rf round=3 arms=ours,ours-ab
+FSPEED lane=rf arm=ours shape=taxi-1000000x16 round=3 ms=1279.537 hash=d8f64dae01de00bd
+FSPEED lane=rf arm=ours-ab shape=taxi-1000000x16 round=3 ms=1273.012 hash=22b93d50f6939aa0
+FSPEED-ORDER lane=rf round=4 arms=ours,ours-ab
+FSPEED lane=rf arm=ours shape=taxi-1000000x16 round=4 ms=1277.585 hash=d8f64dae01de00bd
+FSPEED lane=rf arm=ours-ab shape=taxi-1000000x16 round=4 ms=1279.629 hash=22b93d50f6939aa0
+FSPEED-ORDER lane=rf round=5 arms=ours,ours-ab
+FSPEED lane=rf arm=ours shape=taxi-1000000x16 round=5 ms=1275.698 hash=d8f64dae01de00bd
+FSPEED lane=rf arm=ours-ab shape=taxi-1000000x16 round=5 ms=1273.315 hash=22b93d50f6939aa0
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.525910
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.617154
+FSPEED-ACC lane=rf arm=ours-ab metric=logloss value=0.525887
+FSPEED-ACC lane=rf arm=ours-ab metric=auc value=0.617467
+FSPEED-SCALE stage=after rows=1000000 features=16 input_mib=61.0 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.

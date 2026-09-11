@@ -1,0 +1,32 @@
+FSPEED-NOTE lane=rf arms=cpu,gpu,opencl metric=devices delta=3.000000 reason=AMD box: CPU arms run for libraries with no AMD GPU path, on all cores (ENGINEERING_RULES.md section 10); every arm name carries its device
+FSPEED-NOTE lane=rf arms=ours metric=devices delta=3.000000 reason=devices=cpu,gpu,opencl (explicit); AMD box: an opponent with an AMD GPU path runs on the GPU, one without runs on this box's CPU on all cores (ENGINEERING_RULES.md section 10); the arm name says which
+FSPEED-IMPORT-ORDER lane=rf first=opponents
+FSPEED-REFUSED lane=rf arm=cuml-rf-gpu reason=ModuleNotFoundError: No module named 'cuml'
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=hip path=/root/mojolearn/python/mojolearn/identical/_mojolearn_rf.so
+FSPEED-SCALE stage=before rows=2000000 features=16 input_mib=122.1 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=rf arm=ours mode=IDENTICAL device=AMD_Instinct_MI300X_VF rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=rf arm=sklearn-rf-cpu mode=IDENTICAL device=AMD_Instinct_MI300X_VF rounds=5 size=shipped
+FSPEED-WARMUP lane=rf arm=ours shape=taxi-2000000x16 ms=5508.080
+FSPEED-WARMUP lane=rf arm=sklearn-rf-cpu shape=taxi-2000000x16 ms=28470.782
+FSPEED-ORDER lane=rf round=1 arms=ours,sklearn-rf-cpu
+FSPEED lane=rf arm=ours shape=taxi-2000000x16 round=1 ms=1960.576 hash=f1240292e3b1dd3f
+FSPEED lane=rf arm=sklearn-rf-cpu shape=taxi-2000000x16 round=1 ms=27945.957 hash=6fbc3efd066d9a31
+FSPEED-ORDER lane=rf round=2 arms=ours,sklearn-rf-cpu
+FSPEED lane=rf arm=ours shape=taxi-2000000x16 round=2 ms=1894.817 hash=f1240292e3b1dd3f
+FSPEED lane=rf arm=sklearn-rf-cpu shape=taxi-2000000x16 round=2 ms=27810.841 hash=9b0fee0627d354d1
+FSPEED-ORDER lane=rf round=3 arms=ours,sklearn-rf-cpu
+FSPEED lane=rf arm=ours shape=taxi-2000000x16 round=3 ms=1895.980 hash=f1240292e3b1dd3f
+FSPEED lane=rf arm=sklearn-rf-cpu shape=taxi-2000000x16 round=3 ms=27954.944 hash=022e7b307c164084
+FSPEED-ORDER lane=rf round=4 arms=ours,sklearn-rf-cpu
+FSPEED lane=rf arm=ours shape=taxi-2000000x16 round=4 ms=1897.221 hash=f1240292e3b1dd3f
+FSPEED lane=rf arm=sklearn-rf-cpu shape=taxi-2000000x16 round=4 ms=27989.329 hash=09d14a067066941f
+FSPEED-ORDER lane=rf round=5 arms=ours,sklearn-rf-cpu
+FSPEED lane=rf arm=ours shape=taxi-2000000x16 round=5 ms=1888.065 hash=f1240292e3b1dd3f
+FSPEED lane=rf arm=sklearn-rf-cpu shape=taxi-2000000x16 round=5 ms=28088.944 hash=3ee4f3ea97a4d319
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.524221
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.622648
+FSPEED-ACC lane=rf arm=sklearn-rf-cpu metric=logloss value=0.523834
+FSPEED-ACC lane=rf arm=sklearn-rf-cpu metric=auc value=0.622621
+FSPEED-SCALE stage=after rows=2000000 features=16 input_mib=122.1 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.

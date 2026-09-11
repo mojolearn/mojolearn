@@ -1,0 +1,1 @@
+/root/.local/share/uv/python/cpython-3.12.14-linux-x86_64-gnu/lib/libpython3.12.so.1.0

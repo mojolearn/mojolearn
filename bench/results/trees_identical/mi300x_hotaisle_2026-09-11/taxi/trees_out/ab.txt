@@ -1,0 +1,28 @@
+arms: xgboost=xgboost-cpu lightgbm=lightgbm-cpu lightgbm_params=min_child_weight=1e-3 python=/root/venv-gpu/bin/python
+cell rf taxi 1000000 16:20:25 load 2.39 2.35 1.22
+speed_exit baseline.rf.taxi.r1000000.full=0 16:23:52
+cell et taxi 1000000 16:23:52 load 4.58 3.71 2.01
+speed_exit baseline.et.taxi.r1000000.full=0 16:26:25
+PHASE_F1_DONE 16:26:25
+cell rf taxi 2000000 16:26:25 load 5.61 4.76 2.68
+speed_exit baseline.rf.taxi.r2000000.full=0 16:31:35
+PHASE_F2_DONE 16:31:35
+cell gbdt-symmetric taxi 1000000 16:31:35 load 6.23 6.37 4.04
+speed_exit baseline.gbdt-symmetric.taxi.r1000000.full=0 16:32:05
+cell gbdt-depthwise taxi 1000000 16:32:05 load 7.32 6.71 4.23
+speed_exit baseline.gbdt-depthwise.taxi.r1000000.full=0 16:33:02
+cell gbdt-lossguide taxi 1000000 16:33:02 load 8.98 7.38 4.62
+speed_exit baseline.gbdt-lossguide.taxi.r1000000.full=0 16:34:27
+PHASE_G_DONE 16:34:27
+cell fast.rf taxi 16:34:27 load 8.35 7.70 4.98
+speed_exit baseline.rf.taxi.r1000000.ours.fastab=0 16:38:15
+cell fast.gbdt-symmetric taxi 16:38:15 load 1.21 4.28 4.19
+speed_exit baseline.gbdt-symmetric.taxi.r1000000.ours.fastab=0 16:38:38
+cell fast.gbdt-depthwise taxi 16:38:38 load 3.07 4.51 4.27
+speed_exit baseline.gbdt-depthwise.taxi.r1000000.ours.fastab=0 16:39:08
+cell fast.gbdt-lossguide taxi 16:39:08 load 3.10 4.42 4.25
+speed_exit baseline.gbdt-lossguide.taxi.r1000000.ours.fastab=0 16:39:47
+cell fast.et taxi 16:39:47 load 3.02 4.28 4.21
+speed_exit baseline.et.taxi.r1000000.ours.fastab=0 16:42:39
+PHASE_FAST_DONE 16:42:39
+body end 16:42:39

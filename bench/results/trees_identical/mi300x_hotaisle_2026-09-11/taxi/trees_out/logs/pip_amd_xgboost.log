@@ -1,0 +1,3 @@
+Looking in indexes: https://pypi.org/simple, https://pypi.amd.com/rocm-6.4.4/simple
+ERROR: Could not find a version that satisfies the requirement amd_xgboost (from versions: none)
+ERROR: No matching distribution found for amd_xgboost

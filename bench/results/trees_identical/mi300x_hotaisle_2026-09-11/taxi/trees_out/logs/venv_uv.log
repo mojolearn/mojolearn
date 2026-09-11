@@ -1,0 +1,5 @@
+Downloading cpython-3.12.14-linux-x86_64-gnu (download) (32.6MiB)
+ Downloaded cpython-3.12.14-linux-x86_64-gnu (download)
+Using CPython 3.12.14
+Creating virtual environment with seed packages at: /root/venv-gpu
+ + pip==26.2.1

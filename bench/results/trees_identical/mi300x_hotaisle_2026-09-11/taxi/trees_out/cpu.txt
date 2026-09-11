@@ -1,0 +1,3 @@
+nproc 13
+model name	: Intel(R) Xeon(R) Platinum 8470
+cgroup cpu.max max 100000
