@@ -30,8 +30,9 @@ rather than skipped."
 
 The first NVIDIA wheel leg (2026-08-30) failed the fast and deterministic
 smokes on exactly this, 28 of 29 lanes green, and the one red one was the
-library behaving correctly. So `DESIGNED_REFUSALS` below inverts the test for
-those pairs instead of skipping them: the lane must RAISE, and a lane that
+library behaving correctly. So `designed_refusals()` below inverts the test
+for those pairs instead of skipping them (since DEVIATION 2490 that is every
+non-tree lane under fast and deterministic, not only gemm-pinned): the lane must RAISE, and a lane that
 SUCCEEDS is the failure. A skip would have hidden a library that quietly
 started honouring an identity request under a tier that cannot keep it.
 
@@ -55,13 +56,29 @@ import time
 import traceback
 
 
-#: (lane, tier) pairs where the library is REQUIRED to refuse. See the
-#: module docstring. `gemm-pinned` calls matmul(identical=True); only the
-#: `identical` tier may answer it.
-DESIGNED_REFUSALS = {
-    ("gemm-pinned", "fast"),
-    ("gemm-pinned", "deterministic"),
-}
+#: THE LANES THAT RUN IN EVERY TIER: the ones whose only binding is a tree
+#: lane (`_mojolearn_gbdt`, `_mojolearn_rf`, `_mojolearn_trees`). Since
+#: DEVIATION 2490 (2026-09-10) those three are the ONLY bindings with a fast
+#: or deterministic tier; every other binding is identical only, so every
+#: other lane must REFUSE under the two lower tiers, and a lane that answers
+#: there is the failure (a lower-tier binary got back into the wheel). This
+#: is an allowlist on purpose: a lane added tomorrow is expected to refuse
+#: until someone puts it here, which is the safe direction to be wrong in.
+TREE_LANES = frozenset({
+    "rf-clf", "rf-reg", "et-clf", "et-reg",
+    "gbdt-depthwise", "gbdt-lossguide", "gbdt-symmetric", "gbdt-rmse",
+})
+LOWER_TIERS = ("fast", "deterministic")
+
+
+def designed_refusals(lane_names):
+    """(lane, tier) pairs where the library is REQUIRED to refuse. See the
+    module docstring: the lane must RAISE, naming the identical tier, and a
+    lane that SUCCEEDS is the failure. `gemm-pinned` was the first such pair
+    (matmul(identical=True) under a tier that makes no identity claim); as
+    of DEVIATION 2490 every non-tree lane joins it."""
+    return {(lane, tier) for lane in lane_names if lane not in TREE_LANES
+            for tier in LOWER_TIERS}
 
 
 def load_lanes(repo):
@@ -111,21 +128,25 @@ ALL_BINDINGS = (
     "_mojolearn_mamba", "_mojolearn_transformer",
 )
 
-#: THE NEURAL LANES BUILD IDENTICAL ONLY (2026-09-10). They stay in
-#: `ALL_BINDINGS` above ON PURPOSE. Deleting a name from that tuple is exactly
-#: the miss this file's header is about: a name absent from the list is never
-#: looked for and never missed, which is how the 0.4.0 Linux wheel shipped
-#: `_mamba_impl.py` with no `.so` behind it.
+#: EVERY BINDING BUT THE THREE TREE LANES BUILDS IDENTICAL ONLY (DEVIATION
+#: 2490, 2026-09-10). They stay in `ALL_BINDINGS` above ON PURPOSE. Deleting
+#: a name from that tuple is exactly the miss this file's header is about: a
+#: name absent from the list is never looked for and never missed, which is
+#: how the 0.4.0 Linux wheel shipped `_mamba_impl.py` with no `.so` behind it.
 #:
 #: So the test is INVERTED for these names below rather than skipped, the way
-#: `DESIGNED_REFUSALS` inverts it for lanes. Under `identical` they must load
-#: and read back the vendor. Under `fast` and `deterministic` they must RAISE,
-#: and one that LOADS is the failure -- that would mean a lower-tier neural
-#: binary got back into the wheel, which is the whole thing this split
-#: removed.
+#: `designed_refusals()` inverts it for lanes. Under `identical` they must
+#: load and read back the vendor. Under `fast` and `deterministic` they must
+#: RAISE, and one that LOADS is the failure -- that would mean a lower-tier
+#: binary got back into the wheel, which is the whole thing this rule
+#: removed. `main()` checks this set against the installed package's own
+#: `_backend._IDENTICAL_ONLY`, so the two cannot drift apart unnoticed.
 IDENTICAL_ONLY_BINDINGS = frozenset({
-    "_mojolearn_transformer", "_mojolearn_mamba",
-    "_mojolearn_training", "_mojolearn_byte_lm",
+    "_mojolearn", "_mojolearn_estimators", "_mojolearn_svm",
+    "_mojolearn_solver", "_mojolearn_metrics", "_mojolearn_preprocessing",
+    "_mojolearn_tsa", "_mojolearn_linalg", "_mojolearn_arima", "_mojolearn_gp",
+    "_mojolearn_training", "_mojolearn_mamba", "_mojolearn_transformer",
+    "_mojolearn_byte_lm",
 })
 
 
@@ -208,6 +229,12 @@ def main():
             f"gpu_arch() read back {_backend.gpu_arch()!r} "
             f"({_backend.gpu_arch_how()}), the leg built {a.arch!r}")
 
+    if frozenset(_backend._IDENTICAL_ONLY) != IDENTICAL_ONLY_BINDINGS:
+        failures.append(
+            "IDENTICAL_ONLY_BINDINGS in this smoke != _backend._IDENTICAL_ONLY "
+            f"in the installed package: smoke-only {sorted(IDENTICAL_ONLY_BINDINGS - set(_backend._IDENTICAL_ONLY))}, "
+            f"package-only {sorted(set(_backend._IDENTICAL_ONLY) - IDENTICAL_ONLY_BINDINGS)}")
+
     per = {}
     names_to_load = ALL_BINDINGS
     if os.environ.get("MOJOLEARN_PACKAGE_BYTE_LM", "0") == "1" and mode == "identical":
@@ -220,7 +247,7 @@ def main():
             per[name] = f"REFUSED {type(exc).__name__}: {exc}"[:200]
         if must_refuse:
             # A LOADED binary here is the failure. It would mean a lower-tier
-            # neural .so is back in the wheel.
+            # .so of an identical-only lane is back in the wheel.
             if not per[name].startswith("REFUSED"):
                 failures.append(
                     f"{name}: LOADED under mode={mode}, where it must refuse; "
@@ -232,28 +259,40 @@ def main():
     report["vendor_per_binding"] = per
     used = {}
     for name, ctor in PER_BINDING.items():
+        must_refuse = name in IDENTICAL_ONLY_BINDINGS and mode != "identical"
         try:
             used[name] = ctor(ml).vendor_used()
         except Exception as exc:
             used[name] = f"REFUSED {type(exc).__name__}: {exc}"[:200]
+        if must_refuse:
+            # The estimator path must refuse the same way the import path
+            # did, and it must say WHY: a refusal that does not name the
+            # identical tier is a different fault being passed as this one.
+            if not used[name].startswith("REFUSED") or "identical" not in used[name].lower():
+                failures.append(
+                    f"{name}: estimator ANSWERED or failed for another reason "
+                    f"under mode={mode}, where it must refuse by name "
+                    f"(vendor_used() = {used[name]!r})")
+            continue
         if used[name] != a.vendor:
             failures.append(f"{name}: vendor_used() = {used[name]!r}")
     report["vendor_used_per_estimator"] = used
 
     lanes = load_lanes(a.repo)
     names = [n for n in sorted(lanes) if not a.lanes or n in a.lanes.split(",")]
+    refusals = designed_refusals(lanes)
     for name in names:
         t0 = time.time()
-        must_refuse = (name, mode) in DESIGNED_REFUSALS
+        must_refuse = (name, mode) in refusals
         try:
             h = lanes[name](ml)
             if must_refuse:
                 # The library answered a question this tier is not allowed
                 # to answer. That is worse than a lane failing.
                 msg = (f"lane {name} RETURNED a result under mode={mode}, "
-                       f"where it must refuse: this tier makes no "
-                       f"cross-vendor claim and the pinned product asserts "
-                       f"one")
+                       f"where it must refuse: only the tree lanes ship "
+                       f"this tier (DEVIATION 2490), so a lower-tier binary "
+                       f"of an identical-only lane is back in the wheel")
                 report["lanes"][name] = {"ok": False, "error": msg,
                                          "designed_refusal": True,
                                          "seconds": round(time.time() - t0, 2)}
@@ -276,7 +315,17 @@ def main():
             full = traceback.format_exc()
             report_err = _trim(full)
             short = _cause(exc, full)
-            if must_refuse:
+            if must_refuse and "identical" not in full.lower():
+                # It raised, but not the refusal this tier owes. A bare
+                # "it failed" would pass any fault under the lower tiers.
+                report["lanes"][name] = {"ok": False, "error": short,
+                                         "error_full": report_err,
+                                         "designed_refusal": True,
+                                         "seconds": round(time.time() - t0, 2)}
+                failures.append(f"lane {name}: raised under {mode} but not the "
+                                f"identical-only refusal: {short}")
+                print(f"  {name:<16} FAIL raised, not the designed refusal: {short[:120]}")
+            elif must_refuse:
                 report["lanes"][name] = {"ok": True, "refused": short,
                                          "refused_full": report_err,
                                          "designed_refusal": True,

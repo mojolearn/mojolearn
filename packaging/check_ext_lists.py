@@ -42,6 +42,12 @@ def truth():
     return set(_backend._MODULES)
 
 
+def _backend_tiered():
+    sys.path.insert(0, str(ROOT / "python"))
+    from mojolearn import _backend
+    return set(_backend._TIERED)
+
+
 def from_python_tuple(path, varname):
     """Names inside `VARNAME = ( ... )`, quoted, up to the closing paren."""
     text = (ROOT / path).read_text()
@@ -60,14 +66,18 @@ def from_shell_string(path, varname):
     return set(m.group(1).split())
 
 
-#: (path, how, varname). Each is a list that must name every shipped
-#: extension; a short one is a wheel that ships without that extension, or a
-#: gate that never looks at it.
+#: (path, how, every-tier varname, identical-only varname or None). Since
+#: DEVIATION 2490 (2026-09-10) the pack and build lists come in PAIRS: the
+#: three TREE lanes build in every tier and every other binding in identical
+#: only, and each file names both halves. The UNION of a pair must equal
+#: `_MODULES`, and the every-tier half must equal `_backend._TIERED`, or a
+#: binding has been quietly moved back into three tiers (or out of the wheel).
+#: The smoke list is one flat list: it loads every binding under identical.
 SOURCES = [
-    ("packaging/linux/pack_wheel.py", from_python_tuple, "EXT_NAMES"),
-    ("packaging/linux/smoke.py", from_python_tuple, "ALL_BINDINGS"),
-    ("packaging/linux/build_sets.sh", from_shell_string, "EXT_NAMES"),
-    ("packaging/macos/build_release_wheel.sh", from_shell_string, "EXT_NAMES"),
+    ("packaging/linux/pack_wheel.py", from_python_tuple, "EXT_NAMES", "IDENTICAL_ONLY_NAMES"),
+    ("packaging/linux/smoke.py", from_python_tuple, "ALL_BINDINGS", None),
+    ("packaging/linux/build_sets.sh", from_shell_string, "EXT_NAMES", "IDENTICAL_ONLY_NAMES"),
+    ("packaging/macos/build_release_wheel.sh", from_shell_string, "EXT_NAMES", "IDENTICAL_ONLY_NAMES"),
 ]
 
 
@@ -83,13 +93,27 @@ def main():
     print(f"source of truth: python/mojolearn/_backend.py _MODULES "
           f"({len(want)} extensions)")
     bad = 0
-    for path, how, var in SOURCES:
+    tiered = set(_backend_tiered())
+    for path, how, var, ident_var in SOURCES:
         got = how(path, var)
         if got is None:
             print(f"  UNREADABLE {path}: no {var} found -- the parser and the "
                   f"file have diverged, which is its own defect")
             bad += 1
             continue
+        label = var
+        if ident_var is not None:
+            ident = how(path, ident_var)
+            if ident is None:
+                print(f"  UNREADABLE {path}: no {ident_var} found")
+                bad += 1
+                continue
+            if got != tiered:
+                bad += 1
+                print(f"  MISMATCH  {path} {var} ({len(got)}) is not _backend._TIERED")
+                print(f"              every-tier list must be exactly: {', '.join(sorted(tiered))}")
+            got = got | ident
+            label = f"{var} + {ident_var}"
         text = (ROOT / path).read_text()
         for name in profile_only:
             if name not in text:
@@ -98,10 +122,10 @@ def main():
         missing = sorted(want - got)
         extra = sorted(got - want)
         if not missing and not extra:
-            print(f"  OK        {path} {var} ({len(got)})")
+            print(f"  OK        {path} {label} ({len(got)})")
             continue
         bad += 1
-        print(f"  MISMATCH  {path} {var} ({len(got)})")
+        print(f"  MISMATCH  {path} {label} ({len(got)})")
         if missing:
             print(f"              MISSING (ships without a gate): {', '.join(missing)}")
         if extra:

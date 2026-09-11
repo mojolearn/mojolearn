@@ -202,28 +202,59 @@ _MODULES = (
     "_mojolearn_transformer",
 )
 
-#: THE NEURAL LANES BUILD ONE TIER (2026-09-10). They used to build three.
-#: The FAST and DETERMINISTIC binaries were never a faster path: every fused
-#: kernel in transformer/ and mamba/ is gated on
-#: `GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL`, so the lower tiers fell back to
-#: the UNFUSED arms and ran slower than the default while promising less.
-#: `training/mlp_ops.mojo` and `training/byte_lm.mojo` had already refused
-#: outright for the same reason, and DEVIATION 2300 is the cost written down:
-#: a `k_last` failure that existed ONLY in the deterministic tier of the mamba
-#: lane, found in a shipped 0.7.0 qualification, in code no user had a reason
-#: to run. Two binaries per GPU arch per platform, to serve nobody.
+#: ONE RULE FOR TIERS (DEVIATION 2490, 2026-09-10): THE TREE LANES SHIP
+#: THREE TIERS, EVERYTHING ELSE SHIPS IDENTICAL ONLY.
 #:
-#: `bindings/build_{transformer,mamba,training,byte_lm}.sh` refuse any other
-#: tier, the bindings themselves `abort()` on one, and this set is why the
-#: Python side raises a sentence a caller can act on instead of an ImportError
-#: about a missing `.so`.
-_IDENTICAL_ONLY = frozenset({
-    "_mojolearn_transformer",
-    "_mojolearn_mamba",
-    "_mojolearn_training",
-    "_mojolearn_byte_lm",
+#: The product is cross-vendor bitwise identity. That is the thing no other
+#: library sells, on any platform, and it is the default tier. A FAST tier
+#: only earns its place where we have measured a win against the opponent's
+#: own CPU, and that is trees on Apple silicon: tree fitting calls no BLAS
+#: (histogram building and split finding are scatter-gather over integers),
+#: so the opponent gets nothing from Accelerate's AMX coprocessor, and
+#: ExtraTrees measured 1.25-1.61x scikit-learn on ALL TEN cores at covtype
+#: 581k. Nothing else has that argument:
+#:
+#:   * The classical families (k-means, kNN, PCA, SVD, the linear models,
+#:     UMAP, GP, ARIMA, preprocessing) have a BLAS call as their inner loop.
+#:     On an M4 (2026-09-10) Accelerate does 1438 GFLOP/s fp32 GEMM on four
+#:     P-cores against ~4000 for the ten-core GPU, and ONE CPU thread already
+#:     draws 88 of the 120 GB/s the two share. A FAST kernel there wins ~2.5x
+#:     at best over a CPU that scikit-learn gets for free, for the price of
+#:     the reproducibility guarantee. Not a product.
+#:   * SVC and SVR could beat libsvm's single thread on a Mac, but two
+#:     families with a fast tier that is not "trees" is a rule a user has to
+#:     look up. One rule beats two wins.
+#:   * The neural lanes (transformer, mamba, training, byte LM) gate every
+#:     fused kernel on the identical contract, so their lower tiers were
+#:     SLOWER than the default (DEVIATION 2300 is the cost: a `k_last`
+#:     failure that lived only in a tier nobody ran).
+#:
+#: This is an ALLOWLIST on purpose. A binding added tomorrow is identical
+#: only until someone measures a win and adds it here, which is the rule in
+#: ENGINEERING_RULES.md section 0b-iii: a tier we will not benchmark is a
+#: tier we do not ship. The build scripts of every binding outside this set
+#: exit 2 on any other MOJOLEARN_NUMERIC_MODE, and this set is why the Python
+#: side raises a sentence a caller can act on instead of an ImportError about
+#: a missing `.so`.
+_TIERED = frozenset({
+    "_mojolearn_gbdt",   # GradientBoosting
+    "_mojolearn_rf",     # RandomForest
+    "_mojolearn_trees",  # ExtraTrees
 })
+
+_IDENTICAL_ONLY = frozenset(_MODULES) - _TIERED
 _SELECTED = None
+
+_IDENTICAL_ONLY_REASON = (
+    "Only the tree lanes (GradientBoosting, RandomForest, ExtraTrees) ship "
+    "fast and deterministic tiers; every other family ships IDENTICAL only "
+    "(DEVIATION 2490)."
+)
+
+
+def _identical_only_reason(name):
+    """The sentence that explains why this binding has one tier."""
+    return _IDENTICAL_ONLY_REASON
 
 
 #: Tier name -> the code `<ext>_numeric_mode()` reports, which is the
@@ -782,18 +813,29 @@ def select():
         # ones is read back lazily by `vendor()`, because on this layout the
         # binaries are imported by the estimator modules, not here.
         for name in _MODULES:
+            full = f"{pkg.__name__}.{name}"
+            if name in _IDENTICAL_ONLY:
+                # BEFORE the on-disk check, on purpose. A fast `.so` of an
+                # identical-only lane is never a legitimate artifact, only a
+                # stale one (the lane's build script exits 2 on this tier),
+                # and until DEVIATION 2490 a stale file here was imported
+                # under the canonical name and ANSWERED. The stub wins over
+                # whatever sits on disk.
+                if full in sys.modules and not isinstance(sys.modules[full], _IdenticalOnlyTier):
+                    del sys.modules[full]
+                module = _IdenticalOnlyTier(full, name, "fast")
+                sys.modules[full] = module
+                setattr(pkg, name, module)
+                _MISSING.append(name)
+                continue
             if os.path.exists(os.path.join(pkg_dir, name + ".so")):
                 continue
-            full = f"{pkg.__name__}.{name}"
             if full in sys.modules:
                 continue
-            if name in _IDENTICAL_ONLY:
-                module = _IdenticalOnlyTier(full, name, "fast")
-            else:
-                module = _MissingUpperTier(
-                    full, os.path.join(pkg_dir, name + ".so"),
-                    _build_script(name), "fast",
-                )
+            module = _MissingUpperTier(
+                full, os.path.join(pkg_dir, name + ".so"),
+                _build_script(name), "fast",
+            )
             sys.modules[full] = module
             setattr(pkg, name, module)
             _MISSING.append(name)
@@ -899,8 +941,8 @@ class _ModeSet:
             pass
         if name in _IDENTICAL_ONLY and self.mode != "identical":
             raise ImportError(
-                f"mojolearn: {name} has no {self.mode!r} tier; the neural "
-                "lanes build IDENTICAL only. See _IDENTICAL_ONLY."
+                f"mojolearn: {name} has no {self.mode!r} tier. "
+                f"{_identical_only_reason(name)} See _IDENTICAL_ONLY."
             )
         if name in self.missing:
             raise ImportError(
@@ -1023,10 +1065,8 @@ def binding(name, mode=None):
     requested = requested.strip().lower()
     if name in _IDENTICAL_ONLY and requested != "identical":
         raise ValueError(
-            f"mojolearn: {name} has no {requested!r} tier. The neural lanes "
-            "(transformer, mamba, training, byte LM) build IDENTICAL only: "
-            "their fused kernels are gated on the identical contract, so the "
-            "lower tiers ran the unfused path and were SLOWER than the default. "
+            f"mojolearn: {name} has no {requested!r} tier. "
+            f"{_identical_only_reason(name)} "
             "Drop numeric_mode= (identical is the default) or pass "
             "numeric_mode='identical'."
         )

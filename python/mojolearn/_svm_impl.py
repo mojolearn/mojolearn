@@ -103,84 +103,22 @@ _REFUSED_KERNELS = {
 
 _EXT_NAME = "_mojolearn_svm"
 _PKG = __name__.rsplit(".", 1)[0]
-_ext_cache = None
 
 
 def _extension(mode=None):
-    """The `_mojolearn_svm` extension, in the numeric mode the package
-    asked for, cross-checked against the mode the binary was COMPILED in.
+    """The `_mojolearn_svm` extension for `mode` (the process default when
+    None), through `_backend.binding`: the one choke point that refuses an
+    identical-only lane by name under a lower tier, loads the set the tier
+    and vendor axes name, and cross-checks the binary's compiled tier.
 
-    WHY THIS IS NOT JUST `from . import _mojolearn_svm`. `_backend.py`'s
-    `_MODULES` tuple lists the five older extensions and does not list
-    this one, so under `MOJOLEARN_NUMERIC_MODE=identical` the selector
-    installs nothing for it and a plain relative import would load the
-    FAST binary sitting next to it -- an identical-mode process running
-    FAST arithmetic and labelling it identical. That is the exact failure
-    `_backend.py`'s own header calls "a mislabelled measurement".
-
-    So this loads the right file itself and then asks the binary what it
-    was compiled as. Adding `_mojolearn_svm` to `_MODULES` and
-    `_build_script` in `_backend.py` is the tidier fix and belongs to
-    whoever owns that file; when it lands, the module is already in
-    `sys.modules` and this function uses it unchanged.
-
-    Deliberately lazy, not called at import: `_backend.py` installs a stub
-    that imports fine and raises BY NAME on first use when an identical
-    binary is missing, so that one unbuilt extension does not take the
-    whole package down. Same policy here.
+    This carried a private loader until DEVIATION 2490 (2026-09-10), written
+    when `_backend._MODULES` did not list this extension. It does now, and
+    the private path was how a stale FAST `_mojolearn_svm.so` on disk kept
+    ANSWERING after the lane went identical only: the macOS release smoke
+    caught it the day the rule landed. Nothing loads a binding by path any
+    more.
     """
-    global _ext_cache
-    # PER-MODE CACHE, keyed by tier, since 2026-08-29. It was a single slot
-    # holding whichever tier asked first, which is fine while the mode is a
-    # process-wide environment variable and wrong the moment it is a
-    # per-estimator parameter: the second tier to ask would have been handed
-    # the first one's binary under its own name.
-    if not isinstance(_ext_cache, dict):
-        _ext_cache = {}
-    mode = (mode or _backend.default_mode()).strip().lower()
-    if mode in _ext_cache:
-        return _ext_cache[mode]
-    full = f"{_PKG}._sets.{mode}.{_EXT_NAME}" if mode != "fast" else f"{_PKG}.{_EXT_NAME}"
-    mod = sys.modules.get(full)
-    if mod is None:
-        # The directory comes from `_backend.tier_dir`, the one place the
-        # tier and vendor axes become a path (python/mojolearn/<vendor>/
-        # <tier>/ on the Linux wheel, the package directory otherwise).
-        path = os.path.join(_backend.tier_dir(mode), _EXT_NAME + ".so")
-        if not os.path.exists(path):
-            raise ImportError(
-                f"mojolearn: {path} is not built; build it with\n    "
-                + (f"MOJOLEARN_NUMERIC_MODE={mode} " if mode != "fast" else "")
-                + "bash bindings/build_svm.sh"
-            )
-        loader = importlib.machinery.ExtensionFileLoader(full, path)
-        spec = importlib.util.spec_from_loader(full, loader, origin=path)
-        mod = importlib.util.module_from_spec(spec)
-        loader.exec_module(mod)
-        sys.modules[full] = mod
-        # Publish under the PLAIN package attribute only for the tier this
-        # process defaults to. Doing it unconditionally, as it did until
-        # 2026-08-29, made `mojolearn._mojolearn_svm` mean "whichever tier
-        # asked last" -- so one estimator built with numeric_mode="identical"
-        # would silently repoint the name every other caller reads.
-        if mode == _backend.default_mode():
-            setattr(sys.modules[_PKG], _EXT_NAME, mod)
-    # A NAME lookup, not a boolean: the middle tier reports 2 and the
-    # old spelling called it "fast", so a deterministic binary matched
-    # a fast request and the cross-check passed on the wrong arm.
-    compiled = _backend._CODE_MODE.get(mod.svm_numeric_mode(), "unknown")
-    requested = mode
-    if compiled != requested:
-        raise ImportError(
-            f"mojolearn: {_EXT_NAME} was compiled {compiled} but "
-            f"MOJOLEARN_NUMERIC_MODE asked for {requested} -- a binary is in "
-            "the wrong directory; rebuild the sets with\n    "
-            "bash bindings/build_svm.sh\n    "
-            "MOJOLEARN_NUMERIC_MODE=deterministic bash bindings/build_svm.sh\n    "
-            "MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_svm.sh"
-        )
-    _ext_cache[mode] = mod
-    return mod
+    return _backend.binding(_EXT_NAME, mode)
 
 
 def _as_labels(y):

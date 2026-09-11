@@ -99,128 +99,83 @@ Two things this does not mean:
 A file in this tree is exactly one of two things: an implementation, or a
 `checks/` file that gates one.
 
-## 0c. Assume our code is broken
+## 0b-iii. A tier we will not benchmark is a tier we do not ship
 
-When our code and a well-tested reference disagree, start from the assumption
-that ours is wrong. When a measurement disagrees with a design that a lot of
-people measured, suspect the measurement. When our code looks like it is
-already doing the right thing, check it anyway.
+DEVIATION 2490, 2026-09-10. Three tiers used to mean three tiers everywhere.
+They no longer do, and the rule is one sentence:
 
-This is not deference. It is the record of what checking actually found:
+**Fast and deterministic ship for the three tree lanes, `gbdt`, `rf` and
+`trees`. Every other binding ships IDENTICAL only.**
 
-| what we believed | what checking found |
-|---|---|
-| `build_necessary_histograms` was correct | its state machine was exactly inverted |
-| the histogram writeback was fine | it used the looked-up leaf id where the dense one is required |
-| replication was tuned | `replicas_for` was invented; it follows from occupancy |
-| leaf values were a correct Newton step | the sign was inverted against the `der` convention |
-| the tree grew to `max_depth` | growth stops when a split repeats |
-| the histogram loop was right | it loaded 1 element per thread where 4 is the shape |
-| a threadgroup barrier was the only option | a warp sync is enough, and `syncwarp` exists |
-| `knn_brute_force.mojo` matched the brute-force k-NN | it matched the fallback; `knn_brute_force.cuh:443` sends k<=64 + row-major + L2 to `fusedL2Knn` |
-| the k-NN distance step wanted a vendor GEMM | the fused path calls no vendor primitive and keeps the top-k in registers, so no distance is ever written |
-| DBSCAN's neighborhood was "the shape the runner depends on" | `EpsUnexpL2SqNeighborhood` is a fused kernel using unexpanded L2 that materializes no distances at all |
-| k-means tested convergence on device, citing `detail/kmeans.cuh:817-825` | that line range is a function signature. The loop syncs at `:491` and tests on the host at `:492`. The kernel was invented and the citation supported nothing |
+Cross-vendor bitwise identity is the product. It is the default tier, it is
+the thing no other library sells on any platform, and it needs no speed
+argument. A FAST binary is a different kind of thing: it is a claim, and a
+claim we cannot publish is a liability. So a fast tier ships only where it has
+a measured win over the opponent's own CPU, and today that is trees on Apple
+silicon. Tree fitting calls no BLAS anywhere (histogram building and split
+finding are scatter-gather over integers), so the opponent gets nothing from
+Accelerate's AMX coprocessor, and ExtraTrees measured 1.25-1.61x scikit-learn
+on ALL TEN cores at covtype 581k.
 
-Eleven, across two sessions. Every one found by checking against something,
-none by reasoning about our own code. Every optimization invented in that
-window (`replicas_for`, the widened barrier, the on-device convergence test)
-was worse than the thing it replaced.
+Nothing else has that argument. Measured on an M4, 4 performance cores,
+10-core GPU, 120 GB/s: Accelerate reaches 1438 GFLOP/s of fp32 GEMM on four
+cores because macOS >= 14 arm64 NumPy links it, so scikit-learn gets AMX free
+on every BLAS call, and one CPU thread already takes 88 of the 120 GB/s the
+GPU must share with it. The GPU's whole margin over its own CPU is about 2.5x
+on compute and 1.0x on bandwidth. k-means, k-NN, PCA, SVD, OLS, UMAP, GP and
+ARIMA are precisely the families whose inner loop IS a BLAS call, so that
+margin is spent against AMX and there is nothing left to win. `SVC` and `SVR`
+could beat libsvm's single thread, and they still ship identical only: two
+families with a fast tier that are not "trees" is a rule a user has to look
+up, and one rule beats two wins. The neural lanes gate every fused kernel on
+the identical contract, so their lower tiers were SLOWER than the default
+(DEVIATION 2300 is the cost, a `k_last` failure that lived only in a tier
+nobody ran).
 
-**The last four all have the same shape and it is worth naming: a function was
-checked faithfully, and nobody checked whether the dispatch sends our
-parameters to that function at all.** A check against the wrong path is
-invisible. It compiles, it passes, its docstring cites real line numbers, and
-it cost a measured 20x. See `0b-i`.
+So the rule, stated so it binds the next family too:
 
-## 1. Read the source, not our notes
+- **Adding a tier is adding a claim.** Ship `fast` for a family only when we
+  intend to measure it against that family's real opponent and publish the
+  result, AND the rule stays one sentence a user can hold. If we would not
+  run the comparison, we do not build the binary.
+- **It is an allowlist.** `_backend.py`'s `_TIERED` names the three tree
+  bindings; `_IDENTICAL_ONLY` is everything else in `_MODULES`. A binding
+  added tomorrow is identical only until someone measures a win and adds it,
+  which is the safe direction to be wrong in. The pack and build lists
+  (`packaging/linux/pack_wheel.py`, `packaging/linux/build_sets.sh`,
+  `packaging/macos/build_release_wheel.sh`) carry the same pair and
+  `packaging/check_ext_lists.py` holds them to it.
+- **Withdrawing a tier is a refusal, never a silent absence.** Rule 8 is why:
+  a spelling that survives with nothing exercising it is an unchecked path.
+  Every identical-only `bindings/build_*.sh` exits 2 with the reason,
+  `_backend.binding()` raises a sentence a caller can act on, and both
+  release smokes (`packaging/macos/smoke.py`, `packaging/linux/smoke.py`)
+  assert BOTH arms per binding: it must launch under identical and must
+  refuse BY NAME under fast and deterministic. One that answers there is the
+  failure.
+- **Shared host helpers resolve from the identical binary, whatever tier the
+  caller runs.** `_buffer.py`'s casts and finiteness check live in the base
+  `_mojolearn` binding, which now exists in one tier; resolving them through
+  the running tier refused every fast tree fit at its first input conversion
+  the day the rule landed. Anything a tree lane shares with an identical-only
+  lane is loaded the same way.
 
-Our notes have been wrong about our own code four times in one day and our
-instruments have failed three times. If a claim in our docs is falsified by
-what a file says, **delete the false sentence in the same commit.** Do not
-annotate it.
-
-## 2. The control plane is code too
-
-`gbdt/gpu_lib/` is 57 headers of scheduler and it is as much a part of the
-learner as the histogram kernels.
-
-**Where a decision belongs on the GPU, it stays on the GPU.** If a decision is
-kept on the device so the host never learns it, keep it there. If a value is a
-kernel argument, pass it as a kernel argument. The host/device split is part of
-the algorithm, not an implementation detail to re-decide casually.
-
-Learned the expensive way: every place the driver did host arithmetic that
-belongs on the device cost a round trip. Nine drains per level became two by
-deleting inventions, not by optimizing them.
-
-## 3. A missing file is visible; a wrong file is not
-
-`build_necessary_histograms` sat in this tree fully written, commented, tested
-by a probe, and **with its state machine exactly backwards**. Nothing caught
-it because nothing called it.
-
-So:
-
-- **Transcribe a state machine branch by branch, in order.** Do not paraphrase
-  it from the comments. The comments describe intent; the branches are the
-  algorithm.
-- **A file that no caller reaches is not done.** Track it in
-  `archive/plans/UNWIRED.md` and treat wiring it as part of the work.
-- **Cite the line range of any loop checked against a reference** so a reviewer
-  can diff it.
-- The other failure mode is a capability that is silently absent. A named
-  refusal beats a missing symbol. Record it in `NOT_IMPLEMENTED.tsv`.
-
-## 4. Work around the toolchain, never around the algorithm
-
-Mojo and Metal will refuse things CUDA allows. Known so far:
-
-| wall | workaround |
-|---|---|
-| no dynamic trait objects | tagged union, which is what a worker switches on anyway |
-| `ctx.stream()` raises on Metal | one queue; handles still handed out, over-ordering is safe |
-| whole-struct load in a kernel kills the Metal compiler | read the fields through the pointer |
-| kernel cannot write an `enqueue_create_host_buffer` | explicit copy; `map_to_host` measured 2x slower |
-| `enqueue_function` refuses derived pointers as aliasing | pass one struct pointer |
-
-Every one of these changes HOW something is said, never WHAT is said. If a
-workaround would change the algorithm, it is not a workaround, it is a fork,
-and it needs Andrew.
-
-Each one goes in a `DEVIATION BLOCK` banner in the file, with the measurement
-that established it.
-
-## 5. Deviations are declared, in the file, with a number
-
-A `DEVIATION BLOCK` states what the alternative does, what ours does, and the
-measured reason. "Slower" and "faster" without a number are not reasons. An
-undocumented departure is a bug even when it works.
-
-## 6. Names are a diff surface
-
-Where a check compares against a reference implementation, keeping that
-implementation's symbol names makes the comparison greppable and is worth more
-than a prettier name. `TCudaManager`, `TPointsSubsets`, `TLeaf`, `TCFeature`
-and `TSplitPointsContext` are here for that reason. Rename freely where the
-name is a lie: `cuda_lib` became `gpu_lib`, because none of it is CUDA.
-
-## 7. Measurement rules
-
-- Andrew, 2026-09-10: **Optimize for large datasets.** Training-speed claims,
-  kernel selection and performance-driven defaults need representative
-  large-data measurements. Small fixtures are for correctness, smoke checks and
-  diagnosis; they are not the optimization target. Include rows, features,
-  classes, tree depth and memory pressure when judging scale. Benchmark
-  reminders should warn about small workloads without blocking useful small
-  checks.
-
-- Only arms interleaved inside ONE process compare. This box drifts 2-3x
-  across time windows.
-- A digest cannot tell a working change from a no-op. Sabotage the path and
-  watch the check move before trusting a bit-identical change.
-- A check whose expected value is the same in every cell verifies the total
-  and nothing about placement. Plant scattered values, compare per cell.
+- **The only number is OUR IDENTICAL arm against THE OPPONENT'S FAST arm**,
+  with exactly one exception: the three tree lanes, where `fast` is a
+  shipped tier and MAY be timed on Apple silicon
+  (`bench/speed/forest_speed_arm.py`). Everywhere else, timing a `fast` or
+  `deterministic` arm is timing a binary that does not ship -- see 0b-iii.
+  Do not build one to benchmark it.
+- **Never compare our fast arm to our identical arm and call it a result.**
+  That ratio is the COST OF IDENTITY, an internal number for deciding what a
+  pin is worth. It says nothing about whether we beat anyone, and it must
+  never reach a claim, a paper table or a default decision.
+- **Name the opponent's threading and its BLAS before quoting a ratio.**
+  `SVC`, `SVR`, `KernelDensity` and `GaussianProcessRegressor` have no
+  `n_jobs` at all; `KMeans` and `PCA` have none either but get threaded BLAS
+  underneath. On Apple silicon that BLAS is Accelerate, and Accelerate is
+  AMX. A ratio against a single-threaded opponent and a ratio against AMX are
+  not the same measurement and must not sit in one column.
 
 ## 8. A non-default path is an unchecked path
 

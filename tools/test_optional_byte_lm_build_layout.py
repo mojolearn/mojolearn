@@ -7,14 +7,15 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 
 #: Bindings that build in EVERY tier, and the ones that build in IDENTICAL
-#: ONLY. The split landed 2026-09-10: the neural lanes' fused kernels are
-#: gated on `GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL`, so their FAST and
-#: DETERMINISTIC builds ran the unfused path -- slower than the default and
-#: promising less -- and `bindings/build_{training,mamba,transformer}.sh` now
-#: exit 2 for any other tier. These tests are what keeps a later edit from
-#: quietly putting them back into all three.
-EVERY_TIER = 13
-IDENTICAL_ONLY = 3
+#: ONLY. Since DEVIATION 2490 (2026-09-10) the rule is one sentence: the
+#: three TREE lanes (gbdt, rf, trees) ship fast and deterministic, every
+#: other binding is identical only. Cross-vendor bitwise identity is the
+#: product; a fast tier ships only where it has a measured win over the
+#: opponent's own CPU (python/mojolearn/_backend.py, `_TIERED`). These
+#: tests are what keeps a later edit from quietly putting a lane back into
+#: all three.
+EVERY_TIER = 3
+IDENTICAL_ONLY = 13
 
 
 class OptionalBuildLayoutTests(unittest.TestCase):
@@ -22,20 +23,20 @@ class OptionalBuildLayoutTests(unittest.TestCase):
         source = (ROOT / 'packaging/linux/build_sets.sh').read_text()
         names = re.search(r'^EXT_NAMES="([^"]+)"$', source, re.M).group(1)
         scripts = re.search(r'^SCRIPTS="\$\{MOJOLEARN_BUILD_SCRIPTS:-([^}]+)\}"$', source, re.M).group(1)
-        neural_names = re.search(r'^NEURAL_NAMES="([^"]+)"$', source, re.M).group(1)
-        neural_scripts = re.search(r'^NEURAL_SCRIPTS="([^"]+)"$', source, re.M).group(1)
+        identical_only_names = re.search(r'^IDENTICAL_ONLY_NAMES="([^"]+)"$', source, re.M).group(1)
+        identical_only_scripts = re.search(r'^IDENTICAL_ONLY_SCRIPTS="([^"]+)"$', source, re.M).group(1)
         body = re.search(r'^' + function + r'\(\) \{\n.*?^\}', source, re.M | re.S).group()
         # Execute ONLY the extracted list helper, never the build driver.
         program = ('set -eu\nEXT_NAMES=' + repr(names) + '\nSCRIPTS=' + repr(scripts)
-                   + '\nNEURAL_NAMES=' + repr(neural_names)
-                   + '\nNEURAL_SCRIPTS=' + repr(neural_scripts)
+                   + '\nIDENTICAL_ONLY_NAMES=' + repr(identical_only_names)
+                   + '\nIDENTICAL_ONLY_SCRIPTS=' + repr(identical_only_scripts)
                    + '\nPACKAGE_BYTE_LM=' + str(enabled) + '\n' + body
                    + '\nfor tier in fast deterministic identical; do ' + function + ' "$tier"; done\n')
         result = subprocess.run(['bash', '-c', program], capture_output=True, text=True,
                                 timeout=5, check=True)
         return [line.split() for line in result.stdout.splitlines()]
 
-    def test_neural_lanes_build_in_identical_only(self):
+    def test_only_tree_lanes_build_in_every_tier(self):
         for helper in ('tier_names', 'tier_scripts'):
             rows = self.rows(0, helper)
             self.assertEqual(

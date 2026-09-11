@@ -5,6 +5,12 @@ also requires a matching native extension for the wheel's GPU architecture and
 numeric tier. A Python export alone does not qualify an installed wheel or
 establish cross-vendor bitwise identity. There is no CPU fallback.
 
+Tiers (DEVIATION 2490, 0.8.0): `_mojolearn_gbdt`, `_mojolearn_rf` and
+`_mojolearn_trees` ship `fast`, `deterministic` and `identical`. Every other
+extension in this table ships `identical` only; passing `numeric_mode="fast"`
+or `"deterministic"` to those components, or importing under
+`MOJOLEARN_NUMERIC_MODE=fast`, raises by name.
+
 | Component | Public import | Native extension | Implemented scope |
 | --- | --- | --- | --- |
 | FP32 GEMM | `mojolearn.linalg.matmul` or `mojolearn.matmul` | `_mojolearn_linalg` | NN, NT and TN matrix products; optional output buffer |
@@ -54,9 +60,10 @@ c = matmul(a, b)  # (8, 3), FP32; IDENTICAL required by default
 print(profile())
 ```
 
-`matmul(..., identical=False)` uses the process-selected tier without an
-identity claim. It does not select FAST. To use FAST, select that tier in a
-fresh process and pass `identical=False`. The product's fixed FP32 reduction
+`matmul(..., identical=False)` makes no identity claim about the result but
+runs the same binary: `_mojolearn_linalg` ships in the `identical` tier alone
+(DEVIATION 2490, 0.8.0), so there is no FAST linalg to select and asking for
+one raises by name. The product's fixed FP32 reduction
 contract does not promise NumPy, cuBLAS, or PyTorch's output bits. The GEMM
 contract documents its measured shape sweep; accepting other shapes does not
 mean those shapes were individually measured.

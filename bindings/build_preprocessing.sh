@@ -8,6 +8,17 @@ if [ "${MOJOLEARN_BUILD_LOCK_HELD:-}" != 1 ]; then
 fi
 # Match existing bindings: environment deployment target disables Metal AOT.
 unset MACOSX_DEPLOYMENT_TARGET
+# ONE TIER (DEVIATION 2490, 2026-09-10): ONLY THE TREE LANES SHIP fast AND
+# deterministic (build_gbdt.sh, build_rf.sh, build_trees.sh). Every other
+# binding, this one included, builds IDENTICAL only. Cross-vendor bitwise
+# identity is the product; a fast tier is shipped only where it has a
+# measured win over the opponent's own CPU, and outside trees it has none
+# (python/mojolearn/_backend.py, `_TIERED`, has the numbers). Refusing
+# here, by name, is what keeps this an unshipped tier rather than an
+# unchecked one (ENGINEERING_RULES.md section 0b-iii and section 8).
+[ "${MOJOLEARN_NUMERIC_MODE:-identical}" = identical ] || {
+    echo 'build_preprocessing.sh: only the tree lanes (gbdt, rf, trees) ship fast and deterministic; every other binding builds MOJOLEARN_NUMERIC_MODE=identical only (DEVIATION 2490, 0.8.0).' >&2
+    exit 2; }
 mode=${MOJOLEARN_NUMERIC_MODE:-identical}
 mode_flags=""
 outdir=python/mojolearn

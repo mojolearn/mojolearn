@@ -8,6 +8,17 @@ contain the detailed investigation record.
 New native builds are required. This entry describes source changes; publication
 and installed-wheel support will be recorded after the artifacts are uploaded.
 
+- Only the three tree families (GBDT, Random Forest, Extra Trees) ship the
+  `fast` and `deterministic` tiers. Every other binding, including SVC, SVR,
+  isolation forest, k-means, k-NN, PCA, the linear models, UMAP, GP, ARIMA,
+  preprocessing and the neural surface, builds and ships `identical` only.
+  Asking one of them for a lower tier raises a named error, from
+  `numeric_mode=` and from `MOJOLEARN_NUMERIC_MODE`, instead of an
+  ImportError about a missing extension. Cross-vendor bitwise identity is
+  the product; a fast tier ships only where it has a measured win over the
+  opponent's own CPU. This removes 26 extension files from every three-tier
+  wheel (13 bindings x 2 retired tiers) and is a minor break from 0.7.0,
+  where `KMeans(numeric_mode="fast")` worked.
 - Removed the runtime NumPy dependency. Estimators return `mojolearn.Array`
   and accept supported buffer inputs; `numpy.asarray(result)` provides a
   zero-copy view. Shared native conversion, validation and row-gather helpers

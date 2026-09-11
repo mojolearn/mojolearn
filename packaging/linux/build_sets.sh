@@ -63,31 +63,34 @@ TIERS="${MOJOLEARN_BUILD_TIERS:-fast deterministic identical}"
 # both of those scripts turned out to be non-executable. When a binding is
 # added, THREE lists move together: this one, EXT_NAMES below, and
 # `packaging/macos/build_release_wheel.sh`'s pair.
-SCRIPTS="${MOJOLEARN_BUILD_SCRIPTS:-build.sh build_gbdt.sh build_estimators.sh build_rf.sh build_trees.sh build_svm.sh build_solver.sh build_metrics.sh build_preprocessing.sh build_tsa.sh build_linalg.sh build_arima.sh build_gp.sh}"
-EXT_NAMES="_mojolearn _mojolearn_gbdt _mojolearn_estimators _mojolearn_rf _mojolearn_trees _mojolearn_svm _mojolearn_solver _mojolearn_metrics _mojolearn_preprocessing _mojolearn_tsa _mojolearn_linalg _mojolearn_arima _mojolearn_gp"
+SCRIPTS="${MOJOLEARN_BUILD_SCRIPTS:-build_gbdt.sh build_rf.sh build_trees.sh}"
+EXT_NAMES="_mojolearn_gbdt _mojolearn_rf _mojolearn_trees"
 
-# THE NEURAL LANES ARE IDENTICAL-ONLY (2026-09-10), so they are NOT in the
-# lists above: they are appended by `tier_scripts`/`tier_names` for the
-# identical tier alone, the way the byte LM already was. Their fused kernels
-# are gated on the identical contract, so a FAST or DETERMINISTIC build of
-# them ran the UNFUSED path -- slower than the default, promising less -- and
-# `bindings/build_{training,mamba,transformer}.sh` now exit 2 rather than
-# produce one. Shipping them in three tiers cost two extra binaries per GPU
-# arch per platform in every wheel and served nobody.
-NEURAL_SCRIPTS="build_training.sh build_mamba.sh build_transformer.sh"
-NEURAL_NAMES="_mojolearn_training _mojolearn_mamba _mojolearn_transformer"
+# ONE TIER RULE (DEVIATION 2490, 2026-09-10): the three TREE lanes above
+# build in every tier TIERS names. EVERY OTHER BINDING is identical only and
+# lives in the two lists below, built and gated for the identical tier alone
+# the way the byte LM always was. Cross-vendor bitwise identity is the
+# product; a fast tier ships only where it has a measured win over the
+# opponent's own CPU, and outside trees it has none (the reasoning and the
+# M4 numbers are on `_TIERED` in python/mojolearn/_backend.py). The
+# identical-only build scripts exit 2 on any other MOJOLEARN_NUMERIC_MODE.
+# Before this the split was neural-only (three lanes, 2026-09-10 morning);
+# the reason for THOSE was different (their fused kernels were gated on the
+# identical contract, so the lower tiers were slower) and no longer matters.
+IDENTICAL_ONLY_SCRIPTS="build.sh build_estimators.sh build_svm.sh build_solver.sh build_metrics.sh build_preprocessing.sh build_tsa.sh build_linalg.sh build_arima.sh build_gp.sh build_training.sh build_mamba.sh build_transformer.sh"
+IDENTICAL_ONLY_NAMES="_mojolearn _mojolearn_estimators _mojolearn_svm _mojolearn_solver _mojolearn_metrics _mojolearn_preprocessing _mojolearn_tsa _mojolearn_linalg _mojolearn_arima _mojolearn_gp _mojolearn_training _mojolearn_mamba _mojolearn_transformer"
 PACKAGE_BYTE_LM=${MOJOLEARN_PACKAGE_BYTE_LM:-0}
 case "$PACKAGE_BYTE_LM" in 0|1) ;; *) echo 'MOJOLEARN_PACKAGE_BYTE_LM must be 0 or 1' >&2; exit 2 ;; esac
 unset MOJOLEARN_BYTE_LM_OUTDIR
 tier_names() {
   printf '%s' "$EXT_NAMES"
-  if [[ "$1" = identical ]]; then printf ' %s' "$NEURAL_NAMES"; fi
+  if [[ "$1" = identical ]]; then printf ' %s' "$IDENTICAL_ONLY_NAMES"; fi
   if [[ "$PACKAGE_BYTE_LM" = 1 && "$1" = identical ]]; then printf ' _mojolearn_byte_lm'; fi
   printf '\n'
 }
 tier_scripts() {
   printf '%s' "$SCRIPTS"
-  if [[ "$1" = identical ]]; then printf ' %s' "$NEURAL_SCRIPTS"; fi
+  if [[ "$1" = identical ]]; then printf ' %s' "$IDENTICAL_ONLY_SCRIPTS"; fi
   if [[ "$PACKAGE_BYTE_LM" = 1 && "$1" = identical ]]; then printf ' build_byte_lm.sh'; fi
   printf '\n'
 }

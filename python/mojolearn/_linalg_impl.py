@@ -113,71 +113,23 @@ _mode_cache = None
 
 
 def _load():
-    """The linalg extension, loaded from the directory the requested numeric
-    mode names. DEVIATION 912.
+    """The linalg extension for the tier this process SELECTED, through
+    `_backend.binding`: the one choke point that refuses an identical-only
+    lane by name under a lower tier, loads the set the tier and vendor axes
+    name, and cross-checks the binary's compiled tier. `numeric_mode()`
+    below adds the profile-version check on top.
 
-    **This does not go through `_backend.select()`, and that is not an
-    oversight.** `_backend._MODULES` is a fixed tuple of five module names and
-    `_mojolearn_linalg` is not one of them, so in identical mode the selector
-    installs nothing for this extension and a plain
-    `from . import _mojolearn_linalg` would resolve to the FAST binary sitting
-    in the package directory. For an estimator that would be a mislabeled
-    measurement. For this module it would be the exact failure the module
-    exists to prevent, delivered by the import system.
-
-    So the path is chosen here, explicitly, from the mode the process
-    actually selected, and the result is cross-checked against the binary's
-    own compile-time answer in `numeric_mode()` below. Adding
-    `_mojolearn_linalg` to `_backend._MODULES` would let this collapse into
-    `from . import _mojolearn_linalg`; that file is not this lane's to edit
-    and the change is in the hand-off note.
-
-    The mode comes from `_backend.numeric_mode()`, which reports what the
-    process actually SELECTED at import, and not from
-    `_backend.requested_mode()`, which re-reads the environment variable every
-    time it is called. Those differ whenever someone sets
-    MOJOLEARN_NUMERIC_MODE after importing mojolearn, and following the
-    environment there would load a linalg binary from a different set than
-    every estimator in the same process is running.
-
-    A missing binary raises HERE, on first use, rather than at import. The
-    reason is `_backend.py`'s: the package imports every binding at load, and
-    an ImportError at import time would take the whole package down on a box
-    where only this one extension is unbuilt.
+    DEVIATION 912 gave this module a private by-path loader because
+    `_backend._MODULES` did not list `_mojolearn_linalg` then. It does now,
+    and since DEVIATION 2490 (2026-09-10) this binding exists in the
+    identical tier alone, so under `fast` or `deterministic` this raises the
+    identical-only refusal before `require_identical` ever runs. A missing
+    binary still raises HERE, on first use, rather than at import.
     """
     global _binding_cache
-    if _binding_cache is not None:
-        return _binding_cache
-    mode = _backend.numeric_mode()
-    # The directory comes from `_backend.tier_dir`, the ONE place the tier
-    # and vendor axes are folded into a path (python/mojolearn/<vendor>/
-    # on the Linux wheel, the package directory otherwise). This joined
-    # `pkg_dir, mode` itself until 2026-08-29 and would have missed the
-    # vendor directory entirely.
-    path = os.path.join(_backend.tier_dir(mode), _MODULE_NAME + ".so")
-    full = __name__.rsplit(".", 1)[0] + "." + _MODULE_NAME
-    existing = sys.modules.get(full)
-    if existing is not None and getattr(existing, "__file__", None) == path:
-        _binding_cache = existing
-        return _binding_cache
-    if not os.path.exists(path):
-        raise ImportError(
-            f"mojolearn.linalg: {path} is not built. Build it with\n    "
-            + (
-                f"MOJOLEARN_NUMERIC_MODE={mode} bash {_BUILD_SCRIPT}"
-                if mode != "fast"
-                else f"bash {_BUILD_SCRIPT}"
-            )
-        )
-    loader = importlib.machinery.ExtensionFileLoader(full, path)
-    spec = importlib.util.spec_from_loader(full, loader, origin=path)
-    module = importlib.util.module_from_spec(spec)
-    loader.exec_module(module)
-    # Registered under the canonical name so nothing later in the process can
-    # import the OTHER build under the same name.
-    sys.modules[full] = module
-    _binding_cache = module
-    return module
+    if _binding_cache is None:
+        _binding_cache = _backend.binding(_MODULE_NAME)
+    return _binding_cache
 
 
 def numeric_mode():

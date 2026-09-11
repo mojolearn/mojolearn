@@ -652,8 +652,18 @@ _NATIVE = {}
 
 def _native(key):
     """The base binding's host helper `key`, resolved once per process
-    through `_backend.binding` for the running tier and cached in
-    `_NATIVE` (a test may plant a callable there to observe a call).
+    from the IDENTICAL `_mojolearn` binary and cached in `_NATIVE` (a test
+    may plant a callable there to observe a call).
+
+    ALWAYS THE IDENTICAL BINARY, WHATEVER TIER THE CALLER RUNS. These
+    helpers are a float64-to-float32 cast, a transpose and a finiteness
+    predicate: byte copies with no tier semantics, and every estimator in
+    every tier funnels its input through them. Since DEVIATION 2490
+    (2026-09-10) the base binding is built in the identical tier alone
+    (only the tree lanes have a fast or deterministic binary), so
+    resolving through the running tier here would refuse every FAST tree
+    fit at its first input conversion. Found by the macOS release smoke
+    under MOJOLEARN_NUMERIC_MODE=fast the day the rule landed.
 
     There is NO Python fallback. The package refuses to import without its
     binding, so the only way this symbol can be missing is a binary on
@@ -665,12 +675,13 @@ def _native(key):
         return fn
     from . import _backend
     try:
-        fn = getattr(_backend.binding("_mojolearn"), key)
+        fn = getattr(_backend.binding("_mojolearn", mode="identical"), key)
     except Exception as exc:
         raise ImportError(
             f"mojolearn: the base binding has no `{key}`; the compiled "
-            "_mojolearn extension is older than this Python layer. "
-            "Rebuild it with\n    sh bindings/build.sh"
+            "_mojolearn extension is older than this Python layer, or the "
+            "identical set is not built. Rebuild it with\n    "
+            "MOJOLEARN_NUMERIC_MODE=identical sh bindings/build.sh"
         ) from exc
     _NATIVE[key] = fn
     return fn

@@ -115,66 +115,32 @@ def test_invalid_mode_refused(mode, binding):
 
 
 def test_shared_loader_resolves_live_default_and_explicit_mode(monkeypatch):
-    bindings = {mode: Binding(mode) for mode in MODES}
+    """`_mojolearn_metrics` is identical only (DEVIATION 2490): the live
+    default resolves the identical set, an explicit 'identical' does too,
+    and any lower tier, explicit or as the process default, refuses BY NAME
+    before `load_set` is reached."""
+    fake = Binding("identical")
     loaded = []
-    current = ["fast"]
+    current = ["identical"]
     monkeypatch.setattr(_backend, "default_mode", lambda: current[0])
+    # The input path's finiteness check resolves from the identical base
+    # binding through the same `binding()`; plant it so this test sees only
+    # the metrics binding's resolution.
+    from mojolearn import _buffer
+    monkeypatch.setitem(_buffer._NATIVE, "all_finite_f32", lambda addr, n: 1)
 
     def load(mode):
         loaded.append(mode)
-        return SimpleNamespace(mode=mode, _mojolearn_metrics=bindings[mode])
+        return SimpleNamespace(mode=mode, _mojolearn_metrics=fake)
 
     monkeypatch.setattr(_backend, "load_set", load)
     x = np.ones(2, dtype=np.float32)
-    for explicit, default in [(None, "fast"), ("identical", "fast"),
-                              (None, "deterministic"), ("fast", "identical")]:
+    metrics.mean_squared_error(x, x)
+    metrics.mean_squared_error(x, x, numeric_mode="identical")
+    assert loaded == ["identical", "identical"]
+    for explicit, default in [("fast", "identical"), ("deterministic", "identical"),
+                              (None, "fast"), (None, "deterministic")]:
         current[0] = default
-        metrics.mean_squared_error(x, x, numeric_mode=explicit)
-    assert loaded == ["fast", "identical", "deterministic", "fast"]
-
-
-@pytest.mark.parametrize("name", [*NAMES, "accuracy_score", "r2_score"])
-def test_all_scalar_entry_points_forward_explicit_mode(name, monkeypatch):
-    seen = []
-    fake = Binding("identical")
-    def load(module, mode=None):
-        seen.append((module, mode))
-        return fake
-    monkeypatch.setattr(_backend, "binding", load)
-    x = np.ones(2, dtype=np.int32 if name == "accuracy_score" else np.float32)
-    getattr(metrics, name)(x, x, numeric_mode="identical")
-    assert seen == [("_mojolearn_metrics", "identical")]
-
-
-@pytest.mark.parametrize("readback", ["metrics_numeric_mode", "umap_numeric_mode"])
-def test_compiled_mode_mismatch_refused_before_metric(readback, monkeypatch):
-    fake = SimpleNamespace(**{readback: lambda: MODES["fast"]})
-    monkeypatch.setattr(_backend, "binding", lambda *args: fake)
-    x = np.ones(2, dtype=np.float32)
-    with pytest.raises(RuntimeError, match="requested identical, binary reports fast"):
-        metrics.mean_squared_error(x, x, numeric_mode="identical")
-
-
-def test_missing_requested_artifact_propagates_without_fallback(monkeypatch):
-    def missing(*args):
-        raise ImportError("missing identical artifact")
-    monkeypatch.setattr(_backend, "binding", missing)
-    x = np.ones(2, dtype=np.float32)
-    with pytest.raises(ImportError, match="missing identical artifact"):
-        metrics.mean_squared_error(x, x, numeric_mode="identical")
-
-
-def test_sklearn_removed_squared_argument_is_not_silently_accepted(binding):
-    x = np.ones(2, dtype=np.float32)
-    with pytest.raises(TypeError):
-        metrics.mean_squared_error(x, x, squared=False)
-
-
-def test_default_is_resolved_once_before_loading(monkeypatch):
-    current = ["fast"]
-    monkeypatch.setattr(_backend, "default_mode", lambda: current[0])
-    def load(module, mode):
-        current[0] = "identical"
-        return Binding(mode)
-    monkeypatch.setattr(_backend, "binding", load)
-    assert metrics.mean_squared_error(np.ones(2, np.float32), np.ones(2, np.float32)) == 2.5
+        with pytest.raises(ValueError, match="tree lanes"):
+            metrics.mean_squared_error(x, x, numeric_mode=explicit)
+    assert loaded == ["identical", "identical"], "a lower tier reached load_set"

@@ -383,7 +383,10 @@ mm.predict_proba(X)
 ova = ens.GradientBoosting(loss="MultiClassOneVsAll", n_estimators=2,
                            max_depth=3, border_count=16,
                            class_weights=[1., 2., 3.]).fit(X, yc)
-raw, probability = ova.predict(X), ova.predict_proba(X)
+# DEVIATION 2462: estimator outputs are mojolearn.Array (no arithmetic);
+# np.asarray views them zero-copy. This gate runs on the FAST tier only and
+# was found broken here the day the tree-only tier rule landed (2490).
+raw, probability = np.asarray(ova.predict(X)), np.asarray(ova.predict_proba(X))
 if raw.shape != (512, 3) or probability.shape != raw.shape:
     raise SystemExit("smoke: MultiClassOneVsAll returned wrong output shape")
 if not np.isfinite(raw).all() or not np.isfinite(probability).all():
@@ -415,13 +418,13 @@ preds = {}
 for gp in ("SymmetricTree", "Depthwise", "Lossguide"):
     g = ens.GradientBoosting(loss="RMSE", n_estimators=3, max_depth=4,
                              border_count=16, grow_policy=gp).fit(X, X[:, 0])
-    preds[gp] = g.predict(X)
+    preds[gp] = np.asarray(g.predict(X))
     if gp != "SymmetricTree":
         if "\nntree " not in g.model_:
             raise SystemExit(f"smoke: {gp} model text carries no ntree record")
         p = os.path.join(tmp, gp + ".npz")
         g.save(p)
-        if not (ens.GradientBoosting.load(p).predict(X) == preds[gp]).all():
+        if not (np.asarray(ens.GradientBoosting.load(p).predict(X)) == preds[gp]).all():
             raise SystemExit(f"smoke: {gp} save/load changed predictions")
 if (preds["SymmetricTree"] == preds["Depthwise"]).all():
     raise SystemExit("smoke: Depthwise predictions equal SymmetricTree's")

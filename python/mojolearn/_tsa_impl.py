@@ -74,45 +74,24 @@ from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, as_f32_colmajor, empty
 from ._bufcheck import nelems, probe, strided_rows
 
-# The numeric-mode selector (`_backend.select()`, called from
-# `mojolearn/__init__.py`) installs the identical build of each extension
-# under its canonical module name -- but only for the modules named in its
-# `_MODULES` tuple, and `_mojolearn_tsa` is not one of them yet. So: use
-# what the selector installed if it installed anything, and otherwise load
-# the binary the requested mode asks for, BY PATH. Never fall back to the
-# fast binary when identical was asked for; a wrong-mode module that
-# imports is a mislabelled measurement, which is `_backend.py`'s own rule
-# and the reason it plants raising stubs instead of falling back.
-def _load_binding():
-    pkg_name = __name__.rsplit(".", 1)[0]
-    pkg = sys.modules[pkg_name]
-    installed = getattr(pkg, "_mojolearn_tsa", None)
-    if installed is not None:
-        return installed
-    from . import _backend
+# THE BINDING, RESOLVED LAZILY THROUGH `_backend.binding`, the one choke
+# point that refuses an identical-only lane by name under a lower tier,
+# loads the set the tier and vendor axes name, and cross-checks the binary's
+# compiled tier. This module loaded `_mojolearn_tsa.so` by path AT IMPORT
+# until DEVIATION 2490 (2026-09-10), from the days when `_backend._MODULES`
+# did not list it; that path was how a stale lower-tier binary on disk kept
+# answering after the lane went identical only, and an import-time load
+# would now take the whole package down under `fast`. Lazy, by name, on
+# first use, like every other lane.
+class _Binding:
+    """Attribute access resolves the binding for the process default tier."""
 
-    mode = _backend.requested_mode()
-    # The directory comes from `_backend.tier_dir`, the one place the tier
-    # and vendor axes become a path (python/mojolearn/<vendor>/<tier>/ on
-    # the Linux wheel, the package directory on macOS and flat checkouts).
-    path = os.path.join(_backend.tier_dir(mode), "_mojolearn_tsa.so")
-    if not os.path.exists(path):
-        raise ImportError(
-            f"mojolearn: {path} is not built; build it with\n    "
-            + (f"MOJOLEARN_NUMERIC_MODE={mode} " if mode != "fast" else "")
-            + "bash bindings/build_tsa.sh"
-        )
-    full = f"{pkg_name}._mojolearn_tsa"
-    loader = importlib.machinery.ExtensionFileLoader(full, path)
-    spec = importlib.util.spec_from_loader(full, loader, origin=path)
-    module = importlib.util.module_from_spec(spec)
-    loader.exec_module(module)
-    sys.modules[full] = module
-    setattr(pkg, "_mojolearn_tsa", module)
-    return module
+    def __getattr__(self, attr):
+        from . import _backend
+        return getattr(_backend.binding("_mojolearn_tsa"), attr)
 
 
-_mojolearn_tsa = _load_binding()
+_mojolearn_tsa = _Binding()
 
 
 def _series_major(y, name):

@@ -62,29 +62,35 @@ if NO_GPU:
     )
     raise SystemExit(0)
 
+
+# ==========================================================================
+# ONE TIER RULE (DEVIATION 2490, 2026-09-10). THE THREE TREE LANES ship
+# fast, deterministic and identical; EVERY OTHER BINDING ships identical
+# only. So this file has two halves:
+#
+#   * The trees, below, fit in whatever tier verify_wheel.sh asked for.
+#   * Every other family is a thunk in IDENTICAL_ONLY_LAUNCHES. Under
+#     `identical` each must LAUNCH. Under `fast` and `deterministic` each
+#     must RAISE, naming the identical tier, and one that answers is the
+#     failure: it would mean a lower-tier binary of an identical-only lane
+#     got back into the wheel.
+#
+# A SKIP WOULD LEAVE THE REFUSAL ITSELF UNGATED, which is the failure mode
+# this file has already shipped once: a binding no gate launches is untested
+# shipped surface. Each thunk is checked on its own rather than the list as
+# a whole, so a refusal from the first family cannot hide a lower-tier
+# binary of the ninth. The refusal has to be identified by what it SAYS,
+# because a bare except would pass any fault under the lower tiers.
+# ==========================================================================
+_tier = mojolearn._backend.requested_mode()
+
 rng = np.random.default_rng(0)
 centers = np.array([[0, 0], [40, 40], [0, 40], [40, 0]], dtype=np.float32)
 X = np.repeat(centers, 100, axis=0) + rng.normal(0, 1, (400, 2)).astype(np.float32)
 
-km = mojolearn.KMeans(
-    n_clusters=4, init="array", init_centroids=centers + 4, max_iter=50
-).fit(X)
-for c in range(4):
-    block = km.labels_[c * 100 : (c + 1) * 100]
-    assert len(set(block.tolist())) == 1, f"cluster {c} split across labels"
-# DEVIATION 2462: estimator outputs are mojolearn.Array (no arithmetic, no
-# ufuncs); np.asarray views them zero-copy so every check below is unchanged.
-assert len({tuple(r) for r in np.asarray(km.cluster_centers_).round(0)}) == 4, "centroids merged"
-
-nn = mojolearn.NearestNeighbors(n_neighbors=3).fit(X)
-d, i = nn.kneighbors(X[:50])
-d, i = np.asarray(d), np.asarray(i)
-assert (i[:, 0] == np.arange(50)).all(), "a point is not its own nearest neighbour"
-assert (d[:, 0] < 1e-3).all(), "self-distance is not ~0"
-
 # THE TREES. Imported from their modules, not from the package top level, so
 # this smoke holds whether or not __init__ re-exports them; the wheel ships
-# the three tree extensions either way and each must load and FIT.
+# the three tree extensions in every tier and each must load and FIT.
 from mojolearn.ensemble import GradientBoosting
 from mojolearn.randomforest import RandomForestClassifier
 from mojolearn.extratrees import ExtraTreesRegressor
@@ -108,106 +114,129 @@ pe = et.predict(Xt)
 assert pe.shape == (512,), pe.shape
 assert np.corrcoef(pe, yr)[0, 1] > 0.5, "ExtraTrees learned nothing"
 
-# THE CLASSICAL ESTIMATORS, same fits as smoke_estimators.py, imported from
-# their modules for the same reason as the trees above.
-from mojolearn.decomposition import PCA, TruncatedSVD
-from mojolearn.density import DBSCAN
-from mojolearn.linear_model import LinearRegression
-
-clouds = np.vstack([
-    rng.normal((-4, -4), 0.08, (40, 2)),
-    rng.normal((4, 4), 0.08, (40, 2)),
-    [[-10, 8], [10, -8], [0, 10], [10, 0]],
-]).astype(np.float32)
-labels = np.asarray(DBSCAN(eps=0.35, min_samples=5).fit_predict(clouds))
-assert len(set(labels[:40].tolist())) == 1 and len(set(labels[40:80].tolist())) == 1
-assert labels[0] != labels[40] and (labels[-4:] == -1).all(), "DBSCAN wrong"
-
-xc = rng.normal(size=(512, 6)).astype(np.float32)
-xc[:, 1] += 0.7 * xc[:, 0]
-pca = PCA(n_components=6).fit(xc)
-np.testing.assert_allclose(
-    pca.explained_variance_, np.linalg.eigvalsh(np.cov(xc, rowvar=False))[::-1],
-    rtol=2e-3, atol=2e-4)
-svd = TruncatedSVD(n_components=6).fit(xc)
-np.testing.assert_allclose(
-    svd.singular_values_, np.linalg.svd(xc, compute_uv=False), rtol=2e-3, atol=2e-3)
-coef = np.array([1.5, -2.0, 0.25, 4.0, -1.0, 0.5], dtype=np.float32)
-ols = LinearRegression().fit(xc, xc @ coef + np.float32(3.25))
-np.testing.assert_allclose(ols.coef_, coef, rtol=3e-3, atol=3e-3)
-
-# ==========================================================================
-# ONE ENTRY POINT PER REMAINING BINDING. Added 2026-09-01.
-# ==========================================================================
-# Everything above reaches FIVE of the twelve extensions this wheel shipped
-# when this section was written (2026-09-01; `_mojolearn_gp` joined later
-# the same day as the THIRTEENTH, and its arm is below with the others):
-# _mojolearn, _mojolearn_estimators, _mojolearn_gbdt, _mojolearn_rf and
-# _mojolearn_trees. MEASURED by wrapping `_backend.binding` and recording
-# every name it was asked for, because guessing from estimator names gives
-# the wrong answer -- PCA and TruncatedSVD look like they cover
-# `_mojolearn_linalg` and do not (`decomposition.py:155`, `:382` both bind
-# `_mojolearn_estimators`), and LinearRegression does not reach
-# `_mojolearn_solver`.
-#
-# So SEVEN extensions shipped in every wheel, across all three tiers, had
-# never been launched by wheel verification: 21 of 36 artifacts. Each is
-# user-reachable, so that was untested shipped surface, not dead weight. Any
-# one of them could import cleanly and die at its first kernel launch, which
-# is precisely the MACOSX_DEPLOYMENT_TARGET failure this project has already
-# shipped once, and verify_wheel.sh would have passed the wheel.
-#
-# These are LAUNCH gates, not accuracy gates. The arithmetic belongs to each
-# lane's own checks; what is asserted here is that the extension loads and a
-# kernel runs. They are kept to the smallest fixture that reaches a launch,
-# because this file runs once per interpreter per tier.
+# The sklearn-shaped GBDT adapter rides the gbdt binding, so it too fits in
+# every tier.
 series = (np.sin(np.arange(64, dtype=np.float64) / 3.0) + 1.0)
 xs = rng.random((48, 3)).astype(np.float32)
 ys = (xs[:, 0] > 0.5).astype(np.int64)
-
-mojolearn.AgglomerativeClustering(n_clusters=2).fit(xs)   # _mojolearn_solver
-mojolearn.SVC().fit(xs, ys)                               # _mojolearn_svm
-mojolearn.kpss_test(series)                               # _mojolearn_tsa
-assert mojolearn.metrics.accuracy_score(ys, ys) == 1.0    # _mojolearn_metrics
-assert mojolearn.MinMaxScaler().fit_transform(xs).shape == xs.shape
-assert mojolearn.StandardScaler().fit_transform(xs).shape == xs.shape
 adapter = mojolearn.GradientBoostingClassifier(n_estimators=2, max_depth=2).fit(xs, ys)
 assert adapter.predict(xs).shape == ys.shape
 adapter_proba = adapter.predict_proba(xs)
-assert adapter_proba.shape == (len(xs), 2) and adapter_proba.dtype == np.float32
-mojolearn.ARIMA(order=(1, 0, 0)).fit(series)              # _mojolearn_arima
+assert adapter_proba.shape == (len(xs), 2), adapter_proba.shape
+assert np.asarray(adapter_proba).dtype == np.float32, adapter_proba.dtype
 
-# _mojolearn_gp, the THIRTEENTH extension (2026-09-01). A 16x2 slice of xs,
-# SPREAD to [-2, 2) so a unit-length-scale RBF does not drive K + 2^-20 I
-# toward singular (points packed in [0, 1)^2 would make this launch gate a
-# conditioning test, which it is not). alpha is the surface default 2^-20
-# spelled explicitly -- the pinned ridge, accepted on every tier
-# (DEVIATIONS 1751/1772) -- and info_ is ASSERTED zero because a failed
-# factorization here is a RESULT, not an exception (DEVIATION 1634), so a
-# smoke that ignored it would pass on a fit that computed nothing.
-gpx = (xs[:16, :2] * np.float32(4.0) - np.float32(2.0))
-gpy = (np.sin(gpx[:, 0]) + 0.5 * gpx[:, 1]).astype(np.float32)
-gpm = mojolearn.GaussianProcessRegressor(
-    kernel=mojolearn.RBF(1.0), alpha=2.0 ** -20).fit(gpx, gpy)
-assert gpm.info_ == 0, f"gp factorization failed: info_={gpm.info_}"
-gpp = gpm.predict(gpx)
-assert gpp.shape == (16,), gpp.shape
-assert np.isfinite(gpp).all(), gpp
+# ------------------------------------------------------------------ the rest
+# Everything from here to IDENTICAL_ONLY_LAUNCHES is one thunk per binding
+# (or per family where a binding carries several). The fixtures are the
+# smallest that reach a kernel launch; the arithmetic belongs to each lane's
+# own checks, and what is asserted here is that the extension loads and a
+# kernel runs. `_launched` collects what the print line at the end reports.
+_launched = {}
 
-# THE NEURAL BINDINGS ARE IDENTICAL-ONLY (2026-09-10), so BOTH ARMS are
-# asserted here rather than the calls being skipped outside the identical
-# tier -- the same rule, and for the same reason, as the `_mojolearn_linalg`
-# block below. `_mojolearn_training`, `_mojolearn_mamba` and
-# `_mojolearn_transformer` build in `identical` alone: their fused kernels are
-# gated on the identical contract, so the lower tiers ran the unfused path and
-# were slower than the default while promising less.
-#
-# A SKIP HERE WOULD LEAVE THE REFUSAL ITSELF UNGATED, which is the failure
-# mode this file has already shipped once: a binding no gate launches is
-# untested shipped surface. Under `identical` these must LAUNCH; under `fast`
-# and `deterministic` they must RAISE, and one that answers is the failure --
-# that would mean a lower-tier neural binary got back into the wheel.
-_neural_mode = os.environ.get("MOJOLEARN_NUMERIC_MODE", "fast")
+
+def _kmeans():                                            # _mojolearn
+    km = mojolearn.KMeans(
+        n_clusters=4, init="array", init_centroids=centers + 4, max_iter=50
+    ).fit(X)
+    for c in range(4):
+        block = km.labels_[c * 100 : (c + 1) * 100]
+        assert len(set(block.tolist())) == 1, f"cluster {c} split across labels"
+    # DEVIATION 2462: estimator outputs are mojolearn.Array (no arithmetic, no
+    # ufuncs); np.asarray views them zero-copy so every check is unchanged.
+    assert len({tuple(r) for r in np.asarray(km.cluster_centers_).round(0)}) == 4, "centroids merged"
+    _launched["kmeans n_iter"] = km.n_iter_
+
+
+def _knn():                                               # _mojolearn
+    nn = mojolearn.NearestNeighbors(n_neighbors=3).fit(X)
+    d, i = nn.kneighbors(X[:50])
+    d, i = np.asarray(d), np.asarray(i)
+    assert (i[:, 0] == np.arange(50)).all(), "a point is not its own nearest neighbour"
+    assert (d[:, 0] < 1e-3).all(), "self-distance is not ~0"
+    _launched["knn tile"] = nn.used_query_tile_
+
+
+def _estimators():                                        # _mojolearn_estimators
+    from mojolearn.decomposition import PCA, TruncatedSVD
+    from mojolearn.density import DBSCAN
+    from mojolearn.linear_model import LinearRegression
+
+    clouds = np.vstack([
+        rng.normal((-4, -4), 0.08, (40, 2)),
+        rng.normal((4, 4), 0.08, (40, 2)),
+        [[-10, 8], [10, -8], [0, 10], [10, 0]],
+    ]).astype(np.float32)
+    labels = np.asarray(DBSCAN(eps=0.35, min_samples=5).fit_predict(clouds))
+    assert len(set(labels[:40].tolist())) == 1 and len(set(labels[40:80].tolist())) == 1
+    assert labels[0] != labels[40] and (labels[-4:] == -1).all(), "DBSCAN wrong"
+
+    xc = rng.normal(size=(512, 6)).astype(np.float32)
+    xc[:, 1] += 0.7 * xc[:, 0]
+    pca = PCA(n_components=6).fit(xc)
+    np.testing.assert_allclose(
+        pca.explained_variance_, np.linalg.eigvalsh(np.cov(xc, rowvar=False))[::-1],
+        rtol=2e-3, atol=2e-4)
+    svd = TruncatedSVD(n_components=6).fit(xc)
+    np.testing.assert_allclose(
+        svd.singular_values_, np.linalg.svd(xc, compute_uv=False), rtol=2e-3, atol=2e-3)
+    coef = np.array([1.5, -2.0, 0.25, 4.0, -1.0, 0.5], dtype=np.float32)
+    ols = LinearRegression().fit(xc, xc @ coef + np.float32(3.25))
+    np.testing.assert_allclose(ols.coef_, coef, rtol=3e-3, atol=3e-3)
+
+
+def _solver():                                            # _mojolearn_solver
+    mojolearn.AgglomerativeClustering(n_clusters=2).fit(xs)
+
+
+def _svm():                                               # _mojolearn_svm
+    mojolearn.SVC().fit(xs, ys)
+
+
+def _tsa():                                               # _mojolearn_tsa
+    mojolearn.kpss_test(series)
+
+
+def _metrics():                                           # _mojolearn_metrics
+    assert mojolearn.metrics.accuracy_score(ys, ys) == 1.0
+
+
+def _preprocessing():                                     # _mojolearn_preprocessing
+    assert mojolearn.MinMaxScaler().fit_transform(xs).shape == xs.shape
+    assert mojolearn.StandardScaler().fit_transform(xs).shape == xs.shape
+
+
+def _arima():                                             # _mojolearn_arima
+    mojolearn.ARIMA(order=(1, 0, 0)).fit(series)
+
+
+def _gp():                                                # _mojolearn_gp
+    # A 16x2 slice of xs, SPREAD to [-2, 2) so a unit-length-scale RBF does
+    # not drive K + 2^-20 I toward singular (points packed in [0, 1)^2 would
+    # make this launch gate a conditioning test, which it is not). alpha is
+    # the surface default 2^-20 spelled explicitly -- the pinned ridge,
+    # accepted on every tier (DEVIATIONS 1751/1772) -- and info_ is ASSERTED
+    # zero because a failed factorization here is a RESULT, not an exception
+    # (DEVIATION 1634), so a smoke that ignored it would pass on a fit that
+    # computed nothing.
+    gpx = (xs[:16, :2] * np.float32(4.0) - np.float32(2.0))
+    gpy = (np.sin(gpx[:, 0]) + 0.5 * gpx[:, 1]).astype(np.float32)
+    gpm = mojolearn.GaussianProcessRegressor(
+        kernel=mojolearn.RBF(1.0), alpha=2.0 ** -20).fit(gpx, gpy)
+    assert gpm.info_ == 0, f"gp factorization failed: info_={gpm.info_}"
+    gpp = gpm.predict(gpx)
+    assert gpp.shape == (16,), gpp.shape
+    assert np.isfinite(gpp).all(), gpp
+
+
+def _linalg():                                            # _mojolearn_linalg
+    # `mojolearn.linalg` publishes a cross-vendor identity profile and has
+    # refused by name on any other tier since before DEVIATION 2490
+    # (`_linalg_impl.py`, `require_identical`, after a mislabeled
+    # deterministic build on the 2026-08-29 Apple stability run).
+    _a = rng.random((8, 4)).astype(np.float32)
+    _p = mojolearn.linalg.matmul(_a, _a.T)
+    assert _p.shape == (8, 8), _p.shape
+
 
 from mojolearn import _training_impl as _T             # _mojolearn_training
 from mojolearn import _mamba_impl as _M                # _mojolearn_mamba
@@ -230,14 +259,15 @@ _ds, _dc = 16, 4
 _nh, _hd, _ff = 4, 8, 64
 
 
-def _launch_neural():
-    """Every neural binding, through one kernel launch each."""
+def _training():                                          # _mojolearn_training
     _ce = _T.cross_entropy(
         rng.standard_normal((4, 3)).astype(np.float32),
         np.array([0, 1, 2, 0], dtype=np.int32),
     )
     assert np.isfinite(_ce) and _ce > 0.0, _ce
 
+
+def _mamba():                                             # _mojolearn_mamba
     _m1 = mojolearn.Mamba1Block({
         "norm.weight": np.ones(_dm, dtype=np.float32),
         "in_proj.weight": _w(2 * _di, _dm),
@@ -252,6 +282,8 @@ def _launch_neural():
     assert _mout.shape == (1, 4, _dm), _mout.shape
     assert np.all(np.isfinite(_mout)), "Mamba1Block returned non-finite cells"
 
+
+def _transformer():                                       # _mojolearn_transformer
     _tb = mojolearn.TransformerBlock({
         "input_layernorm.weight": np.ones(_dm, dtype=np.float32),
         "post_attention_layernorm.weight": np.ones(_dm, dtype=np.float32),
@@ -266,83 +298,87 @@ def _launch_neural():
     assert np.all(np.isfinite(_tout)), "TransformerBlock returned non-finite cells"
 
 
-if _neural_mode == "identical":
-    _launch_neural()
-else:
-    # A BARE `except` HERE WOULD PASS THE GATE ON ANY FAILURE, including a
-    # real bug that has nothing to do with tiers. The refusal has to be
-    # identified by what it says, not merely by having been raised.
+#: One entry per identical-only binding (two for `_mojolearn`, which carries
+#: both k-means and k-NN). packaging/check_ext_lists.py keeps the binding
+#: lists in step; this list is kept in step by the assertion right below it.
+IDENTICAL_ONLY_LAUNCHES = [
+    ("_mojolearn", _kmeans), ("_mojolearn", _knn),
+    ("_mojolearn_estimators", _estimators),
+    ("_mojolearn_solver", _solver),
+    ("_mojolearn_svm", _svm),
+    ("_mojolearn_tsa", _tsa),
+    ("_mojolearn_metrics", _metrics),
+    ("_mojolearn_preprocessing", _preprocessing),
+    ("_mojolearn_arima", _arima),
+    ("_mojolearn_gp", _gp),
+    ("_mojolearn_linalg", _linalg),
+    ("_mojolearn_training", _training),
+    ("_mojolearn_mamba", _mamba),
+    ("_mojolearn_transformer", _transformer),
+]
+_covered = {name for name, _ in IDENTICAL_ONLY_LAUNCHES}
+_expected = set(mojolearn._backend._IDENTICAL_ONLY) - {"_mojolearn_byte_lm"}
+assert _covered == _expected, (
+    "this smoke's identical-only launches and _backend._IDENTICAL_ONLY "
+    f"disagree: smoke-only {sorted(_covered - _expected)}, "
+    f"package-only {sorted(_expected - _covered)}")
+assert not (set(mojolearn._backend._TIERED) & _covered), "a tree lane is in the identical-only list"
+
+for _name, _launch in IDENTICAL_ONLY_LAUNCHES:
+    if _tier == "identical":
+        _launch()
+        continue
     try:
-        _launch_neural()
+        _launch()
     except Exception as _exc:
         _why = str(_exc)
         if "identical" not in _why.lower():
             raise AssertionError(
-                f"the neural bindings failed on the {_neural_mode} tier, but "
-                f"not with the identical-only refusal; this is a different "
-                f"fault and it is being reported rather than passed: {_why}"
+                f"{_name} ({_launch.__name__}) failed on the {_tier} tier, "
+                f"but not with the identical-only refusal; this is a "
+                f"different fault and it is being reported rather than "
+                f"passed: {_why}"
             ) from _exc
     else:
         raise AssertionError(
-            f"the neural bindings ANSWERED on the {_neural_mode} tier, where "
-            f"they must refuse: transformer, mamba and training build "
-            f"identical only, and a {_neural_mode} binary must not exist")
-
-# _mojolearn_linalg IS IDENTITY-ONLY BY DESIGN, so BOTH ARMS are asserted
-# here rather than the call being skipped outside the identical tier.
-# `mojolearn.linalg` publishes a cross-vendor identity profile and REFUSES
-# by name on any tier that does not make that claim (`_linalg_impl.py:269`),
-# a refusal added after a mislabeled deterministic build on the 2026-08-29
-# Apple stability run. A skip here would leave the refusal itself ungated,
-# and this extension is only ever launched on the identical arm.
-_mode_now = os.environ.get("MOJOLEARN_NUMERIC_MODE", "fast")
-if _mode_now == "identical":
-    _a = rng.random((8, 4)).astype(np.float32)
-    _p = mojolearn.linalg.matmul(_a, _a.T)
-    assert _p.shape == (8, 8), _p.shape
-else:
-    try:
-        mojolearn.linalg.matmul(xs, xs.T)
-    except RuntimeError as _e:
-        assert "identity claim" in str(_e), str(_e)
-    else:
-        raise AssertionError(
-            f"mojolearn.linalg.matmul did NOT refuse on the {_mode_now} tier;"
-            " it publishes a cross-vendor identity profile and only the"
-            " identical build may serve it"
-        )
+            f"{_name} ({_launch.__name__}) ANSWERED on the {_tier} tier, "
+            f"where it must refuse: only the tree lanes ship {_tier}, and a "
+            f"{_tier} binary of {_name} must not exist (DEVIATION 2490)")
 
 # THE MODE THAT ACTUALLY LOADED, read back from the binary where it can be.
 # verify_wheel.sh runs this file once per mode and checks the word.
 mode = mojolearn.numeric_mode()
-assert mode == os.environ.get("MOJOLEARN_NUMERIC_MODE", "fast"), mode
+assert mode == _tier, (mode, _tier)
 
-# Run the public UMAP suite against the installed package, including the
-# certified layout bits in IDENTICAL mode and refusal controls in every mode.
+# The public UMAP, mamba and transformer suites against the installed
+# package. These are ACCURACY suites (certified layout bits, corpus
+# tolerances, state continuation), and every binding they touch is identical
+# only, so they run under identical alone; the two lower tiers were gated
+# above, where each of those bindings had to refuse by name.
 import unittest
 import importlib.util
 from pathlib import Path
-_umap_spec = importlib.util.spec_from_file_location(
-    "test_umap_surface", Path(__file__).resolve().parents[2]
-    / "python/mojolearn/tests/test_umap_surface.py")
-test_umap_surface = importlib.util.module_from_spec(_umap_spec)
-_umap_spec.loader.exec_module(test_umap_surface)
-_umap_result = unittest.TextTestRunner(verbosity=1).run(
-    unittest.defaultTestLoader.loadTestsFromModule(test_umap_surface))
-assert _umap_result.wasSuccessful(), "installed UMAP surface failed"
+if _tier == "identical":
+    _umap_spec = importlib.util.spec_from_file_location(
+        "test_umap_surface", Path(__file__).resolve().parents[2]
+        / "python/mojolearn/tests/test_umap_surface.py")
+    test_umap_surface = importlib.util.module_from_spec(_umap_spec)
+    _umap_spec.loader.exec_module(test_umap_surface)
+    _umap_result = unittest.TextTestRunner(verbosity=1).run(
+        unittest.defaultTestLoader.loadTestsFromModule(test_umap_surface))
+    assert _umap_result.wasSuccessful(), "installed UMAP surface failed"
 
-# The sequence fixes must pass their full API gates in the installed wheel,
-# including corpus tolerances and state continuation, in every matrix job.
-# Load the drivers from source so they can find their independent corpora;
-# their mojolearn imports continue to resolve to this isolated installation.
-for _sequence_family in ("mamba", "transformer"):
-    _sequence_spec = importlib.util.spec_from_file_location(
-        "test_" + _sequence_family + "_surface",
-        Path(__file__).resolve().parents[2]
-        / ("python/mojolearn/tests/test_" + _sequence_family + "_surface.py"))
-    _sequence_gate = importlib.util.module_from_spec(_sequence_spec)
-    _sequence_spec.loader.exec_module(_sequence_gate)
-    assert _sequence_gate.main() == 0, "installed " + _sequence_family + " surface failed"
+    # Load the drivers from source so they can find their independent
+    # corpora; their mojolearn imports continue to resolve to this isolated
+    # installation.
+    for _sequence_family in ("mamba", "transformer"):
+        _sequence_spec = importlib.util.spec_from_file_location(
+            "test_" + _sequence_family + "_surface",
+            Path(__file__).resolve().parents[2]
+            / ("python/mojolearn/tests/test_" + _sequence_family + "_surface.py"))
+        _sequence_gate = importlib.util.module_from_spec(_sequence_spec)
+        _sequence_spec.loader.exec_module(_sequence_gate)
+        assert _sequence_gate.main() == 0, "installed " + _sequence_family + " surface failed"
 
 # THE VENDOR THAT ACTUALLY LOADED, read back from the binary (2026-08-29,
 # docs/LINUX_WHEEL.md). On the macOS wheel it is 'metal'; the Linux smoke
@@ -362,8 +398,12 @@ _ordered_gate = importlib.util.module_from_spec(_ordered_spec)
 _ordered_spec.loader.exec_module(_ordered_gate)
 _ordered_gate.run_installed_ordered(Path(__file__).resolve().parents[2], mojolearn, mode, vendor)
 
+_extra = " ".join(f"{k}={v}" for k, v in _launched.items())
 print(
     f"v{mojolearn.__version__} py{sys.version_info.major}.{sys.version_info.minor}"
-    f" mode={mode} vendor={vendor} kmeans n_iter={km.n_iter_} knn tile={nn.used_query_tile_}"
-    f" gbdt rf et dbscan pca svd ols ok"
+    f" mode={mode} vendor={vendor} gbdt rf et ok"
+    + (f" | identical-only launched: {_extra} kmeans knn dbscan pca svd ols solver svm tsa"
+       f" metrics preprocessing arima gp linalg training mamba transformer ok"
+       if _tier == "identical" else
+       f" | {len(IDENTICAL_ONLY_LAUNCHES)} identical-only launches REFUSED by name under {_tier}")
 )

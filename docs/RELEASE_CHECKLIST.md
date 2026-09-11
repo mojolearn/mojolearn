@@ -27,6 +27,15 @@ pixi run write-docs-facts   # rewrites the marked spans in README.md
 pixi run check-docs-facts   # fails if a pin, a badge or a prose default drifted
 ```
 
+```sh
+python3 packaging/check_ext_lists.py   # every pack/build/smoke list agrees with _backend
+```
+
+The wheel's contents are one rule: the three tree bindings in every tier,
+every other binding in `identical/` alone (DEVIATION 2490). The checker holds
+the pack and build lists to `_backend._TIERED` and `_MODULES`; a binding that
+drifted back into three tiers, or out of the wheel, goes red here.
+
 `_version.py` is the source of truth and the checker holds `pyproject.toml`,
 `CITATION.cff` and the newest published CHANGELOG heading to it, so a
 half-finished bump goes red here rather than shipping in a README. Commit,

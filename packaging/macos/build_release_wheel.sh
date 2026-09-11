@@ -83,19 +83,22 @@ cp "$here/CITATION.cff" "$here/python/mojolearn/"
 # and would roughly double its binding-build time. A leg that spends its
 # lease compiling and comes home with an empty lanes/ has bought nothing at
 # all. Add a binding there only when a phase actually imports it.
-BUILD_SCRIPTS="build.sh build_gbdt.sh build_estimators.sh build_rf.sh build_trees.sh build_svm.sh build_solver.sh build_metrics.sh build_preprocessing.sh build_tsa.sh build_linalg.sh build_arima.sh build_gp.sh"
-EXT_NAMES="_mojolearn _mojolearn_gbdt _mojolearn_estimators _mojolearn_rf _mojolearn_trees _mojolearn_svm _mojolearn_solver _mojolearn_metrics _mojolearn_preprocessing _mojolearn_tsa _mojolearn_linalg _mojolearn_arima _mojolearn_gp"
+BUILD_SCRIPTS="build_gbdt.sh build_rf.sh build_trees.sh"
+EXT_NAMES="_mojolearn_gbdt _mojolearn_rf _mojolearn_trees"
 
-# THE NEURAL LANES ARE IDENTICAL-ONLY (2026-09-10) and so are held apart from
-# the two lists above, built and gated for the identical tier alone the way
-# the byte LM already was. Every fused kernel in transformer/ and mamba/ is
-# gated on `GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL`, so the FAST and
-# DETERMINISTIC builds fell back to the UNFUSED arms and ran slower than the
-# default while promising less; `bindings/build_{training,mamba,transformer}.sh`
-# now exit 2 for any other tier. This removes six .so files from every macOS
-# wheel (three bindings x two retired tiers) that no caller should have used.
-NEURAL_SCRIPTS="build_training.sh build_mamba.sh build_transformer.sh"
-NEURAL_NAMES="_mojolearn_training _mojolearn_mamba _mojolearn_transformer"
+# ONE TIER RULE (DEVIATION 2490, 2026-09-10): the three TREE lanes above
+# build in every tier MODES names. EVERY OTHER BINDING is identical only and
+# lives in the two lists below, built and gated for the identical tier alone
+# the way the byte LM always was. Cross-vendor bitwise identity is the
+# product; a fast tier ships only where it has a measured win over the
+# opponent's own CPU, and outside trees it has none (the reasoning and the
+# M4 numbers are on `_TIERED` in python/mojolearn/_backend.py). The
+# identical-only build scripts exit 2 on any other MOJOLEARN_NUMERIC_MODE.
+# Before this the split was neural-only (three lanes, 2026-09-10 morning);
+# the reason for THOSE was different (their fused kernels were gated on the
+# identical contract, so the lower tiers were slower) and no longer matters.
+IDENTICAL_ONLY_SCRIPTS="build.sh build_estimators.sh build_svm.sh build_solver.sh build_metrics.sh build_preprocessing.sh build_tsa.sh build_linalg.sh build_arima.sh build_gp.sh build_training.sh build_mamba.sh build_transformer.sh"
+IDENTICAL_ONLY_NAMES="_mojolearn _mojolearn_estimators _mojolearn_svm _mojolearn_solver _mojolearn_metrics _mojolearn_preprocessing _mojolearn_tsa _mojolearn_linalg _mojolearn_arima _mojolearn_gp _mojolearn_training _mojolearn_mamba _mojolearn_transformer"
 PACKAGE_BYTE_LM=${MOJOLEARN_PACKAGE_BYTE_LM:-0}
 case "$PACKAGE_BYTE_LM" in 0|1) ;; *) echo 'MOJOLEARN_PACKAGE_BYTE_LM must be 0 or 1' >&2; exit 2 ;; esac
 unset MOJOLEARN_BYTE_LM_OUTDIR
@@ -176,7 +179,7 @@ for mode in $MODES; do
         MOJOLEARN_NUMERIC_MODE=$mode MOJOLEARN_SKIP_BUILD_GATE=1 ./bindings/$script
     done
     if [ "$mode" = identical ]; then
-        for script in $NEURAL_SCRIPTS; do
+        for script in $IDENTICAL_ONLY_SCRIPTS; do
             echo "== $script ($mode, identical-only lane)"
             MOJOLEARN_NUMERIC_MODE=$mode MOJOLEARN_SKIP_BUILD_GATE=1 ./bindings/$script
         done
@@ -186,9 +189,9 @@ for mode in $MODES; do
     fi
 done
 
-# THE FILES THE REST OF THIS SCRIPT GATES, thirteen per tier (thirty-nine
-# .so files on the default three-tier build; the count follows EXT_NAMES x
-# MODES and this sentence said "eleven" until 2026-09-01). Built above or absent, never
+# THE FILES THE REST OF THIS SCRIPT GATES: EXT_NAMES x MODES (three tree
+# bindings x three tiers = nine) plus IDENTICAL_ONLY_NAMES in identical/
+# alone (thirteen), twenty-two on the default build as of DEVIATION 2490. Built above or absent, never
 # stale: every one is checked for existence and for being newer than this
 # script's start, so a build script that silently left the old file in place
 # fails here instead of shipping.
@@ -207,7 +210,7 @@ for n in $EXT_NAMES; do
 done
 # The identical-only lanes are gated in ONE tier, whatever MODES says.
 case " $MODES " in *" identical "*)
-    for n in $NEURAL_NAMES; do ALL_SOS="$ALL_SOS $PKG/identical/$n.so"; done ;;
+    for n in $IDENTICAL_ONLY_NAMES; do ALL_SOS="$ALL_SOS $PKG/identical/$n.so"; done ;;
 esac
 if [ "$PACKAGE_BYTE_LM" = 1 ]; then
     ALL_SOS="$ALL_SOS $PKG/identical/_mojolearn_byte_lm.so"

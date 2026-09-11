@@ -94,18 +94,21 @@ PKG = PY_DIR / "mojolearn"
 # `Mamba1Block` and `TransformerBlock` are both in `__all__`, so a Linux user
 # of that wheel gets an ImportError naming a build command they cannot run.
 EXT_NAMES = (
-    "_mojolearn", "_mojolearn_gbdt", "_mojolearn_estimators", "_mojolearn_rf",
-    "_mojolearn_trees", "_mojolearn_svm", "_mojolearn_solver",
-    "_mojolearn_metrics", "_mojolearn_preprocessing", "_mojolearn_tsa", "_mojolearn_linalg",
-    "_mojolearn_arima", "_mojolearn_gp",
+    # The three TREE lanes: the only bindings with fast and deterministic
+    # tiers (DEVIATION 2490, 2026-09-10).
+    "_mojolearn_gbdt", "_mojolearn_rf", "_mojolearn_trees",
 )
-#: THE NEURAL LANES BUILD IDENTICAL ONLY (2026-09-10). They are held apart
-#: from EXT_NAMES rather than removed: the exactness checks below compare the
+#: EVERYTHING ELSE BUILDS IDENTICAL ONLY (DEVIATION 2490). Held apart from
+#: EXT_NAMES rather than removed: the exactness checks below compare the
 #: files ON DISK against the expected set BOTH WAYS, so a name that is in no
 #: list at all is neither required in identical nor refused in fast, which is
 #: the miss the header above is about. `tier_names()` is the one place that
-#: decides, and it is the same shape `build_sets.sh` uses.
-NEURAL_NAMES = (
+#: decides, and it is the same shape `build_sets.sh` uses. The reasoning and
+#: the numbers are on `_TIERED` in python/mojolearn/_backend.py.
+IDENTICAL_ONLY_NAMES = (
+    "_mojolearn", "_mojolearn_estimators", "_mojolearn_svm",
+    "_mojolearn_solver", "_mojolearn_metrics", "_mojolearn_preprocessing",
+    "_mojolearn_tsa", "_mojolearn_linalg", "_mojolearn_arima", "_mojolearn_gp",
     "_mojolearn_training", "_mojolearn_mamba", "_mojolearn_transformer",
 )
 TIERS = ("fast", "deterministic", "identical")
@@ -114,13 +117,13 @@ TIERS = ("fast", "deterministic", "identical")
 def tier_names(tier, include_byte_lm=False):
     """Every extension expected in `tier`, in pack order.
 
-    The neural lanes and the optional byte LM exist in `identical` alone; a
-    lower tier carries neither. A set on disk that does not match this
+    Every binding but the three tree lanes, and the optional byte LM, exist
+    in `identical` alone; a lower tier carries none of them. A set on disk that does not match this
     EXACTLY is refused, in both directions.
     """
     names = EXT_NAMES
     if tier == "identical":
-        names = names + NEURAL_NAMES
+        names = names + IDENTICAL_ONLY_NAMES
         if include_byte_lm:
             names = names + ("_mojolearn_byte_lm",)
     return names
@@ -233,7 +236,7 @@ def release_inventory(sets, proof_paths, version, source_root=REPO):
                 optional_native={n: {
                     'included': True, 'supported_modes': ['identical'],
                     'unsupported_modes': ['fast', 'deterministic']}
-                    for n in ('_mojolearn_byte_lm',) + NEURAL_NAMES},
+                    for n in ('_mojolearn_byte_lm',) + IDENTICAL_ONLY_NAMES},
                 qualification='Build and file provenance only; installed runtime and numerical checks required',
                 runtime_coverage={ '/'.join(k): 'PENDING_INSTALLED_ARTIFACT' for k in sorted(proofs)})
 

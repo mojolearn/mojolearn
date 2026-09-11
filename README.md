@@ -123,8 +123,8 @@ framework, or on a device that has not passed the same checks.
 - **UMAP.** Neighbor selection and iterative updates match across the three
   vendors on named fixtures.
 
-Two other modes sit beside `identical`, selectable at runtime on every
-supported estimator:
+Two other modes sit beside `identical`, selectable at runtime on the three
+tree estimators only (see "Which families offer which tiers" below):
 
 | mode | contract |
 |---|---|
@@ -140,20 +140,41 @@ optimization gaps in the current kernels. The numbers are in the accompanying
 paper; the raw records behind them live under `bench/results/`.
 
 **`identical` is the default**, in the published <!--fact:published_version-->0.7.0<!--/fact--> wheels and in this
-source. For the tree and classical estimators you opt out of it, not into it,
-by setting `MOJOLEARN_NUMERIC_MODE=fast` or `deterministic` in the environment
+source. For the tree estimators you opt out of it, not into it, by
+setting `MOJOLEARN_NUMERIC_MODE=fast` or `deterministic` in the environment
 before import, or by calling `mojolearn.set_numeric_mode(...)` in code.
 
-**The neural surface has no lower tiers.** `TransformerBlock`, the Mamba
-blocks, the training ops and the byte LM build `identical` only. Their fused
-kernels are gated on the identical contract, so the lower tiers ran the
-unfused path and were slower than the default while promising less; asking
-one for `fast` or `deterministic` raises rather than resolving to something
-weaker.
-Certification stays configuration-specific, so the default does not certify
-every feature, and a
-configuration that cannot meet the contract raises a named error rather than
-quietly returning weaker arithmetic.
+### Which families offer which tiers
+
+One rule: **the tree lanes ship three tiers, everything else ships `identical`
+only** (DEVIATION 2490, 0.8.0).
+
+| family | bindings | tiers |
+|---|---|---|
+| Trees: gradient boosting, random forest, extra trees | `gbdt`, `rf`, `trees` | `fast`, `deterministic`, `identical` |
+| Everything else: k-means, k-NN, PCA, truncated SVD, linear models, SVC, SVR, isolation forest, kernel density, clustering, UMAP, GP, ARIMA, preprocessing, and the whole neural surface | all others | `identical` only |
+
+Asking an `identical`-only family for a lower tier raises a named error rather
+than resolving to something weaker.
+
+Cross-vendor bitwise identity is the product, and it is the default. A `fast`
+tier only earns its place where it has a measured win over the opponent's own
+CPU, and that is trees on Apple silicon: tree fitting calls no BLAS, so the
+opponent gets nothing from Accelerate's AMX coprocessor, and extra trees
+measured 1.25-1.61x scikit-learn on all ten cores at covtype 581k. The
+classical families have a BLAS call in the inner loop, and on an M4 Accelerate
+reaches 1438 GFLOP/s of fp32 GEMM on four performance cores against roughly
+4000 for the ten-core GPU, with one CPU thread already taking 88 of the 120
+GB/s the two share. A `fast` kernel there wins about 2.5x at best over a CPU
+scikit-learn gets for free, for the price of the reproducibility guarantee.
+`SVC` and `SVR` could beat libsvm's single thread, but two families with a
+fast tier that are not "trees" is a rule you would have to look up, and one
+rule beats two wins. The neural lanes gate every fused kernel on the identical
+contract, so their lower tiers were slower than the default anyway.
+
+What every other family offers instead is the part no vendor sells: cuML is
+CUDA and Linux only and does not run on Apple silicon at all, and
+cross-vendor bitwise identity is available nowhere else.
 
 ## Who this is for
 
@@ -394,7 +415,8 @@ What will get in your way first:
 And the standing limits of the contract itself:
 
 - Released-wheel support is narrower than source-build support.
-- `fast` deliberately makes no repeatability promise.
+- `fast` deliberately makes no repeatability promise, and is built only for
+  the three tree families (DEVIATION 2490).
 - `deterministic` does not promise agreement between different devices.
 - `identical` covers certified profiles and fixtures, not arbitrary untested shapes or future toolchains.
 - Some recent Python and neural-operator surfaces still have vendor legs or independent-reference checks pending.
