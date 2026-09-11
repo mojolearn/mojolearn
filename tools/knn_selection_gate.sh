@@ -28,19 +28,23 @@
 #             is one kernel's slope) and at k = 10, 15 with the shipped
 #             specialization. No source change; this is the measurement
 #             behind the brief's cost model (select_ms ~ intercept + slope*k).
-#   build     python/mojolearn/identical/_mojolearn.so from
-#             bindings/_mojolearn.mojo with the trial hook,
-#             -D MOJOLEARN_KNN_SELECT_TRIAL=1, mirroring bindings/build.sh's
-#             Linux command (build.sh has no extra-define hook, which is why
-#             the command is repeated here rather than wrapped).
+#   build     python/mojolearn/identical/_mojolearn.so through
+#             bindings/build.sh with the trial hook appended by its
+#             MOJOLEARN_BUILD_EXTRA_DEFINES hook (-D MOJOLEARN_KNN_SELECT_TRIAL=1),
+#             so the flags live in one place and the Mac/Linux differences
+#             (target cpu, linker floor) are build.sh's.
 #   gate      tools/knn_selection_gate.py against that binding: fixtures,
 #             arm equality, order/tie/oracle checks, reach by sabotage,
 #             then ordinary-request timing, under the 300 s deadline.
 #
-# UNTIL THE TRIAL HOOK IS WIRED (the brief's follow-on, not this pass) the
-# gate phase FAILS at its reach check and says so; the profile phase is
-# still the number this lane needs first. MOJOLEARN_KNN_SELECTION_SKIP_GATE=1
-# runs the profile alone.
+# THE ARMS (MOJOLEARN_KNN_SELECTION_ARMS, default baseline,headbound):
+# `baseline` is the 2026-09-09 kernel, `uniform` is C4 alone (DEVIATION
+# 2497), `headbound` is C4 + C1 (DEVIATION 2498). Gate C4 first, alone
+# (ARMS=baseline,uniform), then C1 (the default pair). On a build without
+# the hook the gate phase FAILS at its reach check and says so.
+# MOJOLEARN_KNN_SELECTION_SKIP_GATE=1 runs the profile alone;
+# MOJOLEARN_KNN_SELECTION_SKIP_PROFILE=1 skips the profile (already measured
+# 2026-09-11 on the H100; the brief's "Run 1 results").
 #
 # POSIX sh only: RunPod's Ubuntu images link /bin/sh to dash.
 set -u
@@ -93,6 +97,7 @@ pixi run mojo --version > "$OUT/mojo_version.txt" 2>&1
 IDENT="-D MOJOLEARN_NUMERIC_IDENTICAL=1"
 
 # ---- profile: the k-slope of the selection class, no source change -------
+if [ "${MOJOLEARN_KNN_SELECTION_SKIP_PROFILE:-0}" != "1" ]; then
 # shellcheck disable=SC2086
 run build-profile-generic pixi run mojo build -j "$JOBS" -I . $IDENT \
     -D MOJOLEARN_KNN_PHASE_TIMERS=1 -D MOJOLEARN_KNN_IDENTICAL_GENERIC_K=1 \
@@ -101,6 +106,7 @@ run build-profile-generic pixi run mojo build -j "$JOBS" -I . $IDENT \
 run build-profile-default pixi run mojo build -j "$JOBS" -I . $IDENT \
     -D MOJOLEARN_KNN_PHASE_TIMERS=1 \
     bench/knn_reference_price_main.mojo -o "$OUT/bin/profile-default"
+fi
 for k in 1 2 5 10 15; do
     if [ -x "$OUT/bin/profile-generic" ]; then
         MOJOLEARN_KNN_REF_INDEX=400000 MOJOLEARN_KNN_REF_QUERIES=4000 MOJOLEARN_KNN_REF_FEATURES=32 \
@@ -129,16 +135,15 @@ if [ "${MOJOLEARN_KNN_SELECTION_SKIP_GATE:-0}" = "1" ]; then
 fi
 
 # ---- build: the public binding with the trial hook ----------------------
-# Mirrors bindings/build.sh (Linux x86_64 branch: --target-cpu x86-64-v3,
-# --emit shared-lib, -I . -I bindings). The .so must be named _mojolearn.so
-# (PyInit__mojolearn). One build is one GPU architecture: this box's.
-TARGET_FLAGS=""
-case "$(uname -m)" in x86_64) TARGET_FLAGS="--target-cpu ${MOJOLEARN_LINUX_CPU:-x86-64-v3}" ;; esac
-mkdir -p python/mojolearn/identical
-# shellcheck disable=SC2086
-run build-binding-trial pixi run mojo build -j "$JOBS" --emit shared-lib $TARGET_FLAGS \
-    $IDENT -D MOJOLEARN_KNN_SELECT_TRIAL=1 \
-    -I . -I bindings bindings/_mojolearn.mojo -o python/mojolearn/identical/_mojolearn.so
+# bindings/build.sh owns the command (target cpu, linker floor, include
+# paths, the identical output directory python/mojolearn/identical/); the
+# trial define rides its MOJOLEARN_BUILD_EXTRA_DEFINES hook. One build is
+# one GPU architecture: this box's.
+# `env`, not a prefix assignment: dash does not reliably pass prefix
+# assignments through a shell function.
+run build-binding-trial env MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_COMPILE_JOBS="$JOBS" \
+    MOJOLEARN_BUILD_EXTRA_DEFINES="-D MOJOLEARN_KNN_SELECT_TRIAL=1 ${MOJOLEARN_KNN_SELECTION_EXTRA_DEFINES:-}" \
+    sh bindings/build.sh
 # The binary is witnessed by hash only: binaries are not evidence and the
 # repository's blob fences refuse them (no-oversized-blobs rule).
 if [ -f python/mojolearn/identical/_mojolearn.so ]; then

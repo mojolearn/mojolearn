@@ -461,3 +461,238 @@ wired). The only "distance mismatch" rows were the 16 planted exact-match
 queries, where the float32 Gram form leaves a residual near a true zero; the
 harness floor now includes that residual (71b2f975). Implementation of C4
 and C1 behind the trial define is the next lane (DEVIATION 2497, 2498).
+
+## Implementation pass (DEVIATION 2497 C4, DEVIATION 2498 C1; source only, 2026-09-11)
+
+Nothing here was built or run on the Mac. Every command is in RUN OWED
+below. Files touched by this pass (uncommitted, working tree):
+
+- `neighbors/checks/select_smallk_identical_candidate.mojo` (the kernel
+  lives here, not under `neighbors/impl/`; section 1's table says so):
+  `smallk_bucket_kernel[CAP, K, UNIFORM, BOUND, SABOTAGE]`, the trial hook
+  constants, `smallk_select_arm_from_env`, `_smallk_launch_bucket`,
+  `smallk_select_launch(..., arm)`.
+- `neighbors/impl/detail/knn_brute_force.mojo`: one `select_arm =
+  smallk_select_arm_from_env()` before the query loop (once per request)
+  and the extra argument at the selector call; nothing else.
+- `bindings/build.sh`: `MOJOLEARN_BUILD_EXTRA_DEFINES` (empty default)
+  appended to the `mojo build` line; header comment documents it.
+- `tools/knn_selection_gate.sh`: the build phase now calls
+  `bindings/build.sh` through that hook instead of mirroring the Linux
+  command; `MOJOLEARN_KNN_SELECTION_SKIP_PROFILE=1` skips the profile
+  (already measured, "Run 1 results"); `MOJOLEARN_KNN_SELECTION_EXTRA_DEFINES`
+  passes further defines. Outputs unchanged.
+- `tools/knn_selection_gate.py`: docstring for the three arm names and the
+  per-arm sabotage; the numpy selftest accepts `uniform`.
+- `neighbors/checks/knn_selector_arms_check.mojo` (new).
+- this section.
+
+### What the kernel does now
+
+Three arms, one kernel, chosen by comptime parameters:
+
+| arm | instantiation | scan loop | reject test |
+|---|---|---|---|
+| `baseline` | `[CAP, K, False, False, S]` | 2026-09-09 per-thread condition `col + 7*256 < length` | `pending < threshold` |
+| `uniform` (C4) | `[CAP, K, True, False, S]` | block-uniform `batch_base + 2048 <= length`, `col = batch_base + tid` | `pending < threshold` |
+| `headbound` (C4+C1) | `[CAP, K, True, True, S]` | as `uniform`, plus a refresh after completed batch 1, 4, 12, 28 | `pending < min(threshold, bound)` |
+
+WITHOUT `-D MOJOLEARN_KNN_SELECT_TRIAL=1` the binary holds exactly one
+instantiation per bucket, `[CAP, K, SMALLK_UNIFORM_TRIP_DEFAULT,
+SMALLK_HEAD_BOUND_DEFAULT, False]`, and both defaults are `False`, so it is
+the `baseline` arm: the `comptime if UNIFORM` / `comptime if BOUND` /
+`comptime if SABOTAGE` branches fold away and the remaining code is the
+2026-09-09 kernel (the one textual difference in that path is the rank
+phase's page `((rank + rounds) & 1)` where `rounds` is a constant 0; the
+compiler folds it). `smallk_select_arm_from_env` returns the default
+without reading the environment, and the launch refuses any other arm, so
+the new check cannot pass on a one-arm binary.
+
+WITH the define, `_tiled_brute_force_knn_impl` reads `MOJOLEARN_KNN_SELECT`
+(baseline / uniform / headbound / unset = default / anything else raises)
+and `MOJOLEARN_KNN_SELECT_SABOTAGE` (exactly "1") once per request and
+passes the arm to every selector launch of that request, exactly the
+`MOJOLEARN_KNN_VECTOR_TRIAL` pattern the harness expects (the harness sets
+`os.environ` before each `kneighbors` call and unsets it after).
+
+The defaults are two comptime constants in the selector file rather than
+the kernel-matrix row section 4 asked for, because this pass may not edit
+`checks/kernel_matrix.mojo`; the flip that promotes an arm moves them into
+`knn_selector_head_bound_for[column, identical]` in the same session.
+
+The refresh cadence "after batches 1, 4, 12, 28" is implemented as a count
+of COMPLETED batches (`done`, block-uniform under C4), tested after the
+`done += 1` at the bottom of each batch, so refresh 1 happens with 2,048
+columns seen and every lane holding min(k, 8) real keys (every published
+head is real), and refresh 4 (28) after 8,192 (57,344) columns. A
+65,536-column partition has 32 batches and takes all four; the 6,784-column
+last partition of 400k has 3 batches and takes the first; the carved k-wide
+tail partition has no batch and is the baseline kernel. The refresh reuses
+the rank phase's machinery verbatim (butterfly `shuffle_min_u64` plus one
+shared slot per lane group plus one barrier per round on fixed-lane-width
+columns; the eight-level shared tree elsewhere), popping the block's
+smallest head k times with the popped lane's COPY replaced by the sentinel;
+the k-th pop is `bound`. A running `rounds` counter (refresh rounds plus
+rank rounds) drives the butterfly's page parity, so two consecutive rounds
+never write the same page across the refresh / rank boundary; that is the
+"known parity" section 3 asked for.
+
+### Why the bits are unchanged (the identity argument)
+
+1. C4 changes only which loop visits a column, never whether or in what
+   order: a batch the block takes has all eight columns of every lane inside
+   the row (tid + 1792 < 2048 <= length - b*2048), so the per-thread form
+   took it too; the one batch the per-thread form took and the uniform form
+   does not (the last, for (length - 1792) mod 2048 in 1..255, lanes tid <
+   that remainder) is visited by those lanes in the tail loop instead, the
+   same eight columns ascending through the same `_smallk_insert`, and the
+   per-thread form's tail for those lanes was empty. No lane runs an extra
+   iteration; nothing else is predicated.
+2. Every head published at a refresh is a key of the union of the lanes'
+   lists, so `bound` (the k-th smallest of those 256) is the k-th smallest of
+   a SUBSET of the union: at least k union keys are <= bound.
+3. That count never decreases afterwards: a key leaves a list only when a
+   smaller key from the same lane pushes it off the end, and the smaller key
+   is <= bound as well. So any later pending key p >= bound has at least k
+   union keys below it and is not among the row's k smallest; p == bound is
+   impossible because keys carry their column and p's column is in no list.
+   Dropping it is the same act as the baseline's dropping of a key at or
+   above the lane's own k-th (`threshold`), which is the existing invariant.
+4. Hence after the scan the union still contains the row's true top-k under
+   every arm; the rank phase is unchanged (k exact UInt64 minima of the
+   union, ties decided by the index half of the same composite key, the
+   winner's value read back from the original tile cell), so the k output
+   (value bits, index) pairs and their order are the baseline's.
+5. `bound` is the sentinel before the first refresh, when fewer than k real
+   heads exist, and in every partition too short for one batch, and
+   `min(threshold, sentinel) = threshold`: those cases are the baseline
+   kernel by construction, not by argument.
+
+### Sabotage (reach per arm)
+
+This differs from section 4's spec (XOR on both arms) on purpose: the flip
+must prove the ARM'S OWN code path ran.
+
+- `baseline` and `uniform`: bit 0 of the index half of the composite key is
+  flipped for `u == 0` of every batch, inside that arm's own loop form
+  (the two loop forms are separate `comptime if` blocks). One candidate
+  column in eight carries its neighbor's index and the rank phase gathers
+  that neighbor's value, so thousands of cells move on the large shape and
+  the planted zero at column 2048 moves in the new check. The flipped index
+  stays inside the batch, so no out-of-range gather.
+- `headbound`: inside the refresh, the bound is the FIRST pop (the block
+  minimum head) instead of the k-th; from then on a lane admits only new
+  record minima, so the union loses true neighbors on nearly every row of
+  every partition with at least one batch. Rounds and barriers are
+  unchanged. A bound-minus-one sabotage was rejected: with unique keys it
+  can only drop a key exactly one below the bound, which is not a reliable
+  flip.
+- The DEFAULT (env unset) is the `baseline` instantiation with sabotage, so
+  the harness's default-reach row is provable too.
+
+### The new check
+
+`neighbors/checks/knn_selector_arms_check.mojo`: hashed tile quantized to 61
+values (dense value ties, index tie-break decides), planted +0.0 exact
+matches at columns 3, 2047, 2048, length/2, length-1 (row 1 adds 5 and
+2049), a -0.0, a subnormal, and an all-equal row; k = 10 and 15; lengths
+1793, 2047, 3940, 4095, 65281, 65535 ((length - 1792) mod 2048 in 1..255),
+65536, 65537, 65536 + 3940. Asserts baseline == exhaustive host rank, then
+uniform == baseline and headbound == baseline cell for cell (value bits and
+index), and on the 65,536 rows that each arm's sabotage flips at least one
+cell. Raises at compile time without the trial define.
+
+### RUN OWED (orchestrator; nothing ran)
+
+The leg ships `git archive` of the COMMITTED tree and copies the extra body
+verbatim; the local environment does NOT reach the pod, so the arm pair for
+the C4-only run rides in a wrapper file. Commit this pass first.
+
+Step 0, the native check on the box (or as the first line of the wrapper):
+
+```
+pixi run mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_KNN_SELECT_TRIAL=1 \
+    -I . neighbors/checks/knn_selector_arms_check.mojo
+```
+
+Step 1, C4 alone (arms baseline,uniform; profile skipped, it is measured):
+
+```
+cat > /tmp/knn_c4_extra.sh <<'SH'
+#!/bin/sh
+export MOJOLEARN_KNN_SELECTION_ARMS=baseline,uniform
+export MOJOLEARN_KNN_SELECTION_SKIP_PROFILE=1
+cd /root/mojolearn && PATH="$HOME/.pixi/bin:$PATH" pixi run mojo run \
+    -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_KNN_SELECT_TRIAL=1 \
+    -I . neighbors/checks/knn_selector_arms_check.mojo \
+    > /root/gemm_leg_out/knn-selector-arms-check.log 2>&1
+echo "arms_check_exit=$?" >> /root/gemm_leg_out/leg.txt
+exec sh /root/mojolearn/tools/knn_selection_gate.sh
+SH
+MOJOLEARN_RUNPOD_KEY_FILE=$HOME/.mojolearn_runpod_key \
+MOJOLEARN_GEMM_LEG_EXTRA=/tmp/knn_c4_extra.sh \
+MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/$(date +%Y-%m-%d_%H%M%S)-nvidia-h100-knn-selection-c4 \
+sh tools/gemm_remote_leg.sh nvidia --rent --minutes 60 \
+    --gpu "NVIDIA H100 80GB HBM3" \
+    --local-card bench/results/e1/2026-08-28_131651-runpod-nvidia/lanes/gemm.identical.card
+cat <leg>/remote/knn-selector-arms-check.log | tail -3
+cat <leg>/remote/knn-selection/summary.txt
+cat <leg>/remote/knn-selection/status.tsv
+```
+
+Verdict for step 1: `KNN SELECTOR ARMS PASS`; in the gate JSON every
+fixture and k shows `uniform` and `default` equal to `baseline` (including
+`divergent_tail`), row order, planted and oracle green, reach flipped > 0
+on `baseline`, `uniform` and `default` with clean bits restored. No price
+claim is made for C4 (the timing block runs and is recorded, nothing is
+read from it). On green, flip `SMALLK_UNIFORM_TRIP_DEFAULT = True` (or the
+kernel-matrix row) in the same session; it is the prerequisite, not a win.
+
+Step 2, C1 (the default pair baseline,headbound; same leg, no wrapper
+needed beyond the check line):
+
+```
+cat > /tmp/knn_c1_extra.sh <<'SH'
+#!/bin/sh
+export MOJOLEARN_KNN_SELECTION_SKIP_PROFILE=1
+exec sh /root/mojolearn/tools/knn_selection_gate.sh
+SH
+MOJOLEARN_RUNPOD_KEY_FILE=$HOME/.mojolearn_runpod_key \
+MOJOLEARN_GEMM_LEG_EXTRA=/tmp/knn_c1_extra.sh \
+MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/$(date +%Y-%m-%d_%H%M%S)-nvidia-h100-knn-selection-c1 \
+sh tools/gemm_remote_leg.sh nvidia --rent --minutes 60 \
+    --gpu "NVIDIA H100 80GB HBM3" \
+    --local-card bench/results/e1/2026-08-28_131651-runpod-nvidia/lanes/gemm.identical.card
+cat <leg>/remote/knn-selection/summary.txt
+cat <leg>/remote/knn-selection/status.tsv
+```
+
+Step 3, Apple column on the Mac (orchestrator only, one light thing, after
+the H100 verdict): `MOJOLEARN_NUMERIC_MODE=identical
+MOJOLEARN_BUILD_EXTRA_DEFINES="-D MOJOLEARN_KNN_SELECT_TRIAL=1" sh
+bindings/build.sh`, then `PYTHONPATH=python MOJOLEARN_NUMERIC_MODE=identical
+python3 tools/knn_selection_gate.py --out /tmp/knn-sel-apple --arms
+baseline,uniform,headbound --pairs 2 --deadline 300`. AMD: the same script
+on a DigitalOcean MI325X droplet. Both are RUN OWED before any column other
+than NVIDIA takes the row.
+
+### What flips the default and what does not
+
+- The C4 gate (step 1) flips `SMALLK_UNIFORM_TRIP_DEFAULT` on equality plus
+  reach alone; it claims no price.
+- The C1 gate (step 2) flips the head-bound default ONLY IF: every
+  correctness check is green on every fixture and k; reach flipped on
+  `baseline`, `headbound` and `default` with clean bits restored; AND both
+  timed orders' medians favor `headbound` on `dyadic` AND `large` at k10
+  AND k15 in the gate JSON (the request-level `NearestNeighbors.kneighbors`
+  boundary, `timing` block). The phase-timer split, the section 2 model,
+  the new check's tile and any per-launch number are NOT promotion
+  evidence: a tile or kernel win alone cannot promote a request default.
+- A pass with a request-level loss or a split verdict (one fixture or one k
+  favoring baseline) leaves the default off; the arm stays in the binary
+  behind the define and the result is recorded here with the JSON path.
+- After a flip: rebuild without the trial define, rerun the gate with
+  `--arms baseline` plus default to show the default equals the explicit
+  arm, and record the `dyadic` medians against the cached rows in
+  `bench/OPPONENT_REFERENCE.md` as cached-reference ratios (never as a
+  paired opponent measurement; cuML is not rerun).

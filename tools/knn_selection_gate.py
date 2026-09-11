@@ -40,16 +40,21 @@ partial JSON is written and the exit code is 3.
 
 THE SWITCHES (runtime, read by the native side per request)
 -----------------------------------------------------------
-  MOJOLEARN_KNN_SELECT=<name>       explicit arm: `baseline` or a candidate
-                                    name (`headbound`, ...). Unset = the
-                                    build's default. Unknown names must
-                                    RAISE on the native side, never fall
-                                    back.
+  MOJOLEARN_KNN_SELECT=<name>       explicit arm: `baseline` (the
+                                    2026-09-09 kernel), `uniform` (C4,
+                                    DEVIATION 2497) or `headbound` (C4 +
+                                    C1, DEVIATION 2498). Unset = the
+                                    build's default. Unknown names RAISE
+                                    on the native side, never fall back.
   MOJOLEARN_KNN_SELECT_SABOTAGE=1   deliberately perturbs the selected
-                                    arm's candidate path (index half of
-                                    the composite key XOR 1 for the first
-                                    element of every unrolled batch), so a
-                                    reached arm cannot return clean bits.
+                                    arm's own code path so a reached arm
+                                    cannot return clean bits: baseline and
+                                    uniform flip bit 0 of the index half of
+                                    the composite key for the first element
+                                    of every unrolled batch, inside their
+                                    own loop form; headbound takes the
+                                    block minimum head as the bound
+                                    instead of the k-th, inside the refresh.
 
 Both are honored only by a binding built with
 `-D MOJOLEARN_KNN_SELECT_TRIAL=1` (the hook the brief specifies; not on any
@@ -790,7 +795,7 @@ def selftest_backend(log):
 
         def kneighbors(self, q):
             arm = os.environ.get(arm_env)
-            if arm not in (None, "baseline", "headbound"):
+            if arm not in (None, "baseline", "uniform", "headbound"):
                 raise ValueError(f"unknown arm {arm!r}")
             xi = self.x.astype(np.float64)
             xq = np.asarray(q, dtype=np.float32).astype(np.float64)
