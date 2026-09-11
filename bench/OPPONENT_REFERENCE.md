@@ -460,6 +460,41 @@ Sequence models, torch 2.4.1+cu124, `e1g/2026-08-25_160520-nvidia-speed-gemmseq`
 | mamba130m prefill t512 (torch reference scan) | 29.556 | 29.957 | | |
 | selective_scan t512 | 30.064 | 31.151 | | |
 
+### Classical KDE and SVC on Istella-S against cuML (September 11, pod 44j9e1zik7r8qr)
+
+Pod `44j9e1zik7r8qr` (`mojolearn-ctdk-2026-09-11_180850`) on RunPod machine
+`l4vyjngwksom`, $3.49 per hour, image
+`runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04`, 26 vCPUs and 251
+GB, kernel 6.8.0-90. Ours is IDENTICAL at commit 94c82db8, which carries the
+NVIDIA GEMM ksplit default (DEVIATION 2595), timed from a host float32 array
+to host results. cuML 26.08.00 (cuml-cu12 26.8.0, cupy 14.2.0) and NumPy
+2.4.6 in the same Python. 1 warm-up plus 3 rounds, arms interleaved, ms
+median (min..max), quality computed by `tools/classical_two_datasets.py`.
+Shapes match the MI300X classical section below, kde 100,000 standardized
+Istella-S fit rows x 2,000 queries with Scott bandwidth and svc 10,000
+standardized fit rows with RBF, C 1 and gamma 1/d. GPU path only, so no
+scikit-learn arm runs here. Evidence
+`bench/results/classical_h100_2026-09-11_istella/`.
+
+| lane | dataset | opponent | device | opponent ms | opponent quality | ours IDENTICAL ms | ours quality | ours / opponent |
+|---|---|---|---|---|---|---|---|---|
+| kde | Istella-S | cuML KernelDensity | GPU, H100 | 6.79 (6.72..7.30) | mean log-lik -212.117 | 219 (194..227) | mean log-lik -212.117 | 32.25x |
+| svc | Istella-S | cuML SVC | GPU, H100 | 20.96 (20.69..23.73) | accuracy 0.9222, 2401 SV | FAILED | none | not quoted (ours fails) |
+
+Both KDE arms and the cuML SVC arm held one digest across their rounds.
+
+Ours SVC fails on this GPU for every fit with more than 512 training rows.
+`n_ws = min(1024, n_train)` selects `smo_block_solve_kernel[1024]`, and CUDA
+refuses that launch with CUDA_ERROR_LAUNCH_OUT_OF_RESOURCES. A fit on 400
+rows (width 512) completes, and the same width 1024 launch works on the MI300X
+and the Apple M4. Probe kernels on this pod show that a 48 KB SHARED array, 64
+barriers, 16 SHARED arrays, three tree-path `pinned_block_argmax[1024]`
+reductions and two warp-path `block_argext[1024]` reductions all launch,
+while three warp-path `block_argext[1024]` reductions do not, and that is the
+solve's shape since DEVIATION 2491. No NVIDIA SVC row exists until that is
+fixed. The scikit-learn KDE row on Istella-S in the MI300X section is still
+owed.
+
 ## NVIDIA L40S, driver 580.126.09, CUDA 12.4, torch 2.4.1+cu124, cuBLAS 120402, cupy 14.2.0
 
 Trees, HIGGS 1M, 2026-09-09 trees lane, CatBoost GPU symmetric 1.2.10, same

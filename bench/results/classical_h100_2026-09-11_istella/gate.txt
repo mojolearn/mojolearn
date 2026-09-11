@@ -1,0 +1,20 @@
+lane=classical-two-datasets (DEVIATION 2570, 2571)
+invoked=2026-09-11T18:09:25Z phases=setup smoke_rows=none
+vendor=nvidia provider=runpod
+commit=94c82db87f2e91fe0f0d8cb24678f75de74e257c
+lanes=kde,svc
+datasets=istella
+rounds=5 body_seconds=2100 min_race=240 race_seconds=900 jobs=8
+gpu_archs=
+ours_python=python3 theirs_python=python3 extra_arms=
+finished=2026-09-11T18:11:30Z phases=setup
+lane=classical-two-datasets (DEVIATION 2570, 2571)
+invoked=2026-09-11T18:15:58Z phases=prep races smoke_rows=none
+vendor=nvidia provider=runpod
+commit=94c82db87f2e91fe0f0d8cb24678f75de74e257c
+lanes=kde,svc
+datasets=istella
+rounds=3 body_seconds=3900 min_race=240 race_seconds=1800 jobs=8
+gpu_archs=
+ours_python=python3 theirs_python=python3 extra_arms=
+finished=2026-09-11T18:30:23Z phases=prep races
