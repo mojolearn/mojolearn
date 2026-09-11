@@ -73,7 +73,25 @@ gated as one.
 
 ## 3. Speed
 
-(filled in from the interleaved A/B below)
+Both trees built on the same pod and timed INTERLEAVED at the process level:
+three outer rounds, the tree order swapped every round, three timed rounds per
+process, `MOJOLEARN_SPEED_ROUNDS=3`, 1,000,000 rows. Each process also times
+the GREEDY symmetric arm (`ours`), whose code neither deviation touches, as
+the within-pod drift control. Medians over the nine rounds.
+
+| dataset | arm | main (2624) ms | 2670 ms | after/before | logloss main | logloss 2670 | hash main | hash 2670 |
+|---|---|---|---|---|---|---|---|---|
+| taxi 1M x 16 | pointwise (`ours-ab`) | 1803.3 | **795.4** | **0.441** | 0.525925 | 0.525668 | c56ab803f4d1e84a | 97222a45020a166c |
+| taxi 1M x 16 | greedy control (`ours`) | 309.3 | 308.9 | 0.999 | 0.525735 | 0.525735 | 90c3558501933f47 | 90c3558501933f47 |
+| Istella-S 1M x 220 | pointwise (`ours-ab`) | ISTELLA_POINTWISE | | | | | | |
+| Istella-S 1M x 220 | greedy control (`ours`) | ISTELLA_GREEDY | | | | | | |
+
+On taxi the opt-in pointwise arm takes 0.441 of its 2624 time, which is the
+pre-2624 speed (the 2624 merge recorded about 810 ms before and 1805 ms
+after) with the fold added, and taxi's logloss is 0.525668 against 2624's
+0.525925 (the pre-2624 value, since 2670's taxi model hash is the pre-2624
+hash 97222a45020a166c). The greedy control moved 0.1%, so the pod was not
+drifting under the pointwise rows.
 
 ## 4. What is NOT done
 
