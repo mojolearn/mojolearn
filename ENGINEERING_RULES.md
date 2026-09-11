@@ -291,6 +291,17 @@ FSPEED-ACC lines) and prints both ratios, the geometric mean, the quality
 deltas and FLIP or NO FLIP. From 2026-09-11 every deviation commit ends its
 body with that one line.
 
+**One default per switch (Andrew, 2026-09-11).** "A switch that is on for
+depthwise and off for lossguide is a knob nobody will understand." A switch
+has ONE default, decided over every lane its code reaches: the time gate is
+the geometric mean over every (lane, dataset) cell it reaches, and quality is
+not worse in any of those cells. A switch in shared code (fit-level host
+work, a kernel every growth policy calls) is decided once for all of them; a
+switch in one policy's own code is decided on that policy alone. A shared
+switch that wins on some lanes and clearly loses on another does not flip
+anywhere until that loss is understood. FAST and IDENTICAL remain separate
+decisions.
+
 **HIGGS is RETIRED (2026-09-11)** as a benchmark dataset for trees and
 classical lanes: 28 dense continuous physics features, balanced classes, no
 missing values, no categoricals, and noise so heavy that depth-16 leaves
