@@ -1,0 +1,79 @@
+RESOURCES_DEVICE column=nvidia source_counts=per_thread_hd64
+RESOURCES_BEGIN label=zdot_stash_pf rows=4 keys_per_iteration=32 accumulators_per_thread=2 operand_registers_per_thread=4 thread_local_floats=64 page_bytes=17696 allocations=4 threads_per_block=256
+RESOURCES label=zdot_stash_pf regs=134
+RESOURCES label=zdot_stash_pf local=0
+RESOURCES label=zdot_stash_pf shared=17696
+RESOURCES label=zdot_stash_pf const=0
+RESOURCES label=zdot_stash_pf max_threads=384
+RESOURCES label=zdot_stash_pf blocks_per_sm_256=1
+RESOURCES_BEGIN label=zdot_zdefer_pf rows=4 keys_per_iteration=32 accumulators_per_thread=2 operand_registers_per_thread=4 thread_local_floats=64 page_bytes=17696 allocations=4 threads_per_block=256
+RESOURCES label=zdot_zdefer_pf regs=152
+RESOURCES label=zdot_zdefer_pf local=0
+RESOURCES label=zdot_zdefer_pf shared=17696
+RESOURCES label=zdot_zdefer_pf const=0
+RESOURCES label=zdot_zdefer_pf max_threads=384
+RESOURCES label=zdot_zdefer_pf blocks_per_sm_256=1
+RESOURCES_BEGIN label=zdot_zlag_pf rows=4 keys_per_iteration=32 accumulators_per_thread=2 operand_registers_per_thread=4 thread_local_floats=64 page_bytes=17696 allocations=4 threads_per_block=256
+RESOURCES label=zdot_zlag_pf regs=165
+RESOURCES label=zdot_zlag_pf local=0
+RESOURCES label=zdot_zlag_pf shared=17696
+RESOURCES label=zdot_zlag_pf const=0
+RESOURCES label=zdot_zlag_pf max_threads=384
+RESOURCES label=zdot_zlag_pf blocks_per_sm_256=1
+RESOURCES_BEGIN label=dq_tiled_pf rows=64 keys_per_tile=16 accumulators_per_thread=16 operand_registers_per_thread=5 thread_local_floats=0 page_bytes=8448 allocations=3 threads_per_block=256
+RESOURCES label=dq_tiled_pf regs=118
+RESOURCES label=dq_tiled_pf local=0
+RESOURCES label=dq_tiled_pf shared=8448
+RESOURCES label=dq_tiled_pf const=0
+RESOURCES label=dq_tiled_pf max_threads=512
+RESOURCES label=dq_tiled_pf blocks_per_sm_256=2
+RESOURCES_BEGIN label=dkdv_recompute keys=4 queries_per_iteration=32 accumulators_per_thread=3 operand_registers_per_thread=4 thread_local_floats=64 page_bytes=17696 allocations=4 threads_per_block=256
+RESOURCES label=dkdv_recompute regs=135
+RESOURCES label=dkdv_recompute local=0
+RESOURCES label=dkdv_recompute shared=17696
+RESOURCES label=dkdv_recompute const=0
+RESOURCES label=dkdv_recompute max_threads=384
+RESOURCES label=dkdv_recompute blocks_per_sm_256=1
+RESOURCES_BEGIN label=dkdv_tiled keys=64 queries_per_tile=16 accumulators_per_thread=32 operand_registers_per_thread=10 thread_local_floats=0 page_bytes=16384 allocations=4 threads_per_block=256
+RESOURCES label=dkdv_tiled regs=106
+RESOURCES label=dkdv_tiled local=0
+RESOURCES label=dkdv_tiled shared=16384
+RESOURCES label=dkdv_tiled const=0
+RESOURCES label=dkdv_tiled max_threads=512
+RESOURCES label=dkdv_tiled blocks_per_sm_256=2
+RESOURCES_BEGIN label=dkdv_tiled_pf keys=64 queries_per_tile=16 accumulators_per_thread=32 operand_registers_per_thread=10 thread_local_floats=0 page_bytes=16384 allocations=4 threads_per_block=256
+RESOURCES label=dkdv_tiled_pf regs=106
+RESOURCES label=dkdv_tiled_pf local=0
+RESOURCES label=dkdv_tiled_pf shared=16384
+RESOURCES label=dkdv_tiled_pf const=0
+RESOURCES label=dkdv_tiled_pf max_threads=512
+RESOURCES label=dkdv_tiled_pf blocks_per_sm_256=2
+RESOURCES_BEGIN label=kvgrid_r64 keys=64 queries_per_tile=16 accumulators_per_thread=32 operand_registers_per_thread=10 thread_local_floats=0 page_bytes=16384 allocations=4 threads_per_block=256
+RESOURCES label=kvgrid_r64 regs=106
+RESOURCES label=kvgrid_r64 local=0
+RESOURCES label=kvgrid_r64 shared=16384
+RESOURCES label=kvgrid_r64 const=0
+RESOURCES label=kvgrid_r64 max_threads=512
+RESOURCES label=kvgrid_r64 blocks_per_sm_256=2
+RESOURCES_BEGIN label=kvgrid_r32 keys=32 queries_per_tile=16 accumulators_per_thread=16 operand_registers_per_thread=10 thread_local_floats=0 page_bytes=12288 allocations=4 threads_per_block=256
+RESOURCES label=kvgrid_r32 regs=63
+RESOURCES label=kvgrid_r32 local=0
+RESOURCES label=kvgrid_r32 shared=12288
+RESOURCES label=kvgrid_r32 const=0
+RESOURCES label=kvgrid_r32 max_threads=1024
+RESOURCES label=kvgrid_r32 blocks_per_sm_256=4
+RESOURCES_BEGIN label=kvsplit_r64_fold keys=64 queries_per_tile=16 accumulators_per_thread=16 operand_registers_per_thread=5 thread_local_floats=0 page_bytes=8192 allocations=2 threads_per_block=256
+RESOURCES label=kvsplit_r64_fold regs=79
+RESOURCES label=kvsplit_r64_fold local=0
+RESOURCES label=kvsplit_r64_fold shared=8192
+RESOURCES label=kvsplit_r64_fold const=0
+RESOURCES label=kvsplit_r64_fold max_threads=768
+RESOURCES label=kvsplit_r64_fold blocks_per_sm_256=3
+RESOURCES_BEGIN label=kvsplit_r32_fold keys=32 queries_per_tile=16 accumulators_per_thread=8 operand_registers_per_thread=5 thread_local_floats=0 page_bytes=6144 allocations=2 threads_per_block=256
+RESOURCES label=kvsplit_r32_fold regs=48
+RESOURCES label=kvsplit_r32_fold local=0
+RESOURCES label=kvsplit_r32_fold shared=6144
+RESOURCES label=kvsplit_r32_fold const=0
+RESOURCES label=kvsplit_r32_fold max_threads=1024
+RESOURCES label=kvsplit_r32_fold blocks_per_sm_256=5
+RESOURCES_DONE

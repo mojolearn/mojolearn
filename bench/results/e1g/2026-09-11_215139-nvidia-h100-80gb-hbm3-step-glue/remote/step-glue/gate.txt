@@ -1,0 +1,20 @@
+deviations=2645-2648
+started=2026-09-11T21:56:56Z
+root=/root/mojolearn timed_steps=3 lean_steps=4 deadline=300 jobs=2
+vendor=nvidia gpu_archs=sm_90a column=nvidia
+arms=optskip_noshadow,rows16,rows8,optskip_noshadow_rows16,optskip_noshadow_rows8 timing_arm=optskip_noshadow_rows16
+glue_define=-D MOJOLEARN_STEP_GLUE_TRIAL=1 timers_defines=-D MOJOLEARN_STEP_PHASE_TIMERS=1 -D MOJOLEARN_ATTN_PHASE_TIMERS=1
+vendor=nvidia
+commit=030079af4b5dd3808dd4aee80e5984d1fb95aff6
+glue_check: REACH norm_forward rows16 threads_per_block=16 first_moved_row=32
+glue_check: REACH norm_forward rows8 threads_per_block=8 first_moved_row=40
+glue_check: REACH norm_forward rows4 threads_per_block=4 first_moved_row=44
+glue_check: REACH norm_forward optskip_noshadow_rows16 threads_per_block=16 first_moved_row=32
+glue_check: REACH norm_backward rows16 threads_per_block=16 first_moved_row=32
+glue_check: REACH norm_backward rows8 threads_per_block=8 first_moved_row=40
+glue_check: REACH norm_backward rows4 threads_per_block=4 first_moved_row=44
+glue_check: REACH norm_backward optskip_noshadow_rows16 threads_per_block=16 first_moved_row=32
+glue_check: REACH update noshadow first_moved_element=768
+glue_check: step_glue_check: PASS (names, norm forward and backward with reach, update with reach, step, refusal, rollback)
+corpora= enwik8=training/corpus/enwik8/input.txt pilegithub=training/corpus/pile_github/input.txt
+finished=2026-09-11T22:27:46Z

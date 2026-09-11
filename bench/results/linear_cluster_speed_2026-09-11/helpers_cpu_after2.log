@@ -1,0 +1,14 @@
+== /root/lane/python_base
+column_mean_f64              wall_ms_med=76.2 cpu_ms_med=76.2
+center_into_touched_out      wall_ms_med=36.6 cpu_ms_med=36.7
+empty_alloc_only             wall_ms_med=101.0 cpu_ms_med=101.0
+center_into_fresh_out        wall_ms_med=138.6 cpu_ms_med=138.6
+LinearRegression.fit         wall_ms_med=290.3 cpu_ms_med=290.4
+KMeans.fit                   wall_ms_med=276.4 cpu_ms_med=276.5
+== /root/mojolearn/python
+column_mean_f64              wall_ms_med=20.9 cpu_ms_med=228.6
+center_into_touched_out      wall_ms_med=8.7 cpu_ms_med=149.3
+empty_alloc_only             wall_ms_med=99.9 cpu_ms_med=99.9
+center_into_fresh_out        wall_ms_med=113.5 cpu_ms_med=287.8
+LinearRegression.fit         wall_ms_med=152.3 cpu_ms_med=933.3
+KMeans.fit                   wall_ms_med=201.2 cpu_ms_med=572.4

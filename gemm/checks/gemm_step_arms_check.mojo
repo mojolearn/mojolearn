@@ -33,6 +33,34 @@ column: the shipped dispatch's body at the column's own row, at row 0 (the
 old plan runs: nothing moves) and at row 132 (the group launch's cells move),
 and the shipped entry itself with `MOJOLEARN_GEMM_ARM` unset.
 
+DEVIATION 2599 (docs/lanes/BRIEF_gemm_kernel_2026-09-11.md sections 5 and
+6): the arms `kpack` and `kpack_wide` are geometries 10 and 11, so the
+ragged part forces both at every case (bits equal to the old plan and FLAT,
+reach one cell per tile in their all-leaves launch and one per `(tile, q)` in
+their group launch, `gemm_step_kpack_reach`) and the LM part sends the twelve
+calls through `identical_gemm_into` under both. Two host checks run first:
+`check_kpack_page_is_a_bijection` (every staged `(line, step)` of every
+thread, slot, mapping, operand and geometry lands at exactly one packed
+address, and every read address holds the pair the reader expects) and
+`check_kpack_rule_hand_counts` (the tile-parameterized rule equals
+`gemm_step_ksplit_rule` at 128x128, and the 128x256 counts match brief
+section 4.2). `check_group_fold_is_the_contract_tree` also requires the
+group nodes built with `kpack_wide`'s 12-level stack to equal the 16-level
+ones bit for bit.
+
+DEVIATIONS 2640 to 2642 (docs/lanes/BRIEF_gemm_final_2026-09-11.md sections 4
+to 6): the arms `kfoldv` and `kfoldv_leaf` are geometries 12 and 13, so the
+ragged part forces both at every case (bits equal to the old plan and FLAT,
+reach `gemm_step_kfold_reach`: the group launch's cells plus one cell per lane
+fold block, minus the cells in both) and the LM part sends the twelve calls
+through `identical_gemm_into` under both. Two host checks run first:
+`check_kfold_lanes_is_the_stack_fold` (the lane-wise `_fold_push_lanes` and
+`_fold_drain_lanes` store, in every lane, the bits `_fold_push`,
+`_fold_drain` and the stored `ftz` give that lane's cell alone, for every group
+count 1 to 255, and the 8-level stack overflows exactly at the 256th push) and
+`check_kfold_rule_hand_counts` (the two arms' rules, group counts and fold
+block counts at the twelve LM calls against brief section 3.3's hand counts).
+
     pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 \\
         -D MOJOLEARN_GEMM_ARM_TRIAL=1 -I . \\
         gemm/checks/gemm_step_arms_check.mojo -o <bin>
@@ -85,19 +113,48 @@ from gemm.checks.gemm_identical import (
     GEMM_ARM_TRIAL,
     GEMM_FOLD_SLOTS,
     GEMM_GEOM_COUNT,
+    GEMM_GEOM_KFOLDV,
+    GEMM_GEOM_KFOLDV_LEAF,
+    GEMM_GEOM_KPACK,
+    GEMM_GEOM_KPACK_WIDE,
     GEMM_GEOM_SHIPPED,
     GEMM_GEOM_TUNED128,
+    GEMM_KFOLD_FS,
+    GEMM_KFOLD_MAX_GROUPS,
+    GEMM_KFOLD_TPB,
+    GEMM_KFOLD_VB,
+    GEMM_KFOLD_W,
+    GEMM_KPACKW_BM,
+    GEMM_KPACKW_BN,
+    GEMM_KPACKW_CPT,
+    GEMM_KPACKW_FS,
+    GEMM_KPACKW_KS,
+    GEMM_KPACKW_RPT,
+    GEMM_KPACK_CPT,
+    GEMM_KPACK_KS,
+    GEMM_KPACK_RPT,
     GEMM_KSPLIT_DEFAULT_S,
     PLAN_FLAT,
     PLAN_TUNED_128_8X8,
     TUNED_FOLD_SLOTS,
+    TUNED_TC,
+    TUNED_TPB,
+    TUNED_VECLEN,
     _fold_drain,
+    _fold_drain_lanes,
     _fold_drain_local,
     _fold_push,
+    _fold_push_lanes,
     _fold_push_local,
     choose_gemm_plan,
+    contract_partition,
+    gemm_kfold_blocks,
     gemm_default_ksplit_leaves,
     gemm_default_ksplit_leaves_at,
+    gemm_kpack_addr,
+    gemm_kpack_register_slots,
+    gemm_kpack_stage_outer,
+    gemm_kpack_stage_p,
     gemm_plan_name,
     gemm_sabotage_name,
     gemm_shipped_dispatch_name,
@@ -110,6 +167,9 @@ from gemm.checks.gemm_identical import (
     gemm_step_geometry_launched_blocks,
     gemm_step_geometry_name,
     gemm_step_geometry_reach,
+    gemm_step_kfold_leaves,
+    gemm_step_kfold_rule,
+    gemm_step_kpack_rule,
     gemm_step_ksplit_reach,
     gemm_step_ksplit_rule,
     identical_gemm_into,
@@ -169,7 +229,10 @@ def _trial_hint() -> String:
 def _arm_names() -> List[String]:
     var names: List[String] = [
         "shipped", "lfold", "half", "half_ks16", "quarter", "head", "half_head",
-        "ksplit", "ksplit_leaf", "tuned128"
+        "ksplit", "ksplit_leaf", "tuned128", "kpack", "kpack_wide",
+        # DEVIATIONS 2640 and 2641 (docs/lanes/BRIEF_gemm_final_2026-09-11.md):
+        # geometries 12 and 13, forced in the ragged part by GEMM_GEOM_COUNT.
+        "kfoldv", "kfoldv_leaf"
     ]
     return names^
 
@@ -293,25 +356,26 @@ def _bits32(x: Float32) -> UInt32:
     return bitcast[DType.uint32](x)
 
 
-def _group_node(
-    parts: List[Float32], lbeg: Int, lend: Int
-) raises -> SIMD[DType.float32, GROUP_NC]:
+def _group_node[
+    FS: Int
+](parts: List[Float32], lbeg: Int, lend: Int) raises -> SIMD[DType.float32, GROUP_NC]:
     """One group's stored node, per cell: leaves `[lbeg, lend)` pushed into a
-    FRESH stack with the device's own `_fold_push_local`, then the device's
-    own `_fold_drain_local`. `parts[t * GROUP_NC + e]` is leaf `t` of cell
-    `e`."""
-    var stack = stack_allocation[TUNED_FOLD_SLOTS * GROUP_NC, Scalar[DType.float32]]()
+    FRESH stack of `FS` levels with the device's own `_fold_push_local`, then
+    the device's own `_fold_drain_local`. `parts[t * GROUP_NC + e]` is leaf
+    `t` of cell `e`. `FS` is `TUNED_FOLD_SLOTS` (the shipped kernels) or
+    `GEMM_KPACKW_FS` (`kpack_wide`, DEVIATION 2599)."""
+    var stack = stack_allocation[FS * GROUP_NC, Scalar[DType.float32]]()
     var occ = 0
     for t in range(lbeg, lend):
         var v = SIMD[DType.float32, GROUP_NC](0.0)
         for e in range(GROUP_NC):
             v[e] = parts[t * GROUP_NC + e]
-        if not _fold_push_local[GROUP_NC, TUNED_FOLD_SLOTS](stack, occ, v):
+        if not _fold_push_local[GROUP_NC, FS](stack, occ, v):
             raise Error(
-                "_group_node: the thread-local fold stack OVERFLOWED at leaf "
-                + String(t)
+                "_group_node: the thread-local fold stack of " + String(FS)
+                + " levels OVERFLOWED at leaf " + String(t)
             )
-    return _fold_drain_local[GROUP_NC, TUNED_FOLD_SLOTS](stack, occ)
+    return _fold_drain_local[GROUP_NC, FS](stack, occ)
 
 
 def check_group_fold_is_the_contract_tree(mut failures: List[String]) raises:
@@ -332,6 +396,10 @@ def check_group_fold_is_the_contract_tree(mut failures: List[String]) raises:
     var bad = 0
     var runs = 0
     var first = String("")
+    # DEVIATION 2599: the same group nodes from `kpack_wide`'s shorter stack.
+    var fs_bad = 0
+    var fs_runs = 0
+    var fs_first = String("")
     for kind in range(2):
         for p in range(1, 1101):
             var parts = List[Float32]()
@@ -355,9 +423,21 @@ def check_group_fold_is_the_contract_tree(mut failures: List[String]) raises:
                     var lend = (q + 1) * gl
                     if lend > p:
                         lend = p
-                    var gv = _group_node(parts, q * gl, lend)
+                    var gv = _group_node[TUNED_FOLD_SLOTS](parts, q * gl, lend)
+                    var gv12 = _group_node[GEMM_KPACKW_FS](parts, q * gl, lend)
                     for e in range(GROUP_NC):
                         nodes.append(gv[e])
+                        fs_runs += 1
+                        if _bits32(gv12[e]) != _bits32(gv[e]):
+                            fs_bad += 1
+                            if fs_first.byte_length() == 0:
+                                fs_first = (
+                                    "kind=" + String(kind) + " P=" + String(p) + " group="
+                                    + String(gl) + " q=" + String(q) + " cell=" + String(e)
+                                    + ": FS " + String(GEMM_KPACKW_FS) + " node="
+                                    + hex(_bits32(gv12[e])) + " FS " + String(TUNED_FOLD_SLOTS)
+                                    + " node=" + hex(_bits32(gv[e]))
+                                )
                 for e in range(GROUP_NC):
                     var col2 = List[Float32]()
                     var stack = SIMD[DType.float32, GEMM_FOLD_SLOTS](0.0)
@@ -391,10 +471,425 @@ def check_group_fold_is_the_contract_tree(mut failures: List[String]) raises:
             "check_group_fold_is_the_contract_tree: " + String(bad) + " of " + String(runs)
             + " (kind, P, group, cell) folds DISAGREE with fold_balanced_tree; first " + first
         )
+    if fs_bad != 0:
+        failures.append(
+            "check_group_fold_is_the_contract_tree: " + String(fs_bad) + " of " + String(fs_runs)
+            + " group nodes built with the " + String(GEMM_KPACKW_FS) + "-level stack DIFFER from the "
+            + String(TUNED_FOLD_SLOTS) + "-level ones; first " + fs_first
+        )
     print(
         "check_group_fold_is_the_contract_tree: " + String(runs) + " folds (2 kinds, P 1..1100,"
-        " every power-of-two group up to 2P, 4 cells), " + String(bad) + " disagree"
+        " every power-of-two group up to 2P, 4 cells), " + String(bad) + " disagree; "
+        + String(fs_runs) + " group nodes at FS " + String(GEMM_KPACKW_FS) + " against FS "
+        + String(TUNED_FOLD_SLOTS) + ", " + String(fs_bad) + " differ"
     )
+
+
+# ===========================================================================
+# HOST: THE PACKED PAGE AND THE KPACK RULE (DEVIATION 2599)
+# ===========================================================================
+
+
+def _kpack_page_case(
+    label: String,
+    lines: Int,
+    group_lines: Int,
+    per_thread: Int,
+    ks: Int,
+    outer: Bool,
+    by_row: Bool,
+    mut failures: List[String],
+) raises:
+    """One operand of one geometry under one staging mapping, all 256
+    threads. Brief section 5.2, checked rather than argued:
+
+    1. The helper the kernel's staging stores call
+       (`gemm_kpack_stage_p` or `gemm_kpack_stage_outer`) names the same
+       `(line, step, staged)` as `_tuned_g2r`'s own body, transcribed here.
+    2. Every staged pair lands at an address in `[0, lines KS)`, and every
+       address receives exactly one store (a bijection, no address shared).
+    3. Every address a thread reads (its group `g`, step `c`, element `u`)
+       holds line `g + u group_lines` at step `c`, and is `gemm_kpack_addr`
+       of that pair.
+
+    `by_row` selects the A reader (`g = tid // TC`) or the B reader
+    (`g = tid mod TC`)."""
+    comptime NTH = TUNED_TPB
+    comptime VEC = TUNED_VECLEN
+    var tag = String("check_kpack_page_is_a_bijection [") + label + "]"
+    if lines != per_thread * group_lines or ks % VEC != 0:
+        failures.append(
+            tag + ": " + String(lines) + " lines is not " + String(per_thread) + " x "
+            + String(group_lines) + ", or KS " + String(ks) + " is not a VEC multiple"
+        )
+        return
+    var kv = ks // VEC
+    var slots = (lines * kv + NTH - 1) // NTH
+    # The kernel instantiates `_tuned_g2r` with this padded count, because a
+    # SIMD width must be a power of two (brief section 11). Every padded slot
+    # must stage nothing under either mapping.
+    var reg_slots = gemm_kpack_register_slots(slots)
+    var reg_width = reg_slots * VEC
+    if reg_slots < slots or reg_width <= 0 or (reg_width & (reg_width - 1)) != 0:
+        failures.append(
+            tag + ": " + String(slots) + " staging slots pad to " + String(reg_slots)
+            + ", register width " + String(reg_width) + " is not a power of two at or above "
+            + String(slots * VEC)
+        )
+        return
+    var total = lines * ks
+    var hits = List[Int]()
+    var at_line = List[Int]()
+    var at_step = List[Int]()
+    for _ in range(total):
+        hits.append(0)
+        at_line.append(-1)
+        at_step.append(-1)
+    var bad = 0
+    var first = String("")
+    for tid in range(NTH):
+        for s in range(reg_slots):
+            for e in range(VEC):
+                var want_ok = False
+                var want_line = 0
+                var want_step = 0
+                var sp = gemm_kpack_stage_p(tid, s, e, lines, kv, VEC, NTH)
+                if outer:
+                    sp = gemm_kpack_stage_outer(tid, s, e, lines, ks, VEC, NTH)
+                    var idx0 = tid + (s * VEC + e) * NTH
+                    want_ok = idx0 < lines * kv * VEC
+                    want_line = idx0 % lines
+                    want_step = idx0 // lines
+                else:
+                    var idx = tid + s * NTH
+                    want_ok = idx < lines * kv
+                    want_line = idx // kv
+                    want_step = (idx - want_line * kv) * VEC + e
+                if s >= slots:
+                    # A padded register slot: `_tuned_g2r` must leave it
+                    # `+0.0` and the kernel's stores never visit it.
+                    if want_ok or sp[2]:
+                        bad += 1
+                        if first.byte_length() == 0:
+                            first = (
+                                "tid " + String(tid) + " padded slot (" + String(s) + ", "
+                                + String(e) + ") past " + String(slots) + " would stage line "
+                                + String(want_line) + " step " + String(want_step)
+                            )
+                    continue
+                if sp[2] != want_ok or (want_ok and (sp[0] != want_line or sp[1] != want_step)):
+                    bad += 1
+                    if first.byte_length() == 0:
+                        first = (
+                            "tid " + String(tid) + " slot (" + String(s) + ", " + String(e)
+                            + ") staged as line " + String(sp[0]) + " step " + String(sp[1])
+                            + " where _tuned_g2r holds line " + String(want_line) + " step "
+                            + String(want_step)
+                        )
+                    continue
+                if not want_ok:
+                    continue
+                var ad = gemm_kpack_addr(want_line, want_step, group_lines, per_thread, ks)
+                if ad < 0 or ad >= total:
+                    bad += 1
+                    if first.byte_length() == 0:
+                        first = (
+                            "line " + String(want_line) + " step " + String(want_step)
+                            + " packs to address " + String(ad) + " outside [0, " + String(total) + ")"
+                        )
+                    continue
+                hits[ad] += 1
+                at_line[ad] = want_line
+                at_step[ad] = want_step
+    for ad2 in range(total):
+        if hits[ad2] != 1:
+            bad += 1
+            if first.byte_length() == 0:
+                first = "address " + String(ad2) + " received " + String(hits[ad2]) + " stores"
+    for tid2 in range(NTH):
+        var g = tid2 % TUNED_TC
+        if by_row:
+            g = tid2 // TUNED_TC
+        for c0 in range(ks):
+            for u in range(per_thread):
+                var ad3 = g * ks * per_thread + c0 * per_thread + u
+                var line = g + u * group_lines
+                if (
+                    ad3 >= total
+                    or at_line[ad3] != line
+                    or at_step[ad3] != c0
+                    or gemm_kpack_addr(line, c0, group_lines, per_thread, ks) != ad3
+                ):
+                    bad += 1
+                    if first.byte_length() == 0:
+                        first = (
+                            "tid " + String(tid2) + " reads line " + String(line) + " step "
+                            + String(c0) + " at address " + String(ad3)
+                        )
+    if bad != 0:
+        failures.append(tag + ": " + String(bad) + " disagreements; first " + first)
+    print(
+        tag + " lines=" + String(lines) + " group_lines=" + String(group_lines) + " per_thread="
+        + String(per_thread) + " KS=" + String(ks) + " slots=" + String(slots) + " register_slots=" + String(reg_slots) + " addresses="
+        + String(total) + " disagreements=" + String(bad)
+    )
+
+
+def check_kpack_page_is_a_bijection(mut failures: List[String]) raises:
+    """`_kpack_page_case` for `kpack` (A and B, K step 16) and `kpack_wide`
+    (A and B at K steps 12 and 16, the two values its matrix read can take),
+    under both staging mappings. Host only."""
+    comptime TR = TUNED_TPB // TUNED_TC
+    var before = len(failures)
+    var kss: List[Int] = [12, 16]
+    for oi in range(2):
+        var outer = oi == 1
+        var mapping = String("outer") if outer else String("p")
+        _kpack_page_case(
+            String("kpack A ") + mapping, GEMM_KPACK_RPT * TR, TR, GEMM_KPACK_RPT,
+            GEMM_KPACK_KS, outer, True, failures,
+        )
+        _kpack_page_case(
+            String("kpack B ") + mapping, GEMM_KPACK_CPT * TUNED_TC, TUNED_TC, GEMM_KPACK_CPT,
+            GEMM_KPACK_KS, outer, False, failures,
+        )
+        for si in range(len(kss)):
+            _kpack_page_case(
+                String("kpack_wide A KS=") + String(kss[si]) + " " + mapping, GEMM_KPACKW_BM, TR,
+                GEMM_KPACKW_RPT, kss[si], outer, True, failures,
+            )
+            _kpack_page_case(
+                String("kpack_wide B KS=") + String(kss[si]) + " " + mapping, GEMM_KPACKW_BN,
+                TUNED_TC, GEMM_KPACKW_CPT, kss[si], outer, False, failures,
+            )
+    print(
+        "check_kpack_page_is_a_bijection: 12 cases (2 geometries, 2 operands, 2 mappings, kpack_wide"
+        " at KS 12 and 16; this column's kpack_wide KS=" + String(GEMM_KPACKW_KS) + "), "
+        + String(len(failures) - before) + " failures"
+    )
+
+
+def check_kpack_rule_hand_counts(mut failures: List[String]) raises:
+    """`gemm_step_kpack_rule` at the 128x128 tile must equal
+    `gemm_step_ksplit_rule` at the twelve LM calls, at `S = 132` and at no
+    reading; on the 128x256 tile at `S = 132` it must give brief section
+    4.2's hand counts. Host only."""
+    comptime TR = TUNED_TPB // TUNED_TC
+    var want_wide: List[Int] = [1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 32, 0]
+    var bm = GEMM_KPACK_RPT * TR
+    var bn = GEMM_KPACK_CPT * TUNED_TC
+    var before = len(failures)
+    for i in range(GEMM_STEP_LM_CALLS):
+        var call = gemm_step_lm_call(i)
+        var m = call[1]
+        var n = call[2]
+        var k = call[3]
+        var p132 = gemm_step_kpack_rule(m, n, k, 132, bm, bn)
+        var k132 = gemm_step_ksplit_rule(m, n, k, 132, True)
+        var p0 = gemm_step_kpack_rule(m, n, k, 0, bm, bn)
+        var k0 = gemm_step_ksplit_rule(m, n, k, 0, True)
+        var w132 = gemm_step_kpack_rule(m, n, k, 132, GEMM_KPACKW_BM, GEMM_KPACKW_BN)
+        print(
+            "RULE_KPACK " + gemm_step_lm_call_name(i) + " " + op_name(call[0]) + " " + String(m) + "x"
+            + String(n) + "x" + String(k) + " kpack(S=132)=" + String(p132) + " ksplit(S=132)="
+            + String(k132) + " kpack(S=0)=" + String(p0) + " ksplit(S=0)=" + String(k0)
+            + " kpack_wide(S=132)=" + String(w132) + " (brief " + String(want_wide[i]) + ")"
+        )
+        if p132 != k132 or p0 != k0:
+            failures.append(
+                "RULE_KPACK " + gemm_step_lm_call_name(i) + ": the 128x128 rule gives " + String(p132)
+                + " and " + String(p0) + " where gemm_step_ksplit_rule gives " + String(k132) + " and "
+                + String(k0)
+            )
+        if w132 != want_wide[i]:
+            failures.append(
+                "RULE_KPACK " + gemm_step_lm_call_name(i) + ": kpack_wide(S=132)=" + String(w132)
+                + " (brief " + String(want_wide[i]) + ")"
+            )
+    print("check_kpack_rule_hand_counts: " + String(len(failures) - before) + " failures")
+
+
+# ===========================================================================
+# HOST: THE LANE FOLD AND ITS RULES (DEVIATIONS 2640 to 2642)
+# ===========================================================================
+
+
+def check_kfold_lanes_is_the_stack_fold(mut failures: List[String]) raises:
+    """docs/lanes/BRIEF_gemm_final_2026-09-11.md sections 5.3 to 5.5, on the
+    host, before any device work.
+
+    For every group count `G` in 1 to `GEMM_KFOLD_MAX_GROUPS` (255) and three
+    node kinds (the 13-bit significand generator; the same with about one node
+    in four replaced by `-0.0`; the same with about one in three scaled by
+    `1e-38`, so subnormal nodes and sums exercise every `ftz` seam), `W` lanes
+    of distinct nodes are pushed with the device's own `_fold_push_lanes` in
+    `q` order (the kernel's load batches change when a node loads, never the
+    push order) and drained with `_fold_drain_lanes`. In every lane the stored
+    `ftz(root)` must equal, bit for bit, what the shipped fold stack kernel
+    stores for that lane's cell alone (`_fold_push` into its 12-level register
+    stack, `_fold_drain`, `ftz`). For the first two kinds it must also equal
+    `fold_balanced_tree` over the lane's nodes. No push may overflow below 256
+    groups, `occ` must end at `G`, and after 255 pushes the 256th must overflow
+    (section 5.5 both ways)."""
+    comptime W = GEMM_KFOLD_W
+    comptime FS = GEMM_KFOLD_FS
+    var bad = 0
+    var runs = 0
+    var first = String("")
+    for kind in range(3):
+        for g in range(1, GEMM_KFOLD_MAX_GROUPS + 1):
+            var nodes = List[Float32]()
+            for q in range(g):
+                for e in range(W):
+                    var v = _value(q * 131 + g * 7 + e, 1301 + e + 29 * kind)
+                    if kind == 1 and (q * 5 + e * 3 + g) % 4 == 0:
+                        v = -Float32(0.0)
+                    if kind == 2 and (q + e + g) % 3 == 0:
+                        v = v * Float32(1.0e-38)
+                    nodes.append(v)
+            var stack = SIMD[DType.float32, FS * W](0.0)
+            var occ = 0
+            var overflow_at = -1
+            for q2 in range(g):
+                var val = SIMD[DType.float32, W](0.0)
+                for e2 in range(W):
+                    val[e2] = nodes[q2 * W + e2]
+                if not _fold_push_lanes[W, FS](stack, occ, val):
+                    if overflow_at < 0:
+                        overflow_at = q2
+            if overflow_at >= 0 or occ != g:
+                bad += 1
+                if first.byte_length() == 0:
+                    first = (
+                        "kind=" + String(kind) + " G=" + String(g) + ": lane stack overflowed at push "
+                        + String(overflow_at) + ", occ=" + String(occ)
+                    )
+            var root = _fold_drain_lanes[W, FS](stack, occ)
+            for e3 in range(W):
+                var sstack = SIMD[DType.float32, GEMM_FOLD_SLOTS](0.0)
+                var socc = 0
+                var col = List[Float32]()
+                for q3 in range(g):
+                    var nv = nodes[q3 * W + e3]
+                    col.append(nv)
+                    if not _fold_push(sstack, socc, nv):
+                        raise Error(
+                            "check_kfold_lanes_is_the_stack_fold: the 12-level register stack"
+                            " OVERFLOWED at group " + String(q3)
+                        )
+                var want_stack = ftz(_fold_drain(sstack, socc))
+                var got = ftz(root[e3])
+                var ok = _bits32(got) == _bits32(want_stack)
+                var tree_bits = UInt32(0)
+                if kind < 2:
+                    tree_bits = _bits32(fold_balanced_tree(col))
+                    ok = ok and _bits32(got) == tree_bits
+                runs += 1
+                if not ok:
+                    bad += 1
+                    if first.byte_length() == 0:
+                        first = (
+                            "kind=" + String(kind) + " G=" + String(g) + " lane=" + String(e3)
+                            + ": lanes=" + hex(_bits32(got)) + " stack=" + hex(_bits32(want_stack))
+                            + " tree=" + hex(tree_bits) + " (tree compared for kinds 0 and 1)"
+                        )
+    # Section 5.5 the other way: 255 pushes fit, the 256th overflows.
+    var st2 = SIMD[DType.float32, FS * W](0.0)
+    var occ2 = 0
+    var fit = True
+    for q4 in range(GEMM_KFOLD_MAX_GROUPS):
+        if not _fold_push_lanes[W, FS](st2, occ2, SIMD[DType.float32, W](Float32(q4 % 7) + 1.0)):
+            fit = False
+    var over = _fold_push_lanes[W, FS](st2, occ2, SIMD[DType.float32, W](1.0))
+    if not fit or over:
+        failures.append(
+            "check_kfold_lanes_is_the_stack_fold: " + String(GEMM_KFOLD_MAX_GROUPS)
+            + " pushes fit=" + String(fit) + ", push " + String(GEMM_KFOLD_MAX_GROUPS + 1)
+            + " placed=" + String(over) + " (must be True and False)"
+        )
+    if bad != 0:
+        failures.append(
+            "check_kfold_lanes_is_the_stack_fold: " + String(bad) + " of " + String(runs)
+            + " (kind, G, lane) folds DISAGREE; first " + first
+        )
+    print(
+        "check_kfold_lanes_is_the_stack_fold: " + String(runs) + " lane folds (3 kinds, G 1.."
+        + String(GEMM_KFOLD_MAX_GROUPS) + ", W=" + String(W) + ", FS=" + String(FS) + "), "
+        + String(bad) + " disagree; overflow bound fit=" + String(fit) + " next_placed=" + String(over)
+    )
+
+
+def check_kfold_rule_hand_counts(mut failures: List[String]) raises:
+    """Brief sections 3.3, 4.2 and 4.3 at the twelve LM calls, host only, on
+    every column (`gemm_step_kfold_rule` takes `S` as an argument): `kfoldv`
+    at `S = 132` equals `gemm_step_ksplit_rule(.., 132, True)` and the ksplit
+    hand counts; `kfoldv_leaf` equals `gemm_step_ksplit_rule(.., 0, False)`
+    and the ksplit_leaf hand counts; the group counts match the brief and
+    never exceed `GEMM_KFOLD_MAX_GROUPS` where an arm takes the call (so the
+    lane fold, not the shipped fold, runs there); `gemm_kfold_blocks` matches
+    the hand count of fold blocks (`ceil(ceil(m n / 16) / 256)`). The column's
+    own answer (`gemm_step_kfold_leaves`, at `GEMM_KSPLIT_S`) is printed."""
+    var want_v: List[Int] = [1, 1, 1, 0, 2, 2, 2, 0, 2, 0, 64, 0]
+    var want_leaf: List[Int] = [1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 16, 0]
+    var want_groups_v: List[Int] = [6, 6, 16, 0, 8, 8, 8, 0, 8, 0, 7, 0]
+    var want_groups_leaf: List[Int] = [6, 6, 16, 6, 16, 16, 16, 6, 16, 0, 25, 0]
+    var want_blocks: List[Int] = [384, 384, 144, 1024, 384, 384, 384, 1024, 384, 25129, 384, 9424]
+    var before = len(failures)
+    for i in range(GEMM_STEP_LM_CALLS):
+        var call = gemm_step_lm_call(i)
+        var m = call[1]
+        var n = call[2]
+        var k = call[3]
+        var cname = gemm_step_lm_call_name(i)
+        var p_count = contract_partition(k)[1]
+        var gv = gemm_step_kfold_rule(GEMM_GEOM_KFOLDV, m, n, k, 132)
+        var gf = gemm_step_kfold_rule(GEMM_GEOM_KFOLDV_LEAF, m, n, k, 132)
+        var kv = gemm_step_ksplit_rule(m, n, k, 132, True)
+        var kf = gemm_step_ksplit_rule(m, n, k, 0, False)
+        var groups_v = 0
+        if gv > 0:
+            groups_v = (p_count + gv - 1) // gv
+        var groups_f = 0
+        if gf > 0:
+            groups_f = (p_count + gf - 1) // gf
+        var blocks = gemm_kfold_blocks(m * n)
+        var col_v = gemm_step_kfold_leaves(GEMM_GEOM_KFOLDV, m, n, k)
+        var col_f = gemm_step_kfold_leaves(GEMM_GEOM_KFOLDV_LEAF, m, n, k)
+        print(
+            "RULE_KFOLD " + cname + " " + op_name(call[0]) + " " + String(m) + "x" + String(n) + "x"
+            + String(k) + " kfoldv(S=132)=" + String(gv) + " groups=" + String(groups_v)
+            + " kfoldv_leaf=" + String(gf) + " groups=" + String(groups_f) + " fold_blocks="
+            + String(blocks) + " (W=" + String(GEMM_KFOLD_W) + " tpb=" + String(GEMM_KFOLD_TPB)
+            + " VB=" + String(GEMM_KFOLD_VB) + ") column: kfoldv=" + String(col_v) + " kfoldv_leaf="
+            + String(col_f)
+        )
+        if gv != kv or gf != kf:
+            failures.append(
+                "RULE_KFOLD " + cname + ": kfoldv=" + String(gv) + " (ksplit rule " + String(kv)
+                + "), kfoldv_leaf=" + String(gf) + " (ksplit_leaf rule " + String(kf) + ")"
+            )
+        if gv != want_v[i] or gf != want_leaf[i]:
+            failures.append(
+                "RULE_KFOLD " + cname + ": kfoldv=" + String(gv) + " (brief " + String(want_v[i])
+                + "), kfoldv_leaf=" + String(gf) + " (brief " + String(want_leaf[i]) + ")"
+            )
+        if groups_v != want_groups_v[i] or groups_f != want_groups_leaf[i]:
+            failures.append(
+                "RULE_KFOLD " + cname + ": groups kfoldv=" + String(groups_v) + " (brief "
+                + String(want_groups_v[i]) + "), kfoldv_leaf=" + String(groups_f) + " (brief "
+                + String(want_groups_leaf[i]) + ")"
+            )
+        if groups_v > GEMM_KFOLD_MAX_GROUPS or groups_f > GEMM_KFOLD_MAX_GROUPS:
+            failures.append(
+                "RULE_KFOLD " + cname + ": a taken call has more than " + String(GEMM_KFOLD_MAX_GROUPS)
+                + " groups, so the shipped fold would run there, not the lane fold"
+            )
+        if blocks != want_blocks[i]:
+            failures.append(
+                "RULE_KFOLD " + cname + ": fold blocks " + String(blocks) + " (brief "
+                + String(want_blocks[i]) + ")"
+            )
+    print("check_kfold_rule_hand_counts: " + String(len(failures) - before) + " failures")
 
 
 def check_group_rule_hand_counts(mut failures: List[String]) raises:
@@ -1052,9 +1547,23 @@ def main() raises:
             "gemm_step_arms_check: refuses a build with a global GEMM sabotage ("
             + gemm_sabotage_name() + "): its baseline would be a sabotaged kernel"
         )
+    print(
+        "   DEVIATION 2599; docs/lanes/BRIEF_gemm_kernel_2026-09-11.md sections 5 and 6; kpack=["
+        + gemm_step_geometry_name(GEMM_GEOM_KPACK) + "] kpack_wide=["
+        + gemm_step_geometry_name(GEMM_GEOM_KPACK_WIDE) + "]"
+    )
+    print(
+        "   DEVIATIONS 2640 to 2642; docs/lanes/BRIEF_gemm_final_2026-09-11.md sections 4 to 6; kfoldv=["
+        + gemm_step_geometry_name(GEMM_GEOM_KFOLDV) + "] kfoldv_leaf=["
+        + gemm_step_geometry_name(GEMM_GEOM_KFOLDV_LEAF) + "]"
+    )
     var failures = List[String]()
     check_group_fold_is_the_contract_tree(failures)
     check_group_rule_hand_counts(failures)
+    check_kpack_page_is_a_bijection(failures)
+    check_kpack_rule_hand_counts(failures)
+    check_kfold_lanes_is_the_stack_fold(failures)
+    check_kfold_rule_hand_counts(failures)
     var ctx = DeviceContext()
     check_selector(ctx, failures)
     check_ragged_controls(ctx, failures)
@@ -1075,7 +1584,9 @@ def main() raises:
     var scope = String(", LM calls skipped") if lm == "0" else String(", and per LM call through identical_gemm_into")
     print(
         "PASS gemm step arms: the group fold is the contract tree on the host, the group rule"
-        " matches the hand counts, every geometry and every explicit group size bit-equal to"
+        " matches the hand counts, the kpack page is a bijection and its rule matches (2599),"
+        " the lane fold is the stack fold for G 1..255 and the kfold rules match (2640 to 2642),"
+        " every geometry and every explicit group size bit-equal to"
         " the old 128x128 plan and to FLAT, reach proven per geometry, the shipped default"
         " proven at its column row, at row 0 and at the enabled row" + scope
     )

@@ -1,0 +1,20 @@
+kmeans load ms=984.420917
+kmeans rep=0 plan_sum_scale_ms=54.662977 fit_given_scale_ms=132.991684 n_iter=21 inertia=120627664.0 scale=16.0
+kmeans rep=1 plan_sum_scale_ms=55.738874 fit_given_scale_ms=132.634032 n_iter=21 inertia=120627664.0 scale=16.0
+kmeans rep=2 plan_sum_scale_ms=54.813183 fit_given_scale_ms=132.14437 n_iter=21 inertia=120627664.0 scale=16.0
+ols rep=0 ols_fit_host_total_ms=10.988869 alloc_ms=0.007484 upload_ms=3.479161 gram_ms=2.090272 xty_ms=3.614653 equilibrate_ms=0.032666 coef0=0.0034392336
+  jacobi n=11 ms=0.494211 converged=1.0 rel=2.624243e-10 sweeps=5.0
+ols rep=1 ols_fit_host_total_ms=9.824549 alloc_ms=0.006115 upload_ms=3.493118 gram_ms=2.088773 xty_ms=3.609696 equilibrate_ms=0.031741 coef0=0.0034392336
+  jacobi n=11 ms=0.493569 converged=1.0 rel=2.624243e-10 sweeps=5.0
+ols rep=2 ols_fit_host_total_ms=9.835788 alloc_ms=0.005926 upload_ms=3.477882 gram_ms=2.090235 xty_ms=3.613223 equilibrate_ms=0.031157 coef0=0.0034392336
+  jacobi n=11 ms=0.493124 converged=1.0 rel=2.624243e-10 sweeps=5.0
+pca rep=0 alloc_ms=0.432316 upload_ms=3.216429 covariance_ms=6.582512
+  jacobi n=11 ms=0.469948 converged=1.0 rel=3.784624e-13 sweeps=4.0
+pca rep=1 alloc_ms=0.004229 upload_ms=3.188766 covariance_ms=6.337457
+  jacobi n=11 ms=0.398518 converged=1.0 rel=3.784624e-13 sweeps=4.0
+pca rep=2 alloc_ms=0.003756 upload_ms=3.18639 covariance_ms=6.338565
+  jacobi n=11 ms=0.397851 converged=1.0 rel=3.784624e-13 sweeps=4.0
+kmeans load ms=922.784477
+kmeans rep=0 plan_sum_scale_ms=50.137921 fit_given_scale_ms=133.195499 n_iter=21 inertia=120627664.0 scale=16.0
+kmeans rep=1 plan_sum_scale_ms=45.975637 fit_given_scale_ms=130.445635 n_iter=21 inertia=120627664.0 scale=16.0
+kmeans rep=2 plan_sum_scale_ms=45.934938 fit_given_scale_ms=130.485169 n_iter=21 inertia=120627664.0 scale=16.0

@@ -37,6 +37,24 @@ parallelism row is 0). On a column whose row is above 0 the calls the group
 rule takes run the `ksplit_128x128` row's kernel. The
 `GEMM_STEP_RESOURCES_GEOMETRY label=shipped_default` line says which is true
 on this build.
+
+DEVIATION 2599 (docs/lanes/BRIEF_gemm_kernel_2026-09-11.md section 6): four
+rows of `identical_gemm_kpack_kernel`, `kpack_all` and `kpack_group` at the
+128x128 geometry (compare with `shipped_128x128` and `ksplit_128x128`: same
+tile, packed page, per-step loads) and `kpack_wide_all` and
+`kpack_wide_group` at 128x256 (reg 8x16). Registers, local bytes (spills
+show here beside the fold stack) and blocks per SM are what brief section 4.2
+reads for C4.
+
+DEVIATIONS 2640 to 2642 (docs/lanes/BRIEF_gemm_final_2026-09-11.md sections 3.2
+and 4.1): two rows of FOLD kernels, launched at `FLAT_TPB` threads per block.
+`fold_stack_shipped` is `identical_gemm_fold_stack_kernel`, the fold the
+shipped ksplit default launches on every step call (one thread per cell);
+`kfold_lanes` is `identical_gemm_kfold_lanes_kernel` at the arms' constants
+(16 cells per thread, 8-level lane register stack, 2 loads a batch). Their
+registers, local bytes and blocks per SM are the input the brief's section 3.2
+fit transcribes rather than reads (2,048 resident threads per SM), and the
+`kfold_lanes` register count says whether the 128-lane stack spills.
 """
 from max.gpu.host import Attribute, DeviceContext
 
@@ -48,8 +66,25 @@ from checks.kernel_matrix import (
 )
 from checks.numerics import numeric_mode_name
 from gemm.checks.gemm_identical import (
+    FLAT_TPB,
+    GEMM_GEOM_KFOLDV,
+    GEMM_KFOLD_FS,
+    GEMM_KFOLD_TPB,
+    GEMM_KFOLD_VB,
+    GEMM_KFOLD_W,
     GEMM_GEOM_HALF,
     GEMM_GEOM_HALF_KS16,
+    GEMM_GEOM_KPACK,
+    GEMM_GEOM_KPACK_WIDE,
+    GEMM_KPACKW_CPT,
+    GEMM_KPACKW_FS,
+    GEMM_KPACKW_KS,
+    GEMM_KPACKW_RPT,
+    GEMM_KPACK_CPT,
+    GEMM_KPACK_FS,
+    GEMM_KPACK_KS,
+    GEMM_KPACK_PAGE_GUARD_BYTES,
+    GEMM_KPACK_RPT,
     GEMM_GEOM_HEAD_M,
     GEMM_GEOM_HEAD_N,
     GEMM_GEOM_KSPLIT,
@@ -75,6 +110,9 @@ from gemm.checks.gemm_identical import (
     TUNED_TPB,
     TUNED_VECLEN,
     gemm_step_geometry_name,
+    identical_gemm_fold_stack_kernel,
+    identical_gemm_kfold_lanes_kernel,
+    identical_gemm_kpack_kernel,
     identical_gemm_ksplit_kernel,
     identical_gemm_step_arm_kernel,
     identical_gemm_tuned_kernel,
@@ -154,6 +192,77 @@ def _stat_ksplit(ctx: DeviceContext, label: String) raises:
     )
 
 
+def _stat_kpack[
+    RPT: Int, CPT: Int, TC: Int, KS: Int, FS: Int, GROUP: Bool
+](ctx: DeviceContext, label: String) raises:
+    """DEVIATION 2599: the packed-page kernel, clean, with the PAGES its
+    launcher binds (the matrix row at the packed page bytes plus the guard)."""
+    comptime TR = TUNED_TPB // TC
+    comptime BM = RPT * TR
+    comptime BN = CPT * TC
+    comptime PAGE_BYTES = (BM + BN) * KS * 4
+    comptime PAGES = lib_smem_pages_for[TARGET_COLUMN, PAGE_BYTES + GEMM_KPACK_PAGE_GUARD_BYTES]()
+    comptime kern = identical_gemm_kpack_kernel[RPT, CPT, TC, KS, FS, PAGES, GROUP, False]
+    print(
+        "GEMM_STEP_RESOURCES_BEGIN label=", label, " tile=", BM, "x", BN, " reg=", RPT, "x", CPT,
+        " tc=", TC, " ks=", KS, " fs=", FS, " page_bytes=", PAGE_BYTES, " pages=", PAGES,
+        " group=", GROUP, sep="",
+    )
+    var f = ctx.compile_function[kern]()
+    print("GEMM_STEP_RESOURCES label=", label, " regs=", f.get_attribute(Attribute.NUM_REGS), sep="")
+    print("GEMM_STEP_RESOURCES label=", label, " local=", f.get_attribute(Attribute.LOCAL_SIZE_BYTES), sep="")
+    print("GEMM_STEP_RESOURCES label=", label, " shared=", f.get_attribute(Attribute.SHARED_SIZE_BYTES), sep="")
+    print("GEMM_STEP_RESOURCES label=", label, " const=", f.get_attribute(Attribute.CONST_SIZE_BYTES), sep="")
+    print("GEMM_STEP_RESOURCES label=", label, " max_threads=", f.get_attribute(Attribute.MAX_THREADS_PER_BLOCK), sep="")
+    print(
+        "GEMM_STEP_RESOURCES label=", label, " blocks_per_sm_256=",
+        f.occupancy_max_active_blocks_per_multiprocessor(TUNED_TPB, 0), sep="",
+    )
+
+
+def _stat_fold_stack(ctx: DeviceContext, label: String) raises:
+    """DEVIATION 2642: the shipped fold stack kernel (one thread per cell), the
+    fold `_ksplit_fold_launch` runs on every step call, at its launch block
+    size `FLAT_TPB`."""
+    comptime kern = identical_gemm_fold_stack_kernel
+    print(
+        "GEMM_STEP_RESOURCES_BEGIN label=", label, " fold=stack cells_per_thread=1 tpb=", FLAT_TPB,
+        sep="",
+    )
+    var f = ctx.compile_function[kern]()
+    print("GEMM_STEP_RESOURCES label=", label, " regs=", f.get_attribute(Attribute.NUM_REGS), sep="")
+    print("GEMM_STEP_RESOURCES label=", label, " local=", f.get_attribute(Attribute.LOCAL_SIZE_BYTES), sep="")
+    print("GEMM_STEP_RESOURCES label=", label, " shared=", f.get_attribute(Attribute.SHARED_SIZE_BYTES), sep="")
+    print("GEMM_STEP_RESOURCES label=", label, " const=", f.get_attribute(Attribute.CONST_SIZE_BYTES), sep="")
+    print("GEMM_STEP_RESOURCES label=", label, " max_threads=", f.get_attribute(Attribute.MAX_THREADS_PER_BLOCK), sep="")
+    print(
+        "GEMM_STEP_RESOURCES label=", label, " blocks_per_sm_256=",
+        f.occupancy_max_active_blocks_per_multiprocessor(FLAT_TPB, 0), sep="",
+    )
+
+
+def _stat_kfold(ctx: DeviceContext, label: String) raises:
+    """DEVIATION 2642: the lane fold kernel of `kfoldv` and `kfoldv_leaf`,
+    clean, at the constants `_kfold_fold_launch` binds."""
+    comptime kern = identical_gemm_kfold_lanes_kernel[
+        GEMM_KFOLD_W, GEMM_KFOLD_FS, GEMM_KFOLD_VB, False
+    ]
+    print(
+        "GEMM_STEP_RESOURCES_BEGIN label=", label, " fold=lanes cells_per_thread=", GEMM_KFOLD_W,
+        " fs=", GEMM_KFOLD_FS, " vb=", GEMM_KFOLD_VB, " tpb=", GEMM_KFOLD_TPB, sep="",
+    )
+    var f = ctx.compile_function[kern]()
+    print("GEMM_STEP_RESOURCES label=", label, " regs=", f.get_attribute(Attribute.NUM_REGS), sep="")
+    print("GEMM_STEP_RESOURCES label=", label, " local=", f.get_attribute(Attribute.LOCAL_SIZE_BYTES), sep="")
+    print("GEMM_STEP_RESOURCES label=", label, " shared=", f.get_attribute(Attribute.SHARED_SIZE_BYTES), sep="")
+    print("GEMM_STEP_RESOURCES label=", label, " const=", f.get_attribute(Attribute.CONST_SIZE_BYTES), sep="")
+    print("GEMM_STEP_RESOURCES label=", label, " max_threads=", f.get_attribute(Attribute.MAX_THREADS_PER_BLOCK), sep="")
+    print(
+        "GEMM_STEP_RESOURCES label=", label, " blocks_per_sm_256=",
+        f.occupancy_max_active_blocks_per_multiprocessor(GEMM_KFOLD_TPB, 0), sep="",
+    )
+
+
 def main() raises:
     var ctx = DeviceContext()
     print(
@@ -206,4 +315,39 @@ def main() raises:
         _stat_ksplit(ctx, String("ksplit_128x128"))
     except e:
         print("GEMM_STEP_RESOURCES_ERROR label=ksplit_128x128 error=", e, sep="")
+    print("GEMM_STEP_RESOURCES_GEOMETRY label=kpack ", gemm_step_geometry_name(GEMM_GEOM_KPACK), sep="")
+    try:
+        _stat_kpack[GEMM_KPACK_RPT, GEMM_KPACK_CPT, TUNED_TC, GEMM_KPACK_KS, GEMM_KPACK_FS, False](
+            ctx, String("kpack_all")
+        )
+    except e:
+        print("GEMM_STEP_RESOURCES_ERROR label=kpack_all error=", e, sep="")
+    try:
+        _stat_kpack[GEMM_KPACK_RPT, GEMM_KPACK_CPT, TUNED_TC, GEMM_KPACK_KS, GEMM_KPACK_FS, True](
+            ctx, String("kpack_group")
+        )
+    except e:
+        print("GEMM_STEP_RESOURCES_ERROR label=kpack_group error=", e, sep="")
+    print("GEMM_STEP_RESOURCES_GEOMETRY label=kpack_wide ", gemm_step_geometry_name(GEMM_GEOM_KPACK_WIDE), sep="")
+    try:
+        _stat_kpack[GEMM_KPACKW_RPT, GEMM_KPACKW_CPT, TUNED_TC, GEMM_KPACKW_KS, GEMM_KPACKW_FS, False](
+            ctx, String("kpack_wide_all")
+        )
+    except e:
+        print("GEMM_STEP_RESOURCES_ERROR label=kpack_wide_all error=", e, sep="")
+    try:
+        _stat_kpack[GEMM_KPACKW_RPT, GEMM_KPACKW_CPT, TUNED_TC, GEMM_KPACKW_KS, GEMM_KPACKW_FS, True](
+            ctx, String("kpack_wide_group")
+        )
+    except e:
+        print("GEMM_STEP_RESOURCES_ERROR label=kpack_wide_group error=", e, sep="")
+    print("GEMM_STEP_RESOURCES_GEOMETRY label=kfoldv ", gemm_step_geometry_name(GEMM_GEOM_KFOLDV), sep="")
+    try:
+        _stat_fold_stack(ctx, String("fold_stack_shipped"))
+    except e:
+        print("GEMM_STEP_RESOURCES_ERROR label=fold_stack_shipped error=", e, sep="")
+    try:
+        _stat_kfold(ctx, String("kfold_lanes"))
+    except e:
+        print("GEMM_STEP_RESOURCES_ERROR label=kfold_lanes error=", e, sep="")
     print("GEMM_STEP_RESOURCES_DONE")

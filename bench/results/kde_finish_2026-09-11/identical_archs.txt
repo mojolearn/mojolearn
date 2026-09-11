@@ -1,0 +1,2 @@
+python/mojolearn/identical/_mojolearn.so sha256=cc3786edd79bded3 sm_90a=70 gfx942=0 sm_90a=70
+python/mojolearn/identical/_mojolearn_estimators.so sha256=a033db6ca4432977 sm_90a=131 gfx942=0 sm_90a=131

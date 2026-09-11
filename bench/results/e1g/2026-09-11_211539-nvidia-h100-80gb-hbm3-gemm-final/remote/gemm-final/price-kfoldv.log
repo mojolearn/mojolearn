@@ -1,0 +1,143 @@
+1552 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5bbd80000000, nodemask=2)
+== bench/gemm_step_price_main.mojo [IDENTICAL] arm=kfoldv trial=True column=2 rounds=7 warmups=2 controls=False ==
+DEFAULT gemm column=2 block_parallelism_row=132 ksplit_default=on trial_ksplit_S=132 shipped=[shipped DEFAULT ksplit (DEVIATION 2595, block parallelism row S=132 slack=4) where the group rule takes the call, else choose_gemm_plan's plan (TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) on the step's calls)]
+PLANLABEL arm=kfoldv label=kfoldv: shipped group launch at the ksplit(S=132) rule, lane fold 16 cells/thread register stack 8 levels (shipped fold above 255 groups) where the rule takes the call, else default=ksplit(S=132) else tuned128
+timing=host-synchronized median ms; raw samples below; the BITS pass is not a warmup
+TABLE call | op | m x n x k | per step | shipped plan (ran) | arm geometry | shipped launched blocks | arm blocks | shipped median ms | arm median ms | ratio | arm launched blocks | group leaves | shipped group leaves
+BITS proj_fwd EQUAL cells=1572864 digest=0xdd3c876b6b377944
+SAMPLE proj_fwd round=0 arm_first=False shipped_ns=268937 arm_ns=357885
+SAMPLE proj_fwd round=1 arm_first=True shipped_ns=267644 arm_ns=362371
+SAMPLE proj_fwd round=2 arm_first=False shipped_ns=264234 arm_ns=359307
+SAMPLE proj_fwd round=3 arm_first=True shipped_ns=267177 arm_ns=360670
+SAMPLE proj_fwd round=4 arm_first=False shipped_ns=264383 arm_ns=357294
+SAMPLE proj_fwd round=5 arm_first=True shipped_ns=268434 arm_ns=363531
+SAMPLE proj_fwd round=6 arm_first=False shipped_ns=263943 arm_ns=358264
+PRICE gemm kfoldv proj_fwd shipped_ms=0.267177 arm_ms=0.359307 ratio=1.3448275862068966 shipped_tflops=9.04239176276401 arm_tflops=6.7238297723117 shipped_launched_blocks=576 shipped_group_leaves=1 arm_launched_blocks=576 group_leaves=1 choose_plan=[TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] shipped_plan=[DEFAULT ksplit (DEVIATION 2595) 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> fold (block per cell <= 16384, else register stack) S=132 slack=4 leaves_per_group=1 groups=6 launched_blocks=576] geometry=[kfoldv 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> LANE fold (16 cells per thread, register stack 8 levels, 2 group loads a batch, tpb=256, groups <= 255, else the shipped fold) group rule S=132 slack=4]
+TABLE proj_fwd | NT | 2048 x 768 x 768 | 48 | DEFAULT ksplit (DEVIATION 2595) 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> fold (block per cell <= 16384, else register stack) S=132 slack=4 leaves_per_group=1 groups=6 launched_blocks=576 | kfoldv 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> LANE fold (16 cells per thread, register stack 8 levels, 2 group loads a batch, tpb=256, groups <= 255, else the shipped fold) group rule S=132 slack=4 | 576 | 96 | 0.267177 | 0.359307 | 1.3448275862068966 | 576 | 1 | 1
+PHASEBITS proj_fwd EQUAL cells=1572864 phase_of=arm_kfold
+PHASE gemm kfoldv proj_fwd phase_of=arm_kfold group_leaves=1 groups=6 launched_blocks=576 alloc_ms=0.003157 group_ms=0.209088 fold_ms=0.154623 sum_ms=0.367127 arm_ms=0.359307 shipped_ms=0.267177 (each phase host-synchronized; medians over 7 rounds)
+BITS proj_dA EQUAL cells=1572864 digest=0x4a06fac1f8e83213
+SAMPLE proj_dA round=0 arm_first=False shipped_ns=271324 arm_ns=361010
+SAMPLE proj_dA round=1 arm_first=True shipped_ns=270751 arm_ns=363538
+SAMPLE proj_dA round=2 arm_first=False shipped_ns=267017 arm_ns=359994
+SAMPLE proj_dA round=3 arm_first=True shipped_ns=271705 arm_ns=365199
+SAMPLE proj_dA round=4 arm_first=False shipped_ns=266555 arm_ns=358696
+SAMPLE proj_dA round=5 arm_first=True shipped_ns=270774 arm_ns=363917
+SAMPLE proj_dA round=6 arm_first=False shipped_ns=266560 arm_ns=361785
+PRICE gemm kfoldv proj_dA shipped_ms=0.270751 arm_ms=0.361785 ratio=1.3362277516980547 shipped_tflops=8.923029292597258 arm_tflops=6.677775761847506 shipped_launched_blocks=576 shipped_group_leaves=1 arm_launched_blocks=576 group_leaves=1 choose_plan=[TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] shipped_plan=[DEFAULT ksplit (DEVIATION 2595) 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> fold (block per cell <= 16384, else register stack) S=132 slack=4 leaves_per_group=1 groups=6 launched_blocks=576] geometry=[kfoldv 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> LANE fold (16 cells per thread, register stack 8 levels, 2 group loads a batch, tpb=256, groups <= 255, else the shipped fold) group rule S=132 slack=4]
+TABLE proj_dA | NN | 2048 x 768 x 768 | 48 | DEFAULT ksplit (DEVIATION 2595) 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> fold (block per cell <= 16384, else register stack) S=132 slack=4 leaves_per_group=1 groups=6 launched_blocks=576 | kfoldv 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> LANE fold (16 cells per thread, register stack 8 levels, 2 group loads a batch, tpb=256, groups <= 255, else the shipped fold) group rule S=132 slack=4 | 576 | 96 | 0.270751 | 0.361785 | 1.3362277516980547 | 576 | 1 | 1
+PHASEBITS proj_dA EQUAL cells=1572864 phase_of=arm_kfold
+PHASE gemm kfoldv proj_dA phase_of=arm_kfold group_leaves=1 groups=6 launched_blocks=576 alloc_ms=0.003127 group_ms=0.211844 fold_ms=0.154506 sum_ms=0.369466 arm_ms=0.361785 shipped_ms=0.270751 (each phase host-synchronized; medians over 7 rounds)
+BITS proj_dB EQUAL cells=589824 digest=0x1da75dd594f0934a
+SAMPLE proj_dB round=0 arm_first=False shipped_ns=267015 arm_ns=327819
+SAMPLE proj_dB round=1 arm_first=True shipped_ns=267255 arm_ns=332159
+SAMPLE proj_dB round=2 arm_first=False shipped_ns=263711 arm_ns=328555
+SAMPLE proj_dB round=3 arm_first=True shipped_ns=267458 arm_ns=332072
+SAMPLE proj_dB round=4 arm_first=False shipped_ns=264576 arm_ns=328302
+SAMPLE proj_dB round=5 arm_first=True shipped_ns=269569 arm_ns=331488
+SAMPLE proj_dB round=6 arm_first=False shipped_ns=263990 arm_ns=324655
+PRICE gemm kfoldv proj_dB shipped_ms=0.267015 arm_ms=0.328555 ratio=1.2304739434114187 shipped_tflops=9.047877849559013 arm_tflops=7.353164931290043 shipped_launched_blocks=576 shipped_group_leaves=1 arm_launched_blocks=576 group_leaves=1 choose_plan=[TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] shipped_plan=[DEFAULT ksplit (DEVIATION 2595) 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> fold (block per cell <= 16384, else register stack) S=132 slack=4 leaves_per_group=1 groups=16 launched_blocks=576] geometry=[kfoldv 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> LANE fold (16 cells per thread, register stack 8 levels, 2 group loads a batch, tpb=256, groups <= 255, else the shipped fold) group rule S=132 slack=4]
+TABLE proj_dB | TN | 768 x 768 x 2048 | 48 | DEFAULT ksplit (DEVIATION 2595) 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> fold (block per cell <= 16384, else register stack) S=132 slack=4 leaves_per_group=1 groups=16 launched_blocks=576 | kfoldv 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> LANE fold (16 cells per thread, register stack 8 levels, 2 group loads a batch, tpb=256, groups <= 255, else the shipped fold) group rule S=132 slack=4 | 576 | 36 | 0.267015 | 0.328555 | 1.2304739434114187 | 576 | 1 | 1
+PHASEBITS proj_dB EQUAL cells=589824 phase_of=arm_kfold
+PHASE gemm kfoldv proj_dB phase_of=arm_kfold group_leaves=1 groups=16 launched_blocks=576 alloc_ms=0.003121 group_ms=0.217805 fold_ms=0.114969 sum_ms=0.336139 arm_ms=0.328555 shipped_ms=0.267015 (each phase host-synchronized; medians over 7 rounds)
+BITS gateup_fwd EQUAL cells=4194304 digest=0xe05cc5aa93a62891
+SAMPLE gateup_fwd round=0 arm_first=False shipped_ns=554694 arm_ns=552410
+SAMPLE gateup_fwd round=1 arm_first=True shipped_ns=554176 arm_ns=553845
+SAMPLE gateup_fwd round=2 arm_first=False shipped_ns=554258 arm_ns=553880
+SAMPLE gateup_fwd round=3 arm_first=True shipped_ns=554105 arm_ns=553457
+SAMPLE gateup_fwd round=4 arm_first=False shipped_ns=555124 arm_ns=552668
+SAMPLE gateup_fwd round=5 arm_first=True shipped_ns=554825 arm_ns=553548
+SAMPLE gateup_fwd round=6 arm_first=False shipped_ns=552960 arm_ns=553597
+PRICE gemm kfoldv gateup_fwd shipped_ms=0.554258 arm_ms=0.553548 ratio=0.9987190081153542 shipped_tflops=11.623559685200755 arm_tflops=11.638468468859068 shipped_launched_blocks=256 shipped_group_leaves=0 arm_launched_blocks=256 group_leaves=0 choose_plan=[TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] shipped_plan=[TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) (ksplit default on at S=132: the group rule declines this call)] geometry=[shipped DEFAULT ksplit (DEVIATION 2595, block parallelism row S=132 slack=4) where the group rule takes the call, else choose_gemm_plan's plan (TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) on the step's calls)]
+TABLE gateup_fwd | NT | 2048 x 2048 x 768 | 24 | TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) (ksplit default on at S=132: the group rule declines this call) | shipped DEFAULT ksplit (DEVIATION 2595, block parallelism row S=132 slack=4) where the group rule takes the call, else choose_gemm_plan's plan (TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) on the step's calls) | 256 | 256 | 0.554258 | 0.553548 | 0.9987190081153542 | 256 | 0 | 0
+BITS gateup_dA EQUAL cells=1572864 digest=0x46dcce99fe75e276
+SAMPLE gateup_dA round=0 arm_first=False shipped_ns=578690 arm_ns=694912
+SAMPLE gateup_dA round=1 arm_first=True shipped_ns=577673 arm_ns=700603
+SAMPLE gateup_dA round=2 arm_first=False shipped_ns=572764 arm_ns=695281
+SAMPLE gateup_dA round=3 arm_first=True shipped_ns=577923 arm_ns=699150
+SAMPLE gateup_dA round=4 arm_first=False shipped_ns=571900 arm_ns=694281
+SAMPLE gateup_dA round=5 arm_first=True shipped_ns=576977 arm_ns=699318
+SAMPLE gateup_dA round=6 arm_first=False shipped_ns=572760 arm_ns=695764
+PRICE gemm kfoldv gateup_dA shipped_ms=0.576977 arm_ms=0.695764 ratio=1.2058782239153383 shipped_tflops=11.165871332826091 arm_tflops=9.259534761787043 shipped_launched_blocks=768 shipped_group_leaves=2 arm_launched_blocks=768 group_leaves=2 choose_plan=[TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] shipped_plan=[DEFAULT ksplit (DEVIATION 2595) 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> fold (block per cell <= 16384, else register stack) S=132 slack=4 leaves_per_group=2 groups=8 launched_blocks=768] geometry=[kfoldv 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> LANE fold (16 cells per thread, register stack 8 levels, 2 group loads a batch, tpb=256, groups <= 255, else the shipped fold) group rule S=132 slack=4]
+TABLE gateup_dA | NN | 2048 x 768 x 2048 | 24 | DEFAULT ksplit (DEVIATION 2595) 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> fold (block per cell <= 16384, else register stack) S=132 slack=4 leaves_per_group=2 groups=8 launched_blocks=768 | kfoldv 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> LANE fold (16 cells per thread, register stack 8 levels, 2 group loads a batch, tpb=256, groups <= 255, else the shipped fold) group rule S=132 slack=4 | 768 | 96 | 0.576977 | 0.695764 | 1.2058782239153383 | 768 | 2 | 2
+PHASEBITS gateup_dA EQUAL cells=1572864 phase_of=arm_kfold
+PHASE gemm kfoldv gateup_dA phase_of=arm_kfold group_leaves=2 groups=8 launched_blocks=768 alloc_ms=0.003147 group_ms=0.508482 fold_ms=0.191697 sum_ms=0.703655 arm_ms=0.695764 shipped_ms=0.576977 (each phase host-synchronized; medians over 7 rounds)
+BITS gateup_dB EQUAL cells=1572864 digest=0xb0d0047e75bc15a7
+SAMPLE gateup_dB round=0 arm_first=False shipped_ns=589613 arm_ns=702624
+SAMPLE gateup_dB round=1 arm_first=True shipped_ns=589008 arm_ns=709554
+SAMPLE gateup_dB round=2 arm_first=False shipped_ns=582718 arm_ns=703362
+SAMPLE gateup_dB round=3 arm_first=True shipped_ns=589837 arm_ns=705696
+SAMPLE gateup_dB round=4 arm_first=False shipped_ns=585084 arm_ns=706475
+SAMPLE gateup_dB round=5 arm_first=True shipped_ns=589665 arm_ns=711503
+SAMPLE gateup_dB round=6 arm_first=False shipped_ns=582977 arm_ns=702182
+PRICE gemm kfoldv gateup_dB shipped_ms=0.589008 arm_ms=0.705696 ratio=1.1981093635400537 shipped_tflops=10.937798712411377 arm_tflops=9.129215616922867 shipped_launched_blocks=768 shipped_group_leaves=2 arm_launched_blocks=768 group_leaves=2 choose_plan=[TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] shipped_plan=[DEFAULT ksplit (DEVIATION 2595) 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> fold (block per cell <= 16384, else register stack) S=132 slack=4 leaves_per_group=2 groups=8 launched_blocks=768] geometry=[kfoldv 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> LANE fold (16 cells per thread, register stack 8 levels, 2 group loads a batch, tpb=256, groups <= 255, else the shipped fold) group rule S=132 slack=4]
+TABLE gateup_dB | TN | 2048 x 768 x 2048 | 24 | DEFAULT ksplit (DEVIATION 2595) 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> fold (block per cell <= 16384, else register stack) S=132 slack=4 leaves_per_group=2 groups=8 launched_blocks=768 | kfoldv 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> LANE fold (16 cells per thread, register stack 8 levels, 2 group loads a batch, tpb=256, groups <= 255, else the shipped fold) group rule S=132 slack=4 | 768 | 96 | 0.589008 | 0.705696 | 1.1981093635400537 | 768 | 2 | 2
+PHASEBITS gateup_dB EQUAL cells=1572864 phase_of=arm_kfold
+PHASE gemm kfoldv gateup_dB phase_of=arm_kfold group_leaves=2 groups=8 launched_blocks=768 alloc_ms=0.003127 group_ms=0.520308 fold_ms=0.191985 sum_ms=0.716006 arm_ms=0.705696 shipped_ms=0.589008 (each phase host-synchronized; medians over 7 rounds)
+BITS down_fwd EQUAL cells=1572864 digest=0x63592259bcb93a54
+SAMPLE down_fwd round=0 arm_first=False shipped_ns=571127 arm_ns=689976
+SAMPLE down_fwd round=1 arm_first=True shipped_ns=571972 arm_ns=693541
+SAMPLE down_fwd round=2 arm_first=False shipped_ns=566051 arm_ns=689917
+SAMPLE down_fwd round=3 arm_first=True shipped_ns=572128 arm_ns=695415
+SAMPLE down_fwd round=4 arm_first=False shipped_ns=566764 arm_ns=685635
+SAMPLE down_fwd round=5 arm_first=True shipped_ns=574694 arm_ns=692460
+SAMPLE down_fwd round=6 arm_first=False shipped_ns=565007 arm_ns=685774
+PRICE gemm kfoldv down_fwd shipped_ms=0.571127 arm_ms=0.689976 ratio=1.2080955724383542 shipped_tflops=11.280242299873759 arm_tflops=9.337210198615605 shipped_launched_blocks=768 shipped_group_leaves=2 arm_launched_blocks=768 group_leaves=2 choose_plan=[TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] shipped_plan=[DEFAULT ksplit (DEVIATION 2595) 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> fold (block per cell <= 16384, else register stack) S=132 slack=4 leaves_per_group=2 groups=8 launched_blocks=768] geometry=[kfoldv 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> LANE fold (16 cells per thread, register stack 8 levels, 2 group loads a batch, tpb=256, groups <= 255, else the shipped fold) group rule S=132 slack=4]
+TABLE down_fwd | NT | 2048 x 768 x 2048 | 12 | DEFAULT ksplit (DEVIATION 2595) 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> fold (block per cell <= 16384, else register stack) S=132 slack=4 leaves_per_group=2 groups=8 launched_blocks=768 | kfoldv 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> LANE fold (16 cells per thread, register stack 8 levels, 2 group loads a batch, tpb=256, groups <= 255, else the shipped fold) group rule S=132 slack=4 | 768 | 96 | 0.571127 | 0.689976 | 1.2080955724383542 | 768 | 2 | 2
+PHASEBITS down_fwd EQUAL cells=1572864 phase_of=arm_kfold
+PHASE gemm kfoldv down_fwd phase_of=arm_kfold group_leaves=2 groups=8 launched_blocks=768 alloc_ms=0.003185 group_ms=0.50265 fold_ms=0.191368 sum_ms=0.696905 arm_ms=0.689976 shipped_ms=0.571127 (each phase host-synchronized; medians over 7 rounds)
+BITS down_dA EQUAL cells=4194304 digest=0x5b61bc9fe00905
+SAMPLE down_dA round=0 arm_first=False shipped_ns=564159 arm_ns=562929
+SAMPLE down_dA round=1 arm_first=True shipped_ns=563563 arm_ns=561583
+SAMPLE down_dA round=2 arm_first=False shipped_ns=561348 arm_ns=562868
+SAMPLE down_dA round=3 arm_first=True shipped_ns=560971 arm_ns=562886
+SAMPLE down_dA round=4 arm_first=False shipped_ns=561840 arm_ns=562113
+SAMPLE down_dA round=5 arm_first=True shipped_ns=562446 arm_ns=561692
+SAMPLE down_dA round=6 arm_first=False shipped_ns=562981 arm_ns=560763
+PRICE gemm kfoldv down_dA shipped_ms=0.562446 arm_ms=0.562113 ratio=0.9994079431625436 shipped_tflops=11.454345739857693 arm_tflops=11.461131381056834 shipped_launched_blocks=256 shipped_group_leaves=0 arm_launched_blocks=256 group_leaves=0 choose_plan=[TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] shipped_plan=[TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) (ksplit default on at S=132: the group rule declines this call)] geometry=[shipped DEFAULT ksplit (DEVIATION 2595, block parallelism row S=132 slack=4) where the group rule takes the call, else choose_gemm_plan's plan (TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) on the step's calls)]
+TABLE down_dA | NN | 2048 x 2048 x 768 | 12 | TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) (ksplit default on at S=132: the group rule declines this call) | shipped DEFAULT ksplit (DEVIATION 2595, block parallelism row S=132 slack=4) where the group rule takes the call, else choose_gemm_plan's plan (TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) on the step's calls) | 256 | 256 | 0.562446 | 0.562113 | 0.9994079431625436 | 256 | 0 | 0
+BITS down_dB EQUAL cells=1572864 digest=0xa58e713f45edd8ed
+SAMPLE down_dB round=0 arm_first=False shipped_ns=585952 arm_ns=700160
+SAMPLE down_dB round=1 arm_first=True shipped_ns=588384 arm_ns=709502
+SAMPLE down_dB round=2 arm_first=False shipped_ns=577914 arm_ns=699400
+SAMPLE down_dB round=3 arm_first=True shipped_ns=583258 arm_ns=707081
+SAMPLE down_dB round=4 arm_first=False shipped_ns=577500 arm_ns=701662
+SAMPLE down_dB round=5 arm_first=True shipped_ns=585857 arm_ns=710894
+SAMPLE down_dB round=6 arm_first=False shipped_ns=583251 arm_ns=700642
+PRICE gemm kfoldv down_dB shipped_ms=0.583258 arm_ms=0.701662 ratio=1.203004502295725 shipped_tflops=11.045628082255194 arm_tflops=9.181701366184859 shipped_launched_blocks=768 shipped_group_leaves=2 arm_launched_blocks=768 group_leaves=2 choose_plan=[TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] shipped_plan=[DEFAULT ksplit (DEVIATION 2595) 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> fold (block per cell <= 16384, else register stack) S=132 slack=4 leaves_per_group=2 groups=8 launched_blocks=768] geometry=[kfoldv 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> LANE fold (16 cells per thread, register stack 8 levels, 2 group loads a batch, tpb=256, groups <= 255, else the shipped fold) group rule S=132 slack=4]
+TABLE down_dB | TN | 768 x 2048 x 2048 | 12 | DEFAULT ksplit (DEVIATION 2595) 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> fold (block per cell <= 16384, else register stack) S=132 slack=4 leaves_per_group=2 groups=8 launched_blocks=768 | kfoldv 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> LANE fold (16 cells per thread, register stack 8 levels, 2 group loads a batch, tpb=256, groups <= 255, else the shipped fold) group rule S=132 slack=4 | 768 | 96 | 0.583258 | 0.701662 | 1.203004502295725 | 768 | 2 | 2
+PHASEBITS down_dB EQUAL cells=1572864 phase_of=arm_kfold
+PHASE gemm kfoldv down_dB phase_of=arm_kfold group_leaves=2 groups=8 launched_blocks=768 alloc_ms=0.00314 group_ms=0.517822 fold_ms=0.19107 sum_ms=0.712217 arm_ms=0.701662 shipped_ms=0.583258 (each phase host-synchronized; medians over 7 rounds)
+BITS head_fwd EQUAL cells=102926336 digest=0xe1e8e917ef51cb67
+SAMPLE head_fwd round=0 arm_first=False shipped_ns=13793172 arm_ns=13794629
+SAMPLE head_fwd round=1 arm_first=True shipped_ns=13811891 arm_ns=13801674
+SAMPLE head_fwd round=2 arm_first=False shipped_ns=13823783 arm_ns=13791790
+SAMPLE head_fwd round=3 arm_first=True shipped_ns=13783377 arm_ns=13790593
+SAMPLE head_fwd round=4 arm_first=False shipped_ns=13794283 arm_ns=13801672
+SAMPLE head_fwd round=5 arm_first=True shipped_ns=13792086 arm_ns=13796209
+SAMPLE head_fwd round=6 arm_first=False shipped_ns=13801905 arm_ns=13791330
+PRICE gemm kfoldv head_fwd shipped_ms=13.794283 arm_ms=13.794629 ratio=1.000025082854977 shipped_tflops=11.460896669729047 arm_tflops=11.460609204930412 shipped_launched_blocks=6288 shipped_group_leaves=0 arm_launched_blocks=6288 group_leaves=0 choose_plan=[TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] shipped_plan=[TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) (ksplit default on at S=132: the group rule declines this call)] geometry=[shipped DEFAULT ksplit (DEVIATION 2595, block parallelism row S=132 slack=4) where the group rule takes the call, else choose_gemm_plan's plan (TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) on the step's calls)]
+TABLE head_fwd | NT | 2048 x 50257 x 768 | 1 | TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) (ksplit default on at S=132: the group rule declines this call) | shipped DEFAULT ksplit (DEVIATION 2595, block parallelism row S=132 slack=4) where the group rule takes the call, else choose_gemm_plan's plan (TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) on the step's calls) | 6288 | 6288 | 13.794283 | 13.794629 | 1.000025082854977 | 6288 | 0 | 0
+BITS head_dA EQUAL cells=1572864 digest=0x287761cb23fe7292
+SAMPLE head_dA round=0 arm_first=False shipped_ns=14290097 arm_ns=14389591
+SAMPLE head_dA round=1 arm_first=True shipped_ns=14310808 arm_ns=14403674
+SAMPLE head_dA round=2 arm_first=False shipped_ns=14297261 arm_ns=14403447
+SAMPLE head_dA round=3 arm_first=True shipped_ns=14291339 arm_ns=14387551
+SAMPLE head_dA round=4 arm_first=False shipped_ns=14300627 arm_ns=14388689
+SAMPLE head_dA round=5 arm_first=True shipped_ns=14310346 arm_ns=14417877
+SAMPLE head_dA round=6 arm_first=False shipped_ns=14290330 arm_ns=14395869
+PRICE gemm kfoldv head_dA shipped_ms=14.297261 arm_ms=14.395869 ratio=1.006896985373632 shipped_tflops=11.057702037893831 arm_tflops=10.981959623000181 shipped_launched_blocks=672 shipped_group_leaves=64 arm_launched_blocks=672 group_leaves=64 choose_plan=[TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] shipped_plan=[DEFAULT ksplit (DEVIATION 2595) 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> fold (block per cell <= 16384, else register stack) S=132 slack=4 leaves_per_group=64 groups=7 launched_blocks=672] geometry=[kfoldv 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> LANE fold (16 cells per thread, register stack 8 levels, 2 group loads a batch, tpb=256, groups <= 255, else the shipped fold) group rule S=132 slack=4]
+TABLE head_dA | NN | 2048 x 768 x 50257 | 1 | DEFAULT ksplit (DEVIATION 2595) 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> fold (block per cell <= 16384, else register stack) S=132 slack=4 leaves_per_group=64 groups=7 launched_blocks=672 | kfoldv 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> LANE fold (16 cells per thread, register stack 8 levels, 2 group loads a batch, tpb=256, groups <= 255, else the shipped fold) group rule S=132 slack=4 | 672 | 96 | 14.297261 | 14.395869 | 1.006896985373632 | 672 | 64 | 64
+PHASEBITS head_dA EQUAL cells=1572864 phase_of=arm_kfold
+PHASE gemm kfoldv head_dA phase_of=arm_kfold group_leaves=64 groups=7 launched_blocks=672 alloc_ms=0.003242 group_ms=14.241453 fold_ms=0.161741 sum_ms=14.406994 arm_ms=14.395869 shipped_ms=14.297261 (each phase host-synchronized; medians over 7 rounds)
+BITS head_dB EQUAL cells=38597376 digest=0x48cf871761b383a8
+SAMPLE head_dB round=0 arm_first=False shipped_ns=13931048 arm_ns=13936327
+SAMPLE head_dB round=1 arm_first=True shipped_ns=13933197 arm_ns=13935568
+SAMPLE head_dB round=2 arm_first=False shipped_ns=13935327 arm_ns=13929774
+SAMPLE head_dB round=3 arm_first=True shipped_ns=13934318 arm_ns=13933331
+SAMPLE head_dB round=4 arm_first=False shipped_ns=13939876 arm_ns=13932922
+SAMPLE head_dB round=5 arm_first=True shipped_ns=13943130 arm_ns=13940236
+SAMPLE head_dB round=6 arm_first=False shipped_ns=13943906 arm_ns=13938291
+PRICE gemm kfoldv head_dB shipped_ms=13.935327 arm_ms=13.935568 ratio=1.0000172941761611 shipped_tflops=11.344897187988485 arm_tflops=11.344700990731056 shipped_launched_blocks=2358 shipped_group_leaves=0 arm_launched_blocks=2358 group_leaves=0 choose_plan=[TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] shipped_plan=[TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) (ksplit default on at S=132: the group rule declines this call)] geometry=[shipped DEFAULT ksplit (DEVIATION 2595, block parallelism row S=132 slack=4) where the group rule takes the call, else choose_gemm_plan's plan (TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) on the step's calls)]
+TABLE head_dB | TN | 50257 x 768 x 2048 | 1 | TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) (ksplit default on at S=132: the group rule declines this call) | shipped DEFAULT ksplit (DEVIATION 2595, block parallelism row S=132 slack=4) where the group rule takes the call, else choose_gemm_plan's plan (TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) on the step's calls) | 2358 | 2358 | 13.935327 | 13.935568 | 1.0000172941761611 | 2358 | 0 | 0
+STEP gemm arm=kfoldv ratio=1.1425612807693903 shipped_ms=142.551939 arm_ms=162.874326 calls=12 moved=0 (per-call medians weighted by per-step counts; a GEMM sum, not a step time)

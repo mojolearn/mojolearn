@@ -1,0 +1,11 @@
+CTD-ROUND lane=kde dataset=istella arm=ours round=0 ms=978.957 digest=81d11ed7fcd9eb38
+CTD-ROUND lane=kde dataset=istella arm=cuml-gpu round=0 ms=33.674 digest=3f4541591da35fc6
+CTD-ROUND lane=kde dataset=istella arm=cuml-gpu round=1 ms=6.717 digest=3f4541591da35fc6
+CTD-ROUND lane=kde dataset=istella arm=ours round=1 ms=227.335 digest=81d11ed7fcd9eb38
+CTD-ROUND lane=kde dataset=istella arm=ours round=2 ms=219.030 digest=81d11ed7fcd9eb38
+CTD-ROUND lane=kde dataset=istella arm=cuml-gpu round=2 ms=7.304 digest=3f4541591da35fc6
+CTD-ROUND lane=kde dataset=istella arm=cuml-gpu round=3 ms=6.791 digest=3f4541591da35fc6
+CTD-ROUND lane=kde dataset=istella arm=ours round=3 ms=194.414 digest=81d11ed7fcd9eb38
+CTD lane=kde dataset=istella arm=ours device=gpu status=ok median_ms=219.02994439005852 min_ms=194.41374763846397 max_ms=227.335374802351 digest_stable=True quality={"mean_log_likelihood": -212.1174684753418, "rows_without_density": 0}
+CTD lane=kde dataset=istella arm=cuml-gpu device=gpu status=ok median_ms=6.7908428609371185 min_ms=6.71720877289772 max_ms=7.30413943529129 digest_stable=True quality={"mean_log_likelihood": -212.11746494293212, "rows_without_density": 0}
+CTD-RATIO lane=kde dataset=istella ours/cuml-gpu=32.2537

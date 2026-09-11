@@ -1,0 +1,11 @@
+CTD-ROUND lane=svc dataset=taxi arm=ours round=0 ms=1524.776 digest=2d85d6008566c340
+CTD-ROUND lane=svc dataset=taxi arm=cuml-gpu round=0 ms=646.433 digest=8e5afbc3738c16ee
+CTD-ROUND lane=svc dataset=taxi arm=cuml-gpu round=1 ms=415.057 digest=8e5afbc3738c16ee
+CTD-ROUND lane=svc dataset=taxi arm=ours round=1 ms=856.912 digest=2d85d6008566c340
+CTD-ROUND lane=svc dataset=taxi arm=ours round=2 ms=859.517 digest=2d85d6008566c340
+CTD-ROUND lane=svc dataset=taxi arm=cuml-gpu round=2 ms=415.327 digest=8e5afbc3738c16ee
+CTD-ROUND lane=svc dataset=taxi arm=cuml-gpu round=3 ms=414.396 digest=8e5afbc3738c16ee
+CTD-ROUND lane=svc dataset=taxi arm=ours round=3 ms=856.823 digest=2d85d6008566c340
+CTD lane=svc dataset=taxi arm=ours device=gpu status=ok median_ms=856.9116070866585 min_ms=856.8231873214245 max_ms=859.5165386795998 digest_stable=True quality={"accuracy": 0.7675, "n_support": 5527}
+CTD lane=svc dataset=taxi arm=cuml-gpu device=gpu status=ok median_ms=415.0572791695595 min_ms=414.396021515131 max_ms=415.3273031115532 digest_stable=True quality={"accuracy": 0.7675, "n_support": 5586}
+CTD-RATIO lane=svc dataset=taxi ours/cuml-gpu=2.0646

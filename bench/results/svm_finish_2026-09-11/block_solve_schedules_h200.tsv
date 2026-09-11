@@ -1,0 +1,29 @@
+# svm-finish lane, NVIDIA H200 (RunPod pod 4oih8bhjepzlmm, driver 570.211.01).
+# The driver is below Mojo's CUDA floor (needs >= 580 / CUDA 13), so every run here sets
+# MODULAR_NVPTX_COMPILER_PATH to the pod's ptxas 12.9.86 (nvidia-cuda-nvcc-cu12 12.9.86),
+# which is Modular's documented older-driver path. The four fit hashes below equal the
+# H100 rows of bench/results/svm_speed_2026-09-11/, so the assembler change moves no bits.
+# Commit 7a9b6f55 (lane/svm-finish: origin/main 4dc4346a merged with lane/svm-speed 48f92b19)
+# plus the kernel-matrix row fix that makes -D MOJOLEARN_SVM_SCHED_RARY_TREE reach the
+# schedule at all (48f92b19 added the constant and the arity row but no branch in
+# svm_block_solve_schedule_for, so its R-ary kernel had never been selected by anything).
+# Timing: svm_probe.py time, 1 warm fit then 5 fits, no stage clock, IDENTICAL,
+# taxi block 10,000 x 11 standardized fit rows, RBF, C 1, gamma 1/d, tol 1e-3.
+# Evidence: ~/mojolearn-evidence/svm-finish-2026-09-11/.
+arm	defines	so_sha256	dataset	median_ms	all_ms	accuracy	n_support	fit_hash
+FUSED_TREE 2628	MOJOLEARN_SVM_SCHED_FUSED_TREE	3ded2bfae86f14ab	taxi	771.1	771.6,770.7,771.0,771.8,771.1	0.7675	5527	b0f91a7958162936
+TREE (2623 default on NVIDIA above 512)	MOJOLEARN_SVM_SCHED_TREE	5c6ea682b62986f6	taxi	866.9	866.9,866.6,867.0,866.7,866.9	0.7675	5527	b0f91a7958162936
+RARY_TREE arity 16	MOJOLEARN_SVM_SCHED_RARY_TREE,MOJOLEARN_SVM_ARITY_16	a73de7fbbaf6ce3a	taxi	1324.4	1324.5,1324.4,1324.1,1324.5,1323.7	0.7675	5527	b0f91a7958162936
+RARY_TREE arity 32, no trailing or second update barrier	MOJOLEARN_SVM_SCHED_RARY_TREE,MOJOLEARN_SVM_RARY_NO_TRAILING,MOJOLEARN_SVM_UPDATE_ONE_BARRIER	75e7c15e05b52863	taxi	1937.3	1936.5,1937.3,1937.4,1937.5,1937.3	0.7675	5527	b0f91a7958162936
+RARY_TREE arity 32	MOJOLEARN_SVM_SCHED_RARY_TREE	596dafdcc12acbb4	taxi	1945.6	1945.6,1945.6,1945.1,1944.3,2028.0	0.7675	5527	b0f91a7958162936
+# Every arm above also gave the synthetic fits n=400/600/2000 = 457e29b82bca9df9,
+# 733a383c5699f427, 2b66bc991a9c9ed0 (equal to DEVIATIONS 2623, 2627 and 2628's H100 rows),
+# from five binaries with five different sha256, so each schedule was really reached.
+# READ: the R-ary tree loses badly on this GPU. It trades barriers for work per thread: at
+# arity 32 one thread in 32 folds 31 threadgroup slots in a runtime loop while the other 31
+# idle, so two levels cost more than the binary tree's twelve cheap ones. Arity 16 (three
+# levels, 15 slots per leader) is the least bad of the three and still 1.53x of FUSED_TREE.
+# Dropping the trailing and second update barriers is worth about 0.4 percent of the R-ary
+# arm, which is another way of saying barriers are not what this kernel is spending on.
+# The Istella-S cells of the R-ary arms were not measured: taxi rules the shape out, and the
+# flip candidate (FUSED_TREE) is carried to both datasets by the race instead.

@@ -123,6 +123,14 @@ from std.os import getenv
 from std.sys.compile import is_defined
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext
+# DEVIATION 2630: the step phase timers and counters (core/step_phase.mojo;
+# compiled only under -D MOJOLEARN_STEP_PHASE_TIMERS=1).
+from core.step_phase import (
+    step_count_d2h,
+    step_count_host_alloc,
+    step_count_launch,
+    step_count_sync,
+)
 
 from gemm.checks.gemm_identical import (
     identical_gemm_into,
@@ -664,6 +672,95 @@ def adam_update_kernel(
         q_out.unsafe_store(i, q)
 
 
+def adam_update_oop_kernel(
+    p_out: MutPointer[Float32, MutAnyOrigin],
+    m_out: MutPointer[Float32, MutAnyOrigin],
+    v_out: MutPointer[Float32, MutAnyOrigin],
+    param: MutPointer[Float32, MutAnyOrigin],
+    grad: MutPointer[Float32, MutAnyOrigin],
+    m_state: MutPointer[Float32, MutAnyOrigin],
+    v_state: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    is_adamw_in: Int32,
+    beta1: Float32,
+    beta2: Float32,
+    eps: Float32,
+    weight_decay: Float32,
+    c1: Float32,
+    c2: Float32,
+    step_size: Float32,
+    rt_bc2: Float32,
+    decay_mul: Float32,
+):
+    """DEVIATION 2647 (docs/lanes/BRIEF_step_glue_2026-09-11.md section
+    4.3), TRIAL ONLY: launched solely by `training/byte_lm.mojo` under
+    `-D MOJOLEARN_STEP_GLUE_TRIAL=1`, never by a shipped build.
+
+    `adam_update_kernel`'s CLEAN path, seam for seam, reading element `i`
+    of `param`, `grad`, `m_state`, `v_state` and writing element `i` of
+    `p_out`, `m_out`, `v_out`, three OTHER buffers, so the step can keep the
+    pre-update state where the shadow copy used to put it. The shipped
+    kernel loads all four operands before its first store, so the values
+    read here are the values it reads. Read the two side by side: every line
+    below names the seam it transcribes, and nothing else is spelled.
+
+    NOT CARRIED, on purpose: the sabotage arms (the byte LM refuses every
+    sabotage build in `_require_profile`) and the recorded intermediates
+    (the byte LM glue path refuses `OPT_RECORD_INTERMEDIATES` at compile
+    time). The `lr`, `bc1` and `bc2` arguments exist in the shipped
+    signature only for `SAB_MHAT_FORM` and are not taken here.
+
+    THIS FILE'S OWN WARNING APPLIES: a random fixture cannot separate a
+    fused O14 from an unfused one. The transcription is checked by reading,
+    by `training/checks/step_glue_check.mojo` on planted values, and by the
+    H100 leg's per-step witnesses; not by a fixture alone.
+
+    One thread per element, no shared memory, no barrier, no reduction:
+    launch geometry decides which thread does element `i`, never what it
+    is, exactly as for the shipped kernel."""
+    var n = Int(n_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= n:
+        return
+
+    var is_adamw = is_adamw_in != Int32(0)
+
+    var g = ftz(grad.unsafe_load(i))  # O1, seam
+    var p = ftz(param.unsafe_load(i))  # O2, seam
+    var mp = ftz(m_state.unsafe_load(i))  # O3, seam
+    var vp = ftz(v_state.unsafe_load(i))  # O3, seam
+
+    if weight_decay != Float32(0.0):
+        if is_adamw:
+            # O4b. DECOUPLED, a PRODUCT on the PARAMETER.
+            p = ftz(identical_mul(decay_mul, p))
+        else:
+            # O4a. COUPLED, ONE fused rounding into the GRADIENT.
+            g = ftz(identical_mul_add(weight_decay, p, g))
+
+    # O5 and O6, a PRODUCT then an FMA. Contract 7.2a.
+    var ms = ftz(identical_mul(beta1, mp))
+    var m = ftz(identical_mul_add(c1, g, ms))
+
+    # O7, O8, O9. Contract 7.2b, the square is formed FIRST.
+    var vs = ftz(identical_mul(beta2, vp))
+    var g2 = ftz(identical_mul(g, g))
+    var v = ftz(identical_mul_add(c2, g2, vs))
+
+    # O10 through O13, the denominator and the quotient.
+    var s = ftz(identical_sqrt(v))  # O10
+    var sd = ftz(identical_div(s, rt_bc2))  # O11
+    var dn = ftz(sd + eps)  # O12, eps OUTSIDE the root
+    var q = ftz(identical_div(m, dn))  # O13, a TRUE divide
+
+    # O14. ONE fused rounding. Contract 7.2d.
+    var p_new = ftz(identical_mul_add(-step_size, q, p))
+
+    p_out.unsafe_store(i, p_new)
+    m_out.unsafe_store(i, ftz(m))
+    v_out.unsafe_store(i, ftz(v))
+
+
 def sgd_update_kernel(
     param: MutPointer[Float32, MutAnyOrigin],
     grad: MutPointer[Float32, MutAnyOrigin],
@@ -961,6 +1058,7 @@ def identical_clip_grad_norm(
                 chunks = _grid_for(count)
                 if chunks > SAB_CHUNKS:
                     chunks = SAB_CHUNKS
+            step_count_launch()
             ctx.enqueue_function[sab_chunk_sumsq_kernel](
                 sab_partials.unsafe_ptr(),
                 grad.unsafe_ptr(),
@@ -970,6 +1068,7 @@ def identical_clip_grad_norm(
                 grid_dim=(_grid_for(chunks), 1, 1),
                 block_dim=(OPT_TPB, 1, 1),
             )
+            step_count_launch()
             ctx.enqueue_function[sab_combine_kernel](
                 sumsq.unsafe_ptr(),
                 sab_partials.unsafe_ptr(),
@@ -978,6 +1077,7 @@ def identical_clip_grad_norm(
                 grid_dim=(1, 1, 1),
                 block_dim=(1, 1, 1),
             )
+            step_count_sync()
             ctx.synchronize()
         else:
             # THE CLEAN PATH. Two views of the same range so that the two
@@ -987,6 +1087,7 @@ def identical_clip_grad_norm(
             var gb = grad.create_sub_buffer[DType.float32](begin, count)
             var cv = sumsq.create_sub_buffer[DType.float32](slot, 1)
             identical_gemm_into(ctx, cv, ga, gb, ws, 1, 1, count, OP_NT)
+            step_count_sync()
             ctx.synchronize()
             # The keep-alives. Without these three the views are dead at
             # the `.unsafe_ptr()` inside the call above.
@@ -999,6 +1100,7 @@ def identical_clip_grad_norm(
     # `sqrt(sum_j sumsq_j)` -- the one-level form the reference does not
     # use. Contract 3.1. INERT at J == 1.
     comptime if SAB_CLIP_FLAT_NORM:
+        step_count_launch()
         ctx.enqueue_function[sab_combine_kernel](
             total_cell.unsafe_ptr(),
             sumsq.unsafe_ptr(),
@@ -1007,8 +1109,10 @@ def identical_clip_grad_norm(
             grid_dim=(1, 1, 1),
             block_dim=(1, 1, 1),
         )
+        step_count_sync()
         ctx.synchronize()
     else:
+        step_count_launch()
         ctx.enqueue_function[sqrt_vec_kernel](
             norms.unsafe_ptr(),
             sumsq.unsafe_ptr(),
@@ -1016,16 +1120,19 @@ def identical_clip_grad_norm(
             grid_dim=(_grid_for(j_count), 1, 1),
             block_dim=(OPT_TPB, 1, 1),
         )
+        step_count_sync()
         ctx.synchronize()
         var na = norms.create_sub_buffer[DType.float32](0, j_count)
         var nb = norms.create_sub_buffer[DType.float32](0, j_count)
         var tv = total_cell.create_sub_buffer[DType.float32](0, 1)
         identical_gemm_into(ctx, tv, na, nb, ws, 1, 1, j_count, OP_NT)
+        step_count_sync()
         ctx.synchronize()
         _ = na
         _ = nb
         _ = tv
 
+    step_count_launch()
     ctx.enqueue_function[clip_finish_kernel](
         out2.unsafe_ptr(),
         total_cell.unsafe_ptr(),
@@ -1033,10 +1140,14 @@ def identical_clip_grad_norm(
         grid_dim=(1, 1, 1),
         block_dim=(1, 1, 1),
     )
+    step_count_sync()
     ctx.synchronize()
 
+    step_count_host_alloc()
     var h = ctx.enqueue_create_host_buffer[DType.float32](2)
+    step_count_d2h()
     ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=out2)
+    step_count_sync()
     ctx.synchronize()
     var total_norm = h.unsafe_ptr().unsafe_load(0)
     var coef = h.unsafe_ptr().unsafe_load(1)
@@ -1045,6 +1156,7 @@ def identical_clip_grad_norm(
     # Contract 8a, on the one scalar this path can afford to inspect.
     refuse_nonfinite_scalar(String("clip.total_norm"), total_norm)
 
+    step_count_launch()
     ctx.enqueue_function[clip_scale_kernel](
         grad.unsafe_ptr(),
         Int32(offsets[j_count]),
@@ -1052,6 +1164,7 @@ def identical_clip_grad_norm(
         grid_dim=(_grid_for(offsets[j_count]), 1, 1),
         block_dim=(OPT_TPB, 1, 1),
     )
+    step_count_sync()
     ctx.synchronize()
     return coef
 
@@ -1361,6 +1474,7 @@ def identical_optimizer_step(
             var nest = Int32(0)
             if cfg.nesterov:
                 nest = Int32(1)
+            step_count_launch()
             ctx.enqueue_function[sgd_update_kernel](
                 param.unsafe_ptr(),
                 grad.unsafe_ptr(),
@@ -1377,6 +1491,7 @@ def identical_optimizer_step(
                 grid_dim=(_grid_for(count), 1, 1),
                 block_dim=(OPT_TPB, 1, 1),
             )
+        step_count_sync()
         ctx.synchronize()
         # PHASE 4. Per TENSOR, after the launches, never per element.
         if cfg.momentum != Float32(0.0):
@@ -1386,6 +1501,7 @@ def identical_optimizer_step(
         var is_adamw = Int32(0)
         if cfg.kind == OPT_ADAMW:
             is_adamw = Int32(1)
+        step_count_launch()
         ctx.enqueue_function[adam_update_kernel](
             param.unsafe_ptr(),
             grad.unsafe_ptr(),
@@ -1410,6 +1526,7 @@ def identical_optimizer_step(
             grid_dim=(_grid_for(n_total), 1, 1),
             block_dim=(OPT_TPB, 1, 1),
         )
+        step_count_sync()
         ctx.synchronize()
     _step_timing_tick(ctx, ton, tk, "step.optimizer")
 

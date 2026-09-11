@@ -93,7 +93,8 @@ stash_tiled_fgrid_r32_qres, stash_tiled_fgrid_r32_qres_pf),
 MOJOLEARN_ATTN_BASELINE (default baseline; stash_tiled is the baseline a
 second-round arm is priced against). Either name may be `default`, the
 column's shipped arm (kernel matrix `attn_default_arm_for`, DEVIATION 2534:
-NVIDIA stash_tiled_fgrid_r32_qres_pf, AMD baseline, every other column stash_tiled); the
+NVIDIA stash_tiled_fgrid_r32_qres_pf, AMD stash_tiled_fgrid_r32_qres_pf_kvgrid_r32
+since brief section 18, every other column stash_tiled); the
 harness prints the explicit name everywhere and a `DEFAULT` line beside the
 request. The two `PATH` lines print each arm's resolved kernels
 (`is_default`, `resolved_hd64`), and every correctness run prints a `RAN`
@@ -112,6 +113,15 @@ before the kinds, the compiled attributes of the backward kernels at head_dim
 64 (`RESOURCES` lines: regs, local, shared, const, max_threads,
 blocks_per_sm_256, beside each kernel's source counts), a readback brief 16.3
 reads against the step timers; it launches nothing.
+
+DEVIATION 2598 (brief section 17). A candidate carrying `_zdefer` or `_zlag`
+(the zdot stash kernel's schedule, e.g. stash_tiled_fgrid_r32_qres_pf_zlag,
+composable with the kv tokens after it) gets a `REACH_Z` run per kind: the
+forward CLEAN and the backward under ATTN_ARM_SABOTAGE_NEW, so the backward
+reads the clean amax and denom even when the arm's Q residency flip would move
+them. zdot must move at odd flat rows and hold at even rows (2533's flip moves
+every row), dv and the forward must hold. `PATH` prints `zsched=`, and the
+RESOURCES readback covers the two schedule copies.
 """
 
 from std.math import exp
@@ -130,6 +140,7 @@ from transformer.checks.transformer_backward import (
 )
 from transformer.impl.llama.fused_attention import (
     ATTN_ARM_BASELINE,
+    ATTN_ARM_BWD_ESTASH,
     ATTN_ARM_BWD_KVSPLIT,
     ATTN_ARM_BWD_ZTILED,
     ATTN_ARM_DEFAULT,
@@ -138,10 +149,12 @@ from transformer.impl.llama.fused_attention import (
     ATTN_ARM_SABOTAGE_KV,
     ATTN_ARM_SABOTAGE_NEW,
     ATTN_ARM_TRIAL,
+    ATTN_ES_TQ,
     ATTN_PHASE_TIMERS,
     ATTN_STASH_HD,
     FUSED_RAN,
     fused_attention_arm_backward_resolved,
+    fused_attention_arm_estash,
     fused_attention_arm_forward_resolved,
     fused_attention_arm_kv,
     fused_attention_arm_name,
@@ -149,20 +162,23 @@ from transformer.impl.llama.fused_attention import (
     fused_attention_arm_new_forward,
     fused_attention_arm_parse,
     fused_attention_arm_reach_bit,
+    fused_attention_arm_zsched,
     fused_attention_fwd_rows,
     fused_attention_kv_keys,
     fused_attention_zdot_rows,
-    fused_backward_launch_arm,
-    fused_backward_launch_ran,
+    fused_attention_estash_name,
+    fused_attention_zsched_name,
+    fused_backward_launch_estash_ran,
     fused_bwd_dkdv_kernel,
     fused_bwd_dkdv_r2_kernel,
     fused_bwd_dkdv_tiled_kernel,
     fused_bwd_dkdv_tiled_pf_kernel,
     fused_bwd_dq_tiled_pf_kernel,
     fused_bwd_kvfold_r2_kernel,
+    fused_bwd_zdot_estash_kernel,
+    fused_bwd_zdot_sched_pf_kernel,
     fused_bwd_zdot_stash_pf_kernel,
-    fused_forward_launch_arm,
-    fused_forward_launch_ran,
+    fused_forward_launch_estash_ran,
 )
 from transformer.impl.llama.modeling_llama import (
     LlamaDeviceStages,
@@ -231,6 +247,8 @@ def _path_line(role: String, arm: Int) -> String:
         + " zdot_rows=" + rows + " fwd_rows=" + frows + " preflush="
         + String((arm & ATTN_ARM_PREFLUSH) != 0) + " reach_bit=" + reach
         + " kv_keys=" + kv + " kv_split=" + String((arm & ATTN_ARM_BWD_KVSPLIT) != 0)
+        + " zsched=" + fused_attention_zsched_name(arm)
+        + " estash=" + fused_attention_estash_name(arm)
     )
 
 
@@ -445,6 +463,20 @@ def moved_cells_from_column(a: List[Float32], b: List[Float32], hd: Int, lo: Int
     return n
 
 
+def moved_cells_at_parity(a: List[Float32], b: List[Float32], parity: Int) raises -> Int:
+    """Cells that differ by bits at flat indices of the given parity (0 even,
+    1 odd). On zdot the flat index is the row `(bb * nh + h) * L + t`; the
+    DEVIATION 2598 sabotage flips odd rows only, the 2533 one every row."""
+    if len(a) != len(b):
+        raise Error("compared buffers differ in length: " + String(len(a)) + " vs " + String(len(b)))
+    var n = 0
+    for i in range(len(a)):
+        if i % 2 == parity:
+            if bitcast[DType.uint32](a[i]) != bitcast[DType.uint32](b[i]):
+                n += 1
+    return n
+
+
 def compare_outputs(kind: String, label: String, refout: Outputs, got: Outputs) raises -> Int:
     """Prints one `BITS` line per buffer; returns the moved-cell total."""
     var total = 0
@@ -600,6 +632,10 @@ struct Case(Movable):
     var dq: DeviceBuffer[DType.float32]
     var dk: DeviceBuffer[DType.float32]
     var dv: DeviceBuffer[DType.float32]
+    var kept: DeviceBuffer[DType.float32]
+    """DEVIATION 2652: the kept exp stash for the `_estash` arms, grown by
+    the forward launcher; every other arm passes it through untouched."""
+    var kept_cells: Int
 
     def __init__(
         out self, ctx: DeviceContext, kind: String, b: Int, l: Int, nh: Int,
@@ -665,6 +701,16 @@ struct Case(Movable):
         self.dq = _upload(ctx, List[Float32](length=self.qn, fill=Float32(0.0)))
         self.dk = _upload(ctx, List[Float32](length=self.kn, fill=Float32(0.0)))
         self.dv = _upload(ctx, List[Float32](length=self.kn, fill=Float32(0.0)))
+        self.kept = _upload(ctx, List[Float32](length=1, fill=Float32(0.0)))
+        self.kept_cells = 0
+
+    def poison_kept(mut self, ctx: DeviceContext) raises:
+        """DEVIATION 2650's REACH_E: overwrite the kept exp stash with NaN
+        (its cell count unchanged, so the backward still reads it); a
+        backward that reads it must then move dv."""
+        if self.kept_cells > 0:
+            var nan = bitcast[DType.float32](UInt32(0x7FC00000))
+            self.kept = _upload(ctx, List[Float32](length=self.kept_cells, fill=nan))
 
     def visible_cells(self) -> Int:
         """Visible (query, key) cells per (batch, head): the mask solved
@@ -685,18 +731,21 @@ struct Case(Movable):
         return n
 
     def forward(mut self, ctx: DeviceContext, arm: Int) raises -> Int:
-        return fused_forward_launch_arm(
+        var ran = -1
+        return fused_forward_launch_estash_ran(
             ctx, self.ctxv, self.amax, self.denom, self.q, self.k, self.v,
-            self.b, self.l, self.nh, self.nkv, self.hd, self.s, self.pos0,
-            self.key_lo, self.window, self.scale, arm,
+            self.kept, self.b, self.l, self.nh, self.nkv, self.hd, self.s,
+            self.pos0, self.key_lo, self.window, self.scale, arm, ran,
+            self.kept_cells,
         )
 
     def backward(mut self, ctx: DeviceContext, arm: Int) raises -> Int:
-        return fused_backward_launch_arm(
+        var ran = -1
+        return fused_backward_launch_estash_ran(
             ctx, self.zdot, self.dq, self.dk, self.dv, self.q, self.dctx,
-            self.k, self.v, self.amax, self.denom, self.b, self.l, self.nh,
-            self.nkv, self.hd, self.s, self.pos0, self.key_lo, self.window,
-            self.scale, arm,
+            self.k, self.v, self.amax, self.denom, self.kept, self.kept_cells,
+            self.b, self.l, self.nh, self.nkv, self.hd, self.s, self.pos0,
+            self.key_lo, self.window, self.scale, arm, ran,
         )
 
     def run_both(mut self, ctx: DeviceContext, arm: Int, label: String) raises:
@@ -705,19 +754,20 @@ struct Case(Movable):
         64 they must be the arm's resolved kernels on this build, so a
         result line can never carry one arm's name over another's kernels."""
         var ran_f = -1
-        var sf = fused_forward_launch_ran(
+        var sf = fused_forward_launch_estash_ran(
             ctx, self.ctxv, self.amax, self.denom, self.q, self.k, self.v,
-            self.b, self.l, self.nh, self.nkv, self.hd, self.s, self.pos0,
-            self.key_lo, self.window, self.scale, arm, ran_f,
+            self.kept, self.b, self.l, self.nh, self.nkv, self.hd, self.s,
+            self.pos0, self.key_lo, self.window, self.scale, arm, ran_f,
+            self.kept_cells,
         )
         if sf != FUSED_RAN:
             raise Error(label + ": the fused forward did not report FUSED_RAN (status " + String(sf) + ")")
         var ran_b = -1
-        var sb = fused_backward_launch_ran(
+        var sb = fused_backward_launch_estash_ran(
             ctx, self.zdot, self.dq, self.dk, self.dv, self.q, self.dctx,
-            self.k, self.v, self.amax, self.denom, self.b, self.l, self.nh,
-            self.nkv, self.hd, self.s, self.pos0, self.key_lo, self.window,
-            self.scale, arm, ran_b,
+            self.k, self.v, self.amax, self.denom, self.kept, self.kept_cells,
+            self.b, self.l, self.nh, self.nkv, self.hd, self.s, self.pos0,
+            self.key_lo, self.window, self.scale, arm, ran_b,
         )
         if sb != FUSED_RAN:
             raise Error(label + ": the fused backward did not report FUSED_RAN (status " + String(sb) + ")")
@@ -728,6 +778,44 @@ struct Case(Movable):
         if self.hd == ATTN_STASH_HD:
             var want_f = fused_attention_arm_forward_resolved(arm)
             var want_b = fused_attention_arm_backward_resolved(arm)
+            if ran_f != want_f or ran_b != want_b:
+                raise Error(
+                    label + ": RAN forward " + fused_attention_arm_name(ran_f)
+                    + " backward " + fused_attention_arm_name(ran_b)
+                    + " and this build resolves " + fused_attention_arm_name(want_f)
+                    + " / " + fused_attention_arm_name(want_b)
+                )
+
+    def run_pair(mut self, ctx: DeviceContext, fwd_arm: Int, bwd_arm: Int, label: String) raises:
+        """`run_both` with the forward under `fwd_arm` and the backward
+        under `bwd_arm` (DEVIATION 2598's REACH_Z: a clean forward, so the
+        backward's sabotage is read against clean amax and denom). The `RAN`
+        check is `run_both`'s, per direction."""
+        var ran_f = -1
+        var sf = fused_forward_launch_estash_ran(
+            ctx, self.ctxv, self.amax, self.denom, self.q, self.k, self.v,
+            self.kept, self.b, self.l, self.nh, self.nkv, self.hd, self.s,
+            self.pos0, self.key_lo, self.window, self.scale, fwd_arm, ran_f,
+            self.kept_cells,
+        )
+        if sf != FUSED_RAN:
+            raise Error(label + ": the fused forward did not report FUSED_RAN (status " + String(sf) + ")")
+        var ran_b = -1
+        var sb = fused_backward_launch_estash_ran(
+            ctx, self.zdot, self.dq, self.dk, self.dv, self.q, self.dctx,
+            self.k, self.v, self.amax, self.denom, self.kept, self.kept_cells,
+            self.b, self.l, self.nh, self.nkv, self.hd, self.s, self.pos0,
+            self.key_lo, self.window, self.scale, bwd_arm, ran_b,
+        )
+        if sb != FUSED_RAN:
+            raise Error(label + ": the fused backward did not report FUSED_RAN (status " + String(sb) + ")")
+        print(
+            "RAN " + label + " forward=" + fused_attention_arm_name(ran_f)
+            + " backward=" + fused_attention_arm_name(ran_b)
+        )
+        if self.hd == ATTN_STASH_HD:
+            var want_f = fused_attention_arm_forward_resolved(fwd_arm)
+            var want_b = fused_attention_arm_backward_resolved(bwd_arm)
             if ran_f != want_f or ran_b != want_b:
                 raise Error(
                     label + ": RAN forward " + fused_attention_arm_name(ran_f)
@@ -831,6 +919,38 @@ def _res_zdot_stash_pf(ctx: DeviceContext) raises:
     print("RESOURCES label=", label, " blocks_per_sm_256=", f.occupancy_max_active_blocks_per_multiprocessor(256, 0), sep="")
 
 
+def _res_zdot_sched_pf[LAG: Bool](ctx: DeviceContext, label: String) raises:
+    """DEVIATION 2598's zdot schedule copy: the zdot stash copy's counts,
+    plus one shared load and one global store per thread in the staging
+    phase (and, under LAG, lane 0's z fold there)."""
+    comptime kern = fused_bwd_zdot_sched_pf_kernel[ATTN_STASH_HD, 4, LAG, False]
+    _res_begin(label, "rows=4 keys_per_iteration=32", 2, 4, 64, 17696, 4)
+    var f = ctx.compile_function[kern]()
+    print("RESOURCES label=", label, " regs=", f.get_attribute(Attribute.NUM_REGS), sep="")
+    print("RESOURCES label=", label, " local=", f.get_attribute(Attribute.LOCAL_SIZE_BYTES), sep="")
+    print("RESOURCES label=", label, " shared=", f.get_attribute(Attribute.SHARED_SIZE_BYTES), sep="")
+    print("RESOURCES label=", label, " const=", f.get_attribute(Attribute.CONST_SIZE_BYTES), sep="")
+    print("RESOURCES label=", label, " max_threads=", f.get_attribute(Attribute.MAX_THREADS_PER_BLOCK), sep="")
+    print("RESOURCES label=", label, " blocks_per_sm_256=", f.occupancy_max_active_blocks_per_multiprocessor(256, 0), sep="")
+
+
+def _res_zdot_estash[DRES: Bool](ctx: DeviceContext, label: String) raises:
+    """DEVIATIONS 2650 and 2651's zdot kernel: 8 rows x 32 keys per block,
+    one dy chain per thread (1 accumulator, 3 operand registers), the dctx
+    row in registers (64 floats) or, under DRES, in the shared page."""
+    comptime kern = fused_bwd_zdot_estash_kernel[ATTN_STASH_HD, ATTN_ES_TQ, DRES, False]
+    comptime local_floats = 0 if DRES else 64
+    comptime page = 12480 if DRES else 10432
+    _res_begin(label, "rows=8 keys_per_iteration=32", 1, 3, local_floats, page, 2)
+    var f = ctx.compile_function[kern]()
+    print("RESOURCES label=", label, " regs=", f.get_attribute(Attribute.NUM_REGS), sep="")
+    print("RESOURCES label=", label, " local=", f.get_attribute(Attribute.LOCAL_SIZE_BYTES), sep="")
+    print("RESOURCES label=", label, " shared=", f.get_attribute(Attribute.SHARED_SIZE_BYTES), sep="")
+    print("RESOURCES label=", label, " const=", f.get_attribute(Attribute.CONST_SIZE_BYTES), sep="")
+    print("RESOURCES label=", label, " max_threads=", f.get_attribute(Attribute.MAX_THREADS_PER_BLOCK), sep="")
+    print("RESOURCES label=", label, " blocks_per_sm_256=", f.occupancy_max_active_blocks_per_multiprocessor(256, 0), sep="")
+
+
 def _res_dq_tiled_pf(ctx: DeviceContext) raises:
     comptime kern = fused_bwd_dq_tiled_pf_kernel[ATTN_STASH_HD]
     var label = String("dq_tiled_pf")
@@ -909,13 +1029,31 @@ def _res_kvfold_r2[BJ: Int](ctx: DeviceContext, label: String) raises:
 
 
 def run_resources(ctx: DeviceContext) raises:
-    """The RESOURCES section: nine backward kernels at head_dim 64, each in
-    its own try."""
+    """The RESOURCES section: eleven backward kernels at head_dim 64, each in
+    its own try (the two DEVIATION 2598 zdot schedule copies beside the zdot
+    stash copy they reschedule)."""
     print("RESOURCES_DEVICE column=" + column_name(TARGET_COLUMN) + " source_counts=per_thread_hd64")
     try:
         _res_zdot_stash_pf(ctx)
     except e:
         print("RESOURCES_ERROR label=zdot_stash_pf error=", e, sep="")
+    try:
+        _res_zdot_sched_pf[False](ctx, String("zdot_zdefer_pf"))
+    except e:
+        print("RESOURCES_ERROR label=zdot_zdefer_pf error=", e, sep="")
+    try:
+        _res_zdot_sched_pf[True](ctx, String("zdot_zlag_pf"))
+    except e:
+        print("RESOURCES_ERROR label=zdot_zlag_pf error=", e, sep="")
+    comptime if ATTN_ARM_TRIAL:
+        try:
+            _res_zdot_estash[False](ctx, String("zdot_estash_pf"))
+        except e:
+            print("RESOURCES_ERROR label=zdot_estash_pf error=", e, sep="")
+        try:
+            _res_zdot_estash[True](ctx, String("zdot_estash_dres_pf"))
+        except e:
+            print("RESOURCES_ERROR label=zdot_estash_dres_pf error=", e, sep="")
     try:
         _res_dq_tiled_pf(ctx)
     except e:
@@ -1080,6 +1218,79 @@ def main() raises:
             var ctx_hi_moved = moved_cells_from_column(refout.ctxv, sab.ctxv, c.hd, 16)
             var zdot_moved = moved_cells(refout.zdot, sab.zdot)
             var dv_moved = moved_cells(refout.dv, sab.dv)
+            var zdot_even = moved_cells_at_parity(refout.zdot, sab.zdot, 0)
+            var zdot_odd = moved_cells_at_parity(refout.zdot, sab.zdot, 1)
+            var zs = fused_attention_arm_zsched(cand) != 0
+            # DEVIATION 2598 (brief section 17.4): the zdot schedule copy's
+            # flip with the forward clean, so the backward reads clean amax
+            # and denom even on an arm whose forward flip moves them.
+            if zs:
+                var zb_arm = cand | ATTN_ARM_SABOTAGE_NEW
+                var zb_name = fused_attention_arm_name(zb_arm)
+                c.clear_outputs(ctx)
+                c.run_pair(ctx, cand, zb_arm, kind + " " + cand_name + " forward and " + zb_name + " backward")
+                var zo = c.download(ctx)
+                var z_flipped = compare_outputs(kind, zb_name + "_backward_only_vs_" + base_name, refout, zo)
+                var z_fwd = moved_cells(refout.ctxv, zo.ctxv) + moved_cells(refout.amax, zo.amax) + moved_cells(refout.denom, zo.denom)
+                var z_even = moved_cells_at_parity(refout.zdot, zo.zdot, 0)
+                var z_odd = moved_cells_at_parity(refout.zdot, zo.zdot, 1)
+                var z_dv = moved_cells(refout.dv, zo.dv)
+                print(
+                    "REACH_Z " + kind + " " + cand_name + " sabotage_flipped_cells=" + String(z_flipped)
+                    + " reach_bit=" + zb_name + " backward_only=True forward_moved=" + String(z_fwd)
+                    + " zdot_moved_even_rows=" + String(z_even) + " zdot_moved_odd_rows=" + String(z_odd)
+                    + " dv_moved=" + String(z_dv)
+                )
+                if z_odd == 0:
+                    failures.append(kind + ": ZDOT SCHEDULE REACH NOT PROVEN for " + cand_name + " (" + zb_name + " on the backward moved zdot at no odd row)")
+                if z_even > 0 or z_dv > 0 or z_fwd > 0:
+                    failures.append(kind + ": " + zb_name + " on the backward moved zdot at " + String(z_even) + " even rows, dv in " + String(z_dv) + " and the forward in " + String(z_fwd) + " cells; the DEVIATION 2598 flip reaches zdot at odd rows (and dq, dk through it) only")
+            # DEVIATION 2650 (brief section 20.5): the estash kernel's flip
+            # with the forward CLEAN (its kept stash intact), so the backward
+            # reads clean amax, denom and `e`: zdot moves at EVEN rows only,
+            # dv and the forward hold. Then REACH_E, the read: after a clean
+            # forward the kept buffer is poisoned with NaN and the CLEAN
+            # backward must move dv (a backward that recomputed y would not).
+            if fused_attention_arm_estash(cand):
+                var eb_arm = cand | ATTN_ARM_SABOTAGE_NEW
+                var eb_name = fused_attention_arm_name(eb_arm)
+                c.clear_outputs(ctx)
+                c.run_pair(ctx, cand, eb_arm, kind + " " + cand_name + " forward and " + eb_name + " backward")
+                var eo = c.download(ctx)
+                var e_flipped = compare_outputs(kind, eb_name + "_backward_only_vs_" + base_name, refout, eo)
+                var e_fwd = moved_cells(refout.ctxv, eo.ctxv) + moved_cells(refout.amax, eo.amax) + moved_cells(refout.denom, eo.denom)
+                var e_even = moved_cells_at_parity(refout.zdot, eo.zdot, 0)
+                var e_odd = moved_cells_at_parity(refout.zdot, eo.zdot, 1)
+                var e_dv = moved_cells(refout.dv, eo.dv)
+                print(
+                    "REACH_ES " + kind + " " + cand_name + " sabotage_flipped_cells=" + String(e_flipped)
+                    + " reach_bit=" + eb_name + " backward_only=True forward_moved=" + String(e_fwd)
+                    + " zdot_moved_even_rows=" + String(e_even) + " zdot_moved_odd_rows=" + String(e_odd)
+                    + " dv_moved=" + String(e_dv)
+                )
+                if e_even == 0:
+                    failures.append(kind + ": ESTASH ZDOT REACH NOT PROVEN for " + cand_name + " (" + eb_name + " on the backward moved zdot at no even row)")
+                if e_odd > 0 or e_dv > 0 or e_fwd > 0:
+                    failures.append(kind + ": " + eb_name + " on the backward moved zdot at " + String(e_odd) + " odd rows, dv in " + String(e_dv) + " and the forward in " + String(e_fwd) + " cells; the DEVIATION 2650 flip reaches zdot at even rows (and dq, dk through it) only")
+                c.clear_outputs(ctx)
+                var rf = c.forward(ctx, cand)
+                if rf != FUSED_RAN:
+                    raise Error(kind + " " + cand_name + " (REACH_E): the clean forward did not report FUSED_RAN (status " + String(rf) + ")")
+                c.poison_kept(ctx)
+                var rb = c.backward(ctx, cand)
+                var ro = c.download(ctx)
+                var r_dv = moved_cells(refout.dv, ro.dv)
+                var r_z = moved_cells(refout.zdot, ro.zdot)
+                var r_dq = moved_cells(refout.dq, ro.dq)
+                var r_fwd = moved_cells(refout.ctxv, ro.ctxv) + moved_cells(refout.amax, ro.amax) + moved_cells(refout.denom, ro.denom)
+                print(
+                    "REACH_E " + kind + " " + cand_name + " backward_status=" + String(rb)
+                    + " kept_cells=" + String(c.kept_cells) + " dv_moved=" + String(r_dv)
+                    + " zdot_moved=" + String(r_z) + " dq_moved=" + String(r_dq)
+                    + " forward_moved=" + String(r_fwd)
+                )
+                if r_dv == 0:
+                    failures.append(kind + ": ESTASH READ REACH NOT PROVEN for " + cand_name + " (a NaN kept stash moved no dv cell; a backward that recomputes y instead of reading the kept exp would hold dv)")
             # DEVIATIONS 2596 and 2597 (brief section 16.4): the dk/dv
             # launch's own flip, before the clean restore below.
             if fused_attention_arm_kv(cand):
@@ -1115,6 +1326,8 @@ def main() raises:
                 + String(bwd_moved) + " amax_denom_moved=" + String(amax_den_moved)
                 + " ctx_moved_columns_16_up=" + String(ctx_hi_moved)
                 + " zdot_moved=" + String(zdot_moved) + " dv_moved=" + String(dv_moved)
+                + " zdot_moved_even_rows=" + String(zdot_even)
+                + " zdot_moved_odd_rows=" + String(zdot_odd)
             )
             if flipped == 0:
                 failures.append(kind + ": REACH NOT PROVEN for " + cand_name + " (sabotage moved nothing: build lacks -D MOJOLEARN_ATTN_ARM_TRIAL=1, or the arm is not wired at this head dim)")
@@ -1144,6 +1357,8 @@ def main() raises:
                     failures.append(kind + ": " + sab_name + " moved " + String(ctx_hi_moved) + " ctx cells at columns 16 and up; the 2533 forward flip reaches columns 0 to 15 only")
                 if nb and not zt and amax_den_moved == 0 and (zdot_moved == 0 or dv_moved > 0):
                     failures.append(kind + ": " + sab_name + ": the DEVIATION 2533 backward flip (the stored zdot) must move zdot and hold dv; zdot moved " + String(zdot_moved) + ", dv moved " + String(dv_moved))
+                if nb and not zt and zs and amax_den_moved == 0 and (zdot_odd == 0 or zdot_even > 0):
+                    failures.append(kind + ": " + sab_name + ": the DEVIATION 2598 flip moves zdot at odd rows only; zdot moved at " + String(zdot_odd) + " odd and " + String(zdot_even) + " even rows")
             if not restored:
                 failures.append(kind + ": " + cand_name + " did not restore the baseline bits after sabotage")
 

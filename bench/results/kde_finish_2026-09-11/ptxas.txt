@@ -1,0 +1,1 @@
+MODULAR_NVPTX_COMPILER_PATH=/usr/local/lib/python3.11/dist-packages/nvidia/cuda_nvcc/bin/ptxas (CUDA 12.9.86 wheel; the 12.4 toolkit ptxas refused PTX .version 8.5; driver 570.124.06)

@@ -7,6 +7,14 @@ from embedding.checks.embedding_sort import PLAN_SCAN, PLAN_SORT, embedding_sort
 from std.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
+# DEVIATION 2630: the step phase timers and counters (core/step_phase.mojo;
+# compiled only under -D MOJOLEARN_STEP_PHASE_TIMERS=1).
+from core.step_phase import (
+    step_count_d2h,
+    step_count_host_alloc,
+    step_count_launch,
+    step_count_sync,
+)
 
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
@@ -439,9 +447,13 @@ def emb_refuse_device_ids(
     """Contract section 8 and 9.1 ON THE DEVICE ENTRY POINTS, which is where they were missing. IT IS AN OUT-OF-BOUNDS READ.** `emb_gather_kernel` computes `weight.unsafe_load(v * width + j)` with NO bounds branch on the normative path -- the only bounds handling in the file lives inside `SAB_GATHER_CLAMP_OOR`, a SABOTAGE arm, so a build without that define has none at all."""
     if n_positions <= 0:
         return
+    step_count_host_alloc()
     var h = ctx.enqueue_create_host_buffer[DType.int32](n_positions)
+    step_count_sync()
     ctx.synchronize()
+    step_count_d2h()
     ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=ids)
+    step_count_sync()
     ctx.synchronize()
     var lids = List[Int32]()
     for i in range(n_positions):
@@ -464,6 +476,7 @@ def identical_embedding_forward_into(
     if cfg.width < 1 or n_positions < 1:
         return
     var cells = n_positions * cfg.width
+    step_count_launch()
     ctx.enqueue_function[emb_gather_kernel](
         out_y.unsafe_ptr(),
         weight.unsafe_ptr(),
@@ -504,6 +517,7 @@ def identical_embedding_backward_into(
     comptime if SAB_ACCUM_REFILLS:
         fill = True
     if fill:
+        step_count_launch()
         ctx.enqueue_function[emb_seed_kernel](
             dw.unsafe_ptr(),
             Int32(cells),
@@ -513,6 +527,7 @@ def identical_embedding_backward_into(
 
     if n_positions < 1:
         if cfg.has_padding():
+            step_count_launch()
             ctx.enqueue_function[emb_pad_row_kernel](
                 dw.unsafe_ptr(),
                 Int32(cfg.width),
@@ -525,6 +540,7 @@ def identical_embedding_backward_into(
     if plan == PLAN_SORT:
         embedding_sort_runs(ctx, ids, counts, run_begin, perm, n_positions, cfg.vocab, cfg.padding_idx, block_threads)
     else:
+        step_count_launch()
         ctx.enqueue_function[emb_counts_kernel](
             counts.unsafe_ptr(),
             ids.unsafe_ptr(),
@@ -535,6 +551,7 @@ def identical_embedding_backward_into(
             block_dim=(block_threads, 1, 1),
         )
 
+        step_count_launch()
         ctx.enqueue_function[emb_run_begin_kernel](
             run_begin.unsafe_ptr(),
             counts.unsafe_ptr(),
@@ -543,6 +560,7 @@ def identical_embedding_backward_into(
             block_dim=(1, 1, 1),
         )
 
+        step_count_launch()
         ctx.enqueue_function[emb_perm_kernel](
             perm.unsafe_ptr(),
             run_begin.unsafe_ptr(),
@@ -554,6 +572,7 @@ def identical_embedding_backward_into(
             block_dim=(block_threads, 1, 1),
         )
 
+    step_count_launch()
     ctx.enqueue_function[emb_backward_kernel](
         dw.unsafe_ptr(),
         dy.unsafe_ptr(),
@@ -566,6 +585,7 @@ def identical_embedding_backward_into(
     )
 
     if cfg.has_padding():
+        step_count_launch()
         ctx.enqueue_function[emb_pad_row_kernel](
             dw.unsafe_ptr(),
             Int32(cfg.width),

@@ -1,0 +1,3 @@
+lane	dataset	shape	arm	device	device_name	status	median_ms	min_ms	max_ms	rounds	digest_stable	quality	ours_over_this
+kde	taxi	100000x11	cuml-gpu	gpu	NVIDIA H100 80GB HBM3	ok	2.3686	2.1915	9.2041	5	True	mean_log_likelihood=-9.58205,rows_without_density=0	16.5548
+kde	taxi	100000x11	ours	gpu	cuda	ok	39.2110	35.8126	40.4430	5	True	mean_log_likelihood=-9.58207,rows_without_density=0	

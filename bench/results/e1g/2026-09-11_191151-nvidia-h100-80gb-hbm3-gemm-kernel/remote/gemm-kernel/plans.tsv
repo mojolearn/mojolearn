@@ -1,0 +1,3 @@
+shipped	shipped: default=ksplit(S=132) else tuned128
+kpack	kpack: packed page 128x128 reg8x8 KS=16, ksplit groups (S=132) where the rule takes the call, else all leaves, on every call tuned128 served; other calls default=ksplit(S=132) else tuned128
+kpack_wide	kpack_wide: packed page 128x256 reg8x16 KS=12, groups (S=132, rule on its tile) where the rule takes the call, else all leaves, on every call tuned128 served; other calls default=ksplit(S=132) else tuned128

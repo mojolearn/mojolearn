@@ -52,7 +52,7 @@ the spellings the row-39 gate must reject.
 """
 
 from std.gpu import thread_idx, lane_id, WARP_SIZE
-from std.gpu.primitives.warp import shuffle_xor
+from std.gpu.primitives.warp import shuffle_idx, shuffle_xor
 from std.math import max
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
@@ -257,6 +257,330 @@ def block_argext[
                 rk = ok
                 rt = tids[i]
         barrier()
+        return (rv, rk, rt)
+
+
+# ---------------------------------------------------------------------------
+# DEVIATION 2628 (2026-09-11): THE HALVING TREES WITHOUT THE BALLOT, AND
+# f_u AND f_max IN ONE TREE. The NVIDIA column above width 512 cannot launch
+# the warp folds (DEVIATION 2623) and pays 42 barriers per inner iteration of
+# the block solve for the trees: 12 per tree, three trees, plus two per
+# ballot for `u` and `l`. The thread of the winner rides along in the tree
+# (a third slab written only when the (value, key) pair moves), which retires
+# both ballots, and the argmin over the upper set and the argmax over the
+# lower set share their levels: both read only their own inputs, so one tree
+# of 12 barriers carries both. 26 barriers per inner iteration.
+#
+# WHY THE BITS CANNOT MOVE. Each slab pair folds with `_arg_better`, the
+# same total order on (value, key) as the trees above, keys unique; the
+# winner is one element under any fold topology, and its thread and its own
+# value bits travel with it. Nothing else about the selection changes.
+# ---------------------------------------------------------------------------
+
+
+@always_inline
+def pinned_block_argmin_argmax_tid[
+    block_size: Int
+](vmin: Float32, vmax: Float32, key: Int32) -> Tuple[Float32, Int32, Float32]:
+    """One halving tree for two selections: the (value, key) argmin of
+    `vmin` and the (value, key) argmax of `vmax`. Returns (argmin value,
+    THREAD of the argmin winner, argmax value) to every thread."""
+    var tid = Int(thread_idx.x)
+    var mnv = stack_allocation[
+        block_size, Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
+    var mnk = stack_allocation[
+        block_size, Scalar[DType.int32], address_space = AddressSpace.SHARED
+    ]()
+    var mnt = stack_allocation[
+        block_size, Scalar[DType.int32], address_space = AddressSpace.SHARED
+    ]()
+    var mxv = stack_allocation[
+        block_size, Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
+    var mxk = stack_allocation[
+        block_size, Scalar[DType.int32], address_space = AddressSpace.SHARED
+    ]()
+    mnv[tid] = vmin
+    mnk[tid] = key
+    mnt[tid] = Int32(tid)
+    mxv[tid] = vmax
+    mxk[tid] = key
+    barrier()
+    var step = block_size // 2
+    while step > 0:
+        if tid < step:
+            var ov = mnv[tid + step]
+            var ok = mnk[tid + step]
+            if _arg_better[False](ov, ok, mnv[tid], mnk[tid]):
+                mnv[tid] = ov
+                mnk[tid] = ok
+                mnt[tid] = mnt[tid + step]
+            var xv = mxv[tid + step]
+            var xk = mxk[tid + step]
+            if _arg_better[True](xv, xk, mxv[tid], mxk[tid]):
+                mxv[tid] = xv
+                mxk[tid] = xk
+        barrier()
+        step //= 2
+    var r0 = mnv[0]
+    var r1 = mnt[0]
+    var r2 = mxv[0]
+    barrier()
+    return (r0, r1, r2)
+
+
+@always_inline
+def pinned_block_argext_tid[
+    block_size: Int, MAX: Bool
+](value: Float32, key: Int32) -> Tuple[Float32, Int32, Int32]:
+    """The reference tree with the winner's THREAD carried in a third slab
+    (no ballot). Returns (value, key, thread) to every thread."""
+    var tid = Int(thread_idx.x)
+    var vals = stack_allocation[
+        block_size, Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
+    var keys = stack_allocation[
+        block_size, Scalar[DType.int32], address_space = AddressSpace.SHARED
+    ]()
+    var tids = stack_allocation[
+        block_size, Scalar[DType.int32], address_space = AddressSpace.SHARED
+    ]()
+    vals[tid] = value
+    keys[tid] = key
+    tids[tid] = Int32(tid)
+    barrier()
+    var step = block_size // 2
+    while step > 0:
+        if tid < step:
+            var ov = vals[tid + step]
+            var ok = keys[tid + step]
+            if _arg_better[MAX](ov, ok, vals[tid], keys[tid]):
+                vals[tid] = ov
+                keys[tid] = ok
+                tids[tid] = tids[tid + step]
+        barrier()
+        step //= 2
+    var rv = vals[0]
+    var rk = keys[0]
+    var rt = tids[0]
+    barrier()
+    return (rv, rk, rt)
+
+
+# ---------------------------------------------------------------------------
+# DEVIATION 2628, second shape: the same two thread-carrying selections on a
+# tree of ARITY R through threadgroup memory. At each level of stride s the
+# thread at every multiple of s*R folds the R - 1 slots at s, 2s, ... past it
+# into registers and writes its own slot once; nobody else writes at that
+# level, and every slot it reads was written by a leader of an earlier level,
+# so no read races a write. A width-1024 block at R = 32 has two levels: a
+# post, two level barriers and the optional trailing one, where the binary
+# tree has twelve. Same total order, same element, so the same bits.
+# `R` is a power of two; `PROTECT` keeps the trailing barrier (the block
+# solve's call sites each have at least two barriers before their slab is
+# written again).
+# ---------------------------------------------------------------------------
+
+
+@always_inline
+def pinned_block_argmin_argmax_tid_rary[
+    block_size: Int, R: Int, PROTECT: Bool
+](vmin: Float32, vmax: Float32, key: Int32) -> Tuple[Float32, Int32, Float32]:
+    """`pinned_block_argmin_argmax_tid` on an R-ary tree. Returns (argmin
+    value, THREAD of the argmin winner, argmax value) to every thread."""
+    var tid = Int(thread_idx.x)
+    var mnv = stack_allocation[
+        block_size, Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
+    var mnk = stack_allocation[
+        block_size, Scalar[DType.int32], address_space = AddressSpace.SHARED
+    ]()
+    var mnt = stack_allocation[
+        block_size, Scalar[DType.int32], address_space = AddressSpace.SHARED
+    ]()
+    var mxv = stack_allocation[
+        block_size, Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
+    var mxk = stack_allocation[
+        block_size, Scalar[DType.int32], address_space = AddressSpace.SHARED
+    ]()
+    mnv[tid] = vmin
+    mnk[tid] = key
+    mnt[tid] = Int32(tid)
+    mxv[tid] = vmax
+    mxk[tid] = key
+    barrier()
+    var stride = 1
+    while stride < block_size:
+        var span = stride * R
+        if (tid & (span - 1)) == 0:
+            var mv = mnv[tid]
+            var mk = mnk[tid]
+            var mt = mnt[tid]
+            var xv = mxv[tid]
+            var xk = mxk[tid]
+            var o = tid + stride
+            var end = tid + span
+            if end > block_size:
+                end = block_size
+            while o < end:
+                var ov = mnv[o]
+                var ok = mnk[o]
+                if _arg_better[False](ov, ok, mv, mk):
+                    mv = ov
+                    mk = ok
+                    mt = mnt[o]
+                var oxv = mxv[o]
+                var oxk = mxk[o]
+                if _arg_better[True](oxv, oxk, xv, xk):
+                    xv = oxv
+                    xk = oxk
+                o += stride
+            mnv[tid] = mv
+            mnk[tid] = mk
+            mnt[tid] = mt
+            mxv[tid] = xv
+            mxk[tid] = xk
+        barrier()
+        stride = span
+    var r0 = mnv[0]
+    var r1 = mnt[0]
+    var r2 = mxv[0]
+    comptime if PROTECT:
+        barrier()
+    return (r0, r1, r2)
+
+
+@always_inline
+def pinned_block_argext_tid_rary[
+    block_size: Int, R: Int, MAX: Bool, PROTECT: Bool
+](value: Float32, key: Int32) -> Tuple[Float32, Int32, Int32]:
+    """`pinned_block_argext_tid` on an R-ary tree. Returns (value, key,
+    thread) to every thread."""
+    var tid = Int(thread_idx.x)
+    var vals = stack_allocation[
+        block_size, Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
+    var keys = stack_allocation[
+        block_size, Scalar[DType.int32], address_space = AddressSpace.SHARED
+    ]()
+    var tids = stack_allocation[
+        block_size, Scalar[DType.int32], address_space = AddressSpace.SHARED
+    ]()
+    vals[tid] = value
+    keys[tid] = key
+    tids[tid] = Int32(tid)
+    barrier()
+    var stride = 1
+    while stride < block_size:
+        var span = stride * R
+        if (tid & (span - 1)) == 0:
+            var mv = vals[tid]
+            var mk = keys[tid]
+            var mt = tids[tid]
+            var o = tid + stride
+            var end = tid + span
+            if end > block_size:
+                end = block_size
+            while o < end:
+                var ov = vals[o]
+                var ok = keys[o]
+                if _arg_better[MAX](ov, ok, mv, mk):
+                    mv = ov
+                    mk = ok
+                    mt = tids[o]
+                o += stride
+            vals[tid] = mv
+            keys[tid] = mk
+            tids[tid] = mt
+        barrier()
+        stride = span
+    var rv = vals[0]
+    var rk = keys[0]
+    var rt = tids[0]
+    comptime if PROTECT:
+        barrier()
+    return (rv, rk, rt)
+
+
+# ---------------------------------------------------------------------------
+# DEVIATION 2627 (2026-09-11): THE WARP FOLD WITH A RUNTIME CROSS-WARP LOOP
+# ON LANE 0. `block_argext` above folds the posted warp winners with a
+# `comptime for` that every thread runs, so the block solve at width 1024
+# inlines 31 compare-and-selects per reduction into every lane (93 for the
+# three), and NVIDIA refuses that kernel (DEVIATION 2623) while it launches
+# two such folds, or three at width 512 (45). Here only lane 0 of each warp
+# reads the posted slots, in a runtime loop, and `shuffle_idx` hands its
+# result to the other lanes of the warp. The trailing barrier is optional
+# (`PROTECT`): a call site whose slab is not written again before the next
+# barrier does not need it, and the block solve's three call sites are each
+# separated from the next write to their own slab by at least two barriers.
+#
+# WHY THE BITS CANNOT MOVE. The same total order, the same posted warp
+# winners, the same element; which thread folds the warps is scheduling.
+# ---------------------------------------------------------------------------
+
+
+@always_inline
+def block_argext_lane0[
+    block_size: Int, MAX: Bool, PROTECT: Bool
+](value: Float32, key: Int32) -> Tuple[Float32, Int32, Int32]:
+    """`block_argext` with the cross-warp fold on lane 0 in a runtime loop
+    and a warp broadcast. Returns (value, key, thread) to every thread."""
+    comptime if block_size < WARP_SIZE or block_size % WARP_SIZE != 0:
+        return block_argext[block_size, MAX](value, key)
+    else:
+        comptime WARPS = block_size // WARP_SIZE
+        var tid = Int(thread_idx.x)
+        var v = value
+        var k = key
+        var t = Int32(tid)
+        var offset = 1
+        while offset < WARP_SIZE:
+            var ov = shuffle_xor(v, UInt32(offset))
+            var ok = shuffle_xor(k, UInt32(offset))
+            var ot = shuffle_xor(t, UInt32(offset))
+            if _arg_better[MAX](ov, ok, v, k):
+                v = ov
+                k = ok
+                t = ot
+            offset *= 2
+        var vals = stack_allocation[
+            WARPS, Scalar[DType.float32], address_space = AddressSpace.SHARED
+        ]()
+        var keys = stack_allocation[
+            WARPS, Scalar[DType.int32], address_space = AddressSpace.SHARED
+        ]()
+        var tids = stack_allocation[
+            WARPS, Scalar[DType.int32], address_space = AddressSpace.SHARED
+        ]()
+        var lane0 = Int(lane_id()) == 0
+        if lane0:
+            var w = tid // WARP_SIZE
+            vals[w] = v
+            keys[w] = k
+            tids[w] = t
+        barrier()
+        var rv = v
+        var rk = k
+        var rt = t
+        if lane0:
+            rv = vals[0]
+            rk = keys[0]
+            rt = tids[0]
+            for i in range(1, WARPS):
+                var ov = vals[i]
+                var ok = keys[i]
+                if _arg_better[MAX](ov, ok, rv, rk):
+                    rv = ov
+                    rk = ok
+                    rt = tids[i]
+        rv = shuffle_idx(rv, UInt32(0))
+        rk = shuffle_idx(rk, UInt32(0))
+        rt = shuffle_idx(rt, UInt32(0))
+        comptime if PROTECT:
+            barrier()
         return (rv, rk, rt)
 
 

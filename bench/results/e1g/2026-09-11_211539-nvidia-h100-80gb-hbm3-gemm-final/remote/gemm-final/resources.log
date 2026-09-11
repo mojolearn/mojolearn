@@ -1,0 +1,104 @@
+1461 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x73e9c0000000, nodemask=1)
+GEMM_STEP_RESOURCES_DEVICE name=NVIDIA H100 80GB HBM3 mode=IDENTICAL column=2 lane_width=32 shared_limit=49152 head_w=32 tpb=256
+GEMM_STEP_RESOURCES_GEOMETRY label=shipped_default shipped DEFAULT ksplit (DEVIATION 2595, block parallelism row S=132 slack=4) where the group rule takes the call, else choose_gemm_plan's plan (TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) on the step's calls)
+GEMM_STEP_RESOURCES_BEGIN label=shipped_128x128 tile=128x128 pages=2
+GEMM_STEP_RESOURCES label=shipped_128x128 regs=255
+GEMM_STEP_RESOURCES label=shipped_128x128 local=4144
+GEMM_STEP_RESOURCES label=shipped_128x128 shared=40960
+GEMM_STEP_RESOURCES label=shipped_128x128 const=0
+GEMM_STEP_RESOURCES label=shipped_128x128 max_threads=256
+GEMM_STEP_RESOURCES label=shipped_128x128 blocks_per_sm_256=1
+GEMM_STEP_RESOURCES_BEGIN label=control_128x128_lanefold tile=128x128 reg=8x8 tc=16 ks=16 pages=2 lfold=False
+GEMM_STEP_RESOURCES label=control_128x128_lanefold regs=255
+GEMM_STEP_RESOURCES label=control_128x128_lanefold local=4144
+GEMM_STEP_RESOURCES label=control_128x128_lanefold shared=40960
+GEMM_STEP_RESOURCES label=control_128x128_lanefold const=0
+GEMM_STEP_RESOURCES label=control_128x128_lanefold max_threads=256
+GEMM_STEP_RESOURCES label=control_128x128_lanefold blocks_per_sm_256=1
+GEMM_STEP_RESOURCES_GEOMETRY label=lfold lfold 128x128 reg8x8 TC=16 KS=16 pages=2 fold=cell-serial local tpb=256 hwftz=True
+GEMM_STEP_RESOURCES_BEGIN label=lfold tile=128x128 reg=8x8 tc=16 ks=16 pages=2 lfold=True
+GEMM_STEP_RESOURCES label=lfold regs=254
+GEMM_STEP_RESOURCES label=lfold local=4352
+GEMM_STEP_RESOURCES label=lfold shared=40960
+GEMM_STEP_RESOURCES label=lfold const=0
+GEMM_STEP_RESOURCES label=lfold max_threads=256
+GEMM_STEP_RESOURCES label=lfold blocks_per_sm_256=1
+GEMM_STEP_RESOURCES_GEOMETRY label=half half 64x128 reg4x8 TC=16 KS=16 pages=2 fold=cell-serial local tpb=256 hwftz=True
+GEMM_STEP_RESOURCES_BEGIN label=half tile=64x128 reg=4x8 tc=16 ks=16 pages=2 lfold=True
+GEMM_STEP_RESOURCES label=half regs=226
+GEMM_STEP_RESOURCES label=half local=2176
+GEMM_STEP_RESOURCES label=half shared=30720
+GEMM_STEP_RESOURCES label=half const=0
+GEMM_STEP_RESOURCES label=half max_threads=256
+GEMM_STEP_RESOURCES label=half blocks_per_sm_256=1
+GEMM_STEP_RESOURCES_GEOMETRY label=half_ks16 half_ks16 64x128 reg4x8 TC=16 KS=16 pages=2 fold=cell-serial local tpb=256 hwftz=True
+GEMM_STEP_RESOURCES_BEGIN label=half_ks16 tile=64x128 reg=4x8 tc=16 ks=16 pages=2 lfold=True
+GEMM_STEP_RESOURCES label=half_ks16 regs=226
+GEMM_STEP_RESOURCES label=half_ks16 local=2176
+GEMM_STEP_RESOURCES label=half_ks16 shared=30720
+GEMM_STEP_RESOURCES label=half_ks16 const=0
+GEMM_STEP_RESOURCES label=half_ks16 max_threads=256
+GEMM_STEP_RESOURCES label=half_ks16 blocks_per_sm_256=1
+GEMM_STEP_RESOURCES_GEOMETRY label=quarter quarter 64x64 reg4x4 TC=16 KS=32 pages=2 fold=cell-serial local tpb=256 hwftz=True
+GEMM_STEP_RESOURCES_BEGIN label=quarter tile=64x64 reg=4x4 tc=16 ks=32 pages=2 lfold=True
+GEMM_STEP_RESOURCES label=quarter regs=214
+GEMM_STEP_RESOURCES label=quarter local=1088
+GEMM_STEP_RESOURCES label=quarter shared=36864
+GEMM_STEP_RESOURCES label=quarter const=0
+GEMM_STEP_RESOURCES label=quarter max_threads=256
+GEMM_STEP_RESOURCES label=quarter blocks_per_sm_256=1
+GEMM_STEP_RESOURCES_GEOMETRY label=head_n head_n 32x256 reg4x8 TC=32 KS=16 pages=2 fold=cell-serial local tpb=256 hwftz=True
+GEMM_STEP_RESOURCES_BEGIN label=head_n tile=32x256 reg=4x8 tc=32 ks=16 pages=2 lfold=True
+GEMM_STEP_RESOURCES label=head_n regs=254
+GEMM_STEP_RESOURCES label=head_n local=2176
+GEMM_STEP_RESOURCES label=head_n shared=46080
+GEMM_STEP_RESOURCES label=head_n const=0
+GEMM_STEP_RESOURCES label=head_n max_threads=256
+GEMM_STEP_RESOURCES label=head_n blocks_per_sm_256=1
+GEMM_STEP_RESOURCES_GEOMETRY label=head_m head_m 256x32 reg8x4 TC=8 KS=16 pages=2 fold=cell-serial local tpb=256 hwftz=True
+GEMM_STEP_RESOURCES_BEGIN label=head_m tile=256x32 reg=8x4 tc=8 ks=16 pages=2 lfold=True
+GEMM_STEP_RESOURCES label=head_m regs=254
+GEMM_STEP_RESOURCES label=head_m local=2176
+GEMM_STEP_RESOURCES label=head_m shared=46080
+GEMM_STEP_RESOURCES label=head_m const=0
+GEMM_STEP_RESOURCES label=head_m max_threads=256
+GEMM_STEP_RESOURCES label=head_m blocks_per_sm_256=1
+GEMM_STEP_RESOURCES_GEOMETRY label=ksplit_128x128 ksplit 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=True leaf groups on grid.y -> node workspace -> fold (block per cell <= 16384, else register stack) group rule S=132 slack=4
+GEMM_STEP_RESOURCES_BEGIN label=ksplit_128x128 tile=128x128 reg=8x8 tc=16 ks=16 pages=2 groups=grid.y
+GEMM_STEP_RESOURCES label=ksplit_128x128 regs=255
+GEMM_STEP_RESOURCES label=ksplit_128x128 local=4096
+GEMM_STEP_RESOURCES label=ksplit_128x128 shared=40960
+GEMM_STEP_RESOURCES label=ksplit_128x128 const=0
+GEMM_STEP_RESOURCES label=ksplit_128x128 max_threads=256
+GEMM_STEP_RESOURCES label=ksplit_128x128 blocks_per_sm_256=1
+GEMM_STEP_RESOURCES_GEOMETRY label=kpack kpack 128x128 reg8x8 TC=16 KS=16 page=packed(group,step,line) page_bytes=16384 pages=2 load=per-step fold=lane-wide local FS=16 tpb=256 hwftz=True groups where its rule takes the call (S=132 slack=4), else all leaves in one launch
+GEMM_STEP_RESOURCES_BEGIN label=kpack_all tile=128x128 reg=8x8 tc=16 ks=16 fs=16 page_bytes=16384 pages=2 group=False
+GEMM_STEP_RESOURCES label=kpack_all regs=255
+GEMM_STEP_RESOURCES label=kpack_all local=4200
+GEMM_STEP_RESOURCES label=kpack_all shared=32768
+GEMM_STEP_RESOURCES label=kpack_all const=0
+GEMM_STEP_RESOURCES label=kpack_all max_threads=256
+GEMM_STEP_RESOURCES label=kpack_all blocks_per_sm_256=1
+GEMM_STEP_RESOURCES_BEGIN label=kpack_group tile=128x128 reg=8x8 tc=16 ks=16 fs=16 page_bytes=16384 pages=2 group=True
+GEMM_STEP_RESOURCES label=kpack_group regs=255
+GEMM_STEP_RESOURCES label=kpack_group local=4232
+GEMM_STEP_RESOURCES label=kpack_group shared=32768
+GEMM_STEP_RESOURCES label=kpack_group const=0
+GEMM_STEP_RESOURCES label=kpack_group max_threads=256
+GEMM_STEP_RESOURCES label=kpack_group blocks_per_sm_256=1
+GEMM_STEP_RESOURCES_GEOMETRY label=kpack_wide kpack_wide 128x256 reg8x16 TC=16 KS=12 page=packed(group,step,line) page_bytes=18432 pages=2 load=per-step fold=lane-wide local FS=12 tpb=256 hwftz=True groups where its rule takes the call (S=132 slack=4), else all leaves in one launch
+GEMM_STEP_RESOURCES_BEGIN label=kpack_wide_all tile=128x256 reg=8x16 tc=16 ks=12 fs=12 page_bytes=18432 pages=2 group=False
+GEMM_STEP_RESOURCES label=kpack_wide_all regs=255
+GEMM_STEP_RESOURCES label=kpack_wide_all local=6976
+GEMM_STEP_RESOURCES label=kpack_wide_all shared=36864
+GEMM_STEP_RESOURCES label=kpack_wide_all const=0
+GEMM_STEP_RESOURCES label=kpack_wide_all max_threads=256
+GEMM_STEP_RESOURCES label=kpack_wide_all blocks_per_sm_256=1
+GEMM_STEP_RESOURCES_BEGIN label=kpack_wide_group tile=128x256 reg=8x16 tc=16 ks=12 fs=12 page_bytes=18432 pages=2 group=True
+GEMM_STEP_RESOURCES label=kpack_wide_group regs=255
+GEMM_STEP_RESOURCES label=kpack_wide_group local=6976
+GEMM_STEP_RESOURCES label=kpack_wide_group shared=36864
+GEMM_STEP_RESOURCES label=kpack_wide_group const=0
+GEMM_STEP_RESOURCES label=kpack_wide_group max_threads=256
+GEMM_STEP_RESOURCES label=kpack_wide_group blocks_per_sm_256=1
+GEMM_STEP_RESOURCES_DONE

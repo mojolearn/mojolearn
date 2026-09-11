@@ -971,7 +971,7 @@ row and no environment.
    `pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_GEMM_ARM_TRIAL=1 -I . bench/gemm_step_resources_main.mojo -o /tmp/gemm-step-resources`.
 6. **The byte LM binding, build only** (no import, no step), shipped
    defines:
-   `MOJOLEARN_NUMERIC_MODE=identical python3 tools/macos_serial_guard.py --seconds 900 --rss-gib 12 -- sh bindings/build_byte_lm.sh`.
+   `MOJOLEARN_NUMERIC_MODE=identical sh bindings/build_byte_lm.sh`, on a GPU box and not on the Mac: a full binding build is heavy, and `tools/macos_serial_guard.py` admits tiny jobs only (1 to 180 s, 1 to 4 GiB), so the guarded spelling this item first carried can never run.
    On the built `_mojolearn_byte_lm.so`, `nm -C <binding> | grep -c ksplit`
    should print 0 (the Apple row compiles the old line).
 

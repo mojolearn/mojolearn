@@ -32,6 +32,13 @@ from std.time import perf_counter_ns
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+# DEVIATION 2630: the step phase timers and counters (core/step_phase.mojo;
+# compiled only under -D MOJOLEARN_STEP_PHASE_TIMERS=1).
+from core.step_phase import (
+    step_count_sync,
+    step_counts_now,
+    step_counts_report,
+)
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.vendor import COMPILED_VENDOR
 from training.checks.optimizer_oracle import OptimizerConfig
@@ -51,6 +58,26 @@ from transformer.impl.llama.fused_attention import (
     fused_attention_arm_from_env,
     fused_attention_arm_name,
 )
+# DEVIATION 2648: the step glue arm read-back (core/step_glue.mojo).
+from core.step_glue import (
+    step_glue_arm_from_env,
+    step_glue_arm_name,
+    step_glue_trial_build,
+)
+
+
+def byte_lm_step_glue_arm_binding() raises -> PythonObject:
+    """DEVIATION 2648 read-back, so a result names the glue arm the step ran
+    instead of an environment variable that may be unset or misspelled:
+    [arm, trial_build]. A trial build reads MOJOLEARN_STEP_GLUE_ARM and
+    raises on an invalid name, exactly as the launchers do; every other
+    build returns `shipped` without reading the environment. Reads
+    constants and the environment only; no GPU operation."""
+    var arm = step_glue_arm_from_env()
+    var out = Python.list()
+    out.append(PythonObject(step_glue_arm_name(arm)))
+    out.append(PythonObject(1 if step_glue_trial_build() else 0))
+    return out
 
 
 def byte_lm_attention_arm_binding() raises -> PythonObject:
@@ -769,6 +796,10 @@ def byte_lm_session_step_binding(session: PythonObject, addresses: PythonObject,
     var loss = Float32(0)
     var result_step = completed
     var out_flags = List[Bool]()
+    # DEVIATION 2630: the step's launch, synchronize, copy and allocation
+    # counts (core/step_phase.mojo): zeros and no print on a build without
+    # -D MOJOLEARN_STEP_PHASE_TIMERS=1.
+    var counts0 = step_counts_now()
     owner[].busy = True
     try:
         with GILReleased(Python()):
@@ -787,8 +818,10 @@ def byte_lm_session_step_binding(session: PythonObject, addresses: PythonObject,
                 raise Error("byte LM: nonfinite returned loss")
             if len(out_flags) != n_tensors:
                 raise Error("byte LM: wrong flags length")
+            step_count_sync()
             ctx.synchronize()
             _btick(ton, tk, "step.bind_final_sync")
+            step_counts_report(counts0)
     except error:
         owner[].busy = False
         _mark_if_lost(owner[])
@@ -1069,6 +1102,8 @@ def PyInit__mojolearn_byte_lm() abi("C") -> PythonObject:
         module.def_function[byte_lm_fault_inject_available_binding]("byte_lm_fault_inject_available")
         # DEVIATION 2534: the attention arm read-back (arm, default, trial, resolved).
         module.def_function[byte_lm_attention_arm_binding]("byte_lm_attention_arm")
+        # DEVIATION 2648: the step glue arm read-back (arm, trial).
+        module.def_function[byte_lm_step_glue_arm_binding]("byte_lm_step_glue_arm")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_byte_lm: ", error))

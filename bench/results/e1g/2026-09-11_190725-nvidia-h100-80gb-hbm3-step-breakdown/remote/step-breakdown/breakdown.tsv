@@ -1,0 +1,294 @@
+# DEVIATION 2630 step breakdown; ms per step, median over the timed steps
+# gpu: NVIDIA H100 80GB HBM3, 580.126.09, 81559 MiB, 9.0, 5, 16, 700.00 W, 31, 1980 MHz, GPU-6ba9b52d-1dbd-23cc-e297-f09331d8896f
+# host: model name	: Intel(R) Xeon(R) Platinum 8480+ | nproc=2 | 6.8.0-106-generic
+corpus	kind	component	parent	depth	ms_per_step_median	share_of_envelope	lines_per_step	launches_per_step	syncs_per_step	note
+enwik8	parent	envelope.native_call		0	299.784	1.0000	1			
+enwik8	leaf	step.bind_scalar_admission	envelope.native_call	1	0.010	0.0000	1			
+enwik8	leaf	step.upload_inputs	envelope.native_call	1	0.184	0.0006	1			
+enwik8	leaf	step.unpack_weights	envelope.native_call	1	1.163	0.0039	1			
+enwik8	leaf	step.embedding_forward	envelope.native_call	1	0.058	0.0002	1			
+enwik8	parent	envelope.blocks_forward	envelope.native_call	1	66.673	0.2224	1			
+enwik8	parent	block.norm1	envelope.blocks_forward	2	3.890	0.0130	12			
+enwik8	leaf	fwd.refuse_call	block.norm1	3	0.691	0.0023	12	24.0	96.0	
+enwik8	leaf	fwd.norm1	block.norm1	3	3.067	0.0102	12	12.0	12.0	
+enwik8	remainder	remainder:block.norm1	block.norm1	3	0.135	0.0005				parent minus its children per step, then the median
+enwik8	parent	block.attention_total	envelope.blocks_forward	2	37.393	0.1247	12			
+enwik8	parent	attn.qkv_proj	block.attention_total	3	10.051	0.0335	12			
+enwik8	leaf	fwd.q_proj	attn.qkv_proj	4	3.247	0.0108	12	24.0	48.0	
+enwik8	leaf	fwd.k_proj	attn.qkv_proj	4	3.247	0.0108	12	24.0	48.0	
+enwik8	leaf	fwd.v_proj	attn.qkv_proj	4	3.250	0.0108	12	24.0	48.0	
+enwik8	remainder	remainder:attn.qkv_proj	attn.qkv_proj	4	0.309	0.0010				parent minus its children per step, then the median
+enwik8	leaf	attn.rope_and_cache	block.attention_total	3	1.312	0.0044	12			
+enwik8	parent	attn.core	block.attention_total	3	22.549	0.0752	12			
+enwik8	leaf	attn.fwd_corner_flag	attn.core	4	0.280	0.0009	12			
+enwik8	leaf	attn.fwd_r2_kernel	attn.core	4	20.926	0.0698	12			
+enwik8	leaf	attn.fwd_regime_scan	attn.core	4	1.141	0.0038	12			
+enwik8	leaf	attn.fwd_scratch_alloc	attn.core	4	0.150	0.0005	12			
+enwik8	remainder	remainder:attn.core	attn.core	4	0.067	0.0002				parent minus its children per step, then the median
+enwik8	parent	attn.o_proj	block.attention_total	3	3.430	0.0114	12			
+enwik8	leaf	fwd.o_proj	attn.o_proj	4	3.289	0.0110	12	24.0	48.0	
+enwik8	remainder	remainder:attn.o_proj	attn.o_proj	4	0.142	0.0005				parent minus its children per step, then the median
+enwik8	remainder	remainder:block.attention_total	block.attention_total	3	0.054	0.0002				parent minus its children per step, then the median
+enwik8	parent	block.mlp_and_residuals	envelope.blocks_forward	2	25.364	0.0846	12			
+enwik8	leaf	fwd.residual1_add	block.mlp_and_residuals	3	0.219	0.0007	12	12.0	12.0	
+enwik8	leaf	fwd.norm2	block.mlp_and_residuals	3	3.073	0.0102	12	12.0	12.0	
+enwik8	leaf	fwd.gate_proj	block.mlp_and_residuals	3	6.796	0.0227	12	12.0	24.0	
+enwik8	leaf	fwd.up_proj	block.mlp_and_residuals	3	6.752	0.0225	12	12.0	24.0	
+enwik8	leaf	fwd.silu	block.mlp_and_residuals	3	0.368	0.0012	12	12.0	12.0	
+enwik8	leaf	fwd.gate_mul	block.mlp_and_residuals	3	0.369	0.0012	12	12.0	12.0	
+enwik8	leaf	fwd.down_proj	block.mlp_and_residuals	3	6.915	0.0231	12	24.0	48.0	
+enwik8	leaf	fwd.residual2_add	block.mlp_and_residuals	3	0.214	0.0007	12	12.0	12.0	
+enwik8	remainder	remainder:block.mlp_and_residuals	block.mlp_and_residuals	3	0.681	0.0023				parent minus its children per step, then the median
+enwik8	remainder	remainder:envelope.blocks_forward	envelope.blocks_forward	2	0.053	0.0002				parent minus its children per step, then the median
+enwik8	leaf	step.head_forward	envelope.native_call	1	13.895	0.0463	1			
+enwik8	leaf	step.ce_refuse_scan	envelope.native_call	1	0.388	0.0013	1			
+enwik8	leaf	step.ce_forward	envelope.native_call	1	1.711	0.0057	1			
+enwik8	leaf	step.loss_download	envelope.native_call	1	0.019	0.0001	1			
+enwik8	leaf	step.ce_backward	envelope.native_call	1	0.986	0.0033	1			
+enwik8	leaf	step.head_backward_da	envelope.native_call	1	14.401	0.0480	1			
+enwik8	leaf	step.head_backward_db	envelope.native_call	1	14.025	0.0468	1			
+enwik8	parent	envelope.blocks_backward	envelope.native_call	1	173.280	0.5780	1			
+enwik8	parent	bwd.mlp_through_oproj	envelope.blocks_backward	2	54.916	0.1832	12	348.0	540.0	
+enwik8	leaf	grad.refuse_scan	bwd.mlp_through_oproj	3	0.396	0.0013	12	12.0	48.0	
+enwik8	leaf	grad.residual2_copy	bwd.mlp_through_oproj	3	0.329	0.0011	12	24.0	12.0	
+enwik8	leaf	grad.down_dA	bwd.mlp_through_oproj	3	6.915	0.0231	12	12.0	24.0	
+enwik8	leaf	grad.down_dB	bwd.mlp_through_oproj	3	7.136	0.0238	12	24.0	48.0	
+enwik8	leaf	grad.gate_mul	bwd.mlp_through_oproj	3	0.643	0.0021	12	24.0	12.0	
+enwik8	leaf	grad.silu	bwd.mlp_through_oproj	3	0.423	0.0014	12	12.0	12.0	
+enwik8	leaf	grad.gate_dB	bwd.mlp_through_oproj	3	7.102	0.0237	12	24.0	48.0	
+enwik8	leaf	grad.up_dB	bwd.mlp_through_oproj	3	7.075	0.0236	12	24.0	48.0	
+enwik8	leaf	grad.gate_dA	bwd.mlp_through_oproj	3	6.954	0.0232	12	24.0	48.0	
+enwik8	leaf	grad.up_dA	bwd.mlp_through_oproj	3	6.954	0.0232	12	24.0	48.0	
+enwik8	leaf	grad.gateup_fanin	bwd.mlp_through_oproj	3	0.219	0.0007	12	12.0	12.0	
+enwik8	leaf	grad.norm2_kernels	bwd.mlp_through_oproj	3	2.029	0.0068	12	36.0	36.0	
+enwik8	leaf	grad.norm2_dW	bwd.mlp_through_oproj	3	0.407	0.0014	12	24.0	24.0	
+enwik8	leaf	grad.residual1_add	bwd.mlp_through_oproj	3	0.208	0.0007	12	12.0	12.0	
+enwik8	leaf	grad.o_copy	bwd.mlp_through_oproj	3	0.209	0.0007	12	12.0	12.0	
+enwik8	leaf	grad.o_dA	bwd.mlp_through_oproj	3	3.298	0.0110	12	24.0	48.0	
+enwik8	leaf	grad.o_dB	bwd.mlp_through_oproj	3	3.256	0.0109	12	24.0	48.0	
+enwik8	remainder	remainder:bwd.mlp_through_oproj	bwd.mlp_through_oproj	3	1.378	0.0046				parent minus its children per step, then the median
+enwik8	leaf	bwd.before_attention	envelope.blocks_backward	2	0.018	0.0001	12			
+enwik8	parent	bwd.attention	envelope.blocks_backward	2	93.851	0.3131	12			
+enwik8	leaf	attn.bwd_corner_flag	bwd.attention	3	0.319	0.0011	12			
+enwik8	leaf	attn.bwd_dkdv_tiled_pf	bwd.attention	3	12.484	0.0416	12			
+enwik8	leaf	attn.bwd_dq_tiled_pf	bwd.attention	3	12.598	0.0420	12			
+enwik8	leaf	attn.bwd_regime_scan	bwd.attention	3	1.578	0.0053	12			
+enwik8	leaf	attn.bwd_scratch_alloc	bwd.attention	3	0.140	0.0005	12			
+enwik8	leaf	attn.bwd_zdot_stash_pf	bwd.attention	3	66.645	0.2223	12			
+enwik8	remainder	remainder:bwd.attention	bwd.attention	3	0.062	0.0002				parent minus its children per step, then the median
+enwik8	parent	bwd.after_attention	envelope.blocks_backward	2	24.452	0.0816	12			
+enwik8	leaf	grad.kv_slice	bwd.after_attention	3	0.498	0.0017	12	24.0	12.0	
+enwik8	leaf	grad.rope	bwd.after_attention	3	0.552	0.0018	12	24.0	12.0	
+enwik8	leaf	grad.q_dB	bwd.after_attention	3	3.281	0.0109	12	24.0	48.0	
+enwik8	leaf	grad.k_dB	bwd.after_attention	3	3.255	0.0109	12	24.0	48.0	
+enwik8	leaf	grad.v_dB	bwd.after_attention	3	3.242	0.0108	12	24.0	48.0	
+enwik8	leaf	grad.q_dA	bwd.after_attention	3	3.270	0.0109	12	24.0	48.0	
+enwik8	leaf	grad.k_dA	bwd.after_attention	3	3.279	0.0109	12	24.0	48.0	
+enwik8	leaf	grad.v_dA	bwd.after_attention	3	3.276	0.0109	12	24.0	48.0	
+enwik8	leaf	grad.qkv_fanin	bwd.after_attention	3	0.220	0.0007	12	12.0	12.0	
+enwik8	leaf	grad.norm1_kernels	bwd.after_attention	3	2.015	0.0067	12	36.0	36.0	
+enwik8	leaf	grad.norm1_dW	bwd.after_attention	3	0.398	0.0013	12	24.0	24.0	
+enwik8	leaf	grad.x_add	bwd.after_attention	3	0.211	0.0007	12	12.0	12.0	
+enwik8	remainder	remainder:bwd.after_attention	bwd.after_attention	3	0.967	0.0032				parent minus its children per step, then the median
+enwik8	remainder	remainder:envelope.blocks_backward	envelope.blocks_backward	2	0.125	0.0004				parent minus its children per step, then the median
+enwik8	leaf	step.embedding_backward	envelope.native_call	1	2.522	0.0084	1			
+enwik8	leaf	step.pack_grads	envelope.native_call	1	1.118	0.0037	1			
+enwik8	leaf	step.validate_grads_scan	envelope.native_call	1	0.555	0.0019	1			
+enwik8	leaf	step.shadow_copy	envelope.native_call	1	2.308	0.0077	1			
+enwik8	leaf	step.opt_refuse_scan	envelope.native_call	1	2.176	0.0073	1			
+enwik8	leaf	step.optimizer	envelope.native_call	1	1.714	0.0057	1			
+enwik8	leaf	step.validate_after_scan	envelope.native_call	1	2.150	0.0072	1			
+enwik8	leaf	step.bind_final_sync	envelope.native_call	1	0.002	0.0000	1			
+enwik8	leaf	step.bind_publish	envelope.native_call	1	0.015	0.0001	1			
+enwik8	remainder	remainder:envelope.native_call	envelope.native_call	1	0.364	0.0012				parent minus its children per step, then the median
+enwik8	category	gemm (every GEMM call, head and RMSNorm weight gradients included)	envelope.native_call	1	144.900	0.4833				leaves summed per step, then the median
+enwik8	category	attention kernels (fused launchers, regime scans, corner flags)	envelope.native_call	1	116.226	0.3877				leaves summed per step, then the median
+enwik8	category	refusal and validation scans	envelope.native_call	1	6.356	0.0212				leaves summed per step, then the median
+enwik8	category	rmsnorm forward	envelope.native_call	1	6.139	0.0205				leaves summed per step, then the median
+enwik8	category	remainders (timer prints, host work between ticks, untimed code)	envelope.native_call	1	4.262	0.0142				leaves summed per step, then the median
+enwik8	category	rmsnorm backward kernels (weight gradient GEMM under gemm)	envelope.native_call	1	4.045	0.0135				leaves summed per step, then the median
+enwik8	category	adamw update and its shadow copy	envelope.native_call	1	4.022	0.0134				leaves summed per step, then the median
+enwik8	category	logits softmax and cross entropy, forward and backward, loss readback	envelope.native_call	1	2.716	0.0091				leaves summed per step, then the median
+enwik8	category	embedding forward and backward	envelope.native_call	1	2.583	0.0086				leaves summed per step, then the median
+enwik8	category	ids upload, weight unpack and gradient pack copies	envelope.native_call	1	2.505	0.0084				leaves summed per step, then the median
+enwik8	category	attention rope and kv cache	envelope.native_call	1	2.363	0.0079				leaves summed per step, then the median
+enwik8	category	residual adds, copies and fan-in adds	envelope.native_call	1	1.825	0.0061				leaves summed per step, then the median
+enwik8	category	swiglu activation backward (gate product, silu)	envelope.native_call	1	1.066	0.0036				leaves summed per step, then the median
+enwik8	category	swiglu activation forward (silu, gate product)	envelope.native_call	1	0.737	0.0025				leaves summed per step, then the median
+enwik8	category	binding admission, final wait and publish	envelope.native_call	1	0.031	0.0001				leaves summed per step, then the median
+enwik8	gemm	gemm.down_dA	(cross-cut)		6.915	0.0231	12	12.0	24.0	calls per step = lines_per_step; ms per call 0.576
+enwik8	gemm	gemm.down_dB	(cross-cut)		7.136	0.0238	12	24.0	48.0	calls per step = lines_per_step; ms per call 0.595
+enwik8	gemm	gemm.down_fwd	(cross-cut)		6.915	0.0231	12	24.0	48.0	calls per step = lines_per_step; ms per call 0.576
+enwik8	gemm	gemm.gateup_dA	(cross-cut)		13.907	0.0464	24	48.0	96.0	calls per step = lines_per_step; ms per call 0.579
+enwik8	gemm	gemm.gateup_dB	(cross-cut)		14.177	0.0473	24	48.0	96.0	calls per step = lines_per_step; ms per call 0.591
+enwik8	gemm	gemm.gateup_fwd	(cross-cut)		13.548	0.0452	24	24.0	48.0	calls per step = lines_per_step; ms per call 0.565
+enwik8	gemm	gemm.head_dA	(cross-cut)		14.391	0.0480	1	2.0	2.0	calls per step = lines_per_step; ms per call 14.391
+enwik8	gemm	gemm.head_dB	(cross-cut)		14.020	0.0468	1	1.0	1.0	calls per step = lines_per_step; ms per call 14.020
+enwik8	gemm	gemm.head_fwd	(cross-cut)		13.884	0.0463	1	1.0	1.0	calls per step = lines_per_step; ms per call 13.884
+enwik8	gemm	gemm.norm_dW	(cross-cut)		0.805	0.0027	24	48.0	48.0	calls per step = lines_per_step; ms per call 0.034
+enwik8	gemm	gemm.proj_dA	(cross-cut)		13.122	0.0438	48	96.0	192.0	calls per step = lines_per_step; ms per call 0.273
+enwik8	gemm	gemm.proj_dB	(cross-cut)		13.028	0.0435	48	96.0	192.0	calls per step = lines_per_step; ms per call 0.271
+enwik8	gemm	gemm.proj_fwd	(cross-cut)		13.030	0.0435	48	96.0	192.0	calls per step = lines_per_step; ms per call 0.271
+enwik8	gemm	gemm.total	(cross-cut)		144.875	0.4833				every gemm.* line per step
+enwik8	count	count.copies_d2d						24.0		per native step
+enwik8	count	count.copies_d2h						158.0		per native step
+enwik8	count	count.copies_h2d						2.0		per native step
+enwik8	count	count.device_allocs						678.0		per native step
+enwik8	count	count.host_allocs						155.0		per native step
+enwik8	count	count.launches						1324.0		per native step
+enwik8	count	count.native_steps						1.0		per native step
+enwik8	count	count.synchronizes						2021.0		per native step
+enwik8	untreed	step.py_flags			0.141	0.0005	1			not a node of the tree (outside the envelope or unknown)
+enwik8	untreed	step.py_tokens			0.323	0.0011	1			not a node of the tree (outside the envelope or unknown)
+enwik8	lean	lean.shipped_build			295.789	0.9867				steady median, shipped build, untimed (THE price)
+enwik8	lean	lean.timers_build_switch_off			294.746	0.9832				steady median, timers build, switch off
+enwik8	lean	lean.timers_build_switch_on_wall			300.441	1.0022				median wall of the timed steps (not a price)
+enwik8	lean	lean.shipped_build_again			294.408	0.9821				shipped build rerun last (pod drift)
+enwik8	lean	overhead.compiled_in_switch_off			-1.043	-0.0035				timers build switch off minus shipped
+enwik8	lean	overhead.switch_on			4.653	0.0155				switch-on wall minus shipped
+enwik8	envelope	envelope.native_call		0	299.784	1.0000				median of 3 timed steps: 299.784, 303.939, 299.547
+pilegithub	parent	envelope.native_call		0	299.647	1.0000	1			
+pilegithub	leaf	step.bind_scalar_admission	envelope.native_call	1	0.009	0.0000	1			
+pilegithub	leaf	step.upload_inputs	envelope.native_call	1	0.165	0.0006	1			
+pilegithub	leaf	step.unpack_weights	envelope.native_call	1	1.145	0.0038	1			
+pilegithub	leaf	step.embedding_forward	envelope.native_call	1	0.057	0.0002	1			
+pilegithub	parent	envelope.blocks_forward	envelope.native_call	1	66.636	0.2224	1			
+pilegithub	parent	block.norm1	envelope.blocks_forward	2	3.892	0.0130	12			
+pilegithub	leaf	fwd.refuse_call	block.norm1	3	0.690	0.0023	12	24.0	96.0	
+pilegithub	leaf	fwd.norm1	block.norm1	3	3.064	0.0102	12	12.0	12.0	
+pilegithub	remainder	remainder:block.norm1	block.norm1	3	0.138	0.0005				parent minus its children per step, then the median
+pilegithub	parent	block.attention_total	envelope.blocks_forward	2	37.358	0.1247	12			
+pilegithub	parent	attn.qkv_proj	block.attention_total	3	10.045	0.0335	12			
+pilegithub	leaf	fwd.q_proj	attn.qkv_proj	4	3.243	0.0108	12	24.0	48.0	
+pilegithub	leaf	fwd.k_proj	attn.qkv_proj	4	3.245	0.0108	12	24.0	48.0	
+pilegithub	leaf	fwd.v_proj	attn.qkv_proj	4	3.247	0.0108	12	24.0	48.0	
+pilegithub	remainder	remainder:attn.qkv_proj	attn.qkv_proj	4	0.310	0.0010				parent minus its children per step, then the median
+pilegithub	leaf	attn.rope_and_cache	block.attention_total	3	1.301	0.0043	12			
+pilegithub	parent	attn.core	block.attention_total	3	22.524	0.0752	12			
+pilegithub	leaf	attn.fwd_corner_flag	attn.core	4	0.277	0.0009	12			
+pilegithub	leaf	attn.fwd_r2_kernel	attn.core	4	20.885	0.0697	12			
+pilegithub	leaf	attn.fwd_regime_scan	attn.core	4	1.147	0.0038	12			
+pilegithub	leaf	attn.fwd_scratch_alloc	attn.core	4	0.148	0.0005	12			
+pilegithub	remainder	remainder:attn.core	attn.core	4	0.063	0.0002				parent minus its children per step, then the median
+pilegithub	parent	attn.o_proj	block.attention_total	3	3.436	0.0115	12			
+pilegithub	leaf	fwd.o_proj	attn.o_proj	4	3.293	0.0110	12	24.0	48.0	
+pilegithub	remainder	remainder:attn.o_proj	attn.o_proj	4	0.144	0.0005				parent minus its children per step, then the median
+pilegithub	remainder	remainder:block.attention_total	block.attention_total	3	0.055	0.0002				parent minus its children per step, then the median
+pilegithub	parent	block.mlp_and_residuals	envelope.blocks_forward	2	25.335	0.0845	12			
+pilegithub	leaf	fwd.residual1_add	block.mlp_and_residuals	3	0.219	0.0007	12	12.0	12.0	
+pilegithub	leaf	fwd.norm2	block.mlp_and_residuals	3	3.073	0.0103	12	12.0	12.0	
+pilegithub	leaf	fwd.gate_proj	block.mlp_and_residuals	3	6.792	0.0227	12	12.0	24.0	
+pilegithub	leaf	fwd.up_proj	block.mlp_and_residuals	3	6.751	0.0225	12	12.0	24.0	
+pilegithub	leaf	fwd.silu	block.mlp_and_residuals	3	0.371	0.0012	12	12.0	12.0	
+pilegithub	leaf	fwd.gate_mul	block.mlp_and_residuals	3	0.367	0.0012	12	12.0	12.0	
+pilegithub	leaf	fwd.down_proj	block.mlp_and_residuals	3	6.910	0.0231	12	24.0	48.0	
+pilegithub	leaf	fwd.residual2_add	block.mlp_and_residuals	3	0.212	0.0007	12	12.0	12.0	
+pilegithub	remainder	remainder:block.mlp_and_residuals	block.mlp_and_residuals	3	0.628	0.0021				parent minus its children per step, then the median
+pilegithub	remainder	remainder:envelope.blocks_forward	envelope.blocks_forward	2	0.053	0.0002				parent minus its children per step, then the median
+pilegithub	leaf	step.head_forward	envelope.native_call	1	13.900	0.0464	1			
+pilegithub	leaf	step.ce_refuse_scan	envelope.native_call	1	0.384	0.0013	1			
+pilegithub	leaf	step.ce_forward	envelope.native_call	1	1.708	0.0057	1			
+pilegithub	leaf	step.loss_download	envelope.native_call	1	0.020	0.0001	1			
+pilegithub	leaf	step.ce_backward	envelope.native_call	1	0.986	0.0033	1			
+pilegithub	leaf	step.head_backward_da	envelope.native_call	1	14.401	0.0481	1			
+pilegithub	leaf	step.head_backward_db	envelope.native_call	1	14.027	0.0468	1			
+pilegithub	parent	envelope.blocks_backward	envelope.native_call	1	173.286	0.5783	1			
+pilegithub	parent	bwd.mlp_through_oproj	envelope.blocks_backward	2	54.801	0.1829	12	348.0	540.0	
+pilegithub	leaf	grad.refuse_scan	bwd.mlp_through_oproj	3	0.397	0.0013	12	12.0	48.0	
+pilegithub	leaf	grad.residual2_copy	bwd.mlp_through_oproj	3	0.327	0.0011	12	24.0	12.0	
+pilegithub	leaf	grad.down_dA	bwd.mlp_through_oproj	3	6.917	0.0231	12	12.0	24.0	
+pilegithub	leaf	grad.down_dB	bwd.mlp_through_oproj	3	7.138	0.0238	12	24.0	48.0	
+pilegithub	leaf	grad.gate_mul	bwd.mlp_through_oproj	3	0.637	0.0021	12	24.0	12.0	
+pilegithub	leaf	grad.silu	bwd.mlp_through_oproj	3	0.425	0.0014	12	12.0	12.0	
+pilegithub	leaf	grad.gate_dB	bwd.mlp_through_oproj	3	7.096	0.0237	12	24.0	48.0	
+pilegithub	leaf	grad.up_dB	bwd.mlp_through_oproj	3	7.073	0.0236	12	24.0	48.0	
+pilegithub	leaf	grad.gate_dA	bwd.mlp_through_oproj	3	6.953	0.0232	12	24.0	48.0	
+pilegithub	leaf	grad.up_dA	bwd.mlp_through_oproj	3	6.950	0.0232	12	24.0	48.0	
+pilegithub	leaf	grad.gateup_fanin	bwd.mlp_through_oproj	3	0.216	0.0007	12	12.0	12.0	
+pilegithub	leaf	grad.norm2_kernels	bwd.mlp_through_oproj	3	2.029	0.0068	12	36.0	36.0	
+pilegithub	leaf	grad.norm2_dW	bwd.mlp_through_oproj	3	0.403	0.0013	12	24.0	24.0	
+pilegithub	leaf	grad.residual1_add	bwd.mlp_through_oproj	3	0.208	0.0007	12	12.0	12.0	
+pilegithub	leaf	grad.o_copy	bwd.mlp_through_oproj	3	0.207	0.0007	12	12.0	12.0	
+pilegithub	leaf	grad.o_dA	bwd.mlp_through_oproj	3	3.295	0.0110	12	24.0	48.0	
+pilegithub	leaf	grad.o_dB	bwd.mlp_through_oproj	3	3.252	0.0109	12	24.0	48.0	
+pilegithub	remainder	remainder:bwd.mlp_through_oproj	bwd.mlp_through_oproj	3	1.284	0.0043				parent minus its children per step, then the median
+pilegithub	leaf	bwd.before_attention	envelope.blocks_backward	2	0.018	0.0001	12			
+pilegithub	parent	bwd.attention	envelope.blocks_backward	2	93.870	0.3133	12			
+pilegithub	leaf	attn.bwd_corner_flag	bwd.attention	3	0.316	0.0011	12			
+pilegithub	leaf	attn.bwd_dkdv_tiled_pf	bwd.attention	3	12.546	0.0419	12			
+pilegithub	leaf	attn.bwd_dq_tiled_pf	bwd.attention	3	12.600	0.0420	12			
+pilegithub	leaf	attn.bwd_regime_scan	bwd.attention	3	1.596	0.0053	12			
+pilegithub	leaf	attn.bwd_scratch_alloc	bwd.attention	3	0.137	0.0005	12			
+pilegithub	leaf	attn.bwd_zdot_stash_pf	bwd.attention	3	66.643	0.2224	12			
+pilegithub	remainder	remainder:bwd.attention	bwd.attention	3	0.061	0.0002				parent minus its children per step, then the median
+pilegithub	parent	bwd.after_attention	envelope.blocks_backward	2	24.444	0.0816	12			
+pilegithub	leaf	grad.kv_slice	bwd.after_attention	3	0.497	0.0017	12	24.0	12.0	
+pilegithub	leaf	grad.rope	bwd.after_attention	3	0.550	0.0018	12	24.0	12.0	
+pilegithub	leaf	grad.q_dB	bwd.after_attention	3	3.277	0.0109	12	24.0	48.0	
+pilegithub	leaf	grad.k_dB	bwd.after_attention	3	3.245	0.0108	12	24.0	48.0	
+pilegithub	leaf	grad.v_dB	bwd.after_attention	3	3.240	0.0108	12	24.0	48.0	
+pilegithub	leaf	grad.q_dA	bwd.after_attention	3	3.271	0.0109	12	24.0	48.0	
+pilegithub	leaf	grad.k_dA	bwd.after_attention	3	3.275	0.0109	12	24.0	48.0	
+pilegithub	leaf	grad.v_dA	bwd.after_attention	3	3.275	0.0109	12	24.0	48.0	
+pilegithub	leaf	grad.qkv_fanin	bwd.after_attention	3	0.221	0.0007	12	12.0	12.0	
+pilegithub	leaf	grad.norm1_kernels	bwd.after_attention	3	2.019	0.0067	12	36.0	36.0	
+pilegithub	leaf	grad.norm1_dW	bwd.after_attention	3	0.397	0.0013	12	24.0	24.0	
+pilegithub	leaf	grad.x_add	bwd.after_attention	3	0.208	0.0007	12	12.0	12.0	
+pilegithub	remainder	remainder:bwd.after_attention	bwd.after_attention	3	0.961	0.0032				parent minus its children per step, then the median
+pilegithub	remainder	remainder:envelope.blocks_backward	envelope.blocks_backward	2	0.124	0.0004				parent minus its children per step, then the median
+pilegithub	leaf	step.embedding_backward	envelope.native_call	1	2.529	0.0084	1			
+pilegithub	leaf	step.pack_grads	envelope.native_call	1	1.099	0.0037	1			
+pilegithub	leaf	step.validate_grads_scan	envelope.native_call	1	0.558	0.0019	1			
+pilegithub	leaf	step.shadow_copy	envelope.native_call	1	2.308	0.0077	1			
+pilegithub	leaf	step.opt_refuse_scan	envelope.native_call	1	2.175	0.0073	1			
+pilegithub	leaf	step.optimizer	envelope.native_call	1	1.713	0.0057	1			
+pilegithub	leaf	step.validate_after_scan	envelope.native_call	1	2.147	0.0072	1			
+pilegithub	leaf	step.bind_final_sync	envelope.native_call	1	0.002	0.0000	1			
+pilegithub	leaf	step.bind_publish	envelope.native_call	1	0.014	0.0000	1			
+pilegithub	remainder	remainder:envelope.native_call	envelope.native_call	1	0.358	0.0012				parent minus its children per step, then the median
+pilegithub	category	gemm (every GEMM call, head and RMSNorm weight gradients included)	envelope.native_call	1	144.883	0.4835				leaves summed per step, then the median
+pilegithub	category	attention kernels (fused launchers, regime scans, corner flags)	envelope.native_call	1	116.283	0.3881				leaves summed per step, then the median
+pilegithub	category	refusal and validation scans	envelope.native_call	1	6.354	0.0212				leaves summed per step, then the median
+pilegithub	category	rmsnorm forward	envelope.native_call	1	6.138	0.0205				leaves summed per step, then the median
+pilegithub	category	remainders (timer prints, host work between ticks, untimed code)	envelope.native_call	1	4.199	0.0140				leaves summed per step, then the median
+pilegithub	category	rmsnorm backward kernels (weight gradient GEMM under gemm)	envelope.native_call	1	4.048	0.0135				leaves summed per step, then the median
+pilegithub	category	adamw update and its shadow copy	envelope.native_call	1	4.022	0.0134				leaves summed per step, then the median
+pilegithub	category	logits softmax and cross entropy, forward and backward, loss readback	envelope.native_call	1	2.714	0.0091				leaves summed per step, then the median
+pilegithub	category	embedding forward and backward	envelope.native_call	1	2.585	0.0086				leaves summed per step, then the median
+pilegithub	category	ids upload, weight unpack and gradient pack copies	envelope.native_call	1	2.413	0.0081				leaves summed per step, then the median
+pilegithub	category	attention rope and kv cache	envelope.native_call	1	2.349	0.0078				leaves summed per step, then the median
+pilegithub	category	residual adds, copies and fan-in adds	envelope.native_call	1	1.823	0.0061				leaves summed per step, then the median
+pilegithub	category	swiglu activation backward (gate product, silu)	envelope.native_call	1	1.062	0.0035				leaves summed per step, then the median
+pilegithub	category	swiglu activation forward (silu, gate product)	envelope.native_call	1	0.739	0.0025				leaves summed per step, then the median
+pilegithub	category	binding admission, final wait and publish	envelope.native_call	1	0.025	0.0001				leaves summed per step, then the median
+pilegithub	gemm	gemm.down_dA	(cross-cut)		6.917	0.0231	12	12.0	24.0	calls per step = lines_per_step; ms per call 0.576
+pilegithub	gemm	gemm.down_dB	(cross-cut)		7.138	0.0238	12	24.0	48.0	calls per step = lines_per_step; ms per call 0.595
+pilegithub	gemm	gemm.down_fwd	(cross-cut)		6.910	0.0231	12	24.0	48.0	calls per step = lines_per_step; ms per call 0.576
+pilegithub	gemm	gemm.gateup_dA	(cross-cut)		13.902	0.0464	24	48.0	96.0	calls per step = lines_per_step; ms per call 0.579
+pilegithub	gemm	gemm.gateup_dB	(cross-cut)		14.167	0.0473	24	48.0	96.0	calls per step = lines_per_step; ms per call 0.590
+pilegithub	gemm	gemm.gateup_fwd	(cross-cut)		13.542	0.0452	24	24.0	48.0	calls per step = lines_per_step; ms per call 0.564
+pilegithub	gemm	gemm.head_dA	(cross-cut)		14.390	0.0480	1	2.0	2.0	calls per step = lines_per_step; ms per call 14.390
+pilegithub	gemm	gemm.head_dB	(cross-cut)		14.023	0.0468	1	1.0	1.0	calls per step = lines_per_step; ms per call 14.023
+pilegithub	gemm	gemm.head_fwd	(cross-cut)		13.890	0.0464	1	1.0	1.0	calls per step = lines_per_step; ms per call 13.890
+pilegithub	gemm	gemm.norm_dW	(cross-cut)		0.800	0.0027	24	48.0	48.0	calls per step = lines_per_step; ms per call 0.033
+pilegithub	gemm	gemm.proj_dA	(cross-cut)		13.119	0.0438	48	96.0	192.0	calls per step = lines_per_step; ms per call 0.273
+pilegithub	gemm	gemm.proj_dB	(cross-cut)		13.016	0.0434	48	96.0	192.0	calls per step = lines_per_step; ms per call 0.271
+pilegithub	gemm	gemm.proj_fwd	(cross-cut)		13.028	0.0435	48	96.0	192.0	calls per step = lines_per_step; ms per call 0.271
+pilegithub	gemm	gemm.total	(cross-cut)		144.858	0.4834				every gemm.* line per step
+pilegithub	count	count.copies_d2d						24.0		per native step
+pilegithub	count	count.copies_d2h						158.0		per native step
+pilegithub	count	count.copies_h2d						2.0		per native step
+pilegithub	count	count.device_allocs						678.0		per native step
+pilegithub	count	count.host_allocs						155.0		per native step
+pilegithub	count	count.launches						1324.0		per native step
+pilegithub	count	count.native_steps						1.0		per native step
+pilegithub	count	count.synchronizes						2021.0		per native step
+pilegithub	untreed	step.py_flags			0.136	0.0005	1			not a node of the tree (outside the envelope or unknown)
+pilegithub	untreed	step.py_tokens			0.329	0.0011	1			not a node of the tree (outside the envelope or unknown)
+pilegithub	lean	lean.shipped_build			294.686	0.9834				steady median, shipped build, untimed (THE price)
+pilegithub	lean	lean.timers_build_switch_off			295.049	0.9847				steady median, timers build, switch off
+pilegithub	lean	lean.timers_build_switch_on_wall			300.253	1.0020				median wall of the timed steps (not a price)
+pilegithub	lean	lean.shipped_build_again								shipped build rerun last (pod drift)
+pilegithub	lean	overhead.compiled_in_switch_off			0.363	0.0012				timers build switch off minus shipped
+pilegithub	lean	overhead.switch_on			5.567	0.0186				switch-on wall minus shipped
+pilegithub	envelope	envelope.native_call		0	299.647	1.0000				median of 3 timed steps: 299.707, 299.647, 299.623

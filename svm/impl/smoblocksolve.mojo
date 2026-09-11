@@ -82,8 +82,25 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
 from checks.numerics import ftz, identical_mul_add
+from checks.kernel_matrix import (
+    TARGET_COLUMN,
+    SVM_SCHED_FUSED_TREE,
+    SVM_SCHED_RARY_TREE,
+    SVM_SCHED_TREE,
+    SVM_SCHED_WARP,
+    SVM_SCHED_WARP_LANE0,
+    svm_block_solve_schedule_for,
+    svm_block_solve_tree_arity_for,
+)
 from svm.checks.pinned_argreduce import (
     block_argext,
+    block_argext_lane0,
+    pinned_block_argext_tid,
+    pinned_block_argext_tid_rary,
+    pinned_block_argmin_argmax_tid,
+    pinned_block_argmin_argmax_tid_rary,
+    pinned_block_argmax,
+    pinned_block_argmin,
     sabotage_block_max_hw,
     sabotage_block_max_nokey,
 )
@@ -131,6 +148,29 @@ def smo_block_solve_kernel[
     var max_iter = Int(max_iter_in)
     var tid = Int(thread_idx.x)
     var active = tid < n_ws
+    # DEVIATIONS 2623, 2627, 2628: which schedule folds the three
+    # arg-reductions is a kernel-matrix row (the halving trees with a thread
+    # ballot; DEVIATION 2491's warp butterflies; 2627's butterflies with a
+    # lane-0 cross-warp loop; 2628's fused thread-carrying trees). All select
+    # the same element. The f_max sabotage arms need the separate f_max fold,
+    # so a sabotage build takes the tree schedule in place of the fused one.
+    comptime SCHED_ROW = svm_block_solve_schedule_for[TARGET_COLUMN, WSIZE]()
+    comptime SAB_FMAX_ANY = SAB_FMAX_NOKEY or SAB_FMAX_HWMAX or SAB_FMAX_HWMAX_SWAP
+    comptime SCHED = SVM_SCHED_TREE if (
+        (SCHED_ROW == SVM_SCHED_FUSED_TREE or SCHED_ROW == SVM_SCHED_RARY_TREE)
+        and SAB_FMAX_ANY
+    ) else SCHED_ROW
+    #: DEVIATION 2628's R-ary tree: its arity, whether each reduction keeps
+    #: its trailing barrier, and whether the alpha update keeps its second.
+    comptime ARITY = svm_block_solve_tree_arity_for[TARGET_COLUMN, WSIZE]()
+    comptime RARY_PROTECT = not is_defined["MOJOLEARN_SVM_RARY_NO_TRAILING"]()
+    comptime UPDATE_SECOND_BARRIER = SCHED != SVM_SCHED_RARY_TREE or not is_defined[
+        "MOJOLEARN_SVM_UPDATE_ONE_BARRIER"
+    ]()
+    comptime WARP_FOLDS = SCHED == SVM_SCHED_WARP
+    #: DEVIATION 2627's trailing barrier after each lane-0 fold (on unless
+    #: `-D MOJOLEARN_SVM_LANE0_NO_TRAILING`).
+    comptime LANE0_PROTECT = not is_defined["MOJOLEARN_SVM_LANE0_NO_TRAILING"]()
 
     var Kd = stack_allocation[
         WSIZE, Scalar[DType.float32], address_space = AddressSpace.SHARED
@@ -173,32 +213,75 @@ def smo_block_solve_kernel[
         var f_tmp = pos_inf
         if active and in_upper(a, y, C):
             f_tmp = f
-        # DEVIATION 2491: the reduction returns the winning THREAD beside
-        # the (value, key) pair; the ballot through threadgroup memory that
-        # used to recover it (two barriers) is gone.
-        var res = block_argext[WSIZE, False](f_tmp, key)
-        var f_u = res[0]
-        var u = Int(res[2])
-
-        # select f_max to check stopping condition
-        f_tmp = neg_inf
+        # select f_max to check stopping condition: the X_lower mask (the
+        # same values whether it is formed before or after the argmin;
+        # nothing between them writes a, y, C or f)
+        var f_lo = neg_inf
         if active and in_lower(a, y, C):
-            f_tmp = f
-        var Kui = Float32(0.0)
-        if active:
-            Kui = kernel.unsafe_load(u * n_ws + tid)
+            f_lo = f
+        var f_u: Float32
+        var u: Int
         # DEVIATION 635: the key-tied argmax; `f_max` is the winner's own
         # bits (+0.0 or -0.0 as that sample holds it), decided by the key.
         var f_max: Float32
-        comptime if SAB_FMAX_NOKEY:
-            f_max = sabotage_block_max_nokey[WSIZE](f_tmp)
-        elif SAB_FMAX_HWMAX:
-            f_max = sabotage_block_max_hw[WSIZE, False](f_tmp)
-        elif SAB_FMAX_HWMAX_SWAP:
-            f_max = sabotage_block_max_hw[WSIZE, True](f_tmp)
+        comptime if SCHED == SVM_SCHED_FUSED_TREE:
+            # DEVIATION 2628: one tree for the argmin (with its thread) and
+            # the argmax, no ballot.
+            var rf = pinned_block_argmin_argmax_tid[WSIZE](f_tmp, f_lo, key)
+            f_u = rf[0]
+            u = Int(rf[1])
+            f_max = rf[2]
+        elif SCHED == SVM_SCHED_RARY_TREE:
+            # DEVIATION 2628: the same selections on the R-ary tree.
+            var rf = pinned_block_argmin_argmax_tid_rary[WSIZE, ARITY, RARY_PROTECT](
+                f_tmp, f_lo, key
+            )
+            f_u = rf[0]
+            u = Int(rf[1])
+            f_max = rf[2]
         else:
-            var resm = block_argext[WSIZE, True](f_tmp, key)
-            f_max = resm[0]
+            # DEVIATION 2491: the reduction returns the winning THREAD beside
+            # the (value, key) pair; the ballot through threadgroup memory
+            # that used to recover it (two barriers) is gone.
+            comptime if WARP_FOLDS:
+                var res = block_argext[WSIZE, False](f_tmp, key)
+                f_u = res[0]
+                u = Int(res[2])
+            elif SCHED == SVM_SCHED_WARP_LANE0:
+                # DEVIATION 2627: the cross-warp fold on lane 0.
+                var res = block_argext_lane0[WSIZE, False, LANE0_PROTECT](f_tmp, key)
+                f_u = res[0]
+                u = Int(res[2])
+            else:
+                # `u` is the THREAD holding the winning (value, key); one
+                # ballot through threadgroup memory recovers it (keys are
+                # unique).
+                var res = pinned_block_argmin[WSIZE](f_tmp, key)
+                f_u = res[0]
+                if active and key == res[1]:
+                    sh_tmp[0] = Float32(tid)
+                barrier()
+                u = Int(sh_tmp[0])
+                barrier()
+            comptime if SAB_FMAX_NOKEY:
+                f_max = sabotage_block_max_nokey[WSIZE](f_lo)
+            elif SAB_FMAX_HWMAX:
+                f_max = sabotage_block_max_hw[WSIZE, False](f_lo)
+            elif SAB_FMAX_HWMAX_SWAP:
+                f_max = sabotage_block_max_hw[WSIZE, True](f_lo)
+            else:
+                comptime if WARP_FOLDS:
+                    var resm = block_argext[WSIZE, True](f_lo, key)
+                    f_max = resm[0]
+                elif SCHED == SVM_SCHED_WARP_LANE0:
+                    var resm = block_argext_lane0[WSIZE, True, LANE0_PROTECT](f_lo, key)
+                    f_max = resm[0]
+                else:
+                    var resm = pinned_block_argmax[WSIZE](f_lo, key)
+                    f_max = resm[0]
+        var Kui = Float32(0.0)
+        if active:
+            Kui = kernel.unsafe_load(u * n_ws + tid)
 
         # f_max - f_u is used to check stopping condition.
         var diff = ftz(f_max - f_u)
@@ -219,8 +302,28 @@ def smo_block_solve_kernel[
             f_tmp = ftz(ftz(d * d) / eta_ui)
         else:
             f_tmp = neg_inf
-        var res2 = block_argext[WSIZE, True](f_tmp, key)
-        var l = Int(res2[2])
+        var l: Int
+        comptime if WARP_FOLDS:
+            var res2 = block_argext[WSIZE, True](f_tmp, key)
+            l = Int(res2[2])
+        elif SCHED == SVM_SCHED_WARP_LANE0:
+            var res2 = block_argext_lane0[WSIZE, True, LANE0_PROTECT](f_tmp, key)
+            l = Int(res2[2])
+        elif SCHED == SVM_SCHED_FUSED_TREE:
+            var res2 = pinned_block_argext_tid[WSIZE, True](f_tmp, key)
+            l = Int(res2[2])
+        elif SCHED == SVM_SCHED_RARY_TREE:
+            var res2 = pinned_block_argext_tid_rary[WSIZE, ARITY, True, RARY_PROTECT](
+                f_tmp, key
+            )
+            l = Int(res2[2])
+        else:
+            var res2 = pinned_block_argmax[WSIZE](f_tmp, key)
+            if active and key == res2[1]:
+                sh_tmp[0] = Float32(tid)
+            barrier()
+            l = Int(sh_tmp[0])
+            barrier()
         var Kli = Float32(0.0)
         if active:
             Kli = kernel.unsafe_load(l * n_ws + tid)
@@ -240,7 +343,11 @@ def smo_block_solve_kernel[
         var tmp_u = sh_tmp[0]
         var tmp_l2 = sh_tmp[1]
         var q = tmp_u if tmp_u < tmp_l2 else tmp_l2
-        barrier()
+        # The second barrier protects `sh_tmp` for a write in the next
+        # segment; only the tree ballot writes it there, so the R-ary
+        # schedule may drop it (DEVIATION 2628).
+        comptime if UPDATE_SECOND_BARRIER:
+            barrier()
         if tid == u:
             a = ftz(a + q * y)
         if tid == l:

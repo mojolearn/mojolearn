@@ -1,0 +1,13 @@
+build-binding-base	0	52s
+build-byte-lm-shipped	0	77s
+build-byte-lm-timers	0	70s
+corpus-enwik8	0	6s
+corpus-pile-github	0	19s
+lean-shipped-enwik8	0	87s
+lean-timers-enwik8	0	83s
+timing-enwik8	0	84s
+lean-shipped-pilegithub	0	84s
+lean-timers-pilegithub	0	87s
+timing-pilegithub	0	84s
+lean-shipped2-enwik8	0	87s
+summary	0	0s

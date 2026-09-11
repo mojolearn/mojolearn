@@ -1,0 +1,15 @@
+component	shipped_ms	optskip_noshadow_rows16_ms	delta_ms
+envelope.native_call	297.32910729944706	289.3306575715542	-7.998
+fwd.norm1	3.06776	1.554151	-1.514
+fwd.norm2	3.076562	1.56212	-1.514
+grad.norm1_kernels	2.025714	1.39926	-0.626
+grad.norm2_kernels	2.038154	1.392515	-0.646
+step.validate_grads_scan	0.558668	0.556923	-0.002
+step.shadow_copy	2.308929	None	NA
+step.opt_refuse_scan	2.175149	None	NA
+step.optimizer	1.714676	1.727251	0.013
+step.validate_after_scan	2.14745	2.14858	0.001
+step.embedding_backward	2.552331	2.545274	-0.007
+step.unpack_weights	1.163773	1.165635	0.002
+step.pack_grads	1.122067	1.124994	0.003
+timing_witnesses_equal	True
