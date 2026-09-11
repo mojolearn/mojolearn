@@ -17,9 +17,6 @@ OUT=/root/gemm_leg_out
 mkdir -p "$OUT"
 CAPTURE=bench/results/resume/2026-09-07-root-byte-lm-three-vendor/apple
 STEPS="${MOJOLEARN_BYTE_LM_HOST_STEPS:-every:8}"
-# The box has no .git; the runner already wrote the pinned commit to leg.txt.
-MOJOLEARN_GATE_COMMIT=$(sed -n 's/^commit=//p' "$OUT/leg.txt" | head -1)
-export MOJOLEARN_GATE_COMMIT
 
 lscpu > "$OUT/lscpu.txt" 2>&1 || true
 grep -m1 -E '^(flags|Features)' /proc/cpuinfo > "$OUT/cpu_flags.txt" 2>&1 || true
