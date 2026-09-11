@@ -231,6 +231,12 @@ check-gpu-lib = "mojo run -I . checks/gpu_lib_check.mojo"
 # it launches the full histogram path many times over.
 check-hist2 = "mojo run -I . checks/hist2_check.mojo"
 
+# DEVIATIONS 2580 (per-level quantize) and 2581 (per-group bit width): both
+# sides of each switch, set explicitly inside the check, one-byte cells
+# bit-equal across sides at depth 0 and depth 1, with teeth per arm.
+check-sym-arms = "mojo run -I . checks/sym_arms_check.mojo"
+check-sym-arms-identical = "mojo run -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 checks/sym_arms_check.mojo"
+
 # Border selection for CTR values. MinEntropy is what their GPU uses for
 # FeatureFreq simple ctrs, it is NOT the GreedyLogSum we use for numeric
 # features, and this compares our exact-DP port against CatBoost's own

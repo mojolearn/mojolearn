@@ -1,9 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Fused two-stat 8-bit histograms: the >128-bin arm CatBoost never wrote.
+"""Fused two-stat 8-bit histograms: the greedy ladder's >128-bin arm.
 
 ================= DEVIATION BLOCK (whole file) =================
-NO CATBOOST COUNTERPART. Their one-byte ladder fuses two stats only up
+CatBoost DID write a fused two-stat 8-bit kernel, `pointwise_hist2_one_byte_8bit.cu:89-121`
+(`TPointHist::AddPoint`, their pointwise oblivious searcher); only the GREEDY ladder lacks one.
+Their greedy one-byte ladder fuses two stats only up
 to 128 bins (`hist_one_byte.cu:315-323`): at 8 bits a warp-PRIVATE
 two-stat slice is `256 bins * 2 stats * 4 features * 4B = 8 KB` per
 warp, which no shared-memory budget carries at their block sizes, so
@@ -181,7 +183,7 @@ def h8_reduce_and_flush(
                         acc_i32.unsafe_store(dst_base + fold, q)
 
 
-def hist2_8bit_kernel(
+def hist2_8bit_kernel[preq: Bool = False, col_map: Bool = False](
     feature_folds: MutPointer[UInt32, MutAnyOrigin],
     feature_fold_offset: MutPointer[UInt32, MutAnyOrigin],
     feature_group_offset: MutPointer[UInt32, MutAnyOrigin],
@@ -203,7 +205,15 @@ def hist2_8bit_kernel(
 ):
     """Direct loads (depth 0). Same partition walk as the PASS family's
     direct kernel; the differences are the second stat plane loaded per
-    point (as the hist_2 kernels load it) and grid z = 1."""
+    point (as the hist_2 kernels load it) and grid z = 1.
+
+    `preq` (DEVIATION 2580): `stats` holds the level's Int32 plane from
+    `hist2_level_quantize_kernel`, so every point reads its two integers
+    instead of dithering and quantizing two floats. `col_map` (DEVIATION
+    2581): the group's compressed-index column is read from
+    `feature_folds[f_count_in + group]`, so one launch can take groups
+    that are not contiguous columns. Both default False, byte for byte."""
+    var qs = rebind[MutPointer[Int32, MutAnyOrigin]](stats)
     var fixed_scale = fixed_scale_ptr.unsafe_load(0)
     var f_count_in = Int(f_count_in32)
     var bins_line_size = Int(bins_line_size_in)
@@ -221,9 +231,10 @@ def hist2_8bit_kernel(
     var feature_offset = (Int(block_idx.x) // max_blocks_per_part) * 4
     var f_count = min(f_count_in - feature_offset, 4)
 
-    var bins_p = bins + Int(cindex_base_in) + bins_line_size * (
-        Int(block_idx.x) // max_blocks_per_part
-    )
+    var column = Int(block_idx.x) // max_blocks_per_part
+    comptime if col_map:
+        column = Int(feature_folds.unsafe_load(f_count_in + column))
+    var bins_p = bins + Int(cindex_base_in) + bins_line_size * column
 
     var local_block_idx = Int(block_idx.x) % max_blocks_per_part
     var active_block_count = min(
@@ -261,26 +272,36 @@ def hist2_8bit_kernel(
     while pe < ALIGN_SIZE:
         if local_block_idx == 0 and pe < head_len:
             var hb = ldg(bins_p + (p_offset + pe))
-            var u = hist2_dither(p_offset + pe)
-            var hq1 = hist2_quantize(
-                ldg(stats + (p_offset + pe)), fixed_scale, u
-            )
-            var hq2 = hist2_quantize(
-                ldg(stats + (stat_line_size + p_offset + pe)),
-                fixed_scale, u,
-            )
-            h8_add_point(hb, hq1, hq2, tid, slice_base, smem)
+            comptime if preq:
+                var pq1 = ldg(qs + (p_offset + pe))
+                var pq2 = ldg(qs + (stat_line_size + p_offset + pe))
+                h8_add_point(hb, pq1, pq2, tid, slice_base, smem)
+            else:
+                var u = hist2_dither(p_offset + pe)
+                var hq1 = hist2_quantize(
+                    ldg(stats + (p_offset + pe)), fixed_scale, u
+                )
+                var hq2 = hist2_quantize(
+                    ldg(stats + (stat_line_size + p_offset + pe)),
+                    fixed_scale, u,
+                )
+                h8_add_point(hb, hq1, hq2, tid, slice_base, smem)
         if local_block_idx == 0 and pe < tail_len:
             var tb = ldg(bins_p + (tail_start + pe))
-            var u = hist2_dither(tail_start + pe)
-            var tq1 = hist2_quantize(
-                ldg(stats + (tail_start + pe)), fixed_scale, u
-            )
-            var tq2 = hist2_quantize(
-                ldg(stats + (stat_line_size + tail_start + pe)),
-                fixed_scale, u,
-            )
-            h8_add_point(tb, tq1, tq2, tid, slice_base, smem)
+            comptime if preq:
+                var pt1 = ldg(qs + (tail_start + pe))
+                var pt2 = ldg(qs + (stat_line_size + tail_start + pe))
+                h8_add_point(tb, pt1, pt2, tid, slice_base, smem)
+            else:
+                var u = hist2_dither(tail_start + pe)
+                var tq1 = hist2_quantize(
+                    ldg(stats + (tail_start + pe)), fixed_scale, u
+                )
+                var tq2 = hist2_quantize(
+                    ldg(stats + (stat_line_size + tail_start + pe)),
+                    fixed_scale, u,
+                )
+                h8_add_point(tb, tq1, tq2, tid, slice_base, smem)
         pe += H8_BLOCK
 
     var aligned_offset = p_offset + head_len
@@ -302,6 +323,8 @@ def hist2_8bit_kernel(
     var b_ptr = bins_p + base
     var s1_ptr = stats + base
     var s2_ptr = stats + (stat_line_size + base)
+    var q1_ptr = qs + base
+    var q2_ptr = qs + (stat_line_size + base)
     var pos_base = base
 
     for it in range(max_iters):
@@ -313,28 +336,43 @@ def hist2_8bit_kernel(
         @parameter
         for k in range(H8_UNROLL):
             if active:
-                var vb = ldg[width=H8_LOAD, alignment=4](
-                    b_ptr + H8_LANE * H8_LOAD * k
-                )
-                var v1 = ldg[width=H8_LOAD, alignment=4](
-                    s1_ptr + H8_LANE * H8_LOAD * k
-                )
-                var v2 = ldg[width=H8_LOAD, alignment=4](
-                    s2_ptr + H8_LANE * H8_LOAD * k
-                )
+                comptime if preq:
+                    var wb = ldg[width=H8_LOAD, alignment=4](
+                        b_ptr + H8_LANE * H8_LOAD * k
+                    )
+                    var w1 = ldg[width=H8_LOAD, alignment=4](
+                        q1_ptr + H8_LANE * H8_LOAD * k
+                    )
+                    var w2 = ldg[width=H8_LOAD, alignment=4](
+                        q2_ptr + H8_LANE * H8_LOAD * k
+                    )
+                    comptime for e in range(H8_LOAD):
+                        lb[k * H8_LOAD + e] = wb[e]
+                        lq1[k * H8_LOAD + e] = w1[e]
+                        lq2[k * H8_LOAD + e] = w2[e]
+                else:
+                    var vb = ldg[width=H8_LOAD, alignment=4](
+                        b_ptr + H8_LANE * H8_LOAD * k
+                    )
+                    var v1 = ldg[width=H8_LOAD, alignment=4](
+                        s1_ptr + H8_LANE * H8_LOAD * k
+                    )
+                    var v2 = ldg[width=H8_LOAD, alignment=4](
+                        s2_ptr + H8_LANE * H8_LOAD * k
+                    )
 
-                @parameter
-                for e in range(H8_LOAD):
-                    var u = hist2_dither(
-                        pos_base + H8_LANE * H8_LOAD * k + e
-                    )
-                    lb[k * H8_LOAD + e] = vb[e]
-                    lq1[k * H8_LOAD + e] = hist2_quantize(
-                        v1[e], fixed_scale, u
-                    )
-                    lq2[k * H8_LOAD + e] = hist2_quantize(
-                        v2[e], fixed_scale, u
-                    )
+                    @parameter
+                    for e in range(H8_LOAD):
+                        var u = hist2_dither(
+                            pos_base + H8_LANE * H8_LOAD * k + e
+                        )
+                        lb[k * H8_LOAD + e] = vb[e]
+                        lq1[k * H8_LOAD + e] = hist2_quantize(
+                            v1[e], fixed_scale, u
+                        )
+                        lq2[k * H8_LOAD + e] = hist2_quantize(
+                            v2[e], fixed_scale, u
+                        )
 
         if active:
 
@@ -344,6 +382,8 @@ def hist2_8bit_kernel(
         b_ptr += stripe_size
         s1_ptr += stripe_size
         s2_ptr += stripe_size
+        q1_ptr += stripe_size
+        q2_ptr += stripe_size
         pos_base += stripe_size
 
     h8_reduce_and_flush(
@@ -354,7 +394,9 @@ def hist2_8bit_kernel(
     )
 
 
-def hist2_8bit_gather_kernel[ridx_stats: Bool = False](
+def hist2_8bit_gather_kernel[
+    ridx_stats: Bool = False, preq: Bool = False, col_map: Bool = False
+](
     feature_folds: MutPointer[UInt32, MutAnyOrigin],
     feature_fold_offset: MutPointer[UInt32, MutAnyOrigin],
     feature_group_offset: MutPointer[UInt32, MutAnyOrigin],
@@ -378,7 +420,15 @@ def hist2_8bit_gather_kernel[ridx_stats: Bool = False](
     """Indexed loads (below the root): bins through `indices`, stats
     contiguous (or gathered through the same index under `ridx_stats`,
     DEVIATION 1902), dither keyed on the storage position -- the same
-    conventions as every gather kernel in this package."""
+    conventions as every gather kernel in this package. `preq` and
+    `col_map` as on the direct kernel; `preq` reads the Int32 plane at the
+    storage POSITION, which is where the level quantize wrote it, so it
+    cannot ride the `ridx_stats` row-id schedule."""
+    comptime assert not (ridx_stats and preq), (
+        "DEVIATION 2580 keys the Int32 plane on storage positions; the"
+        " ridx-only schedule reads stats through row ids"
+    )
+    var qs = rebind[MutPointer[Int32, MutAnyOrigin]](stats)
     var fixed_scale = fixed_scale_ptr.unsafe_load(0)
     var f_count_in = Int(f_count_in32)
     var bins_line_size = Int(bins_line_size_in)
@@ -396,9 +446,10 @@ def hist2_8bit_gather_kernel[ridx_stats: Bool = False](
     var feature_offset = (Int(block_idx.x) // max_blocks_per_part) * 4
     var f_count = min(f_count_in - feature_offset, 4)
 
-    var cindex_p = cindex + Int(cindex_base_in) + bins_line_size * (
-        Int(block_idx.x) // max_blocks_per_part
-    )
+    var column = Int(block_idx.x) // max_blocks_per_part
+    comptime if col_map:
+        column = Int(feature_folds.unsafe_load(f_count_in + column))
+    var cindex_p = cindex + Int(cindex_base_in) + bins_line_size * column
 
     var local_block_idx = Int(block_idx.x) % max_blocks_per_part
     var active_block_count = min(
@@ -434,7 +485,19 @@ def hist2_8bit_gather_kernel[ridx_stats: Bool = False](
 
     var pe = tid
     while pe < ALIGN_SIZE:
-        if local_block_idx == 0 and pe < head_len:
+        if local_block_idx == 0 and pe < head_len and preq:
+            var prow = Int(ldg(indices + (p_offset + pe)))
+            var pb = ldg(cindex_p + prow)
+            var pq1 = ldg(qs + (p_offset + pe))
+            var pq2 = ldg(qs + (stat_line_size + p_offset + pe))
+            h8_add_point(pb, pq1, pq2, tid, slice_base, smem)
+        if local_block_idx == 0 and pe < tail_len and preq:
+            var trow_q = Int(ldg(indices + (tail_start + pe)))
+            var tb_q = ldg(cindex_p + trow_q)
+            var tq1_q = ldg(qs + (tail_start + pe))
+            var tq2_q = ldg(qs + (stat_line_size + tail_start + pe))
+            h8_add_point(tb_q, tq1_q, tq2_q, tid, slice_base, smem)
+        if local_block_idx == 0 and pe < head_len and not preq:
             var hrow = Int(ldg(indices + (p_offset + pe)))
             var hb = ldg(cindex_p + hrow)
             var u = hist2_dither(p_offset + pe)
@@ -455,7 +518,7 @@ def hist2_8bit_gather_kernel[ridx_stats: Bool = False](
             var hq1 = hist2_quantize(hs1, fixed_scale, u)
             var hq2 = hist2_quantize(hs2, fixed_scale, u)
             h8_add_point(hb, hq1, hq2, tid, slice_base, smem)
-        if local_block_idx == 0 and pe < tail_len:
+        if local_block_idx == 0 and pe < tail_len and not preq:
             var trow = Int(ldg(indices + (tail_start + pe)))
             var tb = ldg(cindex_p + trow)
             var u = hist2_dither(tail_start + pe)
@@ -494,6 +557,8 @@ def hist2_8bit_gather_kernel[ridx_stats: Bool = False](
     var i_ptr = indices + base
     var s1_ptr = stats + base
     var s2_ptr = stats + (stat_line_size + base)
+    var q1_ptr = qs + base
+    var q2_ptr = qs + (stat_line_size + base)
     var pos_base = base
 
     for it in range(max_iters):
@@ -504,7 +569,21 @@ def hist2_8bit_gather_kernel[ridx_stats: Bool = False](
 
         @parameter
         for k in range(H8_UNROLL):
-            if active:
+            if active and preq:
+                var wi = ldg[width=H8_LOAD, alignment=4](
+                    i_ptr + H8_LANE * H8_LOAD * k
+                )
+                var w1 = ldg[width=H8_LOAD, alignment=4](
+                    q1_ptr + H8_LANE * H8_LOAD * k
+                )
+                var w2 = ldg[width=H8_LOAD, alignment=4](
+                    q2_ptr + H8_LANE * H8_LOAD * k
+                )
+                comptime for e in range(H8_LOAD):
+                    lb[k * H8_LOAD + e] = ldg(cindex_p + Int(wi[e]))
+                    lq1[k * H8_LOAD + e] = w1[e]
+                    lq2[k * H8_LOAD + e] = w2[e]
+            if active and not preq:
                 var vi = ldg[width=H8_LOAD, alignment=4](
                     i_ptr + H8_LANE * H8_LOAD * k
                 )
@@ -551,6 +630,8 @@ def hist2_8bit_gather_kernel[ridx_stats: Bool = False](
         i_ptr += stripe_size
         s1_ptr += stripe_size
         s2_ptr += stripe_size
+        q1_ptr += stripe_size
+        q2_ptr += stripe_size
         pos_base += stripe_size
 
     h8_reduce_and_flush(

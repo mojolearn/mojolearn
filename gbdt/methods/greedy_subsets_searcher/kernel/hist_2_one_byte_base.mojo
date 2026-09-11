@@ -573,7 +573,10 @@ def hist2_add_to_global_memory[
                 fold += 32
 
 
-def hist2_one_byte_kernel[bits: Int, skip_first: Bool, smem_mode: Int](
+def hist2_one_byte_kernel[
+    bits: Int, skip_first: Bool, smem_mode: Int,
+    preq: Bool = False, col_map: Bool = False,
+](
     # `TFeatureInBlock*`, flattened to four parallel arrays so the kernel
     # takes plain pointers, exactly as the PASS family's kernels do.
     feature_folds: MutPointer[UInt32, MutAnyOrigin],
@@ -634,9 +637,12 @@ def hist2_one_byte_kernel[bits: Int, skip_first: Bool, smem_mode: Int](
 
     # `bins += (binsLineSize * (blockIdx.x / maxBlocksPerPart))` plus the
     # policy's own column base, exactly as the PASS family's kernel notes.
-    var bins_p = bins + Int(cindex_base_in) + bins_line_size * (
-        Int(block_idx.x) // max_blocks_per_part
-    )
+    # DEVIATION 2581 (`col_map`): the group's column rides after the
+    # features in `feature_folds`, so one launch takes non-adjacent groups.
+    var column = Int(block_idx.x) // max_blocks_per_part
+    comptime if col_map:
+        column = Int(feature_folds.unsafe_load(f_count_in + column))
+    var bins_p = bins + Int(cindex_base_in) + bins_line_size * column
 
     comptime MIN_DOCS = hist2_min_docs[smem_mode]()
     var local_block_idx = Int(block_idx.x) % max_blocks_per_part
@@ -652,6 +658,12 @@ def hist2_one_byte_kernel[bits: Int, skip_first: Bool, smem_mode: Int](
     # read at `+ statsLineSize` throughout.
     comptime skip_int = 1 if skip_first else 0
     var stats_p = stats + (skip_int + 2 * Int(block_idx.z)) * stat_line_size
+    # DEVIATION 2580 (`preq`): `stats` is the level's Int32 plane, same
+    # stride, so the pair's integers sit where its floats would.
+    comptime assert not preq or smem_mode == HIST_SMEM_SHARED2_I32, (
+        "a pre-quantized plane feeds only the shared-Int32 accumulator"
+    )
+    var qs_p = rebind[MutPointer[Int32, MutAnyOrigin]](stats_p)
 
     # `TPointHist2OneByteBase`'s constructor, inlined (archive/reference/PORTING.md 10):
     #     for (i = threadIdx.x; i < histSize; i += BlockSize) hist[i] = 0;
@@ -700,7 +712,11 @@ def hist2_one_byte_kernel[bits: Int, skip_first: Bool, smem_mode: Int](
         var hs2 = InlineArray[Float32, 1](fill=Float32(0.0))
         var hq1 = InlineArray[Int32, 1](fill=Int32(0))
         var hq2 = InlineArray[Int32, 1](fill=Int32(0))
-        if local_block_idx == 0 and pe < head_len:
+        if local_block_idx == 0 and pe < head_len and preq:
+            hb[0] = ldg(bins_p + (p_offset + pe))
+            hq1[0] = ldg(qs_p + (p_offset + pe))
+            hq2[0] = ldg(qs_p + (p_offset + pe + stat_line_size))
+        if local_block_idx == 0 and pe < head_len and not preq:
             # `Ldg(bins, idx)`, `Ldg(stats, idx)`,
             # `Ldg(stats, idx + statsLineSize)`
             # (`compute_hist_loop_two_stats.cuh:81-83`).
@@ -722,7 +738,11 @@ def hist2_one_byte_kernel[bits: Int, skip_first: Bool, smem_mode: Int](
         var ts2 = InlineArray[Float32, 1](fill=Float32(0.0))
         var tq1 = InlineArray[Int32, 1](fill=Int32(0))
         var tq2 = InlineArray[Int32, 1](fill=Int32(0))
-        if local_block_idx == 0 and pe < tail_len:
+        if local_block_idx == 0 and pe < tail_len and preq:
+            tb[0] = ldg(bins_p + (tail_start + pe))
+            tq1[0] = ldg(qs_p + (tail_start + pe))
+            tq2[0] = ldg(qs_p + (tail_start + pe + stat_line_size))
+        if local_block_idx == 0 and pe < tail_len and not preq:
             # `Ldg(bins, tailOffset + idx)` and the two stat loads
             # (`compute_hist_loop_two_stats.cuh:100-102`).
             tb[0] = ldg(bins_p + (tail_start + pe))
@@ -770,6 +790,7 @@ def hist2_one_byte_kernel[bits: Int, skip_first: Bool, smem_mode: Int](
 
     var b_ptr = bins_p + base
     var s_ptr = stats_p + base
+    var q_ptr = qs_p + base
     var pos_base = base
 
     for it in range(max_iters):
@@ -794,7 +815,21 @@ def hist2_one_byte_kernel[bits: Int, skip_first: Bool, smem_mode: Int](
         # stride and the same `alignment=4` note as `hist_one_byte.mojo`.
         @parameter
         for k in range(HIST2_UNROLL):
-            if active:
+            if active and preq:
+                var wb = ldg[width=HIST2_LOAD_SIZE, alignment=4](
+                    b_ptr + LANE_WIDTH * HIST2_LOAD_SIZE * k
+                )
+                var wq1 = ldg[width=HIST2_LOAD_SIZE, alignment=4](
+                    q_ptr + LANE_WIDTH * HIST2_LOAD_SIZE * k
+                )
+                var wq2 = ldg[width=HIST2_LOAD_SIZE, alignment=4](
+                    q_ptr + stat_line_size + LANE_WIDTH * HIST2_LOAD_SIZE * k
+                )
+                comptime for e in range(HIST2_LOAD_SIZE):
+                    local_bins[k * HIST2_LOAD_SIZE + e] = wb[e]
+                    local_q1[k * HIST2_LOAD_SIZE + e] = wq1[e]
+                    local_q2[k * HIST2_LOAD_SIZE + e] = wq2[e]
+            elif active:
                 var vb = ldg[width=HIST2_LOAD_SIZE, alignment=4](
                     b_ptr + LANE_WIDTH * HIST2_LOAD_SIZE * k
                 )
@@ -842,6 +877,7 @@ def hist2_one_byte_kernel[bits: Int, skip_first: Bool, smem_mode: Int](
 
         b_ptr += stripe_size
         s_ptr += stripe_size
+        q_ptr += stripe_size
         pos_base += stripe_size
 
     # `hist.Reduce()` then the kernel's own `__syncthreads()`
@@ -874,7 +910,8 @@ def hist2_one_byte_kernel[bits: Int, skip_first: Bool, smem_mode: Int](
 
 
 def hist2_one_byte_gather_kernel[
-    bits: Int, skip_first: Bool, smem_mode: Int, ridx_stats: Bool = False
+    bits: Int, skip_first: Bool, smem_mode: Int, ridx_stats: Bool = False,
+    preq: Bool = False, col_map: Bool = False,
 ](
     feature_folds: MutPointer[UInt32, MutAnyOrigin],
     feature_fold_offset: MutPointer[UInt32, MutAnyOrigin],
@@ -918,9 +955,11 @@ def hist2_one_byte_gather_kernel[
     var feature_offset = (Int(block_idx.x) // max_blocks_per_part) * 4
     var f_count = min(f_count_in - feature_offset, 4)
 
-    var cindex_p = cindex + Int(cindex_base_in) + bins_line_size * (
-        Int(block_idx.x) // max_blocks_per_part
-    )
+    var column = Int(block_idx.x) // max_blocks_per_part
+    comptime if col_map:
+        # DEVIATION 2581, as on the direct kernel.
+        column = Int(feature_folds.unsafe_load(f_count_in + column))
+    var cindex_p = cindex + Int(cindex_base_in) + bins_line_size * column
     var idx_p = indices
 
     comptime MIN_DOCS = hist2_min_docs[smem_mode]()
@@ -934,6 +973,15 @@ def hist2_one_byte_gather_kernel[
 
     comptime skip_int = 1 if skip_first else 0
     var stats_p = stats + (skip_int + 2 * Int(block_idx.z)) * stat_line_size
+    # DEVIATION 2580, as on the direct kernel; the plane is keyed on the
+    # storage position, which the ridx-only schedule does not read.
+    comptime assert not preq or smem_mode == HIST_SMEM_SHARED2_I32, (
+        "a pre-quantized plane feeds only the shared-Int32 accumulator"
+    )
+    comptime assert not (preq and ridx_stats), (
+        "a pre-quantized plane is keyed on positions, not row ids"
+    )
+    var qs_p = rebind[MutPointer[Int32, MutAnyOrigin]](stats_p)
 
     comptime BLOCK = hist2_block_size[smem_mode]()
     comptime SLOTS = hist2_smem_slots[smem_mode]()
@@ -974,7 +1022,11 @@ def hist2_one_byte_gather_kernel[
         var hs2 = InlineArray[Float32, 1](fill=Float32(0.0))
         var hq1 = InlineArray[Int32, 1](fill=Int32(0))
         var hq2 = InlineArray[Int32, 1](fill=Int32(0))
-        if local_block_idx == 0 and pe < head_len:
+        if local_block_idx == 0 and pe < head_len and preq:
+            hb[0] = ldg(cindex_p + Int(ldg(indices + (p_offset + pe))))
+            hq1[0] = ldg(qs_p + (p_offset + pe))
+            hq2[0] = ldg(qs_p + (p_offset + pe + stat_line_size))
+        if local_block_idx == 0 and pe < head_len and not preq:
             # `Ldg(indices, idx)`, `Ldg(cindex, loadIdx)`, both stat loads
             # (`compute_hist_loop_two_stats.cuh:134-137`).
             var hrow = Int(ldg(indices + (p_offset + pe)))
@@ -1005,7 +1057,11 @@ def hist2_one_byte_gather_kernel[
         var ts2 = InlineArray[Float32, 1](fill=Float32(0.0))
         var tq1 = InlineArray[Int32, 1](fill=Int32(0))
         var tq2 = InlineArray[Int32, 1](fill=Int32(0))
-        if local_block_idx == 0 and pe < tail_len:
+        if local_block_idx == 0 and pe < tail_len and preq:
+            tb[0] = ldg(cindex_p + Int(ldg(indices + (tail_start + pe))))
+            tq1[0] = ldg(qs_p + (tail_start + pe))
+            tq2[0] = ldg(qs_p + (tail_start + pe + stat_line_size))
+        if local_block_idx == 0 and pe < tail_len and not preq:
             # (`compute_hist_loop_two_stats.cuh:154-157`)
             var trow = Int(ldg(indices + (tail_start + pe)))
             tb[0] = ldg(cindex_p + trow)
@@ -1056,6 +1112,7 @@ def hist2_one_byte_gather_kernel[
 
     var i_ptr = idx_p + base
     var s_ptr = stats_p + base
+    var q_ptr = qs_p + base
     var pos_base = base
 
     for it in range(max_iters):
@@ -1079,7 +1136,23 @@ def hist2_one_byte_gather_kernel[
         # gathered one at a time, because a gather has no vector form.
         @parameter
         for k in range(HIST2_UNROLL):
-            if active:
+            if active and preq:
+                var wi = ldg[width=HIST2_LOAD_SIZE, alignment=4](
+                    i_ptr + LANE_WIDTH * HIST2_LOAD_SIZE * k
+                )
+                var wq1 = ldg[width=HIST2_LOAD_SIZE, alignment=4](
+                    q_ptr + LANE_WIDTH * HIST2_LOAD_SIZE * k
+                )
+                var wq2 = ldg[width=HIST2_LOAD_SIZE, alignment=4](
+                    q_ptr + stat_line_size + LANE_WIDTH * HIST2_LOAD_SIZE * k
+                )
+                comptime for e in range(HIST2_LOAD_SIZE):
+                    local_bins[k * HIST2_LOAD_SIZE + e] = ldg(
+                        cindex_p + Int(wi[e])
+                    )
+                    local_q1[k * HIST2_LOAD_SIZE + e] = wq1[e]
+                    local_q2[k * HIST2_LOAD_SIZE + e] = wq2[e]
+            elif active:
                 var vi = ldg[width=HIST2_LOAD_SIZE, alignment=4](
                     i_ptr + LANE_WIDTH * HIST2_LOAD_SIZE * k
                 )
@@ -1143,6 +1216,7 @@ def hist2_one_byte_gather_kernel[
 
         i_ptr += stripe_size
         s_ptr += stripe_size
+        q_ptr += stripe_size
         pos_base += stripe_size
 
     hist2_reduce[bits, DT, smem_mode](tid, smem)
