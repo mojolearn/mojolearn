@@ -1,0 +1,21 @@
+FSPEED-NOTE lane=gbdt-symmetric arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); AMD box: an opponent with an AMD GPU path runs on the GPU, one without runs on this box's CPU on all cores (ENGINEERING_RULES.md section 10); the arm name says which
+FSPEED-AB lane=gbdt-symmetric arm=ours use_pointwise_searcher=True (arm ours keeps the estimator default)
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=hip path=/root/mojolearn/python/mojolearn/identical/_mojolearn_gbdt.so
+FSPEED-SCALE stage=before rows=1000000 features=16 input_mib=61.0 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED-WARMUP lane=gbdt-symmetric arm=ours shape=taxi-1000000x16 ms=1048.067
+FSPEED-ORDER lane=gbdt-symmetric round=1 arms=ours,ours-ab
+FSPEED lane=gbdt-symmetric arm=ours shape=taxi-1000000x16 round=1 ms=1049.734 hash=97222a45020a166c
+FSPEED-ORDER lane=gbdt-symmetric round=2 arms=ours,ours-ab
+FSPEED lane=gbdt-symmetric arm=ours shape=taxi-1000000x16 round=2 ms=1028.062 hash=97222a45020a166c
+FSPEED-ORDER lane=gbdt-symmetric round=3 arms=ours,ours-ab
+FSPEED lane=gbdt-symmetric arm=ours shape=taxi-1000000x16 round=3 ms=1028.878 hash=97222a45020a166c
+FSPEED-ORDER lane=gbdt-symmetric round=4 arms=ours,ours-ab
+FSPEED lane=gbdt-symmetric arm=ours shape=taxi-1000000x16 round=4 ms=1023.089 hash=97222a45020a166c
+FSPEED-ORDER lane=gbdt-symmetric round=5 arms=ours,ours-ab
+FSPEED lane=gbdt-symmetric arm=ours shape=taxi-1000000x16 round=5 ms=1036.740 hash=97222a45020a166c
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=logloss value=0.525668
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=auc value=0.619093
+FSPEED-SCALE stage=after rows=1000000 features=16 input_mib=61.0 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.

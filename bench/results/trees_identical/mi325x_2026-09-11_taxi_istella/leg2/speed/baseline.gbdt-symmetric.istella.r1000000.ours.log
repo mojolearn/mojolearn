@@ -1,0 +1,20 @@
+FSPEED-NOTE lane=gbdt-symmetric arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); AMD box: an opponent with an AMD GPU path runs on the GPU, one without runs on this box's CPU on all cores (ENGINEERING_RULES.md section 10); the arm name says which
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=hip path=/root/mojolearn/python/mojolearn/identical/_mojolearn_gbdt.so
+FSPEED-SCALE stage=before rows=1000000 features=220 input_mib=839.2 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED-WARMUP lane=gbdt-symmetric arm=ours shape=istella-1000000x220 ms=1822.965
+FSPEED-ORDER lane=gbdt-symmetric round=1 arms=ours
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=1 ms=1476.794 hash=9ea267d793cf6df6
+FSPEED-ORDER lane=gbdt-symmetric round=2 arms=ours
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=2 ms=1153.908 hash=53086e4a1d4490ef
+FSPEED-ORDER lane=gbdt-symmetric round=3 arms=ours
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=3 ms=1161.817 hash=a37a4b2d38dbc256
+FSPEED-ORDER lane=gbdt-symmetric round=4 arms=ours
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=4 ms=1179.651 hash=f784d003999324e4
+FSPEED-ORDER lane=gbdt-symmetric round=5 arms=ours
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=5 ms=1180.305 hash=8ed1bbbad963cf23
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=logloss value=0.146391
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=auc value=0.963075
+FSPEED-SCALE stage=after rows=1000000 features=220 input_mib=839.2 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.

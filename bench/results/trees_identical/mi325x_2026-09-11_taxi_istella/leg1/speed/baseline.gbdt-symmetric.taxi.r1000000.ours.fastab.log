@@ -1,0 +1,22 @@
+FSPEED-NOTE lane=gbdt-symmetric arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); AMD box: an opponent with an AMD GPU path runs on the GPU, one without runs on this box's CPU on all cores (ENGINEERING_RULES.md section 10); the arm name says which
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=hip path=/root/mojolearn/python/mojolearn/identical/_mojolearn_gbdt.so
+FSPEED-AB lane=gbdt-symmetric arm=ours-ab numeric_mode='fast' (arm ours keeps the estimator default)
+FSPEED-REFUSED lane=gbdt-symmetric arm=ours-ab reason=RuntimeError: mode/vendor mismatch: requested=identical/hip resolved=fast compiled=fast/hip
+FSPEED-SCALE stage=before rows=1000000 features=16 input_mib=61.0 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED-WARMUP lane=gbdt-symmetric arm=ours shape=taxi-1000000x16 ms=786.925
+FSPEED-ORDER lane=gbdt-symmetric round=1 arms=ours
+FSPEED lane=gbdt-symmetric arm=ours shape=taxi-1000000x16 round=1 ms=465.364 hash=6636c8eaadcb87b7
+FSPEED-ORDER lane=gbdt-symmetric round=2 arms=ours
+FSPEED lane=gbdt-symmetric arm=ours shape=taxi-1000000x16 round=2 ms=446.961 hash=b196546e6a349243
+FSPEED-ORDER lane=gbdt-symmetric round=3 arms=ours
+FSPEED lane=gbdt-symmetric arm=ours shape=taxi-1000000x16 round=3 ms=444.005 hash=b4905b31c0764236
+FSPEED-ORDER lane=gbdt-symmetric round=4 arms=ours
+FSPEED lane=gbdt-symmetric arm=ours shape=taxi-1000000x16 round=4 ms=442.069 hash=104963974070a2d7
+FSPEED-ORDER lane=gbdt-symmetric round=5 arms=ours
+FSPEED lane=gbdt-symmetric arm=ours shape=taxi-1000000x16 round=5 ms=439.935 hash=6b5ee6a6237d12f0
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=logloss value=0.529057
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=auc value=0.608657
+FSPEED-SCALE stage=after rows=1000000 features=16 input_mib=61.0 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
