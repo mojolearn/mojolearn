@@ -18,6 +18,12 @@ makes `ksplit` the shipped GEMM plan where the kernel matrix row enables it
 BUILT. Sections 5.6 and 9 describe the trial-only state before that flip and
 are kept as the record.
 
+UPDATE, same day, fourth session. Section 11 holds two follow-ups to the
+flip, SOURCE ONLY. The first is the cause and fix of the M4 crash of the step
+arms check built WITHOUT the trial define. The second is the A/B body
+`tools/gemm_ksplit_classical_leg.sh`, which times the classical GEMM callers
+under the new default against `tuned128`.
+
 Arithmetic boundary is the one of
 [HANDOFF_speed_gemm_2026-09-10.md](HANDOFF_speed_gemm_2026-09-10.md) and
 [BRIEF_gemm_step_2026-09-11.md](BRIEF_gemm_step_2026-09-11.md) section 5.
@@ -1063,3 +1069,348 @@ needs its own leg before it ships.
 - **Lease.** The NVIDIA confirmation prices four arms with CONTROL lines and
   probes one LM arm plus the brackets on two corpora, with timing probes.
   The Pile GitHub fetch alone took 426 s on an earlier leg.
+
+## 11. Follow-ups to the flip: the no-trial check crash and the classical caller A/B
+
+September 11, 2026, fourth session, worktree branch `lane/ksplit-followups`
+off the 2595 merge (f3705577). SOURCE ONLY. Nothing in this section was
+built, compiled, parsed or run, on the Mac or on a GPU. No kernel's
+arithmetic and no kernel matrix value changed. No new DEVIATION number is
+taken; both jobs follow DEVIATION 2595.
+
+### 11.1 Job 1, the step arms check built without the trial define crashed on the M4
+
+**The reading (orchestrator, Apple M4).** The build was
+`pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . gemm/checks/gemm_step_arms_check.mojo`
+(no trial define), run with `MOJOLEARN_GEMM_STEP_CHECK_LM=0 MOJOLEARN_GEMM_STEP_CHECK_FLOPS=50000000`.
+It printed the host fold check, the RULE table,
+`check_group_rule_hand_counts: 0 failures` and the selector line, then
+segfaulted inside Metal (IOGPU frames) in `check_ragged_controls`. Under
+`MTL_DEBUG_LAYER=1 MTL_SHADER_VALIDATION=1` the same run raised
+`Failed to create compute pipeline state (GPU machine code generation): Compilation failed due to an interrupted connection: XPC_ERROR_CONNECTION_INTERRUPT`.
+The trial build passed (reach 102/102). The same no-trial gate at 3612e17d
+printed its expected FAIL lines.
+
+**The cause, a hypothesis from source, not yet confirmed by a run.** It is
+not a comptime parameter that goes degenerate without the define.
+`GEMM_KSPLIT_S` and `GEMM_KSPLIT_DEFAULT_S` read the same rows on both
+builds, and every kernel specialization the no-trial build references, the
+trial build references too. What changed is WHICH kernel the no-trial ragged
+part launches, and INTO WHICH WORKSPACE.
+
+- 2595 changed the non-trial fallback of
+  `identical_gemm_step_geometry_into` (every arm geometry but `tuned128`)
+  and of `identical_gemm_step_ksplit_into`. Before, it was
+  `identical_gemm_with_plan(..., PLAN_TUNED_128_8X8)`. After, it is
+  `identical_gemm_shipped_into`, which on the Apple column (row 0) compiles
+  to `identical_gemm_with_plan(..., choose_gemm_plan(m, n, k))`.
+- `_ragged_case` sizes `dw` as the larger of FLAT's and the old 128x128
+  plan's workspace. Both are 0, so `dw` holds ONE float (4 bytes).
+- At a ragged output with `P >= 4` whose `m n P` fits 64 M floats,
+  `choose_gemm_plan` answers a SPLIT plan. `_launch_split` then writes
+  `m n P` partials into `dw` and folds them out of it. Under the M4's 50 M
+  flop budget the ragged part reaches these shapes, each on all three ops:
+
+| shape | P | plan | leaf kernel, then fold | floats written into the 1-float `dw` |
+|---|---:|---|---|---:|
+| 1x3x1000 | 8 | PLAN_SPLIT_16_1X1 | `identical_gemm_tuned_kernel[1, 1, 16, 32, 1, PAGES, True]`, `identical_gemm_fold_kernel[True]` | 24 |
+| 1x3x2049 | 17 | PLAN_SPLIT_16_1X1 | same | 51 |
+| 1x3x50257 | 393 | PLAN_SPLIT_16_1X1 | same | 1,179 |
+| 33x70x1000 | 8 | PLAN_SPLIT_32_2X2 | `identical_gemm_tuned_kernel[2, 2, 16, 32, 1, PAGES, True]`, `identical_gemm_fold_kernel[True]` | 18,480 |
+| 33x70x2049 | 17 | PLAN_SPLIT_32_2X2 | same | 39,270 |
+| 129x257x1000 (ordinary and subnormal) | 8 | PLAN_SPLIT_64_4X4 | `identical_gemm_tuned_kernel[4, 4, 16, 32, 1, PAGES, True]`, `identical_gemm_fold_stack_kernel` | 265,224 |
+| 300x129x1000 | 8 | PLAN_SPLIT_64_4X4 | same | 309,600 |
+
+  Every such case launches the plan 26 times (8 arm geometries and 5 group
+  sizes, clean and "sabotaged"). A GPU write of up to 1.2 MB past a 4-byte
+  buffer corrupts neighboring GPU-mapped allocations, and a segfault inside
+  IOGPU frames fits that.
+- The first such launch in the process is 1x3x1000 NN under `lfold`. It is
+  also the first pipeline creation of
+  `identical_gemm_tuned_kernel[1, 1, 16, 32, 1, PAGES, True]` in the run.
+  The XPC error under shader validation is consistent with the validation
+  layer's instrumented compile failing at that first new pipeline. It is not
+  evidence that Metal cannot build the kernel: the shipped device check
+  launches the SPLIT plans on the M4 with a correctly sized workspace.
+- The trial build never launches `choose_gemm_plan`'s plan in the ragged
+  part. It launches the arm kernels (no workspace), the old plan and FLAT by
+  name, and the ksplit body (which allocates its own workspace). At 3612e17d
+  the no-trial fallback was the old plan by name, with workspace 0, so the
+  same run only failed on reach.
+
+**The fix** (`gemm/checks/gemm_step_arms_check.mojo`, the check only). A
+build without the trial define now launches nothing it cannot reach.
+
+- `_ragged_case` launches no arm geometry but `tuned128` (PLAN_TUNED_128_8X8
+  on every build), and no explicit group size. The references (the old plan
+  and FLAT) and `tuned128` still run on every case.
+  `check_ragged_controls` fails each of the 8 arm geometries and 5 group
+  sizes ONCE, by name, and prints their REACH lines as `0/N cases NOT LAUNCHED`.
+- `check_default_dispatch` runs the shipped body CLEAN at every row
+  (column row, 0 and 132) and the entry clean, both through
+  `identical_gemm_shipped_into` and through `identical_gemm_into`. All must
+  store the old plan's bits. No sabotage runs: a clean run that moves nothing
+  proves no reach. Each row and the entry fail once for the unproven reach.
+- `check_lm_calls` runs the shipped entry clean once per call and fails each
+  selected arm once.
+- `_trial_hint()` still starts with "this build lacks -D MOJOLEARN_GEMM_ARM_TRIAL=1".
+- The trial build's launches, lines and verdict are unchanged.
+- `gemm/checks/gemm_identical.mojo` changes in docstrings only. They record
+  that the non-trial fallbacks of `identical_gemm_step_geometry_into` and
+  `identical_gemm_step_ksplit_into` read `ws`, so a caller must size it with
+  `identical_gemm_workspace_max_floats`. The price harness already does.
+
+**Expected no-trial output** (M4, `MOJOLEARN_GEMM_STEP_CHECK_LM=0`, `MOJOLEARN_GEMM_STEP_CHECK_FLOPS=50000000`):
+
+- the host checks pass as before (0 disagree, 0 failures);
+- the selector line, and one selector failure naming the define;
+- `REACH ragged [<geometry>] 0/102 cases NOT LAUNCHED (no trial define: the arm kernel is not compiled)`
+  for lfold, half, half_ks16, quarter, the two head geometries, ksplit and
+  ksplit_leaf. The library's geometry name still ends in "(NOT RUN: ... the
+  shipped default ran)"; in this check nothing ran for them;
+- `REACH ragged [tuned128 (the OLD shipped plan, forced) ...] 102/102`;
+- `REACH ragged [ksplit group=N] 0/102 cases NOT LAUNCHED` for N in 1, 2, 4,
+  16 and 64;
+- `ragged controls: 102 cases x 9 geometries and 5 explicit group sizes, 8 (m n k) over the 50000000 budget skipped, 13 failures`;
+- 18 `DEFAULT ... sabotage=NOT RUN (no trial define) ... CLEAN OK` lines per
+  row, and `REACH default [row=0 (this column's row)] 18/18 clean launches stored the old plan's bits; reach NOT PROVEN (no trial define)`.
+  The ksplit body took 0 of the cases at row 0 (both lines) and 12 at row 132;
+- `REACH default [shipped entry, column row=0] 18/18 clean calls stored the old plan's bits; reach NOT PROVEN (no trial define); ksplit took 0 of them`;
+- `default dispatch: 18 cases x 3 rows and the shipped entry, 2 (m n k) over the budget skipped, column row=0 [...], 4 failures`;
+- 18 FAIL lines, then the raise `gemm_step_arms_check: 18 failures`: 1
+  selector, 13 ragged and 4 default. No segfault.
+
+### 11.2 Job 2, the classical GEMM caller A/B
+
+ENGINEERING_RULES section 9: a shared kernel's flip must hold for every lane
+it reaches. On NVIDIA the ksplit default reaches every classical estimator
+that calls `identical_gemm_into`.
+
+**When the default can take a call** (`gemm_step_ksplit_rule` at `S = 132`).
+Four conditions must all hold:
+
+- `choose_gemm_plan` answers TUNED 128x128. That needs `m >= 128`,
+  `n >= 128`, at least 131,072 output cells, and no SPLITK base.
+- `P >= 2`, that is `k >= 129`.
+- At least two groups fit the 64 M float workspace.
+- Fewer than 132 tiles (`ceil(m/128) ceil(n/128)`), which bounds the output
+  near 2.1 M cells.
+
+**The classical call sites, read from source** (IDENTICAL on NVIDIA and AMD):
+
+| family | call site | GEMM (op, m x n x k) | default takes it? |
+|---|---|---|---|
+| OLS (`LinearRegression`) | `glm/estimator.mojo::ols_fit_host` -> `lstsq_eig` -> `core/gemm.mojo::gemm_tn` -> `gemm_tn_identical_v1` | TN d x d x rows | no: d x d is 121 cells (taxi) or 48,400 (Istella-S), under the 128 K floor, for any d up to 362 |
+| PCA (`covariance_eigh`) and tSVD | `decomposition/estimator.mojo::pca_fit_host` -> `pca_fit` -> `gemm_tn` | TN d x d x rows | no, same shape |
+| GP posterior mean | `gaussian_process/estimator.mojo` | TN n_star x 1 x n_train | no: n = 1 |
+| Cholesky trailing update (GP fit, Cholesky, KRR fit) | `cholesky/checks/potrf.mojo` | NT n_trail x n_trail x 32 | no: k = `CHOL_NB_PINNED` = 32, so P = 1 |
+| GP Gram and cross covariance | `gaussian_process/checks/kernels.mojo` | elementwise kernels, no GEMM | not reached |
+| kernel matrices (SVC kernel rows, KRR and kernel PCA) | `svm/impl/distance/kernel_matrices.mojo::kernel_op` | NT m x n x d | YES where d >= 129, both sides >= 128, at least 131,072 cells and under 132 tiles |
+| GMM E-step | `mixture/checks/estep.mojo` | NN rows x d x d | YES at d >= 129 (at d = 220, per-call rows up to 8,320) |
+| GMM M-step | `mixture/checks/mstep.mojo` | TN ncomp x d x n, TN d x d x n | no below d = 363 |
+| Nystroem | `kernel_methods/estimator.mojo` (697, 851) | NT q x q x q; rows x q x q | YES at q from 363 to 1,408 (the first); q >= 129 with rows under the tile bound (the second) |
+| RBFSampler transform | `kernel_methods/estimator.mojo` (1017) | NN rows x D x d | YES at d >= 129, D >= 128, rows under the tile bound |
+| KRR predict | `kernel_methods/estimator.mojo` (368) | NN n_query x t x n | only with t >= 128 targets |
+| spectral Lanczos | `spectral/.../lanczos.mojo` | k x n x ncv, n x 1 x ... | no: m is the component count or n = 1 |
+| kNN, k-means, KDE, QN GLMs | `core/gemm.mojo::gemm_nt` | the pinned NT kernel, NOT `identical_gemm_into` (unless `-D MOJOLEARN_537_GEMM_IDENT_SWAP`) | not reached |
+| public linalg GEMM | `gemm/host_entry.mojo` -> `identical_gemm` | any user shape | wherever the rule takes it |
+
+Section 9 declares classical shapes only for kNN (400,000 index rows, 4,000
+queries) and for k-means, OLS and PCA (4,000,000 rows). kNN and k-means do
+not reach the entry. So OLS and PCA are the only classical callers that
+reach `identical_gemm_into` at a section 9 shape, and GP (no declared shape)
+completes the set asked for. **At those shapes the rule declines every GEMM
+the three issue, on both datasets.** Both arms therefore run the same
+launches, and the A/B is expected to read a ratio of 1 within noise with
+equal bits. The leg measures that instead of assuming it, and `dispatch.txt`
+records the Mojo dispatch's own answer per caller shape.
+
+The families the default CAN take are the kernel matrices, the GMM E-step,
+Nystroem, RBFSampler and the public linalg GEMM. None of them has a section 9
+shape yet, so their A/B is OWED and needs a declared shape first (a lane
+decision, not this brief's).
+
+**The entry points.** `bench/speed/classical_speed_main.mojo` is the
+classical lanes' timing driver. It times `ols` and `pca` on a splitmix64
+generator (4,000,000 x 32) and `gp` on the 12 x 3 correctness fixture, and
+none of its lanes reads taxi or Istella-S. The only real-data classical
+harness in the tree is the kNN gate, which runs through a public estimator of
+a trial binding. The new driver `tools/gemm_ksplit_classical_ab.py` follows
+that gate's pattern:
+
+- It runs the public `LinearRegression`, `PCA(n_components=8, svd_solver="covariance_eigh")`
+  and `GaussianProcessRegressor(kernel=RBF(sqrt(d)), alpha=0.1)` of IDENTICAL
+  bindings built with `-D MOJOLEARN_GEMM_ARM_TRIAL=1`.
+- It prints the FSPEED format of the classical driver and
+  `tools/speed_cuml_arm.py`, so `tools/flip_verdict.py` reads its logs as
+  they are.
+- It loads data through `tools/speed_gbdt_arm.py::load_taxi` and
+  `load_istella` (`regression=True`). Taxi takes its 11 `TAXI_NUMERIC`
+  columns and the fare target. Istella-S takes its 220 features and the
+  grade.
+- OLS and PCA take the first 4,000,000 train rows. Istella-S's train split
+  holds 2,043,304, so it takes them all.
+- GP takes 4,000 train rows (a declared rung of the GP ladder) and 1,000 test
+  rows.
+- Quality is RMSE (OLS, GP) and reconstruction MSE (PCA) on the harness's
+  test rows, outside the timed region.
+- `--prep standardize` (the default) applies the training rows' float64
+  column mean and deviation to both splits. It is the same bytes for both
+  arms, and it is needed: raw Istella-S float32-max sentinels overflow a
+  float32 Gram.
+
+Around the driver:
+
+- `bindings/build_estimators.sh` and `bindings/build_gp.sh` gained the
+  `MOJOLEARN_BUILD_EXTRA_DEFINES` hook of `bindings/build.sh`. It is an
+  empty expansion when unset.
+- `bench/gemm_step_price_main.mojo`'s label mode gained one host-only
+  DISPATCH line per caller shape (`MOJOLEARN_GEMM_STEP_LABEL_M`, `_N`, `_K`,
+  `_CALLER`).
+
+**The record and the verdict.**
+
+- Each timed process is one lane, one dataset, one arm and one block:
+  `<lane>.<dataset>.<tuned128|default>.<block>.log`.
+- Each log carries `FSPEED-HEADER`, then `FSPEED-NOTE gemm_arm=... gemm_plan=<PLANLABEL>`
+  (which plan ran), `FSPEED-GEMM` (the caller's GEMM shapes), one warm-up and
+  3 rounds, and `FSPEED-ACC`.
+- `hash` is FNV-1a64 over the outputs.
+- Blocks run ABBA, 2 per arm.
+- `verdict` runs `tools/flip_verdict.py` per caller, with the `tuned128`
+  logs as BEFORE and the default logs as AFTER. FLIP there means the default
+  is faster.
+- Then it prints `caller=<lane> verdict=...`. A caller REGRESSES when the
+  geometric mean of its two default/tuned128 median ratios exceeds 1 plus the
+  measured noise. The noise is the largest block-to-block spread of either
+  arm's block medians on either dataset. A caller also REGRESSES when
+  flip_verdict marks a quality metric WORSE. Otherwise it HOLDS.
+- A caller whose output hashes differ across arms or blocks is an
+  IDENTITY-BREAK. A missing dataset is UNMEASURED.
+
+**How a regressing caller would be fenced out, never with a vendor branch.**
+Nothing is fenced without the measurement. There are two ways.
+
+1. **A caller flag.** Add a comptime `allow_ksplit: Bool = True` parameter
+   to `identical_gemm_into`, the `allow_vendor` pattern, and thread it to
+   `identical_gemm_shipped_into`. There `comptime if GEMM_KSPLIT_DEFAULT_ON and allow_ksplit`
+   keeps the default and anything else compiles the old line. The regressing
+   caller's call site passes `False`. This fences one caller on every column.
+2. **A shape bound in the rule.** Add a bound the measurement names (for
+   example a minimum `k`, or a maximum output cells to tiles ratio) to
+   `gemm_step_ksplit_rule`, and so to `gemm_default_ksplit_leaves_at`. This
+   fences every caller at that shape on every column, and
+   `check_group_rule_hand_counts` must still give the section 4 hand counts
+   at the LM calls.
+
+Both are execution plan (contract 6.1) and move no bit.
+
+### 11.3 RUN OWED, M4, light, run by the orchestrator one at a time
+
+0. **Optional, the discriminator for 11.1's hypothesis**, on a no-trial
+   binary built at f3705577 (before this fix). With
+   `MOJOLEARN_GEMM_STEP_CHECK_LM=0 MOJOLEARN_GEMM_STEP_CHECK_FLOPS=2000` the
+   ragged part reaches only 1x3 at k up to 300, all FLAT and no SPLIT plan.
+   Expect no crash; the check still fails, and the default part reports that
+   no case ran. With `MOJOLEARN_GEMM_STEP_CHECK_FLOPS=3000000` it reaches
+   33x70x1000, where PLAN_SPLIT_32_2X2 writes 18,480 floats into the 1-float
+   `dw`. Expect the crash. If the 2000 run also crashes, the hypothesis is
+   wrong.
+1. **The same check without the trial define, at this commit**:
+   `pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . gemm/checks/gemm_step_arms_check.mojo -o /tmp/gemm-step-check-notrial`
+   then
+   `MOJOLEARN_GEMM_STEP_CHECK_LM=0 MOJOLEARN_GEMM_STEP_CHECK_FLOPS=50000000 /tmp/gemm-step-check-notrial`.
+   Expect the 11.1 lines, no segfault, and a nonzero exit with
+   `gemm_step_arms_check: 18 failures`.
+2. **The trial check**:
+   `pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_GEMM_ARM_TRIAL=1 -I . gemm/checks/gemm_step_arms_check.mojo -o /tmp/gemm-step-check`
+   then
+   `MOJOLEARN_GEMM_STEP_CHECK_LM=0 MOJOLEARN_GEMM_STEP_CHECK_FLOPS=50000000 /tmp/gemm-step-check`.
+   Expect PASS, unchanged from 10.7 item 2 (every ragged REACH at 102/102,
+   the default rows at 18/18).
+3. **The shipped device gates**:
+   `pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . gemm/checks/gemm_device_check.mojo -o /tmp/gemm-device-check && /tmp/gemm-device-check`.
+   Expect 10.7 item 1 unchanged (gemm_identical.mojo changed in docstrings only).
+4. **The price harness, build and host label mode** (no device work):
+   `pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_GEMM_ARM_TRIAL=1 -I . bench/gemm_step_price_main.mojo -o /tmp/gemm-step-price`
+   then
+   `MOJOLEARN_GEMM_STEP_LABEL_ONLY=1 MOJOLEARN_GEMM_ARM=tuned128 MOJOLEARN_GEMM_STEP_LABEL_CALLER=ols.gram.istella.TN MOJOLEARN_GEMM_STEP_LABEL_M=220 MOJOLEARN_GEMM_STEP_LABEL_N=220 MOJOLEARN_GEMM_STEP_LABEL_K=2043304 /tmp/gemm-step-price`.
+   Expect the DEFAULT and PLANLABEL lines, then
+   `DISPATCH caller=ols.gram.istella.TN m=220 n=220 k=2043304 arm=tuned128 ksplit_default_takes=no default_leaves_per_group=0 choose_plan=[TILE 16x16 ...] shipped_plan=[...] arm_geometry=[shipped ...]`,
+   then `LABEL ONLY`.
+5. **The Apple card the leg compares against**, at this commit:
+   `tools/gemm_card.sh device /tmp/gemm-ksplit-classical-apple.card`.
+
+The leg body is POSIX sh that nobody has parsed.
+`tools/gemm_remote_leg.sh` runs `sh -n` on it before it ships it, so a syntax
+error stops the leg before any rental.
+
+### 11.4 The H100 leg for job 2
+
+RunPod passes no extra environment to the body, so the defaults of
+`tools/gemm_ksplit_classical_leg.sh` are this leg. Run it from a
+`git worktree add --detach` checkout of the merge commit that carries this
+section, after 11.3 is green.
+
+```sh
+MOJOLEARN_RUNPOD_KEY_FILE=$HOME/.mojolearn_runpod_key MOJOLEARN_GPU_ARCHS=sm_90a \
+MOJOLEARN_GEMM_LEG_EXTRA=tools/gemm_ksplit_classical_leg.sh \
+MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/$(date -u +%Y-%m-%d_%H%M%S)-nvidia-h100-gemm-ksplit-classical \
+sh tools/gemm_remote_leg.sh nvidia --payload gemm --rent --minutes 60 \
+    --gpu "NVIDIA H100 80GB HBM3" --local-card /tmp/gemm-ksplit-classical-apple.card
+```
+
+Read back from `<leg out>/remote/ksplit-classical/`:
+
+- `status.tsv`: every build, the two downloads (or `cached`), `smoke`, the
+  24 timed items (3 lanes x 2 datasets x 2 arms x 2 blocks), `dispatch` and
+  `verdicts`.
+- `plans.tsv` and `gate.txt`: `shipped` labeled
+  `shipped: default=ksplit(S=132) else tuned128`, and `tuned128` labeled the
+  old plan.
+- `dispatch.txt`: one DISPATCH line per caller shape per arm. Section 11.2
+  predicts `ksplit_default_takes=no` for every line (ols.gram and pca.cov at
+  11x11x4000000 and 220x220x2043304, gp.mean at 1000x1x4000,
+  gp.chol_trailing at 3968x3968x32). Any `yes` means the default does reach
+  the caller, and the verdict is then the measurement that matters.
+- `verdicts.log`: flip_verdict's block per caller, then
+  `caller=gp|ols|pca verdict=...` and `CLASSICAL KSPLIT A/B gp=... ols=... pca=...`.
+  The expected reading is HOLDS for all three, with witnesses equal and ratios
+  near 1.
+
+### 11.5 Risks only a build or a box can settle
+
+- **Never compiled or run.** The risky spots are these.
+  - A comptime Bool in a runtime `if not GEMM_ARM_TRIAL` with `continue`
+    inside loops, in three check functions.
+  - The price harness's DISPATCH block.
+  - The Python driver: `numpy.asarray` on mojolearn Arrays,
+    `GaussianProcessRegressor` accepting `alpha=0.1`, and `fit` returning the
+    estimator.
+  - The sh body.
+- **The crash cause is a hypothesis.** 11.3 item 0 separates it from a Metal
+  compiler fault. If the fix still crashes, the next suspect is the row-132
+  clean ksplit launch in `check_default_dispatch`, which the trial build also
+  runs.
+- **Lease.** The cap is 60 minutes (`MINUTES_CAP`). On the 15:28 H100 leg
+  the price harness built in 38 s and the base binding in 66 s.
+  - The Istella-S download (472 MB plus a decode of minutes) runs in the
+    background during the builds.
+  - The Istella-S OLS and PCA Grams (220x220x2,043,304, about 99 GFLOP on the
+    TILE 16x16 plan) dominate the timing, 16 fits each with warm-ups. Their
+    identical throughput at that shape is unmeasured.
+  - Taxi runs first for every lane and GP first in each dataset, so a lease
+    kill leaves Istella-S's OLS and PCA UNMEASURED rather than the whole leg.
+  - The knobs are `MOJOLEARN_CLASSICAL_AB_ROUNDS`, `_BLOCKS` and `_ROWS`, but
+    RunPod cannot pass them. Narrowing means editing the defaults in the
+    checkout the leg ships.
+- **pip in the pixi environment.** numpy and pyarrow are installed with
+  `pixi run python -m pip`, as `tools/gemm_step_leg.sh` does for numpy. A
+  failure shows in `numpy.log`, `pyarrow.log` and a red `download-taxi` row.
+- **Standardization is a prep choice.** It is the same bytes for both arms
+  and moves no GEMM shape. With `--prep raw` the Istella-S sentinels make
+  float32 Grams overflow, and flip_verdict refuses a non-finite quality.
+- **What the verdict can and cannot say.** At these shapes both arms run the
+  same launches. A HOLDS here says the default costs these callers nothing;
+  it does not price ksplit on classical work. That price is owed on the
+  families 11.2 names, once they have section 9 shapes.
