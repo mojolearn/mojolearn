@@ -48,6 +48,46 @@ helper implemented from a guess.
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.math import ceil, log2
 
+from checks.kernel_matrix import (
+    TARGET_COLUMN,
+    pointwise_private_doc_slots_sm_for,
+)
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+
+
+#: DEVIATION 2670 (opt-in): the ordered tiers split the pointwise document
+#: axis at a PINNED multiplier and every document block stores into its own
+#: scratch slot. False on main; see `pw_block_multiplier` in
+#: `gbdt/methods/pointwise_kernels.mojo`.
+comptime PW_PRIVATE_DOC_SLOTS = (
+    pointwise_private_doc_slots_sm_for[
+        TARGET_COLUMN, GLOBAL_NUMERIC_MODE != NUMERIC_FAST
+    ]()
+    != 0
+)
+
+
+@always_inline
+def pw_private_doc_slot[
+    full_pass: Bool
+](at: Int, doc_block: Int, total_feature_count: Int) -> Int:
+    """DEVIATION 2670: where document block `doc_block` files the cell a
+    writeback would have put at `binSums[at]`.
+
+    One slot is the launch's whole `binSums` window: `gridDim.y * gridDim.z`
+    histogram parts of `2 * totalFeatureCount` floats. On a full pass the
+    window starts at part 0; on a partial pass the drivers write only the
+    RIGHT children, whose histogram offsets are `(gridDim.y | blockIdx.y) *
+    gridDim.z + blockIdx.z` with `gridDim.y` a power of two above every
+    `blockIdx.y`, so the window starts one slot in. Slot `b` is
+    `scratch[b * stride ..]`; `pw_fold_doc_slots_kernel` adds slots 0..M-1
+    onto `binSums` in that order.
+    """
+    var stride = Int(grid_dim.y) * Int(grid_dim.z) * 2 * total_feature_count
+    comptime if full_pass:
+        return at + doc_block * stride
+    return at - stride + doc_block * stride
+
 
 # ---------------------------------------------------------------------------
 # `ELoadType` (`:281-285`)

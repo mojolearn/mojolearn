@@ -642,6 +642,14 @@ check-fit-pointwise = "mojo run -I . checks/fit_pointwise_check.mojo"
 # writeback). Sabotage: pointwise_doc_split_for True fails G1 and G2. A GPU.
 check-pointwise-identical-multiplier = "mojo run -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 checks/pointwise_identical_multiplier_check.mojo"
 
+# DEVIATION 2670 (opt-in, not flipped): the same gate with private document
+# slots on. G1 asserts the multiplier is independent of sm_count and splits
+# somewhere; G2 is then the launch-geometry identity of the slot fold. Pair it
+# with `check-pointwise-dispatch-2670` (integer stats against a host tally),
+# which is what sees a slot filed at the wrong address. A GPU.
+check-pointwise-identical-multiplier-2670 = "mojo run -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_2670_PW_PRIVATE_DOC_SLOTS=1 checks/pointwise_identical_multiplier_check.mojo"
+check-pointwise-dispatch-2670 = "mojo run -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_2670_PW_PRIVATE_DOC_SLOTS=1 checks/pointwise_dispatch_check.mojo"
+
 # The two measurements archive/reference/PORTING.md 98a and 106 said were a measurement's job.
 # Both interleave their arms and report the MIN of each, because another
 # session runs GPU work on this box and a sequential A-then-B measurement
