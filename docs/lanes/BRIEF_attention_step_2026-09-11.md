@@ -607,3 +607,158 @@ shape only: 3.77 s to 2.79 s per step, not a claim).
 Not a claim against anyone: the torch step at the target shape is an
 OWED opponent row (bench/OPPONENT_REFERENCE.md); until it exists these
 are internal before and after numbers.
+
+## 11. Second round, WIP (2026-09-11, wound down by Andrew before any code): the AMD reading and DEVIATIONS 2528, 2530, 2531, 2533
+
+STATUS: reading and design only. NOTHING BELOW IS BUILT. No kernel, check
+case, harness change or leg exists for this section. The deciding speed
+column moved to AMD (Instinct MI325X, DigitalOcean, HIP gfx942) during the
+lane; NVIDIA is the confirmation column.
+
+### 11.1 How the fused attention sizes blocks on AMD today (from the source)
+
+- `fused_attention.mojo` reads two column rows only:
+  `lib_hardware_ftz_fma_for` (NVIDIA only) and `lib_smem_page_fits_for`.
+  Every block is `FUSED_THREADS = 256` threads on every column, and every
+  grid is the same as on the H100. On AMD `_step` is the software seam
+  `ftz(fma(ftz(a), ftz(b), acc))` (`std.math.fma`, then three bit-test
+  flushes). `_step_preflushed` drops the two operand flushes.
+- `column_shared_limit(AMD)` is 64 KB, so every page fits. The hardware
+  matrix marks AMD shared memory as statically partitioned per CU
+  (`smem_statically_partitioned_for`, `smem_per_core_for` 64 KB), with 2048
+  thread slots per CU and a 64-lane wavefront. Resident blocks per CU are
+  therefore `min(2048 // 256 = 8, 65536 // page_bytes)`. The page, not the
+  thread count, is the divisor for every shipped attention kernel. The
+  rows are UNVALIDATED transcriptions pinned to the MI250X (110 CUs), and
+  the MI325X count is not in the repository.
+- Shipped default pages and resident blocks per CU on AMD: forward sstash
+  17,152 B, 3 (grid 384); zdot_stash 17,696 B, 3 (grid 6,144); dq_tiled
+  8,448 B, 7 (grid 384); dkdv_tiled 16,384 B, 4 (grid 384). On the H100
+  (164 KB per SM) the same pages allow 9 or more, so the H100 reading
+  (latency and registers bound, grid under three blocks per SM) does not
+  transfer. On AMD, page bytes are a first-order occupancy term.
+- Consequence for geometry: any page-size choice that differs by vendor
+  must be a kernel-matrix SCHEDULING row (for example
+  `attn_zdot_rows_per_block_for[column]`, `attn_fwd_rows_per_block_for[column]`),
+  never an inline branch.
+
+### 11.2 Order of attack on AMD
+
+0. FIRST: price `stash_tiled` against `baseline` on AMD on both corpora
+   (the flip was H100 evidence only). The existing leg body
+   `tools/attention_step_leg.sh` is NVIDIA-shaped (nvidia-smi, the
+   driver/ptxas block); a vendor-agnostic body is owed.
+1. DEVIATION 2528 (zdot tiled), with an AMD-sized page.
+2. DEVIATION 2531 (forward grid, 32 rows per block): on AMD it also shrinks
+   the page (12,736 B, 5 blocks per CU, grid 768).
+3. DEVIATION 2533 (preflushed seams in the tiled folds, the forward
+   context chain and the new zdot): fewer instructions per term on every
+   column.
+4. DEVIATION 2530 (forward Q residency) only at 32 rows: at 64 rows its
+   page is 27,904 B, which drops AMD from 3 resident blocks to 2.
+5. DEVIATION 2532 is not buildable inside this lane's files (below).
+
+### 11.3 DEVIATION 2528, zdot as a register-blocked y/dy kernel plus a row z fold
+
+Design. Kernel A (`ydy_tiled`): block = 64 query rows of one (batch, head);
+thread `(tr, tc)` holds rows `tr + 16u` (u < 4) and keys `tc + 16v` (v < 4)
+of a 64-key block iteration, so 16 y dot chains and 16 dy dot chains per
+thread. Per 16-wide p window it stages Q, dctx (64 rows each), K and V (64
+keys each), flushed, stride KS + 4 as the forward pads, then 16 p-steps of
+`_step_preflushed`. After the window loop, per visible cell it computes
+`masked`, `e` and `y` with the row's `ftz(amax)` and `ftz(denom)` (loaded once
+per thread into registers) and stores `y` and `ftz(dy)` to the stash. No
+shared tile is needed for z. Kernel B (`zfold`): one row per thread, 256 rows
+per block, no shared memory, no barrier. `z = _step(dy_st[j], y_st[j], z)`
+runs over the row's visible keys ascending from `+0.0`, then `ftz`, the
+corner test (`-0.0` with `hi < s - 1`) and the zdot store. dq_tiled and
+dkdv_tiled follow unchanged.
+
+Identity argument. Each `y[t, j]` and `dy[t, j]` is the same 64-term chain
+over p ascending from `+0.0` on the same flushed operands (`_step_preflushed`
+on `ftz`-staged values equals `_step`, since `ftz` is idempotent), followed by
+the shipped pmul, mask add, exp against `ftz(amax[row])` and division by
+`ftz(denom[row])`. Only the thread holding the chain and the staging page
+change. The z chain is the shipped chain, the same operands in the same
+order (dy then y, j ascending over the row's visible range from
+`_row_range`), read from the stash the shipped zdot_stash also writes.
+Sabotage: kernel A flips one ulp of the `y` it stores (zdot, dq, dk and dv
+move; the forward buffers do not).
+
+Page. 256 staged rows x 20 = 5,120 floats = 20,480 B: 3 blocks per CU on
+AMD. The AMD variant to price is 32 rows per block (192 rows x 20 = 15,360
+B, 4 per CU, grid 768), or KS 8 (half the page, twice the staging round
+trips). This is a kernel-matrix row.
+
+Counted expectation (H100 analogy, not a measurement). Per visible cell,
+kernel A executes 2 x 64 RN-FMA with 0.5 shared loads per FMA and one
+staging round trip per 16 steps, the same count and cadence as dkdv_tiled
+(18.4 ms per step), plus one exp and one div per cell. Estimate about 25 ms
+against zdot_stash's 89.4 ms, so the lean step goes from about 0.38 s to
+about 0.32 s on the H100. AMD is not estimated: no AMD attention timing
+exists.
+
+### 11.4 DEVIATION 2531, forward grid (32 rows per block)
+
+`fused_attn_forward_regblocked_sstash_kernel` with `TQ` a comptime
+parameter (the hd-128 path already uses 16). RPT = 2, 4 dots and 8 context
+accumulators per thread, grid 768 blocks. Identity argument: every chain
+(score over p, denominator over keys, context over keys) keeps its terms
+and order. The row maximum is an `identical_fmax` fold over values that are
+never `-0.0` (the `+ 0.0` mask add) and never NaN (the regime), so its
+grouping is free (contract 5.1). Sabotage for the new instantiation: flip
+the pass-3 weight it stores in the tile (ctx moves; amax, denom and the
+backward do not), which distinguishes it from the shipped sstash sabotage
+(denom moves). Page 12,736 B.
+
+### 11.5 DEVIATION 2530, forward Q residency
+
+Stage the `[TQ][64]` Q page once per block. Per window, stage K only (2
+slots per thread instead of 6). Reuse the Q page for V in pass 3, since Q
+is not read after pass 1. Identity argument: the dots read the same flushed
+Q values in the same p order; only the staging schedule changes. Pages:
+27,904 B at 64 rows, 15,232 B at 32 rows. Counted expectation on the H100:
+small, since staging is about 5 percent of pass-1 instructions.
+
+### 11.6 DEVIATION 2533 (forced by the reading), preflushed seams
+
+`_step` applies software `ftz` to both operands on every column (the NVIDIA
+path too, before `fma.rn`). In dq_tiled, dkdv_tiled, the forward context
+chain and the zdot fold, both operands are already flushed: staged through
+`ftz`, or produced by `_pmul` or `ftz(div)`. A one-ulp sabotage flip of a
+normal value stays normal, and the flip of zero is `2^-100`. So
+`_step_preflushed` gives the same bits and saves two flushes per term. It
+would be built as new instantiations beside the shipped kernels, never as
+an edit of them.
+
+### 11.7 DEVIATION 2532 (not buildable here) and its memory
+
+The forward's pass 3 could store `y` over the sstash cell so the backward
+needs the dy dot only. That buffer must live from each layer's forward to
+its backward, so the callers' stage structs (outside this lane's files)
+would own it: 12 x B*nh*L*S floats = 12 x 50,331,648 x 4 B = 2.42 GB of
+device memory held across the step at the target shape.
+
+### 11.8 Mechanism notes for whoever resumes
+
+- Arm bits: `BWD_ZTILED = 8`, `FWD_QRES = 32`, `FWD_GRID = 64`, plus a
+  `SABOTAGE_NEW = 128` that flips only the new kernels. The shipped kernels'
+  sabotage stays under the old bit, so reach on top of `stash_tiled` is
+  specific. `fused_attention_arm_name` currently masks with
+  `ATTN_ARM_SABOTAGE - 1`, which would drop bits above 16; the parser should
+  be the inverse of the name function.
+- Keep the shipped path byte for byte. Put a trial-only branch before
+  `if want_stash:` / `if want_sstash:` and change only those two conditions
+  to `... and not ran_arm`. Make the launch helpers generic, so the shipped
+  build instantiates none of the new kernels.
+- Arms check: add `stash_tiled` itself, so that new arm = eager and
+  default = eager hold in one run. Require forward reach for forward bits
+  and backward reach for 2528. At head dims other than 64, assert that
+  `SABOTAGE_NEW` moves nothing (the shipped kernels ran).
+- Leg body: vendor from the runner's environment (or `rocm-smi` versus
+  `nvidia-smi`), arch from `MOJOLEARN_GPU_ARCHS`, and no CUDA-only
+  commands on AMD. The AMD pool settings the byte LM legs used
+  (`MODULAR_DEVICE_CONTEXT_MEMORY_MANAGER_*`) belong to the runner.
+  Baseline `stash_tiled` for the price (`MOJOLEARN_ATTN_BASELINE`) and for
+  `witnesses_equal_baseline`. The item before any arm is `baseline` against
+  `stash_tiled` on AMD.
