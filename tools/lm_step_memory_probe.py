@@ -50,7 +50,8 @@ The configuration is an argument; the default is the 20.45M control shape
 first step, or any later step, exceeds --budget-seconds the harness exits 2
 and records the limitation. It NEVER substitutes a smaller model.
 
-Synthetic token batches from a seeded generator, no corpus: a few complete
+Synthetic token batches from a seeded generator by default (or a pinned
+byte corpus with --corpus, DEVIATIONS 2525 to 2527): a few complete
 steps at the named shape are the point, not learning. Nothing here is an
 opponent measurement, a default gate, or target-scale qualification.
 """
@@ -211,6 +212,53 @@ def _sha(data):
     return hashlib.sha256(data).hexdigest()
 
 
+class CorpusBatches:
+    """Token batches from a pinned byte corpus (DEVIATIONS 2525 to 2527;
+    ENGINEERING_RULES section 9: a neural timing claim runs on two
+    ORDINARY corpora). `path` is the corpus file; `manifest.json` beside it
+    (schema `mojolearn.byte-lm.corpus.v1`) must carry its sha256 and byte
+    length, both checked here. Step `k` (zero-based), row `b` reads bytes
+    `[(k * batch * length + b * length) % (n - length - 1) : + length + 1]`
+    as int32 ids: the byte LM's next-byte schedule at this shape, no
+    tokenizer, no normalization. Byte ids are below 256 and valid in any
+    vocabulary of 256 or more; the target's 50,257-row embedding is read
+    on its first 256 rows, which is the same real training path."""
+
+    def __init__(self, path, batch, length):
+        self.path = Path(path)
+        manifest_path = self.path.with_name('manifest.json')
+        manifest_raw = manifest_path.read_bytes()
+        if len(manifest_raw) > 65536:
+            raise ValueError('corpus manifest exceeds bound')
+        self.manifest = json.loads(manifest_raw)
+        if self.manifest.get('schema') != 'mojolearn.byte-lm.corpus.v1':
+            raise ValueError('corpus manifest schema is not mojolearn.byte-lm.corpus.v1')
+        raw = self.path.read_bytes()
+        self.sha256 = _sha(raw)
+        if self.sha256 != self.manifest.get('sha256') or len(raw) != self.manifest.get('bytes'):
+            raise ValueError('pinned corpus length/SHA mismatch for %s' % self.path)
+        self.manifest_sha256 = _sha(manifest_raw)
+        self.data = np.frombuffer(raw, dtype=np.uint8)
+        self.batch = batch
+        self.length = length
+        if len(raw) < length + 2:
+            raise ValueError('corpus shorter than one batch row')
+        self.modulus = len(raw) - length - 1
+
+    def ids(self, step_index):
+        rows = []
+        for b in range(self.batch):
+            start = (step_index * self.batch * self.length + b * self.length) % self.modulus
+            rows.append(self.data[start:start + self.length + 1].astype(np.int32))
+        return np.stack(rows)
+
+    def describe(self):
+        return dict(path=str(self.path), sha256=self.sha256, manifest_sha256=self.manifest_sha256,
+                    bytes=int(self.data.size), source_url=self.manifest.get('source_url'),
+                    schedule='step k row b: bytes[(k*batch*length + b*length) % (bytes - length - 1) : +length+1] '
+                             'as int32; targets shifted one byte')
+
+
 def _witness(trainer, result, step_result):
     """sha256 of the last step's flat gradient and the committed state.
 
@@ -269,9 +317,17 @@ def worker(args):
         os.environ['MOJOLEARN_TRANSFORMER_ATTN_PATH'] = args.attention_path
     resident = not args.no_resident
     step_result = 'lean' if args.resident_lean else 'full'
+    corpus = CorpusBatches(args.corpus, shape.batch, shape.length) if args.corpus else None
+
+    def batch_ids(step_index):
+        if corpus is not None:
+            return corpus.ids(step_index)
+        return rng.integers(0, shape.vocab_size, (shape.batch, shape.length + 1), dtype=np.int32)
+
     trainer = Trainer(weights, shape=shape, resident=resident, step_result=step_result,
                       data_schedule={'fixture': 'lm step memory probe', 'seed': args.seed,
-                                     'batches': 'synthetic uniform token ids, no corpus'})
+                                     'batches': ('pinned corpus ' + corpus.sha256) if corpus is not None
+                                                else 'synthetic uniform token ids, no corpus'})
     runtime = trainer.run_metadata()
     if runtime['step_result'] != step_result:
         raise RuntimeError('trainer reports step_result=%r, requested %r' % (runtime['step_result'], step_result))
@@ -279,12 +335,16 @@ def worker(args):
     # after the last untimed step unless --witness-every-step.
     witness_every_step = step_result == 'full' or args.witness_every_step
     mode = dict(resident=resident, step_result=step_result, witness_every_step=witness_every_step,
-                witness_source=WITNESS_SOURCE[step_result if witness_every_step else 'lean-final'])
+                witness_source=WITNESS_SOURCE[step_result if witness_every_step else 'lean-final'],
+                corpus=corpus.describe() if corpus is not None else None,
+                attention_arm=os.environ.get('MOJOLEARN_ATTN_ARM'))
     sampler = DeviceMemorySampler(args.sample_interval, args.gpu_index)
     sampler.start()
     emit(dict(event='setup', schema=SCHEMA, shape=shape.to_dict(), profile=shape.profile,
               parameters=shape.n_total, n_tensors=shape.n_tensors, tokens_per_step=tokens_per_step,
               seed=args.seed, budget_seconds=args.budget_seconds, **mode,
+              corpus=corpus.describe() if corpus is not None else None,
+              attention_arm_requested=os.environ.get('MOJOLEARN_ATTN_ARM'),
               attention_path_requested=os.environ.get('MOJOLEARN_TRANSFORMER_ATTN_PATH'),
               numeric_mode_env=os.environ.get('MOJOLEARN_NUMERIC_MODE'),
               runtime=runtime, initial_parameters_sha256=_sha(weights.tobytes()),
@@ -296,7 +356,7 @@ def worker(args):
             sampler.stop()
             _write_result(args, shape, steps, limited=True, mode=mode)
             return EXIT_LIMIT
-        ids = rng.integers(0, shape.vocab_size, (shape.batch, shape.length + 1), dtype=np.int32)
+        ids = batch_ids(index)
         sampler.window_reset()
         emit(dict(event='step_start', step=index + 1,
                   first_call_includes_setup=(index == 0),
@@ -348,7 +408,7 @@ def worker(args):
         # denominator of the covered fraction: a timed run is not a timing
         # sample (every tick adds a device wait).
         os.environ['MOJOLEARN_TRANSFORMER_TIMING'] = '1'
-        ids = rng.integers(0, shape.vocab_size, (shape.batch, shape.length + 1), dtype=np.int32)
+        ids = batch_ids(args.steps)
         emit(dict(event='component_timing_step_start', note='MOJOLEARN_TRANSFORMER_TIMING=1; not a timing sample'))
         start = time.perf_counter()
         trainer.train_step(ids)
@@ -414,6 +474,7 @@ def _write_result(args, shape, steps, limited, timing_step_seconds=None, mode=No
         schema=SCHEMA, shape=shape.to_dict(), parameters=shape.n_total, steps_completed=len(steps),
         resident=mode.get('resident'), step_result=mode.get('step_result'),
         witness_every_step=mode.get('witness_every_step'), witness_source=mode.get('witness_source'),
+        corpus=mode.get('corpus'), attention_arm=mode.get('attention_arm'),
         # Per-step witnesses (loss always; gradients/parameters/m/v/flags
         # when the step was witnessed) so a lean run compares with a full
         # run from result.json alone; the same records are in events.jsonl.
@@ -457,6 +518,9 @@ def main():
     parser.add_argument('--witness-every-step', action='store_true',
                         help='with --resident-lean, export and hash after EVERY step (outside the timed '
                              'boundary) so the hashes line up with a full run per step; no effect on full')
+    parser.add_argument('--corpus', type=Path, default=None,
+                        help='a pinned byte corpus (manifest.json beside it, schema mojolearn.byte-lm.corpus.v1, '
+                             'sha256 checked); batches are its bytes in step order instead of synthetic ids')
     parser.add_argument('--attention-path', choices=['fused', 'eager'], default=None,
                         help='sets MOJOLEARN_TRANSFORMER_ATTN_PATH for the worker (default: auto = fused)')
     parser.add_argument('--component-timing', action='store_true',

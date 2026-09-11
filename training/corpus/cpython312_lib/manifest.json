@@ -1,0 +1,24 @@
+{
+  "schema": "mojolearn.byte-lm.corpus.v1",
+  "source_url": "https://www.python.org/ftp/python/3.12.0/Python-3.12.0.tgz",
+  "source_commit": "v3.12.0 release tarball, sha256 51412956d24a1ef7c97f1cb5f70e185c13e3de1f50d131c0aac6338080687afb",
+  "selection": "the 163 top-level Lib/*.py files of the tarball (no subdirectories), sorted bytewise by file name (LC_ALL=C), concatenated with no separators",
+  "sha256": "f08d783cac53829be0da6def7ac74947f3e339915dfee7ca8d8db5ee344fc956",
+  "bytes": 4522096,
+  "encoding": "raw bytes; no normalization",
+  "train_range": [
+    0,
+    4522096
+  ],
+  "validation_range": [
+    0,
+    0
+  ],
+  "vocabulary": 256,
+  "batch": 1,
+  "context": 2048,
+  "planned_steps": 3,
+  "train_batch_schedule": "step k zero-based, row b: bytes[(k*batch*2048 + b*2048) % (4522096 - 2049) : start+2049]; targets shifted one byte (tools/lm_step_memory_probe.py --corpus)",
+  "validation_batch_starts": [],
+  "scope": "source-code kind for the two-corpus neural timing rule (ENGINEERING_RULES section 9); attention step lane DEVIATIONS 2525 to 2527; no learning claim; input.txt is fetched by tools/fetch_corpus_cpython312_lib.sh and is not committed"
+}
