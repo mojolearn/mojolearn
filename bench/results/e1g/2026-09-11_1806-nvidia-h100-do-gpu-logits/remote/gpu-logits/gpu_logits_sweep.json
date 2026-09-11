@@ -1,0 +1,94 @@
+{
+ "byte_values_seen": 256,
+ "commit": "652b93fe37513a61d4a073a9f968de120cb49564",
+ "compared": {
+  "logits_resident": 768,
+  "logits_stateless": 96,
+  "loss_bits": 48,
+  "next_bytes": 768
+ },
+ "cpu_binary": {
+  "path": "/root/mojolearn/python/mojolearn/host/_mojolearn_byte_lm_host.so",
+  "sha256": "6d7d8672513a26392353b00758f77211d34091bd210b7484ed0a7ab414b76658"
+ },
+ "cpu_reference_logits_sha256": {
+  "final": "b518e71ecf5ac01e743f5d5b46df6687e9eefa80a9d627580162305a083f70b2",
+  "initial": "6db55997f1e4d1e9aa08bfaf082ebe48c1b03eec121ebaf6ddf3a0bdbad7e61f",
+  "step000064": "30a89281f2daac140dc9fb440b4476dfe53dd3dcfd5dc4746a84a6fc74ee26f5"
+ },
+ "cpu_sweep_logits_sha256": {
+  "final": "b518e71ecf5ac01e743f5d5b46df6687e9eefa80a9d627580162305a083f70b2",
+  "initial": "6db55997f1e4d1e9aa08bfaf082ebe48c1b03eec121ebaf6ddf3a0bdbad7e61f",
+  "step000064": "30a89281f2daac140dc9fb440b4476dfe53dd3dcfd5dc4746a84a6fc74ee26f5"
+ },
+ "deviation": 2660,
+ "digests_equal_cpu_sweep": true,
+ "first_mismatches": [],
+ "gpu": {
+  "arch": null,
+  "attention_arm": {
+   "arm": "stash_tiled_fgrid_r32_qres_pf_kvgrid_r32",
+   "default": "stash_tiled_fgrid_r32_qres_pf_kvgrid_r32",
+   "resolved_hd64": "stash_tiled_fgrid_r32_qres_pf_kvgrid_r32",
+   "trial_build": false
+  },
+  "numeric_mode": {
+   "native": 1,
+   "process": "identical"
+  },
+  "path": "/root/mojolearn/python/mojolearn/identical/_mojolearn_byte_lm.so",
+  "profile": "mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1",
+  "sha256": "f27cfcb293d520df2dde50afd28c1441fa6d2372a09355c1edbbf91115e56ffb",
+  "vendor": "cuda"
+ },
+ "gpu_logits_sha256": {
+  "final": "b518e71ecf5ac01e743f5d5b46df6687e9eefa80a9d627580162305a083f70b2",
+  "initial": "6db55997f1e4d1e9aa08bfaf082ebe48c1b03eec121ebaf6ddf3a0bdbad7e61f",
+  "step000064": "30a89281f2daac140dc9fb440b4476dfe53dd3dcfd5dc4746a84a6fc74ee26f5"
+ },
+ "host": {
+  "cpu": "Intel(R) Xeon(R) Platinum 8468",
+  "family": "6",
+  "isa": [
+   "avx2",
+   "avx512f",
+   "fma"
+  ],
+  "machine": "x86_64",
+  "model": "143",
+  "python": "3.14.7",
+  "release": "5.15.0-185-generic",
+  "stepping": "8",
+  "system": "Linux",
+  "vendor": "GenuineIntel"
+ },
+ "length": 32,
+ "loss_batches": 16,
+ "max_batch": 8,
+ "mismatched": 0,
+ "negative_control": {
+  "batch": 2,
+  "differ": true,
+  "length": 32,
+  "seed": 2641,
+  "states": [
+   "initial",
+   "step000064"
+  ]
+ },
+ "parameter_sha256": {
+  "final": "e7c9c226dfa550446799ca930480f972ca8942c023df1e0c5c70a1526bfcd258",
+  "initial": "b87a6075597a82c94b68b810bef74f6331b86579d4d434d95455866ada3ba424",
+  "step000064": "c95553ef5ae7b3715f72ca9b190310f1539e3916f5aa29d5b1277e2d42082f67"
+ },
+ "schema": "mojolearn.byte-lm-gpu-logits-sweep.v1",
+ "seconds": 30.208,
+ "seed": 2640,
+ "stateless_every": 8,
+ "states": [
+  "initial",
+  "step000064",
+  "final"
+ ],
+ "verdict": "PASS"
+}
