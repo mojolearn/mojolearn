@@ -1,0 +1,64 @@
+BITS hashed stash_tiled+sabotage_vs_baseline ctx MOVED 1091906 of 1572864
+BITS hashed stash_tiled+sabotage_vs_baseline denom MOVED 6472 of 24576
+BITS hashed stash_tiled+sabotage_vs_baseline zdot MOVED 5435 of 24576
+BITS hashed stash_tiled+sabotage_vs_baseline dq MOVED 1417359 of 1572864
+BITS hashed stash_tiled+sabotage_vs_baseline dk MOVED 1236285 of 1572864
+BITS hashed stash_tiled+sabotage_vs_baseline dv MOVED 1240433 of 1572864
+REACH hashed stash_tiled sabotage_flipped_cells=4997890 clean_restored=True reach_bit=stash_tiled+sabotage forward_moved=1098378 backward_moved=3899512 amax_denom_moved=6472 ctx_moved_columns_16_up=816629 zdot_moved=5435 dv_moved=1240433
+BITS heavytail stash_tiled+sabotage_vs_baseline ctx MOVED 1255215 of 1572864
+BITS heavytail stash_tiled+sabotage_vs_baseline denom MOVED 8181 of 24576
+BITS heavytail stash_tiled+sabotage_vs_baseline zdot MOVED 7198 of 24576
+BITS heavytail stash_tiled+sabotage_vs_baseline dq MOVED 1391887 of 1572864
+BITS heavytail stash_tiled+sabotage_vs_baseline dk MOVED 1306530 of 1572864
+BITS heavytail stash_tiled+sabotage_vs_baseline dv MOVED 1333664 of 1572864
+REACH heavytail stash_tiled sabotage_flipped_cells=5302675 clean_restored=True reach_bit=stash_tiled+sabotage forward_moved=1263396 backward_moved=4039279 amax_denom_moved=8181 ctx_moved_columns_16_up=941018 zdot_moved=7198 dv_moved=1333664
+attention_step_price: PASS (stash_tiled vs baseline)
+BITS hashed stash_tiled_fgrid_r32_qres_pf+sabotage_new_vs_baseline ctx MOVED 1218822 of 1572864
+BITS hashed stash_tiled_fgrid_r32_qres_pf+sabotage_new_vs_baseline amax MOVED 14352 of 24576
+BITS hashed stash_tiled_fgrid_r32_qres_pf+sabotage_new_vs_baseline denom MOVED 15187 of 24576
+BITS hashed stash_tiled_fgrid_r32_qres_pf+sabotage_new_vs_baseline zdot MOVED 22086 of 24576
+BITS hashed stash_tiled_fgrid_r32_qres_pf+sabotage_new_vs_baseline dq MOVED 1281154 of 1572864
+BITS hashed stash_tiled_fgrid_r32_qres_pf+sabotage_new_vs_baseline dk MOVED 1372506 of 1572864
+BITS hashed stash_tiled_fgrid_r32_qres_pf+sabotage_new_vs_baseline dv MOVED 1173396 of 1572864
+REACH hashed stash_tiled_fgrid_r32_qres_pf sabotage_flipped_cells=5097503 clean_restored=True reach_bit=stash_tiled_fgrid_r32_qres_pf+sabotage_new forward_moved=1248361 backward_moved=3849142 amax_denom_moved=29539 ctx_moved_columns_16_up=912964 zdot_moved=22086 dv_moved=1173396
+BITS heavytail stash_tiled_fgrid_r32_qres_pf+sabotage_new_vs_baseline ctx MOVED 1319012 of 1572864
+BITS heavytail stash_tiled_fgrid_r32_qres_pf+sabotage_new_vs_baseline amax MOVED 14424 of 24576
+BITS heavytail stash_tiled_fgrid_r32_qres_pf+sabotage_new_vs_baseline denom MOVED 17032 of 24576
+BITS heavytail stash_tiled_fgrid_r32_qres_pf+sabotage_new_vs_baseline zdot MOVED 22764 of 24576
+BITS heavytail stash_tiled_fgrid_r32_qres_pf+sabotage_new_vs_baseline dq MOVED 1195083 of 1572864
+BITS heavytail stash_tiled_fgrid_r32_qres_pf+sabotage_new_vs_baseline dk MOVED 1408959 of 1572864
+BITS heavytail stash_tiled_fgrid_r32_qres_pf+sabotage_new_vs_baseline dv MOVED 1317301 of 1572864
+REACH heavytail stash_tiled_fgrid_r32_qres_pf sabotage_flipped_cells=5294575 clean_restored=True reach_bit=stash_tiled_fgrid_r32_qres_pf+sabotage_new forward_moved=1350468 backward_moved=3944107 amax_denom_moved=31456 ctx_moved_columns_16_up=989046 zdot_moved=22764 dv_moved=1317301
+attention_step_price: PASS (stash_tiled_fgrid_r32_qres_pf vs baseline)
+BITS file:operands-enwik8 stash_tiled+sabotage_vs_baseline ctx MOVED 516631 of 1572864
+BITS file:operands-enwik8 stash_tiled+sabotage_vs_baseline denom MOVED 4593 of 24576
+BITS file:operands-enwik8 stash_tiled+sabotage_vs_baseline zdot MOVED 3410 of 24576
+BITS file:operands-enwik8 stash_tiled+sabotage_vs_baseline dq MOVED 1277111 of 1572864
+BITS file:operands-enwik8 stash_tiled+sabotage_vs_baseline dk MOVED 1271638 of 1572864
+BITS file:operands-enwik8 stash_tiled+sabotage_vs_baseline dv MOVED 1167779 of 1572864
+REACH file:operands-enwik8 stash_tiled sabotage_flipped_cells=4241162 clean_restored=True reach_bit=stash_tiled+sabotage forward_moved=521224 backward_moved=3719938 amax_denom_moved=4593 ctx_moved_columns_16_up=388583 zdot_moved=3410 dv_moved=1167779
+BITS file:operands-pilegithub stash_tiled+sabotage_vs_baseline ctx MOVED 521531 of 1572864
+BITS file:operands-pilegithub stash_tiled+sabotage_vs_baseline denom MOVED 4637 of 24576
+BITS file:operands-pilegithub stash_tiled+sabotage_vs_baseline zdot MOVED 3447 of 24576
+BITS file:operands-pilegithub stash_tiled+sabotage_vs_baseline dq MOVED 1270593 of 1572864
+BITS file:operands-pilegithub stash_tiled+sabotage_vs_baseline dk MOVED 1269667 of 1572864
+BITS file:operands-pilegithub stash_tiled+sabotage_vs_baseline dv MOVED 1150155 of 1572864
+REACH file:operands-pilegithub stash_tiled sabotage_flipped_cells=4220030 clean_restored=True reach_bit=stash_tiled+sabotage forward_moved=526168 backward_moved=3693862 amax_denom_moved=4637 ctx_moved_columns_16_up=391310 zdot_moved=3447 dv_moved=1150155
+attention_step_price: PASS (stash_tiled vs baseline)
+BITS file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf+sabotage_new_vs_baseline ctx MOVED 857282 of 1572864
+BITS file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf+sabotage_new_vs_baseline amax MOVED 16316 of 24576
+BITS file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf+sabotage_new_vs_baseline denom MOVED 12712 of 24576
+BITS file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf+sabotage_new_vs_baseline zdot MOVED 21014 of 24576
+BITS file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf+sabotage_new_vs_baseline dq MOVED 1411791 of 1572864
+BITS file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf+sabotage_new_vs_baseline dk MOVED 1453564 of 1572864
+BITS file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf+sabotage_new_vs_baseline dv MOVED 1058201 of 1572864
+REACH file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf sabotage_flipped_cells=4830880 clean_restored=True reach_bit=stash_tiled_fgrid_r32_qres_pf+sabotage_new forward_moved=886310 backward_moved=3944570 amax_denom_moved=29028 ctx_moved_columns_16_up=644351 zdot_moved=21014 dv_moved=1058201
+BITS file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf+sabotage_new_vs_baseline ctx MOVED 849951 of 1572864
+BITS file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf+sabotage_new_vs_baseline amax MOVED 16133 of 24576
+BITS file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf+sabotage_new_vs_baseline denom MOVED 12833 of 24576
+BITS file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf+sabotage_new_vs_baseline zdot MOVED 21192 of 24576
+BITS file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf+sabotage_new_vs_baseline dq MOVED 1405497 of 1572864
+BITS file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf+sabotage_new_vs_baseline dk MOVED 1442892 of 1572864
+BITS file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf+sabotage_new_vs_baseline dv MOVED 1027539 of 1572864
+REACH file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf sabotage_flipped_cells=4776037 clean_restored=True reach_bit=stash_tiled_fgrid_r32_qres_pf+sabotage_new forward_moved=878917 backward_moved=3897120 amax_denom_moved=28966 ctx_moved_columns_16_up=637501 zdot_moved=21192 dv_moved=1027539
+attention_step_price: PASS (stash_tiled_fgrid_r32_qres_pf vs baseline)

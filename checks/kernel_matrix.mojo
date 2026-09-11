@@ -840,6 +840,7 @@ def attn_fwd_rows_per_block_for[column: Int]() -> Int:
     return 64
 
 
+comptime ATTN_DEFAULT_WORD_BASELINE = 0
 comptime ATTN_DEFAULT_WORD_STASH_TILED = 7
 """The attention arm word `stash_tiled`: bits 1 (fwd_sstash), 2 (bwd_stash) and 4 (bwd_tiled) of transformer/impl/llama/fused_attention.mojo (DEVIATIONS 2525 to 2527). The matrix cannot import that file (it imports this one), so the word is a literal here and fused_attention.mojo asserts at build time that it equals its own composition."""
 
@@ -854,10 +855,14 @@ def attn_default_arm_for[column: Int]() -> Int:
     if column == COLUMN_NVIDIA:
         return ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF
     if column == COLUMN_AMD:
-        # Measured 2026-09-11 on both AMD boxes against stash_tiled, witnesses
-        # equal: DigitalOcean MI325X geomean 0.9297 (e1g/2026-09-11_163917-amd-mi325x-do-attention-round3)
-        # and RunPod MI300X geomean 0.9325 (e1g/2026-09-11_163024-amd-mi300x-runpod-attention-round3).
-        return ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF
+        # Measured 2026-09-11 on ONE RunPod MI300X pod, all three arms, witnesses
+        # equal (e1g/2026-09-11_171959-amd-mi300x-runpod-attention-three): lean
+        # step baseline 2.192 / 2.166 s, stash_tiled 2.543 / 2.536 s (geomean
+        # 1.166), stash_tiled_fgrid_r32_qres_pf 2.213 / 2.325 s (1.041). The
+        # earlier AMD legs compared the round 3 winner only against stash_tiled,
+        # which itself loses to baseline on AMD. In the step the tiled dk/dv
+        # backward costs 525 to 627 ms against 64 ms for the baseline dk/dv.
+        return ATTN_DEFAULT_WORD_BASELINE
     return ATTN_DEFAULT_WORD_STASH_TILED
 
 

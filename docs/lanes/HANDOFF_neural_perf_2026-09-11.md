@@ -311,6 +311,19 @@ No AMD timing of this step exists at the target shape.
      launched (scratchpad amd_attn_three_body.sh from origin/main a1a22f3f);
      if baseline wins there, AMD's `attn_default_arm_for` row becomes the
      fastest of the three.
+   - **Clean AMD three-way, one RunPod MI300X pod: BASELINE WINS ON AMD**
+     (bench/results/e1g/2026-09-11_171959-amd-mi300x-runpod-attention-three,
+     commit a1a22f3f, GEMM ksplit default on, witnesses equal): lean step
+     baseline 2.192 / 2.166 s, stash_tiled 2.543 / 2.536 s (NO FLIP, geomean
+     1.1656), stash_tiled_fgrid_r32_qres_pf 2.213 / 2.325 s (NO FLIP, 1.0412;
+     0.8933 of stash_tiled, which is why the earlier stash_tiled-relative AMD
+     legs picked it). The price harness disagrees with the step on AMD: fwd+bwd
+     baseline 11.2 to 11.5 ms, stash_tiled 5.17, winner 2.29, yet in the step
+     `attn.bwd_dkdv_tiled` is 627 ms (stash_tiled) and `bwd_dkdv_tiled_pf` 525
+     ms (winner) against baseline's `attn.bwd_dkdv` 63.6 ms. The AMD row of
+     `attn_default_arm_for` goes back to `baseline`; the dk/dv lane
+     (`lane/attention-dkdv-amd`) was sent this evidence and now targets the
+     step-versus-harness gap with baseline as the AMD reference.
 1. The DigitalOcean runner is merged and its dry run is green (section 3);
    its first paid run is also its bring-up. Tuning on AMD is now a repo rule
    for every lane (ENGINEERING_RULES.md section 10), and the account allows
