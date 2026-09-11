@@ -1,0 +1,23 @@
+FSPEED-NOTE lane=et arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+10500 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5acb40000000, nodemask=2)
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=cuda path=/root/mojolearn/python/mojolearn/identical/_mojolearn_trees.so
+FSPEED-SCALE stage=before rows=1000000 features=220 input_mib=839.2 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=et arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-WARMUP lane=et arm=ours shape=istella-1000000x220 ms=7510.286
+FSPEED-ORDER lane=et round=1 arms=ours
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=1 ms=6148.361 hash=40b1c5b03ba40420
+FSPEED-ORDER lane=et round=2 arms=ours
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=2 ms=6046.091 hash=40b1c5b03ba40420
+FSPEED-ORDER lane=et round=3 arms=ours
+10500 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5acb80000000, nodemask=2)
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=3 ms=6028.966 hash=40b1c5b03ba40420
+FSPEED-ORDER lane=et round=4 arms=ours
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=4 ms=6044.539 hash=40b1c5b03ba40420
+FSPEED-ORDER lane=et round=5 arms=ours
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=5 ms=6029.072 hash=40b1c5b03ba40420
+10500 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5acbc0000000, nodemask=2)
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.188191
+FSPEED-ACC lane=et arm=ours metric=auc value=0.938768
+FSPEED-SCALE stage=after rows=1000000 features=220 input_mib=839.2 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.

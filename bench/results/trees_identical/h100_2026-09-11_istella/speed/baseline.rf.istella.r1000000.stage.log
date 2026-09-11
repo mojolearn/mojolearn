@@ -1,0 +1,85 @@
+FSPEED-NOTE lane=rf arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+12115 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3808c0000000, nodemask=2)
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=cuda path=/root/mojolearn/python/mojolearn/identical/_mojolearn_rf.so
+FSPEED-SCALE stage=before rows=1000000 features=220 input_mib=839.2 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=rf arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=1 size=shipped
+== MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+   NOT a certifiable timing -- see ensemble/instruments.mojo)
+  quantiles	0.001399733 s
+  bin_dataset	0.001059807 s
+  host_setup	0.000273191 s
+  row_sampling	0.002021668 s
+  host_stage_items	0.064173678 s
+  host_phase_upload	0.041370958 s
+  host_launch_setup	0.041636514 s
+  host_hist_zero	0.072136375 s
+  host_hist_launch	0.073645971 s
+  host_best_launch	0.0732693 s
+  host_splits_download	0.000381372 s
+  host_begin_tree	0.003929089 s
+  flush_splits	0.011909182 s
+  device_wait	1.657613737 s
+  host_read_splits	0.024376721 s
+  host_enq_partition	0.073981353 s
+  host_queue_push	0.066783729 s
+  host_enq_hist	0.07483029 s
+  host_enq_hist_retry	0.346691931 s
+  tree_copy	0.018407678 s
+  leaf_values	0.064596335 s
+  host_teardown	0.000451461 s
+  fit_total	2.488243146 s
+  other	-0.226696927 s
+== MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+   NOT a certifiable timing -- see ensemble/instruments.mojo)
+  bind_ctx_create	0.194387248 s
+  bind_pinned_alloc	0.507496433 s
+  bind_host_copy	0.156459024 s
+  bind_h2d	0.016659414 s
+  bind_release_buffers	1.388e-05 s
+  bind_release_ctx	2.514e-05 s
+  bind_export_retain	4.0476e-05 s
+  binding_total	3.363603321 s
+FSPEED-WARMUP lane=rf arm=ours shape=istella-1000000x220 ms=4064.587
+FSPEED-ORDER lane=rf round=1 arms=ours
+== MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+   NOT a certifiable timing -- see ensemble/instruments.mojo)
+  quantiles	0.001152361 s
+  bin_dataset	0.001018139 s
+  host_setup	0.000105979 s
+  row_sampling	0.00215201 s
+  host_stage_items	0.064835513 s
+  host_phase_upload	0.043640923 s
+  host_launch_setup	0.045418492 s
+  host_hist_zero	0.078760087 s
+  host_hist_launch	0.080212707 s
+  host_best_launch	0.079609621 s
+  host_splits_download	0.000406019 s
+  host_begin_tree	0.003403407 s
+  flush_splits	0.012375293 s
+  device_wait	1.664195548 s
+  host_read_splits	0.024599728 s
+  host_enq_partition	0.077725974 s
+  host_queue_push	0.05971756 s
+  host_enq_hist	0.07870866 s
+  host_enq_hist_retry	0.370990647 s
+  tree_copy	0.015301596 s
+  leaf_values	0.065775132 s
+  host_teardown	0.000478714 s
+  fit_total	2.519250127 s
+  other	-0.251333983 s
+== MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+   NOT a certifiable timing -- see ensemble/instruments.mojo)
+  bind_ctx_create	6.0851e-05 s
+  bind_pinned_alloc	1.772e-05 s
+  bind_host_copy	0.156024775 s
+  bind_h2d	0.016053051 s
+  bind_release_buffers	1.3689e-05 s
+  bind_release_ctx	2.9855e-05 s
+  bind_export_retain	2.1998e-05 s
+  binding_total	2.691592573 s
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=1 ms=3378.560 hash=15e38312cb4bb870
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.145578
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.964548
+FSPEED-SCALE stage=after rows=1000000 features=220 input_mib=839.2 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.

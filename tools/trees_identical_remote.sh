@@ -52,7 +52,7 @@ track_mojo() {
 
 track_pip() {
     step pip_base 900 python3 -m pip install --no-input --disable-pip-version-check \
-        catboost lightgbm scikit-learn pandas
+        catboost lightgbm xgboost scikit-learn pandas
     step pip_cuml 1200 python3 -m pip install --no-input --disable-pip-version-check \
         --extra-index-url=https://pypi.nvidia.com cuml-cu12
     python3 -c "import catboost, lightgbm, sklearn, numpy; print('catboost', catboost.__version__, 'lightgbm', lightgbm.__version__, 'sklearn', sklearn.__version__, 'numpy', numpy.__version__)" > "$OUT/versions.txt" 2>&1

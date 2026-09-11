@@ -1,0 +1,36 @@
+build_exit baseline.base=0 10:57:34
+a209664c73fe7d6fba80e95422e7632a591e854867fb2106d0fd6b09349da899  /root/bins/baseline/_mojolearn.so
+build_exit baseline.gbdt=0 10:57:55
+79284946e80f59683e31c006b574ffb32c37d1a0b9bbe3ec51b7fed6b8cc044f  /root/bins/baseline/_mojolearn_gbdt.so
+build_exit baseline.rf=0 10:58:03
+aca39b2d072887995b42b31f4d689ec232194e15373f572a4ebd8875cce5a5b2  /root/bins/baseline/_mojolearn_rf.so
+build_exit baseline.trees=0 10:58:09
+7d64b467271edb0522b0a8a45c4ed7b25ea45efd331063c39481fa43bd848dc0  /root/bins/baseline/_mojolearn_trees.so
+build_exit pureleaf.rf=0 10:58:40
+69e8b1a6d848cc1b9356ce7f21adb952898cea09fbadf4df9cdf23d7b2ce610b  /root/bins/pureleaf/_mojolearn_rf.so
+PHASE_A_DONE 10:58:40
+ib_exit baseline=0 10:58:50
+ib_diff sep10b_baseline vs baseline exit=0 10:58:50
+PHASE_B_DONE 10:58:50
+ib_exit pureleaf=0 10:59:24
+ib_diff baseline vs pureleaf exit=1 10:59:24
+ib_diff apple_rf2502 vs pureleaf exit=0 10:59:42
+speed_exit baseline.rf.istella.r1000000.full=0 11:14:58
+speed_exit baseline.gbdt-symmetric.istella.r1000000.full=0 11:15:54
+speed_exit baseline.rf.higgs.r1000000.ours=0 11:18:53
+speed_exit baseline.rf.istella.r1000000.full=0 11:22:10
+speed_exit pureleaf.rf.istella.r1000000.ours=0 11:24:35
+speed_exit pureleaf.rf.higgs.r1000000.ours=0 11:27:37
+speed_exit baseline.gbdt-depthwise.istella.r1000000.full=0 11:28:39
+speed_exit baseline.gbdt-lossguide.istella.r1000000.full=0 11:29:56
+speed_exit baseline.et.istella.r1000000.ours=0 11:31:48
+PHASE_C_DONE 11:31:48
+speed_exit baseline.rf.istella.r2000000.full=0 11:35:44
+speed_exit pureleaf.rf.istella.r2000000.ours=0 11:38:39
+PHASE_D_DONE 11:38:39
+speed_exit baseline.rf.istella.r1000000.stage=0 11:39:34
+speed_exit pureleaf.rf.istella.r1000000.stage=0 11:40:28
+PHASE_E_DONE 11:40:28
+speed_exit baseline.gbdt-depthwise.istella.r1000000.full=0 11:42:31
+speed_exit baseline.gbdt-lossguide.istella.r1000000.full=0 11:44:09
+PHASE_F_DONE 11:44:09

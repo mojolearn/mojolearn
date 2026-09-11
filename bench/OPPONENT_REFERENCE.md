@@ -133,6 +133,74 @@ random thresholds if cuML admits it).
 Accuracy alongside the timing (CatBoost GPU symmetric, HIGGS 1M): logloss
 0.542398, AUC 0.800529, from the same logs (`FSPEED-ACC` lines).
 
+Trees, Istella-S 1M (220 features), 2026-09-11 istella leg
+(`bench/results/trees_identical/h100_2026-09-11_istella/speed/`, pod
+5gvizdykv4gqwm, runpod/pytorch:2.4.0-py3.11-cuda12.4.1 container, driver
+580.126.09, source a6d25306 plus the `_buffer.py` fix in
+`lane/nvidia-istella-0911`). Istella-S LETOR (`tools/speed_gbdt_arm.py:
+load_istella`): train = first 1M rows of sample/train.txt, test = first
+500,000 rows of sample/test.txt, binary target relevance > 0 (11.4 percent
+positive), the 1.797e308 missing marker clamped to the float32 maximum
+(0.30 percent of cells). Same process as our identical arm, arms
+alternating per round, 7 rounds for the boosting cells and 5 for RF, ms
+median with min..max. Config per lane as the HIGGS rows above (100
+estimators, depth 6, lr 0.1, seed 7; RF 100 trees, depth 16, sqrt
+features, 128 bins, bootstrap). The depthwise and lossguide cells ran
+twice: the first pass had no XGBoost on the pod (the setup pip line
+lacked it, fixed in `tools/trees_identical_remote.sh`) and is kept as
+`*.full.pass1.log`; the rows below are the complete-roster pass.
+
+| opponent | version | config | 1M | 2M | log |
+|---|---|---|---|---|---|
+| cuML RandomForestClassifier | 26.08.00 | 100 trees, depth 16, sqrt features, 128 bins, bootstrap, seed 7, n_streams default; logloss 0.145504, AUC 0.964577 (2M: 0.144861, 0.964984) | 3500 (3440..3679) | 5751 (5623..6696) | baseline.rf.istella.r1000000.full.log, baseline.rf.istella.r2000000.full.log |
+| CatBoost GPU symmetric, Logloss | 1.2.10 | SymmetricTree, iters 100, depth 6, lr 0.1, l2 1, border_count 254, bootstrap No, Plain, seed 7; logloss 0.139154, AUC 0.966720 | 1458 (1408..1527) | not run | baseline.gbdt-symmetric.istella.r1000000.full.log |
+| CatBoost GPU depthwise, Logloss | 1.2.10 | same, grow_policy Depthwise; logloss 0.125909, AUC 0.972801 (pass1 without XGBoost: 1629 (1573..1778)) | 1664 (1633..1746) | not run | baseline.gbdt-depthwise.istella.r1000000.full.log |
+| XGBoost GPU depthwise, Logloss | 3.2.0 | device cuda, reg_lambda 1.0, max_bin 255, subsample 1.0; logloss 0.125110, AUC 0.973774 | 1768 (1649..1951) | not run | same |
+| CatBoost GPU lossguide, Logloss | 1.2.10 | same, grow_policy Lossguide; logloss 0.121318, AUC 0.975388 (pass1 without XGBoost: 2328 (2299..2433)) | 2358 (2325..2433) | not run | baseline.gbdt-lossguide.istella.r1000000.full.log |
+| XGBoost GPU lossguide, Logloss | 3.2.0 | same, grow_policy lossguide, max_leaves 64; hash 377719029530ae62 and accuracy equal to its depthwise row (every depth-6 leaf is reached at 1M rows) | 1845 (1762..1940) | not run | same |
+| LightGBM CUDA (rf and lossguide) | 4.7.0 pip wheel | REFUSED: CUDA Tree Learner not enabled in this build (USE_CUDA build skipped on this leg) | refused | refused | same logs |
+
+Our identical arm in the same process on that H100, Istella-S, hash the same
+on every round: RF 1M 3265 (3233..3482) hash 15e38312cb4bb870, logloss
+0.145578, AUC 0.964548, 0.93x of the cuML row; RF 2M 5103 (4964..5738) hash
+b1d9d40baca870b5, logloss 0.144875, AUC 0.964945, 0.89x of cuML. Symmetric
+Logloss 1M 2407 (2326..2530) hash 238d3abce0cabf43, logloss 0.138653, AUC
+0.966990, 1.65x of the CatBoost row. Depthwise 1M 3304 (3175..3483) hash
+5d053cd086658072, logloss 0.126517, AUC 0.971896, 1.99x of CatBoost depthwise
+and 1.87x of XGBoost depthwise (pass1, XGBoost absent: 3033 (2971..3477),
+1.86x of that pass's CatBoost). Lossguide 1M 3908 (3778..4160) hash
+6182fd2bee4fb941, logloss 0.122045, AUC 0.975037, 1.66x of CatBoost lossguide
+and 2.12x of XGBoost lossguide (pass1: 3892 (3802..4037), 1.67x). ET 1M 6045
+(6029..6148) hash 40b1c5b03ba40420, logloss 0.188191, AUC 0.938768, still no
+valid NVIDIA opponent row. HIGGS RF 1M reference on the same pod, ours alone,
+no opponent re-run: 1523 (1509..1628) hash 3ffa2951595422d4 (the shipped
+default forest, the Sep 10 night hash), logloss 0.538850, AUC 0.809906.
+
+DEVIATION 2502 (pure classification node is a leaf, OFF by default, opt in
+with `-D MOJOLEARN_2502_PURE_LEAF=1` on the rf binding), default vs opt-in on
+the same pod, ours alone for the opt-in cells (`pureleaf.*.log`), ms median
+(min..max), hash, logloss, AUC: Istella-S 1M default 3265 (3233..3482)
+15e38312cb4bb870 0.145578 0.964548 vs opt-in 2136 (2064..2292)
+574b24d0d7af51d0 0.145560 0.964538 (0.65x); Istella-S 2M default 5103
+(4964..5738) b1d9d40baca870b5 0.144875 0.964945 vs opt-in 3714 (3670..4457)
+cc25cb08f8b5a813 0.144845 0.964998 (0.73x); HIGGS 1M default 1523
+(1509..1628) 3ffa2951595422d4 0.538850 0.809906 vs opt-in 1058 (1053..1097)
+efd14ab2c09ff57c 0.538817 0.809830 (0.69x). Stage times (one untimed
+replicate each, `*.stage.log`, Istella-S 1M): default device_wait 1.664 s,
+host_enq_hist_retry 0.371 s, host_hist_zero 0.079 s, fit_total 2.519 s;
+opt-in device_wait 0.857 s, host_enq_hist_retry 0.044 s, host_hist_zero
+0.017 s, fit_total 1.233 s. Fingerprints: the default set is 81 of 81
+IDENTICAL against the Sep 10 night H100 set (`ib/diff.sep10b_baseline.
+baseline.txt`); the opt-in set moves rf-clf 9 of 9 and keeps rf-reg 9 of 9
+against the default (`ib/diff.baseline.pureleaf.txt`) and is 18 of 18
+IDENTICAL with the Apple M4 2502 set (`ib/diff.apple_rf2502.pureleaf.txt`).
+Finding on this leg: with cuML in the process our RF arm was REFUSED
+("expected LP__PyBuffer instance instead of pointer to _PyBuffer",
+`baseline.rf.istella.r1000000.full.pass0.log`, cuML rows only) because
+`treelite.model` assigns its own `argtypes` on the cached
+`ctypes.pythonapi.PyObject_GetBuffer`; `python/mojolearn/_buffer.py` now
+takes private function pointers through `PyDLL.__getitem__`.
+
 Classical, cuML 26.8.0 / cuVS, FAST arm, `e1g/2026-08-28_040832-nvidia-speed-classical`
 (3 rounds per arm run; PCA row is the only H100 PCA opponent that did not
 refuse, the Aug 26 leg refused its solver).

@@ -1,0 +1,10 @@
+Collecting xgboost
+  Downloading xgboost-3.2.0-py3-none-manylinux_2_28_x86_64.whl.metadata (2.1 kB)
+Requirement already satisfied: numpy in /usr/local/lib/python3.11/dist-packages (from xgboost) (2.4.6)
+Requirement already satisfied: nvidia-nccl-cu12 in /usr/local/lib/python3.11/dist-packages (from xgboost) (2.20.5)
+Requirement already satisfied: scipy in /usr/local/lib/python3.11/dist-packages (from xgboost) (1.17.1)
+Downloading xgboost-3.2.0-py3-none-manylinux_2_28_x86_64.whl (131.7 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 131.7/131.7 MB 93.6 MB/s eta 0:00:00
+Installing collected packages: xgboost
+Successfully installed xgboost-3.2.0
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable.It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.

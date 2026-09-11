@@ -1,0 +1,38 @@
+FSPEED-NOTE lane=rf arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+7300 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5a0140000000, nodemask=2)
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=cuda path=/root/mojolearn/python/mojolearn/identical/_mojolearn_rf.so
+FSPEED-REFUSED lane=rf arm=sklearn-rf-cpu reason=GPU-PATH-ONLY: sklearn-rf-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-REFUSED lane=rf arm=lightgbm-cpu reason=GPU-PATH-ONLY: lightgbm-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-SCALE stage=before rows=1000000 features=220 input_mib=839.2 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=rf arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=rf arm=cuml-rf-gpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=rf arm=lightgbm-cuda mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-WARMUP lane=rf arm=ours shape=istella-1000000x220 ms=4035.817
+FSPEED-WARMUP lane=rf arm=cuml-rf-gpu shape=istella-1000000x220 ms=4177.170
+[LightGBM] [Fatal] CUDA Tree Learner was not enabled in this build.
+Please recompile with CMake option -DUSE_CUDA=1 (NVIDIA GPUs) or -DUSE_ROCM=1 (AMD GPUs)
+FSPEED-REFUSED lane=rf arm=lightgbm-cuda reason=LightGBMError during warm-up: CUDA Tree Learner was not enabled in this build. Please recompile with CMake option -DUSE_CUDA=1 (NVIDIA GPUs) or -DUSE_ROCM=1 (AMD GPUs)
+FSPEED-ORDER lane=rf round=1 arms=ours,cuml-rf-gpu
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=1 ms=3307.018 hash=15e38312cb4bb870
+FSPEED lane=rf arm=cuml-rf-gpu shape=istella-1000000x220 round=1 ms=3470.394 hash=afb10ad5da9e4921
+FSPEED-ORDER lane=rf round=2 arms=ours,cuml-rf-gpu
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=2 ms=3232.575 hash=15e38312cb4bb870
+FSPEED lane=rf arm=cuml-rf-gpu shape=istella-1000000x220 round=2 ms=3500.032 hash=afb10ad5da9e4921
+FSPEED-ORDER lane=rf round=3 arms=ours,cuml-rf-gpu
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=3 ms=3256.500 hash=15e38312cb4bb870
+FSPEED lane=rf arm=cuml-rf-gpu shape=istella-1000000x220 round=3 ms=3678.635 hash=afb10ad5da9e4921
+FSPEED-ORDER lane=rf round=4 arms=ours,cuml-rf-gpu
+7300 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5a0180000000, nodemask=2)
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=4 ms=3264.685 hash=15e38312cb4bb870
+FSPEED lane=rf arm=cuml-rf-gpu shape=istella-1000000x220 round=4 ms=3588.353 hash=afb10ad5da9e4921
+FSPEED-ORDER lane=rf round=5 arms=ours,cuml-rf-gpu
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=5 ms=3481.930 hash=15e38312cb4bb870
+FSPEED lane=rf arm=cuml-rf-gpu shape=istella-1000000x220 round=5 ms=3439.805 hash=afb10ad5da9e4921
+7300 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5a01c0000000, nodemask=2)
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.145578
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.964548
+FSPEED-ACC lane=rf arm=cuml-rf-gpu metric=logloss value=0.145504
+FSPEED-ACC lane=rf arm=cuml-rf-gpu metric=auc value=0.964577
+FSPEED-SCALE stage=after rows=1000000 features=220 input_mib=839.2 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.

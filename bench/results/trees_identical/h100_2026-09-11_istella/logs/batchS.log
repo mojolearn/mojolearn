@@ -1,0 +1,72 @@
+speed baseline gbdt-depthwise istella 1000000 rounds=7 mode=full 11:41:03
+speed_exit baseline.gbdt-depthwise.istella.r1000000.full=0 11:42:31
+FSPEED-REFUSED lane=gbdt-depthwise arm=catboost-cpu reason=GPU-PATH-ONLY: catboost-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-REFUSED lane=gbdt-depthwise arm=xgboost-cpu reason=GPU-PATH-ONLY: xgboost-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-HEADER family=forest lane=gbdt-depthwise arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=7 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-depthwise arm=catboost-gpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=7 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-depthwise arm=xgboost-gpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=7 size=shipped
+FSPEED lane=gbdt-depthwise arm=ours shape=istella-1000000x220 round=1 ms=3349.348 hash=5d053cd086658072
+FSPEED lane=gbdt-depthwise arm=catboost-gpu shape=istella-1000000x220 round=1 ms=1745.801 hash=c38c0e8335de0214
+FSPEED lane=gbdt-depthwise arm=xgboost-gpu shape=istella-1000000x220 round=1 ms=1649.407 hash=377719029530ae62
+FSPEED lane=gbdt-depthwise arm=ours shape=istella-1000000x220 round=2 ms=3174.515 hash=5d053cd086658072
+FSPEED lane=gbdt-depthwise arm=catboost-gpu shape=istella-1000000x220 round=2 ms=1658.160 hash=64f393a29d080b82
+FSPEED lane=gbdt-depthwise arm=xgboost-gpu shape=istella-1000000x220 round=2 ms=1917.292 hash=377719029530ae62
+FSPEED lane=gbdt-depthwise arm=ours shape=istella-1000000x220 round=3 ms=3339.931 hash=5d053cd086658072
+FSPEED lane=gbdt-depthwise arm=catboost-gpu shape=istella-1000000x220 round=3 ms=1633.328 hash=d14a6090d2f27573
+FSPEED lane=gbdt-depthwise arm=xgboost-gpu shape=istella-1000000x220 round=3 ms=1951.194 hash=377719029530ae62
+FSPEED lane=gbdt-depthwise arm=ours shape=istella-1000000x220 round=4 ms=3304.358 hash=5d053cd086658072
+FSPEED lane=gbdt-depthwise arm=catboost-gpu shape=istella-1000000x220 round=4 ms=1652.940 hash=fcb8fd6518cf1ea2
+FSPEED lane=gbdt-depthwise arm=xgboost-gpu shape=istella-1000000x220 round=4 ms=1681.594 hash=377719029530ae62
+FSPEED lane=gbdt-depthwise arm=ours shape=istella-1000000x220 round=5 ms=3234.409 hash=5d053cd086658072
+FSPEED lane=gbdt-depthwise arm=catboost-gpu shape=istella-1000000x220 round=5 ms=1720.290 hash=bb8332bbaa60187f
+FSPEED lane=gbdt-depthwise arm=xgboost-gpu shape=istella-1000000x220 round=5 ms=1681.883 hash=377719029530ae62
+FSPEED lane=gbdt-depthwise arm=ours shape=istella-1000000x220 round=6 ms=3268.352 hash=5d053cd086658072
+FSPEED lane=gbdt-depthwise arm=catboost-gpu shape=istella-1000000x220 round=6 ms=1695.446 hash=07be8db9a0268cfb
+FSPEED lane=gbdt-depthwise arm=xgboost-gpu shape=istella-1000000x220 round=6 ms=1768.432 hash=377719029530ae62
+FSPEED lane=gbdt-depthwise arm=ours shape=istella-1000000x220 round=7 ms=3483.168 hash=5d053cd086658072
+FSPEED lane=gbdt-depthwise arm=catboost-gpu shape=istella-1000000x220 round=7 ms=1664.029 hash=e24e89371745f849
+FSPEED lane=gbdt-depthwise arm=xgboost-gpu shape=istella-1000000x220 round=7 ms=1782.914 hash=377719029530ae62
+FSPEED-ACC lane=gbdt-depthwise arm=ours metric=logloss value=0.126517
+FSPEED-ACC lane=gbdt-depthwise arm=ours metric=auc value=0.971896
+FSPEED-ACC lane=gbdt-depthwise arm=catboost-gpu metric=logloss value=0.125909
+FSPEED-ACC lane=gbdt-depthwise arm=catboost-gpu metric=auc value=0.972801
+FSPEED-ACC lane=gbdt-depthwise arm=xgboost-gpu metric=logloss value=0.125110
+FSPEED-ACC lane=gbdt-depthwise arm=xgboost-gpu metric=auc value=0.973774
+speed baseline gbdt-lossguide istella 1000000 rounds=7 mode=full 11:42:31
+speed_exit baseline.gbdt-lossguide.istella.r1000000.full=0 11:44:09
+FSPEED-REFUSED lane=gbdt-lossguide arm=catboost-cpu reason=GPU-PATH-ONLY: catboost-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-REFUSED lane=gbdt-lossguide arm=xgboost-cpu reason=GPU-PATH-ONLY: xgboost-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-REFUSED lane=gbdt-lossguide arm=lightgbm-cpu reason=GPU-PATH-ONLY: lightgbm-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=7 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=catboost-gpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=7 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=xgboost-gpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=7 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=lightgbm-cuda mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=7 size=shipped
+FSPEED-REFUSED lane=gbdt-lossguide arm=lightgbm-cuda reason=LightGBMError during warm-up: CUDA Tree Learner was not enabled in this build. Please recompile with CMake option -DUSE_CUDA=1 (NVIDIA GPUs) or -DUSE_ROCM=1 (AMD GPUs)
+FSPEED lane=gbdt-lossguide arm=ours shape=istella-1000000x220 round=1 ms=4050.629 hash=6182fd2bee4fb941
+FSPEED lane=gbdt-lossguide arm=catboost-gpu shape=istella-1000000x220 round=1 ms=2432.822 hash=58e2a494c620ab79
+FSPEED lane=gbdt-lossguide arm=xgboost-gpu shape=istella-1000000x220 round=1 ms=1940.197 hash=377719029530ae62
+FSPEED lane=gbdt-lossguide arm=ours shape=istella-1000000x220 round=2 ms=3890.665 hash=6182fd2bee4fb941
+FSPEED lane=gbdt-lossguide arm=catboost-gpu shape=istella-1000000x220 round=2 ms=2403.567 hash=8aa933187410ea8e
+FSPEED lane=gbdt-lossguide arm=xgboost-gpu shape=istella-1000000x220 round=2 ms=1762.062 hash=377719029530ae62
+FSPEED lane=gbdt-lossguide arm=ours shape=istella-1000000x220 round=3 ms=3778.158 hash=6182fd2bee4fb941
+FSPEED lane=gbdt-lossguide arm=catboost-gpu shape=istella-1000000x220 round=3 ms=2325.279 hash=24f7d2303fa95380
+FSPEED lane=gbdt-lossguide arm=xgboost-gpu shape=istella-1000000x220 round=3 ms=1846.131 hash=377719029530ae62
+FSPEED lane=gbdt-lossguide arm=ours shape=istella-1000000x220 round=4 ms=3814.254 hash=6182fd2bee4fb941
+FSPEED lane=gbdt-lossguide arm=catboost-gpu shape=istella-1000000x220 round=4 ms=2383.437 hash=2f7d36423e841133
+FSPEED lane=gbdt-lossguide arm=xgboost-gpu shape=istella-1000000x220 round=4 ms=1769.524 hash=377719029530ae62
+FSPEED lane=gbdt-lossguide arm=ours shape=istella-1000000x220 round=5 ms=4160.182 hash=6182fd2bee4fb941
+FSPEED lane=gbdt-lossguide arm=catboost-gpu shape=istella-1000000x220 round=5 ms=2349.172 hash=0676e91ee0a82268
+FSPEED lane=gbdt-lossguide arm=xgboost-gpu shape=istella-1000000x220 round=5 ms=1776.701 hash=377719029530ae62
+FSPEED lane=gbdt-lossguide arm=ours shape=istella-1000000x220 round=6 ms=3954.102 hash=6182fd2bee4fb941
+FSPEED lane=gbdt-lossguide arm=catboost-gpu shape=istella-1000000x220 round=6 ms=2353.927 hash=7ef1c708e8356a5a
+FSPEED lane=gbdt-lossguide arm=xgboost-gpu shape=istella-1000000x220 round=6 ms=1865.831 hash=377719029530ae62
+FSPEED lane=gbdt-lossguide arm=ours shape=istella-1000000x220 round=7 ms=3907.566 hash=6182fd2bee4fb941
+FSPEED lane=gbdt-lossguide arm=catboost-gpu shape=istella-1000000x220 round=7 ms=2357.866 hash=d02d598dee68a7ad
+FSPEED lane=gbdt-lossguide arm=xgboost-gpu shape=istella-1000000x220 round=7 ms=1845.256 hash=377719029530ae62
+FSPEED-ACC lane=gbdt-lossguide arm=ours metric=logloss value=0.122045
+FSPEED-ACC lane=gbdt-lossguide arm=ours metric=auc value=0.975037
+FSPEED-ACC lane=gbdt-lossguide arm=catboost-gpu metric=logloss value=0.121318
+FSPEED-ACC lane=gbdt-lossguide arm=catboost-gpu metric=auc value=0.975388
+FSPEED-ACC lane=gbdt-lossguide arm=xgboost-gpu metric=logloss value=0.125110
+FSPEED-ACC lane=gbdt-lossguide arm=xgboost-gpu metric=auc value=0.973774
+PHASE_F_DONE 11:44:09

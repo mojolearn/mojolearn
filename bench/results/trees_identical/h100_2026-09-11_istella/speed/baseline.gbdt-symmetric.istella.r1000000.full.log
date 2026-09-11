@@ -1,0 +1,39 @@
+FSPEED-NOTE lane=gbdt-symmetric arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+6050 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x78a3c0000000, nodemask=2)
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=cuda path=/root/mojolearn/python/mojolearn/identical/_mojolearn_gbdt.so
+FSPEED-REFUSED lane=gbdt-symmetric arm=catboost-cpu reason=GPU-PATH-ONLY: catboost-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-SCALE stage=before rows=1000000 features=220 input_mib=839.2 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=7 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=catboost-gpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=7 size=shipped
+6050 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x78a400000000, nodemask=2)
+FSPEED-WARMUP lane=gbdt-symmetric arm=ours shape=istella-1000000x220 ms=3808.642
+FSPEED-WARMUP lane=gbdt-symmetric arm=catboost-gpu shape=istella-1000000x220 ms=1473.429
+FSPEED-ORDER lane=gbdt-symmetric round=1 arms=ours,catboost-gpu
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=1 ms=2527.661 hash=238d3abce0cabf43
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=istella-1000000x220 round=1 ms=1408.139 hash=9f751ca5c57614bd
+FSPEED-ORDER lane=gbdt-symmetric round=2 arms=ours,catboost-gpu
+6050 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x78a440000000, nodemask=2)
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=2 ms=2529.684 hash=238d3abce0cabf43
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=istella-1000000x220 round=2 ms=1493.095 hash=17bfedcac565baa0
+FSPEED-ORDER lane=gbdt-symmetric round=3 arms=ours,catboost-gpu
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=3 ms=2489.450 hash=238d3abce0cabf43
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=istella-1000000x220 round=3 ms=1457.556 hash=3f106dc7e4a80588
+FSPEED-ORDER lane=gbdt-symmetric round=4 arms=ours,catboost-gpu
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=4 ms=2326.481 hash=238d3abce0cabf43
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=istella-1000000x220 round=4 ms=1527.415 hash=94115decaf75ce35
+FSPEED-ORDER lane=gbdt-symmetric round=5 arms=ours,catboost-gpu
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=5 ms=2350.362 hash=238d3abce0cabf43
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=istella-1000000x220 round=5 ms=1457.688 hash=2537692538349af0
+FSPEED-ORDER lane=gbdt-symmetric round=6 arms=ours,catboost-gpu
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=6 ms=2406.505 hash=238d3abce0cabf43
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=istella-1000000x220 round=6 ms=1441.132 hash=b4dac50cb6238559
+FSPEED-ORDER lane=gbdt-symmetric round=7 arms=ours,catboost-gpu
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=7 ms=2378.309 hash=238d3abce0cabf43
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=istella-1000000x220 round=7 ms=1407.734 hash=447a607245f74cdd
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=logloss value=0.138653
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=auc value=0.966990
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-gpu metric=logloss value=0.139154
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-gpu metric=auc value=0.966720
+FSPEED-SCALE stage=after rows=1000000 features=220 input_mib=839.2 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.

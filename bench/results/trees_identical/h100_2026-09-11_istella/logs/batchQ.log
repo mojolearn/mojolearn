@@ -1,0 +1,114 @@
+batchQ start 10:57:10
+started=2026-09-11T10:44:45Z commit=a6d253060cc8c495977ef68159216bb031195405
+lightgbm_cuda_build=SKIPPED requested focused competitor session
+pixi_install=0 10:44:51
+pip_base=0 10:45:07
+build_base=0 10:45:47
+pip_cuml=0 10:46:56
+build_gbdt=0 10:47:26
+build_rf=0 10:47:55
+build_trees=0 10:48:27
+import_identical=0 10:48:27
+higgs_zip=0 10:52:03
+higgs_unzip=0 10:52:08
+download_higgs=0 10:53:46
+a209664c73fe7d6fba80e95422e7632a591e854867fb2106d0fd6b09349da899  /root/bins/baseline/_mojolearn.so
+79284946e80f59683e31c006b574ffb32c37d1a0b9bbe3ec51b7fed6b8cc044f  /root/bins/baseline/_mojolearn_gbdt.so
+aca39b2d072887995b42b31f4d689ec232194e15373f572a4ebd8875cce5a5b2  /root/bins/baseline/_mojolearn_rf.so
+7d64b467271edb0522b0a8a45c4ed7b25ea45efd331063c39481fa43bd848dc0  /root/bins/baseline/_mojolearn_trees.so
+build baseline/base defines='' 10:57:10
+build_exit baseline.base=0 10:57:34
+a209664c73fe7d6fba80e95422e7632a591e854867fb2106d0fd6b09349da899  /root/bins/baseline/_mojolearn.so
+build baseline/gbdt defines='' 10:57:34
+build_exit baseline.gbdt=0 10:57:55
+79284946e80f59683e31c006b574ffb32c37d1a0b9bbe3ec51b7fed6b8cc044f  /root/bins/baseline/_mojolearn_gbdt.so
+build baseline/rf defines='' 10:57:55
+build_exit baseline.rf=0 10:58:03
+aca39b2d072887995b42b31f4d689ec232194e15373f572a4ebd8875cce5a5b2  /root/bins/baseline/_mojolearn_rf.so
+build baseline/trees defines='' 10:58:03
+build_exit baseline.trees=0 10:58:09
+7d64b467271edb0522b0a8a45c4ed7b25ea45efd331063c39481fa43bd848dc0  /root/bins/baseline/_mojolearn_trees.so
+a209664c73fe7d6fba80e95422e7632a591e854867fb2106d0fd6b09349da899  /root/bins/baseline/_mojolearn.so
+79284946e80f59683e31c006b574ffb32c37d1a0b9bbe3ec51b7fed6b8cc044f  /root/bins/baseline/_mojolearn_gbdt.so
+aca39b2d072887995b42b31f4d689ec232194e15373f572a4ebd8875cce5a5b2  /root/bins/baseline/_mojolearn_rf.so
+7d64b467271edb0522b0a8a45c4ed7b25ea45efd331063c39481fa43bd848dc0  /root/bins/baseline/_mojolearn_trees.so
+build pureleaf/rf defines='-D MOJOLEARN_2502_PURE_LEAF=1' 10:58:10
+build_exit pureleaf.rf=0 10:58:40
+69e8b1a6d848cc1b9356ce7f21adb952898cea09fbadf4df9cdf23d7b2ce610b  /root/bins/pureleaf/_mojolearn_rf.so
+a209664c73fe7d6fba80e95422e7632a591e854867fb2106d0fd6b09349da899  /root/bins/pureleaf/_mojolearn.so
+79284946e80f59683e31c006b574ffb32c37d1a0b9bbe3ec51b7fed6b8cc044f  /root/bins/pureleaf/_mojolearn_gbdt.so
+69e8b1a6d848cc1b9356ce7f21adb952898cea09fbadf4df9cdf23d7b2ce610b  /root/bins/pureleaf/_mojolearn_rf.so
+7d64b467271edb0522b0a8a45c4ed7b25ea45efd331063c39481fa43bd848dc0  /root/bins/pureleaf/_mojolearn_trees.so
+PHASE_A_DONE 10:58:40
+identity_break baseline lanes=rf-clf,rf-reg,et-clf,et-reg,gbdt-symmetric,gbdt-depthwise,gbdt-lossguide,gbdt-rmse,kmeans 10:58:40
+ib_exit baseline=0 10:58:50
+
+cells=81 stable=81 moved=0 refused=0
+wrote /root/trees_out/ib/baseline.json
+ib_diff sep10b_baseline vs baseline exit=0 10:58:50
+82
+PHASE_B_DONE 10:58:50
+started=2026-09-11T10:44:45Z commit=a6d253060cc8c495977ef68159216bb031195405
+lightgbm_cuda_build=SKIPPED requested focused competitor session
+pixi_install=0 10:44:51
+pip_base=0 10:45:07
+build_base=0 10:45:47
+pip_cuml=0 10:46:56
+build_gbdt=0 10:47:26
+build_rf=0 10:47:55
+build_trees=0 10:48:27
+import_identical=0 10:48:27
+higgs_zip=0 10:52:03
+higgs_unzip=0 10:52:08
+download_higgs=0 10:53:46
+download_istella=0 11:13:38
+finished=2026-09-11T11:13:38Z
+speed baseline rf istella 1000000 rounds=5 mode=full 11:14:21
+speed_exit baseline.rf.istella.r1000000.full=0 11:14:58
+FSPEED-REFUSED lane=rf arm=sklearn-rf-cpu reason=GPU-PATH-ONLY: sklearn-rf-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-REFUSED lane=rf arm=lightgbm-cpu reason=GPU-PATH-ONLY: lightgbm-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-HEADER family=forest lane=rf arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=rf arm=cuml-rf-gpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=rf arm=lightgbm-cuda mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-REFUSED lane=rf arm=ours reason=ArgumentError during warm-up: argument 2: TypeError: expected LP__PyBuffer instance instead of pointer to _PyBuffer
+FSPEED-REFUSED lane=rf arm=lightgbm-cuda reason=LightGBMError during warm-up: CUDA Tree Learner was not enabled in this build. Please recompile with CMake option -DUSE_CUDA=1 (NVIDIA GPUs) or -DUSE_ROCM=1 (AMD GPUs)
+FSPEED lane=rf arm=cuml-rf-gpu shape=istella-1000000x220 round=1 ms=3636.556 hash=afb10ad5da9e4921
+FSPEED lane=rf arm=cuml-rf-gpu shape=istella-1000000x220 round=2 ms=3598.518 hash=afb10ad5da9e4921
+FSPEED lane=rf arm=cuml-rf-gpu shape=istella-1000000x220 round=3 ms=3619.005 hash=afb10ad5da9e4921
+FSPEED lane=rf arm=cuml-rf-gpu shape=istella-1000000x220 round=4 ms=3393.981 hash=afb10ad5da9e4921
+FSPEED lane=rf arm=cuml-rf-gpu shape=istella-1000000x220 round=5 ms=3395.353 hash=afb10ad5da9e4921
+FSPEED-ACC lane=rf arm=cuml-rf-gpu metric=logloss value=0.145504
+FSPEED-ACC lane=rf arm=cuml-rf-gpu metric=auc value=0.964577
+speed baseline gbdt-symmetric istella 1000000 rounds=7 mode=full 11:14:58
+speed_exit baseline.gbdt-symmetric.istella.r1000000.full=0 11:15:54
+FSPEED-REFUSED lane=gbdt-symmetric arm=catboost-cpu reason=GPU-PATH-ONLY: catboost-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=7 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=catboost-gpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=7 size=shipped
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=1 ms=2527.661 hash=238d3abce0cabf43
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=istella-1000000x220 round=1 ms=1408.139 hash=9f751ca5c57614bd
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=2 ms=2529.684 hash=238d3abce0cabf43
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=istella-1000000x220 round=2 ms=1493.095 hash=17bfedcac565baa0
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=3 ms=2489.450 hash=238d3abce0cabf43
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=istella-1000000x220 round=3 ms=1457.556 hash=3f106dc7e4a80588
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=4 ms=2326.481 hash=238d3abce0cabf43
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=istella-1000000x220 round=4 ms=1527.415 hash=94115decaf75ce35
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=5 ms=2350.362 hash=238d3abce0cabf43
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=istella-1000000x220 round=5 ms=1457.688 hash=2537692538349af0
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=6 ms=2406.505 hash=238d3abce0cabf43
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=istella-1000000x220 round=6 ms=1441.132 hash=b4dac50cb6238559
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=7 ms=2378.309 hash=238d3abce0cabf43
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=istella-1000000x220 round=7 ms=1407.734 hash=447a607245f74cdd
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=logloss value=0.138653
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=auc value=0.966990
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-gpu metric=logloss value=0.139154
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-gpu metric=auc value=0.966720
+speed baseline rf higgs 1000000 rounds=5 mode=ours 11:15:54
+speed_exit baseline.rf.higgs.r1000000.ours=0 11:18:53
+FSPEED-HEADER family=forest lane=rf arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED lane=rf arm=ours shape=higgs-1000000x28 round=1 ms=1627.990 hash=3ffa2951595422d4
+FSPEED lane=rf arm=ours shape=higgs-1000000x28 round=2 ms=1536.461 hash=3ffa2951595422d4
+FSPEED lane=rf arm=ours shape=higgs-1000000x28 round=3 ms=1523.368 hash=3ffa2951595422d4
+FSPEED lane=rf arm=ours shape=higgs-1000000x28 round=4 ms=1509.000 hash=3ffa2951595422d4
+FSPEED lane=rf arm=ours shape=higgs-1000000x28 round=5 ms=1519.635 hash=3ffa2951595422d4
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.538850
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.809906

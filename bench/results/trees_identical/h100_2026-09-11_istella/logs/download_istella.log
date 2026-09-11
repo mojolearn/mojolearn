@@ -1,0 +1,3 @@
+downloading http://library.istella.it/dataset/istella-s-letor.tar.gz -> /root/datasets/gbm-bench/istella/istella-s-letor.tar.gz (about 472 MB)
+istella: 472.1 MB
+istella decoded to /root/datasets/gbm-bench/istella/istella_speed.npz (train 2043304 x 220, test 500000)

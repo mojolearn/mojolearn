@@ -1,0 +1,41 @@
+FSPEED-NOTE lane=gbdt-depthwise arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+8885 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5a0580000000, nodemask=2)
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=cuda path=/root/mojolearn/python/mojolearn/identical/_mojolearn_gbdt.so
+FSPEED-REFUSED lane=gbdt-depthwise arm=catboost-cpu reason=GPU-PATH-ONLY: catboost-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-REFUSED lane=gbdt-depthwise arm=xgboost-cpu reason=GPU-PATH-ONLY: xgboost-cpu is a CPU arm and this box has an accelerator. On NVIDIA and AMD we compare against the vendor's GPU path only; their CPU path is the MacBook's.
+FSPEED-REFUSED lane=gbdt-depthwise arm=xgboost-cpu reason=ModuleNotFoundError: No module named 'xgboost'
+FSPEED-REFUSED lane=gbdt-depthwise arm=xgboost-gpu reason=ModuleNotFoundError: No module named 'xgboost'
+FSPEED-SCALE stage=before rows=1000000 features=220 input_mib=839.2 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=gbdt-depthwise arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=7 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-depthwise arm=catboost-gpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=7 size=shipped
+8885 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5a05c0000000, nodemask=2)
+FSPEED-WARMUP lane=gbdt-depthwise arm=ours shape=istella-1000000x220 ms=4206.800
+FSPEED-WARMUP lane=gbdt-depthwise arm=catboost-gpu shape=istella-1000000x220 ms=1719.104
+FSPEED-ORDER lane=gbdt-depthwise round=1 arms=ours,catboost-gpu
+FSPEED lane=gbdt-depthwise arm=ours shape=istella-1000000x220 round=1 ms=3473.424 hash=5d053cd086658072
+FSPEED lane=gbdt-depthwise arm=catboost-gpu shape=istella-1000000x220 round=1 ms=1572.550 hash=f6f8306fb10ca091
+FSPEED-ORDER lane=gbdt-depthwise round=2 arms=ours,catboost-gpu
+FSPEED lane=gbdt-depthwise arm=ours shape=istella-1000000x220 round=2 ms=2971.238 hash=5d053cd086658072
+FSPEED lane=gbdt-depthwise arm=catboost-gpu shape=istella-1000000x220 round=2 ms=1777.896 hash=175cbc771bbe5cc6
+FSPEED-ORDER lane=gbdt-depthwise round=3 arms=ours,catboost-gpu
+FSPEED lane=gbdt-depthwise arm=ours shape=istella-1000000x220 round=3 ms=3477.362 hash=5d053cd086658072
+FSPEED lane=gbdt-depthwise arm=catboost-gpu shape=istella-1000000x220 round=3 ms=1629.196 hash=c644deba0ab303e7
+FSPEED-ORDER lane=gbdt-depthwise round=4 arms=ours,catboost-gpu
+FSPEED lane=gbdt-depthwise arm=ours shape=istella-1000000x220 round=4 ms=2990.165 hash=5d053cd086658072
+FSPEED lane=gbdt-depthwise arm=catboost-gpu shape=istella-1000000x220 round=4 ms=1693.136 hash=ad414af852b7b2e3
+FSPEED-ORDER lane=gbdt-depthwise round=5 arms=ours,catboost-gpu
+FSPEED lane=gbdt-depthwise arm=ours shape=istella-1000000x220 round=5 ms=3032.807 hash=5d053cd086658072
+FSPEED lane=gbdt-depthwise arm=catboost-gpu shape=istella-1000000x220 round=5 ms=1599.721 hash=498d173225c8e458
+FSPEED-ORDER lane=gbdt-depthwise round=6 arms=ours,catboost-gpu
+FSPEED lane=gbdt-depthwise arm=ours shape=istella-1000000x220 round=6 ms=3005.477 hash=5d053cd086658072
+FSPEED lane=gbdt-depthwise arm=catboost-gpu shape=istella-1000000x220 round=6 ms=1744.937 hash=380f21b4f1f2512c
+FSPEED-ORDER lane=gbdt-depthwise round=7 arms=ours,catboost-gpu
+FSPEED lane=gbdt-depthwise arm=ours shape=istella-1000000x220 round=7 ms=3114.957 hash=5d053cd086658072
+FSPEED lane=gbdt-depthwise arm=catboost-gpu shape=istella-1000000x220 round=7 ms=1629.035 hash=08c2dc8545258479
+FSPEED-ACC lane=gbdt-depthwise arm=ours metric=logloss value=0.126517
+FSPEED-ACC lane=gbdt-depthwise arm=ours metric=auc value=0.971896
+FSPEED-ACC lane=gbdt-depthwise arm=catboost-gpu metric=logloss value=0.125870
+FSPEED-ACC lane=gbdt-depthwise arm=catboost-gpu metric=auc value=0.972820
+FSPEED-SCALE stage=after rows=1000000 features=220 input_mib=839.2 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
