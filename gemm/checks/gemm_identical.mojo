@@ -4126,7 +4126,12 @@ def identical_gemm_step_ksplit_into(
 
     On a build without `-D MOJOLEARN_GEMM_ARM_TRIAL=1` this runs the shipped
     dispatch (`identical_gemm_shipped_into`) and ignores `group_leaves` and
-    `sabotage`, so the arms check fails on reach there."""
+    `sabotage`. THAT FALLBACK READS `ws`: the shipped dispatch runs the plan
+    `choose_gemm_plan` picks, a SPLIT plan at small outputs with `P >= 4`,
+    so `ws` must then hold `identical_gemm_workspace_max_floats(m, n, k)`
+    floats, not the trial path's none (brief section 11: the arms check sized
+    it for FLAT and the old plan and the M4 no-trial run wrote past it). The
+    arms check launches nothing through this fallback."""
     if m <= 0 or n <= 0:
         return
     comptime if GEMM_ARM_TRIAL:
@@ -4400,8 +4405,12 @@ def identical_gemm_step_geometry_into(
     (`identical_gemm_shipped_at_row_into[True]` at the column's row).
     GEMM_GEOM_TUNED128 runs PLAN_TUNED_128_8X8, the old plan, on EVERY
     build. On a build without `-D MOJOLEARN_GEMM_ARM_TRIAL=1` every other
-    geometry runs the shipped dispatch and `sabotage` is ignored, so the arms
-    check fails on reach there.
+    geometry runs the shipped dispatch and `sabotage` is ignored. That
+    fallback (like GEMM_GEOM_SHIPPED on every build) READS `ws`: size it with
+    `identical_gemm_workspace_max_floats(m, n, k)`, because at a small output
+    with `P >= 4` `choose_gemm_plan` picks a SPLIT plan that writes `m n P`
+    floats there (brief section 11, the M4 no-trial crash). The arms check
+    launches no arm geometry but `tuned128` on such a build.
 
     The two ksplit geometries (2591), and the shipped geometry wherever the
     ksplit default takes the call, allocate their own workspace and
