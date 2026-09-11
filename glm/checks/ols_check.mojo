@@ -1139,8 +1139,12 @@ def _host_fit_coefs(
 #       invariant, so this fails only when BOTH are gone.
 #   check_ols_mixed_scale_design_matches_float64_oracle
 #       column scales spanning 2^26, a correlated pair at the smallest scale
-#       and a near-constant column, Istella-S in miniature. The device
-#       residual must match a float64 oracle's. Gates the EQUILIBRATION.
+#       and a near-constant column. The device residual must match a
+#       float64 oracle's. Gates the EQUILIBRATION that the relative cutoff
+#       needs: without it the cutoff drops the small-scale columns. The
+#       pre-2026-09-11 arithmetic (absolute 1e-10, no equilibration) PASSES
+#       it (measured on the MI325X, 2026-09-11), so it is not a reproduction
+#       of the Istella-S failure.
 #   check_ols_rank_deficient_design_drops_the_noise_direction
 #       one column is the float32 rounding of the sum of two others, so the
 #       Gram matrix is singular up to rounding: exactly one direction must
@@ -1151,6 +1155,11 @@ def _host_fit_coefs(
 #   (f) `ols_equilibration_scale` returns 1.0 for every column
 #   (g) `ols_pinv_threshold` returns the absolute OLS_NONZERO_THRESH
 #   (f+g) both, which is the pre-2026-09-11 arithmetic
+# MEASURED on a DigitalOcean MI325X, 2026-09-11, commit 97df01e0: none, all
+# three pass; f fails only the mixed-scale check (5 of 7 directions dropped,
+# residual 8043.8 against a bound of 3.39); g fails only the rank-deficient
+# check (0 dropped); f+g fails the scale-invariant check (rank 8 at scale 1,
+# rank 0 at 2^-24) and the rank-deficient check.
 
 
 def _pow2_scaled(v: Float32, e: Int) -> Float32:
@@ -1362,8 +1371,9 @@ def check_ols_rank_guard_is_scale_invariant() raises:
 
 
 def check_ols_mixed_scale_design_matches_float64_oracle() raises:
-    """Istella-S in miniature: the device fit's residual matches a float64
-    oracle's when column scales span 2^26.
+    """The device fit's residual matches a float64 oracle's when column
+    scales span 2^26, which is what the relative cutoff needs the
+    equilibration for.
 
     THE FIXTURE, `N x D`, no host rounding beyond one narrowing per cell:
 
@@ -1375,11 +1385,12 @@ def check_ols_mixed_scale_design_matches_float64_oracle() raises:
         target        sum_k cell_k * 2^-scale_k (each column contributes
                       O(1)) plus 0.05 times a hash, narrowed once
 
-    The raw Gram diagonal spans about 2^52. Without equilibration the float32
-    eigensolver's stopping test and the float32 eigenvalues are dominated by
-    the 2^12 column, so the correlated pair at 2^-14 is solved as if it were
-    uncorrelated or dropped; the planted signal on it is exactly what goes
-    missing.
+    The raw Gram diagonal spans about 2^52, so `n * eps32 * max|lam|` of the
+    raw Gram is far above every eigenvalue that belongs to the small columns:
+    a relative cutoff WITHOUT equilibration drops them and the planted signal
+    on them goes missing (sabotage f: 5 of 7 directions dropped). The
+    pre-2026-09-11 arithmetic, an absolute 1e-10 with no equilibration,
+    passes this fixture; it is the other two checks that fail on it.
 
     THE ORACLE is a different program in Float64: the Gram matrix and `A^T b`
     of the same float32 cells, a Jacobi scaling by `1/sqrt(G_ii)` (not a
