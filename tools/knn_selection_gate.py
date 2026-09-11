@@ -456,7 +456,17 @@ def check_oracle(fx, dist, idx, k, rows, log):
                     hard.append(int(q))
         # distances: ours (float32 euclid) vs sqrt of the float64 distance at OUR index
         d64 = np.sqrt(np.maximum(((fx["queries"][q].astype(np.float64) - fx["index"][ours].astype(np.float64)) ** 2).sum(axis=1), 0.0))
-        tol = 1e-3 * np.maximum(1.0, d64)
+        # The kernel's distance is the float32 Gram form |q|^2 + |y|^2 - 2 q.y;
+        # at a true distance of 0 (an exact match) the cancellation leaves a
+        # residual of order sqrt(eps32 * |x|^2), about 1e-3 for these fixtures,
+        # so the floor is that residual, not 1e-3 absolute (first H100 run,
+        # 2026-09-11: every "mismatch" row was a planted exact match, sets and
+        # order agreed). The exact-match rows' bits are reported by
+        # check_planted; this check keeps to the rows the oracle can separate.
+        norms = np.maximum(np.einsum("ij,ij->i", fx["index"][ours].astype(np.float64), fx["index"][ours].astype(np.float64)),
+                           float(np.dot(fx["queries"][q].astype(np.float64), fx["queries"][q].astype(np.float64))))
+        cancellation = 4.0 * np.sqrt(np.finfo(np.float32).eps * norms)
+        tol = np.maximum(1e-3 * np.maximum(1.0, d64), cancellation)
         if np.any(np.abs(dist[q].astype(np.float64) - d64) > tol):
             dist_bad.append(int(q))
     return {"rows": len(rows), "hard_mismatch_rows": hard, "ambiguous_rows": ambiguous, "distance_mismatch_rows": dist_bad}
