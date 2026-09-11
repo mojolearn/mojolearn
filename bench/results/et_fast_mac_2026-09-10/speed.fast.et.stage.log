@@ -1,0 +1,68 @@
+FSPEED-NOTE lane=et arms=ours metric=devices delta=1.000000 reason=devices=cpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+BENCH_BINDING arm=ours requested=fast resolved=fast compiled=fast vendor=metal path=/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/7de13e6c-b220-4235-a53a-461fcad83192/scratchpad/wt-trees/python/mojolearn/_mojolearn_trees.so
+FSPEED-SCALE stage=before rows=1000000 features=28 input_mib=106.8 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=et arm=ours mode=FAST device=Darwin_arm64 rounds=1 size=shipped
+== MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+   NOT a certifiable timing -- see ensemble/instruments.mojo)
+  boundary_dataset_upload	0.035583 s
+MOJOLEARN_STAGE_TIMES [extratrees classification forest fit]
+  (serialized-by-measurement; compare total to an untimed run)
+   setup (buffers, row fill, workspace) -> 0.270063 s
+   stage + feature sampler -> 2.035292 s
+   range pass (init+range+decode+nonconst) -> 3.04527 s
+   score pass (init+score+finalize) -> 3.829213 s
+   candidate+reduce+splits readback -> 0.172903 s
+   host: split records -> 0.073623 s
+   partition (4 kernels) -> 2.423499 s
+   host: pop + batch assembly -> 0.01014 s
+   leaf pass -> 0.093641 s
+   host: queue push (children of the batch) -> 0.028063 s
+  total -> 11.981707 s
+== MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+   NOT a certifiable timing -- see ensemble/instruments.mojo)
+  boundary_x_borrow	1e-06 s
+  boundary_y_list	0.000679 s
+  boundary_device_fit_and_context	12.055955 s
+  boundary_export_handle	1.9e-05 s
+  fit_total	12.056674 s
+  other	2e-05 s
+== MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+   NOT a certifiable timing -- see ensemble/instruments.mojo)
+  boundary_export_into	0.003751 s
+BOUNDARY_PYTHON {'binding_ms': 12064.727374992799, 'array_pack_ms': 0.9762499830685556}
+FSPEED-WARMUP lane=et arm=ours shape=higgs-1000000x28 ms=12137.064
+FSPEED-ORDER lane=et round=1 arms=ours
+== MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+   NOT a certifiable timing -- see ensemble/instruments.mojo)
+  boundary_dataset_upload	0.018956 s
+MOJOLEARN_STAGE_TIMES [extratrees classification forest fit]
+  (serialized-by-measurement; compare total to an untimed run)
+   setup (buffers, row fill, workspace) -> 0.065512 s
+   stage + feature sampler -> 1.916273 s
+   range pass (init+range+decode+nonconst) -> 3.021673 s
+   score pass (init+score+finalize) -> 3.793063 s
+   candidate+reduce+splits readback -> 0.172197 s
+   host: split records -> 0.076422 s
+   partition (4 kernels) -> 2.388331 s
+   host: pop + batch assembly -> 0.010148 s
+   leaf pass -> 0.083642 s
+   host: queue push (children of the batch) -> 0.028473 s
+  total -> 11.555734 s
+== MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+   NOT a certifiable timing -- see ensemble/instruments.mojo)
+  boundary_x_borrow	0.0 s
+  boundary_y_list	0.000254 s
+  boundary_device_fit_and_context	11.579021 s
+  boundary_export_handle	2.7e-05 s
+  fit_total	11.579322 s
+  other	2e-05 s
+== MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+   NOT a certifiable timing -- see ensemble/instruments.mojo)
+  boundary_export_into	0.003663 s
+BOUNDARY_PYTHON {'binding_ms': 11585.607082990464, 'array_pack_ms': 0.9070829837583005}
+FSPEED lane=et arm=ours shape=higgs-1000000x28 round=1 ms=11638.501 hash=2c192f6b12dbb6c5
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.622379
+FSPEED-ACC lane=et arm=ours metric=auc value=0.762400
+FSPEED-SCALE stage=after rows=1000000 features=28 input_mib=106.8 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
