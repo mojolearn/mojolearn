@@ -139,6 +139,14 @@ width 64 and byte vocabulary 256. `train_step(ids)` takes actual int32 shape
 loss, pre-update gradients and the completed-step cursor. `evaluate(ids)`
 computes loss while requiring the complete training state to remain unchanged.
 It also exposes complete state/checkpoint methods and `run_metadata()`.
+With `resident=True` the trainer keeps parameters, moments and the gradient
+on the device between calls and `train_step` returns only loss, step and
+flags (`step_result='lean'`, the resident default since 2026-09-11);
+`export_state()`, `export_gradients()` and `export_checkpoint()` copy them
+out on demand with the same validation, `step_result='full'` restores the
+complete dict, and a failed step rolls the device state back to the last
+committed step. Every exported array is a copy; mutating it cannot reach
+the session.
 CUDA/HIP and process-selected IDENTICAL are required. This is a bounded
 training demonstration, with no useful-generation or reasoning-quality claim.
 

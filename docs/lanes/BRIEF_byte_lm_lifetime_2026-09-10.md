@@ -627,3 +627,281 @@ keeper read-back, `control_fit_equality` and `keeper_reached` in the
 summary), `tools/byte_lm_lifetime_diag.sh` (trees build, readback lines,
 outer timeout, summary rows), this brief. Nothing else, and nothing under
 `python/mojolearn/` or `training/`.
+
+## Runs 4 and 5 (2026-09-11, RTX 4090): controls pass, keeper reached and useless, ptrace blocked
+
+Run 4 (`bench/results/e1g/2026-09-10_235415-nvidia`, sm_89, all three
+builds green, 17 cases, 1402 s): the three DEVIATION 2513 controls PASSED
+(`control_kmeans_x2`, `control_extratrees_x2`, `control_kmeans_then_bytelm`;
+both `control_fit_equality` rows bit-equal), the same three byte LM cases
+passed as in run 3, the same nine byte LM cases HUNG, and BOTH keeper
+variants HUNG with the keeper REACHED (`keeper_reached.*.keeper_active
+true`, `keep_context_env 1`). Read against the DEVIATION 2513 table, that
+is the first row: create-after-destroy works on this box for the base and
+trees bindings, and for the byte LM's first context after a base-binding
+context died. The hang needs the byte LM's OWN trainer to have been
+destroyed, and a separate live context does not help, which removes the
+"create while another is alive" reading of run 3's passing cases (the
+keeper IS a live context, and it did not help). What is left: something the
+byte LM's teardown leaves behind, or something the byte LM's SECOND context
+does that its first does not, on this box. The keeper stays OFF and is not
+a workaround.
+
+Run 5 (`bench/results/e1g/2026-09-11_002601-nvidia`, main 3bae97ad,
+subset `stateless_x1,stateless_x2,resident_close_reopen`): the wrapper
+installed gdb from apt (`gdb=/usr/bin/gdb`), py-spy did not install, and
+`gdb -p` on both hung children returned "ptrace: Inappropriate ioctl for
+device" (the pod's ptrace is filtered; `/proc/<pid>/task/<tid>/stack` was
+EACCES even from the parent as root). So no tool outside the process can
+read the native stack on that image. The `/proc` snapshot did give the
+shape: 132 threads per hung child, every one in state S with
+`wchan futex_wait_queue` except two in `do_poll`, CPU ticks frozen
+(362 -> 362 for `stateless_x2`; 372 -> 373 for `resident_close_reopen`, one
+tick), Python stack at `_byte_lm_impl.py:488` (`byte_lm_run_configured`) or
+`:483` (`byte_lm_session_run`), last event `native_call_begin step2`. A
+blocked main thread in a futex inside the second native call, with nothing
+running on the device.
+
+## DEVIATION 2518: in-process native stack, and two teardown variants (source only)
+
+Nothing in this section was executed. Three files carry it; the run is
+OWED below.
+
+### The in-process native stack (no ptrace)
+
+`tools/native_stack_dump.c` (new) is a shared library whose constructor,
+when `MOJOLEARN_NATIVE_STACK_FILE` is set, installs a `SIGUSR2` handler
+(`SA_SIGINFO | SA_RESTART`) and writes one "handler installed" line to that
+file; when the variable is unset it installs nothing. The handler appends,
+per delivery: a header (`pid`, `tid`, `CLOCK_REALTIME` seconds.nanoseconds,
+sender pid), the interrupted `pc`/`sp` from the ucontext (x86_64 and
+aarch64), `backtrace()` of the receiving thread printed by
+`backtrace_symbols_fd` (`module(symbol+offset) [address]`; stripped
+modules such as `libcuda.so.1` give `module(+offset)`, which still names
+the library), then `/proc/self/task/<tid>/wchan`, `syscall` and `stack`
+for the same thread, and returns, so the interrupted futex or condition
+wait resumes. Only `write`, `open`, `read`, `close`, `clock_gettime`,
+`getpid`, `gettid`, `backtrace` and `backtrace_symbols_fd` run inside the
+handler; the constructor calls `backtrace` once so glibc's lazy `libgcc_s`
+load happens outside signal context. Two caveats are in the file header:
+the wchan/syscall lines are the receiving thread's view of ITSELF while it
+runs the handler (they say "running" or `read`), so the interrupted wait is
+what the backtrace and `pc` show and the parent's outside snapshot (which
+now also reads `/proc/<pid>/task/<tid>/syscall`) is the per-thread kernel
+truth; and a thread hung inside the dynamic loader would deadlock in the
+unwinder, in which case the header line is written and the backtrace is
+not, and the parent still kills the child at the deadline.
+
+The harness (`tools/byte_lm_lifetime_diag.py`) does three things with it:
+
+1. `run_case` gets `--native-stack-lib PATH` and, for the CHILD only, sets
+   `LD_PRELOAD=PATH` (prepended to any existing value) and
+   `MOJOLEARN_NATIVE_STACK_FILE=<out>/<case>.native_stack.txt`. The parent,
+   `nvidia-smi` and `gdb` never load it.
+2. `run_child`, before importing mojolearn, records
+   `record.native_stack` (`file`, `ld_preload`, `handler_installed`,
+   `watchdog_armed`, the main thread's native id). `handler_installed` is
+   `signal.getsignal(SIGUSR2) is None`, which is exactly "a C-level handler
+   not installed from Python is present". Only then does it start a daemon
+   thread that sleeps until `deadline - 10 s` and calls
+   `signal.pthread_kill(threading.main_thread().ident, SIGUSR2)` three
+   times two seconds apart, recording each send as a
+   `native_stack_signal` event (unix time, so the file's headers can be
+   matched to the sends). Without the preload the watchdog is never armed:
+   SIGUSR2's default disposition would terminate the child before the
+   parent's diagnostics.
+3. On a timeout the parent sends one process-directed `SIGUSR2` itself
+   (the kernel offers it to the main thread first) before the `SIGUSR1`
+   faulthandler dump: this is the fallback for a hang that holds the GIL,
+   where the child's watchdog cannot run Python. After the kill it reads
+   the file into `hang_diagnostics.native.in_process` (`samples` counts
+   the sample headers, `installed_line`, `contents`, capped at 400 KB with
+   the middle elided) and records `parent_sigusr2`. Every case, hung or
+   not, carries `result.native_stack` (`handler_installed`,
+   `installed_line`, `samples`); `summary.json.native_stack_reached` lists
+   handler/watchdog/signals/samples per case.
+
+A passing case is unchanged by all of this: the library installs one
+signal handler and nothing else, the watchdog sleeps and dies with the
+process, no signal is ever sent before `deadline - 10 s` (run 4's passing
+cases took 1.7 to 5 s), and `stateless_x1`'s step-1 hashes must still equal
+run 4's. If they do not, the preload is the first suspect and
+`BYTE_LM_LIFETIME_NO_NATIVE_STACK=1` in the wrapper file turns it off.
+
+How to read the samples of a hung case: three headers with the same frames
+is a wait (a deadlock or a wait on something that never arrives); frames
+that move between samples is a stall (a long operation, not a deadlock);
+`samples 0` with `handler_installed true` and three `native_stack_signal`
+events means the signal did not reach our handler (the main thread blocks
+it, or a runtime handler replaced ours after import), which is recorded as
+such. The frames of interest are the ones between `__restore_rt` (the
+signal trampoline) and the Python `PyEval` frames: the byte LM binding's
+symbols, then MAX runtime and `libcuda.so.1` offsets. Whether the top
+non-libc frame is inside the CUDA driver (`libcuda.so.1(+0x...)`), the MAX
+runtime, or our own code (a Mojo symbol from `_mojolearn_byte_lm.so`)
+decides where DEVIATION 2519 looks; the offset inside `libcuda.so.1` can be
+resolved against that driver build's symbols on any box with the same
+driver (580.159.04).
+
+### The two teardown variants (`bindings/_mojolearn_byte_lm.mojo`)
+
+Both are read once per call as `getenv` compares next to the existing
+`ton` and `keep_context` reads (`:278-279`), OFF by default, and touch
+only the stateless (`retain=False`) teardown of `_byte_lm_run`; the
+resident session, the DEVIATION 2514 device-owned entries, the reuse
+admission and every kernel are untouched. Each prints one witness line
+(`byte LM teardown variant: <name>`) when its branch runs, which the
+harness greps out of the case log into
+`summary.json.teardown_variant_reached`; a variant case that passes
+without its witness line did not test the variant.
+
+- (a) `MOJOLEARN_BYTE_LM_SYNC_BEFORE_TEARDOWN=1` (`:409-417`): inside the
+  `GILReleased` block, after the existing `ctx.synchronize()` at `:404`,
+  the teardown becomes `synchronize(); trainer = None; synchronize();
+  ctx = None`. The first drain is the literal request (a second drain of
+  an already drained stream, so on its own it should change nothing); the
+  second is the one that can differ: `DeviceBuffer.__deinit__` schedules
+  its free on the context's stream, so the ~250 frees the trainer's
+  release enqueues are drained while the context is still alive, instead
+  of being left for `DeviceContext.__deinit__`.
+- (b) `MOJOLEARN_BYTE_LM_TEARDOWN_WITH_GIL=1` (`:406` skips the in-block
+  teardown, `:426-433` does it): `trainer = None; ctx = None` run after
+  the `with GILReleased` block has re-acquired the GIL and before
+  publication, the resident `close()` shape (`:77-84`: synchronized, then
+  released with the GIL held).
+
+What each outcome means, with `stateless_x2` still hanging in the same run
+(the anchor; a run where nothing hangs says the box changed):
+
+| `stateless_x2_sync_teardown` | `stateless_x2_teardown_with_gil` | reading |
+|---|---|---|
+| pass, witness seen | hang | the undrained buffer frees of context #1 are what context #2 waits on; the fix is the second synchronize in (a) on the stateless path (and in `close()`, which already synchronizes BEFORE releasing but not after), and the bisect of section 2 narrows to what added frees or changed their order (device backward `28699cc7`, prefill cache `587a9107`, lean stages `de4cf235`). |
+| hang | pass, witness seen | releasing under a released GIL is the trigger; since `resident_close_reopen` (GIL held in `close()`) ALSO hung in runs 3 and 4, the difference would be that (b) releases in the SAME call as the step, so record it as "GIL-held release in the step call passes, GIL-held release in a later call hangs" and do not attribute further without the stack. |
+| hang | hang | neither the drain nor the GIL is the trigger; the native stack (above) is the only remaining datum, and DEVIATION 2519 starts from its top frame. |
+| pass | pass | both changes avoid it; (a) is the cheaper explanation (a drained stream also makes the GIL-held release's timing irrelevant); confirm by running (a) alone on the resident path before choosing. |
+
+Both variant cases join `FIRST_STEP_GROUP` and `SECOND_STEP_GROUP`: a
+variant must not change a bit, and a step-2 hash differing from
+`stateless_x2`'s on a box where both complete blocks making it a default.
+
+### Wrapper
+
+`tools/byte_lm_lifetime_diag.sh` compiles the library on the box with
+`cc -shared -fPIC -O1 -g` (first of `cc`, `gcc`, `clang` on PATH; the pod
+image has gcc) into `$OUT/native_stack_dump.so`, records
+`native_stack_lib=` in `status.txt` (`none (no compiler)` or
+`none (build failed)` are status lines, not failures) and passes
+`--native-stack-lib` to the harness; `BYTE_LM_LIFETIME_NO_NATIVE_STACK=1`
+skips it. The summary print adds the variant witness rows and, for hung or
+handler-less cases, the native stack reach row. 19 cases; the outer 3000 s
+timeout still covers the worst case (19 x 123 s plus builds).
+
+### RUN OWED (orchestrator, one light thing at a time)
+
+The same leg as runs 3 to 5, same box class, same arch, with a wrapper file
+that keeps the run to four cases (the two anchors and the two variants;
+each hung case costs its 120 s deadline):
+
+    cat > /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/a424f2ae-c0f9-4785-ad1c-22e8f833ba55/scratchpad/byte_lm_lifetime_2518.sh <<'EOF2'
+    #!/bin/sh
+    export BYTE_LM_LIFETIME_CASES=stateless_x1,stateless_x2,stateless_x2_sync_teardown,stateless_x2_teardown_with_gil
+    exec sh /root/mojolearn/tools/byte_lm_lifetime_diag.sh
+    EOF2
+    MOJOLEARN_RUNPOD_KEY_FILE=~/.mojolearn_runpod_key \
+    MOJOLEARN_GEMM_LEG_EXTRA=/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/a424f2ae-c0f9-4785-ad1c-22e8f833ba55/scratchpad/byte_lm_lifetime_2518.sh \
+    MOJOLEARN_GPU_ARCHS=sm_89 \
+    sh tools/gemm_remote_leg.sh nvidia --payload gemm --source-ref <sha> \
+        --gpu "NVIDIA GeForce RTX 4090" --rent --minutes 60
+
+`<sha>` must contain this section's four files (`tools/native_stack_dump.c`,
+`tools/byte_lm_lifetime_diag.py`, `tools/byte_lm_lifetime_diag.sh`,
+`bindings/_mojolearn_byte_lm.mojo`; all uncommitted at the time of
+writing). The wrapper file lives outside the repo on purpose (the leg
+copies it to `/root/gemm_leg_extra.sh` and retains it as `extra_body.sh`,
+as run 5 did).
+
+What to read when it comes home, in addition to the earlier sections:
+
+1. `byte-lm-lifetime/status.txt`: the three `build_*_exit=0`,
+   `native_stack_lib=<path> cc=<compiler>` (not `none`).
+2. `cases/summary.json`: `stateless_x1` passed and `stateless_x2` hung
+   (the anchors); `native_stack_reached.stateless_x2` with
+   `handler_installed true`, `watchdog_armed true`, `signals_sent 3`,
+   `samples 3` or `4` (the parent's fallback adds one); then
+   `teardown_variant_reached.*.reached true` for both variants, and their
+   status against the table above.
+3. `cases/stateless_x2.result.json` ->
+   `hang_diagnostics.native.in_process.contents`: the three samples. Same
+   frames three times = a wait; the top non-libc frame names the owner.
+   `hang_diagnostics.proc_before.threads.<pid>.syscall` (the main thread's
+   number and arguments, from outside) confirms the futex and its address.
+4. `first_step_equality` still all bit-equal with the preload in place
+   (the preload changed nothing) and `second_step_equality` true for
+   whichever variant completed.
+
+### Files (DEVIATION 2518, uncommitted)
+
+Created: `tools/native_stack_dump.c`. Edited:
+`tools/byte_lm_lifetime_diag.py` (watchdog thread, preload plumbing,
+parent fallback signal, `syscall` in the `/proc` snapshot, two cases, two
+summary rows), `tools/byte_lm_lifetime_diag.sh` (library build,
+`--native-stack-lib`, summary rows, knob), `bindings/_mojolearn_byte_lm.mojo`
+(two switch reads at `:278-279`, variant (a) at `:409-417`, variant (b) at
+`:406` and `:426-433`), this brief. Nothing under `python/mojolearn/`,
+`training/` or `neighbors/`. Compile-checked: the C file with `cc -c -Wall
+-Wextra` (into the scratchpad, Linux-only parts guarded), the harness with
+`py_compile` and a stdlib-only smoke of its helpers, the wrapper with
+`sh -n` and `dash -n`. The Mojo edit is unbuilt; the RUN OWED builds it.
+
+## Run 6: the native stack, and the cause (RTX 4090, 2026-09-11 05:14Z to 05:22Z, `bench/results/e1g/2026-09-11_010801-nvidia/remote/byte-lm-lifetime`)
+
+The preloaded handler produced four samples of the hung main thread of
+`stateless_x2`, all identical:
+
+```
+pthread_mutex_lock
+libKGENCompilerRTShared.so (+0x8a1cc, +0x8a0ad, +0x75fc8, +0x5d7f3, +0x73ebc, +0x8a4a6, +0x94650)
+M::Driver::DeviceContext::enqueueCreateBuffer
+AsyncRT_DeviceContext_createBuffer_async
+_mojolearn_byte_lm.so (the trainer's first buffer on the new context)
+```
+
+The second trainer's FIRST buffer creation waits on a mutex inside the MAX
+runtime's driver layer that is never released. `/proc` says the thread is in
+a futex wait with no wchan, GPU idle. The variants: `stateless_x2_sync_teardown`
+PASSED (release the trainer, then synchronize, then release the context);
+`stateless_x2_teardown_with_gil` HUNG (same two releases with the GIL held).
+So: releasing the trainer enqueues about 250 stream-ordered buffer frees on
+the context; destroying the context with those frees still in flight leaves
+the runtime allocator's lock held on this box; the next context's first
+allocation blocks on it forever. The GIL is irrelevant. The base and trees
+bindings pass because their teardown has few buffers and synchronizes at
+every operation. The L40S never showed it because its driver or kernel
+drains faster than the release, which is a race, not a fix.
+
+Fix (DEVIATION 2520, on main): both byte LM teardown paths, the stateless
+release and the resident close(), now synchronize AFTER the trainer is
+released and BEFORE the context is destroyed; the struct's deinit does the
+same. The switch-guarded variants stay for the harness. This is a MAX
+runtime defect (a context destroyed with pending stream-ordered frees
+should not leave a global lock held); the drain is our contract until it is
+fixed upstream. Confirmation run: the full 17-case set on the 4090 with the
+switches off.
+
+## Run 7: confirmation on the RTX 4090 with the drain as the default (2026-09-11 05:27Z, `bench/results/e1g/2026-09-11_012132-nvidia/remote/byte-lm-lifetime`)
+
+All 19 cases with every switch off (the drain of DEVIATION 2520 is the
+shipped behavior): 18 PASSED, 0 HUNG, 52 s for the whole harness where
+runs 3, 4 and 6 spent two minutes per hung case. First-step and
+second-step loss, gradients and state bit-equal across every compared
+case; the KMeans and ExtraTrees controls bit-equal fit to fit. The one
+failure was the harness's own `resident_mismatch_recovery`, which altered a
+host mirror that a resident session no longer holds (DEVIATION 2514 owns
+the state on the device); it is now the export-mutation control of design
+gate G3 and passes on the M4.
+
+Closed: the stateless-then-anything hang on the RTX 4090 was our teardown
+destroying a context with its stream-ordered buffer frees in flight, which
+left the MAX runtime allocator's lock held. The drain fixes it on every
+column. Upstream: a context destroyed with pending frees should not wedge a
+process-wide lock; to be reported with the run 6 backtrace.

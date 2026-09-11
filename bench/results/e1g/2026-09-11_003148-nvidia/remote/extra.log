@@ -1,0 +1,51 @@
+status: passed
+phase timers: READ from the binding (build with MOJOLEARN_KNN_PHASE_TIMERS); request medians below are SERIALIZED by the per-class synchronizations and are not comparable to untimed requests
+timing large k10: uniform median 31.721003 ms (min 31.615862), baseline median 31.768294 ms (min 31.710063)
+  phases (median ms): uniform distance_ms 15.334 select_ms 10.276 merge_ms 0.453; baseline distance_ms 15.332 select_ms 10.354 merge_ms 0.456
+timing large k15: uniform median 37.933669 ms (min 37.017118), baseline median 38.460520 ms (min 37.064108)
+  phases (median ms): uniform distance_ms 15.346 select_ms 14.694 merge_ms 0.454; baseline distance_ms 15.351 select_ms 14.702 merge_ms 0.451
+timing dyadic k10: uniform median 33.051326 ms (min 32.166934), baseline median 33.158912 ms (min 32.214996)
+  phases (median ms): uniform distance_ms 15.333 select_ms 10.272 merge_ms 0.448; baseline distance_ms 15.330 select_ms 10.357 merge_ms 0.447
+  cached-reference ratios (NOT a paired opponent): uniform 3.232x, baseline 3.243x
+timing dyadic k15: uniform median 38.236913 ms (min 37.588834), baseline median 38.520200 ms (min 37.471874)
+  phases (median ms): uniform distance_ms 15.334 select_ms 14.686 merge_ms 0.450; baseline distance_ms 15.330 select_ms 14.692 merge_ms 0.448
+  cached-reference ratios (NOT a paired opponent): uniform 3.535x, baseline 3.561x
+timing_only: OUTPUT INVALID; PHASE COST ONLY (never a correctness, reach or promotion input)
+timing_only large k10 skiprank vs uniform (output invalid; phase cost only): uniform median 31.689922 ms (min 31.608839), skiprank median 31.551596 ms (min 31.496312); skiprank output differs from the reference in 79999 cells
+  phases (median ms): uniform distance_ms 15.340 select_ms 10.272 merge_ms 0.449; skiprank distance_ms 15.341 select_ms 9.865 merge_ms 0.449
+  select_ms skiprank/uniform = 0.9603 (paired median)
+timing_only large k15 skiprank vs uniform (output invalid; phase cost only): uniform median 36.905088 ms (min 36.885270), skiprank median 36.703004 ms (min 36.693159); skiprank output differs from the reference in 120000 cells
+  phases (median ms): uniform distance_ms 15.343 select_ms 14.692 merge_ms 0.449; skiprank distance_ms 15.331 select_ms 13.947 merge_ms 0.450
+  select_ms skiprank/uniform = 0.9495 (paired median)
+timing_only dyadic k10 skiprank vs uniform (output invalid; phase cost only): uniform median 31.739108 ms (min 31.703581), skiprank median 31.580472 ms (min 31.538379); skiprank output differs from the reference in 80000 cells
+  phases (median ms): uniform distance_ms 15.332 select_ms 10.272 merge_ms 0.446; skiprank distance_ms 15.332 select_ms 9.863 merge_ms 0.447
+  select_ms skiprank/uniform = 0.9606 (paired median)
+timing_only dyadic k15 skiprank vs uniform (output invalid; phase cost only): uniform median 37.067091 ms (min 36.966023), skiprank median 36.836669 ms (min 36.748458); skiprank output differs from the reference in 120000 cells
+  phases (median ms): uniform distance_ms 15.339 select_ms 14.691 merge_ms 0.451; skiprank distance_ms 15.338 select_ms 13.956 merge_ms 0.450
+  select_ms skiprank/uniform = 0.9497 (paired median)
+timing_only large k10 skipscan vs uniform (output invalid; phase cost only): uniform median 31.686476 ms (min 31.657729), skipscan median 23.186020 ms (min 23.121578); skipscan output differs from the reference in 80000 cells
+  phases (median ms): uniform distance_ms 15.342 select_ms 10.272 merge_ms 0.445; skipscan distance_ms 15.345 select_ms 1.446 merge_ms 0.434
+  select_ms skipscan/uniform = 0.1408 (paired median)
+timing_only large k15 skipscan vs uniform (output invalid; phase cost only): uniform median 36.949770 ms (min 36.802415), skipscan median 24.864030 ms (min 24.798213); skipscan output differs from the reference in 120000 cells
+  phases (median ms): uniform distance_ms 15.343 select_ms 14.690 merge_ms 0.451; skipscan distance_ms 15.350 select_ms 1.927 merge_ms 0.442
+  select_ms skipscan/uniform = 0.1312 (paired median)
+timing_only dyadic k10 skipscan vs uniform (output invalid; phase cost only): uniform median 31.768097 ms (min 31.741344), skipscan median 23.425424 ms (min 23.340508); skipscan output differs from the reference in 80000 cells
+  phases (median ms): uniform distance_ms 15.323 select_ms 10.265 merge_ms 0.442; skipscan distance_ms 15.334 select_ms 1.446 merge_ms 0.433
+  select_ms skipscan/uniform = 0.1408 (paired median)
+timing_only dyadic k15 skipscan vs uniform (output invalid; phase cost only): uniform median 37.028432 ms (min 36.993567), skipscan median 25.033958 ms (min 24.921470); skipscan output differs from the reference in 120000 cells
+  phases (median ms): uniform distance_ms 15.325 select_ms 14.689 merge_ms 0.452; skipscan distance_ms 15.333 select_ms 1.925 merge_ms 0.444
+  select_ms skipscan/uniform = 0.1311 (paired median)
+timing_only large k10 scanonly1 vs uniform (output invalid; phase cost only): uniform median 31.697010 ms (min 31.591117), scanonly1 median 24.724428 ms (min 24.648001); scanonly1 output differs from the reference in 35100 cells
+  phases (median ms): uniform distance_ms 15.336 select_ms 10.269 merge_ms 0.448; scanonly1 distance_ms 15.330 select_ms 3.219 merge_ms 0.450
+  select_ms scanonly1/uniform = 0.3135 (paired median)
+timing_only large k15 scanonly1 vs uniform (output invalid; phase cost only): uniform median 36.932130 ms (min 36.877667), scanonly1 median 25.568028 ms (min 25.465706); scanonly1 output differs from the reference in 51756 cells
+  phases (median ms): uniform distance_ms 15.340 select_ms 14.693 merge_ms 0.450; scanonly1 distance_ms 15.322 select_ms 3.218 merge_ms 0.447
+  select_ms scanonly1/uniform = 0.2189 (paired median)
+timing_only dyadic k10 scanonly1 vs uniform (output invalid; phase cost only): uniform median 31.894420 ms (min 31.691899), scanonly1 median 24.824027 ms (min 24.663816); scanonly1 output differs from the reference in 19478 cells
+  phases (median ms): uniform distance_ms 15.348 select_ms 10.283 merge_ms 0.447; scanonly1 distance_ms 15.330 select_ms 3.222 merge_ms 0.448
+  select_ms scanonly1/uniform = 0.3132 (paired median)
+timing_only dyadic k15 scanonly1 vs uniform (output invalid; phase cost only): uniform median 37.186805 ms (min 37.097800), scanonly1 median 25.718355 ms (min 25.659283); scanonly1 output differs from the reference in 31390 cells
+  phases (median ms): uniform distance_ms 15.334 select_ms 14.692 merge_ms 0.450; scanonly1 distance_ms 15.321 select_ms 3.215 merge_ms 0.447
+  select_ms scanonly1/uniform = 0.2187 (paired median)
+build-binding-trial	0	79s
+gate	0	40s

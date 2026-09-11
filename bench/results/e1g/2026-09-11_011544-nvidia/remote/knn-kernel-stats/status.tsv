@@ -1,0 +1,10 @@
+build-binding-trial	0	90s
+extract-ptx-blobs	0	0s
+build-driver-files	1	3s
+build-driver-stdout	0	8s
+driver	0	1s
+split-driver-log	0	0s
+emit-asm-default	0	41s
+emit-asm-generic	0	28s
+assemble	0	0s
+stats	0	0s

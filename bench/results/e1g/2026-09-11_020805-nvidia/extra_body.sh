@@ -1,0 +1,6 @@
+#!/bin/sh
+export MOJOLEARN_KNN_SELECTION_ARMS=uniform,capk_selp,voteguard
+export MOJOLEARN_KNN_SELECTION_TIMING_ONLY_ARMS=noshift,votecount
+export MOJOLEARN_KNN_SELECTION_PHASE_TIMERS=1
+export MOJOLEARN_KNN_SELECTION_SKIP_PROFILE=1
+exec sh /root/mojolearn/tools/knn_selection_gate.sh

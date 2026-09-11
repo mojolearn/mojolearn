@@ -1,0 +1,12 @@
+deviation=2496
+started=2026-09-11T06:10:35Z
+root=/root/mojolearn
+arms=uniform,capk_selp,voteguard
+timing_only_arms=noshift,votecount
+phase_timers=1
+pairs=3
+cached_opponent=k10=10.225,k15=10.817
+vendor=nvidia
+commit=070da847405a8f5971a1b95dc8eab511eb3e4dac
+python=pixi run python3
+finished=2026-09-11T06:12:40Z

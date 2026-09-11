@@ -1,0 +1,38 @@
+############ block 1 of 1 ############
+==============================================================================
+IDENTITY TRACE DIFF
+==============================================================================
+  APPLE = /var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/gemm-leg.cRyCek/blk_a.1
+  NVIDIA = /var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/gemm-leg.cRyCek/blk_b.1
+
+STEP 1 -- PARSE
+  APPLE: 60 record(s), 1 comment line(s), 1 blank line(s)
+  NVIDIA: 60 record(s), 1 comment line(s), 1 blank line(s)
+
+STEP 1b -- DUMP INTEGRITY (re-hash every .bin found)
+
+STEP 2 -- ALIGNMENT (tag sequence, computed BEFORE any hash compare)
+  matched stage pairs: 60
+  unmatched in APPLE: 0    unmatched in NVIDIA: 0
+  TAG SEQUENCES ARE IDENTICAL.
+
+STEP 3 -- HASH WALK over 60 matched pair(s)
+  0 matched pair(s) agreed before this point.
+
+  Context, the last 0 stage(s) that were still IDENTICAL on both sides:
+    (none: the very first matched stage already differs)
+
+  SHAPE MISMATCH: gram.32x32x1M.in.a
+    APPLE: seq=0 count=4000000
+    NVIDIA: seq=0 count=32000000
+    delta: +28000000 element(s)
+  The same stage hashed a different number of elements. This is a
+  STRUCTURAL difference, not a numeric one: the two runs built
+  different amounts of work at this stage (different histogram
+  width, different node count, different sampled row count).
+  Stopping. Chasing bit patterns before this is resolved wastes
+  the investigation.
+
+==============================================================================
+RESULT: DIVERGENT.
+==============================================================================

@@ -1,0 +1,205 @@
+1426 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5bd5c0000000, nodemask=2)
+[04:36:19] library: {'mojolearn_version': '0.8.0', 'numeric_mode_used': 'identical', 'vendor_used': 'cuda', 'binding_path': '/root/mojolearn/python/mojolearn/identical/_mojolearn.so', 'binding_sha256': 'cf62ab6b2d799df2a531b4d8b5d7b0557a9d161979023a0681ef675a98d14124'}
+[04:36:32] fixtures built in 12.7 s: large 400000x32/4000, dyadic 400000x32/4000, ties 131079x32/700, divergent_tail 397156x32/600
+[04:36:33] large k10 arm uniform: 1172.614 ms (untimed correctness call); phases {'distance_ms': 15.384748, 'select_ms': 10.276418, 'merge_ms': 0.483284, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}
+[04:36:33] phase timers READ from the binding (mode require)
+[04:36:33] large k10 arm baseline: 36.171 ms (untimed correctness call); phases {'distance_ms': 15.338633, 'select_ms': 10.464882, 'merge_ms': 0.456129, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}
+[04:36:33] large k10 arm default: 35.610 ms (untimed correctness call); phases {'distance_ms': 15.328988, 'select_ms': 10.281906, 'merge_ms': 0.455296, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}
+[04:36:34] large k10: arms equal=True order=ok planted=ok oracle={'rows': 64, 'hard_mismatch_rows': [], 'ambiguous_rows': 0, 'distance_mismatch_rows': []}
+[04:36:34] large k10 reach uniform: sabotage flipped 38306 cells, restored=True
+[04:36:34] large k10 reach baseline: sabotage flipped 38306 cells, restored=True
+[04:36:35] large k10 reach default: sabotage flipped 38306 cells, restored=True
+[04:36:35] large k15 arm uniform: 37.339 ms (untimed correctness call); phases {'distance_ms': 15.351152, 'select_ms': 14.814614, 'merge_ms': 0.460913, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}
+[04:36:35] large k15 arm baseline: 37.186 ms (untimed correctness call); phases {'distance_ms': 15.357461, 'select_ms': 14.799384, 'merge_ms': 0.457273, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}
+[04:36:35] large k15 arm default: 37.141 ms (untimed correctness call); phases {'distance_ms': 15.357335, 'select_ms': 14.720323, 'merge_ms': 0.458833, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}
+[04:36:36] large k15: arms equal=True order=ok planted=ok oracle={'rows': 64, 'hard_mismatch_rows': [], 'ambiguous_rows': 0, 'distance_mismatch_rows': []}
+[04:36:36] large k15 reach uniform: sabotage flipped 70635 cells, restored=True
+[04:36:36] large k15 reach baseline: sabotage flipped 70635 cells, restored=True
+[04:36:36] large k15 reach default: sabotage flipped 70635 cells, restored=True
+[04:36:36] dyadic k10 arm uniform: 42.802 ms (untimed correctness call); phases {'distance_ms': 15.326364, 'select_ms': 10.275355, 'merge_ms': 0.455748, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}
+[04:36:36] dyadic k10 arm baseline: 32.600 ms (untimed correctness call); phases {'distance_ms': 15.342715, 'select_ms': 10.366866, 'merge_ms': 0.457966, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}
+[04:36:36] dyadic k10 arm default: 32.465 ms (untimed correctness call); phases {'distance_ms': 15.328237, 'select_ms': 10.270098, 'merge_ms': 0.455717, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}
+[04:36:38] dyadic k10: arms equal=True order=ok planted=ok oracle={'rows': 48, 'hard_mismatch_rows': [], 'ambiguous_rows': 0, 'distance_mismatch_rows': []}
+[04:36:38] dyadic k10 reach uniform: sabotage flipped 38045 cells, restored=True
+[04:36:38] dyadic k10 reach baseline: sabotage flipped 38045 cells, restored=True
+[04:36:38] dyadic k10 reach default: sabotage flipped 38045 cells, restored=True
+[04:36:38] dyadic k15 arm uniform: 37.027 ms (untimed correctness call); phases {'distance_ms': 15.335174, 'select_ms': 14.696359, 'merge_ms': 0.463392, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}
+[04:36:38] dyadic k15 arm baseline: 37.032 ms (untimed correctness call); phases {'distance_ms': 15.349445, 'select_ms': 14.727621, 'merge_ms': 0.460597, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}
+[04:36:38] dyadic k15 arm default: 37.007 ms (untimed correctness call); phases {'distance_ms': 15.345823, 'select_ms': 14.706589, 'merge_ms': 0.456573, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}
+[04:36:39] dyadic k15: arms equal=True order=ok planted=ok oracle={'rows': 48, 'hard_mismatch_rows': [], 'ambiguous_rows': 0, 'distance_mismatch_rows': []}
+[04:36:39] dyadic k15 reach uniform: sabotage flipped 70423 cells, restored=True
+[04:36:39] dyadic k15 reach baseline: sabotage flipped 70423 cells, restored=True
+[04:36:39] dyadic k15 reach default: sabotage flipped 70423 cells, restored=True
+[04:36:39] ties k10 arm uniform: 7.172 ms (untimed correctness call); phases {'distance_ms': 1.206272, 'select_ms': 0.680666, 'merge_ms': 0.037168, 'distance_launches': 6.0, 'select_launches': 6.0, 'merge_launches': 4.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 700.0, 'n_index': 131079.0, 'k': 10.0}
+[04:36:39] ties k10 arm baseline: 4.147 ms (untimed correctness call); phases {'distance_ms': 1.015904, 'select_ms': 0.685383, 'merge_ms': 0.03709, 'distance_launches': 6.0, 'select_launches': 6.0, 'merge_launches': 4.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 700.0, 'n_index': 131079.0, 'k': 10.0}
+[04:36:39] ties k10 arm default: 3.637 ms (untimed correctness call); phases {'distance_ms': 1.016522, 'select_ms': 0.680024, 'merge_ms': 0.036825, 'distance_launches': 6.0, 'select_launches': 6.0, 'merge_launches': 4.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 700.0, 'n_index': 131079.0, 'k': 10.0}
+[04:36:44] ties k10: arms equal=True order=ok planted=ok oracle={'rows': 700, 'hard_mismatch_rows': [], 'ambiguous_rows': 1, 'distance_mismatch_rows': []}
+[04:36:44] ties k10 reach uniform: sabotage flipped 6509 cells, restored=True
+[04:36:44] ties k10 reach baseline: sabotage flipped 6549 cells, restored=True
+[04:36:44] ties k10 reach default: sabotage flipped 6509 cells, restored=True
+[04:36:44] ties k15 arm uniform: 3.948 ms (untimed correctness call); phases {'distance_ms': 1.017308, 'select_ms': 0.959891, 'merge_ms': 0.038168, 'distance_launches': 6.0, 'select_launches': 6.0, 'merge_launches': 4.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 700.0, 'n_index': 131079.0, 'k': 15.0}
+[04:36:44] ties k15 arm baseline: 3.988 ms (untimed correctness call); phases {'distance_ms': 1.016606, 'select_ms': 0.959444, 'merge_ms': 0.038946, 'distance_launches': 6.0, 'select_launches': 6.0, 'merge_launches': 4.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 700.0, 'n_index': 131079.0, 'k': 15.0}
+[04:36:44] ties k15 arm default: 3.955 ms (untimed correctness call); phases {'distance_ms': 1.014172, 'select_ms': 0.957217, 'merge_ms': 0.037822, 'distance_launches': 6.0, 'select_launches': 6.0, 'merge_launches': 4.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 700.0, 'n_index': 131079.0, 'k': 15.0}
+[04:36:48] ties k15: arms equal=True order=ok planted=ok oracle={'rows': 700, 'hard_mismatch_rows': [], 'ambiguous_rows': 1, 'distance_mismatch_rows': []}
+[04:36:48] ties k15 reach uniform: sabotage flipped 12172 cells, restored=True
+[04:36:48] ties k15 reach baseline: sabotage flipped 12234 cells, restored=True
+[04:36:48] ties k15 reach default: sabotage flipped 12172 cells, restored=True
+[04:36:48] divergent_tail k10 arm uniform: 22.387 ms (untimed correctness call); phases {'distance_ms': 2.577134, 'select_ms': 1.672034, 'merge_ms': 0.11017, 'distance_launches': 14.0, 'select_launches': 14.0, 'merge_launches': 12.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 600.0, 'n_index': 397156.0, 'k': 10.0}
+[04:36:48] divergent_tail k10 arm baseline: 8.688 ms (untimed correctness call); phases {'distance_ms': 2.575775, 'select_ms': 1.696343, 'merge_ms': 0.112263, 'distance_launches': 14.0, 'select_launches': 14.0, 'merge_launches': 12.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 600.0, 'n_index': 397156.0, 'k': 10.0}
+[04:36:48] divergent_tail k10 arm default: 8.654 ms (untimed correctness call); phases {'distance_ms': 2.572928, 'select_ms': 1.677664, 'merge_ms': 0.111304, 'distance_launches': 14.0, 'select_launches': 14.0, 'merge_launches': 12.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 600.0, 'n_index': 397156.0, 'k': 10.0}
+[04:36:49] divergent_tail k10: arms equal=True order=ok planted=ok oracle={'rows': 47, 'hard_mismatch_rows': [], 'ambiguous_rows': 0, 'distance_mismatch_rows': []}
+[04:36:49] divergent_tail k10 reach uniform: sabotage flipped 5165 cells, restored=True
+[04:36:49] divergent_tail k10 reach baseline: sabotage flipped 5183 cells, restored=True
+[04:36:49] divergent_tail k10 reach default: sabotage flipped 5165 cells, restored=True
+[04:36:49] divergent_tail k15 arm uniform: 9.334 ms (untimed correctness call); phases {'distance_ms': 2.580925, 'select_ms': 2.369003, 'merge_ms': 0.117357, 'distance_launches': 14.0, 'select_launches': 14.0, 'merge_launches': 12.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 600.0, 'n_index': 397156.0, 'k': 15.0}
+[04:36:49] divergent_tail k15 arm baseline: 9.306 ms (untimed correctness call); phases {'distance_ms': 2.583843, 'select_ms': 2.375045, 'merge_ms': 0.114672, 'distance_launches': 14.0, 'select_launches': 14.0, 'merge_launches': 12.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 600.0, 'n_index': 397156.0, 'k': 15.0}
+[04:36:49] divergent_tail k15 arm default: 9.284 ms (untimed correctness call); phases {'distance_ms': 2.572995, 'select_ms': 2.369048, 'merge_ms': 0.111449, 'distance_launches': 14.0, 'select_launches': 14.0, 'merge_launches': 12.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 600.0, 'n_index': 397156.0, 'k': 15.0}
+[04:36:50] divergent_tail k15: arms equal=True order=ok planted=ok oracle={'rows': 45, 'hard_mismatch_rows': [], 'ambiguous_rows': 0, 'distance_mismatch_rows': []}
+[04:36:50] divergent_tail k15 reach uniform: sabotage flipped 9681 cells, restored=True
+[04:36:50] divergent_tail k15 reach baseline: sabotage flipped 9717 cells, restored=True
+[04:36:50] divergent_tail k15 reach default: sabotage flipped 9681 cells, restored=True
+[04:36:51] large k10 warmup uniform: 45.957 ms; phases {'distance_ms': 15.34238, 'select_ms': 10.269373, 'merge_ms': 0.466633, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}
+[04:36:51] large k10 warmup baseline: 32.332 ms; phases {'distance_ms': 15.33041, 'select_ms': 10.358256, 'merge_ms': 0.446851, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}
+[04:36:51] large k10 order0 pair0: uniform 32.055 ms, baseline 31.907 ms, baseline/uniform 0.9954, select_ms 10.272 vs 10.362
+[04:36:51] large k10 order0 pair1: uniform 31.738 ms, baseline 31.780 ms, baseline/uniform 1.0013, select_ms 10.285 vs 10.366
+[04:36:51] large k10 order0 pair2: uniform 31.711 ms, baseline 31.778 ms, baseline/uniform 1.0021, select_ms 10.280 vs 10.347
+[04:36:51] large k10 order1 pair0: uniform 31.616 ms, baseline 31.758 ms, baseline/uniform 1.0045, select_ms 10.264 vs 10.347
+[04:36:51] large k10 order1 pair1: uniform 31.731 ms, baseline 31.713 ms, baseline/uniform 0.9994, select_ms 10.281 vs 10.358
+[04:36:51] large k10 order1 pair2: uniform 31.657 ms, baseline 31.710 ms, baseline/uniform 1.0017, select_ms 10.263 vs 10.350
+[04:36:51] large k10: uniform median 31.721 ms, baseline median 31.768 ms, paired median baseline/uniform 1.0015, 2/6 pairs favor baseline; select_ms medians uniform 10.276, baseline 10.354
+[04:36:51] large k15 warmup uniform: 37.022 ms; phases {'distance_ms': 15.334784, 'select_ms': 14.68378, 'merge_ms': 0.46943, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}
+[04:36:51] large k15 warmup baseline: 36.964 ms; phases {'distance_ms': 15.347685, 'select_ms': 14.695911, 'merge_ms': 0.458148, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}
+[04:36:51] large k15 order0 pair0: uniform 37.017 ms, baseline 37.064 ms, baseline/uniform 1.0013, select_ms 14.699 vs 14.703
+[04:36:51] large k15 order0 pair1: uniform 37.087 ms, baseline 38.292 ms, baseline/uniform 1.0325, select_ms 14.680 vs 14.697
+[04:36:51] large k15 order0 pair2: uniform 37.726 ms, baseline 38.673 ms, baseline/uniform 1.0251, select_ms 14.705 vs 14.701
+[04:36:51] large k15 order1 pair0: uniform 38.529 ms, baseline 38.697 ms, baseline/uniform 1.0043, select_ms 14.683 vs 14.705
+[04:36:51] large k15 order1 pair1: uniform 38.496 ms, baseline 38.577 ms, baseline/uniform 1.0021, select_ms 14.697 vs 14.693
+[04:36:51] large k15 order1 pair2: uniform 38.141 ms, baseline 38.344 ms, baseline/uniform 1.0053, select_ms 14.690 vs 14.708
+[04:36:51] large k15: uniform median 37.934 ms, baseline median 38.461 ms, paired median baseline/uniform 1.0048, 0/6 pairs favor baseline; select_ms medians uniform 14.694, baseline 14.702
+[04:36:52] dyadic k10 warmup uniform: 34.264 ms; phases {'distance_ms': 15.323079, 'select_ms': 10.269943, 'merge_ms': 0.448773, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}
+[04:36:52] dyadic k10 warmup baseline: 33.827 ms; phases {'distance_ms': 15.317929, 'select_ms': 10.354695, 'merge_ms': 0.444593, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}
+[04:36:52] dyadic k10 order0 pair0: uniform 33.201 ms, baseline 32.215 ms, baseline/uniform 0.9703, select_ms 10.283 vs 10.354
+[04:36:52] dyadic k10 order0 pair1: uniform 32.167 ms, baseline 32.349 ms, baseline/uniform 1.0056, select_ms 10.267 vs 10.359
+[04:36:52] dyadic k10 order0 pair2: uniform 32.459 ms, baseline 33.443 ms, baseline/uniform 1.0303, select_ms 10.280 vs 10.355
+[04:36:52] dyadic k10 order1 pair0: uniform 33.336 ms, baseline 33.353 ms, baseline/uniform 1.0005, select_ms 10.273 vs 10.367
+[04:36:52] dyadic k10 order1 pair1: uniform 33.210 ms, baseline 33.309 ms, baseline/uniform 1.0030, select_ms 10.271 vs 10.347
+[04:36:52] dyadic k10 order1 pair2: uniform 32.902 ms, baseline 33.009 ms, baseline/uniform 1.0032, select_ms 10.271 vs 10.366
+[04:36:52] dyadic k10: uniform median 33.051 ms, baseline median 33.159 ms, paired median baseline/uniform 1.0031, 1/6 pairs favor baseline; select_ms medians uniform 10.272, baseline 10.357
+[04:36:52] dyadic k15 warmup uniform: 38.057 ms; phases {'distance_ms': 15.349065, 'select_ms': 14.692206, 'merge_ms': 0.448793, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}
+[04:36:52] dyadic k15 warmup baseline: 37.812 ms; phases {'distance_ms': 15.34461, 'select_ms': 14.694403, 'merge_ms': 0.447974, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}
+[04:36:52] dyadic k15 order0 pair0: uniform 37.589 ms, baseline 37.472 ms, baseline/uniform 0.9969, select_ms 14.683 vs 14.686
+[04:36:52] dyadic k15 order0 pair1: uniform 37.867 ms, baseline 37.965 ms, baseline/uniform 1.0026, select_ms 14.686 vs 14.700
+[04:36:52] dyadic k15 order0 pair2: uniform 38.793 ms, baseline 38.718 ms, baseline/uniform 0.9981, select_ms 14.686 vs 14.696
+[04:36:52] dyadic k15 order1 pair0: uniform 38.601 ms, baseline 39.073 ms, baseline/uniform 1.0122, select_ms 14.692 vs 14.726
+[04:36:52] dyadic k15 order1 pair1: uniform 38.340 ms, baseline 38.713 ms, baseline/uniform 1.0097, select_ms 14.683 vs 14.687
+[04:36:52] dyadic k15 order1 pair2: uniform 38.134 ms, baseline 38.327 ms, baseline/uniform 1.0051, select_ms 14.688 vs 14.682
+[04:36:52] dyadic k15: uniform median 38.237 ms, baseline median 38.520 ms, paired median baseline/uniform 1.0038, 2/6 pairs favor baseline; select_ms medians uniform 14.686, baseline 14.692
+[04:36:53] large k10 warmup uniform: 33.893 ms; phases {'distance_ms': 15.3414, 'select_ms': 10.277702, 'merge_ms': 0.446556, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}
+[04:36:53] large k10 warmup skiprank: 34.114 ms; phases {'distance_ms': 15.351114, 'select_ms': 10.323765, 'merge_ms': 0.452457, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}
+[04:36:53] large k10 order0 pair0: uniform 32.896 ms, skiprank 31.683 ms, skiprank/uniform 0.9631, select_ms 10.272 vs 9.864
+[04:36:53] large k10 order0 pair1: uniform 31.808 ms, skiprank 31.573 ms, skiprank/uniform 0.9926, select_ms 10.270 vs 9.863
+[04:36:53] large k10 order0 pair2: uniform 31.654 ms, skiprank 31.496 ms, skiprank/uniform 0.9950, select_ms 10.272 vs 9.866
+[04:36:53] large k10 order1 pair0: uniform 31.693 ms, skiprank 31.513 ms, skiprank/uniform 0.9943, select_ms 10.275 vs 9.862
+[04:36:53] large k10 order1 pair1: uniform 31.687 ms, skiprank 31.740 ms, skiprank/uniform 1.0017, select_ms 10.278 vs 9.867
+[04:36:53] large k10 order1 pair2: uniform 31.609 ms, skiprank 31.530 ms, skiprank/uniform 0.9975, select_ms 10.271 vs 9.868
+[04:36:53] large k10: uniform median 31.690 ms, skiprank median 31.552 ms, paired median skiprank/uniform 0.9947, 5/6 pairs favor skiprank; select_ms medians uniform 10.272, skiprank 9.865 [OUTPUT INVALID; phase cost only; skiprank differs from the reference in 79999 cells]
+[04:36:53] large k15 warmup uniform: 36.958 ms; phases {'distance_ms': 15.341612, 'select_ms': 14.685811, 'merge_ms': 0.451405, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}
+[04:36:53] large k15 warmup skiprank: 36.986 ms; phases {'distance_ms': 15.349395, 'select_ms': 14.095152, 'merge_ms': 0.45331, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}
+[04:36:53] large k15 order0 pair0: uniform 36.980 ms, skiprank 36.748 ms, skiprank/uniform 0.9937, select_ms 14.696 vs 13.946
+[04:36:53] large k15 order0 pair1: uniform 36.908 ms, skiprank 36.736 ms, skiprank/uniform 0.9953, select_ms 14.688 vs 13.951
+[04:36:53] large k15 order0 pair2: uniform 37.060 ms, skiprank 36.704 ms, skiprank/uniform 0.9904, select_ms 14.693 vs 13.946
+[04:36:53] large k15 order1 pair0: uniform 36.885 ms, skiprank 36.693 ms, skiprank/uniform 0.9948, select_ms 14.682 vs 13.949
+[04:36:53] large k15 order1 pair1: uniform 36.892 ms, skiprank 36.699 ms, skiprank/uniform 0.9948, select_ms 14.695 vs 13.944
+[04:36:53] large k15 order1 pair2: uniform 36.902 ms, skiprank 36.702 ms, skiprank/uniform 0.9946, select_ms 14.691 vs 13.954
+[04:36:53] large k15: uniform median 36.905 ms, skiprank median 36.703 ms, paired median skiprank/uniform 0.9947, 6/6 pairs favor skiprank; select_ms medians uniform 14.692, skiprank 13.947 [OUTPUT INVALID; phase cost only; skiprank differs from the reference in 120000 cells]
+[04:36:54] dyadic k10 warmup uniform: 33.732 ms; phases {'distance_ms': 15.342695, 'select_ms': 10.26117, 'merge_ms': 0.440048, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}
+[04:36:54] dyadic k10 warmup skiprank: 33.528 ms; phases {'distance_ms': 15.311667, 'select_ms': 9.857385, 'merge_ms': 0.443526, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}
+[04:36:54] dyadic k10 order0 pair0: uniform 32.968 ms, skiprank 31.649 ms, skiprank/uniform 0.9600, select_ms 10.274 vs 9.861
+[04:36:54] dyadic k10 order0 pair1: uniform 31.731 ms, skiprank 31.572 ms, skiprank/uniform 0.9950, select_ms 10.267 vs 9.863
+[04:36:54] dyadic k10 order0 pair2: uniform 31.761 ms, skiprank 31.550 ms, skiprank/uniform 0.9933, select_ms 10.266 vs 9.863
+[04:36:54] dyadic k10 order1 pair0: uniform 31.704 ms, skiprank 31.538 ms, skiprank/uniform 0.9948, select_ms 10.287 vs 9.863
+[04:36:54] dyadic k10 order1 pair1: uniform 31.747 ms, skiprank 31.620 ms, skiprank/uniform 0.9960, select_ms 10.274 vs 9.872
+[04:36:54] dyadic k10 order1 pair2: uniform 31.705 ms, skiprank 31.589 ms, skiprank/uniform 0.9964, select_ms 10.270 vs 9.879
+[04:36:54] dyadic k10: uniform median 31.739 ms, skiprank median 31.580 ms, paired median skiprank/uniform 0.9949, 6/6 pairs favor skiprank; select_ms medians uniform 10.272, skiprank 9.863 [OUTPUT INVALID; phase cost only; skiprank differs from the reference in 80000 cells]
+[04:36:54] dyadic k15 warmup uniform: 37.004 ms; phases {'distance_ms': 15.326834, 'select_ms': 14.682062, 'merge_ms': 0.456748, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}
+[04:36:54] dyadic k15 warmup skiprank: 36.822 ms; phases {'distance_ms': 15.346947, 'select_ms': 13.949956, 'merge_ms': 0.454617, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}
+[04:36:54] dyadic k15 order0 pair0: uniform 37.076 ms, skiprank 36.748 ms, skiprank/uniform 0.9912, select_ms 14.702 vs 13.957
+[04:36:54] dyadic k15 order0 pair1: uniform 37.067 ms, skiprank 36.842 ms, skiprank/uniform 0.9939, select_ms 14.688 vs 13.953
+[04:36:54] dyadic k15 order0 pair2: uniform 37.128 ms, skiprank 37.097 ms, skiprank/uniform 0.9992, select_ms 14.693 vs 13.956
+[04:36:54] dyadic k15 order1 pair0: uniform 37.067 ms, skiprank 37.091 ms, skiprank/uniform 1.0006, select_ms 14.681 vs 13.956
+[04:36:54] dyadic k15 order1 pair1: uniform 36.966 ms, skiprank 36.831 ms, skiprank/uniform 0.9964, select_ms 14.689 vs 13.948
+[04:36:54] dyadic k15 order1 pair2: uniform 36.971 ms, skiprank 36.790 ms, skiprank/uniform 0.9951, select_ms 14.698 vs 13.955
+[04:36:54] dyadic k15: uniform median 37.067 ms, skiprank median 36.837 ms, paired median skiprank/uniform 0.9957, 5/6 pairs favor skiprank; select_ms medians uniform 14.691, skiprank 13.956 [OUTPUT INVALID; phase cost only; skiprank differs from the reference in 120000 cells]
+[04:36:54] large k10 warmup uniform: 33.626 ms; phases {'distance_ms': 15.339662, 'select_ms': 10.279178, 'merge_ms': 0.446067, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}
+[04:36:55] large k10 warmup skipscan: 25.276 ms; phases {'distance_ms': 15.355839, 'select_ms': 1.584384, 'merge_ms': 0.429233, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}
+[04:36:55] large k10 order0 pair0: uniform 32.517 ms, skipscan 23.361 ms, skipscan/uniform 0.7184, select_ms 10.270 vs 1.450
+[04:36:55] large k10 order0 pair1: uniform 31.688 ms, skipscan 23.219 ms, skipscan/uniform 0.7328, select_ms 10.267 vs 1.445
+[04:36:55] large k10 order0 pair2: uniform 31.685 ms, skipscan 23.122 ms, skipscan/uniform 0.7297, select_ms 10.274 vs 1.442
+[04:36:55] large k10 order1 pair0: uniform 31.673 ms, skipscan 23.153 ms, skipscan/uniform 0.7310, select_ms 10.267 vs 1.449
+[04:36:55] large k10 order1 pair1: uniform 31.658 ms, skipscan 23.135 ms, skipscan/uniform 0.7308, select_ms 10.276 vs 1.445
+[04:36:55] large k10 order1 pair2: uniform 31.694 ms, skipscan 23.242 ms, skipscan/uniform 0.7333, select_ms 10.278 vs 1.448
+[04:36:55] large k10: uniform median 31.686 ms, skipscan median 23.186 ms, paired median skipscan/uniform 0.7309, 6/6 pairs favor skipscan; select_ms medians uniform 10.272, skipscan 1.446 [OUTPUT INVALID; phase cost only; skipscan differs from the reference in 80000 cells]
+[04:36:55] large k15 warmup uniform: 36.950 ms; phases {'distance_ms': 15.344897, 'select_ms': 14.690716, 'merge_ms': 0.455914, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}
+[04:36:55] large k15 warmup skipscan: 25.074 ms; phases {'distance_ms': 15.342763, 'select_ms': 2.042414, 'merge_ms': 0.443812, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}
+[04:36:55] large k15 order0 pair0: uniform 37.047 ms, skipscan 24.866 ms, skipscan/uniform 0.6712, select_ms 14.688 vs 1.935
+[04:36:55] large k15 order0 pair1: uniform 36.897 ms, skipscan 24.862 ms, skipscan/uniform 0.6738, select_ms 14.691 vs 1.930
+[04:36:55] large k15 order0 pair2: uniform 36.971 ms, skipscan 24.833 ms, skipscan/uniform 0.6717, select_ms 14.697 vs 1.918
+[04:36:55] large k15 order1 pair0: uniform 36.802 ms, skipscan 24.798 ms, skipscan/uniform 0.6738, select_ms 14.682 vs 1.922
+[04:36:55] large k15 order1 pair1: uniform 36.929 ms, skipscan 24.875 ms, skipscan/uniform 0.6736, select_ms 14.698 vs 1.932
+[04:36:55] large k15 order1 pair2: uniform 37.103 ms, skipscan 25.123 ms, skipscan/uniform 0.6771, select_ms 14.687 vs 1.923
+[04:36:55] large k15: uniform median 36.950 ms, skipscan median 24.864 ms, paired median skipscan/uniform 0.6737, 6/6 pairs favor skipscan; select_ms medians uniform 14.690, skipscan 1.927 [OUTPUT INVALID; phase cost only; skipscan differs from the reference in 120000 cells]
+[04:36:55] dyadic k10 warmup uniform: 33.715 ms; phases {'distance_ms': 15.329628, 'select_ms': 10.272322, 'merge_ms': 0.45031, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}
+[04:36:55] dyadic k10 warmup skipscan: 25.396 ms; phases {'distance_ms': 15.330357, 'select_ms': 1.445867, 'merge_ms': 0.435905, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}
+[04:36:55] dyadic k10 order0 pair0: uniform 32.801 ms, skipscan 23.515 ms, skipscan/uniform 0.7169, select_ms 10.264 vs 1.446
+[04:36:55] dyadic k10 order0 pair1: uniform 31.787 ms, skipscan 23.456 ms, skipscan/uniform 0.7379, select_ms 10.269 vs 1.461
+[04:36:56] dyadic k10 order0 pair2: uniform 31.744 ms, skipscan 23.395 ms, skipscan/uniform 0.7370, select_ms 10.267 vs 1.440
+[04:36:56] dyadic k10 order1 pair0: uniform 31.749 ms, skipscan 23.341 ms, skipscan/uniform 0.7352, select_ms 10.262 vs 1.443
+[04:36:56] dyadic k10 order1 pair1: uniform 31.741 ms, skipscan 23.366 ms, skipscan/uniform 0.7362, select_ms 10.281 vs 1.446
+[04:36:56] dyadic k10 order1 pair2: uniform 31.814 ms, skipscan 23.563 ms, skipscan/uniform 0.7406, select_ms 10.260 vs 1.446
+[04:36:56] dyadic k10: uniform median 31.768 ms, skipscan median 23.425 ms, paired median skipscan/uniform 0.7366, 6/6 pairs favor skipscan; select_ms medians uniform 10.265, skipscan 1.446 [OUTPUT INVALID; phase cost only; skipscan differs from the reference in 80000 cells]
+[04:36:56] dyadic k15 warmup uniform: 36.975 ms; phases {'distance_ms': 15.318236, 'select_ms': 14.680455, 'merge_ms': 0.449794, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}
+[04:36:56] dyadic k15 warmup skipscan: 25.065 ms; phases {'distance_ms': 15.342495, 'select_ms': 1.925428, 'merge_ms': 0.441397, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}
+[04:36:56] dyadic k15 order0 pair0: uniform 37.036 ms, skipscan 24.953 ms, skipscan/uniform 0.6737, select_ms 14.690 vs 1.921
+[04:36:56] dyadic k15 order0 pair1: uniform 37.029 ms, skipscan 24.921 ms, skipscan/uniform 0.6730, select_ms 14.692 vs 1.918
+[04:36:56] dyadic k15 order0 pair2: uniform 36.994 ms, skipscan 25.058 ms, skipscan/uniform 0.6774, select_ms 14.688 vs 1.929
+[04:36:56] dyadic k15 order1 pair0: uniform 37.025 ms, skipscan 25.010 ms, skipscan/uniform 0.6755, select_ms 14.689 vs 1.925
+[04:36:56] dyadic k15 order1 pair1: uniform 37.028 ms, skipscan 25.113 ms, skipscan/uniform 0.6782, select_ms 14.684 vs 1.925
+[04:36:56] dyadic k15 order1 pair2: uniform 37.032 ms, skipscan 25.128 ms, skipscan/uniform 0.6786, select_ms 14.688 vs 1.925
+[04:36:56] dyadic k15: uniform median 37.028 ms, skipscan median 25.034 ms, paired median skipscan/uniform 0.6764, 6/6 pairs favor skipscan; select_ms medians uniform 14.689, skipscan 1.925 [OUTPUT INVALID; phase cost only; skipscan differs from the reference in 120000 cells]
+[04:36:56] large k10 warmup uniform: 33.545 ms; phases {'distance_ms': 15.33531, 'select_ms': 10.270525, 'merge_ms': 0.445956, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}
+[04:36:56] large k10 warmup scanonly1: 26.713 ms; phases {'distance_ms': 15.326663, 'select_ms': 3.344984, 'merge_ms': 0.444103, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}
+[04:36:56] large k10 order0 pair0: uniform 32.576 ms, scanonly1 24.838 ms, scanonly1/uniform 0.7625, select_ms 10.270 vs 3.212
+[04:36:56] large k10 order0 pair1: uniform 31.778 ms, scanonly1 24.837 ms, scanonly1/uniform 0.7816, select_ms 10.275 vs 3.221
+[04:36:56] large k10 order0 pair2: uniform 31.744 ms, scanonly1 24.685 ms, scanonly1/uniform 0.7776, select_ms 10.272 vs 3.217
+[04:36:56] large k10 order1 pair0: uniform 31.591 ms, scanonly1 24.648 ms, scanonly1/uniform 0.7802, select_ms 10.261 vs 3.216
+[04:36:56] large k10 order1 pair1: uniform 31.650 ms, scanonly1 24.659 ms, scanonly1/uniform 0.7791, select_ms 10.265 vs 3.223
+[04:36:57] large k10 order1 pair2: uniform 31.646 ms, scanonly1 24.764 ms, scanonly1/uniform 0.7825, select_ms 10.268 vs 3.221
+[04:36:57] large k10: uniform median 31.697 ms, scanonly1 median 24.724 ms, paired median scanonly1/uniform 0.7797, 6/6 pairs favor scanonly1; select_ms medians uniform 10.269, scanonly1 3.219 [OUTPUT INVALID; phase cost only; scanonly1 differs from the reference in 35100 cells]
+[04:36:57] large k15 warmup uniform: 36.997 ms; phases {'distance_ms': 15.33815, 'select_ms': 14.687698, 'merge_ms': 0.443441, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}
+[04:36:57] large k15 warmup scanonly1: 25.597 ms; phases {'distance_ms': 15.3236, 'select_ms': 3.209246, 'merge_ms': 0.446288, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}
+[04:36:57] large k15 order0 pair0: uniform 36.952 ms, scanonly1 25.627 ms, scanonly1/uniform 0.6935, select_ms 14.698 vs 3.219
+[04:36:57] large k15 order0 pair1: uniform 36.900 ms, scanonly1 25.466 ms, scanonly1/uniform 0.6901, select_ms 14.693 vs 3.204
+[04:36:57] large k15 order0 pair2: uniform 36.950 ms, scanonly1 25.487 ms, scanonly1/uniform 0.6898, select_ms 14.693 vs 3.223
+[04:36:57] large k15 order1 pair0: uniform 36.878 ms, scanonly1 25.576 ms, scanonly1/uniform 0.6935, select_ms 14.687 vs 3.240
+[04:36:57] large k15 order1 pair1: uniform 36.967 ms, scanonly1 25.591 ms, scanonly1/uniform 0.6923, select_ms 14.708 vs 3.217
+[04:36:57] large k15 order1 pair2: uniform 36.914 ms, scanonly1 25.560 ms, scanonly1/uniform 0.6924, select_ms 14.690 vs 3.211
+[04:36:57] large k15: uniform median 36.932 ms, scanonly1 median 25.568 ms, paired median scanonly1/uniform 0.6923, 6/6 pairs favor scanonly1; select_ms medians uniform 14.693, scanonly1 3.218 [OUTPUT INVALID; phase cost only; scanonly1 differs from the reference in 51756 cells]
+[04:36:57] dyadic k10 warmup uniform: 33.804 ms; phases {'distance_ms': 15.333736, 'select_ms': 10.270067, 'merge_ms': 0.44924, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}
+[04:36:57] dyadic k10 warmup scanonly1: 26.748 ms; phases {'distance_ms': 15.328153, 'select_ms': 3.216131, 'merge_ms': 0.448134, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}
+[04:36:57] dyadic k10 order0 pair0: uniform 32.795 ms, scanonly1 25.066 ms, scanonly1/uniform 0.7643, select_ms 10.280 vs 3.236
+[04:36:57] dyadic k10 order0 pair1: uniform 32.026 ms, scanonly1 24.869 ms, scanonly1/uniform 0.7765, select_ms 10.294 vs 3.217
+[04:36:57] dyadic k10 order0 pair2: uniform 31.692 ms, scanonly1 24.700 ms, scanonly1/uniform 0.7794, select_ms 10.272 vs 3.205
+[04:36:57] dyadic k10 order1 pair0: uniform 31.808 ms, scanonly1 24.664 ms, scanonly1/uniform 0.7754, select_ms 10.286 vs 3.220
+[04:36:57] dyadic k10 order1 pair1: uniform 31.878 ms, scanonly1 24.779 ms, scanonly1/uniform 0.7773, select_ms 10.292 vs 3.225
+[04:36:57] dyadic k10 order1 pair2: uniform 31.911 ms, scanonly1 25.040 ms, scanonly1/uniform 0.7847, select_ms 10.272 vs 3.231
+[04:36:57] dyadic k10: uniform median 31.894 ms, scanonly1 median 24.824 ms, paired median scanonly1/uniform 0.7769, 6/6 pairs favor scanonly1; select_ms medians uniform 10.283, scanonly1 3.222 [OUTPUT INVALID; phase cost only; scanonly1 differs from the reference in 19478 cells]
+[04:36:57] dyadic k15 warmup uniform: 37.152 ms; phases {'distance_ms': 15.326534, 'select_ms': 14.692551, 'merge_ms': 0.449866, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}
+[04:36:57] dyadic k15 warmup scanonly1: 25.773 ms; phases {'distance_ms': 15.324647, 'select_ms': 3.216798, 'merge_ms': 0.454849, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}
+[04:36:58] dyadic k15 order0 pair0: uniform 37.190 ms, scanonly1 25.789 ms, scanonly1/uniform 0.6934, select_ms 14.687 vs 3.208
+[04:36:58] dyadic k15 order0 pair1: uniform 37.183 ms, scanonly1 25.706 ms, scanonly1/uniform 0.6913, select_ms 14.694 vs 3.221
+[04:36:58] dyadic k15 order0 pair2: uniform 37.098 ms, scanonly1 25.659 ms, scanonly1/uniform 0.6917, select_ms 14.702 vs 3.215
+[04:36:58] dyadic k15 order1 pair0: uniform 37.218 ms, scanonly1 25.708 ms, scanonly1/uniform 0.6907, select_ms 14.701 vs 3.215
+[04:36:58] dyadic k15 order1 pair1: uniform 37.114 ms, scanonly1 25.840 ms, scanonly1/uniform 0.6962, select_ms 14.689 vs 3.216
+[04:36:58] dyadic k15 order1 pair2: uniform 37.251 ms, scanonly1 25.729 ms, scanonly1/uniform 0.6907, select_ms 14.681 vs 3.206
+[04:36:58] dyadic k15: uniform median 37.187 ms, scanonly1 median 25.718 ms, paired median scanonly1/uniform 0.6915, 6/6 pairs favor scanonly1; select_ms medians uniform 14.692, scanonly1 3.215 [OUTPUT INVALID; phase cost only; scanonly1 differs from the reference in 31390 cells]
+[04:36:58] PASSED

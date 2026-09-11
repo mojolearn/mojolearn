@@ -1,0 +1,155 @@
+=== native stack handler installed pid 2539 tid 2539 time 1789103814.431216656 signal SIGUSR2
+=== native stack handler installed pid 2542 tid 2542 time 1789103814.519776712 signal SIGUSR2
+=== native stack handler installed pid 2543 tid 2543 time 1789103814.522896003 signal SIGUSR2
+=== native stack sample pid 2539 tid 2539 time 1789103924.494752928 sender_pid 2539
+interrupted pc 0x73d84f1e29bc sp 0x579abebba4d0 rax 0x0
+backtrace frames 33
+/root/gemm_leg_out/byte-lm-lifetime/native_stack_dump.so(+0x199d)[0x73d84f47499d]
+/lib/x86_64-linux-gnu/libc.so.6(+0x42520)[0x73d84f18e520]
+/lib/x86_64-linux-gnu/libc.so.6(pthread_kill+0x12c)[0x73d84f1e29bc]
+/lib/x86_64-linux-gnu/libc.so.6(raise+0x16)[0x73d84f18e476]
+/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0xfce15)[0x73d84cb3de15]
+/lib/x86_64-linux-gnu/libc.so.6(+0x42520)[0x73d84f18e520]
+/lib/x86_64-linux-gnu/libc.so.6(+0x91280)[0x73d84f1dd280]
+/lib/x86_64-linux-gnu/libc.so.6(pthread_mutex_lock+0x112)[0x73d84f1e3fc2]
+/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x8a1cc)[0x73d84cacb1cc]
+/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x8a0ad)[0x73d84cacb0ad]
+/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x75fc8)[0x73d84cab6fc8]
+/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x5d7f3)[0x73d84ca9e7f3]
+/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x73ebc)[0x73d84cab4ebc]
+/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x8a4a6)[0x73d84cacb4a6]
+/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x94650)[0x73d84cad5650]
+/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(_ZN1M6Driver13DeviceContext19enqueueCreateBufferEm+0x49)[0x73d84cab73c9]
+/root/mojolearn/.pixi/envs/default/lib/libAsyncRTMojoBindings.so(AsyncRT_DeviceContext_createBuffer_async+0x29)[0x73d84c94eae9]
+/root/mojolearn/python/mojolearn/identical/_mojolearn_byte_lm.so(+0x39348)[0x73d82830b348]
+/root/mojolearn/python/mojolearn/identical/_mojolearn_byte_lm.so(+0x3ed67)[0x73d828310d67]
+/root/mojolearn/python/mojolearn/identical/_mojolearn_byte_lm.so(+0x669f)[0x73d8282d869f]
+/root/mojolearn/python/mojolearn/identical/_mojolearn_byte_lm.so(+0x306aa)[0x73d8283026aa]
+/root/mojolearn/.pixi/envs/default/bin/python3(_PyEval_EvalFrameDefault+0x15c9)[0x579aa4df4c49]
+/root/mojolearn/.pixi/envs/default/bin/python3(+0x1e2265)[0x579aa4df1265]
+/root/mojolearn/.pixi/envs/default/bin/python3(PyEval_EvalCode+0xb0)[0x579aa4ed47b0]
+/root/mojolearn/.pixi/envs/default/bin/python3(+0x308cef)[0x579aa4f17cef]
+/root/mojolearn/.pixi/envs/default/bin/python3(+0x307f8f)[0x579aa4f16f8f]
+/root/mojolearn/.pixi/envs/default/bin/python3(+0x3078ae)[0x579aa4f168ae]
+/root/mojolearn/.pixi/envs/default/bin/python3(+0x3076cd)[0x579aa4f166cd]
+/root/mojolearn/.pixi/envs/default/bin/python3(Py_RunMain+0x300)[0x579aa4ec3510]
+/root/mojolearn/.pixi/envs/default/bin/python3(Py_BytesMain+0x35)[0x579aa4ebd865]
+/lib/x86_64-linux-gnu/libc.so.6(+0x29d90)[0x73d84f175d90]
+/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x80)[0x73d84f175e40]
+/root/mojolearn/.pixi/envs/default/bin/python3(+0x2adbfa)[0x579aa4ebcbfa]
+--- /proc/self/task/2539/wchan: 0
+--- /proc/self/task/2539/syscall: 0 0x2c 0x579abebb8680 0x1000 0x0 0x0 0x5 0x579abebb85b0 0x73d84f26096c
+--- /proc/self/task/2539/stack: 
+(read failed errno=13)
+=== end sample
+=== native stack sample pid 2539 tid 2539 time 1789103926.504089296 sender_pid 2539
+interrupted pc 0x73d84f1dd27e sp 0x7ffc12782788 rax 0xca
+backtrace frames 29
+/root/gemm_leg_out/byte-lm-lifetime/native_stack_dump.so(+0x199d)[0x73d84f47499d]
+/lib/x86_64-linux-gnu/libc.so.6(+0x42520)[0x73d84f18e520]
+/lib/x86_64-linux-gnu/libc.so.6(+0x9127e)[0x73d84f1dd27e]
+/lib/x86_64-linux-gnu/libc.so.6(pthread_mutex_lock+0x112)[0x73d84f1e3fc2]
+/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x8a1cc)[0x73d84cacb1cc]
+/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x8a0ad)[0x73d84cacb0ad]
+/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x75fc8)[0x73d84cab6fc8]
+/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x5d7f3)[0x73d84ca9e7f3]
+/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x73ebc)[0x73d84cab4ebc]
+/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x8a4a6)[0x73d84cacb4a6]
+/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x94650)[0x73d84cad5650]
+/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(_ZN1M6Driver13DeviceContext19enqueueCreateBufferEm+0x49)[0x73d84cab73c9]
+/root/mojolearn/.pixi/envs/default/lib/libAsyncRTMojoBindings.so(AsyncRT_DeviceContext_createBuffer_async+0x29)[0x73d84c94eae9]
+/root/mojolearn/python/mojolearn/identical/_mojolearn_byte_lm.so(+0x39348)[0x73d82830b348]
+/root/mojolearn/python/mojolearn/identical/_mojolearn_byte_lm.so(+0x3ed67)[0x73d828310d67]
+/root/mojolearn/python/mojolearn/identical/_mojolearn_byte_lm.so(+0x669f)[0x73d8282d869f]
+/root/mojolearn/python/mojolearn/identical/_mojolearn_byte_lm.so(+0x306aa)[0x73d8283026aa]
+/root/mojolearn/.pixi/envs/default/bin/python3(_PyEval_EvalFrameDefault+0x15c9)[0x579aa4df4c49]
+/root/mojolearn/.pixi/envs/default/bin/python3(+0x1e2265)[0x579aa4df1265]
+/root/mojolearn/.pixi/envs/default/bin/python3(PyEval_EvalCode+0xb0)[0x579aa4ed47b0]
+/root/mojolearn/.pixi/envs/default/bin/python3(+0x308cef)[0x579aa4f17cef]
+/root/mojolearn/.pixi/envs/default/bin/python3(+0x307f8f)[0x579aa4f16f8f]
+/root/mojolearn/.pixi/envs/default/bin/python3(+0x3078ae)[0x579aa4f168ae]
+/root/mojolearn/.pixi/envs/default/bin/python3(+0x3076cd)[0x579aa4f166cd]
+/root/mojolearn/.pixi/envs/default/bin/python3(Py_RunMain+0x300)[0x579aa4ec3510]
+/root/mojolearn/.pixi/envs/default/bin/python3(Py_BytesMain+0x35)[0x579aa4ebd865]
+/lib/x86_64-linux-gnu/libc.so.6(+0x29d90)[0x73d84f175d90]
+/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x80)[0x73d84f175e40]
+/root/mojolearn/.pixi/envs/default/bin/python3(+0x2adbfa)[0x579aa4ebcbfa]
+--- /proc/self/task/2539/wchan: 0
+--- /proc/self/task/2539/syscall: 0 0x2c 0x7ffc12780940 0x1000 0x0 0x0 0x5 0x7ffc12780870 0x73d84f26096c
+--- /proc/self/task/2539/stack: 
+(read failed errno=13)
+=== end sample
+=== native stack sample pid 2539 tid 2539 time 1789103928.513256952 sender_pid 2539
+interrupted pc 0x73d84f1dd27e sp 0x7ffc12782788 rax 0xca
+backtrace frames 29
+/root/gemm_leg_out/byte-lm-lifetime/native_stack_dump.so(+0x199d)[0x73d84f47499d]
+/lib/x86_64-linux-gnu/libc.so.6(+0x42520)[0x73d84f18e520]
+/lib/x86_64-linux-gnu/libc.so.6(+0x9127e)[0x73d84f1dd27e]
+/lib/x86_64-linux-gnu/libc.so.6(pthread_mutex_lock+0x112)[0x73d84f1e3fc2]
+/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x8a1cc)[0x73d84cacb1cc]
+/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x8a0ad)[0x73d84cacb0ad]
+/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x75fc8)[0x73d84cab6fc8]
+/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x5d7f3)[0x73d84ca9e7f3]
+/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x73ebc)[0x73d84cab4ebc]
+/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x8a4a6)[0x73d84cacb4a6]
+/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x94650)[0x73d84cad5650]
+/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(_ZN1M6Driver13DeviceContext19enqueueCreateBufferEm+0x49)[0x73d84cab73c9]
+/root/mojolearn/.pixi/envs/default/lib/libAsyncRTMojoBindings.so(AsyncRT_DeviceContext_createBuffer_async+0x29)[0x73d84c94eae9]
+/root/mojolearn/python/mojolearn/identical/_mojolearn_byte_lm.so(+0x39348)[0x73d82830b348]
+/root/mojolearn/python/mojolearn/identical/_mojolearn_byte_lm.so(+0x3ed67)[0x73d828310d67]
+/root/mojolearn/python/mojolearn/identical/_mojolearn_byte_lm.so(+0x669f)[0x73d8282d869f]
+/root/mojolearn/python/mojolearn/identical/_mojolearn_byte_lm.so(+0x306aa)[0x73d8283026aa]
+/root/mojolearn/.pixi/envs/default/bin/python3(_PyEval_EvalFrameDefault+0x15c9)[0x579aa4df4c49]
+/root/mojolearn/.pixi/envs/default/bin/python3(+0x1e2265)[0x579aa4df1265]
+/root/mojolearn/.pixi/envs/default/bin/python3(PyEval_EvalCode+0xb0)[0x579aa4ed47b0]
+/root/mojolearn/.pixi/envs/default/bin/python3(+0x308cef)[0x579aa4f17cef]
+/root/mojolearn/.pixi/envs/default/bin/python3(+0x307f8f)[0x579aa4f16f8f]
+/root/mojolearn/.pixi/envs/default/bin/python3(+0x3078ae)[0x579aa4f168ae]
+/root/mojolearn/.pixi/envs/default/bin/python3(+0x3076cd)[0x579aa4f166cd]
+/root/mojolearn/.pixi/envs/default/bin/python3(Py_RunMain+0x300)[0x579aa4ec3510]
+/root/mojolearn/.pixi/envs/default/bin/python3(Py_BytesMain+0x35)[0x579aa4ebd865]
+/lib/x86_64-linux-gnu/libc.so.6(+0x29d90)[0x73d84f175d90]
+/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x80)[0x73d84f175e40]
+/root/mojolearn/.pixi/envs/default/bin/python3(+0x2adbfa)[0x579aa4ebcbfa]
+--- /proc/self/task/2539/wchan: 0
+--- /proc/self/task/2539/syscall: 0 0x2c 0x7ffc12780940 0x1000 0x0 0x0 0x5 0x7ffc12780870 0x73d84f26096c
+--- /proc/self/task/2539/stack: 
+(read failed errno=13)
+=== end sample
+=== native stack sample pid 2539 tid 2539 time 1789103934.428994857 sender_pid 2011
+interrupted pc 0x73d84f1dd27e sp 0x7ffc12782788 rax 0xca
+backtrace frames 29
+/root/gemm_leg_out/byte-lm-lifetime/native_stack_dump.so(+0x199d)[0x73d84f47499d]
+/lib/x86_64-linux-gnu/libc.so.6(+0x42520)[0x73d84f18e520]
+/lib/x86_64-linux-gnu/libc.so.6(+0x9127e)[0x73d84f1dd27e]
+/lib/x86_64-linux-gnu/libc.so.6(pthread_mutex_lock+0x112)[0x73d84f1e3fc2]
+/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x8a1cc)[0x73d84cacb1cc]
+/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x8a0ad)[0x73d84cacb0ad]
+/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x75fc8)[0x73d84cab6fc8]
+/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x5d7f3)[0x73d84ca9e7f3]
+/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x73ebc)[0x73d84cab4ebc]
+/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x8a4a6)[0x73d84cacb4a6]
+/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x94650)[0x73d84cad5650]
+/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(_ZN1M6Driver13DeviceContext19enqueueCreateBufferEm+0x49)[0x73d84cab73c9]
+/root/mojolearn/.pixi/envs/default/lib/libAsyncRTMojoBindings.so(AsyncRT_DeviceContext_createBuffer_async+0x29)[0x73d84c94eae9]
+/root/mojolearn/python/mojolearn/identical/_mojolearn_byte_lm.so(+0x39348)[0x73d82830b348]
+/root/mojolearn/python/mojolearn/identical/_mojolearn_byte_lm.so(+0x3ed67)[0x73d828310d67]
+/root/mojolearn/python/mojolearn/identical/_mojolearn_byte_lm.so(+0x669f)[0x73d8282d869f]
+/root/mojolearn/python/mojolearn/identical/_mojolearn_byte_lm.so(+0x306aa)[0x73d8283026aa]
+/root/mojolearn/.pixi/envs/default/bin/python3(_PyEval_EvalFrameDefault+0x15c9)[0x579aa4df4c49]
+/root/mojolearn/.pixi/envs/default/bin/python3(+0x1e2265)[0x579aa4df1265]
+/root/mojolearn/.pixi/envs/default/bin/python3(PyEval_EvalCode+0xb0)[0x579aa4ed47b0]
+/root/mojolearn/.pixi/envs/default/bin/python3(+0x308cef)[0x579aa4f17cef]
+/root/mojolearn/.pixi/envs/default/bin/python3(+0x307f8f)[0x579aa4f16f8f]
+/root/mojolearn/.pixi/envs/default/bin/python3(+0x3078ae)[0x579aa4f168ae]
+/root/mojolearn/.pixi/envs/default/bin/python3(+0x3076cd)[0x579aa4f166cd]
+/root/mojolearn/.pixi/envs/default/bin/python3(Py_RunMain+0x300)[0x579aa4ec3510]
+/root/mojolearn/.pixi/envs/default/bin/python3(Py_BytesMain+0x35)[0x579aa4ebd865]
+/lib/x86_64-linux-gnu/libc.so.6(+0x29d90)[0x73d84f175d90]
+/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x80)[0x73d84f175e40]
+/root/mojolearn/.pixi/envs/default/bin/python3(+0x2adbfa)[0x579aa4ebcbfa]
+--- /proc/self/task/2539/wchan: 0
+--- /proc/self/task/2539/syscall: 0 0x2b 0x7ffc12780940 0x1000 0x0 0x0 0x5 0x7ffc12780870 0x73d84f26096c
+--- /proc/self/task/2539/stack: 
+(read failed errno=13)
+=== end sample

@@ -32,9 +32,12 @@ committed host state.
 Reused native state is checked against supplied parameters, moments, flags,
 step, optimizer and shape. Optimizer Float32 values match raw bits, including
 signed zero; a native negative control verifies this. Full snapshots, returned gradients, validation
-readbacks and per-forward flat-weight unpacking remain. In particular, reuse
-currently adds three state readbacks for host/device mirror admission; this is
-not yet a minimal-transfer trainer.
+readbacks and per-forward flat-weight unpacking remain on the stateless path.
+Superseded 2026-09-11 (DEVIATION 2514): a resident trainer now defaults to
+step_result='lean', owns param, m, v and the gradient on the device, validates
+on the device with the same refusals, keeps a shadow copy for rollback, and
+exports on demand; the target-shape step went from 45 s to 0.565 s on the
+H100 with every step bit-equal. See docs/lanes/DESIGN_lm_device_owned_step_2026-09-11.md.
 
 ## Loader correction
 

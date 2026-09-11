@@ -1,0 +1,5 @@
+[stateless_x1]   0.093s imported {"mojolearn_file": "/root/mojolearn/python/mojolearn/__init__.py", "version": "0.8.0"}
+[stateless_x1]   0.320s binding {"sha256": "c968eb19df63", "vendor": "cuda"}
+[stateless_x1]   0.321s native_call_begin {"completed_steps": 0, "label": "step1", "resident": false}
+[stateless_x1]   2.632s native_call_end {"keep_context_env": null, "keeper_active": false, "label": "step1"}
+[stateless_x1]   2.634s hashed {"label": "step1", "loss": 5.548226833343506, "step": 1}

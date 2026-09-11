@@ -1,0 +1,1841 @@
+{
+ "argv": [
+  "/root/mojolearn/.pixi/envs/default/bin/python3",
+  "/root/mojolearn/tools/byte_lm_lifetime_diag.py",
+  "--case",
+  "stateless_x2_teardown_with_gil",
+  "--record",
+  "/root/gemm_leg_out/byte-lm-lifetime/cases/stateless_x2_teardown_with_gil.json",
+  "--deadline",
+  "120.0"
+ ],
+ "case": "stateless_x2_teardown_with_gil",
+ "deadline_s": 120.0,
+ "env_overrides": {
+  "MOJOLEARN_BYTE_LM_TEARDOWN_WITH_GIL": "1"
+ },
+ "exit_code": -9,
+ "hang_diagnostics": {
+  "cpu_ticks": {
+   "advancing": false,
+   "after": 343,
+   "before": 343,
+   "note": "advancing=true means the child is spinning (host loop or driver spin-wait); false means it is blocked (futex/cond wait)"
+  },
+  "native": {
+   "gdb": {
+    "argv": [
+     "gdb",
+     "-p",
+     "2539",
+     "-batch",
+     "-ex",
+     "set pagination off",
+     "-ex",
+     "thread apply all bt"
+    ],
+    "returncode": 0,
+    "stderr": "Could not attach to process.  If your uid matches the uid of the target\nprocess, check the setting of /proc/sys/kernel/yama/ptrace_scope, or try\nagain as the root user.  For more details, see /etc/sysctl.d/10-ptrace.conf\nptrace: Inappropriate ioctl for device.\n",
+    "stdout": ""
+   },
+   "in_process": {
+    "configured": true,
+    "contents": "=== native stack handler installed pid 2539 tid 2539 time 1789103814.431216656 signal SIGUSR2\n=== native stack handler installed pid 2542 tid 2542 time 1789103814.519776712 signal SIGUSR2\n=== native stack handler installed pid 2543 tid 2543 time 1789103814.522896003 signal SIGUSR2\n=== native stack sample pid 2539 tid 2539 time 1789103924.494752928 sender_pid 2539\ninterrupted pc 0x73d84f1e29bc sp 0x579abebba4d0 rax 0x0\nbacktrace frames 33\n/root/gemm_leg_out/byte-lm-lifetime/native_stack_dump.so(+0x199d)[0x73d84f47499d]\n/lib/x86_64-linux-gnu/libc.so.6(+0x42520)[0x73d84f18e520]\n/lib/x86_64-linux-gnu/libc.so.6(pthread_kill+0x12c)[0x73d84f1e29bc]\n/lib/x86_64-linux-gnu/libc.so.6(raise+0x16)[0x73d84f18e476]\n/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0xfce15)[0x73d84cb3de15]\n/lib/x86_64-linux-gnu/libc.so.6(+0x42520)[0x73d84f18e520]\n/lib/x86_64-linux-gnu/libc.so.6(+0x91280)[0x73d84f1dd280]\n/lib/x86_64-linux-gnu/libc.so.6(pthread_mutex_lock+0x112)[0x73d84f1e3fc2]\n/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x8a1cc)[0x73d84cacb1cc]\n/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x8a0ad)[0x73d84cacb0ad]\n/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x75fc8)[0x73d84cab6fc8]\n/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x5d7f3)[0x73d84ca9e7f3]\n/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x73ebc)[0x73d84cab4ebc]\n/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x8a4a6)[0x73d84cacb4a6]\n/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x94650)[0x73d84cad5650]\n/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(_ZN1M6Driver13DeviceContext19enqueueCreateBufferEm+0x49)[0x73d84cab73c9]\n/root/mojolearn/.pixi/envs/default/lib/libAsyncRTMojoBindings.so(AsyncRT_DeviceContext_createBuffer_async+0x29)[0x73d84c94eae9]\n/root/mojolearn/python/mojolearn/identical/_mojolearn_byte_lm.so(+0x39348)[0x73d82830b348]\n/root/mojolearn/python/mojolearn/identical/_mojolearn_byte_lm.so(+0x3ed67)[0x73d828310d67]\n/root/mojolearn/python/mojolearn/identical/_mojolearn_byte_lm.so(+0x669f)[0x73d8282d869f]\n/root/mojolearn/python/mojolearn/identical/_mojolearn_byte_lm.so(+0x306aa)[0x73d8283026aa]\n/root/mojolearn/.pixi/envs/default/bin/python3(_PyEval_EvalFrameDefault+0x15c9)[0x579aa4df4c49]\n/root/mojolearn/.pixi/envs/default/bin/python3(+0x1e2265)[0x579aa4df1265]\n/root/mojolearn/.pixi/envs/default/bin/python3(PyEval_EvalCode+0xb0)[0x579aa4ed47b0]\n/root/mojolearn/.pixi/envs/default/bin/python3(+0x308cef)[0x579aa4f17cef]\n/root/mojolearn/.pixi/envs/default/bin/python3(+0x307f8f)[0x579aa4f16f8f]\n/root/mojolearn/.pixi/envs/default/bin/python3(+0x3078ae)[0x579aa4f168ae]\n/root/mojolearn/.pixi/envs/default/bin/python3(+0x3076cd)[0x579aa4f166cd]\n/root/mojolearn/.pixi/envs/default/bin/python3(Py_RunMain+0x300)[0x579aa4ec3510]\n/root/mojolearn/.pixi/envs/default/bin/python3(Py_BytesMain+0x35)[0x579aa4ebd865]\n/lib/x86_64-linux-gnu/libc.so.6(+0x29d90)[0x73d84f175d90]\n/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x80)[0x73d84f175e40]\n/root/mojolearn/.pixi/envs/default/bin/python3(+0x2adbfa)[0x579aa4ebcbfa]\n--- /proc/self/task/2539/wchan: 0\n--- /proc/self/task/2539/syscall: 0 0x2c 0x579abebb8680 0x1000 0x0 0x0 0x5 0x579abebb85b0 0x73d84f26096c\n--- /proc/self/task/2539/stack: \n(read failed errno=13)\n=== end sample\n=== native stack sample pid 2539 tid 2539 time 1789103926.504089296 sender_pid 2539\ninterrupted pc 0x73d84f1dd27e sp 0x7ffc12782788 rax 0xca\nbacktrace frames 29\n/root/gemm_leg_out/byte-lm-lifetime/native_stack_dump.so(+0x199d)[0x73d84f47499d]\n/lib/x86_64-linux-gnu/libc.so.6(+0x42520)[0x73d84f18e520]\n/lib/x86_64-linux-gnu/libc.so.6(+0x9127e)[0x73d84f1dd27e]\n/lib/x86_64-linux-gnu/libc.so.6(pthread_mutex_lock+0x112)[0x73d84f1e3fc2]\n/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x8a1cc)[0x73d84cacb1cc]\n/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x8a0ad)[0x73d84cacb0ad]\n/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x75fc8)[0x73d84cab6fc8]\n/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x5d7f3)[0x73d84ca9e7f3]\n/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x73ebc)[0x73d84cab4ebc]\n/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x8a4a6)[0x73d84cacb4a6]\n/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x94650)[0x73d84cad5650]\n/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(_ZN1M6Driver13DeviceContext19enqueueCreateBufferEm+0x49)[0x73d84cab73c9]\n/root/mojolearn/.pixi/envs/default/lib/libAsyncRTMojoBindings.so(AsyncRT_DeviceContext_createBuffer_async+0x29)[0x73d84c94eae9]\n/root/mojolearn/python/mojolearn/identical/_mojolearn_byte_lm.so(+0x39348)[0x73d82830b348]\n/root/mojolearn/python/mojolearn/identical/_mojolearn_byte_lm.so(+0x3ed67)[0x73d828310d67]\n/root/mojolearn/python/mojolearn/identical/_mojolearn_byte_lm.so(+0x669f)[0x73d8282d869f]\n/root/mojolearn/python/mojolearn/identical/_mojolearn_byte_lm.so(+0x306aa)[0x73d8283026aa]\n/root/mojolearn/.pixi/envs/default/bin/python3(_PyEval_EvalFrameDefault+0x15c9)[0x579aa4df4c49]\n/root/mojolearn/.pixi/envs/default/bin/python3(+0x1e2265)[0x579aa4df1265]\n/root/mojolearn/.pixi/envs/default/bin/python3(PyEval_EvalCode+0xb0)[0x579aa4ed47b0]\n/root/mojolearn/.pixi/envs/default/bin/python3(+0x308cef)[0x579aa4f17cef]\n/root/mojolearn/.pixi/envs/default/bin/python3(+0x307f8f)[0x579aa4f16f8f]\n/root/mojolearn/.pixi/envs/default/bin/python3(+0x3078ae)[0x579aa4f168ae]\n/root/mojolearn/.pixi/envs/default/bin/python3(+0x3076cd)[0x579aa4f166cd]\n/root/mojolearn/.pixi/envs/default/bin/python3(Py_RunMain+0x300)[0x579aa4ec3510]\n/root/mojolearn/.pixi/envs/default/bin/python3(Py_BytesMain+0x35)[0x579aa4ebd865]\n/lib/x86_64-linux-gnu/libc.so.6(+0x29d90)[0x73d84f175d90]\n/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x80)[0x73d84f175e40]\n/root/mojolearn/.pixi/envs/default/bin/python3(+0x2adbfa)[0x579aa4ebcbfa]\n--- /proc/self/task/2539/wchan: 0\n--- /proc/self/task/2539/syscall: 0 0x2c 0x7ffc12780940 0x1000 0x0 0x0 0x5 0x7ffc12780870 0x73d84f26096c\n--- /proc/self/task/2539/stack: \n(read failed errno=13)\n=== end sample\n=== native stack sample pid 2539 tid 2539 time 1789103928.513256952 sender_pid 2539\ninterrupted pc 0x73d84f1dd27e sp 0x7ffc12782788 rax 0xca\nbacktrace frames 29\n/root/gemm_leg_out/byte-lm-lifetime/native_stack_dump.so(+0x199d)[0x73d84f47499d]\n/lib/x86_64-linux-gnu/libc.so.6(+0x42520)[0x73d84f18e520]\n/lib/x86_64-linux-gnu/libc.so.6(+0x9127e)[0x73d84f1dd27e]\n/lib/x86_64-linux-gnu/libc.so.6(pthread_mutex_lock+0x112)[0x73d84f1e3fc2]\n/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x8a1cc)[0x73d84cacb1cc]\n/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x8a0ad)[0x73d84cacb0ad]\n/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x75fc8)[0x73d84cab6fc8]\n/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x5d7f3)[0x73d84ca9e7f3]\n/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x73ebc)[0x73d84cab4ebc]\n/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x8a4a6)[0x73d84cacb4a6]\n/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x94650)[0x73d84cad5650]\n/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(_ZN1M6Driver13DeviceContext19enqueueCreateBufferEm+0x49)[0x73d84cab73c9]\n/root/mojolearn/.pixi/envs/default/lib/libAsyncRTMojoBindings.so(AsyncRT_DeviceContext_createBuffer_async+0x29)[0x73d84c94eae9]\n/root/mojolearn/python/mojolearn/identical/_mojolearn_byte_lm.so(+0x39348)[0x73d82830b348]\n/root/mojolearn/python/mojolearn/identical/_mojolearn_byte_lm.so(+0x3ed67)[0x73d828310d67]\n/root/mojolearn/python/mojolearn/identical/_mojolearn_byte_lm.so(+0x669f)[0x73d8282d869f]\n/root/mojolearn/python/mojolearn/identical/_mojolearn_byte_lm.so(+0x306aa)[0x73d8283026aa]\n/root/mojolearn/.pixi/envs/default/bin/python3(_PyEval_EvalFrameDefault+0x15c9)[0x579aa4df4c49]\n/root/mojolearn/.pixi/envs/default/bin/python3(+0x1e2265)[0x579aa4df1265]\n/root/mojolearn/.pixi/envs/default/bin/python3(PyEval_EvalCode+0xb0)[0x579aa4ed47b0]\n/root/mojolearn/.pixi/envs/default/bin/python3(+0x308cef)[0x579aa4f17cef]\n/root/mojolearn/.pixi/envs/default/bin/python3(+0x307f8f)[0x579aa4f16f8f]\n/root/mojolearn/.pixi/envs/default/bin/python3(+0x3078ae)[0x579aa4f168ae]\n/root/mojolearn/.pixi/envs/default/bin/python3(+0x3076cd)[0x579aa4f166cd]\n/root/mojolearn/.pixi/envs/default/bin/python3(Py_RunMain+0x300)[0x579aa4ec3510]\n/root/mojolearn/.pixi/envs/default/bin/python3(Py_BytesMain+0x35)[0x579aa4ebd865]\n/lib/x86_64-linux-gnu/libc.so.6(+0x29d90)[0x73d84f175d90]\n/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x80)[0x73d84f175e40]\n/root/mojolearn/.pixi/envs/default/bin/python3(+0x2adbfa)[0x579aa4ebcbfa]\n--- /proc/self/task/2539/wchan: 0\n--- /proc/self/task/2539/syscall: 0 0x2c 0x7ffc12780940 0x1000 0x0 0x0 0x5 0x7ffc12780870 0x73d84f26096c\n--- /proc/self/task/2539/stack: \n(read failed errno=13)\n=== end sample\n=== native stack sample pid 2539 tid 2539 time 1789103934.428994857 sender_pid 2011\ninterrupted pc 0x73d84f1dd27e sp 0x7ffc12782788 rax 0xca\nbacktrace frames 29\n/root/gemm_leg_out/byte-lm-lifetime/native_stack_dump.so(+0x199d)[0x73d84f47499d]\n/lib/x86_64-linux-gnu/libc.so.6(+0x42520)[0x73d84f18e520]\n/lib/x86_64-linux-gnu/libc.so.6(+0x9127e)[0x73d84f1dd27e]\n/lib/x86_64-linux-gnu/libc.so.6(pthread_mutex_lock+0x112)[0x73d84f1e3fc2]\n/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x8a1cc)[0x73d84cacb1cc]\n/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x8a0ad)[0x73d84cacb0ad]\n/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x75fc8)[0x73d84cab6fc8]\n/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x5d7f3)[0x73d84ca9e7f3]\n/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x73ebc)[0x73d84cab4ebc]\n/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x8a4a6)[0x73d84cacb4a6]\n/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(+0x94650)[0x73d84cad5650]\n/root/mojolearn/.pixi/envs/default/lib/libKGENCompilerRTShared.so(_ZN1M6Driver13DeviceContext19enqueueCreateBufferEm+0x49)[0x73d84cab73c9]\n/root/mojolearn/.pixi/envs/default/lib/libAsyncRTMojoBindings.so(AsyncRT_DeviceContext_createBuffer_async+0x29)[0x73d84c94eae9]\n/root/mojolearn/python/mojolearn/identical/_mojolearn_byte_lm.so(+0x39348)[0x73d82830b348]\n/root/mojolearn/python/mojolearn/identical/_mojolearn_byte_lm.so(+0x3ed67)[0x73d828310d67]\n/root/mojolearn/python/mojolearn/identical/_mojolearn_byte_lm.so(+0x669f)[0x73d8282d869f]\n/root/mojolearn/python/mojolearn/identical/_mojolearn_byte_lm.so(+0x306aa)[0x73d8283026aa]\n/root/mojolearn/.pixi/envs/default/bin/python3(_PyEval_EvalFrameDefault+0x15c9)[0x579aa4df4c49]\n/root/mojolearn/.pixi/envs/default/bin/python3(+0x1e2265)[0x579aa4df1265]\n/root/mojolearn/.pixi/envs/default/bin/python3(PyEval_EvalCode+0xb0)[0x579aa4ed47b0]\n/root/mojolearn/.pixi/envs/default/bin/python3(+0x308cef)[0x579aa4f17cef]\n/root/mojolearn/.pixi/envs/default/bin/python3(+0x307f8f)[0x579aa4f16f8f]\n/root/mojolearn/.pixi/envs/default/bin/python3(+0x3078ae)[0x579aa4f168ae]\n/root/mojolearn/.pixi/envs/default/bin/python3(+0x3076cd)[0x579aa4f166cd]\n/root/mojolearn/.pixi/envs/default/bin/python3(Py_RunMain+0x300)[0x579aa4ec3510]\n/root/mojolearn/.pixi/envs/default/bin/python3(Py_BytesMain+0x35)[0x579aa4ebd865]\n/lib/x86_64-linux-gnu/libc.so.6(+0x29d90)[0x73d84f175d90]\n/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x80)[0x73d84f175e40]\n/root/mojolearn/.pixi/envs/default/bin/python3(+0x2adbfa)[0x579aa4ebcbfa]\n--- /proc/self/task/2539/wchan: 0\n--- /proc/self/task/2539/syscall: 0 0x2b 0x7ffc12780940 0x1000 0x0 0x0 0x5 0x7ffc12780870 0x73d84f26096c\n--- /proc/self/task/2539/stack: \n(read failed errno=13)\n=== end sample\n",
+    "file": "/root/gemm_leg_out/byte-lm-lifetime/cases/stateless_x2_teardown_with_gil.native_stack.txt",
+    "handler_installed": true,
+    "installed_line": true,
+    "nbytes": 11899,
+    "samples": 4
+   },
+   "parent_sigusr2": {
+    "sent": true,
+    "unix_time": 1789103934.428882
+   }
+  },
+  "nvidia": {
+   "available": true,
+   "compute_apps": "2539, 386 MiB",
+   "samples": [
+    "0 %, 398 MiB, 210 MHz, 30",
+    "0 %, 398 MiB, 210 MHz, 30",
+    "0 %, 398 MiB, 210 MHz, 30"
+   ]
+  },
+  "proc_after": {
+   "stat": "2539 (python3) S 2011 2539 2539 0 -1 4194560 357060 1628 0 0 201 142 2 1 20 0 132 0 566048997 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 0 0 0 17 38 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+   "status": "Name:\tpython3\nUmask:\t0022\nState:\tS (sleeping)\nTgid:\t2539\nNgid:\t0\nPid:\t2539\nPPid:\t2011\nTracerPid:\t0\nUid:\t0\t0\t0\t0\nGid:\t0\t0\t0\t0\nFDSize:\t64\nGroups:\t0 \nNStgid:\t2539\nNSpid:\t2539\nNSpgid:\t2539\nNSsid:\t2539\nKthread:\t0\nVmPeak:\t112651008 kB\nVmSize:\t112650992 kB\nVmLck:\t       0 kB\nVmPin:\t       0 kB\nVmHWM:\t 1518732 kB\nVmRSS:\t 1518732 kB\nRssAnon:\t   67976 kB\nRssFile:\t  100356 kB\nRssShmem:\t 1350400 kB\nVmData:\t 9580116 kB\nVmStk:\t     132 kB\nVmExe:\t    3036 kB\nVmLib:\t   78156 kB\nVmPTE:\t    4036 kB\nVmSwap:\t       0 kB\nHugetlbPages:\t       0 kB\nCoreDumping:\t0\nTHP_enabled:\t1\nuntag_mask:\t0xffffffffffffffff\nThreads:\t132\nSigQ:\t1/2061644\nSigPnd:\t0000000000000000\nShdPnd:\t0000000000000000\nSigBlk:\t0000000000000000\nSigIgn:\t0000000001001000\nSigCgt:\t0000000100000eea\nCapInh:\t0000000000000000\nCapPrm:\t00000000a80425fb\nCapEff:\t00000000a80425fb\nCapBnd:\t00000000a80425fb\nCapAmb:\t0000000000000000\nNoNewPrivs:\t0\nSeccomp:\t2\nSeccomp_filters:\t1\nSpeculation_Store_Bypass:\tthread vulnerable\nSpeculationIndirectBranch:\tconditional enabled\nCpus_allowed:\tffffffff,ffffffff\nCpus_allowed_list:\t0-63\nMems_allowed:\t00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000001\nMems_allowed_list:\t0\nvoluntary_ctxt_switches:\t61\nnonvoluntary_ctxt_switches:\t14\nx86_Thread_features:\t\nx86_Thread_features_locked:\t\n",
+   "threads": {
+    "2539": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2539 (python3) S 2011 2539 2539 0 -1 4194560 356975 1628 0 0 16 138 2 1 20 0 132 0 566048997 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 17 38 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abf428b70 0x80 0x2 0x0 0x0 0x0 0x7ffc12782788 0x73d84f1dd280",
+     "wchan": "futex_wait_queue"
+    },
+    "2540": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2540 (python3) S 2011 2539 2539 0 -1 4194368 2 1628 0 0 0 0 2 1 20 0 132 0 566049004 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 2147221247 16781312 3818 1 0 0 -1 47 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abea33b70 0x189 0x0 0x73d84e1bdd50 0x0 0xffffffff 0x73d84e1bdc90 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2544": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2544 (\ud83d\udd25 Thread0) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 42 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abead08a0 0x189 0x0 0x0 0x0 0xffffffff 0x73d8474f1c50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2545": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2545 (\ud83d\udd25 Thread1) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 25 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abea32300 0x189 0x0 0x0 0x0 0xffffffff 0x73d846cf0c50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2546": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2546 (\ud83d\udd25 Thread2) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 55 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb20be0 0x189 0x0 0x0 0x0 0xffffffff 0x73d8464efc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2547": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2547 (\ud83d\udd25 Thread3) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 31 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeade2f0 0x189 0x0 0x0 0x0 0xffffffff 0x73d845ceec50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2548": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2548 (\ud83d\udd25 Thread4) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 2 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb200b0 0x189 0x0 0x0 0x0 0xffffffff 0x73d8454edc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2549": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2549 (\ud83d\udd25 Thread5) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 15 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb2cff0 0x189 0x0 0x0 0x0 0xffffffff 0x73d844cecc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2550": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2550 (\ud83d\udd25 Thread6) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 48 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb19b50 0x189 0x0 0x0 0x0 0xffffffff 0x73d823ffec50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2551": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2551 (\ud83d\udd25 Thread7) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 42 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abea480a0 0x189 0x0 0x0 0x0 0xffffffff 0x73d82bffec50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2552": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2552 (\ud83d\udd25 Thread8) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 25 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeaa5040 0x189 0x0 0x0 0x0 0xffffffff 0x73d82b7fdc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2553": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2553 (\ud83d\udd25 Thread9) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 21 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb1bc20 0x189 0x0 0x0 0x0 0xffffffff 0x73d82affcc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2554": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2554 (\ud83d\udd25 Thread10) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 31 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abead6a70 0x189 0x0 0x0 0x0 0xffffffff 0x73d82a7fbc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2555": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2555 (\ud83d\udd25 Thread11) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 15 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeaa7b50 0x189 0x0 0x0 0x0 0xffffffff 0x73d829ffac50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2556": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2556 (\ud83d\udd25 Thread12) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 48 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeabb200 0x189 0x0 0x0 0x0 0xffffffff 0x73d8297f9c50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2557": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2557 (\ud83d\udd25 Thread13) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 25 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb29e40 0x189 0x0 0x0 0x0 0xffffffff 0x73d828ff8c50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2558": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2558 (\ud83d\udd25 Thread14) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 42 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb3ee10 0x189 0x0 0x0 0x0 0xffffffff 0x73d8237fdc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2559": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2559 (\ud83d\udd25 Thread15) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 31 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb47fc0 0x189 0x0 0x0 0x0 0xffffffff 0x73d822ffcc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2560": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2560 (\ud83d\udd25 Thread16) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 25 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeade290 0x189 0x0 0x0 0x0 0xffffffff 0x73d8227fbc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2561": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2561 (\ud83d\udd25 Thread17) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 42 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abea8f620 0x189 0x0 0x0 0x0 0xffffffff 0x73d821ffac50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2562": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2562 (\ud83d\udd25 Thread18) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 15 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeaec880 0x189 0x0 0x0 0x0 0xffffffff 0x73d8217f9c50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2563": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2563 (\ud83d\udd25 Thread19) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 48 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abea697d0 0x189 0x0 0x0 0x0 0xffffffff 0x73d820ff8c50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2564": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2564 (\ud83d\udd25 Thread20) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 31 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeacefe0 0x189 0x0 0x0 0x0 0xffffffff 0x73d81bffec50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2565": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2565 (\ud83d\udd25 Thread21) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 42 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeacf010 0x189 0x0 0x0 0x0 0xffffffff 0x73d81b7fdc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2566": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2566 (\ud83d\udd25 Thread22) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 25 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abea98170 0x189 0x0 0x0 0x0 0xffffffff 0x73d81affcc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2567": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2567 (\ud83d\udd25 Thread23) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 31 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeaadd80 0x189 0x0 0x0 0x0 0xffffffff 0x73d81a7fbc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2568": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2568 (\ud83d\udd25 Thread24) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 42 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeaaddd0 0x189 0x0 0x0 0x0 0xffffffff 0x73d819ffac50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2569": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2569 (\ud83d\udd25 Thread25) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 25 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb14a90 0x189 0x0 0x0 0x0 0xffffffff 0x73d8197f9c50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2570": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2570 (\ud83d\udd25 Thread26) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 21 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb49c90 0x189 0x0 0x0 0x0 0xffffffff 0x73d818ff8c50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2571": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2571 (\ud83d\udd25 Thread27) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 15 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb49ce0 0x189 0x0 0x0 0x0 0xffffffff 0x73d7cbffec50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2572": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2572 (\ud83d\udd25 Thread28) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 25 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb61e40 0x189 0x0 0x0 0x0 0xffffffff 0x73d7cb7fdc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2573": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2573 (\ud83d\udd25 Thread29) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 42 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb61e90 0x189 0x0 0x0 0x0 0xffffffff 0x73d7caffcc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2574": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2574 (\ud83d\udd25 Thread30) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 31 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb4c320 0x189 0x0 0x0 0x0 0xffffffff 0x73d7ca7fbc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2575": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2575 (\ud83d\udd25 Thread31) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 25 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb4c370 0x189 0x0 0x0 0x0 0xffffffff 0x73d7c9ffac50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2576": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2576 (\ud83d\udd25 Thread32) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 42 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeadbea0 0x189 0x0 0x0 0x0 0xffffffff 0x73d7c97f9c50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2577": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2577 (\ud83d\udd25 Thread33) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 31 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeadbef0 0x189 0x0 0x0 0x0 0xffffffff 0x73d7c8ff8c50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2578": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2578 (\ud83d\udd25 Thread34) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 25 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeadbf40 0x189 0x0 0x0 0x0 0xffffffff 0x73d7a7ffec50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2579": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2579 (\ud83d\udd25 Thread35) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 42 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeaaa100 0x189 0x0 0x0 0x0 0xffffffff 0x73d7a77fdc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2580": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2580 (\ud83d\udd25 Thread36) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 25 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeaaa150 0x189 0x0 0x0 0x0 0xffffffff 0x73d7a6ffcc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2581": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2581 (\ud83d\udd25 Thread37) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 48 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeaaa1a0 0x189 0x0 0x0 0x0 0xffffffff 0x73d7a67fbc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2582": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2582 (\ud83d\udd25 Thread38) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 42 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb5ddd0 0x189 0x0 0x0 0x0 0xffffffff 0x73d7a5ffac50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2583": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2583 (\ud83d\udd25 Thread39) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 25 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abea92310 0x189 0x0 0x0 0x0 0xffffffff 0x73d7a57f9c50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2584": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2584 (\ud83d\udd25 Thread40) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 31 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abea92360 0x189 0x0 0x0 0x0 0xffffffff 0x73d7a4ff8c50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2585": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2585 (\ud83d\udd25 Thread41) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 42 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abea923b0 0x189 0x0 0x0 0x0 0xffffffff 0x73d787ffec50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2586": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2586 (\ud83d\udd25 Thread42) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 25 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb160f0 0x189 0x0 0x0 0x0 0xffffffff 0x73d7877fdc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2587": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2587 (\ud83d\udd25 Thread43) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 31 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb16140 0x189 0x0 0x0 0x0 0xffffffff 0x73d786ffcc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2588": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2588 (\ud83d\udd25 Thread44) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 42 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb16190 0x189 0x0 0x0 0x0 0xffffffff 0x73d7867fbc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2589": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2589 (\ud83d\udd25 Thread45) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 25 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeae7d00 0x189 0x0 0x0 0x0 0xffffffff 0x73d785ffac50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2590": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2590 (\ud83d\udd25 Thread46) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 42 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeae7d30 0x189 0x0 0x0 0x0 0xffffffff 0x73d7857f9c50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2591": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2591 (\ud83d\udd25 Thread47) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 15 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeae7d80 0x189 0x0 0x0 0x0 0xffffffff 0x73d784ff8c50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2592": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2592 (\ud83d\udd25 Thread48) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 25 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeae7dd0 0x189 0x0 0x0 0x0 0xffffffff 0x73d767ffec50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2593": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2593 (\ud83d\udd25 Thread49) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 42 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb5a4e0 0x189 0x0 0x0 0x0 0xffffffff 0x73d7677fdc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2594": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2594 (\ud83d\udd25 Thread50) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 31 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb5a530 0x189 0x0 0x0 0x0 0xffffffff 0x73d766ffcc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2595": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2595 (\ud83d\udd25 Thread51) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 25 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb5a580 0x189 0x0 0x0 0x0 0xffffffff 0x73d7667fbc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2596": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2596 (\ud83d\udd25 Thread52) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 42 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb72970 0x189 0x0 0x0 0x0 0xffffffff 0x73d765ffac50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2597": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2597 (\ud83d\udd25 Thread53) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 31 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb729c0 0x189 0x0 0x0 0x0 0xffffffff 0x73d7657f9c50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2598": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2598 (\ud83d\udd25 Thread54) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 25 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb72a10 0x189 0x0 0x0 0x0 0xffffffff 0x73d764ff8c50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2599": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2599 (\ud83d\udd25 Thread55) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 42 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb72a60 0x189 0x0 0x0 0x0 0xffffffff 0x73d747ffec50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2600": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2600 (\ud83d\udd25 Thread56) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 31 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb28f00 0x189 0x0 0x0 0x0 0xffffffff 0x73d7477fdc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2601": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2601 (\ud83d\udd25 Thread57) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 25 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb28f50 0x189 0x0 0x0 0x0 0xffffffff 0x73d746ffcc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2602": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2602 (\ud83d\udd25 Thread58) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 42 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb28fa0 0x189 0x0 0x0 0x0 0xffffffff 0x73d7467fbc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2603": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2603 (\ud83d\udd25 Thread59) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 48 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb28ff0 0x189 0x0 0x0 0x0 0xffffffff 0x73d745ffac50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2604": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2604 (\ud83d\udd25 Thread60) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 25 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb30160 0x189 0x0 0x0 0x0 0xffffffff 0x73d7457f9c50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2605": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2605 (\ud83d\udd25 Thread61) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 42 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb301b0 0x189 0x0 0x0 0x0 0xffffffff 0x73d744ff8c50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2606": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2606 (\ud83d\udd25 Thread62) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 31 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb30200 0x189 0x0 0x0 0x0 0xffffffff 0x73d727ffec50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2607": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2607 (\ud83d\udd25 Thread63) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 25 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb30250 0x189 0x0 0x0 0x0 0xffffffff 0x73d7277fdc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2608": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2608 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 3 0 2 1 20 0 132 0 566049015 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 15 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675c2e0 0x189 0x0 0x0 0x0 0xffffffff 0x73d71fffecf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2609": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2609 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 3 0 2 1 20 0 132 0 566049015 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 42 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675c360 0x189 0x0 0x0 0x0 0xffffffff 0x73d71f7fdcf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2610": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2610 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049015 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 59 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675c3e0 0x189 0x0 0x0 0x0 0xffffffff 0x73d71effccf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2611": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2611 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049015 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 52 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675c460 0x189 0x0 0x0 0x0 0xffffffff 0x73d71e7fbcf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2612": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2612 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049015 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 62 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675c4e0 0x189 0x0 0x0 0x0 0xffffffff 0x73d71dffacf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2613": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2613 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049015 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 4 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675c560 0x189 0x0 0x0 0x0 0xffffffff 0x73d71d7f9cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2614": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2614 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049015 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 0 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675c5e0 0x189 0x0 0x0 0x0 0xffffffff 0x73d71cff8cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2615": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2615 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 3 0 2 1 20 0 132 0 566049015 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 44 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675c660 0x189 0x0 0x0 0x0 0xffffffff 0x73d517ffecf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2616": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2616 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049015 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 17 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675c6e0 0x189 0x0 0x0 0x0 0xffffffff 0x73d5177fdcf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2617": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2617 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 43 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675c760 0x189 0x0 0x0 0x0 0xffffffff 0x73d516ffccf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2618": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2618 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 58 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675c7e0 0x189 0x0 0x0 0x0 0xffffffff 0x73d5167fbcf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2619": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2619 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 54 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675c860 0x189 0x0 0x0 0x0 0xffffffff 0x73d515ffacf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2620": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2620 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 37 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675c8e0 0x189 0x0 0x0 0x0 0xffffffff 0x73d5157f9cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2621": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2621 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 51 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675c960 0x189 0x0 0x0 0x0 0xffffffff 0x73d514ff8cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2622": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2622 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 45 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675c9e0 0x189 0x0 0x0 0x0 0xffffffff 0x73d5147f7cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2623": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2623 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 40 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675ca60 0x189 0x0 0x0 0x0 0xffffffff 0x73d513ff6cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2624": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2624 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 2 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675cae0 0x189 0x0 0x0 0x0 0xffffffff 0x73d5137f5cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2625": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2625 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 18 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675cb60 0x189 0x0 0x0 0x0 0xffffffff 0x73d512ff4cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2626": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2626 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 28 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675cbe0 0x189 0x0 0x0 0x0 0xffffffff 0x73d5127f3cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2627": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2627 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 3 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 55 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675cc60 0x189 0x0 0x0 0x0 0xffffffff 0x73d511ff2cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2628": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2628 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 24 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675cce0 0x189 0x0 0x0 0x0 0xffffffff 0x73d5117f1cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2629": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2629 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 7 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675cd60 0x189 0x0 0x0 0x0 0xffffffff 0x73d510ff0cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2630": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2630 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 3 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675cde0 0x189 0x0 0x0 0x0 0xffffffff 0x73d5107efcf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2631": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2631 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 46 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675ce60 0x189 0x0 0x0 0x0 0xffffffff 0x73d50ffeecf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2632": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2632 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 3 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 41 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675cee0 0x189 0x0 0x0 0x0 0xffffffff 0x73d50f7edcf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2633": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2633 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 53 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675cf60 0x189 0x0 0x0 0x0 0xffffffff 0x73d50efeccf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2634": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2634 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 3 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 25 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675cfe0 0x189 0x0 0x0 0x0 0xffffffff 0x73d50e7ebcf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2635": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2635 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 48 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675d060 0x189 0x0 0x0 0x0 0xffffffff 0x73d50dfeacf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2636": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2636 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 3 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 63 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675d0e0 0x189 0x0 0x0 0x0 0xffffffff 0x73d50d7e9cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2637": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2637 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 6 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675d160 0x189 0x0 0x0 0x0 0xffffffff 0x73d50cfe8cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2638": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2638 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 3 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 34 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675d1e0 0x189 0x0 0x0 0x0 0xffffffff 0x73d50c7e7cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2639": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2639 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 19 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675d260 0x189 0x0 0x0 0x0 0xffffffff 0x73d50bfe6cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2640": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2640 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 47 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675d2e0 0x189 0x0 0x0 0x0 0xffffffff 0x73d50b7e5cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2641": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2641 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 8 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675d360 0x189 0x0 0x0 0x0 0xffffffff 0x73d50afe4cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2642": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2642 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 3 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 21 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675d3e0 0x189 0x0 0x0 0x0 0xffffffff 0x73d50a7e3cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2643": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2643 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 61 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675d460 0x189 0x0 0x0 0x0 0xffffffff 0x73d509fe2cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2644": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2644 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 57 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675d4e0 0x189 0x0 0x0 0x0 0xffffffff 0x73d5097e1cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2645": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2645 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 3 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 36 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675d560 0x189 0x0 0x0 0x0 0xffffffff 0x73d508fe0cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2646": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2646 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 35 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675d5e0 0x189 0x0 0x0 0x0 0xffffffff 0x73d5087dfcf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2647": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2647 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 49 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675d660 0x189 0x0 0x0 0x0 0xffffffff 0x73d507fdecf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2648": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2648 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 13 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675d6e0 0x189 0x0 0x0 0x0 0xffffffff 0x73d5077ddcf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2649": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2649 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 3 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 9 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675d760 0x189 0x0 0x0 0x0 0xffffffff 0x73d506fdccf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2650": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2650 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 3 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 20 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675d7e0 0x189 0x0 0x0 0x0 0xffffffff 0x73d5067dbcf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2651": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2651 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 27 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675d860 0x189 0x0 0x0 0x0 0xffffffff 0x73d505fdacf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2652": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2652 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 31 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675d8e0 0x189 0x0 0x0 0x0 0xffffffff 0x73d5057d9cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2653": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2653 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 5 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675d960 0x189 0x0 0x0 0x0 0xffffffff 0x73d504fd8cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2654": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2654 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 3 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 32 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675d9e0 0x189 0x0 0x0 0x0 0xffffffff 0x73d5047d7cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2655": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2655 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 3 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 16 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675da60 0x189 0x0 0x0 0x0 0xffffffff 0x73d503fd6cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2656": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2656 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 12 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675dae0 0x189 0x0 0x0 0x0 0xffffffff 0x73d5037d5cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2657": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2657 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 10 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675db60 0x189 0x0 0x0 0x0 0xffffffff 0x73d502fd4cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2658": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2658 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 3 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 23 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675dbe0 0x189 0x0 0x0 0x0 0xffffffff 0x73d5027d3cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2659": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2659 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 30 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675dc60 0x189 0x0 0x0 0x0 0xffffffff 0x73d501fd2cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2660": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2660 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 56 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675dce0 0x189 0x0 0x0 0x0 0xffffffff 0x73d5017d1cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2661": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2661 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 39 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675dd60 0x189 0x0 0x0 0x0 0xffffffff 0x73d500fd0cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2662": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2662 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 50 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675dde0 0x189 0x0 0x0 0x0 0xffffffff 0x73d5007cfcf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2663": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2663 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 14 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675de60 0x189 0x0 0x0 0x0 0xffffffff 0x73d4fffcecf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2664": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2664 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 11 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675dee0 0x189 0x0 0x0 0x0 0xffffffff 0x73d4ff7cdcf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2665": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2665 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 22 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675df60 0x189 0x0 0x0 0x0 0xffffffff 0x73d4fefcccf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2666": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2666 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 1 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675dfe0 0x189 0x0 0x0 0x0 0xffffffff 0x73d4fe7cbcf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2667": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2667 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 26 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675e060 0x189 0x0 0x0 0x0 0xffffffff 0x73d4fdfcacf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2668": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2668 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 0 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 33 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675e0e0 0x189 0x0 0x0 0x0 0xffffffff 0x73d4fd7c9cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2669": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2669 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 0 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 38 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675e160 0x189 0x0 0x0 0x0 0xffffffff 0x73d4fcfc8cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2670": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2670 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 60 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675e1e0 0x189 0x0 0x0 0x0 0xffffffff 0x73d4fc7c7cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2671": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2671 (cuda00001c00008) S 2011 2539 2539 0 -1 4194368 3 1628 0 0 0 0 2 1 20 0 132 0 566049035 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 19 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "7 0x579abf3a9cc0 0x3 0xffffffff 0x4022 0x0 0x73d4f0000b70 0x73d4f51fecd0 0x73d84f264d1f",
+     "wchan": "do_poll.constprop.0"
+    },
+    "2672": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2672 (python3) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049043 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 22 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abf606810 0x189 0x0 0x0 0x0 0xffffffff 0x73d4f49fdc80 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2673": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2673 (cuda-EvtHandlr) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 1 4 2 1 20 0 132 0 566049043 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 45 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "7 0x73d4e4000c20 0xa 0x64 0x0 0x0 0x0 0x73d4e8dddcd0 0x73d84f264d1f",
+     "wchan": "do_poll.constprop.0"
+    }
+   },
+   "wchan": "futex_wait_queue"
+  },
+  "proc_before": {
+   "stat": "2539 (python3) S 2011 2539 2539 0 -1 4194560 357060 1628 0 0 201 142 2 1 20 0 132 0 566048997 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 0 0 0 17 38 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+   "status": "Name:\tpython3\nUmask:\t0022\nState:\tS (sleeping)\nTgid:\t2539\nNgid:\t0\nPid:\t2539\nPPid:\t2011\nTracerPid:\t0\nUid:\t0\t0\t0\t0\nGid:\t0\t0\t0\t0\nFDSize:\t64\nGroups:\t0 \nNStgid:\t2539\nNSpid:\t2539\nNSpgid:\t2539\nNSsid:\t2539\nKthread:\t0\nVmPeak:\t112651008 kB\nVmSize:\t112650992 kB\nVmLck:\t       0 kB\nVmPin:\t       0 kB\nVmHWM:\t 1518732 kB\nVmRSS:\t 1518732 kB\nRssAnon:\t   67976 kB\nRssFile:\t  100356 kB\nRssShmem:\t 1350400 kB\nVmData:\t 9580116 kB\nVmStk:\t     132 kB\nVmExe:\t    3036 kB\nVmLib:\t   78156 kB\nVmPTE:\t    4036 kB\nVmSwap:\t       0 kB\nHugetlbPages:\t       0 kB\nCoreDumping:\t0\nTHP_enabled:\t1\nuntag_mask:\t0xffffffffffffffff\nThreads:\t132\nSigQ:\t1/2061644\nSigPnd:\t0000000000000000\nShdPnd:\t0000000000000000\nSigBlk:\t0000000000000000\nSigIgn:\t0000000001001000\nSigCgt:\t0000000100000eea\nCapInh:\t0000000000000000\nCapPrm:\t00000000a80425fb\nCapEff:\t00000000a80425fb\nCapBnd:\t00000000a80425fb\nCapAmb:\t0000000000000000\nNoNewPrivs:\t0\nSeccomp:\t2\nSeccomp_filters:\t1\nSpeculation_Store_Bypass:\tthread vulnerable\nSpeculationIndirectBranch:\tconditional enabled\nCpus_allowed:\tffffffff,ffffffff\nCpus_allowed_list:\t0-63\nMems_allowed:\t00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000001\nMems_allowed_list:\t0\nvoluntary_ctxt_switches:\t61\nnonvoluntary_ctxt_switches:\t14\nx86_Thread_features:\t\nx86_Thread_features_locked:\t\n",
+   "threads": {
+    "2539": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2539 (python3) S 2011 2539 2539 0 -1 4194560 356975 1628 0 0 16 138 2 1 20 0 132 0 566048997 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 17 38 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abf428b70 0x80 0x2 0x0 0x0 0x0 0x7ffc12782788 0x73d84f1dd280",
+     "wchan": "futex_wait_queue"
+    },
+    "2540": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2540 (python3) S 2011 2539 2539 0 -1 4194368 2 1628 0 0 0 0 2 1 20 0 132 0 566049004 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 2147221247 16781312 3818 1 0 0 -1 47 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abea33b70 0x189 0x0 0x73d84e1bdd50 0x0 0xffffffff 0x73d84e1bdc90 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2544": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2544 (\ud83d\udd25 Thread0) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 42 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abead08a0 0x189 0x0 0x0 0x0 0xffffffff 0x73d8474f1c50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2545": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2545 (\ud83d\udd25 Thread1) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 25 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abea32300 0x189 0x0 0x0 0x0 0xffffffff 0x73d846cf0c50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2546": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2546 (\ud83d\udd25 Thread2) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 55 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb20be0 0x189 0x0 0x0 0x0 0xffffffff 0x73d8464efc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2547": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2547 (\ud83d\udd25 Thread3) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 31 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeade2f0 0x189 0x0 0x0 0x0 0xffffffff 0x73d845ceec50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2548": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2548 (\ud83d\udd25 Thread4) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 2 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb200b0 0x189 0x0 0x0 0x0 0xffffffff 0x73d8454edc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2549": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2549 (\ud83d\udd25 Thread5) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 15 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb2cff0 0x189 0x0 0x0 0x0 0xffffffff 0x73d844cecc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2550": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2550 (\ud83d\udd25 Thread6) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 48 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb19b50 0x189 0x0 0x0 0x0 0xffffffff 0x73d823ffec50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2551": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2551 (\ud83d\udd25 Thread7) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 42 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abea480a0 0x189 0x0 0x0 0x0 0xffffffff 0x73d82bffec50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2552": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2552 (\ud83d\udd25 Thread8) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 25 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeaa5040 0x189 0x0 0x0 0x0 0xffffffff 0x73d82b7fdc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2553": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2553 (\ud83d\udd25 Thread9) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 21 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb1bc20 0x189 0x0 0x0 0x0 0xffffffff 0x73d82affcc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2554": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2554 (\ud83d\udd25 Thread10) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 31 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abead6a70 0x189 0x0 0x0 0x0 0xffffffff 0x73d82a7fbc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2555": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2555 (\ud83d\udd25 Thread11) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 15 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeaa7b50 0x189 0x0 0x0 0x0 0xffffffff 0x73d829ffac50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2556": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2556 (\ud83d\udd25 Thread12) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 48 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeabb200 0x189 0x0 0x0 0x0 0xffffffff 0x73d8297f9c50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2557": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2557 (\ud83d\udd25 Thread13) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 25 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb29e40 0x189 0x0 0x0 0x0 0xffffffff 0x73d828ff8c50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2558": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2558 (\ud83d\udd25 Thread14) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 42 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb3ee10 0x189 0x0 0x0 0x0 0xffffffff 0x73d8237fdc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2559": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2559 (\ud83d\udd25 Thread15) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 31 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb47fc0 0x189 0x0 0x0 0x0 0xffffffff 0x73d822ffcc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2560": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2560 (\ud83d\udd25 Thread16) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 25 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeade290 0x189 0x0 0x0 0x0 0xffffffff 0x73d8227fbc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2561": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2561 (\ud83d\udd25 Thread17) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 42 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abea8f620 0x189 0x0 0x0 0x0 0xffffffff 0x73d821ffac50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2562": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2562 (\ud83d\udd25 Thread18) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 15 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeaec880 0x189 0x0 0x0 0x0 0xffffffff 0x73d8217f9c50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2563": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2563 (\ud83d\udd25 Thread19) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 48 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abea697d0 0x189 0x0 0x0 0x0 0xffffffff 0x73d820ff8c50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2564": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2564 (\ud83d\udd25 Thread20) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 31 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeacefe0 0x189 0x0 0x0 0x0 0xffffffff 0x73d81bffec50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2565": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2565 (\ud83d\udd25 Thread21) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 42 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeacf010 0x189 0x0 0x0 0x0 0xffffffff 0x73d81b7fdc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2566": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2566 (\ud83d\udd25 Thread22) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 25 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abea98170 0x189 0x0 0x0 0x0 0xffffffff 0x73d81affcc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2567": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2567 (\ud83d\udd25 Thread23) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 31 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeaadd80 0x189 0x0 0x0 0x0 0xffffffff 0x73d81a7fbc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2568": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2568 (\ud83d\udd25 Thread24) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 42 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeaaddd0 0x189 0x0 0x0 0x0 0xffffffff 0x73d819ffac50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2569": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2569 (\ud83d\udd25 Thread25) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 25 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb14a90 0x189 0x0 0x0 0x0 0xffffffff 0x73d8197f9c50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2570": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2570 (\ud83d\udd25 Thread26) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 21 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb49c90 0x189 0x0 0x0 0x0 0xffffffff 0x73d818ff8c50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2571": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2571 (\ud83d\udd25 Thread27) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 15 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb49ce0 0x189 0x0 0x0 0x0 0xffffffff 0x73d7cbffec50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2572": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2572 (\ud83d\udd25 Thread28) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 25 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb61e40 0x189 0x0 0x0 0x0 0xffffffff 0x73d7cb7fdc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2573": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2573 (\ud83d\udd25 Thread29) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 42 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb61e90 0x189 0x0 0x0 0x0 0xffffffff 0x73d7caffcc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2574": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2574 (\ud83d\udd25 Thread30) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 31 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb4c320 0x189 0x0 0x0 0x0 0xffffffff 0x73d7ca7fbc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2575": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2575 (\ud83d\udd25 Thread31) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 25 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb4c370 0x189 0x0 0x0 0x0 0xffffffff 0x73d7c9ffac50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2576": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2576 (\ud83d\udd25 Thread32) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 42 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeadbea0 0x189 0x0 0x0 0x0 0xffffffff 0x73d7c97f9c50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2577": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2577 (\ud83d\udd25 Thread33) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 31 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeadbef0 0x189 0x0 0x0 0x0 0xffffffff 0x73d7c8ff8c50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2578": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2578 (\ud83d\udd25 Thread34) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 25 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeadbf40 0x189 0x0 0x0 0x0 0xffffffff 0x73d7a7ffec50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2579": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2579 (\ud83d\udd25 Thread35) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 42 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeaaa100 0x189 0x0 0x0 0x0 0xffffffff 0x73d7a77fdc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2580": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2580 (\ud83d\udd25 Thread36) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 25 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeaaa150 0x189 0x0 0x0 0x0 0xffffffff 0x73d7a6ffcc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2581": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2581 (\ud83d\udd25 Thread37) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 48 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeaaa1a0 0x189 0x0 0x0 0x0 0xffffffff 0x73d7a67fbc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2582": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2582 (\ud83d\udd25 Thread38) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 42 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb5ddd0 0x189 0x0 0x0 0x0 0xffffffff 0x73d7a5ffac50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2583": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2583 (\ud83d\udd25 Thread39) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 25 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abea92310 0x189 0x0 0x0 0x0 0xffffffff 0x73d7a57f9c50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2584": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2584 (\ud83d\udd25 Thread40) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 31 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abea92360 0x189 0x0 0x0 0x0 0xffffffff 0x73d7a4ff8c50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2585": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2585 (\ud83d\udd25 Thread41) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 42 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abea923b0 0x189 0x0 0x0 0x0 0xffffffff 0x73d787ffec50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2586": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2586 (\ud83d\udd25 Thread42) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 25 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb160f0 0x189 0x0 0x0 0x0 0xffffffff 0x73d7877fdc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2587": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2587 (\ud83d\udd25 Thread43) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 31 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb16140 0x189 0x0 0x0 0x0 0xffffffff 0x73d786ffcc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2588": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2588 (\ud83d\udd25 Thread44) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 42 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb16190 0x189 0x0 0x0 0x0 0xffffffff 0x73d7867fbc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2589": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2589 (\ud83d\udd25 Thread45) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 25 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeae7d00 0x189 0x0 0x0 0x0 0xffffffff 0x73d785ffac50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2590": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2590 (\ud83d\udd25 Thread46) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 42 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeae7d30 0x189 0x0 0x0 0x0 0xffffffff 0x73d7857f9c50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2591": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2591 (\ud83d\udd25 Thread47) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 15 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeae7d80 0x189 0x0 0x0 0x0 0xffffffff 0x73d784ff8c50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2592": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2592 (\ud83d\udd25 Thread48) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 25 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeae7dd0 0x189 0x0 0x0 0x0 0xffffffff 0x73d767ffec50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2593": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2593 (\ud83d\udd25 Thread49) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 42 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb5a4e0 0x189 0x0 0x0 0x0 0xffffffff 0x73d7677fdc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2594": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2594 (\ud83d\udd25 Thread50) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 31 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb5a530 0x189 0x0 0x0 0x0 0xffffffff 0x73d766ffcc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2595": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2595 (\ud83d\udd25 Thread51) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 25 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb5a580 0x189 0x0 0x0 0x0 0xffffffff 0x73d7667fbc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2596": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2596 (\ud83d\udd25 Thread52) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 42 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb72970 0x189 0x0 0x0 0x0 0xffffffff 0x73d765ffac50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2597": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2597 (\ud83d\udd25 Thread53) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 31 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb729c0 0x189 0x0 0x0 0x0 0xffffffff 0x73d7657f9c50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2598": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2598 (\ud83d\udd25 Thread54) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 25 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb72a10 0x189 0x0 0x0 0x0 0xffffffff 0x73d764ff8c50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2599": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2599 (\ud83d\udd25 Thread55) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 42 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb72a60 0x189 0x0 0x0 0x0 0xffffffff 0x73d747ffec50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2600": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2600 (\ud83d\udd25 Thread56) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 31 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb28f00 0x189 0x0 0x0 0x0 0xffffffff 0x73d7477fdc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2601": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2601 (\ud83d\udd25 Thread57) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 25 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb28f50 0x189 0x0 0x0 0x0 0xffffffff 0x73d746ffcc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2602": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2602 (\ud83d\udd25 Thread58) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 42 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb28fa0 0x189 0x0 0x0 0x0 0xffffffff 0x73d7467fbc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2603": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2603 (\ud83d\udd25 Thread59) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 48 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb28ff0 0x189 0x0 0x0 0x0 0xffffffff 0x73d745ffac50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2604": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2604 (\ud83d\udd25 Thread60) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 25 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb30160 0x189 0x0 0x0 0x0 0xffffffff 0x73d7457f9c50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2605": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2605 (\ud83d\udd25 Thread61) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 42 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb301b0 0x189 0x0 0x0 0x0 0xffffffff 0x73d744ff8c50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2606": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2606 (\ud83d\udd25 Thread62) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 31 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb30200 0x189 0x0 0x0 0x0 0xffffffff 0x73d727ffec50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2607": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2607 (\ud83d\udd25 Thread63) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049011 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 25 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abeb30250 0x189 0x0 0x0 0x0 0xffffffff 0x73d7277fdc50 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2608": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2608 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 3 0 2 1 20 0 132 0 566049015 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 15 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675c2e0 0x189 0x0 0x0 0x0 0xffffffff 0x73d71fffecf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2609": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2609 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 3 0 2 1 20 0 132 0 566049015 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 42 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675c360 0x189 0x0 0x0 0x0 0xffffffff 0x73d71f7fdcf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2610": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2610 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049015 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 59 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675c3e0 0x189 0x0 0x0 0x0 0xffffffff 0x73d71effccf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2611": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2611 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049015 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 52 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675c460 0x189 0x0 0x0 0x0 0xffffffff 0x73d71e7fbcf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2612": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2612 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049015 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 62 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675c4e0 0x189 0x0 0x0 0x0 0xffffffff 0x73d71dffacf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2613": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2613 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049015 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 4 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675c560 0x189 0x0 0x0 0x0 0xffffffff 0x73d71d7f9cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2614": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2614 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049015 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 0 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675c5e0 0x189 0x0 0x0 0x0 0xffffffff 0x73d71cff8cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2615": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2615 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 3 0 2 1 20 0 132 0 566049015 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 44 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675c660 0x189 0x0 0x0 0x0 0xffffffff 0x73d517ffecf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2616": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2616 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049015 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 17 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675c6e0 0x189 0x0 0x0 0x0 0xffffffff 0x73d5177fdcf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2617": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2617 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 43 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675c760 0x189 0x0 0x0 0x0 0xffffffff 0x73d516ffccf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2618": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2618 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 58 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675c7e0 0x189 0x0 0x0 0x0 0xffffffff 0x73d5167fbcf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2619": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2619 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 54 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675c860 0x189 0x0 0x0 0x0 0xffffffff 0x73d515ffacf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2620": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2620 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 37 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675c8e0 0x189 0x0 0x0 0x0 0xffffffff 0x73d5157f9cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2621": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2621 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 51 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675c960 0x189 0x0 0x0 0x0 0xffffffff 0x73d514ff8cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2622": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2622 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 45 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675c9e0 0x189 0x0 0x0 0x0 0xffffffff 0x73d5147f7cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2623": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2623 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 40 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675ca60 0x189 0x0 0x0 0x0 0xffffffff 0x73d513ff6cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2624": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2624 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 2 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675cae0 0x189 0x0 0x0 0x0 0xffffffff 0x73d5137f5cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2625": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2625 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 18 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675cb60 0x189 0x0 0x0 0x0 0xffffffff 0x73d512ff4cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2626": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2626 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 28 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675cbe0 0x189 0x0 0x0 0x0 0xffffffff 0x73d5127f3cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2627": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2627 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 3 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 55 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675cc60 0x189 0x0 0x0 0x0 0xffffffff 0x73d511ff2cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2628": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2628 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 24 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675cce0 0x189 0x0 0x0 0x0 0xffffffff 0x73d5117f1cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2629": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2629 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 7 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675cd60 0x189 0x0 0x0 0x0 0xffffffff 0x73d510ff0cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2630": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2630 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 3 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675cde0 0x189 0x0 0x0 0x0 0xffffffff 0x73d5107efcf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2631": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2631 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 46 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675ce60 0x189 0x0 0x0 0x0 0xffffffff 0x73d50ffeecf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2632": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2632 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 3 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 41 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675cee0 0x189 0x0 0x0 0x0 0xffffffff 0x73d50f7edcf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2633": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2633 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 53 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675cf60 0x189 0x0 0x0 0x0 0xffffffff 0x73d50efeccf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2634": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2634 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 3 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 25 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675cfe0 0x189 0x0 0x0 0x0 0xffffffff 0x73d50e7ebcf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2635": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2635 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 48 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675d060 0x189 0x0 0x0 0x0 0xffffffff 0x73d50dfeacf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2636": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2636 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 3 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 63 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675d0e0 0x189 0x0 0x0 0x0 0xffffffff 0x73d50d7e9cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2637": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2637 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 6 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675d160 0x189 0x0 0x0 0x0 0xffffffff 0x73d50cfe8cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2638": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2638 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 3 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 34 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675d1e0 0x189 0x0 0x0 0x0 0xffffffff 0x73d50c7e7cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2639": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2639 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 19 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675d260 0x189 0x0 0x0 0x0 0xffffffff 0x73d50bfe6cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2640": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2640 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 47 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675d2e0 0x189 0x0 0x0 0x0 0xffffffff 0x73d50b7e5cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2641": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2641 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 8 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675d360 0x189 0x0 0x0 0x0 0xffffffff 0x73d50afe4cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2642": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2642 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 3 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 21 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675d3e0 0x189 0x0 0x0 0x0 0xffffffff 0x73d50a7e3cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2643": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2643 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 61 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675d460 0x189 0x0 0x0 0x0 0xffffffff 0x73d509fe2cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2644": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2644 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 57 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675d4e0 0x189 0x0 0x0 0x0 0xffffffff 0x73d5097e1cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2645": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2645 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 3 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 36 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675d560 0x189 0x0 0x0 0x0 0xffffffff 0x73d508fe0cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2646": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2646 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 35 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675d5e0 0x189 0x0 0x0 0x0 0xffffffff 0x73d5087dfcf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2647": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2647 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 49 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675d660 0x189 0x0 0x0 0x0 0xffffffff 0x73d507fdecf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2648": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2648 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 13 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675d6e0 0x189 0x0 0x0 0x0 0xffffffff 0x73d5077ddcf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2649": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2649 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 3 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 9 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675d760 0x189 0x0 0x0 0x0 0xffffffff 0x73d506fdccf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2650": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2650 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 3 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 20 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675d7e0 0x189 0x0 0x0 0x0 0xffffffff 0x73d5067dbcf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2651": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2651 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 27 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675d860 0x189 0x0 0x0 0x0 0xffffffff 0x73d505fdacf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2652": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2652 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 31 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675d8e0 0x189 0x0 0x0 0x0 0xffffffff 0x73d5057d9cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2653": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2653 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 5 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675d960 0x189 0x0 0x0 0x0 0xffffffff 0x73d504fd8cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2654": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2654 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 3 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 32 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675d9e0 0x189 0x0 0x0 0x0 0xffffffff 0x73d5047d7cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2655": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2655 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 3 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 16 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675da60 0x189 0x0 0x0 0x0 0xffffffff 0x73d503fd6cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2656": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2656 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 12 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675dae0 0x189 0x0 0x0 0x0 0xffffffff 0x73d5037d5cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2657": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2657 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 10 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675db60 0x189 0x0 0x0 0x0 0xffffffff 0x73d502fd4cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2658": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2658 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 3 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 23 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675dbe0 0x189 0x0 0x0 0x0 0xffffffff 0x73d5027d3cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2659": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2659 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 30 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675dc60 0x189 0x0 0x0 0x0 0xffffffff 0x73d501fd2cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2660": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2660 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 56 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675dce0 0x189 0x0 0x0 0x0 0xffffffff 0x73d5017d1cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2661": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2661 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 39 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675dd60 0x189 0x0 0x0 0x0 0xffffffff 0x73d500fd0cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2662": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2662 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 50 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675dde0 0x189 0x0 0x0 0x0 0xffffffff 0x73d5007cfcf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2663": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2663 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 14 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675de60 0x189 0x0 0x0 0x0 0xffffffff 0x73d4fffcecf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2664": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2664 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 11 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675dee0 0x189 0x0 0x0 0x0 0xffffffff 0x73d4ff7cdcf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2665": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2665 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 22 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675df60 0x189 0x0 0x0 0x0 0xffffffff 0x73d4fefcccf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2666": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2666 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 1 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675dfe0 0x189 0x0 0x0 0x0 0xffffffff 0x73d4fe7cbcf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2667": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2667 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 26 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675e060 0x189 0x0 0x0 0x0 0xffffffff 0x73d4fdfcacf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2668": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2668 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 0 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 33 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675e0e0 0x189 0x0 0x0 0x0 0xffffffff 0x73d4fd7c9cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2669": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2669 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 0 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 38 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675e160 0x189 0x0 0x0 0x0 0xffffffff 0x73d4fcfc8cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2670": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2670 (python3) S 2011 2539 2539 0 -1 4194368 0 1628 0 0 2 0 2 1 20 0 132 0 566049016 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 60 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x73d72675e1e0 0x189 0x0 0x0 0x0 0xffffffff 0x73d4fc7c7cf0 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2671": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2671 (cuda00001c00008) S 2011 2539 2539 0 -1 4194368 3 1628 0 0 0 0 2 1 20 0 132 0 566049035 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 19 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "7 0x579abf3a9cc0 0x3 0xffffffff 0x4022 0x0 0x73d4f0000b70 0x73d4f51fecd0 0x73d84f264d1f",
+     "wchan": "do_poll.constprop.0"
+    },
+    "2672": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2672 (python3) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 0 0 2 1 20 0 132 0 566049043 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 22 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "202 0x579abf606810 0x189 0x0 0x0 0x0 0xffffffff 0x73d4f49fdc80 0x73d84f1dd0d7",
+     "wchan": "futex_wait_queue"
+    },
+    "2673": {
+     "stack": "unavailable: [Errno 13] Permission denied",
+     "stat": "2673 (cuda-EvtHandlr) S 2011 2539 2539 0 -1 4194368 1 1628 0 0 1 4 2 1 20 0 132 0 566049043 115354615808 379377 18446744073709551615 96321701269504 96321704378301 140720618362816 0 0 0 0 16781312 3818 1 0 0 -1 45 0 0 0 0 0 96321706041312 96321706997288 96322131222528 140720618371512 140720618371748 140720618371748 140720618373065 0",
+     "syscall": "7 0x73d4e4000c20 0xa 0x64 0x0 0x0 0x0 0x73d4e8dddcd0 0x73d84f264d1f",
+     "wchan": "do_poll.constprop.0"
+    }
+   },
+   "wchan": "futex_wait_queue"
+  }
+ },
+ "log": "/root/gemm_leg_out/byte-lm-lifetime/cases/stateless_x2_teardown_with_gil.log",
+ "native_stack": {
+  "file": "/root/gemm_leg_out/byte-lm-lifetime/cases/stateless_x2_teardown_with_gil.native_stack.txt",
+  "handler_installed": true,
+  "installed_line": true,
+  "samples": 4
+ },
+ "python_stacks": "Timeout (0:00:30)!\nThread 0x000073d84d9bd640 [native-stack-wa] (most recent call first):\n  File \"/root/mojolearn/tools/byte_lm_lifetime_diag.py\", line 672 in _native_stack_watchdog\n  File \"/root/mojolearn/.pixi/envs/default/lib/python3.14/threading.py\", line 1024 in run\n  File \"/root/mojolearn/.pixi/envs/default/lib/python3.14/threading.py\", line 1082 in _bootstrap_inner\n  File \"/root/mojolearn/.pixi/envs/default/lib/python3.14/threading.py\", line 1044 in _bootstrap\n\nThread 0x000073d84f149740 [python3] (most recent call first):\n  File \"/root/mojolearn/python/mojolearn/_byte_lm_impl.py\", line 703 in _run_impl\n  File \"/root/mojolearn/python/mojolearn/_byte_lm_impl.py\", line 652 in _run\n  File \"/root/mojolearn/python/mojolearn/_byte_lm_impl.py\", line 814 in train_step\n  File \"/root/mojolearn/tools/byte_lm_lifetime_diag.py\", line 287 in _step\n  File \"/root/mojolearn/tools/byte_lm_lifetime_diag.py\", line 322 in case_stateless_x2\n  File \"/root/mojolearn/tools/byte_lm_lifetime_diag.py\", line 630 in case_stateless_x2_teardown_with_gil\n  File \"/root/mojolearn/tools/byte_lm_lifetime_diag.py\", line 739 in run_child\n  File \"/root/mojolearn/tools/byte_lm_lifetime_diag.py\", line 1050 in main\n  File \"/root/mojolearn/tools/byte_lm_lifetime_diag.py\", line 1129 in <module>\nTimeout (0:00:30)!\nThread 0x000073d84d9bd640 [native-stack-wa] (most recent call first):\n  File \"/root/mojolearn/tools/byte_lm_lifetime_diag.py\", line 672 in _native_stack_watchdog\n  File \"/root/mojolearn/.pixi/envs/default/lib/python3.14/threading.py\", line 1024 in run\n  File \"/root/mojolearn/.pixi/envs/default/lib/python3.14/threading.py\", line 1082 in _bootstrap_inner\n  File \"/root/mojolearn/.pixi/envs/default/lib/python3.14/threading.py\", line 1044 in _bootstrap\n\nThread 0x000073d84f149740 [python3] (most recent call first):\n  File \"/root/mojolearn/python/mojolearn/_byte_lm_impl.py\", line 703 in _run_impl\n  File \"/root/mojolearn/python/mojolearn/_byte_lm_impl.py\", line 652 in _run\n  File \"/root/mojolearn/python/mojolearn/_byte_lm_impl.py\", line 814 in train_step\n  File \"/root/mojolearn/tools/byte_lm_lifetime_diag.py\", line 287 in _step\n  File \"/root/mojolearn/tools/byte_lm_lifetime_diag.py\", line 322 in case_stateless_x2\n  File \"/root/mojolearn/tools/byte_lm_lifetime_diag.py\", line 630 in case_stateless_x2_teardown_with_gil\n  File \"/root/mojolearn/tools/byte_lm_lifetime_diag.py\", line 739 in run_child\n  File \"/root/mojolearn/tools/byte_lm_lifetime_diag.py\", line 1050 in main\n  File \"/root/mojolearn/tools/byte_lm_lifetime_diag.py\", line 1129 in <module>\nTimeout (0:00:30)!\nThread 0x000073d84d9bd640 [native-stack-wa] (most recent call first):\n  File \"/root/mojolearn/tools/byte_lm_lifetime_diag.py\", line 672 in _native_stack_watchdog\n  File \"/root/mojolearn/.pixi/envs/default/lib/python3.14/threading.py\", line 1024 in run\n  File \"/root/mojolearn/.pixi/envs/default/lib/python3.14/threading.py\", line 1082 in _bootstrap_inner\n  File \"/root/mojolearn/.pixi/envs/default/lib/python3.14/threading.py\", line 1044 in _bootstrap\n\nThread 0x000073d84f149740 [python3] (most recent call first):\n  File \"/root/mojolearn/python/mojolearn/_byte_lm_impl.py\", line 703 in _run_impl\n  File \"/root/mojolearn/python/mojolearn/_byte_lm_impl.py\", line 652 in _run\n  File \"/root/mojolearn/python/mojolearn/_byte_lm_impl.py\", line 814 in train_step\n  File \"/root/mojolearn/tools/byte_lm_lifetime_diag.py\", line 287 in _step\n  File \"/root/mojolearn/tools/byte_lm_lifetime_diag.py\", line 322 in case_stateless_x2\n  File \"/root/mojolearn/tools/byte_lm_lifetime_diag.py\", line 630 in case_stateless_x2_teardown_with_gil\n  File \"/root/mojolearn/tools/byte_lm_lifetime_diag.py\", line 739 in run_child\n  File \"/root/mojolearn/tools/byte_lm_lifetime_diag.py\", line 1050 in main\n  File \"/root/mojolearn/tools/byte_lm_lifetime_diag.py\", line 1129 in <module>\nTimeout (0:00:30)!\nThread 0x000073d84f149740 [python3] (most recent call first):\n  File \"/root/mojolearn/python/mojolearn/_byte_lm_impl.py\", line 703 in _run_impl\n  File \"/root/mojolearn/python/mojolearn/_byte_lm_impl.py\", line 652 in _run\n  File \"/root/mojolearn/python/mojolearn/_byte_lm_impl.py\", line 814 in train_step\n  File \"/root/mojolearn/tools/byte_lm_lifetime_diag.py\", line 287 in _step\n  File \"/root/mojolearn/tools/byte_lm_lifetime_diag.py\", line 322 in case_stateless_x2\n  File \"/root/mojolearn/tools/byte_lm_lifetime_diag.py\", line 630 in case_stateless_x2_teardown_with_gil\n  File \"/root/mojolearn/tools/byte_lm_lifetime_diag.py\", line 739 in run_child\n  File \"/root/mojolearn/tools/byte_lm_lifetime_diag.py\", line 1050 in main\n  File \"/root/mojolearn/tools/byte_lm_lifetime_diag.py\", line 1129 in <module>\nCurrent thread 0x000073d84f149740 [python3] (most recent call first):\n  File \"/root/mojolearn/python/mojolearn/_byte_lm_impl.py\", line 703 in _run_impl\n  File \"/root/mojolearn/python/mojolearn/_byte_lm_impl.py\", line 652 in _run\n  File \"/root/mojolearn/python/mojolearn/_byte_lm_impl.py\", line 814 in train_step\n  File \"/root/mojolearn/tools/byte_lm_lifetime_diag.py\", line 287 in _step\n  File \"/root/mojolearn/tools/byte_lm_lifetime_diag.py\", line 322 in case_stateless_x2\n  File \"/root/mojolearn/tools/byte_lm_lifetime_diag.py\", line 630 in case_stateless_x2_teardown_with_gil\n  File \"/root/mojolearn/tools/byte_lm_lifetime_diag.py\", line 739 in run_child\n  File \"/root/mojolearn/tools/byte_lm_lifetime_diag.py\", line 1050 in main\n  File \"/root/mojolearn/tools/byte_lm_lifetime_diag.py\", line 1129 in <module>\n",
+ "record": {
+  "binding": {
+   "binding_file": "/root/mojolearn/python/mojolearn/identical/_mojolearn_byte_lm.so",
+   "binding_sha256": "6f56c4c70709f8760348543b5a27b88f0a4abaaf522a5f9ff15c8cb530bc60fc",
+   "native_profile": "mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1",
+   "native_vendor": "cuda"
+  },
+  "case": "stateless_x2_teardown_with_gil",
+  "elapsed_s": 114.019,
+  "error": null,
+  "events": [
+   {
+    "mojolearn_file": "/root/mojolearn/python/mojolearn/__init__.py",
+    "name": "imported",
+    "t": 0.102,
+    "version": "0.8.0"
+   },
+   {
+    "name": "binding",
+    "sha256": "6f56c4c70709",
+    "t": 0.274,
+    "vendor": "cuda"
+   },
+   {
+    "MOJOLEARN_BYTE_LM_TEARDOWN_WITH_GIL": "1",
+    "name": "env",
+    "t": 0.281
+   },
+   {
+    "completed_steps": 0,
+    "label": "step1",
+    "name": "native_call_begin",
+    "resident": false,
+    "t": 0.287
+   },
+   {
+    "keep_context_env": null,
+    "keeper_active": false,
+    "label": "step1",
+    "name": "native_call_end",
+    "t": 1.654
+   },
+   {
+    "label": "step1",
+    "loss": 5.548226833343506,
+    "name": "hashed",
+    "step": 1,
+    "t": 1.661
+   },
+   {
+    "completed_steps": 1,
+    "label": "step2",
+    "name": "native_call_begin",
+    "resident": false,
+    "t": 1.667
+   },
+   {
+    "name": "native_stack_signal",
+    "sample": 1,
+    "sender": "child_watchdog",
+    "t": 110.0,
+    "target": "main_thread",
+    "unix_time": 1789103924.494456
+   },
+   {
+    "name": "native_stack_signal",
+    "sample": 2,
+    "sender": "child_watchdog",
+    "t": 112.01,
+    "target": "main_thread",
+    "unix_time": 1789103926.503987
+   },
+   {
+    "name": "native_stack_signal",
+    "sample": 3,
+    "sender": "child_watchdog",
+    "t": 114.019,
+    "target": "main_thread",
+    "unix_time": 1789103928.513168
+   }
+  ],
+  "fixture": {
+   "n_total": 14080,
+   "profile": "mojolearn.byte-lm.b1-l5-d16-h2-kv1-hd8-ff24-v257-blocks3.fp32.v3",
+   "shape": {
+    "batch": 1,
+    "d_model": 16,
+    "head_dim": 8,
+    "intermediate": 24,
+    "length": 5,
+    "n_heads": 2,
+    "n_kv": 1,
+    "n_layers": 3,
+    "vocab_size": 257
+   },
+   "source": "numpy.default_rng(19) standard_normal*0.02 then integers"
+  },
+  "hashes": {
+   "step1": {
+    "flat_gradients": {
+     "dtype": "<f4",
+     "nbytes": 56320,
+     "sha256": "59ee565645507db79d7f0d260a9b63781a389560b6ef208568e9bb29b69ada5b",
+     "shape": [
+      14080
+     ]
+    },
+    "loss": {
+     "dtype": "<f4",
+     "nbytes": 4,
+     "sha256": "2e835026b33d1c82bfc4d98d72916e8170cb50e85edb43a08aa41e34e9737c72",
+     "shape": [],
+     "value": 5.548226833343506
+    },
+    "state.completed_steps": {
+     "value": 1
+    },
+    "state.flags": {
+     "dtype": "<i4",
+     "nbytes": 116,
+     "sha256": "5b517952cbe9c4c147bc3f3434f9d82409e76d09ea58905aefe7fb5415912d9a",
+     "shape": [
+      29
+     ]
+    },
+    "state.m": {
+     "dtype": "<f4",
+     "nbytes": 56320,
+     "sha256": "0c1b2b285f4c2421009e1ac1382f6af5f87496498b5727243e9db799962a907a",
+     "shape": [
+      14080
+     ]
+    },
+    "state.parameters": {
+     "dtype": "<f4",
+     "nbytes": 56320,
+     "sha256": "5f07d63108aab735d66bdae38d508f387726ca447f70198154d0e87e513b6fe4",
+     "shape": [
+      14080
+     ]
+    },
+    "state.v": {
+     "dtype": "<f4",
+     "nbytes": 56320,
+     "sha256": "c33462c1b5d15bcde76a0875757b935117d51b2cd99678be2a87047a897c5660",
+     "shape": [
+      14080
+     ]
+    },
+    "step": {
+     "value": 1
+    }
+   }
+  },
+  "native_stack": {
+   "file": "/root/gemm_leg_out/byte-lm-lifetime/cases/stateless_x2_teardown_with_gil.native_stack.txt",
+   "handler_installed": true,
+   "ld_preload": "/root/gemm_leg_out/byte-lm-lifetime/native_stack_dump.so",
+   "main_thread_native_id": 2539,
+   "watchdog_armed": true
+  },
+  "numeric_mode": "identical",
+  "pid": 2539,
+  "python": "3.14.7",
+  "schema": "byte-lm-lifetime-diag.record.v1",
+  "status": "running"
+ },
+ "status": "timeout",
+ "timed_out": true,
+ "wall_s": 126.977
+}

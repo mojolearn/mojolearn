@@ -105,6 +105,11 @@ def main():
                 model_shape=fields, oracle_device=args.oracle_device)
             reference_flat = np.concatenate([gradients[e['name']].reshape(-1) for e in entries])
             result = trainer.train_step(ids)
+            if runtime['step_result'] == 'lean':
+                # DEVIATION 2514: the lean step leaves the gradient on the
+                # device; export the last completed step's so the checks
+                # and the capture below read the same `flat_gradients`.
+                result = dict(result, **trainer.export_gradients())
             after = trainer.state_dict()
             grad_checks = {}
             for entry in entries:

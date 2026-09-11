@@ -1,0 +1,12 @@
+started=2026-09-11T04:45:00Z budget=300 steps=3
+gpu_archs=sm_90a column=nvidia
+build base exit=0 secs=58
+build byte_lm exit=0 secs=67
+probe control exit=0 secs=19 (2 = budget limitation recorded)
+probe target exit=0 secs=97 (2 = budget limitation recorded)
+probe target-timing exit=0 secs=64 (2 = budget limitation recorded)
+lean arm: --resident-lean --witness-every-step (control-lean, target-lean, target-lean-timing)
+probe control-lean exit=0 secs=11 (2 = budget limitation recorded)
+probe target-lean exit=0 secs=80 (2 = budget limitation recorded)
+probe target-lean-timing exit=0 secs=53 (2 = budget limitation recorded)
+finished=2026-09-11T04:52:30Z

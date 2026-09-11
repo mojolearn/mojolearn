@@ -1,0 +1,2840 @@
+{
+ "deviation": 2496,
+ "tool": "tools/knn_selection_gate.py",
+ "status": "passed",
+ "quick": false,
+ "selftest": false,
+ "seed": 20260910,
+ "arm_env": "MOJOLEARN_KNN_SELECT",
+ "sabotage_env": "MOJOLEARN_KNN_SELECT_SABOTAGE",
+ "arms": [
+  "uniform",
+  "capk",
+  "capk_selp"
+ ],
+ "ks": [
+  10,
+  15
+ ],
+ "timing_only_arms": [],
+ "timing_only_note": "output invalid; phase cost only. These arms skip one phase of the selector kernel on purpose; never a correctness, oracle, reach or promotion input.",
+ "phase_timers": {
+  "mode": "require",
+  "available": true,
+  "serialized": true,
+  "note": "from the binding's KNN_PHASE_TIMERS line (build define MOJOLEARN_KNN_PHASE_TIMERS); when available the request medians are serialized by per-class synchronizations and are not comparable to untimed requests; the split is the measurement"
+ },
+ "pairs_per_order": 3,
+ "deadline_s": 300,
+ "python": "3.14.7 | packaged by conda-forge | (main, Aug 19 2026, 15:32:49) [GCC 15.3.0]",
+ "platform": "Linux-6.8.0-90-generic-x86_64-with-glibc2.35",
+ "numpy": "2.5.2",
+ "started_utc": "2026-09-11T05:45:25Z",
+ "environment": {
+  "MOJOLEARN_KNN_SELECTION_ARMS": "uniform,capk,capk_selp",
+  "MOJOLEARN_KNN_SELECTION_PHASE_TIMERS": "1",
+  "MOJOLEARN_KNN_SELECTION_SKIP_PROFILE": "1",
+  "MOJOLEARN_NUMERIC_MODE": "identical"
+ },
+ "fixtures": {
+  "large": {
+   "name": "large",
+   "n_index": 400000,
+   "n_queries": 4000,
+   "d": 32,
+   "exact": [
+    [
+     100,
+     0
+    ],
+    [
+     101,
+     1
+    ],
+    [
+     102,
+     255
+    ],
+    [
+     103,
+     256
+    ],
+    [
+     104,
+     2047
+    ],
+    [
+     105,
+     2048
+    ],
+    [
+     106,
+     65535
+    ],
+    [
+     107,
+     65536
+    ],
+    [
+     108,
+     65537
+    ],
+    [
+     109,
+     131071
+    ],
+    [
+     110,
+     131072
+    ],
+    [
+     111,
+     200000
+    ],
+    [
+     112,
+     393215
+    ],
+    [
+     113,
+     393216
+    ],
+    [
+     114,
+     399998
+    ],
+    [
+     115,
+     399999
+    ]
+   ],
+   "dup_groups": [],
+   "offset_groups": [],
+   "oracle": "sampled",
+   "timed": true,
+   "description": "hashed non-uniform 400k x 32 / 4k x 32 with 16 exact-match queries",
+   "sha256_index": "b68be4ee19d74e32599b0724e4005479c9ea218fc2e475390e46bffb084c6dd5",
+   "sha256_queries": "c6a4271900811e183426fcaad0f63bbdb5fade6c83e6fd51a92387e24c0976bd",
+   "distinct_rows": true
+  },
+  "dyadic": {
+   "name": "dyadic",
+   "n_index": 400000,
+   "n_queries": 4000,
+   "d": 32,
+   "exact": [],
+   "dup_groups": [],
+   "offset_groups": [],
+   "oracle": "sampled",
+   "timed": true,
+   "description": "dyadic-v1, the cached cuML opponent fixture (salts 0/593)",
+   "sha256_index": "f8bde93b13eeeb96f8787aa8a6e2e9ca42ca69b1e90b765aa79d2141e087bac3",
+   "sha256_queries": "98f9264b520b234e5f05b862744af1e04752441cc740848eb2e195033b88f63e",
+   "distinct_rows": true
+  },
+  "ties": {
+   "name": "ties",
+   "n_index": 131079,
+   "n_queries": 700,
+   "d": 32,
+   "exact": [
+    [
+     0,
+     [
+      42222,
+      73958,
+      96984
+     ]
+    ],
+    [
+     1,
+     [
+      62606,
+      111327,
+      126102
+     ]
+    ],
+    [
+     2,
+     [
+      33897,
+      65537,
+      107476
+     ]
+    ],
+    [
+     3,
+     [
+      34538,
+      96953,
+      128637
+     ]
+    ],
+    [
+     4,
+     [
+      888,
+      65534,
+      108301
+     ]
+    ],
+    [
+     5,
+     [
+      6590,
+      17676,
+      92157
+     ]
+    ],
+    [
+     6,
+     [
+      59051,
+      65536,
+      95566
+     ]
+    ],
+    [
+     7,
+     [
+      35024,
+      44550,
+      98722
+     ]
+    ],
+    [
+     8,
+     [
+      42387,
+      64165,
+      72082
+     ]
+    ],
+    [
+     9,
+     [
+      14619,
+      80053,
+      101979
+     ]
+    ],
+    [
+     10,
+     [
+      59762,
+      65264,
+      131075
+     ]
+    ],
+    [
+     11,
+     [
+      11722,
+      28766,
+      118284
+     ]
+    ],
+    [
+     12,
+     [
+      11806,
+      55828,
+      72415
+     ]
+    ],
+    [
+     13,
+     [
+      70141,
+      117516,
+      131074
+     ]
+    ],
+    [
+     14,
+     [
+      54263,
+      64199,
+      131071
+     ]
+    ],
+    [
+     15,
+     [
+      32341,
+      102043,
+      109084
+     ]
+    ],
+    [
+     16,
+     [
+      0,
+      64100,
+      76790
+     ]
+    ],
+    [
+     17,
+     [
+      1357,
+      108227,
+      131076
+     ]
+    ],
+    [
+     18,
+     [
+      89218,
+      107812,
+      131072
+     ]
+    ],
+    [
+     19,
+     [
+      6550,
+      104359,
+      108496
+     ]
+    ],
+    [
+     20,
+     [
+      13444,
+      32311,
+      70000
+     ]
+    ],
+    [
+     21,
+     [
+      27304,
+      88405,
+      131078
+     ]
+    ],
+    [
+     22,
+     [
+      50480,
+      97581,
+      105373
+     ]
+    ],
+    [
+     23,
+     [
+      4198,
+      10035,
+      78793
+     ]
+    ],
+    [
+     24,
+     [
+      4057,
+      21232,
+      91794
+     ]
+    ],
+    [
+     25,
+     [
+      54322,
+      107715,
+      131073
+     ]
+    ],
+    [
+     26,
+     [
+      14827,
+      23938,
+      58618
+     ]
+    ],
+    [
+     27,
+     [
+      27202,
+      38919,
+      112805
+     ]
+    ],
+    [
+     28,
+     [
+      3786,
+      65535,
+      66149
+     ]
+    ],
+    [
+     29,
+     [
+      35305,
+      57571,
+      110453
+     ]
+    ],
+    [
+     30,
+     [
+      18862,
+      75463,
+      109368
+     ]
+    ],
+    [
+     31,
+     [
+      5109,
+      9232,
+      131077
+     ]
+    ],
+    [
+     32,
+     [
+      49234,
+      95382,
+      116025
+     ]
+    ],
+    [
+     33,
+     [
+      1,
+      7374,
+      104965
+     ]
+    ],
+    [
+     34,
+     [
+      42924,
+      64442,
+      92843
+     ]
+    ],
+    [
+     35,
+     [
+      31181,
+      46326,
+      99358
+     ]
+    ],
+    [
+     36,
+     [
+      94803,
+      103366,
+      129664
+     ]
+    ],
+    [
+     37,
+     [
+      26157,
+      49831,
+      118695
+     ]
+    ],
+    [
+     38,
+     [
+      32878,
+      73099,
+      105896
+     ]
+    ],
+    [
+     39,
+     [
+      30281,
+      57265,
+      62068
+     ]
+    ]
+   ],
+   "dup_groups": [
+    [
+     42222,
+     73958,
+     96984
+    ],
+    [
+     62606,
+     111327,
+     126102
+    ],
+    [
+     33897,
+     65537,
+     107476
+    ],
+    [
+     34538,
+     96953,
+     128637
+    ],
+    [
+     888,
+     65534,
+     108301
+    ],
+    [
+     6590,
+     17676,
+     92157
+    ],
+    [
+     59051,
+     65536,
+     95566
+    ],
+    [
+     35024,
+     44550,
+     98722
+    ],
+    [
+     42387,
+     64165,
+     72082
+    ],
+    [
+     14619,
+     80053,
+     101979
+    ],
+    [
+     59762,
+     65264,
+     131075
+    ],
+    [
+     11722,
+     28766,
+     118284
+    ],
+    [
+     11806,
+     55828,
+     72415
+    ],
+    [
+     70141,
+     117516,
+     131074
+    ],
+    [
+     54263,
+     64199,
+     131071
+    ],
+    [
+     32341,
+     102043,
+     109084
+    ],
+    [
+     0,
+     64100,
+     76790
+    ],
+    [
+     1357,
+     108227,
+     131076
+    ],
+    [
+     89218,
+     107812,
+     131072
+    ],
+    [
+     6550,
+     104359,
+     108496
+    ],
+    [
+     13444,
+     32311,
+     70000
+    ],
+    [
+     27304,
+     88405,
+     131078
+    ],
+    [
+     50480,
+     97581,
+     105373
+    ],
+    [
+     4198,
+     10035,
+     78793
+    ],
+    [
+     4057,
+     21232,
+     91794
+    ],
+    [
+     54322,
+     107715,
+     131073
+    ],
+    [
+     14827,
+     23938,
+     58618
+    ],
+    [
+     27202,
+     38919,
+     112805
+    ],
+    [
+     3786,
+     65535,
+     66149
+    ],
+    [
+     35305,
+     57571,
+     110453
+    ],
+    [
+     18862,
+     75463,
+     109368
+    ],
+    [
+     5109,
+     9232,
+     131077
+    ],
+    [
+     49234,
+     95382,
+     116025
+    ],
+    [
+     1,
+     7374,
+     104965
+    ],
+    [
+     42924,
+     64442,
+     92843
+    ],
+    [
+     31181,
+     46326,
+     99358
+    ],
+    [
+     94803,
+     103366,
+     129664
+    ],
+    [
+     26157,
+     49831,
+     118695
+    ],
+    [
+     32878,
+     73099,
+     105896
+    ],
+    [
+     30281,
+     57265,
+     62068
+    ]
+   ],
+   "offset_groups": [
+    [
+     40,
+     [
+      42222,
+      73958,
+      96984
+     ]
+    ],
+    [
+     41,
+     [
+      62606,
+      111327,
+      126102
+     ]
+    ],
+    [
+     42,
+     [
+      33897,
+      65537,
+      107476
+     ]
+    ],
+    [
+     43,
+     [
+      34538,
+      96953,
+      128637
+     ]
+    ],
+    [
+     44,
+     [
+      888,
+      65534,
+      108301
+     ]
+    ],
+    [
+     45,
+     [
+      6590,
+      17676,
+      92157
+     ]
+    ],
+    [
+     46,
+     [
+      59051,
+      65536,
+      95566
+     ]
+    ],
+    [
+     47,
+     [
+      35024,
+      44550,
+      98722
+     ]
+    ],
+    [
+     48,
+     [
+      42387,
+      64165,
+      72082
+     ]
+    ],
+    [
+     49,
+     [
+      14619,
+      80053,
+      101979
+     ]
+    ],
+    [
+     50,
+     [
+      59762,
+      65264,
+      131075
+     ]
+    ],
+    [
+     51,
+     [
+      11722,
+      28766,
+      118284
+     ]
+    ],
+    [
+     52,
+     [
+      11806,
+      55828,
+      72415
+     ]
+    ],
+    [
+     53,
+     [
+      70141,
+      117516,
+      131074
+     ]
+    ],
+    [
+     54,
+     [
+      54263,
+      64199,
+      131071
+     ]
+    ],
+    [
+     55,
+     [
+      32341,
+      102043,
+      109084
+     ]
+    ],
+    [
+     56,
+     [
+      0,
+      64100,
+      76790
+     ]
+    ],
+    [
+     57,
+     [
+      1357,
+      108227,
+      131076
+     ]
+    ],
+    [
+     58,
+     [
+      89218,
+      107812,
+      131072
+     ]
+    ],
+    [
+     59,
+     [
+      6550,
+      104359,
+      108496
+     ]
+    ],
+    [
+     60,
+     [
+      13444,
+      32311,
+      70000
+     ]
+    ],
+    [
+     61,
+     [
+      27304,
+      88405,
+      131078
+     ]
+    ],
+    [
+     62,
+     [
+      50480,
+      97581,
+      105373
+     ]
+    ],
+    [
+     63,
+     [
+      4198,
+      10035,
+      78793
+     ]
+    ],
+    [
+     64,
+     [
+      4057,
+      21232,
+      91794
+     ]
+    ],
+    [
+     65,
+     [
+      54322,
+      107715,
+      131073
+     ]
+    ],
+    [
+     66,
+     [
+      14827,
+      23938,
+      58618
+     ]
+    ],
+    [
+     67,
+     [
+      27202,
+      38919,
+      112805
+     ]
+    ],
+    [
+     68,
+     [
+      3786,
+      65535,
+      66149
+     ]
+    ],
+    [
+     69,
+     [
+      35305,
+      57571,
+      110453
+     ]
+    ],
+    [
+     70,
+     [
+      18862,
+      75463,
+      109368
+     ]
+    ],
+    [
+     71,
+     [
+      5109,
+      9232,
+      131077
+     ]
+    ],
+    [
+     72,
+     [
+      49234,
+      95382,
+      116025
+     ]
+    ],
+    [
+     73,
+     [
+      1,
+      7374,
+      104965
+     ]
+    ],
+    [
+     74,
+     [
+      42924,
+      64442,
+      92843
+     ]
+    ],
+    [
+     75,
+     [
+      31181,
+      46326,
+      99358
+     ]
+    ],
+    [
+     76,
+     [
+      94803,
+      103366,
+      129664
+     ]
+    ],
+    [
+     77,
+     [
+      26157,
+      49831,
+      118695
+     ]
+    ],
+    [
+     78,
+     [
+      32878,
+      73099,
+      105896
+     ]
+    ],
+    [
+     79,
+     [
+      30281,
+      57265,
+      62068
+     ]
+    ]
+   ],
+   "oracle": "complete",
+   "timed": false,
+   "description": "carved last partition (2 x 65536 + 7), planted three-way exact and offset ties",
+   "sha256_index": "3b66eb6fb66675f8654668ec4c5500da4b802655cde4e90df7374926507348fc",
+   "sha256_queries": "1cd87d546ac8b7d2589628d610514df8ca46b456c717852200ce3667df451cbd",
+   "distinct_rows": null
+  },
+  "divergent_tail": {
+   "name": "divergent_tail",
+   "n_index": 397156,
+   "n_queries": 600,
+   "d": 32,
+   "exact": [],
+   "dup_groups": [],
+   "offset_groups": [],
+   "oracle": "sampled",
+   "timed": false,
+   "description": "last partition 3,940 columns: per-thread trip-count divergence in the unrolled scan",
+   "sha256_index": "950ac54c7552d9a44f3c2f482d008f53d5de78bc8ff6f5c61b92875764ae074a",
+   "sha256_queries": "dd9821628f12ad0cc303ef72a15c208fa9dfb2e1225154bb52e7aa1d6c79e7b9",
+   "distinct_rows": true
+  }
+ },
+ "correctness": [
+  {
+   "fixture": "large",
+   "k": 10,
+   "arms": {
+    "uniform": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    },
+    "capk": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    },
+    "capk_selp": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    },
+    "default": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    }
+   },
+   "row_order": [],
+   "planted": [],
+   "oracle": {
+    "rows": 64,
+    "hard_mismatch_rows": [],
+    "ambiguous_rows": 0,
+    "distance_mismatch_rows": []
+   },
+   "exact_zero_bits": 8
+  },
+  {
+   "fixture": "large",
+   "k": 15,
+   "arms": {
+    "uniform": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    },
+    "capk": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    },
+    "capk_selp": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    },
+    "default": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    }
+   },
+   "row_order": [],
+   "planted": [],
+   "oracle": {
+    "rows": 64,
+    "hard_mismatch_rows": [],
+    "ambiguous_rows": 0,
+    "distance_mismatch_rows": []
+   },
+   "exact_zero_bits": 8
+  },
+  {
+   "fixture": "dyadic",
+   "k": 10,
+   "arms": {
+    "uniform": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    },
+    "capk": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    },
+    "capk_selp": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    },
+    "default": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    }
+   },
+   "row_order": [],
+   "planted": [],
+   "oracle": {
+    "rows": 48,
+    "hard_mismatch_rows": [],
+    "ambiguous_rows": 0,
+    "distance_mismatch_rows": []
+   },
+   "exact_zero_bits": 0
+  },
+  {
+   "fixture": "dyadic",
+   "k": 15,
+   "arms": {
+    "uniform": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    },
+    "capk": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    },
+    "capk_selp": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    },
+    "default": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    }
+   },
+   "row_order": [],
+   "planted": [],
+   "oracle": {
+    "rows": 48,
+    "hard_mismatch_rows": [],
+    "ambiguous_rows": 0,
+    "distance_mismatch_rows": []
+   },
+   "exact_zero_bits": 0
+  },
+  {
+   "fixture": "ties",
+   "k": 10,
+   "arms": {
+    "uniform": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    },
+    "capk": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    },
+    "capk_selp": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    },
+    "default": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    }
+   },
+   "row_order": [],
+   "planted": [],
+   "oracle": {
+    "rows": 700,
+    "hard_mismatch_rows": [],
+    "ambiguous_rows": 1,
+    "distance_mismatch_rows": []
+   },
+   "exact_zero_bits": 26
+  },
+  {
+   "fixture": "ties",
+   "k": 15,
+   "arms": {
+    "uniform": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    },
+    "capk": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    },
+    "capk_selp": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    },
+    "default": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    }
+   },
+   "row_order": [],
+   "planted": [],
+   "oracle": {
+    "rows": 700,
+    "hard_mismatch_rows": [],
+    "ambiguous_rows": 1,
+    "distance_mismatch_rows": []
+   },
+   "exact_zero_bits": 26
+  },
+  {
+   "fixture": "divergent_tail",
+   "k": 10,
+   "arms": {
+    "uniform": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    },
+    "capk": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    },
+    "capk_selp": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    },
+    "default": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    }
+   },
+   "row_order": [],
+   "planted": [],
+   "oracle": {
+    "rows": 47,
+    "hard_mismatch_rows": [],
+    "ambiguous_rows": 0,
+    "distance_mismatch_rows": []
+   },
+   "exact_zero_bits": 0
+  },
+  {
+   "fixture": "divergent_tail",
+   "k": 15,
+   "arms": {
+    "uniform": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    },
+    "capk": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    },
+    "capk_selp": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    },
+    "default": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    }
+   },
+   "row_order": [],
+   "planted": [],
+   "oracle": {
+    "rows": 45,
+    "hard_mismatch_rows": [],
+    "ambiguous_rows": 0,
+    "distance_mismatch_rows": []
+   },
+   "exact_zero_bits": 0
+  }
+ ],
+ "reach": [
+  {
+   "fixture": "large",
+   "k": 10,
+   "arm": "uniform",
+   "sabotage_flipped_cells": 38306,
+   "clean_restored": true
+  },
+  {
+   "fixture": "large",
+   "k": 10,
+   "arm": "capk",
+   "sabotage_flipped_cells": 38306,
+   "clean_restored": true
+  },
+  {
+   "fixture": "large",
+   "k": 10,
+   "arm": "capk_selp",
+   "sabotage_flipped_cells": 38306,
+   "clean_restored": true
+  },
+  {
+   "fixture": "large",
+   "k": 10,
+   "arm": "default",
+   "sabotage_flipped_cells": 38306,
+   "clean_restored": true
+  },
+  {
+   "fixture": "large",
+   "k": 15,
+   "arm": "uniform",
+   "sabotage_flipped_cells": 70635,
+   "clean_restored": true
+  },
+  {
+   "fixture": "large",
+   "k": 15,
+   "arm": "capk",
+   "sabotage_flipped_cells": 70635,
+   "clean_restored": true
+  },
+  {
+   "fixture": "large",
+   "k": 15,
+   "arm": "capk_selp",
+   "sabotage_flipped_cells": 70635,
+   "clean_restored": true
+  },
+  {
+   "fixture": "large",
+   "k": 15,
+   "arm": "default",
+   "sabotage_flipped_cells": 70635,
+   "clean_restored": true
+  },
+  {
+   "fixture": "dyadic",
+   "k": 10,
+   "arm": "uniform",
+   "sabotage_flipped_cells": 38045,
+   "clean_restored": true
+  },
+  {
+   "fixture": "dyadic",
+   "k": 10,
+   "arm": "capk",
+   "sabotage_flipped_cells": 38045,
+   "clean_restored": true
+  },
+  {
+   "fixture": "dyadic",
+   "k": 10,
+   "arm": "capk_selp",
+   "sabotage_flipped_cells": 38045,
+   "clean_restored": true
+  },
+  {
+   "fixture": "dyadic",
+   "k": 10,
+   "arm": "default",
+   "sabotage_flipped_cells": 38045,
+   "clean_restored": true
+  },
+  {
+   "fixture": "dyadic",
+   "k": 15,
+   "arm": "uniform",
+   "sabotage_flipped_cells": 70423,
+   "clean_restored": true
+  },
+  {
+   "fixture": "dyadic",
+   "k": 15,
+   "arm": "capk",
+   "sabotage_flipped_cells": 70423,
+   "clean_restored": true
+  },
+  {
+   "fixture": "dyadic",
+   "k": 15,
+   "arm": "capk_selp",
+   "sabotage_flipped_cells": 70423,
+   "clean_restored": true
+  },
+  {
+   "fixture": "dyadic",
+   "k": 15,
+   "arm": "default",
+   "sabotage_flipped_cells": 70423,
+   "clean_restored": true
+  },
+  {
+   "fixture": "ties",
+   "k": 10,
+   "arm": "uniform",
+   "sabotage_flipped_cells": 6509,
+   "clean_restored": true
+  },
+  {
+   "fixture": "ties",
+   "k": 10,
+   "arm": "capk",
+   "sabotage_flipped_cells": 6509,
+   "clean_restored": true
+  },
+  {
+   "fixture": "ties",
+   "k": 10,
+   "arm": "capk_selp",
+   "sabotage_flipped_cells": 6509,
+   "clean_restored": true
+  },
+  {
+   "fixture": "ties",
+   "k": 10,
+   "arm": "default",
+   "sabotage_flipped_cells": 6509,
+   "clean_restored": true
+  },
+  {
+   "fixture": "ties",
+   "k": 15,
+   "arm": "uniform",
+   "sabotage_flipped_cells": 12172,
+   "clean_restored": true
+  },
+  {
+   "fixture": "ties",
+   "k": 15,
+   "arm": "capk",
+   "sabotage_flipped_cells": 12172,
+   "clean_restored": true
+  },
+  {
+   "fixture": "ties",
+   "k": 15,
+   "arm": "capk_selp",
+   "sabotage_flipped_cells": 12172,
+   "clean_restored": true
+  },
+  {
+   "fixture": "ties",
+   "k": 15,
+   "arm": "default",
+   "sabotage_flipped_cells": 12172,
+   "clean_restored": true
+  },
+  {
+   "fixture": "divergent_tail",
+   "k": 10,
+   "arm": "uniform",
+   "sabotage_flipped_cells": 5165,
+   "clean_restored": true
+  },
+  {
+   "fixture": "divergent_tail",
+   "k": 10,
+   "arm": "capk",
+   "sabotage_flipped_cells": 5165,
+   "clean_restored": true
+  },
+  {
+   "fixture": "divergent_tail",
+   "k": 10,
+   "arm": "capk_selp",
+   "sabotage_flipped_cells": 5165,
+   "clean_restored": true
+  },
+  {
+   "fixture": "divergent_tail",
+   "k": 10,
+   "arm": "default",
+   "sabotage_flipped_cells": 5165,
+   "clean_restored": true
+  },
+  {
+   "fixture": "divergent_tail",
+   "k": 15,
+   "arm": "uniform",
+   "sabotage_flipped_cells": 9681,
+   "clean_restored": true
+  },
+  {
+   "fixture": "divergent_tail",
+   "k": 15,
+   "arm": "capk",
+   "sabotage_flipped_cells": 9681,
+   "clean_restored": true
+  },
+  {
+   "fixture": "divergent_tail",
+   "k": 15,
+   "arm": "capk_selp",
+   "sabotage_flipped_cells": 9681,
+   "clean_restored": true
+  },
+  {
+   "fixture": "divergent_tail",
+   "k": 15,
+   "arm": "default",
+   "sabotage_flipped_cells": 9681,
+   "clean_restored": true
+  }
+ ],
+ "timing": [
+  {
+   "fixture": "large",
+   "k": 10,
+   "n_index": 400000,
+   "n_queries": 4000,
+   "d": 32,
+   "arm_a": "uniform",
+   "arm_b": "capk",
+   "pairs": [
+    {
+     "order": 0,
+     "pair": 0,
+     "ms": {
+      "uniform": 32.515886,
+      "capk": 31.176474
+     },
+     "phases": {
+      "uniform": {
+       "distance_ms": 15.272511,
+       "select_ms": 10.230513,
+       "merge_ms": 0.458682,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      },
+      "capk": {
+       "distance_ms": 15.243123,
+       "select_ms": 10.299692,
+       "merge_ms": 0.447755,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      }
+     },
+     "ratio_b_over_a": 0.9588074579914567,
+     "select_ms_ratio_b_over_a": 1.0067620264985735
+    },
+    {
+     "order": 0,
+     "pair": 1,
+     "ms": {
+      "uniform": 30.947013,
+      "capk": 30.979317
+     },
+     "phases": {
+      "uniform": {
+       "distance_ms": 15.252139,
+       "select_ms": 10.227296,
+       "merge_ms": 0.464576,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      },
+      "capk": {
+       "distance_ms": 15.263645,
+       "select_ms": 10.313683,
+       "merge_ms": 0.44897,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      }
+     },
+     "ratio_b_over_a": 1.0010438487229771,
+     "select_ms_ratio_b_over_a": 1.0084467096679317
+    },
+    {
+     "order": 0,
+     "pair": 2,
+     "ms": {
+      "uniform": 30.930747,
+      "capk": 31.162046
+     },
+     "phases": {
+      "uniform": {
+       "distance_ms": 15.283692,
+       "select_ms": 10.239723,
+       "merge_ms": 0.455054,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      },
+      "capk": {
+       "distance_ms": 15.381047,
+       "select_ms": 10.382052,
+       "merge_ms": 0.459359,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      }
+     },
+     "ratio_b_over_a": 1.0074779635939604,
+     "select_ms_ratio_b_over_a": 1.0138996924037886
+    },
+    {
+     "order": 1,
+     "pair": 0,
+     "ms": {
+      "capk": 31.087417,
+      "uniform": 31.069514
+     },
+     "phases": {
+      "capk": {
+       "distance_ms": 15.355526,
+       "select_ms": 10.374714,
+       "merge_ms": 0.449764,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      },
+      "uniform": {
+       "distance_ms": 15.344135,
+       "select_ms": 10.292929,
+       "merge_ms": 0.467935,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      }
+     },
+     "ratio_b_over_a": 1.0005762240117433,
+     "select_ms_ratio_b_over_a": 1.0079457460553745
+    },
+    {
+     "order": 1,
+     "pair": 1,
+     "ms": {
+      "capk": 31.108807,
+      "uniform": 30.970733
+     },
+     "phases": {
+      "capk": {
+       "distance_ms": 15.343423,
+       "select_ms": 10.375636,
+       "merge_ms": 0.466595,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      },
+      "uniform": {
+       "distance_ms": 15.345023,
+       "select_ms": 10.273015,
+       "merge_ms": 0.453896,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      }
+     },
+     "ratio_b_over_a": 1.0044582089807175,
+     "select_ms_ratio_b_over_a": 1.0099893750763531
+    },
+    {
+     "order": 1,
+     "pair": 2,
+     "ms": {
+      "capk": 31.118831,
+      "uniform": 30.98229
+     },
+     "phases": {
+      "capk": {
+       "distance_ms": 15.349004,
+       "select_ms": 10.383975,
+       "merge_ms": 0.461761,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      },
+      "uniform": {
+       "distance_ms": 15.34554,
+       "select_ms": 10.285942,
+       "merge_ms": 0.459954,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      }
+     },
+     "ratio_b_over_a": 1.0044070661013114,
+     "select_ms_ratio_b_over_a": 1.0095307751103397
+    }
+   ],
+   "median_ms": {
+    "uniform": 30.9765115,
+    "capk": 31.113819
+   },
+   "min_ms": {
+    "uniform": 30.930747,
+    "capk": 30.979317
+   },
+   "median_ms_by_order": {
+    "uniform": {
+     "0": 30.947013,
+     "1": 30.98229
+    },
+    "capk": {
+     "0": 31.162046,
+     "1": 31.108807
+    }
+   },
+   "paired_ratio_median_b_over_a": 1.0027254574121442,
+   "pairs_favoring_b": 1,
+   "spread_pct": {
+    "uniform": 5.117228904229585,
+    "capk": 0.6336637749290666
+   },
+   "boundary": "public NearestNeighbors.kneighbors: host in, host out, includes query conversion, upload, norms, transpose, distance, selection, merge, download, index widening to int64",
+   "phase_ms_median": {
+    "uniform": {
+     "distance_ms": 15.3139135,
+     "select_ms": 10.256369,
+     "merge_ms": 0.459318
+    },
+    "capk": {
+     "distance_ms": 15.346213500000001,
+     "select_ms": 10.375175,
+     "merge_ms": 0.4545615
+    }
+   },
+   "phase_ms_median_by_order": {
+    "uniform": {
+     "0": {
+      "distance_ms": 15.272511,
+      "select_ms": 10.230513,
+      "merge_ms": 0.458682
+     },
+     "1": {
+      "distance_ms": 15.345023,
+      "select_ms": 10.285942,
+      "merge_ms": 0.459954
+     }
+    },
+    "capk": {
+     "0": {
+      "distance_ms": 15.263645,
+      "select_ms": 10.313683,
+      "merge_ms": 0.44897
+     },
+     "1": {
+      "distance_ms": 15.349004,
+      "select_ms": 10.375636,
+      "merge_ms": 0.461761
+     }
+    }
+   },
+   "select_ms_ratio_b_over_a": 1.0089887423891357,
+   "phase_note": "phase milliseconds from the binding's KNN_PHASE_TIMERS line (serializing); request ms above include those synchronizations"
+  },
+  {
+   "fixture": "large",
+   "k": 15,
+   "n_index": 400000,
+   "n_queries": 4000,
+   "d": 32,
+   "arm_a": "uniform",
+   "arm_b": "capk",
+   "pairs": [
+    {
+     "order": 0,
+     "pair": 0,
+     "ms": {
+      "uniform": 36.127487,
+      "capk": 36.039843
+     },
+     "phases": {
+      "uniform": {
+       "distance_ms": 15.360566,
+       "select_ms": 14.700333,
+       "merge_ms": 0.458855,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      },
+      "capk": {
+       "distance_ms": 15.352646,
+       "select_ms": 14.650883,
+       "merge_ms": 0.454456,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      }
+     },
+     "ratio_b_over_a": 0.997574035525914,
+     "select_ms_ratio_b_over_a": 0.9966361306237076
+    },
+    {
+     "order": 0,
+     "pair": 1,
+     "ms": {
+      "uniform": 36.086994,
+      "capk": 35.945139
+     },
+     "phases": {
+      "uniform": {
+       "distance_ms": 15.351364,
+       "select_ms": 14.709708,
+       "merge_ms": 0.466013,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      },
+      "capk": {
+       "distance_ms": 15.336485,
+       "select_ms": 14.648104,
+       "merge_ms": 0.446989,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      }
+     },
+     "ratio_b_over_a": 0.9960690823957241,
+     "select_ms_ratio_b_over_a": 0.9958120174785251
+    },
+    {
+     "order": 0,
+     "pair": 2,
+     "ms": {
+      "uniform": 36.101456,
+      "capk": 35.975877
+     },
+     "phases": {
+      "uniform": {
+       "distance_ms": 15.360894,
+       "select_ms": 14.710914,
+       "merge_ms": 0.462579,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      },
+      "capk": {
+       "distance_ms": 15.360907,
+       "select_ms": 14.649718,
+       "merge_ms": 0.452788,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      }
+     },
+     "ratio_b_over_a": 0.9965214976371035,
+     "select_ms_ratio_b_over_a": 0.9958400953197061
+    },
+    {
+     "order": 1,
+     "pair": 0,
+     "ms": {
+      "capk": 36.112305,
+      "uniform": 36.142114
+     },
+     "phases": {
+      "capk": {
+       "distance_ms": 15.365588,
+       "select_ms": 14.65655,
+       "merge_ms": 0.465832,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      },
+      "uniform": {
+       "distance_ms": 15.338638,
+       "select_ms": 14.696019,
+       "merge_ms": 0.453977,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      }
+     },
+     "ratio_b_over_a": 0.9991752281009351,
+     "select_ms_ratio_b_over_a": 0.9973143066840073
+    },
+    {
+     "order": 1,
+     "pair": 1,
+     "ms": {
+      "capk": 36.047446,
+      "uniform": 36.092781
+     },
+     "phases": {
+      "capk": {
+       "distance_ms": 15.338037,
+       "select_ms": 14.642112,
+       "merge_ms": 0.454362,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      },
+      "uniform": {
+       "distance_ms": 15.349708,
+       "select_ms": 14.707794,
+       "merge_ms": 0.461962,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      }
+     },
+     "ratio_b_over_a": 0.9987439316466081,
+     "select_ms_ratio_b_over_a": 0.9955342045176863
+    },
+    {
+     "order": 1,
+     "pair": 2,
+     "ms": {
+      "capk": 36.088528,
+      "uniform": 36.110209
+     },
+     "phases": {
+      "capk": {
+       "distance_ms": 15.360521,
+       "select_ms": 14.656685,
+       "merge_ms": 0.462848,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      },
+      "uniform": {
+       "distance_ms": 15.358773,
+       "select_ms": 14.705481,
+       "merge_ms": 0.4611,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      }
+     },
+     "ratio_b_over_a": 0.9993995880777096,
+     "select_ms_ratio_b_over_a": 0.996681781439179
+    }
+   ],
+   "median_ms": {
+    "uniform": 36.1058325,
+    "capk": 36.0436445
+   },
+   "min_ms": {
+    "uniform": 36.086994,
+    "capk": 35.945139
+   },
+   "median_ms_by_order": {
+    "uniform": {
+     "0": 36.101456,
+     "1": 36.110209
+    },
+    "capk": {
+     "0": 35.975877,
+     "1": 36.088528
+    }
+   },
+   "paired_ratio_median_b_over_a": 0.998158983586261,
+   "pairs_favoring_b": 6,
+   "spread_pct": {
+    "uniform": 0.15266231570758626,
+    "capk": 0.4637877282359771
+   },
+   "boundary": "public NearestNeighbors.kneighbors: host in, host out, includes query conversion, upload, norms, transpose, distance, selection, merge, download, index widening to int64",
+   "phase_ms_median": {
+    "uniform": {
+     "distance_ms": 15.3550685,
+     "select_ms": 14.7066375,
+     "merge_ms": 0.461531
+    },
+    "capk": {
+     "distance_ms": 15.3565835,
+     "select_ms": 14.6503005,
+     "merge_ms": 0.454409
+    }
+   },
+   "phase_ms_median_by_order": {
+    "uniform": {
+     "0": {
+      "distance_ms": 15.360566,
+      "select_ms": 14.709708,
+      "merge_ms": 0.462579
+     },
+     "1": {
+      "distance_ms": 15.349708,
+      "select_ms": 14.705481,
+      "merge_ms": 0.4611
+     }
+    },
+    "capk": {
+     "0": {
+      "distance_ms": 15.352646,
+      "select_ms": 14.649718,
+      "merge_ms": 0.452788
+     },
+     "1": {
+      "distance_ms": 15.360521,
+      "select_ms": 14.65655,
+      "merge_ms": 0.462848
+     }
+    }
+   },
+   "select_ms_ratio_b_over_a": 0.9962381129717068,
+   "phase_note": "phase milliseconds from the binding's KNN_PHASE_TIMERS line (serializing); request ms above include those synchronizations"
+  },
+  {
+   "fixture": "dyadic",
+   "k": 10,
+   "n_index": 400000,
+   "n_queries": 4000,
+   "d": 32,
+   "arm_a": "uniform",
+   "arm_b": "capk",
+   "pairs": [
+    {
+     "order": 0,
+     "pair": 0,
+     "ms": {
+      "uniform": 32.452569,
+      "capk": 31.313816
+     },
+     "phases": {
+      "uniform": {
+       "distance_ms": 15.350112,
+       "select_ms": 10.298393,
+       "merge_ms": 0.462606,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      },
+      "capk": {
+       "distance_ms": 15.333772,
+       "select_ms": 10.363249,
+       "merge_ms": 0.449234,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      }
+     },
+     "ratio_b_over_a": 0.9649102356118556,
+     "select_ms_ratio_b_over_a": 1.006297681589739
+    },
+    {
+     "order": 0,
+     "pair": 1,
+     "ms": {
+      "uniform": 31.047553,
+      "capk": 31.06373
+     },
+     "phases": {
+      "uniform": {
+       "distance_ms": 15.335692,
+       "select_ms": 10.289024,
+       "merge_ms": 0.454718,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      },
+      "capk": {
+       "distance_ms": 15.342433,
+       "select_ms": 10.36874,
+       "merge_ms": 0.458784,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      }
+     },
+     "ratio_b_over_a": 1.0005210394519657,
+     "select_ms_ratio_b_over_a": 1.0077476736374609
+    },
+    {
+     "order": 0,
+     "pair": 2,
+     "ms": {
+      "uniform": 31.08214,
+      "capk": 31.100358
+     },
+     "phases": {
+      "uniform": {
+       "distance_ms": 15.347492,
+       "select_ms": 10.291558,
+       "merge_ms": 0.46469,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      },
+      "capk": {
+       "distance_ms": 15.321098,
+       "select_ms": 10.357844,
+       "merge_ms": 0.462966,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      }
+     },
+     "ratio_b_over_a": 1.0005861243788234,
+     "select_ms_ratio_b_over_a": 1.0064408129459115
+    },
+    {
+     "order": 1,
+     "pair": 0,
+     "ms": {
+      "capk": 31.080976,
+      "uniform": 31.016592
+     },
+     "phases": {
+      "capk": {
+       "distance_ms": 15.331205,
+       "select_ms": 10.366872,
+       "merge_ms": 0.454617,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      },
+      "uniform": {
+       "distance_ms": 15.331995,
+       "select_ms": 10.281587,
+       "merge_ms": 0.454494,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      }
+     },
+     "ratio_b_over_a": 1.0020757922082477,
+     "select_ms_ratio_b_over_a": 1.0082949256763571
+    },
+    {
+     "order": 1,
+     "pair": 1,
+     "ms": {
+      "capk": 31.122383,
+      "uniform": 30.953621
+     },
+     "phases": {
+      "capk": {
+       "distance_ms": 15.344112,
+       "select_ms": 10.373036,
+       "merge_ms": 0.456931,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      },
+      "uniform": {
+       "distance_ms": 15.325053,
+       "select_ms": 10.278923,
+       "merge_ms": 0.44549,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      }
+     },
+     "ratio_b_over_a": 1.005452092341636,
+     "select_ms_ratio_b_over_a": 1.0091559203235592
+    },
+    {
+     "order": 1,
+     "pair": 2,
+     "ms": {
+      "capk": 31.124288,
+      "uniform": 30.940404
+     },
+     "phases": {
+      "capk": {
+       "distance_ms": 15.337946,
+       "select_ms": 10.394439,
+       "merge_ms": 0.458139,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      },
+      "uniform": {
+       "distance_ms": 15.325873,
+       "select_ms": 10.280801,
+       "merge_ms": 0.451131,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      }
+     },
+     "ratio_b_over_a": 1.0059431673872132,
+     "select_ms_ratio_b_over_a": 1.011053418892166
+    }
+   ],
+   "median_ms": {
+    "uniform": 31.032072499999998,
+    "capk": 31.1113705
+   },
+   "min_ms": {
+    "uniform": 30.940404,
+    "capk": 31.06373
+   },
+   "median_ms_by_order": {
+    "uniform": {
+     "0": 31.08214,
+     "1": 30.953621
+    },
+    "capk": {
+     "0": 31.100358,
+     "1": 31.122383
+    }
+   },
+   "paired_ratio_median_b_over_a": 1.0013309582935355,
+   "pairs_favoring_b": 1,
+   "spread_pct": {
+    "uniform": 4.872910115816454,
+    "capk": 0.803841155117225
+   },
+   "boundary": "public NearestNeighbors.kneighbors: host in, host out, includes query conversion, upload, norms, transpose, distance, selection, merge, download, index widening to int64",
+   "phase_ms_median": {
+    "uniform": {
+     "distance_ms": 15.3338435,
+     "select_ms": 10.2853055,
+     "merge_ms": 0.454606
+    },
+    "capk": {
+     "distance_ms": 15.335859,
+     "select_ms": 10.367806000000002,
+     "merge_ms": 0.457535
+    }
+   },
+   "phase_ms_median_by_order": {
+    "uniform": {
+     "0": {
+      "distance_ms": 15.347492,
+      "select_ms": 10.291558,
+      "merge_ms": 0.462606
+     },
+     "1": {
+      "distance_ms": 15.325873,
+      "select_ms": 10.280801,
+      "merge_ms": 0.451131
+     }
+    },
+    "capk": {
+     "0": {
+      "distance_ms": 15.333772,
+      "select_ms": 10.363249,
+      "merge_ms": 0.458784
+     },
+     "1": {
+      "distance_ms": 15.337946,
+      "select_ms": 10.373036,
+      "merge_ms": 0.456931
+     }
+    }
+   },
+   "select_ms_ratio_b_over_a": 1.008021299656909,
+   "phase_note": "phase milliseconds from the binding's KNN_PHASE_TIMERS line (serializing); request ms above include those synchronizations",
+   "cached_opponent_ms": 10.225,
+   "cached_opponent_ratio": {
+    "uniform": 3.0349215158924205,
+    "capk": 3.0426768215158924
+   },
+   "cached_opponent_note": "cached cuML row from bench/OPPONENT_REFERENCE.md (H100 80GB HBM3, driver 580.126.09, dyadic-v1); admissible only if this box matches that tuple; not a paired opponent measurement; this build's requests are serialized by the phase timers, so the ratio is inflated and not admissible"
+  },
+  {
+   "fixture": "dyadic",
+   "k": 15,
+   "n_index": 400000,
+   "n_queries": 4000,
+   "d": 32,
+   "arm_a": "uniform",
+   "arm_b": "capk",
+   "pairs": [
+    {
+     "order": 0,
+     "pair": 0,
+     "ms": {
+      "uniform": 36.111021,
+      "capk": 36.012353
+     },
+     "phases": {
+      "uniform": {
+       "distance_ms": 15.340169,
+       "select_ms": 14.710362,
+       "merge_ms": 0.459086,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      },
+      "capk": {
+       "distance_ms": 15.343052,
+       "select_ms": 14.650671,
+       "merge_ms": 0.456158,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      }
+     },
+     "ratio_b_over_a": 0.9972676485663475,
+     "select_ms_ratio_b_over_a": 0.9959422480561662
+    },
+    {
+     "order": 0,
+     "pair": 1,
+     "ms": {
+      "uniform": 36.938015,
+      "capk": 36.121152
+     },
+     "phases": {
+      "uniform": {
+       "distance_ms": 15.340652,
+       "select_ms": 14.710716,
+       "merge_ms": 0.460127,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      },
+      "capk": {
+       "distance_ms": 15.327078,
+       "select_ms": 14.654871,
+       "merge_ms": 0.451138,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      }
+     },
+     "ratio_b_over_a": 0.9778855739811683,
+     "select_ms_ratio_b_over_a": 0.9962037877694057
+    },
+    {
+     "order": 0,
+     "pair": 2,
+     "ms": {
+      "uniform": 36.109347,
+      "capk": 36.045464
+     },
+     "phases": {
+      "uniform": {
+       "distance_ms": 15.337764,
+       "select_ms": 14.700556,
+       "merge_ms": 0.46338,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      },
+      "capk": {
+       "distance_ms": 15.339036,
+       "select_ms": 14.655857,
+       "merge_ms": 0.455001,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      }
+     },
+     "ratio_b_over_a": 0.998230845880431,
+     "select_ms_ratio_b_over_a": 0.9969593667069462
+    },
+    {
+     "order": 1,
+     "pair": 0,
+     "ms": {
+      "capk": 36.039038,
+      "uniform": 36.025342
+     },
+     "phases": {
+      "capk": {
+       "distance_ms": 15.334515,
+       "select_ms": 14.649787,
+       "merge_ms": 0.457876,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      },
+      "uniform": {
+       "distance_ms": 15.340105,
+       "select_ms": 14.702401,
+       "merge_ms": 0.458907,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      }
+     },
+     "ratio_b_over_a": 1.0003801768210832,
+     "select_ms_ratio_b_over_a": 0.9964214008310616
+    },
+    {
+     "order": 1,
+     "pair": 1,
+     "ms": {
+      "capk": 36.054993,
+      "uniform": 36.284014
+     },
+     "phases": {
+      "capk": {
+       "distance_ms": 15.328277,
+       "select_ms": 14.653486,
+       "merge_ms": 0.457666,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      },
+      "uniform": {
+       "distance_ms": 15.334685,
+       "select_ms": 14.709728,
+       "merge_ms": 0.461627,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      }
+     },
+     "ratio_b_over_a": 0.9936881018731831,
+     "select_ms_ratio_b_over_a": 0.9961765438490772
+    },
+    {
+     "order": 1,
+     "pair": 2,
+     "ms": {
+      "capk": 36.403816,
+      "uniform": 36.348374
+     },
+     "phases": {
+      "capk": {
+       "distance_ms": 15.332247,
+       "select_ms": 14.663108,
+       "merge_ms": 0.456445,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      },
+      "uniform": {
+       "distance_ms": 15.334766,
+       "select_ms": 14.695143,
+       "merge_ms": 0.450539,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      }
+     },
+     "ratio_b_over_a": 1.0015252951892704,
+     "select_ms_ratio_b_over_a": 0.9978200280187814
+    }
+   ],
+   "median_ms": {
+    "uniform": 36.197517500000004,
+    "capk": 36.0502285
+   },
+   "min_ms": {
+    "uniform": 36.025342,
+    "capk": 36.012353
+   },
+   "median_ms_by_order": {
+    "uniform": {
+     "0": 36.111021,
+     "1": 36.284014
+    },
+    "capk": {
+     "0": 36.045464,
+     "1": 36.054993
+    }
+   },
+   "paired_ratio_median_b_over_a": 0.9977492472233893,
+   "pairs_favoring_b": 4,
+   "spread_pct": {
+    "uniform": 2.5213690413990353,
+    "capk": 1.0858821602198767
+   },
+   "boundary": "public NearestNeighbors.kneighbors: host in, host out, includes query conversion, upload, norms, transpose, distance, selection, merge, download, index widening to int64",
+   "phase_ms_median": {
+    "uniform": {
+     "distance_ms": 15.3389345,
+     "select_ms": 14.7060645,
+     "merge_ms": 0.45960650000000003
+    },
+    "capk": {
+     "distance_ms": 15.333381,
+     "select_ms": 14.6541785,
+     "merge_ms": 0.4563015
+    }
+   },
+   "phase_ms_median_by_order": {
+    "uniform": {
+     "0": {
+      "distance_ms": 15.340169,
+      "select_ms": 14.710362,
+      "merge_ms": 0.460127
+     },
+     "1": {
+      "distance_ms": 15.334766,
+      "select_ms": 14.702401,
+      "merge_ms": 0.458907
+     }
+    },
+    "capk": {
+     "0": {
+      "distance_ms": 15.339036,
+      "select_ms": 14.654871,
+      "merge_ms": 0.455001
+     },
+     "1": {
+      "distance_ms": 15.332247,
+      "select_ms": 14.653486,
+      "merge_ms": 0.457666
+     }
+    }
+   },
+   "select_ms_ratio_b_over_a": 0.9963125943002336,
+   "phase_note": "phase milliseconds from the binding's KNN_PHASE_TIMERS line (serializing); request ms above include those synchronizations",
+   "cached_opponent_ms": 10.817,
+   "cached_opponent_ratio": {
+    "uniform": 3.3463545807525197,
+    "capk": 3.3327381436627532
+   },
+   "cached_opponent_note": "cached cuML row from bench/OPPONENT_REFERENCE.md (H100 80GB HBM3, driver 580.126.09, dyadic-v1); admissible only if this box matches that tuple; not a paired opponent measurement; this build's requests are serialized by the phase timers, so the ratio is inflated and not admissible"
+  }
+ ],
+ "timing_only": [],
+ "failures": [],
+ "log": [
+  "[05:45:25] library: {'mojolearn_version': '0.8.0', 'numeric_mode_used': 'identical', 'vendor_used': 'cuda', 'binding_path': '/root/mojolearn/python/mojolearn/identical/_mojolearn.so', 'binding_sha256': '5dec92cde8452e9e72e0b361cd85d3be10b12ad9c9a5ae97d476f5f7f8bed9ae'}",
+  "[05:45:30] fixtures built in 5.0 s: large 400000x32/4000, dyadic 400000x32/4000, ties 131079x32/700, divergent_tail 397156x32/600",
+  "[05:45:31] large k10 arm uniform: 1000.393 ms (untimed correctness call); phases {'distance_ms': 15.369723, 'select_ms': 10.271321, 'merge_ms': 0.488545, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}",
+  "[05:45:31] phase timers READ from the binding (mode require)",
+  "[05:45:31] large k10 arm capk: 33.798 ms (untimed correctness call); phases {'distance_ms': 15.266428, 'select_ms': 10.420113, 'merge_ms': 0.458583, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}",
+  "[05:45:31] large k10 arm capk_selp: 33.570 ms (untimed correctness call); phases {'distance_ms': 15.269393, 'select_ms': 10.309514, 'merge_ms': 0.459461, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}",
+  "[05:45:31] large k10 arm default: 32.505 ms (untimed correctness call); phases {'distance_ms': 15.283926, 'select_ms': 10.251586, 'merge_ms': 0.455666, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}",
+  "[05:45:32] large k10: arms equal=True order=ok planted=ok oracle={'rows': 64, 'hard_mismatch_rows': [], 'ambiguous_rows': 0, 'distance_mismatch_rows': []}",
+  "[05:45:32] large k10 reach uniform: sabotage flipped 38306 cells, restored=True",
+  "[05:45:32] large k10 reach capk: sabotage flipped 38306 cells, restored=True",
+  "[05:45:32] large k10 reach capk_selp: sabotage flipped 38306 cells, restored=True",
+  "[05:45:32] large k10 reach default: sabotage flipped 38306 cells, restored=True",
+  "[05:45:32] large k15 arm uniform: 36.160 ms (untimed correctness call); phases {'distance_ms': 15.288742, 'select_ms': 14.741688, 'merge_ms': 0.461836, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}",
+  "[05:45:32] large k15 arm capk: 35.980 ms (untimed correctness call); phases {'distance_ms': 15.279182, 'select_ms': 14.678273, 'merge_ms': 0.461973, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}",
+  "[05:45:32] large k15 arm capk_selp: 36.001 ms (untimed correctness call); phases {'distance_ms': 15.284318, 'select_ms': 14.663931, 'merge_ms': 0.461195, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}",
+  "[05:45:32] large k15 arm default: 36.188 ms (untimed correctness call); phases {'distance_ms': 15.264408, 'select_ms': 14.622383, 'merge_ms': 0.466992, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}",
+  "[05:45:32] large k15: arms equal=True order=ok planted=ok oracle={'rows': 64, 'hard_mismatch_rows': [], 'ambiguous_rows': 0, 'distance_mismatch_rows': []}",
+  "[05:45:32] large k15 reach uniform: sabotage flipped 70635 cells, restored=True",
+  "[05:45:32] large k15 reach capk: sabotage flipped 70635 cells, restored=True",
+  "[05:45:32] large k15 reach capk_selp: sabotage flipped 70635 cells, restored=True",
+  "[05:45:33] large k15 reach default: sabotage flipped 70635 cells, restored=True",
+  "[05:45:33] dyadic k10 arm uniform: 33.427 ms (untimed correctness call); phases {'distance_ms': 15.351323, 'select_ms': 10.296136, 'merge_ms': 0.464695, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}",
+  "[05:45:33] dyadic k10 arm capk: 33.388 ms (untimed correctness call); phases {'distance_ms': 15.332484, 'select_ms': 10.370777, 'merge_ms': 0.458844, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}",
+  "[05:45:33] dyadic k10 arm capk_selp: 32.529 ms (untimed correctness call); phases {'distance_ms': 15.351138, 'select_ms': 10.263478, 'merge_ms': 0.457315, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}",
+  "[05:45:33] dyadic k10 arm default: 31.273 ms (untimed correctness call); phases {'distance_ms': 15.357267, 'select_ms': 10.301409, 'merge_ms': 0.460994, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}",
+  "[05:45:33] dyadic k10: arms equal=True order=ok planted=ok oracle={'rows': 48, 'hard_mismatch_rows': [], 'ambiguous_rows': 0, 'distance_mismatch_rows': []}",
+  "[05:45:33] dyadic k10 reach uniform: sabotage flipped 38045 cells, restored=True",
+  "[05:45:33] dyadic k10 reach capk: sabotage flipped 38045 cells, restored=True",
+  "[05:45:33] dyadic k10 reach capk_selp: sabotage flipped 38045 cells, restored=True",
+  "[05:45:33] dyadic k10 reach default: sabotage flipped 38045 cells, restored=True",
+  "[05:45:33] dyadic k15 arm uniform: 36.316 ms (untimed correctness call); phases {'distance_ms': 15.361152, 'select_ms': 14.716593, 'merge_ms': 0.462883, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}",
+  "[05:45:33] dyadic k15 arm capk: 36.260 ms (untimed correctness call); phases {'distance_ms': 15.338493, 'select_ms': 14.655211, 'merge_ms': 0.459545, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}",
+  "[05:45:33] dyadic k15 arm capk_selp: 36.210 ms (untimed correctness call); phases {'distance_ms': 15.340882, 'select_ms': 14.656879, 'merge_ms': 0.465854, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}",
+  "[05:45:33] dyadic k15 arm default: 36.274 ms (untimed correctness call); phases {'distance_ms': 15.337953, 'select_ms': 14.706751, 'merge_ms': 0.46263, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}",
+  "[05:45:34] dyadic k15: arms equal=True order=ok planted=ok oracle={'rows': 48, 'hard_mismatch_rows': [], 'ambiguous_rows': 0, 'distance_mismatch_rows': []}",
+  "[05:45:34] dyadic k15 reach uniform: sabotage flipped 70423 cells, restored=True",
+  "[05:45:34] dyadic k15 reach capk: sabotage flipped 70423 cells, restored=True",
+  "[05:45:34] dyadic k15 reach capk_selp: sabotage flipped 70423 cells, restored=True",
+  "[05:45:34] dyadic k15 reach default: sabotage flipped 70423 cells, restored=True",
+  "[05:45:34] ties k10 arm uniform: 4.295 ms (untimed correctness call); phases {'distance_ms': 1.18006, 'select_ms': 0.683849, 'merge_ms': 0.037966, 'distance_launches': 6.0, 'select_launches': 6.0, 'merge_launches': 4.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 700.0, 'n_index': 131079.0, 'k': 10.0}",
+  "[05:45:34] ties k10 arm capk: 4.111 ms (untimed correctness call); phases {'distance_ms': 1.016173, 'select_ms': 0.687642, 'merge_ms': 0.037482, 'distance_launches': 6.0, 'select_launches': 6.0, 'merge_launches': 4.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 700.0, 'n_index': 131079.0, 'k': 10.0}",
+  "[05:45:34] ties k10 arm capk_selp: 3.436 ms (untimed correctness call); phases {'distance_ms': 1.016469, 'select_ms': 0.677242, 'merge_ms': 0.037299, 'distance_launches': 6.0, 'select_launches': 6.0, 'merge_launches': 4.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 700.0, 'n_index': 131079.0, 'k': 10.0}",
+  "[05:45:34] ties k10 arm default: 3.329 ms (untimed correctness call); phases {'distance_ms': 1.014349, 'select_ms': 0.680288, 'merge_ms': 0.037065, 'distance_launches': 6.0, 'select_launches': 6.0, 'merge_launches': 4.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 700.0, 'n_index': 131079.0, 'k': 10.0}",
+  "[05:45:35] ties k10: arms equal=True order=ok planted=ok oracle={'rows': 700, 'hard_mismatch_rows': [], 'ambiguous_rows': 1, 'distance_mismatch_rows': []}",
+  "[05:45:35] ties k10 reach uniform: sabotage flipped 6509 cells, restored=True",
+  "[05:45:35] ties k10 reach capk: sabotage flipped 6509 cells, restored=True",
+  "[05:45:35] ties k10 reach capk_selp: sabotage flipped 6509 cells, restored=True",
+  "[05:45:35] ties k10 reach default: sabotage flipped 6509 cells, restored=True",
+  "[05:45:35] ties k15 arm uniform: 3.722 ms (untimed correctness call); phases {'distance_ms': 1.013545, 'select_ms': 0.954525, 'merge_ms': 0.037909, 'distance_launches': 6.0, 'select_launches': 6.0, 'merge_launches': 4.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 700.0, 'n_index': 131079.0, 'k': 15.0}",
+  "[05:45:35] ties k15 arm capk: 3.711 ms (untimed correctness call); phases {'distance_ms': 1.009548, 'select_ms': 0.950875, 'merge_ms': 0.037012, 'distance_launches': 6.0, 'select_launches': 6.0, 'merge_launches': 4.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 700.0, 'n_index': 131079.0, 'k': 15.0}",
+  "[05:45:35] ties k15 arm capk_selp: 3.724 ms (untimed correctness call); phases {'distance_ms': 1.010992, 'select_ms': 0.951381, 'merge_ms': 0.037651, 'distance_launches': 6.0, 'select_launches': 6.0, 'merge_launches': 4.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 700.0, 'n_index': 131079.0, 'k': 15.0}",
+  "[05:45:35] ties k15 arm default: 3.712 ms (untimed correctness call); phases {'distance_ms': 1.011415, 'select_ms': 0.95157, 'merge_ms': 0.037601, 'distance_launches': 6.0, 'select_launches': 6.0, 'merge_launches': 4.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 700.0, 'n_index': 131079.0, 'k': 15.0}",
+  "[05:45:36] ties k15: arms equal=True order=ok planted=ok oracle={'rows': 700, 'hard_mismatch_rows': [], 'ambiguous_rows': 1, 'distance_mismatch_rows': []}",
+  "[05:45:36] ties k15 reach uniform: sabotage flipped 12172 cells, restored=True",
+  "[05:45:36] ties k15 reach capk: sabotage flipped 12172 cells, restored=True",
+  "[05:45:36] ties k15 reach capk_selp: sabotage flipped 12172 cells, restored=True",
+  "[05:45:36] ties k15 reach default: sabotage flipped 12172 cells, restored=True",
+  "[05:45:36] divergent_tail k10 arm uniform: 11.001 ms (untimed correctness call); phases {'distance_ms': 2.56865, 'select_ms': 1.672285, 'merge_ms': 0.112022, 'distance_launches': 14.0, 'select_launches': 14.0, 'merge_launches': 12.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 600.0, 'n_index': 397156.0, 'k': 10.0}",
+  "[05:45:36] divergent_tail k10 arm capk: 10.329 ms (untimed correctness call); phases {'distance_ms': 2.564414, 'select_ms': 1.693963, 'merge_ms': 0.112191, 'distance_launches': 14.0, 'select_launches': 14.0, 'merge_launches': 12.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 600.0, 'n_index': 397156.0, 'k': 10.0}",
+  "[05:45:36] divergent_tail k10 arm capk_selp: 8.889 ms (untimed correctness call); phases {'distance_ms': 2.56954, 'select_ms': 1.670546, 'merge_ms': 0.114192, 'distance_launches': 14.0, 'select_launches': 14.0, 'merge_launches': 12.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 600.0, 'n_index': 397156.0, 'k': 10.0}",
+  "[05:45:36] divergent_tail k10 arm default: 8.147 ms (untimed correctness call); phases {'distance_ms': 2.563036, 'select_ms': 1.668048, 'merge_ms': 0.11735, 'distance_launches': 14.0, 'select_launches': 14.0, 'merge_launches': 12.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 600.0, 'n_index': 397156.0, 'k': 10.0}",
+  "[05:45:36] divergent_tail k10: arms equal=True order=ok planted=ok oracle={'rows': 47, 'hard_mismatch_rows': [], 'ambiguous_rows': 0, 'distance_mismatch_rows': []}",
+  "[05:45:36] divergent_tail k10 reach uniform: sabotage flipped 5165 cells, restored=True",
+  "[05:45:36] divergent_tail k10 reach capk: sabotage flipped 5165 cells, restored=True",
+  "[05:45:36] divergent_tail k10 reach capk_selp: sabotage flipped 5165 cells, restored=True",
+  "[05:45:36] divergent_tail k10 reach default: sabotage flipped 5165 cells, restored=True",
+  "[05:45:36] divergent_tail k15 arm uniform: 8.858 ms (untimed correctness call); phases {'distance_ms': 2.567351, 'select_ms': 2.358605, 'merge_ms': 0.115271, 'distance_launches': 14.0, 'select_launches': 14.0, 'merge_launches': 12.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 600.0, 'n_index': 397156.0, 'k': 15.0}",
+  "[05:45:36] divergent_tail k15 arm capk: 8.849 ms (untimed correctness call); phases {'distance_ms': 2.565878, 'select_ms': 2.354239, 'merge_ms': 0.112253, 'distance_launches': 14.0, 'select_launches': 14.0, 'merge_launches': 12.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 600.0, 'n_index': 397156.0, 'k': 15.0}",
+  "[05:45:36] divergent_tail k15 arm capk_selp: 8.824 ms (untimed correctness call); phases {'distance_ms': 2.567582, 'select_ms': 2.350601, 'merge_ms': 0.114905, 'distance_launches': 14.0, 'select_launches': 14.0, 'merge_launches': 12.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 600.0, 'n_index': 397156.0, 'k': 15.0}",
+  "[05:45:36] divergent_tail k15 arm default: 8.837 ms (untimed correctness call); phases {'distance_ms': 2.564022, 'select_ms': 2.35961, 'merge_ms': 0.113859, 'distance_launches': 14.0, 'select_launches': 14.0, 'merge_launches': 12.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 600.0, 'n_index': 397156.0, 'k': 15.0}",
+  "[05:45:36] divergent_tail k15: arms equal=True order=ok planted=ok oracle={'rows': 45, 'hard_mismatch_rows': [], 'ambiguous_rows': 0, 'distance_mismatch_rows': []}",
+  "[05:45:36] divergent_tail k15 reach uniform: sabotage flipped 9681 cells, restored=True",
+  "[05:45:36] divergent_tail k15 reach capk: sabotage flipped 9681 cells, restored=True",
+  "[05:45:36] divergent_tail k15 reach capk_selp: sabotage flipped 9681 cells, restored=True",
+  "[05:45:36] divergent_tail k15 reach default: sabotage flipped 9681 cells, restored=True",
+  "[05:45:36] large k10 warmup uniform: 34.440 ms; phases {'distance_ms': 15.274148, 'select_ms': 10.232844, 'merge_ms': 0.450599, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}",
+  "[05:45:36] large k10 warmup capk: 33.415 ms; phases {'distance_ms': 15.275273, 'select_ms': 10.318989, 'merge_ms': 0.456607, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}",
+  "[05:45:36] large k10 order0 pair0: uniform 32.516 ms, capk 31.176 ms, capk/uniform 0.9588, select_ms 10.231 vs 10.300",
+  "[05:45:37] large k10 order0 pair1: uniform 30.947 ms, capk 30.979 ms, capk/uniform 1.0010, select_ms 10.227 vs 10.314",
+  "[05:45:37] large k10 order0 pair2: uniform 30.931 ms, capk 31.162 ms, capk/uniform 1.0075, select_ms 10.240 vs 10.382",
+  "[05:45:37] large k10 order1 pair0: uniform 31.070 ms, capk 31.087 ms, capk/uniform 1.0006, select_ms 10.293 vs 10.375",
+  "[05:45:37] large k10 order1 pair1: uniform 30.971 ms, capk 31.109 ms, capk/uniform 1.0045, select_ms 10.273 vs 10.376",
+  "[05:45:37] large k10 order1 pair2: uniform 30.982 ms, capk 31.119 ms, capk/uniform 1.0044, select_ms 10.286 vs 10.384",
+  "[05:45:37] large k10: uniform median 30.977 ms, capk median 31.114 ms, paired median capk/uniform 1.0027, 1/6 pairs favor capk; select_ms medians uniform 10.256, capk 10.375",
+  "[05:45:37] large k15 warmup uniform: 36.113 ms; phases {'distance_ms': 15.356608, 'select_ms': 14.703864, 'merge_ms': 0.46384, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}",
+  "[05:45:37] large k15 warmup capk: 36.111 ms; phases {'distance_ms': 15.368349, 'select_ms': 14.672306, 'merge_ms': 0.468693, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}",
+  "[05:45:37] large k15 order0 pair0: uniform 36.127 ms, capk 36.040 ms, capk/uniform 0.9976, select_ms 14.700 vs 14.651",
+  "[05:45:37] large k15 order0 pair1: uniform 36.087 ms, capk 35.945 ms, capk/uniform 0.9961, select_ms 14.710 vs 14.648",
+  "[05:45:37] large k15 order0 pair2: uniform 36.101 ms, capk 35.976 ms, capk/uniform 0.9965, select_ms 14.711 vs 14.650",
+  "[05:45:37] large k15 order1 pair0: uniform 36.142 ms, capk 36.112 ms, capk/uniform 0.9992, select_ms 14.696 vs 14.657",
+  "[05:45:37] large k15 order1 pair1: uniform 36.093 ms, capk 36.047 ms, capk/uniform 0.9987, select_ms 14.708 vs 14.642",
+  "[05:45:37] large k15 order1 pair2: uniform 36.110 ms, capk 36.089 ms, capk/uniform 0.9994, select_ms 14.705 vs 14.657",
+  "[05:45:37] large k15: uniform median 36.106 ms, capk median 36.044 ms, paired median capk/uniform 0.9982, 6/6 pairs favor capk; select_ms medians uniform 14.707, capk 14.650",
+  "[05:45:37] dyadic k10 warmup uniform: 33.761 ms; phases {'distance_ms': 15.346151, 'select_ms': 10.298659, 'merge_ms': 0.464532, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}",
+  "[05:45:37] dyadic k10 warmup capk: 33.436 ms; phases {'distance_ms': 15.324502, 'select_ms': 10.367932, 'merge_ms': 0.449931, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}",
+  "[05:45:37] dyadic k10 order0 pair0: uniform 32.453 ms, capk 31.314 ms, capk/uniform 0.9649, select_ms 10.298 vs 10.363",
+  "[05:45:37] dyadic k10 order0 pair1: uniform 31.048 ms, capk 31.064 ms, capk/uniform 1.0005, select_ms 10.289 vs 10.369",
+  "[05:45:38] dyadic k10 order0 pair2: uniform 31.082 ms, capk 31.100 ms, capk/uniform 1.0006, select_ms 10.292 vs 10.358",
+  "[05:45:38] dyadic k10 order1 pair0: uniform 31.017 ms, capk 31.081 ms, capk/uniform 1.0021, select_ms 10.282 vs 10.367",
+  "[05:45:38] dyadic k10 order1 pair1: uniform 30.954 ms, capk 31.122 ms, capk/uniform 1.0055, select_ms 10.279 vs 10.373",
+  "[05:45:38] dyadic k10 order1 pair2: uniform 30.940 ms, capk 31.124 ms, capk/uniform 1.0059, select_ms 10.281 vs 10.394",
+  "[05:45:38] dyadic k10: uniform median 31.032 ms, capk median 31.111 ms, paired median capk/uniform 1.0013, 1/6 pairs favor capk; select_ms medians uniform 10.285, capk 10.368",
+  "[05:45:38] dyadic k15 warmup uniform: 36.025 ms; phases {'distance_ms': 15.323343, 'select_ms': 14.702144, 'merge_ms': 0.457614, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}",
+  "[05:45:38] dyadic k15 warmup capk: 36.052 ms; phases {'distance_ms': 15.325414, 'select_ms': 14.653221, 'merge_ms': 0.457945, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}",
+  "[05:45:38] dyadic k15 order0 pair0: uniform 36.111 ms, capk 36.012 ms, capk/uniform 0.9973, select_ms 14.710 vs 14.651",
+  "[05:45:38] dyadic k15 order0 pair1: uniform 36.938 ms, capk 36.121 ms, capk/uniform 0.9779, select_ms 14.711 vs 14.655",
+  "[05:45:38] dyadic k15 order0 pair2: uniform 36.109 ms, capk 36.045 ms, capk/uniform 0.9982, select_ms 14.701 vs 14.656",
+  "[05:45:38] dyadic k15 order1 pair0: uniform 36.025 ms, capk 36.039 ms, capk/uniform 1.0004, select_ms 14.702 vs 14.650",
+  "[05:45:38] dyadic k15 order1 pair1: uniform 36.284 ms, capk 36.055 ms, capk/uniform 0.9937, select_ms 14.710 vs 14.653",
+  "[05:45:38] dyadic k15 order1 pair2: uniform 36.348 ms, capk 36.404 ms, capk/uniform 1.0015, select_ms 14.695 vs 14.663",
+  "[05:45:38] dyadic k15: uniform median 36.198 ms, capk median 36.050 ms, paired median capk/uniform 0.9977, 4/6 pairs favor capk; select_ms medians uniform 14.706, capk 14.654"
+ ],
+ "git_commit": "unknown",
+ "nvidia_smi": "NVIDIA H100 80GB HBM3, 580.126.09, GPU-dfccd461-1fa0-0b62-00da-e9abb74fb025",
+ "library": {
+  "mojolearn_version": "0.8.0",
+  "numeric_mode_used": "identical",
+  "vendor_used": "cuda",
+  "binding_path": "/root/mojolearn/python/mojolearn/identical/_mojolearn.so",
+  "binding_sha256": "5dec92cde8452e9e72e0b361cd85d3be10b12ad9c9a5ae97d476f5f7f8bed9ae"
+ },
+ "finished_utc": "2026-09-11T05:45:38Z"
+}

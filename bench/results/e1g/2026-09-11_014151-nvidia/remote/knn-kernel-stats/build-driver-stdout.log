@@ -1,0 +1,115 @@
+1062 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5a0640000000, nodemask=2)
+Imported from /root/gemm_leg_out/knn-kernel-stats/driver_stdout.mojo:8:
+./neighbors/checks/select_smallk_identical_candidate.mojo:1090:38: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                                heads[page + warp] = group_min
+                                ~~~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/gemm_leg_out/knn-kernel-stats/driver_stdout.mojo:8:
+./neighbors/checks/select_smallk_identical_candidate.mojo:1092:47: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            var winner = heads[page]
+                                         ~~~~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/gemm_leg_out/knn-kernel-stats/driver_stdout.mojo:8:
+./neighbors/checks/select_smallk_identical_candidate.mojo:1094:50: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                                var other = heads[page + w]
+                                            ~~~~~^~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/gemm_leg_out/knn-kernel-stats/driver_stdout.mojo:8:
+./neighbors/checks/select_smallk_identical_candidate.mojo:1115:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            heads[tid] = mine
+                            ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/gemm_leg_out/knn-kernel-stats/driver_stdout.mojo:8:
+./neighbors/checks/select_smallk_identical_candidate.mojo:1120:54: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                                    var other = heads[tid + stride]
+                                                ~~~~~^~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/gemm_leg_out/knn-kernel-stats/driver_stdout.mojo:8:
+./neighbors/checks/select_smallk_identical_candidate.mojo:1121:53: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                                    if other < heads[tid]:
+                                               ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/gemm_leg_out/knn-kernel-stats/driver_stdout.mojo:8:
+./neighbors/checks/select_smallk_identical_candidate.mojo:1122:46: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                                        heads[tid] = other
+                                        ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/gemm_leg_out/knn-kernel-stats/driver_stdout.mojo:8:
+./neighbors/checks/select_smallk_identical_candidate.mojo:1125:47: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            var winner = heads[0]
+                                         ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/gemm_leg_out/knn-kernel-stats/driver_stdout.mojo:8:
+./neighbors/checks/select_smallk_identical_candidate.mojo:1200:22: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                heads[tid // SMALLK_LANES] = digest
+                ~~~~~^~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/gemm_leg_out/knn-kernel-stats/driver_stdout.mojo:8:
+./neighbors/checks/select_smallk_identical_candidate.mojo:1202:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            block_digest = heads[0]
+                           ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/gemm_leg_out/knn-kernel-stats/driver_stdout.mojo:8:
+./neighbors/checks/select_smallk_identical_candidate.mojo:1204:52: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                block_digest = block_digest ^ heads[w]
+                                              ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/gemm_leg_out/knn-kernel-stats/driver_stdout.mojo:8:
+./neighbors/checks/select_smallk_identical_candidate.mojo:1206:18: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            heads[tid] = digest
+            ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/gemm_leg_out/knn-kernel-stats/driver_stdout.mojo:8:
+./neighbors/checks/select_smallk_identical_candidate.mojo:1208:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            block_digest = heads[0]
+                           ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/gemm_leg_out/knn-kernel-stats/driver_stdout.mojo:8:
+./neighbors/checks/select_smallk_identical_candidate.mojo:1210:52: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                block_digest = block_digest ^ heads[t]
+                                              ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/gemm_leg_out/knn-kernel-stats/driver_stdout.mojo:8:
+./neighbors/checks/select_smallk_identical_candidate.mojo:1227:22: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                heads[page + warp] = group_min
+                ~~~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/gemm_leg_out/knn-kernel-stats/driver_stdout.mojo:8:
+./neighbors/checks/select_smallk_identical_candidate.mojo:1229:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var winner = heads[page]
+                         ~~~~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/gemm_leg_out/knn-kernel-stats/driver_stdout.mojo:8:
+./neighbors/checks/select_smallk_identical_candidate.mojo:1231:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                var other = heads[page + w]
+                            ~~~~~^~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/gemm_leg_out/knn-kernel-stats/driver_stdout.mojo:8:
+./neighbors/checks/select_smallk_identical_candidate.mojo:1251:18: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            heads[tid] = mine
+            ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/gemm_leg_out/knn-kernel-stats/driver_stdout.mojo:8:
+./neighbors/checks/select_smallk_identical_candidate.mojo:1256:38: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    var other = heads[tid + stride]
+                                ~~~~~^~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/gemm_leg_out/knn-kernel-stats/driver_stdout.mojo:8:
+./neighbors/checks/select_smallk_identical_candidate.mojo:1257:37: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    if other < heads[tid]:
+                               ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/gemm_leg_out/knn-kernel-stats/driver_stdout.mojo:8:
+./neighbors/checks/select_smallk_identical_candidate.mojo:1258:30: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        heads[tid] = other
+                        ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/gemm_leg_out/knn-kernel-stats/driver_stdout.mojo:8:
+./neighbors/checks/select_smallk_identical_candidate.mojo:1261:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var winner = heads[0]
+                         ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Included from /root/gemm_leg_out/knn-kernel-stats/driver_stdout.mojo:8:
+./neighbors/checks/select_smallk_identical_candidate.mojo:1193:28: warning: assignment to 'block_digest' was never used; assign to '_' instead?
+        var block_digest = digest
+                           ^

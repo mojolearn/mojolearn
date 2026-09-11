@@ -977,3 +977,1635 @@ under the same define, give the split directly; then the rank phase's k
 barrier rounds are the candidate (a single-pass bitonic or shuffle-based
 extraction of k minima with the same comparison order), which the brief's
 C5 already named and ranked too low on the wrong premise.
+
+## Implementation pass, phase split measured on the box (DEVIATION 2516; source only, 2026-09-11)
+
+Nothing here was built or run on the Mac (py_compile and `sh -n` only).
+Measure, do not model: the k-proportional cost survived two bound arms that
+removed half the insertion events (steps 2 and 3), so the split of the
+selection launch between its scan phase and its rank phase is now measured
+DIRECTLY with timing-only arms that run one phase and skip the other. Files
+touched by this pass (uncommitted, working tree):
+
+- `neighbors/checks/select_smallk_identical_candidate.mojo`: seventh kernel
+  parameter `PHASE` on `smallk_bucket_kernel` (after `WARPBOUND`, default
+  `SMALLK_PHASE_FULL`, so every six-parameter instantiation is unchanged),
+  the constants `SMALLK_PHASE_FULL / SKIPRANK / SKIPSCAN` and the arms
+  `SMALLK_ARM_SKIPRANK = 4`, `SMALLK_ARM_SKIPSCAN = 5`,
+  `SMALLK_ARM_SCANONLY1 = 6` in `smallk_select_arm_from_env` and
+  `_smallk_launch_bucket`, the `scan_length` alias, the skipscan fill and
+  the skiprank epilogue, `PHASE` on `_smallk_enqueue`, the hook comment and
+  the module docstring. `bitcast` imported from `std.memory`.
+- `tools/knn_selection_gate.py`: `--timing-only-arms` (default empty),
+  `--phase-timers auto|require|off`, descriptor-level capture of the
+  binding's `KNN_PHASE_TIMERS` line per request (`PhaseCapture`), a shared
+  `time_pair` helper for the arm pair and the timing-only pairs, the
+  `timing_only` JSON table and summary lines ("output invalid; phase cost
+  only"), `phase_ms_median` on every timing row, the numpy selftest's
+  timing-only stand-in and a fake phase line written to fd 1 so the capture
+  is exercised without a GPU.
+- `tools/knn_selection_gate.sh`: `MOJOLEARN_KNN_SELECTION_TIMING_ONLY_ARMS`
+  (passed through as `--timing-only-arms`) and
+  `MOJOLEARN_KNN_SELECTION_PHASE_TIMERS=1` (adds
+  `-D MOJOLEARN_KNN_PHASE_TIMERS=1` to the binding build and passes
+  `--phase-timers require`); both recorded in `gate.txt`.
+- this section.
+
+The shipped default path is untouched: without the trial define the only
+instantiations are the six-parameter ones with `PHASE = FULL`, in which
+`scan_length` is a plain copy of `length` (the three scan loop conditions
+read the copy; a value copy, no codegen), the skipscan fill and the
+skiprank epilogue are `comptime if` branches on a constant and fold away,
+and the rank phase is the `elif SMALLK_SHUFFLE` / `else` pair it was, with
+its bodies' text unchanged. A `comptime assert` refuses any `PHASE` other
+than `FULL` on a non-trial build, and another refuses it on any scan form
+but the uniform default (no bound, no sabotage).
+
+### The arms (OUTPUT INVALID BY CONSTRUCTION)
+
+| arm | instantiation | what runs | what is written |
+|---|---|---|---|
+| `skiprank` | `[CAP, K, True, False, False, False, SKIPRANK]` | the scan exactly as `uniform` (the shipped default since 541ca9e2) runs it: same batches, same `_smallk_insert`, same tail loop; then an epilogue, NO rank phase | thread 0 writes one digest-addressed cell to slot 0 of the row and the sentinel key's two halves (index 0xFFFFFFFF, value bits 0xFFFFFFFF) to slots 1 .. k-1 |
+| `skipscan` | `[CAP, K, True, False, False, False, SKIPSCAN]` | NO scan (the three scan loops see `scan_length = 0`); every lane's k slots are filled with a synthetic pattern; then the rank phase exactly as the default runs it (k rounds, one butterfly and one barrier per round, index-half tie rule, the winner's value gathered from the tile cell) | the k "winners" of the synthetic pattern with their gathered values: real columns, wrong answer |
+| `scanonly1` | `[1, 1, True, False, False, False, SKIPRANK]` | `skiprank` with the register list one key deep (CAP = 1 and K = 1 folded, so the scan keeps a running minimum: one compare, one conditional swap, threshold = the minimum); the runtime k is ignored by the kernel | thread 0 writes one slot per row; the rest of the row is whatever the output buffer held |
+
+`scanonly1` cost nothing beyond a third instantiation of the same body, so
+it is in (the task allowed skipping it if it needed a second kernel body;
+it did not).
+
+The exact skipscan filling. For lane `tid` and slot `s < k`:
+
+    ordinal = s * 256 + tid + 1                         (1 .. 256 k, block-distinct)
+    column  = (ordinal * 2654435761) mod length         (a real column of the row)
+    key     = ordinal << 32 | column
+
+Slots k .. CAP-1 stay the sentinel, as after a real scan. Why this makes
+the rank phase's cost representative: (i) the rank loop is `for rank in
+range(k)` unconditionally, and every round costs the same instructions
+(one `shuffle_min_u64`, one shared store by lane 0 of each warp, ONE
+barrier, eight shared loads and seven compares, thread 0's two stores and
+one gather, the winning lane's predicated CAP-1 shift), so any filling with
+at least k real keys makes it do its full k rounds; (ii) the keys are
+distinct and ascending within a lane (the ordinal grows with the slot), so
+slot 0 is the lane's minimum exactly as after a real scan and the shift
+keeps the list sorted; (iii) the k block minima are ordinals 1 .. k, one
+lane each (lanes 0 .. k-1 of warp 0), so every round has exactly one
+winning lane whose warp executes the shift, as in the real kernel, where
+the winners are spread over the warps but there is still one shifting warp
+per round; (iv) the index half is a hashed column inside the row, so the
+winner's gather stays in range (an all-sentinel list would gather at
+column 0xFFFFFFFF, out of the tile) and lands on a spread-out column the
+way a real winner's does, not on a leading column that the distance
+kernel's last writes may have left in L2.
+
+Why skiprank cannot let the compiler drop the scan. The scan's loads have
+no side effect of their own, so an arm that discards the lists would
+measure an empty kernel. In the epilogue every lane XORs its whole list
+and its threshold into one digest, the block folds the 256 digests (the
+rank phase's own butterfly shape plus one barrier on fixed-lane-width
+columns, the shared tree elsewhere), and thread 0 uses the block digest as
+a GATHER ADDRESS (`values[base + digest mod length]`) and stores the
+gathered cell and the column. A load address that depends on every lane's
+list keeps every insert live, and the fold is a collective every lane
+takes, so no lane's scan can be sunk under thread 0's branch. Cost of the
+epilogue: about one rank round (ten shuffles, one barrier, eight shared
+loads, one gather), independent of k, so `select_ms(skiprank)` overstates
+the scan by about one round and its k-slope is the scan's k-slope alone.
+
+The timing-only arms refuse the sabotage bit (a RAISE, not a fallback):
+there is no reach to prove on an arm whose output is wrong by design. The
+harness's only assertion on such an arm is that its output DIFFERS from
+the clean reference (equality would mean the arm's body did not run); the
+baseline samples in the same pairs must still equal the reference.
+
+### The harness
+
+`--timing-only-arms skiprank,skipscan,scanonly1` keeps those arms out of
+the correctness, oracle and reach sections entirely (they never appear in
+`correctness` or `reach`), and in the timing block pairs each one with the
+FIRST `--arms` arm under the existing protocol (one warmup per arm,
+`--pairs` pairs in order (A, B), then `--pairs` in order (B, A), every
+sample kept, medians and minima per arm and per order). The rows go to a
+separate `timing_only` table in the JSON, each carrying `"note": "output
+invalid; phase cost only"` and `output_valid: {A: true, B: false}`, and
+the summary prints them under a `timing_only: OUTPUT INVALID; PHASE COST
+ONLY` header. Nothing in that table can feed a promotion.
+
+Phase timers. The profile phase's `select_ms` comes from
+`-D MOJOLEARN_KNN_PHASE_TIMERS=1`, a BUILD define (not an environment
+switch): `_tiled_brute_force_knn_impl` then synchronizes after every launch
+class and prints one `KNN_PHASE_TIMERS distance_ms ... select_ms ...
+merge_ms ...` line per request to file descriptor 1 from inside the
+binding. So the harness cannot flip it per request; the shell script adds
+the define to the BINDING build under
+`MOJOLEARN_KNN_SELECTION_PHASE_TIMERS=1`, and the harness redirects fd 1
+into a scratch file around every request (outside the timed region),
+flushes C stdio, restores the descriptor and parses the line. Every timed
+sample then carries `distance_ms / select_ms / merge_ms`, every timing row
+(the arm pair and the timing-only rows) carries `phase_ms_median` per arm
+and per order, and the per-arm `select_ms` is READ, not inferred from
+request deltas. The price: the synchronizations serialize the queue, so on
+that build the request medians are slower than an untimed request, are
+labeled so in the JSON (`phase_timers.serialized`) and the summary, and
+are not comparable to the qualified numbers or admissible against the
+cached cuML rows (the cached-reference note says so on that build).
+`--phase-timers auto` (default) records the line when the build prints
+one; `require` fails otherwise; `off` never redirects.
+
+### RUN OWED (orchestrator; nothing ran)
+
+Step 0, on the Mac, numpy only, no native import, seconds (the checker's
+own smoke; the lane may not run tests): expect `PASSED`, a `timing_only`
+table with three rows per timed fixture and k, `phase_timers.available:
+true`, and `select_ms` medians in every row.
+
+```
+python3 tools/knn_selection_gate.py --selftest --quick --out /tmp/knn-sel-selftest \
+    --arms baseline,uniform --timing-only-arms skiprank,skipscan,scanonly1 --pairs 1 --deadline 120
+grep -A12 '^timing_only' /tmp/knn-sel-selftest/summary.txt
+```
+
+Step 4, the H100 leg. Commit this pass first (the leg ships `git archive`
+of the COMMITTED tree); the arm lists ride in the wrapper file because the
+local environment does not reach the pod. The first `--arms` arm is
+`uniform`, not `baseline`, on purpose: the timing-only arms are the uniform
+scan form, and `uniform` IS the shipped default since 541ca9e2 (`baseline`
+is the pre-C4 per-thread trip count, kept as the second arm so the pair
+timing re-measures C4 under the phase timers for free; step 1 found the
+two within noise). ARMS=baseline alone, as the task specified, is also
+admissible on that evidence.
+
+```
+cat > /tmp/knn_phase_extra.sh <<'SH'
+#!/bin/sh
+export MOJOLEARN_KNN_SELECTION_ARMS=uniform,baseline
+export MOJOLEARN_KNN_SELECTION_TIMING_ONLY_ARMS=skiprank,skipscan,scanonly1
+export MOJOLEARN_KNN_SELECTION_PHASE_TIMERS=1
+export MOJOLEARN_KNN_SELECTION_SKIP_PROFILE=1
+cd /root/mojolearn && PATH="$HOME/.pixi/bin:$PATH" pixi run mojo run \
+    -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_KNN_SELECT_TRIAL=1 \
+    -I . neighbors/checks/knn_selector_arms_check.mojo \
+    > /root/gemm_leg_out/knn-selector-arms-check.log 2>&1
+echo "arms_check_exit=$?" >> /root/gemm_leg_out/leg.txt
+exec sh /root/mojolearn/tools/knn_selection_gate.sh
+SH
+MOJOLEARN_RUNPOD_KEY_FILE=$HOME/.mojolearn_runpod_key \
+MOJOLEARN_GEMM_LEG_EXTRA=/tmp/knn_phase_extra.sh \
+MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/$(date +%Y-%m-%d_%H%M%S)-nvidia-h100-knn-selection-phases \
+sh tools/gemm_remote_leg.sh nvidia --rent --minutes 60 \
+    --gpu "NVIDIA H100 80GB HBM3" \
+    --local-card bench/results/e1/2026-08-28_131651-runpod-nvidia/lanes/gemm.identical.card
+cat <leg>/remote/knn-selector-arms-check.log | tail -3
+cat <leg>/remote/knn-selection/summary.txt
+cat <leg>/remote/knn-selection/status.tsv
+```
+
+The arms check line is a regression fence only (the timing-only arms are
+not in it; it proves the FULL instantiations still pass with the seventh
+parameter in place). Budget: about 300 requests at 50 ms serialized, well
+inside the 300 s deadline.
+
+### How to read the result
+
+Everything below is read from the `timing_only` rows' `phase_ms_median`
+(`select_ms`, per arm, pooled and per order; the two orders must agree
+within the pair spread or the row is noise) at k10 and k15 on `large` and
+`dyadic`. `select_ms(uniform)` is the reference (about 10.3 ms at k10 and
+14.6 ms at k15 per the profile; 56 launches):
+
+1. Rank phase share: `select_ms(uniform) - select_ms(skiprank)`, plus about
+   one rank round's worth (the epilogue) that skiprank still pays.
+2. Scan share: `select_ms(uniform) - select_ms(skipscan)`. Note skipscan's
+   warps reach the first barrier together, whereas after a real scan they
+   arrive staggered by their insert counts, so skipscan may UNDERSTATE the
+   rank phase by that one-time skew; the per-round cost (the slope) is
+   unaffected.
+3. Additivity check: `select_ms(skiprank) + select_ms(skipscan)` against
+   `select_ms(uniform)` plus 56 launch overheads (a few tenths of a
+   millisecond). If the sum overshoots by more than that, the two phases
+   overlap across blocks when both are present (a block in its rank phase
+   hides behind another block's scan) or the missing phase changed the
+   codegen of the present one (registers, occupancy); then the ABSOLUTE
+   shares are not additive and only the k-slopes below are the verdict.
+4. THE VERDICT, the k-slope of each phase per launch per unit of k:
+   `(select_ms(arm, k15) - select_ms(arm, k10)) / 5 / 56` for `skiprank`
+   (the scan's slope) and for `skipscan` (the rank phase's slope). Their
+   sum should land near the profile's 15.4 us. Whichever phase owns the
+   slope owns the k-proportional cost: if `skipscan` carries it, the k
+   barrier rounds are the candidate (C5, a single-pass extraction of k
+   minima with the same comparison order); if `skiprank` carries it, the
+   cost is in the scan but not in the insertion events the bound arms
+   removed, and the register list's depth is the next suspect.
+5. List depth inside the scan: `select_ms(skiprank) - select_ms(scanonly1)`
+   at k10 and at k15 is the price of maintaining a K-deep list versus a
+   running minimum over the same loads and keys; its own k-slope
+   (`scanonly1` is k-independent, so this is skiprank's slope again) says
+   how much of the scan's slope is the list rather than the loads.
+
+What this pass does NOT claim: no output of a timing-only arm is a result;
+no request median from a phase-timer build is comparable to the qualified
+26.66 / 31.13 ms or to the cached cuML rows; no default moves on this
+evidence. The next candidate is chosen from the slopes, then gated as a
+normal arm (bit-equal, reach, request-level price) before anything flips.
+
+## Step 4 result: the phase split, measured (H100, 2026-09-11 04:40Z, `bench/results/e1g/2026-09-11_003148-nvidia/remote/knn-selection`)
+
+Phase timers read from a phase-timer build (request medians in that run are
+serialized and not comparable to anything else); `select_ms` per arm,
+400k/4k/d32, 56 launches, paired medians:
+
+| arm (what runs) | k10 select ms | k15 select ms |
+|---|---:|---:|
+| uniform (shipped: scan + rank) | 10.27 | 14.69 |
+| skiprank (scan + digest epilogue) | 9.87 | 13.95 |
+| skipscan (synthetic fill + rank) | 1.45 | 1.93 |
+| scanonly1 (scan with CAP 1, K 1: a running minimum) | 3.22 | 3.22 |
+
+So: rank phase 0.4 ms (k10) to 0.75 ms (k15); scan 8.8 to 12.8 ms; of the
+scan, 3.2 ms is k-independent (tile reads and the per-element compare) and
+5.6 to 9.6 ms is the per-lane K-deep list: 0.80 ms per unit of k of the
+0.88 total slope. The rank phase and the merge are not the target. The
+K-deep list is, and steps 2 and 3 already showed that REJECTING MORE does
+not shrink it (both bounds halved the insertion events and lost), which
+means the K-chain's cost is paid whether or not a lane inserts: the
+predicated chain executes for the whole warp on every element step. The
+lever is therefore execution frequency of the chain, not admission:
+defer insertion (per-lane append of admitted keys into a short queue,
+K-independent per element; drain the queue through the K-chain only when a
+warp-uniform test says some queue is non-empty or full, so the chain runs
+once per several elements instead of once per element). The final list is
+the k smallest keys admitted, which is the k smallest overall regardless of
+insertion order, and keys are unique, so the rank phase sees the same
+list: bit-identical by construction. Per lane about 32 insertions happen in
+256 elements at k10, so the chain should run an order of magnitude less
+often. Expected: scan 8.8 to about 4 ms at k10 and 12.8 to about 5.5 ms at
+k15; a request from 31 to about 26 ms and 36 to about 29 ms. Measured next
+as arm `deferred` under the same define and the same gate.
+
+## Implementation pass, deferred insertion (DEVIATION 2517; source only, 2026-09-11)
+
+Nothing here was built or run on the Mac (py_compile of the gate and a
+pure-Python event model only; no test, no native, no mojo). The step 4
+verdict is the premise: of the scan's 8.8 (k10) to 12.8 ms (k15), 3.2 ms is
+k-independent and 5.6 to 9.6 ms is the per-lane K-deep list, 0.80 ms per
+unit of k, and both bound arms halved the lanes' insertion EVENTS and lost,
+so the K-chain is paid on every element step whether or not a lane inserts.
+The lever is how often the chain EXECUTES, not how often a lane admits.
+Files touched by this pass (uncommitted, working tree):
+
+- `neighbors/checks/select_smallk_identical_candidate.mojo`: eighth kernel
+  parameter `DEFERRED` on `smallk_bucket_kernel` (after `PHASE`, default
+  False, so every seven-parameter instantiation is unchanged), the helpers
+  `_smallk_append` and `_smallk_drain`, the comptime knob `SMALLK_DEFER_Q =
+  4`, the ballot width `SMALLK_MASK_DT`, the default `SMALLK_DEFERRED_DEFAULT
+  = False`, the arm `SMALLK_ARM_DEFERRED = 7` in `smallk_select_arm_from_env`
+  and `_smallk_launch_bucket`, `DEFERRED` on `_smallk_enqueue`, the hook
+  comment and the module docstring. `vote` imported beside `shuffle_xor`.
+- `neighbors/checks/knn_selector_arms_check.mojo`: the fifth arm in the
+  equality and reach properties, same 18 cases; the REACH_PASS line gains a
+  fifth count.
+- `tools/knn_selection_gate.py`: docstring for the arm name and its
+  sabotage; the numpy selftest accepts `deferred`. The harness selects arms
+  by name from `--arms`, which the shell script fills from
+  `MOJOLEARN_KNN_SELECTION_ARMS`, so `uniform,deferred` needs no code.
+- this section.
+
+The shipped default path is untouched: without the trial define the only
+instantiations are `[CAP, K, True, False, False, False, FULL, False]`, in
+which the queue and its count are constants, every `comptime if DEFERRED`
+folds away, the per-element test is `pending < threshold` followed by
+`_smallk_insert` as before, and the tail loop, the epilogue and the rank
+phase are textually the uniform arm's. `SMALLK_DEFERRED_DEFAULT` excludes
+both bound defaults by `comptime assert`.
+
+### Mechanism
+
+Per lane, an element step under `deferred` does: the composite key, one
+compare against the lane's threshold, and, when admitted, an append into a
+`SMALLK_DEFER_Q = 4` slot queue held in registers (newest at slot 0: three
+comptime-indexed 64-bit moves and a store, plus a counter increment). No
+K-chain per element. The queue drains at WARP-UNIFORM points only:
+
+- at the end of every unrolled batch (block-uniform under C4), and
+- immediately after any element step at which `vote[SMALLK_MASK_DT](count
+  == Q)` over the warp is nonzero (some lane's queue is full). The ballot
+  width follows the column's lane count, the ball-cover kernel's rule (a
+  64-lane wavefront needs a 64-bit ballot). Every lane reaches the vote:
+  the append is closed before it and the batch trip count has no `tid` in
+  it, so it is convergent.
+
+A drain runs `_smallk_insert` (unchanged) once per queued key, predicated
+per slot on the lane's count, then clears the count; the warp therefore
+executes the chain max(count over its 32 lanes) times per drain instead of
+once per element step. The drain has no collective of its own (the chain is
+per lane); warp uniformity is a scheduling choice that makes the lanes'
+chains coincide. After the batch loop one more drain runs (a guard: the
+queue is already empty, every batch drained at its end), then the tail loop
+(the remainder under 2,048 columns, a per-lane trip count where a vote
+would not be convergent) inserts eagerly through the same chain from that
+empty queue; it holds at most eight elements per lane, nothing to defer.
+The rank phase starts with every lane's list exactly as the eager arm
+leaves it.
+
+Why Q = 4: half an unrolled batch. Past the fourth batch at k in 9..16 a
+lane admits under 2.4 elements per batch in expectation, so four slots
+rarely fill and the cadence is the batch end; four UInt64 are eight
+32-bit registers on top of the list's 32 at CAP = 16, where eight slots
+would be sixteen for a six percent smaller chain count (model below).
+Register pressure is the risk this arm carries that the bound arms did
+not: nine extra live registers per thread (the queue and its count) at 256
+threads per block; if the gate shows the arm register-bound (a resident
+block per SM lost at a 64-register boundary shows as a scan that does not
+speed up although the chain count fell), `SMALLK_DEFER_Q = 2` is the first
+knob (0.66x / 0.74x in the model) and 8 the second.
+
+### Why the bits are unchanged
+
+1. Let S be the set of keys a lane scans; keys are unique (each carries its
+   column). The eager path keeps L_e, the k smallest of the prefix seen so
+   far, and admits p iff p < threshold_e, the k-th smallest of that prefix
+   (sentinel while fewer than k). The deferred path keeps L_d, the k
+   smallest of the set I of keys DRAINED so far, and admits p iff p <
+   threshold_d, the k-th smallest of I.
+2. I is a subset of the prefix, so threshold_d >= threshold_e at every
+   step: the stale threshold admits a SUPERSET of what the eager path
+   admits, never a subset.
+3. Take any x among the k smallest of S. When x is scanned, at most k - 1
+   keys of S are below x, hence at most k - 1 keys of I, and x is not in I,
+   so the k-th smallest of I is above x (or the sentinel): x is admitted,
+   queued, and inserted at the next drain. It never leaves L_d afterwards,
+   because a key leaves only when k smaller keys of the same lane have
+   been inserted and only k - 1 exist.
+4. Every extra key the stale threshold admitted goes through the same
+   `_smallk_insert`, which keeps "the list is the k smallest of everything
+   inserted so far" under ANY insertion order and leaves the list unchanged
+   for a key at or above its current k-th (the carry runs off the end). So
+   after the last drain L_d holds every one of the k smallest of S, exactly
+   min(k, |S|) keys, and only keys of S: L_d is the k smallest of S sorted,
+   which is L_e. Equality of sets of unique keys is equality of the sorted
+   lists slot for slot.
+5. The rank phase reads only those lists (never the threshold), pops the
+   union's exact minima with the same UInt64 compare, decides ties by the
+   same index half, and gathers the winner's value from the same tile
+   cell. Corners: the queue is empty before the tail loop and the rank
+   phase (batch-end drains plus the guard drain); the tail inserts eagerly;
+   a partition too short for one batch (the carved k-wide tail) never
+   enters the batch loop and is the uniform arm by construction.
+
+### Sabotage (reach)
+
+At every drain the newest queued key (slot 0) is skipped on every lane
+whose count is nonzero, inside `_smallk_drain` only. Late in the scan a
+lane's queue at the batch-end drain usually holds one key, so a true
+neighbor admitted there is the newest and is dropped with high
+probability; a row has k of them, so on the hashed fixtures thousands of
+cells move per request. On the arms check it is certain: the planted +0.0
+at column length - 1 is the last element of the last batch, hence the
+newest in lane 255's queue at that batch's drain, and it is a top-k key of
+rows 0 and 1 (the keys below it are the -0.0, the other zeros and the
+subnormal). The uniform arm's index flip is excluded from the deferred
+instantiation so a flip proves the drain path, not the loop.
+
+### Expected cost (model; the gate's numbers replace it)
+
+Event model, pure Python (iid keys, 256 elements per lane, 32 lanes, 400
+trials, the brief's section 2 model with the queue simulated): chain
+executions per warp per 65,536-column launch, eager 231 (k10) and 246 (k15)
+against deferred with Q = 4 drained every batch and on any full queue 116
+(0.50x) and 138 (0.56x). Q = 2: 0.66x / 0.74x. Q = 8: 0.47x / 0.52x. Q = 8
+drained every second batch: 0.42x / 0.47x. The floor is the first batches
+(every lane admits every element, the queues fill every Q elements, the
+cost equals today's) plus the warp MAXIMUM of a small binomial per batch
+afterwards (two to three chains per batch of eight), not Q. Step 4's "an
+order of magnitude less often" counted one lane's 32 admissions in 256;
+the warp pays the max over its lanes, so the honest model is 2x, not 8x.
+
+In the phase split's terms: the K-deep list is 5.6 ms at k10 and 9.6 ms at
+k15 (0.80 ms per unit of k) and scales with the chain frequency, so 0.50 x
+5.6 = 2.8 ms and 0.56 x 9.6 = 5.4 ms, a saving of 2.8 / 4.2 ms. Against it
+the new k-independent work per lane: about 232 / 246 warp-level append
+events at about 9 instructions, 256 votes at about 3, and 41 / 45 drains at
+about 6 for the slot predicates, about 3.3k instructions, which at the
+chain's measured rate (5.6 ms for 231 x 72 instructions per lane at k10,
+about 0.34 ms per thousand) is about +1.2 ms unless it hides under the load
+latency the k-independent 3.2 ms already pays.
+
+Expected `select_ms` (56 launches, phase-timer build): k10 10.27 -> about
+8.7 ms, k15 14.69 -> about 11.7 ms. Brackets: BEST CASE the append and vote
+hide under the loads, 7.5 / 10.5 ms; IF-CONVERTED DRAIN (the compiler runs
+all Q chains per drain regardless of the counts: 164 / 180 executions,
+0.71x / 0.73x), 9.9 / 13.3 ms; WORST CASE as C1 and C2 showed, the extra
+live state changes the code the compiler emits and nothing is saved, +1.2
+ms. On an unserialized request that is about 31 -> 29.4 ms (k10) and 36 ->
+33 ms (k15) at the model's center, which is what the promotion run reads.
+
+### RUN OWED (orchestrator; nothing ran)
+
+Commit this pass first (the leg ships `git archive` of the COMMITTED tree).
+The arms line is the regression fence for all five arms; the gate pairs
+`uniform` (the shipped default) with `deferred`, no timing-only arms, phase
+timers ON so `select_ms` per arm is READ from `phase_ms_median` rather than
+inferred from request deltas, profile skipped (measured).
+
+```
+cat > /tmp/knn_deferred_extra.sh <<'SH'
+#!/bin/sh
+export MOJOLEARN_KNN_SELECTION_ARMS=uniform,deferred
+export MOJOLEARN_KNN_SELECTION_PHASE_TIMERS=1
+export MOJOLEARN_KNN_SELECTION_SKIP_PROFILE=1
+cd /root/mojolearn && PATH="$HOME/.pixi/bin:$PATH" pixi run mojo run \
+    -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_KNN_SELECT_TRIAL=1 \
+    -I . neighbors/checks/knn_selector_arms_check.mojo \
+    > /root/gemm_leg_out/knn-selector-arms-check.log 2>&1
+echo "arms_check_exit=$?" >> /root/gemm_leg_out/leg.txt
+exec sh /root/mojolearn/tools/knn_selection_gate.sh
+SH
+MOJOLEARN_RUNPOD_KEY_FILE=$HOME/.mojolearn_runpod_key \
+MOJOLEARN_GEMM_LEG_EXTRA=/tmp/knn_deferred_extra.sh \
+MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/$(date +%Y-%m-%d_%H%M%S)-nvidia-h100-knn-selection-deferred \
+sh tools/gemm_remote_leg.sh nvidia --rent --minutes 60 \
+    --gpu "NVIDIA H100 80GB HBM3" \
+    --local-card bench/results/e1/2026-08-28_131651-runpod-nvidia/lanes/gemm.identical.card
+cat <leg>/remote/knn-selector-arms-check.log | tail -3
+cat <leg>/remote/knn-selection/summary.txt
+cat <leg>/remote/knn-selection/status.tsv
+```
+
+Verdict lines: `KNN SELECTOR ARMS PASS` with `SELECTOR_ARMS_REACH_PASS 65536
+<k> <base> <uni> <hb> <wb> <df>` all five counts nonzero; in the gate JSON
+every fixture (large, dyadic, ties, divergent_tail) at k10 and k15 shows
+`deferred` and `default` equal to `uniform`, row order, planted and oracle
+green, reach flipped > 0 on `uniform`, `deferred` and `default` with clean
+bits restored; then the `timing` block's `phase_ms_median.select_ms` per
+arm, pooled and per order (the two orders must agree within the pair
+spread or the row is noise), read against the expected 8.7 / 11.7 ms and
+the brackets above. Request medians on that build are serialized and are
+NOT a price.
+
+### Promotion rule
+
+Two runs, in this order. The phase-timer run above is the mechanism
+verdict only: it says whether the chain count fell (`select_ms` down at
+both k) and by how much. It promotes nothing. If it is green and
+`select_ms(deferred) < select_ms(uniform)` at both k, the PROMOTION RUN is
+the same wrapper WITHOUT `MOJOLEARN_KNN_SELECTION_PHASE_TIMERS` (an
+unserialized build, request-level timing at the `NearestNeighbors.kneighbors`
+boundary). `SMALLK_DEFERRED_DEFAULT` flips to True (and moves into the
+kernel-matrix SCHEDULING row in the same session) ONLY IF, on that second
+run: every correctness check is green on every fixture and k; reach flipped
+on `uniform`, `deferred` and `default` with clean bits restored; AND all
+EIGHT request-level timing cells (both orders' medians, `dyadic` and `large`,
+k10 and k15) favor `deferred`. The phase-timer split, the event model, the
+arms check's tile and any per-launch number are not promotion evidence. A
+split verdict leaves the default off, the arm stays behind the define as a
+measured result, and the JSON path is recorded here beside C1 and C2. After
+a flip: rebuild without the trial define, rerun the gate with `--arms
+uniform` plus default to show the default equals the explicit arm, and
+record the `dyadic` medians against the cached rows in
+`bench/OPPONENT_REFERENCE.md` as cached-reference ratios (never as a paired
+opponent measurement; cuML is not rerun). Apple (the Mac, orchestrator
+only, one light thing, after the H100 verdict: `MOJOLEARN_NUMERIC_MODE=identical
+MOJOLEARN_BUILD_EXTRA_DEFINES="-D MOJOLEARN_KNN_SELECT_TRIAL=1" sh
+bindings/build.sh`, then `PYTHONPATH=python MOJOLEARN_NUMERIC_MODE=identical
+python3 tools/knn_selection_gate.py --out /tmp/knn-sel-apple --arms
+uniform,deferred --pairs 2 --deadline 300`) and AMD (a DigitalOcean MI325X
+droplet; 64-lane wavefront, 64-bit ballot by `SMALLK_MASK_DT`) are RUN OWED
+before any column other than NVIDIA takes the row.
+
+## Step 5 result: deferred insertion is NEGATIVE (H100, 2026-09-11 04:57Z, `bench/results/e1g/2026-09-11_005250-nvidia/remote/knn-selection`)
+
+Correctness green on every fixture (five arms bit-equal, reach for
+deferred 75,060 / 114,164 / 75,012 cells). select_ms per arm from the
+phase-timer build: k10 uniform 10.31, deferred 10.00 (0.97x); k15 uniform
+14.73, deferred 16.26 (1.10x). Not promotable; default stays off.
+
+Three mechanisms that reduce how often or how much the K-chain runs
+(headbound, warpbound, deferred) all failed to move the 0.80 ms per unit
+of k, and one of them ran the chain about half as often. The K-dependent
+cost is therefore not the chain's execution count. What scales with K in
+the kernel regardless of admissions is the register list itself: CAP=16
+UInt64 keys per lane indexed by a runtime slot in the insert and drain
+paths, which the compiler can only keep in registers if every index is a
+compile-time constant after unrolling; otherwise the list lives in local
+memory and every touch is a memory access, and register count itself
+lowers occupancy. That is a property of the compiled kernel, so the next
+step is to read it off the PTX/SASS: registers per thread, local memory
+bytes, spill stores and loads, and whether the list accesses compile to
+ld.local/st.local, for K=1, 10 and 15. If the list is in local memory the
+fix is a fully unrolled compare-and-shift with constant indices (or a
+sorting network) so the list stays in registers; if occupancy is the
+limiter the fix is a smaller CAP for small k.
+
+## Implementation pass, kernel resource stats (DEVIATION 2519; source only, 2026-09-11)
+
+Step 5 left one question the gate cannot answer: is the CAP=16 UInt64
+list in registers, and if so does it cost occupancy? Both are properties
+of the compiled kernel, read off the compiled kernel. Nothing in this pass
+touches the kernel or the gate; it adds a leg extra body and its parser:
+
+- `tools/knn_selector_kernel_stats.sh` (the leg extra body; runs on the
+  pod under `MOJOLEARN_GEMM_LEG_EXTRA`, writes
+  `/root/gemm_leg_out/knn-kernel-stats/`)
+- `tools/knn_selector_kernel_stats.py` (the parser; `--selftest` on
+  embedded ptxas / cuobjdump / PTX / SASS / driver-log samples passes on
+  the Mac; `--out <dir>` writes `stats.tsv`; `--split-driver-log` and
+  `--extract-ptx` are the body's helpers)
+
+A note on the premise. Step 5 suspected "a runtime slot index forces the
+list into local memory". The source does not have one: every index into
+`local_keys` (a `SIMD[DType.uint64, CAP]`) is a `comptime for` constant,
+guarded by a runtime `slot < k` predicate on the generic bucket and folded
+on the K-specialized ones; `threshold` is its own register. So the answer
+is not in the source, which is exactly why it is measured: LLVM may still
+demote a 16-wide 64-bit vector that is rewritten under predication in a
+deep loop, and the register count of an in-register list is itself the
+occupancy question.
+
+### Method (documented API first, repo-proven route as cross-check)
+
+1. Runtime attributes, the authoritative numbers. A Mojo driver, generated
+   by the body on the pod (it must track the kernel's parameter list and
+   the lane may not edit the kernel; the generated text is kept beside
+   the results as `driver_files.mojo` / `driver_stdout.mojo`), calls for
+   each instantiation
+   `DeviceContext.compile_function[kernel, dump_asm=..., _dump_sass=..., _ptxas_info_verbose=True]()`
+   and reads `DeviceFunction.get_attribute(Attribute.NUM_REGS)`,
+   `Attribute.LOCAL_SIZE_BYTES`, `Attribute.SHARED_SIZE_BYTES`,
+   `Attribute.CONST_SIZE_BYTES`, `Attribute.MAX_THREADS_PER_BLOCK` and
+   `DeviceFunction.occupancy_max_active_blocks_per_multiprocessor(256, 0)`.
+   These are the driver's own answers about the cubin it will launch
+   (`Attribute` mirrors `CUfunction_attribute`: NUM_REGS = "the number of
+   registers used by each thread of this function", LOCAL_SIZE_BYTES =
+   "the size in bytes of local memory used by each thread"). Citation:
+   max.modular.com/api/mojo/max/gpu/host/device_context/DeviceContext
+   (`compile_function`, parameters `dump_asm`, `dump_llvm`, `_dump_sass`,
+   `_ptxas_info_verbose`), .../device_context/DeviceFunction
+   (`get_attribute`, `occupancy_max_active_blocks_per_multiprocessor`,
+   `dump_rep`), .../func_attribute/Attribute. The docs say `_dump_sass`
+   and `_ptxas_info_verbose` are NVIDIA-only and need the CUDA toolkit on
+   the box, so the body requests them only when it finds `ptxas` and
+   `cuobjdump`. `dump_asm` takes `True` (stdout), a `Path`, a static
+   string, or a function returning a `Path`; the body builds the
+   function-returning-Path variant first (dumps land in `dumps/<label>.ptx`
+   and `.sass`), and if that variant does not compile it builds the `True`
+   variant and the parser cuts each instantiation's PTX and SASS out of
+   `driver.log`. Nothing is launched; the kernel body is the shipped one
+   (the trial define only gates host dispatch and the timing-only PHASE
+   assert, so it is needed for the CAP=1 scanonly1 instantiation and
+   changes nothing else).
+2. Spills and executed local traffic. `ptxas --verbose --gpu-name <the
+   PTX's .target>` on each dumped PTX reports "N bytes stack frame, N
+   bytes spill stores, N bytes spill loads" and "Used N registers"; then
+   `cuobjdump --dump-resource-usage` (REG / STACK / SHARED / LOCAL) and
+   `cuobjdump --dump-sass` (LDL / STL counts) on the cubin. This is the
+   GEMM lane's H100 procedure (`tools/gemm_cuda_resources.py`,
+   docs/lanes/HANDOFF_speed_gemm_2026-09-10.md "H100 resource
+   inspection": 255 registers, 4144-byte stack, 44-byte spills, one block
+   per SM), NVIDIA's binary-utilities tools. An offline `ptxas` is that
+   toolkit's answer, not necessarily the runtime JIT's; where they
+   disagree the runtime attribute wins and stats.tsv carries both. On a
+   pod without the toolkit the spill columns and SASS counts are OWED
+   and the runtime attributes plus the PTX-level `ld.local` / `st.local`
+   counts stand.
+3. The repo-proven sidecar route as a cross-check and as the fallback if
+   the driver does not build: `mojo build --emit asm` of
+   `bench/knn_reference_price_main.mojo` retains one
+   `<out>_<module>_<hash>.ptx` per GPU kernel (the form behind
+   bench/results/gemm_swizzle_2026-09-10/h100-current-128.ptx.gz). Entry
+   names carry module and hash, not parameters, so instantiations are
+   identified by elimination: the default build has [16,10], [16,15],
+   [16,0], [32,0], [64,0]; the `-D MOJOLEARN_KNN_IDENTICAL_GENERIC_K=1`
+   build has only the three K=0 buckets; the two sidecars present only in
+   the default build are the k10 / k15 specializations (`emit/manifest.tsv`).
+4. The trial binding is built the way the gate builds it
+   (`bindings/build.sh` with `-D MOJOLEARN_KNN_SELECT_TRIAL=1` through
+   `MOJOLEARN_BUILD_EXTRA_DEFINES`), hashed, and scanned for NVPTX text
+   blobs (an attempt; whether a Mojo shared library embeds PTX as text is
+   not documented, and `binding_ptx_blobs=` in `stats.txt` records the
+   answer either way).
+
+Instantiations measured (rows of `stats.tsv`): `cap16_k0_generic` (the
+bucket k=1 and every other k <= 16 hits without the specialization),
+`cap16_k10`, `cap16_k15` (the shipped specializations), `cap1_k1_scanonly1`
+(the CAP=1 / K=1 SKIPRANK form from step 4), `cap32_k0_generic`,
+`cap64_k0_generic` (the k <= 32 and k <= 64 buckets, for the CAP curve),
+plus one row per emit-asm sidecar (`emit_default_*`, `emit_generic_*`).
+Columns: label, cap, k, entry, registers, local_bytes, spill_stores,
+spill_loads, ld_local, st_local, sass_ldl, sass_stl, shared_bytes,
+blocks_per_sm_by_regs, blocks_per_sm_by_shared, blocks_per_sm_max,
+occupancy_pct, runtime_blocks_per_sm, runtime_occupancy_pct, sources.
+Occupancy is computed as the brief asked (65,536 registers per SM, 2,048
+threads per SM, 256 threads per block; registers rounded up to the 8 per
+thread allocation unit, 32 blocks per SM and 228 KB shared per SM as the
+other limits) and the runtime's own `occupancy_max_active_blocks_per_multiprocessor`
+answer sits beside it; when they disagree the runtime's is the number.
+Raw resource text is kept (`dumps/<label>.ptxas.log`, `.resources.log`),
+dumps over 256 KB are gzipped, binaries and cubins are deleted, and the
+directory is fenced at 2 MB. Smoke: the body ran on the Mac against stub
+`pixi` / `nvidia-smi` / `ptxas` / `cuobjdump` / `bindings/build.sh` (no
+Mojo, no build, no GPU) end to end, both driver variants, the stdout
+split, the emit manifest and the size fence; the selftest covers the
+parsers and the occupancy arithmetic at the thresholds named below.
+
+### RUN OWED (orchestrator; nothing ran on a GPU)
+
+Commit this pass first (the leg ships `git archive` of the COMMITTED
+tree). One H100 leg, 60 minutes, the body as the leg extra; the leg's own
+device check and card run first, then the binding build (about 5 min), the
+driver build and run (two compiles at most), two `--emit asm` builds and
+the assembly step. Nothing in it is a timing number.
+
+```
+MOJOLEARN_RUNPOD_KEY_FILE=$HOME/.mojolearn_runpod_key \
+MOJOLEARN_GEMM_LEG_EXTRA=tools/knn_selector_kernel_stats.sh \
+MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/$(date +%Y-%m-%d_%H%M%S)-nvidia-h100-knn-kernel-stats \
+sh tools/gemm_remote_leg.sh nvidia --rent --minutes 60 \
+    --gpu "NVIDIA H100 80GB HBM3" \
+    --local-card bench/results/e1/2026-08-28_131651-runpod-nvidia/lanes/gemm.identical.card
+cat <leg>/remote/knn-kernel-stats/stats.txt
+cat <leg>/remote/knn-kernel-stats/stats.tsv
+cat <leg>/remote/knn-kernel-stats/status.tsv
+cat <leg>/remote/knn-kernel-stats/driver_lines.txt
+cat <leg>/remote/knn-kernel-stats/emit/manifest.tsv
+```
+
+The GPU is named because the numbers are per architecture (sm_90a; the
+PTX `.target` is read back and recorded in `tools.txt` / the ptxas logs)
+and the step 4 and 5 costs they explain were measured on the H100. Green
+is: `status.tsv` shows `driver 0` (or, failing that, both `emit-asm-*`
+rows 0 with a nonempty `emit/manifest.tsv`), `stats.tsv` has the three
+rows `cap16_k0_generic`, `cap16_k10`, `cap16_k15` with `sources`
+containing `runtime` (or `ptxas`), and `cuda_toolkit=1` in `stats.txt`
+(without it the spill columns are blank and OWED, not zero).
+
+### How to read the result
+
+For each of `cap16_k10`, `cap16_k15` and `cap16_k0_generic`:
+
+- `local_bytes > 0`, or `spill_stores`/`spill_loads > 0`, or `ld_local` /
+  `st_local` (PTX) or `sass_ldl` / `sass_stl` (SASS) nonzero: the list
+  (or part of the scan state) is in local memory and every K-chain step
+  is a memory access, which is a K-proportional cost paid whether or not
+  the lane inserts and explains why halving the insertion events did not
+  move it. The fix is a list whose every touch the compiler keeps in
+  registers: the constant-index compare-and-shift written so the
+  predicated stores are selects on scalars rather than element writes
+  into one wide vector (CAP scalars, or a sorting network for the K=10 /
+  K=15 specializations), and no wide `SIMD` value live across the batch
+  loop. `cap1_k1_scanonly1` is the control: a one-key list must show
+  zero local traffic; if it does not, the local memory belongs to the
+  scan state rather than the list, and that is a different fix (the
+  `batch[8]` unroll or the composite-key temporaries).
+- `local_bytes == 0` and no local traffic, but `registers > 128`: the
+  list is in registers and its footprint holds the SM at one 256-thread
+  block (`blocks_per_sm_by_regs = 1`, 12.5% occupancy; with the 8 per
+  thread allocation unit, 81 to 128 registers gives 2 blocks at 25%, 65
+  to 80 gives 3, 33 to 64 gives 4 to 6, 32 or fewer gives the full 8 at
+  100%). The K-slope is then the
+  latency the missing warps would have hidden, and the fix is a smaller
+  CAP for small k (CAP 16 costs 32 registers for the list alone on
+  every k <= 16; a CAP=8 bucket for k <= 8 and the K=10 / K=15
+  specializations at CAP=K would cut that), read against the CAP curve
+  in the `cap32` / `cap64` rows. `runtime_blocks_per_sm` is the driver's
+  answer to the same question and wins.
+- neither (no local traffic, registers at or below 64, two or more
+  blocks per SM): the cost is instruction count, sixteen predicated
+  compare-and-shift steps per element on every lane, and the fix is a
+  cheaper chain: a shorter one (CAP=K on the specializations, K-1
+  compares instead of CAP), a compare-and-swap whose per-step cost is
+  one `setp` plus two `selp` rather than a compare, a copy and a store,
+  or the bitonic per-warp merge that C5 deferred.
+
+The generic bucket at K=0 is expected to be the worst of the three (its
+`slot < k` guards are runtime predicates on a 16-deep chain); if the K=10
+and K=15 rows differ from it only in instruction count and not in local
+traffic or registers, that difference is the whole specialization win of
+2026-09-09 (20.3 to 9.1 ms) and the same mechanism bounds what CAP=K can
+still buy.
+
+### What the docs did not settle
+
+- Whether `_ptxas_info_verbose=True` prints the `ptxas -v` summary or
+  changes what `dump_asm` writes: the doc says it "changes dump_asm to
+  output verbose PTX assembly". The body captures stdout either way and
+  runs its own `ptxas --verbose` on the dumped PTX, so the spill counts
+  do not depend on it.
+- Which of the four `dump_asm` Variant members is accepted at parameter
+  position for a file path (a `Path` value, a static string, or a
+  function returning a `Path`): the body builds the function form first
+  and the `True` (stdout) form second, and records which one compiled in
+  `stats.txt` (`driver_variant=`).
+- Whether `mojo build --emit asm` on the pod (native target) writes the
+  same `<out>_<module>_<hash>.ptx` sidecars the Mac cross-compile wrote
+  on 2026-09-10; the manifest records what appeared.
+- The MAX environment-variable reference (max.modular.com/environment-variables)
+  lists no variable that dumps PTX or SASS for Mojo-compiled kernels
+  (`MODULAR_DEBUG=ir-output-dir=` dumps MAX graph-compiler IR, not
+  `mojo build` kernels), and the `mojo build` CLI reference is not in the
+  MAX docs index reachable here, so `--emit asm` is cited from the repo's
+  own use rather than from a doc page.
+
+## Step 6 result: kernel resource stats (H100, 2026-09-11 05:18Z, `bench/results/e1g/2026-09-11_011544-nvidia/remote/knn-kernel-stats`)
+
+From DeviceFunction attributes plus the dumped PTX (ptxas spill counts were
+not emitted by the toolchain on the pod; ld.local/st.local counted in the
+PTX):
+
+| instantiation | registers | local bytes | ld.local / st.local | shared | blocks per SM (regs) | occupancy |
+|---|---:|---:|---:|---:|---:|---:|
+| cap16 generic k (k up to 16) | 99 | 0 | 0 / 0 | 2048 | 2 | 25% |
+| cap16 k10 (shipped) | 54 | 0 | 0 / 0 | 2048 | 4 | 50% |
+| cap16 k15 (shipped) | 56 | 0 | 0 / 0 | 2048 | 4 | 50% |
+| cap1 k1 (scanonly1 control) | 31 | 0 | 0 / 0 | 2048 | 8 | 100% |
+| cap32 generic | 107 | 0 | 0 / 0 | 2048 | 2 | 25% |
+| cap64 generic | 178 | 0 | 0 / 0 | 2048 | 1 | 12.5% |
+
+The list is register-resident with no spills, so the "local memory" reading
+is closed. The K cost is instruction count plus occupancy: the shipped
+kernels run four 256-thread blocks per SM where the k-independent control
+runs eight, on a scan whose 3.2 ms floor is tile reads. Two levers follow
+from the table, both bit-identical: (1) CAP = K for the specialized
+instantiations (a key outside a lane's k smallest has k same-lane keys
+below it and can never reach the block's top-k, so the sixteenth slot at
+k10 is dead weight: 32 registers of list become 20 or 30), which may lift
+the shipped kernels to 5 or 6 blocks per SM; (2) a cheaper compare-and-shift
+(setp plus selp swaps instead of the branchy insert) to cut the
+per-element instruction count. Lever 1 is one comptime argument and is
+measured first, as arm `capk`.
+
+## Implementation pass, CAP = K and the branch-free chain (DEVIATION 2521; source only, 2026-09-11)
+
+Nothing here was built or run on the Mac (py_compile of the gate and `sh -n`
+of the stats body only; no test, no native, no mojo). Step 6 is the premise:
+the CAP = 16 list is register-resident with no spills, the shipped k10 / k15
+kernels use 54 / 56 registers and run four 256-thread blocks per SM (50
+percent occupancy) where the CAP = 1 control runs eight at 31 registers, on
+a scan whose 3.2 ms floor is tile reads. Lever 1 is CAP = K; lever 2 is a
+cheaper carry chain. Both are behind the trial define, OFF by default. Files
+touched by this pass (uncommitted, working tree):
+
+- `neighbors/checks/select_smallk_identical_candidate.mojo`: ninth kernel
+  parameter `SELP` on `smallk_bucket_kernel` (after `DEFERRED`, default
+  False, so every eight-parameter instantiation is unchanged), the comptime
+  storage width `STORE` inside the kernel, `_smallk_insert` and
+  `_smallk_drain` taking the storage width as an inferred parameter `W` and
+  the depth as `CAP` (call sites now `[CAP=CAP]`, the two uniform-form sites
+  `[CAP=CAP, SELP=SELP]`), the SELP min/max chain inside `_smallk_insert`,
+  the arms `SMALLK_ARM_CAPK = 8` and `SMALLK_ARM_CAPK_SELP = 9` in
+  `smallk_select_arm_from_env` and `_smallk_launch_bucket`, the defaults
+  `SMALLK_CAPK_DEFAULT = False` and `SMALLK_SELP_DEFAULT = False` with
+  `DEFAULT_CAP` on the non-trial path, the comment block above
+  `_smallk_insert`, the hook comment and the module docstring.
+- `neighbors/checks/knn_selector_arms_check.mojo`: the sixth and seventh
+  arms in the equality and reach properties, same 18 cases; the REACH_PASS
+  line gains two counts.
+- `tools/knn_selection_gate.py`: docstring for the two arm names and their
+  sabotage; the numpy selftest accepts `capk` and `capk_selp`. The harness
+  selects arms by name from `--arms`, which the shell script fills from
+  `MOJOLEARN_KNN_SELECTION_ARMS`, so `uniform,capk,capk_selp` needs no code.
+- `tools/knn_selector_kernel_stats.sh`: four rows `capk_k10`, `capk_k15`,
+  `capk_selp_k10`, `capk_selp_k15` (instantiations `[10, 10, True, False,
+  False, False, SMALLK_PHASE_FULL, False, <selp>]` and the k15 twins), the
+  ninth parameter on the existing rows, `SMALLK_SELP_DEFAULT` imported.
+- this section.
+
+The shipped default path is untouched: without the trial define the only
+instantiations are `[CAP, K, True, False, False, False, FULL, False, False]`
+with CAP the bucket capacity (`DEFAULT_CAP` folds to CAP while
+`SMALLK_CAPK_DEFAULT` is False), `STORE` folds to CAP for 16 / 32 / 64, the
+helpers infer `W == CAP` and their bodies are textually the ones that
+shipped, and `comptime if SELP` folds to the branchy chain. The control for
+that claim is in the runs below: the `uniform` arm's `select_ms` on the
+phase-timer build must land on the step 4 / step 5 numbers (10.27 to 10.31
+ms at k10, 14.69 to 14.73 ms at k15); if it moves, this pass moved the
+shipped kernel and the diff is the suspect before any capk number is read.
+
+### Mechanism
+
+`capk` instantiates the K-specialized buckets with CAP = K:
+`smallk_bucket_kernel[10, 10, ...]` and `[15, 15, ...]` instead of `[16, 10]`
+and `[16, 15]`. The generic bucket keeps CAP = 16 (k is a runtime value
+there; the arm RAISES on it rather than run the CAP = 16 uniform kernel
+under its name, so a column without the specialization row, that is
+anything but NVIDIA unless `-D MOJOLEARN_KNN_IDENTICAL_SPECIALIZE_COMMON=1`,
+cannot pass the arm silently).
+
+One fact of the language decides the shape: Mojo's SIMD width must be a
+power of two (the repo pads every such queue, `warp_topk.mojo`'s TQP, and
+asserts it in `gemm_unpinned.mojo`), so `SIMD[DType.uint64, 10]` cannot be
+spelled. The kernel therefore separates the list DEPTH (CAP, what every
+loop over the list is bounded by) from its STORAGE (a comptime conditional
+chain `STORE` = the next power of two at or above CAP: 16 for 10 and 15,
+CAP itself for 1, 16, 32, 64). A CAP = K instantiation reads and writes
+exactly K lanes after the sentinel fill; lanes K .. 15 have no use at all,
+so they carry no phi, no copy and no register in the compiled kernel. That
+is what CAP = K means at the register level, and it is exactly the state
+the shipped CAP = 16 kernel does NOT have, for one reason found by reading
+the kernel for every place CAP exceeds K:
+
+| where CAP is used | CAP = 16, K = 10 today | CAP = K |
+|---|---|---|
+| `SIMD[DType.uint64, CAP]` (the list) | 16 lanes, 32 registers if all live | STORE lanes, K touched |
+| `_smallk_insert`: chain `range(CAP)` with `slot < k`, threshold at `slot == k - 1` | folds to slots 0 .. 9; slots 10 .. 15 never written | folds to all CAP slots; threshold at CAP - 1 |
+| the rank phase's pop: shift `range(CAP - 1)` reading `slot + 1`, sentinel at `CAP - 1` | READS slots 10 .. 15 (the sentinel) into 9 .. 14: the one place that touches them, which keeps them live across the whole scan as twelve registers of the constant | shifts K - 1 slots, sentinel at K - 1; slots 0 .. K - 1 end up with the same content (the shifted-in slot 10 was the sentinel anyway) |
+| skipscan fill `range(CAP)` with `slot < k`; warpbound published slot `range(CAP)`; C1 head `local_keys[0]`; skiprank digest `range(CAP)` | fine | fine; the capk arms exclude these arms anyway (asserts) |
+| `_smallk_drain` (deferred) | calls `_smallk_insert`; no spare-slot assumption | same; excluded by assert |
+| the sentinel | slots k .. 15 are the sentinel forever; the pops never read one while rank < k because the union has at least k keys (`length >= k` is the caller's guarantee) | no spare slot; the same argument, unchanged |
+| `_smallk_launch_bucket[16, 10]` / `[16, 15]` | the bucket capacity is the instantiation's CAP | the capk branch enqueues `[K, K, ...]`; `DEFAULT_CAP` does the same on the non-trial path once `SMALLK_CAPK_DEFAULT` flips |
+
+So the CAP > K assumptions were: the storage type (a language constraint,
+handled by STORE), the insert's slot guard and threshold pick (fold
+correctly at CAP == K), and the rank phase's shift past K (correct at CAP ==
+K, and the reason the dead lanes are live today). No sentinel slot, drain
+or digest depends on a spare slot.
+
+`capk_selp` is `capk` plus SELP: every step of the carry chain becomes one
+unsigned minimum into the slot and one unsigned maximum into the carry
+(`min(pending, current)`, `max(pending, current)` on UInt64), no per-step
+branch; the admission branch `pending < threshold` around the chain is kept,
+so a warp with no admitting lane still skips the chain exactly as the
+uniform arm does. It was cheap: a `comptime if SELP` inside `_smallk_insert`
+and the parameter threaded through the two uniform-form call sites; the
+CAP = 16 path is the `else` branch, textually the one that shipped. SELP
+requires CAP == K (no slot guard in the chain) and the uniform scan form,
+excludes both bounds, deferred and the timing-only phases, all by
+`comptime assert`.
+
+### Why the bits are unchanged
+
+1. A lane's list holds its CAP smallest keys of everything it scanned
+   (`_smallk_insert` keeps "the k smallest inserted so far, sorted" under
+   any insertion order; the carry runs off the end of a full list).
+2. Only a lane's k smallest can ever be in the block's top-k: any other key
+   of that lane has k same-lane keys below it. With CAP = K the list holds
+   exactly those k, so the union of the 256 lists still contains the row's
+   true top-k after the scan.
+3. Admission is the same test on the same threshold (the lane's k-th
+   smallest, `local_keys[k - 1]` at CAP = 16, `local_keys[CAP - 1]` at CAP
+   = K, the same slot), so every lane admits the same keys in the same
+   order; the SELP chain preserves the multiset {slot, carry} at every step
+   and leaves the minimum in the slot, which is the same sorted list
+   whichever way it is computed (keys are unique; two sentinels tie to the
+   sentinel either way).
+4. The rank phase is textually the same loop: k exact UInt64 minima of the
+   union, ties decided by the index half of the same composite key, the
+   winner's value gathered from the same tile cell; its shift at CAP = K
+   moves slots 1 .. K - 1 down and writes the sentinel at K - 1, which is
+   the content slots 0 .. K - 1 had under CAP = 16 after the same shift.
+5. Partitions shorter than one batch, the tail loop and the carved k-wide
+   tail are the uniform arm's code with a shorter list: the same inserts in
+   the same order, so no corner is argued separately.
+
+### Sabotage (reach)
+
+Nothing different: both arms are the uniform scan form and carry the
+uniform arm's flip (bit 0 of the index half on `u == 0` of every batch,
+inside the uniform loop), which proves the arm's own launch branch in
+`_smallk_launch_bucket` and its loop ran, on the `[K, K, ...]` instantiation
+that branch enqueues. A depth-specific perturbation (dropping every lane's
+slot K - 1 after the scan) was considered and rejected: it flips only when
+a row's whole top-k sits in one lane, which the hashed fixtures never
+produce reliably. That the list is k deep is read from the stats leg's
+register count, not from a flip.
+
+### Expected effect (model; the stats leg and the gate replace it)
+
+Registers. If the shipped k10 kernel carries lanes 10 .. 15 as twelve live
+registers of the sentinel (the reading of the 54 / 56 pair: the list is 32
+registers at both k, so the other state is about 22 to 24), `capk_k10` drops
+to about 42, and at the 8-per-thread allocation unit that is 48 x 256 =
+12,288 registers per block, 5 blocks per SM (62.5 percent); at 40 or fewer
+it is 6 (75 percent). At k15 only one lane is dead (2 registers, 56 to 54,
+still the 56 allocation), so `capk_k15` stays at 4 blocks unless ptxas
+finds more; capk is a k10 experiment first. If `capk_k10` reports 54, ptxas
+had already rematerialized the dead lanes and the register count is not the
+list; then the follow-on is a storage form the compiler cannot widen (a
+struct of K scalar slots, or `InlineArray[UInt64, K]` with constant indices,
+neither of which can be added without changing the shipped path's list
+type, so it would be a separate gated arm with its own control).
+
+Time. The step 4 split says the scan is 8.8 ms at k10 (3.2 ms k-independent
+floor, 5.6 ms the K-deep list) and 12.8 ms at k15 (9.6 ms list); the rank
+phase is 0.4 to 0.75 ms. Occupancy helps only the latency-bound share, and
+the floor (scanonly1 at eight blocks per SM) is the k-independent scan at
+full occupancy, so the BEST CASE for capk is the list share shrinking in
+proportion to the occupancy gain: 4 to 5 blocks, 5.6 x 0.8 = 4.5 ms, select
+10.3 to about 9.1 ms at k10; 4 to 6 blocks, 5.6 x 0.67 = 3.7 ms, about 8.4
+ms; a request-level saving of about 1 to 2 ms at k10 and none at k15. That
+is the ceiling: the 3.2 ms floor and the k15 kernel's unchanged occupancy
+mean capk alone cannot close the 2.6x / 2.9x gap to the cached cuML rows;
+it is the cheapest bit-identical change that touches the register count
+at all, which is why it is measured first. WORST CASE: no register change
+(above), bit-identical, same time, and the arm is neutral; that result
+retires the occupancy reading and leaves instruction count as the K cost.
+For `capk_selp`: if ptxas already if-converted the per-step branch, the
+SASS is the same and the arm is neutral; if it did not, each step loses a
+branch and a reconvergence and the chain's 16 (now K) steps get cheaper by
+a few instructions each, at most a modest fraction of the 5.6 / 9.6 ms
+list share. Bracketed: neutral to about 1 ms at k10, neutral to about 2 ms
+at k15. No default moves on any of this; the gate's numbers replace it.
+
+### RUN OWED (orchestrator; nothing ran)
+
+Commit this pass first (the leg ships `git archive` of the COMMITTED tree).
+The arms check line is the regression fence for all seven arms and runs on
+the K-specialized buckets (NVIDIA: the specialization row is on).
+
+Run A, the mechanism verdict: the gate with phase timers ON, arms
+`uniform,capk,capk_selp` (the first arm is the shipped default; each later
+arm is paired with it; `select_ms` per arm is READ from
+`phase_ms_median`, never inferred from request deltas; request medians on
+that build are serialized and are NOT a price), profile skipped.
+
+```
+cat > /tmp/knn_capk_extra.sh <<'SH'
+#!/bin/sh
+export MOJOLEARN_KNN_SELECTION_ARMS=uniform,capk,capk_selp
+export MOJOLEARN_KNN_SELECTION_PHASE_TIMERS=1
+export MOJOLEARN_KNN_SELECTION_SKIP_PROFILE=1
+cd /root/mojolearn && PATH="$HOME/.pixi/bin:$PATH" pixi run mojo run \
+    -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_KNN_SELECT_TRIAL=1 \
+    -I . neighbors/checks/knn_selector_arms_check.mojo \
+    > /root/gemm_leg_out/knn-selector-arms-check.log 2>&1
+echo "arms_check_exit=$?" >> /root/gemm_leg_out/leg.txt
+exec sh /root/mojolearn/tools/knn_selection_gate.sh
+SH
+MOJOLEARN_RUNPOD_KEY_FILE=$HOME/.mojolearn_runpod_key \
+MOJOLEARN_GEMM_LEG_EXTRA=/tmp/knn_capk_extra.sh \
+MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/$(date +%Y-%m-%d_%H%M%S)-nvidia-h100-knn-selection-capk \
+sh tools/gemm_remote_leg.sh nvidia --rent --minutes 60 \
+    --gpu "NVIDIA H100 80GB HBM3" \
+    --local-card bench/results/e1/2026-08-28_131651-runpod-nvidia/lanes/gemm.identical.card
+cat <leg>/remote/knn-selector-arms-check.log | tail -3
+cat <leg>/remote/knn-selection/summary.txt
+cat <leg>/remote/knn-selection/status.tsv
+```
+
+Verdict lines for run A: `KNN SELECTOR ARMS PASS` with
+`SELECTOR_ARMS_REACH_PASS 65536 <k> <base> <uni> <hb> <wb> <df> <ck> <cs>`
+all seven counts nonzero; in the gate JSON every fixture (large, dyadic,
+ties, divergent_tail) at k10 and k15 shows `capk`, `capk_selp` and `default`
+equal to `uniform`, row order, planted and oracle green, reach flipped > 0
+on `uniform`, `capk`, `capk_selp` and `default` with clean bits restored;
+then `phase_ms_median.select_ms` per arm, pooled and per order (the two
+orders must agree within the pair spread or the row is noise), read
+against the brackets above, and the `uniform` arm's own `select_ms`
+against step 4 / step 5 (the control that the shipped kernel did not move).
+
+Run B, the register numbers (independent of run A; can go first): the
+stats leg, now ten rows.
+
+```
+MOJOLEARN_RUNPOD_KEY_FILE=$HOME/.mojolearn_runpod_key \
+MOJOLEARN_GEMM_LEG_EXTRA=tools/knn_selector_kernel_stats.sh \
+MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/$(date +%Y-%m-%d_%H%M%S)-nvidia-h100-knn-kernel-stats-capk \
+sh tools/gemm_remote_leg.sh nvidia --rent --minutes 60 \
+    --gpu "NVIDIA H100 80GB HBM3" \
+    --local-card bench/results/e1/2026-08-28_131651-runpod-nvidia/lanes/gemm.identical.card
+cat <leg>/remote/knn-kernel-stats/stats.tsv
+cat <leg>/remote/knn-kernel-stats/status.tsv
+```
+
+Read `capk_k10` / `capk_selp_k10` against `cap16_k10` (54 registers, 4
+blocks per SM) and `capk_k15` / `capk_selp_k15` against `cap16_k15` (56, 4):
+registers, `runtime_blocks_per_sm`, and that `local_bytes` and the local
+counts stay zero (a CAP = K list that spilled would be a worse kernel, not
+a smaller one).
+
+Run C, the promotion run, ONLY if run A is green and `select_ms(arm) <
+select_ms(uniform)` at both k for the arm in question: the same wrapper
+WITHOUT `MOJOLEARN_KNN_SELECTION_PHASE_TIMERS` (an unserialized build,
+request-level timing at the `NearestNeighbors.kneighbors` boundary), arms
+`uniform,<arm>` for that one arm. `SMALLK_CAPK_DEFAULT` (and
+`SMALLK_SELP_DEFAULT` for `capk_selp`) flips to True, and moves into the
+kernel-matrix SCHEDULING row in the same session, ONLY IF on that run every
+correctness check is green on every fixture and k, reach flipped on
+`uniform`, the arm and `default` with clean bits restored, AND all eight
+request-level timing cells (both orders' medians, `dyadic` and `large`, k10
+and k15) favor the arm. A k10-only win (the model's likely shape for capk)
+is a split verdict and leaves the default off, recorded here with the JSON
+path; the register numbers from run B are recorded beside it either way.
+After a flip: rebuild without the trial define, rerun the gate with `--arms
+uniform` plus default to show the default equals the explicit arm, and
+record the `dyadic` medians against the cached rows in
+`bench/OPPONENT_REFERENCE.md` as cached-reference ratios (never as a paired
+opponent measurement; cuML is not rerun). Apple and AMD columns take the
+arm only with the specialization row or
+`-D MOJOLEARN_KNN_IDENTICAL_SPECIALIZE_COMMON=1` in the build, and only
+after their own gate runs; both RUN OWED before any column other than
+NVIDIA takes the row.
+
+## Step 7 result: CAP = K is NEUTRAL; occupancy is not the limiter (H100, 2026-09-11 05:45Z, `bench/results/e1g/2026-09-11_014146-nvidia` and `_014151-nvidia`)
+
+Stats leg: capk_k10 40 registers, 6 blocks per SM, 75 percent occupancy
+(from 54 / 4 / 50 percent); capk_selp_k10 48 / 5 / 62.5 percent; the k15
+pair stays at 56 / 4 / 50 percent (the sixteenth slot was the only dead
+one). No local memory anywhere. Mechanism run: seven arms bit-equal with
+reach on every fixture; select_ms uniform 10.26 / 14.71 ms, capk 10.38 /
+14.65 ms. A 50 percent occupancy gain at k10 bought nothing, so the scan
+is not latency-bound on occupancy at this shape either. capk_selp was
+not timed (the gate times only the first pair of --arms; every arm needs
+a timed pair, fixed next).
+
+What is left: the per-element instruction count of the K-deep chain
+itself. Every arm that changed HOW OFTEN the chain runs (bounds, deferred)
+or HOW MANY registers it takes (capk) measured neutral, which is only
+consistent with the chain cost being paid on every element regardless
+(the compiler if-converts the admission branch and the whole predicated
+chain issues every step for every lane). The discriminating measurement is
+a timing-only arm `noshift`: the K-deep list is present and the admission
+compare runs, but an admitted key overwrites the last slot without the
+shift (output invalid). select_ms(uniform) minus select_ms(noshift) is the
+chain's own cost at k10 and k15; if it is the 0.80 ms per k, the fix is
+a branch the compiler cannot if-convert around the chain (a warp-uniform
+`vote.any` guard, which pays the chain only on steps where some lane
+admits) combined with the branch-free selp chain inside it, and the
+model says the admission rate per warp-step must be measured too
+(a `vote` counter arm gives it).
+
+## Implementation pass, the chain measurement (DEVIATION 2522; source only, 2026-09-11)
+
+Nothing here was built or run on the Mac (py_compile of the gate, `sh -n`
+of the wrapper, and the gate's numpy `--selftest --quick` with arms
+`uniform,capk_selp,voteguard` and timing-only `noshift,votecount`, which
+PASSED with eight `timing` rows and eight `timing_only` rows; no test, no
+native, no mojo). Step 7 is the premise: every arm that changed how often
+the K-chain runs (headbound, warpbound, deferred) or how many registers it
+takes (capk, 75 percent occupancy) measured neutral against the 0.80 ms
+per unit of k, which is consistent only with the chain's instructions
+being issued on every element step for every lane, admitted or not (the
+compiler if-converts `if pending < threshold` around a short predicated
+region). Two measurements decide it, and a third reads the number that
+explains the second. Files touched (uncommitted, working tree):
+
+- `neighbors/checks/select_smallk_identical_candidate.mojo`: the tenth
+  kernel parameter `CHAIN` on `smallk_bucket_kernel` (default
+  `SMALLK_CHAIN_INSERT`, so every nine-parameter instantiation, the stats
+  leg's included, is unchanged), the seventh kernel ARGUMENT `counters`
+  (a two-slot UInt64 device pointer read and written by the VOTECOUNT
+  form only; every other launch passes the output-index address as a
+  placeholder that no folded-in code dereferences), the helpers
+  `_smallk_overwrite_last` and `_smallk_warp_any`, the comment block
+  above them, the arms `SMALLK_ARM_NOSHIFT = 10`, `SMALLK_ARM_VOTEGUARD =
+  11`, `SMALLK_ARM_VOTECOUNT = 12` in `smallk_select_arm_from_env` and
+  `_smallk_launch_bucket`, the launcher `_smallk_launch_votecount`
+  (zeroes the counter from a host buffer, launches, reads back,
+  synchronizes, prints), the `comptime SMALLK_PHASE_TIMERS` define
+  mirror, the `noshift` gather mask in both rank-phase forms, the
+  VOTECOUNT epilogue before the rank phase, the hook comment and the
+  module docstring.
+- `tools/knn_selection_gate.py`: the timing block pairs EVERY later
+  `--arms` arm with the first (step 7's "capk_selp was not timed" defect;
+  one `timing` row per fixture, k and pair, summary lines now name the
+  pair), `KNN_ADMIT_RATE` lines are summed per request into
+  `admit_warp_steps`, `admit_any_admit`, `admit_rate` beside the phase
+  milliseconds (so the per-arm phase medians carry `admit_rate`),
+  `TIMING_ONLY_VALID_OUTPUT = ("votecount",)` flips the timing-only
+  assertion to equality for that arm and marks its time as not a price,
+  and the selftest stand-in knows the three names and prints two admit
+  lines per request for `votecount` (admit_rate 0.375 exercises the sum).
+- `tools/knn_selection_gate.sh`: comments only (the arm lists and that
+  `votecount` needs `MOJOLEARN_KNN_SELECTION_PHASE_TIMERS=1`).
+- this section.
+
+NOT touched, by the lane's file list: `neighbors/checks/knn_selector_arms_check.mojo`
+(its equality and reach properties still cover seven arms; adding
+`voteguard` as the eighth is owed to whoever next edits it) and
+`tools/knn_selector_kernel_stats.sh` (a `voteguard_k10` / `_k15` row,
+instantiation `[16, K, True, False, False, False, SMALLK_PHASE_FULL,
+False, False, SMALLK_CHAIN_VOTEGUARD]`, would say whether the guard
+changed the register count; owed, not blocking).
+
+The shipped default path: without the trial define the only
+instantiations are `[CAP, K, True, False, False, False, FULL, False, False,
+INSERT]`; `CHAIN == INSERT` folds every new `comptime if` to the branch
+that shipped, the counter state is two constants that fold away, and the
+one visible change to the shipped kernel is the extra, never-loaded
+kernel argument (constant bank, no instruction). The control is the same
+as in the capk pass: the `uniform` arm's `select_ms` on the phase-timer
+build must land on 10.26 to 10.31 ms at k10 and 14.65 to 14.73 at k15; if
+it moves, the extra argument is the suspect before any new number is read.
+
+### The arms
+
+`noshift` (TIMING ONLY, OUTPUT INVALID). The uniform scan form with the
+same STORE-wide register list, the same per-element key and admission
+compare, but an admitted key overwrites slot K - 1 (the threshold slot)
+and the threshold is refreshed from that slot; no carry chain, in the
+batch loop and in the tail loop. The rank phase runs on the list as it
+stands (the sentinel wins the first K - 1 ranks on every lane; thread 0's
+gather index is masked into the row with `% length` under `comptime if`
+on this chain form only, so a sentinel index cannot fault), and consumes
+slot K - 1 through the pops, so the write and the compare that feeds it
+cannot be dropped. Known differences from the uniform arm besides the
+missing chain: its threshold is a running minimum (each admitted key
+becomes the threshold), so it admits less often than uniform; since it
+has no chain, its own cost is admission-independent up to one predicated
+8-byte register write; and its rank phase pops all 8 warps for K - 1
+rounds instead of 1, about a microsecond per launch.
+
+`voteguard` (OUTPUT VALID; a normal trial arm). The uniform arm with the
+admission wrapped in a warp-uniform guard: `admit = pending < threshold;
+if vote.any(admit): if admit: chain`. Every lane takes the ballot (the
+uniform batch loop's trip count is block-uniform, C4; the tail loop's
+count is per lane, so the tail keeps the plain form on at most eight
+elements per lane). Bit-identical by construction: `admit` is the same
+test on the same threshold, a lane that admits inserts the same key at
+the same step through the same `_smallk_insert`, a lane that does not
+admit does nothing in both forms, and the list is a function of the
+inserted keys and their order. Sabotage: the uniform flip (bit 0 of the
+index half on `u == 0`), moved INSIDE the guarded and admitted path, after
+the compare; a flip proves the guard's body ran on an admitted key. The
+plain uniform flip before the compare is compiled out on this form.
+
+`votecount` (OUTPUT VALID; listed as timing-only because its time is not
+a price). `voteguard` plus two per-lane counters, `warp_steps` (element
+steps in the batch loop) and `admit_steps` (those whose ballot was
+nonzero), identical across a warp's lanes; at the end of the scan lane 0
+of each warp parks them in shared memory (the `heads` array, free until
+the rank phase), thread 0 folds the block's eight pairs and adds them to
+the two-slot device counter with two atomics (integer addition commutes,
+so arrival order cannot matter). The launcher zeroes the counter from a
+host buffer before the launch, reads it back after, SYNCHRONIZES (so the
+arm's select_ms includes a sync and a copy and is not a price), and under
+the phase-timer build prints `KNN_ADMIT_RATE warp_steps N any_admit M
+rows R length L k K` once per launch to fd 1, the same capture the phase
+line lands in. The harness sums a request's lines: `admit_rate` = M / N.
+Refuses the sabotage bit. Without the phase-timer define the counts are
+gathered and dropped.
+
+### What each number means
+
+- `select_ms(uniform) - select_ms(noshift)` at k10 and at k15, from
+  `timing_only[...].phase_ms_median` on the phase-timer build: the chain's
+  own cost, paid on the uniform arm's real admission pattern. If it is the
+  whole 5.6 / 9.6 ms list share (the 0.80 ms per k slope), the K cost is
+  the chain's instruction count and nothing else; if it is a fraction, the
+  remainder is the list's other costs (the threshold pick, the register
+  pressure on the scan's loads, the rank phase's shift), and the chain is
+  not the only lever.
+- `select_ms(voteguard)` against `select_ms(uniform)` in `timing[...]`:
+  whether a real branch on a ballot around the chain changes anything.
+  If voteguard is faster by about `(1 - admit_rate)` of the chain cost,
+  the compiler HAD been issuing the chain every step and a branch it
+  cannot if-convert is the fix (promotion rule below). If voteguard is
+  neutral and admit_rate is high (most warp-steps have some admitting
+  lane), the chain runs on most steps in either form and the branch
+  cannot save what is not skippable: the lever is then the chain's
+  length per execution (a shorter chain: the selp form inside the guard,
+  a sorting network, or a wider per-lane list that admits less often).
+  If voteguard is neutral and admit_rate is LOW, the branch did not skip
+  the chain (the compiler predicated through it, or the ballot itself
+  costs what it saves) and that reading is the stats leg's to settle
+  (the owed voteguard row: a `bra` on the ballot in the SASS, or none).
+- `admit_rate` from `votecount`'s phase medians: the fraction of
+  warp-steps with any admission, and therefore the fraction on which the
+  guarded chain executes. The model from step 4 (about 32 insertions per
+  lane in 256 elements at k10) puts a 32-lane warp's per-step any-admit
+  at about 1 - (1 - 1/8)^32 = 0.986 early in the scan and far lower late
+  (a lane's admission probability falls as k / seen), so the request-wide
+  rate is what the run reports, not the model; nothing here is a
+  prediction of it.
+
+### RUN OWED (orchestrator; nothing ran)
+
+Commit this pass first (the leg ships `git archive` of the COMMITTED tree).
+The gate with phase timers ON, arms `uniform,capk_selp,voteguard`,
+timing-only `noshift,votecount`, profile skipped, on an H100. `voteguard`
+enters correctness, oracle and reach with `uniform`, `capk_selp` and
+`default`; `capk_selp` gets the timed pair it did not get in step 7;
+`noshift` and `votecount` are timing-only.
+
+```
+cat > /tmp/knn_chain_extra.sh <<'SH'
+#!/bin/sh
+export MOJOLEARN_KNN_SELECTION_ARMS=uniform,capk_selp,voteguard
+export MOJOLEARN_KNN_SELECTION_TIMING_ONLY_ARMS=noshift,votecount
+export MOJOLEARN_KNN_SELECTION_PHASE_TIMERS=1
+export MOJOLEARN_KNN_SELECTION_SKIP_PROFILE=1
+exec sh /root/mojolearn/tools/knn_selection_gate.sh
+SH
+MOJOLEARN_RUNPOD_KEY_FILE=$HOME/.mojolearn_runpod_key \
+MOJOLEARN_GEMM_LEG_EXTRA=/tmp/knn_chain_extra.sh \
+MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/$(date +%Y-%m-%d_%H%M%S)-nvidia-h100-knn-selection-chain \
+sh tools/gemm_remote_leg.sh nvidia --rent --minutes 60 \
+    --gpu "NVIDIA H100 80GB HBM3" \
+    --local-card bench/results/e1/2026-08-28_131651-runpod-nvidia/lanes/gemm.identical.card
+cat <leg>/remote/knn-selection/summary.txt
+cat <leg>/remote/knn-selection/status.tsv
+```
+
+Budget under the harness's 300 s deadline: the correctness and reach
+section is four arms (three plus default) on four fixtures at two k, as in
+step 7 plus one arm; the timing block is now FOUR pairs (capk_selp,
+voteguard, noshift, votecount) on two fixtures at two k, at 3 pairs per
+order that is 4 x 4 x (2 + 12) = 224 requests where step 7 had 56. On the
+phase-timer build a 400k request is about 31 to 36 ms, so about 8 s of
+requests plus fits and fixture builds; well inside. If the deadline
+trips anyway, `MOJOLEARN_KNN_SELECTION_PAIRS=2` halves the timing block.
+
+Verdict lines: `status: passed` in `summary.txt`; in the JSON every
+fixture at k10 and k15 shows `capk_selp`, `voteguard` and `default` equal
+to `uniform`, row order, planted and oracle green, reach flipped > 0 on
+all four with clean bits restored; the `uniform` control (above); then
+`phase_ms_median.select_ms` for `noshift` against `uniform` in the
+`timing_only` rows (the chain cost, at both k), for `voteguard` against
+`uniform` in the `timing` rows, and `phase_ms_median.admit_rate` for
+`votecount`, read as in "What each number means". The four `timing_only`
+rows for `noshift` must each report `differing_cells_from_reference > 0`
+and the four for `votecount` must report `output_valid` True for both
+arms; a `votecount` sample without an admit line fails the gate (the
+launcher did not run).
+
+### Promotion rule
+
+`voteguard` is the only arm here that can move a default, and only on
+its own run C (the same wrapper WITHOUT `MOJOLEARN_KNN_SELECTION_PHASE_TIMERS`,
+arms `uniform,voteguard`, request-level timing at the
+`NearestNeighbors.kneighbors` boundary) under the rule of the capk pass:
+every correctness check green on every fixture and k, reach flipped on
+`uniform`, `voteguard` and `default` with clean bits restored, and all
+eight request-level timing cells (both orders' medians, `dyadic` and
+`large`, k10 and k15) favor the arm. A flip would add a seventh comptime
+default (`SMALLK_VOTEGUARD_DEFAULT`) that folds `CHAIN` to VOTEGUARD on
+the K-specialized and generic buckets of fixed-lane-width columns only
+(Apple takes it only with its own gate; the ballot needs a convergent
+warp), and moves into the kernel-matrix SCHEDULING row in the same
+session. `noshift` and `votecount` never move anything.
+
+### How the measurement could mislead
+
+- The extra kernel argument: if the `uniform` control moves off 10.26 to
+  10.31 / 14.65 to 14.73 ms, the pass touched the shipped kernel and no
+  new number is read until that is explained.
+- `noshift` admits less often than `uniform` (running-minimum threshold),
+  so if the compiler did NOT if-convert the uniform arm's chain (a real
+  branch, taken on admitted lanes only), part of `uniform - noshift` is
+  admission-rate-dependent chain execution, not a per-step cost; the
+  `voteguard` and `admit_rate` numbers separate the two readings, which
+  is why all three arms are in one run.
+- `noshift` frees the list's registers between slot 0 and K - 2 across the
+  scan (they hold a constant until the rank phase), so its instantiation
+  may run at higher occupancy than `uniform`. Step 7 showed occupancy is
+  not the limiter at this shape (capk: 50 to 75 percent, neutral), so
+  that gap is not attributed to occupancy; a `noshift_k10` stats row
+  would confirm the register count if the difference looks too large.
+- The ballot in `voteguard` is not free: one `vote.ballot` plus a branch
+  per element step per warp, about 2 instructions against a chain of
+  about 3 K. A neutral `voteguard` therefore does not by itself say the
+  chain was skippable-but-not-skipped; it says the branch's saving did
+  not exceed its cost at the measured admit_rate.
+- `votecount`'s own select_ms includes a host synchronization, a device
+  allocation and a copy per launch (56 per request) and is never a price;
+  its phase line is the only number read from it.
+- Phase-timer builds serialize the queue: every select_ms here is a
+  kernel-only time, comparable only with other phase-timer rows (steps 4
+  to 7) and never with the qualified request numbers.
+
+## Step 8 result: the chain priced, and why every earlier arm was neutral (H100, 2026-09-11 06:15Z, `bench/results/e1g/2026-09-11_020805-nvidia/remote/knn-selection`)
+
+select_ms per arm (phase-timer build, paired medians, both fixtures agree):
+
+| arm | k10 | k15 | note |
+|---|---:|---:|---|
+| uniform (shipped) | 10.21 | 14.62 | |
+| noshift (timing only: list present, compare runs, NO chain) | 3.51 to 3.57 | 3.80 | the chain is 6.7 ms at k10 and 10.8 ms at k15, the whole K cost |
+| voteguard (warp-uniform ballot branch around the chain, bit-equal) | 9.86 | 14.40 | 3.4 and 1.5 percent |
+| votecount admit rate (fraction of warp-steps where some lane admits) | 0.903 | 0.960 | |
+| capk_selp (min/max carry chain) | 10.24 | 14.55 | neutral |
+
+So the chain costs 0.67 to 0.72 ms per unit of k per request, it issues on
+every warp-step where any of the 32 lanes admits, and that is 90 to 96
+percent of warp-steps under the shipped per-lane threshold. That is why the
+bounds (fewer per-lane admissions, chain still issued because it was
+if-converted), deferred insertion (drains still on nearly every batch), CAP
+= K (registers) and the branch alone (only 4 to 10 percent of steps to
+skip) all measured neutral or negative.
+
+The two levers now compose: the warp bound (C2) lowers the per-warp
+admission rate (its event model said 231 to 116 admitting steps per 256
+at k10, 246 to 138 at k15) and the ballot branch turns skipped steps into
+skipped chains. Expected: chain 6.7 to about 3.4 ms at k10 and 10.8 to
+about 6.1 ms at k15, minus the bound's measured cost (1.4 and 0.8 ms):
+about 2 ms at k10 and 4 ms at k15 per request, roughly 31 to 29 ms and 36
+to 32 ms. Arm `warpbound_guard` next, measured with votecount's admit
+rate under the bound so the model is checked, then the unserialized
+promotion run.
+
+## Implementation pass, warpbound_guard (DEVIATION 2523; source only, 2026-09-11)
+
+Nothing here was built or run on the Mac (py_compile of the gate only; no
+test, no native, no mojo, no selftest). Step 8 is the premise: the chain is
+6.7 ms of the k10 launch and 10.8 ms of the k15 launch, it issues on every
+warp-step where any of the 32 lanes admits, that is 90 to 96 percent of
+warp-steps under the shipped per-lane threshold, and the ballot branch
+alone therefore had only 4 to 10 percent of steps to skip. C2's warp bound
+halves the admitting steps (its event model: 231 to 116 admitting steps
+per 256 at k10, 246 to 138 at k15) but was measured with the chain
+if-converted, so the admissions it removed saved no chain and the arm paid
+its refreshes for nothing. This pass composes the two. Files touched
+(uncommitted, working tree):
+
+- `neighbors/checks/select_smallk_identical_candidate.mojo`: the eleventh
+  kernel parameter `WB_EVERY` (the warp bound refresh cadence, default
+  `SMALLK_WARPBOUND_EVERY`, so every ten-parameter instantiation is
+  unchanged); `_smallk_warpbound_refresh_due[EVERY]`; the batch loop's
+  `BOUND or WARPBOUND` branch narrowed to `BOUND or (WARPBOUND and CHAIN
+  == INSERT)` (the same fold for every existing instantiation) and the
+  voteguard branch's predicate `pending < gate` plus the gate refresh
+  after the insert under `comptime if WARPBOUND`; the voteguard index
+  flip compiled out under WARPBOUND; the arms `SMALLK_ARM_WARPBOUND_GUARD
+  = 13`, `SMALLK_ARM_WARPBOUND_COUNT = 14`, `SMALLK_ARM_WARPBOUND_GUARD1 =
+  15` in `smallk_select_arm_from_env` and `_smallk_launch_bucket`;
+  `_smallk_launch_votecount[CAP, K, WARPBOUND]` with `warpbound 0|1` on
+  its `KNN_ADMIT_RATE` line; `_smallk_enqueue` threading `WB_EVERY`; the
+  default `SMALLK_WARPBOUND_GUARD_DEFAULT = False` with `DEFAULT_WARPBOUND`
+  and `DEFAULT_CHAIN` on the non-trial enqueue (both fold to the shipped
+  values while it is False); the asserts; the comment block above
+  `_smallk_warpbound_refresh_due`; the hook comment and the module
+  docstring. The arm space under the sabotage bit (0 .. 15) is now FULL;
+  the next arm moves `SMALLK_ARM_SABOTAGE` to 32 and the mask with it.
+- `neighbors/checks/knn_selector_arms_check.mojo`: the eighth and ninth
+  arms (`warpbound_guard`, `warpbound_guard1`) in the equality and reach
+  properties, same 18 cases; the REACH_PASS line gains two counts.
+  (`voteguard` itself is still not in the check, as the DEVIATION 2522
+  pass recorded; its reach was proven by the gate in step 8.)
+- `tools/knn_selection_gate.py`: docstring for the three arm names and
+  their sabotage; `TIMING_ONLY_VALID_OUTPUT = ("votecount",
+  "warpbound_count")`; the numpy selftest accepts the three names and
+  prints `warpbound 1` on the admit line for `warpbound_count`. The
+  harness selects arms by name from `--arms` and `--timing-only-arms`,
+  which the shell script fills from the environment, so no other code.
+- this section.
+
+The shipped default path is untouched: without the trial define the only
+instantiations are `[CAP, K, True, False, False, False, FULL, False,
+False, INSERT, SMALLK_WARPBOUND_EVERY]` (DEFAULT_WARPBOUND and
+DEFAULT_CHAIN fold to False and INSERT while SMALLK_WARPBOUND_GUARD_DEFAULT
+is False), the narrowed `BOUND or (WARPBOUND and CHAIN == INSERT)` folds to
+False exactly as `BOUND or WARPBOUND` did, and WB_EVERY is read only under
+WARPBOUND. The control is the same as in the last three passes: the
+`uniform` arm's `select_ms` on the phase-timer build must land on 10.21 to
+10.31 ms at k10 and 14.62 to 14.73 at k15; if it moves, this pass moved the
+shipped kernel and the diff is the suspect before any new number is read.
+
+### The composition, in three lines
+
+    refresh (C2, unchanged): at the batch boundary, block-uniform under C4, OUTSIDE the ballot branch:
+        bound = group max of pair mins of the lane heads (five xor shuffles); gate = min(threshold, bound)
+    element step (voteguard, one change): admit = pending < gate;  any = ballot(admit) != 0
+    if any: if admit: _smallk_insert(...) (unchanged); gate = min(threshold, bound)
+
+Why the two features do not interfere, read off the kernel: the refresh
+points are after `done += 1` at the bottom of a batch, where the unrolled
+`u` loop is closed, so no ballot inside the batch can keep a lane from the
+shuffles, and `done` has no `tid` in it (C4), so every lane of every warp
+reaches them together; the bound only LOWERS the admission predicate (it
+never adds an insertion path, and `gate <= threshold` always); the ballot
+is convergent for the same reason as in `voteguard` (nothing above it
+diverges); the chain inside the branch is the unchanged `_smallk_insert`;
+the tail loop (per-lane trip count) keeps C2's plain `pending < gate`
+form on at most eight elements per lane; the rank phase is untouched (no
+shared memory, no barrier, `rounds` stays 0). `warpbound_guard1` differs
+from `warpbound_guard` in one comptime value, `WB_EVERY = 1`: the bound is
+refreshed after every completed batch from batch 2 on (31 refreshes on a
+65,536-column partition instead of 16). The cadence was a scheduling
+choice in C2 and still is; no order argument depends on it.
+
+### Why the bits are unchanged
+
+C2's argument, unchanged (brief, "Implementation pass, C2 warpbound", and
+the comment above `_smallk_warp_group_bound`): at least k distinct keys of
+the warp's union, hence of the block's, are at or below the bound at every
+moment after a refresh, the count never drops, so a pending key at or
+above min(threshold, bound) is not among the row's k smallest, dropping it
+is the baseline's own act, and the union still holds the true top-k after
+the scan. Plus voteguard's argument, unchanged (brief, "Implementation
+pass, the chain measurement"): `admit` is the same test on the same gate
+as C2's `warpbound` arm, a lane that admits inserts the same key at the
+same step through the same `_smallk_insert`, a lane that does not admit
+does nothing in both forms, and the list is a function of the inserted
+keys and their order. The two statements are about different things (the
+bound decides WHAT is admitted, the ballot decides WHEN the warp executes
+the chain) and neither depends on the other, so the composition is both
+at once. The rank phase then pops the union's exact minima with the same
+UInt64 compare, ties by the same index half, the winner's value gathered
+from the same tile cell.
+
+### Sabotage (reach)
+
+C2's, unchanged: bit 63 of the reduced bound is cleared inside the refresh
+(only when the reduction returned a real key), so from the first refresh
+on the gate sits below every non-negative-distance key, every lane's
+`admit` is false on every later step, every ballot is zero, and the output
+is the top-k of the first `wb_fill` batches (4,096 columns at k in 9..16):
+it flips every row with a true neighbor beyond them (certain on the arms
+check, where rows 0 and 1 plant a +0.0 at length / 2 and length - 1, and
+with probability 1 - (4096 / 65536)^k on every hashed row of every
+partition with at least two batches). Why it still proves the GUARDED path
+ran: on the WARPBOUND + VOTEGUARD instantiation the bound has exactly one
+consumer, the `admit = pending < gate` that the ballot reads inside the
+guard; the uniform flip and the voteguard flip are compiled out under
+WARPBOUND, so a flip cannot come from them; the flip therefore exists only
+if the refresh ran AND its result reached the guard's predicate (on plain
+`voteguard` the same sabotage would flip nothing: its predicate reads
+`threshold` and the refresh is not compiled in); and the cells that survive
+the flip, the top-k of the first 4,096 columns, were inserted by the
+guarded chain, the only insertion path in that loop form.
+`warpbound_count` refuses the sabotage bit like `votecount`.
+
+### Expected numbers (model; the gate's numbers replace it)
+
+Phase-timer build, `select_ms` per request (56 launches), from step 8's
+measured parts: the k-independent floor is `noshift` (3.5 ms at k10, 3.8 at
+k15); the chain is 6.7 / 10.8 ms at admit rates 0.903 / 0.960; the bound's
+own cost is step 3's measured +1.4 / +0.8 ms (refreshes every second batch
+with the chain still issued, so the refresh price and nothing else); the
+ballot and branch cost about 0.3 / 0.2 ms (voteguard's measured saving,
+0.35 / 0.22 ms, against the 0.65 / 0.43 ms its admit rate would have
+bought). C2's event model puts the admit rate under the bound at 116 / 256
+= 0.45 (k10) and 138 / 256 = 0.54 (k15); that model was right about the
+unbounded rate (231 / 256 = 0.90 against votecount's 0.903), which is the
+one reason to trust it here.
+
+| arm | k10 select ms | k15 select ms |
+|---|---:|---:|
+| uniform (shipped, the control) | 10.21 to 10.31 | 14.62 to 14.73 |
+| warpbound_guard, the task's arithmetic (chain x rate under the bound + the bound) | 3.5 + 6.7 x 0.45 + 1.4 = 7.9 | 3.8 + 10.8 x 0.54 + 0.8 = 10.4 |
+| warpbound_guard, with the ballot's own cost | about 8.2 | about 10.6 |
+| warpbound_guard1 (31 refreshes) | about 8.9 (16 more refreshes, about +0.7; about 3 fewer admitting steps in 256, about -0.1) | about 11.0 |
+| warpbound_count admit_rate | about 0.45 | about 0.54 |
+
+So the model's saving is about 2.0 ms per request at k10 and 4.0 ms at
+k15, on an unserialized request roughly 31 to 29 ms and 36 to 32 ms, which
+is what the promotion run reads. Brackets: BEST CASE the bound under the
+guard costs less than step 3's 1.4 / 0.8 ms (part of that price may have
+been the chain the refresh's extra live state made dearer), 7.5 / 10.0 ms;
+WORST CASE the admit rate under the bound is not 0.45 / 0.54 but stays
+near 0.9 (the group bound is 1.7 / i, looser than the head bound's k / (32
+i), and the model has been wrong on this kernel before), and then the arm
+pays the bound for nothing, about +1.1 / +0.6 ms against uniform, like
+warpbound in step 3. `warpbound_count`'s admit line settles which bracket
+applies before anyone argues about the time: a rate near 0.45 / 0.54 with
+no time saving says the chain is not skipped even under a real branch (a
+codegen question for the stats leg: a `voteguard_k10` row is still owed);
+a rate near 0.9 says the bound is too loose for this fixture and the
+tighter, dearer bounds (the k-th smallest of the 32 heads, k rounds) are
+the follow-on. `warpbound_guard1` is included because with the branch the
+bound's benefit is now realized per skipped step, so the cadence tradeoff
+C2 priced (three events against sixteen refreshes) was priced under the
+wrong chain-cost model; the model still says it loses to `warpbound_guard`
+by about 0.6 ms, and it is one comptime value.
+
+### RUN OWED (orchestrator; nothing ran)
+
+Step 0, on the Mac, numpy only, no native import, seconds (the checker's
+own smoke; the lane may not run tests): expect `PASSED`, four `timing`
+rows per timed fixture and k (two arms against uniform), a `timing_only`
+table with `warpbound_count` rows carrying `output_valid` True and an
+`admit_rate` of 0.375 in their phase medians.
+
+```
+python3 tools/knn_selection_gate.py --selftest --quick --out /tmp/knn-sel-selftest \
+    --arms uniform,warpbound_guard,warpbound_guard1 --timing-only-arms warpbound_count --pairs 1 --deadline 120
+grep -A12 '^timing_only' /tmp/knn-sel-selftest/summary.txt
+```
+
+Step 9, the mechanism run on the H100. Commit this pass first (the leg
+ships `git archive` of the COMMITTED tree). The arms check line is the
+regression fence for all nine arms; the gate with phase timers ON, arms
+`uniform,warpbound_guard,warpbound_guard1`, timing-only `warpbound_count`,
+profile skipped. `select_ms` per arm is READ from `phase_ms_median`;
+request medians on that build are serialized and are NOT a price.
+
+```
+cat > /tmp/knn_wbguard_extra.sh <<'SH'
+#!/bin/sh
+export MOJOLEARN_KNN_SELECTION_ARMS=uniform,warpbound_guard,warpbound_guard1
+export MOJOLEARN_KNN_SELECTION_TIMING_ONLY_ARMS=warpbound_count
+export MOJOLEARN_KNN_SELECTION_PHASE_TIMERS=1
+export MOJOLEARN_KNN_SELECTION_SKIP_PROFILE=1
+cd /root/mojolearn && PATH="$HOME/.pixi/bin:$PATH" pixi run mojo run \
+    -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_KNN_SELECT_TRIAL=1 \
+    -I . neighbors/checks/knn_selector_arms_check.mojo \
+    > /root/gemm_leg_out/knn-selector-arms-check.log 2>&1
+echo "arms_check_exit=$?" >> /root/gemm_leg_out/leg.txt
+exec sh /root/mojolearn/tools/knn_selection_gate.sh
+SH
+MOJOLEARN_RUNPOD_KEY_FILE=$HOME/.mojolearn_runpod_key \
+MOJOLEARN_GEMM_LEG_EXTRA=/tmp/knn_wbguard_extra.sh \
+MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/$(date +%Y-%m-%d_%H%M%S)-nvidia-h100-knn-selection-wbguard \
+sh tools/gemm_remote_leg.sh nvidia --rent --minutes 60 \
+    --gpu "NVIDIA H100 80GB HBM3" \
+    --local-card bench/results/e1/2026-08-28_131651-runpod-nvidia/lanes/gemm.identical.card
+cat <leg>/remote/knn-selector-arms-check.log | tail -3
+cat <leg>/remote/knn-selection/summary.txt
+cat <leg>/remote/knn-selection/status.tsv
+```
+
+Verdict lines for step 9: `KNN SELECTOR ARMS PASS` with
+`SELECTOR_ARMS_REACH_PASS 65536 <k> <base> <uni> <hb> <wb> <df> <ck> <cs>
+<wg> <wg1>` all nine counts nonzero; in the gate JSON every fixture
+(large, dyadic, ties, divergent_tail) at k10 and k15 shows
+`warpbound_guard`, `warpbound_guard1` and `default` equal to `uniform`,
+row order, planted and oracle green, reach flipped > 0 on all four with
+clean bits restored; the `uniform` control (above); then
+`phase_ms_median.select_ms` for the two guard arms against `uniform` in
+the `timing` rows (pooled and per order; the two orders must agree within
+the pair spread or the row is noise), read against the table above, and
+`phase_ms_median.admit_rate` for `warpbound_count` in the `timing_only`
+rows against votecount's 0.903 / 0.960 and the model's 0.45 / 0.54. The
+`warpbound_count` rows must report `output_valid` True for both arms; a
+sample without an admit line fails the gate (the launcher did not run).
+Budget: the correctness and reach section is four arms (three plus
+default) on four fixtures at two k; the timing block is three pairs on two
+fixtures at two k, 3 x 4 x 14 = 168 requests at about 31 to 36 ms
+serialized; well inside the 300 s deadline.
+
+Step 10, the promotion run, ONLY if step 9 is green and
+`select_ms(arm) < select_ms(uniform)` at both k for the arm in question
+(if both guard arms win, the better one at both k; a split between them
+takes `warpbound_guard`, the C2 cadence, and records the other): the same
+wrapper WITHOUT `MOJOLEARN_KNN_SELECTION_PHASE_TIMERS` and without the
+timing-only arm (an unserialized build, request-level timing at the
+`NearestNeighbors.kneighbors` boundary), arms `uniform,<arm>`.
+
+```
+cat > /tmp/knn_wbguard_promo_extra.sh <<'SH'
+#!/bin/sh
+export MOJOLEARN_KNN_SELECTION_ARMS=uniform,warpbound_guard
+export MOJOLEARN_KNN_SELECTION_SKIP_PROFILE=1
+exec sh /root/mojolearn/tools/knn_selection_gate.sh
+SH
+MOJOLEARN_RUNPOD_KEY_FILE=$HOME/.mojolearn_runpod_key \
+MOJOLEARN_GEMM_LEG_EXTRA=/tmp/knn_wbguard_promo_extra.sh \
+MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/$(date +%Y-%m-%d_%H%M%S)-nvidia-h100-knn-selection-wbguard-promo \
+sh tools/gemm_remote_leg.sh nvidia --rent --minutes 60 \
+    --gpu "NVIDIA H100 80GB HBM3" \
+    --local-card bench/results/e1/2026-08-28_131651-runpod-nvidia/lanes/gemm.identical.card
+cat <leg>/remote/knn-selection/summary.txt
+cat <leg>/remote/knn-selection/status.tsv
+```
+
+### Promotion rule
+
+`SMALLK_WARPBOUND_GUARD_DEFAULT` flips to True (which folds
+`DEFAULT_WARPBOUND` to True and `DEFAULT_CHAIN` to VOTEGUARD on the
+non-trial enqueue, on fixed-lane-width columns only: the asserts refuse it
+elsewhere, and it moves into the kernel-matrix SCHEDULING row in the same
+session) ONLY IF, on step 10: every correctness check is green on every
+fixture and k; reach flipped on `uniform`, the arm and `default` with
+clean bits restored; AND all EIGHT request-level timing cells (both
+orders' medians, `dyadic` and `large`, k10 and k15) favor the arm. The
+phase-timer split, the event model, the arms check's tile and any
+per-launch number are not promotion evidence. A split verdict leaves the
+default off, the arm stays behind the define as a measured result, and the
+JSON path is recorded here beside C1, C2, deferred and capk. After a flip:
+rebuild without the trial define, rerun the gate with `--arms uniform`
+plus default to show the default equals the explicit arm, and record the
+`dyadic` medians against the cached rows in `bench/OPPONENT_REFERENCE.md`
+as cached-reference ratios (never as a paired opponent measurement; cuML
+is not rerun). Apple (the Mac, orchestrator only, one light thing, after
+the H100 verdict: `MOJOLEARN_NUMERIC_MODE=identical
+MOJOLEARN_BUILD_EXTRA_DEFINES="-D MOJOLEARN_KNN_SELECT_TRIAL=1" sh
+bindings/build.sh`, then `PYTHONPATH=python MOJOLEARN_NUMERIC_MODE=identical
+python3 tools/knn_selection_gate.py --out /tmp/knn-sel-apple --arms
+uniform,warpbound_guard --pairs 2 --deadline 300`) and AMD (a DigitalOcean
+MI325X droplet; 64-lane wavefront: depth 1, group 4, a 64-bit ballot by
+`SMALLK_MASK_DT`, the same argument) are RUN OWED before any column other
+than NVIDIA takes the row. `warpbound_count` and `warpbound_guard1` never
+move anything on their own; `warpbound_guard1` promotes only through its
+own step 10 under the same rule.
+
+## Step 9 result: warpbound_guard PROMOTED on NVIDIA (H100, 2026-09-11 06:33Z and 06:40Z, `bench/results/e1g/2026-09-11_022524-nvidia` and `_023138-nvidia`)
+
+Mechanism run (phase-timer build): nine arms bit-equal with reach on every
+fixture; select_ms uniform 10.33 / 14.75 ms, warpbound_guard 7.33 / 9.72
+ms, warpbound_guard1 (refresh every batch) 7.50 / 9.83 ms; admit rate under
+the bound 0.462 at both k (C2's model said 0.45 and 0.54). The chain now
+issues on 46 percent of warp-steps instead of 90 to 96.
+
+Promotion run (unserialized, request level, three pairs per order):
+
+| fixture | k | uniform median ms | warpbound_guard median ms | pairs favoring |
+|---|---:|---:|---:|---:|
+| large | 10 | 30.82 | 27.85 | 6 of 6 |
+| large | 15 | 36.09 | 31.02 | 6 of 6 |
+| dyadic | 10 | 30.68 | 27.85 | 6 of 6 |
+| dyadic | 15 | 35.88 | 30.85 | 6 of 6 |
+
+All eight cells, both orders. Flipped: `knn_selector_warpbound_guard_for`
+in checks/kernel_matrix.mojo (NVIDIA on; Apple and AMD pass the identity
+check and are RUN OWED for timing; Qualcomm and Intel keep the chain by
+lane width). Against the cached cuML H100 rows (26.66 / 31.13 ms at the
+qualified boundary) the bare search moves from 2.61x / 2.88x toward about
+2.3x / 2.5x; a paired opponent run at the qualified boundary is the
+number to publish, not this ratio.
+
+Where the remaining selection time is: 3.5 ms of tile reads and compares
+(k-independent), about 3.1 ms of chain at k10 and 5.9 ms at k15 (46
+percent of warp-steps times the chain), 0.4 to 0.75 ms of rank. The next
+lever is the admit rate: a tighter bound (the k-th smallest of the 32
+heads costs k rounds of shuffles, C2 rejected it as too expensive before
+the guard existed; with the guard it is worth pricing) or a two-level
+bound (warp then block, the block one rarely).

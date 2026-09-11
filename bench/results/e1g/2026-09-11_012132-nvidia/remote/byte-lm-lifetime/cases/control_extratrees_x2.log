@@ -1,0 +1,7 @@
+[control_extratrees_x2]   0.107s imported {"mojolearn_file": "/root/mojolearn/python/mojolearn/__init__.py", "version": "0.8.0"}
+[control_extratrees_x2]   0.112s native_call_begin {"binding": "_mojolearn_trees", "entry": "et_classifier_fit(_export)", "features": 8, "label": "fit1", "rows": 512}
+[control_extratrees_x2]   1.923s native_call_end {"label": "fit1", "n_trees": 8}
+[control_extratrees_x2]   1.924s hashed {"label": "fit1"}
+[control_extratrees_x2]   1.926s native_call_begin {"binding": "_mojolearn_trees", "entry": "et_classifier_fit(_export)", "features": 8, "label": "fit2", "rows": 512}
+[control_extratrees_x2]   1.930s native_call_end {"label": "fit2", "n_trees": 8}
+[control_extratrees_x2]   1.930s hashed {"label": "fit2"}

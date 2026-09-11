@@ -11,10 +11,15 @@ weights=(rng.standard_normal(shape.n_total)*.02).astype(np.float32)
 ids=rng.integers(0,shape.vocab_size,(shape.batch,shape.length+1),dtype=np.int32)
 resident=os.environ.get('WP67_LM_RESIDENT','0')=='1'
 with_trainer=LanguageModelTrainer(weights,shape=shape,resident=resident,data_schedule={'dataset':'wp67-gate'})
+# DEVIATION 2514: under step_result='lean' the gradient stays on the device
+# and is fetched with export_gradients(); under 'full' the result carries it.
+lean=with_trainer.run_metadata()['step_result']=='lean'
 try:
     for step in range(int(os.environ.get("WP67_LM_STEPS", "1")) if os.environ.get("WP67_LM_ACTION", "train")!="eval" else 0):
         print('training',resident,step,flush=True)
         result=with_trainer.train_step(ids)
+        if lean:
+            result=dict(result,**with_trainer.export_gradients())
         assert result['step']==step+1 and np.isfinite(result['loss'])
         for key in ('parameters','m','v','flags'):
             value=np.asarray(with_trainer.state_dict()[key])

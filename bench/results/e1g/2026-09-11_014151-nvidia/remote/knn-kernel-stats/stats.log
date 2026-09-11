@@ -1,0 +1,10 @@
+cap16_k0_generic	16	0	neighbors_checks_select_smallk6A6A6A6A_1c9c2b8afe7aa2fb	99	0			0	0			2048	2	76	2	25.0	2	25.0	runtime+ptx
+cap16_k10	16	10	neighbors_checks_select_smallk6A6A6A6A_da115a88cbf3bef8	54	0			0	0			2048	4	76	4	50.0	4	50.0	runtime+ptx
+cap16_k15	16	15	neighbors_checks_select_smallk6A6A6A6A_928bb82e42f5703c	56	0			0	0			2048	4	76	4	50.0	4	50.0	runtime+ptx
+cap1_k1_scanonly1	1	1	neighbors_checks_select_smallk6A6A6A6A_f1146463d0459d38	31	0			0	0			2048	8	76	8	100.0	8	100.0	runtime+ptx
+cap32_k0_generic	32	0	neighbors_checks_select_smallk6A6A6A6A_59412b9381d14a63	107	0			0	0			2048	2	76	2	25.0	2	25.0	runtime+ptx
+cap64_k0_generic	64	0	neighbors_checks_select_smallk6A6A6A6A_995b9adcc125e319	178	0			0	0			2048	1	76	1	12.5	1	12.5	runtime+ptx
+capk_k10	10	10	neighbors_checks_select_smallk6A6A6A6A_eabbf3170133897d	40	0			0	0			2048	6	76	6	75.0	6	75.0	runtime+ptx
+capk_k15	15	15	neighbors_checks_select_smallk6A6A6A6A_58d74d1d082797e8	56	0			0	0			2048	4	76	4	50.0	4	50.0	runtime+ptx
+capk_selp_k10	10	10	neighbors_checks_select_smallk6A6A6A6A_5a6afb3417f32adf	48	0			0	0			2048	5	76	5	62.5	5	62.5	runtime+ptx
+capk_selp_k15	15	15	neighbors_checks_select_smallk6A6A6A6A_e553509fe73141c5	56	0			0	0			2048	4	76	4	50.0	4	50.0	runtime+ptx

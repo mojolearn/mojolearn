@@ -1,0 +1,2 @@
+name, driver_version, uuid, clocks.current.sm [MHz], temperature.gpu
+NVIDIA H100 80GB HBM3, 580.126.09, GPU-afd93a5e-64ee-1a97-2c02-f275bb390b8d, 1980 MHz, 32

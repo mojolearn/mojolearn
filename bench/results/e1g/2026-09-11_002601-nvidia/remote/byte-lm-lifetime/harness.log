@@ -1,0 +1,7 @@
+== stateless_x1 (deadline 120s)
+   passed exit=0 wall=3.4s
+== stateless_x2 (deadline 120s)
+   timeout exit=-9 wall=126.0s
+== resident_close_reopen (deadline 120s)
+   timeout exit=-9 wall=126.0s
+{"failed": [], "hung": ["stateless_x2", "resident_close_reopen"], "passed": ["stateless_x1"]}

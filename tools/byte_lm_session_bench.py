@@ -37,8 +37,14 @@ def worker(args):
             stream.write(json.dumps(value, allow_nan=False) + '\n')
         print(json.dumps(value, allow_nan=False), flush=True)
 
+    # DEVIATION 2514: a trainer running step_result='lean' keeps the gradient
+    # on the device; the comparison below fetches it with export_gradients()
+    # after the timed call. Under 'full' the result carries it and nothing
+    # here changes.
+    lean = {name: model.run_metadata()['step_result'] == 'lean' for name, model in models.items()}
     emit({'event': 'setup', 'shape': shape.to_dict(), 'parameters': shape.n_total,
           'runtime': models['resident'].run_metadata(),
+          'step_result': {name: 'lean' if lean[name] else 'full' for name in models},
           'attention_path_requested': os.environ.get('MOJOLEARN_TRANSFORMER_ATTN_PATH'),
           'qualification': 'pilot only; target-model default qualification remains separate'})
     for index in range(args.pairs + 1):
@@ -52,6 +58,8 @@ def worker(args):
             elapsed = time.perf_counter() - start
             emit({'event': 'call_end', 'pair': index, 'arm': name,
                   'warmup': index == 0, 'seconds': elapsed})
+            if lean[name]:
+                outputs[name] = dict(outputs[name], **models[name].export_gradients(named=False))
         state = {name: model.state_dict() for name, model in models.items()}
         arrays = {name: {**{key: state[name][key] for key in ('parameters', 'm', 'v', 'flags')},
                          'gradient': outputs[name]['flat_gradients'],

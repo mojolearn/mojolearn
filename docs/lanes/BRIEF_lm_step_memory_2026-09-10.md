@@ -617,3 +617,100 @@ handoff's step 1 calls for (state validated once at admission and at
 export, no per-step whole-state round trips) is where the step goes from
 38 s to about 1 s at this shape; the memory candidates in this brief
 (2.4 GiB, 1.3 GiB, 1.1 GiB) come after that.
+
+## Step 8 (DEVIATION 2514, design section 8 row 8): the probe runs the lean step; RUN OWED for gate G5
+
+Landed on main after 621d3b15 (steps 4 to 7). Source only; nothing here has
+run on a GPU.
+
+`tools/lm_step_memory_probe.py` (schema `v3`) gains `--resident-lean`
+(constructs the trainer with `resident=True, step_result='lean'`; the
+timed boundary is unchanged, the public `train_step` call) and
+`--witness-every-step`. Under lean the per-step witnesses come from
+`export_gradients(named=False)` and `export_state()`, outside the timed
+boundary: after every step under `--witness-every-step`, otherwise ONCE
+after the last untimed step and before the `--component-timing` step (the
+gradient export is the LAST completed step's). `result.json` gains
+`resident`, `step_result`, `witness_every_step`, `witness_source`,
+`step_witnesses` (per-step `step`, `completed_steps`, `sha256`) and
+`final_witness` (`step`, `completed_steps`, `sha256` of gradients,
+parameters, m, v, flags, `export_seconds`, `source`; null when every step
+was witnessed). Every `step_end` event gains `step_result`, `witnessed`,
+`witness_export_seconds`; the lean run's one export is the `final_witness`
+event. Run 2's full witnesses are the `step_end.sha256` records in
+`control/events.jsonl` and `target/events.jsonl` (run 2's `result.json`
+predates `step_witnesses` and carries no hashes).
+
+`tools/lm_step_memory_probe.sh` runs the full control and target as before,
+then `control-lean/` and `target-lean/` (`--resident-lean
+--witness-every-step`, same steps and budget) and, if the lean target
+completed, `target-lean-timing/` (`--resident-lean --component-timing
+--steps 1`); `status.txt` gets a line per probe as before.
+
+The five other consumers of the step result (`byte_lm_real_text_capture.py`,
+`byte_lm_session_bench.py`, `wp67_lm_surface.py`,
+`byte_lm_runtime_numerical_check.py`, `byte_lm_lifetime_diag.py`) merge
+`export_gradients()` into the result when `run_metadata()['step_result']`
+is `'lean'`; under `'full'` they are unchanged. `state_dict()` already
+routes through `export_state()` on an open resident session.
+
+### RUN OWED (orchestrator, NVIDIA box, clean committed tree)
+
+```sh
+cd /Users/andrewhendel/CascadeProjects/mojolearn
+MOJOLEARN_RUNPOD_KEY_FILE=$HOME/.mojolearn_runpod_key \
+MOJOLEARN_GPU_ARCHS=sm_90a \
+MOJOLEARN_GEMM_LEG_EXTRA=tools/lm_step_memory_probe.sh \
+sh tools/gemm_remote_leg.sh nvidia --payload gemm --rent --minutes 75 \
+    --gpu "NVIDIA H100 80GB HBM3"
+```
+
+Six probes now run in one leg (three full, three lean); the 75-minute
+lease covers a repeat of run 2 (about 5 minutes for the full arm) plus the
+lean arm. Gate G5 (design section 7) passes when, under
+`<leg out>/remote/lm-step-memory/`:
+
+1. `target-lean/result.json` `steady_median_seconds` is under 2.0 s at the
+   same boundary as `target/result.json` (the public `train_step` call,
+   binding synchronized before publication);
+2. for every step k, `target-lean/result.json` `step_witnesses[k].sha256`
+   (loss, gradients, parameters, m, v, flags) equals the full run's
+   `step_end.sha256` for step k in `target/events.jsonl` of the SAME leg,
+   and both equal run 2's
+   `bench/results/e1g/2026-09-10_233303-nvidia/remote/lm-step-memory/target/events.jsonl`
+   on the same GPU; likewise `control-lean/` against `control/`;
+3. `target-lean-timing/result.json` `component_timing_ms` contains none of
+   the removed host phases of section 1.2 (`step.py_validate_state`,
+   `step.py_candidate_state`, `step.py_gradients_dict`,
+   `step.opt_refuse_download`, `step.bind_resident_admission`,
+   `step.py_input_unchanged`, `step.mirror_download_*`,
+   `step.py_export_gradients`) and does contain `step.shadow_copy`,
+   `step.ce_refuse_scan`, `step.opt_refuse_scan`,
+   `step.validate_after_scan`, `step.validate_grads_scan`; the phases
+   still present, sorted descending, are the answer to what remains.
+
+A lean `result.json` with `limited: true` or a probe exit 2 is a recorded
+limitation, not a pass. File the fetched directory under `bench/results`
+with its `extra_body.sh` copy; the default flip (design step 9) waits on
+this filing.
+
+## Gate G5 result: PASSED; the default flipped (H100 sm_90a, main 3b81dc2e, 2026-09-11 04:44Z to 04:52Z, `bench/results/e1g/2026-09-11_004220-nvidia/remote/lm-step-memory`)
+
+| shape | full step median (this leg) | lean step median | tokens/s lean | witnesses |
+|---|---:|---:|---:|---|
+| control 20.45M, L2048, V8192 | 1.26 s | 0.199 s | 10,305 | 3 of 3 steps equal the full path and run 2 |
+| target 162,147,840, L2048, V50257 | 8.59 s | 0.563 s | 3,637 | 3 of 3 steps equal the full path and run 2 |
+
+The full path itself fell from 38.9 s to 8.6 s at the target because the
+CE and optimizer refusals now scan on the device (steps 2 and 3) and the
+after-step validation is a device scan; its remaining cost is its mirrors
+and the Python-side validation of a state it still holds. The lean step's
+phase timers cover 87 percent: the twelve blocks 0.50 s (attention
+backward 262 ms), head forward and backward 46 ms, embedding 3 ms, shadow
+copy 2.3 ms; none of run 2's host phases appear. From 44.97 s (run 1) to
+0.565 s is 80x at the same boundary with the same bits at every step.
+step_result now defaults to 'lean' for resident trainers (step 9).
+
+What remains per step is device compute, so the handoff's priority 3
+(GEMM and attention) is now the whole target-shape step: attention
+backward alone is 46 percent of it.
