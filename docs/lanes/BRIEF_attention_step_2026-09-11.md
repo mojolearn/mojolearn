@@ -4,8 +4,10 @@ Source-only lane, September 11, 2026, IDENTICAL only. Nothing here ran on
 the Mac or on a GPU; every number below that is not copied from the
 evidence path is derived from the source by counting, and says so. The
 shipped default is untouched. Every arm is opt-in behind a build define
-and an environment read, and `ATTN_ARM_DEFAULT` stays `baseline` until a
-leg flips it.
+and an environment read. UPDATE 2026-09-11 11:44Z: the H100 leg ran, every
+gate in section 6 held on both corpora, and `ATTN_ARM_DEFAULT` is now
+`stash_tiled` (section 10); the shipped build compiles that arm's clean
+kernels and runs them at head_dim 64.
 
 Parent, [HANDOFF_ai_classical_identical_next_2026-09-10.md](HANDOFF_ai_classical_identical_next_2026-09-10.md)
 section 3 ("Attention. Profile backward and repeated operand traffic;
@@ -520,66 +522,88 @@ brief, in the same session as the evidence filing.
   source-code corpus (bytes not committed).
 - This brief.
 
-## RUN OWED (orchestrator; nothing below has run)
+## 10. Leg result and the flip (2026-09-11, H100 80GB HBM3 sm_90a, commit e6b1350a)
 
-On the M4, one at a time, `nice 19`, a `mojo` check of each new or
-changed file (no GPU work; `mojo build` of the check compiles the kernels
-for the Apple column, which is the column-invariance witness for the
-shared pages).
+Evidence, `bench/results/e1g/2026-09-11_113013-nvidia-h100-attention-step/remote/attention-step/`
+(status.tsv, arms-check.log, smoke-*.log, price-*.log, price_tables.txt,
+timers_summary.tsv, lm-*/result.json, lmtiming-*/result.json,
+lm_summary.tsv). Two earlier legs the same morning
+(`2026-09-11_070550-...` and `2026-09-11_111701-...`) died in the
+probe's new `--corpus` option before any measurement (a NameError, then a
+duplicate keyword; both mine, both fixed on main, ce67991f and e6b1350a);
+their builds, arms check and smokes passed and are kept as evidence of
+that. The real activations (q, k, v, dctx at the target shape, 25 MB per
+corpus) are not in the repository; they are at
+`~/mojolearn-evidence/attention-step-2026-09-11_113013/operands-<corpus>/`
+on Andrew's Mac and their sha256s are in each `operands-<corpus>/sha256.txt`
+here.
 
-```sh
-cd /Users/andrewhendel/CascadeProjects/mojolearn
-nice -n 19 pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_ATTN_ARM_TRIAL=1 -I . \
-    transformer/checks/transformer_attention_arms_check.mojo -o /tmp/attn_arms_check
-nice -n 19 pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_ATTN_ARM_TRIAL=1 -I . \
-    bench/attention_step_price_main.mojo -o /tmp/attn_price
-nice -n 19 pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_ATTN_ARM_TRIAL=1 \
-    -D MOJOLEARN_ATTN_PHASE_TIMERS=1 -I . bench/attention_step_price_main.mojo -o /tmp/attn_timers
-nice -n 19 pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . \
-    transformer/checks/transformer_fused_check.mojo -o /tmp/fused_check_shipped
-```
+Gates (section 6), all six held on both corpora: arms check PASS (15 x 3);
+four smokes PASS; every `BITS ... _vs_baseline` and `baseline_vs_eager`
+line MATCH on both corpora's activations (52, 38, 30, 30 lines across the
+four price runs, zero mismatches), REACH proven with clean restore in all
+eight; the lean step `limited: false` with every step witness equal to the
+baseline's on both corpora (`witnesses_equal_baseline=True`, three steps,
+six hashes each); the timers present and lower.
 
-The fourth build is the shipped path without the hook; it must still
-compile (the `_arm` launchers and the delegating names). If the M4 is
-idle, the small-shape gate is light enough to run there too (17 cases at
-L <= 700; the arms exist at hd 64 only and the check asserts reach at hd
-64).
+Price at the target shape, real activations, medians of seven rounds
+(spread across rounds under 0.1 ms on both arms):
 
-```sh
-nice -n 19 /tmp/attn_arms_check
-```
+| arm | fwd ms | fwd+bwd ms | fwd ratio | fwd+bwd ratio | corpus |
+|---|---:|---:|---:|---:|---|
+| baseline | 6.79 | 28.46 | 1.00 | 1.00 | shakespeare |
+| bwd_stash | 6.76 | 20.91 | 1.00 | 1.36 | shakespeare |
+| fwd_sstash | 3.16 | 24.81 | 2.14 | 1.15 | shakespeare |
+| bwd_stash_tiled | 6.80 | 17.17 | 0.99 | 1.66 | shakespeare |
+| stash_tiled | 3.17 | 13.57 | 2.14 | 2.10 | shakespeare |
+| baseline | 6.78 | 28.52 | 1.00 | 1.00 | cpython |
+| stash_tiled | 3.16 | 13.57 | 2.14 | 2.10 | cpython |
 
-Then the H100 leg (RunPod, one-hour lease, the key file never exported).
+The lean target step (162,147,840 parameters, L2048, batch 1, three
+steps, median of the two steady steps):
 
-```sh
-cd /Users/andrewhendel/CascadeProjects/mojolearn
-MOJOLEARN_RUNPOD_KEY_FILE=$HOME/.mojolearn_runpod_key \
-MOJOLEARN_GPU_ARCHS=sm_90a \
-MOJOLEARN_GEMM_LEG_EXTRA=tools/attention_step_leg.sh \
-MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/$(date +%Y-%m-%d_%H%M%S)-nvidia-h100-attention-step \
-sh tools/gemm_remote_leg.sh nvidia --payload gemm --rent --minutes 60 \
-    --gpu "NVIDIA H100 80GB HBM3"
-```
+| corpus | baseline s | stash_tiled s | ratio | witnesses |
+|---|---:|---:|---:|---|
+| shakespeare | 0.5619 | 0.3829 | 1.47 | equal, 3 steps x 6 hashes |
+| cpython | 0.5593 | 0.3804 | 1.47 | equal, 3 steps x 6 hashes |
 
-Read, under `<leg out>/remote/attention-step/`, `status.tsv` (every item
-exit 0, no 124), `arms-check.log` (PASS), `price_verdicts.txt` (no MOVED
-on a `_vs_` line, every REACH flipped > 0 and restored, on the smoke and
-on both corpora), `price_tables.txt` (the ratios and TFLOP/s per arm and
-corpus), `timers_summary.tsv` (the per-kernel split per arm),
-`lm_summary.tsv` (the lean medians per arm and corpus, the witnesses and
-`witnesses_equal_baseline`), `operands-<corpus>/sha256.txt` (the
-activation files the prices were taken on), and
-`lmtiming-<arm>-<corpus>/result.json` `component_timing_ms` for
-`attn.core`, `bwd.attention` and the `attn.*` lines. File the fetched
-directory under `bench/results` with the `extra_body.sh` copy (the
-`operands-*` directories are 25 MB of activations each and are evidence
-OUTSIDE the source repo; keep their `sha256.txt` and `meta.txt`, not the
-`.bin` files); the default flip waits on the filing and on gate 6.
+Per-kernel timers in the lean step (serialized, a breakdown and not a
+price; cpython corpus, shakespeare within 0.5 ms of every line):
 
-Optional on the Mac before the leg, no GPU and no compute, a rehearsal of
-the corpus fetch (network, tar, sha256) so a box failure there is not a
-surprise.
+| line | baseline ms | stash_tiled ms |
+|---|---:|---:|
+| envelope.native_call | 560.8 | 381.9 |
+| bwd.attention | 261.4 | 125.5 |
+| attn.bwd_zdot / attn.bwd_zdot_stash | 52.2 | 89.4 |
+| attn.bwd_dq / attn.bwd_dq_tiled | 90.7 | 15.5 |
+| attn.bwd_dkdv / attn.bwd_dkdv_tiled | 116.4 | 18.4 |
+| attn.core | 81.0 | 38.4 |
+| attn.fwd_kernel / attn.fwd_sstash_kernel | 79.5 | 36.8 |
+| attn.fwd_scratch_alloc + attn.bwd_scratch_alloc | | 0.14 + 0.14 |
+| attn.fwd_regime_scan + attn.bwd_regime_scan + both corner flags | 3.4 | 3.3 |
 
-```sh
-sh tools/fetch_corpus_cpython312_lib.sh && sh tools/fetch_corpus_cpython312_lib.sh --check
-```
+Reading. The two tiled folds took dq and dkdv from 207 ms to 34 ms. The
+stash zdot is now 89 ms, 71 percent of the backward: it is the shipped
+zdot (four rows per block, the z fold on lane 0 of each row) plus the
+stash stores, so DEVIATION 2528 (a 64-row register-blocked zdot with the
+fold on 64 threads) is the backward's next floor. The scratch allocation
+is 0.14 ms per direction per step, so DEVIATION 2529 (persistent scratch)
+is not worth a lane at this shape. The regime scans and corner flags are
+3.3 ms per step; not a lane either.
+
+The flip. `ATTN_ARM_DEFAULT = ATTN_ARM_FWD_SSTASH | ATTN_ARM_BWD_STASH |
+ATTN_ARM_BWD_TILED`; `ATTN_ARM_COMPILED` (trial build, or the default is
+an arm) gates the arm launch code, and every sabotage instantiation sits
+under `comptime if ATTN_ARM_TRIAL` so a shipped build compiles only the
+default arm's clean kernels. Read back on the M4 after the edit, one at a
+time under `nice 19`: the shipped `transformer_fused_check` (no trial
+define) PASS, 15 cases, the six head_dim 64 cases RAN through the arm and
+every buffer bit-identical to eager; `transformer_attention_arms_check`
+PASS 15 x 3 with reach; the shipped bindings (no extra defines) ran the
+control shape on tinyshakespeare for three steps with every witness equal
+to the baseline arm's run of the same morning (Apple column, control
+shape only: 3.77 s to 2.79 s per step, not a claim).
+
+Not a claim against anyone: the torch step at the target shape is an
+OWED opponent row (bench/OPPONENT_REFERENCE.md); until it exists these
+are internal before and after numbers.

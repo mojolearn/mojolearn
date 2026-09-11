@@ -1,0 +1,121 @@
+2094 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x123000000000, nodemask=1)
+=== attention step price, mode IDENTICAL, column nvidia, generator shape B1_L2048_nh12_nkv12_hd64_win0 (a file: kind carries its own shape)
+trial_hook=True phase_timers_built=False
+baseline=baseline candidate=stash_tiled rounds=7 warmups=2
+--- kind file:operands-shakespeare
+shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 S=2048 key_lo=0 pos0=0
+DIGEST file:operands-shakespeare baseline ctx 5425d02dd1adaf93 amax ce645fc3f08c46c4 denom 0e74f8eae0551def zdot 5b85fc0aab40e95a dq 8b876e42ee14ed17 dk 6c0b8fb678387b28 dv 119cdf13e7127dcf
+DIGEST file:operands-shakespeare stash_tiled ctx 5425d02dd1adaf93 amax ce645fc3f08c46c4 denom 0e74f8eae0551def zdot 5b85fc0aab40e95a dq 8b876e42ee14ed17 dk 6c0b8fb678387b28 dv 119cdf13e7127dcf
+BITS file:operands-shakespeare stash_tiled_vs_baseline ctx MATCH 0 of 1572864
+BITS file:operands-shakespeare stash_tiled_vs_baseline amax MATCH 0 of 24576
+BITS file:operands-shakespeare stash_tiled_vs_baseline denom MATCH 0 of 24576
+BITS file:operands-shakespeare stash_tiled_vs_baseline zdot MATCH 0 of 24576
+BITS file:operands-shakespeare stash_tiled_vs_baseline dq MATCH 0 of 1572864
+BITS file:operands-shakespeare stash_tiled_vs_baseline dk MATCH 0 of 1572864
+BITS file:operands-shakespeare stash_tiled_vs_baseline dv MATCH 0 of 1572864
+BITS file:operands-shakespeare stash_tiled+sabotage_vs_baseline ctx MOVED 497731 of 1572864
+BITS file:operands-shakespeare stash_tiled+sabotage_vs_baseline amax MATCH 0 of 24576
+BITS file:operands-shakespeare stash_tiled+sabotage_vs_baseline denom MOVED 4414 of 24576
+BITS file:operands-shakespeare stash_tiled+sabotage_vs_baseline zdot MOVED 3318 of 24576
+BITS file:operands-shakespeare stash_tiled+sabotage_vs_baseline dq MOVED 1277688 of 1572864
+BITS file:operands-shakespeare stash_tiled+sabotage_vs_baseline dk MOVED 1317264 of 1572864
+BITS file:operands-shakespeare stash_tiled+sabotage_vs_baseline dv MOVED 1166150 of 1572864
+BITS file:operands-shakespeare stash_tiled_restored_vs_baseline ctx MATCH 0 of 1572864
+BITS file:operands-shakespeare stash_tiled_restored_vs_baseline amax MATCH 0 of 24576
+BITS file:operands-shakespeare stash_tiled_restored_vs_baseline denom MATCH 0 of 24576
+BITS file:operands-shakespeare stash_tiled_restored_vs_baseline zdot MATCH 0 of 24576
+BITS file:operands-shakespeare stash_tiled_restored_vs_baseline dq MATCH 0 of 1572864
+BITS file:operands-shakespeare stash_tiled_restored_vs_baseline dk MATCH 0 of 1572864
+BITS file:operands-shakespeare stash_tiled_restored_vs_baseline dv MATCH 0 of 1572864
+REACH file:operands-shakespeare stash_tiled sabotage_flipped_cells=4266565 clean_restored=True
+PRICE attention baseline fwd file:operands-shakespeare 6.76736 ms
+PRICE attention baseline fwdbwd file:operands-shakespeare 28.452782 ms
+PRICE attention stash_tiled fwd file:operands-shakespeare 3.171275 ms
+PRICE attention stash_tiled fwdbwd file:operands-shakespeare 13.55929 ms
+PRICE attention stash_tiled fwd file:operands-shakespeare 3.152682 ms
+PRICE attention stash_tiled fwdbwd file:operands-shakespeare 13.565052 ms
+PRICE attention baseline fwd file:operands-shakespeare 6.866579 ms
+PRICE attention baseline fwdbwd file:operands-shakespeare 28.500572 ms
+PRICE attention baseline fwd file:operands-shakespeare 6.789182 ms
+PRICE attention baseline fwdbwd file:operands-shakespeare 28.42502 ms
+PRICE attention stash_tiled fwd file:operands-shakespeare 3.169162 ms
+PRICE attention stash_tiled fwdbwd file:operands-shakespeare 13.54279 ms
+PRICE attention stash_tiled fwd file:operands-shakespeare 3.176817 ms
+PRICE attention stash_tiled fwdbwd file:operands-shakespeare 13.61233 ms
+PRICE attention baseline fwd file:operands-shakespeare 6.862914 ms
+PRICE attention baseline fwdbwd file:operands-shakespeare 28.486208 ms
+PRICE attention baseline fwd file:operands-shakespeare 6.732944 ms
+PRICE attention baseline fwdbwd file:operands-shakespeare 28.576369 ms
+PRICE attention stash_tiled fwd file:operands-shakespeare 3.167959 ms
+PRICE attention stash_tiled fwdbwd file:operands-shakespeare 13.599818 ms
+PRICE attention stash_tiled fwd file:operands-shakespeare 3.150659 ms
+PRICE attention stash_tiled fwdbwd file:operands-shakespeare 13.597292 ms
+PRICE attention baseline fwd file:operands-shakespeare 6.807549 ms
+PRICE attention baseline fwdbwd file:operands-shakespeare 28.464159 ms
+PRICE attention baseline fwd file:operands-shakespeare 6.762255 ms
+PRICE attention baseline fwdbwd file:operands-shakespeare 28.435633 ms
+PRICE attention stash_tiled fwd file:operands-shakespeare 3.159799 ms
+PRICE attention stash_tiled fwdbwd file:operands-shakespeare 13.503189 ms
+TABLE kind=file:operands-shakespeare shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 (useful flops: fwd 4*cells*hd, bwd 10*cells*hd; executed multiplier of the shipped kernels: fwd dots 3 of 2 contractions, bwd dots 6 of 5)
+TABLE arm | fwd median ms | fwd useful TFLOP/s | fwd+bwd median ms | bwd (derived) ms | bwd useful TFLOP/s | fwd ratio | fwd+bwd ratio
+TABLE baseline | 6.789182 | 0.9493922348819047 | 28.464159 | 21.674977 | 0.7434375445934729 | 1.0 | 1.0
+TABLE stash_tiled | 3.167959 | 2.0346212409945963 | 13.565052 | 10.397093 | 1.549855491337819 | 2.143077609274615 | 2.098344997129388
+--- kind file:operands-cpython
+shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 S=2048 key_lo=0 pos0=0
+DIGEST file:operands-cpython baseline ctx b2f76ad30bdfa0f6 amax 947ae346666c52ff denom bb2f8fccbcf4b2b7 zdot 7d8bd3cf3833ba48 dq 5c90b4ed98590d29 dk 70395bb4786fe308 dv fbc71e953233280d
+DIGEST file:operands-cpython stash_tiled ctx b2f76ad30bdfa0f6 amax 947ae346666c52ff denom bb2f8fccbcf4b2b7 zdot 7d8bd3cf3833ba48 dq 5c90b4ed98590d29 dk 70395bb4786fe308 dv fbc71e953233280d
+BITS file:operands-cpython stash_tiled_vs_baseline ctx MATCH 0 of 1572864
+BITS file:operands-cpython stash_tiled_vs_baseline amax MATCH 0 of 24576
+BITS file:operands-cpython stash_tiled_vs_baseline denom MATCH 0 of 24576
+BITS file:operands-cpython stash_tiled_vs_baseline zdot MATCH 0 of 24576
+BITS file:operands-cpython stash_tiled_vs_baseline dq MATCH 0 of 1572864
+BITS file:operands-cpython stash_tiled_vs_baseline dk MATCH 0 of 1572864
+BITS file:operands-cpython stash_tiled_vs_baseline dv MATCH 0 of 1572864
+BITS file:operands-cpython stash_tiled+sabotage_vs_baseline ctx MOVED 490294 of 1572864
+BITS file:operands-cpython stash_tiled+sabotage_vs_baseline amax MATCH 0 of 24576
+BITS file:operands-cpython stash_tiled+sabotage_vs_baseline denom MOVED 4353 of 24576
+BITS file:operands-cpython stash_tiled+sabotage_vs_baseline zdot MOVED 3262 of 24576
+BITS file:operands-cpython stash_tiled+sabotage_vs_baseline dq MOVED 1271584 of 1572864
+BITS file:operands-cpython stash_tiled+sabotage_vs_baseline dk MOVED 1292145 of 1572864
+BITS file:operands-cpython stash_tiled+sabotage_vs_baseline dv MOVED 1174570 of 1572864
+BITS file:operands-cpython stash_tiled_restored_vs_baseline ctx MATCH 0 of 1572864
+BITS file:operands-cpython stash_tiled_restored_vs_baseline amax MATCH 0 of 24576
+BITS file:operands-cpython stash_tiled_restored_vs_baseline denom MATCH 0 of 24576
+BITS file:operands-cpython stash_tiled_restored_vs_baseline zdot MATCH 0 of 24576
+BITS file:operands-cpython stash_tiled_restored_vs_baseline dq MATCH 0 of 1572864
+BITS file:operands-cpython stash_tiled_restored_vs_baseline dk MATCH 0 of 1572864
+BITS file:operands-cpython stash_tiled_restored_vs_baseline dv MATCH 0 of 1572864
+REACH file:operands-cpython stash_tiled sabotage_flipped_cells=4236208 clean_restored=True
+PRICE attention baseline fwd file:operands-cpython 6.776869 ms
+PRICE attention baseline fwdbwd file:operands-cpython 28.489066 ms
+PRICE attention stash_tiled fwd file:operands-cpython 3.160465 ms
+PRICE attention stash_tiled fwdbwd file:operands-cpython 13.569958 ms
+PRICE attention stash_tiled fwd file:operands-cpython 3.178348 ms
+PRICE attention stash_tiled fwdbwd file:operands-cpython 13.617309 ms
+PRICE attention baseline fwd file:operands-cpython 6.781337 ms
+PRICE attention baseline fwdbwd file:operands-cpython 28.581949 ms
+PRICE attention baseline fwd file:operands-cpython 6.822263 ms
+PRICE attention baseline fwdbwd file:operands-cpython 28.602025 ms
+PRICE attention stash_tiled fwd file:operands-cpython 3.159014 ms
+PRICE attention stash_tiled fwdbwd file:operands-cpython 13.612794 ms
+PRICE attention stash_tiled fwd file:operands-cpython 3.168564 ms
+PRICE attention stash_tiled fwdbwd file:operands-cpython 13.822851 ms
+PRICE attention baseline fwd file:operands-cpython 6.720789 ms
+PRICE attention baseline fwdbwd file:operands-cpython 28.479983 ms
+PRICE attention baseline fwd file:operands-cpython 6.740949 ms
+PRICE attention baseline fwdbwd file:operands-cpython 28.521734 ms
+PRICE attention stash_tiled fwd file:operands-cpython 3.162079 ms
+PRICE attention stash_tiled fwdbwd file:operands-cpython 13.536496 ms
+PRICE attention stash_tiled fwd file:operands-cpython 3.155079 ms
+PRICE attention stash_tiled fwdbwd file:operands-cpython 13.555722 ms
+PRICE attention baseline fwd file:operands-cpython 6.790136 ms
+PRICE attention baseline fwdbwd file:operands-cpython 28.507104 ms
+PRICE attention baseline fwd file:operands-cpython 6.710397 ms
+PRICE attention baseline fwdbwd file:operands-cpython 28.560059 ms
+PRICE attention stash_tiled fwd file:operands-cpython 3.146984 ms
+PRICE attention stash_tiled fwdbwd file:operands-cpython 13.554239 ms
+TABLE kind=file:operands-cpython shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 (useful flops: fwd 4*cells*hd, bwd 10*cells*hd; executed multiplier of the shipped kernels: fwd dots 3 of 2 contractions, bwd dots 6 of 5)
+TABLE arm | fwd median ms | fwd useful TFLOP/s | fwd+bwd median ms | bwd (derived) ms | bwd useful TFLOP/s | fwd ratio | fwd+bwd ratio
+TABLE baseline | 6.776869 | 0.9511172005833373 | 28.521734 | 21.744864999999997 | 0.741048136192154 | 1.0 | 1.0
+TABLE stash_tiled | 3.160465 | 2.0394456739751905 | 13.569958 | 10.409493 | 1.5480092719213125 | 2.144263265057515 | 2.1018292024190495
+attention_step_price: PASS (stash_tiled vs baseline)

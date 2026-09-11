@@ -1,0 +1,57 @@
+1490 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5bc6c0000000, nodemask=2)
+=== attention step price, mode IDENTICAL, column nvidia, generator shape B1_L2048_nh12_nkv12_hd64_win0 (a file: kind carries its own shape)
+trial_hook=True phase_timers_built=False
+baseline=baseline candidate=stash_tiled rounds=7 warmups=2
+--- kind hashed
+shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 S=2048 key_lo=0 pos0=0
+DIGEST hashed baseline ctx 13ccc93eac28789a amax afaf4c3ad51a2071 denom 461ef8b28777ac11 zdot aba1ca249126f2a9 dq d66200e4f5fecee1 dk cec17a18979026ec dv 1082386d9d9af404
+DIGEST hashed stash_tiled ctx 13ccc93eac28789a amax afaf4c3ad51a2071 denom 461ef8b28777ac11 zdot aba1ca249126f2a9 dq d66200e4f5fecee1 dk cec17a18979026ec dv 1082386d9d9af404
+BITS hashed stash_tiled_vs_baseline ctx MATCH 0 of 1572864
+BITS hashed stash_tiled_vs_baseline amax MATCH 0 of 24576
+BITS hashed stash_tiled_vs_baseline denom MATCH 0 of 24576
+BITS hashed stash_tiled_vs_baseline zdot MATCH 0 of 24576
+BITS hashed stash_tiled_vs_baseline dq MATCH 0 of 1572864
+BITS hashed stash_tiled_vs_baseline dk MATCH 0 of 1572864
+BITS hashed stash_tiled_vs_baseline dv MATCH 0 of 1572864
+BITS hashed stash_tiled+sabotage_vs_baseline ctx MOVED 1091906 of 1572864
+BITS hashed stash_tiled+sabotage_vs_baseline amax MATCH 0 of 24576
+BITS hashed stash_tiled+sabotage_vs_baseline denom MOVED 6472 of 24576
+BITS hashed stash_tiled+sabotage_vs_baseline zdot MOVED 5435 of 24576
+BITS hashed stash_tiled+sabotage_vs_baseline dq MOVED 1417359 of 1572864
+BITS hashed stash_tiled+sabotage_vs_baseline dk MOVED 1236285 of 1572864
+BITS hashed stash_tiled+sabotage_vs_baseline dv MOVED 1240433 of 1572864
+BITS hashed stash_tiled_restored_vs_baseline ctx MATCH 0 of 1572864
+BITS hashed stash_tiled_restored_vs_baseline amax MATCH 0 of 24576
+BITS hashed stash_tiled_restored_vs_baseline denom MATCH 0 of 24576
+BITS hashed stash_tiled_restored_vs_baseline zdot MATCH 0 of 24576
+BITS hashed stash_tiled_restored_vs_baseline dq MATCH 0 of 1572864
+BITS hashed stash_tiled_restored_vs_baseline dk MATCH 0 of 1572864
+BITS hashed stash_tiled_restored_vs_baseline dv MATCH 0 of 1572864
+REACH hashed stash_tiled sabotage_flipped_cells=4997890 clean_restored=True
+--- kind heavytail
+shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 S=2048 key_lo=0 pos0=0
+DIGEST heavytail baseline ctx aff4e652e9f55718 amax 839832dc27b619dc denom 7cbf2d64fd3477b2 zdot 3b3f30c9c44ac436 dq f46bc57e6248e259 dk 6eefe3816467e38d dv 65573d5a06bdfda8
+DIGEST heavytail stash_tiled ctx aff4e652e9f55718 amax 839832dc27b619dc denom 7cbf2d64fd3477b2 zdot 3b3f30c9c44ac436 dq f46bc57e6248e259 dk 6eefe3816467e38d dv 65573d5a06bdfda8
+BITS heavytail stash_tiled_vs_baseline ctx MATCH 0 of 1572864
+BITS heavytail stash_tiled_vs_baseline amax MATCH 0 of 24576
+BITS heavytail stash_tiled_vs_baseline denom MATCH 0 of 24576
+BITS heavytail stash_tiled_vs_baseline zdot MATCH 0 of 24576
+BITS heavytail stash_tiled_vs_baseline dq MATCH 0 of 1572864
+BITS heavytail stash_tiled_vs_baseline dk MATCH 0 of 1572864
+BITS heavytail stash_tiled_vs_baseline dv MATCH 0 of 1572864
+BITS heavytail stash_tiled+sabotage_vs_baseline ctx MOVED 1255215 of 1572864
+BITS heavytail stash_tiled+sabotage_vs_baseline amax MATCH 0 of 24576
+BITS heavytail stash_tiled+sabotage_vs_baseline denom MOVED 8181 of 24576
+BITS heavytail stash_tiled+sabotage_vs_baseline zdot MOVED 7198 of 24576
+BITS heavytail stash_tiled+sabotage_vs_baseline dq MOVED 1391887 of 1572864
+BITS heavytail stash_tiled+sabotage_vs_baseline dk MOVED 1306530 of 1572864
+BITS heavytail stash_tiled+sabotage_vs_baseline dv MOVED 1333664 of 1572864
+BITS heavytail stash_tiled_restored_vs_baseline ctx MATCH 0 of 1572864
+BITS heavytail stash_tiled_restored_vs_baseline amax MATCH 0 of 24576
+BITS heavytail stash_tiled_restored_vs_baseline denom MATCH 0 of 24576
+BITS heavytail stash_tiled_restored_vs_baseline zdot MATCH 0 of 24576
+BITS heavytail stash_tiled_restored_vs_baseline dq MATCH 0 of 1572864
+BITS heavytail stash_tiled_restored_vs_baseline dk MATCH 0 of 1572864
+BITS heavytail stash_tiled_restored_vs_baseline dv MATCH 0 of 1572864
+REACH heavytail stash_tiled sabotage_flipped_cells=5302675 clean_restored=True
+attention_step_price: PASS (stash_tiled vs baseline)

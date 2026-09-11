@@ -1,0 +1,18 @@
+{
+  "exit_code": 1,
+  "timed_out": false,
+  "elapsed_seconds": 2.767710864543915,
+  "budget_seconds": 300.0,
+  "shape": [
+    1,
+    2048,
+    768,
+    12,
+    12,
+    64,
+    2048,
+    12,
+    50257
+  ],
+  "limitation": false
+}

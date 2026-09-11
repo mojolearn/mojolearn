@@ -1,0 +1,631 @@
+972 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x51abc0000000, nodemask=1)
+=== transformer fused attention ARMS vs eager, BITWISE (mode IDENTICAL, trial hook True)
+  case win45_hd64_l150  B=1 L=150 S=150 win=45 pos0=0 nh=4 nkv=2 hd=64
+    bwd_stash forward status: RAN
+    bwd_stash fwd ctx: 38400 cells bit-identical
+    bwd_stash fwd amax: 600 cells bit-identical
+    bwd_stash fwd denom: 600 cells bit-identical
+    bwd_stash backward status: RAN
+    bwd_stash bwd zdot: 600 cells bit-identical
+    bwd_stash bwd dq: 38400 cells bit-identical
+    bwd_stash bwd dk: 19200 cells bit-identical
+    bwd_stash bwd dv: 19200 cells bit-identical
+    bwd_stash+sabotage forward status: RAN
+    bwd_stash+sabotage fwd ctx: 38400 cells bit-identical
+    bwd_stash+sabotage fwd denom: 600 cells bit-identical
+    bwd_stash+sabotage backward status: RAN
+    bwd_stash+sabotage bwd dq: 30841 of 38400 cells MOVED; first at 0 eager 0x00000000 fused 0x0aecabc0
+    bwd_stash+sabotage bwd dk: 19200 cells bit-identical
+    bwd_stash+sabotage bwd dv: 16205 of 19200 cells MOVED; first at 1 eager 0xbf95cbad fused 0xbf95cbb0
+    REACH bwd_stash sabotage_flipped_cells=47046
+    fwd_sstash forward status: RAN
+    fwd_sstash fwd ctx: 38400 cells bit-identical
+    fwd_sstash fwd amax: 600 cells bit-identical
+    fwd_sstash fwd denom: 600 cells bit-identical
+    fwd_sstash backward status: RAN
+    fwd_sstash bwd zdot: 600 cells bit-identical
+    fwd_sstash bwd dq: 38400 cells bit-identical
+    fwd_sstash bwd dk: 19200 cells bit-identical
+    fwd_sstash bwd dv: 19200 cells bit-identical
+    fwd_sstash+sabotage forward status: RAN
+    fwd_sstash+sabotage fwd ctx: 24624 of 38400 cells MOVED; first at 384 eager 0x3f556a4c fused 0x3f556a4b
+    fwd_sstash+sabotage fwd denom: 111 of 600 cells MOVED; first at 0 eager 0x3f800000 fused 0x3f7fffff
+    fwd_sstash+sabotage backward status: RAN
+    fwd_sstash+sabotage bwd dq: 38400 cells bit-identical
+    fwd_sstash+sabotage bwd dk: 19200 cells bit-identical
+    fwd_sstash+sabotage bwd dv: 19200 cells bit-identical
+    REACH fwd_sstash sabotage_flipped_cells=24735
+    bwd_stash_tiled forward status: RAN
+    bwd_stash_tiled fwd ctx: 38400 cells bit-identical
+    bwd_stash_tiled fwd amax: 600 cells bit-identical
+    bwd_stash_tiled fwd denom: 600 cells bit-identical
+    bwd_stash_tiled backward status: RAN
+    bwd_stash_tiled bwd zdot: 600 cells bit-identical
+    bwd_stash_tiled bwd dq: 38400 cells bit-identical
+    bwd_stash_tiled bwd dk: 19200 cells bit-identical
+    bwd_stash_tiled bwd dv: 19200 cells bit-identical
+    bwd_stash_tiled+sabotage forward status: RAN
+    bwd_stash_tiled+sabotage fwd ctx: 38400 cells bit-identical
+    bwd_stash_tiled+sabotage fwd denom: 600 cells bit-identical
+    bwd_stash_tiled+sabotage backward status: RAN
+    bwd_stash_tiled+sabotage bwd dq: 30841 of 38400 cells MOVED; first at 0 eager 0x00000000 fused 0x0aecabc0
+    bwd_stash_tiled+sabotage bwd dk: 19200 cells bit-identical
+    bwd_stash_tiled+sabotage bwd dv: 16205 of 19200 cells MOVED; first at 1 eager 0xbf95cbad fused 0xbf95cbb0
+    REACH bwd_stash_tiled sabotage_flipped_cells=47046
+  case base_hd64_l300  B=2 L=300 S=300 win=0 pos0=0 nh=4 nkv=2 hd=64
+    bwd_stash forward status: RAN
+    bwd_stash fwd ctx: 153600 cells bit-identical
+    bwd_stash fwd amax: 2400 cells bit-identical
+    bwd_stash fwd denom: 2400 cells bit-identical
+    bwd_stash backward status: RAN
+    bwd_stash bwd zdot: 2400 cells bit-identical
+    bwd_stash bwd dq: 153600 cells bit-identical
+    bwd_stash bwd dk: 76800 cells bit-identical
+    bwd_stash bwd dv: 76800 cells bit-identical
+    bwd_stash+sabotage forward status: RAN
+    bwd_stash+sabotage fwd ctx: 153600 cells bit-identical
+    bwd_stash+sabotage fwd denom: 2400 cells bit-identical
+    bwd_stash+sabotage backward status: RAN
+    bwd_stash+sabotage bwd dq: 129224 of 153600 cells MOVED; first at 0 eager 0x00000000 fused 0x0aecabc0
+    bwd_stash+sabotage bwd dk: 76800 cells bit-identical
+    bwd_stash+sabotage bwd dv: 67157 of 76800 cells MOVED; first at 1 eager 0xbf89bd86 fused 0xbf89bd89
+    REACH bwd_stash sabotage_flipped_cells=196381
+    fwd_sstash forward status: RAN
+    fwd_sstash fwd ctx: 153600 cells bit-identical
+    fwd_sstash fwd amax: 2400 cells bit-identical
+    fwd_sstash fwd denom: 2400 cells bit-identical
+    fwd_sstash backward status: RAN
+    fwd_sstash bwd zdot: 2400 cells bit-identical
+    fwd_sstash bwd dq: 153600 cells bit-identical
+    fwd_sstash bwd dk: 76800 cells bit-identical
+    fwd_sstash bwd dv: 76800 cells bit-identical
+    fwd_sstash+sabotage forward status: RAN
+    fwd_sstash+sabotage fwd ctx: 111624 of 153600 cells MOVED; first at 448 eager 0x3d52f95b fused 0x3d52f963
+    fwd_sstash+sabotage fwd denom: 479 of 2400 cells MOVED; first at 0 eager 0x3f800000 fused 0x3f7fffff
+    fwd_sstash+sabotage backward status: RAN
+    fwd_sstash+sabotage bwd dq: 153600 cells bit-identical
+    fwd_sstash+sabotage bwd dk: 76800 cells bit-identical
+    fwd_sstash+sabotage bwd dv: 76800 cells bit-identical
+    REACH fwd_sstash sabotage_flipped_cells=112103
+    bwd_stash_tiled forward status: RAN
+    bwd_stash_tiled fwd ctx: 153600 cells bit-identical
+    bwd_stash_tiled fwd amax: 2400 cells bit-identical
+    bwd_stash_tiled fwd denom: 2400 cells bit-identical
+    bwd_stash_tiled backward status: RAN
+    bwd_stash_tiled bwd zdot: 2400 cells bit-identical
+    bwd_stash_tiled bwd dq: 153600 cells bit-identical
+    bwd_stash_tiled bwd dk: 76800 cells bit-identical
+    bwd_stash_tiled bwd dv: 76800 cells bit-identical
+    bwd_stash_tiled+sabotage forward status: RAN
+    bwd_stash_tiled+sabotage fwd ctx: 153600 cells bit-identical
+    bwd_stash_tiled+sabotage fwd denom: 2400 cells bit-identical
+    bwd_stash_tiled+sabotage backward status: RAN
+    bwd_stash_tiled+sabotage bwd dq: 129224 of 153600 cells MOVED; first at 0 eager 0x00000000 fused 0x0aecabc0
+    bwd_stash_tiled+sabotage bwd dk: 76800 cells bit-identical
+    bwd_stash_tiled+sabotage bwd dv: 67157 of 76800 cells MOVED; first at 1 eager 0xbf89bd86 fused 0xbf89bd89
+    REACH bwd_stash_tiled sabotage_flipped_cells=196381
+  case win96_hd64_l300  B=2 L=300 S=300 win=96 pos0=0 nh=4 nkv=2 hd=64
+    bwd_stash forward status: RAN
+    bwd_stash fwd ctx: 153600 cells bit-identical
+    bwd_stash fwd amax: 2400 cells bit-identical
+    bwd_stash fwd denom: 2400 cells bit-identical
+    bwd_stash backward status: RAN
+    bwd_stash bwd zdot: 2400 cells bit-identical
+    bwd_stash bwd dq: 153600 cells bit-identical
+    bwd_stash bwd dk: 76800 cells bit-identical
+    bwd_stash bwd dv: 76800 cells bit-identical
+    bwd_stash+sabotage forward status: RAN
+    bwd_stash+sabotage fwd ctx: 153600 cells bit-identical
+    bwd_stash+sabotage fwd denom: 2400 cells bit-identical
+    bwd_stash+sabotage backward status: RAN
+    bwd_stash+sabotage bwd dq: 127072 of 153600 cells MOVED; first at 0 eager 0x00000000 fused 0x0aecabc0
+    bwd_stash+sabotage bwd dk: 76800 cells bit-identical
+    bwd_stash+sabotage bwd dv: 65920 of 76800 cells MOVED; first at 0 eager 0x3fbd7f4c fused 0x3fbd7f4d
+    REACH bwd_stash sabotage_flipped_cells=192992
+    fwd_sstash forward status: RAN
+    fwd_sstash fwd ctx: 153600 cells bit-identical
+    fwd_sstash fwd amax: 2400 cells bit-identical
+    fwd_sstash fwd denom: 2400 cells bit-identical
+    fwd_sstash backward status: RAN
+    fwd_sstash bwd zdot: 2400 cells bit-identical
+    fwd_sstash bwd dq: 153600 cells bit-identical
+    fwd_sstash bwd dk: 76800 cells bit-identical
+    fwd_sstash bwd dv: 76800 cells bit-identical
+    fwd_sstash+sabotage forward status: RAN
+    fwd_sstash+sabotage fwd ctx: 107429 of 153600 cells MOVED; first at 448 eager 0x3d52f95b fused 0x3d52f963
+    fwd_sstash+sabotage fwd denom: 452 of 2400 cells MOVED; first at 0 eager 0x3f800000 fused 0x3f7fffff
+    fwd_sstash+sabotage backward status: RAN
+    fwd_sstash+sabotage bwd dq: 153600 cells bit-identical
+    fwd_sstash+sabotage bwd dk: 76800 cells bit-identical
+    fwd_sstash+sabotage bwd dv: 76800 cells bit-identical
+    REACH fwd_sstash sabotage_flipped_cells=107881
+    bwd_stash_tiled forward status: RAN
+    bwd_stash_tiled fwd ctx: 153600 cells bit-identical
+    bwd_stash_tiled fwd amax: 2400 cells bit-identical
+    bwd_stash_tiled fwd denom: 2400 cells bit-identical
+    bwd_stash_tiled backward status: RAN
+    bwd_stash_tiled bwd zdot: 2400 cells bit-identical
+    bwd_stash_tiled bwd dq: 153600 cells bit-identical
+    bwd_stash_tiled bwd dk: 76800 cells bit-identical
+    bwd_stash_tiled bwd dv: 76800 cells bit-identical
+    bwd_stash_tiled+sabotage forward status: RAN
+    bwd_stash_tiled+sabotage fwd ctx: 153600 cells bit-identical
+    bwd_stash_tiled+sabotage fwd denom: 2400 cells bit-identical
+    bwd_stash_tiled+sabotage backward status: RAN
+    bwd_stash_tiled+sabotage bwd dq: 127072 of 153600 cells MOVED; first at 0 eager 0x00000000 fused 0x0aecabc0
+    bwd_stash_tiled+sabotage bwd dk: 76800 cells bit-identical
+    bwd_stash_tiled+sabotage bwd dv: 65920 of 76800 cells MOVED; first at 0 eager 0x3fbd7f4c fused 0x3fbd7f4d
+    REACH bwd_stash_tiled sabotage_flipped_cells=192992
+  case win2048_hd64_l700_nrep4  B=1 L=700 S=700 win=2048 pos0=0 nh=4 nkv=1 hd=64
+    bwd_stash forward status: RAN
+    bwd_stash fwd ctx: 179200 cells bit-identical
+    bwd_stash fwd amax: 2800 cells bit-identical
+    bwd_stash fwd denom: 2800 cells bit-identical
+    bwd_stash backward status: RAN
+    bwd_stash bwd zdot: 2800 cells bit-identical
+    bwd_stash bwd dq: 179200 cells bit-identical
+    bwd_stash bwd dk: 44800 cells bit-identical
+    bwd_stash bwd dv: 44800 cells bit-identical
+    bwd_stash+sabotage forward status: RAN
+    bwd_stash+sabotage fwd ctx: 179200 cells bit-identical
+    bwd_stash+sabotage fwd denom: 2800 cells bit-identical
+    bwd_stash+sabotage backward status: RAN
+    bwd_stash+sabotage bwd dq: 155331 of 179200 cells MOVED; first at 0 eager 0x00000000 fused 0x0aecabc0
+    bwd_stash+sabotage bwd dk: 44800 cells bit-identical
+    bwd_stash+sabotage bwd dv: 40640 of 44800 cells MOVED; first at 1 eager 0xbb1a1dc9 fused 0xbb1a2045
+    REACH bwd_stash sabotage_flipped_cells=195971
+    fwd_sstash forward status: RAN
+    fwd_sstash fwd ctx: 179200 cells bit-identical
+    fwd_sstash fwd amax: 2800 cells bit-identical
+    fwd_sstash fwd denom: 2800 cells bit-identical
+    fwd_sstash backward status: RAN
+    fwd_sstash bwd zdot: 2800 cells bit-identical
+    fwd_sstash bwd dq: 179200 cells bit-identical
+    fwd_sstash bwd dk: 44800 cells bit-identical
+    fwd_sstash bwd dv: 44800 cells bit-identical
+    fwd_sstash+sabotage forward status: RAN
+    fwd_sstash+sabotage fwd ctx: 139219 of 179200 cells MOVED; first at 512 eager 0x3eee39aa fused 0x3eee39a9
+    fwd_sstash+sabotage fwd denom: 525 of 2800 cells MOVED; first at 0 eager 0x3f800000 fused 0x3f7fffff
+    fwd_sstash+sabotage backward status: RAN
+    fwd_sstash+sabotage bwd dq: 179200 cells bit-identical
+    fwd_sstash+sabotage bwd dk: 44800 cells bit-identical
+    fwd_sstash+sabotage bwd dv: 44800 cells bit-identical
+    REACH fwd_sstash sabotage_flipped_cells=139744
+    bwd_stash_tiled forward status: RAN
+    bwd_stash_tiled fwd ctx: 179200 cells bit-identical
+    bwd_stash_tiled fwd amax: 2800 cells bit-identical
+    bwd_stash_tiled fwd denom: 2800 cells bit-identical
+    bwd_stash_tiled backward status: RAN
+    bwd_stash_tiled bwd zdot: 2800 cells bit-identical
+    bwd_stash_tiled bwd dq: 179200 cells bit-identical
+    bwd_stash_tiled bwd dk: 44800 cells bit-identical
+    bwd_stash_tiled bwd dv: 44800 cells bit-identical
+    bwd_stash_tiled+sabotage forward status: RAN
+    bwd_stash_tiled+sabotage fwd ctx: 179200 cells bit-identical
+    bwd_stash_tiled+sabotage fwd denom: 2800 cells bit-identical
+    bwd_stash_tiled+sabotage backward status: RAN
+    bwd_stash_tiled+sabotage bwd dq: 155331 of 179200 cells MOVED; first at 0 eager 0x00000000 fused 0x0aecabc0
+    bwd_stash_tiled+sabotage bwd dk: 44800 cells bit-identical
+    bwd_stash_tiled+sabotage bwd dv: 40640 of 44800 cells MOVED; first at 1 eager 0xbb1a1dc9 fused 0xbb1a2045
+    REACH bwd_stash_tiled sabotage_flipped_cells=195971
+  case decode_hd64_pos200  B=2 L=1 S=201 win=0 pos0=200 nh=4 nkv=2 hd=64
+    bwd_stash forward status: RAN
+    bwd_stash fwd ctx: 512 cells bit-identical
+    bwd_stash fwd amax: 8 cells bit-identical
+    bwd_stash fwd denom: 8 cells bit-identical
+    bwd_stash backward status: RAN
+    bwd_stash bwd zdot: 8 cells bit-identical
+    bwd_stash bwd dq: 512 cells bit-identical
+    bwd_stash bwd dk: 51456 cells bit-identical
+    bwd_stash bwd dv: 51456 cells bit-identical
+    bwd_stash+sabotage forward status: RAN
+    bwd_stash+sabotage fwd ctx: 512 cells bit-identical
+    bwd_stash+sabotage fwd denom: 8 cells bit-identical
+    bwd_stash+sabotage backward status: RAN
+    bwd_stash+sabotage bwd dq: 432 of 512 cells MOVED; first at 0 eager 0xba21abbb fused 0xba21ab99
+    bwd_stash+sabotage bwd dk: 51456 cells bit-identical
+    bwd_stash+sabotage bwd dv: 41434 of 51456 cells MOVED; first at 0 eager 0x3b9ae2e6 fused 0x3b9ae2e7
+    REACH bwd_stash sabotage_flipped_cells=41866
+    fwd_sstash forward status: RAN
+    fwd_sstash fwd ctx: 512 cells bit-identical
+    fwd_sstash fwd amax: 8 cells bit-identical
+    fwd_sstash fwd denom: 8 cells bit-identical
+    fwd_sstash backward status: RAN
+    fwd_sstash bwd zdot: 8 cells bit-identical
+    fwd_sstash bwd dq: 512 cells bit-identical
+    fwd_sstash bwd dk: 51456 cells bit-identical
+    fwd_sstash bwd dv: 51456 cells bit-identical
+    fwd_sstash+sabotage forward status: RAN
+    fwd_sstash+sabotage fwd ctx: 401 of 512 cells MOVED; first at 0 eager 0xbd978f5e fused 0xbd978f5d
+    fwd_sstash+sabotage fwd denom: 1 of 8 cells MOVED; first at 2 eager 0x42a68ce2 fused 0x42a68ce3
+    fwd_sstash+sabotage backward status: RAN
+    fwd_sstash+sabotage bwd dq: 512 cells bit-identical
+    fwd_sstash+sabotage bwd dk: 51456 cells bit-identical
+    fwd_sstash+sabotage bwd dv: 51456 cells bit-identical
+    REACH fwd_sstash sabotage_flipped_cells=402
+    bwd_stash_tiled forward status: RAN
+    bwd_stash_tiled fwd ctx: 512 cells bit-identical
+    bwd_stash_tiled fwd amax: 8 cells bit-identical
+    bwd_stash_tiled fwd denom: 8 cells bit-identical
+    bwd_stash_tiled backward status: RAN
+    bwd_stash_tiled bwd zdot: 8 cells bit-identical
+    bwd_stash_tiled bwd dq: 512 cells bit-identical
+    bwd_stash_tiled bwd dk: 51456 cells bit-identical
+    bwd_stash_tiled bwd dv: 51456 cells bit-identical
+    bwd_stash_tiled+sabotage forward status: RAN
+    bwd_stash_tiled+sabotage fwd ctx: 512 cells bit-identical
+    bwd_stash_tiled+sabotage fwd denom: 8 cells bit-identical
+    bwd_stash_tiled+sabotage backward status: RAN
+    bwd_stash_tiled+sabotage bwd dq: 432 of 512 cells MOVED; first at 0 eager 0xba21abbb fused 0xba21ab99
+    bwd_stash_tiled+sabotage bwd dk: 51456 cells bit-identical
+    bwd_stash_tiled+sabotage bwd dv: 41434 of 51456 cells MOVED; first at 0 eager 0x3b9ae2e6 fused 0x3b9ae2e7
+    REACH bwd_stash_tiled sabotage_flipped_cells=41866
+  case decode_win64_pos200  B=2 L=1 S=64 win=64 pos0=200 nh=4 nkv=2 hd=64
+    bwd_stash forward status: RAN
+    bwd_stash fwd ctx: 512 cells bit-identical
+    bwd_stash fwd amax: 8 cells bit-identical
+    bwd_stash fwd denom: 8 cells bit-identical
+    bwd_stash backward status: RAN
+    bwd_stash bwd zdot: 8 cells bit-identical
+    bwd_stash bwd dq: 512 cells bit-identical
+    bwd_stash bwd dk: 16384 cells bit-identical
+    bwd_stash bwd dv: 16384 cells bit-identical
+    bwd_stash+sabotage forward status: RAN
+    bwd_stash+sabotage fwd ctx: 512 cells bit-identical
+    bwd_stash+sabotage fwd denom: 8 cells bit-identical
+    bwd_stash+sabotage backward status: RAN
+    bwd_stash+sabotage bwd dq: 415 of 512 cells MOVED; first at 1 eager 0x3c3362b6 fused 0x3c3362bb
+    bwd_stash+sabotage bwd dk: 16384 cells bit-identical
+    bwd_stash+sabotage bwd dv: 13110 of 16384 cells MOVED; first at 0 eager 0x3c6db658 fused 0x3c6db657
+    REACH bwd_stash sabotage_flipped_cells=13525
+    fwd_sstash forward status: RAN
+    fwd_sstash fwd ctx: 512 cells bit-identical
+    fwd_sstash fwd amax: 8 cells bit-identical
+    fwd_sstash fwd denom: 8 cells bit-identical
+    fwd_sstash backward status: RAN
+    fwd_sstash bwd zdot: 8 cells bit-identical
+    fwd_sstash bwd dq: 512 cells bit-identical
+    fwd_sstash bwd dk: 16384 cells bit-identical
+    fwd_sstash bwd dv: 16384 cells bit-identical
+    fwd_sstash+sabotage forward status: RAN
+    fwd_sstash+sabotage fwd ctx: 370 of 512 cells MOVED; first at 0 eager 0x3c3059fa fused 0x3c3059fe
+    fwd_sstash+sabotage fwd denom: 1 of 8 cells MOVED; first at 2 eager 0x42096eee fused 0x42096eed
+    fwd_sstash+sabotage backward status: RAN
+    fwd_sstash+sabotage bwd dq: 512 cells bit-identical
+    fwd_sstash+sabotage bwd dk: 16384 cells bit-identical
+    fwd_sstash+sabotage bwd dv: 16384 cells bit-identical
+    REACH fwd_sstash sabotage_flipped_cells=371
+    bwd_stash_tiled forward status: RAN
+    bwd_stash_tiled fwd ctx: 512 cells bit-identical
+    bwd_stash_tiled fwd amax: 8 cells bit-identical
+    bwd_stash_tiled fwd denom: 8 cells bit-identical
+    bwd_stash_tiled backward status: RAN
+    bwd_stash_tiled bwd zdot: 8 cells bit-identical
+    bwd_stash_tiled bwd dq: 512 cells bit-identical
+    bwd_stash_tiled bwd dk: 16384 cells bit-identical
+    bwd_stash_tiled bwd dv: 16384 cells bit-identical
+    bwd_stash_tiled+sabotage forward status: RAN
+    bwd_stash_tiled+sabotage fwd ctx: 512 cells bit-identical
+    bwd_stash_tiled+sabotage fwd denom: 8 cells bit-identical
+    bwd_stash_tiled+sabotage backward status: RAN
+    bwd_stash_tiled+sabotage bwd dq: 415 of 512 cells MOVED; first at 1 eager 0x3c3362b6 fused 0x3c3362bb
+    bwd_stash_tiled+sabotage bwd dk: 16384 cells bit-identical
+    bwd_stash_tiled+sabotage bwd dv: 13110 of 16384 cells MOVED; first at 0 eager 0x3c6db658 fused 0x3c6db657
+    REACH bwd_stash_tiled sabotage_flipped_cells=13525
+  case split_win50_pos100_l37  B=1 L=37 S=86 win=50 pos0=100 nh=2 nkv=1 hd=64
+    bwd_stash forward status: RAN
+    bwd_stash fwd ctx: 4736 cells bit-identical
+    bwd_stash fwd amax: 74 cells bit-identical
+    bwd_stash fwd denom: 74 cells bit-identical
+    bwd_stash backward status: RAN
+    bwd_stash bwd zdot: 74 cells bit-identical
+    bwd_stash bwd dq: 4736 cells bit-identical
+    bwd_stash bwd dk: 5504 cells bit-identical
+    bwd_stash bwd dv: 5504 cells bit-identical
+    bwd_stash+sabotage forward status: RAN
+    bwd_stash+sabotage fwd ctx: 4736 cells bit-identical
+    bwd_stash+sabotage fwd denom: 74 cells bit-identical
+    bwd_stash+sabotage backward status: RAN
+    bwd_stash+sabotage bwd dq: 3873 of 4736 cells MOVED; first at 0 eager 0x3cb755c8 fused 0x3cb755c7
+    bwd_stash+sabotage bwd dk: 5504 cells bit-identical
+    bwd_stash+sabotage bwd dv: 4474 of 5504 cells MOVED; first at 0 eager 0x3c9cc535 fused 0x3c9cc534
+    REACH bwd_stash sabotage_flipped_cells=8347
+    fwd_sstash forward status: RAN
+    fwd_sstash fwd ctx: 4736 cells bit-identical
+    fwd_sstash fwd amax: 74 cells bit-identical
+    fwd_sstash fwd denom: 74 cells bit-identical
+    fwd_sstash backward status: RAN
+    fwd_sstash bwd zdot: 74 cells bit-identical
+    fwd_sstash bwd dq: 4736 cells bit-identical
+    fwd_sstash bwd dk: 5504 cells bit-identical
+    fwd_sstash bwd dv: 5504 cells bit-identical
+    fwd_sstash+sabotage forward status: RAN
+    fwd_sstash+sabotage fwd ctx: 3253 of 4736 cells MOVED; first at 0 eager 0x3d2ce902 fused 0x3d2ce900
+    fwd_sstash+sabotage fwd denom: 15 of 74 cells MOVED; first at 7 eager 0x41f14632 fused 0x41f14633
+    fwd_sstash+sabotage backward status: RAN
+    fwd_sstash+sabotage bwd dq: 4736 cells bit-identical
+    fwd_sstash+sabotage bwd dk: 5504 cells bit-identical
+    fwd_sstash+sabotage bwd dv: 5504 cells bit-identical
+    REACH fwd_sstash sabotage_flipped_cells=3268
+    bwd_stash_tiled forward status: RAN
+    bwd_stash_tiled fwd ctx: 4736 cells bit-identical
+    bwd_stash_tiled fwd amax: 74 cells bit-identical
+    bwd_stash_tiled fwd denom: 74 cells bit-identical
+    bwd_stash_tiled backward status: RAN
+    bwd_stash_tiled bwd zdot: 74 cells bit-identical
+    bwd_stash_tiled bwd dq: 4736 cells bit-identical
+    bwd_stash_tiled bwd dk: 5504 cells bit-identical
+    bwd_stash_tiled bwd dv: 5504 cells bit-identical
+    bwd_stash_tiled+sabotage forward status: RAN
+    bwd_stash_tiled+sabotage fwd ctx: 4736 cells bit-identical
+    bwd_stash_tiled+sabotage fwd denom: 74 cells bit-identical
+    bwd_stash_tiled+sabotage backward status: RAN
+    bwd_stash_tiled+sabotage bwd dq: 3873 of 4736 cells MOVED; first at 0 eager 0x3cb755c8 fused 0x3cb755c7
+    bwd_stash_tiled+sabotage bwd dk: 5504 cells bit-identical
+    bwd_stash_tiled+sabotage bwd dv: 4474 of 5504 cells MOVED; first at 0 eager 0x3c9cc535 fused 0x3c9cc534
+    REACH bwd_stash_tiled sabotage_flipped_cells=8347
+  case hd16_win7_l40  B=2 L=40 S=40 win=7 pos0=0 nh=2 nkv=1 hd=16
+    bwd_stash forward status: RAN
+    bwd_stash fwd ctx: 2560 cells bit-identical
+    bwd_stash fwd amax: 160 cells bit-identical
+    bwd_stash fwd denom: 160 cells bit-identical
+    bwd_stash backward status: RAN
+    bwd_stash bwd zdot: 160 cells bit-identical
+    bwd_stash bwd dq: 2560 cells bit-identical
+    bwd_stash bwd dk: 1280 cells bit-identical
+    bwd_stash bwd dv: 1280 cells bit-identical
+    bwd_stash+sabotage forward status: RAN
+    bwd_stash+sabotage fwd ctx: 2560 cells bit-identical
+    bwd_stash+sabotage fwd denom: 160 cells bit-identical
+    bwd_stash+sabotage backward status: RAN
+    bwd_stash+sabotage bwd dq: 2560 cells bit-identical
+    bwd_stash+sabotage bwd dk: 1280 cells bit-identical
+    bwd_stash+sabotage bwd dv: 1280 cells bit-identical
+    fwd_sstash forward status: RAN
+    fwd_sstash fwd ctx: 2560 cells bit-identical
+    fwd_sstash fwd amax: 160 cells bit-identical
+    fwd_sstash fwd denom: 160 cells bit-identical
+    fwd_sstash backward status: RAN
+    fwd_sstash bwd zdot: 160 cells bit-identical
+    fwd_sstash bwd dq: 2560 cells bit-identical
+    fwd_sstash bwd dk: 1280 cells bit-identical
+    fwd_sstash bwd dv: 1280 cells bit-identical
+    fwd_sstash+sabotage forward status: RAN
+    fwd_sstash+sabotage fwd ctx: 2560 cells bit-identical
+    fwd_sstash+sabotage fwd denom: 160 cells bit-identical
+    fwd_sstash+sabotage backward status: RAN
+    fwd_sstash+sabotage bwd dq: 2560 cells bit-identical
+    fwd_sstash+sabotage bwd dk: 1280 cells bit-identical
+    fwd_sstash+sabotage bwd dv: 1280 cells bit-identical
+    bwd_stash_tiled forward status: RAN
+    bwd_stash_tiled fwd ctx: 2560 cells bit-identical
+    bwd_stash_tiled fwd amax: 160 cells bit-identical
+    bwd_stash_tiled fwd denom: 160 cells bit-identical
+    bwd_stash_tiled backward status: RAN
+    bwd_stash_tiled bwd zdot: 160 cells bit-identical
+    bwd_stash_tiled bwd dq: 2560 cells bit-identical
+    bwd_stash_tiled bwd dk: 1280 cells bit-identical
+    bwd_stash_tiled bwd dv: 1280 cells bit-identical
+    bwd_stash_tiled+sabotage forward status: RAN
+    bwd_stash_tiled+sabotage fwd ctx: 2560 cells bit-identical
+    bwd_stash_tiled+sabotage fwd denom: 160 cells bit-identical
+    bwd_stash_tiled+sabotage backward status: RAN
+    bwd_stash_tiled+sabotage bwd dq: 2560 cells bit-identical
+    bwd_stash_tiled+sabotage bwd dk: 1280 cells bit-identical
+    bwd_stash_tiled+sabotage bwd dv: 1280 cells bit-identical
+  case hd24_l33  B=1 L=33 S=33 win=0 pos0=0 nh=2 nkv=1 hd=24
+    bwd_stash forward status: RAN
+    bwd_stash fwd ctx: 1584 cells bit-identical
+    bwd_stash fwd amax: 66 cells bit-identical
+    bwd_stash fwd denom: 66 cells bit-identical
+    bwd_stash backward status: RAN
+    bwd_stash bwd zdot: 66 cells bit-identical
+    bwd_stash bwd dq: 1584 cells bit-identical
+    bwd_stash bwd dk: 792 cells bit-identical
+    bwd_stash bwd dv: 792 cells bit-identical
+    bwd_stash+sabotage forward status: RAN
+    bwd_stash+sabotage fwd ctx: 1584 cells bit-identical
+    bwd_stash+sabotage fwd denom: 66 cells bit-identical
+    bwd_stash+sabotage backward status: RAN
+    bwd_stash+sabotage bwd dq: 1584 cells bit-identical
+    bwd_stash+sabotage bwd dk: 792 cells bit-identical
+    bwd_stash+sabotage bwd dv: 792 cells bit-identical
+    fwd_sstash forward status: RAN
+    fwd_sstash fwd ctx: 1584 cells bit-identical
+    fwd_sstash fwd amax: 66 cells bit-identical
+    fwd_sstash fwd denom: 66 cells bit-identical
+    fwd_sstash backward status: RAN
+    fwd_sstash bwd zdot: 66 cells bit-identical
+    fwd_sstash bwd dq: 1584 cells bit-identical
+    fwd_sstash bwd dk: 792 cells bit-identical
+    fwd_sstash bwd dv: 792 cells bit-identical
+    fwd_sstash+sabotage forward status: RAN
+    fwd_sstash+sabotage fwd ctx: 1584 cells bit-identical
+    fwd_sstash+sabotage fwd denom: 66 cells bit-identical
+    fwd_sstash+sabotage backward status: RAN
+    fwd_sstash+sabotage bwd dq: 1584 cells bit-identical
+    fwd_sstash+sabotage bwd dk: 792 cells bit-identical
+    fwd_sstash+sabotage bwd dv: 792 cells bit-identical
+    bwd_stash_tiled forward status: RAN
+    bwd_stash_tiled fwd ctx: 1584 cells bit-identical
+    bwd_stash_tiled fwd amax: 66 cells bit-identical
+    bwd_stash_tiled fwd denom: 66 cells bit-identical
+    bwd_stash_tiled backward status: RAN
+    bwd_stash_tiled bwd zdot: 66 cells bit-identical
+    bwd_stash_tiled bwd dq: 1584 cells bit-identical
+    bwd_stash_tiled bwd dk: 792 cells bit-identical
+    bwd_stash_tiled bwd dv: 792 cells bit-identical
+    bwd_stash_tiled+sabotage forward status: RAN
+    bwd_stash_tiled+sabotage fwd ctx: 1584 cells bit-identical
+    bwd_stash_tiled+sabotage fwd denom: 66 cells bit-identical
+    bwd_stash_tiled+sabotage backward status: RAN
+    bwd_stash_tiled+sabotage bwd dq: 1584 cells bit-identical
+    bwd_stash_tiled+sabotage bwd dk: 792 cells bit-identical
+    bwd_stash_tiled+sabotage bwd dv: 792 cells bit-identical
+  case hd128_win20_l70  B=1 L=70 S=70 win=20 pos0=0 nh=2 nkv=2 hd=128
+    bwd_stash forward status: RAN
+    bwd_stash fwd ctx: 17920 cells bit-identical
+    bwd_stash fwd amax: 140 cells bit-identical
+    bwd_stash fwd denom: 140 cells bit-identical
+    bwd_stash backward status: RAN
+    bwd_stash bwd zdot: 140 cells bit-identical
+    bwd_stash bwd dq: 17920 cells bit-identical
+    bwd_stash bwd dk: 17920 cells bit-identical
+    bwd_stash bwd dv: 17920 cells bit-identical
+    bwd_stash+sabotage forward status: RAN
+    bwd_stash+sabotage fwd ctx: 17920 cells bit-identical
+    bwd_stash+sabotage fwd denom: 140 cells bit-identical
+    bwd_stash+sabotage backward status: RAN
+    bwd_stash+sabotage bwd dq: 17920 cells bit-identical
+    bwd_stash+sabotage bwd dk: 17920 cells bit-identical
+    bwd_stash+sabotage bwd dv: 17920 cells bit-identical
+    fwd_sstash forward status: RAN
+    fwd_sstash fwd ctx: 17920 cells bit-identical
+    fwd_sstash fwd amax: 140 cells bit-identical
+    fwd_sstash fwd denom: 140 cells bit-identical
+    fwd_sstash backward status: RAN
+    fwd_sstash bwd zdot: 140 cells bit-identical
+    fwd_sstash bwd dq: 17920 cells bit-identical
+    fwd_sstash bwd dk: 17920 cells bit-identical
+    fwd_sstash bwd dv: 17920 cells bit-identical
+    fwd_sstash+sabotage forward status: RAN
+    fwd_sstash+sabotage fwd ctx: 17920 cells bit-identical
+    fwd_sstash+sabotage fwd denom: 140 cells bit-identical
+    fwd_sstash+sabotage backward status: RAN
+    fwd_sstash+sabotage bwd dq: 17920 cells bit-identical
+    fwd_sstash+sabotage bwd dk: 17920 cells bit-identical
+    fwd_sstash+sabotage bwd dv: 17920 cells bit-identical
+    bwd_stash_tiled forward status: RAN
+    bwd_stash_tiled fwd ctx: 17920 cells bit-identical
+    bwd_stash_tiled fwd amax: 140 cells bit-identical
+    bwd_stash_tiled fwd denom: 140 cells bit-identical
+    bwd_stash_tiled backward status: RAN
+    bwd_stash_tiled bwd zdot: 140 cells bit-identical
+    bwd_stash_tiled bwd dq: 17920 cells bit-identical
+    bwd_stash_tiled bwd dk: 17920 cells bit-identical
+    bwd_stash_tiled bwd dv: 17920 cells bit-identical
+    bwd_stash_tiled+sabotage forward status: RAN
+    bwd_stash_tiled+sabotage fwd ctx: 17920 cells bit-identical
+    bwd_stash_tiled+sabotage fwd denom: 140 cells bit-identical
+    bwd_stash_tiled+sabotage backward status: RAN
+    bwd_stash_tiled+sabotage bwd dq: 17920 cells bit-identical
+    bwd_stash_tiled+sabotage bwd dk: 17920 cells bit-identical
+    bwd_stash_tiled+sabotage bwd dv: 17920 cells bit-identical
+  case hd128_win45_l150  B=1 L=150 S=150 win=45 pos0=0 nh=4 nkv=1 hd=128
+    bwd_stash forward status: RAN
+    bwd_stash fwd ctx: 76800 cells bit-identical
+    bwd_stash fwd amax: 600 cells bit-identical
+    bwd_stash fwd denom: 600 cells bit-identical
+    bwd_stash backward status: RAN
+    bwd_stash bwd zdot: 600 cells bit-identical
+    bwd_stash bwd dq: 76800 cells bit-identical
+    bwd_stash bwd dk: 19200 cells bit-identical
+    bwd_stash bwd dv: 19200 cells bit-identical
+    bwd_stash+sabotage forward status: RAN
+    bwd_stash+sabotage fwd ctx: 76800 cells bit-identical
+    bwd_stash+sabotage fwd denom: 600 cells bit-identical
+    bwd_stash+sabotage backward status: RAN
+    bwd_stash+sabotage bwd dq: 76800 cells bit-identical
+    bwd_stash+sabotage bwd dk: 19200 cells bit-identical
+    bwd_stash+sabotage bwd dv: 19200 cells bit-identical
+    fwd_sstash forward status: RAN
+    fwd_sstash fwd ctx: 76800 cells bit-identical
+    fwd_sstash fwd amax: 600 cells bit-identical
+    fwd_sstash fwd denom: 600 cells bit-identical
+    fwd_sstash backward status: RAN
+    fwd_sstash bwd zdot: 600 cells bit-identical
+    fwd_sstash bwd dq: 76800 cells bit-identical
+    fwd_sstash bwd dk: 19200 cells bit-identical
+    fwd_sstash bwd dv: 19200 cells bit-identical
+    fwd_sstash+sabotage forward status: RAN
+    fwd_sstash+sabotage fwd ctx: 76800 cells bit-identical
+    fwd_sstash+sabotage fwd denom: 600 cells bit-identical
+    fwd_sstash+sabotage backward status: RAN
+    fwd_sstash+sabotage bwd dq: 76800 cells bit-identical
+    fwd_sstash+sabotage bwd dk: 19200 cells bit-identical
+    fwd_sstash+sabotage bwd dv: 19200 cells bit-identical
+    bwd_stash_tiled forward status: RAN
+    bwd_stash_tiled fwd ctx: 76800 cells bit-identical
+    bwd_stash_tiled fwd amax: 600 cells bit-identical
+    bwd_stash_tiled fwd denom: 600 cells bit-identical
+    bwd_stash_tiled backward status: RAN
+    bwd_stash_tiled bwd zdot: 600 cells bit-identical
+    bwd_stash_tiled bwd dq: 76800 cells bit-identical
+    bwd_stash_tiled bwd dk: 19200 cells bit-identical
+    bwd_stash_tiled bwd dv: 19200 cells bit-identical
+    bwd_stash_tiled+sabotage forward status: RAN
+    bwd_stash_tiled+sabotage fwd ctx: 76800 cells bit-identical
+    bwd_stash_tiled+sabotage fwd denom: 600 cells bit-identical
+    bwd_stash_tiled+sabotage backward status: RAN
+    bwd_stash_tiled+sabotage bwd dq: 76800 cells bit-identical
+    bwd_stash_tiled+sabotage bwd dk: 19200 cells bit-identical
+    bwd_stash_tiled+sabotage bwd dv: 19200 cells bit-identical
+  case underflow_hd128_l48  B=1 L=48 S=48 win=0 pos0=0 nh=2 nkv=1 hd=128
+    bwd_stash forward status: CORNER
+    bwd_stash backward status: CORNER
+    bwd_stash+sabotage forward status: CORNER
+    bwd_stash+sabotage backward status: CORNER
+    fwd_sstash forward status: CORNER
+    fwd_sstash backward status: CORNER
+    fwd_sstash+sabotage forward status: CORNER
+    fwd_sstash+sabotage backward status: CORNER
+    bwd_stash_tiled forward status: CORNER
+    bwd_stash_tiled backward status: CORNER
+    bwd_stash_tiled+sabotage forward status: CORNER
+    bwd_stash_tiled+sabotage backward status: CORNER
+  case underflow_hd64_l48  B=1 L=48 S=48 win=0 pos0=0 nh=2 nkv=1 hd=64
+    bwd_stash forward status: CORNER
+    bwd_stash backward status: CORNER
+    bwd_stash+sabotage forward status: CORNER
+    bwd_stash+sabotage backward status: CORNER
+    fwd_sstash forward status: CORNER
+    fwd_sstash backward status: CORNER
+    fwd_sstash+sabotage forward status: CORNER
+    fwd_sstash+sabotage backward status: CORNER
+    bwd_stash_tiled forward status: CORNER
+    bwd_stash_tiled backward status: CORNER
+    bwd_stash_tiled+sabotage forward status: CORNER
+    bwd_stash_tiled+sabotage backward status: CORNER
+  case regime_q1e30  B=1 L=32 S=32 win=0 pos0=0 nh=2 nkv=1 hd=64
+    bwd_stash forward status: REFUSED_REGIME
+    bwd_stash backward status: REFUSED_REGIME
+    bwd_stash+sabotage forward status: REFUSED_REGIME
+    bwd_stash+sabotage backward status: REFUSED_REGIME
+    fwd_sstash forward status: REFUSED_REGIME
+    fwd_sstash backward status: REFUSED_REGIME
+    fwd_sstash+sabotage forward status: REFUSED_REGIME
+    fwd_sstash+sabotage backward status: REFUSED_REGIME
+    bwd_stash_tiled forward status: REFUSED_REGIME
+    bwd_stash_tiled backward status: REFUSED_REGIME
+    bwd_stash_tiled+sabotage forward status: REFUSED_REGIME
+    bwd_stash_tiled+sabotage backward status: REFUSED_REGIME
+  case regime_dctx1e30  B=1 L=32 S=32 win=0 pos0=0 nh=2 nkv=1 hd=64
+    bwd_stash forward status: RAN
+    bwd_stash fwd ctx: 4096 cells bit-identical
+    bwd_stash fwd amax: 64 cells bit-identical
+    bwd_stash fwd denom: 64 cells bit-identical
+    bwd_stash backward status: REFUSED_REGIME
+    bwd_stash+sabotage forward status: RAN
+    bwd_stash+sabotage fwd ctx: 4096 cells bit-identical
+    bwd_stash+sabotage fwd denom: 64 cells bit-identical
+    bwd_stash+sabotage backward status: REFUSED_REGIME
+    fwd_sstash forward status: RAN
+    fwd_sstash fwd ctx: 4096 cells bit-identical
+    fwd_sstash fwd amax: 64 cells bit-identical
+    fwd_sstash fwd denom: 64 cells bit-identical
+    fwd_sstash backward status: REFUSED_REGIME
+    fwd_sstash+sabotage forward status: RAN
+    fwd_sstash+sabotage fwd ctx: 1961 of 4096 cells MOVED; first at 320 eager 0x3eac0347 fused 0x3eac0346
+    fwd_sstash+sabotage fwd denom: 11 of 64 cells MOVED; first at 0 eager 0x3f800000 fused 0x3f7fffff
+    fwd_sstash+sabotage backward status: REFUSED_REGIME
+    REACH fwd_sstash sabotage_flipped_cells=1972
+    bwd_stash_tiled forward status: RAN
+    bwd_stash_tiled fwd ctx: 4096 cells bit-identical
+    bwd_stash_tiled fwd amax: 64 cells bit-identical
+    bwd_stash_tiled fwd denom: 64 cells bit-identical
+    bwd_stash_tiled backward status: REFUSED_REGIME
+    bwd_stash_tiled+sabotage forward status: RAN
+    bwd_stash_tiled+sabotage fwd ctx: 4096 cells bit-identical
+    bwd_stash_tiled+sabotage fwd denom: 64 cells bit-identical
+    bwd_stash_tiled+sabotage backward status: REFUSED_REGIME
+transformer_attention_arms_check: PASS, 15 cases x 3 arms, every RAN buffer bit-identical to eager, every status as expected, reach proven at head_dim 64

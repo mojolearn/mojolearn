@@ -1,0 +1,152 @@
+2137 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x705640000000, nodemask=1)
+=== attention step price, mode IDENTICAL, column nvidia, generator shape B1_L2048_nh12_nkv12_hd64_win0 (a file: kind carries its own shape)
+trial_hook=True phase_timers_built=True
+NOTE: built with MOJOLEARN_ATTN_PHASE_TIMERS; under MOJOLEARN_TRANSFORMER_TIMING=1 every launch is serialized and PRICE lines are a breakdown, not a price
+baseline=baseline candidate=baseline rounds=1 warmups=1
+--- kind file:operands-shakespeare
+shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 S=2048 key_lo=0 pos0=0
+timing attn.fwd_regime_scan 0.236172 ms
+timing attn.fwd_kernel 6.979516 ms
+timing attn.fwd_corner_flag 0.026031 ms
+timing attn.bwd_regime_scan 0.130818 ms
+timing attn.bwd_zdot 4.430066 ms
+timing attn.bwd_dq 7.617629 ms
+timing attn.bwd_dkdv 9.844509 ms
+timing attn.bwd_corner_flag 0.041728 ms
+DIGEST file:operands-shakespeare baseline ctx 5425d02dd1adaf93 amax ce645fc3f08c46c4 denom 0e74f8eae0551def zdot 5b85fc0aab40e95a dq 8b876e42ee14ed17 dk 6c0b8fb678387b28 dv 119cdf13e7127dcf
+timing attn.fwd_regime_scan 0.102459 ms
+timing attn.fwd_kernel 6.666092 ms
+timing attn.fwd_corner_flag 0.021416 ms
+timing attn.bwd_regime_scan 0.13328 ms
+timing attn.bwd_zdot 4.359728 ms
+timing attn.bwd_dq 7.528268 ms
+timing attn.bwd_dkdv 9.640451 ms
+timing attn.bwd_corner_flag 0.020798 ms
+DIGEST file:operands-shakespeare baseline ctx 5425d02dd1adaf93 amax ce645fc3f08c46c4 denom 0e74f8eae0551def zdot 5b85fc0aab40e95a dq 8b876e42ee14ed17 dk 6c0b8fb678387b28 dv 119cdf13e7127dcf
+BITS file:operands-shakespeare baseline_vs_baseline ctx MATCH 0 of 1572864
+BITS file:operands-shakespeare baseline_vs_baseline amax MATCH 0 of 24576
+BITS file:operands-shakespeare baseline_vs_baseline denom MATCH 0 of 24576
+BITS file:operands-shakespeare baseline_vs_baseline zdot MATCH 0 of 24576
+BITS file:operands-shakespeare baseline_vs_baseline dq MATCH 0 of 1572864
+BITS file:operands-shakespeare baseline_vs_baseline dk MATCH 0 of 1572864
+BITS file:operands-shakespeare baseline_vs_baseline dv MATCH 0 of 1572864
+timing attn.fwd_regime_scan 0.112566 ms
+timing attn.fwd_kernel 6.681493 ms
+timing attn.fwd_corner_flag 0.022627 ms
+timing attn.bwd_regime_scan 0.129414 ms
+timing attn.bwd_zdot 4.351806 ms
+timing attn.bwd_dq 7.529248 ms
+timing attn.bwd_dkdv 9.642445 ms
+timing attn.bwd_corner_flag 0.021106 ms
+timing attn.fwd_regime_scan 0.092975 ms
+timing attn.fwd_kernel 6.668551 ms
+timing attn.fwd_corner_flag 0.020567 ms
+timing attn.bwd_regime_scan 0.130902 ms
+timing attn.bwd_zdot 4.354096 ms
+timing attn.bwd_dq 7.52128 ms
+timing attn.bwd_dkdv 9.633508 ms
+timing attn.bwd_corner_flag 0.021226 ms
+timing attn.fwd_regime_scan 0.091276 ms
+timing attn.fwd_kernel 6.735181 ms
+timing attn.fwd_corner_flag 0.020293 ms
+timing attn.fwd_regime_scan 0.096824 ms
+timing attn.fwd_kernel 6.819199 ms
+timing attn.fwd_corner_flag 0.020193 ms
+timing attn.bwd_regime_scan 0.128655 ms
+timing attn.bwd_zdot 4.357857 ms
+timing attn.bwd_dq 7.537565 ms
+timing attn.bwd_dkdv 9.665393 ms
+timing attn.bwd_corner_flag 0.042476 ms
+PRICE attention baseline fwd file:operands-shakespeare 6.849387 ms
+PRICE attention baseline fwdbwd file:operands-shakespeare 28.672451 ms
+timing attn.fwd_regime_scan 0.097634 ms
+timing attn.fwd_kernel 6.629467 ms
+timing attn.fwd_corner_flag 0.021827 ms
+timing attn.fwd_regime_scan 0.097107 ms
+timing attn.fwd_kernel 6.744748 ms
+timing attn.fwd_corner_flag 0.024698 ms
+timing attn.bwd_regime_scan 0.143487 ms
+timing attn.bwd_zdot 4.353719 ms
+timing attn.bwd_dq 7.529319 ms
+timing attn.bwd_dkdv 9.642261 ms
+timing attn.bwd_corner_flag 0.022435 ms
+PRICE attention baseline fwd file:operands-shakespeare 6.752135 ms
+PRICE attention baseline fwdbwd file:operands-shakespeare 28.56291 ms
+TABLE kind=file:operands-shakespeare shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 (useful flops: fwd 4*cells*hd, bwd 10*cells*hd; executed multiplier of the shipped kernels: fwd dots 3 of 2 contractions, bwd dots 6 of 5)
+TABLE arm | fwd median ms | fwd useful TFLOP/s | fwd+bwd median ms | bwd (derived) ms | bwd useful TFLOP/s | fwd ratio | fwd+bwd ratio
+TABLE baseline | 6.849387 | 0.9410472312339776 | 28.672451 | 21.823064 | 0.7383927243213877 | 1.0 | 1.0
+TABLE baseline | 6.752135 | 0.9546012738193179 | 28.56291 | 21.810775 | 0.7388087621829119 | 1.0144031480413231 | 1.0038350784286334
+--- kind file:operands-cpython
+shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 S=2048 key_lo=0 pos0=0
+timing attn.fwd_regime_scan 0.105806 ms
+timing attn.fwd_kernel 6.714822 ms
+timing attn.fwd_corner_flag 0.020832 ms
+timing attn.bwd_regime_scan 0.132448 ms
+timing attn.bwd_zdot 4.347139 ms
+timing attn.bwd_dq 7.527413 ms
+timing attn.bwd_dkdv 9.659799 ms
+timing attn.bwd_corner_flag 0.021124 ms
+DIGEST file:operands-cpython baseline ctx b2f76ad30bdfa0f6 amax 947ae346666c52ff denom bb2f8fccbcf4b2b7 zdot 7d8bd3cf3833ba48 dq 5c90b4ed98590d29 dk 70395bb4786fe308 dv fbc71e953233280d
+timing attn.fwd_regime_scan 0.100688 ms
+timing attn.fwd_kernel 6.715708 ms
+timing attn.fwd_corner_flag 0.021119 ms
+timing attn.bwd_regime_scan 0.131218 ms
+timing attn.bwd_zdot 4.349883 ms
+timing attn.bwd_dq 7.531938 ms
+timing attn.bwd_dkdv 9.652386 ms
+timing attn.bwd_corner_flag 0.020014 ms
+DIGEST file:operands-cpython baseline ctx b2f76ad30bdfa0f6 amax 947ae346666c52ff denom bb2f8fccbcf4b2b7 zdot 7d8bd3cf3833ba48 dq 5c90b4ed98590d29 dk 70395bb4786fe308 dv fbc71e953233280d
+BITS file:operands-cpython baseline_vs_baseline ctx MATCH 0 of 1572864
+BITS file:operands-cpython baseline_vs_baseline amax MATCH 0 of 24576
+BITS file:operands-cpython baseline_vs_baseline denom MATCH 0 of 24576
+BITS file:operands-cpython baseline_vs_baseline zdot MATCH 0 of 24576
+BITS file:operands-cpython baseline_vs_baseline dq MATCH 0 of 1572864
+BITS file:operands-cpython baseline_vs_baseline dk MATCH 0 of 1572864
+BITS file:operands-cpython baseline_vs_baseline dv MATCH 0 of 1572864
+timing attn.fwd_regime_scan 0.102547 ms
+timing attn.fwd_kernel 6.799071 ms
+timing attn.fwd_corner_flag 0.021305 ms
+timing attn.bwd_regime_scan 0.129755 ms
+timing attn.bwd_zdot 4.346513 ms
+timing attn.bwd_dq 7.523599 ms
+timing attn.bwd_dkdv 9.655762 ms
+timing attn.bwd_corner_flag 0.020278 ms
+timing attn.fwd_regime_scan 0.089636 ms
+timing attn.fwd_kernel 6.747353 ms
+timing attn.fwd_corner_flag 0.020431 ms
+timing attn.bwd_regime_scan 0.130471 ms
+timing attn.bwd_zdot 4.347415 ms
+timing attn.bwd_dq 7.526992 ms
+timing attn.bwd_dkdv 9.668364 ms
+timing attn.bwd_corner_flag 0.019793 ms
+timing attn.fwd_regime_scan 0.092627 ms
+timing attn.fwd_kernel 6.616518 ms
+timing attn.fwd_corner_flag 0.02058 ms
+timing attn.fwd_regime_scan 0.096852 ms
+timing attn.fwd_kernel 6.660564 ms
+timing attn.fwd_corner_flag 0.019809 ms
+timing attn.bwd_regime_scan 0.128567 ms
+timing attn.bwd_zdot 4.3402 ms
+timing attn.bwd_dq 7.527911 ms
+timing attn.bwd_dkdv 9.653401 ms
+timing attn.bwd_corner_flag 0.020589 ms
+PRICE attention baseline fwd file:operands-cpython 6.732524 ms
+PRICE attention baseline fwdbwd file:operands-cpython 28.451842 ms
+timing attn.fwd_regime_scan 0.090295 ms
+timing attn.fwd_kernel 6.677007 ms
+timing attn.fwd_corner_flag 0.02006 ms
+timing attn.fwd_regime_scan 0.095937 ms
+timing attn.fwd_kernel 6.742854 ms
+timing attn.fwd_corner_flag 0.019843 ms
+timing attn.bwd_regime_scan 0.128471 ms
+timing attn.bwd_zdot 4.357405 ms
+timing attn.bwd_dq 7.5335 ms
+timing attn.bwd_dkdv 9.655311 ms
+timing attn.bwd_corner_flag 0.020509 ms
+PRICE attention baseline fwd file:operands-cpython 6.790099 ms
+PRICE attention baseline fwdbwd file:operands-cpython 28.557731 ms
+TABLE kind=file:operands-cpython shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 (useful flops: fwd 4*cells*hd, bwd 10*cells*hd; executed multiplier of the shipped kernels: fwd dots 3 of 2 contractions, bwd dots 6 of 5)
+TABLE arm | fwd median ms | fwd useful TFLOP/s | fwd+bwd median ms | bwd (derived) ms | bwd useful TFLOP/s | fwd ratio | fwd+bwd ratio
+TABLE baseline | 6.732524 | 0.9573819078847695 | 28.451842 | 21.719318 | 0.7419197821957393 | 1.0 | 1.0
+TABLE baseline | 6.790099 | 0.9492640198618606 | 28.557731 | 21.767632 | 0.7402730659908253 | 0.9915207421865277 | 0.9962921073806599
+attention_step_price: PASS (baseline vs baseline)

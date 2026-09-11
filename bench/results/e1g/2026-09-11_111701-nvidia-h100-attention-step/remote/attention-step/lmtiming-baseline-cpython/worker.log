@@ -1,0 +1,20 @@
+2430 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7a7440000000, nodemask=2)
+2430 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x13bc40000000, nodemask=1)
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/lm_step_memory_probe.py", line 577, in <module>
+    main()
+    ~~~~^^
+  File "/root/mojolearn/tools/lm_step_memory_probe.py", line 543, in main
+    raise SystemExit(worker(args))
+                     ~~~~~~^^^^^^
+  File "/root/mojolearn/tools/lm_step_memory_probe.py", line 345, in worker
+    emit(dict(event='setup', schema=SCHEMA, shape=shape.to_dict(), profile=shape.profile,
+         ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+              parameters=shape.n_total, n_tensors=shape.n_tensors, tokens_per_step=tokens_per_step,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<6 lines>...
+              host_before_first_call=_rss_bytes(), device_tool=sampler.tool or 'unavailable',
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+              qualification='complete-step probe at the named shape; not an opponent ratio, not a default gate'))
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: dict() got multiple values for keyword argument 'corpus'

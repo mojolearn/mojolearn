@@ -1,0 +1,13 @@
+deviations=2525-2527
+started=2026-09-11T11:08:58Z
+root=/root/mojolearn
+arms=bwd_stash,fwd_sstash,bwd_stash_tiled,stash_tiled
+lm_arms=baseline,stash_tiled
+rounds=7 warmups=2 deadline=300
+gpu_archs=sm_90a column=nvidia
+vendor=nvidia
+commit=fd8f4f05a1290713678f55a1c184ae8b46ae716a
+corpora= shakespeare=training/corpus/tinyshakespeare/input.txt cpython=training/corpus/cpython312_lib/input.txt
+file_kinds=
+no real-activation dump; price and timers NOT RUN (smoke only)
+finished=2026-09-11T11:14:08Z

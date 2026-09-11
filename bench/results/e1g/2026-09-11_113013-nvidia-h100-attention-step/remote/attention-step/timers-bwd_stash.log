@@ -1,0 +1,158 @@
+2165 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3b6380000000, nodemask=2)
+=== attention step price, mode IDENTICAL, column nvidia, generator shape B1_L2048_nh12_nkv12_hd64_win0 (a file: kind carries its own shape)
+trial_hook=True phase_timers_built=True
+NOTE: built with MOJOLEARN_ATTN_PHASE_TIMERS; under MOJOLEARN_TRANSFORMER_TIMING=1 every launch is serialized and PRICE lines are a breakdown, not a price
+baseline=baseline candidate=bwd_stash rounds=1 warmups=1
+--- kind file:operands-shakespeare
+shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 S=2048 key_lo=0 pos0=0
+timing attn.fwd_regime_scan 0.237314 ms
+timing attn.fwd_kernel 6.997391 ms
+timing attn.fwd_corner_flag 0.024494 ms
+timing attn.bwd_regime_scan 0.126549 ms
+timing attn.bwd_zdot 4.432226 ms
+timing attn.bwd_dq 7.613665 ms
+timing attn.bwd_dkdv 9.810185 ms
+timing attn.bwd_corner_flag 0.02762 ms
+DIGEST file:operands-shakespeare baseline ctx 5425d02dd1adaf93 amax ce645fc3f08c46c4 denom 0e74f8eae0551def zdot 5b85fc0aab40e95a dq 8b876e42ee14ed17 dk 6c0b8fb678387b28 dv 119cdf13e7127dcf
+timing attn.fwd_regime_scan 0.10103 ms
+timing attn.fwd_kernel 6.664598 ms
+timing attn.fwd_corner_flag 0.020273 ms
+timing attn.bwd_regime_scan 0.125933 ms
+timing attn.bwd_scratch_alloc 0.186304 ms
+timing attn.bwd_zdot_stash 7.574466 ms
+timing attn.bwd_dq_stash 2.651443 ms
+timing attn.bwd_dkdv_stash 4.065788 ms
+timing attn.bwd_corner_flag 0.030178 ms
+DIGEST file:operands-shakespeare bwd_stash ctx 5425d02dd1adaf93 amax ce645fc3f08c46c4 denom 0e74f8eae0551def zdot 5b85fc0aab40e95a dq 8b876e42ee14ed17 dk 6c0b8fb678387b28 dv 119cdf13e7127dcf
+BITS file:operands-shakespeare bwd_stash_vs_baseline ctx MATCH 0 of 1572864
+BITS file:operands-shakespeare bwd_stash_vs_baseline amax MATCH 0 of 24576
+BITS file:operands-shakespeare bwd_stash_vs_baseline denom MATCH 0 of 24576
+BITS file:operands-shakespeare bwd_stash_vs_baseline zdot MATCH 0 of 24576
+BITS file:operands-shakespeare bwd_stash_vs_baseline dq MATCH 0 of 1572864
+BITS file:operands-shakespeare bwd_stash_vs_baseline dk MATCH 0 of 1572864
+BITS file:operands-shakespeare bwd_stash_vs_baseline dv MATCH 0 of 1572864
+timing attn.fwd_regime_scan 0.107691 ms
+timing attn.fwd_kernel 6.630162 ms
+timing attn.fwd_corner_flag 0.021056 ms
+timing attn.bwd_regime_scan 0.126419 ms
+timing attn.bwd_zdot 4.353472 ms
+timing attn.bwd_dq 7.52849 ms
+timing attn.bwd_dkdv 9.625046 ms
+timing attn.bwd_corner_flag 0.020407 ms
+timing attn.fwd_regime_scan 0.087567 ms
+timing attn.fwd_kernel 6.628742 ms
+timing attn.fwd_corner_flag 0.019679 ms
+timing attn.bwd_regime_scan 0.126035 ms
+timing attn.bwd_scratch_alloc 0.010698 ms
+timing attn.bwd_zdot_stash 7.434501 ms
+timing attn.bwd_dq_stash 2.580339 ms
+timing attn.bwd_dkdv_stash 4.022695 ms
+timing attn.bwd_corner_flag 0.024694 ms
+timing attn.fwd_regime_scan 0.091778 ms
+timing attn.fwd_kernel 6.686178 ms
+timing attn.fwd_corner_flag 0.035124 ms
+timing attn.fwd_regime_scan 0.106554 ms
+timing attn.fwd_kernel 6.618258 ms
+timing attn.fwd_corner_flag 0.045421 ms
+timing attn.bwd_regime_scan 0.146421 ms
+timing attn.bwd_zdot 4.343838 ms
+timing attn.bwd_dq 7.532563 ms
+timing attn.bwd_dkdv 9.64662 ms
+timing attn.bwd_corner_flag 0.024359 ms
+PRICE attention baseline fwd file:operands-shakespeare 6.81635 ms
+PRICE attention baseline fwdbwd file:operands-shakespeare 28.471846 ms
+timing attn.fwd_regime_scan 0.089597 ms
+timing attn.fwd_kernel 6.676925 ms
+timing attn.fwd_corner_flag 0.019859 ms
+timing attn.fwd_regime_scan 0.093802 ms
+timing attn.fwd_kernel 6.654948 ms
+timing attn.fwd_corner_flag 0.019522 ms
+timing attn.bwd_regime_scan 0.124489 ms
+timing attn.bwd_scratch_alloc 0.011141 ms
+timing attn.bwd_zdot_stash 7.438762 ms
+timing attn.bwd_dq_stash 2.594794 ms
+timing attn.bwd_dkdv_stash 4.036296 ms
+timing attn.bwd_corner_flag 0.044859 ms
+PRICE attention bwd_stash fwd file:operands-shakespeare 6.789365 ms
+PRICE attention bwd_stash fwdbwd file:operands-shakespeare 21.022967 ms
+TABLE kind=file:operands-shakespeare shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 (useful flops: fwd 4*cells*hd, bwd 10*cells*hd; executed multiplier of the shipped kernels: fwd dots 3 of 2 contractions, bwd dots 6 of 5)
+TABLE arm | fwd median ms | fwd useful TFLOP/s | fwd+bwd median ms | bwd (derived) ms | bwd useful TFLOP/s | fwd ratio | fwd+bwd ratio
+TABLE baseline | 6.81635 | 0.9456082319716563 | 28.471846 | 21.655496 | 0.744106331251891 | 1.0 | 1.0
+TABLE bwd_stash | 6.789365 | 0.9493666450397055 | 21.022967 | 14.233602000000001 | 1.1321091934423906 | 1.0039745985081079 | 1.354321014726418
+--- kind file:operands-cpython
+shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 S=2048 key_lo=0 pos0=0
+timing attn.fwd_regime_scan 0.112602 ms
+timing attn.fwd_kernel 6.673485 ms
+timing attn.fwd_corner_flag 0.020867 ms
+timing attn.bwd_regime_scan 0.12603 ms
+timing attn.bwd_zdot 4.348053 ms
+timing attn.bwd_dq 7.529709 ms
+timing attn.bwd_dkdv 9.663581 ms
+timing attn.bwd_corner_flag 0.020374 ms
+DIGEST file:operands-cpython baseline ctx b2f76ad30bdfa0f6 amax 947ae346666c52ff denom bb2f8fccbcf4b2b7 zdot 7d8bd3cf3833ba48 dq 5c90b4ed98590d29 dk 70395bb4786fe308 dv fbc71e953233280d
+timing attn.fwd_regime_scan 0.098305 ms
+timing attn.fwd_kernel 6.678634 ms
+timing attn.fwd_corner_flag 0.020773 ms
+timing attn.bwd_regime_scan 0.127951 ms
+timing attn.bwd_scratch_alloc 0.011035 ms
+timing attn.bwd_zdot_stash 7.439142 ms
+timing attn.bwd_dq_stash 2.565774 ms
+timing attn.bwd_dkdv_stash 4.041119 ms
+timing attn.bwd_corner_flag 0.024907 ms
+DIGEST file:operands-cpython bwd_stash ctx b2f76ad30bdfa0f6 amax 947ae346666c52ff denom bb2f8fccbcf4b2b7 zdot 7d8bd3cf3833ba48 dq 5c90b4ed98590d29 dk 70395bb4786fe308 dv fbc71e953233280d
+BITS file:operands-cpython bwd_stash_vs_baseline ctx MATCH 0 of 1572864
+BITS file:operands-cpython bwd_stash_vs_baseline amax MATCH 0 of 24576
+BITS file:operands-cpython bwd_stash_vs_baseline denom MATCH 0 of 24576
+BITS file:operands-cpython bwd_stash_vs_baseline zdot MATCH 0 of 24576
+BITS file:operands-cpython bwd_stash_vs_baseline dq MATCH 0 of 1572864
+BITS file:operands-cpython bwd_stash_vs_baseline dk MATCH 0 of 1572864
+BITS file:operands-cpython bwd_stash_vs_baseline dv MATCH 0 of 1572864
+timing attn.fwd_regime_scan 0.100952 ms
+timing attn.fwd_kernel 6.665735 ms
+timing attn.fwd_corner_flag 0.020611 ms
+timing attn.bwd_regime_scan 0.125135 ms
+timing attn.bwd_zdot 4.346451 ms
+timing attn.bwd_dq 7.53797 ms
+timing attn.bwd_dkdv 9.662788 ms
+timing attn.bwd_corner_flag 0.033698 ms
+timing attn.fwd_regime_scan 0.087193 ms
+timing attn.fwd_kernel 6.678636 ms
+timing attn.fwd_corner_flag 0.01978 ms
+timing attn.bwd_regime_scan 0.124824 ms
+timing attn.bwd_scratch_alloc 0.012029 ms
+timing attn.bwd_zdot_stash 7.433357 ms
+timing attn.bwd_dq_stash 2.565256 ms
+timing attn.bwd_dkdv_stash 3.994526 ms
+timing attn.bwd_corner_flag 0.024665 ms
+timing attn.fwd_regime_scan 0.091219 ms
+timing attn.fwd_kernel 6.66416 ms
+timing attn.fwd_corner_flag 0.019556 ms
+timing attn.fwd_regime_scan 0.097046 ms
+timing attn.fwd_kernel 6.663335 ms
+timing attn.fwd_corner_flag 0.019073 ms
+timing attn.bwd_regime_scan 0.127092 ms
+timing attn.bwd_zdot 4.344464 ms
+timing attn.bwd_dq 7.53666 ms
+timing attn.bwd_dkdv 9.674453 ms
+timing attn.bwd_corner_flag 0.019611 ms
+PRICE attention baseline fwd file:operands-cpython 6.777516 ms
+PRICE attention baseline fwdbwd file:operands-cpython 28.485546 ms
+timing attn.fwd_regime_scan 0.087328 ms
+timing attn.fwd_kernel 6.691695 ms
+timing attn.fwd_corner_flag 0.019365 ms
+timing attn.fwd_regime_scan 0.093348 ms
+timing attn.fwd_kernel 6.683674 ms
+timing attn.fwd_corner_flag 0.019617 ms
+timing attn.bwd_regime_scan 0.124484 ms
+timing attn.bwd_scratch_alloc 0.009896 ms
+timing attn.bwd_zdot_stash 7.441542 ms
+timing attn.bwd_dq_stash 2.564159 ms
+timing attn.bwd_dkdv_stash 4.050504 ms
+timing attn.bwd_corner_flag 0.024321 ms
+PRICE attention bwd_stash fwd file:operands-cpython 6.800966 ms
+PRICE attention bwd_stash fwdbwd file:operands-cpython 21.015245 ms
+TABLE kind=file:operands-cpython shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 (useful flops: fwd 4*cells*hd, bwd 10*cells*hd; executed multiplier of the shipped kernels: fwd dots 3 of 2 contractions, bwd dots 6 of 5)
+TABLE arm | fwd median ms | fwd useful TFLOP/s | fwd+bwd median ms | bwd (derived) ms | bwd useful TFLOP/s | fwd ratio | fwd+bwd ratio
+TABLE baseline | 6.777516 | 0.9510264043640767 | 28.485546 | 21.70803 | 0.7423055744809639 | 1.0 | 1.0
+TABLE bwd_stash | 6.800966 | 0.9477472276732453 | 21.015245 | 14.214279000000001 | 1.1336481913715073 | 0.9965519604126826 | 1.3554705643450742
+attention_step_price: PASS (bwd_stash vs baseline)

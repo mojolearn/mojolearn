@@ -1,0 +1,15 @@
+1868 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x79a300000000, nodemask=2)
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/lm_step_memory_probe.py", line 575, in <module>
+    main()
+    ~~~~^^
+  File "/root/mojolearn/tools/lm_step_memory_probe.py", line 541, in main
+    raise SystemExit(worker(args))
+                     ~~~~~~^^^^^^
+  File "/root/mojolearn/tools/lm_step_memory_probe.py", line 320, in worker
+    corpus = CorpusBatches(args.corpus, shape.batch, shape.length) if args.corpus else None
+             ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/lm_step_memory_probe.py", line 241, in __init__
+    self.data = np.frombuffer(raw, dtype=np.uint8)
+                ^^
+NameError: name 'np' is not defined

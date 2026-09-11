@@ -1,0 +1,67 @@
+BITS hashed bwd_stash+sabotage_vs_baseline dq MOVED 1407861 of 1572864
+BITS hashed bwd_stash+sabotage_vs_baseline dv MOVED 1231330 of 1572864
+REACH hashed bwd_stash sabotage_flipped_cells=2639191 clean_restored=True
+BITS heavytail bwd_stash+sabotage_vs_baseline dq MOVED 1367920 of 1572864
+BITS heavytail bwd_stash+sabotage_vs_baseline dv MOVED 1306569 of 1572864
+REACH heavytail bwd_stash sabotage_flipped_cells=2674489 clean_restored=True
+attention_step_price: PASS (bwd_stash vs baseline)
+BITS hashed bwd_stash_tiled+sabotage_vs_baseline dq MOVED 1407861 of 1572864
+BITS hashed bwd_stash_tiled+sabotage_vs_baseline dv MOVED 1231330 of 1572864
+REACH hashed bwd_stash_tiled sabotage_flipped_cells=2639191 clean_restored=True
+BITS heavytail bwd_stash_tiled+sabotage_vs_baseline dq MOVED 1367920 of 1572864
+BITS heavytail bwd_stash_tiled+sabotage_vs_baseline dv MOVED 1306569 of 1572864
+REACH heavytail bwd_stash_tiled sabotage_flipped_cells=2674489 clean_restored=True
+attention_step_price: PASS (bwd_stash_tiled vs baseline)
+BITS hashed fwd_sstash+sabotage_vs_baseline ctx MOVED 1091906 of 1572864
+BITS hashed fwd_sstash+sabotage_vs_baseline denom MOVED 6472 of 24576
+BITS hashed fwd_sstash+sabotage_vs_baseline zdot MOVED 5435 of 24576
+BITS hashed fwd_sstash+sabotage_vs_baseline dq MOVED 376374 of 1572864
+BITS hashed fwd_sstash+sabotage_vs_baseline dk MOVED 1236285 of 1572864
+BITS hashed fwd_sstash+sabotage_vs_baseline dv MOVED 970967 of 1572864
+REACH hashed fwd_sstash sabotage_flipped_cells=3687439 clean_restored=True
+BITS heavytail fwd_sstash+sabotage_vs_baseline ctx MOVED 1255215 of 1572864
+BITS heavytail fwd_sstash+sabotage_vs_baseline denom MOVED 8181 of 24576
+BITS heavytail fwd_sstash+sabotage_vs_baseline zdot MOVED 7198 of 24576
+BITS heavytail fwd_sstash+sabotage_vs_baseline dq MOVED 466235 of 1572864
+BITS heavytail fwd_sstash+sabotage_vs_baseline dk MOVED 1306530 of 1572864
+BITS heavytail fwd_sstash+sabotage_vs_baseline dv MOVED 1158320 of 1572864
+REACH heavytail fwd_sstash sabotage_flipped_cells=4201679 clean_restored=True
+attention_step_price: PASS (fwd_sstash vs baseline)
+BITS hashed stash_tiled+sabotage_vs_baseline ctx MOVED 1091906 of 1572864
+BITS hashed stash_tiled+sabotage_vs_baseline denom MOVED 6472 of 24576
+BITS hashed stash_tiled+sabotage_vs_baseline zdot MOVED 5435 of 24576
+BITS hashed stash_tiled+sabotage_vs_baseline dq MOVED 1417359 of 1572864
+BITS hashed stash_tiled+sabotage_vs_baseline dk MOVED 1236285 of 1572864
+BITS hashed stash_tiled+sabotage_vs_baseline dv MOVED 1240433 of 1572864
+REACH hashed stash_tiled sabotage_flipped_cells=4997890 clean_restored=True
+BITS heavytail stash_tiled+sabotage_vs_baseline ctx MOVED 1255215 of 1572864
+BITS heavytail stash_tiled+sabotage_vs_baseline denom MOVED 8181 of 24576
+BITS heavytail stash_tiled+sabotage_vs_baseline zdot MOVED 7198 of 24576
+BITS heavytail stash_tiled+sabotage_vs_baseline dq MOVED 1391887 of 1572864
+BITS heavytail stash_tiled+sabotage_vs_baseline dk MOVED 1306530 of 1572864
+BITS heavytail stash_tiled+sabotage_vs_baseline dv MOVED 1333664 of 1572864
+REACH heavytail stash_tiled sabotage_flipped_cells=5302675 clean_restored=True
+attention_step_price: PASS (stash_tiled vs baseline)
+build-price	0	54s
+build-timers	0	39s
+build-arms-check	0	50s
+arms-check	0	2s
+smoke-bwd_stash	0	2s
+smoke-fwd_sstash	0	2s
+smoke-bwd_stash_tiled	0	2s
+smoke-stash_tiled	0	2s
+build-binding-base	0	52s
+build-binding-byte-lm	0	72s
+corpus-tinyshakespeare	0	0s
+corpus-cpython312-lib	0	2s
+dump-shakespeare	1	6s
+dump-cpython	1	7s
+price	9	0s
+lm-baseline-shakespeare	1	10s
+lmtiming-baseline-shakespeare	1	9s
+lm-stash_tiled-shakespeare	1	9s
+lmtiming-stash_tiled-shakespeare	1	8s
+lm-baseline-cpython	1	8s
+lmtiming-baseline-cpython	1	10s
+lm-stash_tiled-cpython	1	9s
+lmtiming-stash_tiled-cpython	1	9s

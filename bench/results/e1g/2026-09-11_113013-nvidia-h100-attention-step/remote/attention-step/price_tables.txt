@@ -1,0 +1,32 @@
+TABLE kind=file:operands-shakespeare shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 (useful flops: fwd 4*cells*hd, bwd 10*cells*hd; executed multiplier of the shipped kernels: fwd dots 3 of 2 contractions, bwd dots 6 of 5)
+TABLE arm | fwd median ms | fwd useful TFLOP/s | fwd+bwd median ms | bwd (derived) ms | bwd useful TFLOP/s | fwd ratio | fwd+bwd ratio
+TABLE baseline | 6.732452 | 0.9573921465760171 | 28.390056 | 21.657604 | 0.744033905135582 | 1.0 | 1.0
+TABLE bwd_stash | 6.755812 | 0.9540817109771557 | 20.914911 | 14.159099000000001 | 1.13806617779846 | 0.9965422365216795 | 1.357407449642028
+TABLE kind=file:operands-cpython shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 (useful flops: fwd 4*cells*hd, bwd 10*cells*hd; executed multiplier of the shipped kernels: fwd dots 3 of 2 contractions, bwd dots 6 of 5)
+TABLE arm | fwd median ms | fwd useful TFLOP/s | fwd+bwd median ms | bwd (derived) ms | bwd useful TFLOP/s | fwd ratio | fwd+bwd ratio
+TABLE baseline | 6.713018 | 0.9601637701552417 | 28.428032 | 21.715014000000004 | 0.7420668335742264 | 1.0 | 1.0
+TABLE bwd_stash | 6.671517 | 0.9661365881253094 | 20.910579 | 14.239061999999999 | 1.1316750836536846 | 1.0062206241848743 | 1.35950477507103
+TABLE kind=file:operands-shakespeare shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 (useful flops: fwd 4*cells*hd, bwd 10*cells*hd; executed multiplier of the shipped kernels: fwd dots 3 of 2 contractions, bwd dots 6 of 5)
+TABLE arm | fwd median ms | fwd useful TFLOP/s | fwd+bwd median ms | bwd (derived) ms | bwd useful TFLOP/s | fwd ratio | fwd+bwd ratio
+TABLE baseline | 6.756829 | 0.9539381079497498 | 28.433565 | 21.676736000000002 | 0.743377216938934 | 1.0 | 1.0
+TABLE bwd_stash_tiled | 6.798792 | 0.9480502818736034 | 17.169119 | 10.370327 | 1.5538556961607863 | 0.9938278741282275 | 1.6560875954089436
+TABLE kind=file:operands-cpython shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 (useful flops: fwd 4*cells*hd, bwd 10*cells*hd; executed multiplier of the shipped kernels: fwd dots 3 of 2 contractions, bwd dots 6 of 5)
+TABLE arm | fwd median ms | fwd useful TFLOP/s | fwd+bwd median ms | bwd (derived) ms | bwd useful TFLOP/s | fwd ratio | fwd+bwd ratio
+TABLE baseline | 6.716544 | 0.9596597107083643 | 28.491364 | 21.774820000000002 | 0.7400286973669588 | 1.0 | 1.0
+TABLE bwd_stash_tiled | 6.747561 | 0.9552483737457135 | 17.166726 | 10.419165 | 1.5465722713864307 | 0.9954032279219113 | 1.659685370407846
+TABLE kind=file:operands-shakespeare shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 (useful flops: fwd 4*cells*hd, bwd 10*cells*hd; executed multiplier of the shipped kernels: fwd dots 3 of 2 contractions, bwd dots 6 of 5)
+TABLE arm | fwd median ms | fwd useful TFLOP/s | fwd+bwd median ms | bwd (derived) ms | bwd useful TFLOP/s | fwd ratio | fwd+bwd ratio
+TABLE baseline | 6.757668 | 0.9538196715198202 | 28.437803 | 21.680135 | 0.743260670655418 | 1.0 | 1.0
+TABLE fwd_sstash | 3.1646 | 2.0367808481324654 | 24.811995 | 21.647395 | 0.7443847945676605 | 2.1353940466409655 | 1.1461312562734274
+TABLE kind=file:operands-cpython shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 (useful flops: fwd 4*cells*hd, bwd 10*cells*hd; executed multiplier of the shipped kernels: fwd dots 3 of 2 contractions, bwd dots 6 of 5)
+TABLE arm | fwd median ms | fwd useful TFLOP/s | fwd+bwd median ms | bwd (derived) ms | bwd useful TFLOP/s | fwd ratio | fwd+bwd ratio
+TABLE baseline | 6.728657 | 0.9579321210755727 | 28.492837 | 21.764180000000003 | 0.7403904801375469 | 1.0 | 1.0
+TABLE fwd_sstash | 3.159745 | 2.0399103953008866 | 24.936302 | 21.776557 | 0.7399696692181413 | 2.1294936774961273 | 1.142624796571681
+TABLE kind=file:operands-shakespeare shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 (useful flops: fwd 4*cells*hd, bwd 10*cells*hd; executed multiplier of the shipped kernels: fwd dots 3 of 2 contractions, bwd dots 6 of 5)
+TABLE arm | fwd median ms | fwd useful TFLOP/s | fwd+bwd median ms | bwd (derived) ms | bwd useful TFLOP/s | fwd ratio | fwd+bwd ratio
+TABLE baseline | 6.789182 | 0.9493922348819047 | 28.464159 | 21.674977 | 0.7434375445934729 | 1.0 | 1.0
+TABLE stash_tiled | 3.167959 | 2.0346212409945963 | 13.565052 | 10.397093 | 1.549855491337819 | 2.143077609274615 | 2.098344997129388
+TABLE kind=file:operands-cpython shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 (useful flops: fwd 4*cells*hd, bwd 10*cells*hd; executed multiplier of the shipped kernels: fwd dots 3 of 2 contractions, bwd dots 6 of 5)
+TABLE arm | fwd median ms | fwd useful TFLOP/s | fwd+bwd median ms | bwd (derived) ms | bwd useful TFLOP/s | fwd ratio | fwd+bwd ratio
+TABLE baseline | 6.776869 | 0.9511172005833373 | 28.521734 | 21.744864999999997 | 0.741048136192154 | 1.0 | 1.0
+TABLE stash_tiled | 3.160465 | 2.0394456739751905 | 13.569958 | 10.409493 | 1.5480092719213125 | 2.144263265057515 | 2.1018292024190495

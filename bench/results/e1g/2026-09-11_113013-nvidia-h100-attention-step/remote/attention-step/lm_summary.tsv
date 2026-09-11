@@ -1,0 +1,90 @@
+lm-baseline-cpython	steady_median_seconds=0.5593014266341925	limited=False	arm=baseline	corpus_sha256=f08d783cac53829be0da6def7ac74947f3e339915dfee7ca8d8db5ee344fc956
+lm-baseline-cpython	step=1	sha256={"flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb", "gradients": "cb249f967f12a578d5210798338354538980bd07e683930f2056aa18f8445661", "loss": "46d215b846e2d69a88ffe8c54ff8f3edf88b82ccdfda7d39a640f6a977525593", "m": "2f32ec8dc1ad52242cc1e9f5a8a3281e48b1875907e81477466e5495c757a891", "parameters": "9066f3556e9e7647a328a8d4e9235a4574d3bc8cc5ef631d3bebee45765e3c9c", "v": "11ff93aad18aa4bcaa235bd1137924d34ae7230df26d37c2a5e647b62c2fd3c3"}
+lm-baseline-cpython	step=2	sha256={"flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb", "gradients": "47b2e63cf229c6cb619af9eab715c6d3df1b4863c30c266bee0860724e18145e", "loss": "c759d8ed1d392a7eb3bb7e26f0870f3c0dd06bb560438e01aea4f6712f1f85d6", "m": "14f453d85410fd5c7fa0c96df8228b0cbe7a32f8f92833a0bf6bfd20ddc0f6c0", "parameters": "93ae58c5ee3f6a433058613f16b2c8cd2fe74573d787f3263d7b8f4b81513368", "v": "ca303e63d0ed8d9974f380bdc4ef26625618fc014464a0b25027bdaef8ade64b"}
+lm-baseline-cpython	step=3	sha256={"flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb", "gradients": "344bb99996e14efb8279d060b185ed8be3c82bfac6bca4dc374a4114f57476c4", "loss": "3debd40325ef656ad457a3194ec51c1d16f5ecccfcd4541d0d2f512d2280c31f", "m": "a1ed4ea522bab4c362c0e60386de19d2fd8b396c80fb864761c5394040a7f0c2", "parameters": "c517f8fe549df095c1cfe89843cdf60e61d7f9e56929ce3e0770798f22553ca6", "v": "f0a5824cb0f0a979a31a1526364c1237e653e6d8f44834c0482fb3c3b9b5b5a3"}
+lm-baseline-cpython.log	no result.json
+lm-baseline-shakespeare	steady_median_seconds=0.5618796646595001	limited=False	arm=baseline	corpus_sha256=86c4e6aa9db7c042ec79f339dcb96d42b0075e16b8fc2e86bf0ca57e2dc565ed
+lm-baseline-shakespeare	step=1	sha256={"flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb", "gradients": "446fb457a54f9b85adc83aa3599cbc84758518694ed6248d4b7646f66e244e04", "loss": "491e4339621f7563335b13894a7a15e5ca3d94d1046b2cb04185f890e88029bb", "m": "34725580288f01c376f154388beb4371d419bd241bf380b3f39e2bdfee73143b", "parameters": "acbb3f613ba1c128cb3bbd9ebb6662c30a0f6293f17a8be79ac315bd53b48e37", "v": "e80d4a36b8e2948c85bd2b9e7b2df4329de43e84d27ae760f4af7babd92f8b27"}
+lm-baseline-shakespeare	step=2	sha256={"flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb", "gradients": "e4194ccf3ada08a4335c887ccb93d9cc6e453764368fb23da97059c1efde4bba", "loss": "4997402950677782d12be0ffb708249550a7142160d6978aea68f02489a3fb1c", "m": "6e4f8f60674b52571e7d89b8d0efb5afb4071dcdbb3371812e8199a0640b1e33", "parameters": "04dc2b8652b90ca12b7cc2a5c57acfc998d404e045a262eabf0be773705c1cf0", "v": "51cea2252eca4ef83a1ff7eed5a9977aa28c93fec745db7128dcff00fcbf53a8"}
+lm-baseline-shakespeare	step=3	sha256={"flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb", "gradients": "f0dc4a7a2a4f7d19ca7a99d73fad3b3cf140f420bdcdc5cfb7163d28f6d01283", "loss": "65670e8e4e4afb0d2a407e0312472c9cb24741cf2f29ff73c30e220b9233acff", "m": "7ab52be3ef429668e55b9ac707a41f71bbfc11553973c98bdfba6c803a82fc1d", "parameters": "12462aa671d966c7456203358f098d434c33ec649f90011c65ac5f81d1363798", "v": "fd4e3a8c7999d08027b690d3ef7864b6c601e565799f418e5bc2532d81dd22a5"}
+lm-baseline-shakespeare.log	no result.json
+lm-stash_tiled-cpython	steady_median_seconds=0.380379606038332	limited=False	arm=stash_tiled	corpus_sha256=f08d783cac53829be0da6def7ac74947f3e339915dfee7ca8d8db5ee344fc956
+lm-stash_tiled-cpython	step=1	sha256={"flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb", "gradients": "cb249f967f12a578d5210798338354538980bd07e683930f2056aa18f8445661", "loss": "46d215b846e2d69a88ffe8c54ff8f3edf88b82ccdfda7d39a640f6a977525593", "m": "2f32ec8dc1ad52242cc1e9f5a8a3281e48b1875907e81477466e5495c757a891", "parameters": "9066f3556e9e7647a328a8d4e9235a4574d3bc8cc5ef631d3bebee45765e3c9c", "v": "11ff93aad18aa4bcaa235bd1137924d34ae7230df26d37c2a5e647b62c2fd3c3"}
+lm-stash_tiled-cpython	step=2	sha256={"flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb", "gradients": "47b2e63cf229c6cb619af9eab715c6d3df1b4863c30c266bee0860724e18145e", "loss": "c759d8ed1d392a7eb3bb7e26f0870f3c0dd06bb560438e01aea4f6712f1f85d6", "m": "14f453d85410fd5c7fa0c96df8228b0cbe7a32f8f92833a0bf6bfd20ddc0f6c0", "parameters": "93ae58c5ee3f6a433058613f16b2c8cd2fe74573d787f3263d7b8f4b81513368", "v": "ca303e63d0ed8d9974f380bdc4ef26625618fc014464a0b25027bdaef8ade64b"}
+lm-stash_tiled-cpython	step=3	sha256={"flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb", "gradients": "344bb99996e14efb8279d060b185ed8be3c82bfac6bca4dc374a4114f57476c4", "loss": "3debd40325ef656ad457a3194ec51c1d16f5ecccfcd4541d0d2f512d2280c31f", "m": "a1ed4ea522bab4c362c0e60386de19d2fd8b396c80fb864761c5394040a7f0c2", "parameters": "c517f8fe549df095c1cfe89843cdf60e61d7f9e56929ce3e0770798f22553ca6", "v": "f0a5824cb0f0a979a31a1526364c1237e653e6d8f44834c0482fb3c3b9b5b5a3"}
+lm-stash_tiled-cpython.log	no result.json
+lm-stash_tiled-shakespeare	steady_median_seconds=0.38285655342042446	limited=False	arm=stash_tiled	corpus_sha256=86c4e6aa9db7c042ec79f339dcb96d42b0075e16b8fc2e86bf0ca57e2dc565ed
+lm-stash_tiled-shakespeare	step=1	sha256={"flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb", "gradients": "446fb457a54f9b85adc83aa3599cbc84758518694ed6248d4b7646f66e244e04", "loss": "491e4339621f7563335b13894a7a15e5ca3d94d1046b2cb04185f890e88029bb", "m": "34725580288f01c376f154388beb4371d419bd241bf380b3f39e2bdfee73143b", "parameters": "acbb3f613ba1c128cb3bbd9ebb6662c30a0f6293f17a8be79ac315bd53b48e37", "v": "e80d4a36b8e2948c85bd2b9e7b2df4329de43e84d27ae760f4af7babd92f8b27"}
+lm-stash_tiled-shakespeare	step=2	sha256={"flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb", "gradients": "e4194ccf3ada08a4335c887ccb93d9cc6e453764368fb23da97059c1efde4bba", "loss": "4997402950677782d12be0ffb708249550a7142160d6978aea68f02489a3fb1c", "m": "6e4f8f60674b52571e7d89b8d0efb5afb4071dcdbb3371812e8199a0640b1e33", "parameters": "04dc2b8652b90ca12b7cc2a5c57acfc998d404e045a262eabf0be773705c1cf0", "v": "51cea2252eca4ef83a1ff7eed5a9977aa28c93fec745db7128dcff00fcbf53a8"}
+lm-stash_tiled-shakespeare	step=3	sha256={"flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb", "gradients": "f0dc4a7a2a4f7d19ca7a99d73fad3b3cf140f420bdcdc5cfb7163d28f6d01283", "loss": "65670e8e4e4afb0d2a407e0312472c9cb24741cf2f29ff73c30e220b9233acff", "m": "7ab52be3ef429668e55b9ac707a41f71bbfc11553973c98bdfba6c803a82fc1d", "parameters": "12462aa671d966c7456203358f098d434c33ec649f90011c65ac5f81d1363798", "v": "fd4e3a8c7999d08027b690d3ef7864b6c601e565799f418e5bc2532d81dd22a5"}
+lm-stash_tiled-shakespeare.log	no result.json
+lm-stash_tiled-cpython	witnesses_equal_baseline=True
+lm-stash_tiled-shakespeare	witnesses_equal_baseline=True
+lmtiming-baseline-cpython	envelope.native_call	560.775
+lmtiming-baseline-cpython	bwd.attention	261.400
+lmtiming-baseline-cpython	attn.bwd_dkdv	116.425
+lmtiming-baseline-cpython	block.attention_total	95.888
+lmtiming-baseline-cpython	attn.bwd_dq	90.716
+lmtiming-baseline-cpython	attn.core	81.015
+lmtiming-baseline-cpython	attn.fwd_kernel	79.534
+lmtiming-baseline-cpython	attn.bwd_zdot	52.229
+lmtiming-baseline-cpython	attn.qkv_proj	9.959
+lmtiming-baseline-cpython	attn.o_proj	3.501
+lmtiming-baseline-cpython	attn.bwd_regime_scan	1.638
+lmtiming-baseline-cpython	attn.rope_and_cache	1.333
+lmtiming-baseline-cpython	attn.fwd_regime_scan	1.142
+lmtiming-baseline-cpython	attn.bwd_corner_flag	0.301
+lmtiming-baseline-cpython	attn.fwd_corner_flag	0.274
+lmtiming-baseline-cpython.log	no result.json
+lmtiming-baseline-shakespeare	envelope.native_call	561.038
+lmtiming-baseline-shakespeare	bwd.attention	261.190
+lmtiming-baseline-shakespeare	attn.bwd_dkdv	116.434
+lmtiming-baseline-shakespeare	block.attention_total	96.228
+lmtiming-baseline-shakespeare	attn.bwd_dq	90.681
+lmtiming-baseline-shakespeare	attn.core	81.356
+lmtiming-baseline-shakespeare	attn.fwd_kernel	79.873
+lmtiming-baseline-shakespeare	attn.bwd_zdot	52.224
+lmtiming-baseline-shakespeare	attn.qkv_proj	9.976
+lmtiming-baseline-shakespeare	attn.o_proj	3.510
+lmtiming-baseline-shakespeare	attn.bwd_regime_scan	1.514
+lmtiming-baseline-shakespeare	attn.rope_and_cache	1.324
+lmtiming-baseline-shakespeare	attn.fwd_regime_scan	1.108
+lmtiming-baseline-shakespeare	attn.fwd_corner_flag	0.310
+lmtiming-baseline-shakespeare	attn.bwd_corner_flag	0.265
+lmtiming-baseline-shakespeare.log	no result.json
+lmtiming-stash_tiled-cpython	envelope.native_call	381.894
+lmtiming-stash_tiled-cpython	bwd.attention	125.467
+lmtiming-stash_tiled-cpython	attn.bwd_zdot_stash	89.375
+lmtiming-stash_tiled-cpython	block.attention_total	53.148
+lmtiming-stash_tiled-cpython	attn.core	38.360
+lmtiming-stash_tiled-cpython	attn.fwd_sstash_kernel	36.752
+lmtiming-stash_tiled-cpython	attn.bwd_dkdv_tiled	18.445
+lmtiming-stash_tiled-cpython	attn.bwd_dq_tiled	15.494
+lmtiming-stash_tiled-cpython	attn.qkv_proj	9.946
+lmtiming-stash_tiled-cpython	attn.o_proj	3.485
+lmtiming-stash_tiled-cpython	attn.bwd_regime_scan	1.601
+lmtiming-stash_tiled-cpython	attn.rope_and_cache	1.306
+lmtiming-stash_tiled-cpython	attn.fwd_regime_scan	1.124
+lmtiming-stash_tiled-cpython	attn.bwd_corner_flag	0.341
+lmtiming-stash_tiled-cpython	attn.fwd_corner_flag	0.279
+lmtiming-stash_tiled-cpython	attn.fwd_scratch_alloc	0.140
+lmtiming-stash_tiled-cpython	attn.bwd_scratch_alloc	0.139
+lmtiming-stash_tiled-cpython.log	no result.json
+lmtiming-stash_tiled-shakespeare	envelope.native_call	383.163
+lmtiming-stash_tiled-shakespeare	bwd.attention	125.868
+lmtiming-stash_tiled-shakespeare	attn.bwd_zdot_stash	89.881
+lmtiming-stash_tiled-shakespeare	block.attention_total	53.399
+lmtiming-stash_tiled-shakespeare	attn.core	38.564
+lmtiming-stash_tiled-shakespeare	attn.fwd_sstash_kernel	36.962
+lmtiming-stash_tiled-shakespeare	attn.bwd_dkdv_tiled	18.512
+lmtiming-stash_tiled-shakespeare	attn.bwd_dq_tiled	15.389
+lmtiming-stash_tiled-shakespeare	attn.qkv_proj	9.985
+lmtiming-stash_tiled-shakespeare	attn.o_proj	3.484
+lmtiming-stash_tiled-shakespeare	attn.bwd_regime_scan	1.584
+lmtiming-stash_tiled-shakespeare	attn.rope_and_cache	1.311
+lmtiming-stash_tiled-shakespeare	attn.fwd_regime_scan	1.122
+lmtiming-stash_tiled-shakespeare	attn.bwd_corner_flag	0.307
+lmtiming-stash_tiled-shakespeare	attn.fwd_corner_flag	0.277
+lmtiming-stash_tiled-shakespeare	attn.fwd_scratch_alloc	0.150
+lmtiming-stash_tiled-shakespeare	attn.bwd_scratch_alloc	0.130
+lmtiming-stash_tiled-shakespeare.log	no result.json

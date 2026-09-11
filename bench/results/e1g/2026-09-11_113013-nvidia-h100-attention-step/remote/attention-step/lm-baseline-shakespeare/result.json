@@ -1,0 +1,82 @@
+{
+  "schema": "mojolearn.lm-step-memory-probe.v3",
+  "shape": {
+    "batch": 1,
+    "length": 2048,
+    "d_model": 768,
+    "n_heads": 12,
+    "n_kv": 12,
+    "head_dim": 64,
+    "intermediate": 2048,
+    "n_layers": 12,
+    "vocab_size": 50257
+  },
+  "parameters": 162147840,
+  "steps_completed": 3,
+  "resident": true,
+  "step_result": "lean",
+  "witness_every_step": true,
+  "witness_source": "export_gradients(named=False) + export_state() after every step (outside the timed boundary)",
+  "corpus": {
+    "path": "training/corpus/tinyshakespeare/input.txt",
+    "sha256": "86c4e6aa9db7c042ec79f339dcb96d42b0075e16b8fc2e86bf0ca57e2dc565ed",
+    "manifest_sha256": "62104076baccf809e986aba08c1c4fae644896de7c995d542c0f757001065dc3",
+    "bytes": 1115394,
+    "source_url": "https://raw.githubusercontent.com/karpathy/char-rnn/6f9487a6fe5b420b7ca9afb0d7c078e37c1d1b4e/data/tinyshakespeare/input.txt",
+    "schedule": "step k row b: bytes[(k*batch*length + b*length) % (bytes - length - 1) : +length+1] as int32; targets shifted one byte"
+  },
+  "attention_arm": "baseline",
+  "step_witnesses": [
+    {
+      "step": 1,
+      "completed_steps": 1,
+      "sha256": {
+        "loss": "491e4339621f7563335b13894a7a15e5ca3d94d1046b2cb04185f890e88029bb",
+        "gradients": "446fb457a54f9b85adc83aa3599cbc84758518694ed6248d4b7646f66e244e04",
+        "parameters": "acbb3f613ba1c128cb3bbd9ebb6662c30a0f6293f17a8be79ac315bd53b48e37",
+        "m": "34725580288f01c376f154388beb4371d419bd241bf380b3f39e2bdfee73143b",
+        "v": "e80d4a36b8e2948c85bd2b9e7b2df4329de43e84d27ae760f4af7babd92f8b27",
+        "flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb"
+      }
+    },
+    {
+      "step": 2,
+      "completed_steps": 2,
+      "sha256": {
+        "loss": "4997402950677782d12be0ffb708249550a7142160d6978aea68f02489a3fb1c",
+        "gradients": "e4194ccf3ada08a4335c887ccb93d9cc6e453764368fb23da97059c1efde4bba",
+        "parameters": "04dc2b8652b90ca12b7cc2a5c57acfc998d404e045a262eabf0be773705c1cf0",
+        "m": "6e4f8f60674b52571e7d89b8d0efb5afb4071dcdbb3371812e8199a0640b1e33",
+        "v": "51cea2252eca4ef83a1ff7eed5a9977aa28c93fec745db7128dcff00fcbf53a8",
+        "flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb"
+      }
+    },
+    {
+      "step": 3,
+      "completed_steps": 3,
+      "sha256": {
+        "loss": "65670e8e4e4afb0d2a407e0312472c9cb24741cf2f29ff73c30e220b9233acff",
+        "gradients": "f0dc4a7a2a4f7d19ca7a99d73fad3b3cf140f420bdcdc5cfb7163d28f6d01283",
+        "parameters": "12462aa671d966c7456203358f098d434c33ec649f90011c65ac5f81d1363798",
+        "m": "7ab52be3ef429668e55b9ac707a41f71bbfc11553973c98bdfba6c803a82fc1d",
+        "v": "fd4e3a8c7999d08027b690d3ef7864b6c601e565799f418e5bc2532d81dd22a5",
+        "flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb"
+      }
+    }
+  ],
+  "final_witness": null,
+  "first_call_seconds": 11.893375784158707,
+  "steady_step_seconds": [
+    0.5620155893266201,
+    0.5617437399923801
+  ],
+  "steady_median_seconds": 0.5618796646595001,
+  "steady_median_tokens_per_second": 3644.9085610547786,
+  "peak_device_process_bytes": 14273216512,
+  "peak_device_wide_bytes": 14286848000,
+  "process_ru_maxrss_bytes": 8165478400,
+  "budget_seconds": 300.0,
+  "limited": false,
+  "component_timing_step_seconds": null,
+  "qualification": "complete-step probe; device peak from a polled vendor tool; host RSS is a separate boundary; no opponent, no default gate, no target-scale qualification claim"
+}

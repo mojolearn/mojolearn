@@ -1,0 +1,121 @@
+2038 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3a1200000000, nodemask=2)
+=== attention step price, mode IDENTICAL, column nvidia, generator shape B1_L2048_nh12_nkv12_hd64_win0 (a file: kind carries its own shape)
+trial_hook=True phase_timers_built=False
+baseline=baseline candidate=fwd_sstash rounds=7 warmups=2
+--- kind file:operands-shakespeare
+shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 S=2048 key_lo=0 pos0=0
+DIGEST file:operands-shakespeare baseline ctx 5425d02dd1adaf93 amax ce645fc3f08c46c4 denom 0e74f8eae0551def zdot 5b85fc0aab40e95a dq 8b876e42ee14ed17 dk 6c0b8fb678387b28 dv 119cdf13e7127dcf
+DIGEST file:operands-shakespeare fwd_sstash ctx 5425d02dd1adaf93 amax ce645fc3f08c46c4 denom 0e74f8eae0551def zdot 5b85fc0aab40e95a dq 8b876e42ee14ed17 dk 6c0b8fb678387b28 dv 119cdf13e7127dcf
+BITS file:operands-shakespeare fwd_sstash_vs_baseline ctx MATCH 0 of 1572864
+BITS file:operands-shakespeare fwd_sstash_vs_baseline amax MATCH 0 of 24576
+BITS file:operands-shakespeare fwd_sstash_vs_baseline denom MATCH 0 of 24576
+BITS file:operands-shakespeare fwd_sstash_vs_baseline zdot MATCH 0 of 24576
+BITS file:operands-shakespeare fwd_sstash_vs_baseline dq MATCH 0 of 1572864
+BITS file:operands-shakespeare fwd_sstash_vs_baseline dk MATCH 0 of 1572864
+BITS file:operands-shakespeare fwd_sstash_vs_baseline dv MATCH 0 of 1572864
+BITS file:operands-shakespeare fwd_sstash+sabotage_vs_baseline ctx MOVED 497731 of 1572864
+BITS file:operands-shakespeare fwd_sstash+sabotage_vs_baseline amax MATCH 0 of 24576
+BITS file:operands-shakespeare fwd_sstash+sabotage_vs_baseline denom MOVED 4414 of 24576
+BITS file:operands-shakespeare fwd_sstash+sabotage_vs_baseline zdot MOVED 3318 of 24576
+BITS file:operands-shakespeare fwd_sstash+sabotage_vs_baseline dq MOVED 258009 of 1572864
+BITS file:operands-shakespeare fwd_sstash+sabotage_vs_baseline dk MOVED 1317264 of 1572864
+BITS file:operands-shakespeare fwd_sstash+sabotage_vs_baseline dv MOVED 741938 of 1572864
+BITS file:operands-shakespeare fwd_sstash_restored_vs_baseline ctx MATCH 0 of 1572864
+BITS file:operands-shakespeare fwd_sstash_restored_vs_baseline amax MATCH 0 of 24576
+BITS file:operands-shakespeare fwd_sstash_restored_vs_baseline denom MATCH 0 of 24576
+BITS file:operands-shakespeare fwd_sstash_restored_vs_baseline zdot MATCH 0 of 24576
+BITS file:operands-shakespeare fwd_sstash_restored_vs_baseline dq MATCH 0 of 1572864
+BITS file:operands-shakespeare fwd_sstash_restored_vs_baseline dk MATCH 0 of 1572864
+BITS file:operands-shakespeare fwd_sstash_restored_vs_baseline dv MATCH 0 of 1572864
+REACH file:operands-shakespeare fwd_sstash sabotage_flipped_cells=2822674 clean_restored=True
+PRICE attention baseline fwd file:operands-shakespeare 6.747997 ms
+PRICE attention baseline fwdbwd file:operands-shakespeare 28.33469 ms
+PRICE attention fwd_sstash fwd file:operands-shakespeare 3.158308 ms
+PRICE attention fwd_sstash fwdbwd file:operands-shakespeare 24.809311 ms
+PRICE attention fwd_sstash fwd file:operands-shakespeare 3.16875 ms
+PRICE attention fwd_sstash fwdbwd file:operands-shakespeare 24.823844 ms
+PRICE attention baseline fwd file:operands-shakespeare 6.757668 ms
+PRICE attention baseline fwdbwd file:operands-shakespeare 28.465335 ms
+PRICE attention baseline fwd file:operands-shakespeare 6.725439 ms
+PRICE attention baseline fwdbwd file:operands-shakespeare 28.478462 ms
+PRICE attention fwd_sstash fwd file:operands-shakespeare 3.1646 ms
+PRICE attention fwd_sstash fwdbwd file:operands-shakespeare 24.859891 ms
+PRICE attention fwd_sstash fwd file:operands-shakespeare 3.167241 ms
+PRICE attention fwd_sstash fwdbwd file:operands-shakespeare 24.811995 ms
+PRICE attention baseline fwd file:operands-shakespeare 6.710059 ms
+PRICE attention baseline fwdbwd file:operands-shakespeare 28.405737 ms
+PRICE attention baseline fwd file:operands-shakespeare 6.839097 ms
+PRICE attention baseline fwdbwd file:operands-shakespeare 28.404838 ms
+PRICE attention fwd_sstash fwd file:operands-shakespeare 3.155584 ms
+PRICE attention fwd_sstash fwdbwd file:operands-shakespeare 24.817165 ms
+PRICE attention fwd_sstash fwd file:operands-shakespeare 3.160468 ms
+PRICE attention fwd_sstash fwdbwd file:operands-shakespeare 24.808979 ms
+PRICE attention baseline fwd file:operands-shakespeare 6.78257 ms
+PRICE attention baseline fwdbwd file:operands-shakespeare 28.497222 ms
+PRICE attention baseline fwd file:operands-shakespeare 6.786941 ms
+PRICE attention baseline fwdbwd file:operands-shakespeare 28.437803 ms
+PRICE attention fwd_sstash fwd file:operands-shakespeare 3.170345 ms
+PRICE attention fwd_sstash fwdbwd file:operands-shakespeare 24.810409 ms
+TABLE kind=file:operands-shakespeare shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 (useful flops: fwd 4*cells*hd, bwd 10*cells*hd; executed multiplier of the shipped kernels: fwd dots 3 of 2 contractions, bwd dots 6 of 5)
+TABLE arm | fwd median ms | fwd useful TFLOP/s | fwd+bwd median ms | bwd (derived) ms | bwd useful TFLOP/s | fwd ratio | fwd+bwd ratio
+TABLE baseline | 6.757668 | 0.9538196715198202 | 28.437803 | 21.680135 | 0.743260670655418 | 1.0 | 1.0
+TABLE fwd_sstash | 3.1646 | 2.0367808481324654 | 24.811995 | 21.647395 | 0.7443847945676605 | 2.1353940466409655 | 1.1461312562734274
+--- kind file:operands-cpython
+shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 S=2048 key_lo=0 pos0=0
+DIGEST file:operands-cpython baseline ctx b2f76ad30bdfa0f6 amax 947ae346666c52ff denom bb2f8fccbcf4b2b7 zdot 7d8bd3cf3833ba48 dq 5c90b4ed98590d29 dk 70395bb4786fe308 dv fbc71e953233280d
+DIGEST file:operands-cpython fwd_sstash ctx b2f76ad30bdfa0f6 amax 947ae346666c52ff denom bb2f8fccbcf4b2b7 zdot 7d8bd3cf3833ba48 dq 5c90b4ed98590d29 dk 70395bb4786fe308 dv fbc71e953233280d
+BITS file:operands-cpython fwd_sstash_vs_baseline ctx MATCH 0 of 1572864
+BITS file:operands-cpython fwd_sstash_vs_baseline amax MATCH 0 of 24576
+BITS file:operands-cpython fwd_sstash_vs_baseline denom MATCH 0 of 24576
+BITS file:operands-cpython fwd_sstash_vs_baseline zdot MATCH 0 of 24576
+BITS file:operands-cpython fwd_sstash_vs_baseline dq MATCH 0 of 1572864
+BITS file:operands-cpython fwd_sstash_vs_baseline dk MATCH 0 of 1572864
+BITS file:operands-cpython fwd_sstash_vs_baseline dv MATCH 0 of 1572864
+BITS file:operands-cpython fwd_sstash+sabotage_vs_baseline ctx MOVED 490294 of 1572864
+BITS file:operands-cpython fwd_sstash+sabotage_vs_baseline amax MATCH 0 of 24576
+BITS file:operands-cpython fwd_sstash+sabotage_vs_baseline denom MOVED 4353 of 24576
+BITS file:operands-cpython fwd_sstash+sabotage_vs_baseline zdot MOVED 3262 of 24576
+BITS file:operands-cpython fwd_sstash+sabotage_vs_baseline dq MOVED 252771 of 1572864
+BITS file:operands-cpython fwd_sstash+sabotage_vs_baseline dk MOVED 1292145 of 1572864
+BITS file:operands-cpython fwd_sstash+sabotage_vs_baseline dv MOVED 743106 of 1572864
+BITS file:operands-cpython fwd_sstash_restored_vs_baseline ctx MATCH 0 of 1572864
+BITS file:operands-cpython fwd_sstash_restored_vs_baseline amax MATCH 0 of 24576
+BITS file:operands-cpython fwd_sstash_restored_vs_baseline denom MATCH 0 of 24576
+BITS file:operands-cpython fwd_sstash_restored_vs_baseline zdot MATCH 0 of 24576
+BITS file:operands-cpython fwd_sstash_restored_vs_baseline dq MATCH 0 of 1572864
+BITS file:operands-cpython fwd_sstash_restored_vs_baseline dk MATCH 0 of 1572864
+BITS file:operands-cpython fwd_sstash_restored_vs_baseline dv MATCH 0 of 1572864
+REACH file:operands-cpython fwd_sstash sabotage_flipped_cells=2785931 clean_restored=True
+PRICE attention baseline fwd file:operands-cpython 6.780164 ms
+PRICE attention baseline fwdbwd file:operands-cpython 28.455378 ms
+PRICE attention fwd_sstash fwd file:operands-cpython 3.169187 ms
+PRICE attention fwd_sstash fwdbwd file:operands-cpython 24.915985 ms
+PRICE attention fwd_sstash fwd file:operands-cpython 3.15745 ms
+PRICE attention fwd_sstash fwdbwd file:operands-cpython 24.959688 ms
+PRICE attention baseline fwd file:operands-cpython 6.779552 ms
+PRICE attention baseline fwdbwd file:operands-cpython 28.492837 ms
+PRICE attention baseline fwd file:operands-cpython 6.728657 ms
+PRICE attention baseline fwdbwd file:operands-cpython 28.541657 ms
+PRICE attention fwd_sstash fwd file:operands-cpython 3.159257 ms
+PRICE attention fwd_sstash fwdbwd file:operands-cpython 24.936302 ms
+PRICE attention fwd_sstash fwd file:operands-cpython 3.185404 ms
+PRICE attention fwd_sstash fwdbwd file:operands-cpython 25.000836 ms
+PRICE attention baseline fwd file:operands-cpython 6.71879 ms
+PRICE attention baseline fwdbwd file:operands-cpython 28.504777 ms
+PRICE attention baseline fwd file:operands-cpython 6.720181 ms
+PRICE attention baseline fwdbwd file:operands-cpython 28.488551 ms
+PRICE attention fwd_sstash fwd file:operands-cpython 3.159474 ms
+PRICE attention fwd_sstash fwdbwd file:operands-cpython 24.938825 ms
+PRICE attention fwd_sstash fwd file:operands-cpython 3.159745 ms
+PRICE attention fwd_sstash fwdbwd file:operands-cpython 24.929942 ms
+PRICE attention baseline fwd file:operands-cpython 6.695192 ms
+PRICE attention baseline fwdbwd file:operands-cpython 28.453711 ms
+PRICE attention baseline fwd file:operands-cpython 6.771114 ms
+PRICE attention baseline fwdbwd file:operands-cpython 28.54193 ms
+PRICE attention fwd_sstash fwd file:operands-cpython 3.172125 ms
+PRICE attention fwd_sstash fwdbwd file:operands-cpython 24.930503 ms
+TABLE kind=file:operands-cpython shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 (useful flops: fwd 4*cells*hd, bwd 10*cells*hd; executed multiplier of the shipped kernels: fwd dots 3 of 2 contractions, bwd dots 6 of 5)
+TABLE arm | fwd median ms | fwd useful TFLOP/s | fwd+bwd median ms | bwd (derived) ms | bwd useful TFLOP/s | fwd ratio | fwd+bwd ratio
+TABLE baseline | 6.728657 | 0.9579321210755727 | 28.492837 | 21.764180000000003 | 0.7403904801375469 | 1.0 | 1.0
+TABLE fwd_sstash | 3.159745 | 2.0399103953008866 | 24.936302 | 21.776557 | 0.7399696692181413 | 2.1294936774961273 | 1.142624796571681
+attention_step_price: PASS (fwd_sstash vs baseline)

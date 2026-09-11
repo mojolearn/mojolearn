@@ -61,9 +61,11 @@ materialized in HBM" where the shape makes it cheap: at the LM target
 shape (batch 1, 12 heads, L 2048) a `[B, n_heads, L, S]` scratch is 201 MB
 and the recomputation it replaces is 61 percent of the training step.
 They keep every chain's terms and order and change only what is
-recomputed and which thread holds which chain; they exist on a
-`-D MOJOLEARN_ATTN_ARM_TRIAL=1` build only and the default stays the
-kernels above until a leg flips it. See the arm hook below.
+recomputed and which thread holds which chain. The composed arm
+`stash_tiled` is the shipped default since the 2026-09-11 H100 leg (a
+bit-equal 1.47x on the lean target step on both corpora); the kernels
+above remain the path for every head dim other than 64 and the reference
+every arm is gated against. See the arm hook below.
 
 `[[ALWAYS GPU-agnostic]]`: one source; the only vendor row read is
 `lib_hardware_ftz_fma_for`, through the kernel matrix.
@@ -130,7 +132,8 @@ comptime FUSED_HW_FTZ_FMA = lib_hardware_ftz_fma_for[TARGET_COLUMN]()
 # docs/lanes/BRIEF_attention_step_2026-09-11.md).
 #
 # `-D MOJOLEARN_ATTN_ARM_TRIAL=1` (never on a shipped build) compiles every
-# candidate arm of the fused forward and backward and lets the HOST pick one
+# candidate arm of the fused forward and backward, clean and sabotage, and
+# lets the HOST pick one
 # per call from the environment, the `MOJOLEARN_KNN_SELECT_TRIAL` pattern:
 # `fused_attention_arm_from_env` is read once per launcher call (the
 # callers' signatures are fixed, so the launcher reads it itself; a getenv
@@ -160,8 +163,10 @@ comptime FUSED_HW_FTZ_FMA = lib_hardware_ftz_fma_for[TARGET_COLUMN]()
 #                                      candidate kernel flips one ulp of a
 #                                      value only that kernel produces)
 #
-# Every arm is opt-in and off by default: ATTN_ARM_DEFAULT is the shipped
-# path until a leg flips it. The arms instantiate at head_dim 64 (the
+# ATTN_ARM_DEFAULT is what the shipped build runs; it reads no environment.
+# It was `baseline` until the 2026-09-11 H100 leg flipped it to stash_tiled
+# (see its docstring); a shipped build compiles only the default arm's
+# clean kernels (ATTN_ARM_COMPILED). The arms instantiate at head_dim 64 (the
 # target shape); any other head dim takes the shipped kernels under every
 # arm, and the status line of the launchers says nothing about it, so the
 # harness asserts the arm's own witness (the sabotage flip) rather than
@@ -188,8 +193,17 @@ comptime ATTN_ARM_BWD_TILED = 4
 """Bit: register-blocked dq and dk/dv folds over the stash (DEVIATION 2527); implies ATTN_ARM_BWD_STASH."""
 comptime ATTN_ARM_SABOTAGE = 16
 """OR'd into the arm value; the launchers strip it."""
-comptime ATTN_ARM_DEFAULT = ATTN_ARM_BASELINE
-"""No arm has flipped. A leg that flips one edits this line and the brief."""
+comptime ATTN_ARM_DEFAULT = ATTN_ARM_FWD_SSTASH | ATTN_ARM_BWD_STASH | ATTN_ARM_BWD_TILED
+"""FLIPPED 2026-09-11 to stash_tiled (DEVIATIONS 2525 to 2527): H100 leg
+bench/results/e1g/2026-09-11_113013-nvidia-h100-attention-step, bit-equal
+to the shipped kernels and to the eager oracle on real activations from
+both corpora, lean target step 0.562/0.559 s -> 0.383/0.380 s
+(shakespeare/cpython) with every step witness equal. A later leg that
+flips again edits this line and the brief."""
+comptime ATTN_ARM_COMPILED = ATTN_ARM_TRIAL or (ATTN_ARM_DEFAULT != ATTN_ARM_BASELINE)
+"""Whether the launchers compile the arm kernels at all: on a trial build
+(every arm, clean and sabotage) or when the build default is an arm (that
+arm's clean kernels only; the sabotage instantiations stay trial-only)."""
 
 comptime ATTN_STASH_HD = 64
 """The only head dim the candidate arms instantiate (the target shape)."""
@@ -2676,10 +2690,11 @@ def fused_forward_launch_arm(
     arm: Int,
 ) raises -> Int:
     """`fused_forward_launch` with the arm given (the harness alternates
-    arms inside one process). The candidate arm's kernels exist on a
-    `-D MOJOLEARN_ATTN_ARM_TRIAL=1` build only; without it every arm value
-    runs the shipped kernels, so a harness must prove reach by sabotage
-    rather than trust the arm it asked for."""
+    arms inside one process). A candidate arm's kernels exist on a
+    `-D MOJOLEARN_ATTN_ARM_TRIAL=1` build, or when it is ATTN_ARM_DEFAULT
+    (clean kernels only); otherwise the arm value runs the shipped kernels,
+    so a harness must prove reach by sabotage rather than trust the arm it
+    asked for."""
     if not fused_forward_supported_head_dim(hd):
         return FUSED_REFUSED_REGIME
     var ton = _attn_timer_on()
@@ -2695,7 +2710,7 @@ def fused_forward_launch_arm(
     var blocks = b * nh * ((l + tq - 1) // tq)
     var nt = hd * tq
     var ran_arm = False
-    comptime if ATTN_ARM_TRIAL:
+    comptime if ATTN_ARM_COMPILED:
         var sabotage = (arm & ATTN_ARM_SABOTAGE) != 0
         var want_sstash = (arm & ATTN_ARM_FWD_SSTASH) != 0 and hd == ATTN_STASH_HD
         if want_sstash:
@@ -2707,15 +2722,16 @@ def fused_forward_launch_arm(
             blocks = b * nh * ((l + 63) // 64)
             nt = FUSED_THREADS
             if sabotage:
-                comptime ks = fused_attn_forward_regblocked_sstash_kernel[ATTN_STASH_HD, True]
-                ctx.enqueue_function[ks](
-                    ctxv.unsafe_ptr(), amax.unsafe_ptr(), denom.unsafe_ptr(),
-                    corner.unsafe_ptr(), sstash.unsafe_ptr(), q_rope.unsafe_ptr(),
-                    k_cache.unsafe_ptr(), v_cache.unsafe_ptr(), Int32(b), Int32(l),
-                    Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo),
-                    Int32(window), scale,
-                    grid_dim=(blocks, 1, 1), block_dim=(nt, 1, 1),
-                )
+                comptime if ATTN_ARM_TRIAL:
+                    comptime ks = fused_attn_forward_regblocked_sstash_kernel[ATTN_STASH_HD, True]
+                    ctx.enqueue_function[ks](
+                        ctxv.unsafe_ptr(), amax.unsafe_ptr(), denom.unsafe_ptr(),
+                        corner.unsafe_ptr(), sstash.unsafe_ptr(), q_rope.unsafe_ptr(),
+                        k_cache.unsafe_ptr(), v_cache.unsafe_ptr(), Int32(b), Int32(l),
+                        Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo),
+                        Int32(window), scale,
+                        grid_dim=(blocks, 1, 1), block_dim=(nt, 1, 1),
+                    )
             else:
                 comptime kc = fused_attn_forward_regblocked_sstash_kernel[ATTN_STASH_HD, False]
                 ctx.enqueue_function[kc](
@@ -2923,7 +2939,7 @@ def fused_backward_launch_arm(
     var ran_arm = False
     comptime HD = ATTN_STASH_HD
     comptime TQ = FUSED_THREADS // ATTN_STASH_HD
-    comptime if ATTN_ARM_TRIAL:
+    comptime if ATTN_ARM_COMPILED:
         var sabotage = (arm & ATTN_ARM_SABOTAGE) != 0
         var want_stash = (arm & ATTN_ARM_BWD_STASH) != 0 and hd == ATTN_STASH_HD
         var want_tiled = (arm & ATTN_ARM_BWD_TILED) != 0
@@ -2951,14 +2967,15 @@ def fused_backward_launch_arm(
                 var dq_blocks = b * nh * ((l + 63) // 64)
                 var kv_blocks = b * nkv * ((s + 63) // 64)
                 if sabotage:
-                    comptime qs = fused_bwd_dq_tiled_kernel[HD, True]
-                    ctx.enqueue_function[qs](
-                        dq.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
-                        dy_st.unsafe_ptr(), k_cache.unsafe_ptr(), zdot.unsafe_ptr(),
-                        Int32(b), Int32(l), Int32(nh), Int32(nkv), Int32(s),
-                        Int32(pos0), Int32(key_lo), Int32(window), scale,
-                        grid_dim=(dq_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
-                    )
+                    comptime if ATTN_ARM_TRIAL:
+                        comptime qs = fused_bwd_dq_tiled_kernel[HD, True]
+                        ctx.enqueue_function[qs](
+                            dq.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
+                            dy_st.unsafe_ptr(), k_cache.unsafe_ptr(), zdot.unsafe_ptr(),
+                            Int32(b), Int32(l), Int32(nh), Int32(nkv), Int32(s),
+                            Int32(pos0), Int32(key_lo), Int32(window), scale,
+                            grid_dim=(dq_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
+                        )
                 else:
                     comptime qc = fused_bwd_dq_tiled_kernel[HD, False]
                     ctx.enqueue_function[qc](
@@ -2970,14 +2987,15 @@ def fused_backward_launch_arm(
                     )
                 _attn_tick(ctx, ton, tk, "bwd_dq_tiled")
                 if sabotage:
-                    comptime kvs = fused_bwd_dkdv_tiled_kernel[HD, True]
-                    ctx.enqueue_function[kvs](
-                        dk.unsafe_ptr(), dv.unsafe_ptr(), corner.unsafe_ptr(),
-                        y_st.unsafe_ptr(), dy_st.unsafe_ptr(), q_rope.unsafe_ptr(),
-                        dctx.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv),
-                        Int32(s), Int32(pos0), Int32(key_lo), Int32(window),
-                        grid_dim=(kv_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
-                    )
+                    comptime if ATTN_ARM_TRIAL:
+                        comptime kvs = fused_bwd_dkdv_tiled_kernel[HD, True]
+                        ctx.enqueue_function[kvs](
+                            dk.unsafe_ptr(), dv.unsafe_ptr(), corner.unsafe_ptr(),
+                            y_st.unsafe_ptr(), dy_st.unsafe_ptr(), q_rope.unsafe_ptr(),
+                            dctx.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv),
+                            Int32(s), Int32(pos0), Int32(key_lo), Int32(window),
+                            grid_dim=(kv_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
+                        )
                 else:
                     comptime kvc = fused_bwd_dkdv_tiled_kernel[HD, False]
                     ctx.enqueue_function[kvc](
@@ -2990,14 +3008,15 @@ def fused_backward_launch_arm(
                 _attn_tick(ctx, ton, tk, "bwd_dkdv_tiled")
             else:
                 if sabotage:
-                    comptime qs2 = fused_bwd_dq_stash_kernel[HD, TQ, True]
-                    ctx.enqueue_function[qs2](
-                        dq.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
-                        dy_st.unsafe_ptr(), k_cache.unsafe_ptr(), zdot.unsafe_ptr(),
-                        Int32(b), Int32(l), Int32(nh), Int32(nkv), Int32(s),
-                        Int32(pos0), Int32(key_lo), Int32(window), scale,
-                        grid_dim=(row_blocks, 1, 1), block_dim=(nt, 1, 1),
-                    )
+                    comptime if ATTN_ARM_TRIAL:
+                        comptime qs2 = fused_bwd_dq_stash_kernel[HD, TQ, True]
+                        ctx.enqueue_function[qs2](
+                            dq.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
+                            dy_st.unsafe_ptr(), k_cache.unsafe_ptr(), zdot.unsafe_ptr(),
+                            Int32(b), Int32(l), Int32(nh), Int32(nkv), Int32(s),
+                            Int32(pos0), Int32(key_lo), Int32(window), scale,
+                            grid_dim=(row_blocks, 1, 1), block_dim=(nt, 1, 1),
+                        )
                 else:
                     comptime qc2 = fused_bwd_dq_stash_kernel[HD, TQ, False]
                     ctx.enqueue_function[qc2](
@@ -3009,14 +3028,15 @@ def fused_backward_launch_arm(
                     )
                 _attn_tick(ctx, ton, tk, "bwd_dq_stash")
                 if sabotage:
-                    comptime kvs2 = fused_bwd_dkdv_stash_kernel[HD, TQ, True]
-                    ctx.enqueue_function[kvs2](
-                        dk.unsafe_ptr(), dv.unsafe_ptr(), corner.unsafe_ptr(),
-                        y_st.unsafe_ptr(), dy_st.unsafe_ptr(), q_rope.unsafe_ptr(),
-                        dctx.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv),
-                        Int32(s), Int32(pos0), Int32(key_lo), Int32(window),
-                        grid_dim=(key_blocks, 1, 1), block_dim=(nt, 1, 1),
-                    )
+                    comptime if ATTN_ARM_TRIAL:
+                        comptime kvs2 = fused_bwd_dkdv_stash_kernel[HD, TQ, True]
+                        ctx.enqueue_function[kvs2](
+                            dk.unsafe_ptr(), dv.unsafe_ptr(), corner.unsafe_ptr(),
+                            y_st.unsafe_ptr(), dy_st.unsafe_ptr(), q_rope.unsafe_ptr(),
+                            dctx.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv),
+                            Int32(s), Int32(pos0), Int32(key_lo), Int32(window),
+                            grid_dim=(key_blocks, 1, 1), block_dim=(nt, 1, 1),
+                        )
                 else:
                     comptime kvc2 = fused_bwd_dkdv_stash_kernel[HD, TQ, False]
                     ctx.enqueue_function[kvc2](
