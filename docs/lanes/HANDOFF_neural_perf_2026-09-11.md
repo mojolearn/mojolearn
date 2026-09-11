@@ -317,10 +317,20 @@ No AMD timing of this step exists at the target shape.
      baseline 2.192 / 2.166 s, stash_tiled 2.543 / 2.536 s (NO FLIP, geomean
      1.1656), stash_tiled_fgrid_r32_qres_pf 2.213 / 2.325 s (NO FLIP, 1.0412;
      0.8933 of stash_tiled, which is why the earlier stash_tiled-relative AMD
-     legs picked it). The price harness disagrees with the step on AMD: fwd+bwd
-     baseline 11.2 to 11.5 ms, stash_tiled 5.17, winner 2.29, yet in the step
-     `attn.bwd_dkdv_tiled` is 627 ms (stash_tiled) and `bwd_dkdv_tiled_pf` 525
-     ms (winner) against baseline's `attn.bwd_dkdv` 63.6 ms. The AMD row of
+     legs picked it). CORRECTION (read by the dk/dv lane): 11.2 to 11.5,
+     5.17 and 2.29 ms in that pod's price_tables.txt are the FORWARD medians,
+     not fwd+bwd; the harness backward per layer is baseline 13.7 to 14.0 ms,
+     stash_tiled 41.6 to 41.9 and the winner 31.4 to 31.5, so the harness
+     already ranks the tiled backward above baseline's on AMD (2.3 to 3.0x).
+     In the step `attn.bwd_dkdv_tiled` is 627 ms (stash_tiled) and
+     `bwd_dkdv_tiled_pf` 525 ms (winner) against baseline's `attn.bwd_dkdv`
+     63.6 ms; the step's attention backward over 12 times the harness backward
+     is 1.00 to 1.03 for baseline but 1.56 to 1.68 for the stash arms on AMD
+     (1.00 on the H100), so there are two gaps: the tiled kernel itself and a
+     step-only cost for the stash arms (likeliest the two 201 MB y/dy stash
+     allocations per call; not measured). The commit message of fc742e62
+     repeats the forward-as-fwd+bwd misreading; the decision there rests on
+     the same-pod lean steps and stands. The AMD row of
      `attn_default_arm_for` goes back to `baseline`; the dk/dv lane
      (`lane/attention-dkdv-amd`) was sent this evidence and now targets the
      step-versus-harness gap with baseline as the AMD reference.
