@@ -324,7 +324,13 @@ OUR IDENTICAL arm on the SAME pod: the shipped `stash_tiled` lean step from
 | ours IDENTICAL (`stash_tiled`, bits equal on every vendor) | 0.3835 | 0.3833 | 1 |
 
 Not measured, so their true fast column may be faster still: compile with
-TF32, and mixed precision (bf16 autocast). Our number is the step time for
+TF32, and mixed precision (bf16 autocast). The harness now has those columns
+(`compile_tf32`; `eager_bf16` and `compile_bf16`, which wrap forward and loss
+in `torch.autocast` bfloat16 with float32 parameters and AdamW state, leave
+the SDPA pick to torch under `auto`, and record the SDPA kernel that ran). They
+are owed on this H100 and on the AMD MI300X (Hot Aisle, ROCm torch). The
+MI300X rows are a new tuple and are never mixed with the H100 rows above.
+Our number is the step time for
 bitwise identical results across Apple, NVIDIA and AMD; theirs carries no
 such property (`nondeterministic_label` true on every column).
 
@@ -538,8 +544,10 @@ opponent here is torch `cdist` + `topk`, NOT cuML.
    below 1M).
 5. (closed 2026-09-11 on the H100: the "torch byte-LM training step" table
    in the H100 section, eager fp32, eager TF32 and compile fp32 on enwik8 and
-   Pile GitHub. Still owed: the same row on the AMD MI325X with ROCm torch,
-   and compile TF32 and bf16 autocast columns on the H100.)
+   Pile GitHub. Still owed: the same row on AMD with ROCm torch (the leg now
+   targets the Hot Aisle MI300X, a new tuple), and the harness's
+   `compile_tf32`, `eager_bf16` and `compile_bf16` columns on the H100 and on
+   the MI300X.)
 6. cuML brute-force kNN on the HIGGS prefix (the kNN second kind, DEVIATION
    2524; the "kNN second kind (HIGGS rows)" table above), H100, k 10 and
    15, measured once by `tools/knn_selection_gate.sh` under
