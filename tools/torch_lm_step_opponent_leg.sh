@@ -32,6 +32,17 @@
 #   torch-pin      the torch the row is labeled with. If the found torch is
 #                  not the pin, the pin goes into a THROWAWAY venv and that
 #                  venv runs the columns; the system python is never modified.
+#                  The venv's base is a python of PIN_PYTHON_MINOR on PATH
+#                  (python3.12, or python3 when it IS 3.12). When none exists
+#                  (rocm/dev-ubuntu-22.04:6.4.1-complete on the Hot Aisle
+#                  MI300X ships Python 3.10), uv's official installer script
+#                  puts uv into $UV_HOME (under the venv's parent directory),
+#                  `uv venv --seed --python 3.12` builds the venv on a CPython
+#                  that uv downloads into $UV_HOME, and the same pip lines
+#                  install the same sha256 pinned wheels into it. Every step,
+#                  the installer's output included, lands in torch-pin.log;
+#                  every network step is under `timeout`. When the found torch
+#                  IS the pin (the RunPod NVIDIA image), none of this runs.
 #                    amd     torch 2.6.0+rocm6.4.1.git1ded221d and
 #                            pytorch-triton-rocm 3.2.0+rocm6.4.1.git6da9e660,
 #                            cp312 wheels from repo.radeon.com rocm-rel-6.4.1
@@ -59,10 +70,16 @@
 #                  `timeout 300` (124 is the deadline). eager_fp32 (THE ROW)
 #                  on both corpora first, then eager_tf32 (NVIDIA only; on
 #                  ROCm it writes a not_applicable record with the flag read
-#                  back and exits 4), then compile_fp32 last so a compiler
-#                  failure cannot cost the row.
+#                  back and exits 4), then eager_bf16 (autocast bfloat16,
+#                  float32 parameters and AdamW state; not_applicable and
+#                  exit 4 where the device refuses bf16 autocast), and the
+#                  compile columns LAST so a compiler failure cannot cost an
+#                  eager number: compile_fp32, compile_tf32 (NVIDIA only, as
+#                  eager_tf32), compile_bf16. Every column's JSON records the
+#                  SDPA kernels that actually ran (sdpa.observed).
 #   summary.tsv    column, corpus, median seconds, tokens per second
-#                  (NOT_APPLICABLE or NOT_RUN in both numeric fields).
+#                  (NOT_APPLICABLE or NOT_RUN in both numeric fields), the
+#                  SDPA selection and the SDPA backend observed.
 #
 # Everything the row is labeled with lands in the output directory:
 # vendor.txt (nvidia-smi, or rocm-smi driver/product, amd-smi version and
@@ -72,13 +89,17 @@
 set -u
 ROOT=${MOJOLEARN_TORCH_LM_ROOT:-/root/mojolearn}
 OUT=${MOJOLEARN_TORCH_LM_OUT:-/root/gemm_leg_out/torch-lm-step}
-COLUMNS=${MOJOLEARN_TORCH_LM_COLUMNS:-eager_fp32,eager_tf32,compile_fp32}
+COLUMNS=${MOJOLEARN_TORCH_LM_COLUMNS:-eager_fp32,eager_tf32,eager_bf16,compile_fp32,compile_tf32,compile_bf16}
 CORPORA="enwik8 pile_github"
 SHAPE=${MOJOLEARN_TORCH_LM_SHAPE:-target}
 WARMUP=${MOJOLEARN_TORCH_LM_WARMUP:-2}
 STEPS=${MOJOLEARN_TORCH_LM_STEPS:-7}
 DEADLINE=${MOJOLEARN_TORCH_LM_DEADLINE:-300}
 VENV=${MOJOLEARN_TORCH_LM_VENV:-/root/.venv-torch-lm-step}
+# Throwaway uv (and the CPython it downloads), only when no python of the
+# pin's minor is on PATH; under the venv's parent, never on PATH.
+UV_HOME=${MOJOLEARN_TORCH_LM_UV_HOME:-$(dirname "$VENV")/.uv-torch-lm-step}
+UV_VERSION=${MOJOLEARN_TORCH_LM_UV_VERSION:-0.8.0}
 mkdir -p "$OUT"
 cd "$ROOT" || exit 9
 : > "$OUT/status.tsv"
@@ -189,6 +210,72 @@ else
 fi
 
 # ---- torch-pin ------------------------------------------------------------------
+python_minor() {
+    # python_minor <interpreter>: its "major.minor"; empty when it does not answer.
+    "$1" -c 'import sys; print("%d.%d" % sys.version_info[:2])' 2> /dev/null
+}
+fetch_url() {
+    # fetch_url <url> <file>, bounded; curl, else wget.
+    if command -v curl > /dev/null 2>&1; then
+        timeout -k 10 120 curl -fLsS --retry 3 -o "$2" "$1"
+    else
+        timeout -k 10 120 wget -q -O "$2" "$1"
+    fi
+}
+bootstrap_python() {
+    # bootstrap_python <minor>: no python of <minor> is on PATH. uv from its
+    # official installer script into $UV_HOME/bin (no PATH, profile or receipt
+    # changes), then `uv venv --seed` makes $VENV on a managed CPython <minor>
+    # downloaded into $UV_HOME/python. The system python is never used.
+    echo "== bootstrap: uv $UV_VERSION into $UV_HOME"
+    mkdir -p "$UV_HOME" || return 1
+    if ! command -v curl > /dev/null 2>&1 && ! command -v wget > /dev/null 2>&1; then
+        echo "== no curl or wget (the uv installer needs one); apt-get install curl"
+        DEBIAN_FRONTEND=noninteractive timeout -k 10 120 apt-get update -qq
+        DEBIAN_FRONTEND=noninteractive timeout -k 10 180 apt-get install -y -qq curl ca-certificates
+        echo "apt-get exit $?"
+    fi
+    rm -f "$UV_HOME/install.sh"
+    echo "== fetch https://astral.sh/uv/$UV_VERSION/install.sh"
+    fetch_url "https://astral.sh/uv/$UV_VERSION/install.sh" "$UV_HOME/install.sh"
+    echo "fetch exit $?"
+    if [ ! -s "$UV_HOME/install.sh" ]; then
+        echo "no installer script"
+        return 1
+    fi
+    echo "installer sha256 $(sha256sum "$UV_HOME/install.sh" 2> /dev/null | cut -d ' ' -f 1)"
+    echo "== run the installer (UV_UNMANAGED_INSTALL=$UV_HOME/bin)"
+    timeout -k 10 300 env UV_UNMANAGED_INSTALL="$UV_HOME/bin" UV_INSTALL_DIR="$UV_HOME/bin" \
+        UV_NO_MODIFY_PATH=1 INSTALLER_NO_MODIFY_PATH=1 sh "$UV_HOME/install.sh"
+    echo "installer exit $?"
+    UV=""
+    for _uv in "$UV_HOME/bin/uv" "$UV_HOME/bin/bin/uv"; do
+        if [ -x "$_uv" ]; then
+            UV=$_uv
+            break
+        fi
+    done
+    if [ -z "$UV" ]; then
+        echo "no uv binary under $UV_HOME/bin"
+        ls -la "$UV_HOME" "$UV_HOME/bin" 2>&1
+        return 1
+    fi
+    echo "uv $UV: $("$UV" --version 2>&1)"
+    if [ -f "$VENV/pyvenv.cfg" ]; then
+        echo "== removing the earlier throwaway venv $VENV"
+        rm -rf "$VENV"
+    fi
+    echo "== uv venv --seed --python $1 $VENV (managed CPython only, into $UV_HOME/python)"
+    UV_PYTHON_INSTALL_DIR="$UV_HOME/python" UV_CACHE_DIR="$UV_HOME/cache" UV_NO_CONFIG=1 \
+        UV_PYTHON_PREFERENCE=only-managed \
+        timeout -k 10 600 "$UV" venv --seed --python "$1" "$VENV"
+    echo "uv venv exit $?"
+    _got_minor=$(python_minor "$VENV/bin/python")
+    echo "venv python: $("$VENV/bin/python" --version 2>&1) at $VENV/bin/python -> $(readlink -f "$VENV/bin/python" 2>&1)"
+    echo "python_bootstrap=uv $("$UV" --version 2>&1) (installer $UV_VERSION), venv python $_got_minor" >> "$OUT/gate.txt"
+    [ "$_got_minor" = "$1" ]
+}
+
 if [ -n "$PIN_VERSION" ]; then
     _t0=$(date +%s)
     found=""
@@ -201,23 +288,37 @@ if [ -n "$PIN_VERSION" ]; then
         {
             echo "found torch '$found', pin $PIN_VERSION; installing into $VENV"
             base=""
-            for cand in "python$PIN_PYTHON_MINOR" python3; do
-                [ "$cand" = python ] && continue
-                if command -v "$cand" > /dev/null 2>&1; then
-                    base=$(command -v "$cand")
-                    break
+            if [ -n "$PIN_PYTHON_MINOR" ]; then
+                # Only a python that IS the pin's minor (the wheels are cp312).
+                for cand in "python$PIN_PYTHON_MINOR" python3; do
+                    if command -v "$cand" > /dev/null 2>&1 \
+                            && [ "$(python_minor "$cand")" = "$PIN_PYTHON_MINOR" ]; then
+                        base=$(command -v "$cand")
+                        break
+                    fi
+                done
+            elif command -v python3 > /dev/null 2>&1; then
+                base=$(command -v python3)
+            fi
+            if [ -n "$base" ]; then
+                echo "venv base python: $base ($("$base" --version 2>&1))"
+                if ! "$base" -m venv "$VENV" > /dev/null 2>&1; then
+                    echo "venv unavailable; apt-get install python3-venv"
+                    DEBIAN_FRONTEND=noninteractive timeout -k 10 120 apt-get update -qq
+                    DEBIAN_FRONTEND=noninteractive timeout -k 10 180 apt-get install -y -qq python3-venv python3-pip
+                    "$base" -m venv "$VENV"
                 fi
-            done
-            echo "venv base python: ${base:-NONE} ($("${base:-false}" --version 2>&1))"
-            if [ -n "$base" ] && ! "$base" -m venv "$VENV" > /dev/null 2>&1; then
-                echo "venv unavailable; apt-get install python3-venv"
-                DEBIAN_FRONTEND=noninteractive timeout -k 10 120 apt-get update -qq
-                DEBIAN_FRONTEND=noninteractive timeout -k 10 180 apt-get install -y -qq python3-venv python3-pip
-                "$base" -m venv "$VENV"
+            elif [ -n "$PIN_PYTHON_MINOR" ]; then
+                echo "venv base python: NONE of $PIN_PYTHON_MINOR on PATH (python3 is $(python3 --version 2>&1))"
+                bootstrap_python "$PIN_PYTHON_MINOR"
+                echo "bootstrap exit $?"
+            else
+                echo "venv base python: NONE"
             fi
             # shellcheck disable=SC2086
-            "$VENV/bin/pip" install -q --disable-pip-version-check --upgrade pip \
-                && "$VENV/bin/pip" install --disable-pip-version-check --no-input $PIN_INDEX_ARGS $PIN_ARGS
+            timeout -k 10 300 "$VENV/bin/pip" install -q --disable-pip-version-check --upgrade pip \
+                && timeout -k 10 1800 "$VENV/bin/pip" install --disable-pip-version-check --no-input \
+                    $PIN_INDEX_ARGS $PIN_ARGS
             echo "pip exit $?"
             "$VENV/bin/pip" freeze 2>&1
         } > "$OUT/torch-pin.log" 2>&1
@@ -247,6 +348,10 @@ print("cuda api available", torch.cuda.is_available())
 if torch.cuda.is_available():
     print("device", torch.cuda.get_device_name(0), "capability", torch.cuda.get_device_capability(0))
     print("cudnn/miopen", torch.backends.cudnn.version())
+    try:
+        print("cuda bf16 supported", torch.cuda.is_bf16_supported())
+    except Exception as exc:
+        print("cuda bf16 supported: query failed", repr(exc))
 try:
     import numpy
     print("numpy", numpy.__version__)
@@ -281,19 +386,23 @@ SUMMARY_PY=${PY:-python3}
 "$SUMMARY_PY" - "$OUT" "$COLUMNS" "$CORPORA" > "$OUT/summary.tsv" 2> "$OUT/summary.err" <<'PY'
 import json, pathlib, sys
 out = pathlib.Path(sys.argv[1])
-print("column\tcorpus\tmedian_seconds\ttokens_per_second")
+print("column\tcorpus\tmedian_seconds\ttokens_per_second\tsdpa_selected\tsdpa_observed")
 for column in sys.argv[2].split(","):
     for corpus in sys.argv[3].split():
         path = out / f"{column}-{corpus}.json"
         if not path.is_file():
-            print(f"{column}\t{corpus}\tNOT_RUN\tNOT_RUN")
+            print(f"{column}\t{corpus}\tNOT_RUN\tNOT_RUN\tNOT_RUN\tNOT_RUN")
             continue
         j = json.loads(path.read_text())
         if j.get("status") != "measured":
             tag = "NOT_APPLICABLE" if j.get("status") == "not_applicable" else "NOT_RUN"
-            print(f"{column}\t{corpus}\t{tag}\t{tag}")
+            print(f"{column}\t{corpus}\t{tag}\t{tag}\t{tag}\t{tag}")
             continue
-        print(f"{column}\t{corpus}\t{j['median_seconds']:.6f}\t{j['tokens_per_second']:.1f}")
+        sdpa = j.get("sdpa") or {}
+        observed = sdpa.get("observed") or {}
+        seen = observed.get("backend") or ("NONE_SEEN" if "backends" in observed else "NOT_RECORDED")
+        print(f"{column}\t{corpus}\t{j['median_seconds']:.6f}\t{j['tokens_per_second']:.1f}"
+              f"\t{sdpa.get('backend', 'NOT_RECORDED')}\t{seen}")
 PY
 record summary $? 0
 
