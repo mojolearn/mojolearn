@@ -142,7 +142,15 @@ if (proof.get('complete') is not True or proof.get('build_exit') != 0
         or proof.get('source_inventory') != before['source_inventory']
         or proof.get('source_sha256') != before['source_sha256']):
     raise SystemExit('Build proof differs from preflight or is incomplete')
-prefix = 'mojolearn/' + before['vendor'] + '/' + before['device_architecture'] + '/'
+# DEVIATION 2293, postflight side: the device reports sm_90 and the build is
+# sm_90a; the same suffix rule the preflight applies holds here, cuda only.
+# Until 2026-09-10 this check demanded string equality and marked every
+# green H100 leg (0.7.0 included) build-proof-check 1.
+built = {p.split('/')[2] for p in proof.get('extensions', {})}
+witness = before['device_architecture']
+if len(built) != 1 or not (built == {witness} or (before['vendor'] == 'cuda' and built == {witness + 'a'})):
+    raise SystemExit('Built architecture differs from physical GPU witness: ' + repr((sorted(built), witness)))
+prefix = 'mojolearn/' + before['vendor'] + '/' + next(iter(built)) + '/'
 if len(proof.get('extensions', {})) != expected_count or not all(p.startswith(prefix) for p in proof['extensions']):
     raise SystemExit('Built architecture differs from physical GPU witness')
 byte_members = {p for p in proof['extensions'] if p.endswith('/_mojolearn_byte_lm.so')}
