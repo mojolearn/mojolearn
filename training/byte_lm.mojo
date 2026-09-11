@@ -999,31 +999,47 @@ def _byte_step_device(ctx: DeviceContext, mut tr: ByteTrainer,
     _require_device_finite(ctx, tr.scan, tr.buffers.grad, n, "gradients")
     timing_tick(ctx, ton, tk, "step.validate_grads_scan")
     timing_bytes(ton, "step.validate_grads_scan_bytes", n * 4)
-    # THE SHADOW POINT (design 4.2 item 2): everything before this line
-    # left param/m/v untouched; the update kernel below writes them in
-    # place, so their bytes and the flags are shadowed here first.
-    _copy_into(ctx, tr.buffers.shadow_p, tr.buffers.param, 0, 0, n)
-    _copy_into(ctx, tr.buffers.shadow_m, tr.buffers.m_state, 0, 0, n)
-    _copy_into(ctx, tr.buffers.shadow_v, tr.buffers.v_state, 0, 0, n)
-    step_count_sync()
-    ctx.synchronize()
-    tr.buffers.flags_before = tr.buffers.buf_initialized.copy()
-    tr.shadow_step = tr.completed_steps
-    tr.shadow_valid = True
-    timing_tick(ctx, ton, tk, "step.shadow_copy")
-    timing_bytes(ton, "step.shadow_copy_bytes", 3 * n * 4)
-    _maybe_fault(ctx, tr.buffers.m_state, "opt_refuse", 5, _FAULT_NAN)
+    # Host arithmetic on a field nothing below writes before the update, so
+    # computing it here (it was computed after the shadow copy) is the same
+    # value on both paths.
     var next_step = tr.completed_steps + 1
-    # `identical_optimizer_step` prints `step.opt_refuse_scan` (its first
-    # statement: param, grad, m, v scanned on the device) and
-    # `step.optimizer` (clip, scalars, update; it waits before it
-    # returns), both from its own clock; this clock is re-read after it.
-    identical_optimizer_step(ctx, tr.buffers.param, tr.buffers.grad,
-        tr.buffers.m_state, tr.buffers.v_state, tr.buffers.denom_out,
-        tr.buffers.q_out, tr.buffers.sumsq, tr.buffers.norms,
-        tr.buffers.total_cell, tr.buffers.out2, tr.buffers.opt_ws,
-        tr.buffers.sab_partials, tr.buffers.buf_initialized, tr.buffers.offsets,
-        tr.optimizer, next_step)
+    # DEVIATIONS 2646 and 2647 (docs/lanes/BRIEF_step_glue_2026-09-11.md
+    # sections 4.2, 4.3, 5.2, 5.3): a trial build under an arm carrying
+    # `optskip` or `noshadow` takes `_byte_glue_update` INSTEAD of the shadow
+    # copy and `identical_optimizer_step`. On a build without
+    # -D MOJOLEARN_STEP_GLUE_TRIAL=1 `glue_update` is the constant False and
+    # the block below is the shipped path, unchanged.
+    var glue_update = False
+    comptime if STEP_GLUE_TRIAL:
+        var glue_arm = step_glue_arm_from_env()
+        if (glue_arm & STEP_GLUE_UPDATE_BITS) != 0:
+            glue_update = True
+            _byte_glue_update(ctx, tr, next_step, glue_arm)
+    if not glue_update:
+        # THE SHADOW POINT (design 4.2 item 2): everything before this line
+        # left param/m/v untouched; the update kernel below writes them in
+        # place, so their bytes and the flags are shadowed here first.
+        _copy_into(ctx, tr.buffers.shadow_p, tr.buffers.param, 0, 0, n)
+        _copy_into(ctx, tr.buffers.shadow_m, tr.buffers.m_state, 0, 0, n)
+        _copy_into(ctx, tr.buffers.shadow_v, tr.buffers.v_state, 0, 0, n)
+        step_count_sync()
+        ctx.synchronize()
+        tr.buffers.flags_before = tr.buffers.buf_initialized.copy()
+        tr.shadow_step = tr.completed_steps
+        tr.shadow_valid = True
+        timing_tick(ctx, ton, tk, "step.shadow_copy")
+        timing_bytes(ton, "step.shadow_copy_bytes", 3 * n * 4)
+        _maybe_fault(ctx, tr.buffers.m_state, "opt_refuse", 5, _FAULT_NAN)
+        # `identical_optimizer_step` prints `step.opt_refuse_scan` (its first
+        # statement: param, grad, m, v scanned on the device) and
+        # `step.optimizer` (clip, scalars, update; it waits before it
+        # returns), both from its own clock; this clock is re-read after it.
+        identical_optimizer_step(ctx, tr.buffers.param, tr.buffers.grad,
+            tr.buffers.m_state, tr.buffers.v_state, tr.buffers.denom_out,
+            tr.buffers.q_out, tr.buffers.sumsq, tr.buffers.norms,
+            tr.buffers.total_cell, tr.buffers.out2, tr.buffers.opt_ws,
+            tr.buffers.sab_partials, tr.buffers.buf_initialized, tr.buffers.offsets,
+            tr.optimizer, next_step)
     if ton:
         tk = Int(perf_counter_ns())
     _maybe_fault(ctx, tr.buffers.v_state, "after_nonfinite", 3, _FAULT_INF)
@@ -1038,6 +1054,185 @@ def _byte_step_device(ctx: DeviceContext, mut tr: ByteTrainer,
     # Explicit last uses retain all async operands through completion.
     _ = trace
     return loss
+
+
+def byte_glue_update_launch(
+    ctx: DeviceContext,
+    mut param: DeviceBuffer[DType.float32],
+    mut grad: DeviceBuffer[DType.float32],
+    mut m_state: DeviceBuffer[DType.float32],
+    mut v_state: DeviceBuffer[DType.float32],
+    mut p_out: DeviceBuffer[DType.float32],
+    mut m_out: DeviceBuffer[DType.float32],
+    mut v_out: DeviceBuffer[DType.float32],
+    mut denom_out: DeviceBuffer[DType.float32],
+    mut q_out: DeviceBuffer[DType.float32],
+    n: Int,
+    cfg: OptimizerConfig,
+    t: Int,
+    out_of_place: Bool,
+) raises:
+    """DEVIATIONS 2646 and 2647, TRIAL ONLY (reached from `_byte_glue_update`
+    and from `training/checks/step_glue_check.mojo`, both under
+    -D MOJOLEARN_STEP_GLUE_TRIAL=1): the Adam update of
+    `identical_optimizer_step` WITHOUT its entry scans and without a clip,
+    one launch over `n` elements, then a wait.
+
+    `out_of_place` False launches the SHIPPED `adam_update_kernel` with the
+    arguments `identical_optimizer_step` passes it (the same scalars from
+    `device_step_scalars`, the same `_grid_for` geometry at `OPT_TPB`), in
+    place; `p_out`, `m_out` and `v_out` are not touched. True launches
+    `adam_update_oop_kernel`, which reads `param`, `grad`, `m_state`,
+    `v_state` and writes `p_out`, `m_out`, `v_out` (brief section 4.3), at
+    `OPT_TPB` threads per block over `step_glue_blocks(n, OPT_TPB)` blocks
+    (the ceiling; the floor only under the reach sabotage).
+
+    Refused, because this path does not carry them: SGD (a different kernel
+    with per-tensor flags) and clipping (`max_norm > 0`). The byte LM admits
+    neither (`byte_validate_optimizer`). Recorded intermediates are refused
+    at compile time on the trial build."""
+    comptime if STEP_GLUE_TRIAL:
+        comptime assert not OPT_RECORD_INTERMEDIATES, (
+            "the step glue update path does not record denom/q; build the"
+            " glue trial without MOJOLEARN_OPT_RECORD"
+        )
+    if cfg.kind == OPT_SGD:
+        raise Error("byte LM glue update: Adam or AdamW only")
+    if cfg.max_norm > Float32(0.0):
+        raise Error("byte LM glue update: gradient clipping is not on this path")
+    if n <= 0:
+        return
+    var sc = device_step_scalars(cfg, t)
+    var is_adamw = Int32(0)
+    if cfg.kind == OPT_ADAMW:
+        is_adamw = Int32(1)
+    if out_of_place:
+        step_count_launch()
+        ctx.enqueue_function[adam_update_oop_kernel](
+            p_out.unsafe_ptr(),
+            m_out.unsafe_ptr(),
+            v_out.unsafe_ptr(),
+            param.unsafe_ptr(),
+            grad.unsafe_ptr(),
+            m_state.unsafe_ptr(),
+            v_state.unsafe_ptr(),
+            Int32(n),
+            is_adamw,
+            cfg.beta1,
+            cfg.beta2,
+            cfg.eps,
+            cfg.weight_decay,
+            sc.c1,
+            sc.c2,
+            sc.step_size,
+            sc.rt_bc2,
+            sc.decay_mul,
+            grid_dim=(step_glue_blocks(n, OPT_TPB), 1, 1),
+            block_dim=(OPT_TPB, 1, 1),
+        )
+    else:
+        step_count_launch()
+        ctx.enqueue_function[adam_update_kernel](
+            param.unsafe_ptr(),
+            grad.unsafe_ptr(),
+            m_state.unsafe_ptr(),
+            v_state.unsafe_ptr(),
+            denom_out.unsafe_ptr(),
+            q_out.unsafe_ptr(),
+            Int32(n),
+            is_adamw,
+            cfg.beta1,
+            cfg.beta2,
+            cfg.eps,
+            cfg.weight_decay,
+            sc.c1,
+            sc.c2,
+            sc.step_size,
+            sc.rt_bc2,
+            sc.decay_mul,
+            cfg.lr,
+            sc.bc1,
+            sc.bc2,
+            grid_dim=(_opt_grid_for(n), 1, 1),
+            block_dim=(OPT_TPB, 1, 1),
+        )
+    step_count_sync()
+    ctx.synchronize()
+    # `[[mojo-buffer-freed-at-last-use]]`: every buffer is the caller's and
+    # outlives the wait above.
+    _ = param
+    _ = grad
+    _ = m_state
+    _ = v_state
+    _ = p_out
+    _ = m_out
+    _ = v_out
+    _ = denom_out
+    _ = q_out
+
+
+def _byte_glue_update(ctx: DeviceContext, mut tr: ByteTrainer, next_step: Int, arm: Int) raises:
+    """DEVIATIONS 2646 and 2647, TRIAL ONLY: the shadow point and the update
+    of `_byte_step_device` under a glue arm carrying `optskip` and/or
+    `noshadow` (brief sections 4.2, 4.3, 5.2, 5.3). Ends with the new state
+    in `param`, `m_state`, `v_state`, the pre-update state in `shadow_*`,
+    `flags_before` and `shadow_step` set and `shadow_valid` True, exactly
+    the invariant the shipped shadow copy plus `identical_optimizer_step`
+    leave, so `validate_after`, `_byte_recover` and `byte_rollback` run
+    unchanged after it.
+
+    Without `noshadow`: the shipped shadow copy, then (unless `optskip`) the
+    shipped entry scans, then the shipped in-place kernel. With `noshadow`:
+    (unless `optskip`) the entry scans with `shadow_valid` still False, then
+    the out-of-place kernel into `shadow_*`, the wait, three handle swaps,
+    and only then `shadow_valid = True`, so a raise before the swaps leaves
+    the state untouched and takes `_byte_recover`'s no-shadow branch.
+
+    The fault-injection build is refused at compile time: its `opt_refuse`
+    site writes `m_state` between the shadow copy and the optimizer, which
+    is the one write the `optskip` argument excludes (brief section 5.2)."""
+    comptime if STEP_GLUE_TRIAL:
+        comptime assert not BYTE_LM_FAULT_INJECT, (
+            "the step glue trial and MOJOLEARN_BYTE_LM_FAULT_INJECT are not"
+            " combined: the G4 fault sites assume the shipped update order"
+            " (docs/lanes/BRIEF_step_glue_2026-09-11.md section 5.2)"
+        )
+    var n = tr.config.n_total()
+    var ton = timing_on()
+    var tk = Int(perf_counter_ns())
+    var out_of_place = (arm & STEP_GLUE_NOSHADOW) != 0
+    if not out_of_place:
+        # The shipped shadow point, as `_byte_step_device` spells it.
+        _copy_into(ctx, tr.buffers.shadow_p, tr.buffers.param, 0, 0, n)
+        _copy_into(ctx, tr.buffers.shadow_m, tr.buffers.m_state, 0, 0, n)
+        _copy_into(ctx, tr.buffers.shadow_v, tr.buffers.v_state, 0, 0, n)
+        step_count_sync()
+        ctx.synchronize()
+        tr.buffers.flags_before = tr.buffers.buf_initialized.copy()
+        tr.shadow_step = tr.completed_steps
+        tr.shadow_valid = True
+        timing_tick(ctx, ton, tk, "step.shadow_copy")
+        timing_bytes(ton, "step.shadow_copy_bytes", 3 * n * 4)
+    if (arm & STEP_GLUE_OPTSKIP) == 0:
+        opt_refuse_device_inputs(ctx, tr.buffers.param, tr.buffers.grad,
+            tr.buffers.m_state, tr.buffers.v_state, tr.buffers.offsets, tr.optimizer)
+        timing_tick(ctx, ton, tk, "step.opt_refuse_scan")
+    if out_of_place:
+        tr.buffers.flags_before = tr.buffers.buf_initialized.copy()
+        tr.shadow_step = tr.completed_steps
+    byte_glue_update_launch(ctx, tr.buffers.param, tr.buffers.grad,
+        tr.buffers.m_state, tr.buffers.v_state, tr.buffers.shadow_p,
+        tr.buffers.shadow_m, tr.buffers.shadow_v, tr.buffers.denom_out,
+        tr.buffers.q_out, n, tr.optimizer, next_step, out_of_place)
+    if out_of_place:
+        # The new state is in `shadow_*` and the pre-update state is still in
+        # `param`, `m_state`, `v_state`; swap the handles so every later
+        # reader sees what the shipped path leaves (brief section 4.3).
+        swap(tr.buffers.param, tr.buffers.shadow_p)
+        swap(tr.buffers.m_state, tr.buffers.shadow_m)
+        swap(tr.buffers.v_state, tr.buffers.shadow_v)
+        tr.shadow_valid = True
+    timing_tick(ctx, ton, tk, "step.optimizer")
 
 
 def byte_checkpoint(capture: ByteStepCapture, seed: UInt64,
