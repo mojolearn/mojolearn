@@ -556,6 +556,31 @@ opponent here is torch `cdist` + `topk`, NOT cuML.
 | gram | 65536 x 32 | torch | 1.097 |
 | umap | 15 neighbors, 2 components, 50 epochs | cuML UMAP | REFUSED (no cupy in the venv) |
 
+## AMD Instinct MI300X (Hot Aisle), ROCm 6.4.1 image on a ROCm 7.2.4 host, torch 2.6.0+rocm6.4.1
+
+### torch byte-LM training step, PROVISIONAL (shared 2x VM)
+
+Source: `bench/results/e1g/2026-09-11_165905-amd-mi300x-2gpu-vm-hotaisle-torch-lm-step/remote/torch-lm-step/`,
+Hot Aisle VM enc1-gpuvm005 (deployment 210d0e97), commit 593e580d, one GPU of
+a 2x MI300X VM whose other GPU ran our attention leg at the same time on the
+shared 26 cores (label `mi300x-2gpu-vm`). torch 2.6.0+rocm6.4.1.git1ded221d,
+HIP 6.4.43483, Python 3.12.11 in a uv venv inside
+rocm/dev-ubuntu-22.04:6.4.1-complete; device "AMD Instinct MI300X VF". Same
+harness, shape, init, AdamW, clock and corpora as the H100 table. TF32 does
+not exist on ROCm (not_applicable, exit 4).
+
+| column | enwik8 s | Pile GitHub s |
+|---|---|---|
+| compile_bf16 | 0.03228 | 0.02054 |
+| eager_bf16 | 0.03375 | 0.03920 |
+| compile_fp32 | 0.04510 | 0.04527 |
+| eager_fp32 | 0.05005 | 0.04999 |
+
+NOT a row to quote: the two compile_bf16 corpora disagree by 1.6x, which fits
+host contention from the concurrent body. No same-box ratio to our IDENTICAL
+step is stated here; the clean 1x MI300X row is owed (item 5 below), with our
+step on the same VM.
+
 ## Rows that do not exist yet (owed, in priority order)
 
 1. LightGBM CUDA extra_trees, valid build, HIGGS 1M/2M/5M (the Sep 9 trees

@@ -1,0 +1,14 @@
+lane=torch byte LM step opponent (OPPONENT_REFERENCE rows owed, item 5)
+started=2026-09-11T17:02:19Z
+vendor=amd
+root=/root/mojolearn
+commit=593e580d5acc16064fab106a894a3d8e7c7ecb16
+columns=eager_fp32,eager_tf32,eager_bf16,compile_fp32,compile_tf32,compile_bf16
+corpora=enwik8 pile_github
+shape=target warmup=2 steps=7 deadline=300
+torch_pin=2.6.0+rocm6.4.1.git1ded221d
+python_found=NONE (no python on PATH imports torch)
+torch_found=
+python_bootstrap=uv uv 0.8.0 (installer 0.8.0), venv python 3.12
+python_used=/root/.venv-torch-lm-step/bin/python (pinned venv)
+finished=2026-09-11T17:11:52Z

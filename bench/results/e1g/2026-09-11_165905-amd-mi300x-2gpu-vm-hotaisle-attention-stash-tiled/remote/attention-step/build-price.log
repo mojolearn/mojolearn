@@ -1,0 +1,48 @@
+/root/mojolearn/bench/attention_step_price_main.mojo:495:33: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+    memcpy(dest=out.unsafe_ptr().bitcast[UInt8](), src=bytes.unsafe_ptr(), count=n * 4)
+                ~~~~~~~~~~~~~~~~^~~~~~~~
+                                 unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+/root/mojolearn/bench/attention_step_price_main.mojo:495:5: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+    memcpy(dest=out.unsafe_ptr().bitcast[UInt8](), src=bytes.unsafe_ptr(), count=n * 4)
+    ^~~~~~
+    unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/bench/attention_step_price_main.mojo:118:
+Imported from /root/mojolearn/transformer/checks/transformer_backward.mojo:36:
+/root/mojolearn/transformer/impl/llama/modeling_llama.mojo:696:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/bench/attention_step_price_main.mojo:118:
+Imported from /root/mojolearn/transformer/checks/transformer_backward.mojo:36:
+/root/mojolearn/transformer/impl/llama/modeling_llama.mojo:721:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/bench/attention_step_price_main.mojo:113:
+/root/mojolearn/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bench/attention_step_price_main.mojo:113:
+/root/mojolearn/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/bench/attention_step_price_main.mojo:113:
+/root/mojolearn/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bench/attention_step_price_main.mojo:122:
+/root/mojolearn/transformer/impl/llama/fused_attention.mojo:859:32: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+    var raw = host.unsafe_ptr().bitcast[UInt8]()
+              ~~~~~~~~~~~~~~~~~^~~~~~~~
+                                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here

@@ -1,0 +1,1 @@
+{"event": "not_applicable", "column": "eager_tf32", "corpus": "enwik8", "torch_build": "rocm", "out": "/root/gemm_leg_out/torch-lm-step/eager_tf32-enwik8.json"}

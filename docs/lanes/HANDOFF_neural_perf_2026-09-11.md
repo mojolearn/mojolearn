@@ -296,6 +296,21 @@ No AMD timing of this step exists at the target shape.
      pinned apart (hip+rocminfo, fd:00.0 and ff:00.0); GPU 1 (torch ROCm)
      finished and fetched; GPU 0 (attention stash_tiled against baseline)
      running.
+   - **Hot Aisle 2gpu PASSED all six checks** (VM enc1-gpuvm005, deployment
+     210d0e97, $6.78; merged by the trees session at a1a22f3f). Its two
+     bodies, labeled `mi300x-2gpu-vm` and provisional because they shared 26
+     cores: (a) attention on AMD, `baseline` 1.679 / 1.677 s against
+     `stash_tiled` 1.951 / 1.952 s, witnesses equal
+     (bench/results/e1g/2026-09-11_165905-amd-mi300x-2gpu-vm-hotaisle-attention-stash-tiled):
+     the stash_tiled default was flipped on H100 evidence only and may LOSE
+     on AMD; (b) torch 2.6.0+rocm6.4.1 via the uv Python 3.12 bootstrap
+     (bench/results/e1g/2026-09-11_165905-amd-mi300x-2gpu-vm-hotaisle-torch-lm-step):
+     eager_fp32 0.0500 s, compile_bf16 0.0323 / 0.0205 s, TF32 not applicable
+     (provisional table in OPPONENT_REFERENCE). A clean 1x AMD leg of
+     baseline, stash_tiled and stash_tiled_fgrid_r32_qres_pf on one box is
+     launched (scratchpad amd_attn_three_body.sh from origin/main a1a22f3f);
+     if baseline wins there, AMD's `attn_default_arm_for` row becomes the
+     fastest of the three.
 1. The DigitalOcean runner is merged and its dry run is green (section 3);
    its first paid run is also its bring-up. Tuning on AMD is now a repo rule
    for every lane (ENGINEERING_RULES.md section 10), and the account allows
