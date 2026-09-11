@@ -24,8 +24,19 @@ nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader > 
   python3 -c "import catboost, xgboost, sklearn, numpy; print('catboost', catboost.__version__, 'xgboost', xgboost.__version__, 'sklearn', sklearn.__version__, 'numpy', numpy.__version__)" > "$OUT/versions.txt" 2>&1
   timeout -k 30 1800 python3 tools/speed_gbdt_arm.py --download taxi > "$L/download_taxi.log" 2>&1; note download_taxi=$?
   : > "$OUT/taxi.done"
-  timeout -k 30 2400 python3 tools/speed_gbdt_arm.py --download istella > "$L/download_istella.log" 2>&1; note download_istella=$?
-  : > "$OUT/data.done"
+  # The Istella-S fetch is 472 MB from library.istella.it and ran at about
+  # 150 KB/s on 2026-09-11, so a 40-minute cap TIMED OUT (exit 124) with
+  # 410 of 472 MB on disk. `data.done` gates the timed cells, so it is
+  # written ONLY on success: a released gate with no data cost this lane
+  # three rounds of Istella-S cells. `--download istella` does not resume
+  # (any existing file counts as complete), so a partial file is finished
+  # with `curl -C -` before re-running it.
+  timeout -k 30 5400 python3 tools/speed_gbdt_arm.py --download istella > "$L/download_istella.log" 2>&1; note download_istella=$?
+  if [ "$(tail -1 "$L/download_istella.log" | grep -c 'istella decoded')" = 1 ]; then
+    : > "$OUT/data.done"
+  else
+    note istella_MISSING_no_data_done
+  fi
 ) &
 [ -x "$HOME/.pixi/bin/pixi" ] || curl -fsSL https://pixi.sh/install.sh | sh > "$L/pixi_get.log" 2>&1
 timeout -k 30 1500 pixi install > "$L/pixi_install.log" 2>&1; note pixi_install=$?
