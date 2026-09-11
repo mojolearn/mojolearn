@@ -136,7 +136,8 @@ from . import umap
 from .umap import UMAP
 from .neural_network import SmallMLPTrainer
 from .language_model import (SmallByteLanguageModelTrainer, ByteLanguageModelConfig,
-                             LanguageModelTrainer, LanguageModelConfig)
+                             LanguageModelTrainer, LanguageModelConfig,
+                             LanguageModelInference)
 from ._svm_impl import SVC, SVR
 from ._arima_impl import ARIMA
 from ._tsa_impl import ExponentialSmoothing, kpss_test, select_d
@@ -289,6 +290,7 @@ __all__ = [
     "ByteLanguageModelConfig",
     "LanguageModelConfig",
     "LanguageModelTrainer",
+    "LanguageModelInference",
     "kpss_test",
     "linalg",
     "matmul",

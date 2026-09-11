@@ -140,7 +140,7 @@ usage() {
 VENDOR=""; MINUTES=60; DRY=0; GATES=1
 while [ $# -gt 0 ]; do
   case "$1" in
-    amd|nv)
+    amd|nv|cpu-intel|cpu-amd)
       [ -z "$VENDOR" ] || { echo "one vendor per leg" >&2; exit 2; }
       VENDOR=$1 ;;
     --minutes) shift; MINUTES="${1:-}" ;;
@@ -167,6 +167,20 @@ case "$VENDOR" in
   nv)  NAME=mojolearn-extra-nv;  REGION=nyc2; SIZE=gpu-h100x1-80gb;   IMAGE=236925144
        BODY_VENDOR=nvidia; COLUMN=nvidia; GPU_LABEL=nvidia-h100
        SMI_CMD='nvidia-smi --query-gpu=name,driver_version --format=csv,noheader' ;;
+  # DEVIATION 2614: CPU-only droplets for the CPU inference leg. Stock Ubuntu,
+  # no GPU, so the GPU gates cannot run and are forced off, and each CPU
+  # vendor takes its own lock rather than the shared GPU one.
+  cpu-intel) NAME=mojolearn-extra-cpu-intel; REGION=nyc3; SIZE=s-4vcpu-8gb-intel; IMAGE='"ubuntu-24-04-x64"'
+       BODY_VENDOR=cpu;    COLUMN=cpu;    GPU_LABEL=cpu-intel
+       SMI_CMD='lscpu' ;;
+  cpu-amd)   NAME=mojolearn-extra-cpu-amd;   REGION=nyc1; SIZE=s-4vcpu-8gb-amd;   IMAGE='"ubuntu-24-04-x64"'
+       BODY_VENDOR=cpu;    COLUMN=cpu;    GPU_LABEL=cpu-amd
+       SMI_CMD='lscpu' ;;
+esac
+case "$VENDOR" in
+  cpu-*)
+    GATES=0
+    [ -z "${MOJOLEARN_GPU_ARCHS:-}" ] || { echo "MOJOLEARN_GPU_ARCHS names a GPU; a CPU-only droplet has none. Unset it." >&2; exit 2; } ;;
 esac
 
 GPU_ARCHS="${MOJOLEARN_GPU_ARCHS:-}"
@@ -191,7 +205,11 @@ TOKFILE="${MOJOLEARN_DO_TOKEN_FILE:-$HOME/.mojolearn_do_token}"
 STAMP="$(date -u +%Y-%m-%d_%H%M%S)"
 # THE SHARED GPU LOCK (ENGINEERING_RULES 10). A lock older than 100 minutes
 # with no GPU or mojolearn droplet live is an orphan and may be broken.
-GPU_LOCK="${MOJOLEARN_DO_GPU_LOCK:-/tmp/mojolearn-do-gpu.lock}"
+case "$VENDOR" in
+  cpu-*) _DEFAULT_LOCK="/tmp/mojolearn-do-$VENDOR.lock" ;;
+  *)     _DEFAULT_LOCK=/tmp/mojolearn-do-gpu.lock ;;
+esac
+GPU_LOCK="${MOJOLEARN_DO_GPU_LOCK:-$_DEFAULT_LOCK}"
 LOCK_STALE_SECONDS=6000
 LOCK_LANE="${MOJOLEARN_DO_LOCK_LANE:-extra:$(basename "$LEG_EXTRA" .sh)}"
 case "$LOCK_LANE" in *[!A-Za-z0-9_.,:-]*) echo "MOJOLEARN_DO_LOCK_LANE: letters, digits and _.,:- only" >&2; exit 2 ;; esac
@@ -204,6 +222,21 @@ LOCK_HELD=0
 # must start with MOJOLEARN_ or MODULAR_; values are letters, digits and
 # _.,:/=- only, so they cannot carry shell syntax or a secret by accident.
 EXTRA_ENV="${MOJOLEARN_DO_EXTRA_ENV:-}"
+# MOJOLEARN_DO_EXTRA_PAYLOAD (optional, DEVIATION 2614): one local .tgz that is
+# extracted into /root/mojolearn after the source, for inputs `git archive`
+# excludes on purpose (bench/results). Capped like the bundle and sha256-checked
+# on the box before it is unpacked.
+PAYLOAD="${MOJOLEARN_DO_EXTRA_PAYLOAD:-}"
+PAYLOAD_BYTES=0; PAYLOAD_SHA=none
+if [ -n "$PAYLOAD" ]; then
+  [ -f "$PAYLOAD" ] || { echo "MOJOLEARN_DO_EXTRA_PAYLOAD=$PAYLOAD does not exist" >&2; exit 2; }
+  case "$PAYLOAD" in *.tgz|*.tar.gz) ;; *) echo "MOJOLEARN_DO_EXTRA_PAYLOAD must be a .tgz" >&2; exit 2 ;; esac
+  PAYLOAD_BYTES=$(wc -c < "$PAYLOAD" | tr -d ' ')
+  if [ "$PAYLOAD_BYTES" -gt "$MAX_BUNDLE_BYTES" ]; then
+    echo "MOJOLEARN_DO_EXTRA_PAYLOAD is $PAYLOAD_BYTES bytes, over the $MAX_BUNDLE_BYTES cap" >&2; exit 2
+  fi
+  PAYLOAD_SHA=$(shasum -a 256 "$PAYLOAD" | awk '{print $1}')
+fi
 OUT="${MOJOLEARN_GEMM_LEG_OUT:-bench/results/e1g/${STAMP}-${GPU_LABEL}-extra}"
 case "$OUT" in /*) ;; *) OUT="$REPO/$OUT" ;; esac
 REAL_OUT="$OUT"
@@ -1123,6 +1156,19 @@ log "uploaded after $(( $(date +%s) - LEG_START ))s of lease"
 sed 's/^/    /' "$TMPD/unpack.out"
 grep -q '^ARCHIVE-SHA-OK' "$TMPD/unpack.out" && grep -q '^UNPACKED ' "$TMPD/unpack.out" \
   || die "the box refused or failed to unpack the bundle" 7
+
+if [ -n "$PAYLOAD" ]; then
+  log "scp the payload ($PAYLOAD_BYTES bytes, sha256 ${PAYLOAD_SHA:0:16})"
+  _left=$((DEADLINE_EPOCH - FETCH_RESERVE - $(date +%s)))
+  [ "$_left" -gt 120 ] || die "no lease left to upload the payload" 7
+  with_deadline "$_left" scp -q "${SSH_OPTS[@]}" "$PAYLOAD" "root@$IP:/root/extra_payload.tgz" \
+    || die "the payload upload failed" 7
+  "${SSHN[@]}" "cd /root && echo '$PAYLOAD_SHA  extra_payload.tgz' | sha256sum -c - && tar -xzf extra_payload.tgz -C /root/mojolearn && rm -f extra_payload.tgz && echo PAYLOAD-OK" \
+    > "$TMPD/payload.out" 2>&1
+  sed 's/^/    /' "$TMPD/payload.out"
+  grep -q '^PAYLOAD-OK' "$TMPD/payload.out" || die "the box refused or failed to unpack the payload" 7
+  echo "payload_sha256=$PAYLOAD_SHA" >> "$OUT/leg.txt"
+fi
 
 "${SSH[@]}" 'umask 022; cat > /root/gemm_leg_extra.sh' < "$OUT/extra_body.sh" || die "could not ship the extra body" 7
 "${SSH[@]}" 'umask 022; cat > /root/gemm_leg_extra_env.sh' < "$OUT/extra_env.sh" || die "could not ship the extra body environment" 7

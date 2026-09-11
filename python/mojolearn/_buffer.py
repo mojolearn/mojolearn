@@ -687,11 +687,33 @@ def _native(key):
     try:
         fn = getattr(_backend.binding("_mojolearn", mode="identical"), key)
     except Exception as exc:
-        raise ImportError(
-            f"mojolearn: the base binding has no `{key}`; the compiled "
-            "_mojolearn extension is older than this Python layer, or the "
-            "identical set is not built. Rebuild it with\n    "
-            "MOJOLEARN_NUMERIC_MODE=identical sh bindings/build.sh"
-        ) from exc
+        fn = _host_native(key)
+        if fn is None:
+            raise ImportError(
+                f"mojolearn: the base binding has no `{key}`; the compiled "
+                "_mojolearn extension is older than this Python layer, or the "
+                "identical set is not built. Rebuild it with\n    "
+                "MOJOLEARN_NUMERIC_MODE=identical sh bindings/build.sh"
+            ) from exc
     _NATIVE[key] = fn
     return fn
+
+
+#: DEVIATION 2614: the helpers the CPU inference binding also exports, and the
+#: only ones `_native` may resolve from it.
+_HOST_NATIVE_KEYS = frozenset({"all_finite_f32", "all_finite_f64", "cast_f64_to_f32"})
+
+
+def _host_native(key):
+    """`key` from the CPU inference binding, on a box whose GPU base binding
+    is not built (DEVIATION 2614). The same native helper compiled into a
+    second binary, not a Python copy, so the no-Python-fallback rule above
+    holds. None when `key` is not one of the three or that binary is not
+    built either; a refused sabotage build raises rather than hiding."""
+    if key not in _HOST_NATIVE_KEYS:
+        return None
+    from . import _byte_lm_host
+    try:
+        return getattr(_byte_lm_host._load(), key)
+    except (ImportError, AttributeError):
+        return None

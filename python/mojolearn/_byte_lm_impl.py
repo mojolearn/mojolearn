@@ -875,46 +875,54 @@ class SmallByteLanguageModelTrainer:
         It shares every schema, integrity, tensor, optimizer and cursor check
         with from_checkpoint; neither API launches native model operations.
         """
-        if type(encoded) is not bytes:
-            raise TypeError('Byte-LM checkpoint capture must be immutable bytes')
-        if len(encoded) > _CHECKPOINT_LIMIT:
-            raise ValueError('Byte-LM checkpoint exceeds 2 MiB')
-        try:
-            envelope = json.loads(encoded, object_pairs_hook=_unique_object)
-        except (ValueError, UnicodeDecodeError, RecursionError) as exc:
-            raise ValueError('Byte-LM checkpoint is not valid bounded JSON') from exc
-        if (not isinstance(envelope, dict) or set(envelope) != {'schema', 'payload', 'payload_sha256'}
-                or envelope['schema'] != _CHECKPOINT_SCHEMA):
-            raise ValueError('Byte-LM checkpoint schema mismatch')
-        payload = envelope['payload']
-        if hashlib.sha256(_canonical(payload)).hexdigest() != envelope['payload_sha256']:
-            raise ValueError('Byte-LM checkpoint integrity mismatch')
-        if not isinstance(payload, dict):
-            raise ValueError('Byte-LM checkpoint payload must be an object')
-        shape = state_shape(payload)
-        for key in ('parameters', 'm', 'v', 'flags'):
-            value = payload.get(key)
-            cells, dtype = (shape.n_tensors, '<i4') if key == 'flags' else (shape.n_total, '<f4')
-            if (not isinstance(value, dict) or set(value) != {'dtype', 'shape', 'hex'}
-                    or value['dtype'] != dtype or value['shape'] != [cells]
-                    or not isinstance(value['hex'], str) or len(value['hex']) != cells * 8):
-                raise ValueError('Byte-LM checkpoint tensor descriptor mismatch')
-            try:
-                raw = bytes.fromhex(value['hex'])
-            except ValueError as exc:
-                raise ValueError('Byte-LM checkpoint tensor is not hexadecimal') from exc
-            if len(raw) != cells * 4:
-                raise ValueError('Byte-LM checkpoint tensor byte count mismatch')
-            # `np.frombuffer(raw, dtype).astype(native, copy=True)`:
-            # `_buffer.frombytes` reads the little-endian bytes into a
-            # fresh native Array (DEVIATION 2432).
-            payload[key] = frombytes(raw, dtype, (cells,))
-        state = _validate_state(payload)
+        state, shape = _decode_checkpoint(encoded)
         cfg = state['config']
         result = cls(state['parameters'], data_schedule=state['data_schedule'], lr=cfg['lr'],
                      betas=(cfg['beta1'], cfg['beta2']), eps=cfg['eps'], weight_decay=cfg['weight_decay'],
                      shape=shape, resident=resident)
         return result.load_state_dict(state)
+
+
+def _decode_checkpoint(encoded):
+    """`(state, shape)` from checkpoint bytes, every schema, integrity,
+    tensor, optimizer and cursor check applied, no native call. Shared by
+    `from_checkpoint_bytes` and the CPU inference loader (DEVIATION 2610),
+    so there is one decoder."""
+    if type(encoded) is not bytes:
+        raise TypeError('Byte-LM checkpoint capture must be immutable bytes')
+    if len(encoded) > _CHECKPOINT_LIMIT:
+        raise ValueError('Byte-LM checkpoint exceeds 2 MiB')
+    try:
+        envelope = json.loads(encoded, object_pairs_hook=_unique_object)
+    except (ValueError, UnicodeDecodeError, RecursionError) as exc:
+        raise ValueError('Byte-LM checkpoint is not valid bounded JSON') from exc
+    if (not isinstance(envelope, dict) or set(envelope) != {'schema', 'payload', 'payload_sha256'}
+            or envelope['schema'] != _CHECKPOINT_SCHEMA):
+        raise ValueError('Byte-LM checkpoint schema mismatch')
+    payload = envelope['payload']
+    if hashlib.sha256(_canonical(payload)).hexdigest() != envelope['payload_sha256']:
+        raise ValueError('Byte-LM checkpoint integrity mismatch')
+    if not isinstance(payload, dict):
+        raise ValueError('Byte-LM checkpoint payload must be an object')
+    shape = state_shape(payload)
+    for key in ('parameters', 'm', 'v', 'flags'):
+        value = payload.get(key)
+        cells, dtype = (shape.n_tensors, '<i4') if key == 'flags' else (shape.n_total, '<f4')
+        if (not isinstance(value, dict) or set(value) != {'dtype', 'shape', 'hex'}
+                or value['dtype'] != dtype or value['shape'] != [cells]
+                or not isinstance(value['hex'], str) or len(value['hex']) != cells * 8):
+            raise ValueError('Byte-LM checkpoint tensor descriptor mismatch')
+        try:
+            raw = bytes.fromhex(value['hex'])
+        except ValueError as exc:
+            raise ValueError('Byte-LM checkpoint tensor is not hexadecimal') from exc
+        if len(raw) != cells * 4:
+            raise ValueError('Byte-LM checkpoint tensor byte count mismatch')
+        # `np.frombuffer(raw, dtype).astype(native, copy=True)`:
+        # `_buffer.frombytes` reads the little-endian bytes into a
+        # fresh native Array (DEVIATION 2432).
+        payload[key] = frombytes(raw, dtype, (cells,))
+    return _validate_state(payload), shape
 
 
 def _unique_object(pairs):
