@@ -7,7 +7,7 @@
 #
 #   nohup sh tools/trees_identical_remote.sh > /root/trees_out/setup_console.log 2>&1 &
 #
-# The three independent tracks (pixi+bindings, pip+higgs, LightGBM CUDA)
+# The three independent tracks (pixi+bindings, pip+datasets, LightGBM CUDA)
 # run concurrently; the sentinel /root/trees_out/setup.done is written last.
 set -u
 ROOT=/root/mojolearn
@@ -59,20 +59,12 @@ track_pip() {
     python3 -c "import cuml; print('cuml', cuml.__version__)" >> "$OUT/versions.txt" 2>&1
     python3 -c "import torch; print('torch', torch.__version__, 'cuda', torch.version.cuda)" >> "$OUT/versions.txt" 2>&1
     : > "$OUT/track_pip_base.done"
-    # HIGGS from UCI's static zip: measured 6-8 MB/s per connection on
-    # 2026-09-09 where the /ml/machine-learning-databases path gave 0.2 MB/s.
-    # Same bytes (the zip holds the same HIGGS.csv.gz); decoded by the
-    # harness's own --download step into higgs_speed.npz.
-    _hd=/root/datasets/gbm-bench/higgs
-    mkdir -p "$_hd"
-    if [ ! -s "$_hd/HIGGS.csv.gz" ]; then
-        step higgs_zip 1800 curl -sSL --retry 3 -o "$_hd/higgs.zip" https://archive.ics.uci.edu/static/public/280/higgs.zip
-        step higgs_unzip 600 python3 -c "import zipfile; zipfile.ZipFile('$_hd/higgs.zip').extract('HIGGS.csv.gz', '$_hd')"
-        rm -f "$_hd/higgs.zip"
-    fi
-    step download_higgs 2400 python3 tools/speed_gbdt_arm.py --download higgs
-    # Istella-S LETOR (3.4M x 220), the high-feature second kind of
-    # ENGINEERING_RULES.md section 9. Direct 472 MB download, no credentials.
+    # The two datasets of ENGINEERING_RULES.md section 9 (2026-09-11):
+    # NYC taxi (about 100 MB of parquet, needs pyarrow) and Istella-S LETOR
+    # (472 MB tar). Direct downloads, no credentials; each decoded once to a
+    # NumPy cache by the harness's own --download step. HIGGS is retired.
+    step pip_pyarrow 600 python3 -m pip install --no-input --disable-pip-version-check pyarrow
+    step download_taxi 1800 python3 tools/speed_gbdt_arm.py --download taxi
     step download_istella 1800 python3 tools/speed_gbdt_arm.py --download istella
     : > "$OUT/track_pip.done"
 }

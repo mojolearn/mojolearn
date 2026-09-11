@@ -17,6 +17,13 @@ FP16 and FP8. Nobody publishes absolute times on H100 or L40S at our sizes
 with a pinned version, so published numbers are only a sanity check that a
 row here is not misconfigured.
 
+**HIGGS IS RETIRED (2026-09-11, ENGINEERING_RULES.md section 9).** Every
+HIGGS row and every HIGGS ratio below is history and is never quoted as a
+result again. The two benchmark datasets for trees and classical lanes are
+NYC taxi (`taxi`, `taxireg`) and Istella-S LETOR (`istella`, `istellareg`);
+their opponent rows are measured once per (GPU, driver, version, dataset)
+on their first leg and land in this file under the GPU's section.
+
 Every number is a median in milliseconds unless stated. Paths are relative
 to the repository root. `e1g/<stamp>` means `bench/results/e1g/<stamp>/remote/logs/`.
 "Config" is the opponent's FAST arm as pinned by `bench/speed/`; the
