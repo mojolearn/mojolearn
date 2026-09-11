@@ -23,7 +23,7 @@ from std.os import getenv
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from gemm.checks.gemm_backward import gemm_backward_a_call, gemm_backward_b_call
-from gemm.checks.gemm_oracle import OP_NT
+from gemm.checks.gemm_oracle import OP_NN, OP_NT, OP_TN
 
 #: `TARGET_SHAPE` in `tools/lm_step_memory_probe.py`: 12 layers, DM 768,
 #: FF 2048, V 50257, L 2048, batch 1.
@@ -88,6 +88,47 @@ def gemm_step_lm_call(i: Int) raises -> Tuple[Int, Int, Int, Int, Int]:
         return (ca[0], ca[1], ca[2], ca[3], per)
     var cb = gemm_backward_b_call(OP_NT, m, out_f, in_f)
     return (cb[0], cb[1], cb[2], cb[3], per)
+
+
+#: DEVIATION 2593: control calls the price harness adds under
+#: `MOJOLEARN_GEMM_STEP_CONTROLS=1` (never weighted into the STEP line). Each
+#: separates explanations of brief docs/lanes/BRIEF_gemm_long_k_2026-09-11.md
+#: section 3.2 at a 128x128 shipped plan: TN at 36 blocks and a short k (E3,
+#: E4), NT and NN at proj_dB's 36 blocks and long k (E2), 132 against 143
+#: blocks (rounds against a proportional rate, and the column's block
+#: parallelism), and 64 blocks at a long k.
+comptime GEMM_STEP_CONTROL_CALLS = 6
+
+
+def gemm_step_control_call_name(i: Int) -> String:
+    if i == 0:
+        return String("ctl_tn_768x768x768")
+    if i == 1:
+        return String("ctl_nt_768x768x2048")
+    if i == 2:
+        return String("ctl_nn_768x768x2048")
+    if i == 3:
+        return String("ctl_nt_1536x1408x768")
+    if i == 4:
+        return String("ctl_nt_1664x1408x768")
+    return String("ctl_nt_1024x1024x2048")
+
+
+def gemm_step_control_call(i: Int) raises -> Tuple[Int, Int, Int, Int, Int]:
+    """`(op, m, n, k, 0)` for control call `i`: zero calls per step."""
+    if i == 0:
+        return (OP_TN, 768, 768, 768, 0)
+    if i == 1:
+        return (OP_NT, 768, 768, 2048, 0)
+    if i == 2:
+        return (OP_NN, 768, 768, 2048, 0)
+    if i == 3:
+        return (OP_NT, 1536, 1408, 768, 0)
+    if i == 4:
+        return (OP_NT, 1664, 1408, 768, 0)
+    if i == 5:
+        return (OP_NT, 1024, 1024, 2048, 0)
+    raise Error("gemm_step_control_call: no control call " + String(i))
 
 
 def gemm_step_operand_counts(m: Int, n: Int, k: Int) -> Tuple[Int, Int]:

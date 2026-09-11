@@ -809,6 +809,15 @@ def attn_zdot_rows_per_block_for[column: Int]() -> Int:
     return 64
 
 
+def lib_gemm_block_parallelism_for[column: Int]() -> Int:
+    """SCHEDULING row (DEVIATION 2591, 2026-09-11, trial arm only; brief docs/lanes/BRIEF_gemm_long_k_2026-09-11.md sections 3 and 4): how many 256-thread GEMM blocks the column runs side by side, which the `ksplit` arm reads to decide how finely to split a grid-bound call's `k` axis into leaf groups. NVIDIA 132: the H100's SM count (docs/lanes/BRIEF_attention_step_2026-09-11.md section 3.1), and the value that fits the shipped plan's H100 price table with one block per SM (brief section 3.2, a fit, not a timer). AMD 110, from a READING, not a measurement: the attention brief section 11.1 transcribes 110 CUs (pinned to the MI250X; the MI325X and MI300X counts are not in the repository) and resident blocks per CU as `min(2048 // 256, 65536 // page bytes)`; the shipped 128x128 GEMM block holds two 20,480 B pages (40,960 B), so one block per CU and 110 side by side. THE MI300X LEG DECIDES IT: its CONTROL pair below reads the real value, and this row follows that reading. Every other column 0, meaning no reading: the arm then takes the finest split the workspace cap allows. A wrong value costs time (extra rounds or extra fold traffic) and can never move a bit, because the group size reaches no leaf boundary and no tree level (brief section 5.5). The CONTROL pair `ctl_nt_1536x1408x768` / `ctl_nt_1664x1408x768` of `bench/gemm_step_price_main.mojo` reads it on any board. The shipped build reads it nowhere."""
+    if column == COLUMN_NVIDIA:
+        return 132
+    if column == COLUMN_AMD:
+        return 110
+    return 0
+
+
 def knn_warpsort_select_for[column: Int, identical: Bool]() -> Bool:
     """SCHEDULING row (DEVIATION 1922): whether the k-NN TILED path's selector is the implemented RAFT WARPSORT (`select_warpsort.mojo`, `warpsort_topk_block_kernel`) instead of the implemented RAFT radix (`select_radix.mojo`) for `2 < k <= 256`."""
     comptime if identical:
