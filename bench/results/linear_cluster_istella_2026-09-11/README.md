@@ -165,7 +165,19 @@ arm), min_samples 10, blocks standardized.
 
 | dataset | shape | cuML HDBSCAN ms | ours | notes |
 |---|---|---|---|---|
-| taxi | 100,000 x 11 | 191.2 | no arm | 159 clusters, noise fraction 0.1310; min_samples 10, min_cluster_size 100, eom. **This library ships no HDBSCAN**, so there is no ratio, only cuML's row. |
+| taxi | 100,000 x 11 | 191.2 | no arm | 159 clusters, noise fraction 0.1310 |
+| Istella-S | 100,000 x 220 | 567.4 | no arm | 53 clusters, noise fraction 0.2563 |
+
+HDBSCAN settings are min_samples 10, min_cluster_size 100, `eom`, on the first
+100,000 rows of the same standardized block. **This library ships no HDBSCAN**,
+so those are cuML's rows alone and there is no ratio to quote; they are here so
+the next lane that writes one starts from a measured opponent.
+
+The first Istella-S DBSCAN race lost its `ours` arm to the harness: a round
+takes about 337 s there and `--round-seconds` defaults to 300, so the arm was
+killed at round 1 with only its warm-up measured. cuML's arm finished that
+race at 55240 ms median (1501 clusters, noise fraction 0.16966). The row above
+comes from the re-run with a 1200 s bound.
 
 `cuml-gpu-rbc` (cuML's own ball cover) refuses both datasets at 1,000,000 rows
 with "An overflow occurred with the current choice of precision and the number
