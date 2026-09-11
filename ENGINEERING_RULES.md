@@ -256,8 +256,31 @@ istella`, untimed, decoded once to a NumPy cache). Trees run both at or
 above 1,000,000 rows (the 2026-09-01 floor); classical lanes take each at
 the lane's kernel-bound shape (below). Two datasets, not more: several
 sizes of one dataset are one dataset, and a third kind buys less than it
-costs. A win that shows on one of the two and not the other is reported as
-exactly that, and is not flipped as a default until it is understood.
+costs.
+
+**The flip rule (Andrew, 2026-09-11 evening).** A deviation flips ON as the
+default, without asking, when it wins on the AVERAGE of the two datasets
+and loses quality on neither. Andrew: "if things are improving now with
+these 2 datasets we should be turning those deviations on without you
+needing to ask me ... the deviation should improve maybe the average of
+both datasets? we shouldn't be so strict ... same for all". ONE rule for
+trees, classical and neural: the two datasets are this section's two
+tables for trees and classical, and the two corpora below for neural, and
+the metric is the lane's own (loss per token for a network). Concretely,
+at the lane's shape and on the same box in one heat window:
+- Time: the geometric mean of the two ratios (after / before, one per
+  dataset) is below 1. The geometric mean, not the mean of raw times: an
+  Istella-S RF fit is about five times a taxi fit, so a raw average would
+  be Istella alone. A 20% win on one kind and a 10% loss on the other
+  flips; report both ratios so the loss is visible.
+- Quality: the lane's metric (logloss, RMSE, NDCG, recall) is not worse on
+  EITHER dataset beyond its round-to-round noise. A speed win bought with
+  accuracy on one kind of data is a regression a user on that kind sees,
+  so quality is gated per dataset, never averaged.
+- A win on one kind with the other unmeasured is still no flip: the second
+  dataset has to run first. That is what stays strict.
+Applied the same evening: DEVIATION 2502 (pure node is a leaf) went ON by
+default on ratios 0.89 (taxi) and 0.45 (Istella-S) with equal logloss.
 
 **HIGGS is RETIRED (2026-09-11)** as a benchmark dataset for trees and
 classical lanes: 28 dense continuous physics features, balanced classes, no
