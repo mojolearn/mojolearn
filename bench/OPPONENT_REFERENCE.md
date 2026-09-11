@@ -1086,3 +1086,55 @@ istella=1.408 reason=time (quality better on both); DEVIATION 2512 on
 against off, RF NO FLIP geomean=1.001 taxi=0.999 istella=1.004 (bits equal),
 symmetric NO FLIP geomean=1.011 taxi=0.999 istella=1.023 (its quality delta
 is inside the round-to-round movement above), so 2512 is neutral on AMD.
+
+## AMD Instinct MI300X, amdgpu 6.16.13, ROCm 6.4.1, Hot Aisle (13-core VM)
+
+Hot Aisle 1x MI300X VM on the 13-core spec (the card reports AMD Instinct
+MI300X VF, gfx942), Intel Xeon Platinum 8470 with 13 cores and 224 GB. The
+host runs Ubuntu 24.04.4 with ROCm 7.2.4, and the leg body runs in the
+runner's default container `rocm/dev-ubuntu-22.04:6.4.1-complete` (Ubuntu
+22.04.5, glibc 2.35, ROCm 6.4.1 userland), CPython 3.12.14, Mojo 1.0.0
+(ed45d567). ENGINEERING_RULES.md section 10 applies, and these rows are a new
+tuple, never mixed with the MI325X rows above or with any NVIDIA row. CatBoost
+and scikit-learn have no AMD GPU path and run on this VM's CPU on all 13
+cores. Ours is the IDENTICAL tier at the default build, source 8d7e129c, which
+carries the AMD GBDT identity fix (6ad945c6, DEVIATION 2600). Same process as
+our arm, arms alternating per round, opponents imported before our binding, 1
+warm-up plus 5 rounds, ms median (min..max), configs as in the MI325X section.
+Accuracy is logloss / AUC on the fixed test tail. Ours FAST is the
+`numeric_mode='fast'` arm interleaved with IDENTICAL in its own ours-only cell
+(`*.ours.fastab.log`), set against the opponent row beside it. Evidence is in
+`bench/results/trees_identical/mi300x_hotaisle_2026-09-11/taxi/` (build logs
+over 100 KB stay outside the repository).
+
+Two opponents with an AMD GPU path did not run on the GPU here, and each row
+says so. XGBoost is the PyPI 3.4.1 build on the CPU, because AMD ships
+`amd_xgboost` only as manylinux_2_39 wheels and this container has glibc 2.35,
+so pip found no distribution. The amd_xgboost GPU row is owed on an Ubuntu
+24.04 image. LightGBM 4.7.0 ran on the CPU with `min_child_weight=1e-3`
+(`MOJOLEARN_SPEED_LGBM_PARAMS`), the one retry after the harness's 0.0 was
+refused on the MI325X. Its OpenCL build compiled and still failed its probe
+with "Check failed: (best_split_info.right_count) > (0)" under
+`gpu_use_dp=True` (one attempt, 80 s).
+
+Identity on this box. With the fix, each of our IDENTICAL GBDT lanes returned
+one prediction hash across all ten fits in both of its cells (symmetric
+90c3558501933f47, depthwise 40c1683b9e0eb151, lossguide 0dd8bcfc3c3a4a1d). Our
+RF and ET hashes equal the MI325X taxi hashes (RF 1M d8f64dae01de00bd, RF 2M
+f1240292e3b1dd3f, ET e683f121d11f59dd). FAST GBDT hashes move every round, FAST
+RF holds one hash of its own, and FAST ET returns the IDENTICAL hash.
+
+Taxi, 1,000,000 training rows (2,000,000 for RF 2M), VM 9b86604d:
+
+| lane | opponent | version | device | config | opponent ms | opponent logloss / AUC | ours IDENTICAL ms | ours logloss / AUC | IDENTICAL / opponent | ours FAST ms | FAST / opponent |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| RF 1M | scikit-learn RandomForestClassifier | 1.9.1 | CPU, 13 cores (n_jobs=-1) | exact thresholds (no bins) | 12529 (12478..12593) | 0.525336 / 0.617420 | 1291 (1280..1372) | 0.525910 / 0.617154 | 0.10x | 1280 (1273..1295) | 0.10x |
+| RF 2M | scikit-learn RandomForestClassifier | 1.9.1 | CPU, 13 cores | same | 27955 (27811..28089) | 0.523834 / 0.622621 | 1896 (1888..1961) | 0.524221 / 0.622648 | 0.07x | not run (FAST cells are 1M) | - |
+| ET 1M | scikit-learn ExtraTreesClassifier | 1.9.1 | CPU, 13 cores | no bootstrap | 10224 (10190..10246) | 0.527011 / 0.611206 | 4093 (4074..4134) | 0.527541 / 0.608084 | 0.40x | 4081 (4075..4091) | 0.40x |
+| symmetric 1M | CatBoost SymmetricTree | 1.2.10 | CPU, 13 threads | task_type CPU | 2180 (2168..2212) | 0.525674 / 0.617966 | 507 (492..525) | 0.525735 / 0.619460 | 0.23x | 543 (541..557) | 0.25x |
+| depthwise 1M | CatBoost Depthwise | 1.2.10 | CPU, 13 threads | task_type CPU | 4362 (4317..4423) | 0.525755 / 0.620508 | 1047 (1038..1063) | 0.525086 / 0.621421 | 0.24x | 1097 (1086..1129) | 0.25x |
+| depthwise 1M | XGBoost (PyPI) | 3.4.1 | CPU, 13 threads (amd_xgboost not installable on the glibc 2.35 image) | tree_method hist, device cpu | 1043 (1013..1483) | 0.525332 / 0.620103 | 1047 (1038..1063) | 0.525086 / 0.621421 | 1.00x | 1097 (1086..1129) | 1.05x |
+| lossguide 1M | CatBoost Lossguide | 1.2.10 | CPU, 13 threads | task_type CPU | 6943 (6868..6986) | 0.526113 / 0.619758 | 1774 (1741..1779) | 0.525504 / 0.619386 | 0.26x | 1837 (1821..1859) | 0.26x |
+| lossguide 1M | XGBoost (PyPI) | 3.4.1 | CPU, 13 threads (same reason) | grow_policy lossguide; hash 98e44c1ffb4f3ad5, equal to its depthwise row | 1034 (982..1491) | 0.525332 / 0.620103 | 1774 (1741..1779) | 0.525504 / 0.619386 | 1.72x | 1837 (1821..1859) | 1.78x |
+| lossguide 1M | LightGBM | 4.7.0 | CPU, 13 threads | min_child_weight=1e-3 (retry); OpenCL build failed its probe | 952 (930..988) | 0.525029 / 0.620694 | 1774 (1741..1779) | 0.525504 / 0.619386 | 1.86x | 1837 (1821..1859) | 1.93x |
+| depthwise, lossguide 1M | XGBoost `amd_xgboost` | - | GPU | - | owed (needs a glibc 2.39 image) | - | - | - | - | - | - |
