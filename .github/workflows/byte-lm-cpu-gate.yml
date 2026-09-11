@@ -1,0 +1,136 @@
+# Byte LM CPU inference gate (DEVIATIONS 2610-2616) on GitHub's free standard
+# runners: ARM64 Linux (Azure Cobalt 100), x86-64 Linux and Apple M1 macOS.
+#
+# What it proves on each runner, and nothing more: the CPU binding built ON
+# THAT RUNNER reproduces the retained Metal/CUDA/HIP loss bytes for the byte LM
+# checkpoint states in bench/results/resume/2026-09-07-root-byte-lm-three-vendor
+# (tools/byte_lm_host_gate.py), and a build with the head fold reversed
+# (DEVIATION 2612) fails the same comparison. No GPU is used or wanted.
+#
+# A green job is evidence for docs/BYTE_LM_CPU_INFERENCE.md's certified table
+# only after its uploaded reports are read; the job summary is not the record.
+#
+# Hosted macOS has failed GPU binding builds with "Unknown GPU architecture
+# detected" (wheel-ci.yml). This binding compiles no kernel, but it imports
+# max.gpu.host through core/identity_trace.mojo, so that row is measured, not
+# assumed; fail-fast is off so one runner cannot hide another.
+
+name: Byte LM CPU gate
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "lane/cpu-inference"
+      - "lane/cpu-inference-threads"
+    paths:
+      - "training/byte_lm_host.mojo"
+      - "bindings/_mojolearn_byte_lm_host.mojo"
+      - "bindings/build_byte_lm_host.sh"
+      - "python/mojolearn/_byte_lm_host.py"
+      - "python/mojolearn/_backend.py"
+      - "python/mojolearn/_buffer.py"
+      - "tools/byte_lm_host_gate.py"
+      - ".github/workflows/byte-lm-cpu-gate.yml"
+
+permissions: {}
+
+jobs:
+  gate:
+    name: ${{ matrix.label }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04-arm
+            label: ARM64 Linux (Azure Cobalt 100)
+          - runner: ubuntu-24.04
+            label: x86-64 Linux (hosted)
+          - runner: macos-15
+            label: Apple M1 macOS (hosted)
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    env:
+      MOJOLEARN_GATE_COMMIT: ${{ github.sha }}
+      GATE_OUT: ${{ github.workspace }}/cpu-gate-out
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # bench/results is 2.6 GB; only the one capture the gate reads comes down.
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /*
+            !/bench/results/*
+            /bench/results/resume/
+            !/bench/results/resume/*
+            /bench/results/resume/2026-09-07-root-byte-lm-three-vendor/
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+
+      - name: Runner facts
+        run: |
+          mkdir -p "$GATE_OUT"
+          {
+            uname -a
+            python3 --version
+            if [ "$(uname -s)" = Darwin ]; then
+              sysctl -n machdep.cpu.brand_string
+              sw_vers -productVersion
+            else
+              lscpu
+              grep -m1 -E '^(flags|Features)' /proc/cpuinfo
+            fi
+          } 2>&1 | tee "$GATE_OUT/runner.txt"
+          test -f bench/results/resume/2026-09-07-root-byte-lm-three-vendor/comparison.json
+
+      - uses: prefix-dev/setup-pixi@v0.10.1
+        with:
+          run-install: true
+          cache: false
+
+      - name: Build the CPU binding (production)
+        run: |
+          set -o pipefail
+          pixi run mojo --version | tee "$GATE_OUT/mojo_version.txt"
+          sh bindings/build_byte_lm_host.sh 2>&1 | tee "$GATE_OUT/build_prod.log"
+
+      - name: Gate, production build must reproduce every loss byte
+        run: |
+          set -o pipefail
+          cp python/mojolearn/host/_mojolearn_byte_lm_host.so "$GATE_OUT/_mojolearn_byte_lm_host.prod.so"
+          python3 tools/byte_lm_host_gate.py --steps every:8 \
+            --report "$GATE_OUT/gate_prod.json" 2>&1 | tee "$GATE_OUT/gate_prod.log"
+
+      - name: Build the sabotage binding (DEVIATION 2612)
+        if: always()
+        env:
+          MOJOLEARN_BYTE_LM_HOST_OUTDIR: ${{ runner.temp }}/host-sab
+          MOJOLEARN_BUILD_EXTRA_DEFINES: "-D MOJOLEARN_BYTE_LM_HOST_SABOTAGE=1"
+        run: |
+          set -o pipefail
+          sh bindings/build_byte_lm_host.sh 2>&1 | tee "$GATE_OUT/build_sab.log"
+
+      - name: Gate, sabotage build must be caught
+        if: always()
+        env:
+          MOJOLEARN_BYTE_LM_HOST_ALLOW_SABOTAGE: "1"
+          MOJOLEARN_BYTE_LM_HOST_BINARY: ${{ runner.temp }}/host-sab/_mojolearn_byte_lm_host.so
+        run: |
+          set -o pipefail
+          python3 tools/byte_lm_host_gate.py --steps every:8 --expect-mismatch \
+            --report "$GATE_OUT/gate_sab.json" 2>&1 | tee "$GATE_OUT/gate_sab.log"
+
+      - name: Upload reports and logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: byte-lm-cpu-gate-${{ matrix.runner }}
+          path: cpu-gate-out/
+          if-no-files-found: warn
