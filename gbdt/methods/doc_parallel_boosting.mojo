@@ -116,9 +116,13 @@ from gbdt.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_base import (
 from gbdt.data.permutation import TRandom
 from gbdt.gpu_data.feature_sampling import check_feature_fraction, sample_tree_folds, FeatureProjectionWorkspace
 from gbdt.methods.leaves_estimation.doc_parallel_leaves_estimator import (
+    DEVICE_LEAF_PARTITION,
+    DeviceLeafPartitioner,
+    LeafPartition,
     compute_bins_for_model,
     partition_from_bins,
 )
+from ensemble.instruments import StageTimes as HostStageTimes
 from gbdt.overfitting_detector.overfitting_detector import (
     OD_NONE,
     make_overfitting_detector,
@@ -1375,6 +1379,9 @@ def fit_with_test(
     # one set of gather/staging buffers, keyed by (n_rows, approx_dim) with
     # a leaf-count capacity
     var est_ws = List[TEstimationWorkspace]()
+    # DEVIATION 2551: the non-symmetric estimator's device partition, the
+    # FIT's pool of one (empty and never touched on the default side)
+    var leaf_parts = List[DeviceLeafPartitioner]()
 
     # `secondDerAsWeights = IsSecondOrderScoreFunction(scoreFunction)`.
     # BOTH their searchers key the stat planes' content on it -- the greedy
@@ -1410,7 +1417,15 @@ def fit_with_test(
     if feature_fraction < 1:
         feature_random = TRandom(random_seed ^ UInt64(0x4645415455524553))
         feature_projection = FeatureProjectionWorkspace(ctx,n_rows,layout_for_test)
+    # DEVIATION 2552: host stamps over the boosting loop, the sites the
+    # DEVIATION 2510 tables left unstamped (MOJOLEARN_STAGE_TIMES=1 only,
+    # `stop_host`, NO drain added). Queued device work is charged to the
+    # stage that next drains, so read a row as "host time until this
+    # stage's own drain returned". Disjoint stages; `other` is the rest.
+    var loop_times = HostStageTimes()
+    var t_loop = loop_times.start()
     for iteration in range(n_estimators):
+        var t_grad = loop_times.start()
         # ---- which permutation the STRUCTURE is searched on ----------
         #
         # `TRandom rand(iteration + BaseIterationSeed); rand.Advance(10);`
@@ -1675,7 +1690,7 @@ def fit_with_test(
         # at most that much too large. `SCALE_HEADROOM_BITS = 3` is a factor
         # of eight against it, five orders of magnitude of slack.
         #
-        # THE SHIPPED BUILD IS `NUMERIC_FAST` (numerics.mojo:74) -- the
+        # THE TIER IS A BUILD DEFINE (checks/numerics.mojo:9-16) AND AN IDENTICAL GBDT BUILD SHIPS -- the
         # runtime `determinism` option is validated but wired to nothing,
         # and a comment here used to claim it pinned the integer flush,
         # which was false (caught 2026-08-21 when Andrew asked why the
@@ -1689,6 +1704,7 @@ def fit_with_test(
         # `run_tree_layout` from the magnitudes buffer, so the per-tree
         # drain that used to read two floats back is gone -- the tree's
         # own drain is now the loop's only one.
+        loop_times.stop_host("iter_gradients_enqueue", t_grad)
         var mags_opt = Optional[DeviceBuffer[DType.float32]]()
 
         @parameter
@@ -1743,6 +1759,7 @@ def fit_with_test(
             # applies when someone measures it.
             var wmag = Float32(0.0)
             var gmag = Float32(0.0)
+            var t_mags = loop_times.start()
 
             @parameter
             if _needs_magnitudes:
@@ -1752,6 +1769,7 @@ def fit_with_test(
                 wmag = hm[0]
                 gmag = hm[1]
                 _ = hm^  # past the drain
+            loop_times.stop_host("iter_mags_drain", t_mags)
             # ====================== DEVIATION 260 ======================
             # THE hist_2 ACCUMULATION MODE IS THE KERNEL MATRIX'S
             # `HIST2_SMEM_MODE` ROW, the same one the oblivious
@@ -1781,6 +1799,7 @@ def fit_with_test(
             # this shape. The matrix row stands; an inline mode 0 here would
             # have been a vendor/arm fork hiding a race.
             # ============================================================
+            var t_search = loop_times.start()
             var tree = fit_non_symmetric_tree[HIST2_SMEM_MODE](
                 ctx, n_rows, tree_folds if feature_fraction < 1 else fold_counts, opts,
                 tree_cindex, stats, row_index,
@@ -1792,21 +1811,63 @@ def fit_with_test(
                 random_seed=tree_seed,
                 tag_prefix=_tree_tag(iteration) + ".",
             )
+            loop_times.stop_host("iter_tree_search", t_search)
             var n_bins = tree.bin_count()
+            comptime if DEVICE_LEAF_PARTITION:
+                # DEVIATION 2551: the pool of one, keyed on the row count,
+                # with a leaf capacity of the policy's own bound
+                if (
+                    len(leaf_parts) == 0
+                    or leaf_parts[0].n_rows_cap != n_rows
+                    or leaf_parts[0].n_leaves_cap < n_bins
+                ):
+                    leaf_parts.clear()
+                    leaf_parts.append(
+                        DeviceLeafPartitioner(
+                            ctx,
+                            n_rows,
+                            ns_max_leaves if ns_max_leaves > n_bins else n_bins,
+                        )
+                    )
             for p in range(perm_count):
                 var pv = List[Float32]()
-                var d_bins = ctx.enqueue_create_buffer[DType.uint32](n_rows)
-                if p == learn_p:
-                    compute_non_symmetric_bins_for_model(
-                        ctx, layout_for_test, tree.model_structure, lc,
-                        n_rows, d_bins,
-                    )
+                var t_bins = loop_times.start()
+                var part: LeafPartition
+                comptime if DEVICE_LEAF_PARTITION:
+                    ref lp = leaf_parts[0]
+                    if p == learn_p:
+                        compute_non_symmetric_bins_for_model(
+                            ctx, layout_for_test, tree.model_structure, lc,
+                            n_rows, lp.bins,
+                        )
+                    else:
+                        compute_non_symmetric_bins_for_model(
+                            ctx, layout_for_test, tree.model_structure,
+                            perm_cindexes[p], n_rows, lp.bins,
+                        )
+                    loop_times.stop_host("iter_bins_for_model", t_bins)
+                    var t_part = loop_times.start()
+                    part = lp.partition(ctx, n_rows, n_bins)
+                    loop_times.stop_host("iter_partition", t_part)
                 else:
-                    compute_non_symmetric_bins_for_model(
-                        ctx, layout_for_test, tree.model_structure,
-                        perm_cindexes[p], n_rows, d_bins,
+                    var d_bins = ctx.enqueue_create_buffer[DType.uint32](
+                        n_rows
                     )
-                var part = partition_from_bins(ctx, d_bins, n_rows, n_bins)
+                    if p == learn_p:
+                        compute_non_symmetric_bins_for_model(
+                            ctx, layout_for_test, tree.model_structure, lc,
+                            n_rows, d_bins,
+                        )
+                    else:
+                        compute_non_symmetric_bins_for_model(
+                            ctx, layout_for_test, tree.model_structure,
+                            perm_cindexes[p], n_rows, d_bins,
+                        )
+                    loop_times.stop_host("iter_bins_for_model", t_bins)
+                    var t_part = loop_times.start()
+                    part = partition_from_bins(ctx, d_bins, n_rows, n_bins)
+                    loop_times.stop_host("iter_partition", t_part)
+                var t_est = loop_times.start()
                 _estimate_and_apply(
                     ctx, n_rows, approx_dim, len(part.sizes),
                     part.sizes, part.offsets,
@@ -1822,6 +1883,7 @@ def fit_with_test(
                     + ".leaves.estimated",
                     est_ws,
                 )
+                loop_times.stop_host("iter_estimate_apply", t_est)
                 if p == est_p:
                     leaf_values.clear()
                     for i in range(len(pv)):
@@ -1933,6 +1995,7 @@ def fit_with_test(
                     est_ws,
                 )
         else:
+            var t_sym = loop_times.start()
             sizes = run_tree_layout_traced(
                 ctx, n_rows, tree_folds if feature_fraction < 1 else fold_counts, max_depth,
                 tree_cindex, stats, row_index, lcur,
@@ -1962,7 +2025,9 @@ def fit_with_test(
                 ),
                 random_seed=tree_seed,
             )
+            loop_times.stop_host("iter_tree_search", t_sym)
 
+        var t_sym_est = loop_times.start()
         if need_estimation and not non_symmetric:
             # ---- their estimation loop (`doc_parallel_boosting.h:
             # 371-385`): ONE TASK PER PERMUTATION, each on its own dataset
@@ -2034,8 +2099,10 @@ def fit_with_test(
                     leaf_values.clear()
                     for i in range(len(pv)):
                         leaf_values.append(pv[i])
+        loop_times.stop_host("iter_symmetric_estimate", t_sym_est)
         _ = len(sizes)
 
+        var t_append = loop_times.start()
         # their `result[i].AddWeakModel(iterationModels[i])` (`:398`).
         # `Rescale(step)` is folded into `add_model_value_kernel`, so the
         # stored values are UNSCALED and the rate is applied on the way out.
@@ -2064,6 +2131,7 @@ def fit_with_test(
             for i in range(len(leaf_values)):
                 weak.leaf_values.append(leaf_values[i] * learning_rate)
             model.add_weak_model(weak^)
+        loop_times.stop_host("iter_model_append", t_append)
 
         # ---- their `AppendModels(..., learnCursors, testCursor)` -----
         # (`doc_parallel_boosting.h:391-396`): the SAME weak model goes on
@@ -2099,6 +2167,9 @@ def fit_with_test(
             # trees are in `non_symmetric_models`)
             if model.size() > 1:
                 losses.append(-v / Float64(n_rows))
+
+    loop_times.stop_host("fit_total", t_loop)
+    loop_times.report()
 
     # the final tree's loss: one more `functionValue` pass over the settled
     # cursor, through the SAME per-block-partials + fixed-order fold as the

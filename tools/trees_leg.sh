@@ -113,7 +113,9 @@ cmd_rent() {
     [ "$RP_CODE" = "200" ] || die "pre-flight GET /v1/pods -> HTTP $RP_CODE; not renting"
     # TREES_LEG_NAME names this lane's pods (default mojolearn-trees), so two
     # trees lanes renting at once each check only their own prefix.
-    _prefix="${TREES_LEG_NAME:-mojolearn-trees}-"
+    # TREES_LEG_NAME_PREFIX (the symmetric-arms lane's spelling, a full
+    # prefix with its trailing dash) still wins when set.
+    _prefix="${TREES_LEG_NAME_PREFIX:-${TREES_LEG_NAME:-mojolearn-trees}-}"
     _mine=$(rp_json "','.join(str(p.get('id','')) for p in (d.get('items') or d.get('pods') or d.get('data') or []) if str(p.get('name','')).startswith('$_prefix'))")
     [ -z "$_mine" ] || die "this lane already has pod(s) up: $_mine; reap first"
     STAMP=$(date -u +%Y-%m-%d_%H%M%S)

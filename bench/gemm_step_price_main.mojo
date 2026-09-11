@@ -48,7 +48,12 @@ shipped one and the default takes the call, the PHASE line prices the
 default's own phases (`phase_of=shipped_default`).
 `MOJOLEARN_GEMM_STEP_LABEL_ONLY=1` prints the header and the PLANLABEL line
 and exits before any device work (`tools/gemm_step_leg.sh` labels its LM
-probes from it).
+probes from it). With `MOJOLEARN_GEMM_STEP_LABEL_M`, `_N` and `_K` set (and
+an optional `MOJOLEARN_GEMM_STEP_LABEL_CALLER` tag) it also prints one
+host-only DISPATCH line for that caller shape under the arm: whether the
+ksplit default takes it, the default's group size, `choose_gemm_plan`'s
+plan, the shipped dispatch's plan and the arm's geometry
+(`tools/gemm_ksplit_classical_leg.sh`, brief section 11).
 
 Operands are the hashed ordinary kind. This is a per-call kernel price; the
 default-flip input under ENGINEERING_RULES 9 is the LM step on the two
@@ -342,6 +347,29 @@ def main() raises:
         + " shipped=[" + gemm_step_geometry_name(GEMM_GEOM_SHIPPED) + "]"
     )
     print("PLANLABEL arm=" + name + " label=" + gemm_step_arm_plan_label(arm))
+    # Brief section 11: one CALLER shape's dispatch on this build under this
+    # arm, host only (no DeviceContext), so a classical A/B leg records which
+    # plan each GEMM of a caller runs. `op` does not enter the dispatch.
+    var label_m = gemm_step_env_int("MOJOLEARN_GEMM_STEP_LABEL_M", 0)
+    if label_m > 0:
+        var label_n = gemm_step_env_int("MOJOLEARN_GEMM_STEP_LABEL_N", 0)
+        var label_k = gemm_step_env_int("MOJOLEARN_GEMM_STEP_LABEL_K", 0)
+        var label_geom = gemm_step_arm_geometry(arm, label_m, label_n, label_k)
+        var label_leaves = gemm_step_geometry_group_leaves(
+            GEMM_GEOM_SHIPPED, label_m, label_n, label_k
+        )
+        var takes = String("no")
+        if label_leaves > 0:
+            takes = String("yes")
+        print(
+            "DISPATCH caller=" + String(getenv("MOJOLEARN_GEMM_STEP_LABEL_CALLER")) + " m="
+            + String(label_m) + " n=" + String(label_n) + " k=" + String(label_k) + " arm="
+            + name + " ksplit_default_takes=" + takes + " default_leaves_per_group="
+            + String(label_leaves) + " choose_plan=["
+            + gemm_plan_name(choose_gemm_plan(label_m, label_n, label_k)) + "] shipped_plan=["
+            + gemm_shipped_dispatch_name(label_m, label_n, label_k) + "] arm_geometry=["
+            + gemm_step_geometry_name(label_geom) + "]"
+        )
     if String(getenv("MOJOLEARN_GEMM_STEP_LABEL_ONLY")) == "1":
         print("LABEL ONLY (MOJOLEARN_GEMM_STEP_LABEL_ONLY=1): no device work")
         return

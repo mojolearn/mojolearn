@@ -44,9 +44,28 @@ Knobs: `MOJOLEARN_GEMM_STEP_CHECK_LM=0` skips the LM section (and says so);
 arms; `MOJOLEARN_GEMM_STEP_CHECK_FLOPS` (default 400,000,000) caps
 `m n k` of a ragged or default control.
 
-Without `-D MOJOLEARN_GEMM_ARM_TRIAL=1` every geometry but `tuned128` runs
-the shipped default, the sabotage moves nothing, and this check FAILS saying
-so. It refuses a build that defines one of `gemm_identical.mojo`'s global
+Without `-D MOJOLEARN_GEMM_ARM_TRIAL=1` the arm kernels and every sabotage
+instantiation are not compiled, so this check LAUNCHES NONE OF THEM: no
+forced arm geometry but `tuned128`, no explicit group size, no sabotage run
+at any default row or through the entry, no arm through the LM entry. It
+FAILS, one line per geometry, per group size, per default row, for the
+shipped entry and per LM arm, each naming the missing define, and it still
+checks what the shipped build can: the two host checks, the old plan against
+FLAT, `tuned128` forced, and the shipped dispatch's CLEAN bits at every
+default row and through the entry.
+
+Why it launches nothing it cannot reach (the no-trial crash on the Apple M4,
+2026-09-11, brief section 11). Since DEVIATION 2595 the non-trial fallback
+of `identical_gemm_step_geometry_into` and `identical_gemm_step_ksplit_into`
+is the shipped dispatch, which at a ragged shape with `P >= 4` picks a SPLIT
+plan (`choose_gemm_plan`: 1x3x1000 SPLIT_16_1X1, 33x70x1000 SPLIT_32_2X2,
+129x257x1000 SPLIT_64_4X4) that writes `m n P` floats of workspace. The
+ragged part sizes `dw` for FLAT and the old 128x128 plan, which need none,
+so `dw` held ONE float and the SPLIT leaf kernel wrote up to 1.2 MB past it.
+Before 2595 the fallback was PLAN_TUNED_128_8X8 by name, which needs no
+workspace, so the same run only failed on reach.
+
+It refuses a build that defines one of `gemm_identical.mojo`'s global
 sabotage switches, because its baseline would be a sabotaged kernel.
 
 ENGINEERING_RULES 8: the switch is exercised on both sides by name. The
@@ -67,6 +86,7 @@ from gemm.checks.gemm_identical import (
     GEMM_FOLD_SLOTS,
     GEMM_GEOM_COUNT,
     GEMM_GEOM_SHIPPED,
+    GEMM_GEOM_TUNED128,
     GEMM_KSPLIT_DEFAULT_S,
     PLAN_FLAT,
     PLAN_TUNED_128_8X8,
@@ -141,7 +161,8 @@ def _trial_hint() -> String:
     comptime if GEMM_ARM_TRIAL:
         return String("")
     return String(
-        " (this build lacks -D MOJOLEARN_GEMM_ARM_TRIAL=1: every geometry ran the shipped default)"
+        " (this build lacks -D MOJOLEARN_GEMM_ARM_TRIAL=1: the arm kernels and the sabotage"
+        " instantiations are not compiled, so nothing was launched for them)"
     )
 
 
@@ -480,6 +501,14 @@ def _ragged_case(
         )
     for geom in range(1, GEMM_GEOM_COUNT):
         var gname = gemm_step_geometry_name(geom)
+        # Brief section 11: without the trial define an arm geometry is the
+        # shipped dispatch, which at this shape may pick a SPLIT plan whose
+        # workspace `dw` (sized above for FLAT and the old plan) does not
+        # hold. Nothing is launched; check_ragged_controls fails the geometry
+        # by name. `tuned128` is PLAN_TUNED_128_8X8 on every build and runs.
+        if not GEMM_ARM_TRIAL and geom != GEMM_GEOM_TUNED128:
+            reach_runs[geom] += 1
+            continue
         _run(ctx, dc, da, db, dw, hgot, op, m, n, k, RUN_GEOMETRY, geom, False)
         var cc = gemm_step_compare(hgot, hexp, mn)
         if cc[0] != 0 or cc[1] != 0:
@@ -507,6 +536,11 @@ def _ragged_case(
     for gi in range(len(group_sizes)):
         var gl = group_sizes[gi]
         var kname = String("ksplit group=") + String(gl)
+        # Brief section 11: the group launch is not compiled without the
+        # trial define and the fallback reads `dw`; launch nothing.
+        if not GEMM_ARM_TRIAL:
+            kreach_runs[gi] += 1
+            continue
         _run(ctx, dc, da, db, dw, hgot, op, m, n, k, RUN_KSPLIT, gl, False)
         var kc = gemm_step_compare(hgot, hexp, mn)
         if kc[0] != 0 or kc[1] != 0:
@@ -579,17 +613,36 @@ def check_ragged_controls(ctx: DeviceContext, mut failures: List[String]) raises
                     )
                     cases += 1
     for geom in range(1, GEMM_GEOM_COUNT):
+        var what = String(" launches moved exactly the geometry's reach")
+        if not GEMM_ARM_TRIAL and geom != GEMM_GEOM_TUNED128:
+            what = String(" cases NOT LAUNCHED (no trial define: the arm kernel is not compiled)")
         print(
             "REACH ragged [" + gemm_step_geometry_name(geom) + "] "
-            + String(reach_ok[geom]) + "/" + String(reach_runs[geom])
-            + " launches moved exactly the geometry's reach"
+            + String(reach_ok[geom]) + "/" + String(reach_runs[geom]) + what
         )
     for gi in range(len(group_sizes)):
+        var kwhat = String(" launches moved exactly the group launch's reach")
+        if not GEMM_ARM_TRIAL:
+            kwhat = String(" cases NOT LAUNCHED (no trial define: the group launch is not compiled)")
         print(
             "REACH ragged [ksplit group=" + String(group_sizes[gi]) + "] "
-            + String(kreach_ok[gi]) + "/" + String(kreach_runs[gi])
-            + " launches moved exactly the group launch's reach"
+            + String(kreach_ok[gi]) + "/" + String(kreach_runs[gi]) + kwhat
         )
+    # Brief section 11: a build without the trial define launched none of
+    # these, so each FAILS once, by name, instead of once per case.
+    if not GEMM_ARM_TRIAL:
+        for geom in range(1, GEMM_GEOM_COUNT):
+            if geom == GEMM_GEOM_TUNED128:
+                continue
+            failures.append(
+                "REACH ragged [" + gemm_step_geometry_name(geom) + "]: NOT RUN in "
+                + String(reach_runs[geom]) + " cases, bits and reach unproven" + _trial_hint()
+            )
+        for gi in range(len(group_sizes)):
+            failures.append(
+                "REACH ragged [ksplit group=" + String(group_sizes[gi]) + "]: NOT RUN in "
+                + String(kreach_runs[gi]) + " cases, bits and reach unproven" + _trial_hint()
+            )
     print(
         "ragged controls: " + String(cases) + " cases x " + String(GEMM_GEOM_COUNT - 1)
         + " geometries and " + String(len(group_sizes)) + " explicit group sizes, "
@@ -635,8 +688,12 @@ def check_default_dispatch(ctx: DeviceContext, mut failures: List[String]) raise
     case under the budget; row 0 must take none; the column's entry must take
     ksplit somewhere when its row is above 0 and nowhere when it is 0.
 
-    Without `-D MOJOLEARN_GEMM_ARM_TRIAL=1` the sabotage runs are clean and
-    the entry reads no environment, so every nonzero reach FAILS, saying so.
+    Without `-D MOJOLEARN_GEMM_ARM_TRIAL=1` (brief section 11) no sabotage
+    runs at any row or through the entry, because the sabotaged body is not
+    compiled and a clean run that moves nothing proves no reach. The clean
+    launches still run and must store the old plan's bits (the shipped body
+    at every row, `identical_gemm_shipped_into` and `identical_gemm_into`),
+    and each row and the entry FAIL once, by name, for the unproven reach.
     """
     var budget = gemm_step_env_int("MOJOLEARN_GEMM_STEP_CHECK_FLOPS", 400_000_000)
     var dims: List[Int] = [257, 520, 520, 257]
@@ -710,9 +767,31 @@ def check_default_dispatch(ctx: DeviceContext, mut failures: List[String]) raise
                         row_took[ri] += 1
                     _run(ctx, dc, da, db, dw, hgot, op, m, n, k, RUN_ROW, row, False)
                     var cc = gemm_step_compare(hgot, hexp, mn)
+                    row_runs[ri] += 1
+                    if not GEMM_ARM_TRIAL:
+                        # Brief section 11: the sabotaged body is not compiled,
+                        # so no reach is provable at ANY row (a clean run that
+                        # moves nothing proves nothing about a sabotage). The
+                        # clean bits are the shipped build's own check; the
+                        # row fails once, by name, after the loop.
+                        var clean_ok = cc[0] == 0 and cc[1] == 0
+                        if clean_ok:
+                            row_ok[ri] += 1
+                        else:
+                            failures.append(
+                                tag + " row=" + String(row) + ": clean moved " + String(cc[0])
+                                + " (poison " + String(cc[1]) + ") against the old plan"
+                            )
+                        print(
+                            tag + " row=" + String(row) + " leaves_per_group=" + String(gl)
+                            + " reach=" + String(reach) + " clean_moved=" + String(cc[0])
+                            + " sabotage=NOT RUN (no trial define) plan=["
+                            + gemm_shipped_dispatch_name_at(m, n, k, row) + "]"
+                            + (" CLEAN OK" if clean_ok else " FAIL")
+                        )
+                        continue
                     _run(ctx, dc, da, db, dw, hgot, op, m, n, k, RUN_ROW, row, True)
                     var cs = gemm_step_compare(hgot, hexp, mn)
-                    row_runs[ri] += 1
                     var ok = cc[0] == 0 and cc[1] == 0 and cs[0] == reach and cs[1] == 0
                     if ok:
                         row_ok[ri] += 1
@@ -738,18 +817,27 @@ def check_default_dispatch(ctx: DeviceContext, mut failures: List[String]) raise
                 _run(ctx, dc, da, db, dw, hgot, op, m, n, k, RUN_SHIPPED, 0, False)
                 var ce = gemm_step_compare(hgot, hexp, mn)
                 _ = setenv("MOJOLEARN_GEMM_ARM", "", True)
-                _ = setenv("MOJOLEARN_GEMM_ARM_SABOTAGE", "1", True)
+                # Brief section 11: without the trial define the entry has no
+                # hook and would ignore the sabotage variable, so it runs clean
+                # and must move nothing; the reach fails once after the loop.
+                var want_se = reachc
+                var se_label = String(" sabotage_moved=")
+                if GEMM_ARM_TRIAL:
+                    _ = setenv("MOJOLEARN_GEMM_ARM_SABOTAGE", "1", True)
+                else:
+                    want_se = 0
+                    se_label = String(" sabotage=NOT RUN (no trial define) entry_clean_moved=")
                 _run(ctx, dc, da, db, dw, hgot, op, m, n, k, RUN_ENTRY, 0, False)
                 var se = gemm_step_compare(hgot, hexp, mn)
                 _ = setenv("MOJOLEARN_GEMM_ARM_SABOTAGE", "", True)
                 entry_runs += 1
-                var eok = ce[0] == 0 and ce[1] == 0 and se[0] == reachc and se[1] == 0
+                var eok = ce[0] == 0 and ce[1] == 0 and se[0] == want_se and se[1] == 0
                 if eok:
                     entry_ok += 1
                 print(
                     tag + " shipped entry (column row=" + String(GEMM_KSPLIT_DEFAULT_S) + ")"
                     + " leaves_per_group=" + String(glc) + " reach=" + String(reachc)
-                    + " clean_moved=" + String(ce[0]) + " sabotage_moved=" + String(se[0])
+                    + " clean_moved=" + String(ce[0]) + se_label + String(se[0])
                     + " plan=[" + gemm_shipped_dispatch_name(m, n, k) + "]"
                     + (" OK" if eok else " FAIL")
                 )
@@ -765,6 +853,11 @@ def check_default_dispatch(ctx: DeviceContext, mut failures: List[String]) raise
                 _ = dw
                 _ = hexp
                 _ = hgot
+    var row_what = String(" launches moved exactly the default's reach")
+    var entry_what = String(" calls moved exactly the column's default reach")
+    if not GEMM_ARM_TRIAL:
+        row_what = String(" clean launches stored the old plan's bits; reach NOT PROVEN (no trial define)")
+        entry_what = String(" clean calls stored the old plan's bits; reach NOT PROVEN (no trial define)")
     for ri in range(len(rows)):
         var which = String(" (this column's row)")
         if ri == 1:
@@ -773,14 +866,27 @@ def check_default_dispatch(ctx: DeviceContext, mut failures: List[String]) raise
             which = String(" (enabled, the H100 row)")
         print(
             "REACH default [row=" + String(rows[ri]) + which + "] " + String(row_ok[ri]) + "/"
-            + String(row_runs[ri]) + " launches moved exactly the default's reach; the ksplit"
-            + " body took " + String(row_took[ri]) + " of the cases"
+            + String(row_runs[ri]) + row_what + "; the ksplit body took " + String(row_took[ri])
+            + " of the cases"
         )
     print(
         "REACH default [shipped entry, column row=" + String(GEMM_KSPLIT_DEFAULT_S) + "] "
-        + String(entry_ok) + "/" + String(entry_runs) + " calls moved exactly the column's"
-        + " default reach; ksplit took " + String(entry_took) + " of them"
+        + String(entry_ok) + "/" + String(entry_runs) + entry_what + "; ksplit took "
+        + String(entry_took) + " of them"
     )
+    # Brief section 11: without the trial define no sabotage ran, so the
+    # reach of every row and of the entry FAILS once, by name.
+    if not GEMM_ARM_TRIAL:
+        for ri in range(len(rows)):
+            failures.append(
+                "check_default_dispatch [row=" + String(rows[ri]) + "]: reach NOT PROVEN in "
+                + String(row_runs[ri]) + " cases (clean bits equal in " + String(row_ok[ri]) + ")"
+                + _trial_hint()
+            )
+        failures.append(
+            "check_default_dispatch [shipped entry]: reach NOT PROVEN in " + String(entry_runs)
+            + " cases (clean bits equal in " + String(entry_ok) + ")" + _trial_hint()
+        )
     if cases > 0 and row_took[2] == 0:
         failures.append(
             "check_default_dispatch: the enabled row took ksplit in none of " + String(cases)
@@ -856,9 +962,30 @@ def check_lm_calls(ctx: DeviceContext, mut failures: List[String]) raises:
         if left != 0:
             failures.append("LM " + cname + ": the old plan left " + String(left) + " cells poisoned")
             continue
+        # Brief section 11: without the trial define the entry reads no arm,
+        # so every arm below would run the shipped default and no sabotage
+        # exists. Check the shipped entry's CLEAN bits once per call and fail
+        # each selected arm once, by name, after the loop.
+        if not GEMM_ARM_TRIAL:
+            _run(ctx, dc, da, db, dw, hgot, op, m, n, k, RUN_ENTRY, 0, False)
+            var ce = gemm_step_compare(hgot, hexp, mn)
+            var clean_ok = ce[0] == 0 and ce[1] == 0
+            print(
+                "LM " + cname + " " + op_name(op) + " " + String(m) + "x" + String(n) + "x" + String(k)
+                + " shipped entry (no trial define: no arm, no sabotage) clean_moved=" + String(ce[0])
+                + " shipped_plan=[" + gemm_shipped_dispatch_name(m, n, k) + "]"
+                + (" CLEAN OK" if clean_ok else " FAIL")
+            )
+            if not clean_ok:
+                failures.append(
+                    "LM " + cname + " shipped entry: clean moved " + String(ce[0]) + " (poison "
+                    + String(ce[1]) + ") against the old plan"
+                )
         for ai in range(len(names)):
             var an = names[ai]
             if not gemm_step_selected(spec, an):
+                continue
+            if not GEMM_ARM_TRIAL:
                 continue
             var arm = gemm_step_arm_parse(an)
             var geom = gemm_step_arm_geometry(arm, m, n, k)
@@ -898,6 +1025,15 @@ def check_lm_calls(ctx: DeviceContext, mut failures: List[String]) raises:
         _ = dw
         _ = hexp
         _ = hgot
+    # Brief section 11: every selected arm FAILS once, by name, on a build
+    # without the trial define (nothing was launched for it).
+    if not GEMM_ARM_TRIAL:
+        for ai in range(len(names)):
+            if gemm_step_selected(spec, names[ai]):
+                failures.append(
+                    "LM arm=" + names[ai] + ": NOT RUN through identical_gemm_into, bits and"
+                    + " reach unproven" + _trial_hint()
+                )
 
 
 def main() raises:

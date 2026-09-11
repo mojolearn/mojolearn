@@ -1011,7 +1011,24 @@ def download(name):
                       % (m, os.path.getsize(dest) / 1e6))
                 continue
             print("downloading %s -> %s" % (TAXI_URL % m, dest))
-            urllib.request.urlretrieve(TAXI_URL % m, dest)
+            # An explicit agent: the TLC CloudFront has refused Python-urllib's
+            # default one (MI325X trees leg, 2026-09-11). It also refuses
+            # DigitalOcean droplets BY ADDRESS whatever the agent (curl with a
+            # browser agent got 403 on droplet 599682588, 2026-09-11), so a
+            # DigitalOcean leg needs taxi from the mojolearn-data-tor1 volume.
+            # Written to .part and renamed, so a failed fetch leaves no
+            # truncated file for the "already present" test to accept.
+            req = urllib.request.Request(
+                TAXI_URL % m,
+                headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) mojolearn-bench"})
+            part = dest + ".part"
+            with urllib.request.urlopen(req) as resp, open(part, "wb") as fh:
+                while True:
+                    chunk = resp.read(1 << 20)
+                    if not chunk:
+                        break
+                    fh.write(chunk)
+            os.replace(part, dest)
             print("taxi %s: %.1f MB" % (m, os.path.getsize(dest) / 1e6))
         d = load_taxi("shipped")
         print("taxi decoded to %s (train %d x %d, test %d, positives %.3f)"

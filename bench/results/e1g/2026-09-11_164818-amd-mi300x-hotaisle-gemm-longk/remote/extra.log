@@ -1,0 +1,113 @@
+STEP gemm arm=ksplit ratio=0.4396067968789843 shipped_ms=1339.1797060000001 arm_ms=588.712501 calls=12 moved=0 (per-call medians weighted by per-step counts; a GEMM sum, not a step time)
+STEP gemm arm=ksplit_leaf ratio=0.4374409803101549 shipped_ms=1338.4759849999998 arm_ms=585.5042470000001 calls=12 moved=0 (per-call medians weighted by per-step counts; a GEMM sum, not a step time)
+STEP gemm arm=shipped ratio=0.9996359134300145 shipped_ms=1336.6299119999999 arm_ms=1336.1432629999997 calls=12 moved=0 (per-call medians weighted by per-step counts; a GEMM sum, not a step time)
+GEMM_STEP_RESOURCES_DEVICE name=AMD Instinct MI300X VF mode=IDENTICAL column=3 lane_width=64 shared_limit=65536 head_w=64 tpb=256
+GEMM_STEP_RESOURCES_BEGIN label=shipped_128x128 tile=128x128 pages=2
+GEMM_STEP_RESOURCES label=shipped_128x128 regs=128
+GEMM_STEP_RESOURCES label=shipped_128x128 local=5204
+GEMM_STEP_RESOURCES label=shipped_128x128 shared=40960
+GEMM_STEP_RESOURCES label=shipped_128x128 const=-1
+GEMM_STEP_RESOURCES label=shipped_128x128 max_threads=1024
+GEMM_STEP_RESOURCES label=shipped_128x128 blocks_per_sm_256=1
+GEMM_STEP_RESOURCES_BEGIN label=control_128x128_lanefold tile=128x128 reg=8x8 tc=16 ks=16 pages=2 lfold=False
+GEMM_STEP_RESOURCES label=control_128x128_lanefold regs=128
+GEMM_STEP_RESOURCES label=control_128x128_lanefold local=5204
+GEMM_STEP_RESOURCES label=control_128x128_lanefold shared=40960
+GEMM_STEP_RESOURCES label=control_128x128_lanefold const=-1
+GEMM_STEP_RESOURCES label=control_128x128_lanefold max_threads=1024
+GEMM_STEP_RESOURCES label=control_128x128_lanefold blocks_per_sm_256=1
+GEMM_STEP_RESOURCES_GEOMETRY label=lfold lfold 128x128 reg8x8 TC=16 KS=16 pages=2 fold=cell-serial local tpb=256 hwftz=False
+GEMM_STEP_RESOURCES_BEGIN label=lfold tile=128x128 reg=8x8 tc=16 ks=16 pages=2 lfold=True
+GEMM_STEP_RESOURCES label=lfold regs=128
+GEMM_STEP_RESOURCES label=lfold local=5504
+GEMM_STEP_RESOURCES label=lfold shared=40960
+GEMM_STEP_RESOURCES label=lfold const=-1
+GEMM_STEP_RESOURCES label=lfold max_threads=1024
+GEMM_STEP_RESOURCES label=lfold blocks_per_sm_256=1
+GEMM_STEP_RESOURCES_GEOMETRY label=half half 64x128 reg4x8 TC=16 KS=32 pages=2 fold=cell-serial local tpb=256 hwftz=False
+GEMM_STEP_RESOURCES_BEGIN label=half tile=64x128 reg=4x8 tc=16 ks=32 pages=2 lfold=True
+GEMM_STEP_RESOURCES label=half regs=128
+GEMM_STEP_RESOURCES label=half local=3776
+GEMM_STEP_RESOURCES label=half shared=55296
+GEMM_STEP_RESOURCES label=half const=-1
+GEMM_STEP_RESOURCES label=half max_threads=1024
+GEMM_STEP_RESOURCES label=half blocks_per_sm_256=1
+GEMM_STEP_RESOURCES_GEOMETRY label=half_ks16 half_ks16 64x128 reg4x8 TC=16 KS=16 pages=2 fold=cell-serial local tpb=256 hwftz=False
+GEMM_STEP_RESOURCES_BEGIN label=half_ks16 tile=64x128 reg=4x8 tc=16 ks=16 pages=2 lfold=True
+GEMM_STEP_RESOURCES label=half_ks16 regs=128
+GEMM_STEP_RESOURCES label=half_ks16 local=2464
+GEMM_STEP_RESOURCES label=half_ks16 shared=30720
+GEMM_STEP_RESOURCES label=half_ks16 const=-1
+GEMM_STEP_RESOURCES label=half_ks16 max_threads=1024
+GEMM_STEP_RESOURCES label=half_ks16 blocks_per_sm_256=2
+GEMM_STEP_RESOURCES_GEOMETRY label=quarter quarter 64x64 reg4x4 TC=16 KS=32 pages=2 fold=cell-serial local tpb=256 hwftz=False
+GEMM_STEP_RESOURCES_BEGIN label=quarter tile=64x64 reg=4x4 tc=16 ks=32 pages=2 lfold=True
+GEMM_STEP_RESOURCES label=quarter regs=128
+GEMM_STEP_RESOURCES label=quarter local=1460
+GEMM_STEP_RESOURCES label=quarter shared=36864
+GEMM_STEP_RESOURCES label=quarter const=-1
+GEMM_STEP_RESOURCES label=quarter max_threads=1024
+GEMM_STEP_RESOURCES label=quarter blocks_per_sm_256=1
+GEMM_STEP_RESOURCES_GEOMETRY label=head_n head_n 32x256 reg8x4 TC=64 KS=16 pages=2 fold=cell-serial local tpb=256 hwftz=False
+GEMM_STEP_RESOURCES_BEGIN label=head_n tile=32x256 reg=8x4 tc=64 ks=16 pages=2 lfold=True
+GEMM_STEP_RESOURCES label=head_n regs=128
+GEMM_STEP_RESOURCES label=head_n local=2848
+GEMM_STEP_RESOURCES label=head_n shared=46080
+GEMM_STEP_RESOURCES label=head_n const=-1
+GEMM_STEP_RESOURCES label=head_n max_threads=1024
+GEMM_STEP_RESOURCES label=head_n blocks_per_sm_256=1
+GEMM_STEP_RESOURCES_GEOMETRY label=head_m head_m 256x32 reg4x8 TC=4 KS=16 pages=2 fold=cell-serial local tpb=256 hwftz=False
+GEMM_STEP_RESOURCES_BEGIN label=head_m tile=256x32 reg=4x8 tc=4 ks=16 pages=2 lfold=True
+GEMM_STEP_RESOURCES label=head_m regs=128
+GEMM_STEP_RESOURCES label=head_m local=3152
+GEMM_STEP_RESOURCES label=head_m shared=46080
+GEMM_STEP_RESOURCES label=head_m const=-1
+GEMM_STEP_RESOURCES label=head_m max_threads=1024
+GEMM_STEP_RESOURCES label=head_m blocks_per_sm_256=1
+GEMM_STEP_RESOURCES_GEOMETRY label=ksplit_128x128 ksplit 128x128 reg8x8 TC=16 KS=16 pages=2 fold=lane-wide local tpb=256 hwftz=False leaf groups on grid.y -> node workspace -> fold (block per cell <= 16384, else register stack) group rule S=110 slack=4
+GEMM_STEP_RESOURCES_BEGIN label=ksplit_128x128 tile=128x128 reg=8x8 tc=16 ks=16 pages=2 groups=grid.y
+GEMM_STEP_RESOURCES label=ksplit_128x128 regs=128
+GEMM_STEP_RESOURCES label=ksplit_128x128 local=5160
+GEMM_STEP_RESOURCES label=ksplit_128x128 shared=40960
+GEMM_STEP_RESOURCES label=ksplit_128x128 const=-1
+GEMM_STEP_RESOURCES label=ksplit_128x128 max_threads=1024
+GEMM_STEP_RESOURCES label=ksplit_128x128 blocks_per_sm_256=1
+GEMM_STEP_RESOURCES_DONE
+lm-ksplit-enwik8	witnesses_equal_baseline=True
+lm-ksplit-enwik8	ratio_vs_shipped=0.6135	shipped_brackets=2
+lm-ksplit-pilegithub	witnesses_equal_baseline=True
+lm-ksplit-pilegithub	ratio_vs_shipped=0.6137	shipped_brackets=2
+lm-ksplit_leaf-enwik8	witnesses_equal_baseline=True
+lm-ksplit_leaf-enwik8	ratio_vs_shipped=0.6097	shipped_brackets=2
+lm-ksplit_leaf-pilegithub	witnesses_equal_baseline=True
+lm-ksplit_leaf-pilegithub	ratio_vs_shipped=0.6083	shipped_brackets=2
+lm-shippedclose-enwik8	witnesses_equal_baseline=True
+lm-shippedclose-pilegithub	witnesses_equal_baseline=True
+verdict	ksplit	FLIP	geomean=0.6136	enwik8=0.6135	pilegithub=0.6137	quality=identical (every step witness equal to shipped)
+verdict	ksplit_leaf	FLIP	geomean=0.6090	enwik8=0.6097	pilegithub=0.6083	quality=identical (every step witness equal to shipped)
+build-check	0	36s
+build-price	0	31s
+build-resources	0	13s
+step-check	0	16s
+resources	0	0s
+price-shipped	0	15s
+price-ksplit	0	14s
+price-ksplit_leaf	0	14s
+build-binding-base	0	46s
+build-binding-byte-lm	0	122s
+corpus-enwik8	0	2s
+corpus-pile-github	0	27s
+lm-shipped-enwik8	0	72s
+lmtiming-shipped-enwik8	0	44s
+lm-ksplit-enwik8	0	69s
+lmtiming-ksplit-enwik8	0	43s
+lm-ksplit_leaf-enwik8	0	70s
+lmtiming-ksplit_leaf-enwik8	0	42s
+lm-shippedclose-enwik8	0	72s
+lm-shipped-pilegithub	0	72s
+lmtiming-shipped-pilegithub	0	44s
+lm-ksplit-pilegithub	0	69s
+lmtiming-ksplit-pilegithub	0	42s
+lm-ksplit_leaf-pilegithub	0	70s
+lmtiming-ksplit_leaf-pilegithub	0	42s
+lm-shippedclose-pilegithub	0	73s

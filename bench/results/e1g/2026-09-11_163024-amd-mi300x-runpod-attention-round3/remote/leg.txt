@@ -1,0 +1,11 @@
+vendor=amd
+commit=73d0e64be3201f1cf990a74291cdc1da37483419
+card_full=
+trace_dump=
+started=2026-09-11T16:33:43Z
+pixi_install_exit=0
+device_check_exit=0
+card_exit=0
+attention_round3_leg_exit=0
+extra_exit=0
+finished=2026-09-11T16:51:58Z

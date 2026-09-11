@@ -813,6 +813,11 @@ def lib_gemm_block_parallelism_for[column: Int]() -> Int:
     """SCHEDULING row, SHIPPED since DEVIATION 2595 (2026-09-11; brief docs/lanes/BRIEF_gemm_long_k_2026-09-11.md sections 3, 4 and 10; first added by DEVIATION 2591 as a trial-arm row): how many 256-thread GEMM blocks the column runs side by side. A value above 0 TURNS ON the `ksplit` default in `gemm/checks/gemm_identical.mojo::identical_gemm_shipped_into`: every call the long-k group rule takes (section 4, rules 1, 2 and 4, at `S` = this value) runs the 128x128 group kernel over power-of-two leaf groups plus one fold launch, and every other call runs the plan `choose_gemm_plan` picks, as before. 0 turns it off: the dispatch compiles to the old line and the TUNED 128x128 plan runs exactly as it did. NVIDIA 132, MEASURED: the H100's SM count (docs/lanes/BRIEF_attention_step_2026-09-11.md section 3.1), and the value the `ksplit` arm ran at on the H100 leg that flipped it (bench/results/e1g/2026-09-11_152822-nvidia-h100-80gb-hbm3-gemm-longk, lean step geomean 0.895 on enwik8 and Pile GitHub, every step witness equal). AMD 0, OFF UNTIL THE MI300X LEG DECIDES THE AMD VALUE: nothing on an AMD board has measured the arm, and this row takes the value that leg reads (its CONTROL pair and its `ksplit` against `shipped` lean step verdict). The trial arm still runs on AMD at the column's reading through `lib_gemm_block_parallelism_trial_for`. Every other column 0 (Apple included, so the Apple identity card compiles the old line). A wrong value costs time and can never move a bit, because the group size reaches no leaf boundary and no tree level (brief section 5.5)."""
     if column == COLUMN_NVIDIA:
         return 132
+    if column == COLUMN_AMD:
+        # Measured 2026-09-11 on the Hot Aisle MI300X with the trial arm at S=110
+        # (e1g/2026-09-11_164818-amd-mi300x-hotaisle-gemm-longk): lean step
+        # 1.953 -> 1.198 s on both corpora, geomean 0.614, witnesses equal.
+        return 110
     return 0
 
 
@@ -849,8 +854,10 @@ def attn_default_arm_for[column: Int]() -> Int:
     if column == COLUMN_NVIDIA:
         return ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF
     if column == COLUMN_AMD:
-        # The MI300X leg decides AMD; until it reads, the shipped stash_tiled.
-        return ATTN_DEFAULT_WORD_STASH_TILED
+        # Measured 2026-09-11 on both AMD boxes against stash_tiled, witnesses
+        # equal: DigitalOcean MI325X geomean 0.9297 (e1g/2026-09-11_163917-amd-mi325x-do-attention-round3)
+        # and RunPod MI300X geomean 0.9325 (e1g/2026-09-11_163024-amd-mi300x-runpod-attention-round3).
+        return ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF
     return ATTN_DEFAULT_WORD_STASH_TILED
 
 

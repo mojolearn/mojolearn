@@ -1,0 +1,139 @@
+9922 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1bd280000000, nodemask=2)
+=== attention step price, mode IDENTICAL, column amd, generator shape B1_L2048_nh12_nkv12_hd64_win0 (a file: kind carries its own shape)
+trial_hook=True phase_timers_built=False
+baseline=stash_tiled candidate=stash_tiled_pf rounds=7 warmups=2
+PATH baseline arm=stash_tiled zdot_rows=- fwd_rows=- preflush=False reach_bit=sabotage
+PATH candidate arm=stash_tiled_pf zdot_rows=- fwd_rows=64 preflush=True reach_bit=sabotage_new
+--- kind file:operands-enwik8
+shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 S=2048 key_lo=0 pos0=0
+DIGEST file:operands-enwik8 stash_tiled ctx 5f01fc3a9bcec9c9 amax d89905a2e4307303 denom 195b4567d81c06fc zdot 8300ce7d2f4755d5 dq e0625e227bed3164 dk 27853f72872d8fc9 dv 95007640dca74d09
+DIGEST file:operands-enwik8 eager ctx 5f01fc3a9bcec9c9 amax d89905a2e4307303 denom 195b4567d81c06fc zdot 8300ce7d2f4755d5 dq e0625e227bed3164 dk 27853f72872d8fc9 dv 95007640dca74d09
+BITS file:operands-enwik8 stash_tiled_vs_eager ctx MATCH 0 of 1572864
+BITS file:operands-enwik8 stash_tiled_vs_eager amax MATCH 0 of 24576
+BITS file:operands-enwik8 stash_tiled_vs_eager denom MATCH 0 of 24576
+BITS file:operands-enwik8 stash_tiled_vs_eager zdot MATCH 0 of 24576
+BITS file:operands-enwik8 stash_tiled_vs_eager dq MATCH 0 of 1572864
+BITS file:operands-enwik8 stash_tiled_vs_eager dk MATCH 0 of 1572864
+BITS file:operands-enwik8 stash_tiled_vs_eager dv MATCH 0 of 1572864
+DIGEST file:operands-enwik8 stash_tiled_pf ctx 5f01fc3a9bcec9c9 amax d89905a2e4307303 denom 195b4567d81c06fc zdot 8300ce7d2f4755d5 dq e0625e227bed3164 dk 27853f72872d8fc9 dv 95007640dca74d09
+BITS file:operands-enwik8 stash_tiled_pf_vs_stash_tiled ctx MATCH 0 of 1572864
+BITS file:operands-enwik8 stash_tiled_pf_vs_stash_tiled amax MATCH 0 of 24576
+BITS file:operands-enwik8 stash_tiled_pf_vs_stash_tiled denom MATCH 0 of 24576
+BITS file:operands-enwik8 stash_tiled_pf_vs_stash_tiled zdot MATCH 0 of 24576
+BITS file:operands-enwik8 stash_tiled_pf_vs_stash_tiled dq MATCH 0 of 1572864
+BITS file:operands-enwik8 stash_tiled_pf_vs_stash_tiled dk MATCH 0 of 1572864
+BITS file:operands-enwik8 stash_tiled_pf_vs_stash_tiled dv MATCH 0 of 1572864
+BITS file:operands-enwik8 stash_tiled_pf+sabotage_new_vs_stash_tiled ctx MOVED 393216 of 1572864
+BITS file:operands-enwik8 stash_tiled_pf+sabotage_new_vs_stash_tiled amax MATCH 0 of 24576
+BITS file:operands-enwik8 stash_tiled_pf+sabotage_new_vs_stash_tiled denom MATCH 0 of 24576
+BITS file:operands-enwik8 stash_tiled_pf+sabotage_new_vs_stash_tiled zdot MOVED 24576 of 24576
+BITS file:operands-enwik8 stash_tiled_pf+sabotage_new_vs_stash_tiled dq MOVED 1385260 of 1572864
+BITS file:operands-enwik8 stash_tiled_pf+sabotage_new_vs_stash_tiled dk MOVED 1429203 of 1572864
+BITS file:operands-enwik8 stash_tiled_pf+sabotage_new_vs_stash_tiled dv MATCH 0 of 1572864
+BITS file:operands-enwik8 stash_tiled_pf_restored_vs_stash_tiled ctx MATCH 0 of 1572864
+BITS file:operands-enwik8 stash_tiled_pf_restored_vs_stash_tiled amax MATCH 0 of 24576
+BITS file:operands-enwik8 stash_tiled_pf_restored_vs_stash_tiled denom MATCH 0 of 24576
+BITS file:operands-enwik8 stash_tiled_pf_restored_vs_stash_tiled zdot MATCH 0 of 24576
+BITS file:operands-enwik8 stash_tiled_pf_restored_vs_stash_tiled dq MATCH 0 of 1572864
+BITS file:operands-enwik8 stash_tiled_pf_restored_vs_stash_tiled dk MATCH 0 of 1572864
+BITS file:operands-enwik8 stash_tiled_pf_restored_vs_stash_tiled dv MATCH 0 of 1572864
+REACH file:operands-enwik8 stash_tiled_pf sabotage_flipped_cells=3232255 clean_restored=True reach_bit=stash_tiled_pf+sabotage_new forward_moved=393216 backward_moved=2839039 amax_denom_moved=0 ctx_moved_columns_16_up=0 zdot_moved=24576 dv_moved=0
+PRICE attention stash_tiled fwd file:operands-enwik8 5.251124 ms
+PRICE attention stash_tiled fwdbwd file:operands-enwik8 46.975637 ms
+PRICE attention stash_tiled_pf fwd file:operands-enwik8 4.818829 ms
+PRICE attention stash_tiled_pf fwdbwd file:operands-enwik8 60.871637 ms
+PRICE attention stash_tiled_pf fwd file:operands-enwik8 4.791268 ms
+PRICE attention stash_tiled_pf fwdbwd file:operands-enwik8 36.120294 ms
+PRICE attention stash_tiled fwd file:operands-enwik8 5.129031 ms
+PRICE attention stash_tiled fwdbwd file:operands-enwik8 46.999383 ms
+PRICE attention stash_tiled fwd file:operands-enwik8 5.144945 ms
+PRICE attention stash_tiled fwdbwd file:operands-enwik8 69.952334 ms
+PRICE attention stash_tiled_pf fwd file:operands-enwik8 4.801944 ms
+PRICE attention stash_tiled_pf fwdbwd file:operands-enwik8 36.211079 ms
+PRICE attention stash_tiled_pf fwd file:operands-enwik8 4.778979 ms
+PRICE attention stash_tiled_pf fwdbwd file:operands-enwik8 36.29212 ms
+PRICE attention stash_tiled fwd file:operands-enwik8 5.103564 ms
+PRICE attention stash_tiled fwdbwd file:operands-enwik8 46.89672 ms
+PRICE attention stash_tiled fwd file:operands-enwik8 29.156526 ms
+PRICE attention stash_tiled fwdbwd file:operands-enwik8 47.005442 ms
+PRICE attention stash_tiled_pf fwd file:operands-enwik8 4.764397 ms
+PRICE attention stash_tiled_pf fwdbwd file:operands-enwik8 36.178311 ms
+PRICE attention stash_tiled_pf fwd file:operands-enwik8 4.798758 ms
+PRICE attention stash_tiled_pf fwdbwd file:operands-enwik8 63.371166 ms
+PRICE attention stash_tiled fwd file:operands-enwik8 5.166037 ms
+PRICE attention stash_tiled fwdbwd file:operands-enwik8 46.758563 ms
+PRICE attention stash_tiled fwd file:operands-enwik8 5.144634 ms
+PRICE attention stash_tiled fwdbwd file:operands-enwik8 65.886879 ms
+PRICE attention stash_tiled_pf fwd file:operands-enwik8 4.762174 ms
+PRICE attention stash_tiled_pf fwdbwd file:operands-enwik8 36.120995 ms
+TABLE kind=file:operands-enwik8 shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 (useful flops: fwd 4*cells*hd, bwd 10*cells*hd; executed multiplier of the shipped kernels: fwd dots 3 of 2 contractions, bwd dots 6 of 5)
+TABLE arm | fwd median ms | fwd useful TFLOP/s | fwd+bwd median ms | bwd (derived) ms | bwd useful TFLOP/s | fwd ratio | fwd+bwd ratio
+TABLE stash_tiled | 5.144945 | 1.2528018612443865 | 46.999383 | 41.854438 | 0.3850007896414712 | 1.0 | 1.0
+TABLE stash_tiled_pf | 4.791268 | 1.3452799284030865 | 36.211079 | 31.419811 | 0.5128608723967181 | 1.0738169937477928 | 1.2979282666501046
+--- kind file:operands-pilegithub
+shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 S=2048 key_lo=0 pos0=0
+DIGEST file:operands-pilegithub stash_tiled ctx 2a3a48d476868ddf amax c87795424c4ce74a denom 3b946f3ab306552a zdot 18417cee822a4690 dq dce688e9f43ba511 dk b7bdacf0394a4c64 dv 36950bfa379abbf6
+DIGEST file:operands-pilegithub eager ctx 2a3a48d476868ddf amax c87795424c4ce74a denom 3b946f3ab306552a zdot 18417cee822a4690 dq dce688e9f43ba511 dk b7bdacf0394a4c64 dv 36950bfa379abbf6
+BITS file:operands-pilegithub stash_tiled_vs_eager ctx MATCH 0 of 1572864
+BITS file:operands-pilegithub stash_tiled_vs_eager amax MATCH 0 of 24576
+BITS file:operands-pilegithub stash_tiled_vs_eager denom MATCH 0 of 24576
+BITS file:operands-pilegithub stash_tiled_vs_eager zdot MATCH 0 of 24576
+BITS file:operands-pilegithub stash_tiled_vs_eager dq MATCH 0 of 1572864
+BITS file:operands-pilegithub stash_tiled_vs_eager dk MATCH 0 of 1572864
+BITS file:operands-pilegithub stash_tiled_vs_eager dv MATCH 0 of 1572864
+DIGEST file:operands-pilegithub stash_tiled_pf ctx 2a3a48d476868ddf amax c87795424c4ce74a denom 3b946f3ab306552a zdot 18417cee822a4690 dq dce688e9f43ba511 dk b7bdacf0394a4c64 dv 36950bfa379abbf6
+BITS file:operands-pilegithub stash_tiled_pf_vs_stash_tiled ctx MATCH 0 of 1572864
+BITS file:operands-pilegithub stash_tiled_pf_vs_stash_tiled amax MATCH 0 of 24576
+BITS file:operands-pilegithub stash_tiled_pf_vs_stash_tiled denom MATCH 0 of 24576
+BITS file:operands-pilegithub stash_tiled_pf_vs_stash_tiled zdot MATCH 0 of 24576
+BITS file:operands-pilegithub stash_tiled_pf_vs_stash_tiled dq MATCH 0 of 1572864
+BITS file:operands-pilegithub stash_tiled_pf_vs_stash_tiled dk MATCH 0 of 1572864
+BITS file:operands-pilegithub stash_tiled_pf_vs_stash_tiled dv MATCH 0 of 1572864
+BITS file:operands-pilegithub stash_tiled_pf+sabotage_new_vs_stash_tiled ctx MOVED 393216 of 1572864
+BITS file:operands-pilegithub stash_tiled_pf+sabotage_new_vs_stash_tiled amax MATCH 0 of 24576
+BITS file:operands-pilegithub stash_tiled_pf+sabotage_new_vs_stash_tiled denom MATCH 0 of 24576
+BITS file:operands-pilegithub stash_tiled_pf+sabotage_new_vs_stash_tiled zdot MOVED 24576 of 24576
+BITS file:operands-pilegithub stash_tiled_pf+sabotage_new_vs_stash_tiled dq MOVED 1374755 of 1572864
+BITS file:operands-pilegithub stash_tiled_pf+sabotage_new_vs_stash_tiled dk MOVED 1422644 of 1572864
+BITS file:operands-pilegithub stash_tiled_pf+sabotage_new_vs_stash_tiled dv MATCH 0 of 1572864
+BITS file:operands-pilegithub stash_tiled_pf_restored_vs_stash_tiled ctx MATCH 0 of 1572864
+BITS file:operands-pilegithub stash_tiled_pf_restored_vs_stash_tiled amax MATCH 0 of 24576
+BITS file:operands-pilegithub stash_tiled_pf_restored_vs_stash_tiled denom MATCH 0 of 24576
+BITS file:operands-pilegithub stash_tiled_pf_restored_vs_stash_tiled zdot MATCH 0 of 24576
+BITS file:operands-pilegithub stash_tiled_pf_restored_vs_stash_tiled dq MATCH 0 of 1572864
+BITS file:operands-pilegithub stash_tiled_pf_restored_vs_stash_tiled dk MATCH 0 of 1572864
+BITS file:operands-pilegithub stash_tiled_pf_restored_vs_stash_tiled dv MATCH 0 of 1572864
+REACH file:operands-pilegithub stash_tiled_pf sabotage_flipped_cells=3215191 clean_restored=True reach_bit=stash_tiled_pf+sabotage_new forward_moved=393216 backward_moved=2821975 amax_denom_moved=0 ctx_moved_columns_16_up=0 zdot_moved=24576 dv_moved=0
+PRICE attention stash_tiled fwd file:operands-pilegithub 5.109963 ms
+PRICE attention stash_tiled fwdbwd file:operands-pilegithub 46.745345 ms
+PRICE attention stash_tiled_pf fwd file:operands-pilegithub 4.948322 ms
+PRICE attention stash_tiled_pf fwdbwd file:operands-pilegithub 36.348153 ms
+PRICE attention stash_tiled_pf fwd file:operands-pilegithub 4.898707 ms
+PRICE attention stash_tiled_pf fwdbwd file:operands-pilegithub 36.408264 ms
+PRICE attention stash_tiled fwd file:operands-pilegithub 5.101531 ms
+PRICE attention stash_tiled fwdbwd file:operands-pilegithub 46.941848 ms
+PRICE attention stash_tiled fwd file:operands-pilegithub 5.140499 ms
+PRICE attention stash_tiled fwdbwd file:operands-pilegithub 46.875518 ms
+PRICE attention stash_tiled_pf fwd file:operands-pilegithub 4.76663 ms
+PRICE attention stash_tiled_pf fwdbwd file:operands-pilegithub 36.33879 ms
+PRICE attention stash_tiled_pf fwd file:operands-pilegithub 4.808724 ms
+PRICE attention stash_tiled_pf fwdbwd file:operands-pilegithub 36.294834 ms
+PRICE attention stash_tiled fwd file:operands-pilegithub 5.197393 ms
+PRICE attention stash_tiled fwdbwd file:operands-pilegithub 46.946474 ms
+PRICE attention stash_tiled fwd file:operands-pilegithub 5.297523 ms
+PRICE attention stash_tiled fwdbwd file:operands-pilegithub 46.844292 ms
+PRICE attention stash_tiled_pf fwd file:operands-pilegithub 4.885728 ms
+PRICE attention stash_tiled_pf fwdbwd file:operands-pilegithub 36.381283 ms
+PRICE attention stash_tiled_pf fwd file:operands-pilegithub 4.770556 ms
+PRICE attention stash_tiled_pf fwdbwd file:operands-pilegithub 36.388334 ms
+PRICE attention stash_tiled fwd file:operands-pilegithub 5.259216 ms
+PRICE attention stash_tiled fwdbwd file:operands-pilegithub 50.065447 ms
+PRICE attention stash_tiled fwd file:operands-pilegithub 5.166928 ms
+PRICE attention stash_tiled fwdbwd file:operands-pilegithub 46.784272 ms
+PRICE attention stash_tiled_pf fwd file:operands-pilegithub 4.767352 ms
+PRICE attention stash_tiled_pf fwdbwd file:operands-pilegithub 36.242556 ms
+TABLE kind=file:operands-pilegithub shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 (useful flops: fwd 4*cells*hd, bwd 10*cells*hd; executed multiplier of the shipped kernels: fwd dots 3 of 2 contractions, bwd dots 6 of 5)
+TABLE arm | fwd median ms | fwd useful TFLOP/s | fwd+bwd median ms | bwd (derived) ms | bwd useful TFLOP/s | fwd ratio | fwd+bwd ratio
+TABLE stash_tiled | 5.166928 | 1.2474717418164138 | 46.875518 | 41.70859 | 0.3863470733486795 | 1.0 | 1.0
+TABLE stash_tiled_pf | 4.808724 | 1.3403964694168349 | 36.348153 | 31.539429000000005 | 0.51091577085939 | 1.074490446946009 | 1.28962585801815
+attention_step_price: PASS (stash_tiled_pf vs stash_tiled)

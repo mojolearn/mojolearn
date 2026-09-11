@@ -2,6 +2,12 @@
 # Build the DBSCAN / PCA / tSVD / OLS / Ridge / logistic CPython extension into
 # python/mojolearn/_mojolearn_estimators.so. Run from anywhere; requires pixi.
 #
+# MOJOLEARN_BUILD_EXTRA_DEFINES (optional, empty by default): extra flags
+# appended verbatim, word-split, to the `mojo build` command, exactly as in
+# bindings/build.sh. For trial builds only (for example
+# `-D MOJOLEARN_GEMM_ARM_TRIAL=1`, tools/gemm_ksplit_classical_leg.sh); a
+# release build leaves it unset.
+#
 # FIXED 2026-08-22. THIS SCRIPT SHIPPED A ZERO-KERNEL ARTIFACT FOR HOURS AND
 # NOTHING NOTICED, for two independent reasons, both fixed here.
 #
@@ -160,6 +166,7 @@ fi
 # shellcheck disable=SC2086
 pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib \
     $TARGET_FLAGS $COLUMN_DEFINE $MODE_DEFINE \
+    ${MOJOLEARN_BUILD_EXTRA_DEFINES:-} \
     $LINK_FLAGS \
     -I . -I bindings \
     bindings/_mojolearn_estimators.mojo \
