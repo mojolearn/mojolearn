@@ -1748,17 +1748,25 @@ ours `covariance_eigh`; cuML OLS `algorithm='eig'`.
 | pca | taxi | cuML PCA full | 19.54 | EVR sum 0.99786046 | 28.46 | 26.32 | 0.925 | 1.35x | EVR sum 0.99786071, `c790338770a4c120` |
 | pca | Istella-S | cuML PCA full | 81.91 | EVR sum 1.0000000156 | 713.09 | 686.27 | 0.962 | 8.38x | EVR sum 1.0000000146, one digest, equal |
 | kmeans | taxi | cuML KMeans | 129.28 | inertia 1.2019161e8, 20 iter, digest different every round | 216.59 | 211.99 | 0.979 | 1.64x | inertia 1.2062766e8, 21 iter, `89520efe99a08d5f` |
-| kmeans | Istella-S | cuML KMeans | 171.81 | inertia 1.2855462e17, 20 iter, digest different every round | see the lane README (instance spread exceeds the effect) | | | 7.56x | inertia 1.3128483e17, 21 iter, `7f720b0b76896308` |
+| kmeans | Istella-S | cuML KMeans | 171.81 | inertia 1.2855462e17, 20 iter, digest different every round | 1267.6 (pooled median of 5 instances) | 1260.4 (pooled) | 0.994 | 7.56x | inertia 1.3128483e17, 21 iter, `7f720b0b76896308` |
 
 OLS and PCA reach the device Jacobi and k-means does not, so those rows isolate
 DEVIATION 2671 (two barriers per rotation instead of four, same bits) and the
 k-means row isolates DEVIATION 2672 (host staging removed from the k-means fit).
-Flip verdicts under ENGINEERING_RULES section 9: OLS geomean 0.9610 and PCA
-geomean 0.9435, both below 1 with quality equal and bits equal on both datasets,
-so 2671 is the default. The k-means A/B swung 1.066 then 0.950 between race
-instances against an effect the stage probe puts at about 5 ms of host work, so
-2672 is decided on pooled instances in
-`bench/results/linear_cluster_istella_2026-09-11/README.md`.
+Flip verdicts under ENGINEERING_RULES section 9: OLS geomean 0.9610, PCA geomean
+0.9434, and k-means geomean 0.9449 over pooled race instances, all below 1 with
+quality equal and bits equal on both datasets, so BOTH deviations are the
+default.
+
+The k-means numbers are pooled because ONE race instance is not enough at this
+shape: the Istella-S A/B read 1.066, 0.950, 0.9574, 1.0171 and 0.9986 across
+five instances whose rounds were each tight, so the spread lives between race
+instances (about 80 ms) and swamps a change the stage probe sizes at about 5 ms
+of host work. Pooled medians of instances are taxi 183.5 after against 204.4
+before (0.8979, four instances) and Istella-S 1260.4 against 1267.6 (0.9943,
+five instances). The taxi instances that race only ours against ours-base run
+faster than the three-arm race in the table above (181 to 185 ms against 212),
+which is the cuML worker's own GPU work showing up in its neighbours.
 
 **Where the Istella-S time goes** (stage probe, IDENTICAL, same pod): the OLS
 device solve is 1744 to 1775 ms, of which the 220-column Jacobi is 1656 ms at 12

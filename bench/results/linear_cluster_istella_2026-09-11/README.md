@@ -113,7 +113,7 @@ ours and are never quoted as an opponent row; the opponent column is
 | PCA | taxi | 19.54 | 28.46 | 26.32 | 0.925 | 1.35x | EVR sum 0.99786071 both (cuML 0.99786046) |
 | PCA | Istella-S | 81.91 | 713.09 | 686.27 | 0.962 | 8.38x | EVR sum 1.00000001 both (cuML the same) |
 | KMeans | taxi | 129.28 | 216.59 | 211.99 | 0.979 | 1.64x | inertia 1.2062766e8 both (cuML 1.2019161e8 at 20 iterations against our 21) |
-| KMeans | Istella-S | 171.81 | see below | see below | see below | 7.56x | inertia 1.3128483e17 both (cuML 1.2855462e17) |
+| KMeans | Istella-S | 171.81 | 1267.6 (pooled) | 1260.4 (pooled) | 0.994 | 7.56x | inertia 1.3128483e17 both (cuML 1.2855462e17 at 20 iterations against our 21) |
 
 Every cell held ONE digest across its five rounds, and the after digest equals
 the before digest in every cell: OLS taxi `fb86358654367fa0`, k-means taxi
@@ -129,28 +129,49 @@ a time for the same answer.
 
 * **LinearRegression: 0.972 and 0.950, geomean 0.9610, FLIP.** Quality equal
   on both datasets, bits equal on both.
-* **PCA: 0.925 and 0.962, geomean 0.9435, FLIP.** Same.
-* **KMeans: pending the pooled instances below.**
+* **PCA: 0.925 and 0.962, geomean 0.9434, FLIP.** Same.
+* **KMeans: 0.898 and 0.994 pooled, geomean 0.9449, FLIP.** Same. See the
+  pooled instances below; one race instance is not enough at this shape.
 
 Both of those are DEVIATION 2671 alone: OLS and PCA reach the Jacobi and
 k-means does not, so the k-means row isolates DEVIATION 2672 and the OLS and
 PCA rows isolate 2671.
 
-### KMeans and DEVIATION 2672: the effect is under this shape's noise
+### KMeans and DEVIATION 2672: ONE RACE INSTANCE IS NOT ENOUGH AT THIS SHAPE
 
-The Istella-S k-means A/B swung between race instances, in both directions:
+The Istella-S k-means A/B swung in both directions between race instances, so
+the first number I had (1.066, a regression) was an artifact of quoting one
+instance. Each instance is its own interleaved race, 1 warm-up plus 5 rounds:
 
-| instance | before ms | after ms | after/before |
-|---|---|---|---|
-| first race | 1219.0 | 1299.4 | 1.066 |
-| repeat | 1279.6 | 1215.5 | 0.950 |
+| instance | dataset | before ms | after ms | after/before |
+|---|---|---|---|---|
+| first race (3 arms, with cuML) | Istella-S | 1219.0 | 1299.4 | 1.0660 |
+| repeat | Istella-S | 1279.6 | 1215.5 | 0.9500 |
+| instance 3 | Istella-S | 1316.5 | 1260.4 | 0.9574 |
+| instance 4 | Istella-S | 1230.3 | 1251.4 | 1.0171 |
+| instance 5 | Istella-S | 1267.6 | 1265.8 | 0.9986 |
+| **pooled median of instances** | **Istella-S** | **1267.6** | **1260.4** | **0.9943** |
+| first race (3 arms, with cuML) | taxi | 216.6 | 212.0 | 0.9788 |
+| instance 3 | taxi | 201.6 | 181.3 | 0.8989 |
+| instance 4 | taxi | 207.2 | 185.0 | 0.8929 |
+| instance 5 | taxi | 196.0 | 182.1 | 0.9287 |
+| **pooled median of instances** | **taxi** | **204.4** | **183.5** | **0.8979** |
 
-The rounds inside each instance were tight (after 1267 to 1346, before 1217 to
-1267 in the first; after 1211 to 1234, before 1231 to 1378 in the repeat), so
-the spread is BETWEEN race instances, not within them, and it is about 80 ms
-against a change the probe measures at about 5 ms of host work at this shape
-(weight fill 1.0 ms, readback 0.2 to 0.3 ms). Pooled instances and the verdict
-they give are below.
+The rounds INSIDE each instance were tight (Istella-S after 1267 to 1346 and
+before 1217 to 1267 in the first; after 1211 to 1234 and before 1231 to 1378 in
+the repeat), so the spread lives between instances, about 80 ms on Istella-S,
+against a change the stage probe sizes at about 5 ms of host work there (weight
+fill 1.0 ms, readback 0.2 to 0.3 ms). Taxi, where the same host work is 4,000,000
+rows of weight fill and label copy rather than 2,043,304, carries the win.
+
+**Geomean of the pooled ratios, 0.8979 and 0.9943, is 0.9449, so DEVIATION 2672
+is the default.** Inertia, n_iter and the centroid and label digests are equal
+between after and before in every instance on both datasets.
+
+The two-arm instances run faster than the three-arm race above (taxi 181 to 185
+ms against 212) because the cuML worker's own GPU work shows up in its
+neighbours; that is why an A/B is only ever read against the arm beside it in
+the same race, never against a number from another race.
 
 ## DBSCAN and HDBSCAN rows (measurement only, first at this size)
 
@@ -205,9 +226,19 @@ because this library ships no HDBSCAN.
 
 ## RUN OWED
 
-DEVIATION 2671 changes a GPU kernel's phase structure, so it is the one that
-needs other vendors even though it cannot move a bit by construction. Every
-command below is IDENTICAL and is run from a checkout of this branch.
+**Both deviations flip, so both are owed on the other two vendors.** DEVIATION
+2671 changes a GPU kernel's phase structure (OLS, PCA, truncated SVD and every
+other caller of the device Jacobi) and DEVIATION 2672 changes how the k-means
+fit stages its weights and reads its results back (`cluster/estimator.mojo`,
+`python/mojolearn/cluster.py`). Neither can move a bit by construction, which
+is exactly why the gates below are the evidence rather than the argument.
+Every command is IDENTICAL and is run from a checkout of this branch.
+
+On the H100 in this lane all of them are green: `jacobi_check` (including
+`check_jacobi_merged_phases_equal_four_phase`, 0 differing cells at n = 2, 3,
+11, 33, 64, 129 and 220), `glm/ols_main.mojo`, `check-kmeans-identity`,
+`check-kmeans` (whose `check_kmeans_fit_weight_arms_agree` is the one that
+covers 2672's device weight fill) and `check-dbscan`.
 
 1. **Apple M4 (local, one deliberate run, nothing else heavy running).**
 
