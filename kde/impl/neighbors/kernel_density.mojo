@@ -117,6 +117,7 @@ from kde.impl.distance.distance_ops import (
 )
 from neighbors.impl.distance.detail.distance_ops import (
     cosine_zero_norm_row,
+    cosine_zero_norm_row_ptr,
     validate_metric_arg,
 )
 from checks.numerics import (
@@ -124,10 +125,13 @@ from checks.numerics import (
     NUMERIC_FAST,
     NUMERIC_IDENTICAL,
     ftz,
+    ftz_simd,
     identical_cos,
     identical_exp,
     identical_log,
     identical_mul_add,
+    identical_mul_add_simd,
+    identical_sqrt,
 )
 
 # ---------------------------------------------------------------------------
@@ -246,6 +250,94 @@ def kde_validate_data(
                 " inf - inf; row " + String(i // n_features) + ", column "
                 + String(i % n_features) + " is " + String(v) + " (DEVIATION 604)"
             )
+
+
+# ---------------------------------------------------------------------------
+# DEVIATION 2660 (2026-09-11): DEVIATION 604'S DATA RULES OVER THE CALLER'S
+# MEMORY, BLOCK SCREENED
+# ---------------------------------------------------------------------------
+# THEIRS: cuML's `fit` and `score_samples` read the caller's array in place
+# (`input_to_cuml_array`); no host copy.
+# OURS BEFORE: `kde_score_samples_binding` copied X and the queries into two
+# `List`s (36 to 54 ms at 100,000 x 220 on the H100), then
+# `kde_validate_data` walked every value with an early-exit loop that does
+# not vectorize (39 ms), then `_upload` copied the List again into pinned
+# memory.
+# OURS NOW: `kde_validate_data_ptr` takes the caller's pointer. Blocks of
+# `KDE_VALIDATE_W` values are screened with one mask each: an exponent field
+# of all ones (exactly the values where `v != v or v == inf or v == -inf`),
+# and under sqeuclidean `abs(v) >= bound`. The first block that screens
+# positive, and the tail, run `kde_validate_data`'s own per-value loop from
+# that block's first index, so the refusal names the same first value, in
+# the same words, as before. Host-only, no device bit depends on it; the
+# score bits are unchanged because the uploaded values are the caller's.
+# The cosine zero-row rule (DEVIATION 553) runs first, as before, through
+# `cosine_zero_norm_row_ptr`. The length rule is the caller's: the pointer
+# entry runs after `kde_fit_validate` and the `n_query` check, so both
+# dimensions are positive and the span is `n_rows * n_features` by
+# construction. Gate: `kde/checks/kde_check.mojo::check_kde_host_ptr_equals_list`.
+comptime KDE_VALIDATE_W = 16
+
+
+def kde_validate_data_ptr(
+    x: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    n_features: Int,
+    metric: Int,
+    what: String,
+) raises:
+    """DEVIATION 2660: `kde_validate_data` over a host pointer, same rules,
+    same first refusal, same message."""
+    if n_rows <= 0 or n_features <= 0:
+        raise Error(
+            "kde: " + what + " must have positive dimensions, got "
+            + String(n_rows) + " x " + String(n_features)
+        )
+    if metric == DIST_COSINE_EXPANDED:
+        var zr = cosine_zero_norm_row_ptr(x, n_rows, n_features)
+        if zr >= 0:
+            raise Error(
+                "kde: metric='cosine' but " + what + " row " + String(zr)
+                + " is all zeros; cosine distance divides by ||x|| and is"
+                " undefined at the origin (DEVIATION 553)"
+            )
+    var bound = Float32(0.0)
+    var bounded = metric == DIST_L2_EXPANDED
+    if bounded:
+        bound = Float32(9.223372036854775808e18 / sqrt(Float64(n_features)))
+    var n = n_rows * n_features
+    var expm = SIMD[DType.uint32, KDE_VALIDATE_W](UInt32(0x7F800000))
+    var one = SIMD[DType.uint32, KDE_VALIDATE_W](UInt32(1))
+    var zero = SIMD[DType.uint32, KDE_VALIDATE_W](UInt32(0))
+    var boundv = SIMD[DType.float32, KDE_VALIDATE_W](bound)
+    var i = 0
+    var body = n - n % KDE_VALIDATE_W
+    while i < body:
+        var v = x.unsafe_load[width=KDE_VALIDATE_W](i)
+        var hit = (bitcast[DType.uint32](v) & expm).eq(expm).select(one, zero).reduce_max()
+        if bounded:
+            hit = hit | abs(v).ge(boundv).select(one, zero).reduce_max()
+        if hit != UInt32(0):
+            break
+        i += KDE_VALIDATE_W
+    # The screened-positive block (if any) and the tail, value by value in
+    # `kde_validate_data`'s order and words.
+    while i < n:
+        var v = x.unsafe_load(i)
+        if v != v or v == kde_inf() or v == -kde_inf():
+            raise Error(
+                "kde: " + what + " contains " + ("NaN" if v != v else "infinity")
+                + " at row " + String(i // n_features) + ", column "
+                + String(i % n_features) + " (DEVIATION 604)"
+            )
+        if bounded and abs(v) >= bound:
+            raise Error(
+                "kde: metric='sqeuclidean' needs |" + what + "| < 2^63/sqrt("
+                + String(n_features) + ") so the expanded identity cannot form"
+                " inf - inf; row " + String(i // n_features) + ", column "
+                + String(i % n_features) + " is " + String(v) + " (DEVIATION 604)"
+            )
+        i += 1
 
 
 def kernel_from_name(name: String) raises -> Int:
@@ -1488,6 +1580,429 @@ def _kde_score_samples_fused(
     _ = logw^
 
 
+# ---------------------------------------------------------------------------
+# DEVIATION 2625 (2026-09-11): THE TILED IDENTICAL SCORE PASS, SAME BITS
+# ---------------------------------------------------------------------------
+# THEIRS (cuVS 26.08 `cpp/src/distance/kde.cu:335-441`, `kde_tiled_kernel`):
+# one thread per query, the training rows cooperatively loaded into shared
+# memory in tiles of `feat_tile x CELL_TILE` (64 x 64), a per-train-row
+# accumulator in registers that persists across the feature tiles, and a 2D
+# grid (query blocks x train chunks, `:594-603`) so a small query count
+# still fills the GPU; the log-kernel is folded into an online log-sum-exp
+# and a reduce kernel merges the per-chunk partials (`:447-473`).
+#
+# OURS BEFORE (the staged path below): the distance matrix one thread per
+# CELL, each thread re-reading its query row and its train row from global
+# memory (`2 x d` loads per cell: 440 per cell on Istella-S, 176 GB of
+# global traffic for 100,000 x 2,000), then a second matrix for the
+# log-kernel, then one thread per query ROW walking 100,000 cells twice with
+# `identical_exp` in the inner loop, so the busiest stage ran on
+# `n_query / lse_tpb` blocks (16 on the lane's shape).
+#
+# OURS NOW, under IDENTICAL with no identity trace recording and one of the
+# three unexpanded metrics (euclidean, l1, chebyshev):
+#   1. `kde_tiled_logk_kernel`: THEIR tile geometry and 2D grid, but every
+#      cell's arithmetic is the staged path's, operation for operation:
+#      `l2_unexp_core` / `l1_core` / `linf_core` over the features in
+#      ascending order (the feature tiles are walked in order and a cell's
+#      accumulator persists across them), `identical_sqrt` for euclidean,
+#      `compute_log_kernel(ftz(dist))`, `ftz(logk + logw[j])` when weighted.
+#      `ftz` of a training value moves from the use to the tile load; `ftz`
+#      is idempotent, so no bit moves. The log-kernel is WRITTEN to the
+#      `n_query x n_train` matrix (the distance matrix is never allocated)
+#      and each (query, chunk) thread keeps the chunk's max by strict `>`
+#      from `-inf`. DEVIATION 2626 (2026-09-11): the 64 accumulators of a
+#      cell tile are one `SIMD[float32, 64]` value in registers, advanced
+#      a whole tile row per feature (`ftz_simd`, `identical_mul_add_simd`,
+#      lane-wise `abs` and a strict `>` select); each lane is its scalar
+#      core operation for operation, so the matrix is unchanged.
+#   2. `kde_rowmax_reduce_kernel`: the chunk maxima folded in ascending
+#      chunk order by strict `>`. The staged fold is strict `>` from
+#      `logk[0]` over ascending `j`; both return the value AND the bits of
+#      the first index that attains the maximum (the only case where two
+#      equal values have different bits is -0.0/+0.0, row 39, and the first
+#      one still wins), and a seed of `-inf` is replaced by any cell that is
+#      not `-inf`, so the two folds agree on every input, including the
+#      all-`-inf` row of DEVIATION 603.
+#   3. `kde_lse_terms_kernel`: `ftz(identical_exp(ftz(logk - rowmax)))` per
+#      cell, in place, one thread per cell (the staged inner term, moved out
+#      of the serial loop; it depends on nothing but its own cell and the
+#      row's max).
+#   4. `kde_lse_serial_sum_kernel`: `s = ftz(s + term)` over ascending `j`,
+#      then `ftz(identical_log(s) + max)`: the staged sum in the staged
+#      order. DEVIATION 603's `-inf` row is checked first, as before.
+# Nothing here is a new summation order: the only sum is the serial one.
+# The grid, the block width and the chunk length are SCHEDULING and move no
+# bit; `kde/checks/kde_check.mojo::check_kde_tiled_equals_staged` asserts
+# tiled == staged bit for bit over 6 kernels x 3 metrics x weighted and
+# unweighted x shapes that straddle every tile and chunk edge, under two
+# schedules. The staged path still runs whenever a trace records (the card
+# certifies `kde.dists`), for cosine, sqeuclidean and minkowski, and under
+# FAST (DEVIATION 2490) and DETERMINISTIC, whose codegen contraction is not
+# pinned and so could differ between two loop shapes.
+# MEASURED: `kde/checks/kde_stage_profile.mojo` and the lane's race on the
+# H100; numbers in `kde/README.md` and `bench/OPPONENT_REFERENCE.md`.
+comptime KDE_TILED_FEAT = 64
+comptime KDE_TILED_CELL = 64
+comptime KDE_TILED_TILE_FLOATS = KDE_TILED_FEAT * KDE_TILED_CELL
+# DEVIATION 2626 also sets the tiled pass's DEFAULT SCHEDULE from the sweep
+# in `kde/checks/kde_stage_profile.mojo` (H100, pod ur95zh3h9qbx2p, 3
+# repetitions after a warm-up, 100,000 fit rows x 2,000 queries). Chunks of
+# 256 train rows beat 1,024 on both shapes (d = 220: 36.5 against 41.1 ms;
+# d = 11: 26.7 against 27.3 ms) and 4,096 loses on both; a 128-thread query
+# block beats 256 at d = 220 (36.5 against 38.9 ms) and ties it at d = 11.
+# More, shorter chunks give the 2D grid more blocks to fill the GPU with and
+# keep each thread's `logk` writes closer together. A block width and a chunk
+# length are SCHEDULING: the gate asserts the same bits across schedules
+# (`check_kde_tiled_equals_staged` runs q_tpb 32 with 100-row chunks beside
+# the defaults) and the profile hashed nine of them equal on both shapes.
+comptime KDE_TILED_Q_TPB = 128
+comptime KDE_TILED_CHUNK_ROWS = 256
+
+
+def kde_identical_tiled_applies(metric: Int, trace_enabled: Bool) -> Bool:
+    """DEVIATION 2625's dispatch rule, one definition for the entry and the
+    gate that proves the entry reaches the tiled pass."""
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        if trace_enabled:
+            return False
+        return (
+            metric == DIST_L2_SQRT_UNEXPANDED
+            or metric == DIST_L1
+            or metric == DIST_LINF
+        )
+    return False
+
+
+def kde_tiled_logk_kernel(
+    logk: MutPointer[Float32, MutAnyOrigin],
+    part_max: MutPointer[Float32, MutAnyOrigin],
+    query: MutPointer[Float32, MutAnyOrigin],
+    train: MutPointer[Float32, MutAnyOrigin],
+    logw: MutPointer[Float32, MutAnyOrigin],
+    n_query_in: Int32,
+    n_train_in: Int32,
+    d_in: Int32,
+    n_chunks_in: Int32,
+    chunk_rows_in: Int32,
+    has_weights_in: Int32,
+    bandwidth: Float32,
+    kernel_in: Int32,
+    metric_in: Int32,
+):
+    """DEVIATION 2625, step 1. Grid x: query blocks of `block_dim.x`
+    threads; grid y: train chunks of `chunk_rows_in` rows. Writes
+    `logk[q * n_train + j]` for the chunk's `j` and `part_max[q * n_chunks
+    + chunk]`."""
+    var n_query = Int(n_query_in)
+    var n_train = Int(n_train_in)
+    var d = Int(d_in)
+    var n_chunks = Int(n_chunks_in)
+    var chunk_rows = Int(chunk_rows_in)
+    var has_weights = Int(has_weights_in) != 0
+    var kernel = Int(kernel_in)
+    var metric = Int(metric_in)
+    var tpb = Int(block_dim.x)
+    var tid = Int(thread_idx.x)
+    var q = Int(block_idx.x) * tpb + tid
+    var chunk = Int(block_idx.y)
+    var valid = q < n_query and chunk < n_chunks
+    var j_begin = chunk * chunk_rows
+    var j_end = j_begin + chunk_rows
+    if j_end > n_train:
+        j_end = n_train
+
+    var tile = stack_allocation[
+        KDE_TILED_TILE_FLOATS,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+
+    var neg_inf = bitcast[DType.float32](UInt32(0xFF800000))
+    var m = neg_inf
+    var qbase = q * d
+    var obase = q * n_train
+
+    var j_base = j_begin
+    while j_base < j_end:
+        var cells = j_end - j_base
+        if cells > KDE_TILED_CELL:
+            cells = KDE_TILED_CELL
+        # DEVIATION 2626: the cell tile's accumulators as ONE SIMD value in
+        # registers, lane c = cell c. Every lane runs the scalar core's
+        # operations in the scalar core's order (see the block comment
+        # above `KDE_TILED_FEAT`); lanes past `cells` fold the tile's zero
+        # padding and are never read.
+        var acc = SIMD[DType.float32, KDE_TILED_CELL](0.0)
+        var f0 = 0
+        while f0 < d:
+            var feats = d - f0
+            if feats > KDE_TILED_FEAT:
+                feats = KDE_TILED_FEAT
+            # Cooperative load, slot = feat * CELL + cell (their layout).
+            barrier()
+            var idx = tid
+            while idx < KDE_TILED_TILE_FLOATS:
+                var feat = idx // KDE_TILED_CELL
+                var cell = idx - feat * KDE_TILED_CELL
+                var v = Float32(0.0)
+                if cell < cells and feat < feats:
+                    v = ftz(train.unsafe_load((j_base + cell) * d + f0 + feat))
+                tile.unsafe_store(idx, v)
+                idx += tpb
+            barrier()
+            if valid:
+                # DEVIATION 2626: one tile row (64 train values of feature
+                # `f0 + feat`) against the query value, lane by lane:
+                #   euclidean  `l2_unexp_core`: diff = ftz(q - t);
+                #              acc = ftz(identical_mul_add(diff, diff, acc))
+                #   l1         `l1_core`: acc = ftz(acc + abs(ftz(q - t)))
+                #   chebyshev  `linf_core`: diff = abs(ftz(q - t));
+                #              acc = diff > acc ? diff : acc (row 39, strict)
+                # `ftz_simd` is `ftz` on each lane and
+                # `identical_mul_add_simd` is one `fma` per lane, so each
+                # lane is bit for bit the scalar core it replaces.
+                if metric == DIST_L2_SQRT_UNEXPANDED:
+                    for feat in range(feats):
+                        var qv = SIMD[DType.float32, KDE_TILED_CELL](
+                            ftz(query.unsafe_load(qbase + f0 + feat))
+                        )
+                        var row = tile.unsafe_load[width=KDE_TILED_CELL](feat * KDE_TILED_CELL)
+                        var diff = ftz_simd[KDE_TILED_CELL](qv - row)
+                        acc = ftz_simd[KDE_TILED_CELL](
+                            identical_mul_add_simd[KDE_TILED_CELL](diff, diff, acc)
+                        )
+                elif metric == DIST_L1:
+                    for feat in range(feats):
+                        var qv = SIMD[DType.float32, KDE_TILED_CELL](
+                            ftz(query.unsafe_load(qbase + f0 + feat))
+                        )
+                        var row = tile.unsafe_load[width=KDE_TILED_CELL](feat * KDE_TILED_CELL)
+                        acc = ftz_simd[KDE_TILED_CELL](
+                            acc + abs(ftz_simd[KDE_TILED_CELL](qv - row))
+                        )
+                else:
+                    for feat in range(feats):
+                        var qv = SIMD[DType.float32, KDE_TILED_CELL](
+                            ftz(query.unsafe_load(qbase + f0 + feat))
+                        )
+                        var row = tile.unsafe_load[width=KDE_TILED_CELL](feat * KDE_TILED_CELL)
+                        var diff = abs(ftz_simd[KDE_TILED_CELL](qv - row))
+                        acc = diff.gt(acc).select(diff, acc)
+            f0 += KDE_TILED_FEAT
+        if valid:
+            for c in range(cells):
+                var dist = acc[c]
+                if metric == DIST_L2_SQRT_UNEXPANDED:
+                    # `pairwise_unexpanded_kernel`'s epilog.
+                    dist = ftz(identical_sqrt(dist))
+                # `log_kernel_matrix_kernel`'s cell.
+                var v = compute_log_kernel(ftz(dist), bandwidth, kernel)
+                if has_weights:
+                    # `add_log_weights_kernel`'s cell.
+                    v = ftz(v + logw.unsafe_load(j_base + c))
+                logk.unsafe_store(obase + j_base + c, v)
+                # Row 39: strict `>`, the first index attaining the max wins.
+                if v > m:
+                    m = v
+        j_base += KDE_TILED_CELL
+    if valid:
+        part_max.unsafe_store(q * n_chunks + chunk, m)
+
+
+def kde_rowmax_reduce_kernel(
+    rowmax: MutPointer[Float32, MutAnyOrigin],
+    part_max: MutPointer[Float32, MutAnyOrigin],
+    n_query_in: Int32,
+    n_chunks_in: Int32,
+):
+    """DEVIATION 2625, step 2: the chunk maxima in ascending chunk order,
+    strict `>` (row 39), one thread per query."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(n_query_in):
+        return
+    var n_chunks = Int(n_chunks_in)
+    var base = i * n_chunks
+    var m = part_max.unsafe_load(base)
+    for b in range(1, n_chunks):
+        var v = part_max.unsafe_load(base + b)
+        if v > m:
+            m = v
+    rowmax.unsafe_store(i, m)
+
+
+def kde_lse_terms_kernel(
+    logk: MutPointer[Float32, MutAnyOrigin],
+    rowmax: MutPointer[Float32, MutAnyOrigin],
+    n_query_in: Int32,
+    n_train_in: Int32,
+):
+    """DEVIATION 2625, step 3: `logsumexp_kernel`'s term
+    `ftz(identical_exp(ftz(logk - max)))`, in place, one thread per cell.
+    A row whose max is `-inf` (DEVIATION 603) is left untouched: step 4
+    never reads it."""
+    var n_train = Int(n_train_in)
+    var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if idx >= Int(n_query_in) * n_train:
+        return
+    var mx = rowmax.unsafe_load(idx // n_train)
+    if mx == bitcast[DType.float32](UInt32(0xFF800000)):
+        return
+    logk.unsafe_store(idx, ftz(identical_exp(ftz(logk.unsafe_load(idx) - mx))))
+
+
+def kde_lse_serial_sum_kernel(
+    terms: MutPointer[Float32, MutAnyOrigin],
+    rowmax: MutPointer[Float32, MutAnyOrigin],
+    lse: MutPointer[Float32, MutAnyOrigin],
+    n_query_in: Int32,
+    n_train_in: Int32,
+):
+    """DEVIATION 2625, step 4: `logsumexp_kernel`'s serial ascending sum and
+    its `log(sum) + max`, one thread per query, DEVIATION 603 first."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(n_query_in):
+        return
+    var n_train = Int(n_train_in)
+    var mx = rowmax.unsafe_load(i)
+    if mx == bitcast[DType.float32](UInt32(0xFF800000)):
+        lse.unsafe_store(i, mx)
+        return
+    var base = i * n_train
+    var s = Float32(0.0)
+    for j in range(n_train):
+        s = ftz(s + terms.unsafe_load(base + j))
+    lse.unsafe_store(i, ftz(identical_log(s) + mx))
+
+
+def kde_score_samples_tiled_identical(
+    ctx: DeviceContext,
+    mut train: DeviceBuffer[DType.float32],
+    mut query: DeviceBuffer[DType.float32],
+    mut weights: DeviceBuffer[DType.float32],
+    has_weights: Bool,
+    sum_weights: Float32,
+    n_train: Int,
+    n_query: Int,
+    n_features: Int,
+    bandwidth: Float32,
+    kernel: Int,
+    metric: Int,
+    mut scores: DeviceBuffer[DType.float32],
+    elem_tpb: Int = KDE_ELEM_TPB,
+    lse_tpb: Int = KDE_LSE_TPB,
+    q_tpb: Int = KDE_TILED_Q_TPB,
+    chunk_rows_in: Int = KDE_TILED_CHUNK_ROWS,
+) raises:
+    """DEVIATION 2625's host side: log-weights (if any), the tiled
+    log-kernel matrix, the row max, the terms, the serial sum, the staged
+    normalization. Five or six launches, one drain. `q_tpb` and
+    `chunk_rows_in` are scheduling, here so the gate can vary them."""
+    if n_query <= 0 or n_train <= 0 or n_features <= 0:
+        raise Error(
+            "kde: n_query, n_train and n_features must be positive, got "
+            + String(n_query) + ", " + String(n_train) + ", " + String(n_features)
+        )
+    if (
+        metric != DIST_L2_SQRT_UNEXPANDED
+        and metric != DIST_L1
+        and metric != DIST_LINF
+    ):
+        raise Error(
+            "kde: the tiled pass (DEVIATION 2625) takes euclidean, l1 or"
+            " chebyshev; metric value " + String(metric)
+        )
+    if elem_tpb <= 0 or lse_tpb <= 0 or q_tpb <= 0 or chunk_rows_in <= 0:
+        raise Error("kde: block widths and the chunk length must be positive")
+    if q_tpb > KDE_TILED_TILE_FLOATS:
+        raise Error("kde: q_tpb must not exceed the tile (" + String(KDE_TILED_TILE_FLOATS) + ")")
+    validate_metric_arg(metric, Float32(2.0))
+    # Grid y stays inside every vendor's 65,535 limit.
+    var chunk_rows = chunk_rows_in
+    var min_rows = (n_train + 32767) // 32768
+    if chunk_rows < min_rows:
+        chunk_rows = min_rows
+    var n_chunks = (n_train + chunk_rows - 1) // chunk_rows
+    var cells = n_query * n_train
+
+    var logw: DeviceBuffer[DType.float32]
+    if has_weights:
+        logw = ctx.enqueue_create_buffer[DType.float32](n_train)
+        ctx.enqueue_function[log_weights_kernel](
+            logw.unsafe_ptr(),
+            weights.unsafe_ptr(),
+            Int32(n_train),
+            grid_dim=((n_train + elem_tpb - 1) // elem_tpb, 1, 1),
+            block_dim=(elem_tpb, 1, 1),
+        )
+    else:
+        logw = ctx.enqueue_create_buffer[DType.float32](1)
+    var logk = ctx.enqueue_create_buffer[DType.float32](cells)
+    var part = ctx.enqueue_create_buffer[DType.float32](n_query * n_chunks)
+    var rowmax = ctx.enqueue_create_buffer[DType.float32](n_query)
+    var lse = ctx.enqueue_create_buffer[DType.float32](n_query)
+    ctx.enqueue_function[kde_tiled_logk_kernel](
+        logk.unsafe_ptr(),
+        part.unsafe_ptr(),
+        query.unsafe_ptr(),
+        train.unsafe_ptr(),
+        logw.unsafe_ptr(),
+        Int32(n_query),
+        Int32(n_train),
+        Int32(n_features),
+        Int32(n_chunks),
+        Int32(chunk_rows),
+        Int32(1 if has_weights else 0),
+        bandwidth,
+        Int32(kernel),
+        Int32(metric),
+        grid_dim=((n_query + q_tpb - 1) // q_tpb, n_chunks, 1),
+        block_dim=(q_tpb, 1, 1),
+    )
+    ctx.enqueue_function[kde_rowmax_reduce_kernel](
+        rowmax.unsafe_ptr(),
+        part.unsafe_ptr(),
+        Int32(n_query),
+        Int32(n_chunks),
+        grid_dim=((n_query + lse_tpb - 1) // lse_tpb, 1, 1),
+        block_dim=(lse_tpb, 1, 1),
+    )
+    ctx.enqueue_function[kde_lse_terms_kernel](
+        logk.unsafe_ptr(),
+        rowmax.unsafe_ptr(),
+        Int32(n_query),
+        Int32(n_train),
+        grid_dim=((cells + elem_tpb - 1) // elem_tpb, 1, 1),
+        block_dim=(elem_tpb, 1, 1),
+    )
+    ctx.enqueue_function[kde_lse_serial_sum_kernel](
+        logk.unsafe_ptr(),
+        rowmax.unsafe_ptr(),
+        lse.unsafe_ptr(),
+        Int32(n_query),
+        Int32(n_train),
+        grid_dim=((n_query + lse_tpb - 1) // lse_tpb, 1, 1),
+        block_dim=(lse_tpb, 1, 1),
+    )
+    var log_sw = ftz(identical_log(sum_weights))
+    var norm = log_kernel_norm(kernel, bandwidth, n_features)
+    ctx.enqueue_function[normalize_scores_kernel](
+        scores.unsafe_ptr(),
+        lse.unsafe_ptr(),
+        Int32(n_query),
+        log_sw,
+        norm,
+        grid_dim=((n_query + elem_tpb - 1) // elem_tpb, 1, 1),
+        block_dim=(elem_tpb, 1, 1),
+    )
+    ctx.synchronize()
+    _ = logk^
+    _ = part^
+    _ = rowmax^
+    _ = lse^
+    _ = logw^
+
+
 def kde_score_samples_device(
     ctx: DeviceContext,
     mut train: DeviceBuffer[DType.float32],
@@ -1506,6 +2021,7 @@ def kde_score_samples_device(
     elem_tpb: Int = KDE_ELEM_TPB,
     lse_tpb: Int = KDE_LSE_TPB,
     metric_arg: Float32 = Float32(2.0),
+    staged_only: Bool = False,
 ) raises:
     """`score_samples` (`:264-363`), stage by stage, with the card.
 
@@ -1514,14 +2030,25 @@ def kde_score_samples_device(
     computed by the caller (`host_sum_weights`). `scores` holds `n_query`
     float32 log-densities on return. `elem_tpb` / `lse_tpb` are scheduling
     widths (see the `KDE_*_TPB` note), here so the gates can vary them.
+    `staged_only` forces the staged path (the gates' reference for the
+    fused FAST pass and the tiled IDENTICAL pass).
     """
     if n_query <= 0:
         raise Error("kde: X must have at least one row (n_query)")
     if elem_tpb <= 0 or lse_tpb <= 0:
         raise Error("kde: block widths must be positive")
+    # DEVIATION 2625: IDENTICAL with no trace recording takes the tiled
+    # pass for the three unexpanded metrics; the same bits as below.
+    if (not staged_only) and kde_identical_tiled_applies(metric, trace.enabled):
+        kde_score_samples_tiled_identical(
+            ctx, train, query, weights, has_weights, sum_weights,
+            n_train, n_query, n_features, bandwidth, kernel, metric, scores,
+            elem_tpb, lse_tpb,
+        )
+        return
     # DEVIATION 2490: FAST with no trace recording takes the fused pass.
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST:
-        if not trace.enabled and n_features <= KDE_FUSED_TILE_FLOATS:
+        if (not staged_only) and not trace.enabled and n_features <= KDE_FUSED_TILE_FLOATS:
             _kde_score_samples_fused(
                 ctx, train, query, weights, has_weights, sum_weights,
                 n_train, n_query, n_features, bandwidth, kernel, metric,
