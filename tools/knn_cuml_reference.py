@@ -11,19 +11,25 @@ Two warmups, `--rounds` timed rounds, medians. With `--ours-dump DIR` the
 UInt32 neighbour lists `bench/knn_reference_price_main.mojo` wrote there
 are compared row by row (as sets, and as ordered lists).
 
-`--dataset higgs` (DEVIATION 2524; ENGINEERING_RULES.md section 9) prices
-the same opponent on the SECOND KIND, the real HIGGS prefix that
-`tools/knn_selection_gate.py`'s `higgs` fixture uses: the same
-`tools/knn_datasets.py::higgs_block` call, so the bytes are the gate's by
-construction (index = prefix rows [0, --index), queries = prefix rows
-[400,000, 400,000 + --queries), 28 raw float32 features, no shuffle, no
-scaling). The JSON names the dataset, the sha256 of the whole 404,000-row
-block and of the index and query parts, and the row ranges. That row is
-measured ONCE per (GPU, driver, cuML version, dataset) and cached in
-`bench/OPPONENT_REFERENCE.md`; later rounds run ours alone against it.
-`--dataset dyadic` (the default) is the unchanged behavior. A missing
-HIGGS.csv.gz is fetched (2.6 GB) before any timing, as its own untimed
-step, recorded under `environment.dataset_source`.
+`--dataset taxi` and `--dataset istella` (DEVIATION 2524; ENGINEERING_RULES.md
+section 9, rewritten 2026-09-11) price the same opponent on THE TWO REAL
+DATASETS every classical claim quotes: NYC taxi's 11 numeric columns
+(`TAXI_NUMERIC`, d = 11) and Istella-S's 220 features (d = 220), the same
+`tools/knn_datasets.py::real_block` call `tools/knn_selection_gate.py`'s
+`taxi` and `istella` fixtures make, so the bytes are the gate's by
+construction (index = rows [0, --index), queries = rows [400,000, 400,000 +
+--queries) of the trees harness's NumPy cache; float32, no shuffle, no
+scaling). The feature count comes from the data, so `--features` is
+ignored for them and recorded. The JSON names the dataset, the sha256 of
+the whole 404,000-row block and of the index and query parts, and the row
+ranges. Each row is measured ONCE per (GPU, driver, cuML version, dataset)
+and cached in `bench/OPPONENT_REFERENCE.md`; later rounds run ours alone
+against it. The caches are the ones `python tools/speed_gbdt_arm.py
+--download taxi|istella` builds; this tool never downloads, and a missing
+cache fails before any GPU work with that command in the message.
+`--dataset dyadic` (the default) is the unchanged generator. `--dataset
+higgs` is RETIRED (2026-09-11): the HIGGS prefix path stays so an old row
+can be re-derived, and a HIGGS ratio is never quoted as a result again.
 
 `--out` is a JSON file path, or a directory (an existing one, or a path
 without a `.json` suffix), in which case the file is
@@ -80,20 +86,30 @@ def nvidia_smi():
 
 def fixture_blocks(dataset, n_index, n_queries, d, data_root=None):
     """(xi, xq, record fields) for one shape. `dyadic` is the generator
-    (unchanged); `higgs` is the shared real prefix, whose feature count is
-    the data's (28), so `--features` is ignored for it and recorded."""
+    (unchanged); `taxi` and `istella` are the two real datasets through
+    the shared `real_block`, whose feature count is the data's (11 or
+    220), so `--features` is ignored for them and recorded; `higgs` is
+    the RETIRED real prefix (28), kept so an old row can be re-derived."""
     if dataset == "dyadic":
         xi = np.ascontiguousarray(coordinate_block(n_index, d, 0))
         xq = np.ascontiguousarray(coordinate_block(n_queries, d, 593))
         return xi, xq, {"fixture": "dyadic-v1", "dataset": "dyadic"}
-    if dataset == "higgs":
-        block = knn_datasets.higgs_block(n_index, n_queries, data_root=data_root)
+    if dataset in knn_datasets.REAL_DATASETS or dataset == "higgs":
+        if dataset == "higgs":
+            block = knn_datasets.higgs_block(n_index, n_queries, data_root=data_root)
+            note = "RETIRED dataset (2026-09-11): HIGGS prefix, 28 raw float32 features; re-derivation of an old row only, never a result"
+        else:
+            block = knn_datasets.real_block(dataset, n_index, n_queries, data_root=data_root)
+            note = ("REAL data, one of the two datasets (ENGINEERING_RULES.md section 9): %s, %d raw float32 features from the trees harness's cache, "
+                    "no shuffle, no scaling, no deduplication; the same bytes tools/knn_selection_gate.py's %s fixture measures"
+                    % (block["fixture"], block["d"], dataset))
         fields = {
-            "fixture": block["fixture"], "dataset": "higgs",
+            "fixture": block["fixture"], "dataset": dataset,
             "index_rows": block["index_rows"], "query_rows": block["query_rows"],
             "sha256_block": block["sha256_block"], "sha256_index": block["sha256_index"],
             "sha256_queries": block["sha256_queries"],
-            "note_dataset": "REAL data, the second kind (DEVIATION 2524): HIGGS prefix, 28 raw float32 features, no shuffle, no scaling, no deduplication; the same bytes tools/knn_selection_gate.py's higgs fixture measures",
+            "features_flag_ignored": d,
+            "note_dataset": note,
         }
         return block["index"], block["queries"], fields
     raise ValueError("unknown dataset %r" % (dataset,))
@@ -184,8 +200,8 @@ def main():
     ap.add_argument("--features", type=int, default=32)
     ap.add_argument("--rounds", type=int, default=7)
     ap.add_argument("--ours-dump", default="")
-    ap.add_argument("--dataset", choices=("dyadic", "higgs"), default="dyadic", help="dyadic: the dyadic-v1 generator (unchanged default); higgs: the real HIGGS prefix shared with tools/knn_selection_gate.py (DEVIATION 2524; --index <= 400000, --queries <= 4000, features fixed at 28)")
-    ap.add_argument("--data-root", default=None, help="higgs only: where HIGGS lives (default GBM_BENCH_DATA or ~/datasets/gbm-bench)")
+    ap.add_argument("--dataset", choices=("dyadic", "taxi", "istella", "higgs"), default="dyadic", help="dyadic: the dyadic-v1 generator (unchanged default); taxi | istella: the two real datasets shared with tools/knn_selection_gate.py through tools/knn_datasets.py::real_block (ENGINEERING_RULES.md section 9; --index <= 400000, --queries <= 4000, features from the data: 11 or 220; the trees harness's cache must exist, this tool never downloads); higgs: RETIRED 2026-09-11, kept to re-derive an old row only")
+    ap.add_argument("--data-root", default=None, help="taxi/istella/higgs: the dataset store (default GBM_BENCH_DATA or ~/datasets/gbm-bench, the trees harness's)")
     ap.add_argument("--out", required=True, help="JSON file, or a directory (then <out>/cuml-reference-<dataset>.json)")
     args = ap.parse_args()
 
@@ -195,14 +211,27 @@ def main():
         out_path = os.path.join(out_path, "cuml-reference-%s.json" % args.dataset)
 
     dataset_source = None
-    if args.dataset == "higgs":
-        # The fetch and the decode happen here, ONCE, before any GPU work
-        # or timing; they are recorded, never timed as part of a request.
+    if args.dataset in knn_datasets.REAL_DATASETS:
+        # The cache check and the prefix read happen here, ONCE, before any
+        # GPU work or timing; a missing cache fails here with the
+        # `--download` command, never after cuML is up. Recorded, never
+        # timed as part of a request.
+        t0 = time.perf_counter()
+        _x, dataset_source = knn_datasets.load_real_prefix(args.dataset, args.data_root)
+        dataset_source = dict(dataset_source)
+        dataset_source["prefetch_seconds"] = time.perf_counter() - t0
+        dataset_source["index_row_range_rule"] = "index = cache rows [0, --index); queries = cache rows [400000, 400000 + --queries)"
+        dataset_source["features_flag_ignored"] = args.features
+        del _x
+    elif args.dataset == "higgs":
+        # RETIRED (2026-09-11): kept so an old HIGGS row can be re-derived.
+        # The fetch and the decode happen here, ONCE, before any GPU work.
         t0 = time.perf_counter()
         _x, _y, dataset_source = knn_datasets.load_higgs_prefix(args.data_root)
         dataset_source = dict(dataset_source)
         dataset_source["prefetch_seconds"] = time.perf_counter() - t0
         dataset_source["index_row_range_rule"] = "index = prefix rows [0, --index); queries = prefix rows [400000, 400000 + --queries)"
+        dataset_source["retired"] = "HIGGS is retired as a benchmark dataset (ENGINEERING_RULES.md section 9, 2026-09-11); this row is a re-derivation, not a result"
         del _x, _y
 
     import cupy as cp
