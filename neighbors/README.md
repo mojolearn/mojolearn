@@ -37,6 +37,26 @@ across the four flag combinations and named GPUs. See the
 dispatch coverage and scoped timing evidence. These correctness checks do
 not establish that either optimization is faster for every workload/device.
 
+DEVIATION 2629 (2026-09-11, lane/knn-speed): the exact-chain admission. The
+transposed register-tile distance (`checks/pinned_distance_tile.mojo`) flushes
+every FMA step to zero when subnormal. One launch per matrix per request now
+records each row's minimum nonzero and maximum biased exponent, with
+nonfinite rows marked. A tile whose rows and columns give a minimum sum of at
+least 174 and a maximum sum plus ceil(log2 d) of at most 376 cannot produce a
+subnormal or an overflow anywhere in its chains, so it runs the same rounded
+FMA chain without the flush; every other tile keeps the flushed chain. The
+bits are equal by the proof written above `vector_exponent_admission_kernel`.
+Measured NEUTRAL on the H100 on 2026-09-11 (400k x 4k x d32, three
+interleaved pairs): request k10 23.65 to 23.85 ms and k15 26.24 to 26.19 ms,
+distance class 15.31 to 15.41 ms, every dumped distance and index equal to
+origin/main, sabotage reached. So kernel-matrix row
+`knn_distance_exact_chain_for` is OFF on every column and the path is opt-in
+through `-D MOJOLEARN_EXPERIMENTAL_KNN_EXACT_CHAIN=1`;
+`-D MOJOLEARN_KNN_IDENTICAL_FLUSHED_CHAIN=1` forces the flushed chain and
+`-D MOJOLEARN_KNN_EXACT_CHAIN_SABOTAGE=1` (never shipped) perturbs each
+admitted step so a reached path cannot return clean bits. Evidence:
+`bench/results/knn_speed_2026-09-11/`.
+
 At frozen source `6dd44ac5`, AMD MI325X and NVIDIA RTX 4090 pass all four
 arms and match every one of those 5,440 records. The driver explicitly scopes
 its device context and synchronizes host allocation before pointer writes;

@@ -1105,3 +1105,13 @@ def knn_distance_rows_for[column: Int, identical: Bool]() -> Int:
     comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_ROWS4"]():
         return 4
     return 8 if identical and column == COLUMN_NVIDIA else 4
+
+
+@always_inline
+def knn_distance_exact_chain_for[column: Int, identical: Bool]() -> Bool:
+    """SCHEDULING row (DEVIATION 2629, 2026-09-11, lane/knn-speed): whether the transposed IDENTICAL register-tile distance admits a tile to the UNFLUSHED chain (`pinned_distance_tile.mojo::_rt_step_exact`) when request-local exponent metadata proves every product and every partial sum of every cell in the tile is zero or at least the smallest normal (minimum biased exponent sum >= 174, maximum sum plus ceil(log2 d) <= 376, no nonfinite input). Under that proof the per-step flush never sees a subnormal, so dropping it moves no bit; a tile that fails admission keeps the flushed chain. Kernel code is the same on every column; this row only decides where the admission runs. MEASURED NEUTRAL on the H100 2026-09-11 (pod 62dlwtf4amlt2s, 400k x 4k x d32, three interleaved before/after pairs of 7 rounds): request k10 23.65 -> 23.85 ms, k15 26.24 -> 26.19 ms, distance class 15.31 -> 15.41 ms; full distance and index dumps equal to origin/main, sabotage flips them. The flush is not what the distance class pays for, so the row is OFF on every column and stays opt-in: `-D MOJOLEARN_EXPERIMENTAL_KNN_EXACT_CHAIN=1` admits on every column; `-D MOJOLEARN_KNN_IDENTICAL_FLUSHED_CHAIN=1` forces the flushed chain."""
+    comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_FLUSHED_CHAIN"]():
+        return False
+    comptime if is_defined["MOJOLEARN_EXPERIMENTAL_KNN_EXACT_CHAIN"]():
+        return identical
+    return False

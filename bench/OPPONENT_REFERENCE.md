@@ -1447,3 +1447,21 @@ by 1 percent or less for ours pca, knn, kde and svc, 10 percent for ours ols
 span 168 to 621 ms). It was reaped at 16:57Z, before this pod's first race
 at 17:00Z. Both pods were verified gone (HTTP 404). This pod's gemm device card
 matched the Apple card at all 60 stages.
+
+### kNN on taxi and Istella-S against cuML, same pod (September 11, knn-speed lane, pod 62dlwtf4amlt2s)
+
+H100 80GB HBM3, driver 580.159.04, cuML 26.8.0 (pypi.nvidia.com), source
+origin/main 36ca51fd. Ours IDENTICAL through the public `NearestNeighbors`
+(host in, host out, upload inside the clock); cuML brute NearestNeighbors
+with cupy inputs uploaded before the clock (`tools/classical_two_datasets.py
+race --lane knn`, 1 warm-up plus 5 interleaved rounds). Index rows
+[0, 400,000), queries [400,000, 404,000), k 10, raw columns (Istella's
+float32-max sentinel set to 0.0). Evidence:
+`bench/results/knn_speed_2026-09-11/`.
+
+| lane | dataset | opponent | ms | quality | ours IDENTICAL ms | quality | ours / opponent |
+|---|---|---|---:|---|---:|---|---:|
+| knn | taxi | cuML NearestNeighbors brute | 8.19 (8.17..8.60) | recall@10 0.99925 | 24.79 (24.41..25.25) | recall@10 0.99915 | 3.03x |
+| knn | Istella-S | cuML NearestNeighbors brute | 51.11 (median of 4 races, 50.51..52.13) | recall@10 0.92205 | 124.71 (median of 2 races, 119.93..128.71) | recall@10 0.923025 | 2.44x |
+| knn | dyadic-v1 400k x 4k x d32, k10 | cuML NearestNeighbors brute (`tools/knn_cuml_reference.py`, request) | 10.05 | 4000 of 4000 rows ordered-equal | 23.66 | same | 2.36x |
+| knn | dyadic-v1, k15 | same | 10.22 | 4000 of 4000 rows ordered-equal | 26.21 | same | 2.57x |

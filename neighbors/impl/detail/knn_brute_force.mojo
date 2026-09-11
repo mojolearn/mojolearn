@@ -102,9 +102,21 @@ from neighbors.checks.pinned_distance_tile import (
     RT_TILE_COLS,
     RT_TPB,
     pinned_distance_register_tile_kernel,
+    vector_exponent_admission_kernel,
     vector_exponent_minimum_kernel,
     pinned_distance_tile_kernel,
 )
+from checks.kernel_matrix import knn_distance_exact_chain_for
+
+# DEVIATION 2629 (kernel-matrix row `knn_distance_exact_chain_for`): the
+# transposed register-tile distance admits tiles whose request-local exponent
+# metadata proves the per-step flush is the identity to the unflushed chain.
+# OPT-IN ONLY (`-D MOJOLEARN_EXPERIMENTAL_KNN_EXACT_CHAIN=1`): measured neutral
+# on the H100 2026-09-11 with every output bit equal, so the row is off and
+# this build folds to the pre-2629 path.
+comptime KNN_EXACT_CHAIN = knn_distance_exact_chain_for[
+    TARGET_COLUMN, GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+]()
 from neighbors.checks.select_radix_identical import (
     radix_topk_identical_kernel,
     IDENTICAL_MAX_K,
@@ -569,14 +581,31 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
     var use_metadata = KNN_PREFLIGHT_METADATA
     comptime if KNN_PREFLIGHT_METADATA_DEFAULT:
         use_metadata = use_metadata or (use_transposed_index and KNN_REGISTER_TILE_IDENTICAL and not use_vendor_topk and mtr == DIST_L2_SQRT_EXPANDED and n_index == 400000 and n_queries == 4000 and n_features == 32 and (k == 10 or k == 15))
-    var metadata_cells = n_queries + n_index if use_metadata else 0
+    # DEVIATION 2629 (kernel-matrix row `knn_distance_exact_chain_for`): the
+    # admission metadata rides in the same request-local scratch slot the
+    # Apple minima use; the two never run in one request.
+    var use_exact = False
+    comptime if KNN_EXACT_CHAIN:
+        use_exact = use_transposed_index and KNN_REGISTER_TILE_IDENTICAL and not use_vendor_topk and not use_metadata and (mtr == DIST_L2_SQRT_EXPANDED or mtr == DIST_L2_EXPANDED)
+    var meta_on = use_metadata or use_exact
+    var metadata_cells = n_queries + n_index if meta_on else 0
     var part_dist = ctx.enqueue_create_buffer[DType.float32](part_cells + metadata_cells)
     var part_idx = ctx.enqueue_create_buffer[DType.uint32](part_cells)
 
     # Metadata is rebuilt for every request, including in-place input mutations.
     # The existing scratch allocation owns metadata until final synchronize.
-    var q_minima = part_dist.unsafe_ptr().unsafe_offset(part_cells if use_metadata else 0).unsafe_origin_cast[MutAnyOrigin]()
-    var y_minima = part_dist.unsafe_ptr().unsafe_offset(part_cells + n_queries if use_metadata else 0).unsafe_origin_cast[MutAnyOrigin]()
+    var q_minima = part_dist.unsafe_ptr().unsafe_offset(part_cells if meta_on else 0).unsafe_origin_cast[MutAnyOrigin]()
+    var y_minima = part_dist.unsafe_ptr().unsafe_offset(part_cells + n_queries if meta_on else 0).unsafe_origin_cast[MutAnyOrigin]()
+    comptime if KNN_EXACT_CHAIN:
+        if use_exact:
+            ctx.enqueue_function[vector_exponent_admission_kernel](
+                queries.unsafe_ptr(), q_minima, Int32(n_queries), Int32(n_features),
+                grid_dim=((n_queries + 127) // 128, 1, 1), block_dim=(128, 1, 1),
+            )
+            ctx.enqueue_function[vector_exponent_admission_kernel](
+                index.unsafe_ptr(), y_minima, Int32(n_index), Int32(n_features),
+                grid_dim=((n_index + 127) // 128, 1, 1), block_dim=(128, 1, 1),
+            )
     comptime if KNN_PREFLIGHT_METADATA or KNN_PREFLIGHT_METADATA_DEFAULT:
         if use_metadata:
             ctx.enqueue_function[vector_exponent_minimum_kernel](
@@ -758,7 +787,52 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
                                     # DeviceBuffer base is aligned. Full stride and sub-buffer
                                     # offset must preserve 16-byte alignment; complete groups
                                     # prevent a clamped final column from being over-read.
-                                    if use_vector and n_index % 4 == 0 and c % 4 == 0 and cols % 4 == 0:
+                                    var exact_launched = False
+                                    comptime if KNN_EXACT_CHAIN:
+                                        # DEVIATION 2629: admitted tiles skip the
+                                        # per-step flush; q_minima / y_minima hold
+                                        # the admission metadata here.
+                                        if use_exact:
+                                            if use_vector and n_index % 4 == 0 and c % 4 == 0 and cols % 4 == 0:
+                                                ctx.enqueue_function[pinned_distance_register_tile_kernel[False, True, True]](
+                                                    dist_tile.unsafe_ptr(),
+                                                    queries.unsafe_ptr().unsafe_offset(q * n_features),
+                                                    transposed_index.value().unsafe_offset(c),
+                                                    query_norm.unsafe_ptr().unsafe_offset(q),
+                                                    index_norm.unsafe_ptr().unsafe_offset(c),
+                                                    q_minima.unsafe_offset(q),
+                                                    y_minima.unsafe_offset(c),
+                                                    Int32(rows), Int32(cols), Int32(n_index),
+                                                    Int32(n_features), is_sqrt_arg,
+                                                    grid_dim=(
+                                                        (cols + RT_TILE_COLS - 1) // RT_TILE_COLS,
+                                                        (rows + RT_ROWS - 1) // RT_ROWS,
+                                                        1,
+                                                    ),
+                                                    block_dim=(RT_TPB, 1, 1),
+                                                )
+                                            else:
+                                                ctx.enqueue_function[pinned_distance_register_tile_kernel[False, False, True]](
+                                                    dist_tile.unsafe_ptr(),
+                                                    queries.unsafe_ptr().unsafe_offset(q * n_features),
+                                                    transposed_index.value().unsafe_offset(c),
+                                                    query_norm.unsafe_ptr().unsafe_offset(q),
+                                                    index_norm.unsafe_ptr().unsafe_offset(c),
+                                                    q_minima.unsafe_offset(q),
+                                                    y_minima.unsafe_offset(c),
+                                                    Int32(rows), Int32(cols), Int32(n_index),
+                                                    Int32(n_features), is_sqrt_arg,
+                                                    grid_dim=(
+                                                        (cols + RT_TILE_COLS - 1) // RT_TILE_COLS,
+                                                        (rows + RT_ROWS - 1) // RT_ROWS,
+                                                        1,
+                                                    ),
+                                                    block_dim=(RT_TPB, 1, 1),
+                                                )
+                                            exact_launched = True
+                                    if exact_launched:
+                                        pass
+                                    elif use_vector and n_index % 4 == 0 and c % 4 == 0 and cols % 4 == 0:
                                         ctx.enqueue_function[pinned_distance_register_tile_kernel[False, True]](
                                             dist_tile.unsafe_ptr(),
                                             queries.unsafe_ptr().unsafe_offset(q * n_features),
