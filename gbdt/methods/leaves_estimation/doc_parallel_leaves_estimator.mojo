@@ -55,9 +55,19 @@ from gbdt.gpu_util.kernel.fill import launch_make_sequence
 from gbdt.gpu_util.kernel.radix_sort import launch_radix_sort_bins
 from gbdt.gpu_util.kernel.reorder_one_bit import REORDER_BLOCK
 
-comptime DEVICE_LEAF_PARTITION = is_defined["MOJOLEARN_2551_DEVICE_PARTITION"]()
-"""DEVIATION 2551 (2026-09-11), OPT-IN with
-`-D MOJOLEARN_2551_DEVICE_PARTITION=1`. `partition_from_bins` below
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+
+comptime DEVICE_LEAF_PARTITION = is_defined["MOJOLEARN_2551_DEVICE_PARTITION"]() or (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not is_defined["MOJOLEARN_2551_DEVICE_PARTITION_OFF"]()
+)
+"""DEVIATION 2551 (2026-09-11). DEFAULT ON UNDER IDENTICAL since
+2026-09-11 (DigitalOcean MI325X, taxi and Istella-S on one box, combined
+over depthwise and lossguide: FLIP geomean=0.898 cells=4 quality=ok);
+`-D MOJOLEARN_2551_DEVICE_PARTITION_OFF=1` restores the host partition.
+FAST stays OPT-IN (`-D MOJOLEARN_2551_DEVICE_PARTITION=1`): its verdict
+read NO FLIP on a taxi quality flag that is FAST's own round-to-round fit
+variation, left to the orchestrator. `partition_from_bins` below
 (DEVIATION 90) reads every row's leaf back to the host, counting-sorts
 1M rows there on two passes, allocates two n_rows pinned buffers and one
 device buffer, and uploads the row order again: once per tree per
@@ -71,9 +81,10 @@ back `2 * n_leaves + 1` words. A stable sort from ascending row ids leaves
 every leaf's rows ascending, which is exactly the host counting sort's
 output, so `row_index`, `offsets` and `sizes` are the same integers and
 the model is bitwise the default's. The buffers are the fit's pool of one.
-Checks: `pixi run check-gbdt-per-round` compares the two partitions
-directly on every build; `check-gbdt-per-round-2551` runs the fits on the
-switched side."""
+Checks: every build compares the two partitions directly (claim 1 of
+`checks/gbdt_per_round_check.mojo`); `pixi run check-gbdt-per-round` runs
+the fits on the ON side and `check-gbdt-per-round-2551-host-partition` on
+the OFF side."""
 from gbdt.models.kernel.add_bin_values import compute_bins_kernel
 from gbdt.models.oblivious_model import BIN_SPLIT_TAKE_BIN, TBinarySplit
 
