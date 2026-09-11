@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Forward-only device logits for the byte LM (DEVIATION 2660).
+"""Forward-only device logits for the byte LM (DEVIATION 2658).
 
 THE TRAINING FORWARD'S KERNELS, AT ANY SHAPE. `training/byte_lm.mojo::
 _byte_forward_loss` launches `identical_embedding_forward_into`, one

@@ -1065,7 +1065,7 @@ def byte_lm_session_run_binding(session: PythonObject, addresses: PythonObject,
 
 
 # ---------------------------------------------------------------------------
-# DEVIATION 2660: forward-only logits (training/byte_lm_logits.mojo).
+# DEVIATION 2658: forward-only logits (training/byte_lm_logits.mojo).
 # ---------------------------------------------------------------------------
 
 
@@ -1206,7 +1206,7 @@ def PyInit__mojolearn_byte_lm() abi("C") -> PythonObject:
         module.def_function[byte_lm_session_eval_binding]("byte_lm_session_eval")
         module.def_function[byte_lm_session_export_state_binding]("byte_lm_session_export_state")
         module.def_function[byte_lm_session_export_gradients_binding]("byte_lm_session_export_gradients")
-        # DEVIATION 2660: forward-only logits.
+        # DEVIATION 2658: forward-only logits.
         module.def_function[byte_lm_logits_binding]("byte_lm_logits")
         module.def_function[byte_lm_session_logits_binding]("byte_lm_session_logits")
         module.def_function[byte_lm_session_rollback_binding]("byte_lm_session_rollback")

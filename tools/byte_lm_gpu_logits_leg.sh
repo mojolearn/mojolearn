@@ -1,5 +1,5 @@
 #!/bin/sh
-# tools/byte_lm_gpu_logits_leg.sh -- DEVIATION 2660: the byte LM's GPU logits
+# tools/byte_lm_gpu_logits_leg.sh -- DEVIATION 2658: the byte LM's GPU logits
 # against the CPU reference path, byte for byte, on a rented GPU. A
 # vendor-agnostic body that runs ON THE BOX from /root/mojolearn with pixi on
 # PATH; everything under /root/gemm_leg_out/gpu-logits/ comes home with the

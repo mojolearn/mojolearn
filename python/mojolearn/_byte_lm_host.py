@@ -103,7 +103,7 @@ def _logits_ids(ids, shape):
     """`(tokens, copied)` for a logits call, int32 ids `[batch, length]` with
     `batch >= 1`, `1 <= length <= shape.length` and every id a byte value,
     refused with ValueError otherwise. Shared with the trainer's GPU logits
-    (DEVIATION 2660) so both surfaces admit the same ids."""
+    (DEVIATION 2658) so both surfaces admit the same ids."""
     tokens, copied = as_i32_c(ids, ndim=2, name='ids')
     batch, length = tokens.shape
     if batch <= 0 or not 0 < length <= shape.length:
@@ -116,7 +116,7 @@ def _greedy_next_bytes(logits):
     """The greedy next byte after each row of float32 logits
     `[batch, length, vocab]`, read at the last position; ties go to the
     lowest byte value. Shared with the trainer's GPU logits (DEVIATION
-    2660), so equal logits bytes pick equal bytes."""
+    2658), so equal logits bytes pick equal bytes."""
     batch, length, vocab = logits.shape
     flat = flat_view(logits, 'f')
     result = []

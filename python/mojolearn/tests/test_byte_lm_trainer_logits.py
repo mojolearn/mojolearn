@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Host plumbing for the trainer's GPU logits (DEVIATION 2660).
+"""Host plumbing for the trainer's GPU logits (DEVIATION 2658).
 
 The fake binding of test_byte_lm_surface stands in for `_mojolearn_byte_lm`,
 so these tests prove wiring, refusals and state invariance, never

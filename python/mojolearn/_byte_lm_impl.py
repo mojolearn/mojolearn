@@ -28,7 +28,7 @@ upload), at export (`export_state`, `export_gradients`, `export_checkpoint`,
 flags out. The stateless path (`resident=False`) is unchanged: mirror in,
 mirror out, validated candidate committed or nothing.
 
-GPU LOGITS (DEVIATION 2660). `logits(ids)` and `next_bytes(ids)` run the
+GPU LOGITS (DEVIATION 2658). `logits(ids)` and `next_bytes(ids)` run the
 forward alone, through the native `byte_lm_logits` (stateless) and
 `byte_lm_session_logits` (resident) entries, and return the numbers the
 trainer's loss is computed from. They write no state on either path.
@@ -75,7 +75,7 @@ _SESSION_ENTRIES = ('byte_lm_session_create', 'byte_lm_session_close',
                     'byte_lm_session_eval', 'byte_lm_session_export_state',
                     'byte_lm_session_export_gradients', 'byte_lm_session_rollback',
                     'byte_lm_session_info')
-#: DEVIATION 2660 names the native logits entries and the limits they
+#: DEVIATION 2658 names the native logits entries and the limits they
 #: admit; `logits` refuses anything outside the limits here first.
 _LOGITS_ENTRY = 'byte_lm_logits'
 _SESSION_LOGITS_ENTRY = 'byte_lm_session_logits'
@@ -355,7 +355,7 @@ def _binding_metadata(binding):
 
 
 def _gpu_logits_ids(ids, shape):
-    """`(tokens, batch, length)` for `logits` (DEVIATION 2660). The CPU
+    """`(tokens, batch, length)` for `logits` (DEVIATION 2658). The CPU
     class's admission (`_byte_lm_host._logits_ids`) plus the native batch
     and cell limits, returned as an owned copy so the trainer never aliases
     caller memory. An empty 2-D buffer is refused by its reported shape
@@ -388,7 +388,7 @@ class SmallByteLanguageModelTrainer:
     array or the configured named tensors exposed by parameter_registry(shape). There
     is no hidden initialization, tokenizer, padding, truncation or RNG.
 
-    logits(ids)/next_bytes(ids) (DEVIATION 2660) run the same device forward
+    logits(ids)/next_bytes(ids) (DEVIATION 2658) run the same device forward
     alone on int32[batch, length] IDs and change no state; the logits are the
     numbers the loss is computed from, and next_bytes picks greedily with
     ties going to the lowest byte value.
@@ -876,7 +876,7 @@ class SmallByteLanguageModelTrainer:
 
     def logits(self, ids):
         """Float32 logits `[batch, length, vocab]` for int32 ids `[batch,
-        length]` (DEVIATION 2660), for positions 0 to length - 1 of each row,
+        length]` (DEVIATION 2658), for positions 0 to length - 1 of each row,
         prefilled from absolute position 0. `batch` must be in [1, 1024],
         `length` in [1, shape.length], `batch * length * vocab` at most
         268435456 and every id in [0, shape.vocab_size); anything else is
@@ -910,7 +910,7 @@ class SmallByteLanguageModelTrainer:
     def next_bytes(self, ids):
         """The greedy next byte after each row of ids `[batch, length]`, ties
         to the lowest byte value, picked from `logits(ids)` by the helper
-        `LanguageModelInference.next_bytes` uses (DEVIATION 2660)."""
+        `LanguageModelInference.next_bytes` uses (DEVIATION 2658)."""
         return _greedy_next_bytes(self.logits(ids))
 
     def _logits_stateless(self, tokens, batch, length, shape):

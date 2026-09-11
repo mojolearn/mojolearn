@@ -1,6 +1,6 @@
 # Byte LM logits on a GPU
 
-`LanguageModelTrainer.logits(ids)` and `next_bytes(ids)` (DEVIATION 2660) run
+`LanguageModelTrainer.logits(ids)` and `next_bytes(ids)` (DEVIATION 2658) run
 the model's forward pass on the GPU and return what it predicts, without
 training and without changing any state.
 
@@ -72,7 +72,7 @@ the CPU path sweep, recording each phase's exit code.
 |---|---|---|---|---|---|
 | AMD MI325X (HIP, gfx942), DigitalOcean | `--target-accelerator gfx942`, Mojo 1.0.0, commit `652b93fe` | PASS, 1680 of 1680 (768 resident logits, 96 stateless, 768 next_bytes, 48 loss bits) | yes: `6db55997`, `30a89281`, `b518e71e` | differs | `bench/results/e1g/2026-09-11_1800-amd-mi325x-do-gpu-logits` |
 | NVIDIA H100 80GB HBM3 (CUDA, sm_90a), DigitalOcean | `--target-accelerator sm_90a`, Mojo 1.0.0, commit `652b93fe` | PASS, 1680 of 1680, the same counts | yes: `6db55997`, `30a89281`, `b518e71e` | differs | `bench/results/e1g/2026-09-11_1806-nvidia-h100-do-gpu-logits` |
-| Apple M4 (Metal) | | OWED | | | |
+| Apple M4 (Metal) | OWED, never compiled | OWED | | | none |
 
 Each row also carries a CPU path sweep from its own box, 4752 of 4752 with the
 same digests: an AMD EPYC 9575F beside the MI325X, an Intel Xeon Platinum 8468
@@ -80,6 +80,23 @@ beside the H100.
 
 Until the Apple row is filled, this file supports two GPU vendors, AMD and
 NVIDIA. A measurement on one column is a result about that column only.
+
+The Apple row is owed because this code has never been compiled for Metal, not
+because a Metal run disagreed. On 2026-09-11 the M4 was carrying about 8 GiB of
+swap and `tools/macos_serial_guard.py` admits a build only at memory pressure
+level 1; a retry loop took 80 attempts, reached admission 10 times, and every
+attempt died before the compile finished, 8 on the guard's own limit of 256 MiB
+of compressed-memory growth and 2 on the build lock. Metal is a third backend,
+so nothing here should be read as covering it. What is owed is one compile of
+`bindings/_mojolearn_byte_lm.mojo` on an Apple GPU followed by
+`tools/byte_lm_gpu_logits_sweep.py`.
+
+This work was written as DEVIATION 2660 and renumbered to 2658 before it
+merged, because 2660 was already taken on `main` by
+`bindings/_mojolearn_estimators.mojo` and 2660 upward is where the trees and
+classical lanes are told to claim; 2640 to 2659 is the neural block. The AMD
+and NVIDIA evidence below was captured before the renumber and records 2660
+inside it. That evidence is left as it ran rather than rewritten.
 
 ## Scope
 

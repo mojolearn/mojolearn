@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Byte LM GPU logits: device forward against the CPU reference path, byte for byte (DEVIATION 2660).
+"""Byte LM GPU logits: device forward against the CPU reference path, byte for byte (DEVIATION 2658).
 
 `LanguageModelTrainer.logits` runs the IDENTICAL device forward the
 trainer's loss uses, on Metal, CUDA or HIP. For each selected parameter
@@ -46,7 +46,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CAPTURE = ROOT / 'bench/results/resume/2026-09-07-root-byte-lm-three-vendor/apple/full128'
-DEVIATION = 2660
+DEVIATION = 2658
 #: The defaults of tools/byte_lm_host_path_sweep.py and the reference logits
 #: SHA-256 it recorded at them. The loss batches are part of the key because
 #: their ids are drawn from the same stream between states.
