@@ -199,8 +199,27 @@ larger capacity. So the honest prior is a small effect, and the A/B decides it.
 
 ## Results: DEVIATION 2663
 
-Pending: batch C's builds, identity and A/B, batch D's verdict, and (only if a
-flip is on the table) batch F's two regression cells.
+### Identity first: the width moves no bit
+
+Each trial set is the `rowmajor` set with ONLY `_mojolearn_trees.so` rebuilt,
+and the three binaries differ, so the defines reached the compiler rather than
+producing one binary three times: `ctl` `ba521b20024795ca...`, `stats`
+`237c8956dd3bdd0d...`, `bw16k` `6421f3c105f11ef2...` (`bw32k` built too).
+
+`identity_break` rf-clf, rf-reg, et-clf, et-reg, iforest read 45 of 45 cells
+stable on `ctl`, on `bw16k` and on `bw32k`, and each set's diff against
+`rowmajor` carries 46 IDENTICAL rows with no DIVERGENT, MOVED or REFUSED. The
+ExtraTrees fingerprints are equal at every width (et-clf/base
+`c586b27a3b049614`, et-clf/wide `ee8b318d6bf698b2`, et-reg/base
+`754d8c127ecfc04d`, et-reg/wide `b745e53515f59cac`), which is what the
+scheduling-parameter argument predicted and what `device_batched_check`'s
+"max_batch_size=3 must not move a tree" already guarded. So 2663 is purely a
+speed question.
+
+### Speed
+
+Pending: batch C's A/B, batch D's verdict, and (only if a flip is on the table)
+batch F's two regression cells.
 
 Big logs are outside the repo in
 `~/mojolearn-evidence/forest-finish-2026-09-11/`.
