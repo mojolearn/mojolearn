@@ -1,0 +1,9 @@
+deviations=2640-2642
+brief=docs/lanes/BRIEF_gemm_final_2026-09-11.md
+started=2026-09-11T21:18:36Z
+root=/root/mojolearn
+arms=shipped,ksplit_leaf,kfoldv,kfoldv_leaf
+lm_arms=kfoldv,kfoldv_leaf
+lmtiming=1
+check_arms=shipped,kfoldv,kfoldv_leaf
+out=/root/gemm_leg_out/gemm-final

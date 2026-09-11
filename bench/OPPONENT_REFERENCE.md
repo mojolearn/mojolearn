@@ -527,6 +527,79 @@ from 94c82db8 plus that change (branch `lane/svc-cuda-1024`, 11928fec).
 Taxi was prepped for this race only. The scikit-learn KDE row on Istella-S
 in the MI300X section is still owed.
 
+### Classical KDE on NYC taxi against cuML (September 11, pod dn8er13wjuxtax)
+
+Pod `dn8er13wjuxtax` (`kde-speed-2026-09-11_203033`), NVIDIA H100 80GB
+HBM3, driver 580.126.09, the image above, cuML 26.08.00. Ours is IDENTICAL
+at commit 36ca51fd (staged path), the kde lane's shape and harness as in
+the Istella-S rows above (100,000 standardized taxi fit rows x 11 numeric
+columns, 2,000 queries, Scott bandwidth). 1 warm-up plus 5 interleaved
+rounds, ms median (min..max). Evidence
+`bench/results/kde_speed_h100_2026-09-11/`. Both arms held one digest.
+
+| lane | dataset | opponent | device | opponent ms | opponent quality | ours IDENTICAL ms | ours quality | ours / opponent |
+|---|---|---|---|---|---|---|---|---|
+| kde | taxi | cuML KernelDensity | GPU, H100 | 2.37 (2.19..9.20) | mean log-lik -9.58205 | 39.2 (35.8..40.4) | mean log-lik -9.58207 | 16.55x |
+
+### Classical KDE on both datasets, before and after DEVIATIONS 2625, 2626 and 2660 (September 11, pod ur95zh3h9qbx2p)
+
+Pod `ur95zh3h9qbx2p` (`kde-finish-2026-09-11_213144`), NVIDIA H100 80GB HBM3,
+driver 570.124.06, the image above, cuML 26.08.00 (cuml-cu12 26.8.0, cupy
+14.2.0), NumPy 2.4.6, scikit-learn 1.9.1 in the image's Python 3.11. Both of
+our arms and every gate ran with `MODULAR_NVPTX_COMPILER_PATH` at the CUDA
+12.9.86 wheel's `ptxas`, because MAX asks for driver 580 otherwise and this
+box has 570; the image's 12.4 `ptxas` refuses PTX `.version` 8.5. The kde
+lane's shape and harness as in the rows above, 100,000 standardized fit rows
+x 2,000 queries, gaussian kernel, euclidean metric, Scott bandwidth, 1
+warm-up plus 5 interleaved rounds, ms median (min..max). `ours-base` is
+`origin/main` 2c64a778 (the staged path) built on this same pod and raced
+round by round beside `ours` (lane `lane/kde-finish`), so it is OURS, never
+an opponent row. Evidence `bench/results/kde_finish_2026-09-11/`.
+
+| lane | dataset | opponent | device | opponent ms | opponent quality | ours IDENTICAL ms | ours quality | ours / opponent |
+|---|---|---|---|---|---|---|---|---|
+| kde | taxi | cuML KernelDensity | GPU, H100 | 2.02 (1.98..2.06) | mean log-lik -9.58205 | 28.94 (28.92..28.97) | mean log-lik -9.58207 | 14.30x |
+| kde | Istella-S | cuML KernelDensity | GPU, H100 | 6.95 (6.92..7.14) | mean log-lik -212.117 | 67.94 (67.46..68.79) | mean log-lik -212.117 | 9.78x |
+
+Ours before this lane, same pod, same window, same harness: taxi 35.69
+(35.64..35.99) ms, 17.64x; Istella-S 218.73 (217.91..221.95) ms, 31.49x. The
+after/before ratios are 0.811 and 0.311, geometric mean 0.502, and the score
+digests are equal between the two arms on both datasets (taxi
+aa8ac4159ad2cbfa, Istella-S 81d11ed7fcd9eb38), so the three deviations stay
+ON by default under ENGINEERING_RULES.md section 9. cuML held one digest per
+dataset as well (cdce01475f9e6977, 3f4541591da35fc6). The cuML taxi row is
+the first of the two races on this pod; in the second, cuML's taxi arm took
+a 22.1 ms round and read 3.56 ms median, against which ours reads 8.14x.
+## NVIDIA H200, driver 570.211.01, CUDA 12.8 (ptxas 12.9.86 override), cuml-cu12 26.8.0
+
+RunPod pod `4oih8bhjepzlmm` (`svm-finish-2026-09-11_213129`), image
+`runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04`, 96 vCPUs. THE HOST
+DRIVER IS BELOW MOJO'S CUDA FLOOR (it asks for 580 or newer, CUDA 13), so
+every run in this section exports `MODULAR_NVPTX_COMPILER_PATH` pointing at the
+pod's ptxas 12.9.86, which is Modular's documented older-driver path. The fits
+it produces hash equal to the H100 and MI300X rows (n=400/600/2000
+457e29b82bca9df9, 733a383c5699f427, 2b66bc991a9c9ed0), so the assembler moves
+no bits. H200 is its own tuple: these rows are never mixed with the H100 rows
+above.
+
+### SVC on taxi and Istella-S (September 11, svm-finish lane)
+
+1 warm-up plus 5 interleaved rounds through
+`tools/classical_two_datasets_leg.sh` with `MOJOLEARN_CTD_LANES=svc`, blocks of
+10,000 standardized fit rows and 10,000 eval rows, RBF, C 1, gamma 1/d, tol
+1e-3, quality computed by `tools/classical_two_datasets.py`. Ours is IDENTICAL
+at `lane/svm-finish` (DEVIATIONS 2665 and 2666). Evidence
+`bench/results/svm_finish_2026-09-11/`.
+
+| lane | dataset | opponent | device | opponent ms | opponent quality | ours IDENTICAL ms | ours quality | ours / opponent |
+|---|---|---|---|---|---|---|---|---|
+| svc | taxi | cuML SVC | GPU, H200 | 418.4 (417.9..418.9) | accuracy 0.7675, 5586 SV | 768.7 (767.9..769.5) | accuracy 0.7675, 5527 SV | 1.84x |
+| svc | Istella-S | cuML SVC | GPU, H200 | 20.29 (19.95..20.35) | accuracy 0.9222, 2401 SV | 61.3 (60.4..66.6) | accuracy 0.9222, 2400 SV | 3.02x |
+
+The same race carried a before arm, origin/main 2c64a778 built on this pod and
+raced in the same conductor: taxi 865.0 ms (2.07x) and Istella-S 72.2 ms
+(3.56x). Every arm held one digest across its five rounds.
+
 ## NVIDIA L40S, driver 580.126.09, CUDA 12.4, torch 2.4.1+cu124, cuBLAS 120402, cupy 14.2.0
 
 Trees, HIGGS 1M, 2026-09-09 trees lane, CatBoost GPU symmetric 1.2.10, same
@@ -1447,3 +1520,75 @@ by 1 percent or less for ours pca, knn, kde and svc, 10 percent for ours ols
 span 168 to 621 ms). It was reaped at 16:57Z, before this pod's first race
 at 17:00Z. Both pods were verified gone (HTTP 404). This pod's gemm device card
 matched the Apple card at all 60 stages.
+
+### Classical OLS, PCA and k-means on taxi against cuML (September 11, pod 22up9vbhj3tbeg, lane linear-cluster-speed)
+
+RunPod H100 80GB HBM3, driver 580.126.09, cuML 26.08 (cuml-cu12 26.8.0) in the
+same Python 3.11; ours IDENTICAL built on the pod (sm_90a) from main 36ca51fd.
+`tools/classical_two_datasets.py race`, 1 warm-up plus 5 interleaved rounds, ms
+median (min..max). Taxi 4,000,000 x 11; k-means k 64, 20 iterations, shared init,
+tol 1e-7 on both arms (cuVS refuses tol 0); cuML PCA `svd_solver='full'`, ours
+`covariance_eigh`; cuML OLS `algorithm='eig'`. Istella-S not measured (RUN OWED in
+`bench/results/linear_cluster_speed_2026-09-11/README.md`, with the stage
+breakdown and logs).
+
+| lane | dataset | opponent | opponent ms | opponent quality | ours IDENTICAL ms (36ca51fd) | ours quality | ours / opponent | ours with DEVIATIONS 2632, 2633 (lane branch) |
+|---|---|---|---|---|---|---|---|---|
+| ols | taxi | cuML LinearRegression eig | 23.12 (21.92..26.83) | R2 0.908836 | 263.5 (251.8..275.9) | R2 0.908837 | 11.40x | 177.8 (146.0..180.0), 7.60x of that race's cuML 23.39, same coefficient digest |
+| pca | taxi | cuML PCA full | 20.99 (20.08..21.73) | EVR sum 0.99786 | 28.69 (25.78..38.83) | EVR sum 0.997861 | 1.37x | unchanged |
+| kmeans | taxi | cuML KMeans | 128.2 (127.4..129.0) | inertia 1.20192e8, 20 iter | 304.0 (279.6..368.6) | inertia 1.20628e8 | 2.37x | 216.2 (196.2..222.7), 1.68x of that race's cuML 128.9, same centroid digest |
+
+cuML k-means returned a different centroid digest in every round; ours held one.
+
+Istella-S, measured by the orchestrator the same night on RunPod pod
+n03kul7dt759n0 (NVIDIA H200, driver 580.95.05; H100 stock was out, same sm_90a
+build), cuML 26.08, both trees built on that pod, the same harness, 1 warm-up plus
+5 interleaved rounds. Istella-S 2,043,304 x 220. Evidence
+`~/mojolearn-evidence/linear-cluster-speed-2026-09-11/pod2-h200-istella/`,
+summary `bench/results/linear_cluster_speed_2026-09-11/istella_h200_summary.tsv`.
+
+| lane | dataset | opponent | opponent ms | opponent quality | ours before (36ca51fd) ms | ours after (2632, 2633) ms | after / before | ours after / opponent | ours quality, digest before = after |
+|---|---|---|---|---|---|---|---|---|---|
+| ols | Istella-S | cuML LinearRegression eig | 83.48 (83.29..83.54) | R2 -6473.68 | 4110.0 (4068.5..4320.3) | 2565.1 (2524.0..2585.7) | 0.624 | 30.73x | R2 0.331944, 6f12cfc209ecd1f9 |
+| pca | Istella-S | cuML PCA full | 81.32 (81.26..116.80) | EVR sum 1.0000000156 | 687.8 (687.7..689.4) | 687.4 (684.2..688.6) | 0.999 (unchanged code) | 8.45x | EVR sum 1.0000000146, e43f2f52f20f511a |
+| kmeans | Istella-S | cuML KMeans | 173.80 (173.60..176.06) | inertia 1.28555e17 (0.979 of ours), 20 iter, digest different every round | 2021.1 (2015.4..2023.3) | 805.7 (796.0..824.2) | 0.399 | 4.64x | inertia 1.31285e17, 21 iter, 7f720b0b76896308 |
+
+Flip verdict (ENGINEERING_RULES section 9, geomean of after/before over taxi and
+Istella-S): OLS sqrt(0.67 x 0.624) = 0.65, k-means sqrt(0.71 x 0.399) = 0.53, both
+below 1 with bits unchanged on both datasets, so DEVIATIONS 2632 and 2633 are the
+default (merged into main). cuML's eig OLS again returns a broken fit on Istella-S
+(R2 -6473.68), the failure DEVIATIONS 2620 and 2621 fixed in ours.
+### kNN on taxi and Istella-S against cuML, same pod (September 11, knn-speed lane, pod 62dlwtf4amlt2s)
+
+H100 80GB HBM3, driver 580.159.04, cuML 26.8.0 (pypi.nvidia.com), source
+origin/main 36ca51fd. Ours IDENTICAL through the public `NearestNeighbors`
+(host in, host out, upload inside the clock); cuML brute NearestNeighbors
+with cupy inputs uploaded before the clock (`tools/classical_two_datasets.py
+race --lane knn`, 1 warm-up plus 5 interleaved rounds). Index rows
+[0, 400,000), queries [400,000, 404,000), k 10, raw columns (Istella's
+float32-max sentinel set to 0.0). Evidence:
+`bench/results/knn_speed_2026-09-11/`.
+
+| lane | dataset | opponent | ms | quality | ours IDENTICAL ms | quality | ours / opponent |
+|---|---|---|---:|---|---:|---|---:|
+| knn | taxi | cuML NearestNeighbors brute | 8.19 (8.17..8.60) | recall@10 0.99925 | 24.79 (24.41..25.25) | recall@10 0.99915 | 3.03x |
+| knn | Istella-S | cuML NearestNeighbors brute | 51.11 (median of 4 races, 50.51..52.13) | recall@10 0.92205 | 124.71 (median of 2 races, 119.93..128.71) | recall@10 0.923025 | 2.44x |
+| knn | dyadic-v1 400k x 4k x d32, k10 | cuML NearestNeighbors brute (`tools/knn_cuml_reference.py`, request) | 10.05 | 4000 of 4000 rows ordered-equal | 23.66 | same | 2.36x |
+| knn | dyadic-v1, k15 | same | 10.22 | 4000 of 4000 rows ordered-equal | 26.21 | same | 2.57x |
+
+### kNN on taxi and Istella-S against cuML, same pod (September 11, knn-finish lane, pod zwmta1li2twxx2)
+
+A NEW TUPLE: NVIDIA H200 143,771 MiB, driver 580.159.03, cuML 26.8.0. The
+H100 80GB HBM3 and H100 NVL pools were empty, so these are H200 rows and are
+never mixed with the H100 rows above. Same harness and shape as that section
+(`race --lane knn`, index 400,000 x queries 4,000, k10, 1 warm-up plus 5
+interleaved rounds); ours is the IDENTICAL arm at DEVIATION 2631's flipped
+query tile. Evidence: `bench/results/knn_finish_2026-09-11/`.
+
+| lane | dataset | opponent | opponent ms | opponent quality | ours ms | ours quality | ratio |
+|---|---|---|---:|---|---:|---|---:|
+| knn | taxi | cuML NearestNeighbors brute | 8.90 (8.56..9.23) | recall@10 0.99925 | 19.92 (19.79..20.37) | recall@10 0.99915 | 2.24x |
+| knn | Istella-S | cuML NearestNeighbors brute | 52.10 (51.61..132.92) | recall@10 0.92205 | 95.51 (94.62..96.01) | recall@10 0.923025 | 1.83x |
+
+Ours before DEVIATION 2631 on the same pod, in the same races, was 22.14 ms
+(taxi) and 100.29 ms (Istella-S), so the ratios there were 2.49x and 1.93x.

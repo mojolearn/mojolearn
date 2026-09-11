@@ -51,6 +51,7 @@ from svm.impl.svm_parameter import (
     SvmModel,
     SvmParameter,
     check_finite_list,
+    check_finite_ptr,
     check_rung1_scope,
 )
 
@@ -146,8 +147,68 @@ def svc_fit(
     check_rung1_scope(param, kp, has_sample_weight)
     # DEVIATION 636 (row 39, FACT 2): no NaN/inf may enter; see svm_parameter.mojo
     check_finite_list(x_host, "X")
-    check_finite_list(labels_host, "labels")
+    var model = _svc_label_model(labels_host, n_rows, n_cols, param, kp, card)
+    var x = upload_f32(ctx, x_host)
+    var fitted = _svc_fit_staged(
+        ctx, x, labels_host, n_rows, n_cols, param, kp, model^, card, trace,
+        kernel_tile_byte_limit, block_solve_threads, record_iterations,
+        scratch_pad, scratch_poison,
+    )
+    _ = x^
+    return fitted^
 
+
+def svc_fit_borrowed(
+    ctx: DeviceContext,
+    x_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    labels_host: List[Float32],
+    n_rows: Int,
+    n_cols: Int,
+    param: SvmParameter,
+    kp: KernelParams,
+    mut card: IdentityTrace,
+    mut trace: SmoTrace,
+) raises -> SvmModel:
+    """`svc_fit` on the caller's borrowed row-major X (DEVIATION 2665,
+    2026-09-11). The List front copied X into a host List, walked it once
+    for finiteness, then copied it element by element into a pinned host
+    buffer before the device copy. Here the finiteness check is one threaded
+    pass over the borrowed cells (`check_finite_ptr`, the same predicate,
+    first index and message) and the device buffer is filled from the
+    address. The same checks run in the same order, the same bytes reach the
+    device, and everything after the upload is `_svc_fit_staged`, shared with
+    `svc_fit`. The caller keeps the buffer alive and unmodified for the call."""
+    if n_cols <= 0:
+        raise Error("Parameter n_cols: number of columns cannot be less than one")
+    if n_rows <= 0:
+        raise Error("Parameter n_rows: number of rows cannot be less than one")
+    if len(labels_host) != n_rows:
+        raise Error("svc_fit: x / labels sizes do not match n_rows x n_cols")
+    check_rung1_scope(param, kp, False)
+    check_finite_ptr(x_ptr, n_rows * n_cols, "X")
+    var model = _svc_label_model(labels_host, n_rows, n_cols, param, kp, card)
+    var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_cols)
+    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+    ctx.synchronize()
+    var fitted = _svc_fit_staged(
+        ctx, x, labels_host, n_rows, n_cols, param, kp, model^, card, trace,
+        1 << 30, 0, False, 0, Float32(0.0),
+    )
+    _ = x^
+    return fitted^
+
+
+def _svc_label_model(
+    labels_host: List[Float32],
+    n_rows: Int,
+    n_cols: Int,
+    param: SvmParameter,
+    kp: KernelParams,
+    mut card: IdentityTrace,
+) raises -> SvmModel:
+    """The host half of `svcFit` after X's check: the labels' finiteness,
+    their sorted distinct pair, and the card header."""
+    check_finite_list(labels_host, "labels")
     var model = SvmModel()
     model.unique_labels = unique_labels_sorted(labels_host)
     model.n_classes = len(model.unique_labels)
@@ -161,8 +222,28 @@ def svc_fit(
         + " kernel=" + String(kp.kernel) + " C=" + String(param.C)
         + " tol=" + String(param.tol)
     )
+    return model^
 
-    var x = upload_f32(ctx, x_host)
+
+def _svc_fit_staged(
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    labels_host: List[Float32],
+    n_rows: Int,
+    n_cols: Int,
+    param: SvmParameter,
+    kp: KernelParams,
+    var model: SvmModel,
+    mut card: IdentityTrace,
+    mut trace: SmoTrace,
+    kernel_tile_byte_limit: Int,
+    block_solve_threads: Int,
+    record_iterations: Bool,
+    scratch_pad: Int,
+    scratch_poison: Float32,
+) raises -> SvmModel:
+    """`svcFit` from the uploaded X on: the labels, the one-vs-rest targets,
+    the card's input stages and the solve."""
     var labels = upload_f32(ctx, labels_host)
     var y = ctx.enqueue_create_buffer[DType.float32](n_rows)
     ctx.synchronize()
@@ -183,7 +264,6 @@ def svc_fit(
     ctx.synchronize()
     trace = smo.trace^
     smo.trace = SmoTrace()
-    _ = x^
     _ = labels^
     _ = y^
     return model^

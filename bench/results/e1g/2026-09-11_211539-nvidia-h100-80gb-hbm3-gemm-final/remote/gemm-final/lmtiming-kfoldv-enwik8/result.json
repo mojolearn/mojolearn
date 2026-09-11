@@ -1,0 +1,302 @@
+{
+  "schema": "mojolearn.lm-step-memory-probe.v3",
+  "shape": {
+    "batch": 1,
+    "length": 2048,
+    "d_model": 768,
+    "n_heads": 12,
+    "n_kv": 12,
+    "head_dim": 64,
+    "intermediate": 2048,
+    "n_layers": 12,
+    "vocab_size": 50257
+  },
+  "parameters": 162147840,
+  "steps_completed": 1,
+  "resident": true,
+  "step_result": "lean",
+  "witness_every_step": false,
+  "witness_source": "export_gradients(named=False) + export_state() once after the last untimed step",
+  "corpus": {
+    "path": "training/corpus/enwik8/input.txt",
+    "sha256": "2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8",
+    "manifest_sha256": "c65094a4d6a494d2882d972c20138015b4a258b310d662d4be05fb7ba2e9b423",
+    "bytes": 100000000,
+    "source_url": "http://mattmahoney.net/dc/enwik8.zip",
+    "schedule": "step k row b: bytes[(k*batch*length + b*length) % (bytes - length - 1) : +length+1] as int32; targets shifted one byte"
+  },
+  "attention_arm": "stash_tiled_fgrid_r32_qres_pf_kvgrid_r32",
+  "attention_arm_source": "binding",
+  "attention_arm_requested": null,
+  "attention_arm_default": "stash_tiled_fgrid_r32_qres_pf_kvgrid_r32",
+  "attention_arm_is_default": true,
+  "attention_arm_resolved_hd64": "stash_tiled_fgrid_r32_qres_pf_kvgrid_r32",
+  "attention_arm_trial_build": false,
+  "gemm_arm": "kfoldv",
+  "gemm_plan": "kfoldv: shipped group launch at the ksplit(S=132) rule, lane fold 16 cells/thread register stack 8 levels (shipped fold above 255 groups) where the rule takes the call, else default=ksplit(S=132) else tuned128",
+  "step_witnesses": [
+    {
+      "step": 1,
+      "completed_steps": 1,
+      "sha256": {
+        "loss": "a39d1a773245b9bb9f5a25aac121f308d875d0f0a5a7d827bc21552112023c71"
+      }
+    }
+  ],
+  "final_witness": {
+    "step": 1,
+    "completed_steps": 1,
+    "sha256": {
+      "gradients": "01d5fa4ae0299bbbd2de8f47d6d0d1e3c525c57b13cfa0244b130a7d7bb813f7",
+      "parameters": "84f96dc296e50b8cea15b54787e7fbede994b0730ee5d3ed86c620cf539c05c9",
+      "m": "b3fafccc62a0feab9ae135d3053054ea3ea8b131bbb0247959d212e13c727c0c",
+      "v": "ae18e62bdf7a1dab7177ff4af00bf7d185845716e1af365e0bc52e362666a8f6",
+      "flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb"
+    },
+    "export_seconds": 14.465537054464221,
+    "source": "export_gradients(named=False) + export_state() once after the last untimed step"
+  },
+  "first_call_seconds": 13.890097927302122,
+  "steady_step_seconds": [],
+  "steady_median_seconds": null,
+  "steady_median_tokens_per_second": null,
+  "peak_device_process_bytes": "unavailable",
+  "peak_device_wide_bytes": 14553186304,
+  "process_ru_maxrss_bytes": 8274173952,
+  "budget_seconds": 300.0,
+  "limited": false,
+  "component_timing_step_seconds": 0.31604963913559914,
+  "component_timing_steps": 1,
+  "component_timing_step_seconds_all": [
+    0.31604963913559914
+  ],
+  "component_timing_witnesses": [],
+  "qualification": "complete-step probe; device peak from a polled vendor tool; host RSS is a separate boundary; no opponent, no default gate, no target-scale qualification claim",
+  "component_timing_ms": {
+    "attn.core": 22.340689,
+    "attn.o_proj": 4.497357,
+    "attn.qkv_proj": 13.357012,
+    "attn.rope_and_cache": 1.33615,
+    "block.attention_total": 41.598888,
+    "block.mlp_and_residuals": 26.107961,
+    "block.norm1": 3.752826,
+    "bwd.after_attention": 29.538762,
+    "bwd.attention": 91.367998,
+    "bwd.before_attention": 0.037246,
+    "envelope.blocks_backward": 184.059546,
+    "envelope.blocks_forward": 71.536715,
+    "envelope.native_call": 315.48193097114563,
+    "step.bind_final_sync": 0.002288,
+    "step.bind_publish": 0.006279,
+    "step.bind_scalar_admission": 0.007319,
+    "step.ce_backward": 0.986934,
+    "step.ce_forward": 1.70614,
+    "step.ce_refuse_scan": 0.388776,
+    "step.embedding_backward": 2.552656,
+    "step.embedding_forward": 0.05818,
+    "step.head_backward_da": 14.507854,
+    "step.head_backward_db": 14.028455,
+    "step.head_forward": 13.880433,
+    "step.loss_download": 0.020859,
+    "step.opt_refuse_scan": 2.203471,
+    "step.optimizer": 1.717631,
+    "step.pack_grads": 1.114735,
+    "step.py_flags": 0.15906617045402527,
+    "step.py_tokens": 0.25765039026737213,
+    "step.shadow_copy": 2.313541,
+    "step.unpack_weights": 1.156468,
+    "step.upload_inputs": 0.163057,
+    "step.validate_after_scan": 2.152582,
+    "step.validate_grads_scan": 0.562312
+  },
+  "component_timing_ms_per_step": {
+    "attn.core": [
+      22.340689
+    ],
+    "attn.o_proj": [
+      4.497357
+    ],
+    "attn.qkv_proj": [
+      13.357012
+    ],
+    "attn.rope_and_cache": [
+      1.33615
+    ],
+    "block.attention_total": [
+      41.598888
+    ],
+    "block.mlp_and_residuals": [
+      26.107961
+    ],
+    "block.norm1": [
+      3.752826
+    ],
+    "bwd.after_attention": [
+      29.538762
+    ],
+    "bwd.attention": [
+      91.367998
+    ],
+    "bwd.before_attention": [
+      0.037246
+    ],
+    "envelope.blocks_backward": [
+      184.059546
+    ],
+    "envelope.blocks_forward": [
+      71.536715
+    ],
+    "envelope.native_call": [
+      315.48193097114563
+    ],
+    "step.bind_final_sync": [
+      0.002288
+    ],
+    "step.bind_publish": [
+      0.006279
+    ],
+    "step.bind_scalar_admission": [
+      0.007319
+    ],
+    "step.ce_backward": [
+      0.986934
+    ],
+    "step.ce_forward": [
+      1.70614
+    ],
+    "step.ce_refuse_scan": [
+      0.388776
+    ],
+    "step.embedding_backward": [
+      2.552656
+    ],
+    "step.embedding_forward": [
+      0.05818
+    ],
+    "step.head_backward_da": [
+      14.507854
+    ],
+    "step.head_backward_db": [
+      14.028455
+    ],
+    "step.head_forward": [
+      13.880433
+    ],
+    "step.loss_download": [
+      0.020859
+    ],
+    "step.opt_refuse_scan": [
+      2.203471
+    ],
+    "step.optimizer": [
+      1.717631
+    ],
+    "step.pack_grads": [
+      1.114735
+    ],
+    "step.py_flags": [
+      0.15906617045402527
+    ],
+    "step.py_tokens": [
+      0.25765039026737213
+    ],
+    "step.shadow_copy": [
+      2.313541
+    ],
+    "step.unpack_weights": [
+      1.156468
+    ],
+    "step.upload_inputs": [
+      0.163057
+    ],
+    "step.validate_after_scan": [
+      2.152582
+    ],
+    "step.validate_grads_scan": [
+      0.562312
+    ]
+  },
+  "component_bytes": {
+    "step.bind_publish_bytes": 444,
+    "step.ce_refuse_scan_bytes": 411705344,
+    "step.ce_refuse_scan_download_bytes": 8192,
+    "step.loss_download_bytes": 4,
+    "step.opt_refuse_scan_bytes": 2594365440,
+    "step.opt_refuse_scan_download_bytes": 0,
+    "step.pack_grads_bytes": 648591360,
+    "step.py_flags_bytes": 440,
+    "step.py_tokens_bytes": 8196,
+    "step.shadow_copy_bytes": 1945774080,
+    "step.unpack_weights_bytes": 648591360,
+    "step.upload_inputs_bytes": 16384,
+    "step.validate_after_scan_bytes": 2594365440,
+    "step.validate_grads_scan_bytes": 648591360
+  },
+  "component_counts": {},
+  "component_line_counts": {
+    "attn.core": 12,
+    "attn.o_proj": 12,
+    "attn.qkv_proj": 12,
+    "attn.rope_and_cache": 12,
+    "block.attention_total": 12,
+    "block.mlp_and_residuals": 12,
+    "block.norm1": 12,
+    "bwd.after_attention": 12,
+    "bwd.attention": 12,
+    "bwd.before_attention": 12,
+    "envelope.blocks_backward": 1,
+    "envelope.blocks_forward": 1,
+    "envelope.native_call": 1,
+    "step.bind_final_sync": 1,
+    "step.bind_publish": 1,
+    "step.bind_publish_bytes": 1,
+    "step.bind_scalar_admission": 1,
+    "step.ce_backward": 1,
+    "step.ce_forward": 1,
+    "step.ce_refuse_scan": 1,
+    "step.ce_refuse_scan_bytes": 1,
+    "step.ce_refuse_scan_download_bytes": 1,
+    "step.embedding_backward": 1,
+    "step.embedding_forward": 1,
+    "step.head_backward_da": 1,
+    "step.head_backward_db": 1,
+    "step.head_forward": 1,
+    "step.loss_download": 1,
+    "step.loss_download_bytes": 1,
+    "step.opt_refuse_scan": 1,
+    "step.opt_refuse_scan_bytes": 1,
+    "step.opt_refuse_scan_download_bytes": 1,
+    "step.optimizer": 1,
+    "step.pack_grads": 1,
+    "step.pack_grads_bytes": 1,
+    "step.py_flags": 1,
+    "step.py_flags_bytes": 1,
+    "step.py_tokens": 1,
+    "step.py_tokens_bytes": 1,
+    "step.shadow_copy": 1,
+    "step.shadow_copy_bytes": 1,
+    "step.unpack_weights": 1,
+    "step.unpack_weights_bytes": 1,
+    "step.upload_inputs": 1,
+    "step.upload_inputs_bytes": 1,
+    "step.validate_after_scan": 1,
+    "step.validate_after_scan_bytes": 1,
+    "step.validate_grads_scan": 1,
+    "step.validate_grads_scan_bytes": 1
+  },
+  "component_timing_steps_parsed": 1,
+  "component_timing_uneven": [],
+  "component_timing_total_ms": 252.3503675607214,
+  "component_timing_excluded_from_total": [
+    "attn.core",
+    "attn.o_proj",
+    "attn.qkv_proj",
+    "attn.rope_and_cache",
+    "envelope.blocks_backward",
+    "envelope.blocks_forward",
+    "envelope.native_call"
+  ],
+  "step_seconds": 0.31604963913559914,
+  "component_timing_covered_fraction": 0.7984516870542985,
+  "component_timing_boundary": "one step under MOJOLEARN_TRANSFORMER_TIMING=1; every tick waits on the device, so neither the parts nor step_seconds are a timing sample; the uncovered remainder (1 - covered fraction) is time no timer brackets"
+}

@@ -1,0 +1,4 @@
+shipped	shipped: default=ksplit(S=132) else tuned128
+ksplit_leaf	ksplit_leaf(finest under the cap) where its rule takes the call, else default=ksplit(S=132) else tuned128
+kfoldv	kfoldv: shipped group launch at the ksplit(S=132) rule, lane fold 16 cells/thread register stack 8 levels (shipped fold above 255 groups) where the rule takes the call, else default=ksplit(S=132) else tuned128
+kfoldv_leaf	kfoldv_leaf: shipped group launch at the ksplit_leaf rule (finest under the cap), lane fold 16 cells/thread register stack 8 levels (shipped fold above 255 groups) where the rule takes the call, else default=ksplit(S=132) else tuned128

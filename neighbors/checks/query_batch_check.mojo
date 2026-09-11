@@ -43,7 +43,10 @@ def _case(n: Int, q: Int, d: Int, k: Int) raises:
 def main() raises:
     comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         raise Error("query batch gate requires IDENTICAL")
-    if plan_query_tile(400000, 4000, DEFAULT_QUERY_TILE) != DEFAULT_QUERY_TILE:
+    # DEVIATION 2631: the query clamp goes last, so a default tile wider than
+    # the request (4,096 against 4,000 queries) comes back as the query count.
+    var bench_tile = DEFAULT_QUERY_TILE if DEFAULT_QUERY_TILE < 4000 else 4000
+    if plan_query_tile(400000, 4000, DEFAULT_QUERY_TILE) != bench_tile:
         raise Error("default query batch unexpectedly shrank")
     if plan_query_tile(400000, 32, DEFAULT_QUERY_TILE) != 32:
         raise Error("query clamp changed")
@@ -57,8 +60,13 @@ def main() raises:
         raise Error("large-index historical floor changed")
     if plan_query_tile(100000000, 1, DEFAULT_QUERY_TILE) != 1:
         raise Error("large-index query clamp changed")
-    if plan_query_tile(400000, 4000, 1024) != 256:
-        raise Error("explicit oversized query tile must retain historical cap")
+    # DEVIATION 2631: a request tile at or under the row's default keeps the
+    # bounded-index budget; above a 512 default the historical cap applies.
+    var expect_1024 = 1024 if DEFAULT_QUERY_TILE >= 1024 else 256
+    if plan_query_tile(400000, 4000, 1024) != expect_1024:
+        raise Error("explicit 1024 query tile left its budget rule")
     _case(513, 513, 17, 10)
     _case(65537, 513, 8, 15)
-    print("QUERY BATCH PASS", "enabled", QUERY_TILE_512_CANDIDATE, "cases", 2)
+    # Crosses the 512, 2048 and 4096 batch boundaries and three column tiles.
+    _case(140000, 4100, 11, 10)
+    print("QUERY BATCH PASS", "enabled", QUERY_TILE_512_CANDIDATE, "default_tile", DEFAULT_QUERY_TILE, "cases", 3)

@@ -86,6 +86,12 @@ column_mean_f64(x_addr: Int, rows: Int, cols: Int, out_addr: Int)   # sequential
 weighted copy). That moves OLS/ridge centering off NumPy's blocked reduction and onto
 a defined order; the OLS reference cards are RE-BASELINE OWED and must be rerun on all
 three vendors (recorded in this file's owed list, not hidden).
+DEVIATION 2632 (2026-09-11) threads `column_mean_f64` (column groups, each column's
+chain in its defined row order, task-local totals), `center_columns_f32` and
+`scale_rows_f32` (row chunks) on the host pool, and `linear_model.py` takes their
+destinations from `_output_store` instead of the zero-filled `empty`. The defined order
+above is unchanged, so the bytes are unchanged; the H100 before/after hashes are in
+`bench/results/linear_cluster_speed_2026-09-11/`.
 `ensemble.py` routes the sigmoid of every tier through the existing `gbdt_sigmoid`
 binding (fast/deterministic predict_proba bits move; IDENTICAL does not).
 `randomforest.py` computes `max_features='log2'` from `math.log2` in float64 and then

@@ -1021,10 +1021,20 @@ comptime SVM_SCHED_TREE = 0
 comptime SVM_SCHED_WARP = 1
 comptime SVM_SCHED_WARP_LANE0 = 2
 comptime SVM_SCHED_FUSED_TREE = 3
+comptime SVM_SCHED_RARY_TREE = 4
+
+
+def svm_block_solve_tree_arity_for[column: Int, width: Int]() -> Int:
+    """SCHEDULING row (2026-09-11, DEVIATION 2628): the arity R of SVM_SCHED_RARY_TREE's threadgroup tree (a power of two; levels = ceil(log_R(width))). Selection under a total order, so no bits depend on it. `-D MOJOLEARN_SVM_ARITY_16` / `_64` for an A/B; default 32."""
+    comptime if is_defined["MOJOLEARN_SVM_ARITY_16"]():
+        return 16
+    comptime if is_defined["MOJOLEARN_SVM_ARITY_64"]():
+        return 64
+    return 32
 
 
 def svm_block_solve_schedule_for[column: Int, width: Int]() -> Int:
-    """SCHEDULING row (2026-09-11, DEVIATIONS 2627 and 2628): which schedule folds the three arg-reductions of `svm/impl/smoblocksolve.mojo::smo_block_solve_kernel[width]`. SVM_SCHED_TREE (0) is the pre-2491 halving trees with a thread ballot for `u` and `l` (42 barriers per inner iteration at width 1024); SVM_SCHED_WARP (1) is DEVIATION 2491's `block_argext` warp butterflies (8); SVM_SCHED_WARP_LANE0 (2) is `block_argext_lane0`, the same butterflies with the cross-warp fold on lane 0 in a runtime loop and a warp broadcast (DEVIATION 2627, 5); SVM_SCHED_FUSED_TREE (3) is one halving tree carrying the argmin, its thread and the argmax together plus a thread-carrying tree for `l`, no ballot (DEVIATION 2628, 26). All four select the same (value, key) element under a total order with unique keys, so no column's bits depend on this row. Default: `svm_block_solve_warp_folds_for` (DEVIATION 2623) picks WARP or TREE. `-D MOJOLEARN_SVM_SCHED_TREE`, `_WARP`, `_WARP_LANE0` or `_FUSED_TREE` forces one schedule on every column for an A/B."""
+    """SCHEDULING row (2026-09-11, DEVIATIONS 2627 and 2628): which schedule folds the three arg-reductions of `svm/impl/smoblocksolve.mojo::smo_block_solve_kernel[width]`. SVM_SCHED_TREE (0) is the pre-2491 halving trees with a thread ballot for `u` and `l` (42 barriers per inner iteration at width 1024); SVM_SCHED_WARP (1) is DEVIATION 2491's `block_argext` warp butterflies (8); SVM_SCHED_WARP_LANE0 (2) is `block_argext_lane0`, the same butterflies with the cross-warp fold on lane 0 in a runtime loop and a warp broadcast (DEVIATION 2627, 5); SVM_SCHED_FUSED_TREE (3) is one halving tree carrying the argmin, its thread and the argmax together plus a thread-carrying tree for `l`, no ballot (DEVIATION 2628, 26); SVM_SCHED_RARY_TREE (4) carries the same selections on a threadgroup tree of arity `svm_block_solve_tree_arity_for` (DEVIATION 2628's second shape, about 10). All five select the same (value, key) element under a total order with unique keys, so no column's bits depend on this row. Default: `svm_block_solve_warp_folds_for` (DEVIATION 2623) picks WARP or TREE. `-D MOJOLEARN_SVM_SCHED_TREE`, `_WARP`, `_WARP_LANE0`, `_FUSED_TREE` or `_RARY_TREE` forces one schedule on every column for an A/B (the `_RARY_TREE` define was missing from this row at 48f92b19, so that commit's R-ary kernel was unreachable)."""
     comptime if is_defined["MOJOLEARN_SVM_SCHED_TREE"]():
         return SVM_SCHED_TREE
     comptime if is_defined["MOJOLEARN_SVM_SCHED_WARP"]():
@@ -1033,8 +1043,26 @@ def svm_block_solve_schedule_for[column: Int, width: Int]() -> Int:
         return SVM_SCHED_WARP_LANE0
     comptime if is_defined["MOJOLEARN_SVM_SCHED_FUSED_TREE"]():
         return SVM_SCHED_FUSED_TREE
+    comptime if is_defined["MOJOLEARN_SVM_SCHED_RARY_TREE"]():
+        return SVM_SCHED_RARY_TREE
     if svm_block_solve_warp_folds_for[column, width]():
         return SVM_SCHED_WARP
+    # DEVIATION 2666 (2026-09-11): the column DEVIATION 2623 sends to the
+    # halving trees -- NVIDIA above width 512, where CUDA refuses the warp
+    # kernel -- takes the FUSED_TREE schedule instead. Measured on an NVIDIA
+    # H200 (RunPod 4oih8bhjepzlmm, driver 570.211.01, ptxas 12.9.86), taxi
+    # 10,000 x 11, five fits each: FUSED_TREE 771.1 ms, TREE 866.9 ms,
+    # RARY_TREE at arity 16 1,324.4 ms and at 32 1,945.6 ms (1,937.3 ms
+    # without its trailing and second update barriers), every arm giving the
+    # same fits (n=400/600/2000 457e29b82bca9df9, 733a383c5699f427,
+    # 2b66bc991a9c9ed0; taxi b0f91a7958162936) from five different binaries.
+    # NVIDIA ONLY: Metal refuses the fused kernel's width-1024 pipeline
+    # (threadgroup memory 36872 > 32768, Apple M4 gate 2026-09-11), so this
+    # stays a row and never a global default. `-D MOJOLEARN_SVM_TREE_FOLDS`
+    # still takes the pre-2491 trees on every column for an A/B.
+    comptime if not is_defined["MOJOLEARN_SVM_TREE_FOLDS"]():
+        comptime if column == COLUMN_NVIDIA:
+            return SVM_SCHED_FUSED_TREE
     return SVM_SCHED_TREE
 
 
@@ -1126,3 +1154,73 @@ def knn_distance_rows_for[column: Int, identical: Bool]() -> Int:
     comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_ROWS4"]():
         return 4
     return 8 if identical and column == COLUMN_NVIDIA else 4
+
+
+@always_inline
+def knn_distance_exact_chain_for[column: Int, identical: Bool]() -> Bool:
+    """SCHEDULING row (DEVIATION 2629, 2026-09-11, lane/knn-speed): whether the transposed IDENTICAL register-tile distance admits a tile to the UNFLUSHED chain (`pinned_distance_tile.mojo::_rt_step_exact`) when request-local exponent metadata proves every product and every partial sum of every cell in the tile is zero or at least the smallest normal (minimum biased exponent sum >= 174, maximum sum plus ceil(log2 d) <= 376, no nonfinite input). Under that proof the per-step flush never sees a subnormal, so dropping it moves no bit; a tile that fails admission keeps the flushed chain. Kernel code is the same on every column; this row only decides where the admission runs. MEASURED NEUTRAL on the H100 2026-09-11 (pod 62dlwtf4amlt2s, 400k x 4k x d32, three interleaved before/after pairs of 7 rounds): request k10 23.65 -> 23.85 ms, k15 26.24 -> 26.19 ms, distance class 15.31 -> 15.41 ms; full distance and index dumps equal to origin/main, sabotage flips them. The flush is not what the distance class pays for, so the row is OFF on every column and stays opt-in: `-D MOJOLEARN_EXPERIMENTAL_KNN_EXACT_CHAIN=1` admits on every column; `-D MOJOLEARN_KNN_IDENTICAL_FLUSHED_CHAIN=1` forces the flushed chain."""
+    comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_FLUSHED_CHAIN"]():
+        return False
+    comptime if is_defined["MOJOLEARN_EXPERIMENTAL_KNN_EXACT_CHAIN"]():
+        return identical
+    return False
+
+
+#: DEVIATION 2631's measured tile, FLIPPED 2026-09-11 on the H200 (pod
+#: `zwmta1li2twxx2`): synthetic 400k x 4k x d32 request 23.53 -> 21.38 ms at
+#: k10 (0.909) and 25.98 -> 23.52 at k15 (0.905) against the 512 default,
+#: taxi 22.14 -> 19.92 ms (0.900) and Istella-S 100.29 -> 95.51 (0.952) in
+#: interleaved races, geomean 0.926, recall@10 unchanged on both datasets and
+#: every output bit equal. At 4,000 queries `plan_query_tile`'s query clamp
+#: lowers it to 4,000, so the benchmark shape runs as ONE query tile.
+comptime KNN_IDENTICAL_WIDE_QUERY_TILE = 4096
+
+
+@always_inline
+def knn_query_tile_for[column: Int, identical: Bool]() -> Int:
+    """SCHEDULING row (DEVIATION 2631, 2026-09-11, lane/knn-finish): the default query tile of the IDENTICAL tiled k-NN arm (`neighbors/estimator.mojo::DEFAULT_QUERY_TILE`), and on the same column the radix scratch the small-k selector never reads is not allocated (`knn_brute_force.mojo::tiled_radix_scratch_len`). 0 means the estimator's historical rule (512 on NVIDIA IDENTICAL, 256 elsewhere). Tiling cannot move a bit: every cell's chain is a function of its query row and index column alone, every row's selection and partial merges run in the same column-tile order whatever the query tile, and the scratch is never read on a k <= 64 request. Arms for the A/B: `-D MOJOLEARN_KNN_QUERY_TILE_ARM_512`, `_1024`, `_2048`, `_4096` force that tile on every column; `-D MOJOLEARN_KNN_IDENTICAL_FULL_RADIX_SCRATCH=1` keeps the historical scratch."""
+    comptime if not identical:
+        return 0
+    comptime if is_defined["MOJOLEARN_KNN_QUERY_TILE_ARM_512"]():
+        return 512
+    comptime if is_defined["MOJOLEARN_KNN_QUERY_TILE_ARM_1024"]():
+        return 1024
+    comptime if is_defined["MOJOLEARN_KNN_QUERY_TILE_ARM_2048"]():
+        return 2048
+    comptime if is_defined["MOJOLEARN_KNN_QUERY_TILE_ARM_4096"]():
+        return 4096
+    return KNN_IDENTICAL_WIDE_QUERY_TILE if column == COLUMN_NVIDIA else 0
+
+
+@always_inline
+def knn_radix_scratch_shrink_for[column: Int, identical: Bool]() -> Bool:
+    """SCHEDULING row (DEVIATION 2631): whether a k <= 64 IDENTICAL tiled request allocates `k` radix scratch pairs per query row instead of `n_index // 8`. The small-k selector (`knn_smallk_select_for`) serves every column tile of such a request, so the radix kernel that reads the scratch is never launched and no output can depend on its size. Same column scope as `knn_query_tile_for`'s measured tile. `-D MOJOLEARN_KNN_IDENTICAL_FULL_RADIX_SCRATCH=1` keeps the historical size everywhere."""
+    comptime if not identical:
+        return False
+    comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_FULL_RADIX_SCRATCH"]():
+        return False
+    return column == COLUMN_NVIDIA
+
+
+@always_inline
+def knn_fused_distance_select_for[column: Int, identical: Bool]() -> Bool:
+    """SCHEDULING row (DEVIATION 2667, 2026-09-11, lane/knn-finish): whether the transposed IDENTICAL tiled k-NN arm computes each column tile's distances INSIDE the small-k selector (`neighbors/checks/fused_distance_select_identical.mojo`), one launch per tile, instead of a register-tile distance launch that writes a `query_tile x index_tile` matrix and a selector launch that reads it back. The shape of cuVS's `fusedL2Knn` (`knn_brute_force.cuh:447-451`): no distance matrix is written. Each candidate's distance is the register tile's cell chain (`pinned_distance_tile.mojo::_rt_step` over the feature axis ascending, then the same epilogue, clamp and root), its key is the same composite (distance, index) key, and the selector's rank phase returns the k smallest keys of the whole tile, which do not depend on which thread saw which column, so neighbors and distances are the same bits. `-D MOJOLEARN_EXPERIMENTAL_KNN_FUSED_SELECT=1` forces it on every column; `-D MOJOLEARN_KNN_IDENTICAL_UNFUSED_SELECT=1` forces the two-launch form."""
+    comptime if not identical:
+        return False
+    comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_UNFUSED_SELECT"]():
+        return False
+    comptime if is_defined["MOJOLEARN_EXPERIMENTAL_KNN_FUSED_SELECT"]():
+        return True
+    return False
+
+
+@always_inline
+def umap_device_optimizer_live_row_for[column: Int, identical: Bool]() -> Bool:
+    """ROUTING row (DEVIATION 2668, 2026-09-11, lane/knn-finish): whether the IDENTICAL UMAP device optimizer (`umap/optimizer_identical_device.mojo::umap_identical_epoch_kernel`) applies a vertex's own attractive and repulsive moves to its running position during its fold (cuML's per-vertex serial kernel, `optimize_batch_kernel.cuh:569-577, 608-616`) instead of summing every move from the epoch snapshot. The mirror edge's tail move stays deferred. MOVES UMAP BITS on every column (the IDENTICAL contract is one default for all columns); both forms are pure functions of the epoch snapshot with one writer per vertex, so each is independent of launch width and vendor, and the 2668 fold's 20,000-row fingerprint is one value (4040033352384472344) across launch widths 64, 128 and 256 with both UMAP identity checks passing. OFF BY DEFAULT: measured on the H200 2026-09-11 it SPLITS on the two datasets, which ENGINEERING_RULES section 9 gates per dataset. Sampled trustworthiness and 10-neighbor retention at 100,000 rows, 200 epochs: taxi 0.9062 / 0.3736 to 0.9323 / 0.3627 (trust up, retention down) and Istella-S 0.9737 / 0.4832 to 0.9636 / 0.4264 (both down), with the time flat on both (1.003 and 1.000). Quality worse on a dataset is a regression a user on that data sees, so the row stays opt-in through `-D MOJOLEARN_UMAP_IDENTICAL_LIVE_ROW=1`; `-D MOJOLEARN_UMAP_IDENTICAL_SNAPSHOT_FOLD=1` forces the snapshot fold even then. What the measurement DID establish is the cause of the cuML gap on taxi (the update order: our own serial host loop scores 0.9796 on the same graph and init against cuML's 0.9657), and that on Istella-S the shipped fold already beats cuML by a wide margin."""
+    comptime if not identical:
+        return False
+    comptime if is_defined["MOJOLEARN_UMAP_IDENTICAL_SNAPSHOT_FOLD"]():
+        return False
+    comptime if is_defined["MOJOLEARN_UMAP_IDENTICAL_LIVE_ROW"]():
+        return True
+    return False

@@ -46,6 +46,7 @@ calling `gemm_nt` plus `expand_distances_kernel` in the default build.
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 from std.sys import llvm_intrinsic
+from std.sys.compile import is_defined
 from checks.kernel_matrix import TARGET_COLUMN, knn_distance_zero_fma_repair_for, knn_distance_preflight_for, knn_distance_hardware_flush_for, knn_distance_rows_for
 from neighbors.checks.zero_fma_boundary import repair_zero_fma
 
@@ -176,7 +177,29 @@ def _rt_step(a: Float32, b: Float32, acc: Float32) -> Float32:
 
 
 @always_inline
-def _rt_dot_tile[REPAIR: Bool, VECTOR: Bool = False](
+def _rt_step_exact(a: Float32, b: Float32, acc: Float32) -> Float32:
+    """DEVIATION 2629: the step `_rt_step` takes once admission has proved
+    that no subnormal can arise anywhere in the chain (see the admission
+    comment above `vector_exponent_admission_kernel`). The rounded FMA is
+    the same rounded FMA; the flush after it is dropped because its input is
+    never subnormal, so the flush is the identity on every value it would
+    see. NVIDIA keeps its explicit round-to-nearest intrinsic; every other
+    column keeps `identical_mul_add`. Sabotage (`-D
+    MOJOLEARN_KNN_EXACT_CHAIN_SABOTAGE=1`, never shipped) flips the lowest
+    mantissa bit of each step so a reached exact path cannot return clean
+    bits."""
+    var r: Float32
+    comptime if knn_distance_hardware_flush_for[TARGET_COLUMN, GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL]():
+        r = llvm_intrinsic["llvm.nvvm.fma.rn.f", Float32, has_side_effect=False](a, b, acc)
+    else:
+        r = identical_mul_add(a, b, acc)
+    comptime if is_defined["MOJOLEARN_KNN_EXACT_CHAIN_SABOTAGE"]():
+        r = bitcast[DType.float32](bitcast[DType.uint32](r) ^ UInt32(1))
+    return r
+
+
+@always_inline
+def _rt_dot_tile[REPAIR: Bool, VECTOR: Bool = False, EXACT: Bool = False](
     q: MutPointer[Float32, MutAnyOrigin],
     yt: MutPointer[Float32, MutAnyOrigin],
     rows_idx: SIMD[DType.int32, RT_ROWS],
@@ -199,10 +222,14 @@ def _rt_dot_tile[REPAIR: Bool, VECTOR: Bool = False](
         comptime for r in range(RT_ROWS):
             var qv = _rt_load(q.unsafe_load(Int(rows_idx[r]) * d + f))
             comptime for c in range(RT_COLS):
-                comptime if REPAIR:
-                    acc[r * RT_COLS + c] = _rt_step(qv, yv[c], acc[r * RT_COLS + c])
+                comptime if EXACT:
+                    # DEVIATION 2629: admitted tile, same chain, no flush.
+                    acc[r * RT_COLS + c] = _rt_step_exact(qv, yv[c], acc[r * RT_COLS + c])
                 else:
-                    acc[r * RT_COLS + c] = ftz(identical_mul_add(qv, yv[c], acc[r * RT_COLS + c]))
+                    comptime if REPAIR:
+                        acc[r * RT_COLS + c] = _rt_step(qv, yv[c], acc[r * RT_COLS + c])
+                    else:
+                        acc[r * RT_COLS + c] = ftz(identical_mul_add(qv, yv[c], acc[r * RT_COLS + c]))
 
     return acc
 
@@ -278,7 +305,110 @@ def _rt_accumulate_metadata_tile(
     return _rt_dot_tile[True](q, yt, rows_idx, cols_idx, d, y_stride)
 
 
-def pinned_distance_register_tile_kernel[METADATA: Bool, VECTOR: Bool = False](
+# ---------------------------------------------------------------------------
+# DEVIATION 2629 (2026-09-11, lane/knn-speed): EXACT-CHAIN ADMISSION.
+#
+# The NVIDIA step is a rounded FMA followed by a hardware flush (`_rt_step`),
+# two operations per feature per cell, and the phase profile puts the
+# distance class at 15.3 of the 25.4 serialized milliseconds at 400k x 4k x
+# d32 on the H100. The flush only changes a value that is subnormal. This
+# admission proves, per register tile and before the chain runs, that no
+# value the flush would see can be subnormal, so the tile takes the same
+# rounded FMA chain without the flush and every output bit is unchanged.
+#
+# The proof, in biased exponents e (a normal float with exponent e has ulp
+# 2^(e-150) and magnitude below 2^(e-126)):
+#   1. Operands are loaded through `ftz`, so an e == 0 operand is +-0 and
+#      contributes an exact zero product. Let lo_q, lo_y be the minimum
+#      NONZERO exponents over the tile's rows and columns. Every nonzero
+#      exact product q_f * y_f is a multiple of 2^(lo_q + lo_y - 300); with
+#      lo_q + lo_y >= 174 that is a multiple of 2^-126.
+#   2. By induction acc is a multiple of 2^-126 after every step: an exact
+#      sum of multiples of 2^-126 with magnitude below 2^-102 is exactly
+#      representable (at most 24 significant bits above 2^-126), and at or
+#      above 2^-102 the float's ulp is at least 2^-125, so the rounded value
+#      is a multiple of that ulp. A nonzero multiple of 2^-126 is at least
+#      the smallest normal, so no step input or output is ever subnormal
+#      and the flush is the identity. Apple's zero-FMA boundary (an exact
+#      result in (0, 2^-126) rounding up) cannot occur either.
+#   3. No overflow and no generated NaN: with hi_q, hi_y the maximum
+#      exponents and L = ceil(log2 d), |product| < 2^(hi_q + hi_y - 252) and
+#      |acc| stays below 2^(hi_q + hi_y + L - 251) including rounding, so
+#      hi_q + hi_y + L <= 376 keeps every value below 2^125. A row holding a
+#      nonfinite value is never admitted.
+# A tile that fails any clause keeps `_rt_accumulate_tile`, bit for bit
+# today's chain. The metadata is request local (one launch per matrix,
+# rebuilt every request) and lives in the caller's existing scratch.
+# ---------------------------------------------------------------------------
+
+comptime RT_EXACT_MIN_EXPONENT_SUM = 174
+comptime RT_EXACT_MAX_EXPONENT_SUM = 376
+
+
+def vector_exponent_admission_kernel(
+    values: MutPointer[Float32, MutAnyOrigin], meta: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32, d_in: Int32,
+):
+    """Per row: lo + 256 * hi as an exact Float32 integer, or -1 when the row
+    holds a nonfinite value (DEVIATION 2629 admission metadata)."""
+    var row = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if row >= Int(n_in):
+        return
+    var d = Int(d_in)
+    var lo = 255
+    var hi = 0
+    var nonfinite = False
+    for f in range(d):
+        var e = Int((bitcast[DType.uint32](values.unsafe_load(row * d + f)) >> 23) & 255)
+        if e == 255:
+            nonfinite = True
+        if e != 0 and e < lo:
+            lo = e
+        if e > hi:
+            hi = e
+    if nonfinite:
+        meta.unsafe_store(row, Float32(-1.0))
+    else:
+        meta.unsafe_store(row, Float32(lo + 256 * hi))
+
+
+@always_inline
+def _rt_accumulate_exact_tile[VECTOR: Bool = False](
+    q: MutPointer[Float32, MutAnyOrigin], yt: MutPointer[Float32, MutAnyOrigin],
+    q_meta: MutPointer[Float32, MutAnyOrigin], y_meta: MutPointer[Float32, MutAnyOrigin],
+    rows_idx: SIMD[DType.int32, RT_ROWS], cols_idx: SIMD[DType.int32, RT_COLS],
+    d: Int, y_stride: Int,
+) -> SIMD[DType.float32, RT_ROWS * RT_COLS]:
+    var admitted = True
+    var q_lo = 255
+    var q_hi = 0
+    var y_lo = 255
+    var y_hi = 0
+    comptime for r in range(RT_ROWS):
+        var m = q_meta.unsafe_load(Int(rows_idx[r]))
+        if m < Float32(0.0):
+            admitted = False
+        else:
+            var v = Int(UInt32(m))
+            q_lo = min(q_lo, v & 255)
+            q_hi = max(q_hi, v >> 8)
+    comptime for c in range(RT_COLS):
+        var m = y_meta.unsafe_load(Int(cols_idx[c]))
+        if m < Float32(0.0):
+            admitted = False
+        else:
+            var v = Int(UInt32(m))
+            y_lo = min(y_lo, v & 255)
+            y_hi = max(y_hi, v >> 8)
+    var log2d = 0
+    while (1 << log2d) < d:
+        log2d += 1
+    if admitted and q_lo + y_lo >= RT_EXACT_MIN_EXPONENT_SUM and q_hi + y_hi + log2d <= RT_EXACT_MAX_EXPONENT_SUM:
+        return _rt_dot_tile[False, VECTOR, True](q, yt, rows_idx, cols_idx, d, y_stride)
+    return _rt_accumulate_tile[VECTOR](q, yt, rows_idx, cols_idx, d, y_stride)
+
+
+def pinned_distance_register_tile_kernel[METADATA: Bool, VECTOR: Bool = False, EXACT: Bool = False](
     z: MutPointer[Float32, MutAnyOrigin],
     q: MutPointer[Float32, MutAnyOrigin],
     yt: MutPointer[Float32, MutAnyOrigin],
@@ -325,7 +455,12 @@ def pinned_distance_register_tile_kernel[METADATA: Bool, VECTOR: Bool = False](
     comptime if METADATA:
         acc = _rt_accumulate_metadata_tile(q, yt, q_minima, y_minima, rows_idx, cols_idx, d, y_stride)
     else:
-        acc = _rt_accumulate_tile[VECTOR](q, yt, rows_idx, cols_idx, d, y_stride)
+        comptime if EXACT:
+            # DEVIATION 2629: q_minima / y_minima carry the admission metadata
+            # (`vector_exponent_admission_kernel`), not the Apple minima.
+            acc = _rt_accumulate_exact_tile[VECTOR](q, yt, q_minima, y_minima, rows_idx, cols_idx, d, y_stride)
+        else:
+            acc = _rt_accumulate_tile[VECTOR](q, yt, rows_idx, cols_idx, d, y_stride)
 
     comptime for r in range(RT_ROWS):
         var row = row0 + r

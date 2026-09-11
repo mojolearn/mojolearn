@@ -70,7 +70,7 @@ from max.gpu.host import DeviceContext
 
 from core.identity_trace import IdentityTrace
 from svm.impl.smosolver import SmoTrace
-from svm.impl.svc_impl import svc_fit, svc_predict
+from svm.impl.svc_impl import svc_fit, svc_fit_borrowed, svc_predict
 from svm.impl.svr_impl import svr_fit, svr_predict
 from svm.impl.svm_parameter import (
     C_SVC,
@@ -196,6 +196,74 @@ def svc_fit_host(
     )
     var trace = SmoTrace()
     var model = svc_fit(ctx, x, labels, n_rows, n_cols, param, kp, card, trace)
+
+    var out = SvcFitOutputs()
+    out.n_support = model.n_support
+    out.n_iter = model.n_iter
+    out.b = model.b
+    out.label0 = model.unique_labels[0]
+    out.label1 = model.unique_labels[1]
+    out.dual_coefs = model.dual_coefs.copy()
+    out.support_idx = model.support_idx.copy()
+    out.support_matrix = model.support_matrix.copy()
+    _ = model^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
+    return out^
+
+
+def svc_fit_host_borrowed(
+    x_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    labels: List[Float32],
+    n_rows: Int,
+    n_cols: Int,
+    kernel: Int,
+    gamma: Float64,
+    C: Float64,
+    tol: Float64,
+    max_iter: Int,
+    nochange_steps: Int,
+) raises -> SvcFitOutputs:
+    """`svc_fit_host` on the caller's borrowed row-major `n_rows x n_cols`
+    float32 buffer (DEVIATION 2665, 2026-09-11), what the binding calls. No
+    host List copy of X: `svc_fit_borrowed` checks the borrowed cells in one
+    threaded pass and fills the device buffer from the address. The caller
+    keeps the buffer alive and unmodified for the call (`_svm_impl.py` holds
+    the array across it). Same parameters, refusals, card and bytes as
+    `svc_fit_host`."""
+    if n_rows <= 0:
+        raise Error("Parameter n_rows: number of rows cannot be less than one")
+    if n_cols <= 0:
+        raise Error("Parameter n_cols: number of columns cannot be less than one")
+    if len(labels) != n_rows:
+        raise Error(
+            "svc_fit_host: y has " + String(len(labels)) + " values, n_rows is "
+            + String(n_rows)
+        )
+    var kp = _kernel_params(kernel, gamma)
+    var param = SvmParameter.default()
+    param.C = C
+    param.tol = tol
+    param.max_iter = max_iter
+    param.max_outer_iter = -1
+    param.nochange_steps = nochange_steps
+    param.cache_size = 0.0
+    param.epsilon = 0.0
+    param.svmType = C_SVC
+    param.verbosity = 0
+    check_rung1_scope(param, kp, False)
+
+    var ctx = DeviceContext()
+    var card = IdentityTrace()
+    card.header(
+        "svc_fit_host: n_rows=" + String(n_rows) + " n_cols=" + String(n_cols)
+        + " kernel=" + String(kernel) + " gamma=" + String(gamma)
+        + " C=" + String(C) + " tol=" + String(tol)
+        + " max_iter=" + String(max_iter)
+        + " nochange_steps=" + String(nochange_steps)
+    )
+    var trace = SmoTrace()
+    var model = svc_fit_borrowed(ctx, x_ptr, labels, n_rows, n_cols, param, kp, card, trace)
 
     var out = SvcFitOutputs()
     out.n_support = model.n_support

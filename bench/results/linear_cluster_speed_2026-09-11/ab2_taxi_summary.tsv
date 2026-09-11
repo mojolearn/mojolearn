@@ -1,0 +1,7 @@
+lane	dataset	shape	arm	device	device_name	status	median_ms	min_ms	max_ms	rounds	digest_stable	quality	ours_over_this
+kmeans	taxi	4000000x11	cuml-gpu	gpu	NVIDIA H100 80GB HBM3	ok	128.8755	126.9700	129.1957	5	False	inertia=1.20192e+08,inertia_over_ours=0.996385,n_iter=20	1.6774
+kmeans	taxi	4000000x11	ours	gpu	cuda	ok	216.1694	196.2332	222.6861	5	True	inertia=1.20628e+08,inertia_over_ours=1,n_iter=21	
+kmeans	taxi	4000000x11	ours-base	gpu	cuda	ok	304.5518	287.8915	308.7389	5	True	inertia=1.20628e+08,inertia_over_ours=1,n_iter=21	0.7098
+ols	taxi	4000000x11	cuml-gpu	gpu	NVIDIA H100 80GB HBM3	ok	23.3926	23.0920	27.0804	5	True	finite=True,r2=0.908836,rmse=4.69649	7.6004
+ols	taxi	4000000x11	ours	gpu	cuda	ok	177.7937	145.9530	180.0276	5	True	finite=True,r2=0.908837,rmse=4.69647	
+ols	taxi	4000000x11	ours-base	gpu	cuda	ok	264.7269	262.9374	268.0725	5	True	finite=True,r2=0.908837,rmse=4.69647	0.6716
