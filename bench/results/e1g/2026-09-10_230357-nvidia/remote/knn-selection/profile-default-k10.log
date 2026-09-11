@@ -1,0 +1,51 @@
+1030 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1b69c0000000, nodemask=2)
+KNN_REF_HEADER mode IDENTICAL column nvidia index 400000 queries 4000 features 32 k 10 rounds 3 fixture dyadic-v1 selector 1 transpose 1 register_tile 1 metadata_forced 0 metadata_default_capable 0 index_tile 65536
+KNN_PHASE_TIMERS transpose_ms 0.115624
+KNN_PHASE_TIMERS distance_ms 15.367994 select_ms 10.350676 merge_ms 0.494285 distance_launches 56 select_launches 56 merge_launches 48 query_tile 512 index_tile 65536 n_queries 4000 n_index 400000 k 10
+KNN_REF_WARMUP request 0 28.412305
+KNN_PHASE_TIMERS transpose_ms 0.076105
+KNN_PHASE_TIMERS distance_ms 15.231621 select_ms 10.298968 merge_ms 0.453859 distance_launches 56 select_launches 56 merge_launches 48 query_tile 512 index_tile 65536 n_queries 4000 n_index 400000 k 10
+KNN_REF_WARMUP request 1 27.445839
+KNN_PHASE_TIMERS transpose_ms 0.074892
+KNN_PHASE_TIMERS distance_ms 15.235115 select_ms 10.301552 merge_ms 0.478026 distance_launches 56 select_launches 56 merge_launches 48 query_tile 512 index_tile 65536 n_queries 4000 n_index 400000 k 10
+KNN_REF_ROUND request 1 27.460056
+KNN_PHASE_TIMERS transpose_ms 0.075229
+KNN_PHASE_TIMERS distance_ms 15.246378 select_ms 11.042207 merge_ms 0.484629 distance_launches 56 select_launches 56 merge_launches 48 query_tile 512 index_tile 65536 n_queries 4000 n_index 400000 k 10
+KNN_REF_ROUND request 2 28.259005
+KNN_PHASE_TIMERS transpose_ms 0.078776
+KNN_PHASE_TIMERS distance_ms 15.245768 select_ms 10.304602 merge_ms 0.458208 distance_launches 56 select_launches 56 merge_launches 48 query_tile 512 index_tile 65536 n_queries 4000 n_index 400000 k 10
+KNN_REF_ROUND request 3 27.460592
+KNN_PHASE_TIMERS norms_ms 0.255376
+KNN_PHASE_TIMERS transpose_ms 0.075508
+KNN_PHASE_TIMERS distance_ms 15.249296 select_ms 10.310259 merge_ms 0.462941 distance_launches 56 select_launches 56 merge_launches 48 query_tile 512 index_tile 65536 n_queries 4000 n_index 400000 k 10
+KNN_REF_WARMUP device 0 26.373021
+KNN_PHASE_TIMERS norms_ms 0.254351
+KNN_PHASE_TIMERS transpose_ms 0.074774
+KNN_PHASE_TIMERS distance_ms 15.228216 select_ms 10.292424 merge_ms 0.458417 distance_launches 56 select_launches 56 merge_launches 48 query_tile 512 index_tile 65536 n_queries 4000 n_index 400000 k 10
+KNN_REF_WARMUP device 1 26.32607
+KNN_PHASE_TIMERS norms_ms 0.254256
+KNN_PHASE_TIMERS transpose_ms 0.074584
+KNN_PHASE_TIMERS distance_ms 15.282101 select_ms 10.31146 merge_ms 0.449282 distance_launches 56 select_launches 56 merge_launches 48 query_tile 512 index_tile 65536 n_queries 4000 n_index 400000 k 10
+KNN_REF_ROUND device 1 26.388493
+KNN_PHASE_TIMERS norms_ms 0.25459
+KNN_PHASE_TIMERS transpose_ms 0.075023
+KNN_PHASE_TIMERS distance_ms 15.230173 select_ms 10.282762 merge_ms 0.444728 distance_launches 56 select_launches 56 merge_launches 48 query_tile 512 index_tile 65536 n_queries 4000 n_index 400000 k 10
+KNN_REF_ROUND device 2 26.305756
+KNN_PHASE_TIMERS norms_ms 0.254557
+KNN_PHASE_TIMERS transpose_ms 0.074656
+KNN_PHASE_TIMERS distance_ms 15.234702 select_ms 10.284388 merge_ms 0.449899 distance_launches 56 select_launches 56 merge_launches 48 query_tile 512 index_tile 65536 n_queries 4000 n_index 400000 k 10
+KNN_REF_ROUND device 3 26.315626
+KNN_REF_DEVICE_VS_REQUEST mismatched_cells 0
+KNN_REF_FINGERPRINT index_fnv1a64 14071077154797861403 distance_bits_xor 708282
+KNN_REF_ROW0 0 147075 1075752738
+KNN_REF_ROW0 1 347872 1075802578
+KNN_REF_ROW0 2 280582 1075899932
+KNN_REF_ROW0 3 255546 1076098936
+KNN_REF_ROW0 4 158380 1076157127
+KNN_REF_ROW0 5 151319 1076280807
+KNN_REF_ROW0 6 252972 1076309764
+KNN_REF_ROW0 7 194725 1076394742
+KNN_REF_ROW0 8 125716 1076423977
+KNN_REF_ROW0 9 351008 1076424580
+KNN_REF_RESULT index 400000 queries 4000 k 10 features 32 request_median_ms 27.460592 device_median_ms 26.315626 rounds 3 query_tile 512 index_tile 65536
+KNN REFERENCE PRICE PASS

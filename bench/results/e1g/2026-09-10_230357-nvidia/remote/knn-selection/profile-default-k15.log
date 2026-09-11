@@ -1,0 +1,56 @@
+1057 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1b3a00000000, nodemask=2)
+KNN_REF_HEADER mode IDENTICAL column nvidia index 400000 queries 4000 features 32 k 15 rounds 3 fixture dyadic-v1 selector 1 transpose 1 register_tile 1 metadata_forced 0 metadata_default_capable 0 index_tile 65536
+KNN_PHASE_TIMERS transpose_ms 0.114139
+KNN_PHASE_TIMERS distance_ms 15.368081 select_ms 14.659937 merge_ms 0.486996 distance_launches 56 select_launches 56 merge_launches 48 query_tile 512 index_tile 65536 n_queries 4000 n_index 400000 k 15
+KNN_REF_WARMUP request 0 32.751763
+KNN_PHASE_TIMERS transpose_ms 0.076658
+KNN_PHASE_TIMERS distance_ms 15.236566 select_ms 14.595745 merge_ms 0.452612 distance_launches 56 select_launches 56 merge_launches 48 query_tile 512 index_tile 65536 n_queries 4000 n_index 400000 k 15
+KNN_REF_WARMUP request 1 31.797238
+KNN_PHASE_TIMERS transpose_ms 0.075595
+KNN_PHASE_TIMERS distance_ms 15.243118 select_ms 14.606239 merge_ms 0.452019 distance_launches 56 select_launches 56 merge_launches 48 query_tile 512 index_tile 65536 n_queries 4000 n_index 400000 k 15
+KNN_REF_ROUND request 1 31.800798
+KNN_PHASE_TIMERS transpose_ms 0.074827
+KNN_PHASE_TIMERS distance_ms 15.234708 select_ms 14.597782 merge_ms 0.455706 distance_launches 56 select_launches 56 merge_launches 48 query_tile 512 index_tile 65536 n_queries 4000 n_index 400000 k 15
+KNN_REF_ROUND request 2 31.784979
+KNN_PHASE_TIMERS transpose_ms 0.074905
+KNN_PHASE_TIMERS distance_ms 15.249668 select_ms 14.605507 merge_ms 0.451729 distance_launches 56 select_launches 56 merge_launches 48 query_tile 512 index_tile 65536 n_queries 4000 n_index 400000 k 15
+KNN_REF_ROUND request 3 31.801659
+KNN_PHASE_TIMERS norms_ms 0.25586
+KNN_PHASE_TIMERS transpose_ms 0.075031
+KNN_PHASE_TIMERS distance_ms 16.0431 select_ms 14.629746 merge_ms 0.46885 distance_launches 56 select_launches 56 merge_launches 48 query_tile 512 index_tile 65536 n_queries 4000 n_index 400000 k 15
+KNN_REF_WARMUP device 0 31.502341
+KNN_PHASE_TIMERS norms_ms 0.258037
+KNN_PHASE_TIMERS transpose_ms 0.077068
+KNN_PHASE_TIMERS distance_ms 15.256446 select_ms 14.613231 merge_ms 0.469905 distance_launches 56 select_launches 56 merge_launches 48 query_tile 512 index_tile 65536 n_queries 4000 n_index 400000 k 15
+KNN_REF_WARMUP device 1 30.692913
+KNN_PHASE_TIMERS norms_ms 0.254176
+KNN_PHASE_TIMERS transpose_ms 0.075235
+KNN_PHASE_TIMERS distance_ms 15.268355 select_ms 14.618896 merge_ms 0.443368 distance_launches 56 select_launches 56 merge_launches 48 query_tile 512 index_tile 65536 n_queries 4000 n_index 400000 k 15
+KNN_REF_ROUND device 1 30.676921
+KNN_PHASE_TIMERS norms_ms 0.25434
+KNN_PHASE_TIMERS transpose_ms 0.07481
+KNN_PHASE_TIMERS distance_ms 15.223841 select_ms 14.586854 merge_ms 0.448854 distance_launches 56 select_launches 56 merge_launches 48 query_tile 512 index_tile 65536 n_queries 4000 n_index 400000 k 15
+KNN_REF_ROUND device 2 30.60713
+KNN_PHASE_TIMERS norms_ms 0.254718
+KNN_PHASE_TIMERS transpose_ms 0.074535
+KNN_PHASE_TIMERS distance_ms 15.232836 select_ms 14.59576 merge_ms 0.452318 distance_launches 56 select_launches 56 merge_launches 48 query_tile 512 index_tile 65536 n_queries 4000 n_index 400000 k 15
+KNN_REF_ROUND device 3 30.629449
+KNN_REF_DEVICE_VS_REQUEST mismatched_cells 0
+KNN_REF_FINGERPRINT index_fnv1a64 16146695062279770847 distance_bits_xor 3272156
+KNN_REF_ROW0 0 147075 1075752738
+KNN_REF_ROW0 1 347872 1075802578
+KNN_REF_ROW0 2 280582 1075899932
+KNN_REF_ROW0 3 255546 1076098936
+KNN_REF_ROW0 4 158380 1076157127
+KNN_REF_ROW0 5 151319 1076280807
+KNN_REF_ROW0 6 252972 1076309764
+KNN_REF_ROW0 7 194725 1076394742
+KNN_REF_ROW0 8 125716 1076423977
+KNN_REF_ROW0 9 351008 1076424580
+KNN_REF_ROW0 10 322815 1076439373
+KNN_REF_ROW0 11 301998 1076456634
+KNN_REF_ROW0 12 77158 1076475919
+KNN_REF_ROW0 13 158980 1076482935
+KNN_REF_ROW0 14 335466 1076512547
+KNN_REF_RESULT index 400000 queries 4000 k 15 features 32 request_median_ms 31.800798 device_median_ms 30.629449 rounds 3 query_tile 512 index_tile 65536
+KNN REFERENCE PRICE PASS

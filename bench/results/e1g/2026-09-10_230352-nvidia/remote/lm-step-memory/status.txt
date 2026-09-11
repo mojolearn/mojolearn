@@ -1,0 +1,6 @@
+started=2026-09-11T03:05:36Z budget=300 steps=3
+gpu_archs=sm_90a column=nvidia
+build byte_lm exit=0 secs=51
+probe control exit=1 secs=1 (2 = budget limitation recorded)
+probe target exit=1 secs=4 (2 = budget limitation recorded)
+finished=2026-09-11T03:06:32Z

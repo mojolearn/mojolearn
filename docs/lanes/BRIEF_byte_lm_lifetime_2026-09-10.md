@@ -348,3 +348,25 @@ window; the retained hang is on a 4090.
 
 Created (uncommitted): `tools/byte_lm_lifetime_diag.py`,
 `tools/byte_lm_lifetime_diag.sh`, this brief. Nothing else edited.
+
+## Run 1 and 2 results (2026-09-11)
+
+Run 1 (L40S, `bench/results/e1g/2026-09-10_230347-nvidia`): every case
+failed in 0.3 s at input validation because the wrapper built only the byte
+LM binding and the NumPy-free Python layer takes `all_finite_f32` from the
+IDENTICAL base binding. Fixed in a51b6150 (build `bindings/build.sh` first).
+
+Run 2 (L40S sm_89, main a51b6150, `bench/results/e1g/2026-09-10_230815-nvidia`):
+all 12 cases PASSED, none hung (stateless x1, stateless x2, stateless then
+resident, resident x2, resident then stateless, close/reopen, restore then
+step, failure recovery, resident mismatch recovery, stateless x2 with the
+default profile, with a GC pause, with CUDA_LAUNCH_BLOCKING). First-step
+loss, gradients and state are bit-equal across all eleven compared cases,
+second steps across all seven, and the mixed sequences match the pure ones.
+Wall 1.7 to 4.9 s per case, 26 s for the harness, 97 s of builds.
+
+What this does and does not say: at this commit, on an L40S, with the WP67
+3-layer V257 shape, the second DeviceContext after a stateless call does not
+hang. It does not clear the retained RTX 4090 capture; the 4090 run is in
+flight (`lifetime-4090`, pod started 03:16Z) and is the column that matters
+before any conclusion.

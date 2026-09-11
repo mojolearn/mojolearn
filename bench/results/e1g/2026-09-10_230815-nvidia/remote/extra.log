@@ -1,0 +1,50 @@
+03:10:26 byte-lm-lifetime: start, root=/root/mojolearn out=/root/gemm_leg_out/byte-lm-lifetime deadline=120s
+03:10:26 byte-lm-lifetime: GPU arch sm_89
+03:12:03 byte-lm-lifetime: build exit 0 after 97s
+865 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7b8ac0000000, nodemask=2)
+numeric_mode 1
+vendor cuda
+profile mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1
+file /root/mojolearn/python/mojolearn/identical/_mojolearn_byte_lm.so
+03:12:29 byte-lm-lifetime: harness exit 0 after 26s
+== stateless_x1 (deadline 120s)
+   passed exit=0 wall=2.5s
+== stateless_x2 (deadline 120s)
+   passed exit=0 wall=1.7s
+== stateless_then_resident (deadline 120s)
+   passed exit=0 wall=1.9s
+== resident_x2 (deadline 120s)
+   passed exit=0 wall=1.9s
+== resident_then_stateless (deadline 120s)
+   passed exit=0 wall=1.8s
+== resident_close_reopen (deadline 120s)
+   passed exit=0 wall=1.7s
+== restore_then_step (deadline 120s)
+   passed exit=0 wall=1.9s
+== failure_recovery (deadline 120s)
+   passed exit=0 wall=1.9s
+== resident_mismatch_recovery (deadline 120s)
+   passed exit=0 wall=1.9s
+== stateless_x2_default_profile (deadline 120s)
+   passed exit=0 wall=1.9s
+== stateless_x2_gc_pause (deadline 120s)
+   passed exit=0 wall=4.9s
+== stateless_x2_launch_blocking (deadline 120s)
+   passed exit=0 wall=1.7s
+{"failed": [], "hung": [], "passed": ["stateless_x1", "stateless_x2", "stateless_then_resident", "resident_x2", "resident_then_stateless", "resident_close_reopen", "restore_then_step", "failure_recovery", "resident_mismatch_recovery", "stateless_x2_default_profile", "stateless_x2_gc_pause", "stateless_x2_launch_blocking"]}
+failure_recovery                 passed   exit=0 wall=1.9s
+resident_close_reopen            passed   exit=0 wall=1.7s
+resident_mismatch_recovery       passed   exit=0 wall=1.9s
+resident_then_stateless          passed   exit=0 wall=1.8s
+resident_x2                      passed   exit=0 wall=1.9s
+restore_then_step                passed   exit=0 wall=1.9s
+stateless_then_resident          passed   exit=0 wall=1.9s
+stateless_x1                     passed   exit=0 wall=2.5s
+stateless_x2                     passed   exit=0 wall=1.7s
+stateless_x2_default_profile     passed   exit=0 wall=1.9s
+stateless_x2_gc_pause            passed   exit=0 wall=4.9s
+stateless_x2_launch_blocking     passed   exit=0 wall=1.7s
+first_step_equality cases: ['stateless_x1', 'stateless_x2', 'stateless_then_resident', 'resident_x2', 'resident_then_stateless', 'resident_close_reopen', 'restore_then_step', 'failure_recovery', 'resident_mismatch_recovery', 'stateless_x2_gc_pause', 'stateless_x2_launch_blocking'] NOT bit-equal fields: none
+second_step_equality cases: ['stateless_x2', 'resident_x2', 'resident_close_reopen', 'restore_then_step', 'resident_mismatch_recovery', 'stateless_x2_gc_pause', 'stateless_x2_launch_blocking'] NOT bit-equal fields: none
+hung: [] failed: []
+03:12:29 byte-lm-lifetime: done, total 123s

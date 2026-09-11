@@ -428,3 +428,36 @@ different GPU model or driver, in which case the tuple is absent and
 - `docs/lanes/BRIEF_knn_selection_2026-09-10.md` (this file)
 
 No kernel, binding, check or Python package file was modified.
+
+## Run 1 results (H100, 2026-09-11 03:06Z to 03:14Z, `bench/results/e1g/2026-09-10_230357-nvidia/remote/knn-selection`)
+
+Profile phase (the deliverable on unchanged source). Request-level phase
+timers, 400k index rows, 4k queries, d32, query tile 512, index tile 65,536,
+56 distance and 56 selection launches, 48 merges:
+
+| build | k | distance ms | select ms | merge ms |
+|---|---:|---:|---:|---:|
+| default (K-specialized) | 10 | 15.23 | 10.28 | 0.45 |
+| default (K-specialized) | 15 | 15.23 | 14.60 | 0.45 |
+| generic bucket | 1 | 16.25 | 16.11 | 0.44 |
+| generic bucket | 2 | 16.25 | 19.25 | 0.44 |
+| generic bucket | 5 | 16.24 | 24.71 | 0.46 |
+| generic bucket | 10 | 15.26 | 28.59 | 0.45 |
+| generic bucket | 15 | 15.24 | 30.28 | 0.45 |
+
+The default selector's k-slope is 0.86 ms per unit of k per request, 15.4 us
+per launch per unit of k, with an intercept near 1.7 ms: 84 percent of the
+k10 selection and 88 percent of the k15 selection is k-proportional. That is
+C1's premise, confirmed. Full request medians (baseline arm, unwired trial
+build, so both arms ARE the baseline): large k10 33.65 ms, k15 38.41 ms;
+dyadic k10 32.34 ms, k15 36.22 ms. Kernels sum to about 26 ms at k10, so
+about 7.7 ms of every request is outside the three kernels (upload, download,
+Python). The cached-reference ratios the harness prints (3.16x, 3.35x) are
+not a paired opponent measurement and are not the qualified 2.61 to 2.88x.
+
+Gate phase: arms equal, order ok, planted ok, no hard oracle mismatch on any
+fixture; REACH NOT PROVEN for every arm as designed (the trial define is not
+wired). The only "distance mismatch" rows were the 16 planted exact-match
+queries, where the float32 Gram form leaves a residual near a true zero; the
+harness floor now includes that residual (71b2f975). Implementation of C4
+and C1 behind the trial define is the next lane (DEVIATION 2497, 2498).

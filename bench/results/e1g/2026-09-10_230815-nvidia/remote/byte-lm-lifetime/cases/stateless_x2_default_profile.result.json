@@ -1,0 +1,223 @@
+{
+ "argv": [
+  "/root/mojolearn/.pixi/envs/default/bin/python3",
+  "/root/mojolearn/tools/byte_lm_lifetime_diag.py",
+  "--case",
+  "stateless_x2_default_profile",
+  "--record",
+  "/root/gemm_leg_out/byte-lm-lifetime/cases/stateless_x2_default_profile.json",
+  "--deadline",
+  "120.0"
+ ],
+ "case": "stateless_x2_default_profile",
+ "deadline_s": 120.0,
+ "env_overrides": {},
+ "exit_code": 0,
+ "hang_diagnostics": null,
+ "log": "/root/gemm_leg_out/byte-lm-lifetime/cases/stateless_x2_default_profile.log",
+ "python_stacks": "",
+ "record": {
+  "binding": {
+   "binding_file": "/root/mojolearn/python/mojolearn/identical/_mojolearn_byte_lm.so",
+   "binding_sha256": "9a81c0300ae8e93edde074686bfda4affe93ec3137e98bf4831ae0c4610f0462",
+   "native_profile": "mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1",
+   "native_vendor": "cuda"
+  },
+  "case": "stateless_x2_default_profile",
+  "elapsed_s": 1.384,
+  "error": null,
+  "events": [
+   {
+    "mojolearn_file": "/root/mojolearn/python/mojolearn/__init__.py",
+    "name": "imported",
+    "t": 0.065,
+    "version": "0.8.0"
+   },
+   {
+    "name": "binding",
+    "sha256": "9a81c0300ae8",
+    "t": 0.272,
+    "vendor": "cuda"
+   },
+   {
+    "name": "profile",
+    "profile": "mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1",
+    "t": 0.274
+   },
+   {
+    "completed_steps": 0,
+    "label": "step1",
+    "name": "native_call_begin",
+    "resident": false,
+    "t": 0.275
+   },
+   {
+    "label": "step1",
+    "name": "native_call_end",
+    "t": 1.368
+   },
+   {
+    "label": "step1",
+    "loss": 5.545339107513428,
+    "name": "hashed",
+    "step": 1,
+    "t": 1.369
+   },
+   {
+    "completed_steps": 1,
+    "label": "step2",
+    "name": "native_call_begin",
+    "resident": false,
+    "t": 1.37
+   },
+   {
+    "label": "step2",
+    "name": "native_call_end",
+    "t": 1.383
+   },
+   {
+    "label": "step2",
+    "loss": 5.544347763061523,
+    "name": "hashed",
+    "step": 2,
+    "t": 1.384
+   }
+  ],
+  "fixture": {
+   "n_total": 14080,
+   "profile": "mojolearn.byte-lm.b1-l5-d16-h2-kv1-hd8-ff24-v257-blocks3.fp32.v3",
+   "shape": {
+    "batch": 1,
+    "d_model": 16,
+    "head_dim": 8,
+    "intermediate": 24,
+    "length": 5,
+    "n_heads": 2,
+    "n_kv": 1,
+    "n_layers": 3,
+    "vocab_size": 257
+   },
+   "source": "numpy.default_rng(19) standard_normal*0.02 then integers"
+  },
+  "hashes": {
+   "step1": {
+    "flat_gradients": {
+     "dtype": "<f4",
+     "nbytes": 139776,
+     "sha256": "0548c969faaf8aa209e2bd029158109794f0dee68aa025f7f529e9e6fb3a649c",
+     "shape": [
+      34944
+     ]
+    },
+    "loss": {
+     "dtype": "<f4",
+     "nbytes": 4,
+     "sha256": "ebdac6bcaf6e6321ab61373d178e3994f855aac69bb2f48b37536350c26427fc",
+     "shape": [],
+     "value": 5.545339107513428
+    },
+    "state.completed_steps": {
+     "value": 1
+    },
+    "state.flags": {
+     "dtype": "<i4",
+     "nbytes": 80,
+     "sha256": "5b6fb58e61fa475939767d68a446f97f1bff02c0e5935a3ea8bb51e6515783d8",
+     "shape": [
+      20
+     ]
+    },
+    "state.m": {
+     "dtype": "<f4",
+     "nbytes": 139776,
+     "sha256": "f3cb8acea3f85804030c63b04342ce89873e616953064360e698e7ce3fc7988e",
+     "shape": [
+      34944
+     ]
+    },
+    "state.parameters": {
+     "dtype": "<f4",
+     "nbytes": 139776,
+     "sha256": "bf6687a8057892646492ae848774f23f44d94b833d8583c6c3b7a30e2f54d8ff",
+     "shape": [
+      34944
+     ]
+    },
+    "state.v": {
+     "dtype": "<f4",
+     "nbytes": 139776,
+     "sha256": "73aa2b524229984f30318e2f1cb91ef1a5c43fe25e0cf714a2b0cab1df0e94c1",
+     "shape": [
+      34944
+     ]
+    },
+    "step": {
+     "value": 1
+    }
+   },
+   "step2": {
+    "flat_gradients": {
+     "dtype": "<f4",
+     "nbytes": 139776,
+     "sha256": "9a498cdaa36dead1ad1f716589c71d2c56de2549cd6481415c93fde2a531775f",
+     "shape": [
+      34944
+     ]
+    },
+    "loss": {
+     "dtype": "<f4",
+     "nbytes": 4,
+     "sha256": "a4c4742c369ce8b7d433b5177359e18f1b82bf137856d685605011f96c8575f3",
+     "shape": [],
+     "value": 5.544347763061523
+    },
+    "state.completed_steps": {
+     "value": 2
+    },
+    "state.flags": {
+     "dtype": "<i4",
+     "nbytes": 80,
+     "sha256": "5b6fb58e61fa475939767d68a446f97f1bff02c0e5935a3ea8bb51e6515783d8",
+     "shape": [
+      20
+     ]
+    },
+    "state.m": {
+     "dtype": "<f4",
+     "nbytes": 139776,
+     "sha256": "da0b3395d1deb75a9a6a0d99fa0cd30bc872c1bcb4014ec560bd5e615d8bd033",
+     "shape": [
+      34944
+     ]
+    },
+    "state.parameters": {
+     "dtype": "<f4",
+     "nbytes": 139776,
+     "sha256": "e28acec9a222ae0b74506e9cc2b240ce4b5e14307204913401267d89bd0d739c",
+     "shape": [
+      34944
+     ]
+    },
+    "state.v": {
+     "dtype": "<f4",
+     "nbytes": 139776,
+     "sha256": "18efd513e300b972fa6f843fedffc7bd70e52b614748b28aaccb9ee9d6bcb424",
+     "shape": [
+      34944
+     ]
+    },
+    "step": {
+     "value": 2
+    }
+   }
+  },
+  "numeric_mode": "identical",
+  "pid": 2236,
+  "python": "3.14.7",
+  "schema": "byte-lm-lifetime-diag.record.v1",
+  "status": "passed"
+ },
+ "status": "passed",
+ "timed_out": false,
+ "wall_s": 1.901
+}

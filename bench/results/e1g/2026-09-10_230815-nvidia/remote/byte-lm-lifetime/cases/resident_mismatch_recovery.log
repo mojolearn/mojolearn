@@ -1,0 +1,12 @@
+2090 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x136240000000, nodemask=1)
+[resident_mismatch_recovery]   0.076s imported {"mojolearn_file": "/root/mojolearn/python/mojolearn/__init__.py", "version": "0.8.0"}
+[resident_mismatch_recovery]   0.271s binding {"sha256": "9a81c0300ae8", "vendor": "cuda"}
+[resident_mismatch_recovery]   0.272s native_call_begin {"completed_steps": 0, "label": "step1", "resident": true}
+[resident_mismatch_recovery]   1.275s native_call_end {"label": "step1"}
+[resident_mismatch_recovery]   1.276s hashed {"label": "step1", "loss": 5.548226833343506, "step": 1}
+[resident_mismatch_recovery]   1.277s mirror_altered 
+[resident_mismatch_recovery]   1.279s mismatch_refused {"error": "byte LM: authoritative state bits mismatch", "session_released": true}
+[resident_mismatch_recovery]   1.280s state_restored {"completed_steps": 1}
+[resident_mismatch_recovery]   1.281s native_call_begin {"completed_steps": 1, "label": "step2", "resident": true}
+[resident_mismatch_recovery]   1.291s native_call_end {"label": "step2"}
+[resident_mismatch_recovery]   1.291s hashed {"label": "step2", "loss": 5.547558784484863, "step": 2}

@@ -1,0 +1,46 @@
+status: failed
+timing large k10: baseline median 33.653272 ms (min 33.295915), headbound median 33.554896 ms (min 33.254208)
+timing large k15: baseline median 38.411057 ms (min 38.224591), headbound median 38.552074 ms (min 37.935670)
+timing dyadic k10: baseline median 32.339593 ms (min 32.023818), headbound median 32.234832 ms (min 32.030873)
+  cached-reference ratios (NOT a paired opponent): baseline 3.163x, headbound 3.153x
+timing dyadic k15: baseline median 36.215493 ms (min 35.175256), headbound median 36.001887 ms (min 35.519722)
+  cached-reference ratios (NOT a paired opponent): baseline 3.348x, headbound 3.328x
+FAIL large k10: oracle distance mismatch rows [101, 104, 107, 110, 111, 113, 114, 115]
+FAIL large k10: REACH NOT PROVEN for arm baseline: sabotage left every cell unchanged (build lacks -D MOJOLEARN_KNN_SELECT_TRIAL=1, or the arm is not wired)
+FAIL large k10: REACH NOT PROVEN for arm headbound: sabotage left every cell unchanged (build lacks -D MOJOLEARN_KNN_SELECT_TRIAL=1, or the arm is not wired)
+FAIL large k10: REACH NOT PROVEN for arm default: sabotage left every cell unchanged (build lacks -D MOJOLEARN_KNN_SELECT_TRIAL=1, or the arm is not wired)
+FAIL large k15: oracle distance mismatch rows [101, 104, 107, 110, 111, 113, 114, 115]
+FAIL large k15: REACH NOT PROVEN for arm baseline: sabotage left every cell unchanged (build lacks -D MOJOLEARN_KNN_SELECT_TRIAL=1, or the arm is not wired)
+FAIL large k15: REACH NOT PROVEN for arm headbound: sabotage left every cell unchanged (build lacks -D MOJOLEARN_KNN_SELECT_TRIAL=1, or the arm is not wired)
+FAIL large k15: REACH NOT PROVEN for arm default: sabotage left every cell unchanged (build lacks -D MOJOLEARN_KNN_SELECT_TRIAL=1, or the arm is not wired)
+FAIL dyadic k10: REACH NOT PROVEN for arm baseline: sabotage left every cell unchanged (build lacks -D MOJOLEARN_KNN_SELECT_TRIAL=1, or the arm is not wired)
+FAIL dyadic k10: REACH NOT PROVEN for arm headbound: sabotage left every cell unchanged (build lacks -D MOJOLEARN_KNN_SELECT_TRIAL=1, or the arm is not wired)
+FAIL dyadic k10: REACH NOT PROVEN for arm default: sabotage left every cell unchanged (build lacks -D MOJOLEARN_KNN_SELECT_TRIAL=1, or the arm is not wired)
+FAIL dyadic k15: REACH NOT PROVEN for arm baseline: sabotage left every cell unchanged (build lacks -D MOJOLEARN_KNN_SELECT_TRIAL=1, or the arm is not wired)
+FAIL dyadic k15: REACH NOT PROVEN for arm headbound: sabotage left every cell unchanged (build lacks -D MOJOLEARN_KNN_SELECT_TRIAL=1, or the arm is not wired)
+FAIL dyadic k15: REACH NOT PROVEN for arm default: sabotage left every cell unchanged (build lacks -D MOJOLEARN_KNN_SELECT_TRIAL=1, or the arm is not wired)
+FAIL ties k10: oracle distance mismatch rows [0, 4, 9, 12, 13, 15, 17, 22, 24, 25]
+FAIL ties k10: REACH NOT PROVEN for arm baseline: sabotage left every cell unchanged (build lacks -D MOJOLEARN_KNN_SELECT_TRIAL=1, or the arm is not wired)
+FAIL ties k10: REACH NOT PROVEN for arm headbound: sabotage left every cell unchanged (build lacks -D MOJOLEARN_KNN_SELECT_TRIAL=1, or the arm is not wired)
+FAIL ties k10: REACH NOT PROVEN for arm default: sabotage left every cell unchanged (build lacks -D MOJOLEARN_KNN_SELECT_TRIAL=1, or the arm is not wired)
+FAIL ties k15: oracle distance mismatch rows [0, 4, 9, 12, 13, 15, 17, 22, 24, 25]
+FAIL ties k15: REACH NOT PROVEN for arm baseline: sabotage left every cell unchanged (build lacks -D MOJOLEARN_KNN_SELECT_TRIAL=1, or the arm is not wired)
+FAIL ties k15: REACH NOT PROVEN for arm headbound: sabotage left every cell unchanged (build lacks -D MOJOLEARN_KNN_SELECT_TRIAL=1, or the arm is not wired)
+FAIL ties k15: REACH NOT PROVEN for arm default: sabotage left every cell unchanged (build lacks -D MOJOLEARN_KNN_SELECT_TRIAL=1, or the arm is not wired)
+FAIL divergent_tail k10: REACH NOT PROVEN for arm baseline: sabotage left every cell unchanged (build lacks -D MOJOLEARN_KNN_SELECT_TRIAL=1, or the arm is not wired)
+FAIL divergent_tail k10: REACH NOT PROVEN for arm headbound: sabotage left every cell unchanged (build lacks -D MOJOLEARN_KNN_SELECT_TRIAL=1, or the arm is not wired)
+FAIL divergent_tail k10: REACH NOT PROVEN for arm default: sabotage left every cell unchanged (build lacks -D MOJOLEARN_KNN_SELECT_TRIAL=1, or the arm is not wired)
+FAIL divergent_tail k15: REACH NOT PROVEN for arm baseline: sabotage left every cell unchanged (build lacks -D MOJOLEARN_KNN_SELECT_TRIAL=1, or the arm is not wired)
+FAIL divergent_tail k15: REACH NOT PROVEN for arm headbound: sabotage left every cell unchanged (build lacks -D MOJOLEARN_KNN_SELECT_TRIAL=1, or the arm is not wired)
+FAIL divergent_tail k15: REACH NOT PROVEN for arm default: sabotage left every cell unchanged (build lacks -D MOJOLEARN_KNN_SELECT_TRIAL=1, or the arm is not wired)
+build-profile-generic	0	37s
+build-profile-default	0	26s
+profile-generic-k1	0	1s
+profile-generic-k2	0	2s
+profile-generic-k5	0	2s
+profile-generic-k10	0	2s
+profile-generic-k15	0	1s
+profile-default-k10	0	2s
+profile-default-k15	0	1s
+build-binding-trial	0	57s
+gate	1	183s

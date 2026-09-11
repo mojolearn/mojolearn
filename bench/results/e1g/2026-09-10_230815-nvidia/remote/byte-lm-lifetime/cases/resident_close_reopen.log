@@ -1,0 +1,11 @@
+1652 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x190900000000, nodemask=2)
+[resident_close_reopen]   0.077s imported {"mojolearn_file": "/root/mojolearn/python/mojolearn/__init__.py", "version": "0.8.0"}
+[resident_close_reopen]   0.225s binding {"sha256": "9a81c0300ae8", "vendor": "cuda"}
+[resident_close_reopen]   0.226s native_call_begin {"completed_steps": 0, "label": "step1", "resident": true}
+[resident_close_reopen]   1.181s native_call_end {"label": "step1"}
+[resident_close_reopen]   1.182s hashed {"label": "step1", "loss": 5.548226833343506, "step": 1}
+[resident_close_reopen]   1.182s close_begin 
+[resident_close_reopen]   1.183s close_end {"session_released": true}
+[resident_close_reopen]   1.183s native_call_begin {"completed_steps": 1, "label": "step2", "resident": true}
+[resident_close_reopen]   1.192s native_call_end {"label": "step2"}
+[resident_close_reopen]   1.193s hashed {"label": "step2", "loss": 5.547558784484863, "step": 2}

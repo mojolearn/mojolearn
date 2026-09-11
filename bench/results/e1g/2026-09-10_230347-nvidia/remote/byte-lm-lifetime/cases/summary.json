@@ -1,0 +1,128 @@
+{
+ "cases": {
+  "failure_recovery": {
+   "exit_code": 1,
+   "status": "failed",
+   "timed_out": false,
+   "wall_s": 0.301
+  },
+  "resident_close_reopen": {
+   "exit_code": 1,
+   "status": "failed",
+   "timed_out": false,
+   "wall_s": 0.302
+  },
+  "resident_mismatch_recovery": {
+   "exit_code": 1,
+   "status": "failed",
+   "timed_out": false,
+   "wall_s": 0.398
+  },
+  "resident_then_stateless": {
+   "exit_code": 1,
+   "status": "failed",
+   "timed_out": false,
+   "wall_s": 0.35
+  },
+  "resident_x2": {
+   "exit_code": 1,
+   "status": "failed",
+   "timed_out": false,
+   "wall_s": 0.348
+  },
+  "restore_then_step": {
+   "exit_code": 1,
+   "status": "failed",
+   "timed_out": false,
+   "wall_s": 0.397
+  },
+  "stateless_then_resident": {
+   "exit_code": 1,
+   "status": "failed",
+   "timed_out": false,
+   "wall_s": 0.3
+  },
+  "stateless_x1": {
+   "exit_code": 1,
+   "status": "failed",
+   "timed_out": false,
+   "wall_s": 0.8
+  },
+  "stateless_x2": {
+   "exit_code": 1,
+   "status": "failed",
+   "timed_out": false,
+   "wall_s": 0.398
+  },
+  "stateless_x2_default_profile": {
+   "exit_code": 1,
+   "status": "failed",
+   "timed_out": false,
+   "wall_s": 0.349
+  },
+  "stateless_x2_gc_pause": {
+   "exit_code": 1,
+   "status": "failed",
+   "timed_out": false,
+   "wall_s": 0.346
+  },
+  "stateless_x2_launch_blocking": {
+   "exit_code": 1,
+   "status": "failed",
+   "timed_out": false,
+   "wall_s": 0.303
+  }
+ },
+ "deadline_s": 120.0,
+ "deviation": 2494,
+ "failed": [
+  "stateless_x1",
+  "stateless_x2",
+  "stateless_then_resident",
+  "resident_x2",
+  "resident_then_stateless",
+  "resident_close_reopen",
+  "restore_then_step",
+  "failure_recovery",
+  "resident_mismatch_recovery",
+  "stateless_x2_default_profile",
+  "stateless_x2_gc_pause",
+  "stateless_x2_launch_blocking"
+ ],
+ "first_step_equality": {
+  "cases_compared": [],
+  "fields": {}
+ },
+ "fixture": {
+  "scale": 0.02,
+  "seed": 19,
+  "shape": {
+   "batch": 1,
+   "d_model": 16,
+   "head_dim": 8,
+   "intermediate": 24,
+   "length": 5,
+   "n_heads": 2,
+   "n_kv": 1,
+   "n_layers": 3,
+   "vocab_size": 257
+  }
+ },
+ "hung": [],
+ "mixed_second_trainer_vs_stateless_x1_step1": {},
+ "passed": [],
+ "python": "/root/mojolearn/.pixi/envs/default/bin/python3",
+ "resident_then_stateless_equality": {
+  "cases_compared": [],
+  "fields": {}
+ },
+ "schema": "byte-lm-lifetime-diag.summary.v1",
+ "second_step_equality": {
+  "cases_compared": [],
+  "fields": {}
+ },
+ "stateless_then_resident_equality": {
+  "cases_compared": [],
+  "fields": {}
+ }
+}
