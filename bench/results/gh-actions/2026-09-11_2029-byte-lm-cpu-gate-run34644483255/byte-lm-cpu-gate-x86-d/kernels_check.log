@@ -1,0 +1,55 @@
+byte LM host kernels against the oracles, by bits
+  ok   gemm m=3 n=256 k=32 force_redo=False
+  ok   gemm m=3 n=256 k=32 force_redo=True
+  ok   gemm m=3 n=256 k=32 rows split across calls
+  ok   gemm m=3 n=256 k=32 reversed fold
+  ok   gemm m=3 n=256 k=32 planted force_redo=False
+  ok   gemm m=3 n=256 k=32 planted force_redo=True
+  ok   gemm m=3 n=256 k=32 planted rows split across calls
+  ok   gemm m=3 n=256 k=32 planted reversed fold
+  ok   gemm m=4 n=64 k=32 planted force_redo=False
+  ok   gemm m=4 n=64 k=32 planted force_redo=True
+  ok   gemm m=4 n=64 k=32 planted rows split across calls
+  ok   gemm m=4 n=64 k=32 planted reversed fold
+  ok   gemm m=5 n=32 k=64 planted force_redo=False
+  ok   gemm m=5 n=32 k=64 planted force_redo=True
+  ok   gemm m=5 n=32 k=64 planted rows split across calls
+  ok   gemm m=5 n=32 k=64 planted reversed fold
+  ok   gemm m=4 n=16 k=32 planted force_redo=False
+  ok   gemm m=4 n=16 k=32 planted force_redo=True
+  ok   gemm m=4 n=16 k=32 planted rows split across calls
+  ok   gemm m=4 n=16 k=32 planted reversed fold
+  ok   gemm m=3 n=40 k=8 planted force_redo=False
+  ok   gemm m=3 n=40 k=8 planted force_redo=True
+  ok   gemm m=3 n=40 k=8 planted rows split across calls
+  ok   gemm m=3 n=40 k=8 planted reversed fold
+  ok   gemm m=3 n=7 k=5 planted force_redo=False
+  ok   gemm m=3 n=7 k=5 planted force_redo=True
+  ok   gemm m=3 n=7 k=5 planted rows split across calls
+  ok   gemm m=3 n=7 k=5 planted reversed fold
+  ok   gemm m=2 n=70 k=128 planted force_redo=False
+  ok   gemm m=2 n=70 k=128 planted force_redo=True
+  ok   gemm m=2 n=70 k=128 planted rows split across calls
+  ok   gemm m=2 n=70 k=128 planted reversed fold
+  ok   gemm m=2 n=33 k=130 planted force_redo=False
+  ok   gemm m=2 n=33 k=130 planted force_redo=True
+  ok   gemm m=2 n=33 k=130 planted rows split across calls
+  ok   gemm m=3 n=40 k=300 planted force_redo=False
+  ok   gemm m=3 n=40 k=300 planted force_redo=True
+  ok   gemm m=3 n=40 k=300 planted rows split across calls
+  ok   gemm m=4 n=1 k=256 force_redo=False
+  ok   gemm m=4 n=1 k=256 force_redo=True
+  ok   gemm m=4 n=1 k=256 rows split across calls
+  ok   fmax fold, S14 and L1 spellings, 20000 planted rows
+  ok   rms_norm dm=32 l=32
+  ok   rms_norm dm=13 l=7
+  ok   rope nh=4 hd=8 l=32
+  ok   rope nh=1 hd=6 l=7
+  ok   rope nh=2 hd=10 l=3
+  ok   block dm=32 hd=8 kv=2 ff=64 l=32
+  ok   block dm=32 hd=8 kv=2 ff=64 l=5
+  ok   block dm=24 hd=6 kv=4 ff=40 l=16
+  ok   block dm=24 hd=6 kv=2 ff=40 l=1
+  ok   loss n=64 vocab=256
+  ok   loss n=5 vocab=300
+PASS

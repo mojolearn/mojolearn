@@ -321,9 +321,13 @@ from mamba.impl.modeling.modeling_mamba import (
 )
 
 from transformer.impl.llama.fused_attention import (
+    ATTN_ARM_TRIAL,
     FUSED_RAN,
     device_first_nonfinite,
+    fused_attention_arm_estash_runs,
+    fused_attention_arm_from_env,
     fused_forward_launch,
+    fused_forward_launch_estash_ran,
     fused_supported_head_dim,
 )
 from checks.numerics import (
@@ -1226,6 +1230,19 @@ struct LlamaDeviceStages(Movable):
     attention stages. The eager path sets it; the fused path (which never
     writes them) clears it, and a backward that needs them recomputes
     them first (`ensure_attention_materialized`)."""
+    var attn_estash_cells: Int
+    """DEVIATION 2652 (trial builds only; brief
+    docs/lanes/BRIEF_attention_step_2026-09-11.md section 20): the `[B,
+    n_heads, L, S]` cell count of the fused forward's exp stash KEPT in
+    `aexp` by the LAST call, 0 when nothing is kept. Set by
+    `eager_attention_forward` after a fused forward under an `_estash` arm
+    ran into `aexp` with no eager stages needed (`attn_materialized` stays
+    False: `aexp` does not hold the eager stage); cleared at the start of
+    every `eager_attention_forward` and by `attention_eager_core`, the only
+    other writer of `aexp`, on every build (a host integer nothing on a
+    shipped build reads). `llama_decoder_layer_backward_device` hands it
+    with `aexp` to `fused_backward_launch_estash_ran`, which runs the
+    DEVIATION 2650 backward only when it equals this call's cell count."""
 
     def __init__(
         out self,
@@ -1311,6 +1328,7 @@ struct LlamaDeviceStages(Movable):
         self.kbh = _zeros(ctx, sc * hd)
         self.sbh = _zeros(ctx, sbh_n)
         self.attn_materialized = False
+        self.attn_estash_cells = 0
 
 
 def ensure_attention_stage_capacity(
@@ -2784,18 +2802,39 @@ def eager_attention_forward(
     var choice = attention_path_choice(plant_at)
     var need_eager = materialize or trace.enabled or choice == ATTN_PATH_EAGER
     var status = -1
+    # DEVIATION 2652: nothing kept until this call keeps it.
+    stages.attn_estash_cells = 0
     if need_eager:
         attention_eager_core(
             ctx, stages, b, l, s, pos0, key_lo, window, dims, plant_at,
             plant_idx, plant_bits, trace, prefix,
         )
     if choice != ATTN_PATH_EAGER:
-        status = fused_forward_launch(
-            ctx, stages.ctxv, stages.amax, stages.denom, stages.q_rope,
-            stages.k_cache, stages.v_cache, b, l, dims.n_heads, dims.n_kv,
-            dims.head_dim, s, pos0, key_lo, window,
-            llama_attention_scale(dims.head_dim),
-        )
+        var kept_estash = False
+        comptime if ATTN_ARM_TRIAL:
+            # DEVIATION 2652 (brief section 20.3): under an `_estash` arm,
+            # with no eager stages needed (so `aexp` holds no stage this
+            # call reads back), the fused forward writes its exp stash into
+            # `aexp` and keeps it for the backward. Trial builds only; the
+            # shipped call sits in the branch below unchanged.
+            var arm = fused_attention_arm_from_env()
+            if (not need_eager) and fused_attention_arm_estash_runs(arm):
+                var ran = 0
+                status = fused_forward_launch_estash_ran(
+                    ctx, stages.ctxv, stages.amax, stages.denom, stages.q_rope,
+                    stages.k_cache, stages.v_cache, stages.aexp, b, l,
+                    dims.n_heads, dims.n_kv, dims.head_dim, s, pos0, key_lo,
+                    window, llama_attention_scale(dims.head_dim), arm, ran,
+                    stages.attn_estash_cells,
+                )
+                kept_estash = True
+        if not kept_estash:
+            status = fused_forward_launch(
+                ctx, stages.ctxv, stages.amax, stages.denom, stages.q_rope,
+                stages.k_cache, stages.v_cache, b, l, dims.n_heads, dims.n_kv,
+                dims.head_dim, s, pos0, key_lo, window,
+                llama_attention_scale(dims.head_dim),
+            )
         if status != FUSED_RAN and not need_eager:
             attention_eager_core(
                 ctx, stages, b, l, s, pos0, key_lo, window, dims, plant_at,
@@ -2885,6 +2924,8 @@ def attention_eager_core(
     var scale = llama_attention_scale(hd)
     ensure_attention_stage_capacity(ctx, stages, l, s)
     stages.attn_materialized = True
+    # DEVIATION 2652: the eager stage overwrites `aexp`; nothing is kept.
+    stages.attn_estash_cells = 0
 
     # ---- S11 (:204's matmul). `gemm.fp32.v1` OP_NT with `k = head_dim`,
     #      ONE CALL PER (batch, head). Contract DEVIATION 808.

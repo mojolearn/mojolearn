@@ -1,0 +1,4 @@
+bit patterns checked: 4294967296 lanes of width 8
+expf_lanes mismatches: 0
+silu_lanes mismatches: 0
+PASS
