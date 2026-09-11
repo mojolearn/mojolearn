@@ -394,6 +394,14 @@ tuple: never mixed with the MI325X rows of the same night or with any
 NVIDIA row. CPU opponents are measured on the 13-core VM spec only, so their
 rows stay comparable.
 
+**Speed work returns to NVIDIA on RunPod (Andrew, 2026-09-11 afternoon).**
+"lets continue using nvidia and runpod for optimizing times ... since amd is
+so problematic". A leg whose purpose is a speed A/B, a stage profile or a
+default flip rents a RunPod NVIDIA H100 80GB HBM3; the flip decided there
+ships. AMD boxes (Hot Aisle, DigitalOcean, RunPod MI300X) are kept for
+correctness work: cross-vendor identity checks, AMD-only bugs, and release
+builds of the AMD set. The box-order rule below now applies to those.
+
 **Box order, and never wait (Andrew, 2026-09-11).** "use hot aisle first if
 we can, digital ocean second if we can, runpod 3rd.. DO NOT WAIT". Before
 renting, a leg runs `tools/pick_box.sh` and takes the first box that can
