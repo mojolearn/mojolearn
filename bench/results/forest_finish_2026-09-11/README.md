@@ -69,8 +69,41 @@ tarball): mojolearn imported beside real cuML and treelite, one small RF fit
 and predict, no ctypes argtypes clash. That is the 0.8.1 check the release
 notes still carried as owed on NVIDIA.
 
-## Results
+## Results: DEVIATIONS 2637 and 2638
 
-Filled in when the leg finishes; the tables live in
-`bench/OPPONENT_REFERENCE.md` and the lane's commit messages. Big logs are
-outside the repo in `~/mojolearn-evidence/forest-finish-2026-09-11/`.
+Same pod, same process per cell, arms alternating, 1 warm-up plus 3 rounds,
+ms median. BEFORE is main `4dc4346a` built on this pod, AFTER is this lane.
+
+| family | dataset | opponent and device | opponent ms | before ms | after ms | after/before | ours/opponent after | quality |
+|---|---|---|---|---|---|---|---|---|
+| RandomForest | taxi | cuML 26.08.00, GPU | 1860 | 826 | 811 | 0.98 | 0.44x | logloss 0.525910 both |
+| RandomForest | Istella-S | cuML 26.08.00, GPU | 3885 | 1977 | 1333 | 0.67 | 0.34x | logloss 0.145560 both |
+| ExtraTrees | taxi | scikit-learn 1.9.1, CPU 23-core quota | 3295 | 1894 | 1831 | 0.97 | 0.56x | logloss 0.527541 both |
+| ExtraTrees | Istella-S | scikit-learn 1.9.1, CPU 23-core quota | 15502 | 5782 | 4947 | 0.86 | 0.32x | logloss 0.188191 both |
+| IsolationForest | taxi | cuML 26.08.00, GPU | 54.4 | 290 | 95.4 | 0.33 | 1.75x | proxy AUC 0.553631 both |
+| IsolationForest | Istella-S | cuML 26.08.00, GPU | 1001 | 4456 | 155 | 0.035 | 0.16x | proxy AUC 0.821218 both |
+
+Section 9 geometric means of after/before: RandomForest 0.81, ExtraTrees 0.91,
+IsolationForest 0.11. Quality is byte-equal before and after in every cell, so
+all three pass the flip gate. These are not opt-in switches: 2637 and 2638 are
+the shipped path on this branch, and these rows are what keeps them.
+
+The isolation forest is where the staging mattered most, because its fit was
+the one that copied the matrix three times in one thread: Istella-S 4456 ms to
+155 ms is 3.5 percent of the old time, and it turns a cell we lost to cuML
+(4456 against 1001) into one we win (155 against 1001). RandomForest's taxi
+cell barely moves (0.98) because 16 columns of staging is not where its time
+goes; Istella-S, at 220 columns and 880 MB per pass, is (0.67).
+
+Hashes held one value in 3 of 3 rounds and are equal before and after: RF taxi
+`d8f64dae01de00bd`, RF Istella-S `574b24d0d7af51d0`, ET taxi
+`e683f121d11f59dd`, ET Istella-S `40b1c5b03ba40420`, iforest taxi
+`6f68d48431290524`, iforest Istella-S `a1902225f8730abf`.
+
+## Results: DEVIATION 2663
+
+Pending: batch C's builds, identity and A/B, batch D's verdict, and (only if a
+flip is on the table) batch F's two regression cells.
+
+Big logs are outside the repo in
+`~/mojolearn-evidence/forest-finish-2026-09-11/`.
