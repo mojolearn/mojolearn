@@ -386,29 +386,41 @@ or on a GPU.
   `phase_of=arm_kfold` where either arm takes a call.
 - `tools/gemm_final_leg.sh`: the leg body (section 4.4's arms).
 
-**NOT FINISHED (owed before the M4 gate means what section 5 says).**
+**Finished after the resume (branch `lane/gemm-final-checks` off main, which
+already carries the arms at d368b6d8; no kernel or dispatch line changed).**
 
-1. The host check `check_kfold_lanes_is_the_stack_fold` (section 5.5 both
-   ways): `_fold_push_lanes`/`_fold_drain_lanes` against `_fold_push`,
-   `_fold_drain` and `fold_balanced_tree` per lane for every `G` in 1 to 255,
-   ordinary, `-0.0` and subnormal kinds, and overflow exactly at `G = 256`.
-   The device ragged part still holds the kernel's bits to the old plan, so
-   the arms are gated without it, but the 8-level bound is only argued.
-2. The host check `check_kfold_rule_hand_counts` (kfoldv = the ksplit hand
-   counts at S = 132, kfoldv_leaf = the ksplit_leaf hand counts, `G <= 255` on
-   every LM call).
-3. Resources rows for `identical_gemm_fold_stack_kernel` (shipped) and
-   `identical_gemm_kfold_lanes_kernel` in `bench/gemm_step_resources_main.mojo`
-   (registers and blocks per SM, the section 3.2 fit's missing input).
-4. The docstring paragraphs for 2640 to 2642 in the check and the price
-   harness, and the check's banner line.
+1. `check_kfold_lanes_is_the_stack_fold` (host): for every `G` in 1 to 255 and
+   three node kinds (ordinary, `-0.0` mixed, about a third scaled by `1e-38`
+   so subnormals reach every `ftz`), 16 lanes pushed with `_fold_push_lanes`
+   and drained with `_fold_drain_lanes` must store in every lane the bits
+   `_fold_push`, `_fold_drain` and `ftz` store for that lane's cell alone,
+   and `fold_balanced_tree`'s bits for the first two kinds; no overflow below
+   256 groups, `occ` ends at `G`, 255 pushes fit and the 256th overflows.
+2. `check_kfold_rule_hand_counts` (host): at the twelve LM calls, `kfoldv` at
+   S = 132 equals `gemm_step_ksplit_rule(.., 132, True)` and the hand counts
+   [1,1,1,0,2,2,2,0,2,0,64,0]; `kfoldv_leaf` equals the ksplit_leaf rule and
+   [1,1,1,1,1,1,1,1,1,0,16,0]; groups [6,6,16,0,8,8,8,0,8,0,7,0] and
+   [6,6,16,6,16,16,16,6,16,0,25,0], none above 255; fold blocks
+   [384,384,144,1024,384,384,384,1024,384,25129,384,9424].
+3. Resources rows `fold_stack_shipped` and `kfold_lanes` in
+   `bench/gemm_step_resources_main.mojo`.
+4. Docstring paragraphs in the check, the price harness and the resources
+   harness; the check's banner and PASS lines name 2640 to 2642.
 
 ## 7. RUN OWED, M4, light, run by the orchestrator one at a time
 
 1. `pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_GEMM_ARM_TRIAL=1 -I . gemm/checks/gemm_step_arms_check.mojo -o /tmp/gemm-final-check`
    then `MOJOLEARN_GEMM_STEP_CHECK_LM=0 MOJOLEARN_GEMM_STEP_CHECK_FLOPS=50000000 /tmp/gemm-final-check`.
    Expect PASS with `REACH ragged [kfoldv ...] N/N` and
-   `REACH ragged [kfoldv_leaf ...] N/N` beside the existing lines.
+   `REACH ragged [kfoldv_leaf ...] N/N` beside the existing lines, and before
+   any device work
+   `check_kfold_lanes_is_the_stack_fold: 12240 lane folds (3 kinds, G 1..255, W=16, FS=8), 0 disagree; overflow bound fit=True next_placed=False`,
+   twelve `RULE_KFOLD` lines and `check_kfold_rule_hand_counts: 0 failures`.
+   The no-trial build (item 2) must print the same two host lines with 0
+   failures.
+5. The resources harness build (no run on the M4 is needed):
+   `pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_GEMM_ARM_TRIAL=1 -I . bench/gemm_step_resources_main.mojo -o /tmp/gemm-final-resources`.
+   On a GPU box it prints `fold_stack_shipped` and `kfold_lanes` rows.
 2. The same without `-D MOJOLEARN_GEMM_ARM_TRIAL=1` (`-o /tmp/gemm-final-check-notrial`),
    same env: expect FAIL naming the define for both new geometries.
 3. `pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . gemm/checks/gemm_device_check.mojo -o /tmp/gemm-device-check && /tmp/gemm-device-check`:
