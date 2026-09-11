@@ -884,17 +884,19 @@ uplink_stable() {
 
 echo
 echo "== pre-flight =="
-list_live() {  # prints every GPU, leg-tagged or mojolearn-* droplet; prints the HTTP code and returns 1 when the listing failed
+list_live() {  # prints every GPU droplet (size_slug gpu-*) and any droplet named exactly $NAME; prints the HTTP code and returns 1 when the listing failed
+  # GPU legs only: CPU droplets do not count against the one-GPU-droplet quota, and a
+  # leg-tagged CPU droplet used to refuse every GPU leg for its whole lease.
   local c
   c=$(http_code GET "$API/droplets?per_page=200" "$TMPD/all_droplets.json")
   [ "$c" = 200 ] || { printf 'HTTP %s' "$c"; return 1; }
-  python3 - "$TMPD/all_droplets.json" "$LEG_TAGS" <<'PY'
+  python3 - "$TMPD/all_droplets.json" "$NAME" <<'PY'
 import json, sys
 d = json.load(open(sys.argv[1]))
-tags = set(sys.argv[2].split())
+own_name = sys.argv[2]
 for x in d.get("droplets", []):
     t = set(x.get("tags") or [])
-    if str(x.get("size_slug", "")).startswith("gpu-") or (t & tags) or str(x.get("name", "")).startswith("mojolearn-"):
+    if str(x.get("size_slug", "")).startswith("gpu-") or str(x.get("name", "")) == own_name:
         print("  id=%s name=%s size=%s region=%s tags=%s created=%s" % (
             x.get("id"), x.get("name"), x.get("size_slug"),
             (x.get("region") or {}).get("slug"), ",".join(sorted(t)), x.get("created_at")))
