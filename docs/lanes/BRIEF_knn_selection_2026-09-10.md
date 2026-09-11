@@ -696,3 +696,15 @@ than NVIDIA takes the row.
   arm, and record the `dyadic` medians against the cached rows in
   `bench/OPPONENT_REFERENCE.md` as cached-reference ratios (never as a
   paired opponent measurement; cuML is not rerun).
+
+## Step 1 result: C4 gated alone on the H100 (2026-09-11 03:38Z, `bench/results/e1g/2026-09-10_233258-nvidia/remote/knn-selection`)
+
+The arms check passed on the box (18 cases). The gate with arms
+baseline,uniform: every fixture (large, dyadic, ties, divergent_tail) at
+k10 and k15 bit-equal across baseline, uniform and default, order ok,
+planted ok, oracle clean (the cancellation floor holds); reach proven for
+each arm (sabotage flipped 38,306 / 70,635 cells, restored). Timing pairs
+were within noise, as expected for a trip-count change (large k10 30.47 vs
+30.41 ms, k15 35.64 vs 35.63 ms). C4 is the prerequisite, not a win;
+SMALLK_UNIFORM_TRIP_DEFAULT flipped to True on this evidence and the M4
+check. Step 2 (headbound) runs next.

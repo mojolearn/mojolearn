@@ -281,7 +281,7 @@ comptime SMALLK_SCAN_SPAN = SMALLK_SCAN_UNROLL * SMALLK_BLOCK
 # plus the request-level price). HEAD_BOUND requires UNIFORM.
 # ---------------------------------------------------------------------------
 comptime SMALLK_SELECT_TRIAL = is_defined["MOJOLEARN_KNN_SELECT_TRIAL"]()
-comptime SMALLK_UNIFORM_TRIP_DEFAULT = False
+comptime SMALLK_UNIFORM_TRIP_DEFAULT = True  # DEVIATION 2497: flipped 2026-09-11 on the H100 and M4 gates
 comptime SMALLK_HEAD_BOUND_DEFAULT = False
 
 comptime SMALLK_ARM_BASELINE = 0
