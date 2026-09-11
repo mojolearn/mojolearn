@@ -97,6 +97,55 @@ def hist2_quantize(val: Float32, fixed_scale: Float32, u: Float32) -> Int32:
     return q
 
 
+def hist2_level_quantize_kernel(
+    part_offset: MutPointer[UInt32, MutAnyOrigin],
+    part_size: MutPointer[UInt32, MutAnyOrigin],
+    part_ids: MutPointer[UInt32, MutAnyOrigin],
+    stats: MutPointer[Float32, MutAnyOrigin],
+    qstats: MutPointer[Int32, MutAnyOrigin],
+    stat_line_size_in: Int32,
+    stat_count_in: Int32,
+    fixed_scale_ptr: MutPointer[Float32, MutAnyOrigin],
+):
+    """DEVIATION 2580: every (position, stat) of the compute leaves through
+    `hist2_quantize` ONCE per level, into an Int32 plane of the stat
+    plane's shape. NO CATBOOST COUNTERPART (their histograms add floats).
+
+    The one-byte hist_2 kernels called `hist2_quantize` per row INSIDE each
+    4-feature group's walk, so a row was quantized once per group: 55 times
+    per row per level at 220 features. This launch does it once, at the
+    same position with the same dither key (`hist2_dither(pos)`, the
+    STORAGE position, exactly what those kernels key on) and the same
+    scale, so the plane holds the integers the kernels computed and the
+    histogram receives the same Int32 addends. Nothing about the sum
+    changes, so the bits cannot.
+
+    Grid (replicas, compute leaves, 1): block `y` is a compute leaf read
+    through `part_ids`, as the histogram kernels read it; thread `t` of
+    replica `x` owns positions `t + x * block + k * stripe` of that leaf.
+    Every position is written by exactly one thread and no thread reads
+    what another writes, so there is no barrier and no shared memory.
+    Rows outside the compute leaves keep stale values that no histogram
+    kernel of this level reads."""
+    var part_id = Int(part_ids.unsafe_load(Int(block_idx.y)))
+    var p_offset = Int(part_offset.unsafe_load(part_id))
+    var p_size = Int(part_size.unsafe_load(part_id))
+    var stripe = Int(block_dim.x) * Int(grid_dim.x)
+    var k = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var fixed_scale = fixed_scale_ptr.unsafe_load(0)
+    var line = Int(stat_line_size_in)
+    var stat_count = Int(stat_count_in)
+    while k < p_size:
+        var pos = p_offset + k
+        var u = hist2_dither(pos)
+        for s in range(stat_count):
+            qstats.unsafe_store(
+                s * line + pos,
+                hist2_quantize(stats.unsafe_load(s * line + pos), fixed_scale, u),
+            )
+        k += stripe
+
+
 def hist2_smem_add[
     dt: DType
 ](

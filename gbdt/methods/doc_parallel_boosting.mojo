@@ -1690,7 +1690,7 @@ def fit_with_test(
         # at most that much too large. `SCALE_HEADROOM_BITS = 3` is a factor
         # of eight against it, five orders of magnitude of slack.
         #
-        # THE SHIPPED BUILD IS `NUMERIC_FAST` (numerics.mojo:74) -- the
+        # THE TIER IS A BUILD DEFINE (checks/numerics.mojo:9-16) AND AN IDENTICAL GBDT BUILD SHIPS -- the
         # runtime `determinism` option is validated but wired to nothing,
         # and a comment here used to claim it pinned the integer flush,
         # which was false (caught 2026-08-21 when Andrew asked why the
