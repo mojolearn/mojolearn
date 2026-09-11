@@ -99,7 +99,8 @@ per state over the reference logits of the whole sweep, so reports from
 different CPUs can be compared at every shape. On the Apple M4 at `a824d9da`
 all 4752 comparisons were equal (evidence
 `bench/results/local/2026-09-11_1648-apple-m4-byte-lm-path-sweep`); CI runs it
-on every runner.
+on every runner. In run 34646204834 every runner, Intel, AMD, Arm and Apple, passed it
+with the M4's per-state hashes.
 
 ## Running it
 
@@ -265,6 +266,7 @@ landed first, so the kernels are DEVIATION 2640 from the merge on.
 | `450addf1` | Apple M4, bare metal, `--threads 3` | 144 of 144 on both paths; 65 of 144 caught on both; user path through `from_checkpoint` PASS | PASS | 0 of 4294967296 differ | `bench/results/local/2026-09-11_1618-apple-m4-byte-lm-cpu-speed` |
 | `450addf1` | GitHub run 34643527802: Neoverse N2, Apple M1 (virtual), EPYC 9V74 in three draws, EPYC 9V45, EPYC 7763 | 33 of 33 on both paths; 9 of 33 caught on both; plumbing tests 9 passed | PASS | 0 of 4294967296 differ, at 8 lanes on x86-64 and 4 on ARM64 | `bench/results/gh-actions/2026-09-11_2018-byte-lm-cpu-gate-run34643527802` |
 | `3798fbf3` (main, the merge) | GitHub run 34644483255: Neoverse N2, Apple M1 (virtual), EPYC 7763 in four draws, EPYC 9V45 | 33 of 33 on both paths; 9 of 33 caught on both; plumbing tests 9 passed | PASS | 0 of 4294967296 differ, at 8 lanes on x86-64 and 4 on ARM64 | `bench/results/gh-actions/2026-09-11_2029-byte-lm-cpu-gate-run34644483255` |
+| `6621d13b` (main) | GitHub run 34646204834: Neoverse N2, Apple M1 (virtual), EPYC 7763 in three draws, Intel Xeon Platinum 8573C in two | 33 of 33 on both paths; 9 of 33 caught on both; path sweep 4752 of 4752 equal with the M4's per-state logits hashes; plumbing tests 9 passed | PASS | 0 of 4294967296 differ | `bench/results/gh-actions/2026-09-11_2049-byte-lm-cpu-gate-run34646204834` |
 
-Not measured with the kernels: any Intel CPU (no Intel host was drawn in
-these runs) and the DigitalOcean droplets.
+Not measured with the kernels: the DigitalOcean droplets. Intel first ran the
+kernels in run 34646204834, on a Xeon Platinum 8573C in two draws.
