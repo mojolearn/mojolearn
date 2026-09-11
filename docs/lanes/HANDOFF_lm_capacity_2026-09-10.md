@@ -2,8 +2,9 @@
 
 The shape generalization and device-to-device inter-layer gradients are on main
 (72f79a18, 28699cc7). They establish functionality on the recorded small checks,
-not measured large-model throughput. A resident Python/native training session
-is still unwritten. No new kernel speed result or opponent measurement here.
+not measured large-model throughput. Owned resident Python/native sessions are now implemented; see
+[the session handoff](HANDOFF_lm_session_2026-09-10.md). Full host-state
+traffic remains. This capacity report adds no kernel speed or opponent measurement.
 
 ## Current relative performance
 
