@@ -2840,3 +2840,449 @@ bits identical with timers compiled in and switched on) attributes 145 ms of
 the 300 ms native call to GEMM (48%) and 116 ms to attention kernels (39%);
 nothing else exceeds 7 ms. The next NVIDIA target is GEMM
 (`docs/lanes/BRIEF_gemm_kernel_2026-09-11.md`), not attention.
+
+## 20. The final attention pass on the H100: the backward reads the forward's exp stash (2026-09-11, worktree lane `lane/attention-final-h100`, DESIGN ONLY, NO CODE WRITTEN): DEVIATIONS 2650, 2651 and 2652
+
+STATUS, WOUND DOWN BY ANDREW BEFORE ANY CODE. 20.1 and 20.2 read filed
+evidence; 20.3 to 20.5 are the mechanism, the arithmetic and the identity
+argument, written before the code as the rule asks. NOTHING FROM 20.6 ON
+EXISTS: no kernel, launcher, glue, check change, harness change or leg body
+was written. 20.6 to 20.10 are the plan a later lane would build, and the M4
+commands and leg command there have nothing to run yet. Nothing was compiled
+or run (no build on the Mac, by rule). A build without
+`-D MOJOLEARN_ATTN_ARM_TRIAL=1` compiles none of the kernels or launches
+below, reads no new environment, and dispatches exactly as before. Andrew
+called this the last optimization pass, so 20.2 first asks whether any arm
+can save 1 percent of the step (2.9 ms of 290 ms) at all.
+
+### 20.1 The ranking, ms per step on the current NVIDIA default
+
+Default `stash_tiled_fgrid_r32_qres_pf_kvgrid_r32` (word 52327). Step timers
+of one serialized step, `lmtiming-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-*`
+in bench/results/e1g/2026-09-11_185833-nvidia-h100-80gb-hbm3-attention-zdot
+(enwik8 / Pile GitHub, 12 layers, a breakdown and never a price; envelope
+290.3 / 290.4 ms):
+
+| rank | phase | ms per step | ms per call | movable by |
+|---:|---|---:|---:|---|
+| 1 | zdot, `attn.bwd_zdot_stash_pf` | 66.37 / 66.35 | 5.53 | this section |
+| 2 | forward kernel, `attn.fwd_r2_kernel` | 20.70 / 20.74 | 1.73 | tuned in round 3 (2530, 2531, 2533) |
+| 3 | dq, `attn.bwd_dq_tiled_pf` | 12.49 / 12.49 | 1.04 | a new fold kernel, at most a few ms |
+| 4 | dk/dv, `attn.bwd_kvgrid_dkdv_pf` | 9.93 / 10.00 | 0.83 | flipped in section 19 |
+| 5 | regime scans, forward and backward | 2.59 / 2.61 | 0.22 | seven scans per layer |
+| 6 | corner flags | 0.54 / 0.55 | 0.05 | |
+| 7 | scratch allocations | 0.26 / 0.26 | 0.02 | |
+
+Launches and synchronizes (rows 5 to 7) are 3.4 ms per step in all. Fusing
+the seven scans into one launch per direction and deferring both flag reads
+saves at most about half of that, 1.7 ms, under the bar; not built. The
+forward kernel was the round 3 target and no source reading here names a
+geometry it has not priced. dq and dk/dv together are 22.5 ms and already run
+2 and 4 blocks per SM (20.2). The largest movable phase is the zdot kernel.
+
+### 20.2 Why the zdot kernel is slow on the H100: one block per SM (the readback, and a reading)
+
+The sm_90 occupancy rule `tools/knn_selector_kernel_stats.py` computes (65,536
+registers per SM, registers per thread padded to 8) gives a 256-thread block
+`floor(256 / pad8(regs))` slots per SM. The zdot leg's `resources.txt` (H100,
+commit 6d4bd867) against that rule, every line consistent:
+
+| kernel | regs | padded | 256 / padded | `blocks_per_sm_256` read back |
+|---|---:|---:|---:|---:|
+| `zdot_stash_pf` (shipped zdot) | 134 | 136 | 1.88 | 1 |
+| `zdot_zdefer_pf` (2598) | 152 | 152 | 1.68 | 1 |
+| `zdot_zlag_pf` (2598) | 165 | 168 | 1.52 | 1 |
+| `dkdv_recompute` | 135 | 136 | 1.88 | 1 |
+| `dq_tiled_pf` | 118 | 120 | 2.13 | 2 |
+| `dkdv_tiled_pf`, `kvgrid_r64` | 106 | 112 | 2.29 | 2 |
+| `kvsplit_r64_fold` | 79 | 80 | 3.20 | 3 |
+| `kvgrid_r32` | 63 | 64 | 4.00 | 4 |
+| `kvsplit_r32_fold` | 48 | 48 | 5.33 | 5 |
+
+The shipped zdot kernel misses two blocks per SM by 6 registers, and it is the
+only attention kernel in the step at one. Its grid is 6,144 blocks per layer
+on about 132 SMs, so the SM count, not the grid, bounds how many run at once.
+
+The history reads the same way. It is a reading, not a measurement, because
+no register count was ever read back for the recompute kernel:
+
+- Section 10 timed `fused_bwd_zdot_kernel` (recompute, no stash) at 52.2 ms
+  and `fused_bwd_zdot_stash_kernel` at 89.4 ms on one pod. The two sources
+  differ only by two global stores per visible cell (17.2, S). Two stores
+  cannot be 37 ms of bandwidth (2.4 GB per step against the 39 GB of K and V
+  staging both kernels carry), but they can be the registers that take a
+  kernel from at most 128 to above 128, from two blocks per SM to one:
+  89.4 / 52.2 = 1.71.
+- DEVIATION 2598 (`_zdefer`, `_zlag`) moved the stores and the z fold between
+  phases. Registers rose to 152 and 165, occupancy stayed at 1, and the zdot
+  phase stayed at 5.5 ms per call (section 19).
+- DEVIATION 2528 (`_ztiled`) replaced the geometry with 16 + 16 register
+  chains per thread and four staging round trips per 64-key iteration, and
+  read 115.5 ms (section 13). That prices register-blocked dots, not
+  occupancy.
+- `_kvgrid_r32` took dk/dv from 106 regs and 2 blocks per SM to 63 and 4, and
+  dk/dv moved from 1.0 to 0.8 ms per call (section 19), the one attention
+  change of the day that altered occupancy and moved the step.
+
+So a zdot arm that only reschedules work inside the same thread (tiling,
+deferral) cannot move the kernel's rate: the SM still runs one 256-thread
+block of four rows. What moves it is more rows per block-iteration (less
+block time per row), fewer registers per thread (more blocks per SM), or
+both.
+
+### 20.3 The mechanism: take y from the forward
+
+The backward's y at cell `(t, j)` is `ftz(identical_div(ftz(e), ftz(denom[t])))`
+with `e = ftz(identical_exp(ftz(ftz(masked) - ftz(amax[t]))))`, and `masked`
+is the score chain. The shipped forward `fused_attn_forward_r2_kernel` writes
+exactly that `e` into its `[B, n_heads, L, S]` score scratch at every visible
+cell in its pass 2, reads it in pass 3, and the launcher frees it. The
+backward's zdot kernel then recomputes the whole of it: a K stage, a 64-term
+score chain, `identical_exp`. Section 11.7 named keeping y across the step
+(DEVIATION 2532) and stopped at the callers' stage structs and 2.42 GB.
+Keeping `e` instead of y needs no forward change at all: the same forward
+instantiation writes into a buffer the caller keeps instead of one the
+launcher frees.
+
+DEVIATION 2650, `_estash`. `fused_bwd_zdot_estash_kernel[64, 8, DRES=False,
+SABN]` is the zdot stash copy with the y lane gone:
+
+- A 256-thread block is EIGHT query rows of one head times 32 keys (thread
+  `(tr, kj)` holds row `8 tb + tr` and key `32 kb + kj`), not four rows times
+  64 lanes. Grid 12 x 256 = 3,072 blocks per layer.
+- Phase 1 stages V only for the iteration's 32 keys (8 slots per thread, the
+  shipped V slot count, K gone).
+- Phase 2, every visible thread: the dy chain (the shipped statements) and,
+  beside it, one global load of the kept `e` and the shipped division, then
+  the shipped four stores (the two shared slots, `y_st`, `dy_st`).
+- Phase 3, lane 0 of each of the 8 rows folds z over the 32 keys (the shipped
+  fold), and the zdot store and corner test are the shipped statements.
+- It reads `e_st`, `dctx`, `v_cache` and `denom`; not q, k, amax or scale.
+
+dq and dk/dv are the shipped clean `fused_bwd_dq_tiled_pf_kernel[64]` and
+`fused_bwd_dkdv_r2_kernel[64, keys, False]` on the stashes it wrote.
+
+DEVIATION 2651, `_estash_dres`. The same kernel with `DRES=True`: the eight
+rows' dctx (512 floats) are staged once per block into the shared page (2
+slots per thread, one barrier), the QRES pattern of DEVIATION 2530, so no
+thread holds the 64-float `vec` (64 registers of the shipped 134, `local=0`
+in the readback). The dy chain then loads both operands from shared memory.
+
+DEVIATION 2652, the kept stash in the LM step. `LlamaDeviceStages` gains one
+host field, `attn_estash_cells` (0 means nothing kept). On a trial build only,
+`eager_attention_forward` resets it, and when the path is fused with no eager
+stages needed and the arm carries `_estash`, it grows `stages.aexp` to the
+call's `[B, n_heads, L, S]` (a lean struct holds it at one element) and runs
+`fused_forward_launch_estash_ran` with `stages.aexp` as the score scratch;
+on FUSED_RAN it records the cell count. `llama_decoder_layer_backward_device`
+passes `fwd.aexp` and `fwd.attn_estash_cells` to
+`fused_backward_launch_estash_ran`. `attention_eager_core`, the only writer
+of `aexp`, clears the field (on every build: a host integer nothing on a
+shipped build reads), so an eager rewrite can never be read as the fused
+forward's `e`. The shipped calls sit in the `else` branches unchanged.
+`aexp` is the natural home: the kept values are the exp stage at the visible
+cells, and `attn_materialized` stays False, as it already says `aexp` does
+not hold the eager stage.
+
+Why the rate moves, where 2528 and 2598 did not (counted at the target,
+causal, `n_rep` 1; nothing measured):
+
+| per step | shipped zdot | `_estash` |
+|---|---:|---:|
+| blocks | 73,728 | 36,864 |
+| block iterations | 2,396,160 | 1,198,080 |
+| barriers | 7.19 M | 3.59 M |
+| staged floats | 9.81 G (K and V) | 2.45 G (V) |
+| score chain terms | 38.7 G | 19.3 G |
+| `identical_exp` | 302 M | 0 |
+| `identical_div` | 302 M | 302 M |
+| global stash stores | 604 M | 604 M |
+| global loads of `e` | 0 | 302 M |
+| z steps | 302 M | 302 M |
+
+Block `tb` runs `tb // 4 + 1` iterations at 8 rows (4 x (1 + ... + 64) =
+8,320 per head) against `tb // 8 + 1` at 4 rows (16,640). Per iteration the
+dependent latency is not longer: phase 2 is one 64-term chain per thread as
+before (the y lane's exp and division tail is gone, the division now runs
+beside the chain), phase 3 is the same 32-step fold, and phase 1 stages half
+the floats. `_estash` changes the rows per block-iteration at the same
+threads per block, and drops the y path from every thread's code; 2528 and
+2598 did neither.
+
+### 20.4 Expected saving, with the arithmetic
+
+The bar is 1 percent of 290 ms, 2.9 ms per step.
+
+- Occupancy and latency reading (20.2). zdot time scales with block
+  iterations over blocks per SM. At one block per SM, 66.4 x 1,198,080 /
+  2,396,160 = 33.2 ms, a saving of 33 ms (11 percent of the step). If the
+  thread code falls to at most 128 registers (the y path, `m_row`, the K
+  slots and the exp temporaries removed; unknown until the readback), two
+  blocks per SM give 16.6 ms, a saving of 50 ms.
+- Pessimistic reading (17.2's S: the 604 M stash stores cost 27 to 37 ms and
+  nothing here changes them). The other 29 to 39 ms halves, so zdot reads 44
+  to 52 ms, a saving of 15 to 20 ms. The added 302 M global loads of `e` are
+  bounded above by the dq kernel, which does 604 M stash loads, 302 M stores
+  and its K staging in 12.5 ms: at most about 4 ms. Net at least 11 ms, 3.6
+  percent.
+- `_estash_dres`. If `vec`'s 64 registers leave the thread and the count
+  lands at 80 or below, three blocks per SM give about 11 ms (a saving near
+  55 ms). The dy chain then does two shared loads per term instead of one;
+  if the H100's shared path is the bound (section 3.1's 32 words per clock
+  per SM), it prices at or above `_estash`. The pair's price and RESOURCES
+  lines separate registers from shared bandwidth.
+
+Every reading clears the bar. The one cost outside time is memory: the step
+keeps 12 x 201 MB = 2.42 GB of exp stash resident on the device (the 2.42 GB
+section 11.7 named for 2532), held in `stages.aexp` across steps.
+
+### 20.5 Identity argument (written before the code)
+
+Claim. On a call where the kept stash is valid (`attn_estash_cells` equals
+`B * n_heads * L * S` and was set by this call's forward), `zdot`, `y_st` and
+`dy_st` after `fused_bwd_zdot_estash_kernel` hold at every visible row and cell
+the bits `fused_bwd_zdot_stash_pf_kernel[64, 4, False]` writes, and dq, dk
+and dv are the shipped clean instantiations on those stashes, so every
+backward output is the shipped bits. On any other call the launcher runs the
+shipped backward, unchanged.
+
+1. The kept `e`. The forward that set the field ran
+   `fused_attn_forward_r2_kernel[64, 32, True, True, False]` (the default
+   word's forward) into the kept buffer. Its pass 1 chain is `_step_preflushed`
+   over `p` ascending from +0.0 on `ftz(q[t, p])` (the Q page) and
+   `ftz(k[j, p])` (the K page); the backward's y chain is `_step_preflushed`
+   over `p` ascending from +0.0 on `vec[p] = ftz(q[t, p])` and
+   `ks[kj, p] = ftz(k[j, p])`, the same operands in the same argument order,
+   so `dot` has the same bits. `masked = ftz(_pmul(dot, scale) + 0.0)` is the
+   same statement in both. The forward stores `masked`, and in pass 2 loads it
+   and computes `e = ftz(identical_exp(ftz(ftz(masked) - ftz(stats[r]))))`,
+   where `stats[r]` is the row maximum `m` it also stored as `amax[t]`. The
+   shipped backward computes `ftz(identical_exp(ftz(ftz(masked) - m_row)))`
+   with `m_row = ftz(amax[t])`. Storing and loading a Float32 returns its bits,
+   so both `e` are equal. The forward stores `e` at cell `(bb nh + h) L S + t S
+   + j`, the backward's `row * S + j`, the same index, and pass 3 only reads it.
+2. Coverage. The forward writes `e` at every visible `(t, j)` of every row
+   of its blocks: its thread `(tr, tc)` covers rows `tr + 16u` and keys
+   `tc + 16v` of each 32-key iteration from `kb_lo` to `kb_hi`, and both ends
+   of `_row_range` are nondecreasing in `t`. The estash kernel loads `e` only
+   under the copied visibility test (`valid`, `j_lo <= j <= j_hi`), so it never
+   reads an unwritten cell.
+3. amax and denom. The backward's y needs the row maximum of the forward that
+   wrote `e`, and `d_row = ftz(denom[t])`. In the LM step both come from the
+   same `LlamaDeviceStages` the forward wrote (the backward's docstring: `fwd`
+   is the saved stages of this same call). In the arms check and the price
+   harness the forward and the backward run on one case in sequence, and the
+   check compares the forward's amax and denom with eager's in the same run.
+4. y. The estash kernel computes `yv = ftz(identical_div(ftz(e_st[row S + j]),
+   d_row))`, the shipped y statement on equal operands (`ftz` of a stored
+   `ftz` output is itself).
+5. dy. The shipped statements: `vec[p] = ftz(dctx[t, p])` (under `DRES` the
+   shared page cell `(t - t0) * 64 + p`, staged through `ftz` from the same
+   index), `vs[kj, p] = ftz(v[j, p])`, `_step_preflushed(dctx, v, dy)` over `p`
+   ascending from +0.0, `dyv = ftz(dy)`.
+6. Partition. Row `t` lies in block `t // 8`; key `j` in iteration `j // 32`,
+   which lies in `[kb_lo, kb_hi]` of the block by item 2's monotonicity; so
+   every visible cell has exactly one thread `(t - 8 tb, j - 32 kb)` and one
+   iteration. Every thread of a block runs the same `kb` range and reaches
+   every barrier; rows at or past `L` compute nothing and only meet barriers.
+7. z. The shipped chain starts at +0.0 and, after each iteration's phase 2,
+   steps `_step_preflushed(dys[jj], ys[jj], z)` for `jj` ascending over that
+   iteration's visible keys, iterations ascending. The estash kernel takes
+   the same steps in the same phase on slots written in that phase 2 by
+   threads `(tr, jj)` of the same row, from the values item 4 and 5 argued.
+   The corner test and the zdot store are the shipped statements.
+8. Stores and races. `y_st` and `dy_st` are written at the same visible cells
+   with the same values as the shipped kernel. Each thread writes its own two
+   slots and two stash cells; the global writes go to distinct cells; the
+   kept `e` buffer is read only (the backward allocates its own `y_st`, so a
+   second backward on the same forward, as the checks run, reads the same
+   `e`).
+9. The consumers. `fused_bwd_dq_tiled_pf_kernel[64]` and
+   `fused_bwd_dkdv_r2_kernel[64, keys, False]` are the shipped clean
+   instantiations the default launches, on stashes and a zdot with the
+   shipped bits, in the shipped order.
+10. Staleness. The field is set only after a fused forward returned FUSED_RAN
+    into `aexp` on this call, reset at the start of every
+    `eager_attention_forward` on a trial build, and cleared by every
+    `attention_eager_core` (the only writer of `aexp`). A backward whose
+    forward took any other path, or refused, or hit the corner, or whose
+    stages were rematerialized, reads 0 and runs the shipped backward.
+
+`_estash_dres` changes where dctx is read from (item 5) and nothing else.
+
+Sabotage (reach, `+sabotage_new`). The estash kernel stores zdot flipped one
+ulp (`_flip_ulp`) at EVEN flat rows only. zdot moves at even rows and holds at
+odd rows, dq and dk move through it, dv and the forward hold. 2533's flip moves
+every row and 2598's odd rows only, so `zdot_moved_odd_rows=0` with
+`zdot_moved_even_rows` above 0 names this kernel. Row 0 of head 0 is even, so
+every head_dim 64 case has one. The forward under `+sabotage_new` flips its Q
+page (2530) and so moves `e`; the checks therefore run the estash backward's
+reach on a clean forward (as REACH_Z did for 2598). Second reach, the read:
+after a clean forward, the check overwrites the kept buffer with NaN and runs
+the clean backward. A kernel that reads `e` moves y, so dv must move
+(`REACH_E`); a kernel that recomputes y would not.
+
+### 20.6 What was built, per file
+
+| bit | constant | token | meaning |
+|---:|---|---|---|
+| 2097152 | `ATTN_ARM_BWD_ESTASH` | `_estash` | DEVIATION 2650, zdot from the forward's kept exp stash, 8 rows per block |
+| 4194304 | `ATTN_ARM_ESTASH_DRES` | `_estash_dres` (with the bit above) | DEVIATION 2651, dctx rows in the shared page |
+
+Grammar: base, `_ztiled[_r32|_r64]`, `_fgrid[_r32|_r64]`, `_qres`, `_pf`,
+one of `_zdefer`, `_zlag`, `_estash`, `_estash_dres`, then `_kvrecompute`,
+`_kvgrid[_r32|_r64]`, `_kvsplit`, then the sabotages. `_estash` needs
+stash_tiled with `_fgrid_r32`, `_qres`, `_pf` and `_kvgrid` (any keys), and
+refuses `_ztiled`, `_zdefer`, `_zlag`, `_kvrecompute` and `_kvsplit`. Both
+bits are in `ATTN_ARM_NEW_BITS` and `ATTN_ARM_DEFAULT_REFUSED_BITS`.
+
+- `transformer/impl/llama/fused_attention.mojo`: the bits, parser, name
+  function, `fused_attention_arm_estash_runs`, the resolved backward word (the
+  estash bits beside the kv bits on a trial build); the kernel of 20.3 with
+  its page constants; `_launch_fwd_r2_keep` (the shipped forward
+  instantiation into a caller's buffer), `_launch_bwd_estash[HD, DRES, BJ]`
+  (two stashes, the estash zdot, a wait, the shipped dq and dk/dv, a wait);
+  `fused_forward_launch_estash_ran` and `fused_backward_launch_estash_ran`,
+  which run the estash path when the arm carries it and the kept stash is
+  valid, and otherwise return the shipped launchers' result unchanged. Timer
+  lines `attn.fwd_r2_keep_kernel`, `attn.bwd_zdot_estash_pf` and
+  `attn.bwd_zdot_estash_dres_pf`, then the existing dq and dk/dv lines. Every
+  launch has `step_count_launch` before it and every synchronize
+  `step_count_sync`. No shipped branch or kernel is edited.
+- `transformer/impl/llama/modeling_llama.mojo`: the field, its reset in
+  `attention_eager_core`, the trial branch in `eager_attention_forward`
+  (DEVIATION 2652).
+- `transformer/checks/transformer_backward.mojo`: the trial branch at the
+  fused backward call (DEVIATION 2652).
+- `transformer/checks/transformer_attention_arms_check.mojo`: 23 arms (the 21
+  of 17.5 plus `stash_tiled_fgrid_r32_qres_pf_estash_kvgrid_r32` and
+  `stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32`), launched through
+  the estash launchers with a kept buffer per case; under `+sabotage_new` an
+  estash arm's backward runs on a clean forward and must move zdot at even
+  rows only and hold dv; a fourth pass poisons the kept buffer and must move
+  dv (`REACH_E`).
+- `transformer/checks/transformer_fused_check.mojo`: the backward launch goes
+  through `fused_backward_launch_estash_ran` with the wrapper's `stages.aexp`
+  and field (the wrapper runs again right before it, because the eager
+  backward reference rematerializes the stages), and a `WRAPPER` line prints
+  the kept cell count. On a shipped build the call returns the shipped
+  launcher's result, so the check reads as before.
+- `bench/attention_step_price_main.mojo`: `Case` holds a kept buffer and cell
+  count and launches through the estash launchers; `PATH` gains `estash=`; a
+  `REACH_ES` run (clean forward, `+sabotage_new` backward) and a `REACH_E`
+  run for estash candidates; `RESOURCES` gains `zdot_estash_pf` and
+  `zdot_estash_dres_pf`.
+- `tools/attention_final_leg.sh`: the leg body (20.9); `tools/attention_step_leg.sh`
+  header and `gate.txt` only.
+
+A trial build instantiates four more kernel pipelines (DRES times SABN); the
+forward and the dq and dk/dv instantiations are ones a trial build already
+compiles.
+
+### 20.7 The flip rule for this leg
+
+ENGINEERING_RULES 9. For an arm, the geometric mean of its enwik8 and
+pilegithub lean step ratios (`steady_median_seconds` of `lm-<arm>-<corpus>`
+over `lm-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-<corpus>`, same pod) below
+1, with `witnesses_equal_baseline=True` for every step on both corpora. A flip
+needs the lane that takes it to add the shipped branch (the kernel, the two
+launch helpers and the DEVIATION 2652 glue out of `comptime if ATTN_ARM_TRIAL`),
+move the bits out of `ATTN_ARM_DEFAULT_REFUSED_BITS`, and edit only the
+NVIDIA word of `attn_default_arm_for`.
+
+### 20.8 RUN OWED on the M4 (the orchestrator's light commands, one at a time)
+
+1. The shipped path, no trial define:
+   `nice -n 19 pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . transformer/checks/transformer_fused_check.mojo -o /tmp/fused-check`
+   then `nice -n 19 /tmp/fused-check`. Expect 18.5 item 1's `DEFAULT`, `ARM`
+   and `DKDV` lines, `WRAPPER ... estash_cells=0` on every case, and
+   `transformer_fused_check: PASS, 15 cases`.
+2. The NVIDIA and AMD default word on the Mac, still no trial define:
+   `nice -n 19 pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_ATTN_DEFAULT_KVGRID_EVERY_COLUMN=1 -I . transformer/checks/transformer_fused_check.mojo -o /tmp/fused-check-kv`
+   then `nice -n 19 /tmp/fused-check-kv`. Expect 18.5 item 2's lines and PASS.
+3. The arms gate, trial define:
+   `nice -n 19 pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_ATTN_ARM_TRIAL=1 -I . transformer/checks/transformer_attention_arms_check.mojo -o /tmp/arms-check`
+   then `nice -n 19 /tmp/arms-check`. Expect
+   `names: 43 spellings and 184 arm values round-trip, 48 invalid spellings refused`;
+   status lines ending `ran stash_tiled_pf_estash_kvgrid_r32` and
+   `ran stash_tiled_pf_estash_dres_kvgrid_r32` at head_dim 64 (backward);
+   for both arms `REACH <arm>+sabotage_new zdot_moved=<n> dv_moved=0 zdot_moved_even_rows=<n> zdot_moved_odd_rows=0`
+   and `REACH_E <arm> dv_moved=<n> zdot_moved=<n>` with n above 0; and
+   `transformer_attention_arms_check: PASS, names inverse, 15 cases x 23 arms`.
+4. The wrapper glue, trial define, one estash arm per run:
+   `nice -n 19 pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_ATTN_ARM_TRIAL=1 -I . transformer/checks/transformer_fused_check.mojo -o /tmp/fused-check-trial`
+   then `MOJOLEARN_ATTN_ARM=stash_tiled_fgrid_r32_qres_pf_estash_kvgrid_r32 nice -n 19 /tmp/fused-check-trial`
+   and the same with `stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32`.
+   Expect `ARM this_run=<arm> ... backward_hd64=stash_tiled_pf_estash[_dres]_kvgrid_r32`,
+   `WRAPPER ... estash_cells=<B*nh*L*S>` above 0 on the head_dim 64 cases
+   whose forward RAN, `fused backward status: RAN  ran <that word>` there,
+   and PASS.
+5. The price harness at L 512, correctness only, against the NVIDIA default
+   by name:
+   `nice -n 19 pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_ATTN_ARM_TRIAL=1 -I . bench/attention_step_price_main.mojo -o /tmp/attn-price`
+   then
+   `MOJOLEARN_ATTN_BASELINE=stash_tiled_fgrid_r32_qres_pf_kvgrid_r32 MOJOLEARN_ATTN_ARM=stash_tiled_fgrid_r32_qres_pf_estash_kvgrid_r32 MOJOLEARN_ATTN_KINDS=hashed,heavytail MOJOLEARN_ATTN_TIMING=0 MOJOLEARN_ATTN_RESOURCES=1 MOJOLEARN_ATTN_L=512 MOJOLEARN_ATTN_NH=4 MOJOLEARN_ATTN_NKV=2 nice -n 19 /tmp/attn-price`,
+   then the `_estash_dres_` arm with `MOJOLEARN_ATTN_ORACLE=0 MOJOLEARN_ATTN_RESOURCES=0`.
+   Expect `PATH candidate ... estash=estash` (or `estash_dres`), every `BITS`
+   MATCH, `REACH_ES ... forward_moved=0 zdot_moved_even_rows=<above 0> zdot_moved_odd_rows=0 dv_moved=0`,
+   `REACH_E ... dv_moved=<above 0>`, `REACH ... clean_restored=True`, a
+   `REACH_KV` line, `RESOURCES_BEGIN label=zdot_estash_pf` and
+   `label=zdot_estash_dres_pf` (Metal may answer `RESOURCES_ERROR`), and
+   `attention_step_price: PASS`.
+6. Compile proof of the backward glue (the byte LM bindings cannot build on
+   the Mac), build only, both builds:
+   `nice -n 19 pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_ATTN_ARM_TRIAL=1 -I . transformer/checks/transformer_backward_check.mojo -o /tmp/bwd-check-trial`
+   and the same without the trial define to `/tmp/bwd-check`. Expect both to
+   build.
+
+### 20.9 The H100 leg
+
+Body `tools/attention_final_leg.sh`. Each setting only when unset:
+`MOJOLEARN_ATTN_BASELINE=stash_tiled_fgrid_r32_qres_pf_kvgrid_r32` (the
+shipped NVIDIA default, by name);
+`MOJOLEARN_ATTN_LEG_ARMS=stash_tiled_fgrid_r32_qres_pf_estash_kvgrid_r32,stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32`;
+`MOJOLEARN_ATTN_LEG_LM_ARMS` the baseline and both arms;
+`MOJOLEARN_ATTN_LEG_SKIP_TIMERS=1`; `MOJOLEARN_COMPILE_JOBS=8`. From a
+`git worktree add --detach` checkout at the lane's merge commit:
+
+    MOJOLEARN_RUNPOD_KEY_FILE=$HOME/.mojolearn_runpod_key \
+    MOJOLEARN_GPU_ARCHS=sm_90a \
+    MOJOLEARN_GEMM_LEG_EXTRA=tools/attention_final_leg.sh \
+    MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/$(date -u +%Y-%m-%d_%H%M%S)-nvidia-h100-attention-final \
+    sh tools/gemm_remote_leg.sh nvidia --payload gemm --rent --minutes 60 \
+        --gpu "NVIDIA H100 80GB HBM3" \
+        --local-card bench/results/e1/2026-08-28_131651-runpod-nvidia/lanes/gemm.identical.card
+
+Expected about 20 to 25 minutes on the pod: the zdot leg's body took 22.5
+minutes with 20 LM probes; this one runs 12 (three arms, two corpora, a lean
+and a timing probe each, about 97 s per pair) after the same builds (about 4
+minutes), dumps and prices.
+
+Gates: section 6 with the NVIDIA default in place of `baseline` (arms check
+exit 0; smokes exit 0; every `BITS ... _vs_stash_tiled_fgrid_r32_qres_pf_kvgrid_r32`
+MATCH on both corpora's activations; `REACH` with `clean_restored=True`,
+`REACH_ES`, `REACH_E` and `REACH_KV` proven; lean steps `limited: false`).
+Flip: 20.7. Reading: `RESOURCES label=zdot_estash_pf regs=` and
+`blocks_per_sm_256=` against 134 and 1; `attn.bwd_zdot_estash_pf` in
+`lmtiming-*` against 66.4 ms; `envelope.native_call` against 290.3.
+
+### 20.10 Risks only a build or a box can settle
+
+1. Nothing was compiled. Likeliest faults: the new `var` field and its uses
+   in two modules; `len()` on a `DeviceBuffer` (the lean capacity helper is
+   the precedent); `stages.aexp` passed `mut` beside other `stages` fields
+   (the shipped forward call is the precedent); a comptime-sized shared
+   allocation that depends on `DRES`; `~` on the arm mask in the checks.
+2. The register count of the estash kernels. If it stays above 128 the arm
+   gets the rows-per-block half of 20.4 only (about 33 ms); `_estash_dres`
+   exists to cover that.
+3. Shared bandwidth under `_estash_dres` (two shared loads per chain term).
+4. The global load of `e` in the dot phase. If a global load's latency is
+   longer than the 64-term chain, phase 2 lengthens; the pessimistic bound in
+   20.4 already charges 4 ms.
+5. Memory. 2.42 GB of kept stash on the H100 (80 GB) for the whole run, and a
+   201 MB fill per layer in the first step (the probe's warmup step).
+6. The lean probe's memory lines will show the kept stash; they are not the
+   price.
+7. The byte LM bindings first compile the DEVIATION 2652 glue on the box;
+   M4 item 6 compiles the same functions in a check first.
