@@ -168,6 +168,21 @@ No AMD timing of this step exists at the target shape.
      identity argument. Code on the branch is a kernel matrix row and control
      shapes only, never compiled; the arm itself is NOT BUILT. Its predicted
      GEMM sum of about 162 ms (from 219) is a model, not a measurement.
+   - Hot Aisle runner, NOT BUILT, branch `lane/hotaisle-runner` (77c89135):
+     `tools/hotaisle_leg.sh` is a skeleton that refuses every mode (exit 2).
+     Its header holds the verified API facts and the design: key from
+     ~/.mojolearn_hotaisle_key through a 0600 curl config; dry run default,
+     `--probe` free GETs, `--rent` bills; MI300X only; balance printed before
+     create; Mac dead-man before create; on-box watchdog DELETEs its own VM
+     with `?force=true`; gone means GET 404 AND absent from a 200 team list.
+     Facts from the spec and hotaisle-cli: create has no name field (mark legs
+     with `PATCH {description}`), create and delete need the `operator` role,
+     a cancelled create still provisions, DELETE blocks until teardown,
+     `stop` keeps billing, SSH user `hotaisle`, only port 22 open. Unverified:
+     host ROCm tools, passwordless sudo, create 200 vs 201, the MI300X gfx
+     name. RUN OWED order: dry run, `--probe`, `--rent --watchdog-test`, then a
+     tiny real body. Andrew should mint a key scoped to this team with the
+     operator role, since the key rides on the VM.
 1. The DigitalOcean runner is merged and its dry run is green (section 3);
    its first paid run is also its bring-up. Tuning on AMD is now a repo rule
    for every lane (ENGINEERING_RULES.md section 10), and the account allows
