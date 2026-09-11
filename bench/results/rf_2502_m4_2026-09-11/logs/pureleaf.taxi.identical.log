@@ -1,0 +1,16 @@
+FSPEED-NOTE lane=rf arms=ours metric=devices delta=1.000000 reason=devices=cpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=metal path=/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/7de13e6c-b220-4235-a53a-461fcad83192/scratchpad/wt-trees/python/mojolearn/identical/_mojolearn_rf.so
+FSPEED-SCALE stage=before rows=1000000 features=16 input_mib=61.0 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=rf arm=ours mode=IDENTICAL device=Darwin_arm64 rounds=3 size=shipped
+FSPEED-WARMUP lane=rf arm=ours shape=taxi-1000000x16 ms=6481.533
+FSPEED-ORDER lane=rf round=1 arms=ours
+FSPEED lane=rf arm=ours shape=taxi-1000000x16 round=1 ms=6486.787 hash=d8f64dae01de00bd
+FSPEED-ORDER lane=rf round=2 arms=ours
+FSPEED lane=rf arm=ours shape=taxi-1000000x16 round=2 ms=6403.369 hash=d8f64dae01de00bd
+FSPEED-ORDER lane=rf round=3 arms=ours
+FSPEED lane=rf arm=ours shape=taxi-1000000x16 round=3 ms=6553.691 hash=d8f64dae01de00bd
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.525910
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.617154
+FSPEED-SCALE stage=after rows=1000000 features=16 input_mib=61.0 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
