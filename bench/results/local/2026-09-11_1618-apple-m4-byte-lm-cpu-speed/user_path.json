@@ -1,0 +1,32 @@
+{
+ "cpu": "Apple M4",
+ "machine": "arm64",
+ "python": "3.13.15",
+ "vendor": "cpu",
+ "cpu_only_import": true,
+ "checkpoint_params_equal_step128_post_p": true,
+ "profile": "mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1",
+ "heldout_final_loss_bytes_equal": {
+  "reference": 8,
+  "threaded": 8,
+  "of": 8
+ },
+ "heldout_final_mean_equals_record": true,
+ "heldout_final_mean": 2.8436418771743774,
+ "logits_hash_matches_certified_cpus": {
+  "reference": true,
+  "threaded": true
+ },
+ "next_bytes": [
+  32,
+  32
+ ],
+ "refusals": {
+  "token_out_of_range": "Exception",
+  "length_over_config": "ValueError",
+  "wrong_loss_shape": "ValueError"
+ },
+ "ms_per_2x32_logits_reference": 27.397,
+ "ms_per_2x32_logits_threaded": 0.517,
+ "PASS": true
+}

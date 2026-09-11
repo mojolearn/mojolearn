@@ -1,0 +1,15 @@
+Imported from /Users/runner/work/mojolearn/mojolearn/bindings/_mojolearn_byte_lm_host.mojo:19:
+./bindings/hostptr.mojo:58:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /Users/runner/work/mojolearn/mojolearn/bindings/_mojolearn_byte_lm_host.mojo:19:
+./bindings/hostptr.mojo:69:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+ld: warning: passed two min versions (15.0, 11.0) for platform macOS. Using 11.0.
+ld: warning: object file (/private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/mojo_archive-7c52cb5.a) was built for newer 'macOS' version (15.0) than being linked (11.0)
+built python/mojolearn/host/_mojolearn_byte_lm_host.so
