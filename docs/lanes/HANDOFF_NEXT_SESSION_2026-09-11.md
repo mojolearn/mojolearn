@@ -30,17 +30,18 @@ bench/results/e1g/. Read the briefs before touching any of it.
    step. Start from docs/lanes/HANDOFF_speed_gemm_2026-09-10.md and the lean
    timing step's phase list (bench/results/e1g/2026-09-11_004220-nvidia/
    remote/lm-step-memory/target-lean-timing). Attention backward first.
-4. kNN selection (priority 4): the premise (insertion chain dominates) was
-   WRONG. Measured on the H100: rank phase 0.4 to 0.75 ms of the 10.3 to
-   14.7 ms selection; scan 8.8 to 12.8 ms with a 3.2 ms k-independent floor;
-   the list is register-resident, no spills; occupancy is not the limiter
-   (CAP = K lifted it to 75 percent, neutral). NEGATIVE, all bit-equal:
-   headbound, warpbound, deferred insertion; NEUTRAL: CAP = K. In flight at
-   02:10: the chain-cost isolation run (noshift, voteguard, votecount,
-   capk_selp) in bench/results/e1g/2026-09-11_0208*-nvidia; read
-   docs/lanes/BRIEF_knn_selection_2026-09-10.md "Step 7 result" and the
-   DEVIATION 2522 section for how to read it. Trees, memory candidates
-   (backward stage reuse 2.4 GiB etc.) are untouched device-memory work.
+4. kNN selection (priority 4): the premise (insertion chain dominates
+   through its admissions) was WRONG in a specific way: the chain issued on
+   90 to 96 percent of warp-steps because SOME lane admits, so bounds,
+   deferred insertion and CAP = K were all neutral or negative. Measured
+   on the H100 with timing-only arms: rank 0.4 to 0.75 ms, tile reads 3.5
+   ms, chain 6.7 ms (k10) and 10.8 ms (k15). WIN (DEVIATION 2523, flipped
+   for NVIDIA in checks/kernel_matrix.mojo): the warp bound behind a
+   ballot branch, admit rate 0.46, requests 30.8 to 27.8 ms (k10) and 36.0
+   to 31.0 ms (k15), bit-equal. OWED: Apple and AMD timing (identity
+   passes), a paired cuML run at the qualified boundary, and the next
+   lever (a tighter bound now that the branch exists). Read
+   docs/lanes/BRIEF_knn_selection_2026-09-10.md Steps 4 to 9 first.
 5. Training readiness (priority 5): NOT STARTED.
 
 ## Running the machinery
