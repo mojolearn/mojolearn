@@ -1,0 +1,126 @@
+1286 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x11b900000000, nodemask=1)
+Imported from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:26:
+./bindings/hostptr.mojo:58:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:41:
+Imported from ./training/byte_lm.mojo:56:
+/root/mojolearn/./transformer/impl/llama/modeling_llama.mojo:696:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:41:
+Imported from ./training/byte_lm.mojo:20:
+/root/mojolearn/./core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:41:
+Imported from ./training/byte_lm.mojo:20:
+/root/mojolearn/./core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:41:
+Imported from ./training/byte_lm.mojo:20:
+/root/mojolearn/./core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:41:
+Imported from ./training/byte_lm.mojo:43:
+./training/checks/loss.mojo:511:8: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    red[tid] = value
+    ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:41:
+Imported from ./training/byte_lm.mojo:43:
+./training/checks/loss.mojo:516:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var other = red[tid + step]
+                        ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:41:
+Imported from ./training/byte_lm.mojo:43:
+./training/checks/loss.mojo:520:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                if other > red[tid]:
+                           ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:41:
+Imported from ./training/byte_lm.mojo:43:
+./training/checks/loss.mojo:521:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    red[tid] = other
+                    ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:41:
+Imported from ./training/byte_lm.mojo:43:
+./training/checks/loss.mojo:523:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = identical_fmax(red[tid], other)
+                ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:41:
+Imported from ./training/byte_lm.mojo:43:
+./training/checks/loss.mojo:523:46: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = identical_fmax(red[tid], other)
+                                          ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:41:
+Imported from ./training/byte_lm.mojo:43:
+./training/checks/loss.mojo:526:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var total = red[0]
+                ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_byte_lm.mojo:289:30: warning: assignment to 'out_p' was never used; assign to '_' instead?
+    var out_p = List[Float32]()
+                             ^
+/root/mojolearn/bindings/_mojolearn_byte_lm.mojo:290:30: warning: assignment to 'out_m' was never used; assign to '_' instead?
+    var out_m = List[Float32]()
+                             ^
+/root/mojolearn/bindings/_mojolearn_byte_lm.mojo:291:30: warning: assignment to 'out_v' was never used; assign to '_' instead?
+    var out_v = List[Float32]()
+                             ^
+/root/mojolearn/bindings/_mojolearn_byte_lm.mojo:293:31: warning: assignment to 'out_flags' was never used; assign to '_' instead?
+    var out_flags = List[Bool]()
+                              ^
+/root/mojolearn/bindings/_mojolearn_byte_lm.mojo:294:23: warning: assignment to 'loss' was never used; assign to '_' instead?
+    var loss = Float32(0)
+                      ^
+/root/mojolearn/bindings/_mojolearn_byte_lm.mojo:295:23: warning: assignment to 'result_step' was never used; assign to '_' instead?
+    var result_step = completed
+                      ^
+Included from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:41:
+Included from ./training/byte_lm.mojo:48:
+./training/checks/optimizer.mojo:571:20: warning: assignment to 'm' was never used; assign to '_' instead?
+    var m = Float32(0.0)
+                   ^
+Included from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:41:
+Included from ./training/byte_lm.mojo:48:
+./training/checks/optimizer.mojo:581:20: warning: assignment to 'v' was never used; assign to '_' instead?
+    var v = Float32(0.0)
+                   ^
+Included from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:41:
+Included from ./training/byte_lm.mojo:48:
+./training/checks/optimizer.mojo:601:21: warning: assignment to 'dn' was never used; assign to '_' instead?
+    var dn = Float32(0.0)
+                    ^
+Included from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:41:
+Included from ./training/byte_lm.mojo:48:
+./training/checks/optimizer.mojo:602:20: warning: assignment to 'q' was never used; assign to '_' instead?
+    var q = Float32(0.0)
+                   ^
+Included from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:41:
+Included from ./training/byte_lm.mojo:48:
+./training/checks/optimizer.mojo:649:24: warning: assignment to 'p_out' was never used; assign to '_' instead?
+    var p_out = Float32(0.0)
+                       ^
+Included from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:41:
+Included from ./training/byte_lm.mojo:53:
+/root/mojolearn/./transformer/checks/transformer_backward.mojo:2624:28: warning: assignment to 'cells' was never used; assign to '_' instead?
+    var cells = b * nh * l * s
+                           ^
+built python/mojolearn/identical/_mojolearn_byte_lm.so; root must read byte_lm_numeric_mode/vendor/profile and retain guard exit evidence

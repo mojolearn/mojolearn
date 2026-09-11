@@ -1,0 +1,73 @@
+{
+  "schema": "mojolearn.lm-step-memory-probe.v3",
+  "shape": {
+    "batch": 1,
+    "length": 2048,
+    "d_model": 768,
+    "n_heads": 12,
+    "n_kv": 12,
+    "head_dim": 64,
+    "intermediate": 2048,
+    "n_layers": 12,
+    "vocab_size": 50257
+  },
+  "parameters": 162147840,
+  "steps_completed": 3,
+  "resident": true,
+  "step_result": "lean",
+  "witness_every_step": true,
+  "witness_source": "export_gradients(named=False) + export_state() after every step (outside the timed boundary)",
+  "step_witnesses": [
+    {
+      "step": 1,
+      "completed_steps": 1,
+      "sha256": {
+        "loss": "7755ecd0d22543abbe76932aa276e43572b7a3ceb8a561956df2a157f3a50c04",
+        "gradients": "5055aee89c800d3463962f4e9deafa191a16ba024b66728b9e41546f82c9687b",
+        "parameters": "e463f82574506fbaccae2b832d6fc735164c5583bb88d60c0e11c42129e4a441",
+        "m": "7e61441b6bf58c983aa6c739adf8b96e62513288cb787f83b6c2fdb1ef7e567e",
+        "v": "2b75b19c6a3accbe949859fe9afbce983b3a34b5a496c368ecdeae1062eeca48",
+        "flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb"
+      }
+    },
+    {
+      "step": 2,
+      "completed_steps": 2,
+      "sha256": {
+        "loss": "0a5f8f7ab5f31aa71bd58773fc64784b8d15707ab943624adfc4417e9796a5db",
+        "gradients": "57ad01e8f8f75291bcc88ae211a6cd4683358411db9a2279bef5cd64874ad984",
+        "parameters": "4b61e9b8962f3f779556b70655a7b7128766e8845460ee35d1c1eb24284d8941",
+        "m": "b36fecbfc33c97f90a4ce291a3fc89cdb64aaaf075796af519df28e73196f061",
+        "v": "2dadf6a3dcba0afed5479de492f572831ab651ac76a9d8a0e133871f570cf0f3",
+        "flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb"
+      }
+    },
+    {
+      "step": 3,
+      "completed_steps": 3,
+      "sha256": {
+        "loss": "e6e4e8e31c77935480ce25e01b8154113d1d568db4ab4281caca4d8912d183f9",
+        "gradients": "b2b8cdb4c2e4fce10e0ff98e6dc803ae7007c54c6a74d40efec415159c8107b1",
+        "parameters": "41432668fb90e3022eae7e9546ec38ced42ce245ea082f2b8f868e041e48d904",
+        "m": "e3c2d4cd47f4fe94357ccee522905688191b6b49fd96444bcf529566b4c9b057",
+        "v": "437fefefdfd8c4cfe10c4fb7ad58ad516881f5004404e839a4b777c56d3267c8",
+        "flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb"
+      }
+    }
+  ],
+  "final_witness": null,
+  "first_call_seconds": 15.380035389214754,
+  "steady_step_seconds": [
+    0.5628280490636826,
+    0.5633621867746115
+  ],
+  "steady_median_seconds": 0.563095117919147,
+  "steady_median_tokens_per_second": 3637.0409453524435,
+  "peak_device_process_bytes": "unavailable",
+  "peak_device_wide_bytes": 14286848000,
+  "process_ru_maxrss_bytes": 8169091072,
+  "budget_seconds": 300.0,
+  "limited": false,
+  "component_timing_step_seconds": null,
+  "qualification": "complete-step probe; device peak from a polled vendor tool; host RSS is a separate boundary; no opponent, no default gate, no target-scale qualification claim"
+}

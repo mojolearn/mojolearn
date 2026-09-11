@@ -365,11 +365,16 @@ class SmallByteLanguageModelTrainer:
     object then raises "session lost at step k; last exported state is step
     j" on every call until `load_state_dict()`.
 
-    step_result='full' (the default) returns today's `train_step` dict; on a
-    resident session it is the lean step plus `export_gradients()`, so the
-    bytes are the stateless path's. step_result='lean' (resident only)
-    returns `loss, step, completed_steps, next_batch_index, flags` and
-    leaves the gradient on the device until `export_gradients()`.
+    step_result selects what `train_step` returns. 'full' returns the
+    complete dict (loss, gradients, state); on a resident session it is the
+    lean step plus `export_gradients()`, so the bytes are the stateless
+    path's. 'lean' (resident only) returns `loss, step, completed_steps,
+    next_batch_index, flags` and leaves the gradient on the device until
+    `export_gradients()`. The default (None) is 'lean' for a resident
+    trainer and 'full' for a stateless one: DEVIATION 2514 gate G5 on the
+    H100 (2026-09-11) measured a lean target-shape step at 0.565 s against
+    8.6 s full and 45 s before the device-owned step, with every lean step
+    bit-equal to the full path's and to the pre-change trainer's.
 
     Complete state is copied and updates commit only after success. On the
     stateless path evaluation requires byte-unchanged parameters, moments,
@@ -383,9 +388,11 @@ class SmallByteLanguageModelTrainer:
     """
 
     def __init__(self, parameters, *, data_schedule, lr=1e-3, betas=(.9, .999),
-                 eps=1e-8, weight_decay=.01, shape=None, resident=False, step_result='full'):
+                 eps=1e-8, weight_decay=.01, shape=None, resident=False, step_result=None):
         if type(resident) is not bool:
             raise TypeError("resident must be a bool")
+        if step_result is None:
+            step_result = 'lean' if resident else 'full'
         if type(step_result) is not str or step_result not in ('full', 'lean'):
             raise ValueError("step_result must be 'full' or 'lean'")
         if step_result == 'lean' and not resident:

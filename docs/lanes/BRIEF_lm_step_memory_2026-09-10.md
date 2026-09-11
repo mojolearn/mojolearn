@@ -693,3 +693,24 @@ A lean `result.json` with `limited: true` or a probe exit 2 is a recorded
 limitation, not a pass. File the fetched directory under `bench/results`
 with its `extra_body.sh` copy; the default flip (design step 9) waits on
 this filing.
+
+## Gate G5 result: PASSED; the default flipped (H100 sm_90a, main 3b81dc2e, 2026-09-11 04:44Z to 04:52Z, `bench/results/e1g/2026-09-11_004220-nvidia/remote/lm-step-memory`)
+
+| shape | full step median (this leg) | lean step median | tokens/s lean | witnesses |
+|---|---:|---:|---:|---|
+| control 20.45M, L2048, V8192 | 1.26 s | 0.199 s | 10,305 | 3 of 3 steps equal the full path and run 2 |
+| target 162,147,840, L2048, V50257 | 8.59 s | 0.563 s | 3,637 | 3 of 3 steps equal the full path and run 2 |
+
+The full path itself fell from 38.9 s to 8.6 s at the target because the
+CE and optimizer refusals now scan on the device (steps 2 and 3) and the
+after-step validation is a device scan; its remaining cost is its mirrors
+and the Python-side validation of a state it still holds. The lean step's
+phase timers cover 87 percent: the twelve blocks 0.50 s (attention
+backward 262 ms), head forward and backward 46 ms, embedding 3 ms, shadow
+copy 2.3 ms; none of run 2's host phases appear. From 44.97 s (run 1) to
+0.565 s is 80x at the same boundary with the same bits at every step.
+step_result now defaults to 'lean' for resident trainers (step 9).
+
+What remains per step is device compute, so the handoff's priority 3
+(GEMM and attention) is now the whole target-shape step: attention
+backward alone is 46 percent of it.

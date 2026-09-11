@@ -235,7 +235,16 @@ def test_resident_requires_boolean(host, value):
 @pytest.mark.parametrize('kwargs', [dict(resident=False, step_result='lean'),
                                     dict(step_result='lean'),
                                     dict(resident=True, step_result='terse'),
-                                    dict(resident=True, step_result=None)])
+                                    dict(resident=True, step_result=7)])
 def test_lean_requires_resident_and_the_result_kind_is_checked(host, kwargs):
     with pytest.raises(ValueError, match='step_result'):
         Trainer(initial(), data_schedule={'dataset': 'test'}, **kwargs)
+
+
+def test_default_step_result_is_lean_for_resident_and_full_for_stateless(host):
+    # DEVIATION 2514 step 9: the default flipped on gate G5 (H100, 2026-09-11).
+    assert Trainer(initial(), data_schedule={'dataset': 'test'}).run_metadata()['step_result'] == 'full'
+    assert Trainer(initial(), data_schedule={'dataset': 'test'},
+                   resident=True).run_metadata()['step_result'] == 'lean'
+    assert Trainer(initial(), data_schedule={'dataset': 'test'}, resident=True,
+                   step_result='full').run_metadata()['step_result'] == 'full'
