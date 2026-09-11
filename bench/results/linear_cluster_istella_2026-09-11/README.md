@@ -53,6 +53,105 @@ centroids and labels are copied from the device into the caller's memory, and
 Neither change moves a bit by construction: no arithmetic, no order and no
 kernel geometry changes in either.
 
+## Istella-S stage breakdown (the question this lane was opened on)
+
+`stage_probe`, IDENTICAL, 3 reps, Istella-S 2,043,304 x 220, warm. The caller's
+block is a pinned host buffer here, so the upload row is a pinned upload and
+the public fit's pageable upload can only be slower.
+
+| stage | OLS (ms) | PCA (ms) |
+|---|---|---|
+| device allocation | 0.006 | 0.006 to 2.4 |
+| upload of the 1.8 GB design | 36.0 | 34.9 |
+| Gram (`gemm_tn`) / covariance | 23.6 | 30.0 |
+| `A^T b` | 2.7 | - |
+| equilibration (DEVIATION 2620) | 0.06 | - |
+| **device Jacobi, 220 columns** | **1656.5 (12 sweeps)** | **418.3 (3 sweeps)** |
+| `ols_fit_host` total | 1744 to 1775 | - |
+
+**The Jacobi is 94 percent of the OLS solve and 86 percent of the PCA fit, and
+the GEMM is 23.6 ms of it.** The v1 GEMM profile past 128 columns is not what
+costs anything here, so there is nothing in this lane for the neural session's
+`gemm/` to take; the 220-column eigensolver is the whole cost.
+
+Same matrix, both kernels, per rep:
+
+| fit | merged, DEVIATION 2671 | four-phase | after/before | cells differing |
+|---|---|---|---|---|
+| OLS Gram, n = 220, 12 sweeps | 1656.5 ms | 1825.8 ms | 0.907 | 0 of 48,400 matrix, 0 of 48,400 eigenvector |
+| PCA covariance, n = 220, 3 sweeps | 418.3 ms | 466.6 ms | 0.896 | 0 of 48,400 and 0 of 48,400 |
+| taxi, n = 11, 4 to 5 sweeps | 0.449 to 0.566 ms | 0.401 to 0.559 ms | 1.06 to 1.12 | 0 of 121 and 0 of 121 |
+
+At 11 columns the merged kernel is a shade slower (a rotation there is two
+lanes of work, and one barrier saved does not pay for the branch), and the
+whole Jacobi is half a millisecond of a 10 ms solve, so the taxi fit does not
+notice either way. At 220 columns it removes about 169 ms from every OLS fit.
+
+k-means host stages, same probe:
+
+| stage | taxi 4,000,000 x 11 | Istella-S 2,043,304 x 220 |
+|---|---|---|
+| `plan_sum_scale` (host pool, DEVIATION 2633) | 28.2 to 33.1 ms | 189.2 to 220.5 ms |
+| upload of X | 3.9 | 34.1 |
+| weight fill (now a device fill, 2672) | 2.0 | 1.0 |
+| row norms | 2.4 | 1.2 |
+| `fit_predict` (21 iterations) | 121.8 to 122.6 | 823.1 to 826.9 |
+| readback of centroids and labels | 0.3 to 0.6 | 0.2 to 0.3 |
+| public fit | 156.4 to 159.4 | 1081 to 1146 |
+
+## Before and after, same pod, interleaved (1 warm-up plus 5 rounds)
+
+`ours` is this lane, `ours-base` is origin/main (8dc33f00) built on the same
+pod, `cuml-gpu` is cuML 26.08. Ratios against `ours-base` are ours against
+ours and are never quoted as an opponent row; the opponent column is
+`ours / cuML`.
+
+| family | dataset | cuML ms | before ms | after ms | after/before | ours/cuML after | quality after = before |
+|---|---|---|---|---|---|---|---|
+| LinearRegression | taxi 4,000,000 x 11 | 21.67 | 139.65 | 135.76 | 0.972 | 6.26x | R2 0.90883698 both (cuML 0.90883616) |
+| LinearRegression | Istella-S 2,043,304 x 220 | 84.85 | 2529.06 | 2402.44 | 0.950 | 28.31x | R2 0.33194438 both (cuML -6473.68) |
+| PCA | taxi | 19.54 | 28.46 | 26.32 | 0.925 | 1.35x | EVR sum 0.99786071 both (cuML 0.99786046) |
+| PCA | Istella-S | 81.91 | 713.09 | 686.27 | 0.962 | 8.38x | EVR sum 1.00000001 both (cuML the same) |
+| KMeans | taxi | 129.28 | 216.59 | 211.99 | 0.979 | 1.64x | inertia 1.2062766e8 both (cuML 1.2019161e8 at 20 iterations against our 21) |
+| KMeans | Istella-S | 171.81 | see below | see below | see below | 7.56x | inertia 1.3128483e17 both (cuML 1.2855462e17) |
+
+Every cell held ONE digest across its five rounds, and the after digest equals
+the before digest in every cell: OLS taxi `fb86358654367fa0`, k-means taxi
+`89520efe99a08d5f`, PCA taxi `c790338770a4c120`, k-means Istella-S
+`7f720b0b76896308`, and OLS and PCA Istella-S likewise stable and equal.
+cuML's k-means returned a different centroid digest in every round on both
+datasets; ours held one. **cuML's OLS is wrong on Istella-S**: its `eig`
+solver returns R2 -6473.68 where ours returns 0.331944, which is the ill
+conditioning DEVIATION 2620's equilibration exists for, so its 84.85 ms is not
+a time for the same answer.
+
+### The verdicts (ENGINEERING_RULES section 9, geometric mean over the two)
+
+* **LinearRegression: 0.972 and 0.950, geomean 0.9610, FLIP.** Quality equal
+  on both datasets, bits equal on both.
+* **PCA: 0.925 and 0.962, geomean 0.9435, FLIP.** Same.
+* **KMeans: pending the pooled instances below.**
+
+Both of those are DEVIATION 2671 alone: OLS and PCA reach the Jacobi and
+k-means does not, so the k-means row isolates DEVIATION 2672 and the OLS and
+PCA rows isolate 2671.
+
+### KMeans and DEVIATION 2672: the effect is under this shape's noise
+
+The Istella-S k-means A/B swung between race instances, in both directions:
+
+| instance | before ms | after ms | after/before |
+|---|---|---|---|
+| first race | 1219.0 | 1299.4 | 1.066 |
+| repeat | 1279.6 | 1215.5 | 0.950 |
+
+The rounds inside each instance were tight (after 1267 to 1346, before 1217 to
+1267 in the first; after 1211 to 1234, before 1231 to 1378 in the repeat), so
+the spread is BETWEEN race instances, not within them, and it is about 80 ms
+against a change the probe measures at about 5 ms of host work at this shape
+(weight fill 1.0 ms, readback 0.2 to 0.3 ms). Pooled instances and the verdict
+they give are below.
+
 ## Measurements
 
 Filled from the pod's races and probes; see `summary.tsv`, the `probe-*.log`
