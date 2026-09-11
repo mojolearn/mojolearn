@@ -18,6 +18,14 @@ from core.step_phase import (
     step_count_launch,
     step_count_sync,
 )
+# DEVIATION 2645: the RMSNorm row launch geometry arm (core/step_glue.mojo;
+# its launch path is compiled only under -D MOJOLEARN_STEP_GLUE_TRIAL=1).
+from core.step_glue import (
+    STEP_GLUE_TRIAL,
+    step_glue_arm_from_env,
+    step_glue_blocks,
+    step_glue_rows_of,
+)
 
 from core.identity_trace import IdentityTrace
 from gemm.checks.gemm_backward import (

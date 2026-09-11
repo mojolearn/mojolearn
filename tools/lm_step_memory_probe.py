@@ -377,7 +377,13 @@ def worker(args):
                 # labels it (tools/gemm_step_leg.sh plans.tsv), so `shipped`
                 # (the ksplit default where the row is above 0) is never
                 # confused with the old plan (`tuned128`). None when unset.
-                gemm_plan=os.environ.get('MOJOLEARN_GEMM_PLAN_LABEL'))
+                gemm_plan=os.environ.get('MOJOLEARN_GEMM_PLAN_LABEL'),
+                # DEVIATION 2648: the step glue arm the binding runs (its
+                # read-back; `shipped` on any non-trial binding), the raw
+                # request and whether the binding is a glue trial build.
+                step_glue_arm=(runtime.get('native_step_glue_arm') or {}).get('arm'),
+                step_glue_arm_requested=os.environ.get('MOJOLEARN_STEP_GLUE_ARM'),
+                step_glue_trial_build=(runtime.get('native_step_glue_arm') or {}).get('trial_build'))
     sampler = DeviceMemorySampler(args.sample_interval, args.gpu_index)
     sampler.start()
     emit(dict(event='setup', schema=SCHEMA, shape=shape.to_dict(), profile=shape.profile,

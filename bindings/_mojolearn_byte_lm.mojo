@@ -58,6 +58,26 @@ from transformer.impl.llama.fused_attention import (
     fused_attention_arm_from_env,
     fused_attention_arm_name,
 )
+# DEVIATION 2648: the step glue arm read-back (core/step_glue.mojo).
+from core.step_glue import (
+    step_glue_arm_from_env,
+    step_glue_arm_name,
+    step_glue_trial_build,
+)
+
+
+def byte_lm_step_glue_arm_binding() raises -> PythonObject:
+    """DEVIATION 2648 read-back, so a result names the glue arm the step ran
+    instead of an environment variable that may be unset or misspelled:
+    [arm, trial_build]. A trial build reads MOJOLEARN_STEP_GLUE_ARM and
+    raises on an invalid name, exactly as the launchers do; every other
+    build returns `shipped` without reading the environment. Reads
+    constants and the environment only; no GPU operation."""
+    var arm = step_glue_arm_from_env()
+    var out = Python.list()
+    out.append(PythonObject(step_glue_arm_name(arm)))
+    out.append(PythonObject(1 if step_glue_trial_build() else 0))
+    return out
 
 
 def byte_lm_attention_arm_binding() raises -> PythonObject:

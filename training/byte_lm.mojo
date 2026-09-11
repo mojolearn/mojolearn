@@ -22,7 +22,18 @@ from core.step_phase import (
     StepPhaseClock,
     step_count_h2d,
     step_count_host_alloc,
+    step_count_launch,
     step_count_sync,
+)
+# DEVIATIONS 2646 and 2647: the step glue update arms (core/step_glue.mojo;
+# their path is compiled only under -D MOJOLEARN_STEP_GLUE_TRIAL=1).
+from core.step_glue import (
+    STEP_GLUE_NOSHADOW,
+    STEP_GLUE_OPTSKIP,
+    STEP_GLUE_TRIAL,
+    STEP_GLUE_UPDATE_BITS,
+    step_glue_arm_from_env,
+    step_glue_blocks,
 )
 from core.device_scan import DeviceScanScratch
 from core.identity_trace import IdentityTrace

@@ -331,11 +331,18 @@ def _binding_metadata(binding):
         arm, default, trial, resolved = binding.byte_lm_attention_arm()
         attention = dict(arm=str(arm), default=str(default), trial_build=bool(int(trial)),
                          resolved_hd64=str(resolved))
+    # DEVIATION 2648: the step glue arm the native step runs and whether the
+    # binding is a glue trial build. None for a binding without the read-back.
+    step_glue = None
+    if hasattr(binding, 'byte_lm_step_glue_arm'):
+        glue_arm, glue_trial = binding.byte_lm_step_glue_arm()
+        step_glue = dict(arm=str(glue_arm), trial_build=bool(int(glue_trial)))
     return dict(binding_file=binding.__file__, binding_sha256=_sha(binding.__file__),
                 native_profile=str(binding.byte_lm_profile()),
                 native_vendor=str(binding.byte_lm_vendor()),
                 native_numeric_mode=int(binding.byte_lm_numeric_mode()),
                 native_attention_arm=attention,
+                native_step_glue_arm=step_glue,
                 source_sha256=inventory,
                 source_scope='available direct source files; binding SHA identifies the compiled artifact')
 

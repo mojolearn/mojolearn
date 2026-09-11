@@ -672,6 +672,95 @@ def adam_update_kernel(
         q_out.unsafe_store(i, q)
 
 
+def adam_update_oop_kernel(
+    p_out: MutPointer[Float32, MutAnyOrigin],
+    m_out: MutPointer[Float32, MutAnyOrigin],
+    v_out: MutPointer[Float32, MutAnyOrigin],
+    param: MutPointer[Float32, MutAnyOrigin],
+    grad: MutPointer[Float32, MutAnyOrigin],
+    m_state: MutPointer[Float32, MutAnyOrigin],
+    v_state: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    is_adamw_in: Int32,
+    beta1: Float32,
+    beta2: Float32,
+    eps: Float32,
+    weight_decay: Float32,
+    c1: Float32,
+    c2: Float32,
+    step_size: Float32,
+    rt_bc2: Float32,
+    decay_mul: Float32,
+):
+    """DEVIATION 2647 (docs/lanes/BRIEF_step_glue_2026-09-11.md section
+    4.3), TRIAL ONLY: launched solely by `training/byte_lm.mojo` under
+    `-D MOJOLEARN_STEP_GLUE_TRIAL=1`, never by a shipped build.
+
+    `adam_update_kernel`'s CLEAN path, seam for seam, reading element `i`
+    of `param`, `grad`, `m_state`, `v_state` and writing element `i` of
+    `p_out`, `m_out`, `v_out`, three OTHER buffers, so the step can keep the
+    pre-update state where the shadow copy used to put it. The shipped
+    kernel loads all four operands before its first store, so the values
+    read here are the values it reads. Read the two side by side: every line
+    below names the seam it transcribes, and nothing else is spelled.
+
+    NOT CARRIED, on purpose: the sabotage arms (the byte LM refuses every
+    sabotage build in `_require_profile`) and the recorded intermediates
+    (the byte LM glue path refuses `OPT_RECORD_INTERMEDIATES` at compile
+    time). The `lr`, `bc1` and `bc2` arguments exist in the shipped
+    signature only for `SAB_MHAT_FORM` and are not taken here.
+
+    THIS FILE'S OWN WARNING APPLIES: a random fixture cannot separate a
+    fused O14 from an unfused one. The transcription is checked by reading,
+    by `training/checks/step_glue_check.mojo` on planted values, and by the
+    H100 leg's per-step witnesses; not by a fixture alone.
+
+    One thread per element, no shared memory, no barrier, no reduction:
+    launch geometry decides which thread does element `i`, never what it
+    is, exactly as for the shipped kernel."""
+    var n = Int(n_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= n:
+        return
+
+    var is_adamw = is_adamw_in != Int32(0)
+
+    var g = ftz(grad.unsafe_load(i))  # O1, seam
+    var p = ftz(param.unsafe_load(i))  # O2, seam
+    var mp = ftz(m_state.unsafe_load(i))  # O3, seam
+    var vp = ftz(v_state.unsafe_load(i))  # O3, seam
+
+    if weight_decay != Float32(0.0):
+        if is_adamw:
+            # O4b. DECOUPLED, a PRODUCT on the PARAMETER.
+            p = ftz(identical_mul(decay_mul, p))
+        else:
+            # O4a. COUPLED, ONE fused rounding into the GRADIENT.
+            g = ftz(identical_mul_add(weight_decay, p, g))
+
+    # O5 and O6, a PRODUCT then an FMA. Contract 7.2a.
+    var ms = ftz(identical_mul(beta1, mp))
+    var m = ftz(identical_mul_add(c1, g, ms))
+
+    # O7, O8, O9. Contract 7.2b, the square is formed FIRST.
+    var vs = ftz(identical_mul(beta2, vp))
+    var g2 = ftz(identical_mul(g, g))
+    var v = ftz(identical_mul_add(c2, g2, vs))
+
+    # O10 through O13, the denominator and the quotient.
+    var s = ftz(identical_sqrt(v))  # O10
+    var sd = ftz(identical_div(s, rt_bc2))  # O11
+    var dn = ftz(sd + eps)  # O12, eps OUTSIDE the root
+    var q = ftz(identical_div(m, dn))  # O13, a TRUE divide
+
+    # O14. ONE fused rounding. Contract 7.2d.
+    var p_new = ftz(identical_mul_add(-step_size, q, p))
+
+    p_out.unsafe_store(i, p_new)
+    m_out.unsafe_store(i, ftz(m))
+    v_out.unsafe_store(i, ftz(v))
+
+
 def sgd_update_kernel(
     param: MutPointer[Float32, MutAnyOrigin],
     grad: MutPointer[Float32, MutAnyOrigin],
