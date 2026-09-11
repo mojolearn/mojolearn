@@ -33,8 +33,8 @@ def fake_host(monkeypatch, tmp_path):
     m.byte_lm_host_profile = (
         lambda native: shape.profile if list(native) == host_mod._native_shape(shape) else 'other')
 
-    def logits(addresses, dims, native):
-        m.calls.append(('logits', list(dims)))
+    def logits(addresses, dims, native, threaded):
+        m.calls.append(('logits', list(dims), threaded))
         batch, length = dims
         out = buffer(addresses[2], batch * length * shape.vocab_size)
         out[:] = 0
@@ -45,7 +45,7 @@ def fake_host(monkeypatch, tmp_path):
         return batch * length * shape.vocab_size
 
     m.byte_lm_host_logits = logits
-    m.byte_lm_host_loss = lambda addresses, native: m.calls.append(('loss',)) or 0x3F800000
+    m.byte_lm_host_loss = lambda addresses, native, threaded: m.calls.append(('loss', threaded)) or 0x3F800000
     m.all_finite_f32 = lambda addr, n: int(np.isfinite(buffer(addr, n)).all())
     monkeypatch.setitem(sys.modules, host_mod._MODULE_NAME, m)
     monkeypatch.setattr(host_mod, '_MODULE', None)
@@ -57,6 +57,18 @@ def test_loss_bits_round_trip(fake_host):
     model = host_mod.LanguageModelInference(np.zeros(34944, np.float32))
     assert model.loss_bits(np.zeros((2, 33), np.int32)) == 0x3F800000
     assert model.loss(np.zeros((2, 33), np.int32)) == 1.0
+
+
+def test_threaded_flag_reaches_the_binding_as_an_int(fake_host):
+    model = host_mod.LanguageModelInference(np.zeros(34944, np.float32), threaded=True)
+    model.loss_bits(np.zeros((2, 33), np.int32))
+    model.loss_bits(np.zeros((2, 33), np.int32), threaded=False)
+    model.logits(np.zeros((1, 4), np.int32))
+    assert fake_host.calls == [('loss', 1), ('loss', 0), ('logits', [1, 4], 1)]
+    with pytest.raises(TypeError):
+        model.logits(np.zeros((1, 4), np.int32), threaded=1)
+    with pytest.raises(TypeError):
+        host_mod.LanguageModelInference(np.zeros(34944, np.float32), threaded='yes')
 
 
 def test_logits_shape_and_greedy_ties_go_low(fake_host):

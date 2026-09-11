@@ -33,8 +33,13 @@ certified only by its own row in the table at the end of this file.
 - One model family, the byte LM profile
   `mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1`.
 - FP32, forward only. No training, no backward pass, no optimizer on the CPU.
-- The oracles are single-threaded scalar loops. This path is correct first and
-  slow; it is not a performance claim of any kind.
+- The reference path is the oracles as written, single-threaded scalar loops.
+  `threaded=True` (DEVIATION 2616) splits the same arithmetic across cores
+  along axes the contracts make independent: one task per batch row, or one
+  task per token row of the head product for a single sequence. No float
+  crosses a thread and no fold changes order, and the gate requires both
+  paths to reproduce the capture bytes and each other's logits. Neither path
+  vectorizes, and neither is a performance claim of any kind.
 - Every GPU estimator, block and trainer still requires a GPU. On a CPU-only
   install they raise by name on use (DEVIATION 2615).
 

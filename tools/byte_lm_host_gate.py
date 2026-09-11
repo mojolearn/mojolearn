@@ -136,10 +136,15 @@ def main():
         ids = frombytes(verified(ids_path, ids_sha, 'ids'), '<i4', (shape.batch, shape.length + 1))
         want = struct.unpack('<I', verified(loss_path, loss_sha, 'loss'))[0]
         started = time.perf_counter()
-        got = model.loss_bits(ids)
+        got = model.loss_bits(ids, threaded=False)
         seconds = time.perf_counter() - started
-        rows.append(dict(case=label, want=f'{want:08x}', got=f'{got:08x}', equal=got == want,
-                         seconds=round(seconds, 6)))
+        started = time.perf_counter()
+        got_thr = model.loss_bits(ids, threaded=True)
+        seconds_thr = time.perf_counter() - started
+        rows.append(dict(case=label, want=f'{want:08x}', got=f'{got:08x}', got_threaded=f'{got_thr:08x}',
+                         equal_reference=got == want, equal_threaded=got_thr == want,
+                         equal=got == want and got_thr == want,
+                         seconds=round(seconds, 6), seconds_threaded=round(seconds_thr, 6)))
 
     try:
         for phase in ('heldout-initial', 'heldout-final'):
@@ -173,13 +178,29 @@ def main():
     inputs = [v for r in range(shape.batch) for v in flat_ids[r * width: r * width + shape.length]]
     rows_in = frombytes(struct.pack(f'<{len(inputs)}i', *inputs), '<i4', (shape.batch, shape.length))
     first = frombytes(struct.pack('<i', inputs[0]), '<i4', (1, 1))
+    first_row = frombytes(struct.pack(f'<{shape.length}i', *inputs[:shape.length]), '<i4', (1, shape.length))
     probes = {}
-    probes['final_heldout00_full'] = hashlib.sha256(le_bytes(final.logits(rows_in), 'f')).hexdigest()
-    probes['final_heldout00_row0_len1'] = hashlib.sha256(le_bytes(final.logits(first), 'f')).hexdigest()
-    probes['final_heldout00_next_bytes'] = final.next_bytes(rows_in)
+    for tag, flag in (('', False), ('_threaded', True)):
+        probes['final_heldout00_full' + tag] = hashlib.sha256(
+            le_bytes(final.logits(rows_in, threaded=flag), 'f')).hexdigest()
+        probes['final_heldout00_row0' + tag] = hashlib.sha256(
+            le_bytes(final.logits(first_row, threaded=flag), 'f')).hexdigest()
+        probes['final_heldout00_row0_len1' + tag] = hashlib.sha256(
+            le_bytes(final.logits(first, threaded=flag), 'f')).hexdigest()
+        probes['final_heldout00_next_bytes' + tag] = final.next_bytes(rows_in, threaded=flag)
+    # DEVIATION 2616: the threaded path must reproduce the reference logits
+    # byte for byte at batch 2 (row tasks) and batch 1 (head tasks).
+    probe_paths_equal = all(probes[k] == probes[k + '_threaded'] for k in
+                            ('final_heldout00_full', 'final_heldout00_row0',
+                             'final_heldout00_row0_len1', 'final_heldout00_next_bytes'))
 
     mismatches = [r for r in rows if not r['equal']]
-    verdict = (len(mismatches) > 0) if args.expect_mismatch else (len(mismatches) == 0)
+    ref_mismatches = [r for r in rows if not r['equal_reference']]
+    thr_mismatches = [r for r in rows if not r['equal_threaded']]
+    if args.expect_mismatch:
+        verdict = len(ref_mismatches) > 0 and len(thr_mismatches) > 0
+    else:
+        verdict = len(mismatches) == 0 and probe_paths_equal
     report = dict(
         schema='mojolearn.byte-lm-host-gate.v1',
         deviation=2613,
@@ -190,12 +211,15 @@ def main():
         capture_comparison_sha256=sha256(args.capture.parent / 'comparison.json'),
         expect_mismatch=args.expect_mismatch,
         compared=len(rows), equal=len(rows) - len(mismatches), mismatched=len(mismatches),
+        mismatched_reference=len(ref_mismatches), mismatched_threaded=len(thr_mismatches),
+        probe_paths_equal=probe_paths_equal,
         first_mismatches=mismatches[:5], probes=probes,
         # Wall clock of each loss call through the public surface (one
-        # [2, 32] forward plus the loss, single thread). Operational, not a
-        # matched benchmark: it sizes where a threaded path would pay.
+        # [2, 32] forward plus the loss). Operational, not a matched
+        # benchmark, and not compared with anything outside this library.
         timing=dict(loss_calls=len(rows),
                     total_seconds=round(sum(r['seconds'] for r in rows), 6),
+                    total_seconds_threaded=round(sum(r['seconds_threaded'] for r in rows), 6),
                     max_seconds=max((r['seconds'] for r in rows), default=0.0),
                     min_seconds=min((r['seconds'] for r in rows), default=0.0)),
         verdict='PASS' if verdict else 'FAIL', rows=rows)

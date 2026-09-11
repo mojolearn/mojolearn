@@ -40,9 +40,11 @@ the comparison is not reaching the arithmetic.
 
 from std.sys.compile import is_defined
 
+from max.algorithm import sync_parallelize
+
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, identical_mul_add
 from embedding.checks.embedding_oracle import EmbConfig, emb_forward_oracle
-from gemm.checks.gemm_oracle import OP_NT, gemm_oracle
+from gemm.checks.gemm_oracle import OP_NT, contract_leaf_size, gemm_oracle, gemm_oracle_cell
 from training.byte_lm_config import ByteConfig
 from training.checks.loss_oracle import CeConfig, ce_forward_oracle
 from transformer.checks.transformer_fixture import (
@@ -107,29 +109,27 @@ def byte_host_block_weights(params: List[Float32], offsets: List[Int], block: In
     return w^
 
 
+def _sabotaged_cell(a: List[Float32], b: List[Float32], i: Int, j: Int, k: Int) -> Float32:
+    """DEVIATION 2612 only. One OP_NT cell with k walked DESCENDING. Both the
+    reference and the threaded head use this one spelling."""
+    var acc = Float32(0.0)
+    var kk = k - 1
+    while kk >= 0:
+        acc = identical_mul_add(a[i * k + kk], b[j * k + kk], acc)
+        kk -= 1
+    return acc
+
+
 def _sabotaged_head(a: List[Float32], b: List[Float32], m: Int, n: Int, k: Int) -> List[Float32]:
-    """DEVIATION 2612 only. The OP_NT chain with k walked DESCENDING."""
     var out = List[Float32](capacity=m * n)
     for i in range(m):
         for j in range(n):
-            var acc = Float32(0.0)
-            var kk = k - 1
-            while kk >= 0:
-                acc = identical_mul_add(a[i * k + kk], b[j * k + kk], acc)
-                kk -= 1
-            out.append(acc)
+            out.append(_sabotaged_cell(a, b, i, j, k))
     return out^
 
 
-def byte_host_logits(params: List[Float32], inputs: List[Int32], batch: Int,
-                     length: Int, config: ByteConfig) raises -> List[Float32]:
-    """Logits `[batch * length, vocab]`, row-major, for token ids
-    `[batch, length]` starting at absolute position 0.
-
-    `length` may be shorter than the configured length and `batch` may
-    differ from it. The block and head contracts carry no fold across rows,
-    so a row's logits do not depend on the batch around it; the gate
-    measures that at the configured shape only."""
+def _validate_logits_inputs(params: List[Float32], inputs: List[Int32], batch: Int,
+                            length: Int, config: ByteConfig) raises:
     _require_identical()
     config.validate()
     if batch <= 0 or length <= 0:
@@ -145,10 +145,15 @@ def byte_host_logits(params: List[Float32], inputs: List[Int32], batch: Int,
         var v = Int(inputs[t])
         if v < 0 or v >= config.vocab_size:
             raise Error("byte LM host: token id outside [0, vocab) at " + String(t))
+
+
+def _byte_host_hidden(params: List[Float32], inputs: List[Int32], batch: Int,
+                      length: Int, config: ByteConfig) raises -> List[Float32]:
+    """The last block's residual `[batch * length, d_model]`. Inputs are
+    validated by the caller."""
     var offsets = config.offsets()
     var dims = byte_host_dims(config)
     var rope = build_rope_table(dims)
-    var m = batch * length
     var x = emb_forward_oracle(_slice(params, offsets, 0), inputs,
                                EmbConfig.llama(config.vocab_size, config.d_model))
     for layer in range(config.n_layers):
@@ -156,15 +161,125 @@ def byte_host_logits(params: List[Float32], inputs: List[Int32], batch: Int,
         var cache = TransformerKVCache(batch, dims, length, 0)
         var st = transformer_block_oracle(w, x, batch, length, cache, rope, ScorePlant.none())
         x = st.residual2_out.copy()
-    var head = _slice(params, offsets, config.n_tensors() - 1)
+    return x^
+
+
+def byte_host_logits(params: List[Float32], inputs: List[Int32], batch: Int,
+                     length: Int, config: ByteConfig) raises -> List[Float32]:
+    """Logits `[batch * length, vocab]`, row-major, for token ids
+    `[batch, length]` starting at absolute position 0. THE REFERENCE PATH:
+    one thread, the oracles exactly as written.
+
+    `length` may be shorter than the configured length and `batch` may
+    differ from it. The block and head contracts carry no fold across rows,
+    so a row's logits do not depend on the batch around it; the gate
+    measures that at the configured shape only."""
+    _validate_logits_inputs(params, inputs, batch, length, config)
+    var x = _byte_host_hidden(params, inputs, batch, length, config)
+    var head = _slice(params, config.offsets(), config.n_tensors() - 1)
+    var m = batch * length
     comptime if BYTE_HOST_SABOTAGE:
         return _sabotaged_head(x, head, m, config.vocab_size, config.d_model)
     return gemm_oracle(x, head, OP_NT, m, config.vocab_size, config.d_model)
 
 
-def byte_host_loss(params: List[Float32], ids: List[Int32], config: ByteConfig) raises -> Float32:
+# ===========================================================================
+# THE THREADED PATH (DEVIATION 2616)
+# ===========================================================================
+# Same bits as the reference BY CONSTRUCTION, and gated to prove it. Threads
+# split only along axes the contracts already make independent, so no float
+# ever crosses a thread boundary and no fold changes order:
+#
+#   batch > 1   one task per batch row, each running THE REFERENCE PATH at
+#               batch 1 and writing its own disjoint slice of the logits.
+#               Rows share nothing in any block or head contract.
+#   batch == 1  the blocks run on the calling thread; the head product runs
+#               one task per token row, each cell through `gemm_oracle_cell`
+#               at `contract_leaf_size(k)`, which is exactly what
+#               `gemm_oracle` loops over.
+#
+# No task starts another parallel region. Owners that tasks read through a
+# pointer are transferred only AFTER the join (the step-33 race class,
+# `gbdt/train.mojo`). Within one row or cell the arithmetic is the oracle's,
+# scalar and in order; this path divides work across cores and does not
+# vectorize anything.
+
+
+def _head_rows_threaded(x: List[Float32], head: List[Float32], m: Int, n: Int, k: Int) -> List[Float32]:
+    var logits = List[Float32](length=m * n, fill=Float32(0.0))
+    var op = logits.unsafe_ptr()
+    var operands = List[List[Float32]]()
+    operands.append(x.copy())
+    operands.append(head.copy())
+    var mats = operands.unsafe_ptr()
+    var leaf = contract_leaf_size(k)
+
+    def _head_task(i: Int) {imm op, imm mats, imm m, imm n, imm k, imm leaf}:
+        for j in range(n):
+            comptime if BYTE_HOST_SABOTAGE:
+                op.unsafe_store(i * n + j, _sabotaged_cell(mats[], (mats + 1)[], i, j, k))
+            else:
+                op.unsafe_store(i * n + j,
+                    gemm_oracle_cell(mats[], (mats + 1)[], OP_NT, i, j, m, n, k, leaf))
+
+    sync_parallelize(_head_task, m)
+    _ = operands^
+    return logits^
+
+
+def byte_host_logits_threaded(params: List[Float32], inputs: List[Int32], batch: Int,
+                              length: Int, config: ByteConfig) raises -> List[Float32]:
+    """`byte_host_logits` across threads; same arguments, same bits."""
+    _validate_logits_inputs(params, inputs, batch, length, config)
+    var vocab = config.vocab_size
+    if batch == 1:
+        var hidden = _byte_host_hidden(params, inputs, 1, length, config)
+        var head = _slice(params, config.offsets(), config.n_tensors() - 1)
+        return _head_rows_threaded(hidden, head, length, vocab, config.d_model)
+    var logits = List[Float32](length=batch * length * vocab, fill=Float32(0.0))
+    var failed = List[Int](length=batch, fill=0)
+    var op = logits.unsafe_ptr()
+    var fp = failed.unsafe_ptr()
+    var ip = inputs.unsafe_ptr()
+    var held = List[List[Float32]]()
+    held.append(params.copy())
+    var pp = held.unsafe_ptr()
+    var c_batch = config.batch
+    var c_length = config.length
+    var c_dm = config.d_model
+    var c_heads = config.n_heads
+    var c_kv = config.n_kv
+    var c_hd = config.head_dim
+    var c_ff = config.intermediate
+    var c_layers = config.n_layers
+
+    def _row_task(r: Int) {imm op, imm fp, imm ip, imm pp, imm length, imm vocab, imm c_batch,
+                           imm c_length, imm c_dm, imm c_heads, imm c_kv, imm c_hd, imm c_ff,
+                           imm c_layers}:
+        try:
+            var row = List[Int32](capacity=length)
+            for t in range(length):
+                row.append(ip.unsafe_load(r * length + t))
+            var cfg = ByteConfig(c_batch, c_length, c_dm, c_heads, c_kv, c_hd, c_ff, c_layers, vocab)
+            var row_logits = byte_host_logits(pp[], row, 1, length, cfg)
+            for c in range(len(row_logits)):
+                op.unsafe_store(r * length * vocab + c, row_logits[c])
+        except:
+            fp.unsafe_store(r, 1)
+
+    sync_parallelize(_row_task, batch)
+    _ = held^
+    for r in range(batch):
+        if failed[r] != 0:
+            raise Error("byte LM host: threaded row " + String(r) + " raised")
+    return logits^
+
+
+def byte_host_loss(params: List[Float32], ids: List[Int32], config: ByteConfig,
+                   threaded: Bool = False) raises -> Float32:
     """Mean next-byte cross-entropy of ids `[batch, length + 1]` at the
-    configured shape, split exactly as `_byte_forward_loss` splits them."""
+    configured shape, split exactly as `_byte_forward_loss` splits them.
+    The loss itself is the one-thread oracle on both paths."""
     config.validate()
     var b = config.batch
     var l = config.length
@@ -176,6 +291,10 @@ def byte_host_loss(params: List[Float32], ids: List[Int32], config: ByteConfig) 
         for li in range(l):
             inputs.append(ids[bi * (l + 1) + li])
             targets.append(ids[bi * (l + 1) + li + 1])
-    var logits = byte_host_logits(params, inputs, b, l, config)
+    var logits: List[Float32]
+    if threaded:
+        logits = byte_host_logits_threaded(params, inputs, b, l, config)
+    else:
+        logits = byte_host_logits(params, inputs, b, l, config)
     var st = ce_forward_oracle(logits, targets, CeConfig.causal_lm(config.vocab_size))
     return st.loss[0]

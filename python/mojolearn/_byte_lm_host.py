@@ -79,12 +79,20 @@ def _native_shape(shape):
 
 class LanguageModelInference:
     """Forward-only byte LM on the CPU. The parameters are copied at
-    construction and never change afterward."""
+    construction and never change afterward.
 
-    def __init__(self, parameters, *, shape=None):
+    `threaded=True` splits the work across cores along axes the contracts
+    make independent (DEVIATION 2616): the same bits as the one-thread
+    reference path, which the gate checks on every certified CPU. Each call
+    may override the instance default."""
+
+    def __init__(self, parameters, *, shape=None, threaded=False):
         shape = ByteLanguageModelConfig() if shape is None else shape
         if not isinstance(shape, ByteLanguageModelConfig):
             raise TypeError('shape must be a ByteLanguageModelConfig')
+        if not isinstance(threaded, bool):
+            raise TypeError('threaded must be a bool')
+        self._threaded = threaded
         array, _ = as_f32_c(parameters, ndim=1, name='parameters')
         if tuple(array.shape) != (shape.n_total,):
             raise ValueError(f'parameters must be float32 [{shape.n_total}]')
@@ -99,14 +107,20 @@ class LanguageModelInference:
             raise RuntimeError(f'byte LM host profile mismatch: {compiled} != {shape.profile}')
 
     @classmethod
-    def from_checkpoint(cls, path):
+    def from_checkpoint(cls, path, *, threaded=False):
         """Parameters from a `mojolearn.small-byte-lm-json-checkpoint.v1`
         file, through the trainer's own decoder and integrity checks."""
         from ._byte_lm_impl import _CHECKPOINT_LIMIT, _decode_checkpoint
         with Path(path).open('rb') as stream:
             encoded = stream.read(_CHECKPOINT_LIMIT + 1)
         state, shape = _decode_checkpoint(encoded)
-        return cls(state['parameters'], shape=shape)
+        return cls(state['parameters'], shape=shape, threaded=threaded)
+
+    def _threads_flag(self, threaded):
+        value = self._threaded if threaded is None else threaded
+        if not isinstance(value, bool):
+            raise TypeError('threaded must be a bool or None')
+        return 1 if value else 0
 
     @property
     def shape(self):
@@ -119,9 +133,10 @@ class LanguageModelInference:
     def parameters_sha256(self):
         return hashlib.sha256(le_bytes(self._parameters, 'f')).hexdigest()
 
-    def logits(self, ids):
+    def logits(self, ids, *, threaded=None):
         """Float32 logits `[batch, length, vocab]` for int32 ids
         `[batch, length]`, positions from 0, length at most `shape.length`."""
+        flag = self._threads_flag(threaded)
         tokens, _ = as_i32_c(ids, ndim=2, name='ids')
         batch, length = tokens.shape
         if batch <= 0 or not 0 < length <= self._shape.length:
@@ -130,28 +145,29 @@ class LanguageModelInference:
         written = self._binding.byte_lm_host_logits(
             [addr_ro(self._parameters, name='parameters'), addr_ro(tokens, name='ids'),
              addr(out, name='logits')],
-            [batch, length], self._native)
+            [batch, length], self._native, flag)
         if int(written) != batch * length * self._shape.vocab_size:
             raise RuntimeError('byte LM host wrote an unexpected number of logits')
         return out
 
-    def loss_bits(self, ids):
+    def loss_bits(self, ids, *, threaded=None):
         """IEEE-754 bits of the mean next-byte loss of int32 ids
         `[shape.batch, shape.length + 1]`, the training batch layout."""
+        flag = self._threads_flag(threaded)
         tokens, _ = as_i32_c(ids, ndim=2, name='ids')
         if tuple(tokens.shape) != (self._shape.batch, self._shape.length + 1):
             raise ValueError(f'ids must be [{self._shape.batch}, {self._shape.length + 1}]')
         return int(self._binding.byte_lm_host_loss(
             [addr_ro(self._parameters, name='parameters'), addr_ro(tokens, name='ids')],
-            self._native))
+            self._native, flag))
 
-    def loss(self, ids):
-        return struct.unpack('<f', struct.pack('<I', self.loss_bits(ids)))[0]
+    def loss(self, ids, *, threaded=None):
+        return struct.unpack('<f', struct.pack('<I', self.loss_bits(ids, threaded=threaded)))[0]
 
-    def next_bytes(self, ids):
+    def next_bytes(self, ids, *, threaded=None):
         """Greedy next byte after each row of ids `[batch, length]`; ties go
         to the lowest byte value."""
-        out = self.logits(ids)
+        out = self.logits(ids, threaded=threaded)
         batch, length, vocab = out.shape
         flat = flat_view(out, 'f')
         result = []
