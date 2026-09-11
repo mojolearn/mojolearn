@@ -1,0 +1,13 @@
+root=/root/mojolearn
+arch=sm_89
+target_column=
+deadline_s=120
+started=2026-09-11T04:43:24Z
+build_base_exit=0
+build_trees_exit=0
+build_exit=0 build_seconds=184
+readback_exit=0
+gdb=/usr/bin/gdb
+py-spy=none
+harness_exit=1 run_seconds=256
+finished=2026-09-11T04:51:48Z total_seconds=505

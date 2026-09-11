@@ -1,0 +1,28 @@
+04:43:23 byte-lm-lifetime: start, root=/root/mojolearn out=/root/gemm_leg_out/byte-lm-lifetime deadline=120s
+04:43:24 byte-lm-lifetime: GPU arch sm_89
+04:46:29 byte-lm-lifetime: build exit 0 after 185s
+numeric_mode 1
+vendor cuda
+profile mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1
+file /root/mojolearn/python/mojolearn/identical/_mojolearn_byte_lm.so
+keeper_readback True
+keeper_active_at_import False
+04:51:48 byte-lm-lifetime: harness exit 1 after 256s
+== stateless_x1 (deadline 120s)
+   passed exit=0 wall=3.4s
+== stateless_x2 (deadline 120s)
+   timeout exit=-9 wall=126.0s
+== resident_close_reopen (deadline 120s)
+   timeout exit=-9 wall=126.0s
+{"failed": [], "hung": ["stateless_x2", "resident_close_reopen"], "passed": ["stateless_x1"]}
+resident_close_reopen            timeout  exit=-9 wall=126.0s
+stateless_x1                     passed   exit=0 wall=3.4s
+stateless_x2                     timeout  exit=-9 wall=126.0s
+first_step_equality cases: ['stateless_x1', 'stateless_x2', 'resident_close_reopen'] NOT bit-equal fields: none
+second_step_equality cases: [] NOT bit-equal fields: none
+control_extratrees_x2 fit1 == fit2: not compared
+control_kmeans_x2 fit1 == fit2: not compared
+resident_close_reopen_keep_context keeper_active: None env: None
+stateless_x2_keep_context keeper_active: None env: None
+hung: ['stateless_x2', 'resident_close_reopen'] failed: []
+04:51:48 byte-lm-lifetime: done, total 505s
