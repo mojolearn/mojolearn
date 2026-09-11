@@ -114,6 +114,42 @@ Hashes held one value in 3 of 3 rounds and are equal before and after: RF taxi
 `e683f121d11f59dd`, ET Istella-S `40b1c5b03ba40420`, iforest taxi
 `6f68d48431290524`, iforest Istella-S `a1902225f8730abf`.
 
+## The verdicts, as tools/flip_verdict.py pooled them
+
+Batch D reads BOTH passes per side (n=6 rounds each) rather than the
+interleaved pass alone, so these are the numbers of record:
+
+| switch | taxi | Istella-S | geomean | quality | verdict |
+|---|---|---|---|---|---|
+| 2637/2638, lane `rf` | 0.947 | 0.634 | 0.775 | equal on both | FLIP |
+| 2637/2638, lane `et` | 1.018 | 0.848 | 0.929 | equal on both | FLIP |
+| 2637/2638, lane `iforest` | 0.338 | 0.035 | 0.108 | equal on both | FLIP |
+| 2663, ctl -> bw16k | 0.847 | 0.914 | 0.880 | equal on both | FLIP |
+| 2663, ctl -> bw32k | 0.832 | 0.899 | 0.865 | equal on both | FLIP |
+
+Every quality delta is +0.000000 on every metric, which is what equal model
+hashes require. ET on taxi reads 1.018 pooled, the flat cell this lane does not
+claim; Istella-S carries that geomean.
+
+## The reach CONTROL: the same probe on the main build
+
+Batch E ran the probe on BOTH sets. On `baseline` (main, which has no
+row-major entry at all) each estimator calls the plain `*_fit_export` entry for
+C-order AND for F-order input. On `rowmajor` the C-order fits call
+`*_fit_rowmajor_export` and the F-order fits fall back to the plain entry.
+
+The predict hash is the same in all four combinations of set and layout
+(RandomForestClassifier `f3456770b37fcf78`, ExtraTreesClassifier
+`d502134482897f03`, RandomForestRegressor `4822690ce8bf5d21`,
+ExtraTreesRegressor `70032248949ccbaa`), so main and this lane build the same
+model from the same data whichever entry is taken. That is a second, separate
+statement of identity from `identity_break`'s, through a different probe.
+
+Batch E finished at 22:33:52 and batch F started at 22:33:56, so E's GPU fits
+never overlapped a timed cell. That mattered: F's rotation puts `ctl` first,
+and contention there would have biased the comparison toward the wider batch,
+which is the direction this lane hypothesized.
+
 ## Where the win comes from, line by line (Istella-S host split)
 
 `tools/forest_host_split.py`, 3 repetitions after a warm-up, both sets, the
