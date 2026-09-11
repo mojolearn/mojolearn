@@ -379,11 +379,17 @@ benchmark box.** Andrew, 2026-09-11 night: "i do want fast mode on trees
 with an aim to being good on mac... i just think there are confounding
 factors and it is hard to measure and risks crashing the device". The
 laptop is shared by several sessions and drifts 1.7x within twenty minutes,
-so a timing there is confounded as well as risky. So a FAST change that is
-vendor neutral (host round trips, fills, histogram logic) is A/B'd in the
-FAST tier on the MI325X beside IDENTICAL. A Metal-only effect stays
-unmeasured until a dedicated idle Mac runs it. The local Mac runs light
-correctness only: a small check or a fingerprint set.
+so a timing there is confounded as well as risky. So the FAST tier is
+tuned on the MI325X too, A/B'd beside IDENTICAL. Work removed on AMD
+(host round trips, histograms not built, fewer launches) is removed on the
+Mac as well, but the size of the win does not carry over: Metal pays more
+per launch and per fill, unified memory makes a host copy cheaper than
+PCIe does, and kernel geometry is per vendor (DEVIATION 2512 halved M4
+fills and was neutral on CUDA). A FAST default flip therefore gets one
+local Mac confirmation, scheduled on purpose: one lane, `nice -n 19`, two
+threads, nothing else heavy running on the machine, both datasets. Cloud
+Macs are not used (Andrew, 2026-09-11: the 24-hour minimum rules them
+out).
 
 Tuning on one vendor costs nothing in correctness. IDENTICAL makes the bits
 equal on every vendor, so where a kernel was tuned never changes an answer
