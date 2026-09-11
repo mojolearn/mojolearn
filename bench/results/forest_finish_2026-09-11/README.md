@@ -84,7 +84,21 @@ ms median. BEFORE is main `4dc4346a` built on this pod, AFTER is this lane.
 | IsolationForest | Istella-S | cuML 26.08.00, GPU | 1001 | 4456 | 155 | 0.035 | 0.16x | proxy AUC 0.821218 both |
 
 Section 9 geometric means of after/before: RandomForest 0.81, ExtraTrees 0.91,
-IsolationForest 0.11. Quality is byte-equal before and after in every cell, so
+IsolationForest 0.11.
+BOTH PASSES, because one pass is one measurement. Each cell was run twice: an
+interleaved pass against the opponent (the table above) and an ours-only pass
+in the reverse set order (ABBA). after/before per pass, interleaved then
+ours-only: RF taxi 0.98 / 0.93, RF Istella-S 0.67 / 0.60, ET taxi 0.97 / 1.03,
+ET Istella-S 0.86 / 0.86, iforest taxi 0.33 / 0.36, iforest Istella-S
+0.035 / 0.034. Every cell holds its hash in both passes.
+
+ET ON TAXI IS FLAT, AND THE TWO PASSES DISAGREE ON ITS SIGN (0.97 against
+1.03), so it is noise around 1 and not a win: 16 columns of staging is not
+where a taxi ExtraTrees fit spends its time. ET's geometric mean is below 1
+either way (0.91 with the interleaved pass, 0.94 with the ours-only one)
+because Istella-S carries it at 0.86 in both. RF's taxi cell is the same story
+one notch milder (0.98 / 0.93).
+ Quality is byte-equal before and after in every cell, so
 all three pass the flip gate. These are not opt-in switches: 2637 and 2638 are
 the shipped path on this branch, and these rows are what keeps them.
 
