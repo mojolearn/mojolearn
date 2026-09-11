@@ -86,14 +86,15 @@ import numbers
 
 from . import _mojolearn_trees, _serialize
 from ._array import Array
-from ._buffer import addr, addr_ro, as_f32_c, as_f32_colmajor, empty
+from ._buffer import addr, addr_ro, as_f32_c, as_f32_colmajor, as_f32_forest_layout, empty
 from ._labels import (
     argmax_rows, classes_from_member, classes_member, decode_labels,
     encode_labels, flatten_labels, is_bool, sorted_classes,
 )
 from ._mode import NumericModeMixin
 from ._forest_protocol import (ForestProtocol, forest_estimator,
-                               _forest_fit_function, _forest_fit_arrays)
+                               _forest_fit_function, _forest_fit_arrays,
+                               _rowmajor_fit_function)
 
 #: The npz model-file format tag `save` writes and `load` requires.
 _MODEL_FORMAT = "mojolearn-extratrees-1"
@@ -232,14 +233,22 @@ class _ExtraTreesBase(ForestProtocol, NumericModeMixin):
         _validate_device(device)
         self.device = device
 
-    def _fit_arrays(self, X, ya, n_classes, fit_fn):
+    def _fit_arrays(self, X, ya, n_classes, fit_fn, rowmajor_fit_fn=None):
         # Column-major is the builder's layout (cuML's `data` is
         # column-major); `as_f32_colmajor` is that copy, named in the
         # module docstring, and zero for a float32 F-order input
         # (DEVIATION 2343). Its 2-D refusal reads "mojolearn: X must be
         # 2-D, got ...", the wording `_arrays.py` used. `ya` arrives as
         # a float32 `Array` from the caller.
-        Xf, _ = as_f32_colmajor(X, name="X")
+        # DEVIATION 2637: a C-order float32 X is lent row-major to the
+        # `*_rowmajor` entry, which transposes it into the pinned upload
+        # stage across the host pool (same staged bytes, one pass fewer).
+        if rowmajor_fit_fn is not None:
+            Xf, row_major = as_f32_forest_layout(X, name="X")
+            if row_major:
+                fit_fn = rowmajor_fit_fn
+        else:
+            Xf, _ = as_f32_colmajor(X, name="X")
         n_rows, n_features = Xf.shape
         if len(ya) != n_rows:
             raise ValueError(
@@ -446,6 +455,7 @@ class ExtraTreesClassifier(_ExtraTreesBase):
             codes.astype("<f4"),
             self.n_classes_,
             _forest_fit_function(self._bind("_mojolearn_trees"), "et_classifier_fit"),
+            _rowmajor_fit_function(self._bind("_mojolearn_trees"), "et_classifier_fit"),
         )
 
     def predict_proba(self, X):
@@ -538,6 +548,7 @@ class ExtraTreesRegressor(_ExtraTreesBase):
             ya,
             0,
             _forest_fit_function(self._bind("_mojolearn_trees"), "et_regressor_fit"),
+            _rowmajor_fit_function(self._bind("_mojolearn_trees"), "et_regressor_fit"),
         )
 
     def predict(self, X):

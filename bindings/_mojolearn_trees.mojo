@@ -293,6 +293,21 @@ def _forest_out(result: FitResult) raises -> PythonObject:
 
 
 def et_classifier_fit_binding[EXPORT: Bool = False](
+    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    return _et_classifier_fit[EXPORT](x_addr, y_addr, params)
+
+
+def et_classifier_fit_rowmajor_binding[EXPORT: Bool = False](
+    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """`et_classifier_fit` with `x` ROW-major (C-order) float32, borrowed
+    through the call and transposed into the pinned upload stage across the
+    host pool (DEVIATION 2637). Same params, same forest bits."""
+    return _et_classifier_fit[EXPORT, True](x_addr, y_addr, params)
+
+
+def _et_classifier_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
     x_addr: PythonObject,
     y_addr: PythonObject,
     params: PythonObject,
@@ -338,7 +353,7 @@ def et_classifier_fit_binding[EXPORT: Bool = False](
         var ctx = DeviceContext()
         result = fit_extra_trees_classifier_device(
             ctx, x, y, Int32(n_rows), Int32(n_features), Int32(n_classes),
-            config, x_addr=x_pointer,
+            config, x_addr=x_pointer, x_row_major=ROWMAJOR,
         )
     times.stop_host("boundary_device_fit_and_context", stamp)
     stamp = times.start()
@@ -357,6 +372,20 @@ def et_classifier_fit_binding[EXPORT: Bool = False](
 
 
 def et_regressor_fit_binding[EXPORT: Bool = False](
+    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    return _et_regressor_fit[EXPORT](x_addr, y_addr, params)
+
+
+def et_regressor_fit_rowmajor_binding[EXPORT: Bool = False](
+    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """`et_regressor_fit` with `x` ROW-major (C-order) float32 (DEVIATION
+    2637), as `et_classifier_fit_rowmajor`."""
+    return _et_regressor_fit[EXPORT, True](x_addr, y_addr, params)
+
+
+def _et_regressor_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
     x_addr: PythonObject,
     y_addr: PythonObject,
     params: PythonObject,
@@ -401,7 +430,7 @@ def et_regressor_fit_binding[EXPORT: Bool = False](
         var ctx = DeviceContext()
         result = fit_extra_trees_regressor_device(
             ctx, x, y, Int32(n_rows), Int32(n_features), config,
-            x_addr=x_pointer,
+            x_addr=x_pointer, x_row_major=ROWMAJOR,
         )
     times.stop_host("boundary_device_fit_and_context", stamp)
     stamp = times.start()
@@ -600,8 +629,12 @@ def PyInit__mojolearn_trees() abi("C") -> PythonObject:
         m.def_function[trees_shared_counts_mask_binding]("trees_shared_counts_mask")
         m.def_function[et_classifier_fit_binding[False]]("et_classifier_fit")
         m.def_function[et_classifier_fit_binding[True]]("et_classifier_fit_export")
+        m.def_function[et_classifier_fit_rowmajor_binding[False]]("et_classifier_fit_rowmajor")
+        m.def_function[et_classifier_fit_rowmajor_binding[True]]("et_classifier_fit_rowmajor_export")
         m.def_function[et_regressor_fit_binding[False]]("et_regressor_fit")
         m.def_function[et_regressor_fit_binding[True]]("et_regressor_fit_export")
+        m.def_function[et_regressor_fit_rowmajor_binding[False]]("et_regressor_fit_rowmajor")
+        m.def_function[et_regressor_fit_rowmajor_binding[True]]("et_regressor_fit_rowmajor_export")
         m.def_function[et_predict_binding]("et_predict")
         m.def_function[et_predict_gpu_parallel_binding]("et_predict_gpu_parallel")
         m.def_function[forest_resident_layout_binding]("forest_resident_layout")

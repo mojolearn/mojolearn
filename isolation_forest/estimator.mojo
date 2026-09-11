@@ -139,9 +139,13 @@ struct IsolationForestEstimator(Movable):
         self.knobs = IFLaunchKnobs.default()
 
     def fit(
-        mut self, ctx: DeviceContext, x_rowmajor: List[Float32], n_rows: Int, n_cols: Int
+        mut self, ctx: DeviceContext, x_rowmajor: List[Float32], n_rows: Int, n_cols: Int,
+        src_addr: Int = 0,
     ) raises:
-        """`IsolationForest.fit(X)` (`:572-787`). `sample_weight` has no
+        """`IsolationForest.fit(X)` (`:572-787`). DEVIATION 2638: a nonzero
+        `src_addr` lends the ROW-major X by address (the CPython binding's
+        path, `x_rowmajor` then empty) and the column-major copy below is
+        written straight into the pinned upload stage instead. `sample_weight` has no
         argument here; it would raise by name as `warm_start` does."""
         if self.warm_start:
             raise Error("`warm_start=True` is not supported")
@@ -200,17 +204,30 @@ struct IsolationForestEstimator(Movable):
         params.seed = UInt64(self.random_state)
         self.n_features_in_ = n_cols
 
-        # order="F" for fit (:599-605): a copy, no arithmetic
-        var x_col = List[Float32]()
-        for k in range(n_cols):
-            for i in range(n_rows):
-                x_col.append(x_rowmajor[i * n_cols + k])
         var trace = IdentityTrace()
-        if_fit(ctx, self.model, x_col, n_rows, n_cols, params, trace, self.knobs)
+        if src_addr != 0:
+            # DEVIATION 2638: order="F" (:599-605) happens inside the upload.
+            if_fit(ctx, self.model, List[Float32](), n_rows, n_cols, params, trace,
+                   self.knobs, src_addr)
+        else:
+            # order="F" for fit (:599-605): a copy, no arithmetic
+            var x_col = List[Float32]()
+            for k in range(n_cols):
+                for i in range(n_rows):
+                    x_col.append(x_rowmajor[i * n_cols + k])
+            if_fit(ctx, self.model, x_col, n_rows, n_cols, params, trace, self.knobs)
         self.fitted = True
 
         if use_quantile:
-            var training_scores = self.score_samples(ctx, x_rowmajor, n_rows, n_cols)
+            var training_scores: List[Float32]
+            if src_addr != 0:
+                var sp = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=src_addr)
+                var x_rows = List[Float32](capacity=n_rows * n_cols)
+                for i in range(n_rows * n_cols):
+                    x_rows.append(sp.unsafe_load(i))
+                training_scores = self.score_samples(ctx, x_rows, n_rows, n_cols)
+            else:
+                training_scores = self.score_samples(ctx, x_rowmajor, n_rows, n_cols)
             self.offset_ = percentile_linear(training_scores, 100.0 * self.contamination)
         else:
             self.offset_ = -0.5
@@ -335,6 +352,7 @@ def iforest_run_host(
     contamination_auto: Bool,
     contamination: Float64,
     want: Int,
+    train_addr: Int = 0,
 ) raises -> IFRunOutputs:
     """`IsolationForest(...).fit(train)` then one of `score_samples`,
     `decision_function` or `predict` on `query`, in one call.
@@ -358,7 +376,7 @@ def iforest_run_host(
         raise Error("iforest_run_host: n_rows must be at least one")
     if n_features <= 0:
         raise Error("iforest_run_host: n_features must be at least one")
-    if len(train) != n_train * n_features:
+    if train_addr == 0 and len(train) != n_train * n_features:
         raise Error(
             "iforest_run_host: X has " + String(len(train))
             + " values, n_rows x n_features is " + String(n_train * n_features)
@@ -391,7 +409,8 @@ def iforest_run_host(
     est.contamination_auto = contamination_auto
     est.contamination = contamination
     est.warm_start = False
-    est.fit(ctx, train, n_train, n_features)
+    # DEVIATION 2638: `train_addr` lends the ROW-major training block.
+    est.fit(ctx, train, n_train, n_features, src_addr=train_addr)
 
     var out = IFRunOutputs()
     out.offset_ = est.offset_

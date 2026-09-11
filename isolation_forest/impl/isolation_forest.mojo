@@ -95,6 +95,7 @@ from checks.numerics import (
     identical_log64,
     identical_pow,
 )
+from ensemble.host_layout import colmajor_ftz_from_rowmajor_f32
 
 
 # ---------------------------------------------------------------------------
@@ -309,6 +310,67 @@ def _upload_f32(
     return buf^
 
 
+def _raise_first_nonfinite_colmajor_view(
+    name: String,
+    src: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    n_cols: Int,
+) raises:
+    """DEVIATION 2638: `check_finite_by_name(name, x_col, n_rows, n_cols)`'s
+    refusal for a ROW-major borrowed block, without building `x_col`. Walks
+    the flat index in column-major order (`x_col[c * n_rows + r] =
+    src[r * n_cols + c]`) and raises the same message at the same index."""
+    for i in range(n_rows * n_cols):
+        var c = i // n_rows
+        var r = i % n_rows
+        var v = src.unsafe_load(r * n_cols + c)
+        var bits = bitcast[DType.uint32](v)
+        if (bits & 0x7F800000) == 0x7F800000:
+            var what = String("infinity")
+            if (bits & 0x007FFFFF) != 0:
+                what = String("NaN")
+            raise Error(
+                "Input "
+                + name
+                + " contains "
+                + what
+                + " at flat index "
+                + String(i)
+                + " (row "
+                + String(i // n_cols)
+                + ", column "
+                + String(i % n_cols)
+                + " row-major); Isolation Forest does not accept non-finite"
+                + " values (DEVIATION 680)"
+            )
+    raise Error("Input " + name + ": the threaded finite scan and the named scan disagree")
+
+
+def _upload_rowmajor_as_colmajor(
+    ctx: DeviceContext, src_addr: Int, n_rows: Int, n_cols: Int, pad: Int, poison: Float32
+) raises -> DeviceBuffer[DType.float32]:
+    """DEVIATION 2638: `_upload_f32` of the column-major transpose of a
+    borrowed ROW-major block, in one threaded pass into the pinned stage.
+    The stage holds exactly what `_upload_f32(x_col)` staged: `ftz` of every
+    cell at its column-major index (the same scalar `ftz`, DEVIATION 1942 row
+    10) and `poison` in the `pad` tail. DEVIATION 680's scan rides the same
+    pass; a non-finite cell raises `check_finite_by_name`'s message."""
+    var n = n_rows * n_cols
+    var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=src_addr)
+    var buf = ctx.enqueue_create_buffer[DType.float32](n + pad)
+    var host = ctx.enqueue_create_host_buffer[DType.float32](n + pad)
+    ctx.synchronize()
+    var hp = host.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+    for i in range(n, n + pad):
+        hp.unsafe_store(i, poison)
+    if not colmajor_ftz_from_rowmajor_f32(src, hp, n_rows, n_cols):
+        _raise_first_nonfinite_colmajor_view("X", src, n_rows, n_cols)
+    ctx.enqueue_copy(dst_buf=buf, src_ptr=host.unsafe_ptr())
+    ctx.synchronize()
+    _ = host^
+    return buf^
+
+
 def _upload_u32(
     ctx: DeviceContext, values: List[UInt32], n: Int
 ) raises -> DeviceBuffer[DType.uint32]:
@@ -495,6 +557,7 @@ struct IsolationForest(Movable):
         mut model: IsolationForestModel,
         mut trace: IdentityTrace,
         knobs: IFLaunchKnobs = IFLaunchKnobs.default(),
+        src_addr: Int = 0,
     ) raises:
         """`IsolationForest::fit` (`:70-140`): resolve `n_sampled_rows`,
         `max_depth`, `n_sampled_features`, `c_normalization`,
@@ -502,7 +565,10 @@ struct IsolationForest(Movable):
         sync. `input_colmajor` is column-major `n_rows x n_cols` as theirs
         (`isolation_forest.hpp:118`)."""
         self.error_checking(n_rows, n_cols)
-        check_finite_by_name("X", input_colmajor, n_rows, n_cols)
+        # DEVIATION 2638: with `src_addr` (a borrowed ROW-major X, the binding's
+        # path) `input_colmajor` is empty and the scan rides the threaded upload.
+        if src_addr == 0:
+            check_finite_by_name("X", input_colmajor, n_rows, n_cols)
 
         var n_sampled_rows = self.params.max_samples
         if n_rows < n_sampled_rows:
@@ -553,7 +619,11 @@ struct IsolationForest(Movable):
         )
 
         # build_isolation_forest_global (isolation_tree_builder.cuh:377-420)
-        var data = _upload_f32(ctx, input_colmajor, n_rows * n_cols, pad, poison)
+        var data: DeviceBuffer[DType.float32]
+        if src_addr != 0:
+            data = _upload_rowmajor_as_colmajor(ctx, src_addr, n_rows, n_cols, pad, poison)
+        else:
+            data = _upload_f32(ctx, input_colmajor, n_rows * n_cols, pad, poison)
         var subsample_buffer = _poisoned_f32(
             ctx, n_trees * n_sampled_rows * n_sampled_features, pad, poison
         )
@@ -786,11 +856,13 @@ def fit(
     params: IF_params,
     mut trace: IdentityTrace,
     knobs: IFLaunchKnobs = IFLaunchKnobs.default(),
+    src_addr: Int = 0,
 ) raises:
     """`ML::fit(handle, IsolationForestF*, const float*, n_rows, n_cols,
-    params)` (`isolation_forest.cu:119-130`)."""
+    params)` (`isolation_forest.cu:119-130`). `src_addr` nonzero lends a
+    ROW-major X instead of `input_colmajor` (DEVIATION 2638)."""
     var if_model = IsolationForest(params)
-    if_model.fit(ctx, input_colmajor, n_rows, n_cols, forest, trace, knobs)
+    if_model.fit(ctx, input_colmajor, n_rows, n_cols, forest, trace, knobs, src_addr)
 
 
 def _score_samples_device(

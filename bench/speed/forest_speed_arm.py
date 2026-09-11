@@ -508,6 +508,7 @@ def main(argv=None):
     data = spec.load_with_fallback(dataset, size, args.rows)
     cfg = spec.lane_config(lane, size)
     spec.prepare_cuml_labels(data)
+    spec.prepare_anomaly_labels(lane, data)
     prepare_our_inputs(data)
 
     if args.list_arms:

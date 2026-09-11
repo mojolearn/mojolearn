@@ -29,6 +29,7 @@ sampler's first Python caller.
 
 from std.memory import memcpy
 from hostptr import copy_f32
+from ensemble.host_layout import colmajor_from_rowmajor_f32, copy_f32_threaded
 
 from std.os import abort
 from std.python import Python, PythonObject
@@ -328,7 +329,7 @@ def rf_forest_export_release_binding(handle: PythonObject) raises -> PythonObjec
     return PythonObject(None)
 
 
-def _rf_classifier_fit[EXPORT: Bool = False](
+def _rf_classifier_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
     x_addr: PythonObject,
     y_addr: PythonObject,
     params: PythonObject,
@@ -394,7 +395,19 @@ def _rf_classifier_fit[EXPORT: Bool = False](
         t_s = bt.start()
         # DEVIATION 2481: bulk typed copies preserve every input bit while
         # avoiding scalar stores into pinned memory.
-        copy_f32(xp, hx.unsafe_ptr(), n_rows * n_cols)
+        # DEVIATION 2637: X lands in the pinned stage across the host pool,
+        # transposed there when the caller lent its ROW-major C-order block
+        # (ROWMAJOR), so Python no longer transposes 1 thread and this no
+        # longer copies a second time. Pure moves: the stage bytes are the
+        # column-major bytes the old path staged. The builder's host view
+        # of X (`host_x_addr`, DEVIATION 2484) is then the stage itself.
+        var hxp = hx.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+        var host_x = Int(xp)
+        comptime if ROWMAJOR:
+            colmajor_from_rowmajor_f32(xp, hxp, n_rows, n_cols)
+            host_x = Int(hxp)
+        else:
+            copy_f32_threaded(xp, hxp, n_rows * n_cols)
         memcpy(dest=hy.unsafe_ptr(), src=yp, count=n_rows)
         bt.stop_host("bind_host_copy", t_s)
         t_s = bt.start()
@@ -418,12 +431,12 @@ def _rf_classifier_fit[EXPORT: Bool = False](
             var scales = BinScales(Float32(1), Float32(scale))
             forest = fit_forest[WeightedClsObj](
                 ctx, dx, dy, dsw, n_rows, n_cols, n_classes, rf_params,
-                scales, sample_weight_host=weights, host_x_addr=Int(xp),
+                scales, sample_weight_host=weights, host_x_addr=host_x,
             )
         else:
             forest = fit_forest[ClsObj](
                 ctx, dx, dy, dsw, n_rows, n_cols, n_classes, rf_params,
-                sample_weight_host=weights, host_x_addr=Int(xp),
+                sample_weight_host=weights, host_x_addr=host_x,
             )
         t_s = bt.start()
         ctx.synchronize()
@@ -471,6 +484,15 @@ def rf_classifier_fit_binding[EXPORT: Bool = False](
     return _rf_classifier_fit[EXPORT](x_addr, y_addr, params, criterion)
 
 
+def rf_classifier_fit_rowmajor_binding[EXPORT: Bool = False](
+    x_addr: PythonObject, y_addr: PythonObject,
+    params: PythonObject, criterion: PythonObject,
+) raises -> PythonObject:
+    """`rf_classifier_fit` with `x` ROW-major (C-order) float32, borrowed
+    through the call (DEVIATION 2637). Same params, same forest bits."""
+    return _rf_classifier_fit[EXPORT, True](x_addr, y_addr, params, criterion)
+
+
 def rf_classifier_fit_weighted_binding[EXPORT: Bool = False](
     x_addr: PythonObject, y_addr: PythonObject,
     params: PythonObject, criterion: PythonObject, weights_addr: PythonObject,
@@ -482,6 +504,22 @@ def rf_classifier_fit_weighted_binding[EXPORT: Bool = False](
 
 
 def rf_regressor_fit_binding[EXPORT: Bool = False](
+    x_addr: PythonObject, y_addr: PythonObject,
+    params: PythonObject, criterion: PythonObject,
+) raises -> PythonObject:
+    return _rf_regressor_fit[EXPORT](x_addr, y_addr, params, criterion)
+
+
+def rf_regressor_fit_rowmajor_binding[EXPORT: Bool = False](
+    x_addr: PythonObject, y_addr: PythonObject,
+    params: PythonObject, criterion: PythonObject,
+) raises -> PythonObject:
+    """`rf_regressor_fit` with `x` ROW-major (C-order) float32, borrowed
+    through the call (DEVIATION 2637). Same params, same forest bits."""
+    return _rf_regressor_fit[EXPORT, True](x_addr, y_addr, params, criterion)
+
+
+def _rf_regressor_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
     x_addr: PythonObject,
     y_addr: PythonObject,
     params: PythonObject,
@@ -525,7 +563,14 @@ def rf_regressor_fit_binding[EXPORT: Bool = False](
         t_s = bt.start()
         # DEVIATION 2481: bulk typed copies preserve every input bit while
         # avoiding scalar stores into pinned memory.
-        copy_f32(xp, hx.unsafe_ptr(), n_rows * n_cols)
+        # DEVIATION 2637, as in the classifier.
+        var hxp = hx.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+        var host_x = Int(xp)
+        comptime if ROWMAJOR:
+            colmajor_from_rowmajor_f32(xp, hxp, n_rows, n_cols)
+            host_x = Int(hxp)
+        else:
+            copy_f32_threaded(xp, hxp, n_rows * n_cols)
         copy_f32(yp, hy.unsafe_ptr(), n_rows)
         bt.stop_host("bind_host_copy", t_s)
         t_s = bt.start()
@@ -555,7 +600,7 @@ def rf_regressor_fit_binding[EXPORT: Bool = False](
         # `rf_regressor_fit`'s cuML counterpart passes.
         forest = fit_forest[RegObj](
             ctx, dx, dy, dsw, n_rows, n_cols, 1, rf_params, scales,
-            host_x_addr=Int(xp),
+            host_x_addr=host_x,
         )
         t_s = bt.start()
         ctx.synchronize()
@@ -887,10 +932,14 @@ def PyInit__mojolearn_rf() abi("C") -> PythonObject:
         m.def_function[rf_numeric_mode_binding]("rf_numeric_mode")
         m.def_function[rf_classifier_fit_binding[False]]("rf_classifier_fit")
         m.def_function[rf_classifier_fit_binding[True]]("rf_classifier_fit_export")
+        m.def_function[rf_classifier_fit_rowmajor_binding[False]]("rf_classifier_fit_rowmajor")
+        m.def_function[rf_classifier_fit_rowmajor_binding[True]]("rf_classifier_fit_rowmajor_export")
         m.def_function[rf_classifier_fit_weighted_binding[False]]("rf_classifier_fit_weighted")
         m.def_function[rf_classifier_fit_weighted_binding[True]]("rf_classifier_fit_weighted_export")
         m.def_function[rf_regressor_fit_binding[False]]("rf_regressor_fit")
         m.def_function[rf_regressor_fit_binding[True]]("rf_regressor_fit_export")
+        m.def_function[rf_regressor_fit_rowmajor_binding[False]]("rf_regressor_fit_rowmajor")
+        m.def_function[rf_regressor_fit_rowmajor_binding[True]]("rf_regressor_fit_rowmajor_export")
         m.def_function[rf_predict_proba_binding]("rf_predict_proba")
         m.def_function[rf_predict_reg_binding]("rf_predict_reg")
         m.def_function[rf_predict_proba_gpu_parallel_binding]("rf_predict_proba_gpu_parallel")
