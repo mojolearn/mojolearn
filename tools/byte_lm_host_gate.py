@@ -30,6 +30,7 @@ import platform
 import struct
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -134,8 +135,11 @@ def main():
     def check(label, model, ids_path, ids_sha, loss_path, loss_sha):
         ids = frombytes(verified(ids_path, ids_sha, 'ids'), '<i4', (shape.batch, shape.length + 1))
         want = struct.unpack('<I', verified(loss_path, loss_sha, 'loss'))[0]
+        started = time.perf_counter()
         got = model.loss_bits(ids)
-        rows.append(dict(case=label, want=f'{want:08x}', got=f'{got:08x}', equal=got == want))
+        seconds = time.perf_counter() - started
+        rows.append(dict(case=label, want=f'{want:08x}', got=f'{got:08x}', equal=got == want,
+                         seconds=round(seconds, 6)))
 
     try:
         for phase in ('heldout-initial', 'heldout-final'):
@@ -187,6 +191,13 @@ def main():
         expect_mismatch=args.expect_mismatch,
         compared=len(rows), equal=len(rows) - len(mismatches), mismatched=len(mismatches),
         first_mismatches=mismatches[:5], probes=probes,
+        # Wall clock of each loss call through the public surface (one
+        # [2, 32] forward plus the loss, single thread). Operational, not a
+        # matched benchmark: it sizes where a threaded path would pay.
+        timing=dict(loss_calls=len(rows),
+                    total_seconds=round(sum(r['seconds'] for r in rows), 6),
+                    max_seconds=max((r['seconds'] for r in rows), default=0.0),
+                    min_seconds=min((r['seconds'] for r in rows), default=0.0)),
         verdict='PASS' if verdict else 'FAIL', rows=rows)
     text = json.dumps(report, indent=1, sort_keys=True) + '\n'
     if args.report:
