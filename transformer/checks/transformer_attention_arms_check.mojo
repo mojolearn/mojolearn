@@ -1,28 +1,44 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""The fused attention ARMS (DEVIATIONS 2525 to 2527) against the eager
+"""The fused attention ARMS (DEVIATIONS 2525 to 2528) against the eager
 stage kernels, BIT FOR BIT, on the fused check's cases, plus reach by
 sabotage. Additive beside `transformer_fused_check.mojo`, which gates the
-shipped kernels; this file gates the opt-in arms on the same cases.
+shipped kernels; this file gates the arms on the same cases.
 
     pixi run mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 \\
         -D MOJOLEARN_ATTN_ARM_TRIAL=1 -I . \\
         transformer/checks/transformer_attention_arms_check.mojo
 
-WHAT IT ASSERTS, for every case of `transformer_fused_check.cases()` and
-every arm (bwd_stash, fwd_sstash, bwd_stash_tiled):
-  * the arm's launcher reports the status the case expects (RAN, the
-    regime refusal, the corner), exactly as the shipped kernels must;
-  * on RAN, ctx, amax, denom (forward) and zdot, dq, dk, dv (backward)
-    equal the eager kernels' bits;
-  * REACH, on a head-dim-64 case that RAN: the arm's sabotage instantiation
-    moves at least one cell of the outputs that arm produces (the forward
-    arm moves denom or ctx; a backward arm moves dq, dk or dv), and the
-    clean arm restores the eager bits. At any other head dim the arms
-    take the shipped kernels by design and no reach is asserted.
-Without -D MOJOLEARN_ATTN_ARM_TRIAL=1 every arm runs the shipped kernels;
-the equality section then passes trivially and the reach section FAILS,
-naming the missing define, so a green run is always a run of the arms.
+WHAT IT ASSERTS.
+  * NAMES first, host only: `fused_attention_arm_parse` and
+    `fused_attention_arm_name` are inverses on every valid spelling and
+    on every arm below with each sabotage bit, and the parser refuses the
+    invalid spellings (brief section 12.1).
+  * For every case of `transformer_fused_check.cases()` and every arm
+    (bwd_stash, fwd_sstash, bwd_stash_tiled, stash_tiled, the shipped
+    default, and stash_tiled_ztiled_r64 and stash_tiled_ztiled_r32,
+    DEVIATION 2528 at both geometries, so "new arm = eager" and
+    "default = eager" hold in one run):
+      - the arm's launcher reports the status the case expects (RAN, the
+        regime refusal, the corner), exactly as the shipped kernels must;
+      - on RAN, ctx, amax, denom (forward) and zdot, dq, dk, dv (backward)
+        equal the eager kernels' bits;
+      - REACH, on a head-dim-64 case, with the arm's reach bit
+        (`fused_attention_arm_reach_bit`: ATTN_ARM_SABOTAGE for a
+        first-round arm, ATTN_ARM_SABOTAGE_NEW for an arm with a
+        second-round bit). A first-round forward bit must move the forward
+        (ctx or denom) on every case whose forward RAN; a first-round
+        backward bit, or DEVIATION 2528 under sabotage_new, must move the
+        backward (zdot, dq, dk or dv) on every case whose backward RAN;
+        and a sabotage_new run of an arm with no second-round forward bit
+        must move NO forward cell, so the proof names the new kernel and
+        not the stash_tiled kernels under it. Reach is per branch, never a
+        sum of both directions.
+      - at any other head dim every arm takes the shipped kernels by
+        design, and a sabotage run must move nothing.
+Without -D MOJOLEARN_ATTN_ARM_TRIAL=1 every non-default arm runs the
+default kernels; the reach section then FAILS, naming the missing define,
+so a green run is always a run of the arms.
 
 This is a SMALL-SHAPE gate (L <= 700): it says the arms compute the
 profile's bits where the fused check says the shipped kernels do. The
@@ -51,12 +67,19 @@ from transformer.checks.transformer_fused_check import (
 from transformer.impl.llama.fused_attention import (
     ATTN_ARM_BWD_STASH,
     ATTN_ARM_BWD_TILED,
+    ATTN_ARM_BWD_ZTILED,
     ATTN_ARM_FWD_SSTASH,
+    ATTN_ARM_NEW_FWD_BITS,
     ATTN_ARM_SABOTAGE,
+    ATTN_ARM_SABOTAGE_NEW,
     ATTN_ARM_TRIAL,
+    ATTN_ARM_ZROWS32,
+    ATTN_ARM_ZROWS64,
     ATTN_STASH_HD,
     FUSED_RAN,
     fused_attention_arm_name,
+    fused_attention_arm_parse,
+    fused_attention_arm_reach_bit,
     fused_backward_launch_arm,
     fused_forward_launch_arm,
 )
@@ -74,11 +97,73 @@ from transformer.impl.llama.modeling_llama import (
 
 
 def arms() -> List[Int]:
+    comptime stash_tiled = ATTN_ARM_FWD_SSTASH | ATTN_ARM_BWD_STASH | ATTN_ARM_BWD_TILED
     var out = List[Int]()
     out.append(ATTN_ARM_BWD_STASH)
     out.append(ATTN_ARM_FWD_SSTASH)
     out.append(ATTN_ARM_BWD_STASH | ATTN_ARM_BWD_TILED)
+    out.append(stash_tiled)
+    out.append(stash_tiled | ATTN_ARM_BWD_ZTILED | ATTN_ARM_ZROWS64)
+    out.append(stash_tiled | ATTN_ARM_BWD_ZTILED | ATTN_ARM_ZROWS32)
     return out^
+
+
+def check_names(mut failures: List[String]) raises:
+    """The parser and the name function are inverses (brief 12.1)."""
+    var good = List[String]()
+    good.append("baseline")
+    good.append("bwd_stash")
+    good.append("fwd_sstash")
+    good.append("bwd_stash_tiled")
+    good.append("stash")
+    good.append("stash_tiled")
+    good.append("bwd_stash_tiled_ztiled")
+    good.append("stash_tiled_ztiled")
+    good.append("stash_tiled_ztiled_r32")
+    good.append("stash_tiled_ztiled_r64")
+    good.append("stash_tiled+sabotage")
+    good.append("stash_tiled_ztiled_r32+sabotage_new")
+    good.append("stash_tiled_ztiled_r64+sabotage+sabotage_new")
+    for i in range(len(good)):
+        var n = String(good[i])
+        var got = fused_attention_arm_name(fused_attention_arm_parse(n))
+        if got != n:
+            failures.append("NAMES: '" + n + "' parses and names back as '" + got + "'")
+    var all_arms = arms()
+    for i in range(len(all_arms)):
+        for extra in range(4):
+            var a = all_arms[i]
+            if extra == 1:
+                a = a | ATTN_ARM_SABOTAGE
+            elif extra == 2:
+                a = a | ATTN_ARM_SABOTAGE_NEW
+            elif extra == 3:
+                a = a | ATTN_ARM_SABOTAGE | ATTN_ARM_SABOTAGE_NEW
+            var back = fused_attention_arm_parse(fused_attention_arm_name(a))
+            if back != a:
+                failures.append("NAMES: arm " + String(a) + " names as '" + fused_attention_arm_name(a) + "' and parses back as " + String(back))
+    var bad = List[String]()
+    bad.append("")
+    bad.append("arm4")
+    bad.append("stash_ztiled")
+    bad.append("bwd_stash_ztiled")
+    bad.append("stash_tiled_r32")
+    bad.append("stash_tiled_ztiled_r32_r64")
+    bad.append("stash_tiled_bits1024")
+    bad.append("stash_tiled_ztiled+sabotage_new+sabotage")
+    for i in range(len(bad)):
+        var refused = False
+        try:
+            _ = fused_attention_arm_parse(bad[i])
+        except:
+            refused = True
+        if not refused:
+            failures.append("NAMES: '" + bad[i] + "' was accepted; the parser must refuse it")
+    print(
+        "  names: " + String(len(good)) + " spellings and "
+        + String(4 * len(all_arms)) + " arm values round-trip, "
+        + String(len(bad)) + " invalid spellings refused"
+    )
 
 
 def run_case(ctx: DeviceContext, c: FusedCase, mut failures: List[String]) raises:
@@ -151,14 +236,20 @@ def run_case(ctx: DeviceContext, c: FusedCase, mut failures: List[String]) raise
     for ai in range(len(all_arms)):
         var arm = all_arms[ai]
         var name = fused_attention_arm_name(arm)
-        var is_fwd_arm = (arm & ATTN_ARM_FWD_SSTASH) != 0
-        var is_bwd_arm = (arm & ATTN_ARM_BWD_STASH) != 0
+        var reach_bit = fused_attention_arm_reach_bit(arm)
+        # Which direction this arm's sabotage must reach (per branch).
+        var need_fwd = (arm & ATTN_ARM_FWD_SSTASH) != 0
+        var need_bwd = (arm & ATTN_ARM_BWD_STASH) != 0
+        var fwd_must_hold = False
+        if reach_bit == ATTN_ARM_SABOTAGE_NEW:
+            need_fwd = (arm & ATTN_ARM_NEW_FWD_BITS) != 0
+            need_bwd = (arm & ATTN_ARM_BWD_ZTILED) != 0
+            fwd_must_hold = not need_fwd
         for sab in range(2):
             var this_arm = arm
-            var label = String(name)
             if sab == 1:
-                this_arm = arm | ATTN_ARM_SABOTAGE
-                label = name + "+sabotage"
+                this_arm = arm | reach_bit
+            var label = fused_attention_arm_name(this_arm)
             # ---- forward ------------------------------------------------
             var ctxv = _upload(ctx, List[Float32](length=qn, fill=Float32(0.0)))
             var amax = _upload(ctx, List[Float32](length=rn, fill=Float32(0.0)))
@@ -181,6 +272,7 @@ def run_case(ctx: DeviceContext, c: FusedCase, mut failures: List[String]) raise
                         failures.append(c.name + " " + label + ": forward differs from eager in " + String(fwd_moved) + " cells")
             elif st == FUSED_RAN:
                 fwd_moved += compare(c.name, label + " fwd ctx", e_ctx, _download(ctx, ctxv, qn))
+                fwd_moved += compare(c.name, label + " fwd amax", e_max, _download(ctx, amax, rn))
                 fwd_moved += compare(c.name, label + " fwd denom", e_den, _download(ctx, denom, rn))
             # ---- backward -----------------------------------------------
             var zdot = _upload(ctx, List[Float32](length=rn, fill=Float32(0.0)))
@@ -205,23 +297,27 @@ def run_case(ctx: DeviceContext, c: FusedCase, mut failures: List[String]) raise
                     if bwd_moved > 0:
                         failures.append(c.name + " " + label + ": backward differs from eager in " + String(bwd_moved) + " cells")
             elif bs == FUSED_RAN:
+                bwd_moved += compare(c.name, label + " bwd zdot", e_z, _download(ctx, zdot, rn))
                 bwd_moved += compare(c.name, label + " bwd dq", e_dq, _download(ctx, dq, qn))
                 bwd_moved += compare(c.name, label + " bwd dk", e_dk, _download(ctx, dk, kn))
                 bwd_moved += compare(c.name, label + " bwd dv", e_dv, _download(ctx, dv, kn))
-            # ---- reach: only where the arm is wired and the case RAN -----
-            if sab == 1 and c.hd == ATTN_STASH_HD:
-                var moved = 0
-                var applies = False
-                if is_fwd_arm and c.expect_fwd == FUSED_RAN:
-                    applies = True
-                    moved += fwd_moved
-                if is_bwd_arm and c.expect_bwd == FUSED_RAN:
-                    applies = True
-                    moved += bwd_moved
-                if applies:
-                    print("    REACH " + name + " sabotage_flipped_cells=" + String(moved))
-                    if moved == 0:
-                        failures.append(c.name + ": REACH NOT PROVEN for " + name + " (sabotage moved nothing; build lacks -D MOJOLEARN_ATTN_ARM_TRIAL=1 or the arm is not wired)")
+            # ---- reach, per branch ---------------------------------------
+            if sab == 1:
+                if c.hd == ATTN_STASH_HD:
+                    if need_fwd and c.expect_fwd == FUSED_RAN:
+                        print("    REACH " + label + " forward_flipped_cells=" + String(fwd_moved))
+                        if fwd_moved == 0:
+                            failures.append(c.name + ": FORWARD REACH NOT PROVEN for " + label + " (sabotage moved no forward cell; build lacks -D MOJOLEARN_ATTN_ARM_TRIAL=1 or the arm is not wired)")
+                    if need_bwd and c.expect_bwd == FUSED_RAN:
+                        print("    REACH " + label + " backward_flipped_cells=" + String(bwd_moved))
+                        if bwd_moved == 0:
+                            failures.append(c.name + ": BACKWARD REACH NOT PROVEN for " + label + " (sabotage moved no backward cell; build lacks -D MOJOLEARN_ATTN_ARM_TRIAL=1 or the arm is not wired)")
+                    if fwd_must_hold and st == FUSED_RAN:
+                        print("    REACH " + label + " forward_cells_that_must_hold_moved=" + String(fwd_moved))
+                        if fwd_moved > 0:
+                            failures.append(c.name + ": " + label + " moved " + String(fwd_moved) + " forward cells; a second-round backward sabotage must reach no forward buffer")
+                elif fwd_moved + bwd_moved > 0:
+                    failures.append(c.name + ": " + label + " moved " + String(fwd_moved + bwd_moved) + " cells at head_dim " + String(c.hd) + ", where every arm runs the shipped kernels")
             _ = ctxv^
             _ = amax^
             _ = denom^
@@ -238,25 +334,29 @@ def run_case(ctx: DeviceContext, c: FusedCase, mut failures: List[String]) raise
 def main() raises:
     print("=== transformer fused attention ARMS vs eager, BITWISE (mode " + numeric_mode_name() + ", trial hook " + String(ATTN_ARM_TRIAL) + ")")
     if not ATTN_ARM_TRIAL:
-        print("NOTE: no -D MOJOLEARN_ATTN_ARM_TRIAL=1: every arm runs the shipped kernels; reach will FAIL")
+        print("NOTE: no -D MOJOLEARN_ATTN_ARM_TRIAL=1: every non-default arm runs the default kernels; reach will FAIL")
+    var failures = List[String]()
+    check_names(failures)
     var ctx = DeviceContext()
     var all_cases = cases()
-    var failures = List[String]()
     var n = 0
     for i in range(len(all_cases)):
         var c = all_cases[i].copy()
         run_case(ctx, c, failures)
         n += 1
+    var n_arms = len(arms())
     if len(failures) > 0:
         for i in range(len(failures)):
             print("FAIL " + failures[i])
         raise Error(
             "transformer_attention_arms_check: " + String(len(failures))
-            + " failure(s) over " + String(n) + " cases; see the FAIL lines"
+            + " failure(s) over " + String(n) + " cases x " + String(n_arms)
+            + " arms; see the FAIL lines"
         )
     print(
-        "transformer_attention_arms_check: PASS, " + String(n)
-        + " cases x 3 arms, every RAN buffer bit-identical to eager, every"
-        + " status as expected, reach proven at head_dim 64"
+        "transformer_attention_arms_check: PASS, names inverse, " + String(n)
+        + " cases x " + String(n_arms) + " arms, every RAN buffer bit-identical"
+        + " to eager, every status as expected, reach proven per branch at"
+        + " head_dim 64, nothing moved at other head dims"
     )
     _ = ctx^

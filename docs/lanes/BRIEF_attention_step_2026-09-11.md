@@ -611,7 +611,8 @@ are internal before and after numbers.
 ## 11. Second round, WIP (2026-09-11, wound down by Andrew before any code): the AMD reading and DEVIATIONS 2528, 2530, 2531, 2533
 
 STATUS: reading and design only. NOTHING BELOW IS BUILT. No kernel, check
-case, harness change or leg exists for this section. The deciding speed
+case, harness change or leg exists for this section. (Section 12 records
+what a later lane built from it: DEVIATION 2528 only, source only.) The deciding speed
 column moved to AMD (Instinct MI325X, DigitalOcean, HIP gfx942) during the
 lane; NVIDIA is the confirmation column.
 
@@ -762,3 +763,259 @@ device memory held across the step at the target shape.
   Baseline `stash_tiled` for the price (`MOJOLEARN_ATTN_BASELINE`) and for
   `witnesses_equal_baseline`. The item before any arm is `baseline` against
   `stash_tiled` on AMD.
+
+## 12. Second round, source built (2026-09-11, worktree lane, nothing run)
+
+STATUS: source only. Nothing in this section was compiled or run. Every
+claim that needs a run is marked RUN OWED with its command in 12.6 (the
+M4 checks) or 12.7 (the AMD legs). The
+shipped default is still `stash_tiled`, and a shipped build compiles none
+of the kernels below.
+
+### 12.1 Arm bits and names (the parser and the name function are inverses)
+
+| bit | constant | meaning |
+|---:|---|---|
+| 8 | `ATTN_ARM_BWD_ZTILED` | DEVIATION 2528, needs `BWD_STASH` and `BWD_TILED` |
+| 16 | `ATTN_ARM_SABOTAGE` | the 2525 to 2527 kernels' sabotage (unchanged) |
+| 32 | reserved `FWD_QRES` | DEVIATION 2530, not built |
+| 64 | reserved `FWD_GRID` | DEVIATION 2531, not built |
+| 128 | `ATTN_ARM_SABOTAGE_NEW` | flips only the second-round kernels |
+| 256 | `ATTN_ARM_ZROWS32` | trial geometry knob, 2528 at 32 rows per block |
+| 512 | `ATTN_ARM_ZROWS64` | trial geometry knob, 2528 at 64 rows per block |
+
+A name is the first-round base (`baseline`, `bwd_stash`, `fwd_sstash`,
+`bwd_stash_tiled`, `stash`, `stash_tiled`), then one token per
+second-round bit in a fixed order (`_ztiled`, then the geometry token
+`_r32` or `_r64`), then `+sabotage` and `+sabotage_new` for the two
+sabotage bits. `fused_attention_arm_parse` strips the tokens in reverse
+order and raises on an unknown base, a token whose prerequisite is
+missing, or a rows token without `_ztiled`. `fused_attention_arm_name`
+builds the name from the bits it knows and spells any other bit as
+`_bits<N>`, which the parser refuses, so the two functions are inverses
+over the valid arms. The first-round `fused_attention_arm_name` masked
+with `ATTN_ARM_SABOTAGE - 1` and would have named every second-round arm
+by its low bits; that is the defect 11.8 pointed at, and it is fixed.
+Names carry no `-` (the leg's `lm_summary` splits run names on it) and no
+character outside `tools/do_extra_leg.sh`'s value set.
+
+`stash_tiled_ztiled` takes its rows per block from the new kernel-matrix
+SCHEDULING row `attn_zdot_rows_per_block_for[column]` (32 on AMD, 64
+elsewhere, UNMEASURED). `stash_tiled_ztiled_r32` and
+`stash_tiled_ztiled_r64` force the geometry on any column so one leg
+prices both.
+
+### 12.2 DEVIATION 2528, identity argument (written before the code)
+
+Kernels. `fused_bwd_ydy_tiled_kernel[HD, TQ, SABOTAGE]` (kernel A) and
+`fused_bwd_zfold_kernel[TZ]` (kernel B), launched by the trial-only
+generic `_launch_bwd_ztiled[HD, TQZ, ZSAB]`, which then launches the
+shipped `fused_bwd_dq_tiled_kernel` and `fused_bwd_dkdv_tiled_kernel`
+instantiations unchanged.
+
+Kernel A. One block holds `TQ` (64 or 32) query rows of one (batch,
+head). Thread `(tr, tc)` (`tid // 16`, `tid % 16`) holds rows `tr + 16u`
+(`u < TQ // 16`) and keys `tc + 16v` (`v < 4`) of a 64-key block
+iteration, so `4 * TQ / 16` y dot chains and as many dy dot chains. Per
+16-wide p window it stages Q and dctx for its `TQ` rows and K and V for
+the 64 keys, each value through `ftz`, at stride 20 (the forward's
+`KS + 4`), behind one barrier, then runs 16 p steps of
+`_step_preflushed`. After the four windows, for each visible cell it
+computes `masked`, `e` and `y` against the row's `ftz(amax)` and
+`ftz(denom)` (loaded once per thread) and stores `y` and `ftz(dy)` to
+the two stashes. Kernel B. One row per thread, 256 rows per block, no
+shared memory, no barrier; `z = _step(dy_st[j], y_st[j], z)` over the
+block's key range ascending, stepping only where `j` is in the row's
+`_row_range`; then `ftz`, the corner test and the zdot store.
+
+Why no bit moves.
+
+1. `y[t, j]`. The shipped `fused_bwd_zdot_stash_kernel` computes
+   `dot = _step(ftz(q[t, p]), ftz(k[j, p]), dot)` for `p` ascending from
+   `+0.0`. `ftz` only maps a subnormal to a signed zero, so it is
+   idempotent and leaves every other value alone. `_step(a, b, acc)` is
+   `_step_preflushed(ftz(a), ftz(b), acc)` on every column (NVIDIA
+   spells both as `fma.rn` then `mul.rn.ftz`; the others as
+   `ftz(fma(...))`), so kernel A's chain over the staged `ftz(q)` and
+   `ftz(k)` with `_step_preflushed`, q first and k second, p ascending
+   from `+0.0` across the four windows, is the same chain on the same
+   operands. The cell arithmetic after the dot is the shipped spelling
+   term for term: `ftz(_pmul(dot, scale) + 0.0)`, then
+   `ftz(identical_exp(ftz(ftz(masked) - ftz(amax[row]))))`, then
+   `ftz(identical_div(ftz(e), ftz(denom[row])))`, with `amax` and
+   `denom` read from the same buffers.
+2. `dy[t, j]`. Likewise `_step(ftz(dctx[t, p]), ftz(v[j, p]), dy)` for
+   `p` ascending, dctx first, then `ftz`.
+3. `z[t]`. The shipped chain is `z = _step(dys[j], ys[j], z)` over the
+   row's visible `j` ascending from `+0.0`, where `dys[j]` and `ys[j]`
+   hold exactly the values the stash holds. Kernel B steps the same
+   operands in the same order; a key outside the row's range is skipped,
+   as the shipped `j >= j_lo and j <= j_hi` test skips it. The iteration
+   over the block's union key range (instead of the row's own range) is
+   a control-flow choice that keeps the trip count block-uniform; it
+   adds no term. The corner test is the shipped one (`ftz(z)` is `-0.0`
+   and `j_hi < s - 1`).
+4. dq, dk and dv. The shipped `fused_bwd_dq_tiled_kernel` and
+   `fused_bwd_dkdv_tiled_kernel` read `y_st`, `dy_st` and `zdot` only at
+   visible cells, and kernels A and B write every visible cell with the
+   bits `fused_bwd_zdot_stash_kernel` writes. Their instantiations are
+   the shipped ones.
+
+Which thread holds a chain, how many chains one thread holds, the page
+layout and the barrier count are execution-plan choices the contract does
+not read.
+
+Sabotage (reach). Kernel A under `SABOTAGE_NEW` flips one ulp of every `y`
+it stores (`_flip_ulp`, a zero becomes `2^-100`). zdot, dq, dk and dv move;
+ctx, amax and denom do not, and the arms check and the harness assert
+both halves.
+
+Page. `(2 * TQ + 128) * 20` floats, 20,480 B at 64 rows and 15,360 B at
+32 rows; both fit every buildable column (`lib_smem_page_fits_for` is
+still asked, and a column where the forced page does not fit runs the
+first-round stash kernels). Grid `B * nh * ceil(L / TQ)` for kernel A
+(384 at 64 rows, 768 at 32) and `B * nh * ceil(L / 256)` for kernel B
+(96).
+
+Correction to 11.3. The page-only occupancy count in 11.1 does not favor
+32 rows on AMD. Resident blocks per CU are `min(8, 65536 // page)`, so 64
+rows give 3 blocks and 192 rows in flight per CU, while 32 rows give 4
+blocks and 128 rows. The case for 32 rows would have to come from register
+counts or staging latency, not from the page, so the leg prices both
+(`_r32`, `_r64`) and the matrix row's AMD value of 32 is a placeholder
+until it does. The same count applies to 2531 (17,152 B at 64 rows, 3
+blocks, 192 rows; 12,672 B at 32 rows, 5 blocks, 160 rows), and 11.4's
+12,736 B is 12,672 B by the kernel's own allocations (8,192 + 4,224 +
+256).
+
+### 12.3 What was built, per deviation
+
+- DEVIATION 2528, BUILT (source, not compiled). In
+  `transformer/impl/llama/fused_attention.mojo`: the two kernels of
+  12.2; the generic `_launch_bwd_ztiled[HD, TQZ, ZSAB]`; in
+  `fused_backward_launch_arm` a `comptime if ATTN_ARM_TRIAL` branch
+  before the first-round branch, whose condition became
+  `if want_stash and not ran_arm:` (the only edit to shipped lines; on a
+  shipped build the trial branch does not exist, so `ran_arm` is `False`
+  there and the branch runs exactly as before); the arm bits, names and
+  parser of 12.1; `fused_attention_arm_reach_bit`;
+  `fused_attention_zdot_rows` (the knob, else the matrix row, else 0 when
+  the page does not fit). In `checks/kernel_matrix.mojo`:
+  `attn_zdot_rows_per_block_for[column]`. The forward launcher is
+  untouched. New timer lines under `MOJOLEARN_ATTN_PHASE_TIMERS`:
+  `attn.bwd_ydy_tiled`, `attn.bwd_zfold` (then the existing
+  `attn.bwd_dq_tiled`, `attn.bwd_dkdv_tiled`).
+- DEVIATION 2531, NOT BUILT. 2528's `_r32` and `_r64` price on the MI325X
+  answers the question 2531 depends on (whether 32-row blocks pay on
+  that column), and the page-only count in 12.2 does not favor them;
+  building a second 32-row kernel before that number would be building to
+  a reading the counts contradict. Its bit stays reserved.
+- DEVIATION 2533, NOT BUILT (order 11.2: after 2531). Reading confirmed
+  for when it is built: every operand of the tiled dq and dk/dv steps,
+  the forward context step and kernel B's step is already flushed
+  (staged through `ftz`, or produced by `_pmul` or `ftz(div)`; a
+  sabotage flip of a normal stays normal and of a zero is `2^-100`), so
+  `_step_preflushed` gives the same bits. It needs new instantiations
+  (a seam parameter on copies), never an edit of the shipped kernels.
+- DEVIATION 2530, NOT BUILT (order 11.2: after 2533, 32 rows only).
+
+### 12.4 Checks, harness and leg
+
+- `transformer/checks/transformer_attention_arms_check.mojo`: a host-only
+  NAMES section (13 spellings round-trip, the six arms times four
+  sabotage combinations round-trip as values, eight invalid spellings
+  refused), then six arms on the 15 cases: the first three, `stash_tiled`
+  itself, `stash_tiled_ztiled_r64` and `stash_tiled_ztiled_r32`. Reach is
+  per branch: a first-round forward bit must move the forward, a
+  first-round backward bit or 2528 under `sabotage_new` must move the
+  backward (zdot now counted too), a `sabotage_new` run of an arm with no
+  second-round forward bit (`ATTN_ARM_NEW_FWD_BITS`, 0 today) must move
+  no forward cell, and at head dims other than 64 a sabotage must move
+  nothing.
+- `bench/attention_step_price_main.mojo`: names through
+  `fused_attention_arm_parse` (and a round-trip assert), two `PATH` lines
+  (arm, resolved `zdot_rows`, `reach_bit`), reach with the arm's reach
+  bit, and a failure when a backward-only second-round sabotage moves a
+  forward cell. `REACH` lines keep their first fields and add
+  `reach_bit`, `forward_moved`, `backward_moved`.
+  `MOJOLEARN_ATTN_BASELINE` already existed and is unchanged.
+- `tools/attention_step_leg.sh` (additions only, the vendor-agnostic body
+  and the enwik8 and pile_github corpora of 7c0a5af4 kept): `BASE` from
+  `MOJOLEARN_ATTN_BASELINE`, passed explicitly to every smoke, price and
+  timer run; the timer loop runs `$BASE` instead of `baseline`;
+  `lm_summary.tsv` compares witnesses with `lm-$BASE-<corpus>` and prints
+  the reference; `gate.txt` records `baseline_arm`; the header names the
+  new arms and the AMD env.
+
+### 12.5 Risks not resolvable without a build
+
+1. Nothing was compiled. The likeliest compile faults are in the generic
+   kernel's comptime arithmetic (`NR * STRIDE`, `NR * KS // 256`) and the
+   `mut` DeviceBuffer pass-through of the launch helper; the M4 arms
+   check build (12.6 step 2) finds them in minutes.
+2. Kernel B reads two global floats per step on 256 threads with no
+   staging, so it may be bandwidth-bound rather than serial-bound. The
+   `attn.bwd_zfold` timer line sizes it; a row-tiled staging of y and dy
+   is the follow-on if it is.
+3. The trial bindings on the leg now instantiate four more kernel A
+   pipelines (32 and 64 rows, clean and sabotage) and kernel B, so the
+   binding builds take longer (they are not under the leg's `timeout`).
+4. The AMD value of `attn_zdot_rows_per_block_for` (32) is a placeholder;
+   only the forced `_r32` and `_r64` names are evidence-bearing until the
+   leg flips the row.
+5. Whether kernel A's 32 register accumulators plus 24 register loads
+   per thread (at 64 rows) stay register-resident on each column is not
+   known from the source (the GEMM lane's resource read answers it on
+   NVIDIA).
+
+### 12.6 RUN OWED, in order (M4 light checks, one at a time)
+
+1. The shipped path still builds and is still bit-identical (no trial
+   define):
+   `nice -n 19 pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . transformer/checks/transformer_fused_check.mojo -o /tmp/fused-check`
+   then `nice -n 19 /tmp/fused-check` (expect PASS, 15 cases, the
+   head_dim 64 cases RAN through `stash_tiled`).
+2. The arms gate, with the new arms and the names section:
+   `nice -n 19 pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_ATTN_ARM_TRIAL=1 -I . transformer/checks/transformer_attention_arms_check.mojo -o /tmp/arms-check`
+   then `nice -n 19 /tmp/arms-check` (expect
+   `PASS, names inverse, 15 cases x 6 arms`).
+3. The harness builds and runs 2528 against stash_tiled on the generator
+   kinds at a small shape (correctness only, never a timing):
+   `nice -n 19 pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_ATTN_ARM_TRIAL=1 -I . bench/attention_step_price_main.mojo -o /tmp/attn-price`
+   then
+   `MOJOLEARN_ATTN_BASELINE=stash_tiled MOJOLEARN_ATTN_ARM=stash_tiled_ztiled_r32 MOJOLEARN_ATTN_KINDS=hashed,heavytail MOJOLEARN_ATTN_TIMING=0 MOJOLEARN_ATTN_L=512 MOJOLEARN_ATTN_NH=4 MOJOLEARN_ATTN_NKV=2 nice -n 19 /tmp/attn-price`
+   and the same with `MOJOLEARN_ATTN_ARM=stash_tiled_ztiled_r64 MOJOLEARN_ATTN_ORACLE=0`
+   (expect every `BITS ... _vs_stash_tiled` MATCH,
+   `REACH ... clean_restored=True reach_bit=...+sabotage_new forward_moved=0`).
+
+### 12.7 The AMD legs (MI325X, DigitalOcean, from a detached worktree at the lane's commit)
+
+First, 11.2 item 0 (stash_tiled against baseline, no second-round arm),
+the example already in the leg header:
+
+    MOJOLEARN_DO_TOKEN_FILE=$HOME/.mojolearn_do_token \
+    MOJOLEARN_GPU_ARCHS=gfx942 \
+    MOJOLEARN_GEMM_LEG_EXTRA=tools/attention_step_leg.sh \
+    MOJOLEARN_DO_EXTRA_ENV="MOJOLEARN_ATTN_LEG_ARMS=stash_tiled MOJOLEARN_ATTN_LEG_SKIP_TIMERS=1" \
+    MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/$(date -u +%Y-%m-%d_%H%M%S)-amd-mi325x-attention-step \
+    bash tools/do_extra_leg.sh amd --minutes 60 --skip-gates
+
+Then DEVIATION 2528 at both geometries against the shipped default, with
+the lean step witnesses of all three arms on both corpora:
+
+    MOJOLEARN_DO_TOKEN_FILE=$HOME/.mojolearn_do_token \
+    MOJOLEARN_GPU_ARCHS=gfx942 \
+    MOJOLEARN_GEMM_LEG_EXTRA=tools/attention_step_leg.sh \
+    MOJOLEARN_DO_EXTRA_ENV="MOJOLEARN_ATTN_BASELINE=stash_tiled MOJOLEARN_ATTN_LEG_ARMS=stash_tiled_ztiled_r64,stash_tiled_ztiled_r32 MOJOLEARN_ATTN_LEG_LM_ARMS=stash_tiled,stash_tiled_ztiled_r64,stash_tiled_ztiled_r32 MOJOLEARN_ATTN_LEG_SKIP_TIMERS=1" \
+    MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/$(date -u +%Y-%m-%d_%H%M%S)-amd-mi325x-attention-ztiled \
+    bash tools/do_extra_leg.sh amd --minutes 90 --skip-gates
+
+Every word is inside the runner's value set (letters, digits, `_.,:/=-`).
+The second leg runs twelve probes (three arms, two corpora, lean and
+timing); if the lease must be 60 minutes, drop the slower geometry from
+`MOJOLEARN_ATTN_LEG_LM_ARMS` after the price lines name it, never
+`stash_tiled` (it is the witness reference). Gates are section 6 with
+`stash_tiled` in place of `baseline`, and the flip rule is
+ENGINEERING_RULES 9 (the geometric mean of the enwik8 and pile_github
+ratios below 1, loss not worse on either); a flip also writes
+`attn_zdot_rows_per_block_for`'s AMD value from the same leg.
