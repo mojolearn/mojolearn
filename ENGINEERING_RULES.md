@@ -162,8 +162,9 @@ So the rule, stated so it binds the next family too:
 
 - **The only number is OUR IDENTICAL arm against THE OPPONENT'S FAST arm**,
   with exactly one exception: the three tree lanes, where `fast` is a
-  shipped tier and MAY be timed on Apple silicon
-  (`bench/speed/forest_speed_arm.py`). Everywhere else, timing a `fast` or
+  shipped tier aimed at the Mac and MAY be timed
+  (`bench/speed/forest_speed_arm.py`). Where it is timed is section 10:
+  never on the orchestrator's own laptop. Everywhere else, timing a `fast` or
   `deterministic` arm is timing a binary that does not ship -- see 0b-iii.
   Do not build one to benchmark it.
 - **Never compare our fast arm to our identical arm and call it a result.**
@@ -371,8 +372,18 @@ distinguishing. also amd is cheaper."
 decides a kernel geometry, a default flip under section 9, a deviation A/B,
 a stage profile or a new opponent row is an AMD Instinct GPU on
 DigitalOcean (MI325X, size `gpu-mi325x1-256gb`, region `tor1`). NVIDIA is
-the confirmation column. Apple stays where the tree FAST tier is timed
-(0b-iii).
+the confirmation column.
+
+**The tree FAST tier is for the Mac, and the Mac it is built on is not a
+benchmark box.** Andrew, 2026-09-11 night: "i do want fast mode on trees
+with an aim to being good on mac... i just think there are confounding
+factors and it is hard to measure and risks crashing the device". The
+laptop is shared by several sessions and drifts 1.7x within twenty minutes,
+so a timing there is confounded as well as risky. So a FAST change that is
+vendor neutral (host round trips, fills, histogram logic) is A/B'd in the
+FAST tier on the MI325X beside IDENTICAL. A Metal-only effect stays
+unmeasured until a dedicated idle Mac runs it. The local Mac runs light
+correctness only: a small check or a fingerprint set.
 
 Tuning on one vendor costs nothing in correctness. IDENTICAL makes the bits
 equal on every vendor, so where a kernel was tuned never changes an answer
