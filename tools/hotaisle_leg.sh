@@ -1,26 +1,41 @@
 #!/usr/bin/env bash
 # tools/hotaisle_leg.sh. THE ONLY WAY ANY LANE RENTS AN AMD GPU ON HOT AISLE.
-# One guarded 1x AMD MI300X VM: slot, create, tag, watchdog, ship the commit,
-# pixi and the gates, the body, fetch, DELETE, verify gone.
+# One guarded AMD MI300X VM: slot, create, tag, watchdog, ship the commit,
+# pixi and the gates, the body (two bodies, one per GPU, on the 2gpu spec),
+# fetch, DELETE, verify gone.
 #
 #   MOJOLEARN_GEMM_LEG_EXTRA=tools/attention_step_leg.sh \
 #   MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/$(date -u +%Y-%m-%d_%H%M%S)-amd-mi300x-hotaisle-<lane> \
 #   MOJOLEARN_HOTAISLE_EXTRA_ENV='MOJOLEARN_X=1 MODULAR_Y=2' \
 #   bash tools/hotaisle_leg.sh amd [--rent | --probe] [--minutes N] [--skip-gates]
-#   bash tools/hotaisle_leg.sh status        this team's VMs, descriptions, states, slots, balance
+#
+#   MOJOLEARN_HOTAISLE_SPEC=2gpu MOJOLEARN_HOTAISLE_GPU_ONLY=1 \
+#   MOJOLEARN_GEMM_LEG_EXTRA=<GPU 0 body> MOJOLEARN_GEMM_LEG_EXTRA_B=<GPU 1 body> \
+#   [MOJOLEARN_GEMM_LEG_OUT=<dir> MOJOLEARN_GEMM_LEG_OUT_B=<dir>] \
+#   bash tools/hotaisle_leg.sh amd [--rent] [--skip-gates]     two bodies on one 2x MI300X VM
+#   MOJOLEARN_HOTAISLE_SPEC=2gpu MOJOLEARN_HOTAISLE_GPU_ONLY=1 \
+#   bash tools/hotaisle_leg.sh amd --rent --test-2gpu          the pinning test, before any real 2gpu use
+#
+#   bash tools/hotaisle_leg.sh status        this team's VMs, descriptions, states, slots (both legs of a 2gpu VM), balance
 #   bash tools/hotaisle_leg.sh reap <vm>     DELETE ?force=true a mojolearn:* VM, verify gone
 #
 #   (no mode)  DRY RUN: no key read, no API call, nothing created
 #   --probe    free GETs only: roles, VM limit, balance, stock and price, VMs, ssh key
 #   --rent     BILLS: creates one VM
+#   --spec S   the same as MOJOLEARN_HOTAISLE_SPEC=S
 #
 # ENVIRONMENT
-#   MOJOLEARN_GEMM_LEG_EXTRA      the body (POSIX sh), run from /root/mojolearn on the VM
+#   MOJOLEARN_GEMM_LEG_EXTRA      the body (POSIX sh), run from /root/mojolearn on the VM (GPU 0 on 2gpu)
 #   MOJOLEARN_GEMM_LEG_OUT        evidence dir; the VM's /root/gemm_leg_out lands in <out>/remote/
 #   MOJOLEARN_HOTAISLE_EXTRA_ENV  NAME=value words for the body (MOJOLEARN_* or MODULAR_*, values [A-Za-z0-9_.,:/=-])
+#   MOJOLEARN_GEMM_LEG_EXTRA_B, MOJOLEARN_GEMM_LEG_OUT_B, MOJOLEARN_HOTAISLE_EXTRA_ENV_B, MOJOLEARN_HOTAISLE_LANE_B
+#                                 the GPU 1 body, its evidence dir, env and lane: 2gpu only, validated the
+#                                 same way, and REFUSED on 13core or 8core rather than silently dropped
+#   MOJOLEARN_HOTAISLE_GPU_ONLY   must be 1 on 2gpu: the caller's word that neither body is a CPU opponent row
 #   MOJOLEARN_GPU_ARCHS           one arch; unset reads it from rocminfo on the VM (the MI300X is gfx942)
 #   MOJOLEARN_HOTAISLE_KEY_FILE   default ~/.mojolearn_hotaisle_key (0600, one line)
-#   MOJOLEARN_HOTAISLE_SPEC       13core (default, comparable CPU opponent rows) or 8core
+#   MOJOLEARN_HOTAISLE_SPEC       13core (default, comparable CPU opponent rows), 8core, or 2gpu (the
+#                                 2x MI300X VM, 26 cores: GPU rows only, labeled mi300x-2gpu-vm)
 #   MOJOLEARN_HOTAISLE_LANE       tag in the VM description; default the body's basename
 #   MOJOLEARN_HOTAISLE_RUNTIME    auto (default: docker, else podman, else native), docker, podman, native
 #   MOJOLEARN_HOTAISLE_IMAGE      default rocm/dev-ubuntu-22.04:6.4.1-complete (the RunPod AMD image)
@@ -41,7 +56,9 @@
 #      removed only when its owner pid is also dead.
 #   b. Balance at or above 500 cents or the leg refuses by name. The chosen
 #      spec must show Quantity > 0; otherwise wait and retry up to 30 minutes.
-#      The 2x MI300X spec is never picked (exactly one GPU is matched).
+#      13core and 8core match exactly one GPU; only 2gpu picks the 2x MI300X
+#      offering (exactly two MI300X GPUs), and it also needs a balance at or
+#      above that offering's minimum reservation price.
 #   c. A detached Mac-side dead-man armed BEFORE the create, keyed by the VM's
 #      deployment_id as soon as the create returns it. At the deadline it
 #      DELETEs with force and verifies, even if this script is gone.
@@ -53,7 +70,8 @@
 #   e. EXIT/INT/TERM trap: DELETE ?force=true, then poll until GET 404 or the
 #      VM is absent from a 200 listing (not merely stopped). The verification
 #      line is logged. Unverified: banner, dead-man left armed, slot kept.
-#   f. --minutes defaults to 60 and 60 is the maximum. More is refused.
+#   f. --minutes defaults to 60 and 60 is the maximum. More is refused. On
+#      2gpu 60 is also the minimum (the offering's minimum reservation).
 #   g. The description is PATCHed to mojolearn:<lane>:<utc> right after the
 #      create. reap, status and every delete refuse a VM whose description is
 #      not mojolearn:* (the leg's own VM may also be empty if the PATCH never
@@ -71,6 +89,82 @@
 #                    verified gone within 8 minutes after the deadline.
 #   --bare           ships no source, no pixi, no gates, no container; the body
 #                    runs natively from an empty /root/mojolearn. For the trap test.
+#   --test-2gpu      2gpu only, see below.
+#
+# THE 2GPU SPEC (MOJOLEARN_HOTAISLE_SPEC=2gpu). The team limit is 2 VMs, so the
+# only fan-out is more GPUs per VM. The offering (probe 2026-09-11 16:05Z):
+# 2x MI300X, 26 cores, 448 GB, 598 cents/h, minimum reservation 60 min. One
+# such VM takes ONE slot and runs TWO bodies, with ONE Mac dead-man, ONE on-box
+# watchdog and ONE verified delete keyed on deployment_id for the whole VM.
+#   1. REFUSED before anything: a lease under 60 minutes; --bare,
+#      --test-watchdog or runtime native; MOJOLEARN_HOTAISLE_GPU_ONLY unset;
+#      a body that marks a CPU opponent row (below); both bodies on one OUT.
+#      WARNING printed: both legs should need at least 40 minutes each.
+#   2. The single-GPU steps, once for the VM: slot, stock (exactly two MI300X
+#      GPUs in one offering), balance, dead-man, create, tag, running, ssh,
+#      watchdog, key-in-ps, device probe, runtime (docker or podman), arch.
+#   3. GPU MAP, read on the host into gpu_map.txt and leg.txt: KFD topology GPU
+#      nodes in node order (drm_render_minor, location_id and domain give the
+#      PCI address), /sys/class/drm/renderD* (driver, PCI address) and
+#      rocm-smi --showbus. GPU g is the g-th KFD GPU node. When both GPUs have a
+#      render node whose address agrees between KFD and DRM, pin_mode=render:
+#      each container gets /dev/kfd and ONLY its renderD node. Otherwise
+#      pin_mode=dri: /dev/kfd and the whole /dev/dri to both containers, the
+#      pinning rests on the visible-devices variables, and leg.txt says so.
+#   4. ONE bundle upload, unpacked twice into /root/leg-a/mojolearn and
+#      /root/leg-b/mojolearn (each body its own writable source copy). ONE
+#      image pull; a failed pull deletes the VM (no native fallback).
+#   5. PIN CALIBRATION, after the pull. For GPU g, candidate containers
+#      (its devices, ROCR_VISIBLE_DEVICES=r, HIP_VISIBLE_DEVICES=h) run a probe
+#      that asks HIP itself (python3 ctypes into libamdhip64: hipGetDeviceCount,
+#      hipGetDevicePciBusId) and rocminfo (GPU agents, BDFID). Candidates in
+#      order: (g,g) the literal pin; in render mode (0,0), the view the renderD
+#      restriction may leave; then (g,0), ROCR in host order with HIP relative
+#      to it. The pin is the first candidate where HIP sees EXACTLY ONE device
+#      at GPU g's PCI address (rocminfo decides only when HIP cannot load).
+#      Both GPUs must pin, to different addresses, or the VM is deleted unused.
+#   6. Each body runs in its own container: --device /dev/kfd plus its
+#      devices, -e ROCR_VISIBLE_DEVICES and -e HIP_VISIBLE_DEVICES as pinned,
+#      host /root/leg-a (GPU 0) or /root/leg-b (GPU 1) mounted at /root. The
+#      body sees exactly the single-GPU world (/root/mojolearn,
+#      /root/gemm_leg_out, /root/gemm_leg_extra.sh, pixi in /root/.pixi) under
+#      its own timeout(1), sentinel and body_exit. Its leg.txt carries
+#      size=mi300x-2gpu-vm, gpu_index and the pin lines.
+#   7. Poll both every 30 s. A body that finishes is fetched to its own OUT at
+#      once while the other keeps running; one body failing never ends the
+#      other. The EXIT trap deletes the VM only when both finished or the poll
+#      deadline (lease minus fetch reserve, 360 s on 2gpu) passed.
+#   8. teardown.txt and deadman.txt are copied into the GPU 1 OUT. Every
+#      leg.txt of a 2gpu leg (both OUTs, Mac side and box side) says
+#      size=mi300x-2gpu-vm: GPU rows from a shared VM are their own tuple and
+#      are never mixed with 1x MI300X VM rows without that label.
+# CPU OPPONENT ROWS NEVER RUN ON 2GPU: 26 cores is not the 13-core CPU tuple.
+# A body is refused when its path, or any tools/ or bench/ shell script its
+# non-comment lines reach, is or names an entry of CPU_OPPONENT_DENY (the trees
+# and classical opponent drivers and their Python arms), or when its env words
+# carry a CPU_OPPONENT_ENV_DENY prefix. MOJOLEARN_HOTAISLE_GPU_ONLY=1 is still
+# required: the scan cannot see a body that builds a script name at run time.
+#
+# --test-2gpu (with --rent and SPEC=2gpu; no body variables): ships no source,
+# rents one 2x VM, maps and calibrates the pins, then runs two runner-written
+# tiny bodies, one per pinned container, that print what they see (the pin
+# probe: HIP and rocminfo; plus rocm-smi and raw rocminfo), hold about 2
+# minutes, and print it again. PASS = each body saw exactly one GPU at both
+# prints, at its own pinned address; the two addresses differ; the bodies
+# overlapped in time and both exited 0; and the VM is verified gone.
+# test_2gpu=PASS or FAIL lands in both leg.txt. It runs before any real use.
+# Inside a container rocm-smi reads sysfs and still lists both GPUs; that is
+# recorded, never used as the verdict.
+#
+# RUN OWED, 2gpu (nothing of it has run on a real VM; the orchestrator runs it):
+#   1. The dry run with two bodies, GREEN, both composed commands and pins shown:
+#        MOJOLEARN_HOTAISLE_SPEC=2gpu MOJOLEARN_HOTAISLE_GPU_ONLY=1 MOJOLEARN_GPU_ARCHS=gfx942 \
+#        MOJOLEARN_GEMM_LEG_EXTRA=tools/gemm_longk_leg.sh \
+#        MOJOLEARN_GEMM_LEG_EXTRA_B=tools/attention_round3_leg.sh \
+#        bash tools/hotaisle_leg.sh amd --skip-gates
+#   2. MOJOLEARN_HOTAISLE_SPEC=2gpu MOJOLEARN_HOTAISLE_GPU_ONLY=1 \
+#        bash tools/hotaisle_leg.sh amd --rent --test-2gpu            -> test_2gpu=PASS
+#   Only then a real 2gpu leg (step 1 with --rent).
 #
 # VERIFIED ON REAL VMs, 2026-09-11 (see RUNNER RESULTS below)
 #
@@ -180,8 +274,15 @@ FETCH_RESERVE="${FETCH_RESERVE:-240}"
 MAX_BUNDLE_BYTES="${MOJOLEARN_HOTAISLE_MAX_BYTES:-15000000}"
 BOX_DIR=/var/lib/mojolearn-hotaisle
 BOX_RC="$BOX_DIR/curlrc"
+LEG2_LABEL=mi300x-2gpu-vm
+TEST2_HOLD_TICKS=12   # --test-2gpu: each tiny body holds 12 x 10 s
+# THE 2GPU CPU OPPONENT DENY LIST: the trees and classical opponent drivers
+# (CatBoost, scikit-learn, LightGBM, XGBoost, cuML on the CPU or beside our
+# arm) and the Python arms they run. Their CPU tuple is the 13-core VM.
+CPU_OPPONENT_DENY="trees_leg.sh trees_amd_leg.sh trees_amd_remote.sh trees_identical_remote.sh trees_identical_ab.sh vendor_trees_leg.sh vendor_preflight.sh local_speed_run.sh do_speed_leg.sh gbdt_accuracy_ab.sh grow_policy_ab.sh nvidia_bench.sh nvidia_forest_bench.sh knn_reference_leg.sh speed_gbdt_arm.py speed_cuml_arm.py vendor_preflight.py catboost_arm.py catboost_end2end_arm.py catboost_logloss_arm.py catboost_multiclass_arm.py catboost_reference.py knn_cuml_reference.py forest_speed_arm.py classical_ladder_arm.py nvidia_identical_trees.py rf_higgs_columns_ab.py forest_inference_ab.py"
+CPU_OPPONENT_ENV_DENY="MOJOLEARN_SPEED_ MOJOLEARN_VT_ MOJOLEARN_TREES_ MOJOLEARN_LADDER_ MOJOLEARN_KNN_REF_"
 
-usage() { sed -n '2,33p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,48p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 log() { printf '[%s hotaisle] %s\n' "$(date +%T)" "$*"; }
 die() { printf '\n%s\n' "$1" >&2; exit "${2:-1}"; }
 utc() { date -u +%Y-%m-%dT%H:%M:%SZ; }
@@ -191,6 +292,7 @@ sha256_of() { if command -v shasum > /dev/null 2>&1; then shasum -a 256 "$1"; el
 
 # ------------------------------------------------------------------ arguments
 CMD=leg; MODE=dry; MINUTES=60; GATES=1; TEST_WATCHDOG=0; BARE=0; REAP_REF=""
+TEST_2GPU=0
 while [ $# -gt 0 ]; do
   case "$1" in
     amd) ;;
@@ -205,6 +307,9 @@ while [ $# -gt 0 ]; do
     --skip-gates) GATES=0 ;;
     --test-watchdog) TEST_WATCHDOG=1 ;;
     --bare) BARE=1 ;;
+    --spec) shift; SPEC="${1:-}" ;;
+    --spec=*) SPEC="${1#--spec=}" ;;
+    --test-2gpu) TEST_2GPU=1 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "unknown argument '$1'" >&2; usage >&2; exit 2 ;;
   esac
@@ -217,11 +322,27 @@ fi
 _min=10; [ "$BARE" = 1 ] && _min=5; [ "$TEST_WATCHDOG" = 1 ] && _min=3
 [ "$MINUTES" -ge "$_min" ] || { echo "--minutes must be at least $_min for this mode" >&2; exit 2; }
 [ "$TEST_WATCHDOG" = 1 ] && [ "$BARE" = 1 ] && { echo "--test-watchdog and --bare are separate tests" >&2; exit 2; }
+SPEC_DESC="1x MI300X"
 case "$SPEC" in
   13core) SPEC_CORES=13 ;;
   8core)  SPEC_CORES=8 ;;
-  *) echo "MOJOLEARN_HOTAISLE_SPEC='$SPEC': 13core or 8core (the 2x MI300X spec is never rented)" >&2; exit 2 ;;
+  2gpu)   SPEC_CORES=26; SPEC_DESC="2x MI300X" ;;
+  *) echo "MOJOLEARN_HOTAISLE_SPEC='$SPEC': 13core, 8core or 2gpu (2gpu is the 2x MI300X VM: GPU rows only)" >&2; exit 2 ;;
 esac
+if [ "$SPEC" = 2gpu ]; then
+  if [ "$MINUTES" -lt 60 ]; then
+    echo "--minutes $MINUTES REFUSED for --spec 2gpu: the 2x MI300X offering bills a 60-minute minimum reservation, so a 2gpu lease is 60 minutes" >&2; exit 2
+  fi
+  if [ "$TEST_WATCHDOG" = 1 ] || [ "$BARE" = 1 ]; then
+    echo "--test-watchdog and --bare are single-GPU tests; the 2gpu spec has --test-2gpu" >&2; exit 2
+  fi
+  if [ "$RUNTIME_WANT" = native ]; then
+    echo "MOJOLEARN_HOTAISLE_RUNTIME=native REFUSED for --spec 2gpu: each body needs its own pinned container" >&2; exit 2
+  fi
+  [ "$FETCH_RESERVE" -ge 360 ] 2>/dev/null || FETCH_RESERVE=360   # two fetches
+elif [ "$TEST_2GPU" = 1 ]; then
+  echo "--test-2gpu needs MOJOLEARN_HOTAISLE_SPEC=2gpu (or --spec 2gpu)" >&2; exit 2
+fi
 case "$RUNTIME_WANT" in auto|docker|podman|native) ;; *) echo "MOJOLEARN_HOTAISLE_RUNTIME: auto, docker, podman or native" >&2; exit 2 ;; esac
 case "$IMAGE" in *[!A-Za-z0-9_.:/@-]*) echo "MOJOLEARN_HOTAISLE_IMAGE: letters, digits and _.:/@- only" >&2; exit 2 ;; esac
 case "$TEAM" in ''|*[!A-Za-z0-9_-]*) echo "MOJOLEARN_HOTAISLE_TEAM: letters, digits, _ and - only" >&2; exit 2 ;; esac
@@ -240,6 +361,13 @@ DEADMAN_PID=""; DEADMAN_DIR=""; DEADLINE_EPOCH=0; LEG_START=0
 SLOT=""; NONCE="$$-$(date -u +%Y%m%dT%H%M%SZ)"; WATCHDOG_OK=0; WDT_DONE=0
 KEY_RED=0; FETCH_RED=0; BODY_STATE=not_started; SSH=(ssh); SSHN=(ssh -n)
 BAL_BEFORE=""
+# 2gpu state: index 0 is GPU 0 (host /root/leg-a), index 1 is GPU 1 (/root/leg-b).
+LETTERS=(a b); OUT_B=""; REAL_OUT_B=""; OUTS=("" ""); LANE_A=""; LANE_B=""
+LEG_EXTRA_B=""; EXTRA_ENV_B=""; EXTRA_SHA_B=none
+B_STATE=(pending pending); B_EXIT=(- -); B_SINCE=(0 0); B_DONE=(0 0); FETCHED=(0 0); RPIDS=("" "")
+PIN_MODE=""; GPU_MAP_SOURCE=none; GPU_COUNT_SEEN=""; G_RENDER=("" ""); G_BDF=("" "")
+PIN_DEVICES=("" ""); PIN_ROCR=("" ""); PIN_HIP=("" ""); PIN_BUS=("" ""); PIN_VIA=("" ""); PIN_CAND=("" "")
+TEST2_BODIES=NOT_RUN
 
 # ---- JSON helper, one file, also copied beside the dead-man ----
 cat > "$TMPD/j.py" <<'PY'
@@ -287,6 +415,23 @@ elif cmd == "pick":
             json.dump(best["Specs"], f)
         print("found", best.get("Quantity", 0), best.get("OnDemandPrice", 0),
               best.get("MinimumReservationMinutes", 0))
+elif cmd == "pick2":
+    found = []
+    for e in d or []:
+        s = e.get("Specs") or {}
+        g = s.get("gpus") or []
+        if (g and all(x.get("model") == "MI300X" for x in g)
+                and sum((x.get("count") or 0) for x in g) == 2):
+            found.append(e)
+    if not found:
+        print("none 0 0 0 0")
+    else:
+        found.sort(key=lambda e: -(e.get("Quantity") or 0))
+        best = found[0]
+        with open(a[0], "w") as f:
+            json.dump(best["Specs"], f)
+        print("found", best.get("Quantity") or 0, best.get("OnDemandPrice") or 0,
+              best.get("MinimumReservationMinutes") or 0, (best.get("Specs") or {}).get("cpu_cores") or 0)
 elif cmd == "vm":
     v = d if isinstance(d, dict) else {}
     sa = v.get("ssh_access") or {}
@@ -431,12 +576,23 @@ slot_cap() {  # min(MAX_SLOTS, the team's maximum_virtual_machines)
   [ "${TEAM_MAX_VMS:-0}" -gt 0 ] 2>/dev/null && [ "$TEAM_MAX_VMS" -lt "$cap" ] && cap=$TEAM_MAX_VMS
   echo "$cap"
 }
+print_legs() {  # <slot dir> <indent>: the two legs of a 2gpu VM, when the slot holds one
+  [ -f "$1/legs" ] || return 0
+  local now g lane body out since state ex
+  now=$(date +%s)
+  while IFS=$'\t' read -r g lane body out since state ex; do
+    case "$since" in ''|*[!0-9]*) since=$now ;; esac
+    printf '%sleg %s  lane=%s  body=%s  out=%s  elapsed=%ss  state=%s  body_exit=%s\n' \
+      "$2" "$g" "$lane" "$body" "$out" "$(( now - since ))" "$state" "$ex"
+  done < "$1/legs"
+}
 list_slots() {
   local n s
   for n in 1 2 3; do
     s="$SLOT_PREFIX.$n"
     if [ -d "$s" ]; then
       printf '  slot %s  HELD %ss  %s\n' "$n" "$(slot_age "$s")" "$(tr '\n' ' ' < "$s/owner" 2>/dev/null || echo 'no owner file')"
+      print_legs "$s" '          '
     else
       printf '  slot %s  free\n' "$n"
     fi
@@ -500,6 +656,11 @@ if [ "$CMD" = status ] || [ "$CMD" = reap ]; then
       [ "$(api GET "teams/$TEAM/virtual_machines/$id/state/" "$TMPD/st.json")" = 200 ] && st=$(J state "$TMPD/st.json")
       own="NOT OURS, never touched"; vm_desc_ok "$d" && own=ours
       printf '  %s  deployment_id=%s  ip=%s  state=%s  description=%s  (%s)\n' "$n" "$id" "$ip" "$st" "${d:-<empty>}" "$own"
+      for _s in "$SLOT_PREFIX".1 "$SLOT_PREFIX".2 "$SLOT_PREFIX".3; do
+        [ -f "$_s/legs" ] || continue
+        _r=$(slot_field "$_s" vm_ref)
+        if [ -n "$_r" ] && { [ "$_r" = "$id" ] || [ "$_r" = "$n" ]; }; then print_legs "$_s" '      '; fi
+      done
     done
     echo "slots (/tmp, this Mac):"; list_slots
     exit 0
@@ -534,12 +695,41 @@ fi
 
 # ------------------------------------------------------------------ the leg
 LEG_EXTRA="${MOJOLEARN_GEMM_LEG_EXTRA:-}"
-if [ "$MODE" != probe ]; then
+if [ "$MODE" != probe ] && [ "$TEST_2GPU" = 0 ]; then
   [ -n "$LEG_EXTRA" ] || die "MOJOLEARN_GEMM_LEG_EXTRA=<body.sh> is required: running a body is this runner's whole job" 2
   [ -f "$LEG_EXTRA" ] || die "MOJOLEARN_GEMM_LEG_EXTRA=$LEG_EXTRA does not exist" 2
 fi
+LEG_EXTRA_B="${MOJOLEARN_GEMM_LEG_EXTRA_B:-}"
+EXTRA_ENV_B="${MOJOLEARN_HOTAISLE_EXTRA_ENV_B:-}"
+if [ "$MODE" != probe ]; then
+  if [ "$SPEC" != 2gpu ]; then
+    if [ -n "$LEG_EXTRA_B${MOJOLEARN_GEMM_LEG_OUT_B:-}$EXTRA_ENV_B${MOJOLEARN_HOTAISLE_LANE_B:-}" ]; then
+      die "REFUSED: MOJOLEARN_GEMM_LEG_EXTRA_B, MOJOLEARN_GEMM_LEG_OUT_B, MOJOLEARN_HOTAISLE_EXTRA_ENV_B and MOJOLEARN_HOTAISLE_LANE_B belong to the GPU 1 body of --spec 2gpu; the $SPEC spec runs one body and will not silently drop the other" 2
+    fi
+  else
+    [ "${MOJOLEARN_HOTAISLE_GPU_ONLY:-0}" = 1 ] \
+      || die "REFUSED: --spec 2gpu needs MOJOLEARN_HOTAISLE_GPU_ONLY=1, the caller's word that neither body is a CPU opponent row (26 cores is not the 13-core CPU tuple)" 2
+    if [ "$TEST_2GPU" = 1 ]; then
+      [ -z "$LEG_EXTRA$LEG_EXTRA_B$EXTRA_ENV_B${MOJOLEARN_HOTAISLE_EXTRA_ENV:-}" ] \
+        || die "--test-2gpu runs its own two tiny bodies: unset MOJOLEARN_GEMM_LEG_EXTRA, MOJOLEARN_GEMM_LEG_EXTRA_B and both extra envs" 2
+    else
+      [ -n "$LEG_EXTRA_B" ] || die "MOJOLEARN_GEMM_LEG_EXTRA_B=<body.sh> is required on --spec 2gpu: it is the GPU 1 body" 2
+      [ -f "$LEG_EXTRA_B" ] || die "MOJOLEARN_GEMM_LEG_EXTRA_B=$LEG_EXTRA_B does not exist" 2
+    fi
+    printf '\nWARNING: the 2x MI300X VM bills its 60-minute minimum reservation whatever the bodies take.\n         Pair two legs that each need at least 40 minutes; a short leg leaves its GPU idle on the bill.\n\n' >&2
+  fi
+fi
 LANE="${MOJOLEARN_HOTAISLE_LANE:-$(basename "${LEG_EXTRA:-probe}" .sh)}"
+if [ "$TEST_2GPU" = 1 ]; then LANE="${MOJOLEARN_HOTAISLE_LANE:-test2gpu}"; fi
 case "$LANE" in ''|*[!A-Za-z0-9_.-]*) die "MOJOLEARN_HOTAISLE_LANE='$LANE': letters, digits and _.- only (it goes in the VM description)" 2 ;; esac
+LANE_A="$LANE"
+if [ "$SPEC" = 2gpu ]; then
+  _lane_b=$(basename "${LEG_EXTRA_B:-probe}" .sh)
+  if [ "$TEST_2GPU" = 1 ]; then _lane_b=test2gpu; fi
+  LANE_B="${MOJOLEARN_HOTAISLE_LANE_B:-$_lane_b}"
+  case "$LANE_B" in ''|*[!A-Za-z0-9_.-]*) die "MOJOLEARN_HOTAISLE_LANE_B='$LANE_B': letters, digits and _.- only (it goes in the VM description)" 2 ;; esac
+  LANE="2gpu.$LANE_A.$LANE_B"   # the VM's lane: its description, slot owner and create lock
+fi
 STAMP="$(date -u +%Y-%m-%d_%H%M%S)"
 CARD_FULL="${MOJOLEARN_GEMM_CARD_FULL:-}"
 LEG_DUMP="${MOJOLEARN_IDENTITY_TRACE_DUMP:-}"
@@ -547,14 +737,70 @@ for _v in "$CARD_FULL" "$LEG_DUMP"; do
   case "$_v" in *[!A-Za-z0-9_.,:-]*) die "MOJOLEARN_GEMM_CARD_FULL / MOJOLEARN_IDENTITY_TRACE_DUMP: letters, digits and _.,:- only" 2 ;; esac
 done
 EXTRA_ENV="${MOJOLEARN_HOTAISLE_EXTRA_ENV:-}"
-OUT="${MOJOLEARN_GEMM_LEG_OUT:-bench/results/e1g/${STAMP}-amd-mi300x-hotaisle-${LANE}}"
+
+# THE 2GPU CPU OPPONENT SCAN. One line per mark, nothing when clean. The body's
+# own path, then every tools/ or bench/ shell script named on a non-comment
+# line, recursively (six levels): a basename on CPU_OPPONENT_DENY, or a deny
+# name anywhere outside a comment. Then the env words' name prefixes.
+cpu_opponent_marks() {  # <body path> <env words>
+  local queue="$1" next f b n w seen=" " depth=0
+  while [ -n "${queue// /}" ] && [ "$depth" -lt 6 ]; do
+    next=""
+    for f in $queue; do
+      case "$seen" in *" $f "*) continue ;; esac
+      seen="$seen$f "
+      b=$(basename "$f")
+      for n in $CPU_OPPONENT_DENY; do
+        [ "$b" = "$n" ] && echo "$f is on the CPU opponent deny list"
+      done
+      case "$f" in *.sh) [ -f "$f" ] || continue ;; *) continue ;; esac
+      grep -v '^[[:space:]]*#' "$f" > "$TMPD/deny_scan.txt" 2>/dev/null
+      for n in $CPU_OPPONENT_DENY; do
+        grep -qF "$n" "$TMPD/deny_scan.txt" && echo "$f names $n (a CPU opponent driver) outside a comment"
+      done
+      next="$next $(grep -oE '(tools|bench)/[A-Za-z0-9_./-]+\.sh' "$TMPD/deny_scan.txt" | sort -u | tr '\n' ' ')"
+    done
+    queue=$next
+    depth=$((depth + 1))
+  done
+  for w in $2; do
+    for n in $CPU_OPPONENT_ENV_DENY; do
+      case "$w" in "$n"*) echo "env ${w%%=*} marks a CPU opponent row (prefix $n)" ;; esac
+    done
+  done
+  return 0
+}
+if [ "$SPEC" = 2gpu ] && [ "$MODE" != probe ] && [ "$TEST_2GPU" = 0 ]; then
+  _marks_a=$(cpu_opponent_marks "$LEG_EXTRA" "$EXTRA_ENV")
+  _marks_b=$(cpu_opponent_marks "$LEG_EXTRA_B" "$EXTRA_ENV_B")
+  if [ -n "$_marks_a$_marks_b" ]; then
+    die "REFUSED on --spec 2gpu: a body marks a CPU opponent row, whose tuple is the 13-core VM (this VM has 26 cores):
+$( { printf '%s\n' "$_marks_a" | grep . | sed 's/^/  GPU 0 body: /'; printf '%s\n' "$_marks_b" | grep . | sed 's/^/  GPU 1 body: /'; } )" 2
+  fi
+fi
+
+if [ "$SPEC" = 2gpu ]; then
+  OUT="${MOJOLEARN_GEMM_LEG_OUT:-bench/results/e1g/${STAMP}-amd-${LEG2_LABEL}-hotaisle-${LANE_A}-gpu0}"
+else
+  OUT="${MOJOLEARN_GEMM_LEG_OUT:-bench/results/e1g/${STAMP}-amd-mi300x-hotaisle-${LANE}}"
+fi
 case "$OUT" in /*) ;; *) OUT="$REPO/$OUT" ;; esac
 REAL_OUT="$OUT"
+if [ "$SPEC" = 2gpu ] && [ "$MODE" != probe ]; then
+  OUT_B="${MOJOLEARN_GEMM_LEG_OUT_B:-bench/results/e1g/${STAMP}-amd-${LEG2_LABEL}-hotaisle-${LANE_B}-gpu1}"
+  case "$OUT_B" in /*) ;; *) OUT_B="$REPO/$OUT_B" ;; esac
+  REAL_OUT_B="$OUT_B"
+  [ "${REAL_OUT_B%/}" != "${REAL_OUT%/}" ] || die "MOJOLEARN_GEMM_LEG_OUT and MOJOLEARN_GEMM_LEG_OUT_B name one directory; each body needs its own" 2
+fi
 if [ "$MODE" != rent ]; then
   OUT="$(mktemp -d "${TMPDIR:-/tmp}/mojolearn-hotaisle-$MODE.XXXXXX")" || exit 2
+  if [ -n "$OUT_B" ]; then OUT_B="$(mktemp -d "${TMPDIR:-/tmp}/mojolearn-hotaisle-$MODE-gpu1.XXXXXX")" || exit 2; fi
 fi
 mkdir -p "$OUT" || die "cannot create $OUT" 2
+if [ -n "$OUT_B" ]; then mkdir -p "$OUT_B" || die "cannot create $OUT_B" 2; fi
+OUTS=("$OUT" "$OUT_B")
 SIZE_LABEL="mi300x-${SPEC}"
+if [ "$SPEC" = 2gpu ]; then SIZE_LABEL="$LEG2_LABEL"; fi
 
 # shellcheck disable=SC2317
 cancel_deadman() {
@@ -633,11 +879,27 @@ teardown() {
     echo "mac_deadman=LEFT_ARMED pid=$DEADMAN_PID" >> "$OUT/deadman.txt"
     [ "$rc" = 0 ] && rc=1
   fi
+  if [ "$TEST_2GPU" = 1 ] && [ "$MODE" = rent ] && [ "$CREATE_ATTEMPTED" = 1 ]; then
+    if [ "$TEST2_BODIES" = PASS ] && [ "$DESTROY_CONFIRMED" = 1 ]; then
+      line="test_2gpu=PASS (each pinned body saw exactly one GPU at its pinned address at both prints, the two differ, the bodies overlapped and exited 0, the VM is verified gone)"
+    else
+      line="test_2gpu=FAIL (bodies=$TEST2_BODIES destroy_confirmed=$DESTROY_CONFIRMED)"
+      [ "$rc" = 0 ] && rc=1
+    fi
+    log "$line"
+    echo "$line" >> "$OUT/leg.txt"
+    echo "$line" >> "$OUT/teardown.txt"
+    [ -n "$OUT_B" ] && echo "$line" >> "$OUT_B/leg.txt"
+  fi
   if [ "$MODE" = rent ]; then
     line=$(balance_cents)
     log "team balance at the end $(dollars "$line") (at the start $(dollars "${BAL_BEFORE:--1}"))"
     echo "balance_after_cents=$line" >> "$OUT/leg.txt"
     echo "exit=$rc" >> "$OUT/teardown.txt"
+  fi
+  if [ "$SPEC" = 2gpu ] && [ "$MODE" = rent ] && [ -n "$OUT_B" ] && [ -d "$OUT_B" ]; then
+    cp "$OUT/teardown.txt" "$OUT/deadman.txt" "$OUT_B/" 2>/dev/null
+    { echo "balance_after_cents=$line"; echo "vm_records_copied=teardown.txt deadman.txt from $OUT"; } >> "$OUT_B/leg.txt"
   fi
   [ -n "$TMPD" ] && rm -rf "$TMPD"
   exit "$rc"
@@ -655,8 +917,13 @@ if [ "$MODE" = probe ]; then
   _b=$(balance_cents); echo "  balance $(dollars "$_b") ($_b cents; floor $MIN_BALANCE_CENTS)"
   c=$(api GET "teams/$TEAM/virtual_machines/available/" "$TMPD/avail.json"); echo "GET available -> $c"
   J offers "$TMPD/avail.json"
-  read -r _f _q _p _m < <(J pick "$TMPD/avail.json" "$SPEC_CORES" "$TMPD/spec.json")
-  echo "  MOJOLEARN_HOTAISLE_SPEC=$SPEC -> $_f quantity=$_q price=$_p cents/h min_reservation=$_m"
+  if [ "$SPEC" = 2gpu ]; then
+    read -r _f _q _p _m _c < <(J pick2 "$TMPD/avail.json" "$TMPD/spec.json")
+    echo "  MOJOLEARN_HOTAISLE_SPEC=2gpu -> $_f quantity=$_q price=$_p cents/h min_reservation=$_m cpu_cores=$_c"
+  else
+    read -r _f _q _p _m < <(J pick "$TMPD/avail.json" "$SPEC_CORES" "$TMPD/spec.json")
+    echo "  MOJOLEARN_HOTAISLE_SPEC=$SPEC -> $_f quantity=$_q price=$_p cents/h min_reservation=$_m"
+  fi
   c=$(api GET "teams/$TEAM/virtual_machines/" "$TMPD/list.json"); echo "GET virtual_machines -> $c ($(J count "$TMPD/list.json") VMs)"
   J list "$TMPD/list.json" | sed 's/^/  /'
   c=$(api GET "user/ssh_keys/" "$TMPD/keys.json"); echo "GET user/ssh_keys -> $c; this Mac's key registered: $(J sshkey "$TMPD/keys.json" "$SSH_KEY_FP")"
@@ -670,19 +937,38 @@ rok()    { printf '  ok     %s\n' "$1"; }
 rbad()   { RED=1;   printf '  FAIL   %s\n' "$1"; }
 rblock() { BLOCK=1; printf '  BLOCK  %s\n' "$1"; }
 SHIPS_SOURCE=1; [ "$BARE" = 1 ] || [ "$TEST_WATCHDOG" = 1 ] && SHIPS_SOURCE=0
+if [ "$TEST_2GPU" = 1 ]; then SHIPS_SOURCE=0; fi
 
 COMMIT="$(git -C "$REPO" rev-parse HEAD)" || die "not a git checkout: $REPO" 2
 COMMIT_LINE="$(git -C "$REPO" log -1 --format='%h parent %p' "$COMMIT")"
-echo "== hotaisle_leg: one Hot Aisle 1x MI300X leg running an extra body =="
-echo "   mode      $MODE$( [ "$TEST_WATCHDOG" = 1 ] && echo ' TEST-WATCHDOG')$( [ "$BARE" = 1 ] && echo ' BARE')"
-echo "   commit    $COMMIT_LINE"
-echo "   spec      $SPEC (1x MI300X, $SPEC_CORES cores), team $TEAM"
-echo "   lease     $MINUTES minutes (Mac dead-man and on-box watchdog at that deadline)"
-echo "   body      $LEG_EXTRA   lane $LANE"
-echo "   gates     $( [ "$GATES" = 1 ] && echo 'device check + card' || echo 'SKIPPED (--skip-gates)')"
-echo "   archs     ${GPU_ARCHS:-<unset: read from rocminfo on the VM>}   column amd"
-echo "   runtime   $RUNTIME_WANT (image $IMAGE)"
-echo "   out       $REAL_OUT"
+if [ "$SPEC" = 2gpu ]; then
+  echo "== hotaisle_leg: one Hot Aisle 2x MI300X VM running two extra bodies, one pinned container per GPU =="
+  echo "   mode      $MODE$( [ "$TEST_2GPU" = 1 ] && echo ' TEST-2GPU')"
+  echo "   commit    $COMMIT_LINE"
+  echo "   spec      2gpu (2x MI300X, $SPEC_CORES cores; ONE VM, ONE slot, ONE watchdog, ONE delete), team $TEAM"
+  echo "   lease     $MINUTES minutes (the offering's minimum reservation; Mac dead-man and on-box watchdog at that deadline)"
+  echo "   label     $LEG2_LABEL (in every leg.txt of this leg; never mixed with 1x MI300X VM rows)"
+  echo "   vm lane   $LANE"
+  echo "   GPU 0     ${LEG_EXTRA:-<the runner tiny test body>}   lane $LANE_A"
+  echo "             out $REAL_OUT"
+  echo "   GPU 1     ${LEG_EXTRA_B:-<the runner tiny test body>}   lane $LANE_B"
+  echo "             out $REAL_OUT_B"
+  echo "   gates     $( [ "$GATES" = 1 ] && echo 'device check + card, per body on its own GPU' || echo 'SKIPPED (--skip-gates)')"
+  echo "   archs     ${GPU_ARCHS:-<unset: read from rocminfo on the VM>}   column amd"
+  echo "   runtime   $RUNTIME_WANT (image $IMAGE; native is refused)"
+  echo "   WARNING   the 60-minute minimum is billed whatever the bodies take: pair two legs that each need at least 40 minutes"
+else
+  echo "== hotaisle_leg: one Hot Aisle 1x MI300X leg running an extra body =="
+  echo "   mode      $MODE$( [ "$TEST_WATCHDOG" = 1 ] && echo ' TEST-WATCHDOG')$( [ "$BARE" = 1 ] && echo ' BARE')"
+  echo "   commit    $COMMIT_LINE"
+  echo "   spec      $SPEC (1x MI300X, $SPEC_CORES cores), team $TEAM"
+  echo "   lease     $MINUTES minutes (Mac dead-man and on-box watchdog at that deadline)"
+  echo "   body      $LEG_EXTRA   lane $LANE"
+  echo "   gates     $( [ "$GATES" = 1 ] && echo 'device check + card' || echo 'SKIPPED (--skip-gates)')"
+  echo "   archs     ${GPU_ARCHS:-<unset: read from rocminfo on the VM>}   column amd"
+  echo "   runtime   $RUNTIME_WANT (image $IMAGE)"
+  echo "   out       $REAL_OUT"
+fi
 echo
 echo "== local checks =="
 DIRTY="$(git -C "$REPO" status --porcelain -- . ':!bench/results' 2>/dev/null)"
@@ -694,36 +980,58 @@ elif [ -n "$DIRTY" ]; then
 else
   rok "the tree is clean (minus bench/results)"
 fi
-if sh -n "$LEG_EXTRA" 2> "$TMPD/extra_syntax.err"; then
-  rok "the extra body is valid sh: $LEG_EXTRA"
-else
-  rbad "the extra body is NOT valid sh: $(head -3 "$TMPD/extra_syntax.err")"
-fi
-cp "$LEG_EXTRA" "$OUT/extra_body.sh"
-EXTRA_SHA="$(sha256_of "$OUT/extra_body.sh")"
-
-{
-  echo "# Generated by tools/hotaisle_leg.sh from MOJOLEARN_HOTAISLE_EXTRA_ENV; sourced before the extra body."
-  _env_ok=1
-  for _w in $EXTRA_ENV; do
+gen_extra_env() {  # <env words> <the variable they came from>: the sourced file; refusals as comments
+  local _w _n _v
+  echo "# Generated by tools/hotaisle_leg.sh from $2; sourced before the extra body."
+  for _w in $1; do
     case "$_w" in
       MOJOLEARN_HOTAISLE_*=*|MOJOLEARN_DO_*=*|MOJOLEARN_RUNPOD_*=*|MOJOLEARN_GEMM_LEG_*=*|MOJOLEARN_GPU_ARCHS=*|MOJOLEARN_TARGET_COLUMN=*)
-        _env_ok=0; printf '# REFUSED (runner-owned name): %s\n' "${_w%%=*}" ;;
+        printf '# REFUSED (runner-owned name): %s\n' "${_w%%=*}" ;;
       MOJOLEARN_[A-Z0-9_]*=*|MODULAR_[A-Z0-9_]*=*)
         _n=${_w%%=*}; _v=${_w#*=}
-        case "$_n" in *[!A-Z0-9_]*) _env_ok=0; printf '# REFUSED (name characters): %s\n' "$_n"; continue ;; esac
+        case "$_n" in *[!A-Z0-9_]*) printf '# REFUSED (name characters): %s\n' "$_n"; continue ;; esac
         case "$_v" in
-          *[!A-Za-z0-9_.,:/=-]*) _env_ok=0; printf '# REFUSED (value characters): %s\n' "$_n" ;;
+          *[!A-Za-z0-9_.,:/=-]*) printf '# REFUSED (value characters): %s\n' "$_n" ;;
           *) printf "export %s='%s'\n" "$_n" "$_v" ;;
         esac ;;
-      *) _env_ok=0; printf '# REFUSED (not NAME=value with a MOJOLEARN_ or MODULAR_ name): %s\n' "${_w%%=*}" ;;
+      *) printf '# REFUSED (not NAME=value with a MOJOLEARN_ or MODULAR_ name): %s\n' "${_w%%=*}" ;;
     esac
   done
-} > "$OUT/extra_env.sh"
-if ! grep -q '^# REFUSED' "$OUT/extra_env.sh" && sh -n "$OUT/extra_env.sh" 2>/dev/null; then
-  rok "the extra body environment: $(grep -c '^export ' "$OUT/extra_env.sh" | tr -d ' ') export(s)$( [ -n "$EXTRA_ENV" ] && echo ": $EXTRA_ENV")"
+}
+if [ "$TEST_2GPU" = 1 ]; then
+  printf '  info   --test-2gpu: no extra bodies; the runner writes two tiny pinned test bodies\n'
+  EXTRA_SHA=none
 else
-  rbad "MOJOLEARN_HOTAISLE_EXTRA_ENV is refused: $(grep '^# REFUSED' "$OUT/extra_env.sh" | tr '\n' ' ')"
+  if sh -n "$LEG_EXTRA" 2> "$TMPD/extra_syntax.err"; then
+    rok "the extra body is valid sh: $LEG_EXTRA"
+  else
+    rbad "the extra body is NOT valid sh: $(head -3 "$TMPD/extra_syntax.err")"
+  fi
+  cp "$LEG_EXTRA" "$OUT/extra_body.sh"
+  EXTRA_SHA="$(sha256_of "$OUT/extra_body.sh")"
+
+  gen_extra_env "$EXTRA_ENV" MOJOLEARN_HOTAISLE_EXTRA_ENV > "$OUT/extra_env.sh"
+  if ! grep -q '^# REFUSED' "$OUT/extra_env.sh" && sh -n "$OUT/extra_env.sh" 2>/dev/null; then
+    rok "the extra body environment: $(grep -c '^export ' "$OUT/extra_env.sh" | tr -d ' ') export(s)$( [ -n "$EXTRA_ENV" ] && echo ": $EXTRA_ENV")"
+  else
+    rbad "MOJOLEARN_HOTAISLE_EXTRA_ENV is refused: $(grep '^# REFUSED' "$OUT/extra_env.sh" | tr '\n' ' ')"
+  fi
+  if [ "$SPEC" = 2gpu ]; then
+    if sh -n "$LEG_EXTRA_B" 2> "$TMPD/extra_syntax_b.err"; then
+      rok "the GPU 1 extra body is valid sh: $LEG_EXTRA_B"
+    else
+      rbad "the GPU 1 extra body is NOT valid sh: $(head -3 "$TMPD/extra_syntax_b.err")"
+    fi
+    cp "$LEG_EXTRA_B" "$OUT_B/extra_body.sh"
+    EXTRA_SHA_B="$(sha256_of "$OUT_B/extra_body.sh")"
+    gen_extra_env "$EXTRA_ENV_B" MOJOLEARN_HOTAISLE_EXTRA_ENV_B > "$OUT_B/extra_env.sh"
+    if ! grep -q '^# REFUSED' "$OUT_B/extra_env.sh" && sh -n "$OUT_B/extra_env.sh" 2>/dev/null; then
+      rok "the GPU 1 extra body environment: $(grep -c '^export ' "$OUT_B/extra_env.sh" | tr -d ' ') export(s)$( [ -n "$EXTRA_ENV_B" ] && echo ": $EXTRA_ENV_B")"
+    else
+      rbad "MOJOLEARN_HOTAISLE_EXTRA_ENV_B is refused: $(grep '^# REFUSED' "$OUT_B/extra_env.sh" | tr '\n' ' ')"
+    fi
+    rok "no CPU opponent mark on either body (deny list, the scripts they reach, env prefixes; MOJOLEARN_HOTAISLE_GPU_ONLY=1 given)"
+  fi
 fi
 
 if _why=$(key_hygiene); then
@@ -1021,6 +1329,193 @@ fi
 rm -f "$D/curlrc"
 DEADMAN
 
+# ---- the 2gpu scripts (the rest of the templates serve both specs) ----
+cat > "$TMPD/gpu_map.sh" <<'GPUMAP'
+# Written by tools/hotaisle_leg.sh. RUNS ON THE 2x MI300X VM AS ROOT: which GPU
+# is which. KFD topology GPU nodes in node order (the order ROCr enumerates),
+# the DRM render nodes, rocm-smi --showbus. The runner parses the KFD, DRM and
+# SMI lines; everything else is the record.
+set -u
+echo "== kfd topology: KFD <node> <drm_render_minor> <pci address>"
+if [ -d /sys/class/kfd/kfd/topology/nodes ]; then
+    for n in $(ls /sys/class/kfd/kfd/topology/nodes | sort -n); do
+        d=/sys/class/kfd/kfd/topology/nodes/$n
+        gid=$(cat "$d/gpu_id" 2>/dev/null)
+        if [ -z "$gid" ] || [ "$gid" = 0 ]; then continue; fi
+        minor=$(awk '$1 == "drm_render_minor" {print $2}' "$d/properties" 2>/dev/null)
+        loc=$(awk '$1 == "location_id" {print $2}' "$d/properties" 2>/dev/null)
+        dom=$(awk '$1 == "domain" {print $2}' "$d/properties" 2>/dev/null)
+        case "$dom" in ''|*[!0-9]*) dom=0 ;; esac
+        case "$loc" in
+            ''|*[!0-9]*) bdf=unknown ;;
+            *) bdf=$(printf '%04x:%02x:%02x.%x' "$dom" $((loc >> 8 & 255)) $((loc >> 3 & 31)) $((loc & 7))) ;;
+        esac
+        echo "KFD $n ${minor:-unknown} $bdf"
+    done
+else
+    echo "KFD_ABSENT"
+fi
+echo "== drm render nodes: DRM <minor> <node> <driver> <pci address>"
+for r in /sys/class/drm/renderD*; do
+    [ -e "$r/device" ] || continue
+    name=$(basename "$r")
+    drv=$(basename "$(readlink -f "$r/device/driver" 2>/dev/null)" 2>/dev/null)
+    bdf=$(basename "$(readlink -f "$r/device" 2>/dev/null)" 2>/dev/null)
+    echo "DRM ${name#renderD} $name ${drv:-unknown} ${bdf:-unknown}"
+done
+echo "== rocm-smi --showbus: SMI <index> <pci address>"
+if command -v rocm-smi > /dev/null 2>&1; then
+    rocm-smi --showbus > /tmp/mojolearn-showbus.txt 2>&1
+    sed 's/^/RAW /' /tmp/mojolearn-showbus.txt
+    awk '/^GPU\[[0-9]+\]/ && /PCI Bus/ { i = $1; gsub(/[^0-9]/, "", i); print "SMI", i, tolower($NF) }' /tmp/mojolearn-showbus.txt
+    rm -f /tmp/mojolearn-showbus.txt
+else
+    echo "SMI_ABSENT"
+fi
+echo "== devices"
+ls -l /dev/kfd /dev/dri 2>&1
+GPUMAP
+
+cat > "$TMPD/pin_probe.sh" <<'PINPROBE'
+# Written by tools/hotaisle_leg.sh. RUNS INSIDE ONE CONTAINER on the 2x MI300X
+# VM: what HIP and rocminfo see through this container's devices and its
+# ROCR_VISIBLE_DEVICES / HIP_VISIBLE_DEVICES. HIP is asked directly (ctypes
+# into libamdhip64), because HIP is what a Mojo GPU program opens.
+set -u
+echo "PROBE_ENV ROCR_VISIBLE_DEVICES=${ROCR_VISIBLE_DEVICES:-<unset>} HIP_VISIBLE_DEVICES=${HIP_VISIBLE_DEVICES:-<unset>}"
+echo "PROBE_DRI $(ls /dev/dri 2>&1 | tr '\n' ' ')"
+if command -v rocminfo > /dev/null 2>&1; then
+    rocminfo > /tmp/mojolearn-rocminfo.txt 2>&1
+    echo "ROCMINFO_EXIT $?"
+    awk '
+        $1 == "Agent" { a++ }
+        $1 == "Name:" && !(a in nm) { nm[a] = $2 }
+        $1 == "Device" && $2 == "Type:" { ty[a] = $3 }
+        $1 == "BDFID:" { bd[a] = $2 }
+        END {
+            for (i = 1; i <= a; i++) {
+                if (ty[i] != "GPU") continue
+                if (bd[i] == "") { printf "ROCMINFO_GPU bdf=unknown name=%s\n", nm[i]; continue }
+                b = bd[i] + 0
+                printf "ROCMINFO_GPU bdf=%02x:%02x.%x name=%s bdfid=%s\n", int(b / 256) % 256, int(b / 8) % 32, b % 8, nm[i], bd[i]
+            }
+        }' /tmp/mojolearn-rocminfo.txt
+else
+    echo "ROCMINFO_ABSENT"
+fi
+PY=""
+for c in python3 python; do
+    if command -v "$c" > /dev/null 2>&1; then PY=$c; break; fi
+done
+if [ -z "$PY" ]; then
+    echo "HIP_UNAVAILABLE no python in the image"
+else
+    "$PY" - <<'PY'
+import ctypes
+lib = None
+for p in ("libamdhip64.so", "/opt/rocm/lib/libamdhip64.so", "libamdhip64.so.6", "/opt/rocm/lib/libamdhip64.so.6"):
+    try:
+        lib = ctypes.CDLL(p)
+        break
+    except OSError:
+        pass
+if lib is None:
+    print("HIP_UNAVAILABLE libamdhip64 does not load")
+else:
+    n = ctypes.c_int(0)
+    rc = lib.hipGetDeviceCount(ctypes.byref(n))
+    count = n.value if rc == 0 else 0
+    print("HIP_COUNT rc=%d count=%d" % (rc, count))
+    for i in range(count):
+        buf = ctypes.create_string_buffer(64)
+        r = lib.hipGetDevicePciBusId(buf, 64, i)
+        print("HIP_DEVICE index=%d rc=%d bus=%s" % (i, r, buf.value.decode("ascii", "replace").lower()))
+PY
+fi
+PINPROBE
+
+cat > "$TMPD/remote_unpack2.sh.template" <<'REMOTE_UNPACK2'
+set -eu
+cd /root
+got=$(sha256sum extra_src.tgz | awk '{print $1}')
+if [ "$got" != "@SHA@" ]; then echo "ARCHIVE SHA MISMATCH: sent @SHA@ got $got"; exit 9; fi
+echo ARCHIVE-SHA-OK
+rm -rf /root/leg-a /root/leg-b /root/mojolearn-pin /root/mojolearn /root/gemm_leg_out /root/gemm_leg.done
+for x in a b; do
+    mkdir -p /root/leg-$x/mojolearn
+    tar -xzf extra_src.tgz -C /root/leg-$x/mojolearn
+    echo "UNPACKED_$x $(find /root/leg-$x/mojolearn -type f | wc -l) files"
+done
+rm -f extra_src.tgz
+REMOTE_UNPACK2
+
+cat > "$TMPD/remote_start2.sh.template" <<'REMOTE_START2'
+# Generated by tools/hotaisle_leg.sh. RUNS ON THE 2x MI300X VM AS ROOT: two
+# bodies, one container per GPU, each with its own /root (host /root/leg-a or
+# /root/leg-b), devices, visible-devices variables, timeout, sentinel and
+# body_exit.
+set -u
+RT="@RUNTIME@"
+for x in a b; do
+    rm -f /root/leg-$x/gemm_leg.done /root/leg-$x/gemm_leg_console.log
+    mkdir -p /root/leg-$x/gemm_leg_out /root/leg-$x/mojolearn
+    "$RT" rm -f mojolearn-leg-$x > /dev/null 2>&1
+done
+setsid nohup sh -c '"$0" run --rm --name mojolearn-leg-a --device /dev/kfd @DEVICES_A@ \
+    -e ROCR_VISIBLE_DEVICES=@ROCR_A@ -e HIP_VISIBLE_DEVICES=@HIP_A@ \
+    --security-opt seccomp=unconfined --ipc=host --network host \
+    -e HOME=/root -v /root/leg-a:/root -w /root/mojolearn @IMAGE@ \
+    timeout -k 30 @WORK@ sh /root/gemm_leg.sh; rc=$?; "$0" rm -f mojolearn-leg-a > /dev/null 2>&1; \
+    mkdir -p /root/leg-a/gemm_leg_out; echo "body_exit=$rc" >> /root/leg-a/gemm_leg_out/leg.txt' "$RT" \
+    > /root/leg-a/gemm_leg_console.log 2>&1 < /dev/null &
+echo "REMOTE_PID_A=$!"
+setsid nohup sh -c '"$0" run --rm --name mojolearn-leg-b --device /dev/kfd @DEVICES_B@ \
+    -e ROCR_VISIBLE_DEVICES=@ROCR_B@ -e HIP_VISIBLE_DEVICES=@HIP_B@ \
+    --security-opt seccomp=unconfined --ipc=host --network host \
+    -e HOME=/root -v /root/leg-b:/root -w /root/mojolearn @IMAGE@ \
+    timeout -k 30 @WORK@ sh /root/gemm_leg.sh; rc=$?; "$0" rm -f mojolearn-leg-b > /dev/null 2>&1; \
+    mkdir -p /root/leg-b/gemm_leg_out; echo "body_exit=$rc" >> /root/leg-b/gemm_leg_out/leg.txt' "$RT" \
+    > /root/leg-b/gemm_leg_console.log 2>&1 < /dev/null &
+echo "REMOTE_PID_B=$!"
+REMOTE_START2
+
+cat > "$TMPD/test_body.sh.template" <<'TEST_BODY'
+#!/bin/sh
+# Generated by tools/hotaisle_leg.sh --test-2gpu. RUNS IN ONE PINNED CONTAINER
+# on the 2x MI300X VM (GPU @G@): what this container sees, a hold of about two
+# minutes while the other container does the same, then what it sees again.
+set -u
+OUT=/root/gemm_leg_out
+mkdir -p "$OUT"
+{
+  echo "vendor=amd"
+  echo "provider=hotaisle"
+  echo "size=@SIZE@"
+  echo "runtime=@RUNTIME@"
+  echo "image=@IMAGE@"
+  echo "test_2gpu_body_gpu=@G@"
+  echo "started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  echo "started_epoch=$(date +%s)"
+  echo "target_column=amd"
+} > "$OUT/leg.txt"
+sh /root/pin_probe.sh > "$OUT/visible_start.txt" 2>&1
+{ rocm-smi --showproductname --showbus 2>&1 || echo "rocm-smi did not answer"; } > "$OUT/rocm_smi.txt"
+{ rocminfo 2>&1 || echo "rocminfo did not answer"; } > "$OUT/rocminfo.txt"
+cat "$OUT/visible_start.txt"
+i=0
+while [ "$i" -lt @HOLDTICKS@ ]; do
+    sleep 10
+    i=$((i + 1))
+    echo "$(date -u +%H:%M:%S) holding" >> "$OUT/hold.txt"
+done
+sh /root/pin_probe.sh > "$OUT/visible_end.txt" 2>&1
+cat "$OUT/visible_end.txt"
+echo "finished=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$OUT/leg.txt"
+echo "finished_epoch=$(date +%s)" >> "$OUT/leg.txt"
+: > /root/gemm_leg.done
+echo TEST_BODY_DONE
+TEST_BODY
+
 subst() {  # <template> <out>: replace every placeholder, then prove none survived
   sed -e "s|@COMMIT@|$COMMIT|g" -e "s|@CARDFULL@|$CARD_FULL|g" -e "s|@DUMP@|$LEG_DUMP|g" \
       -e "s|@SIZE@|$SIZE_LABEL|g" -e "s|@RUNTIME@|${RUNTIME:-native}|g" -e "s|@IMAGE@|$IMAGE|g" \
@@ -1044,6 +1539,208 @@ check_posix() {  # <file> <label>
   [ -s "$TMPD/bashisms" ] && { rbad "$2 has a BASHISM (the VM runs dash):"; sed 's/^/           /' "$TMPD/bashisms"; return 1; }
   return 0
 }
+# ---- the 2gpu helpers ----
+subst2() {  # <template> <out> [<gpu index>]: the 2gpu placeholders, then subst
+  sed -e "s|@DEVICES_A@|${PIN_DEVICES[0]}|g" -e "s|@ROCR_A@|${PIN_ROCR[0]}|g" -e "s|@HIP_A@|${PIN_HIP[0]}|g" \
+      -e "s|@DEVICES_B@|${PIN_DEVICES[1]}|g" -e "s|@ROCR_B@|${PIN_ROCR[1]}|g" -e "s|@HIP_B@|${PIN_HIP[1]}|g" \
+      -e "s|@G@|${3:-0}|g" -e "s|@HOLDTICKS@|$TEST2_HOLD_TICKS|g" "$1" > "$2.pre" || return 1
+  subst "$2.pre" "$2"
+  local r=$?
+  rm -f "$2.pre"
+  return "$r"
+}
+insert_pin_lines() {  # <body script> <key=value file> <out>: echo lines right after its one target_column=amd line
+  sed 's/.*/  echo "&"/' "$2" > "$2.echo"
+  awk -v f="$2.echo" '{ print } $0 == "  echo \"target_column=amd\"" { while ((getline l < f) > 0) print l; close(f); n++ } END { exit (n == 1 ? 0 : 1) }' "$1" > "$3"
+}
+set_example_pins() {  # the dry run and the local checks: a plausible map and each GPU's first candidate, shown as EXAMPLE
+  PIN_MODE=render; GPU_MAP_SOURCE=example; G_RENDER=(renderD128 renderD129); G_BDF=(0000:c1:00.0 0000:c2:00.0)
+  PIN_DEVICES=("--device /dev/dri/renderD128" "--device /dev/dri/renderD129"); PIN_ROCR=(0 1); PIN_HIP=(0 1)
+  PIN_BUS=(0000:c1:00.0 0000:c2:00.0); PIN_VIA=(example example); PIN_CAND=(1 1)
+  RUNTIME="${RUNTIME_WANT/auto/docker}"
+}
+gen_calibrate() {  # <script out>: one probe container per GPU and candidate, in order; the list goes to $TMPD/pin_cands.txt
+  local g k c r h dev cands seen rt="${RUNTIME:-docker}"
+  : > "$TMPD/pin_cands.txt"
+  {
+    echo "# Generated by tools/hotaisle_leg.sh. RUNS ON THE 2x MI300X VM AS ROOT after the image pull:"
+    echo "# one probe container per GPU and candidate pin, each under timeout(1)."
+    echo "set -u"
+    for g in 0 1; do
+      if [ "$PIN_MODE" = render ]; then dev="/dev/dri/${G_RENDER[$g]}"; cands="$g,$g 0,0 $g,0"; else dev=/dev/dri; cands="$g,$g $g,0"; fi
+      k=0; seen=" "
+      for c in $cands; do
+        case "$seen" in *" $c "*) continue ;; esac
+        seen="$seen$c "; k=$((k + 1)); r=${c%,*}; h=${c#*,}
+        echo "$g $k $r $h $dev" >> "$TMPD/pin_cands.txt"
+        echo "echo 'BEGIN $g $k'"
+        echo "timeout -k 10 120 $rt run --rm --name mojolearn-pin-$g-$k --device /dev/kfd --device $dev -e ROCR_VISIBLE_DEVICES=$r -e HIP_VISIBLE_DEVICES=$h --security-opt seccomp=unconfined --ipc=host -v /root/mojolearn-pin:/pin:ro $IMAGE sh /pin/probe.sh 2>&1"
+        echo "echo \"END $g $k rc=\$?\""
+        echo "$rt rm -f mojolearn-pin-$g-$k > /dev/null 2>&1"
+      done
+    done
+  } > "$1"
+}
+pin_kv() {  # <gpu index> [body]: the pin as key=value lines (with body: also gpu_index and vm_share, for the box's leg.txt)
+  local g=$1
+  if [ "${2:-}" = body ]; then
+    echo "gpu_index=$g"
+    echo "vm_share=one 2x MI300X VM, two bodies, one pinned container per GPU; never mixed with 1x MI300X VM rows"
+  fi
+  echo "pin_mode=$PIN_MODE"
+  echo "pin_devices=/dev/kfd ${PIN_DEVICES[$g]#--device }"
+  echo "rocr_visible_devices=${PIN_ROCR[$g]}"
+  echo "hip_visible_devices=${PIN_HIP[$g]}"
+  echo "pin_candidate=${PIN_CAND[$g]}"
+  echo "pin_verified_by=${PIN_VIA[$g]}"
+  echo "pin_bus=${PIN_BUS[$g]}"
+  echo "gpu_map_source=$GPU_MAP_SOURCE"
+  echo "pin_host_render=${G_RENDER[$g]:-unknown}"
+  echo "pin_host_bdf=${G_BDF[$g]:-unknown}"
+  if [ "$PIN_MODE" != render ]; then
+    echo "gpu_pinning_note=the renderD mapping could not be read on the box: /dev/dri passed whole to both containers, pinning rests on ROCR_VISIBLE_DEVICES and HIP_VISIBLE_DEVICES as verified by the pin probe"
+  fi
+}
+bdf_tail() { printf '%s\n' "$1" | tr 'A-F' 'a-f' | sed -n 's/^.*\([0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]\.[0-9a-f]\)$/\1/p'; }
+probe_read() {  # <one pin probe's output>: sets PR_COUNT, PR_BUS, PR_VIA
+  PR_COUNT=-1; PR_BUS=""; PR_VIA=none
+  [ -f "$1" ] || return 0
+  if grep -q '^HIP_COUNT rc=0 ' "$1"; then
+    PR_VIA=hip
+    PR_COUNT=$(sed -n 's/^HIP_COUNT rc=0 count=\([0-9]*\).*/\1/p' "$1" | head -1)
+    PR_BUS=$(sed -n 's/^HIP_DEVICE index=0 rc=0 bus=\([0-9a-f:.]*\).*/\1/p' "$1" | head -1)
+  elif grep -q '^HIP_COUNT ' "$1"; then
+    PR_VIA=hip; PR_COUNT=0   # HIP answered with an error: no device in this view
+  elif grep -q '^HIP_UNAVAILABLE' "$1"; then
+    PR_VIA=rocminfo
+    PR_COUNT=$(grep -c '^ROCMINFO_GPU ' "$1")
+    PR_BUS=$(sed -n 's/^ROCMINFO_GPU bdf=\([0-9a-f:.]*\) .*/\1/p' "$1" | head -1)
+  fi
+  PR_COUNT=${PR_COUNT:-0}
+  return 0
+}
+map_gpus() {  # <gpu_map.txt>: sets PIN_MODE, GPU_MAP_SOURCE, GPU_COUNT_SEEN, G_RENDER, G_BDF
+  local kn dn sn g m b r
+  G_RENDER=("" ""); G_BDF=("" ""); PIN_MODE=dri; GPU_MAP_SOURCE=none
+  kn=$(grep -c '^KFD [0-9]' "$1")
+  dn=$(awk '$1 == "DRM" && $4 == "amdgpu"' "$1" | grep -c .)
+  sn=$(grep -c '^SMI [0-9]' "$1")
+  GPU_COUNT_SEEN="kfd=$kn drm_amdgpu=$dn rocm_smi=$sn"
+  if [ "$kn" = 2 ]; then
+    GPU_MAP_SOURCE=kfd; g=0
+    while read -r _ _ m b; do
+      G_BDF[g]=$b
+      if [ -n "$(awk -v m="$m" -v b="$b" '$1 == "DRM" && $2 == m && $4 == "amdgpu" && tolower($5) == tolower(b)' "$1")" ]; then
+        G_RENDER[g]="renderD$m"; GPU_MAP_SOURCE=kfd+drm
+      fi
+      g=$((g + 1))
+    done < <(grep '^KFD [0-9]' "$1")
+  elif [ "$dn" = 2 ]; then
+    GPU_MAP_SOURCE=drm; g=0
+    while read -r _ m r _ b; do G_RENDER[g]=$r; G_BDF[g]=$b; g=$((g + 1)); done < <(awk '$1 == "DRM" && $4 == "amdgpu"' "$1" | sort -k2,2n)
+  elif [ "$sn" = 2 ]; then
+    GPU_MAP_SOURCE=rocm-smi; g=0
+    while read -r _ _ b; do G_BDF[g]=$b; g=$((g + 1)); done < <(grep '^SMI [0-9]' "$1")
+  fi
+  for g in 0 1; do
+    case "${G_RENDER[$g]}" in renderD[0-9]*) case "${G_RENDER[$g]#renderD}" in *[!0-9]*) G_RENDER[g]="" ;; esac ;; *) G_RENDER[g]="" ;; esac
+    case "${G_BDF[$g]}" in ''|*[!0-9A-Fa-f:.]*) G_BDF[g]="" ;; esac
+  done
+  if [ -n "${G_RENDER[0]}" ] && [ -n "${G_RENDER[1]}" ] && [ "${G_RENDER[0]}" != "${G_RENDER[1]}" ]; then PIN_MODE=render; fi
+  return 0
+}
+calibrate_pins() {  # <calibration output>: sets PIN_* per GPU; 0 only when both GPUs pinned, to different addresses
+  local g k r h dev want _g
+  for g in 0 1; do
+    PIN_ROCR[g]=""; PIN_HIP[g]=""; PIN_DEVICES[g]=""; PIN_BUS[g]=""; PIN_VIA[g]=""; PIN_CAND[g]=""
+    want=$(bdf_tail "${G_BDF[$g]}")
+    while read -r _g k r h dev; do
+      [ "$_g" = "$g" ] || continue
+      awk -v g="$g" -v k="$k" '$1 == "BEGIN" && $2 == g && $3 == k { on = 1; next } $1 == "END" && $2 == g && $3 == k { on = 0 } on' "$1" > "$TMPD/pin_cand_out.txt"
+      probe_read "$TMPD/pin_cand_out.txt"
+      echo "gpu$g candidate=$k devices=/dev/kfd,$dev rocr=$r hip=$h via=$PR_VIA count=$PR_COUNT bus=${PR_BUS:-none} host_bdf=${G_BDF[$g]:-unknown}" >> "$OUT/pin_decisions.txt"
+      if [ "$PR_COUNT" != 1 ] || [ -z "$(bdf_tail "$PR_BUS")" ]; then continue; fi
+      if [ -n "$want" ] && [ "$(bdf_tail "$PR_BUS")" != "$want" ]; then continue; fi
+      PIN_ROCR[g]=$r; PIN_HIP[g]=$h; PIN_DEVICES[g]="--device $dev"; PIN_BUS[g]=$PR_BUS; PIN_VIA[g]=$PR_VIA; PIN_CAND[g]=$k
+      echo "gpu$g PINNED to candidate $k" >> "$OUT/pin_decisions.txt"
+      break
+    done < "$TMPD/pin_cands.txt"
+  done
+  [ -n "${PIN_BUS[0]}" ] && [ -n "${PIN_BUS[1]}" ] && [ "$(bdf_tail "${PIN_BUS[0]}")" != "$(bdf_tail "${PIN_BUS[1]}")" ]
+}
+legs_write() {  # the slot's legs file, which `status` prints
+  { [ "$SPEC" = 2gpu ] && [ -n "$SLOT" ] && [ -d "$SLOT" ]; } || return 0
+  grep -qx "nonce=$NONCE" "$SLOT/owner" 2>/dev/null || return 0
+  {
+    printf 'gpu0\t%s\t%s\t%s\t%s\t%s\t%s\n' "$LANE_A" "${LEG_EXTRA:-runner-test-body}" "$REAL_OUT" "${B_SINCE[0]}" "${B_STATE[0]}" "${B_EXIT[0]}"
+    printf 'gpu1\t%s\t%s\t%s\t%s\t%s\t%s\n' "$LANE_B" "${LEG_EXTRA_B:-runner-test-body}" "$REAL_OUT_B" "${B_SINCE[1]}" "${B_STATE[1]}" "${B_EXIT[1]}"
+  } > "$SLOT/legs.tmp" && mv -f "$SLOT/legs.tmp" "$SLOT/legs"
+}
+fetch_body2() {  # <gpu index>: /root/leg-<x>/gemm_leg_out -> <its out>/remote/, its exits into its leg.txt; once
+  local g=$1 x o secs left v k lsha rsha
+  x=${LETTERS[$g]}; o=${OUTS[$g]}
+  [ "${FETCHED[$g]}" = 1 ] && return 0
+  FETCHED[g]=1
+  echo "body=${B_STATE[$g]}" >> "$o/leg.txt"
+  left=$((DEADLINE_EPOCH - $(date +%s) - 90)); secs=600
+  [ "$left" -lt "$secs" ] && secs=$left
+  [ "$secs" -ge 60 ] || secs=60
+  mkdir -p "$o/remote"
+  if with_deadline "$secs" /dev/null "${SSHN[@]}" "sudo -n sh -c 'cd /root/leg-$x/gemm_leg_out && tar czf - --exclude=./tools-venv .'" > "$TMPD/remote_$x.tgz" \
+     && tar xzf "$TMPD/remote_$x.tgz" -C "$o/remote"; then
+    log "GPU $g: fetched /root/leg-$x/gemm_leg_out -> $o/remote/ ($(wc -c < "$TMPD/remote_$x.tgz" | tr -d ' ') bytes)"
+  else
+    FETCH_RED=1; log "GPU $g: FETCH FAILED or hit its ${secs}s bound"
+    echo "fetch=FAILED" >> "$o/leg.txt"
+  fi
+  rm -rf "$o/remote/tools-venv"
+  with_deadline 60 /dev/null "${SSHN[@]}" "sudo -n cat /root/leg-$x/gemm_leg_console.log /root/mojolearn-pull.done" > "$o/remote_console.log" 2>/dev/null || true
+  if [ "$SHIPS_SOURCE" = 1 ]; then
+    lsha=$(cat "$OUT/source_sha256_local.txt" 2>/dev/null); rsha=$(cat "$o/remote/source_sha256.txt" 2>/dev/null)
+    if [ -n "$lsha" ] && [ "$lsha" = "$rsha" ]; then
+      echo "source_sha256_match=yes" >> "$o/leg.txt"
+    else
+      echo "source_sha256_match=NO local=$lsha remote=$rsha" >> "$o/leg.txt"; FETCH_RED=1
+    fi
+  fi
+  for k in pixi_install_exit pixi_install_seconds device_check_exit card_exit extra_exit body_exit; do
+    v=$(sed -n "s/^$k=//p" "$o/remote/leg.txt" 2>/dev/null | tail -1)
+    echo "remote_$k=${v:-<absent>}" >> "$o/leg.txt"
+    log "  GPU $g $k=${v:-<absent>}"
+  done
+  v=$(sed -n 's/^body_exit=//p' "$o/remote/leg.txt" 2>/dev/null | tail -1)
+  B_EXIT[g]=${v:--}
+  echo "finished=$(utc)" >> "$o/leg.txt"
+  legs_write
+}
+test2_verdict() {  # --test-2gpu: sets TEST2_BODIES to PASS or FAIL and records every reading in both leg.txt
+  local g o f v line ok=1 s0 e0 s1 e1
+  for g in 0 1; do
+    o=${OUTS[$g]}
+    for f in visible_start visible_end; do
+      probe_read "$o/remote/$f.txt"
+      line="test_2gpu_gpu${g}_$f=count:$PR_COUNT bus:${PR_BUS:-none} via:$PR_VIA pinned_bus:${PIN_BUS[$g]}"
+      echo "$line" >> "$o/leg.txt"; log "$line"
+      if [ "$PR_COUNT" != 1 ] || [ -z "$(bdf_tail "$PR_BUS")" ] || [ "$(bdf_tail "$PR_BUS")" != "$(bdf_tail "${PIN_BUS[$g]}")" ]; then ok=0; fi
+    done
+    v=$(sed -n 's/^body_exit=//p' "$o/remote/leg.txt" 2>/dev/null | tail -1)
+    if [ "$v" != 0 ]; then ok=0; log "GPU $g test body_exit=${v:-<absent>}"; fi
+  done
+  s0=$(sed -n 's/^started_epoch=//p' "${OUTS[0]}/remote/leg.txt" 2>/dev/null | tail -1)
+  e0=$(sed -n 's/^finished_epoch=//p' "${OUTS[0]}/remote/leg.txt" 2>/dev/null | tail -1)
+  s1=$(sed -n 's/^started_epoch=//p' "${OUTS[1]}/remote/leg.txt" 2>/dev/null | tail -1)
+  e1=$(sed -n 's/^finished_epoch=//p' "${OUTS[1]}/remote/leg.txt" 2>/dev/null | tail -1)
+  case "$s0:$e0:$s1:$e1" in
+    *[!0-9:]*|:*|*::*|*:) line="test_2gpu_overlap=UNREADABLE gpu0=${s0:-?}..${e0:-?} gpu1=${s1:-?}..${e1:-?}"; ok=0 ;;
+    *) if [ "$s0" -lt "$e1" ] && [ "$s1" -lt "$e0" ]; then line="test_2gpu_overlap=yes gpu0=$s0..$e0 gpu1=$s1..$e1"
+       else line="test_2gpu_overlap=NO gpu0=$s0..$e0 gpu1=$s1..$e1"; ok=0; fi ;;
+  esac
+  if [ "$(bdf_tail "${PIN_BUS[0]}")" = "$(bdf_tail "${PIN_BUS[1]}")" ]; then ok=0; line="$line pinned_buses=SAME"; fi
+  TEST2_BODIES=FAIL; [ "$ok" = 1 ] && TEST2_BODIES=PASS
+  for o in "$OUT" "$OUT_B"; do printf '%s\ntest_2gpu_bodies=%s\n' "$line" "$TEST2_BODIES" >> "$o/leg.txt"; done
+  log "$line; bodies $TEST2_BODIES"
+}
+
 _ok=1
 for _t in remote_body watchdog watchdog_arm remote_unpack remote_start pull_start deadman; do
   if subst "$TMPD/$_t.sh.template" "$TMPD/check_$_t.sh"; then
@@ -1054,6 +1751,31 @@ for _t in remote_body watchdog watchdog_arm remote_unpack remote_start pull_star
 done
 check_posix "$TMPD/device_probe.sh" device_probe.sh || _ok=0
 [ "$_ok" = 1 ] && rok "the remote body, watchdog, arm, unpack, start, pull and Mac dead-man scripts substitute cleanly and pass sh -n, dash -n and the bashism scan"
+if [ "$SPEC" = 2gpu ]; then
+  _ok2=1
+  set_example_pins
+  WORK_SECONDS=$((MINUTES * 60 - FETCH_RESERVE - 600))   # EXAMPLE only; the real bound is computed when the bodies start
+  for _t in remote_unpack2 remote_start2 test_body; do
+    if subst2 "$TMPD/$_t.sh.template" "$TMPD/check_$_t.sh" 0; then
+      check_posix "$TMPD/check_$_t.sh" "$_t.sh" || _ok2=0
+    else
+      rbad "UNSUBSTITUTED PLACEHOLDER in $_t.sh"; _ok2=0
+    fi
+  done
+  check_posix "$TMPD/gpu_map.sh" gpu_map.sh || _ok2=0
+  check_posix "$TMPD/pin_probe.sh" pin_probe.sh || _ok2=0
+  gen_calibrate "$TMPD/check_pin_calibrate.sh"
+  check_posix "$TMPD/check_pin_calibrate.sh" pin_calibrate.sh || _ok2=0
+  pin_kv 0 body > "$TMPD/check_pin_0.txt"
+  if insert_pin_lines "$TMPD/check_remote_body.sh" "$TMPD/check_pin_0.txt" "$TMPD/check_remote_body_pinned.sh" \
+     && insert_pin_lines "$TMPD/check_test_body.sh" "$TMPD/check_pin_0.txt" "$TMPD/check_test_body_pinned.sh"; then
+    check_posix "$TMPD/check_remote_body_pinned.sh" "remote_body.sh with pin lines" || _ok2=0
+    check_posix "$TMPD/check_test_body_pinned.sh" "test_body.sh with pin lines" || _ok2=0
+  else
+    rbad "the pin lines found no single 'target_column=amd' line to follow in a body script"; _ok2=0
+  fi
+  [ "$_ok2" = 1 ] && rok "the 2gpu GPU map, pin probe, pin calibration, two-copy unpack, two-body start and test body scripts, and both body scripts with pin lines, pass sh -n, dash -n and the bashism scan"
+fi
 cp "$TMPD/check_remote_body.sh" "$OUT/remote_body.sh"
 
 {
@@ -1080,6 +1802,115 @@ cp "$TMPD/check_remote_body.sh" "$OUT/remote_body.sh"
   echo "mode=$MODE"
   echo "started=$(utc)"
 } > "$OUT/leg.txt"
+if [ "$SPEC" = 2gpu ]; then
+  {
+    echo "size=$LEG2_LABEL"
+    echo "vm_share=one 2x MI300X VM, two bodies, one pinned container per GPU; this dir is GPU 0 and holds the VM records"
+    echo "gpu_index=0"
+    echo "lane_gpu0=$LANE_A"
+    echo "lane_gpu1=$LANE_B"
+    echo "extra_gpu1=${LEG_EXTRA_B:-<test body>}"
+    echo "extra_gpu1_sha256=$EXTRA_SHA_B"
+    echo "out_gpu1=$REAL_OUT_B"
+    echo "gpu_only_ack=${MOJOLEARN_HOTAISLE_GPU_ONLY:-0}"
+    echo "test_2gpu=$TEST_2GPU"
+  } >> "$OUT/leg.txt"
+  {
+    echo "commit=$COMMIT_LINE"
+    echo "commit_sha=$COMMIT"
+    echo "provider=hotaisle"
+    echo "vendor=amd"
+    echo "team=$TEAM"
+    echo "spec=$SPEC"
+    echo "size=$LEG2_LABEL"
+    echo "vm_share=one 2x MI300X VM, two bodies, one pinned container per GPU; this dir is GPU 1"
+    echo "gpu_index=1"
+    echo "lane=$LANE"
+    echo "lane_gpu1=$LANE_B"
+    echo "minutes=$MINUTES"
+    echo "gates=$GATES"
+    echo "test_2gpu=$TEST_2GPU"
+    echo "gpu_archs_requested=${GPU_ARCHS:-<unset>}"
+    echo "target_column=amd"
+    echo "runtime_requested=$RUNTIME_WANT"
+    echo "image=$IMAGE"
+    echo "extra=${LEG_EXTRA_B:-<test body>}"
+    echo "extra_sha256=$EXTRA_SHA_B"
+    echo "bundle_bytes=$BUNDLE_BYTES"
+    echo "bundle_sha256=$BUNDLE_SHA"
+    echo "source_sha256_local=$(cat "$OUT/source_sha256_local.txt" 2>/dev/null)"
+    echo "mode=$MODE"
+    echo "started=$(utc)"
+    echo "vm_records=$REAL_OUT (slot, create, dead-man, watchdog, GPU map, pin calibration; teardown.txt and deadman.txt are copied here at the end)"
+    echo "out_gpu0=$REAL_OUT"
+  } > "$OUT_B/leg.txt"
+fi
+
+if [ "$MODE" = dry ] && [ "$SPEC" = 2gpu ]; then
+  set_example_pins
+  WORK_SECONDS=$((MINUTES * 60 - FETCH_RESERVE - 600))
+  gen_calibrate "$OUT/pin_calibrate.example.sh"
+  subst2 "$TMPD/remote_start2.sh.template" "$OUT/remote_start2.example.sh"
+  for _g in 0 1; do
+    pin_kv "$_g" body > "$TMPD/dry_pin_$_g.txt"
+    if [ "$TEST_2GPU" = 1 ]; then
+      subst2 "$TMPD/test_body.sh.template" "$TMPD/dry_body_$_g.sh" "$_g"
+    else
+      subst "$TMPD/remote_body.sh.template" "$TMPD/dry_body_$_g.sh"
+    fi
+    insert_pin_lines "$TMPD/dry_body_$_g.sh" "$TMPD/dry_pin_$_g.txt" "${OUTS[$_g]}/remote_body.sh"
+  done
+  echo
+  echo "== EXAMPLE VALUES BELOW: render nodes, PCI addresses and pins are read and verified on the box, never assumed =="
+  for _g in 0 1; do
+    _x=${LETTERS[$_g]}
+    if [ "$_g" = 0 ]; then _body=$LEG_EXTRA; _env=$EXTRA_ENV; _o=$REAL_OUT; _sha=$EXTRA_SHA
+    else _body=$LEG_EXTRA_B; _env=$EXTRA_ENV_B; _o=$REAL_OUT_B; _sha=$EXTRA_SHA_B; fi
+    echo
+    echo "== GPU $_g body, composed =="
+    echo "   host dir   /root/leg-$_x, mounted at /root in its own container (/root/mojolearn is its own source copy)"
+    echo "   container  $RUNTIME run --rm --name mojolearn-leg-$_x --device /dev/kfd ${PIN_DEVICES[$_g]} -e ROCR_VISIBLE_DEVICES=${PIN_ROCR[$_g]} -e HIP_VISIBLE_DEVICES=${PIN_HIP[$_g]} --security-opt seccomp=unconfined --ipc=host --network host -e HOME=/root -v /root/leg-$_x:/root -w /root/mojolearn $IMAGE timeout -k 30 <work seconds> sh /root/gemm_leg.sh"
+    if [ "$TEST_2GPU" = 1 ]; then
+      echo "   body       the runner's tiny test body: pin probe, rocm-smi, rocminfo, hold $((TEST2_HOLD_TICKS * 10)) s, pin probe again"
+    else
+      echo "   body       /root/gemm_leg.sh: pixi install, gates, then (. /root/gemm_leg_extra_env.sh; sh /root/gemm_leg_extra.sh) > /root/gemm_leg_out/extra.log"
+      echo "   extra      $_body (sha256 ${_sha:0:16})"
+      echo "   env        $(grep -c '^export ' "${OUTS[$_g]}/extra_env.sh" | tr -d ' ') export(s)${_env:+: $_env}"
+    fi
+    echo "   pin        EXAMPLE mode $PIN_MODE: devices /dev/kfd ${PIN_DEVICES[$_g]#--device }, ROCR_VISIBLE_DEVICES=${PIN_ROCR[$_g]}, HIP_VISIBLE_DEVICES=${PIN_HIP[$_g]} (the first candidate; calibration decides)"
+    echo "   evidence   /root/leg-$_x/gemm_leg_out -> $_o/remote/"
+    echo
+    echo "== the GPU $_g remote body (/root/leg-$_x/gemm_leg.sh; its pin lines are EXAMPLES) =="
+    cat "${OUTS[$_g]}/remote_body.sh"
+  done
+  echo; echo "== the GPU map, read on the host =="; cat "$TMPD/gpu_map.sh"
+  echo; echo "== the pin probe, run inside every candidate container and twice in each test body =="; cat "$TMPD/pin_probe.sh"
+  echo; echo "== the pin calibration (EXAMPLE map: GPU 0 renderD128 at 0000:c1:00.0, GPU 1 renderD129 at 0000:c2:00.0) =="; cat "$OUT/pin_calibrate.example.sh"
+  echo; echo "== the two-body start wrapper (EXAMPLE pins, EXAMPLE work bound ${WORK_SECONDS}s) =="; cat "$OUT/remote_start2.example.sh"
+  echo; echo "== the on-box watchdog ($BOX_DIR/watchdog.sh: ONE for the whole VM; ref and seconds filled at arm time) =="; cat "$TMPD/check_watchdog.sh"
+  echo
+  echo "== what --rent does on 2gpu, in order =="
+  echo "   1. refuse: lease under 60 min, no MOJOLEARN_HOTAISLE_GPU_ONLY=1, a CPU opponent body or env, one OUT for both,"
+  echo "      a dirty tree (when source ships), a bad key file, a broken script, an oversized bundle"
+  echo "   2. GET teams (operator role, VM limit), take ONE slot, balance >= $MIN_BALANCE_CENTS cents"
+  echo "   3. wait for Quantity > 0 on the 2x MI300X offering; its minimum reservation <= the lease; balance >= its price"
+  echo "   4. ARM THE MAC DEAD-MAN, then under the create lock: snapshot, POST   [THE BILL STARTS HERE: 60 minutes minimum]"
+  echo "   5. PATCH description mojolearn:$LANE:<utc>, verify it; wait for running; ssh settle as hotaisle; sudo -n"
+  echo "   6. key to $BOX_RC on stdin; arm ONE watchdog for the VM; verify pid (two sessions), ref, GET 200 + description"
+  echo "   7. key-in-ps both ends; device probe; runtime docker or podman (native deletes); GPU arch from rocminfo"
+  echo "   8. GPU map (KFD, DRM, rocm-smi) -> pin_mode render or dri, into both leg.txt; not 2 KFD GPUs deletes"
+  echo "   9. image pull in the background; $( [ "$TEST_2GPU" = 1 ] && echo 'no source (test)' || echo 'ONE bundle upload, sha256 check, unpacked to /root/leg-a and /root/leg-b')"
+  echo "  10. pull done (a failed pull deletes); pin calibration: HIP must see exactly one device at the GPU's address; both"
+  echo "      GPUs pinned to different addresses, or delete unused; pin lines into both leg.txt and both remote bodies"
+  echo "  11. both bodies start, one pinned container each, own timeout(1); poll 30 s; a finished body is fetched to its OUT at once"
+  echo "  12. both finished or the poll deadline: DELETE ?force=true; verify gone; cancel the dead-man; release the slot;"
+  echo "      teardown.txt and deadman.txt copied to the GPU 1 OUT$( [ "$TEST_2GPU" = 1 ] && echo '; test_2gpu=PASS or FAIL in both leg.txt')"
+  echo "   dry-run artifacts kept in $OUT and $OUT_B"
+  [ "$RED" = 1 ] && { echo "DRY RUN: RED. This script is broken (a FAIL above). Nothing rented."; exit 1; }
+  [ "$BLOCK" = 1 ] && { echo "DRY RUN: plumbing GREEN, and a real leg is BLOCKED (see BLOCK above). Nothing rented."; exit 3; }
+  echo "DRY RUN: GREEN. Nothing rented."
+  exit 0
+fi
 
 if [ "$MODE" = dry ]; then
   echo
@@ -1145,19 +1976,39 @@ while :; do
 done
 echo "slot=$SLOT taken $(utc)" >> "$OUT/leg.txt"
 log "slot $SLOT taken (lane $LANE)"
+if [ "$SPEC" = 2gpu ]; then
+  { echo "spec=2gpu"; echo "out_b=$REAL_OUT_B"; } >> "$SLOT/owner"
+  _now=$(date +%s); B_SINCE=("$_now" "$_now")
+  legs_write
+  echo "slot=$SLOT taken $(utc) (the VM's one slot)" >> "$OUT_B/leg.txt"
+fi
 
 # ---- b. stock ----
 _t0=$(date +%s)
 while :; do
   c=$(api GET "teams/$TEAM/virtual_machines/available/" "$TMPD/avail.json")
-  read -r _f _qty _price _minres < <(J pick "$TMPD/avail.json" "$SPEC_CORES" "$TMPD/create_request.json")
+  if [ "$SPEC" = 2gpu ]; then
+    read -r _f _qty _price _minres _cores < <(J pick2 "$TMPD/avail.json" "$TMPD/create_request.json")
+  else
+    read -r _f _qty _price _minres < <(J pick "$TMPD/avail.json" "$SPEC_CORES" "$TMPD/create_request.json")
+  fi
   if [ "$c" = 200 ] && [ "$_f" = found ] && [ "$_qty" -gt 0 ]; then break; fi
   [ $(( $(date +%s) - _t0 )) -lt $(( STOCK_WAIT_MINUTES * 60 )) ] \
-    || die "REFUSED: the $SPEC 1x MI300X spec showed no stock for $STOCK_WAIT_MINUTES minutes (last HTTP $c, $_f, quantity ${_qty:-0}). Nothing was created." 3
+    || die "REFUSED: the $SPEC $SPEC_DESC spec showed no stock for $STOCK_WAIT_MINUTES minutes (last HTTP $c, $_f, quantity ${_qty:-0}). Nothing was created." 3
   log "no stock on $SPEC (HTTP $c, $_f, quantity ${_qty:-0}); retrying in 60 s"
   nap 60
 done
-[ "$_minres" -le 10 ] || die "REFUSED: the $SPEC spec has MinimumReservationMinutes $_minres. Nothing was created." 3
+if [ "$SPEC" = 2gpu ]; then
+  [ "$_minres" -le "$MINUTES" ] 2>/dev/null \
+    || die "REFUSED: the 2x MI300X offering has MinimumReservationMinutes $_minres, above the $MINUTES-minute lease. Nothing was created." 3
+  _floor=$(( _price * _minres / 60 + 1 ))
+  [ "$_floor" -ge "$MIN_BALANCE_CENTS" ] || _floor=$MIN_BALANCE_CENTS
+  [ "$BAL_BEFORE" -ge "$_floor" ] 2>/dev/null \
+    || die "REFUSED: balance $(dollars "$BAL_BEFORE") is below $(dollars "$_floor"), the 2x MI300X minimum reservation ($_minres min at $_price cents/h). Nothing was created." 3
+  echo "cpu_cores=$_cores balance_floor_cents=$_floor" >> "$OUT/leg.txt"
+else
+  [ "$_minres" -le 10 ] || die "REFUSED: the $SPEC spec has MinimumReservationMinutes $_minres. Nothing was created." 3
+fi
 cp "$TMPD/create_request.json" "$OUT/create_request.json"
 cp "$TMPD/avail.json" "$OUT/offering.json"
 log "spec $SPEC: quantity $_qty, $_price cents/hour, minimum reservation $_minres min; $MINUTES min costs at most $(dollars $(( _price * MINUTES / 60 + 1 )))"
@@ -1212,7 +2063,7 @@ J ids "$TMPD/pre.json" | awk '{print $1}' > "$TMPD/pre_ids.txt"
 
 echo
 echo "== the VM =="
-log "creating 1x MI300X $SPEC"
+log "creating $SPEC_DESC $SPEC"
 CREATE_ATTEMPTED=1
 c=$(api POST "teams/$TEAM/virtual_machines/" "$OUT/create_response.json" 300 "$TMPD/create_request.json")
 redact "$OUT/create_response.json"
@@ -1354,6 +2205,10 @@ esac
 grep -q '^KFD_PRESENT' "$OUT/device_probe.txt" || die "/dev/kfd is absent on the VM: no AMD compute device. Deleting." 6
 echo "runtime=$RUNTIME" >> "$OUT/leg.txt"
 log "runtime $RUNTIME"
+if [ "$SPEC" = 2gpu ]; then
+  echo "runtime=$RUNTIME" >> "$OUT_B/leg.txt"
+  [ "$RUNTIME" != native ] || die "the 2gpu spec needs docker or podman on the VM (one pinned container per GPU) and the runtime is native. Deleting." 6
+fi
 if [ "$TEST_WATCHDOG" = 0 ] && [ "$RUNTIME" != native ]; then
   subst "$TMPD/pull_start.sh.template" "$TMPD/pull_start.sh" && rexec "$TMPD/pull_start.sh" > "$TMPD/pull.out" 2>&1
   log "image pull started in the background: $(tr '\n' ' ' < "$TMPD/pull.out")"
@@ -1423,6 +2278,188 @@ with_deadline() {  # <seconds> <stdin file> <cmd...>: the command's status, or 1
   done
   wait "$pid"
 }
+
+# ================================================================ the 2gpu VM
+# The 2gpu flow from the GPU map to its exit (header: THE 2GPU SPEC, steps 3 to
+# 8). The EXIT trap is the same one delete for the whole VM. The single-GPU
+# flow below this block never runs on 2gpu and is unchanged.
+if [ "$SPEC" = 2gpu ]; then
+  echo
+  echo "== the GPU map (2gpu) =="
+  rexec "$TMPD/gpu_map.sh" > "$OUT/gpu_map.txt" 2>&1
+  sed 's/^/    [box] /' "$OUT/gpu_map.txt"
+  map_gpus "$OUT/gpu_map.txt"
+  _kn=$(grep -c '^KFD [0-9]' "$OUT/gpu_map.txt")
+  if [ "$_kn" -gt 0 ] && [ "$_kn" != 2 ]; then
+    die "the 2x MI300X VM shows $_kn KFD GPU nodes, not 2 ($GPU_COUNT_SEEN). Deleting." 6
+  fi
+  for _o in "$OUT" "$OUT_B"; do
+    {
+      echo "gpu_map_source=$GPU_MAP_SOURCE seen=$GPU_COUNT_SEEN"
+      echo "pin_mode=$PIN_MODE"
+      echo "gpu0_host_render=${G_RENDER[0]:-unknown} gpu0_host_bdf=${G_BDF[0]:-unknown}"
+      echo "gpu1_host_render=${G_RENDER[1]:-unknown} gpu1_host_bdf=${G_BDF[1]:-unknown}"
+      if [ "$PIN_MODE" != render ]; then
+        echo "gpu_pinning_note=the renderD mapping could not be read on the box: /dev/dri goes whole to both containers and pinning rests on ROCR_VISIBLE_DEVICES and HIP_VISIBLE_DEVICES"
+      fi
+    } >> "$_o/leg.txt"
+  done
+  log "GPU map from $GPU_MAP_SOURCE ($GPU_COUNT_SEEN): pin_mode $PIN_MODE; GPU 0 ${G_RENDER[0]:-?} ${G_BDF[0]:-?}; GPU 1 ${G_RENDER[1]:-?} ${G_BDF[1]:-?}"
+
+  echo
+  echo "== the source (2gpu: one upload, two copies) =="
+  if [ "$SHIPS_SOURCE" = 1 ]; then
+    _up0=$(date +%s); _up_ok=0
+    for _try in 1 2 3; do
+      _left=$((DEADLINE_EPOCH - FETCH_RESERVE - $(date +%s)))
+      [ "$_left" -gt 120 ] || break
+      if with_deadline "$_left" "$TMPD/src.tgz" "${SSH[@]}" "sudo -n sh -c 'cat > /root/extra_src.tgz'"; then _up_ok=1; break; fi
+      log "upload attempt $_try failed; retrying in 15 s"
+      nap 15
+    done
+    [ "$_up_ok" = 1 ] || die "the bundle upload failed" 7
+    _up_s=$(( $(date +%s) - _up0 ))
+    log "uploaded $BUNDLE_BYTES bytes in ${_up_s}s over ssh stdin"
+    echo "upload_seconds=$_up_s" >> "$OUT/leg.txt"
+    subst "$TMPD/remote_unpack2.sh.template" "$TMPD/remote_unpack2.sh" || die "the two-copy unpack script did not substitute" 1
+    rexec "$TMPD/remote_unpack2.sh" > "$TMPD/unpack.out" 2>&1
+    sed 's/^/    /' "$TMPD/unpack.out"
+    { grep -q '^ARCHIVE-SHA-OK' "$TMPD/unpack.out" && [ "$(grep -c '^UNPACKED_[ab] ' "$TMPD/unpack.out")" = 2 ]; } \
+      || die "the VM refused or failed to unpack the bundle into both copies" 7
+  else
+    printf 'rm -rf /root/leg-a /root/leg-b /root/mojolearn-pin\nmkdir -p /root/leg-a/mojolearn /root/leg-b/mojolearn\n' > "$TMPD/prep2.sh"
+    rexec "$TMPD/prep2.sh" > /dev/null 2>&1
+  fi
+
+  log "waiting for the image pull (one pull for both bodies)"
+  while [ "$(date +%s)" -lt $((DEADLINE_EPOCH - FETCH_RESERVE - 180)) ]; do
+    "${SSHN[@]}" 'sudo -n cat /root/mojolearn-pull.done 2>/dev/null' > "$TMPD/pull.done" 2>/dev/null
+    grep -q pull_exit= "$TMPD/pull.done" && break
+    nap 15
+  done
+  _pull="$(tr -d '\r' < "$TMPD/pull.done" 2>/dev/null)"
+  echo "image_pull=${_pull:-NOT_DONE}" >> "$OUT/leg.txt"
+  log "image pull: ${_pull:-NOT DONE}"
+  case "$_pull" in
+    *pull_exit=0*) ;;
+    *) die "the image pull did not finish cleanly; a 2gpu VM has no native fallback (one pinned container per GPU). Deleting." 7 ;;
+  esac
+
+  echo
+  echo "== pin calibration (2gpu) =="
+  rput "$TMPD/pin_probe.sh" /root/mojolearn-pin/probe.sh 644 || die "could not ship the pin probe" 7
+  gen_calibrate "$OUT/pin_calibrate.sh"
+  cp "$TMPD/pin_cands.txt" "$OUT/pin_candidates.txt"
+  rexec "$OUT/pin_calibrate.sh" > "$OUT/pin_calibration.txt" 2>&1
+  sed 's/^/    [box] /' "$OUT/pin_calibration.txt"
+  : > "$OUT/pin_decisions.txt"
+  if ! calibrate_pins "$OUT/pin_calibration.txt"; then
+    sed 's/^/    /' "$OUT/pin_decisions.txt"
+    die "PINNING NOT VERIFIED: each GPU needs a candidate container where HIP sees exactly one device at that GPU's address, and the two addresses must differ (pin_decisions.txt). Deleting the VM unused." 6
+  fi
+  sed 's/^/    /' "$OUT/pin_decisions.txt"
+  cp "$OUT/pin_decisions.txt" "$OUT_B/pin_decisions.txt"
+  for _g in 0 1; do
+    pin_kv "$_g" >> "${OUTS[$_g]}/leg.txt"
+    log "GPU $_g pinned: /dev/kfd ${PIN_DEVICES[$_g]#--device } ROCR_VISIBLE_DEVICES=${PIN_ROCR[$_g]} HIP_VISIBLE_DEVICES=${PIN_HIP[$_g]} -> ${PIN_BUS[$_g]} (via ${PIN_VIA[$_g]}, candidate ${PIN_CAND[$_g]})"
+  done
+
+  for _g in 0 1; do
+    _x=${LETTERS[$_g]}; _o=${OUTS[$_g]}
+    pin_kv "$_g" body > "$TMPD/pin_body_$_g.txt"
+    if [ "$TEST_2GPU" = 1 ]; then
+      subst2 "$TMPD/test_body.sh.template" "$TMPD/body_pre_$_g.sh" "$_g" || die "the GPU $_g test body did not substitute" 1
+    else
+      subst "$TMPD/remote_body.sh.template" "$TMPD/body_pre_$_g.sh" || die "the GPU $_g remote body did not substitute" 1
+    fi
+    insert_pin_lines "$TMPD/body_pre_$_g.sh" "$TMPD/pin_body_$_g.txt" "$_o/remote_body.sh" || die "the GPU $_g pin lines did not go into its body" 1
+    sh -n "$_o/remote_body.sh" || die "the GPU $_g body with its pin lines is not valid sh" 1
+    if [ "$TEST_2GPU" = 1 ]; then
+      rput "$TMPD/pin_probe.sh" "/root/leg-$_x/pin_probe.sh" 644 || die "could not ship the GPU $_g test probe" 7
+    else
+      rput "$_o/extra_body.sh" "/root/leg-$_x/gemm_leg_extra.sh" 644 || die "could not ship the GPU $_g extra body" 7
+      rput "$_o/extra_env.sh" "/root/leg-$_x/gemm_leg_extra_env.sh" 644 || die "could not ship the GPU $_g extra body environment" 7
+    fi
+    rput "$_o/remote_body.sh" "/root/leg-$_x/gemm_leg.sh" 644 || die "could not ship the GPU $_g remote body" 7
+    if [ "$TEST_2GPU" = 1 ]; then _what="the tiny test body"; elif [ "$_g" = 0 ]; then _what=$LEG_EXTRA; else _what=$LEG_EXTRA_B; fi
+    log "shipped the GPU $_g body to /root/leg-$_x ($_what)"
+  done
+
+  echo
+  echo "== the work (2gpu: two bodies) =="
+  WORK_SECONDS=$((DEADLINE_EPOCH - FETCH_RESERVE - $(date +%s)))
+  [ "$WORK_SECONDS" -ge 120 ] || die "only ${WORK_SECONDS}s of lease left for the work; starting neither body" 8
+  subst2 "$TMPD/remote_start2.sh.template" "$OUT/remote_start2.sh" || die "the two-body start wrapper did not substitute" 1
+  for _o in "$OUT" "$OUT_B"; do echo "work_seconds=$WORK_SECONDS" >> "$_o/leg.txt"; done
+  rexec "$OUT/remote_start2.sh" > "$OUT/remote_start2.log" 2>&1
+  RPIDS[0]=$(sed -n 's/^REMOTE_PID_A=//p' "$OUT/remote_start2.log" | tr -d '\r' | tail -1)
+  RPIDS[1]=$(sed -n 's/^REMOTE_PID_B=//p' "$OUT/remote_start2.log" | tr -d '\r' | tail -1)
+  for _g in 0 1; do
+    case "${RPIDS[$_g]}" in ''|*[!0-9]*) die "THE GPU $_g BODY DID NOT START (no pid). Read $OUT/remote_start2.log." 8 ;; esac
+  done
+  _now=$(date +%s)
+  B_STATE=(running running); B_SINCE=("$_now" "$_now")
+  legs_write
+  BODY_STATE=running
+  log "GPU 0 pid ${RPIDS[0]}, GPU 1 pid ${RPIDS[1]} ($RUNTIME), each bound ${WORK_SECONDS}s; polling every 30 s"
+  # shellcheck disable=SC2016  # the poll script's own variables, expanded on the VM
+  {
+    echo "for p in a:${RPIDS[0]} b:${RPIDS[1]}; do"
+    echo '    x=${p%%:*}; pid=${p#*:}'
+    echo '    if [ -f /root/leg-$x/gemm_leg.done ]; then echo "$x=LEG_DONE"; elif kill -0 "$pid" 2>/dev/null; then echo "$x=LEG_RUNNING"; else echo "$x=LEG_GONE"; fi'
+    echo 'done'
+  } > "$TMPD/poll2.sh"
+  POLL_DEADLINE=$((DEADLINE_EPOCH - FETCH_RESERVE + 60))
+  _unreach=0
+  while :; do
+    if [ "$(date +%s)" -ge "$POLL_DEADLINE" ]; then
+      for _g in 0 1; do
+        if [ "${B_DONE[$_g]}" = 0 ]; then
+          B_STATE[_g]=partial_deadline; B_DONE[_g]=1; FETCH_RED=1
+          log "GPU $_g body: OUTER POLL DEADLINE reached. Fetching what exists."
+        fi
+      done
+      break
+    fi
+    _st=$(rexec "$TMPD/poll2.sh" 2>/dev/null) || _st=""
+    case "$_st" in
+      *a=LEG_*) _unreach=0 ;;
+      *) _unreach=$((_unreach + 1)); [ "$_unreach" = 1 ] && log "poll: the VM did not answer (the bodies are detached; retrying)" ;;
+    esac
+    for _g in 0 1; do
+      [ "${B_DONE[$_g]}" = 0 ] || continue
+      _x=${LETTERS[$_g]}
+      case "$_st" in
+        *"$_x=LEG_DONE"*)
+          _rp=${RPIDS[$_g]}
+          "${SSHN[@]}" "sudo -n sh -c 'for i in 1 2 3 4 5 6 7 8 9 10; do kill -0 $_rp 2>/dev/null || break; sleep 1; done'" 2>/dev/null
+          B_STATE[_g]="done"; B_DONE[_g]=1
+          log "GPU $_g body finished (sentinel on the VM); fetching it now"
+          fetch_body2 "$_g" ;;
+        *"$_x=LEG_GONE"*)
+          B_STATE[_g]=partial_died; B_DONE[_g]=1; FETCH_RED=1
+          log "THE GPU $_g BODY PROCESS IS GONE AND WROTE NO SENTINEL. Fetching a partial run; the other body keeps running."
+          fetch_body2 "$_g" ;;
+      esac
+    done
+    legs_write
+    if [ "${B_DONE[0]}" = 1 ] && [ "${B_DONE[1]}" = 1 ]; then break; fi
+    nap 30
+  done
+  BODY_STATE="gpu0:${B_STATE[0]} gpu1:${B_STATE[1]}"
+
+  echo
+  echo "== fetch (2gpu) =="
+  for _g in 0 1; do fetch_body2 "$_g"; done
+  for _o in "$OUT" "$OUT_B"; do echo "lease_used_seconds=$(( $(date +%s) - LEG_START ))" >> "$_o/leg.txt"; done
+  if [ "$TEST_2GPU" = 1 ]; then test2_verdict; fi
+  log "both legs done ($BODY_STATE); deleting the VM (EXIT trap)"
+  [ "$FETCH_RED" = 1 ] && exit 1
+  [ "$KEY_RED" = 1 ] && exit 1
+  if [ "$TEST_2GPU" = 1 ] && [ "$TEST2_BODIES" != PASS ]; then exit 1; fi
+  exit 0
+fi
+
 if [ "$SHIPS_SOURCE" = 1 ]; then
   echo
   echo "== the source =="
