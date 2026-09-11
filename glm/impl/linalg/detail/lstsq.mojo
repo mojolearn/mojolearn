@@ -339,6 +339,18 @@ def lstsq_eig_traced(
     # is EXACT: no rounding is added and no vendor can round it differently.
     # Step 6b multiplies the solution back, `w = S w~`, also exactly.
     #
+    # WHY IT IS HERE, MEASURED (DigitalOcean MI325X, 2026-09-11, Istella-S
+    # 2,043,304 x 220, tools/ols_illconditioned_probe.py). The raw Gram's
+    # largest eigenvalue is 4.75e19, so the Jacobi's float32 `||G||_F^2`
+    # overflows to inf, its stopping test `2 off <= tol^2 ||G||_F^2` holds
+    # before the first rotation, and the eigendecomposition it returns is the
+    # diagonal: every coefficient became `Ab_i / G_ii` and R^2 was -115.6 (a
+    # float32 emulation of that Jacobi does 0 sweeps and gives -115.8).
+    # Without the overflow (50,000 rows) the same global test stops after 2
+    # sweeps with column pairs at relative correlation 0.82 unrotated.
+    # Equilibrated, the diagonal lies in [0.5, 2), nothing overflows, and the
+    # test does its job (12 sweeps at full shape).
+    #
     # The card recorded `step1.covA` and `step2.Ab` just above, BEFORE this
     # step. The scales are a pure function of `step1.covA`'s bits, so they
     # need no stage of their own and the card keeps its 11 stages.
