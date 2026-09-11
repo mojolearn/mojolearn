@@ -1,0 +1,12 @@
+downloading http://library.istella.it/dataset/istella-s-letor.tar.gz -> /mnt/mojolearn-data/gbm-bench/istella/istella-s-letor.tar.gz (about 472 MB)
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/speed_gbdt_arm.py", line 2118, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/root/mojolearn/tools/speed_gbdt_arm.py", line 2066, in main
+    download(args.download)
+  File "/root/mojolearn/tools/speed_gbdt_arm.py", line 1033, in download
+    urllib.request.urlretrieve(ISTELLA_URL, dest)
+  File "/usr/lib/python3.12/urllib/request.py", line 276, in urlretrieve
+    raise ContentTooShortError(
+urllib.error.ContentTooShortError: <urlopen error retrieval incomplete: got only 454285384 out of 472129615 bytes>

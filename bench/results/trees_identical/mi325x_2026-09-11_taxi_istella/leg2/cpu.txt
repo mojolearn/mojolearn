@@ -1,0 +1,2 @@
+nproc 20
+model name	: AMD EPYC 9575F 64-Core Processor

@@ -1,0 +1,62 @@
+load 0.10 0.41 0.34 1/409 14483 13:00:57
+speed_exit baseline.gbdt-symmetric.taxi.r1000000.ours.pointwise=0 13:01:14
+speed_exit baseline.gbdt-symmetric.taxi.r1000000.stage=0 13:01:17
+speed_exit baseline.gbdt-depthwise.taxi.r1000000.stage=0 13:01:21
+speed_exit baseline.gbdt-lossguide.taxi.r1000000.stage=0 13:01:27
+PHASE_TS_DONE 13:01:27
+speed_exit baseline.gbdt-symmetric.taxi.r1000000.ours.hashcheck=0 13:02:58
+speed_exit baseline.gbdt-depthwise.taxi.r1000000.ours.hashcheck=0 13:03:07
+speed_exit baseline.gbdt-lossguide.taxi.r1000000.ours.hashcheck=0 13:03:21
+ib_exit baseline=1 13:03:30
+ib_diff h100_pureleaf vs baseline exit=1 13:03:30
+speed_exit baseline.rf.taxi.r1000000.ours.hashcheck=0 13:04:40
+speed_exit baseline.et.taxi.r1000000.ours.hashcheck=0 13:05:36
+batchH end 13:05:36 setup_done=no
+load 0.03 0.35 0.38 1/399 16180 13:09:07
+arms: xgboost=xgboost-gpu lightgbm=lightgbm-cpu python=/root/venv-gpu/bin/python
+speed_exit baseline.gbdt-symmetric.taxi.r1000000.full=0 13:09:23
+speed_exit baseline.rf.taxi.r1000000.full=0 13:10:59
+speed_exit baseline.gbdt-depthwise.taxi.r1000000.full=0 13:11:27
+speed_exit baseline.gbdt-lossguide.taxi.r1000000.full=0 13:12:11
+speed_exit baseline.et.taxi.r1000000.full=0 13:13:24
+PHASE_T1_DONE 13:13:24
+speed_exit baseline.rf.taxi.r2000000.full=0 13:15:36
+PHASE_T2_DONE 13:15:36
+batchT stopped after PHASE_T2_DONE 13:15:37
+speed_exit baseline.gbdt-symmetric.istella.r1000000.full=143 13:15:37
+batchX start 13:18:18 load 0.47 3.13 2.26 1/409 19827
+speed_exit baseline.gbdt-lossguide.taxi.r1000000.full.lgbmwheel=0 13:19:02
+PHASE_X1_DONE 13:19:02
+build_fast_gbdt=0 13:19:49
+build_fast_rf=0 13:20:03
+build_fast_trees=0 13:20:17
+build_fast_base=2 (the base binding refuses fast by name, DEVIATION 2490) 13:20:17
+import_fast=0 13:20:17
+speed_exit baseline.gbdt-symmetric.taxi.r1000000.ours.fastab=0 13:20:24
+speed_exit baseline.gbdt-depthwise.taxi.r1000000.ours.fastab=0 13:20:33
+speed_exit baseline.gbdt-lossguide.taxi.r1000000.ours.fastab=0 13:20:46
+speed_exit baseline.rf.taxi.r1000000.ours.fastab=0 13:21:57
+speed_exit baseline.et.taxi.r1000000.ours.fastab=0 13:22:54
+PHASE_X2_DONE 13:22:54
+patch_2512_rf=0 13:22:54
+patch_2512_gbdt=0 13:22:54
+build_exit no2512.rf=0 13:23:10
+2184213b63e42f45993c468aef1af18160d64ea42ebff39d3101adc06d7288cf  /root/bins/no2512/_mojolearn_rf.so
+build_exit no2512.gbdt=0 13:23:58
+7d95c6b07eeb27c61d04b36a7897c5e75bd2f177385514ff3d5298c2281b78d7  /root/bins/no2512/_mojolearn_gbdt.so
+unpatch_2512 rf=0 gbdt=0 13:23:58
+speed_exit baseline.rf.taxi.r1000000.ours=0 13:25:08
+speed_exit no2512.rf.taxi.r1000000.ours=0 13:26:17
+speed_exit baseline.rf.taxi.r1000000.ours.pass2=0 13:27:28
+speed_exit baseline.gbdt-symmetric.taxi.r1000000.ours=0 13:27:35
+speed_exit no2512.gbdt-symmetric.taxi.r1000000.ours=0 13:27:42
+speed_exit baseline.gbdt-symmetric.taxi.r1000000.ours.pass2=0 13:27:49
+PHASE_X3_DONE 13:27:49
+batchY start 13:27:50 load 1.84 1.88 2.02 2/431 34008
+speed_exit baseline.gbdt-symmetric.taxi.r1000000.ours.fastab2=0 13:28:04
+speed_exit baseline.gbdt-depthwise.taxi.r1000000.ours.fastab2=0 13:28:22
+speed_exit baseline.gbdt-lossguide.taxi.r1000000.ours.fastab2=0 13:28:49
+download_istella_decode=0 13:29:14
+speed_exit baseline.rf.taxi.r1000000.ours.fastab2=0 13:31:00
+speed_exit baseline.et.taxi.r1000000.ours.fastab2=0 13:32:53
+PHASE_Y_DONE 13:32:53

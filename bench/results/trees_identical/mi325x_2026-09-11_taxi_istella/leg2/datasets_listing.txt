@@ -1,0 +1,17 @@
+/mnt/mojolearn-data/gbm-bench/istella:
+total 2656688
+drwxr-xr-x 3 root root       4096 Sep 11 13:29 .
+drwxr-xr-x 4 root root       4096 Sep 11 12:53 ..
+-r--r--r-- 1  500  500       2537 May 13  2016 README
+-r--r--r-- 1  500  500       6108 May  9  2016 istella-letor-LA.txt
+-rw-r--r-- 1 root root  472129615 Sep 11 13:26 istella-s-letor.tar.gz
+-rw-r--r-- 1 root root 2248281826 Sep 11 13:29 istella_speed.npz
+dr-xr-xr-x 2  500  500       4096 Mar 31  2016 sample
+
+/mnt/mojolearn-data/gbm-bench/taxi:
+total 507892
+drwxr-xr-x 2 root root      4096 Sep 11 13:00 .
+drwxr-xr-x 4 root root      4096 Sep 11 12:53 ..
+-rw-r--r-- 1 root root 419757252 Sep 11 13:00 taxi_speed.npz
+-rw-r--r-- 1 root root  49961641 Sep 11 13:00 yellow_tripdata_2024-01.parquet
+-rw-r--r-- 1 root root  50349284 Sep 11 13:00 yellow_tripdata_2024-02.parquet

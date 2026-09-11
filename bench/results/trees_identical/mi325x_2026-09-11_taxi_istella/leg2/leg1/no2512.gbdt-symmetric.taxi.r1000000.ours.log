@@ -1,0 +1,20 @@
+FSPEED-NOTE lane=gbdt-symmetric arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); AMD box: an opponent with an AMD GPU path runs on the GPU, one without runs on this box's CPU on all cores (ENGINEERING_RULES.md section 10); the arm name says which
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=hip path=/root/mojolearn/python/mojolearn/identical/_mojolearn_gbdt.so
+FSPEED-SCALE stage=before rows=1000000 features=16 input_mib=61.0 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED-WARMUP lane=gbdt-symmetric arm=ours shape=taxi-1000000x16 ms=790.120
+FSPEED-ORDER lane=gbdt-symmetric round=1 arms=ours
+FSPEED lane=gbdt-symmetric arm=ours shape=taxi-1000000x16 round=1 ms=460.035 hash=2059d9685f761847
+FSPEED-ORDER lane=gbdt-symmetric round=2 arms=ours
+FSPEED lane=gbdt-symmetric arm=ours shape=taxi-1000000x16 round=2 ms=442.373 hash=f57b7af92a17f2b7
+FSPEED-ORDER lane=gbdt-symmetric round=3 arms=ours
+FSPEED lane=gbdt-symmetric arm=ours shape=taxi-1000000x16 round=3 ms=453.245 hash=81c7ee770ca495e2
+FSPEED-ORDER lane=gbdt-symmetric round=4 arms=ours
+FSPEED lane=gbdt-symmetric arm=ours shape=taxi-1000000x16 round=4 ms=443.881 hash=32313f03d495140d
+FSPEED-ORDER lane=gbdt-symmetric round=5 arms=ours
+FSPEED lane=gbdt-symmetric arm=ours shape=taxi-1000000x16 round=5 ms=440.690 hash=833ea4b0e3b83cc3
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=logloss value=0.527836
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=auc value=0.614954
+FSPEED-SCALE stage=after rows=1000000 features=16 input_mib=61.0 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.

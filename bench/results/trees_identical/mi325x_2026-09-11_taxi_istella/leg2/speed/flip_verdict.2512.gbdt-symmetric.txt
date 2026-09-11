@@ -1,0 +1,10 @@
+selected lane=gbdt-symmetric arm=ours
+time taxi shape=taxi-1000000x16: before median=443.881 ms n=5, after median=443.322 ms n=10, ratio=0.999
+quality taxi auc: before=0.614954 after=0.614779 delta=-0.000175 n=1/2 higher-is-better tol=6.15e-05 WORSE
+quality taxi logloss: before=0.527836 after=0.527870 delta=+0.000034 n=1/2 lower-is-better tol=5.28e-05 ok
+time istella shape=istella-1000000x220: before median=1137.033 ms n=5, after median=1163.259 ms n=10, ratio=1.023
+quality istella auc: before=0.963318 after=0.963110 delta=-0.000208 n=1/2 higher-is-better tol=9.63e-05 WORSE
+quality istella logloss: before=0.145965 after=0.146343 delta=+0.000378 n=1/2 lower-is-better tol=1.46e-05 WORSE
+time geomean=1.010830 (decided unrounded, below 1 wins)
+reasons: quality:taxi quality:istella time
+NO FLIP geomean=1.011 taxi=0.999 istella=1.023 reason=quality:taxi

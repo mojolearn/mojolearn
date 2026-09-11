@@ -1,0 +1,85 @@
+| lane/fixture                 | verdict    | nvidia-NVIDIA_H100_80GB_HBM3 | amd-AMD_Instinct_Mi325X_VF |
+|------------------------------|------------|------------------|------------------|
+| et-clf/base                  | IDENTICAL x2 | c586b27a3b049614 | c586b27a3b049614 |
+| et-clf/denormal              | IDENTICAL x2 | b40377fb35e52909 | b40377fb35e52909 |
+| et-clf/denormal_ftz          | IDENTICAL x2 | b40377fb35e52909 | b40377fb35e52909 |
+| et-clf/dupes                 | IDENTICAL x2 | a24dcc8a93f699ff | a24dcc8a93f699ff |
+| et-clf/hashed                | IDENTICAL x2 | eb7aaadcd0843a6d | eb7aaadcd0843a6d |
+| et-clf/negative              | IDENTICAL x2 | e1409786c462d97b | e1409786c462d97b |
+| et-clf/odd                   | IDENTICAL x2 | 1da918353bb9f10e | 1da918353bb9f10e |
+| et-clf/ties                  | IDENTICAL x2 | 604f59c7a4203eeb | 604f59c7a4203eeb |
+| et-clf/wide                  | IDENTICAL x2 | ee8b318d6bf698b2 | ee8b318d6bf698b2 |
+| et-reg/base                  | IDENTICAL x2 | 754d8c127ecfc04d | 754d8c127ecfc04d |
+| et-reg/denormal              | IDENTICAL x2 | 19a23f6fea44befd | 19a23f6fea44befd |
+| et-reg/denormal_ftz          | IDENTICAL x2 | 19a23f6fea44befd | 19a23f6fea44befd |
+| et-reg/dupes                 | IDENTICAL x2 | 9a63fea590f79a67 | 9a63fea590f79a67 |
+| et-reg/hashed                | IDENTICAL x2 | 4e0a0d9a4670ed5f | 4e0a0d9a4670ed5f |
+| et-reg/negative              | IDENTICAL x2 | 3fd3dff94cc79fc2 | 3fd3dff94cc79fc2 |
+| et-reg/odd                   | IDENTICAL x2 | c9fe7c90673c2661 | c9fe7c90673c2661 |
+| et-reg/ties                  | IDENTICAL x2 | e7072e1c8fe0083c | e7072e1c8fe0083c |
+| et-reg/wide                  | IDENTICAL x2 | b745e53515f59cac | b745e53515f59cac |
+| gbdt-depthwise/base          | IDENTICAL x2 | 38726fc0c93c0bff | 38726fc0c93c0bff |
+| gbdt-depthwise/denormal      | IDENTICAL x2 | 64ba350c759ff2e9 | 64ba350c759ff2e9 |
+| gbdt-depthwise/denormal_ftz  | IDENTICAL x2 | 64ba350c759ff2e9 | 64ba350c759ff2e9 |
+| gbdt-depthwise/dupes         | IDENTICAL x2 | e521424a96e216cb | e521424a96e216cb |
+| gbdt-depthwise/hashed        | IDENTICAL x2 | 9455870882645f48 | 9455870882645f48 |
+| gbdt-depthwise/negative      | IDENTICAL x2 | d77fc9f6a3eee0a2 | d77fc9f6a3eee0a2 |
+| gbdt-depthwise/odd           | IDENTICAL x2 | fb9e5c03088814f6 | fb9e5c03088814f6 |
+| gbdt-depthwise/ties          | MOVED      | 465cb10f303e005a | MOVED            |
+| gbdt-depthwise/wide          | IDENTICAL x2 | 2a77ec865e62539a | 2a77ec865e62539a |
+| gbdt-lossguide/base          | IDENTICAL x2 | bc3017cb29615105 | bc3017cb29615105 |
+| gbdt-lossguide/denormal      | IDENTICAL x2 | b0a6d4a26ed4d77c | b0a6d4a26ed4d77c |
+| gbdt-lossguide/denormal_ftz  | IDENTICAL x2 | b0a6d4a26ed4d77c | b0a6d4a26ed4d77c |
+| gbdt-lossguide/dupes         | IDENTICAL x2 | b1546f9b3c4293a5 | b1546f9b3c4293a5 |
+| gbdt-lossguide/hashed        | IDENTICAL x2 | 3841103ecb3ac05d | 3841103ecb3ac05d |
+| gbdt-lossguide/negative      | IDENTICAL x2 | 67b332fcf8b5d0dd | 67b332fcf8b5d0dd |
+| gbdt-lossguide/odd           | IDENTICAL x2 | 9fd309c55a93e6c3 | 9fd309c55a93e6c3 |
+| gbdt-lossguide/ties          | MOVED      | 19d199f7bfa16c25 | MOVED            |
+| gbdt-lossguide/wide          | IDENTICAL x2 | b9cc1b2b55425cdc | b9cc1b2b55425cdc |
+| gbdt-rmse/base               | IDENTICAL x2 | 3f8aef8d73be249c | 3f8aef8d73be249c |
+| gbdt-rmse/denormal           | IDENTICAL x2 | 400f099e655dc453 | 400f099e655dc453 |
+| gbdt-rmse/denormal_ftz       | IDENTICAL x2 | 400f099e655dc453 | 400f099e655dc453 |
+| gbdt-rmse/dupes              | IDENTICAL x2 | 49848bfd3c26b52e | 49848bfd3c26b52e |
+| gbdt-rmse/hashed             | IDENTICAL x2 | a89dba586c0f1ab4 | a89dba586c0f1ab4 |
+| gbdt-rmse/negative           | IDENTICAL x2 | e54f74cdab3f29f0 | e54f74cdab3f29f0 |
+| gbdt-rmse/odd                | IDENTICAL x2 | 7b54ca9d69e29714 | 7b54ca9d69e29714 |
+| gbdt-rmse/ties               | MOVED      | 88cba1574daa922e | MOVED            |
+| gbdt-rmse/wide               | IDENTICAL x2 | 5ea3a06d9df1d862 | 5ea3a06d9df1d862 |
+| gbdt-symmetric/base          | IDENTICAL x2 | 56560dec5bdb6cb9 | 56560dec5bdb6cb9 |
+| gbdt-symmetric/denormal      | IDENTICAL x2 | 56560dec5bdb6cb9 | 56560dec5bdb6cb9 |
+| gbdt-symmetric/denormal_ftz  | IDENTICAL x2 | 56560dec5bdb6cb9 | 56560dec5bdb6cb9 |
+| gbdt-symmetric/dupes         | IDENTICAL x2 | 9d55545ce5f2ac2b | 9d55545ce5f2ac2b |
+| gbdt-symmetric/hashed        | IDENTICAL x2 | cf3de2636433b65a | cf3de2636433b65a |
+| gbdt-symmetric/negative      | IDENTICAL x2 | fb9966f26639c286 | fb9966f26639c286 |
+| gbdt-symmetric/odd           | IDENTICAL x2 | 0836bd47530040d0 | 0836bd47530040d0 |
+| gbdt-symmetric/ties          | MOVED      | b32c469f812adf25 | MOVED            |
+| gbdt-symmetric/wide          | IDENTICAL x2 | bc0084b9b1e30f87 | bc0084b9b1e30f87 |
+| kmeans/base                  | IDENTICAL x2 | 5aa44cc11034dec9 | 5aa44cc11034dec9 |
+| kmeans/denormal              | IDENTICAL x2 | 993fe5caff144b0c | 993fe5caff144b0c |
+| kmeans/denormal_ftz          | IDENTICAL x2 | 993fe5caff144b0c | 993fe5caff144b0c |
+| kmeans/dupes                 | IDENTICAL x2 | 2ae942d45a51757a | 2ae942d45a51757a |
+| kmeans/hashed                | IDENTICAL x2 | 0a570e84b0002723 | 0a570e84b0002723 |
+| kmeans/negative              | IDENTICAL x2 | d4cc38e75f8e2d75 | d4cc38e75f8e2d75 |
+| kmeans/odd                   | IDENTICAL x2 | 43d8a3d3859f4143 | 43d8a3d3859f4143 |
+| kmeans/ties                  | IDENTICAL x2 | 3de3e103006de69c | 3de3e103006de69c |
+| kmeans/wide                  | IDENTICAL x2 | 6f0529fcb3d60536 | 6f0529fcb3d60536 |
+| rf-clf/base                  | DIVERGENT  | parts differ: predict,proba; agree: - | 21178dc5457bf5dc |
+| rf-clf/denormal              | DIVERGENT  | parts differ: predict,proba; agree: - | 9ee018b4ad7d8c6c |
+| rf-clf/denormal_ftz          | DIVERGENT  | parts differ: predict,proba; agree: - | 9ee018b4ad7d8c6c |
+| rf-clf/dupes                 | DIVERGENT  | parts differ: predict,proba; agree: - | 941ea7485b906b92 |
+| rf-clf/hashed                | DIVERGENT  | parts differ: predict,proba; agree: - | 30000a54b1ebf87f |
+| rf-clf/negative              | DIVERGENT  | parts differ: predict,proba; agree: - | 5c321c2a1e99f705 |
+| rf-clf/odd                   | DIVERGENT  | parts differ: predict,proba; agree: - | 8eadf0d0c523cf9a |
+| rf-clf/ties                  | DIVERGENT  | parts differ: predict,proba; agree: - | 578c313bdad14449 |
+| rf-clf/wide                  | DIVERGENT  | parts differ: predict,proba; agree: - | e57dc48ebb4fda48 |
+| rf-reg/base                  | IDENTICAL x2 | f032017cfd1c73dd | f032017cfd1c73dd |
+| rf-reg/denormal              | IDENTICAL x2 | feed3869ba06eaf7 | feed3869ba06eaf7 |
+| rf-reg/denormal_ftz          | IDENTICAL x2 | feed3869ba06eaf7 | feed3869ba06eaf7 |
+| rf-reg/dupes                 | IDENTICAL x2 | 55f5becd2a3a172c | 55f5becd2a3a172c |
+| rf-reg/hashed                | IDENTICAL x2 | c755113ac878c8b9 | c755113ac878c8b9 |
+| rf-reg/negative              | IDENTICAL x2 | cd81c456c75aaaf0 | cd81c456c75aaaf0 |
+| rf-reg/odd                   | IDENTICAL x2 | 33f207a8fab32866 | 33f207a8fab32866 |
+| rf-reg/ties                  | IDENTICAL x2 | ec6e7b28cd0d16a9 | ec6e7b28cd0d16a9 |
+| rf-reg/wide                  | IDENTICAL x2 | 8d9b05172d7a3777 | 8d9b05172d7a3777 |
+
+summary: DIVERGENT=9, IDENTICAL=68, MOVED=4

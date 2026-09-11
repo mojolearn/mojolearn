@@ -1,0 +1,31 @@
+FSPEED-NOTE lane=gbdt-symmetric arms=cpu,gpu,opencl metric=devices delta=3.000000 reason=AMD box: CPU arms run for libraries with no AMD GPU path, on all cores (ENGINEERING_RULES.md section 10); every arm name carries its device
+FSPEED-NOTE lane=gbdt-symmetric arms=ours metric=devices delta=3.000000 reason=devices=cpu,gpu,opencl (explicit); AMD box: an opponent with an AMD GPU path runs on the GPU, one without runs on this box's CPU on all cores (ENGINEERING_RULES.md section 10); the arm name says which
+FSPEED-IMPORT-ORDER lane=gbdt-symmetric first=opponents
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=hip path=/root/mojolearn/python/mojolearn/identical/_mojolearn_gbdt.so
+FSPEED-SCALE stage=before rows=1000000 features=220 input_mib=839.2 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=catboost-cpu mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED-WARMUP lane=gbdt-symmetric arm=ours shape=istella-1000000x220 ms=1815.963
+FSPEED-WARMUP lane=gbdt-symmetric arm=catboost-cpu shape=istella-1000000x220 ms=4429.346
+FSPEED-ORDER lane=gbdt-symmetric round=1 arms=ours,catboost-cpu
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=1 ms=1463.645 hash=c528737f86b06435
+FSPEED lane=gbdt-symmetric arm=catboost-cpu shape=istella-1000000x220 round=1 ms=4341.752 hash=649971705d63a83b
+FSPEED-ORDER lane=gbdt-symmetric round=2 arms=ours,catboost-cpu
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=2 ms=1284.302 hash=61842bfd2dee7c15
+FSPEED lane=gbdt-symmetric arm=catboost-cpu shape=istella-1000000x220 round=2 ms=4400.296 hash=649971705d63a83b
+FSPEED-ORDER lane=gbdt-symmetric round=3 arms=ours,catboost-cpu
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=3 ms=1315.837 hash=720e13c88dd0983d
+FSPEED lane=gbdt-symmetric arm=catboost-cpu shape=istella-1000000x220 round=3 ms=4380.984 hash=649971705d63a83b
+FSPEED-ORDER lane=gbdt-symmetric round=4 arms=ours,catboost-cpu
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=4 ms=1310.251 hash=d07ea8d1cc58437d
+FSPEED lane=gbdt-symmetric arm=catboost-cpu shape=istella-1000000x220 round=4 ms=4373.010 hash=649971705d63a83b
+FSPEED-ORDER lane=gbdt-symmetric round=5 arms=ours,catboost-cpu
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=5 ms=1311.737 hash=762fbbed7b315f6a
+FSPEED lane=gbdt-symmetric arm=catboost-cpu shape=istella-1000000x220 round=5 ms=4370.895 hash=649971705d63a83b
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=logloss value=0.147018
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=auc value=0.962675
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-cpu metric=logloss value=0.138897
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-cpu metric=auc value=0.966996
+FSPEED-SCALE stage=after rows=1000000 features=220 input_mib=839.2 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.

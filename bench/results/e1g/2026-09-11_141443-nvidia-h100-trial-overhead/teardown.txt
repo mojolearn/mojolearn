@@ -1,0 +1,6 @@
+pod=zohoobc9mx9oa0
+armed=1
+terminated=1
+deadman_pid=61406
+exit=0
+at=2026-09-11T14:26:41Z

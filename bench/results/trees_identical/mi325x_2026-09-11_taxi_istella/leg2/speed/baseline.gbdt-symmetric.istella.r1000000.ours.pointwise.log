@@ -1,0 +1,32 @@
+FSPEED-NOTE lane=gbdt-symmetric arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); AMD box: an opponent with an AMD GPU path runs on the GPU, one without runs on this box's CPU on all cores (ENGINEERING_RULES.md section 10); the arm name says which
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=hip path=/root/mojolearn/python/mojolearn/identical/_mojolearn_gbdt.so
+FSPEED-AB lane=gbdt-symmetric arm=ours-ab use_pointwise_searcher=True (arm ours keeps the estimator default)
+BENCH_BINDING arm=ours-ab requested=identical resolved=identical compiled=identical vendor=hip path=/root/mojolearn/python/mojolearn/identical/_mojolearn_gbdt.so
+FSPEED-SCALE stage=before rows=1000000 features=220 input_mib=839.2 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours-ab mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED-WARMUP lane=gbdt-symmetric arm=ours shape=istella-1000000x220 ms=1820.430
+FSPEED-WARMUP lane=gbdt-symmetric arm=ours-ab shape=istella-1000000x220 ms=1921.515
+FSPEED-ORDER lane=gbdt-symmetric round=1 arms=ours,ours-ab
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=1 ms=1134.647 hash=5e32c6d0064ebc13
+FSPEED lane=gbdt-symmetric arm=ours-ab shape=istella-1000000x220 round=1 ms=1598.461 hash=579d955b7271c0b4
+FSPEED-ORDER lane=gbdt-symmetric round=2 arms=ours,ours-ab
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=2 ms=1159.245 hash=4959892985e8f802
+FSPEED lane=gbdt-symmetric arm=ours-ab shape=istella-1000000x220 round=2 ms=1601.109 hash=d4d12a42dd5929ad
+FSPEED-ORDER lane=gbdt-symmetric round=3 arms=ours,ours-ab
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=3 ms=1149.340 hash=006b3e332b769410
+FSPEED lane=gbdt-symmetric arm=ours-ab shape=istella-1000000x220 round=3 ms=1590.012 hash=d4d12a42dd5929ad
+FSPEED-ORDER lane=gbdt-symmetric round=4 arms=ours,ours-ab
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=4 ms=1133.515 hash=766b521d35c5fb39
+FSPEED lane=gbdt-symmetric arm=ours-ab shape=istella-1000000x220 round=4 ms=1597.222 hash=579d955b7271c0b4
+FSPEED-ORDER lane=gbdt-symmetric round=5 arms=ours,ours-ab
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=5 ms=1131.451 hash=23b190f415a7350b
+FSPEED lane=gbdt-symmetric arm=ours-ab shape=istella-1000000x220 round=5 ms=1579.691 hash=d4d12a42dd5929ad
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=logloss value=0.147073
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=auc value=0.962546
+FSPEED-ACC lane=gbdt-symmetric arm=ours-ab metric=logloss value=0.138653
+FSPEED-ACC lane=gbdt-symmetric arm=ours-ab metric=auc value=0.966990
+FSPEED-NOTE lane=gbdt-symmetric arms=ours,ours-ab metric=logloss delta=0.057249 reason=two arms of mojolearn differ by 5.72% on logloss (tolerance 2.00%); their configurations were NOT identical, so the timing ratio compares two different problems
+FSPEED-SCALE stage=after rows=1000000 features=220 input_mib=839.2 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
