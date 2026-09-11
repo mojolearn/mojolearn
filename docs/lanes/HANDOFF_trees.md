@@ -799,3 +799,24 @@ existing Apple JSON 81/81; the fold matched that baseline 81/81 on NVIDIA).
   was wound down by the orchestrator while its first RF cell was in flight
   (lightgbm-cuda at 470 s per fit ate the phase).
 - No flag flipped: nothing has an H100 timing with a log on disk.
+
+## 2026-09-11 night, lane forest-speed: DEVIATIONS 2637 and 2638 (source only, not built)
+
+DEVIATION 2637 (RandomForest and ExtraTrees). A C-order float32 X used to be
+transposed to column-major in one thread in Python (`as_f32_colmajor`) and
+copied again into pinned memory in one thread by the binding. The Sep 11
+Istella-S 1M stage log puts about 700 ms of a 2104 ms RF round outside
+`binding_total` and 159 ms in `bind_host_copy`. New `rf_*_fit_rowmajor` and
+`et_*_fit_rowmajor` entries take the caller's block and transpose it straight
+into the pinned stage across the host pool (`ensemble/host_layout.mojo`); for
+RF the builder's host view of X (`host_x_addr`) becomes the stage. Pure moves,
+so the forest bits are expected unchanged.
+
+DEVIATION 2638 (IsolationForest). The fit appended every training cell into a
+List, appended it again to transpose, scanned it and wrote it to pinned memory,
+all in one thread; the binding now lends the block by address and one threaded
+pass stages `ftz(cell)` in column-major order with the finite scan.
+
+Neither was compiled or run: the lane wound down first. RUN OWED commands are
+in commit c4056486's message. The same-pod baseline taken before the wind-down
+is in `bench/results/forest_speed_2026-09-11/`.

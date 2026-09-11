@@ -382,8 +382,16 @@ def verify_our_arm(arm, requested=None):
     model = arm.make()
     resolved = model.numeric_mode_used()
     vendor = model.vendor_used()
-    binding = model._bind()
-    prefix = model._BINDING.removeprefix("_mojolearn_")
+    # FOUND 2026-09-11 (lane forest-speed, H100): IsolationForest inherits the
+    # mixin's `_BINDING = "_mojolearn"` while its code is compiled into the
+    # svm extension, so this readback asked the base binding for
+    # `_numeric_mode` and REFUSED our iforest arm on taxi and Istella-S.
+    # Its tier and vendor are read from `_mojolearn_svm` (`svm_numeric_mode`).
+    binding_name = model._BINDING
+    if type(model).__name__ == "IsolationForest":
+        binding_name = "_mojolearn_svm"
+    binding = model._bind(binding_name)
+    prefix = binding_name.removeprefix("_mojolearn_")
     getter = getattr(binding, prefix + "_numeric_mode", None)
     if getter is None:
         raise RuntimeError("native compiled-mode readback missing for " + model._BINDING)
