@@ -147,6 +147,7 @@ from checks.kernel_matrix import (
     lib_block_size_for,
     lib_hardware_ftz_fma_for,
     gemm_wide_split_for,
+    lib_gemm_block_parallelism_for,
     lib_lane_width_for,
     lib_smem_page_fits_for,
     lib_smem_pages_for,
