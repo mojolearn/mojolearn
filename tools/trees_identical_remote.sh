@@ -104,5 +104,13 @@ track_mojo &
 track_pip &
 track_lgbm &
 wait
+# Buffer conversions with the real opponent in the process (the 0.8.0 ctypes
+# bug, fixed in 0.8.1): import mojolearn, then cuml and treelite.model, then
+# fit and predict one small RF. After `wait` because cuML is installed by
+# track_pip while track_mojo builds and imports. 0 pass, 1 refused, 2 not tested.
+MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_SKIP_BUILD_GATE=1 PYTHONPATH="$ROOT/python" \
+    timeout -k 30 600 python3 tools/check_buffer_foreign_argtypes.py --real-cuml \
+    > "$LOGS/buffer_foreign_argtypes_cuml.log" 2>&1
+echo "buffer_foreign_argtypes_cuml=$? $(date -u +%H:%M:%S)" >> "$OUT/setup.txt"
 echo "finished=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$OUT/setup.txt"
 : > "$OUT/setup.done"
