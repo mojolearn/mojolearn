@@ -475,7 +475,8 @@ def gbdt_fit(
     var t_phase = host_times.start()
     var n_x = n_rows * n_features
     var xs = List[Float32]()
-    # DEVIATION 2550: under `MOJOLEARN_2550_BORROW_X` the caller's buffer
+    # DEVIATION 2550 (default ON; `-D MOJOLEARN_2550_HOST_COPY=1` restores
+    # the copy): the caller's buffer
     # goes to `train` as a pointer and is never copied here. The binding
     # holds the Python array for the length of the call (its docstring).
     var x_borrow = Optional[MutPointer[Float32, MutUntrackedOrigin]]()

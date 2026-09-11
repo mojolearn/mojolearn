@@ -2,9 +2,11 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """DEVIATIONS 2550 and 2551, both sides of both switches (ENGINEERING_RULES 8).
 
-    pixi run check-gbdt-per-round        default build, both switches off
-    pixi run check-gbdt-per-round-2550   -D MOJOLEARN_2550_BORROW_X=1
-    pixi run check-gbdt-per-round-2551   -D MOJOLEARN_2551_DEVICE_PARTITION=1
+    pixi run check-gbdt-per-round                  default build: 2550 ON (the
+                                                   default since 2026-09-11), 2551 off
+    pixi run check-gbdt-per-round-2550-host-copy   -D MOJOLEARN_2550_HOST_COPY=1,
+                                                   the 2550 OPT-OUT side
+    pixi run check-gbdt-per-round-2551             -D MOJOLEARN_2551_DEVICE_PARTITION=1
 
 CLAIM 1, every build. `DeviceLeafPartitioner.partition` returns the same
 `row_index`, `offsets` and `sizes` as the host `partition_from_bins` over a

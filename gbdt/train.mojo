@@ -83,8 +83,10 @@ from gbdt.gpu_util.kernel.bootstrap import (
 #: and MVS does not reach their GPU oblivious searcher.
 comptime DEFAULT_SUBSAMPLE = Float32(0.66)
 
-comptime BORROW_X_COLUMNS = is_defined["MOJOLEARN_2550_BORROW_X"]()
-"""DEVIATION 2550 (2026-09-11), OPT-IN with `-D MOJOLEARN_2550_BORROW_X=1`.
+comptime BORROW_X_COLUMNS = not is_defined["MOJOLEARN_2550_HOST_COPY"]()
+"""DEVIATION 2550 (2026-09-11), DEFAULT ON in both tiers since 2026-09-11
+(flipped on Andrew's order on one dataset, Istella-S on the MI325X; taxi
+owed). `-D MOJOLEARN_2550_HOST_COPY=1` restores the two host copies below.
 Ours, host bookkeeping only. `gbdt_fit` copied the caller's column-major X
 into a `List` (`gbdt/estimator.mojo`) and `train` copied every raw column
 again into its own `List` before quantization, so a 1M x 220 fit paid two
@@ -94,9 +96,9 @@ the caller's pointer (`x_borrow`) and `train` reads every raw, non-
 categorical column in place through `column_ptrs`; categorical and CTR
 columns stay owned. The same bytes are read in the same order by the same
 border builder and quantize kernel, so the model is bitwise the default's
-by construction. Checks: `pixi run check-gbdt-per-round` (off) and
-`check-gbdt-per-round-2550` (on) print one MODEL_HASH per lane, which must
-agree across the two builds."""
+by construction. Checks, one per side: `pixi run check-gbdt-per-round`
+(the default, ON) and `check-gbdt-per-round-2550-host-copy` (the opt-out)
+print one MODEL_HASH per lane, which must agree across the two builds."""
 from gbdt.targets.kernel.pointwise_targets import (
     OBJECTIVE_CROSSENTROPY,
     OBJECTIVE_LOGLOSS,
@@ -607,8 +609,9 @@ def train(
     min_child_hessian: Float64 = -1.0,
     feature_fraction: Float64 = 1.0,
     # DEVIATION 2550: the caller's column-major X read in place, with
-    # `x_colmajor` empty. The binding entry (`gbdt_fit`) passes it under
-    # `MOJOLEARN_2550_BORROW_X`; every other caller passes the List.
+    # `x_colmajor` empty. The binding entry (`gbdt_fit`) passes it by
+    # default (`-D MOJOLEARN_2550_HOST_COPY=1` opts out); every other
+    # caller passes the List.
     x_borrow: Optional[MutPointer[Float32, MutUntrackedOrigin]] = None,
 ) raises -> TrainedModel:
     """Borders -> device quantization -> fit, one call.
