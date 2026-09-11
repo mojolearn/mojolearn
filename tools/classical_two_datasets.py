@@ -144,7 +144,7 @@ import numpy as np
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
 
-LANES = ("kmeans", "pca", "ols", "knn", "kde", "svc")
+LANES = ("kmeans", "pca", "ols", "knn", "kde", "svc", "dbscan", "hdbscan")
 DATASETS = ("taxi", "istella")
 #: Every arm a lane has. A leg names the ones it races with --arms (NVIDIA:
 #: ours, cuml-gpu and torch; AMD: ours, torch ROCm and scikit-learn on the CPU).
@@ -155,9 +155,21 @@ ARMS = {
     "knn": ("ours", "cuml-gpu", "torch-gpu", "sklearn-cpu"),
     "kde": ("ours", "cuml-gpu", "sklearn-cpu"),
     "svc": ("ours", "cuml-gpu", "sklearn-cpu"),
+    # Lane linear-cluster-istella (2026-09-11): DBSCAN at 1,000,000 rows,
+    # measurement only. `cuml-gpu` is cuML's default eps search ('brute'),
+    # `cuml-gpu-rbc` its random ball cover; ours runs its default ('rbc').
+    # HDBSCAN has a cuML arm only: this library ships no HDBSCAN.
+    "dbscan": ("ours", "cuml-gpu", "cuml-gpu-rbc"),
+    "hdbscan": ("cuml-gpu",),
 }
 BLOCK_OF = {"kmeans": "big", "pca": "big", "ols": "big", "knn": "knn",
-            "kde": "kde", "svc": "svc"}
+            "kde": "kde", "svc": "svc", "dbscan": "dbscan", "hdbscan": "dbscan"}
+#: DBSCAN block rows and parameters. eps and min_samples come from the
+#: environment (MOJOLEARN_CTD_DBSCAN_<DATASET>="eps,min_samples"), the SAME
+#: value for every arm, chosen per dataset by the lane's rule and recorded in
+#: each race's arm info; the block itself is standardized like kde and svc.
+DBSCAN_ROWS = 1_000_000
+HDBSCAN_ROWS = 100_000
 
 BIG_ROWS = 4_000_000
 KMEANS_K = 64
@@ -344,6 +356,30 @@ def prep(args):
             _write_block(args.data, "big-" + ds,
                          {"X": X, "y": ytr[:n], "Xq": Xq, "yq": yte,
                           "init": init}, rec)
+        if "dbscan" in blocks:
+            # Lane linear-cluster-istella: the first DBSCAN_ROWS train rows,
+            # sentinel cleaned, standardized by themselves (float64 mean and
+            # std), so one eps means the same thing on every column.
+            if ds == "taxi":
+                db_src = harness.load_taxi("shipped", regression=True)
+                db_x = _taxi_numeric(harness, db_src.X_train)
+                db_loader = "speed_gbdt_arm.load_taxi('shipped', regression=True), TAXI_NUMERIC columns"
+            else:
+                db_src = reg if reg is not None else harness.load_istella("shipped", regression=True)
+                db_x = db_src.X_train
+                db_loader = "speed_gbdt_arm.load_istella('shipped', regression=True)"
+            n_db = min(DBSCAN_ROWS, cap, db_x.shape[0]) if cap else min(DBSCAN_ROWS, db_x.shape[0])
+            Xd, bad_x = clean_sentinel(db_x[:n_db])
+            (Xd,) = standardize(Xd)
+            rec = dict(base, block="dbscan", lanes=["dbscan", "hdbscan"], loader=db_loader,
+                       fit_rows=[0, n_db], fit_rows_available=int(db_x.shape[0]),
+                       sentinel_cells_replaced={"X": bad_x},
+                       scaling="standardized by these rows (float64 mean and std)",
+                       dbscan={"rows": n_db,
+                               "params_env": "MOJOLEARN_CTD_DBSCAN_%s" % ds.upper()},
+                       hdbscan={"rows": min(HDBSCAN_ROWS, n_db)})
+            _write_block(args.data, "dbscan-" + ds, {"X": Xd}, rec)
+            db_src = db_x = Xd = None
         if "kde" in blocks:
             fit_idx = stride_rows(xtr.shape[0], kde_train)
             q_idx = stride_rows(xte.shape[0], kde_query)
@@ -1250,7 +1286,104 @@ class SkQuota:
         return self.inner.outputs()
 
 
+# ---- DBSCAN and HDBSCAN (lane linear-cluster-istella, measurement only) -------
+
+def _dbscan_params(ds):
+    """(eps, min_samples) for this dataset, from MOJOLEARN_CTD_DBSCAN_<DATASET>
+    ("eps,min_samples"). One value for every arm of a race, never a default."""
+    key = "MOJOLEARN_CTD_DBSCAN_%s" % ds.upper()
+    raw = os.environ.get(key, "")
+    if "," not in raw:
+        raise RuntimeError("%s is not set (want 'eps,min_samples')" % key)
+    eps, ms = raw.split(",", 1)
+    return float(eps), int(ms)
+
+
+class OursDBSCAN:
+    def __init__(self, data, rec):
+        self.ml = _ours_module()
+        self.X = data["X"]
+        self.eps, self.min_samples = _dbscan_params(rec["dataset"])
+        self.est = None
+        self.info = _ours_info(self.ml, self.ml.DBSCAN(eps=self.eps, min_samples=self.min_samples))
+        self.info["config"] = ("mojolearn.DBSCAN(eps=%r, min_samples=%d, metric='euclidean', "
+                               "algorithm='rbc' (its default)); fit timed" % (self.eps, self.min_samples))
+
+    def call(self):
+        est = self.ml.DBSCAN(eps=self.eps, min_samples=self.min_samples)
+        est.fit(self.X)
+        self.est = est
+
+    def sync(self):
+        pass
+
+    def outputs(self):
+        return {"labels": np.array(self.est.labels_, dtype=np.int32).reshape(-1)}
+
+
+class CumlDBSCAN:
+    ALGO = "brute"
+
+    def __init__(self, data, rec):
+        from cuml.cluster import DBSCAN
+        self.DBSCAN = DBSCAN
+        t, self.info = _cuml_setup({"X": data["X"]})
+        self.x = t["X"]
+        self.eps, self.min_samples = _dbscan_params(rec["dataset"])
+        self.info["config"] = ("cuml.cluster.DBSCAN(eps=%r, min_samples=%d, metric='euclidean', "
+                               "algorithm=%r, calc_core_sample_indices=False, output_type='cupy'); "
+                               "fit timed" % (self.eps, self.min_samples, self.ALGO))
+        self.est = None
+
+    def call(self):
+        est = self.DBSCAN(eps=self.eps, min_samples=self.min_samples, metric="euclidean",
+                          algorithm=self.ALGO, calc_core_sample_indices=False, output_type="cupy")
+        est.fit(self.x)
+        self.est = est
+
+    def sync(self):
+        _cupy_sync()
+
+    def outputs(self):
+        return {"labels": np.asarray(_to_host(self.est.labels_), dtype=np.int32).reshape(-1)}
+
+
+class CumlDBSCANRbc(CumlDBSCAN):
+    ALGO = "rbc"
+
+
+class CumlHDBSCAN:
+    MIN_SAMPLES = 10
+    MIN_CLUSTER_SIZE = 100
+
+    def __init__(self, data, rec):
+        from cuml.cluster import HDBSCAN
+        self.HDBSCAN = HDBSCAN
+        n = int(rec.get("hdbscan", {}).get("rows", HDBSCAN_ROWS))
+        t, self.info = _cuml_setup({"X": data["X"][:n]})
+        self.x = t["X"]
+        self.info["config"] = ("cuml.cluster.HDBSCAN(min_samples=%d, min_cluster_size=%d, "
+                               "metric='euclidean', cluster_selection_method='eom', output_type='cupy') "
+                               "on the block's first %d rows; fit timed"
+                               % (self.MIN_SAMPLES, self.MIN_CLUSTER_SIZE, n))
+        self.est = None
+
+    def call(self):
+        est = self.HDBSCAN(min_samples=self.MIN_SAMPLES, min_cluster_size=self.MIN_CLUSTER_SIZE,
+                           metric="euclidean", cluster_selection_method="eom", output_type="cupy")
+        est.fit(self.x)
+        self.est = est
+
+    def sync(self):
+        _cupy_sync()
+
+    def outputs(self):
+        return {"labels": np.asarray(_to_host(self.est.labels_), dtype=np.int32).reshape(-1)}
+
+
 BUILDERS = {
+    ("dbscan", "ours"): OursDBSCAN, ("dbscan", "cuml-gpu"): CumlDBSCAN,
+    ("dbscan", "cuml-gpu-rbc"): CumlDBSCANRbc, ("hdbscan", "cuml-gpu"): CumlHDBSCAN,
     ("kmeans", "ours"): OursKMeans, ("kmeans", "sklearn-cpu"): SkKMeans, ("kmeans", "torch-gpu"): TorchKMeans,
     ("kmeans", "cuml-gpu"): CumlKMeans,
     ("pca", "ours"): OursPCA, ("pca", "sklearn-cpu"): SkPCA, ("pca", "torch-gpu"): TorchPCA,
@@ -1526,6 +1659,21 @@ def quality(lane, data, outs, rec):
             ok = np.isfinite(s) & (s > sentinel)
             q[arm] = {"mean_log_likelihood": float(s[ok].mean()) if ok.any() else None,
                       "rows_without_density": int((~ok).sum())}
+    elif lane in ("dbscan", "hdbscan"):
+        # Cluster count, noise share, and agreement with OUR labels (adjusted
+        # Rand index over every row both arms labeled; noise is its own label).
+        ref = outs.get("ours")
+        for arm, o in outs.items():
+            lab = o["labels"].astype(np.int64).reshape(-1)
+            ent = {"rows": int(lab.shape[0]),
+                   "n_clusters": int(np.unique(lab[lab >= 0]).shape[0]),
+                   "noise_fraction": float((lab < 0).mean())}
+            if ref is not None and arm != "ours" and ref["labels"].size == lab.size:
+                from sklearn.metrics import adjusted_rand_score
+                r = ref["labels"].astype(np.int64).reshape(-1)
+                ent["ari_vs_ours"] = float(adjusted_rand_score(r, lab))
+                ent["noise_agreement_vs_ours"] = float(((r < 0) == (lab < 0)).mean())
+            q[arm] = ent
     elif lane == "svc":
         yq = data["yq"].astype(np.float64)
         for arm, o in outs.items():
