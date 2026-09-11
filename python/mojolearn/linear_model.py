@@ -314,10 +314,22 @@ def _center(x, mu32):
     rows, cols = _dims(x)
     fn = _native_helper("center_columns_f32")
     mean = Array.from_list([float(m) for m in mu32], "<f8")
-    out = empty(x.shape, "<f4")
+    out = _helper_output(x.shape, rows * cols)
     fn(addr_ro(x, name="X"), int(rows), int(cols),
        addr_ro(mean, name="column means"), addr(out, name="centered X"))
     return out
+
+
+def _helper_output(shape, size):
+    """DEVIATION 2632: the float32 destination of a native helper that
+    writes EVERY element (`center_columns_f32`, `scale_rows_f32`), taken from
+    `_buffer._output_store`'s uninitialized raw allocation instead of
+    `empty`, whose `array.array` zero fill cost 105 to 121 ms of a 4,000,000 x
+    11 LinearRegression fit on the H100 pod (the helper itself took 8 ms).
+    No byte of the result comes from the allocation, so no bit moves; the
+    helper's own threads take the first touch of every page."""
+    from ._buffer import _output_store
+    return Array._owned(_output_store("f", size), tuple(shape), "<f4", "C")
 
 
 def _shift(v, mu32):
@@ -340,7 +352,7 @@ def _scale_rows(x, root):
     rows, cols = _dims(x)
     fn = _native_helper("scale_rows_f32")
     w = Array.from_list([float(r) for r in root], "<f4")
-    out = empty(x.shape, "<f4")
+    out = _helper_output(x.shape, rows * cols)
     fn(addr_ro(x, name="X"), int(rows), int(cols),
        addr_ro(w, name="sqrt weights"), addr(out, name="scaled X"))
     return out

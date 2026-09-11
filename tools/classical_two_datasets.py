@@ -1028,14 +1028,29 @@ class CumlKMeans:
         self.KMeans = KMeans
         t, self.info = _cuml_setup({"X": data["X"], "init": data["init"]})
         self.x, self.init = t["X"], t["init"]
+        # cuVS refuses tol <= 0 ("RAFT failure ... invalid parameter (tol<=0)",
+        # H100 pod 22up9vbhj3tbeg, 2026-09-11: every cuml-gpu kmeans round died
+        # on it), exactly as our binding does; both arms fall back to the
+        # speed driver's 1e-7, so 20 iterations run on each.
+        self.tol = 0.0
         self.info["config"] = ("cuml.cluster.KMeans(n_clusters=64, init=<the shared array, on device>, "
-                               "n_init=1, max_iter=20, tol=0.0, output_type='cupy'); fit timed")
+                               "n_init=1, max_iter=20, tol=0.0 (1e-7 when refused), "
+                               "output_type='cupy'); fit timed")
         self.est = None
 
     def call(self):
-        est = self.KMeans(n_clusters=KMEANS_K, init=self.init, n_init=1, max_iter=KMEANS_ITER,
-                          tol=0.0, output_type="cupy")
-        est.fit(self.x)
+        try:
+            est = self.KMeans(n_clusters=KMEANS_K, init=self.init, n_init=1, max_iter=KMEANS_ITER,
+                              tol=self.tol, output_type="cupy")
+            est.fit(self.x)
+        except RuntimeError as exc:
+            if self.tol != 0.0 or "tol" not in str(exc):
+                raise
+            self.tol = 1e-7
+            self.info["tol_fallback"] = 1e-7
+            est = self.KMeans(n_clusters=KMEANS_K, init=self.init, n_init=1, max_iter=KMEANS_ITER,
+                              tol=self.tol, output_type="cupy")
+            est.fit(self.x)
         self.est = est
 
     def sync(self):
@@ -1247,6 +1262,13 @@ BUILDERS = {
     ("kde", "ours"): OursKDE, ("kde", "sklearn-cpu"): SkKDE, ("kde", "cuml-gpu"): CumlKDE,
     ("svc", "ours"): OursSVC, ("svc", "sklearn-cpu"): SkSVC, ("svc", "cuml-gpu"): CumlSVC,
 }
+# `ours-base`: OUR SAME estimator from a second Python tree
+# (MOJOLEARN_CTD_BASE_PY, a copy of `python/` holding the BEFORE bindings), so
+# a before/after A/B interleaves round by round in one race instead of two
+# races minutes apart (lane linear-cluster-speed, 2026-09-11). It is never an
+# opponent: ratios against it are ours-vs-ours and are not quoted as one.
+for _lane in LANES:
+    BUILDERS[(_lane, "ours-base")] = BUILDERS[(_lane, "ours")]
 for _lane in LANES:
     BUILDERS[(_lane, "sklearn-cpu-quota")] = (
         lambda data, rec, _c=BUILDERS[(_lane, "sklearn-cpu")]: SkQuota(_c, data, rec))
@@ -1399,9 +1421,14 @@ def _worker_env(arm, root):
     env = dict(os.environ)
     for k in THREAD_ENV:
         env.pop(k, None)
-    if arm == "ours":
+    if arm in ("ours", "ours-base"):
         env["MOJOLEARN_NUMERIC_MODE"] = "identical"
-        env["PYTHONPATH"] = os.path.join(root, "python") + (
+        tree = os.path.join(root, "python")
+        if arm == "ours-base":
+            tree = os.environ.get("MOJOLEARN_CTD_BASE_PY", "")
+            if not tree or not os.path.isdir(tree):
+                raise SystemExit("arm ours-base needs MOJOLEARN_CTD_BASE_PY, a python/ tree holding the before bindings")
+        env["PYTHONPATH"] = tree + (
             os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
     return env
 
@@ -1525,7 +1552,7 @@ def race(args):
     tag = "%s-%s" % (lane, ds)
     workers = {}
     for arm in arms:
-        py = args.ours_python if arm == "ours" else args.theirs_python
+        py = args.ours_python if arm in ("ours", "ours-base") else args.theirs_python
         cmd = shlex.split(py) + [os.path.abspath(__file__), "worker", "--arm", arm,
                                  "--lane", lane, "--dataset", ds, "--data", args.data]
         workers[arm] = Worker(arm, cmd, _worker_env(arm, args.root),
