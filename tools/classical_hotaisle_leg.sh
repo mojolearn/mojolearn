@@ -70,13 +70,20 @@ B="$MOJOLEARN_CTD_OUT/hotaisle_body.txt"
 #     - 300 s), and the lease deadline on the pod is the mtime of
 #     /tmp/mojolearn-lease.pid plus the `sleep N` of /tmp/mojolearn-lease.sh
 #     (tools/runpod_guard.sh). End 180 s inside the smaller.
-_work=$(tr '\0' ' ' < /proc/1/cmdline 2>/dev/null | sed -n 's|^timeout -k [0-9]* \([0-9][0-9]*\) sh /root/gemm_leg.sh.*|\1|p')
+#   DigitalOcean (tools/do_extra_leg.sh): the same `timeout -k 30 <seconds> sh
+#     /root/gemm_leg.sh` wrapper, natively (not PID 1), so every pid is read.
+_work=""
+for _c in /proc/1/cmdline /proc/[0-9]*/cmdline; do
+    _work=$(tr '\0' ' ' < "$_c" 2>/dev/null | sed -n 's|^timeout -k [0-9]* \([0-9][0-9]*\) sh /root/gemm_leg.sh.*|\1|p')
+    [ -n "$_work" ] && break
+done
 _started=$(sed -n 's/^started=//p' /root/gemm_leg_out/leg.txt 2>/dev/null | head -1)
 _s0=$(date -d "$_started" +%s 2>/dev/null)
 _provider=unknown
 _cap=""
 if [ -n "$_work" ] && [ -n "$_s0" ]; then
-    _provider=hotaisle
+    _provider=$(sed -n 's/^provider=//p' /root/gemm_leg_out/leg.txt 2>/dev/null | head -1)
+    [ -n "$_provider" ] || _provider=digitalocean
     _cap=$(( _s0 + _work - 150 - MOJOLEARN_CTD_BODY_START ))
 elif [ -f /tmp/mojolearn-lease.sh ] && [ -f /tmp/mojolearn-lease.pid ] && [ -n "$_s0" ]; then
     _provider=runpod
