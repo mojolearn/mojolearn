@@ -818,6 +818,13 @@ def lib_gemm_block_parallelism_for[column: Int]() -> Int:
     return 0
 
 
+def attn_fwd_rows_per_block_for[column: Int]() -> Int:
+    """SCHEDULING row (DEVIATION 2531, 2026-09-11, trial arm only; brief docs/lanes/BRIEF_attention_step_2026-09-11.md section 14): query rows per 256-thread block of the fused attention's second-round forward kernel (`fused_attn_forward_r2_kernel`), 64 (the shipped hd-64 sstash geometry) or 32. The kernel's shared page is `(32 * 64 + rows * 35) * 4` bytes (17,152 B at 64 rows, 12,672 B at 32), and on a column whose shared memory is partitioned per compute unit the page bounds the resident blocks. The rows are a schedule, never a numeric term: the score, denominator and context chains keep their terms and order at either value, and the row maximum is an `identical_fmax` fold whose grouping is free. UNMEASURED on every column. AMD reads 32 as the variant brief section 11.4 named to price (the page-only count, 3 blocks x 64 rows against 5 x 32 per CU, does not settle it); the AMD leg prices both through the `_fgrid_r32` / `_fgrid_r64` arm names and this row follows that measurement. The shipped build reads it nowhere."""
+    if column == COLUMN_AMD:
+        return 32
+    return 64
+
+
 def knn_warpsort_select_for[column: Int, identical: Bool]() -> Bool:
     """SCHEDULING row (DEVIATION 1922): whether the k-NN TILED path's selector is the implemented RAFT WARPSORT (`select_warpsort.mojo`, `warpsort_topk_block_kernel`) instead of the implemented RAFT radix (`select_radix.mojo`) for `2 < k <= 256`."""
     comptime if identical:
