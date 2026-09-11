@@ -71,6 +71,27 @@ shipped, 3743 (3719..3761) with the flip; ET 1M 3314 (3272..3430), ET 2M 6099
 the Aug 28 cuML 2M row (4543.0, different container) against the 2M cells,
 naming each. Detail: `docs/lanes/HANDOFF_trees.md`, "2026-09-10 H100 leg".
 
+Our identical arm, 2026-09-10 night leg, same GPU model and image, driver
+580.126.09, source 7cebeecf (DEVIATION 2500 native label encoding on the
+forest path), ours alone in the process, no opponent re-measured
+(`bench/results/trees_identical/h100_2026-09-10b/speed/`, ms median with
+min..max, 5 rounds RF/ET and the 2M cells, 7 rounds the 1M gbdt cells):
+RF 1M 1516 (1476..1579) hash 3ffa2951595422d4, RF 2M 2283 (2231..2293) hash
+67d883dc6079b90f; quote the cuML 1M row above (3314, Sep 9) against the 1M
+cell and the Aug 28 cuML 2M row (4543.0, different container) against the
+2M cell: 0.46x and 0.50x of their time. Depthwise Logloss 1M 1070
+(987..1121), 2M 1917 (1905..1962): against the Aug 28 XGBoost GPU depthwise
+rows (617.3, 1039.4) 1.73x and 1.84x, against the Aug 28 CatBoost depthwise
+rows (1232.5, 1560.6) 0.87x and 1.23x. Lossguide Logloss 1M 1652
+(1639..1690), 2M 2451 (2437..2509): against the Aug 28 XGBoost lossguide rows
+(816.9, 1272.0) 2.02x and 1.93x, LightGBM CUDA lossguide (1313.7, 1669.3)
+1.26x and 1.47x, CatBoost lossguide (1600.6, 1954.5) 1.03x and 1.25x.
+Symmetric Logloss 1M 533 (490..570) against the Sep 9 CatBoost row (900)
+0.59x and the Aug 28 row (846.1) 0.63x; the Sep 10 leg's 478 was on another
+physical pod and the gap is unresolved. ET 1M 2578 (2543..2616), still no
+valid NVIDIA opponent row. Fingerprints 81/81 IDENTICAL against the Sep 10
+set. Detail: `docs/lanes/HANDOFF_trees.md`, "2026-09-10 night H100 leg".
+
 Extra trees therefore has NO valid NVIDIA opponent row. That measurement
 is owed (a LightGBM build with USE_CUDA, or cuML RF with `split_criterion`
 random thresholds if cuML admits it).

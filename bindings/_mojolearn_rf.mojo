@@ -57,6 +57,7 @@ from ensemble.decisiontree.batched_levelalgo.objectives import (
     ClassificationObjectiveFunction,
     RegressionObjectiveFunction,
 )
+from ensemble.instruments import StageTimes
 from ensemble.decisiontree.decisiontree import (
     ENTROPY,
     GAMMA,
@@ -376,15 +377,27 @@ def _rf_classifier_fit[EXPORT: Bool = False](
         if all_unit:
             weights = List[Float32]()
     var forest: RandomForestMetaData[DT, CLT]
+    # DEVIATION 2510 -- the binding's own stage table (MOJOLEARN_STAGE_TIMES=1
+    # only): what this entry point spends OUTSIDE `fit_forest`'s fit_total,
+    # host-stamped, so the Python-side residual can be split. No arithmetic.
+    var bt = StageTimes()
+    var t_bind = bt.start()
     with GILReleased(Python()):
+        var t_s = bt.start()
         var ctx = DeviceContext()
+        bt.stop_host("bind_ctx_create", t_s)
+        t_s = bt.start()
         var hx = ctx.enqueue_create_host_buffer[DT](n_rows * n_cols)
         var hy = ctx.enqueue_create_host_buffer[CLT](n_rows)
         ctx.synchronize()
+        bt.stop_host("bind_pinned_alloc", t_s)
+        t_s = bt.start()
         # DEVIATION 2481: bulk typed copies preserve every input bit while
         # avoiding scalar stores into pinned memory.
         copy_f32(xp, hx.unsafe_ptr(), n_rows * n_cols)
         memcpy(dest=hy.unsafe_ptr(), src=yp, count=n_rows)
+        bt.stop_host("bind_host_copy", t_s)
+        t_s = bt.start()
         var dx = ctx.enqueue_create_buffer[DT](n_rows * n_cols)
         ctx.enqueue_copy(dst_buf=dx, src_ptr=hx.unsafe_ptr())
         var dy = ctx.enqueue_create_buffer[CLT](n_rows)
@@ -393,6 +406,7 @@ def _rf_classifier_fit[EXPORT: Bool = False](
         # device weights at original row IDs. Keep both alive through fitting.
         var dsw = ctx.enqueue_create_buffer[DT](max(1, len(weights)))
         ctx.synchronize()
+        bt.stop_host("bind_h2d", t_s)
         if len(weights) > 0:
             ctx.enqueue_copy(dst_buf=dsw, src_ptr=weights.unsafe_ptr())
         # cuML randomforest.cuh dispatches weighted objectives only when
@@ -411,12 +425,15 @@ def _rf_classifier_fit[EXPORT: Bool = False](
                 ctx, dx, dy, dsw, n_rows, n_cols, n_classes, rf_params,
                 sample_weight_host=weights, host_x_addr=Int(xp),
             )
+        t_s = bt.start()
         ctx.synchronize()
         _ = dx^
         _ = dy^
         _ = dsw^
         _ = hx^
         _ = hy^
+        bt.stop_host("bind_release_buffers", t_s)
+        t_s = bt.start()
         # DEVIATION 1946: THE CONTEXT DIES LAST. Mojo destroys a value at its
         # LAST USE, so without this line `ctx`'s last use is the
         # `synchronize()` above and the five buffers -- two of them PINNED
@@ -428,13 +445,23 @@ def _rf_classifier_fit[EXPORT: Bool = False](
         # `rf_ctx_probe.mojo::one_fit` takes `ctx` as a BORROWED argument, so
         # the caller's frame keeps it alive past every release.
         _ = ctx^
+        bt.stop_host("bind_release_ctx", t_s)
     _ = weights^
+    var t_x = bt.start()
     comptime if EXPORT:
         var export_trees = forest.trees^
         forest.trees = RFExportTrees()
-        return _retain_rf_export(export_trees^)
+        var handle = _retain_rf_export(export_trees^)
+        bt.stop_host("bind_export_retain", t_x)
+        bt.stop_host("binding_total", t_bind)
+        bt.report()
+        return handle
     else:
-        return _forest_out_i32(forest)
+        var out = _forest_out_i32(forest)
+        bt.stop_host("bind_export_legacy", t_x)
+        bt.stop_host("binding_total", t_bind)
+        bt.report()
+        return out
 
 
 def rf_classifier_fit_binding[EXPORT: Bool = False](
@@ -483,21 +510,32 @@ def rf_regressor_fit_binding[EXPORT: Bool = False](
     var rf_params = _rf_params_from(params, crit)
 
     var forest: RandomForestMetaData[DT, RLT]
+    # DEVIATION 2510 -- as in the classifier: the binding's own host stamps.
+    var bt = StageTimes()
+    var t_bind = bt.start()
     with GILReleased(Python()):
+        var t_s = bt.start()
         var ctx = DeviceContext()
+        bt.stop_host("bind_ctx_create", t_s)
+        t_s = bt.start()
         var hx = ctx.enqueue_create_host_buffer[DT](n_rows * n_cols)
         var hy = ctx.enqueue_create_host_buffer[RLT](n_rows)
         ctx.synchronize()
+        bt.stop_host("bind_pinned_alloc", t_s)
+        t_s = bt.start()
         # DEVIATION 2481: bulk typed copies preserve every input bit while
         # avoiding scalar stores into pinned memory.
         copy_f32(xp, hx.unsafe_ptr(), n_rows * n_cols)
         copy_f32(yp, hy.unsafe_ptr(), n_rows)
+        bt.stop_host("bind_host_copy", t_s)
+        t_s = bt.start()
         var dx = ctx.enqueue_create_buffer[DT](n_rows * n_cols)
         ctx.enqueue_copy(dst_buf=dx, src_ptr=hx.unsafe_ptr())
         var dy = ctx.enqueue_create_buffer[RLT](n_rows)
         ctx.enqueue_copy(dst_buf=dy, src_ptr=hy.unsafe_ptr())
         var dsw = ctx.enqueue_create_buffer[DT](1)
         ctx.synchronize()
+        bt.stop_host("bind_h2d", t_s)
         # THE LABEL SCALE IS NOT OPTIONAL. `RegressionBin` accumulates
         # `label_sum` in fixed point through `BinScales.label_scale`
         # (DEVIATION 101b), and the host chooses the scale once per fit
@@ -519,21 +557,34 @@ def rf_regressor_fit_binding[EXPORT: Bool = False](
             ctx, dx, dy, dsw, n_rows, n_cols, 1, rf_params, scales,
             host_x_addr=Int(xp),
         )
+        t_s = bt.start()
         ctx.synchronize()
         _ = dx^
         _ = dy^
         _ = dsw^
         _ = hx^
         _ = hy^
+        bt.stop_host("bind_release_buffers", t_s)
+        t_s = bt.start()
         # DEVIATION 1946, as in `rf_classifier_fit_binding`: the context
         # outlives every buffer created on it.
         _ = ctx^
+        bt.stop_host("bind_release_ctx", t_s)
+    var t_x = bt.start()
     comptime if EXPORT:
         var export_trees = forest.trees^
         forest.trees = RFExportTrees()
-        return _retain_rf_export(export_trees^)
+        var handle = _retain_rf_export(export_trees^)
+        bt.stop_host("bind_export_retain", t_x)
+        bt.stop_host("binding_total", t_bind)
+        bt.report()
+        return handle
     else:
-        return _forest_out(forest)
+        var out = _forest_out(forest)
+        bt.stop_host("bind_export_legacy", t_x)
+        bt.stop_host("binding_total", t_bind)
+        bt.report()
+        return out
 
 
 def _rebuild_trees(

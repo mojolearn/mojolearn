@@ -35,6 +35,8 @@ max = ">=26.5.0,<27"
 [tasks]
 # Explicit direct/packed resident GPU correctness arms, FAST and IDENTICAL.
 check-forest-resident-layouts = "bash tools/check_forest_resident_layouts.sh"
+# DEVIATION 2512: the kernel zero-fill writes exactly its span (79 spans).
+check-device-zero = "mojo run -I . core/device_zero_check.mojo"
 # Host-only runtime byte-model shape/registry checks; no GPU import or context.
 check-byte-lm-config = "mojo run -j 2 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . training/checks/byte_lm_config_check.mojo"
 

@@ -1,0 +1,94 @@
+FSPEED-NOTE lane=rf arms=ours metric=devices delta=1.000000 reason=devices=cpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+BENCH_BINDING arm=ours requested=fast resolved=fast compiled=fast vendor=metal path=/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/7de13e6c-b220-4235-a53a-461fcad83192/scratchpad/wt-trees/python/mojolearn/_mojolearn_rf.so
+FSPEED-SCALE stage=before rows=1000000 features=28 input_mib=106.8 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=rf arm=ours mode=FAST device=Darwin_arm64 rounds=1 size=shipped
+== MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+   NOT a certifiable timing -- see ensemble/instruments.mojo)
+  quantiles	0.00875 s
+  bin_dataset	0.015407 s
+  row_sampling	0.075744 s
+  h.stage_items	0.026444 s
+  h.phase_upload	0.039001 s
+  h.launch_setup	0.147333 s
+  h.hist_zero	0.13863 s
+  h.hist_launch	0.146082 s
+  h.best_launch	0.136903 s
+  h.launch_hist_best	0.424222 s
+  h.splits_download	0.00013 s
+  h.enqueue_round	0.642377 s
+  device_wait	11.05604 s
+  h.read_splits	0.062106 s
+  n.round0.items	0.002536425 s
+  n.round0.rows	1.594189711 s
+  n.exhausted.items	0.000526514 s
+  n.exhausted.rows	0.004871494 s
+  n.exhausted.le4rows	0.000248385 s
+  n.batch.items	0.002536425 s
+  h.node_split	0.30207 s
+  h.advance_batch	0.918457 s
+  h.queue_push	0.045517 s
+  h.queue_pop	0.007568 s
+  h.begin_batch	0.171312 s
+  n.round1.items	0.000530696 s
+  n.round1.rows	0.004912937 s
+  n.round2.items	0.000527498 s
+  n.round2.rows	0.004881293 s
+  n.round3.items	0.000526816 s
+  n.round3.rows	0.004874599 s
+  n.round4.items	0.000526614 s
+  n.round4.rows	0.004872578 s
+  n.round5.items	0.000526532 s
+  n.round5.rows	0.004871699 s
+  leaf_values	0.292888 s
+  h.tree_copy	0.00506 s
+  fit_total	12.633706 s
+  other	-3.660295216 s
+FSPEED-WARMUP lane=rf arm=ours shape=higgs-1000000x28 ms=12845.211
+FSPEED-ORDER lane=rf round=1 arms=ours
+== MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+   NOT a certifiable timing -- see ensemble/instruments.mojo)
+  quantiles	0.003532 s
+  bin_dataset	0.009687 s
+  row_sampling	0.054153 s
+  h.stage_items	0.026534 s
+  h.phase_upload	0.037893 s
+  h.launch_setup	0.148192 s
+  h.hist_zero	0.13942 s
+  h.hist_launch	0.148919 s
+  h.best_launch	0.138869 s
+  h.launch_hist_best	0.429772 s
+  h.splits_download	0.000112 s
+  h.enqueue_round	0.647456 s
+  device_wait	11.026832 s
+  h.read_splits	0.065161 s
+  n.round0.items	0.002536425 s
+  n.round0.rows	1.594189711 s
+  n.exhausted.items	0.000526514 s
+  n.exhausted.rows	0.004871494 s
+  n.exhausted.le4rows	0.000248385 s
+  n.batch.items	0.002536425 s
+  h.node_split	0.306489 s
+  h.advance_batch	0.931543 s
+  h.queue_push	0.039114 s
+  h.queue_pop	0.007248 s
+  h.begin_batch	0.173211 s
+  n.round1.items	0.000530696 s
+  n.round1.rows	0.004912937 s
+  n.round2.items	0.000527498 s
+  n.round2.rows	0.004881293 s
+  n.round3.items	0.000526816 s
+  n.round3.rows	0.004874599 s
+  n.round4.items	0.000526614 s
+  n.round4.rows	0.004872578 s
+  n.round5.items	0.000526532 s
+  n.round5.rows	0.004871699 s
+  leaf_values	0.295134 s
+  h.tree_copy	0.00306 s
+  fit_total	12.576154 s
+  other	-3.688137216 s
+FSPEED lane=rf arm=ours shape=higgs-1000000x28 round=1 ms=12635.811 hash=3ffa2951595422d4
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.538850
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.809906
+FSPEED-SCALE stage=after rows=1000000 features=28 input_mib=106.8 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.

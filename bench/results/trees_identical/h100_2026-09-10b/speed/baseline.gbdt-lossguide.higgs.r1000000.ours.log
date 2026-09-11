@@ -1,0 +1,26 @@
+FSPEED-NOTE lane=gbdt-lossguide arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+3617 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x19c500000000, nodemask=2)
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=cuda path=/root/mojolearn/python/mojolearn/identical/_mojolearn_gbdt.so
+FSPEED-SCALE stage=before rows=1000000 features=28 input_mib=106.8 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=7 size=shipped
+FSPEED-WARMUP lane=gbdt-lossguide arm=ours shape=higgs-1000000x28 ms=2364.183
+FSPEED-ORDER lane=gbdt-lossguide round=1 arms=ours
+FSPEED lane=gbdt-lossguide arm=ours shape=higgs-1000000x28 round=1 ms=1654.281 hash=4f02e5cb8088b281
+FSPEED-ORDER lane=gbdt-lossguide round=2 arms=ours
+3617 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x52e900000000, nodemask=1)
+FSPEED lane=gbdt-lossguide arm=ours shape=higgs-1000000x28 round=2 ms=1651.989 hash=4f02e5cb8088b281
+FSPEED-ORDER lane=gbdt-lossguide round=3 arms=ours
+FSPEED lane=gbdt-lossguide arm=ours shape=higgs-1000000x28 round=3 ms=1689.940 hash=4f02e5cb8088b281
+FSPEED-ORDER lane=gbdt-lossguide round=4 arms=ours
+FSPEED lane=gbdt-lossguide arm=ours shape=higgs-1000000x28 round=4 ms=1649.136 hash=4f02e5cb8088b281
+FSPEED-ORDER lane=gbdt-lossguide round=5 arms=ours
+FSPEED lane=gbdt-lossguide arm=ours shape=higgs-1000000x28 round=5 ms=1646.352 hash=4f02e5cb8088b281
+FSPEED-ORDER lane=gbdt-lossguide round=6 arms=ours
+FSPEED lane=gbdt-lossguide arm=ours shape=higgs-1000000x28 round=6 ms=1673.574 hash=4f02e5cb8088b281
+FSPEED-ORDER lane=gbdt-lossguide round=7 arms=ours
+FSPEED lane=gbdt-lossguide arm=ours shape=higgs-1000000x28 round=7 ms=1638.563 hash=4f02e5cb8088b281
+FSPEED-ACC lane=gbdt-lossguide arm=ours metric=logloss value=0.525348
+FSPEED-ACC lane=gbdt-lossguide arm=ours metric=auc value=0.813238
+FSPEED-SCALE stage=after rows=1000000 features=28 input_mib=106.8 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.

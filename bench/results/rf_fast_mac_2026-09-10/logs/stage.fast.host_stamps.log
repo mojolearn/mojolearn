@@ -1,0 +1,56 @@
+FSPEED-NOTE lane=rf arms=ours metric=devices delta=1.000000 reason=devices=cpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+BENCH_BINDING arm=ours requested=fast resolved=fast compiled=fast vendor=metal path=/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/7de13e6c-b220-4235-a53a-461fcad83192/scratchpad/wt-trees/python/mojolearn/_mojolearn_rf.so
+FSPEED-SCALE stage=before rows=1000000 features=28 input_mib=106.8 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=rf arm=ours mode=FAST device=Darwin_arm64 rounds=1 size=shipped
+== MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+   NOT a certifiable timing -- see ensemble/instruments.mojo)
+  quantiles	0.009568 s
+  bin_dataset	0.034293 s
+  row_sampling	0.083329 s
+  h.stage_items	0.053488 s
+  h.phase_upload	0.094335 s
+  h.launch_setup	0.313053 s
+  h.launch_hist_best	13.595768 s
+  h.splits_download	0.000262 s
+  h.enqueue_round	14.068757 s
+  device_wait	4.928566 s
+  h.read_splits	0.145141 s
+  h.node_split	0.665002 s
+  h.advance_batch	11.242682 s
+  h.queue_push	0.097488 s
+  h.queue_pop	0.017565 s
+  h.begin_batch	3.730686 s
+  leaf_values	0.276117 s
+  h.tree_copy	0.010224 s
+  fit_total	20.574456 s
+  other	-28.791868 s
+FSPEED-WARMUP lane=rf arm=ours shape=higgs-1000000x28 ms=20761.980
+FSPEED-ORDER lane=rf round=1 arms=ours
+== MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+   NOT a certifiable timing -- see ensemble/instruments.mojo)
+  quantiles	0.003735 s
+  bin_dataset	0.025905 s
+  row_sampling	0.107905 s
+  h.stage_items	0.05276 s
+  h.phase_upload	0.081981 s
+  h.launch_setup	0.288567 s
+  h.launch_hist_best	13.496145 s
+  h.splits_download	0.000254 s
+  h.enqueue_round	13.930359 s
+  device_wait	4.871175 s
+  h.read_splits	0.130526 s
+  h.node_split	0.621625 s
+  h.advance_batch	11.05114 s
+  h.queue_push	0.083648 s
+  h.queue_pop	0.016316 s
+  h.begin_batch	3.717441 s
+  leaf_values	0.27387 s
+  h.tree_copy	0.007552 s
+  fit_total	20.285391 s
+  other	-28.475513 s
+FSPEED lane=rf arm=ours shape=higgs-1000000x28 round=1 ms=20418.938 hash=3ffa2951595422d4
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.538850
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.809906
+FSPEED-SCALE stage=after rows=1000000 features=28 input_mib=106.8 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.

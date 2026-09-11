@@ -1,0 +1,33 @@
+18280 xfer_phase_upload
+14640 phase_setup
+14640 histogram_binned
+14640 find_best_splits
+4616 xfer_splits_download
+3640 xfer_splits_upload
+3640 scan_by_key_emit
+3640 scan_by_key_carry
+3640 scan_by_key_block
+3640 nodesplit_reset
+3640 nodesplit_publish
+3640 nodesplit_count_left
+3640 nodesplit_copy_back
+2274 xfer_nodesplit_ops
+ 200 xfer_leaf_tree
+ 200 xfer_leaf_ranges
+ 200 xfer_leaf_download
+ 200 philox_uniform_int
+ 200 leaf
+ 200 gather_sampled_order
+  64 seg_sort_scan_key_bit
+  64 seg_sort_scan_block_sums
+  64 seg_sort_reorder_one_bit
+  64 seg_sort_add_block_carry
+  48 xfer_args_upload
+   2 xfer_quantiles_seed
+   2 xfer_quantiles_offsets
+   2 xfer_quantiles_bin_idx
+   2 seg_sort_twiddle_out
+   2 seg_sort_twiddle_in
+   2 quantiles_sample_columns
+   2 quantiles_batched
+   2 bin_dataset

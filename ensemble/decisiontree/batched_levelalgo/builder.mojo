@@ -12,6 +12,7 @@ from checks.kernel_matrix import TARGET_COLUMN, column_shared_limit
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from core.launch_log import log_launch
+from core.device_zero import enqueue_zero_bytes
 from ensemble.instruments import FitInstruments
 from ensemble.decisiontree.batched_levelalgo.bins import Bin, BinScales
 from ensemble.decisiontree.batched_levelalgo.dataset import DatasetView
@@ -452,7 +453,43 @@ struct SplitSummary[dtype: DType](TrivialRegisterPassable):
     var best_metric_val: Scalar[Self.dtype]
     var global_n_left: Int64
     var local_n_left: Int64
+    var terminal: Bool
+    """DEVIATION 2502: the split kernel found the node PURE (one class
+    holds every row). It is a leaf: `is_valid` is False and `colid` is -1
+    here whatever candidate the slot held, so the queue, the partition
+    upload and the identity trace all see a leaf, and the host does not
+    retry it with fresh columns."""
 
+
+comptime RETRY_PURE_NODES = is_defined["MOJOLEARN_2502_RETRY_PURE"]()
+"""DEVIATION 2502 (2026-09-10): A PURE NODE IS A LEAF. Their `doSplit`
+retries every node whose sampled columns found no valid split, up to
+`max_sampling_rounds` times with fresh columns, and never asks whether the
+node CAN split. Counted on HIGGS 1M, 100 trees, depth 16, on the M4: round
+0 processes 2.54M nodes over 1.59 billion rows; rounds 1-5 each re-run
+about 527k nodes of 9 rows on average, and 99.2% of them end the batch with
+no split after every column has been tried. Every one of them is pure (the
+leaf vectors say so, 55k per tree audited). The other 0.8% are pure nodes
+too: their Gini gain is not exactly 0 in the objective's arithmetic, and a
+retry with the right column "splits" them into two pure children of the
+same class. scikit-learn leafs a pure node before it looks for a split;
+this flag restores that rule. `find_best_splits_kernel` writes the node's
+purity into the slot's `pure` field and `_read_splits` reports it as
+`terminal`: the node is a leaf regardless of any candidate and is never
+retried.
+
+THIS CHANGES THE FOREST. A pure node that used to split into two identical
+children no longer does, and every later node's tree index shifts by the
+nodes not created; the column sampler seeds on that index, so the
+subsequent draws differ. Same algorithm family, a different random
+stream: HIGGS 1M logloss 0.538850 -> 0.538817, AUC 0.809906 -> 0.809830,
+histogram rounds 14,640 -> 3,627 per fit, M4 FAST fit 12.4 s -> 9.1 s
+(hash efd14ab2c09ff57c, 8 of 8 fits equal). Cross-vendor and run-to-run
+identity hold as before (the flag is a function of the class totals); the
+rf-clf fingerprints move once and are regenerated with this flip. The
+define restores the retries and the previous forests exactly. Regression
+never marks a node (one histogram plane shows no purity), so rf-reg
+forests are unchanged."""
 
 def update_workload_info[
     o: MutOrigin, //, sabotage: Int = 0
@@ -1692,14 +1729,20 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         out.reserve(n)
         for i in range(n):
             ref s = p[unsafe_offset=i]
+            # DEVIATION 2502: a pure node is a leaf whatever its slot
+            # holds; the retained fields keep the shape every reader knows.
+            var terminal = s.pure != Int32(0)
+            comptime if RETRY_PURE_NODES:
+                terminal = False
             out.append(
                 SplitSummary[Self.O.DataT](
-                    s.colid != Int32(-1),
-                    s.colid,
+                    s.colid != Int32(-1) and not terminal,
+                    Int32(-1) if terminal else s.colid,
                     s.quesval,
                     s.best_metric_val,
                     s.global_nLeft,
                     s.local_nLeft,
+                    terminal,
                 )
             )
         return out^
@@ -1780,10 +1823,20 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         # the default `max_batch_size` 4096 that is a constant ~100x the
         # bytes their launch touches whenever the live batch is small.)
         var len_histograms = n_bins * n_classes * n_blocks_dimy * n_work_items
-        self.hist_view.ensure(
-            self.histograms, size_of[Self.O.BinT]() * len_histograms
+        # DEVIATION 2512: the zero rides a kernel launch, not
+        # `enqueue_memset`. On Metal under MAX 26.5 a memset between two
+        # launches cost 650 us of HOST time per round here (9.5 s of a
+        # 14.4 s HIGGS 1M FAST fit on the M4, `core/device_zero.mojo`);
+        # the launch costs 10 us and writes the same zeros.
+        var t_h = instr.times.start()
+        log_launch("hist_zero")
+        enqueue_zero_bytes(
+            ctx,
+            self._hist_ptr().unsafe_bitcast[UInt8](),
+            size_of[Self.O.BinT]() * len_histograms,
         )
-        ctx.enqueue_memset(self.hist_view.view, UInt8(0))
+        instr.times.stop_host("host_hist_zero", t_h)
+        t_h = instr.times.start()
 
         # DEVIATION 1893/1909: the args blobs were staged by
         # `enqueue_best_splits` (once per tree per sampled-cols width);
@@ -1808,6 +1861,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
             hist_argsp,
             n_classes,
         )
+        instr.times.stop_host("host_hist_launch", t_h)
         # DEVIATION 401 -- the column block's REDUCED histograms, hashed
         # between the histogram kernel and the split kernel so the record
         # is the pdf the atomics produced (order-independent by
@@ -1827,6 +1881,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
             )
         # DEVIATION 302: their `if (distributed) allReduceHistograms(...)`
         # sits exactly here (`:613`) and is unreachable on one device.
+        t_h = instr.times.start()
         launch_find_best_splits_kernel[Self.O](
             ctx,
             self._hist_ptr(),
@@ -1841,6 +1896,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
             n_blocks_dimy,
             find_argsp,
         )
+        instr.times.stop_host("host_best_launch", t_h)
 
     def enqueue_best_splits(
         mut self,
@@ -1867,6 +1923,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         # `find_best_splits`, so the later position is equivalent to the
         # old one for every reader on the in-order queue).
         # DEVIATION 1908: stage both, then ONE packed upload.
+        var t_h = instr.times.start()
         self._stage_work_items(work_items)
         # `:393-407` -- straight into the pinned array, as theirs.
         # DEVIATION 2011: the granularity constant folds to TPB_DEFAULT
@@ -1877,7 +1934,10 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         var n_blocks_dimx = update_workload_info(
             work_items, self._h_workload_ptr(), HIST_WORKLOAD_GRANULARITY
         )
+        instr.times.stop_host("host_stage_items", t_h)
+        t_h = instr.times.start()
         self._enqueue_phase_upload(ctx, n_blocks_dimx)
+        instr.times.stop_host("host_phase_upload", t_h)
 
         # DEVIATION 1893/1909: the two split kernels' argument blobs are
         # a pure function of this tree's dataset and the round's
@@ -1937,6 +1997,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         # live `n`, the mutex over max_batch_size, the feature sample
         # over `n * n_sampled_cols`. One op where the implementation paid three
         # (two kernels + one memset) per sampling round.
+        t_h = instr.times.start()
         launch_phase_setup_kernel[Self.O.DataT](
             ctx,
             self._splits_ptr(),
@@ -1974,6 +2035,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
             )
 
         # `:497-500` -- ten columns per launch.
+        instr.times.stop_host("host_launch_setup", t_h)
         var c = 0
         while c < n_sampled_cols:
             self._compute_split(
@@ -1982,7 +2044,9 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
                 hist_argsp, find_argsp,
             )
             c += N_BLKS_FOR_COLS
+        t_h = instr.times.start()
         self._enqueue_splits_download(ctx, n)
+        instr.times.stop_host("host_splits_download", t_h)
 
     def _compute_best_splits(
         mut self,
@@ -2123,7 +2187,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
             final_splits.append(
                 SplitSummary[Self.O.DataT](
                     False, Int32(-1), Scalar[Self.O.DataT](0),
-                    Scalar[Self.O.DataT](0), Int64(0), Int64(0),
+                    Scalar[Self.O.DataT](0), Int64(0), Int64(0), False,
                 )
             )
         var active_items = work_items.copy()
@@ -2162,7 +2226,9 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         enqueues. Returns True when the batch is finished, with the pushed
         splits in `st.result`."""
         if st.phase == 1:
+            var t_rd = instr.times.start()
             st.result = self._read_splits(len(st.work_items))
+            instr.times.stop_host("host_read_splits", t_rd)
             # DEVIATION 401 -- the batch's splits as the PARTITION read
             # them back: chosen column, threshold bits, child counts.
             # This is "after split selection" for the whole batch.
@@ -2177,7 +2243,9 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
                     st.result,
                 )
             return True
+        var t_rd = instr.times.start()
         var h = self._read_splits(len(st.active_items))
+        instr.times.stop_host("host_read_splits", t_rd)
         # DEVIATION 401 -- the round's CANDIDATE splits, before the retry
         # dispatch, so a divergence is pinned to a sampling round rather
         # than to the batch's final answer.
@@ -2199,6 +2267,9 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
             var orig = st.active_to_original[i]
             st.final_splits[orig] = h[i]
             if not h[i].is_valid:
+                # DEVIATION 2502: a pure node is not retried; it is a leaf.
+                if h[i].terminal:
+                    continue
                 retry_items.append(st.active_items[i])
                 retry_to_original.append(orig)
         # Their `:456`: `if (round + 1 >= max_sampling_rounds) break;` --
@@ -2207,9 +2278,11 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
             st.active_items = retry_items^
             st.active_to_original = retry_to_original^
             st.round += 1
+            var t_rt = instr.times.start()
             self._enqueue_round[sabotage](
                 ctx, dataset, quantiles, smem_config, st, instr
             )
+            instr.times.stop_host("host_enq_hist_retry", t_rt)
             return False
         # DEVIATION 1919 -- at round 0 the device span already holds this
         # batch's items and block map (round zero staged `active_items`,
@@ -2219,6 +2292,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         # must never read -- the reuse is off and every batch restages
         # (priced in the 2011 block). Comptime-folds to `st.round == 0`
         # under the default flag.
+        var t_ns = instr.times.start()
         self.enqueue_node_split(
             ctx,
             dataset,
@@ -2226,6 +2300,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
             st.final_splits,
             reuse_phase_span=(st.round == 0 and HIST_ITEMS_PER_THREAD == 1),
         )
+        instr.times.stop_host("host_enq_partition", t_ns)
         st.phase = 1
         return False
 
@@ -2702,16 +2777,26 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         step and carries its own syncs, exactly as the serial train did."""
         if ts.done:
             return True
+        # DEVIATION 2510 -- this step's HOST work, stamped piecewise with
+        # no drain so the stage table can split `other`: `advance_batch`
+        # stamps its own readback decode and enqueues; here the queue
+        # push (child nodes into the tree) and the next batch's pop plus
+        # histogram-round enqueue. Off unless MOJOLEARN_STAGE_TIMES=1;
+        # changes no arithmetic.
         if not self.advance_batch[sabotage](
             ctx, ts.ds, quantiles, ts.smem_config, ts.batch, instr
         ):
             return False
+        var t_host = instr.times.start()
         ts.queue.push(ts.batch.work_items, ts.batch.result)
+        instr.times.stop_host("host_queue_push", t_host)
         if ts.queue.has_work():
+            t_host = instr.times.start()
             var work_items = ts.queue.pop()
             ts.batch = self.begin_batch[sabotage](
                 ctx, ts.ds, quantiles, work_items, ts.smem_config, instr
             )
+            instr.times.stop_host("host_enq_hist", t_host)
             return False
         self._finish_tree(ctx, ts, instr)
         return True
@@ -2726,8 +2811,12 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         DEVIATION 402 times the leaf pass here, where it runs, because
         `set_leaf_predictions` carries its own per-batch syncs and its
         wall time is real device work."""
+        # DEVIATION 2510 -- the tree copy out of the queue is host work,
+        # stamped without a drain.
+        var t_copy = instr.times.start()
         var tree = ts.queue.tree.copy()
         tree.treeid = self.treeid
+        instr.times.stop_host("tree_copy", t_copy)
         var t0 = instr.times.start()
         self.set_leaf_predictions(
             ctx, tree, ts.queue.node_instances_.copy(), ts.ds
