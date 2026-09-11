@@ -1429,6 +1429,22 @@ def lightgbm_arms(lane, cfg, data, devices):
             bagging_fraction=1.0,            # DEVIATION 1833
             feature_fraction=1.0,
         )
+    # MOJOLEARN_SPEED_LGBM_PARAMS=name=value,... (lane trees-hotaisle,
+    # 2026-09-11): LightGBM 4.7.0 refused every AMD cell with "Check failed:
+    # (best_split_info.left_count) > (0)" under min_child_weight=0.0, so ONE
+    # retry runs with other params. Unset means the params above, unchanged;
+    # set means every LightGBM arm in the process takes them, and the log says so.
+    raw = os.environ.get("MOJOLEARN_SPEED_LGBM_PARAMS", "").strip()
+    if raw:
+        import ast
+        over = {}
+        for item in raw.split(","):
+            key, _, val = item.partition("=")
+            over[key.strip()] = ast.literal_eval(val.strip())
+        p.update(over)
+        emit_note(lane, ["lightgbm-*"], "params", float(len(over)),
+                  "MOJOLEARN_SPEED_LGBM_PARAMS overrides the harness LightGBM "
+                  "params: %s" % ", ".join("%s=%r" % kv for kv in sorted(over.items())))
 
     def make(device_type):
         q = dict(p)
@@ -1790,7 +1806,6 @@ def resolve_devices(requested, lane=None):
                 lane, want, "devices", float(len(want)),
                 "NVIDIA box, lane et: no GPU ExtraTrees exists, so the CPU "
                 "arm requested by name runs on all cores and is labeled CPU")
->>>>>>> origin/lane/trees-taxi-h100
     elif "cpu" in want and accel_visible():
         dropped = [d for d in want if d == "cpu"]
         want = [d for d in want if d != "cpu"]
