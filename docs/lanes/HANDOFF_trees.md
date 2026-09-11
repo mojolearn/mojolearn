@@ -177,10 +177,9 @@ measured its effect: RF 1M 2234 -> 1516, 2M 3743 -> 2283, ET 1M 3314 -> 2578.
 
 The histogram zero rides a kernel launch. Hash unchanged
 (3ffa2951595422d4, 3 of 3), M4 FAST fit 12.4 s. `pixi run check-device-zero`.
-The same `enqueue_memset`-between-launches pattern exists in gbdt
-(`greedy_search_helper*.mojo` histogram memsets, `pointwise_scores_calcer`,
-`dynamic_boosting`) and is the first thing to try on the gbdt lanes on the
-M4; not yet measured there.
+CORRECTED 2026-09-11: the gbdt memsets were replaced the same night
+(89cb86ee, all 32 sites, HIGGS only, section below); the taxi and
+Istella-S A/B is owed (`-D MOJOLEARN_2560_MEMSET_FILL=1`, lane/gbdt-mac-memsets).
 
 ### DEVIATION 2502 (a pure node is a leaf) -- CHANGES THE FOREST
 
