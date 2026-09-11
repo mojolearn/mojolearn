@@ -1447,3 +1447,22 @@ by 1 percent or less for ours pca, knn, kde and svc, 10 percent for ours ols
 span 168 to 621 ms). It was reaped at 16:57Z, before this pod's first race
 at 17:00Z. Both pods were verified gone (HTTP 404). This pod's gemm device card
 matched the Apple card at all 60 stages.
+
+### Classical OLS, PCA and k-means on taxi against cuML (September 11, pod 22up9vbhj3tbeg, lane linear-cluster-speed)
+
+RunPod H100 80GB HBM3, driver 580.126.09, cuML 26.08 (cuml-cu12 26.8.0) in the
+same Python 3.11; ours IDENTICAL built on the pod (sm_90a) from main 36ca51fd.
+`tools/classical_two_datasets.py race`, 1 warm-up plus 5 interleaved rounds, ms
+median (min..max). Taxi 4,000,000 x 11; k-means k 64, 20 iterations, shared init,
+tol 1e-7 on both arms (cuVS refuses tol 0); cuML PCA `svd_solver='full'`, ours
+`covariance_eigh`; cuML OLS `algorithm='eig'`. Istella-S not measured (RUN OWED in
+`bench/results/linear_cluster_speed_2026-09-11/README.md`, with the stage
+breakdown and logs).
+
+| lane | dataset | opponent | opponent ms | opponent quality | ours IDENTICAL ms (36ca51fd) | ours quality | ours / opponent | ours with DEVIATIONS 2632, 2633 (lane branch) |
+|---|---|---|---|---|---|---|---|---|
+| ols | taxi | cuML LinearRegression eig | 23.12 (21.92..26.83) | R2 0.908836 | 263.5 (251.8..275.9) | R2 0.908837 | 11.40x | 177.8 (146.0..180.0), 7.60x of that race's cuML 23.39, same coefficient digest |
+| pca | taxi | cuML PCA full | 20.99 (20.08..21.73) | EVR sum 0.99786 | 28.69 (25.78..38.83) | EVR sum 0.997861 | 1.37x | unchanged |
+| kmeans | taxi | cuML KMeans | 128.2 (127.4..129.0) | inertia 1.20192e8, 20 iter | 304.0 (279.6..368.6) | inertia 1.20628e8 | 2.37x | 216.2 (196.2..222.7), 1.68x of that race's cuML 128.9, same centroid digest |
+
+cuML k-means returned a different centroid digest in every round; ours held one.
