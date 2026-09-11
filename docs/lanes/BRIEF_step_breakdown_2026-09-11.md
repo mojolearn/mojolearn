@@ -259,6 +259,48 @@ rows), then the `lean` rows.
    because no shipped run sits beside it).
 7. `sh -n tools/step_breakdown_leg.sh` (the runner does this too).
 
+**Merge note (2026-09-11, branch `lane/step-breakdown-h100-merged`).**
+This lane was merged with origin/main at afba564c (the AMD attention
+default `stash_tiled_fgrid_r32_qres_pf_kvgrid_r32`, attention brief
+section 18). The only conflicts were three hunks in
+`transformer/impl/llama/fused_attention.mojo`, where main moved the
+sabotage copies in `_launch_bwd_stash_zdq_pf` and `_launch_bwd_stash_tiled_kv`
+under `comptime if ATTN_ARM_TRIAL`. They were resolved as main's structure
+with this lane's `step_count_launch()` inside each trial branch. Main's
+shipped `_launch_bwd_stash_tiled_kv[64, ATTN_DEFAULT_KV_KEYS,
+ATTN_DEFAULT_KV_SPLIT]` call carries no counter of its own, because every
+allocation, synchronize and launch inside that helper (and inside
+`_launch_bwd_stash_zdq_pf`) is already counted. Nothing was built. The
+orchestrator runs these M4 light checks on the merged branch, ONE AT A
+TIME, before the H100 leg:
+
+1. `nice -n 19 pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . transformer/checks/transformer_fused_check.mojo -o /tmp/fused-check`
+   then `nice -n 19 /tmp/fused-check` (expect PASS).
+2. `nice -n 19 pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_ATTN_DEFAULT_KVGRID_EVERY_COLUMN=1 -I . transformer/checks/transformer_fused_check.mojo -o /tmp/fused-check-kv`
+   then `nice -n 19 /tmp/fused-check-kv` (expect PASS naming
+   `bwd_stash_tiled_pf_kvgrid_r32` and `fused_bwd_dkdv_r2_kernel[64,32]`).
+3. `nice -n 19 pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . gemm/checks/gemm_device_check.mojo -o /tmp/gemm-device-check`
+   then `nice -n 19 /tmp/gemm-device-check` (expect green).
+4. `nice -n 19 pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . transformer/checks/transformer_backward_check.mojo -o /tmp/backward-check`
+   then `nice -n 19 /tmp/backward-check` (expect PASS).
+5. `nice -n 19 pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_STEP_PHASE_TIMERS=1 -D MOJOLEARN_ATTN_PHASE_TIMERS=1 -I . transformer/checks/transformer_backward_check.mojo -o /tmp/backward-check-timers`
+   then `nice -n 19 /tmp/backward-check-timers` and
+   `MOJOLEARN_TRANSFORMER_TIMING=1 nice -n 19 /tmp/backward-check-timers`
+   (expect PASS both).
+6. `nice -n 19 pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_ATTN_ARM_TRIAL=1 -I . transformer/checks/transformer_attention_arms_check.mojo -o /tmp/arms-check`
+   then `nice -n 19 /tmp/arms-check` (expect
+   `transformer_attention_arms_check: PASS, names inverse, 15 cases x 18 arms`).
+7. The byte LM timers binding build:
+   `MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_BYTE_LM_OUTDIR=/tmp/step-timers-bytelm MOJOLEARN_BUILD_EXTRA_DEFINES="-D MOJOLEARN_STEP_PHASE_TIMERS=1 -D MOJOLEARN_ATTN_PHASE_TIMERS=1" python3 tools/macos_serial_guard.py --seconds 900 --rss-gib 12 -- sh bindings/build_byte_lm.sh`.
+
+Not covered by these checks: the counters inside the shipped kv helper are
+compiled with the define only on a column whose default carries a
+DEVIATION 2597 token (AMD), or on a trial build. No M4 command above
+combines `-D MOJOLEARN_STEP_PHASE_TIMERS=1` with
+`-D MOJOLEARN_ATTN_DEFAULT_KVGRID_EVERY_COLUMN=1` or
+`-D MOJOLEARN_ATTN_ARM_TRIAL=1`. The first timers build on AMD compiles
+them for the first time.
+
 ## 9. Risks only a build or a box can settle
 
 - `std.ffi._Global` from a non-binding module (`core/step_phase.mojo`) has
