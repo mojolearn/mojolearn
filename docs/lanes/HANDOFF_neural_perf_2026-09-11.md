@@ -280,6 +280,22 @@ No AMD timing of this step exists at the target shape.
      0.0319 / 0.0321 s, eager fp32 0.0620 s. Our IDENTICAL step takes 14.5x
      compile bf16's time, 9.2x compile TF32's and 4.8x eager fp32's
      (bench/OPPONENT_REFERENCE.md H100 torch section).
+   - **GEMM ksplit FLIP on AMD, now the AMD default** (bench/results/e1g/2026-09-11_164818-amd-mi300x-hotaisle-gemm-longk,
+     Hot Aisle MI300X 1x VM, commit 73d0e64b, trial arm at S=110): lean step
+     shipped 1.9527 / 1.9556 s against ksplit 1.1982 / 1.1993 s (geomean
+     0.614; ksplit_leaf 0.609), witnesses equal; GEMM sum per step 1339 ->
+     589 ms; CONTROL 768x768 outputs 0.15 to 0.20 of shipped. Commit
+     190fb7a4 sets `lib_gemm_block_parallelism_for` AMD to 110 after M4
+     gates. So on AMD the matrix multiplies were the larger cost, not the
+     attention (the shipped step on this Hot Aisle leg's GEMM binding is 1.95
+     s, not the 3.4 s the DigitalOcean and RunPod attention legs measured on
+     their bindings and boxes; not attributed). Owed: the classical AMD A/B
+     for callers ksplit takes there (KDE and SVC on Istella-S at d = 220; lane
+     `lane/ksplit-classical-amd`), and the H100 classical A/B is running.
+   - Hot Aisle 2gpu retry (branch lane/hotaisle-2gpu 593e580d): both GPUs
+     pinned apart (hip+rocminfo, fd:00.0 and ff:00.0); GPU 1 (torch ROCm)
+     finished and fetched; GPU 0 (attention stash_tiled against baseline)
+     running.
 1. The DigitalOcean runner is merged and its dry run is green (section 3);
    its first paid run is also its bring-up. Tuning on AMD is now a repo rule
    for every lane (ENGINEERING_RULES.md section 10), and the account allows
