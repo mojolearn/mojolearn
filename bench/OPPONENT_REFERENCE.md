@@ -334,6 +334,33 @@ Our number is the step time for
 bitwise identical results across Apple, NVIDIA and AMD; theirs carries no
 such property (`nondeterministic_label` true on every column).
 
+#### Same pod, after the two NVIDIA default flips (2026-09-11 16:41Z)
+
+Source: `bench/results/e1g/2026-09-11_164101-nvidia-h100-80gb-hbm3-new-defaults-torch/remote/`
+(`attention-step/lm_summary.tsv`, `torch-lm-step/summary.tsv`), RunPod pod
+mgpc9vhnkjre5x, driver 580.126.09 (1980 MHz clock reading), commit e629434d,
+same harness, shape, init, AdamW, clock and corpora as the table above. OUR
+IDENTICAL arm is the shipped NVIDIA default at that commit: GEMM `ksplit`
+(DEVIATION 2595) and attention `stash_tiled_fgrid_r32_qres_pf` (DEVIATION
+2534), resolved by the binding and confirmed by the shipped fused check on
+the pod. SDPA observed in the profiled warmup: `efficient` for the float32
+columns, `flash` for the bf16 columns.
+
+| column | enwik8 s | Pile GitHub s | our IDENTICAL / column (enwik8, Pile GitHub) |
+|---|---|---|---|
+| compile_bf16 (their fastest measured) | 0.02038 | 0.02085 | 14.48x, 14.15x |
+| compile_tf32 | 0.03189 | 0.03208 | 9.25x, 9.19x |
+| eager_bf16 | 0.03705 | 0.03879 | 7.96x, 7.60x |
+| eager_tf32 | 0.03788 | 0.03779 | 7.79x, 7.80x |
+| compile_fp32 | 0.05775 | 0.05735 | 5.11x, 5.14x |
+| eager_fp32 | 0.06197 | 0.06200 | 4.76x, 4.76x |
+| ours IDENTICAL (shipped defaults, bits equal on every vendor) | 0.2950 | 0.2949 | 1 |
+
+On the same pod our previous attention default (`stash_tiled`, with the GEMM
+default already `ksplit`) ran 0.3414 / 0.3409 s. Every torch column is
+nondeterministic by label; ours is bitwise identical across Apple, NVIDIA
+and AMD.
+
 ### kNN second kind (HIGGS rows)
 
 Every kNN row above is dyadic-v1, a generator, and the gate's `large`

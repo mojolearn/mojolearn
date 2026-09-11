@@ -270,6 +270,16 @@ No AMD timing of this step exists at the target shape.
      MI325X timers for stash_tiled put `attn.bwd_dkdv_tiled` at 705 ms per
      step (18.5 ms on the H100), `attn.o_proj` 128 ms and `attn.qkv_proj` 78
      ms; the dk/dv tiled backward on AMD is the next target.
+   - **Both NVIDIA defaults together, measured on one H100 pod with torch**
+     (bench/results/e1g/2026-09-11_164101-nvidia-h100-80gb-hbm3-new-defaults-torch,
+     commit e629434d, 1980 MHz pod): shipped default step 0.2950 / 0.2949 s
+     on enwik8 / Pile GitHub, against 0.3414 / 0.3409 s with the previous
+     attention default on the same pod (GEMM already ksplit), witnesses
+     equal; the morning's step was 0.383 s. Torch on the same pod: compile
+     bf16 0.0204 / 0.0208 s (their fastest, flash attention), compile TF32
+     0.0319 / 0.0321 s, eager fp32 0.0620 s. Our IDENTICAL step takes 14.5x
+     compile bf16's time, 9.2x compile TF32's and 4.8x eager fp32's
+     (bench/OPPONENT_REFERENCE.md H100 torch section).
 1. The DigitalOcean runner is merged and its dry run is green (section 3);
    its first paid run is also its bring-up. Tuning on AMD is now a repo rule
    for every lane (ENGINEERING_RULES.md section 10), and the account allows
