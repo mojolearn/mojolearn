@@ -28,7 +28,7 @@ def make_wheel(root, vendors=('hip', 'cuda'), omit=None, corrupt=False):
         arch = 'gfx942' if vendor == 'hip' else 'sm_89'
         for mode in gate.surface.MODES:
             prefix = f'mojolearn/{vendor}/{arch}/' + (mode + '/' if mode != 'fast' else '')
-            for binding in gate.surface.BINDINGS:
+            for binding in gate.surface.expected_bindings(mode):
                 name = prefix + binding + '.so'
                 if name != omit:
                     files[name] = name.encode()
@@ -55,9 +55,11 @@ class ReleaseAdmissionTests(unittest.TestCase):
             root = Path(directory)
             wheel = make_wheel(root)
             extensions, sets = gate.inspect_wheel(wheel, root)
-            self.assertEqual(len(extensions), 2 * len(gate.surface.MODES) * len(gate.surface.BINDINGS))
+            per_arch = sum(len(gate.surface.expected_bindings(m)) for m in gate.surface.MODES)
+            self.assertEqual(len(extensions), 2 * per_arch)
             self.assertEqual(len(sets), 6)
-            self.assertEqual(set(sets.values()), {len(gate.surface.BINDINGS)})
+            self.assertEqual(sorted(sets.values()), sorted(len(gate.surface.expected_bindings(m))
+                                                           for m in gate.surface.MODES for _ in 'ab'))
 
     def test_vendor_candidates_missing_modes_and_corrupt_record_refuse(self):
         cases = [dict(vendors=('hip',)), dict(vendors=('cuda',)),
@@ -105,12 +107,12 @@ class ReleaseAdmissionTests(unittest.TestCase):
         write_json(out / 'wheel-audit.json', audit)
         records = {}
         package = '/vanished/qualification/venv/lib/python3.11/site-packages/mojolearn'
-        for surface in gate.surface.SURFACES:
-            for mode, code in gate.surface.MODES.items():
+        for surface, mode in sorted(gate.surface.expected_jobs(audit)):
+            for code in (gate.surface.MODES[mode],):
                 name = surface + '-' + mode
                 prefix = 'hip/gfx942/' + (mode + '/' if mode != 'fast' else '')
                 bindings = {}
-                for binding in gate.surface.BINDINGS:
+                for binding in gate.surface.expected_bindings(mode):
                     member = prefix + binding + '.so'
                     bindings[binding] = {'path': package + '/' + member,
                                          'sha256': extensions[member], 'mode_code': code}
@@ -125,17 +127,18 @@ class ReleaseAdmissionTests(unittest.TestCase):
                          'source_sha256': source_sha, 'installed_records': records}
         return out, qualification, wheel_sha, inventory, extensions, sets
 
-    def test_all_24_installed_records_and_three_quality_modes_rechecked(self):
+    def test_all_installed_records_and_identical_quality_rechecked(self):
+        # DEVIATION 2490: UMAP quality is an identical-only job, rechecked once.
         with tempfile.TemporaryDirectory() as directory:
             out, qualification, *args = self.vendor_fixture(Path(directory))
             with patch.object(gate.surface, 'retained', return_value=(qualification, {})), \
                     patch.object(gate.surface, 'check_quality') as quality:
                 gate.check_vendor(out, 'hip', *args)
-                self.assertEqual(quality.call_count, 3)
+                self.assertEqual(quality.call_count, 1)
 
     def test_runtime_architecture_requires_device_and_selection_in_every_job(self):
-        # Use the full release-linux3 inert fixture (DEVIATION 2290): 25 jobs
-        # and 16 IDENTICAL bindings.
+        # Use the full release-linux3 inert fixture (DEVIATION 2290, 2490): 11
+        # jobs (smoke in three tiers, eight identical-only) and 17 IDENTICAL bindings.
         # Re-seal mutated evidence so this checks actual architecture admission,
         # not merely stale hashes. Neither this fixture nor gate loads natives.
         from test_release061_end_to_end import fixture, seal_evidence
@@ -158,7 +161,7 @@ class ReleaseAdmissionTests(unittest.TestCase):
                             gate.check_vendor(*args, arch='gfx942')
                     else:
                         result = gate.check_vendor(*args, arch='gfx942')
-                        self.assertEqual(len(result['installed_records']), 25)
+                        self.assertEqual(len(result['installed_records']), 11)
 
     def test_stale_hash_inventory_and_missing_job_refuse(self):
         for defect in ('wheel', 'native', 'missing_job', 'build_proof'):
@@ -169,7 +172,7 @@ class ReleaseAdmissionTests(unittest.TestCase):
                 elif defect == 'native':
                     inventory = inventory + [['new.mojo', 'b' * 64]]
                 elif defect == 'missing_job':
-                    qualification['installed_records'].pop('ordered-rmse-fast')
+                    qualification['installed_records'].pop('ordered-rmse-identical')
                 else:
                     (out / 'build-provenance.json').write_text('{}')
                 with patch.object(gate.surface, 'retained', return_value=(qualification, {})), \
@@ -179,11 +182,11 @@ class ReleaseAdmissionTests(unittest.TestCase):
     def test_nonidentical_job_binding_cannot_hide_behind_success_manifest(self):
         with tempfile.TemporaryDirectory() as directory:
             out, qualification, *args = self.vendor_fixture(Path(directory))
-            path = out / 'ordered-rmse-fast.installed.json'
+            path = out / 'smoke-fast.installed.json'
             installed = json.loads(path.read_text())
             installed['installed_bindings']['_mojolearn_gbdt']['mode_code'] = 1
             write_json(path, installed)
-            qualification['installed_records']['ordered-rmse-fast'] = gate.digest_file(path)
+            qualification['installed_records']['smoke-fast'] = gate.digest_file(path)
             with patch.object(gate.surface, 'retained', return_value=(qualification, {})), \
                     patch.object(gate.surface, 'check_quality'), self.assertRaises(ValueError):
                 gate.check_vendor(out, 'hip', *args)
@@ -233,7 +236,7 @@ class ReleaseAdmissionTests(unittest.TestCase):
                         with self.assertRaises(ValueError):
                             gate.check(wheel, root / 'qualification', root)
                     else:
-                        self.assertEqual(gate.check(wheel, root / 'qualification', root)['jobs_per_vendor'], 24)
+                        self.assertEqual(gate.check(wheel, root / 'qualification', root)['jobs_per_vendor'], 10)
                     umap.assert_called_once()
                     ordered.assert_called_once()
 

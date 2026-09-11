@@ -13,29 +13,30 @@ import compare_installed_lanes as gate
 class InstalledLaneTests(unittest.TestCase):
     def statuses(self, directory, failure=('mamba', 'identical')):
         text = ''.join(f'{surface}\t{mode}\t{134 if (surface, mode) == failure else 0}\n'
-                       for surface in gate.SURFACES for mode in gate.MODES)
+                       for surface, mode in sorted(gate.expected_jobs({})))
         (directory / 'results.tsv').write_text(text)
 
-    def test_unrelated_failure_retained_in_all_24_rows(self):
+    def test_unrelated_failure_retained_in_all_rows(self):
+        # DEVIATION 2490: smoke in three tiers plus seven identical-only surfaces.
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
             self.statuses(directory)
-            rows = gate.status_rows(directory)
-            self.assertEqual(len(rows), 24)
+            rows = gate.status_rows(directory, {})
+            self.assertEqual(len(rows), 10)
             self.assertEqual([r for r in rows if r['exit_code']],
                              [{'surface': 'mamba', 'mode': 'identical', 'exit_code': 134}])
 
     def test_target_failure_or_missing_row_refused(self):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
-            self.statuses(directory, ('ordered-rmse', 'fast'))
+            self.statuses(directory, ('ordered-rmse', 'identical'))
             with self.assertRaisesRegex(ValueError, 'Target lane failed'):
-                gate.status_rows(directory)
+                gate.status_rows(directory, {})
             self.statuses(directory)
             path = directory / 'results.tsv'
             path.write_text('\n'.join(path.read_text().splitlines()[:-1]))
-            with self.assertRaisesRegex(ValueError, '24 installed'):
-                gate.status_rows(directory)
+            with self.assertRaisesRegex(ValueError, 'every installed exit row'):
+                gate.status_rows(directory, {})
 
     def fixtures(self):
         fields = ('training_input', 'query_input', 'training_embedding', 'query_embedding',
@@ -52,7 +53,7 @@ class InstalledLaneTests(unittest.TestCase):
                        'qualification_status': {'status': 'FAILED'},
                        'installed_exit_rows': [{'surface': s, 'mode': m,
                                                'exit_code': 1 if s == 'mamba' else 0}
-                                              for s in gate.SURFACES for m in gate.MODES]}
+                                              for s, m in sorted(gate.expected_jobs({}))]}
             results.append((summary, copy.deepcopy(quality), copy.deepcopy(ordered)))
         return results
 
@@ -64,7 +65,7 @@ class InstalledLaneTests(unittest.TestCase):
         self.assertIs(result['overall_release_eligible'], False)
         self.assertEqual([c['candidate_status']['status'] for c in result['candidates']],
                          ['FAILED', 'FAILED'])
-        self.assertTrue(all(len(c['installed_exit_rows']) == 24 for c in result['candidates']))
+        self.assertTrue(all(len(c['installed_exit_rows']) == 10 for c in result['candidates']))
 
     def test_source_umap_and_ordered_mismatches_refused(self):
         for mutation, needle in (

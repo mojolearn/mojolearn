@@ -17,7 +17,7 @@ import re
 import zipfile
 
 from compare_ordered_python import ARRAYS, PREFIX, check_record
-from verify_linux_surface_qualification import BINDINGS, FIXTURES, MODES, SURFACES, check_quality, expected_bindings, require
+from verify_linux_surface_qualification import BINDINGS, FIXTURES, MODES, SURFACES, check_quality, expected_bindings, expected_jobs, require
 
 TARGETS = {'umap', 'umap-transform', 'umap-quality', 'ordered-rmse'}
 EXTENSION = re.compile(r'mojolearn/(cuda|hip)/(sm_[0-9]+a?|gfx[0-9a-f]+)/(?:(deterministic|identical)/)?(_mojolearn[^/]*)\.so')
@@ -101,10 +101,10 @@ def audit_wheel(candidate, qualification):
     return audit
 
 
-def status_rows(qualification):
+def status_rows(qualification, audit):
     rows = [line.split('\t') for line in (qualification / 'results.tsv').read_text().splitlines()]
-    expected = {(s, m) for s in SURFACES for m in MODES}
-    require(len(rows) == 24 and all(len(r) == 3 for r in rows), 'Need all 24 installed exit rows')
+    expected = expected_jobs(audit)
+    require(len(rows) == len(expected) and all(len(r) == 3 for r in rows), 'Need every installed exit row')
     require({(s, m) for s, m, _ in rows} == expected, 'Missing/duplicate installed exit rows')
     require(all(re.fullmatch(r'[0-9]+', code) is not None for _, _, code in rows), 'Invalid exit code')
     require(all(code == '0' for surface, _, code in rows if surface in TARGETS), 'Target lane failed')
@@ -138,7 +138,7 @@ def load(candidate):
     candidate = Path(candidate)
     qualification = candidate / 'qualification-normalized'
     audit = audit_wheel(candidate, qualification)
-    rows = status_rows(qualification)
+    rows = status_rows(qualification, audit)
     candidate_status = read(candidate / 'candidate-status.json')
     qualification_status = read(qualification / 'qualification.json')
     require(candidate_status.get('status') in ('PASSED', 'FAILED'), 'Missing candidate disposition')
@@ -147,6 +147,8 @@ def load(candidate):
     require(re.fullmatch(r'[0-9]+', exit_text) is not None, 'Missing qualification exit marker')
     for surface in TARGETS:
         for mode in MODES:
+            if (surface, mode) not in expected_jobs(audit):
+                continue  # DEVIATION 2490: identical-only surfaces have no lower-tier job
             require((qualification / (surface + '-' + mode + '.log')).is_file(), 'Missing target log')
             bindings = installed(qualification, surface, mode, audit)
             if surface == 'umap-quality':

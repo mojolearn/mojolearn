@@ -94,7 +94,11 @@ def is_release_profile(audit):
 
 
 def expected_jobs(audit):
-    jobs = {(s, m) for s in SURFACES for m in MODES}
+    # DEVIATION 2490: the smoke runs in every tier (it asserts the tree
+    # lanes launch and every other binding refuses by name under fast and
+    # deterministic); every other surface is an identical-only family and
+    # runs under identical alone.
+    jobs = {('smoke', m) for m in MODES} | {(s, 'identical') for s in SURFACES}
     if is_release_profile(audit):  # DEVIATION 2290
         jobs.add(('byte-lm', 'identical'))
     return jobs
@@ -444,7 +448,7 @@ def retained(out, allowed=frozenset()):
                 'installed-dependencies.txt', 'dependency-check.log'}
     required.update(s + '-' + m + suffix for s, m in expected
                     for suffix in ('.log', '.installed.json'))
-    required.update('umap-quality-' + m + '.json' for m in MODES)
+    required.update('umap-quality-' + m + '.json' for s, m in expected if s == 'umap-quality')
     if ('byte-lm', 'identical') in expected:
         required.update(BYTE_FILES)
     if allowed:

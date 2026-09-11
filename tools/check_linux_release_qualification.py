@@ -344,7 +344,7 @@ def check_release061(wheel, qualification_root, source_root):
         comparisons[cuda] = dict(umap=umap, ordered=ordered)
     return dict(schema='mojolearn.linux.release-admission.v2', status='PASSED',
                 assembly_profile=surface.RELEASE_PROFILE, wheel=wheel.name, wheel_sha256=digest_file(wheel),
-                source_sha256=inventory_digest(inventory), jobs_per_runtime_architecture=25,
+                source_sha256=inventory_digest(inventory), jobs_per_runtime_architecture=len(surface.expected_jobs({'assembly_profile': surface.RELEASE_PROFILE})),
                 runtime_coverage={key: digest_file(qualification_root / key / 'qualification.json')
                                   for key in sorted(tiers)},
                 qualification_tiers=tiers,
@@ -391,7 +391,7 @@ def check(wheel, qualification_root, source_root):
             'Retained installed identity comparator failed')
     return {'schema': 'mojolearn.linux.release-admission.v1', 'status': 'PASSED',
             'wheel': wheel.name, 'wheel_sha256': wheel_sha,
-            'source_sha256': inventory_digest(inventory), 'jobs_per_vendor': 24,
+            'source_sha256': inventory_digest(inventory), 'jobs_per_vendor': len(surface.expected_jobs({})),
             'qualification_sha256': {v: digest_file(p / 'qualification.json')
                                      for v, p in directories.items()},
             'umap_identity': umap, 'ordered_identity': ordered,

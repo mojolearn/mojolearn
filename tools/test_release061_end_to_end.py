@@ -221,7 +221,7 @@ class EndToEndRelease061(unittest.TestCase):
                     if defect == 'mislabeled_device':
                         row['device_architecture'] = 'sm_89'
                     else:
-                        b = row['installed_bindings']['_mojolearn_mamba']
+                        b = row['installed_bindings']['_mojolearn_gbdt']
                         b['path'] = b['path'].replace('/cuda/sm_90/_', '/cuda/sm_89/_')
                     write_json(path, row)
                     seal_evidence(out)  # defeat superficial stale-record hash rejection
@@ -242,7 +242,7 @@ class EndToEndRelease061(unittest.TestCase):
                         result = gate.check_release061(wheel, qualification, root)
                         self.assertEqual(result['status'], 'PASSED')
                         self.assertEqual(set(result['runtime_coverage']), gate.RELEASE_ARCHES)
-                        self.assertEqual(result['jobs_per_runtime_architecture'], 25)
+                        self.assertEqual(result['jobs_per_runtime_architecture'], 11)
                         self.assertEqual(ordered.call_count, 2)
                         self.assertEqual(result['assembly_profile'], gate.surface.RELEASE_PROFILE)
 
@@ -298,7 +298,7 @@ class HopperSpelling(unittest.TestCase):
         self.assertEqual(result['status'], 'PASSED')
         self.assertEqual(set(result['runtime_coverage']),
                          {'cuda/sm_89', 'cuda/sm_90a', 'hip/gfx942'})
-        self.assertEqual(result['jobs_per_runtime_architecture'], 25)
+        self.assertEqual(result['jobs_per_runtime_architecture'], 11)
 
     def test_hopper_spelled_sm_90_still_admits(self):
         result = self._run({'cuda/sm_89', 'cuda/sm_90', 'hip/gfx942'})
@@ -407,36 +407,36 @@ class DeclaredKnownFailures(unittest.TestCase):
 
     def test_declared_failure_admits_and_is_republished(self):
         with tempfile.TemporaryDirectory() as tmp:
-            w, q, r = self._fixture(tmp, fail_job='mamba/deterministic', declare='mamba/deterministic')
+            w, q, r = self._fixture(tmp, fail_job='mamba/identical', declare='mamba/identical')
             result = self._check(w, q, r)
             self.assertEqual(result['status'], 'PASSED')
             self.assertEqual(result['qualification_tiers']['cuda/sm_89'], 'full')
             declared = result['observed_job_failures']['cuda/sm_89']
-            self.assertEqual(declared[0]['job'], 'mamba/deterministic')
+            self.assertEqual(declared[0]['job'], 'mamba/identical')
             self.assertTrue(declared[0]['citation'])
 
     def test_undeclared_failure_refused(self):
         with tempfile.TemporaryDirectory() as tmp:
-            w, q, r = self._fixture(tmp, fail_job='mamba/deterministic')
+            w, q, r = self._fixture(tmp, fail_job='mamba/identical')
             with self.assertRaises((ValueError, OSError, KeyError)):
                 self._check(w, q, r)
 
     def test_declaring_one_job_does_not_excuse_another(self):
         with tempfile.TemporaryDirectory() as tmp:
-            w, q, r = self._fixture(tmp, fail_job='umap/fast', declare='mamba/deterministic')
+            w, q, r = self._fixture(tmp, fail_job='smoke/fast', declare='mamba/identical')
             with self.assertRaises((ValueError, OSError, KeyError)):
                 self._check(w, q, r)
 
     def test_stale_declaration_refused(self):
         with tempfile.TemporaryDirectory() as tmp:
-            w, q, r = self._fixture(tmp, declare='mamba/deterministic')   # nothing failed
+            w, q, r = self._fixture(tmp, declare='mamba/identical')   # nothing failed
             with self.assertRaises((ValueError, OSError, KeyError)):
                 self._check(w, q, r)
 
     def test_citation_must_exist_in_the_source_tree(self):
         with tempfile.TemporaryDirectory() as tmp:
-            w, q, r = self._fixture(tmp, fail_job='mamba/deterministic',
-                                    declare='mamba/deterministic',
+            w, q, r = self._fixture(tmp, fail_job='mamba/identical',
+                                    declare='mamba/identical',
                                     citation='docs/NO_SUCH_DOCUMENT.md')
             with self.assertRaises((ValueError, OSError, KeyError)):
                 self._check(w, q, r)
