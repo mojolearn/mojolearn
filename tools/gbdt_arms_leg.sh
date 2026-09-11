@@ -1,54 +1,66 @@
 #!/bin/sh
 # tools/gbdt_arms_leg.sh -- lane gbdt-arms-hotaisle: DEVIATIONS 2550 (X read
-# in place), 2551 (device leaf partition), 2580 (level quantize) and 2581
-# (per-group bit width) compiled, checked and A/B'd on one AMD box (gfx942) in
-# IDENTICAL and FAST. Runs ON THE BOX as the MOJOLEARN_GEMM_LEG_EXTRA body of
-# either AMD runner (the tools/do_extra_leg.sh body contract: cwd
-# /root/mojolearn, pixi on PATH, pixi install done, output under
-# /root/gemm_leg_out/gah/, fetched home with the leg). Every number is
+# in place; the DEFAULT since 2026-09-11, opt out with
+# MOJOLEARN_2550_HOST_COPY), 2551 (device leaf partition), 2580 (level
+# quantize) and 2581 (per-group bit width) compiled, checked and A/B'd on one
+# AMD box (gfx942) in IDENTICAL and FAST. Runs ON THE BOX as the
+# MOJOLEARN_GEMM_LEG_EXTRA body of any AMD runner (the tools/do_extra_leg.sh
+# body contract: cwd /root/mojolearn, pixi on PATH, pixi install done, output
+# under /root/gemm_leg_out/gah/, fetched home with the leg). Every number is
 # labeled with the box it ran on; before and after always share one box.
 #
-#   DigitalOcean MI325X (native; one GPU droplet at a time, so one group per leg):
-#   MOJOLEARN_GPU_ARCHS=gfx942 \
-#   MOJOLEARN_GEMM_LEG_EXTRA=tools/gbdt_arms_leg.sh \
-#   MOJOLEARN_GEMM_LEG_OUT=$HOME/mojolearn-evidence/gbdt-arms-hotaisle/<stamp>-amd-mi325x-<group> \
-#   MOJOLEARN_DO_EXTRA_ENV='MOJOLEARN_GBDT_ARMS_GROUP=<perround|sym>' \
-#   bash tools/do_extra_leg.sh amd --minutes 60 --skip-gates
-#
 #   Hot Aisle MI300X (in the ROCm container):
-#   MOJOLEARN_HOTAISLE_SPEC=13core MOJOLEARN_GEMM_LEG_EXTRA=tools/gbdt_arms_leg.sh \
+#   MOJOLEARN_HOTAISLE_SPEC=8core MOJOLEARN_GEMM_LEG_EXTRA=tools/gbdt_arms_leg.sh \
 #   MOJOLEARN_GEMM_LEG_OUT=... MOJOLEARN_HOTAISLE_EXTRA_ENV='MOJOLEARN_GBDT_ARMS_GROUP=<group>' \
 #   bash tools/hotaisle_leg.sh amd --rent --minutes 60 --skip-gates
 #
+#   DigitalOcean MI325X (native; the TLC CloudFront refuses droplets, so the
+#   taxi parquet is uploaded from the Mac and sha256-checked on the box):
+#   MOJOLEARN_GPU_ARCHS=gfx942 MOJOLEARN_GEMM_LEG_EXTRA=tools/gbdt_arms_leg.sh \
+#   MOJOLEARN_GEMM_LEG_OUT=... MOJOLEARN_DO_EXTRA_ENV='MOJOLEARN_GBDT_ARMS_GROUP=<group>' \
+#   MOJOLEARN_DO_EXTRA_UPLOAD='<abs>/yellow_tripdata_2024-01.parquet <abs>/yellow_tripdata_2024-02.parquet' \
+#   bash tools/do_extra_leg.sh amd --minutes 60 --skip-gates
+#
+#   RunPod AMD MI300X (gemm payload; the body runs after the pod's gates):
+#   MOJOLEARN_RUNPOD_KEY_FILE=... MOJOLEARN_GPU_ARCHS=gfx942 MOJOLEARN_GEMM_LEG_EXTRA=tools/gbdt_arms_leg.sh \
+#   MOJOLEARN_GEMM_LEG_LOCAL_CARD=<an existing card> MOJOLEARN_GEMM_LEG_OUT=... \
+#   sh tools/gemm_remote_leg.sh amd --payload gemm --rent --minutes 60   (group perround only)
+#
 # ENV (values limited to the runners' [A-Za-z0-9_.,:/=-])
-#   MOJOLEARN_GBDT_ARMS_GROUP   perround: sets default a2550 a2551, combo
-#                               c2550_2551, lanes depthwise lossguide symmetric
+#   MOJOLEARN_GBDT_ARMS_GROUP   perround (default): sets h2550 (2550 opted out),
+#                               default (2550 ON), a2551 (2550 ON plus 2551);
+#                               lanes depthwise lossguide symmetric
 #                               sym: sets default a2580 a2581, combo
 #                               c2580_2581, lane symmetric (the only lane the
 #                               two arms reach)
 #   MOJOLEARN_GBDT_ARMS_TIERS   identical,fast (default)
-#   MOJOLEARN_GBDT_ARMS_COMBOS  1 (default) or 0; combos build and time last
-#                               and are what goes first when time is short
+#   MOJOLEARN_GBDT_ARMS_COMBOS  1 (default) or 0; the sym combo builds and
+#                               times last and goes first when time is short
 #   MOJOLEARN_GBDT_ARMS_BUDGET_S  work bound when the start wrapper's is unreadable
 #
+# VERDICT PAIRS (before:after), per tier per lane the pair reaches:
+#   perround  h2550:default (2550)  default:a2551 (2551)  h2550:a2551 (both)
+#   sym       default:a2580  default:a2581  combo pass default:c2580_2581
+#
 # PHASES (each a row in status.tsv; a red phase does not stop the next)
-#   deps, data (background; taxi falls back to curl with an explicit agent),
-#   builds (identical base, then per tier default and single arms; the body
-#   exits at once when no default gbdt build compiled, so the runner ends the
-#   bill; combos last), checks (every named check of the group, both sides,
-#   in parallel after the builds, so no compile shares the box with a timed
-#   round), import (prints the compiled path of all four switches), ib
+#   deps, data (background; an uploaded taxi parquet is copied in first, and
+#   a failed fetch falls back to curl with an explicit agent), builds
+#   (identical base, then per tier every set; the body exits at once when no
+#   default gbdt build compiled, so the runner ends the bill; the sym combo
+#   last), checks (every named check of the group, both sides, in parallel
+#   after the builds, so no compile shares the box with a timed round),
+#   import (prints the compiled path of all four switches), ib
 #   (identity_break per IDENTICAL set), speed (1M rows, per cell one process
 #   per set, warm-up plus 5 rounds, set order rotated per cell; IDENTICAL
 #   cells before FAST cells), stage (one MOJOLEARN_STAGE_TIMES=1 replicate
-#   per set, Istella-S first), combos (default re-timed beside each combo in
-#   the same window), verdicts (tools/flip_verdict.py per tier per lane per
-#   arm, rerun on the Mac).
+#   per set, Istella-S first), combos (sym only: default re-timed beside the
+#   combo in the same window), verdicts (tools/flip_verdict.py per pair per
+#   tier per lane, rerun on the Mac).
 #
-# Which lane an arm reaches decides its cells: 2551 is the non-symmetric
+# Which lane a switch reaches decides its cells: 2551 is the non-symmetric
 # estimator only; 2580 and 2581 are the symmetric searcher only; 2550 is
-# every lane (train's column staging). A lane an arm cannot reach is covered
-# by identity_break's hashes, not by a timing.
+# every lane (train's column staging). A lane a switch cannot reach is
+# covered by identity_break's hashes, not by a timing.
 #
 # POSIX sh only (dash), `set -u` not `set -e`.
 set -u
@@ -93,39 +105,40 @@ status body_start 0
 
 case "$GROUP" in
     perround)
-        SETS="default a2550 a2551"
-        COMBO=c2550_2551
+        SETS="default h2550 a2551"
+        COMBO=""
         LANES="gbdt-depthwise gbdt-lossguide gbdt-symmetric"
+        PAIRS="h2550:default default:a2551 h2550:a2551"
         ;;
     sym)
         SETS="default a2580 a2581"
         COMBO=c2580_2581
         LANES="gbdt-symmetric"
+        PAIRS="default:a2580 default:a2581"
         ;;
     *)
         status bad_group 2
         exit 2
         ;;
 esac
+[ -n "$COMBO" ] || COMBOS=0
 defines_for() {
     case "$1" in
         default) echo "" ;;
-        a2550) echo "-D MOJOLEARN_2550_BORROW_X=1" ;;
+        h2550) echo "-D MOJOLEARN_2550_HOST_COPY=1" ;;
         a2551) echo "-D MOJOLEARN_2551_DEVICE_PARTITION=1" ;;
-        c2550_2551) echo "-D MOJOLEARN_2550_BORROW_X=1 -D MOJOLEARN_2551_DEVICE_PARTITION=1" ;;
         a2580) echo "-D MOJOLEARN_2580_LEVEL_QUANT=1" ;;
         a2581) echo "-D MOJOLEARN_2581_GROUP_WIDTH=1" ;;
         c2580_2581) echo "-D MOJOLEARN_2580_LEVEL_QUANT=1 -D MOJOLEARN_2581_GROUP_WIDTH=1" ;;
     esac
 }
-# sets_for <lane> <sets...>: the sets that reach the lane, default first
+# sets_for <lane> <sets...>: the sets that reach the lane
 sets_for() {
     _lane=$1; shift
     _o=""
     for _s in "$@"; do
         case "$_lane.$_s" in
             gbdt-symmetric.a2551) ;;
-            gbdt-symmetric.c2550_2551) ;;
             gbdt-depthwise.a258*|gbdt-lossguide.a258*|gbdt-depthwise.c2580_2581|gbdt-lossguide.c2580_2581) ;;
             *) _o="$_o $_s" ;;
         esac
@@ -157,6 +170,15 @@ echo "gpu_name=$GPU_NAME ib_label=$IB_LABEL" >> "$G/deadline.txt"
 
 # ---------------------------------------------------------------- data (background)
 (
+    # parquet uploaded by the runner (tools/do_extra_leg.sh
+    # MOJOLEARN_DO_EXTRA_UPLOAD, sha256 checked on the box): the TLC
+    # CloudFront refuses DigitalOcean droplets by address. The download step
+    # below skips a parquet that is present and decodes it.
+    if ls /root/gemm_leg_upload/yellow_tripdata_*.parquet > /dev/null 2>&1; then
+        mkdir -p "$DATA/taxi"
+        cp /root/gemm_leg_upload/yellow_tripdata_*.parquet "$DATA/taxi/"
+        echo "taxi_parquet=uploaded $(ls /root/gemm_leg_upload | tr '\n' ' ')" >> "$G/data.txt"
+    fi
     timeout -k 10 1200 $PY tools/speed_gbdt_arm.py --download taxi > "$G/logs/download_taxi.log" 2>&1
     _t=$?
     if [ "$_t" != 0 ]; then
@@ -234,12 +256,14 @@ check() {  # <name> <mojo run args...>
 }
 DI="-D MOJOLEARN_NUMERIC_IDENTICAL=1"
 if [ "$GROUP" = perround ]; then
+    # pixi.toml: check-gbdt-per-round (2550 ON), -2550-host-copy (2550
+    # opted out), -2551 (2551 on); the fourth crosses the two switches
     # shellcheck disable=SC2086
     check check-gbdt-per-round $DI checks/gbdt_per_round_check.mojo
-    check check-gbdt-per-round-2550 $DI -D MOJOLEARN_2550_BORROW_X=1 checks/gbdt_per_round_check.mojo
+    check check-gbdt-per-round-2550-host-copy $DI -D MOJOLEARN_2550_HOST_COPY=1 checks/gbdt_per_round_check.mojo
     check check-gbdt-per-round-2551 $DI -D MOJOLEARN_2551_DEVICE_PARTITION=1 checks/gbdt_per_round_check.mojo
-    check check-gbdt-per-round-2550-2551 $DI -D MOJOLEARN_2550_BORROW_X=1 -D MOJOLEARN_2551_DEVICE_PARTITION=1 checks/gbdt_per_round_check.mojo
-    CHECKS="check-gbdt-per-round check-gbdt-per-round-2550 check-gbdt-per-round-2551 check-gbdt-per-round-2550-2551"
+    check check-gbdt-per-round-2551-host-copy $DI -D MOJOLEARN_2550_HOST_COPY=1 -D MOJOLEARN_2551_DEVICE_PARTITION=1 checks/gbdt_per_round_check.mojo
+    CHECKS="check-gbdt-per-round check-gbdt-per-round-2550-host-copy check-gbdt-per-round-2551 check-gbdt-per-round-2551-host-copy"
 else
     # the check instantiates every side itself; one run per tier
     check check-sym-arms-identical $DI checks/sym_arms_check.mojo
@@ -368,15 +392,13 @@ for _d in istella taxi; do
         done
     done
 done
-# combos: default re-timed beside each combo in the same window
+# sym combo: default re-timed beside the combo in the same window
 if [ "$COMBOS" = 1 ]; then
     for _t in $TIERS; do
         for _l in $LANES; do
-            _cs=$(sets_for "$_l" default "$COMBO")
-            [ "$_cs" = default ] && continue
             for _d in taxi istella; do
-                # shellcheck disable=SC2086
-                cell combo "$_t" timed "$_l" "$_d" $_cs
+                # shellcheck disable=SC2046
+                cell combo "$_t" timed "$_l" "$_d" $(sets_for "$_l" default "$COMBO")
             done
         done
     done
@@ -384,21 +406,22 @@ if [ "$COMBOS" = 1 ]; then
 fi
 
 # ---------------------------------------------------------------- verdicts (rerun on the Mac)
-for _pass in main combo; do
-    for _t in $TIERS; do
-        for _l in $LANES; do
-            for _s in $SETS $COMBO; do
-                [ "$_s" = default ] && continue
-                _b="$G/speed/$_pass.$_t.default.$_l"
-                _a="$G/speed/$_pass.$_t.$_s.$_l"
-                [ -f "$_a.taxi.log" ] || [ -f "$_a.istella.log" ] || continue
-                $PY tools/flip_verdict.py --lane "$_l" --arm ours --rows 1000000 \
-                    --taxi-before "$_b.taxi.log" --taxi-after "$_a.taxi.log" \
-                    --istella-before "$_b.istella.log" --istella-after "$_a.istella.log" \
-                    > "$G/verdicts/$_pass.$_t.$_s.$_l.txt" 2>&1
-                echo "$_pass.$_t.$_s.$_l $(tail -n 1 "$G/verdicts/$_pass.$_t.$_s.$_l.txt")" >> "$G/verdicts.txt"
-            done
+verdict() {  # <pass> <tier> <lane> <before> <after>
+    _b="$G/speed/$1.$2.$4.$3"
+    _a="$G/speed/$1.$2.$5.$3"
+    [ -f "$_a.taxi.log" ] || [ -f "$_a.istella.log" ] || return 0
+    $PY tools/flip_verdict.py --lane "$3" --arm ours --rows 1000000 \
+        --taxi-before "$_b.taxi.log" --taxi-after "$_a.taxi.log" \
+        --istella-before "$_b.istella.log" --istella-after "$_a.istella.log" \
+        > "$G/verdicts/$1.$2.$4-$5.$3.txt" 2>&1
+    echo "$1.$2.$4-$5.$3 $(tail -n 1 "$G/verdicts/$1.$2.$4-$5.$3.txt")" >> "$G/verdicts.txt"
+}
+for _t in $TIERS; do
+    for _l in $LANES; do
+        for _p in $PAIRS; do
+            verdict main "$_t" "$_l" "${_p%%:*}" "${_p#*:}"
         done
+        [ "$COMBOS" = 1 ] && verdict combo "$_t" "$_l" default "$COMBO"
     done
 done
 grep -h '^FSPEED \|^FSPEED-ACC\|^BENCH_PATHS\|^BENCH_BINDING' "$G"/speed/*.log > "$G/summary_fspeed.txt" 2>/dev/null
