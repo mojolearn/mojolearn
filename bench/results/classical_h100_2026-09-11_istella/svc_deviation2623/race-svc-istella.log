@@ -1,0 +1,11 @@
+CTD-ROUND lane=svc dataset=istella arm=ours round=0 ms=738.112 digest=8963cdc33da9ec9e
+CTD-ROUND lane=svc dataset=istella arm=cuml-gpu round=0 ms=427.967 digest=de5ac69d825801b3
+CTD-ROUND lane=svc dataset=istella arm=cuml-gpu round=1 ms=19.912 digest=de5ac69d825801b3
+CTD-ROUND lane=svc dataset=istella arm=ours round=1 ms=73.084 digest=8963cdc33da9ec9e
+CTD-ROUND lane=svc dataset=istella arm=ours round=2 ms=70.699 digest=8963cdc33da9ec9e
+CTD-ROUND lane=svc dataset=istella arm=cuml-gpu round=2 ms=24.561 digest=de5ac69d825801b3
+CTD-ROUND lane=svc dataset=istella arm=cuml-gpu round=3 ms=20.638 digest=de5ac69d825801b3
+CTD-ROUND lane=svc dataset=istella arm=ours round=3 ms=65.700 digest=8963cdc33da9ec9e
+CTD lane=svc dataset=istella arm=ours device=gpu status=ok median_ms=70.69941610097885 min_ms=65.69962203502655 max_ms=73.08448478579521 digest_stable=True quality={"accuracy": 0.9222, "n_support": 2400}
+CTD lane=svc dataset=istella arm=cuml-gpu device=gpu status=ok median_ms=20.637620240449905 min_ms=19.911766052246094 max_ms=24.561218917369843 digest_stable=True quality={"accuracy": 0.9222, "n_support": 2401}
+CTD-RATIO lane=svc dataset=istella ours/cuml-gpu=3.4258

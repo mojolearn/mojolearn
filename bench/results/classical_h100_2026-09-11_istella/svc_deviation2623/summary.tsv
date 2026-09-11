@@ -1,0 +1,5 @@
+lane	dataset	shape	arm	device	device_name	status	median_ms	min_ms	max_ms	rounds	digest_stable	quality	ours_over_this
+svc	istella	10000x220	cuml-gpu	gpu	NVIDIA H100 80GB HBM3	ok	20.6376	19.9118	24.5612	3	True	accuracy=0.9222,n_support=2401	3.4258
+svc	istella	10000x220	ours	gpu	cuda	ok	70.6994	65.6996	73.0845	3	True	accuracy=0.9222,n_support=2400	
+svc	taxi	10000x11	cuml-gpu	gpu	NVIDIA H100 80GB HBM3	ok	415.0573	414.3960	415.3273	3	True	accuracy=0.7675,n_support=5586	2.0646
+svc	taxi	10000x11	ours	gpu	cuda	ok	856.9116	856.8232	859.5165	3	True	accuracy=0.7675,n_support=5527	
