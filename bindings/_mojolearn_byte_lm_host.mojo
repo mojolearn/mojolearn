@@ -80,7 +80,7 @@ def byte_lm_host_logits_binding(addresses: PythonObject, dims: PythonObject,
     """Logits for addresses [params f32 (n_total), ids i32 (batch * length),
     out logits f32 (batch * length * vocab)] and dims [batch, length].
     `threaded` is 0 for the reference path, 1 for the threaded path of
-    DEVIATIONS 2616 and 2624, which runs on at most `threads` threads (0: one
+    DEVIATIONS 2616 and 2640, which runs on at most `threads` threads (0: one
     per physical core). Returns the number of logits written."""
     var cfg = _host_config(shape)
     var use_threads = _index(threaded)

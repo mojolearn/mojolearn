@@ -1,4 +1,4 @@
-# Byte LM CPU inference gate (DEVIATIONS 2610-2616, 2624) on GitHub's free standard
+# Byte LM CPU inference gate (DEVIATIONS 2610-2616, 2640) on GitHub's free standard
 # runners: ARM64 Linux (Azure Cobalt 100), x86-64 Linux and Apple M1 macOS.
 #
 # What it proves on each runner, and nothing more: the CPU binding built ON
@@ -171,7 +171,7 @@ jobs:
           cd python
           python3 -m pytest -q mojolearn/tests/test_byte_lm_host.py 2>&1 | tee "$GATE_OUT/pytest_host.log"
 
-      # DEVIATION 2624's two Mojo checks, built with the binding's CPU target so
+      # DEVIATION 2640's two Mojo checks, built with the binding's CPU target so
       # they test the codegen the gate ran: the host kernels against the
       # oracles by bits on shapes and planted values the captures never reach,
       # and the lane-wise exp and SiLU against the scalar seams on all 2^32

@@ -195,9 +195,9 @@ def byte_host_logits(params: List[Float32], inputs: List[Int32], batch: Int,
 
 
 # ===========================================================================
-# THE THREADED PATH (DEVIATIONS 2616, 2624)
+# THE THREADED PATH (DEVIATIONS 2616, 2640)
 # ===========================================================================
-# Same bits as the reference, and gated to prove it. Since DEVIATION 2624 it
+# Same bits as the reference, and gated to prove it. Since DEVIATION 2640 it
 # runs `training/byte_lm_host_kernels.mojo`: the oracles' arithmetic, per
 # output value in the oracles' order, without their per-cell allocation,
 # with operands flushed and packed once per call and the cells of a row
@@ -346,7 +346,7 @@ def _threaded_rows(params: List[Float32], inputs: List[Int32], batch: Int, lengt
 
 def byte_host_logits_threaded(params: List[Float32], inputs: List[Int32], batch: Int,
                               length: Int, config: ByteConfig, threads: Int = 0) raises -> List[Float32]:
-    """`byte_host_logits` through the DEVIATION 2624 kernels on at most
+    """`byte_host_logits` through the DEVIATION 2640 kernels on at most
     `threads` threads (0: one per physical core); same arguments, same bits."""
     _validate_logits_inputs(params, inputs, batch, length, config)
     return _threaded_rows(params, inputs, batch, length, config, byte_host_worker_count(threads))

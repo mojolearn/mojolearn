@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Exhaustive check of the lane-wise exponential and SiLU (DEVIATION 2624).
+"""Exhaustive check of the lane-wise exponential and SiLU (DEVIATION 2640).
 
 `training/byte_lm_host_kernels.mojo::expf_lanes` and `silu_lanes` respell
 `portable_expf` and `portable_siluf` (checks/numerics.mojo) lane by lane. Two

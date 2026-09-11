@@ -95,7 +95,7 @@ class LanguageModelInference:
     """Forward-only byte LM on the CPU. The parameters are copied at
     construction and never change afterward.
 
-    `threaded=True` runs the threaded path (DEVIATIONS 2616, 2624): host
+    `threaded=True` runs the threaded path (DEVIATIONS 2616, 2640): host
     kernels that spend the oracles' arithmetic in the oracles' order without
     their per-cell allocation, advanced as SIMD lanes and split across at
     most `threads` threads (None: one per physical core) along axes the

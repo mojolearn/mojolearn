@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Bitwise check of the byte LM host kernels against the oracles (DEVIATION 2624).
+"""Bitwise check of the byte LM host kernels against the oracles (DEVIATION 2640).
 
 `tools/byte_lm_host_gate.py` qualifies the kernels end to end at the admitted
 profile on retained GPU captures. This check reaches what that data cannot:

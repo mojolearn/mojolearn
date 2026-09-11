@@ -28,18 +28,28 @@ the Metal, CUDA and HIP kernels are gated against bit for bit, in the order
 That composition is a prediction until the gate below runs on a CPU. A CPU is
 certified only by its own row in the table at the end of this file.
 
+The threaded path (DEVIATIONS 2616 and 2640) computes the same numbers through
+host kernels in `training/byte_lm_host_kernels.mojo`. Each kernel performs the
+operations its oracle performs, on the same operands, in the same order for
+every output value, and changes only what surrounds that arithmetic. There is no
+allocation per GEMM cell. Operands are flushed and packed once per call. The
+cells of a GEMM row advance together as SIMD lanes, with the flush deferred
+behind an exact fallback. Per-element seams run as lanes, and the maxima whose
+fold shape the contracts leave free run as a branch-free total-order fold. That
+is an argument and not a qualification; the gate and the two checks below are
+the qualification.
+
 ## Scope
 
 - One model family, the byte LM profile
   `mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1`.
 - FP32, forward only. No training, no backward pass, no optimizer on the CPU.
 - The reference path is the oracles as written, single-threaded scalar loops.
-  `threaded=True` (DEVIATION 2616) splits the same arithmetic across cores
-  along axes the contracts make independent: one task per batch row, or one
-  task per token row of the head product for a single sequence. No float
-  crosses a thread and no fold changes order, and the gate requires both
-  paths to reproduce the capture bytes and each other's logits. Neither path
-  vectorizes, and neither is a performance claim of any kind.
+  `threaded=True` runs the kernels described above and splits batch rows
+  across at most `threads` threads (`None` is one per physical core);
+  `threaded=True, threads=1` is the kernels on one core. No float crosses a
+  thread and no fold changes order, and the gate requires both paths to
+  reproduce the capture bytes and each other's logits.
 - Every GPU estimator, block and trainer still requires a GPU. On a CPU-only
   install they raise by name on use (DEVIATION 2615).
 
@@ -62,7 +72,23 @@ full `[batch, length, vocab]` resolution.
 
 The negative control (DEVIATION 2612) is a build with
 `-D MOJOLEARN_BYTE_LM_HOST_SABOTAGE=1`, which folds the head product in reverse
-order. The gate run on that build must find a mismatch.
+order, inside the GEMM kernel on the threaded path. The gate run on that build
+must find a mismatch on both paths.
+
+Two Mojo programs check the kernels where the captures cannot reach.
+`training/checks/byte_lm_host_kernels_check.mojo` compares every kernel with
+its oracle by bits. It covers GEMM shapes with scalar tails, eight-chain groups
+and two or three leaves, rows split across calls, and the reversed fold. It
+exercises the deferred flush's fallback both forced and triggered by planted
+subnormal accumulators, with a self test that the plants would expose a missing
+flush. It checks the free-shape maximum against both scalar folds on 20000
+planted rows (signed zeros, subnormals, infinities, quiet and signaling NaNs),
+and RMS norm, RoPE, whole blocks at head_dim 8 and 6 and the loss at vocab 256
+and 300. `training/checks/byte_lm_host_exp_check.mojo` compares the lane-wise
+exponential and SiLU with the scalar seams on all 4294967296 Float32 bit
+patterns. Its first run found the lanes returning signaling NaNs quieted where
+the scalar returns them unchanged. No model input reaches a signaling NaN, but
+the lanes now pass NaNs through by an integer select and match on every pattern.
 
 ## Running it
 
@@ -72,7 +98,15 @@ runs both builds, both gates and the fake-binding plumbing tests on ARM64 Linux
 to `main` or the lane branches that touches the CPU path, and uploads the
 reports. GitHub assigns the x86-64 host, so Intel and AMD rows come only from a
 report that names the CPU. A row enters the table below only after its uploaded
-reports are read.
+reports are read. The workflow also builds both Mojo checks with the binding's
+CPU target and runs them on every runner. Locally, from the repository root,
+after `bindings/build_byte_lm_host.sh`:
+
+```sh
+pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . training/checks/byte_lm_host_kernels_check.mojo -o kernels_check && ./kernels_check
+pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . training/checks/byte_lm_host_exp_check.mojo -o exp_check && ./exp_check
+python tools/byte_lm_host_gate.py --steps all --threads 3
+```
 
 A rented CPU-only droplet (DEVIATION 2614) runs the same body. It is the
 fallback, not the default: do not overlap it with another lane's GPU legs.
@@ -85,6 +119,48 @@ bash tools/do_extra_leg.sh cpu-intel --minutes 45
 
 `cpu-amd` is the AMD twin. The upload is the capture subset `git archive`
 excludes, packed at its repository paths; the body unpacks it.
+
+## Speed
+
+Apple M4, bare metal, through the Python surface, median of repeated calls, one
+thread unless the row says three. Every build in the table produced the same
+logits SHA-256 at `[1, 1]`, `[1, 32]`, `[2, 32]`, `[8, 32]` and `[32, 32]` and
+the same loss bits. The reference row is from the session's first and quietest
+window. Each kernel row is from an interleaved A/B run against the build that
+followed it, in one window per pair. The Mac was shared with other work, so
+compare rows within this table and not with other machines.
+
+| path | `[1, 1]` logits | `[2, 32]` logits | `[32, 32]` logits | `[2, 33]` loss |
+|---|---|---|---|---|
+| reference path, the oracles as written | 0.26 ms | 13.3 ms | 214 ms | 13.5 ms |
+| kernels at `6349278a` | 0.12 ms | 0.87 ms | 12.3 ms | 1.13 ms |
+| kernels at `185ad160` | 0.042 ms | 0.57 ms | 8.7 ms | 0.78 ms |
+| kernels at `450addf1` | 0.041 ms | 0.456 ms | 6.9 ms | 0.535 ms |
+| kernels at `450addf1`, three threads | 0.041 ms | 0.269 ms | 2.72 ms | 0.359 ms |
+
+What moved the numbers, each measured by interleaved A/B with bits unchanged.
+Removing per-cell allocation and advancing GEMM cells as lanes came first. Then
+register accumulators, a deferred flush (17% at `[32, 32]`), setup straight
+from parameter offsets (a one-token call from 0.12 to 0.045 ms), lane-wise
+exponential and SiLU, and the total-order maximum (about 20%). Measured and
+dropped: sixteen accumulator chains instead of eight (18% slower), and
+splitting one sequence's head product across threads (slower at `[1, 32]`).
+
+PyTorch 2.13 on the same parameters (eager FP32 with
+`scaled_dot_product_attention`, `torch.set_num_threads`) computes the same
+function, with a largest logit difference of 2.9e-6 and identical argmax, and
+makes no cross-vendor bit identity claim. In one window with the kernels at
+`450addf1`, on a loaded Mac, PyTorch took 0.30 ms at `[2, 32]` and 3.4 ms at
+`[32, 32]` on one thread against the kernels' 0.80 ms and 11.9 ms, and 0.35 ms
+and 2.4 ms on three threads against 0.41 ms and 4.2 ms. PyTorch is faster on
+this model on this CPU. The kernels keep every fold order the contracts pin,
+which a reordering BLAS does not; how much of the difference that accounts for
+is not measured.
+
+Evidence `bench/results/local/2026-09-11_1618-apple-m4-byte-lm-cpu-speed`
+holds the gate reports at `450addf1` with `--threads 3`, the user path through
+`from_checkpoint` on both paths, both Mojo check outputs, every A/B row, the
+same-window PyTorch rows, a profile and the benchmark scripts.
 
 ## Certified CPUs
 
@@ -160,3 +236,23 @@ built: cloud-init held the apt lock, `build-essential` did not install, and the
 link step found no C compiler. That is an infrastructure failure with no
 numerical result in either direction; the leg body waits for cloud-init. The
 threaded path on Intel is measured instead on the Xeon 6973P-C row above.
+
+## Threaded path kernels by commit (DEVIATION 2640)
+
+The table above certified the threaded path as it was before DEVIATION 2640,
+one task per batch row running the oracles. The kernels are certified
+separately, by commit.
+
+The lane commits `6349278a`, `185ad160` and `450addf1` name these kernels
+DEVIATION 2624. Main's DEVIATION 2624 is the pointwise histogram fix, which
+landed first, so the kernels are DEVIATION 2640 from the merge on.
+
+| commit | where | gate | kernel check | exhaustive exp and SiLU | evidence |
+|---|---|---|---|---|---|
+| `6349278a` | GitHub run 34640825397: Neoverse N2, Apple M1 (virtual), EPYC 7763 in four draws, EPYC 9V74 | 33 of 33 on both paths; reversed fold caught, 9 of 33 on both | not yet in CI | not yet in CI | `bench/results/gh-actions/2026-09-11_1948-byte-lm-cpu-gate-run34640825397` |
+| `185ad160` | GitHub run 34643134242: Neoverse N2, Apple M1 (virtual), EPYC 7763 in three draws, EPYC 9V74 in two | 33 of 33 on both paths; 9 of 33 caught on both | PASS | 0 of 4294967296 differ, at 8 lanes on x86-64 and 4 on ARM64 | `bench/results/gh-actions/2026-09-11_2014-byte-lm-cpu-gate-run34643134242` |
+| `450addf1` | Apple M4, bare metal, `--threads 3` | 144 of 144 on both paths; 65 of 144 caught on both; user path through `from_checkpoint` PASS | PASS | 0 of 4294967296 differ | `bench/results/local/2026-09-11_1618-apple-m4-byte-lm-cpu-speed` |
+| `450addf1` | GitHub run 34643527802: Neoverse N2, Apple M1 (virtual), EPYC 9V74 in three draws, EPYC 9V45, EPYC 7763 | 33 of 33 on both paths; 9 of 33 caught on both; plumbing tests 9 passed | PASS | 0 of 4294967296 differ, at 8 lanes on x86-64 and 4 on ARM64 | `bench/results/gh-actions/2026-09-11_2018-byte-lm-cpu-gate-run34643527802` |
+
+Not measured with the kernels: any Intel CPU (no Intel host was drawn in
+these runs) and the DigitalOcean droplets.

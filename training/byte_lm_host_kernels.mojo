@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Host kernels for the byte LM's threaded CPU path (DEVIATION 2624).
+"""Host kernels for the byte LM's threaded CPU path (DEVIATION 2640).
 
 THE ORACLES' ARITHMETIC, NOT A NEW ONE. Every floating point operation below
 is one the host oracles perform, on the same operands, in the same order for
