@@ -24,7 +24,13 @@ WHAT IT ASSERTS.
     (NVIDIA's shipped default, DEVIATION 2534), then five arms on that one:
     `_kvrecompute` (DEVIATION 2596) and `_kvgrid_r64`, `_kvgrid_r32`,
     `_kvsplit`, `_kvgrid_r32_kvsplit` (DEVIATION 2597), then `_zdefer`,
-    `_zlag` and `_zlag_kvgrid_r32` (DEVIATION 2598), so every second-round
+    `_zlag` and `_zlag_kvgrid_r32` (DEVIATION 2598), then `_estash_kvgrid_r32`
+    and `_estash_dres_kvgrid_r32` (DEVIATIONS 2650 and 2651, launched
+    through the kept-stash entry points with a kept buffer per case; their
+    `+sabotage_new` backward runs on a clean forward's kept stash and must
+    move zdot at EVEN rows only and hold dv, and a fourth pass poisons the
+    kept buffer with NaN and the clean backward must move dv, `REACH_E`),
+    so every second-round
     forward instantiation (rows 64 and 32, Q residency, preflush) and every
     second-round backward launch runs, and "new arm = eager" and
     "default = eager" hold in one run):
@@ -101,8 +107,10 @@ from transformer.impl.llama.fused_attention import (
     ATTN_ARM_BWD_KVSPLIT,
     ATTN_ARM_BWD_STASH,
     ATTN_ARM_BWD_TILED,
+    ATTN_ARM_BWD_ESTASH,
     ATTN_ARM_BWD_ZDEFER,
     ATTN_ARM_BWD_ZLAG,
+    ATTN_ARM_ESTASH_DRES,
     ATTN_ARM_BWD_ZTILED,
     ATTN_ARM_FROWS32,
     ATTN_ARM_FROWS64,
@@ -120,6 +128,8 @@ from transformer.impl.llama.fused_attention import (
     ATTN_ARM_ZROWS64,
     ATTN_STASH_HD,
     FUSED_RAN,
+    FUSED_REFUSED_REGIME,
+    fused_attention_arm_estash,
     fused_attention_arm_kv,
     fused_attention_arm_name,
     fused_attention_arm_new_backward,
@@ -129,8 +139,8 @@ from transformer.impl.llama.fused_attention import (
     fused_attention_arm_forward_resolved,
     fused_attention_arm_reach_bit,
     fused_attention_arm_zsched,
-    fused_backward_launch_ran,
-    fused_forward_launch_ran,
+    fused_backward_launch_estash_ran,
+    fused_forward_launch_estash_ran,
 )
 from transformer.impl.llama.modeling_llama import (
     LlamaDeviceStages,
@@ -180,6 +190,11 @@ def arms() -> List[Int]:
     out.append(r3 | ATTN_ARM_BWD_ZDEFER)
     out.append(r3 | ATTN_ARM_BWD_ZLAG)
     out.append(r3 | ATTN_ARM_BWD_ZLAG | ATTN_ARM_BWD_KVGRID | ATTN_ARM_KVROWS32)
+    # DEVIATIONS 2650 and 2651 (brief section 20), on the NVIDIA default
+    # word (the 2597 32-key dk/dv fold on the round 3 arm).
+    comptime r3kv = r3 | ATTN_ARM_BWD_KVGRID | ATTN_ARM_KVROWS32
+    out.append(r3kv | ATTN_ARM_BWD_ESTASH)
+    out.append(r3kv | ATTN_ARM_BWD_ESTASH | ATTN_ARM_ESTASH_DRES)
     return out^
 
 
@@ -226,6 +241,11 @@ def check_names(mut failures: List[String]) raises:
     good.append("stash_tiled_fgrid_r32_qres_pf_zlag_kvgrid_r32")
     good.append("stash_tiled_pf_zdefer_kvrecompute+sabotage_kv")
     good.append("stash_tiled_pf_zlag_kvsplit")
+    # DEVIATIONS 2650 and 2651 (brief section 20).
+    good.append("stash_tiled_fgrid_r32_qres_pf_estash_kvgrid_r32")
+    good.append("stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r64")
+    good.append("stash_tiled_fgrid_r32_qres_pf_estash_kvgrid+sabotage_new")
+    good.append("stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32+sabotage_kv")
     for i in range(len(good)):
         var n = String(good[i])
         var got = fused_attention_arm_name(fused_attention_arm_parse(n))
@@ -282,6 +302,21 @@ def check_names(mut failures: List[String]) raises:
     bad.append("fwd_sstash_pf_zlag")
     bad.append("stash_tiled_pf_kvsplit_zlag")
     bad.append("bwd_stash_pf_zdefer")
+    # DEVIATIONS 2650 and 2651: no `_kvgrid`, no `_qres` or `_fgrid_r32`,
+    # with a zdot schedule, with `_ztiled`, `_kvrecompute` or `_kvsplit`,
+    # out of order, a bare `_dres`, and without `_pf`.
+    bad.append("stash_tiled_fgrid_r32_qres_pf_estash")
+    bad.append("stash_tiled_pf_estash_kvgrid_r32")
+    bad.append("stash_tiled_fgrid_r32_pf_estash_kvgrid_r32")
+    bad.append("stash_tiled_fgrid_r64_pf_estash_kvgrid_r32")
+    bad.append("stash_tiled_fgrid_r32_qres_pf_zlag_estash_kvgrid_r32")
+    bad.append("stash_tiled_fgrid_r32_qres_pf_estash_zdefer_kvgrid_r32")
+    bad.append("stash_tiled_ztiled_r32_fgrid_r32_qres_pf_estash_kvgrid_r32")
+    bad.append("stash_tiled_fgrid_r32_qres_pf_estash_kvrecompute")
+    bad.append("stash_tiled_fgrid_r32_qres_pf_estash_kvsplit")
+    bad.append("stash_tiled_fgrid_r32_qres_pf_estash_kvgrid_r32_kvsplit")
+    bad.append("stash_tiled_fgrid_r32_qres_pf_kvgrid_r32_estash")
+    bad.append("stash_tiled_fgrid_r32_qres_pf_dres_kvgrid_r32")
     for i in range(len(bad)):
         var refused = False
         try:
@@ -391,10 +426,16 @@ def run_case(ctx: DeviceContext, c: FusedCase, mut failures: List[String]) raise
     # reads them from there, as the block does.
     var f_amax = _upload(ctx, e_max)
     var f_den = _upload(ctx, e_den)
+    # DEVIATION 2652: this check's kept exp stash for the estash arms, grown
+    # by the forward launcher; every other arm passes it through untouched.
+    var kept = _upload(ctx, List[Float32](length=1, fill=Float32(0.0)))
+    var kept_cells = 0
+    var nan = bitcast[DType.float32](UInt32(0x7FC00000))
 
     var all_arms = arms()
     for ai in range(len(all_arms)):
         var arm = all_arms[ai]
+        var estash = fused_attention_arm_estash(arm)
         var reach_bit = fused_attention_arm_reach_bit(arm)
         var second = reach_bit == ATTN_ARM_SABOTAGE_NEW
         # Which direction this arm's sabotage must reach (per branch), and
@@ -413,10 +454,17 @@ def run_case(ctx: DeviceContext, c: FusedCase, mut failures: List[String]) raise
         var ztiled = (arm & ATTN_ARM_BWD_ZTILED) != 0
         var zsched = fused_attention_arm_zsched(arm) != 0
         var kv = fused_attention_arm_kv(arm)
-        for sab in range(3):
+        for sab in range(4):
             # sab 2: DEVIATIONS 2596 / 2597, the dk/dv launch's own flip
             # (ATTN_ARM_SABOTAGE_KV), for the arms that carry one.
             if sab == 2 and not kv:
+                continue
+            # sab 3: DEVIATION 2650's READ reach (REACH_E, brief 20.5): a
+            # clean forward keeps `e`, the kept buffer is then poisoned with
+            # NaN, and the CLEAN backward must move dv (a kernel that
+            # recomputed y instead of reading the kept exp would hold it).
+            # Only where both directions run at head_dim 64.
+            if sab == 3 and (not estash or c.hd != ATTN_STASH_HD or c.expect_fwd != FUSED_RAN or c.expect_bwd != FUSED_RAN):
                 continue
             var this_arm = arm
             if sab == 1:
@@ -424,15 +472,17 @@ def run_case(ctx: DeviceContext, c: FusedCase, mut failures: List[String]) raise
             elif sab == 2:
                 this_arm = arm | ATTN_ARM_SABOTAGE_KV
             var label = fused_attention_arm_name(this_arm)
+            if sab == 3:
+                label = label + "+poisoned_estash"
             # ---- forward ------------------------------------------------
             var ctxv = _upload(ctx, List[Float32](length=qn, fill=Float32(0.0)))
             var amax = _upload(ctx, List[Float32](length=rn, fill=Float32(0.0)))
             var denom = _upload(ctx, List[Float32](length=rn, fill=Float32(0.0)))
             var ran_f = -1
-            var st = fused_forward_launch_ran(
+            var st = fused_forward_launch_estash_ran(
                 ctx, ctxv, amax, denom, stages.q_rope, stages.k_cache,
-                stages.v_cache, b, l, c.nh, c.nkv, c.hd, s, pos0, key_lo,
-                window, scale, this_arm, ran_f,
+                stages.v_cache, kept, b, l, c.nh, c.nkv, c.hd, s, pos0, key_lo,
+                window, scale, this_arm, ran_f, kept_cells,
             )
             print("    " + label + " forward status: " + status_name(st) + "  ran " + fused_attention_arm_name(ran_f))
             # DEVIATION 2534: the kernels that launched are the arm's resolved
@@ -457,15 +507,35 @@ def run_case(ctx: DeviceContext, c: FusedCase, mut failures: List[String]) raise
                 if fwd_moved > 0:
                     failures.append(c.name + " " + label + ": forward differs from eager in " + String(fwd_moved) + " cells")
             # ---- backward -----------------------------------------------
+            if estash and sab == 1 and c.hd == ATTN_STASH_HD and st != FUSED_REFUSED_REGIME:
+                # Brief 20.5: the sabotaged forward above flipped its Q page,
+                # so the kept `e` moved with it; the estash backward's reach
+                # is read on a CLEAN forward's kept stash (as REACH_Z did
+                # for 2598), against the eager amax and denom below.
+                var cctx = _upload(ctx, List[Float32](length=qn, fill=Float32(0.0)))
+                var camax = _upload(ctx, List[Float32](length=rn, fill=Float32(0.0)))
+                var cden = _upload(ctx, List[Float32](length=rn, fill=Float32(0.0)))
+                var ran_c = -1
+                _ = fused_forward_launch_estash_ran(
+                    ctx, cctx, camax, cden, stages.q_rope, stages.k_cache,
+                    stages.v_cache, kept, b, l, c.nh, c.nkv, c.hd, s, pos0, key_lo,
+                    window, scale, arm, ran_c, kept_cells,
+                )
+                _ = cctx^
+                _ = camax^
+                _ = cden^
+            if sab == 3 and kept_cells > 0:
+                kept = _upload(ctx, List[Float32](length=kept_cells, fill=nan))
             var zdot = _upload(ctx, List[Float32](length=rn, fill=Float32(0.0)))
             var dq = _upload(ctx, List[Float32](length=qn, fill=Float32(0.0)))
             var dk = _upload(ctx, List[Float32](length=kn, fill=Float32(0.0)))
             var dv = _upload(ctx, List[Float32](length=kn, fill=Float32(0.0)))
             var ran_b = -1
-            var bs = fused_backward_launch_ran(
+            var bs = fused_backward_launch_estash_ran(
                 ctx, zdot, dq, dk, dv, stages.q_rope, bst.d_attn_ctx,
-                stages.k_cache, stages.v_cache, f_amax, f_den, b, l, c.nh,
-                c.nkv, c.hd, s, pos0, key_lo, window, scale, this_arm, ran_b,
+                stages.k_cache, stages.v_cache, f_amax, f_den, kept, kept_cells,
+                b, l, c.nh, c.nkv, c.hd, s, pos0, key_lo, window, scale,
+                this_arm, ran_b,
             )
             print("    " + label + " backward status: " + status_name(bs) + "  ran " + fused_attention_arm_name(ran_b))
             var want_b = expected_ran(c.hd, bs, fused_attention_arm_backward_resolved(this_arm))
@@ -535,8 +605,24 @@ def run_case(ctx: DeviceContext, c: FusedCase, mut failures: List[String]) raise
                         # odd rows only, so it is told apart from 2533's copy.
                         if zsched and (m_z_odd == 0 or m_z_even > 0):
                             failures.append(c.name + ": " + label + ": the DEVIATION 2598 flip moves zdot at odd rows only; zdot moved at " + String(m_z_odd) + " odd and " + String(m_z_even) + " even rows (the zdot schedule copy did not run)")
+                        # DEVIATION 2650 (brief 20.5): the estash kernel flips
+                        # EVEN rows only, on a clean forward's kept stash.
+                        if estash and (m_z_even == 0 or m_z_odd > 0):
+                            failures.append(c.name + ": " + label + ": the DEVIATION 2650 flip moves zdot at even rows only; zdot moved at " + String(m_z_even) + " even and " + String(m_z_odd) + " odd rows (the estash kernel did not run)")
                 elif fwd_moved + bwd_moved > 0:
                     failures.append(c.name + ": " + label + " moved " + String(fwd_moved + bwd_moved) + " cells at head_dim " + String(c.hd) + ", where every arm runs the shipped kernels")
+            # ---- the kept stash READ (DEVIATION 2650, brief 20.5) ---------
+            if sab == 3:
+                if bs == FUSED_RAN:
+                    print(
+                        "    REACH_E " + label + " dv_moved=" + String(m_dv)
+                        + " zdot_moved=" + String(m_z) + " dq_moved=" + String(m_dq)
+                        + " kept_cells=" + String(kept_cells)
+                    )
+                    if m_dv == 0:
+                        failures.append(c.name + ": ESTASH READ REACH NOT PROVEN for " + label + " (a NaN kept stash moved no dv cell; a backward that recomputes y instead of reading the kept exp would hold dv)")
+                else:
+                    failures.append(c.name + ": " + label + ": the clean backward on a poisoned kept stash reported " + status_name(bs) + " (expected RAN), so the read cannot be proven")
             # ---- dk/dv reach (DEVIATIONS 2596 and 2597, brief 16.4) ------
             if sab == 2:
                 if c.hd == ATTN_STASH_HD:
@@ -561,6 +647,7 @@ def run_case(ctx: DeviceContext, c: FusedCase, mut failures: List[String]) raise
             _ = dq^
             _ = dk^
             _ = dv^
+    _ = kept^
     _ = f_amax^
     _ = f_den^
     _ = bst^
