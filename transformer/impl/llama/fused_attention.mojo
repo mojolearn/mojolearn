@@ -281,21 +281,29 @@ def fused_attention_arm_parse(name: String) raises -> Int:
     stash backward, or a rows token without `_ztiled`."""
     var rest = String(name)
     var arm = 0
+    # Each suffix is copied out into a fresh String before it replaces
+    # `rest`: assigning a String built from `rest`'s own slice back to
+    # `rest` aliases the borrow and does not compile.
     if rest.endswith("+sabotage_new"):
         arm = arm | ATTN_ARM_SABOTAGE_NEW
-        rest = String(rest.removesuffix("+sabotage_new"))
+        var trimmed = String(rest.removesuffix("+sabotage_new"))
+        rest = trimmed^
     if rest.endswith("+sabotage"):
         arm = arm | ATTN_ARM_SABOTAGE
-        rest = String(rest.removesuffix("+sabotage"))
+        var trimmed = String(rest.removesuffix("+sabotage"))
+        rest = trimmed^
     if rest.endswith("_r64"):
         arm = arm | ATTN_ARM_ZROWS64
-        rest = String(rest.removesuffix("_r64"))
+        var trimmed = String(rest.removesuffix("_r64"))
+        rest = trimmed^
     elif rest.endswith("_r32"):
         arm = arm | ATTN_ARM_ZROWS32
-        rest = String(rest.removesuffix("_r32"))
+        var trimmed = String(rest.removesuffix("_r32"))
+        rest = trimmed^
     if rest.endswith("_ztiled"):
         arm = arm | ATTN_ARM_BWD_ZTILED
-        rest = String(rest.removesuffix("_ztiled"))
+        var trimmed = String(rest.removesuffix("_ztiled"))
+        rest = trimmed^
     arm = arm | _attn_arm_base_from_name(rest, name)
     comptime tiled_stash = ATTN_ARM_BWD_STASH | ATTN_ARM_BWD_TILED
     if (arm & ATTN_ARM_BWD_ZTILED) != 0 and (arm & tiled_stash) != tiled_stash:
