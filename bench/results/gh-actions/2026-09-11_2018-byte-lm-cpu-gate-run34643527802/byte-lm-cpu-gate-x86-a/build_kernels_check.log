@@ -1,0 +1,3 @@
+/home/runner/work/mojolearn/mojolearn/training/checks/byte_lm_host_kernels_check.mojo:284:9: warning: ref 'i' was never used, remove it?
+    for i in range(n):
+        ^
