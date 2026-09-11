@@ -2741,6 +2741,14 @@ def identical_gemm_into[allow_vendor: Bool = True](
 #   MOJOLEARN_GEMM_ARM=kpack_wide  2599: kpack on a 128x256 tile, register
 #                                  tile 8x16, K step from the page row
 #                                  (section 4.2)
+#   MOJOLEARN_GEMM_ARM=kfoldv      2640: the shipped group launch and group
+#                                  rule, the group nodes folded 16 cells per
+#                                  thread through a lane-wise register stack
+#                                  (brief docs/lanes/BRIEF_gemm_final_2026-09-11.md
+#                                  sections 4.1 and 4.2)
+#   MOJOLEARN_GEMM_ARM=kfoldv_leaf 2641: the same lane fold at `ksplit_leaf`'s
+#                                  rule, the finest group under the workspace
+#                                  cap (section 4.3)
 #   anything else                  RAISES; the harnesses rely on it
 #   MOJOLEARN_GEMM_ARM_SABOTAGE=1  the arm's sabotage instantiation: one cell
 #                                  per block moves (reach proof). With
@@ -2780,7 +2788,12 @@ comptime GEMM_ARM_TUNED128 = 9
 #: tile (docs/lanes/BRIEF_gemm_kernel_2026-09-11.md section 4).
 comptime GEMM_ARM_KPACK = 10
 comptime GEMM_ARM_KPACK_WIDE = 11
-comptime GEMM_ARM_COUNT = 12
+#: DEVIATIONS 2640 and 2641: the lane fold after the shipped group launch, at
+#: the shipped rule and at `ksplit_leaf`'s (docs/lanes/BRIEF_gemm_final_2026-09-11.md
+#: section 4). Arm ids stay below GEMM_ARM_SABOTAGE.
+comptime GEMM_ARM_KFOLDV = 12
+comptime GEMM_ARM_KFOLDV_LEAF = 13
+comptime GEMM_ARM_COUNT = 14
 #: OR'd into an arm by MOJOLEARN_GEMM_ARM_SABOTAGE=1.
 comptime GEMM_ARM_SABOTAGE = 16
 
@@ -2801,7 +2814,11 @@ comptime GEMM_GEOM_TUNED128 = 9
 #: group launch where the arm's rule takes the call, else all leaves.
 comptime GEMM_GEOM_KPACK = 10
 comptime GEMM_GEOM_KPACK_WIDE = 11
-comptime GEMM_GEOM_COUNT = 12
+#: DEVIATIONS 2640 and 2641: the ksplit group launch at the arm's rule, then
+#: `identical_gemm_kfold_lanes_kernel` (the shipped fold where `G > 255`).
+comptime GEMM_GEOM_KFOLDV = 12
+comptime GEMM_GEOM_KFOLDV_LEAF = 13
+comptime GEMM_GEOM_COUNT = 14
 
 #: `head` applies to calls with `max(m, n, k)` at least this: the step's
 #: three head calls (V = 50,257), and no per-layer call (at most 2,048).
@@ -2873,10 +2890,14 @@ def gemm_step_arm_parse(name: String) raises -> Int:
         return GEMM_ARM_KPACK
     if name == "kpack_wide":
         return GEMM_ARM_KPACK_WIDE
+    if name == "kfoldv":
+        return GEMM_ARM_KFOLDV
+    if name == "kfoldv_leaf":
+        return GEMM_ARM_KFOLDV_LEAF
     raise Error(
         "MOJOLEARN_GEMM_ARM='" + name + "' is not a GEMM step arm (shipped, lfold,"
         + " half, half_ks16, quarter, head, half_head, ksplit, ksplit_leaf, tuned128,"
-        + " kpack, kpack_wide, or unset)"
+        + " kpack, kpack_wide, kfoldv, kfoldv_leaf, or unset)"
     )
 
 
@@ -2908,6 +2929,10 @@ def gemm_step_arm_name(arm: Int) -> String:
         name = String("kpack")
     elif which == GEMM_ARM_KPACK_WIDE:
         name = String("kpack_wide")
+    elif which == GEMM_ARM_KFOLDV:
+        name = String("kfoldv")
+    elif which == GEMM_ARM_KFOLDV_LEAF:
+        name = String("kfoldv_leaf")
     if (arm & GEMM_ARM_SABOTAGE) != 0:
         name += "+sabotage"
     return name
@@ -2947,6 +2972,16 @@ def gemm_step_arm_geometry(arm: Int, m: Int, n: Int, k: Int) raises -> Int:
         return GEMM_GEOM_KPACK
     if which == GEMM_ARM_KPACK_WIDE:
         return GEMM_GEOM_KPACK_WIDE
+    if which == GEMM_ARM_KFOLDV:
+        # 2640: the rule decides applicability, as for ksplit (brief 4.2).
+        if gemm_step_kfold_leaves(GEMM_GEOM_KFOLDV, m, n, k) > 0:
+            return GEMM_GEOM_KFOLDV
+        return GEMM_GEOM_SHIPPED
+    if which == GEMM_ARM_KFOLDV_LEAF:
+        # 2641: `ksplit_leaf`'s rule (brief 4.3).
+        if gemm_step_kfold_leaves(GEMM_GEOM_KFOLDV_LEAF, m, n, k) > 0:
+            return GEMM_GEOM_KFOLDV_LEAF
+        return GEMM_GEOM_SHIPPED
     if which == GEMM_ARM_KSPLIT:
         # 2591: the group rule decides applicability (brief section 4).
         if gemm_step_ksplit_group_leaves(GEMM_GEOM_KSPLIT, m, n, k) > 0:
@@ -2988,6 +3023,8 @@ def gemm_step_geometry_tile(geom: Int) raises -> Tuple[Int, Int]:
         or geom == GEMM_GEOM_KSPLIT_LEAF
         or geom == GEMM_GEOM_TUNED128
         or geom == GEMM_GEOM_KPACK
+        or geom == GEMM_GEOM_KFOLDV
+        or geom == GEMM_GEOM_KFOLDV_LEAF
     ):
         return (2 * TUNED_BM_WIDE, 2 * TUNED_BN_WIDE)
     if geom == GEMM_GEOM_KPACK_WIDE:
@@ -3067,6 +3104,10 @@ def gemm_step_geometry_name(geom: Int) -> String:
         s = _kpack_geometry_name[
             GEMM_KPACKW_RPT, GEMM_KPACKW_CPT, TUNED_TC, GEMM_KPACKW_KS, GEMM_KPACKW_FS
         ](String("kpack_wide"))
+    elif geom == GEMM_GEOM_KFOLDV:
+        s = _kfold_geometry_name(String("kfoldv"), True)
+    elif geom == GEMM_GEOM_KFOLDV_LEAF:
+        s = _kfold_geometry_name(String("kfoldv_leaf"), False)
     else:
         return String("GEOMETRY?") + String(geom)
     comptime if not GEMM_ARM_TRIAL:
@@ -4160,6 +4201,16 @@ def gemm_step_arm_plan_label(arm: Int) -> String:
             + ", rule on its tile) where the rule takes the call, else all leaves, on every call"
             + " tuned128 served; other calls " + dflt
         )
+    elif which == GEMM_ARM_KFOLDV or which == GEMM_ARM_KFOLDV_LEAF:
+        var rule = String("ksplit(S=") + String(GEMM_KSPLIT_S) + ") rule"
+        if which == GEMM_ARM_KFOLDV_LEAF:
+            rule = String("ksplit_leaf rule (finest under the cap)")
+        s = (
+            gemm_step_arm_name(which) + ": shipped group launch at the " + rule
+            + ", lane fold " + String(GEMM_KFOLD_W) + " cells/thread register stack "
+            + String(GEMM_KFOLD_FS) + " levels (shipped fold above "
+            + String(GEMM_KFOLD_MAX_GROUPS) + " groups) where the rule takes the call, else " + dflt
+        )
     else:
         s = gemm_step_arm_name(which) + " on the calls it takes, else " + dflt
     comptime if not GEMM_ARM_TRIAL:
@@ -4374,6 +4425,10 @@ def gemm_step_geometry_group_leaves(geom: Int, m: Int, n: Int, k: Int) raises ->
     if geom == GEMM_GEOM_KPACK or geom == GEMM_GEOM_KPACK_WIDE:
         # DEVIATION 2599: the arm's own rule; 0 means its all-leaves launch.
         return gemm_step_kpack_leaves(geom, m, n, k)
+    if geom == GEMM_GEOM_KFOLDV or geom == GEMM_GEOM_KFOLDV_LEAF:
+        # DEVIATIONS 2640 and 2641: the ksplit geometry of the same rule,
+        # forced fallback included (brief 5.2).
+        return gemm_step_geometry_group_leaves(_kfold_ksplit_geometry(geom), m, n, k)
     if geom != GEMM_GEOM_KSPLIT and geom != GEMM_GEOM_KSPLIT_LEAF:
         return 0
     var gl = gemm_step_ksplit_group_leaves(geom, m, n, k)
@@ -4439,6 +4494,8 @@ def gemm_step_geometry_reach(geom: Int, m: Int, n: Int, k: Int) raises -> Int:
         return 0
     if geom == GEMM_GEOM_KPACK or geom == GEMM_GEOM_KPACK_WIDE:
         return gemm_step_kpack_reach(geom, m, n, k)
+    if geom == GEMM_GEOM_KFOLDV or geom == GEMM_GEOM_KFOLDV_LEAF:
+        return gemm_step_kfold_reach(geom, m, n, k)
     if geom == GEMM_GEOM_KSPLIT or geom == GEMM_GEOM_KSPLIT_LEAF:
         return gemm_step_ksplit_reach(
             m, n, k, gemm_step_geometry_group_leaves(geom, m, n, k)
@@ -4536,6 +4593,11 @@ def identical_gemm_step_geometry_into(
             # DEVIATION 2599: synchronizes where the group launch runs (it
             # allocates the node workspace), asynchronous otherwise.
             identical_gemm_step_kpack_into(ctx, c, a, b, ws, m, n, k, op, geom, sabotage)
+            return
+        if geom == GEMM_GEOM_KFOLDV or geom == GEMM_GEOM_KFOLDV_LEAF:
+            # DEVIATIONS 2640 and 2641: synchronizes (it allocates the node
+            # workspace, like the ksplit geometries).
+            identical_gemm_step_kfold_into(ctx, c, a, b, ws, m, n, k, op, geom, sabotage)
             return
         if sabotage:
             _step_geometry_launch[True](ctx, c, a, b, m, n, k, op, geom)
@@ -5335,6 +5397,463 @@ def _kpack_geometry_name[
     s += " tpb=" + String(TUNED_TPB) + " hwftz=" + String(TUNED_HW_FTZ_FMA)
     s += " groups where its rule takes the call (S=" + String(GEMM_KSPLIT_S)
     s += " slack=" + String(GEMM_KSPLIT_SLACK) + "), else all leaves in one launch"
+    return s
+
+
+# ===========================================================================
+# THE LANE FOLD ARMS (DEVIATIONS 2640 and 2641, 2026-09-11; brief
+# docs/lanes/BRIEF_gemm_final_2026-09-11.md sections 4 and 5)
+# ===========================================================================
+# The shipped ksplit default spends 13.3 ms per H100 step in its FOLD launch
+# (brief 2.1): `identical_gemm_fold_stack_kernel`, one thread per output
+# cell, a 12-level register stack per thread. Both arms keep the shipped
+# group launch (`_ksplit_groups_launch`, `identical_gemm_ksplit_kernel`
+# unchanged) and fold the group nodes with `identical_gemm_kfold_lanes_kernel`
+# instead: one thread per `GEMM_KFOLD_W` consecutive cells, `_fold_push` and
+# `_fold_drain` spelled lane by lane over a `GEMM_KFOLD_FS`-level register
+# stack. `kfoldv` (2640) runs at the shipped rule, `kfoldv_leaf` (2641) at
+# `ksplit_leaf`'s. The identity argument is brief section 5, written and
+# committed before this code. Only the trial-gated dispatch in
+# `identical_gemm_step_geometry_into`, the trial harnesses and the host checks
+# reach this section; no shipped kernel, dispatch line or kernel matrix value
+# changes.
+
+#: Cells per fold thread (lanes of every fold register). Execution plan only
+#: (brief 5.6), the same on every column, a power of two.
+comptime GEMM_KFOLD_W = 16
+#: Levels of the lane-wise register stack: `G <= 2^FS - 1` groups (brief 5.5).
+comptime GEMM_KFOLD_FS = 8
+#: Group vectors loaded before their pushes (the shipped fold's FOLD_BATCH idea).
+comptime GEMM_KFOLD_VB = 2
+#: Threads per fold block, the shipped fold's block size.
+comptime GEMM_KFOLD_TPB = FLAT_TPB
+#: The most groups the lane fold takes; above it the shipped fold runs.
+comptime GEMM_KFOLD_MAX_GROUPS = (1 << GEMM_KFOLD_FS) - 1
+
+
+def _fold_push_lanes[
+    W: Int, FS: Int
+](
+    mut stack: SIMD[DType.float32, FS * W],
+    mut occ: Int,
+    value: SIMD[DType.float32, W],
+) -> Bool:
+    """DEVIATION 2640: `_fold_push`, lane by lane. Level `d` of lane `e` is
+    `stack[d * W + e]`. The branches read only `occ`, `d` and `placed`, which
+    are one per thread, so every lane takes the branches `_fold_push` takes for
+    its cell; a merge is `_fold_push`'s expression on one lane, a store copies
+    one lane. No expression reads two lanes (brief 5.3, 5.4). Returns False
+    when all `FS` levels were occupied (overflow), which needs `occ = 2^FS - 1`
+    before the push (brief 5.5). `check_kfold_lanes_is_the_stack_fold` holds
+    it to `_fold_push` and `fold_balanced_tree` on the host."""
+    var val = value
+    var placed = False
+    comptime for d in range(FS):
+        if not placed:
+            if ((occ >> d) & 1) == 1:
+                comptime if SAB_FOLD_STRIDE:
+                    # SABOTAGE: `_fold_push_local`'s far-end pairing, lane-wise.
+                    comptime for es in range(W):
+                        val[es] = ftz(ftz(val[es]) + ftz(stack[(FS - 1 - d) * W + es]))
+                else:
+                    comptime for e in range(W):
+                        val[e] = ftz(ftz(stack[d * W + e]) + ftz(val[e]))
+                occ = occ - (1 << d)
+            else:
+                comptime for e2 in range(W):
+                    stack[d * W + e2] = val[e2]
+                occ = occ + (1 << d)
+                placed = True
+    return placed
+
+
+def _fold_drain_lanes[
+    W: Int, FS: Int
+](stack: SIMD[DType.float32, FS * W], occ: Int) -> SIMD[DType.float32, W]:
+    """DEVIATION 2640: `_fold_drain`, lane by lane: the lowest occupied level
+    copies, each higher occupied level joins on the left. No addition at
+    `occ == 1`."""
+    var have = False
+    var acc = SIMD[DType.float32, W](0.0)
+    comptime for d in range(FS):
+        if ((occ >> d) & 1) == 1:
+            if have:
+                comptime for e in range(W):
+                    acc[e] = ftz(ftz(stack[d * W + e]) + ftz(acc[e]))
+            else:
+                comptime for e2 in range(W):
+                    acc[e2] = stack[d * W + e2]
+                have = True
+    return acc
+
+
+def identical_gemm_kfold_lanes_kernel[
+    W: Int, FS: Int, VB: Int, SAB: Bool
+](
+    c: MutPointer[Float32, MutAnyOrigin],
+    ws: MutPointer[Float32, MutAnyOrigin],
+    mn_in: Int32,
+    groups_in: Int32,
+):
+    """DEVIATION 2640: fold each cell's `G` group nodes (`ws[q * mn + cell]`,
+    the ksplit kernel's layout) into `c[cell]`, `W` cells per thread.
+
+    Block `b`, thread `t` owns cells `base + e`, `e < W`,
+    `base = (b * GEMM_KFOLD_TPB + t) * W`: a bijection onto `[0, mn)` (brief
+    5.3). A full run loads each group vector `W` wide and stores `W` wide; the
+    last thread of a ragged output loads and stores only lanes inside `mn`
+    (the others stay `+0.0` and are never stored). `VB` vectors load before
+    their pushes, then the tail one at a time, `q` ascending in both. The push
+    and the drain are `_fold_push_lanes` and `_fold_drain_lanes`; the stored
+    cell is `ftz(root)` per lane, the shipped fold stack kernel's 5g.
+
+    The launcher never sends `G < 1` or `G > 2^FS - 1`; a thread that would see
+    one returns before any load or store.
+
+    `SAB = True` (brief 5.6) moves lane 0 of thread 0 of every block through
+    `_gemm_step_arm_sabotage`: one cell per fold block, always inside the
+    output. `gemm_step_kfold_reach` counts it with the group launch's cells.
+    """
+    comptime NTH = GEMM_KFOLD_TPB
+    comptime assert W >= 1 and (W & (W - 1)) == 0, (
+        "identical_gemm_kfold_lanes_kernel: W is a register width and must be a"
+        " power of two"
+    )
+    comptime assert FS >= 1 and ((FS * W) & (FS * W - 1)) == 0, (
+        "identical_gemm_kfold_lanes_kernel: FS * W is the stack register's width"
+        " and must be a power of two"
+    )
+    comptime assert VB >= 1 and ((VB * W) & (VB * W - 1)) == 0, (
+        "identical_gemm_kfold_lanes_kernel: VB * W is the load batch register's"
+        " width and must be a power of two"
+    )
+
+    var mn = Int(mn_in)
+    var groups = Int(groups_in)
+    var tid = Int(thread_idx.x)
+    var base = (Int(block_idx.x) * NTH + tid) * W
+    if base >= mn:
+        return
+    if groups < 1 or groups > (1 << FS) - 1:
+        return
+    var full = base + W <= mn
+
+    var stack = SIMD[DType.float32, FS * W](0.0)
+    var occ = 0
+    var q = 0
+    while q + VB <= groups:
+        var batch = SIMD[DType.float32, VB * W](0.0)
+        if full:
+            comptime for bv in range(VB):
+                var lv = ws.unsafe_load[width=W]((q + bv) * mn + base)
+                comptime for e in range(W):
+                    batch[bv * W + e] = lv[e]
+        else:
+            comptime for bv2 in range(VB):
+                comptime for e2 in range(W):
+                    if base + e2 < mn:
+                        batch[bv2 * W + e2] = ws.unsafe_load((q + bv2) * mn + base + e2)
+        comptime for bv3 in range(VB):
+            var val = SIMD[DType.float32, W](0.0)
+            comptime for e3 in range(W):
+                val[e3] = batch[bv3 * W + e3]
+            _ = _fold_push_lanes[W, FS](stack, occ, val)
+        q += VB
+    while q < groups:
+        var val1 = SIMD[DType.float32, W](0.0)
+        if full:
+            val1 = ws.unsafe_load[width=W](q * mn + base)
+        else:
+            comptime for e4 in range(W):
+                if base + e4 < mn:
+                    val1[e4] = ws.unsafe_load(q * mn + base + e4)
+        _ = _fold_push_lanes[W, FS](stack, occ, val1)
+        q += 1
+
+    var root = _fold_drain_lanes[W, FS](stack, occ)
+    var outv = SIMD[DType.float32, W](0.0)
+    comptime for e5 in range(W):
+        # 5g: the output cell as stored.
+        outv[e5] = ftz(root[e5])
+    comptime if SAB:
+        if tid == 0:
+            outv[0] = _gemm_step_arm_sabotage(outv[0])
+    if full:
+        c.unsafe_store(base, outv)
+    else:
+        comptime for e6 in range(W):
+            if base + e6 < mn:
+                c.unsafe_store(base + e6, outv[e6])
+
+
+def gemm_kfold_blocks(mn: Int) -> Int:
+    """Blocks the lane fold launches over `mn` cells (`ceil(ceil(mn / W) /
+    TPB)`), and the cells its sabotage moves."""
+    if mn <= 0:
+        return 0
+    var threads = (mn + GEMM_KFOLD_W - 1) // GEMM_KFOLD_W
+    return (threads + GEMM_KFOLD_TPB - 1) // GEMM_KFOLD_TPB
+
+
+def _kfold_fold_launch[
+    SAB: Bool
+](
+    ctx: DeviceContext,
+    mut c: DeviceBuffer[DType.float32],
+    mut ws: DeviceBuffer[DType.float32],
+    m: Int,
+    n: Int,
+    groups: Int,
+) raises:
+    """DEVIATION 2640, launch two: the lane fold over `m n` cells and `groups`
+    nodes per cell. RAISES outside `1 .. GEMM_KFOLD_MAX_GROUPS`."""
+    comptime kern = identical_gemm_kfold_lanes_kernel[
+        GEMM_KFOLD_W, GEMM_KFOLD_FS, GEMM_KFOLD_VB, SAB
+    ]
+    if groups < 1 or groups > GEMM_KFOLD_MAX_GROUPS:
+        raise Error(
+            "_kfold_fold_launch: " + String(groups) + " groups is outside 1 .. "
+            + String(GEMM_KFOLD_MAX_GROUPS)
+        )
+    var mn = m * n
+    step_count_launch()
+    ctx.enqueue_function[kern](
+        c.unsafe_ptr(),
+        ws.unsafe_ptr(),
+        Int32(mn),
+        Int32(groups),
+        grid_dim=(gemm_kfold_blocks(mn), 1, 1),
+        block_dim=(GEMM_KFOLD_TPB, 1, 1),
+    )
+
+
+def _kfold_run[
+    SAB: Bool
+](
+    ctx: DeviceContext,
+    mut c: DeviceBuffer[DType.float32],
+    mut a: DeviceBuffer[DType.float32],
+    mut b: DeviceBuffer[DType.float32],
+    m: Int,
+    n: Int,
+    k: Int,
+    op: Int,
+    group_leaves: Int,
+) raises:
+    """DEVIATIONS 2640 and 2641: one call. `_ksplit_run`'s lines (allocate
+    `m n G`, synchronize, the shipped group launch, fold, synchronize, keep the
+    buffer, `[[mojo-buffer-freed-at-last-use]]`) with the lane fold where
+    `G <= GEMM_KFOLD_MAX_GROUPS` and the shipped `_ksplit_fold_launch` above it.
+    `k == 0` takes `identical_gemm_step_ksplit_into`'s own line: the step arm
+    kernel at the shipped geometry stores `+0.0` per cell (brief 5.6)."""
+    if m <= 0 or n <= 0:
+        return
+    var part = contract_partition(k)
+    var leaf = part[0]
+    var p_count = part[1]
+    var st = gemm_operand_strides(op, m, n, k)
+    if p_count <= 0:
+        _launch_step_arm[
+            GEMM_KSPLIT_RPT, GEMM_KSPLIT_CPT, TUNED_TC, GEMM_KSPLIT_KS, False, SAB
+        ](ctx, c, a, b, m, n, k, leaf, p_count, st)
+        step_count_sync()
+        ctx.synchronize()
+        return
+    var rg = _ksplit_resolve_leaves(group_leaves, p_count)
+    step_count_device_alloc()
+    var gws = ctx.enqueue_create_buffer[DType.float32](m * n * rg[1])
+    step_count_sync()
+    ctx.synchronize()
+    _ksplit_groups_launch[
+        GEMM_KSPLIT_RPT, GEMM_KSPLIT_CPT, TUNED_TC, GEMM_KSPLIT_KS, SAB
+    ](ctx, gws, a, b, m, n, k, leaf, p_count, st, rg[0], rg[1])
+    if rg[1] <= GEMM_KFOLD_MAX_GROUPS:
+        _kfold_fold_launch[SAB](ctx, c, gws, m, n, rg[1])
+    else:
+        _ksplit_fold_launch(ctx, c, gws, m, n, rg[1])
+    step_count_sync()
+    ctx.synchronize()
+    _ = gws
+
+
+def identical_gemm_step_kfold_into(
+    ctx: DeviceContext,
+    mut c: DeviceBuffer[DType.float32],
+    mut a: DeviceBuffer[DType.float32],
+    mut b: DeviceBuffer[DType.float32],
+    mut ws: DeviceBuffer[DType.float32],
+    m: Int,
+    n: Int,
+    k: Int,
+    op: Int,
+    geom: Int,
+    sabotage: Bool,
+) raises:
+    """DEVIATIONS 2640 and 2641. `C = op(A) . op(B)` on `kfoldv` or
+    `kfoldv_leaf` at the group size `gemm_step_geometry_group_leaves` names
+    (the arm's rule, or its forced fallback). SYNCHRONIZES. `ws` is untouched
+    on a trial build.
+
+    Without `-D MOJOLEARN_GEMM_ARM_TRIAL=1` the lane fold is not compiled and
+    this runs the shipped dispatch, which READS `ws` (size it with
+    `identical_gemm_workspace_max_floats`), and ignores `sabotage`."""
+    _ = _kfold_ksplit_geometry(geom)
+    if m <= 0 or n <= 0:
+        return
+    comptime if GEMM_ARM_TRIAL:
+        var gl = gemm_step_geometry_group_leaves(geom, m, n, k)
+        if sabotage:
+            _kfold_run[True](ctx, c, a, b, m, n, k, op, gl)
+        else:
+            _kfold_run[False](ctx, c, a, b, m, n, k, op, gl)
+        return
+    identical_gemm_shipped_into(ctx, c, a, b, ws, m, n, k, op)
+    step_count_sync()
+    ctx.synchronize()
+
+
+def identical_gemm_step_kfold_phase_into(
+    ctx: DeviceContext,
+    mut c: DeviceBuffer[DType.float32],
+    mut a: DeviceBuffer[DType.float32],
+    mut b: DeviceBuffer[DType.float32],
+    mut ws: DeviceBuffer[DType.float32],
+    m: Int,
+    n: Int,
+    k: Int,
+    op: Int,
+    geom: Int,
+) raises -> Tuple[Int, Int, Int]:
+    """`identical_gemm_step_kfold_into` (clean) with a host synchronize after
+    each phase: `(alloc_ns, group_ns, fold_ns)`, the price harness's PHASE line
+    for the arms (`phase_of=arm_kfold`). `k == 0` reports its one launch as
+    `group_ns`. A non-trial build runs the shipped dispatch and reports it all
+    as `group_ns`."""
+    _ = _kfold_ksplit_geometry(geom)
+    if m <= 0 or n <= 0:
+        return (0, 0, 0)
+    comptime if GEMM_ARM_TRIAL:
+        var gl = gemm_step_geometry_group_leaves(geom, m, n, k)
+        var part = contract_partition(k)
+        var leaf = part[0]
+        var p_count = part[1]
+        var st = gemm_operand_strides(op, m, n, k)
+        if p_count <= 0:
+            var tz = perf_counter_ns()
+            _kfold_run[False](ctx, c, a, b, m, n, k, op, gl)
+            return (0, Int(perf_counter_ns() - tz), 0)
+        var rg = _ksplit_resolve_leaves(gl, p_count)
+        var t0 = perf_counter_ns()
+        step_count_device_alloc()
+        var gws = ctx.enqueue_create_buffer[DType.float32](m * n * rg[1])
+        step_count_sync()
+        ctx.synchronize()
+        var t1 = perf_counter_ns()
+        _ksplit_groups_launch[
+            GEMM_KSPLIT_RPT, GEMM_KSPLIT_CPT, TUNED_TC, GEMM_KSPLIT_KS, False
+        ](ctx, gws, a, b, m, n, k, leaf, p_count, st, rg[0], rg[1])
+        step_count_sync()
+        ctx.synchronize()
+        var t2 = perf_counter_ns()
+        if rg[1] <= GEMM_KFOLD_MAX_GROUPS:
+            _kfold_fold_launch[False](ctx, c, gws, m, n, rg[1])
+        else:
+            _ksplit_fold_launch(ctx, c, gws, m, n, rg[1])
+        step_count_sync()
+        ctx.synchronize()
+        var t3 = perf_counter_ns()
+        _ = gws
+        return (Int(t1 - t0), Int(t2 - t1), Int(t3 - t2))
+    var ts = perf_counter_ns()
+    identical_gemm_shipped_into(ctx, c, a, b, ws, m, n, k, op)
+    step_count_sync()
+    ctx.synchronize()
+    return (0, Int(perf_counter_ns() - ts), 0)
+
+
+def _kfold_ksplit_geometry(geom: Int) raises -> Int:
+    """The ksplit geometry whose rule a lane fold geometry runs: `kfoldv` the
+    shipped rule's (`ksplit`), `kfoldv_leaf` `ksplit_leaf`'s."""
+    if geom == GEMM_GEOM_KFOLDV:
+        return GEMM_GEOM_KSPLIT
+    if geom == GEMM_GEOM_KFOLDV_LEAF:
+        return GEMM_GEOM_KSPLIT_LEAF
+    raise Error("geometry " + String(geom) + " is not a lane fold geometry")
+
+
+def gemm_step_kfold_rule(geom: Int, m: Int, n: Int, k: Int, s: Int) raises -> Int:
+    """Leaves per group the arm's rule gives at a reading `s`, 0 when it
+    declines: `kfoldv` is `gemm_step_ksplit_rule(m, n, k, s, True)`,
+    `kfoldv_leaf` is `gemm_step_ksplit_rule(m, n, k, 0, False)` (reads no `s`).
+    `s` is an argument so a host check holds the hand counts on every column."""
+    if _kfold_ksplit_geometry(geom) == GEMM_GEOM_KSPLIT:
+        return gemm_step_ksplit_rule(m, n, k, s, True)
+    return gemm_step_ksplit_rule(m, n, k, 0, False)
+
+
+def gemm_step_kfold_leaves(geom: Int, m: Int, n: Int, k: Int) raises -> Int:
+    """The arm's rule at this column's trial row `GEMM_KSPLIT_S` (on NVIDIA the
+    shipped default's 132)."""
+    return gemm_step_kfold_rule(geom, m, n, k, GEMM_KSPLIT_S)
+
+
+def gemm_step_kfold_reach(geom: Int, m: Int, n: Int, k: Int) raises -> Int:
+    """Cells a sabotage launch of `identical_gemm_step_kfold_into` moves (brief
+    5.6): one per tile at `k == 0`; otherwise the group launch's cells (one per
+    `(tile, q)` whose cell, thread `q mod NTH` at register cell `q // NTH`,
+    lies in the output) plus one per lane fold block (cell
+    `b * TPB * W`), minus the cells in both. Where the group count exceeds
+    `GEMM_KFOLD_MAX_GROUPS` the shipped fold runs and only the group cells
+    move."""
+    comptime NTH = TUNED_TPB
+    comptime TR = NTH // TUNED_TC
+    comptime BM = GEMM_KSPLIT_RPT * TR
+    comptime BN = GEMM_KSPLIT_CPT * TUNED_TC
+    comptime NCELL = GEMM_KSPLIT_RPT * GEMM_KSPLIT_CPT
+    comptime FOLD_STRIDE = GEMM_KFOLD_TPB * GEMM_KFOLD_W
+    _ = _kfold_ksplit_geometry(geom)
+    if m <= 0 or n <= 0:
+        return 0
+    var tt = _ksplit_tiles(m, n)
+    var p_count = contract_partition(k)[1]
+    if p_count <= 0:
+        return tt[0] * tt[1]
+    var rg = _ksplit_resolve_leaves(gemm_step_geometry_group_leaves(geom, m, n, k), p_count)
+    var group_cells = 0
+    var both = 0
+    for ti in range(tt[0]):
+        for tj in range(tt[1]):
+            for q in range(rg[1]):
+                var reg = q // NTH
+                if reg >= NCELL:
+                    continue
+                var th = q - reg * NTH
+                var arow = th // TUNED_TC
+                var acol = th - arow * TUNED_TC
+                var gi = ti * BM + arow + (reg // GEMM_KSPLIT_CPT) * TR
+                var gj = tj * BN + acol + (reg % GEMM_KSPLIT_CPT) * TUNED_TC
+                if gi < m and gj < n:
+                    group_cells += 1
+                    if (gi * n + gj) % FOLD_STRIDE == 0:
+                        both += 1
+    if rg[1] > GEMM_KFOLD_MAX_GROUPS:
+        return group_cells
+    return group_cells + gemm_kfold_blocks(m * n) - both
+
+
+def _kfold_geometry_name(label: String, reads_s: Bool) -> String:
+    """Built from the constants the launchers bind, never a literal."""
+    var s = _step_arm_geometry_name[
+        GEMM_KSPLIT_RPT, GEMM_KSPLIT_CPT, TUNED_TC, GEMM_KSPLIT_KS, False
+    ](label)
+    s += " leaf groups on grid.y -> node workspace -> LANE fold (" + String(GEMM_KFOLD_W)
+    s += " cells per thread, register stack " + String(GEMM_KFOLD_FS) + " levels, "
+    s += String(GEMM_KFOLD_VB) + " group loads a batch, tpb=" + String(GEMM_KFOLD_TPB)
+    s += ", groups <= " + String(GEMM_KFOLD_MAX_GROUPS) + ", else the shipped fold)"
+    if reads_s:
+        s += " group rule S=" + String(GEMM_KSPLIT_S) + " slack=" + String(GEMM_KSPLIT_SLACK)
+    else:
+        s += " group rule finest under the cap"
     return s
 
 

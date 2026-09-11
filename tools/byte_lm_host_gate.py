@@ -102,6 +102,8 @@ def main():
     parser.add_argument('--steps', default='all', help="'all', 'every:N' or a comma list")
     parser.add_argument('--report', type=Path, help='new exclusive JSON report')
     parser.add_argument('--expect-mismatch', action='store_true')
+    parser.add_argument('--threads', type=int, default=None,
+                        help='threads for the threaded path (default: one per physical core)')
     args = parser.parse_args()
 
     sys.path.insert(0, str(ROOT / 'python'))
@@ -133,7 +135,7 @@ def main():
     def model_for(path, want):
         key = str(path)
         if key not in models:
-            models[key] = LanguageModelInference(params_from(path, want), shape=shape)
+            models[key] = LanguageModelInference(params_from(path, want), shape=shape, threads=args.threads)
         return models[key]
 
     rows = []
@@ -168,7 +170,8 @@ def main():
             directory = run / f'step{step:06d}'
             arrays = json.loads((directory / 'capture.json').read_text())['arrays']
             model = LanguageModelInference(
-                params_from(directory / 'initial_p.f32', arrays['initial_p']['sha256']), shape=shape)
+                params_from(directory / 'initial_p.f32', arrays['initial_p']['sha256']), shape=shape,
+                threads=args.threads)
             check(f'step{step:06d}', model, directory / 'ids.i32', arrays['ids']['sha256'],
                   directory / 'loss.f32', arrays['loss']['sha256'])
     except SystemExit as exc:
@@ -216,6 +219,7 @@ def main():
         capture=str(args.capture.relative_to(ROOT)) if args.capture.is_relative_to(ROOT) else str(args.capture),
         capture_comparison_sha256=sha256(args.capture.parent / 'comparison.json'),
         expect_mismatch=args.expect_mismatch,
+        threads=args.threads,
         compared=len(rows), equal=len(rows) - len(mismatches), mismatched=len(mismatches),
         mismatched_reference=len(ref_mismatches), mismatched_threaded=len(thr_mismatches),
         probe_paths_equal=probe_paths_equal,

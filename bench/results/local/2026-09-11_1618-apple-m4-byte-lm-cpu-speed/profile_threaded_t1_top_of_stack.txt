@@ -1,0 +1,17 @@
+Sort by top of stack, same collapsed (when >= 5):
+        semaphore_wait_trap  (in libsystem_kernel.dylib)        16956
+        training::byte_lm_host_kernels::gemm_nt_rows (in _mojolearn_byte_lm_host.so)        1488
+        training::byte_lm_host_kernels::_softmax_head (in _mojolearn_byte_lm_host.so)        1140
+        training::byte_lm_host_kernels::_value_sum_head (in _mojolearn_byte_lm_host.so)        345
+        training::byte_lm_host_kernels::rms_norm_fast (in _mojolearn_byte_lm_host.so)        269
+        training::byte_lm_host::_row_task(::SIMD[::DType(int), ::SIMDLength(1)])`0x2  (in _mojolearn_byte_lm_host.so)   
+        training::byte_lm_host_kernels::rope_fast (in _mojolearn_byte_lm_host.so)        147
+        training::byte_lm_host_kernels::_silu_gated (in _mojolearn_byte_lm_host.so)        134
+        std::python::bindings::fastcall(::PyObjectPtr,::Pointer[::Bool(True), MutUntrackedOrigin, ::PyObjectPtr, *?, ::A
+        _platform_memset  (in libsystem_platform.dylib)        53
+        training::byte_lm_host::_threaded_rows (in _mojolearn_byte_lm_host.so)        42
+        training::byte_lm_host_kernels::_residual_add (in _mojolearn_byte_lm_host.so)        26
+        training::byte_lm_host::byte_host_loss (in _mojolearn_byte_lm_host.so)        25
+        transformer::checks::transformer_oracle::refuse_nonfinite (in _mojolearn_byte_lm_host.so)        22
+        PackedCache<35>::TryGet(unsigned long, unsigned int*) const  (in libAsyncRTRuntimeGlobals.dylib)        21
+        training::checks::loss_oracle::ce_refuse_inputs (in _mojolearn_byte_lm_host.so)        19
