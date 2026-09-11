@@ -1,0 +1,1 @@
+/usr/bin/python3 tools/amd_serial_guard.py --seconds 2368 --rss-gib 12 -- bash /root/mojolearn/tools/linux_surface_qualification.sh build /root/rel061-build/build 

@@ -1,0 +1,20 @@
+vendor=amd
+arch=hip/gfx942
+image=188571990
+size=gpu-mi325x1-256gb
+region=tor1
+commit=e376e1c611df3485ce2fe1f2dfcada4f0bd7f73f
+archive_sha256=3c3f1889fc5b8679992a9771e30f99ca5ca177c9b5f25d0349c09e6a3765d7b4
+archive_bytes=9303979
+deadman_seconds=3600
+fetch_reserve=900
+started=2026-09-11T01:43:05Z
+droplet=599502837
+created=2026-09-11T01:43:06Z
+ip=167.99.185.255
+ON_DROPLET_DEADMAN_ARMED
+work_seconds=2400
+build_exit=1
+admission=REFUSED campaign exit_code != 0
+destroyed=2026-09-11T01:56:48Z verified_http_404
+finished=2026-09-11T01:56:48Z rc=0

@@ -1,0 +1,59 @@
+pid 490's current affinity list: 0,1
+pid 490's new affinity list: 0,1
+pid 504's current affinity list: 0,1
+pid 504's new affinity list: 0,1
+[02:20:40 build_sets] repo /root/mojolearn, dest /root/gemm_leg_out/release-build/build, tiers: fast deterministic identical, jobs: 1
+[02:20:40 build_sets] pixi env: default
+[02:34:17 build_sets] builds finished in 817s (rc=0)
+[02:34:21 build_sets] vendor read-back per binary:
+    fast _mojolearn_gbdt cuda
+    fast _mojolearn_rf cuda
+    fast _mojolearn_trees cuda
+    deterministic _mojolearn_gbdt cuda
+    deterministic _mojolearn_rf cuda
+    deterministic _mojolearn_trees cuda
+    identical _mojolearn_gbdt cuda
+    identical _mojolearn_rf cuda
+    identical _mojolearn_trees cuda
+    identical _mojolearn cuda
+    identical _mojolearn_estimators cuda
+    identical _mojolearn_svm cuda
+    identical _mojolearn_solver cuda
+    identical _mojolearn_metrics cuda
+    identical _mojolearn_preprocessing cuda
+    identical _mojolearn_tsa cuda
+    identical _mojolearn_linalg cuda
+    identical _mojolearn_arima cuda
+    identical _mojolearn_gp cuda
+    identical _mojolearn_training cuda
+    identical _mojolearn_mamba cuda
+    identical _mojolearn_transformer cuda
+    identical _mojolearn_byte_lm cuda
+[02:34:21 build_sets] GPU architectures embedded, per binary:
+         23 sm_89
+[02:34:21 build_sets] architecture set: sm_89 
+[02:34:21 build_sets] architecture: sm_89 (requested: sm_89)
+[02:34:21 build_sets] vendor: cuda
+[02:34:42 build_sets] CPU ISA baseline: clean at x86-64-v3 (23 binaries)
+[02:34:42 build_sets] patchelf: /root/gemm_leg_out/tools-venv/bin/patchelf
+[02:34:42 build_sets] pixi env lib: /root/mojolearn/.pixi/envs/default/lib
+  closure verified: 4 libraries, nothing unresolved
+  staged 4: libKGENCompilerRTShared.so, libAsyncRTMojoBindings.so, libMSupportGlobals.so, libAsyncRTRuntimeGlobals.so
+  driver libraries left to the box: none
+  extensions 87.2 MB, runtime libraries 3.2 MB, uncompressed set 90.4 MB
+vendor=cuda
+arch=sm_89
+gpu_archs_requested=sm_89
+build_rc=0 stage_rc=0
+build_seconds=845
+set_fast_count=3
+set_fast_bytes=13456403
+set_deterministic_count=3
+set_deterministic_bytes=13468715
+set_identical_count=17
+set_identical_bytes=60257201
+runtime_libs_bytes=3200416
+runtime_libs=libAsyncRTMojoBindings.so libAsyncRTRuntimeGlobals.so libKGENCompilerRTShared.so libMSupportGlobals.so 
+driver_libs_not_staged=
+set_tar_gz_bytes=19645967
+{"guard": "nvidia-root-serial-v1", "reason": null, "cpu_affinity": "0,1", "thread_limit": 2, "returncode": 0}

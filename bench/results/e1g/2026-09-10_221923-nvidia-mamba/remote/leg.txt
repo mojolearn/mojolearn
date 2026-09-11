@@ -1,0 +1,11 @@
+vendor=nvidia
+payload=mamba
+knn_layout_only=0
+nvidia_campaign=7
+commit=9392320e6c67210c45681063c580fac2df9351c9
+started=2026-09-11T02:21:15Z
+pixi_install_exit=0
+release_tools_setup_exit=0
+release_build_exit=1
+scope=one actual CUDA architecture full46 build; no installed wheel qualification
+build-proof-check re-run 22:58 EDT with the corrected postflight (tools/release061_remote_build.sh, DEVIATION 2293 suffix rule on the postflight side): BUILT_NOT_INSTALLED 23 extensions sm_90a on sm_90 witness; the on-box exit_code=1 came from the string-equality prefix check, not the build

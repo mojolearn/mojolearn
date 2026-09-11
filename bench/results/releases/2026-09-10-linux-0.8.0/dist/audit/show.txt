@@ -1,0 +1,92 @@
+Unable to find image 'quay.io/pypa/manylinux_2_28_x86_64:latest' locally
+latest: Pulling from pypa/manylinux_2_28_x86_64
+54aef944f23c: Pulling fs layer
+3e76c883239f: Pulling fs layer
+e874096c842e: Pulling fs layer
+d5fbb5e73690: Pulling fs layer
+f5cc97daaa05: Pulling fs layer
+1cbc5e5f9e95: Pulling fs layer
+4f4fb700ef54: Pulling fs layer
+1660d9aa2530: Pulling fs layer
+383b1adf4336: Pulling fs layer
+3a34c297bcf7: Pulling fs layer
+defd0ec8117d: Pulling fs layer
+5887b4c742da: Pulling fs layer
+9c04a1a9d905: Pulling fs layer
+4f4fb700ef54: Pulling fs layer
+e65bb62264f0: Pulling fs layer
+18f37464fce9: Pulling fs layer
+d612e387a53b: Pulling fs layer
+2b3e802256e9: Pulling fs layer
+74c337e731b9: Pulling fs layer
+292208f55d27: Pulling fs layer
+f1e073016ec2: Pulling fs layer
+4f4fb700ef54: Pulling fs layer
+621f63e91059: Pulling fs layer
+54aef944f23c: Download complete
+1cbc5e5f9e95: Download complete
+5887b4c742da: Download complete
+4f4fb700ef54: Download complete
+9c04a1a9d905: Download complete
+d612e387a53b: Download complete
+3e76c883239f: Download complete
+e874096c842e: Download complete
+383b1adf4336: Download complete
+2b3e802256e9: Download complete
+74c337e731b9: Download complete
+f5cc97daaa05: Download complete
+3a34c297bcf7: Download complete
+292208f55d27: Download complete
+f1e073016ec2: Download complete
+1660d9aa2530: Download complete
+18f37464fce9: Download complete
+e65bb62264f0: Download complete
+d5fbb5e73690: Download complete
+1cbc5e5f9e95: Pull complete
+d612e387a53b: Pull complete
+74c337e731b9: Pull complete
+3a34c297bcf7: Pull complete
+d5fbb5e73690: Pull complete
+621f63e91059: Download complete
+5887b4c742da: Pull complete
+3e76c883239f: Pull complete
+e874096c842e: Pull complete
+383b1adf4336: Pull complete
+f5cc97daaa05: Pull complete
+f1e073016ec2: Pull complete
+18f37464fce9: Pull complete
+621f63e91059: Pull complete
+4f4fb700ef54: Pull complete
+9c04a1a9d905: Pull complete
+292208f55d27: Pull complete
+e65bb62264f0: Pull complete
+2b3e802256e9: Pull complete
+1660d9aa2530: Pull complete
+defd0ec8117d: Download complete
+54aef944f23c: Pull complete
+defd0ec8117d: Pull complete
+Digest: sha256:53390351aeb4688114b02c36a23b3e6ce1166ee9b7afc5df1a4f776354fc764c
+Status: Downloaded newer image for quay.io/pypa/manylinux_2_28_x86_64:latest
+INFO:auditwheel.wheel_abi:setting libc to glibc
+
+mojolearn-0.8.0-py3-none-linux_x86_64.whl is consistent with the
+following platform tag: "manylinux_2_35_x86_64".
+
+The wheel references external versioned symbols in these
+system-provided shared libraries: libc.so.6 with versions
+{'GLIBC_2.33', 'GLIBC_2.14', 'GLIBC_2.3', 'GLIBC_2.7', 'GLIBC_2.4',
+'GLIBC_2.6', 'GLIBC_2.3.4', 'GLIBC_2.15', 'GLIBC_2.2.5', 'GLIBC_2.17',
+'GLIBC_2.32', 'GLIBC_2.16', 'GLIBC_2.34'}, libm.so.6 with versions
+{'GLIBC_2.29', 'GLIBC_2.2.5', 'GLIBC_2.27'}, libstdc++.so.6 with
+versions {'GLIBCXX_3.4.18', 'CXXABI_1.3', 'GLIBCXX_3.4.9',
+'GLIBCXX_3.4', 'GLIBCXX_3.4.19', 'CXXABI_1.3.11', 'CXXABI_1.3.9',
+'GLIBCXX_3.4.20', 'GLIBCXX_3.4.26', 'GLIBCXX_3.4.17',
+'GLIBCXX_3.4.11', 'GLIBCXX_3.4.14', 'GLIBCXX_3.4.21',
+'GLIBCXX_3.4.22', 'GLIBCXX_3.4.29', 'CXXABI_1.3.7', 'GLIBCXX_3.4.30',
+'GLIBCXX_3.4.15', 'CXXABI_1.3.5'}, libgcc_s.so.1 with versions
+{'GCC_3.0', 'GCC_3.3'}
+
+This constrains the platform tag to "manylinux_2_35_x86_64". In order
+to achieve a more compatible tag, you would need to recompile a new
+wheel from source on a system with earlier versions of these
+libraries, such as a recent manylinux image.

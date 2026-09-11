@@ -1,0 +1,11 @@
+vendor=cuda
+architecture=sm_89
+source_commit=eb325ab175e5a4949c3303d11a501e985ba57af9
+cpu_affinity=0,1
+work_seconds=2400
+rss_gib=12
+pixi_environment=default
+kernel_column=nvidia
+linux_cpu=x86-64-v3
+patchelf=/root/gemm_leg_out/tools-venv/bin/patchelf
+scope=one architecture full46 build; byte LM IDENTICAL only; no installed wheel or numerical admission
