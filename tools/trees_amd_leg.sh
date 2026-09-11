@@ -295,7 +295,8 @@ SELFKILL
          else echo VOLUME_DEVICE_MISSING; fi" 2>&1 | sed 's/^/[volume] /'
 
     # SETUP, detached.
-    box "cd /root/mojolearn && if mountpoint -q $VOL_MOUNT; then export GBM_BENCH_DATA=$VOL_MOUNT/gbm-bench PIP_CACHE_DIR=$VOL_MOUNT/pip-cache RATTLER_CACHE_DIR=$VOL_MOUNT/rattler-cache; fi;
+    box "cd /root/mojolearn && export MOJOLEARN_TREES_SKIP_XGB_ROCM=${MOJOLEARN_TREES_SKIP_XGB_ROCM:-0} MOJOLEARN_TREES_SKIP_LGBM_OPENCL=${MOJOLEARN_TREES_SKIP_LGBM_OPENCL:-0};
+         if mountpoint -q $VOL_MOUNT; then export GBM_BENCH_DATA=$VOL_MOUNT/gbm-bench PIP_CACHE_DIR=$VOL_MOUNT/pip-cache RATTLER_CACHE_DIR=$VOL_MOUNT/rattler-cache; fi;
          setsid nohup sh tools/trees_amd_remote.sh > /root/trees_out/setup_console.log 2>&1 < /dev/null & echo SETUP-STARTED"
     : > "$STATE/ready"
     log "READY: ssh via 'tools/trees_amd_leg.sh ssh ...'; hold until release or $minutes min after create"
