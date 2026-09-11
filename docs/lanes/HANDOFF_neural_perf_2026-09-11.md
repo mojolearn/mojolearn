@@ -311,6 +311,32 @@ No AMD timing of this step exists at the target shape.
      launched (scratchpad amd_attn_three_body.sh from origin/main a1a22f3f);
      if baseline wins there, AMD's `attn_default_arm_for` row becomes the
      fastest of the three.
+   - **Clean AMD three-way, one RunPod MI300X pod: BASELINE WINS ON AMD**
+     (bench/results/e1g/2026-09-11_171959-amd-mi300x-runpod-attention-three,
+     commit a1a22f3f, GEMM ksplit default on, witnesses equal): lean step
+     baseline 2.192 / 2.166 s, stash_tiled 2.543 / 2.536 s (NO FLIP, geomean
+     1.1656), stash_tiled_fgrid_r32_qres_pf 2.213 / 2.325 s (NO FLIP, 1.0412;
+     0.8933 of stash_tiled, which is why the earlier stash_tiled-relative AMD
+     legs picked it). The price harness disagrees with the step on AMD: fwd+bwd
+     baseline 11.2 to 11.5 ms, stash_tiled 5.17, winner 2.29, yet in the step
+     `attn.bwd_dkdv_tiled` is 627 ms (stash_tiled) and `bwd_dkdv_tiled_pf` 525
+     ms (winner) against baseline's `attn.bwd_dkdv` 63.6 ms. The AMD row of
+     `attn_default_arm_for` goes back to `baseline`; the dk/dv lane
+     (`lane/attention-dkdv-amd`) was sent this evidence and now targets the
+     step-versus-harness gap with baseline as the AMD reference.
+   - **H100 classical GEMM caller A/B** (bench/results/e1g/2026-09-11_170957-nvidia-h100-80gb-hbm3-gemm-ksplit-classical,
+     commit 519f84fa): the on-box DISPATCH lines under the NVIDIA row (132)
+     read `ksplit_default_takes=no`, with the same plan for default and
+     tuned128, for the OLS Gram and PCA covariance on Istella-S (220 x 220 x
+     2,043,304), the GP posterior mean (1000 x 1 x 4000) and the GP Cholesky
+     trailing update (3968 x 3968 x 32): those callers are unchanged by the
+     ksplit default by construction. Istella-S timing with quality equal: OLS
+     default/tuned128 0.985 (block noise 0.042), PCA 1.007 (identical plans,
+     so drift). Not measured: taxi (no `pyarrow` on the RunPod image, every
+     taxi cell refused) and GP (the driver passed alpha 0.1, which IDENTICAL
+     refuses; the ridge is pinned by the Cholesky profile). No rerun owed for
+     these callers; the ones ksplit can take (kernel matrices at d >= 129,
+     GMM E-step, Nystroem, RBFSampler, linalg GEMM) still owe an A/B.
 1. The DigitalOcean runner is merged and its dry run is green (section 3);
    its first paid run is also its bring-up. Tuning on AMD is now a repo rule
    for every lane (ENGINEERING_RULES.md section 10), and the account allows

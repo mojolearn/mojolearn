@@ -1,0 +1,16 @@
+TABLE kind=file:operands-enwik8 shape=B1_L2048_nh12_nkv12_hd64_win0 column=amd default_arm=stash_tiled_fgrid_r32_qres_pf visible_cells=25178112 (useful flops: fwd 4*cells*hd, bwd 10*cells*hd; executed multiplier of the shipped kernels: fwd dots 3 of 2 contractions, bwd dots 6 of 5)
+TABLE arm | fwd median ms | fwd useful TFLOP/s | fwd+bwd median ms | bwd (derived) ms | bwd useful TFLOP/s | fwd ratio | fwd+bwd ratio
+TABLE baseline | 11.4945 | 0.560754854234634 | 25.229924 | 13.735424 | 1.1731703134901406 | 1.0 | 1.0
+TABLE stash_tiled | 5.172508 | 1.2461259938118994 | 47.120065 | 41.947556999999996 | 0.38414612989261804 | 2.222229525792904 | 0.5354390746277621
+TABLE kind=file:operands-pilegithub shape=B1_L2048_nh12_nkv12_hd64_win0 column=amd default_arm=stash_tiled_fgrid_r32_qres_pf visible_cells=25178112 (useful flops: fwd 4*cells*hd, bwd 10*cells*hd; executed multiplier of the shipped kernels: fwd dots 3 of 2 contractions, bwd dots 6 of 5)
+TABLE arm | fwd median ms | fwd useful TFLOP/s | fwd+bwd median ms | bwd (derived) ms | bwd useful TFLOP/s | fwd ratio | fwd+bwd ratio
+TABLE baseline | 11.304917 | 0.5701586904176298 | 25.324224 | 14.019307000000001 | 1.1494142813193262 | 1.0 | 1.0
+TABLE stash_tiled | 5.165698 | 1.2477687762621819 | 46.720438 | 41.55474 | 0.3877774636539658 | 2.1884587523312433 | 0.5420373841529482
+TABLE kind=file:operands-enwik8 shape=B1_L2048_nh12_nkv12_hd64_win0 column=amd default_arm=stash_tiled_fgrid_r32_qres_pf visible_cells=25178112 (useful flops: fwd 4*cells*hd, bwd 10*cells*hd; executed multiplier of the shipped kernels: fwd dots 3 of 2 contractions, bwd dots 6 of 5)
+TABLE arm | fwd median ms | fwd useful TFLOP/s | fwd+bwd median ms | bwd (derived) ms | bwd useful TFLOP/s | fwd ratio | fwd+bwd ratio
+TABLE baseline | 11.196916 | 0.5756582144583383 | 25.14692 | 13.950004000000002 | 1.1551245203944025 | 1.0 | 1.0
+TABLE stash_tiled_fgrid_r32_qres_pf | 2.292 | 2.812214952879581 | 33.664398 | 31.372397999999997 | 0.5136359573150896 | 4.885216404886562 | 0.7469885544960585
+TABLE kind=file:operands-pilegithub shape=B1_L2048_nh12_nkv12_hd64_win0 column=amd default_arm=stash_tiled_fgrid_r32_qres_pf visible_cells=25178112 (useful flops: fwd 4*cells*hd, bwd 10*cells*hd; executed multiplier of the shipped kernels: fwd dots 3 of 2 contractions, bwd dots 6 of 5)
+TABLE arm | fwd median ms | fwd useful TFLOP/s | fwd+bwd median ms | bwd (derived) ms | bwd useful TFLOP/s | fwd ratio | fwd+bwd ratio
+TABLE baseline | 11.035726 | 0.5840663923696547 | 24.996916 | 13.961189999999998 | 1.1541990102562891 | 1.0 | 1.0
+TABLE stash_tiled_fgrid_r32_qres_pf | 2.295495 | 2.807933222246182 | 33.777327 | 31.481832 | 0.5118505073021163 | 4.807558282636207 | 0.7400501525772006

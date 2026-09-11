@@ -261,9 +261,10 @@ if [ "$GROUP" = perround ]; then
     # shellcheck disable=SC2086
     check check-gbdt-per-round $DI checks/gbdt_per_round_check.mojo
     check check-gbdt-per-round-2550-host-copy $DI -D MOJOLEARN_2550_HOST_COPY=1 checks/gbdt_per_round_check.mojo
-    check check-gbdt-per-round-2551 $DI -D MOJOLEARN_2551_DEVICE_PARTITION=1 checks/gbdt_per_round_check.mojo
-    check check-gbdt-per-round-2551-host-copy $DI -D MOJOLEARN_2550_HOST_COPY=1 -D MOJOLEARN_2551_DEVICE_PARTITION=1 checks/gbdt_per_round_check.mojo
-    CHECKS="check-gbdt-per-round check-gbdt-per-round-2550-host-copy check-gbdt-per-round-2551 check-gbdt-per-round-2551-host-copy"
+    # 2551 is the IDENTICAL default since 2026-09-11: its named OFF side
+    check check-gbdt-per-round-2551-host-partition $DI -D MOJOLEARN_2551_DEVICE_PARTITION_OFF=1 checks/gbdt_per_round_check.mojo
+    check check-gbdt-per-round-both-off $DI -D MOJOLEARN_2550_HOST_COPY=1 -D MOJOLEARN_2551_DEVICE_PARTITION_OFF=1 checks/gbdt_per_round_check.mojo
+    CHECKS="check-gbdt-per-round check-gbdt-per-round-2550-host-copy check-gbdt-per-round-2551-host-partition check-gbdt-per-round-both-off"
 else
     # the check instantiates every side itself; one run per tier
     check check-sym-arms-identical $DI checks/sym_arms_check.mojo

@@ -1,0 +1,27 @@
+############ block 1 of 1 ############
+==============================================================================
+IDENTITY TRACE DIFF
+==============================================================================
+  APPLE = /var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/gemm-leg.Us9d8C/blk_a.1
+  AMD = /var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/gemm-leg.Us9d8C/blk_b.1
+
+STEP 1 -- PARSE
+  APPLE: 60 record(s), 1 comment line(s), 1 blank line(s)
+  AMD: 60 record(s), 1 comment line(s), 1 blank line(s)
+
+STEP 1b -- DUMP INTEGRITY (re-hash every .bin found)
+
+STEP 2 -- ALIGNMENT (tag sequence, computed BEFORE any hash compare)
+  matched stage pairs: 60
+  unmatched in APPLE: 0    unmatched in AMD: 0
+  TAG SEQUENCES ARE IDENTICAL.
+
+STEP 3 -- HASH WALK over 60 matched pair(s)
+  All 60 matched pair(s) agree on dtype, count and hash.
+
+==============================================================================
+RESULT: IDENTICAL. Same stage sequence, same counts, same hashes.
+  Caveat: a matching hash means the buffers agreed at each
+  checkpoint, NOT that the computation was identical, and nothing
+  is known about whatever the trace did not checkpoint.
+==============================================================================

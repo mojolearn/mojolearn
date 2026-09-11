@@ -1,0 +1,19 @@
+downloading https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2024-01.parquet -> /root/datasets/gbm-bench/taxi/yellow_tripdata_2024-01.parquet
+taxi 2024-01: 50.0 MB
+downloading https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2024-02.parquet -> /root/datasets/gbm-bench/taxi/yellow_tripdata_2024-02.parquet
+taxi 2024-02: 50.3 MB
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/speed_gbdt_arm.py", line 2161, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "/root/mojolearn/tools/speed_gbdt_arm.py", line 2109, in main
+    download(args.download)
+    ~~~~~~~~^^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/speed_gbdt_arm.py", line 1033, in download
+    d = load_taxi("shipped")
+  File "/root/mojolearn/tools/speed_gbdt_arm.py", line 879, in load_taxi
+    parts = [_decode_taxi_month(q) for q in paths]
+             ~~~~~~~~~~~~~~~~~~^^^
+  File "/root/mojolearn/tools/speed_gbdt_arm.py", line 787, in _decode_taxi_month
+    import pyarrow.parquet as pq
+ModuleNotFoundError: No module named 'pyarrow'
