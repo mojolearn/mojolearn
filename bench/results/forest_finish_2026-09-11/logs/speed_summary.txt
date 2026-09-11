@@ -1,0 +1,431 @@
+== baseline.et.istella.r1000000.full.log
+FSPEED-REFUSED lane=et arm=cuml-et-gpu reason=RuntimeError: cuML has no ExtraTrees estimator: its RandomForest searches quantile splits, not the uniform-random thresholds that define ExtraTrees. The like-for-like comparator for `et` is sklearn.
+FSPEED-HEADER family=forest lane=et arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-HEADER family=forest lane=et arm=sklearn-et-cpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=1 ms=5781.692 hash=40b1c5b03ba40420
+FSPEED lane=et arm=sklearn-et-cpu shape=istella-1000000x220 round=1 ms=15223.119 hash=99566c2474e40261
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=2 ms=5693.213 hash=40b1c5b03ba40420
+FSPEED lane=et arm=sklearn-et-cpu shape=istella-1000000x220 round=2 ms=15931.808 hash=6331c07ef7f322f3
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=3 ms=5815.744 hash=40b1c5b03ba40420
+FSPEED lane=et arm=sklearn-et-cpu shape=istella-1000000x220 round=3 ms=15385.444 hash=4dae0fc556ad2afb
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.188191
+FSPEED-ACC lane=et arm=ours metric=auc value=0.938768
+FSPEED-ACC lane=et arm=sklearn-et-cpu metric=logloss value=0.187901
+FSPEED-ACC lane=et arm=sklearn-et-cpu metric=auc value=0.939528
+== baseline.et.istella.r1000000.ours.log
+FSPEED-HEADER family=forest lane=et arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=1 ms=5901.188 hash=40b1c5b03ba40420
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=2 ms=5863.690 hash=40b1c5b03ba40420
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=3 ms=5896.045 hash=40b1c5b03ba40420
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.188191
+FSPEED-ACC lane=et arm=ours metric=auc value=0.938768
+== baseline.et.taxi.r1000000.full.log
+FSPEED-REFUSED lane=et arm=cuml-et-gpu reason=RuntimeError: cuML has no ExtraTrees estimator: its RandomForest searches quantile splits, not the uniform-random thresholds that define ExtraTrees. The like-for-like comparator for `et` is sklearn.
+FSPEED-HEADER family=forest lane=et arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-HEADER family=forest lane=et arm=sklearn-et-cpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=1 ms=1936.820 hash=e683f121d11f59dd
+FSPEED lane=et arm=sklearn-et-cpu shape=taxi-1000000x16 round=1 ms=3665.466 hash=29fa609c1ad09940
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=2 ms=1893.929 hash=e683f121d11f59dd
+FSPEED lane=et arm=sklearn-et-cpu shape=taxi-1000000x16 round=2 ms=3407.696 hash=ec5ee25ada15bf91
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=3 ms=1882.930 hash=e683f121d11f59dd
+FSPEED lane=et arm=sklearn-et-cpu shape=taxi-1000000x16 round=3 ms=3381.119 hash=b7c208cc05ccb27a
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.527541
+FSPEED-ACC lane=et arm=ours metric=auc value=0.608084
+FSPEED-ACC lane=et arm=sklearn-et-cpu metric=logloss value=0.527011
+FSPEED-ACC lane=et arm=sklearn-et-cpu metric=auc value=0.611206
+== baseline.et.taxi.r1000000.ours.log
+FSPEED-HEADER family=forest lane=et arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=1 ms=1882.626 hash=e683f121d11f59dd
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=2 ms=1887.685 hash=e683f121d11f59dd
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=3 ms=1881.774 hash=e683f121d11f59dd
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.527541
+FSPEED-ACC lane=et arm=ours metric=auc value=0.608084
+== baseline.iforest.istella.r1000000.full.log
+FSPEED-REFUSED lane=iforest arm=sklearn-iforest-cpu reason=GPU-PATH-ONLY: sklearn-iforest-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare against the vendor's GPU path only; on AMD request cpu by name (ENGINEERING_RULES.md section 10).
+FSPEED-HEADER family=forest lane=iforest arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-HEADER family=forest lane=iforest arm=cuml-iforest-gpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED lane=iforest arm=ours shape=istella-1000000x220 round=1 ms=4455.471 hash=a1902225f8730abf
+FSPEED lane=iforest arm=cuml-iforest-gpu shape=istella-1000000x220 round=1 ms=816.434 hash=94d69b1532e576e2
+FSPEED lane=iforest arm=ours shape=istella-1000000x220 round=2 ms=4628.738 hash=a1902225f8730abf
+FSPEED lane=iforest arm=cuml-iforest-gpu shape=istella-1000000x220 round=2 ms=828.136 hash=94d69b1532e576e2
+FSPEED lane=iforest arm=ours shape=istella-1000000x220 round=3 ms=4409.450 hash=a1902225f8730abf
+FSPEED lane=iforest arm=cuml-iforest-gpu shape=istella-1000000x220 round=3 ms=830.336 hash=94d69b1532e576e2
+FSPEED-ACC lane=iforest arm=ours metric=auc value=0.821218
+FSPEED-ACC lane=iforest arm=cuml-iforest-gpu metric=auc value=0.821218
+== baseline.iforest.istella.r1000000.ours.log
+FSPEED-HEADER family=forest lane=iforest arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED lane=iforest arm=ours shape=istella-1000000x220 round=1 ms=4226.971 hash=a1902225f8730abf
+FSPEED lane=iforest arm=ours shape=istella-1000000x220 round=2 ms=4915.737 hash=a1902225f8730abf
+FSPEED lane=iforest arm=ours shape=istella-1000000x220 round=3 ms=4369.913 hash=a1902225f8730abf
+FSPEED-ACC lane=iforest arm=ours metric=auc value=0.821218
+== baseline.iforest.taxi.r1000000.full.log
+FSPEED-REFUSED lane=iforest arm=sklearn-iforest-cpu reason=GPU-PATH-ONLY: sklearn-iforest-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare against the vendor's GPU path only; on AMD request cpu by name (ENGINEERING_RULES.md section 10).
+FSPEED-HEADER family=forest lane=iforest arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-HEADER family=forest lane=iforest arm=cuml-iforest-gpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED lane=iforest arm=ours shape=taxi-1000000x16 round=1 ms=343.808 hash=6f68d48431290524
+FSPEED lane=iforest arm=cuml-iforest-gpu shape=taxi-1000000x16 round=1 ms=56.035 hash=eb8c4d9983f1cf94
+FSPEED lane=iforest arm=ours shape=taxi-1000000x16 round=2 ms=277.257 hash=6f68d48431290524
+FSPEED lane=iforest arm=cuml-iforest-gpu shape=taxi-1000000x16 round=2 ms=56.412 hash=eb8c4d9983f1cf94
+FSPEED lane=iforest arm=ours shape=taxi-1000000x16 round=3 ms=290.334 hash=6f68d48431290524
+FSPEED lane=iforest arm=cuml-iforest-gpu shape=taxi-1000000x16 round=3 ms=55.649 hash=eb8c4d9983f1cf94
+FSPEED-ACC lane=iforest arm=ours metric=auc value=0.553631
+FSPEED-ACC lane=iforest arm=cuml-iforest-gpu metric=auc value=0.553631
+== baseline.iforest.taxi.r1000000.ours.log
+FSPEED-HEADER family=forest lane=iforest arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED lane=iforest arm=ours shape=taxi-1000000x16 round=1 ms=285.416 hash=6f68d48431290524
+FSPEED lane=iforest arm=ours shape=taxi-1000000x16 round=2 ms=264.254 hash=6f68d48431290524
+FSPEED lane=iforest arm=ours shape=taxi-1000000x16 round=3 ms=261.341 hash=6f68d48431290524
+FSPEED-ACC lane=iforest arm=ours metric=auc value=0.553631
+== baseline.rf.istella.r1000000.full.log
+FSPEED-REFUSED lane=rf arm=sklearn-rf-cpu reason=GPU-PATH-ONLY: sklearn-rf-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare against the vendor's GPU path only; on AMD request cpu by name (ENGINEERING_RULES.md section 10).
+FSPEED-REFUSED lane=rf arm=lightgbm-cpu reason=GPU-PATH-ONLY: lightgbm-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare against the vendor's GPU path only; on AMD request cpu by name (ENGINEERING_RULES.md section 10).
+FSPEED-HEADER family=forest lane=rf arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-HEADER family=forest lane=rf arm=cuml-rf-gpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-HEADER family=forest lane=rf arm=lightgbm-cuda mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-REFUSED lane=rf arm=lightgbm-cuda reason=LightGBMError during warm-up: CUDA Tree Learner was not enabled in this build. Please recompile with CMake option -DUSE_CUDA=1 (NVIDIA GPUs) or -DUSE_ROCM=1 (AMD GPUs)
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=1 ms=2039.565 hash=574b24d0d7af51d0
+FSPEED lane=rf arm=cuml-rf-gpu shape=istella-1000000x220 round=1 ms=3412.433 hash=afb10ad5da9e4921
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=2 ms=1976.966 hash=574b24d0d7af51d0
+FSPEED lane=rf arm=cuml-rf-gpu shape=istella-1000000x220 round=2 ms=5382.646 hash=afb10ad5da9e4921
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=3 ms=1972.325 hash=574b24d0d7af51d0
+FSPEED lane=rf arm=cuml-rf-gpu shape=istella-1000000x220 round=3 ms=3456.201 hash=afb10ad5da9e4921
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.145560
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.964538
+FSPEED-ACC lane=rf arm=cuml-rf-gpu metric=logloss value=0.145504
+FSPEED-ACC lane=rf arm=cuml-rf-gpu metric=auc value=0.964577
+== baseline.rf.istella.r1000000.ours.log
+FSPEED-HEADER family=forest lane=rf arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=1 ms=2115.971 hash=574b24d0d7af51d0
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=2 ms=2223.680 hash=574b24d0d7af51d0
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=3 ms=2161.138 hash=574b24d0d7af51d0
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.145560
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.964538
+== baseline.rf.taxi.r1000000.full.log
+FSPEED-REFUSED lane=rf arm=sklearn-rf-cpu reason=GPU-PATH-ONLY: sklearn-rf-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare against the vendor's GPU path only; on AMD request cpu by name (ENGINEERING_RULES.md section 10).
+FSPEED-REFUSED lane=rf arm=lightgbm-cpu reason=GPU-PATH-ONLY: lightgbm-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare against the vendor's GPU path only; on AMD request cpu by name (ENGINEERING_RULES.md section 10).
+FSPEED-HEADER family=forest lane=rf arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-HEADER family=forest lane=rf arm=cuml-rf-gpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-HEADER family=forest lane=rf arm=lightgbm-cuda mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-REFUSED lane=rf arm=lightgbm-cuda reason=LightGBMError during warm-up: CUDA Tree Learner was not enabled in this build. Please recompile with CMake option -DUSE_CUDA=1 (NVIDIA GPUs) or -DUSE_ROCM=1 (AMD GPUs)
+FSPEED lane=rf arm=ours shape=taxi-1000000x16 round=1 ms=850.193 hash=d8f64dae01de00bd
+FSPEED lane=rf arm=cuml-rf-gpu shape=taxi-1000000x16 round=1 ms=1830.471 hash=5b7c7ca8e872f417
+FSPEED lane=rf arm=ours shape=taxi-1000000x16 round=2 ms=826.057 hash=d8f64dae01de00bd
+FSPEED lane=rf arm=cuml-rf-gpu shape=taxi-1000000x16 round=2 ms=1874.692 hash=5b7c7ca8e872f417
+FSPEED lane=rf arm=ours shape=taxi-1000000x16 round=3 ms=822.341 hash=d8f64dae01de00bd
+FSPEED lane=rf arm=cuml-rf-gpu shape=taxi-1000000x16 round=3 ms=1758.848 hash=5b7c7ca8e872f417
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.525910
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.617154
+FSPEED-ACC lane=rf arm=cuml-rf-gpu metric=logloss value=0.525800
+FSPEED-ACC lane=rf arm=cuml-rf-gpu metric=auc value=0.617582
+== baseline.rf.taxi.r1000000.ours.log
+FSPEED-HEADER family=forest lane=rf arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED lane=rf arm=ours shape=taxi-1000000x16 round=1 ms=890.350 hash=d8f64dae01de00bd
+FSPEED lane=rf arm=ours shape=taxi-1000000x16 round=2 ms=862.577 hash=d8f64dae01de00bd
+FSPEED lane=rf arm=ours shape=taxi-1000000x16 round=3 ms=858.680 hash=d8f64dae01de00bd
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.525910
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.617154
+== bw16k.et.istella.r1000000.ours.p1.log
+FSPEED-HEADER family=forest lane=et arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=1 ms=4592.940 hash=40b1c5b03ba40420
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=2 ms=4599.720 hash=40b1c5b03ba40420
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=3 ms=4588.545 hash=40b1c5b03ba40420
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.188191
+FSPEED-ACC lane=et arm=ours metric=auc value=0.938768
+== bw16k.et.istella.r1000000.ours.p2.log
+FSPEED-HEADER family=forest lane=et arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=1 ms=4587.843 hash=40b1c5b03ba40420
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=2 ms=4701.867 hash=40b1c5b03ba40420
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=3 ms=4730.669 hash=40b1c5b03ba40420
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.188191
+FSPEED-ACC lane=et arm=ours metric=auc value=0.938768
+== bw16k.et.istellareg.r1000000.ours.p1.log
+FSPEED-HEADER family=forest lane=et arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=2 size=shipped
+FSPEED lane=et arm=ours shape=istellareg-1000000x220 round=1 ms=67501.335 hash=59547e3a9db9ecd8
+FSPEED lane=et arm=ours shape=istellareg-1000000x220 round=2 ms=67451.915 hash=59547e3a9db9ecd8
+FSPEED-ACC lane=et arm=ours metric=rmse value=0.563490
+== bw16k.et.taxi.r1000000.ours.p1.log
+FSPEED-HEADER family=forest lane=et arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=1 ms=1632.517 hash=e683f121d11f59dd
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=2 ms=1604.311 hash=e683f121d11f59dd
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=3 ms=1610.826 hash=e683f121d11f59dd
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.527541
+FSPEED-ACC lane=et arm=ours metric=auc value=0.608084
+== bw16k.et.taxi.r1000000.ours.p2.log
+FSPEED-HEADER family=forest lane=et arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=1 ms=1645.272 hash=e683f121d11f59dd
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=2 ms=1621.873 hash=e683f121d11f59dd
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=3 ms=1600.597 hash=e683f121d11f59dd
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.527541
+FSPEED-ACC lane=et arm=ours metric=auc value=0.608084
+== bw16k.et.taxireg.r1000000.ours.p1.log
+FSPEED-HEADER family=forest lane=et arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED lane=et arm=ours shape=taxireg-1000000x16 round=1 ms=5296.886 hash=9844a40ba74bc375
+FSPEED lane=et arm=ours shape=taxireg-1000000x16 round=2 ms=5268.612 hash=9844a40ba74bc375
+FSPEED lane=et arm=ours shape=taxireg-1000000x16 round=3 ms=5238.983 hash=9844a40ba74bc375
+FSPEED-ACC lane=et arm=ours metric=rmse value=3.496392
+== bw16k.et.taxireg.r1000000.ours.p2.log
+FSPEED-HEADER family=forest lane=et arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED lane=et arm=ours shape=taxireg-1000000x16 round=1 ms=5413.674 hash=9844a40ba74bc375
+FSPEED lane=et arm=ours shape=taxireg-1000000x16 round=2 ms=5288.450 hash=9844a40ba74bc375
+FSPEED lane=et arm=ours shape=taxireg-1000000x16 round=3 ms=5323.075 hash=9844a40ba74bc375
+FSPEED-ACC lane=et arm=ours metric=rmse value=3.496392
+== bw32k.et.istella.r1000000.ours.p1.log
+FSPEED-HEADER family=forest lane=et arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=1 ms=4537.734 hash=40b1c5b03ba40420
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=2 ms=4494.482 hash=40b1c5b03ba40420
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=3 ms=4478.788 hash=40b1c5b03ba40420
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.188191
+FSPEED-ACC lane=et arm=ours metric=auc value=0.938768
+== bw32k.et.istella.r1000000.ours.p2.log
+FSPEED-HEADER family=forest lane=et arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=1 ms=4574.501 hash=40b1c5b03ba40420
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=2 ms=4524.793 hash=40b1c5b03ba40420
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=3 ms=4513.242 hash=40b1c5b03ba40420
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.188191
+FSPEED-ACC lane=et arm=ours metric=auc value=0.938768
+== bw32k.et.istellareg.r1000000.ours.p1.log
+FSPEED-HEADER family=forest lane=et arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=2 size=shipped
+FSPEED lane=et arm=ours shape=istellareg-1000000x220 round=1 ms=67306.910 hash=59547e3a9db9ecd8
+FSPEED lane=et arm=ours shape=istellareg-1000000x220 round=2 ms=67279.869 hash=59547e3a9db9ecd8
+FSPEED-ACC lane=et arm=ours metric=rmse value=0.563490
+== bw32k.et.taxi.r1000000.ours.p1.log
+FSPEED-HEADER family=forest lane=et arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=1 ms=1596.114 hash=e683f121d11f59dd
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=2 ms=1576.423 hash=e683f121d11f59dd
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=3 ms=1584.607 hash=e683f121d11f59dd
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.527541
+FSPEED-ACC lane=et arm=ours metric=auc value=0.608084
+== bw32k.et.taxi.r1000000.ours.p2.log
+FSPEED-HEADER family=forest lane=et arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=1 ms=1647.271 hash=e683f121d11f59dd
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=2 ms=1590.056 hash=e683f121d11f59dd
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=3 ms=1578.301 hash=e683f121d11f59dd
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.527541
+FSPEED-ACC lane=et arm=ours metric=auc value=0.608084
+== bw32k.et.taxireg.r1000000.ours.p1.log
+FSPEED-HEADER family=forest lane=et arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED lane=et arm=ours shape=taxireg-1000000x16 round=1 ms=5270.029 hash=9844a40ba74bc375
+FSPEED lane=et arm=ours shape=taxireg-1000000x16 round=2 ms=5246.851 hash=9844a40ba74bc375
+FSPEED lane=et arm=ours shape=taxireg-1000000x16 round=3 ms=5250.751 hash=9844a40ba74bc375
+FSPEED-ACC lane=et arm=ours metric=rmse value=3.496392
+== bw32k.et.taxireg.r1000000.ours.p2.log
+FSPEED-HEADER family=forest lane=et arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED lane=et arm=ours shape=taxireg-1000000x16 round=1 ms=5401.274 hash=9844a40ba74bc375
+FSPEED lane=et arm=ours shape=taxireg-1000000x16 round=2 ms=5301.574 hash=9844a40ba74bc375
+FSPEED lane=et arm=ours shape=taxireg-1000000x16 round=3 ms=5349.476 hash=9844a40ba74bc375
+FSPEED-ACC lane=et arm=ours metric=rmse value=3.496392
+== ctl.et.istella.r1000000.ours.p1.log
+FSPEED-HEADER family=forest lane=et arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=1 ms=5025.670 hash=40b1c5b03ba40420
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=2 ms=5013.351 hash=40b1c5b03ba40420
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=3 ms=5029.835 hash=40b1c5b03ba40420
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.188191
+FSPEED-ACC lane=et arm=ours metric=auc value=0.938768
+== ctl.et.istella.r1000000.ours.p2.log
+FSPEED-HEADER family=forest lane=et arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=1 ms=5132.732 hash=40b1c5b03ba40420
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=2 ms=5010.500 hash=40b1c5b03ba40420
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=3 ms=5027.549 hash=40b1c5b03ba40420
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.188191
+FSPEED-ACC lane=et arm=ours metric=auc value=0.938768
+== ctl.et.istellareg.r1000000.ours.p1.log
+FSPEED-HEADER family=forest lane=et arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=2 size=shipped
+FSPEED lane=et arm=ours shape=istellareg-1000000x220 round=1 ms=67047.601 hash=59547e3a9db9ecd8
+FSPEED lane=et arm=ours shape=istellareg-1000000x220 round=2 ms=67054.496 hash=59547e3a9db9ecd8
+FSPEED-ACC lane=et arm=ours metric=rmse value=0.563490
+== ctl.et.taxi.r1000000.ours.p1.log
+FSPEED-HEADER family=forest lane=et arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=1 ms=1899.653 hash=e683f121d11f59dd
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=2 ms=1926.545 hash=e683f121d11f59dd
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=3 ms=1882.796 hash=e683f121d11f59dd
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.527541
+FSPEED-ACC lane=et arm=ours metric=auc value=0.608084
+== ctl.et.taxi.r1000000.ours.p2.log
+FSPEED-HEADER family=forest lane=et arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=1 ms=1930.806 hash=e683f121d11f59dd
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=2 ms=1890.749 hash=e683f121d11f59dd
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=3 ms=1915.845 hash=e683f121d11f59dd
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.527541
+FSPEED-ACC lane=et arm=ours metric=auc value=0.608084
+== ctl.et.taxireg.r1000000.ours.p1.log
+FSPEED-HEADER family=forest lane=et arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED lane=et arm=ours shape=taxireg-1000000x16 round=1 ms=5398.980 hash=9844a40ba74bc375
+FSPEED lane=et arm=ours shape=taxireg-1000000x16 round=2 ms=5340.823 hash=9844a40ba74bc375
+FSPEED lane=et arm=ours shape=taxireg-1000000x16 round=3 ms=5343.120 hash=9844a40ba74bc375
+FSPEED-ACC lane=et arm=ours metric=rmse value=3.496392
+== ctl.et.taxireg.r1000000.ours.p2.log
+FSPEED-HEADER family=forest lane=et arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED lane=et arm=ours shape=taxireg-1000000x16 round=1 ms=5461.495 hash=9844a40ba74bc375
+FSPEED lane=et arm=ours shape=taxireg-1000000x16 round=2 ms=5349.376 hash=9844a40ba74bc375
+FSPEED lane=et arm=ours shape=taxireg-1000000x16 round=3 ms=5350.658 hash=9844a40ba74bc375
+FSPEED-ACC lane=et arm=ours metric=rmse value=3.496392
+== dflt.et.istella.r1000000.ours.dflt.log
+FSPEED-HEADER family=forest lane=et arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=1 ms=4564.596 hash=40b1c5b03ba40420
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=2 ms=4715.284 hash=40b1c5b03ba40420
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=3 ms=4634.714 hash=40b1c5b03ba40420
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.188191
+FSPEED-ACC lane=et arm=ours metric=auc value=0.938768
+== dflt.et.taxi.r1000000.ours.dflt.log
+FSPEED-HEADER family=forest lane=et arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=1 ms=1625.028 hash=e683f121d11f59dd
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=2 ms=1604.043 hash=e683f121d11f59dd
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=3 ms=1617.930 hash=e683f121d11f59dd
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.527541
+FSPEED-ACC lane=et arm=ours metric=auc value=0.608084
+== rowmajor.et.istella.r1000000.full.log
+FSPEED-REFUSED lane=et arm=cuml-et-gpu reason=RuntimeError: cuML has no ExtraTrees estimator: its RandomForest searches quantile splits, not the uniform-random thresholds that define ExtraTrees. The like-for-like comparator for `et` is sklearn.
+FSPEED-HEADER family=forest lane=et arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-HEADER family=forest lane=et arm=sklearn-et-cpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=1 ms=4960.879 hash=40b1c5b03ba40420
+FSPEED lane=et arm=sklearn-et-cpu shape=istella-1000000x220 round=1 ms=15502.063 hash=becd407adfbfc8d1
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=2 ms=4947.181 hash=40b1c5b03ba40420
+FSPEED lane=et arm=sklearn-et-cpu shape=istella-1000000x220 round=2 ms=15427.587 hash=09e29c37b3bcaf72
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=3 ms=4914.772 hash=40b1c5b03ba40420
+FSPEED lane=et arm=sklearn-et-cpu shape=istella-1000000x220 round=3 ms=15688.038 hash=db374bf27e6c4639
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.188191
+FSPEED-ACC lane=et arm=ours metric=auc value=0.938768
+FSPEED-ACC lane=et arm=sklearn-et-cpu metric=logloss value=0.187901
+FSPEED-ACC lane=et arm=sklearn-et-cpu metric=auc value=0.939528
+== rowmajor.et.istella.r1000000.ours.log
+FSPEED-HEADER family=forest lane=et arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=1 ms=5064.118 hash=40b1c5b03ba40420
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=2 ms=5100.302 hash=40b1c5b03ba40420
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=3 ms=4930.562 hash=40b1c5b03ba40420
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.188191
+FSPEED-ACC lane=et arm=ours metric=auc value=0.938768
+== rowmajor.et.istella.r1000000.stage.log
+FSPEED-HEADER family=forest lane=et arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=1 size=shipped
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=1 ms=5099.614 hash=40b1c5b03ba40420
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.188191
+FSPEED-ACC lane=et arm=ours metric=auc value=0.938768
+== rowmajor.et.taxi.r1000000.full.log
+FSPEED-REFUSED lane=et arm=cuml-et-gpu reason=RuntimeError: cuML has no ExtraTrees estimator: its RandomForest searches quantile splits, not the uniform-random thresholds that define ExtraTrees. The like-for-like comparator for `et` is sklearn.
+FSPEED-HEADER family=forest lane=et arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-HEADER family=forest lane=et arm=sklearn-et-cpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=1 ms=1904.320 hash=e683f121d11f59dd
+FSPEED lane=et arm=sklearn-et-cpu shape=taxi-1000000x16 round=1 ms=3295.014 hash=5d9ff60d2b23d96f
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=2 ms=1831.436 hash=e683f121d11f59dd
+FSPEED lane=et arm=sklearn-et-cpu shape=taxi-1000000x16 round=2 ms=3309.751 hash=58486eeac5105fc5
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=3 ms=1830.043 hash=e683f121d11f59dd
+FSPEED lane=et arm=sklearn-et-cpu shape=taxi-1000000x16 round=3 ms=3254.267 hash=a651c752623a0254
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.527541
+FSPEED-ACC lane=et arm=ours metric=auc value=0.608084
+FSPEED-ACC lane=et arm=sklearn-et-cpu metric=logloss value=0.527011
+FSPEED-ACC lane=et arm=sklearn-et-cpu metric=auc value=0.611206
+== rowmajor.et.taxi.r1000000.ours.log
+FSPEED-HEADER family=forest lane=et arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=1 ms=1932.731 hash=e683f121d11f59dd
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=2 ms=1949.976 hash=e683f121d11f59dd
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=3 ms=1934.568 hash=e683f121d11f59dd
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.527541
+FSPEED-ACC lane=et arm=ours metric=auc value=0.608084
+== rowmajor.et.taxi.r1000000.stage.log
+FSPEED-HEADER family=forest lane=et arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=1 size=shipped
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=1 ms=1957.919 hash=e683f121d11f59dd
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.527541
+FSPEED-ACC lane=et arm=ours metric=auc value=0.608084
+== rowmajor.iforest.istella.r1000000.full.log
+FSPEED-REFUSED lane=iforest arm=sklearn-iforest-cpu reason=GPU-PATH-ONLY: sklearn-iforest-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare against the vendor's GPU path only; on AMD request cpu by name (ENGINEERING_RULES.md section 10).
+FSPEED-HEADER family=forest lane=iforest arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-HEADER family=forest lane=iforest arm=cuml-iforest-gpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED lane=iforest arm=ours shape=istella-1000000x220 round=1 ms=162.177 hash=a1902225f8730abf
+FSPEED lane=iforest arm=cuml-iforest-gpu shape=istella-1000000x220 round=1 ms=1062.330 hash=94d69b1532e576e2
+FSPEED lane=iforest arm=ours shape=istella-1000000x220 round=2 ms=154.336 hash=a1902225f8730abf
+FSPEED lane=iforest arm=cuml-iforest-gpu shape=istella-1000000x220 round=2 ms=999.346 hash=94d69b1532e576e2
+FSPEED lane=iforest arm=ours shape=istella-1000000x220 round=3 ms=155.370 hash=a1902225f8730abf
+FSPEED lane=iforest arm=cuml-iforest-gpu shape=istella-1000000x220 round=3 ms=1000.963 hash=94d69b1532e576e2
+FSPEED-ACC lane=iforest arm=ours metric=auc value=0.821218
+FSPEED-ACC lane=iforest arm=cuml-iforest-gpu metric=auc value=0.821218
+== rowmajor.iforest.istella.r1000000.ours.log
+FSPEED-HEADER family=forest lane=iforest arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED lane=iforest arm=ours shape=istella-1000000x220 round=1 ms=148.896 hash=a1902225f8730abf
+FSPEED lane=iforest arm=ours shape=istella-1000000x220 round=2 ms=153.216 hash=a1902225f8730abf
+FSPEED lane=iforest arm=ours shape=istella-1000000x220 round=3 ms=149.850 hash=a1902225f8730abf
+FSPEED-ACC lane=iforest arm=ours metric=auc value=0.821218
+== rowmajor.iforest.taxi.r1000000.full.log
+FSPEED-REFUSED lane=iforest arm=sklearn-iforest-cpu reason=GPU-PATH-ONLY: sklearn-iforest-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare against the vendor's GPU path only; on AMD request cpu by name (ENGINEERING_RULES.md section 10).
+FSPEED-HEADER family=forest lane=iforest arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-HEADER family=forest lane=iforest arm=cuml-iforest-gpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED lane=iforest arm=ours shape=taxi-1000000x16 round=1 ms=95.416 hash=6f68d48431290524
+FSPEED lane=iforest arm=cuml-iforest-gpu shape=taxi-1000000x16 round=1 ms=54.371 hash=eb8c4d9983f1cf94
+FSPEED lane=iforest arm=ours shape=taxi-1000000x16 round=2 ms=94.304 hash=6f68d48431290524
+FSPEED lane=iforest arm=cuml-iforest-gpu shape=taxi-1000000x16 round=2 ms=55.384 hash=eb8c4d9983f1cf94
+FSPEED lane=iforest arm=ours shape=taxi-1000000x16 round=3 ms=97.708 hash=6f68d48431290524
+FSPEED lane=iforest arm=cuml-iforest-gpu shape=taxi-1000000x16 round=3 ms=48.937 hash=eb8c4d9983f1cf94
+FSPEED-ACC lane=iforest arm=ours metric=auc value=0.553631
+FSPEED-ACC lane=iforest arm=cuml-iforest-gpu metric=auc value=0.553631
+== rowmajor.iforest.taxi.r1000000.ours.log
+FSPEED-HEADER family=forest lane=iforest arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED lane=iforest arm=ours shape=taxi-1000000x16 round=1 ms=94.358 hash=6f68d48431290524
+FSPEED lane=iforest arm=ours shape=taxi-1000000x16 round=2 ms=99.199 hash=6f68d48431290524
+FSPEED lane=iforest arm=ours shape=taxi-1000000x16 round=3 ms=95.010 hash=6f68d48431290524
+FSPEED-ACC lane=iforest arm=ours metric=auc value=0.553631
+== rowmajor.rf.istella.r1000000.full.log
+FSPEED-REFUSED lane=rf arm=sklearn-rf-cpu reason=GPU-PATH-ONLY: sklearn-rf-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare against the vendor's GPU path only; on AMD request cpu by name (ENGINEERING_RULES.md section 10).
+FSPEED-REFUSED lane=rf arm=lightgbm-cpu reason=GPU-PATH-ONLY: lightgbm-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare against the vendor's GPU path only; on AMD request cpu by name (ENGINEERING_RULES.md section 10).
+FSPEED-HEADER family=forest lane=rf arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-HEADER family=forest lane=rf arm=cuml-rf-gpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-HEADER family=forest lane=rf arm=lightgbm-cuda mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-REFUSED lane=rf arm=lightgbm-cuda reason=LightGBMError during warm-up: CUDA Tree Learner was not enabled in this build. Please recompile with CMake option -DUSE_CUDA=1 (NVIDIA GPUs) or -DUSE_ROCM=1 (AMD GPUs)
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=1 ms=1332.984 hash=574b24d0d7af51d0
+FSPEED lane=rf arm=cuml-rf-gpu shape=istella-1000000x220 round=1 ms=3943.245 hash=afb10ad5da9e4921
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=2 ms=1345.506 hash=574b24d0d7af51d0
+FSPEED lane=rf arm=cuml-rf-gpu shape=istella-1000000x220 round=2 ms=3734.757 hash=afb10ad5da9e4921
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=3 ms=1323.349 hash=574b24d0d7af51d0
+FSPEED lane=rf arm=cuml-rf-gpu shape=istella-1000000x220 round=3 ms=3884.464 hash=afb10ad5da9e4921
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.145560
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.964538
+FSPEED-ACC lane=rf arm=cuml-rf-gpu metric=logloss value=0.145504
+FSPEED-ACC lane=rf arm=cuml-rf-gpu metric=auc value=0.964577
+== rowmajor.rf.istella.r1000000.ours.log
+FSPEED-HEADER family=forest lane=rf arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=1 ms=1311.683 hash=574b24d0d7af51d0
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=2 ms=1283.294 hash=574b24d0d7af51d0
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=3 ms=1290.924 hash=574b24d0d7af51d0
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.145560
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.964538
+== rowmajor.rf.istella.r1000000.stage.log
+FSPEED-HEADER family=forest lane=rf arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=1 size=shipped
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=1 ms=1307.816 hash=574b24d0d7af51d0
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.145560
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.964538
+== rowmajor.rf.taxi.r1000000.full.log
+FSPEED-REFUSED lane=rf arm=sklearn-rf-cpu reason=GPU-PATH-ONLY: sklearn-rf-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare against the vendor's GPU path only; on AMD request cpu by name (ENGINEERING_RULES.md section 10).
+FSPEED-REFUSED lane=rf arm=lightgbm-cpu reason=GPU-PATH-ONLY: lightgbm-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare against the vendor's GPU path only; on AMD request cpu by name (ENGINEERING_RULES.md section 10).
+FSPEED-HEADER family=forest lane=rf arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-HEADER family=forest lane=rf arm=cuml-rf-gpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-HEADER family=forest lane=rf arm=lightgbm-cuda mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED-REFUSED lane=rf arm=lightgbm-cuda reason=LightGBMError during warm-up: CUDA Tree Learner was not enabled in this build. Please recompile with CMake option -DUSE_CUDA=1 (NVIDIA GPUs) or -DUSE_ROCM=1 (AMD GPUs)
+FSPEED lane=rf arm=ours shape=taxi-1000000x16 round=1 ms=806.427 hash=d8f64dae01de00bd
+FSPEED lane=rf arm=cuml-rf-gpu shape=taxi-1000000x16 round=1 ms=1855.526 hash=5b7c7ca8e872f417
+FSPEED lane=rf arm=ours shape=taxi-1000000x16 round=2 ms=816.662 hash=d8f64dae01de00bd
+FSPEED lane=rf arm=cuml-rf-gpu shape=taxi-1000000x16 round=2 ms=1860.367 hash=5b7c7ca8e872f417
+FSPEED lane=rf arm=ours shape=taxi-1000000x16 round=3 ms=811.099 hash=d8f64dae01de00bd
+FSPEED lane=rf arm=cuml-rf-gpu shape=taxi-1000000x16 round=3 ms=1937.690 hash=5b7c7ca8e872f417
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.525910
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.617154
+FSPEED-ACC lane=rf arm=cuml-rf-gpu metric=logloss value=0.525800
+FSPEED-ACC lane=rf arm=cuml-rf-gpu metric=auc value=0.617582
+== rowmajor.rf.taxi.r1000000.ours.log
+FSPEED-HEADER family=forest lane=rf arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+FSPEED lane=rf arm=ours shape=taxi-1000000x16 round=1 ms=817.509 hash=d8f64dae01de00bd
+FSPEED lane=rf arm=ours shape=taxi-1000000x16 round=2 ms=805.836 hash=d8f64dae01de00bd
+FSPEED lane=rf arm=ours shape=taxi-1000000x16 round=3 ms=799.507 hash=d8f64dae01de00bd
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.525910
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.617154
+== rowmajor.rf.taxi.r1000000.stage.log
+FSPEED-HEADER family=forest lane=rf arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=1 size=shipped
+FSPEED lane=rf arm=ours shape=taxi-1000000x16 round=1 ms=855.719 hash=d8f64dae01de00bd
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.525910
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.617154
+== stats.et.istella.r1000000.ours.log
+FSPEED-HEADER family=forest lane=et arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=1 size=shipped
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=1 ms=5006.412 hash=40b1c5b03ba40420
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.188191
+FSPEED-ACC lane=et arm=ours metric=auc value=0.938768
+== stats.et.taxi.r1000000.ours.log
+FSPEED-HEADER family=forest lane=et arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=1 size=shipped
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=1 ms=1900.205 hash=e683f121d11f59dd
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.527541
+FSPEED-ACC lane=et arm=ours metric=auc value=0.608084

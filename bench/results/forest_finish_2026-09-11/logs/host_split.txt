@@ -1,0 +1,76 @@
+== baseline.et.istella.log
+SPLIT lane=et dataset=istella warmup export_fit_result=31.1 ms
+SPLIT lane=et dataset=istella warmup extratrees._forest_fit_arrays=0.1 ms
+SPLIT lane=et dataset=istella warmup extratrees.as_f32_colmajor=565.7 ms
+SPLIT lane=et dataset=istella warmup extratrees.encode_labels=9.1 ms
+SPLIT lane=et dataset=istella warmup fit_total=6758.9 ms unwrapped=6184.1 ms
+SPLIT lane=et dataset=istella rep1 export_fit_result=30.3 ms
+SPLIT lane=et dataset=istella rep1 extratrees._forest_fit_arrays=0.0 ms
+SPLIT lane=et dataset=istella rep1 extratrees.as_f32_colmajor=549.0 ms
+SPLIT lane=et dataset=istella rep1 extratrees.encode_labels=6.6 ms
+SPLIT lane=et dataset=istella rep1 fit_total=5748.2 ms unwrapped=5192.5 ms
+SPLIT lane=et dataset=istella rep2 export_fit_result=29.8 ms
+SPLIT lane=et dataset=istella rep2 extratrees._forest_fit_arrays=0.0 ms
+SPLIT lane=et dataset=istella rep2 extratrees.as_f32_colmajor=558.4 ms
+SPLIT lane=et dataset=istella rep2 extratrees.encode_labels=6.4 ms
+SPLIT lane=et dataset=istella rep2 fit_total=5735.1 ms unwrapped=5170.2 ms
+SPLIT lane=et dataset=istella rep3 export_fit_result=25.0 ms
+SPLIT lane=et dataset=istella rep3 extratrees._forest_fit_arrays=0.0 ms
+SPLIT lane=et dataset=istella rep3 extratrees.as_f32_colmajor=570.6 ms
+SPLIT lane=et dataset=istella rep3 extratrees.encode_labels=6.5 ms
+SPLIT lane=et dataset=istella rep3 fit_total=5736.7 ms unwrapped=5159.7 ms
+== baseline.rf.istella.log
+SPLIT lane=rf dataset=istella warmup export_fit_result=36.1 ms
+SPLIT lane=rf dataset=istella warmup randomforest._forest_fit_arrays=0.0 ms
+SPLIT lane=rf dataset=istella warmup randomforest.as_f32_colmajor=576.5 ms
+SPLIT lane=rf dataset=istella warmup randomforest.encode_labels=7.3 ms
+SPLIT lane=rf dataset=istella warmup fit_total=3055.0 ms unwrapped=2471.2 ms
+SPLIT lane=rf dataset=istella rep1 export_fit_result=45.6 ms
+SPLIT lane=rf dataset=istella rep1 randomforest._forest_fit_arrays=0.0 ms
+SPLIT lane=rf dataset=istella rep1 randomforest.as_f32_colmajor=581.5 ms
+SPLIT lane=rf dataset=istella rep1 randomforest.encode_labels=6.5 ms
+SPLIT lane=rf dataset=istella rep1 fit_total=2072.1 ms unwrapped=1484.1 ms
+SPLIT lane=rf dataset=istella rep2 export_fit_result=48.1 ms
+SPLIT lane=rf dataset=istella rep2 randomforest._forest_fit_arrays=0.0 ms
+SPLIT lane=rf dataset=istella rep2 randomforest.as_f32_colmajor=554.5 ms
+SPLIT lane=rf dataset=istella rep2 randomforest.encode_labels=6.5 ms
+SPLIT lane=rf dataset=istella rep2 fit_total=2073.9 ms unwrapped=1512.9 ms
+SPLIT lane=rf dataset=istella rep3 export_fit_result=36.1 ms
+SPLIT lane=rf dataset=istella rep3 randomforest._forest_fit_arrays=0.0 ms
+SPLIT lane=rf dataset=istella rep3 randomforest.as_f32_colmajor=680.1 ms
+SPLIT lane=rf dataset=istella rep3 randomforest.encode_labels=7.2 ms
+SPLIT lane=rf dataset=istella rep3 fit_total=2178.3 ms unwrapped=1491.0 ms
+== rowmajor.et.istella.log
+SPLIT lane=et dataset=istella warmup export_fit_result=25.7 ms
+SPLIT lane=et dataset=istella warmup extratrees._forest_fit_arrays=0.0 ms
+SPLIT lane=et dataset=istella warmup extratrees.encode_labels=7.2 ms
+SPLIT lane=et dataset=istella warmup fit_total=6070.0 ms unwrapped=6062.8 ms
+SPLIT lane=et dataset=istella rep1 export_fit_result=24.9 ms
+SPLIT lane=et dataset=istella rep1 extratrees._forest_fit_arrays=0.0 ms
+SPLIT lane=et dataset=istella rep1 extratrees.encode_labels=5.2 ms
+SPLIT lane=et dataset=istella rep1 fit_total=4971.0 ms unwrapped=4965.8 ms
+SPLIT lane=et dataset=istella rep2 export_fit_result=23.9 ms
+SPLIT lane=et dataset=istella rep2 extratrees._forest_fit_arrays=0.0 ms
+SPLIT lane=et dataset=istella rep2 extratrees.encode_labels=5.2 ms
+SPLIT lane=et dataset=istella rep2 fit_total=4949.8 ms unwrapped=4944.6 ms
+SPLIT lane=et dataset=istella rep3 export_fit_result=24.7 ms
+SPLIT lane=et dataset=istella rep3 extratrees._forest_fit_arrays=0.0 ms
+SPLIT lane=et dataset=istella rep3 extratrees.encode_labels=5.0 ms
+SPLIT lane=et dataset=istella rep3 fit_total=4976.1 ms unwrapped=4971.1 ms
+== rowmajor.rf.istella.log
+SPLIT lane=rf dataset=istella warmup export_fit_result=36.7 ms
+SPLIT lane=rf dataset=istella warmup randomforest._forest_fit_arrays=0.0 ms
+SPLIT lane=rf dataset=istella warmup randomforest.encode_labels=7.0 ms
+SPLIT lane=rf dataset=istella warmup fit_total=2311.3 ms unwrapped=2304.3 ms
+SPLIT lane=rf dataset=istella rep1 export_fit_result=33.8 ms
+SPLIT lane=rf dataset=istella rep1 randomforest._forest_fit_arrays=0.0 ms
+SPLIT lane=rf dataset=istella rep1 randomforest.encode_labels=6.4 ms
+SPLIT lane=rf dataset=istella rep1 fit_total=1303.5 ms unwrapped=1297.2 ms
+SPLIT lane=rf dataset=istella rep2 export_fit_result=34.6 ms
+SPLIT lane=rf dataset=istella rep2 randomforest._forest_fit_arrays=0.0 ms
+SPLIT lane=rf dataset=istella rep2 randomforest.encode_labels=6.3 ms
+SPLIT lane=rf dataset=istella rep2 fit_total=1299.1 ms unwrapped=1292.8 ms
+SPLIT lane=rf dataset=istella rep3 export_fit_result=41.6 ms
+SPLIT lane=rf dataset=istella rep3 randomforest._forest_fit_arrays=0.0 ms
+SPLIT lane=rf dataset=istella rep3 randomforest.encode_labels=6.4 ms
+SPLIT lane=rf dataset=istella rep3 fit_total=1309.2 ms unwrapped=1302.8 ms

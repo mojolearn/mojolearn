@@ -1,0 +1,111 @@
+main_pixi_install=0 21:40:22
+build_exit baseline.rf=0 21:40:47
+build_exit baseline.trees=0 21:41:11
+build_exit baseline.svm=0 21:41:45
+build_exit rowmajor.svm=0 21:42:18
+8ac6078377f0775adcce75894a66ac839b65a8aee9debb7d1156f6f48401bb57  /root/bins/rowmajor/_mojolearn_svm.so
+A1_BUILD_DONE 21:42:18
+ib_exit baseline=0 21:42:28
+ib_exit rowmajor=0 21:42:37
+ib_diff baseline vs rowmajor exit=0 21:42:37
+check_if rowmajor=0 21:42:51
+refusal_probe baseline=0 21:42:53
+refusal_probe rowmajor=0 21:42:55
+refusal_diff_exit=1
+A2_IDENTITY_DONE 21:42:55
+speed_exit baseline.rf.taxi.r1000000.full=0 21:44:24
+speed_exit rowmajor.rf.taxi.r1000000.full=0 21:45:54
+speed_exit baseline.iforest.taxi.r1000000.full=0 21:46:07
+speed_exit rowmajor.iforest.taxi.r1000000.full=0 21:46:16
+speed_exit baseline.et.taxi.r1000000.full=0 21:47:17
+speed_exit rowmajor.et.taxi.r1000000.full=0 21:48:19
+speed_exit rowmajor.rf.taxi.r1000000.ours=0 21:49:32
+speed_exit baseline.rf.taxi.r1000000.ours=0 21:50:51
+speed_exit rowmajor.iforest.taxi.r1000000.ours=0 21:50:58
+speed_exit baseline.iforest.taxi.r1000000.ours=0 21:51:06
+speed_exit rowmajor.et.taxi.r1000000.ours=0 21:51:51
+speed_exit baseline.et.taxi.r1000000.ours=0 21:52:34
+A3_TAXI_DONE 21:52:34
+speed_exit baseline.rf.istella.r1000000.full=0 22:00:55
+speed_exit rowmajor.rf.istella.r1000000.full=0 22:02:47
+speed_exit baseline.iforest.istella.r1000000.full=0 22:03:40
+speed_exit rowmajor.iforest.istella.r1000000.full=0 22:04:04
+speed_exit baseline.et.istella.r1000000.full=0 22:06:20
+speed_exit rowmajor.et.istella.r1000000.full=0 22:08:31
+speed_exit rowmajor.rf.istella.r1000000.ours=0 22:10:03
+speed_exit baseline.rf.istella.r1000000.ours=0 22:11:40
+speed_exit rowmajor.iforest.istella.r1000000.ours=0 22:11:51
+speed_exit baseline.iforest.istella.r1000000.ours=0 22:12:38
+speed_exit rowmajor.et.istella.r1000000.ours=0 22:13:44
+speed_exit baseline.et.istella.r1000000.ours=0 22:14:55
+A3_ISTELLA_DONE 22:14:55
+speed_exit rowmajor.et.istella.r1000000.stage=0 22:15:34
+speed_exit rowmajor.et.taxi.r1000000.stage=0 22:15:58
+speed_exit rowmajor.rf.istella.r1000000.stage=0 22:16:45
+speed_exit rowmajor.rf.taxi.r1000000.stage=0 22:17:25
+A4_STAGE_DONE 22:17:25
+reach_probe=0 22:17:28
+B1_REACH_DONE 22:17:28
+split_exit rowmajor.et.istella=0 22:17:53
+split_exit rowmajor.rf.istella=0 22:18:02
+split_exit baseline.et.istella=0 22:18:29
+split_exit baseline.rf.istella=0 22:18:42
+B2_SPLIT_DONE 22:18:42
+build_exit ctl.trees=0 22:19:23
+ba521b20024795cacab91a0fa9207fe8bf918793fe909af85098c6264080d2f1  /root/bins/ctl/_mojolearn_trees.so
+build_exit stats.trees=0 22:19:49
+237c8956dd3bdd0da7b97d75484cc07c8ba04ce24914bed13bd1eda4fa0962e4  /root/bins/stats/_mojolearn_trees.so
+build_exit bw16k.trees=0 22:20:14
+6421f3c105f11ef2a05e01cd211f9f2a54b6804c65b065ce3b6becd9b2d6ae55  /root/bins/bw16k/_mojolearn_trees.so
+build_exit bw32k.trees=0 22:20:39
+75a334477becd418f888b7387e2c17ed96661c7cc48510aadadd4a524eaa708e  /root/bins/bw32k/_mojolearn_trees.so
+C1_BUILD_DONE 22:20:39
+ib_exit ctl=0 22:20:49
+ib_diff rowmajor vs ctl exit=0 22:20:49
+ib_exit bw16k=0 22:20:58
+ib_diff rowmajor vs bw16k exit=0 22:20:59
+ib_exit bw32k=0 22:21:08
+ib_diff rowmajor vs bw32k exit=0 22:21:08
+device_batched_check=0 22:21:28
+C2_IDENTITY_DONE 22:21:28
+speed_exit stats.et.istella.r1000000.ours=0 22:22:07
+speed_exit stats.et.taxi.r1000000.ours=0 22:22:33
+C3_STATS_DONE 22:22:33
+speed_exit ctl.et.taxi.r1000000.ours.p1=0 22:23:17
+speed_exit bw16k.et.taxi.r1000000.ours.p1=0 22:24:01
+speed_exit bw32k.et.taxi.r1000000.ours.p1=0 22:24:45
+speed_exit bw32k.et.taxi.r1000000.ours.p2=0 22:25:28
+speed_exit bw16k.et.taxi.r1000000.ours.p2=0 22:26:12
+speed_exit ctl.et.taxi.r1000000.ours.p2=0 22:26:56
+speed_exit ctl.et.istella.r1000000.ours.p1=0 22:28:01
+speed_exit bw16k.et.istella.r1000000.ours.p1=0 22:29:06
+speed_exit bw32k.et.istella.r1000000.ours.p1=0 22:30:09
+speed_exit bw32k.et.istella.r1000000.ours.p2=0 22:31:13
+speed_exit bw16k.et.istella.r1000000.ours.p2=0 22:32:21
+speed_exit ctl.et.istella.r1000000.ours.p2=0 22:33:27
+C4_AB_DONE 22:33:27
+D1_VERDICTS_DONE 22:33:34
+reach2_probe rowmajor=0 22:33:50
+reach2_probe baseline=0 22:33:52
+E1_REACH_DONE 22:33:52
+speed_exit ctl.et.taxireg.r1000000.ours.p1=0 22:35:03
+speed_exit bw16k.et.taxireg.r1000000.ours.p1=0 22:36:13
+speed_exit bw32k.et.taxireg.r1000000.ours.p1=0 22:37:22
+speed_exit bw32k.et.taxireg.r1000000.ours.p2=0 22:38:31
+speed_exit bw16k.et.taxireg.r1000000.ours.p2=0 22:39:39
+speed_exit ctl.et.taxireg.r1000000.ours.p2=0 22:40:46
+F1_TAXIREG_DONE 22:40:46
+speed_exit ctl.et.istellareg.r1000000.ours.p1=0 22:44:47
+speed_exit bw16k.et.istellareg.r1000000.ours.p1=0 22:48:48
+speed_exit bw32k.et.istellareg.r1000000.ours.p1=0 22:52:49
+F2_ISTELLAREG_DONE 22:52:49
+F3_MEDIANS_DONE 22:52:49
+build_exit dflt.trees=0 22:55:00
+45747d4935dd2f18f51019a7ab57741c1438f10aec06f480ffc44e3e6eaa84dd  /root/bins/dflt/_mojolearn_trees.so
+45747d4935dd2f18f51019a7ab57741c1438f10aec06f480ffc44e3e6eaa84dd  /root/bins/dflt/_mojolearn_trees.so
+ib_exit dflt=0 22:55:09
+ib_diff rowmajor vs dflt exit=0 22:55:09
+G1_IDENTITY_DONE 22:55:09
+speed_exit dflt.et.taxi.r1000000.ours.dflt=0 22:55:52
+speed_exit dflt.et.istella.r1000000.ours.dflt=0 22:57:02
+G2_CONFIRM_DONE 22:57:02

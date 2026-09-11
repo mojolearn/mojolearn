@@ -1,0 +1,50 @@
+== rowmajor.et.istella.r1000000.stage.log
+MOJOLEARN_STAGE_TIMES [extratrees classification forest fit]
+  (serialized-by-measurement; compare total to an untimed run)
+   setup (buffers, row fill, workspace) -> 0.00768856 s
+   stage + feature sampler -> 0.667657363 s
+   range pass (init+range+decode+nonconst) -> 1.620743943 s
+   score pass (init+score+finalize) -> 2.257997628 s
+   candidate+reduce+splits readback -> 0.025811237 s
+   host: split records -> 0.009286174 s
+   partition (4 kernels) -> 0.3148112 s
+   host: pop + batch assembly -> 0.00792716 s
+   leaf pass -> 0.058095712 s
+   host: queue push (children of the batch) -> 0.039160801 s
+  total -> 5.009179778 s
+  boundary_dataset_upload	0.500731013 s
+  boundary_x_borrow	1.37e-07 s
+  boundary_y_list	0.002392032 s
+  boundary_device_fit_and_context	6.405856158 s
+  boundary_export_handle	9.4324e-05 s
+  fit_total	6.408365217 s
+  boundary_export_into	0.014199056 s
+  boundary_dataset_upload	0.047560141 s
+== rowmajor.et.taxi.r1000000.stage.log
+MOJOLEARN_STAGE_TIMES [extratrees classification forest fit]
+  (serialized-by-measurement; compare total to an untimed run)
+   setup (buffers, row fill, workspace) -> 0.001089849 s
+   stage + feature sampler -> 0.447818829 s
+   range pass (init+range+decode+nonconst) -> 0.457522146 s
+   score pass (init+score+finalize) -> 0.65582113 s
+   candidate+reduce+splits readback -> 0.019073143 s
+   host: split records -> 0.007074844 s
+   partition (4 kernels) -> 0.246385369 s
+   host: pop + batch assembly -> 0.005790196 s
+   leaf pass -> 0.040777778 s
+   host: queue push (children of the batch) -> 0.025934138 s
+  total -> 1.907287422 s
+  boundary_dataset_upload	0.441615304 s
+  boundary_x_borrow	2.199e-06 s
+  boundary_y_list	0.001958632 s
+  boundary_device_fit_and_context	2.549157988 s
+  boundary_export_handle	0.000107711 s
+  fit_total	2.55176106 s
+  boundary_export_into	0.005837206 s
+  boundary_dataset_upload	0.00481007 s
+== rowmajor.rf.istella.r1000000.stage.log
+  fit_total	1.228328865 s
+  fit_total	1.225016833 s
+== rowmajor.rf.taxi.r1000000.stage.log
+  fit_total	0.780579293 s
+  fit_total	0.802648207 s
