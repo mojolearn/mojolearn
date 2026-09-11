@@ -65,11 +65,25 @@ geometry.
 | wide220 | 8c5ac18e8e5547e9 | 8c5ac18e8e5547e9 | 3 of 3 stable |
 | greedy arm (all five) | unchanged | unchanged | 3 of 3 stable |
 
-The one-byte family accumulates in Int32 fixed point (DEVIATION 93), so its
-cells are integer multiples of `1 / fixed_scale` and fold exactly in any
-order; that is why the one-byte-dominated fixtures keep 2624's model hash
-while the binary fixture moves. 2670 is still a bit-moving change and is
-gated as one.
+**Equal model hashes are NOT equal histograms, and the identity traces say
+so.** Twenty-tree traced fits of the same fixtures, main against 2670
+(`tools/identity_trace_diff.py`, logs `trace*_mojolearn*.log`):
+
+| fixture | first divergence | verdict |
+|---|---|---|
+| onebyte | none, 182 of 182 stages | IDENTICAL |
+| halfbyte | `tree001.depth00.hist.HalfByteFeatures` | DIVERGENT |
+| binary | `tree001.depth00.hist.BinaryFeatures` | DIVERGENT |
+| mixed | `tree001.depth00.hist.BinaryFeatures` | DIVERGENT |
+| wide220 | `tree001.depth00.hist.BinaryFeatures` | DIVERGENT |
+
+So 2670 moves the histogram from the first tree wherever a FLOAT accumulator
+builds it (the binary and half-byte policies), and moves nothing at all where
+the accumulator is Int32 fixed point (the one-byte family, DEVIATION 93: its
+cells are integer multiples of `1 / fixed_scale`, so they fold exactly in any
+order). Where the 100-tree model hash nevertheless matches 2624
+(halfbyte, mixed, wide220), the reason is that no near-tied split flipped, not
+that the bits agreed. 2670 is a bit-moving change and is gated as one.
 
 ## 3. Speed
 
