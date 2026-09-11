@@ -325,10 +325,12 @@ for name in ("torch", "cuml", "cupy", "sklearn", "scipy", "pyarrow"):
     except Exception as exc:  # noqa: BLE001
         print(name, "NOT IMPORTABLE", repr(exc))
 PYV
-        # The raw fetches first (a second writer on the same file is a torn file).
-        while [ ! -f "$OUT/fetch_istella.done" ] || [ ! -f "$OUT/fetch_taxi.done" ]; do sleep 5; done
-        ( run download-istella timeout -k 30 2700 "$PY" tools/speed_gbdt_arm.py --download istella
+        # Each decode waits for its own raw fetch (a second writer on the same
+        # file is a torn file); a taxi upload wait does not hold Istella back.
+        ( while [ ! -f "$OUT/fetch_istella.done" ]; do sleep 5; done
+          run download-istella timeout -k 30 2700 "$PY" tools/speed_gbdt_arm.py --download istella
           echo "rc=$?" > "$OUT/istella.done" ) &
+        while [ ! -f "$OUT/fetch_taxi.done" ]; do sleep 5; done
         run download-taxi timeout -k 30 1500 "$PY" tools/speed_gbdt_arm.py --download taxi
         echo "rc=$?" > "$OUT/taxi.done"
         wait
