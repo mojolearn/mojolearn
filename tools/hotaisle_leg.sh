@@ -1426,10 +1426,23 @@ else:
     rc = lib.hipGetDeviceCount(ctypes.byref(n))
     count = n.value if rc == 0 else 0
     print("HIP_COUNT rc=%d count=%d" % (rc, count))
-    for i in range(count):
-        buf = ctypes.create_string_buffer(64)
-        r = lib.hipGetDevicePciBusId(buf, 64, i)
-        print("HIP_DEVICE index=%d rc=%d bus=%s" % (i, r, buf.value.decode("ascii", "replace").lower()))
+    # The bus-id call mirrors CUDA's cudaGetDevicePCIBusId, and the first real
+    # 2gpu test (VM enc1-gpuvm005, ROCm 6.4.1 image) showed libamdhip64 has no
+    # hipGetDevicePciBusId; look the name up instead of assuming its spelling.
+    busfn = None
+    for name in ("hipGetDevicePCIBusId", "hipGetDevicePciBusId"):
+        try:
+            busfn = getattr(lib, name)
+            break
+        except AttributeError:
+            pass
+    if busfn is None:
+        print("HIP_BUS_UNAVAILABLE no hipGetDevicePCIBusId symbol")
+    else:
+        for i in range(count):
+            buf = ctypes.create_string_buffer(64)
+            r = busfn(buf, 64, i)
+            print("HIP_DEVICE index=%d rc=%d bus=%s" % (i, r, buf.value.decode("ascii", "replace").lower()))
 PY
 fi
 PINPROBE
@@ -1609,6 +1622,13 @@ probe_read() {  # <one pin probe's output>: sets PR_COUNT, PR_BUS, PR_VIA
     PR_VIA=hip
     PR_COUNT=$(sed -n 's/^HIP_COUNT rc=0 count=\([0-9]*\).*/\1/p' "$1" | head -1)
     PR_BUS=$(sed -n 's/^HIP_DEVICE index=0 rc=0 bus=\([0-9a-f:.]*\).*/\1/p' "$1" | head -1)
+    if [ -z "$PR_BUS" ] && [ "$PR_COUNT" = 1 ]; then
+      # HIP counted the view but gave no bus id (no bus-id symbol in this
+      # libamdhip64): the address is the one rocminfo reads in the same
+      # container, and the count still comes from HIP.
+      PR_BUS=$(sed -n 's/^ROCMINFO_GPU bdf=\([0-9a-f:.]*\) .*/\1/p' "$1" | head -1)
+      [ -n "$PR_BUS" ] && PR_VIA=hip+rocminfo
+    fi
   elif grep -q '^HIP_COUNT ' "$1"; then
     PR_VIA=hip; PR_COUNT=0   # HIP answered with an error: no device in this view
   elif grep -q '^HIP_UNAVAILABLE' "$1"; then
