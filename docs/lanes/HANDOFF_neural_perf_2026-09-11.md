@@ -183,6 +183,26 @@ No AMD timing of this step exists at the target shape.
      name. RUN OWED order: dry run, `--probe`, `--rent --watchdog-test`, then a
      tiny real body. Andrew should mint a key scoped to this team with the
      operator role, since the key rides on the VM.
+0e. RESTARTED 2026-09-11 ~15:00Z (Andrew: "start the runner lanes ... we have
+   hot aisle now ... benchmark all of our opponents there ... continue with all
+   of our improvement strategies"). The trees session builds the Hot Aisle
+   runner (branch lane/hotaisle-runner-ready, `RUNNER READY:` commit subject
+   when its self-delete test passes; the team limit is 2 VMs, shared through
+   /tmp/mojolearn-hotaisle-slot.1 and .2; priority: AMD GBDT identity fix,
+   then opponent rows including neural's torch ROCm row, then speed A/Bs).
+   - The 0.457 s question is RESOLVED: pod speed, not the GEMM trial build
+     (GEMM brief 10.7; bench/results/e1g/2026-09-11_150622-nvidia-h100-80gb-hbm3-trial-overhead2).
+     RunPod H100 pods came in two speeds today (1980 MHz clock reading: 0.380
+     to 0.383 s; 1590 MHz: 0.455 to 0.457 s, a correlation over four pods);
+     compare step times only within one pod.
+   - GEMM long inner dimension arms `ksplit` and `ksplit_leaf` (DEVIATIONS
+     2590 to 2594) MERGED 3612e17d, trial only, after M4 gates (host group
+     fold 98,024 folds 0 disagree, rule hand counts 0 failures, 102 ragged x 8
+     geometries and 5 group sizes bit-equal with reach 102/102, no-trial build
+     fails naming the define, gemm_device_check green, price and resources
+     compile). Its H100 leg (`tools/gemm_longk_leg.sh`) launched from a
+     detached worktree at 3612e17d.
+   - Attention round 3 (2533, 2531, 2530) is building in a worktree lane.
 1. The DigitalOcean runner is merged and its dry run is green (section 3);
    its first paid run is also its bring-up. Tuning on AMD is now a repo rule
    for every lane (ENGINEERING_RULES.md section 10), and the account allows
