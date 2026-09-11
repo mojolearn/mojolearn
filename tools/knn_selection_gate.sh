@@ -17,14 +17,19 @@
 # dyadic-v1) is an H100 tuple; on any other GPU the gate still runs and the
 # JSON still carries the ratio, labeled cached-reference, but it is not
 # admissible against that row. cuML is NOT rerun for dyadic: the tuple
-# exists. THAT CACHED ROW IS DYADIC ONLY. The second kind (DEVIATION 2524,
-# ENGINEERING_RULES.md section 9), the real HIGGS prefix the gate's `higgs`
-# fixture times, has its own opponent tuple, measured ONCE on its first leg
-# by the optional `opponent` phase below and then cached in
-# bench/OPPONENT_REFERENCE.md ("kNN second kind (HIGGS rows)"); after that
-# the phase stays off and the gate quotes the cached HIGGS row through
-# MOJOLEARN_KNN_SELECTION_CACHED_OPPONENT_HIGGS (k10=ms,k15=ms; default
-# empty until the row exists).
+# exists. THAT CACHED ROW IS DYADIC ONLY. The two real datasets (DEVIATION
+# 2524, ENGINEERING_RULES.md section 9, rewritten 2026-09-11), NYC taxi's
+# 11 numeric columns and Istella-S's 220 features, the gate's `taxi` and
+# `istella` fixtures, each have their own opponent tuple, measured ONCE per
+# dataset on the first leg by the optional `opponent` phase below and then
+# cached in bench/OPPONENT_REFERENCE.md; after that the phase stays off and
+# the gate quotes the cached rows through
+# MOJOLEARN_KNN_SELECTION_CACHED_OPPONENT_TAXI and
+# MOJOLEARN_KNN_SELECTION_CACHED_OPPONENT_ISTELLA (k10=ms,k15=ms; default
+# empty until each row exists). HIGGS is RETIRED (2026-09-11): the `higgs`
+# fixture, its prefetch and its opponent tuple are not run by this script
+# any more; naming higgs in MOJOLEARN_KNN_SELECTION_FIXTURES still reaches
+# the harness's retired path, for re-deriving an old JSON only.
 #
 # THREE PHASES plus an optional fourth, each with its own exit code in
 # status.tsv; a later phase runs even when an earlier one fails, because a
@@ -45,32 +50,45 @@
 #   gate      tools/knn_selection_gate.py against that binding: fixtures,
 #             arm equality, order/tie/oracle checks, reach by sabotage,
 #             then ordinary-request timing, under the 300 s deadline.
-#             Preceded by `prefetch-higgs` (tools/knn_datasets.py
-#             --prefetch higgs): the 2.6 GB HIGGS.csv.gz download when the
-#             box lacks it and the 404,000-line decode into the
-#             GBM_BENCH_DATA cache (default ~/datasets/gbm-bench, the trees
-#             lane's store), as its own status.tsv row and never inside the
-#             gate's deadline. The fresh gemm-leg pod has no volume, so a
-#             new pod pays the download once per leg.
+#             Preceded by `prefetch-taxi` and `prefetch-istella`
+#             (tools/knn_datasets.py --prefetch <dataset>): a CHECK that
+#             the trees harness's NumPy caches (taxi/taxi_speed.npz,
+#             istella/istella_speed.npz under GBM_BENCH_DATA, default
+#             ~/datasets/gbm-bench) are on the box, reading the 404,000-row
+#             prefix and printing its shapes and sha256, as its own
+#             status.tsv row and never inside the gate's deadline. NOTHING
+#             IS DOWNLOADED HERE: the caches are built once, untimed, by
+#             `python tools/speed_gbdt_arm.py --download taxi` and
+#             `--download istella` (the trees harness owns them). The
+#             fresh gemm-leg pod has no volume, so a leg that wants the
+#             real fixtures runs those two commands on the pod BEFORE this
+#             script (about 100 MB of parquet plus pyarrow for taxi, 472
+#             MB for Istella, minutes of decode); a missing cache is a red
+#             prefetch row whose log names the command, and the gate then
+#             fails that fixture by name before its deadline is armed.
 #   opponent  OPTIONAL, MOJOLEARN_KNN_SELECTION_OPPONENT=1 (default off):
-#             cuML brute-force NearestNeighbors on the SAME HIGGS prefix
-#             (tools/knn_cuml_reference.py --dataset higgs, index 400,000,
-#             queries 4,000, k 10 and 15, 7 rounds, request and device
-#             regions), in a venv built the way tools/knn_reference_leg.sh
-#             builds it (numpy==2.4.6 cupy-cuda12x==14.2.0 cuml-cu12==26.8.0
-#             from pypi.nvidia.com), AFTER the gate. Runs ONCE, on the first
-#             leg that needs the HIGGS tuple; its JSON lands in
-#             $OUT/opponent-higgs/ and its numbers go into
-#             bench/OPPONENT_REFERENCE.md, after which the switch stays off.
-#             MOJOLEARN_KNN_REF_PY names an existing cuML python to skip the
-#             venv, as in tools/knn_reference_leg.sh.
+#             cuML brute-force NearestNeighbors on the SAME taxi and
+#             Istella blocks (tools/knn_cuml_reference.py --dataset taxi,
+#             then --dataset istella; index 400,000, queries 4,000, k 10
+#             and 15, 7 rounds, request and device regions), in a venv
+#             built the way tools/knn_reference_leg.sh builds it
+#             (numpy==2.4.6 cupy-cuda12x==14.2.0 cuml-cu12==26.8.0 from
+#             pypi.nvidia.com), AFTER the gate. Runs ONCE per dataset, on
+#             the first leg that needs the tuple; each JSON lands in
+#             $OUT/opponent-<dataset>/ and its numbers go into
+#             bench/OPPONENT_REFERENCE.md, after which the switch stays
+#             off. MOJOLEARN_KNN_SELECTION_OPPONENT_DATASETS (default
+#             `taxi istella`, space separated) picks which.
+#             MOJOLEARN_KNN_REF_PY names an existing cuML python to skip
+#             the venv, as in tools/knn_reference_leg.sh.
 #
 # FIXTURE SELECTION: MOJOLEARN_KNN_SELECTION_TIME_FIXTURES (default the
-# harness default, `dyadic,large,higgs` since DEVIATION 2524) is passed as
-# --time-fixtures; MOJOLEARN_KNN_SELECTION_FIXTURES (default the harness
-# default, `large,dyadic,ties,divergent_tail,higgs`) as --fixtures. Both
-# are passed only when set, so the harness's own defaults govern otherwise.
-# The prefetch is skipped when FIXTURES is set and does not name higgs.
+# harness default, `dyadic,large,taxi,istella` since 2026-09-11) is passed
+# as --time-fixtures; MOJOLEARN_KNN_SELECTION_FIXTURES (default the harness
+# default, `large,dyadic,ties,divergent_tail,taxi,istella`) as --fixtures.
+# Both are passed only when set, so the harness's own defaults govern
+# otherwise. A dataset's prefetch check is skipped when FIXTURES is set and
+# does not name it.
 #
 # THE ARMS (MOJOLEARN_KNN_SELECTION_ARMS, default baseline,headbound):
 # `baseline` is the 2026-09-09 kernel, `uniform` is C4 alone (DEVIATION
@@ -116,9 +134,12 @@ TIMING_ONLY=${MOJOLEARN_KNN_SELECTION_TIMING_ONLY_ARMS:-}
 PHASE_TIMERS=${MOJOLEARN_KNN_SELECTION_PHASE_TIMERS:-0}
 PAIRS=${MOJOLEARN_KNN_SELECTION_PAIRS:-3}
 CACHED=${MOJOLEARN_KNN_SELECTION_CACHED_OPPONENT:-k10=10.225,k15=10.817}
-# The HIGGS opponent tuple (DEVIATION 2524): empty until measured once and
-# cached in bench/OPPONENT_REFERENCE.md; then k10=ms,k15=ms.
-CACHED_HIGGS=${MOJOLEARN_KNN_SELECTION_CACHED_OPPONENT_HIGGS:-}
+# The real datasets' opponent tuples (ENGINEERING_RULES.md section 9):
+# empty until each is measured once and cached in
+# bench/OPPONENT_REFERENCE.md; then k10=ms,k15=ms.
+CACHED_TAXI=${MOJOLEARN_KNN_SELECTION_CACHED_OPPONENT_TAXI:-}
+CACHED_ISTELLA=${MOJOLEARN_KNN_SELECTION_CACHED_OPPONENT_ISTELLA:-}
+OPPONENT_DATASETS=${MOJOLEARN_KNN_SELECTION_OPPONENT_DATASETS:-taxi istella}
 TIME_FIXTURES=${MOJOLEARN_KNN_SELECTION_TIME_FIXTURES:-}
 FIXTURES=${MOJOLEARN_KNN_SELECTION_FIXTURES:-}
 OPPONENT=${MOJOLEARN_KNN_SELECTION_OPPONENT:-0}
@@ -128,8 +149,8 @@ cd "$ROOT" || exit 9
 export PATH="$HOME/.pixi/bin:$PATH"
 export OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 NUMEXPR_NUM_THREADS=2
 # One dataset store for the prefetch, the gate and the opponent: the trees
-# lane's (tools/speed_gbdt_arm.py::data_root), so a box that has HIGGS
-# already fetches nothing.
+# lane's (tools/speed_gbdt_arm.py::data_root), whose `--download taxi` and
+# `--download istella` caches are the only source of the real fixtures.
 GBM_BENCH_DATA=${GBM_BENCH_DATA:-$HOME/datasets/gbm-bench}
 export GBM_BENCH_DATA
 
@@ -165,7 +186,9 @@ run() {
     echo "phase_timers=$PHASE_TIMERS"
     echo "pairs=$PAIRS"
     echo "cached_opponent=$CACHED"
-    echo "cached_opponent_higgs=$CACHED_HIGGS"
+    echo "cached_opponent_taxi=$CACHED_TAXI"
+    echo "cached_opponent_istella=$CACHED_ISTELLA"
+    echo "opponent_datasets=$OPPONENT_DATASETS"
     echo "time_fixtures=${TIME_FIXTURES:-(harness default)}"
     echo "fixtures=${FIXTURES:-(harness default)}"
     echo "opponent=$OPPONENT"
@@ -253,23 +276,29 @@ if [ -z "$PY" ]; then
     printf 'gate\t9\t0s\n' >> "$OUT/status.tsv"
     rc=1
 else
-    # The real fixture's fetch and decode, OUTSIDE the gate's deadline and
-    # with its own status row (DEVIATION 2524). Skipped only when FIXTURES
-    # is set and leaves higgs out. Generous fence: this is a network fetch.
-    NEED_HIGGS=1
-    case ",$FIXTURES," in
-        ,,) ;;
-        *,higgs,*) ;;
-        *) NEED_HIGGS=0 ;;
-    esac
-    if [ "$NEED_HIGGS" = "1" ]; then
-        # shellcheck disable=SC2086
-        run prefetch-higgs timeout -k 30 1800 $PY tools/knn_datasets.py --prefetch higgs
-    fi
+    # The real fixtures' cache check, OUTSIDE the gate's deadline and with
+    # its own status row per dataset (DEVIATION 2524). No download: the
+    # caches are the trees harness's (`python tools/speed_gbdt_arm.py
+    # --download taxi|istella`); a missing one is a red row here and a
+    # named failure in the gate. Skipped for a dataset only when FIXTURES
+    # is set and leaves it out.
+    for ds in taxi istella; do
+        NEED=1
+        case ",$FIXTURES," in
+            ,,) ;;
+            *,$ds,*) ;;
+            *) NEED=0 ;;
+        esac
+        if [ "$NEED" = "1" ]; then
+            # shellcheck disable=SC2086
+            run "prefetch-$ds" timeout -k 30 600 $PY tools/knn_datasets.py --prefetch "$ds"
+        fi
+    done
     FIXTURE_FLAGS=""
     [ -n "$TIME_FIXTURES" ] && FIXTURE_FLAGS="$FIXTURE_FLAGS --time-fixtures $TIME_FIXTURES"
     [ -n "$FIXTURES" ] && FIXTURE_FLAGS="$FIXTURE_FLAGS --fixtures $FIXTURES"
-    [ -n "$CACHED_HIGGS" ] && FIXTURE_FLAGS="$FIXTURE_FLAGS --cached-opponent-higgs $CACHED_HIGGS"
+    [ -n "$CACHED_TAXI" ] && FIXTURE_FLAGS="$FIXTURE_FLAGS --cached-opponent-taxi $CACHED_TAXI"
+    [ -n "$CACHED_ISTELLA" ] && FIXTURE_FLAGS="$FIXTURE_FLAGS --cached-opponent-istella $CACHED_ISTELLA"
     # `timeout` is a second fence outside the harness's own 300 s deadline.
     # shellcheck disable=SC2086
     PYTHONPATH="$ROOT/python" MOJOLEARN_NUMERIC_MODE=identical \
@@ -279,18 +308,17 @@ else
         --cached-opponent "$CACHED" $FIXTURE_FLAGS
 fi
 
-# ---- opponent (optional): the HIGGS cuML row, measured ONCE --------------
+# ---- opponent (optional): the taxi and Istella cuML rows, measured ONCE --
 # ENGINEERING_RULES.md section 9: an opponent row is measured once per (GPU,
-# driver, opponent version, dataset) and cached; the second kind is a new
-# tuple. Same venv recipe as tools/knn_reference_leg.sh (system python3,
+# driver, opponent version, dataset) and cached; each real dataset is its
+# own tuple. Same venv recipe as tools/knn_reference_leg.sh (system python3,
 # --system-site-packages, the pinned NVIDIA wheels); MOJOLEARN_KNN_REF_PY
 # names an existing cuML python instead. Runs after the gate so the gate's
 # GPU window is not shared with a 1 GB wheel install. The venv lives OUTSIDE
 # /root/gemm_leg_out: the leg tars that whole directory home over the Mac's
-# uplink, and a gigabyte of wheels is not evidence.
+# uplink, and a gigabyte of wheels is not evidence. The reference tool reads
+# the same trees-harness caches the prefetch checked; it never downloads.
 if [ "$OPPONENT" = "1" ]; then
-    OPP_OUT="$OUT/opponent-higgs"
-    mkdir -p "$OPP_OUT"
     OPY=${MOJOLEARN_KNN_REF_PY:-}
     if [ -z "$OPY" ]; then
         VENV=${MOJOLEARN_KNN_CUML_VENV:-/root/knn-cuml-venv}
@@ -300,9 +328,13 @@ if [ "$OPPONENT" = "1" ]; then
             numpy==2.4.6 cupy-cuda12x==14.2.0 cuml-cu12==26.8.0 --extra-index-url https://pypi.nvidia.com
     fi
     run opponent-freeze "$OPY" -m pip freeze
-    run opponent timeout -k 30 1800 "$OPY" tools/knn_cuml_reference.py --dataset higgs \
-        --index 400000 --queries 4000 --k 10 15 --rounds 7 --out "$OPP_OUT"
-    [ -f "$OPP_OUT/cuml-reference-higgs.json" ] && grep -h 'CUML_REF ' "$OUT/opponent.log" > "$OPP_OUT/summary.txt" 2>/dev/null
+    for ds in $OPPONENT_DATASETS; do
+        OPP_OUT="$OUT/opponent-$ds"
+        mkdir -p "$OPP_OUT"
+        run "opponent-$ds" timeout -k 30 1800 "$OPY" tools/knn_cuml_reference.py --dataset "$ds" \
+            --index 400000 --queries 4000 --k 10 15 --rounds 7 --out "$OPP_OUT"
+        [ -f "$OPP_OUT/cuml-reference-$ds.json" ] && grep -h 'CUML_REF ' "$OUT/opponent-$ds.log" > "$OPP_OUT/summary.txt" 2>/dev/null
+    done
 fi
 
 nvidia-smi --query-gpu=name,driver_version,uuid,clocks.sm,temperature.gpu --format=csv > "$OUT/gpu_after.csv" 2>&1
