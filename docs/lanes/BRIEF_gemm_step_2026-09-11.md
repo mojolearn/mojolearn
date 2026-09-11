@@ -302,3 +302,93 @@ file of section 7, the trial hook in `identical_gemm_into`, the arm kernel
 and launchers, the probe field. DEVIATIONS 2542 (hook and selector), 2543
 (check, price, resources) and 2544 (leg and probe field) are reserved for
 those and not yet used.
+
+## 10. Build lane (September 11, 2026, second session)
+
+Source only, like the first session: nothing below ran on the Mac or on a
+GPU. Section 10.1 and 10.2 were written before the kernel code they
+describe; 10.3 onward after it.
+
+### 10.1 The identity argument for the kernel as built
+
+`gemm/checks/gemm_identical.mojo::identical_gemm_step_arm_kernel[RPT, CPT,
+TC, KS, PAGES, LFOLD, SAB]` is `identical_gemm_tuned_kernel` with `SPLIT =
+False`, `FS = TUNED_FOLD_SLOTS` and `SWIZZLE_NONE` fixed. Copied unchanged:
+the prologue, `_tuned_g2r` for both operands, the register to shared copy
+into page `w % PAGES` in both staging mappings, the prefetch, both
+accumulate paths through `_tuned_loaded_operand` and `_tuned_step`, the
+`PAGES == 1` barrier, and the leaf boundary test `win[2] == 1`. What
+differs, and why no stored bit can move:
+
+1. The LFOLD leaf boundary (2540). `depth` is the number of trailing one
+   bits of `occ`, computed once per thread per leaf. If `depth >= FS` the
+   thread returns: that is fold overflow, `P >= 2^16`, unreachable under
+   the profile cap `P <= 1024`, and block uniform because `occ` is a
+   function of the leaf count alone, so every thread of the block returns
+   at the same window and no barrier is left waiting. Otherwise, for each
+   cell `e` ascending, `val = ftz(acc[e])` (5d); for `d` in `0 .. depth-1`,
+   `val = ftz(ftz(stack[d NCELL + e]) + ftz(val))` (5e, 5f, the slot on the
+   left); `stack[depth NCELL + e] = val`; then `occ += 1`.
+   `_fold_push_local` merges every cell at once at `d = 0, 1, ...` while
+   bit `d` is set, stores at the first clear bit, and computes
+   `occ - (2^depth - 1) + 2^depth`, which is `occ + 1`. Same operands, same
+   order, same slot, per cell. Cells share no float, so walking them one at
+   a time cannot reorder any cell's additions.
+2. The LFOLD drain. Per cell, `_fold_drain_local`'s element expression
+   (ascending `d`, the first occupied slot copied bit for bit, each later one
+   `ftz(ftz(slot) + ftz(root))`), then the stored `ftz(root)` (5g). The arm
+   drains only cells inside the output (`gi < m`, `gj < n`); the shipped
+   kernel drains every lane and masks the store. A drain that is never
+   stored moves no stored bit.
+3. `LFOLD = False` keeps the shipped lane-wide `_fold_push_local` and
+   `_fold_drain_local` calls. It is not an arm: it is the resources
+   control, the trimmed copy at the shipped geometry.
+4. No swizzle: `tile = raw`, the identity bijection, which is what the
+   shipped plan passes (`SWIZZLE_NONE`).
+5. The arm kernel names none of the file's global sabotage switches itself
+   (the shared helpers it calls keep theirs). The arms check refuses to run
+   on a build that defines one, because its baseline would be a sabotaged
+   kernel.
+6. `SAB = True` (reach, 6.3). At the store, thread 0's cell `(u, v) = (0,
+   0)`, which is output cell `(i0, j0)` and always inside the output,
+   stores `_gemm_step_arm_sabotage(value)`: `+-0.0` becomes `+-2^-100` (bit
+   pattern `0x0D800000` with the sign kept, a normal no later seam
+   flushes), any other pattern becomes the pattern plus one. The `k == 0`
+   store does the same. So a sabotage launch moves exactly one cell per
+   block, and the check requires `moved == blocks` of that geometry, which
+   also names the geometry that ran (`half` at proj fwd is 192 blocks, the
+   shipped 96).
+7. The geometries (execution plan, contract 6.1). `lfold`: `(2 TUNED_RPT,
+   2 TUNED_CPT, TUNED_TC, 16)`, 128x128. `half`: `(TUNED_RPT, 2 TUNED_CPT,
+   TUNED_TC, GEMM_HALF_KS)`, 64x128, `GEMM_HALF_KS` 32 where
+   `lib_smem_pages_for` answers 2 for the 27,648 B page at KS 32, else 16.
+   `half_ks16`: the same at 16. `quarter`: `(TUNED_RPT, TUNED_CPT,
+   TUNED_TC, TUNED_64_KS)`, 64x64. `head`: with `W =
+   lib_lane_width_for[TARGET_COLUMN]` when `W` is a power of two in 8 ..
+   256 and the block is 256 threads, else 16. N-wide (`n >= m`): `TC = W`,
+   `RPT = 32 / (256 / W)`, `CPT = 256 / W`, tile 32x256. M-wide (`m > n`):
+   `TC = 256 / W`, `RPT = 256 / W`, `CPT = 32 / (256 / W)`, tile 256x32.
+   KS 16. AMD (`W = 64`): N-wide reg 8x4 TC 64, M-wide reg 4x8 TC 4.
+   NVIDIA and Apple (`W = 32`): N-wide reg 4x8 TC 32, M-wide 8x4 TC 8.
+   `PAGES` from `lib_smem_pages_for` at `(BM + BN)(KS + 4) 4` bytes, and a
+   comptime assert that one page fits (`lib_smem_page_fits_for`). None of
+   these reaches `leaf_in` or `p_in`, which the launcher takes from
+   `contract_partition(k)` exactly as `identical_gemm_with_plan` does.
+8. Applicability (2542). `gemm_step_arm_geometry(arm, m, n, k)` returns the
+   shipped geometry unless `choose_gemm_plan(m, n, k)` is
+   `PLAN_TUNED_128_8X8`; `head` also requires `max(m, n, k) >= 16,384`. It
+   reads `m`, `n`, `k` and returns a geometry id, never a partition.
+
+### 10.2 A claim of 6.2 the ownership rule does not support
+
+6.2 says the head tile puts "one wavefront or warp" on "consecutive cells of
+the long axis". That holds for the N-wide tile only. Thread `tid` owns rows
+`tid / TC + u TR` and columns `tid mod TC + v TC`. With `TC = W`, a lane's
+`W` threads share one `accrow` and take every `acccol`, so one lane owns
+all 256 columns of the tile. The M-wide tile's long axis is rows, and a
+lane of `W` threads spans only `W / TC = W^2 / 256` consecutive `accrow`
+values (16 on AMD, 4 on NVIDIA), each strided by `TR = W`. Under this
+kernel's ownership rule no M-wide geometry with `W < 256` puts a lane on
+consecutive long-axis rows. The geometry is still legal execution plan and
+is built as designed; a head dA or head dB price is not evidence about lane
+alignment.
