@@ -13,8 +13,8 @@
 #                 -> tools/hotaisle_leg.sh amd --rent
 #   do            the DigitalOcean GPU lock is free and no GPU droplet is live
 #                 -> tools/do_extra_leg.sh amd (it takes the lock itself)
-#   runpod-amd    RunPod has AMD MI300X stock and fewer than 3 non-samba pods
-#   runpod-nvidia RunPod has stock of --gpu and fewer than 3 non-samba pods
+#   runpod-amd    RunPod has AMD MI300X stock and fewer than MOJOLEARN_RUNPOD_MAX_PODS (default 5) non-samba pods
+#   runpod-nvidia RunPod has stock of --gpu and fewer than MOJOLEARN_RUNPOD_MAX_PODS (default 5) non-samba pods
 #                 -> tools/trees_leg.sh / tools/gemm_remote_leg.sh (NVIDIA row)
 #   none          nothing can take it now; exit 3
 #
@@ -104,7 +104,9 @@ print(running, amd, nv)
   set -- $out
   local running=${1:-9} amd=${2:-None} nv=${3:-None}
   say "runpod: running non-samba pods $running, MI300X stock $amd, $GPU stock $nv"
-  [ "$running" -lt 3 ] 2>/dev/null || return 1
+  # The old 3-pod cap protected a ~30 KB/s uplink (Sep 7); on Sep 11 a 9.6 MB
+  # bundle uploaded in 4 s, so the cap is 5 unless MOJOLEARN_RUNPOD_MAX_PODS says.
+  [ "$running" -lt "${MOJOLEARN_RUNPOD_MAX_PODS:-5}" ] 2>/dev/null || return 1
   if [ "$amd" != None ]; then echo runpod-amd; return 0; fi
   if [ "$NEED" = any ] && [ "$nv" != None ]; then echo runpod-nvidia; return 0; fi
   return 1

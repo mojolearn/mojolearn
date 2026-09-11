@@ -43,6 +43,35 @@ from training.byte_lm import (
     byte_validate_state, byte_validate_optimizer,
     byte_validate_tokens, byte_lm_fault_inject_available,
 )
+from transformer.impl.llama.fused_attention import (
+    ATTN_ARM_DEFAULT,
+    ATTN_ARM_TRIAL,
+    fused_attention_arm_backward_resolved,
+    fused_attention_arm_forward_resolved,
+    fused_attention_arm_from_env,
+    fused_attention_arm_name,
+)
+
+
+def byte_lm_attention_arm_binding() raises -> PythonObject:
+    """DEVIATION 2534 read-back, so a result can never confuse `baseline`,
+    `stash_tiled` and the column's default: [arm, default, trial_build,
+    resolved_hd64]. `arm` is the name of the arm this process's launchers
+    run (a trial build reads MOJOLEARN_ATTN_ARM and raises on an unknown
+    name, exactly as the launchers do; every other build returns the
+    default without reading the environment); `default` is the column's
+    kernel-matrix row (`attn_default_arm_for`); `trial_build` is 1 under
+    `-D MOJOLEARN_ATTN_ARM_TRIAL=1`; `resolved_hd64` is the arm with its
+    geometry resolved as the launchers resolve it at head_dim 64 on this
+    build. Reads constants and the environment only; no GPU operation."""
+    var arm = fused_attention_arm_from_env()
+    var resolved = fused_attention_arm_forward_resolved(arm) | fused_attention_arm_backward_resolved(arm)
+    var out = Python.list()
+    out.append(PythonObject(fused_attention_arm_name(arm)))
+    out.append(PythonObject(fused_attention_arm_name(ATTN_ARM_DEFAULT)))
+    out.append(PythonObject(1 if ATTN_ARM_TRIAL else 0))
+    out.append(PythonObject(fused_attention_arm_name(resolved)))
+    return out
 
 
 struct ByteLMSession(Movable, Writable):
@@ -1038,6 +1067,8 @@ def PyInit__mojolearn_byte_lm() abi("C") -> PythonObject:
         module.def_function[byte_lm_session_rollback_binding]("byte_lm_session_rollback")
         module.def_function[byte_lm_session_info_binding]("byte_lm_session_info")
         module.def_function[byte_lm_fault_inject_available_binding]("byte_lm_fault_inject_available")
+        # DEVIATION 2534: the attention arm read-back (arm, default, trial, resolved).
+        module.def_function[byte_lm_attention_arm_binding]("byte_lm_attention_arm")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_byte_lm: ", error))

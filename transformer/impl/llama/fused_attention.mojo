@@ -61,18 +61,23 @@ materialized in HBM" where the shape makes it cheap: at the LM target
 shape (batch 1, 12 heads, L 2048) a `[B, n_heads, L, S]` scratch is 201 MB
 and the recomputation it replaces is 61 percent of the training step.
 They keep every chain's terms and order and change only what is
-recomputed and which thread holds which chain. The composed arm
-`stash_tiled` is the shipped default since the 2026-09-11 H100 leg (a
-bit-equal 1.47x on the lean target step on both corpora); the kernels
-above remain the path for every head dim other than 64 and the reference
-every arm is gated against. See the arm hook below. DEVIATION 2528 (the
-second round, brief section 12) and DEVIATIONS 2533, 2531 and 2530 (the
-third round, brief section 14: preflushed seams, the forward grid, forward
-Q residency) are trial-build arms on top of stash_tiled; the shipped build
-compiles none of their kernels.
+recomputed and which thread holds which chain. The shipped arm is a
+kernel-matrix ROUTING row per column (`attn_default_arm_for`, DEVIATION
+2534): `stash_tiled` on every column since the first 2026-09-11 H100 leg
+(a bit-equal 1.47x on the lean target step on both corpora), and on NVIDIA
+`stash_tiled_fgrid_r32_qres_pf` since the round 3 H100 leg (lean step 0.87
+of stash_tiled's on both corpora, every witness equal). The kernels above
+remain the path for every head dim other than 64 and the reference every
+arm is gated against. See the arm hook below. DEVIATION 2528 (the second
+round, brief section 12) and DEVIATIONS 2533, 2531 and 2530 (the third
+round, brief section 14: preflushed seams, the forward grid, forward Q
+residency) are trial-build arms on top of stash_tiled; a shipped build
+compiles only the clean third-round instantiations its column's default
+needs.
 
-`[[ALWAYS GPU-agnostic]]`: one source; the only vendor row read is
-`lib_hardware_ftz_fma_for`, through the kernel matrix.
+`[[ALWAYS GPU-agnostic]]`: one source and no vendor branch; the rows read
+(`lib_hardware_ftz_fma_for`, the scheduling rows, `attn_default_arm_for`)
+come through the kernel matrix.
 """
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
@@ -91,7 +96,10 @@ from core.device_scan import (
     nonfinite_partial_kernel,
 )
 from checks.kernel_matrix import (
+    ATTN_DEFAULT_WORD_STASH_TILED,
+    ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF,
     TARGET_COLUMN,
+    attn_default_arm_for,
     attn_fwd_rows_per_block_for,
     attn_zdot_rows_per_block_for,
     lib_hardware_ftz_fma_for,
@@ -185,7 +193,9 @@ comptime FUSED_HW_FTZ_FMA = lib_hardware_ftz_fma_for[TARGET_COLUMN]()
 #                                      32 rows only; the tokens compose,
 #                                      e.g. stash_tiled_ztiled_r64_pf,
 #                                      stash_tiled_fgrid_r32_qres_pf
-#   unset or empty                     the build default, ATTN_ARM_DEFAULT
+#   unset or empty                     the column's build default,
+#                                      ATTN_ARM_DEFAULT (kernel matrix row
+#                                      `attn_default_arm_for`)
 #   anything else                      RAISES; the harness relies on it
 #   MOJOLEARN_ATTN_ARM_SABOTAGE=1      the chosen arm's SABOTAGE
 #                                      instantiation (reach proof; each
@@ -197,9 +207,13 @@ comptime FUSED_HW_FTZ_FMA = lib_hardware_ftz_fma_for[TARGET_COLUMN]()
 # brief section 12.1.
 #
 # ATTN_ARM_DEFAULT is what the shipped build runs; it reads no environment.
-# It was `baseline` until the 2026-09-11 H100 leg flipped it to stash_tiled
-# (see its docstring); a shipped build compiles only the default arm's
-# clean kernels (ATTN_ARM_COMPILED). The arms instantiate at head_dim 64 (the
+# It was `baseline` until the 2026-09-11 H100 leg flipped it to stash_tiled;
+# it is now the kernel-matrix row `attn_default_arm_for` (NVIDIA
+# stash_tiled_fgrid_r32_qres_pf since the round 3 H100 leg, DEVIATION 2534;
+# see its docstring). A shipped build compiles only the default arm's clean
+# kernels (ATTN_ARM_COMPILED, ATTN_SHIPPED_FWD_R2, ATTN_SHIPPED_BWD_PF), and
+# `fused_forward_launch_ran` / `fused_backward_launch_ran` report which
+# kernels launched. The arms instantiate at head_dim 64 (the
 # target shape); any other head dim takes the shipped kernels under every
 # arm, and the status line of the launchers says nothing about it, so the
 # harness asserts the arm's own witness (the sabotage flip) rather than
@@ -279,17 +293,43 @@ comptime ATTN_ARM_NEW_FWD_BITS = ATTN_ARM_FWD_QRES | ATTN_ARM_FWD_GRID
 acts on whichever direction runs a stash kernel, so the direction test is
 `fused_attention_arm_new_forward` / `fused_attention_arm_new_backward`,
 never this mask by itself."""
-comptime ATTN_ARM_DEFAULT = ATTN_ARM_FWD_SSTASH | ATTN_ARM_BWD_STASH | ATTN_ARM_BWD_TILED
-"""FLIPPED 2026-09-11 to stash_tiled (DEVIATIONS 2525 to 2527): H100 leg
-bench/results/e1g/2026-09-11_113013-nvidia-h100-attention-step, bit-equal
-to the shipped kernels and to the eager oracle on real activations from
-both corpora, lean target step 0.562/0.559 s -> 0.383/0.380 s
-(shakespeare/cpython) with every step witness equal. A later leg that
-flips again edits this line and the brief."""
+comptime ATTN_ARM_STASH_TILED = ATTN_ARM_FWD_SSTASH | ATTN_ARM_BWD_STASH | ATTN_ARM_BWD_TILED
+"""The composed first-round arm `stash_tiled` (DEVIATIONS 2525 to 2527)."""
+comptime ATTN_ARM_R3_DEFAULT = (
+    ATTN_ARM_STASH_TILED | ATTN_ARM_FWD_GRID | ATTN_ARM_FROWS32
+    | ATTN_ARM_FWD_QRES | ATTN_ARM_PREFLUSH
+)
+"""`stash_tiled_fgrid_r32_qres_pf`: DEVIATIONS 2531 (32 rows), 2530 and
+2533 on top of stash_tiled."""
+comptime ATTN_ARM_DEFAULT_REFUSED_BITS = (
+    ATTN_ARM_SABOTAGE | ATTN_ARM_SABOTAGE_NEW | ATTN_ARM_BWD_ZTILED
+    | ATTN_ARM_ZROWS32 | ATTN_ARM_ZROWS64
+)
+"""Bits a default arm may not carry: the sabotages, and DEVIATION 2528,
+whose kernels a shipped build does not compile (no NVIDIA flip, brief
+section 13)."""
+comptime ATTN_ARM_DEFAULT = attn_default_arm_for[TARGET_COLUMN]()
+"""THE SHIPPED ARM, per column, from the kernel-matrix ROUTING row
+`attn_default_arm_for` (DEVIATION 2534, brief section 15; this file names no
+vendor). A shipped build runs it and reads no environment; a trial build
+runs it when MOJOLEARN_ATTN_ARM is unset or empty.
+
+History. `baseline` until the H100 leg
+bench/results/e1g/2026-09-11_113013-nvidia-h100-attention-step flipped every
+column to stash_tiled (DEVIATIONS 2525 to 2527; lean target step
+0.562/0.559 s -> 0.383/0.380 s, every step witness equal). The H100 leg
+bench/results/e1g/2026-09-11_154257-nvidia-h100-80gb-hbm3-attention-round3
+(commit 5bcfa71d) then flipped NVIDIA to stash_tiled_fgrid_r32_qres_pf
+(lean step 0.3845/0.3819 s -> 0.3346/0.3340 s, enwik8/Pile GitHub, every
+step witness equal). AMD stays stash_tiled until the MI300X leg reads it;
+Apple and the other columns stay stash_tiled. A leg that flips again edits
+the matrix row and the brief."""
 comptime ATTN_ARM_COMPILED = ATTN_ARM_TRIAL or (ATTN_ARM_DEFAULT != ATTN_ARM_BASELINE)
 """Whether the launchers compile the arm kernels at all: on a trial build
-(every arm, clean and sabotage) or when the build default is an arm (that
-arm's clean kernels only; the sabotage instantiations stay trial-only)."""
+(every arm, clean and sabotage) or when the build default is an arm (the
+first-round clean kernels, plus the one clean second-round instantiation
+per direction the default needs, `ATTN_SHIPPED_FWD_R2` and
+`ATTN_SHIPPED_BWD_PF`; the sabotage instantiations stay trial-only)."""
 
 comptime ATTN_STASH_HD = 64
 """The only head dim the candidate arms instantiate (the target shape)."""
@@ -434,7 +474,30 @@ def fused_attention_arm_from_env() raises -> Int:
     anything else raises) and `MOJOLEARN_ATTN_ARM_SABOTAGE` (exactly "1"
     sets ATTN_ARM_SABOTAGE, exactly "new" sets ATTN_ARM_SABOTAGE_NEW).
     Every other build returns ATTN_ARM_DEFAULT without reading the
-    environment at all."""
+    environment at all.
+
+    Every launcher calls this, so the build-time contract of the default
+    row (DEVIATION 2534) is asserted here: the matrix's literal words are
+    this file's bits, and the default carries nothing a shipped build does
+    not compile or cannot run as named."""
+    comptime assert ATTN_DEFAULT_WORD_STASH_TILED == ATTN_ARM_STASH_TILED, (
+        "checks/kernel_matrix.mojo ATTN_DEFAULT_WORD_STASH_TILED no longer"
+        " spells this file's stash_tiled bits; fix the literal there"
+    )
+    comptime assert ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF == ATTN_ARM_R3_DEFAULT, (
+        "checks/kernel_matrix.mojo ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF"
+        " no longer spells this file's stash_tiled_fgrid_r32_qres_pf bits; fix"
+        " the literal there"
+    )
+    comptime assert (ATTN_ARM_DEFAULT & ATTN_ARM_DEFAULT_REFUSED_BITS) == 0, (
+        "attn_default_arm_for names a sabotage or a DEVIATION 2528 arm, whose"
+        " kernels a shipped build does not compile"
+    )
+    comptime assert (not fused_attention_arm_new_forward(ATTN_ARM_DEFAULT)) or ATTN_DEFAULT_FWD_ROWS != 0, (
+        "attn_default_arm_for names a second-round forward whose page does not"
+        " fit this column; the shipped build would run the first-round forward"
+        " under the default's name"
+    )
     comptime if not ATTN_ARM_TRIAL:
         return ATTN_ARM_DEFAULT
     var name = String(getenv("MOJOLEARN_ATTN_ARM"))
@@ -633,6 +696,108 @@ def fused_attention_fwd_rows(arm: Int) -> Int:
     if rows == 64 and ATTN_FR2_FITS_64:
         return 64
     return 0
+
+
+def _attn_fwd_r2_key(arm: Int) -> Int:
+    """Which second-round forward instantiation `arm` resolves to, as one
+    integer: `rows * 4 + 2 * qres + pf`, 0 when it runs none (DEVIATION
+    2534). Two arms with the same key run the same clean
+    `_launch_fwd_r2[HD, rows, QRES, PF, False]`."""
+    var frows = fused_attention_fwd_rows(arm)
+    if frows == 0:
+        return 0
+    var key = frows * 4
+    if (arm & ATTN_ARM_FWD_QRES) != 0:
+        key += 2
+    if (arm & ATTN_ARM_PREFLUSH) != 0:
+        key += 1
+    return key
+
+
+def _attn_fwd_r2_ran_word(arm: Int, frows: Int) -> Int:
+    """The arm word a second-round forward launch at `frows` rows reports:
+    the score stash, the grid with its rows resolved when the arm has
+    `_fgrid`, and the arm's `_qres` and `_pf`. No sabotage bit."""
+    var w = ATTN_ARM_FWD_SSTASH
+    if (arm & ATTN_ARM_FWD_GRID) != 0:
+        w = w | ATTN_ARM_FWD_GRID
+        if frows == 32:
+            w = w | ATTN_ARM_FROWS32
+        else:
+            w = w | ATTN_ARM_FROWS64
+    return w | (arm & (ATTN_ARM_FWD_QRES | ATTN_ARM_PREFLUSH))
+
+
+# DEVIATION 2534: what a SHIPPED build (no trial define) compiles beyond the
+# first-round kernels, from the column's default alone. Each is one clean
+# instantiation, launched by the same generic helper the trial tree uses.
+comptime ATTN_DEFAULT_FWD_ROWS = fused_attention_fwd_rows(ATTN_ARM_DEFAULT)
+"""The default arm's second-round forward rows (0: it runs none, or its
+page does not fit; the build then asserts, see
+`fused_attention_arm_from_env`)."""
+comptime ATTN_DEFAULT_FWD_QRES = (ATTN_ARM_DEFAULT & ATTN_ARM_FWD_QRES) != 0
+comptime ATTN_DEFAULT_FWD_PF = (ATTN_ARM_DEFAULT & ATTN_ARM_PREFLUSH) != 0
+comptime ATTN_DEFAULT_FWD_KEY = _attn_fwd_r2_key(ATTN_ARM_DEFAULT)
+comptime ATTN_SHIPPED_FWD_R2 = (not ATTN_ARM_TRIAL) and ATTN_DEFAULT_FWD_ROWS != 0
+"""A shipped build whose default runs the second-round forward (NVIDIA's
+stash_tiled_fgrid_r32_qres_pf): the forward launcher compiles that one clean
+instantiation."""
+comptime ATTN_SHIPPED_BWD_PF = (not ATTN_ARM_TRIAL) and fused_attention_arm_new_backward(ATTN_ARM_DEFAULT)
+"""A shipped build whose default carries `_pf` on the tiled stash backward
+(the default may not carry `_ztiled`): the backward launcher compiles the
+clean `_launch_bwd_stash_tiled_pf[64, False]`."""
+
+
+def fused_attention_arm_forward_resolved(arm: Int) -> Int:
+    """DEVIATION 2534: the arm word the FORWARD launcher reports
+    (`fused_forward_launch_ran`) when it runs a kernel for `arm` at head_dim
+    64 on THIS build. 0 (the shipped kernels) for an arm without the forward
+    score stash, or on a build that compiles no arm. The second-round
+    forward's word, rows resolved, when this build compiles that
+    instantiation (a trial build: every one; a shipped build: the column
+    default's only) and its page fits; otherwise `fwd_sstash`. Sabotage
+    bits are never part of the word."""
+    comptime if not ATTN_ARM_COMPILED:
+        return ATTN_ARM_BASELINE
+    if (arm & ATTN_ARM_FWD_SSTASH) == 0:
+        return ATTN_ARM_BASELINE
+    var frows = fused_attention_fwd_rows(arm)
+    comptime if not ATTN_ARM_TRIAL:
+        if _attn_fwd_r2_key(arm) != ATTN_DEFAULT_FWD_KEY:
+            frows = 0
+    if frows == 0:
+        return ATTN_ARM_FWD_SSTASH
+    return _attn_fwd_r2_ran_word(arm, frows)
+
+
+def fused_attention_arm_backward_resolved(arm: Int) -> Int:
+    """DEVIATION 2534: the arm word the BACKWARD launcher reports
+    (`fused_backward_launch_ran`) when it runs a kernel for `arm` at
+    head_dim 64 on THIS build. 0 without the backward stash or on a build
+    that compiles no arm; `bwd_stash` for the 2525 non-tiled stash. On a
+    trial build, `_ztiled` with its rows resolved (and the arm's `_pf`) when
+    2528's page fits, else the tiled stash with the arm's `_pf`. On a
+    shipped build, the tiled stash, with `_pf` only when the column default
+    carries it (`ATTN_SHIPPED_BWD_PF`). Sabotage bits are never part of the
+    word."""
+    comptime if not ATTN_ARM_COMPILED:
+        return ATTN_ARM_BASELINE
+    comptime tiled_stash = ATTN_ARM_BWD_STASH | ATTN_ARM_BWD_TILED
+    if (arm & ATTN_ARM_BWD_STASH) == 0:
+        return ATTN_ARM_BASELINE
+    if (arm & ATTN_ARM_BWD_TILED) == 0:
+        return ATTN_ARM_BWD_STASH
+    comptime if ATTN_ARM_TRIAL:
+        if (arm & ATTN_ARM_BWD_ZTILED) != 0:
+            var zrows = fused_attention_zdot_rows(arm)
+            if zrows == 32:
+                return tiled_stash | ATTN_ARM_BWD_ZTILED | ATTN_ARM_ZROWS32 | (arm & ATTN_ARM_PREFLUSH)
+            if zrows == 64:
+                return tiled_stash | ATTN_ARM_BWD_ZTILED | ATTN_ARM_ZROWS64 | (arm & ATTN_ARM_PREFLUSH)
+        return tiled_stash | (arm & ATTN_ARM_PREFLUSH)
+    comptime if ATTN_SHIPPED_BWD_PF:
+        return tiled_stash | (arm & ATTN_ARM_PREFLUSH)
+    return tiled_stash
 
 
 @always_inline
@@ -4053,10 +4218,47 @@ def fused_forward_launch_arm(
 ) raises -> Int:
     """`fused_forward_launch` with the arm given (the harness alternates
     arms inside one process). A candidate arm's kernels exist on a
-    `-D MOJOLEARN_ATTN_ARM_TRIAL=1` build, or when it is ATTN_ARM_DEFAULT
-    (clean kernels only); otherwise the arm value runs the shipped kernels,
-    so a harness must prove reach by sabotage rather than trust the arm it
-    asked for."""
+    `-D MOJOLEARN_ATTN_ARM_TRIAL=1` build, or when the build compiles them
+    for the column's default (clean kernels only, `ATTN_ARM_COMPILED`);
+    otherwise the arm value runs the first-round or the shipped kernels, so
+    a harness must prove reach by sabotage rather than trust the arm it
+    asked for, and `fused_forward_launch_ran` names what launched."""
+    var ran = ATTN_ARM_BASELINE
+    return fused_forward_launch_ran(
+        ctx, ctxv, amax, denom, q_rope, k_cache, v_cache, b, l, nh, nkv,
+        hd, s, pos0, key_lo, window, scale, arm, ran,
+    )
+
+
+def fused_forward_launch_ran(
+    ctx: DeviceContext,
+    mut ctxv: DeviceBuffer[DType.float32],
+    mut amax: DeviceBuffer[DType.float32],
+    mut denom: DeviceBuffer[DType.float32],
+    mut q_rope: DeviceBuffer[DType.float32],
+    mut k_cache: DeviceBuffer[DType.float32],
+    mut v_cache: DeviceBuffer[DType.float32],
+    b: Int,
+    l: Int,
+    nh: Int,
+    nkv: Int,
+    hd: Int,
+    s: Int,
+    pos0: Int,
+    key_lo: Int,
+    window: Int,
+    scale: Float32,
+    arm: Int,
+    mut ran: Int,
+) raises -> Int:
+    """`fused_forward_launch_arm`, also reporting in `ran` the arm word of
+    the kernels that launched (DEVIATION 2534): 0 for the shipped kernels
+    or a refusal before any kernel, `fwd_sstash` for the first-round score
+    stash, and the second-round word with its rows resolved. Each value is
+    written inside the branch that launched, so a check reads the path, not
+    a copy of the dispatch; `fused_attention_arm_forward_resolved` is what
+    it must equal at head_dim 64. Sabotage bits are never reported."""
+    ran = ATTN_ARM_BASELINE
     if not fused_forward_supported_head_dim(hd):
         return FUSED_REFUSED_REGIME
     var ton = _attn_timer_on()
@@ -4168,6 +4370,21 @@ def fused_forward_launch_arm(
                                 k_cache, v_cache, b, l, nh, nkv, s, pos0, key_lo,
                                 window, scale,
                             )
+                ran = _attn_fwd_r2_ran_word(arm, frows)
+                ran_arm = True
+        comptime if ATTN_SHIPPED_FWD_R2:
+            # DEVIATION 2534 (brief section 15): a shipped build whose
+            # column's default (kernel matrix `attn_default_arm_for`) runs
+            # the second-round forward compiles that one clean instantiation
+            # and nothing else of the trial tree above. An arm resolving to
+            # another instantiation runs the first-round branch below, as
+            # every non-default arm always has on a shipped build.
+            if want_sstash and not ran_arm and _attn_fwd_r2_key(arm) == ATTN_DEFAULT_FWD_KEY:
+                _launch_fwd_r2[ATTN_STASH_HD, ATTN_DEFAULT_FWD_ROWS, ATTN_DEFAULT_FWD_QRES, ATTN_DEFAULT_FWD_PF, False](
+                    ctx, ton, tk, ctxv, amax, denom, corner, q_rope, k_cache,
+                    v_cache, b, l, nh, nkv, s, pos0, key_lo, window, scale,
+                )
+                ran = _attn_fwd_r2_ran_word(arm, ATTN_DEFAULT_FWD_ROWS)
                 ran_arm = True
         if want_sstash and not ran_arm:
             # DEVIATION 2526: the score/exp scratch, `[B, n_heads, L, S]`
@@ -4201,6 +4418,7 @@ def fused_forward_launch_arm(
             ctx.synchronize()
             _attn_tick(ctx, ton, tk, "fwd_sstash_kernel")
             _ = sstash^
+            ran = ATTN_ARM_FWD_SSTASH
             ran_arm = True
     if not ran_arm:
         if hd == 16:
@@ -4602,6 +4820,46 @@ def fused_backward_launch_arm(
     """`fused_backward_launch` with the arm given; see
     `fused_forward_launch_arm` for what an arm value means on a build
     without the trial hook."""
+    var ran = ATTN_ARM_BASELINE
+    return fused_backward_launch_ran(
+        ctx, zdot, dq, dk, dv, q_rope, dctx, k_cache, v_cache, amax, denom,
+        b, l, nh, nkv, hd, s, pos0, key_lo, window, scale, arm, ran,
+    )
+
+
+def fused_backward_launch_ran(
+    ctx: DeviceContext,
+    mut zdot: DeviceBuffer[DType.float32],
+    mut dq: DeviceBuffer[DType.float32],
+    mut dk: DeviceBuffer[DType.float32],
+    mut dv: DeviceBuffer[DType.float32],
+    mut q_rope: DeviceBuffer[DType.float32],
+    mut dctx: DeviceBuffer[DType.float32],
+    mut k_cache: DeviceBuffer[DType.float32],
+    mut v_cache: DeviceBuffer[DType.float32],
+    mut amax: DeviceBuffer[DType.float32],
+    mut denom: DeviceBuffer[DType.float32],
+    b: Int,
+    l: Int,
+    nh: Int,
+    nkv: Int,
+    hd: Int,
+    s: Int,
+    pos0: Int,
+    key_lo: Int,
+    window: Int,
+    scale: Float32,
+    arm: Int,
+    mut ran: Int,
+) raises -> Int:
+    """`fused_backward_launch_arm`, also reporting in `ran` the arm word of
+    the kernels that launched (DEVIATION 2534): 0 for the shipped kernels
+    or a refusal before any kernel, `bwd_stash` / `bwd_stash_tiled` for the
+    first-round stash, the `_pf` and `_ztiled` words (rows resolved) for the
+    second-round launches. Written inside the launching branch;
+    `fused_attention_arm_backward_resolved` is what it must equal at
+    head_dim 64. Sabotage bits are never reported."""
+    ran = ATTN_ARM_BASELINE
     if not fused_supported_head_dim(hd):
         return FUSED_REFUSED_REGIME
     comptime if ATTN_OPERAND_DUMP:
@@ -4697,6 +4955,11 @@ def fused_backward_launch_arm(
                                 k_cache, v_cache, amax, denom, b, l, nh, nkv, s, pos0,
                                 key_lo, window, scale, sabotage,
                             )
+                ran = ATTN_ARM_BWD_STASH | ATTN_ARM_BWD_TILED | ATTN_ARM_BWD_ZTILED | (arm & ATTN_ARM_PREFLUSH)
+                if zrows == 32:
+                    ran = ran | ATTN_ARM_ZROWS32
+                else:
+                    ran = ran | ATTN_ARM_ZROWS64
                 ran_arm = True
             elif bpf and want_stash and want_tiled:
                 if zsab:
@@ -4711,6 +4974,21 @@ def fused_backward_launch_arm(
                         k_cache, v_cache, amax, denom, b, l, nh, nkv, s, pos0,
                         key_lo, window, scale,
                     )
+                ran = ATTN_ARM_BWD_STASH | ATTN_ARM_BWD_TILED | ATTN_ARM_PREFLUSH
+                ran_arm = True
+        comptime if ATTN_SHIPPED_BWD_PF:
+            # DEVIATION 2534 (brief section 15): a shipped build whose
+            # column's default carries `_pf` on the tiled stash backward
+            # (kernel matrix `attn_default_arm_for`) compiles the clean
+            # preflushed launch and nothing else of the trial branch above.
+            # An arm without `_pf` runs the first-round branch below.
+            if want_stash and want_tiled and not ran_arm and (arm & ATTN_ARM_PREFLUSH) != 0:
+                _launch_bwd_stash_tiled_pf[HD, False](
+                    ctx, ton, tk, zdot, dq, dk, dv, corner, q_rope, dctx,
+                    k_cache, v_cache, amax, denom, b, l, nh, nkv, s, pos0,
+                    key_lo, window, scale,
+                )
+                ran = ATTN_ARM_BWD_STASH | ATTN_ARM_BWD_TILED | ATTN_ARM_PREFLUSH
                 ran_arm = True
         if want_stash and not ran_arm:
             # DEVIATIONS 2525 and 2527: the y and dy scratches, `[B,
@@ -4819,6 +5097,9 @@ def fused_backward_launch_arm(
             ctx.synchronize()
             _ = y_st^
             _ = dy_st^
+            ran = ATTN_ARM_BWD_STASH
+            if want_tiled:
+                ran = ran | ATTN_ARM_BWD_TILED
             ran_arm = True
     if not ran_arm:
         if hd == 16:

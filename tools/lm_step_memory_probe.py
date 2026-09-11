@@ -336,19 +336,38 @@ def worker(args):
     # 'full' witnesses every step from the result; 'lean' witnesses once
     # after the last untimed step unless --witness-every-step.
     witness_every_step = step_result == 'full' or args.witness_every_step
+    # DEVIATION 2534: `attention_arm` is the arm the native launchers run, as
+    # the binding names it (the column's kernel-matrix default when
+    # MOJOLEARN_ATTN_ARM is unset or empty, or on any non-trial binding), so
+    # `baseline`, `stash_tiled` and the default can never be confused in a
+    # result. The raw request is `attention_arm_requested`.
+    native_attention = runtime.get('native_attention_arm') or {}
+    requested_attention = os.environ.get('MOJOLEARN_ATTN_ARM')
     mode = dict(resident=resident, step_result=step_result, witness_every_step=witness_every_step,
                 witness_source=WITNESS_SOURCE[step_result if witness_every_step else 'lean-final'],
                 corpus=corpus.describe() if corpus is not None else None,
-                attention_arm=os.environ.get('MOJOLEARN_ATTN_ARM'),
+                attention_arm=native_attention.get('arm', requested_attention),
+                attention_arm_source=('binding' if native_attention
+                                      else 'environment (the binding has no byte_lm_attention_arm)'),
+                attention_arm_requested=requested_attention,
+                attention_arm_default=native_attention.get('default'),
+                attention_arm_is_default=(native_attention.get('arm') == native_attention.get('default')
+                                          if native_attention else None),
+                attention_arm_resolved_hd64=native_attention.get('resolved_hd64'),
+                attention_arm_trial_build=native_attention.get('trial_build'),
                 # DEVIATION 2544: the GEMM step arm this run requested (a
                 # trial binding reads it; a shipped binding ignores it).
-                gemm_arm=os.environ.get('MOJOLEARN_GEMM_ARM'))
+                gemm_arm=os.environ.get('MOJOLEARN_GEMM_ARM'),
+                # DEVIATION 2595: the plan that arm runs, as the leg's build
+                # labels it (tools/gemm_step_leg.sh plans.tsv), so `shipped`
+                # (the ksplit default where the row is above 0) is never
+                # confused with the old plan (`tuned128`). None when unset.
+                gemm_plan=os.environ.get('MOJOLEARN_GEMM_PLAN_LABEL'))
     sampler = DeviceMemorySampler(args.sample_interval, args.gpu_index)
     sampler.start()
     emit(dict(event='setup', schema=SCHEMA, shape=shape.to_dict(), profile=shape.profile,
               parameters=shape.n_total, n_tensors=shape.n_tensors, tokens_per_step=tokens_per_step,
               seed=args.seed, budget_seconds=args.budget_seconds, **mode,
-              attention_arm_requested=os.environ.get('MOJOLEARN_ATTN_ARM'),
               gemm_arm_requested=os.environ.get('MOJOLEARN_GEMM_ARM'),
               attention_path_requested=os.environ.get('MOJOLEARN_TRANSFORMER_ATTN_PATH'),
               numeric_mode_env=os.environ.get('MOJOLEARN_NUMERIC_MODE'),
@@ -480,7 +499,15 @@ def _write_result(args, shape, steps, limited, timing_step_seconds=None, mode=No
         resident=mode.get('resident'), step_result=mode.get('step_result'),
         witness_every_step=mode.get('witness_every_step'), witness_source=mode.get('witness_source'),
         corpus=mode.get('corpus'), attention_arm=mode.get('attention_arm'),
-        gemm_arm=mode.get('gemm_arm'),
+        # DEVIATION 2534: where `attention_arm` came from, the raw request,
+        # the column's default and the head_dim 64 resolution (see `mode`).
+        attention_arm_source=mode.get('attention_arm_source'),
+        attention_arm_requested=mode.get('attention_arm_requested'),
+        attention_arm_default=mode.get('attention_arm_default'),
+        attention_arm_is_default=mode.get('attention_arm_is_default'),
+        attention_arm_resolved_hd64=mode.get('attention_arm_resolved_hd64'),
+        attention_arm_trial_build=mode.get('attention_arm_trial_build'),
+        gemm_arm=mode.get('gemm_arm'), gemm_plan=mode.get('gemm_plan'),
         # Per-step witnesses (loss always; gradients/parameters/m/v/flags
         # when the step was witnessed) so a lean run compares with a full
         # run from result.json alone; the same records are in events.jsonl.

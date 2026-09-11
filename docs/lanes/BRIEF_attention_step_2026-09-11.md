@@ -1427,3 +1427,269 @@ over `lm-stash_tiled-<corpus>`, same leg) below 1, and
 that column from the same leg) in the same session as the evidence filing. If
 the lease runs short, drop LM arms after the price lines rank them, never
 `stash_tiled` (the witness reference).
+
+## 15. Round 3 on the H100 and the NVIDIA flip (2026-09-11): DEVIATION 2534, source built, nothing run
+
+STATUS: 15.1 is a leg's reading; everything from 15.2 on is source only.
+Nothing in 15.2 or 15.3 was compiled or run (no build on the Mac, by rule).
+The orchestrator's M4 commands in 15.4 are the first compile.
+
+### 15.1 The H100 leg (RunPod, commit 5bcfa71d)
+
+Evidence
+`bench/results/e1g/2026-09-11_154257-nvidia-h100-80gb-hbm3-attention-round3/remote/attention-step/`
+(filed on main by the orchestrator; the figures below are the orchestrator's
+reading of it). One pod, `NVIDIA H100 80GB HBM3`, SM clock 1980 MHz, body
+`tools/attention_round3_leg.sh` (14.9), every arm against the shipped
+`stash_tiled`, lean LM step on enwik8 and Pile GitHub, every step witness
+equal to stash_tiled's on both corpora.
+
+| arm | enwik8 s | Pile GitHub s | ratio to stash_tiled (enwik8 / Pile GitHub) |
+|---|---:|---:|---|
+| stash_tiled (shipped) | 0.3845 | 0.3819 | 1.000 / 1.000 |
+| stash_tiled_fgrid_r32 | 0.3718 | 0.3716 | 0.967 / 0.973 |
+| stash_tiled_pf | 0.3488 | 0.3473 | 0.907 / 0.909 |
+| stash_tiled_fgrid_r32_qres_pf | 0.3346 | 0.3340 | 0.870 / 0.875 |
+
+Price on real activations, fwd+bwd, stash_tiled over the arm (the TABLE
+ratio): `fgrid_r32` 1.07, `fgrid_r32_qres` 1.08, `pf` 1.27,
+`fgrid_r32_qres_pf` 1.41, `fgrid_r64` 1.00. Lean step timers, stash_tiled to
+`stash_tiled_fgrid_r32_qres_pf`: backward zdot stash 89.9 to 66.2 ms,
+forward kernel 37.0 to 20.9 ms, dq tiled 15.5 to 12.5 ms, dk/dv tiled 18.5
+to 12.4 ms.
+
+Reading. On the H100 all three third-round deviations lower the step, and
+the composed arm is the lowest on both corpora. `fgrid_r64` prices at 1.00,
+so the forward copy at the shipped geometry costs nothing, and the 32-row
+geometry is what pays. The winner's geometric mean ratio is 0.872, below 1,
+with witnesses equal: ENGINEERING_RULES 9 flips it in this session. The
+MI300X verdict is still owed, so AMD does not flip.
+
+### 15.2 The flip (DEVIATION 2534)
+
+`checks/kernel_matrix.mojo`, next to the attention rows (not at the end of
+the file; the GEMM `ksplit` flip lane, DEVIATION 2595, appends a row too):
+
+- `attn_default_arm_for[column]`, a ROUTING row returning an arm word:
+  NVIDIA `ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF` (3175, measured,
+  15.1); AMD `ATTN_DEFAULT_WORD_STASH_TILED` (7) with the comment that the
+  MI300X leg decides it; Apple and every other column 7. The matrix cannot
+  import `fused_attention.mojo` (that file imports the matrix), so the words
+  are literals there and `fused_attention.mojo` asserts at build time that
+  each equals its own composition (`ATTN_ARM_STASH_TILED`,
+  `ATTN_ARM_R3_DEFAULT`).
+- `-D MOJOLEARN_ATTN_DEFAULT_R3_EVERY_COLUMN=1` returns the NVIDIA word on
+  every column: a check knob (the `MOJOLEARN_EXPERIMENTAL_SMALLK_IDENTICAL`
+  pattern) so a no-trial build on the M4 compiles and runs the shipped
+  round 3 branches. Never a shipped build.
+- `attn_fwd_rows_per_block_for`: NVIDIA 64 to 32 (measured on the H100,
+  15.1); AMD stays 32 (placeholder until the MI300X leg); others 64. The
+  default forces `_fgrid_r32`, so this row moves only the bare `_fgrid`
+  token, never a shipped path.
+
+`transformer/impl/llama/fused_attention.mojo` (no vendor branch; the file
+reads the row through `TARGET_COLUMN` like every other row):
+
+- `ATTN_ARM_DEFAULT = attn_default_arm_for[TARGET_COLUMN]()`. Build-time
+  asserts in `fused_attention_arm_from_env` (every launcher calls it): the
+  two literal words equal this file's bits; the default carries no sabotage
+  bit and no DEVIATION 2528 bit (`ATTN_ARM_DEFAULT_REFUSED_BITS`; 2528's
+  kernels are not compiled on a shipped build and did not flip, section 13);
+  a default with a second-round forward has a page that fits the column.
+- A shipped build compiles, beyond the first-round clean kernels it already
+  compiled, exactly the clean second-round instantiations its column's
+  default needs, one per direction: `ATTN_SHIPPED_FWD_R2` launches
+  `_launch_fwd_r2[64, ATTN_DEFAULT_FWD_ROWS, ATTN_DEFAULT_FWD_QRES,
+  ATTN_DEFAULT_FWD_PF, False]` (on NVIDIA `[64, 32, True, True, False]`)
+  when `_attn_fwd_r2_key(arm)` equals the default's key, and
+  `ATTN_SHIPPED_BWD_PF` launches `_launch_bwd_stash_tiled_pf[64, False]`
+  when the arm has `_pf` on the tiled stash backward. Each branch sits after
+  the trial-only branch and before the first-round one, whose condition is
+  already `and not ran_arm`. On Apple and AMD neither constant is true and
+  the shipped build compiles what it compiled before.
+- `fused_forward_launch_ran` and `fused_backward_launch_ran` carry the old
+  launcher bodies plus `mut ran: Int`, the arm word of the kernels that
+  launched, written inside the launching branch (0 for the shipped kernels
+  or a refusal; `fwd_sstash`, `bwd_stash`, `bwd_stash_tiled`; the
+  second-round words with rows resolved; never a sabotage bit).
+  `fused_forward_launch_arm` and `fused_backward_launch_arm` keep their
+  signatures and call them. `fused_attention_arm_forward_resolved` and
+  `fused_attention_arm_backward_resolved` say what each launcher must report
+  at head_dim 64 on this build.
+
+Identity. No kernel was written or edited. On NVIDIA the shipped path now
+launches the instantiations whose bit equality with eager sections 14.2 to
+14.4 argue, the M4 arms check (15 cases x 13 arms) and the H100 leg's BITS
+lines (every one MATCH against stash_tiled and the oracle) measured, through
+the same generic launch helpers the trial tree calls. Which kernel runs is a
+schedule; the contract reads the bits.
+
+How stash_tiled stays reachable. A trial build (`-D
+MOJOLEARN_ATTN_ARM_TRIAL=1`) still compiles every arm and reads
+`MOJOLEARN_ATTN_ARM` per launcher call: `stash_tiled` and every other name
+run as before, unset or empty runs the column default, and the harness's
+`MOJOLEARN_ATTN_BASELINE=stash_tiled` prices the new default against it. On
+a shipped build an explicit stash_tiled word passed to `fused_*_launch_arm`
+still runs stash_tiled (its forward key is 0, not the default's, and it has
+no `_pf`), because the first-round kernels are compiled on every shipped
+build.
+
+A later flip edits the matrix row (and, for a bare `_fgrid`,
+`attn_fwd_rows_per_block_for`) and this brief, no longer `ATTN_ARM_DEFAULT`
+itself (14.9's last paragraph predates the row).
+
+### 15.3 Labels: baseline, stash_tiled and the default cannot be confused
+
+- `transformer/checks/transformer_fused_check.mojo` (no trial define): a
+  `DEFAULT column=<column> arm=<name> word=<n>` line; the default word must
+  name itself and resolve to itself at head_dim 64 on the build (else FAIL:
+  the row names an arm the column cannot run as named); an
+  `ARM this_run=... is_default=... forward_hd64=... backward_hd64=...` line;
+  every direct launch prints `ran <name>` and FAILS unless it ran the arm's
+  resolved half at head_dim 64 and the shipped kernels elsewhere or on a
+  refusal; the PASS line names the column, the arm, the default and how many
+  launches ran it. `expected_ran` is shared with the arms check.
+- `transformer/checks/transformer_attention_arms_check.mojo`: the same ran
+  assertion for all 13 arms, clean and sabotaged, per direction.
+- `bench/attention_step_price_main.mojo`: `default` is an alias for the
+  column's arm, replaced by the explicit name before anything prints; a
+  `DEFAULT column=... arm=... baseline_is_default=... candidate_is_default=...
+  baseline_requested=... candidate_requested=...` line; `PATH` lines gain
+  `is_default=` and `resolved_hd64=`; every correctness run prints
+  `RAN <kind> <arm> forward=<name> backward=<name>` and raises at head_dim
+  64 when they are not the arm's resolved kernels; TABLE headers carry
+  `column=` and `default_arm=`.
+- `bindings/_mojolearn_byte_lm.mojo`: `byte_lm_attention_arm()` returns
+  `[arm, default, trial_build, resolved_hd64]` (constants and the
+  environment only). `python/mojolearn/_byte_lm_impl.py`:
+  `run_metadata()['native_attention_arm']` (None for an older binding).
+- `tools/lm_step_memory_probe.py`: `attention_arm` in the setup event and
+  result.json is now the binding's name for the arm that ran (it was the raw
+  `MOJOLEARN_ATTN_ARM`, None when unset), beside `attention_arm_source`,
+  `attention_arm_requested`, `attention_arm_default`,
+  `attention_arm_is_default`, `attention_arm_resolved_hd64` and
+  `attention_arm_trial_build`.
+- `tools/attention_step_leg.sh`: `MOJOLEARN_ATTN_LEG_SHIPPED_CHECK=1` builds
+  and runs the no-trial fused check (`build-shipped-fused-check`,
+  `shipped-fused-check`) and copies its DEFAULT, ARM and PASS lines into
+  gate.txt; the first smoke log's `DEFAULT` line goes to gate.txt; an LM arm
+  `default` runs with `MOJOLEARN_ATTN_ARM` empty (`lm-default-<corpus>`);
+  `lm_summary.tsv` prints `arm=`, `arm_requested=`, `arm_default=`,
+  `arm_is_default=`, `arm_resolved_hd64=`.
+- `tools/attention_flip_r3_leg.sh`: the H100 confirmation body (15.5).
+
+### 15.4 RUN OWED on the M4 (the orchestrator's light commands, one at a time)
+
+1. The shipped path, no trial define, Apple's row (stash_tiled):
+   `nice -n 19 pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . transformer/checks/transformer_fused_check.mojo -o /tmp/fused-check`
+   then `nice -n 19 /tmp/fused-check`. Expect
+   `DEFAULT column=apple arm=stash_tiled word=7`,
+   `DEFAULT resolved_hd64=stash_tiled`,
+   `ARM this_run=stash_tiled is_default=True forward_hd64=fwd_sstash backward_hd64=bwd_stash_tiled`
+   and `transformer_fused_check: PASS, 15 cases, ...` naming `17 direct
+   launches RAN fwd_sstash / bwd_stash_tiled at head_dim 64` (nine forward
+   and eight backward launches at head_dim 64 are not refused by the case
+   list).
+2. Optional but the only M4 reach of the shipped round 3 branches, still no
+   trial define:
+   `nice -n 19 pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_ATTN_DEFAULT_R3_EVERY_COLUMN=1 -I . transformer/checks/transformer_fused_check.mojo -o /tmp/fused-check-r3`
+   then `nice -n 19 /tmp/fused-check-r3`. Expect
+   `DEFAULT column=apple arm=stash_tiled_fgrid_r32_qres_pf word=3175`, the
+   same resolved name, and PASS with
+   `RAN fwd_sstash_fgrid_r32_qres_pf / bwd_stash_tiled_pf` (the Q residency
+   page, 15,232 B, fits Metal's 32 KB).
+3. The arms gate, trial define:
+   `nice -n 19 pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_ATTN_ARM_TRIAL=1 -I . transformer/checks/transformer_attention_arms_check.mojo -o /tmp/arms-check`
+   then `nice -n 19 /tmp/arms-check`. Expect the 14.8 lines unchanged
+   (`names: 24 spellings and 52 arm values round-trip, 18 invalid spellings refused`,
+   `transformer_attention_arms_check: PASS, names inverse, 15 cases x 13 arms`),
+   every status line now ending `ran <name>`, and no FAIL line containing
+   `RAN`.
+4. The price harness at L 512 against stash_tiled, correctness only:
+   `nice -n 19 pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_ATTN_ARM_TRIAL=1 -I . bench/attention_step_price_main.mojo -o /tmp/attn-price`
+   then
+   `MOJOLEARN_ATTN_BASELINE=stash_tiled MOJOLEARN_ATTN_ARM=stash_tiled_fgrid_r32_qres_pf MOJOLEARN_ATTN_KINDS=hashed,heavytail MOJOLEARN_ATTN_TIMING=0 MOJOLEARN_ATTN_L=512 MOJOLEARN_ATTN_NH=4 MOJOLEARN_ATTN_NKV=2 nice -n 19 /tmp/attn-price`.
+   Expect
+   `DEFAULT column=apple arm=stash_tiled source=kernel_matrix.attn_default_arm_for baseline_is_default=True candidate_is_default=False ...`,
+   `PATH baseline arm=stash_tiled is_default=True resolved_hd64=stash_tiled ...`,
+   `PATH candidate arm=stash_tiled_fgrid_r32_qres_pf is_default=False resolved_hd64=stash_tiled_fgrid_r32_qres_pf ... fwd_rows=32 preflush=True ...`,
+   `RAN hashed stash_tiled forward=fwd_sstash backward=bwd_stash_tiled`,
+   `RAN hashed stash_tiled_fgrid_r32_qres_pf forward=fwd_sstash_fgrid_r32_qres_pf backward=bwd_stash_tiled_pf`,
+   every `BITS ... _vs_stash_tiled` MATCH,
+   `REACH ... clean_restored=True reach_bit=stash_tiled_fgrid_r32_qres_pf+sabotage_new`,
+   and `attention_step_price: PASS (stash_tiled_fgrid_r32_qres_pf vs stash_tiled)`.
+5. The byte LM binding build only (no step):
+   `nice -n 19 env MOJOLEARN_NUMERIC_MODE=identical sh bindings/build_byte_lm.sh`
+   (expect the `built ...` line; the new export is `byte_lm_attention_arm`).
+
+### 15.5 The confirmation legs
+
+NVIDIA, H100 on RunPod, from a `git worktree add --detach` checkout at the
+lane's merge commit. The body `tools/attention_flip_r3_leg.sh` sets
+`MOJOLEARN_ATTN_BASELINE=stash_tiled`,
+`MOJOLEARN_ATTN_LEG_ARMS=stash_tiled_fgrid_r32_qres_pf`,
+`MOJOLEARN_ATTN_LEG_LM_ARMS=stash_tiled,stash_tiled_fgrid_r32_qres_pf`,
+`MOJOLEARN_ATTN_LEG_SKIP_TIMERS=1`, `MOJOLEARN_ATTN_LEG_SHIPPED_CHECK=1` and
+`MOJOLEARN_COMPILE_JOBS=8`, then runs `tools/attention_step_leg.sh`:
+
+    MOJOLEARN_RUNPOD_KEY_FILE=$HOME/.mojolearn_runpod_key \
+    MOJOLEARN_GPU_ARCHS=sm_90a \
+    MOJOLEARN_GEMM_LEG_EXTRA=tools/attention_flip_r3_leg.sh \
+    MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/$(date -u +%Y-%m-%d_%H%M%S)-nvidia-h100-attention-flip-r3 \
+    sh tools/gemm_remote_leg.sh nvidia --payload gemm --rent --minutes 60 \
+        --gpu "NVIDIA H100 80GB HBM3"
+
+Gates: section 6 with stash_tiled in place of baseline; `shipped-fused-check`
+exit 0 with `shipped_check: DEFAULT column=nvidia arm=stash_tiled_fgrid_r32_qres_pf`
+and its PASS line in gate.txt; `harness: DEFAULT column=nvidia arm=stash_tiled_fgrid_r32_qres_pf`;
+in `lm_summary.tsv` the stash_tiled rows `arm_is_default=False` and the
+default's rows `arm=stash_tiled_fgrid_r32_qres_pf arm_is_default=True`, with
+`witnesses_equal_baseline=True` on both corpora. The flip holds when the
+geometric mean of the two lean step ratios stays below 1.
+
+AMD, MI300X on Hot Aisle, where the shipped default is still stash_tiled and
+this leg decides it (the 14.9 arms against stash_tiled):
+
+    MOJOLEARN_GEMM_LEG_EXTRA=tools/attention_round3_leg.sh \
+    MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/$(date -u +%Y-%m-%d_%H%M%S)-amd-mi300x-hotaisle-attention-round3 \
+    bash tools/hotaisle_leg.sh amd --rent --minutes 60 --skip-gates
+
+The runner reads the arch from rocminfo when `MOJOLEARN_GPU_ARCHS` is unset
+(the MI300X is gfx942). Its smoke logs must say
+`DEFAULT column=amd arm=stash_tiled`. The runner caps the lease at 60
+minutes, and 14.9's five prices and 16 LM probes were sized for 90; if the
+price lines already rank the arms, `MOJOLEARN_HOTAISLE_EXTRA_ENV="MOJOLEARN_ATTN_LEG_LM_ARMS=stash_tiled,stash_tiled_fgrid_r32_qres_pf"`
+keeps the witness reference and the NVIDIA winner, and
+`MOJOLEARN_ATTN_LEG_SHIPPED_CHECK=1` in the same variable adds the no-trial
+check. An AMD flip edits `attn_default_arm_for`'s AMD line and
+`attn_fwd_rows_per_block_for`'s AMD value from the same leg's `_fgrid_r32`
+and `_fgrid_r64` prices.
+
+### 15.6 Risks only a build or a box can settle
+
+1. Nothing was compiled. The likeliest compile faults: module-scope
+   comptime evaluation of `fused_attention_fwd_rows(ATTN_ARM_DEFAULT)`,
+   `_attn_fwd_r2_key` and `fused_attention_arm_new_backward`; `comptime
+   assert` inside a non-generic function (the repository's precedents are in
+   a generic matrix row and a check function); comptime globals as
+   parameters of `_launch_fwd_r2`; code after a `comptime if` that returns in
+   the two resolved functions; `mut ran: Int` passed through the
+   `_arm` wrappers.
+2. The shipped round 3 branches compile only on a no-trial build whose
+   column default needs them: NVIDIA, or the M4 under
+   `MOJOLEARN_ATTN_DEFAULT_R3_EVERY_COLUMN`. The leg's LM probes use trial
+   bindings, which never compile those branches; the leg's shipped fused
+   check reaches them at small shapes only. A shipped NVIDIA binding's LM
+   step is argued, not measured, to match the trial run of the same name,
+   because both launch `_launch_fwd_r2[64, 32, True, True, False]` and
+   `_launch_bwd_stash_tiled_pf[64, False]` through the same helpers.
+3. A shipped NVIDIA build now compiles four more GPU kernels (the forward
+   copy, the preflushed zdot stash, dq and dk/dv folds). Build time grows.
+4. `ran` proves which branch launched, not what the kernel computed; reach
+   of the kernel content stays the trial sabotage (arms check, harness).
+5. `attention_arm` in result.json changed meaning from the raw request to
+   the binding's name. Readers of older evidence still see the request, and
+   a trial binding now raises on an invalid `MOJOLEARN_ATTN_ARM` at
+   `run_metadata()`, before the first step instead of during it.
+6. AMD: the default and `attn_fwd_rows_per_block_for`'s 32 are placeholders
+   until the MI300X leg reads them.

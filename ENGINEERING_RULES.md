@@ -368,7 +368,7 @@ never again after that.
 on NVIDIA H100 on RunPod.** Andrew: "just do nvidia on fucking runpod". The
 DigitalOcean account runs one GPU droplet at a time, so every lane waited in
 one line, and RunPod had no AMD stock. Legs run in parallel on RunPod
-(at most three of this project's pods at once, the home uplink's limit),
+(at most five of this project's pods at once; the uplink moved a 9.6 MB bundle in 4 s on 2026-09-11),
 results are labeled NVIDIA, and a flip decided there ships. AMD returns as
 the tuning column when the DigitalOcean GPU limit is raised or another AMD
 cloud (Hot Aisle) is set up; the rest of this section then applies again.
