@@ -1,0 +1,448 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "pixi",
+        "run",
+        "python3",
+        "/root/mojolearn/tools/classical_two_datasets.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "pca",
+        "--dataset",
+        "istella",
+        "--data",
+        "/root/ctd-data"
+      ],
+      "digest_stable": true,
+      "digests": [
+        "e43f2f52f20f511a",
+        "e43f2f52f20f511a",
+        "e43f2f52f20f511a",
+        "e43f2f52f20f511a",
+        "e43f2f52f20f511a",
+        "e43f2f52f20f511a"
+      ],
+      "info": {
+        "device": "gpu",
+        "library": "mojolearn",
+        "numeric_mode_env": "identical",
+        "numeric_mode_used": "identical",
+        "vendor_used": "hip",
+        "version": "0.8.1"
+      },
+      "max_ms": 773.1916180000553,
+      "median_ms": 685.9148940002342,
+      "min_ms": 658.4069860000454,
+      "ms": [
+        685.9148940002342,
+        773.1916180000553,
+        719.4524459991953,
+        658.4069860000454,
+        667.4646589999611
+      ],
+      "status": "ok",
+      "warmup_ms": 1756.485817999419
+    },
+    "sklearn-cpu": {
+      "command": [
+        "/root/ctd-venv/bin/python",
+        "/root/mojolearn/tools/classical_two_datasets.py",
+        "worker",
+        "--arm",
+        "sklearn-cpu",
+        "--lane",
+        "pca",
+        "--dataset",
+        "istella",
+        "--data",
+        "/root/ctd-data"
+      ],
+      "digest_stable": true,
+      "digests": [
+        "25e45f04fefd23e6",
+        "25e45f04fefd23e6",
+        "25e45f04fefd23e6",
+        "25e45f04fefd23e6",
+        "25e45f04fefd23e6",
+        "25e45f04fefd23e6"
+      ],
+      "info": {
+        "config": "PCA(n_components=8, svd_solver='covariance_eigh')",
+        "cpu_model": "AMD EPYC 9474F 48-Core Processor",
+        "device": "cpu",
+        "library": "scikit-learn",
+        "numpy": "2.5.3",
+        "os_cpu_count": 192,
+        "python": "3.12.14",
+        "sched_affinity_cpus": 192,
+        "scipy": "1.18.1",
+        "thread_env": {
+          "MKL_NUM_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "threadpools": [
+          {
+            "architecture": "SkylakeX",
+            "filepath": "libscipy_openblas64_-f48b354e.so",
+            "internal_api": "openblas",
+            "num_threads": 64,
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.34.106.0"
+          },
+          {
+            "architecture": "SkylakeX",
+            "filepath": "libscipy_openblas-5f890258.so",
+            "internal_api": "openblas",
+            "num_threads": 64,
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.31.dev"
+          },
+          {
+            "architecture": null,
+            "filepath": "libgomp-e985bcbb.so.1.0.0",
+            "internal_api": "openmp",
+            "num_threads": 192,
+            "threading_layer": null,
+            "user_api": "openmp",
+            "version": null
+          }
+        ],
+        "version": "1.9.1"
+      },
+      "max_ms": 1362.887708000926,
+      "median_ms": 1360.5238500003907,
+      "min_ms": 1349.7761170001468,
+      "ms": [
+        1361.6908020012488,
+        1353.4490770016419,
+        1360.5238500003907,
+        1349.7761170001468,
+        1362.887708000926
+      ],
+      "status": "ok",
+      "warmup_ms": 1352.629244000127
+    },
+    "sklearn-cpu-quota": {
+      "command": [
+        "/root/ctd-venv/bin/python",
+        "/root/mojolearn/tools/classical_two_datasets.py",
+        "worker",
+        "--arm",
+        "sklearn-cpu-quota",
+        "--lane",
+        "pca",
+        "--dataset",
+        "istella",
+        "--data",
+        "/root/ctd-data"
+      ],
+      "digest_stable": true,
+      "digests": [
+        "d1ce280a7e101a53",
+        "d1ce280a7e101a53",
+        "d1ce280a7e101a53",
+        "d1ce280a7e101a53",
+        "d1ce280a7e101a53",
+        "d1ce280a7e101a53"
+      ],
+      "info": {
+        "config": "PCA(n_components=8, svd_solver='covariance_eigh'); threadpool_limits(limits=20) around construction and every call",
+        "cpu_model": "AMD EPYC 9474F 48-Core Processor",
+        "device": "cpu",
+        "library": "scikit-learn",
+        "numpy": "2.5.3",
+        "os_cpu_count": 192,
+        "python": "3.12.14",
+        "sched_affinity_cpus": 192,
+        "scipy": "1.18.1",
+        "thread_cap": {
+          "quota_cpus": 20.4,
+          "source": "cgroup v1 /sys/fs/cgroup/cpu/cpu.cfs_quota_us",
+          "threads": 20
+        },
+        "thread_env": {
+          "MKL_NUM_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "threadpools": [
+          {
+            "architecture": "SkylakeX",
+            "filepath": "libscipy_openblas64_-f48b354e.so",
+            "internal_api": "openblas",
+            "num_threads": 20,
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.34.106.0"
+          },
+          {
+            "architecture": "SkylakeX",
+            "filepath": "libscipy_openblas-5f890258.so",
+            "internal_api": "openblas",
+            "num_threads": 64,
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.31.dev"
+          },
+          {
+            "architecture": null,
+            "filepath": "libgomp-e985bcbb.so.1.0.0",
+            "internal_api": "openmp",
+            "num_threads": 192,
+            "threading_layer": null,
+            "user_api": "openmp",
+            "version": null
+          }
+        ],
+        "version": "1.9.1"
+      },
+      "max_ms": 1357.5360930008173,
+      "median_ms": 1355.2243259982788,
+      "min_ms": 1351.9812070007902,
+      "ms": [
+        1357.5360930008173,
+        1355.2243259982788,
+        1353.7734809997346,
+        1355.4141280001204,
+        1351.9812070007902
+      ],
+      "status": "ok",
+      "warmup_ms": 1440.9220639990963
+    },
+    "torch-gpu": {
+      "command": [
+        "/root/ctd-venv/bin/python",
+        "/root/mojolearn/tools/classical_two_datasets.py",
+        "worker",
+        "--arm",
+        "torch-gpu",
+        "--lane",
+        "pca",
+        "--dataset",
+        "istella",
+        "--data",
+        "/root/ctd-data"
+      ],
+      "digest_stable": true,
+      "digests": [
+        "f0ce0e077e40683b",
+        "f0ce0e077e40683b",
+        "f0ce0e077e40683b",
+        "f0ce0e077e40683b",
+        "f0ce0e077e40683b",
+        "f0ce0e077e40683b"
+      ],
+      "info": {
+        "config": "mean; xc = x - mean; cov = xc.T @ xc / (n - 1); torch.linalg.eigh(cov); top 8",
+        "cpu_model": "AMD EPYC 9474F 48-Core Processor",
+        "device": "gpu",
+        "device_name": "AMD Instinct MI300X",
+        "library": "torch",
+        "numpy": "2.5.3",
+        "os_cpu_count": 192,
+        "python": "3.12.14",
+        "sched_affinity_cpus": 192,
+        "thread_env": {
+          "MKL_NUM_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "torch_version_cuda": null,
+        "torch_version_hip": "6.4.43483-a187df25c",
+        "upload_ms_untimed": 313.5472169997229,
+        "version": "2.6.0+rocm6.4.1.git1ded221d"
+      },
+      "max_ms": 20.584980000421638,
+      "median_ms": 20.443158000489348,
+      "min_ms": 20.42343900029664,
+      "ms": [
+        20.584980000421638,
+        20.443158000489348,
+        20.45187100156909,
+        20.42343900029664,
+        20.44266799930483
+      ],
+      "status": "ok",
+      "warmup_ms": 654.1158050004015
+    }
+  },
+  "block": {
+    "arrays": {
+      "X": {
+        "dtype": "float32",
+        "sha256": "4c25bd496cda0e88aefdd56e964a3cb050068bd5cbfe2ad26adb0d64c4484ea8",
+        "shape": [
+          2043304,
+          220
+        ]
+      },
+      "Xq": {
+        "dtype": "float32",
+        "sha256": "3e691df6be4f97e311a21b1a155a4aba0b3d0cc50948d452442904615832d2dc",
+        "shape": [
+          500000,
+          220
+        ]
+      },
+      "init": {
+        "dtype": "float32",
+        "sha256": "aabd2454f003ab54cd10f03c84ce0fbf5deddf3da2918b6e2c519f1aca072714",
+        "shape": [
+          64,
+          220
+        ]
+      },
+      "y": {
+        "dtype": "float32",
+        "sha256": "25e6e0e797c2d45c74ad1e254e81f27fc953425c1fb6da38ea3329efa4254381",
+        "shape": [
+          2043304
+        ]
+      },
+      "yq": {
+        "dtype": "float32",
+        "sha256": "a52392bd2069a76aafba8188e8aaf90666b446741363b333d0f2e4f01d46f596",
+        "shape": [
+          500000
+        ]
+      }
+    },
+    "block": "big",
+    "capped_below_4M": true,
+    "data_root": "/root/datasets/gbm-bench",
+    "dataset": "istella",
+    "eval_rows": "the loader's test split, all 500000 rows",
+    "fit_rows": [
+      0,
+      2043304
+    ],
+    "fit_rows_available": 2043304,
+    "kmeans": {
+      "init_rows": [
+        0,
+        31926,
+        63852,
+        95778,
+        127704,
+        159630,
+        191556,
+        223482,
+        255408,
+        287334,
+        319260,
+        351186,
+        383112,
+        415038,
+        446964,
+        478890,
+        510816,
+        542742,
+        574668,
+        606594,
+        638520,
+        670446,
+        702372,
+        734298,
+        766224,
+        798150,
+        830076,
+        862002,
+        893928,
+        925854,
+        957780,
+        989706,
+        1021632,
+        1053558,
+        1085484,
+        1117410,
+        1149336,
+        1181262,
+        1213188,
+        1245114,
+        1277040,
+        1308966,
+        1340892,
+        1372818,
+        1404744,
+        1436670,
+        1468596,
+        1500522,
+        1532448,
+        1564374,
+        1596300,
+        1628226,
+        1660152,
+        1692078,
+        1724004,
+        1755930,
+        1787856,
+        1819782,
+        1851708,
+        1883634,
+        1915560,
+        1947486,
+        1979412,
+        2011338
+      ],
+      "k": 64,
+      "max_iter": 20
+    },
+    "lanes": [
+      "kmeans",
+      "pca",
+      "ols"
+    ],
+    "loader": "speed_gbdt_arm.load_istella('shipped', regression=True)",
+    "pca": {
+      "n_components": 8
+    },
+    "rule": "ENGINEERING_RULES.md section 9; DEVIATION 2570",
+    "scaling": "none",
+    "sentinel_cells_replaced": {
+      "X": 1326565,
+      "Xq": 330995
+    },
+    "smoke_max_rows": null,
+    "target": "relevance grade 0..4",
+    "written": "2026-09-11T17:07:18Z"
+  },
+  "commit": "37480b23dff6c09adfbb21d67a7f492566d71c29",
+  "dataset": "istella",
+  "finished": "2026-09-11T17:09:42Z",
+  "finished_rounds": "2026-09-11T17:09:38Z",
+  "lane": "pca",
+  "quality": {
+    "ours": {
+      "explained_variance_ratio_sum": 1.0000000146386359
+    },
+    "sklearn-cpu": {
+      "explained_variance_ratio_sum": 0.9999999046549269
+    },
+    "sklearn-cpu-quota": {
+      "explained_variance_ratio_sum": 0.9999999046549269
+    },
+    "torch-gpu": {
+      "explained_variance_ratio_sum": 1.0000000144554908
+    }
+  },
+  "ratios_ours_over": {
+    "sklearn-cpu": 0.5041549944163325,
+    "sklearn-cpu-quota": 0.5061264624917199,
+    "torch-gpu": 33.55229627359019
+  },
+  "rounds_requested": 5,
+  "script": "tools/classical_two_datasets.py",
+  "started": "2026-09-11T17:08:53Z"
+}

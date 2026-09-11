@@ -1,0 +1,70 @@
+lane=classical-two-datasets (DEVIATION 2570, 2571)
+invoked=2026-09-11T16:56:08Z phases=setup smoke_rows=none
+vendor=amd provider=runpod
+commit=37480b23dff6c09adfbb21d67a7f492566d71c29
+lanes=kmeans,pca,ols,knn,kde,svc
+datasets=taxi istella
+rounds=5 body_seconds=2985 min_race=240 race_seconds=900 jobs=192
+gpu_archs=gfx942
+ours_python=pixi run python3 theirs_python=/root/ctd-venv/bin/python extra_arms=sklearn-cpu-quota
+finished=2026-09-11T16:58:25Z phases=setup
+lane=classical-two-datasets (DEVIATION 2570, 2571)
+invoked=2026-09-11T16:59:50Z phases=prep smoke_rows=none
+vendor=amd provider=runpod
+commit=37480b23dff6c09adfbb21d67a7f492566d71c29
+lanes=kmeans,pca,ols,knn,kde,svc
+datasets=taxi
+rounds=5 body_seconds=2985 min_race=240 race_seconds=900 jobs=192
+gpu_archs=gfx942
+ours_python=pixi run python3 theirs_python=/root/ctd-venv/bin/python extra_arms=sklearn-cpu-quota
+finished=2026-09-11T16:59:51Z phases=prep
+lane=classical-two-datasets (DEVIATION 2570, 2571)
+invoked=2026-09-11T16:59:51Z phases=races smoke_rows=none
+vendor=amd provider=runpod
+commit=37480b23dff6c09adfbb21d67a7f492566d71c29
+lanes=kmeans,pca,ols,knn
+datasets=taxi
+rounds=5 body_seconds=2985 min_race=240 race_seconds=900 jobs=192
+gpu_archs=gfx942
+ours_python=pixi run python3 theirs_python=/root/ctd-venv/bin/python extra_arms=sklearn-cpu-quota
+finished=2026-09-11T17:02:39Z phases=races
+lane=classical-two-datasets (DEVIATION 2570, 2571)
+invoked=2026-09-11T17:02:39Z phases=races smoke_rows=none
+vendor=amd provider=runpod
+commit=37480b23dff6c09adfbb21d67a7f492566d71c29
+lanes=kde,svc
+datasets=taxi
+rounds=5 body_seconds=2985 min_race=240 race_seconds=900 jobs=192
+gpu_archs=gfx942
+ours_python=pixi run python3 theirs_python=/root/ctd-venv/bin/python extra_arms=sklearn-cpu-quota
+finished=2026-09-11T17:05:41Z phases=races
+lane=classical-two-datasets (DEVIATION 2570, 2571)
+invoked=2026-09-11T17:07:14Z phases=prep smoke_rows=none
+vendor=amd provider=runpod
+commit=37480b23dff6c09adfbb21d67a7f492566d71c29
+lanes=kmeans,pca,ols,knn,kde,svc
+datasets=istella
+rounds=5 body_seconds=2985 min_race=240 race_seconds=900 jobs=192
+gpu_archs=gfx942
+ours_python=pixi run python3 theirs_python=/root/ctd-venv/bin/python extra_arms=sklearn-cpu-quota
+finished=2026-09-11T17:07:20Z phases=prep
+lane=classical-two-datasets (DEVIATION 2570, 2571)
+invoked=2026-09-11T17:07:20Z phases=races smoke_rows=none
+vendor=amd provider=runpod
+commit=37480b23dff6c09adfbb21d67a7f492566d71c29
+lanes=kmeans,pca,ols,knn
+datasets=istella
+rounds=5 body_seconds=2985 min_race=240 race_seconds=900 jobs=192
+gpu_archs=gfx942
+ours_python=pixi run python3 theirs_python=/root/ctd-venv/bin/python extra_arms=sklearn-cpu-quota
+finished=2026-09-11T17:13:26Z phases=races
+lane=classical-two-datasets (DEVIATION 2570, 2571)
+invoked=2026-09-11T17:13:26Z phases=races smoke_rows=none
+vendor=amd provider=runpod
+commit=37480b23dff6c09adfbb21d67a7f492566d71c29
+lanes=kde,svc
+datasets=istella
+rounds=5 body_seconds=2985 min_race=240 race_seconds=900 jobs=192
+gpu_archs=gfx942
+ours_python=pixi run python3 theirs_python=/root/ctd-venv/bin/python extra_arms=sklearn-cpu-quota
+finished=2026-09-11T17:29:37Z phases=races

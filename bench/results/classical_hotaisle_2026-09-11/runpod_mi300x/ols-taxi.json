@@ -1,0 +1,520 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "pixi",
+        "run",
+        "python3",
+        "/root/mojolearn/tools/classical_two_datasets.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "ols",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/ctd-data"
+      ],
+      "digest_stable": true,
+      "digests": [
+        "f0a6eaf5a8c1ee08",
+        "f0a6eaf5a8c1ee08",
+        "f0a6eaf5a8c1ee08",
+        "f0a6eaf5a8c1ee08",
+        "f0a6eaf5a8c1ee08",
+        "f0a6eaf5a8c1ee08"
+      ],
+      "info": {
+        "device": "gpu",
+        "library": "mojolearn",
+        "numeric_mode_env": "identical",
+        "numeric_mode_used": "identical",
+        "vendor_used": "hip",
+        "version": "0.8.1"
+      },
+      "max_ms": 233.46160000073723,
+      "median_ms": 221.1225219998596,
+      "min_ms": 206.09963000060816,
+      "ms": [
+        233.46160000073723,
+        221.1225219998596,
+        221.93961099947046,
+        206.09963000060816,
+        211.55738299967197
+      ],
+      "status": "ok",
+      "warmup_ms": 967.9830789991684
+    },
+    "sklearn-cpu": {
+      "command": [
+        "/root/ctd-venv/bin/python",
+        "/root/mojolearn/tools/classical_two_datasets.py",
+        "worker",
+        "--arm",
+        "sklearn-cpu",
+        "--lane",
+        "ols",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/ctd-data"
+      ],
+      "digest_stable": true,
+      "digests": [
+        "bcdad3106f4b9bcf",
+        "bcdad3106f4b9bcf",
+        "bcdad3106f4b9bcf",
+        "bcdad3106f4b9bcf",
+        "bcdad3106f4b9bcf",
+        "bcdad3106f4b9bcf"
+      ],
+      "info": {
+        "config": "LinearRegression(fit_intercept=True) (scipy.linalg.lstsq, gelsd)",
+        "cpu_model": "AMD EPYC 9474F 48-Core Processor",
+        "device": "cpu",
+        "library": "scikit-learn",
+        "numpy": "2.5.3",
+        "os_cpu_count": 192,
+        "python": "3.12.14",
+        "sched_affinity_cpus": 192,
+        "scipy": "1.18.1",
+        "thread_env": {
+          "MKL_NUM_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "threadpools": [
+          {
+            "architecture": "SkylakeX",
+            "filepath": "libscipy_openblas64_-f48b354e.so",
+            "internal_api": "openblas",
+            "num_threads": 64,
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.34.106.0"
+          },
+          {
+            "architecture": "SkylakeX",
+            "filepath": "libscipy_openblas-5f890258.so",
+            "internal_api": "openblas",
+            "num_threads": 64,
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.31.dev"
+          },
+          {
+            "architecture": null,
+            "filepath": "libgomp-e985bcbb.so.1.0.0",
+            "internal_api": "openmp",
+            "num_threads": 192,
+            "threading_layer": null,
+            "user_api": "openmp",
+            "version": null
+          }
+        ],
+        "version": "1.9.1"
+      },
+      "max_ms": 687.9676360003941,
+      "median_ms": 631.6592330003914,
+      "min_ms": 614.4971489993623,
+      "ms": [
+        687.9676360003941,
+        631.6592330003914,
+        678.1091489992832,
+        614.4971489993623,
+        625.0948489996517
+      ],
+      "status": "ok",
+      "warmup_ms": 726.2385410012939
+    },
+    "sklearn-cpu-quota": {
+      "command": [
+        "/root/ctd-venv/bin/python",
+        "/root/mojolearn/tools/classical_two_datasets.py",
+        "worker",
+        "--arm",
+        "sklearn-cpu-quota",
+        "--lane",
+        "ols",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/ctd-data"
+      ],
+      "digest_stable": true,
+      "digests": [
+        "bcdad3106f4b9bcf",
+        "bcdad3106f4b9bcf",
+        "bcdad3106f4b9bcf",
+        "bcdad3106f4b9bcf",
+        "bcdad3106f4b9bcf",
+        "bcdad3106f4b9bcf"
+      ],
+      "info": {
+        "config": "LinearRegression(fit_intercept=True) (scipy.linalg.lstsq, gelsd); threadpool_limits(limits=20) around construction and every call",
+        "cpu_model": "AMD EPYC 9474F 48-Core Processor",
+        "device": "cpu",
+        "library": "scikit-learn",
+        "numpy": "2.5.3",
+        "os_cpu_count": 192,
+        "python": "3.12.14",
+        "sched_affinity_cpus": 192,
+        "scipy": "1.18.1",
+        "thread_cap": {
+          "quota_cpus": 20.4,
+          "source": "cgroup v1 /sys/fs/cgroup/cpu/cpu.cfs_quota_us",
+          "threads": 20
+        },
+        "thread_env": {
+          "MKL_NUM_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "threadpools": [
+          {
+            "architecture": "SkylakeX",
+            "filepath": "libscipy_openblas64_-f48b354e.so",
+            "internal_api": "openblas",
+            "num_threads": 20,
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.34.106.0"
+          },
+          {
+            "architecture": "SkylakeX",
+            "filepath": "libscipy_openblas-5f890258.so",
+            "internal_api": "openblas",
+            "num_threads": 64,
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.31.dev"
+          },
+          {
+            "architecture": null,
+            "filepath": "libgomp-e985bcbb.so.1.0.0",
+            "internal_api": "openmp",
+            "num_threads": 192,
+            "threading_layer": null,
+            "user_api": "openmp",
+            "version": null
+          }
+        ],
+        "version": "1.9.1"
+      },
+      "max_ms": 499.21897100102797,
+      "median_ms": 487.4576350011921,
+      "min_ms": 478.9730479988066,
+      "ms": [
+        499.21897100102797,
+        487.4576350011921,
+        478.9730479988066,
+        483.04063499926997,
+        487.9881060005573
+      ],
+      "status": "ok",
+      "warmup_ms": 518.9166269992711
+    },
+    "torch-gpu": {
+      "command": [
+        "/root/ctd-venv/bin/python",
+        "/root/mojolearn/tools/classical_two_datasets.py",
+        "worker",
+        "--arm",
+        "torch-gpu",
+        "--lane",
+        "ols",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/ctd-data"
+      ],
+      "digest_stable": true,
+      "digests": [
+        "8d9c718b8a364eac",
+        "8d9c718b8a364eac",
+        "8d9c718b8a364eac",
+        "8d9c718b8a364eac",
+        "8d9c718b8a364eac",
+        "8d9c718b8a364eac"
+      ],
+      "info": {
+        "config": "xc = x - mean, yc = y - mean; torch.linalg.lstsq(xc, yc[:, None]) (default driver; gels on CUDA); intercept = ymean - xmean @ coef",
+        "cpu_model": "AMD EPYC 9474F 48-Core Processor",
+        "device": "gpu",
+        "device_name": "AMD Instinct MI300X",
+        "library": "torch",
+        "numpy": "2.5.3",
+        "os_cpu_count": 192,
+        "python": "3.12.14",
+        "sched_affinity_cpus": 192,
+        "thread_env": {
+          "MKL_NUM_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "torch_version_cuda": null,
+        "torch_version_hip": "6.4.43483-a187df25c",
+        "upload_ms_untimed": 229.12258699943777,
+        "version": "2.6.0+rocm6.4.1.git1ded221d"
+      },
+      "max_ms": 621.2457469991932,
+      "median_ms": 314.71051200060174,
+      "min_ms": 182.85322999872733,
+      "ms": [
+        620.774965000237,
+        621.2457469991932,
+        182.85322999872733,
+        212.28873399923032,
+        314.71051200060174
+      ],
+      "status": "ok",
+      "warmup_ms": 738.4906389997923
+    },
+    "torch-gpu-eigh": {
+      "command": [
+        "/root/ctd-venv/bin/python",
+        "/root/mojolearn/tools/classical_two_datasets.py",
+        "worker",
+        "--arm",
+        "torch-gpu-eigh",
+        "--lane",
+        "ols",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/ctd-data"
+      ],
+      "digest_stable": true,
+      "digests": [
+        "1e89f47bcf39398c",
+        "1e89f47bcf39398c",
+        "1e89f47bcf39398c",
+        "1e89f47bcf39398c",
+        "1e89f47bcf39398c",
+        "1e89f47bcf39398c"
+      ],
+      "info": {
+        "config": "centered normal equations: G = xc.T @ xc, b = xc.T @ yc, torch.linalg.eigh(G), pseudo-inverse cutoff d * eps32 * max|eig|",
+        "cpu_model": "AMD EPYC 9474F 48-Core Processor",
+        "device": "gpu",
+        "device_name": "AMD Instinct MI300X",
+        "library": "torch",
+        "numpy": "2.5.3",
+        "os_cpu_count": 192,
+        "python": "3.12.14",
+        "sched_affinity_cpus": 192,
+        "thread_env": {
+          "MKL_NUM_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "torch_version_cuda": null,
+        "torch_version_hip": "6.4.43483-a187df25c",
+        "upload_ms_untimed": 269.97578400005295,
+        "version": "2.6.0+rocm6.4.1.git1ded221d"
+      },
+      "max_ms": 38.72104699985357,
+      "median_ms": 36.91602300023078,
+      "min_ms": 36.37709900067421,
+      "ms": [
+        36.91602300023078,
+        38.72104699985357,
+        36.37709900067421,
+        36.60664200106112,
+        38.593155000853585
+      ],
+      "status": "ok",
+      "warmup_ms": 452.14614500036987
+    }
+  },
+  "block": {
+    "arrays": {
+      "X": {
+        "dtype": "float32",
+        "sha256": "64a93747ff25bdb8225c941c78de5b98e8f2128becf32b5e2904f1878d204831",
+        "shape": [
+          4000000,
+          11
+        ]
+      },
+      "Xq": {
+        "dtype": "float32",
+        "sha256": "7d1081b9a675b9277b145981389c6b07ecdbf8aa8190617fcf61abe5e9cf2d29",
+        "shape": [
+          500000,
+          11
+        ]
+      },
+      "init": {
+        "dtype": "float32",
+        "sha256": "8ff810734481c6e6509fc3d7cd80d6f86bf69fb88a37748c07297ac452cc1267",
+        "shape": [
+          64,
+          11
+        ]
+      },
+      "y": {
+        "dtype": "float32",
+        "sha256": "8890fead438c9db51b5c5795a554cd01d0995bf84b10e94683e9b13a29fe179d",
+        "shape": [
+          4000000
+        ]
+      },
+      "yq": {
+        "dtype": "float32",
+        "sha256": "6eb4843ea272abd323877deebdd43ed8ae327f5f42e34a6680db4c4c39e457bf",
+        "shape": [
+          500000
+        ]
+      }
+    },
+    "block": "big",
+    "capped_below_4M": false,
+    "data_root": "/root/datasets/gbm-bench",
+    "dataset": "taxi",
+    "eval_rows": "the loader's test split, all 500000 rows",
+    "fit_rows": [
+      0,
+      4000000
+    ],
+    "fit_rows_available": 5250086,
+    "kmeans": {
+      "init_rows": [
+        0,
+        62500,
+        125000,
+        187500,
+        250000,
+        312500,
+        375000,
+        437500,
+        500000,
+        562500,
+        625000,
+        687500,
+        750000,
+        812500,
+        875000,
+        937500,
+        1000000,
+        1062500,
+        1125000,
+        1187500,
+        1250000,
+        1312500,
+        1375000,
+        1437500,
+        1500000,
+        1562500,
+        1625000,
+        1687500,
+        1750000,
+        1812500,
+        1875000,
+        1937500,
+        2000000,
+        2062500,
+        2125000,
+        2187500,
+        2250000,
+        2312500,
+        2375000,
+        2437500,
+        2500000,
+        2562500,
+        2625000,
+        2687500,
+        2750000,
+        2812500,
+        2875000,
+        2937500,
+        3000000,
+        3062500,
+        3125000,
+        3187500,
+        3250000,
+        3312500,
+        3375000,
+        3437500,
+        3500000,
+        3562500,
+        3625000,
+        3687500,
+        3750000,
+        3812500,
+        3875000,
+        3937500
+      ],
+      "k": 64,
+      "max_iter": 20
+    },
+    "lanes": [
+      "kmeans",
+      "pca",
+      "ols"
+    ],
+    "loader": "speed_gbdt_arm.load_taxi('shipped', regression=True), TAXI_NUMERIC columns",
+    "pca": {
+      "n_components": 8
+    },
+    "rule": "ENGINEERING_RULES.md section 9; DEVIATION 2570",
+    "scaling": "none",
+    "sentinel_cells_replaced": {
+      "X": 0,
+      "Xq": 0
+    },
+    "smoke_max_rows": null,
+    "target": "fare_amount",
+    "written": "2026-09-11T16:59:51Z"
+  },
+  "commit": "37480b23dff6c09adfbb21d67a7f492566d71c29",
+  "dataset": "taxi",
+  "finished": "2026-09-11T17:01:50Z",
+  "finished_rounds": "2026-09-11T17:01:50Z",
+  "lane": "ols",
+  "quality": {
+    "ours": {
+      "finite": true,
+      "r2": 0.9088369390594341,
+      "rmse": 4.6964668629893245
+    },
+    "sklearn-cpu": {
+      "finite": true,
+      "r2": 0.9088240847863241,
+      "rmse": 4.696797959483662
+    },
+    "sklearn-cpu-quota": {
+      "finite": true,
+      "r2": 0.9088240847863241,
+      "rmse": 4.696797959483662
+    },
+    "torch-gpu": {
+      "finite": true,
+      "r2": 0.9088391353023965,
+      "rmse": 4.696410290489929
+    },
+    "torch-gpu-eigh": {
+      "finite": true,
+      "r2": 0.9088221193366598,
+      "rmse": 4.696848582886799
+    }
+  },
+  "ratios_ours_over": {
+    "sklearn-cpu": 0.3500661598018984,
+    "sklearn-cpu-quota": 0.4536240816072536,
+    "torch-gpu": 0.7026219766038092,
+    "torch-gpu-eigh": 5.9898792997955725
+  },
+  "rounds_requested": 5,
+  "script": "tools/classical_two_datasets.py",
+  "started": "2026-09-11T17:01:10Z"
+}

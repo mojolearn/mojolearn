@@ -1086,3 +1086,110 @@ istella=1.408 reason=time (quality better on both); DEVIATION 2512 on
 against off, RF NO FLIP geomean=1.001 taxi=0.999 istella=1.004 (bits equal),
 symmetric NO FLIP geomean=1.011 taxi=0.999 istella=1.023 (its quality delta
 is inside the round-to-round movement above), so 2512 is neutral on AMD.
+
+## AMD Instinct MI300X on RunPod, amdgpu 6.10.5, ROCm 6.4.1 userland, torch 2.6.0+rocm6.4.1
+
+A RunPod pod is not a Hot Aisle VM. Its CPU rows are comparable only within
+this section. Its torch GPU rows are the same GPU model as a Hot Aisle
+MI300X, on a different provider and host driver.
+
+### Classical lanes on taxi and Istella-S (September 11, pod uncjlirh5elvmp)
+
+Pod `uncjlirh5elvmp` (`mojolearn-gemm-amd-2026-09-11_125346`) on RunPod
+machine `j03rnq2tcsxu`, $2.39 per hour, image
+`rocm/dev-ubuntu-22.04:6.4.1-complete` (ROCm 6.4.1-83 userland) on host
+amdgpu 6.10.5, kernel 6.8.0-138. GPU AMD Instinct MI300X (SR-IOV SKU
+MI3SRIOV, gfx942). CPU AMD EPYC 9474F 48-Core Processor, 192 CPUs visible
+to the pod and a CFS quota of 20.4 CPUs (2040000 over 100000; the API allots
+24 vCPUs and 283 GB). Ours is IDENTICAL at commit 37480b23 (Mojo 1.0.0
+ed45d567, pixi Python 3.14), timed from a host float32 array to host
+results. torch 2.6.0+rocm6.4.1.git1ded221d from repo.radeon.com
+rocm-rel-6.4.1 (HIP 6.4.43483, setup probe ran eigh, cdist, topk, lstsq and
+addmm on the GPU), inputs uploaded before the clock, the clock ends at
+`torch.cuda.synchronize()`. scikit-learn 1.9.1, SciPy 1.18.1 and NumPy 2.5.3
+in a Python 3.12 venv run in two arms. `sklearn-cpu` is as installed, no
+thread variables, OpenBLAS 0.3.34 (NumPy's) and 0.3.31.dev (SciPy's) at 64
+threads each and OpenMP at 192, `n_jobs=-1` for kNN. `sklearn-cpu-quota` is
+the same call under `threadpool_limits(20)` with kNN `n_jobs=20` (DEVIATION
+2573). KernelDensity scoring and libsvm are single-threaded by design in
+both arms. cuML has no ROCm path. 1 warm-up plus 5 rounds, arms interleaved
+with the order rotated every round, ms median (min..max), quality computed by
+one float64 NumPy function per lane (`tools/classical_two_datasets.py`).
+Shapes are taxi 4,000,000 x 11 and Istella-S 2,043,304 x 220 for kmeans (k
+64, 20 iterations from a shared init), pca (8 components) and ols; kNN
+400,000 index rows x 4,000 queries, k 10; kde 100,000 standardized fit rows x
+2,000 queries, Scott bandwidth; svc 10,000 standardized fit rows, RBF, C 1,
+gamma 1/d. Taxi and Istella-S bytes matched the Mac's sha256. Evidence
+`bench/results/classical_hotaisle_2026-09-11/runpod_mi300x/`.
+
+| lane | dataset | opponent | device, threading, BLAS | opponent ms | opponent quality | ours IDENTICAL ms | ours quality | ours / opponent |
+|---|---|---|---|---|---|---|---|---|
+| kmeans | taxi | scikit-learn KMeans lloyd | CPU, OpenBLAS 64 + OpenMP 192 on a 20.4-CPU quota | 1176 (1171..1225) | inertia 1.20198e8, 20 iter | 129 (122..155) | inertia 1.20628e8, 21 iter | 0.11x |
+| kmeans | taxi | scikit-learn KMeans lloyd | CPU, threadpool_limits(20) | 1310 (1183..1370) | inertia 1.20197e8 | 129 (122..155) | same | 0.10x |
+| kmeans | taxi | torch Lloyd (addmm, index_add_) | GPU, MI300X | 237 (235..248) | inertia 1.20192e8, 20 iter | 129 (122..155) | same | 0.55x |
+| kmeans | Istella-S | scikit-learn KMeans lloyd | CPU, OpenBLAS 64 + OpenMP 192 | 1796 (1791..1947) | inertia 1.28328e17 | 5239 (5215..5254) | inertia 1.31285e17, 21 iter | 2.92x |
+| kmeans | Istella-S | scikit-learn KMeans lloyd | CPU, threadpool_limits(20) | 1835 (1829..1984) | inertia 1.28328e17 | 5239 (5215..5254) | same | 2.86x |
+| kmeans | Istella-S | torch Lloyd | GPU, MI300X | 472 (466..488) | inertia 1.28553e17 | 5239 (5215..5254) | same | 11.09x |
+| pca | taxi | scikit-learn PCA covariance_eigh | CPU, OpenBLAS 64 + OpenMP 192 | 118 (118..120) | EVR sum 0.997809 | 38.1 (22.8..39.0) | EVR sum 0.997861 | 0.32x |
+| pca | taxi | scikit-learn PCA covariance_eigh | CPU, threadpool_limits(20) | 120 (118..120) | EVR sum 0.997809 | 38.1 (22.8..39.0) | same | 0.32x |
+| pca | taxi | torch covariance eigh | GPU, MI300X | 12.5 (12.2..12.7) | EVR sum 0.997861 | 38.1 (22.8..39.0) | same | 3.04x |
+| pca | Istella-S | scikit-learn PCA covariance_eigh | CPU, OpenBLAS 64 + OpenMP 192 | 1361 (1350..1363) | EVR sum 1.0 | 686 (658..773) | EVR sum 1.0 | 0.50x |
+| pca | Istella-S | scikit-learn PCA covariance_eigh | CPU, threadpool_limits(20) | 1355 (1352..1358) | EVR sum 1.0 | 686 (658..773) | same | 0.51x |
+| pca | Istella-S | torch covariance eigh | GPU, MI300X | 20.4 (20.4..20.6) | EVR sum 1.0 | 686 (658..773) | same | 33.55x |
+| ols | taxi | scikit-learn LinearRegression (gelsd) | CPU, OpenBLAS 64 + OpenMP 192 | 632 (614..688) | R2 0.908824 | 221 (206..233) | R2 0.908837 | 0.35x |
+| ols | taxi | scikit-learn LinearRegression | CPU, threadpool_limits(20) | 487 (479..499) | R2 0.908824 | 221 (206..233) | same | 0.45x |
+| ols | taxi | torch.linalg.lstsq | GPU, MI300X | 315 (183..621) | R2 0.908839 | 221 (206..233) | same | 0.70x |
+| ols | taxi | torch normal equations eigh | GPU, MI300X | 36.9 (36.4..38.7) | R2 0.908822 | 221 (206..233) | same | 5.99x |
+| ols | Istella-S | scikit-learn LinearRegression (gelsd) | CPU, OpenBLAS 64 + OpenMP 192 | 10087 (9694..10414) | R2 0.164077 | 1828 (1774..1846) | R2 -115.603 | not quoted (quality) |
+| ols | Istella-S | scikit-learn LinearRegression | CPU, threadpool_limits(20) | 6670 (6603..6716) | R2 0.164151 | 1828 (1774..1846) | R2 -115.603 | not quoted (quality) |
+| ols | Istella-S | torch.linalg.lstsq | GPU, MI300X | 3109 (2999..3189) | R2 NaN | 1828 (1774..1846) | R2 -115.603 | not quoted (quality) |
+| ols | Istella-S | torch normal equations eigh | GPU, MI300X | 44.8 (44.6..44.9) | R2 0.151604 | 1828 (1774..1846) | R2 -115.603 | not quoted (quality) |
+| knn | taxi | scikit-learn NearestNeighbors brute | CPU, n_jobs=-1, OpenBLAS 64 + OpenMP 192 | 246 (240..257) | recall@10 1.0 | 44.1 (28.9..45.5) | recall@10 0.99915 | 0.18x |
+| knn | taxi | scikit-learn NearestNeighbors brute | CPU, n_jobs=20, threadpool_limits(20) | 244 (234..249) | recall@10 1.0 | 44.1 (28.9..45.5) | same | 0.18x |
+| knn | taxi | torch cdist + topk | GPU, MI300X | 28.7 (28.6..33.1) | recall@10 0.999325 | 44.1 (28.9..45.5) | same | 1.54x |
+| knn | Istella-S | scikit-learn NearestNeighbors brute | CPU, n_jobs=-1, OpenBLAS 64 + OpenMP 192 | 1076 (1071..1081) | recall@10 1.0 | 154 (137..244) | recall@10 0.923025 | 0.14x |
+| knn | Istella-S | scikit-learn NearestNeighbors brute | CPU, n_jobs=20, threadpool_limits(20) | 1087 (1086..1090) | recall@10 1.0 | 154 (137..244) | same | 0.14x |
+| knn | Istella-S | torch cdist + topk | GPU, MI300X | 34.2 (34.1..41.8) | recall@10 0.932375 | 154 (137..244) | same | 4.49x |
+| kde | taxi | scikit-learn KernelDensity, rtol = atol = 0 | CPU, one thread (score_samples) | 7634 (7629..7643) | mean log-lik -9.58204 | 62.6 (47.7..64.8) | mean log-lik -9.58207 | 0.0082x |
+| kde | taxi | scikit-learn KernelDensity | CPU, one thread, capped arm | 7631 (7594..7672) | mean log-lik -9.58204 | 62.6 (47.7..64.8) | same | 0.0082x |
+| kde | Istella-S | scikit-learn KernelDensity | CPU, one thread | RUN OWED | - | RUN OWED | - | - |
+| svc | taxi | scikit-learn SVC (libsvm) | CPU, one thread | 2776 (2729..2819) | accuracy 0.7675, 5675 SV | 1559 (1539..1585) | accuracy 0.7675, 5527 SV | 0.56x |
+| svc | taxi | scikit-learn SVC (libsvm) | CPU, one thread, capped arm | 2735 (2726..2800) | accuracy 0.7675 | 1559 (1539..1585) | same | 0.57x |
+| svc | Istella-S | scikit-learn SVC (libsvm) | CPU, one thread | 1508 (1318..1535) | accuracy 0.9222, 2400 SV | 241 (138..502) | accuracy 0.9222, 2400 SV | 0.16x |
+| svc | Istella-S | scikit-learn SVC (libsvm) | CPU, one thread, capped arm | 1348 (1330..1519) | accuracy 0.9222 | 241 (138..502) | same | 0.18x |
+
+Every ours arm held one digest across its five rounds.
+
+Quality findings. Ours OLS on Istella-S returns R2 -115.603 (RMSE 9.011)
+where scikit-learn returns 0.164 (RMSE 0.763), so no ratio is quoted for
+that cell. Ours mirrors cuML `algorithm='eig'`, a float32 eigendecomposition
+of the centered normal equations, and the torch arm of that class with a
+d x eps32 x max|eig| cutoff reaches R2 0.152. That points at our eigenvalue
+cutoff on Istella's near-constant columns and is not yet measured. torch
+lstsq on Istella-S returns NaN. Ours kNN recall@10 on Istella-S is 0.923
+against torch's 0.932 and scikit-learn's 1.0. Ours kmeans inertia is 0.36
+percent above scikit-learn's on taxi and 2.3 percent above on Istella-S, and
+it reports 21 iterations because the binding refuses tol 0 and the arm falls
+back to tol 1e-7 while both opponents run exactly 20.
+
+kde on Istella-S is RUN OWED. The race hit its 900 s bound (rc 124) before
+the uncapped scikit-learn arm's fifth round, so no JSON exists. Each
+scikit-learn `score_samples` call took about 79 s on both arms (78,860 to
+79,599 ms over the rounds that ran), and ours took 608 to 771 ms over rounds
+1 to 5. The rerun needs a race bound near 1,200 s or one scikit-learn arm,
+since both are one thread there.
+
+Capping scikit-learn at the quota moved ols outside its range (632 to 487
+ms on taxi, 10,087 to 6,670 ms on Istella-S). Every other cell's capped and
+uncapped ranges overlap, including kmeans on taxi, whose capped median is
+higher (1,310 against 1,176 ms).
+
+An earlier pod on the same machine (`m73ut5pd92r1rk`, commit ba49747e)
+measured the same cells before the kmeans fix (evidence in
+`superseded_pod_m73ut5pd92r1rk/`). Its taxi medians differ from the table
+by 1 percent or less for ours pca, knn, kde and svc, 10 percent for ours ols
+(201 against 221 ms), 13 percent for scikit-learn kmeans (1,333 against
+1,176 ms) and 28 percent for torch lstsq (403 against 315 ms, whose rounds
+span 168 to 621 ms). It was reaped at 16:57Z, before this pod's first race
+at 17:00Z. Both pods were verified gone (HTTP 404). This pod's gemm device card
+matched the Apple card at all 60 stages.

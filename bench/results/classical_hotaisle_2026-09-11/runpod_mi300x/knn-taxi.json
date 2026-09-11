@@ -1,0 +1,396 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "pixi",
+        "run",
+        "python3",
+        "/root/mojolearn/tools/classical_two_datasets.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "knn",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/ctd-data"
+      ],
+      "digest_stable": true,
+      "digests": [
+        "635062839df98cb1",
+        "635062839df98cb1",
+        "635062839df98cb1",
+        "635062839df98cb1",
+        "635062839df98cb1",
+        "635062839df98cb1"
+      ],
+      "info": {
+        "device": "gpu",
+        "library": "mojolearn",
+        "numeric_mode_env": "identical",
+        "numeric_mode_used": "identical",
+        "vendor_used": "hip",
+        "version": "0.8.1"
+      },
+      "max_ms": 45.524225000917795,
+      "median_ms": 44.10109299897158,
+      "min_ms": 28.945952999492874,
+      "ms": [
+        45.524225000917795,
+        44.744643000740325,
+        44.10109299897158,
+        29.056498999125324,
+        28.945952999492874
+      ],
+      "status": "ok",
+      "warmup_ms": 811.797211999874
+    },
+    "sklearn-cpu": {
+      "command": [
+        "/root/ctd-venv/bin/python",
+        "/root/mojolearn/tools/classical_two_datasets.py",
+        "worker",
+        "--arm",
+        "sklearn-cpu",
+        "--lane",
+        "knn",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/ctd-data"
+      ],
+      "digest_stable": true,
+      "digests": [
+        "0d45b33887b5e653",
+        "0d45b33887b5e653",
+        "0d45b33887b5e653",
+        "0d45b33887b5e653",
+        "0d45b33887b5e653",
+        "0d45b33887b5e653"
+      ],
+      "info": {
+        "config": "NearestNeighbors(n_neighbors=10, algorithm='brute', n_jobs=-1); kneighbors timed",
+        "cpu_model": "AMD EPYC 9474F 48-Core Processor",
+        "device": "cpu",
+        "library": "scikit-learn",
+        "numpy": "2.5.3",
+        "os_cpu_count": 192,
+        "python": "3.12.14",
+        "sched_affinity_cpus": 192,
+        "scipy": "1.18.1",
+        "thread_env": {
+          "MKL_NUM_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "threadpools": [
+          {
+            "architecture": "SkylakeX",
+            "filepath": "libscipy_openblas64_-f48b354e.so",
+            "internal_api": "openblas",
+            "num_threads": 64,
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.34.106.0"
+          },
+          {
+            "architecture": "SkylakeX",
+            "filepath": "libscipy_openblas-5f890258.so",
+            "internal_api": "openblas",
+            "num_threads": 64,
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.31.dev"
+          },
+          {
+            "architecture": null,
+            "filepath": "libgomp-e985bcbb.so.1.0.0",
+            "internal_api": "openmp",
+            "num_threads": 192,
+            "threading_layer": null,
+            "user_api": "openmp",
+            "version": null
+          }
+        ],
+        "version": "1.9.1"
+      },
+      "max_ms": 257.01646999914374,
+      "median_ms": 246.35153999952308,
+      "min_ms": 239.55251700135705,
+      "ms": [
+        257.01646999914374,
+        255.0428770009603,
+        245.95279499953904,
+        239.55251700135705,
+        246.35153999952308
+      ],
+      "status": "ok",
+      "warmup_ms": 252.04442299946095
+    },
+    "sklearn-cpu-quota": {
+      "command": [
+        "/root/ctd-venv/bin/python",
+        "/root/mojolearn/tools/classical_two_datasets.py",
+        "worker",
+        "--arm",
+        "sklearn-cpu-quota",
+        "--lane",
+        "knn",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/ctd-data"
+      ],
+      "digest_stable": true,
+      "digests": [
+        "38c26a7a51b2849a",
+        "38c26a7a51b2849a",
+        "38c26a7a51b2849a",
+        "38c26a7a51b2849a",
+        "38c26a7a51b2849a",
+        "38c26a7a51b2849a"
+      ],
+      "info": {
+        "config": "NearestNeighbors(n_neighbors=10, algorithm='brute', n_jobs=-1); kneighbors timed; threadpool_limits(limits=20) around construction and every call",
+        "cpu_model": "AMD EPYC 9474F 48-Core Processor",
+        "device": "cpu",
+        "library": "scikit-learn",
+        "numpy": "2.5.3",
+        "os_cpu_count": 192,
+        "python": "3.12.14",
+        "sched_affinity_cpus": 192,
+        "scipy": "1.18.1",
+        "thread_cap": {
+          "quota_cpus": 20.4,
+          "source": "cgroup v1 /sys/fs/cgroup/cpu/cpu.cfs_quota_us",
+          "threads": 20
+        },
+        "thread_env": {
+          "MKL_NUM_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "threadpools": [
+          {
+            "architecture": "SkylakeX",
+            "filepath": "libscipy_openblas64_-f48b354e.so",
+            "internal_api": "openblas",
+            "num_threads": 20,
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.34.106.0"
+          },
+          {
+            "architecture": "SkylakeX",
+            "filepath": "libscipy_openblas-5f890258.so",
+            "internal_api": "openblas",
+            "num_threads": 64,
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.31.dev"
+          },
+          {
+            "architecture": null,
+            "filepath": "libgomp-e985bcbb.so.1.0.0",
+            "internal_api": "openmp",
+            "num_threads": 192,
+            "threading_layer": null,
+            "user_api": "openmp",
+            "version": null
+          }
+        ],
+        "version": "1.9.1"
+      },
+      "max_ms": 249.36306299969146,
+      "median_ms": 243.95377299879328,
+      "min_ms": 234.1840279987082,
+      "ms": [
+        240.67642400041223,
+        243.95377299879328,
+        249.36306299969146,
+        247.59315200026322,
+        234.1840279987082
+      ],
+      "status": "ok",
+      "warmup_ms": 244.61321700073313
+    },
+    "torch-gpu": {
+      "command": [
+        "/root/ctd-venv/bin/python",
+        "/root/mojolearn/tools/classical_two_datasets.py",
+        "worker",
+        "--arm",
+        "torch-gpu",
+        "--lane",
+        "knn",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/ctd-data"
+      ],
+      "digest_stable": true,
+      "digests": [
+        "59c1f7e552b4e31c",
+        "59c1f7e552b4e31c",
+        "59c1f7e552b4e31c",
+        "59c1f7e552b4e31c",
+        "59c1f7e552b4e31c",
+        "59c1f7e552b4e31c"
+      ],
+      "info": {
+        "config": "brute force: per 1024-query chunk torch.cdist(q, index) (default compute_mode) then topk(10, largest=False)",
+        "cpu_model": "AMD EPYC 9474F 48-Core Processor",
+        "device": "gpu",
+        "device_name": "AMD Instinct MI300X",
+        "library": "torch",
+        "numpy": "2.5.3",
+        "os_cpu_count": 192,
+        "python": "3.12.14",
+        "sched_affinity_cpus": 192,
+        "thread_env": {
+          "MKL_NUM_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "torch_version_cuda": null,
+        "torch_version_hip": "6.4.43483-a187df25c",
+        "upload_ms_untimed": 225.9095139997953,
+        "version": "2.6.0+rocm6.4.1.git1ded221d"
+      },
+      "max_ms": 33.11906900125905,
+      "median_ms": 28.658995001023868,
+      "min_ms": 28.59476899902802,
+      "ms": [
+        28.622521000215784,
+        28.658995001023868,
+        28.751422998539056,
+        33.11906900125905,
+        28.59476899902802
+      ],
+      "status": "ok",
+      "warmup_ms": 454.3466979994264
+    }
+  },
+  "block": {
+    "arrays": {
+      "index": {
+        "dtype": "float32",
+        "sha256": "ea3401a27dc7f29b9d2aeb073dab652d2529d5db7ae775f41abf11c243710416",
+        "shape": [
+          400000,
+          11
+        ]
+      },
+      "queries": {
+        "dtype": "float32",
+        "sha256": "f4ec2c83347e9943f0482ff63a0fd25323e082f99302241576a0b9b7c1c4894f",
+        "shape": [
+          4000,
+          11
+        ]
+      }
+    },
+    "block": "knn",
+    "data_root": "/root/datasets/gbm-bench",
+    "dataset": "taxi",
+    "index_rows": [
+      0,
+      400000
+    ],
+    "knn": {
+      "k": 10
+    },
+    "lanes": [
+      "knn"
+    ],
+    "loader": "knn_datasets.real_block('taxi') (DEVIATION 2524)",
+    "query_rows": [
+      400000,
+      404000
+    ],
+    "real_block_sha256": {
+      "block": "7314025a013db35d24485bab8e29c2b8f519e4717bc3a7ee128db6b87d4c6a6e",
+      "index": "4ca62139aeebf81cbcacc26117d2d0d7ccd2d67372a70ae25fd81595c363d64e",
+      "queries": "14a4fb483304ed7b9d46730fd6b74ca14850c412ed98001906035fd1d7ae16de"
+    },
+    "real_block_source": {
+      "built_by": "python tools/speed_gbdt_arm.py --download taxi",
+      "cache_bytes": 419757252,
+      "cache_hit": true,
+      "cache_path": "/root/datasets/gbm-bench/taxi/taxi_speed.npz",
+      "cache_total_rows": 5750086,
+      "columns": [
+        "passengers",
+        "distance_mi",
+        "pickup_hour",
+        "pickup_weekday",
+        "pickup_day",
+        "duration_min",
+        "extra",
+        "mta_tax",
+        "tolls",
+        "congestion",
+        "airport_fee"
+      ],
+      "data_root": "/root/datasets/gbm-bench",
+      "download": null,
+      "features": 11,
+      "npz_key": "x",
+      "parse": "leading 404000 rows of the trees harness's NumPy cache, TAXI_NUMERIC columns; float32, C contiguous; no shuffle, no scaling, no deduplication",
+      "parse_seconds": null,
+      "prefix_rows": 404000,
+      "read_seconds": 0.05679450899879157,
+      "sha256_block": "7314025a013db35d24485bab8e29c2b8f519e4717bc3a7ee128db6b87d4c6a6e"
+    },
+    "rule": "ENGINEERING_RULES.md section 9; DEVIATION 2570",
+    "scaling": "none",
+    "sentinel_cells_replaced": {
+      "index": 0,
+      "queries": 0
+    },
+    "smoke_max_rows": null,
+    "written": "2026-09-11T16:59:51Z"
+  },
+  "commit": "37480b23dff6c09adfbb21d67a7f492566d71c29",
+  "dataset": "taxi",
+  "finished": "2026-09-11T17:02:39Z",
+  "finished_rounds": "2026-09-11T17:02:17Z",
+  "lane": "knn",
+  "quality": {
+    "ours": {
+      "recall_at_10": 0.99915,
+      "reference": "float64 NumPy brute force (shortlist 40 plus every arm's ids, exact differences)",
+      "rows_with_repeated_ids": 0
+    },
+    "sklearn-cpu": {
+      "recall_at_10": 1.0,
+      "reference": "float64 NumPy brute force (shortlist 40 plus every arm's ids, exact differences)",
+      "rows_with_repeated_ids": 0
+    },
+    "sklearn-cpu-quota": {
+      "recall_at_10": 1.0,
+      "reference": "float64 NumPy brute force (shortlist 40 plus every arm's ids, exact differences)",
+      "rows_with_repeated_ids": 0
+    },
+    "torch-gpu": {
+      "recall_at_10": 0.999325,
+      "reference": "float64 NumPy brute force (shortlist 40 plus every arm's ids, exact differences)",
+      "rows_with_repeated_ids": 0
+    }
+  },
+  "ratios_ours_over": {
+    "sklearn-cpu": 0.17901691622896676,
+    "sklearn-cpu-quota": 0.18077643340728214,
+    "torch-gpu": 1.5388220346664645
+  },
+  "rounds_requested": 5,
+  "script": "tools/classical_two_datasets.py",
+  "started": "2026-09-11T17:01:50Z"
+}
