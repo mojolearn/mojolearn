@@ -146,6 +146,9 @@ from kde.impl.neighbors.kernel_density import (
     host_sum_weights,
     kde_fit_validate,
     kde_float32_min,
+    kde_identical_tiled_applies,
+    kde_score_samples_device,
+    kde_score_samples_tiled_identical,
     kde_validate_data,
     kernel_from_name,
     kernel_name,
@@ -1480,8 +1483,135 @@ def check_kde_minkowski_general_p() raises:
     _ = ctx^
 
 
+def _scores_by_path(
+    ctx: DeviceContext,
+    train: List[Float32],
+    query: List[Float32],
+    weights: List[Float32],
+    has_weights: Bool,
+    n_train: Int,
+    n_query: Int,
+    d: Int,
+    h: Float32,
+    kernel: Int,
+    metric: Int,
+    path: Int,
+    q_tpb: Int,
+    chunk_rows: Int,
+) raises -> List[Float32]:
+    """path 0: the staged pass forced; 1: the entry's own dispatch; 2: the
+    tiled pass called directly with `q_tpb` / `chunk_rows`."""
+    var poison = Float32(-987654.0)
+    kde_validate_data(train, n_train, d, metric, "train")
+    kde_validate_data(query, n_query, d, metric, "query")
+    var dtrain = _upload(ctx, train, 0, poison)
+    var dquery = _upload(ctx, query, 0, poison)
+    var dummy = List[Float32]()
+    dummy.append(Float32(1.0))
+    var dweights: DeviceBuffer[DType.float32]
+    if has_weights:
+        dweights = _upload(ctx, weights, 0, poison)
+    else:
+        dweights = _upload(ctx, dummy, 0, poison)
+    var fill = List[Float32]()
+    for _ in range(n_query):
+        fill.append(poison)
+    var dout = _upload(ctx, fill, 0, poison)
+    var sum_w = Float32(n_train)
+    if has_weights:
+        sum_w = host_sum_weights(weights)
+    var tr = IdentityTrace.disabled()
+    if path == 0 or path == 1:
+        kde_score_samples_device(
+            ctx, dtrain, dquery, dweights, has_weights, sum_w, n_train, n_query, d,
+            h, kernel, metric, dout, tr, KDE_ELEM_TPB, KDE_LSE_TPB, Float32(2.0), path == 0,
+        )
+    else:
+        kde_score_samples_tiled_identical(
+            ctx, dtrain, dquery, dweights, has_weights, sum_w, n_train, n_query, d,
+            h, kernel, metric, dout, 64, 32, q_tpb, chunk_rows,
+        )
+    var out = _read(ctx, dout, n_query)
+    for i in range(n_query):
+        if bitcast[DType.uint32](out[i]) == bitcast[DType.uint32](poison):
+            raise Error("kde: the poison survived at score " + String(i) + " (path " + String(path) + ")")
+    _ = dtrain^
+    _ = dquery^
+    _ = dweights^
+    _ = dout^
+    return out^
+
+
+def check_kde_tiled_equals_staged() raises:
+    """DEVIATION 2625's gate: the tiled IDENTICAL pass returns the staged
+    pass's bits on every score, over 6 kernels x the 3 unexpanded metrics x
+    weighted and unweighted, on shapes that straddle the 64-row cell tile,
+    the 64-feature tile and the chunk edge, under the default schedule and
+    under q_tpb 32 with 100-row chunks. REACH: the entry's own dispatch is
+    compared too, and `kde_identical_tiled_applies` must say the entry takes
+    the tiled pass for these metrics under IDENTICAL. Asserts under
+    IDENTICAL; a REPORT elsewhere (the tiled pass is not dispatched there)."""
+    var ctx = DeviceContext()
+    var metrics: List[Int] = [DIST_L2_SQRT_UNEXPANDED, DIST_L1, DIST_LINF]
+    # (n_train, n_query, d): d straddles the 64-feature tile (1, 7, 64, 65,
+    # 130); n_train straddles the 64-row cell tile and the 100-row chunk.
+    var shapes_t: List[Int] = [200, 1025, 129, 777, 64]
+    var shapes_q: List[Int] = [37, 300, 513, 70, 5]
+    var shapes_d: List[Int] = [7, 65, 1, 130, 64]
+    var n_cells = 0
+    var n_bad = 0
+    var first_bad = String("")
+    for s in range(len(shapes_t)):
+        var nt = shapes_t[s]
+        var nq = shapes_q[s]
+        var d = shapes_d[s]
+        var train = _train_fixture(nt, d, 3 + s)
+        var query = _query_fixture(train, nt, nq, d, 5 + s)
+        var w = _weight_fixture(nt, 7 + s)
+        var none = List[Float32]()
+        # A bandwidth that keeps the compact kernels inside their support
+        # for some cells at every d.
+        var h = Float32(0.5) * Float32(d) + BANDWIDTH
+        for metric in metrics:
+            if IDENTICAL and not kde_identical_tiled_applies(metric, False):
+                raise Error(
+                    "check_kde_tiled_equals_staged: the entry does not take the tiled pass for "
+                    + metric_name(metric) + " under IDENTICAL"
+                )
+            for kernel in _all_kernels():
+                for weighted in range(2):
+                    var hw = weighted == 1
+                    var staged = _scores_by_path(ctx, train, query, w if hw else none, hw, nt, nq, d, h, kernel, metric, 0, 0, 0)
+                    var entry = _scores_by_path(ctx, train, query, w if hw else none, hw, nt, nq, d, h, kernel, metric, 1, 0, 0)
+                    var alt = _scores_by_path(ctx, train, query, w if hw else none, hw, nt, nq, d, h, kernel, metric, 2, 32, 100)
+                    for q in range(nq):
+                        n_cells += 1
+                        var sb = bitcast[DType.uint32](staged[q])
+                        if bitcast[DType.uint32](entry[q]) != sb or bitcast[DType.uint32](alt[q]) != sb:
+                            n_bad += 1
+                            if first_bad == "":
+                                first_bad = (
+                                    kernel_name(kernel) + "/" + metric_name(metric) + " weighted=" + String(hw)
+                                    + " shape " + String(nt) + "x" + String(nq) + "x" + String(d) + " query " + String(q)
+                                    + ": staged " + _hex32(staged[q]) + " entry " + _hex32(entry[q])
+                                    + " tiled(32,100) " + _hex32(alt[q])
+                                )
+    if n_bad > 0:
+        var msg = String(n_bad) + " of " + String(n_cells) + " scores differ; first: " + first_bad
+        comptime if IDENTICAL:
+            raise Error("check_kde_tiled_equals_staged FAILED " + msg)
+        else:
+            print("  report " + msg)
+    print(
+        "check_kde_tiled_equals_staged " + ("OK" if IDENTICAL else "REPORT") + " [" + _mode_name() + "]: "
+        + String(n_cells) + " scores, 6 kernels x 3 metrics x weighted/unweighted x 5 shapes, entry dispatch and"
+        " tiled(q_tpb 32, chunk 100) vs staged, " + String(n_bad) + " differ"
+    )
+
+
 def main() raises:
     print("== kde/checks/kde_check.mojo [" + _mode_name() + "] ==")
+    check_kde_tiled_equals_staged()
     check_kde_refusals()
     check_kde_zero_sign_cannot_leak()
     check_kde_log_norm_closed_form()

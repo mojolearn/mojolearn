@@ -1395,6 +1395,14 @@ class Worker:
         self.log.close()
 
 
+# DEVIATION 2625's A/B arm: the same OursKDE runner imported from a frozen
+# copy of the BEFORE python tree (MOJOLEARN_CTD_OURS_BEFORE_ROOT, the
+# directory that holds `mojolearn/`), so before and after bindings race in
+# one window with interleaved rounds. Never an opponent row; the flip ratio
+# is ours / ours-before.
+BUILDERS[("kde", "ours-before")] = OursKDE
+
+
 def _worker_env(arm, root):
     env = dict(os.environ)
     for k in THREAD_ENV:
@@ -1402,6 +1410,13 @@ def _worker_env(arm, root):
     if arm == "ours":
         env["MOJOLEARN_NUMERIC_MODE"] = "identical"
         env["PYTHONPATH"] = os.path.join(root, "python") + (
+            os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
+    elif arm == "ours-before":
+        before = os.environ.get("MOJOLEARN_CTD_OURS_BEFORE_ROOT")
+        if not before:
+            raise SystemExit("arm ours-before needs MOJOLEARN_CTD_OURS_BEFORE_ROOT")
+        env["MOJOLEARN_NUMERIC_MODE"] = "identical"
+        env["PYTHONPATH"] = before + (
             os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
     return env
 
@@ -1525,7 +1540,7 @@ def race(args):
     tag = "%s-%s" % (lane, ds)
     workers = {}
     for arm in arms:
-        py = args.ours_python if arm == "ours" else args.theirs_python
+        py = args.ours_python if arm.startswith("ours") else args.theirs_python
         cmd = shlex.split(py) + [os.path.abspath(__file__), "worker", "--arm", arm,
                                  "--lane", lane, "--dataset", ds, "--data", args.data]
         workers[arm] = Worker(arm, cmd, _worker_env(arm, args.root),

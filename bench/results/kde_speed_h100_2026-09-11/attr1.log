@@ -1,0 +1,45 @@
+3225 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x386440000000, nodemask=2)
+3225 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x310080000000, nodemask=1)
+== kde/checks/kde_dist_attribution.mojo [IDENTICAL] ==
+KDE-ATTR q500 rep=0 v0_identical_with_sqrt ms=24.22609
+KDE-ATTR q500 rep=0 v4_identical_no_sqrt ms=24.432971
+KDE-ATTR q500 rep=0 v1_fma_no_ftz ms=23.845398
+KDE-ATTR q500 rep=0 v2_ftz_plain_muladd ms=24.420134
+KDE-ATTR q500 rep=0 v3_plain ms=23.840931
+KDE-ATTR q500 rep=1 v0_identical_with_sqrt ms=23.941962
+KDE-ATTR q500 rep=1 v4_identical_no_sqrt ms=24.380552
+KDE-ATTR q500 rep=1 v1_fma_no_ftz ms=23.801954
+KDE-ATTR q500 rep=1 v2_ftz_plain_muladd ms=24.421098
+KDE-ATTR q500 rep=1 v3_plain ms=23.819802
+KDE-ATTR q500 rep=2 v0_identical_with_sqrt ms=24.036957
+KDE-ATTR q500 rep=2 v4_identical_no_sqrt ms=24.438722
+KDE-ATTR q500 rep=2 v1_fma_no_ftz ms=23.83259
+KDE-ATTR q500 rep=2 v2_ftz_plain_muladd ms=24.398136
+KDE-ATTR q500 rep=2 v3_plain ms=23.812336
+KDE-ATTR q2000 rep=0 t0_tiled_logk_q256 ms=108.23821
+KDE-ATTR q2000 rep=0 t1_simd_logk_q256 ms=30.766555
+KDE-ATTR q2000 q256 t1_logk_equals_t0=True t0=9460907080735567157 t1=9460907080735567157
+KDE-ATTR q2000 rep=0 t0_tiled_logk_q512 ms=98.546719
+KDE-ATTR q2000 rep=0 t1_simd_logk_q512 ms=32.711295
+KDE-ATTR q2000 q512 t1_logk_equals_t0=True t0=9460907080735567157 t1=9460907080735567157
+KDE-ATTR q2000 rep=0 rowmax_reduce ms=0.158049
+KDE-ATTR q2000 rep=0 lse_terms_tpb256 ms=0.956231
+KDE-ATTR q2000 rep=0 lse_serial_sum_tpb128 ms=9.496475
+KDE-ATTR q2000 rep=0 lse_serial_sum_tpb16 ms=7.13553
+KDE-ATTR q2000 rep=1 t0_tiled_logk_q256 ms=107.600285
+KDE-ATTR q2000 rep=1 t1_simd_logk_q256 ms=30.633094
+KDE-ATTR q2000 rep=1 t0_tiled_logk_q512 ms=99.036967
+KDE-ATTR q2000 rep=1 t1_simd_logk_q512 ms=32.893725
+KDE-ATTR q2000 rep=1 rowmax_reduce ms=0.019913
+KDE-ATTR q2000 rep=1 lse_terms_tpb256 ms=0.911867
+KDE-ATTR q2000 rep=1 lse_serial_sum_tpb128 ms=9.440291
+KDE-ATTR q2000 rep=1 lse_serial_sum_tpb16 ms=7.123229
+KDE-ATTR q2000 rep=2 t0_tiled_logk_q256 ms=108.211174
+KDE-ATTR q2000 rep=2 t1_simd_logk_q256 ms=30.435451
+KDE-ATTR q2000 rep=2 t0_tiled_logk_q512 ms=98.060368
+KDE-ATTR q2000 rep=2 t1_simd_logk_q512 ms=33.183171
+KDE-ATTR q2000 rep=2 rowmax_reduce ms=0.020058
+KDE-ATTR q2000 rep=2 lse_terms_tpb256 ms=0.914907
+KDE-ATTR q2000 rep=2 lse_serial_sum_tpb128 ms=9.495576
+KDE-ATTR q2000 rep=2 lse_serial_sum_tpb16 ms=7.155608
+ATTR_RC=0

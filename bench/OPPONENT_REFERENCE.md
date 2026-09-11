@@ -527,6 +527,20 @@ from 94c82db8 plus that change (branch `lane/svc-cuda-1024`, 11928fec).
 Taxi was prepped for this race only. The scikit-learn KDE row on Istella-S
 in the MI300X section is still owed.
 
+### Classical KDE on NYC taxi against cuML (September 11, pod dn8er13wjuxtax)
+
+Pod `dn8er13wjuxtax` (`kde-speed-2026-09-11_203033`), NVIDIA H100 80GB
+HBM3, driver 580.126.09, the image above, cuML 26.08.00. Ours is IDENTICAL
+at commit 36ca51fd (staged path), the kde lane's shape and harness as in
+the Istella-S rows above (100,000 standardized taxi fit rows x 11 numeric
+columns, 2,000 queries, Scott bandwidth). 1 warm-up plus 5 interleaved
+rounds, ms median (min..max). Evidence
+`bench/results/kde_speed_h100_2026-09-11/`. Both arms held one digest.
+
+| lane | dataset | opponent | device | opponent ms | opponent quality | ours IDENTICAL ms | ours quality | ours / opponent |
+|---|---|---|---|---|---|---|---|---|
+| kde | taxi | cuML KernelDensity | GPU, H100 | 2.37 (2.19..9.20) | mean log-lik -9.58205 | 39.2 (35.8..40.4) | mean log-lik -9.58207 | 16.55x |
+
 ## NVIDIA L40S, driver 580.126.09, CUDA 12.4, torch 2.4.1+cu124, cuBLAS 120402, cupy 14.2.0
 
 Trees, HIGGS 1M, 2026-09-09 trees lane, CatBoost GPU symmetric 1.2.10, same
