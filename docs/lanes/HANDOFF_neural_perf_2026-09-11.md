@@ -70,7 +70,16 @@ No AMD timing of this step exists at the target shape.
 ## 6. Plan, next steps in order
 
 1. The DigitalOcean runner is merged and its dry run is green (section 3);
-   its first paid run is also its bring-up. Rerun the dry run from the
+   its first paid run is also its bring-up. Tuning on AMD is now a repo rule
+   for every lane (ENGINEERING_RULES.md section 10), and the account allows
+   one GPU droplet at a time, shared with the trees and classical lanes:
+   every DigitalOcean GPU leg takes `mkdir /tmp/mojolearn-do-gpu.lock`
+   (owner file inside with lane name and UTC time) before the create and
+   removes it only after the destroy is verified; a lock older than 100
+   minutes with zero droplets live may be broken. `tools/do_extra_leg.sh`
+   does NOT take this lock yet (its preflight only refuses while a GPU or
+   mojolearn droplet exists); add the lock to it, or take it by hand around
+   the run, before its first paid run. Rerun the dry run from the
    clean checkout you launch from:
    `MOJOLEARN_GPU_ARCHS=gfx942 MOJOLEARN_GEMM_LEG_EXTRA=tools/attention_step_leg.sh bash tools/do_extra_leg.sh amd --dry-run`.
    The real command (from `git worktree add --detach`):
