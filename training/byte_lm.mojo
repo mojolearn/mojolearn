@@ -16,6 +16,14 @@ from std.os import getenv
 from std.sys.compile import is_defined
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext
+# DEVIATION 2630: the step phase timers and counters (core/step_phase.mojo;
+# compiled only under -D MOJOLEARN_STEP_PHASE_TIMERS=1).
+from core.step_phase import (
+    StepPhaseClock,
+    step_count_h2d,
+    step_count_host_alloc,
+    step_count_sync,
+)
 from core.device_scan import DeviceScanScratch
 from core.identity_trace import IdentityTrace
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -150,11 +158,15 @@ def _fault_plant(ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32],
                  idx: Int, bits: UInt32) raises:
     """Write ONE element, by bits, into a device buffer (one 4 B H2D copy
     through a pinned scalar). Reached only through `_maybe_fault`."""
+    step_count_host_alloc()
     var h = ctx.enqueue_create_host_buffer[DType.float32](1)
+    step_count_sync()
     ctx.synchronize()
     h.unsafe_ptr().unsafe_store(0, bitcast[DType.float32](bits))
     var view = buf.create_sub_buffer[DType.float32](idx, 1)
+    step_count_h2d()
     ctx.enqueue_copy(dst_buf=view, src_ptr=h.unsafe_ptr())
+    step_count_sync()
     ctx.synchronize()
     _ = view^
     _ = h^
@@ -496,6 +508,7 @@ def _unpack_block(ctx: DeviceContext, mut tb: ByteBuffers, mut w: LlamaDeviceWei
     _copy_into(ctx, w.w_gate, tb.param, 0, o[base + 6], o[base + 7] - o[base + 6])
     _copy_into(ctx, w.w_up, tb.param, 0, o[base + 7], o[base + 8] - o[base + 7])
     _copy_into(ctx, w.w_down, tb.param, 0, o[base + 8], o[base + 9] - o[base + 8])
+    step_count_sync()
     ctx.synchronize()
 
 
@@ -511,6 +524,7 @@ def _pack_block(ctx: DeviceContext, mut tb: ByteBuffers, mut bst: LlamaBackwardS
     _copy_into(ctx, tb.grad, bst.dw_gate, o[base + 6], 0, o[base + 7] - o[base + 6])
     _copy_into(ctx, tb.grad, bst.dw_up, o[base + 7], 0, o[base + 8] - o[base + 7])
     _copy_into(ctx, tb.grad, bst.dw_down, o[base + 8], 0, o[base + 9] - o[base + 8])
+    step_count_sync()
     ctx.synchronize()
 
 
@@ -575,6 +589,7 @@ struct ByteTrainer(Movable):
             # still grows them through ensure_*_attention_capacity.
             self.forward.append(LlamaDeviceStages(ctx, config.batch, config.length, config.length, byte_dims(config), lean=True))
             self.backward.append(LlamaBackwardStages(ctx, config.batch, config.length, config.length, byte_dims(config), lean=True))
+        step_count_sync()
         ctx.synchronize()
 
     def validate_device_state(mut self, ctx: DeviceContext, completed: Int) raises:
@@ -761,6 +776,7 @@ def byte_rollback(ctx: DeviceContext, mut tr: ByteTrainer) raises -> Bool:
     _copy_into(ctx, tr.buffers.param, tr.buffers.shadow_p, 0, 0, n)
     _copy_into(ctx, tr.buffers.m_state, tr.buffers.shadow_m, 0, 0, n)
     _copy_into(ctx, tr.buffers.v_state, tr.buffers.shadow_v, 0, 0, n)
+    step_count_sync()
     ctx.synchronize()
     tr.buffers.buf_initialized = tr.buffers.flags_before.copy()
     tr.completed_steps = tr.shadow_step
@@ -786,14 +802,20 @@ def _byte_forward_loss(ctx: DeviceContext, mut tr: ByteTrainer,
         for l in range(config.length):
             inputs.append(ids[b * (config.length + 1) + l])
             targets.append(ids[b * (config.length + 1) + l + 1])
+    step_count_host_alloc()
     var hi = ctx.enqueue_create_host_buffer[DType.int32](M)
+    step_count_host_alloc()
     var ht = ctx.enqueue_create_host_buffer[DType.int32](M)
+    step_count_sync()
     ctx.synchronize()
     for i in range(M):
         hi.unsafe_ptr().unsafe_store(i, inputs[i])
         ht.unsafe_ptr().unsafe_store(i, targets[i])
+    step_count_h2d()
     ctx.enqueue_copy(dst_buf=tr.buffers.ids, src_ptr=hi.unsafe_ptr())
+    step_count_h2d()
     ctx.enqueue_copy(dst_buf=tr.buffers.targets, src_ptr=ht.unsafe_ptr())
+    step_count_sync()
     ctx.synchronize()
     _ = hi
     _ = ht
@@ -804,6 +826,7 @@ def _byte_forward_loss(ctx: DeviceContext, mut tr: ByteTrainer,
         _unpack_block(ctx, tr.buffers, tr.weights[layer], layer)
     _copy_into(ctx, tr.buffers.emb_w, tr.buffers.param, 0, 0, config.vocab_size * config.d_model)
     _copy_into(ctx, tr.buffers.lm_w, tr.buffers.param, 0, tr.buffers.offsets[config.n_tensors() - 1], config.vocab_size * config.d_model)
+    step_count_sync()
     ctx.synchronize()
     # Device-to-device: every parameter byte copied once (blocks, emb, head).
     timing_tick(ctx, ton, tk, "step.unpack_weights")
@@ -811,6 +834,7 @@ def _byte_forward_loss(ctx: DeviceContext, mut tr: ByteTrainer,
     var emb = EmbConfig.llama(config.vocab_size, config.d_model)
     var ce = CeConfig.causal_lm(config.vocab_size)
     identical_embedding_forward_into(ctx, tr.buffers.x, tr.buffers.emb_w, tr.buffers.ids, M, emb)
+    step_count_sync()
     ctx.synchronize()
     timing_tick(ctx, ton, tk, "step.embedding_forward")
     for layer in range(config.n_layers):
@@ -829,15 +853,21 @@ def _byte_forward_loss(ctx: DeviceContext, mut tr: ByteTrainer,
         else:
             llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
                 tr.forward[layer - 1].residual2, config.batch, config.length, 0, trace, prefix)
+        step_count_sync()
         ctx.synchronize()
         tr.forward.insert(layer, stages^)
     # The blocks print their own `block.*` / `attn.*` lines; this envelope
     # is the whole forward loop including the per-layer waits and the
     # stage pop/insert bookkeeping, so the block sum can be checked.
     timing_tick(ctx, ton, tk, "envelope.blocks_forward")
+    # DEVIATION 2630: the head GEMM's call-kind line (core/step_phase.mojo),
+    # compiled only under -D MOJOLEARN_STEP_PHASE_TIMERS=1.
+    var pg = StepPhaseClock(ctx)
     identical_gemm_into(ctx, tr.buffers.logits, tr.forward[config.n_layers - 1].residual2,
         tr.buffers.lm_w, tr.buffers.head_ws, M, config.vocab_size, config.d_model, OP_NT)
+    step_count_sync()
     ctx.synchronize()
+    pg.tick(ctx, "gemm.head_fwd")
     timing_tick(ctx, ton, tk, "step.head_forward")
     # `identical_ce_forward_into` prints `step.ce_refuse_download` (its
     # first statement: the full logits download and host scan) and then
@@ -849,6 +879,7 @@ def _byte_forward_loss(ctx: DeviceContext, mut tr: ByteTrainer,
         tr.buffers.ce_logp_sum, tr.buffers.ce_smooth, tr.buffers.ce_row,
         tr.buffers.ce_total, tr.buffers.ce_loss, tr.buffers.logits,
         tr.buffers.targets, tr.buffers.ce_ones, tr.buffers.ce_ws, M, M, ce)
+    step_count_sync()
     ctx.synchronize()
     if ton:
         tk = Int(perf_counter_ns())
@@ -882,17 +913,25 @@ def _byte_step_device(ctx: DeviceContext, mut tr: ByteTrainer,
     identical_ce_backward_into(ctx, tr.buffers.ce_weights, tr.buffers.ce_dlogits,
         tr.buffers.ce_expo, tr.buffers.ce_denom, tr.buffers.ce_logp,
         tr.buffers.targets, M, M, ce)
+    step_count_sync()
     ctx.synchronize()
     timing_tick(ctx, ton, tk, "step.ce_backward")
+    # DEVIATION 2630: the head GEMMs' call-kind lines (core/step_phase.mojo),
+    # compiled only under -D MOJOLEARN_STEP_PHASE_TIMERS=1. Its dA tick
+    # waits only there, like the `step.head_backward_da` tick below.
+    var pg = StepPhaseClock(ctx)
     identical_gemm_backward_a_into(ctx, tr.buffers.d_h, tr.buffers.ce_dlogits,
         tr.buffers.lm_w, tr.buffers.head_bwd_ws, M, config.vocab_size, config.d_model, OP_NT)
+    pg.tick(ctx, "gemm.head_dA")
     # dA and dB share one wait below; the tick between them waits ONLY
     # under the switch (a timed step is not a sample, and the two GEMMs are
     # queued on one in-order context either way).
     timing_tick(ctx, ton, tk, "step.head_backward_da")
     identical_gemm_backward_b_into(ctx, tr.buffers.dw_lm, tr.buffers.ce_dlogits,
         tr.forward[config.n_layers - 1].residual2, tr.buffers.head_bwd_ws, M, config.vocab_size, config.d_model, OP_NT)
+    step_count_sync()
     ctx.synchronize()
+    pg.tick(ctx, "gemm.head_dB")
     timing_tick(ctx, ton, tk, "step.head_backward_db")
     # Keep inter-layer cotangents on device, as the upstream tensor graph
     # does (transformers/models/llama/modeling_llama.py:402-412). Each
@@ -918,6 +957,7 @@ def _byte_step_device(ctx: DeviceContext, mut tr: ByteTrainer,
             llama_decoder_layer_backward_device(ctx, backward, stages, tr.weights[layer],
                 tr.rope.cos, tr.rope.sin, tr.forward[layer - 1].residual2, tr.backward[layer].d_x,
                 config.batch, config.length, 0, trace, prefix)
+        step_count_sync()
         ctx.synchronize()
         tr.backward.insert(layer, backward^)
         tr.forward.insert(layer, stages^)
@@ -926,12 +966,14 @@ def _byte_step_device(ctx: DeviceContext, mut tr: ByteTrainer,
     identical_embedding_backward_into(ctx, tr.buffers.dw_emb, tr.backward[0].d_x,
         tr.buffers.ids, tr.buffers.emb_counts, tr.buffers.emb_run_begin,
         tr.buffers.emb_perm, M, emb)
+    step_count_sync()
     ctx.synchronize()
     timing_tick(ctx, ton, tk, "step.embedding_backward")
     for layer in range(config.n_layers):
         _pack_block(ctx, tr.buffers, tr.backward[layer], layer)
     _copy_into(ctx, tr.buffers.grad, tr.buffers.dw_emb, 0, 0, config.vocab_size * config.d_model)
     _copy_into(ctx, tr.buffers.grad, tr.buffers.dw_lm, tr.buffers.offsets[config.n_tensors() - 1], 0, config.vocab_size * config.d_model)
+    step_count_sync()
     ctx.synchronize()
     # Device-to-device: every gradient byte copied once into `grad`.
     timing_tick(ctx, ton, tk, "step.pack_grads")
@@ -949,6 +991,7 @@ def _byte_step_device(ctx: DeviceContext, mut tr: ByteTrainer,
     _copy_into(ctx, tr.buffers.shadow_p, tr.buffers.param, 0, 0, n)
     _copy_into(ctx, tr.buffers.shadow_m, tr.buffers.m_state, 0, 0, n)
     _copy_into(ctx, tr.buffers.shadow_v, tr.buffers.v_state, 0, 0, n)
+    step_count_sync()
     ctx.synchronize()
     tr.buffers.flags_before = tr.buffers.buf_initialized.copy()
     tr.shadow_step = tr.completed_steps
@@ -1044,6 +1087,7 @@ def byte_eval_loss(ctx: DeviceContext, mut trainer: ByteTrainer,
     trainer.healthy = False
     var trace = IdentityTrace.disabled()
     var loss = _byte_forward_loss(ctx, trainer, token_ids, trace)
+    step_count_sync()
     ctx.synchronize()
     _ = trace
     trainer.healthy = True
@@ -1074,6 +1118,7 @@ def byte_eval_loss_resident(ctx: DeviceContext, mut trainer: ByteTrainer,
     var message = String("")
     try:
         loss = _byte_forward_loss(ctx, trainer, token_ids, trace)
+        step_count_sync()
         ctx.synchronize()
     except error:
         failed = True

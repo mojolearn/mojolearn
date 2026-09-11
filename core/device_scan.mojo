@@ -47,6 +47,15 @@ call form for callers that scan once.
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+# DEVIATION 2630: the step phase timers and counters (core/step_phase.mojo;
+# compiled only under -D MOJOLEARN_STEP_PHASE_TIMERS=1).
+from core.step_phase import (
+    step_count_d2h,
+    step_count_device_alloc,
+    step_count_host_alloc,
+    step_count_launch,
+    step_count_sync,
+)
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
@@ -176,8 +185,11 @@ def device_first_nonfinite(
     if n <= 0:
         return -1
     var blocks = _scan_blocks(n)
+    step_count_device_alloc()
     var part = ctx.enqueue_create_buffer[DType.int32](blocks)
+    step_count_sync()
     ctx.synchronize()
+    step_count_launch()
     ctx.enqueue_function[nonfinite_partial_kernel](
         part.unsafe_ptr(),
         buf.unsafe_ptr(),
@@ -185,10 +197,15 @@ def device_first_nonfinite(
         grid_dim=(blocks, 1, 1),
         block_dim=(SCAN_TPB, 1, 1),
     )
+    step_count_sync()
     ctx.synchronize()
+    step_count_host_alloc()
     var host = ctx.enqueue_create_host_buffer[DType.int32](blocks)
+    step_count_sync()
     ctx.synchronize()
+    step_count_d2h()
     ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=part)
+    step_count_sync()
     ctx.synchronize()
     var best = _fold_partials(host, blocks)
     _ = host^
@@ -206,8 +223,11 @@ def device_first_negative(
     if n <= 0:
         return -1
     var blocks = _scan_blocks(n)
+    step_count_device_alloc()
     var part = ctx.enqueue_create_buffer[DType.int32](blocks)
+    step_count_sync()
     ctx.synchronize()
+    step_count_launch()
     ctx.enqueue_function[negative_partial_kernel](
         part.unsafe_ptr(),
         buf.unsafe_ptr(),
@@ -215,10 +235,15 @@ def device_first_negative(
         grid_dim=(blocks, 1, 1),
         block_dim=(SCAN_TPB, 1, 1),
     )
+    step_count_sync()
     ctx.synchronize()
+    step_count_host_alloc()
     var host = ctx.enqueue_create_host_buffer[DType.int32](blocks)
+    step_count_sync()
     ctx.synchronize()
+    step_count_d2h()
     ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=part)
+    step_count_sync()
     ctx.synchronize()
     var best = _fold_partials(host, blocks)
     _ = host^
@@ -236,9 +261,13 @@ def device_classify_nonfinite(
     reported as an infinity rather than raising, so the refusal it feeds
     still fires."""
     var one = buf.create_sub_buffer[DType.float32](idx, 1)
+    step_count_host_alloc()
     var host = ctx.enqueue_create_host_buffer[DType.float32](1)
+    step_count_sync()
     ctx.synchronize()
+    step_count_d2h()
     ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=one)
+    step_count_sync()
     ctx.synchronize()
     var v = host.unsafe_ptr().unsafe_load(0)
     _ = host^
@@ -262,14 +291,20 @@ struct DeviceScanScratch(Movable):
     var host: HostBuffer[DType.int32]
 
     def __init__(out self, ctx: DeviceContext) raises:
+        step_count_device_alloc()
         self.part = ctx.enqueue_create_buffer[DType.int32](SCAN_BLOCKS)
+        step_count_host_alloc()
         self.host = ctx.enqueue_create_host_buffer[DType.int32](SCAN_BLOCKS)
+        step_count_sync()
         ctx.synchronize()
 
     def _finish(mut self, ctx: DeviceContext, blocks: Int) raises -> Int:
+        step_count_sync()
         ctx.synchronize()
         var view = self.part.create_sub_buffer[DType.int32](0, blocks)
+        step_count_d2h()
         ctx.enqueue_copy(dst_ptr=self.host.unsafe_ptr(), src_buf=view)
+        step_count_sync()
         ctx.synchronize()
         _ = view^
         return _fold_partials(self.host, blocks)
@@ -284,6 +319,7 @@ struct DeviceScanScratch(Movable):
         if n <= 0:
             return -1
         var blocks = _scan_blocks(n)
+        step_count_launch()
         ctx.enqueue_function[nonfinite_partial_kernel](
             self.part.unsafe_ptr(),
             buf.unsafe_ptr(),
@@ -303,6 +339,7 @@ struct DeviceScanScratch(Movable):
         if n <= 0:
             return -1
         var blocks = _scan_blocks(n)
+        step_count_launch()
         ctx.enqueue_function[negative_partial_kernel](
             self.part.unsafe_ptr(),
             buf.unsafe_ptr(),
