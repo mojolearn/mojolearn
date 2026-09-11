@@ -4,8 +4,8 @@
 against the shipped kernels (and the shipped kernels against the eager
 oracle), reach of every candidate arm by sabotage, and the price of each
 arm, forward alone and forward plus backward, arms alternated inside one
-process. DEVIATIONS 2525 to 2527, brief
-`docs/lanes/BRIEF_attention_step_2026-09-11.md`.
+process. DEVIATIONS 2525 to 2528, brief
+`docs/lanes/BRIEF_attention_step_2026-09-11.md` (2528 is section 12).
 
     pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 \\
         -D MOJOLEARN_ATTN_ARM_TRIAL=1 -I . \\
@@ -27,8 +27,8 @@ INPUT KINDS (MOJOLEARN_ATTN_KINDS, comma separated):
               `-D MOJOLEARN_ATTN_OPERAND_DUMP=1` (the last layer's operands
               of the first step, on the corpus the step was fed); the
               shape is the dump's. The leg feeds two such directories, one
-              per corpus (English text, `training/corpus/tinyshakespeare`;
-              source code, `training/corpus/cpython312_lib`).
+              per corpus (English text, `training/corpus/enwik8`; source
+              code, `training/corpus/pile_github`; ENGINEERING_RULES 9).
   hashed      a cheap bit-equality SMOKE only: the k-NN gate's
               `hashed_block` profile in Mojo (log-uniform magnitudes over
               2.5 e-folds, per-column octave scales, twelve cluster
@@ -51,7 +51,11 @@ WHAT IT ASSERTS, per kind:
      one cell of some buffer, and the clean arm restores the baseline bits
      afterwards. On a build without -D MOJOLEARN_ATTN_ARM_TRIAL=1 every
      arm value runs the shipped kernels: the sabotage moves nothing and
-     the harness FAILS, saying so.
+     the harness FAILS, saying so. A candidate with a second-round bit
+     (DEVIATION 2528, `_ztiled`) proves reach with
+     ATTN_ARM_SABOTAGE_NEW, which flips only the new kernel, so a proof on
+     top of stash_tiled names the new kernel; a backward-only new kernel's
+     sabotage must also move no forward cell (ctx, amax, denom).
   4. PRICE: MOJOLEARN_ATTN_WARMUPS (2) untimed calls, then
      MOJOLEARN_ATTN_ROUNDS (7) timed rounds, the two arms alternated
      inside each round (A B, then B A), each sample one `PRICE` line;
@@ -73,8 +77,12 @@ MOJOLEARN_TRANSFORMER_TIMING=1 prints the per-kernel split; such a run is
 serialized and its PRICE lines are not a price (the harness says so in
 its header).
 
-KNOBS (environment): MOJOLEARN_ATTN_ARM (candidate, default bwd_stash),
-MOJOLEARN_ATTN_BASELINE (default baseline), MOJOLEARN_ATTN_KINDS
+KNOBS (environment): MOJOLEARN_ATTN_ARM (candidate, default bwd_stash;
+any name `fused_attention_arm_parse` reads, brief section 12.1, e.g.
+stash_tiled_ztiled, stash_tiled_ztiled_r32, stash_tiled_ztiled_r64),
+MOJOLEARN_ATTN_BASELINE (default baseline; stash_tiled, the shipped
+default, is the baseline a second-round arm is priced against), the two
+`PATH` lines print each arm's resolved kernels, MOJOLEARN_ATTN_KINDS
 (default hashed; the leg passes file:<dir> per corpus), MOJOLEARN_ATTN_L, _NH, _NKV, _HD, _B, _WINDOW,
 MOJOLEARN_ATTN_ROUNDS, _WARMUPS, MOJOLEARN_ATTN_ORACLE (1),
 MOJOLEARN_ATTN_REACH (1), MOJOLEARN_ATTN_TIMING (1).
@@ -96,14 +104,16 @@ from transformer.checks.transformer_backward import (
 )
 from transformer.impl.llama.fused_attention import (
     ATTN_ARM_BASELINE,
-    ATTN_ARM_BWD_STASH,
-    ATTN_ARM_BWD_TILED,
-    ATTN_ARM_FWD_SSTASH,
-    ATTN_ARM_SABOTAGE,
+    ATTN_ARM_BWD_ZTILED,
+    ATTN_ARM_NEW_FWD_BITS,
+    ATTN_ARM_SABOTAGE_NEW,
     ATTN_ARM_TRIAL,
     ATTN_PHASE_TIMERS,
     FUSED_RAN,
     fused_attention_arm_name,
+    fused_attention_arm_parse,
+    fused_attention_arm_reach_bit,
+    fused_attention_zdot_rows,
     fused_backward_launch_arm,
     fused_forward_launch_arm,
 )
@@ -138,22 +148,21 @@ def _env_str(name: String, default: String) -> String:
     return s
 
 
-def _arm_from_name(name: String) raises -> Int:
-    if name == "baseline":
-        return ATTN_ARM_BASELINE
-    if name == "bwd_stash":
-        return ATTN_ARM_BWD_STASH
-    if name == "fwd_sstash":
-        return ATTN_ARM_FWD_SSTASH
-    if name == "bwd_stash_tiled":
-        return ATTN_ARM_BWD_STASH | ATTN_ARM_BWD_TILED
-    if name == "stash":
-        return ATTN_ARM_FWD_SSTASH | ATTN_ARM_BWD_STASH
-    if name == "stash_tiled":
-        return ATTN_ARM_FWD_SSTASH | ATTN_ARM_BWD_STASH | ATTN_ARM_BWD_TILED
-    raise Error(
-        "attention arm '" + name + "' is not one of baseline, bwd_stash,"
-        + " fwd_sstash, bwd_stash_tiled, stash, stash_tiled"
+def _path_line(role: String, arm: Int) -> String:
+    """ENGINEERING_RULES 8: the harness names the path beside the timing.
+    `zdot_rows` is DEVIATION 2528's resolved geometry (the arm's `_r32` /
+    `_r64`, else the column's kernel-matrix row; `-` when the arm does not
+    run 2528, 0 when the page does not fit and the first-round kernels
+    run); `reach_bit` is the sabotage this arm's reach proof uses."""
+    var rows = String("-")
+    if (arm & ATTN_ARM_BWD_ZTILED) != 0:
+        rows = String(fused_attention_zdot_rows(arm))
+    var reach = String("sabotage")
+    if fused_attention_arm_reach_bit(arm) == ATTN_ARM_SABOTAGE_NEW:
+        reach = String("sabotage_new")
+    return (
+        "PATH " + role + " arm=" + fused_attention_arm_name(arm)
+        + " zdot_rows=" + rows + " reach_bit=" + reach
     )
 
 
@@ -698,8 +707,15 @@ def main() raises:
     var cand_name = _env_str("MOJOLEARN_ATTN_ARM", "bwd_stash")
     var base_name = _env_str("MOJOLEARN_ATTN_BASELINE", "baseline")
     var kinds = _split_list(_env_str("MOJOLEARN_ATTN_KINDS", "hashed"))
-    var cand = _arm_from_name(cand_name)
-    var base = _arm_from_name(base_name)
+    var cand = fused_attention_arm_parse(cand_name)
+    var base = fused_attention_arm_parse(base_name)
+    if fused_attention_arm_name(cand) != cand_name or fused_attention_arm_name(base) != base_name:
+        raise Error(
+            "attention_step_price: arm names do not round-trip ('" + cand_name
+            + "' -> '" + fused_attention_arm_name(cand) + "', '" + base_name
+            + "' -> '" + fused_attention_arm_name(base) + "'); the parser and"
+            + " the name function must be inverses (brief section 12.1)"
+        )
     var env_shape = (
         "B" + String(b) + "_L" + String(l) + "_nh" + String(nh) + "_nkv"
         + String(nkv) + "_hd" + String(hd) + "_win" + String(window)
@@ -713,6 +729,8 @@ def main() raises:
     comptime if ATTN_PHASE_TIMERS:
         print("NOTE: built with MOJOLEARN_ATTN_PHASE_TIMERS; under MOJOLEARN_TRANSFORMER_TIMING=1 every launch is serialized and PRICE lines are a breakdown, not a price")
     print("baseline=" + base_name + " candidate=" + cand_name + " rounds=" + String(rounds) + " warmups=" + String(warmups))
+    print(_path_line("baseline", base))
+    print(_path_line("candidate", cand))
     if not ATTN_ARM_TRIAL and cand != ATTN_ARM_BASELINE:
         print("NOTE: no -D MOJOLEARN_ATTN_ARM_TRIAL=1: the candidate arm runs the shipped kernels; reach will FAIL")
 
@@ -754,20 +772,33 @@ def main() raises:
 
         # 3. reach by sabotage, then the clean arm restores the bits
         if want_reach and cand != ATTN_ARM_BASELINE:
+            # A second-round arm proves reach with ATTN_ARM_SABOTAGE_NEW,
+            # which flips only the new kernel (brief section 12.1).
+            var reach_bit = fused_attention_arm_reach_bit(cand)
+            var sab_arm = cand | reach_bit
+            var sab_name = fused_attention_arm_name(sab_arm)
             c.clear_outputs(ctx)
-            c.run_both(ctx, cand | ATTN_ARM_SABOTAGE, kind + " " + cand_name + "+sabotage")
+            c.run_both(ctx, sab_arm, kind + " " + sab_name)
             var sab = c.download(ctx)
-            var flipped = compare_outputs(kind, cand_name + "+sabotage_vs_" + base_name, refout, sab)
+            var flipped = compare_outputs(kind, sab_name + "_vs_" + base_name, refout, sab)
+            var fwd_moved = (
+                moved_cells(refout.ctxv, sab.ctxv) + moved_cells(refout.amax, sab.amax)
+                + moved_cells(refout.denom, sab.denom)
+            )
             c.clear_outputs(ctx)
             c.run_both(ctx, cand, kind + " " + cand_name + " (restore)")
             var again = c.download(ctx)
             var restored = compare_outputs(kind, cand_name + "_restored_vs_" + base_name, refout, again) == 0
             print(
                 "REACH " + kind + " " + cand_name + " sabotage_flipped_cells=" + String(flipped)
-                + " clean_restored=" + String(restored)
+                + " clean_restored=" + String(restored) + " reach_bit=" + sab_name
+                + " forward_moved=" + String(fwd_moved) + " backward_moved="
+                + String(flipped - fwd_moved)
             )
             if flipped == 0:
                 failures.append(kind + ": REACH NOT PROVEN for " + cand_name + " (sabotage moved nothing: build lacks -D MOJOLEARN_ATTN_ARM_TRIAL=1, or the arm is not wired at this head dim)")
+            if reach_bit == ATTN_ARM_SABOTAGE_NEW and (cand & ATTN_ARM_NEW_FWD_BITS) == 0 and fwd_moved > 0:
+                failures.append(kind + ": " + sab_name + " moved " + String(fwd_moved) + " forward cells; the second-round kernel of " + cand_name + " is backward-only, so its sabotage must reach no forward buffer")
             if not restored:
                 failures.append(kind + ": " + cand_name + " did not restore the baseline bits after sabotage")
 

@@ -49,10 +49,11 @@
 #                            already ships (e1g/2026-08-28_040316-nvidia-speed-
 #                            gemmseq/remote/pip.log); else torch==2.4.1 from
 #                            the cu124 index.
-#   corpus-*       the two ordinary corpora (ENGINEERING_RULES section 9):
-#                  English text (committed) and source code (fetched by
-#                  tools/fetch_corpus_cpython312_lib.sh, verified against its
-#                  manifest). The harness checks both sha256 again.
+#   corpus-*       the two benchmark corpora (ENGINEERING_RULES section 9):
+#                  English text (enwik8, tools/fetch_corpus_enwik8.sh) and
+#                  source code (the Pile's GitHub component,
+#                  tools/fetch_corpus_pile_github.sh), each verified against
+#                  its manifest. The harness checks both sha256 again.
 #   <column>-<corpus>  tools/torch_lm_step_opponent.py --shape target, 2
 #                  warmups then 7 timed steps, one process each under
 #                  `timeout 300` (124 is the deadline). eager_fp32 (THE ROW)
@@ -72,7 +73,7 @@ set -u
 ROOT=${MOJOLEARN_TORCH_LM_ROOT:-/root/mojolearn}
 OUT=${MOJOLEARN_TORCH_LM_OUT:-/root/gemm_leg_out/torch-lm-step}
 COLUMNS=${MOJOLEARN_TORCH_LM_COLUMNS:-eager_fp32,eager_tf32,compile_fp32}
-CORPORA="tinyshakespeare cpython312_lib"
+CORPORA="enwik8 pile_github"
 SHAPE=${MOJOLEARN_TORCH_LM_SHAPE:-target}
 WARMUP=${MOJOLEARN_TORCH_LM_WARMUP:-2}
 STEPS=${MOJOLEARN_TORCH_LM_STEPS:-7}
@@ -257,14 +258,8 @@ PY
 fi
 
 # ---- the two corpora -----------------------------------------------------------
-run corpus-tinyshakespeare sh -c 'test -f training/corpus/tinyshakespeare/input.txt && python3 -c "
-import hashlib, json, sys
-m = json.load(open(\"training/corpus/tinyshakespeare/manifest.json\"))
-raw = open(\"training/corpus/tinyshakespeare/input.txt\", \"rb\").read()
-ok = hashlib.sha256(raw).hexdigest() == m[\"sha256\"] and len(raw) == m[\"bytes\"]
-print(\"tinyshakespeare\", \"ok\" if ok else \"MISMATCH\", len(raw))
-sys.exit(0 if ok else 1)"'
-run corpus-cpython312-lib sh tools/fetch_corpus_cpython312_lib.sh
+run corpus-enwik8 sh tools/fetch_corpus_enwik8.sh
+run corpus-pile-github sh tools/fetch_corpus_pile_github.sh
 
 # ---- the columns, one process each ---------------------------------------------
 if [ -n "$PY" ]; then

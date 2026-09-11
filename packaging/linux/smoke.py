@@ -205,6 +205,19 @@ def main():
 
     import mojolearn as ml
     from mojolearn import _backend
+    # A foreign library's argtypes on the shared ctypes.pythonapi buffer
+    # pointers (treelite.model's spelling, as cuML imports it), armed after
+    # the import and before any lane, so every fit below also proves our
+    # conversions no longer share them (the 0.8.0 bug; the tool says why the
+    # order matters).
+    spec = importlib.util.spec_from_file_location(
+        "check_buffer_foreign_argtypes",
+        pathlib.Path(a.repo) / "tools" / "check_buffer_foreign_argtypes.py")
+    foreign = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(foreign)
+    report["foreign_argtypes"] = foreign.poison_pythonapi()
+    if report["foreign_argtypes"] is None:
+        failures.append("foreign argtypes did not land on ctypes.pythonapi.PyObject_GetBuffer")
     report["mojolearn_file"] = ml.__file__
     report["version"] = ml.__version__
 
