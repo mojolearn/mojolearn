@@ -3,7 +3,33 @@
 This file records release-level changes, not the development diary. Git history and archived evidence
 contain the detailed investigation record.
 
-## 0.8.2 (unreleased 2026-09-11)
+## 0.8.3 (unreleased 2026-09-11)
+
+A patch on the 0.8.2 line. Branch release-0.8.3 starts at tag v0.8.2 (438a6e66) and carries
+only the fixes below, their checks and the version bump; main's later speed defaults are not
+in it.
+
+- Fixed SVC on NVIDIA GPUs. Every `SVC` or `SVR` fit with more than 512 training rows failed
+  on CUDA with CUDA_ERROR_LAUNCH_OUT_OF_RESOURCES since 0.8.0: the block solve's working set
+  is `min(1024, n_train)`, and CUDA refuses the width 1024 kernel's reduction schedule. A
+  kernel-matrix row now gives NVIDIA above width 512 the earlier halving-tree schedule, which
+  selects the same elements, so the model bits are unchanged on every vendor (DEVIATION 2623).
+  Verified on an H100 (fits at 400, 600 and 2,000 rows equal to the pre-0.8.0 schedule's bits,
+  `svm/svc_main.mojo` 44/44 IDENTICAL, which failed seven gates before) and on the Apple M4.
+- Fixed IDENTICAL `LinearRegression` on badly scaled designs. The float32 eigensolver's
+  squared Frobenius norm overflowed on Gram matrices with eigenvalues near 1e19 and stopped
+  before any rotation, and an absolute 1e-10 eigenvalue cutoff made the model's rank depend on
+  the data's units. Istella-S (2,043,304 x 220) returned R^2 -115.6 where scikit-learn gets
+  0.164. The Gram matrix is now equilibrated by exact power-of-two scales and the cutoff is
+  relative, `n * eps32 * max|eigenvalue|` (DEVIATIONS 2620, 2621 for more rows than
+  features; 2622 for more features than rows). Istella-S now gives R^2 0.332; taxi keeps R^2
+  0.908837 with different coefficient bits. Coefficient hashes are identical across vendors.
+
+## 0.8.2 (published 2026-09-11)
+
+Linux x86-64 wheel (CUDA sm_89, CUDA sm_90a, HIP gfx942) and macOS arm64 wheel, both from
+commit 438a6e66 (tags alpha-api-0.8.2-20260911 and v0.8.2), on PyPI 2026-09-11 18:20Z and
+18:35Z (release runs 34632585818 and 34632738047).
 
 A patch on the 0.8.1 line. Branch release-0.8.2 starts at tag v0.8.1 (343ffa35) and carries
 only the fix below, its check and the version bump; main's later GBDT speed defaults
