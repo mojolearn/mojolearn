@@ -53,6 +53,31 @@ folds everywhere except NVIDIA above width 512, which takes the halving trees
 with a one-slot thread ballot again. Both schedules select the same element,
 so the bits are the same on every column.
 
+**2627 and 2628** (2026-09-11, lane/svm-speed, measured, NOT flipped)
+`checks/kernel_matrix.mojo::svm_block_solve_schedule_for` names four
+schedules for the three reductions, selectable by `-D`, all selecting the
+same element: TREE (0), WARP (1, 2491), WARP_LANE0 (2, 2627:
+`block_argext_lane0`, the butterflies with the cross-warp fold on lane 0 in
+a runtime loop and a warp broadcast) and FUSED_TREE (3, 2628:
+`pinned_block_argmin_argmax_tid` carries the argmin, its thread and the
+argmax in one halving tree, and `pinned_block_argext_tid` carries `l`'s
+thread, so both ballots are gone). The default is unchanged (2623's row).
+On the H100 (RunPod pod xss2n2qzc1ed8q, 36ca51fd plus this change), every
+schedule gives the same SVC fits at n=400/600/2000 (457e29b82bca9df9,
+733a383c5699f427, 2b66bc991a9c9ed0) and on the two benchmark blocks
+(taxi b0f91a7958162936, Istella-S 5c19df95159208ef). One staged fit each,
+block solve (taxi 109 outer and 172,540 inner iterations; Istella-S 13 and
+4,664): TREE 783 ms and 21.5 ms, FUSED_TREE 690 ms and 18.9 ms, WARP_LANE0
+1,700 ms and 46 ms (1,675 ms without its trailing barrier). So the
+comptime-unrolled cross-warp fold is what CUDA refused at width 1024 (the
+runtime loop launches), but warp shuffles cost more than barriers on this
+GPU, and barriers are only about a fifth of the tree's 4.5 us per inner
+iteration. cuML on the same pod: taxi 110 outer, 166,517 inner, 420 ms for
+the whole fit (393 ms at cache_size 0, so its kernel cache is not its
+advantage here); Istella-S 12 and 4,503, 20.4 ms. Istella-S also spends
+about 36 ms outside the solver's stage clock. Evidence
+`~/mojolearn-evidence/svm-speed-2026-09-11/`.
+
 `svr_device_matches_oracle` had failed under IDENTICAL since the SVR path
 landed ("ws sequence differs at outer iteration 0", every SVR fixture; FAST
 only reported it). The solver's trace recorded the working set PROJECTED
