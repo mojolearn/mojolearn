@@ -12,6 +12,13 @@ export PATH="$HOME/.pixi/bin:$PATH" MOJOLEARN_NUMERIC_MODE=identical GBM_BENCH_D
 export MOJOLEARN_CTD_DBSCAN_TAXI="${MOJOLEARN_CTD_DBSCAN_TAXI:-}"
 export MOJOLEARN_CTD_DBSCAN_ISTELLA="${MOJOLEARN_CTD_DBSCAN_ISTELLA:-}"
 unset OMP_NUM_THREADS OPENBLAS_NUM_THREADS MKL_NUM_THREADS NUMEXPR_NUM_THREADS
+# Driver older than 580: Mojo needs a system ptxas, or every GPU launch in
+# every arm fails (pod 1yxsotvvcbxtuu is 570.195.03). Same shape as
+# tools/gemm_step_leg.sh.
+driver_major=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null | head -1 | cut -d. -f1)
+if [ "${driver_major:-999}" -lt 580 ] 2>/dev/null && [ -x /usr/local/cuda/bin/ptxas ]; then
+    export MODULAR_NVPTX_COMPILER_PATH=${MODULAR_NVPTX_COMPILER_PATH:-/usr/local/cuda/bin/ptxas}
+fi
 mkdir -p "$out"
 for lane in $(echo $lanes | tr ',' ' '); do
   t0=$(date +%s)

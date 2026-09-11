@@ -1401,8 +1401,15 @@ BUILDERS = {
 # races minutes apart (lane linear-cluster-speed, 2026-09-11). It is never an
 # opponent: ratios against it are ours-vs-ours and are not quoted as one.
 for _lane in LANES:
-    BUILDERS[(_lane, "ours-base")] = BUILDERS[(_lane, "ours")]
+    # A lane without an `ours` arm has no before/after to interleave: hdbscan
+    # is cuML's only, because this library ships no HDBSCAN.
+    if (_lane, "ours") in BUILDERS:
+        BUILDERS[(_lane, "ours-base")] = BUILDERS[(_lane, "ours")]
 for _lane in LANES:
+    # Same for a lane with no scikit-learn arm (dbscan and hdbscan): there is
+    # nothing to wrap in the CPU quota.
+    if (_lane, "sklearn-cpu") not in BUILDERS:
+        continue
     BUILDERS[(_lane, "sklearn-cpu-quota")] = (
         lambda data, rec, _c=BUILDERS[(_lane, "sklearn-cpu")]: SkQuota(_c, data, rec))
     ARMS[_lane] = ARMS[_lane] + ("sklearn-cpu-quota",)

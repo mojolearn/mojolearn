@@ -9,7 +9,10 @@
 #   pixi run mojo build -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 stage_probe_main.mojo -o stage_probe
 #   ./stage_probe <ols|pca|kmeans> <prefix> <rows> <cols> <reps>
 #
-# <prefix>_X.bin, _Xc.bin, _yc.bin, _init.bin from probe_bins.py.
+# <prefix>_X.bin, _Xc.bin, _yc.bin, _init.bin from probe_bins.py. The caller's
+# blocks are PINNED host buffers here (the estimator entry points take
+# MutUntrackedOrigin pointers), so an upload stage is a pinned-memory upload
+# and the public fit's pageable upload can only be slower.
 from std.memory import memcpy
 from std.sys import argv
 from std.time import perf_counter_ns
@@ -62,8 +65,12 @@ def _now() -> Int:
 
 
 def _run_one(
-    ctx: DeviceContext, host_a: MutPointer[Float32, MutAnyOrigin], n: Int, four_phase: Bool,
-    out_a: MutPointer[Float32, MutAnyOrigin], out_v: MutPointer[Float32, MutAnyOrigin],
+    ctx: DeviceContext,
+    host_a: MutPointer[Float32, MutUntrackedOrigin],
+    n: Int,
+    four_phase: Bool,
+    out_a: MutPointer[Float32, MutUntrackedOrigin],
+    out_v: MutPointer[Float32, MutUntrackedOrigin],
 ) raises -> Float64:
     var a = ctx.enqueue_create_buffer[DType.float32](n * n)
     var q = ctx.enqueue_create_buffer[DType.float32](n * n)
@@ -143,33 +150,29 @@ def main() raises:
         var bi = _load(prefix + "_init.bin", 64 * cols)
         var hx = ctx.enqueue_create_host_buffer[DType.float32](cells)
         var hi = ctx.enqueue_create_host_buffer[DType.float32](64 * cols)
+        var hc = ctx.enqueue_create_host_buffer[DType.float32](64 * cols)
+        var hl = ctx.enqueue_create_host_buffer[DType.uint32](rows)
         ctx.synchronize()
         memcpy(dest=hx.unsafe_ptr().bitcast[UInt8](), src=bx.unsafe_ptr(), count=cells * 4)
         memcpy(dest=hi.unsafe_ptr().bitcast[UInt8](), src=bi.unsafe_ptr(), count=64 * cols * 4)
         _ = bx^
         _ = bi^
-        # Pageable caller memory, as the Python surface hands it over.
-        var px = List[Float32](length=cells, fill=Float32(0.0))
-        memcpy(dest=px.unsafe_ptr().bitcast[UInt8](), src=hx.unsafe_ptr().bitcast[UInt8](), count=cells * 4)
-        var pc = List[Float32](length=64 * cols, fill=Float32(0.0))
-        var pl = List[UInt32](length=rows, fill=UInt32(0))
         print("kmeans load ms=" + String(_ms(t0)))
         for rep in range(reps):
             for i in range(64 * cols):
-                pc.unsafe_ptr().unsafe_store(i, hi.unsafe_ptr().unsafe_load(i))
+                hc.unsafe_ptr().unsafe_store(i, hi.unsafe_ptr().unsafe_load(i))
             t0 = _now()
             var res = kmeans_fit(
-                ctx, px.unsafe_ptr(), rows, cols, 64, pc.unsafe_ptr(), pl.unsafe_ptr(),
-                px.unsafe_ptr(), 0, max_iter=20, tol=1.0e-7, init=INIT_ARRAY,
+                ctx, hx.unsafe_ptr(), rows, cols, 64, hc.unsafe_ptr(), hl.unsafe_ptr(),
+                hx.unsafe_ptr(), 0, max_iter=20, tol=1.0e-7, init=INIT_ARRAY,
                 metric=METRIC_L2_EXPANDED,
             )
             var t_public = _ms(t0)
-            # The same fit, stage by stage (kmeans_fit's body with a
-            # synchronize at each boundary).
+            # The same fit, stage by stage (kmeans_fit's body, synchronized).
             for i in range(64 * cols):
-                pc.unsafe_ptr().unsafe_store(i, hi.unsafe_ptr().unsafe_load(i))
+                hc.unsafe_ptr().unsafe_store(i, hi.unsafe_ptr().unsafe_load(i))
             t0 = _now()
-            var s = plan_sum_scale(px.unsafe_ptr(), rows, cols)
+            var s = plan_sum_scale(hx.unsafe_ptr(), rows, cols)
             var t_plan = _ms(t0)
             var wscale = choose_scale(Float64(rows), rows)
             t0 = _now()
@@ -182,7 +185,7 @@ def main() raises:
             ctx.synchronize()
             var t_alloc = _ms(t0)
             t0 = _now()
-            ctx.enqueue_copy(dst_buf=x, src_ptr=px.unsafe_ptr())
+            ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
             ctx.synchronize()
             var t_upx = _ms(t0)
             t0 = _now()
@@ -195,7 +198,7 @@ def main() raises:
             var t_wfill = _ms(t0)
             t0 = _now()
             ctx.enqueue_copy(dst_buf=w, src_ptr=hw.unsafe_ptr())
-            ctx.enqueue_copy(dst_buf=cen, src_ptr=pc.unsafe_ptr())
+            ctx.enqueue_copy(dst_buf=cen, src_ptr=hc.unsafe_ptr())
             ctx.synchronize()
             var t_upw = _ms(t0)
             t0 = _now()
@@ -219,21 +222,15 @@ def main() raises:
             ctx.synchronize()
             var t_fp = _ms(t0)
             t0 = _now()
-            var hc = ctx.enqueue_create_host_buffer[DType.float32](64 * cols)
-            var hl = ctx.enqueue_create_host_buffer[DType.uint32](rows)
+            var oc = ctx.enqueue_create_host_buffer[DType.float32](64 * cols)
+            var ol = ctx.enqueue_create_host_buffer[DType.uint32](rows)
             ctx.synchronize()
             var t_hbuf = _ms(t0)
             t0 = _now()
-            ctx.enqueue_copy(dst_ptr=hc.unsafe_ptr(), src_buf=cen)
-            ctx.enqueue_copy(dst_ptr=hl.unsafe_ptr(), src_buf=lab)
+            ctx.enqueue_copy(dst_ptr=oc.unsafe_ptr(), src_buf=cen)
+            ctx.enqueue_copy(dst_ptr=ol.unsafe_ptr(), src_buf=lab)
             ctx.synchronize()
             var t_down = _ms(t0)
-            t0 = _now()
-            for i in range(64 * cols):
-                pc.unsafe_ptr().unsafe_store(i, hc.unsafe_ptr().unsafe_load(i))
-            for i in range(rows):
-                pl.unsafe_ptr().unsafe_store(i, hl.unsafe_ptr().unsafe_load(i))
-            var t_hcopy = _ms(t0)
             print("kmeans rep=" + String(rep) + " public_fit_ms=" + String(t_public)
                   + " n_iter=" + String(res.n_iter) + " inertia=" + String(res.inertia)
                   + " | plan_ms=" + String(t_plan) + " dev_alloc_ms=" + String(t_alloc)
@@ -241,10 +238,10 @@ def main() raises:
                   + " weight_fill_ms=" + String(t_wfill) + " upload_w_c_ms=" + String(t_upw)
                   + " row_norm_ms=" + String(t_norm) + " fit_predict_ms=" + String(t_fp)
                   + " pinned_out_alloc_ms=" + String(t_hbuf) + " download_ms=" + String(t_down)
-                  + " host_label_copy_ms=" + String(t_hcopy) + " stage_n_iter=" + String(fr.n_iter))
+                  + " stage_n_iter=" + String(fr.n_iter))
             _ = hw^
-            _ = hc^
-            _ = hl^
+            _ = oc^
+            _ = ol^
             _ = x^
             _ = w^
             _ = cen^
@@ -253,14 +250,14 @@ def main() raises:
             _ = md^
         _ = hx^
         _ = hi^
-        _ = px^
-        _ = pc^
-        _ = pl^
+        _ = hc^
+        _ = hl^
         return
     if mode == "pca":
         var bx = _load(prefix + "_X.bin", cells)
-        var px = List[Float32](length=cells, fill=Float32(0.0))
-        memcpy(dest=px.unsafe_ptr().bitcast[UInt8](), src=bx.unsafe_ptr(), count=cells * 4)
+        var hx = ctx.enqueue_create_host_buffer[DType.float32](cells)
+        ctx.synchronize()
+        memcpy(dest=hx.unsafe_ptr().bitcast[UInt8](), src=bx.unsafe_ptr(), count=cells * 4)
         _ = bx^
         for rep in range(reps):
             t0 = _now()
@@ -272,34 +269,36 @@ def main() raises:
             ctx.synchronize()
             var t_alloc = _ms(t0)
             t0 = _now()
-            ctx.enqueue_copy(dst_buf=x, src_ptr=px.unsafe_ptr())
+            ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
             ctx.synchronize()
             var t_up = _ms(t0)
             t0 = _now()
             compute_covariance(ctx, x, xa, xa2, mu, cov, rows, cols, True)
             ctx.synchronize()
             var t_cov = _ms(t0)
-            print("pca rep=" + String(rep) + " dev_alloc_ms=" + String(t_alloc) + " upload_pageable_ms="
-                  + String(t_up) + " covariance_ms=" + String(t_cov))
+            print("pca rep=" + String(rep) + " dev_alloc_ms=" + String(t_alloc)
+                  + " upload_pinned_ms=" + String(t_up) + " covariance_ms=" + String(t_cov))
             _jacobi_ab(ctx, cov, cols)
             _ = x^
             _ = xa^
             _ = xa2^
             _ = mu^
+        _ = hx^
         return
     if mode == "ols":
         var bx = _load(prefix + "_Xc.bin", cells)
         var by = _load(prefix + "_yc.bin", rows)
-        var px = List[Float32](length=cells, fill=Float32(0.0))
-        var py = List[Float32](length=rows, fill=Float32(0.0))
-        var hw = List[Float32](length=cols, fill=Float32(0.0))
-        memcpy(dest=px.unsafe_ptr().bitcast[UInt8](), src=bx.unsafe_ptr(), count=cells * 4)
-        memcpy(dest=py.unsafe_ptr().bitcast[UInt8](), src=by.unsafe_ptr(), count=rows * 4)
+        var hx = ctx.enqueue_create_host_buffer[DType.float32](cells)
+        var hy = ctx.enqueue_create_host_buffer[DType.float32](rows)
+        var hw = ctx.enqueue_create_host_buffer[DType.float32](cols)
+        ctx.synchronize()
+        memcpy(dest=hx.unsafe_ptr().bitcast[UInt8](), src=bx.unsafe_ptr(), count=cells * 4)
+        memcpy(dest=hy.unsafe_ptr().bitcast[UInt8](), src=by.unsafe_ptr(), count=rows * 4)
         _ = bx^
         _ = by^
         for rep in range(reps):
             t0 = _now()
-            ols_fit_host(ctx, px.unsafe_ptr(), py.unsafe_ptr(), hw.unsafe_ptr(), rows, cols)
+            ols_fit_host(ctx, hx.unsafe_ptr(), hy.unsafe_ptr(), hw.unsafe_ptr(), rows, cols)
             var t_total = _ms(t0)
             t0 = _now()
             var x = ctx.enqueue_create_buffer[DType.float32](cells)
@@ -313,8 +312,8 @@ def main() raises:
             ctx.synchronize()
             var t_alloc = _ms(t0)
             t0 = _now()
-            ctx.enqueue_copy(dst_buf=x, src_ptr=px.unsafe_ptr())
-            ctx.enqueue_copy(dst_buf=y, src_ptr=py.unsafe_ptr())
+            ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
+            ctx.enqueue_copy(dst_buf=y, src_ptr=hy.unsafe_ptr())
             ctx.synchronize()
             var t_up = _ms(t0)
             t0 = _now()
@@ -352,7 +351,7 @@ def main() raises:
             ctx.synchronize()
             var t_eq = _ms(t0)
             print("ols rep=" + String(rep) + " ols_fit_host_total_ms=" + String(t_total)
-                  + " dev_alloc_ms=" + String(t_alloc) + " upload_pageable_ms=" + String(t_up)
+                  + " dev_alloc_ms=" + String(t_alloc) + " upload_pinned_ms=" + String(t_up)
                   + " gram_ms=" + String(t_gram) + " xty_ms=" + String(t_xty)
                   + " equilibrate_ms=" + String(t_eq) + " coef0=" + String(hw.unsafe_ptr().unsafe_load(0)))
             _jacobi_ab(ctx, cov, cols)
@@ -365,8 +364,8 @@ def main() raises:
             _ = ab^
             _ = sv^
             _ = scale^
-        _ = px^
-        _ = py^
+        _ = hx^
+        _ = hy^
         _ = hw^
         return
     raise Error("mode must be ols, pca or kmeans")
