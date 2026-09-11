@@ -9,6 +9,197 @@ against each opponent's FAST arm on NVIDIA. Wind-down ordered by the
 orchestrator before tasks 4 and 5 were measured on the H100; everything
 below is either measured with a log path or marked not run.
 
+## 2026-09-10 night H100 leg (branch `lane/nvidia-identical-trees-0910b`, source 7cebeecf)
+
+Box: RunPod NVIDIA H100 80GB HBM3 (81559 MiB), driver 580.126.09, kernel
+6.8.0-106, runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04,
+224-core host, catboost 1.2.10, cuml 26.08.00, numpy 2.4.6 installed but NO
+opponent ran; ours IDENTICAL only (MOJOLEARN_NUMERIC_MODE=identical,
+-D MOJOLEARN_NUMERIC_IDENTICAL=1). Pod lztaetqqwol9jj 02:35 to 03:24 UTC
+(49 minutes of a 120-minute lease), reaped, HTTP 404 verified. Evidence:
+`bench/results/trees_identical/h100_2026-09-10b/{ib,speed,logs,patches}/`;
+`logs/batchK.sh`, `batchL.sh`, `batchM.sh`, `batchN.sh` ran in that order,
+`logs/ab.txt` is the exit-code ledger, `logs/bins_sha256.txt` every binary
+set, `speed/SUMMARY.md` the table below from `logs/summarize_speed.py`.
+Binary sets: `baseline` = the four .so the setup script built from 7cebeecf
+(`baseline2` is the same four, a second RF 1M pass adjacent to the A/B
+switch); `stamps`/`stamps2`/`stampsg` carry the DEVIATION 2510 stamps (RF
+binding twice, gbdt once) and were used for stage runs only; `exp2511` is
+the baseline .so with the DEVIATION 2511 Python patch.
+
+### Fingerprints (identity_break, IDENTICAL, 9 fixtures x2)
+
+- baseline (7cebeecf) vs the retained Sep 10 set
+  (`h100_2026-09-10/ib/baseline.json`, deb01bcf): 81/81 IDENTICAL, all nine
+  lanes (`ib/diff.sep10_baseline.baseline.txt`). The DEVIATION 2340 dtype
+  movement of the Sep 9 comparison is gone against a Sep 10 file, as the
+  brief expected. rf-clf/rf-reg vs `flip2011.json`: 18/18 IDENTICAL.
+- exp2511 (DEVIATION 2511 patch) vs baseline, rf-clf, rf-reg, et-clf,
+  et-reg: 36/36 IDENTICAL (`ib/diff.baseline.exp2511.txt`).
+- No lane moved; nothing was excluded from optimization on that ground.
+
+### Timing, ours IDENTICAL alone in the process, HIGGS first-N rows, ms median (min..max)
+
+Opponent rows are quoted from `bench/OPPONENT_REFERENCE.md` by name and were
+not re-run. "Sep 9 row" = the 2026-09-09 same-image table; "Aug 28 row" =
+the `e1g/2026-08-28_030908` table (different container).
+
+| set | lane | rows | rounds | median | min..max | hash | opponent row (ms) | ours / theirs |
+|---|---|---|---|---|---|---|---|---|
+| baseline | rf | 1M | 5 | 1516 | 1476..1579 | 3ffa2951595422d4 | cuML RF 3314 (Sep 9 row) | 0.46x |
+| baseline2 | rf | 1M | 5 | 1521 | 1485..1576 | 3ffa2951595422d4 | same | 0.46x |
+| baseline | rf | 2M | 5 | 2283 | 2231..2293 | 67d883dc6079b90f | cuML RF 4543.0 (Aug 28 row) | 0.50x |
+| baseline | gbdt-depthwise | 1M | 7 | 1070 | 987..1121 | 592afa74b0d96982 | XGBoost GPU depthwise 617.3; CatBoost GPU depthwise 1232.5 (Aug 28 rows) | 1.73x; 0.87x |
+| baseline | gbdt-depthwise | 2M | 5 | 1917 | 1905..1962 | e9e6dff4ba5496ae | XGBoost 1039.4; CatBoost 1560.6 (Aug 28 rows) | 1.84x; 1.23x |
+| baseline | gbdt-lossguide | 1M | 7 | 1652 | 1639..1690 | 4f02e5cb8088b281 | XGBoost GPU lossguide 816.9; LightGBM CUDA 1313.7; CatBoost 1600.6 (Aug 28 rows) | 2.02x; 1.26x; 1.03x |
+| baseline | gbdt-lossguide | 2M | 5 | 2451 | 2437..2509 | ff9ddbb329632a2d | XGBoost 1272.0; LightGBM 1669.3; CatBoost 1954.5 (Aug 28 rows) | 1.93x; 1.47x; 1.25x |
+| baseline | gbdt-symmetric | 1M | 7 | 533 | 490..570 | dac2cf366e219cec | CatBoost GPU symmetric 900 (Sep 9 row); 846.1 (Aug 28 row) | 0.59x; 0.63x |
+| baseline | et | 1M | 5 | 2578 | 2543..2616 | 2c192f6b12dbb6c5 | no valid NVIDIA row (Sep 10 ours: 3314) | n/a |
+| exp2511 | rf | 1M | 5 | 1484 | 1480..1534 | 3ffa2951595422d4 | A/B vs baseline/baseline2 | see DEVIATION 2511 |
+| exp2511 | rf | 2M | 5 | 2180 | 2175..2212 | 67d883dc6079b90f | A/B vs baseline | see DEVIATION 2511 |
+
+FSPEED-ACC, every set and rung equal to Sep 10 where a Sep 10 cell exists:
+rf 1M logloss 0.538850 / auc 0.809906, rf 2M 0.537060 / 0.811483; depthwise
+1M 0.525450 / 0.813518, 2M 0.524432 / 0.814172; lossguide 1M 0.525348 /
+0.813238, 2M 0.524618 / 0.813858; symmetric 1M 0.542067 / 0.800716; et 1M
+0.622379 / 0.762400. The RF hashes are the ones the brief required.
+
+Against the Sep 10 leg (deb01bcf, same GPU model and image): RF 1M 2234 ->
+1516, RF 2M 3743 -> 2283, ET 1M 3314 -> 2578; DEVIATION 2500 (native label
+encoding, 59d7fbea) is the change between them on the forest path. Symmetric
+1M 478 -> 533 moved the other way on a different physical pod; drift or a
+gbdt-path regression between deb01bcf and 7cebeecf is UNRESOLVED (RUN OWED
+below). Depthwise and lossguide had no post-boundary-tax H100 number; the
+Sep 8 ratios (1.6-2.2x and 2.1-2.5x of XGBoost) are now 1.73-1.84x and
+1.93-2.02x.
+
+### Per-stage splits (MOJOLEARN_STAGE_TIMES=1, one replicate each, drains per stage, not a timing)
+
+RF HIGGS 1M, set `stamps2` (DEVIATION 2510 stamps, `speed/stamps2.rf.higgs.r1000000.stage.log`),
+round 1552, hash 3ffa2951595422d4:
+
+| where | stage | ms |
+|---|---|---|
+| fit_forest | device_wait | 761 |
+| fit_forest | host_queue_push (children into the host tree) | 104 |
+| fit_forest | host_enq_partition (stage + enqueue the node split) | 102 |
+| fit_forest | host_enq_hist_retry (retry sampling rounds) | 89 |
+| fit_forest | host_enq_hist (next batch's histogram round) | 82 |
+| fit_forest | leaf_values | 71 |
+| fit_forest | tree_copy | 33 |
+| fit_forest | host_read_splits | 18 |
+| fit_forest | flush_splits | 6 |
+| fit_forest | host_begin_tree + row_sampling + quantiles + bin_dataset + host_setup + host_teardown | 6 |
+| fit_forest | other (unstamped) | 68 |
+| fit_forest | fit_total | 1342 |
+| binding | bind_host_copy 20 + bind_h2d 2 + ctx/pinned/release/retain < 0.2 | 22 |
+| binding | binding_total | 1361 |
+| Python | round minus binding_total | 191 |
+
+The Python 191 ms by perf_counter in `logs/rf_residual_profile.baseline.log`
+and `logs/rf_export_profile.baseline.log` (3 reps each): `as_f32_colmajor`
+77 (the C-to-F transpose DEVIATION 1840 keeps on purpose), `encode_labels`
+16-18 (was 277 before DEVIATION 2500), `del Xf` 5-7, export destination
+allocation 40-48 (`empty()`, zero-filled, 4,019,922 nodes = 96 MB), export
+copy 19-35, export release 0.3-3. The Sep 10 round-minus-fit residual of
+937 ms is now 191 + 22.
+
+The unstamped `other` of the Sep 10 table (492-499 ms) is therefore host
+work in the level loop: 395 ms of it is enqueue/staging plus the queue push,
+not a hidden kernel. The stamps are `stop_host` (no drain), off unless the
+variable is set, and are on this branch (DEVIATION 2510, ca439973).
+
+GBDT HIGGS 1M, set `stampsg` (gbdt entry and `train` host-phase stamps,
+DEVIATION 2510; `speed/stampsg.gbdt-{depthwise,lossguide}.higgs.r1000000.stage.log`),
+plus the per-tree tables of the baseline stage runs summed over the 100
+trees (`speed/baseline.gbdt-*.higgs.r1000000.stage.log`):
+
+| stage | depthwise (round 1160) | lossguide (round 1944) |
+|---|---|---|
+| Python (round minus gbdt_fit_total) | 105 | 106 |
+| gbdt_fit_host_copy_in (112 MB List copy of X at the binding) | 73 | 73 |
+| train_pre_quantize (per-column host build, a second copy) | 99 | 99 |
+| train_quantize_borders | 59 | 60 |
+| train_cindex_build | 17 | 20 |
+| train_targets_upload + train_pre_fit | 5 | 5 |
+| train_fit_with_test (the boosting loop) | 790 | 1562 |
+| of which: 100 tree-structure tables summed | 210 | 975 |
+| of which: est.pstats/approx/move/readback | 68 | 68 |
+| of which: unwrapped per-iteration work (derivatives, bootstrap, cursor update, loss readback) | ~512 | ~519 |
+| gbdt_fit_model_text | 12 | 14 |
+
+The two GBDT lanes share about 880 ms that is not tree search: ~105 Python,
+~250 host copies and quantization before the loop, ~512 unwrapped inside
+the loop, ~13 model text. For depthwise that is 76 percent of the round.
+
+### What was tried: DEVIATION 2511, raw-malloc export destinations (NOT KEPT under the leg's rule)
+
+`_export_fit_result` (python/mojolearn/_forest_protocol.py) allocated the
+five model arrays with `empty()` (zero-filled `array.array`); the native
+`forest_export` writes every element of every one, so the fill is a second
+pass over 96 MB (1M) / 192 MB (2M) of fresh pages every round (the previous
+model's arrays were just freed). The patch allocates them with
+`_output_store` (`PyMem_RawMalloc`, the DEVIATION 2473/2500 pattern) and
+`Array._owned`; bytes unchanged, fingerprints 36/36 IDENTICAL, hashes equal.
+Patch: `bench/results/trees_identical/h100_2026-09-10b/patches/dev2511_forest_export_raw_store.patch`.
+
+| rung | baseline | baseline2 (adjacent pass) | exp2511 | rule |
+|---|---|---|---|---|
+| RF 1M | 1516 (1476..1579) | 1521 (1485..1576) | 1484 (1480..1534) | median lower by 32-37; range 1480..1534 OVERLAPS the baseline medians: FAIL |
+| RF 2M | 2283 (2231..2293) | not run | 2180 (2175..2212) | median lower by 103; range below 2283: PASS |
+
+Kept only if both rungs pass, so the tree was reverted and the patch
+retained. Mechanism check (`logs/export_alloc_micro.log`, CPU only):
+`empty()` for the five shapes 48.5 ms on fresh pages, 6.5 ms when the
+allocator reuses them; `_output_store` 0.02-0.15 ms plus a 5-34 ms first
+touch that the native export then pays instead of the fill. Orchestrator's
+call: apply it on the 2M evidence, or re-run the 1M rung interleaved with
+7+ rounds. `logs/rf_export_profile.exp2511.log` is NOT a measurement of the
+patch (the scratch script hardcodes `empty()`); ignore it.
+
+### Candidates not taken, with numbers (all mechanical, none touch arithmetic or fold order)
+
+1. GBDT `gbdt_fit_host_copy_in` 73 ms + `train_pre_quantize` 99 ms: two
+   host copies of the 112 MB column-major X before quantization (the List
+   at `gbdt/estimator.mojo` and the per-column build in `gbdt/train.mojo`).
+   Borrowing the caller's buffer the way WP1 did for the forests removes
+   both; 172 ms of a 1070 ms depthwise round, the same 172 of 1652 lossguide.
+2. GBDT unwrapped per-iteration work, ~512 ms in both lanes (5 ms per
+   iteration): derivative launch, deterministic sums, bootstrap, make_sequence,
+   cursor update, loss readback (`gbdt/methods/doc_parallel_boosting.mojo`
+   1410-2110). Needs its own stamps before anything is attributed.
+3. RF enqueue/staging, 273 ms (`host_enq_partition` 102, `host_enq_hist_retry`
+   89, `host_enq_hist` 82) over roughly 1600 batches: per-launch host cost of
+   `enqueue_function` plus pinned staging. Candidate: count launches per batch
+   with RF_LAUNCH_LOG at 1M and fold the per-batch small copies into the
+   DEVIATION 1908 packed upload. Retry rounds alone are 89 ms.
+4. RF `host_queue_push` 104 ms for 4.02M nodes is the transcribed
+   `NodeQueue::push` with a reserve; near its floor, not a target.
+5. RF `tree_copy` 33 ms: `ts.queue.tree.copy()` in `_finish_tree` plus
+   `states[k].tree.copy()` in fit_forest, two copies per tree; a move would
+   remove one. Small.
+6. Python `as_f32_colmajor` 77 ms is DEVIATION 1840's deliberate cost.
+
+### What landed (commits, `%h parent %p`)
+
+- ca439973 parent 7cebeecf: RF stage stamps (DEVIATION 2510), three files.
+- 69c64d11 parent ca439973: gbdt entry and `train` host-phase stamps (DEVIATION 2510).
+- 849b7ccf parent 69c64d11: the evidence directory.
+- the commit after 849b7ccf: this section and the OPPONENT_REFERENCE note.
+- NOT committed to the tree: DEVIATION 2511 (patch retained under `patches/`).
+
+### RUN OWED
+
+- Apple M4 (orchestrator): identity_break on this branch's RF and gbdt
+  bindings (stamps are host-only and off by default, but the .so changed).
+- Symmetric 1M 533 vs Sep 10's 478 on a different pod: one interleaved RF +
+  symmetric session on one H100 to separate drift from a gbdt-path change
+  between deb01bcf and 7cebeecf.
+- DEVIATION 2511 at 1M, interleaved, 7+ rounds, if the orchestrator wants
+  the rule satisfied before applying it.
+- Extra trees NVIDIA opponent row (unchanged from Sep 10).
+- 5M rungs were not started (brief).
+
 ## 2026-09-10 H100 leg (branch `lane/nvidia-identical-trees-0910`, source deb01bcf)
 
 Box: RunPod NVIDIA H100 80GB HBM3, driver 580.126.09, kernel 6.8.0-106,

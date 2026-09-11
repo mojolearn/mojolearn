@@ -2529,6 +2529,10 @@ def fit_forest[
             instr.trace.record_device(ctx, "forest.binned", d_bins)
 
     var has_sw = len(sample_weight_host) > 0
+    # DEVIATION 2510 -- "host_setup": sampler, K builders, the shared
+    # splits staging and the forest preallocation, stamped host-only so
+    # the stage table can split `other`. Off unless MOJOLEARN_STAGE_TIMES=1.
+    var t_host = instr.times.start()
     # DEVIATION 117, IMPLEMENTED: cuML's shipped forest loop is
     # `#pragma omp parallel for num_threads(n_streams)` over trees with a
     # stream pool (`randomforest.cuh:336-367`), and their Python default
@@ -2636,6 +2640,8 @@ def fit_forest[
             )
         )
 
+    instr.times.stop_host("host_setup", t_host)
+
     var states = List[TreeState[O]]()
     var slot_tree = List[Int]()
     var next_tree = 0
@@ -2658,6 +2664,7 @@ def fit_forest[
                     sampler.selected_rows_[k],
                     sampler.n_selected,
                 )
+            t_host = instr.times.start()
             builders[k].reset_for_tree(Int32(next_tree), sampler.n_selected)
             var dataset = DatasetView[O.DataT, O.LabelT](
                 rebind[MutPointer[Scalar[O.DataT], MutUntrackedOrigin]](
@@ -2691,9 +2698,12 @@ def fit_forest[
             comptime if LABELS_SAMPLED_ORDER:
                 builders[k].stage_sampled_order(ctx, dataset)
             var ts = builders[k].begin_tree(ctx, dataset, quantiles, instr)
+            instr.times.stop_host("host_begin_tree", t_host)
             if ts.done:
+                t_host = instr.times.start()
                 forest.trees[next_tree] = ts.tree.copy()
                 _record_tree(instr, forest.trees[next_tree], next_tree)
+                instr.times.stop_host("tree_copy", t_host)
                 next_tree += 1
                 continue
             states.append(ts^)
@@ -2715,7 +2725,9 @@ def fit_forest[
         # prime loop's enqueues. When the loop exits, nothing is
         # pending: a slot records a pending count only by enqueueing a
         # phase, and a slot that enqueued one stays active.
+        t_host = instr.times.start()
         flush_splits_downloads(ctx, split_staging, builders)
+        instr.times.stop_host("flush_splits", t_host)
         # DEVIATION 402 -- "device_wait" is the one drain that serves
         # every in-flight tree's enqueued phase; `stop_host` because the
         # queue is empty at the stamp by construction.
@@ -2730,10 +2742,12 @@ def fit_forest[
             ):
                 continue
             while True:
+                t_host = instr.times.start()
                 forest.trees[slot_tree[k]] = states[k].tree.copy()
                 _record_tree(
                     instr, forest.trees[slot_tree[k]], slot_tree[k]
                 )
+                instr.times.stop_host("tree_copy", t_host)
                 if next_tree >= n_trees:
                     slot_tree[k] = -1
                     active -= 1
@@ -2749,6 +2763,7 @@ def fit_forest[
                         sampler.selected_rows_[k],
                         sampler.n_selected,
                     )
+                t_host = instr.times.start()
                 builders[k].reset_for_tree(
                     Int32(next_tree), sampler.n_selected
                 )
@@ -2781,11 +2796,13 @@ def fit_forest[
                 states[k] = builders[k].begin_tree(
                     ctx, dataset, quantiles, instr
                 )
+                instr.times.stop_host("host_begin_tree", t_host)
                 slot_tree[k] = next_tree
                 next_tree += 1
                 if not states[k].done:
                     break
 
+    t_host = instr.times.start()
     ctx.synchronize()
     # Mojo frees a value at its LAST USE; the builders' buffers must
     # outlive every launch that read them, so they are released only
@@ -2793,6 +2810,7 @@ def fit_forest[
     # is under the same rule: every slot's kernels wrote into it.
     _ = builders^
     _ = split_staging^
+    instr.times.stop_host("host_teardown", t_host)
 
     # `randomforest_common.pyx:669-670` -- after the tree loop, and only
     # if it was asked for.

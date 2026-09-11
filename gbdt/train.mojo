@@ -21,6 +21,7 @@ from gbdt.options.child_hessian import child_hessian_threshold, check_child_hess
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from core.identity_trace import IdentityTrace
+from ensemble.instruments import StageTimes as HostStageTimes
 from gbdt.gpu_data.compressed_index_builder import build_layout
 from gbdt.gpu_data.kernel.binarize import (
     BINARIZE_BLOCK_SIZE,
@@ -716,6 +717,13 @@ def train(
     `best_model_min_trees` above the best iteration gets a model with MORE
     trees than `best_iteration + 1`, and both numbers are correct.
     """
+    # DEVIATION 2510 -- a host-stamped phase table for `train` itself
+    # (MOJOLEARN_STAGE_TIMES=1 only, `stop_host`, no drains added): what the
+    # fit spends before and after the boosting loop's own table. No
+    # arithmetic changes.
+    var host_times = HostStageTimes()
+    var t_train = host_times.start()
+    var t_phase = host_times.start()
     # ---- the grow policy, resolved and refused BY NAME where theirs is ----
     var policy = grow_policy_from_name(grow_policy)
     check_feature_fraction(feature_fraction)
@@ -1079,6 +1087,8 @@ def train(
     for k in range(len(dep_col_index)):
         dep_ordinal_of_column[dep_col_index[k]] = k
 
+    host_times.stop_host("train_pre_quantize", t_phase)
+    t_phase = host_times.start()
     var grid = _quantize_training_columns(
         ctx, columns, column_one_hot, column_ctr_grid,
         dep_ordinal_of_column, dep_by_perm, ctr_grids, n_rows,
@@ -1087,6 +1097,8 @@ def train(
     var borders = grid[0].copy()
     var fold_counts = grid[1].copy()
     var column_nan_treatment = grid[2].copy()
+    host_times.stop_host("train_quantize_borders", t_phase)
+    t_phase = host_times.start()
 
     # the fit's identity trace begins HERE so the border records and the
     # tree records share one seq space (a second IdentityTrace() later
@@ -1146,6 +1158,8 @@ def train(
             )
         )
     var cindex = cindexes[est_perm].copy()
+    host_times.stop_host("train_cindex_build", t_phase)
+    t_phase = host_times.start()
 
     # `class_weights` and `sample_weight`: their
     # `MakeClassificationWeights` applied at pool build. Both fold into
@@ -1222,6 +1236,8 @@ def train(
     # past the drain (step-33 race class)
     _ = ht^
     _ = hw^
+    host_times.stop_host("train_targets_upload", t_phase)
+    t_phase = host_times.start()
 
     var loss_desc = make_loss_description(
         loss,
@@ -1461,6 +1477,8 @@ def train(
         approx_dim, 1 + approx_dim, max_depth,
     )
 
+    host_times.stop_host("train_pre_fit", t_phase)
+    t_phase = host_times.start()
     var model = TAdditiveModel()
     var fit_result = fit_with_test(
         model, ctx, n_rows, fold_counts, max_depth, cindex, targets,
@@ -1510,6 +1528,8 @@ def train(
         min_child_hessian=min_child_hessian,
         feature_fraction=feature_fraction,
     )
+    host_times.stop_host("train_fit_with_test", t_phase)
+    t_phase = host_times.start()
     var losses = fit_result.learn_losses.copy()
     var t_losses = fit_result.test_losses.copy()
 
@@ -1538,6 +1558,9 @@ def train(
         if 0 < best_iter and best_iter < model.size():
             model.shrink(best_iter)
 
+    host_times.stop_host("train_post_fit", t_phase)
+    host_times.stop_host("train_total", t_train)
+    host_times.report()
     return TrainedModel(
         model^,
         fold_counts^,

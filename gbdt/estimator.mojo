@@ -55,6 +55,7 @@ THE POLICY CHOICES
 """
 
 from max.gpu.host import DeviceContext
+from ensemble.instruments import StageTimes as HostStageTimes
 from std.memory import memcpy
 from std.math import isfinite
 
@@ -460,6 +461,10 @@ def gbdt_fit(
     # fit -- the same swap `train`'s column build made
     # (`gbdt/train.mojo:885`). Same bytes in the same order: the caller's
     # buffer is already the column-major layout `train` takes.
+    # DEVIATION 2510 -- host-stamped entry table (MOJOLEARN_STAGE_TIMES=1).
+    var host_times = HostStageTimes()
+    var t_entry = host_times.start()
+    var t_phase = host_times.start()
     var n_x = n_rows * n_features
     var xs = List[Float32]()
     xs.resize(n_x, Float32(0.0))
@@ -500,6 +505,8 @@ def gbdt_fit(
         params.od_type, params.od_pvalue, params.od_wait
     )
 
+    host_times.stop_host("gbdt_fit_host_copy_in", t_phase)
+    t_phase = host_times.start()
     var tm = train(
         ctx, xs, ys, n_rows, n_features,
         border_count=params.border_count,
@@ -545,10 +552,16 @@ def gbdt_fit(
         min_child_hessian=params.min_child_hessian,
         feature_fraction=params.feature_fraction,
     )
+    host_times.stop_host("gbdt_fit_train", t_phase)
+    t_phase = host_times.start()
     var learn_losses = tm.losses.copy()
     var test_losses = tm.test_losses.copy()
+    var text = model_text(tm)
+    host_times.stop_host("gbdt_fit_model_text", t_phase)
+    host_times.stop_host("gbdt_fit_total", t_entry)
+    host_times.report()
     return GbdtFitResult(
-        model_text(tm),
+        text^,
         tm.best_iteration,
         tm.stopped_early,
         learn_losses^,

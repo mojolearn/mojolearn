@@ -1,0 +1,11 @@
+2921 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x59be80000000, nodemask=2)
+X (1000000, 28) float32 True y (1000000,) float32
+2921 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x59bec0000000, nodemask=2)
+rep 0 total_ms=2557.2 config=0.1 encode_labels=17.7 bind=0.0 as_f32_colmajor=78.7 addr=0.0 native_fit_fn=2453.9 del_Xf=6.7 _forest_fit_arrays=0.0 del_out=0.0
+rep 1 total_ms=1570.9 config=0.1 encode_labels=17.3 bind=0.0 as_f32_colmajor=77.0 addr=0.0 native_fit_fn=1469.5 del_Xf=7.0 _forest_fit_arrays=0.0 del_out=0.0
+rep 2 total_ms=1503.6 config=0.1 encode_labels=15.7 bind=0.1 as_f32_colmajor=76.6 addr=0.0 native_fit_fn=1404.3 del_Xf=6.9 _forest_fit_arrays=0.0 del_out=0.0
+2921 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x11abc0000000, nodemask=1)
+2921 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x11ac00000000, nodemask=1)
+2921 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x11ac40000000, nodemask=1)
+harness-style fit ms=1557.6
+harness-style fit ms=1541.0

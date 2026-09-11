@@ -1,0 +1,3225 @@
+FSPEED-NOTE lane=gbdt-lossguide arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+2548 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x79d5c0000000, nodemask=2)
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=cuda path=/root/mojolearn/python/mojolearn/identical/_mojolearn_gbdt.so
+FSPEED-SCALE stage=before rows=1000000 features=28 input_mib=106.8 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=1 size=shipped
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.212 ms
+[stage-times]   hist.zero	0.376 ms
+[stage-times]   hist.build	1.763 ms
+[stage-times]   hist.scan	1.000 ms
+[stage-times]   partstats	0.610 ms
+[stage-times]   score.kernel	0.464 ms
+[stage-times]   score.read	0.412 ms
+[stage-times]   score.hostreduce	0.077 ms
+[stage-times]   split.host	1.044 ms
+[stage-times]   split.chain	2.728 ms
+[stage-times]   split.sizes	0.625 ms
+[stage-times]   hist.subtract	0.446 ms
+[stage-times]   leaf.values	0.036 ms
+[stage-times]   model.build	0.033 ms
+[stage-times]   (accounted 9.833 ms of 10.794 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.205 ms
+[stage-times]   hist.zero	0.337 ms
+[stage-times]   hist.build	1.404 ms
+[stage-times]   hist.scan	0.946 ms
+[stage-times]   partstats	0.539 ms
+[stage-times]   score.kernel	0.414 ms
+[stage-times]   score.read	0.412 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.019 ms
+[stage-times]   split.chain	2.392 ms
+[stage-times]   split.sizes	0.622 ms
+[stage-times]   hist.subtract	0.419 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.021 ms
+[stage-times]   (accounted 8.839 ms of 9.799 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.202 ms
+[stage-times]   hist.zero	0.329 ms
+[stage-times]   hist.build	1.391 ms
+[stage-times]   hist.scan	0.938 ms
+[stage-times]   partstats	0.536 ms
+[stage-times]   score.kernel	0.409 ms
+[stage-times]   score.read	0.409 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.019 ms
+[stage-times]   split.chain	2.375 ms
+[stage-times]   split.sizes	0.623 ms
+[stage-times]   hist.subtract	0.406 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.764 ms of 9.702 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.206 ms
+[stage-times]   hist.zero	0.332 ms
+[stage-times]   hist.build	1.390 ms
+[stage-times]   hist.scan	0.955 ms
+[stage-times]   partstats	0.528 ms
+[stage-times]   score.kernel	0.407 ms
+[stage-times]   score.read	0.414 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.007 ms
+[stage-times]   split.chain	2.395 ms
+[stage-times]   split.sizes	0.636 ms
+[stage-times]   hist.subtract	0.407 ms
+[stage-times]   leaf.values	0.036 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.806 ms of 9.737 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.201 ms
+[stage-times]   hist.zero	0.331 ms
+[stage-times]   hist.build	1.391 ms
+[stage-times]   hist.scan	0.934 ms
+[stage-times]   partstats	0.535 ms
+[stage-times]   score.kernel	0.410 ms
+[stage-times]   score.read	0.410 ms
+[stage-times]   score.hostreduce	0.071 ms
+[stage-times]   split.host	1.008 ms
+[stage-times]   split.chain	2.378 ms
+[stage-times]   split.sizes	0.635 ms
+[stage-times]   hist.subtract	0.409 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.774 ms of 9.705 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.221 ms
+[stage-times]   hist.zero	0.333 ms
+[stage-times]   hist.build	1.376 ms
+[stage-times]   hist.scan	0.943 ms
+[stage-times]   partstats	0.528 ms
+[stage-times]   score.kernel	0.410 ms
+[stage-times]   score.read	0.409 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.003 ms
+[stage-times]   split.chain	2.389 ms
+[stage-times]   split.sizes	0.629 ms
+[stage-times]   hist.subtract	0.418 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.022 ms
+[stage-times]   (accounted 8.789 ms of 9.729 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.206 ms
+[stage-times]   hist.zero	0.329 ms
+[stage-times]   hist.build	1.385 ms
+[stage-times]   hist.scan	0.935 ms
+[stage-times]   partstats	0.525 ms
+[stage-times]   score.kernel	0.411 ms
+[stage-times]   score.read	0.412 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.008 ms
+[stage-times]   split.chain	2.384 ms
+[stage-times]   split.sizes	0.628 ms
+[stage-times]   hist.subtract	0.410 ms
+[stage-times]   leaf.values	0.035 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.760 ms of 9.699 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.198 ms
+[stage-times]   hist.zero	0.330 ms
+[stage-times]   hist.build	1.374 ms
+[stage-times]   hist.scan	0.957 ms
+[stage-times]   partstats	0.534 ms
+[stage-times]   score.kernel	0.410 ms
+[stage-times]   score.read	0.409 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.010 ms
+[stage-times]   split.chain	2.369 ms
+[stage-times]   split.sizes	0.623 ms
+[stage-times]   hist.subtract	0.404 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.744 ms of 9.677 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.204 ms
+[stage-times]   hist.zero	0.329 ms
+[stage-times]   hist.build	1.380 ms
+[stage-times]   hist.scan	0.940 ms
+[stage-times]   partstats	0.533 ms
+[stage-times]   score.kernel	0.407 ms
+[stage-times]   score.read	0.407 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.008 ms
+[stage-times]   split.chain	2.404 ms
+[stage-times]   split.sizes	0.626 ms
+[stage-times]   hist.subtract	0.404 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.769 ms of 9.705 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.201 ms
+[stage-times]   hist.zero	0.334 ms
+[stage-times]   hist.build	1.378 ms
+[stage-times]   hist.scan	0.957 ms
+[stage-times]   partstats	0.527 ms
+[stage-times]   score.kernel	0.408 ms
+[stage-times]   score.read	0.409 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.006 ms
+[stage-times]   split.chain	2.368 ms
+[stage-times]   split.sizes	0.628 ms
+[stage-times]   hist.subtract	0.414 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.756 ms of 9.692 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.210 ms
+[stage-times]   hist.zero	0.331 ms
+[stage-times]   hist.build	1.387 ms
+[stage-times]   hist.scan	0.936 ms
+[stage-times]   partstats	0.528 ms
+[stage-times]   score.kernel	0.409 ms
+[stage-times]   score.read	0.419 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.013 ms
+[stage-times]   split.chain	2.397 ms
+[stage-times]   split.sizes	0.631 ms
+[stage-times]   hist.subtract	0.407 ms
+[stage-times]   leaf.values	0.036 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.796 ms of 9.730 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.196 ms
+[stage-times]   hist.zero	0.328 ms
+[stage-times]   hist.build	1.346 ms
+[stage-times]   hist.scan	0.952 ms
+[stage-times]   partstats	0.537 ms
+[stage-times]   score.kernel	0.408 ms
+[stage-times]   score.read	0.415 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.004 ms
+[stage-times]   split.chain	2.331 ms
+[stage-times]   split.sizes	0.640 ms
+[stage-times]   hist.subtract	0.413 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.696 ms of 9.628 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.199 ms
+[stage-times]   hist.zero	0.329 ms
+[stage-times]   hist.build	1.383 ms
+[stage-times]   hist.scan	0.938 ms
+[stage-times]   partstats	0.530 ms
+[stage-times]   score.kernel	0.405 ms
+[stage-times]   score.read	0.410 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.009 ms
+[stage-times]   split.chain	2.391 ms
+[stage-times]   split.sizes	0.632 ms
+[stage-times]   hist.subtract	0.408 ms
+[stage-times]   leaf.values	0.035 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.760 ms of 9.697 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.201 ms
+[stage-times]   hist.zero	0.330 ms
+[stage-times]   hist.build	1.370 ms
+[stage-times]   hist.scan	0.953 ms
+[stage-times]   partstats	0.537 ms
+[stage-times]   score.kernel	0.406 ms
+[stage-times]   score.read	0.415 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.005 ms
+[stage-times]   split.chain	2.358 ms
+[stage-times]   split.sizes	0.633 ms
+[stage-times]   hist.subtract	0.403 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.738 ms of 9.677 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.201 ms
+[stage-times]   hist.zero	0.328 ms
+[stage-times]   hist.build	1.382 ms
+[stage-times]   hist.scan	0.963 ms
+[stage-times]   partstats	0.531 ms
+[stage-times]   score.kernel	0.407 ms
+[stage-times]   score.read	0.408 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.000 ms
+[stage-times]   split.chain	2.403 ms
+[stage-times]   split.sizes	0.630 ms
+[stage-times]   hist.subtract	0.411 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.789 ms of 9.732 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.200 ms
+[stage-times]   hist.zero	0.329 ms
+[stage-times]   hist.build	1.321 ms
+[stage-times]   hist.scan	0.955 ms
+[stage-times]   partstats	0.535 ms
+[stage-times]   score.kernel	0.404 ms
+[stage-times]   score.read	0.407 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.010 ms
+[stage-times]   split.chain	2.323 ms
+[stage-times]   split.sizes	0.623 ms
+[stage-times]   hist.subtract	0.409 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.641 ms of 9.580 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.198 ms
+[stage-times]   hist.zero	0.330 ms
+[stage-times]   hist.build	1.373 ms
+[stage-times]   hist.scan	0.962 ms
+[stage-times]   partstats	0.530 ms
+[stage-times]   score.kernel	0.408 ms
+[stage-times]   score.read	0.411 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.003 ms
+[stage-times]   split.chain	2.382 ms
+[stage-times]   split.sizes	0.629 ms
+[stage-times]   hist.subtract	0.407 ms
+[stage-times]   leaf.values	0.035 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.759 ms of 9.692 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.200 ms
+[stage-times]   hist.zero	0.330 ms
+[stage-times]   hist.build	1.362 ms
+[stage-times]   hist.scan	0.960 ms
+[stage-times]   partstats	0.530 ms
+[stage-times]   score.kernel	0.408 ms
+[stage-times]   score.read	0.413 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.003 ms
+[stage-times]   split.chain	2.336 ms
+[stage-times]   split.sizes	0.628 ms
+[stage-times]   hist.subtract	0.406 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.701 ms of 9.635 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.203 ms
+[stage-times]   hist.zero	0.328 ms
+[stage-times]   hist.build	1.366 ms
+[stage-times]   hist.scan	0.940 ms
+[stage-times]   partstats	0.528 ms
+[stage-times]   score.kernel	0.407 ms
+[stage-times]   score.read	0.412 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.008 ms
+[stage-times]   split.chain	2.369 ms
+[stage-times]   split.sizes	0.631 ms
+[stage-times]   hist.subtract	0.405 ms
+[stage-times]   leaf.values	0.035 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.724 ms of 9.662 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.203 ms
+[stage-times]   hist.zero	0.332 ms
+[stage-times]   hist.build	1.365 ms
+[stage-times]   hist.scan	0.955 ms
+[stage-times]   partstats	0.525 ms
+[stage-times]   score.kernel	0.408 ms
+[stage-times]   score.read	0.411 ms
+[stage-times]   score.hostreduce	0.066 ms
+[stage-times]   split.host	1.002 ms
+[stage-times]   split.chain	2.370 ms
+[stage-times]   split.sizes	0.630 ms
+[stage-times]   hist.subtract	0.405 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.729 ms of 9.665 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.198 ms
+[stage-times]   hist.zero	0.329 ms
+[stage-times]   hist.build	1.380 ms
+[stage-times]   hist.scan	0.932 ms
+[stage-times]   partstats	0.532 ms
+[stage-times]   score.kernel	0.409 ms
+[stage-times]   score.read	0.411 ms
+[stage-times]   score.hostreduce	0.072 ms
+[stage-times]   split.host	1.003 ms
+[stage-times]   split.chain	2.370 ms
+[stage-times]   split.sizes	0.625 ms
+[stage-times]   hist.subtract	0.408 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.728 ms of 9.660 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.209 ms
+[stage-times]   hist.zero	0.330 ms
+[stage-times]   hist.build	1.369 ms
+[stage-times]   hist.scan	0.959 ms
+[stage-times]   partstats	0.531 ms
+[stage-times]   score.kernel	0.409 ms
+[stage-times]   score.read	0.409 ms
+[stage-times]   score.hostreduce	0.066 ms
+[stage-times]   split.host	1.005 ms
+[stage-times]   split.chain	2.367 ms
+[stage-times]   split.sizes	0.621 ms
+[stage-times]   hist.subtract	0.416 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.752 ms of 9.691 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.196 ms
+[stage-times]   hist.zero	0.332 ms
+[stage-times]   hist.build	1.341 ms
+[stage-times]   hist.scan	0.948 ms
+[stage-times]   partstats	0.537 ms
+[stage-times]   score.kernel	0.407 ms
+[stage-times]   score.read	0.411 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.003 ms
+[stage-times]   split.chain	2.340 ms
+[stage-times]   split.sizes	0.630 ms
+[stage-times]   hist.subtract	0.407 ms
+[stage-times]   leaf.values	0.035 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.681 ms of 9.617 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.190 ms
+[stage-times]   hist.zero	0.328 ms
+[stage-times]   hist.build	1.335 ms
+[stage-times]   hist.scan	0.937 ms
+[stage-times]   partstats	0.545 ms
+[stage-times]   score.kernel	0.405 ms
+[stage-times]   score.read	0.415 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.008 ms
+[stage-times]   split.chain	2.362 ms
+[stage-times]   split.sizes	0.624 ms
+[stage-times]   hist.subtract	0.410 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.685 ms of 9.618 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.202 ms
+[stage-times]   hist.zero	0.333 ms
+[stage-times]   hist.build	1.365 ms
+[stage-times]   hist.scan	0.956 ms
+[stage-times]   partstats	0.529 ms
+[stage-times]   score.kernel	0.409 ms
+[stage-times]   score.read	0.410 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	0.998 ms
+[stage-times]   split.chain	2.354 ms
+[stage-times]   split.sizes	0.636 ms
+[stage-times]   hist.subtract	0.413 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.731 ms of 9.666 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.195 ms
+[stage-times]   hist.zero	0.337 ms
+[stage-times]   hist.build	1.377 ms
+[stage-times]   hist.scan	0.965 ms
+[stage-times]   partstats	0.553 ms
+[stage-times]   score.kernel	0.416 ms
+[stage-times]   score.read	0.416 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.035 ms
+[stage-times]   split.chain	2.377 ms
+[stage-times]   split.sizes	0.647 ms
+[stage-times]   hist.subtract	0.422 ms
+[stage-times]   leaf.values	0.028 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.861 ms of 9.802 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.201 ms
+[stage-times]   hist.zero	0.328 ms
+[stage-times]   hist.build	1.386 ms
+[stage-times]   hist.scan	0.963 ms
+[stage-times]   partstats	0.541 ms
+[stage-times]   score.kernel	0.405 ms
+[stage-times]   score.read	0.407 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.004 ms
+[stage-times]   split.chain	2.384 ms
+[stage-times]   split.sizes	0.627 ms
+[stage-times]   hist.subtract	0.413 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.786 ms of 9.715 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.204 ms
+[stage-times]   hist.zero	0.328 ms
+[stage-times]   hist.build	1.350 ms
+[stage-times]   hist.scan	0.958 ms
+[stage-times]   partstats	0.533 ms
+[stage-times]   score.kernel	0.407 ms
+[stage-times]   score.read	0.412 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.019 ms
+[stage-times]   split.chain	2.337 ms
+[stage-times]   split.sizes	0.628 ms
+[stage-times]   hist.subtract	0.403 ms
+[stage-times]   leaf.values	0.027 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.700 ms of 9.630 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.190 ms
+[stage-times]   hist.zero	0.336 ms
+[stage-times]   hist.build	1.309 ms
+[stage-times]   hist.scan	0.934 ms
+[stage-times]   partstats	0.545 ms
+[stage-times]   score.kernel	0.406 ms
+[stage-times]   score.read	0.406 ms
+[stage-times]   score.hostreduce	0.066 ms
+[stage-times]   split.host	1.008 ms
+[stage-times]   split.chain	2.290 ms
+[stage-times]   split.sizes	0.628 ms
+[stage-times]   hist.subtract	0.408 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.587 ms of 9.520 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.195 ms
+[stage-times]   hist.zero	0.329 ms
+[stage-times]   hist.build	1.350 ms
+[stage-times]   hist.scan	0.957 ms
+[stage-times]   partstats	0.538 ms
+[stage-times]   score.kernel	0.405 ms
+[stage-times]   score.read	0.407 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.004 ms
+[stage-times]   split.chain	2.341 ms
+[stage-times]   split.sizes	0.627 ms
+[stage-times]   hist.subtract	0.411 ms
+[stage-times]   leaf.values	0.036 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.696 ms of 9.629 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.199 ms
+[stage-times]   hist.zero	0.329 ms
+[stage-times]   hist.build	1.337 ms
+[stage-times]   hist.scan	0.957 ms
+[stage-times]   partstats	0.536 ms
+[stage-times]   score.kernel	0.416 ms
+[stage-times]   score.read	0.414 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.008 ms
+[stage-times]   split.chain	2.333 ms
+[stage-times]   split.sizes	0.624 ms
+[stage-times]   hist.subtract	0.406 ms
+[stage-times]   leaf.values	0.035 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.686 ms of 9.616 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.202 ms
+[stage-times]   hist.zero	0.331 ms
+[stage-times]   hist.build	1.336 ms
+[stage-times]   hist.scan	0.940 ms
+[stage-times]   partstats	0.554 ms
+[stage-times]   score.kernel	0.406 ms
+[stage-times]   score.read	0.412 ms
+[stage-times]   score.hostreduce	0.066 ms
+[stage-times]   split.host	1.010 ms
+[stage-times]   split.chain	2.330 ms
+[stage-times]   split.sizes	0.627 ms
+[stage-times]   hist.subtract	0.415 ms
+[stage-times]   leaf.values	0.033 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.685 ms of 9.617 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.195 ms
+[stage-times]   hist.zero	0.330 ms
+[stage-times]   hist.build	1.350 ms
+[stage-times]   hist.scan	0.943 ms
+[stage-times]   partstats	0.534 ms
+[stage-times]   score.kernel	0.412 ms
+[stage-times]   score.read	0.408 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.005 ms
+[stage-times]   split.chain	2.360 ms
+[stage-times]   split.sizes	0.633 ms
+[stage-times]   hist.subtract	0.406 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.702 ms of 9.636 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.199 ms
+[stage-times]   hist.zero	0.329 ms
+[stage-times]   hist.build	1.372 ms
+[stage-times]   hist.scan	0.956 ms
+[stage-times]   partstats	0.531 ms
+[stage-times]   score.kernel	0.413 ms
+[stage-times]   score.read	0.416 ms
+[stage-times]   score.hostreduce	0.066 ms
+[stage-times]   split.host	1.012 ms
+[stage-times]   split.chain	2.377 ms
+[stage-times]   split.sizes	0.632 ms
+[stage-times]   hist.subtract	0.404 ms
+[stage-times]   leaf.values	0.036 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.768 ms of 9.700 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.187 ms
+[stage-times]   hist.zero	0.327 ms
+[stage-times]   hist.build	1.324 ms
+[stage-times]   hist.scan	0.957 ms
+[stage-times]   partstats	0.537 ms
+[stage-times]   score.kernel	0.404 ms
+[stage-times]   score.read	0.408 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.002 ms
+[stage-times]   split.chain	2.288 ms
+[stage-times]   split.sizes	0.624 ms
+[stage-times]   hist.subtract	0.410 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.594 ms of 9.522 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.199 ms
+[stage-times]   hist.zero	0.332 ms
+[stage-times]   hist.build	1.363 ms
+[stage-times]   hist.scan	0.956 ms
+[stage-times]   partstats	0.535 ms
+[stage-times]   score.kernel	0.407 ms
+[stage-times]   score.read	0.409 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.004 ms
+[stage-times]   split.chain	2.363 ms
+[stage-times]   split.sizes	0.636 ms
+[stage-times]   hist.subtract	0.404 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.732 ms of 9.669 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.196 ms
+[stage-times]   hist.zero	0.332 ms
+[stage-times]   hist.build	1.324 ms
+[stage-times]   hist.scan	0.954 ms
+[stage-times]   partstats	0.553 ms
+[stage-times]   score.kernel	0.406 ms
+[stage-times]   score.read	0.407 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.003 ms
+[stage-times]   split.chain	2.305 ms
+[stage-times]   split.sizes	0.633 ms
+[stage-times]   hist.subtract	0.408 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.644 ms of 9.573 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.192 ms
+[stage-times]   hist.zero	0.333 ms
+[stage-times]   hist.build	1.359 ms
+[stage-times]   hist.scan	0.953 ms
+[stage-times]   partstats	0.531 ms
+[stage-times]   score.kernel	0.405 ms
+[stage-times]   score.read	0.410 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.009 ms
+[stage-times]   split.chain	2.341 ms
+[stage-times]   split.sizes	0.628 ms
+[stage-times]   hist.subtract	0.406 ms
+[stage-times]   leaf.values	0.029 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.688 ms of 9.617 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.196 ms
+[stage-times]   hist.zero	0.342 ms
+[stage-times]   hist.build	1.312 ms
+[stage-times]   hist.scan	2.880 ms
+[stage-times]   partstats	0.579 ms
+[stage-times]   score.kernel	0.418 ms
+[stage-times]   score.read	0.430 ms
+[stage-times]   score.hostreduce	0.071 ms
+[stage-times]   split.host	1.047 ms
+[stage-times]   split.chain	2.315 ms
+[stage-times]   split.sizes	0.649 ms
+[stage-times]   hist.subtract	0.458 ms
+[stage-times]   leaf.values	0.035 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 10.757 ms of 11.715 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.191 ms
+[stage-times]   hist.zero	0.337 ms
+[stage-times]   hist.build	1.351 ms
+[stage-times]   hist.scan	0.936 ms
+[stage-times]   partstats	0.535 ms
+[stage-times]   score.kernel	0.408 ms
+[stage-times]   score.read	0.414 ms
+[stage-times]   score.hostreduce	0.066 ms
+[stage-times]   split.host	1.004 ms
+[stage-times]   split.chain	2.346 ms
+[stage-times]   split.sizes	0.628 ms
+[stage-times]   hist.subtract	0.411 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.686 ms of 9.619 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.189 ms
+[stage-times]   hist.zero	0.334 ms
+[stage-times]   hist.build	1.181 ms
+[stage-times]   hist.scan	0.958 ms
+[stage-times]   partstats	0.552 ms
+[stage-times]   score.kernel	0.406 ms
+[stage-times]   score.read	0.405 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.016 ms
+[stage-times]   split.chain	2.060 ms
+[stage-times]   split.sizes	0.653 ms
+[stage-times]   hist.subtract	0.403 ms
+[stage-times]   leaf.values	0.035 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.282 ms of 9.220 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.192 ms
+[stage-times]   hist.zero	0.327 ms
+[stage-times]   hist.build	1.361 ms
+[stage-times]   hist.scan	0.955 ms
+[stage-times]   partstats	0.529 ms
+[stage-times]   score.kernel	0.412 ms
+[stage-times]   score.read	0.413 ms
+[stage-times]   score.hostreduce	0.066 ms
+[stage-times]   split.host	1.011 ms
+[stage-times]   split.chain	2.343 ms
+[stage-times]   split.sizes	0.624 ms
+[stage-times]   hist.subtract	0.404 ms
+[stage-times]   leaf.values	0.035 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.696 ms of 9.630 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.190 ms
+[stage-times]   hist.zero	0.329 ms
+[stage-times]   hist.build	1.298 ms
+[stage-times]   hist.scan	0.956 ms
+[stage-times]   partstats	0.547 ms
+[stage-times]   score.kernel	0.407 ms
+[stage-times]   score.read	0.406 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.008 ms
+[stage-times]   split.chain	2.290 ms
+[stage-times]   split.sizes	0.623 ms
+[stage-times]   hist.subtract	0.404 ms
+[stage-times]   leaf.values	0.036 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.586 ms of 9.517 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.192 ms
+[stage-times]   hist.zero	0.328 ms
+[stage-times]   hist.build	1.302 ms
+[stage-times]   hist.scan	0.939 ms
+[stage-times]   partstats	0.550 ms
+[stage-times]   score.kernel	0.410 ms
+[stage-times]   score.read	0.412 ms
+[stage-times]   score.hostreduce	0.066 ms
+[stage-times]   split.host	1.000 ms
+[stage-times]   split.chain	2.277 ms
+[stage-times]   split.sizes	0.631 ms
+[stage-times]   hist.subtract	0.412 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.577 ms of 9.511 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.195 ms
+[stage-times]   hist.zero	0.333 ms
+[stage-times]   hist.build	1.362 ms
+[stage-times]   hist.scan	0.941 ms
+[stage-times]   partstats	0.526 ms
+[stage-times]   score.kernel	0.406 ms
+[stage-times]   score.read	0.409 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.002 ms
+[stage-times]   split.chain	2.353 ms
+[stage-times]   split.sizes	0.630 ms
+[stage-times]   hist.subtract	0.405 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.020 ms
+[stage-times]   (accounted 8.688 ms of 9.626 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=63 iterations=62 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.179 ms
+[stage-times]   hist.zero	0.329 ms
+[stage-times]   hist.build	1.233 ms
+[stage-times]   hist.scan	0.941 ms
+[stage-times]   partstats	0.565 ms
+[stage-times]   score.kernel	0.410 ms
+[stage-times]   score.read	0.406 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	0.990 ms
+[stage-times]   split.chain	2.131 ms
+[stage-times]   split.sizes	0.621 ms
+[stage-times]   hist.subtract	0.406 ms
+[stage-times]   leaf.values	0.033 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.336 ms of 9.260 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.196 ms
+[stage-times]   hist.zero	0.328 ms
+[stage-times]   hist.build	1.307 ms
+[stage-times]   hist.scan	0.939 ms
+[stage-times]   partstats	0.538 ms
+[stage-times]   score.kernel	0.405 ms
+[stage-times]   score.read	0.413 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.004 ms
+[stage-times]   split.chain	2.285 ms
+[stage-times]   split.sizes	0.632 ms
+[stage-times]   hist.subtract	0.407 ms
+[stage-times]   leaf.values	0.028 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.575 ms of 9.516 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.188 ms
+[stage-times]   hist.zero	0.333 ms
+[stage-times]   hist.build	1.338 ms
+[stage-times]   hist.scan	0.957 ms
+[stage-times]   partstats	0.564 ms
+[stage-times]   score.kernel	0.404 ms
+[stage-times]   score.read	0.410 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.006 ms
+[stage-times]   split.chain	2.311 ms
+[stage-times]   split.sizes	0.626 ms
+[stage-times]   hist.subtract	0.405 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.667 ms of 9.599 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.201 ms
+[stage-times]   hist.zero	0.331 ms
+[stage-times]   hist.build	1.384 ms
+[stage-times]   hist.scan	0.959 ms
+[stage-times]   partstats	0.522 ms
+[stage-times]   score.kernel	0.407 ms
+[stage-times]   score.read	0.409 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.003 ms
+[stage-times]   split.chain	2.384 ms
+[stage-times]   split.sizes	0.624 ms
+[stage-times]   hist.subtract	0.409 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.759 ms of 9.693 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.193 ms
+[stage-times]   hist.zero	0.330 ms
+[stage-times]   hist.build	1.364 ms
+[stage-times]   hist.scan	0.957 ms
+[stage-times]   partstats	0.527 ms
+[stage-times]   score.kernel	0.408 ms
+[stage-times]   score.read	0.410 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.004 ms
+[stage-times]   split.chain	2.422 ms
+[stage-times]   split.sizes	0.626 ms
+[stage-times]   hist.subtract	0.406 ms
+[stage-times]   leaf.values	0.033 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.771 ms of 9.704 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.189 ms
+[stage-times]   hist.zero	0.329 ms
+[stage-times]   hist.build	1.217 ms
+[stage-times]   hist.scan	0.938 ms
+[stage-times]   partstats	0.564 ms
+[stage-times]   score.kernel	0.405 ms
+[stage-times]   score.read	0.409 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.007 ms
+[stage-times]   split.chain	2.108 ms
+[stage-times]   split.sizes	0.632 ms
+[stage-times]   hist.subtract	0.404 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.328 ms of 9.255 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.190 ms
+[stage-times]   hist.zero	0.333 ms
+[stage-times]   hist.build	1.190 ms
+[stage-times]   hist.scan	0.952 ms
+[stage-times]   partstats	0.558 ms
+[stage-times]   score.kernel	0.407 ms
+[stage-times]   score.read	0.408 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.002 ms
+[stage-times]   split.chain	2.081 ms
+[stage-times]   split.sizes	0.625 ms
+[stage-times]   hist.subtract	0.411 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.283 ms of 9.216 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.199 ms
+[stage-times]   hist.zero	0.331 ms
+[stage-times]   hist.build	1.394 ms
+[stage-times]   hist.scan	0.962 ms
+[stage-times]   partstats	0.528 ms
+[stage-times]   score.kernel	0.407 ms
+[stage-times]   score.read	0.408 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.007 ms
+[stage-times]   split.chain	2.374 ms
+[stage-times]   split.sizes	0.630 ms
+[stage-times]   hist.subtract	0.407 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.772 ms of 9.703 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.193 ms
+[stage-times]   hist.zero	0.330 ms
+[stage-times]   hist.build	1.268 ms
+[stage-times]   hist.scan	0.966 ms
+[stage-times]   partstats	0.568 ms
+[stage-times]   score.kernel	0.406 ms
+[stage-times]   score.read	0.410 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	0.998 ms
+[stage-times]   split.chain	2.271 ms
+[stage-times]   split.sizes	0.636 ms
+[stage-times]   hist.subtract	0.405 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.574 ms of 9.509 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.196 ms
+[stage-times]   hist.zero	0.338 ms
+[stage-times]   hist.build	1.360 ms
+[stage-times]   hist.scan	0.956 ms
+[stage-times]   partstats	0.534 ms
+[stage-times]   score.kernel	0.407 ms
+[stage-times]   score.read	0.414 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.003 ms
+[stage-times]   split.chain	2.351 ms
+[stage-times]   split.sizes	0.621 ms
+[stage-times]   hist.subtract	0.404 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.710 ms of 9.646 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.185 ms
+[stage-times]   hist.zero	0.329 ms
+[stage-times]   hist.build	1.319 ms
+[stage-times]   hist.scan	0.962 ms
+[stage-times]   partstats	0.551 ms
+[stage-times]   score.kernel	0.407 ms
+[stage-times]   score.read	0.406 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.005 ms
+[stage-times]   split.chain	2.308 ms
+[stage-times]   split.sizes	0.624 ms
+[stage-times]   hist.subtract	0.409 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.632 ms of 9.563 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.189 ms
+[stage-times]   hist.zero	0.334 ms
+[stage-times]   hist.build	1.358 ms
+[stage-times]   hist.scan	0.955 ms
+[stage-times]   partstats	0.528 ms
+[stage-times]   score.kernel	0.407 ms
+[stage-times]   score.read	0.408 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	0.999 ms
+[stage-times]   split.chain	2.337 ms
+[stage-times]   split.sizes	0.629 ms
+[stage-times]   hist.subtract	0.407 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.677 ms of 9.607 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.188 ms
+[stage-times]   hist.zero	0.328 ms
+[stage-times]   hist.build	1.259 ms
+[stage-times]   hist.scan	0.954 ms
+[stage-times]   partstats	0.576 ms
+[stage-times]   score.kernel	0.408 ms
+[stage-times]   score.read	0.408 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	0.999 ms
+[stage-times]   split.chain	2.209 ms
+[stage-times]   split.sizes	0.628 ms
+[stage-times]   hist.subtract	0.404 ms
+[stage-times]   leaf.values	0.033 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.485 ms of 9.418 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.187 ms
+[stage-times]   hist.zero	0.329 ms
+[stage-times]   hist.build	1.219 ms
+[stage-times]   hist.scan	0.925 ms
+[stage-times]   partstats	0.572 ms
+[stage-times]   score.kernel	0.403 ms
+[stage-times]   score.read	0.413 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.002 ms
+[stage-times]   split.chain	2.173 ms
+[stage-times]   split.sizes	0.625 ms
+[stage-times]   hist.subtract	0.408 ms
+[stage-times]   leaf.values	0.042 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.391 ms of 9.326 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.185 ms
+[stage-times]   hist.zero	0.327 ms
+[stage-times]   hist.build	1.334 ms
+[stage-times]   hist.scan	0.954 ms
+[stage-times]   partstats	0.537 ms
+[stage-times]   score.kernel	0.407 ms
+[stage-times]   score.read	0.408 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.011 ms
+[stage-times]   split.chain	2.287 ms
+[stage-times]   split.sizes	0.629 ms
+[stage-times]   hist.subtract	0.415 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.621 ms of 9.555 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.192 ms
+[stage-times]   hist.zero	0.329 ms
+[stage-times]   hist.build	1.287 ms
+[stage-times]   hist.scan	0.954 ms
+[stage-times]   partstats	0.536 ms
+[stage-times]   score.kernel	0.407 ms
+[stage-times]   score.read	0.409 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.019 ms
+[stage-times]   split.chain	2.226 ms
+[stage-times]   split.sizes	0.624 ms
+[stage-times]   hist.subtract	0.410 ms
+[stage-times]   leaf.values	0.035 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.522 ms of 9.452 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.185 ms
+[stage-times]   hist.zero	0.331 ms
+[stage-times]   hist.build	1.298 ms
+[stage-times]   hist.scan	0.951 ms
+[stage-times]   partstats	0.551 ms
+[stage-times]   score.kernel	0.405 ms
+[stage-times]   score.read	0.410 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.013 ms
+[stage-times]   split.chain	2.293 ms
+[stage-times]   split.sizes	0.625 ms
+[stage-times]   hist.subtract	0.409 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.596 ms of 9.528 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.194 ms
+[stage-times]   hist.zero	0.333 ms
+[stage-times]   hist.build	1.150 ms
+[stage-times]   hist.scan	0.941 ms
+[stage-times]   partstats	0.576 ms
+[stage-times]   score.kernel	0.407 ms
+[stage-times]   score.read	0.407 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.007 ms
+[stage-times]   split.chain	2.105 ms
+[stage-times]   split.sizes	0.622 ms
+[stage-times]   hist.subtract	0.406 ms
+[stage-times]   leaf.values	0.042 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.281 ms of 9.212 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.185 ms
+[stage-times]   hist.zero	0.329 ms
+[stage-times]   hist.build	1.308 ms
+[stage-times]   hist.scan	0.940 ms
+[stage-times]   partstats	0.539 ms
+[stage-times]   score.kernel	0.405 ms
+[stage-times]   score.read	0.413 ms
+[stage-times]   score.hostreduce	0.066 ms
+[stage-times]   split.host	1.015 ms
+[stage-times]   split.chain	2.303 ms
+[stage-times]   split.sizes	0.635 ms
+[stage-times]   hist.subtract	0.412 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.610 ms of 9.540 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.183 ms
+[stage-times]   hist.zero	0.329 ms
+[stage-times]   hist.build	1.323 ms
+[stage-times]   hist.scan	0.947 ms
+[stage-times]   partstats	0.539 ms
+[stage-times]   score.kernel	0.412 ms
+[stage-times]   score.read	0.407 ms
+[stage-times]   score.hostreduce	0.066 ms
+[stage-times]   split.host	0.999 ms
+[stage-times]   split.chain	2.327 ms
+[stage-times]   split.sizes	0.627 ms
+[stage-times]   hist.subtract	0.411 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.629 ms of 9.570 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.198 ms
+[stage-times]   hist.zero	0.328 ms
+[stage-times]   hist.build	1.377 ms
+[stage-times]   hist.scan	0.962 ms
+[stage-times]   partstats	0.530 ms
+[stage-times]   score.kernel	0.408 ms
+[stage-times]   score.read	0.414 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.003 ms
+[stage-times]   split.chain	2.366 ms
+[stage-times]   split.sizes	0.627 ms
+[stage-times]   hist.subtract	0.414 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.751 ms of 9.687 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.194 ms
+[stage-times]   hist.zero	0.328 ms
+[stage-times]   hist.build	1.348 ms
+[stage-times]   hist.scan	0.935 ms
+[stage-times]   partstats	0.542 ms
+[stage-times]   score.kernel	0.406 ms
+[stage-times]   score.read	0.416 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.004 ms
+[stage-times]   split.chain	2.348 ms
+[stage-times]   split.sizes	0.628 ms
+[stage-times]   hist.subtract	0.428 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.023 ms
+[stage-times]   (accounted 8.709 ms of 9.651 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.187 ms
+[stage-times]   hist.zero	0.340 ms
+[stage-times]   hist.build	1.275 ms
+[stage-times]   hist.scan	0.940 ms
+[stage-times]   partstats	0.541 ms
+[stage-times]   score.kernel	0.408 ms
+[stage-times]   score.read	0.407 ms
+[stage-times]   score.hostreduce	0.066 ms
+[stage-times]   split.host	1.008 ms
+[stage-times]   split.chain	2.256 ms
+[stage-times]   split.sizes	0.627 ms
+[stage-times]   hist.subtract	0.405 ms
+[stage-times]   leaf.values	0.033 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.518 ms of 9.448 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.188 ms
+[stage-times]   hist.zero	0.330 ms
+[stage-times]   hist.build	1.340 ms
+[stage-times]   hist.scan	0.936 ms
+[stage-times]   partstats	0.544 ms
+[stage-times]   score.kernel	0.405 ms
+[stage-times]   score.read	0.408 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.003 ms
+[stage-times]   split.chain	2.320 ms
+[stage-times]   split.sizes	0.630 ms
+[stage-times]   hist.subtract	0.411 ms
+[stage-times]   leaf.values	0.028 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.633 ms of 9.567 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=61 iterations=60 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.176 ms
+[stage-times]   hist.zero	0.327 ms
+[stage-times]   hist.build	1.160 ms
+[stage-times]   hist.scan	0.902 ms
+[stage-times]   partstats	0.535 ms
+[stage-times]   score.kernel	0.398 ms
+[stage-times]   score.read	0.391 ms
+[stage-times]   score.hostreduce	0.065 ms
+[stage-times]   split.host	0.958 ms
+[stage-times]   split.chain	2.021 ms
+[stage-times]   split.sizes	0.596 ms
+[stage-times]   hist.subtract	0.392 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.017 ms
+[stage-times]   (accounted 7.978 ms of 8.876 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.180 ms
+[stage-times]   hist.zero	0.330 ms
+[stage-times]   hist.build	1.146 ms
+[stage-times]   hist.scan	0.951 ms
+[stage-times]   partstats	0.563 ms
+[stage-times]   score.kernel	0.402 ms
+[stage-times]   score.read	0.410 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.004 ms
+[stage-times]   split.chain	2.052 ms
+[stage-times]   split.sizes	0.628 ms
+[stage-times]   hist.subtract	0.406 ms
+[stage-times]   leaf.values	0.033 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.196 ms of 9.128 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.187 ms
+[stage-times]   hist.zero	0.334 ms
+[stage-times]   hist.build	1.307 ms
+[stage-times]   hist.scan	0.957 ms
+[stage-times]   partstats	0.536 ms
+[stage-times]   score.kernel	0.406 ms
+[stage-times]   score.read	0.409 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.001 ms
+[stage-times]   split.chain	2.285 ms
+[stage-times]   split.sizes	0.631 ms
+[stage-times]   hist.subtract	0.408 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.588 ms of 9.516 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.186 ms
+[stage-times]   hist.zero	0.333 ms
+[stage-times]   hist.build	1.302 ms
+[stage-times]   hist.scan	0.946 ms
+[stage-times]   partstats	0.547 ms
+[stage-times]   score.kernel	0.406 ms
+[stage-times]   score.read	0.409 ms
+[stage-times]   score.hostreduce	0.066 ms
+[stage-times]   split.host	1.006 ms
+[stage-times]   split.chain	2.285 ms
+[stage-times]   split.sizes	0.626 ms
+[stage-times]   hist.subtract	0.404 ms
+[stage-times]   leaf.values	0.036 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.579 ms of 9.507 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.187 ms
+[stage-times]   hist.zero	0.336 ms
+[stage-times]   hist.build	1.320 ms
+[stage-times]   hist.scan	0.962 ms
+[stage-times]   partstats	0.547 ms
+[stage-times]   score.kernel	0.408 ms
+[stage-times]   score.read	0.411 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.002 ms
+[stage-times]   split.chain	2.305 ms
+[stage-times]   split.sizes	0.629 ms
+[stage-times]   hist.subtract	0.405 ms
+[stage-times]   leaf.values	0.035 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.639 ms of 9.571 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=63 iterations=62 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.178 ms
+[stage-times]   hist.zero	0.332 ms
+[stage-times]   hist.build	1.200 ms
+[stage-times]   hist.scan	0.908 ms
+[stage-times]   partstats	0.529 ms
+[stage-times]   score.kernel	0.405 ms
+[stage-times]   score.read	0.409 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	0.987 ms
+[stage-times]   split.chain	2.068 ms
+[stage-times]   split.sizes	0.612 ms
+[stage-times]   hist.subtract	0.407 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.159 ms of 9.109 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.190 ms
+[stage-times]   hist.zero	0.328 ms
+[stage-times]   hist.build	1.298 ms
+[stage-times]   hist.scan	0.945 ms
+[stage-times]   partstats	0.544 ms
+[stage-times]   score.kernel	0.409 ms
+[stage-times]   score.read	0.405 ms
+[stage-times]   score.hostreduce	0.066 ms
+[stage-times]   split.host	1.001 ms
+[stage-times]   split.chain	2.285 ms
+[stage-times]   split.sizes	0.621 ms
+[stage-times]   hist.subtract	0.412 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.561 ms of 9.489 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.191 ms
+[stage-times]   hist.zero	0.335 ms
+[stage-times]   hist.build	1.177 ms
+[stage-times]   hist.scan	0.943 ms
+[stage-times]   partstats	0.560 ms
+[stage-times]   score.kernel	0.408 ms
+[stage-times]   score.read	0.406 ms
+[stage-times]   score.hostreduce	0.071 ms
+[stage-times]   split.host	1.004 ms
+[stage-times]   split.chain	2.116 ms
+[stage-times]   split.sizes	0.627 ms
+[stage-times]   hist.subtract	0.405 ms
+[stage-times]   leaf.values	0.035 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.301 ms of 9.232 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.190 ms
+[stage-times]   hist.zero	0.328 ms
+[stage-times]   hist.build	1.221 ms
+[stage-times]   hist.scan	0.955 ms
+[stage-times]   partstats	0.569 ms
+[stage-times]   score.kernel	0.406 ms
+[stage-times]   score.read	0.407 ms
+[stage-times]   score.hostreduce	0.066 ms
+[stage-times]   split.host	1.001 ms
+[stage-times]   split.chain	2.206 ms
+[stage-times]   split.sizes	0.633 ms
+[stage-times]   hist.subtract	0.411 ms
+[stage-times]   leaf.values	0.044 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.463 ms of 9.392 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.191 ms
+[stage-times]   hist.zero	0.329 ms
+[stage-times]   hist.build	1.359 ms
+[stage-times]   hist.scan	0.940 ms
+[stage-times]   partstats	0.545 ms
+[stage-times]   score.kernel	0.405 ms
+[stage-times]   score.read	0.412 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.006 ms
+[stage-times]   split.chain	2.328 ms
+[stage-times]   split.sizes	0.631 ms
+[stage-times]   hist.subtract	0.405 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.676 ms of 9.602 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.192 ms
+[stage-times]   hist.zero	0.338 ms
+[stage-times]   hist.build	1.323 ms
+[stage-times]   hist.scan	0.956 ms
+[stage-times]   partstats	0.535 ms
+[stage-times]   score.kernel	0.405 ms
+[stage-times]   score.read	0.408 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	0.999 ms
+[stage-times]   split.chain	2.338 ms
+[stage-times]   split.sizes	0.630 ms
+[stage-times]   hist.subtract	0.407 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.655 ms of 9.584 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.183 ms
+[stage-times]   hist.zero	0.329 ms
+[stage-times]   hist.build	1.296 ms
+[stage-times]   hist.scan	0.957 ms
+[stage-times]   partstats	0.545 ms
+[stage-times]   score.kernel	0.407 ms
+[stage-times]   score.read	0.408 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	0.998 ms
+[stage-times]   split.chain	2.286 ms
+[stage-times]   split.sizes	0.625 ms
+[stage-times]   hist.subtract	0.408 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.567 ms of 9.499 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.190 ms
+[stage-times]   hist.zero	0.331 ms
+[stage-times]   hist.build	1.169 ms
+[stage-times]   hist.scan	0.948 ms
+[stage-times]   partstats	0.565 ms
+[stage-times]   score.kernel	0.403 ms
+[stage-times]   score.read	0.405 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.007 ms
+[stage-times]   split.chain	2.131 ms
+[stage-times]   split.sizes	0.628 ms
+[stage-times]   hist.subtract	0.403 ms
+[stage-times]   leaf.values	0.035 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.305 ms of 9.240 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.176 ms
+[stage-times]   hist.zero	0.331 ms
+[stage-times]   hist.build	1.264 ms
+[stage-times]   hist.scan	0.956 ms
+[stage-times]   partstats	0.550 ms
+[stage-times]   score.kernel	0.405 ms
+[stage-times]   score.read	0.404 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.006 ms
+[stage-times]   split.chain	2.155 ms
+[stage-times]   split.sizes	0.635 ms
+[stage-times]   hist.subtract	0.403 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.411 ms of 9.340 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=63 iterations=62 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.177 ms
+[stage-times]   hist.zero	0.332 ms
+[stage-times]   hist.build	1.138 ms
+[stage-times]   hist.scan	0.923 ms
+[stage-times]   partstats	0.553 ms
+[stage-times]   score.kernel	0.404 ms
+[stage-times]   score.read	0.403 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	0.993 ms
+[stage-times]   split.chain	2.029 ms
+[stage-times]   split.sizes	0.614 ms
+[stage-times]   hist.subtract	0.404 ms
+[stage-times]   leaf.values	0.033 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.094 ms of 9.010 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.178 ms
+[stage-times]   hist.zero	0.328 ms
+[stage-times]   hist.build	1.254 ms
+[stage-times]   hist.scan	0.940 ms
+[stage-times]   partstats	0.565 ms
+[stage-times]   score.kernel	0.404 ms
+[stage-times]   score.read	0.407 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.010 ms
+[stage-times]   split.chain	2.293 ms
+[stage-times]   split.sizes	0.627 ms
+[stage-times]   hist.subtract	0.410 ms
+[stage-times]   leaf.values	0.036 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.543 ms of 9.476 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.191 ms
+[stage-times]   hist.zero	0.329 ms
+[stage-times]   hist.build	1.368 ms
+[stage-times]   hist.scan	0.957 ms
+[stage-times]   partstats	0.528 ms
+[stage-times]   score.kernel	0.413 ms
+[stage-times]   score.read	0.413 ms
+[stage-times]   score.hostreduce	0.066 ms
+[stage-times]   split.host	1.010 ms
+[stage-times]   split.chain	2.346 ms
+[stage-times]   split.sizes	0.628 ms
+[stage-times]   hist.subtract	0.406 ms
+[stage-times]   leaf.values	0.036 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.715 ms of 9.649 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.191 ms
+[stage-times]   hist.zero	0.331 ms
+[stage-times]   hist.build	1.366 ms
+[stage-times]   hist.scan	0.944 ms
+[stage-times]   partstats	0.536 ms
+[stage-times]   score.kernel	0.411 ms
+[stage-times]   score.read	0.427 ms
+[stage-times]   score.hostreduce	0.066 ms
+[stage-times]   split.host	1.003 ms
+[stage-times]   split.chain	2.370 ms
+[stage-times]   split.sizes	0.633 ms
+[stage-times]   hist.subtract	0.407 ms
+[stage-times]   leaf.values	0.035 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.745 ms of 9.677 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.183 ms
+[stage-times]   hist.zero	0.331 ms
+[stage-times]   hist.build	1.315 ms
+[stage-times]   hist.scan	0.946 ms
+[stage-times]   partstats	0.538 ms
+[stage-times]   score.kernel	0.405 ms
+[stage-times]   score.read	0.406 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.005 ms
+[stage-times]   split.chain	2.309 ms
+[stage-times]   split.sizes	0.627 ms
+[stage-times]   hist.subtract	0.407 ms
+[stage-times]   leaf.values	0.033 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.596 ms of 9.527 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.183 ms
+[stage-times]   hist.zero	0.329 ms
+[stage-times]   hist.build	1.308 ms
+[stage-times]   hist.scan	0.933 ms
+[stage-times]   partstats	0.537 ms
+[stage-times]   score.kernel	0.411 ms
+[stage-times]   score.read	0.407 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.001 ms
+[stage-times]   split.chain	2.267 ms
+[stage-times]   split.sizes	0.628 ms
+[stage-times]   hist.subtract	0.406 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.537 ms of 9.470 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.186 ms
+[stage-times]   hist.zero	0.332 ms
+[stage-times]   hist.build	1.266 ms
+[stage-times]   hist.scan	0.949 ms
+[stage-times]   partstats	0.539 ms
+[stage-times]   score.kernel	0.409 ms
+[stage-times]   score.read	0.407 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	0.996 ms
+[stage-times]   split.chain	2.182 ms
+[stage-times]   split.sizes	0.633 ms
+[stage-times]   hist.subtract	0.414 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.439 ms of 9.370 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.196 ms
+[stage-times]   hist.zero	0.330 ms
+[stage-times]   hist.build	1.296 ms
+[stage-times]   hist.scan	0.954 ms
+[stage-times]   partstats	0.542 ms
+[stage-times]   score.kernel	0.405 ms
+[stage-times]   score.read	0.409 ms
+[stage-times]   score.hostreduce	0.066 ms
+[stage-times]   split.host	1.003 ms
+[stage-times]   split.chain	2.278 ms
+[stage-times]   split.sizes	0.627 ms
+[stage-times]   hist.subtract	0.404 ms
+[stage-times]   leaf.values	0.036 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.572 ms of 9.498 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.190 ms
+[stage-times]   hist.zero	0.330 ms
+[stage-times]   hist.build	1.317 ms
+[stage-times]   hist.scan	0.951 ms
+[stage-times]   partstats	0.533 ms
+[stage-times]   score.kernel	0.416 ms
+[stage-times]   score.read	0.412 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.004 ms
+[stage-times]   split.chain	2.299 ms
+[stage-times]   split.sizes	0.629 ms
+[stage-times]   hist.subtract	0.409 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.619 ms of 9.552 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.194 ms
+[stage-times]   hist.zero	0.334 ms
+[stage-times]   hist.build	1.177 ms
+[stage-times]   hist.scan	0.953 ms
+[stage-times]   partstats	0.568 ms
+[stage-times]   score.kernel	0.408 ms
+[stage-times]   score.read	0.408 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.005 ms
+[stage-times]   split.chain	2.160 ms
+[stage-times]   split.sizes	0.627 ms
+[stage-times]   hist.subtract	0.403 ms
+[stage-times]   leaf.values	0.045 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.374 ms of 9.307 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.181 ms
+[stage-times]   hist.zero	0.329 ms
+[stage-times]   hist.build	1.374 ms
+[stage-times]   hist.scan	0.941 ms
+[stage-times]   partstats	0.529 ms
+[stage-times]   score.kernel	0.411 ms
+[stage-times]   score.read	0.417 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.020 ms
+[stage-times]   split.chain	2.357 ms
+[stage-times]   split.sizes	0.629 ms
+[stage-times]   hist.subtract	0.408 ms
+[stage-times]   leaf.values	0.028 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.716 ms of 9.643 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.187 ms
+[stage-times]   hist.zero	0.330 ms
+[stage-times]   hist.build	1.291 ms
+[stage-times]   hist.scan	0.957 ms
+[stage-times]   partstats	0.530 ms
+[stage-times]   score.kernel	0.403 ms
+[stage-times]   score.read	0.409 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.001 ms
+[stage-times]   split.chain	2.280 ms
+[stage-times]   split.sizes	0.623 ms
+[stage-times]   hist.subtract	0.405 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.542 ms of 9.481 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=63 iterations=62 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.182 ms
+[stage-times]   hist.zero	0.327 ms
+[stage-times]   hist.build	1.193 ms
+[stage-times]   hist.scan	0.929 ms
+[stage-times]   partstats	0.539 ms
+[stage-times]   score.kernel	0.404 ms
+[stage-times]   score.read	0.408 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	0.983 ms
+[stage-times]   split.chain	2.070 ms
+[stage-times]   split.sizes	0.620 ms
+[stage-times]   hist.subtract	0.405 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.186 ms of 9.106 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=63 iterations=62 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.171 ms
+[stage-times]   hist.zero	0.332 ms
+[stage-times]   hist.build	1.185 ms
+[stage-times]   hist.scan	0.967 ms
+[stage-times]   partstats	0.539 ms
+[stage-times]   score.kernel	0.407 ms
+[stage-times]   score.read	0.405 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	0.983 ms
+[stage-times]   split.chain	2.039 ms
+[stage-times]   split.sizes	0.618 ms
+[stage-times]   hist.subtract	0.408 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.178 ms of 9.099 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.188 ms
+[stage-times]   hist.zero	0.333 ms
+[stage-times]   hist.build	1.350 ms
+[stage-times]   hist.scan	0.935 ms
+[stage-times]   partstats	0.545 ms
+[stage-times]   score.kernel	0.405 ms
+[stage-times]   score.read	0.409 ms
+[stage-times]   score.hostreduce	0.066 ms
+[stage-times]   split.host	0.998 ms
+[stage-times]   split.chain	2.355 ms
+[stage-times]   split.sizes	0.631 ms
+[stage-times]   hist.subtract	0.406 ms
+[stage-times]   leaf.values	0.035 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.680 ms of 9.610 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.186 ms
+[stage-times]   hist.zero	0.333 ms
+[stage-times]   hist.build	1.326 ms
+[stage-times]   hist.scan	0.932 ms
+[stage-times]   partstats	0.545 ms
+[stage-times]   score.kernel	0.409 ms
+[stage-times]   score.read	0.410 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.007 ms
+[stage-times]   split.chain	2.303 ms
+[stage-times]   split.sizes	0.634 ms
+[stage-times]   hist.subtract	0.414 ms
+[stage-times]   leaf.values	0.035 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.627 ms of 9.557 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.193 ms
+[stage-times]   hist.zero	0.328 ms
+[stage-times]   hist.build	1.172 ms
+[stage-times]   hist.scan	0.948 ms
+[stage-times]   partstats	0.568 ms
+[stage-times]   score.kernel	0.406 ms
+[stage-times]   score.read	0.413 ms
+[stage-times]   score.hostreduce	0.067 ms
+[stage-times]   split.host	1.002 ms
+[stage-times]   split.chain	2.112 ms
+[stage-times]   split.sizes	0.628 ms
+[stage-times]   hist.subtract	0.430 ms
+[stage-times]   leaf.values	0.035 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.327 ms of 9.256 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] Lossguide fit (doc-parallel boosting) -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   est.move	13.808 ms
+[stage-times]   est.approx	17.002 ms
+[stage-times]   est.pstats	22.568 ms
+[stage-times]   est.readback	13.747 ms
+[stage-times]   (accounted 67.127 ms of 1533.594 ms fit wall; the rest is un-wrapped host bookkeeping)
+FSPEED-WARMUP lane=gbdt-lossguide arm=ours shape=higgs-1000000x28 ms=2596.935
+FSPEED-ORDER lane=gbdt-lossguide round=1 arms=ours
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.207 ms
+[stage-times]   hist.zero	0.342 ms
+[stage-times]   hist.build	1.433 ms
+[stage-times]   hist.scan	0.977 ms
+[stage-times]   partstats	0.549 ms
+[stage-times]   score.kernel	0.424 ms
+[stage-times]   score.read	0.415 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.028 ms
+[stage-times]   split.chain	2.522 ms
+[stage-times]   split.sizes	0.634 ms
+[stage-times]   hist.subtract	0.415 ms
+[stage-times]   leaf.values	0.035 ms
+[stage-times]   model.build	0.043 ms
+[stage-times]   (accounted 9.102 ms of 10.058 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.208 ms
+[stage-times]   hist.zero	0.334 ms
+[stage-times]   hist.build	1.423 ms
+[stage-times]   hist.scan	0.964 ms
+[stage-times]   partstats	0.544 ms
+[stage-times]   score.kernel	0.417 ms
+[stage-times]   score.read	0.411 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.008 ms
+[stage-times]   split.chain	2.536 ms
+[stage-times]   split.sizes	0.635 ms
+[stage-times]   hist.subtract	0.410 ms
+[stage-times]   leaf.values	0.035 ms
+[stage-times]   model.build	0.020 ms
+[stage-times]   (accounted 9.021 ms of 9.976 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.206 ms
+[stage-times]   hist.zero	0.339 ms
+[stage-times]   hist.build	1.422 ms
+[stage-times]   hist.scan	0.944 ms
+[stage-times]   partstats	0.546 ms
+[stage-times]   score.kernel	0.414 ms
+[stage-times]   score.read	0.415 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.021 ms
+[stage-times]   split.chain	2.520 ms
+[stage-times]   split.sizes	0.629 ms
+[stage-times]   hist.subtract	0.412 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.997 ms of 9.954 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.213 ms
+[stage-times]   hist.zero	0.339 ms
+[stage-times]   hist.build	1.435 ms
+[stage-times]   hist.scan	0.942 ms
+[stage-times]   partstats	0.547 ms
+[stage-times]   score.kernel	0.414 ms
+[stage-times]   score.read	0.416 ms
+[stage-times]   score.hostreduce	0.069 ms
+[stage-times]   split.host	1.023 ms
+[stage-times]   split.chain	2.562 ms
+[stage-times]   split.sizes	0.629 ms
+[stage-times]   hist.subtract	0.408 ms
+[stage-times]   leaf.values	0.037 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 9.059 ms of 10.004 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.198 ms
+[stage-times]   hist.zero	0.334 ms
+[stage-times]   hist.build	1.425 ms
+[stage-times]   hist.scan	0.957 ms
+[stage-times]   partstats	0.544 ms
+[stage-times]   score.kernel	0.418 ms
+[stage-times]   score.read	0.417 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.007 ms
+[stage-times]   split.chain	2.530 ms
+[stage-times]   split.sizes	0.633 ms
+[stage-times]   hist.subtract	0.406 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 9.000 ms of 9.935 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.212 ms
+[stage-times]   hist.zero	0.334 ms
+[stage-times]   hist.build	1.408 ms
+[stage-times]   hist.scan	0.940 ms
+[stage-times]   partstats	0.536 ms
+[stage-times]   score.kernel	0.408 ms
+[stage-times]   score.read	0.408 ms
+[stage-times]   score.hostreduce	0.069 ms
+[stage-times]   split.host	1.021 ms
+[stage-times]   split.chain	2.540 ms
+[stage-times]   split.sizes	0.631 ms
+[stage-times]   hist.subtract	0.421 ms
+[stage-times]   leaf.values	0.035 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.990 ms of 9.928 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.202 ms
+[stage-times]   hist.zero	0.331 ms
+[stage-times]   hist.build	1.415 ms
+[stage-times]   hist.scan	0.966 ms
+[stage-times]   partstats	0.534 ms
+[stage-times]   score.kernel	0.408 ms
+[stage-times]   score.read	0.411 ms
+[stage-times]   score.hostreduce	0.069 ms
+[stage-times]   split.host	1.000 ms
+[stage-times]   split.chain	2.517 ms
+[stage-times]   split.sizes	0.646 ms
+[stage-times]   hist.subtract	0.405 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.964 ms of 9.912 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.198 ms
+[stage-times]   hist.zero	0.335 ms
+[stage-times]   hist.build	1.414 ms
+[stage-times]   hist.scan	0.967 ms
+[stage-times]   partstats	0.537 ms
+[stage-times]   score.kernel	0.412 ms
+[stage-times]   score.read	0.410 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.029 ms
+[stage-times]   split.chain	2.504 ms
+[stage-times]   split.sizes	0.631 ms
+[stage-times]   hist.subtract	0.407 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.973 ms of 9.910 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.203 ms
+[stage-times]   hist.zero	0.334 ms
+[stage-times]   hist.build	1.413 ms
+[stage-times]   hist.scan	0.965 ms
+[stage-times]   partstats	0.536 ms
+[stage-times]   score.kernel	0.407 ms
+[stage-times]   score.read	0.414 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.006 ms
+[stage-times]   split.chain	2.540 ms
+[stage-times]   split.sizes	0.631 ms
+[stage-times]   hist.subtract	0.414 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.994 ms of 9.935 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.197 ms
+[stage-times]   hist.zero	0.334 ms
+[stage-times]   hist.build	1.416 ms
+[stage-times]   hist.scan	0.943 ms
+[stage-times]   partstats	0.536 ms
+[stage-times]   score.kernel	0.409 ms
+[stage-times]   score.read	0.418 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.008 ms
+[stage-times]   split.chain	2.518 ms
+[stage-times]   split.sizes	0.627 ms
+[stage-times]   hist.subtract	0.408 ms
+[stage-times]   leaf.values	0.035 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.944 ms of 9.897 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.213 ms
+[stage-times]   hist.zero	0.339 ms
+[stage-times]   hist.build	1.420 ms
+[stage-times]   hist.scan	0.955 ms
+[stage-times]   partstats	0.531 ms
+[stage-times]   score.kernel	0.415 ms
+[stage-times]   score.read	0.416 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.012 ms
+[stage-times]   split.chain	2.545 ms
+[stage-times]   split.sizes	0.629 ms
+[stage-times]   hist.subtract	0.410 ms
+[stage-times]   leaf.values	0.036 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 9.016 ms of 9.958 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.195 ms
+[stage-times]   hist.zero	0.335 ms
+[stage-times]   hist.build	1.372 ms
+[stage-times]   hist.scan	0.954 ms
+[stage-times]   partstats	0.546 ms
+[stage-times]   score.kernel	0.414 ms
+[stage-times]   score.read	0.414 ms
+[stage-times]   score.hostreduce	0.069 ms
+[stage-times]   split.host	1.006 ms
+[stage-times]   split.chain	2.480 ms
+[stage-times]   split.sizes	0.632 ms
+[stage-times]   hist.subtract	0.410 ms
+[stage-times]   leaf.values	0.035 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.889 ms of 9.832 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.200 ms
+[stage-times]   hist.zero	0.337 ms
+[stage-times]   hist.build	1.433 ms
+[stage-times]   hist.scan	0.959 ms
+[stage-times]   partstats	0.544 ms
+[stage-times]   score.kernel	0.409 ms
+[stage-times]   score.read	0.411 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	0.999 ms
+[stage-times]   split.chain	2.529 ms
+[stage-times]   split.sizes	0.635 ms
+[stage-times]   hist.subtract	0.411 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.996 ms of 9.936 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.201 ms
+[stage-times]   hist.zero	0.345 ms
+[stage-times]   hist.build	1.408 ms
+[stage-times]   hist.scan	0.962 ms
+[stage-times]   partstats	0.537 ms
+[stage-times]   score.kernel	0.408 ms
+[stage-times]   score.read	0.413 ms
+[stage-times]   score.hostreduce	0.069 ms
+[stage-times]   split.host	1.002 ms
+[stage-times]   split.chain	2.517 ms
+[stage-times]   split.sizes	0.631 ms
+[stage-times]   hist.subtract	0.404 ms
+[stage-times]   leaf.values	0.035 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.959 ms of 9.898 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.204 ms
+[stage-times]   hist.zero	0.332 ms
+[stage-times]   hist.build	1.417 ms
+[stage-times]   hist.scan	0.965 ms
+[stage-times]   partstats	0.536 ms
+[stage-times]   score.kernel	0.411 ms
+[stage-times]   score.read	0.415 ms
+[stage-times]   score.hostreduce	0.069 ms
+[stage-times]   split.host	1.003 ms
+[stage-times]   split.chain	2.536 ms
+[stage-times]   split.sizes	0.627 ms
+[stage-times]   hist.subtract	0.410 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.985 ms of 9.927 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.199 ms
+[stage-times]   hist.zero	0.336 ms
+[stage-times]   hist.build	1.349 ms
+[stage-times]   hist.scan	0.960 ms
+[stage-times]   partstats	0.547 ms
+[stage-times]   score.kernel	0.412 ms
+[stage-times]   score.read	0.409 ms
+[stage-times]   score.hostreduce	0.069 ms
+[stage-times]   split.host	1.001 ms
+[stage-times]   split.chain	2.469 ms
+[stage-times]   split.sizes	0.639 ms
+[stage-times]   hist.subtract	0.409 ms
+[stage-times]   leaf.values	0.033 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.858 ms of 9.796 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.195 ms
+[stage-times]   hist.zero	0.332 ms
+[stage-times]   hist.build	1.408 ms
+[stage-times]   hist.scan	0.934 ms
+[stage-times]   partstats	0.541 ms
+[stage-times]   score.kernel	0.414 ms
+[stage-times]   score.read	0.413 ms
+[stage-times]   score.hostreduce	0.069 ms
+[stage-times]   split.host	1.011 ms
+[stage-times]   split.chain	2.556 ms
+[stage-times]   split.sizes	0.626 ms
+[stage-times]   hist.subtract	0.410 ms
+[stage-times]   leaf.values	0.035 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.971 ms of 9.908 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.200 ms
+[stage-times]   hist.zero	0.332 ms
+[stage-times]   hist.build	1.386 ms
+[stage-times]   hist.scan	0.958 ms
+[stage-times]   partstats	0.540 ms
+[stage-times]   score.kernel	0.410 ms
+[stage-times]   score.read	0.416 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.009 ms
+[stage-times]   split.chain	2.480 ms
+[stage-times]   split.sizes	0.636 ms
+[stage-times]   hist.subtract	0.413 ms
+[stage-times]   leaf.values	0.036 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.910 ms of 9.847 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.206 ms
+[stage-times]   hist.zero	0.333 ms
+[stage-times]   hist.build	1.405 ms
+[stage-times]   hist.scan	0.945 ms
+[stage-times]   partstats	0.545 ms
+[stage-times]   score.kernel	0.412 ms
+[stage-times]   score.read	0.411 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.026 ms
+[stage-times]   split.chain	2.508 ms
+[stage-times]   split.sizes	0.632 ms
+[stage-times]   hist.subtract	0.408 ms
+[stage-times]   leaf.values	0.036 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.961 ms of 9.904 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.201 ms
+[stage-times]   hist.zero	0.339 ms
+[stage-times]   hist.build	1.399 ms
+[stage-times]   hist.scan	0.940 ms
+[stage-times]   partstats	0.544 ms
+[stage-times]   score.kernel	0.409 ms
+[stage-times]   score.read	0.410 ms
+[stage-times]   score.hostreduce	0.069 ms
+[stage-times]   split.host	1.010 ms
+[stage-times]   split.chain	2.503 ms
+[stage-times]   split.sizes	0.633 ms
+[stage-times]   hist.subtract	0.405 ms
+[stage-times]   leaf.values	0.035 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.923 ms of 9.863 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.198 ms
+[stage-times]   hist.zero	0.338 ms
+[stage-times]   hist.build	1.417 ms
+[stage-times]   hist.scan	0.962 ms
+[stage-times]   partstats	0.543 ms
+[stage-times]   score.kernel	0.409 ms
+[stage-times]   score.read	0.412 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.003 ms
+[stage-times]   split.chain	2.511 ms
+[stage-times]   split.sizes	0.635 ms
+[stage-times]   hist.subtract	0.410 ms
+[stage-times]   leaf.values	0.036 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.967 ms of 9.911 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.203 ms
+[stage-times]   hist.zero	0.337 ms
+[stage-times]   hist.build	1.402 ms
+[stage-times]   hist.scan	0.946 ms
+[stage-times]   partstats	0.538 ms
+[stage-times]   score.kernel	0.412 ms
+[stage-times]   score.read	0.411 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.002 ms
+[stage-times]   split.chain	2.513 ms
+[stage-times]   split.sizes	0.631 ms
+[stage-times]   hist.subtract	0.408 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.933 ms of 9.876 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.196 ms
+[stage-times]   hist.zero	0.331 ms
+[stage-times]   hist.build	1.378 ms
+[stage-times]   hist.scan	0.960 ms
+[stage-times]   partstats	0.550 ms
+[stage-times]   score.kernel	0.411 ms
+[stage-times]   score.read	0.411 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.002 ms
+[stage-times]   split.chain	2.488 ms
+[stage-times]   split.sizes	0.627 ms
+[stage-times]   hist.subtract	0.411 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.893 ms of 9.832 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.195 ms
+[stage-times]   hist.zero	0.331 ms
+[stage-times]   hist.build	1.374 ms
+[stage-times]   hist.scan	0.956 ms
+[stage-times]   partstats	0.556 ms
+[stage-times]   score.kernel	0.409 ms
+[stage-times]   score.read	0.412 ms
+[stage-times]   score.hostreduce	0.069 ms
+[stage-times]   split.host	1.009 ms
+[stage-times]   split.chain	2.490 ms
+[stage-times]   split.sizes	0.630 ms
+[stage-times]   hist.subtract	0.403 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.893 ms of 9.831 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.205 ms
+[stage-times]   hist.zero	0.339 ms
+[stage-times]   hist.build	1.394 ms
+[stage-times]   hist.scan	0.958 ms
+[stage-times]   partstats	0.542 ms
+[stage-times]   score.kernel	0.417 ms
+[stage-times]   score.read	0.408 ms
+[stage-times]   score.hostreduce	0.072 ms
+[stage-times]   split.host	1.004 ms
+[stage-times]   split.chain	2.509 ms
+[stage-times]   split.sizes	0.629 ms
+[stage-times]   hist.subtract	0.407 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.945 ms of 9.887 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.197 ms
+[stage-times]   hist.zero	0.337 ms
+[stage-times]   hist.build	1.399 ms
+[stage-times]   hist.scan	0.942 ms
+[stage-times]   partstats	0.549 ms
+[stage-times]   score.kernel	0.414 ms
+[stage-times]   score.read	0.409 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.003 ms
+[stage-times]   split.chain	2.523 ms
+[stage-times]   split.sizes	0.632 ms
+[stage-times]   hist.subtract	0.407 ms
+[stage-times]   leaf.values	0.035 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.943 ms of 9.888 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.205 ms
+[stage-times]   hist.zero	0.333 ms
+[stage-times]   hist.build	1.422 ms
+[stage-times]   hist.scan	0.963 ms
+[stage-times]   partstats	0.548 ms
+[stage-times]   score.kernel	0.411 ms
+[stage-times]   score.read	0.413 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.003 ms
+[stage-times]   split.chain	2.552 ms
+[stage-times]   split.sizes	0.631 ms
+[stage-times]   hist.subtract	0.403 ms
+[stage-times]   leaf.values	0.035 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 9.013 ms of 9.951 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.212 ms
+[stage-times]   hist.zero	0.333 ms
+[stage-times]   hist.build	1.380 ms
+[stage-times]   hist.scan	0.961 ms
+[stage-times]   partstats	0.545 ms
+[stage-times]   score.kernel	0.409 ms
+[stage-times]   score.read	0.416 ms
+[stage-times]   score.hostreduce	0.069 ms
+[stage-times]   split.host	0.999 ms
+[stage-times]   split.chain	2.485 ms
+[stage-times]   split.sizes	0.629 ms
+[stage-times]   hist.subtract	0.409 ms
+[stage-times]   leaf.values	0.036 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.908 ms of 9.848 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.190 ms
+[stage-times]   hist.zero	0.333 ms
+[stage-times]   hist.build	1.334 ms
+[stage-times]   hist.scan	0.944 ms
+[stage-times]   partstats	0.555 ms
+[stage-times]   score.kernel	0.407 ms
+[stage-times]   score.read	0.409 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.007 ms
+[stage-times]   split.chain	2.428 ms
+[stage-times]   split.sizes	0.642 ms
+[stage-times]   hist.subtract	0.406 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.783 ms of 9.721 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.196 ms
+[stage-times]   hist.zero	0.331 ms
+[stage-times]   hist.build	1.382 ms
+[stage-times]   hist.scan	0.960 ms
+[stage-times]   partstats	0.540 ms
+[stage-times]   score.kernel	0.409 ms
+[stage-times]   score.read	0.412 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.000 ms
+[stage-times]   split.chain	2.486 ms
+[stage-times]   split.sizes	0.631 ms
+[stage-times]   hist.subtract	0.406 ms
+[stage-times]   leaf.values	0.028 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.877 ms of 9.830 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.195 ms
+[stage-times]   hist.zero	0.331 ms
+[stage-times]   hist.build	1.373 ms
+[stage-times]   hist.scan	0.960 ms
+[stage-times]   partstats	0.548 ms
+[stage-times]   score.kernel	0.410 ms
+[stage-times]   score.read	0.412 ms
+[stage-times]   score.hostreduce	0.069 ms
+[stage-times]   split.host	1.014 ms
+[stage-times]   split.chain	2.494 ms
+[stage-times]   split.sizes	0.627 ms
+[stage-times]   hist.subtract	0.410 ms
+[stage-times]   leaf.values	0.035 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.905 ms of 9.846 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.202 ms
+[stage-times]   hist.zero	0.331 ms
+[stage-times]   hist.build	1.371 ms
+[stage-times]   hist.scan	0.941 ms
+[stage-times]   partstats	0.560 ms
+[stage-times]   score.kernel	0.408 ms
+[stage-times]   score.read	0.410 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.010 ms
+[stage-times]   split.chain	2.473 ms
+[stage-times]   split.sizes	0.638 ms
+[stage-times]   hist.subtract	0.407 ms
+[stage-times]   leaf.values	0.033 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.877 ms of 9.815 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.203 ms
+[stage-times]   hist.zero	0.339 ms
+[stage-times]   hist.build	1.406 ms
+[stage-times]   hist.scan	0.955 ms
+[stage-times]   partstats	0.550 ms
+[stage-times]   score.kernel	0.412 ms
+[stage-times]   score.read	0.409 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	0.999 ms
+[stage-times]   split.chain	2.493 ms
+[stage-times]   split.sizes	0.633 ms
+[stage-times]   hist.subtract	0.405 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.933 ms of 9.879 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.192 ms
+[stage-times]   hist.zero	0.334 ms
+[stage-times]   hist.build	1.408 ms
+[stage-times]   hist.scan	0.960 ms
+[stage-times]   partstats	0.540 ms
+[stage-times]   score.kernel	0.409 ms
+[stage-times]   score.read	0.428 ms
+[stage-times]   score.hostreduce	0.069 ms
+[stage-times]   split.host	1.007 ms
+[stage-times]   split.chain	2.525 ms
+[stage-times]   split.sizes	0.630 ms
+[stage-times]   hist.subtract	0.412 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.974 ms of 9.912 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.188 ms
+[stage-times]   hist.zero	0.332 ms
+[stage-times]   hist.build	1.350 ms
+[stage-times]   hist.scan	0.961 ms
+[stage-times]   partstats	0.549 ms
+[stage-times]   score.kernel	0.409 ms
+[stage-times]   score.read	0.414 ms
+[stage-times]   score.hostreduce	0.069 ms
+[stage-times]   split.host	1.006 ms
+[stage-times]   split.chain	2.425 ms
+[stage-times]   split.sizes	0.630 ms
+[stage-times]   hist.subtract	0.407 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.801 ms of 9.736 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.199 ms
+[stage-times]   hist.zero	0.336 ms
+[stage-times]   hist.build	1.395 ms
+[stage-times]   hist.scan	0.962 ms
+[stage-times]   partstats	0.542 ms
+[stage-times]   score.kernel	0.415 ms
+[stage-times]   score.read	0.412 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.008 ms
+[stage-times]   split.chain	2.512 ms
+[stage-times]   split.sizes	0.627 ms
+[stage-times]   hist.subtract	0.407 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.944 ms of 9.887 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.195 ms
+[stage-times]   hist.zero	0.336 ms
+[stage-times]   hist.build	1.347 ms
+[stage-times]   hist.scan	0.950 ms
+[stage-times]   partstats	0.559 ms
+[stage-times]   score.kernel	0.407 ms
+[stage-times]   score.read	0.409 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.005 ms
+[stage-times]   split.chain	2.448 ms
+[stage-times]   split.sizes	0.630 ms
+[stage-times]   hist.subtract	0.410 ms
+[stage-times]   leaf.values	0.035 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.826 ms of 9.769 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.200 ms
+[stage-times]   hist.zero	0.331 ms
+[stage-times]   hist.build	1.395 ms
+[stage-times]   hist.scan	0.962 ms
+[stage-times]   partstats	0.540 ms
+[stage-times]   score.kernel	0.409 ms
+[stage-times]   score.read	0.409 ms
+[stage-times]   score.hostreduce	0.069 ms
+[stage-times]   split.host	1.007 ms
+[stage-times]   split.chain	2.474 ms
+[stage-times]   split.sizes	0.635 ms
+[stage-times]   hist.subtract	0.409 ms
+[stage-times]   leaf.values	0.033 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.898 ms of 9.837 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.194 ms
+[stage-times]   hist.zero	0.333 ms
+[stage-times]   hist.build	1.318 ms
+[stage-times]   hist.scan	0.962 ms
+[stage-times]   partstats	0.574 ms
+[stage-times]   score.kernel	0.407 ms
+[stage-times]   score.read	0.410 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.005 ms
+[stage-times]   split.chain	2.382 ms
+[stage-times]   split.sizes	0.634 ms
+[stage-times]   hist.subtract	0.411 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.759 ms of 9.695 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.191 ms
+[stage-times]   hist.zero	0.330 ms
+[stage-times]   hist.build	1.377 ms
+[stage-times]   hist.scan	0.963 ms
+[stage-times]   partstats	0.542 ms
+[stage-times]   score.kernel	0.416 ms
+[stage-times]   score.read	0.410 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	0.997 ms
+[stage-times]   split.chain	2.491 ms
+[stage-times]   split.sizes	0.631 ms
+[stage-times]   hist.subtract	0.405 ms
+[stage-times]   leaf.values	0.035 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.882 ms of 9.834 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.188 ms
+[stage-times]   hist.zero	0.332 ms
+[stage-times]   hist.build	1.208 ms
+[stage-times]   hist.scan	0.961 ms
+[stage-times]   partstats	0.584 ms
+[stage-times]   score.kernel	0.413 ms
+[stage-times]   score.read	0.410 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.003 ms
+[stage-times]   split.chain	2.175 ms
+[stage-times]   split.sizes	0.631 ms
+[stage-times]   hist.subtract	0.412 ms
+[stage-times]   leaf.values	0.033 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.444 ms of 9.383 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.192 ms
+[stage-times]   hist.zero	0.334 ms
+[stage-times]   hist.build	1.401 ms
+[stage-times]   hist.scan	0.961 ms
+[stage-times]   partstats	0.539 ms
+[stage-times]   score.kernel	0.409 ms
+[stage-times]   score.read	0.414 ms
+[stage-times]   score.hostreduce	0.073 ms
+[stage-times]   split.host	0.999 ms
+[stage-times]   split.chain	2.492 ms
+[stage-times]   split.sizes	0.628 ms
+[stage-times]   hist.subtract	0.411 ms
+[stage-times]   leaf.values	0.028 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.905 ms of 9.847 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.191 ms
+[stage-times]   hist.zero	0.334 ms
+[stage-times]   hist.build	1.331 ms
+[stage-times]   hist.scan	0.959 ms
+[stage-times]   partstats	0.559 ms
+[stage-times]   score.kernel	0.406 ms
+[stage-times]   score.read	0.410 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.007 ms
+[stage-times]   split.chain	2.439 ms
+[stage-times]   split.sizes	0.628 ms
+[stage-times]   hist.subtract	0.412 ms
+[stage-times]   leaf.values	0.037 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.808 ms of 9.752 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.196 ms
+[stage-times]   hist.zero	0.336 ms
+[stage-times]   hist.build	1.335 ms
+[stage-times]   hist.scan	0.957 ms
+[stage-times]   partstats	0.559 ms
+[stage-times]   score.kernel	0.410 ms
+[stage-times]   score.read	0.415 ms
+[stage-times]   score.hostreduce	0.069 ms
+[stage-times]   split.host	1.006 ms
+[stage-times]   split.chain	2.411 ms
+[stage-times]   split.sizes	0.628 ms
+[stage-times]   hist.subtract	0.411 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.791 ms of 9.730 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.195 ms
+[stage-times]   hist.zero	0.332 ms
+[stage-times]   hist.build	1.391 ms
+[stage-times]   hist.scan	0.961 ms
+[stage-times]   partstats	0.540 ms
+[stage-times]   score.kernel	0.415 ms
+[stage-times]   score.read	0.409 ms
+[stage-times]   score.hostreduce	0.074 ms
+[stage-times]   split.host	1.003 ms
+[stage-times]   split.chain	2.498 ms
+[stage-times]   split.sizes	0.632 ms
+[stage-times]   hist.subtract	0.407 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.917 ms of 9.857 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=63 iterations=62 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.187 ms
+[stage-times]   hist.zero	0.331 ms
+[stage-times]   hist.build	1.264 ms
+[stage-times]   hist.scan	0.951 ms
+[stage-times]   partstats	0.567 ms
+[stage-times]   score.kernel	0.408 ms
+[stage-times]   score.read	0.407 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	0.988 ms
+[stage-times]   split.chain	2.263 ms
+[stage-times]   split.sizes	0.617 ms
+[stage-times]   hist.subtract	0.406 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.517 ms of 9.450 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.203 ms
+[stage-times]   hist.zero	0.356 ms
+[stage-times]   hist.build	1.386 ms
+[stage-times]   hist.scan	0.967 ms
+[stage-times]   partstats	0.575 ms
+[stage-times]   score.kernel	0.423 ms
+[stage-times]   score.read	0.419 ms
+[stage-times]   score.hostreduce	0.073 ms
+[stage-times]   split.host	1.028 ms
+[stage-times]   split.chain	2.513 ms
+[stage-times]   split.sizes	0.653 ms
+[stage-times]   hist.subtract	0.427 ms
+[stage-times]   leaf.values	0.035 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 9.082 ms of 10.059 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.189 ms
+[stage-times]   hist.zero	0.337 ms
+[stage-times]   hist.build	1.370 ms
+[stage-times]   hist.scan	0.940 ms
+[stage-times]   partstats	0.568 ms
+[stage-times]   score.kernel	0.409 ms
+[stage-times]   score.read	0.411 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.015 ms
+[stage-times]   split.chain	2.467 ms
+[stage-times]   split.sizes	0.628 ms
+[stage-times]   hist.subtract	0.408 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.871 ms of 9.807 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.205 ms
+[stage-times]   hist.zero	0.333 ms
+[stage-times]   hist.build	1.409 ms
+[stage-times]   hist.scan	0.967 ms
+[stage-times]   partstats	0.530 ms
+[stage-times]   score.kernel	0.412 ms
+[stage-times]   score.read	0.411 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.011 ms
+[stage-times]   split.chain	2.521 ms
+[stage-times]   split.sizes	0.632 ms
+[stage-times]   hist.subtract	0.417 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.978 ms of 9.923 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.194 ms
+[stage-times]   hist.zero	0.333 ms
+[stage-times]   hist.build	1.391 ms
+[stage-times]   hist.scan	0.961 ms
+[stage-times]   partstats	0.540 ms
+[stage-times]   score.kernel	0.413 ms
+[stage-times]   score.read	0.423 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.001 ms
+[stage-times]   split.chain	2.496 ms
+[stage-times]   split.sizes	0.632 ms
+[stage-times]   hist.subtract	0.406 ms
+[stage-times]   leaf.values	0.035 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.919 ms of 9.856 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.189 ms
+[stage-times]   hist.zero	0.333 ms
+[stage-times]   hist.build	1.243 ms
+[stage-times]   hist.scan	0.955 ms
+[stage-times]   partstats	0.569 ms
+[stage-times]   score.kernel	0.407 ms
+[stage-times]   score.read	0.409 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.012 ms
+[stage-times]   split.chain	2.236 ms
+[stage-times]   split.sizes	0.628 ms
+[stage-times]   hist.subtract	0.413 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.523 ms of 9.462 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.191 ms
+[stage-times]   hist.zero	0.332 ms
+[stage-times]   hist.build	1.215 ms
+[stage-times]   hist.scan	0.949 ms
+[stage-times]   partstats	0.572 ms
+[stage-times]   score.kernel	0.414 ms
+[stage-times]   score.read	0.407 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.001 ms
+[stage-times]   split.chain	2.218 ms
+[stage-times]   split.sizes	0.637 ms
+[stage-times]   hist.subtract	0.404 ms
+[stage-times]   leaf.values	0.035 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.468 ms of 9.408 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.202 ms
+[stage-times]   hist.zero	0.335 ms
+[stage-times]   hist.build	1.420 ms
+[stage-times]   hist.scan	0.961 ms
+[stage-times]   partstats	0.542 ms
+[stage-times]   score.kernel	0.413 ms
+[stage-times]   score.read	0.410 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.003 ms
+[stage-times]   split.chain	2.531 ms
+[stage-times]   split.sizes	0.629 ms
+[stage-times]   hist.subtract	0.411 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.987 ms of 9.940 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.192 ms
+[stage-times]   hist.zero	0.331 ms
+[stage-times]   hist.build	1.293 ms
+[stage-times]   hist.scan	0.949 ms
+[stage-times]   partstats	0.588 ms
+[stage-times]   score.kernel	0.409 ms
+[stage-times]   score.read	0.411 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.016 ms
+[stage-times]   split.chain	2.413 ms
+[stage-times]   split.sizes	0.630 ms
+[stage-times]   hist.subtract	0.407 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.767 ms of 9.705 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.201 ms
+[stage-times]   hist.zero	0.333 ms
+[stage-times]   hist.build	1.388 ms
+[stage-times]   hist.scan	0.960 ms
+[stage-times]   partstats	0.548 ms
+[stage-times]   score.kernel	0.411 ms
+[stage-times]   score.read	0.411 ms
+[stage-times]   score.hostreduce	0.069 ms
+[stage-times]   split.host	0.998 ms
+[stage-times]   split.chain	2.496 ms
+[stage-times]   split.sizes	0.634 ms
+[stage-times]   hist.subtract	0.408 ms
+[stage-times]   leaf.values	0.038 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.921 ms of 9.859 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.185 ms
+[stage-times]   hist.zero	0.333 ms
+[stage-times]   hist.build	1.356 ms
+[stage-times]   hist.scan	0.962 ms
+[stage-times]   partstats	0.557 ms
+[stage-times]   score.kernel	0.411 ms
+[stage-times]   score.read	0.406 ms
+[stage-times]   score.hostreduce	0.069 ms
+[stage-times]   split.host	1.010 ms
+[stage-times]   split.chain	2.457 ms
+[stage-times]   split.sizes	0.634 ms
+[stage-times]   hist.subtract	0.407 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.845 ms of 9.785 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.194 ms
+[stage-times]   hist.zero	0.332 ms
+[stage-times]   hist.build	1.390 ms
+[stage-times]   hist.scan	0.938 ms
+[stage-times]   partstats	0.537 ms
+[stage-times]   score.kernel	0.411 ms
+[stage-times]   score.read	0.409 ms
+[stage-times]   score.hostreduce	0.073 ms
+[stage-times]   split.host	1.003 ms
+[stage-times]   split.chain	2.477 ms
+[stage-times]   split.sizes	0.632 ms
+[stage-times]   hist.subtract	0.413 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.869 ms of 9.811 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.187 ms
+[stage-times]   hist.zero	0.331 ms
+[stage-times]   hist.build	1.292 ms
+[stage-times]   hist.scan	0.958 ms
+[stage-times]   partstats	0.585 ms
+[stage-times]   score.kernel	0.409 ms
+[stage-times]   score.read	0.406 ms
+[stage-times]   score.hostreduce	0.074 ms
+[stage-times]   split.host	1.001 ms
+[stage-times]   split.chain	2.351 ms
+[stage-times]   split.sizes	0.631 ms
+[stage-times]   hist.subtract	0.405 ms
+[stage-times]   leaf.values	0.035 ms
+[stage-times]   model.build	0.023 ms
+[stage-times]   (accounted 8.694 ms of 9.629 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.193 ms
+[stage-times]   hist.zero	0.335 ms
+[stage-times]   hist.build	1.255 ms
+[stage-times]   hist.scan	0.958 ms
+[stage-times]   partstats	0.606 ms
+[stage-times]   score.kernel	0.407 ms
+[stage-times]   score.read	0.405 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.000 ms
+[stage-times]   split.chain	2.288 ms
+[stage-times]   split.sizes	0.628 ms
+[stage-times]   hist.subtract	0.413 ms
+[stage-times]   leaf.values	0.042 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.625 ms of 9.563 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.184 ms
+[stage-times]   hist.zero	0.333 ms
+[stage-times]   hist.build	1.357 ms
+[stage-times]   hist.scan	0.957 ms
+[stage-times]   partstats	0.548 ms
+[stage-times]   score.kernel	0.411 ms
+[stage-times]   score.read	0.409 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	0.999 ms
+[stage-times]   split.chain	2.431 ms
+[stage-times]   split.sizes	0.641 ms
+[stage-times]   hist.subtract	0.408 ms
+[stage-times]   leaf.values	0.036 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.807 ms of 9.741 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.192 ms
+[stage-times]   hist.zero	0.335 ms
+[stage-times]   hist.build	1.310 ms
+[stage-times]   hist.scan	0.948 ms
+[stage-times]   partstats	0.551 ms
+[stage-times]   score.kernel	0.407 ms
+[stage-times]   score.read	0.408 ms
+[stage-times]   score.hostreduce	0.069 ms
+[stage-times]   split.host	1.000 ms
+[stage-times]   split.chain	2.386 ms
+[stage-times]   split.sizes	0.634 ms
+[stage-times]   hist.subtract	0.409 ms
+[stage-times]   leaf.values	0.035 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.710 ms of 9.652 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.189 ms
+[stage-times]   hist.zero	0.336 ms
+[stage-times]   hist.build	1.331 ms
+[stage-times]   hist.scan	0.951 ms
+[stage-times]   partstats	0.553 ms
+[stage-times]   score.kernel	0.411 ms
+[stage-times]   score.read	0.410 ms
+[stage-times]   score.hostreduce	0.069 ms
+[stage-times]   split.host	1.008 ms
+[stage-times]   split.chain	2.418 ms
+[stage-times]   split.sizes	0.626 ms
+[stage-times]   hist.subtract	0.407 ms
+[stage-times]   leaf.values	0.035 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.769 ms of 9.708 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.194 ms
+[stage-times]   hist.zero	0.332 ms
+[stage-times]   hist.build	1.184 ms
+[stage-times]   hist.scan	0.952 ms
+[stage-times]   partstats	0.586 ms
+[stage-times]   score.kernel	0.411 ms
+[stage-times]   score.read	0.404 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.003 ms
+[stage-times]   split.chain	2.230 ms
+[stage-times]   split.sizes	0.639 ms
+[stage-times]   hist.subtract	0.404 ms
+[stage-times]   leaf.values	0.042 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.475 ms of 9.415 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.185 ms
+[stage-times]   hist.zero	0.333 ms
+[stage-times]   hist.build	1.343 ms
+[stage-times]   hist.scan	0.961 ms
+[stage-times]   partstats	0.548 ms
+[stage-times]   score.kernel	0.410 ms
+[stage-times]   score.read	0.408 ms
+[stage-times]   score.hostreduce	0.072 ms
+[stage-times]   split.host	1.010 ms
+[stage-times]   split.chain	2.427 ms
+[stage-times]   split.sizes	0.629 ms
+[stage-times]   hist.subtract	0.408 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.793 ms of 9.739 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.183 ms
+[stage-times]   hist.zero	0.339 ms
+[stage-times]   hist.build	1.352 ms
+[stage-times]   hist.scan	0.952 ms
+[stage-times]   partstats	0.545 ms
+[stage-times]   score.kernel	0.410 ms
+[stage-times]   score.read	0.407 ms
+[stage-times]   score.hostreduce	0.069 ms
+[stage-times]   split.host	0.998 ms
+[stage-times]   split.chain	2.481 ms
+[stage-times]   split.sizes	0.627 ms
+[stage-times]   hist.subtract	0.407 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.831 ms of 9.767 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.196 ms
+[stage-times]   hist.zero	0.332 ms
+[stage-times]   hist.build	1.398 ms
+[stage-times]   hist.scan	0.962 ms
+[stage-times]   partstats	0.541 ms
+[stage-times]   score.kernel	0.409 ms
+[stage-times]   score.read	0.410 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.004 ms
+[stage-times]   split.chain	2.532 ms
+[stage-times]   split.sizes	0.625 ms
+[stage-times]   hist.subtract	0.410 ms
+[stage-times]   leaf.values	0.035 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.948 ms of 9.887 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.202 ms
+[stage-times]   hist.zero	0.332 ms
+[stage-times]   hist.build	1.377 ms
+[stage-times]   hist.scan	0.944 ms
+[stage-times]   partstats	0.551 ms
+[stage-times]   score.kernel	0.416 ms
+[stage-times]   score.read	0.409 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.008 ms
+[stage-times]   split.chain	2.508 ms
+[stage-times]   split.sizes	0.632 ms
+[stage-times]   hist.subtract	0.411 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.921 ms of 9.869 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.188 ms
+[stage-times]   hist.zero	0.334 ms
+[stage-times]   hist.build	1.318 ms
+[stage-times]   hist.scan	0.956 ms
+[stage-times]   partstats	0.555 ms
+[stage-times]   score.kernel	0.411 ms
+[stage-times]   score.read	0.408 ms
+[stage-times]   score.hostreduce	0.069 ms
+[stage-times]   split.host	0.997 ms
+[stage-times]   split.chain	2.369 ms
+[stage-times]   split.sizes	0.632 ms
+[stage-times]   hist.subtract	0.408 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.706 ms of 9.646 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.189 ms
+[stage-times]   hist.zero	0.337 ms
+[stage-times]   hist.build	1.372 ms
+[stage-times]   hist.scan	0.942 ms
+[stage-times]   partstats	0.550 ms
+[stage-times]   score.kernel	0.407 ms
+[stage-times]   score.read	0.412 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.004 ms
+[stage-times]   split.chain	2.471 ms
+[stage-times]   split.sizes	0.640 ms
+[stage-times]   hist.subtract	0.417 ms
+[stage-times]   leaf.values	0.028 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.865 ms of 9.801 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=61 iterations=60 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.185 ms
+[stage-times]   hist.zero	0.322 ms
+[stage-times]   hist.build	1.201 ms
+[stage-times]   hist.scan	0.931 ms
+[stage-times]   partstats	0.546 ms
+[stage-times]   score.kernel	0.402 ms
+[stage-times]   score.read	0.393 ms
+[stage-times]   score.hostreduce	0.068 ms
+[stage-times]   split.host	0.952 ms
+[stage-times]   split.chain	2.138 ms
+[stage-times]   split.sizes	0.595 ms
+[stage-times]   hist.subtract	0.394 ms
+[stage-times]   leaf.values	0.036 ms
+[stage-times]   model.build	0.017 ms
+[stage-times]   (accounted 8.187 ms of 9.091 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.181 ms
+[stage-times]   hist.zero	0.338 ms
+[stage-times]   hist.build	1.183 ms
+[stage-times]   hist.scan	0.955 ms
+[stage-times]   partstats	0.568 ms
+[stage-times]   score.kernel	0.404 ms
+[stage-times]   score.read	0.410 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.002 ms
+[stage-times]   split.chain	2.173 ms
+[stage-times]   split.sizes	0.629 ms
+[stage-times]   hist.subtract	0.406 ms
+[stage-times]   leaf.values	0.037 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.381 ms of 9.319 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.186 ms
+[stage-times]   hist.zero	0.332 ms
+[stage-times]   hist.build	1.336 ms
+[stage-times]   hist.scan	0.941 ms
+[stage-times]   partstats	0.545 ms
+[stage-times]   score.kernel	0.419 ms
+[stage-times]   score.read	0.412 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.000 ms
+[stage-times]   split.chain	2.454 ms
+[stage-times]   split.sizes	0.631 ms
+[stage-times]   hist.subtract	0.407 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.790 ms of 9.726 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.185 ms
+[stage-times]   hist.zero	0.333 ms
+[stage-times]   hist.build	1.323 ms
+[stage-times]   hist.scan	0.951 ms
+[stage-times]   partstats	0.572 ms
+[stage-times]   score.kernel	0.409 ms
+[stage-times]   score.read	0.409 ms
+[stage-times]   score.hostreduce	0.072 ms
+[stage-times]   split.host	1.010 ms
+[stage-times]   split.chain	2.429 ms
+[stage-times]   split.sizes	0.632 ms
+[stage-times]   hist.subtract	0.406 ms
+[stage-times]   leaf.values	0.036 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.792 ms of 9.731 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.185 ms
+[stage-times]   hist.zero	0.338 ms
+[stage-times]   hist.build	1.347 ms
+[stage-times]   hist.scan	0.945 ms
+[stage-times]   partstats	0.566 ms
+[stage-times]   score.kernel	0.410 ms
+[stage-times]   score.read	0.411 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.007 ms
+[stage-times]   split.chain	2.452 ms
+[stage-times]   split.sizes	0.629 ms
+[stage-times]   hist.subtract	0.408 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.827 ms of 9.762 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=63 iterations=62 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.185 ms
+[stage-times]   hist.zero	0.332 ms
+[stage-times]   hist.build	1.235 ms
+[stage-times]   hist.scan	0.935 ms
+[stage-times]   partstats	0.536 ms
+[stage-times]   score.kernel	0.418 ms
+[stage-times]   score.read	0.405 ms
+[stage-times]   score.hostreduce	0.072 ms
+[stage-times]   split.host	0.987 ms
+[stage-times]   split.chain	2.186 ms
+[stage-times]   split.sizes	0.619 ms
+[stage-times]   hist.subtract	0.407 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.377 ms of 9.308 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.191 ms
+[stage-times]   hist.zero	0.335 ms
+[stage-times]   hist.build	1.327 ms
+[stage-times]   hist.scan	0.965 ms
+[stage-times]   partstats	0.552 ms
+[stage-times]   score.kernel	0.408 ms
+[stage-times]   score.read	0.408 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.006 ms
+[stage-times]   split.chain	2.429 ms
+[stage-times]   split.sizes	0.629 ms
+[stage-times]   hist.subtract	0.412 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.790 ms of 9.730 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.191 ms
+[stage-times]   hist.zero	0.339 ms
+[stage-times]   hist.build	1.213 ms
+[stage-times]   hist.scan	0.961 ms
+[stage-times]   partstats	0.584 ms
+[stage-times]   score.kernel	0.410 ms
+[stage-times]   score.read	0.408 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	0.997 ms
+[stage-times]   split.chain	2.253 ms
+[stage-times]   split.sizes	0.636 ms
+[stage-times]   hist.subtract	0.405 ms
+[stage-times]   leaf.values	0.036 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.528 ms of 9.464 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.201 ms
+[stage-times]   hist.zero	0.331 ms
+[stage-times]   hist.build	1.249 ms
+[stage-times]   hist.scan	0.964 ms
+[stage-times]   partstats	0.581 ms
+[stage-times]   score.kernel	0.408 ms
+[stage-times]   score.read	0.407 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.004 ms
+[stage-times]   split.chain	2.340 ms
+[stage-times]   split.sizes	0.629 ms
+[stage-times]   hist.subtract	0.409 ms
+[stage-times]   leaf.values	0.042 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.660 ms of 9.600 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.188 ms
+[stage-times]   hist.zero	0.338 ms
+[stage-times]   hist.build	1.387 ms
+[stage-times]   hist.scan	0.962 ms
+[stage-times]   partstats	0.550 ms
+[stage-times]   score.kernel	0.410 ms
+[stage-times]   score.read	0.415 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.001 ms
+[stage-times]   split.chain	2.464 ms
+[stage-times]   split.sizes	0.631 ms
+[stage-times]   hist.subtract	0.407 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.884 ms of 9.824 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.192 ms
+[stage-times]   hist.zero	0.332 ms
+[stage-times]   hist.build	1.370 ms
+[stage-times]   hist.scan	0.953 ms
+[stage-times]   partstats	0.542 ms
+[stage-times]   score.kernel	0.410 ms
+[stage-times]   score.read	0.409 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.013 ms
+[stage-times]   split.chain	2.466 ms
+[stage-times]   split.sizes	0.630 ms
+[stage-times]   hist.subtract	0.407 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.851 ms of 9.788 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.188 ms
+[stage-times]   hist.zero	0.333 ms
+[stage-times]   hist.build	1.333 ms
+[stage-times]   hist.scan	0.962 ms
+[stage-times]   partstats	0.549 ms
+[stage-times]   score.kernel	0.416 ms
+[stage-times]   score.read	0.409 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.005 ms
+[stage-times]   split.chain	2.430 ms
+[stage-times]   split.sizes	0.635 ms
+[stage-times]   hist.subtract	0.410 ms
+[stage-times]   leaf.values	0.033 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.798 ms of 9.735 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.194 ms
+[stage-times]   hist.zero	0.335 ms
+[stage-times]   hist.build	1.200 ms
+[stage-times]   hist.scan	0.959 ms
+[stage-times]   partstats	0.576 ms
+[stage-times]   score.kernel	0.409 ms
+[stage-times]   score.read	0.405 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.012 ms
+[stage-times]   split.chain	2.248 ms
+[stage-times]   split.sizes	0.631 ms
+[stage-times]   hist.subtract	0.406 ms
+[stage-times]   leaf.values	0.036 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.505 ms of 9.443 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.180 ms
+[stage-times]   hist.zero	0.335 ms
+[stage-times]   hist.build	1.293 ms
+[stage-times]   hist.scan	0.958 ms
+[stage-times]   partstats	0.554 ms
+[stage-times]   score.kernel	0.407 ms
+[stage-times]   score.read	0.406 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	0.997 ms
+[stage-times]   split.chain	2.290 ms
+[stage-times]   split.sizes	0.629 ms
+[stage-times]   hist.subtract	0.405 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.582 ms of 9.535 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=63 iterations=62 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.175 ms
+[stage-times]   hist.zero	0.338 ms
+[stage-times]   hist.build	1.169 ms
+[stage-times]   hist.scan	0.929 ms
+[stage-times]   partstats	0.556 ms
+[stage-times]   score.kernel	0.415 ms
+[stage-times]   score.read	0.406 ms
+[stage-times]   score.hostreduce	0.069 ms
+[stage-times]   split.host	0.988 ms
+[stage-times]   split.chain	2.162 ms
+[stage-times]   split.sizes	0.617 ms
+[stage-times]   hist.subtract	0.405 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.287 ms of 9.211 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.182 ms
+[stage-times]   hist.zero	0.335 ms
+[stage-times]   hist.build	1.290 ms
+[stage-times]   hist.scan	0.942 ms
+[stage-times]   partstats	0.576 ms
+[stage-times]   score.kernel	0.413 ms
+[stage-times]   score.read	0.410 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.001 ms
+[stage-times]   split.chain	2.419 ms
+[stage-times]   split.sizes	0.627 ms
+[stage-times]   hist.subtract	0.406 ms
+[stage-times]   leaf.values	0.036 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.730 ms of 9.667 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.191 ms
+[stage-times]   hist.zero	0.331 ms
+[stage-times]   hist.build	1.393 ms
+[stage-times]   hist.scan	0.942 ms
+[stage-times]   partstats	0.539 ms
+[stage-times]   score.kernel	0.414 ms
+[stage-times]   score.read	0.413 ms
+[stage-times]   score.hostreduce	0.069 ms
+[stage-times]   split.host	1.002 ms
+[stage-times]   split.chain	2.516 ms
+[stage-times]   split.sizes	0.635 ms
+[stage-times]   hist.subtract	0.407 ms
+[stage-times]   leaf.values	0.036 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.914 ms of 9.850 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.194 ms
+[stage-times]   hist.zero	0.334 ms
+[stage-times]   hist.build	1.398 ms
+[stage-times]   hist.scan	0.960 ms
+[stage-times]   partstats	0.538 ms
+[stage-times]   score.kernel	0.415 ms
+[stage-times]   score.read	0.416 ms
+[stage-times]   score.hostreduce	0.069 ms
+[stage-times]   split.host	0.999 ms
+[stage-times]   split.chain	2.519 ms
+[stage-times]   split.sizes	0.632 ms
+[stage-times]   hist.subtract	0.408 ms
+[stage-times]   leaf.values	0.035 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.941 ms of 9.880 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.186 ms
+[stage-times]   hist.zero	0.332 ms
+[stage-times]   hist.build	1.352 ms
+[stage-times]   hist.scan	0.965 ms
+[stage-times]   partstats	0.554 ms
+[stage-times]   score.kernel	0.411 ms
+[stage-times]   score.read	0.407 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.005 ms
+[stage-times]   split.chain	2.444 ms
+[stage-times]   split.sizes	0.629 ms
+[stage-times]   hist.subtract	0.413 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.826 ms of 9.775 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.184 ms
+[stage-times]   hist.zero	0.333 ms
+[stage-times]   hist.build	1.329 ms
+[stage-times]   hist.scan	0.958 ms
+[stage-times]   partstats	0.550 ms
+[stage-times]   score.kernel	0.413 ms
+[stage-times]   score.read	0.414 ms
+[stage-times]   score.hostreduce	0.069 ms
+[stage-times]   split.host	1.003 ms
+[stage-times]   split.chain	2.391 ms
+[stage-times]   split.sizes	0.628 ms
+[stage-times]   hist.subtract	0.411 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.743 ms of 9.681 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.190 ms
+[stage-times]   hist.zero	0.334 ms
+[stage-times]   hist.build	1.307 ms
+[stage-times]   hist.scan	0.945 ms
+[stage-times]   partstats	0.553 ms
+[stage-times]   score.kernel	0.413 ms
+[stage-times]   score.read	0.410 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.010 ms
+[stage-times]   split.chain	2.326 ms
+[stage-times]   split.sizes	0.628 ms
+[stage-times]   hist.subtract	0.414 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.659 ms of 9.600 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.194 ms
+[stage-times]   hist.zero	0.336 ms
+[stage-times]   hist.build	1.336 ms
+[stage-times]   hist.scan	0.956 ms
+[stage-times]   partstats	0.552 ms
+[stage-times]   score.kernel	0.407 ms
+[stage-times]   score.read	0.409 ms
+[stage-times]   score.hostreduce	0.069 ms
+[stage-times]   split.host	1.002 ms
+[stage-times]   split.chain	2.422 ms
+[stage-times]   split.sizes	0.627 ms
+[stage-times]   hist.subtract	0.404 ms
+[stage-times]   leaf.values	0.036 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.775 ms of 9.725 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.192 ms
+[stage-times]   hist.zero	0.342 ms
+[stage-times]   hist.build	1.344 ms
+[stage-times]   hist.scan	0.939 ms
+[stage-times]   partstats	0.543 ms
+[stage-times]   score.kernel	0.407 ms
+[stage-times]   score.read	0.410 ms
+[stage-times]   score.hostreduce	0.069 ms
+[stage-times]   split.host	1.007 ms
+[stage-times]   split.chain	2.439 ms
+[stage-times]   split.sizes	0.628 ms
+[stage-times]   hist.subtract	0.406 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.787 ms of 9.724 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.192 ms
+[stage-times]   hist.zero	0.330 ms
+[stage-times]   hist.build	1.216 ms
+[stage-times]   hist.scan	0.956 ms
+[stage-times]   partstats	0.581 ms
+[stage-times]   score.kernel	0.405 ms
+[stage-times]   score.read	0.407 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.021 ms
+[stage-times]   split.chain	2.275 ms
+[stage-times]   split.sizes	0.628 ms
+[stage-times]   hist.subtract	0.405 ms
+[stage-times]   leaf.values	0.045 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.556 ms of 9.494 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.185 ms
+[stage-times]   hist.zero	0.333 ms
+[stage-times]   hist.build	1.410 ms
+[stage-times]   hist.scan	0.930 ms
+[stage-times]   partstats	0.544 ms
+[stage-times]   score.kernel	0.416 ms
+[stage-times]   score.read	0.415 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.008 ms
+[stage-times]   split.chain	2.506 ms
+[stage-times]   split.sizes	0.630 ms
+[stage-times]   hist.subtract	0.407 ms
+[stage-times]   leaf.values	0.028 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.906 ms of 9.852 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.192 ms
+[stage-times]   hist.zero	0.335 ms
+[stage-times]   hist.build	1.330 ms
+[stage-times]   hist.scan	0.952 ms
+[stage-times]   partstats	0.544 ms
+[stage-times]   score.kernel	0.408 ms
+[stage-times]   score.read	0.409 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.010 ms
+[stage-times]   split.chain	2.435 ms
+[stage-times]   split.sizes	0.630 ms
+[stage-times]   hist.subtract	0.410 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.783 ms of 9.725 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=63 iterations=62 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.180 ms
+[stage-times]   hist.zero	0.341 ms
+[stage-times]   hist.build	1.237 ms
+[stage-times]   hist.scan	0.931 ms
+[stage-times]   partstats	0.549 ms
+[stage-times]   score.kernel	0.409 ms
+[stage-times]   score.read	0.409 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	0.981 ms
+[stage-times]   split.chain	2.195 ms
+[stage-times]   split.sizes	0.624 ms
+[stage-times]   hist.subtract	0.404 ms
+[stage-times]   leaf.values	0.035 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.390 ms of 9.315 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=63 iterations=62 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.177 ms
+[stage-times]   hist.zero	0.333 ms
+[stage-times]   hist.build	1.212 ms
+[stage-times]   hist.scan	0.964 ms
+[stage-times]   partstats	0.556 ms
+[stage-times]   score.kernel	0.415 ms
+[stage-times]   score.read	0.406 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	0.997 ms
+[stage-times]   split.chain	2.161 ms
+[stage-times]   split.sizes	0.625 ms
+[stage-times]   hist.subtract	0.407 ms
+[stage-times]   leaf.values	0.035 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.383 ms of 9.319 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.189 ms
+[stage-times]   hist.zero	0.331 ms
+[stage-times]   hist.build	1.395 ms
+[stage-times]   hist.scan	0.959 ms
+[stage-times]   partstats	0.549 ms
+[stage-times]   score.kernel	0.409 ms
+[stage-times]   score.read	0.415 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.002 ms
+[stage-times]   split.chain	2.492 ms
+[stage-times]   split.sizes	0.625 ms
+[stage-times]   hist.subtract	0.404 ms
+[stage-times]   leaf.values	0.035 ms
+[stage-times]   model.build	0.018 ms
+[stage-times]   (accounted 8.902 ms of 9.838 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.189 ms
+[stage-times]   hist.zero	0.331 ms
+[stage-times]   hist.build	1.361 ms
+[stage-times]   hist.scan	0.959 ms
+[stage-times]   partstats	0.546 ms
+[stage-times]   score.kernel	0.410 ms
+[stage-times]   score.read	0.409 ms
+[stage-times]   score.hostreduce	0.074 ms
+[stage-times]   split.host	1.000 ms
+[stage-times]   split.chain	2.436 ms
+[stage-times]   split.sizes	0.627 ms
+[stage-times]   hist.subtract	0.413 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.815 ms of 9.760 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] lossguide fit: rows=1000000 leaves=64 iterations=63 -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   host.plan	0.195 ms
+[stage-times]   hist.zero	0.336 ms
+[stage-times]   hist.build	1.205 ms
+[stage-times]   hist.scan	0.956 ms
+[stage-times]   partstats	0.568 ms
+[stage-times]   score.kernel	0.410 ms
+[stage-times]   score.read	0.406 ms
+[stage-times]   score.hostreduce	0.070 ms
+[stage-times]   split.host	1.011 ms
+[stage-times]   split.chain	2.230 ms
+[stage-times]   split.sizes	0.631 ms
+[stage-times]   hist.subtract	0.408 ms
+[stage-times]   leaf.values	0.034 ms
+[stage-times]   model.build	0.019 ms
+[stage-times]   (accounted 8.485 ms of 9.426 ms fit wall; the rest is un-wrapped host bookkeeping)
+[stage-times] Lossguide fit (doc-parallel boosting) -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   est.move	13.874 ms
+[stage-times]   est.approx	17.078 ms
+[stage-times]   est.pstats	23.027 ms
+[stage-times]   est.readback	13.834 ms
+[stage-times]   (accounted 67.815 ms of 1553.544 ms fit wall; the rest is un-wrapped host bookkeeping)
+FSPEED lane=gbdt-lossguide arm=ours shape=higgs-1000000x28 round=1 ms=1927.528 hash=4f02e5cb8088b281
+FSPEED-ACC lane=gbdt-lossguide arm=ours metric=logloss value=0.525348
+FSPEED-ACC lane=gbdt-lossguide arm=ours metric=auc value=0.813238
+FSPEED-SCALE stage=after rows=1000000 features=28 input_mib=106.8 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.

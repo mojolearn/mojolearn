@@ -1,0 +1,4 @@
+rep 0 nodes=4019922: empty(zero-filled) 48.5 ms | _output_store 0.15 ms + first-touch memset 33.6 ms
+rep 1 nodes=4019922: empty(zero-filled) 22.9 ms | _output_store 0.04 ms + first-touch memset 5.2 ms
+rep 2 nodes=4019922: empty(zero-filled) 6.7 ms | _output_store 0.02 ms + first-touch memset 5.0 ms
+rep 3 nodes=4019922: empty(zero-filled) 6.5 ms | _output_store 0.02 ms + first-touch memset 4.9 ms
