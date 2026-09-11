@@ -3,6 +3,26 @@
 This file records release-level changes, not the development diary. Git history and archived evidence
 contain the detailed investigation record.
 
+## 0.8.2 (published 2026-09-11)
+
+Linux x86-64 wheel (CUDA sm_89, CUDA sm_90a, HIP gfx942) and macOS arm64 wheel, both from
+commit 438a6e66 (tags alpha-api-0.8.2-20260911 and v0.8.2), on PyPI 2026-09-11 18:20Z and
+18:35Z (release runs 34632585818 and 34632738047).
+
+A patch on the 0.8.1 line. Branch release-0.8.2 starts at tag v0.8.1 (343ffa35) and carries
+only the fix below, its check and the version bump; main's later GBDT speed defaults
+(DEVIATIONS 2550, 2551, 2581) are not in it. No change on Apple or NVIDIA: the fixed and
+unfixed builds give identical bits there.
+
+- Fixed IDENTICAL GBDT on AMD GPUs. The binary, half-byte and 5-/6-bit histogram kernels
+  skipped a block-wide sync on some threads of AMD's 64-lane layout, so a fit on data with
+  tied values (few distinct values per column) could differ between runs in one process
+  and from NVIDIA and Apple. 0.8.1 moved on the `ties` fixture on an MI300X. Every thread
+  now makes the same trips (DEVIATION 2600). Verified: 36/36 identity cells equal to the
+  H100 on an MI300X and on the Apple M4, taxi 1M symmetric one hash in 10/10 rounds.
+- Added `checks/gbdt_sub_byte_identity_check.py`, which fits the binary, half-byte, 5-bit
+  and 6-bit arms twice and compares each to an H100 reference.
+
 ## 0.8.1 (published 2026-09-11)
 
 Linux x86-64 wheel (CUDA sm_89, CUDA sm_90a, HIP gfx942) and macOS arm64 wheel, both from
