@@ -339,13 +339,17 @@ def worker(args):
     mode = dict(resident=resident, step_result=step_result, witness_every_step=witness_every_step,
                 witness_source=WITNESS_SOURCE[step_result if witness_every_step else 'lean-final'],
                 corpus=corpus.describe() if corpus is not None else None,
-                attention_arm=os.environ.get('MOJOLEARN_ATTN_ARM'))
+                attention_arm=os.environ.get('MOJOLEARN_ATTN_ARM'),
+                # DEVIATION 2544: the GEMM step arm this run requested (a
+                # trial binding reads it; a shipped binding ignores it).
+                gemm_arm=os.environ.get('MOJOLEARN_GEMM_ARM'))
     sampler = DeviceMemorySampler(args.sample_interval, args.gpu_index)
     sampler.start()
     emit(dict(event='setup', schema=SCHEMA, shape=shape.to_dict(), profile=shape.profile,
               parameters=shape.n_total, n_tensors=shape.n_tensors, tokens_per_step=tokens_per_step,
               seed=args.seed, budget_seconds=args.budget_seconds, **mode,
               attention_arm_requested=os.environ.get('MOJOLEARN_ATTN_ARM'),
+              gemm_arm_requested=os.environ.get('MOJOLEARN_GEMM_ARM'),
               attention_path_requested=os.environ.get('MOJOLEARN_TRANSFORMER_ATTN_PATH'),
               numeric_mode_env=os.environ.get('MOJOLEARN_NUMERIC_MODE'),
               runtime=runtime, initial_parameters_sha256=_sha(weights.tobytes()),
@@ -476,6 +480,7 @@ def _write_result(args, shape, steps, limited, timing_step_seconds=None, mode=No
         resident=mode.get('resident'), step_result=mode.get('step_result'),
         witness_every_step=mode.get('witness_every_step'), witness_source=mode.get('witness_source'),
         corpus=mode.get('corpus'), attention_arm=mode.get('attention_arm'),
+        gemm_arm=mode.get('gemm_arm'),
         # Per-step witnesses (loss always; gradients/parameters/m/v/flags
         # when the step was witnessed) so a lean run compares with a full
         # run from result.json alone; the same records are in events.jsonl.
