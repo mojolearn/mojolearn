@@ -577,3 +577,13 @@ and the occupancy arms as built do not move that. They are declined on
 NVIDIA. Whether HIP on the MI325X has a different register budget or SM
 geometry is exactly what the AMD leg's `resources_lines.txt` answers; do not
 build more occupancy arms before it has been read.
+
+Open, not attributed: this leg's shipped lean step (0.4573 / 0.4556 s) is
+slower than the same commit's shipped step on the concurrent attention leg
+(`stash_tiled` 0.3835 / 0.3833 s, bench/results/e1g/2026-09-11_133041-nvidia-h100-attention-torch),
+on a different H100 pod. The GEMM binding here is a `MOJOLEARN_GEMM_ARM_TRIAL`
+build whose hook reads the environment on every GEMM call (10.6); the box
+also differs. Nothing measured separates the two. Both the numerator and the
+denominator of the NO FLIP ratio carry whatever it is, so the verdict stands,
+but a shipped (non-trial) binding probe on the same box is owed before any
+GEMM step time from a trial build is quoted.

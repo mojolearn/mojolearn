@@ -104,6 +104,38 @@ No AMD timing of this step exists at the target shape.
    the agreed alternation: the torch opponent row, then
    `MOJOLEARN_DO_TOKEN_FILE=$HOME/.mojolearn_do_token MOJOLEARN_GPU_ARCHS=gfx942 MOJOLEARN_GEMM_LEG_EXTRA=tools/gemm_step_leg.sh MOJOLEARN_DO_EXTRA_ENV="MOJOLEARN_GEMM_STEP_LEG_ARMS=shipped,lfold,half,half_ks16,quarter,head,half_head MOJOLEARN_GEMM_STEP_LEG_LM_ARMS=auto" MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/<UTC stamp>-amd-mi325x-gemm-step bash tools/do_extra_leg.sh amd --minutes 60 --skip-gates`,
    then the 2528 LM step leg against stash_tiled (brief section 12).
+0c. NVIDIA FIRST, 2026-09-11 ~13:30Z. Andrew: "use runpod then and just do
+   nvidia for now" while the trees lane held the DigitalOcean GPU. The AMD
+   attention launcher was stopped before it took the lock and mojolearn-83
+   was told neural yields its AMD turns until neural messages again. Two
+   concurrent RunPod H100 legs at commit cd086f67, both pods terminated and
+   verified, both device cards IDENTICAL to the M4 card from the same commit:
+   - Attention plus torch, one pod
+     (bench/results/e1g/2026-09-11_133041-nvidia-h100-attention-torch; attention
+     brief section 13). `stash_tiled` holds on the benchmark corpora: lean step
+     0.5625 -> 0.3835 s (enwik8), 0.5628 -> 0.3833 s (Pile GitHub), witnesses
+     equal. DEVIATION 2528 NO FLIP on NVIDIA: r64 step 1.084x stash_tiled on
+     both corpora (y/dy kernel 115.5 + fold 6.6 ms against the stash read's
+     89.9 ms); r32 prices worse than r64.
+   - GEMM step arms (bench/results/e1g/2026-09-11_133216-nvidia-h100-gemm-step;
+     GEMM brief 10.7). NO FLIP: quarter step 1.128x shipped, every arm slower
+     in price (quarter 1.27 to lfold 2.86), every arm still one block per SM
+     at 214 to 254 registers. The step check passed on the H100 including the
+     three vocab-sized head calls.
+   - The first torch row (bench/OPPONENT_REFERENCE.md, H100 section). Same pod,
+     same shape, same corpora: our IDENTICAL step takes 10.1x torch eager TF32's
+     time (0.383 s against 0.038 s), 6.7x compile fp32's and 6.2x eager fp32's.
+     Compile with TF32 and bf16 autocast were not measured.
+   What that says about where to work next: the GEMM price harness puts the
+   twelve GEMM call kinds at about 219 ms of the 384 ms step (the three vocab
+   calls alone about 55 ms) and the attention timers put attention at about
+   165 ms, so the matrix multiplies are the larger share against a whole torch
+   step of 38 ms. Still owed: the AMD legs (attention 12.7 second leg for 2528
+   at 32 rows, GEMM 10.5 for the first AMD register readback, the torch ROCm
+   row) whenever neural takes an AMD turn again, and a shipped non-trial
+   binding probe to explain the GEMM leg's 0.457 s shipped step (GEMM brief
+   10.7). `tools/gemm_remote_leg.sh` has no extra-env plumbing; the attention
+   settings rode in a wrapper body the leg copied to `extra_body.sh`.
 1. The DigitalOcean runner is merged and its dry run is green (section 3);
    its first paid run is also its bring-up. Tuning on AMD is now a repo rule
    for every lane (ENGINEERING_RULES.md section 10), and the account allows
