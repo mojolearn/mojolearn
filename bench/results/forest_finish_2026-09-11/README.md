@@ -240,6 +240,26 @@ staging compare (DEVIATION 472) four times larger, which pushes the other way.
 DEVIATION 205's rescue is not a hidden cost either: 8,143 survey nodes out of
 1,020,229 searched, 0.8 percent.
 
+AND THEN TAXI DISAGREED, WHICH IS WHY BOTH DATASETS RUN. The same probe on
+taxi: group 0 is 67 trees, 127 cycles, 491,170 nodes, 24,790 surveys; group 1
+is 33 trees, 67 cycles, 240,424 nodes, 11,571 surveys. That is 194 cycles over
+731,594 nodes -- and 36,361 survey nodes, 5.0 percent, against Istella-S's 0.8
+percent, with EVERY surveyed node rescued (surveys == rescues on both groups).
+
+The reason is the column count. Taxi samples 4 of 16 columns per node
+(`max_features='sqrt'`), so a node whose four draws are all constant is common;
+Istella-S samples 14 of 220 and is far less likely to draw four dead columns at
+once. Each cycle that carries ANY retry pays two extra staged sub-batches --
+DEVIATION 205's survey over ALL 16 columns, then the k=1 rescue -- and each
+sub-batch restages the work items and drains (the `len(retry) > 0` arm's
+`stage_batch` plus `ctx.synchronize()`). Those costs scale with the number of
+CYCLES, not with the number of rescued nodes, so a four-times wider batch cuts
+them four-fold. That is the mechanism a wider frontier actually buys on taxi,
+and it is not the one 2663 was argued on.
+
+It also explains the stage split: `stage + feature sampler` is 23 percent of
+the taxi loop (0.448 s of 1.907 s) against 13 percent on Istella-S.
+
 `device_batched_check` PASSED on this pod (45 cells), and its two sabotages
 moved thousands of nodes (scalar-tree 2688 / 2052 clf/reg, shared-row-base
 2499 / 2598), so the gate that says batch width cannot move a tree is a gate
