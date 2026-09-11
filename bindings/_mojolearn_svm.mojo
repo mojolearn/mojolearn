@@ -63,6 +63,7 @@ from svm.estimator import (
     SvcFitOutputs,
     SvrFitOutputs,
     svc_fit_host,
+    svc_fit_host_borrowed,
     svc_predict_host,
     svr_fit_host,
     svr_predict_host,
@@ -157,14 +158,14 @@ def svc_fit_binding(
     var nochange_steps = Int(py=params[7])
     if n_rows <= 0 or n_cols <= 0:
         raise Error("svc_fit: n_rows and n_features must both be positive")
-    var x = List[Float32]()
     var y = List[Float32]()
-    x = read_f32(Int(xp), max(0, n_rows * n_cols))
     y = read_f32(Int(yp), max(0, n_rows))
     var res = SvcFitOutputs()
     with GILReleased(Python()):
-        res = svc_fit_host(
-            x, y, n_rows, n_cols, kernel, gamma, c, tol, max_iter,
+        # DEVIATION 2665: X is not copied into a host List; the fit checks
+        # and stages the caller's buffer, which `_svm_impl.py` holds alive.
+        res = svc_fit_host_borrowed(
+            xp, y, n_rows, n_cols, kernel, gamma, c, tol, max_iter,
             nochange_steps,
         )
     copy_f32(res.dual_coefs.unsafe_ptr(), dp, res.n_support)

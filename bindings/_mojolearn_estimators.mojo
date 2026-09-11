@@ -21,7 +21,7 @@ from checks.vendor import COMPILED_VENDOR
 from max.gpu.host import DeviceContext
 
 from dbscan.estimator import dbscan_fit
-from kde.estimator import kde_score_samples_host
+from kde.estimator import kde_score_samples_host_ptr
 from decomposition.estimator import (
     inverse_transform_host,
     pca_fit_host,
@@ -551,21 +551,20 @@ def kde_score_samples_binding(
     var has_weights = Int(py=params[4]) != 0
     var kname = String(py=kernel)
     var mname = String(py=metric)
-    var train = List[Float32]()
-    var query = List[Float32]()
+    # DEVIATION 2660: X and the queries are validated and staged from the
+    # caller's memory (no `List` copies); the weights, `n_train` values
+    # that `kde_fit_validate` and `host_sum_weights` read, are still one
+    # owned copy. The scores are written to `out_addr` from the pinned
+    # download buffer. Same values in, same bits out.
     var weights = List[Float32]()
-    train = read_f32(Int(tp), max(0, n_train * n_features))
-    query = read_f32(Int(qp), max(0, n_query * n_features))
     if has_weights:
         var wp = _f32_ptr(Int(py=weights_addr))
         weights = read_f32(Int(wp), max(0, n_train))
-    var out = List[Float32]()
     with GILReleased(Python()):
-        out = kde_score_samples_host(
-            train, n_train, query, n_query, n_features, bandwidth, kname,
-            mname, weights, has_weights,
+        kde_score_samples_host_ptr(
+            tp, n_train, qp, n_query, n_features, bandwidth, kname,
+            mname, weights, has_weights, op,
         )
-    copy_f32(out.unsafe_ptr(), op, n_query)
     return PythonObject(n_query)
 
 

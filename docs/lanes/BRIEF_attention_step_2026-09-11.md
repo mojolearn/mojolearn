@@ -3310,3 +3310,70 @@ Flip: 20.7. Reading: `RESOURCES label=zdot_estash_pf regs=` and
    price.
 7. The byte LM bindings first compile the DEVIATION 2652 glue on the box;
    M4 item 6 compiles the same functions in a check first.
+
+### 20.11 The H100 leg, the flip, and the shipped branch (2026-09-11, measured): DEVIATION 2657
+
+Pod 43v3euoz80r9zy, one RunPod NVIDIA H100 80GB HBM3, commit 8dc33f00, one
+heat window, baseline `stash_tiled_fgrid_r32_qres_pf_kvgrid_r32` (the NVIDIA
+default of section 19). Evidence
+`bench/results/e1g/2026-09-11_215636-nvidia-h100-80gb-hbm3-attention-estash`
+(the operand `.bin` dumps of that directory are 6 MB each and live outside the
+repo in `~/mojolearn-evidence/`; their `meta.txt` and `sha256.txt` are kept).
+
+Lean step, `steady_median_seconds`, enwik8 / Pile GitHub:
+
+| arm | enwik8 s | pilegithub s | ratios | geomean |
+|---|---:|---:|---|---:|
+| baseline `..._kvgrid_r32` | 0.29217 | 0.29157 | 1, 1 | 1 |
+| `..._estash_kvgrid_r32` | 0.24374 | 0.24358 | 0.8342, 0.8354 | 0.8348 |
+| `..._estash_dres_kvgrid_r32` | 0.24033 | 0.23881 | 0.8226, 0.8190 | **0.8207** |
+
+`witnesses_equal_baseline=True` for every step on both corpora and both arms,
+every leg stage exited 0, the byte LM binding built on the box, and the Apple
+vs NVIDIA identity trace is IDENTICAL over 60 matched stages. ENGINEERING
+RULES 9 flips the winner, so the NVIDIA row of `attn_default_arm_for` becomes
+`stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32` (word 6343783).
+
+The register lens of 20.2 predicted this and the readback confirms it. Risk 2
+of 20.10 (the count staying above 128) did not happen:
+
+| kernel | regs | padded | 256 / padded | `blocks_per_sm_256` |
+|---|---:|---:|---:|---:|
+| `zdot_stash_pf` (the shipped zdot) | 134 | 136 | 1.88 | 1 |
+| `zdot_estash_pf` | 125 | 128 | 2.00 | 2 |
+| `zdot_estash_dres_pf` | 64 | 64 | 4.00 | 4 |
+
+`_estash` clears the 128 cliff the shipped kernel missed by 6 registers, and
+`_estash_dres` (dctx rows in the shared page, so no thread holds the 64-float
+vector) reaches 4 blocks per SM at a 12,480 byte page. In-step zdot falls
+66.4 -> 14.9 ms per step; on real activations the backward is 7.52 -> 3.23 ms
+(fwd+bwd 1.85x) with the forward unchanged at 1.00x, which is the shape the
+mechanism predicts: 20.3 moves work out of the backward only.
+
+THE SHIPPED BRANCH (what the flip owed, per 20.7). The estash kernels, their
+two launch helpers and the DEVIATION 2652 glue were compiled under
+`-D MOJOLEARN_ATTN_ARM_TRIAL=1` only, and `fused_attention_arm_estash_runs`
+opened with `comptime if not ATTN_ARM_TRIAL: return False`, so the default
+word alone would have run the old backward silently. DEVIATION 2657 adds:
+
+- `ATTN_SHIPPED_BWD_ESTASH` (a shipped build whose column default carries the
+  `_estash` bit and whose page fits) and `ATTN_DEFAULT_ESTASH_DRES`, beside
+  `ATTN_SHIPPED_BWD_KV`, which they mirror.
+- `fused_attention_arm_estash_runs` now admits a shipped build whose default
+  carries the same estash bits, the way the 2597 test compares
+  `_attn_kv_key(arm)` with `ATTN_DEFAULT_KV_KEY`.
+- Both entry points are gated `ATTN_ARM_TRIAL or ATTN_SHIPPED_BWD_ESTASH`;
+  inside them the `+sabotage_new` instantiations stay behind
+  `comptime if ATTN_ARM_TRIAL`, and a shipped build instantiates exactly
+  `_launch_fwd_r2_keep[64, 32, True, True, False]` and
+  `_launch_bwd_estash[64, ATTN_DEFAULT_ESTASH_DRES, False]`.
+- `ATTN_ARM_ESTASH_BITS` leaves `ATTN_ARM_DEFAULT_REFUSED_BITS`, and
+  `fused_attention_arm_backward_resolved` reports the estash bits on the
+  shipped path too.
+- The DEVIATION 2652 glue in `modeling_llama.mojo` and
+  `transformer_backward.mojo` takes the same two-part gate.
+- `checks/kernel_matrix.mojo` gains the word constant (asserted equal to this
+  file's `ATTN_ARM_R3_KVGRID_R32_ESTASH_DRES_DEFAULT` at build time) and a
+  third check knob, `MOJOLEARN_ATTN_DEFAULT_ESTASH_EVERY_COLUMN`, with the
+  mutual exclusion assert widened to three. The knob is how the M4 gates a
+  branch Apple's own default does not carry; never a shipped build.

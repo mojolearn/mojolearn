@@ -117,6 +117,7 @@ from checks.kernel_matrix import (
     ATTN_DEFAULT_WORD_BASELINE,
     ATTN_DEFAULT_WORD_STASH_TILED,
     ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF,
+    ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_ESTASH_DRES_KVGRID_R32,
     ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_KVGRID_R32,
     TARGET_COLUMN,
     attn_default_arm_for,
@@ -432,14 +433,19 @@ comptime ATTN_ARM_R3_KVGRID_R32_DEFAULT = ATTN_ARM_R3_DEFAULT | ATTN_ARM_BWD_KVG
 """`stash_tiled_fgrid_r32_qres_pf_kvgrid_r32`: DEVIATION 2597's joint dk/dv
 kernel at 32 keys per block on top of `stash_tiled_fgrid_r32_qres_pf`
 (brief section 18)."""
+comptime ATTN_ARM_R3_KVGRID_R32_ESTASH_DRES_DEFAULT = (
+    ATTN_ARM_R3_KVGRID_R32_DEFAULT | ATTN_ARM_BWD_ESTASH | ATTN_ARM_ESTASH_DRES
+)
+"""`stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32`: DEVIATIONS 2650
+and 2651 (the backward reads the forward's kept exp stash, dctx rows in the
+shared page) on top of `stash_tiled_fgrid_r32_qres_pf_kvgrid_r32`, flipped
+on NVIDIA by DEVIATION 2657 (brief section 20)."""
 comptime ATTN_ARM_DEFAULT_REFUSED_BITS = (
     ATTN_ARM_SABOTAGE | ATTN_ARM_SABOTAGE_NEW | ATTN_ARM_BWD_ZTILED
     | ATTN_ARM_ZROWS32 | ATTN_ARM_ZROWS64 | ATTN_ARM_SABOTAGE_KV
-    | ATTN_ARM_BWD_KVRECOMPUTE | ATTN_ARM_ZSCHED_BITS | ATTN_ARM_ESTASH_BITS
+    | ATTN_ARM_BWD_KVRECOMPUTE | ATTN_ARM_ZSCHED_BITS
 )
-"""Bits a default arm may not carry (DEVIATIONS 2650 and 2651, `_estash`
-and `_estash_dres`, are trial arms until a leg flips one and its lane adds
-the shipped branch, brief section 20): the sabotages; DEVIATION 2528, whose
+"""Bits a default arm may not carry: the sabotages; DEVIATION 2528, whose
 kernels a shipped build does not compile (no NVIDIA flip, brief section 13);
 DEVIATION 2596 (`_kvrecompute`), whose launch a shipped build does not
 compile either (it lost to `_kvgrid_r32` and `_kvsplit` on the MI325X, and
@@ -450,7 +456,11 @@ branch, brief section 17). The DEVIATION 2597 bits (`_kvgrid`, its keys
 knobs, `_kvsplit`) are allowed since brief section 18: a shipped build
 compiles the one clean 2597 dk/dv instantiation its column default resolves
 to (`ATTN_SHIPPED_BWD_KV`), and `fused_attention_arm_from_env` asserts that
-the default's 2597 part is a legal combination whose page fits."""
+the default's 2597 part is a legal combination whose page fits. The
+DEVIATION 2650 / 2651 bits (`_estash`, `_estash_dres`) are allowed since
+DEVIATION 2657 (brief section 20): the H100 leg flipped `_estash_dres` on
+NVIDIA and this file compiles the one clean estash forward and backward its
+column default resolves to (`ATTN_SHIPPED_BWD_ESTASH`)."""
 comptime ATTN_ARM_DEFAULT = attn_default_arm_for[TARGET_COLUMN]()
 """THE SHIPPED ARM, per column, from the kernel-matrix ROUTING row
 `attn_default_arm_for` (DEVIATION 2534, brief section 15; this file names no
@@ -477,8 +487,15 @@ bench/results/e1g/2026-09-11_180903-amd-mi325x-do-attention-dkdv (commit
 5cc3b8df) then flipped AMD to stash_tiled_fgrid_r32_qres_pf_kvgrid_r32
 against baseline (FLIP geomean 0.8436; lean step 1.623/1.633 s ->
 1.376/1.370 s; in-step dk/dv 169.8 -> 21.2 ms; every step witness equal;
-brief section 18). Apple and the other columns stay stash_tiled. A leg that
-flips again edits the matrix row and the brief."""
+brief section 18). The H100 leg
+bench/results/e1g/2026-09-11_215636-nvidia-h100-80gb-hbm3-attention-estash
+(commit 8dc33f00) then flipped NVIDIA to
+stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 (DEVIATION 2657, brief
+section 20; FLIP geomean 0.8207, enwik8 0.8226 and Pile GitHub 0.8190; lean
+step 0.2922/0.2916 s -> 0.2403/0.2388 s; in-step zdot 66.4 -> 14.9 ms; every
+step witness equal and the Apple vs NVIDIA identity trace IDENTICAL). Apple
+and the other columns stay stash_tiled. A leg that flips again edits the
+matrix row and the brief."""
 comptime ATTN_ARM_COMPILED = ATTN_ARM_TRIAL or (ATTN_ARM_DEFAULT != ATTN_ARM_BASELINE)
 """Whether the launchers compile the arm kernels at all: on a trial build
 (every arm, clean and sabotage) or when the build default is an arm (the
@@ -775,6 +792,13 @@ def fused_attention_arm_from_env() raises -> Int:
         " ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_KVGRID_R32 no longer"
         " spells this file's stash_tiled_fgrid_r32_qres_pf_kvgrid_r32 bits; fix"
         " the literal there"
+    )
+    comptime assert ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_ESTASH_DRES_KVGRID_R32 == ATTN_ARM_R3_KVGRID_R32_ESTASH_DRES_DEFAULT, (
+        "checks/kernel_matrix.mojo"
+        " ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_ESTASH_DRES_KVGRID_R32"
+        " no longer spells this file's"
+        " stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 bits (DEVIATION"
+        " 2657); fix the literal there"
     )
     comptime assert (ATTN_ARM_DEFAULT & ATTN_ARM_DEFAULT_REFUSED_BITS) == 0, (
         "attn_default_arm_for names a sabotage, a DEVIATION 2528 arm or"
@@ -1138,6 +1162,24 @@ def _estash_page_bytes(dres: Bool) -> Int:
 comptime ATTN_ES_FITS = lib_smem_page_fits_for[TARGET_COLUMN, _estash_page_bytes(True)]()
 """Whether the larger (`_estash_dres`) page fits this column (every column)."""
 
+comptime ATTN_SHIPPED_BWD_ESTASH = (
+    (not ATTN_ARM_TRIAL) and ATTN_ES_FITS
+    and (ATTN_ARM_DEFAULT & ATTN_ARM_BWD_ESTASH) != 0
+)
+"""DEVIATION 2657: a shipped build whose column default carries DEVIATION
+2650's `_estash` bit (NVIDIA's
+`stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32` since the H100 leg
+bench/results/e1g/2026-09-11_215636-nvidia-h100-80gb-hbm3-attention-estash).
+The two estash entry points then compile the ONE clean instantiation that
+default resolves to: `_launch_fwd_r2_keep[64, 32, True, True, False]` and
+`_launch_bwd_estash[64, ATTN_DEFAULT_ESTASH_DRES, False]`, and nothing else
+of the trial tree (the sabotage copies stay trial-only, like
+`ATTN_SHIPPED_BWD_KV`'s)."""
+
+comptime ATTN_DEFAULT_ESTASH_DRES = (ATTN_ARM_DEFAULT & ATTN_ARM_ESTASH_DRES) != 0
+"""Whether the column default carries DEVIATION 2651's `_dres` bit, so a
+shipped build instantiates that one estash backward and not both."""
+
 
 def fused_attention_arm_estash(arm: Int) -> Bool:
     """Whether `arm` carries DEVIATION 2650's `_estash` token."""
@@ -1156,12 +1198,19 @@ def fused_attention_estash_name(arm: Int) -> String:
 
 def fused_attention_arm_estash_runs(arm: Int) -> Bool:
     """Whether THIS build runs DEVIATION 2650's backward for `arm` at head_dim
-    64 when the kept stash is valid: a trial build, the `_estash` bit, the
-    forward resolving to the 32-row Q-resident preflushed instantiation
-    (the one whose exp scratch the kernel reads), a dk/dv keys count and a
-    page that fits. False on every shipped build, which compiles none of it."""
+    64 when the kept stash is valid: the `_estash` bit, the forward resolving
+    to the 32-row Q-resident preflushed instantiation (the one whose exp
+    scratch the kernel reads), a dk/dv keys count and a page that fits, on a
+    trial build (every such arm) or on a shipped build whose column default
+    carries the same estash bits (DEVIATION 2657, `ATTN_SHIPPED_BWD_ESTASH`;
+    the entry points compile that one clean instantiation, the way
+    `ATTN_SHIPPED_BWD_KV` compiles one 2597 dk/dv fold). False on every other
+    shipped build, which compiles none of it."""
     comptime if not ATTN_ARM_TRIAL:
-        return False
+        comptime if not ATTN_SHIPPED_BWD_ESTASH:
+            return False
+        if (arm & ATTN_ARM_ESTASH_BITS) != (ATTN_ARM_DEFAULT & ATTN_ARM_ESTASH_BITS):
+            return False
     if (arm & ATTN_ARM_BWD_ESTASH) == 0 or not ATTN_ES_FITS:
         return False
     if fused_attention_fwd_rows(arm) != 32:
@@ -1330,6 +1379,15 @@ def fused_attention_arm_backward_resolved(arm: Int) -> Int:
                 return tiled_stash | ATTN_ARM_PREFLUSH | zsw | esw | _attn_kv_ran_bits(arm, kvkeys)
             return tiled_stash | ATTN_ARM_PREFLUSH | zsw
         return tiled_stash | (arm & ATTN_ARM_PREFLUSH)
+    comptime if ATTN_SHIPPED_BWD_ESTASH:
+        # DEVIATION 2657 (brief section 20): the column default's estash
+        # backward, for an arm this build runs it for (the launcher's own
+        # condition, which also pins the dk/dv instantiation).
+        if fused_attention_arm_estash_runs(arm):
+            return (
+                tiled_stash | ATTN_ARM_PREFLUSH | (arm & ATTN_ARM_ESTASH_BITS)
+                | _attn_kv_ran_bits(arm, ATTN_DEFAULT_KV_KEYS)
+            )
     comptime if ATTN_SHIPPED_BWD_KV:
         # Brief section 18: the column default's DEVIATION 2597 dk/dv
         # instantiation, for an arm with `_pf` resolving to the same one (the
@@ -5972,8 +6030,10 @@ def _launch_fwd_r2_keep[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: Bool](
     score/exp scratch supplied by the caller (`sstash`, at least `B * nh *
     L * S` cells) and KEPT: the same instantiation writes the same bits,
     and after the wait the buffer holds `e` at every visible cell for
-    `fused_bwd_zdot_estash_kernel`. Generic; a shipped build calls it
-    nowhere and instantiates none of it."""
+    `fused_bwd_zdot_estash_kernel`. Generic; a shipped build instantiates
+    only the clean copy its column default resolves to, and only when that
+    default carries the estash bits (DEVIATION 2657,
+    `ATTN_SHIPPED_BWD_ESTASH`)."""
     comptime kr = fused_attn_forward_r2_kernel[HD, TQ, QRES, PF, SABN]
     step_count_launch()
     ctx.enqueue_function[kr](
@@ -6507,7 +6567,9 @@ def _estash_dkdv_launch[HD: Int, BJ: Int](
     """The joint DEVIATION 2597 dk/dv fold at `BJ` keys per block for the
     estash backward (the clean instantiation, or the sabotage_kv one under
     `ksab`), exactly the launch of `_launch_bwd_stash_tiled_kv`'s joint
-    branch. Trial builds only (`_launch_bwd_estash` has no other caller)."""
+    branch. `_launch_bwd_estash` has no other caller, so it is compiled on a
+    trial build and on a shipped build whose column default carries the
+    estash bits (DEVIATION 2657, `ATTN_SHIPPED_BWD_ESTASH`)."""
     var kv_blocks = b * nkv * ((s + BJ - 1) // BJ)
     if ksab:
         comptime jks = fused_bwd_dkdv_r2_kernel[HD, BJ, True]
@@ -6554,8 +6616,10 @@ def _launch_bwd_estash[HD: Int, DRES: Bool, SABN: Bool](
     over the kept exp stash `kept`, a wait, then the shipped clean
     preflushed tiled dq (`fused_bwd_dq_tiled_pf_kernel`, which writes dcell
     over `dy_st`) and the joint DEVIATION 2597 dk/dv fold at `keys` keys per
-    block, in the shipped order, a wait. Generic; a shipped build calls it
-    nowhere."""
+    block, in the shipped order, a wait. Generic; a shipped build
+    instantiates only `[HD, ATTN_DEFAULT_ESTASH_DRES, False]`, and only when
+    its column default carries the estash bits (DEVIATION 2657,
+    `ATTN_SHIPPED_BWD_ESTASH`)."""
     var cells = b * nh * l * s
     step_count_device_alloc()
     var y_st = ctx.enqueue_create_buffer[DType.float32](cells)
@@ -7221,7 +7285,7 @@ def fused_forward_launch_estash_ran(
     a valid kept stash from a stale or absent one. The regime scan, the
     corner flag and `ran` are the plain launcher's."""
     kept_cells = 0
-    comptime if ATTN_ARM_TRIAL:
+    comptime if ATTN_ARM_TRIAL or ATTN_SHIPPED_BWD_ESTASH:
         if fused_attention_arm_estash_runs(arm) and hd == ATTN_STASH_HD:
             ran = ATTN_ARM_BASELINE
             if not fused_forward_supported_head_dim(hd):
@@ -7243,13 +7307,18 @@ def fused_forward_launch_estash_ran(
                 ctx.synchronize()
                 _attn_tick(ctx, ton, tk, "fwd_estash_alloc")
             var nsab = (arm & ATTN_ARM_SABOTAGE_NEW) != 0
-            if nsab:
-                _launch_fwd_r2_keep[ATTN_STASH_HD, 32, True, True, True](
-                    ctx, ton, tk, ctxv, amax, denom, corner, kept, q_rope,
-                    k_cache, v_cache, b, l, nh, nkv, s, pos0, key_lo, window,
-                    scale,
-                )
-            else:
+            var ran_sab = False
+            comptime if ATTN_ARM_TRIAL:
+                # The sabotage copy is a trial instantiation only (DEVIATION
+                # 2657): a shipped build compiles the clean one below alone.
+                if nsab:
+                    _launch_fwd_r2_keep[ATTN_STASH_HD, 32, True, True, True](
+                        ctx, ton, tk, ctxv, amax, denom, corner, kept, q_rope,
+                        k_cache, v_cache, b, l, nh, nkv, s, pos0, key_lo, window,
+                        scale,
+                    )
+                    ran_sab = True
+            if not ran_sab:
                 _launch_fwd_r2_keep[ATTN_STASH_HD, 32, True, True, False](
                     ctx, ton, tk, ctxv, amax, denom, corner, kept, q_rope,
                     k_cache, v_cache, b, l, nh, nkv, s, pos0, key_lo, window,
@@ -7309,7 +7378,7 @@ def fused_backward_launch_estash_ran(
     With no valid kept stash the plain launcher runs, unchanged, and `ran`
     says so (no estash bit). The regime scans and the corner flag are the
     plain launcher's."""
-    comptime if ATTN_ARM_TRIAL:
+    comptime if ATTN_ARM_TRIAL or ATTN_SHIPPED_BWD_ESTASH:
         if fused_attention_arm_estash_runs(arm) and hd == ATTN_STASH_HD and kept_cells > 0 and kept_cells == b * nh * l * s:
             ran = ATTN_ARM_BASELINE
             if not fused_supported_head_dim(hd):
@@ -7336,28 +7405,42 @@ def fused_backward_launch_estash_ran(
             var ksab = (arm & ATTN_ARM_SABOTAGE_KV) != 0
             var nsab = (arm & ATTN_ARM_SABOTAGE_NEW) != 0
             var dres = (arm & ATTN_ARM_ESTASH_DRES) != 0
-            if dres:
+            var ran_sab = False
+            comptime if ATTN_ARM_TRIAL:
+                # The sabotage_new copies are trial instantiations only
+                # (DEVIATION 2657); a shipped build compiles neither.
                 if nsab:
-                    _launch_bwd_estash[HD, True, True](
-                        ctx, ton, tk, zdot, dq, dk, dv, corner, q_rope, dctx,
-                        k_cache, v_cache, denom, kept, b, l, nh, nkv, s, pos0,
-                        key_lo, window, scale, keys, ksab,
-                    )
+                    if dres:
+                        _launch_bwd_estash[HD, True, True](
+                            ctx, ton, tk, zdot, dq, dk, dv, corner, q_rope, dctx,
+                            k_cache, v_cache, denom, kept, b, l, nh, nkv, s, pos0,
+                            key_lo, window, scale, keys, ksab,
+                        )
+                    else:
+                        _launch_bwd_estash[HD, False, True](
+                            ctx, ton, tk, zdot, dq, dk, dv, corner, q_rope, dctx,
+                            k_cache, v_cache, denom, kept, b, l, nh, nkv, s, pos0,
+                            key_lo, window, scale, keys, ksab,
+                        )
+                    ran_sab = True
+            if not ran_sab:
+                comptime if ATTN_ARM_TRIAL:
+                    if dres:
+                        _launch_bwd_estash[HD, True, False](
+                            ctx, ton, tk, zdot, dq, dk, dv, corner, q_rope, dctx,
+                            k_cache, v_cache, denom, kept, b, l, nh, nkv, s, pos0,
+                            key_lo, window, scale, keys, ksab,
+                        )
+                    else:
+                        _launch_bwd_estash[HD, False, False](
+                            ctx, ton, tk, zdot, dq, dk, dv, corner, q_rope, dctx,
+                            k_cache, v_cache, denom, kept, b, l, nh, nkv, s, pos0,
+                            key_lo, window, scale, keys, ksab,
+                        )
                 else:
-                    _launch_bwd_estash[HD, True, False](
-                        ctx, ton, tk, zdot, dq, dk, dv, corner, q_rope, dctx,
-                        k_cache, v_cache, denom, kept, b, l, nh, nkv, s, pos0,
-                        key_lo, window, scale, keys, ksab,
-                    )
-            else:
-                if nsab:
-                    _launch_bwd_estash[HD, False, True](
-                        ctx, ton, tk, zdot, dq, dk, dv, corner, q_rope, dctx,
-                        k_cache, v_cache, denom, kept, b, l, nh, nkv, s, pos0,
-                        key_lo, window, scale, keys, ksab,
-                    )
-                else:
-                    _launch_bwd_estash[HD, False, False](
+                    # DEVIATION 2657: the column default's one clean estash
+                    # backward, `_dres` resolved at build time.
+                    _launch_bwd_estash[HD, ATTN_DEFAULT_ESTASH_DRES, False](
                         ctx, ton, tk, zdot, dq, dk, dv, corner, q_rope, dctx,
                         k_cache, v_cache, denom, kept, b, l, nh, nkv, s, pos0,
                         key_lo, window, scale, keys, ksab,

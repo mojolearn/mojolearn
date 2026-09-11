@@ -1,0 +1,170 @@
+{
+ "binding": null,
+ "case": "control_extratrees_x2",
+ "control_binding": {
+  "binding_file": "/root/mojolearn/python/mojolearn/identical/_mojolearn_trees.so",
+  "binding_sha256": "d35cb347950840711063665b9e8e6ca0fbe030d51f41bf628fdf5deeb9e7892e",
+  "name": "_mojolearn_trees",
+  "native_numeric_mode": 1,
+  "native_vendor": "cuda"
+ },
+ "elapsed_s": 1.992,
+ "error": null,
+ "events": [
+  {
+   "mojolearn_file": "/root/mojolearn/python/mojolearn/__init__.py",
+   "name": "imported",
+   "t": 0.103,
+   "version": "0.8.0"
+  },
+  {
+   "binding": "_mojolearn_trees",
+   "entry": "et_classifier_fit(_export)",
+   "features": 8,
+   "label": "fit1",
+   "name": "native_call_begin",
+   "rows": 512,
+   "t": 0.108
+  },
+  {
+   "label": "fit1",
+   "n_trees": 8,
+   "name": "native_call_end",
+   "t": 1.983
+  },
+  {
+   "label": "fit1",
+   "name": "hashed",
+   "t": 1.984
+  },
+  {
+   "binding": "_mojolearn_trees",
+   "entry": "et_classifier_fit(_export)",
+   "features": 8,
+   "label": "fit2",
+   "name": "native_call_begin",
+   "rows": 512,
+   "t": 1.986
+  },
+  {
+   "label": "fit2",
+   "n_trees": 8,
+   "name": "native_call_end",
+   "t": 1.991
+  },
+  {
+   "label": "fit2",
+   "name": "hashed",
+   "t": 1.991
+  }
+ ],
+ "fixture": {
+  "control": {
+   "extratrees": {
+    "classes": 2,
+    "features": 8,
+    "max_depth": 6,
+    "n_estimators": 8,
+    "rows": 512,
+    "seed": 2513
+   },
+   "kmeans": {
+    "clusters": 4,
+    "features": 4,
+    "rows": 256,
+    "seed": 2513
+   }
+  }
+ },
+ "hashes": {
+  "fit1": {
+   "colid": {
+    "dtype": "<i4",
+    "nbytes": 1040,
+    "sha256": "addea2c2016f0d4306c54b3800648a0a1ed9949ccfef8bc16bb5e7f959572e1a",
+    "shape": [
+     260
+    ]
+   },
+   "leaves": {
+    "dtype": "<f4",
+    "nbytes": 2080,
+    "sha256": "387844bb18ab80f11e4a7b5908b2e00df058d61a8ab8d58b12683cc864aa78df",
+    "shape": [
+     520
+    ]
+   },
+   "left_child": {
+    "dtype": "<i4",
+    "nbytes": 1040,
+    "sha256": "5fabe44eaeed7722f5e70c4b7677eeb0e2c1e7fe6d48ade69810407e90b85fed",
+    "shape": [
+     260
+    ]
+   },
+   "offsets": {
+    "dtype": "<i4",
+    "nbytes": 36,
+    "sha256": "7cd2e7cc78f2da4aa0b8e70863e0d3eea6aeb4ba0a162d8111cf118855c7f39a",
+    "shape": [
+     9
+    ]
+   },
+   "quesval": {
+    "dtype": "<f4",
+    "nbytes": 1040,
+    "sha256": "37b689e833077d4b471a6f0379f0f6b5ab28c7a19648224649a9dcf1ecbf921d",
+    "shape": [
+     260
+    ]
+   }
+  },
+  "fit2": {
+   "colid": {
+    "dtype": "<i4",
+    "nbytes": 1040,
+    "sha256": "addea2c2016f0d4306c54b3800648a0a1ed9949ccfef8bc16bb5e7f959572e1a",
+    "shape": [
+     260
+    ]
+   },
+   "leaves": {
+    "dtype": "<f4",
+    "nbytes": 2080,
+    "sha256": "387844bb18ab80f11e4a7b5908b2e00df058d61a8ab8d58b12683cc864aa78df",
+    "shape": [
+     520
+    ]
+   },
+   "left_child": {
+    "dtype": "<i4",
+    "nbytes": 1040,
+    "sha256": "5fabe44eaeed7722f5e70c4b7677eeb0e2c1e7fe6d48ade69810407e90b85fed",
+    "shape": [
+     260
+    ]
+   },
+   "offsets": {
+    "dtype": "<i4",
+    "nbytes": 36,
+    "sha256": "7cd2e7cc78f2da4aa0b8e70863e0d3eea6aeb4ba0a162d8111cf118855c7f39a",
+    "shape": [
+     9
+    ]
+   },
+   "quesval": {
+    "dtype": "<f4",
+    "nbytes": 1040,
+    "sha256": "37b689e833077d4b471a6f0379f0f6b5ab28c7a19648224649a9dcf1ecbf921d",
+    "shape": [
+     260
+    ]
+   }
+  }
+ },
+ "numeric_mode": "identical",
+ "pid": 4227,
+ "python": "3.14.7",
+ "schema": "byte-lm-lifetime-diag.record.v1",
+ "status": "passed"
+}

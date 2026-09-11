@@ -1,0 +1,5 @@
+pod='ujlg5ytky38cvv'
+target='-p 16511 root@216.243.220.224'
+armed_utc='2026-09-10T09:05:27Z'
+deadline_epoch=1789034727
+minutes=60

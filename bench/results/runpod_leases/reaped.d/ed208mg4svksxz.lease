@@ -1,0 +1,5 @@
+pod='ed208mg4svksxz'
+target='-p 17048 root@47.47.180.106'
+armed_utc='2026-09-08T09:30:29Z'
+deadline_epoch=1788863429
+minutes=60

@@ -1265,8 +1265,9 @@ BUILDERS = {
 # `ours-base`: OUR SAME estimator from a second Python tree
 # (MOJOLEARN_CTD_BASE_PY, a copy of `python/` holding the BEFORE bindings), so
 # a before/after A/B interleaves round by round in one race instead of two
-# races minutes apart (lane linear-cluster-speed, 2026-09-11). It is never an
-# opponent: ratios against it are ours-vs-ours and are not quoted as one.
+# races minutes apart (lane linear-cluster-speed f3de0b36, 2026-09-11; taken
+# here for the SVC before/after as well). It is never an opponent: ratios
+# against it are ours-vs-ours and are not quoted as one.
 for _lane in LANES:
     BUILDERS[(_lane, "ours-base")] = BUILDERS[(_lane, "ours")]
 for _lane in LANES:

@@ -377,7 +377,13 @@ def worker(args):
                 # labels it (tools/gemm_step_leg.sh plans.tsv), so `shipped`
                 # (the ksplit default where the row is above 0) is never
                 # confused with the old plan (`tuned128`). None when unset.
-                gemm_plan=os.environ.get('MOJOLEARN_GEMM_PLAN_LABEL'))
+                gemm_plan=os.environ.get('MOJOLEARN_GEMM_PLAN_LABEL'),
+                # DEVIATION 2648: the step glue arm the binding runs (its
+                # read-back; `shipped` on any non-trial binding), the raw
+                # request and whether the binding is a glue trial build.
+                step_glue_arm=(runtime.get('native_step_glue_arm') or {}).get('arm'),
+                step_glue_arm_requested=os.environ.get('MOJOLEARN_STEP_GLUE_ARM'),
+                step_glue_trial_build=(runtime.get('native_step_glue_arm') or {}).get('trial_build'))
     sampler = DeviceMemorySampler(args.sample_interval, args.gpu_index)
     sampler.start()
     emit(dict(event='setup', schema=SCHEMA, shape=shape.to_dict(), profile=shape.profile,
@@ -594,6 +600,11 @@ def _write_result(args, shape, steps, limited, timing_step_seconds=None, mode=No
         attention_arm_resolved_hd64=mode.get('attention_arm_resolved_hd64'),
         attention_arm_trial_build=mode.get('attention_arm_trial_build'),
         gemm_arm=mode.get('gemm_arm'), gemm_plan=mode.get('gemm_plan'),
+        # DEVIATION 2648: the step glue arm the binding ran, the raw request
+        # and whether the binding was a glue trial build (see `mode`).
+        step_glue_arm=mode.get('step_glue_arm'),
+        step_glue_arm_requested=mode.get('step_glue_arm_requested'),
+        step_glue_trial_build=mode.get('step_glue_trial_build'),
         # Per-step witnesses (loss always; gradients/parameters/m/v/flags
         # when the step was witnessed) so a lean run compares with a full
         # run from result.json alone; the same records are in events.jsonl.

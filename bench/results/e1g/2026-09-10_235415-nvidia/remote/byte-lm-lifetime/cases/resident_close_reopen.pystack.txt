@@ -1,0 +1,40 @@
+Timeout (0:00:30)!
+Thread 0x00007e496b342440 [python3] (most recent call first):
+  File "/root/mojolearn/python/mojolearn/_byte_lm_impl.py", line 483 in _run_impl
+  File "/root/mojolearn/python/mojolearn/_byte_lm_impl.py", line 432 in _run
+  File "/root/mojolearn/python/mojolearn/_byte_lm_impl.py", line 529 in train_step
+  File "/root/mojolearn/tools/byte_lm_lifetime_diag.py", line 239 in _step
+  File "/root/mojolearn/tools/byte_lm_lifetime_diag.py", line 323 in case_resident_close_reopen
+  File "/root/mojolearn/tools/byte_lm_lifetime_diag.py", line 605 in run_child
+  File "/root/mojolearn/tools/byte_lm_lifetime_diag.py", line 820 in main
+  File "/root/mojolearn/tools/byte_lm_lifetime_diag.py", line 889 in <module>
+Timeout (0:00:30)!
+Thread 0x00007e496b342440 [python3] (most recent call first):
+  File "/root/mojolearn/python/mojolearn/_byte_lm_impl.py", line 483 in _run_impl
+  File "/root/mojolearn/python/mojolearn/_byte_lm_impl.py", line 432 in _run
+  File "/root/mojolearn/python/mojolearn/_byte_lm_impl.py", line 529 in train_step
+  File "/root/mojolearn/tools/byte_lm_lifetime_diag.py", line 239 in _step
+  File "/root/mojolearn/tools/byte_lm_lifetime_diag.py", line 323 in case_resident_close_reopen
+  File "/root/mojolearn/tools/byte_lm_lifetime_diag.py", line 605 in run_child
+  File "/root/mojolearn/tools/byte_lm_lifetime_diag.py", line 820 in main
+  File "/root/mojolearn/tools/byte_lm_lifetime_diag.py", line 889 in <module>
+Timeout (0:00:30)!
+Thread 0x00007e496b342440 [python3] (most recent call first):
+  File "/root/mojolearn/python/mojolearn/_byte_lm_impl.py", line 483 in _run_impl
+  File "/root/mojolearn/python/mojolearn/_byte_lm_impl.py", line 432 in _run
+  File "/root/mojolearn/python/mojolearn/_byte_lm_impl.py", line 529 in train_step
+  File "/root/mojolearn/tools/byte_lm_lifetime_diag.py", line 239 in _step
+  File "/root/mojolearn/tools/byte_lm_lifetime_diag.py", line 323 in case_resident_close_reopen
+  File "/root/mojolearn/tools/byte_lm_lifetime_diag.py", line 605 in run_child
+  File "/root/mojolearn/tools/byte_lm_lifetime_diag.py", line 820 in main
+  File "/root/mojolearn/tools/byte_lm_lifetime_diag.py", line 889 in <module>
+Timeout (0:00:30)!
+Thread 0x00007e496b342440 [python3] (most recent call first):
+  File "/root/mojolearn/python/mojolearn/_byte_lm_impl.py", line 483 in _run_impl
+  File "/root/mojolearn/python/mojolearn/_byte_lm_impl.py", line 432 in _run
+  File "/root/mojolearn/python/mojolearn/_byte_lm_impl.py", line 529 in train_step
+  File "/root/mojolearn/tools/byte_lm_lifetime_diag.py", line 239 in _step
+  File "/root/mojolearn/tools/byte_lm_lifetime_diag.py", line 323 in case_resident_close_reopen
+  File "/root/mojolearn/tools/byte_lm_lifetime_diag.py", line 605 in run_child
+  File "/root/mojolearn/tools/byte_lm_lifetime_diag.py", line 820 in main
+  File "/root/mojolearn/tools/byte_lm_lifetime_diag.py", line 889 in <module>

@@ -288,6 +288,14 @@ from core.step_phase import (
     step_count_launch,
     step_count_sync,
 )
+# DEVIATION 2645: the RMSNorm row launch geometry arm (core/step_glue.mojo;
+# its launch path is compiled only under -D MOJOLEARN_STEP_GLUE_TRIAL=1).
+from core.step_glue import (
+    STEP_GLUE_TRIAL,
+    step_glue_arm_from_env,
+    step_glue_blocks,
+    step_glue_rows_of,
+)
 
 from core.identity_trace import IdentityTrace
 from gemm.checks.gemm_identical import identical_gemm
@@ -314,6 +322,7 @@ from mamba.impl.modeling.modeling_mamba import (
 
 from transformer.impl.llama.fused_attention import (
     ATTN_ARM_TRIAL,
+    ATTN_SHIPPED_BWD_ESTASH,
     FUSED_RAN,
     device_first_nonfinite,
     fused_attention_arm_estash_runs,
@@ -1451,6 +1460,20 @@ def llama_rms_norm(
     `llama_rms_norm_kernel` is deleted. This launcher exists so that the
     swap touches one function and no call site.
     """
+    # DEVIATION 2645 (docs/lanes/BRIEF_step_glue_2026-09-11.md section 4.1):
+    # a trial build under an arm carrying `rows16`, `rows8` or `rows4` launches
+    # the same kernel at that many threads per block. The kernel owns one
+    # token row per thread and reads `block_dim` only to index its row, so
+    # every geometry covering [0, m) computes the same bits. On a build
+    # without -D MOJOLEARN_STEP_GLUE_TRIAL=1 the two values below are the
+    # shipped `_grid(m)` and `LLAMA_TPB`.
+    var norm_blocks = _grid(m)
+    var norm_threads = LLAMA_TPB
+    comptime if STEP_GLUE_TRIAL:
+        var glue_rows = step_glue_rows_of(step_glue_arm_from_env())
+        if glue_rows > 0:
+            norm_blocks = step_glue_blocks(m, glue_rows)
+            norm_threads = glue_rows
     step_count_launch()
     ctx.enqueue_function[llama_rms_norm_kernel](
         sumsq.unsafe_ptr(),
@@ -1460,8 +1483,8 @@ def llama_rms_norm(
         Int32(m),
         Int32(d_model),
         eps,
-        grid_dim=(_grid(m), 1, 1),
-        block_dim=(LLAMA_TPB, 1, 1),
+        grid_dim=(norm_blocks, 1, 1),
+        block_dim=(norm_threads, 1, 1),
     )
 
 
@@ -2803,12 +2826,14 @@ def eager_attention_forward(
         )
     if choice != ATTN_PATH_EAGER:
         var kept_estash = False
-        comptime if ATTN_ARM_TRIAL:
+        comptime if ATTN_ARM_TRIAL or ATTN_SHIPPED_BWD_ESTASH:
             # DEVIATION 2652 (brief section 20.3): under an `_estash` arm,
             # with no eager stages needed (so `aexp` holds no stage this
             # call reads back), the fused forward writes its exp stash into
-            # `aexp` and keeps it for the backward. Trial builds only; the
-            # shipped call sits in the branch below unchanged.
+            # `aexp` and keeps it for the backward. A trial build, or a
+            # shipped build whose column default carries the estash bits
+            # (DEVIATION 2657); every other build takes the branch below
+            # unchanged.
             var arm = fused_attention_arm_from_env()
             if (not need_eager) and fused_attention_arm_estash_runs(arm):
                 var ran = 0

@@ -18,6 +18,14 @@ from core.step_phase import (
     step_count_launch,
     step_count_sync,
 )
+# DEVIATION 2645: the RMSNorm row launch geometry arm (core/step_glue.mojo;
+# its launch path is compiled only under -D MOJOLEARN_STEP_GLUE_TRIAL=1).
+from core.step_glue import (
+    STEP_GLUE_TRIAL,
+    step_glue_arm_from_env,
+    step_glue_blocks,
+    step_glue_rows_of,
+)
 
 from core.identity_trace import IdentityTrace
 from gemm.checks.gemm_backward import (
@@ -37,6 +45,7 @@ from checks.numerics import (
 )
 from transformer.impl.llama.fused_attention import (
     ATTN_ARM_TRIAL,
+    ATTN_SHIPPED_BWD_ESTASH,
     FUSED_RAN,
     device_first_nonfinite,
     fused_attention_arm_estash_runs,
@@ -2570,6 +2579,20 @@ def bwd_rms_norm[which: Int = 0](
     )
     step_count_sync()
     ctx.synchronize()
+    # DEVIATION 2645 (docs/lanes/BRIEF_step_glue_2026-09-11.md section 4.1):
+    # a trial build under an arm carrying `rows16`, `rows8` or `rows4` launches
+    # the ONE row kernel here (the `c` fold) at that many threads per block;
+    # the two cell kernels keep `BWD_TPB`. One token row per thread, the fold
+    # never leaves the thread, so every geometry covering [0, m) computes the
+    # same bits. Without -D MOJOLEARN_STEP_GLUE_TRIAL=1 the two values below
+    # are the shipped `_grid(m)` and `BWD_TPB`.
+    var dot_blocks = _grid(m)
+    var dot_threads = BWD_TPB
+    comptime if STEP_GLUE_TRIAL:
+        var glue_rows = step_glue_rows_of(step_glue_arm_from_env())
+        if glue_rows > 0:
+            dot_blocks = step_glue_blocks(m, glue_rows)
+            dot_threads = glue_rows
     step_count_launch()
     ctx.enqueue_function[bwd_norm_dot_kernel](
         dot_out.unsafe_ptr(),
@@ -2581,8 +2604,8 @@ def bwd_rms_norm[which: Int = 0](
         Int32(m),
         Int32(dm),
         eps,
-        grid_dim=(_grid(m), 1, 1),
-        block_dim=(BWD_TPB, 1, 1),
+        grid_dim=(dot_blocks, 1, 1),
+        block_dim=(dot_threads, 1, 1),
     )
     step_count_sync()
     ctx.synchronize()
@@ -2996,12 +3019,14 @@ def llama_decoder_layer_backward_device(
     if choice != ATTN_PATH_EAGER:
         var status = -1
         var estash_done = False
-        comptime if ATTN_ARM_TRIAL:
+        comptime if ATTN_ARM_TRIAL or ATTN_SHIPPED_BWD_ESTASH:
             # DEVIATION 2652 (brief section 20.3): under an `_estash` arm the
             # backward reads the exp stash this call's forward kept in
             # `fwd.aexp` (valid when `fwd.attn_estash_cells` is this call's
             # cell count; otherwise the launcher runs the shipped backward).
-            # Trial builds only; the shipped call sits below unchanged.
+            # A trial build, or a shipped build whose column default carries
+            # the estash bits (DEVIATION 2657); every other build takes the
+            # call below unchanged.
             var arm = fused_attention_arm_from_env()
             if fused_attention_arm_estash_runs(arm):
                 var kept_cells = fwd.attn_estash_cells

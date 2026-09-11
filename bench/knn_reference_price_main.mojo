@@ -32,8 +32,10 @@ from neighbors.estimator import DEFAULT_QUERY_TILE, knn_search, plan_query_tile
 from neighbors.impl.detail.knn_brute_force import (
     EXPERIMENTAL_KNN_TRANSPOSE_IDENTICAL,
     EXPERIMENTAL_SMALLK_IDENTICAL,
+    KNN_FUSED_SELECT,
     KNN_INDEX_TILE_IDENTICAL,
     KNN_METHOD_AUTO,
+    KNN_RADIX_SCRATCH_SHRINK,
     KNN_PHASE_TIMERS,
     KNN_REGISTER_TILE_IDENTICAL,
     KNN_PREFLIGHT_METADATA,
@@ -43,6 +45,8 @@ from neighbors.impl.detail.knn_brute_force import (
     compute_norms_for_metric,
     identical_index_tile,
     resolve_metric,
+    tiled_distance_tile_cells,
+    tiled_radix_scratch_len,
 )
 
 
@@ -88,6 +92,9 @@ def main() raises:
         "metadata_forced", Int(KNN_PREFLIGHT_METADATA),
         "metadata_default_capable", Int(KNN_PREFLIGHT_METADATA_DEFAULT),
         "index_tile", KNN_INDEX_TILE_IDENTICAL,
+        "default_query_tile", DEFAULT_QUERY_TILE,
+        "fused_select", Int(KNN_FUSED_SELECT),
+        "radix_scratch_shrink", Int(KNN_RADIX_SCRATCH_SHRINK),
     )
     with DeviceContext() as ctx:
         var index = ctx.enqueue_create_host_buffer[DType.float32](n_index * d)
@@ -138,15 +145,14 @@ def main() raises:
 
         # ---- device region: everything but the transfers and the host sort --
         var query_tile = plan_query_tile(n_index, n_queries, DEFAULT_QUERY_TILE)
-        var buf_len = n_index // 8
-        if buf_len < k:
-            buf_len = k
+        # DEVIATIONS 2631 and 2667: the request region's sizing (estimator.mojo).
+        var buf_len = tiled_radix_scratch_len(n_index, k)
         var d_index = ctx.enqueue_create_buffer[DType.float32](n_index * d)
         var d_queries = ctx.enqueue_create_buffer[DType.float32](n_queries * d)
         var d_index_norm = ctx.enqueue_create_buffer[DType.float32](n_index)
         var d_query_norm = ctx.enqueue_create_buffer[DType.float32](n_queries)
         var d_dist_tile = ctx.enqueue_create_buffer[DType.float32](
-            query_tile * identical_index_tile(n_index)
+            tiled_distance_tile_cells(query_tile, n_index, d, k, resolve_metric(METRIC_FROM_IS_SQRT, True))
         )
         var d_buf_val = ctx.enqueue_create_buffer[DType.float32](query_tile * 2 * buf_len)
         var d_buf_idx = ctx.enqueue_create_buffer[DType.uint32](query_tile * 2 * buf_len)

@@ -1,0 +1,5 @@
+pod='gdkumy79olopt6'
+target='-p 18430 root@216.243.220.224'
+armed_utc='2026-09-10T08:24:28Z'
+deadline_epoch=1789032268
+minutes=60

@@ -82,8 +82,84 @@ On the Apple M4 (orchestrator gate, 2026-09-11) the default schedule passes
 fails seven gates because Metal refuses the width-1024 pipeline ("Threadgroup
 memory size (36872) exceeds the maximum threadgroup memory allowed (32768)").
 FUSED_TREE is therefore an NVIDIA-only candidate; a flip must route it through
-the kernel-matrix row for NVIDIA alone, not the global define. The R-ary
-thread-carrying tree (lane commit 48f92b19) was never built and is not merged.
+the kernel-matrix row for NVIDIA alone, not the global define. DEVIATION 2666
+below is that flip.
+
+SVM_SCHED_RARY_TREE (4, 2628's second shape) IS BUILT NOW AND IT LOSES.
+`pinned_block_argmin_argmax_tid_rary` and `pinned_block_argext_tid_rary` fold
+the same selections on a threadgroup tree of arity R
+(`svm_block_solve_tree_arity_for`, default 32), two levels at width 1024, so
+about 10 barriers per inner iteration where FUSED_TREE has 26 and with no warp
+shuffles. On the H200 (taxi, five fits each, median): arity 32 1,945.6 ms,
+arity 32 without its trailing and second update barriers 1,937.3 ms, arity 16
+1,324.4 ms, against FUSED_TREE 771.1 ms and TREE 866.9 ms. It trades barriers
+for serial work: at arity 32 one thread in 32 folds 31 threadgroup slots in a
+runtime loop while the other 31 idle, and two such levels cost more than the
+binary tree's twelve cheap ones. Dropping the two barriers is worth 0.4
+percent of that arm, which says again that barriers are not where this kernel
+spends. The shape is kept behind its define and is not a candidate.
+
+48f92b19 SHIPPED IT UNREACHABLE: it added the constant and
+`svm_block_solve_tree_arity_for` but no branch for
+`-D MOJOLEARN_SVM_SCHED_RARY_TREE` in `svm_block_solve_schedule_for`, so the
+define selected nothing and the first three "R-ary" builds were the default
+schedule. The row now has the branch, and each arm above is a different
+`_mojolearn_svm.so` (sha256 596dafdcc12acbb4, 75e7c15e05b52863,
+a73de7fbbaf6ce3a, 3ded2bfae86f14ab, 5c6ea682b62986f6), so each schedule was
+really reached. All five give the same fits: n=400/600/2000
+457e29b82bca9df9, 733a383c5699f427, 2b66bc991a9c9ed0, taxi b0f91a7958162936,
+Istella-S 5c19df95159208ef.
+
+**2666** (2026-09-11, lane/svm-finish, MEASURED AND FLIPPED)
+`checks/kernel_matrix.mojo::svm_block_solve_schedule_for`: the column DEVIATION
+2623 sends to the halving trees, NVIDIA above width 512, takes FUSED_TREE
+instead. Nothing else moves: every other column keeps 2491's warp folds, and
+`-D MOJOLEARN_SVM_TREE_FOLDS` still takes the pre-2491 trees everywhere for an
+A/B. It stays a row rather than a global default because Metal refuses the
+fused kernel's width-1024 pipeline (threadgroup memory 36872 > 32768).
+
+**2665** (same lane, MEASURED AND FLIPPED) the fixed cost outside the solver,
+which was about a third of an Istella-S fit. Three changes, no bits moved:
+`bindings/_mojolearn_svm.mojo` hands `svc_fit_host_borrowed` the caller's NumPy
+address instead of copying X into a host `List` (8.8 MB per Istella-S fit) and
+then into a pinned buffer element by element; `svm_parameter.mojo::check_finite_ptr`
+walks the borrowed cells once on the host pool, sixteen at a time by exponent
+bits, and reports the same first flat index and the same message as
+`check_finite_list`; and `KernelCache.__init__` runs its three scratch fills
+only for the launch-invariance gate's padded or poisoned arms, which skips a
+41 MB fill of the kernel tile at 10,000 rows and a 1,024 working set. The gate
+is what licenses the last one: `check_device_is_launch_invariant` fills with
+-7.25e20 and 3.0e-39 under paddings 37 and 1029 and requires the base arm,
+which now runs unfilled, to match byte for byte.
+
+Measured on an NVIDIA H200 (RunPod pod 4oih8bhjepzlmm, driver 570.211.01,
+below Mojo's CUDA floor so `MODULAR_NVPTX_COMPILER_PATH` points at the pod's
+ptxas 12.9.86, Modular's documented older-driver path). The race, 1 warm-up
+plus 5 interleaved rounds against cuML 26.8.0 in one conductor, before being
+origin/main 2c64a778 built on the same pod:
+
+| dataset | cuML ms | before ms | after ms | after/before | ours/cuML after | accuracy |
+|---|---|---|---|---|---|---|
+| taxi 10,000 x 11 | 418.4 | 865.0 | 768.7 | 0.8886 | 1.84x | 0.7675 both |
+| Istella-S 10,000 x 220 | 20.29 | 72.2 | 61.3 | 0.8498 | 3.02x | 0.9222 both |
+
+Geometric mean 0.869, quality not worse on either dataset and the same number
+of support vectors (5,527 and 2,400), so both flip (ENGINEERING_RULES.md
+section 9). Which change buys what, five fits per cell on the same pod: taxi
+866.3 before, 865.7 with 2665 alone, 772.2 with both; Istella-S 67.2, 60.9,
+57.8. So 2666 is the taxi win and 2665 is most of the Istella-S win, which is
+what the shapes predict, the taxi block being 11 columns wide and Istella-S
+220. `svm/svc_main.mojo` passes 44/44 under IDENTICAL on the H200 with both,
+launch invariance and the six SVR fixtures included, and the fit hashes above
+are unchanged. Evidence `bench/results/svm_finish_2026-09-11/` and
+`~/mojolearn-evidence/svm-finish-2026-09-11/`.
+
+RUN OWED, both for 2665 (2666 is inert off NVIDIA, but these gates cover it):
+on the Apple M4 and on an AMD MI300X, `sh bindings/build_svm.sh` then
+`tools/with_identical_mode.sh pixi run mojo run -I . svm/svc_main.mojo`
+(expect 44/44) and
+`MOJOLEARN_NUMERIC_MODE=identical python3 bench/results/svm_speed_2026-09-11/svm_probe.py hash . /tmp`
+(expect 457e29b82bca9df9, 733a383c5699f427, 2b66bc991a9c9ed0).
 
 `svr_device_matches_oracle` had failed under IDENTICAL since the SVR path
 landed ("ws sequence differs at outer iteration 0", every SVR fixture; FAST

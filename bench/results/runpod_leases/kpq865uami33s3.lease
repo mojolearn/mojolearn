@@ -1,0 +1,5 @@
+pod='kpq865uami33s3'
+target='-p 12990 root@103.207.149.102'
+armed_utc='2026-09-10T10:35:04Z'
+deadline_epoch=1789040104
+minutes=60

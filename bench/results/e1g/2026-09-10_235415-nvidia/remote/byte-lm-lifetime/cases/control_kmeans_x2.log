@@ -1,0 +1,7 @@
+[control_kmeans_x2]   0.103s imported {"mojolearn_file": "/root/mojolearn/python/mojolearn/__init__.py", "version": "0.8.0"}
+[control_kmeans_x2]   0.113s native_call_begin {"binding": "_mojolearn", "entry": "kmeans_fit", "features": 4, "label": "fit1", "rows": 256}
+[control_kmeans_x2]   1.887s native_call_end {"inertia": 686.8068237304688, "label": "fit1", "n_iter": 8}
+[control_kmeans_x2]   1.888s hashed {"label": "fit1"}
+[control_kmeans_x2]   1.889s native_call_begin {"binding": "_mojolearn", "entry": "kmeans_fit", "features": 4, "label": "fit2", "rows": 256}
+[control_kmeans_x2]   1.892s native_call_end {"inertia": 686.8068237304688, "label": "fit2", "n_iter": 8}
+[control_kmeans_x2]   1.893s hashed {"label": "fit2"}
