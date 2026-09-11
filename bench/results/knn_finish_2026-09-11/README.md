@@ -54,6 +54,15 @@ the shape of cuVS's `fusedL2Knn`.
 | fu2048 | 2048 | 34.691 | 1.475 | 40.386 | 1.555 |
 | fu4096 | 4000 | 33.261 | 1.414 | 38.339 | 1.476 |
 
+Two cheap variants were measured against the same base in two further
+interleaved runs, and neither changes the verdict (k10 / k15 request ms):
+sixteen columns per thread per batch instead of eight
+(`-D MOJOLEARN_KNN_FUSED_UNROLL_16=1`) gives 34.66 / 40.69, and dropping the
+vote guard for the plain predicated chain
+(`-D MOJOLEARN_KNN_FUSED_PLAIN_CHAIN=1`) gives 35.65 / 39.95, against the
+tile winner's 21.38 / 23.52 in the same runs. Their dumps are the same two
+hashes, so the arms are exact; the cost is structural and not a tuning knob.
+
 The phase timers say where it goes: at tile 2048 the fused launch class is
 33.34 ms (k10) and 38.98 ms (k15) against the unfused 14.43 ms of distance
 plus 5.99 / 8.13 ms of selection, and the selection class falls to 0.02 ms
@@ -149,6 +158,19 @@ and cuML alternating.
 | dataset | arm | before ms | after ms | after / before | cuML ms | trust before / after | cuML trust |
 |---|---|---:|---:|---:|---:|---|---:|
 | taxi | ours | 2548.4 | 2556.3 | 1.003 | 4784.6 | 0.9062 / 0.9323 | 0.9683 |
+| Istella-S | ours | 6727.0 | 6730.0 | 1.000 | 58149.2 | 0.9737 / 0.9636 | 0.5128 |
+
+Retention moves the same way: taxi 0.3736 to 0.3627, Istella-S 0.4832 to
+0.4264. So DEVIATION 2668 is NEUTRAL in time and SPLIT in quality, up on one
+dataset's headline metric and down on the other's, which under
+ENGINEERING_RULES section 9 (quality gated per dataset) is NO FLIP. The row
+`umap_device_optimizer_live_row_for` is OFF and the shipped UMAP bits do not
+move; `-D MOJOLEARN_UMAP_IDENTICAL_LIVE_ROW=1` takes the fold.
+
+Istella-S is also the shape where cuML's UMAP collapses (trustworthiness
+0.5117 to 0.5128, retention 0.0039 to 0.0042, 58.1 to 58.4 s against our
+6.7 s), so the taxi quality gap that opened this investigation is a
+taxi-shaped finding rather than a general one.
 
 Our round times hold one digest; cuML's embedding differs every round
 (`digest_stable=False`), which is why no UMAP time ratio against cuML is
@@ -173,6 +195,7 @@ Gate on the H200: the 2668 build's 20,000-row fingerprint is
 | 2631 query tile | `knn_query_tile_for` | 4,096 on NVIDIA IDENTICAL, 0 (the historical rule) elsewhere | `-D MOJOLEARN_KNN_QUERY_TILE_ARM_512` / `_1024` / `_2048` / `_4096` |
 | 2631 radix scratch | `knn_radix_scratch_shrink_for` | ON for NVIDIA IDENTICAL | `-D MOJOLEARN_KNN_IDENTICAL_FULL_RADIX_SCRATCH=1` |
 | 2667 fused select | `knn_fused_distance_select_for` | OFF on every column | `-D MOJOLEARN_EXPERIMENTAL_KNN_FUSED_SELECT=1` |
+| 2668 UMAP live row | `umap_device_optimizer_live_row_for` | OFF on every column, so no UMAP bit moves | `-D MOJOLEARN_UMAP_IDENTICAL_LIVE_ROW=1` |
 
 The two 2631 rows are one decision measured together and flipped together;
 no column outside NVIDIA changes a default, and no column changes a bit.
@@ -236,6 +259,14 @@ bench/knn_reference_price_main.mojo` on the flipped tree gives request
 23.517, and its full dumps are still `c8af7c3d3137e6ea` and
 `bfb848a13019378f`. `neighbors/checks/query_batch_check.mojo` built the same
 way prints `QUERY BATCH PASS enabled True default_tile 4096 cases 3`.
+
+The same discipline for DEVIATION 2668, whose row is OFF: this lane's
+optimizer source built with no define at all
+(`bench/umap_phase_price_main.mojo`, 20,000 rows) returns
+`embedding_fnv1a64 15879769428157041013` and sha `87f68de9a3471687`, which
+are the pre-lane values, so the shipped UMAP path moves no bit. The opt-in
+fold's `4040033352384472344` / `2050168fc2799235` is reached only with
+`-D MOJOLEARN_UMAP_IDENTICAL_LIVE_ROW=1`.
 
 `neighbors/checks/query_batch_check.mojo` (the request-level output
 invariance across query batching, with repeated index rows so composite-key

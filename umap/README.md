@@ -219,6 +219,19 @@ fold, which is a re-baseline of the UMAP cards. Kernel-matrix row
 Measured on taxi: trustworthiness 0.9062 to 0.9323, retention 0.3736 to
 0.3627. The trial arm that also applies the mirror move live
 (`-D MOJOLEARN_UMAP_LIVE_BOTH_ARM=1`) is worse on both (0.8907, 0.2826).
+
+IT IS OFF BY DEFAULT, because the two datasets disagree. On Istella-S
+(100,000 rows x 220 features, same shape and epochs) the shipped snapshot
+fold scores 0.9737 trustworthiness and 0.4832 retention and DEVIATION 2668
+scores 0.9636 and 0.4264, so the change that helps taxi hurts the wide
+numeric table; the time is flat on both (1.003 on taxi, 1.000 on Istella-S).
+ENGINEERING_RULES section 9 gates quality per dataset rather than on the
+average, so the row is opt-in behind
+`-D MOJOLEARN_UMAP_IDENTICAL_LIVE_ROW=1` and the shipped default UMAP bits
+do not move. Istella-S is also where cuML falls apart on this shape
+(trustworthiness 0.5117 and retention 0.0039 against our 0.9737, at
+58,400 ms against our 6,730), so the cuML quality gap is a taxi-shaped
+finding, not a general one.
 What remains between 0.9323 and the host loop's 0.9796 is the order ACROSS
 vertices: the host loop is a Gauss-Seidel sweep in which a vertex sees every
 earlier vertex's move of the same epoch, and that order has no parallel form

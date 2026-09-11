@@ -79,12 +79,20 @@ comptime UMAP_IDENTICAL_GRAD_CLIP = Float32(4.0)
 # tail move is still summed and applied at the end. The fold is still a pure
 # function of the epoch snapshot with one writer per vertex, so the bits stay
 # independent of launch width and vendor; they differ from the snapshot fold
-# (a re-baseline). Measured on taxi 100k (H200, 2026-09-11): the snapshot
-# fold summed about twenty undamped moves from one point and scored sampled
-# trustworthiness 0.906 where the serial host loop on the same graph and init
-# scored 0.980. `-D MOJOLEARN_UMAP_IDENTICAL_SNAPSHOT_FOLD=1` restores the
-# snapshot fold; `-D MOJOLEARN_UMAP_LIVE_BOTH_ARM=1` (trial only) applies
-# both attractive moves live.
+# (a re-baseline, which is why the row decides it). Measured on taxi 100k
+# (H200, 2026-09-11): the snapshot fold summed about twenty undamped moves
+# from one point and scored sampled trustworthiness 0.906 where the serial
+# host loop on the same graph and init scored 0.980; this fold scores 0.932.
+#
+# THE ROW IS OFF BY DEFAULT. On the second dataset the sign reverses:
+# Istella-S 100k goes 0.9737 to 0.9636 trustworthiness and 0.4832 to 0.4264
+# retention, with the time flat on both (1.003 taxi, 1.000 Istella-S).
+# ENGINEERING_RULES section 9 gates quality per dataset rather than on the
+# average, so this cannot be a default; it is opt-in through
+# `-D MOJOLEARN_UMAP_IDENTICAL_LIVE_ROW=1`.
+# `-D MOJOLEARN_UMAP_IDENTICAL_SNAPSHOT_FOLD=1` forces the snapshot fold even
+# then, and `-D MOJOLEARN_UMAP_LIVE_BOTH_ARM=1` (trial only) applies both
+# attractive moves live (worse on taxi at 0.8907).
 comptime UMAP_LIVE_ROW = umap_device_optimizer_live_row_for[
     TARGET_COLUMN, GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 ]()
