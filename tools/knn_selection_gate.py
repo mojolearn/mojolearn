@@ -68,6 +68,39 @@ Both are honored only by a binding built with
 shipped build). The names are overridable with `--arm-env` /
 `--sabotage-env` if the follow-on lane chooses differently.
 
+TIMING-ONLY ARMS (`--timing-only-arms`, DEVIATION 2516)
+--------------------------------------------------------
+`skiprank`, `skipscan` and `scanonly1` are selector arms whose OUTPUT IS
+INVALID BY CONSTRUCTION: they run one phase of the shipped selector kernel
+(the scan, or the rank phase) and skip the other, so the two phases can be
+priced separately on the box instead of modeled. They are EXCLUDED from
+the correctness, oracle and reach sections. In the timing block each one
+is paired with the first `--arms` arm exactly like a candidate (one warmup
+each, `--pairs` pairs in order (A, B) then (B, A), every sample kept) and
+reported under a separate `timing_only` table labeled "output invalid;
+phase cost only". The only assertion on such an arm is that its output
+DIFFERS from the clean reference (an arm whose output equals the reference
+did not run its own body); the baseline samples in those pairs must still
+equal the reference.
+
+PHASE TIMERS (`--phase-timers`)
+-------------------------------
+A binding built with `-D MOJOLEARN_KNN_PHASE_TIMERS=1` (the profile phase's
+switch: a BUILD define, not an environment variable; the shell script adds
+it to the binding build under MOJOLEARN_KNN_SELECTION_PHASE_TIMERS=1)
+synchronizes after every launch class and prints one
+`KNN_PHASE_TIMERS distance_ms ... select_ms ... merge_ms ...` line per
+request to file descriptor 1 from inside the native call. The harness
+redirects fd 1 into a scratch file around every request and parses that
+line, so every timed sample carries the request's distance / select /
+merge milliseconds and every arm's select_ms is READ, not inferred from
+request deltas. The synchronizations serialize the launch queue, so on
+such a build the request medians are slower than an untimed request and
+are NOT comparable to the qualified numbers; the JSON says so
+(`phase_timers.serialized`). `auto` (default) records the lines if the
+build prints them, `require` fails when it does not, `off` never
+redirects.
+
 FIXTURES (all from `--seed`, all recorded by sha256 in the JSON)
 ----------------------------------------------------------------
   large          400,000 x 32 index, 4,000 x 32 queries, HASHED non-uniform
@@ -103,6 +136,7 @@ Only existing public APIs are used: `NearestNeighbors(n_neighbors=k)`,
 read through their `__array_interface__`.
 """
 import argparse
+import ctypes
 import hashlib
 import importlib.util
 import json
@@ -112,6 +146,7 @@ import signal
 import statistics
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 
@@ -339,12 +374,74 @@ def oracle_topk(index, queries, k, rows):
 # ------------------------------------------------------------ the request
 
 
+PHASE_LINE = "KNN_PHASE_TIMERS"
+PHASE_KEYS = ("distance_ms", "select_ms", "merge_ms")
+
+
+class PhaseCapture:
+    """Redirect file descriptor 1 into a scratch file around one native
+    call and parse the `KNN_PHASE_TIMERS distance_ms ...` line the binding
+    prints when built with -D MOJOLEARN_KNN_PHASE_TIMERS=1. The redirect is
+    at the descriptor level because the print happens inside the extension,
+    not through `sys.stdout`; C stdio is flushed before the descriptor is
+    restored in case the runtime buffers. Disabled, it does nothing."""
+
+    def __init__(self, enabled):
+        self.enabled = enabled
+        self.scratch = tempfile.TemporaryFile(mode="w+b") if enabled else None
+        self.saved = None
+        try:
+            self.libc = ctypes.CDLL(None) if enabled else None
+        except OSError:
+            self.libc = None
+
+    def begin(self):
+        if not self.enabled:
+            return
+        sys.stdout.flush()
+        sys.stderr.flush()
+        self.scratch.seek(0)
+        self.scratch.truncate(0)
+        self.saved = os.dup(1)
+        os.dup2(self.scratch.fileno(), 1)
+
+    def end(self):
+        """Restore fd 1; return the parsed phase dict (None when no line)."""
+        if not self.enabled:
+            return None
+        if self.libc is not None:
+            try:
+                self.libc.fflush(None)
+            except Exception:  # noqa: BLE001
+                pass
+        os.dup2(self.saved, 1)
+        os.close(self.saved)
+        self.saved = None
+        self.scratch.seek(0)
+        text = self.scratch.read().decode("utf-8", "replace")
+        phases = None
+        for line in text.splitlines():
+            words = line.split()
+            if words[:2] == [PHASE_LINE, "distance_ms"]:
+                rec = {}
+                for i in range(1, len(words) - 1, 2):
+                    try:
+                        rec[words[i]] = float(words[i + 1])
+                    except ValueError:
+                        rec[words[i]] = words[i + 1]
+                phases = rec  # the last line of the request wins
+        return phases
+
+
 class Runner:
-    def __init__(self, arm_env, sabotage_env, log):
+    def __init__(self, arm_env, sabotage_env, log, capture=None):
         self.arm_env = arm_env
         self.sabotage_env = sabotage_env
         self.log = log
         self.calls = 0
+        self.capture = capture or PhaseCapture(False)
+        self.last_phases = None
+        self.phase_lines_seen = 0
 
     def set_arm(self, arm, sabotage):
         if arm is None:
@@ -357,11 +454,19 @@ class Runner:
             os.environ.pop(self.sabotage_env, None)
 
     def search(self, model, queries, arm, sabotage=False):
-        """One public request; returns (elapsed_ns, dist float32 [n, k], idx int64 [n, k])."""
+        """One public request; returns (elapsed_ns, dist float32 [n, k], idx int64 [n, k]).
+        The request's phase-timer line, if the build prints one, is left in
+        `self.last_phases` (the redirect happens outside the timed region)."""
         self.set_arm(arm, sabotage)
-        t0 = time.perf_counter_ns()
-        dist, idx = model.kneighbors(queries)
-        t1 = time.perf_counter_ns()
+        self.capture.begin()
+        try:
+            t0 = time.perf_counter_ns()
+            dist, idx = model.kneighbors(queries)
+            t1 = time.perf_counter_ns()
+        finally:
+            self.last_phases = self.capture.end()
+        if self.last_phases is not None:
+            self.phase_lines_seen += 1
         self.calls += 1
         d = np.array(np.asarray(dist), dtype=np.float32, copy=True)
         i = np.array(np.asarray(idx), dtype=np.int64, copy=True)
@@ -495,6 +600,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--out", required=True, help="output directory (JSON, summary)")
     ap.add_argument("--arms", default="baseline,headbound", help="explicit arms, comma separated; the first two are the timed pair")
+    ap.add_argument("--timing-only-arms", default="", help="comma separated arms whose OUTPUT IS INVALID by construction (skiprank, skipscan, scanonly1); excluded from correctness, oracle and reach; each is timed against the first --arms arm and reported under `timing_only`")
+    ap.add_argument("--phase-timers", choices=("auto", "require", "off"), default="auto", help="read the binding's KNN_PHASE_TIMERS line per request (needs a build with -D MOJOLEARN_KNN_PHASE_TIMERS=1): auto records it when present, require fails without it, off never redirects fd 1")
     ap.add_argument("--ks", default="10,15")
     ap.add_argument("--pairs", type=int, default=3, help="timed pairs per order (3 = the protocol's initial count; 5 where affordable)")
     ap.add_argument("--deadline", type=int, default=300, help="hard process deadline in seconds")
@@ -526,11 +633,15 @@ def main():
         "quick": bool(args.quick), "selftest": bool(args.selftest),
         "seed": args.seed, "arm_env": args.arm_env, "sabotage_env": args.sabotage_env,
         "arms": args.arms.split(","), "ks": [int(k) for k in args.ks.split(",")],
+        "timing_only_arms": [a for a in args.timing_only_arms.split(",") if a],
+        "timing_only_note": "output invalid; phase cost only. These arms skip one phase of the selector kernel on purpose; never a correctness, oracle, reach or promotion input.",
+        "phase_timers": {"mode": args.phase_timers, "available": None, "serialized": None,
+                         "note": "from the binding's KNN_PHASE_TIMERS line (build define MOJOLEARN_KNN_PHASE_TIMERS); when available the request medians are serialized by per-class synchronizations and are not comparable to untimed requests; the split is the measurement"},
         "pairs_per_order": args.pairs, "deadline_s": args.deadline,
         "python": sys.version, "platform": platform.platform(), "numpy": np.__version__,
         "started_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "environment": {k: v for k, v in os.environ.items() if k.startswith("MOJOLEARN_")},
-        "fixtures": {}, "correctness": [], "reach": [], "timing": [], "failures": [], "log": log_lines,
+        "fixtures": {}, "correctness": [], "reach": [], "timing": [], "timing_only": [], "failures": [], "log": log_lines,
     }
     try:
         report["git_commit"] = subprocess.run(["git", "-C", REPO, "rev-parse", "HEAD"], capture_output=True, text=True, timeout=10).stdout.strip() or "unknown"
@@ -548,12 +659,30 @@ def main():
             json.dump(report, f, indent=1, default=str)
         with open(summary_path, "w") as f:
             f.write(f"status: {status}\n")
+            if report["phase_timers"].get("available"):
+                f.write("phase timers: READ from the binding (build with MOJOLEARN_KNN_PHASE_TIMERS); request medians below are SERIALIZED by the per-class synchronizations and are not comparable to untimed requests\n")
             for row in report["timing"]:
                 f.write(f"timing {row['fixture']} k{row['k']}: " + ", ".join(
                     f"{arm} median {row['median_ms'][arm]:.6f} ms (min {row['min_ms'][arm]:.6f})" for arm in row["median_ms"]) + "\n")
+                if row.get("phase_ms_median"):
+                    f.write("  phases (median ms): " + "; ".join(
+                        f"{arm} " + " ".join(f"{key} {val:.3f}" for key, val in ph.items())
+                        for arm, ph in row["phase_ms_median"].items()) + "\n")
                 if row.get("cached_opponent_ratio"):
                     f.write("  cached-reference ratios (NOT a paired opponent): " + ", ".join(
                         f"{arm} {r:.3f}x" for arm, r in row["cached_opponent_ratio"].items()) + "\n")
+            if report["timing_only"]:
+                f.write("timing_only: OUTPUT INVALID; PHASE COST ONLY (never a correctness, reach or promotion input)\n")
+            for row in report["timing_only"]:
+                f.write(f"timing_only {row['fixture']} k{row['k']} {row['arm_b']} vs {row['arm_a']} (output invalid; phase cost only): " + ", ".join(
+                    f"{arm} median {row['median_ms'][arm]:.6f} ms (min {row['min_ms'][arm]:.6f})" for arm in row["median_ms"])
+                    + f"; {row['arm_b']} output differs from the reference in {row['differing_cells_from_reference']} cells\n")
+                if row.get("phase_ms_median"):
+                    f.write("  phases (median ms): " + "; ".join(
+                        f"{arm} " + " ".join(f"{key} {val:.3f}" for key, val in ph.items())
+                        for arm, ph in row["phase_ms_median"].items()) + "\n")
+                if row.get("select_ms_ratio_b_over_a") is not None:
+                    f.write(f"  select_ms {row['arm_b']}/{row['arm_a']} = {row['select_ms_ratio_b_over_a']:.4f} (paired median)\n")
             for failure in report["failures"]:
                 f.write(f"FAIL {failure}\n")
 
@@ -603,6 +732,10 @@ def run_gate(args, report, log, dump):
     arms = [a for a in args.arms.split(",") if a]
     if len(arms) < 1:
         raise GateFailure("--arms needs at least one arm name")
+    timing_only = [a for a in args.timing_only_arms.split(",") if a]
+    overlap = sorted(set(arms) & set(timing_only))
+    if overlap:
+        raise GateFailure(f"--timing-only-arms {overlap} also in --arms; a timing-only arm never enters a correctness section")
 
     # ---- the library -------------------------------------------------
     if args.selftest:
@@ -638,7 +771,7 @@ def run_gate(args, report, log, dump):
         raise GateFailure(f"numeric mode is {describe.get('numeric_mode_used')!r}; this gate runs IDENTICAL only")
     log(f"library: {describe}")
 
-    runner = Runner(args.arm_env, args.sabotage_env, log)
+    runner = Runner(args.arm_env, args.sabotage_env, log, PhaseCapture(args.phase_timers != "off"))
 
     # ---- fixtures ----------------------------------------------------
     wanted = args.fixtures.split(",")
@@ -671,7 +804,16 @@ def run_gate(args, report, log, dump):
                 label = arm or "default"
                 ns, d, i = runner.search(model, fx["queries"], arm)
                 outputs[label] = (d, i)
-                log(f"{fx['name']} k{k} arm {label}: {ns / 1e6:.3f} ms (untimed correctness call)")
+                log(f"{fx['name']} k{k} arm {label}: {ns / 1e6:.3f} ms (untimed correctness call)"
+                    + (f"; phases {runner.last_phases}" if runner.last_phases else ""))
+                if report["phase_timers"]["available"] is None:
+                    # Decided on the first request of the process.
+                    available = runner.last_phases is not None
+                    report["phase_timers"]["available"] = available
+                    report["phase_timers"]["serialized"] = available
+                    if args.phase_timers == "require" and not available:
+                        raise GateFailure("--phase-timers require: the binding printed no KNN_PHASE_TIMERS line (build it with -D MOJOLEARN_KNN_PHASE_TIMERS=1)")
+                    log(f"phase timers {'READ from the binding' if available else 'not printed by this build'} (mode {args.phase_timers})")
             ref = outputs[arms[0]]
             references[(fx["name"], k)] = ref
             entry = {"fixture": fx["name"], "k": k, "arms": {}, "row_order": [], "planted": [], "oracle": None}
@@ -726,59 +868,124 @@ def run_gate(args, report, log, dump):
     # ---- timing --------------------------------------------------------
     if args.skip_timing:
         return
-    if len(arms) < 2:
-        log("timing needs two arms; skipped")
-        return
     cached = {}
     for item in [s for s in args.cached_opponent.split(",") if s]:
         key, val = item.split("=")
         cached[int(key.lstrip("k"))] = float(val)
-    a, b = arms[0], arms[1]
-    for fx in fixtures:
-        if fx["name"] not in args.time_fixtures.split(",") or not fx["timed"]:
-            continue
-        for k in ks:
-            model = model_factory(k).fit(fx["index"])
-            ref = references[(fx["name"], k)]
-            samples = {a: [], b: []}
-            orders = []
-            # warmup, one per arm
-            for arm in (a, b):
+    timed_fixtures = [fx for fx in fixtures if fx["name"] in args.time_fixtures.split(",") and fx["timed"]]
+    if len(arms) < 2:
+        log("timing needs two arms; the arm pair is skipped")
+    else:
+        a, b = arms[0], arms[1]
+        for fx in timed_fixtures:
+            for k in ks:
+                model = model_factory(k).fit(fx["index"])
+                row = time_pair(args, runner, log, model, fx, k, references[(fx["name"], k)], a, b, invalid_b=False)
+                if fx["name"] == "dyadic" and k in cached and not args.quick:
+                    row["cached_opponent_ms"] = cached[k]
+                    row["cached_opponent_ratio"] = {arm: row["median_ms"][arm] / cached[k] for arm in (a, b)}
+                    row["cached_opponent_note"] = "cached cuML row from bench/OPPONENT_REFERENCE.md (H100 80GB HBM3, driver 580.126.09, dyadic-v1); admissible only if this box matches that tuple; not a paired opponent measurement"
+                    if report["phase_timers"].get("available"):
+                        row["cached_opponent_note"] += "; this build's requests are serialized by the phase timers, so the ratio is inflated and not admissible"
+                report["timing"].append(row)
+                del model
+                dump("running")
+
+    # ---- timing-only arms: OUTPUT INVALID; phase cost only ---------------
+    # Each timing-only arm is paired with arms[0] under the same protocol.
+    # Its output is never checked for correctness; the only assertion is
+    # that it DIFFERS from the reference (the arm's own body ran), while the
+    # baseline samples in the same pairs must still equal the reference.
+    for t_arm in timing_only:
+        for fx in timed_fixtures:
+            for k in ks:
+                model = model_factory(k).fit(fx["index"])
+                row = time_pair(args, runner, log, model, fx, k, references[(fx["name"], k)], arms[0], t_arm, invalid_b=True)
+                row["note"] = "output invalid; phase cost only"
+                report["timing_only"].append(row)
+                del model
+                dump("running")
+
+
+def phase_medians(samples, arm):
+    """Median of every phase key over an arm's samples; None when no sample
+    carried a phase line."""
+    recs = [ph for _, _, ph in samples[arm] if ph]
+    if not recs:
+        return None
+    return {key: median([ph[key] for ph in recs if isinstance(ph.get(key), float)]) for key in PHASE_KEYS if any(isinstance(ph.get(key), float) for ph in recs)}
+
+
+def time_pair(args, runner, log, model, fx, k, ref, a, b, invalid_b):
+    """One warmup per arm, `--pairs` pairs in order (a, b) then (b, a), every
+    sample kept with its phase line when the build prints one. `invalid_b`
+    marks a timing-only arm: its output must DIFFER from the reference
+    instead of equaling it."""
+    samples = {a: [], b: []}
+    orders = []
+    differing = None
+
+    def check(arm, out, where):
+        nonlocal differing
+        if arm == b and invalid_b:
+            n = count_diff(ref, out)
+            if n == 0:
+                raise GateFailure(f"{fx['name']} k{k}: timing-only arm {b} returned the reference bits at {where}; its body did not run (output invalid by design, so equality means the arm was not reached)")
+            differing = n if differing is None else min(differing, n)
+        elif not bits_equal(ref, out):
+            raise GateFailure(f"{fx['name']} k{k}: {arm} output moved from the correctness reference at {where}")
+
+    for arm in (a, b):
+        ns, d, i = runner.search(model, fx["queries"], arm)
+        log(f"{fx['name']} k{k} warmup {arm}: {ns / 1e6:.3f} ms" + (f"; phases {runner.last_phases}" if runner.last_phases else ""))
+        check(arm, (d, i), "warmup")
+    for order_id, order in enumerate([(a, b), (b, a)]):
+        for pair in range(args.pairs):
+            rec = {"order": order_id, "pair": pair, "ms": {}, "phases": {}}
+            for arm in order:
                 ns, d, i = runner.search(model, fx["queries"], arm)
-                log(f"{fx['name']} k{k} warmup {arm}: {ns / 1e6:.3f} ms")
-                if not bits_equal(ref, (d, i)):
-                    raise GateFailure(f"{fx['name']} k{k}: warmup {arm} output moved from the correctness reference")
-            for order_id, order in enumerate([(a, b), (b, a)]):
-                for pair in range(args.pairs):
-                    rec = {"order": order_id, "pair": pair, "ms": {}}
-                    for arm in order:
-                        ns, d, i = runner.search(model, fx["queries"], arm)
-                        if not bits_equal(ref, (d, i)):
-                            raise GateFailure(f"{fx['name']} k{k}: timed {arm} output moved between rounds (order {order_id}, pair {pair})")
-                        rec["ms"][arm] = ns / 1e6
-                        samples[arm].append((order_id, ns / 1e6))
-                    rec["ratio_b_over_a"] = rec["ms"][b] / rec["ms"][a]
-                    orders.append(rec)
-                    log(f"{fx['name']} k{k} order{order_id} pair{pair}: {a} {rec['ms'][a]:.3f} ms, {b} {rec['ms'][b]:.3f} ms, {b}/{a} {rec['ratio_b_over_a']:.4f}")
-            row = {
-                "fixture": fx["name"], "k": k, "n_index": fx["n_index"], "n_queries": fx["n_queries"], "d": fx["d"],
-                "arm_a": a, "arm_b": b, "pairs": orders,
-                "median_ms": {arm: median([ms for _, ms in samples[arm]]) for arm in (a, b)},
-                "min_ms": {arm: min(ms for _, ms in samples[arm]) for arm in (a, b)},
-                "median_ms_by_order": {arm: {str(o): median([ms for oo, ms in samples[arm] if oo == o]) for o in (0, 1)} for arm in (a, b)},
-                "paired_ratio_median_b_over_a": median([r["ratio_b_over_a"] for r in orders]),
-                "pairs_favoring_b": sum(1 for r in orders if r["ratio_b_over_a"] < 1.0),
-                "spread_pct": {arm: 100.0 * (max(ms for _, ms in samples[arm]) - min(ms for _, ms in samples[arm])) / median([ms for _, ms in samples[arm]]) for arm in (a, b)},
-                "boundary": "public NearestNeighbors.kneighbors: host in, host out, includes query conversion, upload, norms, transpose, distance, selection, merge, download, index widening to int64",
-            }
-            if fx["name"] == "dyadic" and k in cached and not args.quick:
-                row["cached_opponent_ms"] = cached[k]
-                row["cached_opponent_ratio"] = {arm: row["median_ms"][arm] / cached[k] for arm in (a, b)}
-                row["cached_opponent_note"] = "cached cuML row from bench/OPPONENT_REFERENCE.md (H100 80GB HBM3, driver 580.126.09, dyadic-v1); admissible only if this box matches that tuple; not a paired opponent measurement"
-            report["timing"].append(row)
-            log(f"{fx['name']} k{k}: {a} median {row['median_ms'][a]:.3f} ms, {b} median {row['median_ms'][b]:.3f} ms, paired median {b}/{a} {row['paired_ratio_median_b_over_a']:.4f}, {row['pairs_favoring_b']}/{len(orders)} pairs favor {b}")
-            del model
-            dump("running")
+                check(arm, (d, i), f"order {order_id}, pair {pair}")
+                rec["ms"][arm] = ns / 1e6
+                rec["phases"][arm] = runner.last_phases
+                samples[arm].append((order_id, ns / 1e6, runner.last_phases))
+            rec["ratio_b_over_a"] = rec["ms"][b] / rec["ms"][a]
+            pa, pb = rec["phases"][a], rec["phases"][b]
+            if pa and pb and isinstance(pa.get("select_ms"), float) and isinstance(pb.get("select_ms"), float) and pa["select_ms"] > 0:
+                rec["select_ms_ratio_b_over_a"] = pb["select_ms"] / pa["select_ms"]
+            orders.append(rec)
+            log(f"{fx['name']} k{k} order{order_id} pair{pair}: {a} {rec['ms'][a]:.3f} ms, {b} {rec['ms'][b]:.3f} ms, {b}/{a} {rec['ratio_b_over_a']:.4f}"
+                + (f", select_ms {pa['select_ms']:.3f} vs {pb['select_ms']:.3f}" if "select_ms_ratio_b_over_a" in rec else ""))
+    row = {
+        "fixture": fx["name"], "k": k, "n_index": fx["n_index"], "n_queries": fx["n_queries"], "d": fx["d"],
+        "arm_a": a, "arm_b": b, "pairs": orders,
+        "median_ms": {arm: median([ms for _, ms, _ in samples[arm]]) for arm in (a, b)},
+        "min_ms": {arm: min(ms for _, ms, _ in samples[arm]) for arm in (a, b)},
+        "median_ms_by_order": {arm: {str(o): median([ms for oo, ms, _ in samples[arm] if oo == o]) for o in (0, 1)} for arm in (a, b)},
+        "paired_ratio_median_b_over_a": median([r["ratio_b_over_a"] for r in orders]),
+        "pairs_favoring_b": sum(1 for r in orders if r["ratio_b_over_a"] < 1.0),
+        "spread_pct": {arm: 100.0 * (max(ms for _, ms, _ in samples[arm]) - min(ms for _, ms, _ in samples[arm])) / median([ms for _, ms, _ in samples[arm]]) for arm in (a, b)},
+        "boundary": "public NearestNeighbors.kneighbors: host in, host out, includes query conversion, upload, norms, transpose, distance, selection, merge, download, index widening to int64",
+    }
+    phases = {arm: phase_medians(samples, arm) for arm in (a, b)}
+    if any(phases.values()):
+        row["phase_ms_median"] = {arm: ph for arm, ph in phases.items() if ph}
+        row["phase_ms_median_by_order"] = {
+            arm: {str(o): {key: median([ph[key] for oo, _, ph in samples[arm] if oo == o and ph and isinstance(ph.get(key), float)]) for key in PHASE_KEYS
+                           if any(oo == o and ph and isinstance(ph.get(key), float) for oo, _, ph in samples[arm])} for o in (0, 1)}
+            for arm in (a, b)}
+        ratios = [r["select_ms_ratio_b_over_a"] for r in orders if "select_ms_ratio_b_over_a" in r]
+        row["select_ms_ratio_b_over_a"] = median(ratios) if ratios else None
+        row["phase_note"] = "phase milliseconds from the binding's KNN_PHASE_TIMERS line (serializing); request ms above include those synchronizations"
+    if invalid_b:
+        row["output_valid"] = {a: True, b: False}
+        row["differing_cells_from_reference"] = differing
+    msg = f"{fx['name']} k{k}: {a} median {row['median_ms'][a]:.3f} ms, {b} median {row['median_ms'][b]:.3f} ms, paired median {b}/{a} {row['paired_ratio_median_b_over_a']:.4f}, {row['pairs_favoring_b']}/{len(orders)} pairs favor {b}"
+    if row.get("phase_ms_median"):
+        msg += "; select_ms medians " + ", ".join(f"{arm} {ph['select_ms']:.3f}" for arm, ph in row["phase_ms_median"].items() if "select_ms" in ph)
+    if invalid_b:
+        msg += f" [OUTPUT INVALID; phase cost only; {b} differs from the reference in {differing} cells]"
+    log(msg)
+    return row
 
 
 # --------------------------------------------------------------- selftest
@@ -802,8 +1009,11 @@ def selftest_backend(log):
 
         def kneighbors(self, q):
             arm = os.environ.get(arm_env)
-            if arm not in (None, "baseline", "uniform", "headbound", "warpbound"):
+            timing_only = ("skiprank", "skipscan", "scanonly1")
+            if arm not in (None, "baseline", "uniform", "headbound", "warpbound") + timing_only:
                 raise ValueError(f"unknown arm {arm!r}")
+            if arm in timing_only and os.environ.get(sab_env) == "1":
+                raise ValueError("timing-only arms carry no sabotage")
             xi = self.x.astype(np.float64)
             xq = np.asarray(q, dtype=np.float32).astype(np.float64)
             d2 = np.einsum("ij,ij->i", xq, xq)[:, None] + np.einsum("ij,ij->i", xi, xi)[None, :] - 2.0 * (xq @ xi.T)
@@ -818,6 +1028,16 @@ def selftest_backend(log):
             if os.environ.get(sab_env) == "1":
                 idx[:, 0] ^= 1
                 dist[:, 0] = d32[np.arange(xq.shape[0]), idx[:, 0]]
+            if arm in timing_only:
+                # Output invalid by construction, like the native arms:
+                # sentinel index and value bits in every slot but the first.
+                idx[:, 1:] = 0xFFFFFFFF
+                dist[:, 1:] = np.float32(np.nan)
+            # The phase line the instrumented binding prints to fd 1, so the
+            # harness's descriptor-level capture is exercised here too.
+            select = {"skiprank": 0.4, "skipscan": 0.6, "scanonly1": 0.3}.get(arm, 1.0)
+            os.write(1, (f"KNN_PHASE_TIMERS distance_ms 1.5 select_ms {select} merge_ms 0.05 "
+                         f"distance_launches 1 select_launches 1 merge_launches 0 k {self.k}\n").encode())
             return dist, idx
 
     log("SELFTEST: numpy stand-in search, no GPU, no mojolearn import")

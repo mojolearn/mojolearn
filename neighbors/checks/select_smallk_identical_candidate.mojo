@@ -28,14 +28,18 @@ MOJOLEARN_KNN_SELECT): the block-uniform trip count (DEVIATION 2497, C4),
 the block head-bound rejection (DEVIATION 2498, C1, measured NEGATIVE on
 the H100 2026-09-11 and kept as that record) and the warp-scope group
 bound (DEVIATION 2515, C2). See the hook comment above the kernel; without
-the define the shipped kernel is the 2026-09-09 one plus C4.
+the define the shipped kernel is the 2026-09-09 one plus C4. The same hook
+carries three TIMING-ONLY arms (DEVIATION 2516) whose output is invalid by
+construction: `skiprank`, `skipscan` and `scanonly1` measure the scan phase
+and the rank phase of the shipped kernel separately; the gate runs them in
+its timing block alone, never in a correctness or reach section.
 """
 from std.gpu import block_idx, thread_idx
 from std.os import getenv
 from std.sys.compile import is_defined
 from neighbors.checks.lane_minimum import shuffle_min_u64
 from std.gpu.primitives.warp import shuffle_xor
-from std.memory import stack_allocation
+from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -268,6 +272,36 @@ comptime SMALLK_SCAN_SPAN = SMALLK_SCAN_UNROLL * SMALLK_BLOCK
 #   MOJOLEARN_KNN_SELECT_SABOTAGE=1  the chosen arm's SABOTAGE instantiation
 #                                    (reach proof; see the kernel)
 #
+# TIMING-ONLY ARMS (DEVIATION 2516). OUTPUT INVALID BY CONSTRUCTION; the
+# gate runs them in its timing block only, never in a correctness, oracle or
+# reach section, and reports them under a separate table that says so. They
+# measure the two phases of the shipped kernel (the uniform default: C4 trip
+# count, no bound) one at a time, on the H100, instead of modeling the
+# split from the k-slope:
+#
+#   MOJOLEARN_KNN_SELECT=skiprank    the scan exactly as the default runs
+#                                    it, then NO rank phase: every lane's
+#                                    list is folded into a block digest
+#                                    that thread 0 uses as a gather address
+#                                    and writes (so no scan work is dead),
+#                                    the other k - 1 slots get the sentinel
+#   MOJOLEARN_KNN_SELECT=skipscan    NO scan: every lane's k slots are
+#                                    filled with a synthetic ascending
+#                                    pattern of block-distinct keys whose
+#                                    index halves are in range, then the
+#                                    rank phase exactly as the default runs
+#                                    it (k rounds, one winner per round,
+#                                    the winner's value gathered from the
+#                                    tile)
+#   MOJOLEARN_KNN_SELECT=scanonly1   `skiprank` with the register list one
+#                                    key deep (CAP = 1, K = 1): the scan's
+#                                    cost with no list to maintain beyond a
+#                                    running minimum
+#
+# A timing-only arm refuses the sabotage bit (there is no reach to prove
+# on an arm whose output is wrong by design). They exist on trial builds
+# only, like every other arm.
+#
 # WITHOUT THE DEFINE NONE OF THIS EXISTS: `smallk_select_arm_from_env`
 # returns SMALLK_ARM_DEFAULT without touching the environment, the launch
 # refuses any other arm, and the only instantiations in the binary are
@@ -296,8 +330,19 @@ comptime SMALLK_ARM_BASELINE = 0
 comptime SMALLK_ARM_UNIFORM = 1
 comptime SMALLK_ARM_HEADBOUND = 2
 comptime SMALLK_ARM_WARPBOUND = 3
+# Timing-only arms (DEVIATION 2516); see the hook comment. Never a default.
+comptime SMALLK_ARM_SKIPRANK = 4
+comptime SMALLK_ARM_SKIPSCAN = 5
+comptime SMALLK_ARM_SCANONLY1 = 6
 # OR'd into the arm value; the launch strips it.
 comptime SMALLK_ARM_SABOTAGE = 16
+
+# The kernel's PHASE parameter: which phases of `smallk_bucket_kernel` run.
+# FULL is every shipped instantiation; the other two exist on trial builds
+# only and produce invalid output on purpose.
+comptime SMALLK_PHASE_FULL = 0
+comptime SMALLK_PHASE_SKIPRANK = 1
+comptime SMALLK_PHASE_SKIPSCAN = 2
 comptime SMALLK_ARM_DEFAULT = SMALLK_ARM_HEADBOUND if SMALLK_HEAD_BOUND_DEFAULT else (
     SMALLK_ARM_WARPBOUND if SMALLK_WARPBOUND_DEFAULT else (
         SMALLK_ARM_UNIFORM if SMALLK_UNIFORM_TRIP_DEFAULT else SMALLK_ARM_BASELINE
@@ -309,10 +354,10 @@ def smallk_select_arm_from_env() raises -> Int:
     """The selector arm for THIS request, read once on the host.
 
     Trial builds read `MOJOLEARN_KNN_SELECT` (baseline / uniform / headbound /
-    warpbound, unset = the build default, anything else raises) and
-    `MOJOLEARN_KNN_SELECT_SABOTAGE` (exactly "1" sets the SMALLK_ARM_SABOTAGE
-    bit). Every other build returns SMALLK_ARM_DEFAULT without reading the
-    environment at all.
+    warpbound, the timing-only skiprank / skipscan / scanonly1, unset = the
+    build default, anything else raises) and `MOJOLEARN_KNN_SELECT_SABOTAGE`
+    (exactly "1" sets the SMALLK_ARM_SABOTAGE bit). Every other build returns
+    SMALLK_ARM_DEFAULT without reading the environment at all.
     """
     comptime if not SMALLK_SELECT_TRIAL:
         return SMALLK_ARM_DEFAULT
@@ -328,10 +373,17 @@ def smallk_select_arm_from_env() raises -> Int:
         arm = SMALLK_ARM_HEADBOUND
     elif name == "warpbound":
         arm = SMALLK_ARM_WARPBOUND
+    elif name == "skiprank":
+        arm = SMALLK_ARM_SKIPRANK
+    elif name == "skipscan":
+        arm = SMALLK_ARM_SKIPSCAN
+    elif name == "scanonly1":
+        arm = SMALLK_ARM_SCANONLY1
     else:
         raise Error(
             "MOJOLEARN_KNN_SELECT='" + name
-            + "' is not a selector arm (baseline, uniform, headbound, warpbound, or unset)"
+            + "' is not a selector arm (baseline, uniform, headbound, warpbound,"
+            + " the timing-only skiprank, skipscan, scanonly1, or unset)"
         )
     if String(getenv("MOJOLEARN_KNN_SELECT_SABOTAGE")) == "1":
         arm = arm | SMALLK_ARM_SABOTAGE
@@ -470,7 +522,7 @@ def _smallk_warpbound_refresh_due(done: Int, fill: Int) -> Bool:
 
 def smallk_bucket_kernel[
     CAP: Int, K: Int = 0, UNIFORM: Bool = False, BOUND: Bool = False, SABOTAGE: Bool = False,
-    WARPBOUND: Bool = False,
+    WARPBOUND: Bool = False, PHASE: Int = SMALLK_PHASE_FULL,
 ](
     values: MutPointer[Float32, MutAnyOrigin],
     out_values: MutPointer[Float32, MutAnyOrigin],
@@ -497,10 +549,17 @@ def smallk_bucket_kernel[
     convergent) and a fixed-lane-width column (SMALLK_SHUFFLE); excludes
     BOUND.
     SABOTAGE: reach proof for the gate, per arm. Never on by default.
+    PHASE (DEVIATION 2516, TIMING ONLY, OUTPUT INVALID): SMALLK_PHASE_SKIPRANK
+    runs the scan and then a digest epilogue instead of the rank phase;
+    SMALLK_PHASE_SKIPSCAN skips the scan, fills every lane's k slots with a
+    synthetic pattern and runs the rank phase. Trial builds only, the
+    uniform scan form only, no bound, no sabotage. See the hook comment.
     """
     comptime assert UNIFORM or not BOUND, "C1's in-loop barrier needs C4's block-uniform trip count"
     comptime assert UNIFORM or not WARPBOUND, "C2's in-loop shuffles need C4's block-uniform trip count"
     comptime assert not (BOUND and WARPBOUND), "one bound arm at most"
+    comptime assert PHASE == SMALLK_PHASE_FULL or SMALLK_SELECT_TRIAL, "timing-only phases exist on trial builds only"
+    comptime assert PHASE == SMALLK_PHASE_FULL or (UNIFORM and not BOUND and not WARPBOUND and not SABOTAGE), "a timing-only phase measures the uniform default: no bound, no sabotage"
     var length = Int(length_in)
     var k = K if K > 0 else Int(k_in)
     var tid = Int(thread_idx.x)
@@ -516,6 +575,30 @@ def smallk_bucket_kernel[
     var select_min = select_min_in != 0
     var base = row * length
     var col = tid
+    # TIMING-ONLY `skipscan` (DEVIATION 2516). The three scan loops below
+    # run over `scan_length`, a plain copy of `length` on every instantiation
+    # but SKIPSCAN, where it is 0 and no scan loop is entered; instead every
+    # lane's k slots are filled here with a synthetic pattern so the rank
+    # phase does the same work it does after a real scan:
+    #   ordinal(slot, tid) = slot * 256 + tid + 1      (1 .. k * 256)
+    #   key = ordinal << 32 | column,  column = (ordinal * 2654435761) mod length
+    # Every key is distinct in the block (the ordinal is), ascending within
+    # a lane (the ordinal grows with the slot, so slot 0 is the lane's
+    # minimum exactly as after a real scan), the index half is a real column
+    # of the row (the winner's gather stays in range and lands on a hashed,
+    # not a leading, column), and the k block minima are the k smallest
+    # ordinals, one lane each, so every round has exactly one winning lane
+    # that shifts its list, as in the real kernel. Slots k .. CAP - 1 stay
+    # the sentinel, as after a real scan. The scan's own state (threshold,
+    # gate) is left at the sentinel because nothing reads it afterwards.
+    var scan_length = length
+    comptime if PHASE == SMALLK_PHASE_SKIPSCAN:
+        scan_length = 0
+        comptime for slot in range(CAP):
+            if slot < k:
+                var ordinal = UInt64(slot * SMALLK_BLOCK + tid + 1)
+                var column = (ordinal * UInt64(2654435761)) % UInt64(length)
+                local_keys[slot] = (ordinal << UInt64(32)) | column
     # C1 state. `bound` is the k-th smallest of the 256 heads published at
     # the last refresh (the sentinel before the first one and when fewer
     # than k real heads exist); `gate = min(threshold, bound)` is the reject
@@ -569,7 +652,7 @@ def smallk_bucket_kernel[
         # of a taken batch has all eight columns inside the row.
         var batch_base = 0
         var done = 0
-        while batch_base + SMALLK_SCAN_SPAN <= length:
+        while batch_base + SMALLK_SCAN_SPAN <= scan_length:
             var batch = SIMD[DType.float32, SMALLK_SCAN_UNROLL](0.0)
             comptime for u in range(SMALLK_SCAN_UNROLL):
                 batch[u] = values.unsafe_load(base + batch_base + tid + u * SMALLK_BLOCK)
@@ -736,7 +819,7 @@ def smallk_bucket_kernel[
         col = batch_base + tid
     else:
         # The 2026-09-09 form: the batch condition is per thread.
-        while col + (SMALLK_SCAN_UNROLL - 1) * SMALLK_BLOCK < length:
+        while col + (SMALLK_SCAN_UNROLL - 1) * SMALLK_BLOCK < scan_length:
             var batch = SIMD[DType.float32, SMALLK_SCAN_UNROLL](0.0)
             comptime for u in range(SMALLK_SCAN_UNROLL):
                 batch[u] = values.unsafe_load(base + col + u * SMALLK_BLOCK)
@@ -749,7 +832,7 @@ def smallk_bucket_kernel[
                 if pending < threshold:
                     _smallk_insert[CAP](local_keys, threshold, pending, k)
             col += SMALLK_SCAN_SPAN
-    while col < length:
+    while col < scan_length:
         var pending = composite_key(values.unsafe_load(base + col), UInt32(col), select_min)
         comptime if BOUND or WARPBOUND:
             if pending < gate:
@@ -759,7 +842,52 @@ def smallk_bucket_kernel[
             if pending < threshold:
                 _smallk_insert[CAP](local_keys, threshold, pending, k)
         col += SMALLK_BLOCK
-    comptime if SMALLK_SHUFFLE:
+    comptime if PHASE == SMALLK_PHASE_SKIPRANK:
+        # TIMING-ONLY `skiprank` (DEVIATION 2516): no rank phase. The scan's
+        # result must be CONSUMED or the compiler may drop the scan (its
+        # loads have no other side effect): every lane folds its whole list
+        # and its threshold into one XOR digest, the block folds the 256
+        # digests (the rank phase's own butterfly shape where the column has
+        # fixed-width lanes, the shared tree elsewhere), and thread 0 uses
+        # the block digest as a GATHER ADDRESS into the row and writes the
+        # gathered cell and the column to slot 0. A load address that
+        # depends on every lane's list keeps every insert live; the shuffle
+        # or shared fold is a collective every lane takes, so no lane's scan
+        # can be sunk under thread 0's branch. Slots 1 .. k - 1 get the
+        # sentinel key's two halves (index 0xFFFFFFFF, value bits
+        # 0xFFFFFFFF). Cost of this epilogue: about ONE rank round (ten
+        # shuffles, one barrier, eight shared loads, one gather) and it does
+        # not depend on k, so select_ms(skiprank) overstates the scan by
+        # about one rank round and its k-slope is the scan's k-slope alone.
+        var digest = threshold
+        comptime for slot in range(CAP):
+            digest = digest ^ local_keys[slot]
+        var block_digest = digest
+        comptime if SMALLK_SHUFFLE:
+            var offset = 1
+            while offset < SMALLK_LANES:
+                digest = digest ^ _smallk_shuffle_xor_u64(digest, offset)
+                offset *= 2
+            if tid % SMALLK_LANES == 0:
+                heads[tid // SMALLK_LANES] = digest
+            barrier()
+            block_digest = heads[0]
+            comptime for w in range(1, SMALLK_WARPS):
+                block_digest = block_digest ^ heads[w]
+        else:
+            heads[tid] = digest
+            barrier()
+            block_digest = heads[0]
+            for t in range(1, SMALLK_BLOCK):
+                block_digest = block_digest ^ heads[t]
+        if tid == 0:
+            var probe = Int(block_digest % UInt64(length))
+            out_indices.unsafe_store(row * k, UInt32(probe))
+            out_values.unsafe_store(row * k, values.unsafe_load(base + probe))
+            for r in range(1, k):
+                out_indices.unsafe_store(row * k + r, UInt32(4294967295))
+                out_values.unsafe_store(row * k + r, bitcast[DType.float32](UInt32(4294967295)))
+    elif SMALLK_SHUFFLE:
         var warp = tid // SMALLK_LANES
         var lane = tid % SMALLK_LANES
         for rank in range(k):
@@ -811,7 +939,8 @@ def smallk_bucket_kernel[
 
 @always_inline
 def _smallk_enqueue[
-    CAP: Int, K: Int, UNIFORM: Bool, BOUND: Bool, SABOTAGE: Bool, WARPBOUND: Bool = False
+    CAP: Int, K: Int, UNIFORM: Bool, BOUND: Bool, SABOTAGE: Bool, WARPBOUND: Bool = False,
+    PHASE: Int = SMALLK_PHASE_FULL,
 ](
     ctx: DeviceContext,
     values: MutPointer[Float32, MutAnyOrigin],
@@ -819,7 +948,7 @@ def _smallk_enqueue[
     out_indices: MutPointer[UInt32, MutAnyOrigin],
     rows: Int, length: Int, k: Int, select_min: Bool,
 ) raises:
-    ctx.enqueue_function[smallk_bucket_kernel[CAP, K, UNIFORM, BOUND, SABOTAGE, WARPBOUND]](
+    ctx.enqueue_function[smallk_bucket_kernel[CAP, K, UNIFORM, BOUND, SABOTAGE, WARPBOUND, PHASE]](
         values, out_values, out_indices,
         Int32(length), Int32(k), Int32(select_min),
         grid_dim=(rows, 1, 1), block_dim=(SMALLK_BLOCK, 1, 1),
@@ -867,6 +996,28 @@ def _smallk_launch_bucket[CAP: Int, K: Int](
                 _smallk_enqueue[CAP, K, True, False, True, True](ctx, values, out_values, out_indices, rows, length, k, select_min)
             else:
                 _smallk_enqueue[CAP, K, True, False, False, True](ctx, values, out_values, out_indices, rows, length, k, select_min)
+        elif which == SMALLK_ARM_SKIPRANK or which == SMALLK_ARM_SKIPSCAN or which == SMALLK_ARM_SCANONLY1:
+            # TIMING-ONLY arms (DEVIATION 2516): the uniform default's scan
+            # form, no bound, and never a sabotage instantiation (their
+            # output is invalid by design; there is no reach to prove).
+            if sabotage:
+                raise Error("small-k selector: timing-only arms carry no sabotage")
+            if which == SMALLK_ARM_SKIPRANK:
+                _smallk_enqueue[CAP, K, True, False, False, False, SMALLK_PHASE_SKIPRANK](
+                    ctx, values, out_values, out_indices, rows, length, k, select_min
+                )
+            elif which == SMALLK_ARM_SKIPSCAN:
+                _smallk_enqueue[CAP, K, True, False, False, False, SMALLK_PHASE_SKIPSCAN](
+                    ctx, values, out_values, out_indices, rows, length, k, select_min
+                )
+            else:
+                # `scanonly1`: the same body with a one-key list (CAP = 1,
+                # K = 1 folded), so the scan keeps a running minimum and
+                # nothing else; the runtime k is ignored by the kernel and
+                # thread 0 writes one slot per row.
+                _smallk_enqueue[1, 1, True, False, False, False, SMALLK_PHASE_SKIPRANK](
+                    ctx, values, out_values, out_indices, rows, length, k, select_min
+                )
         else:
             raise Error("small-k selector: unknown arm " + String(arm))
     else:

@@ -977,3 +977,233 @@ under the same define, give the split directly; then the rank phase's k
 barrier rounds are the candidate (a single-pass bitonic or shuffle-based
 extraction of k minima with the same comparison order), which the brief's
 C5 already named and ranked too low on the wrong premise.
+
+## Implementation pass, phase split measured on the box (DEVIATION 2516; source only, 2026-09-11)
+
+Nothing here was built or run on the Mac (py_compile and `sh -n` only).
+Measure, do not model: the k-proportional cost survived two bound arms that
+removed half the insertion events (steps 2 and 3), so the split of the
+selection launch between its scan phase and its rank phase is now measured
+DIRECTLY with timing-only arms that run one phase and skip the other. Files
+touched by this pass (uncommitted, working tree):
+
+- `neighbors/checks/select_smallk_identical_candidate.mojo`: seventh kernel
+  parameter `PHASE` on `smallk_bucket_kernel` (after `WARPBOUND`, default
+  `SMALLK_PHASE_FULL`, so every six-parameter instantiation is unchanged),
+  the constants `SMALLK_PHASE_FULL / SKIPRANK / SKIPSCAN` and the arms
+  `SMALLK_ARM_SKIPRANK = 4`, `SMALLK_ARM_SKIPSCAN = 5`,
+  `SMALLK_ARM_SCANONLY1 = 6` in `smallk_select_arm_from_env` and
+  `_smallk_launch_bucket`, the `scan_length` alias, the skipscan fill and
+  the skiprank epilogue, `PHASE` on `_smallk_enqueue`, the hook comment and
+  the module docstring. `bitcast` imported from `std.memory`.
+- `tools/knn_selection_gate.py`: `--timing-only-arms` (default empty),
+  `--phase-timers auto|require|off`, descriptor-level capture of the
+  binding's `KNN_PHASE_TIMERS` line per request (`PhaseCapture`), a shared
+  `time_pair` helper for the arm pair and the timing-only pairs, the
+  `timing_only` JSON table and summary lines ("output invalid; phase cost
+  only"), `phase_ms_median` on every timing row, the numpy selftest's
+  timing-only stand-in and a fake phase line written to fd 1 so the capture
+  is exercised without a GPU.
+- `tools/knn_selection_gate.sh`: `MOJOLEARN_KNN_SELECTION_TIMING_ONLY_ARMS`
+  (passed through as `--timing-only-arms`) and
+  `MOJOLEARN_KNN_SELECTION_PHASE_TIMERS=1` (adds
+  `-D MOJOLEARN_KNN_PHASE_TIMERS=1` to the binding build and passes
+  `--phase-timers require`); both recorded in `gate.txt`.
+- this section.
+
+The shipped default path is untouched: without the trial define the only
+instantiations are the six-parameter ones with `PHASE = FULL`, in which
+`scan_length` is a plain copy of `length` (the three scan loop conditions
+read the copy; a value copy, no codegen), the skipscan fill and the
+skiprank epilogue are `comptime if` branches on a constant and fold away,
+and the rank phase is the `elif SMALLK_SHUFFLE` / `else` pair it was, with
+its bodies' text unchanged. A `comptime assert` refuses any `PHASE` other
+than `FULL` on a non-trial build, and another refuses it on any scan form
+but the uniform default (no bound, no sabotage).
+
+### The arms (OUTPUT INVALID BY CONSTRUCTION)
+
+| arm | instantiation | what runs | what is written |
+|---|---|---|---|
+| `skiprank` | `[CAP, K, True, False, False, False, SKIPRANK]` | the scan exactly as `uniform` (the shipped default since 541ca9e2) runs it: same batches, same `_smallk_insert`, same tail loop; then an epilogue, NO rank phase | thread 0 writes one digest-addressed cell to slot 0 of the row and the sentinel key's two halves (index 0xFFFFFFFF, value bits 0xFFFFFFFF) to slots 1 .. k-1 |
+| `skipscan` | `[CAP, K, True, False, False, False, SKIPSCAN]` | NO scan (the three scan loops see `scan_length = 0`); every lane's k slots are filled with a synthetic pattern; then the rank phase exactly as the default runs it (k rounds, one butterfly and one barrier per round, index-half tie rule, the winner's value gathered from the tile cell) | the k "winners" of the synthetic pattern with their gathered values: real columns, wrong answer |
+| `scanonly1` | `[1, 1, True, False, False, False, SKIPRANK]` | `skiprank` with the register list one key deep (CAP = 1 and K = 1 folded, so the scan keeps a running minimum: one compare, one conditional swap, threshold = the minimum); the runtime k is ignored by the kernel | thread 0 writes one slot per row; the rest of the row is whatever the output buffer held |
+
+`scanonly1` cost nothing beyond a third instantiation of the same body, so
+it is in (the task allowed skipping it if it needed a second kernel body;
+it did not).
+
+The exact skipscan filling. For lane `tid` and slot `s < k`:
+
+    ordinal = s * 256 + tid + 1                         (1 .. 256 k, block-distinct)
+    column  = (ordinal * 2654435761) mod length         (a real column of the row)
+    key     = ordinal << 32 | column
+
+Slots k .. CAP-1 stay the sentinel, as after a real scan. Why this makes
+the rank phase's cost representative: (i) the rank loop is `for rank in
+range(k)` unconditionally, and every round costs the same instructions
+(one `shuffle_min_u64`, one shared store by lane 0 of each warp, ONE
+barrier, eight shared loads and seven compares, thread 0's two stores and
+one gather, the winning lane's predicated CAP-1 shift), so any filling with
+at least k real keys makes it do its full k rounds; (ii) the keys are
+distinct and ascending within a lane (the ordinal grows with the slot), so
+slot 0 is the lane's minimum exactly as after a real scan and the shift
+keeps the list sorted; (iii) the k block minima are ordinals 1 .. k, one
+lane each (lanes 0 .. k-1 of warp 0), so every round has exactly one
+winning lane whose warp executes the shift, as in the real kernel, where
+the winners are spread over the warps but there is still one shifting warp
+per round; (iv) the index half is a hashed column inside the row, so the
+winner's gather stays in range (an all-sentinel list would gather at
+column 0xFFFFFFFF, out of the tile) and lands on a spread-out column the
+way a real winner's does, not on a leading column that the distance
+kernel's last writes may have left in L2.
+
+Why skiprank cannot let the compiler drop the scan. The scan's loads have
+no side effect of their own, so an arm that discards the lists would
+measure an empty kernel. In the epilogue every lane XORs its whole list
+and its threshold into one digest, the block folds the 256 digests (the
+rank phase's own butterfly shape plus one barrier on fixed-lane-width
+columns, the shared tree elsewhere), and thread 0 uses the block digest as
+a GATHER ADDRESS (`values[base + digest mod length]`) and stores the
+gathered cell and the column. A load address that depends on every lane's
+list keeps every insert live, and the fold is a collective every lane
+takes, so no lane's scan can be sunk under thread 0's branch. Cost of the
+epilogue: about one rank round (ten shuffles, one barrier, eight shared
+loads, one gather), independent of k, so `select_ms(skiprank)` overstates
+the scan by about one round and its k-slope is the scan's k-slope alone.
+
+The timing-only arms refuse the sabotage bit (a RAISE, not a fallback):
+there is no reach to prove on an arm whose output is wrong by design. The
+harness's only assertion on such an arm is that its output DIFFERS from
+the clean reference (equality would mean the arm's body did not run); the
+baseline samples in the same pairs must still equal the reference.
+
+### The harness
+
+`--timing-only-arms skiprank,skipscan,scanonly1` keeps those arms out of
+the correctness, oracle and reach sections entirely (they never appear in
+`correctness` or `reach`), and in the timing block pairs each one with the
+FIRST `--arms` arm under the existing protocol (one warmup per arm,
+`--pairs` pairs in order (A, B), then `--pairs` in order (B, A), every
+sample kept, medians and minima per arm and per order). The rows go to a
+separate `timing_only` table in the JSON, each carrying `"note": "output
+invalid; phase cost only"` and `output_valid: {A: true, B: false}`, and
+the summary prints them under a `timing_only: OUTPUT INVALID; PHASE COST
+ONLY` header. Nothing in that table can feed a promotion.
+
+Phase timers. The profile phase's `select_ms` comes from
+`-D MOJOLEARN_KNN_PHASE_TIMERS=1`, a BUILD define (not an environment
+switch): `_tiled_brute_force_knn_impl` then synchronizes after every launch
+class and prints one `KNN_PHASE_TIMERS distance_ms ... select_ms ...
+merge_ms ...` line per request to file descriptor 1 from inside the
+binding. So the harness cannot flip it per request; the shell script adds
+the define to the BINDING build under
+`MOJOLEARN_KNN_SELECTION_PHASE_TIMERS=1`, and the harness redirects fd 1
+into a scratch file around every request (outside the timed region),
+flushes C stdio, restores the descriptor and parses the line. Every timed
+sample then carries `distance_ms / select_ms / merge_ms`, every timing row
+(the arm pair and the timing-only rows) carries `phase_ms_median` per arm
+and per order, and the per-arm `select_ms` is READ, not inferred from
+request deltas. The price: the synchronizations serialize the queue, so on
+that build the request medians are slower than an untimed request, are
+labeled so in the JSON (`phase_timers.serialized`) and the summary, and
+are not comparable to the qualified numbers or admissible against the
+cached cuML rows (the cached-reference note says so on that build).
+`--phase-timers auto` (default) records the line when the build prints
+one; `require` fails otherwise; `off` never redirects.
+
+### RUN OWED (orchestrator; nothing ran)
+
+Step 0, on the Mac, numpy only, no native import, seconds (the checker's
+own smoke; the lane may not run tests): expect `PASSED`, a `timing_only`
+table with three rows per timed fixture and k, `phase_timers.available:
+true`, and `select_ms` medians in every row.
+
+```
+python3 tools/knn_selection_gate.py --selftest --quick --out /tmp/knn-sel-selftest \
+    --arms baseline,uniform --timing-only-arms skiprank,skipscan,scanonly1 --pairs 1 --deadline 120
+grep -A12 '^timing_only' /tmp/knn-sel-selftest/summary.txt
+```
+
+Step 4, the H100 leg. Commit this pass first (the leg ships `git archive`
+of the COMMITTED tree); the arm lists ride in the wrapper file because the
+local environment does not reach the pod. The first `--arms` arm is
+`uniform`, not `baseline`, on purpose: the timing-only arms are the uniform
+scan form, and `uniform` IS the shipped default since 541ca9e2 (`baseline`
+is the pre-C4 per-thread trip count, kept as the second arm so the pair
+timing re-measures C4 under the phase timers for free; step 1 found the
+two within noise). ARMS=baseline alone, as the task specified, is also
+admissible on that evidence.
+
+```
+cat > /tmp/knn_phase_extra.sh <<'SH'
+#!/bin/sh
+export MOJOLEARN_KNN_SELECTION_ARMS=uniform,baseline
+export MOJOLEARN_KNN_SELECTION_TIMING_ONLY_ARMS=skiprank,skipscan,scanonly1
+export MOJOLEARN_KNN_SELECTION_PHASE_TIMERS=1
+export MOJOLEARN_KNN_SELECTION_SKIP_PROFILE=1
+cd /root/mojolearn && PATH="$HOME/.pixi/bin:$PATH" pixi run mojo run \
+    -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_KNN_SELECT_TRIAL=1 \
+    -I . neighbors/checks/knn_selector_arms_check.mojo \
+    > /root/gemm_leg_out/knn-selector-arms-check.log 2>&1
+echo "arms_check_exit=$?" >> /root/gemm_leg_out/leg.txt
+exec sh /root/mojolearn/tools/knn_selection_gate.sh
+SH
+MOJOLEARN_RUNPOD_KEY_FILE=$HOME/.mojolearn_runpod_key \
+MOJOLEARN_GEMM_LEG_EXTRA=/tmp/knn_phase_extra.sh \
+MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/$(date +%Y-%m-%d_%H%M%S)-nvidia-h100-knn-selection-phases \
+sh tools/gemm_remote_leg.sh nvidia --rent --minutes 60 \
+    --gpu "NVIDIA H100 80GB HBM3" \
+    --local-card bench/results/e1/2026-08-28_131651-runpod-nvidia/lanes/gemm.identical.card
+cat <leg>/remote/knn-selector-arms-check.log | tail -3
+cat <leg>/remote/knn-selection/summary.txt
+cat <leg>/remote/knn-selection/status.tsv
+```
+
+The arms check line is a regression fence only (the timing-only arms are
+not in it; it proves the FULL instantiations still pass with the seventh
+parameter in place). Budget: about 300 requests at 50 ms serialized, well
+inside the 300 s deadline.
+
+### How to read the result
+
+Everything below is read from the `timing_only` rows' `phase_ms_median`
+(`select_ms`, per arm, pooled and per order; the two orders must agree
+within the pair spread or the row is noise) at k10 and k15 on `large` and
+`dyadic`. `select_ms(uniform)` is the reference (about 10.3 ms at k10 and
+14.6 ms at k15 per the profile; 56 launches):
+
+1. Rank phase share: `select_ms(uniform) - select_ms(skiprank)`, plus about
+   one rank round's worth (the epilogue) that skiprank still pays.
+2. Scan share: `select_ms(uniform) - select_ms(skipscan)`. Note skipscan's
+   warps reach the first barrier together, whereas after a real scan they
+   arrive staggered by their insert counts, so skipscan may UNDERSTATE the
+   rank phase by that one-time skew; the per-round cost (the slope) is
+   unaffected.
+3. Additivity check: `select_ms(skiprank) + select_ms(skipscan)` against
+   `select_ms(uniform)` plus 56 launch overheads (a few tenths of a
+   millisecond). If the sum overshoots by more than that, the two phases
+   overlap across blocks when both are present (a block in its rank phase
+   hides behind another block's scan) or the missing phase changed the
+   codegen of the present one (registers, occupancy); then the ABSOLUTE
+   shares are not additive and only the k-slopes below are the verdict.
+4. THE VERDICT, the k-slope of each phase per launch per unit of k:
+   `(select_ms(arm, k15) - select_ms(arm, k10)) / 5 / 56` for `skiprank`
+   (the scan's slope) and for `skipscan` (the rank phase's slope). Their
+   sum should land near the profile's 15.4 us. Whichever phase owns the
+   slope owns the k-proportional cost: if `skipscan` carries it, the k
+   barrier rounds are the candidate (C5, a single-pass extraction of k
+   minima with the same comparison order); if `skiprank` carries it, the
+   cost is in the scan but not in the insertion events the bound arms
+   removed, and the register list's depth is the next suspect.
+5. List depth inside the scan: `select_ms(skiprank) - select_ms(scanonly1)`
+   at k10 and at k15 is the price of maintaining a K-deep list versus a
+   running minimum over the same loads and keys; its own k-slope
+   (`scanonly1` is k-independent, so this is skiprank's slope again) says
+   how much of the scan's slope is the list rather than the loads.
+
+What this pass does NOT claim: no output of a timing-only arm is a result;
+no request median from a phase-timer build is comparable to the qualified
+26.66 / 31.13 ms or to the cached cuML rows; no default moves on this
+evidence. The next candidate is chosen from the slopes, then gated as a
+normal arm (bit-equal, reach, request-level price) before anything flips.

@@ -49,11 +49,26 @@
 # MOJOLEARN_KNN_SELECTION_SKIP_PROFILE=1 skips the profile (already measured
 # 2026-09-11 on the H100; the brief's "Run 1 results").
 #
+# TIMING-ONLY ARMS (DEVIATION 2516): MOJOLEARN_KNN_SELECTION_TIMING_ONLY_ARMS
+# (default empty; e.g. skiprank,skipscan,scanonly1) names arms whose OUTPUT
+# IS INVALID by construction; the harness keeps them out of correctness,
+# oracle and reach, times each against the first ARMS arm, and reports them
+# under `timing_only` ("output invalid; phase cost only").
+# MOJOLEARN_KNN_SELECTION_PHASE_TIMERS=1 adds -D MOJOLEARN_KNN_PHASE_TIMERS=1
+# to the BINDING build (the profile phase's own switch; a build define, not
+# an environment variable) and makes the harness REQUIRE the per-request
+# `KNN_PHASE_TIMERS` line, so every timed sample carries distance_ms /
+# select_ms / merge_ms read from the binding. Such a build serializes the
+# launch queue: its request medians are not comparable to untimed ones and
+# never feed a promotion; the phase split is the measurement.
+#
 # POSIX sh only: RunPod's Ubuntu images link /bin/sh to dash.
 set -u
 ROOT=${MOJOLEARN_KNN_ROOT:-/root/mojolearn}
 OUT=${MOJOLEARN_KNN_SELECTION_OUT:-/root/gemm_leg_out/knn-selection}
 ARMS=${MOJOLEARN_KNN_SELECTION_ARMS:-baseline,headbound}
+TIMING_ONLY=${MOJOLEARN_KNN_SELECTION_TIMING_ONLY_ARMS:-}
+PHASE_TIMERS=${MOJOLEARN_KNN_SELECTION_PHASE_TIMERS:-0}
 PAIRS=${MOJOLEARN_KNN_SELECTION_PAIRS:-3}
 CACHED=${MOJOLEARN_KNN_SELECTION_CACHED_OPPONENT:-k10=10.225,k15=10.817}
 JOBS=${MOJOLEARN_COMPILE_JOBS:-2}
@@ -90,6 +105,8 @@ run() {
     echo "started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     echo "root=$ROOT"
     echo "arms=$ARMS"
+    echo "timing_only_arms=$TIMING_ONLY"
+    echo "phase_timers=$PHASE_TIMERS"
     echo "pairs=$PAIRS"
     echo "cached_opponent=$CACHED"
     [ -f /root/gemm_leg_out/leg.txt ] && grep -E '^(commit|vendor)=' /root/gemm_leg_out/leg.txt
@@ -144,8 +161,14 @@ fi
 # one GPU architecture: this box's.
 # `env`, not a prefix assignment: dash does not reliably pass prefix
 # assignments through a shell function.
+PHASE_DEFINE=""
+PHASE_FLAG="--phase-timers auto"
+if [ "$PHASE_TIMERS" = "1" ]; then
+    PHASE_DEFINE="-D MOJOLEARN_KNN_PHASE_TIMERS=1"
+    PHASE_FLAG="--phase-timers require"
+fi
 run build-binding-trial env MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_COMPILE_JOBS="$JOBS" \
-    MOJOLEARN_BUILD_EXTRA_DEFINES="-D MOJOLEARN_KNN_SELECT_TRIAL=1 ${MOJOLEARN_KNN_SELECTION_EXTRA_DEFINES:-}" \
+    MOJOLEARN_BUILD_EXTRA_DEFINES="-D MOJOLEARN_KNN_SELECT_TRIAL=1 $PHASE_DEFINE ${MOJOLEARN_KNN_SELECTION_EXTRA_DEFINES:-}" \
     sh bindings/build.sh
 # The binary is witnessed by hash only: binaries are not evidence and the
 # repository's blob fences refuse them (no-oversized-blobs rule).
@@ -170,9 +193,11 @@ if [ -z "$PY" ]; then
     rc=1
 else
     # `timeout` is a second fence outside the harness's own 300 s deadline.
+    # shellcheck disable=SC2086
     PYTHONPATH="$ROOT/python" MOJOLEARN_NUMERIC_MODE=identical \
     run gate timeout 420 $PY tools/knn_selection_gate.py \
-        --out "$OUT" --arms "$ARMS" --pairs "$PAIRS" --deadline 300 \
+        --out "$OUT" --arms "$ARMS" --timing-only-arms "$TIMING_ONLY" \
+        --pairs "$PAIRS" --deadline 300 $PHASE_FLAG \
         --cached-opponent "$CACHED"
 fi
 
