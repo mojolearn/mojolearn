@@ -52,10 +52,18 @@ WHAT IT ASSERTS, per kind:
      afterwards. On a build without -D MOJOLEARN_ATTN_ARM_TRIAL=1 every
      arm value runs the shipped kernels: the sabotage moves nothing and
      the harness FAILS, saying so. A candidate with a second-round bit
-     (DEVIATION 2528, `_ztiled`) proves reach with
-     ATTN_ARM_SABOTAGE_NEW, which flips only the new kernel, so a proof on
-     top of stash_tiled names the new kernel; a backward-only new kernel's
-     sabotage must also move no forward cell (ctx, amax, denom).
+     (DEVIATION 2528 `_ztiled`, 2531 `_fgrid`, 2530 `_qres`, 2533 `_pf`)
+     proves reach with ATTN_ARM_SABOTAGE_NEW, which flips only the new
+     kernels, so a proof on top of stash_tiled names the new kernels. Per
+     branch: an arm with a second-round forward kernel must move the
+     forward and one without must move no forward cell; an arm with a
+     second-round backward kernel must move the backward, and one without
+     must move no backward cell whenever the sabotaged forward left amax
+     and denom (the backward's forward inputs) alone. Attribution (brief
+     section 14.5): the 2530 flip must move amax or denom, the 2531 and
+     2533 forward flips must hold them and the 2533 forward flip must hold
+     ctx columns 16 and up; the 2533 backward flip must move zdot and hold
+     dv when 2528 is not in the arm.
   4. PRICE: MOJOLEARN_ATTN_WARMUPS (2) untimed calls, then
      MOJOLEARN_ATTN_ROUNDS (7) timed rounds, the two arms alternated
      inside each round (A B, then B A), each sample one `PRICE` line;
@@ -79,7 +87,9 @@ its header).
 
 KNOBS (environment): MOJOLEARN_ATTN_ARM (candidate, default bwd_stash;
 any name `fused_attention_arm_parse` reads, brief section 12.1, e.g.
-stash_tiled_ztiled, stash_tiled_ztiled_r32, stash_tiled_ztiled_r64),
+stash_tiled_ztiled, stash_tiled_ztiled_r32, stash_tiled_ztiled_r64, and
+section 14's stash_tiled_pf, stash_tiled_fgrid_r32, stash_tiled_fgrid_r64,
+stash_tiled_fgrid_r32_qres, stash_tiled_fgrid_r32_qres_pf),
 MOJOLEARN_ATTN_BASELINE (default baseline; stash_tiled, the shipped
 default, is the baseline a second-round arm is priced against), the two
 `PATH` lines print each arm's resolved kernels, MOJOLEARN_ATTN_KINDS
@@ -105,14 +115,18 @@ from transformer.checks.transformer_backward import (
 from transformer.impl.llama.fused_attention import (
     ATTN_ARM_BASELINE,
     ATTN_ARM_BWD_ZTILED,
-    ATTN_ARM_NEW_FWD_BITS,
+    ATTN_ARM_FWD_QRES,
+    ATTN_ARM_PREFLUSH,
     ATTN_ARM_SABOTAGE_NEW,
     ATTN_ARM_TRIAL,
     ATTN_PHASE_TIMERS,
     FUSED_RAN,
     fused_attention_arm_name,
+    fused_attention_arm_new_backward,
+    fused_attention_arm_new_forward,
     fused_attention_arm_parse,
     fused_attention_arm_reach_bit,
+    fused_attention_fwd_rows,
     fused_attention_zdot_rows,
     fused_backward_launch_arm,
     fused_forward_launch_arm,
@@ -153,16 +167,24 @@ def _path_line(role: String, arm: Int) -> String:
     `zdot_rows` is DEVIATION 2528's resolved geometry (the arm's `_r32` /
     `_r64`, else the column's kernel-matrix row; `-` when the arm does not
     run 2528, 0 when the page does not fit and the first-round kernels
-    run); `reach_bit` is the sabotage this arm's reach proof uses."""
+    run); `fwd_rows` is the second-round forward's resolved geometry
+    (DEVIATIONS 2531 and 2530, and 2533's forward half: `-` when the arm
+    runs no second-round forward, 0 when its page does not fit and the
+    first-round sstash kernel runs); `preflush` says whether DEVIATION 2533
+    is in the arm; `reach_bit` is the sabotage this arm's reach proof uses."""
     var rows = String("-")
     if (arm & ATTN_ARM_BWD_ZTILED) != 0:
         rows = String(fused_attention_zdot_rows(arm))
+    var frows = String("-")
+    if fused_attention_arm_new_forward(arm):
+        frows = String(fused_attention_fwd_rows(arm))
     var reach = String("sabotage")
     if fused_attention_arm_reach_bit(arm) == ATTN_ARM_SABOTAGE_NEW:
         reach = String("sabotage_new")
     return (
         "PATH " + role + " arm=" + fused_attention_arm_name(arm)
-        + " zdot_rows=" + rows + " reach_bit=" + reach
+        + " zdot_rows=" + rows + " fwd_rows=" + frows + " preflush="
+        + String((arm & ATTN_ARM_PREFLUSH) != 0) + " reach_bit=" + reach
     )
 
 
@@ -350,6 +372,20 @@ def moved_cells(a: List[Float32], b: List[Float32]) raises -> Int:
     for i in range(len(a)):
         if bitcast[DType.uint32](a[i]) != bitcast[DType.uint32](b[i]):
             n += 1
+    return n
+
+
+def moved_cells_from_column(a: List[Float32], b: List[Float32], hd: Int, lo: Int) raises -> Int:
+    """Cells that differ by bits at head-dim columns `lo` and up of a
+    `[B*L][nh*hd]` buffer (the flat index modulo `hd` is the column); the
+    DEVIATION 2533 forward sabotage moves columns 0 to 15 only."""
+    if len(a) != len(b):
+        raise Error("compared buffers differ in length: " + String(len(a)) + " vs " + String(len(b)))
+    var n = 0
+    for i in range(len(a)):
+        if i % hd >= lo:
+            if bitcast[DType.uint32](a[i]) != bitcast[DType.uint32](b[i]):
+                n += 1
     return n
 
 
@@ -781,10 +817,12 @@ def main() raises:
             c.run_both(ctx, sab_arm, kind + " " + sab_name)
             var sab = c.download(ctx)
             var flipped = compare_outputs(kind, sab_name + "_vs_" + base_name, refout, sab)
-            var fwd_moved = (
-                moved_cells(refout.ctxv, sab.ctxv) + moved_cells(refout.amax, sab.amax)
-                + moved_cells(refout.denom, sab.denom)
-            )
+            var amax_den_moved = moved_cells(refout.amax, sab.amax) + moved_cells(refout.denom, sab.denom)
+            var fwd_moved = moved_cells(refout.ctxv, sab.ctxv) + amax_den_moved
+            var bwd_moved = flipped - fwd_moved
+            var ctx_hi_moved = moved_cells_from_column(refout.ctxv, sab.ctxv, c.hd, 16)
+            var zdot_moved = moved_cells(refout.zdot, sab.zdot)
+            var dv_moved = moved_cells(refout.dv, sab.dv)
             c.clear_outputs(ctx)
             c.run_both(ctx, cand, kind + " " + cand_name + " (restore)")
             var again = c.download(ctx)
@@ -793,12 +831,38 @@ def main() raises:
                 "REACH " + kind + " " + cand_name + " sabotage_flipped_cells=" + String(flipped)
                 + " clean_restored=" + String(restored) + " reach_bit=" + sab_name
                 + " forward_moved=" + String(fwd_moved) + " backward_moved="
-                + String(flipped - fwd_moved)
+                + String(bwd_moved) + " amax_denom_moved=" + String(amax_den_moved)
+                + " ctx_moved_columns_16_up=" + String(ctx_hi_moved)
+                + " zdot_moved=" + String(zdot_moved) + " dv_moved=" + String(dv_moved)
             )
             if flipped == 0:
                 failures.append(kind + ": REACH NOT PROVEN for " + cand_name + " (sabotage moved nothing: build lacks -D MOJOLEARN_ATTN_ARM_TRIAL=1, or the arm is not wired at this head dim)")
-            if reach_bit == ATTN_ARM_SABOTAGE_NEW and (cand & ATTN_ARM_NEW_FWD_BITS) == 0 and fwd_moved > 0:
-                failures.append(kind + ": " + sab_name + " moved " + String(fwd_moved) + " forward cells; the second-round kernel of " + cand_name + " is backward-only, so its sabotage must reach no forward buffer")
+            if reach_bit == ATTN_ARM_SABOTAGE_NEW:
+                # Per branch (brief sections 12.4 and 14.5). The backward
+                # reads the forward's amax and denom, so a backward-must-hold
+                # or backward attribution is asserted only when the
+                # sabotaged forward left both alone.
+                var nf = fused_attention_arm_new_forward(cand)
+                var nb = fused_attention_arm_new_backward(cand)
+                var qres = (cand & ATTN_ARM_FWD_QRES) != 0
+                var pf = (cand & ATTN_ARM_PREFLUSH) != 0
+                var zt = (cand & ATTN_ARM_BWD_ZTILED) != 0
+                if nf and fwd_moved == 0:
+                    failures.append(kind + ": FORWARD REACH NOT PROVEN for " + cand_name + " (" + sab_name + " moved no forward cell)")
+                if nb and bwd_moved == 0:
+                    failures.append(kind + ": BACKWARD REACH NOT PROVEN for " + cand_name + " (" + sab_name + " moved no backward cell)")
+                if not nf and fwd_moved > 0:
+                    failures.append(kind + ": " + sab_name + " moved " + String(fwd_moved) + " forward cells; " + cand_name + " has no second-round forward kernel, so its sabotage must reach no forward buffer")
+                if not nb and amax_den_moved == 0 and bwd_moved > 0:
+                    failures.append(kind + ": " + sab_name + " moved " + String(bwd_moved) + " backward cells with amax and denom unmoved; " + cand_name + " has no second-round backward kernel, so its sabotage must reach no backward buffer")
+                if nf and qres and amax_den_moved == 0:
+                    failures.append(kind + ": " + sab_name + ": the DEVIATION 2530 flip (every staged Q value) moved neither amax nor denom; the Q residency instantiation did not run")
+                if nf and not qres and amax_den_moved > 0:
+                    failures.append(kind + ": " + sab_name + " moved " + String(amax_den_moved) + " amax/denom cells; the 2531 and 2533 forward flips reach ctx only")
+                if nf and not qres and pf and ctx_hi_moved > 0:
+                    failures.append(kind + ": " + sab_name + " moved " + String(ctx_hi_moved) + " ctx cells at columns 16 and up; the 2533 forward flip reaches columns 0 to 15 only")
+                if nb and not zt and amax_den_moved == 0 and (zdot_moved == 0 or dv_moved > 0):
+                    failures.append(kind + ": " + sab_name + ": the DEVIATION 2533 backward flip (the stored zdot) must move zdot and hold dv; zdot moved " + String(zdot_moved) + ", dv moved " + String(dv_moved))
             if not restored:
                 failures.append(kind + ": " + cand_name + " did not restore the baseline bits after sabotage")
 

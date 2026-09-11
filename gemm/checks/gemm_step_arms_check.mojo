@@ -1,12 +1,21 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""The GEMM step arms gate (DEVIATION 2543).
+"""The GEMM step arms gate (DEVIATIONS 2543 and 2592).
 
-Every arm geometry of DEVIATIONS 2540 and 2541, forced through
+Every arm geometry of DEVIATIONS 2540, 2541 and 2591, forced through
 `identical_gemm_step_geometry_into`, must store the SAME BITS as the shipped
 `PLAN_TUNED_128_8X8` and as `PLAN_FLAT`, and its sabotage instantiation must
-move EXACTLY one cell per block of that geometry (brief section 10.1 item
-6), which proves the arm kernel ran and names the geometry that ran. Then
+move EXACTLY the cells `gemm_step_geometry_reach` names: one per block for
+the 2540 and 2541 geometries (brief section 10.1 item 6), one per launched
+`(tile, group)` whose sabotaged cell is in the output for the ksplit
+geometries (docs/lanes/BRIEF_gemm_long_k_2026-09-11.md section 5.6), which
+proves the arm kernel ran and names the geometry (and group count) that ran.
+The ragged part also runs `identical_gemm_step_ksplit_into` at explicit group
+sizes {1, 2, 4, 16, 64}. Two host checks run first and need no device work:
+`check_group_fold_is_the_contract_tree` (the long-k brief's Lemmas A to C,
+every `P` in 1 to 1,100, every power-of-two group size up to at least `2 P`)
+and `check_group_rule_hand_counts` (the section 4 rule at `S = 132` against
+the brief's hand counts at the twelve LM calls). Then
 the twelve LM calls of the step at the target shape (brief section 2, the
 three vocab-sized head calls among them) go through `identical_gemm_into`,
 the entry every GEMM of the step reaches, under `MOJOLEARN_GEMM_ARM` set
@@ -34,35 +43,48 @@ ENGINEERING_RULES 8: the switch is exercised on both sides by name. The
 sabotage must move nothing; every other arm must move one cell per block
 where it applies.
 """
+from std.memory import bitcast, stack_allocation
 from std.os import getenv, setenv
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
-from checks.numerics import numeric_mode_name
+from checks.numerics import ftz, numeric_mode_name
 from gemm.checks.gemm_identical import (
     ANY_SABOTAGE,
     GEMM_ARM_SHIPPED,
     GEMM_ARM_TRIAL,
+    GEMM_FOLD_SLOTS,
     GEMM_GEOM_COUNT,
     GEMM_GEOM_SHIPPED,
     PLAN_FLAT,
     PLAN_TUNED_128_8X8,
+    TUNED_FOLD_SLOTS,
+    _fold_drain,
+    _fold_drain_local,
+    _fold_push,
+    _fold_push_local,
     choose_gemm_plan,
     gemm_plan_name,
     gemm_sabotage_name,
     gemm_step_arm_geometry,
     gemm_step_arm_name,
     gemm_step_arm_parse,
-    gemm_step_geometry_blocks,
+    gemm_step_geometry_group_leaves,
+    gemm_step_geometry_launched_blocks,
     gemm_step_geometry_name,
+    gemm_step_geometry_reach,
+    gemm_step_ksplit_reach,
+    gemm_step_ksplit_rule,
     identical_gemm_into,
     identical_gemm_step_geometry_into,
+    identical_gemm_step_ksplit_into,
     identical_gemm_with_plan,
     identical_gemm_workspace_floats,
     identical_gemm_workspace_max_floats,
 )
-from gemm.checks.gemm_oracle import OP_NN, OP_NT, OP_TN, op_name
+from gemm.checks.gemm_oracle import OP_NN, OP_NT, OP_TN, fold_balanced_tree, op_name
 from gemm.checks.gemm_step_arms import (
     GEMM_STEP_LM_CALLS,
+    _value,
     gemm_step_compare,
     gemm_step_env_int,
     gemm_step_fill,
@@ -78,6 +100,11 @@ from gemm.checks.gemm_step_arms import (
 comptime RUN_PLAN = 0
 comptime RUN_GEOMETRY = 1
 comptime RUN_ENTRY = 2
+#: `which` is the leaves per group (DEVIATION 2592).
+comptime RUN_KSPLIT = 3
+
+#: Cells per fold in the host group-fold check (the device check's 4).
+comptime GROUP_NC = 4
 
 
 def _trial_hint() -> String:
@@ -90,7 +117,8 @@ def _trial_hint() -> String:
 
 def _arm_names() -> List[String]:
     var names: List[String] = [
-        "shipped", "lfold", "half", "half_ks16", "quarter", "head", "half_head"
+        "shipped", "lfold", "half", "half_ks16", "quarter", "head", "half_head",
+        "ksplit", "ksplit_leaf"
     ]
     return names^
 
@@ -116,6 +144,10 @@ def _run(
         identical_gemm_with_plan(ctx, dc, da, db, dw, m, n, k, op, which)
     elif how == RUN_GEOMETRY:
         identical_gemm_step_geometry_into(
+            ctx, dc, da, db, dw, m, n, k, op, which, sabotage
+        )
+    elif how == RUN_KSPLIT:
+        identical_gemm_step_ksplit_into(
             ctx, dc, da, db, dw, m, n, k, op, which, sabotage
         )
     else:
@@ -184,6 +216,148 @@ def check_selector(ctx: DeviceContext, mut failures: List[String]) raises:
 
 
 # ===========================================================================
+# HOST: THE GROUP FOLD AND THE GROUP RULE (DEVIATION 2592)
+# ===========================================================================
+
+
+def _bits32(x: Float32) -> UInt32:
+    return bitcast[DType.uint32](x)
+
+
+def _group_node(
+    parts: List[Float32], lbeg: Int, lend: Int
+) raises -> SIMD[DType.float32, GROUP_NC]:
+    """One group's stored node, per cell: leaves `[lbeg, lend)` pushed into a
+    FRESH stack with the device's own `_fold_push_local`, then the device's
+    own `_fold_drain_local`. `parts[t * GROUP_NC + e]` is leaf `t` of cell
+    `e`."""
+    var stack = stack_allocation[TUNED_FOLD_SLOTS * GROUP_NC, Scalar[DType.float32]]()
+    var occ = 0
+    for t in range(lbeg, lend):
+        var v = SIMD[DType.float32, GROUP_NC](0.0)
+        for e in range(GROUP_NC):
+            v[e] = parts[t * GROUP_NC + e]
+        if not _fold_push_local[GROUP_NC, TUNED_FOLD_SLOTS](stack, occ, v):
+            raise Error(
+                "_group_node: the thread-local fold stack OVERFLOWED at leaf "
+                + String(t)
+            )
+    return _fold_drain_local[GROUP_NC, TUNED_FOLD_SLOTS](stack, occ)
+
+
+def check_group_fold_is_the_contract_tree(mut failures: List[String]) raises:
+    """Lemmas A to C of docs/lanes/BRIEF_gemm_long_k_2026-09-11.md section 5,
+    exhaustively on the host, before any device run.
+
+    For every `P` in 1 to 1,100 and every power-of-two group size `gl` from 1
+    up to the first at or above `2 P`: the group nodes are built as the group
+    kernel builds them (`_group_node`), then folded two ways, as
+    `identical_gemm_fold_stack_kernel` folds them (`_fold_push`,
+    `_fold_drain`, then the stored `ftz`) and as
+    `identical_gemm_fold_kernel[True]` folds them (`fold_balanced_tree`, the
+    level-wise tree). Both must equal `fold_balanced_tree` over all `P` leaf
+    partials, bit for bit, in every cell. Two partial kinds: the 13-bit
+    significand generator (every addition inexact), and the same with about
+    one partial in five replaced by `-0.0` (the carry and signed-zero seams).
+    """
+    var bad = 0
+    var runs = 0
+    var first = String("")
+    for kind in range(2):
+        for p in range(1, 1101):
+            var parts = List[Float32]()
+            for t in range(p):
+                for e in range(GROUP_NC):
+                    var v = _value(t * 31 + p + 7 * e, 909 + e + 17 * kind)
+                    if kind == 1 and (t * 7 + e * 3 + p) % 5 == 0:
+                        v = -Float32(0.0)
+                    parts.append(v)
+            var want = List[Float32]()
+            for e in range(GROUP_NC):
+                var col = List[Float32]()
+                for t in range(p):
+                    col.append(parts[t * GROUP_NC + e])
+                want.append(fold_balanced_tree(col))
+            var gl = 1
+            while True:
+                var groups = (p + gl - 1) // gl
+                var nodes = List[Float32]()
+                for q in range(groups):
+                    var lend = (q + 1) * gl
+                    if lend > p:
+                        lend = p
+                    var gv = _group_node(parts, q * gl, lend)
+                    for e in range(GROUP_NC):
+                        nodes.append(gv[e])
+                for e in range(GROUP_NC):
+                    var col2 = List[Float32]()
+                    var stack = SIMD[DType.float32, GEMM_FOLD_SLOTS](0.0)
+                    var occ = 0
+                    for q2 in range(groups):
+                        var nv = nodes[q2 * GROUP_NC + e]
+                        col2.append(nv)
+                        if not _fold_push(stack, occ, nv):
+                            raise Error(
+                                "check_group_fold_is_the_contract_tree: the register stack"
+                                " OVERFLOWED at group " + String(q2) + " of " + String(groups)
+                            )
+                    var got_stack = ftz(_fold_drain(stack, occ))
+                    var got_tree = fold_balanced_tree(col2)
+                    runs += 1
+                    var want_bits = _bits32(want[e])
+                    if _bits32(got_stack) != want_bits or _bits32(got_tree) != want_bits:
+                        bad += 1
+                        if first.byte_length() == 0:
+                            first = (
+                                "kind=" + String(kind) + " P=" + String(p) + " group="
+                                + String(gl) + " cell=" + String(e) + ": stack="
+                                + hex(_bits32(got_stack)) + " tree=" + hex(_bits32(got_tree))
+                                + " contract=" + hex(want_bits)
+                            )
+                if gl >= 2 * p:
+                    break
+                gl = gl * 2
+    if bad != 0:
+        failures.append(
+            "check_group_fold_is_the_contract_tree: " + String(bad) + " of " + String(runs)
+            + " (kind, P, group, cell) folds DISAGREE with fold_balanced_tree; first " + first
+        )
+    print(
+        "check_group_fold_is_the_contract_tree: " + String(runs) + " folds (2 kinds, P 1..1100,"
+        " every power-of-two group up to 2P, 4 cells), " + String(bad) + " disagree"
+    )
+
+
+def check_group_rule_hand_counts(mut failures: List[String]) raises:
+    """The section 4 group rule, at the NVIDIA reading `S = 132` and with no
+    reading, against the long-k brief's hand counts at the twelve LM calls
+    (leaves per group; 0 declines). Host only: `gemm_step_ksplit_rule` takes
+    `S` as an argument, so this holds on every column."""
+    var want_ksplit: List[Int] = [1, 1, 1, 0, 2, 2, 2, 0, 2, 0, 64, 0]
+    var want_leaf: List[Int] = [1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 16, 0]
+    var before = len(failures)
+    for i in range(GEMM_STEP_LM_CALLS):
+        var call = gemm_step_lm_call(i)
+        var m = call[1]
+        var n = call[2]
+        var k = call[3]
+        var gk = gemm_step_ksplit_rule(m, n, k, 132, True)
+        var gf = gemm_step_ksplit_rule(m, n, k, 0, False)
+        print(
+            "RULE " + gemm_step_lm_call_name(i) + " " + op_name(call[0]) + " " + String(m) + "x"
+            + String(n) + "x" + String(k) + " ksplit(S=132)=" + String(gk) + " ksplit_leaf="
+            + String(gf)
+        )
+        if gk != want_ksplit[i] or gf != want_leaf[i]:
+            failures.append(
+                "RULE " + gemm_step_lm_call_name(i) + ": ksplit(S=132)=" + String(gk) + " (brief "
+                + String(want_ksplit[i]) + "), ksplit_leaf=" + String(gf) + " (brief "
+                + String(want_leaf[i]) + ")"
+            )
+    print("check_group_rule_hand_counts: " + String(len(failures) - before) + " failures")
+
+
+# ===========================================================================
 # RAGGED AND ADVERSARIAL CONTROLS: every geometry forced
 # ===========================================================================
 
@@ -199,6 +373,9 @@ def _ragged_case(
     mut failures: List[String],
     mut reach_ok: List[Int],
     mut reach_runs: List[Int],
+    group_sizes: List[Int],
+    mut kreach_ok: List[Int],
+    mut kreach_runs: List[Int],
 ) raises:
     var mn = m * n
     var counts = gemm_step_operand_counts(m, n, k)
@@ -247,14 +424,40 @@ def _ragged_case(
             )
         _run(ctx, dc, da, db, dw, hgot, op, m, n, k, RUN_GEOMETRY, geom, True)
         var cs = gemm_step_compare(hgot, hexp, mn)
-        var blocks = gemm_step_geometry_blocks(geom, m, n)
+        # DEVIATION 2592: one per block for 2540 and 2541, one per launched
+        # (tile, group) whose sabotaged cell is in the output for ksplit.
+        var blocks = gemm_step_geometry_reach(geom, m, n, k)
         reach_runs[geom] += 1
         if cs[0] == blocks and cs[1] == 0:
             reach_ok[geom] += 1
         else:
             failures.append(
                 tag + " [" + gname + "]: REACH NOT PROVEN: the sabotage moved " + String(cs[0])
-                + " cells and one per block is " + String(blocks) + _trial_hint()
+                + " cells and the geometry's reach is " + String(blocks) + " (group leaves "
+                + String(gemm_step_geometry_group_leaves(geom, m, n, k)) + ")" + _trial_hint()
+            )
+    # DEVIATION 2592: the group kernel and its fold at explicit group sizes,
+    # every size a power of two (a size at or above P is one group).
+    for gi in range(len(group_sizes)):
+        var gl = group_sizes[gi]
+        var kname = String("ksplit group=") + String(gl)
+        _run(ctx, dc, da, db, dw, hgot, op, m, n, k, RUN_KSPLIT, gl, False)
+        var kc = gemm_step_compare(hgot, hexp, mn)
+        if kc[0] != 0 or kc[1] != 0:
+            failures.append(
+                tag + " [" + kname + "]: MOVED " + String(kc[0]) + " cells against the shipped plan (first "
+                + String(kc[2]) + "), poison " + String(kc[1])
+            )
+        _run(ctx, dc, da, db, dw, hgot, op, m, n, k, RUN_KSPLIT, gl, True)
+        var ks = gemm_step_compare(hgot, hexp, mn)
+        var kexp = gemm_step_ksplit_reach(m, n, k, gl)
+        kreach_runs[gi] += 1
+        if ks[0] == kexp and ks[1] == 0:
+            kreach_ok[gi] += 1
+        else:
+            failures.append(
+                tag + " [" + kname + "]: REACH NOT PROVEN: the sabotage moved " + String(ks[0])
+                + " cells and the group launch's reach is " + String(kexp) + _trial_hint()
             )
     _ = da
     _ = db
@@ -278,6 +481,12 @@ def check_ragged_controls(ctx: DeviceContext, mut failures: List[String]) raises
     for _ in range(GEMM_GEOM_COUNT):
         reach_ok.append(0)
         reach_runs.append(0)
+    var group_sizes: List[Int] = [1, 2, 4, 16, 64]
+    var kreach_ok = List[Int]()
+    var kreach_runs = List[Int]()
+    for _ in range(len(group_sizes)):
+        kreach_ok.append(0)
+        kreach_runs.append(0)
     var before = len(failures)
     var cases = 0
     var skipped = 0
@@ -292,19 +501,33 @@ def check_ragged_controls(ctx: DeviceContext, mut failures: List[String]) raises
                 continue
             for oi in range(len(ops)):
                 var salt = 101 + 13 * s + 7 * ki + oi
-                _ragged_case(ctx, ops[oi], m, n, k, False, salt, failures, reach_ok, reach_runs)
+                _ragged_case(
+                    ctx, ops[oi], m, n, k, False, salt, failures, reach_ok, reach_runs,
+                    group_sizes, kreach_ok, kreach_runs,
+                )
                 cases += 1
                 if m == 129 and n == 257 and (k == 129 or k == 1000):
-                    _ragged_case(ctx, ops[oi], m, n, k, True, salt + 1, failures, reach_ok, reach_runs)
+                    _ragged_case(
+                        ctx, ops[oi], m, n, k, True, salt + 1, failures, reach_ok, reach_runs,
+                        group_sizes, kreach_ok, kreach_runs,
+                    )
                     cases += 1
     for geom in range(1, GEMM_GEOM_COUNT):
         print(
             "REACH ragged [" + gemm_step_geometry_name(geom) + "] "
-            + String(reach_ok[geom]) + "/" + String(reach_runs[geom]) + " launches moved one cell per block"
+            + String(reach_ok[geom]) + "/" + String(reach_runs[geom])
+            + " launches moved exactly the geometry's reach"
+        )
+    for gi in range(len(group_sizes)):
+        print(
+            "REACH ragged [ksplit group=" + String(group_sizes[gi]) + "] "
+            + String(kreach_ok[gi]) + "/" + String(kreach_runs[gi])
+            + " launches moved exactly the group launch's reach"
         )
     print(
         "ragged controls: " + String(cases) + " cases x " + String(GEMM_GEOM_COUNT - 1)
-        + " geometries, " + String(skipped) + " (m n k) over the " + String(budget)
+        + " geometries and " + String(len(group_sizes)) + " explicit group sizes, "
+        + String(skipped) + " (m n k) over the " + String(budget)
         + " budget skipped, " + String(len(failures) - before) + " failures"
     )
 
@@ -355,9 +578,8 @@ def check_lm_calls(ctx: DeviceContext, mut failures: List[String]) raises:
                 continue
             var arm = gemm_step_arm_parse(an)
             var geom = gemm_step_arm_geometry(arm, m, n, k)
-            var expected = 0
-            if geom != GEMM_GEOM_SHIPPED:
-                expected = gemm_step_geometry_blocks(geom, m, n)
+            # DEVIATION 2592: 0 for shipped; one per block, or the ksplit reach.
+            var expected = gemm_step_geometry_reach(geom, m, n, k)
             _ = setenv("MOJOLEARN_GEMM_ARM", an, True)
             _ = setenv("MOJOLEARN_GEMM_ARM_SABOTAGE", "0", True)
             _run(ctx, dc, da, db, dw, hgot, op, m, n, k, RUN_ENTRY, 0, False)
@@ -369,7 +591,9 @@ def check_lm_calls(ctx: DeviceContext, mut failures: List[String]) raises:
             var ok = cc[0] == 0 and cc[1] == 0 and cs[0] == expected and cs[1] == 0
             print(
                 "LM " + cname + " " + op_name(op) + " " + String(m) + "x" + String(n) + "x" + String(k)
-                + " arm=" + an + " geometry=[" + gemm_step_geometry_name(geom) + "] blocks="
+                + " arm=" + an + " geometry=[" + gemm_step_geometry_name(geom) + "] group_leaves="
+                + String(gemm_step_geometry_group_leaves(geom, m, n, k)) + " launched_blocks="
+                + String(gemm_step_geometry_launched_blocks(geom, m, n, k)) + " reach="
                 + String(expected) + " clean_moved=" + String(cc[0]) + " sabotage_moved="
                 + String(cs[0]) + (" OK" if ok else " FAIL")
             )
@@ -394,13 +618,16 @@ def main() raises:
         + String(GEMM_ARM_TRIAL) + " sabotage: " + gemm_sabotage_name() + " =="
     )
     print("   DEVIATIONS 2540 to 2543; docs/lanes/BRIEF_gemm_step_2026-09-11.md sections 6 and 10")
+    print("   DEVIATIONS 2590 to 2592; docs/lanes/BRIEF_gemm_long_k_2026-09-11.md sections 4, 5 and 9")
     comptime if ANY_SABOTAGE:
         raise Error(
             "gemm_step_arms_check: refuses a build with a global GEMM sabotage ("
             + gemm_sabotage_name() + "): its baseline would be a sabotaged kernel"
         )
-    var ctx = DeviceContext()
     var failures = List[String]()
+    check_group_fold_is_the_contract_tree(failures)
+    check_group_rule_hand_counts(failures)
+    var ctx = DeviceContext()
     check_selector(ctx, failures)
     check_ragged_controls(ctx, failures)
     var lm = String(getenv("MOJOLEARN_GEMM_STEP_CHECK_LM"))
@@ -418,6 +645,7 @@ def main() raises:
         raise Error("gemm_step_arms_check: " + String(len(failures)) + " failures")
     var scope = String(", LM calls skipped") if lm == "0" else String(", and per LM call through identical_gemm_into")
     print(
-        "PASS gemm step arms: every geometry bit-equal to the shipped 128x128 plan and to FLAT,"
-        " reach proven per geometry" + scope
+        "PASS gemm step arms: the group fold is the contract tree on the host, the group rule"
+        " matches the hand counts, every geometry and every explicit group size bit-equal to"
+        " the shipped 128x128 plan and to FLAT, reach proven per geometry" + scope
     )

@@ -123,6 +123,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.sys import llvm_intrinsic
 from std.sys.compile import is_defined
+from std.time import perf_counter_ns
 
 from gemm.checks.gemm_oracle import (
     CONTRACT_MAX_LEAVES,
@@ -147,6 +148,7 @@ from checks.kernel_matrix import (
     lib_block_size_for,
     lib_hardware_ftz_fma_for,
     gemm_wide_split_for,
+    lib_gemm_block_parallelism_for,
     lib_lane_width_for,
     lib_smem_page_fits_for,
     lib_smem_pages_for,
@@ -2679,6 +2681,13 @@ def identical_gemm_into[allow_vendor: Bool = True](
 #                                  grid reads the lane width; other calls
 #                                  take the shipped plan
 #   MOJOLEARN_GEMM_ARM=half_head   2541: head calls take head, the rest half
+#   MOJOLEARN_GEMM_ARM=ksplit      2591: the shipped 128x128 block over a
+#                                  power-of-two GROUP of leaves on grid.y,
+#                                  group nodes to a workspace, one fold
+#                                  launch; the group size reads the column's
+#                                  block parallelism (kernel matrix row)
+#   MOJOLEARN_GEMM_ARM=ksplit_leaf 2591: the same at the finest group the
+#                                  workspace cap allows (reads no machine row)
 #   anything else                  RAISES; the harnesses rely on it
 #   MOJOLEARN_GEMM_ARM_SABOTAGE=1  the arm's sabotage instantiation: one cell
 #                                  per block moves (reach proof)
@@ -2702,7 +2711,9 @@ comptime GEMM_ARM_HALF_KS16 = 3
 comptime GEMM_ARM_QUARTER = 4
 comptime GEMM_ARM_HEAD = 5
 comptime GEMM_ARM_HALF_HEAD = 6
-comptime GEMM_ARM_COUNT = 7
+comptime GEMM_ARM_KSPLIT = 7
+comptime GEMM_ARM_KSPLIT_LEAF = 8
+comptime GEMM_ARM_COUNT = 9
 #: OR'd into an arm by MOJOLEARN_GEMM_ARM_SABOTAGE=1.
 comptime GEMM_ARM_SABOTAGE = 16
 
@@ -2714,7 +2725,9 @@ comptime GEMM_GEOM_HALF_KS16 = 3
 comptime GEMM_GEOM_QUARTER = 4
 comptime GEMM_GEOM_HEAD_N = 5
 comptime GEMM_GEOM_HEAD_M = 6
-comptime GEMM_GEOM_COUNT = 7
+comptime GEMM_GEOM_KSPLIT = 7
+comptime GEMM_GEOM_KSPLIT_LEAF = 8
+comptime GEMM_GEOM_COUNT = 9
 
 #: `head` applies to calls with `max(m, n, k)` at least this: the step's
 #: three head calls (V = 50,257), and no per-layer call (at most 2,048).
@@ -2776,9 +2789,13 @@ def gemm_step_arm_parse(name: String) raises -> Int:
         return GEMM_ARM_HEAD
     if name == "half_head":
         return GEMM_ARM_HALF_HEAD
+    if name == "ksplit":
+        return GEMM_ARM_KSPLIT
+    if name == "ksplit_leaf":
+        return GEMM_ARM_KSPLIT_LEAF
     raise Error(
         "MOJOLEARN_GEMM_ARM='" + name + "' is not a GEMM step arm (shipped, lfold,"
-        + " half, half_ks16, quarter, head, half_head, or unset)"
+        + " half, half_ks16, quarter, head, half_head, ksplit, ksplit_leaf, or unset)"
     )
 
 
@@ -2800,6 +2817,10 @@ def gemm_step_arm_name(arm: Int) -> String:
         name = String("head")
     elif which == GEMM_ARM_HALF_HEAD:
         name = String("half_head")
+    elif which == GEMM_ARM_KSPLIT:
+        name = String("ksplit")
+    elif which == GEMM_ARM_KSPLIT_LEAF:
+        name = String("ksplit_leaf")
     if (arm & GEMM_ARM_SABOTAGE) != 0:
         name += "+sabotage"
     return name
@@ -2830,6 +2851,15 @@ def gemm_step_arm_geometry(arm: Int, m: Int, n: Int, k: Int) raises -> Int:
         return GEMM_GEOM_SHIPPED
     if choose_gemm_plan(m, n, k) != PLAN_TUNED_128_8X8:
         return GEMM_GEOM_SHIPPED
+    if which == GEMM_ARM_KSPLIT:
+        # 2591: the group rule decides applicability (brief section 4).
+        if gemm_step_ksplit_group_leaves(GEMM_GEOM_KSPLIT, m, n, k) > 0:
+            return GEMM_GEOM_KSPLIT
+        return GEMM_GEOM_SHIPPED
+    if which == GEMM_ARM_KSPLIT_LEAF:
+        if gemm_step_ksplit_group_leaves(GEMM_GEOM_KSPLIT_LEAF, m, n, k) > 0:
+            return GEMM_GEOM_KSPLIT_LEAF
+        return GEMM_GEOM_SHIPPED
     if which == GEMM_ARM_LFOLD:
         return GEMM_GEOM_LFOLD
     if which == GEMM_ARM_HALF:
@@ -2855,7 +2885,12 @@ def gemm_step_arm_geometry(arm: Int, m: Int, n: Int, k: Int) raises -> Int:
 def gemm_step_geometry_tile(geom: Int) raises -> Tuple[Int, Int]:
     """`(BM, BN)`, the output tile one block owns, from the same constants
     the launcher binds."""
-    if geom == GEMM_GEOM_SHIPPED or geom == GEMM_GEOM_LFOLD:
+    if (
+        geom == GEMM_GEOM_SHIPPED
+        or geom == GEMM_GEOM_LFOLD
+        or geom == GEMM_GEOM_KSPLIT
+        or geom == GEMM_GEOM_KSPLIT_LEAF
+    ):
         return (2 * TUNED_BM_WIDE, 2 * TUNED_BN_WIDE)
     if geom == GEMM_GEOM_HALF or geom == GEMM_GEOM_HALF_KS16:
         return (TUNED_BM_WIDE, 2 * TUNED_BN_WIDE)
@@ -2917,6 +2952,10 @@ def gemm_step_geometry_name(geom: Int) -> String:
         s = _step_arm_geometry_name[GEMM_HEADN_RPT, GEMM_HEADN_CPT, GEMM_HEADN_TC, 16, True]("head_n")
     elif geom == GEMM_GEOM_HEAD_M:
         s = _step_arm_geometry_name[GEMM_HEADM_RPT, GEMM_HEADM_CPT, GEMM_HEADM_TC, 16, True]("head_m")
+    elif geom == GEMM_GEOM_KSPLIT:
+        s = _ksplit_geometry_name(String("ksplit"), True)
+    elif geom == GEMM_GEOM_KSPLIT_LEAF:
+        s = _ksplit_geometry_name(String("ksplit_leaf"), False)
     else:
         return String("GEOMETRY?") + String(geom)
     comptime if not GEMM_ARM_TRIAL:
@@ -3343,6 +3382,709 @@ def _step_geometry_launch[
         raise Error("gemm step arm: no geometry " + String(geom))
 
 
+# ===========================================================================
+# THE LONG-K GROUP ARMS (DEVIATIONS 2590 and 2591, 2026-09-11; brief
+# docs/lanes/BRIEF_gemm_long_k_2026-09-11.md sections 4 and 5)
+# ===========================================================================
+# One block owns a 128x128 output tile and a GROUP of `2^g` consecutive
+# leaves (grid.y = the group), runs the shipped per-window body over exactly
+# those leaves, and stores one tree node per cell to a workspace laid out
+# leaf-major like the SPLIT plans (`ws[q * m * n + cell]`). A second launch
+# folds the `G = ceil(P / 2^g)` nodes per cell with the SPLIT plans' fold
+# kernels. The identity argument is brief section 5, written before this
+# code. Only the trial-gated dispatch in `identical_gemm_step_geometry_into`
+# and the trial harnesses reach this section.
+
+#: The shipped 128x128 geometry, bound once for the group kernel.
+comptime GEMM_KSPLIT_RPT = TUNED_RPT * 2
+comptime GEMM_KSPLIT_CPT = TUNED_CPT * 2
+comptime GEMM_KSPLIT_KS = 16
+#: `ksplit` coarsens a group while the coarser split still issues at least
+#: this many times `S` blocks (brief section 4, rule 4).
+comptime GEMM_KSPLIT_SLACK = 4
+#: `S`, the column's block parallelism (kernel matrix SCHEDULING row, 2591).
+#: 0 means no reading.
+comptime GEMM_KSPLIT_S = lib_gemm_block_parallelism_for[TARGET_COLUMN]()
+#: The largest group size `_ksplit_resolve_leaves` accepts (it travels as an
+#: Int32 kernel argument).
+comptime GEMM_KSPLIT_MAX_GROUP_LEAVES = 1 << 20
+
+
+def identical_gemm_ksplit_kernel[
+    RPT: Int, CPT: Int, TC: Int, KS: Int, PAGES: Int, SAB: Bool
+](
+    ws: MutPointer[Float32, MutAnyOrigin],
+    a: MutPointer[Float32, MutAnyOrigin],
+    b: MutPointer[Float32, MutAnyOrigin],
+    m_in: Int32,
+    n_in: Int32,
+    k_in: Int32,
+    leaf_in: Int32,
+    p_in: Int32,
+    a_si_in: Int32,
+    a_sp_in: Int32,
+    b_sp_in: Int32,
+    b_sj_in: Int32,
+    gleaves_in: Int32,
+    groups_in: Int32,
+):
+    """DEVIATION 2590: `identical_gemm_step_arm_kernel` with `LFOLD = False`,
+    over ONE group of leaves.
+
+    Block `(tile, q)`: `raw = block_idx.x`, `q = block_idx.y`. The window
+    loop starts at flat window `q * gleaves * wpl` and stops before
+    `min((q + 1) * gleaves, P) * wpl`; every other line of the loop is the
+    step arm kernel's non-LFOLD path, which is the shipped tuned kernel's
+    non-SPLIT path (brief 5.1). The leaf partials enter a fresh
+    `_fold_push_local` stack, `_fold_drain_local` returns the group's node
+    (Lemma A for a full group, Lemma B for the tail), and the node is stored
+    unflushed at `ws[q * m * n + cell]` for in-range cells. The fold kernels
+    flush on read, and every node is already flushed (brief 5.4).
+
+    `leaf_in` and `p_in` come from `contract_partition(k)`; `gleaves_in`
+    selects which leaves this block walks and reaches no leaf boundary.
+
+    Every thread of the block reaches every `barrier()`: the two early
+    returns (`raw >= n_tiles or q >= groups`, and an empty group) read only
+    block-uniform values and come before any barrier, and the window range
+    reads `q`, which every thread of the block shares.
+
+    `SAB = True` (brief 5.6) stores `1.0e30` in place of the node of ONE cell
+    per block: thread `q mod NTH`, register cell `q // NTH` (row
+    `(q // NTH) // CPT`, column `(q // NTH) mod CPT`), when that cell is in
+    the output. `gemm_step_ksplit_reach` counts those cells.
+    """
+    comptime NTH = TUNED_TPB
+    comptime TR = NTH // TC
+    comptime BM = RPT * TR
+    comptime BN = CPT * TC
+    comptime VEC = TUNED_VECLEN
+    comptime KV = KS // VEC
+    comptime SSTRIDE = KS + VEC
+    comptime APAGE = BM * SSTRIDE
+    comptime BPAGE = BN * SSTRIDE
+    comptime NCELL = RPT * CPT
+    comptime NR = RPT
+    comptime NCOL = CPT
+    comptime FS = TUNED_FOLD_SLOTS
+    comptime ASLOTS = (BM * KV + NTH - 1) // NTH
+    comptime BSLOTS = (BN * KV + NTH - 1) // NTH
+
+    comptime assert KS % VEC == 0, (
+        "identical_gemm_ksplit_kernel: KS must be a VEC multiple"
+    )
+    comptime assert NTH % TC == 0, (
+        "identical_gemm_ksplit_kernel: TC must divide the block size"
+    )
+    comptime assert (NCELL & (NCELL - 1)) == 0, (
+        "identical_gemm_ksplit_kernel: RPT * CPT must be a power of two"
+    )
+    comptime assert PAGES == 1 or PAGES == 2, (
+        "identical_gemm_ksplit_kernel: PAGES comes from lib_smem_pages_for"
+    )
+    comptime assert FS > 1, (
+        "identical_gemm_ksplit_kernel: the group folds through the local stack"
+    )
+
+    var m = Int(m_in)
+    var n = Int(n_in)
+    var k = Int(k_in)
+    var leaf = Int(leaf_in)
+    var p_count = Int(p_in)
+    var a_si = Int(a_si_in)
+    var a_sp = Int(a_sp_in)
+    var b_sp = Int(b_sp_in)
+    var b_sj = Int(b_sj_in)
+    var gleaves = Int(gleaves_in)
+    var groups = Int(groups_in)
+    var a_outer_fast = a_sp != 1 and a_si == 1
+    var b_outer_fast = b_sp != 1 and b_sj == 1
+
+    var as_ = stack_allocation[
+        PAGES * APAGE,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var bs_ = stack_allocation[
+        PAGES * BPAGE,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+
+    var tiles_i = (m + BM - 1) // BM
+    var tiles_j = (n + BN - 1) // BN
+    var n_tiles = tiles_i * tiles_j
+    var raw = Int(block_idx.x)
+    var q = Int(block_idx.y)
+    if raw >= n_tiles or q >= groups:
+        return
+    if p_count <= 0 or gleaves < 1:
+        # The launcher never sends `k == 0` here (brief 5.5).
+        return
+    var lbeg = q * gleaves
+    var lend = lbeg + gleaves
+    if lend > p_count:
+        lend = p_count
+    if lbeg >= lend:
+        return
+    var ti = raw // tiles_j
+    var tj = raw - ti * tiles_j
+    var i0 = ti * BM
+    var j0 = tj * BN
+    var mn = m * n
+
+    var tid = Int(thread_idx.x)
+    var accrow = tid // TC
+    var acccol = tid - accrow * TC
+
+    var acc = SIMD[DType.float32, NCELL](0.0)
+    var fl = stack_allocation[FS * NCELL, Scalar[DType.float32]]()
+    var occ = 0
+
+    var wpl = _tuned_windows_per_leaf[KS](leaf)
+    # THE ONLY CHANGE IN THE WINDOW LOOP: its range (brief 5.1).
+    var w = lbeg * wpl
+    var w_end = lend * wpl
+
+    # ---- PROLOGUE: the first window, DRAM to registers (shipped lines).
+    var w0 = _tuned_window[KS](w, wpl, leaf, k, p_count)
+    var pa = _tuned_g2r[ASLOTS, VEC, KV, BM, NTH](
+        a, a_si, a_sp, i0, m, w0[0], w0[1], tid
+    )
+    var pb = _tuned_g2r[BSLOTS, VEC, KV, BN, NTH](
+        b, b_sj, b_sp, j0, n, w0[0], w0[1], tid
+    )
+
+    while w < w_end:
+        var win = _tuned_window[KS](w, wpl, leaf, k, p_count)
+        var chunk = win[1]
+        var pgw = w % PAGES
+
+        # ---- REGISTERS TO SHARED, into page `w % PAGES` (shipped lines).
+        comptime for sa in range(ASLOTS):
+            if a_outer_fast:
+                comptime for ea0 in range(VEC):
+                    var ia0 = tid + (sa * VEC + ea0) * NTH
+                    if ia0 < BM * KS:
+                        as_.unsafe_store(
+                            pgw * APAGE + (ia0 % BM) * SSTRIDE + ia0 // BM,
+                            pa[sa * VEC + ea0],
+                        )
+            else:
+                var ia = tid + sa * NTH
+                if ia < BM * KV:
+                    var rra = ia // KV
+                    var cca = (ia - rra * KV) * VEC
+                    var va = SIMD[DType.float32, VEC](0.0)
+                    comptime for ea in range(VEC):
+                        va[ea] = pa[sa * VEC + ea]
+                    as_.unsafe_store(pgw * APAGE + rra * SSTRIDE + cca, va)
+        comptime for sb in range(BSLOTS):
+            if b_outer_fast:
+                comptime for eb0 in range(VEC):
+                    var ib0 = tid + (sb * VEC + eb0) * NTH
+                    if ib0 < BN * KS:
+                        bs_.unsafe_store(
+                            pgw * BPAGE + (ib0 % BN) * SSTRIDE + ib0 // BN,
+                            pb[sb * VEC + eb0],
+                        )
+            else:
+                var ib = tid + sb * NTH
+                if ib < BN * KV:
+                    var rrb = ib // KV
+                    var ccb = (ib - rrb * KV) * VEC
+                    var vb = SIMD[DType.float32, VEC](0.0)
+                    comptime for eb in range(VEC):
+                        vb[eb] = pb[sb * VEC + eb]
+                    bs_.unsafe_store(pgw * BPAGE + rrb * SSTRIDE + ccb, vb)
+        barrier()
+
+        # ---- PREFETCH window w+1 (shipped lines, DEVIATION 1256).
+        comptime if PAGES == 2:
+            if w + 1 < w_end:
+                var wn = _tuned_window[KS](w + 1, wpl, leaf, k, p_count)
+                pa = _tuned_g2r[ASLOTS, VEC, KV, BM, NTH](
+                    a, a_si, a_sp, i0, m, wn[0], wn[1], tid
+                )
+                pb = _tuned_g2r[BSLOTS, VEC, KV, BN, NTH](
+                    b, b_sj, b_sp, j0, n, wn[0], wn[1], tid
+                )
+
+        # ---- ACCUMULATE (shipped lines: contract 7.1, 4 and 5).
+        var abase = pgw * APAGE + accrow * SSTRIDE
+        var bbase = pgw * BPAGE + acccol * SSTRIDE
+        if chunk == KS:
+            comptime for kc in range(KV):
+                var ra = SIMD[DType.float32, RPT * VEC](0.0)
+                comptime for u in range(NR):
+                    var ta = as_.unsafe_load[width=VEC](
+                        abase + u * TR * SSTRIDE + kc * VEC
+                    )
+                    comptime for e in range(VEC):
+                        ra[u * VEC + e] = ta[e]
+                var rb = SIMD[DType.float32, CPT * VEC](0.0)
+                comptime for v in range(NCOL):
+                    var tb = bs_.unsafe_load[width=VEC](
+                        bbase + v * TC * SSTRIDE + kc * VEC
+                    )
+                    comptime for e2 in range(VEC):
+                        rb[v * VEC + e2] = tb[e2]
+                comptime for e3 in range(VEC):
+                    var bfl = SIMD[DType.float32, CPT](0.0)
+                    comptime for v2 in range(NCOL):
+                        bfl[v2] = _tuned_loaded_operand(rb[v2 * VEC + e3])
+                    comptime for u2 in range(NR):
+                        var afl = _tuned_loaded_operand(ra[u2 * VEC + e3])
+                        comptime for v3 in range(NCOL):
+                            acc[u2 * CPT + v3] = _tuned_step(
+                                afl, bfl[v3], acc[u2 * CPT + v3]
+                            )
+        else:
+            for cc in range(chunk):
+                var bfl2 = SIMD[DType.float32, CPT](0.0)
+                comptime for v4 in range(NCOL):
+                    bfl2[v4] = _tuned_loaded_operand(
+                        bs_.unsafe_load(bbase + v4 * TC * SSTRIDE + cc)
+                    )
+                comptime for u3 in range(NR):
+                    var afl2 = _tuned_loaded_operand(
+                        as_.unsafe_load(abase + u3 * TR * SSTRIDE + cc)
+                    )
+                    comptime for v5 in range(NCOL):
+                        acc[u3 * CPT + v5] = _tuned_step(
+                            afl2, bfl2[v5], acc[u3 * CPT + v5]
+                        )
+
+        comptime if PAGES == 1:
+            barrier()
+            if w + 1 < w_end:
+                var wn1 = _tuned_window[KS](w + 1, wpl, leaf, k, p_count)
+                pa = _tuned_g2r[ASLOTS, VEC, KV, BM, NTH](
+                    a, a_si, a_sp, i0, m, wn1[0], wn1[1], tid
+                )
+                pb = _tuned_g2r[BSLOTS, VEC, KV, BN, NTH](
+                    b, b_sj, b_sp, j0, n, wn1[0], wn1[1], tid
+                )
+
+        # ---- THE LEAF BOUNDARY. Fires exactly once per logical leaf.
+        if win[2] == 1:
+            var part = SIMD[DType.float32, NCELL](0.0)
+            comptime for pe in range(NCELL):
+                part[pe] = ftz(acc[pe])  # 5d, the leaf partial
+            _ = _fold_push_local[NCELL, FS](fl, occ, part)
+            acc = SIMD[DType.float32, NCELL](0.0)
+
+        w = w + 1
+
+    # ---- THE GROUP NODE: the group's own drain (Lemmas A and B), stored.
+    var outv = _fold_drain_local[NCELL, FS](fl, occ)
+    comptime for u4 in range(NR):
+        comptime for v6 in range(NCOL):
+            var gi = i0 + accrow + u4 * TR
+            var gj = j0 + acccol + v6 * TC
+            if gi < m and gj < n:
+                var node = outv[u4 * CPT + v6]
+                comptime if SAB:
+                    if tid == q % NTH and q // NTH == u4 * CPT + v6:
+                        node = Float32(1.0e30)
+                ws.unsafe_store(q * mn + gi * n + gj, node)
+
+
+def _ksplit_groups_launch[
+    RPT: Int, CPT: Int, TC: Int, KS: Int, SAB: Bool
+](
+    ctx: DeviceContext,
+    mut ws: DeviceBuffer[DType.float32],
+    mut a: DeviceBuffer[DType.float32],
+    mut b: DeviceBuffer[DType.float32],
+    m: Int,
+    n: Int,
+    k: Int,
+    leaf: Int,
+    p_count: Int,
+    st: Tuple[Int, Int, Int, Int],
+    gleaves: Int,
+    groups: Int,
+) raises:
+    """DEVIATION 2590, launch one: the group kernel over `(tiles, groups)`,
+    PAGES from the matrix at the page bytes `_launch_tuned` computes, the
+    grid's x axis from the IMPORTED `_tile_grid`."""
+    comptime NTH = TUNED_TPB
+    comptime TR = NTH // TC
+    comptime BM = RPT * TR
+    comptime BN = CPT * TC
+    comptime SSTRIDE = KS + TUNED_VECLEN
+    comptime PAGE_BYTES = (BM + BN) * SSTRIDE * 4
+    comptime PAGES = lib_smem_pages_for[TARGET_COLUMN, PAGE_BYTES]()
+    comptime assert lib_smem_page_fits_for[TARGET_COLUMN, PAGE_BYTES](), (
+        "_ksplit_groups_launch: one shared page of this geometry exceeds the"
+        " column's shared limit"
+    )
+    comptime kern = identical_gemm_ksplit_kernel[RPT, CPT, TC, KS, PAGES, SAB]
+    var g = _tile_grid(m, n, BM, BN, False)
+    ctx.enqueue_function[kern](
+        ws.unsafe_ptr(),
+        a.unsafe_ptr(),
+        b.unsafe_ptr(),
+        Int32(m),
+        Int32(n),
+        Int32(k),
+        Int32(leaf),
+        Int32(p_count),
+        Int32(st[0]),
+        Int32(st[1]),
+        Int32(st[2]),
+        Int32(st[3]),
+        Int32(gleaves),
+        Int32(groups),
+        grid_dim=(g[0], groups, 1),
+        block_dim=(NTH, 1, 1),
+    )
+
+
+def _ksplit_fold_launch(
+    ctx: DeviceContext,
+    mut c: DeviceBuffer[DType.float32],
+    mut ws: DeviceBuffer[DType.float32],
+    m: Int,
+    n: Int,
+    groups: Int,
+) raises:
+    """DEVIATION 2590, launch two: `_launch_split`'s fold dispatch with the
+    group count as the count (brief 5.4)."""
+    if m * n <= SPLIT_BLOCK_FOLD_MAX_CELLS:
+        ctx.enqueue_function[identical_gemm_fold_kernel[True]](
+            c.unsafe_ptr(),
+            ws.unsafe_ptr(),
+            Int32(m * n),
+            Int32(groups),
+            Int32(groups),
+            grid_dim=(m * n, 1, 1),
+            block_dim=(SPLITK_FOLD_TPB, 1, 1),
+        )
+        return
+    ctx.enqueue_function[identical_gemm_fold_stack_kernel](
+        c.unsafe_ptr(),
+        ws.unsafe_ptr(),
+        Int32(m * n),
+        Int32(groups),
+        grid_dim=((m * n + FLAT_TPB - 1) // FLAT_TPB, 1, 1),
+        block_dim=(FLAT_TPB, 1, 1),
+    )
+
+
+def _ksplit_resolve_leaves(group_leaves: Int, p_count: Int) raises -> Tuple[Int, Int]:
+    """`(leaves per group, groups)`. RAISES unless `group_leaves` is a power
+    of two in `1 .. GEMM_KSPLIT_MAX_GROUP_LEAVES` (brief 5.5: groups are
+    powers of two aligned at leaf 0). A size at or above `P` is one group.
+    `P <= 0` has no groups."""
+    if (
+        group_leaves < 1
+        or group_leaves > GEMM_KSPLIT_MAX_GROUP_LEAVES
+        or (group_leaves & (group_leaves - 1)) != 0
+    ):
+        raise Error(
+            "ksplit: " + String(group_leaves)
+            + " leaves per group is not a power of two in 1 .. "
+            + String(GEMM_KSPLIT_MAX_GROUP_LEAVES)
+        )
+    if p_count <= 0:
+        return (group_leaves, 0)
+    return (group_leaves, (p_count + group_leaves - 1) // group_leaves)
+
+
+def _ksplit_tiles(m: Int, n: Int) -> Tuple[Int, Int]:
+    """`(tiles_i, tiles_j)` of the 128x128 tile the group kernel binds."""
+    comptime BM = GEMM_KSPLIT_RPT * (TUNED_TPB // TUNED_TC)
+    comptime BN = GEMM_KSPLIT_CPT * TUNED_TC
+    if m <= 0 or n <= 0:
+        return (0, 0)
+    return ((m + BM - 1) // BM, (n + BN - 1) // BN)
+
+
+def identical_gemm_step_ksplit_workspace_floats(
+    m: Int, n: Int, k: Int, group_leaves: Int
+) raises -> Int:
+    """`m n G`, the node workspace one ksplit call allocates (0 at `k == 0`)."""
+    if m <= 0 or n <= 0:
+        return 0
+    var rg = _ksplit_resolve_leaves(group_leaves, contract_partition(k)[1])
+    return m * n * rg[1]
+
+
+def identical_gemm_step_ksplit_into(
+    ctx: DeviceContext,
+    mut c: DeviceBuffer[DType.float32],
+    mut a: DeviceBuffer[DType.float32],
+    mut b: DeviceBuffer[DType.float32],
+    mut ws: DeviceBuffer[DType.float32],
+    m: Int,
+    n: Int,
+    k: Int,
+    op: Int,
+    group_leaves: Int,
+    sabotage: Bool,
+) raises:
+    """DEVIATION 2590. `C = op(A) . op(B)` through leaf groups of
+    `group_leaves` leaves: allocate `m n G` floats, launch the groups, launch
+    the fold, SYNCHRONIZE (the workspace is allocated here, so returning
+    before the wait would free it under the kernels,
+    `[[mojo-buffer-freed-at-last-use]]`). `ws` is the caller's and untouched
+    on a trial build.
+
+    `k == 0` takes no group launch: the step arm kernel at the shipped
+    geometry with `LFOLD = False` stores `+0.0` per cell (brief 5.5).
+
+    On a build without `-D MOJOLEARN_GEMM_ARM_TRIAL=1` this runs
+    PLAN_TUNED_128_8X8 and ignores `group_leaves` and `sabotage`, so the arms
+    check fails on reach there."""
+    if m <= 0 or n <= 0:
+        return
+    comptime if GEMM_ARM_TRIAL:
+        var part = contract_partition(k)
+        var leaf = part[0]
+        var p_count = part[1]
+        var st = gemm_operand_strides(op, m, n, k)
+        var rg = _ksplit_resolve_leaves(group_leaves, p_count)
+        if p_count <= 0:
+            if sabotage:
+                _launch_step_arm[
+                    GEMM_KSPLIT_RPT, GEMM_KSPLIT_CPT, TUNED_TC, GEMM_KSPLIT_KS, False, True
+                ](ctx, c, a, b, m, n, k, leaf, p_count, st)
+            else:
+                _launch_step_arm[
+                    GEMM_KSPLIT_RPT, GEMM_KSPLIT_CPT, TUNED_TC, GEMM_KSPLIT_KS, False, False
+                ](ctx, c, a, b, m, n, k, leaf, p_count, st)
+            ctx.synchronize()
+            return
+        var gws = ctx.enqueue_create_buffer[DType.float32](m * n * rg[1])
+        ctx.synchronize()
+        if sabotage:
+            _ksplit_groups_launch[
+                GEMM_KSPLIT_RPT, GEMM_KSPLIT_CPT, TUNED_TC, GEMM_KSPLIT_KS, True
+            ](ctx, gws, a, b, m, n, k, leaf, p_count, st, rg[0], rg[1])
+        else:
+            _ksplit_groups_launch[
+                GEMM_KSPLIT_RPT, GEMM_KSPLIT_CPT, TUNED_TC, GEMM_KSPLIT_KS, False
+            ](ctx, gws, a, b, m, n, k, leaf, p_count, st, rg[0], rg[1])
+        _ksplit_fold_launch(ctx, c, gws, m, n, rg[1])
+        ctx.synchronize()
+        _ = gws
+        return
+    identical_gemm_with_plan(ctx, c, a, b, ws, m, n, k, op, PLAN_TUNED_128_8X8)
+    ctx.synchronize()
+
+
+def identical_gemm_step_ksplit_phase_into(
+    ctx: DeviceContext,
+    mut c: DeviceBuffer[DType.float32],
+    mut a: DeviceBuffer[DType.float32],
+    mut b: DeviceBuffer[DType.float32],
+    mut ws: DeviceBuffer[DType.float32],
+    m: Int,
+    n: Int,
+    k: Int,
+    op: Int,
+    group_leaves: Int,
+) raises -> Tuple[Int, Int, Int]:
+    """`identical_gemm_step_ksplit_into` (clean) with a host synchronize
+    after each phase: `(alloc_ns, group_ns, fold_ns)`. The price harness's
+    PHASE lines (2593). A non-trial build runs PLAN_TUNED_128_8X8 and
+    reports it all as `group_ns`."""
+    if m <= 0 or n <= 0:
+        return (0, 0, 0)
+    comptime if GEMM_ARM_TRIAL:
+        var part = contract_partition(k)
+        var leaf = part[0]
+        var p_count = part[1]
+        var st = gemm_operand_strides(op, m, n, k)
+        var rg = _ksplit_resolve_leaves(group_leaves, p_count)
+        if p_count <= 0:
+            var tz = perf_counter_ns()
+            _launch_step_arm[
+                GEMM_KSPLIT_RPT, GEMM_KSPLIT_CPT, TUNED_TC, GEMM_KSPLIT_KS, False, False
+            ](ctx, c, a, b, m, n, k, leaf, p_count, st)
+            ctx.synchronize()
+            return (0, Int(perf_counter_ns() - tz), 0)
+        var t0 = perf_counter_ns()
+        var gws = ctx.enqueue_create_buffer[DType.float32](m * n * rg[1])
+        ctx.synchronize()
+        var t1 = perf_counter_ns()
+        _ksplit_groups_launch[
+            GEMM_KSPLIT_RPT, GEMM_KSPLIT_CPT, TUNED_TC, GEMM_KSPLIT_KS, False
+        ](ctx, gws, a, b, m, n, k, leaf, p_count, st, rg[0], rg[1])
+        ctx.synchronize()
+        var t2 = perf_counter_ns()
+        _ksplit_fold_launch(ctx, c, gws, m, n, rg[1])
+        ctx.synchronize()
+        var t3 = perf_counter_ns()
+        _ = gws
+        return (Int(t1 - t0), Int(t2 - t1), Int(t3 - t2))
+    var ts = perf_counter_ns()
+    identical_gemm_with_plan(ctx, c, a, b, ws, m, n, k, op, PLAN_TUNED_128_8X8)
+    ctx.synchronize()
+    return (0, Int(perf_counter_ns() - ts), 0)
+
+
+def gemm_step_ksplit_finest_leaves(m: Int, n: Int, k: Int) -> Int:
+    """The finest power-of-two leaves per group whose workspace `m n G` fits
+    `SPLITK_MAX_WORKSPACE_FLOATS` (a size at or above `P` is one group). 0
+    when `P == 0` or not even one group fits. Execution plan only."""
+    if m <= 0 or n <= 0:
+        return 0
+    var p_count = contract_partition(k)[1]
+    if p_count <= 0:
+        return 0
+    var mn = m * n
+    if mn > SPLITK_MAX_WORKSPACE_FLOATS:
+        return 0
+    var gl = 1
+    while gl < p_count and mn * ((p_count + gl - 1) // gl) > SPLITK_MAX_WORKSPACE_FLOATS:
+        gl = gl * 2
+    return gl
+
+
+def gemm_step_ksplit_rule(m: Int, n: Int, k: Int, s: Int, read_s: Bool) -> Int:
+    """THE GROUP RULE (brief section 4), with `S` as an argument so a host
+    check can hold it to the section 4 hand counts at any reading. Leaves per
+    group, or 0 when the rule declines. Reads `m`, `n`, `k` and `s`; returns
+    an execution plan quantity, never a partition (contract 6.1).
+
+    1. Only where `choose_gemm_plan` answers PLAN_TUNED_128_8X8 and `P >= 2`.
+    2. The finest power-of-two group under the workspace cap; declines when
+       fewer than two groups result.
+    3. `read_s = False` (`ksplit_leaf`) stops there.
+    4. `read_s = True` (`ksplit`) with `s > 0`: declines at `tiles >= s`,
+       then doubles the group while the doubled split still issues at least
+       `GEMM_KSPLIT_SLACK * s` blocks. With `s <= 0` it stops at 2."""
+    if choose_gemm_plan(m, n, k) != PLAN_TUNED_128_8X8:
+        return 0
+    var p_count = contract_partition(k)[1]
+    if p_count < 2:
+        return 0
+    var gl = gemm_step_ksplit_finest_leaves(m, n, k)
+    if gl < 1:
+        return 0
+    if (p_count + gl - 1) // gl < 2:
+        return 0
+    if not read_s or s <= 0:
+        return gl
+    var tt = _ksplit_tiles(m, n)
+    var tiles = tt[0] * tt[1]
+    if tiles >= s:
+        return 0
+    while tiles * ((p_count + 2 * gl - 1) // (2 * gl)) >= GEMM_KSPLIT_SLACK * s:
+        gl = gl * 2
+    return gl
+
+
+def gemm_step_ksplit_group_leaves(geom: Int, m: Int, n: Int, k: Int) raises -> Int:
+    """The rule for a ksplit geometry at this column: `ksplit` reads
+    `GEMM_KSPLIT_S` (the kernel matrix row), `ksplit_leaf` reads nothing. 0
+    when it declines."""
+    if geom == GEMM_GEOM_KSPLIT:
+        return gemm_step_ksplit_rule(m, n, k, GEMM_KSPLIT_S, True)
+    if geom == GEMM_GEOM_KSPLIT_LEAF:
+        return gemm_step_ksplit_rule(m, n, k, 0, False)
+    raise Error("gemm_step_ksplit_group_leaves: geometry " + String(geom) + " is not a ksplit geometry")
+
+
+def gemm_step_geometry_group_leaves(geom: Int, m: Int, n: Int, k: Int) raises -> Int:
+    """Leaves per group a FORCED launch of `geom` uses: 0 for a geometry that
+    is not ksplit; the rule where it applies; where it declines (a forced
+    harness launch only, never the hook), the finest group under the cap, and
+    1 at `k == 0` (no group launch runs). RAISES when not even one group
+    fits the cap."""
+    if geom != GEMM_GEOM_KSPLIT and geom != GEMM_GEOM_KSPLIT_LEAF:
+        return 0
+    var gl = gemm_step_ksplit_group_leaves(geom, m, n, k)
+    if gl > 0:
+        return gl
+    if m <= 0 or n <= 0 or contract_partition(k)[1] <= 0:
+        return 1
+    gl = gemm_step_ksplit_finest_leaves(m, n, k)
+    if gl < 1:
+        raise Error(
+            "forced ksplit at " + String(m) + "x" + String(n) + "x" + String(k)
+            + ": the output alone exceeds the workspace cap"
+        )
+    return gl
+
+
+def gemm_step_ksplit_reach(m: Int, n: Int, k: Int, group_leaves: Int) raises -> Int:
+    """Cells a sabotage launch of `identical_gemm_step_ksplit_into` moves:
+    one per `(tile, q)` whose sabotaged cell (thread `q mod NTH`, register
+    cell `q // NTH`) lies in the output; one per tile at `k == 0` (the step
+    arm kernel's thread 0, cell (0, 0)). Names the group count that ran."""
+    comptime NTH = TUNED_TPB
+    comptime TR = NTH // TUNED_TC
+    comptime BM = GEMM_KSPLIT_RPT * TR
+    comptime BN = GEMM_KSPLIT_CPT * TUNED_TC
+    comptime NCELL = GEMM_KSPLIT_RPT * GEMM_KSPLIT_CPT
+    if m <= 0 or n <= 0:
+        return 0
+    var tt = _ksplit_tiles(m, n)
+    var p_count = contract_partition(k)[1]
+    if p_count <= 0:
+        return tt[0] * tt[1]
+    var rg = _ksplit_resolve_leaves(group_leaves, p_count)
+    var moved = 0
+    for ti in range(tt[0]):
+        for tj in range(tt[1]):
+            for q in range(rg[1]):
+                var reg = q // NTH
+                if reg >= NCELL:
+                    continue
+                var th = q - reg * NTH
+                var arow = th // TUNED_TC
+                var acol = th - arow * TUNED_TC
+                var gi = ti * BM + arow + (reg // GEMM_KSPLIT_CPT) * TR
+                var gj = tj * BN + acol + (reg % GEMM_KSPLIT_CPT) * TUNED_TC
+                if gi < m and gj < n:
+                    moved += 1
+    return moved
+
+
+def gemm_step_geometry_reach(geom: Int, m: Int, n: Int, k: Int) raises -> Int:
+    """Cells a sabotage launch of `geom` through
+    `identical_gemm_step_geometry_into` moves: 0 for shipped, one per block
+    for the 2540 and 2541 geometries, `gemm_step_ksplit_reach` for ksplit."""
+    if geom == GEMM_GEOM_SHIPPED:
+        return 0
+    if geom == GEMM_GEOM_KSPLIT or geom == GEMM_GEOM_KSPLIT_LEAF:
+        return gemm_step_ksplit_reach(
+            m, n, k, gemm_step_geometry_group_leaves(geom, m, n, k)
+        )
+    return gemm_step_geometry_blocks(geom, m, n)
+
+
+def gemm_step_geometry_launched_blocks(geom: Int, m: Int, n: Int, k: Int) raises -> Int:
+    """Blocks the (first) launch of `geom` issues: tiles times groups for
+    ksplit (the fold launch is not counted), tiles otherwise."""
+    var blocks = gemm_step_geometry_blocks(geom, m, n)
+    if geom != GEMM_GEOM_KSPLIT and geom != GEMM_GEOM_KSPLIT_LEAF:
+        return blocks
+    var p_count = contract_partition(k)[1]
+    if blocks <= 0 or p_count <= 0:
+        return blocks
+    var gl = gemm_step_geometry_group_leaves(geom, m, n, k)
+    return blocks * ((p_count + gl - 1) // gl)
+
+
+def _ksplit_geometry_name(label: String, reads_s: Bool) -> String:
+    """Built from the constants the launcher binds, never a literal."""
+    var s = _step_arm_geometry_name[
+        GEMM_KSPLIT_RPT, GEMM_KSPLIT_CPT, TUNED_TC, GEMM_KSPLIT_KS, False
+    ](label)
+    s += " leaf groups on grid.y -> node workspace -> fold (block per cell <= "
+    s += String(SPLIT_BLOCK_FOLD_MAX_CELLS) + ", else register stack)"
+    if reads_s:
+        s += " group rule S=" + String(GEMM_KSPLIT_S) + " slack=" + String(GEMM_KSPLIT_SLACK)
+    else:
+        s += " group rule finest under the cap"
+    return s
+
+
 def identical_gemm_step_geometry_into(
     ctx: DeviceContext,
     mut c: DeviceBuffer[DType.float32],
@@ -3362,12 +4104,23 @@ def identical_gemm_step_geometry_into(
 
     GEMM_GEOM_SHIPPED runs PLAN_TUNED_128_8X8. On a build without
     `-D MOJOLEARN_GEMM_ARM_TRIAL=1` EVERY geometry runs PLAN_TUNED_128_8X8
-    and `sabotage` is ignored, so the arms check fails on reach there."""
+    and `sabotage` is ignored, so the arms check fails on reach there.
+
+    The two ksplit geometries (2591) allocate their own workspace and
+    therefore SYNCHRONIZE before returning
+    (`identical_gemm_step_ksplit_into`); their group size is
+    `gemm_step_geometry_group_leaves`."""
     if geom < 0 or geom >= GEMM_GEOM_COUNT:
         raise Error("identical_gemm_step_geometry_into: no geometry " + String(geom))
     if m <= 0 or n <= 0:
         return
     comptime if GEMM_ARM_TRIAL:
+        if geom == GEMM_GEOM_KSPLIT or geom == GEMM_GEOM_KSPLIT_LEAF:
+            identical_gemm_step_ksplit_into(
+                ctx, c, a, b, ws, m, n, k, op,
+                gemm_step_geometry_group_leaves(geom, m, n, k), sabotage,
+            )
+            return
         if geom != GEMM_GEOM_SHIPPED:
             if sabotage:
                 _step_geometry_launch[True](ctx, c, a, b, m, n, k, op, geom)
