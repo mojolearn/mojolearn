@@ -405,6 +405,7 @@ if [ "$LEG_MODE" = qualify ]; then
 else
 $SSH "cd /root/mojolearn && nohup bash -c 'export PATH=/root/release-tools/bin:/root/.pixi/bin:\$PATH; \
   MOJOLEARN_COMMIT=$COMMIT MOJOLEARN_PYTHON=$REMOTE_PY MOJOLEARN_RELEASE_BUILD_SECONDS=$WORK_SECONDS \
+  MOJOLEARN_BUILD_JOBS=${MOJOLEARN_BUILD_JOBS:-4} \
   timeout -k 20 $((WORK_SECONDS + 40)) bash tools/release061_remote_build.sh $LEG_VENDOR $LEG_ARCH $REMOTE_OUT > $REMOTE_LOG 2>&1; \
   echo \$? > /root/rel061.exit' > /dev/null 2>&1 < /dev/null &" || { log "could not start the build"; exit 9; }
 fi

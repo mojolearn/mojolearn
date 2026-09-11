@@ -21,9 +21,12 @@
 # target) or disagree with each other fails this script rather than producing
 # a set under a label somebody typed.
 #
-# Build tiers serially. Concurrent compilers previously multiplied worker counts
-# and memory pressure; MOJOLEARN_BUILD_JOBS must now be 1. The inherited Linux
-# affinity is capped at two CPUs, compiler workers at two, BLAS/OpenMP at one.
+# MOJOLEARN_BUILD_JOBS extension builds run at a time (default 4; DEVIATION
+# 2501). Concurrent compilers once multiplied worker counts and memory
+# pressure, so the caps are per build, not per box: every build keeps two
+# compiler workers and one BLAS/OpenMP thread, and the affinity is 2 x jobs
+# CPUs out of the inherited set (never widened beyond it). Each build writes
+# its own log; a failure names the script and its first error as before.
 # A partial timed-out build is retained as partial, never release-qualified.
 #
 # THE BUILD SCRIPTS ARE THE EXISTING ONES. bindings/build_*.sh already know
@@ -39,8 +42,9 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$REPO"
 mkdir -p "$DEST/build_logs" "$DEST/sets"
 PIXI_ENV="${MOJOLEARN_BUILD_PIXI_ENV:-gbmbench}"
-JOBS="${MOJOLEARN_BUILD_JOBS:-1}"
-[[ "$JOBS" = 1 ]] || { echo 'MOJOLEARN_BUILD_JOBS must be 1: wheel builds are serial' >&2; exit 2; }
+JOBS="${MOJOLEARN_BUILD_JOBS:-4}"
+[[ "$JOBS" =~ ^[1-9][0-9]?$ && "$JOBS" -le 16 ]] || { echo 'MOJOLEARN_BUILD_JOBS must be 1..16' >&2; exit 2; }
+BUILD_CORES=$((2 * JOBS))
 export MOJOLEARN_COMPILE_JOBS=2 MAX_JOBS=2 CMAKE_BUILD_PARALLEL_LEVEL=2
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
 export NUMEXPR_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1
@@ -49,10 +53,10 @@ if [[ "$(uname -s)" != Linux ]]; then
     exit 2
 fi
 command -v taskset >/dev/null || { echo 'taskset required for CPU cap' >&2; exit 2; }
-BUILD_CPUS=$(python3 -c 'import os; print(",".join(map(str, sorted(os.sched_getaffinity(0))[:2])))') || exit 2
+BUILD_CPUS=$(python3 -c 'import os, sys; print(",".join(map(str, sorted(os.sched_getaffinity(0))[:int(sys.argv[1])])))' "$BUILD_CORES") || exit 2
 [[ -n "$BUILD_CPUS" ]] || { echo 'Empty CPU affinity' >&2; exit 2; }
 taskset -pc "$BUILD_CPUS" $$ || exit 2
-python3 -c 'import os; assert 1 <= len(os.sched_getaffinity(0)) <= 2, "two-core build affinity required"' || exit 2
+python3 -c 'import os, sys; assert 1 <= len(os.sched_getaffinity(0)) <= int(sys.argv[1]), "build affinity exceeds 2 x jobs"' "$BUILD_CORES" || exit 2
 TIERS="${MOJOLEARN_BUILD_TIERS:-fast deterministic identical}"
 # THE TWO LISTS BELOW ARE THE LINUX WHEEL'S CONTENTS AND THEY GO STALE
 # SILENTLY. A binding missing from them is not a build error -- it is a wheel
@@ -110,28 +114,48 @@ for t in $TIERS; do
 done
 
 # ---------------------------------------------------------------- builds
-build_tier() {
-  local tier="$1" rc=0
-  for s in $(tier_scripts "$tier"); do
-    local log="$DEST/build_logs/${tier}_${s%.sh}.log"
-    { echo "start $(date -u +%FT%TZ)"; } > "$log"
-    if MOJOLEARN_NUMERIC_MODE=$tier MOJOLEARN_SKIP_BUILD_GATE=1 \
-         pixi run -e "$PIXI_ENV" bash "bindings/$s" >> "$log" 2>&1; then
-      echo "end $(date -u +%FT%TZ) OK" >> "$log"
-    else
-      echo "end $(date -u +%FT%TZ) FAILED" >> "$log"
-      say "FINDING: $tier bindings/$s did not build; first error:"
-      grep -m2 -E 'error:|constraint failed' "$log" | cut -c1-200 | sed 's/^/      /'
-      rc=1
-    fi
-  done
-  return $rc
+build_one() {
+  local tier="$1" s="$2"
+  local log="$DEST/build_logs/${tier}_${s%.sh}.log"
+  { echo "start $(date -u +%FT%TZ)"; } > "$log"
+  if MOJOLEARN_NUMERIC_MODE=$tier MOJOLEARN_SKIP_BUILD_GATE=1 \
+       pixi run -e "$PIXI_ENV" bash "bindings/$s" >> "$log" 2>&1; then
+    echo "end $(date -u +%FT%TZ) OK" >> "$log"
+    say "built $tier bindings/$s"
+  else
+    echo "end $(date -u +%FT%TZ) FAILED" >> "$log"
+    say "FINDING: $tier bindings/$s did not build; first error:"
+    grep -m2 -E 'error:|constraint failed' "$log" | cut -c1-200 | sed 's/^/      /'
+    return 1
+  fi
 }
 
+# The pool: every (tier, script) pair is one background build; at most JOBS
+# run at once. Each build has its own output directory (python/mojolearn or
+# python/mojolearn/<tier>) and its own mktemp scratch, so the pairs are
+# independent. The identical tier is queued first because it holds the most
+# scripts; the tail of the schedule is then the shortest.
 T0=$(date +%s)
 BUILD_RC=0
-for tier in $TIERS; do build_tier "$tier" || BUILD_RC=1; done
-say "builds finished in $(( $(date +%s) - T0 ))s (rc=$BUILD_RC)"
+ordered_tiers=""
+for tier in $TIERS; do [[ "$tier" = identical ]] && ordered_tiers="identical"; done
+for tier in $TIERS; do [[ "$tier" = identical ]] || ordered_tiers="$ordered_tiers $tier"; done
+running=0
+for tier in $ordered_tiers; do
+  for s in $(tier_scripts "$tier"); do
+    build_one "$tier" "$s" &
+    running=$((running + 1))
+    if (( running >= JOBS )); then
+      wait -n || BUILD_RC=1
+      running=$((running - 1))
+    fi
+  done
+done
+while (( running > 0 )); do
+  wait -n || BUILD_RC=1
+  running=$((running - 1))
+done
+say "builds finished in $(( $(date +%s) - T0 ))s (rc=$BUILD_RC, jobs=$JOBS, cpus=$BUILD_CPUS)"
 
 # ---------------------------------------------------------------- read-back
 # THE VENDOR COMES OUT OF THE BINARY. A bare ExtensionFileLoader import, no

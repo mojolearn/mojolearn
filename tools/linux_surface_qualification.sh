@@ -22,16 +22,23 @@ command -v taskset >/dev/null || { echo 'taskset required for CPU cap' >&2; exit
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1
 export OMP_THREAD_LIMIT=1 OMP_MAX_ACTIVE_LEVELS=1 BLIS_NUM_THREADS=1 NUMEXPR_MAX_THREADS=1
 export MOJOLEARN_COMPILE_JOBS=2 MAX_JOBS=2 CMAKE_BUILD_PARALLEL_LEVEL=2 MOJOLEARN_CPU_THREADS=2
-export MOJOLEARN_BUILD_JOBS=1 CARGO_BUILD_JOBS=2 RAYON_NUM_THREADS=2
+# DEVIATION 2501: the build action runs MOJOLEARN_BUILD_JOBS extension
+# builds at a time (default 4) on 2 x jobs cores; each build keeps the
+# two-worker, one-BLAS-thread caps above. Qualification stays serial on two.
+BUILD_JOBS=1
+if [[ "$ACTION" = build ]]; then BUILD_JOBS=${MOJOLEARN_BUILD_JOBS:-4}; fi
+[[ "$BUILD_JOBS" =~ ^[1-9][0-9]?$ && "$BUILD_JOBS" -le 16 ]] || { echo 'MOJOLEARN_BUILD_JOBS must be 1..16' >&2; exit 2; }
+BUILD_CORES=$((2 * BUILD_JOBS))
+export MOJOLEARN_BUILD_JOBS=$BUILD_JOBS CARGO_BUILD_JOBS=2 RAYON_NUM_THREADS=2
 export MAKEFLAGS=-j2 MFLAGS=-j2 GNUMAKEFLAGS=
-cores=$("$PY" -c 'import os; print(",".join(map(str, sorted(os.sched_getaffinity(0))[:2])))')
+cores=$("$PY" -c 'import os, sys; print(",".join(map(str, sorted(os.sched_getaffinity(0))[:int(sys.argv[1])])))' "$BUILD_CORES")
 [[ -n "$cores" ]] || { echo 'Empty CPU affinity' >&2; exit 2; }
 taskset -pc "$cores" $$
-"$PY" - "$cores" <<'PYCAP'
+"$PY" - "$cores" "$BUILD_CORES" <<'PYCAP'
 import os, sys
 expected = {int(cpu) for cpu in sys.argv[1].split(',')}
 actual = os.sched_getaffinity(0)
-if not 1 <= len(actual) <= 2 or actual != expected:
+if not 1 <= len(actual) <= int(sys.argv[2]) or actual != expected:
     raise SystemExit('CPU affinity cap failed')
 PYCAP
 # RESOURCE_CAPS_END: source-only test extracts only the admission prefix.
@@ -66,7 +73,7 @@ byte_lm = os.environ.get('MOJOLEARN_PACKAGE_BYTE_LM', '0') == '1'
 print(' '.join(f'expected_bindings_{m}={len(expected_bindings(m, byte_lm))}' for m in MODES))
 PYCOUNTS
         echo "expected_tiers=${MOJOLEARN_BUILD_TIERS:-fast deterministic identical}"
-        echo 'build_jobs=1 cpu_affinity_max=2 compiler_jobs=2 blas_threads=1'
+        echo "build_jobs=$BUILD_JOBS cpu_affinity_max=$BUILD_CORES compiler_jobs=2 blas_threads=1"
         echo "cpu_affinity=$cores"
         echo "artifact=$ACTION vendor set; not a wheel or publication"
     } > "$DEST/source-provenance.txt"

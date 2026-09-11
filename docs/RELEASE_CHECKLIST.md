@@ -12,10 +12,17 @@ path users call, or when the release is cited as paper evidence; the archive
 is then attached to the release. No deviation numbers, admission essays or
 evidence READMEs. Plain commit messages and the files the tools write.
 
-Measured on 2026-09-09: one architecture build is about 30 minutes of rental
-and they run in parallel; pack, audit and upload are about 15 minutes; one
-install-and-test column, all 25 jobs, is about four minutes. The macOS build
-on the release Mac is 30 to 60 minutes.
+Measured on 2026-09-10 (0.8.0, serial compiles): one architecture build was
+12 minutes of compile on the MI325X and 19 on the H100 plus about 5 minutes
+of rental spin-up, and the three run in parallel; pack, audit and upload are
+about 15 minutes; one install-and-test column is about four minutes. The
+macOS run on the release Mac was 20 minutes, 8 of them compiling.
+
+Since then the extension builds run four at a time on every builder
+(MOJOLEARN_BUILD_JOBS, default 4, each build still capped at two compiler
+workers and one BLAS thread, the box affinity at 2 x jobs cores). Set
+MOJOLEARN_BUILD_JOBS=1 to reproduce a serial build. Times for the parallel
+path are OWED from the next release; record them here when it ships.
 
 ## 1. Freeze
 
@@ -41,7 +48,7 @@ drifted back into three tiers, or out of the wheel, goes red here.
 half-finished bump goes red here rather than shipping in a README. Commit,
 push. Every build below runs from that commit.
 
-## 2. Build the three Linux sets (parallel, about 30 minutes)
+## 2. Build the three Linux sets (parallel legs, parallel compiles inside each)
 
 ```sh
 REF=<40-hex commit>

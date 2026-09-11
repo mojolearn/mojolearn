@@ -625,6 +625,12 @@ IMAGE=""
 SSH_TARGET=""
 LOCAL_CARD="${MOJOLEARN_GEMM_LEG_LOCAL_CARD:-}"
 LEG_EXTRA="${MOJOLEARN_GEMM_LEG_EXTRA:-}"
+# DEVIATION 2501: parallel extension builds for the release campaign only.
+BUILD_JOBS="${MOJOLEARN_BUILD_JOBS:-4}"
+case "$BUILD_JOBS" in ''|*[!0-9]*) echo "MOJOLEARN_BUILD_JOBS must be 1..16" >&2; exit 2;; esac
+[ "$BUILD_JOBS" -ge 1 ] && [ "$BUILD_JOBS" -le 16 ] || { echo "MOJOLEARN_BUILD_JOBS must be 1..16" >&2; exit 2; }
+BUILD_CORES=2
+if [ "${MOJOLEARN_NVIDIA_CAMPAIGN:-}" = 7 ]; then BUILD_CORES=$((2 * BUILD_JOBS)); fi
 SWEEP=0
 READY_TIMEOUT="${MOJOLEARN_GEMM_LEG_READY_TIMEOUT:-600}"
 CARD_FULL="${MOJOLEARN_GEMM_CARD_FULL:-}"
@@ -2744,7 +2750,9 @@ mkdir -p "$OUT"
 cd "$ROOT" || exit 9
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
 export MAX_JOBS=2 CMAKE_BUILD_PARALLEL_LEVEL=2
-cores=$(python3 -c 'import os; print(",".join(map(str, sorted(os.sched_getaffinity(0))[:2])))')
+# DEVIATION 2501: campaign 7 (the release build) gets 2 x MOJOLEARN_BUILD_JOBS
+# cores for its parallel extension builds; every other campaign stays on two.
+cores=$(python3 -c 'import os, sys; print(",".join(map(str, sorted(os.sched_getaffinity(0))[:int(sys.argv[1])])))' '@BUILDCORES@')
 taskset -pc "$cores" $$ > "$OUT/cpu-affinity.log" 2>&1 || exit 9
 {
   echo "vendor=@VENDOR@"
@@ -2905,6 +2913,7 @@ RELEASE_TOOLS_SETUP
         else
         MOJOLEARN_COMMIT='@COMMIT@' MOJOLEARN_PYTHON="$release_system_python" \
           MOJOLEARN_RELEASE_BUILD_SECONDS="$release_seconds" MOJOLEARN_BUILD_PIXI_ENV=default \
+          MOJOLEARN_BUILD_JOBS='@BUILDJOBS@' \
           timeout -k 20 "$work_remaining" bash tools/release061_remote_build.sh \
             cuda '@GPUARCHS@' "$OUT/release-build" > "$OUT/release-build-console.log" 2>&1
         release_rc=$?
@@ -4164,6 +4173,8 @@ leg_check_remote_body() {
         -e "s|@DUMP@|$LEG_DUMP|g" \
         -e "s|@WORKTIMEOUT@|$WORK_TIMEOUT|g" \
         -e "s|@NVIDIACAMPAIGN@|$NVIDIA_CAMPAIGN|g" \
+        -e "s|@BUILDJOBS@|$BUILD_JOBS|g" \
+        -e "s|@BUILDCORES@|$BUILD_CORES|g" \
         -e "s|@QUALIFY@|$LEG_QUALIFY|g" \
         -e "s|@QUALWHEEL@|$QUAL_BASE|g" \
         -e "s|@QUALSHA@|$QUAL_SHA|g" \

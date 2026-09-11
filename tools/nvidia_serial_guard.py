@@ -63,6 +63,9 @@ def run(args):
         raise RuntimeError('Refusing local work: this guard requires Linux NVIDIA')
     if not args.command or args.seconds < 1 or not 1 <= args.rss_gib <= 16:
         raise ValueError('Require command, positive deadline and RSS cap of 1..16 GiB')
+    core_count = getattr(args, 'cores', 2)
+    if not 1 <= core_count <= 64:
+        raise ValueError('Require a CPU core count of 1..64')
     lock = open('/tmp/mojolearn-nvidia-root-job.lock', 'a')
     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     used, total = gpu_memory()
@@ -76,7 +79,7 @@ def run(args):
                 'NUMEXPR_NUM_THREADS', 'NUMBA_NUM_THREADS', 'MAX_JOBS', 'CMAKE_BUILD_PARALLEL_LEVEL',
                 'MOJOLEARN_CPU_THREADS'):
         env[key] = '2'
-    cores = ','.join(map(str, sorted(os.sched_getaffinity(0))[:2]))
+    cores = ','.join(map(str, sorted(os.sched_getaffinity(0))[:core_count]))
     def cancelled(signum, frame):
         raise InterruptedError('NVIDIA job guard received signal ' + str(signum))
     for signum in (signal.SIGTERM, signal.SIGHUP, signal.SIGINT):
@@ -117,6 +120,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--seconds', type=int, default=600)
     parser.add_argument('--rss-gib', type=int, default=12)
+    # DEVIATION 2501: parallel wheel builds. Default 2 keeps every other job
+    # serial; the release build passes 2 x MOJOLEARN_BUILD_JOBS.
+    parser.add_argument('--cores', type=int, default=2)
     parser.add_argument('command', nargs=argparse.REMAINDER)
     arguments = parser.parse_args()
     if arguments.command[:1] == ['--']:
