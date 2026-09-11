@@ -1,0 +1,12 @@
+status: passed
+phase timers: READ from the binding (build with MOJOLEARN_KNN_PHASE_TIMERS); request medians below are SERIALIZED by the per-class synchronizations and are not comparable to untimed requests
+timing large k10: uniform median 32.233479 ms (min 32.023776), deferred median 31.863981 ms (min 31.705471)
+  phases (median ms): uniform distance_ms 15.383 select_ms 10.311 merge_ms 0.476; deferred distance_ms 15.383 select_ms 10.000 merge_ms 0.476
+timing large k15: uniform median 37.595567 ms (min 37.347703), deferred median 39.181815 ms (min 38.937334)
+  phases (median ms): uniform distance_ms 15.385 select_ms 14.725 merge_ms 0.474; deferred distance_ms 15.387 select_ms 16.258 merge_ms 0.478
+timing dyadic k10: uniform median 32.523594 ms (min 32.415384), deferred median 32.222043 ms (min 32.123587)
+  phases (median ms): uniform distance_ms 15.363 select_ms 10.303 merge_ms 0.469; deferred distance_ms 15.369 select_ms 10.022 merge_ms 0.470
+  cached-reference ratios (NOT a paired opponent): uniform 3.181x, deferred 3.151x
+timing dyadic k15: uniform median 37.649382 ms (min 37.452819), deferred median 39.201707 ms (min 39.076723)
+  phases (median ms): uniform distance_ms 15.378 select_ms 14.725 merge_ms 0.483; deferred distance_ms 15.377 select_ms 16.270 merge_ms 0.477
+  cached-reference ratios (NOT a paired opponent): uniform 3.481x, deferred 3.624x

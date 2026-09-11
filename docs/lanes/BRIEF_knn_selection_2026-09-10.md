@@ -1471,3 +1471,27 @@ python3 tools/knn_selection_gate.py --out /tmp/knn-sel-apple --arms
 uniform,deferred --pairs 2 --deadline 300`) and AMD (a DigitalOcean MI325X
 droplet; 64-lane wavefront, 64-bit ballot by `SMALLK_MASK_DT`) are RUN OWED
 before any column other than NVIDIA takes the row.
+
+## Step 5 result: deferred insertion is NEGATIVE (H100, 2026-09-11 04:57Z, `bench/results/e1g/2026-09-11_005250-nvidia/remote/knn-selection`)
+
+Correctness green on every fixture (five arms bit-equal, reach for
+deferred 75,060 / 114,164 / 75,012 cells). select_ms per arm from the
+phase-timer build: k10 uniform 10.31, deferred 10.00 (0.97x); k15 uniform
+14.73, deferred 16.26 (1.10x). Not promotable; default stays off.
+
+Three mechanisms that reduce how often or how much the K-chain runs
+(headbound, warpbound, deferred) all failed to move the 0.80 ms per unit
+of k, and one of them ran the chain about half as often. The K-dependent
+cost is therefore not the chain's execution count. What scales with K in
+the kernel regardless of admissions is the register list itself: CAP=16
+UInt64 keys per lane indexed by a runtime slot in the insert and drain
+paths, which the compiler can only keep in registers if every index is a
+compile-time constant after unrolling; otherwise the list lives in local
+memory and every touch is a memory access, and register count itself
+lowers occupancy. That is a property of the compiled kernel, so the next
+step is to read it off the PTX/SASS: registers per thread, local memory
+bytes, spill stores and loads, and whether the list accesses compile to
+ld.local/st.local, for K=1, 10 and 15. If the list is in local memory the
+fix is a fully unrolled compare-and-shift with constant indices (or a
+sorting network) so the list stays in registers; if occupancy is the
+limiter the fix is a smaller CAP for small k.

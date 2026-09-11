@@ -1,0 +1,137 @@
+1073 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x71d5c0000000, nodemask=1)
+Imported from /root/mojolearn/neighbors/checks/knn_selector_arms_check.mojo:57:
+/root/mojolearn/neighbors/checks/select_smallk_identical_candidate.mojo:951:38: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                                heads[page + warp] = group_min
+                                ~~~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/neighbors/checks/knn_selector_arms_check.mojo:57:
+/root/mojolearn/neighbors/checks/select_smallk_identical_candidate.mojo:953:47: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            var winner = heads[page]
+                                         ~~~~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/neighbors/checks/knn_selector_arms_check.mojo:57:
+/root/mojolearn/neighbors/checks/select_smallk_identical_candidate.mojo:955:50: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                                var other = heads[page + w]
+                                            ~~~~~^~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/neighbors/checks/knn_selector_arms_check.mojo:57:
+/root/mojolearn/neighbors/checks/select_smallk_identical_candidate.mojo:976:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            heads[tid] = mine
+                            ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/neighbors/checks/knn_selector_arms_check.mojo:57:
+/root/mojolearn/neighbors/checks/select_smallk_identical_candidate.mojo:981:54: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                                    var other = heads[tid + stride]
+                                                ~~~~~^~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/neighbors/checks/knn_selector_arms_check.mojo:57:
+/root/mojolearn/neighbors/checks/select_smallk_identical_candidate.mojo:982:53: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                                    if other < heads[tid]:
+                                               ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/neighbors/checks/knn_selector_arms_check.mojo:57:
+/root/mojolearn/neighbors/checks/select_smallk_identical_candidate.mojo:983:46: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                                        heads[tid] = other
+                                        ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/neighbors/checks/knn_selector_arms_check.mojo:57:
+/root/mojolearn/neighbors/checks/select_smallk_identical_candidate.mojo:986:47: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            var winner = heads[0]
+                                         ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/neighbors/checks/knn_selector_arms_check.mojo:57:
+/root/mojolearn/neighbors/checks/select_smallk_identical_candidate.mojo:1061:22: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                heads[tid // SMALLK_LANES] = digest
+                ~~~~~^~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/neighbors/checks/knn_selector_arms_check.mojo:57:
+/root/mojolearn/neighbors/checks/select_smallk_identical_candidate.mojo:1063:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            block_digest = heads[0]
+                           ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/neighbors/checks/knn_selector_arms_check.mojo:57:
+/root/mojolearn/neighbors/checks/select_smallk_identical_candidate.mojo:1065:52: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                block_digest = block_digest ^ heads[w]
+                                              ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/neighbors/checks/knn_selector_arms_check.mojo:57:
+/root/mojolearn/neighbors/checks/select_smallk_identical_candidate.mojo:1067:18: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            heads[tid] = digest
+            ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/neighbors/checks/knn_selector_arms_check.mojo:57:
+/root/mojolearn/neighbors/checks/select_smallk_identical_candidate.mojo:1069:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            block_digest = heads[0]
+                           ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/neighbors/checks/knn_selector_arms_check.mojo:57:
+/root/mojolearn/neighbors/checks/select_smallk_identical_candidate.mojo:1071:52: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                block_digest = block_digest ^ heads[t]
+                                              ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/neighbors/checks/knn_selector_arms_check.mojo:57:
+/root/mojolearn/neighbors/checks/select_smallk_identical_candidate.mojo:1088:22: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                heads[page + warp] = group_min
+                ~~~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/neighbors/checks/knn_selector_arms_check.mojo:57:
+/root/mojolearn/neighbors/checks/select_smallk_identical_candidate.mojo:1090:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var winner = heads[page]
+                         ~~~~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/neighbors/checks/knn_selector_arms_check.mojo:57:
+/root/mojolearn/neighbors/checks/select_smallk_identical_candidate.mojo:1092:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                var other = heads[page + w]
+                            ~~~~~^~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/neighbors/checks/knn_selector_arms_check.mojo:57:
+/root/mojolearn/neighbors/checks/select_smallk_identical_candidate.mojo:1106:18: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            heads[tid] = mine
+            ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/neighbors/checks/knn_selector_arms_check.mojo:57:
+/root/mojolearn/neighbors/checks/select_smallk_identical_candidate.mojo:1111:38: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    var other = heads[tid + stride]
+                                ~~~~~^~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/neighbors/checks/knn_selector_arms_check.mojo:57:
+/root/mojolearn/neighbors/checks/select_smallk_identical_candidate.mojo:1112:37: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    if other < heads[tid]:
+                               ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/neighbors/checks/knn_selector_arms_check.mojo:57:
+/root/mojolearn/neighbors/checks/select_smallk_identical_candidate.mojo:1113:30: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        heads[tid] = other
+                        ~~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/neighbors/checks/knn_selector_arms_check.mojo:57:
+/root/mojolearn/neighbors/checks/select_smallk_identical_candidate.mojo:1116:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var winner = heads[0]
+                         ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Included from /root/mojolearn/neighbors/checks/knn_selector_arms_check.mojo:57:
+/root/mojolearn/neighbors/checks/select_smallk_identical_candidate.mojo:1054:28: warning: assignment to 'block_digest' was never used; assign to '_' instead?
+        var block_digest = digest
+                           ^
+1073 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3be480000000, nodemask=2)
+SELECTOR_ARMS_CASE_PASS 1793 10 30
+SELECTOR_ARMS_CASE_PASS 1793 15 45
+SELECTOR_ARMS_CASE_PASS 2047 10 30
+SELECTOR_ARMS_CASE_PASS 2047 15 45
+SELECTOR_ARMS_CASE_PASS 3940 10 30
+SELECTOR_ARMS_CASE_PASS 3940 15 45
+SELECTOR_ARMS_CASE_PASS 4095 10 30
+SELECTOR_ARMS_CASE_PASS 4095 15 45
+SELECTOR_ARMS_CASE_PASS 65281 10 30
+SELECTOR_ARMS_CASE_PASS 65281 15 45
+SELECTOR_ARMS_CASE_PASS 65535 10 30
+SELECTOR_ARMS_CASE_PASS 65535 15 45
+SELECTOR_ARMS_CASE_PASS 65536 10 30
+SELECTOR_ARMS_REACH_PASS 65536 10 13 13 13 10 15
+SELECTOR_ARMS_CASE_PASS 65536 15 45
+SELECTOR_ARMS_REACH_PASS 65536 15 15 15 23 20 25
+SELECTOR_ARMS_CASE_PASS 65537 10 30
+SELECTOR_ARMS_CASE_PASS 65537 15 45
+SELECTOR_ARMS_CASE_PASS 69476 10 30
+SELECTOR_ARMS_CASE_PASS 69476 15 45
+KNN SELECTOR ARMS PASS cases 18
