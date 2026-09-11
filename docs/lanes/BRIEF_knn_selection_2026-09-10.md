@@ -1207,3 +1207,37 @@ no request median from a phase-timer build is comparable to the qualified
 26.66 / 31.13 ms or to the cached cuML rows; no default moves on this
 evidence. The next candidate is chosen from the slopes, then gated as a
 normal arm (bit-equal, reach, request-level price) before anything flips.
+
+## Step 4 result: the phase split, measured (H100, 2026-09-11 04:40Z, `bench/results/e1g/2026-09-11_003148-nvidia/remote/knn-selection`)
+
+Phase timers read from a phase-timer build (request medians in that run are
+serialized and not comparable to anything else); `select_ms` per arm,
+400k/4k/d32, 56 launches, paired medians:
+
+| arm (what runs) | k10 select ms | k15 select ms |
+|---|---:|---:|
+| uniform (shipped: scan + rank) | 10.27 | 14.69 |
+| skiprank (scan + digest epilogue) | 9.87 | 13.95 |
+| skipscan (synthetic fill + rank) | 1.45 | 1.93 |
+| scanonly1 (scan with CAP 1, K 1: a running minimum) | 3.22 | 3.22 |
+
+So: rank phase 0.4 ms (k10) to 0.75 ms (k15); scan 8.8 to 12.8 ms; of the
+scan, 3.2 ms is k-independent (tile reads and the per-element compare) and
+5.6 to 9.6 ms is the per-lane K-deep list: 0.80 ms per unit of k of the
+0.88 total slope. The rank phase and the merge are not the target. The
+K-deep list is, and steps 2 and 3 already showed that REJECTING MORE does
+not shrink it (both bounds halved the insertion events and lost), which
+means the K-chain's cost is paid whether or not a lane inserts: the
+predicated chain executes for the whole warp on every element step. The
+lever is therefore execution frequency of the chain, not admission:
+defer insertion (per-lane append of admitted keys into a short queue,
+K-independent per element; drain the queue through the K-chain only when a
+warp-uniform test says some queue is non-empty or full, so the chain runs
+once per several elements instead of once per element). The final list is
+the k smallest keys admitted, which is the k smallest overall regardless of
+insertion order, and keys are unique, so the rank phase sees the same
+list: bit-identical by construction. Per lane about 32 insertions happen in
+256 elements at k10, so the chain should run an order of magnitude less
+often. Expected: scan 8.8 to about 4 ms at k10 and 12.8 to about 5.5 ms at
+k15; a request from 31 to about 26 ms and 36 to about 29 ms. Measured next
+as arm `deferred` under the same define and the same gate.
