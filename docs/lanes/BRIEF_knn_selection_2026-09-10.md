@@ -2022,3 +2022,242 @@ a branch the compiler cannot if-convert around the chain (a warp-uniform
 admits) combined with the branch-free selp chain inside it, and the
 model says the admission rate per warp-step must be measured too
 (a `vote` counter arm gives it).
+
+## Implementation pass, the chain measurement (DEVIATION 2522; source only, 2026-09-11)
+
+Nothing here was built or run on the Mac (py_compile of the gate, `sh -n`
+of the wrapper, and the gate's numpy `--selftest --quick` with arms
+`uniform,capk_selp,voteguard` and timing-only `noshift,votecount`, which
+PASSED with eight `timing` rows and eight `timing_only` rows; no test, no
+native, no mojo). Step 7 is the premise: every arm that changed how often
+the K-chain runs (headbound, warpbound, deferred) or how many registers it
+takes (capk, 75 percent occupancy) measured neutral against the 0.80 ms
+per unit of k, which is consistent only with the chain's instructions
+being issued on every element step for every lane, admitted or not (the
+compiler if-converts `if pending < threshold` around a short predicated
+region). Two measurements decide it, and a third reads the number that
+explains the second. Files touched (uncommitted, working tree):
+
+- `neighbors/checks/select_smallk_identical_candidate.mojo`: the tenth
+  kernel parameter `CHAIN` on `smallk_bucket_kernel` (default
+  `SMALLK_CHAIN_INSERT`, so every nine-parameter instantiation, the stats
+  leg's included, is unchanged), the seventh kernel ARGUMENT `counters`
+  (a two-slot UInt64 device pointer read and written by the VOTECOUNT
+  form only; every other launch passes the output-index address as a
+  placeholder that no folded-in code dereferences), the helpers
+  `_smallk_overwrite_last` and `_smallk_warp_any`, the comment block
+  above them, the arms `SMALLK_ARM_NOSHIFT = 10`, `SMALLK_ARM_VOTEGUARD =
+  11`, `SMALLK_ARM_VOTECOUNT = 12` in `smallk_select_arm_from_env` and
+  `_smallk_launch_bucket`, the launcher `_smallk_launch_votecount`
+  (zeroes the counter from a host buffer, launches, reads back,
+  synchronizes, prints), the `comptime SMALLK_PHASE_TIMERS` define
+  mirror, the `noshift` gather mask in both rank-phase forms, the
+  VOTECOUNT epilogue before the rank phase, the hook comment and the
+  module docstring.
+- `tools/knn_selection_gate.py`: the timing block pairs EVERY later
+  `--arms` arm with the first (step 7's "capk_selp was not timed" defect;
+  one `timing` row per fixture, k and pair, summary lines now name the
+  pair), `KNN_ADMIT_RATE` lines are summed per request into
+  `admit_warp_steps`, `admit_any_admit`, `admit_rate` beside the phase
+  milliseconds (so the per-arm phase medians carry `admit_rate`),
+  `TIMING_ONLY_VALID_OUTPUT = ("votecount",)` flips the timing-only
+  assertion to equality for that arm and marks its time as not a price,
+  and the selftest stand-in knows the three names and prints two admit
+  lines per request for `votecount` (admit_rate 0.375 exercises the sum).
+- `tools/knn_selection_gate.sh`: comments only (the arm lists and that
+  `votecount` needs `MOJOLEARN_KNN_SELECTION_PHASE_TIMERS=1`).
+- this section.
+
+NOT touched, by the lane's file list: `neighbors/checks/knn_selector_arms_check.mojo`
+(its equality and reach properties still cover seven arms; adding
+`voteguard` as the eighth is owed to whoever next edits it) and
+`tools/knn_selector_kernel_stats.sh` (a `voteguard_k10` / `_k15` row,
+instantiation `[16, K, True, False, False, False, SMALLK_PHASE_FULL,
+False, False, SMALLK_CHAIN_VOTEGUARD]`, would say whether the guard
+changed the register count; owed, not blocking).
+
+The shipped default path: without the trial define the only
+instantiations are `[CAP, K, True, False, False, False, FULL, False, False,
+INSERT]`; `CHAIN == INSERT` folds every new `comptime if` to the branch
+that shipped, the counter state is two constants that fold away, and the
+one visible change to the shipped kernel is the extra, never-loaded
+kernel argument (constant bank, no instruction). The control is the same
+as in the capk pass: the `uniform` arm's `select_ms` on the phase-timer
+build must land on 10.26 to 10.31 ms at k10 and 14.65 to 14.73 at k15; if
+it moves, the extra argument is the suspect before any new number is read.
+
+### The arms
+
+`noshift` (TIMING ONLY, OUTPUT INVALID). The uniform scan form with the
+same STORE-wide register list, the same per-element key and admission
+compare, but an admitted key overwrites slot K - 1 (the threshold slot)
+and the threshold is refreshed from that slot; no carry chain, in the
+batch loop and in the tail loop. The rank phase runs on the list as it
+stands (the sentinel wins the first K - 1 ranks on every lane; thread 0's
+gather index is masked into the row with `% length` under `comptime if`
+on this chain form only, so a sentinel index cannot fault), and consumes
+slot K - 1 through the pops, so the write and the compare that feeds it
+cannot be dropped. Known differences from the uniform arm besides the
+missing chain: its threshold is a running minimum (each admitted key
+becomes the threshold), so it admits less often than uniform; since it
+has no chain, its own cost is admission-independent up to one predicated
+8-byte register write; and its rank phase pops all 8 warps for K - 1
+rounds instead of 1, about a microsecond per launch.
+
+`voteguard` (OUTPUT VALID; a normal trial arm). The uniform arm with the
+admission wrapped in a warp-uniform guard: `admit = pending < threshold;
+if vote.any(admit): if admit: chain`. Every lane takes the ballot (the
+uniform batch loop's trip count is block-uniform, C4; the tail loop's
+count is per lane, so the tail keeps the plain form on at most eight
+elements per lane). Bit-identical by construction: `admit` is the same
+test on the same threshold, a lane that admits inserts the same key at
+the same step through the same `_smallk_insert`, a lane that does not
+admit does nothing in both forms, and the list is a function of the
+inserted keys and their order. Sabotage: the uniform flip (bit 0 of the
+index half on `u == 0`), moved INSIDE the guarded and admitted path, after
+the compare; a flip proves the guard's body ran on an admitted key. The
+plain uniform flip before the compare is compiled out on this form.
+
+`votecount` (OUTPUT VALID; listed as timing-only because its time is not
+a price). `voteguard` plus two per-lane counters, `warp_steps` (element
+steps in the batch loop) and `admit_steps` (those whose ballot was
+nonzero), identical across a warp's lanes; at the end of the scan lane 0
+of each warp parks them in shared memory (the `heads` array, free until
+the rank phase), thread 0 folds the block's eight pairs and adds them to
+the two-slot device counter with two atomics (integer addition commutes,
+so arrival order cannot matter). The launcher zeroes the counter from a
+host buffer before the launch, reads it back after, SYNCHRONIZES (so the
+arm's select_ms includes a sync and a copy and is not a price), and under
+the phase-timer build prints `KNN_ADMIT_RATE warp_steps N any_admit M
+rows R length L k K` once per launch to fd 1, the same capture the phase
+line lands in. The harness sums a request's lines: `admit_rate` = M / N.
+Refuses the sabotage bit. Without the phase-timer define the counts are
+gathered and dropped.
+
+### What each number means
+
+- `select_ms(uniform) - select_ms(noshift)` at k10 and at k15, from
+  `timing_only[...].phase_ms_median` on the phase-timer build: the chain's
+  own cost, paid on the uniform arm's real admission pattern. If it is the
+  whole 5.6 / 9.6 ms list share (the 0.80 ms per k slope), the K cost is
+  the chain's instruction count and nothing else; if it is a fraction, the
+  remainder is the list's other costs (the threshold pick, the register
+  pressure on the scan's loads, the rank phase's shift), and the chain is
+  not the only lever.
+- `select_ms(voteguard)` against `select_ms(uniform)` in `timing[...]`:
+  whether a real branch on a ballot around the chain changes anything.
+  If voteguard is faster by about `(1 - admit_rate)` of the chain cost,
+  the compiler HAD been issuing the chain every step and a branch it
+  cannot if-convert is the fix (promotion rule below). If voteguard is
+  neutral and admit_rate is high (most warp-steps have some admitting
+  lane), the chain runs on most steps in either form and the branch
+  cannot save what is not skippable: the lever is then the chain's
+  length per execution (a shorter chain: the selp form inside the guard,
+  a sorting network, or a wider per-lane list that admits less often).
+  If voteguard is neutral and admit_rate is LOW, the branch did not skip
+  the chain (the compiler predicated through it, or the ballot itself
+  costs what it saves) and that reading is the stats leg's to settle
+  (the owed voteguard row: a `bra` on the ballot in the SASS, or none).
+- `admit_rate` from `votecount`'s phase medians: the fraction of
+  warp-steps with any admission, and therefore the fraction on which the
+  guarded chain executes. The model from step 4 (about 32 insertions per
+  lane in 256 elements at k10) puts a 32-lane warp's per-step any-admit
+  at about 1 - (1 - 1/8)^32 = 0.986 early in the scan and far lower late
+  (a lane's admission probability falls as k / seen), so the request-wide
+  rate is what the run reports, not the model; nothing here is a
+  prediction of it.
+
+### RUN OWED (orchestrator; nothing ran)
+
+Commit this pass first (the leg ships `git archive` of the COMMITTED tree).
+The gate with phase timers ON, arms `uniform,capk_selp,voteguard`,
+timing-only `noshift,votecount`, profile skipped, on an H100. `voteguard`
+enters correctness, oracle and reach with `uniform`, `capk_selp` and
+`default`; `capk_selp` gets the timed pair it did not get in step 7;
+`noshift` and `votecount` are timing-only.
+
+```
+cat > /tmp/knn_chain_extra.sh <<'SH'
+#!/bin/sh
+export MOJOLEARN_KNN_SELECTION_ARMS=uniform,capk_selp,voteguard
+export MOJOLEARN_KNN_SELECTION_TIMING_ONLY_ARMS=noshift,votecount
+export MOJOLEARN_KNN_SELECTION_PHASE_TIMERS=1
+export MOJOLEARN_KNN_SELECTION_SKIP_PROFILE=1
+exec sh /root/mojolearn/tools/knn_selection_gate.sh
+SH
+MOJOLEARN_RUNPOD_KEY_FILE=$HOME/.mojolearn_runpod_key \
+MOJOLEARN_GEMM_LEG_EXTRA=/tmp/knn_chain_extra.sh \
+MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/$(date +%Y-%m-%d_%H%M%S)-nvidia-h100-knn-selection-chain \
+sh tools/gemm_remote_leg.sh nvidia --rent --minutes 60 \
+    --gpu "NVIDIA H100 80GB HBM3" \
+    --local-card bench/results/e1/2026-08-28_131651-runpod-nvidia/lanes/gemm.identical.card
+cat <leg>/remote/knn-selection/summary.txt
+cat <leg>/remote/knn-selection/status.tsv
+```
+
+Budget under the harness's 300 s deadline: the correctness and reach
+section is four arms (three plus default) on four fixtures at two k, as in
+step 7 plus one arm; the timing block is now FOUR pairs (capk_selp,
+voteguard, noshift, votecount) on two fixtures at two k, at 3 pairs per
+order that is 4 x 4 x (2 + 12) = 224 requests where step 7 had 56. On the
+phase-timer build a 400k request is about 31 to 36 ms, so about 8 s of
+requests plus fits and fixture builds; well inside. If the deadline
+trips anyway, `MOJOLEARN_KNN_SELECTION_PAIRS=2` halves the timing block.
+
+Verdict lines: `status: passed` in `summary.txt`; in the JSON every
+fixture at k10 and k15 shows `capk_selp`, `voteguard` and `default` equal
+to `uniform`, row order, planted and oracle green, reach flipped > 0 on
+all four with clean bits restored; the `uniform` control (above); then
+`phase_ms_median.select_ms` for `noshift` against `uniform` in the
+`timing_only` rows (the chain cost, at both k), for `voteguard` against
+`uniform` in the `timing` rows, and `phase_ms_median.admit_rate` for
+`votecount`, read as in "What each number means". The four `timing_only`
+rows for `noshift` must each report `differing_cells_from_reference > 0`
+and the four for `votecount` must report `output_valid` True for both
+arms; a `votecount` sample without an admit line fails the gate (the
+launcher did not run).
+
+### Promotion rule
+
+`voteguard` is the only arm here that can move a default, and only on
+its own run C (the same wrapper WITHOUT `MOJOLEARN_KNN_SELECTION_PHASE_TIMERS`,
+arms `uniform,voteguard`, request-level timing at the
+`NearestNeighbors.kneighbors` boundary) under the rule of the capk pass:
+every correctness check green on every fixture and k, reach flipped on
+`uniform`, `voteguard` and `default` with clean bits restored, and all
+eight request-level timing cells (both orders' medians, `dyadic` and
+`large`, k10 and k15) favor the arm. A flip would add a seventh comptime
+default (`SMALLK_VOTEGUARD_DEFAULT`) that folds `CHAIN` to VOTEGUARD on
+the K-specialized and generic buckets of fixed-lane-width columns only
+(Apple takes it only with its own gate; the ballot needs a convergent
+warp), and moves into the kernel-matrix SCHEDULING row in the same
+session. `noshift` and `votecount` never move anything.
+
+### How the measurement could mislead
+
+- The extra kernel argument: if the `uniform` control moves off 10.26 to
+  10.31 / 14.65 to 14.73 ms, the pass touched the shipped kernel and no
+  new number is read until that is explained.
+- `noshift` admits less often than `uniform` (running-minimum threshold),
+  so if the compiler did NOT if-convert the uniform arm's chain (a real
+  branch, taken on admitted lanes only), part of `uniform - noshift` is
+  admission-rate-dependent chain execution, not a per-step cost; the
+  `voteguard` and `admit_rate` numbers separate the two readings, which
+  is why all three arms are in one run.
+- `noshift` frees the list's registers between slot 0 and K - 2 across the
+  scan (they hold a constant until the rank phase), so its instantiation
+  may run at higher occupancy than `uniform`. Step 7 showed occupancy is
+  not the limiter at this shape (capk: 50 to 75 percent, neutral), so
+  that gap is not attributed to occupancy; a `noshift_k10` stats row
+  would confirm the register count if the difference looks too large.
+- The ballot in `voteguard` is not free: one `vote.ballot` plus a branch
+  per element step per warp, about 2 instructions against a chain of
+  about 3 K. A neutral `voteguard` therefore does not by itself say the
+  chain was skippable-but-not-skipped; it says the branch's saving did
+  not exceed its cost at the measured admit_rate.
+- `votecount`'s own select_ms includes a host synchronization, a device
+  allocation and a copy per launch (56 per request) and is never a price;
+  its phase line is the only number read from it.
+- Phase-timer builds serialize the queue: every select_ms here is a
+  kernel-only time, comparable only with other phase-timer rows (steps 4
+  to 7) and never with the qualified request numbers.

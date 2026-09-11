@@ -40,20 +40,30 @@
 # THE ARMS (MOJOLEARN_KNN_SELECTION_ARMS, default baseline,headbound):
 # `baseline` is the 2026-09-09 kernel, `uniform` is C4 alone (DEVIATION
 # 2497), `headbound` is C4 + C1 (DEVIATION 2498, NEGATIVE on the H100
-# 2026-09-11), `warpbound` is C4 + C2 (DEVIATION 2515). Names pass through
-# to the harness unchecked; the native side raises on an unknown one. C4
-# was gated alone (ARMS=baseline,uniform); a bound arm is gated as
-# ARMS=baseline,<arm>. On a build without the hook the gate phase FAILS at
-# its reach check and says so.
+# 2026-09-11), `warpbound` is C4 + C2 (DEVIATION 2515), `deferred`
+# (DEVIATION 2517), `capk` and `capk_selp` (DEVIATION 2521), `voteguard`
+# (DEVIATION 2522: the K-chain behind a warp-uniform vote guard). Names
+# pass through to the harness unchecked; the native side raises on an
+# unknown one. C4 was gated alone (ARMS=baseline,uniform); a candidate arm
+# is gated as ARMS=uniform,<arm>. Since DEVIATION 2522 the harness times
+# EVERY later arm against the first, so ARMS=uniform,a,b yields two timed
+# pairs (a vs uniform, b vs uniform). On a build without the hook the gate
+# phase FAILS at its reach check and says so.
 # MOJOLEARN_KNN_SELECTION_SKIP_GATE=1 runs the profile alone;
 # MOJOLEARN_KNN_SELECTION_SKIP_PROFILE=1 skips the profile (already measured
 # 2026-09-11 on the H100; the brief's "Run 1 results").
 #
 # TIMING-ONLY ARMS (DEVIATION 2516): MOJOLEARN_KNN_SELECTION_TIMING_ONLY_ARMS
-# (default empty; e.g. skiprank,skipscan,scanonly1) names arms whose OUTPUT
-# IS INVALID by construction; the harness keeps them out of correctness,
-# oracle and reach, times each against the first ARMS arm, and reports them
-# under `timing_only` ("output invalid; phase cost only").
+# (default empty; e.g. skiprank,skipscan,scanonly1,noshift) names arms whose
+# OUTPUT IS INVALID by construction; the harness keeps them out of
+# correctness, oracle and reach, times each against the first ARMS arm, and
+# reports them under `timing_only` ("output invalid; phase cost only").
+# `votecount` (DEVIATION 2522) goes in the same list: its output is valid
+# (the harness asserts equality for it) but its launcher synchronizes per
+# launch, so its time is not a price; what it yields is the
+# `KNN_ADMIT_RATE` line per launch, printed under the phase-timer build
+# only, which the harness folds into `admit_rate` in the phase medians. So
+# votecount needs MOJOLEARN_KNN_SELECTION_PHASE_TIMERS=1.
 # MOJOLEARN_KNN_SELECTION_PHASE_TIMERS=1 adds -D MOJOLEARN_KNN_PHASE_TIMERS=1
 # to the BINDING build (the profile phase's own switch; a build define, not
 # an environment variable) and makes the harness REQUIRE the per-request

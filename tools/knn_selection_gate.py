@@ -30,13 +30,16 @@ unless ALL of the following hold:
      this gate fails by design until the hook lands: a gate that cannot
      fail is not a gate.
 
-Then it prices ordinary requests: one warmup per arm, then `--pairs`
-alternating timed pairs in order (A, B) and `--pairs` more in order (B, A).
-Every sample is retained, both orders are reported separately and pooled,
+Then it prices ordinary requests: EVERY later `--arms` arm is paired with
+the first one (DEVIATION 2522; before it only the second arm was timed):
+per pair, one warmup per arm, then `--pairs` alternating timed pairs in
+order (A, B) and `--pairs` more in order (B, A). Every sample is retained,
+both orders are reported separately and pooled, phase medians are per arm,
 and the output of every timed request is compared, outside the timed
-region, against the clean reference of that fixture. The whole process
-runs under a hard deadline (`--deadline`, default 300 s); on expiry the
-partial JSON is written and the exit code is 3.
+region, against the clean reference of that fixture. One `timing` row per
+fixture, k and pair. The whole process runs under a hard deadline
+(`--deadline`, default 300 s); on expiry the partial JSON is written and
+the exit code is 3.
 
 THE SWITCHES (runtime, read by the native side per request)
 -----------------------------------------------------------
@@ -57,7 +60,11 @@ THE SWITCHES (runtime, read by the native side per request)
                                     with CAP = K, a list of exactly k
                                     slots; raises on the generic bucket)
                                     or `capk_selp` (capk plus a
-                                    branch-free min/max carry chain).
+                                    branch-free min/max carry chain),
+                                    `voteguard` (DEVIATION 2522: the
+                                    uniform arm with the K-chain behind a
+                                    warp-uniform `vote` guard, output
+                                    valid, bit-identical by construction).
                                     Unset = the build's default.
                                     Unknown names RAISE on the native side,
                                     never fall back.
@@ -78,7 +85,10 @@ THE SWITCHES (runtime, read by the native side per request)
                                     at every drain, inside its drain;
                                     capk and capk_selp carry the uniform
                                     flip (their scan is the uniform loop
-                                    with a k-deep list).
+                                    with a k-deep list); voteguard carries
+                                    the uniform flip INSIDE its guarded
+                                    and admitted path, so a flip proves
+                                    the guarded body ran.
 
 Both are honored only by a binding built with
 `-D MOJOLEARN_KNN_SELECT_TRIAL=1` (the hook the brief specifies; not on any
@@ -90,15 +100,32 @@ TIMING-ONLY ARMS (`--timing-only-arms`, DEVIATION 2516)
 `skiprank`, `skipscan` and `scanonly1` are selector arms whose OUTPUT IS
 INVALID BY CONSTRUCTION: they run one phase of the shipped selector kernel
 (the scan, or the rank phase) and skip the other, so the two phases can be
-priced separately on the box instead of modeled. They are EXCLUDED from
-the correctness, oracle and reach sections. In the timing block each one
-is paired with the first `--arms` arm exactly like a candidate (one warmup
+priced separately on the box instead of modeled. `noshift` (DEVIATION
+2522) is the same kind: the uniform scan with its K-deep list and its
+admission compare, but an admitted key overwrites the threshold slot
+instead of running the carry chain, so select_ms(uniform) minus
+select_ms(noshift) is the chain's own cost. They are EXCLUDED from the
+correctness, oracle and reach sections. In the timing block each one is
+paired with the first `--arms` arm exactly like a candidate (one warmup
 each, `--pairs` pairs in order (A, B) then (B, A), every sample kept) and
 reported under a separate `timing_only` table labeled "output invalid;
 phase cost only". The only assertion on such an arm is that its output
 DIFFERS from the clean reference (an arm whose output equals the reference
 did not run its own body); the baseline samples in those pairs must still
 equal the reference.
+
+`votecount` (DEVIATION 2522) is listed under `--timing-only-arms` too but
+its OUTPUT IS VALID (it is `voteguard` plus a per-block admission counter
+whose launcher synchronizes and reads back every launch, so its time is
+not a price): for the arms in TIMING_ONLY_VALID_OUTPUT the assertion is
+the opposite one, equality with the reference, and the row says
+`output_valid` True for both arms. Under the phase-timer build the
+binding prints `KNN_ADMIT_RATE warp_steps N any_admit M` once per launch;
+the harness sums the lines of a request and records `admit_warp_steps`,
+`admit_any_admit` and `admit_rate` (M / N: the fraction of warp-steps on
+which some lane of the warp admitted a key, which is the fraction on
+which the guarded chain runs) beside the phase milliseconds, so the
+per-arm phase medians carry `admit_rate`.
 
 PHASE TIMERS (`--phase-timers`)
 -------------------------------
@@ -392,7 +419,16 @@ def oracle_topk(index, queries, k, rows):
 
 
 PHASE_LINE = "KNN_PHASE_TIMERS"
-PHASE_KEYS = ("distance_ms", "select_ms", "merge_ms")
+ADMIT_LINE = "KNN_ADMIT_RATE"
+# Keys medianed per arm from the per-request phase record: the three phase
+# milliseconds, and the admission counts the `votecount` arm's launcher
+# prints (summed over a request's launches; `admit_rate` = any_admit /
+# warp_steps).
+PHASE_KEYS = ("distance_ms", "select_ms", "merge_ms", "admit_warp_steps", "admit_any_admit", "admit_rate")
+# `--timing-only-arms` entries whose output is VALID (equality with the
+# reference is asserted instead of difference): counter arms whose time is
+# not a price because their launcher synchronizes per launch.
+TIMING_ONLY_VALID_OUTPUT = ("votecount",)
 
 
 class PhaseCapture:
@@ -437,6 +473,9 @@ class PhaseCapture:
         self.scratch.seek(0)
         text = self.scratch.read().decode("utf-8", "replace")
         phases = None
+        admit_steps = 0
+        admit_any = 0
+        admit_lines = 0
         for line in text.splitlines():
             words = line.split()
             if words[:2] == [PHASE_LINE, "distance_ms"]:
@@ -447,6 +486,25 @@ class PhaseCapture:
                     except ValueError:
                         rec[words[i]] = words[i + 1]
                 phases = rec  # the last line of the request wins
+            elif words[:2] == [ADMIT_LINE, "warp_steps"]:
+                # One line per selector launch (DEVIATION 2522, the
+                # `votecount` arm); a request is the sum of its launches.
+                fields = {}
+                for i in range(1, len(words) - 1, 2):
+                    try:
+                        fields[words[i]] = int(words[i + 1])
+                    except ValueError:
+                        pass
+                admit_steps += fields.get("warp_steps", 0)
+                admit_any += fields.get("any_admit", 0)
+                admit_lines += 1
+        if admit_lines:
+            if phases is None:
+                phases = {}
+            phases["admit_warp_steps"] = float(admit_steps)
+            phases["admit_any_admit"] = float(admit_any)
+            phases["admit_rate"] = (float(admit_any) / float(admit_steps)) if admit_steps else float("nan")
+            phases["admit_lines"] = float(admit_lines)
         return phases
 
 
@@ -616,8 +674,8 @@ def median(xs):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--out", required=True, help="output directory (JSON, summary)")
-    ap.add_argument("--arms", default="baseline,headbound", help="explicit arms, comma separated; the first two are the timed pair")
-    ap.add_argument("--timing-only-arms", default="", help="comma separated arms whose OUTPUT IS INVALID by construction (skiprank, skipscan, scanonly1); excluded from correctness, oracle and reach; each is timed against the first --arms arm and reported under `timing_only`")
+    ap.add_argument("--arms", default="baseline,headbound", help="explicit arms, comma separated; every later arm is timed as a pair against the first")
+    ap.add_argument("--timing-only-arms", default="", help="comma separated arms whose OUTPUT IS INVALID by construction (skiprank, skipscan, scanonly1, noshift), plus the counter arm votecount (valid output, time not a price); excluded from correctness, oracle and reach; each is timed against the first --arms arm and reported under `timing_only`")
     ap.add_argument("--phase-timers", choices=("auto", "require", "off"), default="auto", help="read the binding's KNN_PHASE_TIMERS line per request (needs a build with -D MOJOLEARN_KNN_PHASE_TIMERS=1): auto records it when present, require fails without it, off never redirects fd 1")
     ap.add_argument("--ks", default="10,15")
     ap.add_argument("--pairs", type=int, default=3, help="timed pairs per order (3 = the protocol's initial count; 5 where affordable)")
@@ -679,7 +737,7 @@ def main():
             if report["phase_timers"].get("available"):
                 f.write("phase timers: READ from the binding (build with MOJOLEARN_KNN_PHASE_TIMERS); request medians below are SERIALIZED by the per-class synchronizations and are not comparable to untimed requests\n")
             for row in report["timing"]:
-                f.write(f"timing {row['fixture']} k{row['k']}: " + ", ".join(
+                f.write(f"timing {row['fixture']} k{row['k']} {row['arm_b']} vs {row['arm_a']}: " + ", ".join(
                     f"{arm} median {row['median_ms'][arm]:.6f} ms (min {row['min_ms'][arm]:.6f})" for arm in row["median_ms"]) + "\n")
                 if row.get("phase_ms_median"):
                     f.write("  phases (median ms): " + "; ".join(
@@ -691,9 +749,15 @@ def main():
             if report["timing_only"]:
                 f.write("timing_only: OUTPUT INVALID; PHASE COST ONLY (never a correctness, reach or promotion input)\n")
             for row in report["timing_only"]:
-                f.write(f"timing_only {row['fixture']} k{row['k']} {row['arm_b']} vs {row['arm_a']} (output invalid; phase cost only): " + ", ".join(
+                if row.get("output_valid", {}).get(row["arm_b"]):
+                    tail = f"; {row['arm_b']} output VALID (equal to the reference); its time is not a price"
+                    label = "output valid; counter arm; time not a price"
+                else:
+                    tail = f"; {row['arm_b']} output differs from the reference in {row['differing_cells_from_reference']} cells"
+                    label = "output invalid; phase cost only"
+                f.write(f"timing_only {row['fixture']} k{row['k']} {row['arm_b']} vs {row['arm_a']} ({label}): " + ", ".join(
                     f"{arm} median {row['median_ms'][arm]:.6f} ms (min {row['min_ms'][arm]:.6f})" for arm in row["median_ms"])
-                    + f"; {row['arm_b']} output differs from the reference in {row['differing_cells_from_reference']} cells\n")
+                    + tail + "\n")
                 if row.get("phase_ms_median"):
                     f.write("  phases (median ms): " + "; ".join(
                         f"{arm} " + " ".join(f"{key} {val:.3f}" for key, val in ph.items())
@@ -893,32 +957,39 @@ def run_gate(args, report, log, dump):
     if len(arms) < 2:
         log("timing needs two arms; the arm pair is skipped")
     else:
-        a, b = arms[0], arms[1]
-        for fx in timed_fixtures:
-            for k in ks:
-                model = model_factory(k).fit(fx["index"])
-                row = time_pair(args, runner, log, model, fx, k, references[(fx["name"], k)], a, b, invalid_b=False)
-                if fx["name"] == "dyadic" and k in cached and not args.quick:
-                    row["cached_opponent_ms"] = cached[k]
-                    row["cached_opponent_ratio"] = {arm: row["median_ms"][arm] / cached[k] for arm in (a, b)}
-                    row["cached_opponent_note"] = "cached cuML row from bench/OPPONENT_REFERENCE.md (H100 80GB HBM3, driver 580.126.09, dyadic-v1); admissible only if this box matches that tuple; not a paired opponent measurement"
-                    if report["phase_timers"].get("available"):
-                        row["cached_opponent_note"] += "; this build's requests are serialized by the phase timers, so the ratio is inflated and not admissible"
-                report["timing"].append(row)
-                del model
-                dump("running")
+        # EVERY later arm against the first (DEVIATION 2522): one row per
+        # fixture, k and pair; the first arm is re-timed inside every pair
+        # so each candidate's numbers sit beside a same-window control.
+        a = arms[0]
+        for b in arms[1:]:
+            for fx in timed_fixtures:
+                for k in ks:
+                    model = model_factory(k).fit(fx["index"])
+                    row = time_pair(args, runner, log, model, fx, k, references[(fx["name"], k)], a, b, invalid_b=False)
+                    if fx["name"] == "dyadic" and k in cached and not args.quick:
+                        row["cached_opponent_ms"] = cached[k]
+                        row["cached_opponent_ratio"] = {arm: row["median_ms"][arm] / cached[k] for arm in (a, b)}
+                        row["cached_opponent_note"] = "cached cuML row from bench/OPPONENT_REFERENCE.md (H100 80GB HBM3, driver 580.126.09, dyadic-v1); admissible only if this box matches that tuple; not a paired opponent measurement"
+                        if report["phase_timers"].get("available"):
+                            row["cached_opponent_note"] += "; this build's requests are serialized by the phase timers, so the ratio is inflated and not admissible"
+                    report["timing"].append(row)
+                    del model
+                    dump("running")
 
     # ---- timing-only arms: OUTPUT INVALID; phase cost only ---------------
     # Each timing-only arm is paired with arms[0] under the same protocol.
     # Its output is never checked for correctness; the only assertion is
     # that it DIFFERS from the reference (the arm's own body ran), while the
     # baseline samples in the same pairs must still equal the reference.
+    # The exception is TIMING_ONLY_VALID_OUTPUT (counter arms, DEVIATION
+    # 2522): valid output, so equality is asserted; time not a price.
     for t_arm in timing_only:
+        valid = t_arm in TIMING_ONLY_VALID_OUTPUT
         for fx in timed_fixtures:
             for k in ks:
                 model = model_factory(k).fit(fx["index"])
-                row = time_pair(args, runner, log, model, fx, k, references[(fx["name"], k)], arms[0], t_arm, invalid_b=True)
-                row["note"] = "output invalid; phase cost only"
+                row = time_pair(args, runner, log, model, fx, k, references[(fx["name"], k)], arms[0], t_arm, invalid_b=not valid, counter_b=valid)
+                row["note"] = "output valid; counter arm; its launcher synchronizes per launch so its time is not a price; the admit_rate in its phase medians is the measurement" if valid else "output invalid; phase cost only"
                 report["timing_only"].append(row)
                 del model
                 dump("running")
@@ -933,11 +1004,14 @@ def phase_medians(samples, arm):
     return {key: median([ph[key] for ph in recs if isinstance(ph.get(key), float)]) for key in PHASE_KEYS if any(isinstance(ph.get(key), float) for ph in recs)}
 
 
-def time_pair(args, runner, log, model, fx, k, ref, a, b, invalid_b):
+def time_pair(args, runner, log, model, fx, k, ref, a, b, invalid_b, counter_b=False):
     """One warmup per arm, `--pairs` pairs in order (a, b) then (b, a), every
     sample kept with its phase line when the build prints one. `invalid_b`
     marks a timing-only arm: its output must DIFFER from the reference
-    instead of equaling it."""
+    instead of equaling it. `counter_b` marks a counter arm (valid output,
+    equality asserted; when the build prints phase lines every one of its
+    samples must also carry the admission counts, or the arm's launcher
+    did not run)."""
     samples = {a: [], b: []}
     orders = []
     differing = None
@@ -951,6 +1025,8 @@ def time_pair(args, runner, log, model, fx, k, ref, a, b, invalid_b):
             differing = n if differing is None else min(differing, n)
         elif not bits_equal(ref, out):
             raise GateFailure(f"{fx['name']} k{k}: {arm} output moved from the correctness reference at {where}")
+        if arm == b and counter_b and runner.last_phases is not None and not isinstance(runner.last_phases.get("admit_rate"), float):
+            raise GateFailure(f"{fx['name']} k{k}: counter arm {b} printed no {ADMIT_LINE} line at {where} on a build that prints phase lines; its launcher did not run")
 
     for arm in (a, b):
         ns, d, i = runner.search(model, fx["queries"], arm)
@@ -996,11 +1072,20 @@ def time_pair(args, runner, log, model, fx, k, ref, a, b, invalid_b):
     if invalid_b:
         row["output_valid"] = {a: True, b: False}
         row["differing_cells_from_reference"] = differing
+    elif counter_b:
+        row["output_valid"] = {a: True, b: True}
+        row["differing_cells_from_reference"] = 0
+        row["time_is_a_price"] = {a: True, b: False}
     msg = f"{fx['name']} k{k}: {a} median {row['median_ms'][a]:.3f} ms, {b} median {row['median_ms'][b]:.3f} ms, paired median {b}/{a} {row['paired_ratio_median_b_over_a']:.4f}, {row['pairs_favoring_b']}/{len(orders)} pairs favor {b}"
     if row.get("phase_ms_median"):
         msg += "; select_ms medians " + ", ".join(f"{arm} {ph['select_ms']:.3f}" for arm, ph in row["phase_ms_median"].items() if "select_ms" in ph)
+        rates = {arm: ph["admit_rate"] for arm, ph in row["phase_ms_median"].items() if isinstance(ph.get("admit_rate"), float)}
+        if rates:
+            msg += "; admit_rate medians " + ", ".join(f"{arm} {r:.4f}" for arm, r in rates.items())
     if invalid_b:
         msg += f" [OUTPUT INVALID; phase cost only; {b} differs from the reference in {differing} cells]"
+    elif counter_b:
+        msg += f" [counter arm; output valid; {b} time is not a price]"
     log(msg)
     return row
 
@@ -1026,10 +1111,11 @@ def selftest_backend(log):
 
         def kneighbors(self, q):
             arm = os.environ.get(arm_env)
-            timing_only = ("skiprank", "skipscan", "scanonly1")
-            if arm not in (None, "baseline", "uniform", "headbound", "warpbound", "deferred", "capk", "capk_selp") + timing_only:
+            timing_only = ("skiprank", "skipscan", "scanonly1", "noshift")
+            counter_arms = ("votecount",)
+            if arm not in (None, "baseline", "uniform", "headbound", "warpbound", "deferred", "capk", "capk_selp", "voteguard") + timing_only + counter_arms:
                 raise ValueError(f"unknown arm {arm!r}")
-            if arm in timing_only and os.environ.get(sab_env) == "1":
+            if arm in timing_only + counter_arms and os.environ.get(sab_env) == "1":
                 raise ValueError("timing-only arms carry no sabotage")
             xi = self.x.astype(np.float64)
             xq = np.asarray(q, dtype=np.float32).astype(np.float64)
@@ -1052,7 +1138,13 @@ def selftest_backend(log):
                 dist[:, 1:] = np.float32(np.nan)
             # The phase line the instrumented binding prints to fd 1, so the
             # harness's descriptor-level capture is exercised here too.
-            select = {"skiprank": 0.4, "skipscan": 0.6, "scanonly1": 0.3}.get(arm, 1.0)
+            select = {"skiprank": 0.4, "skipscan": 0.6, "scanonly1": 0.3, "noshift": 0.5}.get(arm, 1.0)
+            if arm in counter_arms:
+                # The counter arm's launcher prints one line per launch;
+                # two here so the harness's per-request sum is exercised
+                # (3 of 8 warp-steps admit: admit_rate 0.375).
+                os.write(1, b"KNN_ADMIT_RATE warp_steps 5 any_admit 2 rows 4 length 100 k 3\n")
+                os.write(1, b"KNN_ADMIT_RATE warp_steps 3 any_admit 1 rows 4 length 100 k 3\n")
             os.write(1, (f"KNN_PHASE_TIMERS distance_ms 1.5 select_ms {select} merge_ms 0.05 "
                          f"distance_launches 1 select_launches 1 merge_launches 0 k {self.k}\n").encode())
             return dist, idx
