@@ -3,7 +3,15 @@
 This file records release-level changes, not the development diary. Git history and archived evidence
 contain the detailed investigation record.
 
-## 0.8.3 (unreleased 2026-09-11)
+## 0.8.3 (published 2026-09-11)
+
+Linux x86-64 wheel (CUDA sm_89, CUDA sm_90a, HIP gfx942) and macOS arm64 wheel, both from
+commit f8b65ee2 (tags alpha-api-0.8.3-20260911 and v0.8.3), on PyPI 2026-09-11 20:17Z and
+20:35Z (release runs 34643281339 and 34643372856). The installed Linux wheel passed its
+identical qualification jobs on HIP gfx942 and CUDA sm_90a (29 smoke lanes, equal hashes on
+both) and fit SVC at 400, 600 and 2,000 rows on an H100 with the source builds' bits; sm_89
+was not qualified installed (no RunPod stock), and the release line's fast and deterministic
+qualification jobs cannot pass without main's cc117fdf, which would have required new builds.
 
 A patch on the 0.8.2 line. Branch release-0.8.3 starts at tag v0.8.2 (438a6e66) and carries
 only the fixes below, their checks and the version bump; main's later speed defaults are not

@@ -139,7 +139,7 @@ workloads. Those measurements reflect both the numerical constraints and
 optimization gaps in the current kernels. The numbers are in the accompanying
 paper; the raw records behind them live under `bench/results/`.
 
-**`identical` is the default**, in the published <!--fact:published_version-->0.8.2<!--/fact--> wheels and in this
+**`identical` is the default**, in the published <!--fact:published_version-->0.8.3<!--/fact--> wheels and in this
 source. For the tree estimators you opt out of it, not into it, by
 setting `MOJOLEARN_NUMERIC_MODE=fast` or `deterministic` in the environment
 before import, or by calling `mojolearn.set_numeric_mode(...)` in code.
@@ -197,12 +197,15 @@ source .venv/bin/activate
 pip install mojolearn
 ```
 
-Version **<!--fact:published_version-->0.8.2<!--/fact--> is published on PyPI** as an alpha API release, a macOS arm64
+Version **<!--fact:published_version-->0.8.3<!--/fact--> is published on PyPI** as an alpha API release, a macOS arm64
 wheel and one Linux x86-64 wheel that now carries **CUDA sm_89, CUDA sm_90 and
 HIP gfx942** together, the tree bindings in all three numeric modes and every other binding in identical only, plus the
 identical-mode byte-LM trainer extension per architecture. NVIDIA Linux is no
-longer source-build-only. Installed per-architecture qualification was not run
-for the Linux wheel. The wheels expose public `linalg`, `umap`, `training`,
+longer source-build-only. For 0.8.3 the installed Linux wheel passed its
+identical qualification jobs on HIP gfx942 and CUDA sm_90a (all 29 smoke lanes
+with equal hashes on both) and an installed SVC fit check on an H100; sm_89 was
+not qualified installed, and the fast and deterministic qualification jobs do
+not run on the 0.8 release line. The wheels expose public `linalg`, `umap`, `training`,
 Mamba and Transformer APIs, including UMAP transform and CSR support. Newer
 Python API exposure does not inherit every numerical certificate. See
 [CHANGELOG.md](CHANGELOG.md) and the
@@ -223,9 +226,9 @@ as released-wheel support.
 
 ### Stability and release cadence
 
-mojolearn went from 0.1.0 on 2026-08-23 to <!--fact:published_version-->0.8.2<!--/fact--> on <!--fact:published_date-->2026-09-11<!--/fact-->, ten PyPI
+mojolearn went from 0.1.0 on 2026-08-23 to <!--fact:published_version-->0.8.3<!--/fact--> on <!--fact:published_date-->2026-09-11<!--/fact-->, eleven PyPI
 releases in under three weeks (0.1.0, 0.2.0, 0.3.0, 0.3.1, 0.5.0, 0.6.0,
-0.7.0, 0.8.0, 0.8.1, 0.8.2; 0.3.2, 0.4.0 and 0.6.1 are recorded in [CHANGELOG.md](CHANGELOG.md) but
+0.7.0, 0.8.0, 0.8.1, 0.8.2, 0.8.3; 0.3.2, 0.4.0 and 0.6.1 are recorded in [CHANGELOG.md](CHANGELOG.md) but
 were not published to PyPI). One release was yanked. 0.3.0, published
 2026-08-30 as the first release with a Linux wheel, had been compiled for the
 build machine's CPU and
