@@ -1,0 +1,9 @@
+deviations=2599
+brief=docs/lanes/BRIEF_gemm_kernel_2026-09-11.md
+started=2026-09-11T19:14:28Z
+root=/root/mojolearn
+arms=shipped,kpack,kpack_wide
+lm_arms=kpack,kpack_wide
+lmtiming=1
+check_arms=shipped,kpack,kpack_wide
+out=/root/gemm_leg_out/gemm-kernel

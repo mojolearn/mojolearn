@@ -702,3 +702,72 @@ than this one (a Tuple reassigned inside a kernel, width-16 shared loads in
 a kernel, 128-cell accumulators) are all power-of-two or front-end
 constructs that the failed build had already type-checked. None is clearly
 a compile failure, so they are unchanged and the next M4 build settles them.
+
+## 12. The H100 leg (2026-09-11, measured)
+
+Leg `bench/results/e1g/2026-09-11_191151-nvidia-h100-80gb-hbm3-gemm-kernel`,
+commit e6ffb6f4 (section 11's fix merged), one RunPod H100 80GB HBM3 pod at
+1980 MHz, run by `tools/gemm_remote_leg.sh` with `tools/gemm_kernel_leg.sh`
+as the body, the pod terminated and verified gone (HTTP 404). Every
+`status.tsv` item exits 0. The NVIDIA card equals the Apple card
+(`RESULT: IDENTICAL`), `device_check.log` is green (8 gates), and
+`step-check.log` passes with `REACH ragged` 117/117 for both `kpack` and
+`kpack_wide`. Every call's price line reads `BITS ... EQUAL`. The attention
+arm on this commit is still the previous NVIDIA default
+`stash_tiled_fgrid_r32_qres_pf` for every arm, so the ratios isolate GEMM.
+
+**Lean LM step**, steady medians in seconds, ratio against the shipped
+default bracketed before and after on the same pod:
+
+| arm | enwik8 | Pile GitHub | geomean | witnesses | verdict |
+|---|---|---|---|---|---|
+| shipped (open, close) | 0.2951, 0.2939 | 0.2942, 0.2939 | | reference | |
+| `kpack` | 0.3657 (1.2418) | 0.3662 (1.2453) | 1.2436 | equal | NO FLIP |
+| `kpack_wide` | 0.4110 (1.3954) | 0.4120 (1.4010) | 1.3982 | equal | NO FLIP |
+
+**GEMM per step** (`price_step.txt`, per-call medians weighted by per-step
+counts, a GEMM sum and not a step time): shipped against itself 142.5 ms
+(ratio 1.0006), `kpack` 216.2 ms against 143.6 (1.505), `kpack_wide` 256.8 ms
+against 143.3 (1.793). The `kpack` LM step grows by about 71 ms and its GEMM
+sum by about 73 ms, so the whole LM loss is inside GEMM.
+
+**Kernel rate on the saturated calls**, TFLOP/s shipped to arm (same-round
+pairs, 7 rounds, medians):
+
+| call | `kpack` | `kpack_wide` |
+|---|---|---|
+| head_fwd | 11.31 to 7.23 | 11.33 to 6.35 |
+| head_dB | 11.29 to 8.23 | 11.26 to 7.01 |
+| gateup_fwd | 11.33 to 7.23 | 11.37 to 6.00 |
+| down_dA | 11.14 to 7.61 | 11.20 to 6.27 |
+
+Every other call moves the same way. The one-leaf proj_* groups read 1.42 to
+1.57 under `kpack` and 1.86 to 1.97 under `kpack_wide`. At head_dA, where the
+rule takes the call, the `kpack` PHASE line puts the loss in the group phase
+(`group_ms` 22.40 against 14.34), with the fold unchanged (0.068 ms).
+
+**Resources** (`resources_lines.txt`): `kpack_all` and `kpack_group` read 255
+registers, local 4,200 and 4,232 B, shared 32,768 B; `kpack_wide_all` and
+`kpack_wide_group` read 255 registers, local 6,976 B, shared 36,864 B. Every
+label, the shipped and ksplit controls included, reads
+`blocks_per_sm_256=1`.
+
+**Reading, against section 9's table.** No row of the table fits. Both arms
+are slower, so neither C2 nor C3 is the rate limit in the direction the arms
+could exploit. `kpack` removes the per-window register copies at the same
+tile, staging words and arithmetic, and the rate falls by a third with the
+same 255 registers and one block per SM, so C4 did not move either. The arms
+replace per-window register copies with per-step loads from a packed shared
+page (`load=per-step` in both labels), and `kpack_wide` also doubles the B
+page and takes KS 12. A plausible reading is that a shared load per product
+step costs the H100 more than the register copies it replaces, and that the
+wider page and extra windows add to that. This is a reading of the price
+lines and is not measured as the cause.
+
+**Decision.** No flip. The NVIDIA GEMM plan stays
+`shipped: default=ksplit(S=132) else tuned128`, no scheduling row is added,
+and both arms remain trial only behind `MOJOLEARN_GEMM_ARM_TRIAL`. What is
+left of section 3.6 after this leg is C1 (arithmetic issue capacity, which
+tracks the SM clock) and C5 (fold stack traffic at leaf boundaries). Any
+next GEMM arm should keep register staging per window and change something
+else. It is owed, not started.

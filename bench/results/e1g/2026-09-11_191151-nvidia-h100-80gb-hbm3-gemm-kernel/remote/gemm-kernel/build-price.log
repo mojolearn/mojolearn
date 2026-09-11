@@ -1,0 +1,12 @@
+1331 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x39c400000000, nodemask=2)
+/root/mojolearn/bench/gemm_step_price_main.mojo:314:33: warning: assignment to 'ph' was never used; assign to '_' instead?
+                var ph = (Int(0), Int(0), Int(0))
+                                ^
+Included from /root/mojolearn/bench/gemm_step_price_main.mojo:77:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:3028:19: warning: assignment to 's' was never used; assign to '_' instead?
+    var s = String("")
+                  ^
+Included from /root/mojolearn/bench/gemm_step_price_main.mojo:77:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:4116:19: warning: assignment to 's' was never used; assign to '_' instead?
+    var s = String("")
+                  ^
