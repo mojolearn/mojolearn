@@ -20,7 +20,13 @@ def boundary(monkeypatch):
     monkeypatch.setattr(_backend, 'default_mode', lambda: default[0])
     native = SimpleNamespace(**{name: object() for name in (
         'rf_classifier_fit', 'rf_regressor_fit', 'et_classifier_fit', 'et_regressor_fit')})
+    real = _backend.binding
+
     def binding(name, mode=None):
+        if name == '_mojolearn':
+            # the base binding's host helpers (label encoding, DEVIATION
+            # 2500) are not the boundary under test; they stay real
+            return real(name, mode=mode)
         calls.append(mode)
         return native
     monkeypatch.setattr(_backend, 'binding', binding)
