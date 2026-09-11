@@ -1,19 +1,26 @@
 #!/bin/sh
-# tools/gbdt_arms_hotaisle_leg.sh -- lane gbdt-arms-hotaisle: DEVIATIONS 2550
-# (X read in place), 2551 (device leaf partition), 2580 (level quantize) and
-# 2581 (per-group bit width) compiled, checked and A/B'd on a Hot Aisle MI300X
-# in IDENTICAL and FAST. Runs ON THE VM as tools/hotaisle_leg.sh's
-# MOJOLEARN_GEMM_LEG_EXTRA body (the tools/do_extra_leg.sh body contract):
-# cwd /root/mojolearn, pixi on PATH, pixi install done, output under
-# /root/gemm_leg_out/gah/, fetched home with the leg.
+# tools/gbdt_arms_leg.sh -- lane gbdt-arms-hotaisle: DEVIATIONS 2550 (X read
+# in place), 2551 (device leaf partition), 2580 (level quantize) and 2581
+# (per-group bit width) compiled, checked and A/B'd on one AMD box (gfx942) in
+# IDENTICAL and FAST. Runs ON THE BOX as the MOJOLEARN_GEMM_LEG_EXTRA body of
+# either AMD runner (the tools/do_extra_leg.sh body contract: cwd
+# /root/mojolearn, pixi on PATH, pixi install done, output under
+# /root/gemm_leg_out/gah/, fetched home with the leg). Every number is
+# labeled with the box it ran on; before and after always share one box.
 #
-#   MOJOLEARN_HOTAISLE_SPEC=13core \
-#   MOJOLEARN_GEMM_LEG_EXTRA=tools/gbdt_arms_hotaisle_leg.sh \
-#   MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/<stamp>-amd-mi300x-hotaisle-gbdt-arms-<group> \
-#   MOJOLEARN_HOTAISLE_EXTRA_ENV='MOJOLEARN_GBDT_ARMS_GROUP=<perround|sym>' \
+#   DigitalOcean MI325X (native; one GPU droplet at a time, so one group per leg):
+#   MOJOLEARN_GPU_ARCHS=gfx942 \
+#   MOJOLEARN_GEMM_LEG_EXTRA=tools/gbdt_arms_leg.sh \
+#   MOJOLEARN_GEMM_LEG_OUT=$HOME/mojolearn-evidence/gbdt-arms-hotaisle/<stamp>-amd-mi325x-<group> \
+#   MOJOLEARN_DO_EXTRA_ENV='MOJOLEARN_GBDT_ARMS_GROUP=<perround|sym>' \
+#   bash tools/do_extra_leg.sh amd --minutes 60 --skip-gates
+#
+#   Hot Aisle MI300X (in the ROCm container):
+#   MOJOLEARN_HOTAISLE_SPEC=13core MOJOLEARN_GEMM_LEG_EXTRA=tools/gbdt_arms_leg.sh \
+#   MOJOLEARN_GEMM_LEG_OUT=... MOJOLEARN_HOTAISLE_EXTRA_ENV='MOJOLEARN_GBDT_ARMS_GROUP=<group>' \
 #   bash tools/hotaisle_leg.sh amd --rent --minutes 60 --skip-gates
 #
-# ENV (values limited to the runner's [A-Za-z0-9_.,:/=-])
+# ENV (values limited to the runners' [A-Za-z0-9_.,:/=-])
 #   MOJOLEARN_GBDT_ARMS_GROUP   perround: sets default a2550 a2551, combo
 #                               c2550_2551, lanes depthwise lossguide symmetric
 #                               sym: sets default a2580 a2581, combo
@@ -25,16 +32,18 @@
 #   MOJOLEARN_GBDT_ARMS_BUDGET_S  work bound when the start wrapper's is unreadable
 #
 # PHASES (each a row in status.tsv; a red phase does not stop the next)
-#   deps, data (background), builds (identical base, then per tier default
-#   and single arms, combos last), checks (every named check of the group,
-#   both sides, in parallel after the builds, so no compile shares the box
-#   with a timed round), import (prints the compiled path of all four
-#   switches), ib (identity_break per IDENTICAL set), speed (1M rows, per
-#   cell one process per set, warm-up plus 5 rounds, set order rotated per
-#   cell; IDENTICAL cells before FAST cells), stage (one
-#   MOJOLEARN_STAGE_TIMES=1 replicate per set, Istella-S first), combos
-#   (default re-timed beside each combo in the same window), verdicts
-#   (tools/flip_verdict.py per tier per lane per arm, rerun on the Mac).
+#   deps, data (background; taxi falls back to curl with an explicit agent),
+#   builds (identical base, then per tier default and single arms; the body
+#   exits at once when no default gbdt build compiled, so the runner ends the
+#   bill; combos last), checks (every named check of the group, both sides,
+#   in parallel after the builds, so no compile shares the box with a timed
+#   round), import (prints the compiled path of all four switches), ib
+#   (identity_break per IDENTICAL set), speed (1M rows, per cell one process
+#   per set, warm-up plus 5 rounds, set order rotated per cell; IDENTICAL
+#   cells before FAST cells), stage (one MOJOLEARN_STAGE_TIMES=1 replicate
+#   per set, Istella-S first), combos (default re-timed beside each combo in
+#   the same window), verdicts (tools/flip_verdict.py per tier per lane per
+#   arm, rerun on the Mac).
 #
 # Which lane an arm reaches decides its cells: 2551 is the non-symmetric
 # estimator only; 2580 and 2581 are the symmetric searcher only; 2550 is
@@ -64,8 +73,8 @@ COMBOS="${MOJOLEARN_GBDT_ARMS_COMBOS:-1}"
 
 # THE DEADLINE: the start wrapper's timeout bound, from its argv and the
 # remote body's started= line; the budget env or a conservative bound else.
-# Read from /proc first: the Hot Aisle body runs in the ROCm container,
-# where procps is not guaranteed; `ps` is the fallback.
+# Read from /proc first: in the Hot Aisle ROCm container procps is not
+# guaranteed; `ps` is the fallback.
 WORK=$(for _f in /proc/[0-9]*/cmdline; do tr '\000' ' ' < "$_f" 2>/dev/null; echo; done \
     | sed -n 's/^timeout -k [0-9]* \([0-9][0-9]*\) sh \/root\/gemm_leg\.sh.*$/\1/p' | head -n 1)
 [ -n "$WORK" ] || WORK=$(ps -eo args 2>/dev/null | sed -n 's/^timeout -k [0-9]* \([0-9][0-9]*\) sh \/root\/gemm_leg\.sh.*$/\1/p' | head -n 1)
@@ -141,14 +150,29 @@ fi
 status deps "$_rc"
 $PY -c "import numpy, pyarrow, pandas; print('numpy', numpy.__version__, 'pyarrow', pyarrow.__version__, 'pandas', pandas.__version__)" > "$G/versions.txt" 2>&1
 GPU_NAME=$(rocm-smi --showproductname 2>/dev/null | sed -n 's/.*Card Series:[[:space:]]*//p' | head -n 1 | tr ' ' '_')
-[ -n "$GPU_NAME" ] || GPU_NAME=AMD_MI300X
-echo "gpu_name=$GPU_NAME" >> "$G/deadline.txt"
-{ rocminfo 2>/dev/null | grep -m 4 -E 'Marketing Name|gfx'; nproc; free -g; } > "$G/box.txt" 2>&1
+[ -n "$GPU_NAME" ] || GPU_NAME=AMD_unknown
+IB_LABEL="amd-$(echo "$GPU_NAME" | tr 'A-Z' 'a-z' | tr -c 'a-z0-9\n' '-')"
+echo "gpu_name=$GPU_NAME ib_label=$IB_LABEL" >> "$G/deadline.txt"
+{ rocminfo 2>/dev/null | grep -m 4 -E 'Marketing Name|Name:[[:space:]]+gfx'; nproc; free -g; } > "$G/box.txt" 2>&1
 
 # ---------------------------------------------------------------- data (background)
 (
     timeout -k 10 1200 $PY tools/speed_gbdt_arm.py --download taxi > "$G/logs/download_taxi.log" 2>&1
-    echo "download_taxi=$? $(date -u +%H:%M:%S)" >> "$G/data.txt"
+    _t=$?
+    if [ "$_t" != 0 ]; then
+        # the TLC CloudFront has refused a default agent before
+        # (bench/results/trees_identical/mi325x_2026-09-11_taxi_istella/logs/fetch_taxi.sh)
+        mkdir -p "$DATA/taxi"
+        for m in 2024-01 2024-02; do
+            curl -fL --retry 3 -A "Mozilla/5.0 (X11; Linux x86_64) mojolearn-bench" \
+                -o "$DATA/taxi/yellow_tripdata_$m.parquet.part" \
+                "https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_$m.parquet" \
+                && mv "$DATA/taxi/yellow_tripdata_$m.parquet.part" "$DATA/taxi/yellow_tripdata_$m.parquet"
+        done >> "$G/logs/download_taxi.curl.log" 2>&1
+        timeout -k 10 1200 $PY tools/speed_gbdt_arm.py --download taxi >> "$G/logs/download_taxi.curl.log" 2>&1
+        _t=$?
+    fi
+    echo "download_taxi=$_t $(date -u +%H:%M:%S)" >> "$G/data.txt"
     timeout -k 10 2400 $PY tools/speed_gbdt_arm.py --download istella > "$G/logs/download_istella.log" 2>&1
     echo "download_istella=$? $(date -u +%H:%M:%S)" >> "$G/data.txt"
     : > "$G/data.done"
@@ -188,7 +212,7 @@ for _t in $TIERS; do
     done
 done
 # No default gbdt build in any tier: nothing below can measure, so end the
-# body now and let the runner DELETE the VM (the bill is per minute).
+# body now and let the runner destroy the box (the bill runs until then).
 _any_default=0
 for _t in $TIERS; do
     [ -f "$BINS/$_t/default/_mojolearn_gbdt.so" ] && _any_default=1
@@ -272,7 +296,7 @@ ib() {  # <set> <repeats>
     if [ "$(left)" -lt 900 ]; then status "ib.$1" SKIPPED_TIME; return 0; fi
     use identical "$1"
     MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH="$ROOT/python" timeout -k 30 600 $PY -u tools/identity_break.py \
-        --lanes gbdt-symmetric,gbdt-depthwise,gbdt-lossguide --repeats "$2" --vendor "amd-mi300x-$1" \
+        --lanes gbdt-symmetric,gbdt-depthwise,gbdt-lossguide --repeats "$2" --vendor "$IB_LABEL-$1" \
         --json "$G/ib/$1.json" > "$G/ib/$1.txt" 2>&1
     status "ib.$1" $?
 }
