@@ -1,0 +1,12 @@
+deviation=2496
+started=2026-09-11T06:28:24Z
+root=/root/mojolearn
+arms=uniform,warpbound_guard,warpbound_guard1
+timing_only_arms=warpbound_count
+phase_timers=1
+pairs=3
+cached_opponent=k10=10.225,k15=10.817
+vendor=nvidia
+commit=4528735c9bf41d0d31c2a59796a9d20a7d6d2215
+python=pixi run python3
+finished=2026-09-11T06:30:39Z

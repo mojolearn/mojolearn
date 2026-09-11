@@ -1,0 +1,5532 @@
+{
+ "deviation": 2496,
+ "tool": "tools/knn_selection_gate.py",
+ "status": "passed",
+ "quick": false,
+ "selftest": false,
+ "seed": 20260910,
+ "arm_env": "MOJOLEARN_KNN_SELECT",
+ "sabotage_env": "MOJOLEARN_KNN_SELECT_SABOTAGE",
+ "arms": [
+  "uniform",
+  "warpbound_guard",
+  "warpbound_guard1"
+ ],
+ "ks": [
+  10,
+  15
+ ],
+ "timing_only_arms": [
+  "warpbound_count"
+ ],
+ "timing_only_note": "output invalid; phase cost only. These arms skip one phase of the selector kernel on purpose; never a correctness, oracle, reach or promotion input.",
+ "phase_timers": {
+  "mode": "require",
+  "available": true,
+  "serialized": true,
+  "note": "from the binding's KNN_PHASE_TIMERS line (build define MOJOLEARN_KNN_PHASE_TIMERS); when available the request medians are serialized by per-class synchronizations and are not comparable to untimed requests; the split is the measurement"
+ },
+ "pairs_per_order": 3,
+ "deadline_s": 300,
+ "python": "3.14.7 | packaged by conda-forge | (main, Aug 19 2026, 15:32:49) [GCC 15.3.0]",
+ "platform": "Linux-6.8.0-106-generic-x86_64-with-glibc2.35",
+ "numpy": "2.5.2",
+ "started_utc": "2026-09-11T06:30:19Z",
+ "environment": {
+  "MOJOLEARN_KNN_SELECTION_ARMS": "uniform,warpbound_guard,warpbound_guard1",
+  "MOJOLEARN_KNN_SELECTION_PHASE_TIMERS": "1",
+  "MOJOLEARN_KNN_SELECTION_SKIP_PROFILE": "1",
+  "MOJOLEARN_KNN_SELECTION_TIMING_ONLY_ARMS": "warpbound_count",
+  "MOJOLEARN_NUMERIC_MODE": "identical"
+ },
+ "fixtures": {
+  "large": {
+   "name": "large",
+   "n_index": 400000,
+   "n_queries": 4000,
+   "d": 32,
+   "exact": [
+    [
+     100,
+     0
+    ],
+    [
+     101,
+     1
+    ],
+    [
+     102,
+     255
+    ],
+    [
+     103,
+     256
+    ],
+    [
+     104,
+     2047
+    ],
+    [
+     105,
+     2048
+    ],
+    [
+     106,
+     65535
+    ],
+    [
+     107,
+     65536
+    ],
+    [
+     108,
+     65537
+    ],
+    [
+     109,
+     131071
+    ],
+    [
+     110,
+     131072
+    ],
+    [
+     111,
+     200000
+    ],
+    [
+     112,
+     393215
+    ],
+    [
+     113,
+     393216
+    ],
+    [
+     114,
+     399998
+    ],
+    [
+     115,
+     399999
+    ]
+   ],
+   "dup_groups": [],
+   "offset_groups": [],
+   "oracle": "sampled",
+   "timed": true,
+   "description": "hashed non-uniform 400k x 32 / 4k x 32 with 16 exact-match queries",
+   "sha256_index": "b68be4ee19d74e32599b0724e4005479c9ea218fc2e475390e46bffb084c6dd5",
+   "sha256_queries": "c6a4271900811e183426fcaad0f63bbdb5fade6c83e6fd51a92387e24c0976bd",
+   "distinct_rows": true
+  },
+  "dyadic": {
+   "name": "dyadic",
+   "n_index": 400000,
+   "n_queries": 4000,
+   "d": 32,
+   "exact": [],
+   "dup_groups": [],
+   "offset_groups": [],
+   "oracle": "sampled",
+   "timed": true,
+   "description": "dyadic-v1, the cached cuML opponent fixture (salts 0/593)",
+   "sha256_index": "f8bde93b13eeeb96f8787aa8a6e2e9ca42ca69b1e90b765aa79d2141e087bac3",
+   "sha256_queries": "98f9264b520b234e5f05b862744af1e04752441cc740848eb2e195033b88f63e",
+   "distinct_rows": true
+  },
+  "ties": {
+   "name": "ties",
+   "n_index": 131079,
+   "n_queries": 700,
+   "d": 32,
+   "exact": [
+    [
+     0,
+     [
+      42222,
+      73958,
+      96984
+     ]
+    ],
+    [
+     1,
+     [
+      62606,
+      111327,
+      126102
+     ]
+    ],
+    [
+     2,
+     [
+      33897,
+      65537,
+      107476
+     ]
+    ],
+    [
+     3,
+     [
+      34538,
+      96953,
+      128637
+     ]
+    ],
+    [
+     4,
+     [
+      888,
+      65534,
+      108301
+     ]
+    ],
+    [
+     5,
+     [
+      6590,
+      17676,
+      92157
+     ]
+    ],
+    [
+     6,
+     [
+      59051,
+      65536,
+      95566
+     ]
+    ],
+    [
+     7,
+     [
+      35024,
+      44550,
+      98722
+     ]
+    ],
+    [
+     8,
+     [
+      42387,
+      64165,
+      72082
+     ]
+    ],
+    [
+     9,
+     [
+      14619,
+      80053,
+      101979
+     ]
+    ],
+    [
+     10,
+     [
+      59762,
+      65264,
+      131075
+     ]
+    ],
+    [
+     11,
+     [
+      11722,
+      28766,
+      118284
+     ]
+    ],
+    [
+     12,
+     [
+      11806,
+      55828,
+      72415
+     ]
+    ],
+    [
+     13,
+     [
+      70141,
+      117516,
+      131074
+     ]
+    ],
+    [
+     14,
+     [
+      54263,
+      64199,
+      131071
+     ]
+    ],
+    [
+     15,
+     [
+      32341,
+      102043,
+      109084
+     ]
+    ],
+    [
+     16,
+     [
+      0,
+      64100,
+      76790
+     ]
+    ],
+    [
+     17,
+     [
+      1357,
+      108227,
+      131076
+     ]
+    ],
+    [
+     18,
+     [
+      89218,
+      107812,
+      131072
+     ]
+    ],
+    [
+     19,
+     [
+      6550,
+      104359,
+      108496
+     ]
+    ],
+    [
+     20,
+     [
+      13444,
+      32311,
+      70000
+     ]
+    ],
+    [
+     21,
+     [
+      27304,
+      88405,
+      131078
+     ]
+    ],
+    [
+     22,
+     [
+      50480,
+      97581,
+      105373
+     ]
+    ],
+    [
+     23,
+     [
+      4198,
+      10035,
+      78793
+     ]
+    ],
+    [
+     24,
+     [
+      4057,
+      21232,
+      91794
+     ]
+    ],
+    [
+     25,
+     [
+      54322,
+      107715,
+      131073
+     ]
+    ],
+    [
+     26,
+     [
+      14827,
+      23938,
+      58618
+     ]
+    ],
+    [
+     27,
+     [
+      27202,
+      38919,
+      112805
+     ]
+    ],
+    [
+     28,
+     [
+      3786,
+      65535,
+      66149
+     ]
+    ],
+    [
+     29,
+     [
+      35305,
+      57571,
+      110453
+     ]
+    ],
+    [
+     30,
+     [
+      18862,
+      75463,
+      109368
+     ]
+    ],
+    [
+     31,
+     [
+      5109,
+      9232,
+      131077
+     ]
+    ],
+    [
+     32,
+     [
+      49234,
+      95382,
+      116025
+     ]
+    ],
+    [
+     33,
+     [
+      1,
+      7374,
+      104965
+     ]
+    ],
+    [
+     34,
+     [
+      42924,
+      64442,
+      92843
+     ]
+    ],
+    [
+     35,
+     [
+      31181,
+      46326,
+      99358
+     ]
+    ],
+    [
+     36,
+     [
+      94803,
+      103366,
+      129664
+     ]
+    ],
+    [
+     37,
+     [
+      26157,
+      49831,
+      118695
+     ]
+    ],
+    [
+     38,
+     [
+      32878,
+      73099,
+      105896
+     ]
+    ],
+    [
+     39,
+     [
+      30281,
+      57265,
+      62068
+     ]
+    ]
+   ],
+   "dup_groups": [
+    [
+     42222,
+     73958,
+     96984
+    ],
+    [
+     62606,
+     111327,
+     126102
+    ],
+    [
+     33897,
+     65537,
+     107476
+    ],
+    [
+     34538,
+     96953,
+     128637
+    ],
+    [
+     888,
+     65534,
+     108301
+    ],
+    [
+     6590,
+     17676,
+     92157
+    ],
+    [
+     59051,
+     65536,
+     95566
+    ],
+    [
+     35024,
+     44550,
+     98722
+    ],
+    [
+     42387,
+     64165,
+     72082
+    ],
+    [
+     14619,
+     80053,
+     101979
+    ],
+    [
+     59762,
+     65264,
+     131075
+    ],
+    [
+     11722,
+     28766,
+     118284
+    ],
+    [
+     11806,
+     55828,
+     72415
+    ],
+    [
+     70141,
+     117516,
+     131074
+    ],
+    [
+     54263,
+     64199,
+     131071
+    ],
+    [
+     32341,
+     102043,
+     109084
+    ],
+    [
+     0,
+     64100,
+     76790
+    ],
+    [
+     1357,
+     108227,
+     131076
+    ],
+    [
+     89218,
+     107812,
+     131072
+    ],
+    [
+     6550,
+     104359,
+     108496
+    ],
+    [
+     13444,
+     32311,
+     70000
+    ],
+    [
+     27304,
+     88405,
+     131078
+    ],
+    [
+     50480,
+     97581,
+     105373
+    ],
+    [
+     4198,
+     10035,
+     78793
+    ],
+    [
+     4057,
+     21232,
+     91794
+    ],
+    [
+     54322,
+     107715,
+     131073
+    ],
+    [
+     14827,
+     23938,
+     58618
+    ],
+    [
+     27202,
+     38919,
+     112805
+    ],
+    [
+     3786,
+     65535,
+     66149
+    ],
+    [
+     35305,
+     57571,
+     110453
+    ],
+    [
+     18862,
+     75463,
+     109368
+    ],
+    [
+     5109,
+     9232,
+     131077
+    ],
+    [
+     49234,
+     95382,
+     116025
+    ],
+    [
+     1,
+     7374,
+     104965
+    ],
+    [
+     42924,
+     64442,
+     92843
+    ],
+    [
+     31181,
+     46326,
+     99358
+    ],
+    [
+     94803,
+     103366,
+     129664
+    ],
+    [
+     26157,
+     49831,
+     118695
+    ],
+    [
+     32878,
+     73099,
+     105896
+    ],
+    [
+     30281,
+     57265,
+     62068
+    ]
+   ],
+   "offset_groups": [
+    [
+     40,
+     [
+      42222,
+      73958,
+      96984
+     ]
+    ],
+    [
+     41,
+     [
+      62606,
+      111327,
+      126102
+     ]
+    ],
+    [
+     42,
+     [
+      33897,
+      65537,
+      107476
+     ]
+    ],
+    [
+     43,
+     [
+      34538,
+      96953,
+      128637
+     ]
+    ],
+    [
+     44,
+     [
+      888,
+      65534,
+      108301
+     ]
+    ],
+    [
+     45,
+     [
+      6590,
+      17676,
+      92157
+     ]
+    ],
+    [
+     46,
+     [
+      59051,
+      65536,
+      95566
+     ]
+    ],
+    [
+     47,
+     [
+      35024,
+      44550,
+      98722
+     ]
+    ],
+    [
+     48,
+     [
+      42387,
+      64165,
+      72082
+     ]
+    ],
+    [
+     49,
+     [
+      14619,
+      80053,
+      101979
+     ]
+    ],
+    [
+     50,
+     [
+      59762,
+      65264,
+      131075
+     ]
+    ],
+    [
+     51,
+     [
+      11722,
+      28766,
+      118284
+     ]
+    ],
+    [
+     52,
+     [
+      11806,
+      55828,
+      72415
+     ]
+    ],
+    [
+     53,
+     [
+      70141,
+      117516,
+      131074
+     ]
+    ],
+    [
+     54,
+     [
+      54263,
+      64199,
+      131071
+     ]
+    ],
+    [
+     55,
+     [
+      32341,
+      102043,
+      109084
+     ]
+    ],
+    [
+     56,
+     [
+      0,
+      64100,
+      76790
+     ]
+    ],
+    [
+     57,
+     [
+      1357,
+      108227,
+      131076
+     ]
+    ],
+    [
+     58,
+     [
+      89218,
+      107812,
+      131072
+     ]
+    ],
+    [
+     59,
+     [
+      6550,
+      104359,
+      108496
+     ]
+    ],
+    [
+     60,
+     [
+      13444,
+      32311,
+      70000
+     ]
+    ],
+    [
+     61,
+     [
+      27304,
+      88405,
+      131078
+     ]
+    ],
+    [
+     62,
+     [
+      50480,
+      97581,
+      105373
+     ]
+    ],
+    [
+     63,
+     [
+      4198,
+      10035,
+      78793
+     ]
+    ],
+    [
+     64,
+     [
+      4057,
+      21232,
+      91794
+     ]
+    ],
+    [
+     65,
+     [
+      54322,
+      107715,
+      131073
+     ]
+    ],
+    [
+     66,
+     [
+      14827,
+      23938,
+      58618
+     ]
+    ],
+    [
+     67,
+     [
+      27202,
+      38919,
+      112805
+     ]
+    ],
+    [
+     68,
+     [
+      3786,
+      65535,
+      66149
+     ]
+    ],
+    [
+     69,
+     [
+      35305,
+      57571,
+      110453
+     ]
+    ],
+    [
+     70,
+     [
+      18862,
+      75463,
+      109368
+     ]
+    ],
+    [
+     71,
+     [
+      5109,
+      9232,
+      131077
+     ]
+    ],
+    [
+     72,
+     [
+      49234,
+      95382,
+      116025
+     ]
+    ],
+    [
+     73,
+     [
+      1,
+      7374,
+      104965
+     ]
+    ],
+    [
+     74,
+     [
+      42924,
+      64442,
+      92843
+     ]
+    ],
+    [
+     75,
+     [
+      31181,
+      46326,
+      99358
+     ]
+    ],
+    [
+     76,
+     [
+      94803,
+      103366,
+      129664
+     ]
+    ],
+    [
+     77,
+     [
+      26157,
+      49831,
+      118695
+     ]
+    ],
+    [
+     78,
+     [
+      32878,
+      73099,
+      105896
+     ]
+    ],
+    [
+     79,
+     [
+      30281,
+      57265,
+      62068
+     ]
+    ]
+   ],
+   "oracle": "complete",
+   "timed": false,
+   "description": "carved last partition (2 x 65536 + 7), planted three-way exact and offset ties",
+   "sha256_index": "3b66eb6fb66675f8654668ec4c5500da4b802655cde4e90df7374926507348fc",
+   "sha256_queries": "1cd87d546ac8b7d2589628d610514df8ca46b456c717852200ce3667df451cbd",
+   "distinct_rows": null
+  },
+  "divergent_tail": {
+   "name": "divergent_tail",
+   "n_index": 397156,
+   "n_queries": 600,
+   "d": 32,
+   "exact": [],
+   "dup_groups": [],
+   "offset_groups": [],
+   "oracle": "sampled",
+   "timed": false,
+   "description": "last partition 3,940 columns: per-thread trip-count divergence in the unrolled scan",
+   "sha256_index": "950ac54c7552d9a44f3c2f482d008f53d5de78bc8ff6f5c61b92875764ae074a",
+   "sha256_queries": "dd9821628f12ad0cc303ef72a15c208fa9dfb2e1225154bb52e7aa1d6c79e7b9",
+   "distinct_rows": true
+  }
+ },
+ "correctness": [
+  {
+   "fixture": "large",
+   "k": 10,
+   "arms": {
+    "uniform": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    },
+    "warpbound_guard": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    },
+    "warpbound_guard1": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    },
+    "default": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    }
+   },
+   "row_order": [],
+   "planted": [],
+   "oracle": {
+    "rows": 64,
+    "hard_mismatch_rows": [],
+    "ambiguous_rows": 0,
+    "distance_mismatch_rows": []
+   },
+   "exact_zero_bits": 8
+  },
+  {
+   "fixture": "large",
+   "k": 15,
+   "arms": {
+    "uniform": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    },
+    "warpbound_guard": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    },
+    "warpbound_guard1": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    },
+    "default": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    }
+   },
+   "row_order": [],
+   "planted": [],
+   "oracle": {
+    "rows": 64,
+    "hard_mismatch_rows": [],
+    "ambiguous_rows": 0,
+    "distance_mismatch_rows": []
+   },
+   "exact_zero_bits": 8
+  },
+  {
+   "fixture": "dyadic",
+   "k": 10,
+   "arms": {
+    "uniform": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    },
+    "warpbound_guard": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    },
+    "warpbound_guard1": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    },
+    "default": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    }
+   },
+   "row_order": [],
+   "planted": [],
+   "oracle": {
+    "rows": 48,
+    "hard_mismatch_rows": [],
+    "ambiguous_rows": 0,
+    "distance_mismatch_rows": []
+   },
+   "exact_zero_bits": 0
+  },
+  {
+   "fixture": "dyadic",
+   "k": 15,
+   "arms": {
+    "uniform": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    },
+    "warpbound_guard": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    },
+    "warpbound_guard1": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    },
+    "default": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    }
+   },
+   "row_order": [],
+   "planted": [],
+   "oracle": {
+    "rows": 48,
+    "hard_mismatch_rows": [],
+    "ambiguous_rows": 0,
+    "distance_mismatch_rows": []
+   },
+   "exact_zero_bits": 0
+  },
+  {
+   "fixture": "ties",
+   "k": 10,
+   "arms": {
+    "uniform": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    },
+    "warpbound_guard": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    },
+    "warpbound_guard1": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    },
+    "default": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    }
+   },
+   "row_order": [],
+   "planted": [],
+   "oracle": {
+    "rows": 700,
+    "hard_mismatch_rows": [],
+    "ambiguous_rows": 1,
+    "distance_mismatch_rows": []
+   },
+   "exact_zero_bits": 26
+  },
+  {
+   "fixture": "ties",
+   "k": 15,
+   "arms": {
+    "uniform": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    },
+    "warpbound_guard": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    },
+    "warpbound_guard1": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    },
+    "default": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    }
+   },
+   "row_order": [],
+   "planted": [],
+   "oracle": {
+    "rows": 700,
+    "hard_mismatch_rows": [],
+    "ambiguous_rows": 1,
+    "distance_mismatch_rows": []
+   },
+   "exact_zero_bits": 26
+  },
+  {
+   "fixture": "divergent_tail",
+   "k": 10,
+   "arms": {
+    "uniform": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    },
+    "warpbound_guard": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    },
+    "warpbound_guard1": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    },
+    "default": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    }
+   },
+   "row_order": [],
+   "planted": [],
+   "oracle": {
+    "rows": 47,
+    "hard_mismatch_rows": [],
+    "ambiguous_rows": 0,
+    "distance_mismatch_rows": []
+   },
+   "exact_zero_bits": 0
+  },
+  {
+   "fixture": "divergent_tail",
+   "k": 15,
+   "arms": {
+    "uniform": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    },
+    "warpbound_guard": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    },
+    "warpbound_guard1": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    },
+    "default": {
+     "equal_to_uniform": true,
+     "differing_cells": 0
+    }
+   },
+   "row_order": [],
+   "planted": [],
+   "oracle": {
+    "rows": 45,
+    "hard_mismatch_rows": [],
+    "ambiguous_rows": 0,
+    "distance_mismatch_rows": []
+   },
+   "exact_zero_bits": 0
+  }
+ ],
+ "reach": [
+  {
+   "fixture": "large",
+   "k": 10,
+   "arm": "uniform",
+   "sabotage_flipped_cells": 38306,
+   "clean_restored": true
+  },
+  {
+   "fixture": "large",
+   "k": 10,
+   "arm": "warpbound_guard",
+   "sabotage_flipped_cells": 79362,
+   "clean_restored": true
+  },
+  {
+   "fixture": "large",
+   "k": 10,
+   "arm": "warpbound_guard1",
+   "sabotage_flipped_cells": 79362,
+   "clean_restored": true
+  },
+  {
+   "fixture": "large",
+   "k": 10,
+   "arm": "default",
+   "sabotage_flipped_cells": 38306,
+   "clean_restored": true
+  },
+  {
+   "fixture": "large",
+   "k": 15,
+   "arm": "uniform",
+   "sabotage_flipped_cells": 70635,
+   "clean_restored": true
+  },
+  {
+   "fixture": "large",
+   "k": 15,
+   "arm": "warpbound_guard",
+   "sabotage_flipped_cells": 119362,
+   "clean_restored": true
+  },
+  {
+   "fixture": "large",
+   "k": 15,
+   "arm": "warpbound_guard1",
+   "sabotage_flipped_cells": 119362,
+   "clean_restored": true
+  },
+  {
+   "fixture": "large",
+   "k": 15,
+   "arm": "default",
+   "sabotage_flipped_cells": 70635,
+   "clean_restored": true
+  },
+  {
+   "fixture": "dyadic",
+   "k": 10,
+   "arm": "uniform",
+   "sabotage_flipped_cells": 38045,
+   "clean_restored": true
+  },
+  {
+   "fixture": "dyadic",
+   "k": 10,
+   "arm": "warpbound_guard",
+   "sabotage_flipped_cells": 79444,
+   "clean_restored": true
+  },
+  {
+   "fixture": "dyadic",
+   "k": 10,
+   "arm": "warpbound_guard1",
+   "sabotage_flipped_cells": 79444,
+   "clean_restored": true
+  },
+  {
+   "fixture": "dyadic",
+   "k": 10,
+   "arm": "default",
+   "sabotage_flipped_cells": 38045,
+   "clean_restored": true
+  },
+  {
+   "fixture": "dyadic",
+   "k": 15,
+   "arm": "uniform",
+   "sabotage_flipped_cells": 70423,
+   "clean_restored": true
+  },
+  {
+   "fixture": "dyadic",
+   "k": 15,
+   "arm": "warpbound_guard",
+   "sabotage_flipped_cells": 119444,
+   "clean_restored": true
+  },
+  {
+   "fixture": "dyadic",
+   "k": 15,
+   "arm": "warpbound_guard1",
+   "sabotage_flipped_cells": 119444,
+   "clean_restored": true
+  },
+  {
+   "fixture": "dyadic",
+   "k": 15,
+   "arm": "default",
+   "sabotage_flipped_cells": 70423,
+   "clean_restored": true
+  },
+  {
+   "fixture": "ties",
+   "k": 10,
+   "arm": "uniform",
+   "sabotage_flipped_cells": 6509,
+   "clean_restored": true
+  },
+  {
+   "fixture": "ties",
+   "k": 10,
+   "arm": "warpbound_guard",
+   "sabotage_flipped_cells": 13892,
+   "clean_restored": true
+  },
+  {
+   "fixture": "ties",
+   "k": 10,
+   "arm": "warpbound_guard1",
+   "sabotage_flipped_cells": 13892,
+   "clean_restored": true
+  },
+  {
+   "fixture": "ties",
+   "k": 10,
+   "arm": "default",
+   "sabotage_flipped_cells": 6509,
+   "clean_restored": true
+  },
+  {
+   "fixture": "ties",
+   "k": 15,
+   "arm": "uniform",
+   "sabotage_flipped_cells": 12172,
+   "clean_restored": true
+  },
+  {
+   "fixture": "ties",
+   "k": 15,
+   "arm": "warpbound_guard",
+   "sabotage_flipped_cells": 20892,
+   "clean_restored": true
+  },
+  {
+   "fixture": "ties",
+   "k": 15,
+   "arm": "warpbound_guard1",
+   "sabotage_flipped_cells": 20892,
+   "clean_restored": true
+  },
+  {
+   "fixture": "ties",
+   "k": 15,
+   "arm": "default",
+   "sabotage_flipped_cells": 12172,
+   "clean_restored": true
+  },
+  {
+   "fixture": "divergent_tail",
+   "k": 10,
+   "arm": "uniform",
+   "sabotage_flipped_cells": 5165,
+   "clean_restored": true
+  },
+  {
+   "fixture": "divergent_tail",
+   "k": 10,
+   "arm": "warpbound_guard",
+   "sabotage_flipped_cells": 11900,
+   "clean_restored": true
+  },
+  {
+   "fixture": "divergent_tail",
+   "k": 10,
+   "arm": "warpbound_guard1",
+   "sabotage_flipped_cells": 11900,
+   "clean_restored": true
+  },
+  {
+   "fixture": "divergent_tail",
+   "k": 10,
+   "arm": "default",
+   "sabotage_flipped_cells": 5165,
+   "clean_restored": true
+  },
+  {
+   "fixture": "divergent_tail",
+   "k": 15,
+   "arm": "uniform",
+   "sabotage_flipped_cells": 9681,
+   "clean_restored": true
+  },
+  {
+   "fixture": "divergent_tail",
+   "k": 15,
+   "arm": "warpbound_guard",
+   "sabotage_flipped_cells": 17900,
+   "clean_restored": true
+  },
+  {
+   "fixture": "divergent_tail",
+   "k": 15,
+   "arm": "warpbound_guard1",
+   "sabotage_flipped_cells": 17900,
+   "clean_restored": true
+  },
+  {
+   "fixture": "divergent_tail",
+   "k": 15,
+   "arm": "default",
+   "sabotage_flipped_cells": 9681,
+   "clean_restored": true
+  }
+ ],
+ "timing": [
+  {
+   "fixture": "large",
+   "k": 10,
+   "n_index": 400000,
+   "n_queries": 4000,
+   "d": 32,
+   "arm_a": "uniform",
+   "arm_b": "warpbound_guard",
+   "pairs": [
+    {
+     "order": 0,
+     "pair": 0,
+     "ms": {
+      "uniform": 33.632201,
+      "warpbound_guard": 29.797929
+     },
+     "phases": {
+      "uniform": {
+       "distance_ms": 15.384854,
+       "select_ms": 10.331483,
+       "merge_ms": 0.491356,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      },
+      "warpbound_guard": {
+       "distance_ms": 15.375587,
+       "select_ms": 7.335858,
+       "merge_ms": 0.471059,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      }
+     },
+     "ratio_b_over_a": 0.8859940210276455,
+     "select_ms_ratio_b_over_a": 0.7100488864957721
+    },
+    {
+     "order": 0,
+     "pair": 1,
+     "ms": {
+      "uniform": 32.376677,
+      "warpbound_guard": 29.248846
+     },
+     "phases": {
+      "uniform": {
+       "distance_ms": 15.405323,
+       "select_ms": 10.344964,
+       "merge_ms": 0.496476,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      },
+      "warpbound_guard": {
+       "distance_ms": 15.383836,
+       "select_ms": 7.329978,
+       "merge_ms": 0.482244,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      }
+     },
+     "ratio_b_over_a": 0.9033924636552417,
+     "select_ms_ratio_b_over_a": 0.7085551965188086
+    },
+    {
+     "order": 0,
+     "pair": 2,
+     "ms": {
+      "uniform": 32.287931,
+      "warpbound_guard": 29.233231
+     },
+     "phases": {
+      "uniform": {
+       "distance_ms": 15.386302,
+       "select_ms": 10.330861,
+       "merge_ms": 0.48783,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      },
+      "warpbound_guard": {
+       "distance_ms": 15.373267,
+       "select_ms": 7.321984,
+       "merge_ms": 0.487311,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      }
+     },
+     "ratio_b_over_a": 0.9053918939556703,
+     "select_ms_ratio_b_over_a": 0.7087486706093519
+    },
+    {
+     "order": 1,
+     "pair": 0,
+     "ms": {
+      "warpbound_guard": 29.308254,
+      "uniform": 32.494689
+     },
+     "phases": {
+      "warpbound_guard": {
+       "distance_ms": 15.373654,
+       "select_ms": 7.330112,
+       "merge_ms": 0.483847,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      },
+      "uniform": {
+       "distance_ms": 15.387947,
+       "select_ms": 10.323508,
+       "merge_ms": 0.486119,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      }
+     },
+     "ratio_b_over_a": 0.9019398216120794,
+     "select_ms_ratio_b_over_a": 0.7100408117085781
+    },
+    {
+     "order": 1,
+     "pair": 1,
+     "ms": {
+      "warpbound_guard": 29.739904,
+      "uniform": 32.455021
+     },
+     "phases": {
+      "warpbound_guard": {
+       "distance_ms": 15.406472,
+       "select_ms": 7.370924,
+       "merge_ms": 0.499405,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      },
+      "uniform": {
+       "distance_ms": 15.380702,
+       "select_ms": 10.316901,
+       "merge_ms": 0.484423,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      }
+     },
+     "ratio_b_over_a": 0.9163421585831049,
+     "select_ms_ratio_b_over_a": 0.7144513648042179
+    },
+    {
+     "order": 1,
+     "pair": 2,
+     "ms": {
+      "warpbound_guard": 29.411652,
+      "uniform": 32.273681
+     },
+     "phases": {
+      "warpbound_guard": {
+       "distance_ms": 15.405872,
+       "select_ms": 7.345602,
+       "merge_ms": 0.498634,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      },
+      "uniform": {
+       "distance_ms": 15.400523,
+       "select_ms": 10.322199,
+       "merge_ms": 0.480309,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      }
+     },
+     "ratio_b_over_a": 0.9113200319480135,
+     "select_ms_ratio_b_over_a": 0.7116315041010157
+    }
+   ],
+   "median_ms": {
+    "uniform": 32.415849,
+    "warpbound_guard": 29.359953
+   },
+   "min_ms": {
+    "uniform": 32.273681,
+    "warpbound_guard": 29.233231
+   },
+   "median_ms_by_order": {
+    "uniform": {
+     "0": 32.376677,
+     "1": 32.455021
+    },
+    "warpbound_guard": {
+     "0": 29.248846,
+     "1": 29.411652
+    }
+   },
+   "paired_ratio_median_b_over_a": 0.9043921788054561,
+   "pairs_favoring_b": 6,
+   "spread_pct": {
+    "uniform": 4.19091290806543,
+    "warpbound_guard": 1.923361389577156
+   },
+   "boundary": "public NearestNeighbors.kneighbors: host in, host out, includes query conversion, upload, norms, transpose, distance, selection, merge, download, index widening to int64",
+   "phase_ms_median": {
+    "uniform": {
+     "distance_ms": 15.3871245,
+     "select_ms": 10.327184500000001,
+     "merge_ms": 0.4869745
+    },
+    "warpbound_guard": {
+     "distance_ms": 15.379711499999999,
+     "select_ms": 7.332985,
+     "merge_ms": 0.485579
+    }
+   },
+   "phase_ms_median_by_order": {
+    "uniform": {
+     "0": {
+      "distance_ms": 15.386302,
+      "select_ms": 10.331483,
+      "merge_ms": 0.491356
+     },
+     "1": {
+      "distance_ms": 15.387947,
+      "select_ms": 10.322199,
+      "merge_ms": 0.484423
+     }
+    },
+    "warpbound_guard": {
+     "0": {
+      "distance_ms": 15.375587,
+      "select_ms": 7.329978,
+      "merge_ms": 0.482244
+     },
+     "1": {
+      "distance_ms": 15.405872,
+      "select_ms": 7.345602,
+      "merge_ms": 0.498634
+     }
+    }
+   },
+   "select_ms_ratio_b_over_a": 0.7100448491021751,
+   "phase_note": "phase milliseconds from the binding's KNN_PHASE_TIMERS line (serializing); request ms above include those synchronizations"
+  },
+  {
+   "fixture": "large",
+   "k": 15,
+   "n_index": 400000,
+   "n_queries": 4000,
+   "d": 32,
+   "arm_a": "uniform",
+   "arm_b": "warpbound_guard",
+   "pairs": [
+    {
+     "order": 0,
+     "pair": 0,
+     "ms": {
+      "uniform": 37.824934,
+      "warpbound_guard": 32.750558
+     },
+     "phases": {
+      "uniform": {
+       "distance_ms": 15.389966,
+       "select_ms": 14.751759,
+       "merge_ms": 0.49334,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      },
+      "warpbound_guard": {
+       "distance_ms": 15.413055,
+       "select_ms": 9.709602,
+       "merge_ms": 0.486823,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      }
+     },
+     "ratio_b_over_a": 0.865845740801557,
+     "select_ms_ratio_b_over_a": 0.6581996086026081
+    },
+    {
+     "order": 0,
+     "pair": 1,
+     "ms": {
+      "uniform": 37.782425,
+      "warpbound_guard": 32.719849
+     },
+     "phases": {
+      "uniform": {
+       "distance_ms": 15.44058,
+       "select_ms": 14.767454,
+       "merge_ms": 0.503404,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      },
+      "warpbound_guard": {
+       "distance_ms": 15.37241,
+       "select_ms": 9.726544,
+       "merge_ms": 0.484813,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      }
+     },
+     "ratio_b_over_a": 0.8660071183890393,
+     "select_ms_ratio_b_over_a": 0.6586473199781087
+    },
+    {
+     "order": 0,
+     "pair": 2,
+     "ms": {
+      "uniform": 37.647458,
+      "warpbound_guard": 32.580004
+     },
+     "phases": {
+      "uniform": {
+       "distance_ms": 15.370799,
+       "select_ms": 14.747818,
+       "merge_ms": 0.500302,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      },
+      "warpbound_guard": {
+       "distance_ms": 15.369118,
+       "select_ms": 9.703776,
+       "merge_ms": 0.480202,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      }
+     },
+     "ratio_b_over_a": 0.8653971803355223,
+     "select_ms_ratio_b_over_a": 0.6579804551425844
+    },
+    {
+     "order": 1,
+     "pair": 0,
+     "ms": {
+      "warpbound_guard": 32.724714,
+      "uniform": 37.539458
+     },
+     "phases": {
+      "warpbound_guard": {
+       "distance_ms": 15.422538,
+       "select_ms": 9.727371,
+       "merge_ms": 0.497866,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      },
+      "uniform": {
+       "distance_ms": 15.39109,
+       "select_ms": 14.738611,
+       "merge_ms": 0.494516,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      }
+     },
+     "ratio_b_over_a": 0.8717417816740987,
+     "select_ms_ratio_b_over_a": 0.6599923832713951
+    },
+    {
+     "order": 1,
+     "pair": 1,
+     "ms": {
+      "warpbound_guard": 32.637781,
+      "uniform": 37.617158
+     },
+     "phases": {
+      "warpbound_guard": {
+       "distance_ms": 15.399165,
+       "select_ms": 9.697935,
+       "merge_ms": 0.483877,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      },
+      "uniform": {
+       "distance_ms": 15.369222,
+       "select_ms": 14.74106,
+       "merge_ms": 0.500139,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      }
+     },
+     "ratio_b_over_a": 0.8676301649369682,
+     "select_ms_ratio_b_over_a": 0.6578858643815302
+    },
+    {
+     "order": 1,
+     "pair": 2,
+     "ms": {
+      "warpbound_guard": 32.510472,
+      "uniform": 37.79275
+     },
+     "phases": {
+      "warpbound_guard": {
+       "distance_ms": 15.386494,
+       "select_ms": 9.726671,
+       "merge_ms": 0.501212,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      },
+      "uniform": {
+       "distance_ms": 15.389118,
+       "select_ms": 14.850013,
+       "merge_ms": 0.500218,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      }
+     },
+     "ratio_b_over_a": 0.8602303881035385,
+     "select_ms_ratio_b_over_a": 0.6549941067391658
+    }
+   ],
+   "median_ms": {
+    "uniform": 37.7149415,
+    "warpbound_guard": 32.678815
+   },
+   "min_ms": {
+    "uniform": 37.539458,
+    "warpbound_guard": 32.510472
+   },
+   "median_ms_by_order": {
+    "uniform": {
+     "0": 37.782425,
+     "1": 37.617158
+    },
+    "warpbound_guard": {
+     "0": 32.719849,
+     "1": 32.637781
+    }
+   },
+   "paired_ratio_median_b_over_a": 0.8659264295952982,
+   "pairs_favoring_b": 6,
+   "spread_pct": {
+    "uniform": 0.7569307776865983,
+    "warpbound_guard": 0.7346839229023391
+   },
+   "boundary": "public NearestNeighbors.kneighbors: host in, host out, includes query conversion, upload, norms, transpose, distance, selection, merge, download, index widening to int64",
+   "phase_ms_median": {
+    "uniform": {
+     "distance_ms": 15.389541999999999,
+     "select_ms": 14.749788500000001,
+     "merge_ms": 0.5001785000000001
+    },
+    "warpbound_guard": {
+     "distance_ms": 15.392829500000001,
+     "select_ms": 9.718073,
+     "merge_ms": 0.48581799999999997
+    }
+   },
+   "phase_ms_median_by_order": {
+    "uniform": {
+     "0": {
+      "distance_ms": 15.389966,
+      "select_ms": 14.751759,
+      "merge_ms": 0.500302
+     },
+     "1": {
+      "distance_ms": 15.389118,
+      "select_ms": 14.74106,
+      "merge_ms": 0.500139
+     }
+    },
+    "warpbound_guard": {
+     "0": {
+      "distance_ms": 15.37241,
+      "select_ms": 9.709602,
+      "merge_ms": 0.484813
+     },
+     "1": {
+      "distance_ms": 15.399165,
+      "select_ms": 9.726671,
+      "merge_ms": 0.497866
+     }
+    }
+   },
+   "select_ms_ratio_b_over_a": 0.6580900318725962,
+   "phase_note": "phase milliseconds from the binding's KNN_PHASE_TIMERS line (serializing); request ms above include those synchronizations"
+  },
+  {
+   "fixture": "dyadic",
+   "k": 10,
+   "n_index": 400000,
+   "n_queries": 4000,
+   "d": 32,
+   "arm_a": "uniform",
+   "arm_b": "warpbound_guard",
+   "pairs": [
+    {
+     "order": 0,
+     "pair": 0,
+     "ms": {
+      "uniform": 33.854568,
+      "warpbound_guard": 30.260262
+     },
+     "phases": {
+      "uniform": {
+       "distance_ms": 15.393067,
+       "select_ms": 10.363124,
+       "merge_ms": 0.497953,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      },
+      "warpbound_guard": {
+       "distance_ms": 15.380091,
+       "select_ms": 7.31854,
+       "merge_ms": 0.481955,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      }
+     },
+     "ratio_b_over_a": 0.8938309890706625,
+     "select_ms_ratio_b_over_a": 0.7062098263033425
+    },
+    {
+     "order": 0,
+     "pair": 1,
+     "ms": {
+      "uniform": 32.975937,
+      "warpbound_guard": 29.604051
+     },
+     "phases": {
+      "uniform": {
+       "distance_ms": 15.375804,
+       "select_ms": 10.318273,
+       "merge_ms": 0.489543,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      },
+      "warpbound_guard": {
+       "distance_ms": 15.387114,
+       "select_ms": 7.344334,
+       "merge_ms": 0.482429,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      }
+     },
+     "ratio_b_over_a": 0.8977470753901549,
+     "select_ms_ratio_b_over_a": 0.7117793840112585
+    },
+    {
+     "order": 0,
+     "pair": 2,
+     "ms": {
+      "uniform": 32.34962,
+      "warpbound_guard": 29.2931
+     },
+     "phases": {
+      "uniform": {
+       "distance_ms": 15.405672,
+       "select_ms": 10.338727,
+       "merge_ms": 0.49385,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      },
+      "warpbound_guard": {
+       "distance_ms": 15.385821,
+       "select_ms": 7.327975,
+       "merge_ms": 0.480037,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      }
+     },
+     "ratio_b_over_a": 0.9055160462472202,
+     "select_ms_ratio_b_over_a": 0.7087889060229562
+    },
+    {
+     "order": 1,
+     "pair": 0,
+     "ms": {
+      "warpbound_guard": 29.296918,
+      "uniform": 32.221481
+     },
+     "phases": {
+      "warpbound_guard": {
+       "distance_ms": 15.398409,
+       "select_ms": 7.338587,
+       "merge_ms": 0.483145,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      },
+      "uniform": {
+       "distance_ms": 15.349198,
+       "select_ms": 10.307653,
+       "merge_ms": 0.483423,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      }
+     },
+     "ratio_b_over_a": 0.9092356121060979,
+     "select_ms_ratio_b_over_a": 0.7119551851425344
+    },
+    {
+     "order": 1,
+     "pair": 1,
+     "ms": {
+      "warpbound_guard": 29.321345,
+      "uniform": 32.428076
+     },
+     "phases": {
+      "warpbound_guard": {
+       "distance_ms": 15.373747,
+       "select_ms": 7.339715,
+       "merge_ms": 0.486487,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      },
+      "uniform": {
+       "distance_ms": 15.361604,
+       "select_ms": 10.31788,
+       "merge_ms": 0.48108,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      }
+     },
+     "ratio_b_over_a": 0.9041962588221393,
+     "select_ms_ratio_b_over_a": 0.7113588256502305
+    },
+    {
+     "order": 1,
+     "pair": 2,
+     "ms": {
+      "warpbound_guard": 29.625581,
+      "uniform": 32.497318
+     },
+     "phases": {
+      "warpbound_guard": {
+       "distance_ms": 15.381855,
+       "select_ms": 7.37741,
+       "merge_ms": 0.487444,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      },
+      "uniform": {
+       "distance_ms": 15.373174,
+       "select_ms": 10.322251,
+       "merge_ms": 0.484228,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      }
+     },
+     "ratio_b_over_a": 0.9116315691036411,
+     "select_ms_ratio_b_over_a": 0.7147094175485561
+    }
+   ],
+   "median_ms": {
+    "uniform": 32.462697,
+    "warpbound_guard": 29.462698
+   },
+   "min_ms": {
+    "uniform": 32.221481,
+    "warpbound_guard": 29.2931
+   },
+   "median_ms_by_order": {
+    "uniform": {
+     "0": 32.975937,
+     "1": 32.428076
+    },
+    "warpbound_guard": {
+     "0": 29.604051,
+     "1": 29.321345
+    }
+   },
+   "paired_ratio_median_b_over_a": 0.9048561525346797,
+   "pairs_favoring_b": 6,
+   "spread_pct": {
+    "uniform": 5.030657187848574,
+    "warpbound_guard": 3.2826661020657437
+   },
+   "boundary": "public NearestNeighbors.kneighbors: host in, host out, includes query conversion, upload, norms, transpose, distance, selection, merge, download, index widening to int64",
+   "phase_ms_median": {
+    "uniform": {
+     "distance_ms": 15.374489,
+     "select_ms": 10.320262,
+     "merge_ms": 0.48688549999999997
+    },
+    "warpbound_guard": {
+     "distance_ms": 15.383838,
+     "select_ms": 7.339151,
+     "merge_ms": 0.48278699999999997
+    }
+   },
+   "phase_ms_median_by_order": {
+    "uniform": {
+     "0": {
+      "distance_ms": 15.393067,
+      "select_ms": 10.338727,
+      "merge_ms": 0.49385
+     },
+     "1": {
+      "distance_ms": 15.361604,
+      "select_ms": 10.31788,
+      "merge_ms": 0.483423
+     }
+    },
+    "warpbound_guard": {
+     "0": {
+      "distance_ms": 15.385821,
+      "select_ms": 7.327975,
+      "merge_ms": 0.481955
+     },
+     "1": {
+      "distance_ms": 15.381855,
+      "select_ms": 7.339715,
+      "merge_ms": 0.486487
+     }
+    }
+   },
+   "select_ms_ratio_b_over_a": 0.7115691048307444,
+   "phase_note": "phase milliseconds from the binding's KNN_PHASE_TIMERS line (serializing); request ms above include those synchronizations",
+   "cached_opponent_ms": 10.225,
+   "cached_opponent_ratio": {
+    "uniform": 3.1748358924205378,
+    "warpbound_guard": 2.881437457212714
+   },
+   "cached_opponent_note": "cached cuML row from bench/OPPONENT_REFERENCE.md (H100 80GB HBM3, driver 580.126.09, dyadic-v1); admissible only if this box matches that tuple; not a paired opponent measurement; this build's requests are serialized by the phase timers, so the ratio is inflated and not admissible"
+  },
+  {
+   "fixture": "dyadic",
+   "k": 15,
+   "n_index": 400000,
+   "n_queries": 4000,
+   "d": 32,
+   "arm_a": "uniform",
+   "arm_b": "warpbound_guard",
+   "pairs": [
+    {
+     "order": 0,
+     "pair": 0,
+     "ms": {
+      "uniform": 37.796689,
+      "warpbound_guard": 33.083667
+     },
+     "phases": {
+      "uniform": {
+       "distance_ms": 15.386877,
+       "select_ms": 14.751163,
+       "merge_ms": 0.497833,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      },
+      "warpbound_guard": {
+       "distance_ms": 15.408693,
+       "select_ms": 9.728865,
+       "merge_ms": 0.492798,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      }
+     },
+     "ratio_b_over_a": 0.8753059560322862,
+     "select_ms_ratio_b_over_a": 0.6595320653700323
+    },
+    {
+     "order": 0,
+     "pair": 1,
+     "ms": {
+      "uniform": 37.925435,
+      "warpbound_guard": 32.54901
+     },
+     "phases": {
+      "uniform": {
+       "distance_ms": 15.40541,
+       "select_ms": 14.780159,
+       "merge_ms": 0.497625,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      },
+      "warpbound_guard": {
+       "distance_ms": 15.406943,
+       "select_ms": 9.713882,
+       "merge_ms": 0.483825,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      }
+     },
+     "ratio_b_over_a": 0.8582369589168852,
+     "select_ms_ratio_b_over_a": 0.6572244588167151
+    },
+    {
+     "order": 0,
+     "pair": 2,
+     "ms": {
+      "uniform": 37.530373,
+      "warpbound_guard": 32.542765
+     },
+     "phases": {
+      "uniform": {
+       "distance_ms": 15.38118,
+       "select_ms": 14.767484,
+       "merge_ms": 0.491548,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      },
+      "warpbound_guard": {
+       "distance_ms": 15.364889,
+       "select_ms": 9.758353,
+       "merge_ms": 0.490911,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      }
+     },
+     "ratio_b_over_a": 0.8671047580582267,
+     "select_ms_ratio_b_over_a": 0.6607999710715786
+    },
+    {
+     "order": 1,
+     "pair": 0,
+     "ms": {
+      "warpbound_guard": 32.494063,
+      "uniform": 37.372064
+     },
+     "phases": {
+      "warpbound_guard": {
+       "distance_ms": 15.369698,
+       "select_ms": 9.716065,
+       "merge_ms": 0.490133,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      },
+      "uniform": {
+       "distance_ms": 15.380636,
+       "select_ms": 14.741087,
+       "merge_ms": 0.493661,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      }
+     },
+     "ratio_b_over_a": 0.8694746696355865,
+     "select_ms_ratio_b_over_a": 0.6591145551206637
+    },
+    {
+     "order": 1,
+     "pair": 1,
+     "ms": {
+      "warpbound_guard": 32.412817,
+      "uniform": 37.463182
+     },
+     "phases": {
+      "warpbound_guard": {
+       "distance_ms": 15.400488,
+       "select_ms": 9.712057,
+       "merge_ms": 0.491465,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      },
+      "uniform": {
+       "distance_ms": 15.375763,
+       "select_ms": 14.735366,
+       "merge_ms": 0.490628,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      }
+     },
+     "ratio_b_over_a": 0.8651912429648927,
+     "select_ms_ratio_b_over_a": 0.6590984574119163
+    },
+    {
+     "order": 1,
+     "pair": 2,
+     "ms": {
+      "warpbound_guard": 32.482864,
+      "uniform": 37.437317
+     },
+     "phases": {
+      "warpbound_guard": {
+       "distance_ms": 15.389829,
+       "select_ms": 9.722929,
+       "merge_ms": 0.489644,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      },
+      "uniform": {
+       "distance_ms": 15.37045,
+       "select_ms": 14.736309,
+       "merge_ms": 0.487182,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      }
+     },
+     "ratio_b_over_a": 0.8676600409158595,
+     "select_ms_ratio_b_over_a": 0.6597940501926229
+    }
+   ],
+   "median_ms": {
+    "uniform": 37.4967775,
+    "warpbound_guard": 32.518414
+   },
+   "min_ms": {
+    "uniform": 37.372064,
+    "warpbound_guard": 32.412817
+   },
+   "median_ms_by_order": {
+    "uniform": {
+     "0": 37.796689,
+     "1": 37.437317
+    },
+    "warpbound_guard": {
+     "0": 32.54901,
+     "1": 32.482864
+    }
+   },
+   "paired_ratio_median_b_over_a": 0.8673823994870431,
+   "pairs_favoring_b": 6,
+   "spread_pct": {
+    "uniform": 1.4757828189369033,
+    "warpbound_guard": 2.0629849905964095
+   },
+   "boundary": "public NearestNeighbors.kneighbors: host in, host out, includes query conversion, upload, norms, transpose, distance, selection, merge, download, index widening to int64",
+   "phase_ms_median": {
+    "uniform": {
+     "distance_ms": 15.380908000000002,
+     "select_ms": 14.746125,
+     "merge_ms": 0.4926045
+    },
+    "warpbound_guard": {
+     "distance_ms": 15.3951585,
+     "select_ms": 9.719497,
+     "merge_ms": 0.490522
+    }
+   },
+   "phase_ms_median_by_order": {
+    "uniform": {
+     "0": {
+      "distance_ms": 15.386877,
+      "select_ms": 14.767484,
+      "merge_ms": 0.497625
+     },
+     "1": {
+      "distance_ms": 15.375763,
+      "select_ms": 14.736309,
+      "merge_ms": 0.490628
+     }
+    },
+    "warpbound_guard": {
+     "0": {
+      "distance_ms": 15.406943,
+      "select_ms": 9.728865,
+      "merge_ms": 0.490911
+     },
+     "1": {
+      "distance_ms": 15.389829,
+      "select_ms": 9.716065,
+      "merge_ms": 0.490133
+     }
+    }
+   },
+   "select_ms_ratio_b_over_a": 0.659323310245348,
+   "phase_note": "phase milliseconds from the binding's KNN_PHASE_TIMERS line (serializing); request ms above include those synchronizations",
+   "cached_opponent_ms": 10.817,
+   "cached_opponent_ratio": {
+    "uniform": 3.46646736618286,
+    "warpbound_guard": 3.0062322270500137
+   },
+   "cached_opponent_note": "cached cuML row from bench/OPPONENT_REFERENCE.md (H100 80GB HBM3, driver 580.126.09, dyadic-v1); admissible only if this box matches that tuple; not a paired opponent measurement; this build's requests are serialized by the phase timers, so the ratio is inflated and not admissible"
+  },
+  {
+   "fixture": "large",
+   "k": 10,
+   "n_index": 400000,
+   "n_queries": 4000,
+   "d": 32,
+   "arm_a": "uniform",
+   "arm_b": "warpbound_guard1",
+   "pairs": [
+    {
+     "order": 0,
+     "pair": 0,
+     "ms": {
+      "uniform": 33.630324,
+      "warpbound_guard1": 29.850508
+     },
+     "phases": {
+      "uniform": {
+       "distance_ms": 15.466662,
+       "select_ms": 10.330467,
+       "merge_ms": 0.528368,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      },
+      "warpbound_guard1": {
+       "distance_ms": 15.544563,
+       "select_ms": 7.511034,
+       "merge_ms": 0.481293,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      }
+     },
+     "ratio_b_over_a": 0.8876069109533408,
+     "select_ms_ratio_b_over_a": 0.7270759395485219
+    },
+    {
+     "order": 0,
+     "pair": 1,
+     "ms": {
+      "uniform": 32.360038,
+      "warpbound_guard1": 29.352651
+     },
+     "phases": {
+      "uniform": {
+       "distance_ms": 15.401136,
+       "select_ms": 10.329863,
+       "merge_ms": 0.486411,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      },
+      "warpbound_guard1": {
+       "distance_ms": 15.378527,
+       "select_ms": 7.501297,
+       "merge_ms": 0.481564,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      }
+     },
+     "ratio_b_over_a": 0.907064787748395,
+     "select_ms_ratio_b_over_a": 0.7261758457009546
+    },
+    {
+     "order": 0,
+     "pair": 2,
+     "ms": {
+      "uniform": 32.221537,
+      "warpbound_guard1": 29.403564
+     },
+     "phases": {
+      "uniform": {
+       "distance_ms": 15.372294,
+       "select_ms": 10.316615,
+       "merge_ms": 0.485847,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      },
+      "warpbound_guard1": {
+       "distance_ms": 15.398523,
+       "select_ms": 7.490559,
+       "merge_ms": 0.47746,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      }
+     },
+     "ratio_b_over_a": 0.912543805716034,
+     "select_ms_ratio_b_over_a": 0.7260675134237344
+    },
+    {
+     "order": 1,
+     "pair": 0,
+     "ms": {
+      "warpbound_guard1": 29.556118,
+      "uniform": 32.211909
+     },
+     "phases": {
+      "warpbound_guard1": {
+       "distance_ms": 15.405854,
+       "select_ms": 7.502101,
+       "merge_ms": 0.483333,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      },
+      "uniform": {
+       "distance_ms": 15.388498,
+       "select_ms": 10.323999,
+       "merge_ms": 0.488505,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      }
+     },
+     "ratio_b_over_a": 0.9175525114019167,
+     "select_ms_ratio_b_over_a": 0.7266661881699136
+    },
+    {
+     "order": 1,
+     "pair": 1,
+     "ms": {
+      "warpbound_guard1": 29.486521,
+      "uniform": 32.253247
+     },
+     "phases": {
+      "warpbound_guard1": {
+       "distance_ms": 15.378368,
+       "select_ms": 7.509565,
+       "merge_ms": 0.487089,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      },
+      "uniform": {
+       "distance_ms": 15.362818,
+       "select_ms": 10.352493,
+       "merge_ms": 0.47874,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      }
+     },
+     "ratio_b_over_a": 0.9142186831607992,
+     "select_ms_ratio_b_over_a": 0.7253871120704936
+    },
+    {
+     "order": 1,
+     "pair": 2,
+     "ms": {
+      "warpbound_guard1": 29.518772,
+      "uniform": 32.328591
+     },
+     "phases": {
+      "warpbound_guard1": {
+       "distance_ms": 15.394016,
+       "select_ms": 7.49856,
+       "merge_ms": 0.504629,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      },
+      "uniform": {
+       "distance_ms": 15.397806,
+       "select_ms": 10.314378,
+       "merge_ms": 0.47876,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      }
+     },
+     "ratio_b_over_a": 0.913085633704234,
+     "select_ms_ratio_b_over_a": 0.7270006974729839
+    }
+   ],
+   "median_ms": {
+    "uniform": 32.290919,
+    "warpbound_guard1": 29.502646499999997
+   },
+   "min_ms": {
+    "uniform": 32.211909,
+    "warpbound_guard1": 29.352651
+   },
+   "median_ms_by_order": {
+    "uniform": {
+     "0": 32.360038,
+     "1": 32.253247
+    },
+    "warpbound_guard1": {
+     "0": 29.403564,
+     "1": 29.518772
+    }
+   },
+   "paired_ratio_median_b_over_a": 0.912814719710134,
+   "pairs_favoring_b": 6,
+   "spread_pct": {
+    "uniform": 4.392612672311999,
+    "warpbound_guard1": 1.6874994587349978
+   },
+   "boundary": "public NearestNeighbors.kneighbors: host in, host out, includes query conversion, upload, norms, transpose, distance, selection, merge, download, index widening to int64",
+   "phase_ms_median": {
+    "uniform": {
+     "distance_ms": 15.393152,
+     "select_ms": 10.326931,
+     "merge_ms": 0.486129
+    },
+    "warpbound_guard1": {
+     "distance_ms": 15.3962695,
+     "select_ms": 7.501699,
+     "merge_ms": 0.4824485
+    }
+   },
+   "phase_ms_median_by_order": {
+    "uniform": {
+     "0": {
+      "distance_ms": 15.401136,
+      "select_ms": 10.329863,
+      "merge_ms": 0.486411
+     },
+     "1": {
+      "distance_ms": 15.388498,
+      "select_ms": 10.323999,
+      "merge_ms": 0.47876
+     }
+    },
+    "warpbound_guard1": {
+     "0": {
+      "distance_ms": 15.398523,
+      "select_ms": 7.501297,
+      "merge_ms": 0.481293
+     },
+     "1": {
+      "distance_ms": 15.394016,
+      "select_ms": 7.502101,
+      "merge_ms": 0.487089
+     }
+    }
+   },
+   "select_ms_ratio_b_over_a": 0.7264210169354341,
+   "phase_note": "phase milliseconds from the binding's KNN_PHASE_TIMERS line (serializing); request ms above include those synchronizations"
+  },
+  {
+   "fixture": "large",
+   "k": 15,
+   "n_index": 400000,
+   "n_queries": 4000,
+   "d": 32,
+   "arm_a": "uniform",
+   "arm_b": "warpbound_guard1",
+   "pairs": [
+    {
+     "order": 0,
+     "pair": 0,
+     "ms": {
+      "uniform": 38.03704,
+      "warpbound_guard1": 32.913088
+     },
+     "phases": {
+      "uniform": {
+       "distance_ms": 15.370828,
+       "select_ms": 14.739853,
+       "merge_ms": 0.494431,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      },
+      "warpbound_guard1": {
+       "distance_ms": 15.372883,
+       "select_ms": 9.831207,
+       "merge_ms": 0.486269,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      }
+     },
+     "ratio_b_over_a": 0.865290464242223,
+     "select_ms_ratio_b_over_a": 0.6669813464218401
+    },
+    {
+     "order": 0,
+     "pair": 1,
+     "ms": {
+      "uniform": 37.789236,
+      "warpbound_guard1": 33.115208
+     },
+     "phases": {
+      "uniform": {
+       "distance_ms": 15.395955,
+       "select_ms": 14.745762,
+       "merge_ms": 0.497582,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      },
+      "warpbound_guard1": {
+       "distance_ms": 15.393797,
+       "select_ms": 9.825433,
+       "merge_ms": 0.498919,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      }
+     },
+     "ratio_b_over_a": 0.8763132443323278,
+     "select_ms_ratio_b_over_a": 0.6663224999833851
+    },
+    {
+     "order": 0,
+     "pair": 2,
+     "ms": {
+      "uniform": 38.028642,
+      "warpbound_guard1": 32.841678
+     },
+     "phases": {
+      "uniform": {
+       "distance_ms": 15.376605,
+       "select_ms": 14.746011,
+       "merge_ms": 0.48975,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      },
+      "warpbound_guard1": {
+       "distance_ms": 15.387701,
+       "select_ms": 9.829719,
+       "merge_ms": 0.487459,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      }
+     },
+     "ratio_b_over_a": 0.8636037542439723,
+     "select_ms_ratio_b_over_a": 0.6666019033893302
+    },
+    {
+     "order": 1,
+     "pair": 0,
+     "ms": {
+      "warpbound_guard1": 32.671203,
+      "uniform": 37.520844
+     },
+     "phases": {
+      "warpbound_guard1": {
+       "distance_ms": 15.393289,
+       "select_ms": 9.82681,
+       "merge_ms": 0.492988,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      },
+      "uniform": {
+       "distance_ms": 15.387699,
+       "select_ms": 14.733435,
+       "merge_ms": 0.483277,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      }
+     },
+     "ratio_b_over_a": 0.8707480833853312,
+     "select_ms_ratio_b_over_a": 0.6669734518800267
+    },
+    {
+     "order": 1,
+     "pair": 1,
+     "ms": {
+      "warpbound_guard1": 32.606158,
+      "uniform": 37.516988
+     },
+     "phases": {
+      "warpbound_guard1": {
+       "distance_ms": 15.401748,
+       "select_ms": 9.829083,
+       "merge_ms": 0.493651,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      },
+      "uniform": {
+       "distance_ms": 15.385633,
+       "select_ms": 14.733888,
+       "merge_ms": 0.500192,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      }
+     },
+     "ratio_b_over_a": 0.8691038310431531,
+     "select_ms_ratio_b_over_a": 0.6671072156921514
+    },
+    {
+     "order": 1,
+     "pair": 2,
+     "ms": {
+      "warpbound_guard1": 32.713482,
+      "uniform": 37.513988
+     },
+     "phases": {
+      "warpbound_guard1": {
+       "distance_ms": 15.42352,
+       "select_ms": 9.844948,
+       "merge_ms": 0.487985,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      },
+      "uniform": {
+       "distance_ms": 15.438126,
+       "select_ms": 14.741793,
+       "merge_ms": 0.493117,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      }
+     },
+     "ratio_b_over_a": 0.8720342396015055,
+     "select_ms_ratio_b_over_a": 0.6678256844333658
+    }
+   ],
+   "median_ms": {
+    "uniform": 37.65504,
+    "warpbound_guard1": 32.77758
+   },
+   "min_ms": {
+    "uniform": 37.513988,
+    "warpbound_guard1": 32.606158
+   },
+   "median_ms_by_order": {
+    "uniform": {
+     "0": 38.028642,
+     "1": 37.516988
+    },
+    "warpbound_guard1": {
+     "0": 32.913088,
+     "1": 32.671203
+    }
+   },
+   "paired_ratio_median_b_over_a": 0.8699259572142422,
+   "pairs_favoring_b": 6,
+   "spread_pct": {
+    "uniform": 1.38906239377252,
+    "warpbound_guard1": 1.5530432692102407
+   },
+   "boundary": "public NearestNeighbors.kneighbors: host in, host out, includes query conversion, upload, norms, transpose, distance, selection, merge, download, index widening to int64",
+   "phase_ms_median": {
+    "uniform": {
+     "distance_ms": 15.386666,
+     "select_ms": 14.740822999999999,
+     "merge_ms": 0.49377400000000005
+    },
+    "warpbound_guard1": {
+     "distance_ms": 15.393543,
+     "select_ms": 9.829401,
+     "merge_ms": 0.4904865
+    }
+   },
+   "phase_ms_median_by_order": {
+    "uniform": {
+     "0": {
+      "distance_ms": 15.376605,
+      "select_ms": 14.745762,
+      "merge_ms": 0.494431
+     },
+     "1": {
+      "distance_ms": 15.387699,
+      "select_ms": 14.733888,
+      "merge_ms": 0.493117
+     }
+    },
+    "warpbound_guard1": {
+     "0": {
+      "distance_ms": 15.387701,
+      "select_ms": 9.829719,
+      "merge_ms": 0.487459
+     },
+     "1": {
+      "distance_ms": 15.401748,
+      "select_ms": 9.829083,
+      "merge_ms": 0.492988
+     }
+    }
+   },
+   "select_ms_ratio_b_over_a": 0.6669773991509333,
+   "phase_note": "phase milliseconds from the binding's KNN_PHASE_TIMERS line (serializing); request ms above include those synchronizations"
+  },
+  {
+   "fixture": "dyadic",
+   "k": 10,
+   "n_index": 400000,
+   "n_queries": 4000,
+   "d": 32,
+   "arm_a": "uniform",
+   "arm_b": "warpbound_guard1",
+   "pairs": [
+    {
+     "order": 0,
+     "pair": 0,
+     "ms": {
+      "uniform": 33.515967,
+      "warpbound_guard1": 29.528881
+     },
+     "phases": {
+      "uniform": {
+       "distance_ms": 15.369179,
+       "select_ms": 10.328482,
+       "merge_ms": 0.487164,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      },
+      "warpbound_guard1": {
+       "distance_ms": 15.381925,
+       "select_ms": 7.516829,
+       "merge_ms": 0.493996,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      }
+     },
+     "ratio_b_over_a": 0.8810392073724144,
+     "select_ms_ratio_b_over_a": 0.7277767439590833
+    },
+    {
+     "order": 0,
+     "pair": 1,
+     "ms": {
+      "uniform": 32.319796,
+      "warpbound_guard1": 29.453497
+     },
+     "phases": {
+      "uniform": {
+       "distance_ms": 15.37101,
+       "select_ms": 10.325439,
+       "merge_ms": 0.493836,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      },
+      "warpbound_guard1": {
+       "distance_ms": 15.388214,
+       "select_ms": 7.518734,
+       "merge_ms": 0.488507,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      }
+     },
+     "ratio_b_over_a": 0.9113144464154416,
+     "select_ms_ratio_b_over_a": 0.7281757221169968
+    },
+    {
+     "order": 0,
+     "pair": 2,
+     "ms": {
+      "uniform": 32.32339,
+      "warpbound_guard1": 29.347528
+     },
+     "phases": {
+      "uniform": {
+       "distance_ms": 15.375326,
+       "select_ms": 10.332138,
+       "merge_ms": 0.48509,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      },
+      "warpbound_guard1": {
+       "distance_ms": 15.392051,
+       "select_ms": 7.497598,
+       "merge_ms": 0.491851,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      }
+     },
+     "ratio_b_over_a": 0.9079347184809513,
+     "select_ms_ratio_b_over_a": 0.7256579422380924
+    },
+    {
+     "order": 1,
+     "pair": 0,
+     "ms": {
+      "warpbound_guard1": 29.480341,
+      "uniform": 32.222789
+     },
+     "phases": {
+      "warpbound_guard1": {
+       "distance_ms": 15.399398,
+       "select_ms": 7.517073,
+       "merge_ms": 0.481078,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      },
+      "uniform": {
+       "distance_ms": 15.386628,
+       "select_ms": 10.323637,
+       "merge_ms": 0.48046,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      }
+     },
+     "ratio_b_over_a": 0.9148910418648118,
+     "select_ms_ratio_b_over_a": 0.7281419329253828
+    },
+    {
+     "order": 1,
+     "pair": 1,
+     "ms": {
+      "warpbound_guard1": 29.449163,
+      "uniform": 32.339048
+     },
+     "phases": {
+      "warpbound_guard1": {
+       "distance_ms": 15.407381,
+       "select_ms": 7.580767,
+       "merge_ms": 0.495322,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      },
+      "uniform": {
+       "distance_ms": 15.406081,
+       "select_ms": 10.320614,
+       "merge_ms": 0.490293,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      }
+     },
+     "ratio_b_over_a": 0.9106379074609742,
+     "select_ms_ratio_b_over_a": 0.7345267442421545
+    },
+    {
+     "order": 1,
+     "pair": 2,
+     "ms": {
+      "warpbound_guard1": 29.444174,
+      "uniform": 32.258854
+     },
+     "phases": {
+      "warpbound_guard1": {
+       "distance_ms": 15.372816,
+       "select_ms": 7.495288,
+       "merge_ms": 0.484527,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      },
+      "uniform": {
+       "distance_ms": 15.355782,
+       "select_ms": 10.324417,
+       "merge_ms": 0.486226,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      }
+     },
+     "ratio_b_over_a": 0.9127470554285655,
+     "select_ms_ratio_b_over_a": 0.7259768759824404
+    }
+   ],
+   "median_ms": {
+    "uniform": 32.321593,
+    "warpbound_guard1": 29.45133
+   },
+   "min_ms": {
+    "uniform": 32.222789,
+    "warpbound_guard1": 29.347528
+   },
+   "median_ms_by_order": {
+    "uniform": {
+     "0": 32.32339,
+     "1": 32.258854
+    },
+    "warpbound_guard1": {
+     "0": 29.453497,
+     "1": 29.449163
+    }
+   },
+   "paired_ratio_median_b_over_a": 0.9109761769382079,
+   "pairs_favoring_b": 6,
+   "spread_pct": {
+    "uniform": 4.0009723530644195,
+    "warpbound_guard1": 0.6157718513900658
+   },
+   "boundary": "public NearestNeighbors.kneighbors: host in, host out, includes query conversion, upload, norms, transpose, distance, selection, merge, download, index widening to int64",
+   "phase_ms_median": {
+    "uniform": {
+     "distance_ms": 15.373168,
+     "select_ms": 10.324928,
+     "merge_ms": 0.486695
+    },
+    "warpbound_guard1": {
+     "distance_ms": 15.3901325,
+     "select_ms": 7.516951000000001,
+     "merge_ms": 0.49017900000000003
+    }
+   },
+   "phase_ms_median_by_order": {
+    "uniform": {
+     "0": {
+      "distance_ms": 15.37101,
+      "select_ms": 10.328482,
+      "merge_ms": 0.487164
+     },
+     "1": {
+      "distance_ms": 15.386628,
+      "select_ms": 10.323637,
+      "merge_ms": 0.486226
+     }
+    },
+    "warpbound_guard1": {
+     "0": {
+      "distance_ms": 15.388214,
+      "select_ms": 7.516829,
+      "merge_ms": 0.491851
+     },
+     "1": {
+      "distance_ms": 15.399398,
+      "select_ms": 7.517073,
+      "merge_ms": 0.484527
+     }
+    }
+   },
+   "select_ms_ratio_b_over_a": 0.727959338442233,
+   "phase_note": "phase milliseconds from the binding's KNN_PHASE_TIMERS line (serializing); request ms above include those synchronizations",
+   "cached_opponent_ms": 10.225,
+   "cached_opponent_ratio": {
+    "uniform": 3.161035990220049,
+    "warpbound_guard1": 2.880325672371638
+   },
+   "cached_opponent_note": "cached cuML row from bench/OPPONENT_REFERENCE.md (H100 80GB HBM3, driver 580.126.09, dyadic-v1); admissible only if this box matches that tuple; not a paired opponent measurement; this build's requests are serialized by the phase timers, so the ratio is inflated and not admissible"
+  },
+  {
+   "fixture": "dyadic",
+   "k": 15,
+   "n_index": 400000,
+   "n_queries": 4000,
+   "d": 32,
+   "arm_a": "uniform",
+   "arm_b": "warpbound_guard1",
+   "pairs": [
+    {
+     "order": 0,
+     "pair": 0,
+     "ms": {
+      "uniform": 37.681817,
+      "warpbound_guard1": 33.203537
+     },
+     "phases": {
+      "uniform": {
+       "distance_ms": 15.387398,
+       "select_ms": 14.753104,
+       "merge_ms": 0.495093,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      },
+      "warpbound_guard1": {
+       "distance_ms": 15.386683,
+       "select_ms": 9.839271,
+       "merge_ms": 0.490098,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      }
+     },
+     "ratio_b_over_a": 0.8811554124367197,
+     "select_ms_ratio_b_over_a": 0.6669288713751357
+    },
+    {
+     "order": 0,
+     "pair": 1,
+     "ms": {
+      "uniform": 38.035233,
+      "warpbound_guard1": 32.759538
+     },
+     "phases": {
+      "uniform": {
+       "distance_ms": 15.384036,
+       "select_ms": 14.735562,
+       "merge_ms": 0.49062,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      },
+      "warpbound_guard1": {
+       "distance_ms": 15.382089,
+       "select_ms": 9.826108,
+       "merge_ms": 0.485205,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      }
+     },
+     "ratio_b_over_a": 0.8612945265775025,
+     "select_ms_ratio_b_over_a": 0.6668295379572221
+    },
+    {
+     "order": 0,
+     "pair": 2,
+     "ms": {
+      "uniform": 37.601249,
+      "warpbound_guard1": 32.797211
+     },
+     "phases": {
+      "uniform": {
+       "distance_ms": 15.394069,
+       "select_ms": 14.758838,
+       "merge_ms": 0.485238,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      },
+      "warpbound_guard1": {
+       "distance_ms": 15.395504,
+       "select_ms": 9.837728,
+       "merge_ms": 0.486087,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      }
+     },
+     "ratio_b_over_a": 0.8722372759479344,
+     "select_ms_ratio_b_over_a": 0.6665652133318355
+    },
+    {
+     "order": 1,
+     "pair": 0,
+     "ms": {
+      "warpbound_guard1": 34.866196,
+      "uniform": 38.372597
+     },
+     "phases": {
+      "warpbound_guard1": {
+       "distance_ms": 15.562691,
+       "select_ms": 9.944999,
+       "merge_ms": 0.586841,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      },
+      "uniform": {
+       "distance_ms": 15.377618,
+       "select_ms": 14.748329,
+       "merge_ms": 0.49185,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      }
+     },
+     "ratio_b_over_a": 0.9086222649981184,
+     "select_ms_ratio_b_over_a": 0.6743136120708997
+    },
+    {
+     "order": 1,
+     "pair": 1,
+     "ms": {
+      "warpbound_guard1": 32.68864,
+      "uniform": 37.642857
+     },
+     "phases": {
+      "warpbound_guard1": {
+       "distance_ms": 15.367898,
+       "select_ms": 9.826426,
+       "merge_ms": 0.484063,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      },
+      "uniform": {
+       "distance_ms": 15.365607,
+       "select_ms": 14.746996,
+       "merge_ms": 0.491135,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      }
+     },
+     "ratio_b_over_a": 0.8683889217016657,
+     "select_ms_ratio_b_over_a": 0.6663340791575451
+    },
+    {
+     "order": 1,
+     "pair": 2,
+     "ms": {
+      "warpbound_guard1": 32.624475,
+      "uniform": 37.612988
+     },
+     "phases": {
+      "warpbound_guard1": {
+       "distance_ms": 15.403602,
+       "select_ms": 9.847915,
+       "merge_ms": 0.491685,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      },
+      "uniform": {
+       "distance_ms": 15.37559,
+       "select_ms": 14.747572,
+       "merge_ms": 0.485928,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      }
+     },
+     "ratio_b_over_a": 0.8673725948068788,
+     "select_ms_ratio_b_over_a": 0.6677651751759545
+    }
+   ],
+   "median_ms": {
+    "uniform": 37.662337,
+    "warpbound_guard1": 32.7783745
+   },
+   "min_ms": {
+    "uniform": 37.601249,
+    "warpbound_guard1": 32.624475
+   },
+   "median_ms_by_order": {
+    "uniform": {
+     "0": 37.681817,
+     "1": 37.642857
+    },
+    "warpbound_guard1": {
+     "0": 32.797211,
+     "1": 32.68864
+    }
+   },
+   "paired_ratio_median_b_over_a": 0.8703130988248,
+   "pairs_favoring_b": 6,
+   "spread_pct": {
+    "uniform": 2.048061967052114,
+    "warpbound_guard1": 6.839024308542224
+   },
+   "boundary": "public NearestNeighbors.kneighbors: host in, host out, includes query conversion, upload, norms, transpose, distance, selection, merge, download, index widening to int64",
+   "phase_ms_median": {
+    "uniform": {
+     "distance_ms": 15.380827,
+     "select_ms": 14.7479505,
+     "merge_ms": 0.49087749999999997
+    },
+    "warpbound_guard1": {
+     "distance_ms": 15.3910935,
+     "select_ms": 9.838499500000001,
+     "merge_ms": 0.4880925
+    }
+   },
+   "phase_ms_median_by_order": {
+    "uniform": {
+     "0": {
+      "distance_ms": 15.387398,
+      "select_ms": 14.753104,
+      "merge_ms": 0.49062
+     },
+     "1": {
+      "distance_ms": 15.37559,
+      "select_ms": 14.747572,
+      "merge_ms": 0.491135
+     }
+    },
+    "warpbound_guard1": {
+     "0": {
+      "distance_ms": 15.386683,
+      "select_ms": 9.837728,
+      "merge_ms": 0.486087
+     },
+     "1": {
+      "distance_ms": 15.403602,
+      "select_ms": 9.847915,
+      "merge_ms": 0.491685
+     }
+    }
+   },
+   "select_ms_ratio_b_over_a": 0.6668792046661789,
+   "phase_note": "phase milliseconds from the binding's KNN_PHASE_TIMERS line (serializing); request ms above include those synchronizations",
+   "cached_opponent_ms": 10.817,
+   "cached_opponent_ratio": {
+    "uniform": 3.4817728575390587,
+    "warpbound_guard1": 3.0302648146436164
+   },
+   "cached_opponent_note": "cached cuML row from bench/OPPONENT_REFERENCE.md (H100 80GB HBM3, driver 580.126.09, dyadic-v1); admissible only if this box matches that tuple; not a paired opponent measurement; this build's requests are serialized by the phase timers, so the ratio is inflated and not admissible"
+  }
+ ],
+ "timing_only": [
+  {
+   "fixture": "large",
+   "k": 10,
+   "n_index": 400000,
+   "n_queries": 4000,
+   "d": 32,
+   "arm_a": "uniform",
+   "arm_b": "warpbound_count",
+   "pairs": [
+    {
+     "order": 0,
+     "pair": 0,
+     "ms": {
+      "uniform": 33.496798,
+      "warpbound_count": 31.163943
+     },
+     "phases": {
+      "uniform": {
+       "distance_ms": 15.396046,
+       "select_ms": 10.32538,
+       "merge_ms": 0.481331,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      },
+      "warpbound_count": {
+       "distance_ms": 15.452792,
+       "select_ms": 8.99426,
+       "merge_ms": 0.484045,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0,
+       "admit_warp_steps": 49920000.0,
+       "admit_any_admit": 23075772.0,
+       "admit_rate": 0.4622550480769231,
+       "admit_lines": 56.0
+      }
+     },
+     "ratio_b_over_a": 0.9303558805829739,
+     "select_ms_ratio_b_over_a": 0.8710827107573766
+    },
+    {
+     "order": 0,
+     "pair": 1,
+     "ms": {
+      "uniform": 32.313593,
+      "warpbound_count": 30.896526
+     },
+     "phases": {
+      "uniform": {
+       "distance_ms": 15.377575,
+       "select_ms": 10.321324,
+       "merge_ms": 0.48791,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      },
+      "warpbound_count": {
+       "distance_ms": 15.406953,
+       "select_ms": 8.990339,
+       "merge_ms": 0.481509,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0,
+       "admit_warp_steps": 49920000.0,
+       "admit_any_admit": 23075772.0,
+       "admit_rate": 0.4622550480769231,
+       "admit_lines": 56.0
+      }
+     },
+     "ratio_b_over_a": 0.9561464118211801,
+     "select_ms_ratio_b_over_a": 0.8710451294814503
+    },
+    {
+     "order": 0,
+     "pair": 2,
+     "ms": {
+      "uniform": 32.289032,
+      "warpbound_count": 30.990532
+     },
+     "phases": {
+      "uniform": {
+       "distance_ms": 15.375051,
+       "select_ms": 10.319262,
+       "merge_ms": 0.48915,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      },
+      "warpbound_count": {
+       "distance_ms": 15.44251,
+       "select_ms": 8.968154,
+       "merge_ms": 0.482763,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0,
+       "admit_warp_steps": 49920000.0,
+       "admit_any_admit": 23075772.0,
+       "admit_rate": 0.4622550480769231,
+       "admit_lines": 56.0
+      }
+     },
+     "ratio_b_over_a": 0.9597851059765434,
+     "select_ms_ratio_b_over_a": 0.8690693191044089
+    },
+    {
+     "order": 1,
+     "pair": 0,
+     "ms": {
+      "warpbound_count": 30.995215,
+      "uniform": 34.29715
+     },
+     "phases": {
+      "warpbound_count": {
+       "distance_ms": 15.454735,
+       "select_ms": 8.969348,
+       "merge_ms": 0.492064,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0,
+       "admit_warp_steps": 49920000.0,
+       "admit_any_admit": 23075772.0,
+       "admit_rate": 0.4622550480769231,
+       "admit_lines": 56.0
+      },
+      "uniform": {
+       "distance_ms": 15.461894,
+       "select_ms": 10.395987,
+       "merge_ms": 0.536753,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      }
+     },
+     "ratio_b_over_a": 0.9037256739991515,
+     "select_ms_ratio_b_over_a": 0.8627702208554128
+    },
+    {
+     "order": 1,
+     "pair": 1,
+     "ms": {
+      "warpbound_count": 31.134354,
+      "uniform": 32.262089
+     },
+     "phases": {
+      "warpbound_count": {
+       "distance_ms": 15.422829,
+       "select_ms": 9.078886,
+       "merge_ms": 0.495209,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0,
+       "admit_warp_steps": 49920000.0,
+       "admit_any_admit": 23075772.0,
+       "admit_rate": 0.4622550480769231,
+       "admit_lines": 56.0
+      },
+      "uniform": {
+       "distance_ms": 15.372057,
+       "select_ms": 10.329053,
+       "merge_ms": 0.487307,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      }
+     },
+     "ratio_b_over_a": 0.9650445760037422,
+     "select_ms_ratio_b_over_a": 0.8789659613519265
+    },
+    {
+     "order": 1,
+     "pair": 2,
+     "ms": {
+      "warpbound_count": 31.071485,
+      "uniform": 32.619365
+     },
+     "phases": {
+      "warpbound_count": {
+       "distance_ms": 15.413539,
+       "select_ms": 9.008192,
+       "merge_ms": 0.494508,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0,
+       "admit_warp_steps": 49920000.0,
+       "admit_any_admit": 23075772.0,
+       "admit_rate": 0.4622550480769231,
+       "admit_lines": 56.0
+      },
+      "uniform": {
+       "distance_ms": 15.539714,
+       "select_ms": 10.375088,
+       "merge_ms": 0.577378,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      }
+     },
+     "ratio_b_over_a": 0.952547206237767,
+     "select_ms_ratio_b_over_a": 0.868252105427925
+    }
+   ],
+   "median_ms": {
+    "uniform": 32.466479,
+    "warpbound_count": 31.03335
+   },
+   "min_ms": {
+    "uniform": 32.262089,
+    "warpbound_count": 30.896526
+   },
+   "median_ms_by_order": {
+    "uniform": {
+     "0": 32.313593,
+     "1": 32.619365
+    },
+    "warpbound_count": {
+     "0": 30.990532,
+     "1": 31.071485
+    }
+   },
+   "paired_ratio_median_b_over_a": 0.9543468090294736,
+   "pairs_favoring_b": 6,
+   "spread_pct": {
+    "uniform": 6.268191262748261,
+    "warpbound_count": 0.8617084523585055
+   },
+   "boundary": "public NearestNeighbors.kneighbors: host in, host out, includes query conversion, upload, norms, transpose, distance, selection, merge, download, index widening to int64",
+   "phase_ms_median": {
+    "uniform": {
+     "distance_ms": 15.3868105,
+     "select_ms": 10.327216499999999,
+     "merge_ms": 0.48853
+    },
+    "warpbound_count": {
+     "distance_ms": 15.4326695,
+     "select_ms": 8.992299500000001,
+     "merge_ms": 0.4880545,
+     "admit_warp_steps": 49920000.0,
+     "admit_any_admit": 23075772.0,
+     "admit_rate": 0.4622550480769231
+    }
+   },
+   "phase_ms_median_by_order": {
+    "uniform": {
+     "0": {
+      "distance_ms": 15.377575,
+      "select_ms": 10.321324,
+      "merge_ms": 0.48791
+     },
+     "1": {
+      "distance_ms": 15.461894,
+      "select_ms": 10.375088,
+      "merge_ms": 0.536753
+     }
+    },
+    "warpbound_count": {
+     "0": {
+      "distance_ms": 15.44251,
+      "select_ms": 8.990339,
+      "merge_ms": 0.482763,
+      "admit_warp_steps": 49920000.0,
+      "admit_any_admit": 23075772.0,
+      "admit_rate": 0.4622550480769231
+     },
+     "1": {
+      "distance_ms": 15.422829,
+      "select_ms": 9.008192,
+      "merge_ms": 0.494508,
+      "admit_warp_steps": 49920000.0,
+      "admit_any_admit": 23075772.0,
+      "admit_rate": 0.4622550480769231
+     }
+    }
+   },
+   "select_ms_ratio_b_over_a": 0.8700572242929296,
+   "phase_note": "phase milliseconds from the binding's KNN_PHASE_TIMERS line (serializing); request ms above include those synchronizations",
+   "output_valid": {
+    "uniform": true,
+    "warpbound_count": true
+   },
+   "differing_cells_from_reference": 0,
+   "time_is_a_price": {
+    "uniform": true,
+    "warpbound_count": false
+   },
+   "note": "output valid; counter arm; its launcher synchronizes per launch so its time is not a price; the admit_rate in its phase medians is the measurement"
+  },
+  {
+   "fixture": "large",
+   "k": 15,
+   "n_index": 400000,
+   "n_queries": 4000,
+   "d": 32,
+   "arm_a": "uniform",
+   "arm_b": "warpbound_count",
+   "pairs": [
+    {
+     "order": 0,
+     "pair": 0,
+     "ms": {
+      "uniform": 37.811506,
+      "warpbound_count": 34.671169
+     },
+     "phases": {
+      "uniform": {
+       "distance_ms": 15.367948,
+       "select_ms": 14.753478,
+       "merge_ms": 0.492005,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      },
+      "warpbound_count": {
+       "distance_ms": 15.416345,
+       "select_ms": 11.463014,
+       "merge_ms": 0.502732,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0,
+       "admit_warp_steps": 49920000.0,
+       "admit_any_admit": 23076247.0,
+       "admit_rate": 0.46226456330128207,
+       "admit_lines": 56.0
+      }
+     },
+     "ratio_b_over_a": 0.9169475820402392,
+     "select_ms_ratio_b_over_a": 0.7769702845661206
+    },
+    {
+     "order": 0,
+     "pair": 1,
+     "ms": {
+      "uniform": 37.93672,
+      "warpbound_count": 34.95585
+     },
+     "phases": {
+      "uniform": {
+       "distance_ms": 15.372419,
+       "select_ms": 14.751145,
+       "merge_ms": 0.500372,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      },
+      "warpbound_count": {
+       "distance_ms": 15.45586,
+       "select_ms": 11.380593,
+       "merge_ms": 0.499853,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0,
+       "admit_warp_steps": 49920000.0,
+       "admit_any_admit": 23076247.0,
+       "admit_rate": 0.46226456330128207,
+       "admit_lines": 56.0
+      }
+     },
+     "ratio_b_over_a": 0.9214252049201933,
+     "select_ms_ratio_b_over_a": 0.7715057373512361
+    },
+    {
+     "order": 0,
+     "pair": 2,
+     "ms": {
+      "uniform": 38.191538,
+      "warpbound_count": 34.562748
+     },
+     "phases": {
+      "uniform": {
+       "distance_ms": 15.393965,
+       "select_ms": 14.747664,
+       "merge_ms": 0.490704,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      },
+      "warpbound_count": {
+       "distance_ms": 15.433193,
+       "select_ms": 11.426995,
+       "merge_ms": 0.503598,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0,
+       "admit_warp_steps": 49920000.0,
+       "admit_any_admit": 23076247.0,
+       "admit_rate": 0.46226456330128207,
+       "admit_lines": 56.0
+      }
+     },
+     "ratio_b_over_a": 0.904984449696684,
+     "select_ms_ratio_b_over_a": 0.7748342381545985
+    },
+    {
+     "order": 1,
+     "pair": 0,
+     "ms": {
+      "warpbound_count": 34.300077,
+      "uniform": 37.884196
+     },
+     "phases": {
+      "warpbound_count": {
+       "distance_ms": 15.416411,
+       "select_ms": 11.439189,
+       "merge_ms": 0.488116,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0,
+       "admit_warp_steps": 49920000.0,
+       "admit_any_admit": 23076247.0,
+       "admit_rate": 0.46226456330128207,
+       "admit_lines": 56.0
+      },
+      "uniform": {
+       "distance_ms": 15.376459,
+       "select_ms": 14.740224,
+       "merge_ms": 0.49259,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      }
+     },
+     "ratio_b_over_a": 0.9053927658910855,
+     "select_ms_ratio_b_over_a": 0.7760525891601106
+    },
+    {
+     "order": 1,
+     "pair": 1,
+     "ms": {
+      "warpbound_count": 35.261218,
+      "uniform": 38.440962
+     },
+     "phases": {
+      "warpbound_count": {
+       "distance_ms": 15.471296,
+       "select_ms": 11.455625,
+       "merge_ms": 0.490566,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0,
+       "admit_warp_steps": 49920000.0,
+       "admit_any_admit": 23076247.0,
+       "admit_rate": 0.46226456330128207,
+       "admit_lines": 56.0
+      },
+      "uniform": {
+       "distance_ms": 15.391701,
+       "select_ms": 14.759762,
+       "merge_ms": 0.490283,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      }
+     },
+     "ratio_b_over_a": 0.917282403078258,
+     "select_ms_ratio_b_over_a": 0.776138869989909
+    },
+    {
+     "order": 1,
+     "pair": 2,
+     "ms": {
+      "warpbound_count": 34.898309,
+      "uniform": 37.836776
+     },
+     "phases": {
+      "warpbound_count": {
+       "distance_ms": 15.438637,
+       "select_ms": 11.465018,
+       "merge_ms": 0.484973,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0,
+       "admit_warp_steps": 49920000.0,
+       "admit_any_admit": 23076247.0,
+       "admit_rate": 0.46226456330128207,
+       "admit_lines": 56.0
+      },
+      "uniform": {
+       "distance_ms": 15.365912,
+       "select_ms": 14.744388,
+       "merge_ms": 0.498881,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      }
+     },
+     "ratio_b_over_a": 0.9223383355918061,
+     "select_ms_ratio_b_over_a": 0.7775852073344787
+    }
+   ],
+   "median_ms": {
+    "uniform": 37.910458000000006,
+    "warpbound_count": 34.784739
+   },
+   "min_ms": {
+    "uniform": 37.811506,
+    "warpbound_count": 34.300077
+   },
+   "median_ms_by_order": {
+    "uniform": {
+     "0": 37.93672,
+     "1": 37.884196
+    },
+    "warpbound_count": {
+     "0": 34.671169,
+     "1": 34.898309
+    }
+   },
+   "paired_ratio_median_b_over_a": 0.9171149925592486,
+   "pairs_favoring_b": 6,
+   "spread_pct": {
+    "uniform": 1.660375614559965,
+    "warpbound_count": 2.763111144804041
+   },
+   "boundary": "public NearestNeighbors.kneighbors: host in, host out, includes query conversion, upload, norms, transpose, distance, selection, merge, download, index widening to int64",
+   "phase_ms_median": {
+    "uniform": {
+     "distance_ms": 15.374439,
+     "select_ms": 14.7494045,
+     "merge_ms": 0.4922975
+    },
+    "warpbound_count": {
+     "distance_ms": 15.435915,
+     "select_ms": 11.447407,
+     "merge_ms": 0.49520949999999997,
+     "admit_warp_steps": 49920000.0,
+     "admit_any_admit": 23076247.0,
+     "admit_rate": 0.46226456330128207
+    }
+   },
+   "phase_ms_median_by_order": {
+    "uniform": {
+     "0": {
+      "distance_ms": 15.372419,
+      "select_ms": 14.751145,
+      "merge_ms": 0.492005
+     },
+     "1": {
+      "distance_ms": 15.376459,
+      "select_ms": 14.744388,
+      "merge_ms": 0.49259
+     }
+    },
+    "warpbound_count": {
+     "0": {
+      "distance_ms": 15.433193,
+      "select_ms": 11.426995,
+      "merge_ms": 0.502732,
+      "admit_warp_steps": 49920000.0,
+      "admit_any_admit": 23076247.0,
+      "admit_rate": 0.46226456330128207
+     },
+     "1": {
+      "distance_ms": 15.438637,
+      "select_ms": 11.455625,
+      "merge_ms": 0.488116,
+      "admit_warp_steps": 49920000.0,
+      "admit_any_admit": 23076247.0,
+      "admit_rate": 0.46226456330128207
+     }
+    }
+   },
+   "select_ms_ratio_b_over_a": 0.7760957295750097,
+   "phase_note": "phase milliseconds from the binding's KNN_PHASE_TIMERS line (serializing); request ms above include those synchronizations",
+   "output_valid": {
+    "uniform": true,
+    "warpbound_count": true
+   },
+   "differing_cells_from_reference": 0,
+   "time_is_a_price": {
+    "uniform": true,
+    "warpbound_count": false
+   },
+   "note": "output valid; counter arm; its launcher synchronizes per launch so its time is not a price; the admit_rate in its phase medians is the measurement"
+  },
+  {
+   "fixture": "dyadic",
+   "k": 10,
+   "n_index": 400000,
+   "n_queries": 4000,
+   "d": 32,
+   "arm_a": "uniform",
+   "arm_b": "warpbound_count",
+   "pairs": [
+    {
+     "order": 0,
+     "pair": 0,
+     "ms": {
+      "uniform": 33.551064,
+      "warpbound_count": 31.060106
+     },
+     "phases": {
+      "uniform": {
+       "distance_ms": 15.353698,
+       "select_ms": 10.312816,
+       "merge_ms": 0.476659,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      },
+      "warpbound_count": {
+       "distance_ms": 15.394404,
+       "select_ms": 8.947518,
+       "merge_ms": 0.48651,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0,
+       "admit_warp_steps": 49920000.0,
+       "admit_any_admit": 23055555.0,
+       "admit_rate": 0.46185006009615387,
+       "admit_lines": 56.0
+      }
+     },
+     "ratio_b_over_a": 0.9257562144675949,
+     "select_ms_ratio_b_over_a": 0.8676115233705324
+    },
+    {
+     "order": 0,
+     "pair": 1,
+     "ms": {
+      "uniform": 32.362132,
+      "warpbound_count": 31.040444
+     },
+     "phases": {
+      "uniform": {
+       "distance_ms": 15.418262,
+       "select_ms": 10.3331,
+       "merge_ms": 0.488526,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      },
+      "warpbound_count": {
+       "distance_ms": 15.44805,
+       "select_ms": 9.001552,
+       "merge_ms": 0.489135,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0,
+       "admit_warp_steps": 49920000.0,
+       "admit_any_admit": 23055555.0,
+       "admit_rate": 0.46185006009615387,
+       "admit_lines": 56.0
+      }
+     },
+     "ratio_b_over_a": 0.959159427444397,
+     "select_ms_ratio_b_over_a": 0.8711376063330463
+    },
+    {
+     "order": 0,
+     "pair": 2,
+     "ms": {
+      "uniform": 32.256623,
+      "warpbound_count": 31.004138
+     },
+     "phases": {
+      "uniform": {
+       "distance_ms": 15.363989,
+       "select_ms": 10.313708,
+       "merge_ms": 0.480578,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      },
+      "warpbound_count": {
+       "distance_ms": 15.411365,
+       "select_ms": 9.018322,
+       "merge_ms": 0.491337,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0,
+       "admit_warp_steps": 49920000.0,
+       "admit_any_admit": 23055555.0,
+       "admit_rate": 0.46185006009615387,
+       "admit_lines": 56.0
+      }
+     },
+     "ratio_b_over_a": 0.9611712298587488,
+     "select_ms_ratio_b_over_a": 0.8744015246504943
+    },
+    {
+     "order": 1,
+     "pair": 0,
+     "ms": {
+      "warpbound_count": 30.871274,
+      "uniform": 32.180302
+     },
+     "phases": {
+      "warpbound_count": {
+       "distance_ms": 15.380704,
+       "select_ms": 8.9716,
+       "merge_ms": 0.483106,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0,
+       "admit_warp_steps": 49920000.0,
+       "admit_any_admit": 23055555.0,
+       "admit_rate": 0.46185006009615387,
+       "admit_lines": 56.0
+      },
+      "uniform": {
+       "distance_ms": 15.357931,
+       "select_ms": 10.314144,
+       "merge_ms": 0.483512,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      }
+     },
+     "ratio_b_over_a": 0.9593220722415844,
+     "select_ms_ratio_b_over_a": 0.8698346658724175
+    },
+    {
+     "order": 1,
+     "pair": 1,
+     "ms": {
+      "warpbound_count": 30.842184,
+      "uniform": 32.276286
+     },
+     "phases": {
+      "warpbound_count": {
+       "distance_ms": 15.397965,
+       "select_ms": 8.947807,
+       "merge_ms": 0.485533,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0,
+       "admit_warp_steps": 49920000.0,
+       "admit_any_admit": 23055555.0,
+       "admit_rate": 0.46185006009615387,
+       "admit_lines": 56.0
+      },
+      "uniform": {
+       "distance_ms": 15.369806,
+       "select_ms": 10.323019,
+       "merge_ms": 0.485417,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      }
+     },
+     "ratio_b_over_a": 0.9555679361621718,
+     "select_ms_ratio_b_over_a": 0.8667819946858568
+    },
+    {
+     "order": 1,
+     "pair": 2,
+     "ms": {
+      "warpbound_count": 31.023423,
+      "uniform": 32.296958
+     },
+     "phases": {
+      "warpbound_count": {
+       "distance_ms": 15.429304,
+       "select_ms": 9.004687,
+       "merge_ms": 0.486844,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0,
+       "admit_warp_steps": 49920000.0,
+       "admit_any_admit": 23055555.0,
+       "admit_rate": 0.46185006009615387,
+       "admit_lines": 56.0
+      },
+      "uniform": {
+       "distance_ms": 15.374711,
+       "select_ms": 10.324721,
+       "merge_ms": 0.487789,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 10.0
+      }
+     },
+     "ratio_b_over_a": 0.9605679581340139,
+     "select_ms_ratio_b_over_a": 0.8721482159178926
+    }
+   ],
+   "median_ms": {
+    "uniform": 32.286621999999994,
+    "warpbound_count": 31.013780500000003
+   },
+   "min_ms": {
+    "uniform": 32.180302,
+    "warpbound_count": 30.842184
+   },
+   "median_ms_by_order": {
+    "uniform": {
+     "0": 32.362132,
+     "1": 32.276286
+    },
+    "warpbound_count": {
+     "0": 31.040444,
+     "1": 30.871274
+    }
+   },
+   "paired_ratio_median_b_over_a": 0.9592407498429907,
+   "pairs_favoring_b": 6,
+   "spread_pct": {
+    "uniform": 4.24560364351526,
+    "warpbound_count": 0.7026618376950255
+   },
+   "boundary": "public NearestNeighbors.kneighbors: host in, host out, includes query conversion, upload, norms, transpose, distance, selection, merge, download, index widening to int64",
+   "phase_ms_median": {
+    "uniform": {
+     "distance_ms": 15.3668975,
+     "select_ms": 10.3185815,
+     "merge_ms": 0.48446449999999996
+    },
+    "warpbound_count": {
+     "distance_ms": 15.404665,
+     "select_ms": 8.986576,
+     "merge_ms": 0.486677,
+     "admit_warp_steps": 49920000.0,
+     "admit_any_admit": 23055555.0,
+     "admit_rate": 0.46185006009615387
+    }
+   },
+   "phase_ms_median_by_order": {
+    "uniform": {
+     "0": {
+      "distance_ms": 15.363989,
+      "select_ms": 10.313708,
+      "merge_ms": 0.480578
+     },
+     "1": {
+      "distance_ms": 15.369806,
+      "select_ms": 10.323019,
+      "merge_ms": 0.485417
+     }
+    },
+    "warpbound_count": {
+     "0": {
+      "distance_ms": 15.411365,
+      "select_ms": 9.001552,
+      "merge_ms": 0.489135,
+      "admit_warp_steps": 49920000.0,
+      "admit_any_admit": 23055555.0,
+      "admit_rate": 0.46185006009615387
+     },
+     "1": {
+      "distance_ms": 15.397965,
+      "select_ms": 8.9716,
+      "merge_ms": 0.485533,
+      "admit_warp_steps": 49920000.0,
+      "admit_any_admit": 23055555.0,
+      "admit_rate": 0.46185006009615387
+     }
+    }
+   },
+   "select_ms_ratio_b_over_a": 0.8704861361027318,
+   "phase_note": "phase milliseconds from the binding's KNN_PHASE_TIMERS line (serializing); request ms above include those synchronizations",
+   "output_valid": {
+    "uniform": true,
+    "warpbound_count": true
+   },
+   "differing_cells_from_reference": 0,
+   "time_is_a_price": {
+    "uniform": true,
+    "warpbound_count": false
+   },
+   "note": "output valid; counter arm; its launcher synchronizes per launch so its time is not a price; the admit_rate in its phase medians is the measurement"
+  },
+  {
+   "fixture": "dyadic",
+   "k": 15,
+   "n_index": 400000,
+   "n_queries": 4000,
+   "d": 32,
+   "arm_a": "uniform",
+   "arm_b": "warpbound_count",
+   "pairs": [
+    {
+     "order": 0,
+     "pair": 0,
+     "ms": {
+      "uniform": 37.598788,
+      "warpbound_count": 34.334333
+     },
+     "phases": {
+      "uniform": {
+       "distance_ms": 15.392409,
+       "select_ms": 14.738411,
+       "merge_ms": 0.502687,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      },
+      "warpbound_count": {
+       "distance_ms": 15.441231,
+       "select_ms": 11.46267,
+       "merge_ms": 0.496684,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0,
+       "admit_warp_steps": 49920000.0,
+       "admit_any_admit": 23056101.0,
+       "admit_rate": 0.46186099759615384,
+       "admit_lines": 56.0
+      }
+     },
+     "ratio_b_over_a": 0.9131765896283679,
+     "select_ms_ratio_b_over_a": 0.7777412368266837
+    },
+    {
+     "order": 0,
+     "pair": 1,
+     "ms": {
+      "uniform": 37.577548,
+      "warpbound_count": 34.223678
+     },
+     "phases": {
+      "uniform": {
+       "distance_ms": 15.376881,
+       "select_ms": 14.741823,
+       "merge_ms": 0.508896,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      },
+      "warpbound_count": {
+       "distance_ms": 15.382044,
+       "select_ms": 11.397166,
+       "merge_ms": 0.493214,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0,
+       "admit_warp_steps": 49920000.0,
+       "admit_any_admit": 23056101.0,
+       "admit_rate": 0.46186099759615384,
+       "admit_lines": 56.0
+      }
+     },
+     "ratio_b_over_a": 0.9107480349702434,
+     "select_ms_ratio_b_over_a": 0.7731178158902057
+    },
+    {
+     "order": 0,
+     "pair": 2,
+     "ms": {
+      "uniform": 37.686509,
+      "warpbound_count": 34.887968
+     },
+     "phases": {
+      "uniform": {
+       "distance_ms": 15.360107,
+       "select_ms": 14.74929,
+       "merge_ms": 0.498603,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      },
+      "warpbound_count": {
+       "distance_ms": 15.386693,
+       "select_ms": 11.444344,
+       "merge_ms": 0.497047,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0,
+       "admit_warp_steps": 49920000.0,
+       "admit_any_admit": 23056101.0,
+       "admit_rate": 0.46186099759615384,
+       "admit_lines": 56.0
+      }
+     },
+     "ratio_b_over_a": 0.9257415697484742,
+     "select_ms_ratio_b_over_a": 0.7759250784275039
+    },
+    {
+     "order": 1,
+     "pair": 0,
+     "ms": {
+      "warpbound_count": 34.950615,
+      "uniform": 37.838233
+     },
+     "phases": {
+      "warpbound_count": {
+       "distance_ms": 15.43757,
+       "select_ms": 11.463957,
+       "merge_ms": 0.49269,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0,
+       "admit_warp_steps": 49920000.0,
+       "admit_any_admit": 23056101.0,
+       "admit_rate": 0.46186099759615384,
+       "admit_lines": 56.0
+      },
+      "uniform": {
+       "distance_ms": 15.379758,
+       "select_ms": 14.755093,
+       "merge_ms": 0.492565,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      }
+     },
+     "ratio_b_over_a": 0.9236851784278615,
+     "select_ms_ratio_b_over_a": 0.7769491524045291
+    },
+    {
+     "order": 1,
+     "pair": 1,
+     "ms": {
+      "warpbound_count": 34.448684,
+      "uniform": 37.961828
+     },
+     "phases": {
+      "warpbound_count": {
+       "distance_ms": 15.430071,
+       "select_ms": 11.450916,
+       "merge_ms": 0.492964,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0,
+       "admit_warp_steps": 49920000.0,
+       "admit_any_admit": 23056101.0,
+       "admit_rate": 0.46186099759615384,
+       "admit_lines": 56.0
+      },
+      "uniform": {
+       "distance_ms": 15.363213,
+       "select_ms": 14.755898,
+       "merge_ms": 0.494988,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      }
+     },
+     "ratio_b_over_a": 0.907455879100448,
+     "select_ms_ratio_b_over_a": 0.7760229841653825
+    },
+    {
+     "order": 1,
+     "pair": 2,
+     "ms": {
+      "warpbound_count": 36.617853,
+      "uniform": 38.319582
+     },
+     "phases": {
+      "warpbound_count": {
+       "distance_ms": 15.506094,
+       "select_ms": 11.860844,
+       "merge_ms": 0.588485,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0,
+       "admit_warp_steps": 49920000.0,
+       "admit_any_admit": 23056101.0,
+       "admit_rate": 0.46186099759615384,
+       "admit_lines": 56.0
+      },
+      "uniform": {
+       "distance_ms": 15.390784,
+       "select_ms": 14.784932,
+       "merge_ms": 0.53881,
+       "distance_launches": 56.0,
+       "select_launches": 56.0,
+       "merge_launches": 48.0,
+       "query_tile": 512.0,
+       "index_tile": 65536.0,
+       "n_queries": 4000.0,
+       "n_index": 400000.0,
+       "k": 15.0
+      }
+     },
+     "ratio_b_over_a": 0.9555911387551148,
+     "select_ms_ratio_b_over_a": 0.8022251302880528
+    }
+   ],
+   "median_ms": {
+    "uniform": 37.762371,
+    "warpbound_count": 34.668326
+   },
+   "min_ms": {
+    "uniform": 37.577548,
+    "warpbound_count": 34.223678
+   },
+   "median_ms_by_order": {
+    "uniform": {
+     "0": 37.598788,
+     "1": 37.961828
+    },
+    "warpbound_count": {
+     "0": 34.334333,
+     "1": 34.950615
+    }
+   },
+   "paired_ratio_median_b_over_a": 0.9184308840281147,
+   "pairs_favoring_b": 6,
+   "spread_pct": {
+    "uniform": 1.9650090297560943,
+    "warpbound_count": 6.905943482820593
+   },
+   "boundary": "public NearestNeighbors.kneighbors: host in, host out, includes query conversion, upload, norms, transpose, distance, selection, merge, download, index widening to int64",
+   "phase_ms_median": {
+    "uniform": {
+     "distance_ms": 15.3783195,
+     "select_ms": 14.7521915,
+     "merge_ms": 0.500645
+    },
+    "warpbound_count": {
+     "distance_ms": 15.4338205,
+     "select_ms": 11.456793,
+     "merge_ms": 0.494949,
+     "admit_warp_steps": 49920000.0,
+     "admit_any_admit": 23056101.0,
+     "admit_rate": 0.46186099759615384
+    }
+   },
+   "phase_ms_median_by_order": {
+    "uniform": {
+     "0": {
+      "distance_ms": 15.376881,
+      "select_ms": 14.741823,
+      "merge_ms": 0.502687
+     },
+     "1": {
+      "distance_ms": 15.379758,
+      "select_ms": 14.755898,
+      "merge_ms": 0.494988
+     }
+    },
+    "warpbound_count": {
+     "0": {
+      "distance_ms": 15.386693,
+      "select_ms": 11.444344,
+      "merge_ms": 0.496684,
+      "admit_warp_steps": 49920000.0,
+      "admit_any_admit": 23056101.0,
+      "admit_rate": 0.46186099759615384
+     },
+     "1": {
+      "distance_ms": 15.43757,
+      "select_ms": 11.463957,
+      "merge_ms": 0.492964,
+      "admit_warp_steps": 49920000.0,
+      "admit_any_admit": 23056101.0,
+      "admit_rate": 0.46186099759615384
+     }
+    }
+   },
+   "select_ms_ratio_b_over_a": 0.7764860682849558,
+   "phase_note": "phase milliseconds from the binding's KNN_PHASE_TIMERS line (serializing); request ms above include those synchronizations",
+   "output_valid": {
+    "uniform": true,
+    "warpbound_count": true
+   },
+   "differing_cells_from_reference": 0,
+   "time_is_a_price": {
+    "uniform": true,
+    "warpbound_count": false
+   },
+   "note": "output valid; counter arm; its launcher synchronizes per launch so its time is not a price; the admit_rate in its phase medians is the measurement"
+  }
+ ],
+ "failures": [],
+ "log": [
+  "[06:30:20] library: {'mojolearn_version': '0.8.0', 'numeric_mode_used': 'identical', 'vendor_used': 'cuda', 'binding_path': '/root/mojolearn/python/mojolearn/identical/_mojolearn.so', 'binding_sha256': '3f3a3ff050db90b9acac681ebabed897e0c00de63078cfd5c34d015f07eda4dd'}",
+  "[06:30:26] fixtures built in 6.2 s: large 400000x32/4000, dyadic 400000x32/4000, ties 131079x32/700, divergent_tail 397156x32/600",
+  "[06:30:27] large k10 arm uniform: 1065.092 ms (untimed correctness call); phases {'distance_ms': 15.459637, 'select_ms': 10.348226, 'merge_ms': 0.519799, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}",
+  "[06:30:27] phase timers READ from the binding (mode require)",
+  "[06:30:27] large k10 arm warpbound_guard: 31.872 ms (untimed correctness call); phases {'distance_ms': 15.330246, 'select_ms': 7.435175, 'merge_ms': 0.487986, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}",
+  "[06:30:27] large k10 arm warpbound_guard1: 31.883 ms (untimed correctness call); phases {'distance_ms': 15.342998, 'select_ms': 7.572212, 'merge_ms': 0.481665, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}",
+  "[06:30:27] large k10 arm default: 33.194 ms (untimed correctness call); phases {'distance_ms': 15.330016, 'select_ms': 10.271192, 'merge_ms': 0.485674, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}",
+  "[06:30:27] large k10: arms equal=True order=ok planted=ok oracle={'rows': 64, 'hard_mismatch_rows': [], 'ambiguous_rows': 0, 'distance_mismatch_rows': []}",
+  "[06:30:28] large k10 reach uniform: sabotage flipped 38306 cells, restored=True",
+  "[06:30:28] large k10 reach warpbound_guard: sabotage flipped 79362 cells, restored=True",
+  "[06:30:28] large k10 reach warpbound_guard1: sabotage flipped 79362 cells, restored=True",
+  "[06:30:28] large k10 reach default: sabotage flipped 38306 cells, restored=True",
+  "[06:30:28] large k15 arm uniform: 38.160 ms (untimed correctness call); phases {'distance_ms': 15.393471, 'select_ms': 14.866007, 'merge_ms': 0.498993, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}",
+  "[06:30:28] large k15 arm warpbound_guard: 32.698 ms (untimed correctness call); phases {'distance_ms': 15.39722, 'select_ms': 9.821054, 'merge_ms': 0.492961, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}",
+  "[06:30:28] large k15 arm warpbound_guard1: 32.878 ms (untimed correctness call); phases {'distance_ms': 15.398101, 'select_ms': 9.952009, 'merge_ms': 0.503474, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}",
+  "[06:30:28] large k15 arm default: 37.904 ms (untimed correctness call); phases {'distance_ms': 15.371867, 'select_ms': 14.754382, 'merge_ms': 0.507688, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}",
+  "[06:30:28] large k15: arms equal=True order=ok planted=ok oracle={'rows': 64, 'hard_mismatch_rows': [], 'ambiguous_rows': 0, 'distance_mismatch_rows': []}",
+  "[06:30:28] large k15 reach uniform: sabotage flipped 70635 cells, restored=True",
+  "[06:30:28] large k15 reach warpbound_guard: sabotage flipped 119362 cells, restored=True",
+  "[06:30:28] large k15 reach warpbound_guard1: sabotage flipped 119362 cells, restored=True",
+  "[06:30:28] large k15 reach default: sabotage flipped 70635 cells, restored=True",
+  "[06:30:28] dyadic k10 arm uniform: 34.641 ms (untimed correctness call); phases {'distance_ms': 15.381065, 'select_ms': 10.33276, 'merge_ms': 0.500057, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}",
+  "[06:30:29] dyadic k10 arm warpbound_guard: 31.591 ms (untimed correctness call); phases {'distance_ms': 15.392094, 'select_ms': 7.357405, 'merge_ms': 0.496858, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}",
+  "[06:30:29] dyadic k10 arm warpbound_guard1: 30.819 ms (untimed correctness call); phases {'distance_ms': 15.389623, 'select_ms': 7.507364, 'merge_ms': 0.499442, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}",
+  "[06:30:29] dyadic k10 arm default: 32.518 ms (untimed correctness call); phases {'distance_ms': 15.392658, 'select_ms': 10.385239, 'merge_ms': 0.502559, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}",
+  "[06:30:29] dyadic k10: arms equal=True order=ok planted=ok oracle={'rows': 48, 'hard_mismatch_rows': [], 'ambiguous_rows': 0, 'distance_mismatch_rows': []}",
+  "[06:30:29] dyadic k10 reach uniform: sabotage flipped 38045 cells, restored=True",
+  "[06:30:29] dyadic k10 reach warpbound_guard: sabotage flipped 79444 cells, restored=True",
+  "[06:30:29] dyadic k10 reach warpbound_guard1: sabotage flipped 79444 cells, restored=True",
+  "[06:30:29] dyadic k10 reach default: sabotage flipped 38045 cells, restored=True",
+  "[06:30:29] dyadic k15 arm uniform: 37.695 ms (untimed correctness call); phases {'distance_ms': 15.392262, 'select_ms': 14.778371, 'merge_ms': 0.502438, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}",
+  "[06:30:29] dyadic k15 arm warpbound_guard: 32.755 ms (untimed correctness call); phases {'distance_ms': 15.394649, 'select_ms': 9.727039, 'merge_ms': 0.502175, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}",
+  "[06:30:29] dyadic k15 arm warpbound_guard1: 32.800 ms (untimed correctness call); phases {'distance_ms': 15.403092, 'select_ms': 9.843409, 'merge_ms': 0.496086, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}",
+  "[06:30:29] dyadic k15 arm default: 37.692 ms (untimed correctness call); phases {'distance_ms': 15.380069, 'select_ms': 14.761067, 'merge_ms': 0.506973, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}",
+  "[06:30:29] dyadic k15: arms equal=True order=ok planted=ok oracle={'rows': 48, 'hard_mismatch_rows': [], 'ambiguous_rows': 0, 'distance_mismatch_rows': []}",
+  "[06:30:30] dyadic k15 reach uniform: sabotage flipped 70423 cells, restored=True",
+  "[06:30:30] dyadic k15 reach warpbound_guard: sabotage flipped 119444 cells, restored=True",
+  "[06:30:30] dyadic k15 reach warpbound_guard1: sabotage flipped 119444 cells, restored=True",
+  "[06:30:30] dyadic k15 reach default: sabotage flipped 70423 cells, restored=True",
+  "[06:30:30] ties k10 arm uniform: 5.165 ms (untimed correctness call); phases {'distance_ms': 1.227457, 'select_ms': 0.690481, 'merge_ms': 0.043344, 'distance_launches': 6.0, 'select_launches': 6.0, 'merge_launches': 4.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 700.0, 'n_index': 131079.0, 'k': 10.0}",
+  "[06:30:30] ties k10 arm warpbound_guard: 4.239 ms (untimed correctness call); phases {'distance_ms': 1.022602, 'select_ms': 0.520191, 'merge_ms': 0.041806, 'distance_launches': 6.0, 'select_launches': 6.0, 'merge_launches': 4.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 700.0, 'n_index': 131079.0, 'k': 10.0}",
+  "[06:30:30] ties k10 arm warpbound_guard1: 3.626 ms (untimed correctness call); phases {'distance_ms': 1.02427, 'select_ms': 0.521217, 'merge_ms': 0.042122, 'distance_launches': 6.0, 'select_launches': 6.0, 'merge_launches': 4.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 700.0, 'n_index': 131079.0, 'k': 10.0}",
+  "[06:30:30] ties k10 arm default: 3.658 ms (untimed correctness call); phases {'distance_ms': 1.023375, 'select_ms': 0.684379, 'merge_ms': 0.041498, 'distance_launches': 6.0, 'select_launches': 6.0, 'merge_launches': 4.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 700.0, 'n_index': 131079.0, 'k': 10.0}",
+  "[06:30:31] ties k10: arms equal=True order=ok planted=ok oracle={'rows': 700, 'hard_mismatch_rows': [], 'ambiguous_rows': 1, 'distance_mismatch_rows': []}",
+  "[06:30:31] ties k10 reach uniform: sabotage flipped 6509 cells, restored=True",
+  "[06:30:31] ties k10 reach warpbound_guard: sabotage flipped 13892 cells, restored=True",
+  "[06:30:31] ties k10 reach warpbound_guard1: sabotage flipped 13892 cells, restored=True",
+  "[06:30:31] ties k10 reach default: sabotage flipped 6509 cells, restored=True",
+  "[06:30:31] ties k15 arm uniform: 4.123 ms (untimed correctness call); phases {'distance_ms': 1.022432, 'select_ms': 0.964759, 'merge_ms': 0.041453, 'distance_launches': 6.0, 'select_launches': 6.0, 'merge_launches': 4.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 700.0, 'n_index': 131079.0, 'k': 15.0}",
+  "[06:30:31] ties k15 arm warpbound_guard: 3.813 ms (untimed correctness call); phases {'distance_ms': 1.019777, 'select_ms': 0.660115, 'merge_ms': 0.038648, 'distance_launches': 6.0, 'select_launches': 6.0, 'merge_launches': 4.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 700.0, 'n_index': 131079.0, 'k': 15.0}",
+  "[06:30:31] ties k15 arm warpbound_guard1: 3.818 ms (untimed correctness call); phases {'distance_ms': 1.02245, 'select_ms': 0.667087, 'merge_ms': 0.041509, 'distance_launches': 6.0, 'select_launches': 6.0, 'merge_launches': 4.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 700.0, 'n_index': 131079.0, 'k': 15.0}",
+  "[06:30:31] ties k15 arm default: 4.104 ms (untimed correctness call); phases {'distance_ms': 1.019311, 'select_ms': 0.963836, 'merge_ms': 0.043861, 'distance_launches': 6.0, 'select_launches': 6.0, 'merge_launches': 4.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 700.0, 'n_index': 131079.0, 'k': 15.0}",
+  "[06:30:32] ties k15: arms equal=True order=ok planted=ok oracle={'rows': 700, 'hard_mismatch_rows': [], 'ambiguous_rows': 1, 'distance_mismatch_rows': []}",
+  "[06:30:32] ties k15 reach uniform: sabotage flipped 12172 cells, restored=True",
+  "[06:30:32] ties k15 reach warpbound_guard: sabotage flipped 20892 cells, restored=True",
+  "[06:30:32] ties k15 reach warpbound_guard1: sabotage flipped 20892 cells, restored=True",
+  "[06:30:32] ties k15 reach default: sabotage flipped 12172 cells, restored=True",
+  "[06:30:32] divergent_tail k10 arm uniform: 11.290 ms (untimed correctness call); phases {'distance_ms': 2.592875, 'select_ms': 1.692842, 'merge_ms': 0.12135, 'distance_launches': 14.0, 'select_launches': 14.0, 'merge_launches': 12.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 600.0, 'n_index': 397156.0, 'k': 10.0}",
+  "[06:30:32] divergent_tail k10 arm warpbound_guard: 10.696 ms (untimed correctness call); phases {'distance_ms': 2.586504, 'select_ms': 1.25642, 'merge_ms': 0.117914, 'distance_launches': 14.0, 'select_launches': 14.0, 'merge_launches': 12.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 600.0, 'n_index': 397156.0, 'k': 10.0}",
+  "[06:30:32] divergent_tail k10 arm warpbound_guard1: 9.455 ms (untimed correctness call); phases {'distance_ms': 2.59053, 'select_ms': 1.294055, 'merge_ms': 0.122154, 'distance_launches': 14.0, 'select_launches': 14.0, 'merge_launches': 12.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 600.0, 'n_index': 397156.0, 'k': 10.0}",
+  "[06:30:32] divergent_tail k10 arm default: 9.039 ms (untimed correctness call); phases {'distance_ms': 2.588086, 'select_ms': 1.688761, 'merge_ms': 0.118822, 'distance_launches': 14.0, 'select_launches': 14.0, 'merge_launches': 12.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 600.0, 'n_index': 397156.0, 'k': 10.0}",
+  "[06:30:32] divergent_tail k10: arms equal=True order=ok planted=ok oracle={'rows': 47, 'hard_mismatch_rows': [], 'ambiguous_rows': 0, 'distance_mismatch_rows': []}",
+  "[06:30:32] divergent_tail k10 reach uniform: sabotage flipped 5165 cells, restored=True",
+  "[06:30:32] divergent_tail k10 reach warpbound_guard: sabotage flipped 11900 cells, restored=True",
+  "[06:30:32] divergent_tail k10 reach warpbound_guard1: sabotage flipped 11900 cells, restored=True",
+  "[06:30:32] divergent_tail k10 reach default: sabotage flipped 5165 cells, restored=True",
+  "[06:30:32] divergent_tail k15 arm uniform: 9.707 ms (untimed correctness call); phases {'distance_ms': 2.597991, 'select_ms': 2.382959, 'merge_ms': 0.124137, 'distance_launches': 14.0, 'select_launches': 14.0, 'merge_launches': 12.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 600.0, 'n_index': 397156.0, 'k': 15.0}",
+  "[06:30:32] divergent_tail k15 arm warpbound_guard: 8.887 ms (untimed correctness call); phases {'distance_ms': 2.592931, 'select_ms': 1.621944, 'merge_ms': 0.12099, 'distance_launches': 14.0, 'select_launches': 14.0, 'merge_launches': 12.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 600.0, 'n_index': 397156.0, 'k': 15.0}",
+  "[06:30:32] divergent_tail k15 arm warpbound_guard1: 8.924 ms (untimed correctness call); phases {'distance_ms': 2.589206, 'select_ms': 1.656228, 'merge_ms': 0.122181, 'distance_launches': 14.0, 'select_launches': 14.0, 'merge_launches': 12.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 600.0, 'n_index': 397156.0, 'k': 15.0}",
+  "[06:30:32] divergent_tail k15 arm default: 9.615 ms (untimed correctness call); phases {'distance_ms': 2.598476, 'select_ms': 2.379802, 'merge_ms': 0.128071, 'distance_launches': 14.0, 'select_launches': 14.0, 'merge_launches': 12.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 600.0, 'n_index': 397156.0, 'k': 15.0}",
+  "[06:30:32] divergent_tail k15: arms equal=True order=ok planted=ok oracle={'rows': 45, 'hard_mismatch_rows': [], 'ambiguous_rows': 0, 'distance_mismatch_rows': []}",
+  "[06:30:33] divergent_tail k15 reach uniform: sabotage flipped 9681 cells, restored=True",
+  "[06:30:33] divergent_tail k15 reach warpbound_guard: sabotage flipped 17900 cells, restored=True",
+  "[06:30:33] divergent_tail k15 reach warpbound_guard1: sabotage flipped 17900 cells, restored=True",
+  "[06:30:33] divergent_tail k15 reach default: sabotage flipped 9681 cells, restored=True",
+  "[06:30:33] large k10 warmup uniform: 34.942 ms; phases {'distance_ms': 15.377573, 'select_ms': 10.310489, 'merge_ms': 0.477217, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}",
+  "[06:30:33] large k10 warmup warpbound_guard: 31.597 ms; phases {'distance_ms': 15.370437, 'select_ms': 7.358802, 'merge_ms': 0.487896, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}",
+  "[06:30:33] large k10 order0 pair0: uniform 33.632 ms, warpbound_guard 29.798 ms, warpbound_guard/uniform 0.8860, select_ms 10.331 vs 7.336",
+  "[06:30:33] large k10 order0 pair1: uniform 32.377 ms, warpbound_guard 29.249 ms, warpbound_guard/uniform 0.9034, select_ms 10.345 vs 7.330",
+  "[06:30:33] large k10 order0 pair2: uniform 32.288 ms, warpbound_guard 29.233 ms, warpbound_guard/uniform 0.9054, select_ms 10.331 vs 7.322",
+  "[06:30:33] large k10 order1 pair0: uniform 32.495 ms, warpbound_guard 29.308 ms, warpbound_guard/uniform 0.9019, select_ms 10.324 vs 7.330",
+  "[06:30:33] large k10 order1 pair1: uniform 32.455 ms, warpbound_guard 29.740 ms, warpbound_guard/uniform 0.9163, select_ms 10.317 vs 7.371",
+  "[06:30:33] large k10 order1 pair2: uniform 32.274 ms, warpbound_guard 29.412 ms, warpbound_guard/uniform 0.9113, select_ms 10.322 vs 7.346",
+  "[06:30:33] large k10: uniform median 32.416 ms, warpbound_guard median 29.360 ms, paired median warpbound_guard/uniform 0.9044, 6/6 pairs favor warpbound_guard; select_ms medians uniform 10.327, warpbound_guard 7.333",
+  "[06:30:33] large k15 warmup uniform: 38.087 ms; phases {'distance_ms': 15.370471, 'select_ms': 14.754516, 'merge_ms': 0.502789, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}",
+  "[06:30:33] large k15 warmup warpbound_guard: 32.965 ms; phases {'distance_ms': 15.35706, 'select_ms': 9.721671, 'merge_ms': 0.484064, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}",
+  "[06:30:33] large k15 order0 pair0: uniform 37.825 ms, warpbound_guard 32.751 ms, warpbound_guard/uniform 0.8658, select_ms 14.752 vs 9.710",
+  "[06:30:33] large k15 order0 pair1: uniform 37.782 ms, warpbound_guard 32.720 ms, warpbound_guard/uniform 0.8660, select_ms 14.767 vs 9.727",
+  "[06:30:33] large k15 order0 pair2: uniform 37.647 ms, warpbound_guard 32.580 ms, warpbound_guard/uniform 0.8654, select_ms 14.748 vs 9.704",
+  "[06:30:33] large k15 order1 pair0: uniform 37.539 ms, warpbound_guard 32.725 ms, warpbound_guard/uniform 0.8717, select_ms 14.739 vs 9.727",
+  "[06:30:33] large k15 order1 pair1: uniform 37.617 ms, warpbound_guard 32.638 ms, warpbound_guard/uniform 0.8676, select_ms 14.741 vs 9.698",
+  "[06:30:34] large k15 order1 pair2: uniform 37.793 ms, warpbound_guard 32.510 ms, warpbound_guard/uniform 0.8602, select_ms 14.850 vs 9.727",
+  "[06:30:34] large k15: uniform median 37.715 ms, warpbound_guard median 32.679 ms, paired median warpbound_guard/uniform 0.8659, 6/6 pairs favor warpbound_guard; select_ms medians uniform 14.750, warpbound_guard 9.718",
+  "[06:30:34] dyadic k10 warmup uniform: 34.665 ms; phases {'distance_ms': 15.402011, 'select_ms': 10.336298, 'merge_ms': 0.498634, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}",
+  "[06:30:34] dyadic k10 warmup warpbound_guard: 31.512 ms; phases {'distance_ms': 15.378942, 'select_ms': 7.336274, 'merge_ms': 0.484154, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}",
+  "[06:30:34] dyadic k10 order0 pair0: uniform 33.855 ms, warpbound_guard 30.260 ms, warpbound_guard/uniform 0.8938, select_ms 10.363 vs 7.319",
+  "[06:30:34] dyadic k10 order0 pair1: uniform 32.976 ms, warpbound_guard 29.604 ms, warpbound_guard/uniform 0.8977, select_ms 10.318 vs 7.344",
+  "[06:30:34] dyadic k10 order0 pair2: uniform 32.350 ms, warpbound_guard 29.293 ms, warpbound_guard/uniform 0.9055, select_ms 10.339 vs 7.328",
+  "[06:30:34] dyadic k10 order1 pair0: uniform 32.221 ms, warpbound_guard 29.297 ms, warpbound_guard/uniform 0.9092, select_ms 10.308 vs 7.339",
+  "[06:30:34] dyadic k10 order1 pair1: uniform 32.428 ms, warpbound_guard 29.321 ms, warpbound_guard/uniform 0.9042, select_ms 10.318 vs 7.340",
+  "[06:30:34] dyadic k10 order1 pair2: uniform 32.497 ms, warpbound_guard 29.626 ms, warpbound_guard/uniform 0.9116, select_ms 10.322 vs 7.377",
+  "[06:30:34] dyadic k10: uniform median 32.463 ms, warpbound_guard median 29.463 ms, paired median warpbound_guard/uniform 0.9049, 6/6 pairs favor warpbound_guard; select_ms medians uniform 10.320, warpbound_guard 7.339",
+  "[06:30:34] dyadic k15 warmup uniform: 37.708 ms; phases {'distance_ms': 15.369977, 'select_ms': 14.750538, 'merge_ms': 0.491088, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}",
+  "[06:30:34] dyadic k15 warmup warpbound_guard: 32.631 ms; phases {'distance_ms': 15.388036, 'select_ms': 9.734871, 'merge_ms': 0.490727, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}",
+  "[06:30:34] dyadic k15 order0 pair0: uniform 37.797 ms, warpbound_guard 33.084 ms, warpbound_guard/uniform 0.8753, select_ms 14.751 vs 9.729",
+  "[06:30:34] dyadic k15 order0 pair1: uniform 37.925 ms, warpbound_guard 32.549 ms, warpbound_guard/uniform 0.8582, select_ms 14.780 vs 9.714",
+  "[06:30:34] dyadic k15 order0 pair2: uniform 37.530 ms, warpbound_guard 32.543 ms, warpbound_guard/uniform 0.8671, select_ms 14.767 vs 9.758",
+  "[06:30:34] dyadic k15 order1 pair0: uniform 37.372 ms, warpbound_guard 32.494 ms, warpbound_guard/uniform 0.8695, select_ms 14.741 vs 9.716",
+  "[06:30:34] dyadic k15 order1 pair1: uniform 37.463 ms, warpbound_guard 32.413 ms, warpbound_guard/uniform 0.8652, select_ms 14.735 vs 9.712",
+  "[06:30:34] dyadic k15 order1 pair2: uniform 37.437 ms, warpbound_guard 32.483 ms, warpbound_guard/uniform 0.8677, select_ms 14.736 vs 9.723",
+  "[06:30:34] dyadic k15: uniform median 37.497 ms, warpbound_guard median 32.518 ms, paired median warpbound_guard/uniform 0.8674, 6/6 pairs favor warpbound_guard; select_ms medians uniform 14.746, warpbound_guard 9.719",
+  "[06:30:35] large k10 warmup uniform: 34.404 ms; phases {'distance_ms': 15.398632, 'select_ms': 10.327449, 'merge_ms': 0.487252, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}",
+  "[06:30:35] large k10 warmup warpbound_guard1: 31.616 ms; phases {'distance_ms': 15.432296, 'select_ms': 7.506524, 'merge_ms': 0.483155, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}",
+  "[06:30:35] large k10 order0 pair0: uniform 33.630 ms, warpbound_guard1 29.851 ms, warpbound_guard1/uniform 0.8876, select_ms 10.330 vs 7.511",
+  "[06:30:35] large k10 order0 pair1: uniform 32.360 ms, warpbound_guard1 29.353 ms, warpbound_guard1/uniform 0.9071, select_ms 10.330 vs 7.501",
+  "[06:30:35] large k10 order0 pair2: uniform 32.222 ms, warpbound_guard1 29.404 ms, warpbound_guard1/uniform 0.9125, select_ms 10.317 vs 7.491",
+  "[06:30:35] large k10 order1 pair0: uniform 32.212 ms, warpbound_guard1 29.556 ms, warpbound_guard1/uniform 0.9176, select_ms 10.324 vs 7.502",
+  "[06:30:35] large k10 order1 pair1: uniform 32.253 ms, warpbound_guard1 29.487 ms, warpbound_guard1/uniform 0.9142, select_ms 10.352 vs 7.510",
+  "[06:30:35] large k10 order1 pair2: uniform 32.329 ms, warpbound_guard1 29.519 ms, warpbound_guard1/uniform 0.9131, select_ms 10.314 vs 7.499",
+  "[06:30:35] large k10: uniform median 32.291 ms, warpbound_guard1 median 29.503 ms, paired median warpbound_guard1/uniform 0.9128, 6/6 pairs favor warpbound_guard1; select_ms medians uniform 10.327, warpbound_guard1 7.502",
+  "[06:30:35] large k15 warmup uniform: 37.944 ms; phases {'distance_ms': 15.40109, 'select_ms': 14.751403, 'merge_ms': 0.490171, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}",
+  "[06:30:35] large k15 warmup warpbound_guard1: 33.275 ms; phases {'distance_ms': 15.419547, 'select_ms': 9.812511, 'merge_ms': 0.489726, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}",
+  "[06:30:35] large k15 order0 pair0: uniform 38.037 ms, warpbound_guard1 32.913 ms, warpbound_guard1/uniform 0.8653, select_ms 14.740 vs 9.831",
+  "[06:30:35] large k15 order0 pair1: uniform 37.789 ms, warpbound_guard1 33.115 ms, warpbound_guard1/uniform 0.8763, select_ms 14.746 vs 9.825",
+  "[06:30:35] large k15 order0 pair2: uniform 38.029 ms, warpbound_guard1 32.842 ms, warpbound_guard1/uniform 0.8636, select_ms 14.746 vs 9.830",
+  "[06:30:35] large k15 order1 pair0: uniform 37.521 ms, warpbound_guard1 32.671 ms, warpbound_guard1/uniform 0.8707, select_ms 14.733 vs 9.827",
+  "[06:30:35] large k15 order1 pair1: uniform 37.517 ms, warpbound_guard1 32.606 ms, warpbound_guard1/uniform 0.8691, select_ms 14.734 vs 9.829",
+  "[06:30:35] large k15 order1 pair2: uniform 37.514 ms, warpbound_guard1 32.713 ms, warpbound_guard1/uniform 0.8720, select_ms 14.742 vs 9.845",
+  "[06:30:35] large k15: uniform median 37.655 ms, warpbound_guard1 median 32.778 ms, paired median warpbound_guard1/uniform 0.8699, 6/6 pairs favor warpbound_guard1; select_ms medians uniform 14.741, warpbound_guard1 9.829",
+  "[06:30:35] dyadic k10 warmup uniform: 34.442 ms; phases {'distance_ms': 15.353145, 'select_ms': 10.321395, 'merge_ms': 0.48515, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}",
+  "[06:30:35] dyadic k10 warmup warpbound_guard1: 31.527 ms; phases {'distance_ms': 15.354478, 'select_ms': 7.483348, 'merge_ms': 0.48173, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}",
+  "[06:30:36] dyadic k10 order0 pair0: uniform 33.516 ms, warpbound_guard1 29.529 ms, warpbound_guard1/uniform 0.8810, select_ms 10.328 vs 7.517",
+  "[06:30:36] dyadic k10 order0 pair1: uniform 32.320 ms, warpbound_guard1 29.453 ms, warpbound_guard1/uniform 0.9113, select_ms 10.325 vs 7.519",
+  "[06:30:36] dyadic k10 order0 pair2: uniform 32.323 ms, warpbound_guard1 29.348 ms, warpbound_guard1/uniform 0.9079, select_ms 10.332 vs 7.498",
+  "[06:30:36] dyadic k10 order1 pair0: uniform 32.223 ms, warpbound_guard1 29.480 ms, warpbound_guard1/uniform 0.9149, select_ms 10.324 vs 7.517",
+  "[06:30:36] dyadic k10 order1 pair1: uniform 32.339 ms, warpbound_guard1 29.449 ms, warpbound_guard1/uniform 0.9106, select_ms 10.321 vs 7.581",
+  "[06:30:36] dyadic k10 order1 pair2: uniform 32.259 ms, warpbound_guard1 29.444 ms, warpbound_guard1/uniform 0.9127, select_ms 10.324 vs 7.495",
+  "[06:30:36] dyadic k10: uniform median 32.322 ms, warpbound_guard1 median 29.451 ms, paired median warpbound_guard1/uniform 0.9110, 6/6 pairs favor warpbound_guard1; select_ms medians uniform 10.325, warpbound_guard1 7.517",
+  "[06:30:36] dyadic k15 warmup uniform: 37.567 ms; phases {'distance_ms': 15.375928, 'select_ms': 14.748198, 'merge_ms': 0.496477, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}",
+  "[06:30:36] dyadic k15 warmup warpbound_guard1: 32.739 ms; phases {'distance_ms': 15.388467, 'select_ms': 9.857814, 'merge_ms': 0.494777, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}",
+  "[06:30:36] dyadic k15 order0 pair0: uniform 37.682 ms, warpbound_guard1 33.204 ms, warpbound_guard1/uniform 0.8812, select_ms 14.753 vs 9.839",
+  "[06:30:36] dyadic k15 order0 pair1: uniform 38.035 ms, warpbound_guard1 32.760 ms, warpbound_guard1/uniform 0.8613, select_ms 14.736 vs 9.826",
+  "[06:30:36] dyadic k15 order0 pair2: uniform 37.601 ms, warpbound_guard1 32.797 ms, warpbound_guard1/uniform 0.8722, select_ms 14.759 vs 9.838",
+  "[06:30:36] dyadic k15 order1 pair0: uniform 38.373 ms, warpbound_guard1 34.866 ms, warpbound_guard1/uniform 0.9086, select_ms 14.748 vs 9.945",
+  "[06:30:36] dyadic k15 order1 pair1: uniform 37.643 ms, warpbound_guard1 32.689 ms, warpbound_guard1/uniform 0.8684, select_ms 14.747 vs 9.826",
+  "[06:30:36] dyadic k15 order1 pair2: uniform 37.613 ms, warpbound_guard1 32.624 ms, warpbound_guard1/uniform 0.8674, select_ms 14.748 vs 9.848",
+  "[06:30:36] dyadic k15: uniform median 37.662 ms, warpbound_guard1 median 32.778 ms, paired median warpbound_guard1/uniform 0.8703, 6/6 pairs favor warpbound_guard1; select_ms medians uniform 14.748, warpbound_guard1 9.838",
+  "[06:30:36] large k10 warmup uniform: 34.529 ms; phases {'distance_ms': 15.440883, 'select_ms': 10.325707, 'merge_ms': 0.490635, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}",
+  "[06:30:36] large k10 warmup warpbound_count: 33.328 ms; phases {'distance_ms': 15.446311, 'select_ms': 9.165088, 'merge_ms': 0.487584, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0, 'admit_warp_steps': 49920000.0, 'admit_any_admit': 23075772.0, 'admit_rate': 0.4622550480769231, 'admit_lines': 56.0}",
+  "[06:30:37] large k10 order0 pair0: uniform 33.497 ms, warpbound_count 31.164 ms, warpbound_count/uniform 0.9304, select_ms 10.325 vs 8.994",
+  "[06:30:37] large k10 order0 pair1: uniform 32.314 ms, warpbound_count 30.897 ms, warpbound_count/uniform 0.9561, select_ms 10.321 vs 8.990",
+  "[06:30:37] large k10 order0 pair2: uniform 32.289 ms, warpbound_count 30.991 ms, warpbound_count/uniform 0.9598, select_ms 10.319 vs 8.968",
+  "[06:30:37] large k10 order1 pair0: uniform 34.297 ms, warpbound_count 30.995 ms, warpbound_count/uniform 0.9037, select_ms 10.396 vs 8.969",
+  "[06:30:37] large k10 order1 pair1: uniform 32.262 ms, warpbound_count 31.134 ms, warpbound_count/uniform 0.9650, select_ms 10.329 vs 9.079",
+  "[06:30:37] large k10 order1 pair2: uniform 32.619 ms, warpbound_count 31.071 ms, warpbound_count/uniform 0.9525, select_ms 10.375 vs 9.008",
+  "[06:30:37] large k10: uniform median 32.466 ms, warpbound_count median 31.033 ms, paired median warpbound_count/uniform 0.9543, 6/6 pairs favor warpbound_count; select_ms medians uniform 10.327, warpbound_count 8.992; admit_rate medians warpbound_count 0.4623 [counter arm; output valid; warpbound_count time is not a price]",
+  "[06:30:37] large k15 warmup uniform: 37.865 ms; phases {'distance_ms': 15.403157, 'select_ms': 14.760249, 'merge_ms': 0.493016, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}",
+  "[06:30:37] large k15 warmup warpbound_count: 34.863 ms; phases {'distance_ms': 15.45972, 'select_ms': 11.599443, 'merge_ms': 0.501922, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0, 'admit_warp_steps': 49920000.0, 'admit_any_admit': 23076247.0, 'admit_rate': 0.46226456330128207, 'admit_lines': 56.0}",
+  "[06:30:37] large k15 order0 pair0: uniform 37.812 ms, warpbound_count 34.671 ms, warpbound_count/uniform 0.9169, select_ms 14.753 vs 11.463",
+  "[06:30:37] large k15 order0 pair1: uniform 37.937 ms, warpbound_count 34.956 ms, warpbound_count/uniform 0.9214, select_ms 14.751 vs 11.381",
+  "[06:30:37] large k15 order0 pair2: uniform 38.192 ms, warpbound_count 34.563 ms, warpbound_count/uniform 0.9050, select_ms 14.748 vs 11.427",
+  "[06:30:37] large k15 order1 pair0: uniform 37.884 ms, warpbound_count 34.300 ms, warpbound_count/uniform 0.9054, select_ms 14.740 vs 11.439",
+  "[06:30:37] large k15 order1 pair1: uniform 38.441 ms, warpbound_count 35.261 ms, warpbound_count/uniform 0.9173, select_ms 14.760 vs 11.456",
+  "[06:30:37] large k15 order1 pair2: uniform 37.837 ms, warpbound_count 34.898 ms, warpbound_count/uniform 0.9223, select_ms 14.744 vs 11.465",
+  "[06:30:37] large k15: uniform median 37.910 ms, warpbound_count median 34.785 ms, paired median warpbound_count/uniform 0.9171, 6/6 pairs favor warpbound_count; select_ms medians uniform 14.749, warpbound_count 11.447; admit_rate medians warpbound_count 0.4623 [counter arm; output valid; warpbound_count time is not a price]",
+  "[06:30:37] dyadic k10 warmup uniform: 34.380 ms; phases {'distance_ms': 15.355314, 'select_ms': 10.332488, 'merge_ms': 0.480492, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}",
+  "[06:30:37] dyadic k10 warmup warpbound_count: 33.066 ms; phases {'distance_ms': 15.387508, 'select_ms': 8.96808, 'merge_ms': 0.483021, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0, 'admit_warp_steps': 49920000.0, 'admit_any_admit': 23055555.0, 'admit_rate': 0.46185006009615387, 'admit_lines': 56.0}",
+  "[06:30:37] dyadic k10 order0 pair0: uniform 33.551 ms, warpbound_count 31.060 ms, warpbound_count/uniform 0.9258, select_ms 10.313 vs 8.948",
+  "[06:30:38] dyadic k10 order0 pair1: uniform 32.362 ms, warpbound_count 31.040 ms, warpbound_count/uniform 0.9592, select_ms 10.333 vs 9.002",
+  "[06:30:38] dyadic k10 order0 pair2: uniform 32.257 ms, warpbound_count 31.004 ms, warpbound_count/uniform 0.9612, select_ms 10.314 vs 9.018",
+  "[06:30:38] dyadic k10 order1 pair0: uniform 32.180 ms, warpbound_count 30.871 ms, warpbound_count/uniform 0.9593, select_ms 10.314 vs 8.972",
+  "[06:30:38] dyadic k10 order1 pair1: uniform 32.276 ms, warpbound_count 30.842 ms, warpbound_count/uniform 0.9556, select_ms 10.323 vs 8.948",
+  "[06:30:38] dyadic k10 order1 pair2: uniform 32.297 ms, warpbound_count 31.023 ms, warpbound_count/uniform 0.9606, select_ms 10.325 vs 9.005",
+  "[06:30:38] dyadic k10: uniform median 32.287 ms, warpbound_count median 31.014 ms, paired median warpbound_count/uniform 0.9592, 6/6 pairs favor warpbound_count; select_ms medians uniform 10.319, warpbound_count 8.987; admit_rate medians warpbound_count 0.4619 [counter arm; output valid; warpbound_count time is not a price]",
+  "[06:30:38] dyadic k15 warmup uniform: 37.513 ms; phases {'distance_ms': 15.360099, 'select_ms': 14.739862, 'merge_ms': 0.489601, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}",
+  "[06:30:38] dyadic k15 warmup warpbound_count: 34.172 ms; phases {'distance_ms': 15.385226, 'select_ms': 11.392906, 'merge_ms': 0.489792, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0, 'admit_warp_steps': 49920000.0, 'admit_any_admit': 23056101.0, 'admit_rate': 0.46186099759615384, 'admit_lines': 56.0}",
+  "[06:30:38] dyadic k15 order0 pair0: uniform 37.599 ms, warpbound_count 34.334 ms, warpbound_count/uniform 0.9132, select_ms 14.738 vs 11.463",
+  "[06:30:38] dyadic k15 order0 pair1: uniform 37.578 ms, warpbound_count 34.224 ms, warpbound_count/uniform 0.9107, select_ms 14.742 vs 11.397",
+  "[06:30:38] dyadic k15 order0 pair2: uniform 37.687 ms, warpbound_count 34.888 ms, warpbound_count/uniform 0.9257, select_ms 14.749 vs 11.444",
+  "[06:30:38] dyadic k15 order1 pair0: uniform 37.838 ms, warpbound_count 34.951 ms, warpbound_count/uniform 0.9237, select_ms 14.755 vs 11.464",
+  "[06:30:38] dyadic k15 order1 pair1: uniform 37.962 ms, warpbound_count 34.449 ms, warpbound_count/uniform 0.9075, select_ms 14.756 vs 11.451",
+  "[06:30:38] dyadic k15 order1 pair2: uniform 38.320 ms, warpbound_count 36.618 ms, warpbound_count/uniform 0.9556, select_ms 14.785 vs 11.861",
+  "[06:30:38] dyadic k15: uniform median 37.762 ms, warpbound_count median 34.668 ms, paired median warpbound_count/uniform 0.9184, 6/6 pairs favor warpbound_count; select_ms medians uniform 14.752, warpbound_count 11.457; admit_rate medians warpbound_count 0.4619 [counter arm; output valid; warpbound_count time is not a price]"
+ ],
+ "git_commit": "unknown",
+ "nvidia_smi": "NVIDIA H100 80GB HBM3, 580.126.09, GPU-10219e47-f923-3a0b-9ba7-e3c4449d75a5",
+ "library": {
+  "mojolearn_version": "0.8.0",
+  "numeric_mode_used": "identical",
+  "vendor_used": "cuda",
+  "binding_path": "/root/mojolearn/python/mojolearn/identical/_mojolearn.so",
+  "binding_sha256": "3f3a3ff050db90b9acac681ebabed897e0c00de63078cfd5c34d015f07eda4dd"
+ },
+ "finished_utc": "2026-09-11T06:30:38Z"
+}

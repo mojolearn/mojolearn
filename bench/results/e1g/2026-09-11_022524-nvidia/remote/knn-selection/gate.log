@@ -1,0 +1,185 @@
+1466 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3b8400000000, nodemask=2)
+[06:30:20] library: {'mojolearn_version': '0.8.0', 'numeric_mode_used': 'identical', 'vendor_used': 'cuda', 'binding_path': '/root/mojolearn/python/mojolearn/identical/_mojolearn.so', 'binding_sha256': '3f3a3ff050db90b9acac681ebabed897e0c00de63078cfd5c34d015f07eda4dd'}
+[06:30:26] fixtures built in 6.2 s: large 400000x32/4000, dyadic 400000x32/4000, ties 131079x32/700, divergent_tail 397156x32/600
+[06:30:27] large k10 arm uniform: 1065.092 ms (untimed correctness call); phases {'distance_ms': 15.459637, 'select_ms': 10.348226, 'merge_ms': 0.519799, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}
+[06:30:27] phase timers READ from the binding (mode require)
+[06:30:27] large k10 arm warpbound_guard: 31.872 ms (untimed correctness call); phases {'distance_ms': 15.330246, 'select_ms': 7.435175, 'merge_ms': 0.487986, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}
+[06:30:27] large k10 arm warpbound_guard1: 31.883 ms (untimed correctness call); phases {'distance_ms': 15.342998, 'select_ms': 7.572212, 'merge_ms': 0.481665, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}
+[06:30:27] large k10 arm default: 33.194 ms (untimed correctness call); phases {'distance_ms': 15.330016, 'select_ms': 10.271192, 'merge_ms': 0.485674, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}
+[06:30:27] large k10: arms equal=True order=ok planted=ok oracle={'rows': 64, 'hard_mismatch_rows': [], 'ambiguous_rows': 0, 'distance_mismatch_rows': []}
+[06:30:28] large k10 reach uniform: sabotage flipped 38306 cells, restored=True
+[06:30:28] large k10 reach warpbound_guard: sabotage flipped 79362 cells, restored=True
+[06:30:28] large k10 reach warpbound_guard1: sabotage flipped 79362 cells, restored=True
+[06:30:28] large k10 reach default: sabotage flipped 38306 cells, restored=True
+[06:30:28] large k15 arm uniform: 38.160 ms (untimed correctness call); phases {'distance_ms': 15.393471, 'select_ms': 14.866007, 'merge_ms': 0.498993, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}
+[06:30:28] large k15 arm warpbound_guard: 32.698 ms (untimed correctness call); phases {'distance_ms': 15.39722, 'select_ms': 9.821054, 'merge_ms': 0.492961, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}
+[06:30:28] large k15 arm warpbound_guard1: 32.878 ms (untimed correctness call); phases {'distance_ms': 15.398101, 'select_ms': 9.952009, 'merge_ms': 0.503474, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}
+[06:30:28] large k15 arm default: 37.904 ms (untimed correctness call); phases {'distance_ms': 15.371867, 'select_ms': 14.754382, 'merge_ms': 0.507688, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}
+[06:30:28] large k15: arms equal=True order=ok planted=ok oracle={'rows': 64, 'hard_mismatch_rows': [], 'ambiguous_rows': 0, 'distance_mismatch_rows': []}
+[06:30:28] large k15 reach uniform: sabotage flipped 70635 cells, restored=True
+[06:30:28] large k15 reach warpbound_guard: sabotage flipped 119362 cells, restored=True
+[06:30:28] large k15 reach warpbound_guard1: sabotage flipped 119362 cells, restored=True
+[06:30:28] large k15 reach default: sabotage flipped 70635 cells, restored=True
+[06:30:28] dyadic k10 arm uniform: 34.641 ms (untimed correctness call); phases {'distance_ms': 15.381065, 'select_ms': 10.33276, 'merge_ms': 0.500057, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}
+[06:30:29] dyadic k10 arm warpbound_guard: 31.591 ms (untimed correctness call); phases {'distance_ms': 15.392094, 'select_ms': 7.357405, 'merge_ms': 0.496858, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}
+[06:30:29] dyadic k10 arm warpbound_guard1: 30.819 ms (untimed correctness call); phases {'distance_ms': 15.389623, 'select_ms': 7.507364, 'merge_ms': 0.499442, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}
+[06:30:29] dyadic k10 arm default: 32.518 ms (untimed correctness call); phases {'distance_ms': 15.392658, 'select_ms': 10.385239, 'merge_ms': 0.502559, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}
+[06:30:29] dyadic k10: arms equal=True order=ok planted=ok oracle={'rows': 48, 'hard_mismatch_rows': [], 'ambiguous_rows': 0, 'distance_mismatch_rows': []}
+[06:30:29] dyadic k10 reach uniform: sabotage flipped 38045 cells, restored=True
+[06:30:29] dyadic k10 reach warpbound_guard: sabotage flipped 79444 cells, restored=True
+[06:30:29] dyadic k10 reach warpbound_guard1: sabotage flipped 79444 cells, restored=True
+[06:30:29] dyadic k10 reach default: sabotage flipped 38045 cells, restored=True
+[06:30:29] dyadic k15 arm uniform: 37.695 ms (untimed correctness call); phases {'distance_ms': 15.392262, 'select_ms': 14.778371, 'merge_ms': 0.502438, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}
+[06:30:29] dyadic k15 arm warpbound_guard: 32.755 ms (untimed correctness call); phases {'distance_ms': 15.394649, 'select_ms': 9.727039, 'merge_ms': 0.502175, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}
+[06:30:29] dyadic k15 arm warpbound_guard1: 32.800 ms (untimed correctness call); phases {'distance_ms': 15.403092, 'select_ms': 9.843409, 'merge_ms': 0.496086, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}
+[06:30:29] dyadic k15 arm default: 37.692 ms (untimed correctness call); phases {'distance_ms': 15.380069, 'select_ms': 14.761067, 'merge_ms': 0.506973, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}
+[06:30:29] dyadic k15: arms equal=True order=ok planted=ok oracle={'rows': 48, 'hard_mismatch_rows': [], 'ambiguous_rows': 0, 'distance_mismatch_rows': []}
+[06:30:30] dyadic k15 reach uniform: sabotage flipped 70423 cells, restored=True
+[06:30:30] dyadic k15 reach warpbound_guard: sabotage flipped 119444 cells, restored=True
+[06:30:30] dyadic k15 reach warpbound_guard1: sabotage flipped 119444 cells, restored=True
+[06:30:30] dyadic k15 reach default: sabotage flipped 70423 cells, restored=True
+[06:30:30] ties k10 arm uniform: 5.165 ms (untimed correctness call); phases {'distance_ms': 1.227457, 'select_ms': 0.690481, 'merge_ms': 0.043344, 'distance_launches': 6.0, 'select_launches': 6.0, 'merge_launches': 4.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 700.0, 'n_index': 131079.0, 'k': 10.0}
+[06:30:30] ties k10 arm warpbound_guard: 4.239 ms (untimed correctness call); phases {'distance_ms': 1.022602, 'select_ms': 0.520191, 'merge_ms': 0.041806, 'distance_launches': 6.0, 'select_launches': 6.0, 'merge_launches': 4.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 700.0, 'n_index': 131079.0, 'k': 10.0}
+[06:30:30] ties k10 arm warpbound_guard1: 3.626 ms (untimed correctness call); phases {'distance_ms': 1.02427, 'select_ms': 0.521217, 'merge_ms': 0.042122, 'distance_launches': 6.0, 'select_launches': 6.0, 'merge_launches': 4.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 700.0, 'n_index': 131079.0, 'k': 10.0}
+[06:30:30] ties k10 arm default: 3.658 ms (untimed correctness call); phases {'distance_ms': 1.023375, 'select_ms': 0.684379, 'merge_ms': 0.041498, 'distance_launches': 6.0, 'select_launches': 6.0, 'merge_launches': 4.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 700.0, 'n_index': 131079.0, 'k': 10.0}
+[06:30:31] ties k10: arms equal=True order=ok planted=ok oracle={'rows': 700, 'hard_mismatch_rows': [], 'ambiguous_rows': 1, 'distance_mismatch_rows': []}
+[06:30:31] ties k10 reach uniform: sabotage flipped 6509 cells, restored=True
+[06:30:31] ties k10 reach warpbound_guard: sabotage flipped 13892 cells, restored=True
+[06:30:31] ties k10 reach warpbound_guard1: sabotage flipped 13892 cells, restored=True
+[06:30:31] ties k10 reach default: sabotage flipped 6509 cells, restored=True
+[06:30:31] ties k15 arm uniform: 4.123 ms (untimed correctness call); phases {'distance_ms': 1.022432, 'select_ms': 0.964759, 'merge_ms': 0.041453, 'distance_launches': 6.0, 'select_launches': 6.0, 'merge_launches': 4.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 700.0, 'n_index': 131079.0, 'k': 15.0}
+[06:30:31] ties k15 arm warpbound_guard: 3.813 ms (untimed correctness call); phases {'distance_ms': 1.019777, 'select_ms': 0.660115, 'merge_ms': 0.038648, 'distance_launches': 6.0, 'select_launches': 6.0, 'merge_launches': 4.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 700.0, 'n_index': 131079.0, 'k': 15.0}
+[06:30:31] ties k15 arm warpbound_guard1: 3.818 ms (untimed correctness call); phases {'distance_ms': 1.02245, 'select_ms': 0.667087, 'merge_ms': 0.041509, 'distance_launches': 6.0, 'select_launches': 6.0, 'merge_launches': 4.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 700.0, 'n_index': 131079.0, 'k': 15.0}
+[06:30:31] ties k15 arm default: 4.104 ms (untimed correctness call); phases {'distance_ms': 1.019311, 'select_ms': 0.963836, 'merge_ms': 0.043861, 'distance_launches': 6.0, 'select_launches': 6.0, 'merge_launches': 4.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 700.0, 'n_index': 131079.0, 'k': 15.0}
+[06:30:32] ties k15: arms equal=True order=ok planted=ok oracle={'rows': 700, 'hard_mismatch_rows': [], 'ambiguous_rows': 1, 'distance_mismatch_rows': []}
+[06:30:32] ties k15 reach uniform: sabotage flipped 12172 cells, restored=True
+[06:30:32] ties k15 reach warpbound_guard: sabotage flipped 20892 cells, restored=True
+[06:30:32] ties k15 reach warpbound_guard1: sabotage flipped 20892 cells, restored=True
+[06:30:32] ties k15 reach default: sabotage flipped 12172 cells, restored=True
+[06:30:32] divergent_tail k10 arm uniform: 11.290 ms (untimed correctness call); phases {'distance_ms': 2.592875, 'select_ms': 1.692842, 'merge_ms': 0.12135, 'distance_launches': 14.0, 'select_launches': 14.0, 'merge_launches': 12.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 600.0, 'n_index': 397156.0, 'k': 10.0}
+[06:30:32] divergent_tail k10 arm warpbound_guard: 10.696 ms (untimed correctness call); phases {'distance_ms': 2.586504, 'select_ms': 1.25642, 'merge_ms': 0.117914, 'distance_launches': 14.0, 'select_launches': 14.0, 'merge_launches': 12.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 600.0, 'n_index': 397156.0, 'k': 10.0}
+[06:30:32] divergent_tail k10 arm warpbound_guard1: 9.455 ms (untimed correctness call); phases {'distance_ms': 2.59053, 'select_ms': 1.294055, 'merge_ms': 0.122154, 'distance_launches': 14.0, 'select_launches': 14.0, 'merge_launches': 12.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 600.0, 'n_index': 397156.0, 'k': 10.0}
+[06:30:32] divergent_tail k10 arm default: 9.039 ms (untimed correctness call); phases {'distance_ms': 2.588086, 'select_ms': 1.688761, 'merge_ms': 0.118822, 'distance_launches': 14.0, 'select_launches': 14.0, 'merge_launches': 12.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 600.0, 'n_index': 397156.0, 'k': 10.0}
+[06:30:32] divergent_tail k10: arms equal=True order=ok planted=ok oracle={'rows': 47, 'hard_mismatch_rows': [], 'ambiguous_rows': 0, 'distance_mismatch_rows': []}
+[06:30:32] divergent_tail k10 reach uniform: sabotage flipped 5165 cells, restored=True
+[06:30:32] divergent_tail k10 reach warpbound_guard: sabotage flipped 11900 cells, restored=True
+[06:30:32] divergent_tail k10 reach warpbound_guard1: sabotage flipped 11900 cells, restored=True
+[06:30:32] divergent_tail k10 reach default: sabotage flipped 5165 cells, restored=True
+[06:30:32] divergent_tail k15 arm uniform: 9.707 ms (untimed correctness call); phases {'distance_ms': 2.597991, 'select_ms': 2.382959, 'merge_ms': 0.124137, 'distance_launches': 14.0, 'select_launches': 14.0, 'merge_launches': 12.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 600.0, 'n_index': 397156.0, 'k': 15.0}
+[06:30:32] divergent_tail k15 arm warpbound_guard: 8.887 ms (untimed correctness call); phases {'distance_ms': 2.592931, 'select_ms': 1.621944, 'merge_ms': 0.12099, 'distance_launches': 14.0, 'select_launches': 14.0, 'merge_launches': 12.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 600.0, 'n_index': 397156.0, 'k': 15.0}
+[06:30:32] divergent_tail k15 arm warpbound_guard1: 8.924 ms (untimed correctness call); phases {'distance_ms': 2.589206, 'select_ms': 1.656228, 'merge_ms': 0.122181, 'distance_launches': 14.0, 'select_launches': 14.0, 'merge_launches': 12.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 600.0, 'n_index': 397156.0, 'k': 15.0}
+[06:30:32] divergent_tail k15 arm default: 9.615 ms (untimed correctness call); phases {'distance_ms': 2.598476, 'select_ms': 2.379802, 'merge_ms': 0.128071, 'distance_launches': 14.0, 'select_launches': 14.0, 'merge_launches': 12.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 600.0, 'n_index': 397156.0, 'k': 15.0}
+[06:30:32] divergent_tail k15: arms equal=True order=ok planted=ok oracle={'rows': 45, 'hard_mismatch_rows': [], 'ambiguous_rows': 0, 'distance_mismatch_rows': []}
+[06:30:33] divergent_tail k15 reach uniform: sabotage flipped 9681 cells, restored=True
+[06:30:33] divergent_tail k15 reach warpbound_guard: sabotage flipped 17900 cells, restored=True
+[06:30:33] divergent_tail k15 reach warpbound_guard1: sabotage flipped 17900 cells, restored=True
+[06:30:33] divergent_tail k15 reach default: sabotage flipped 9681 cells, restored=True
+[06:30:33] large k10 warmup uniform: 34.942 ms; phases {'distance_ms': 15.377573, 'select_ms': 10.310489, 'merge_ms': 0.477217, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}
+[06:30:33] large k10 warmup warpbound_guard: 31.597 ms; phases {'distance_ms': 15.370437, 'select_ms': 7.358802, 'merge_ms': 0.487896, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}
+[06:30:33] large k10 order0 pair0: uniform 33.632 ms, warpbound_guard 29.798 ms, warpbound_guard/uniform 0.8860, select_ms 10.331 vs 7.336
+[06:30:33] large k10 order0 pair1: uniform 32.377 ms, warpbound_guard 29.249 ms, warpbound_guard/uniform 0.9034, select_ms 10.345 vs 7.330
+[06:30:33] large k10 order0 pair2: uniform 32.288 ms, warpbound_guard 29.233 ms, warpbound_guard/uniform 0.9054, select_ms 10.331 vs 7.322
+[06:30:33] large k10 order1 pair0: uniform 32.495 ms, warpbound_guard 29.308 ms, warpbound_guard/uniform 0.9019, select_ms 10.324 vs 7.330
+[06:30:33] large k10 order1 pair1: uniform 32.455 ms, warpbound_guard 29.740 ms, warpbound_guard/uniform 0.9163, select_ms 10.317 vs 7.371
+[06:30:33] large k10 order1 pair2: uniform 32.274 ms, warpbound_guard 29.412 ms, warpbound_guard/uniform 0.9113, select_ms 10.322 vs 7.346
+[06:30:33] large k10: uniform median 32.416 ms, warpbound_guard median 29.360 ms, paired median warpbound_guard/uniform 0.9044, 6/6 pairs favor warpbound_guard; select_ms medians uniform 10.327, warpbound_guard 7.333
+[06:30:33] large k15 warmup uniform: 38.087 ms; phases {'distance_ms': 15.370471, 'select_ms': 14.754516, 'merge_ms': 0.502789, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}
+[06:30:33] large k15 warmup warpbound_guard: 32.965 ms; phases {'distance_ms': 15.35706, 'select_ms': 9.721671, 'merge_ms': 0.484064, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}
+[06:30:33] large k15 order0 pair0: uniform 37.825 ms, warpbound_guard 32.751 ms, warpbound_guard/uniform 0.8658, select_ms 14.752 vs 9.710
+[06:30:33] large k15 order0 pair1: uniform 37.782 ms, warpbound_guard 32.720 ms, warpbound_guard/uniform 0.8660, select_ms 14.767 vs 9.727
+[06:30:33] large k15 order0 pair2: uniform 37.647 ms, warpbound_guard 32.580 ms, warpbound_guard/uniform 0.8654, select_ms 14.748 vs 9.704
+[06:30:33] large k15 order1 pair0: uniform 37.539 ms, warpbound_guard 32.725 ms, warpbound_guard/uniform 0.8717, select_ms 14.739 vs 9.727
+[06:30:33] large k15 order1 pair1: uniform 37.617 ms, warpbound_guard 32.638 ms, warpbound_guard/uniform 0.8676, select_ms 14.741 vs 9.698
+[06:30:34] large k15 order1 pair2: uniform 37.793 ms, warpbound_guard 32.510 ms, warpbound_guard/uniform 0.8602, select_ms 14.850 vs 9.727
+[06:30:34] large k15: uniform median 37.715 ms, warpbound_guard median 32.679 ms, paired median warpbound_guard/uniform 0.8659, 6/6 pairs favor warpbound_guard; select_ms medians uniform 14.750, warpbound_guard 9.718
+[06:30:34] dyadic k10 warmup uniform: 34.665 ms; phases {'distance_ms': 15.402011, 'select_ms': 10.336298, 'merge_ms': 0.498634, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}
+[06:30:34] dyadic k10 warmup warpbound_guard: 31.512 ms; phases {'distance_ms': 15.378942, 'select_ms': 7.336274, 'merge_ms': 0.484154, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}
+[06:30:34] dyadic k10 order0 pair0: uniform 33.855 ms, warpbound_guard 30.260 ms, warpbound_guard/uniform 0.8938, select_ms 10.363 vs 7.319
+[06:30:34] dyadic k10 order0 pair1: uniform 32.976 ms, warpbound_guard 29.604 ms, warpbound_guard/uniform 0.8977, select_ms 10.318 vs 7.344
+[06:30:34] dyadic k10 order0 pair2: uniform 32.350 ms, warpbound_guard 29.293 ms, warpbound_guard/uniform 0.9055, select_ms 10.339 vs 7.328
+[06:30:34] dyadic k10 order1 pair0: uniform 32.221 ms, warpbound_guard 29.297 ms, warpbound_guard/uniform 0.9092, select_ms 10.308 vs 7.339
+[06:30:34] dyadic k10 order1 pair1: uniform 32.428 ms, warpbound_guard 29.321 ms, warpbound_guard/uniform 0.9042, select_ms 10.318 vs 7.340
+[06:30:34] dyadic k10 order1 pair2: uniform 32.497 ms, warpbound_guard 29.626 ms, warpbound_guard/uniform 0.9116, select_ms 10.322 vs 7.377
+[06:30:34] dyadic k10: uniform median 32.463 ms, warpbound_guard median 29.463 ms, paired median warpbound_guard/uniform 0.9049, 6/6 pairs favor warpbound_guard; select_ms medians uniform 10.320, warpbound_guard 7.339
+[06:30:34] dyadic k15 warmup uniform: 37.708 ms; phases {'distance_ms': 15.369977, 'select_ms': 14.750538, 'merge_ms': 0.491088, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}
+[06:30:34] dyadic k15 warmup warpbound_guard: 32.631 ms; phases {'distance_ms': 15.388036, 'select_ms': 9.734871, 'merge_ms': 0.490727, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}
+[06:30:34] dyadic k15 order0 pair0: uniform 37.797 ms, warpbound_guard 33.084 ms, warpbound_guard/uniform 0.8753, select_ms 14.751 vs 9.729
+[06:30:34] dyadic k15 order0 pair1: uniform 37.925 ms, warpbound_guard 32.549 ms, warpbound_guard/uniform 0.8582, select_ms 14.780 vs 9.714
+[06:30:34] dyadic k15 order0 pair2: uniform 37.530 ms, warpbound_guard 32.543 ms, warpbound_guard/uniform 0.8671, select_ms 14.767 vs 9.758
+[06:30:34] dyadic k15 order1 pair0: uniform 37.372 ms, warpbound_guard 32.494 ms, warpbound_guard/uniform 0.8695, select_ms 14.741 vs 9.716
+[06:30:34] dyadic k15 order1 pair1: uniform 37.463 ms, warpbound_guard 32.413 ms, warpbound_guard/uniform 0.8652, select_ms 14.735 vs 9.712
+[06:30:34] dyadic k15 order1 pair2: uniform 37.437 ms, warpbound_guard 32.483 ms, warpbound_guard/uniform 0.8677, select_ms 14.736 vs 9.723
+[06:30:34] dyadic k15: uniform median 37.497 ms, warpbound_guard median 32.518 ms, paired median warpbound_guard/uniform 0.8674, 6/6 pairs favor warpbound_guard; select_ms medians uniform 14.746, warpbound_guard 9.719
+[06:30:35] large k10 warmup uniform: 34.404 ms; phases {'distance_ms': 15.398632, 'select_ms': 10.327449, 'merge_ms': 0.487252, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}
+[06:30:35] large k10 warmup warpbound_guard1: 31.616 ms; phases {'distance_ms': 15.432296, 'select_ms': 7.506524, 'merge_ms': 0.483155, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}
+[06:30:35] large k10 order0 pair0: uniform 33.630 ms, warpbound_guard1 29.851 ms, warpbound_guard1/uniform 0.8876, select_ms 10.330 vs 7.511
+[06:30:35] large k10 order0 pair1: uniform 32.360 ms, warpbound_guard1 29.353 ms, warpbound_guard1/uniform 0.9071, select_ms 10.330 vs 7.501
+[06:30:35] large k10 order0 pair2: uniform 32.222 ms, warpbound_guard1 29.404 ms, warpbound_guard1/uniform 0.9125, select_ms 10.317 vs 7.491
+[06:30:35] large k10 order1 pair0: uniform 32.212 ms, warpbound_guard1 29.556 ms, warpbound_guard1/uniform 0.9176, select_ms 10.324 vs 7.502
+[06:30:35] large k10 order1 pair1: uniform 32.253 ms, warpbound_guard1 29.487 ms, warpbound_guard1/uniform 0.9142, select_ms 10.352 vs 7.510
+[06:30:35] large k10 order1 pair2: uniform 32.329 ms, warpbound_guard1 29.519 ms, warpbound_guard1/uniform 0.9131, select_ms 10.314 vs 7.499
+[06:30:35] large k10: uniform median 32.291 ms, warpbound_guard1 median 29.503 ms, paired median warpbound_guard1/uniform 0.9128, 6/6 pairs favor warpbound_guard1; select_ms medians uniform 10.327, warpbound_guard1 7.502
+[06:30:35] large k15 warmup uniform: 37.944 ms; phases {'distance_ms': 15.40109, 'select_ms': 14.751403, 'merge_ms': 0.490171, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}
+[06:30:35] large k15 warmup warpbound_guard1: 33.275 ms; phases {'distance_ms': 15.419547, 'select_ms': 9.812511, 'merge_ms': 0.489726, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}
+[06:30:35] large k15 order0 pair0: uniform 38.037 ms, warpbound_guard1 32.913 ms, warpbound_guard1/uniform 0.8653, select_ms 14.740 vs 9.831
+[06:30:35] large k15 order0 pair1: uniform 37.789 ms, warpbound_guard1 33.115 ms, warpbound_guard1/uniform 0.8763, select_ms 14.746 vs 9.825
+[06:30:35] large k15 order0 pair2: uniform 38.029 ms, warpbound_guard1 32.842 ms, warpbound_guard1/uniform 0.8636, select_ms 14.746 vs 9.830
+[06:30:35] large k15 order1 pair0: uniform 37.521 ms, warpbound_guard1 32.671 ms, warpbound_guard1/uniform 0.8707, select_ms 14.733 vs 9.827
+[06:30:35] large k15 order1 pair1: uniform 37.517 ms, warpbound_guard1 32.606 ms, warpbound_guard1/uniform 0.8691, select_ms 14.734 vs 9.829
+[06:30:35] large k15 order1 pair2: uniform 37.514 ms, warpbound_guard1 32.713 ms, warpbound_guard1/uniform 0.8720, select_ms 14.742 vs 9.845
+[06:30:35] large k15: uniform median 37.655 ms, warpbound_guard1 median 32.778 ms, paired median warpbound_guard1/uniform 0.8699, 6/6 pairs favor warpbound_guard1; select_ms medians uniform 14.741, warpbound_guard1 9.829
+[06:30:35] dyadic k10 warmup uniform: 34.442 ms; phases {'distance_ms': 15.353145, 'select_ms': 10.321395, 'merge_ms': 0.48515, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}
+[06:30:35] dyadic k10 warmup warpbound_guard1: 31.527 ms; phases {'distance_ms': 15.354478, 'select_ms': 7.483348, 'merge_ms': 0.48173, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}
+[06:30:36] dyadic k10 order0 pair0: uniform 33.516 ms, warpbound_guard1 29.529 ms, warpbound_guard1/uniform 0.8810, select_ms 10.328 vs 7.517
+[06:30:36] dyadic k10 order0 pair1: uniform 32.320 ms, warpbound_guard1 29.453 ms, warpbound_guard1/uniform 0.9113, select_ms 10.325 vs 7.519
+[06:30:36] dyadic k10 order0 pair2: uniform 32.323 ms, warpbound_guard1 29.348 ms, warpbound_guard1/uniform 0.9079, select_ms 10.332 vs 7.498
+[06:30:36] dyadic k10 order1 pair0: uniform 32.223 ms, warpbound_guard1 29.480 ms, warpbound_guard1/uniform 0.9149, select_ms 10.324 vs 7.517
+[06:30:36] dyadic k10 order1 pair1: uniform 32.339 ms, warpbound_guard1 29.449 ms, warpbound_guard1/uniform 0.9106, select_ms 10.321 vs 7.581
+[06:30:36] dyadic k10 order1 pair2: uniform 32.259 ms, warpbound_guard1 29.444 ms, warpbound_guard1/uniform 0.9127, select_ms 10.324 vs 7.495
+[06:30:36] dyadic k10: uniform median 32.322 ms, warpbound_guard1 median 29.451 ms, paired median warpbound_guard1/uniform 0.9110, 6/6 pairs favor warpbound_guard1; select_ms medians uniform 10.325, warpbound_guard1 7.517
+[06:30:36] dyadic k15 warmup uniform: 37.567 ms; phases {'distance_ms': 15.375928, 'select_ms': 14.748198, 'merge_ms': 0.496477, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}
+[06:30:36] dyadic k15 warmup warpbound_guard1: 32.739 ms; phases {'distance_ms': 15.388467, 'select_ms': 9.857814, 'merge_ms': 0.494777, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}
+[06:30:36] dyadic k15 order0 pair0: uniform 37.682 ms, warpbound_guard1 33.204 ms, warpbound_guard1/uniform 0.8812, select_ms 14.753 vs 9.839
+[06:30:36] dyadic k15 order0 pair1: uniform 38.035 ms, warpbound_guard1 32.760 ms, warpbound_guard1/uniform 0.8613, select_ms 14.736 vs 9.826
+[06:30:36] dyadic k15 order0 pair2: uniform 37.601 ms, warpbound_guard1 32.797 ms, warpbound_guard1/uniform 0.8722, select_ms 14.759 vs 9.838
+[06:30:36] dyadic k15 order1 pair0: uniform 38.373 ms, warpbound_guard1 34.866 ms, warpbound_guard1/uniform 0.9086, select_ms 14.748 vs 9.945
+[06:30:36] dyadic k15 order1 pair1: uniform 37.643 ms, warpbound_guard1 32.689 ms, warpbound_guard1/uniform 0.8684, select_ms 14.747 vs 9.826
+[06:30:36] dyadic k15 order1 pair2: uniform 37.613 ms, warpbound_guard1 32.624 ms, warpbound_guard1/uniform 0.8674, select_ms 14.748 vs 9.848
+[06:30:36] dyadic k15: uniform median 37.662 ms, warpbound_guard1 median 32.778 ms, paired median warpbound_guard1/uniform 0.8703, 6/6 pairs favor warpbound_guard1; select_ms medians uniform 14.748, warpbound_guard1 9.838
+[06:30:36] large k10 warmup uniform: 34.529 ms; phases {'distance_ms': 15.440883, 'select_ms': 10.325707, 'merge_ms': 0.490635, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}
+[06:30:36] large k10 warmup warpbound_count: 33.328 ms; phases {'distance_ms': 15.446311, 'select_ms': 9.165088, 'merge_ms': 0.487584, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0, 'admit_warp_steps': 49920000.0, 'admit_any_admit': 23075772.0, 'admit_rate': 0.4622550480769231, 'admit_lines': 56.0}
+[06:30:37] large k10 order0 pair0: uniform 33.497 ms, warpbound_count 31.164 ms, warpbound_count/uniform 0.9304, select_ms 10.325 vs 8.994
+[06:30:37] large k10 order0 pair1: uniform 32.314 ms, warpbound_count 30.897 ms, warpbound_count/uniform 0.9561, select_ms 10.321 vs 8.990
+[06:30:37] large k10 order0 pair2: uniform 32.289 ms, warpbound_count 30.991 ms, warpbound_count/uniform 0.9598, select_ms 10.319 vs 8.968
+[06:30:37] large k10 order1 pair0: uniform 34.297 ms, warpbound_count 30.995 ms, warpbound_count/uniform 0.9037, select_ms 10.396 vs 8.969
+[06:30:37] large k10 order1 pair1: uniform 32.262 ms, warpbound_count 31.134 ms, warpbound_count/uniform 0.9650, select_ms 10.329 vs 9.079
+[06:30:37] large k10 order1 pair2: uniform 32.619 ms, warpbound_count 31.071 ms, warpbound_count/uniform 0.9525, select_ms 10.375 vs 9.008
+[06:30:37] large k10: uniform median 32.466 ms, warpbound_count median 31.033 ms, paired median warpbound_count/uniform 0.9543, 6/6 pairs favor warpbound_count; select_ms medians uniform 10.327, warpbound_count 8.992; admit_rate medians warpbound_count 0.4623 [counter arm; output valid; warpbound_count time is not a price]
+[06:30:37] large k15 warmup uniform: 37.865 ms; phases {'distance_ms': 15.403157, 'select_ms': 14.760249, 'merge_ms': 0.493016, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}
+[06:30:37] large k15 warmup warpbound_count: 34.863 ms; phases {'distance_ms': 15.45972, 'select_ms': 11.599443, 'merge_ms': 0.501922, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0, 'admit_warp_steps': 49920000.0, 'admit_any_admit': 23076247.0, 'admit_rate': 0.46226456330128207, 'admit_lines': 56.0}
+[06:30:37] large k15 order0 pair0: uniform 37.812 ms, warpbound_count 34.671 ms, warpbound_count/uniform 0.9169, select_ms 14.753 vs 11.463
+[06:30:37] large k15 order0 pair1: uniform 37.937 ms, warpbound_count 34.956 ms, warpbound_count/uniform 0.9214, select_ms 14.751 vs 11.381
+[06:30:37] large k15 order0 pair2: uniform 38.192 ms, warpbound_count 34.563 ms, warpbound_count/uniform 0.9050, select_ms 14.748 vs 11.427
+[06:30:37] large k15 order1 pair0: uniform 37.884 ms, warpbound_count 34.300 ms, warpbound_count/uniform 0.9054, select_ms 14.740 vs 11.439
+[06:30:37] large k15 order1 pair1: uniform 38.441 ms, warpbound_count 35.261 ms, warpbound_count/uniform 0.9173, select_ms 14.760 vs 11.456
+[06:30:37] large k15 order1 pair2: uniform 37.837 ms, warpbound_count 34.898 ms, warpbound_count/uniform 0.9223, select_ms 14.744 vs 11.465
+[06:30:37] large k15: uniform median 37.910 ms, warpbound_count median 34.785 ms, paired median warpbound_count/uniform 0.9171, 6/6 pairs favor warpbound_count; select_ms medians uniform 14.749, warpbound_count 11.447; admit_rate medians warpbound_count 0.4623 [counter arm; output valid; warpbound_count time is not a price]
+[06:30:37] dyadic k10 warmup uniform: 34.380 ms; phases {'distance_ms': 15.355314, 'select_ms': 10.332488, 'merge_ms': 0.480492, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0}
+[06:30:37] dyadic k10 warmup warpbound_count: 33.066 ms; phases {'distance_ms': 15.387508, 'select_ms': 8.96808, 'merge_ms': 0.483021, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 10.0, 'admit_warp_steps': 49920000.0, 'admit_any_admit': 23055555.0, 'admit_rate': 0.46185006009615387, 'admit_lines': 56.0}
+[06:30:37] dyadic k10 order0 pair0: uniform 33.551 ms, warpbound_count 31.060 ms, warpbound_count/uniform 0.9258, select_ms 10.313 vs 8.948
+[06:30:38] dyadic k10 order0 pair1: uniform 32.362 ms, warpbound_count 31.040 ms, warpbound_count/uniform 0.9592, select_ms 10.333 vs 9.002
+[06:30:38] dyadic k10 order0 pair2: uniform 32.257 ms, warpbound_count 31.004 ms, warpbound_count/uniform 0.9612, select_ms 10.314 vs 9.018
+[06:30:38] dyadic k10 order1 pair0: uniform 32.180 ms, warpbound_count 30.871 ms, warpbound_count/uniform 0.9593, select_ms 10.314 vs 8.972
+[06:30:38] dyadic k10 order1 pair1: uniform 32.276 ms, warpbound_count 30.842 ms, warpbound_count/uniform 0.9556, select_ms 10.323 vs 8.948
+[06:30:38] dyadic k10 order1 pair2: uniform 32.297 ms, warpbound_count 31.023 ms, warpbound_count/uniform 0.9606, select_ms 10.325 vs 9.005
+[06:30:38] dyadic k10: uniform median 32.287 ms, warpbound_count median 31.014 ms, paired median warpbound_count/uniform 0.9592, 6/6 pairs favor warpbound_count; select_ms medians uniform 10.319, warpbound_count 8.987; admit_rate medians warpbound_count 0.4619 [counter arm; output valid; warpbound_count time is not a price]
+[06:30:38] dyadic k15 warmup uniform: 37.513 ms; phases {'distance_ms': 15.360099, 'select_ms': 14.739862, 'merge_ms': 0.489601, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0}
+[06:30:38] dyadic k15 warmup warpbound_count: 34.172 ms; phases {'distance_ms': 15.385226, 'select_ms': 11.392906, 'merge_ms': 0.489792, 'distance_launches': 56.0, 'select_launches': 56.0, 'merge_launches': 48.0, 'query_tile': 512.0, 'index_tile': 65536.0, 'n_queries': 4000.0, 'n_index': 400000.0, 'k': 15.0, 'admit_warp_steps': 49920000.0, 'admit_any_admit': 23056101.0, 'admit_rate': 0.46186099759615384, 'admit_lines': 56.0}
+[06:30:38] dyadic k15 order0 pair0: uniform 37.599 ms, warpbound_count 34.334 ms, warpbound_count/uniform 0.9132, select_ms 14.738 vs 11.463
+[06:30:38] dyadic k15 order0 pair1: uniform 37.578 ms, warpbound_count 34.224 ms, warpbound_count/uniform 0.9107, select_ms 14.742 vs 11.397
+[06:30:38] dyadic k15 order0 pair2: uniform 37.687 ms, warpbound_count 34.888 ms, warpbound_count/uniform 0.9257, select_ms 14.749 vs 11.444
+[06:30:38] dyadic k15 order1 pair0: uniform 37.838 ms, warpbound_count 34.951 ms, warpbound_count/uniform 0.9237, select_ms 14.755 vs 11.464
+[06:30:38] dyadic k15 order1 pair1: uniform 37.962 ms, warpbound_count 34.449 ms, warpbound_count/uniform 0.9075, select_ms 14.756 vs 11.451
+[06:30:38] dyadic k15 order1 pair2: uniform 38.320 ms, warpbound_count 36.618 ms, warpbound_count/uniform 0.9556, select_ms 14.785 vs 11.861
+[06:30:38] dyadic k15: uniform median 37.762 ms, warpbound_count median 34.668 ms, paired median warpbound_count/uniform 0.9184, 6/6 pairs favor warpbound_count; select_ms medians uniform 14.752, warpbound_count 11.457; admit_rate medians warpbound_count 0.4619 [counter arm; output valid; warpbound_count time is not a price]
+[06:30:38] PASSED

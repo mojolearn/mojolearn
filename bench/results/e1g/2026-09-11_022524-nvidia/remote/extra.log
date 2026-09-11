@@ -1,0 +1,37 @@
+status: passed
+phase timers: READ from the binding (build with MOJOLEARN_KNN_PHASE_TIMERS); request medians below are SERIALIZED by the per-class synchronizations and are not comparable to untimed requests
+timing large k10 warpbound_guard vs uniform: uniform median 32.415849 ms (min 32.273681), warpbound_guard median 29.359953 ms (min 29.233231)
+  phases (median ms): uniform distance_ms 15.387 select_ms 10.327 merge_ms 0.487; warpbound_guard distance_ms 15.380 select_ms 7.333 merge_ms 0.486
+timing large k15 warpbound_guard vs uniform: uniform median 37.714942 ms (min 37.539458), warpbound_guard median 32.678815 ms (min 32.510472)
+  phases (median ms): uniform distance_ms 15.390 select_ms 14.750 merge_ms 0.500; warpbound_guard distance_ms 15.393 select_ms 9.718 merge_ms 0.486
+timing dyadic k10 warpbound_guard vs uniform: uniform median 32.462697 ms (min 32.221481), warpbound_guard median 29.462698 ms (min 29.293100)
+  phases (median ms): uniform distance_ms 15.374 select_ms 10.320 merge_ms 0.487; warpbound_guard distance_ms 15.384 select_ms 7.339 merge_ms 0.483
+  cached-reference ratios (NOT a paired opponent): uniform 3.175x, warpbound_guard 2.881x
+timing dyadic k15 warpbound_guard vs uniform: uniform median 37.496778 ms (min 37.372064), warpbound_guard median 32.518414 ms (min 32.412817)
+  phases (median ms): uniform distance_ms 15.381 select_ms 14.746 merge_ms 0.493; warpbound_guard distance_ms 15.395 select_ms 9.719 merge_ms 0.491
+  cached-reference ratios (NOT a paired opponent): uniform 3.466x, warpbound_guard 3.006x
+timing large k10 warpbound_guard1 vs uniform: uniform median 32.290919 ms (min 32.211909), warpbound_guard1 median 29.502646 ms (min 29.352651)
+  phases (median ms): uniform distance_ms 15.393 select_ms 10.327 merge_ms 0.486; warpbound_guard1 distance_ms 15.396 select_ms 7.502 merge_ms 0.482
+timing large k15 warpbound_guard1 vs uniform: uniform median 37.655040 ms (min 37.513988), warpbound_guard1 median 32.777580 ms (min 32.606158)
+  phases (median ms): uniform distance_ms 15.387 select_ms 14.741 merge_ms 0.494; warpbound_guard1 distance_ms 15.394 select_ms 9.829 merge_ms 0.490
+timing dyadic k10 warpbound_guard1 vs uniform: uniform median 32.321593 ms (min 32.222789), warpbound_guard1 median 29.451330 ms (min 29.347528)
+  phases (median ms): uniform distance_ms 15.373 select_ms 10.325 merge_ms 0.487; warpbound_guard1 distance_ms 15.390 select_ms 7.517 merge_ms 0.490
+  cached-reference ratios (NOT a paired opponent): uniform 3.161x, warpbound_guard1 2.880x
+timing dyadic k15 warpbound_guard1 vs uniform: uniform median 37.662337 ms (min 37.601249), warpbound_guard1 median 32.778374 ms (min 32.624475)
+  phases (median ms): uniform distance_ms 15.381 select_ms 14.748 merge_ms 0.491; warpbound_guard1 distance_ms 15.391 select_ms 9.838 merge_ms 0.488
+  cached-reference ratios (NOT a paired opponent): uniform 3.482x, warpbound_guard1 3.030x
+timing_only: OUTPUT INVALID; PHASE COST ONLY (never a correctness, reach or promotion input)
+timing_only large k10 warpbound_count vs uniform (output valid; counter arm; time not a price): uniform median 32.466479 ms (min 32.262089), warpbound_count median 31.033350 ms (min 30.896526); warpbound_count output VALID (equal to the reference); its time is not a price
+  phases (median ms): uniform distance_ms 15.387 select_ms 10.327 merge_ms 0.489; warpbound_count distance_ms 15.433 select_ms 8.992 merge_ms 0.488 admit_warp_steps 49920000.000 admit_any_admit 23075772.000 admit_rate 0.462
+  select_ms warpbound_count/uniform = 0.8701 (paired median)
+timing_only large k15 warpbound_count vs uniform (output valid; counter arm; time not a price): uniform median 37.910458 ms (min 37.811506), warpbound_count median 34.784739 ms (min 34.300077); warpbound_count output VALID (equal to the reference); its time is not a price
+  phases (median ms): uniform distance_ms 15.374 select_ms 14.749 merge_ms 0.492; warpbound_count distance_ms 15.436 select_ms 11.447 merge_ms 0.495 admit_warp_steps 49920000.000 admit_any_admit 23076247.000 admit_rate 0.462
+  select_ms warpbound_count/uniform = 0.7761 (paired median)
+timing_only dyadic k10 warpbound_count vs uniform (output valid; counter arm; time not a price): uniform median 32.286622 ms (min 32.180302), warpbound_count median 31.013781 ms (min 30.842184); warpbound_count output VALID (equal to the reference); its time is not a price
+  phases (median ms): uniform distance_ms 15.367 select_ms 10.319 merge_ms 0.484; warpbound_count distance_ms 15.405 select_ms 8.987 merge_ms 0.487 admit_warp_steps 49920000.000 admit_any_admit 23055555.000 admit_rate 0.462
+  select_ms warpbound_count/uniform = 0.8705 (paired median)
+timing_only dyadic k15 warpbound_count vs uniform (output valid; counter arm; time not a price): uniform median 37.762371 ms (min 37.577548), warpbound_count median 34.668326 ms (min 34.223678); warpbound_count output VALID (equal to the reference); its time is not a price
+  phases (median ms): uniform distance_ms 15.378 select_ms 14.752 merge_ms 0.501; warpbound_count distance_ms 15.434 select_ms 11.457 merge_ms 0.495 admit_warp_steps 49920000.000 admit_any_admit 23056101.000 admit_rate 0.462
+  select_ms warpbound_count/uniform = 0.7765 (paired median)
+build-binding-trial	0	114s
+gate	0	20s
