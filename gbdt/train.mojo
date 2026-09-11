@@ -71,6 +71,7 @@ from std.memory import memcpy
 from max.algorithm import sync_parallelize
 from gbdt.data.permutation import TRandom
 from gbdt.gpu_data.feature_sampling import check_feature_fraction
+from std.sys.compile import is_defined
 from gbdt.gpu_util.kernel.bootstrap import (
     BOOTSTRAP_KERNEL_BAYESIAN,
     BOOTSTRAP_KERNEL_BERNOULLI,
@@ -81,6 +82,21 @@ from gbdt.gpu_util.kernel.bootstrap import (
 #: `SetDefault(0.8)` at `catboost_options.cpp:798` is the MVS arm only,
 #: and MVS does not reach their GPU oblivious searcher.
 comptime DEFAULT_SUBSAMPLE = Float32(0.66)
+
+comptime BORROW_X_COLUMNS = is_defined["MOJOLEARN_2550_BORROW_X"]()
+"""DEVIATION 2550 (2026-09-11), OPT-IN with `-D MOJOLEARN_2550_BORROW_X=1`.
+Ours, host bookkeeping only. `gbdt_fit` copied the caller's column-major X
+into a `List` (`gbdt/estimator.mojo`) and `train` copied every raw column
+again into its own `List` before quantization, so a 1M x 220 fit paid two
+resize-and-memcpy passes over 880 MB before the first border (H100 HIGGS
+ledger, 112 MB: 73 ms + 99 ms). Under the switch `gbdt_fit` hands `train`
+the caller's pointer (`x_borrow`) and `train` reads every raw, non-
+categorical column in place through `column_ptrs`; categorical and CTR
+columns stay owned. The same bytes are read in the same order by the same
+border builder and quantize kernel, so the model is bitwise the default's
+by construction. Checks: `pixi run check-gbdt-per-round` (off) and
+`check-gbdt-per-round-2550` (on) print one MODEL_HASH per lane, which must
+agree across the two builds."""
 from gbdt.targets.kernel.pointwise_targets import (
     OBJECTIVE_CROSSENTROPY,
     OBJECTIVE_LOGLOSS,
@@ -293,6 +309,42 @@ def _build_cindex_from_floats(
     return cindex^
 
 
+def _resolve_column_ptrs(
+    columns: List[List[Float32]],
+    column_ptrs: List[MutPointer[Float32, MutUntrackedOrigin]],
+) raises -> List[MutPointer[Float32, MutUntrackedOrigin]]:
+    """DEVIATION 2550: one read pointer per column. An empty `column_ptrs`
+    means every column is owned by `columns` (every caller but `train`)."""
+    if len(column_ptrs) == 0:
+        var out = List[MutPointer[Float32, MutUntrackedOrigin]](
+            capacity=len(columns)
+        )
+        for c in range(len(columns)):
+            out.append(
+                rebind[MutPointer[Float32, MutUntrackedOrigin]](
+                    columns[c].unsafe_ptr()
+                )
+            )
+        return out^
+    if len(column_ptrs) != len(columns):
+        raise Error(
+            "column_ptrs has " + String(len(column_ptrs)) + " entries for "
+            + String(len(columns)) + " columns"
+        )
+    return column_ptrs.copy()
+
+
+def _column_list_copy(
+    src: MutPointer[Float32, MutUntrackedOrigin], n: Int
+) -> List[Float32]:
+    """DEVIATION 2550: an owned copy of one column, the bytes `List.copy()`
+    of the owned column held."""
+    var out = List[Float32]()
+    out.resize(n, Float32(0.0))
+    memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+    return out^
+
+
 def _build_cindex_from_columns(
     ctx: DeviceContext,
     columns: List[List[Float32]],
@@ -300,6 +352,9 @@ def _build_cindex_from_columns(
     borders: List[List[Float32]],
     fold_counts: List[Int],
     nan_treatment: List[Int],
+    column_ptrs: List[MutPointer[Float32, MutUntrackedOrigin]] = List[
+        MutPointer[Float32, MutUntrackedOrigin]
+    ](),
 ) raises -> DeviceBuffer[DType.uint32]:
     """`_build_cindex_from_floats` without the flat pack and without the
     per-feature drain. The flat buffer exists so PERMUTATION-DEPENDENT
@@ -317,6 +372,7 @@ def _build_cindex_from_columns(
     var n_features = len(borders)
     if len(fold_counts) != n_features:
         raise Error("fold_counts/borders length mismatch")
+    var cps = _resolve_column_ptrs(columns, column_ptrs)
     var lay = build_layout(fold_counts)
     var cindex = ctx.enqueue_create_buffer[DType.uint32](
         n_rows * lay.columns
@@ -350,7 +406,7 @@ def _build_cindex_from_columns(
             ctx.synchronize()
         var hx = hxs[slot].unsafe_ptr()
         var hbo = hbos[slot].unsafe_ptr()
-        var src = columns[f].unsafe_ptr()
+        var src = cps[f]
         if treat == NAN_TREATMENT_AS_IS:
             # AS_IS means the border build's full-column NaN scan (the
             # sampled draw's explicit scan, or the full path's
@@ -550,6 +606,10 @@ def train(
     min_split_gain: Float64 = -1.0,
     min_child_hessian: Float64 = -1.0,
     feature_fraction: Float64 = 1.0,
+    # DEVIATION 2550: the caller's column-major X read in place, with
+    # `x_colmajor` empty. The binding entry (`gbdt_fit`) passes it under
+    # `MOJOLEARN_2550_BORROW_X`; every other caller passes the List.
+    x_borrow: Optional[MutPointer[Float32, MutUntrackedOrigin]] = None,
 ) raises -> TrainedModel:
     """Borders -> device quantization -> fit, one call.
 
@@ -776,8 +836,17 @@ def train(
 
     if n_rows < 1 or n_features < 1:
         raise Error("train requires at least one row and one feature")
-    if len(x_colmajor) != n_rows * n_features:
-        raise Error("x_colmajor size mismatch")
+    var x_src: MutPointer[Float32, MutUntrackedOrigin]
+    if x_borrow:
+        if len(x_colmajor) != 0:
+            raise Error("pass x_colmajor or x_borrow, not both")
+        x_src = x_borrow.value()
+    else:
+        if len(x_colmajor) != n_rows * n_features:
+            raise Error("x_colmajor size mismatch")
+        x_src = rebind[MutPointer[Float32, MutUntrackedOrigin]](
+            x_colmajor.unsafe_ptr()
+        )
     if len(y) != n_rows:
         raise Error("y size mismatch")
     # Validate dense class codes before class-weight indexing or allocating
@@ -817,6 +886,9 @@ def train(
     # MinEntropy 15 for FeatureFreq and Uniform 15 for Borders, not the
     # `border_count` GreedyLogSum the numeric columns take.
     var columns = List[List[Float32]]()
+    #: DEVIATION 2550: the raw feature a BORROWED column reads from `x_src`,
+    #: or -1 for a column `columns` owns.
+    var column_src_feature = List[Int]()
     var column_one_hot = List[Bool]()
     var column_ctr_grid = List[Int]()
     """-1 for a raw column, otherwise an index into `ctr_grids`."""
@@ -887,7 +959,7 @@ def train(
             var maxc = 0
             for r in range(n_rows):
                 var c = dense_category_code(
-                    x_colmajor[f * n_rows + r], f, r
+                    x_src.unsafe_load(f * n_rows + r), f, r
                 )
                 if c > maxc:
                     maxc = c
@@ -957,22 +1029,35 @@ def train(
                 + " is in both cat_features and one_hot; cat_features makes"
                 " the one-hot decision itself, from one_hot_max_size"
             )
-        # one flat memcpy per column; the append loop this replaces was
-        # ~0.5 s of every train() at 400k x 500 (200M bounds-checked
-        # appends)
+        if not is_cat:
+            # DEVIATION 2550: under the switch a raw column is read in
+            # place from the caller's buffer; the default copies it, one
+            # flat memcpy per column (the append loop that replaced was
+            # ~0.5 s of every train() at 400k x 500).
+            comptime if BORROW_X_COLUMNS:
+                columns.append(List[Float32]())
+                column_src_feature.append(f)
+            else:
+                var raw = List[Float32]()
+                raw.resize(n_rows, Float32(0.0))
+                memcpy(
+                    dest=raw.unsafe_ptr(),
+                    src=x_src + f * n_rows,
+                    count=n_rows,
+                )
+                columns.append(raw^)
+                column_src_feature.append(-1)
+            column_one_hot.append(flagged_one_hot)
+            column_ctr_grid.append(-1)
+            continue
+
         var col = List[Float32]()
         col.resize(n_rows, Float32(0.0))
         memcpy(
             dest=col.unsafe_ptr(),
-            src=x_colmajor.unsafe_ptr() + f * n_rows,
+            src=x_src + f * n_rows,
             count=n_rows,
         )
-
-        if not is_cat:
-            columns.append(col^)
-            column_one_hot.append(flagged_one_hot)
-            column_ctr_grid.append(-1)
-            continue
 
         # dense codes: cardinality is max + 1
         var maxc = 0
@@ -1007,6 +1092,7 @@ def train(
             # `UseForOneHotEncoding` (`binarizations_manager.cpp:106-109`):
             # one-hot features never get CTRs.
             columns.append(col^)
+            column_src_feature.append(-1)
             column_one_hot.append(True)
             column_ctr_grid.append(-1)
             continue
@@ -1072,6 +1158,7 @@ def train(
             dep_col_index.append(base_col + dependent_slots[c])
         for c in range(len(ctr_columns)):
             columns.append(ctr_columns[c].copy())
+            column_src_feature.append(-1)
             column_one_hot.append(False)
             ctr_grids.append(cat_params.ctr_binarization_for(configs[c]))
             column_ctr_grid.append(len(ctr_grids) - 1)
@@ -1088,12 +1175,29 @@ def train(
     for k in range(len(dep_col_index)):
         dep_ordinal_of_column[dep_col_index[k]] = k
 
+    # DEVIATION 2550: one read pointer per column, into `x_src` for a
+    # borrowed column and into `columns` for an owned one. `columns` takes
+    # no further appends, so its element buffers stay put.
+    var column_ptrs = List[MutPointer[Float32, MutUntrackedOrigin]](
+        capacity=n_columns
+    )
+    for c in range(n_columns):
+        if column_src_feature[c] >= 0:
+            column_ptrs.append(x_src + column_src_feature[c] * n_rows)
+        else:
+            column_ptrs.append(
+                rebind[MutPointer[Float32, MutUntrackedOrigin]](
+                    columns[c].unsafe_ptr()
+                )
+            )
+
     host_times.stop_host("train_pre_quantize", t_phase)
     t_phase = host_times.start()
     var grid = _quantize_training_columns(
         ctx, columns, column_one_hot, column_ctr_grid,
         dep_ordinal_of_column, dep_by_perm, ctr_grids, n_rows,
         border_count, border_build_max_samples, random_seed, nan_mode,
+        column_ptrs=column_ptrs,
     )
     var borders = grid[0].copy()
     var fold_counts = grid[1].copy()
@@ -1140,6 +1244,7 @@ def train(
                 _build_cindex_from_columns(
                     ctx, columns, n_rows, borders, fold_counts,
                     column_nan_treatment,
+                    column_ptrs=column_ptrs,
                 )
             )
             continue
@@ -1151,7 +1256,7 @@ def train(
                     flat.append(dep_by_perm[p][ord][r])
             else:
                 for r in range(n_rows):
-                    flat.append(columns[c][r])
+                    flat.append(column_ptrs[c].unsafe_load(r))
         cindexes.append(
             _build_cindex_from_floats(
                 ctx, flat, n_rows, borders, fold_counts,
@@ -1159,6 +1264,9 @@ def train(
             )
         )
     var cindex = cindexes[est_perm].copy()
+    # DEVIATION 2550: `column_ptrs` points into `columns`; hold both to here
+    _ = len(columns)
+    _ = len(column_ptrs)
     host_times.stop_host("train_cindex_build", t_phase)
     t_phase = host_times.start()
 
@@ -1591,13 +1699,20 @@ def _quantize_training_columns(
     border_build_max_samples: Int,
     random_seed: UInt64,
     nan_mode: String,
+    column_ptrs: List[MutPointer[Float32, MutUntrackedOrigin]] = List[
+        MutPointer[Float32, MutUntrackedOrigin]
+    ](),
 ) raises -> Tuple[List[List[Float32]], List[Int], List[Int]]:
     """Shared grid builder for ordinary training and reusable numeric pools.
 
     Keep sampling, sorting, NaN treatment and reduction order identical to
     the ordinary training path. Prepared pools freeze this result explicitly.
+
+    DEVIATION 2550: raw columns are read through `column_ptrs` (empty means
+    every column is owned by `columns`). CTR columns are always owned.
     """
     var n_columns = len(columns)
+    var cps = _resolve_column_ptrs(columns, column_ptrs)
     var borders = List[List[Float32]]()
     var fold_counts = List[Int]()
     # their ComputeBorders' device RadixSort, scratch hoisted once for
@@ -1671,7 +1786,7 @@ def _quantize_training_columns(
         predrawn.resize(n_float_prescan * border_sample_n, Float32(0.0))
         var pd = predrawn.unsafe_ptr()
         var fi = float_idx.unsafe_ptr()
-        var colp = columns.unsafe_ptr()
+        var colp = cps.unsafe_ptr()
         var sn = border_sample_n
         var nrr = n_rows
         var sd0 = random_seed
@@ -1686,7 +1801,7 @@ def _quantize_training_columns(
             k: Int
         ) {imm pd, imm fi, imm colp, imm sn, imm nrr, imm sidx, imm flg}:
             var fcol = fi.unsafe_load(k)
-            var src = (colp + fcol)[].unsafe_ptr()
+            var src = colp.unsafe_load(fcol)
             for i in range(sn):
                 pd.unsafe_store(
                     k * sn + i,
@@ -1712,6 +1827,7 @@ def _quantize_training_columns(
         sync_parallelize(_draw_task, n_float_prescan)
         _ = flags^
         _ = sample_idx^
+        _ = len(cps)  # DEVIATION 2550: the task read `cps`; past the join
     var border_sorter = DeviceFloatSorter(
         ctx, n_rows if border_sample_n == n_rows else 1
     )
@@ -1728,7 +1844,7 @@ def _quantize_training_columns(
         if flagged:
             var maxc = 0
             for r in range(n_rows):
-                var c = Int(columns[f][r])
+                var c = Int(cps[f].unsafe_load(r))
                 if c > maxc:
                     maxc = c
             if maxc > 254:
@@ -1806,12 +1922,16 @@ def _quantize_training_columns(
                 # launch-floor-bound (measured 1.8 s for 500 columns) while
                 # the host sort rides inside phase B's parallel region.
                 if not border_sorter.has_pending:
-                    border_sorter.begin(ctx, columns[f].copy())
+                    border_sorter.begin(
+                        ctx, _column_list_copy(cps[f], n_rows)
+                    )
                 var col = border_sorter.finish(ctx)
                 var g = f + 1
                 while g < n_columns:
                     if not column_one_hot[g] and column_ctr_grid[g] < 0:
-                        border_sorter.begin(ctx, columns[g].copy())
+                        border_sorter.begin(
+                            ctx, _column_list_copy(cps[g], n_rows)
+                        )
                         break
                     g += 1
                 var slot = len(float_cols)

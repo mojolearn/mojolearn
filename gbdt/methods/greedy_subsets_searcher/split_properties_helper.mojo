@@ -34,10 +34,11 @@ subtraction runs in float32 on cells that have already been rounded out of
 float32's exact-integer range, so swapping it moves histogram bits. archive/reference/PORTING.md
 136.
 
-**THIS HOST COPY IS NOT ON THE SHIPPED PATH.** DEVIATION 94 moved the choice
-onto the device (`kernel/split_resolve.plan_level_kernel`); only `probe_main`
-and the checks reach this function. It is kept in step with the device twin
-so the two cannot drift.
+**THIS HOST COPY IS ON THE SHIPPED DEPTHWISE AND LOSSGUIDE PATH**
+(`greedy_search_helper_depthwise.mojo`, `fit_non_symmetric_tree`, once per
+level; corrected 2026-09-11). DEVIATION 94 moved the SYMMETRIC driver's choice
+onto the device (`kernel/split_resolve.plan_level_kernel`). It is kept in step
+with the device twin so the two cannot drift.
 
 **One case they handle that is easy to miss:** if BOTH siblings of a pair are
 terminal, neither histogram will ever be read, so neither is built

@@ -35,17 +35,45 @@ sizes, because that is the shape the searcher produces and the shape the
 gather kernels were written against. So `partition_from_bins` has to build
 that grouping, and it builds it ON THE HOST. DEVIATION 90.
 
-**The learn permutation does NOT go through here.** It keeps the searcher's
-own partition, so a one-permutation fit is byte for byte what it was before
-this file existed. That is not an optimization: rows within a leaf are
+**The learn permutation does NOT go through here on the SYMMETRIC path.** It
+keeps the searcher's own partition, so a one-permutation symmetric fit is byte
+for byte what it was before this file existed. (Corrected 2026-09-11: the
+Depthwise and Lossguide path sends EVERY permutation, the learn one included,
+through `partition_from_bins`; see `fit_with_test`'s non-symmetric arm.) That is not an optimization: rows within a leaf are
 summed in whatever order the partition holds them, and two orders give two
 float sums, so routing the learn permutation through a different grouping
 would move every number in the fit for no reason.
 """
 
-from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from std.sys.compile import is_defined
 
 from gbdt.gpu_data.compressed_index_builder import CompressedIndexLayout
+from gbdt.gpu_util.copy import COPY_BLOCK, copy_u32_kernel
+from gbdt.gpu_util.kernel.fill import launch_make_sequence
+from gbdt.gpu_util.kernel.radix_sort import launch_radix_sort_bins
+from gbdt.gpu_util.kernel.reorder_one_bit import REORDER_BLOCK
+
+comptime DEVICE_LEAF_PARTITION = is_defined["MOJOLEARN_2551_DEVICE_PARTITION"]()
+"""DEVIATION 2551 (2026-09-11), OPT-IN with
+`-D MOJOLEARN_2551_DEVICE_PARTITION=1`. `partition_from_bins` below
+(DEVIATION 90) reads every row's leaf back to the host, counting-sorts
+1M rows there on two passes, allocates two n_rows pinned buffers and one
+device buffer, and uploads the row order again: once per tree per
+permutation on the Depthwise and Lossguide paths. Their oracle partitions
+on the device off the same `bins` buffer (the module docstring), so the
+switch moves the grouping there: `DeviceLeafPartitioner.partition` is a
+stable LSD radix sort of (leaf, row) over their `ReorderBins`
+(`launch_radix_sort_bins`) from the identity row order, then one kernel
+marks each leaf's first and one-past-last position, and the host reads
+back `2 * n_leaves + 1` words. A stable sort from ascending row ids leaves
+every leaf's rows ascending, which is exactly the host counting sort's
+output, so `row_index`, `offsets` and `sizes` are the same integers and
+the model is bitwise the default's. The buffers are the fit's pool of one.
+Checks: `pixi run check-gbdt-per-round` compares the two partitions
+directly on every build; `check-gbdt-per-round-2551` runs the fits on the
+switched side."""
 from gbdt.models.kernel.add_bin_values import compute_bins_kernel
 from gbdt.models.oblivious_model import BIN_SPLIT_TAKE_BIN, TBinarySplit
 
@@ -218,3 +246,142 @@ def partition_from_bins(
     _ = h_rows^  # past the drain (step-33 race class)
 
     return LeafPartition(row_index^, offsets^, sizes^)
+
+
+def leaf_bounds_kernel(
+    keys: MutPointer[UInt32, MutAnyOrigin],
+    bounds: MutPointer[UInt32, MutAnyOrigin],
+    n_in: Int32,
+    n_leaves_in: Int32,
+):
+    """DEVIATION 2551: over leaf-sorted `keys`, write each present leaf's
+    first position to `bounds[leaf]` and one past its last to
+    `bounds[n_leaves + leaf]`; a key at or above `n_leaves` sets
+    `bounds[2 * n_leaves]`. Every slot has exactly one writer (the unique
+    boundary row of its leaf), except the flag, whose writers all write 1.
+    Integer only. Grid-stride, as `copy_u32_kernel`."""
+    var n = Int(n_in)
+    var n_leaves = Int(n_leaves_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(block_dim.x) * Int(grid_dim.x)
+    while i < n:
+        var k = Int(keys.unsafe_load(i))
+        if k >= n_leaves:
+            bounds.unsafe_store(2 * n_leaves, UInt32(1))
+        else:
+            if i == 0 or Int(keys.unsafe_load(i - 1)) != k:
+                bounds.unsafe_store(k, UInt32(i))
+            if i == n - 1 or Int(keys.unsafe_load(i + 1)) != k:
+                bounds.unsafe_store(n_leaves + k, UInt32(i + 1))
+        i += stride
+
+
+struct DeviceLeafPartitioner(Movable):
+    """DEVIATION 2551: `partition_from_bins` on the device, owned by the
+    fit (pool of one, like `TEstimationWorkspace`). `bins` is the buffer the
+    caller writes the tree's leaf per row into; `partition` groups by it.
+
+    The returned `row_index` is a HANDLE onto `vals`: the next `partition`
+    call rewrites it, so a caller consumes one partition (and drains) before
+    asking for the next, which is what the estimation loop does
+    (`_estimate_and_apply` ends on a drain)."""
+
+    var n_rows_cap: Int
+    var n_leaves_cap: Int
+    var bins: DeviceBuffer[DType.uint32]
+    var keys: DeviceBuffer[DType.uint32]
+    var vals: DeviceBuffer[DType.uint32]
+    var tkeys: DeviceBuffer[DType.uint32]
+    var tvals: DeviceBuffer[DType.uint32]
+    var offsets: DeviceBuffer[DType.int32]
+    var bsums: DeviceBuffer[DType.int32]
+    var d_bounds: DeviceBuffer[DType.uint32]
+    var h_bounds: HostBuffer[DType.uint32]
+
+    def __init__(
+        out self, ctx: DeviceContext, n_rows: Int, n_leaves: Int
+    ) raises:
+        if n_rows <= 0 or n_leaves <= 0:
+            raise Error(
+                "DeviceLeafPartitioner: n_rows and n_leaves must be positive"
+            )
+        self.n_rows_cap = n_rows
+        self.n_leaves_cap = n_leaves
+        self.bins = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+        self.keys = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+        self.vals = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+        self.tkeys = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+        self.tvals = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+        self.offsets = ctx.enqueue_create_buffer[DType.int32](n_rows)
+        self.bsums = ctx.enqueue_create_buffer[DType.int32](
+            (n_rows + REORDER_BLOCK - 1) // REORDER_BLOCK
+        )
+        self.d_bounds = ctx.enqueue_create_buffer[DType.uint32](
+            2 * n_leaves + 1
+        )
+        self.h_bounds = ctx.enqueue_create_host_buffer[DType.uint32](
+            2 * n_leaves + 1
+        )
+        ctx.synchronize()
+
+    def partition(
+        mut self, ctx: DeviceContext, n_rows: Int, n_leaves: Int
+    ) raises -> LeafPartition:
+        """Group the first `n_rows` entries of `bins` by leaf. Same result
+        as `partition_from_bins(ctx, bins, n_rows, n_leaves)`, and the same
+        refusal of a leaf at or above `n_leaves`."""
+        if n_rows <= 0 or n_rows > self.n_rows_cap:
+            raise Error(
+                "DeviceLeafPartitioner: n_rows " + String(n_rows)
+                + " outside capacity " + String(self.n_rows_cap)
+            )
+        if n_leaves <= 0 or n_leaves > self.n_leaves_cap:
+            raise Error(
+                "DeviceLeafPartitioner: n_leaves " + String(n_leaves)
+                + " outside capacity " + String(self.n_leaves_cap)
+            )
+        var copy_blocks = (n_rows + COPY_BLOCK - 1) // COPY_BLOCK
+        ctx.enqueue_function[copy_u32_kernel](
+            self.keys.unsafe_ptr(), self.bins.unsafe_ptr(), Int32(n_rows),
+            grid_dim=copy_blocks, block_dim=COPY_BLOCK,
+        )
+        launch_make_sequence(ctx, UInt32(0), self.vals, n_rows)
+        var bits = 0
+        while (1 << bits) < n_leaves:
+            bits += 1
+        launch_radix_sort_bins(
+            ctx, n_rows, 0, bits, self.keys, self.vals, self.tkeys,
+            self.tvals, self.offsets, self.bsums,
+        )
+        var hb = self.h_bounds.unsafe_ptr()
+        for i in range(2 * n_leaves + 1):
+            hb.unsafe_store(i, UInt32(0))
+        ctx.enqueue_copy(dst_buf=self.d_bounds, src_ptr=hb)
+        ctx.enqueue_function[leaf_bounds_kernel](
+            self.keys.unsafe_ptr(), self.d_bounds.unsafe_ptr(),
+            Int32(n_rows), Int32(n_leaves),
+            grid_dim=copy_blocks, block_dim=COPY_BLOCK,
+        )
+        ctx.enqueue_copy(dst_ptr=hb, src_buf=self.d_bounds)
+        ctx.synchronize()
+        if hb.unsafe_load(2 * n_leaves) != UInt32(0):
+            raise Error(
+                "DeviceLeafPartitioner: a row fell in a leaf at or above "
+                + String(n_leaves)
+            )
+        var sizes = List[Int]()
+        var offsets = List[Int]()
+        var running = 0
+        for leaf in range(n_leaves):
+            var first = Int(hb.unsafe_load(leaf))
+            var past = Int(hb.unsafe_load(n_leaves + leaf))
+            var size = past - first if past > first else 0
+            offsets.append(running)
+            sizes.append(size)
+            running += size
+        if running != n_rows:
+            raise Error(
+                "DeviceLeafPartitioner: leaf sizes sum to " + String(running)
+                + " for " + String(n_rows) + " rows"
+            )
+        return LeafPartition(self.vals.copy(), offsets^, sizes^)

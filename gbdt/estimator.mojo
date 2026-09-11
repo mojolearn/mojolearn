@@ -84,7 +84,11 @@ from gbdt.options.overfitting_detector_options import (
 )
 from gbdt.overfitting_detector.overfitting_detector import od_type_name
 from gbdt.models.model_text import load_model_text
+from gbdt.methods.leaves_estimation.doc_parallel_leaves_estimator import (
+    DEVICE_LEAF_PARTITION,
+)
 from gbdt.train import (
+    BORROW_X_COLUMNS,
     TrainedModel,
     model_input_features,
     multiclass_probabilities,
@@ -467,8 +471,15 @@ def gbdt_fit(
     var t_phase = host_times.start()
     var n_x = n_rows * n_features
     var xs = List[Float32]()
-    xs.resize(n_x, Float32(0.0))
-    memcpy(dest=xs.unsafe_ptr(), src=x, count=n_x)
+    # DEVIATION 2550: under `MOJOLEARN_2550_BORROW_X` the caller's buffer
+    # goes to `train` as a pointer and is never copied here. The binding
+    # holds the Python array for the length of the call (its docstring).
+    var x_borrow = Optional[MutPointer[Float32, MutUntrackedOrigin]]()
+    comptime if BORROW_X_COLUMNS:
+        x_borrow = Optional(x)
+    else:
+        xs.resize(n_x, Float32(0.0))
+        memcpy(dest=xs.unsafe_ptr(), src=x, count=n_x)
     var ys = List[Float32]()
     ys.resize(n_rows, Float32(0.0))
     memcpy(dest=ys.unsafe_ptr(), src=y, count=n_rows)
@@ -551,6 +562,7 @@ def gbdt_fit(
         min_split_gain=params.min_split_gain,
         min_child_hessian=params.min_child_hessian,
         feature_fraction=params.feature_fraction,
+        x_borrow=x_borrow,
     )
     host_times.stop_host("gbdt_fit_train", t_phase)
     t_phase = host_times.start()
@@ -567,6 +579,23 @@ def gbdt_fit(
         learn_losses^,
         test_losses^,
     )
+
+
+def gbdt_per_round_paths() -> String:
+    """Which side of each gbdt-per-round switch this binary compiled
+    (DEVIATIONS 2550, 2551), for the benchmark's path line
+    (ENGINEERING_RULES.md section 8)."""
+    var out = String("2550_borrow_x=")
+    comptime if BORROW_X_COLUMNS:
+        out += "1"
+    else:
+        out += "0"
+    out += " 2551_device_partition="
+    comptime if DEVICE_LEAF_PARTITION:
+        out += "1"
+    else:
+        out += "0"
+    return out^
 
 
 def gbdt_model_dim(text: String) raises -> Int:
