@@ -77,6 +77,11 @@ bash tools/do_extra_leg.sh cpu-intel --minutes 45
 `cpu-amd` is the AMD twin. The payload is the capture subset `git archive`
 excludes; see DEVIATION 2614 in `tools/do_extra_leg.sh`.
 
+On GitHub's free standard runners (ARM64 Linux on Azure Cobalt 100, x86-64
+Linux, Apple M1 macOS), `.github/workflows/byte-lm-cpu-gate.yml` runs the same
+two builds and two gates on every push to the lane branches and uploads the
+reports. A row enters the table below only after its uploaded reports are read.
+
 ## Certified CPUs
 
 | CPU | host | build | loss bytes equal | sabotage caught | evidence |
