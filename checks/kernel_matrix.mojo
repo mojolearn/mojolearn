@@ -864,30 +864,53 @@ comptime ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF = 3175
 comptime ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_KVGRID_R32 = 52327
 """The attention arm word `stash_tiled_fgrid_r32_qres_pf_kvgrid_r32`: stash_tiled_fgrid_r32_qres_pf (3175) | 16384 (bwd_kvgrid, DEVIATION 2597) | 32768 (dk/dv keys per block 32) = 52327. fused_attention.mojo asserts at build time that it equals its own composition (`ATTN_ARM_R3_KVGRID_R32_DEFAULT`)."""
 
+comptime ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_ESTASH_DRES_KVGRID_R32 = 6343783
+"""The attention arm word `stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32`: stash_tiled_fgrid_r32_qres_pf_kvgrid_r32 (52327) | 2097152 (bwd_estash, DEVIATION 2650) | 4194304 (estash_dres, DEVIATION 2651) = 6343783. fused_attention.mojo asserts at build time that it equals its own composition (`ATTN_ARM_R3_KVGRID_R32_ESTASH_DRES_DEFAULT`)."""
+
 
 def attn_default_arm_for[column: Int]() -> Int:
-    """ROUTING row (DEVIATION 2534, 2026-09-11; brief docs/lanes/BRIEF_attention_step_2026-09-11.md sections 15 and 18): the attention arm word the SHIPPED build runs on this column (`ATTN_ARM_DEFAULT` in transformer/impl/llama/fused_attention.mojo; a `-D MOJOLEARN_ATTN_ARM_TRIAL=1` build runs it when MOJOLEARN_ATTN_ARM is unset and keeps every other arm selectable by name). Every arm is bit-equal to the eager oracle by the identity arguments of brief sections 4, 12, 14 and 16, so this row picks a schedule and never a result. NVIDIA `stash_tiled_fgrid_r32_qres_pf`, MEASURED: H100 leg bench/results/e1g/2026-09-11_154257-nvidia-h100-80gb-hbm3-attention-round3 (commit 5bcfa71d), lean LM step 0.3845 / 0.3819 s under stash_tiled against 0.3346 / 0.3340 s (enwik8 / Pile GitHub), every step witness equal, fwd+bwd on real activations 1.41x of stash_tiled; ENGINEERING_RULES 9 flips it. AMD `stash_tiled_fgrid_r32_qres_pf_kvgrid_r32` (ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_KVGRID_R32), MEASURED on the DigitalOcean MI325X against the previous AMD default `baseline`, every step witness equal (the comment in the body names the evidence and the verdict); a shipped build compiles its DEVIATION 2597 dk/dv kernel because the default carries it (brief section 18). Apple and every other column `stash_tiled` (unmeasured for the round 3 and 2597 arms as a price). `-D MOJOLEARN_ATTN_DEFAULT_R3_EVERY_COLUMN=1` returns the NVIDIA word on every column, so a no-trial build on a Mac reaches the shipped round 3 branch; `-D MOJOLEARN_ATTN_DEFAULT_KVGRID_EVERY_COLUMN=1` returns the AMD word on every column, so the same build reaches the shipped DEVIATION 2597 dk/dv branch (check knobs, the `MOJOLEARN_EXPERIMENTAL_SMALLK_IDENTICAL` pattern; never a shipped build; at most one of the two)."""
+    """ROUTING row (DEVIATION 2534, 2026-09-11; brief docs/lanes/BRIEF_attention_step_2026-09-11.md sections 15 and 18): the attention arm word the SHIPPED build runs on this column (`ATTN_ARM_DEFAULT` in transformer/impl/llama/fused_attention.mojo; a `-D MOJOLEARN_ATTN_ARM_TRIAL=1` build runs it when MOJOLEARN_ATTN_ARM is unset and keeps every other arm selectable by name). Every arm is bit-equal to the eager oracle by the identity arguments of brief sections 4, 12, 14 and 16, so this row picks a schedule and never a result. NVIDIA `stash_tiled_fgrid_r32_qres_pf`, MEASURED: H100 leg bench/results/e1g/2026-09-11_154257-nvidia-h100-80gb-hbm3-attention-round3 (commit 5bcfa71d), lean LM step 0.3845 / 0.3819 s under stash_tiled against 0.3346 / 0.3340 s (enwik8 / Pile GitHub), every step witness equal, fwd+bwd on real activations 1.41x of stash_tiled; ENGINEERING_RULES 9 flips it. AMD `stash_tiled_fgrid_r32_qres_pf_kvgrid_r32` (ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_KVGRID_R32), MEASURED on the DigitalOcean MI325X against the previous AMD default `baseline`, every step witness equal (the comment in the body names the evidence and the verdict); a shipped build compiles its DEVIATION 2597 dk/dv kernel because the default carries it (brief section 18). Apple and every other column `stash_tiled` (unmeasured for the round 3 and 2597 arms as a price). `-D MOJOLEARN_ATTN_DEFAULT_R3_EVERY_COLUMN=1` returns the NVIDIA word on every column, so a no-trial build on a Mac reaches the shipped round 3 branch; `-D MOJOLEARN_ATTN_DEFAULT_KVGRID_EVERY_COLUMN=1` returns the previous NVIDIA word (now AMD's) on every column, so the same build reaches the shipped DEVIATION 2597 dk/dv branch; `-D MOJOLEARN_ATTN_DEFAULT_ESTASH_EVERY_COLUMN=1` returns the current NVIDIA word on every column, so a no-trial build on a Mac reaches the shipped DEVIATION 2650 / 2651 estash branch (DEVIATION 2657, `ATTN_SHIPPED_BWD_ESTASH`; this is how the M4 gates that branch, since Apple's own default carries no estash bit). Check knobs, the `MOJOLEARN_EXPERIMENTAL_SMALLK_IDENTICAL` pattern; never a shipped build; at most one of the three."""
     comptime assert not (is_defined["MOJOLEARN_ATTN_DEFAULT_R3_EVERY_COLUMN"]() and is_defined["MOJOLEARN_ATTN_DEFAULT_KVGRID_EVERY_COLUMN"]()), (
         "MOJOLEARN_ATTN_DEFAULT_R3_EVERY_COLUMN and"
         " MOJOLEARN_ATTN_DEFAULT_KVGRID_EVERY_COLUMN each name a different"
         " default for every column; define at most one"
     )
+    comptime assert not (is_defined["MOJOLEARN_ATTN_DEFAULT_R3_EVERY_COLUMN"]() and is_defined["MOJOLEARN_ATTN_DEFAULT_ESTASH_EVERY_COLUMN"]()), (
+        "MOJOLEARN_ATTN_DEFAULT_R3_EVERY_COLUMN and"
+        " MOJOLEARN_ATTN_DEFAULT_ESTASH_EVERY_COLUMN each name a different"
+        " default for every column; define at most one"
+    )
+    comptime assert not (is_defined["MOJOLEARN_ATTN_DEFAULT_KVGRID_EVERY_COLUMN"]() and is_defined["MOJOLEARN_ATTN_DEFAULT_ESTASH_EVERY_COLUMN"]()), (
+        "MOJOLEARN_ATTN_DEFAULT_KVGRID_EVERY_COLUMN and"
+        " MOJOLEARN_ATTN_DEFAULT_ESTASH_EVERY_COLUMN each name a different"
+        " default for every column; define at most one"
+    )
+    comptime if is_defined["MOJOLEARN_ATTN_DEFAULT_ESTASH_EVERY_COLUMN"]():
+        return ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_ESTASH_DRES_KVGRID_R32
     comptime if is_defined["MOJOLEARN_ATTN_DEFAULT_KVGRID_EVERY_COLUMN"]():
         return ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_KVGRID_R32
     comptime if is_defined["MOJOLEARN_ATTN_DEFAULT_R3_EVERY_COLUMN"]():
         return ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF
     if column == COLUMN_NVIDIA:
-        # Measured 2026-09-11 on a RunPod H100 80GB HBM3 (1980 MHz) against the
-        # previous NVIDIA default stash_tiled_fgrid_r32_qres_pf, commit 6d4bd867,
-        # every step witness equal, card IDENTICAL
-        # (bench/results/e1g/2026-09-11_185833-nvidia-h100-80gb-hbm3-attention-zdot):
-        #   verdict stash_tiled_fgrid_r32_qres_pf_kvgrid_r32 FLIP geomean=0.9908
-        #   enwik8=0.9901 pilegithub=0.9915 (vs the previous default, same pod)
-        # Lean step 0.2929 / 0.2926 -> 0.2900 / 0.2901 s (enwik8 / Pile GitHub).
-        # Same leg: _zlag_kvgrid_r32 0.9902 (its DEVIATION 2598 zdot schedule is
-        # compiled on trial builds only), _zlag 0.9968, _kvsplit NO FLIP 1.0131.
-        # Before it: stash_tiled_fgrid_r32_qres_pf (round 3, e1g/...154257).
-        return ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_KVGRID_R32
+        # DEVIATION 2657. Measured 2026-09-11 on a RunPod H100 80GB HBM3
+        # against the previous NVIDIA default
+        # stash_tiled_fgrid_r32_qres_pf_kvgrid_r32, commit 8dc33f00, every step
+        # witness equal on both corpora, Apple vs NVIDIA identity trace
+        # IDENTICAL over 60 stages
+        # (bench/results/e1g/2026-09-11_215636-nvidia-h100-80gb-hbm3-attention-estash):
+        #   verdict stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 FLIP
+        #   geomean=0.8207 enwik8=0.8226 pilegithub=0.8190 (same pod)
+        # Lean step 0.2922 / 0.2916 -> 0.2403 / 0.2388 s (enwik8 / Pile GitHub).
+        # In-step zdot 66.4 -> 14.9 ms; on real activations the backward is
+        # 7.52 -> 3.23 ms (fwd+bwd 1.85x, the forward untouched at 1.00x).
+        # The runner-up on the same leg, _estash without _dres, FLIP 0.8348:
+        # ENGINEERING_RULES 9 takes the winner. The register lens (brief
+        # section 20.2) reads the same: the shipped zdot kernel is 134 regs and
+        # 1 block per SM, _estash 125 and 2, _estash_dres 64 and 4.
+        # Before it: stash_tiled_fgrid_r32_qres_pf_kvgrid_r32 (e1g/...185833,
+        # FLIP geomean 0.9908); before that stash_tiled_fgrid_r32_qres_pf
+        # (round 3, e1g/...154257).
+        return ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_ESTASH_DRES_KVGRID_R32
     if column == COLUMN_AMD:
         # Measured 2026-09-11 on the DigitalOcean MI325X against the previous
         # AMD default baseline, commit 5cc3b8df, every step witness equal

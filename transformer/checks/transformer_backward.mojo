@@ -45,6 +45,7 @@ from checks.numerics import (
 )
 from transformer.impl.llama.fused_attention import (
     ATTN_ARM_TRIAL,
+    ATTN_SHIPPED_BWD_ESTASH,
     FUSED_RAN,
     device_first_nonfinite,
     fused_attention_arm_estash_runs,
@@ -3018,12 +3019,14 @@ def llama_decoder_layer_backward_device(
     if choice != ATTN_PATH_EAGER:
         var status = -1
         var estash_done = False
-        comptime if ATTN_ARM_TRIAL:
+        comptime if ATTN_ARM_TRIAL or ATTN_SHIPPED_BWD_ESTASH:
             # DEVIATION 2652 (brief section 20.3): under an `_estash` arm the
             # backward reads the exp stash this call's forward kept in
             # `fwd.aexp` (valid when `fwd.attn_estash_cells` is this call's
             # cell count; otherwise the launcher runs the shipped backward).
-            # Trial builds only; the shipped call sits below unchanged.
+            # A trial build, or a shipped build whose column default carries
+            # the estash bits (DEVIATION 2657); every other build takes the
+            # call below unchanged.
             var arm = fused_attention_arm_from_env()
             if fused_attention_arm_estash_runs(arm):
                 var kept_cells = fwd.attn_estash_cells

@@ -322,6 +322,7 @@ from mamba.impl.modeling.modeling_mamba import (
 
 from transformer.impl.llama.fused_attention import (
     ATTN_ARM_TRIAL,
+    ATTN_SHIPPED_BWD_ESTASH,
     FUSED_RAN,
     device_first_nonfinite,
     fused_attention_arm_estash_runs,
@@ -2825,12 +2826,14 @@ def eager_attention_forward(
         )
     if choice != ATTN_PATH_EAGER:
         var kept_estash = False
-        comptime if ATTN_ARM_TRIAL:
+        comptime if ATTN_ARM_TRIAL or ATTN_SHIPPED_BWD_ESTASH:
             # DEVIATION 2652 (brief section 20.3): under an `_estash` arm,
             # with no eager stages needed (so `aexp` holds no stage this
             # call reads back), the fused forward writes its exp stash into
-            # `aexp` and keeps it for the backward. Trial builds only; the
-            # shipped call sits in the branch below unchanged.
+            # `aexp` and keeps it for the backward. A trial build, or a
+            # shipped build whose column default carries the estash bits
+            # (DEVIATION 2657); every other build takes the branch below
+            # unchanged.
             var arm = fused_attention_arm_from_env()
             if (not need_eager) and fused_attention_arm_estash_runs(arm):
                 var ran = 0

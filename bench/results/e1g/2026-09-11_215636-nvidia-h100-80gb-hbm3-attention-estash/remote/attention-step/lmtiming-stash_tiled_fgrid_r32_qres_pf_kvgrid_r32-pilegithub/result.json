@@ -1,0 +1,362 @@
+{
+  "schema": "mojolearn.lm-step-memory-probe.v3",
+  "shape": {
+    "batch": 1,
+    "length": 2048,
+    "d_model": 768,
+    "n_heads": 12,
+    "n_kv": 12,
+    "head_dim": 64,
+    "intermediate": 2048,
+    "n_layers": 12,
+    "vocab_size": 50257
+  },
+  "parameters": 162147840,
+  "steps_completed": 1,
+  "resident": true,
+  "step_result": "lean",
+  "witness_every_step": false,
+  "witness_source": "export_gradients(named=False) + export_state() once after the last untimed step",
+  "corpus": {
+    "path": "training/corpus/pile_github/input.txt",
+    "sha256": "52a5b4c36ab9119c15505331c10e3b23690377d40fbac3e598c7fafe13a324df",
+    "manifest_sha256": "e3f46ca3870913aabd179647f5ab7e66b829c30c3cbcbf4b2862e2790d94cda5",
+    "bytes": 97124565,
+    "source_url": "https://huggingface.co/datasets/monology/pile-uncopyrighted/resolve/3be90335b66f24456a5d6659d9c8d208c0357119/val.jsonl.zst",
+    "schedule": "step k row b: bytes[(k*batch*length + b*length) % (bytes - length - 1) : +length+1] as int32; targets shifted one byte"
+  },
+  "attention_arm": "stash_tiled_fgrid_r32_qres_pf_kvgrid_r32",
+  "attention_arm_source": "binding",
+  "attention_arm_requested": "stash_tiled_fgrid_r32_qres_pf_kvgrid_r32",
+  "attention_arm_default": "stash_tiled_fgrid_r32_qres_pf_kvgrid_r32",
+  "attention_arm_is_default": true,
+  "attention_arm_resolved_hd64": "stash_tiled_fgrid_r32_qres_pf_kvgrid_r32",
+  "attention_arm_trial_build": true,
+  "gemm_arm": null,
+  "gemm_plan": null,
+  "step_witnesses": [
+    {
+      "step": 1,
+      "completed_steps": 1,
+      "sha256": {
+        "loss": "fb1bfea4e8daa3b31227ff49a404e36a58fe27b98856af4d27a24872b0e9abf2"
+      }
+    }
+  ],
+  "final_witness": {
+    "step": 1,
+    "completed_steps": 1,
+    "sha256": {
+      "gradients": "85d053a482668fd958df0e32325fc47f9ba10ec630ff63557c7b79c5bd85b0e3",
+      "parameters": "1b32246046a72ada00e3c8ec04d079beb629d8e314f860bc7106d42c5996a8ca",
+      "m": "8dbf0dfcb08f29687241a6586a7ef8224fde5877a7aeb490b9701d24d5812524",
+      "v": "227d2c36dbd16e9acf0556ec491d8b6431a8e4cc5b235b8d81011996a9bc05be",
+      "flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb"
+    },
+    "export_seconds": 11.514739169739187,
+    "source": "export_gradients(named=False) + export_state() once after the last untimed step"
+  },
+  "first_call_seconds": 11.386576354503632,
+  "steady_step_seconds": [],
+  "steady_median_seconds": null,
+  "steady_median_tokens_per_second": null,
+  "peak_device_process_bytes": 14541651968,
+  "peak_device_wide_bytes": 14553186304,
+  "process_ru_maxrss_bytes": 8298250240,
+  "budget_seconds": 300.0,
+  "limited": false,
+  "component_timing_step_seconds": 0.2923857048153877,
+  "component_timing_steps": 1,
+  "component_timing_step_seconds_all": [
+    0.2923857048153877
+  ],
+  "component_timing_witnesses": [],
+  "qualification": "complete-step probe; device peak from a polled vendor tool; host RSS is a separate boundary; no opponent, no default gate, no target-scale qualification claim",
+  "component_timing_ms": {
+    "attn.bwd_corner_flag": 0.29195,
+    "attn.bwd_dq_tiled_pf": 12.565591,
+    "attn.bwd_kvgrid_dkdv_pf": 10.064586,
+    "attn.bwd_regime_scan": 1.5092349999999999,
+    "attn.bwd_scratch_alloc": 0.127036,
+    "attn.bwd_zdot_stash_pf": 66.599555,
+    "attn.core": 22.385495,
+    "attn.fwd_corner_flag": 0.257418,
+    "attn.fwd_r2_kernel": 20.827751,
+    "attn.fwd_regime_scan": 1.0840049999999999,
+    "attn.fwd_scratch_alloc": 0.12729000000000001,
+    "attn.o_proj": 3.292916,
+    "attn.qkv_proj": 9.652603,
+    "attn.rope_and_cache": 1.262755,
+    "block.attention_total": 36.646562,
+    "block.mlp_and_residuals": 24.482051,
+    "block.norm1": 3.6682449999999998,
+    "bwd.after_attention": 23.152585,
+    "bwd.attention": 91.246337,
+    "bwd.before_attention": 0.03305,
+    "envelope.blocks_backward": 167.408681,
+    "envelope.blocks_forward": 64.855073,
+    "envelope.native_call": 291.80260095745325,
+    "step.bind_final_sync": 0.002093,
+    "step.bind_publish": 0.003555,
+    "step.bind_scalar_admission": 0.004424,
+    "step.ce_backward": 0.982097,
+    "step.ce_forward": 1.702576,
+    "step.ce_refuse_scan": 0.379972,
+    "step.embedding_backward": 2.52531,
+    "step.embedding_forward": 0.044593,
+    "step.head_backward_da": 14.395651,
+    "step.head_backward_db": 14.027343,
+    "step.head_forward": 13.892217,
+    "step.loss_download": 0.01558,
+    "step.opt_refuse_scan": 2.163555,
+    "step.optimizer": 1.697402,
+    "step.pack_grads": 1.109268,
+    "step.py_flags": 0.11607911437749863,
+    "step.py_tokens": 0.2989061176776886,
+    "step.shadow_copy": 2.307258,
+    "step.unpack_weights": 1.140134,
+    "step.upload_inputs": 0.114512,
+    "step.validate_after_scan": 2.141697,
+    "step.validate_grads_scan": 0.549939
+  },
+  "component_timing_ms_per_step": {
+    "attn.bwd_corner_flag": [
+      0.29195
+    ],
+    "attn.bwd_dq_tiled_pf": [
+      12.565591
+    ],
+    "attn.bwd_kvgrid_dkdv_pf": [
+      10.064586
+    ],
+    "attn.bwd_regime_scan": [
+      1.5092349999999999
+    ],
+    "attn.bwd_scratch_alloc": [
+      0.127036
+    ],
+    "attn.bwd_zdot_stash_pf": [
+      66.599555
+    ],
+    "attn.core": [
+      22.385495
+    ],
+    "attn.fwd_corner_flag": [
+      0.257418
+    ],
+    "attn.fwd_r2_kernel": [
+      20.827751
+    ],
+    "attn.fwd_regime_scan": [
+      1.0840049999999999
+    ],
+    "attn.fwd_scratch_alloc": [
+      0.12729000000000001
+    ],
+    "attn.o_proj": [
+      3.292916
+    ],
+    "attn.qkv_proj": [
+      9.652603
+    ],
+    "attn.rope_and_cache": [
+      1.262755
+    ],
+    "block.attention_total": [
+      36.646562
+    ],
+    "block.mlp_and_residuals": [
+      24.482051
+    ],
+    "block.norm1": [
+      3.6682449999999998
+    ],
+    "bwd.after_attention": [
+      23.152585
+    ],
+    "bwd.attention": [
+      91.246337
+    ],
+    "bwd.before_attention": [
+      0.03305
+    ],
+    "envelope.blocks_backward": [
+      167.408681
+    ],
+    "envelope.blocks_forward": [
+      64.855073
+    ],
+    "envelope.native_call": [
+      291.80260095745325
+    ],
+    "step.bind_final_sync": [
+      0.002093
+    ],
+    "step.bind_publish": [
+      0.003555
+    ],
+    "step.bind_scalar_admission": [
+      0.004424
+    ],
+    "step.ce_backward": [
+      0.982097
+    ],
+    "step.ce_forward": [
+      1.702576
+    ],
+    "step.ce_refuse_scan": [
+      0.379972
+    ],
+    "step.embedding_backward": [
+      2.52531
+    ],
+    "step.embedding_forward": [
+      0.044593
+    ],
+    "step.head_backward_da": [
+      14.395651
+    ],
+    "step.head_backward_db": [
+      14.027343
+    ],
+    "step.head_forward": [
+      13.892217
+    ],
+    "step.loss_download": [
+      0.01558
+    ],
+    "step.opt_refuse_scan": [
+      2.163555
+    ],
+    "step.optimizer": [
+      1.697402
+    ],
+    "step.pack_grads": [
+      1.109268
+    ],
+    "step.py_flags": [
+      0.11607911437749863
+    ],
+    "step.py_tokens": [
+      0.2989061176776886
+    ],
+    "step.shadow_copy": [
+      2.307258
+    ],
+    "step.unpack_weights": [
+      1.140134
+    ],
+    "step.upload_inputs": [
+      0.114512
+    ],
+    "step.validate_after_scan": [
+      2.141697
+    ],
+    "step.validate_grads_scan": [
+      0.549939
+    ]
+  },
+  "component_bytes": {
+    "step.bind_publish_bytes": 444,
+    "step.ce_refuse_scan_bytes": 411705344,
+    "step.ce_refuse_scan_download_bytes": 8192,
+    "step.loss_download_bytes": 4,
+    "step.opt_refuse_scan_bytes": 2594365440,
+    "step.opt_refuse_scan_download_bytes": 0,
+    "step.pack_grads_bytes": 648591360,
+    "step.py_flags_bytes": 440,
+    "step.py_tokens_bytes": 8196,
+    "step.shadow_copy_bytes": 1945774080,
+    "step.unpack_weights_bytes": 648591360,
+    "step.upload_inputs_bytes": 16384,
+    "step.validate_after_scan_bytes": 2594365440,
+    "step.validate_grads_scan_bytes": 648591360
+  },
+  "component_counts": {},
+  "component_line_counts": {
+    "attn.bwd_corner_flag": 12,
+    "attn.bwd_dq_tiled_pf": 12,
+    "attn.bwd_kvgrid_dkdv_pf": 12,
+    "attn.bwd_regime_scan": 12,
+    "attn.bwd_scratch_alloc": 12,
+    "attn.bwd_zdot_stash_pf": 12,
+    "attn.core": 12,
+    "attn.fwd_corner_flag": 12,
+    "attn.fwd_r2_kernel": 12,
+    "attn.fwd_regime_scan": 12,
+    "attn.fwd_scratch_alloc": 12,
+    "attn.o_proj": 12,
+    "attn.qkv_proj": 12,
+    "attn.rope_and_cache": 12,
+    "block.attention_total": 12,
+    "block.mlp_and_residuals": 12,
+    "block.norm1": 12,
+    "bwd.after_attention": 12,
+    "bwd.attention": 12,
+    "bwd.before_attention": 12,
+    "envelope.blocks_backward": 1,
+    "envelope.blocks_forward": 1,
+    "envelope.native_call": 1,
+    "step.bind_final_sync": 1,
+    "step.bind_publish": 1,
+    "step.bind_publish_bytes": 1,
+    "step.bind_scalar_admission": 1,
+    "step.ce_backward": 1,
+    "step.ce_forward": 1,
+    "step.ce_refuse_scan": 1,
+    "step.ce_refuse_scan_bytes": 1,
+    "step.ce_refuse_scan_download_bytes": 1,
+    "step.embedding_backward": 1,
+    "step.embedding_forward": 1,
+    "step.head_backward_da": 1,
+    "step.head_backward_db": 1,
+    "step.head_forward": 1,
+    "step.loss_download": 1,
+    "step.loss_download_bytes": 1,
+    "step.opt_refuse_scan": 1,
+    "step.opt_refuse_scan_bytes": 1,
+    "step.opt_refuse_scan_download_bytes": 1,
+    "step.optimizer": 1,
+    "step.pack_grads": 1,
+    "step.pack_grads_bytes": 1,
+    "step.py_flags": 1,
+    "step.py_flags_bytes": 1,
+    "step.py_tokens": 1,
+    "step.py_tokens_bytes": 1,
+    "step.shadow_copy": 1,
+    "step.shadow_copy_bytes": 1,
+    "step.unpack_weights": 1,
+    "step.unpack_weights_bytes": 1,
+    "step.upload_inputs": 1,
+    "step.upload_inputs_bytes": 1,
+    "step.validate_after_scan": 1,
+    "step.validate_after_scan_bytes": 1,
+    "step.validate_grads_scan": 1,
+    "step.validate_grads_scan_bytes": 1
+  },
+  "component_timing_steps_parsed": 1,
+  "component_timing_uneven": [],
+  "component_timing_total_ms": 238.8429912320552,
+  "component_timing_excluded_from_total": [
+    "attn.bwd_corner_flag",
+    "attn.bwd_dq_tiled_pf",
+    "attn.bwd_kvgrid_dkdv_pf",
+    "attn.bwd_regime_scan",
+    "attn.bwd_scratch_alloc",
+    "attn.bwd_zdot_stash_pf",
+    "attn.core",
+    "attn.fwd_corner_flag",
+    "attn.fwd_r2_kernel",
+    "attn.fwd_regime_scan",
+    "attn.fwd_scratch_alloc",
+    "attn.o_proj",
+    "attn.qkv_proj",
+    "attn.rope_and_cache",
+    "envelope.blocks_backward",
+    "envelope.blocks_forward",
+    "envelope.native_call"
+  ],
+  "step_seconds": 0.2923857048153877,
+  "component_timing_covered_fraction": 0.8168764317081117,
+  "component_timing_boundary": "one step under MOJOLEARN_TRANSFORMER_TIMING=1; every tick waits on the device, so neither the parts nor step_seconds are a timing sample; the uncovered remainder (1 - covered fraction) is time no timer brackets"
+}
