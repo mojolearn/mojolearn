@@ -76,13 +76,23 @@ _PyBUF_READ = 0x100
 _PyBUF_WRITE = 0x200
 
 _api = ctypes.pythonapi
-_get_buffer = _api.PyObject_GetBuffer
+# PRIVATE function-pointer objects, on purpose (2026-09-11, H100 istella leg).
+# `ctypes.pythonapi` is a process-wide singleton and `_api.PyObject_GetBuffer`
+# (attribute access) is CACHED on it, so every library that spells it that
+# way shares ONE `_FuncPtr` and the last `argtypes` assignment wins for all
+# of them. `treelite.model` (imported by cuML) assigns its own `_PyBuffer`
+# class there; after `import cuml` our calls failed with "argument 2:
+# expected LP__PyBuffer instance instead of pointer to _PyBuffer" and every
+# RF fit in a process that also held cuML was refused. `PyDLL.__getitem__`
+# builds a fresh, uncached `_FuncPtr` each time, so nobody else's argtypes
+# can reach these three.
+_get_buffer = _api["PyObject_GetBuffer"]
 _get_buffer.argtypes = [ctypes.py_object, ctypes.POINTER(_PyBuffer), ctypes.c_int]
 _get_buffer.restype = ctypes.c_int
-_release_buffer = _api.PyBuffer_Release
+_release_buffer = _api["PyBuffer_Release"]
 _release_buffer.argtypes = [ctypes.POINTER(_PyBuffer)]
 _release_buffer.restype = None
-_memoryview_from_memory = _api.PyMemoryView_FromMemory
+_memoryview_from_memory = _api["PyMemoryView_FromMemory"]
 _memoryview_from_memory.argtypes = [ctypes.c_void_p, ctypes.c_ssize_t, ctypes.c_int]
 _memoryview_from_memory.restype = ctypes.py_object
 

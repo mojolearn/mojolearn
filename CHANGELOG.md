@@ -3,10 +3,35 @@
 This file records release-level changes, not the development diary. Git history and archived evidence
 contain the detailed investigation record.
 
-## 0.8.0 (unreleased 2026-09-10)
+## 0.8.1 (unreleased 2026-09-11)
 
-New native builds are required. This entry describes source changes; publication
-and installed-wheel support will be recorded after the artifacts are uploaded.
+A patch on the 0.8.0 line. Branch release-0.8.1 starts at tag v0.8.0
+(4a3c22c3, which is the 0.8.0 Linux build commit 9392320e plus two
+qualification-tool commits) and carries only this fix, its regression check
+and the version bump, because main has changed Random Forest outputs and the
+attention default since 0.8.0. The 0.8.0 extension sets are not reused (their
+build proofs bind `python/mojolearn/_buffer.py` and `_version.py`), so all
+three Linux sets are rebuilt from this branch. No numerics change.
+
+- Fixed buffer conversions in a process that also imports cuML. They were
+  all refused with "argument 2: expected LP__PyBuffer instance instead of
+  pointer to _PyBuffer", because `treelite.model` retypes the
+  `ctypes.pythonapi.PyObject_GetBuffer` function pointer that ctypes caches
+  process-wide and `_buffer.py` shared it. mojolearn now takes private
+  function pointers for `PyObject_GetBuffer`, `PyBuffer_Release` and
+  `PyMemoryView_FromMemory`.
+- Added `tools/check_buffer_foreign_argtypes.py`, which reproduces that
+  failure without cuML (`--real-cuml` imports cuML instead). The Linux and
+  macOS release smokes arm the same foreign argtypes before their fits.
+
+## 0.8.0 (published 2026-09-10)
+
+Linux x86-64 wheel (CUDA sm_89, CUDA sm_90a, HIP gfx942) from commit 9392320e,
+tag alpha-api-0.8.0-20260910; macOS arm64 wheel from tag v0.8.0 at 4a3c22c3.
+Both on PyPI 2026-09-11 02:46Z and 02:52Z. Installed-wheel qualification on
+the Linux architectures was not run (release policy of 2026-09-09: build,
+retag, publish; test what changed). DEVIATION 2500 (labels in the base
+binding) landed on main during the build and is not in these wheels.
 
 - Only the three tree families (GBDT, Random Forest, Extra Trees) ship the
   `fast` and `deterministic` tiers. Every other binding, including SVC, SVR,
