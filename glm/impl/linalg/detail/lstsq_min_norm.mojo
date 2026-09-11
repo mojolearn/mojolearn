@@ -34,11 +34,11 @@ It does not transfer to the Gram of the ROWS, and swapping which one is
 formed removes it entirely.
 
 Identity [1] is not restricted to full row rank; `A^+ = A^T (A A^T)^+` holds
-for every `A`, and the `DivideByNonZero` guard that `lstsq_eig` already uses
-supplies the `+` on `A A^T` exactly as it supplies it on `A^T A` there. So a
-rank-deficient wide design lands on the same pseudo-inverse it would land on
-by any other route, cut at the same threshold, with the same recorded
-absolute-threshold deviation (`OLS_NONZERO_THRESH`, `glm/NOT_IMPLEMENTED.tsv`).
+for every `A`, and the `DivideByNonZero` guard supplies the `+` on `A A^T`.
+So a rank-deficient wide design lands on a pseudo-inverse cut at the
+absolute `OLS_NONZERO_THRESH` (`glm/NOT_IMPLEMENTED.tsv` row 10). CORRECTED
+2026-09-11: `lstsq_eig` no longer shares that threshold; it equilibrates and
+cuts relative (DEVIATIONS 2620, 2621), and this route was not changed.
 
 WHAT THIS COSTS IN DIGITS, STATED HONESTLY
 -------------------------------------------

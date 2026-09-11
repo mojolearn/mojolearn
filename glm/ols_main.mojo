@@ -42,7 +42,9 @@ from glm.checks.ols_check import (
     check_ols_host_surface_takes_the_guard,
     check_ols_is_launch_invariant,
     check_ols_normal_equation_residual_is_zero,
-    check_ols_rank_guard_is_absolute,
+    check_ols_mixed_scale_design_matches_float64_oracle,
+    check_ols_rank_deficient_design_drops_the_noise_direction,
+    check_ols_rank_guard_is_scale_invariant,
     check_ols_over_capacity_fits,
     check_ols_sample_weight_host_rescale_matches_device,
     check_ols_sample_weight_restores_its_operands,
@@ -69,6 +71,8 @@ def main() raises:
     check_ols_over_capacity_fits()
     check_ols_is_launch_invariant()
     check_ols_host_surface_takes_the_guard()
-    check_ols_rank_guard_is_absolute()
+    check_ols_rank_guard_is_scale_invariant()
+    check_ols_mixed_scale_design_matches_float64_oracle()
+    check_ols_rank_deficient_design_drops_the_noise_direction()
     check_ols_card_hashes_raw_bytes()
     check_ols_card_is_emitted()
