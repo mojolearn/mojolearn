@@ -64,7 +64,7 @@ Evidence, H100 80GB HBM3 pods at 1980 MHz:
 | head_dA | 1 | 7 | 1,572,864 | 0.0670 | 0.07 |
 | | | | | **sum** | **13.30** |
 
-The allocation phase is 3.0 ms per call (0.65 ms per step over 217 calls).
+The allocation phase is 3.0 µs per call (0.65 ms per step over 217 calls).
 The group phase is the rest.
 
 ### 2.2 The group phase per leaf-round
@@ -354,3 +354,93 @@ group launch's cells plus the fold blocks minus the cells in both, counted on
 the host by `gemm_step_kfold_reach`; where `G > 255` the shipped fold runs
 and the reach is the group cells alone. The check requires exact equality,
 which names the rule, the group count, `W` and the block size that ran.
+
+## 6. State at wind-down (same day; Andrew asked every lane to stop)
+
+Written after the code. NOTHING WAS BUILT, COMPILED, PARSED OR RUN, on the Mac
+or on a GPU.
+
+**Built (source only).**
+
+- `gemm/checks/gemm_identical.mojo`, trial arm sections only: arms `kfoldv`
+  (12) and `kfoldv_leaf` (13) and geometries 12 and 13 (counts now 14), with
+  parse, name, geometry, tile, geometry name and plan label entries;
+  `identical_gemm_step_geometry_into` dispatches them under the trial define;
+  `gemm_step_geometry_group_leaves` and `gemm_step_geometry_reach` answer for
+  them. A new section before `_fast_vendor_gemm`: the constants
+  (`GEMM_KFOLD_W` 16, `_FS` 8, `_VB` 2, `_TPB` = `FLAT_TPB`, `_MAX_GROUPS`
+  255), `_fold_push_lanes`, `_fold_drain_lanes`,
+  `identical_gemm_kfold_lanes_kernel[W, FS, VB, SAB]`, `gemm_kfold_blocks`,
+  `_kfold_fold_launch`, `_kfold_run`, `identical_gemm_step_kfold_into`,
+  `identical_gemm_step_kfold_phase_into`, `_kfold_ksplit_geometry`,
+  `gemm_step_kfold_rule`, `gemm_step_kfold_leaves`, `gemm_step_kfold_reach`,
+  `_kfold_geometry_name`. No shipped kernel, dispatch line or kernel matrix
+  value changed; the new kernel is referenced only under
+  `comptime if GEMM_ARM_TRIAL`.
+- `gemm/checks/gemm_step_arms_check.mojo`: both names in `_arm_names()`, so
+  the selector round-trips them, the ragged part forces geometries 12 and 13
+  at every case (bits against the old plan and FLAT, exact reach) and the LM
+  section runs both through `identical_gemm_into`. A no-trial build fails
+  them by name like every other arm.
+- `bench/gemm_step_price_main.mojo`: PHASEBITS and PHASE lines with
+  `phase_of=arm_kfold` where either arm takes a call.
+- `tools/gemm_final_leg.sh`: the leg body (section 4.4's arms).
+
+**NOT FINISHED (owed before the M4 gate means what section 5 says).**
+
+1. The host check `check_kfold_lanes_is_the_stack_fold` (section 5.5 both
+   ways): `_fold_push_lanes`/`_fold_drain_lanes` against `_fold_push`,
+   `_fold_drain` and `fold_balanced_tree` per lane for every `G` in 1 to 255,
+   ordinary, `-0.0` and subnormal kinds, and overflow exactly at `G = 256`.
+   The device ragged part still holds the kernel's bits to the old plan, so
+   the arms are gated without it, but the 8-level bound is only argued.
+2. The host check `check_kfold_rule_hand_counts` (kfoldv = the ksplit hand
+   counts at S = 132, kfoldv_leaf = the ksplit_leaf hand counts, `G <= 255` on
+   every LM call).
+3. Resources rows for `identical_gemm_fold_stack_kernel` (shipped) and
+   `identical_gemm_kfold_lanes_kernel` in `bench/gemm_step_resources_main.mojo`
+   (registers and blocks per SM, the section 3.2 fit's missing input).
+4. The docstring paragraphs for 2640 to 2642 in the check and the price
+   harness, and the check's banner line.
+
+## 7. RUN OWED, M4, light, run by the orchestrator one at a time
+
+1. `pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_GEMM_ARM_TRIAL=1 -I . gemm/checks/gemm_step_arms_check.mojo -o /tmp/gemm-final-check`
+   then `MOJOLEARN_GEMM_STEP_CHECK_LM=0 MOJOLEARN_GEMM_STEP_CHECK_FLOPS=50000000 /tmp/gemm-final-check`.
+   Expect PASS with `REACH ragged [kfoldv ...] N/N` and
+   `REACH ragged [kfoldv_leaf ...] N/N` beside the existing lines.
+2. The same without `-D MOJOLEARN_GEMM_ARM_TRIAL=1` (`-o /tmp/gemm-final-check-notrial`),
+   same env: expect FAIL naming the define for both new geometries.
+3. `pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . gemm/checks/gemm_device_check.mojo -o /tmp/gemm-device-check && /tmp/gemm-device-check`:
+   `all green [IDENTICAL]  (8 gates, sabotage: none)`, unchanged.
+4. `pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_GEMM_ARM_TRIAL=1 -I . bench/gemm_step_price_main.mojo -o /tmp/gemm-final-price`,
+   then `MOJOLEARN_GEMM_STEP_LABEL_ONLY=1 MOJOLEARN_GEMM_ARM=kfoldv /tmp/gemm-final-price`.
+
+## 8. The H100 leg
+
+From a detached worktree of the commit carrying this section, after section
+7 is green, with the Apple card first
+(`tools/gemm_card.sh device /tmp/gemm-final-apple.card`):
+
+```sh
+MOJOLEARN_RUNPOD_KEY_FILE=$HOME/.mojolearn_runpod_key MOJOLEARN_GPU_ARCHS=sm_90a \
+MOJOLEARN_GEMM_LEG_EXTRA=tools/gemm_final_leg.sh \
+MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/$(date -u +%Y-%m-%d_%H%M%S)-nvidia-h100-gemm-final \
+sh tools/gemm_remote_leg.sh nvidia --payload gemm --rent --minutes 60 \
+    --gpu "NVIDIA H100 80GB HBM3" --local-card /tmp/gemm-final-apple.card
+```
+
+About 25 minutes on the pod (the 2599 leg with the same shape took 23).
+Read `price_tables.txt` PHASE `fold_ms` for `arm_kfold` against
+`shipped_default` (which of models A to C holds) and `lm_summary.tsv`
+verdicts.
+
+## 9. Risks only a build or a box can settle
+
+- `SIMD[DType.float32, FS * W]` as a `mut` parametric argument, 16-wide global
+  loads and a 16-wide global store in a kernel (the width-4 load is the only
+  precedent), and a 128-lane register stack: compile and register count.
+- Register spill: stack 128 + batch 32 + vectors; a spill to local memory
+  would pay the traffic section 3.4 avoids.
+- Model C (DRAM traffic bound fold): `kfoldv` flat and `kfoldv_leaf` about
+  2 ms slower.
