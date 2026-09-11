@@ -91,7 +91,9 @@ chains many of these and one wait per stage is the wrong shape.
 from std.gpu import block_dim, block_idx, thread_idx
 from std.math import exp, log
 from std.memory import bitcast, stack_allocation
+from std.os import getenv
 from std.sys.compile import is_defined
+from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -1218,6 +1220,30 @@ def _grid_for(count: Int) -> Int:
 # which is the shape the whole file exists for.
 
 
+def _step_timing_on() -> Bool:
+    """DEVIATION 2499: the trainer's step-phase timers, behind the SAME
+    switch as the transformer block timers (`MOJOLEARN_TRANSFORMER_TIMING=1`,
+    `modeling_llama.timing_on`). Spelled here rather than imported so the
+    loss lane does not depend on the transformer lane. Off, one getenv."""
+    return String(getenv("MOJOLEARN_TRANSFORMER_TIMING")) != ""
+
+
+def _step_timing_tick(
+    ctx: DeviceContext, on: Bool, mut t: Int, name: String
+) raises:
+    """Same line shape as `modeling_llama.timing_tick`: wait, print the
+    milliseconds since `t`, advance `t`. The wait exists ONLY under the
+    switch; a timed step is not a sample."""
+    if not on:
+        return
+    ctx.synchronize()
+    var now = Int(perf_counter_ns())
+    print(
+        "timing " + name + " " + String(Float64(now - t) / 1000000.0) + " ms"
+    )
+    t = now
+
+
 def ce_refuse_device_inputs(
     ctx: DeviceContext,
     mut logits: DeviceBuffer[DType.float32],
@@ -1335,7 +1361,20 @@ def identical_ce_forward_into(
     # missing by loss_check clause (f) -- a planted NaN reached 40
     # recorded cells, first at `ce.max`. This is the FIRST statement in
     # the body because "before any recorded stage" is the clause.
+    # DEVIATION 2499: timed as `step.ce_refuse_download` (the phase ends
+    # on the host, after the scan; nothing is queued on the device when the
+    # tick reads the clock) with its byte count beside it, and the seams
+    # below as `step.ce_forward`, whose wait exists only under the switch.
+    var ton = _step_timing_on()
+    var tk = Int(perf_counter_ns())
     ce_refuse_device_inputs(ctx, logits, targets, n_rows, cfg)
+    _step_timing_tick(ctx, ton, tk, "step.ce_refuse_download")
+    if ton:
+        print(
+            "timing step.ce_refuse_download_bytes "
+            + String((n_rows * cfg.vocab + n_rows) * 4)
+            + " bytes"
+        )
 
     if n_rows < 1 or cfg.vocab < 1:
         return
@@ -1478,6 +1517,7 @@ def identical_ce_forward_into(
         )
 
     if cfg.reduction == REDUCTION_NONE:
+        _step_timing_tick(ctx, ton, tk, "step.ce_forward")
         return
 
     # ---- L12. ROUTED. The ones vector is the LEFT operand here, which is
@@ -1503,6 +1543,10 @@ def identical_ce_forward_into(
         grid_dim=(1, 1, 1),
         block_dim=(1, 1, 1),
     )
+    # DEVIATION 2499: L1-L13 complete on the device at this tick's wait,
+    # which exists only under the switch ("enqueued, nothing waits" holds
+    # for every untimed caller).
+    _step_timing_tick(ctx, ton, tk, "step.ce_forward")
 
 
 def identical_ce_backward_into(

@@ -24,6 +24,15 @@ resident sessions) and records, per step:
   * sha256 of the loss bits, the flat pre-update gradients, and the updated
     parameters, moments and flags, so a before/after change can be compared
     bit for bit.
+  * with --component-timing, one extra step under
+    MOJOLEARN_TRANSFORMER_TIMING=1 (DEVIATION 2499): every `timing <name>
+    <value> <unit>` line the native step and the Python wrapper print is
+    summed by name into result.json as `component_timing_ms` (unit ms) and
+    `component_bytes` (unit bytes), with `component_timing_total_ms`, the
+    step's own wall `step_seconds`, and the covered fraction, so the
+    itemized share of the step is explicit. Envelope lines (`envelope.*`)
+    and the `attn.*` sub-phases of `block.attention_total` are kept in the
+    dict but out of the total (they would double count).
 
 The configuration is an argument; the default is the 20.45M control shape
 (B1 L2048 DM384 H6 KV6 HD64 FF1024, 8 layers, V8192). If setup plus the
@@ -48,8 +57,12 @@ import time
 
 CONTROL_SHAPE = [1, 2048, 384, 6, 6, 64, 1024, 8, 8192]
 TARGET_SHAPE = [1, 2048, 768, 12, 12, 64, 2048, 12, 50257]
-SCHEMA = 'mojolearn.lm-step-memory-probe.v1'
+SCHEMA = 'mojolearn.lm-step-memory-probe.v2'
 EXIT_LIMIT = 2
+# Names summed into component_timing_total_ms exclude these: `envelope.*`
+# lines wrap other itemized lines, and `attn.*` are the sub-phases of
+# `block.attention_total` (modeling_llama.mojo prints both from one block).
+TIMING_TOTAL_EXCLUDED_PREFIXES = ('envelope.', 'attn.')
 
 
 def _proc_status():
@@ -262,23 +275,74 @@ def worker(args):
             sampler.stop()
             _write_result(args, shape, steps, limited=True)
             return EXIT_LIMIT
+    timing_step_seconds = None
     if args.component_timing:
-        # One extra, UNTIMED step with the native phase printer on. Its
+        # One extra step with the native phase printer on. Its
         # `timing <phase> <ms>` lines land in this process's stdout (the
-        # worker log). A timed run is not a timing sample.
+        # worker log); the PARENT sums them after this process exits (so
+        # every native stdout buffer has been flushed) and writes them into
+        # result.json. The step's wall time is recorded ONLY as the
+        # denominator of the covered fraction: a timed run is not a timing
+        # sample (every tick adds a device wait).
         os.environ['MOJOLEARN_TRANSFORMER_TIMING'] = '1'
         ids = rng.integers(0, shape.vocab_size, (shape.batch, shape.length + 1), dtype=np.int32)
         emit(dict(event='component_timing_step_start', note='MOJOLEARN_TRANSFORMER_TIMING=1; not a timing sample'))
+        start = time.perf_counter()
         trainer.train_step(ids)
-        emit(dict(event='component_timing_step_end'))
+        timing_step_seconds = time.perf_counter() - start
+        sys.stdout.flush()
+        emit(dict(event='component_timing_step_end', seconds=timing_step_seconds))
         del os.environ['MOJOLEARN_TRANSFORMER_TIMING']
     sampler.stop()
     trainer.close()
-    _write_result(args, shape, steps, limited=False)
+    _write_result(args, shape, steps, limited=False, timing_step_seconds=timing_step_seconds)
     return 0
 
 
-def _write_result(args, shape, steps, limited):
+def parse_timing_lines(text):
+    """Sum every `timing <name> <value> <unit>` line by name.
+
+    Returns (ms_by_name, bytes_by_name, count_by_name). Lines with any
+    other unit are ignored. A name printed once per layer (the block
+    timers) sums across layers; the count says how many lines fed it.
+    """
+    ms, nbytes, count = {}, {}, {}
+    for line in text.splitlines():
+        parts = line.strip().split()
+        if len(parts) != 4 or parts[0] != 'timing':
+            continue
+        name, value, unit = parts[1], parts[2], parts[3]
+        try:
+            value = float(value)
+        except ValueError:
+            continue
+        count[name] = count.get(name, 0) + 1
+        if unit == 'ms':
+            ms[name] = ms.get(name, 0.0) + value
+        elif unit == 'bytes':
+            nbytes[name] = nbytes.get(name, 0) + int(value)
+    return ms, nbytes, count
+
+
+def component_timing_record(text, step_seconds):
+    ms, nbytes, count = parse_timing_lines(text)
+    total = sum(v for k, v in ms.items() if not k.startswith(TIMING_TOTAL_EXCLUDED_PREFIXES))
+    record = dict(
+        component_timing_ms={k: ms[k] for k in sorted(ms)},
+        component_bytes={k: nbytes[k] for k in sorted(nbytes)},
+        component_line_counts={k: count[k] for k in sorted(count)},
+        component_timing_total_ms=total,
+        component_timing_excluded_from_total=sorted(
+            k for k in ms if k.startswith(TIMING_TOTAL_EXCLUDED_PREFIXES)),
+        step_seconds=step_seconds,
+        component_timing_covered_fraction=(total / 1000.0 / step_seconds) if step_seconds else None,
+        component_timing_boundary='one step under MOJOLEARN_TRANSFORMER_TIMING=1; every tick waits on the device, '
+                                  'so neither the parts nor step_seconds are a timing sample; the uncovered '
+                                  'remainder (1 - covered fraction) is time no timer brackets')
+    return record
+
+
+def _write_result(args, shape, steps, limited, timing_step_seconds=None):
     import statistics
     timed = [s['seconds'] for s in steps[1:]] if len(steps) > 1 else []
     result = dict(
@@ -293,6 +357,7 @@ def _write_result(args, shape, steps, limited):
         process_ru_maxrss_bytes=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
             * (1 if sys.platform == 'darwin' else 1024),
         budget_seconds=args.budget_seconds, limited=limited,
+        component_timing_step_seconds=timing_step_seconds,
         qualification='complete-step probe; device peak from a polled vendor tool; host RSS is a separate boundary; '
                       'no opponent, no default gate, no target-scale qualification claim')
     (args.out / 'result.json').write_text(json.dumps(result, indent=2) + '\n')
@@ -339,6 +404,16 @@ def main():
             status = dict(exit_code=None, timed_out=True)
     status.update(elapsed_seconds=time.monotonic() - start, budget_seconds=args.budget_seconds,
                   shape=args.shape, limitation=(status['timed_out'] or status['exit_code'] == EXIT_LIMIT))
+    if args.component_timing:
+        # The worker has exited, so its native stdout is flushed into
+        # worker.log; sum the timing lines here and fold them into the
+        # worker's result.json (written by the worker before it exited).
+        result_path = args.out / 'result.json'
+        if result_path.exists():
+            result = json.loads(result_path.read_text())
+            text = (args.out / 'worker.log').read_text(errors='replace')
+            result.update(component_timing_record(text, result.get('component_timing_step_seconds')))
+            result_path.write_text(json.dumps(result, indent=2) + '\n')
     if status['limitation']:
         status['verdict'] = 'setup or a step exceeded the budget; recorded as a limitation, no smaller model substituted'
     (args.out / 'execution.json').write_text(json.dumps(status, indent=2) + '\n')

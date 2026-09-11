@@ -21,9 +21,12 @@
 #   3. attempts the TARGET shape (162,147,840 parameters, 12 layers DM768
 #      FF2048 V50257 untied, B1 L2048), 3 complete steps, 300 s budget. A
 #      budget miss is exit 2 and a recorded limitation, never a smaller model;
-#   4. if the target completed, one extra untimed target step with the
-#      native phase printer (MOJOLEARN_TRANSFORMER_TIMING=1) for component
-#      time fractions, in its own directory.
+#   4. if the target completed, one extra target step with the phase
+#      printer (MOJOLEARN_TRANSFORMER_TIMING=1) in its own directory; the
+#      probe sums its `timing` lines (blocks, and since DEVIATION 2499 the
+#      `step.*` phases outside the blocks plus the Python wrapper) into
+#      result.json as component_timing_ms / component_bytes with the
+#      covered fraction of step_seconds. Not a timing sample.
 # Outputs land under /root/gemm_leg_out/lm-step-memory/ and come home with
 # the leg's fetch. Everything is OUR IDENTICAL arm; no opponent runs.
 #
@@ -104,8 +107,9 @@ probe control --shape 1 2048 384 6 6 64 1024 8 8192
 # the control's outcome; a miss is a limitation, not a reason to shrink it.
 smi "$OUT/gpu_between.txt"
 if probe target --target; then
-    # 4. Component time fractions: one untimed target step with the phase
-    # printer. Its `timing <phase> <ms>` lines are in target-timing.log.
+    # 4. Component time fractions: one target step with the phase printer.
+    # Its `timing <phase> <ms>` lines are in target-timing/worker.log and
+    # summed by name in target-timing/result.json (DEVIATION 2499).
     # argparse keeps the last --steps, so this overrides the default count.
     probe target-timing --target --component-timing --steps 1
 fi

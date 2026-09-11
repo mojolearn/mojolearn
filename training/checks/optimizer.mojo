@@ -114,7 +114,9 @@ The full list is contract section 16. The five that bear on THIS file.
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
+from std.os import getenv
 from std.sys.compile import is_defined
+from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from gemm.checks.gemm_identical import (
@@ -1075,6 +1077,29 @@ def identical_optimizer_workspace_floats(offsets: List[Int]) -> Int:
     return w
 
 
+def _step_timing_on() -> Bool:
+    """DEVIATION 2499: the trainer's step-phase timers, behind the SAME
+    switch as the transformer block timers (`MOJOLEARN_TRANSFORMER_TIMING=1`,
+    `modeling_llama.timing_on`). Spelled here rather than imported so the
+    optimizer lane does not depend on the transformer lane. Off, one getenv."""
+    return String(getenv("MOJOLEARN_TRANSFORMER_TIMING")) != ""
+
+
+def _step_timing_tick(
+    ctx: DeviceContext, on: Bool, mut t: Int, name: String
+) raises:
+    """Same line shape as `modeling_llama.timing_tick`: wait, print the
+    milliseconds since `t`, advance `t`. Off, nothing runs."""
+    if not on:
+        return
+    ctx.synchronize()
+    var now = Int(perf_counter_ns())
+    print(
+        "timing " + name + " " + String(Float64(now - t) / 1000000.0) + " ms"
+    )
+    t = now
+
+
 def opt_refuse_device_inputs(
     ctx: DeviceContext,
     mut param: DeviceBuffer[DType.float32],
@@ -1225,9 +1250,25 @@ def identical_optimizer_step(
     # in a PARAMETER reached param.out, because the only device-side
     # refusal lives in identical_clip_grad_norm and does not run.
     # FIRST statement in the body: "before any recorded stage".
+    # DEVIATION 2499: timed as `step.opt_refuse_download` (ends on the host
+    # after the four scans; the device queue is empty at the tick) with its
+    # byte count, and the rest of the step as `step.optimizer` (this entry
+    # waits before it returns, so that tick's wait is a no-op).
+    var ton = _step_timing_on()
+    var tk = Int(perf_counter_ns())
     opt_refuse_device_inputs(
         ctx, param, grad, m_state, v_state, offsets, cfg
     )
+    _step_timing_tick(ctx, ton, tk, "step.opt_refuse_download")
+    if ton:
+        var refused_n = offsets[len(offsets) - 1] if len(offsets) > 0 else 0
+        comptime if is_defined["MOJOLEARN_OPT_TRUST_INPUTS"]():
+            refused_n = 0
+        print(
+            "timing step.opt_refuse_download_bytes "
+            + String(4 * refused_n * 4)
+            + " bytes"
+        )
 
     var j_count = len(offsets) - 1
     if j_count <= 0:
@@ -1341,6 +1382,7 @@ def identical_optimizer_step(
             block_dim=(OPT_TPB, 1, 1),
         )
         ctx.synchronize()
+    _step_timing_tick(ctx, ton, tk, "step.optimizer")
 
     # `[[mojo-buffer-freed-at-last-use]]`: keep every caller buffer alive
     # past the wait above, so that a caller who drops its own handle

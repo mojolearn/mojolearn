@@ -12,6 +12,7 @@ Caller supplies actual parameters, moments, flags, completed step and token IDs.
 No generated data, hidden initialization, tokenizer, performance or learning claim.
 """
 from std.memory import bitcast
+from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.identity_trace import IdentityTrace
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -51,6 +52,7 @@ from transformer.checks.transformer_backward import (
 from transformer.impl.llama.modeling_llama import (
     BLOCK_ANY_SABOTAGE, LlamaDims, LlamaDeviceWeights, LlamaDeviceStages,
     LlamaRopeTable, LlamaKVCache, llama_decoder_layer_forward,
+    timing_on, timing_tick,
 )
 
 comptime BYTE_B = 2
@@ -101,6 +103,16 @@ def byte_names(config: ByteConfig = ByteConfig()) raises -> List[String]:
     for j in range(config.n_tensors()):
         result.append(byte_param_name(j, config))
     return result^
+
+
+def timing_bytes(on: Bool, name: String, n_bytes: Int):
+    """DEVIATION 2499: the byte count of a transfer phase, on the same
+    `timing` line shape the phase timers use (`timing <name> <n> bytes`),
+    so a reader can put bandwidth beside conversion. Prints only under
+    `MOJOLEARN_TRANSFORMER_TIMING=1`; costs nothing otherwise."""
+    if not on:
+        return
+    print("timing " + name + " " + String(n_bytes) + " bytes")
 
 
 def _require_finite(values: List[Float32], name: String) raises:
@@ -475,11 +487,23 @@ def byte_train_step(ctx: DeviceContext, mut trainer: ByteTrainer,
         raise Error("byte LM: step bound reached")
     # Device-state validation requires readback. It precedes all numerical work
     # and all writes; downloads themselves are the only device operations here.
+    # DEVIATION 2499: step-phase timers, IDENTICAL-only instrumentation
+    # behind MOJOLEARN_TRANSFORMER_TIMING=1 (the switch the block timers
+    # use). Every `timing_tick` synchronizes the context before it reads
+    # the clock; on a phase that already ends with its own wait or a host
+    # scan the extra wait is a no-op, and where a phase was asynchronous
+    # the tick's wait exists ONLY under the switch. Off, nothing here runs.
+    var ton = timing_on()
+    var tk = Int(perf_counter_ns())
     var before_p = download_f32(ctx, trainer.buffers.param, config.n_total())
     var before_m = download_f32(ctx, trainer.buffers.m_state, config.n_total())
     var before_v = download_f32(ctx, trainer.buffers.v_state, config.n_total())
     var before_flags = trainer.buffers.buf_initialized.copy()
+    # download_f32 waits inside; the three Lists are complete on the host.
+    timing_tick(ctx, ton, tk, "step.mirror_download_before")
+    timing_bytes(ton, "step.mirror_download_before_bytes", 3 * config.n_total() * 4)
     byte_validate_state(before_p, before_m, before_v, before_flags, trainer.completed_steps, config)
+    timing_tick(ctx, ton, tk, "step.validate_before")
     trainer.healthy = False
     var capture = _byte_step_admitted(ctx, trainer, token_ids, before_p, before_m, before_v, before_flags)
     trainer.healthy = True
@@ -491,6 +515,8 @@ def _byte_forward_loss(ctx: DeviceContext, mut tr: ByteTrainer,
     """Shared forward only. Authoritative params/m/v/flags/t are read-only."""
     var config = tr.config.copy()
     var M = config.batch * config.length
+    var ton = timing_on()
+    var tk = Int(perf_counter_ns())
     var inputs = List[Int32]()
     var targets = List[Int32]()
     for b in range(config.batch):
@@ -508,15 +534,22 @@ def _byte_forward_loss(ctx: DeviceContext, mut tr: ByteTrainer,
     ctx.synchronize()
     _ = hi
     _ = ht
+    # The wait above completes both uploads: host split, staging, H2D.
+    timing_tick(ctx, ton, tk, "step.upload_inputs")
+    timing_bytes(ton, "step.upload_inputs_bytes", 2 * M * 4)
     for layer in range(config.n_layers):
         _unpack_block(ctx, tr.buffers, tr.weights[layer], layer)
     _copy_into(ctx, tr.buffers.emb_w, tr.buffers.param, 0, 0, config.vocab_size * config.d_model)
     _copy_into(ctx, tr.buffers.lm_w, tr.buffers.param, 0, tr.buffers.offsets[config.n_tensors() - 1], config.vocab_size * config.d_model)
     ctx.synchronize()
+    # Device-to-device: every parameter byte copied once (blocks, emb, head).
+    timing_tick(ctx, ton, tk, "step.unpack_weights")
+    timing_bytes(ton, "step.unpack_weights_bytes", config.n_total() * 4)
     var emb = EmbConfig.llama(config.vocab_size, config.d_model)
     var ce = CeConfig.causal_lm(config.vocab_size)
     identical_embedding_forward_into(ctx, tr.buffers.x, tr.buffers.emb_w, tr.buffers.ids, M, emb)
     ctx.synchronize()
+    timing_tick(ctx, ton, tk, "step.embedding_forward")
     for layer in range(config.n_layers):
         # Move the current stages out while borrowing the preceding residual.
         # No extra activation copy; restore canonical layer order after the call.
@@ -535,9 +568,18 @@ def _byte_forward_loss(ctx: DeviceContext, mut tr: ByteTrainer,
                 tr.forward[layer - 1].residual2, config.batch, config.length, 0, trace, prefix)
         ctx.synchronize()
         tr.forward.insert(layer, stages^)
+    # The blocks print their own `block.*` / `attn.*` lines; this envelope
+    # is the whole forward loop including the per-layer waits and the
+    # stage pop/insert bookkeeping, so the block sum can be checked.
+    timing_tick(ctx, ton, tk, "envelope.blocks_forward")
     identical_gemm_into(ctx, tr.buffers.logits, tr.forward[config.n_layers - 1].residual2,
         tr.buffers.lm_w, tr.buffers.head_ws, M, config.vocab_size, config.d_model, OP_NT)
     ctx.synchronize()
+    timing_tick(ctx, ton, tk, "step.head_forward")
+    # `identical_ce_forward_into` prints `step.ce_refuse_download` (its
+    # first statement: the full logits download and host scan) and then
+    # `step.ce_forward` (L1-L13, waited on under the switch only), both from
+    # its own clock; this clock is re-read after the call's wait.
     identical_ce_forward_into(ctx, tr.buffers.ce_max, tr.buffers.ce_shift,
         tr.buffers.ce_expo, tr.buffers.ce_denom, tr.buffers.ce_logdenom,
         tr.buffers.ce_logp_target, tr.buffers.ce_nll, tr.buffers.ce_logp,
@@ -545,8 +587,12 @@ def _byte_forward_loss(ctx: DeviceContext, mut tr: ByteTrainer,
         tr.buffers.ce_total, tr.buffers.ce_loss, tr.buffers.logits,
         tr.buffers.targets, tr.buffers.ce_ones, tr.buffers.ce_ws, M, M, ce)
     ctx.synchronize()
+    if ton:
+        tk = Int(perf_counter_ns())
     var losses = download_f32(ctx, tr.buffers.ce_loss, 1)
     _require_finite(losses, "loss")
+    timing_tick(ctx, ton, tk, "step.loss_download")
+    timing_bytes(ton, "step.loss_download_bytes", 4)
     return losses[0]
 
 
@@ -560,15 +606,25 @@ def _byte_step_admitted(ctx: DeviceContext, mut tr: ByteTrainer,
     var ce = CeConfig.causal_lm(config.vocab_size)
     var trace = IdentityTrace.disabled()
     var loss = _byte_forward_loss(ctx, tr, ids, trace)
+    # DEVIATION 2499 step-phase timers; see byte_train_step. The forward's
+    # own clock ended at `step.loss_download`; this one starts here.
+    var ton = timing_on()
+    var tk = Int(perf_counter_ns())
     identical_ce_backward_into(ctx, tr.buffers.ce_weights, tr.buffers.ce_dlogits,
         tr.buffers.ce_expo, tr.buffers.ce_denom, tr.buffers.ce_logp,
         tr.buffers.targets, M, M, ce)
     ctx.synchronize()
+    timing_tick(ctx, ton, tk, "step.ce_backward")
     identical_gemm_backward_a_into(ctx, tr.buffers.d_h, tr.buffers.ce_dlogits,
         tr.buffers.lm_w, tr.buffers.head_bwd_ws, M, config.vocab_size, config.d_model, OP_NT)
+    # dA and dB share one wait below; the tick between them waits ONLY
+    # under the switch (a timed step is not a sample, and the two GEMMs are
+    # queued on one in-order context either way).
+    timing_tick(ctx, ton, tk, "step.head_backward_da")
     identical_gemm_backward_b_into(ctx, tr.buffers.dw_lm, tr.buffers.ce_dlogits,
         tr.forward[config.n_layers - 1].residual2, tr.buffers.head_bwd_ws, M, config.vocab_size, config.d_model, OP_NT)
     ctx.synchronize()
+    timing_tick(ctx, ton, tk, "step.head_backward_db")
     # Keep inter-layer cotangents on device, as the upstream tensor graph
     # does (transformers/models/llama/modeling_llama.py:402-412). Each
     # backward call synchronizes before its borrowed buffers are reinserted.
@@ -596,38 +652,60 @@ def _byte_step_admitted(ctx: DeviceContext, mut tr: ByteTrainer,
         ctx.synchronize()
         tr.backward.insert(layer, backward^)
         tr.forward.insert(layer, stages^)
+    # Envelope of the whole backward loop (the blocks print `bwd.*`).
+    timing_tick(ctx, ton, tk, "envelope.blocks_backward")
     identical_embedding_backward_into(ctx, tr.buffers.dw_emb, tr.backward[0].d_x,
         tr.buffers.ids, tr.buffers.emb_counts, tr.buffers.emb_run_begin,
         tr.buffers.emb_perm, M, emb)
     ctx.synchronize()
+    timing_tick(ctx, ton, tk, "step.embedding_backward")
     for layer in range(config.n_layers):
         _pack_block(ctx, tr.buffers, tr.backward[layer], layer)
     _copy_into(ctx, tr.buffers.grad, tr.buffers.dw_emb, 0, 0, config.vocab_size * config.d_model)
     _copy_into(ctx, tr.buffers.grad, tr.buffers.dw_lm, tr.buffers.offsets[config.n_tensors() - 1], 0, config.vocab_size * config.d_model)
     ctx.synchronize()
+    # Device-to-device: every gradient byte copied once into `grad`.
+    timing_tick(ctx, ton, tk, "step.pack_grads")
+    timing_bytes(ton, "step.pack_grads_bytes", config.n_total() * 4)
     # Capture actual raw pre-update gradients before ANY optimizer writes.
     var grads = download_f32(ctx, tr.buffers.grad, config.n_total())
+    timing_tick(ctx, ton, tk, "step.mirror_download_grads")
+    timing_bytes(ton, "step.mirror_download_grads_bytes", config.n_total() * 4)
     _require_finite(grads, "gradients")
+    timing_tick(ctx, ton, tk, "step.validate_grads")
     var next_step = tr.completed_steps + 1
+    # `identical_optimizer_step` prints `step.opt_refuse_download` (its
+    # first statement: param, grad, m, v downloaded and scanned on the host)
+    # and `step.optimizer` (clip, scalars, update; it waits before it
+    # returns), both from its own clock; this clock is re-read after it.
     identical_optimizer_step(ctx, tr.buffers.param, tr.buffers.grad,
         tr.buffers.m_state, tr.buffers.v_state, tr.buffers.denom_out,
         tr.buffers.q_out, tr.buffers.sumsq, tr.buffers.norms,
         tr.buffers.total_cell, tr.buffers.out2, tr.buffers.opt_ws,
         tr.buffers.sab_partials, tr.buffers.buf_initialized, tr.buffers.offsets,
         tr.optimizer, next_step)
+    if ton:
+        tk = Int(perf_counter_ns())
     var after_p = download_f32(ctx, tr.buffers.param, config.n_total())
     var after_m = download_f32(ctx, tr.buffers.m_state, config.n_total())
     var after_v = download_f32(ctx, tr.buffers.v_state, config.n_total())
     var after_flags = tr.buffers.buf_initialized.copy()
+    timing_tick(ctx, ton, tk, "step.mirror_download_after")
+    timing_bytes(ton, "step.mirror_download_after_bytes", 3 * config.n_total() * 4)
     byte_validate_state(after_p, after_m, after_v, after_flags, next_step, config)
     ctx.synchronize()
+    timing_tick(ctx, ton, tk, "step.validate_after")
     tr.completed_steps = next_step
     # Explicit last uses retain all async operands through completion.
     _ = trace
-    return ByteStepCapture(ids.copy(), before_p.copy(), before_m.copy(),
+    var capture = ByteStepCapture(ids.copy(), before_p.copy(), before_m.copy(),
         before_v.copy(), before_flags.copy(), grads^, after_p^, after_m^,
         after_v^, after_flags^, loss, next_step, tr.optimizer.copy(),
         config.profile(), "identical", String(COMPILED_VENDOR))
+    # Host-only: the second copy of before_p/m/v (3n floats) and the ids.
+    timing_tick(ctx, ton, tk, "step.capture_copy")
+    timing_bytes(ton, "step.capture_copy_bytes", 3 * config.n_total() * 4 + len(ids) * 4)
+    return capture^
 
 
 def byte_checkpoint(capture: ByteStepCapture, seed: UInt64,

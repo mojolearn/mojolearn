@@ -27,6 +27,7 @@ from pathlib import Path
 import struct
 import tempfile
 import threading
+import time
 
 from . import _backend
 from ._arrays import _addr, _addr_ro
@@ -186,6 +187,28 @@ def _step(value):
 def _mode():
     if _backend.default_mode() != 'identical' or _backend.numeric_mode() != 'identical':
         raise RuntimeError('SmallByteLanguageModelTrainer requires process-selected IDENTICAL mode')
+
+
+def _timing_on():
+    """DEVIATION 2499: the Python side of the step-phase timers, behind the
+    SAME switch as the native block and step timers
+    (MOJOLEARN_TRANSFORMER_TIMING=1). One environment lookup per call when
+    off; nothing else."""
+    return bool(os.environ.get('MOJOLEARN_TRANSFORMER_TIMING'))
+
+
+def _tick(on, clock, name, n_bytes=None):
+    """Print `timing <name> <ms> ms` (the native line shape) for the time
+    since `clock[0]`, then advance it; with `n_bytes`, also print
+    `timing <name>_bytes <n> bytes`. Every phase this brackets is host
+    work; the native call is bounded by the binding's own final wait."""
+    if not on:
+        return
+    now = time.perf_counter()
+    print('timing %s %s ms' % (name, (now - clock[0]) * 1000.0), flush=True)
+    if n_bytes is not None:
+        print('timing %s_bytes %d bytes' % (name, n_bytes), flush=True)
+    clock[0] = now
 
 
 def _load(shape=None):
@@ -418,21 +441,29 @@ class SmallByteLanguageModelTrainer:
 
     def _run_impl(self, ids, train):
         shape = state_shape(self._state)
+        ton = _timing_on()
+        clock = [time.perf_counter()]
+        n4 = shape.n_total * 4
         tokens = _array(ids, (shape.batch, shape.length + 1), 'ids', '<i4')
         if any(x < 0 or x >= shape.vocab_size for x in flat_view(tokens, 'i')):
             raise ValueError(f'Byte-LM IDs must be in [0, {shape.vocab_size})')
+        _tick(ton, clock, 'step.py_tokens', tokens.nbytes)
         working = _validate_state(self._state)
         if train and working['completed_steps'] >= 999999:
             raise ValueError('Byte-LM native call step counter is exhausted')
+        # Three n-float copies plus the v >= 0 and flags scans.
+        _tick(ton, clock, 'step.py_validate_state', 3 * n4)
         binding = self._binding()
         inputs = [working['parameters'], working['m'], working['v'], working['flags'], tokens]
         before = tuple(array.tobytes() for array in inputs)
+        _tick(ton, clock, 'step.py_before_bytes', 3 * n4)
         out_p = _buffers.full(shape.n_total, float("nan"), '<f4')
         out_m = _buffers.full(shape.n_total, float("nan"), '<f4')
         out_v = _buffers.full(shape.n_total, float("nan"), '<f4')
         out_flags = _buffers.full(shape.n_tensors, -1, '<i4')
         out_loss = _buffers.full(1, float("nan"), '<f4')
         out_grad = _buffers.full(shape.n_total, float("nan"), '<f4') if train else None
+        _tick(ton, clock, 'step.py_alloc_outputs', (3 + int(train)) * n4)
         cfg = working['config']
         addresses = [*(addr_ro(value, name='input') for value in inputs),
                      addr(out_p, name='out_p'), addr(out_m, name='out_m'),
@@ -455,6 +486,10 @@ class SmallByteLanguageModelTrainer:
             completed = binding.byte_lm_run(addresses, parameters)
         else:
             completed = binding.byte_lm_run_configured(addresses, parameters, list(shape.native_shape))
+        # The whole native call, itemized by the `step.bind_*`, `step.*`,
+        # `block.*`, `attn.*` and `bwd.*` lines the binding printed; an
+        # envelope, not a phase, so the probe keeps it out of the sum.
+        _tick(ton, clock, 'envelope.native_call')
         expected = working['completed_steps'] + int(train)
         if _is_bool(completed) or not isinstance(completed, int) or completed != expected:
             raise RuntimeError('Byte-LM returned an invalid completed-step counter')
@@ -462,22 +497,30 @@ class SmallByteLanguageModelTrainer:
         # all three parameter-sized byte copies alive simultaneously.
         if any(saved != array.tobytes() for saved, array in zip(before, inputs)):
             raise RuntimeError('Byte-LM native call changed an input state/token buffer')
+        _tick(ton, clock, 'step.py_input_unchanged', 3 * n4)
         if not all_finite(out_loss):
             raise RuntimeError('Byte-LM returned a nonfinite/unwritten loss')
         candidate = _validate_state(dict(working, parameters=out_p, m=out_m, v=out_v, flags=out_flags,
                                          completed_steps=expected, next_batch_index=expected))
         _mode()
+        # Three n-float copies of the outputs plus their scans.
+        _tick(ton, clock, 'step.py_candidate_state', 3 * n4)
         if not train:
             if any(candidate[key].tobytes() != working[key].tobytes()
                    for key in ('parameters', 'm', 'v', 'flags')):
                 raise RuntimeError('Byte-LM evaluation changed full training state')
+            _tick(ton, clock, 'step.py_eval_unchanged', 3 * n4)
             return float(out_loss[0])
         gradients = _array(out_grad, (shape.n_total,), 'pre-update gradients')
+        # One n-float copy plus all_finite.
+        _tick(ton, clock, 'step.py_gradients_array', n4)
         result = dict(loss=float(out_loss[0]), step=expected, completed_steps=expected,
                       next_batch_index=expected, flat_gradients=gradients,
                       gradients={name: gradients[shape.offsets[index]:shape.offsets[index + 1]].reshape(tensor_shape).copy()
                                  for index, (name, tensor_shape) in enumerate(zip(shape.parameter_names, shape.parameter_shapes))})
         self._state = candidate
+        # The per-tensor gradient dict: one more n-float copy in slices.
+        _tick(ton, clock, 'step.py_gradients_dict', n4)
         return result
 
     def train_step(self, ids):

@@ -429,3 +429,148 @@ copies under the device-owned step API the handoff's step 1 calls for.
 What this changes in the handoff order: GEMM and attention (step 3) are one
 percent of the target step today; steps 1 and 2 (transfers and the loss/head
 buffers) are the whole cost until they are gone.
+
+## Step-phase timers (DEVIATION 2499, instrumentation only, IDENTICAL)
+
+Nothing here changes arithmetic, fold order or outputs. Every new timer is
+behind the existing `MOJOLEARN_TRANSFORMER_TIMING=1` switch (the one the
+block timers use), prints the block timers' line shape
+(`timing <name> <ms> ms`), and costs one `getenv` per entry when off. Each
+transfer phase also prints `timing <name>_bytes <n> bytes` on the same line
+shape so bandwidth can be put beside conversion. The `step.` names are the
+phases outside the blocks; `envelope.` names wrap other itemized lines and
+are kept OUT of the probe's total. No test, build or run happened on the
+Mac; the RUN OWED at the end is the measurement.
+
+### The complete step path, in order (file:line after this edit)
+
+Python `LanguageModelTrainer.train_step` -> `_run_impl`
+(`python/mojolearn/_byte_lm_impl.py:442`); all host work, no device:
+
+| # | phase | timer | at | what it does |
+|---|---|---|---|---|
+| 1 | tokens | `step.py_tokens` (+bytes) | :447-450 | `_array(ids)` copy, int32 check, range scan over every id |
+| 2 | validate state | `step.py_validate_state` (+bytes 3n) | :451-455 | `_validate_state(self._state)`: three n-float copies (:246-248), `v >= 0` and flags scans |
+| 3 | before bytes | `step.py_before_bytes` (+bytes 3n) | :457-459 | `tobytes()` of the five inputs (three n-float copies) |
+| 4 | output allocation | `step.py_alloc_outputs` (+bytes 4n) | :460-466 | four NaN-filled n-float arrays |
+| 5 | native call | `envelope.native_call` | :476-492 | the binding, itemized below |
+| 6 | input unchanged | `step.py_input_unchanged` (+bytes 3n) | :498-500 | second `tobytes()` of the inputs and compare |
+| 7 | candidate state | `step.py_candidate_state` (+bytes 3n) | :501-507 | `all_finite(out_loss)`, `_validate_state` on the four outputs (three more n-float copies and scans) |
+| 8 | gradients array | `step.py_gradients_array` (+bytes n) | :514-516 | `_array(out_grad)`: one n-float copy and `all_finite` |
+| 9 | gradients dict | `step.py_gradients_dict` (+bytes n) | :517-523 | per-tensor slice `.copy()` for every registry entry |
+
+Native binding `_byte_lm_run` (`bindings/_mojolearn_byte_lm.mojo:166`),
+host clock (`_btick`, no wait: each phase is host work or ends with a
+`download_f32`, which waits inside):
+
+| # | phase | timer | at | what it does |
+|---|---|---|---|---|
+| 10 | read inputs | `step.bind_read_inputs` (+bytes 3n+) | :209-225 | `_read_f32` x3 (host to host into Lists), flags and ids Lists |
+| 11 | validate inputs | `step.bind_validate_inputs` | :226-228 | `byte_validate_state` (finite scan of 3n) and `byte_validate_tokens` |
+| 12 | setup | `step.bind_context_or_trainer_setup` | :242-249 | first call only: `DeviceContext()` and `ByteTrainer` (all uploads); ~0 on a resident reuse |
+| 13 | resident admission | `step.bind_resident_admission` (+bytes 3n) | :250-273 | three `download_f32` (each waits) and three `_require_same_bits` host compares; device queue empty at the tick |
+| 14 | the trainer step | `step.*` below | :275 | `byte_train_step` |
+| 15 | move outputs | `step.bind_move_outputs` | :280-292 | moves out of the capture (cheap) |
+| 16 | validate outputs | `step.bind_validate_outputs` | :313-324 | `byte_validate_state(out_p, out_m, out_v)` scans and the n-float nonfinite loop over `out_g` |
+| 17 | final wait | `step.bind_final_sync` | :325-326 | `ctx.synchronize()`; nothing is queued by then, so this is the cost of an empty wait |
+| 18 | publish | `step.bind_publish` (+bytes 4n) | :339-351 | `_write_f32` x4 into Python memory (host to host); on a non-resident call the teardown at :327-331 is inside this phase |
+
+Eval (`action == 0`) prints `step.bind_eval_readback` (+bytes 3n, :297-311)
+instead of 15.
+
+Trainer `byte_train_step` (`training/byte_lm.mojo:477`) and
+`_byte_step_admitted` (:599), device clock (`timing_tick` from
+`modeling_llama.mojo`, which waits before it reads the clock):
+
+| # | phase | timer | at | ends on the device because |
+|---|---|---|---|---|
+| 19 | before mirrors | `step.mirror_download_before` (+bytes 3n) | :498-503 | three `download_f32` (param, m, v): each waits inside; the Lists are complete |
+| 20 | validate before | `step.validate_before` | :505-506 | host scan of 3n; the tick's wait is a no-op |
+| 21 | upload inputs | `step.upload_inputs` (+bytes 2M) | :521-538 | host split into inputs/targets, pinned staging, two H2D copies, `ctx.synchronize()` (:534) |
+| 22 | unpack weights | `step.unpack_weights` (+bytes n, D2D) | :539-546 | `_unpack_block` x layers plus `emb_w`/`lm_w` copies, `ctx.synchronize()` (:544) |
+| 23 | embedding forward | `step.embedding_forward` | :549-552 | `identical_embedding_forward_into`, `ctx.synchronize()` (:551) |
+| 24 | blocks forward | `block.*`, `attn.*` per layer (existing); `envelope.blocks_forward` | :553-574 | per-layer `ctx.synchronize()` (:569); the envelope minus the block sum is the pop/insert bookkeeping and the waits |
+| 25 | head forward | `step.head_forward` | :575-578 | `identical_gemm_into` (M, V, DM) OP_NT, `ctx.synchronize()` (:577) |
+| 26 | CE refusal | `step.ce_refuse_download` (+bytes M*V+M) | `loss.mojo:1368-1377` (called from `byte_lm.mojo:583`) | `ce_refuse_device_inputs` (`loss.mojo:1247`): pinned logits and targets, D2H, `ctx.synchronize()`, List copy, host `ce_refuse_inputs` scan; nothing queued at the tick |
+| 27 | CE forward | `step.ce_forward` | `loss.mojo:1520,1549` | L1-L13 enqueued; this tick's wait exists ONLY under the switch (the entry is "enqueued, nothing waits" for every untimed caller); the trainer's own `ctx.synchronize()` at `byte_lm.mojo:589` follows |
+| 28 | loss download | `step.loss_download` (+bytes 4) | :592-594 | `download_f32(ce_loss, 1)` waits inside, then `_require_finite` |
+| 29 | CE backward | `step.ce_backward` | :613-617 | L14-L16, `ctx.synchronize()` (:616) |
+| 30 | head backward dA | `step.head_backward_da` | :618-623 | `identical_gemm_backward_a_into` (M, DM, V); the tick between dA and dB waits ONLY under the switch (both were under one wait at :626) |
+| 31 | head backward dB | `step.head_backward_db` | :624-627 | `identical_gemm_backward_b_into` (V, DM, M), `ctx.synchronize()` (:626) |
+| 32 | blocks backward | `bwd.*` per layer (existing); `envelope.blocks_backward` | :631-656 | per-layer `ctx.synchronize()` (:652) |
+| 33 | embedding backward | `step.embedding_backward` | :657-661 | `identical_embedding_backward_into`, `ctx.synchronize()` (:660) |
+| 34 | pack grads | `step.pack_grads` (+bytes n, D2D) | :662-669 | `_pack_block` x layers plus `dw_emb`/`dw_lm` copies into `grad`, `ctx.synchronize()` (:666) |
+| 35 | grad mirror | `step.mirror_download_grads` (+bytes n) | :671-673 | `download_f32(grad)` waits inside |
+| 36 | validate grads | `step.validate_grads` | :674-675 | host `_require_finite` over n |
+| 37 | optimizer refusal | `step.opt_refuse_download` (+bytes 4n; 0 under `-D MOJOLEARN_OPT_TRUST_INPUTS=1`) | `optimizer.mojo:1257-1271` (called from `byte_lm.mojo:681`) | `opt_refuse_device_inputs` (`optimizer.mojo:1103`): four pinned buffers, four D2H copies, `ctx.synchronize()`, four List copies, four host `refuse_nonfinite` scans; nothing queued at the tick |
+| 38 | optimizer | `step.optimizer` | `optimizer.mojo:1273-1385` | clip (off at `max_norm = 0`), host scalars, one `adam_update_kernel` launch, the entry's own `ctx.synchronize()` (:1384) |
+| 39 | after mirrors | `step.mirror_download_after` (+bytes 3n) | :689-694 | three `download_f32` (param, m, v), each waits inside |
+| 40 | validate after | `step.validate_after` | :695-697 | host `byte_validate_state` over 3n, then the trainer's `ctx.synchronize()` (:696) |
+| 41 | capture copy | `step.capture_copy` (+bytes 3n+M) | :701-707 | `ByteStepCapture(...)` with `.copy()` of before_p/m/v and ids (host only) |
+
+Phases that synchronize the device in the UNTIMED step: 13, 17, 19, 21, 22,
+23, 24 (per layer), 25, 26, 28, 29, 31, 32 (per layer), 33, 34, 35, 37, 38,
+39, 40, plus the waits inside every `download_f32` and every synchronizing
+`identical_gemm` the blocks call (brief section 4, item 5). Phases 27 and 30
+gain a wait only when the switch is on.
+
+Inside one `download_f32` (`train_loop.mojo:766`) the pinned staging
+allocation, the D2H copy and the `List.append` loop are NOT split; the bytes
+line beside each download timer is the number to divide by the bus rate to
+see how much of the phase is the copy and how much is the conversion. The
+same holds inside the two refusal checks (26 and 37), which is what their
+bytes lines are for.
+
+Not bracketed, and why:
+
+- the per-layer split of `_unpack_block` / `_pack_block` (22, 34): one D2D
+  phase each; a per-layer tick would add twelve waits per phase for a copy
+  whose total is what matters;
+- the L1-L13 seams inside `step.ce_forward` and the L14-L16 seams inside
+  `step.ce_backward`: sub-phase ticks would go into `loss.mojo` between
+  enqueues; the CE chain over 2048 x 50257 is reported as two numbers,
+  which is enough to rank it against the refusal and the mirrors;
+- `train_step` -> `_run_impl` (the lock) and `_binding()`: trivial;
+- GIL release and reacquire around the native scope, and the Python print
+  calls themselves: they are inside `envelope.native_call` minus the sum of
+  the native lines, which the probe's `component_timing_covered_fraction`
+  exposes rather than hides.
+
+### Probe changes (`tools/lm_step_memory_probe.py`, schema v2)
+
+The `--component-timing` step is now timed by the worker (`step_seconds`,
+denominator only; every tick waits, so neither the parts nor the whole are a
+timing sample). After the worker exits (so every native stdout buffer is
+flushed into `worker.log`) the parent sums every `timing <name> <value>
+<unit>` line by name and folds into `result.json`: `component_timing_ms`
+(unit ms), `component_bytes` (unit bytes), `component_line_counts`,
+`component_timing_total_ms` (excluding `envelope.*` and `attn.*`, the
+latter being the sub-phases of `block.attention_total`),
+`component_timing_excluded_from_total`, `step_seconds` and
+`component_timing_covered_fraction`. The parser was dry-run on run 1's
+`target-timing/worker.log` (block lines only): total 1,664 ms of a 44.97 s
+step, covered fraction 0.037, which is the 1 percent this brief's run 1
+section states and the number the RUN OWED below is expected to raise to
+near 1.0. The wrapper `tools/lm_step_memory_probe.sh` runs control, target
+and the timing step exactly as before (comments updated).
+
+### RUN OWED (orchestrator, NVIDIA box, clean committed tree)
+
+```sh
+cd /Users/andrewhendel/CascadeProjects/mojolearn
+MOJOLEARN_RUNPOD_KEY_FILE=$HOME/.mojolearn_runpod_key \
+MOJOLEARN_GPU_ARCHS=sm_90a \
+MOJOLEARN_GEMM_LEG_EXTRA=tools/lm_step_memory_probe.sh \
+sh tools/gemm_remote_leg.sh nvidia --payload gemm --rent --minutes 60 \
+    --gpu "NVIDIA H100 80GB HBM3"
+```
+
+Read `<leg out>/remote/lm-step-memory/target-timing/result.json`:
+`component_timing_ms` sorted descending is the answer to "where do the
+44.5 s go"; `component_timing_covered_fraction` says how much of the step
+the timers bracket; `component_bytes[<phase>_bytes] / component_timing_ms[<phase>]`
+is the effective rate of each transfer phase against the H100's PCIe
+(about 25 GB/s pinned) for the split between bandwidth and conversion.
+The control and target `result.json` (untimed steps) must reproduce run 1's
+step times and sha256 witnesses: the timers are off there, and a change
+in either is a defect in this instrumentation.
