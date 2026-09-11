@@ -216,6 +216,35 @@ scheduling-parameter argument predicted and what `device_batched_check`'s
 "max_batch_size=3 must not move a tree" already guarded. So 2663 is purely a
 speed question.
 
+### What the level loop actually does at 4096 (the premise, measured)
+
+`-D MOJOLEARN_ET_CYCLE_STATS=1`, one Istella-S fit (100 trees, depth 16, 1M
+rows). DEVIATION 211 puts 67 trees in the first group and 33 in the second:
+
+| group | trees | level cycles | nodes searched | nodes per cycle | DEVIATION 205 surveys | rescued |
+|---|---|---|---|---|---|---|
+| 0 | 67 | 175 | 682,422 | 3,900 | 5,456 | 5,143 |
+| 1 | 33 | 91 | 337,807 | 3,712 | 2,687 | 2,533 |
+| both | 100 | 266 | 1,020,229 | 3,836 | 8,143 (0.8%) | 7,676 |
+
+THE PREMISE IS WRONG, AND THE NUMBERS SAY SO BEFORE THE A/B DOES. 2663 assumed
+a 4096-node frontier runs MANY cycles, each paying a drain and a host pass. It
+runs 266 for the whole forest, and the batch is already 94 percent full at
+3,836 nodes per cycle, so the width is not leaving the device idle. Against the
+stage split above -- reduce readback, split records, pop and assembly and queue
+push together about 0.09 s of a 5.0 s loop -- that is roughly 0.34 ms of host
+cost per cycle. Quadrupling the width to 16,384 can therefore remove at most
+about 0.07 s, near 1.4 percent, and it makes each cycle's capacity-sized
+staging compare (DEVIATION 472) four times larger, which pushes the other way.
+
+DEVIATION 205's rescue is not a hidden cost either: 8,143 survey nodes out of
+1,020,229 searched, 0.8 percent.
+
+`device_batched_check` PASSED on this pod (45 cells), and its two sabotages
+moved thousands of nodes (scalar-tree 2688 / 2052 clf/reg, shared-row-base
+2499 / 2598), so the gate that says batch width cannot move a tree is a gate
+that can fail.
+
 ### Speed
 
 Pending: batch C's A/B, batch D's verdict, and (only if a flip is on the table)
