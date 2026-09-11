@@ -7,18 +7,21 @@ gemm/, core/step_phase.mojo and the byte LM, and DEVIATIONS 2640 to 2659.
 This file covers trees and classical only. Read ENGINEERING_RULES.md
 sections 9 and 10 and bench/OPPONENT_REFERENCE.md before touching a lane.
 
-## 1. State at wind-down
+## 1. State now (2026-09-11 night, after the merges)
 
-- Nothing of this session is renting. RunPod lists only the
-  `samba-train-*` pod, which belongs to another program (never touch it).
-  No Hot Aisle VM and no DigitalOcean droplet of this session exists; every
-  box below was deleted and verified gone (HTTP 404).
-- Six speed lanes ran on RunPod NVIDIA H100 (one pod each) for about 30
-  minutes before the wind-down. None rented anything else.
-- Every measurement in this file is our IDENTICAL arm against the
-  opponent's FAST arm on the same pod, unless a row says otherwise. Ratios
-  are ours divided by the opponent's time (below 1 means ours took less).
-
+- **Everything from the final pass is merged into main and pushed.** The
+  seven finish lanes (kde, svm, knn, forest, gbdt, pointwise, linear-cluster)
+  all landed; section 2 has the commits.
+- **Four pods were still running when this was written** and MUST be reaped
+  (`tools/trees_leg.sh reap`, then confirm HTTP 404): forest
+  `8gsem9f3thnhvu` (lease to 23:52), gbdt `dk14p0y15w0ig5`, pointwise
+  `eqxtzdcpctpnkh`, linear-cluster-istella `1yxsotvvcbxtuu`. The kde, svm and
+  knn pods are already reaped and verified gone.
+- Never touch `samba-*` (another program) or `mojolearn-gemm-nvidia-*` (the
+  neural session).
+- Every measurement here is our IDENTICAL arm against the opponent's FAST
+  arm on the same pod unless a row says otherwise. Ratios are ours divided
+  by the opponent's time; after/before ratios below 1 mean we got faster.
 ## 2. What landed on main
 
 | item | main commit | result |
@@ -29,6 +32,22 @@ sections 9 and 10 and bench/OPPONENT_REFERENCE.md before touching a lane.
 | 0.8.3 release merged | a824d9da | see section 3 |
 | SVM block-solve schedule row, DEVIATIONS 2627, 2628 | 3671a1e5 | opt-in schedules, default unchanged; see section 5 |
 
+### Merged the same night (the final speed pass)
+
+| lane | main commit | result |
+|---|---|---|
+| knn-finish, DEVIATION 2631 | af194de1 | NVIDIA query tile 4,096: taxi 0.900, Istella-S 0.952, **geomean 0.926**, recall and every bit unchanged. 2667 fused select measured NEGATIVE (geomean 1.523) and stays opt-in; 2668 UMAP live-row NOT flipped (wins taxi 0.9323, LOSES Istella-S 0.9636 against the shipped 0.9737) |
+| kde-finish, DEVIATIONS 2625, 2626, 2660 | 44bf06a0 | taxi 0.811, Istella-S 0.311, **geomean 0.502**, log-likelihood identical to the last digit |
+| svm-finish, DEVIATIONS 2665, 2666 | aede96e8 | taxi 0.8886, Istella-S 0.8498, **geomean 0.869**, accuracy unchanged. Also fixed a REAL BUG in 48f92b19: the RARY_TREE arity row had no dispatch branch, so that define silently selected the default and three earlier "rary" measurements measured nothing |
+| forest-finish, DEVIATIONS 2637, 2638, 2663 | b3d6eeb5 | RF **0.775**, ET **0.929**, iforest **0.108**; 2663 at bw16k **0.880** and bw32k **0.865**. Every quality delta exactly +0.000000. ET is SLOWER on taxi (1.018) and is not claimed there |
+| gbdt-finish, DEVIATIONS 2634, 2635, 2636 (2661 opt-in) | 5030ebc3 | identity only: 36/36 cells stable on four sets, sub-byte 16/16 PASS. **NO speed claim** — timing was still running at merge |
+| pointwise-speed | 652ccd8f | merged on Andrew's instruction while the lane was still running; its verdicts are owed |
+| linear-cluster-istella, DEVIATION 2671 | 0c6c1249 | Jacobi with two barriers per rotation: OLS geomean 0.9610, PCA 0.9435, 0 of 48,400 matrix and 0 of 48,400 eigenvector cells differing. **DEVIATION 2672 is UNRESOLVED** (taxi 0.979, Istella-S 1.066 then 0.950) and must not be read as a win until the pooled tie-break returns |
+
+Apple M4 gates passed before each merge: check-knn-identity, check-knn,
+query_batch_check; kde_check 15/15 and kde_stage_profile; svc_main 44/44 plus
+the three fit hashes; check-if, check-forest-resident-layouts and extratrees
+device_batched_check (45 cells, sabotage arms move thousands of nodes).
 ## 3. Release 0.8.3 (published 2026-09-11)
 
 - Contents: 2620 to 2623 only, on top of v0.8.2. Branch release-0.8.3,
@@ -121,107 +140,106 @@ Istella-S was not measured (download 980 s).
 | KDE, 100k x 2k queries | taxi (d11) | 2.37 | 39.2 | 16.55x |
 | KDE, 100k x 2k queries | Istella-S (d220) | 6.79 | 219 | 32.25x |
 
-## 5. Lane branches (pushed, NOT merged unless stated)
+## 5. Lane branches
 
-| lane | branch tip | what is on it | why not merged, and what merging needs |
-|---|---|---|---|
-| svm-speed | 48f92b19 | 61feb052 MERGED (3671a1e5); 48f92b19 R-ary 32-way thread-carrying tree, UNBUILT | build and time it; see 6.5 |
-| kde-speed | 21bb9a91 | DEVIATION 2625 tiled IDENTICAL KDE (euclidean, l1, chebyshev), same bits (gate `check_kde_tiled_equals_staged` 33,300 scores, 0 differ; `kde_check` PASS on H100), ON BY DEFAULT in the branch | the race against cuML never ran on it; device-only synthetic taxi shape 32.3 to 18.9 ms, Istella-S shape 124 to 118 ms; needs 6.2 |
-| linear-cluster-speed | 904733ff | DEVIATIONS 2632 (OLS host means, centering, uninitialized centered buffer) and 2633 (k-means scale pass), same bits (OLS fb86358654367fa0, k-means 89520efe99a08d5f); harness fixes (cuML k-means tol 0 refused by cuVS, new `ours-base` arm) | taxi only: OLS 264.7 to 177.8 ms (0.67), k-means 304.6 to 216.2 ms (0.71); Istella-S race and M4/AMD gates owed; needs 6.1 |
-| gbdt-speed | 55967003 | DEVIATION 2634 (skip CTR target prep without categorical columns, built, never timed) and 2635 (binary-search border candidates, NEVER COMPILED), both default on | needs 6.3 |
-| forest-speed | e3bce76a | DEVIATIONS 2637 (RF/ET row-major staging straight into pinned memory) and 2638 (iforest lends X by address), UNBUILT; 759e1aac harness fix; results | needs 6.4 |
-| knn-speed | 63740f29 | DEVIATION 2629 exact distance chain without per-step flush, opt-in, same bits, flat (synthetic k10 23.65 to 23.85 ms, Istella-S 124.71 to 119.49 ms inside 6 to 10% noise); `tools/umap_two_datasets.py`; the committed default-off path was never compiled | little to merge; take the harness and rows if wanted, see 6.6 |
+All seven finish lanes are MERGED (section 2). Four branches remain ahead of
+main and were deliberately NOT merged:
 
-The lanes' own OPPONENT_REFERENCE sections live on their branches; merge
-them with the code, or copy the section 4 tables here into
-bench/OPPONENT_REFERENCE.md if the code is dropped.
+| branch | what is on it | why not merged |
+|---|---|---|
+| lane/cpu-sweep | byte LM GPU logits, verified 1680/1680 equal to the CPU reference on an H100 AND an MI325X | **DEVIATION 2660 COLLISION**: main already uses 2660 for KDE host-pointer staging, this uses it for byte-LM forward-only logits. Renumber before merging. It touches no classical file, so it merges cleanly once renumbered |
+| lane/attention-regs-h100 | attention register pressure, DEVIATIONS 2653, 2654; 2655 and 2656 named, NOT BUILT | neural, owned by the peer session; partly unbuilt |
+| lane/trees-hotaisle-run | trees-hotaisle body switch | its own commit says "NOT RUN: lane stopped as a duplicate" |
+| lane/amd-gbdt-identity-verify | nothing unique | zero non-merge commits ahead of main; only a stale merge commit |
 
+**Deviation-number collisions are a recurring failure here.** 2624 collided
+with `lane/cpu-speed` and 2660 now collides with `lane/cpu-sweep`, both byte-LM
+lanes from other sessions. Always run `git grep -n "DEVIATION 26[0-9][0-9]"`
+across main AND every open branch before taking a number.
 ## 6. Next steps, in the order I would take them
 
-Rules for all of them: runs on RunPod NVIDIA H100 through `tools/trees_leg.sh`
-(one pod per lane, watchdog baked in, reap and see 404); subagents never
-run anything on the Mac; the flip rule of section 9 (geomean of after/before
-over taxi and Istella-S below 1, quality not worse); same bits proven on the
-H100, then the orchestrator gates the Apple M4 and an AMD box (Hot Aisle
-first) before a merge.
+Rules: runs on RunPod NVIDIA H100 through `tools/trees_leg.sh` (one pod per
+lane, watchdog baked in, reap and confirm 404); subagents never run anything
+on the Mac; the flip rule of section 9 (geomean of after/before over taxi and
+Istella-S below 1, quality not worse on EITHER dataset); same bits proven on
+the H100, then gate the Apple M4 and an AMD box before merging.
 
-1. **Finish linear-cluster-speed (smallest step to a merged win).** On one
-   H100, race `ours,ours-base,cuml-gpu` on Istella-S for LinearRegression,
-   PCA and KMeans (commands in bench/results/linear_cluster_speed_2026-09-11/README
-   on the branch), compute the geomean by hand (`tools/flip_verdict.py` reads
-   another log format). On the M4: `pixi run check-kmeans`,
-   `tools/with_identical_mode.sh pixi run mojo run -I . glm/ols_main.mojo`,
-   `test_native_helpers.py`, `helpers_ident.py` against 36ca51fd. Then
-   merge. On Istella-S the 220-column device Jacobi is expected to dominate
-   OLS and PCA; fewer synchronization points per rotation keep bits.
-2. **KDE (largest ratio).** Port the SIMD accumulator from
-   `kde/checks/kde_dist_attribution.mojo` into `kde_tiled_logk_kernel`
-   (it cut the tiled log-kernel stage 108 to 30.6 ms with the same hash),
-   stage the caller's memory without List copies (about 95 ms of host time
-   on Istella-S), run `kde_check` on H100, M4 and AMD, then the race
-   `MOJOLEARN_CTD_PHASES=races MOJOLEARN_CTD_LANES=kde MOJOLEARN_CTD_DATASETS=taxi,istella MOJOLEARN_CTD_ROUNDS=5 MOJOLEARN_CTD_EXTRA_ARMS=ours-before`
-   (the `ours-before` arm is new and untested).
-3. **GBDT host setup and lossguide.** Build 2634 and 2635, then
-   `sh tools/trees_identical_ab.sh build a2634 gbdt`, `ib baseline`,
-   `ib a2634`, `diff baseline a2634`, `pixi run check-greedylogsum`,
-   `pixi run check-binarization`, `python3 checks/gbdt_sub_byte_identity_check.py`,
-   and `bench/results/gbdt_speed_2026-09-11/body_ab2634.sh` into
-   `tools/flip_verdict.py`. Then batch the Istella-S compressed index uploads
-   (about 100 ms per fit) and remove one of lossguide's two host drains per
-   grow iteration (`greedy_search_helper_depthwise.mojo:2305-2308`), which
-   is the 2.03x against XGBoost on taxi.
-4. **Forests.** Build c4056486, `sh tools/trees_identical_ab.sh ib rowmajor rf-clf,rf-reg,et-clf,et-reg,iforest`
-   and `diff baseline rowmajor`, `pixi run check-if`, then speed cells for
-   RF, ET and our first iforest baseline on both datasets. ExtraTrees on
-   Istella-S (about 6 s) holds most of the remaining forest time.
-5. **SVC.** Build and time the R-ary tree (`bench/results/svm_speed_2026-09-11/variants.sh`
-   with rary32, rary16, rary32nt, fused, tree). Any flip goes through the
-   NVIDIA row only (Metal refuses FUSED_TREE at width 1024, threadgroup
-   memory 36872 > 32768). Then the roughly 36 ms of Istella-S work outside
-   the solver (41 MB kernel tile allocation and poison fill, X list copy,
-   host finite check). cuML runs as many inner iterations as we do, so the
-   remaining gap is per-iteration cost.
-6. **k-NN.** Widen the NVIDIA query tile from 512 to 2048 or 4096 (256 to
-   512 saved 5.8%, tiling cannot move bits) and shrink unused radix scratch;
-   then mirror cuML's fused distance plus top-k (cuVS
-   `knn_brute_force.cuh:447-451`), which never writes a distance matrix.
-   Our time today is distance 15.3 ms and selection 7 to 10 ms across about
-   160 launches.
-7. **UMAP.** Find why our trustworthiness trails cuML's (0.906 against
-   0.966 on taxi 100k) before quoting any UMAP time; the Istella-S race is
-   owed (`python3 tools/umap_two_datasets.py race --dataset istella --rows 100000 ...`
-   on lane/knn-speed).
-
-Also owed, not speed:
-
-- Pointwise speed win-back after 2624: per-block scratch slots summed in a
-  fixed order with a vendor-independent multiplier, keeping 2624's hashes;
-  Apple M4 pointwise model hashes were never compared.
-- Before the next Linux release: confirm the installed FAST and
-  DETERMINISTIC smoke passes on main (`run_installed.py` asks
-  `_backend.binding('_mojolearn')` in every tier), and qualify sm_89
-  installed.
-- DBSCAN and HDBSCAN at 1M rows against cuML (never measured); scikit-learn
-  KDE Istella-S row on AMD.
-- DEVIATION 2624 collision: `origin/lane/cpu-speed` (byte LM CPU kernels,
-  another session) also uses 2624 and must renumber before it merges; the
-  neural session was told.
-
+1. **Reap the four live pods** listed in section 1 and confirm HTTP 404. Do
+   this first; they bill by the minute.
+2. **Collect the verdicts the merges do not yet carry.**
+   - GBDT 2634/2635/2636: the ab and phase 2 medians, per-switch, through
+     `tools/flip_verdict.py`. If any loses, turn it off; it is merged as
+     default-on with identity proven but speed unproven.
+   - DEVIATION 2672 (k-means host staging): the pooled tie-break across five
+     race instances per dataset. If it loses, revert its two hunks.
+   - DEVIATION 2663 regression: the ExtraTrees istellareg cells and the
+     pre-registered width rule (taxireg was flat at 0.989/0.988, and the
+     mechanism is structurally absent at max_features=1.0).
+   - The pointwise lane's own before/after table.
+3. **AMD confirmations for every lane merged tonight** (gfx942, Hot Aisle
+   first, then DigitalOcean): the three kNN checks; `kde_check` and
+   `kde_stage_profile`; `svm/svc_main.mojo` 44/44 plus the hash probe;
+   `check-if`, `check-forest-resident-layouts` and extratrees
+   `device_batched_check`.
+4. **A RunPod network volume for the datasets.** Istella-S is 472 MB and each
+   new pod refetches it from library.istella.it at 86 to 285 KB/s. Tonight it
+   cost the gbdt lane about 40 minutes and blew its 2400 s download timeout;
+   the leg only survived because `curl -C -` resumed the partial file
+   (`urllib.request.urlretrieve`, which the arm uses, cannot resume). Pattern
+   to copy: `samba-sweep/tools/train_leg.sh`. This is the single highest-value
+   infrastructure fix left.
+5. **Before the next Linux release**: confirm the installed FAST and
+   DETERMINISTIC smoke passes on main (`run_installed.py` asks
+   `_backend.binding('_mojolearn')` in tiers DEVIATION 2490 removed; the fix
+   cc117fdf is on main but was not on the 0.8.3 release branch), and qualify
+   sm_89 installed (no L40S, RTX 4090 or L4 stock on RunPod that night).
+6. **Speed work still open**, in descending value:
+   - kNN: a fused kernel only pays if a block owns SEVERAL query rows, which
+     needs cuVS's shape of staging a rows-by-columns distance chunk in shared
+     memory. 2667 failed because one block owning one row reads 1.125 operands
+     per cell per feature against the register tile's 0.375.
+   - UMAP: the remaining quality gap is the order ACROSS vertices, so damping
+     (a rate schedule matched to how many moves a vertex applies) is the
+     candidate, not a closer imitation of a serial sweep.
+   - SVC: cuML runs about the same inner-iteration count we do, so the gap is
+     per-iteration cost inside the fused tree (about 3.5 us against 2.5), plus
+     the Python side still allocating n_rows x n_cols float32 for support
+     vectors on every fit.
+   - KDE: Istella-S is about 68 ms against cuML's 7, roughly 41 ms device and
+     20 ms host staging. cuML's fused approach never writes the
+     n_query x n_train matrix, but under IDENTICAL that needs a summation
+     order equal to the staged one, so it is a design question.
+   - The kNN query tile row is NVIDIA only; Apple and AMD have never been
+     timed at a wider tile and that is the cheapest kNN win left.
+7. **Also owed, not speed**: Apple M4 pointwise model hashes were never
+   compared; `test_native_helpers.py` and `helpers_ident.py` on the M4 for the
+   linear-cluster work; scikit-learn KDE Istella-S row on AMD.
 ## 7. DEVIATION numbers
 
-Trees and classical used 2620 to 2629 and 2631 to 2638 (2626, 2631, 2636
-unused so far; 2639 held for the orchestrator). 2630 and 2640 to 2659 are
-neural's. Take the next trees or classical number from 2660 up after
-checking `git grep -n "DEVIATION 26[6-9]"` on main and the open branches.
+Trees and classical have used 2620 to 2629, 2631 to 2638, and 2660 to 2672.
+2630 and 2640 to 2659 are neural's. 2639 was held for the orchestrator and is
+still free.
 
+Take the next trees or classical number from 2673 up, and BEFORE taking it run
+`git grep -n "DEVIATION 26[0-9][0-9]"` on main and on every open branch --
+two collisions (2624, 2660) have already come from byte-LM lanes in other
+sessions picking from the same range.
 ## 8. Evidence and worktrees
 
-- Lanes: `~/mojolearn-evidence/{kde,svm,knn,linear-cluster,gbdt,forest}-speed-2026-09-11/`;
-  small copies under `bench/results/*_2026-09-11/` on each branch.
-- Earlier tonight: `~/mojolearn-evidence/svc-cuda-1024-2026-09-11`,
-  `pointwise-hash-drift-2026-09-11`, `ptw2624-amd-mi300x-hotaisle`,
-  `verify083-amd-mi300x-hotaisle`, `trees-h100-pointwise-ab-2026-09-11`,
+- Tonight's finish lanes: `~/mojolearn-evidence/{kde,svm,knn,forest,gbdt}-finish-2026-09-11/`
+  and `linear-cluster-speed-2026-09-11/`; small copies committed under
+  `bench/results/*_2026-09-11/`.
+- Earlier: `~/mojolearn-evidence/{kde,svm,knn,linear-cluster,gbdt,forest}-speed-2026-09-11/`,
+  `release-0.8.3-2026-09-11/`, `release-0.8.2-2026-09-11/`,
+  `svc-cuda-1024-2026-09-11`, `pointwise-hash-drift-2026-09-11`,
+  `ptw2624-amd-mi300x-hotaisle`, `verify083-amd-mi300x-hotaisle`,
+  `trees-h100-pointwise-ab-2026-09-11`,
   `classical-h100-kde-svc-istella-2026-09-11`.
-- The lane and release worktrees live in the orchestrator's scratchpad
-  under /private/tmp and will not survive a reboot; every branch is pushed
-  and the release evidence is copied, so they can be removed.
+- The lane worktrees live in the orchestrator's scratchpad under /private/tmp
+  and will not survive a reboot. Every branch is pushed and all evidence is
+  copied out, so they can be removed.
+- Useful traps learned tonight: macOS has no `timeout` (the wrapped command
+  never runs); `pkill -f PAT` inside an ssh command matches that command's own
+  line and kills the remote shell, so break the pattern (`"istella_re[s]ume"`);
+  `git merge -F -` cannot read a message from stdin the way `git commit -F -`
+  can.
