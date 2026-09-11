@@ -1,0 +1,1 @@
+STEP gemm arm=shipped ratio=0.9998219668022803 shipped_ms=181.292031 arm_ms=181.25975499999998 calls=12 moved=0 (per-call medians weighted by per-step counts; a GEMM sum, not a step time)
