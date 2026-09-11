@@ -18,6 +18,8 @@ export GBM_BENCH_DATA=/mnt/mojolearn-data/gbm-bench
 export MOJOLEARN_SPEED_PY=python3
 mark() { echo "$1 $(date -u +%T)" | tee -a $OUT/ab.txt; : > "$OUT/phase.$1"; }
 while [ ! -f $OUT/track_mojo.done ] || [ ! -f $OUT/track_import.done ]; do sleep 10; done
+# In the same lease as batchC (leg 2), it runs after batchC; the hold cuts what does not fit.
+sleep 20; while pgrep -f "[s]h /root/batchC.sh" > /dev/null; do sleep 10; done
 echo "batchD start $(date -u +%T) load $(cat /proc/loadavg)" | tee -a $OUT/ab.txt
 grep -q '^import_identical=0' $OUT/setup.txt || { echo "import_identical failed"; exit 3; }
 [ -s $GBM_BENCH_DATA/istella/istella_speed.npz ] || { echo "no Istella-S cache on the volume; refusing"; exit 4; }
