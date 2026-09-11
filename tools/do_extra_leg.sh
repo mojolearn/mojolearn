@@ -204,6 +204,14 @@ LOCK_HELD=0
 # must start with MOJOLEARN_ or MODULAR_; values are letters, digits and
 # _.,:/=- only, so they cannot carry shell syntax or a secret by accident.
 EXTRA_ENV="${MOJOLEARN_DO_EXTRA_ENV:-}"
+# Data files the box cannot fetch itself (the NYC TLC CloudFront refuses
+# droplets by address, 2026-09-11) ride MOJOLEARN_DO_EXTRA_UPLOAD as
+# space-separated ABSOLUTE local paths. Each is uploaded after the bundle to
+# /root/gemm_leg_upload/<basename>, its sha256 is compared on the box against
+# the one computed here, and the pair lands in leg.txt. Basenames: letters,
+# digits and ._- only. Empty (the default) uploads nothing.
+EXTRA_UPLOAD="${MOJOLEARN_DO_EXTRA_UPLOAD:-}"
+UPLOAD_LIST=""
 OUT="${MOJOLEARN_GEMM_LEG_OUT:-bench/results/e1g/${STAMP}-${GPU_LABEL}-extra}"
 case "$OUT" in /*) ;; *) OUT="$REPO/$OUT" ;; esac
 REAL_OUT="$OUT"
@@ -449,6 +457,20 @@ elif [ "$DRY" = 1 ]; then
   printf '  info   %s (a dry run does not need it)\n' "$_why"
 else
   die "REFUSING to rent: $_why" 2
+fi
+
+if [ -n "$EXTRA_UPLOAD" ]; then
+  : > "$OUT/upload_files.txt"
+  _up_ok=1
+  for _u in $EXTRA_UPLOAD; do
+    _b=$(basename "$_u")
+    case "$_u" in /*) ;; *) rbad "MOJOLEARN_DO_EXTRA_UPLOAD: $_u is not an absolute path"; _up_ok=0; continue ;; esac
+    case "$_b" in .*|*[!A-Za-z0-9._-]*) rbad "MOJOLEARN_DO_EXTRA_UPLOAD: basename $_b (letters, digits and ._- only)"; _up_ok=0; continue ;; esac
+    if [ ! -f "$_u" ] || [ ! -r "$_u" ]; then rbad "MOJOLEARN_DO_EXTRA_UPLOAD: $_u is not a readable file"; _up_ok=0; continue; fi
+    printf '%s %s %s\n' "$(sha256_of "$_u")" "$(wc -c < "$_u" | tr -d ' ')" "$_u" >> "$OUT/upload_files.txt"
+    UPLOAD_LIST="$UPLOAD_LIST $_u"
+  done
+  [ "$_up_ok" = 1 ] && rok "upload files: $(wc -l < "$OUT/upload_files.txt" | tr -d ' '), $(awk '{s+=$2} END {print s}' "$OUT/upload_files.txt") bytes, each sha256-checked on the box after upload"
 fi
 
 if _age=$(lock_age); then
@@ -1125,6 +1147,27 @@ log "uploaded after $(( $(date +%s) - LEG_START ))s of lease"
 sed 's/^/    /' "$TMPD/unpack.out"
 grep -q '^ARCHIVE-SHA-OK' "$TMPD/unpack.out" && grep -q '^UNPACKED ' "$TMPD/unpack.out" \
   || die "the box refused or failed to unpack the bundle" 7
+
+# MOJOLEARN_DO_EXTRA_UPLOAD: data the box cannot fetch, each file checked by
+# sha256 on the box against the one computed before the create.
+if [ -n "$UPLOAD_LIST" ]; then
+  "${SSHN[@]}" 'mkdir -p /root/gemm_leg_upload' || die "could not create /root/gemm_leg_upload" 7
+  for _u in $UPLOAD_LIST; do
+    _b=$(basename "$_u")
+    _want=$(awk -v p="$_u" '$3 == p { print $1 }' "$OUT/upload_files.txt")
+    _bytes=$(awk -v p="$_u" '$3 == p { print $2 }' "$OUT/upload_files.txt")
+    _left=$((DEADLINE_EPOCH - FETCH_RESERVE - $(date +%s)))
+    [ "$_left" -gt 120 ] || die "no lease left to upload $_b" 7
+    log "upload $_b ($_bytes bytes, sha256 ${_want:0:16})"
+    with_deadline "$_left" scp -q "${SSH_OPTS[@]}" "$_u" "root@$IP:/root/gemm_leg_upload/$_b" \
+      || die "the upload of $_b failed" 7
+    _got=$("${SSHN[@]}" "sha256sum /root/gemm_leg_upload/$_b" 2>/dev/null | awk '{ print $1 }')
+    [ -n "$_want" ] && [ "$_got" = "$_want" ] \
+      || die "the upload of $_b does not match on the box (sha256 ${_got:0:16} there, ${_want:0:16} here)" 7
+    echo "upload=$_b bytes=$_bytes sha256=$_want" >> "$OUT/leg.txt"
+  done
+  log "uploads verified by sha256 on the box after $(( $(date +%s) - LEG_START ))s of lease"
+fi
 
 "${SSH[@]}" 'umask 022; cat > /root/gemm_leg_extra.sh' < "$OUT/extra_body.sh" || die "could not ship the extra body" 7
 "${SSH[@]}" 'umask 022; cat > /root/gemm_leg_extra_env.sh' < "$OUT/extra_env.sh" || die "could not ship the extra body environment" 7

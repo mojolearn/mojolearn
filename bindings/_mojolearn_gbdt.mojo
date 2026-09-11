@@ -62,6 +62,7 @@ from gbdt.estimator import (
     gbdt_fit,
     gbdt_fit_two_level_feature_freq,
     gbdt_model_dim,
+    gbdt_per_round_paths,
     gbdt_predict,
     gbdt_predict_multi,
 )
@@ -94,6 +95,13 @@ def gbdt_numeric_mode_binding() raises -> PythonObject:
     and should: 2 promises reproducibility on one device and says
     nothing about a second."""
     return PythonObject(GLOBAL_NUMERIC_MODE)
+
+
+def gbdt_per_round_paths_binding() raises -> PythonObject:
+    """Which side of each gbdt speed switch this binary compiled
+    (DEVIATIONS 2550, 2551, 2580, 2581), printed by the benchmark beside its timing
+    (ENGINEERING_RULES.md section 8)."""
+    return PythonObject(gbdt_per_round_paths())
 
 
 def gbdt_binary_prediction_binding[probabilities: Bool, dtype: DType](
@@ -597,6 +605,7 @@ def PyInit__mojolearn_gbdt() abi("C") -> PythonObject:
         m.def_function[gbdt_model_dim_binding]("gbdt_model_dim")
         m.def_function[gbdt_predict_multi_binding]("gbdt_predict_multi")
         m.def_function[gbdt_numeric_mode_binding]("gbdt_numeric_mode")
+        m.def_function[gbdt_per_round_paths_binding]("gbdt_per_round_paths")
         m.def_function[gbdt_binary_prediction_binding[True,DType.float32]]("gbdt_binary_probabilities")
         m.def_function[gbdt_binary_prediction_binding[False,DType.int32]]("gbdt_binary_classes")
         m.def_function[gbdt_sigmoid_binding]("gbdt_sigmoid")
