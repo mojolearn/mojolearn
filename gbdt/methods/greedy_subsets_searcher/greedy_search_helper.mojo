@@ -484,11 +484,23 @@ comptime SYM_LEVEL_QUANT_2580 = (
 # addends into the same accumulator cells, and integer sums do not
 # depend on grouping, so no bit can move.
 #
-# Opt-in: `-D MOJOLEARN_2581_GROUP_WIDTH=1`. Named checks, one per side:
-# `checks/sym_arms_check.mojo` `check_2581_off` / `check_2581_on`.
+# DEFAULT ON UNDER IDENTICAL since 2026-09-11 (MI300X Hot Aisle, tools/
+# flip_verdict.py FLIP geomean=0.995 taxi=1.006 istella=0.985 quality=ok);
+# `-D MOJOLEARN_2581_GROUP_WIDTH_OFF=1` restores the block-widest ladder.
+# FAST stays OPT-IN (`-D MOJOLEARN_2581_GROUP_WIDTH=1`; NO FLIP geomean=1.007
+# on the same box). What it reaches today: Istella-S's one-byte block is 32
+# groups, 31 of them 8-bit and one short 7-bit group, so one group leaves the
+# 8-bit route; taxi's two groups are both 8-bit and only change launcher.
+# Named checks, one per side, both instantiated explicitly whatever the
+# defines: `checks/sym_arms_check.mojo` `check_2581_off` / `check_2581_on`.
 # `MOJOLEARN_GBDT_PATH=1` prints each fit's per-width group counts.
 # ====================================================
-comptime SYM_GROUP_WIDTH_2581 = is_defined["MOJOLEARN_2581_GROUP_WIDTH"]()
+from checks.numerics import GLOBAL_NUMERIC_MODE
+
+comptime SYM_GROUP_WIDTH_2581 = is_defined["MOJOLEARN_2581_GROUP_WIDTH"]() or (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not is_defined["MOJOLEARN_2581_GROUP_WIDTH_OFF"]()
+)
 
 #: Threads per block of the level quantize launch; no shared memory.
 comptime LEVEL_QUANT_BLOCK = 512
