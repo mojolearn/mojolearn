@@ -416,3 +416,214 @@ not, it is the byte LM's teardown.
 Mitigation to test (not the default until the control says which it is): a
 process-lifetime context keeper, so a live context always exists when the
 next one is created, which is the exact condition of the passing cases.
+
+## DEVIATION 2513: controls through other bindings, and an opt-in context keeper (2026-09-11, source only)
+
+Nothing in this section was executed. It adds three CONTROL cases and two
+mitigation variants to the harness, one switch-guarded change to the byte LM
+binding, and the trees build to the wrapper. The run is OWED below.
+
+Line numbers first, because the ones cited above are stale: DEVIATION 2499
+(b3d4f3e0, the phase timers) landed after this brief was written, and this
+section adds 53 lines. In the current `bindings/_mojolearn_byte_lm.mojo`
+the per-call context is created at :296 (`session.ctx = DeviceContext()`,
+was :216 then :244) and the stateless teardown is :382-383
+(`session.trainer = None; session.ctx = None`, was :284-285 then :330-331).
+Everything else in section 3 still reads the same.
+
+### The controls
+
+Every hung case in run 3 creates a `DeviceContext` after the process has
+destroyed one. The byte LM is not the only binding that does that:
+
+- `kmeans_fit_binding` (`bindings/_mojolearn.mojo:421`) creates
+  `var ctx = DeviceContext()` inside `with GILReleased`, and it dies at the
+  end of that block. The base binding does NOT cache its context: every
+  `KMeans.fit` (`python/mojolearn/cluster.py:161`) is one create-use-destroy.
+- `et_classifier_fit_binding` (`bindings/_mojolearn_trees.mojo:338`) does
+  the same per fit. The only process-wide state in that binding is
+  `ET_EXPORTS` (`:72`, a `std.ffi._Global` registry) and it holds a HOST
+  `FitResult`, no device object; the Python side copies the arrays out and
+  calls `forest_export_release` before `fit()` returns
+  (`python/mojolearn/_forest_protocol.py:265-310`).
+
+So two fits in one process through either binding is exactly the
+create-after-destroy shape, with none of the byte LM's code. The three
+cases, each its own subprocess with the same deadline and hang diagnostics:
+
+| case | sequence | binding(s) |
+|---|---|---|
+| `control_kmeans_x2` | `KMeans(n_clusters=4, numeric_mode='identical').fit` twice, 256 x 4 | `_mojolearn` only |
+| `control_extratrees_x2` | `ExtraTreesClassifier(n_estimators=8, max_depth=6, numeric_mode='identical').fit` twice, 512 x 8 | `_mojolearn_trees` (plus `_mojolearn` host helpers) |
+| `control_kmeans_then_bytelm` | one KMeans fit, then one stateless byte LM `train_step` (fresh trainer, `completed_steps=0`) | `_mojolearn`, then `_mojolearn_byte_lm` |
+
+The two pure controls never import the byte LM binding (`run_child` skips
+the byte LM witness for `CONTROL_ONLY`); they record their own binding's
+file, sha256, vendor and compiled mode instead (`record.control_binding`).
+Inputs are a pure-Python `random.Random(2513)` fixture through `frombytes`,
+so the controls do not depend on NumPy. Small data on purpose: this is a
+lifetime question, not a timing one; the 1M-row floor is for tree timing.
+Each control hashes both fits' outputs (centroids, labels, inertia; the five
+forest arrays) and `summary.json.control_fit_equality` says whether fit 1
+and fit 2 are bit-equal, which under IDENTICAL with one seed they must be;
+a difference there is a separate finding, not this lane's.
+
+What each outcome means, read together with `stateless_x2` on the same box:
+
+| `control_kmeans_x2` | `control_extratrees_x2` | `control_kmeans_then_bytelm` | reading |
+|---|---|---|---|
+| pass | pass | pass | create-after-destroy is fine for the other bindings AND for the byte LM's first context after a base-binding context died: the hang needs the byte LM's OWN first context to have been destroyed. The byte LM's teardown (what its ~250 buffers, fused-attention modules, pinned frees or the session restructure leave behind) is the trigger. Bisect the five commits of section 2 on this box; the keeper is a workaround only. |
+| pass | pass | HUNG | the byte LM's context CREATION or first use is the sensitive side (a base-binding context died first and the byte LM's first context still hung); still byte LM specific, but the fault is in what the byte LM does on a fresh context after any destroy (kernel loads, first allocations), not in its own teardown. |
+| HUNG | HUNG | HUNG | the runtime on this box: any second `DeviceContext` after a destroy blocks, every per-call estimator is affected there, and the byte LM is only where it was noticed. The keeper then belongs in the BASE binding (or a process-wide runtime hook), not in the byte LM; that is a follow-up lane, not this one. |
+| HUNG | pass (or the reverse) | any | the two per-call bindings differ in what their first context leaves behind (kernel count, pinned host memory, the export registry); record which and compare its teardown with the byte LM's before attributing. |
+
+The passing controls are only meaningful if `stateless_x2` still hangs in
+the same run (the binary changed: the keeper code is in it, switch off); a
+run where nothing hangs says the box or image changed, not that anything was
+fixed.
+
+### The keeper (mitigation, OFF by default)
+
+`bindings/_mojolearn_byte_lm.mojo:73-112` and `:250-252`, `:289-296`:
+
+- `_ContextKeeper` (:73) holds `Optional[DeviceContext]`; `ensure()` creates
+  the context once; `active()` reports whether it holds one.
+- `BYTE_LM_CONTEXT_KEEPER` (:105) is a `std.ffi._Global[StorageType=_ContextKeeper, name="MojoByteLMContextKeeperIdentical", init_fn=...]`,
+  the same construction as `ET_EXPORTS` (`_mojolearn_trees.mojo:72`) and
+  `RF_EXPORTS` (`_mojolearn_rf.mojo:266`). The repo has no module-level
+  `var` anywhere (section 3 grep), and the memory names module-level `var`
+  and buffer lifetimes as traps; `_Global` is the one process-wide slot
+  pattern the bindings already use, runtime-owned, created once by name,
+  `get_or_create_ptr()` callable with the GIL released (it is an
+  `external_call` into the compiler runtime, no Python involved). Its
+  storage lives until the runtime tears down its globals at process exit,
+  which is after every per-call context of the process, so the keeper is the
+  last context standing either way. What reading could not establish: the
+  stdlib source is not in this checkout (compiled `.mojoc` only) and
+  `_Global` is undocumented, so whether its deinit runs at exit at all, or
+  only on explicit destruction, is not confirmed; both are acceptable here.
+- `_byte_lm_run` reads `MOJOLEARN_BYTE_LM_KEEP_CONTEXT` once per call
+  (:252, a `getenv` in the same host section and cost class as the timing
+  switch `ton`). Inside `GILReleased`, ON THE CREATE PATH ONLY (`if not
+  session.ctx`), when the switch is `"1"`, it calls
+  `BYTE_LM_CONTEXT_KEEPER.get_or_create_ptr()[].ensure()` (:295) and then
+  creates the per-call context exactly as before (:296).
+
+It is a SEPARATE context, created first, never the per-call one retained:
+the per-call `session.ctx`, the resident session, the reuse admission, the
+`synchronize()` and the teardown at :382-383 are untouched, so a keeper run
+differs from `stateless_x2` in exactly one thing, "a live context existed
+when the second one was created", which is the condition every passing case
+in run 3 shares. Off (the default and every existing caller), the only added
+work is the `getenv` compare; the keeper branch is not entered and no
+`_Global` slot is created.
+
+Reach is verified, not assumed: `byte_lm_context_keeper_active()` (:109,
+exported at the end of `PyInit`) returns whether the keeper holds a context
+and creates nothing. The wrapper's readback prints it at import (must be
+`False`), and the harness records it after every byte LM call
+(`native_call_end.keeper_active`); `summary.json.keeper_reached` carries the
+last value per keeper case. A keeper case that passes with
+`keeper_active=false` did not test the keeper (stale binary or unreached
+branch) and is not evidence.
+
+If `_Global` proved unusable on some target, the fallback is a keeper held
+in the Python layer: one `LanguageModelTrainer(resident=True)` whose session
+is created at first use and never closed for the life of the process, since
+a resident session's context is exactly a never-released context
+(`resident_then_stateless` passed on the 4090 for that reason). Not
+implemented; the Python layer is another lane's write set.
+
+### Harness variants
+
+`stateless_x2_keep_context` and `resident_close_reopen_keep_context` are the
+existing two cases run with `MOJOLEARN_BYTE_LM_KEEP_CONTEXT=1` in the child
+environment (`CHILD_ENV`), each recording the switch and the keeper
+read-back before and after. Both join `SECOND_STEP_GROUP` and
+`FIRST_STEP_GROUP`: the keeper must not change a bit, and a second-step hash
+that differs from `stateless_x2`'s on a box where both complete is a finding
+that blocks making it a default.
+
+Expected readings, 4090, with `stateless_x2` still hanging:
+
+- both keeper variants pass with `keeper_active=true`: the create-while-alive
+  condition is sufficient on that box; the keeper is a usable workaround.
+- `stateless_x2_keep_context` hangs with `keeper_active` unobserved (the
+  first call is where the keeper context is created): the second context
+  (keeper then per-call, both in call 1) already hangs, which contradicts
+  `resident_then_stateless`, and the difference would be that the keeper
+  context did no work; record it, do not explain it here.
+- `stateless_x2_keep_context` passes and `resident_close_reopen_keep_context`
+  hangs: `close()` (GIL held, explicit synchronize) leaves something the
+  keeper does not cover; candidate 3 rises.
+
+### Wrapper
+
+`tools/byte_lm_lifetime_diag.sh` now builds three bindings under IDENTICAL,
+each rm-then-build: base (`bindings/build.sh`, as before), trees
+(`bindings/build_trees.sh`, new, for `control_extratrees_x2`; a failed trees
+build is recorded as `build_trees_exit` and only that control fails), byte
+LM (`bindings/build_byte_lm.sh`, as before). The readback prints
+`keeper_readback` and `keeper_active_at_import`. The harness's outer timeout
+is 3000 s for 17 cases; worst case (every case hangs at 120 s) is 34 min
+plus three builds, about 40 min, inside the 60 minute lease with run 3's
+2 minute gates and the 600 s fetch reserve.
+
+### RUN OWED (orchestrator, one light thing at a time)
+
+    MOJOLEARN_RUNPOD_KEY_FILE=~/.mojolearn_runpod_key \
+    MOJOLEARN_GEMM_LEG_EXTRA=tools/byte_lm_lifetime_diag.sh \
+    MOJOLEARN_GPU_ARCHS=sm_89 \
+    sh tools/gemm_remote_leg.sh nvidia --payload gemm --source-ref <sha> \
+        --gpu "NVIDIA GeForce RTX 4090" --rent --minutes 60
+
+`<sha>` must contain this section's three files (`bindings/_mojolearn_byte_lm.mojo`,
+`tools/byte_lm_lifetime_diag.py`, `tools/byte_lm_lifetime_diag.sh`; all
+uncommitted at the time of writing). The same leg as run 3, same box class,
+same arch. If the lease is a concern, the wrapper honors
+`BYTE_LM_LIFETIME_CASES` only from the box's environment (edit the default
+at the top of the `.sh`); the decisive subset is
+`stateless_x1,stateless_x2,control_kmeans_x2,control_extratrees_x2,control_kmeans_then_bytelm,stateless_x2_keep_context,resident_close_reopen_keep_context`.
+
+What to read when it comes home, in addition to section 6:
+
+1. `byte-lm-lifetime/status.txt`: `build_base_exit=0`, `build_trees_exit=0`,
+   `build_exit=0`, `readback_exit=0`; `binding_readback.txt` shows
+   `keeper_readback True` and `keeper_active_at_import False`.
+2. `cases/summary.json`: `stateless_x2` in `hung` (the anchor), then the
+   three controls against the table above, then `keeper_reached` (both
+   `keeper_active: true`) and the keeper variants' status.
+3. `control_fit_equality.*.all_bit_equal` true for both controls;
+   `second_step_equality` still true with the keeper cases included.
+4. For any hung control, its `result.json` `hang_diagnostics` (CPU ticks,
+   nvidia-smi) should look like run 3's (blocked, idle GPU) if it is the
+   same hang; a spinning or busy-GPU control is a different stop and is
+   recorded as such.
+
+### What would make the keeper the default
+
+Only one of two results, and neither is decided by this lane:
+
+- the controls pass and both keeper variants pass with the keeper reached
+  and every hash unchanged: the byte LM is special on that box, and the
+  keeper (or a resident-by-default session, which is the same thing with a
+  name) can become the byte LM's default for CUDA, AFTER the bisect of
+  section 2 says what the byte LM's first context leaves behind, so the
+  default is a fix and not a bandage over an unknown; or
+- every control hangs and the keeper variants pass: all per-call bindings
+  are affected on that box, the keeper is the right shape, and it belongs in
+  the base binding (one process-wide slot every binding checks), not in the
+  byte LM. That is a follow-up lane with its own deviation number; this lane
+  does not touch the base binding.
+
+Any other combination keeps the switch OFF and the finding open. Not
+qualified on any vendor; no arithmetic changed on any path.
+
+### Files (DEVIATION 2513, uncommitted)
+
+Edited: `bindings/_mojolearn_byte_lm.mojo` (+53, the keeper, the switch,
+the read-back), `tools/byte_lm_lifetime_diag.py` (five cases, controls,
+keeper read-back, `control_fit_equality` and `keeper_reached` in the
+summary), `tools/byte_lm_lifetime_diag.sh` (trees build, readback lines,
+outer timeout, summary rows), this brief. Nothing else, and nothing under
+`python/mojolearn/` or `training/`.

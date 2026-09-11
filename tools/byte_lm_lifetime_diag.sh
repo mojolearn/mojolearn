@@ -6,9 +6,13 @@
 # the rented box AFTER the device check and the card, from /root/mojolearn
 # with pixi on PATH. POSIX sh only: RunPod images link /bin/sh to dash.
 #
-#   1. builds ONLY the byte LM binding, IDENTICAL, for this box's GPU,
+#   1. builds the base binding (host helpers), the trees binding (the
+#      DEVIATION 2513 ExtraTrees control) and the byte LM binding, all
+#      IDENTICAL, for this box's GPU,
 #   2. runs tools/byte_lm_lifetime_diag.py (each case in its own
-#      subprocess with a per-case deadline, stacks retained on timeout),
+#      subprocess with a per-case deadline, stacks retained on timeout);
+#      17 cases since DEVIATION 2513 (3 controls through other bindings,
+#      2 MOJOLEARN_BYTE_LM_KEEP_CONTEXT=1 variants), worst case 17 x 120 s,
 #   3. leaves everything under /root/gemm_leg_out/byte-lm-lifetime/, which
 #      the leg fetches home as remote/byte-lm-lifetime/.
 #
@@ -94,6 +98,23 @@ if [ "$base_rc" != 0 ] || [ ! -f python/mojolearn/identical/_mojolearn.so ]; the
     echo "finished=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$OUT/status.txt"
     exit 1
 fi
+sha256sum python/mojolearn/identical/_mojolearn.so > "$OUT/binding_base_sha256.txt" 2>&1
+# DEVIATION 2513: the ExtraTrees control (control_extratrees_x2) goes
+# through the trees binding; same rm-then-build pattern, IDENTICAL tier
+# (bindings/build_trees.sh lands it under python/mojolearn/identical/ and
+# skips its own gate for that tier). A failed trees build is recorded and
+# only the ET control fails; the KMeans controls and the keeper cases still
+# run through the base and byte LM bindings.
+rm -f python/mojolearn/identical/_mojolearn_trees.so
+MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_GPU_ARCHS="$ARCH" MOJOLEARN_SKIP_BUILD_GATE=1 \
+    timeout -k 30 1500 sh bindings/build_trees.sh > "$OUT/build_trees.log" 2>&1
+trees_rc=$?
+echo "build_trees_exit=$trees_rc" >> "$OUT/status.txt"
+if [ "$trees_rc" != 0 ] || [ ! -f python/mojolearn/identical/_mojolearn_trees.so ]; then
+    say "byte-lm-lifetime: TREES BUILD FAILED (exit $trees_rc); control_extratrees_x2 will fail at import; see $OUT/build_trees.log"
+else
+    sha256sum python/mojolearn/identical/_mojolearn_trees.so > "$OUT/binding_trees_sha256.txt" 2>&1
+fi
 MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_GPU_ARCHS="$ARCH" \
 MOJOLEARN_BYTE_LM_OUTDIR="$DEST_DIR" \
     timeout -k 30 1500 sh bindings/build_byte_lm.sh > "$OUT/build.log" 2>&1
@@ -114,6 +135,10 @@ print('numeric_mode', int(b.byte_lm_numeric_mode()))
 print('vendor', str(b.byte_lm_vendor()))
 print('profile', str(b.byte_lm_profile()))
 print('file', b.__file__)
+# DEVIATION 2513: the keeper read-back must exist on THIS binary, and must
+# be False before any call (the switch is off and nothing ran).
+print('keeper_readback', hasattr(b, 'byte_lm_context_keeper_active'))
+print('keeper_active_at_import', bool(b.byte_lm_context_keeper_active()) if hasattr(b, 'byte_lm_context_keeper_active') else None)
 PYEOF
 echo "readback_exit=$?" >> "$OUT/status.txt"
 cat "$OUT/binding_readback.txt"
@@ -125,7 +150,7 @@ cases_arg=""
 [ -z "${BYTE_LM_LIFETIME_CASES:-}" ] || cases_arg="--cases $BYTE_LM_LIFETIME_CASES"
 run_started=$(date +%s)
 MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH="$ROOT/python" PYTHONUNBUFFERED=1 \
-    timeout -k 30 2400 pixi run python3 tools/byte_lm_lifetime_diag.py \
+    timeout -k 30 3000 pixi run python3 tools/byte_lm_lifetime_diag.py \
         --out "$OUT/cases" --deadline "$DEADLINE" $cases_arg > "$OUT/harness.log" 2>&1
 run_rc=$?
 echo "harness_exit=$run_rc run_seconds=$(( $(date +%s) - run_started ))" >> "$OUT/status.txt"
@@ -141,6 +166,10 @@ for key in ('first_step_equality', 'second_step_equality'):
     eq = s[key]
     bad = [f for f, v in eq['fields'].items() if not v['bit_equal']]
     print(key, 'cases:', eq['cases_compared'], 'NOT bit-equal fields:', bad or 'none')
+for case, eq in s.get('control_fit_equality', {}).items():
+    print(case, 'fit1 == fit2:', eq.get('all_bit_equal') if eq.get('compared') else 'not compared')
+for case, k in s.get('keeper_reached', {}).items():
+    print(case, 'keeper_active:', k.get('keeper_active'), 'env:', k.get('keep_context_env'))
 print('hung:', s['hung'], 'failed:', s['failed'])
 PYEOF
 fi

@@ -27,6 +27,18 @@ retained RTX 4090 captures.
     MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH=python \\
         python3 tools/byte_lm_lifetime_diag.py --out /path/to/new/dir
 
+DEVIATION 2513 adds three CONTROL cases that never touch the byte LM
+binding (or touch it only after another binding has created and destroyed a
+context): two KMeans fits through the base binding, two ExtraTrees fits
+through the trees binding, and a KMeans fit followed by one stateless byte
+LM step. Each of those bindings creates a DeviceContext per call
+(bindings/_mojolearn.mojo:421, bindings/_mojolearn_trees.mojo:338) and lets
+it die at the end of its GILReleased block, so "second fit" means "second
+context after the first was destroyed", the exact shape of every hung case.
+It also adds two variants that set MOJOLEARN_BYTE_LM_KEEP_CONTEXT=1, the
+binding's opt-in process-lifetime context keeper, and record whether the
+keeper was reached (`byte_lm_context_keeper_active`).
+
 This file makes no speed, learning or cross-vendor claim. It records what a
 process did, in which order, and where it stopped.
 """
@@ -62,17 +74,33 @@ CASES = [
     'stateless_x2_default_profile',
     'stateless_x2_gc_pause',
     'stateless_x2_launch_blocking',
+    # DEVIATION 2513: controls through OTHER bindings, then the keeper.
+    'control_kmeans_x2',
+    'control_extratrees_x2',
+    'control_kmeans_then_bytelm',
+    'stateless_x2_keep_context',
+    'resident_close_reopen_keep_context',
 ]
+
+# Controls that must not import the byte LM binding before their own work.
+CONTROL_ONLY = ('control_kmeans_x2', 'control_extratrees_x2')
+KEEP_CONTEXT_CASES = ('stateless_x2_keep_context', 'resident_close_reopen_keep_context')
+CONTROL_FIXTURE = dict(kmeans=dict(rows=256, features=4, clusters=4, seed=2513),
+                       extratrees=dict(rows=512, features=8, classes=2, n_estimators=8,
+                                       max_depth=6, seed=2513))
 
 # Cases whose second completed training step must be bit-equal to each other
 # (same fixture, same completed_steps, only the lifetime differs).
 SECOND_STEP_GROUP = ('stateless_x2', 'resident_x2', 'resident_close_reopen',
                      'restore_then_step', 'resident_mismatch_recovery',
-                     'stateless_x2_gc_pause', 'stateless_x2_launch_blocking')
+                     'stateless_x2_gc_pause', 'stateless_x2_launch_blocking',
+                     'stateless_x2_keep_context', 'resident_close_reopen_keep_context')
 FIRST_STEP_GROUP = ('stateless_x1', 'stateless_x2', 'stateless_then_resident',
                     'resident_x2', 'resident_then_stateless', 'resident_close_reopen',
                     'restore_then_step', 'failure_recovery', 'resident_mismatch_recovery',
-                    'stateless_x2_gc_pause', 'stateless_x2_launch_blocking')
+                    'stateless_x2_gc_pause', 'stateless_x2_launch_blocking',
+                    'control_kmeans_then_bytelm', 'stateless_x2_keep_context',
+                    'resident_close_reopen_keep_context')
 
 
 # ----------------------------------------------------------------- fixtures
@@ -183,6 +211,11 @@ class Recorder:
         self.record['hashes'][label] = entry
         self.event('hashed', label=label, loss=loss)
 
+    def hash_values(self, label, values):
+        """Record a mapping of arrays/scalars (the controls' fit outputs)."""
+        self.record['hashes'][label] = {key: self._hash_value(value) for key, value in values.items()}
+        self.event('hashed', label=label)
+
     def finish(self, status, error=None):
         self.record['status'] = status
         self.record['error'] = error
@@ -191,11 +224,22 @@ class Recorder:
 
 # ----------------------------------------------------------------- cases
 
+def _keeper_active():
+    """DEVIATION 2513 reach check: True once the binding's process-lifetime
+    keeper holds a context; None on a binary without the read-back."""
+    from mojolearn import _backend
+    getter = getattr(_backend.binding('_mojolearn_byte_lm', 'identical'),
+                     'byte_lm_context_keeper_active', None)
+    return None if getter is None else bool(getter())
+
+
 def _step(rec, trainer, tokens, label):
     rec.event('native_call_begin', label=label, resident=trainer._resident,
               completed_steps=trainer.step_)
     result = trainer.train_step(tokens)
-    rec.event('native_call_end', label=label)
+    rec.event('native_call_end', label=label,
+              keep_context_env=os.environ.get('MOJOLEARN_BYTE_LM_KEEP_CONTEXT'),
+              keeper_active=_keeper_active())
     rec.hash_step(label, result, trainer.state_dict())
     return result
 
@@ -392,8 +436,130 @@ def case_stateless_x2_launch_blocking(rec):
     case_stateless_x2(rec)
 
 
+# ----------------------------------------------------------------- controls
+# DEVIATION 2513. These never construct a LanguageModelTrainer (except the
+# mixed case, after the KMeans fit). Small data on purpose: this is a
+# lifetime question, not a timing one (the 1M-row floor is for tree TIMING).
+
+
+def _control_bytes(count, seed, scale=1.0):
+    import random
+    rng = random.Random(seed)
+    return struct.pack('<%df' % count, *[rng.gauss(0.0, 1.0) * scale for _ in range(count)])
+
+
+def _binding_identity(name, vendor_fn, mode_fn):
+    """File, sha256, vendor and compiled mode of a NON byte LM binding."""
+    from mojolearn import _backend
+    module = _backend.binding(name, 'identical')
+    path = getattr(module, '__file__', None)
+    digest = hashlib.sha256(Path(path).read_bytes()).hexdigest() if path else None
+    return dict(name=name, binding_file=path, binding_sha256=digest,
+                native_vendor=str(getattr(module, vendor_fn)()),
+                native_numeric_mode=int(getattr(module, mode_fn)()))
+
+
+def _kmeans_fit(rec, label):
+    """One KMeans fit through the base binding: bindings/_mojolearn.mojo:421
+    creates `var ctx = DeviceContext()` inside GILReleased and lets it die at
+    the end of that block, so a second fit is a second context after the
+    first was destroyed."""
+    from mojolearn import KMeans
+    from mojolearn._buffer import frombytes
+    spec = CONTROL_FIXTURE['kmeans']
+    x = frombytes(_control_bytes(spec['rows'] * spec['features'], spec['seed']), '<f4',
+                  (spec['rows'], spec['features']))
+    model = KMeans(n_clusters=spec['clusters'], n_init=1, max_iter=50,
+                   random_state=spec['seed'], numeric_mode='identical')
+    rec.event('native_call_begin', label=label, binding='_mojolearn', entry='kmeans_fit',
+              rows=spec['rows'], features=spec['features'])
+    model.fit(x)
+    rec.event('native_call_end', label=label, n_iter=int(model.n_iter_),
+              inertia=float(model.inertia_))
+    rec.hash_values(label, {'cluster_centers_': model.cluster_centers_,
+                            'labels_': model.labels_,
+                            'inertia_': float(model.inertia_),
+                            'n_iter_': int(model.n_iter_)})
+    return model
+
+
+def _extratrees_fit(rec, label):
+    """One ExtraTreesClassifier fit through the trees binding:
+    bindings/_mojolearn_trees.mojo:338 creates a local DeviceContext per fit
+    (et_classifier_fit_export); the export registry (ET_EXPORTS, a
+    std.ffi._Global) keeps only a HOST FitResult afterwards, and the Python
+    side copies it out and releases the handle before fit() returns."""
+    from mojolearn import ExtraTreesClassifier
+    from mojolearn._buffer import frombytes
+    spec = CONTROL_FIXTURE['extratrees']
+    x = frombytes(_control_bytes(spec['rows'] * spec['features'], spec['seed']), '<f4',
+                  (spec['rows'], spec['features']))
+    # Labels: the sign of the first feature, so the split is learnable and
+    # both classes are present.
+    raw = x.tobytes()
+    labels = [1 if struct.unpack_from('<f', raw, 4 * spec['features'] * r)[0] > 0.0 else 0
+              for r in range(spec['rows'])]
+    y = frombytes(struct.pack('<%di' % spec['rows'], *labels), '<i4', (spec['rows'],))
+    model = ExtraTreesClassifier(n_estimators=spec['n_estimators'], max_depth=spec['max_depth'],
+                                 random_state=spec['seed'], numeric_mode='identical')
+    rec.event('native_call_begin', label=label, binding='_mojolearn_trees',
+              entry='et_classifier_fit(_export)', rows=spec['rows'], features=spec['features'])
+    model.fit(x, y)
+    rec.event('native_call_end', label=label, n_trees=int(model._n_trees))
+    rec.hash_values(label, {'offsets': model._offsets, 'colid': model._colid,
+                            'quesval': model._quesval, 'left_child': model._left_child,
+                            'leaves': model._leaves})
+    return model
+
+
+def case_control_kmeans_x2(rec):
+    rec.record['control_binding'] = _binding_identity('_mojolearn', 'mojolearn_vendor',
+                                                      'mojolearn_numeric_mode')
+    _kmeans_fit(rec, 'fit1')
+    _kmeans_fit(rec, 'fit2')
+
+
+def case_control_extratrees_x2(rec):
+    rec.record['control_binding'] = _binding_identity('_mojolearn_trees', 'trees_vendor',
+                                                      'trees_numeric_mode')
+    _extratrees_fit(rec, 'fit1')
+    _extratrees_fit(rec, 'fit2')
+
+
+def case_control_kmeans_then_bytelm(rec):
+    # A context created and destroyed by the BASE binding, then the byte
+    # LM's first (stateless) context. Hangs here with control_kmeans_x2
+    # passing: the byte LM's context CREATION side is the sensitive one.
+    rec.record['control_binding'] = _binding_identity('_mojolearn', 'mojolearn_vendor',
+                                                      'mojolearn_numeric_mode')
+    _kmeans_fit(rec, 'fit1')
+    shape, parameters, tokens, _ = _make_inputs(FIXTURE)
+    trainer = _trainer(shape, parameters, False)
+    try:
+        _step(rec, trainer, tokens, 'step1')
+    finally:
+        trainer.close()
+
+
+def case_stateless_x2_keep_context(rec):
+    # The parent sets MOJOLEARN_BYTE_LM_KEEP_CONTEXT=1 (CHILD_ENV): the
+    # first creating call also creates the keeper context, which is never
+    # released, so the second call's context is created while one is alive.
+    rec.event('env', MOJOLEARN_BYTE_LM_KEEP_CONTEXT=os.environ.get('MOJOLEARN_BYTE_LM_KEEP_CONTEXT'),
+              keeper_active_before=_keeper_active())
+    case_stateless_x2(rec)
+
+
+def case_resident_close_reopen_keep_context(rec):
+    rec.event('env', MOJOLEARN_BYTE_LM_KEEP_CONTEXT=os.environ.get('MOJOLEARN_BYTE_LM_KEEP_CONTEXT'),
+              keeper_active_before=_keeper_active())
+    case_resident_close_reopen(rec)
+
+
 CHILD_ENV = {
     'stateless_x2_launch_blocking': {'CUDA_LAUNCH_BLOCKING': '1'},
+    'stateless_x2_keep_context': {'MOJOLEARN_BYTE_LM_KEEP_CONTEXT': '1'},
+    'resident_close_reopen_keep_context': {'MOJOLEARN_BYTE_LM_KEEP_CONTEXT': '1'},
 }
 
 CASE_FUNCTIONS = {name: globals()['case_' + name] for name in CASES}
@@ -420,16 +586,22 @@ def run_child(case, record_path, deadline):
         from mojolearn import LanguageModelTrainer
         rec.event('imported', mojolearn_file=getattr(mojolearn, '__file__', None),
                   version=getattr(mojolearn, '__version__', None))
-        probe = _make_inputs(FIXTURE)
-        rec.record['fixture'] = dict(shape=dict(FIXTURE), profile=probe[0].profile,
-                                     n_total=probe[0].n_total, source=probe[3])
-        # Binding identity without any model execution.
-        witness = _trainer(probe[0], probe[1], False).run_metadata()
-        rec.record['binding'] = dict(binding_file=witness['binding_file'],
-                                     binding_sha256=witness['binding_sha256'],
-                                     native_vendor=witness['native_vendor'],
-                                     native_profile=witness['native_profile'])
-        rec.event('binding', vendor=witness['native_vendor'], sha256=witness['binding_sha256'][:12])
+        if case in CONTROL_ONLY:
+            # DEVIATION 2513: the pure controls never load the byte LM
+            # binding; their own binding identity is recorded by the case.
+            rec.record['fixture'] = dict(control=dict(CONTROL_FIXTURE))
+            rec.record['binding'] = None
+        else:
+            probe = _make_inputs(FIXTURE)
+            rec.record['fixture'] = dict(shape=dict(FIXTURE), profile=probe[0].profile,
+                                         n_total=probe[0].n_total, source=probe[3])
+            # Binding identity without any model execution.
+            witness = _trainer(probe[0], probe[1], False).run_metadata()
+            rec.record['binding'] = dict(binding_file=witness['binding_file'],
+                                         binding_sha256=witness['binding_sha256'],
+                                         native_vendor=witness['native_vendor'],
+                                         native_profile=witness['native_profile'])
+            rec.event('binding', vendor=witness['native_vendor'], sha256=witness['binding_sha256'][:12])
         CASE_FUNCTIONS[case](rec)
     except BaseException as error:  # noqa: BLE001 -- the record must say what happened
         rec.finish('failed', '%s: %s' % (type(error).__name__, error))
@@ -600,6 +772,39 @@ def _equality(results, group, label_of):
     return dict(cases_compared=present, fields=verdict)
 
 
+def _pair_equality(results, case, label_a, label_b):
+    """Per-field bit equality of two hashed labels inside ONE case."""
+    for result in results:
+        if result['case'] != case:
+            continue
+        hashes = (result.get('record') or {}).get('hashes') or {}
+        a, b = hashes.get(label_a), hashes.get(label_b)
+        if not a or not b:
+            return dict(compared=False)
+        fields = {}
+        for key in a:
+            if isinstance(a[key], dict) and 'sha256' in a[key] and key in b:
+                fields[key] = dict(bit_equal=a[key]['sha256'] == b[key].get('sha256'))
+        return dict(compared=True, fields=fields, all_bit_equal=all(v['bit_equal'] for v in fields.values()))
+    return dict(compared=False)
+
+
+def _keeper_reached(results, case):
+    """The last `native_call_end` event's keeper read-back for a case: True
+    means the keeper held a context (the switch was reached), False means
+    the switch was set but never armed (a stale binary or an unreached
+    branch), None means the binary has no read-back."""
+    for result in results:
+        if result['case'] != case:
+            continue
+        events = (result.get('record') or {}).get('events') or []
+        ends = [e for e in events if e.get('name') == 'native_call_end']
+        return dict(observed=bool(ends),
+                    keeper_active=(ends[-1].get('keeper_active') if ends else None),
+                    keep_context_env=(ends[-1].get('keep_context_env') if ends else None))
+    return dict(observed=False)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--out', type=Path, help='new output directory (parent mode)')
@@ -631,7 +836,7 @@ def main():
         print('   %s exit=%s wall=%.1fs' % (result['status'], result['exit_code'], result['wall_s']), flush=True)
     summary = dict(
         schema='byte-lm-lifetime-diag.summary.v1',
-        deviation=2494,
+        deviation=[2494, 2513],
         fixture=dict(shape=FIXTURE, seed=FIXTURE_SEED, scale=FIXTURE_SCALE),
         deadline_s=args.deadline,
         python=args.python,
@@ -643,6 +848,13 @@ def main():
             results, ('stateless_then_resident',), lambda case: 'step1_resident'),
         resident_then_stateless_equality=_equality(
             results, ('resident_then_stateless',), lambda case: 'step1_stateless'),
+        # DEVIATION 2513: each control's two fits must be bit-equal (same
+        # seed, IDENTICAL); a difference is a separate finding.
+        control_fit_equality={
+            case: _pair_equality(results, case, 'fit1', 'fit2')
+            for case in ('control_kmeans_x2', 'control_extratrees_x2')},
+        keeper_reached={
+            case: _keeper_reached(results, case) for case in KEEP_CONTEXT_CASES},
         hung=[r['case'] for r in results if r['timed_out']],
         failed=[r['case'] for r in results if not r['timed_out'] and r['exit_code'] != 0],
         passed=[r['case'] for r in results if r['exit_code'] == 0],

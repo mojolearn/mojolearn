@@ -11,6 +11,7 @@ synchronization; the stateless ABI also tears down its context before return.
 """
 # DEVIATION 2486: shared byte-preserving host copies.
 from bindings.hostptr import f32_ptr, read_f32, copy_f32
+from std.ffi import _Global
 from std.memory import bitcast
 from std.os import abort, getenv
 from std.python import Python, PythonObject
@@ -67,6 +68,48 @@ struct ByteLMSession(Movable, Writable):
             self.ctx.value().synchronize()
         self.trainer = None
         self.ctx = None
+
+
+struct _ContextKeeper(Defaultable, Movable):
+    """DEVIATION 2513: an OPT-IN process-lifetime DeviceContext.
+
+    On one RTX 4090 pod every DeviceContext created after another was
+    destroyed in the same process never returned from its first use
+    (docs/lanes/BRIEF_byte_lm_lifetime_2026-09-10.md, run 3), while a
+    second context created while the first was still alive always did.
+    When MOJOLEARN_BYTE_LM_KEEP_CONTEXT=1 is set at a call that creates a
+    context, `ensure()` creates ONE separate context here first and never
+    releases it, so a live context exists whenever any later per-call or
+    resident context is created. The per-call path, the resident session
+    and the teardown order are unchanged; this is a diagnostic mitigation,
+    OFF by default, and not a claim about the cause.
+
+    Storage: `std.ffi._Global`, the pattern the trees and RF bindings use
+    for their export registries (ET_EXPORTS, RF_EXPORTS). There is no
+    module-level `var` in this tree on purpose; the _Global slot is
+    runtime-owned, created once by name, and lives until process teardown.
+    """
+    var ctx: Optional[DeviceContext]
+
+    def __init__(out self):
+        self.ctx = Optional[DeviceContext]()
+
+    def ensure(mut self) raises:
+        if not self.ctx:
+            self.ctx = DeviceContext()
+
+    def active(self) -> Bool:
+        return Bool(self.ctx)
+
+
+comptime BYTE_LM_CONTEXT_KEEPER = _Global[StorageType=_ContextKeeper,
+    name="MojoByteLMContextKeeperIdentical", init_fn=_ContextKeeper.__init__]
+
+
+def byte_lm_context_keeper_active_binding() raises -> PythonObject:
+    """DEVIATION 2513 read-back: True once the keeper holds a context.
+    Creates the empty slot if absent; never creates a DeviceContext."""
+    return PythonObject(BYTE_LM_CONTEXT_KEEPER.get_or_create_ptr()[].active())
 
 
 def byte_lm_session_create_binding() raises -> PythonObject:
@@ -204,6 +247,9 @@ def _byte_lm_run(addresses: PythonObject, params: PythonObject, shape: ByteConfi
         addr.append(Int(py=addresses[i]))
     _validate_addresses(addr, action, shape)
     var ton = String(getenv("MOJOLEARN_TRANSFORMER_TIMING")) != ""
+    # DEVIATION 2513: one getenv per call, same cost class as `ton`; the
+    # keeper itself is touched only on a call that creates a context.
+    var keep_context = String(getenv("MOJOLEARN_BYTE_LM_KEEP_CONTEXT")) == "1"
     var tk = Int(perf_counter_ns())
     # No GPU work before all borrowed inputs become validated owned host lists.
     var initial_p = _read_f32(addr[0], n)
@@ -241,6 +287,12 @@ def _byte_lm_run(addresses: PythonObject, params: PythonObject, shape: ByteConfi
         with GILReleased(Python()):
             var reused = Bool(session.ctx)
             if not session.ctx:
+                if keep_context:
+                    # DEVIATION 2513: a SEPARATE keeper context, created
+                    # before the per-call one and never released. Idempotent
+                    # after the first creating call. Off: this branch is
+                    # not entered and nothing below changes.
+                    BYTE_LM_CONTEXT_KEEPER.get_or_create_ptr()[].ensure()
                 session.ctx = DeviceContext()
                 session.trainer = ByteTrainer(session.ctx.value(), initial_p, initial_m,
                     initial_v, flags, completed, cfg, shape)
@@ -412,6 +464,7 @@ def PyInit__mojolearn_byte_lm() abi("C") -> PythonObject:
         module.def_function[byte_lm_session_create_binding]("byte_lm_session_create")
         module.def_function[byte_lm_session_close_binding]("byte_lm_session_close")
         module.def_function[byte_lm_session_run_binding]("byte_lm_session_run")
+        module.def_function[byte_lm_context_keeper_active_binding]("byte_lm_context_keeper_active")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_byte_lm: ", error))
