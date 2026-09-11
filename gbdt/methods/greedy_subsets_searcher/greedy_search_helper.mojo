@@ -2835,11 +2835,15 @@ def launch_histograms_for_blocks[
             # construction, and low-cardinality features histogram on a
             # 64-wide wavefront.
             #
-            # WHAT IS ELIGIBLE IS NOT WHAT IS VERIFIED: no sub-byte block
-            # has ever EXECUTED on 64-wide hardware in either mode (every
-            # AMD fixture to date is 255-border float data, which produces
-            # one-byte blocks only). The MI325X covtype leg named in
-            # DEVIATION 1947 is OWED.
+            # WHAT IS ELIGIBLE WAS NOT WHAT WAS VERIFIED. Sub-byte blocks
+            # first executed on 64-wide hardware on the MI325X on 2026-09-11
+            # (identity_break `ties`, taxi, Istella-S under IDENTICAL), and
+            # the fit moved between repeats (on the MI300X the binary arm
+            # instead gave one wrong answer every time): the head/tail peel
+            # gave the block a non-uniform count of threadgroup barriers.
+            # DEVIATION 2600 fixed the peel, measured with and without it on
+            # the MI300X; `checks/gbdt_sub_byte_identity_check.py` is the
+            # gate.
             # ==================================================
             if depth == 0:
                 ctx.enqueue_function[binary_hist_kernel](

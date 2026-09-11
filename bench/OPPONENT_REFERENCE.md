@@ -997,6 +997,26 @@ arm's 0.138653 / 0.966990 exactly (still two hashes across five rounds), which
 points at the greedy searcher path on AMD. RF and ET hashes equal the H100
 hashes at 1M and 2M (574b24d0d7af51d0, cc25cb08f8b5a813, 40b1c5b03ba40420).
 
+Cause found and fixed 2026-09-11 (DEVIATION 2600, lane/amd-gbdt-identity-fix).
+The greedy searcher's binary, half-byte and hist_2 5-/6-bit histogram kernels
+peeled a partition's head and tail with a loop that gave threads at or past
+128 or 256 of a 512-thread block no trip, so part of the block skipped a
+threadgroup barrier that only the 64-lane AMD column issues
+(`gbdt/methods/greedy_subsets_searcher/kernel/lane_sync.mojo`). Taxi and
+Istella-S have low-cardinality columns that land in those kernels; the
+128-border float fixtures do not. Verified on a Hot Aisle MI300X (VF, gfx942,
+8 cores, ROCm 6.4.1 userland on a 7.2.4 host) with the same source built with
+and without the fix: identity_break 36/36 gbdt cells equal to the H100 with it
+(32/36, `ties` MOVED, without); `checks/gbdt_sub_byte_identity_check.py` 16/16
+with it (0/16 without, and restoring one kernel file at a time failed exactly
+that file's fixtures); taxi 1M symmetric hash 90c3558501933f47 in 10 of 10
+rounds with logloss 0.525735 / AUC 0.619460, equal to the H100 cell of the same
+source (without it five hashes in five rounds, twice). On the H100 both builds
+gave the same bits. The GBDT rows and accuracy above were measured BEFORE the
+fix and are not re-run; they are not IDENTICAL results. The shipped 0.8.1 wheel
+moves on `ties` on the MI300X (it carries the defect). The pointwise arm's
+second hash is not explained by this fix and was not re-measured.
+
 Taxi, 1,000,000 training rows (2,000,000 for RF 2M), leg 1 (droplet
 599636038):
 
