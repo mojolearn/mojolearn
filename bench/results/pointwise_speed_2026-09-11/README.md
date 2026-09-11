@@ -109,10 +109,17 @@ synthetic fixture` and labeled every row `shape=synthclf-720000x100`. Six
 such processes ran before the labels were read. **Those rows were deleted,
 not quoted** -- a synthetic 720,000 x 100 fixture is not the wide numeric
 table section 9 asks for, and a fallback silently counted as Istella-S is how
-a missing download becomes a published ratio. `tools/../ptws_medians.py` now
-refuses any row whose `shape=` does not match its dataset, and the setup
-script writes the sentinel only on a zero exit. A second, clean download was
-started; whether it finished is recorded below.
+a missing download becomes a published ratio. The lane's medians parser
+(`ptws_medians.py`, a scratch tool kept with the evidence, not in the repo)
+now refuses any row whose `shape=` does not match its dataset, and the setup
+script writes the dataset sentinel only on a zero exit.
+
+A second, clean download was started at 22:20Z on the same pod and was still
+running when the lane wound down: it moved 251 of 472 MB in 36 minutes at a
+rate that decayed from about 15 to about 2 MB per minute, which put the fit
+rounds past the pod's lease. The origin was slow that night; nothing about
+2670 or the harness caused it, and an infrastructure failure is not a
+measurement. That is why the two Istella-S rows above read RUN OWED.
 
 So this lane has ONE dataset, and one dataset is not a result: **2670 gets NO
 flip verdict here** (section 9), however large the taxi win is.
@@ -126,8 +133,8 @@ drifting under the pointwise rows.
 
 ### The pinned SM constant is not what the win rests on
 
-`PW_2670_PINNED_SM` is a NUMERIC constant I chose, so it was measured rather
-than argued. A third tree built from the 2670 tree with the constant set to 32
+`PW_2670_PINNED_SM` is a NUMERIC constant this lane chose, so it was measured
+rather than argued. A third tree built from the 2670 tree with the constant set to 32
 instead of 128, taxi 1M, the two interleaved in one job on the same pod (two
 outer rounds, three timed rounds each):
 
