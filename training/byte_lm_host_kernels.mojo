@@ -7,33 +7,44 @@ is one the host oracles perform, on the same operands, in the same order for
 each output value, through the same seams (`identical_mul_add` and its
 lane-wise twin `identical_mul_add_simd`, `identical_mul`, `identical_div`,
 `identical_rsqrt`, `identical_exp`, `identical_silu`, `identical_fmax`,
-`ftz`). What changes is everything around that arithmetic:
+`ftz`) or through a lane-wise respelling of one of them that is checked
+against it. What changes is everything around that arithmetic:
 
   - Nothing is allocated per GEMM cell. `gemm_oracle_cell` builds a partials
     List and `fold_balanced_tree` copies it for every cell; on the M4 profile
     of the reference path the allocator was the largest cost after the cells.
-  - Right operands are flushed and packed once per call (`pack_nt`). `ftz` is
-    pure and idempotent, so `ftz(B[j*k+p])` read from a flushed copy is the
-    value the oracle's per-read `ftz` returns.
-  - The cells of one output row advance together, one SIMD lane per cell,
-    down the p axis. Each lane of `identical_mul_add_simd` is an IEEE fused
-    multiply-add, correctly rounded exactly as the scalar seam is, so every
-    cell runs the oracle's chain and no lane reads another.
+  - Operands are flushed and packed once per call, straight from the
+    parameters (`pack_nt_span`, `flushed_span`). `ftz` is pure and
+    idempotent, so a value read from a flushed copy is the value the
+    oracle's per-read `ftz` returns.
+  - The cells of one GEMM output row advance together, one SIMD lane per
+    cell, down the p axis, in registers, with the flush deferred and an
+    exact fallback (`_chain_step`, `gemm_nt_rows`). Each lane of
+    `identical_mul_add_simd` is an IEEE fused multiply-add, correctly
+    rounded exactly as the scalar seam is.
+  - Per-element seams run as lanes: attention scale, mask add, shift,
+    exponential and division, SiLU, the gated product, residual adds, and
+    the loss's shift and exponential. `expf_lanes` and `silu_lanes` respell
+    `portable_expf` and `portable_siluf`; `training/checks/
+    byte_lm_host_exp_check.mojo` compares them with the scalar seams on all
+    2^32 Float32 bit patterns.
   - The attention value sum (S19) advances all `head_dim` outputs of one
     query together down the key axis, the same chain per output.
-  - `ftz_lanes` flushes every lane without a branch; the argument that it is
-    `ftz` is at the function.
 
-The folds the contracts make serial stay serial and scalar: the RMS sum of
-squares (S1), the softmax maximum (S14) and denominator (S17). Prefill only,
-from absolute position 0 with no window and no plant, which is the only call
+The folds the contracts make serial stay serial: the RMS sum of squares
+(S1), the softmax maximum (S14) and denominator (S17). Prefill only, from
+absolute position 0 with no window and no plant, which is the only call
 `training/byte_lm_host.mojo` makes of `transformer_block_oracle`.
 
-A PREDICTION UNTIL THE GATE RUNS. `tools/byte_lm_host_gate.py` compares this
+A PREDICTION UNTIL IT IS GATED. `tools/byte_lm_host_gate.py` compares this
 path's loss bytes against the retained Metal, CUDA and HIP captures and its
-logits against the reference path's.
+logits against the reference path's, and
+`training/checks/byte_lm_host_kernels_check.mojo` compares every kernel
+with its oracle by bits on shapes and planted values the captures never
+reach.
 """
 
+from std.math import floor, fma, min
 from std.memory import bitcast
 from std.sys.info import simd_width_of
 
@@ -75,8 +86,9 @@ comptime HOST_FW = simd_width_of[DType.float32]()
 comptime F32V = SIMD[DType.float32, HOST_FW]
 comptime U32V = SIMD[DType.uint32, HOST_FW]
 #: SIMD accumulators `gemm_nt_rows` advances together per p step at one leaf
-#: (spelled out as eight locals there). A schedule knob: every lane still
-#: runs its own cell's chain, so it changes no bit.
+#: (spelled out as eight locals there). A schedule knob: every lane still runs
+#: its own cell's chain, so it changes no bit. On the M4 at one thread, 16
+#: chains measured 18% slower than 8 at [32, 32].
 comptime GEMM_CHAINS = 8
 
 
@@ -99,29 +111,156 @@ def ftz_lanes(x: F32V) -> F32V:
 
 
 @always_inline
+def _chain_step(sv: F32V, bv: F32V, acc: F32V, mut exps: U32V) -> F32V:
+    """One p step of one SIMD accumulator with the flush DEFERRED: the raw
+    `identical_mul_add(a, b, acc)` per lane, while `exps` keeps the lane-wise
+    minimum exponent field of every raw result.
+
+    Why that is still the oracle's chain. The operands are flushed before the
+    chain, so only an accumulator can be subnormal. If no raw result in a lane
+    is subnormal, `ftz` was the identity at every step of that lane and, by
+    induction from the `+0.0` seed, the unflushed chain IS the flushed chain
+    bit for bit. A zero minimum exponent field (a subnormal, or an exact zero,
+    which is conservative) sends the whole group back through the flush at
+    every step (`gemm_nt_rows`). On the M4 at one thread this measured 17%
+    faster at [32, 32] than flushing every step, because the accumulator's
+    dependency chain is one fused multiply-add per step instead of four
+    operations."""
+    var raw = identical_mul_add_simd[HOST_FW](sv, bv, acc)
+    exps = min(exps, bitcast[DType.uint32](raw) & U32V(0x7F800000))
+    return raw
+
+
+@always_inline
 def _neg_zero_lanes() -> F32V:
     return bitcast[DType.float32](U32V(0x80000000))
 
 
+@always_inline
+def _nan_bits(x: F32V) -> SIMD[DType.bool, HOST_FW]:
+    """NaN lanes by bits: magnitude above the infinity's."""
+    return (bitcast[DType.uint32](x) & U32V(0x7FFFFFFF)).gt(U32V(0x7F800000))
+
+
+@always_inline
+def expf_lanes(x: F32V) -> F32V:
+    """`checks/numerics.mojo::portable_expf` on every lane: the same
+    operations on the same constants in the same order, with the scalar's
+    three early returns (NaN as is, `+inf` above 88.722835, `+0.0` below
+    -87.33655) applied last as masks in the scalar's priority. Special lanes
+    run the arithmetic on `+0.0`, so no lane converts a NaN or an out-of-range
+    value to an integer.
+
+    The NaN lanes are passed through by an INTEGER select on the input's bits.
+    Selected as floats, a signaling NaN came back quieted (0x7f800001 as
+    0x7fc00001, measured on the M4), where the scalar returns it untouched.
+    `training/checks/byte_lm_host_exp_check.mojo` compares this with the
+    scalar over all 2^32 bit patterns."""
+    var nan = _nan_bits(x)
+    var over = x.gt(F32V(88.722835))
+    var under = x.lt(F32V(-87.33655))
+    var xs = (nan | over | under).select(F32V(0.0), x)
+    var t = xs * F32V(1.4426950408889634)
+    t = t + F32V(0.5)
+    var zf = floor(t)
+    var r = fma(zf, F32V(-0.693359375), xs)
+    r = fma(zf, F32V(2.12194440e-4), r)
+    var q = F32V(1.9875691500e-4)
+    q = fma(q, r, F32V(1.3981999507e-3))
+    q = fma(q, r, F32V(8.3334519073e-3))
+    q = fma(q, r, F32V(4.1665795894e-2))
+    q = fma(q, r, F32V(1.6666665459e-1))
+    q = fma(q, r, F32V(5.0000001201e-1))
+    var r2 = r * r
+    var y = fma(q, r2, r)
+    y = y + F32V(1.0)
+    var k = zf.cast[DType.int32]()
+    var k1 = k >> SIMD[DType.int32, HOST_FW](1)
+    var k2 = k - k1
+    var bias = SIMD[DType.int32, HOST_FW](127)
+    var shift = SIMD[DType.int32, HOST_FW](23)
+    y = y * bitcast[DType.float32](((k1 + bias) << shift).cast[DType.uint32]())
+    y = y * bitcast[DType.float32](((k2 + bias) << shift).cast[DType.uint32]())
+    y = y.lt(F32V(1.1754943508222875e-38)).select(F32V(0.0), y)
+    y = under.select(F32V(0.0), y)
+    y = over.select(bitcast[DType.float32](U32V(0x7F800000)), y)
+    return bitcast[DType.float32](nan.select(bitcast[DType.uint32](x), bitcast[DType.uint32](y)))
+
+
+@always_inline
+def silu_lanes(x: F32V) -> F32V:
+    """`checks/numerics.mojo::portable_siluf` on every lane: NaN as is (by
+    an integer select, as in `expf_lanes`), else
+    `portable_divf(x, portable_expf(-x) + 1.0)`, whose flushes are the
+    unconditional `_ftz_always`, which is `ftz_lanes` on every bit pattern.
+    Compared with the scalar over all 2^32 bit patterns by
+    `training/checks/byte_lm_host_exp_check.mojo`."""
+    var nan = _nan_bits(x)
+    var d = expf_lanes(-x) + F32V(1.0)
+    var quotient = ftz_lanes(ftz_lanes(x) / ftz_lanes(d))
+    return bitcast[DType.float32](nan.select(bitcast[DType.uint32](x), bitcast[DType.uint32](quotient)))
+
+
+def all_finite_span(values: List[Float32], lo: Int, hi: Int) -> Bool:
+    """Whether every value in `[lo, hi)` is finite, tested by bits (an
+    exponent field of all ones is an infinity or a NaN), lane-wise. A screen
+    only: a caller that finds a non-finite value raises through the oracle's
+    own refusal, so the message is the oracle's."""
+    var sp = values.unsafe_ptr()
+    var expm = U32V(0x7F800000)
+    var i = lo
+    while i + HOST_FW <= hi:
+        if (bitcast[DType.uint32](sp.unsafe_load[width=HOST_FW](i)) & expm).reduce_max() == UInt32(0x7F800000):
+            return False
+        i += HOST_FW
+    while i < hi:
+        if (bitcast[DType.uint32](sp.unsafe_load(i)) & UInt32(0x7F800000)) == UInt32(0x7F800000):
+            return False
+        i += 1
+    return True
+
+
+def flushed_span(values: List[Float32], lo: Int, hi: Int) -> List[Float32]:
+    """`ftz` of every value in `[lo, hi)`, once, as lanes."""
+    _identical_build_only()
+    var n = hi - lo
+    var out = List[Float32](length=n, fill=Float32(0.0))
+    var sp = values.unsafe_ptr()
+    var op = out.unsafe_ptr()
+    var i = 0
+    while i + HOST_FW <= n:
+        op.unsafe_store[width=HOST_FW](i, ftz_lanes(sp.unsafe_load[width=HOST_FW](lo + i)))
+        i += HOST_FW
+    while i < n:
+        op.unsafe_store(i, ftz(sp.unsafe_load(lo + i)))
+        i += 1
+    return out^
+
+
 def flushed(values: List[Float32]) -> List[Float32]:
     """`ftz` of every value, once."""
+    return flushed_span(values, 0, len(values))
+
+
+def pack_nt_span(values: List[Float32], lo: Int, n: Int, k: Int) -> List[Float32]:
+    """The right operand of an OP_NT product, the `B [n x k]` stored at
+    `values[lo : lo + n * k]`, flushed and laid out `[k x n]`:
+    `out[p * n + j] = ftz(B[j * k + p])`, so the p-th terms of the n cells of
+    one output row are contiguous."""
     _identical_build_only()
-    var out = List[Float32](capacity=len(values))
-    for i in range(len(values)):
-        out.append(ftz(values[i]))
+    var out = List[Float32](length=n * k, fill=Float32(0.0))
+    var sp = values.unsafe_ptr()
+    var op = out.unsafe_ptr()
+    for j in range(n):
+        var src = lo + j * k
+        for p in range(k):
+            op.unsafe_store(p * n + j, ftz(sp.unsafe_load(src + p)))
     return out^
 
 
 def pack_nt(b: List[Float32], n: Int, k: Int) -> List[Float32]:
-    """The right operand of an OP_NT product, `B [n x k]`, flushed and laid
-    out `[k x n]`: `out[p * n + j] = ftz(B[j * k + p])`, so the p-th terms of
-    the n cells of one output row are contiguous."""
-    _identical_build_only()
-    var out = List[Float32](length=n * k, fill=Float32(0.0))
-    for j in range(n):
-        for p in range(k):
-            out[p * n + j] = ftz(b[j * k + p])
-    return out^
+    """`pack_nt_span` of a whole `B [n x k]`."""
+    return pack_nt_span(b, 0, n, k)
 
 
 def gemm_nt_rows(
@@ -133,6 +272,7 @@ def gemm_nt_rows(
     hi: Int,
     mut c: List[Float32],
     reverse: Bool = False,
+    force_redo: Bool = False,
 ) raises:
     """Rows `[lo, hi)` of `gemm_oracle(A, B, OP_NT, m, n, k)`, written to
     `c[(i - lo) * n + j]`. `a` is `A [m x k]` as the oracle receives it and
@@ -146,6 +286,11 @@ def gemm_nt_rows(
     legal layout: every node is written after both children are read. The
     oracle's `ftz` on each child read and on the output is not repeated,
     because every stored value is already flushed and `ftz` is idempotent.
+
+    At one leaf, groups of GEMM_CHAINS vectors defer the flush (`_chain_step`)
+    and fall back to flushing at every step when a raw result's exponent field
+    is zero; `force_redo` takes that fallback for every group, which is how
+    `training/checks/byte_lm_host_kernels_check.mojo` reaches it.
 
     `reverse` walks p DESCENDING (DEVIATION 2612's negative control) and is
     admitted only at one leaf, where it changes the fold and nothing else."""
@@ -174,6 +319,7 @@ def gemm_nt_rows(
         var arp = arow.unsafe_ptr()
         var bop = boff.unsafe_ptr()
         var zv = F32V(0.0)
+        var expm = U32V(0x7F800000)
         var group = GEMM_CHAINS * HOST_FW
         for i in range(lo, hi):
             for step in range(k):
@@ -193,17 +339,40 @@ def gemm_nt_rows(
                 var c5 = zv
                 var c6 = zv
                 var c7 = zv
+                var e0 = expm
+                var e1 = expm
+                var e2 = expm
+                var e3 = expm
+                var e4 = expm
+                var e5 = expm
+                var e6 = expm
+                var e7 = expm
                 for step in range(k):
                     var sv = F32V(arp.unsafe_load(step))
                     var base = bop.unsafe_load(step) + jb
-                    c0 = ftz_lanes(identical_mul_add_simd[HOST_FW](sv, bp.unsafe_load[width=HOST_FW](base), c0))
-                    c1 = ftz_lanes(identical_mul_add_simd[HOST_FW](sv, bp.unsafe_load[width=HOST_FW](base + HOST_FW), c1))
-                    c2 = ftz_lanes(identical_mul_add_simd[HOST_FW](sv, bp.unsafe_load[width=HOST_FW](base + 2 * HOST_FW), c2))
-                    c3 = ftz_lanes(identical_mul_add_simd[HOST_FW](sv, bp.unsafe_load[width=HOST_FW](base + 3 * HOST_FW), c3))
-                    c4 = ftz_lanes(identical_mul_add_simd[HOST_FW](sv, bp.unsafe_load[width=HOST_FW](base + 4 * HOST_FW), c4))
-                    c5 = ftz_lanes(identical_mul_add_simd[HOST_FW](sv, bp.unsafe_load[width=HOST_FW](base + 5 * HOST_FW), c5))
-                    c6 = ftz_lanes(identical_mul_add_simd[HOST_FW](sv, bp.unsafe_load[width=HOST_FW](base + 6 * HOST_FW), c6))
-                    c7 = ftz_lanes(identical_mul_add_simd[HOST_FW](sv, bp.unsafe_load[width=HOST_FW](base + 7 * HOST_FW), c7))
+                    c0 = _chain_step(sv, bp.unsafe_load[width=HOST_FW](base), c0, e0)
+                    c1 = _chain_step(sv, bp.unsafe_load[width=HOST_FW](base + HOST_FW), c1, e1)
+                    c2 = _chain_step(sv, bp.unsafe_load[width=HOST_FW](base + 2 * HOST_FW), c2, e2)
+                    c3 = _chain_step(sv, bp.unsafe_load[width=HOST_FW](base + 3 * HOST_FW), c3, e3)
+                    c4 = _chain_step(sv, bp.unsafe_load[width=HOST_FW](base + 4 * HOST_FW), c4, e4)
+                    c5 = _chain_step(sv, bp.unsafe_load[width=HOST_FW](base + 5 * HOST_FW), c5, e5)
+                    c6 = _chain_step(sv, bp.unsafe_load[width=HOST_FW](base + 6 * HOST_FW), c6, e6)
+                    c7 = _chain_step(sv, bp.unsafe_load[width=HOST_FW](base + 7 * HOST_FW), c7, e7)
+                var emin = min(min(min(e0, e1), min(e2, e3)), min(min(e4, e5), min(e6, e7)))
+                if force_redo or emin.reduce_min() == UInt32(0):
+                    # A zero or subnormal raw result (or a forced check): this
+                    # group again, with the flush at every step.
+                    var jr = jb
+                    while jr < jb + group:
+                        var cr = zv
+                        for step in range(k):
+                            cr = ftz_lanes(identical_mul_add_simd[HOST_FW](
+                                F32V(arp.unsafe_load(step)),
+                                bp.unsafe_load[width=HOST_FW](bop.unsafe_load(step) + jr), cr))
+                        cp.unsafe_store[width=HOST_FW](row + jr, cr)
+                        jr += HOST_FW
+                    jb += group
+                    continue
                 cp.unsafe_store[width=HOST_FW](row + jb, c0)
                 cp.unsafe_store[width=HOST_FW](row + jb + HOST_FW, c1)
                 cp.unsafe_store[width=HOST_FW](row + jb + 2 * HOST_FW, c2)
@@ -359,6 +528,163 @@ def rope_fast(src: List[Float32], n_head: Int, hd: Int, l: Int, rope: RopeTable)
     return out^
 
 
+@no_inline
+def _residual_add(a: List[Float32], b: List[Float32]) -> List[Float32]:
+    """S22 and S23: `ftz(ftz(a[i]) + ftz(b[i]))`, one add per element, as
+    lanes."""
+    var n = len(a)
+    var out = List[Float32](length=n, fill=Float32(0.0))
+    var ap = a.unsafe_ptr()
+    var bp = b.unsafe_ptr()
+    var op = out.unsafe_ptr()
+    var i = 0
+    while i + HOST_FW <= n:
+        op.unsafe_store[width=HOST_FW](i, ftz_lanes(
+            ftz_lanes(ap.unsafe_load[width=HOST_FW](i)) + ftz_lanes(bp.unsafe_load[width=HOST_FW](i))))
+        i += HOST_FW
+    while i < n:
+        op.unsafe_store(i, ftz(ftz(ap.unsafe_load(i)) + ftz(bp.unsafe_load(i))))
+        i += 1
+    return out^
+
+
+@no_inline
+def _softmax_head(cell: List[Float32], masks: List[Float32], l: Int, s: Int, scale: Float32,
+                  mut aweights: List[Float32]):
+    """S12-S18 for every query of one head, from `cell` (S11, `[l, s]`) and
+    the additive `masks`, into `aweights` `[l, s]`: the scale, mask add,
+    shift, exponential and division as lanes per key, the maximum (S14) and
+    the denominator (S17) as the oracle's serial scalar folds."""
+    var cellp = cell.unsafe_ptr()
+    var mkp = masks.unsafe_ptr()
+    var awp = aweights.unsafe_ptr()
+    var masked = List[Float32](length=s, fill=Float32(0.0))
+    var aexp = List[Float32](length=s, fill=Float32(0.0))
+    var mp = masked.unsafe_ptr()
+    var ep = aexp.unsafe_ptr()
+    var neg0 = _neg_zero_lanes()
+    var scale_v = F32V(scale)
+    var sbody = s - s % HOST_FW
+    for qi in range(l):
+        var crow = qi * s
+        # S12, S13.
+        var jv = 0
+        while jv < sbody:
+            var sc = ftz_lanes(identical_mul_add_simd[HOST_FW](
+                ftz_lanes(cellp.unsafe_load[width=HOST_FW](crow + jv)), scale_v, neg0))
+            mp.unsafe_store[width=HOST_FW](jv, ftz_lanes(sc + mkp.unsafe_load[width=HOST_FW](crow + jv)))
+            jv += HOST_FW
+        while jv < s:
+            var sc_s = ftz(identical_mul(ftz(cellp.unsafe_load(crow + jv)), scale))
+            mp.unsafe_store(jv, ftz(ftz(sc_s) + mkp.unsafe_load(crow + jv)))
+            jv += 1
+        # S14, serial and scalar.
+        var mx = ftz(mp.unsafe_load(0))
+        for j in range(1, s):
+            mx = identical_fmax(mx, ftz(mp.unsafe_load(j)))
+        mx = ftz(mx)
+        # S15, S16.
+        var mxv = F32V(mx)
+        jv = 0
+        while jv < sbody:
+            ep.unsafe_store[width=HOST_FW](jv, ftz_lanes(expf_lanes(ftz_lanes(mp.unsafe_load[width=HOST_FW](jv) - mxv))))
+            jv += HOST_FW
+        while jv < s:
+            ep.unsafe_store(jv, ftz(identical_exp(ftz(ftz(mp.unsafe_load(jv)) - mx))))
+            jv += 1
+        # S17, serial ascending from +0.0, scalar.
+        var den = Float32(0.0)
+        for j in range(s):
+            den = ftz(ftz(den) + ftz(ep.unsafe_load(j)))
+        den = ftz(den)
+        # S18: `identical_div` is `portable_divf`, the flush around ONE
+        # correctly rounded division, and every operand here is flushed.
+        var denv = F32V(den)
+        jv = 0
+        while jv < sbody:
+            awp.unsafe_store[width=HOST_FW](crow + jv, ftz_lanes(ep.unsafe_load[width=HOST_FW](jv) / denv))
+            jv += HOST_FW
+        while jv < s:
+            awp.unsafe_store(crow + jv, ftz(identical_div(ftz(ep.unsafe_load(jv)), den)))
+            jv += 1
+
+
+@no_inline
+def _value_sum_head(aweights: List[Float32], vpack: List[Float32], l: Int, s: Int, hd: Int,
+                    qw: Int, h: Int, mut ctx: List[Float32]):
+    """S19 for every query of one head: one serial chain per output over the
+    key axis from `+0.0`, all `head_dim` outputs of a query as lanes. At a
+    head_dim of one or two SIMD widths the accumulators stay in registers;
+    `ctx` holds `+0.0` in this head's slots on entry."""
+    var awp = aweights.unsafe_ptr()
+    var vp = vpack.unsafe_ptr()
+    var ctxp = ctx.unsafe_ptr()
+    var hbody = hd - hd % HOST_FW
+    for qi in range(l):
+        var cbase = qi * qw + h * hd
+        var wrow = qi * s
+        if hd == 2 * HOST_FW:
+            var a0 = F32V(0.0)
+            var a1 = F32V(0.0)
+            for j in range(s):
+                var wv2 = F32V(awp.unsafe_load(wrow + j))
+                var vrow2 = j * hd
+                a0 = ftz_lanes(identical_mul_add_simd[HOST_FW](wv2, vp.unsafe_load[width=HOST_FW](vrow2), a0))
+                a1 = ftz_lanes(identical_mul_add_simd[HOST_FW](wv2, vp.unsafe_load[width=HOST_FW](vrow2 + HOST_FW), a1))
+            ctxp.unsafe_store[width=HOST_FW](cbase, a0)
+            ctxp.unsafe_store[width=HOST_FW](cbase + HOST_FW, a1)
+            continue
+        if hd == HOST_FW:
+            var a_one = F32V(0.0)
+            for j in range(s):
+                a_one = ftz_lanes(identical_mul_add_simd[HOST_FW](
+                    F32V(awp.unsafe_load(wrow + j)), vp.unsafe_load[width=HOST_FW](j * hd), a_one))
+            ctxp.unsafe_store[width=HOST_FW](cbase, a_one)
+            continue
+        for j in range(s):
+            var wj = awp.unsafe_load(wrow + j)
+            var wv = F32V(wj)
+            var vrow = j * hd
+            var dv = 0
+            while dv < hbody:
+                var acc = ctxp.unsafe_load[width=HOST_FW](cbase + dv)
+                ctxp.unsafe_store[width=HOST_FW](
+                    cbase + dv,
+                    ftz_lanes(identical_mul_add_simd[HOST_FW](wv, vp.unsafe_load[width=HOST_FW](vrow + dv), acc)),
+                )
+                dv += HOST_FW
+            while dv < hd:
+                ctxp.unsafe_store(
+                    cbase + dv,
+                    ftz(identical_mul_add(wj, vp.unsafe_load(vrow + dv), ctxp.unsafe_load(cbase + dv))),
+                )
+                dv += 1
+
+
+@no_inline
+def _silu_gated(gate: List[Float32], up: List[Float32]) -> List[Float32]:
+    """S20 then S21 per element, as lanes: the oracle's
+    `silu = ftz(identical_silu(ftz(gate)))` and
+    `ftz(identical_mul(ftz(silu), ftz(up)))`."""
+    var n = len(gate)
+    var out = List[Float32](length=n, fill=Float32(0.0))
+    var gatep = gate.unsafe_ptr()
+    var upp = up.unsafe_ptr()
+    var op = out.unsafe_ptr()
+    var neg0 = _neg_zero_lanes()
+    var i = 0
+    while i + HOST_FW <= n:
+        var silu = ftz_lanes(silu_lanes(ftz_lanes(gatep.unsafe_load[width=HOST_FW](i))))
+        op.unsafe_store[width=HOST_FW](i, ftz_lanes(identical_mul_add_simd[HOST_FW](
+            ftz_lanes(silu), ftz_lanes(upp.unsafe_load[width=HOST_FW](i)), neg0)))
+        i += HOST_FW
+    while i < n:
+        var silu_s = ftz(identical_silu(ftz(gatep.unsafe_load(i))))
+        op.unsafe_store(i, ftz(identical_mul(ftz(silu_s), ftz(upp.unsafe_load(i)))))
+        i += 1
+    return out^
+
+
 def block_fast(
     tensors: List[List[Float32]],
     tb: Int,
@@ -373,7 +699,7 @@ def block_fast(
     `tensors[tb .. tb + 8]` are the block's weights as
     `byte_host_fast_tensors` prepares them: norm1 flushed, q, k, v, o packed,
     norm2 flushed, gate, up, down packed. Their shapes and finiteness were
-    refused by `refuse_bad_weights` when they were prepared."""
+    refused when they were prepared."""
     var dm = dims.d_model
     var nh = dims.n_heads
     var hd = dims.head_dim
@@ -400,137 +726,53 @@ def block_fast(
     var qr = rope_fast(q, nh, hd, l, rope)
     var kr = rope_fast(k, dims.n_kv_heads, hd, l, rope)
 
-    var scale = attention_scale(hd)
+    # S13's additive mask per (query, key), `+0.0` where the key is visible
+    # and the finite fill where it is not, exactly the `mv` the oracle picks.
     var mfill = mask_fill()
-    var ufill = unmasked_fill()
+    var masks = List[Float32](length=l * s, fill=unmasked_fill())
+    for qi in range(l):
+        for j in range(qi + 1, s):
+            masks[qi * s + j] = mfill
+    var scale = attention_scale(hd)
     var ctx = List[Float32](length=m * qw, fill=Float32(0.0))
     var qmat = List[Float32](length=l * hd, fill=Float32(0.0))
     var kpack = List[Float32](length=hd * s, fill=Float32(0.0))
     var vpack = List[Float32](length=s * hd, fill=Float32(0.0))
     var cell = List[Float32](length=l * s, fill=Float32(0.0))
-    var masked = List[Float32](length=s, fill=Float32(0.0))
-    var shifted = List[Float32](length=s, fill=Float32(0.0))
-    var aexp = List[Float32](length=s, fill=Float32(0.0))
-    var aweights = List[Float32](length=s, fill=Float32(0.0))
-    # S13's additive mask per (query, key), `+0.0` where the key is visible
-    # and the finite fill where it is not, exactly the `mv` the oracle picks.
-    var masks = List[Float32](length=l * s, fill=ufill)
-    for qi in range(l):
-        for j in range(qi + 1, s):
-            masks[qi * s + j] = mfill
-    var ctxp = ctx.unsafe_ptr()
-    var vp = vpack.unsafe_ptr()
-    var cellp = cell.unsafe_ptr()
-    var mkp = masks.unsafe_ptr()
-    var mp = masked.unsafe_ptr()
-    var shp = shifted.unsafe_ptr()
-    var ep = aexp.unsafe_ptr()
-    var awp = aweights.unsafe_ptr()
-    var neg0 = _neg_zero_lanes()
-    var scale_v = F32V(scale)
-    var hbody = hd - hd % HOST_FW
-    var sbody = s - s % HOST_FW
+    var aweights = List[Float32](length=l * s, fill=Float32(0.0))
+    var qrp = qr.unsafe_ptr()
+    var krp = kr.unsafe_ptr()
+    var vvp = v.unsafe_ptr()
+    var qmp = qmat.unsafe_ptr()
+    var kpp = kpack.unsafe_ptr()
+    var vpp = vpack.unsafe_ptr()
     for h in range(nh):
         var kvh = h // n_rep
         for qi in range(l):
             for d in range(hd):
-                qmat[qi * hd + d] = qr[qi * qw + h * hd + d]
+                qmp.unsafe_store(qi * hd + d, qrp.unsafe_load(qi * qw + h * hd + d))
         for j in range(s):
             for d in range(hd):
-                kpack[d * s + j] = ftz(kr[j * kw + kvh * hd + d])
-                vpack[j * hd + d] = ftz(v[j * kw + kvh * hd + d])
-        # S11, one gemm per head, k = head_dim.
+                kpp.unsafe_store(d * s + j, ftz(krp.unsafe_load(j * kw + kvh * hd + d)))
+                vpp.unsafe_store(j * hd + d, ftz(vvp.unsafe_load(j * kw + kvh * hd + d)))
+        # S11, one gemm per head, k = head_dim; then S12-S18 and S19.
         gemm_nt_rows(qmat, kpack, s, hd, 0, l, cell)
-        for qi in range(l):
-            var crow = qi * s
-            # S12, S13: one product and one add per key, as lanes.
-            var jv = 0
-            while jv < sbody:
-                var sc = ftz_lanes(identical_mul_add_simd[HOST_FW](
-                    ftz_lanes(cellp.unsafe_load[width=HOST_FW](crow + jv)), scale_v, neg0))
-                mp.unsafe_store[width=HOST_FW](jv, ftz_lanes(sc + mkp.unsafe_load[width=HOST_FW](crow + jv)))
-                jv += HOST_FW
-            while jv < s:
-                var sc_s = ftz(identical_mul(ftz(cellp.unsafe_load(crow + jv)), scale))
-                mp.unsafe_store(jv, ftz(ftz(sc_s) + mkp.unsafe_load(crow + jv)))
-                jv += 1
-            # S14, serial and scalar.
-            var mx = ftz(mp.unsafe_load(0))
-            for j in range(1, s):
-                mx = identical_fmax(mx, ftz(mp.unsafe_load(j)))
-            mx = ftz(mx)
-            # S15 as lanes (one subtraction per key), S16 scalar.
-            var mxv = F32V(mx)
-            jv = 0
-            while jv < sbody:
-                shp.unsafe_store[width=HOST_FW](jv, ftz_lanes(mp.unsafe_load[width=HOST_FW](jv) - mxv))
-                jv += HOST_FW
-            while jv < s:
-                shp.unsafe_store(jv, ftz(ftz(mp.unsafe_load(jv)) - mx))
-                jv += 1
-            for j in range(s):
-                ep.unsafe_store(j, ftz(identical_exp(shp.unsafe_load(j))))
-            # S17, serial ascending from +0.0, scalar.
-            var den = Float32(0.0)
-            for j in range(s):
-                den = ftz(ftz(den) + ftz(ep.unsafe_load(j)))
-            den = ftz(den)
-            # S18 as lanes: `identical_div` is `portable_divf`, the flush
-            # around ONE correctly rounded division, and every operand here is
-            # already flushed.
-            var denv = F32V(den)
-            jv = 0
-            while jv < sbody:
-                awp.unsafe_store[width=HOST_FW](jv, ftz_lanes(ep.unsafe_load[width=HOST_FW](jv) / denv))
-                jv += HOST_FW
-            while jv < s:
-                awp.unsafe_store(jv, ftz(identical_div(ftz(ep.unsafe_load(jv)), den)))
-                jv += 1
-            # S19, one serial chain per output, all head_dim outputs as lanes.
-            var cbase = qi * qw + h * hd
-            for j in range(s):
-                var wj = aweights[j]
-                var wv = F32V(wj)
-                var vrow = j * hd
-                var dv = 0
-                while dv < hbody:
-                    var acc = ctxp.unsafe_load[width=HOST_FW](cbase + dv)
-                    ctxp.unsafe_store[width=HOST_FW](
-                        cbase + dv,
-                        ftz_lanes(identical_mul_add_simd[HOST_FW](
-                            wv, vp.unsafe_load[width=HOST_FW](vrow + dv), acc)),
-                    )
-                    dv += HOST_FW
-                while dv < hd:
-                    ctxp.unsafe_store(
-                        cbase + dv,
-                        ftz(identical_mul_add(wj, vp.unsafe_load(vrow + dv), ctxp.unsafe_load(cbase + dv))),
-                    )
-                    dv += 1
+        _softmax_head(cell, masks, l, s, scale, aweights)
+        _value_sum_head(aweights, vpack, l, s, hd, qw, h, ctx)
 
-    # S5 o_proj, S22.
+    # S5 o_proj, S22; S1-S4 again; the MLP (S5, S20, S21, S5); S23.
     var o = List[Float32](length=m * dm, fill=Float32(0.0))
     gemm_nt_rows(ctx, tensors[tb + 4], dm, qw, 0, m, o)
-    var r1 = List[Float32](length=m * dm, fill=Float32(0.0))
-    for i in range(m * dm):
-        r1[i] = ftz(ftz(x[i]) + ftz(o[i]))
-
-    # S1-S4 again, then the MLP (S5, S20, S21, S5) and S23.
+    var r1 = _residual_add(x, o)
     var n2 = rms_norm_fast(r1, tensors[tb + 5], m, dm)
     var gate = List[Float32](length=m * inter, fill=Float32(0.0))
     var up = List[Float32](length=m * inter, fill=Float32(0.0))
     gemm_nt_rows(n2, tensors[tb + 6], inter, dm, 0, m, gate)
     gemm_nt_rows(n2, tensors[tb + 7], inter, dm, 0, m, up)
-    var gated = List[Float32](length=m * inter, fill=Float32(0.0))
-    for i in range(m * inter):
-        var silu = ftz(identical_silu(ftz(gate[i])))
-        gated[i] = ftz(identical_mul(ftz(silu), ftz(up[i])))
+    var gated = _silu_gated(gate, up)
     var down = List[Float32](length=m * dm, fill=Float32(0.0))
     gemm_nt_rows(gated, tensors[tb + 8], dm, inter, 0, m, down)
-    var r2 = List[Float32](length=m * dm, fill=Float32(0.0))
-    for i in range(m * dm):
-        r2[i] = ftz(ftz(r1[i]) + ftz(down[i]))
-    return r2^
+    return _residual_add(r1, down)
 
 
 def hidden_fast(
@@ -562,9 +804,10 @@ def ce_causal_mean_loss_fast(logits: List[Float32], targets: List[Int32], vocab:
 
     The oracle's refusals (`ce_refuse_inputs`, called as is) and then its
     seams per row in its order: L1 `identical_fmax` from `-inf` over the
-    unflushed logits, L2 the flushed shift, L3 `identical_exp` with no outer
-    flush, L5 the flushed `identical_log`, L6 the flushed difference, L7
-    `neg_by_bits`, and a `+0.0` row where the target is `ignore_index`.
+    unflushed logits, L2 the flushed shift and L3 the exponential with no
+    outer flush (both as lanes), L5 the flushed `identical_log`, L6 the
+    flushed difference, L7 `neg_by_bits`, and a `+0.0` row where the target is
+    `ignore_index`.
 
     Both folds (L4's denominator per row and the batch total) are `ce_fold`,
     which is `gemm_oracle(values, ones, OP_NN, 1, 1, count)`. At m = n = 1,
@@ -585,15 +828,24 @@ def ce_causal_mean_loss_fast(logits: List[Float32], targets: List[Int32], vocab:
     var expo = List[Float32](length=n * v, fill=Float32(0.0))
     var shp = shift.unsafe_ptr()
     var exp_p = expo.unsafe_ptr()
+    var vbody = v - v % HOST_FW
     for i in range(n):
         var base = i * v
         var mx = bitcast[DType.float32](CE_NEG_INF_BITS)
         for vv in range(v):
             mx = identical_fmax(mx, lp.unsafe_load(base + vv))
-        for vv in range(v):
-            var s = ftz(ftz(lp.unsafe_load(base + vv)) - ftz(mx))
-            shp.unsafe_store(base + vv, s)
-            exp_p.unsafe_store(base + vv, identical_exp(s))
+        var mxv = F32V(ftz(mx))
+        var jv = 0
+        while jv < vbody:
+            var sv = ftz_lanes(ftz_lanes(lp.unsafe_load[width=HOST_FW](base + jv)) - mxv)
+            shp.unsafe_store[width=HOST_FW](base + jv, sv)
+            exp_p.unsafe_store[width=HOST_FW](base + jv, expf_lanes(sv))
+            jv += HOST_FW
+        while jv < v:
+            var s = ftz(ftz(lp.unsafe_load(base + jv)) - ftz(mx))
+            shp.unsafe_store(base + jv, s)
+            exp_p.unsafe_store(base + jv, identical_exp(s))
+            jv += 1
     var ones_v = List[Float32](length=v, fill=Float32(1.0))
     var denom = List[Float32](length=n, fill=Float32(0.0))
     gemm_nt_rows(expo, ones_v, 1, v, 0, n, denom)

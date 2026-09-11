@@ -49,11 +49,12 @@ from embedding.checks.embedding_oracle import EmbConfig, emb_forward_oracle, ref
 from gemm.checks.gemm_oracle import OP_NT, gemm_oracle
 from training.byte_lm_config import ByteConfig
 from training.byte_lm_host_kernels import (
+    all_finite_span,
     ce_causal_mean_loss_fast,
-    flushed,
+    flushed_span,
     gemm_nt_rows,
     hidden_fast,
-    pack_nt,
+    pack_nt_span,
 )
 from training.checks.loss_oracle import CeConfig, ce_forward_oracle
 from transformer.checks.transformer_fixture import (
@@ -233,34 +234,52 @@ def byte_host_worker_count(threads: Int) raises -> Int:
     return cores
 
 
+def _span(offsets: List[Int], j: Int, want: Int) raises -> Int:
+    """The offset of registry tensor `j`, refusing a size other than `want`."""
+    if offsets[j + 1] - offsets[j] != want:
+        raise Error("byte LM host: tensor " + String(j) + " holds " + String(offsets[j + 1] - offsets[j])
+                    + " values, expected " + String(want))
+    return offsets[j]
+
+
 def byte_host_fast_tensors(params: List[Float32], config: ByteConfig) raises -> List[List[Float32]]:
     """The threaded path's operands, prepared once per call in registry
-    order: the flushed embedding; per block norm1 flushed, q, k, v, o packed,
-    norm2 flushed, gate, up, down packed; then the packed head. It meets the
-    reference path's refusals: the embedding's non-finite scan
-    (`emb_forward_oracle`) and every block's `refuse_bad_weights`."""
+    order and read straight from `params` by offset: the flushed embedding;
+    per block norm1 flushed, q, k, v, o packed, norm2 flushed, gate, up, down
+    packed; then the packed head.
+
+    The reference path refuses a non-finite embedding (`emb_forward_oracle`)
+    or block weight (`refuse_bad_weights`) and nothing in the head. So the
+    embedding and the blocks are screened lane-wise, and a non-finite value
+    there re-enters those same refusals, which raise with their own messages.
+    (On the M4 the element-by-element copies and scans were about 90% of a
+    one-token call.)"""
     var offsets = config.offsets()
     var dims = byte_host_dims(config)
     var dm = config.d_model
     var qw = dims.q_width()
     var kw = dims.kv_width()
     var ff = config.intermediate
-    var emb = _slice(params, offsets, 0)
-    refuse_nonfinite(String("W"), emb)
+    var head_j = config.n_tensors() - 1
+    if not all_finite_span(params, 0, offsets[head_j]):
+        refuse_nonfinite(String("W"), _slice(params, offsets, 0))
+        for layer in range(config.n_layers):
+            _ = byte_host_block_weights(params, offsets, layer, dims)
+        raise Error("byte LM host: a non-finite parameter that no refusal named")
     var out = List[List[Float32]]()
-    out.append(flushed(emb))
+    out.append(flushed_span(params, _span(offsets, 0, config.vocab_size * dm), offsets[1]))
     for layer in range(config.n_layers):
-        var w = byte_host_block_weights(params, offsets, layer, dims)
-        out.append(flushed(w.norm1_w))
-        out.append(pack_nt(w.w_q, qw, dm))
-        out.append(pack_nt(w.w_k, kw, dm))
-        out.append(pack_nt(w.w_v, kw, dm))
-        out.append(pack_nt(w.w_o, dm, qw))
-        out.append(flushed(w.norm2_w))
-        out.append(pack_nt(w.w_gate, ff, dm))
-        out.append(pack_nt(w.w_up, ff, dm))
-        out.append(pack_nt(w.w_down, dm, ff))
-    out.append(pack_nt(_slice(params, offsets, config.n_tensors() - 1), config.vocab_size, dm))
+        var base = 1 + 9 * layer
+        out.append(flushed_span(params, _span(offsets, base, dm), offsets[base + 1]))
+        out.append(pack_nt_span(params, _span(offsets, base + 1, qw * dm), qw, dm))
+        out.append(pack_nt_span(params, _span(offsets, base + 2, kw * dm), kw, dm))
+        out.append(pack_nt_span(params, _span(offsets, base + 3, kw * dm), kw, dm))
+        out.append(pack_nt_span(params, _span(offsets, base + 4, dm * qw), dm, qw))
+        out.append(flushed_span(params, _span(offsets, base + 5, dm), offsets[base + 6]))
+        out.append(pack_nt_span(params, _span(offsets, base + 6, ff * dm), ff, dm))
+        out.append(pack_nt_span(params, _span(offsets, base + 7, ff * dm), ff, dm))
+        out.append(pack_nt_span(params, _span(offsets, base + 8, dm * ff), dm, ff))
+    out.append(pack_nt_span(params, _span(offsets, head_j, config.vocab_size * dm), config.vocab_size, dm))
     return out^
 
 
