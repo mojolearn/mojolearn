@@ -83,6 +83,40 @@ from gbdt.gpu_util.kernel.bootstrap import (
 #: and MVS does not reach their GPU oblivious searcher.
 comptime DEFAULT_SUBSAMPLE = Float32(0.66)
 
+comptime CTR_TARGET_PREP_NEEDS_CAT_2634 = not is_defined[
+    "MOJOLEARN_2634_CTR_PREP_OFF"
+]()
+"""DEVIATION 2634 (2026-09-11, gbdt-speed lane), ours, host bookkeeping only.
+`train()` built the CTR target prep whenever the default `simple_ctr`
+carried a permutation-dependent config, which is always: the MinEntropy
+target borders (a sort of a copy of y plus the DP), the binarized target
+(one binarize per row) and one CTR estimation order per permutation. Their
+only readers are `compute_simple_ctrs_gpu` and `build_ctr_tables`, both
+inside the categorical-feature branch, so a fit with no `cat_features`
+paid them for nothing on every call. CatBoost builds the binarized target
+only when its feature manager holds CTR features. Under the switch the
+prep runs only when some column is declared categorical; nothing a
+numeric fit reads changes, so model bits cannot move. `-D
+MOJOLEARN_2634_CTR_PREP_OFF=1` restores the unconditional build (the A/B
+arm)."""
+
+comptime CINDEX_PARALLEL_STAGING_2636 = not is_defined[
+    "MOJOLEARN_2636_SERIAL_STAGING"
+]()
+"""DEVIATION 2636 (2026-09-11, gbdt-finish lane), ours, host staging only.
+`_build_cindex_from_columns` (every fit without permutation-dependent
+columns) copies each float column into a pinned staging slot of an
+8-slot ring, one column after another on one thread, and uploads it to the
+device binarize kernel. At Istella-S's 220 x 1,000,000 that is 880 MB of
+single-thread memcpy inside the ~100 ms `train_cindex_build` stage. Under
+the switch the fills of one ring revolution (up to 8 columns, disjoint
+slots, host memory only, the device untouched inside the parallel region)
+run in `sync_parallelize`, and then the revolution's uploads and binarize
+kernels are enqueued in the serial loop's order with the same drain before
+the ring is reused. Same bytes into the same kernels in the same order, so
+the compressed index and the model cannot move. `-D
+MOJOLEARN_2636_SERIAL_STAGING=1` restores the serial fill (the A/B arm)."""
+
 comptime BORROW_X_COLUMNS = not is_defined["MOJOLEARN_2550_HOST_COPY"]()
 """DEVIATION 2550 (2026-09-11), DEFAULT ON in both tiers since 2026-09-11
 (flipped on Andrew's order on one dataset, Istella-S on the MI325X; taxi
@@ -393,6 +427,82 @@ def _build_cindex_from_columns(
         bdevs.append(ctx.enqueue_create_buffer[DType.float32](256))
     ctx.synchronize()
     comptime BIN_GRID = BINARIZE_BLOCK_SIZE * BINARIZE_DOCS_PER_THREAD
+    comptime if CINDEX_PARALLEL_STAGING_2636:
+        # DEVIATION 2636 (see `CINDEX_PARALLEL_STAGING_2636`): one ring
+        # revolution at a time, the host fills of its slots run in
+        # parallel, then the revolution's uploads and kernels are enqueued
+        # in the serial loop's order, one feature at a time. The drain
+        # before a revolution reuses slot 0 stands where the serial loop
+        # had it.
+        var active = List[Int](capacity=n_features)
+        var treats = List[Int](capacity=n_features)
+        for f in range(n_features):
+            if len(borders[f]) == 0:
+                continue
+            active.append(f)
+            if len(nan_treatment) == n_features:
+                treats.append(nan_treatment[f])
+            else:
+                treats.append(NAN_TREATMENT_AS_IS)
+        var n_active = len(active)
+        var base = 0
+        while base < n_active:
+            var width = n_active - base
+            if width > _CINDEX_SLOTS:
+                width = _CINDEX_SLOTS
+            if base > 0:
+                # one drain per revolution frees every slot in the ring
+                ctx.synchronize()
+            var hxp = hxs.unsafe_ptr()
+            var colp = cps.unsafe_ptr()
+            var ap = active.unsafe_ptr()
+            var tp = treats.unsafe_ptr()
+            var nr = n_rows
+            var b0 = base
+
+            def _stage_task(
+                j: Int
+            ) {imm hxp, imm colp, imm ap, imm tp, imm nr, imm b0}:
+                var k = b0 + j
+                var dst = hxp[j].unsafe_ptr()
+                var src = colp[ap[k]]
+                var treat = tp[k]
+                if treat == NAN_TREATMENT_AS_IS:
+                    # the serial loop's AS_IS reasoning holds per column
+                    memcpy(dest=dst, src=src, count=nr)
+                else:
+                    var sub = nan_substitution(treat)
+                    for r in range(nr):
+                        var v = src.unsafe_load(r)
+                        if v != v:
+                            v = sub
+                        dst.unsafe_store(r, v)
+
+            sync_parallelize(_stage_task, width)
+            # the tasks read these planes; they must outlive the join
+            _ = len(active)
+            _ = len(treats)
+            _ = len(cps)
+            for j in range(width):
+                var f = active[base + j]
+                ref cf = lay.features[f]
+                var hbo = hbos[j].unsafe_ptr()
+                hbo.unsafe_store(0, Float32(len(borders[f])))
+                for b in range(len(borders[f])):
+                    hbo.unsafe_store(1 + b, borders[f][b])
+                ctx.enqueue_copy(dst_buf=xdevs[j], src_ptr=hxs[j].unsafe_ptr())
+                ctx.enqueue_copy(dst_buf=bdevs[j], src_ptr=hbo)
+                ctx.enqueue_function[binarize_float_feature_kernel](
+                    Int32(Int(cf.offset) * n_rows), cf.mask, cf.shift,
+                    xdevs[j].unsafe_ptr(), Int32(n_rows),
+                    bdevs[j].unsafe_ptr(), cindex.unsafe_ptr(),
+                    grid_dim=(n_rows + BIN_GRID - 1) // BIN_GRID,
+                    block_dim=(BINARIZE_BLOCK_SIZE, 1, 1),
+                )
+            base += width
+        ctx.synchronize()
+        _ = len(hxs)
+        return cindex^
     var staged = 0
     for f in range(n_features):
         if len(borders[f]) == 0:
@@ -1001,7 +1111,20 @@ def train(
     var binarized_target = List[UInt8]()
     var ctr_orders = List[List[UInt32]]()
     var target_classes_count = 0
-    if len(dependent_configs) > 0:
+    # DEVIATION 2634 (see `CTR_TARGET_PREP_NEEDS_CAT_2634`): the binarized
+    # target, its borders and the CTR orders are read only inside the
+    # categorical-feature branch below, so a fit with no `cat_features`
+    # skips building them. `-D MOJOLEARN_2634_CTR_PREP_OFF=1` restores the
+    # unconditional build.
+    var ctr_prep_wanted = True
+    comptime if CTR_TARGET_PREP_NEEDS_CAT_2634:
+        ctr_prep_wanted = False
+        if len(cat_features) == n_features:
+            for f in range(n_features):
+                if cat_features[f]:
+                    ctr_prep_wanted = True
+                    break
+    if len(dependent_configs) > 0 and ctr_prep_wanted:
         var target_borders = build_target_borders(
             y, cat_params.target_binarization
         )

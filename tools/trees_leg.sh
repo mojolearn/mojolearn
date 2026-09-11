@@ -120,13 +120,16 @@ cmd_rent() {
     [ -z "$_mine" ] || die "this lane already has pod(s) up: $_mine; reap first"
     STAMP=$(date -u +%Y-%m-%d_%H%M%S)
     POD_NAME="$_prefix$STAMP"
-    python3 - "$TMPD/create.json" "$POD_NAME" "$IMAGE" "$GPU" <<'PY'
+    # TREES_LEG_CUDA_VERSIONS (comma list) narrows the host CUDA versions.
+    # Mojo 1.0.0's GPU runtime refuses NVIDIA drivers below 580 (CUDA 13.0),
+    # so a leg that fits on the device passes TREES_LEG_CUDA_VERSIONS=13.0.
+    python3 - "$TMPD/create.json" "$POD_NAME" "$IMAGE" "$GPU" "${TREES_LEG_CUDA_VERSIONS:-12.4,12.5,12.6,12.7,12.8,12.9,13.0}" <<'PY'
 import json, sys
-out, name, image, gpu = sys.argv[1:]
+out, name, image, gpu, cudas = sys.argv[1:]
 req = {"name": name, "imageName": image, "gpuTypeIds": [gpu], "gpuCount": 1,
        "cloudType": "SECURE", "containerDiskInGb": 80, "volumeInGb": 0,
        "ports": ["22/tcp"], "supportPublicIp": True, "interruptible": False,
-       "allowedCudaVersions": ["12.4", "12.5", "12.6", "12.7", "12.8", "12.9", "13.0"]}
+       "allowedCudaVersions": [c.strip() for c in cudas.split(",") if c.strip()]}
 open(out, "w").write(json.dumps(req, indent=2) + "\n")
 PY
     say "creating $POD_NAME ($GPU, $IMAGE); THE BILL STARTS HERE"
