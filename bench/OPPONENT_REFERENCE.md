@@ -176,8 +176,10 @@ valid NVIDIA opponent row. HIGGS RF 1M reference on the same pod, ours alone,
 no opponent re-run: 1523 (1509..1628) hash 3ffa2951595422d4 (the shipped
 default forest, the Sep 10 night hash), logloss 0.538850, AUC 0.809906.
 
-DEVIATION 2502 (pure classification node is a leaf, OFF by default, opt in
-with `-D MOJOLEARN_2502_PURE_LEAF=1` on the rf binding), default vs opt-in on
+DEVIATION 2502 (pure classification node is a leaf; this leg built source
+a6d25306 where it was opt-in; since main 329cbeb4 the same evening it is ON
+by default and this leg's "opt-in" arm is the shipped forest, its "default"
+arm the `-D MOJOLEARN_2502_RETRY_PURE=1` opt-out), default vs opt-in on
 the same pod, ours alone for the opt-in cells (`pureleaf.*.log`), ms median
 (min..max), hash, logloss, AUC: Istella-S 1M default 3265 (3233..3482)
 15e38312cb4bb870 0.145578 0.964548 vs opt-in 2136 (2064..2292)
