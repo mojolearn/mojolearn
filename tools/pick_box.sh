@@ -56,13 +56,18 @@ import json,sys
 lines=[l for l in sys.stdin.read().split('\n') if l.strip()]
 try:
     team,bal,avail=(json.loads(l) for l in lines[:3])
-except Exception as e:
-    print('no api:', e); sys.exit()
-cap=int(team.get('maximum_virtual_machines') or 0)
-cents=int(bal.get('available_balance') or 0)
-qty=sum(int(v.get('Quantity') or 0) for v in avail
-        if v.get('Specs',{}).get('cpu_cores')==$CORES
-        and sum(g.get('count',0) for g in v.get('Specs',{}).get('gpus',[]))==1)
+    if not isinstance(avail, list):
+        avail = []   # an error object instead of the list: treat as no stock
+    cap=int((team or {}).get('maximum_virtual_machines') or 0)
+    cents=int((bal or {}).get('available_balance') or 0)
+    qty=0
+    for v in avail:
+        specs = (v or {}).get('Specs') or {}
+        gpus = sum(int((g or {}).get('count') or 0) for g in (specs.get('gpus') or []))
+        if specs.get('cpu_cores') == $CORES and gpus == 1:
+            qty += int(v.get('Quantity') or 0)
+except Exception as e:   # a malformed answer means Hot Aisle is not usable now, never a crash
+    print('no api:', type(e).__name__, e); sys.exit()
 print(cap, cents, qty)
 ")
   set -- $verdict
