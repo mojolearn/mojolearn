@@ -44,7 +44,7 @@ with its oracle by bits on shapes and planted values the captures never
 reach.
 """
 
-from std.math import floor, fma, min
+from std.math import floor, fma, max, min
 from std.memory import bitcast
 from std.sys.info import simd_width_of
 
@@ -54,7 +54,6 @@ from checks.numerics import (
     ftz,
     identical_div,
     identical_exp,
-    identical_fmax,
     identical_log,
     identical_mul,
     identical_mul_add,
@@ -64,7 +63,6 @@ from checks.numerics import (
 )
 from gemm.checks.gemm_oracle import contract_leaf_size, leaf_count
 from training.checks.loss_oracle import (
-    CE_NEG_INF_BITS,
     REDUCTION_MEAN,
     CeConfig,
     ce_count,
@@ -199,6 +197,58 @@ def silu_lanes(x: F32V) -> F32V:
     var d = expf_lanes(-x) + F32V(1.0)
     var quotient = ftz_lanes(ftz_lanes(x) / ftz_lanes(d))
     return bitcast[DType.float32](nan.select(bitcast[DType.uint32](x), bitcast[DType.uint32](quotient)))
+
+
+@always_inline
+def _order_key_scalar(v: Float32) -> UInt32:
+    """`checks/numerics.mojo::_total_order_key`: negative values map to
+    `~bits`, others to `bits | 0x80000000`, so integer order is float order."""
+    var b = bitcast[DType.uint32](v)
+    if (b & UInt32(0x80000000)) != UInt32(0):
+        return b ^ UInt32(0xFFFFFFFF)
+    return b | UInt32(0x80000000)
+
+
+@always_inline
+def _order_keys(v: F32V) -> U32V:
+    """`_order_key_scalar` on every lane."""
+    var b = bitcast[DType.uint32](v)
+    var negative = (b & U32V(0x80000000)).ne(U32V(0))
+    return negative.select(b ^ U32V(0xFFFFFFFF), b | U32V(0x80000000))
+
+
+def fmax_fold_span(values: List[Float32], base: Int, count: Int) -> Float32:
+    """What `identical_fmax` folds to over `values[base : base + count]`, in
+    ANY fold shape, for `count >= 1` operands of at least one `fmax`.
+
+    `portable_fmaxf(a, b)` (DEVIATION 825) returns the canonical quiet NaN
+    0x7FC00000 when either operand is a NaN, and otherwise the flushed operand
+    of the larger `_total_order_key`, the first on equal keys. Equal keys are
+    equal bits, so it is exactly commutative and associative over all of
+    Float32, which is why the transformer contract (S14) and the loss
+    contract (L1) both name this fold's shape free. Any fold of it is
+    therefore the canonical NaN if any operand is a NaN, and otherwise the
+    flushed operand of the largest key, found here as lanes with no branch on
+    the data. A fold of one value that performs no `fmax` is the caller's."""
+    var p = values.unsafe_ptr()
+    var magnitude = UInt32(0)
+    var best = UInt32(0)
+    var i = 0
+    while i + HOST_FW <= count:
+        var v = p.unsafe_load[width=HOST_FW](base + i)
+        magnitude = max(magnitude, (bitcast[DType.uint32](v) & U32V(0x7FFFFFFF)).reduce_max())
+        best = max(best, _order_keys(ftz_lanes(v)).reduce_max())
+        i += HOST_FW
+    while i < count:
+        var x = p.unsafe_load(base + i)
+        magnitude = max(magnitude, bitcast[DType.uint32](x) & UInt32(0x7FFFFFFF))
+        best = max(best, _order_key_scalar(ftz(x)))
+        i += 1
+    if magnitude > UInt32(0x7F800000):
+        return bitcast[DType.float32](UInt32(0x7FC00000))
+    if (best & UInt32(0x80000000)) != UInt32(0):
+        return bitcast[DType.float32](best & UInt32(0x7FFFFFFF))
+    return bitcast[DType.float32](best ^ UInt32(0xFFFFFFFF))
 
 
 def all_finite_span(values: List[Float32], lo: Int, hi: Int) -> Bool:
@@ -578,11 +628,11 @@ def _softmax_head(cell: List[Float32], masks: List[Float32], l: Int, s: Int, sca
             var sc_s = ftz(identical_mul(ftz(cellp.unsafe_load(crow + jv)), scale))
             mp.unsafe_store(jv, ftz(ftz(sc_s) + mkp.unsafe_load(crow + jv)))
             jv += 1
-        # S14, serial and scalar.
+        # S14. The maximum's fold shape is free (`fmax_fold_span`), so it
+        # runs as lanes; a single key performs no fmax and is itself, flushed.
         var mx = ftz(mp.unsafe_load(0))
-        for j in range(1, s):
-            mx = identical_fmax(mx, ftz(mp.unsafe_load(j)))
-        mx = ftz(mx)
+        if s >= 2:
+            mx = ftz(fmax_fold_span(masked, 0, s))
         # S15, S16.
         var mxv = F32V(mx)
         jv = 0
@@ -803,8 +853,8 @@ def ce_causal_mean_loss_fast(logits: List[Float32], targets: List[Int32], vocab:
     """`ce_forward_oracle(logits, targets, CeConfig.causal_lm(vocab)).loss[0]`.
 
     The oracle's refusals (`ce_refuse_inputs`, called as is) and then its
-    seams per row in its order: L1 `identical_fmax` from `-inf` over the
-    unflushed logits, L2 the flushed shift and L3 the exponential with no
+    seams per row in its order: L1 the `identical_fmax` fold from `-inf` over
+    the unflushed logits (`fmax_fold_span`), L2 the flushed shift and L3 the exponential with no
     outer flush (both as lanes), L5 the flushed `identical_log`, L6 the
     flushed difference, L7 `neg_by_bits`, and a `+0.0` row where the target is
     `ignore_index`.
@@ -831,9 +881,10 @@ def ce_causal_mean_loss_fast(logits: List[Float32], targets: List[Int32], vocab:
     var vbody = v - v % HOST_FW
     for i in range(n):
         var base = i * v
-        var mx = bitcast[DType.float32](CE_NEG_INF_BITS)
-        for vv in range(v):
-            mx = identical_fmax(mx, lp.unsafe_load(base + vv))
+        # L1. The fold starts from -inf, whose key is below every other
+        # non-NaN key, and performs at least one fmax, so it is
+        # `fmax_fold_span` over the row.
+        var mx = fmax_fold_span(logits, base, v)
         var mxv = F32V(ftz(mx))
         var jv = 0
         while jv < vbody:

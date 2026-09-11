@@ -27,12 +27,13 @@ Raises (nonzero exit) on any mismatch.
 
 from std.memory import bitcast
 
-from checks.numerics import identical_mul_add
+from checks.numerics import ftz, identical_fmax, identical_mul_add
 from gemm.checks.gemm_oracle import OP_NT, gemm_oracle
 from training.byte_lm_host_kernels import (
     block_fast,
     ce_causal_mean_loss_fast,
     flushed,
+    fmax_fold_span,
     gemm_nt_rows,
     pack_nt,
     rms_norm_fast,
@@ -235,6 +236,48 @@ def check_block(mut rng: Rng, dm: Int, nh: Int, nkv: Int, hd: Int, inter: Int, p
     return report(tag, differing(got, st.residual2_out))
 
 
+def check_fmax_folds(mut rng: Rng, trials: Int) raises -> Int:
+    """`fmax_fold_span` against the two scalar folds it replaces: S14's
+    `ftz(m0)` then `identical_fmax(mx, ftz(mj))` then `ftz`, and L1's
+    `identical_fmax(m, x)` from `-inf`. Rows of 1 to 40 values at a nonzero
+    offset, planted with signed zeros, subnormals, infinities, the largest
+    finite values and quiet and signaling NaNs of both signs; one trial in
+    five carries no planted NaN, so the finite answer is reached often."""
+    var specials: List[UInt32] = [
+        UInt32(0x00000000), UInt32(0x80000000), UInt32(0x00000001), UInt32(0x80000001),
+        UInt32(0x007FFFFF), UInt32(0x807FFFFF), UInt32(0x7F800000), UInt32(0xFF800000),
+        UInt32(0x7F7FFFFF), UInt32(0xFF7FFFFF), UInt32(0x3F800000), UInt32(0xBF800000),
+        UInt32(0x7FC00000), UInt32(0x7F800001), UInt32(0xFFC00001), UInt32(0xFF800001),
+    ]
+    var bad = 0
+    for trial in range(trials):
+        var count = 1 + Int(rng.next() >> 40) % 40
+        var offset = 1 + Int(rng.next() >> 40) % 5
+        var row = random_list(rng, offset + count, Float32(4.0))
+        var plants = Int(rng.next() >> 40) % 4
+        var nan_allowed = Int(rng.next() >> 40) % 5 != 0
+        for _ in range(plants):
+            var pick = specials[Int(rng.next() >> 40) % len(specials)]
+            if not nan_allowed and (pick & UInt32(0x7FFFFFFF)) > UInt32(0x7F800000):
+                pick = UInt32(0x80000000)
+            row[offset + Int(rng.next() >> 40) % count] = bitcast[DType.float32](pick)
+        if trial % 7 == 0 and count >= 2:
+            row[offset + count - 1] = row[offset]
+        var loss_want = bitcast[DType.float32](UInt32(0xFF800000))
+        for j in range(count):
+            loss_want = identical_fmax(loss_want, row[offset + j])
+        if bitcast[DType.uint32](fmax_fold_span(row, offset, count)) != bitcast[DType.uint32](loss_want):
+            bad += 1
+        if count >= 2:
+            var s14_want = ftz(row[offset])
+            for j in range(1, count):
+                s14_want = identical_fmax(s14_want, ftz(row[offset + j]))
+            s14_want = ftz(s14_want)
+            if bitcast[DType.uint32](ftz(fmax_fold_span(row, offset, count))) != bitcast[DType.uint32](s14_want):
+                bad += 1
+    return report(String("fmax fold, S14 and L1 spellings, ") + String(trials) + " planted rows", bad)
+
+
 def check_loss(mut rng: Rng, n: Int, vocab: Int) raises -> Int:
     var logits = random_list(rng, n * vocab, Float32(8.0))
     var targets = List[Int32](capacity=n)
@@ -270,6 +313,7 @@ def main() raises:
     bad += check_gemm(rng, 2, 33, 130, True)
     bad += check_gemm(rng, 3, 40, 300, True)
     bad += check_gemm(rng, 4, 1, 256, False)
+    bad += check_fmax_folds(rng, 20000)
     bad += check_rms(rng, 32, 32)
     bad += check_rms(rng, 13, 7)
     bad += check_rope(rng, 4, 8, 32)
