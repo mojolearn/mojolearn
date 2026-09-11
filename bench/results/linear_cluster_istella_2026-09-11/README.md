@@ -152,10 +152,30 @@ against a change the probe measures at about 5 ms of host work at this shape
 (weight fill 1.0 ms, readback 0.2 to 0.3 ms). Pooled instances and the verdict
 they give are below.
 
-## Measurements
+## DBSCAN and HDBSCAN rows (measurement only, first at this size)
 
-Filled from the pod's races and probes; see `summary.tsv`, the `probe-*.log`
-files and the tables below.
+1 warm-up plus 3 rounds, eps the p75 quantile of the min_samples-th nearest
+neighbor distance ON THE BLOCK (the same rule and the same value for every
+arm), min_samples 10, blocks standardized.
+
+| dataset | shape | eps | cuML brute ms | ours (ball cover) ms | ours / cuML | agreement |
+|---|---|---|---|---|---|---|
+| taxi | 1,000,000 x 11 | 0.177 | 13631.0 | 1129.8 | 0.083x | both 2900 clusters, both noise fraction 0.216119, adjusted Rand index 0.99999999908, noise agreement 1.000 |
+| Istella-S | 1,000,000 x 220 | 4.17 | pending | pending (round 0 was 337.1 s against cuML's 55.2 s) | | |
+
+| dataset | shape | cuML HDBSCAN ms | ours | notes |
+|---|---|---|---|---|
+| taxi | 100,000 x 11 | 191.2 | no arm | 159 clusters, noise fraction 0.1310; min_samples 10, min_cluster_size 100, eom. **This library ships no HDBSCAN**, so there is no ratio, only cuML's row. |
+
+`cuml-gpu-rbc` (cuML's own ball cover) refuses both datasets at 1,000,000 rows
+with "An overflow occurred with the current choice of precision and the number
+of samples", so cuML's rbc has no row.
+
+**The two datasets say opposite things about our ball cover, and that is the
+finding.** On the narrow table it is an order of magnitude below cuML's brute
+force; on 220 features its pruning stops paying and cuML's brute force wins,
+which is what a landmark bound does as dimension grows. Anyone quoting the
+taxi row alone would be quoting the fixture.
 
 ## DBSCAN and HDBSCAN
 
