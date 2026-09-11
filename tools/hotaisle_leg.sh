@@ -1367,7 +1367,7 @@ echo "== rocm-smi --showbus: SMI <index> <pci address>"
 if command -v rocm-smi > /dev/null 2>&1; then
     rocm-smi --showbus > /tmp/mojolearn-showbus.txt 2>&1
     sed 's/^/RAW /' /tmp/mojolearn-showbus.txt
-    awk '/^GPU\[[0-9]+\]/ && /PCI Bus/ { i = $1; gsub(/[^0-9]/, "", i); print "SMI", i, tolower($NF) }' /tmp/mojolearn-showbus.txt
+    awk '/^GPU\[/ && /PCI Bus/ { i = $1; gsub(/[^0-9]/, "", i); print "SMI", i, tolower($NF) }' /tmp/mojolearn-showbus.txt
     rm -f /tmp/mojolearn-showbus.txt
 else
     echo "SMI_ABSENT"
