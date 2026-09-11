@@ -75,6 +75,8 @@ from gbdt.methods.kernel.compute_point_hist2_loop import (
     compute_histogram_4,
 )
 from gbdt.methods.kernel.split_properties_helpers import (
+    PW_PRIVATE_DOC_SLOTS,
+    pw_private_doc_slot,
     shift_part_and_bin_sums_ptr,
 )
 from gbdt.methods.kernel.pointwise_hist2_one_byte_5bit import (
@@ -408,7 +410,17 @@ def compute_split_properties_nb_kernel[
                     * 2
                     + w
                 )
-                comptime if m > 1:
+                comptime if m > 1 and PW_PRIVATE_DOC_SLOTS:
+                    # DEVIATION 2670 (opt-in): this document block's OWN
+                    # slot, a plain store; the launcher folds the M slots
+                    # into `binSums` in block order
+                    bin_sums.unsafe_store(
+                        pw_private_doc_slot[full_pass](
+                            at, Int(block_idx.x) % m, total_feature_count
+                        ),
+                        val,
+                    )
+                elif m > 1:
                     # several document blocks per feature, so the writes
                     # collide; theirs is a global float atomicAdd
                     # DEVIATION 1898: upstream's atomicAdd is relaxed; the non-

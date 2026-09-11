@@ -33,6 +33,10 @@ ordered tiers restores the pre-2624 launch and must fail G1 and G2.
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
+from checks.kernel_matrix import (
+    TARGET_COLUMN,
+    pointwise_private_doc_slots_sm_for,
+)
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, numeric_mode_name
 from gbdt.gpu_data.grid_policy import (
     POLICY_BINARY,
@@ -44,6 +48,15 @@ from gbdt.methods.pointwise_kernels import (
     compute_hist2,
     folds_histogram_from_folds,
     pw_block_multiplier,
+)
+
+#: DEVIATION 2670 (opt-in): private document slots are on in this build, so
+#: G1 asserts a pinned multiplier instead of multiplier 1.
+comptime SLOTS_2670 = (
+    pointwise_private_doc_slots_sm_for[
+        TARGET_COLUMN, GLOBAL_NUMERIC_MODE != NUMERIC_FAST
+    ]()
+    != 0
 )
 
 #: 400,000 rows, so the unguarded ladder reaches M = 32 at SM count 4096
@@ -247,26 +260,47 @@ def main() raises:
     var sizes: List[Int] = [24000, 400000, 1000000, 2000000]
     var bad1 = 0
     var probes = 0
+    var split = 0
     for nx in range(1, 9):
         for d in range(7):
             for si in range(len(sizes)):
+                var m0 = pw_block_multiplier(nx, 1 << d, 1, sizes[si], sms[0])
                 for mi in range(len(sms)):
                     var m = pw_block_multiplier(
                         nx, 1 << d, 1, sizes[si], sms[mi]
                     )
                     probes += 1
-                    if m != 1:
+                    if m > 1:
+                        split += 1
+                    var wrong = m != 1
+                    comptime if SLOTS_2670:
+                        # DEVIATION 2670: pinned, so never a function of sm
+                        wrong = m != m0
+                    if wrong:
                         if bad1 < 4:
                             print(
                                 "     G1 nx", nx, "ny", 1 << d, "rows",
                                 sizes[si], "sm", sms[mi], "-> multiplier", m,
                             )
                         bad1 += 1
-    if bad1 != 0:
-        print("FAIL G1: --", bad1, "of", probes, "grids split the document axis")
-        failures += 1
+    comptime if SLOTS_2670:
+        if bad1 != 0 or split == 0:
+            print(
+                "FAIL G1 (2670): --", bad1, "of", probes,
+                "grids moved with sm;", split, "split the document axis",
+            )
+            failures += 1
+        else:
+            print(
+                "  ok   G1 (2670) --", probes, "grids, multiplier independent"
+                " of sm at every one;", split, "of them split the document axis",
+            )
     else:
-        print("  ok   G1 --", probes, "grids, multiplier 1 at every one")
+        if bad1 != 0:
+            print("FAIL G1: --", bad1, "of", probes, "grids split the document axis")
+            failures += 1
+        else:
+            print("  ok   G1 --", probes, "grids, multiplier 1 at every one")
 
     # ============================================================ G2
     var ctx = DeviceContext()
