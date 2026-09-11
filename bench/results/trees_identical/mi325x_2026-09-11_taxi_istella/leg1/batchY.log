@@ -1,0 +1,92 @@
+batchY start 13:27:50 load 1.84 1.88 2.02 2/431 34008
+speed baseline gbdt-symmetric taxi 1000000 rounds=5 mode=ours extra='--devices auto' 13:27:50
+speed_exit baseline.gbdt-symmetric.taxi.r1000000.ours.fastab2=0 13:28:04
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours-ab mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED lane=gbdt-symmetric arm=ours shape=taxi-1000000x16 round=1 ms=444.117 hash=fe1a5600b272155e
+FSPEED lane=gbdt-symmetric arm=ours-ab shape=taxi-1000000x16 round=1 ms=523.545 hash=49bb5c3d5c27117b
+FSPEED lane=gbdt-symmetric arm=ours shape=taxi-1000000x16 round=2 ms=447.505 hash=0c5d2dadf9e829ec
+FSPEED lane=gbdt-symmetric arm=ours-ab shape=taxi-1000000x16 round=2 ms=520.742 hash=53e47544ce57e63d
+FSPEED lane=gbdt-symmetric arm=ours shape=taxi-1000000x16 round=3 ms=437.738 hash=00e0cd215ba2bf08
+FSPEED lane=gbdt-symmetric arm=ours-ab shape=taxi-1000000x16 round=3 ms=509.354 hash=c864d0706fe13bd3
+FSPEED lane=gbdt-symmetric arm=ours shape=taxi-1000000x16 round=4 ms=421.978 hash=0f4ecc5a1814ab3d
+FSPEED lane=gbdt-symmetric arm=ours-ab shape=taxi-1000000x16 round=4 ms=494.318 hash=016a78ab4da1dbaf
+FSPEED lane=gbdt-symmetric arm=ours shape=taxi-1000000x16 round=5 ms=416.014 hash=a62b8f7fa16e8ddc
+FSPEED lane=gbdt-symmetric arm=ours-ab shape=taxi-1000000x16 round=5 ms=495.498 hash=052b59cab3b2b3b6
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=logloss value=0.528165
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=auc value=0.614416
+FSPEED-ACC lane=gbdt-symmetric arm=ours-ab metric=logloss value=0.528078
+FSPEED-ACC lane=gbdt-symmetric arm=ours-ab metric=auc value=0.615817
+speed baseline gbdt-depthwise taxi 1000000 rounds=5 mode=ours extra='--devices auto' 13:28:04
+speed_exit baseline.gbdt-depthwise.taxi.r1000000.ours.fastab2=0 13:28:22
+FSPEED-HEADER family=forest lane=gbdt-depthwise arm=ours mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-depthwise arm=ours-ab mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED lane=gbdt-depthwise arm=ours shape=taxi-1000000x16 round=1 ms=785.476 hash=7bf45676f6c9b03a
+FSPEED lane=gbdt-depthwise arm=ours-ab shape=taxi-1000000x16 round=1 ms=882.100 hash=8555d752aa2dbfa5
+FSPEED lane=gbdt-depthwise arm=ours shape=taxi-1000000x16 round=2 ms=793.695 hash=bb8a283ff9956544
+FSPEED lane=gbdt-depthwise arm=ours-ab shape=taxi-1000000x16 round=2 ms=883.086 hash=937a0376f5170010
+FSPEED lane=gbdt-depthwise arm=ours shape=taxi-1000000x16 round=3 ms=772.574 hash=0d9d8eed4c7a7337
+FSPEED lane=gbdt-depthwise arm=ours-ab shape=taxi-1000000x16 round=3 ms=867.870 hash=66f6fb2309886e4b
+FSPEED lane=gbdt-depthwise arm=ours shape=taxi-1000000x16 round=4 ms=774.061 hash=c86db9f62735362b
+FSPEED lane=gbdt-depthwise arm=ours-ab shape=taxi-1000000x16 round=4 ms=873.298 hash=fa09f8bc08caaebd
+FSPEED lane=gbdt-depthwise arm=ours shape=taxi-1000000x16 round=5 ms=787.201 hash=4b30c5ad82a15729
+FSPEED lane=gbdt-depthwise arm=ours-ab shape=taxi-1000000x16 round=5 ms=884.825 hash=688176530f445904
+FSPEED-ACC lane=gbdt-depthwise arm=ours metric=logloss value=0.528991
+FSPEED-ACC lane=gbdt-depthwise arm=ours metric=auc value=0.613259
+FSPEED-ACC lane=gbdt-depthwise arm=ours-ab metric=logloss value=0.525949
+FSPEED-ACC lane=gbdt-depthwise arm=ours-ab metric=auc value=0.618920
+speed baseline gbdt-lossguide taxi 1000000 rounds=5 mode=ours extra='--devices auto' 13:28:22
+speed_exit baseline.gbdt-lossguide.taxi.r1000000.ours.fastab2=0 13:28:49
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=ours mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=ours-ab mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED lane=gbdt-lossguide arm=ours shape=taxi-1000000x16 round=1 ms=1449.095 hash=4c4592692e77992b
+FSPEED lane=gbdt-lossguide arm=ours-ab shape=taxi-1000000x16 round=1 ms=1606.541 hash=9a9ea86eba49ae77
+FSPEED lane=gbdt-lossguide arm=ours shape=taxi-1000000x16 round=2 ms=1497.915 hash=505e9c9fd9c84aee
+FSPEED lane=gbdt-lossguide arm=ours-ab shape=taxi-1000000x16 round=2 ms=1636.656 hash=64267c424445cdd4
+FSPEED lane=gbdt-lossguide arm=ours shape=taxi-1000000x16 round=3 ms=1496.967 hash=fe503777c83cf038
+FSPEED lane=gbdt-lossguide arm=ours-ab shape=taxi-1000000x16 round=3 ms=1613.831 hash=2079ef1bb490bd85
+FSPEED lane=gbdt-lossguide arm=ours shape=taxi-1000000x16 round=4 ms=1528.758 hash=728f333d9581c336
+FSPEED lane=gbdt-lossguide arm=ours-ab shape=taxi-1000000x16 round=4 ms=1627.103 hash=adffd6df93da7988
+FSPEED lane=gbdt-lossguide arm=ours shape=taxi-1000000x16 round=5 ms=1512.377 hash=aa046c6184a6609a
+FSPEED lane=gbdt-lossguide arm=ours-ab shape=taxi-1000000x16 round=5 ms=1634.833 hash=cf0d5539d8fe6459
+FSPEED-ACC lane=gbdt-lossguide arm=ours metric=logloss value=0.527531
+FSPEED-ACC lane=gbdt-lossguide arm=ours metric=auc value=0.614111
+FSPEED-ACC lane=gbdt-lossguide arm=ours-ab metric=logloss value=0.527427
+FSPEED-ACC lane=gbdt-lossguide arm=ours-ab metric=auc value=0.615208
+speed baseline rf taxi 1000000 rounds=5 mode=ours extra='--devices auto' 13:28:49
+speed_exit baseline.rf.taxi.r1000000.ours.fastab2=0 13:31:00
+FSPEED-HEADER family=forest lane=rf arm=ours mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=rf arm=ours-ab mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED lane=rf arm=ours shape=taxi-1000000x16 round=1 ms=1182.456 hash=d8f64dae01de00bd
+FSPEED lane=rf arm=ours-ab shape=taxi-1000000x16 round=1 ms=1180.543 hash=22b93d50f6939aa0
+FSPEED lane=rf arm=ours shape=taxi-1000000x16 round=2 ms=1168.980 hash=d8f64dae01de00bd
+FSPEED lane=rf arm=ours-ab shape=taxi-1000000x16 round=2 ms=1177.704 hash=22b93d50f6939aa0
+FSPEED lane=rf arm=ours shape=taxi-1000000x16 round=3 ms=1175.313 hash=d8f64dae01de00bd
+FSPEED lane=rf arm=ours-ab shape=taxi-1000000x16 round=3 ms=1174.903 hash=22b93d50f6939aa0
+FSPEED lane=rf arm=ours shape=taxi-1000000x16 round=4 ms=1171.986 hash=d8f64dae01de00bd
+FSPEED lane=rf arm=ours-ab shape=taxi-1000000x16 round=4 ms=1177.614 hash=22b93d50f6939aa0
+FSPEED lane=rf arm=ours shape=taxi-1000000x16 round=5 ms=1173.858 hash=d8f64dae01de00bd
+FSPEED lane=rf arm=ours-ab shape=taxi-1000000x16 round=5 ms=1173.501 hash=22b93d50f6939aa0
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.525910
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.617154
+FSPEED-ACC lane=rf arm=ours-ab metric=logloss value=0.525887
+FSPEED-ACC lane=rf arm=ours-ab metric=auc value=0.617467
+speed baseline et taxi 1000000 rounds=5 mode=ours extra='--devices auto' 13:31:00
+speed_exit baseline.et.taxi.r1000000.ours.fastab2=0 13:32:53
+FSPEED-HEADER family=forest lane=et arm=ours mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=et arm=ours-ab mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=1 ms=3838.806 hash=e683f121d11f59dd
+FSPEED lane=et arm=ours-ab shape=taxi-1000000x16 round=1 ms=3838.594 hash=e683f121d11f59dd
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=2 ms=3838.716 hash=e683f121d11f59dd
+FSPEED lane=et arm=ours-ab shape=taxi-1000000x16 round=2 ms=3833.350 hash=e683f121d11f59dd
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=3 ms=3835.362 hash=e683f121d11f59dd
+FSPEED lane=et arm=ours-ab shape=taxi-1000000x16 round=3 ms=3840.493 hash=e683f121d11f59dd
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=4 ms=3835.970 hash=e683f121d11f59dd
+FSPEED lane=et arm=ours-ab shape=taxi-1000000x16 round=4 ms=3837.715 hash=e683f121d11f59dd
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=5 ms=3835.632 hash=e683f121d11f59dd
+FSPEED lane=et arm=ours-ab shape=taxi-1000000x16 round=5 ms=3837.027 hash=e683f121d11f59dd
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.527541
+FSPEED-ACC lane=et arm=ours metric=auc value=0.608084
+FSPEED-ACC lane=et arm=ours-ab metric=logloss value=0.527541
+FSPEED-ACC lane=et arm=ours-ab metric=auc value=0.608084
+PHASE_Y_DONE 13:32:53

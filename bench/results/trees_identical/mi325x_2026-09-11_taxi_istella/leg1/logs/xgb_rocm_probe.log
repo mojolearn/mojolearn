@@ -1,0 +1,6 @@
+xgboost 3.1.1 /root/venv-gpu/lib/python3.12/site-packages/xgboost/__init__.py
+build_info {"USE_CUDA": true, "USE_DLOPEN_NCCL": false, "USE_DLOPEN_RCCL": false, "USE_FEDERATED": false, "USE_HIP": true, "USE_NCCL": false, "USE_NVCOMP": false, "USE_OPENMP": true, "USE_RCCL": false, "USE_RMM": false}
+fit device=cuda 1089.9 ms config_device=cuda:0
+fit device=cpu 1299.2 ms config_device=cpu
+fit device=cuda 739.4 ms config_device=cuda:0
+XGB_GPU_PROBE_DONE

@@ -1,0 +1,28 @@
+[LightGBM] [Fatal] Check failed: (best_split_info.left_count) > (0) at /tmp/pip-install-9iwjisv5/lightgbm_56ca6931feef440791e97710f9b5efdb/src/treelearner/serial_tree_learner.cpp, line 860 .
+
+[LightGBM] [Info] Number of positive: 9934, number of negative: 10066
+[LightGBM] [Info] This is the GPU trainer!!
+[LightGBM] [Info] Total Bins 2040
+[LightGBM] [Info] Number of data points in the train set: 20000, number of used features: 8
+[LightGBM] [Info] Using GPU Device: gfx942:sramecc+:xnack-, Vendor: Advanced Micro Devices, Inc.
+[LightGBM] [Info] Compiling OpenCL Kernel with 256 bins...
+[LightGBM] [Info] GPU programs have been built
+[LightGBM] [Info] Size of histogram bin entry: 8
+[LightGBM] [Info] 8 dense feature groups (0.15 MB) transferred to GPU in 0.006177 secs. 0 sparse feature groups
+[LightGBM] [Info] [binary:BoostFromScore]: pavg=0.496700 -> initscore=-0.013200
+[LightGBM] [Info] Start training from score -0.013200
+Traceback (most recent call last):
+  File "<stdin>", line 5, in <module>
+  File "/root/venv-gpu/lib/python3.12/site-packages/lightgbm/sklearn.py", line 1704, in fit
+    super().fit(
+  File "/root/venv-gpu/lib/python3.12/site-packages/lightgbm/sklearn.py", line 1171, in fit
+    self._Booster = train(
+                    ^^^^^^
+  File "/root/venv-gpu/lib/python3.12/site-packages/lightgbm/engine.py", line 321, in train
+    booster.update(fobj=fobj)
+  File "/root/venv-gpu/lib/python3.12/site-packages/lightgbm/basic.py", line 4265, in update
+    _safe_call(
+  File "/root/venv-gpu/lib/python3.12/site-packages/lightgbm/basic.py", line 297, in _safe_call
+    raise LightGBMError(_LIB.LGBM_GetLastError().decode("utf-8"))
+lightgbm.basic.LightGBMError: Check failed: (best_split_info.left_count) > (0) at /tmp/pip-install-9iwjisv5/lightgbm_56ca6931feef440791e97710f9b5efdb/src/treelearner/serial_tree_learner.cpp, line 860 .
+

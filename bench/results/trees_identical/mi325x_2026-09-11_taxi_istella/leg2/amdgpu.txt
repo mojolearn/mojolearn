@@ -1,0 +1,4 @@
+sysfs 6.12.12
+filename:       /lib/modules/6.8.0-59-generic/updates/dkms/amdgpu.ko.zst
+version:        6.12.12
+vermagic:       6.8.0-59-generic SMP preempt mod_unload modversions 

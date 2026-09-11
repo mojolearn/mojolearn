@@ -1,0 +1,20 @@
+FSPEED-NOTE lane=gbdt-depthwise arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); AMD box: an opponent with an AMD GPU path runs on the GPU, one without runs on this box's CPU on all cores (ENGINEERING_RULES.md section 10); the arm name says which
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=hip path=/root/mojolearn/python/mojolearn/identical/_mojolearn_gbdt.so
+FSPEED-SCALE stage=before rows=1000000 features=16 input_mib=61.0 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=gbdt-depthwise arm=ours mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED-WARMUP lane=gbdt-depthwise arm=ours shape=taxi-1000000x16 ms=1131.481
+FSPEED-ORDER lane=gbdt-depthwise round=1 arms=ours
+FSPEED lane=gbdt-depthwise arm=ours shape=taxi-1000000x16 round=1 ms=802.274 hash=d2edb82a6856c012
+FSPEED-ORDER lane=gbdt-depthwise round=2 arms=ours
+FSPEED lane=gbdt-depthwise arm=ours shape=taxi-1000000x16 round=2 ms=793.238 hash=7f7da1c4a0017403
+FSPEED-ORDER lane=gbdt-depthwise round=3 arms=ours
+FSPEED lane=gbdt-depthwise arm=ours shape=taxi-1000000x16 round=3 ms=793.289 hash=2803f13b4b089b3f
+FSPEED-ORDER lane=gbdt-depthwise round=4 arms=ours
+FSPEED lane=gbdt-depthwise arm=ours shape=taxi-1000000x16 round=4 ms=799.168 hash=28f923f895757e13
+FSPEED-ORDER lane=gbdt-depthwise round=5 arms=ours
+FSPEED lane=gbdt-depthwise arm=ours shape=taxi-1000000x16 round=5 ms=744.257 hash=7553744017e10f0d
+FSPEED-ACC lane=gbdt-depthwise arm=ours metric=logloss value=0.528050
+FSPEED-ACC lane=gbdt-depthwise arm=ours metric=auc value=0.613792
+FSPEED-SCALE stage=after rows=1000000 features=16 input_mib=61.0 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.

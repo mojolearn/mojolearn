@@ -1,0 +1,44 @@
+FSPEED-NOTE lane=gbdt-lossguide arms=cpu,gpu,opencl metric=devices delta=3.000000 reason=AMD box: CPU arms run for libraries with no AMD GPU path, on all cores (ENGINEERING_RULES.md section 10); every arm name carries its device
+FSPEED-NOTE lane=gbdt-lossguide arms=ours metric=devices delta=3.000000 reason=devices=cpu,gpu,opencl (explicit); AMD box: an opponent with an AMD GPU path runs on the GPU, one without runs on this box's CPU on all cores (ENGINEERING_RULES.md section 10); the arm name says which
+FSPEED-IMPORT-ORDER lane=gbdt-lossguide first=opponents
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=hip path=/root/mojolearn/python/mojolearn/identical/_mojolearn_gbdt.so
+FSPEED-SCALE stage=before rows=1000000 features=220 input_mib=839.2 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=ours mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=catboost-cpu mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=xgboost-gpu mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=lightgbm-cpu mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED-WARMUP lane=gbdt-lossguide arm=ours shape=istella-1000000x220 ms=3132.629
+FSPEED-WARMUP lane=gbdt-lossguide arm=catboost-cpu shape=istella-1000000x220 ms=9144.005
+FSPEED-WARMUP lane=gbdt-lossguide arm=xgboost-gpu shape=istella-1000000x220 ms=2059.327
+[LightGBM] [Fatal] Check failed: (best_split_info.left_count) > (0) at /__w/LightGBM/LightGBM/lightgbm-python/src/treelearner/serial_tree_learner.cpp, line 860 .
+
+FSPEED-REFUSED lane=gbdt-lossguide arm=lightgbm-cpu reason=LightGBMError during warm-up: Check failed: (best_split_info.left_count) > (0) at /__w/LightGBM/LightGBM/lightgbm-python/src/treelearner/serial_tree_learner.cpp, line 860 .
+FSPEED-ORDER lane=gbdt-lossguide round=1 arms=ours,catboost-cpu,xgboost-gpu
+FSPEED lane=gbdt-lossguide arm=ours shape=istella-1000000x220 round=1 ms=2790.117 hash=fa6ea639c76b1831
+FSPEED lane=gbdt-lossguide arm=catboost-cpu shape=istella-1000000x220 round=1 ms=9094.668 hash=05ec5e14f256128f
+FSPEED lane=gbdt-lossguide arm=xgboost-gpu shape=istella-1000000x220 round=1 ms=1940.726 hash=4d80a2001a82f486
+FSPEED-ORDER lane=gbdt-lossguide round=2 arms=ours,catboost-cpu,xgboost-gpu
+FSPEED lane=gbdt-lossguide arm=ours shape=istella-1000000x220 round=2 ms=2582.500 hash=9a51a178a5f45341
+FSPEED lane=gbdt-lossguide arm=catboost-cpu shape=istella-1000000x220 round=2 ms=9080.263 hash=05ec5e14f256128f
+FSPEED lane=gbdt-lossguide arm=xgboost-gpu shape=istella-1000000x220 round=2 ms=1868.454 hash=4d80a2001a82f486
+FSPEED-ORDER lane=gbdt-lossguide round=3 arms=ours,catboost-cpu,xgboost-gpu
+FSPEED lane=gbdt-lossguide arm=ours shape=istella-1000000x220 round=3 ms=2607.243 hash=8941f5345eb1a02b
+FSPEED lane=gbdt-lossguide arm=catboost-cpu shape=istella-1000000x220 round=3 ms=9021.302 hash=05ec5e14f256128f
+FSPEED lane=gbdt-lossguide arm=xgboost-gpu shape=istella-1000000x220 round=3 ms=1866.165 hash=4d80a2001a82f486
+FSPEED-ORDER lane=gbdt-lossguide round=4 arms=ours,catboost-cpu,xgboost-gpu
+FSPEED lane=gbdt-lossguide arm=ours shape=istella-1000000x220 round=4 ms=2587.465 hash=1f58ea6c39a336ff
+FSPEED lane=gbdt-lossguide arm=catboost-cpu shape=istella-1000000x220 round=4 ms=9037.694 hash=05ec5e14f256128f
+FSPEED lane=gbdt-lossguide arm=xgboost-gpu shape=istella-1000000x220 round=4 ms=1915.517 hash=4d80a2001a82f486
+FSPEED-ORDER lane=gbdt-lossguide round=5 arms=ours,catboost-cpu,xgboost-gpu
+FSPEED lane=gbdt-lossguide arm=ours shape=istella-1000000x220 round=5 ms=2657.880 hash=8ce2e866cbcea31a
+FSPEED lane=gbdt-lossguide arm=catboost-cpu shape=istella-1000000x220 round=5 ms=9045.393 hash=05ec5e14f256128f
+FSPEED lane=gbdt-lossguide arm=xgboost-gpu shape=istella-1000000x220 round=5 ms=1880.402 hash=4d80a2001a82f486
+FSPEED-ACC lane=gbdt-lossguide arm=ours metric=logloss value=0.126223
+FSPEED-ACC lane=gbdt-lossguide arm=ours metric=auc value=0.973382
+FSPEED-ACC lane=gbdt-lossguide arm=catboost-cpu metric=logloss value=0.127841
+FSPEED-ACC lane=gbdt-lossguide arm=catboost-cpu metric=auc value=0.972012
+FSPEED-ACC lane=gbdt-lossguide arm=xgboost-gpu metric=logloss value=0.124822
+FSPEED-ACC lane=gbdt-lossguide arm=xgboost-gpu metric=auc value=0.973880
+FSPEED-SCALE stage=after rows=1000000 features=220 input_mib=839.2 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.

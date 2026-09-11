@@ -1,0 +1,47 @@
+load 1.52 0.75 0.29 1/419 10593 13:48:16
+arms: xgboost=xgboost-cpu lightgbm=lightgbm-cpu python=python3
+speed_exit baseline.gbdt-symmetric.istella.r1000000.full=143 13:48:49
+batchC and batchD stopped for the venv repair 13:48:51
+load 0.12 0.83 0.59 1/395 11800 13:53:56
+arms: xgboost=xgboost-gpu lightgbm=lightgbm-cpu python=/root/venv-gpu/bin/python
+batchC and batchD relaunched after the venv repair 13:54:04
+speed_exit baseline.gbdt-symmetric.istella.r1000000.full=0 13:54:38
+speed_exit baseline.gbdt-depthwise.istella.r1000000.full=0 13:55:52
+speed_exit baseline.gbdt-lossguide.istella.r1000000.full=0 13:57:27
+PHASE_IG_DONE 13:57:27
+speed_exit baseline.rf.istella.r1000000.full=0 14:00:15
+speed_exit baseline.et.istella.r1000000.full=0 14:03:15
+PHASE_IF1_DONE 14:03:15
+speed_exit baseline.rf.istella.r2000000.full=0 14:07:50
+PHASE_IF2_DONE 14:07:50
+speed_exit baseline.gbdt-symmetric.istella.r1000000.ours.pointwise=0 14:08:18
+speed_exit baseline.gbdt-symmetric.istella.r1000000.stage=0 14:08:24
+speed_exit baseline.gbdt-depthwise.istella.r1000000.stage=0 14:08:31
+speed_exit baseline.gbdt-lossguide.istella.r1000000.stage=0 14:08:40
+PHASE_IS_DONE 14:08:40
+flip_verdict_pointwise=1 14:08:40
+batchD start 14:08:47 load 4.67 8.88 6.47 1/406 17336
+build_fast_gbdt=0 14:09:34
+build_fast_rf=0 14:09:48
+build_fast_trees=0 14:10:02
+speed_exit baseline.gbdt-symmetric.istella.r1000000.ours.fastab=0 14:10:26
+speed_exit baseline.gbdt-depthwise.istella.r1000000.ours.fastab=0 14:10:59
+speed_exit baseline.gbdt-lossguide.istella.r1000000.ours.fastab=0 14:11:42
+speed_exit baseline.rf.istella.r1000000.ours.fastab=0 14:14:13
+speed_exit baseline.et.istella.r1000000.ours.fastab=0 14:18:21
+PHASE_D1_DONE 14:18:21
+patch_2512_rf=0 14:18:21
+patch_2512_gbdt=0 14:18:21
+build_exit no2512.rf=0 14:18:37
+2184213b63e42f45993c468aef1af18160d64ea42ebff39d3101adc06d7288cf  /root/bins/no2512/_mojolearn_rf.so
+build_exit no2512.gbdt=0 14:19:25
+7d95c6b07eeb27c61d04b36a7897c5e75bd2f177385514ff3d5298c2281b78d7  /root/bins/no2512/_mojolearn_gbdt.so
+speed_exit baseline.rf.istella.r1000000.ours=0 14:20:48
+speed_exit no2512.rf.istella.r1000000.ours=0 14:22:10
+speed_exit baseline.rf.istella.r1000000.ours.pass2=0 14:23:31
+speed_exit baseline.gbdt-symmetric.istella.r1000000.ours=0 14:23:45
+speed_exit no2512.gbdt-symmetric.istella.r1000000.ours=0 14:23:58
+speed_exit baseline.gbdt-symmetric.istella.r1000000.ours.pass2=0 14:24:12
+PHASE_D2_DONE 14:24:12
+flip_verdict_2512_rf=1 14:24:12
+flip_verdict_2512_gbdt-symmetric=1 14:24:12

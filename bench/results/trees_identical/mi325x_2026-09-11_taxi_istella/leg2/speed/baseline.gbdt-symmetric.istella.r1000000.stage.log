@@ -1,0 +1,68 @@
+FSPEED-NOTE lane=gbdt-symmetric arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); AMD box: an opponent with an AMD GPU path runs on the GPU, one without runs on this box's CPU on all cores (ENGINEERING_RULES.md section 10); the arm name says which
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=hip path=/root/mojolearn/python/mojolearn/identical/_mojolearn_gbdt.so
+FSPEED-SCALE stage=before rows=1000000 features=220 input_mib=839.2 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=1 size=shipped
+[stage-times] SymmetricTree fit (doc-parallel boosting) -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   sym.hist	327.693 ms
+[stage-times]   sym.pstats	19.259 ms
+[stage-times]   sym.score	29.159 ms
+[stage-times]   sym.winner	12.564 ms
+[stage-times]   sym.split	55.183 ms
+[stage-times]   sym.drain	3.095 ms
+[stage-times]   est.move	29.458 ms
+[stage-times]   est.approx	27.028 ms
+[stage-times]   est.pstats	28.850 ms
+[stage-times]   est.readback	25.726 ms
+[stage-times]   (accounted 558.019 ms of 713.741 ms fit wall; the rest is un-wrapped host bookkeeping)
+== MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+   NOT a certifiable timing -- see ensemble/instruments.mojo)
+  train_pre_quantize	0.19244886 s
+  train_quantize_borders	0.171262447 s
+  train_cindex_build	0.054283432 s
+  train_targets_upload	0.00145811 s
+  train_pre_fit	0.007171581 s
+  train_fit_with_test	0.714593393 s
+  train_post_fit	3.8e-07 s
+  train_total	1.141225213 s
+== MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+   NOT a certifiable timing -- see ensemble/instruments.mojo)
+  gbdt_fit_host_copy_in	0.190988829 s
+  gbdt_fit_train	1.162064444 s
+  gbdt_fit_model_text	0.006355941 s
+  gbdt_fit_total	1.359427244 s
+FSPEED-WARMUP lane=gbdt-symmetric arm=ours shape=istella-1000000x220 ms=1928.379
+FSPEED-ORDER lane=gbdt-symmetric round=1 arms=ours
+[stage-times] SymmetricTree fit (doc-parallel boosting) -- a stage-timed run drains per stage and is NOT a benchmark
+[stage-times]   sym.hist	328.562 ms
+[stage-times]   sym.pstats	18.299 ms
+[stage-times]   sym.score	28.837 ms
+[stage-times]   sym.winner	12.281 ms
+[stage-times]   sym.split	49.375 ms
+[stage-times]   sym.drain	3.102 ms
+[stage-times]   est.move	28.658 ms
+[stage-times]   est.approx	26.375 ms
+[stage-times]   est.pstats	27.155 ms
+[stage-times]   est.readback	25.074 ms
+[stage-times]   (accounted 547.723 ms of 698.294 ms fit wall; the rest is un-wrapped host bookkeeping)
+== MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+   NOT a certifiable timing -- see ensemble/instruments.mojo)
+  train_pre_quantize	0.186946124 s
+  train_quantize_borders	0.094333132 s
+  train_cindex_build	0.03553888 s
+  train_targets_upload	0.001393651 s
+  train_pre_fit	0.00667042 s
+  train_fit_with_test	0.699167215 s
+  train_post_fit	3.1e-07 s
+  train_total	1.024054761 s
+== MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+   NOT a certifiable timing -- see ensemble/instruments.mojo)
+  gbdt_fit_host_copy_in	0.191224853 s
+  gbdt_fit_train	1.024077211 s
+  gbdt_fit_model_text	0.006500531 s
+  gbdt_fit_total	1.221806935 s
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=1 ms=1559.020 hash=ae81b94e057b63a3
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=logloss value=0.146208
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=auc value=0.963115
+FSPEED-SCALE stage=after rows=1000000 features=220 input_mib=839.2 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.

@@ -24,7 +24,18 @@ mkdir -p "$LOGS" "$BINS" "$OUT/ib" "$OUT/speed"
 cd "$ROOT" || exit 9
 PATH="$HOME/.pixi/bin:$PATH"; export PATH
 export MOJOLEARN_NUMERIC_MODE=identical
-export MOJOLEARN_SPEED_EXPECTED_VENDOR=cuda
+# Vendor from the box (2026-09-11, the AMD leg): NVIDIA -> cuda, else AMD -> hip.
+if command -v nvidia-smi > /dev/null 2>&1; then
+    export MOJOLEARN_SPEED_EXPECTED_VENDOR=cuda
+    GPU_NAME="$(nvidia-smi --query-gpu=name --format=csv,noheader | head -1 | tr ' ' '_')"
+    IB_VENDOR="nvidia-$GPU_NAME"
+else
+    export MOJOLEARN_SPEED_EXPECTED_VENDOR=hip
+    GPU_NAME="$(rocm-smi --showproductname 2>/dev/null | sed -n 's/.*Card Series:[[:space:]]*//p' | head -1 | tr ' ' '_')"
+    IB_VENDOR="amd-${GPU_NAME:-unknown}"
+fi
+# The interpreter (a venv carrying AMD's ROCm xgboost, say); python3 by default.
+PY="${MOJOLEARN_SPEED_PY:-python3}"
 TIER=python/mojolearn/identical
 
 cmd_build() {
@@ -65,8 +76,8 @@ cmd_ib() {
     _set="$1"; _lanes="${2:-rf-clf,rf-reg,et-clf,et-reg,gbdt-symmetric,gbdt-depthwise,gbdt-lossguide,gbdt-rmse,kmeans}"
     cmd_use "$_set"
     echo "identity_break $_set lanes=$_lanes $(date -u +%H:%M:%S)"
-    PYTHONPATH="$ROOT/python" timeout -k 30 1800 python3 -u tools/identity_break.py \
-        --lanes "$_lanes" --vendor "nvidia-$(nvidia-smi --query-gpu=name --format=csv,noheader | head -1 | tr ' ' '_')" \
+    PYTHONPATH="$ROOT/python" timeout -k 30 1800 $PY -u tools/identity_break.py \
+        --lanes "$_lanes" --vendor "$IB_VENDOR" \
         --json "$OUT/ib/$_set.json" > "$OUT/ib/$_set.txt" 2>&1
     echo "ib_exit $_set=$? $(date -u +%H:%M:%S)" | tee -a "$OUT/ab.txt"
     tail -3 "$OUT/ib/$_set.txt"
@@ -83,21 +94,41 @@ cmd_speed() {
     _set="$1"; _lane="$2"; _ds="$3"; _rows="$4"; _rounds="$5"; _mode="${6:-full}"
     cmd_use "$_set"
     export MOJOLEARN_SPEED_SIZE=shipped MOJOLEARN_SPEED_BUDGET_S=1800 MOJOLEARN_SPEED_DEADLINE_S=3600
-    export MOJOLEARN_SPEED_DEVICE="$(nvidia-smi --query-gpu=name --format=csv,noheader | head -1 | tr ' ' '_')"
-    _log="$OUT/speed/$_set.$_lane.$_ds.r$_rows.$_mode.log"
-    echo "speed $_set $_lane $_ds $_rows rounds=$_rounds mode=$_mode $(date -u +%H:%M:%S)"
+    export MOJOLEARN_SPEED_DEVICE="$GPU_NAME"
+    # Optional: MOJOLEARN_SPEED_TAG suffixes the log name (a second pass);
+    # MOJOLEARN_SPEED_DEVICES / _ARMS / _OPPONENTS_FIRST=1 reach the harness
+    # as --devices / --arms / --opponents-first (full mode only);
+    # MOJOLEARN_SPEED_SMI_SAMPLE=1 samples rocm-smi GPU use every 5 s beside
+    # the log (the proof that a GPU arm ran on the GPU).
+    _log="$OUT/speed/$_set.$_lane.$_ds.r$_rows.$_mode${MOJOLEARN_SPEED_TAG:+.$MOJOLEARN_SPEED_TAG}.log"
+    _extra="--devices ${MOJOLEARN_SPEED_DEVICES:-auto}"
+    [ -n "${MOJOLEARN_SPEED_ARMS:-}" ] && _extra="$_extra --arms $MOJOLEARN_SPEED_ARMS"
+    [ "${MOJOLEARN_SPEED_OPPONENTS_FIRST:-0}" = 1 ] && _extra="$_extra --opponents-first"
+    # MOJOLEARN_SPEED_OURS_AB=PARAM=VALUE adds the interleaved `ours-ab` arm
+    # (bench/speed/forest_speed_arm.py --ours-ab), in every mode but stage.
+    _ab=""
+    [ -n "${MOJOLEARN_SPEED_OURS_AB:-}" ] && _ab="--ours-ab $MOJOLEARN_SPEED_OURS_AB"
+    echo "speed $_set $_lane $_ds $_rows rounds=$_rounds mode=$_mode extra='$_extra' $(date -u +%H:%M:%S)"
+    _smi=""
+    if [ "${MOJOLEARN_SPEED_SMI_SAMPLE:-0}" = 1 ] && command -v rocm-smi > /dev/null 2>&1; then
+        ( while :; do echo "t $(date -u +%T)"; rocm-smi --showuse --showmemuse 2>/dev/null | grep -i 'GPU use\|VRAM'; sleep 5; done ) > "$_log.smi" 2>&1 &
+        _smi=$!
+    fi
     case "$_mode" in
         stage)
-            MOJOLEARN_STAGE_TIMES=1 MOJOLEARN_SPEED_ROUNDS=1 timeout -k 30 1800 python3 -u bench/speed/forest_speed_arm.py \
+            MOJOLEARN_STAGE_TIMES=1 MOJOLEARN_SPEED_ROUNDS=1 timeout -k 30 1800 $PY -u bench/speed/forest_speed_arm.py \
                 --lane "$_lane" --dataset "$_ds" --rows "$_rows" --ours-only > "$_log" 2>&1 ;;
         ours)
-            MOJOLEARN_SPEED_ROUNDS="$_rounds" timeout -k 30 3600 python3 -u bench/speed/forest_speed_arm.py \
-                --lane "$_lane" --dataset "$_ds" --rows "$_rows" --ours-only > "$_log" 2>&1 ;;
+            MOJOLEARN_SPEED_ROUNDS="$_rounds" timeout -k 30 3600 $PY -u bench/speed/forest_speed_arm.py \
+                --lane "$_lane" --dataset "$_ds" --rows "$_rows" --ours-only $_ab > "$_log" 2>&1 ;;
         *)
-            MOJOLEARN_SPEED_ROUNDS="$_rounds" timeout -k 30 3600 python3 -u bench/speed/forest_speed_arm.py \
-                --lane "$_lane" --dataset "$_ds" --rows "$_rows" > "$_log" 2>&1 ;;
+            # shellcheck disable=SC2086  # $_extra and $_ab are word-split on purpose
+            MOJOLEARN_SPEED_ROUNDS="$_rounds" timeout -k 30 3600 $PY -u bench/speed/forest_speed_arm.py \
+                --lane "$_lane" --dataset "$_ds" --rows "$_rows" $_extra $_ab > "$_log" 2>&1 ;;
     esac
-    echo "speed_exit $_set.$_lane.$_ds.r$_rows.$_mode=$? $(date -u +%H:%M:%S)" | tee -a "$OUT/ab.txt"
+    _rc=$?
+    [ -n "$_smi" ] && kill "$_smi" 2>/dev/null
+    echo "speed_exit $_set.$_lane.$_ds.r$_rows.$_mode${MOJOLEARN_SPEED_TAG:+.$MOJOLEARN_SPEED_TAG}=$_rc $(date -u +%H:%M:%S)" | tee -a "$OUT/ab.txt"
     grep -E '^FSPEED(-HEADER|-ACC|-REFUSED)? ' "$_log" | grep -v WARMUP | head -40
 }
 

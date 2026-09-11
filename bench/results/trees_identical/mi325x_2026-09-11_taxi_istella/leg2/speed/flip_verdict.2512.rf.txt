@@ -1,0 +1,9 @@
+selected lane=rf arm=ours
+time taxi shape=taxi-1000000x16: before median=1178.491 ms n=5, after median=1177.029 ms n=10, ratio=0.999
+quality taxi auc: before=0.617154 after=0.617154 delta=+0.000000 n=1/2 higher-is-better tol=6.17e-05 ok
+quality taxi logloss: before=0.525910 after=0.525910 delta=+0.000000 n=1/2 lower-is-better tol=5.26e-05 ok
+time istella shape=istella-1000000x220: before median=1926.933 ms n=5, after median=1934.142 ms n=10, ratio=1.004
+quality istella auc: before=0.964538 after=0.964538 delta=+0.000000 n=1/2 higher-is-better tol=9.65e-05 ok
+quality istella logloss: before=0.145560 after=0.145560 delta=+0.000000 n=1/2 lower-is-better tol=1.46e-05 ok
+time geomean=1.001247 (decided unrounded, below 1 wins)
+NO FLIP geomean=1.001 taxi=0.999 istella=1.004 reason=time

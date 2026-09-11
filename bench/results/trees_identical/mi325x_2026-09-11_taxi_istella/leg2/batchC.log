@@ -1,0 +1,205 @@
+batchC start 13:53:56
+started=2026-09-11T13:46:20Z commit=fc500f402101f2ac98c7e2569dc0827cf0fec808 data=/mnt/mojolearn-data/gbm-bench
+pixi_install=0 13:46:26
+build_base=0 13:46:50
+apt_pip=100 13:46:52
+pip_base=0 13:47:08
+venv=1 13:47:11
+xgb_rocm_index=https://pypi.amd.com/rocm-6.4.4/simple (rocm major '6')
+pip_amd_xgboost=1 13:47:11
+xgb_rocm_probe=1 13:47:11
+xgb_rocm_works=NO
+lightgbm_opencl_works=SKIPPED
+download_taxi=0 13:47:12
+download_istella=0 13:47:26
+build_gbdt=0 13:47:35
+build_rf=0 13:47:50
+build_trees=0 13:48:04
+import_identical=0 13:48:11
+finished=2026-09-11T13:48:11Z
+repair_apt=124 13:53:48
+repair_venv_via=virtualenv
+repair_venv=0 13:53:49
+repair_pip_amd_xgboost=0 13:53:51
+xgb_rocm_works=yes (repair 13:53:55)
+arms: xgboost=xgboost-gpu lightgbm=lightgbm-cpu python=/root/venv-gpu/bin/python
+speed baseline gbdt-symmetric istella 1000000 rounds=5 mode=full extra='--devices cpu,gpu,opencl --arms catboost-cpu --opponents-first' 13:53:56
+speed_exit baseline.gbdt-symmetric.istella.r1000000.full=0 13:54:38
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=catboost-cpu mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=1 ms=1463.645 hash=c528737f86b06435
+FSPEED lane=gbdt-symmetric arm=catboost-cpu shape=istella-1000000x220 round=1 ms=4341.752 hash=649971705d63a83b
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=2 ms=1284.302 hash=61842bfd2dee7c15
+FSPEED lane=gbdt-symmetric arm=catboost-cpu shape=istella-1000000x220 round=2 ms=4400.296 hash=649971705d63a83b
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=3 ms=1315.837 hash=720e13c88dd0983d
+FSPEED lane=gbdt-symmetric arm=catboost-cpu shape=istella-1000000x220 round=3 ms=4380.984 hash=649971705d63a83b
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=4 ms=1310.251 hash=d07ea8d1cc58437d
+FSPEED lane=gbdt-symmetric arm=catboost-cpu shape=istella-1000000x220 round=4 ms=4373.010 hash=649971705d63a83b
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=5 ms=1311.737 hash=762fbbed7b315f6a
+FSPEED lane=gbdt-symmetric arm=catboost-cpu shape=istella-1000000x220 round=5 ms=4370.895 hash=649971705d63a83b
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=logloss value=0.147018
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=auc value=0.962675
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-cpu metric=logloss value=0.138897
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-cpu metric=auc value=0.966996
+speed baseline gbdt-depthwise istella 1000000 rounds=5 mode=full extra='--devices cpu,gpu,opencl --arms catboost-cpu,xgboost-gpu --opponents-first' 13:54:38
+speed_exit baseline.gbdt-depthwise.istella.r1000000.full=0 13:55:52
+FSPEED-HEADER family=forest lane=gbdt-depthwise arm=ours mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-depthwise arm=catboost-cpu mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-depthwise arm=xgboost-gpu mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED lane=gbdt-depthwise arm=ours shape=istella-1000000x220 round=1 ms=1999.580 hash=9a05b34e3a728082
+FSPEED lane=gbdt-depthwise arm=catboost-cpu shape=istella-1000000x220 round=1 ms=6644.817 hash=0df4b2a25d5c9de2
+FSPEED lane=gbdt-depthwise arm=xgboost-gpu shape=istella-1000000x220 round=1 ms=1569.851 hash=4d80a2001a82f486
+FSPEED lane=gbdt-depthwise arm=ours shape=istella-1000000x220 round=2 ms=1978.922 hash=0278b8ab824a9602
+FSPEED lane=gbdt-depthwise arm=catboost-cpu shape=istella-1000000x220 round=2 ms=6662.520 hash=0df4b2a25d5c9de2
+FSPEED lane=gbdt-depthwise arm=xgboost-gpu shape=istella-1000000x220 round=2 ms=1568.721 hash=4d80a2001a82f486
+FSPEED lane=gbdt-depthwise arm=ours shape=istella-1000000x220 round=3 ms=1982.172 hash=d4f6befba3a4c776
+FSPEED lane=gbdt-depthwise arm=catboost-cpu shape=istella-1000000x220 round=3 ms=6739.558 hash=0df4b2a25d5c9de2
+FSPEED lane=gbdt-depthwise arm=xgboost-gpu shape=istella-1000000x220 round=3 ms=1596.952 hash=4d80a2001a82f486
+FSPEED lane=gbdt-depthwise arm=ours shape=istella-1000000x220 round=4 ms=2007.419 hash=b9d19799b8dc1909
+FSPEED lane=gbdt-depthwise arm=catboost-cpu shape=istella-1000000x220 round=4 ms=6671.000 hash=0df4b2a25d5c9de2
+FSPEED lane=gbdt-depthwise arm=xgboost-gpu shape=istella-1000000x220 round=4 ms=1582.204 hash=4d80a2001a82f486
+FSPEED lane=gbdt-depthwise arm=ours shape=istella-1000000x220 round=5 ms=1986.635 hash=c7ed2fe2e3336ff2
+FSPEED lane=gbdt-depthwise arm=catboost-cpu shape=istella-1000000x220 round=5 ms=6677.174 hash=0df4b2a25d5c9de2
+FSPEED lane=gbdt-depthwise arm=xgboost-gpu shape=istella-1000000x220 round=5 ms=1574.901 hash=4d80a2001a82f486
+FSPEED-ACC lane=gbdt-depthwise arm=ours metric=logloss value=0.133018
+FSPEED-ACC lane=gbdt-depthwise arm=ours metric=auc value=0.969407
+FSPEED-ACC lane=gbdt-depthwise arm=catboost-cpu metric=logloss value=0.128097
+FSPEED-ACC lane=gbdt-depthwise arm=catboost-cpu metric=auc value=0.971895
+FSPEED-ACC lane=gbdt-depthwise arm=xgboost-gpu metric=logloss value=0.124822
+FSPEED-ACC lane=gbdt-depthwise arm=xgboost-gpu metric=auc value=0.973880
+speed baseline gbdt-lossguide istella 1000000 rounds=5 mode=full extra='--devices cpu,gpu,opencl --arms catboost-cpu,xgboost-gpu,lightgbm-cpu --opponents-first' 13:55:52
+speed_exit baseline.gbdt-lossguide.istella.r1000000.full=0 13:57:27
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=ours mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=catboost-cpu mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=xgboost-gpu mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=lightgbm-cpu mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED-REFUSED lane=gbdt-lossguide arm=lightgbm-cpu reason=LightGBMError during warm-up: Check failed: (best_split_info.left_count) > (0) at /__w/LightGBM/LightGBM/lightgbm-python/src/treelearner/serial_tree_learner.cpp, line 860 .
+FSPEED lane=gbdt-lossguide arm=ours shape=istella-1000000x220 round=1 ms=2790.117 hash=fa6ea639c76b1831
+FSPEED lane=gbdt-lossguide arm=catboost-cpu shape=istella-1000000x220 round=1 ms=9094.668 hash=05ec5e14f256128f
+FSPEED lane=gbdt-lossguide arm=xgboost-gpu shape=istella-1000000x220 round=1 ms=1940.726 hash=4d80a2001a82f486
+FSPEED lane=gbdt-lossguide arm=ours shape=istella-1000000x220 round=2 ms=2582.500 hash=9a51a178a5f45341
+FSPEED lane=gbdt-lossguide arm=catboost-cpu shape=istella-1000000x220 round=2 ms=9080.263 hash=05ec5e14f256128f
+FSPEED lane=gbdt-lossguide arm=xgboost-gpu shape=istella-1000000x220 round=2 ms=1868.454 hash=4d80a2001a82f486
+FSPEED lane=gbdt-lossguide arm=ours shape=istella-1000000x220 round=3 ms=2607.243 hash=8941f5345eb1a02b
+FSPEED lane=gbdt-lossguide arm=catboost-cpu shape=istella-1000000x220 round=3 ms=9021.302 hash=05ec5e14f256128f
+FSPEED lane=gbdt-lossguide arm=xgboost-gpu shape=istella-1000000x220 round=3 ms=1866.165 hash=4d80a2001a82f486
+FSPEED lane=gbdt-lossguide arm=ours shape=istella-1000000x220 round=4 ms=2587.465 hash=1f58ea6c39a336ff
+FSPEED lane=gbdt-lossguide arm=catboost-cpu shape=istella-1000000x220 round=4 ms=9037.694 hash=05ec5e14f256128f
+FSPEED lane=gbdt-lossguide arm=xgboost-gpu shape=istella-1000000x220 round=4 ms=1915.517 hash=4d80a2001a82f486
+FSPEED lane=gbdt-lossguide arm=ours shape=istella-1000000x220 round=5 ms=2657.880 hash=8ce2e866cbcea31a
+FSPEED lane=gbdt-lossguide arm=catboost-cpu shape=istella-1000000x220 round=5 ms=9045.393 hash=05ec5e14f256128f
+FSPEED lane=gbdt-lossguide arm=xgboost-gpu shape=istella-1000000x220 round=5 ms=1880.402 hash=4d80a2001a82f486
+FSPEED-ACC lane=gbdt-lossguide arm=ours metric=logloss value=0.126223
+FSPEED-ACC lane=gbdt-lossguide arm=ours metric=auc value=0.973382
+FSPEED-ACC lane=gbdt-lossguide arm=catboost-cpu metric=logloss value=0.127841
+FSPEED-ACC lane=gbdt-lossguide arm=catboost-cpu metric=auc value=0.972012
+FSPEED-ACC lane=gbdt-lossguide arm=xgboost-gpu metric=logloss value=0.124822
+FSPEED-ACC lane=gbdt-lossguide arm=xgboost-gpu metric=auc value=0.973880
+PHASE_IG_DONE 13:57:27
+speed baseline rf istella 1000000 rounds=5 mode=full extra='--devices cpu,gpu,opencl --arms sklearn-rf-cpu --opponents-first' 13:57:27
+speed_exit baseline.rf.istella.r1000000.full=0 14:00:15
+FSPEED-REFUSED lane=rf arm=cuml-rf-gpu reason=ModuleNotFoundError: No module named 'cuml'
+FSPEED-HEADER family=forest lane=rf arm=ours mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=rf arm=sklearn-rf-cpu mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=1 ms=1937.353 hash=574b24d0d7af51d0
+FSPEED lane=rf arm=sklearn-rf-cpu shape=istella-1000000x220 round=1 ms=13697.774 hash=ba7af106db30b3d7
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=2 ms=1946.106 hash=574b24d0d7af51d0
+FSPEED lane=rf arm=sklearn-rf-cpu shape=istella-1000000x220 round=2 ms=13802.355 hash=bbd7e3d315ee8189
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=3 ms=1928.669 hash=574b24d0d7af51d0
+FSPEED lane=rf arm=sklearn-rf-cpu shape=istella-1000000x220 round=3 ms=13641.504 hash=25287fd84bbb3078
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=4 ms=1931.979 hash=574b24d0d7af51d0
+FSPEED lane=rf arm=sklearn-rf-cpu shape=istella-1000000x220 round=4 ms=13733.261 hash=036ed315375de625
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=5 ms=1939.451 hash=574b24d0d7af51d0
+FSPEED lane=rf arm=sklearn-rf-cpu shape=istella-1000000x220 round=5 ms=13663.894 hash=cf98646ca8751939
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.145560
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.964538
+FSPEED-ACC lane=rf arm=sklearn-rf-cpu metric=logloss value=0.146188
+FSPEED-ACC lane=rf arm=sklearn-rf-cpu metric=auc value=0.964092
+speed baseline et istella 1000000 rounds=5 mode=full extra='--devices cpu,gpu,opencl --arms sklearn-et-cpu --opponents-first' 14:00:15
+speed_exit baseline.et.istella.r1000000.full=0 14:03:15
+FSPEED-REFUSED lane=et arm=cuml-et-gpu reason=ModuleNotFoundError: No module named 'cuml'
+FSPEED-HEADER family=forest lane=et arm=ours mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=et arm=sklearn-et-cpu mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=1 ms=14563.015 hash=40b1c5b03ba40420
+FSPEED lane=et arm=sklearn-et-cpu shape=istella-1000000x220 round=1 ms=8969.132 hash=97da35f343240e41
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=2 ms=14532.338 hash=40b1c5b03ba40420
+FSPEED lane=et arm=sklearn-et-cpu shape=istella-1000000x220 round=2 ms=8944.493 hash=e7390d0b778539f5
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=3 ms=14537.550 hash=40b1c5b03ba40420
+FSPEED lane=et arm=sklearn-et-cpu shape=istella-1000000x220 round=3 ms=8983.196 hash=532ef3693cf38582
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=4 ms=14558.129 hash=40b1c5b03ba40420
+FSPEED lane=et arm=sklearn-et-cpu shape=istella-1000000x220 round=4 ms=8862.807 hash=271e67463b734ca8
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=5 ms=14531.532 hash=40b1c5b03ba40420
+FSPEED lane=et arm=sklearn-et-cpu shape=istella-1000000x220 round=5 ms=8891.961 hash=aa854724c7d67d95
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.188191
+FSPEED-ACC lane=et arm=ours metric=auc value=0.938768
+FSPEED-ACC lane=et arm=sklearn-et-cpu metric=logloss value=0.187901
+FSPEED-ACC lane=et arm=sklearn-et-cpu metric=auc value=0.939528
+PHASE_IF1_DONE 14:03:15
+speed baseline rf istella 2000000 rounds=5 mode=full extra='--devices cpu,gpu,opencl --arms sklearn-rf-cpu --opponents-first' 14:03:16
+speed_exit baseline.rf.istella.r2000000.full=0 14:07:50
+FSPEED-REFUSED lane=rf arm=cuml-rf-gpu reason=ModuleNotFoundError: No module named 'cuml'
+FSPEED-HEADER family=forest lane=rf arm=ours mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=rf arm=sklearn-rf-cpu mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED lane=rf arm=ours shape=istella-2000000x220 round=1 ms=3114.815 hash=cc25cb08f8b5a813
+FSPEED lane=rf arm=sklearn-rf-cpu shape=istella-2000000x220 round=1 ms=29484.293 hash=bde37429e4f376c8
+FSPEED lane=rf arm=ours shape=istella-2000000x220 round=2 ms=3101.800 hash=cc25cb08f8b5a813
+FSPEED lane=rf arm=sklearn-rf-cpu shape=istella-2000000x220 round=2 ms=29158.516 hash=daded8b36a300b09
+FSPEED lane=rf arm=ours shape=istella-2000000x220 round=3 ms=3103.476 hash=cc25cb08f8b5a813
+FSPEED lane=rf arm=sklearn-rf-cpu shape=istella-2000000x220 round=3 ms=29333.204 hash=38ca5408d6a8d9f1
+FSPEED lane=rf arm=ours shape=istella-2000000x220 round=4 ms=3109.297 hash=cc25cb08f8b5a813
+FSPEED lane=rf arm=sklearn-rf-cpu shape=istella-2000000x220 round=4 ms=29783.010 hash=63499ddbfc749557
+FSPEED lane=rf arm=ours shape=istella-2000000x220 round=5 ms=3113.982 hash=cc25cb08f8b5a813
+FSPEED lane=rf arm=sklearn-rf-cpu shape=istella-2000000x220 round=5 ms=29435.969 hash=8662b1c8b643d618
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.144845
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.964998
+FSPEED-ACC lane=rf arm=sklearn-rf-cpu metric=logloss value=0.145257
+FSPEED-ACC lane=rf arm=sklearn-rf-cpu metric=auc value=0.964663
+PHASE_IF2_DONE 14:07:50
+speed baseline gbdt-symmetric istella 1000000 rounds=5 mode=ours extra='--devices cpu,gpu,opencl' 14:07:50
+speed_exit baseline.gbdt-symmetric.istella.r1000000.ours.pointwise=0 14:08:18
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours-ab mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=1 ms=1134.647 hash=5e32c6d0064ebc13
+FSPEED lane=gbdt-symmetric arm=ours-ab shape=istella-1000000x220 round=1 ms=1598.461 hash=579d955b7271c0b4
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=2 ms=1159.245 hash=4959892985e8f802
+FSPEED lane=gbdt-symmetric arm=ours-ab shape=istella-1000000x220 round=2 ms=1601.109 hash=d4d12a42dd5929ad
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=3 ms=1149.340 hash=006b3e332b769410
+FSPEED lane=gbdt-symmetric arm=ours-ab shape=istella-1000000x220 round=3 ms=1590.012 hash=d4d12a42dd5929ad
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=4 ms=1133.515 hash=766b521d35c5fb39
+FSPEED lane=gbdt-symmetric arm=ours-ab shape=istella-1000000x220 round=4 ms=1597.222 hash=579d955b7271c0b4
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=5 ms=1131.451 hash=23b190f415a7350b
+FSPEED lane=gbdt-symmetric arm=ours-ab shape=istella-1000000x220 round=5 ms=1579.691 hash=d4d12a42dd5929ad
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=logloss value=0.147073
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=auc value=0.962546
+FSPEED-ACC lane=gbdt-symmetric arm=ours-ab metric=logloss value=0.138653
+FSPEED-ACC lane=gbdt-symmetric arm=ours-ab metric=auc value=0.966990
+speed baseline gbdt-symmetric istella 1000000 rounds=1 mode=stage extra='--devices cpu,gpu,opencl' 14:08:18
+speed_exit baseline.gbdt-symmetric.istella.r1000000.stage=0 14:08:24
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=1 size=shipped
+FSPEED lane=gbdt-symmetric arm=ours shape=istella-1000000x220 round=1 ms=1559.020 hash=ae81b94e057b63a3
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=logloss value=0.146208
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=auc value=0.963115
+speed baseline gbdt-depthwise istella 1000000 rounds=1 mode=stage extra='--devices cpu,gpu,opencl' 14:08:24
+speed_exit baseline.gbdt-depthwise.istella.r1000000.stage=0 14:08:31
+FSPEED-HEADER family=forest lane=gbdt-depthwise arm=ours mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=1 size=shipped
+FSPEED lane=gbdt-depthwise arm=ours shape=istella-1000000x220 round=1 ms=2135.261 hash=79627a002ef5914f
+FSPEED-ACC lane=gbdt-depthwise arm=ours metric=logloss value=0.132610
+FSPEED-ACC lane=gbdt-depthwise arm=ours metric=auc value=0.969735
+speed baseline gbdt-lossguide istella 1000000 rounds=1 mode=stage extra='--devices cpu,gpu,opencl' 14:08:31
+speed_exit baseline.gbdt-lossguide.istella.r1000000.stage=0 14:08:40
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=ours mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=1 size=shipped
+FSPEED lane=gbdt-lossguide arm=ours shape=istella-1000000x220 round=1 ms=3203.345 hash=3f655048fb510d2a
+FSPEED-ACC lane=gbdt-lossguide arm=ours metric=logloss value=0.127144
+FSPEED-ACC lane=gbdt-lossguide arm=ours metric=auc value=0.972980
+PHASE_IS_DONE 14:08:40
+flip_verdict_pointwise=1 14:08:40
+selected lane=gbdt-symmetric arm=ours
+time taxi shape=taxi-1000000x16: before median=439.227 ms n=5, after median=1028.878 ms n=5, ratio=2.342
+quality taxi auc: before=0.615520 after=0.619093 delta=+0.003573 n=1/1 higher-is-better tol=6.16e-05 ok
+quality taxi logloss: before=0.527339 after=0.525668 delta=-0.001671 n=1/1 lower-is-better tol=5.27e-05 ok
+time istella shape=istella-1000000x220: before median=1134.647 ms n=5, after median=1597.222 ms n=5, ratio=1.408
+quality istella auc: before=0.962546 after=0.966990 delta=+0.004444 n=1/1 higher-is-better tol=9.63e-05 ok
+quality istella logloss: before=0.147073 after=0.138653 delta=-0.008420 n=1/1 lower-is-better tol=1.47e-05 ok
+time geomean=1.815891 (decided unrounded, below 1 wins)
+NO FLIP geomean=1.816 taxi=2.342 istella=1.408 reason=time
+batchC end 14:08:40

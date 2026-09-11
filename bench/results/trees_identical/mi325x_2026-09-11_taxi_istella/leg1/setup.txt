@@ -1,0 +1,24 @@
+started=2026-09-11T12:45:59Z commit=92b4bf9ba98f59d87da35ae5b20189ee9d549813 data=/mnt/mojolearn-data/gbm-bench
+pixi_install=0 12:46:02
+build_base=0 12:46:27
+build_gbdt=0 12:47:11
+build_rf=0 12:47:26
+build_trees=0 12:47:40
+apt_pip=0 12:52:49
+pip_base=0 12:53:06
+download_taxi=1 12:53:07
+import_identical=0 12:53:10
+venv=0 12:53:11
+xgb_rocm_index=https://pypi.amd.com/rocm-6.4.4/simple (rocm major '6')
+pip_amd_xgboost=0 12:53:14
+xgb_rocm_probe=0 12:53:18
+xgb_rocm_works=yes
+apt_lgbm_opencl=0 12:55:07
+lightgbm_opencl_build=0 12:55:34
+lightgbm_opencl_works=NO
+download_taxi_fixed=1 12:58:41
+download_taxi_curl=1 12:58:41
+download_taxi_uploaded=0 13:00:55
+download_istella=1 13:09:04
+finished=2026-09-11T13:09:04Z
+download_istella_decode=0 13:29:14
