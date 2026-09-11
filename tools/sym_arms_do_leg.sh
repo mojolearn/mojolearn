@@ -138,8 +138,10 @@ teardown() {
         else
             log "DESTROY NOT VERIFIED: dead-man and lock left in place"
         fi
-    elif [ "$HAVE_LOCK" = 1 ]; then
-        rm -rf "$LOCK" && log "lock released (nothing created)"
+    else
+        if [ "$HAVE_LOCK" = 1 ]; then
+            rm -rf "$LOCK" && log "lock released (nothing created)"
+        fi
         [ -n "$DEADMAN_PID" ] && kill "$DEADMAN_PID" 2>/dev/null
         rm -f "$CURLRC"
     fi
@@ -148,6 +150,9 @@ teardown() {
 trap teardown EXIT
 trap 'exit 130' INT TERM
 
+# The whole run is one function, parsed before it executes, so an edit to
+# this file while a leg waits on the lock cannot shift bash's read offset.
+main() {
 wait_for_turn
 
 # ---- 2. the Mac-side dead-man, before the create ---------------------------
@@ -219,7 +224,8 @@ case "$WD" in *alive*1*get200*) : ;; *) log "watchdog NOT verified; aborting"; e
 
 # ---- 4. ship and run -------------------------------------------------------
 git -C "$REPO" archive --format=tar "$COMMIT" -- . ':!bench/results' ':!mamba/corpus' \
-    ':!bench/oracle_*' ':!bench/minentropy_oracle.txt' | gzip -1 > "$EVID/src.tgz"
+    ':!bench/oracle*' ':!bench/minentropy_oracle.txt' ':!*.bin' ':!archive' ':!upstream' \
+    ':!docs' ':!paper' | gzip -1 > "$EVID/src.tgz"
 log "archive $(du -h "$EVID/src.tgz" | cut -f1)"
 SCP="scp -q -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=$EVID/known_hosts -o BatchMode=yes"
 $SCP "$EVID/src.tgz" "root@$IP:/root/src.tgz" || { log "scp failed"; exit 7; }
@@ -248,3 +254,6 @@ done
 $SSH 'pkill -f sym_arms_box.sh; pkill -f forest_speed_arm.py' 2>/dev/null
 rsync -az -e "$SSH_RSYNC" "root@$IP:/root/symarms_out/" "$EVID/out/" && log "fetched out/" || log "FETCH FAILED"
 log "done; teardown follows"
+}
+
+main "$@"
