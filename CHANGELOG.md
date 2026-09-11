@@ -3,7 +3,23 @@
 This file records release-level changes, not the development diary. Git history and archived evidence
 contain the detailed investigation record.
 
-## 0.8.1 (unreleased 2026-09-11)
+## 0.8.2 (unreleased 2026-09-11)
+
+A patch on the 0.8.1 line. Branch release-0.8.2 starts at tag v0.8.1 (343ffa35) and carries
+only the fix below, its check and the version bump; main's later GBDT speed defaults
+(DEVIATIONS 2550, 2551, 2581) are not in it. No change on Apple or NVIDIA: the fixed and
+unfixed builds give identical bits there.
+
+- Fixed IDENTICAL GBDT on AMD GPUs. The binary, half-byte and 5-/6-bit histogram kernels
+  skipped a block-wide sync on some threads of AMD's 64-lane layout, so a fit on data with
+  tied values (few distinct values per column) could differ between runs in one process
+  and from NVIDIA and Apple. 0.8.1 moved on the `ties` fixture on an MI300X. Every thread
+  now makes the same trips (DEVIATION 2600). Verified: 36/36 identity cells equal to the
+  H100 on an MI300X and on the Apple M4, taxi 1M symmetric one hash in 10/10 rounds.
+- Added `checks/gbdt_sub_byte_identity_check.py`, which fits the binary, half-byte, 5-bit
+  and 6-bit arms twice and compares each to an H100 reference.
+
+## 0.8.1 (published 2026-09-11)
 
 A patch on the 0.8.0 line. Branch release-0.8.1 starts at tag v0.8.0
 (4a3c22c3, which is the 0.8.0 Linux build commit 9392320e plus two
