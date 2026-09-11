@@ -9,6 +9,12 @@
 # an independently changing binding must not become a merge point. All of
 # them land in one wheel.
 #
+# MOJOLEARN_BUILD_EXTRA_DEFINES (optional, empty by default): extra flags
+# appended verbatim, word-split, to the `mojo build` command, exactly as in
+# bindings/build.sh and bindings/build_estimators.sh. For trial builds only
+# (for example `-D MOJOLEARN_GEMM_ARM_TRIAL=1`,
+# tools/gemm_ksplit_classical_amd_leg.sh); a release build leaves it unset.
+#
 # THE FLAGS BELOW ARE NOT ORNAMENTAL. Every one of them is a bug somebody
 # already shipped. The full write-ups live in `bindings/build.sh` and
 # `bindings/build_gbdt.sh`; the short version, because a reader who edits
@@ -181,6 +187,7 @@ out="$tmpdir/_mojolearn_svm.so"
 # shellcheck disable=SC2086  # the flag strings are deliberately word-split
 pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib \
     $TARGET_FLAGS $COLUMN_DEFINE $MODE_DEFINE \
+    ${MOJOLEARN_BUILD_EXTRA_DEFINES:-} \
     $LINK_FLAGS \
     -I . -I bindings \
     bindings/_mojolearn_svm.mojo \
