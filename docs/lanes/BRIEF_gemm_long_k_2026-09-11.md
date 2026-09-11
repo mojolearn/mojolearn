@@ -1470,7 +1470,7 @@ The cells run in this order (`MOJOLEARN_CLASSICAL_AB_ORDER`). Each cell is
 | 3 | pca:istella | PCA fit (8 components, `covariance_eigh`) | the same `big` block | covariance TN 220 x 220 x 2,043,304 | PLAN_SPLIT_64_4X4 | no |
 | 4 | kde:istella | KDE `score_samples` (fit before the clock) | `kde` block: 100,000 fit rows, 2,000 queries, standardized | none | - | NOT REACHED |
 | 5 | kmeans:taxi, pca:taxi, kde:taxi | the same three callers on taxi (d = 11, `big` block 4,000,000 x 11) | the same entries | kmeans tile 32768 x 64 x 11 (not called); PCA TN 11 x 11 x 4,000,000; KDE none | PLAN_TUNED_64_4X4; PLAN_SPLIT_16_1X1; - | no |
-| 6 | gp:taxi, gp:istella | GP fit and predict | 4,000 train and 1,000 test rows, trees loader, standardized (the H100 rung) | mean TN 1000 x 1 x 4000; Cholesky trailing NT 3968 x 3968 x 32 | mean PLAN_SPLIT_16_1X1; trailing TUNED 128x128 | no (n = 1; P = 1) |
+| 6 | gp:taxi, gp:istella | GP fit and predict | 4,000 train and 1,000 test rows, trees loader, standardized, `alpha` 2^-20 (the H100 rung; 12.3) | mean TN 1000 x 1 x 4000; Cholesky trailing NT 3968 x 3968 x 32 | mean PLAN_SPLIT_16_1X1; trailing TUNED 128x128 (both read on the H100 box) | no (n = 1; P = 1) |
 | 7 | ols:taxi, ols:istella | OLS fit | `big` block, both datasets | Gram TN d x d x rows | taxi PLAN_SPLIT_16_1X1; Istella-S PLAN_SPLIT_64_4X4 | no |
 
 **Which callers reach the entry, from source.** The coordinator's
@@ -1521,8 +1521,13 @@ for `ols.gram.istella` at 220x220x2,043,304. By this reading it is
 PLAN_SPLIT_64_4X4. P is 1024 (L = 1996), the SPLITK workspace of 48,400 x
 1024 = 49,561,600 floats fits the 64 M cap, and 48,400 cells is under
 128x1024. TILE 16x16 is `choose_gemm_plan_untuned`'s answer. Either plan is
-outside TUNED 128x128, so neither arm changes the call. The box's DISPATCH
-line settles the label.
+outside TUNED 128x128, so neither arm changes the call. The H100 leg's
+on-box DISPATCH lines settle the label on NVIDIA
+(`bench/results/e1g/2026-09-11_170957-nvidia-h100-80gb-hbm3-gemm-ksplit-classical`,
+merged at 523cba80). Both `ols.gram.istella` and `pca.cov.istella` print
+`choose_plan=[SPLIT 64x64 reg4x4 KS=32 ...]` with
+`ksplit_default_takes=no`. The AMD lines come from this leg; the AMD wide
+split row is off, and 220 is not a multiple of 128 in any case.
 
 Predicted verdicts: SVC measured, with taxi a null and Istella-S the
 reading. kmeans, PCA, KDE, GP and OLS HOLDS with ratios near 1. Every
@@ -1557,6 +1562,15 @@ witness is equal on every caller.
   - `smoke --lanes`, a `verdict` that tells flip_verdict the direction of
     the three classical metrics it does not know, and an optional
     `MOJOLEARN_CLASSICAL_AB_CONTEXT` NOTE line.
+  - **Fixes from the H100 leg's evidence (523cba80), which ran this driver.**
+    `GP_ALPHA` is now 2^-20. NUMERIC_IDENTICAL accepts only 0 and 2^-20 (the
+    Cholesky profile's pinned jitter, DEVIATIONS 1751 and 1752), and the
+    driver's 0.1 got every GP cell and the GP smoke refused by name. The
+    H100 leg's taxi cells all refused on `No module named 'pyarrow'`, because
+    the pixi environment has no pip. The AMD body's uv Python 3.12 venv
+    decodes and preps, and every timed process under `--source ctd` loads
+    NumPy blocks and never imports pyarrow. The GP trees loader also reads
+    the NumPy cache, and imports pyarrow only in the decode.
   - Defaults are unchanged: `time` defaults to `--source trees`, and `smoke`
     and `verdict` default to `gp,ols,pca`. Every line the H100 body's calls
     print is the text they printed before.
@@ -1638,7 +1652,7 @@ orchestrator repeats them at the merge commit, and the item 4 dry run is
 still owed. The trial SVM binding has never been built anywhere. Its first
 build is on the box, and a red `build-binding-svm` row names it.
 
-### 12.6 The leg
+### 12.6 The legs
 
 The lease cap is 60 minutes. Two earlier MI300X legs measure most of the
 budget:
@@ -1656,37 +1670,47 @@ budget:
   rows has no row there.
 
 All six callers are 48 timed processes (6 lanes x 2 datasets x 2 arms x 2
-blocks), each one warm-up plus 3 rounds. The fits sum to about 4 minutes.
-The unmeasured part is each process's overhead: the pixi Python start, the
-IDENTICAL import, a block load of up to 2 GB, and quality outside the
-clock. At 10 to 30 s a process that is 10 to 25 minutes of timing, after
-about 10 minutes of setup, inside the 53-minute work bound. So **one leg
-carries all six callers, and these numbers need no split.** The deadline
-guard still turns an overrun into UNMEASURED cells at the tail of the order
-(GP and OLS), and a second leg reruns only those callers.
+blocks), each one warm-up plus 3 rounds. The fits alone sum to about 4
+minutes. The rest is per-process overhead: the pixi Python start, the
+IDENTICAL import, a block load of up to 2 GB, and quality outside the clock.
+The H100 leg that ran this driver measured it (523cba80). Its Istella-S OLS
+and PCA processes took 25 to 87 s each, and its Istella-S download step took
+1,372 s on that RunPod pod. At those numbers, 48 processes and a slow
+Istella-S setup do not fit a 53-minute work bound with margin. So **the set
+is split into two legs**. They can run at the same time on two VMs (the team
+limit is 2):
 
-The leg:
+- **Leg 1, 32 processes: svc, kmeans, pca, kde.** The entry caller first,
+  then the Istella-S controls the coordinator named, then the taxi halves.
+- **Leg 2, 16 processes: gp, ols.**
+
+Each caller's two arms always run on one VM, so no ratio mixes VMs.
+
+Leg 1:
 
 ```sh
 MOJOLEARN_GEMM_LEG_EXTRA=tools/gemm_ksplit_classical_amd_leg.sh \
 MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/$(date -u +%Y-%m-%d_%H%M%S)-amd-mi300x-hotaisle-gemm-ksplit-classical \
+MOJOLEARN_HOTAISLE_EXTRA_ENV=MOJOLEARN_CLASSICAL_AB_LANES=svc,kmeans,pca,kde \
 bash tools/hotaisle_leg.sh amd --rent --minutes 60 --skip-gates
 ```
 
-If callers come back UNMEASURED, rerun them alone in a new lease, never a
-longer one. For example:
+Leg 2:
 
 ```sh
 MOJOLEARN_GEMM_LEG_EXTRA=tools/gemm_ksplit_classical_amd_leg.sh \
-MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/$(date -u +%Y-%m-%d_%H%M%S)-amd-mi300x-hotaisle-gemm-ksplit-classical-rest \
+MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/$(date -u +%Y-%m-%d_%H%M%S)-amd-mi300x-hotaisle-gemm-ksplit-classical-gp-ols \
 MOJOLEARN_HOTAISLE_EXTRA_ENV=MOJOLEARN_CLASSICAL_AB_LANES=gp,ols \
 bash tools/hotaisle_leg.sh amd --rent --minutes 60 --skip-gates
 ```
 
-Read back from `<leg out>/remote/ksplit-classical-amd/`:
+A caller either leg returns UNMEASURED gets a new lease with only that
+caller in `MOJOLEARN_CLASSICAL_AB_LANES`, never a longer one.
+
+Read back from each leg's `<leg out>/remote/ksplit-classical-amd/`:
 
 - `status.tsv`: fetches, `shapes`, decodes, preps, builds, `smoke`,
-  `wait-data`, the 48 timed items, `dispatch`, `verdicts`.
+  `wait-data`, the 32 or 16 timed items, `dispatch`, `verdicts`.
 - `gate.txt` and `plans.tsv`: the row-110 DEFAULT line and the labels from
   12.4.
 - `dispatch.txt`: 12.2 predicts `ksplit_default_takes=yes` on
@@ -1694,8 +1718,8 @@ Read back from `<leg out>/remote/ksplit-classical-amd/`:
   `no` on every other line, including
   `kmeans.lloyd_unfused_tile_not_called.istella.NT` and
   `pca.cov.istella.TN`.
-- `verdicts.log`:
-  `CLASSICAL KSPLIT A/B svc=... kmeans=... pca=... kde=... gp=... ols=...`.
+- `verdicts.log`: `CLASSICAL KSPLIT A/B svc=... kmeans=... pca=... kde=...`
+  (leg 1) and `CLASSICAL KSPLIT A/B gp=... ols=...` (leg 2).
 
 A REGRESSES verdict on SVC is fenced by one of the two ways in 11.2, never
 with a vendor branch. A control that does not read HOLDS near 1 points at the
@@ -1709,19 +1733,26 @@ arms.
   runner constructors, `outputs()` every round, `quality()` on a 2 GB block,
   and `shapes`. The body: the ORDER cell list, the deadline read from
   `/proc/1/cmdline`, `date -d`, and the `rocminfo` Marketing Name parse.
-- **Python in the pixi environment.** Pixi's Python is 3.14 and needs numpy
-  and pyarrow installed by pip. If pyarrow will not import, the uv 3.12 venv
-  runs only the decode and the prep. The timed processes always need numpy
-  in the pixi Python.
-- **Data time on Hot Aisle is unmeasured.** The 9 minutes above were a RunPod
-  pod. The first cell is `svc:istella`, and a cell waits for its dataset, so
-  a slow Istella-S fetch holds every cell behind it. If the timing floor
-  arrives first, logs of cells that run beside the decode say so. A leg that
-  expects a slow fetch can put the taxi cells first through
+- **Python in the pixi environment.** Pixi's Python is 3.14 and has numpy
+  (the H100 leg's Istella-S cells ran) but no pip, so the body's `pip install
+  pyarrow` there fails by design. The uv 3.12 venv then runs the decode and
+  the prep. That venv recipe ran on the RunPod MI300X classical leg, and it
+  needs astral.sh and PyPI reachable from the VM.
+- **GP at the pinned ridge.** 2^-20 is the larger of the two ridges
+  IDENTICAL accepts. A 4,000-row RBF kernel matrix on standardized
+  Istella-S, with its near-duplicate rows, may still refuse at a pivot.
+  The driver then raises `the kernel matrix did not factor`, and GP is
+  UNMEASURED, not guessed.
+- **Data time on Hot Aisle is unmeasured.** The MI300X pod had the data
+  ready about 9 minutes in. The H100 pod's Istella-S download step took
+  1,372 s. The first cell is `svc:istella`, and a cell waits for its
+  dataset, so a slow Istella-S fetch holds every cell behind it. If the
+  timing floor arrives first, logs of cells that run beside the decode say
+  so. A leg that expects a slow fetch can put the taxi cells first through
   `MOJOLEARN_CLASSICAL_AB_ORDER`.
-- **Per-process overhead on the MI300X is unmeasured** (the 10 to 30 s
-  above is an estimate). SVC's per-round digest calls `predict`, which is
-  untimed but still spends lease time.
+- **Per-process overhead on the MI300X is unmeasured.** On the H100 it was
+  25 to 87 s for the Istella-S big-block lanes. SVC's per-round digest calls
+  `predict`, which is untimed but still spends lease time.
 - **SVC noise on Istella-S.** The pod read 241 ms with a spread of 138 to
   502 ms, wider than any plan effect of a few milliseconds per call, so the
   block band can make HOLDS trivially wide. If the SVC band comes back above

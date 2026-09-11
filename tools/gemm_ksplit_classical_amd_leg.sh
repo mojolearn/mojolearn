@@ -14,14 +14,20 @@
 # <MOJOLEARN_GEMM_LEG_OUT>/remote/ksplit-classical-amd. Binaries, datasets
 # and blocks stay outside that tree.
 #
-# One leg, all six callers in priority order (brief 12.6):
+# Two legs, which may run at the same time on two VMs (brief 12.6). Leg 1 is
+# the entry caller and the Istella-S controls, leg 2 the rest:
 #
 #   MOJOLEARN_GEMM_LEG_EXTRA=tools/gemm_ksplit_classical_amd_leg.sh \
 #   MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/$(date -u +%Y-%m-%d_%H%M%S)-amd-mi300x-hotaisle-gemm-ksplit-classical \
+#   MOJOLEARN_HOTAISLE_EXTRA_ENV=MOJOLEARN_CLASSICAL_AB_LANES=svc,kmeans,pca,kde \
 #   bash tools/hotaisle_leg.sh amd --rent --minutes 60 --skip-gates
 #
-# A caller the deadline cut is rerun alone in a second leg, for example
-#   MOJOLEARN_HOTAISLE_EXTRA_ENV=MOJOLEARN_CLASSICAL_AB_LANES=gp,ols
+#   (leg 2: MOJOLEARN_CLASSICAL_AB_LANES=gp,ols and the out suffix -gp-ols)
+#
+# With no extra environment the body runs all six callers in the ORDER below,
+# and the deadline turns what does not fit into UNMEASURED. The pixi
+# environment has no pip (the H100 leg of 2026-09-11 found it), so pyarrow
+# comes from the uv venv below and only the decode and the prep use it.
 #
 # WHY A SECOND BODY, NOT tools/gemm_ksplit_classical_leg.sh. That file is the
 # H100 leg, and RunPod passes a body no environment, so its defaults ARE that

@@ -149,7 +149,11 @@ SMO_WS_SIZE = 1024
 #: does not take). Transcribed for the `reach=not_called` record only.
 KMEANS_BATCH_SAMPLES = 1 << 15
 PCA_COMPONENTS = 8
-GP_ALPHA = 0.1
+#: NUMERIC_IDENTICAL accepts exactly two ridges, 0 and 2^-20 (0x35800000): the
+#: ridge is the pinned jitter of the Cholesky profile (DEVIATIONS 1751, 1752).
+#: The H100 leg of 2026-09-11 (e1g/2026-09-11_170957-...-gemm-ksplit-classical)
+#: passed 0.1 and every GP fit and the GP smoke were refused by name.
+GP_ALPHA = 2.0 ** -20
 #: `shapes` reads these from tools/classical_two_datasets.py; the values here
 #: are used only when that file cannot be imported, and `shapes` says so.
 DECLARED_FALLBACK = {"BIG_ROWS": 4_000_000, "KDE_TRAIN": 100_000, "KDE_QUERY": 2_000,
