@@ -23,6 +23,16 @@ fi
 SETS="${1:-baseline a2634 both}"; ROUNDS="${2:-3}"; TAG="${3:-ab}"
 mark() { echo "$1 $(date -u +%T)" | tee -a $OUT/progress.txt; }
 while [ ! -f $OUT/builds.done ]; do sleep 10; done
+# A set is only its switch when its OWN gbdt build succeeded: `trees_identical_ab.sh
+# build` seeds a set with baseline's .so files first, so a failed build leaves
+# baseline's _mojolearn_gbdt.so in the set and a file-exists check would pass.
+for s in $SETS; do
+  if [ "$s" = baseline ]; then
+    grep -q "^build_gbdt_baseline=0 " $OUT/setup.txt || { mark "${TAG}_build_failed_$s"; exit 1; }
+  else
+    grep -q "^build_exit $s.gbdt=0 " $OUT/ab.txt || { mark "${TAG}_build_failed_$s"; exit 1; }
+  fi
+done
 if [ "${SKIP_IDENTITY:-0}" != 1 ]; then
   mark ${TAG}_identity_start
   LANES=gbdt-symmetric,gbdt-depthwise,gbdt-lossguide,gbdt-rmse
