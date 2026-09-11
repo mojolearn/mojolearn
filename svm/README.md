@@ -77,6 +77,13 @@ the whole fit (393 ms at cache_size 0, so its kernel cache is not its
 advantage here); Istella-S 12 and 4,503, 20.4 ms. Istella-S also spends
 about 36 ms outside the solver's stage clock. Evidence
 `~/mojolearn-evidence/svm-speed-2026-09-11/`.
+On the Apple M4 (orchestrator gate, 2026-09-11) the default schedule passes
+`svm/svc_main.mojo` 44/44 IDENTICAL, but `-D MOJOLEARN_SVM_SCHED_FUSED_TREE`
+fails seven gates because Metal refuses the width-1024 pipeline ("Threadgroup
+memory size (36872) exceeds the maximum threadgroup memory allowed (32768)").
+FUSED_TREE is therefore an NVIDIA-only candidate; a flip must route it through
+the kernel-matrix row for NVIDIA alone, not the global define. The R-ary
+thread-carrying tree (lane commit 48f92b19) was never built and is not merged.
 
 SVM_SCHED_RARY_TREE (4, 2628's second shape, UNBUILT, RUN OWED):
 `pinned_block_argmin_argmax_tid_rary` and `pinned_block_argext_tid_rary`
