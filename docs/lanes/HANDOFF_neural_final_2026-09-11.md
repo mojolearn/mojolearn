@@ -7,6 +7,10 @@ classical ML belong to the other session (mojolearn-83, session bd222cd8) and
 are not covered here. The full history of the day is
 `docs/lanes/HANDOFF_neural_perf_2026-09-11.md` (items 0 to 0f).
 
+The step-by-step plan to continue this work in another session, with the
+kickoff prompt, commands and read-backs, is
+`docs/lanes/PLAN_neural_final_continue_2026-09-11.md`.
+
 ## 1. Where the step stands
 
 Byte LM training step at the target shape, lean step, steady median, RunPod
