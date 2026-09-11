@@ -397,3 +397,35 @@ this lane; file the fetched directory there afterwards with its
 
 Local dry run of the argument parsing only (no GPU, no mojolearn import):
 `python3 tools/lm_step_memory_probe.py --help`.
+
+## Run 1 results (H100 sm_90a, main a51b6150, 2026-09-11 03:13Z to 03:19Z, `bench/results/e1g/2026-09-10_230820-nvidia/remote/lm-step-memory`)
+
+Complete IDENTICAL training steps through the public trainer, timing at the
+binding's synchronized boundary, three steps each, none budget-limited:
+
+| shape | parameters | first call (setup) | steady step median | tokens/s | device peak (polled, device wide) | process RSS peak |
+|---|---:|---:|---:|---:|---:|---:|
+| control B1 L2048 V8192 (8 x DM384/FF1024) | 20,453,376 | 10.3 s | 5.53 s | 370 | 4.64 GB | 3.96 GB |
+| target B1 L2048 V50257 (12 x DM768/FF2048) | 162,147,840 | 50.2 s | 44.97 s | 45.5 | 12.14 GB | 21.93 GB |
+
+The device peak at the target (12.1 GB) sits between this brief's lean
+estimate (9.98 GiB) and the eager fallback; the host RSS (21.9 GB) is the
+mirror traffic this brief inventoried. The control step on the H100 (5.5 s)
+is within 20 percent of the Apple pilot's 6.8 s: the step is not device-bound.
+
+Component timing (MOJOLEARN_TRANSFORMER_TIMING=1, one target step, not a
+timing sample): the twelve transformer blocks sum to 0.43 s, of which
+attention core forward 82 ms, attention backward 262 ms, MLP and residuals
+26 ms, projections and norms 19 ms. Everything else in the 45 s step, about
+44.5 s or 99 percent, is outside the blocks: the head and loss over
+2048 x 50257 logits, the optimizer, the per-step refusal downloads
+(`ce_refuse_device_inputs`: full logits to pinned host and to a List;
+`opt_refuse_device_inputs`: param, grad, m, v) and the host mirrors. None of
+those phases is itemized by the existing timing switch, so the split among
+them is NOT yet measured and must not be attributed from this brief's byte
+counts. Next: itemize those phases with the same timing boundary, then remove
+copies under the device-owned step API the handoff's step 1 calls for.
+
+What this changes in the handoff order: GEMM and attention (step 3) are one
+percent of the target step today; steps 1 and 2 (transfers and the loss/head
+buffers) are the whole cost until they are gone.
