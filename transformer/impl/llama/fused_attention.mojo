@@ -77,10 +77,12 @@ round, brief section 14: preflushed seams, the forward grid, forward Q
 residency) are trial-build arms on top of stash_tiled, and DEVIATIONS 2596
 and 2597 (brief section 16: dk/dv by the recompute kernel with the stashes
 freed; the tiled dk/dv fold's keys per block and a split into two kernels)
-trial-build arms on the preflushed tiled stash backward; a shipped build
-compiles only the clean third-round and DEVIATION 2597 instantiations its
-column's default needs (DEVIATION 2534's mechanism, brief sections 15 and
-18).
+trial-build arms on the preflushed tiled stash backward, as is DEVIATION 2598
+(brief section 17: the preflushed zdot stash kernel with its stash stores
+deferred into the next staging round trip, and its z fold lagged into the
+same phase); a shipped build compiles only the clean third-round and
+DEVIATION 2597 instantiations its column's default needs (DEVIATION 2534's
+mechanism, brief sections 15 and 18), and never a DEVIATION 2598 kernel.
 
 `[[ALWAYS GPU-agnostic]]`: one source and no vendor branch; the rows read
 (`lib_hardware_ftz_fma_for`, the scheduling rows, `attn_default_arm_for`)
@@ -220,6 +222,15 @@ comptime FUSED_HW_FTZ_FMA = lib_hardware_ftz_fma_for[TARGET_COLUMN]()
 #                                      `attn_dkdv_keys_per_block_for`; all
 #                                      three need `_pf` on the tiled stash
 #                                      backward
+#   MOJOLEARN_ATTN_ARM=stash_tiled_fgrid_r32_qres_pf_zlag
+#                                      DEVIATION 2598 (brief section 17):
+#                                      the preflushed zdot stash kernel with
+#                                      its stash stores deferred into the
+#                                      next staging round trip and its z fold
+#                                      lagged into that phase; `_zdefer`
+#                                      defers the stores only; either needs
+#                                      `_pf` on the tiled stash backward and
+#                                      composes with the kv tokens after it
 #   unset or empty                     the column's build default,
 #                                      ATTN_ARM_DEFAULT (kernel matrix row
 #                                      `attn_default_arm_for`)
@@ -353,9 +364,24 @@ and refuses `_ztiled`, `_kvgrid` and `_kvsplit` (arm-name token
 comptime ATTN_ARM_KV_BITS = ATTN_ARM_BWD_KVSPLIT | ATTN_ARM_BWD_KVGRID | ATTN_ARM_BWD_KVRECOMPUTE
 """The DEVIATION 2596 / 2597 bits; an arm carrying any of them proves the
 dk/dv launch's reach with ATTN_ARM_SABOTAGE_KV."""
+comptime ATTN_ARM_BWD_ZDEFER = 524288
+"""Bit: DEVIATION 2598 (trial builds only; brief section 17), the preflushed
+zdot stash kernel with its y and dy stash stores DEFERRED out of the dot phase
+into the next key-block iteration's staging round trip (and one tail phase),
+so each iteration carries one global round trip instead of two; the z phase is
+unchanged. Needs `_pf` on the tiled stash backward, refuses `_ztiled` and
+`_zlag`, composes with the kv tokens (arm-name token `_zdefer`)."""
+comptime ATTN_ARM_BWD_ZLAG = 1048576
+"""Bit: DEVIATION 2598 (trial builds only; brief section 17), `_zdefer`'s
+deferred stores plus the z fold LAGGED one iteration into the same staging
+phase, so each iteration has two barriers instead of three. Same
+prerequisites as `_zdefer` (arm-name token `_zlag`)."""
+comptime ATTN_ARM_ZSCHED_BITS = ATTN_ARM_BWD_ZDEFER | ATTN_ARM_BWD_ZLAG
+"""The DEVIATION 2598 zdot schedule bits (at most one in a valid arm)."""
 comptime ATTN_ARM_BASE_BITS = ATTN_ARM_FWD_SSTASH | ATTN_ARM_BWD_STASH | ATTN_ARM_BWD_TILED
 comptime ATTN_ARM_NEW_BITS = (
     ATTN_ARM_BWD_ZTILED | ATTN_ARM_FWD_QRES | ATTN_ARM_FWD_GRID | ATTN_ARM_PREFLUSH
+    | ATTN_ARM_ZSCHED_BITS
 )
 """The second-round kernel bits; an arm carrying any of them proves reach
 with ATTN_ARM_SABOTAGE_NEW."""
@@ -379,18 +405,20 @@ kernel at 32 keys per block on top of `stash_tiled_fgrid_r32_qres_pf`
 comptime ATTN_ARM_DEFAULT_REFUSED_BITS = (
     ATTN_ARM_SABOTAGE | ATTN_ARM_SABOTAGE_NEW | ATTN_ARM_BWD_ZTILED
     | ATTN_ARM_ZROWS32 | ATTN_ARM_ZROWS64 | ATTN_ARM_SABOTAGE_KV
-    | ATTN_ARM_BWD_KVRECOMPUTE
+    | ATTN_ARM_BWD_KVRECOMPUTE | ATTN_ARM_ZSCHED_BITS
 )
 """Bits a default arm may not carry: the sabotages; DEVIATION 2528, whose
 kernels a shipped build does not compile (no NVIDIA flip, brief section 13);
-and DEVIATION 2596 (`_kvrecompute`), whose launch a shipped build does not
+DEVIATION 2596 (`_kvrecompute`), whose launch a shipped build does not
 compile either (it lost to `_kvgrid_r32` and `_kvsplit` on the MI325X, and
-its sabotage copies `denom` through a launch of its own). The DEVIATION 2597
-bits (`_kvgrid`, its keys knobs, `_kvsplit`) are allowed since brief section
-18: a shipped build compiles the one clean 2597 dk/dv instantiation its
-column default resolves to (`ATTN_SHIPPED_BWD_KV`), and
-`fused_attention_arm_from_env` asserts that the default's 2597 part is a
-legal combination whose page fits."""
+its sabotage copies `denom` through a launch of its own); and DEVIATION 2598
+(`_zdefer`, `_zlag`), whose zdot schedule copies a shipped build does not
+compile (trial arms until a leg flips one and its lane adds the shipped
+branch, brief section 17). The DEVIATION 2597 bits (`_kvgrid`, its keys
+knobs, `_kvsplit`) are allowed since brief section 18: a shipped build
+compiles the one clean 2597 dk/dv instantiation its column default resolves
+to (`ATTN_SHIPPED_BWD_KV`), and `fused_attention_arm_from_env` asserts that
+the default's 2597 part is a legal combination whose page fits."""
 comptime ATTN_ARM_DEFAULT = attn_default_arm_for[TARGET_COLUMN]()
 """THE SHIPPED ARM, per column, from the kernel-matrix ROUTING row
 `attn_default_arm_for` (DEVIATION 2534, brief section 15; this file names no
@@ -450,7 +478,8 @@ def _attn_arm_base_from_name(base: String, full: String) raises -> Int:
         + base + "' is not one of baseline, bwd_stash, fwd_sstash,"
         + " bwd_stash_tiled, stash, stash_tiled (then optionally _ztiled,"
         + " _ztiled_r32 or _ztiled_r64, then _fgrid, _fgrid_r32 or"
-        + " _fgrid_r64, then _qres, then _pf, then _kvrecompute, then _kvgrid,"
+        + " _fgrid_r64, then _qres, then _pf, then _zdefer or _zlag, then"
+        + " _kvrecompute, then _kvgrid,"
         + " _kvgrid_r32 or _kvgrid_r64, then _kvsplit, then +sabotage,"
         + " +sabotage_new and/or +sabotage_kv, in that order)"
     )
@@ -465,7 +494,9 @@ def fused_attention_arm_parse(name: String) raises -> Int:
     `_r32` or `_r64` (its rows per block, forcing the kernel-matrix row),
     then `_fgrid` (DEVIATION 2531) optionally followed by `_r32` or `_r64`
     (likewise), then `_qres` (DEVIATION 2530), then `_pf` (DEVIATION 2533),
-    then `_kvrecompute` (DEVIATION 2596), then `_kvgrid` (DEVIATION 2597)
+    then `_zdefer` or `_zlag` (DEVIATION 2598, the zdot kernel's schedule;
+    needs `_pf` on the tiled stash backward, refuses `_ztiled` and the two
+    together), then `_kvrecompute` (DEVIATION 2596), then `_kvgrid` (DEVIATION 2597)
     optionally followed by `_r32` or `_r64` (its keys per block), then
     `_kvsplit` (DEVIATION 2597), then `+sabotage` (first-round kernels),
     `+sabotage_new` (second-round kernels) and `+sabotage_kv` (the 2596 /
@@ -515,6 +546,15 @@ def fused_attention_arm_parse(name: String) raises -> Int:
     if rest.endswith("_kvrecompute"):
         arm = arm | ATTN_ARM_BWD_KVRECOMPUTE
         var trimmed = String(rest.removesuffix("_kvrecompute"))
+        rest = trimmed^
+    # DEVIATION 2598: one zdot schedule token between `_pf` and the kv tokens.
+    if rest.endswith("_zlag"):
+        arm = arm | ATTN_ARM_BWD_ZLAG
+        var trimmed = String(rest.removesuffix("_zlag"))
+        rest = trimmed^
+    elif rest.endswith("_zdefer"):
+        arm = arm | ATTN_ARM_BWD_ZDEFER
+        var trimmed = String(rest.removesuffix("_zdefer"))
         rest = trimmed^
     if rest.endswith("_pf"):
         arm = arm | ATTN_ARM_PREFLUSH
@@ -614,6 +654,24 @@ def fused_attention_arm_parse(name: String) raises -> Int:
                 "attention arm '" + name + "': _kvrecompute runs the shipped"
                 + " recompute dk/dv kernel, so _kvgrid and _kvsplit (the tiled"
                 + " fold's geometry) have nothing to act on"
+            )
+    if (arm & ATTN_ARM_ZSCHED_BITS) != 0:
+        if (arm & tiled_stash) != tiled_stash or (arm & ATTN_ARM_PREFLUSH) == 0:
+            raise Error(
+                "attention arm '" + name + "': _zdefer and _zlag (DEVIATION 2598)"
+                + " reschedule the zdot kernel of the preflushed tiled stash"
+                + " backward and need it (bwd_stash_tiled or stash_tiled, with _pf)"
+            )
+        if (arm & ATTN_ARM_BWD_ZTILED) != 0:
+            raise Error(
+                "attention arm '" + name + "': _zdefer and _zlag do not compose"
+                + " with _ztiled (DEVIATION 2528 replaces the zdot kernel they"
+                + " reschedule)"
+            )
+        if (arm & ATTN_ARM_ZSCHED_BITS) == ATTN_ARM_ZSCHED_BITS:
+            raise Error(
+                "attention arm '" + name + "': _zdefer and _zlag are two"
+                + " schedules of one kernel; name one"
             )
     return arm
 
@@ -727,7 +785,7 @@ def fused_attention_arm_name(arm: Int) -> String:
         | ATTN_ARM_FROWS64 | ATTN_ARM_FWD_QRES | ATTN_ARM_PREFLUSH
         | ATTN_ARM_SABOTAGE | ATTN_ARM_SABOTAGE_NEW | ATTN_ARM_BWD_KVGRID
         | ATTN_ARM_KVROWS32 | ATTN_ARM_KVROWS64 | ATTN_ARM_BWD_KVSPLIT
-        | ATTN_ARM_SABOTAGE_KV | ATTN_ARM_BWD_KVRECOMPUTE
+        | ATTN_ARM_SABOTAGE_KV | ATTN_ARM_BWD_KVRECOMPUTE | ATTN_ARM_ZSCHED_BITS
     )
     var other = arm - (arm & known)
     if (arm & ATTN_ARM_BWD_ZTILED) != 0:
@@ -750,6 +808,10 @@ def fused_attention_arm_name(arm: Int) -> String:
         name += "_qres"
     if (arm & ATTN_ARM_PREFLUSH) != 0:
         name += "_pf"
+    if (arm & ATTN_ARM_BWD_ZDEFER) != 0:
+        name += "_zdefer"
+    if (arm & ATTN_ARM_BWD_ZLAG) != 0:
+        name += "_zlag"
     if (arm & ATTN_ARM_BWD_KVRECOMPUTE) != 0:
         name += "_kvrecompute"
     if (arm & ATTN_ARM_BWD_KVGRID) != 0:
@@ -932,6 +994,26 @@ def fused_attention_arm_kv(arm: Int) -> Bool:
     return (arm & ATTN_ARM_KV_BITS) != 0
 
 
+def fused_attention_arm_zsched(arm: Int) -> Int:
+    """The DEVIATION 2598 zdot schedule word `arm` names: ATTN_ARM_BWD_ZDEFER,
+    ATTN_ARM_BWD_ZLAG, or 0 (the shipped schedule). The launcher and the
+    resolved word read it only on an arm with `_pf` on the tiled stash
+    backward, which the parser requires."""
+    return arm & ATTN_ARM_ZSCHED_BITS
+
+
+def fused_attention_zsched_name(arm: Int) -> String:
+    """`zdefer`, `zlag`, or `-` for the harness's `PATH` line."""
+    var w = fused_attention_arm_zsched(arm)
+    if w == ATTN_ARM_BWD_ZDEFER:
+        return String("zdefer")
+    if w == ATTN_ARM_BWD_ZLAG:
+        return String("zlag")
+    if w != 0:
+        return String("both")
+    return String("-")
+
+
 def fused_attention_kv_keys(arm: Int) -> Int:
     """Keys per block the DEVIATION 2596 / 2597 dk/dv launch runs for `arm`:
     0 when the arm names none; for `_kvrecompute`, `fused_rows_per_block(64)`
@@ -1105,11 +1187,15 @@ def fused_attention_arm_backward_resolved(arm: Int) -> Int:
             if zrows == 64:
                 return tiled_stash | ATTN_ARM_BWD_ZTILED | ATTN_ARM_ZROWS64 | (arm & ATTN_ARM_PREFLUSH)
         # DEVIATIONS 2596 and 2597 (brief section 16): the kv word, keys
-        # resolved, when the arm has `_pf` and the page fits.
+        # resolved, when the arm has `_pf` and the page fits. DEVIATION 2598
+        # (brief section 17): the arm's zdot schedule word rides every `_pf`
+        # launch, with or without the kv word.
         if (arm & ATTN_ARM_PREFLUSH) != 0:
+            var zsw = fused_attention_arm_zsched(arm)
             var kvkeys = fused_attention_kv_keys(arm)
             if kvkeys != 0:
-                return tiled_stash | ATTN_ARM_PREFLUSH | _attn_kv_ran_bits(arm, kvkeys)
+                return tiled_stash | ATTN_ARM_PREFLUSH | zsw | _attn_kv_ran_bits(arm, kvkeys)
+            return tiled_stash | ATTN_ARM_PREFLUSH | zsw
         return tiled_stash | (arm & ATTN_ARM_PREFLUSH)
     comptime if ATTN_SHIPPED_BWD_KV:
         # Brief section 18: the column default's DEVIATION 2597 dk/dv
@@ -4544,6 +4630,262 @@ def fused_bwd_kvfold_r2_kernel[HD: Int, BJ: Int, SAB: Bool](
 
 
 # ===========================================================================
+# DEVIATION 2598 (arm tokens `_zdefer` and `_zlag`), TRIAL BUILDS ONLY; brief
+# docs/lanes/BRIEF_attention_step_2026-09-11.md section 17.
+#
+# THE READING (brief 17.2). On the H100 the preflushed zdot stash kernel is 66
+# of the 93 ms attention backward in the lean step. The only source
+# difference between `fused_bwd_zdot_kernel` (52.2 ms) and
+# `fused_bwd_zdot_stash_kernel` (89.4 ms), timed on one pod, is the two
+# global stash stores per visible cell, issued at the END of every thread's
+# dot chain: each key-block iteration carries a second global round trip after
+# the dots, beside the staging round trip at its start. The z phase adds a
+# third barrier per iteration and a 32-step fold on 4 of 256 threads.
+#
+# THE MECHANISM. `fused_bwd_zdot_sched_pf_kernel[HD, TQ, LAG, SABN]` keeps the
+# zdot stash copy's geometry and statements and moves two things in time:
+#   _zdefer (LAG False) the dot phase writes the shared slot only; the next
+#            iteration's staging phase writes each thread's slot value to the
+#            stash beside its K and V loads, and a tail phase after the loop
+#            writes the last iteration's. The z phase is unchanged.
+#   _zlag    (LAG True) the same, and lane 0 folds z over the previous
+#            iteration's keys in that staging phase (the last iteration's in
+#            the tail): two barriers per iteration.
+#
+# WHY NO BIT MOVES (brief 17.4 in full). The dot phase is the shipped
+# statement set, storing the same value to the same slot. A slot is written in
+# the dot phase only, so the next staging phase (or the tail) loads the value
+# the dot phase stored and writes it, unchanged, to the cell the shipped copy
+# writes, under the same visibility test; every visible cell of the block's rows
+# lies in some iteration kb_lo..kb_hi. The z chain takes the same steps on the
+# same slot values in the same order (iteration by iteration, keys ascending),
+# one phase later under LAG. The corner test and the zdot store are the
+# shipped statements. Each phase writes a slot from one thread and reads none
+# it writes; every thread reaches every barrier.
+#
+# SABOTAGE (reach, ATTN_ARM_SABOTAGE_NEW): zdot stored flipped one ulp at ODD
+# flat rows only. zdot moves at odd rows and holds at even rows (the 2533 flip
+# moves every row), dq and dk move through it, dv and the forward hold.
+# ===========================================================================
+
+
+def fused_bwd_zdot_sched_pf_kernel[HD: Int, TQ: Int, LAG: Bool, SABN: Bool](
+    zdot: MutPointer[Float32, MutAnyOrigin],
+    corner: MutPointer[Float32, MutAnyOrigin],
+    y_st: MutPointer[Float32, MutAnyOrigin],
+    dy_st: MutPointer[Float32, MutAnyOrigin],
+    q_rope: MutPointer[Float32, MutAnyOrigin],
+    dctx: MutPointer[Float32, MutAnyOrigin],
+    k_cache: MutPointer[Float32, MutAnyOrigin],
+    v_cache: MutPointer[Float32, MutAnyOrigin],
+    amax: MutPointer[Float32, MutAnyOrigin],
+    denom: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32,
+    l_in: Int32,
+    nh_in: Int32,
+    nkv_in: Int32,
+    s_in: Int32,
+    pos0_in: Int32,
+    key_lo_in: Int32,
+    window_in: Int32,
+    scale_in: Float32,
+):
+    """`fused_bwd_zdot_stash_pf_kernel` with the y and dy stash stores
+    deferred into the next iteration's staging phase (DEVIATION 2598) and,
+    under `LAG`, the z fold lagged into that phase; `SABN` stores zdot
+    flipped one ulp at odd flat rows. See the comment above."""
+    comptime HALF = HD // 2
+    comptime BK = HALF if HALF <= 32 else 32
+    comptime NT = TQ * HD
+    comptime KSTRIDE = HD + 1
+    comptime ESTRIDE = BK + 1
+    comptime SLOTS = (BK * HD + NT - 1) // NT
+
+    var ks = stack_allocation[
+        BK * KSTRIDE,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var vs = stack_allocation[
+        BK * KSTRIDE,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var ys = stack_allocation[
+        TQ * ESTRIDE,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var dys = stack_allocation[
+        TQ * ESTRIDE,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+
+    var b = Int(b_in)
+    var l = Int(l_in)
+    var nh = Int(nh_in)
+    var nkv = Int(nkv_in)
+    var s = Int(s_in)
+    var pos0 = Int(pos0_in)
+    var key_lo = Int(key_lo_in)
+    var window = Int(window_in)
+    var n_rep = nh // nkv
+
+    var ntb = (l + TQ - 1) // TQ
+    var raw = Int(block_idx.x)
+    var tb = raw % ntb
+    var rest = raw // ntb
+    var h = rest % nh
+    var bb = rest // nh
+    if bb >= b:
+        return
+    var kvh = h // n_rep
+
+    var tid = Int(thread_idx.x)
+    var tr = tid // HD
+    var lane = tid - tr * HD
+    var is_y = lane < HALF
+    var kj = lane
+    if not is_y:
+        kj = lane - HALF
+    var active = kj < BK
+    var t = tb * TQ + tr
+    var valid = t < l
+    var tt = t
+    if not valid:
+        tt = l - 1
+    var rr = _row_range(tt, pos0, key_lo, window, s)
+    var j_lo = rr[0]
+    var j_hi = rr[1]
+    var t0 = tb * TQ
+    var t1 = t0 + TQ - 1
+    if t1 > l - 1:
+        t1 = l - 1
+    var r0 = _row_range(t0, pos0, key_lo, window, s)
+    var r1 = _row_range(t1, pos0, key_lo, window, s)
+    var kb_lo = r0[0] // BK
+    var kb_hi = r1[1] // BK
+
+    var kvbase = (bb * nkv + kvh) * s * HD
+    var rowbase = (bb * l + tt) * nh * HD + h * HD
+    var row = (bb * nh + h) * l + tt
+    var stbase = row * s
+    var m_row = ftz(amax.unsafe_load(row))
+    var d_row = ftz(denom.unsafe_load(row))
+
+    var vec = stack_allocation[HD, Scalar[DType.float32]]()
+    if is_y:
+        comptime for p in range(HD):
+            vec.unsafe_store(p, ftz(q_rope.unsafe_load(rowbase + p)))
+    else:
+        comptime for p in range(HD):
+            vec.unsafe_store(p, ftz(dctx.unsafe_load(rowbase + p)))
+
+    var z = Float32(0.0)
+    for kb in range(kb_lo, kb_hi + 1):
+        # Phase 1: the shipped K and V staging for this key block; this
+        # thread's slot from the previous key block to the stash (the store
+        # the shipped copy issues at the end of that block's dot); under LAG,
+        # lane 0's z steps over the previous key block. Nobody writes a slot
+        # of `ys` or `dys` in this phase.
+        comptime for si in range(SLOTS):
+            var i = tid + si * NT
+            if i < BK * HD:
+                var r = i // HD
+                var c = i - r * HD
+                var j = kb * BK + r
+                var kv = Float32(0.0)
+                var vv = Float32(0.0)
+                if j < s:
+                    kv = ftz(k_cache.unsafe_load(kvbase + j * HD + c))
+                    vv = ftz(v_cache.unsafe_load(kvbase + j * HD + c))
+                ks.unsafe_store(r * KSTRIDE + c, kv)
+                vs.unsafe_store(r * KSTRIDE + c, vv)
+        if kb > kb_lo and valid and active:
+            var jp = (kb - 1) * BK + kj
+            if jp >= j_lo and jp <= j_hi:
+                if is_y:
+                    y_st.unsafe_store(stbase + jp, ys.unsafe_load(tr * ESTRIDE + kj))
+                else:
+                    dy_st.unsafe_store(stbase + jp, dys.unsafe_load(tr * ESTRIDE + kj))
+        comptime if LAG:
+            if kb > kb_lo and valid and lane == 0:
+                for jj in range(BK):
+                    var jz = (kb - 1) * BK + jj
+                    if jz >= j_lo and jz <= j_hi:
+                        z = _step_preflushed(
+                            dys.unsafe_load(tr * ESTRIDE + jj),
+                            ys.unsafe_load(tr * ESTRIDE + jj),
+                            z,
+                        )
+        barrier()
+        # Phase 2: the shipped dots, into this thread's shared slot only.
+        if valid and active:
+            var j = kb * BK + kj
+            if j >= j_lo and j <= j_hi:
+                if is_y:
+                    var dot = Float32(0.0)
+                    comptime for p in range(HD):
+                        dot = _step_preflushed(vec.unsafe_load(p), ks.unsafe_load(kj * KSTRIDE + p), dot)
+                    var sc = _pmul(dot, scale_in)
+                    var masked = ftz(sc + Float32(0.0))
+                    var e = ftz(identical_exp(ftz(ftz(masked) - m_row)))
+                    var yv = ftz(identical_div(ftz(e), d_row))
+                    ys.unsafe_store(tr * ESTRIDE + kj, yv)
+                else:
+                    var dy = Float32(0.0)
+                    comptime for p in range(HD):
+                        dy = _step_preflushed(vec.unsafe_load(p), vs.unsafe_load(kj * KSTRIDE + p), dy)
+                    var dyv = ftz(dy)
+                    dys.unsafe_store(tr * ESTRIDE + kj, dyv)
+        barrier()
+        comptime if not LAG:
+            # Phase 3 (`_zdefer`): the shipped z phase.
+            if valid and lane == 0:
+                for jj in range(BK):
+                    var jz = kb * BK + jj
+                    if jz >= j_lo and jz <= j_hi:
+                        z = _step_preflushed(
+                            dys.unsafe_load(tr * ESTRIDE + jj),
+                            ys.unsafe_load(tr * ESTRIDE + jj),
+                            z,
+                        )
+            barrier()
+    # Tail: the last key block's store and, under LAG, its z steps. The
+    # loop's last barrier follows the phase that filled the slots, and no
+    # phase writes a slot after it.
+    if kb_hi >= kb_lo and valid and active:
+        var jl = kb_hi * BK + kj
+        if jl >= j_lo and jl <= j_hi:
+            if is_y:
+                y_st.unsafe_store(stbase + jl, ys.unsafe_load(tr * ESTRIDE + kj))
+            else:
+                dy_st.unsafe_store(stbase + jl, dys.unsafe_load(tr * ESTRIDE + kj))
+    comptime if LAG:
+        if kb_hi >= kb_lo and valid and lane == 0:
+            for jj in range(BK):
+                var jz = kb_hi * BK + jj
+                if jz >= j_lo and jz <= j_hi:
+                    z = _step_preflushed(
+                        dys.unsafe_load(tr * ESTRIDE + jj),
+                        ys.unsafe_load(tr * ESTRIDE + jj),
+                        z,
+                    )
+    if valid and lane == 0:
+        var zf = ftz(z)
+        if bitcast[DType.uint32](zf) == NEG_ZERO_BITS and j_hi < s - 1:
+            corner.unsafe_store(0, Float32(1.0))
+        comptime if SABN:
+            if (row & 1) == 1:
+                zdot.unsafe_store(row, _flip_ulp(zf))
+            else:
+                zdot.unsafe_store(row, zf)
+        else:
+            zdot.unsafe_store(row, zf)
+
+
+# ===========================================================================
 # DEVIATIONS 2531 (arm token `_fgrid`) AND 2530 (arm token `_qres`), plus the
 # forward half of 2533 (`_pf`), TRIAL BUILDS ONLY; brief
 # docs/lanes/BRIEF_attention_step_2026-09-11.md sections 14.3 and 14.4.
@@ -5358,7 +5700,7 @@ def _launch_bwd_stash_zdq_pf[HD: Int](
     mut amax: DeviceBuffer[DType.float32],
     mut denom: DeviceBuffer[DType.float32],
     b: Int, l: Int, nh: Int, nkv: Int, s: Int, pos0: Int, key_lo: Int,
-    window: Int, scale: Float32, zsab: Bool,
+    window: Int, scale: Float32, zsab: Bool, zsched: Int,
 ) raises:
     """The first two kernels of `_launch_bwd_stash_tiled_pf`, in its order
     and geometry, for DEVIATIONS 2596 and 2597 (trial builds, and a shipped
@@ -5367,13 +5709,87 @@ def _launch_bwd_stash_zdq_pf[HD: Int](
     `_launch_bwd_stash_tiled_pf[HD, True]` launches it; compiled on a trial
     build only, and a shipped build raises on `zsab`), a wait, then the
     preflushed tiled dq, which writes dcell over `dy_st`. Nothing waits for
-    dq here; the caller owns both stashes."""
+    dq here; the caller owns both stashes. DEVIATION 2598 (brief section 17):
+    `zsched` ATTN_ARM_BWD_ZDEFER or ATTN_ARM_BWD_ZLAG launches the zdot
+    schedule copy `fused_bwd_zdot_sched_pf_kernel` in place of the zdot stash
+    copy (same grid, same buffers, same wait); 0 launches exactly what this
+    helper launched before. The four schedule instantiations are compiled on
+    a trial build only (merge with brief section 18): a shipped build, whose
+    one caller is the `ATTN_SHIPPED_BWD_KV` branch passing 0, raises on a
+    nonzero `zsched` and instantiates no DEVIATION 2598 kernel."""
     comptime TQ = FUSED_THREADS // HD
     var z_blocks = b * nh * ((l + TQ - 1) // TQ)
-    if zsab:
-        comptime if ATTN_ARM_TRIAL:
-            comptime zks = fused_bwd_zdot_stash_pf_kernel[HD, TQ, True]
-            ctx.enqueue_function[zks](
+    var zsched_launched = False
+    comptime if ATTN_ARM_TRIAL:
+        if zsched == ATTN_ARM_BWD_ZLAG or zsched == ATTN_ARM_BWD_ZDEFER:
+            var lag = zsched == ATTN_ARM_BWD_ZLAG
+            if lag and zsab:
+                comptime zls = fused_bwd_zdot_sched_pf_kernel[HD, TQ, True, True]
+                ctx.enqueue_function[zls](
+                    zdot.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
+                    dy_st.unsafe_ptr(), q_rope.unsafe_ptr(), dctx.unsafe_ptr(),
+                    k_cache.unsafe_ptr(), v_cache.unsafe_ptr(), amax.unsafe_ptr(),
+                    denom.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv),
+                    Int32(s), Int32(pos0), Int32(key_lo), Int32(window), scale,
+                    grid_dim=(z_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
+                )
+            elif lag:
+                comptime zlc = fused_bwd_zdot_sched_pf_kernel[HD, TQ, True, False]
+                ctx.enqueue_function[zlc](
+                    zdot.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
+                    dy_st.unsafe_ptr(), q_rope.unsafe_ptr(), dctx.unsafe_ptr(),
+                    k_cache.unsafe_ptr(), v_cache.unsafe_ptr(), amax.unsafe_ptr(),
+                    denom.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv),
+                    Int32(s), Int32(pos0), Int32(key_lo), Int32(window), scale,
+                    grid_dim=(z_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
+                )
+            elif zsab:
+                comptime zds = fused_bwd_zdot_sched_pf_kernel[HD, TQ, False, True]
+                ctx.enqueue_function[zds](
+                    zdot.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
+                    dy_st.unsafe_ptr(), q_rope.unsafe_ptr(), dctx.unsafe_ptr(),
+                    k_cache.unsafe_ptr(), v_cache.unsafe_ptr(), amax.unsafe_ptr(),
+                    denom.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv),
+                    Int32(s), Int32(pos0), Int32(key_lo), Int32(window), scale,
+                    grid_dim=(z_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
+                )
+            else:
+                comptime zdc = fused_bwd_zdot_sched_pf_kernel[HD, TQ, False, False]
+                ctx.enqueue_function[zdc](
+                    zdot.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
+                    dy_st.unsafe_ptr(), q_rope.unsafe_ptr(), dctx.unsafe_ptr(),
+                    k_cache.unsafe_ptr(), v_cache.unsafe_ptr(), amax.unsafe_ptr(),
+                    denom.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv),
+                    Int32(s), Int32(pos0), Int32(key_lo), Int32(window), scale,
+                    grid_dim=(z_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
+                )
+            zsched_launched = True
+    else:
+        if zsched != 0:
+            raise Error(
+                "fused attention: the DEVIATION 2598 zdot schedule copies are"
+                " compiled on a -D MOJOLEARN_ATTN_ARM_TRIAL=1 build only"
+            )
+    if not zsched_launched:
+        if zsab:
+            comptime if ATTN_ARM_TRIAL:
+                comptime zks = fused_bwd_zdot_stash_pf_kernel[HD, TQ, True]
+                ctx.enqueue_function[zks](
+                    zdot.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
+                    dy_st.unsafe_ptr(), q_rope.unsafe_ptr(), dctx.unsafe_ptr(),
+                    k_cache.unsafe_ptr(), v_cache.unsafe_ptr(), amax.unsafe_ptr(),
+                    denom.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv),
+                    Int32(s), Int32(pos0), Int32(key_lo), Int32(window), scale,
+                    grid_dim=(z_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
+                )
+            else:
+                raise Error(
+                    "fused attention: the zdot stash sabotage instantiation is"
+                    " compiled on a -D MOJOLEARN_ATTN_ARM_TRIAL=1 build only"
+                )
+        else:
+            comptime zkc = fused_bwd_zdot_stash_pf_kernel[HD, TQ, False]
+            ctx.enqueue_function[zkc](
                 zdot.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
                 dy_st.unsafe_ptr(), q_rope.unsafe_ptr(), dctx.unsafe_ptr(),
                 k_cache.unsafe_ptr(), v_cache.unsafe_ptr(), amax.unsafe_ptr(),
@@ -5381,23 +5797,13 @@ def _launch_bwd_stash_zdq_pf[HD: Int](
                 Int32(s), Int32(pos0), Int32(key_lo), Int32(window), scale,
                 grid_dim=(z_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
             )
-        else:
-            raise Error(
-                "fused attention: the zdot stash sabotage instantiation is"
-                " compiled on a -D MOJOLEARN_ATTN_ARM_TRIAL=1 build only"
-            )
-    else:
-        comptime zkc = fused_bwd_zdot_stash_pf_kernel[HD, TQ, False]
-        ctx.enqueue_function[zkc](
-            zdot.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
-            dy_st.unsafe_ptr(), q_rope.unsafe_ptr(), dctx.unsafe_ptr(),
-            k_cache.unsafe_ptr(), v_cache.unsafe_ptr(), amax.unsafe_ptr(),
-            denom.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv),
-            Int32(s), Int32(pos0), Int32(key_lo), Int32(window), scale,
-            grid_dim=(z_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
-        )
     ctx.synchronize()
-    _attn_tick(ctx, on, tk, "bwd_zdot_stash_pf")
+    if zsched == ATTN_ARM_BWD_ZLAG:
+        _attn_tick(ctx, on, tk, "bwd_zdot_zlag_pf")
+    elif zsched == ATTN_ARM_BWD_ZDEFER:
+        _attn_tick(ctx, on, tk, "bwd_zdot_zdefer_pf")
+    else:
+        _attn_tick(ctx, on, tk, "bwd_zdot_stash_pf")
     var dq_blocks = b * nh * ((l + 63) // 64)
     comptime qp = fused_bwd_dq_tiled_pf_kernel[HD]
     ctx.enqueue_function[qp](
@@ -5408,6 +5814,59 @@ def _launch_bwd_stash_zdq_pf[HD: Int](
         grid_dim=(dq_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
     )
     _attn_tick(ctx, on, tk, "bwd_dq_tiled_pf")
+
+
+def _launch_bwd_stash_tiled_zsched_pf[HD: Int](
+    ctx: DeviceContext,
+    on: Bool,
+    mut tk: Int,
+    mut zdot: DeviceBuffer[DType.float32],
+    mut dq: DeviceBuffer[DType.float32],
+    mut dk: DeviceBuffer[DType.float32],
+    mut dv: DeviceBuffer[DType.float32],
+    mut corner: DeviceBuffer[DType.float32],
+    mut q_rope: DeviceBuffer[DType.float32],
+    mut dctx: DeviceBuffer[DType.float32],
+    mut k_cache: DeviceBuffer[DType.float32],
+    mut v_cache: DeviceBuffer[DType.float32],
+    mut amax: DeviceBuffer[DType.float32],
+    mut denom: DeviceBuffer[DType.float32],
+    b: Int, l: Int, nh: Int, nkv: Int, s: Int, pos0: Int, key_lo: Int,
+    window: Int, scale: Float32, zsab: Bool, zsched: Int,
+) raises:
+    """DEVIATION 2598's backward (trial builds only; brief section 17.3):
+    `_launch_bwd_stash_tiled_pf` with the zdot schedule copy in place of the
+    zdot stash copy. The two stashes, `_launch_bwd_stash_zdq_pf` (the
+    schedule copy, a wait, the shipped preflushed dq instantiation), then the
+    shipped preflushed dk/dv instantiation at its shipped geometry, a wait,
+    both stashes freed. `zsab` is the schedule copy's sabotage_new flip (odd
+    rows of zdot). The shipped `_launch_bwd_stash_tiled_pf` is not edited.
+    Generic, so a shipped build instantiates none of it."""
+    var cells = b * nh * l * s
+    var y_st = ctx.enqueue_create_buffer[DType.float32](cells)
+    var dy_st = ctx.enqueue_create_buffer[DType.float32](cells)
+    ctx.synchronize()
+    _attn_tick(ctx, on, tk, "bwd_scratch_alloc")
+    _launch_bwd_stash_zdq_pf[HD](
+        ctx, on, tk, zdot, dq, corner, y_st, dy_st, q_rope, dctx, k_cache,
+        v_cache, amax, denom, b, l, nh, nkv, s, pos0, key_lo, window, scale,
+        zsab, zsched,
+    )
+    var kv_blocks = b * nkv * ((s + 63) // 64)
+    comptime kvp = fused_bwd_dkdv_tiled_pf_kernel[HD]
+    ctx.enqueue_function[kvp](
+        dk.unsafe_ptr(), dv.unsafe_ptr(), corner.unsafe_ptr(),
+        y_st.unsafe_ptr(), dy_st.unsafe_ptr(), q_rope.unsafe_ptr(),
+        dctx.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv),
+        Int32(s), Int32(pos0), Int32(key_lo), Int32(window),
+        grid_dim=(kv_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
+    )
+    _attn_tick(ctx, on, tk, "bwd_dkdv_tiled_pf")
+    # The stashes must outlive the enqueued kernels: synchronize, then the
+    # explicit last use (a buffer is freed at its last use).
+    ctx.synchronize()
+    _ = y_st^
+    _ = dy_st^
 
 
 def _launch_bwd_stash_tiled_kvre[HD: Int](
@@ -5426,7 +5885,7 @@ def _launch_bwd_stash_tiled_kvre[HD: Int](
     mut amax: DeviceBuffer[DType.float32],
     mut denom: DeviceBuffer[DType.float32],
     b: Int, l: Int, nh: Int, nkv: Int, s: Int, pos0: Int, key_lo: Int,
-    window: Int, scale: Float32, zsab: Bool, ksab: Bool,
+    window: Int, scale: Float32, zsab: Bool, ksab: Bool, zsched: Int,
 ) raises:
     """DEVIATION 2596's backward (trial builds only; brief section 16.4): the
     two stashes, `_launch_bwd_stash_zdq_pf`, a wait, both stashes FREED, then
@@ -5434,7 +5893,9 @@ def _launch_bwd_stash_tiled_kvre[HD: Int](
     TQ]` at its shipped geometry: the `baseline` arm's dk/dv, which reads q,
     dctx, k, v, amax, denom and zdot and no stash. Under `ksab`
     (ATTN_ARM_SABOTAGE_KV) that kernel reads a one-ulp-flipped copy of
-    `denom` instead. Generic, so a shipped build instantiates none of it."""
+    `denom` instead. `zsched` (DEVIATION 2598, 0 for the shipped zdot stash
+    copy) passes to `_launch_bwd_stash_zdq_pf`. Generic, so a shipped build
+    instantiates none of it."""
     comptime TQ = FUSED_THREADS // HD
     var cells = b * nh * l * s
     var y_st = ctx.enqueue_create_buffer[DType.float32](cells)
@@ -5444,7 +5905,7 @@ def _launch_bwd_stash_tiled_kvre[HD: Int](
     _launch_bwd_stash_zdq_pf[HD](
         ctx, on, tk, zdot, dq, corner, y_st, dy_st, q_rope, dctx, k_cache,
         v_cache, amax, denom, b, l, nh, nkv, s, pos0, key_lo, window, scale,
-        zsab,
+        zsab, zsched,
     )
     # Nothing reads the stashes after dq: wait for it, then free both before
     # dk/dv runs (a buffer is freed at its last use; these are the last uses).
@@ -5499,18 +5960,20 @@ def _launch_bwd_stash_tiled_kv[HD: Int, BJ: Int, SPLIT: Bool](
     mut amax: DeviceBuffer[DType.float32],
     mut denom: DeviceBuffer[DType.float32],
     b: Int, l: Int, nh: Int, nkv: Int, s: Int, pos0: Int, key_lo: Int,
-    window: Int, scale: Float32, zsab: Bool, ksab: Bool,
+    window: Int, scale: Float32, zsab: Bool, ksab: Bool, zsched: Int,
 ) raises:
     """DEVIATION 2597's backward (brief section 16.4): the
     two stashes, `_launch_bwd_stash_zdq_pf`, then the dk/dv folds over the
     stash at `BJ` keys per block, as the joint `fused_bwd_dkdv_r2_kernel` or
     (`SPLIT`) as two launches of `fused_bwd_kvfold_r2_kernel`, dk first.
     `ksab` picks the sabotage_kv instantiations, compiled on a trial build
-    only (a shipped build raises on `ksab`). Generic: a trial build
-    instantiates every (BJ, SPLIT); a shipped build instantiates only its
-    column default's, with `zsab` and `ksab` False (`ATTN_SHIPPED_BWD_KV`,
-    brief section 18), and none on a column whose default names no 2597
-    token."""
+    only (a shipped build raises on `ksab`). `zsched` (DEVIATION 2598, brief
+    section 17; 0 for the shipped zdot stash copy) passes to
+    `_launch_bwd_stash_zdq_pf`, which compiles the zdot schedule copies on a
+    trial build only. Generic: a trial build instantiates every (BJ, SPLIT);
+    a shipped build instantiates only its column default's, with `zsab` and
+    `ksab` False and `zsched` 0 (`ATTN_SHIPPED_BWD_KV`, brief section 18),
+    and none on a column whose default names no 2597 token."""
     var cells = b * nh * l * s
     var y_st = ctx.enqueue_create_buffer[DType.float32](cells)
     var dy_st = ctx.enqueue_create_buffer[DType.float32](cells)
@@ -5519,7 +5982,7 @@ def _launch_bwd_stash_tiled_kv[HD: Int, BJ: Int, SPLIT: Bool](
     _launch_bwd_stash_zdq_pf[HD](
         ctx, on, tk, zdot, dq, corner, y_st, dy_st, q_rope, dctx, k_cache,
         v_cache, amax, denom, b, l, nh, nkv, s, pos0, key_lo, window, scale,
-        zsab,
+        zsab, zsched,
     )
     var kv_blocks = b * nkv * ((s + BJ - 1) // BJ)
     comptime if SPLIT:
@@ -5832,6 +6295,9 @@ def fused_backward_launch_ran(
             var ksab = (arm & ATTN_ARM_SABOTAGE_KV) != 0
             var ksplit = (arm & ATTN_ARM_BWD_KVSPLIT) != 0
             var kvre = (arm & ATTN_ARM_BWD_KVRECOMPUTE) != 0
+            # DEVIATION 2598 (brief section 17): the zdot schedule word, 0 for
+            # the shipped zdot stash copy; every `_pf` launch below reads it.
+            var zs = fused_attention_arm_zsched(arm)
             if (arm & ATTN_ARM_BWD_ZTILED) != 0 and want_stash and want_tiled and zrows != 0:
                 if zrows == 32:
                     if bpf:
@@ -5902,35 +6368,46 @@ def fused_backward_launch_ran(
                     _launch_bwd_stash_tiled_kvre[HD](
                         ctx, ton, tk, zdot, dq, dk, dv, corner, q_rope, dctx,
                         k_cache, v_cache, amax, denom, b, l, nh, nkv, s, pos0,
-                        key_lo, window, scale, zsab, ksab,
+                        key_lo, window, scale, zsab, ksab, zs,
                     )
                 elif kvkeys == 32:
                     if ksplit:
                         _launch_bwd_stash_tiled_kv[HD, 32, True](
                             ctx, ton, tk, zdot, dq, dk, dv, corner, q_rope, dctx,
                             k_cache, v_cache, amax, denom, b, l, nh, nkv, s, pos0,
-                            key_lo, window, scale, zsab, ksab,
+                            key_lo, window, scale, zsab, ksab, zs,
                         )
                     else:
                         _launch_bwd_stash_tiled_kv[HD, 32, False](
                             ctx, ton, tk, zdot, dq, dk, dv, corner, q_rope, dctx,
                             k_cache, v_cache, amax, denom, b, l, nh, nkv, s, pos0,
-                            key_lo, window, scale, zsab, ksab,
+                            key_lo, window, scale, zsab, ksab, zs,
                         )
                 else:
                     if ksplit:
                         _launch_bwd_stash_tiled_kv[HD, 64, True](
                             ctx, ton, tk, zdot, dq, dk, dv, corner, q_rope, dctx,
                             k_cache, v_cache, amax, denom, b, l, nh, nkv, s, pos0,
-                            key_lo, window, scale, zsab, ksab,
+                            key_lo, window, scale, zsab, ksab, zs,
                         )
                     else:
                         _launch_bwd_stash_tiled_kv[HD, 64, False](
                             ctx, ton, tk, zdot, dq, dk, dv, corner, q_rope, dctx,
                             k_cache, v_cache, amax, denom, b, l, nh, nkv, s, pos0,
-                            key_lo, window, scale, zsab, ksab,
+                            key_lo, window, scale, zsab, ksab, zs,
                         )
-                ran = ATTN_ARM_BWD_STASH | ATTN_ARM_BWD_TILED | ATTN_ARM_PREFLUSH | _attn_kv_ran_bits(arm, kvkeys)
+                ran = ATTN_ARM_BWD_STASH | ATTN_ARM_BWD_TILED | ATTN_ARM_PREFLUSH | zs | _attn_kv_ran_bits(arm, kvkeys)
+                ran_arm = True
+            elif bpf and want_stash and want_tiled and zs != 0:
+                # DEVIATION 2598 (brief section 17), trial builds only: the
+                # zdot schedule copy, then the shipped preflushed dq and dk/dv
+                # instantiations (`_launch_bwd_stash_tiled_pf` is not edited).
+                _launch_bwd_stash_tiled_zsched_pf[HD](
+                    ctx, ton, tk, zdot, dq, dk, dv, corner, q_rope, dctx,
+                    k_cache, v_cache, amax, denom, b, l, nh, nkv, s, pos0,
+                    key_lo, window, scale, zsab, zs,
+                )
+                ran = ATTN_ARM_BWD_STASH | ATTN_ARM_BWD_TILED | ATTN_ARM_PREFLUSH | zs
                 ran_arm = True
             elif bpf and want_stash and want_tiled:
                 if zsab:
@@ -5956,11 +6433,13 @@ def fused_backward_launch_ran(
                 # resolves to, through the helper the trial tree calls, and no
                 # sabotage copy. An arm resolving to another 2597
                 # instantiation, or to none, takes the plain `_pf` launch below.
+                # The trailing zdot schedule word is 0 (DEVIATION 2598 is
+                # trial-only): the shipped zdot stash copy, exactly as before.
                 if want_stash and want_tiled and not ran_arm and (arm & ATTN_ARM_PREFLUSH) != 0 and _attn_kv_key(arm) == ATTN_DEFAULT_KV_KEY:
                     _launch_bwd_stash_tiled_kv[HD, ATTN_DEFAULT_KV_KEYS, ATTN_DEFAULT_KV_SPLIT](
                         ctx, ton, tk, zdot, dq, dk, dv, corner, q_rope, dctx,
                         k_cache, v_cache, amax, denom, b, l, nh, nkv, s, pos0,
-                        key_lo, window, scale, False, False,
+                        key_lo, window, scale, False, False, 0,
                     )
                     ran = ATTN_ARM_BWD_STASH | ATTN_ARM_BWD_TILED | ATTN_ARM_PREFLUSH | _attn_kv_ran_bits(arm, ATTN_DEFAULT_KV_KEYS)
                     ran_arm = True
