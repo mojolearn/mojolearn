@@ -342,7 +342,12 @@ def worker(args):
                 attention_arm=os.environ.get('MOJOLEARN_ATTN_ARM'),
                 # DEVIATION 2544: the GEMM step arm this run requested (a
                 # trial binding reads it; a shipped binding ignores it).
-                gemm_arm=os.environ.get('MOJOLEARN_GEMM_ARM'))
+                gemm_arm=os.environ.get('MOJOLEARN_GEMM_ARM'),
+                # DEVIATION 2595: the plan that arm runs, as the leg's build
+                # labels it (tools/gemm_step_leg.sh plans.tsv), so `shipped`
+                # (the ksplit default where the row is above 0) is never
+                # confused with the old plan (`tuned128`). None when unset.
+                gemm_plan=os.environ.get('MOJOLEARN_GEMM_PLAN_LABEL'))
     sampler = DeviceMemorySampler(args.sample_interval, args.gpu_index)
     sampler.start()
     emit(dict(event='setup', schema=SCHEMA, shape=shape.to_dict(), profile=shape.profile,
@@ -480,7 +485,7 @@ def _write_result(args, shape, steps, limited, timing_step_seconds=None, mode=No
         resident=mode.get('resident'), step_result=mode.get('step_result'),
         witness_every_step=mode.get('witness_every_step'), witness_source=mode.get('witness_source'),
         corpus=mode.get('corpus'), attention_arm=mode.get('attention_arm'),
-        gemm_arm=mode.get('gemm_arm'),
+        gemm_arm=mode.get('gemm_arm'), gemm_plan=mode.get('gemm_plan'),
         # Per-step witnesses (loss always; gradients/parameters/m/v/flags
         # when the step was witnessed) so a lean run compares with a full
         # run from result.json alone; the same records are in events.jsonl.
