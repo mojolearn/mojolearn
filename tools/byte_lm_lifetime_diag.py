@@ -39,6 +39,29 @@ It also adds two variants that set MOJOLEARN_BYTE_LM_KEEP_CONTEXT=1, the
 binding's opt-in process-lifetime context keeper, and record whether the
 keeper was reached (`byte_lm_context_keeper_active`).
 
+DEVIATION 2518 adds the in-process native stack and two teardown variants.
+Run 5 on the RTX 4090 (bench/results/e1g/2026-09-11_002601-nvidia) had gdb
+but ptrace is refused inside the pod ("Inappropriate ioctl for device") and
+py-spy could not be installed, so no tool outside the process can read its
+native stack. Instead the wrapper compiles tools/native_stack_dump.c and
+LD_PRELOADs it into every child; it installs a SIGUSR2 handler that appends
+a glibc backtrace() of the receiving thread to MOJOLEARN_NATIVE_STACK_FILE
+and returns. Each child runs a daemon watchdog thread that, at deadline
+minus 10 s, sends SIGUSR2 to the MAIN thread three times two seconds apart
+(three samples: same frames = a wait, moving frames = a stall), and the
+parent sends one more process-directed SIGUSR2 at the deadline as the
+fallback for a hang that holds the GIL (the watchdog cannot run then). The
+watchdog only signals when a C-level SIGUSR2 handler is installed
+(signal.getsignal(SIGUSR2) is None); without the preload the default
+disposition of SIGUSR2 would terminate the child, so it is never sent bare.
+The file's contents land in the case's result.json under
+hang_diagnostics.native.in_process. The two variant cases run stateless_x2
+with MOJOLEARN_BYTE_LM_SYNC_BEFORE_TEARDOWN=1 (a synchronize immediately
+before the trainer's buffers are released and another before the context
+is) and MOJOLEARN_BYTE_LM_TEARDOWN_WITH_GIL=1 (trainer and context released
+after the GILReleased block, as close() does); the binding prints one
+witness line per reached variant and the summary records it.
+
 This file makes no speed, learning or cross-vendor claim. It records what a
 process did, in which order, and where it stopped.
 """
@@ -52,6 +75,7 @@ import signal
 import struct
 import subprocess
 import sys
+import threading
 import time
 
 FIXTURE = dict(batch=1, length=5, d_model=16, n_heads=2, n_kv=1, head_dim=8,
@@ -59,6 +83,13 @@ FIXTURE = dict(batch=1, length=5, d_model=16, n_heads=2, n_kv=1, head_dim=8,
 FIXTURE_SEED = 19
 FIXTURE_SCALE = .02
 DEFAULT_DEADLINE = 120
+# DEVIATION 2518: the child's watchdog fires this many seconds before the
+# parent's deadline, then twice more at STACK_SAMPLE_GAP_S.
+STACK_LEAD_S = 10.0
+STACK_SAMPLE_GAP_S = 2.0
+STACK_SAMPLES = 3
+NATIVE_STACK_SUFFIX = '.native_stack.txt'
+NATIVE_STACK_RECORD_CAP = 400000
 
 # Case order is the order of the RUN OWED; each name is one subprocess.
 CASES = [
@@ -80,11 +111,22 @@ CASES = [
     'control_kmeans_then_bytelm',
     'stateless_x2_keep_context',
     'resident_close_reopen_keep_context',
+    # DEVIATION 2518: the two stateless teardown variants.
+    'stateless_x2_sync_teardown',
+    'stateless_x2_teardown_with_gil',
 ]
 
 # Controls that must not import the byte LM binding before their own work.
 CONTROL_ONLY = ('control_kmeans_x2', 'control_extratrees_x2')
 KEEP_CONTEXT_CASES = ('stateless_x2_keep_context', 'resident_close_reopen_keep_context')
+# DEVIATION 2518: case -> (switch, witness line the binding prints when the
+# switch's branch is reached; bindings/_mojolearn_byte_lm.mojo).
+TEARDOWN_VARIANT_CASES = {
+    'stateless_x2_sync_teardown': ('MOJOLEARN_BYTE_LM_SYNC_BEFORE_TEARDOWN',
+                                   'byte LM teardown variant: sync_before_teardown'),
+    'stateless_x2_teardown_with_gil': ('MOJOLEARN_BYTE_LM_TEARDOWN_WITH_GIL',
+                                       'byte LM teardown variant: teardown_with_gil'),
+}
 CONTROL_FIXTURE = dict(kmeans=dict(rows=256, features=4, clusters=4, seed=2513),
                        extratrees=dict(rows=512, features=8, classes=2, n_estimators=8,
                                        max_depth=6, seed=2513))
@@ -94,13 +136,15 @@ CONTROL_FIXTURE = dict(kmeans=dict(rows=256, features=4, clusters=4, seed=2513),
 SECOND_STEP_GROUP = ('stateless_x2', 'resident_x2', 'resident_close_reopen',
                      'restore_then_step', 'resident_mismatch_recovery',
                      'stateless_x2_gc_pause', 'stateless_x2_launch_blocking',
-                     'stateless_x2_keep_context', 'resident_close_reopen_keep_context')
+                     'stateless_x2_keep_context', 'resident_close_reopen_keep_context',
+                     'stateless_x2_sync_teardown', 'stateless_x2_teardown_with_gil')
 FIRST_STEP_GROUP = ('stateless_x1', 'stateless_x2', 'stateless_then_resident',
                     'resident_x2', 'resident_then_stateless', 'resident_close_reopen',
                     'restore_then_step', 'failure_recovery', 'resident_mismatch_recovery',
                     'stateless_x2_gc_pause', 'stateless_x2_launch_blocking',
                     'control_kmeans_then_bytelm', 'stateless_x2_keep_context',
-                    'resident_close_reopen_keep_context')
+                    'resident_close_reopen_keep_context',
+                    'stateless_x2_sync_teardown', 'stateless_x2_teardown_with_gil')
 
 
 # ----------------------------------------------------------------- fixtures
@@ -157,6 +201,8 @@ class Recorder:
         self.case = case
         self.path = Path(path)
         self.started = time.time()
+        # DEVIATION 2518: the watchdog thread records its signals too.
+        self._lock = threading.RLock()
         self.record = dict(case=case, schema='byte-lm-lifetime-diag.record.v1',
                            pid=os.getpid(), python=sys.version.split()[0],
                            numeric_mode=os.environ.get('MOJOLEARN_NUMERIC_MODE'),
@@ -164,19 +210,21 @@ class Recorder:
         self.flush()
 
     def flush(self):
-        self.record['elapsed_s'] = round(time.time() - self.started, 3)
-        tmp = self.path.with_suffix(self.path.suffix + '.tmp')
-        with tmp.open('w') as stream:
-            json.dump(self.record, stream, indent=1, sort_keys=True)
-            stream.write('\n')
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(tmp, self.path)
+        with self._lock:
+            self.record['elapsed_s'] = round(time.time() - self.started, 3)
+            tmp = self.path.with_suffix(self.path.suffix + '.tmp')
+            with tmp.open('w') as stream:
+                json.dump(self.record, stream, indent=1, sort_keys=True)
+                stream.write('\n')
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(tmp, self.path)
 
     def event(self, name, **fields):
         entry = dict(name=name, t=round(time.time() - self.started, 3), **fields)
-        self.record['events'].append(entry)
-        self.flush()
+        with self._lock:
+            self.record['events'].append(entry)
+            self.flush()
         print('[%s] %7.3fs %s %s' % (self.case, entry['t'], name,
                                      json.dumps(fields, sort_keys=True) if fields else ''), flush=True)
 
@@ -560,10 +608,34 @@ def case_resident_close_reopen_keep_context(rec):
     case_resident_close_reopen(rec)
 
 
+def case_stateless_x2_sync_teardown(rec):
+    # DEVIATION 2518 variant (a). The parent sets
+    # MOJOLEARN_BYTE_LM_SYNC_BEFORE_TEARDOWN=1 (CHILD_ENV): the binding
+    # synchronizes right before the trainer's buffers are released and again
+    # before the context is released (bindings/_mojolearn_byte_lm.mojo, the
+    # `sync_before_teardown` branch). Everything else is stateless_x2.
+    rec.event('env', MOJOLEARN_BYTE_LM_SYNC_BEFORE_TEARDOWN=os.environ.get(
+        'MOJOLEARN_BYTE_LM_SYNC_BEFORE_TEARDOWN'))
+    case_stateless_x2(rec)
+
+
+def case_stateless_x2_teardown_with_gil(rec):
+    # DEVIATION 2518 variant (b). MOJOLEARN_BYTE_LM_TEARDOWN_WITH_GIL=1: the
+    # trainer and context are released after the GILReleased block, with
+    # the GIL held, the resident close() shape. Everything else is
+    # stateless_x2. A hang here that holds the GIL cannot be sampled by the
+    # child's watchdog; the parent's SIGUSR2 at the deadline is the sample.
+    rec.event('env', MOJOLEARN_BYTE_LM_TEARDOWN_WITH_GIL=os.environ.get(
+        'MOJOLEARN_BYTE_LM_TEARDOWN_WITH_GIL'))
+    case_stateless_x2(rec)
+
+
 CHILD_ENV = {
     'stateless_x2_launch_blocking': {'CUDA_LAUNCH_BLOCKING': '1'},
     'stateless_x2_keep_context': {'MOJOLEARN_BYTE_LM_KEEP_CONTEXT': '1'},
     'resident_close_reopen_keep_context': {'MOJOLEARN_BYTE_LM_KEEP_CONTEXT': '1'},
+    'stateless_x2_sync_teardown': {'MOJOLEARN_BYTE_LM_SYNC_BEFORE_TEARDOWN': '1'},
+    'stateless_x2_teardown_with_gil': {'MOJOLEARN_BYTE_LM_TEARDOWN_WITH_GIL': '1'},
 }
 
 CASE_FUNCTIONS = {name: globals()['case_' + name] for name in CASES}
@@ -571,8 +643,51 @@ CASE_FUNCTIONS = {name: globals()['case_' + name] for name in CASES}
 
 # ----------------------------------------------------------------- child
 
+def _native_stack_handler_installed():
+    """DEVIATION 2518 reach check, from inside the child: True when a C-level
+    SIGUSR2 handler is installed (signal.getsignal returns None for a handler
+    not installed from Python), i.e. tools/native_stack_dump.c was preloaded
+    and its constructor ran. SIG_DFL or a Python handler means NOT installed;
+    the watchdog must not send SIGUSR2 then (default disposition: terminate)."""
+    if not hasattr(signal, 'SIGUSR2'):
+        return False
+    try:
+        return signal.getsignal(signal.SIGUSR2) is None
+    except (ValueError, OSError):
+        return False
+
+
+def _native_stack_watchdog(rec, deadline, started):
+    """Daemon thread: at deadline minus STACK_LEAD_S, send SIGUSR2 to the
+    MAIN thread STACK_SAMPLES times, STACK_SAMPLE_GAP_S apart, and record
+    each send. Needs the GIL to run, which a native call under GILReleased
+    leaves free; a hang that holds the GIL is sampled by the parent's
+    process-directed SIGUSR2 at the deadline instead. A case that completes
+    before the lead time never fires this (the daemon dies with the process)."""
+    fire_at = started + max(deadline / 2.0, deadline - STACK_LEAD_S)
+    while True:
+        remaining = fire_at - time.time()
+        if remaining <= 0:
+            break
+        time.sleep(min(remaining, 0.5))
+    main_ident = threading.main_thread().ident
+    for sample in range(1, STACK_SAMPLES + 1):
+        try:
+            signal.pthread_kill(main_ident, signal.SIGUSR2)
+            rec.event('native_stack_signal', sample=sample, target='main_thread',
+                      sender='child_watchdog', unix_time=round(time.time(), 6))
+        except Exception as error:  # noqa: BLE001 -- record, never raise in the watchdog
+            try:
+                rec.event('native_stack_signal_failed', sample=sample, error=str(error)[:200])
+            except Exception:  # noqa: BLE001
+                pass
+            return
+        time.sleep(STACK_SAMPLE_GAP_S)
+
+
 def run_child(case, record_path, deadline):
     import faulthandler
+    started = time.time()
     stack_path = Path(record_path).with_suffix('.pystack.txt')
     stack_file = stack_path.open('w')
     faulthandler.enable(file=stack_file, all_threads=True)
@@ -582,6 +697,21 @@ def run_child(case, record_path, deadline):
     # even if the parent's signal never reaches a wedged process.
     faulthandler.dump_traceback_later(max(5.0, min(30.0, deadline / 3.0)), repeat=True, file=stack_file)
     rec = Recorder(case, record_path)
+    # DEVIATION 2518: the in-process native stack. Recorded BEFORE mojolearn
+    # is imported so a stale preload or a missing handler is visible even
+    # when the import itself hangs.
+    handler_installed = _native_stack_handler_installed()
+    rec.record['native_stack'] = dict(
+        file=os.environ.get('MOJOLEARN_NATIVE_STACK_FILE'),
+        ld_preload=os.environ.get('LD_PRELOAD'),
+        handler_installed=handler_installed,
+        main_thread_native_id=getattr(threading.main_thread(), 'native_id', None),
+        watchdog_armed=False)
+    if handler_installed and os.environ.get('MOJOLEARN_NATIVE_STACK_FILE'):
+        threading.Thread(target=_native_stack_watchdog, args=(rec, deadline, started),
+                         name='native-stack-watchdog', daemon=True).start()
+        rec.record['native_stack']['watchdog_armed'] = True
+    rec.flush()
     if os.environ.get('MOJOLEARN_NUMERIC_MODE') != 'identical':
         rec.finish('refused', 'MOJOLEARN_NUMERIC_MODE must be identical')
         return 3
@@ -640,6 +770,11 @@ def _proc_snapshot(pid):
         for tid in sorted(task.iterdir(), key=lambda p: int(p.name) if p.name.isdigit() else 0):
             threads[tid.name] = dict(stat=_read_text(tid / 'stat').strip(),
                                      wchan=_read_text(tid / 'wchan').strip(),
+                                     # DEVIATION 2518: the syscall number and
+                                     # arguments the thread is blocked in
+                                     # (202 = futex on x86_64), read from
+                                     # OUTSIDE while it is blocked.
+                                     syscall=_read_text(tid / 'syscall').strip()[:400],
                                      stack=_read_text(tid / 'stack')[:4000])
     out['threads'] = threads
     return out
@@ -686,6 +821,27 @@ def _native_stack(pid):
     return result
 
 
+def _in_process_native_stack(path, handler_installed):
+    """DEVIATION 2518: what tools/native_stack_dump.c appended for this
+    child. `samples` counts the sample headers; zero with the handler
+    installed and signals sent means the signal never reached the handler
+    (blocked mask, or a runtime handler replaced ours), which is itself a
+    finding."""
+    if path is None:
+        return dict(configured=False, note='no --native-stack-lib; only Python stacks retained')
+    text = _read_text(path)
+    samples = text.count('=== native stack sample ')
+    installed_line = '=== native stack handler installed' in text
+    out = dict(configured=True, file=str(path), handler_installed=handler_installed,
+               installed_line=installed_line, samples=samples,
+               nbytes=len(text.encode('utf-8', 'replace')))
+    if len(text) > NATIVE_STACK_RECORD_CAP:
+        out['truncated'] = True
+        text = text[:NATIVE_STACK_RECORD_CAP // 2] + '\n...[truncated]...\n' + text[-NATIVE_STACK_RECORD_CAP // 2:]
+    out['contents'] = text
+    return out
+
+
 def _hang_diagnostics(pid):
     diag = {}
     ticks0 = _cpu_ticks(pid)
@@ -701,13 +857,23 @@ def _hang_diagnostics(pid):
     return diag
 
 
-def run_case(case, out, deadline, python):
+def run_case(case, out, deadline, python, native_stack_lib=None):
     record_path = out / (case + '.json')
     log_path = out / (case + '.log')
     env = dict(os.environ)
     env['MOJOLEARN_NUMERIC_MODE'] = 'identical'
     env.setdefault('PYTHONUNBUFFERED', '1')
     env.update(CHILD_ENV.get(case, {}))
+    native_stack_path = None
+    if native_stack_lib is not None:
+        # DEVIATION 2518: preload the SIGUSR2 backtrace handler into the
+        # CHILD only (the parent, nvidia-smi and gdb never see it) and give
+        # it a per-case file in the case directory. The library installs a
+        # handler and nothing else, so a passing case is unchanged.
+        native_stack_path = out / (case + NATIVE_STACK_SUFFIX)
+        prior = env.get('LD_PRELOAD', '')
+        env['LD_PRELOAD'] = str(native_stack_lib) + ((':' + prior) if prior else '')
+        env['MOJOLEARN_NATIVE_STACK_FILE'] = str(native_stack_path)
     argv = [python, os.path.abspath(__file__), '--case', case, '--record', str(record_path),
             '--deadline', str(deadline)]
     started = time.time()
@@ -720,6 +886,19 @@ def run_case(case, out, deadline, python):
             child.wait(timeout=deadline)
         except subprocess.TimeoutExpired:
             timed_out = True
+            parent_sigusr2 = None
+            if native_stack_path is not None and hasattr(signal, 'SIGUSR2'):
+                # DEVIATION 2518 fallback sample: process-directed, so the
+                # kernel offers it to the main thread first; covers a hang
+                # that holds the GIL (the child's watchdog cannot run then).
+                # Only when the preload was configured: without a handler
+                # SIGUSR2 would terminate the child before its diagnostics.
+                try:
+                    os.kill(child.pid, signal.SIGUSR2)
+                    parent_sigusr2 = dict(sent=True, unix_time=round(time.time(), 6))
+                except OSError as error:
+                    parent_sigusr2 = dict(sent=False, error=str(error))
+                time.sleep(1.0)
             if hasattr(signal, 'SIGUSR1'):
                 try:
                     os.kill(child.pid, signal.SIGUSR1)
@@ -727,6 +906,7 @@ def run_case(case, out, deadline, python):
                     pass
                 time.sleep(2.0)
             diagnostics = _hang_diagnostics(child.pid)
+            diagnostics['native']['parent_sigusr2'] = parent_sigusr2
             try:
                 os.killpg(child.pid, signal.SIGKILL)
             except OSError:
@@ -738,12 +918,25 @@ def run_case(case, out, deadline, python):
         record = json.loads(record_path.read_text())
     except (OSError, ValueError) as error:
         record = dict(unreadable=str(error))
+    handler_installed = ((record.get('native_stack') or {}).get('handler_installed')
+                         if isinstance(record, dict) else None)
+    if diagnostics is not None:
+        # The file is complete only after the child is dead (the handler
+        # appends), so it is read here, after the kill.
+        diagnostics['native']['in_process'] = _in_process_native_stack(native_stack_path, handler_installed)
+    native_stack_summary = None
+    if native_stack_path is not None:
+        text = _read_text(native_stack_path)
+        native_stack_summary = dict(file=str(native_stack_path), handler_installed=handler_installed,
+                                    installed_line='=== native stack handler installed' in text,
+                                    samples=text.count('=== native stack sample '))
     result = dict(case=case, argv=argv, env_overrides=CHILD_ENV.get(case, {}),
                   exit_code=child.returncode, wall_s=round(wall, 3), deadline_s=deadline,
                   timed_out=timed_out,
                   status='timeout' if timed_out else (record.get('status') if isinstance(record, dict) else None),
                   record=record, log=str(log_path),
                   python_stacks=_read_text(record_path.with_suffix('.pystack.txt'))[-20000:],
+                  native_stack=native_stack_summary,
                   hang_diagnostics=diagnostics)
     with (out / (case + '.result.json')).open('w') as stream:
         json.dump(result, stream, indent=1, sort_keys=True)
@@ -809,12 +1002,45 @@ def _keeper_reached(results, case):
     return dict(observed=False)
 
 
+def _teardown_variant_reached(results, case):
+    """DEVIATION 2518: whether the binding printed the variant's witness line
+    into the case log (the switch was read as "1" and the branch ran)."""
+    switch, witness = TEARDOWN_VARIANT_CASES[case]
+    for result in results:
+        if result['case'] != case:
+            continue
+        log = _read_text(result.get('log') or '')
+        return dict(observed=True, switch=switch, env=(result.get('env_overrides') or {}).get(switch),
+                    reached=witness in log, witness_count=log.count(witness))
+    return dict(observed=False, switch=switch)
+
+
+def _native_stack_reached(results):
+    """Per case: handler installed, watchdog armed, samples written."""
+    out = {}
+    for result in results:
+        record = result.get('record') or {}
+        ns = record.get('native_stack') or {}
+        summary = result.get('native_stack') or {}
+        events = record.get('events') or []
+        out[result['case']] = dict(
+            handler_installed=ns.get('handler_installed'),
+            watchdog_armed=ns.get('watchdog_armed'),
+            signals_sent=sum(1 for e in events if e.get('name') == 'native_stack_signal'),
+            samples=summary.get('samples'),
+            timed_out=result['timed_out'])
+    return out
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--out', type=Path, help='new output directory (parent mode)')
     parser.add_argument('--deadline', type=float, default=DEFAULT_DEADLINE, help='seconds per case')
     parser.add_argument('--cases', default=','.join(CASES), help='comma-separated subset, in order')
     parser.add_argument('--python', default=sys.executable, help='interpreter for the children')
+    parser.add_argument('--native-stack-lib', type=Path, default=None,
+                        help='DEVIATION 2518: built tools/native_stack_dump.c, LD_PRELOADed into '
+                             'each child for the in-process SIGUSR2 backtrace')
     parser.add_argument('--case', help=argparse.SUPPRESS)
     parser.add_argument('--record', help=argparse.SUPPRESS)
     args = parser.parse_args()
@@ -830,17 +1056,23 @@ def main():
         parser.error('unknown cases: %s (known: %s)' % (unknown, ', '.join(CASES)))
     if not 5 <= args.deadline <= 1800:
         parser.error('--deadline must be in [5, 1800] seconds')
+    native_stack_lib = None
+    if args.native_stack_lib is not None:
+        native_stack_lib = args.native_stack_lib.resolve()
+        if not native_stack_lib.is_file():
+            parser.error('--native-stack-lib is not a file: %s' % native_stack_lib)
     out = args.out
     out.mkdir(parents=True, exist_ok=False)
     results = []
     for case in cases:
         print('== %s (deadline %.0fs)' % (case, args.deadline), flush=True)
-        result = run_case(case, out, args.deadline, args.python)
+        result = run_case(case, out, args.deadline, args.python, native_stack_lib)
         results.append(result)
         print('   %s exit=%s wall=%.1fs' % (result['status'], result['exit_code'], result['wall_s']), flush=True)
     summary = dict(
         schema='byte-lm-lifetime-diag.summary.v1',
-        deviation=[2494, 2513],
+        deviation=[2494, 2513, 2518],
+        native_stack_lib=(str(native_stack_lib) if native_stack_lib else None),
         fixture=dict(shape=FIXTURE, seed=FIXTURE_SEED, scale=FIXTURE_SCALE),
         deadline_s=args.deadline,
         python=args.python,
@@ -859,6 +1091,10 @@ def main():
             for case in ('control_kmeans_x2', 'control_extratrees_x2')},
         keeper_reached={
             case: _keeper_reached(results, case) for case in KEEP_CONTEXT_CASES},
+        # DEVIATION 2518: the variant witness lines and the stack samples.
+        teardown_variant_reached={
+            case: _teardown_variant_reached(results, case) for case in TEARDOWN_VARIANT_CASES},
+        native_stack_reached=_native_stack_reached(results),
         hung=[r['case'] for r in results if r['timed_out']],
         failed=[r['case'] for r in results if not r['timed_out'] and r['exit_code'] != 0],
         passed=[r['case'] for r in results if r['exit_code'] == 0],

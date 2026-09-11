@@ -264,6 +264,19 @@ def _byte_lm_run(addresses: PythonObject, params: PythonObject, shape: ByteConfi
     # DEVIATION 2513: one getenv per call, same cost class as `ton`; the
     # keeper itself is touched only on a call that creates a context.
     var keep_context = String(getenv("MOJOLEARN_BYTE_LM_KEEP_CONTEXT")) == "1"
+    # DEVIATION 2518: two OPT-IN teardown variants for the stateless path
+    # (retain=False) only, one getenv each per call, OFF by default, no
+    # effect on the resident session or on any arithmetic. Each prints one
+    # witness line when it is on, so a run can prove the branch was reached.
+    #   sync_before_teardown: synchronize() immediately before the trainer
+    #     (its ~250 buffers) is released, and again after that release and
+    #     before the context is released, so every stream-ordered buffer
+    #     free has drained while the context is still alive.
+    #   teardown_with_gil: release the trainer and the context AFTER the
+    #     GILReleased block, i.e. with the GIL held, the way close() does,
+    #     instead of inside it.
+    var sync_before_teardown = String(getenv("MOJOLEARN_BYTE_LM_SYNC_BEFORE_TEARDOWN")) == "1"
+    var teardown_with_gil = String(getenv("MOJOLEARN_BYTE_LM_TEARDOWN_WITH_GIL")) == "1"
     var tk = Int(perf_counter_ns())
     # No GPU work before all borrowed inputs become validated owned host lists.
     var initial_p = _read_f32(addr[0], n)
@@ -390,16 +403,34 @@ def _byte_lm_run(addresses: PythonObject, params: PythonObject, shape: ByteConfi
             _btick(ton, tk, "step.bind_validate_outputs")
             ctx.synchronize()
             _btick(ton, tk, "step.bind_final_sync")
-            if not retain:
+            if not retain and not teardown_with_gil:
                 # Already synchronized: preserve the stateless teardown without
                 # adding close()'s second drain to the comparison baseline.
-                session.trainer = None
-                session.ctx = None
+                if sync_before_teardown:
+                    # DEVIATION 2518 variant (a): drain before the trainer's
+                    # buffers are released, and drain the frees they enqueue
+                    # before the context goes.
+                    print("byte LM teardown variant: sync_before_teardown")
+                    session.ctx.value().synchronize()
+                    session.trainer = None
+                    session.ctx.value().synchronize()
+                    session.ctx = None
+                else:
+                    session.trainer = None
+                    session.ctx = None
     except error:
         session.busy = False
         raise error
     session.busy = False
     session.usable = retain
+    if not retain and teardown_with_gil:
+        # DEVIATION 2518 variant (b): the same two releases, after the
+        # GILReleased block has re-acquired the GIL (the resident close()
+        # shape: synchronized above, released with the GIL held). Off, the
+        # teardown above ran and both Optionals are already empty.
+        print("byte LM teardown variant: teardown_with_gil")
+        session.trainer = None
+        session.ctx = None
     # Publication starts after the synchronized GPU scope succeeds. The
     # Python wrapper commits these fresh arrays atomically to its state object.
     _write_f32(addr[5], out_p)

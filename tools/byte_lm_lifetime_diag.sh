@@ -9,18 +9,27 @@
 #   1. builds the base binding (host helpers), the trees binding (the
 #      DEVIATION 2513 ExtraTrees control) and the byte LM binding, all
 #      IDENTICAL, for this box's GPU,
-#   2. runs tools/byte_lm_lifetime_diag.py (each case in its own
+#   2. compiles tools/native_stack_dump.c (DEVIATION 2518) with the box's C
+#      compiler; the harness LD_PRELOADs it into every child so a hung child
+#      writes its own glibc backtrace on SIGUSR2 (ptrace is refused in the
+#      pod, run 5, so gdb and py-spy cannot); no compiler = a status line
+#      and Python stacks only,
+#   3. runs tools/byte_lm_lifetime_diag.py (each case in its own
 #      subprocess with a per-case deadline, stacks retained on timeout);
-#      17 cases since DEVIATION 2513 (3 controls through other bindings,
-#      2 MOJOLEARN_BYTE_LM_KEEP_CONTEXT=1 variants), worst case 17 x 120 s,
-#   3. leaves everything under /root/gemm_leg_out/byte-lm-lifetime/, which
+#      19 cases since DEVIATION 2518 (3 controls through other bindings,
+#      2 MOJOLEARN_BYTE_LM_KEEP_CONTEXT=1 variants, 2 teardown variants),
+#      worst case 19 x 120 s,
+#   4. leaves everything under /root/gemm_leg_out/byte-lm-lifetime/, which
 #      the leg fetches home as remote/byte-lm-lifetime/.
 #
 # Knobs (all optional):
 #   MOJOLEARN_GPU_ARCHS            sm_NN; otherwise read from nvidia-smi
 #   MOJOLEARN_TARGET_COLUMN        passed to the build script when set
 #   BYTE_LM_LIFETIME_DEADLINE      seconds per case (default 120)
-#   BYTE_LM_LIFETIME_CASES         comma-separated subset (default: all)
+#   BYTE_LM_LIFETIME_CASES         comma-separated subset (default: all);
+#                                  the DEVIATION 2518 short leg is
+#                                  stateless_x1,stateless_x2,stateless_x2_sync_teardown,stateless_x2_teardown_with_gil
+#   BYTE_LM_LIFETIME_NO_NATIVE_STACK=1  skip the native_stack_dump.c preload
 #   BYTE_LM_LIFETIME_OUT           output directory (default below)
 #
 # No claim follows from this file; it records what the box did.
@@ -157,10 +166,40 @@ fi
 pixi run python3 -m pip install -q py-spy > "$OUT/pyspy_install.log" 2>&1 || true
 export PATH="$ROOT/.pixi/envs/default/bin:$PATH"
 { echo "gdb=$(command -v gdb || echo none)"; echo "py-spy=$(command -v py-spy || echo none)"; } >> "$OUT/status.txt"
+# DEVIATION 2518: the in-process native stack. gdb attached in run 5 but
+# ptrace is refused in the pod ("Inappropriate ioctl for device"), so the
+# child has to write its own backtrace. Compiled here on the box (gcc is on
+# the pod image); the harness preloads it into the CHILDREN only. A missing
+# compiler or a failed build is a status line, never a failed run.
+stack_arg=""
+if [ "${BYTE_LM_LIFETIME_NO_NATIVE_STACK:-0}" = 1 ]; then
+    echo "native_stack_lib=disabled" >> "$OUT/status.txt"
+else
+    NSD_CC=""
+    for candidate in cc gcc clang; do
+        if command -v "$candidate" > /dev/null 2>&1; then NSD_CC=$(command -v "$candidate"); break; fi
+    done
+    if [ -z "$NSD_CC" ]; then
+        say "byte-lm-lifetime: no C compiler; native stack preload skipped (Python stacks only)"
+        echo "native_stack_lib=none (no compiler)" >> "$OUT/status.txt"
+    else
+        "$NSD_CC" --version > "$OUT/native_stack_build.log" 2>&1 || true
+        if "$NSD_CC" -shared -fPIC -O1 -g -o "$OUT/native_stack_dump.so" tools/native_stack_dump.c \
+                >> "$OUT/native_stack_build.log" 2>&1 && [ -f "$OUT/native_stack_dump.so" ]; then
+            sha256sum "$OUT/native_stack_dump.so" >> "$OUT/native_stack_build.log" 2>&1 || true
+            stack_arg="--native-stack-lib $OUT/native_stack_dump.so"
+            echo "native_stack_lib=$OUT/native_stack_dump.so cc=$NSD_CC" >> "$OUT/status.txt"
+            say "byte-lm-lifetime: native stack preload built with $NSD_CC"
+        else
+            say "byte-lm-lifetime: native_stack_dump.c did not build; see $OUT/native_stack_build.log"
+            echo "native_stack_lib=none (build failed, cc=$NSD_CC)" >> "$OUT/status.txt"
+        fi
+    fi
+fi
 run_started=$(date +%s)
 MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH="$ROOT/python" PYTHONUNBUFFERED=1 \
     timeout -k 30 3000 pixi run python3 tools/byte_lm_lifetime_diag.py \
-        --out "$OUT/cases" --deadline "$DEADLINE" $cases_arg > "$OUT/harness.log" 2>&1
+        --out "$OUT/cases" --deadline "$DEADLINE" $cases_arg $stack_arg > "$OUT/harness.log" 2>&1
 run_rc=$?
 echo "harness_exit=$run_rc run_seconds=$(( $(date +%s) - run_started ))" >> "$OUT/status.txt"
 say "byte-lm-lifetime: harness exit $run_rc after $(( $(date +%s) - run_started ))s"
@@ -179,6 +218,13 @@ for case, eq in s.get('control_fit_equality', {}).items():
     print(case, 'fit1 == fit2:', eq.get('all_bit_equal') if eq.get('compared') else 'not compared')
 for case, k in s.get('keeper_reached', {}).items():
     print(case, 'keeper_active:', k.get('keeper_active'), 'env:', k.get('keep_context_env'))
+# DEVIATION 2518: each variant's witness line, and the native stack reach.
+for case, k in s.get('teardown_variant_reached', {}).items():
+    print(case, 'variant reached:', k.get('reached'), 'env:', k.get('env'))
+for case, k in s.get('native_stack_reached', {}).items():
+    if k.get('timed_out') or k.get('handler_installed') is not True:
+        print(case, 'native stack: handler', k.get('handler_installed'), 'watchdog', k.get('watchdog_armed'),
+              'signals', k.get('signals_sent'), 'samples', k.get('samples'))
 print('hung:', s['hung'], 'failed:', s['failed'])
 PYEOF
 fi
