@@ -1,0 +1,22 @@
+started=2026-09-11T17:16:42Z datasets=taxi istella cells=xgb commit= gpu_archs=gfx942 target_column=amd
+venv=1 17:16:43
+pixi_install=0 17:16:43
+taxi_fetch=cdn, sha256 of both months matches the Mac 17:16:44
+venv_uv=0 17:16:44
+venv_via=uv CPython 3.12 (this runtime's python3 is '3.12')
+pip_base=0 17:17:12
+xgb_rocm_index=https://pypi.amd.com/rocm-6.4.4/simple (rocm major '6')
+pip_amd_xgboost=0 17:17:14
+decode_taxi=0 17:17:18
+build_base=0 17:17:31
+xgb_rocm_probe=0 17:17:43
+xgb_rocm_works=yes
+lightgbm_opencl_works=SKIPPED (cells=xgb, MOJOLEARN_TREES_HA_LGBM_OPENCL=1; the one OpenCL attempt ran on another leg)
+build_gbdt=0 17:18:51
+build_rf=0 17:19:18
+build_trees=0 17:19:44
+istella_fetch=ok, sha256 matches the Mac 17:32:58
+decode_istella=0 17:36:42
+MOJO_PYTHON_LIBRARY=/usr/lib/x86_64-linux-gnu/libpython3.12.so.1.0
+import_identical=0 17:36:43
+setup_finished=2026-09-11T17:36:43Z

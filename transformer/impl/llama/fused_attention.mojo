@@ -100,6 +100,7 @@ from core.device_scan import (
     nonfinite_partial_kernel,
 )
 from checks.kernel_matrix import (
+    ATTN_DEFAULT_WORD_BASELINE,
     ATTN_DEFAULT_WORD_STASH_TILED,
     ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF,
     TARGET_COLUMN,
@@ -579,6 +580,9 @@ def fused_attention_arm_from_env() raises -> Int:
     row (DEVIATION 2534) is asserted here: the matrix's literal words are
     this file's bits, and the default carries nothing a shipped build does
     not compile or cannot run as named."""
+    comptime assert ATTN_DEFAULT_WORD_BASELINE == ATTN_ARM_BASELINE, (
+        "kernel_matrix ATTN_DEFAULT_WORD_BASELINE must equal ATTN_ARM_BASELINE"
+    )
     comptime assert ATTN_DEFAULT_WORD_STASH_TILED == ATTN_ARM_STASH_TILED, (
         "checks/kernel_matrix.mojo ATTN_DEFAULT_WORD_STASH_TILED no longer"
         " spells this file's stash_tiled bits; fix the literal there"

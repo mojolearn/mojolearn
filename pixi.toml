@@ -383,15 +383,15 @@ check-permutation-count = "mojo run -I . checks/permutation_count_check.mojo"
 # conserves every leaf SIZE and is why the gate is row-wise. Own main().
 check-leaf-partition = "mojo run -I . checks/leaf_partition_check.mojo"
 
-# DEVIATIONS 2550 (X read in place) and 2551 (device leaf partition), both
-# opt-in, one named check per side. Claim 1 compares the device partition
-# with the host one on every build; claim 2 prints one MODEL_HASH per lane,
-# which must be equal across the three builds. IDENTICAL tier.
+# DEVIATIONS 2550 (X read in place) and 2551 (device leaf partition), one
+# named check per side, IDENTICAL tier. Both are the IDENTICAL default since
+# 2026-09-11, so check-gbdt-per-round runs both ON sides and the two tasks
+# below name the OPT-OUT sides (ENGINEERING_RULES 8). Claim 1 compares the
+# device partition with the host one on every build; claim 2 prints one
+# MODEL_HASH per lane, which must be equal across the three builds.
 check-gbdt-per-round = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/gbdt_per_round_check.mojo"
-# DEVIATION 2550 is the default since 2026-09-11: check-gbdt-per-round runs
-# its ON side, and this task names its OPT-OUT side (ENGINEERING_RULES 8).
 check-gbdt-per-round-2550-host-copy = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_2550_HOST_COPY=1 -I . checks/gbdt_per_round_check.mojo"
-check-gbdt-per-round-2551 = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_2551_DEVICE_PARTITION=1 -I . checks/gbdt_per_round_check.mojo"
+check-gbdt-per-round-2551-host-partition = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_2551_DEVICE_PARTITION_OFF=1 -I . checks/gbdt_per_round_check.mojo"
 
 # `nan_mode`: NaN gets a bin of its own at one end of the grid, and CatBoost
 # does it entirely in quantization -- one border of the column's budget is

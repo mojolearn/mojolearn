@@ -1,0 +1,1 @@
+{"name":"mojolearn-extra-cpu-amd","region":"nyc1","size":"s-4vcpu-8gb-amd","image":"ubuntu-24-04-x64","ssh_keys":["df:f7:6b:0c:56:da:48:a5:6f:6d:ae:44:af:de:f3:0b"],"tags":["extra"]}

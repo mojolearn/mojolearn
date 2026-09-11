@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+# ENGINEERING_RULES.md section 9 (2026-09-11): every fixture here is a generator, a correctness and smoke fixture only; the classical timing path on taxi and Istella-S is tools/classical_two_datasets.py (DEVIATION 2570).
 """How fast our FAST path is on the classical lanes: ONE driver, ONE lane per run.
 
     MOJOLEARN_SPEED_LANE=kmeans \\

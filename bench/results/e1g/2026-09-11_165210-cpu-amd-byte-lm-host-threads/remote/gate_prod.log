@@ -1,0 +1,10 @@
+gate: PASS: 33/33 loss bytes equal
+gate: host DO-Premium-AMD x86_64
+gate: probe final_heldout00_full 2e2408f47392b4a1b69a791cf4672cdf6e49fcc0f576e9bcd6b7018f0ffaa6c4
+gate: probe final_heldout00_row0 f54cc3905b65d43461a51b38c2b743ebe7afb55724f37069e5c775d3a81784e7
+gate: probe final_heldout00_row0_len1 8f46027a73524437c25bc9988e309fdc3f37a4210447a56577f2ed1a1401e839
+gate: probe final_heldout00_next_bytes [32, 32]
+gate: probe final_heldout00_full_threaded 2e2408f47392b4a1b69a791cf4672cdf6e49fcc0f576e9bcd6b7018f0ffaa6c4
+gate: probe final_heldout00_row0_threaded f54cc3905b65d43461a51b38c2b743ebe7afb55724f37069e5c775d3a81784e7
+gate: probe final_heldout00_row0_len1_threaded 8f46027a73524437c25bc9988e309fdc3f37a4210447a56577f2ed1a1401e839
+gate: probe final_heldout00_next_bytes_threaded [32, 32]

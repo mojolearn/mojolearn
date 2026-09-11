@@ -1,0 +1,16 @@
+deviations=2525-2527
+started=2026-09-11T17:22:56Z
+root=/root/mojolearn
+arms=stash_tiled,stash_tiled_fgrid_r32_qres_pf
+lm_arms=baseline,stash_tiled,stash_tiled_fgrid_r32_qres_pf
+baseline_arm=baseline deviations_second_round=2528,2530,2531,2533
+rounds=7 warmups=2 deadline=300
+vendor=amd gpu_archs=gfx942 column=amd jobs=8
+skip_timers=1 skip_lm=0
+vendor=amd
+commit=a1a22f3faef296ae50f142a2f9e02ad3869e5b57
+deviation_default_row=2534 shipped_check=0
+harness: DEFAULT column=amd arm=stash_tiled_fgrid_r32_qres_pf source=kernel_matrix.attn_default_arm_for baseline_is_default=False candidate_is_default=False baseline_requested=baseline candidate_requested=stash_tiled
+corpora= enwik8=training/corpus/enwik8/input.txt pilegithub=training/corpus/pile_github/input.txt
+file_kinds=file:/root/gemm_leg_out/attention-step/operands-enwik8,file:/root/gemm_leg_out/attention-step/operands-pilegithub
+finished=2026-09-11T17:38:21Z

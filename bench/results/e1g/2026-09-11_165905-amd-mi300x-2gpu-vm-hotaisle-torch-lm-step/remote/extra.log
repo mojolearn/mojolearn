@@ -1,0 +1,86 @@
+---- vendor=amd
+== date 2026-09-11T17:02:19Z
+== rocm-smi --showproductname --showdriverversion
+
+
+============================ ROCm System Management Interface ============================
+============================== Version of System Component ===============================
+Driver version: 6.16.13
+==========================================================================================
+====================================== Product Info ======================================
+GPU[0]		: Card Series: 		AMD Instinct MI300X VF
+GPU[0]		: Card Model: 		0x74b5
+GPU[0]		: Card Vendor: 		Advanced Micro Devices, Inc. [AMD/ATI]
+GPU[0]		: Card SKU: 		M3000108
+GPU[0]		: Subsystem ID: 	0x74a1
+GPU[0]		: Device Rev: 		0x00
+GPU[0]		: Node ID: 		3
+GPU[0]		: GUID: 		46235
+GPU[0]		: GFX Version: 		gfx942
+==========================================================================================
+================================== End of ROCm SMI Log ===================================
+== rocm-smi --showuse --showmemuse --showtemp
+
+
+============================ ROCm System Management Interface ============================
+====================================== Temperature =======================================
+GPU[0]		: Temperature (Sensor junction) (C): 42.0
+GPU[0]		: Temperature (Sensor memory) (C): 36.0
+==========================================================================================
+=================================== % time GPU is busy ===================================
+GPU[0]		: GPU use (%): 0
+==========================================================================================
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 0
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Not supported on the given system
+==========================================================================================
+================================== End of ROCm SMI Log ===================================
+== amd-smi version
+AMDSMI Tool: 25.4.2+aca1101 | AMDSMI Library version: 25.4.0 | ROCm version: 6.4.1 | amdgpu version: 6.16.13 | amd_hsmp version: N/A
+== /opt/rocm/.info/version
+6.4.1-83
+/opt/rocm-6.4.1
+---- versions (/root/.venv-torch-lm-step/bin/python)
+python 3.12.11 /root/.venv-torch-lm-step/bin/python
+torch 2.6.0+rocm6.4.1.git1ded221d
+torch.version.cuda None
+torch.version.hip 6.4.43483-a187df25c
+cuda api available True
+device AMD Instinct MI300X VF capability (9, 4)
+cudnn/miopen 3004000
+cuda bf16 supported True
+numpy 1.26.4
+---- summary
+column	corpus	median_seconds	tokens_per_second	sdpa_selected	sdpa_observed
+eager_fp32	enwik8	0.050049	40919.7	efficient	efficient
+eager_fp32	pile_github	0.049994	40965.1	efficient	efficient
+eager_tf32	enwik8	NOT_APPLICABLE	NOT_APPLICABLE	NOT_APPLICABLE	NOT_APPLICABLE
+eager_tf32	pile_github	NOT_APPLICABLE	NOT_APPLICABLE	NOT_APPLICABLE	NOT_APPLICABLE
+eager_bf16	enwik8	0.033746	60688.5	torch_default	flash
+eager_bf16	pile_github	0.039200	52244.6	torch_default	flash
+compile_fp32	enwik8	0.045101	45408.7	efficient	efficient
+compile_fp32	pile_github	0.045270	45239.6	efficient	efficient
+compile_tf32	enwik8	NOT_APPLICABLE	NOT_APPLICABLE	NOT_APPLICABLE	NOT_APPLICABLE
+compile_tf32	pile_github	NOT_APPLICABLE	NOT_APPLICABLE	NOT_APPLICABLE	NOT_APPLICABLE
+compile_bf16	enwik8	0.032278	63449.6	torch_default	flash
+compile_bf16	pile_github	0.020544	99686.7	torch_default	flash
+---- status
+torch-python	1	0s
+torch-pin	0	215s
+corpus-enwik8	0	2s
+corpus-pile-github	0	44s
+eager_fp32-enwik8	0	20s
+eager_fp32-pile_github	0	19s
+eager_tf32-enwik8	4	11s
+eager_tf32-pile_github	4	11s
+eager_bf16-enwik8	0	29s
+eager_bf16-pile_github	0	28s
+compile_fp32-enwik8	0	41s
+compile_fp32-pile_github	0	28s
+compile_tf32-enwik8	4	12s
+compile_tf32-pile_github	4	12s
+compile_bf16-enwik8	0	50s
+compile_bf16-pile_github	0	40s
+summary	0	0s

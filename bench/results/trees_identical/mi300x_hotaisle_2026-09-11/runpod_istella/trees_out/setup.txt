@@ -1,0 +1,23 @@
+started=2026-09-11T16:34:52Z leg=istella commit= gpu_archs= target_column=
+pixi_install=0 16:34:52
+venv_uv=0 16:34:55
+venv_via=uv CPython 3.12 (this runtime's python3 is '3.10')
+pip_base=0 16:35:15
+xgb_rocm_index=https://pypi.amd.com/rocm-6.4.4/simple (rocm major '6')
+pip_amd_xgboost=1 16:35:16
+xgb_rocm_works=NO (install failed)
+pip_xgboost_cpu=0 16:35:24
+build_base=0 16:35:29
+lightgbm_opencl_works=SKIPPED (MOJOLEARN_TREES_HA_LGBM_OPENCL=0: the one OpenCL attempt ran on the other leg)
+build_gbdt=0 16:36:29
+build_rf=0 16:36:51
+build_trees=0 16:37:12
+build_fast_gbdt=0 16:38:24
+build_fast_rf=0 16:38:44
+build_fast_trees=0 16:39:06
+istella_fetch=ok, sha256 matches the Mac 16:40:34
+decode_istella=0 16:43:16
+MOJO_PYTHON_LIBRARY=/root/.local/share/uv/python/cpython-3.12.14-linux-x86_64-gnu/lib/libpython3.12.so.1.0
+import_identical=0 16:43:16
+import_fast=0 16:43:16
+setup_finished=2026-09-11T16:43:16Z

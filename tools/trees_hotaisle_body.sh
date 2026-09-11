@@ -290,13 +290,15 @@ fetch_istella() {
 
 track_data() {
     # Downloads need no Python and start at once; each decode waits for pip.
-    for _d in $LEGS; do
-        if "fetch_$_d"; then
+    # The loop variable is _ds: the fetch functions assign _d, and POSIX sh
+    # has no locals (the first cells=xgb pod decoded a path and timed nothing).
+    for _ds in $LEGS; do
+        if "fetch_$_ds"; then
             wait_for "$OUT/track_pip_base.done"
-            step "decode_$_d" 1500 "$PY" tools/speed_gbdt_arm.py --download "$_d"
-            if [ -s "$DATA/$_d/${_d}_speed.npz" ]; then : > "$OUT/data.ok.$_d"; fi
+            step "decode_$_ds" 1500 "$PY" tools/speed_gbdt_arm.py --download "$_ds"
+            if [ -s "$DATA/$_ds/${_ds}_speed.npz" ]; then : > "$OUT/data.ok.$_ds"; fi
         fi
-        ls -la "$DATA/$_d" >> "$OUT/datasets_listing.txt" 2>&1
+        ls -la "$DATA/$_ds" >> "$OUT/datasets_listing.txt" 2>&1
     done
     : > "$OUT/track_data.done"
 }

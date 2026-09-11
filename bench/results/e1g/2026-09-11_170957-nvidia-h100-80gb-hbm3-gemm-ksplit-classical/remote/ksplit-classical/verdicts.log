@@ -1,0 +1,25 @@
+RULE a caller REGRESSES when geomean(default/tuned128 median ratio over taxi and Istella-S) > 1 + noise (the largest block-to-block spread of either arm's block medians on either dataset), or when a quality metric is WORSE; else it HOLDS. Every output hash must agree across arms and blocks (else IDENTITY-BREAK).
+== caller gp ==
+flip_verdict: ERROR no FSPEED line in any input log
+time gp taxi: unmeasured (tuned128 rounds 0, default rounds 0)
+time gp istella: unmeasured (tuned128 rounds 0, default rounds 0)
+caller=gp verdict=UNMEASURED reason=missing:taxi,istella geomean=- noise=unmeasured taxi=- istella=- witness_taxi=- witness_istella=- flip_verdict=[no output, exit 2]
+== caller ols ==
+selected lane=ols arm=ours
+time taxi: no FSPEED line for lane=ols arm=ours in the before logs
+time istella shape=istella-2043304x220: before median=4290.565 ms n=6, after median=4226.428 ms n=6, ratio=0.985
+quality istella rmse: before=0.891644 after=0.891644 delta=+0.000000 n=2/2 lower-is-better tol=8.92e-05 ok
+NO FLIP geomean=- taxi=- istella=0.985 reason=missing:taxi
+time ols taxi: unmeasured (tuned128 rounds 0, default rounds 0)
+time ols istella: default/tuned128=0.9851 block_noise=0.0416 blocks=2/2 witness=equal
+caller=ols verdict=UNMEASURED reason=missing:taxi geomean=- noise=unmeasured taxi=- istella=0.9851 witness_taxi=- witness_istella=equal flip_verdict=[NO FLIP geomean=- taxi=- istella=0.985 reason=missing:taxi]
+== caller pca ==
+selected lane=pca arm=ours
+time taxi: no FSPEED line for lane=pca arm=ours in the before logs
+time istella shape=istella-2043304x220c8: before median=2128.932 ms n=6, after median=2143.807 ms n=6, ratio=1.007
+quality istella mse: before=0.393163 after=0.393163 delta=+0.000000 n=2/2 lower-is-better tol=3.93e-05 ok
+NO FLIP geomean=- taxi=- istella=1.007 reason=missing:taxi
+time pca taxi: unmeasured (tuned128 rounds 0, default rounds 0)
+time pca istella: default/tuned128=1.0070 block_noise=0.0018 blocks=2/2 witness=equal (slower beyond noise on this dataset)
+caller=pca verdict=UNMEASURED reason=missing:taxi geomean=- noise=unmeasured taxi=- istella=1.0070 witness_taxi=- witness_istella=equal flip_verdict=[NO FLIP geomean=- taxi=- istella=1.007 reason=missing:taxi]
+CLASSICAL KSPLIT A/B gp=UNMEASURED ols=UNMEASURED pca=UNMEASURED

@@ -1,0 +1,23 @@
+Imported from /root/mojolearn/bindings/_mojolearn_byte_lm_host.mojo:19:
+./bindings/hostptr.mojo:58:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_byte_lm_host.mojo:19:
+./bindings/hostptr.mojo:69:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_byte_lm_host.mojo:23:
+./training/byte_lm_host.mojo:220:74: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                op.unsafe_store(i * n + j, _sabotaged_cell(mats[], (mats + 1)[], i, j, k))
+                                                                    ~~~~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_byte_lm_host.mojo:23:
+./training/byte_lm_host.mojo:223:52: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                    gemm_oracle_cell(mats[], (mats + 1)[], OP_NT, i, j, m, n, k, leaf))
+                                              ~~~~~^~~
+<unknown>:0: note: '__add__' declared here
+built /root/host-sab/_mojolearn_byte_lm_host.so

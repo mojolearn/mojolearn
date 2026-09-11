@@ -1,0 +1,3 @@
+nproc 192
+model name	: AMD EPYC 9474F 48-Core Processor
+cgroup cpu.max 

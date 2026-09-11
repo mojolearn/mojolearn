@@ -1,0 +1,71 @@
+== os
+OS=Ubuntu 24.04.4 LTS
+6.8.0-124-generic
+== cpu
+NPROC=26
+CPU(s):                                  26
+Model name:                              Intel(R) Xeon(R) Platinum 8470
+Thread(s) per core:                      1
+Core(s) per socket:                      26
+Socket(s):                               1
+== memory
+               total        used        free      shared  buff/cache   available
+Mem:             440           9         432           0           1         431
+== disk
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/vda2        12T   32G   12T   1% /
+/dev/vda2        12T   32G   12T   1% /
+== python
+Python 3.12.3
+== devices
+crw-rw---- 1 root render 237, 0 Sep 11 16:50 /dev/kfd
+
+/dev/dri:
+total 0
+drwxr-xr-x 2 root root        680 Sep 11 16:50 by-path
+crw-rw---- 1 root video  226,   0 Sep 11 16:50 card0
+crw-rw---- 1 root video  226,   1 Sep 11 16:50 card1
+crw-rw---- 1 root video  226,  10 Sep 11 16:50 card10
+crw-rw---- 1 root video  226,  11 Sep 11 16:50 card11
+crw-rw---- 1 root video  226,  12 Sep 11 16:50 card12
+crw-rw---- 1 root video  226,  13 Sep 11 16:50 card13
+crw-rw---- 1 root video  226,  14 Sep 11 16:50 card14
+KFD_PRESENT
+amdgpu              20250624  0
+== rocm
+/opt/rocm
+/opt/rocm-7.2.4
+ROCM_SMI_PRESENT
+
+
+============================ ROCm System Management Interface ============================
+====================================== Product Info ======================================
+GPU[0]		: Card Series: 		AMD Instinct MI300X VF
+GPU[0]		: Card Model: 		0x74b5
+GPU[0]		: Card Vendor: 		Advanced Micro Devices, Inc. [AMD/ATI]
+GPU[0]		: Card SKU: 		M3000108
+GPU[0]		: Subsystem ID: 	0x74a1
+GPU[0]		: Device Rev: 		0x00
+GPU[0]		: Node ID: 		2
+GPU[0]		: GUID: 		54554
+GPU[0]		: GFX Version: 		gfx942
+GPU[1]		: Card Series: 		AMD Instinct MI300X VF
+GPU[1]		: Card Model: 		0x74b5
+GPU[1]		: Card Vendor: 		Advanced Micro Devices, Inc. [AMD/ATI]
+GPU[1]		: Card SKU: 		M3000108
+GPU[1]		: Subsystem ID: 	0x74a1
+GPU[1]		: Device Rev: 		0x00
+GPU[1]		: Node ID: 		3
+ROCMINFO_PRESENT
+GFX=gfx942
+== runtimes
+DOCKER_OK
+Docker version 29.5.3, build d1c06ef
+PODMAN_OK
+podman version 4.9.3
+TOOL_setsid=/usr/bin/setsid
+TOOL_timeout=/usr/bin/timeout
+TOOL_curl=/usr/bin/curl
+TOOL_tar=/usr/bin/tar
+TOOL_gzip=/usr/bin/gzip
+TOOL_sha256sum=/usr/bin/sha256sum

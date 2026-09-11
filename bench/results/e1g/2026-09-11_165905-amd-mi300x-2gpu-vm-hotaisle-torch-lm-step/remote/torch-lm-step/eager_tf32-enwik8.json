@@ -1,0 +1,93 @@
+{
+  "schema": "mojolearn.torch-lm-step-opponent.v1",
+  "opponent": "torch byte LM training step (bench/OPPONENT_REFERENCE.md rows owed, item 5)",
+  "column": "eager_tf32",
+  "column_role": "extra",
+  "column_flags": {
+    "tf32": true,
+    "compile": false,
+    "compile_backend": null,
+    "compile_mode": null,
+    "dtype": "float32",
+    "autocast_dtype": null,
+    "autocast_device_type": null,
+    "autocast_scope": null,
+    "parameter_dtype": "float32",
+    "gradient_dtype": "float32",
+    "optimizer_state_dtype": "float32",
+    "grad_scaler": null,
+    "autocast_applicable": null,
+    "autocast_probe": null,
+    "nondeterministic_label": true,
+    "determinism_asserted": false,
+    "tf32_applicable": false,
+    "tf32_note": "TF32 is an NVIDIA CUDA (Ampere+) matmul mode; this torch/device accepts the flag and does nothing with it",
+    "cuda_matmul_allow_tf32": false,
+    "cudnn_allow_tf32": true,
+    "float32_matmul_precision": "high"
+  },
+  "shape_name": "target",
+  "shape": {
+    "batch": 1,
+    "length": 2048,
+    "d_model": 768,
+    "n_heads": 12,
+    "n_kv": 12,
+    "head_dim": 64,
+    "intermediate": 2048,
+    "n_layers": 12,
+    "vocab_size": 50257
+  },
+  "parameters_expected": 162147840,
+  "tokens_per_step": 2048,
+  "corpus": {
+    "name": "enwik8",
+    "path": "training/corpus/enwik8/input.txt",
+    "sha256": "2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8",
+    "bytes": 100000000,
+    "manifest_sha256": "c65094a4d6a494d2882d972c20138015b4a258b310d662d4be05fb7ba2e9b423",
+    "source_url": "http://mattmahoney.net/dc/enwik8.zip",
+    "manifest_train_batch_schedule": "step k zero-based, row b: bytes[(k*batch*2048 + b*2048) % (100000000 - 2049) : start+2049]; targets shifted one byte (tools/lm_step_memory_probe.py --corpus, tools/torch_lm_step_opponent.py); a timing run of a few steps reads inside train_range",
+    "schedule_used": "step k (zero-based, warmups first) row b: bytes[(k*batch*length + b*length) % (bytes - length - 1) : +length+1]; inputs [:, :length], targets [:, 1:] (tools/lm_step_memory_probe.py CorpusBatches)"
+  },
+  "device": "cuda",
+  "torch_build": "rocm",
+  "gpu_name": "AMD Instinct MI300X VF",
+  "gpu_capability": [
+    9,
+    4
+  ],
+  "driver": {
+    "rocm-smi": {
+      "cmd": "rocm-smi --showproductname --showdriverversion",
+      "exit": 0,
+      "output": "============================ ROCm System Management Interface ============================\n============================== Version of System Component ===============================\nDriver version: 6.16.13\n==========================================================================================\n====================================== Product Info ======================================\nGPU[0]\t\t: Card Series: \t\tAMD Instinct MI300X VF\nGPU[0]\t\t: Card Model: \t\t0x74b5\nGPU[0]\t\t: Card Vendor: \t\tAdvanced Micro Devices, Inc. [AMD/ATI]\nGPU[0]\t\t: Card SKU: \t\tM3000108\nGPU[0]\t\t: Subsystem ID: \t0x74a1\nGPU[0]\t\t: Device Rev: \t\t0x00\nGPU[0]\t\t: Node ID: \t\t3\nGPU[0]\t\t: GUID: \t\t46235\nGPU[0]\t\t: GFX Version: \t\tgfx942\n==========================================================================================\n================================== End of ROCm SMI Log ===================================",
+      "stderr": null
+    },
+    "amd-smi": {
+      "cmd": "amd-smi version",
+      "exit": 0,
+      "output": "AMDSMI Tool: 25.4.2+aca1101 | AMDSMI Library version: 25.4.0 | ROCm version: 6.4.1 | amdgpu version: 6.16.13 | amd_hsmp version: N/A",
+      "stderr": null
+    },
+    "rocm_version_file": {
+      "path": "/opt/rocm/.info/version",
+      "output": "6.4.1-83"
+    }
+  },
+  "torch_version": "2.6.0+rocm6.4.1.git1ded221d",
+  "torch_cuda": null,
+  "torch_hip": "6.4.43483-a187df25c",
+  "cudnn_or_miopen_version": 3004000,
+  "python": "3.12.11",
+  "python_executable": "/root/.venv-torch-lm-step/bin/python",
+  "host": "enc1-gpuvm005",
+  "machine": "x86_64",
+  "repo_commit": "593e580d5acc16064fab106a894a3d8e7c7ecb16",
+  "repo_commit_source": "MOJOLEARN_REPO_COMMIT",
+  "harness_sha256": "cc5b6a43b6aa16e6608535188c442a1924e68d307f16f828cbb616436ad616e6",
+  "status": "not_applicable",
+  "median_seconds": null,
+  "tokens_per_second": null,
+  "reason": "eager_tf32 on torch build 'rocm', device 'cuda': no TF32 mode exists here, so no TF32 number is invented"
+}

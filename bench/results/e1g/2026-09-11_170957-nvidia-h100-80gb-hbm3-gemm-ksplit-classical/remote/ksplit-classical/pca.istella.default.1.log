@@ -1,0 +1,11 @@
+FSPEED-HEADER family=classical lane=pca arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=section9
+3372 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5bc9c0000000, nodemask=2)
+FSPEED-NOTE lane=pca arm=ours gemm_arm=default gemm_plan=shipped:_default=ksplit(S=132)_else_tuned128 block=1 dataset=istella prep=standardize rows=2043304 features=220 test_rows=500000 x_sha256=ef66b56d5be016a3 mojolearn=/root/mojolearn/python/mojolearn/__init__.py
+FSPEED-GEMM lane=pca caller=pca.cov.istella op=TN m=220 n=220 k=2043304
+3372 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x709980000000, nodemask=1)
+FSPEED-WARMUP lane=pca arm=ours shape=istella-2043304x220c8 ms=3030.407
+FSPEED-NOTE lane=pca arm=ours numeric_mode_used=identical
+FSPEED lane=pca arm=ours shape=istella-2043304x220c8 round=1 ms=2143.949 hash=34552bdaca8cb630
+FSPEED lane=pca arm=ours shape=istella-2043304x220c8 round=2 ms=2143.666 hash=34552bdaca8cb630
+FSPEED lane=pca arm=ours shape=istella-2043304x220c8 round=3 ms=2142.888 hash=34552bdaca8cb630
+FSPEED-ACC lane=pca arm=ours metric=mse value=0.393163123

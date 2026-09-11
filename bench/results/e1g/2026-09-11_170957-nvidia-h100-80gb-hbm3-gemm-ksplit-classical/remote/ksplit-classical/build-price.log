@@ -1,0 +1,9 @@
+963 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1ad080000000, nodemask=2)
+Included from /root/mojolearn/bench/gemm_step_price_main.mojo:69:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:2994:19: warning: assignment to 's' was never used; assign to '_' instead?
+    var s = String("")
+                  ^
+Included from /root/mojolearn/bench/gemm_step_price_main.mojo:69:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:4074:19: warning: assignment to 's' was never used; assign to '_' instead?
+    var s = String("")
+                  ^
