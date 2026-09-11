@@ -1,0 +1,8 @@
+# identity_break  mode=identical  2026-09-10 23:38:39  macOS-26.5.2-arm64-arm-64bit-Mach-O
+| lane             | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+| rf-clf           | 21178dc5457bf5dc | 578c313bdad14449 | 30000a54b1ebf87f | e57dc48ebb4fda48 | 9ee018b4ad7d8c6c | 9ee018b4ad7d8c6c | 941ea7485b906b92 | 8eadf0d0c523cf9a | 5c321c2a1e99f705 |
+| rf-reg           | f032017cfd1c73dd | ec6e7b28cd0d16a9 | c755113ac878c8b9 | 8d9b05172d7a3777 | feed3869ba06eaf7 | feed3869ba06eaf7 | 55f5becd2a3a172c | 33f207a8fab32866 | cd81c456c75aaaf0 |
+
+cells=18 stable=18 moved=0 refused=0
+wrote /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/7de13e6c-b220-4235-a53a-461fcad83192/scratchpad/apple_rf_2502.json

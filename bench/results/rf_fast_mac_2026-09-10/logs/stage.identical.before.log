@@ -1,0 +1,30 @@
+FSPEED-NOTE lane=rf arms=ours metric=devices delta=1.000000 reason=devices=cpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=metal path=/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/7de13e6c-b220-4235-a53a-461fcad83192/scratchpad/wt-trees/python/mojolearn/identical/_mojolearn_rf.so
+FSPEED-SCALE stage=before rows=1000000 features=28 input_mib=106.8 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=rf arm=ours mode=IDENTICAL device=Darwin_arm64 rounds=1 size=shipped
+== MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+   NOT a certifiable timing -- see ensemble/instruments.mojo)
+  quantiles	0.013322 s
+  bin_dataset	0.03249 s
+  row_sampling	0.100222 s
+  device_wait	4.486328 s
+  leaf_values	0.255673 s
+  fit_total	18.91527 s
+  other	14.027235 s
+FSPEED-WARMUP lane=rf arm=ours shape=higgs-1000000x28 ms=19116.630
+FSPEED-ORDER lane=rf round=1 arms=ours
+== MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+   NOT a certifiable timing -- see ensemble/instruments.mojo)
+  quantiles	0.006515 s
+  bin_dataset	0.014165 s
+  row_sampling	0.06624 s
+  device_wait	4.310261 s
+  leaf_values	0.233455 s
+  fit_total	17.476638 s
+  other	12.846002 s
+FSPEED lane=rf arm=ours shape=higgs-1000000x28 round=1 ms=17579.232 hash=3ffa2951595422d4
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.538850
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.809906
+FSPEED-SCALE stage=after rows=1000000 features=28 input_mib=106.8 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
