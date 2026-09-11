@@ -30,6 +30,24 @@ direction the data barely constrains appears as a near-zero eigenvalue and
 gets DROPPED rather than divided by, which turns the inverse into a
 pseudo-inverse.
 
+TWO STEPS THAT ARE NOT IN `lstsqEig` (DEVIATIONS 2620, 2621, 2026-09-11)
+------------------------------------------------------------------------
+Their guard is an ABSOLUTE `1e-10` against an eigenvalue of `A^T A`, and on
+Istella-S (raw columns spanning seven orders of magnitude) this route
+returned R^2 -115.6 where scikit-learn gets 0.164. Two settled pieces now
+sit around the eigensolver:
+
+    2b  G <- S G S, Ab <- S Ab     S = diag(2^-ceil(e_i / 2)), G_ii = m 2^e_i:
+                                   LAPACK xPOEQUB's power-of-radix
+                                   equilibration, EXACT in float32
+    3b  keep |lam| > n eps32 max|lam|   scipy.linalg.pinvh's default rtol
+    6b  w <- S w~                  exact
+
+Both decisions (the scales and the threshold) are made on the HOST from
+bits, so every vendor keeps the same directions with the same weights.
+They move bits on every design, well conditioned or not, because `S` is not
+the identity.
+
 Implementing their non-default solver is a deliberate choice and it is recorded
 in `glm/NOT_IMPLEMENTED.tsv`: it is the one that reuses machinery this repository
 already has, and their SVD route needs a one-sided Jacobi SVD that does not
@@ -107,6 +125,7 @@ arithmetic:
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
+from std.memory import bitcast
 
 from cluster.checks.reduce_by_key import copy_f32_kernel
 from core.gemm import gemm_nt, gemm_tn, gemv_n
@@ -123,6 +142,11 @@ from decomposition.checks.jacobi_eigh_device import (
     JACOBI_TPB,
     jacobi_eigh_kernel,
 )
+from glm.impl.matrix.math import (
+    matrix_vector_binary_mult_kernel,
+    row_vector_binary_mult_kernel,
+    vector_binary_mult_kernel,
+)
 
 
 #: The elementwise launch width steps 3b and 4 used to hardcode. SCHEDULING,
@@ -130,19 +154,83 @@ from decomposition.checks.jacobi_eigh_device import (
 #: reach the value of any cell. See the module docstring.
 comptime OLS_ELEM_TPB = 256
 
-#: `DivideByNonZero`'s threshold, hoisted out of the call so the ONE place it
-#: is written is the one place a check can read.
+#: `DivideByNonZero`'s ABSOLUTE threshold, 1e-10 (`lstsq.cuh:105`).
 #:
-#: **IT IS ABSOLUTE, AND THAT IS A RECORDED DEVIATION, NOT A DESIGN.** `lam`
-#: is an eigenvalue of `A^T A`, which scales with the SQUARE of the data and
-#: with `n_rows`; a fixed 1e-10 therefore means something different for the
-#: same design in different units, which is the identical defect DEVIATION
-#: BLOCK 1 of `jacobi_eigh_device.mojo` fixed for the convergence test on the
-#: matrix one step upstream. `check_ols_rank_guard_is_absolute` MEASURES what
-#: it costs rather than arguing about it. Not changed here, because changing
-#: it moves shipped `NUMERIC_FAST` bits on any rank-deficient design and this
-#: file is COPY-DO-NOT-IMPROVE; the finding is reported instead.
+#: **NO LONGER ON THE TALL ROUTE (2026-09-11).** An absolute 1e-10 against an
+#: eigenvalue of `A^T A`, which scales with the square of the data, gave the
+#: same design rank 8 at scale 1 and rank 0 at scale 2^-24, and on Istella-S
+#: (raw columns spanning seven orders of magnitude) an R^2 of -115.6 where
+#: scikit-learn gets 0.164. `lstsq_eig` now equilibrates and cuts relative
+#: (`ols_equilibration_scale`, `ols_pinv_threshold`, DEVIATIONS 2620, 2621).
+#: This constant stays for `lstsq_min_norm`, which still cuts `A A^T` at it.
 comptime OLS_NONZERO_THRESH = Float32(1.0e-10)
+
+#: `numpy.finfo(numpy.float32).eps`, 2^-23 exactly.
+comptime OLS_PINV_EPS32 = Float64(1.1920928955078125e-07)
+
+
+def ols_pinv_threshold(max_abs_eig: Float32, n: Int) -> Float32:
+    """DEVIATION 2621. The eigenvalue cutoff of a Hermitian pseudo-inverse:
+    an eigenvalue `lam` of the `n x n` matrix is kept when
+    `|lam| > n * eps32 * max|lam|`.
+
+    SETTLED, NOT INVENTED. `scipy.linalg.pinvh` defaults `rtol` to `N * eps`
+    of the dtype and keeps `abs(s) > atol + rtol * max(abs(s))`;
+    `torch.linalg.pinv(hermitian=True)` and `numpy.linalg.matrix_rank` cut
+    at the same place. An eigenvalue of a float32 Gram matrix below it is
+    rounding, not data, and dividing by it turns rounding into a coefficient.
+
+    Host arithmetic: one exact integer-times-power-of-two product, one
+    Float64 rounding, one narrowing. The threshold is a function of the
+    eigenvalue bits alone on every machine.
+    """
+    return Float32(Float64(n) * OLS_PINV_EPS32 * Float64(max_abs_eig))
+
+
+def ols_equilibration_scale(diag: Float32) -> Float32:
+    """DEVIATION 2620. The power-of-two scale `s_i` for one diagonal entry
+    `G_ii` of the Gram matrix, chosen so that `s_i^2 G_ii` lies in [0.5, 2).
+
+    SETTLED, NOT INVENTED. LAPACK `xPOEQUB` equilibrates a symmetric positive
+    definite matrix by `S = diag(1 / sqrt(A_ii))` restricted to powers of the
+    radix, so that the scaling introduces no rounding, and `xPOSVX` solves
+    the equilibrated system. By van der Sluis (1969) that diagonal scaling is
+    within a factor `n` of the best condition number any diagonal scaling
+    reaches, and the power-of-two restriction costs at most a further 4. On
+    the columns of the design it is what cuML's `normalize=True` does
+    (`preprocess.cuh`), up to the centering the Python layer already did.
+
+    ONE ROUNDING CHOICE DIFFERS FROM `xPOEQUB`, ON PURPOSE. Theirs is
+    `INT(-0.5 * log2(A_ii))`, truncation toward zero. Ours writes
+    `G_ii = m * 2^e` with `m` in [1, 2) and uses `2^-ceil(e / 2)`, which is
+    exactly shift-invariant: the same design in units scaled by `2^j` gets
+    scales multiplied by exactly `2^-j` and a BIT-IDENTICAL equilibrated
+    matrix (`check_ols_rank_guard_is_scale_invariant`). Truncation toward
+    zero loses that across `e = 0`.
+
+    Integer arithmetic on the bits and no floating-point operation, so every
+    machine computes the same scale. A zero, negative or non-finite diagonal
+    gets scale 1: there is nothing to equilibrate, and a non-finite input
+    keeps propagating rather than being masked.
+    """
+    var bits = bitcast[DType.uint32](diag)
+    var field = Int((bits >> 23) & UInt32(0xFF))
+    var frac = bits & UInt32(0x7FFFFF)
+    if (bits >> 31) != UInt32(0) or field == 255:
+        return Float32(1.0)
+    if field == 0 and frac == UInt32(0):
+        return Float32(1.0)
+    var e = field - 127
+    if field == 0:
+        # Subnormal: value = frac * 2^-149, so e = floor(log2(frac)) - 149.
+        var width = 0
+        var f = frac
+        while f != UInt32(0):
+            f = f >> 1
+            width += 1
+        e = (width - 1) - 149
+    var k = (e + 1) // 2 if e >= 0 else -((-e) // 2)
+    return bitcast[DType.float32](UInt32(127 - k) << 23)
 
 
 def lstsq_eig(
@@ -208,7 +296,7 @@ def lstsq_eig_traced(
     algorithm and carry no machine number, per `core/identity_trace.mojo`
     rule 2, so two vendors' cards align. The rank record is the one that is
     not a rounding: `divide_columns_by_nonzero_kernel` DROPS a direction
-    whose eigenvalue is at or below `OLS_NONZERO_THRESH`, so a last-bit
+    whose eigenvalue is at or below `ols_pinv_threshold` (DEVIATION 2621), so a last-bit
     move in step 3 can change how many directions the pseudo-inverse keeps
     -- a DISCRETE output of a float comparison, and an integer stage the
     differ reads before it reads any float one.
@@ -242,6 +330,78 @@ def lstsq_eig_traced(
         ctx, "ols.step1.covA", cov_a, n_cols * n_cols
     )
     trace.record_device[DType.float32](ctx, "ols.step2.Ab", ab, n_cols)
+
+    # STEP 2b, DEVIATION 2620: EQUILIBRATE BEFORE THE EIGENSOLVER.
+    #
+    # `G_ii = m 2^e` gives `s_i = 2^-ceil(e / 2)`, computed on the host from
+    # the bits (`ols_equilibration_scale`); then `G <- S G S` and
+    # `Ab <- S Ab` on the device. Every multiply is by a power of two, so it
+    # is EXACT: no rounding is added and no vendor can round it differently.
+    # Step 6b multiplies the solution back, `w = S w~`, also exactly.
+    #
+    # WHY IT IS HERE, MEASURED (DigitalOcean MI325X, 2026-09-11, Istella-S
+    # 2,043,304 x 220, tools/ols_illconditioned_probe.py). The raw Gram's
+    # largest eigenvalue is 4.75e19, so the Jacobi's float32 `||G||_F^2`
+    # overflows to inf, its stopping test `2 off <= tol^2 ||G||_F^2` holds
+    # before the first rotation, and the eigendecomposition it returns is the
+    # diagonal: every coefficient became `Ab_i / G_ii` and R^2 was -115.6 (a
+    # float32 emulation of that Jacobi does 0 sweeps and gives -115.8).
+    # Without the overflow (50,000 rows) the same global test stops after 2
+    # sweeps with column pairs at relative correlation 0.82 unrotated.
+    # Equilibrated, the diagonal lies in [0.5, 2), nothing overflows, and the
+    # test does its job (12 sweeps at full shape).
+    #
+    # The card recorded `step1.covA` and `step2.Ab` just above, BEFORE this
+    # step. The scales are a pure function of `step1.covA`'s bits, so they
+    # need no stage of their own and the card keeps its 11 stages.
+    var scale = ctx.enqueue_create_buffer[DType.float32](n_cols)
+    ctx.enqueue_function[diagonal_to_vector_kernel](
+        s_vec.unsafe_ptr(),
+        cov_a.unsafe_ptr(),
+        Int32(n_cols),
+        grid_dim=((n_cols + elem_tpb - 1) // elem_tpb, 1, 1),
+        block_dim=(elem_tpb, 1, 1),
+    )
+    var h_diag = ctx.enqueue_create_host_buffer[DType.float32](n_cols)
+    ctx.enqueue_copy(dst_ptr=h_diag.unsafe_ptr(), src_buf=s_vec)
+    ctx.synchronize()
+    var h_scale = ctx.enqueue_create_host_buffer[DType.float32](n_cols)
+    ctx.synchronize()
+    for i in range(n_cols):
+        h_scale.unsafe_ptr().unsafe_store(
+            i, ols_equilibration_scale(h_diag.unsafe_ptr().unsafe_load(i))
+        )
+    ctx.enqueue_copy(dst_buf=scale, src_ptr=h_scale.unsafe_ptr())
+    ctx.synchronize()
+    # `[[mojo-buffer-freed-at-last-use]]`: a host buffer is dead at its last
+    # `.unsafe_ptr()` unless something uses it after the synchronize.
+    _ = h_diag^
+    _ = h_scale^
+    var cells = n_cols * n_cols
+    ctx.enqueue_function[row_vector_binary_mult_kernel](
+        cov_a.unsafe_ptr(),
+        scale.unsafe_ptr(),
+        Int32(n_cols),
+        Int32(n_cols),
+        grid_dim=((cells + elem_tpb - 1) // elem_tpb, 1, 1),
+        block_dim=(elem_tpb, 1, 1),
+    )
+    ctx.enqueue_function[matrix_vector_binary_mult_kernel](
+        cov_a.unsafe_ptr(),
+        scale.unsafe_ptr(),
+        Int32(n_cols),
+        Int32(n_cols),
+        grid_dim=((cells + elem_tpb - 1) // elem_tpb, 1, 1),
+        block_dim=(elem_tpb, 1, 1),
+    )
+    ctx.enqueue_function[vector_binary_mult_kernel](
+        ab.unsafe_ptr(),
+        scale.unsafe_ptr(),
+        Int32(n_cols),
+        grid_dim=((n_cols + elem_tpb - 1) // elem_tpb, 1, 1),
+        block_dim=(elem_tpb, 1, 1),
+    )
+    ctx.synchronize()
 
     # Q S Q* <- covA. Jacobi consumes covA and leaves S on its diagonal.
     #
@@ -279,8 +439,8 @@ def lstsq_eig_traced(
     ctx.synchronize()
     # `h_info` is alive across the copy TODAY only because the reads below sit
     # after the synchronize. It is the one host buffer on this path without an
-    # explicit guard, and `_record_rank` twenty lines down carries one with the
-    # trap named in its comment. If the convergence branch is ever made
+    # explicit guard; step 3b's `h_eig` below carries one, and the trap is
+    # `[[mojo-buffer-freed-at-last-use]]`. If the convergence branch is ever made
     # conditional or deleted, this buffer's last use becomes the enqueue and
     # the copy writes freed host memory. Hygiene, not the OLS defect.
     _ = h_info
@@ -308,7 +468,32 @@ def lstsq_eig_traced(
         ctx, "ols.step3.eigvecs", q, n_cols * n_cols
     )
     trace.record_device[DType.float32](ctx, "ols.step3.info", info_buf, 3)
-    _record_rank(ctx, trace, s_vec, n_cols)
+    # STEP 3b, DEVIATION 2621: THE CUTOFF IS RELATIVE TO THE LARGEST
+    # EIGENVALUE (`ols_pinv_threshold`, scipy.linalg.pinvh's rtol). The host
+    # reads the eigenvalues back, takes max|lam| exactly and hands the kernel
+    # one threshold. The predicate below is the kernel's, character for
+    # character, so the card's rank is the rank the kernel uses; a NaN
+    # eigenvalue fails both comparisons and counts as DROPPED, as it does
+    # in the kernel.
+    var h_eig = ctx.enqueue_create_host_buffer[DType.float32](n_cols)
+    ctx.enqueue_copy(dst_ptr=h_eig.unsafe_ptr(), src_buf=s_vec)
+    ctx.synchronize()
+    var max_abs = Float32(0.0)
+    for i in range(n_cols):
+        var mag = abs(h_eig.unsafe_ptr().unsafe_load(i))
+        if mag > max_abs:
+            max_abs = mag
+    var thresh = ols_pinv_threshold(max_abs, n_cols)
+    var kept = 0
+    for i in range(n_cols):
+        var lam = h_eig.unsafe_ptr().unsafe_load(i)
+        if lam > thresh or lam < -thresh:
+            kept += 1
+    _ = h_eig^
+    if trace.enabled:
+        var one = List[Int32]()
+        one.append(Int32(kept))
+        trace.record_list_i32("ols.step4.rank", one)
 
     # QS <- Q invS, with DivideByNonZero.
     ctx.enqueue_function[divide_columns_by_nonzero_kernel](
@@ -316,7 +501,7 @@ def lstsq_eig_traced(
         q.unsafe_ptr(),
         s_vec.unsafe_ptr(),
         Int32(n_cols),
-        OLS_NONZERO_THRESH,
+        thresh,
         grid_dim=((n_cols * n_cols + elem_tpb - 1) // elem_tpb, 1, 1),
         block_dim=(elem_tpb, 1, 1),
     )
@@ -385,47 +570,15 @@ def lstsq_eig_traced(
     # and it needs no second device kernel. Keeping one meant carrying a
     # hand-written GEMM to check a tuned GEMV a host property already covers.
     gemv_n(ctx, w, inv, ab, n_cols, n_cols)
+    # STEP 6b, DEVIATION 2620: w = S w~, one exact multiply per coefficient.
+    ctx.enqueue_function[vector_binary_mult_kernel](
+        w.unsafe_ptr(),
+        scale.unsafe_ptr(),
+        Int32(n_cols),
+        grid_dim=((n_cols + elem_tpb - 1) // elem_tpb, 1, 1),
+        block_dim=(elem_tpb, 1, 1),
+    )
     ctx.synchronize()
     trace.record_device[DType.float32](ctx, "ols.step6.coef", w, n_cols)
+    _ = scale^
 
-
-def _record_rank(
-    ctx: DeviceContext,
-    mut trace: IdentityTrace,
-    mut s_vec: DeviceBuffer[DType.float32],
-    n_cols: Int,
-) raises:
-    """The card's one INTEGER stage: how many directions survive step 4.
-
-    `divide_columns_by_nonzero_kernel`'s predicate is
-    `lam > thresh or lam < -thresh` and this recomputes exactly that on the
-    host, character for character, so the record is the rank the kernel is
-    about to use and not an approximation of it. A NaN eigenvalue fails both
-    comparisons and is counted as DROPPED, which is what the kernel does
-    too.
-
-    Why it is worth a stage of its own: every other record here is a float
-    buffer, where a cross-vendor difference is a rounding until proved
-    otherwise. This one is a COUNT. If two vendors' cards first differ at
-    `ols.step4.rank`, they disagree about the MODEL'S RANK -- a different
-    pseudo-inverse, not a different last bit -- and `E1_RUNBOOK`'s ladder
-    says stop and read the integer stage before reading any float one.
-
-    Costs a device-to-host copy, and only when the trace is enabled.
-    """
-    if not trace.enabled:
-        return
-    var hs = ctx.enqueue_create_host_buffer[DType.float32](n_cols)
-    ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=s_vec)
-    ctx.synchronize()
-    var kept = 0
-    for i in range(n_cols):
-        var lam = hs.unsafe_ptr().unsafe_load(i)
-        if lam > OLS_NONZERO_THRESH or lam < -OLS_NONZERO_THRESH:
-            kept += 1
-    var one = List[Int32]()
-    one.append(Int32(kept))
-    trace.record_list_i32("ols.step4.rank", one)
-    # `[[mojo-buffer-freed-at-last-use]]`: a host buffer is dead at
-    # `.unsafe_ptr()` unless something uses it later.
-    _ = hs^

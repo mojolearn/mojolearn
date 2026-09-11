@@ -1121,147 +1121,458 @@ def _host_fit_coefs(
 
 
 # ===========================================================================
-# 5. THE RANK GUARD IS A FLOAT COMPARISON WITH A DISCRETE OUTPUT
+# 5. THE PSEUDO-INVERSE ON ILL-CONDITIONED DESIGNS (DEVIATIONS 2620, 2621)
 # ===========================================================================
+#
+# Until 2026-09-11 this section held `check_ols_rank_guard_is_absolute`,
+# which MEASURED that `DivideByNonZero`'s absolute 1e-10 gave the same
+# 4096 x 8 design rank 8 at scale 1 and rank 0 at scale 2^-24. On Istella-S
+# the same solver returned R^2 = -115.6 where scikit-learn gets 0.164.
+# `lstsq_eig` now equilibrates the Gram matrix by exact power-of-two scales
+# (DEVIATION 2620, LAPACK xPOEQUB) and keeps an eigenvalue only above
+# `n * eps32 * max|lam|` (DEVIATION 2621, scipy.linalg.pinvh). One check per
+# half, and the old check's fixture for both:
+#
+#   check_ols_rank_guard_is_scale_invariant
+#       the old fixture at scale 1 and at 2^-24: the second fit must be BIT
+#       FOR BIT 2^24 times the first. Either half alone makes units
+#       invariant, so this fails only when BOTH are gone.
+#   check_ols_mixed_scale_design_matches_float64_oracle
+#       column scales spanning 2^26, a correlated pair at the smallest scale
+#       and a near-constant column. The device residual must match a
+#       float64 oracle's. Gates the EQUILIBRATION that the relative cutoff
+#       needs: without it the cutoff drops the small-scale columns. The
+#       pre-2026-09-11 arithmetic (absolute 1e-10, no equilibration) PASSES
+#       it (measured on the MI325X, 2026-09-11), so it is not a reproduction
+#       of the Istella-S failure.
+#   check_ols_rank_deficient_design_drops_the_noise_direction
+#       one column is the float32 rounding of the sum of two others, so the
+#       Gram matrix is singular up to rounding: exactly one direction must
+#       be dropped, read off the device's own QS. Gates the RELATIVE CUTOFF.
+#
+# SABOTAGES (tools/ols_illconditioned_leg.sh applies each to lstsq.mojo in a
+# copy of the tree on the box, keeps the diff, and runs these three):
+#   (f) `ols_equilibration_scale` returns 1.0 for every column
+#   (g) `ols_pinv_threshold` returns the absolute OLS_NONZERO_THRESH
+#   (f+g) both, which is the pre-2026-09-11 arithmetic
+# MEASURED on a DigitalOcean MI325X, 2026-09-11, commit 97df01e0: none, all
+# three pass; f fails only the mixed-scale check (5 of 7 directions dropped,
+# residual 8043.8 against a bound of 3.39); g fails only the rank-deficient
+# check (0 dropped); f+g fails the scale-invariant check (rank 8 at scale 1,
+# rank 0 at 2^-24) and the rank-deficient check.
 
 
-def _rank_at_scale(ctx: DeviceContext, n: Int, d: Int, e: Int) raises -> Int:
-    """Fit a design scaled by `2^e` and return how many directions survive
-    `DivideByNonZero`.
+def _pow2_scaled(v: Float32, e: Int) -> Float32:
+    """`v * 2^e` by exponent surgery: exact for a normal `v` whose result
+    stays normal. Zero and subnormals come back unchanged; none of the
+    fixtures below produce one where it matters."""
+    var bits = bitcast[DType.uint32](v)
+    var field = Int((bits >> 23) & UInt32(0xFF))
+    if field == 0:
+        return v
+    var nb = (bits & UInt32(0x807FFFFF)) | (UInt32(field + e) << 23)
+    return bitcast[DType.float32](nb)
 
-    The scale is a POWER OF TWO applied by exponent surgery on the bits, so
-    it is exact: every mantissa is unchanged and the design is the same
-    design in different units, which is the only way to ask this question
-    without the answer being contaminated by the rescaling's own rounding.
+
+def _pow2_64(e: Int) -> Float64:
+    """`2^e` in Float64 by exact doubling or halving."""
+    var v = 1.0
+    if e >= 0:
+        for _ in range(e):
+            v = v * 2.0
+    else:
+        for _ in range(-e):
+            v = v * 0.5
+    return v
+
+
+def _rss64(
+    a: List[Float64], w: List[Float64], b: List[Float64], n: Int, d: Int
+) -> Float64:
+    """`sum_i ((A w)_i - b_i)^2`, in Float64."""
+    var total = 0.0
+    for i in range(n):
+        var acc = 0.0
+        for k in range(d):
+            acc += a[i * d + k] * w[k]
+        var r = acc - b[i]
+        total += r * r
+    return total
+
+
+def _fit_f32_dropped(
+    ctx: DeviceContext,
+    a: List[Float32],
+    b: List[Float32],
+    n: Int,
+    d: Int,
+    mut coef: List[Float32],
+) raises -> Int:
+    """Fit a host float32 design through `ols_fit` (the dispatch every user
+    reaches), append the coefficients to `coef`, and return how many
+    eigen-directions the pseudo-inverse DROPPED.
+
+    The count is read off the device's own `QS`: the divide kernel ZEROES a
+    dropped column and divides a kept one, and an eigenvector has unit norm,
+    so a kept column is never all zero. It is what the kernel did, not a
+    recomputation of its predicate.
     """
-    var a = ctx.enqueue_create_buffer[DType.float32](n * d)
-    var b = ctx.enqueue_create_buffer[DType.float32](n)
-    var w = ctx.enqueue_create_buffer[DType.float32](d)
-    var cov_a = ctx.enqueue_create_buffer[DType.float32](d * d)
+    var da = ctx.enqueue_create_buffer[DType.float32](n * d)
+    var db = ctx.enqueue_create_buffer[DType.float32](n)
+    var dw = ctx.enqueue_create_buffer[DType.float32](d)
+    var cov = ctx.enqueue_create_buffer[DType.float32](d * d)
     var q = ctx.enqueue_create_buffer[DType.float32](d * d)
     var qs = ctx.enqueue_create_buffer[DType.float32](d * d)
-    var s_vec = ctx.enqueue_create_buffer[DType.float32](d)
+    var sv = ctx.enqueue_create_buffer[DType.float32](d)
     var ab = ctx.enqueue_create_buffer[DType.float32](d)
     var inv = ctx.enqueue_create_buffer[DType.float32](d * d)
-    var a_alias = ctx.enqueue_create_buffer[DType.float32](n * d)
-    var a_alias2 = ctx.enqueue_create_buffer[DType.float32](n * d)
+    var xa = ctx.enqueue_create_buffer[DType.float32](n * d)
+    var xa2 = ctx.enqueue_create_buffer[DType.float32](n * d)
     ctx.synchronize()
     var ha = ctx.enqueue_create_host_buffer[DType.float32](n * d)
     var hb = ctx.enqueue_create_host_buffer[DType.float32](n)
     ctx.synchronize()
     for i in range(n * d):
-        var v = _hash_f32(i, 4242)
-        var bits = bitcast[DType.uint32](v)
-        var ex = Int((bits >> 23) & UInt32(0xFF)) + e
-        var nb = (bits & UInt32(0x807FFFFF)) | (UInt32(ex) << 23)
-        ha.unsafe_ptr().unsafe_store(i, bitcast[DType.float32](nb))
+        ha.unsafe_ptr().unsafe_store(i, a[i])
     for i in range(n):
-        hb.unsafe_ptr().unsafe_store(i, _hash_f32(i, 4243))
-    ctx.enqueue_copy(dst_buf=a, src_ptr=ha.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=b, src_ptr=hb.unsafe_ptr())
+        hb.unsafe_ptr().unsafe_store(i, b[i])
+    ctx.enqueue_copy(dst_buf=da, src_ptr=ha.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=db, src_ptr=hb.unsafe_ptr())
     ctx.synchronize()
     ols_fit(
-        ctx, a, b, w, cov_a, q, qs, s_vec, ab, inv, a_alias, a_alias2,
-        n, d, OLS_ALGO_EIG,
+        ctx, da, db, dw, cov, q, qs, sv, ab, inv, xa, xa2, n, d, OLS_ALGO_EIG,
     )
-    var hs = ctx.enqueue_create_host_buffer[DType.float32](d)
-    ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=s_vec)
+    var hw = ctx.enqueue_create_host_buffer[DType.float32](d)
+    var hq = ctx.enqueue_create_host_buffer[DType.float32](d * d)
+    ctx.enqueue_copy(dst_ptr=hw.unsafe_ptr(), src_buf=dw)
+    ctx.enqueue_copy(dst_ptr=hq.unsafe_ptr(), src_buf=qs)
     ctx.synchronize()
-    var kept = 0
-    for i in range(d):
-        var lam = hs.unsafe_ptr().unsafe_load(i)
-        if lam > OLS_NONZERO_THRESH or lam < -OLS_NONZERO_THRESH:
-            kept += 1
-    _ = a
-    _ = b
-    _ = w
-    _ = cov_a
+    for k in range(d):
+        coef.append(hw.unsafe_ptr().unsafe_load(k))
+    var dropped = 0
+    for c in range(d):
+        var all_zero = True
+        for r in range(d):
+            if hq.unsafe_ptr().unsafe_load(r * d + c) != Float32(0.0):
+                all_zero = False
+        if all_zero:
+            dropped += 1
+    _ = da
+    _ = db
+    _ = dw
+    _ = cov
     _ = q
     _ = qs
-    _ = s_vec
+    _ = sv
     _ = ab
     _ = inv
-    _ = a_alias
-    _ = a_alias2
+    _ = xa
+    _ = xa2
     _ = ha^
     _ = hb^
-    _ = hs^
-    return kept
+    _ = hw^
+    _ = hq^
+    return dropped
 
 
-def check_ols_rank_guard_is_absolute() raises:
-    """`DivideByNonZero`'s threshold is ABSOLUTE, and the same design in
-    different units therefore has a different RANK.
+def check_ols_rank_guard_is_scale_invariant() raises:
+    """The same design in units scaled by an exact power of two is the same
+    model: the same rank, and coefficients BIT FOR BIT scaled back.
 
-    THE CLASS THIS BELONGS TO. Every other pathway in this estimator is a
-    rounding: two vendors disagree in the last bits and the model drifts.
-    This one is not. `divide_columns_by_nonzero_kernel` compares a float
-    against `OLS_NONZERO_THRESH` and ZEROES a whole eigen-direction on the
-    strength of it, so what comes out of the comparison is an INTEGER --
-    the rank of the pseudo-inverse -- and a last-bit move at the boundary
-    changes the model's rank rather than its fifth decimal. IDENTITY_PATHS
-    has no more dangerous shape.
+    The fixture is the one `check_ols_rank_guard_is_absolute` used: `N x D`
+    hash cells, then every mantissa kept and every exponent moved by -24.
+    Under the absolute 1e-10 that design had rank 8 at scale 1 and rank 0 at
+    scale 2^-24, the zero model.
 
-    WHAT IS ASSERTED, and it is a measurement rather than an opinion: the
-    same design matrix, multiplied by an exact power of two, is fitted at
-    two scales, and the two ranks are DIFFERENT. That is not a vendor
-    difference and it is not a bug this lane introduced -- it is the
-    consequence of an absolute threshold on a quantity (an eigenvalue of
-    `A^T A`) that scales with the SQUARE of the data. It is the identical
-    defect DEVIATION BLOCK 1 of `jacobi_eigh_device.mojo` fixed one step
-    upstream, where the convergence test was `off <= 1e-10` on a quantity
-    that also scales with the square of the data, and where the fix was to
-    make the test relative.
+    WHY BITWISE AND NOT A TOLERANCE. Scaling the design by 2^-24 scales every
+    Gram entry by exactly 2^-48 and `A^T b` by exactly 2^-24 (no product here
+    is subnormal). `ols_equilibration_scale` is shift-invariant by
+    construction, so its scales absorb both exactly, the eigensolver sees the
+    SAME BITS at both scales, and the solution comes back as the same bits
+    times 2^24. Anything short of equality is a rounding the design does not
+    justify.
 
-    It is NOT fixed here. `glm/impl/` is COPY-DO-NOT-IMPROVE and changing
-    the threshold moves shipped `NUMERIC_FAST` bits on every design near
-    the boundary. The finding is recorded, gated, and handed up.
+    WHAT IT CAN AND CANNOT SEE. Either half of the fix alone passes it:
+    equilibration without the relative cutoff sees unit-sized eigenvalues at
+    both scales, and the relative cutoff without equilibration scales with
+    the eigenvalues. It fails when BOTH are gone, which is the code before
+    2026-09-11. The next two checks gate each half.
 
-    Mode-independent: the threshold is a comptime constant in both modes.
+    THE NEGATIVE CONTROL: the same comparison against 2^23 must not match
+    every coefficient, or the comparison could not fail.
     """
     comptime N = 4096
     comptime D = 8
-    var full = 0
-    var shrunk = 0
+    var a0 = List[Float32]()
+    var a1 = List[Float32]()
+    for i in range(N * D):
+        var v = _hash_f32(i, 4242)
+        a0.append(v)
+        a1.append(_pow2_scaled(v, -24))
+    var b = List[Float32]()
+    for i in range(N):
+        b.append(_hash_f32(i, 4243))
+    var w0 = List[Float32]()
+    var w1 = List[Float32]()
+    var drop0 = 0
+    var drop1 = 0
     with DeviceContext() as ctx:
-        full = _rank_at_scale(ctx, N, D, 0)
-        # 2^-24 per entry -> eigenvalues of A^T A down by 2^-48, which puts
-        # them under 1e-10 for this fixture. Every mantissa is unchanged.
-        shrunk = _rank_at_scale(ctx, N, D, -24)
-    if full != D:
+        drop0 = _fit_f32_dropped(ctx, a0, b, N, D, w0)
+        drop1 = _fit_f32_dropped(ctx, a1, b, N, D, w1)
+    if drop0 != 0:
         raise Error(
-            "check_ols_rank_guard_is_absolute: the unscaled design already"
-            " lost directions (rank "
-            + String(full)
-            + " of "
-            + String(D)
-            + "), so the fixture is not the well-conditioned one this"
-            " check needs and the comparison below is not about units."
+            "check_ols_rank_guard_is_scale_invariant: the unscaled design"
+            " already dropped " + String(drop0) + " of " + String(D)
+            + " directions, so it is not the full-rank fixture this check"
+            " needs."
         )
-    if shrunk >= full:
+    if drop1 != drop0:
         raise Error(
-            "check_ols_rank_guard_is_absolute: scaling the design by 2^-24"
-            " did NOT change the rank ("
-            + String(shrunk)
-            + " vs "
-            + String(full)
-            + "). Either the threshold has been made relative -- in which"
-            " case delete this check and the OLS_NONZERO_THRESH docstring"
-            " that calls it absolute -- or the fixture's eigenvalues no"
-            " longer straddle "
-            + String(OLS_NONZERO_THRESH)
-            + " at that scale."
+            "check_ols_rank_guard_is_scale_invariant: the SAME design has"
+            " rank " + String(D - drop0) + " at scale 1 and rank "
+            + String(D - drop1) + " at scale 2^-24. The pseudo-inverse's"
+            " cutoff depends on the units of the data (the absolute"
+            " threshold is back, or the equilibration is gone)."
+        )
+    var moved = 0
+    var control_hits = 0
+    for k in range(D):
+        var want = bitcast[DType.uint32](_pow2_scaled(w0[k], 24))
+        var got = bitcast[DType.uint32](w1[k])
+        if got != want:
+            moved += 1
+            print(
+                "  coefficient " + String(k) + ": scale 1 gives "
+                + String(w0[k]) + ", scale 2^-24 gives " + String(w1[k])
+                + ", expected exactly " + String(_pow2_scaled(w0[k], 24))
+            )
+        if got == bitcast[DType.uint32](_pow2_scaled(w0[k], 23)):
+            control_hits += 1
+    if moved != 0:
+        raise Error(
+            "check_ols_rank_guard_is_scale_invariant: " + String(moved)
+            + " of " + String(D) + " coefficients at scale 2^-24 are not"
+            " BIT FOR BIT 2^24 times the scale-1 coefficients. The"
+            " equilibration is not exact or not shift-invariant."
+        )
+    if control_hits == D:
+        raise Error(
+            "check_ols_rank_guard_is_scale_invariant: the NEGATIVE CONTROL"
+            " (2^23 instead of 2^24) matched every coefficient, so the"
+            " bitwise comparison above cannot fail."
         )
     print(
-        "check_ols_rank_guard_is_absolute OK ["
-        + _mode_name()
-        + "]: the SAME design has rank "
-        + String(full)
-        + " at scale 1 and rank "
-        + String(shrunk)
-        + " at scale 2^-24. DivideByNonZero's threshold is absolute"
-        " (OLS_NONZERO_THRESH), the quantity it tests scales with the"
-        " square of the data, and what the comparison outputs is a RANK."
+        "check_ols_rank_guard_is_scale_invariant OK [" + _mode_name()
+        + "]: rank " + String(D - drop0) + " at scale 1 and at 2^-24, and"
+        " all " + String(D) + " coefficients at 2^-24 are exactly 2^24"
+        " times those at scale 1 (the 2^23 control matches "
+        + String(control_hits) + ")"
+    )
+
+
+def check_ols_mixed_scale_design_matches_float64_oracle() raises:
+    """The device fit's residual matches a float64 oracle's when column
+    scales span 2^26, which is what the relative cutoff needs the
+    equilibration for.
+
+    THE FIXTURE, `N x D`, no host rounding beyond one narrowing per cell:
+
+        column 0..3   hash cells times 2^12, 2^4, 1, 2^-8
+        column 4      hash cells times 2^-14
+        column 5      (0.9 column-4 cell + 0.1 another hash) at 2^-14, so
+                      columns 4 and 5 correlate at about 0.99
+        column 6      1 on every 1021st row, else 0 (near-constant)
+        target        sum_k cell_k * 2^-scale_k (each column contributes
+                      O(1)) plus 0.05 times a hash, narrowed once
+
+    The raw Gram diagonal spans about 2^52, so `n * eps32 * max|lam|` of the
+    raw Gram is far above every eigenvalue that belongs to the small columns:
+    a relative cutoff WITHOUT equilibration drops them and the planted signal
+    on them goes missing (sabotage f: 5 of 7 directions dropped). The
+    pre-2026-09-11 arithmetic, an absolute 1e-10 with no equilibration,
+    passes this fixture; it is the other two checks that fail on it.
+
+    THE ORACLE is a different program in Float64: the Gram matrix and `A^T b`
+    of the same float32 cells, a Jacobi scaling by `1/sqrt(G_ii)` (not a
+    power of two), and `_gauss_solve64`. The assertion is the objective
+    least squares minimizes: the device residual sum of squares is within
+    1e-3 of the oracle's.
+
+    THE NEGATIVE CONTROL multiplies the oracle's coefficient 4 by 1.9, the
+    answer a solver that ignores the 4-5 correlation gives, and requires it
+    to break the bound.
+    """
+    comptime N = 16384
+    comptime D = 7
+    var exps: List[Int] = [12, 4, 0, -8, -14, -14, 0]
+    var a32 = List[Float32]()
+    var a = List[Float64]()
+    var b32 = List[Float32]()
+    var b = List[Float64]()
+    for i in range(N):
+        var base = Float64(_hash_f32(i, 7401))
+        var target = 0.0
+        for k in range(D):
+            var v: Float32
+            if k == 4:
+                v = Float32(base * _pow2_64(-14))
+            elif k == 5:
+                var mix = 0.9 * base + 0.1 * Float64(_hash_f32(i, 7405))
+                v = Float32(mix * _pow2_64(-14))
+            elif k == 6:
+                v = Float32(1.0) if i % 1021 == 0 else Float32(0.0)
+            else:
+                v = Float32(Float64(_hash_f32(i * D + k, 7400)) * _pow2_64(exps[k]))
+            a32.append(v)
+            a.append(Float64(v))
+            target += Float64(v) * _pow2_64(-exps[k])
+        target += 0.05 * Float64(_hash_f32(i, 7409))
+        var t32 = Float32(target)
+        b32.append(t32)
+        b.append(Float64(t32))
+
+    var g = List[Float64]()
+    for _ in range(D * D):
+        g.append(0.0)
+    var r = List[Float64]()
+    for _ in range(D):
+        r.append(0.0)
+    for i in range(N):
+        for p in range(D):
+            var ap = a[i * D + p]
+            r[p] += ap * b[i]
+            for q in range(D):
+                g[p * D + q] += ap * a[i * D + q]
+    var sc = List[Float64]()
+    for p in range(D):
+        sc.append(1.0 / sqrt(g[p * D + p]))
+    var gs = List[Float64]()
+    var rs = List[Float64]()
+    for p in range(D):
+        rs.append(r[p] * sc[p])
+        for q in range(D):
+            gs.append(g[p * D + q] * sc[p] * sc[q])
+    var z = _gauss_solve64(gs^, rs^, D)
+    var w_orc = List[Float64]()
+    for p in range(D):
+        w_orc.append(z[p] * sc[p])
+
+    var coef = List[Float32]()
+    var ctx = DeviceContext()
+    var dropped = _fit_f32_dropped(ctx, a32, b32, N, D, coef)
+    var w_dev = List[Float64]()
+    for p in range(D):
+        w_dev.append(Float64(coef[p]))
+
+    var rss_orc = _rss64(a, w_orc, b, N, D)
+    var rss_dev = _rss64(a, w_dev, b, N, D)
+    var bound = rss_orc * (1.0 + 1.0e-3)
+    if not (rss_dev <= bound):
+        for p in range(D):
+            print(
+                "  coefficient " + String(p) + ": device " + String(w_dev[p])
+                + ", float64 oracle " + String(w_orc[p])
+            )
+        raise Error(
+            "check_ols_mixed_scale_design_matches_float64_oracle: device"
+            " residual sum of squares " + String(rss_dev) + " > "
+            + String(bound) + " (oracle " + String(rss_orc) + ", "
+            + String(dropped) + " directions dropped). Columns whose scales"
+            " span 2^26 are not being solved jointly; is the Gram matrix"
+            " still equilibrated before the eigensolver?"
+        )
+    var bad = w_orc.copy()
+    bad[4] = bad[4] * 1.9
+    var rss_bad = _rss64(a, bad, b, N, D)
+    if rss_bad <= bound:
+        raise Error(
+            "check_ols_mixed_scale_design_matches_float64_oracle: the"
+            " NEGATIVE CONTROL (coefficient 4 at 1.9x) gives residual "
+            + String(rss_bad) + " within the bound " + String(bound)
+            + ", so the test above cannot fail."
+        )
+    print(
+        "check_ols_mixed_scale_design_matches_float64_oracle OK ["
+        + _mode_name() + "]: residual " + String(rss_dev) + " vs float64 "
+        + String(rss_orc) + " (bound " + String(bound) + ", "
+        + String(dropped) + " dropped); the uncorrelated answer gives "
+        + String(rss_bad)
+    )
+
+
+def check_ols_rank_deficient_design_drops_the_noise_direction() raises:
+    """A design that is singular up to float32 rounding loses exactly one
+    direction, and a full-rank one loses none.
+
+    THE FIXTURE, `N x D`: hash cells, except that the last column is
+    `Float32(Float64(col 0) + Float64(col 1))`. The true Gram matrix of the
+    float64 sum is singular; the narrowing leaves at most one ulp per cell,
+    so the float32 Gram matrix has one eigenvalue that is rounding and
+    nothing else, of the order of `eps32` times the largest. That is the
+    eigenvalue `scipy.linalg.pinvh`'s default `rtol = n * eps` exists to cut,
+    and an absolute 1e-10 keeps it and divides by it.
+
+    ASSERTED: exactly one direction dropped on that design, read off the
+    device's `QS` (`_fit_f32_dropped`), and finite coefficients.
+
+    THE NEGATIVE CONTROL is the same design with the last column replaced by
+    an independent hash column: it must drop NOTHING, or the cutoff would be
+    removing real data and "one dropped" would prove nothing.
+    """
+    comptime N = 1024
+    comptime D = 12
+    var dep = List[Float32]()
+    var full = List[Float32]()
+    for i in range(N):
+        for k in range(D):
+            var v = _hash_f32(i * D + k, 7501)
+            full.append(v)
+            if k == D - 1:
+                var s = Float64(_hash_f32(i * D, 7501)) + Float64(
+                    _hash_f32(i * D + 1, 7501)
+                )
+                dep.append(Float32(s))
+            else:
+                dep.append(v)
+    var b = List[Float32]()
+    for i in range(N):
+        b.append(_hash_f32(i, 7502))
+    var w_dep = List[Float32]()
+    var w_full = List[Float32]()
+    var ctx = DeviceContext()
+    var dropped_dep = _fit_f32_dropped(ctx, dep, b, N, D, w_dep)
+    var dropped_full = _fit_f32_dropped(ctx, full, b, N, D, w_full)
+    if dropped_full != 0:
+        raise Error(
+            "check_ols_rank_deficient_design_drops_the_noise_direction: the"
+            " NEGATIVE CONTROL (a full-rank " + String(N) + " x " + String(D)
+            + " hash design) dropped " + String(dropped_full)
+            + " directions; the cutoff is removing real data."
+        )
+    var biggest = 0.0
+    for k in range(D):
+        var m = abs(Float64(w_dep[k]))
+        if not (m < 1.0e30):
+            raise Error(
+                "check_ols_rank_deficient_design_drops_the_noise_direction:"
+                " coefficient " + String(k) + " is " + String(w_dep[k])
+            )
+        if m > biggest:
+            biggest = m
+    if dropped_dep != 1:
+        raise Error(
+            "check_ols_rank_deficient_design_drops_the_noise_direction: a"
+            " design whose last column is the rounded sum of the first two"
+            " dropped " + String(dropped_dep) + " directions, not 1 (largest"
+            " |coefficient| " + String(biggest) + "). The pseudo-inverse is"
+            " dividing by an eigenvalue that is only rounding; is the cutoff"
+            " still n * eps32 * max|lam|?"
+        )
+    print(
+        "check_ols_rank_deficient_design_drops_the_noise_direction OK ["
+        + _mode_name() + "]: the rank-deficient design dropped 1 direction"
+        " (largest |coefficient| " + String(biggest) + "), the full-rank"
+        " control dropped 0"
     )
 
 
@@ -2294,6 +2605,8 @@ def main() raises:
     check_ols_over_capacity_fits()
     check_ols_is_launch_invariant()
     check_ols_host_surface_takes_the_guard()
-    check_ols_rank_guard_is_absolute()
+    check_ols_rank_guard_is_scale_invariant()
+    check_ols_mixed_scale_design_matches_float64_oracle()
+    check_ols_rank_deficient_design_drops_the_noise_direction()
     check_ols_card_hashes_raw_bytes()
     check_ols_card_is_emitted()
