@@ -1,0 +1,10 @@
+kmeans.lloyd_unfused_tile_not_called.istella NT 32768 64 220
+kmeans.lloyd_unfused_tile_not_called.taxi NT 32768 64 11
+pca.cov.istella TN 220 220 2043304
+pca.cov.taxi TN 11 11 4000000
+svc.batch_tile_nnz128.istella NT 128 10000 220
+svc.batch_tile_nnz128.taxi NT 128 10000 11
+svc.batch_tile_nnzws.istella NT 1024 10000 220
+svc.batch_tile_nnzws.taxi NT 1024 10000 11
+svc.square_tile.istella NT 1024 1024 220
+svc.square_tile.taxi NT 1024 1024 11

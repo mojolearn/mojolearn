@@ -343,7 +343,16 @@ No AMD timing of this step exists at the target shape.
      refuses the 2596 and 2597 bits because a shipped build does not compile
      those kernels; a wiring lane (`lane/attention-kv-default`) makes them
      shippable and sets the AMD row to the kvgrid_r32 winner. The H100 zdot
-     leg also carries kvgrid_r32 and kvsplit as LM arms for the NVIDIA reading. The AMD row of
+     leg also carries kvgrid_r32 and kvsplit as LM arms for the NVIDIA reading.
+   - **AMD classical ksplit A/B, leg 1: every caller HOLDS**
+     (bench/results/e1g/2026-09-11_175657-amd-mi300x-hotaisle-classical-leg1,
+     Hot Aisle MI300X, commit 8d5ae74f, VM verified gone, $1.30), default
+     against tuned128 in ABBA blocks, quality equal on every cell: SVC
+     geomean 0.967 (taxi 1.000, Istella-S 0.935; the on-box dispatch shows
+     the Istella-S batch tile at nnz 128 taken by ksplit), kmeans 1.003, PCA
+     0.998, KDE 0.985. kmeans, PCA and KDE never reach ksplit on AMD (dispatch
+     lines recorded). Leg 2 (GP, OLS) skipped by agreement; the H100 dispatch
+     already settles them. The AMD row of
      `attn_default_arm_for` goes back to `baseline`; the dk/dv lane
      (`lane/attention-dkdv-amd`) was sent this evidence and now targets the
      step-versus-harness gap with baseline as the AMD reference.

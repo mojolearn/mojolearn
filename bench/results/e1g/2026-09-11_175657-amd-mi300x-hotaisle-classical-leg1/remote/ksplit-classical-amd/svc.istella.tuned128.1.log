@@ -1,0 +1,12 @@
+FSPEED-HEADER family=classical lane=svc arm=ours mode=IDENTICAL device=AMD_Instinct_MI300X_VF rounds=3 size=section9
+FSPEED-NOTE lane=svc arm=ours gemm_arm=tuned128 gemm_plan=tuned128:_the_old_TUNED_128x128_plan_forced_on_every_call_it_served block=1 dataset=istella source=ctd data=/root/ctd-data rows=10000 features=220 test_rows=10000 x_sha256=8439cf8430d091e6 block=svc-istella numeric_mode_used=identical vendor_used=hip smoke_max_rows=None mojolearn=/root/mojolearn/python/mojolearn/__init__.py
+FSPEED-NOTE lane=svc arm=ours context=bg=quiet
+FSPEED-GEMM lane=svc caller=svc.square_tile.istella op=NT m=1024 n=1024 k=220 reach=entry
+FSPEED-GEMM lane=svc caller=svc.batch_tile_nnz128.istella op=NT m=128 n=10000 k=220 reach=entry
+FSPEED-GEMM lane=svc caller=svc.batch_tile_nnzws.istella op=NT m=1024 n=10000 k=220 reach=entry
+FSPEED-WARMUP lane=svc arm=ours shape=istella-10000x220-ctd ms=879.988
+FSPEED lane=svc arm=ours shape=istella-10000x220-ctd round=1 ms=118.320 hash=8963cdc33da9ec9e
+FSPEED lane=svc arm=ours shape=istella-10000x220-ctd round=2 ms=112.776 hash=8963cdc33da9ec9e
+FSPEED lane=svc arm=ours shape=istella-10000x220-ctd round=3 ms=125.127 hash=8963cdc33da9ec9e
+FSPEED-ACC lane=svc arm=ours metric=accuracy value=0.9222
+FSPEED-NOTE lane=svc arm=ours quality_extra n_support=2400

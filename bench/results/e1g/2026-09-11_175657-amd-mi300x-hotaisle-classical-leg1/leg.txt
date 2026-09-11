@@ -1,0 +1,50 @@
+commit=8d5ae74f parent df77d6c1 c27ad69d
+commit_sha=8d5ae74fa983ccbf265ac07a9a8ada5545964736
+provider=hotaisle
+vendor=amd
+team=andrews-team
+spec=13core
+lane=neural-classical-leg1
+minutes=60
+gates=0
+bare=0
+test_watchdog=0
+gpu_archs_requested=<unset>
+target_column=amd
+runtime_requested=auto
+image=rocm/dev-ubuntu-22.04:6.4.1-complete
+extra=/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/ece6c35f-471f-4b93-8fcf-f6462a0e5568/scratchpad/classical_amd_leg1_body.sh
+extra_sha256=84791e8e519c158e3a08ca6df788f770aecd285213f628673db983a22510259c
+bundle_bytes=9923213
+bundle_sha256=d71801eeddc644e1891dbe6832c1215f1b9e76126e459b623c6e938d42299cee
+source_sha256_local=704c8cf615677eb02e6dc974b70bdf276d9c854880dd119dbc040338c8e60992
+mode=rent
+started=2026-09-11T17:56:59Z
+balance_before_cents=3047
+slot=/tmp/mojolearn-hotaisle-slot.1 taken 2026-09-11T17:57:02Z
+price_cents_per_hour=299 min_reservation_minutes=1
+local_key_in_ps=not_visible
+create_http=200 create_utc=2026-09-11T17:57:09Z
+vm_ref=4ef24e50-c8fb-41e3-b6c5-80832db50c68
+vm_name=enc1-gpuvm013
+description=mojolearn:neural-classical-leg1:20260911T175703Z
+ssh=hotaisle@23.183.40.78:22 running_after_seconds=12
+box_key_in_ps=not_visible
+runtime=docker
+box_gfx=gfx942
+gpu_archs=gfx942
+upload_seconds=3
+image_pull=pull_exit=0 pull_seconds=98
+work_seconds=3204
+body=done
+source_sha256_match=yes
+remote_pixi_install_exit=0
+remote_pixi_install_seconds=3
+remote_device_check_exit=SKIPPED
+remote_card_exit=SKIPPED
+remote_extra_exit=0
+remote_body_exit=0
+finished=2026-09-11T18:26:42Z
+lease_used_seconds=1779
+slot=released /tmp/mojolearn-hotaisle-slot.1 2026-09-11T18:26:51Z
+balance_after_cents=2917

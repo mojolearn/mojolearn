@@ -1,0 +1,15 @@
+FSPEED-NOTE shapes=declared constants=tools/classical_two_datasets.py istella_train_rows=2043304 gp_train=4000 gp_test=1000 (the timed logs' own FSPEED-GEMM lines are the measurement)
+FSPEED-GEMM lane=svc caller=svc.square_tile.taxi op=NT m=1024 n=1024 k=11 reach=entry
+FSPEED-GEMM lane=svc caller=svc.batch_tile_nnz128.taxi op=NT m=128 n=10000 k=11 reach=entry
+FSPEED-GEMM lane=svc caller=svc.batch_tile_nnzws.taxi op=NT m=1024 n=10000 k=11 reach=entry
+FSPEED-GEMM lane=svc caller=svc.square_tile.istella op=NT m=1024 n=1024 k=220 reach=entry
+FSPEED-GEMM lane=svc caller=svc.batch_tile_nnz128.istella op=NT m=128 n=10000 k=220 reach=entry
+FSPEED-GEMM lane=svc caller=svc.batch_tile_nnzws.istella op=NT m=1024 n=10000 k=220 reach=entry
+FSPEED-GEMM lane=kmeans caller=kmeans.lloyd_unfused_tile_not_called.taxi op=NT m=32768 n=64 k=11 reach=not_called
+FSPEED-NOTE lane=kmeans arm=ours gemm_entry=none (no call of this caller reaches identical_gemm_into under IDENTICAL; both arms run the same launches; a reach=not_called FSPEED-GEMM line is recorded only for its DISPATCH line)
+FSPEED-GEMM lane=kmeans caller=kmeans.lloyd_unfused_tile_not_called.istella op=NT m=32768 n=64 k=220 reach=not_called
+FSPEED-NOTE lane=kmeans arm=ours gemm_entry=none (no call of this caller reaches identical_gemm_into under IDENTICAL; both arms run the same launches; a reach=not_called FSPEED-GEMM line is recorded only for its DISPATCH line)
+FSPEED-GEMM lane=pca caller=pca.cov.taxi op=TN m=11 n=11 k=4000000 reach=entry
+FSPEED-GEMM lane=pca caller=pca.cov.istella op=TN m=220 n=220 k=2043304 reach=entry
+FSPEED-NOTE lane=kde arm=ours gemm_entry=none (no call of this caller reaches identical_gemm_into under IDENTICAL; both arms run the same launches; a reach=not_called FSPEED-GEMM line is recorded only for its DISPATCH line)
+FSPEED-NOTE lane=kde arm=ours gemm_entry=none (no call of this caller reaches identical_gemm_into under IDENTICAL; both arms run the same launches; a reach=not_called FSPEED-GEMM line is recorded only for its DISPATCH line)

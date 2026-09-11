@@ -1,0 +1,4 @@
+CTD-PREP block=big-taxi X=4000000x11 y=4000000 Xq=500000x11 yq=500000 init=64x11
+CTD-PREP block=kde-taxi X=100000x11 Xq=2000x11
+CTD-PREP block=svc-taxi X=10000x11 y=10000 Xq=10000x11 yq=10000
+CTD-PREP dataset=taxi seconds=1.9

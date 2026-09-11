@@ -1,0 +1,20 @@
+brief=docs/lanes/BRIEF_gemm_long_k_2026-09-11.md section 12
+started=2026-09-11T17:59:55Z
+root=/root/mojolearn
+lanes=svc,kmeans,pca,kde ctd_lanes=svc,kmeans,pca,kde datasets=taxi,istella
+cells=svc:istella,svc:taxi,kmeans:istella,pca:istella,kde:istella,kmeans:taxi,pca:taxi,kde:taxi
+rounds=3 blocks=2 order=ABBA gp_train=4000 gp_test=1000 gp_prep=standardize deadline=1200
+body_seconds=3048 runner_work_seconds=3204 runner_started=2026-09-11T17:59:48Z timing_floor=1500 min_item=90 tail=150
+vendor=amd gpu=AMD_Instinct_MI300X_VF_ gpu_archs=gfx942 column=amd jobs=13 nproc=2
+data=/root/ctd-data smoke_rows=none data_root=/root/datasets/gbm-bench bin=/root/ksplit-ab-bin
+vendor=amd
+commit=8d5ae74fa983ccbf265ac07a9a8ada5545964736
+provider=hotaisle
+size=mi300x-13core
+runtime=docker
+image=rocm/dev-ubuntu-22.04:6.4.1-complete
+timed_python=pixi run python decode_python=/root/ksplit-ab-venv/bin/python
+DEFAULT gemm column=3 block_parallelism_row=110 ksplit_default=on trial_ksplit_S=110 shipped=[shipped DEFAULT ksplit (DEVIATION 2595, block parallelism row S=110 slack=4) where the group rule takes the call, else choose_gemm_plan's plan (TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=False (1-D grid, no swizzle) on the step's calls)]
+plan shipped=shipped: default=ksplit(S=110) else tuned128
+plan tuned128=tuned128: the old TUNED 128x128 plan forced on every call it served
+finished=2026-09-11T18:26:08Z seconds=1574

@@ -1,0 +1,9 @@
+FSPEED-HEADER family=classical lane=pca arm=ours mode=IDENTICAL device=AMD_Instinct_MI300X_VF rounds=3 size=section9
+FSPEED-NOTE lane=pca arm=ours gemm_arm=tuned128 gemm_plan=tuned128:_the_old_TUNED_128x128_plan_forced_on_every_call_it_served block=1 dataset=taxi source=ctd data=/root/ctd-data rows=4000000 features=11 test_rows=500000 x_sha256=64a93747ff25bdb8 block=big-taxi numeric_mode_used=identical vendor_used=hip smoke_max_rows=None mojolearn=/root/mojolearn/python/mojolearn/__init__.py
+FSPEED-NOTE lane=pca arm=ours context=bg=quiet
+FSPEED-GEMM lane=pca caller=pca.cov.taxi op=TN m=11 n=11 k=4000000 reach=entry
+FSPEED-WARMUP lane=pca arm=ours shape=taxi-4000000x11c8-ctd ms=5128.117
+FSPEED lane=pca arm=ours shape=taxi-4000000x11c8-ctd round=1 ms=33.190 hash=c790338770a4c120
+FSPEED lane=pca arm=ours shape=taxi-4000000x11c8-ctd round=2 ms=32.428 hash=c790338770a4c120
+FSPEED lane=pca arm=ours shape=taxi-4000000x11c8-ctd round=3 ms=32.301 hash=c790338770a4c120
+FSPEED-ACC lane=pca arm=ours metric=explained_variance_ratio_sum value=0.997860707

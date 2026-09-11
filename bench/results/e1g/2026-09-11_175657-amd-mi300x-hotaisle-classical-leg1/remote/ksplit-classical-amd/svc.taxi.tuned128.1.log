@@ -1,0 +1,12 @@
+FSPEED-HEADER family=classical lane=svc arm=ours mode=IDENTICAL device=AMD_Instinct_MI300X_VF rounds=3 size=section9
+FSPEED-NOTE lane=svc arm=ours gemm_arm=tuned128 gemm_plan=tuned128:_the_old_TUNED_128x128_plan_forced_on_every_call_it_served block=1 dataset=taxi source=ctd data=/root/ctd-data rows=10000 features=11 test_rows=10000 x_sha256=345902ee285b294e block=svc-taxi numeric_mode_used=identical vendor_used=hip smoke_max_rows=None mojolearn=/root/mojolearn/python/mojolearn/__init__.py
+FSPEED-NOTE lane=svc arm=ours context=bg=quiet
+FSPEED-GEMM lane=svc caller=svc.square_tile.taxi op=NT m=1024 n=1024 k=11 reach=entry
+FSPEED-GEMM lane=svc caller=svc.batch_tile_nnz128.taxi op=NT m=128 n=10000 k=11 reach=entry
+FSPEED-GEMM lane=svc caller=svc.batch_tile_nnzws.taxi op=NT m=1024 n=10000 k=11 reach=entry
+FSPEED-WARMUP lane=svc arm=ours shape=taxi-10000x11-ctd ms=7141.606
+FSPEED lane=svc arm=ours shape=taxi-10000x11-ctd round=1 ms=1491.467 hash=2d85d6008566c340
+FSPEED lane=svc arm=ours shape=taxi-10000x11-ctd round=2 ms=1491.411 hash=2d85d6008566c340
+FSPEED lane=svc arm=ours shape=taxi-10000x11-ctd round=3 ms=1491.476 hash=2d85d6008566c340
+FSPEED-ACC lane=svc arm=ours metric=accuracy value=0.7675
+FSPEED-NOTE lane=svc arm=ours quality_extra n_support=5527

@@ -1,0 +1,4 @@
+CTD-PREP block=big-istella X=2043304x220 y=2043304 Xq=500000x220 yq=500000 init=64x220
+CTD-PREP block=kde-istella X=100000x220 Xq=2000x220
+CTD-PREP block=svc-istella X=10000x220 y=10000 Xq=10000x220 yq=10000
+CTD-PREP dataset=istella seconds=7.0

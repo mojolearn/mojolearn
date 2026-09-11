@@ -1,0 +1,12 @@
+mac_deadman_pid=51993
+mac_deadman_dir=/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-hotaisle-deadman-51780
+mac_deadman_fires_at=2026-09-11T18:57:03Z
+mac_deadman_keyed_by=vm_ref.txt (deployment_id from the create response) and description mojolearn:neural-classical-leg1:20260911T175703Z
+watchdog_seconds=3572
+watchdog_fires_at=2026-09-11T18:57:13Z
+watchdog_WATCHDOG_ALIVE pid=2419
+watchdog_REF_BAKED_IN=1
+watchdog_TOKEN_GET_HTTP=200
+watchdog_DESC_MATCH
+watchdog_WATCHDOG_STILL_ALIVE_SECOND_SESSION
+mac_deadman=cancelled 2026-09-11T18:26:51Z
