@@ -897,6 +897,13 @@ def knn_selector_shuffle_for[column: Int, identical: Bool]() -> Bool:
     return column_lane_width_is_fixed(column)
 
 
+def svm_block_solve_warp_folds_for[column: Int, width: Int]() -> Bool:
+    """SCHEDULING row (2026-09-11, DEVIATION 2623): whether `svm/impl/smoblocksolve.mojo::smo_block_solve_kernel[width]` folds its three arg-reductions with `block_argext` warp butterflies (DEVIATION 2491) instead of the halving trees with a one-slot thread ballot that preceded it. Both select the same (value, key) element under a total order with unique keys, so no column's bits depend on this row. NVIDIA refuses the warp kernel at width 1024 (H100 80GB HBM3, driver 580.126.09, CUDA_ERROR_LAUNCH_OUT_OF_RESOURCES, so every SVC fit above 512 training rows failed from 2491 through 0.8.2) and launches it at 512; the tree kernel launches at 1024 there. Fusing two of the warp folds or dropping the WSIZE threadgroup diagonal did not make the warp kernel launch. The Apple M4 and the AMD MI300X launch the warp kernel at 1024. `-D MOJOLEARN_SVM_TREE_FOLDS` takes the tree schedule on every column for an A/B."""
+    comptime if is_defined["MOJOLEARN_SVM_TREE_FOLDS"]():
+        return False
+    return not (column == COLUMN_NVIDIA and width > 512)
+
+
 def umap_device_optimizer_for[column: Int, identical: Bool]() -> Bool:
     """ROUTING row (2026-09-09, lane/umap-optimizer): whether the IDENTICAL UMAP layout optimizer runs on the device (`umap/optimizer_identical_device.mojo`: one thread per vertex, one epoch snapshot, each vertex's update a fixed-order fold over its CSR row, negatives from Philox keyed by (seed, epoch, edge, slot), no atomics, no launch-geometry dependence) instead of the serial host loop (`umap/optimizer.mojo::optimize_layout_identical`, `umap/sparse_optimizer.mojo::optimize_sparse_layout_identical`). The two produce DIFFERENT bits (Jacobi versus Gauss-Seidel order); the device path is the IDENTICAL contract on every column and is gated against itself across launch widths and GPUs, not against the host loop. `-D MOJOLEARN_UMAP_IDENTICAL_HOST_OPTIMIZER=1` restores the host loop on every column (the pre-2026-09-09 cards). FAST and DETERMINISTIC never enter this row."""
     comptime if not identical:

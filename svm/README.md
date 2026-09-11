@@ -38,6 +38,21 @@ honors: the block solve was 2.73 s and the full kernel tile 3.58 s of a
 Fit 7.5 s to 2.2 s under the stage clock; `svc_main.mojo` 44/44 in FAST
 and, after the trace fix below, 44/44 in IDENTICAL.
 
+**2623** (2026-09-11) `checks/kernel_matrix.mojo::svm_block_solve_warp_folds_for`:
+2491 made `smo_block_solve_kernel[1024]` unlaunchable on CUDA. An NVIDIA
+H100 80GB HBM3 refuses it with CUDA_ERROR_LAUNCH_OUT_OF_RESOURCES, so every
+SVC fit with more than 512 training rows (`n_ws = min(1024, n_train)`)
+failed there from 2491 through 0.8.2, and `svc_main.mojo` failed seven
+IDENTICAL gates there, while [512], the MI300X and the M4 launch it. The
+pre-2491 kernel fits at 600 and 2,000 rows on the same GPU. The compiled
+warp kernel reports 61 registers and 5,256 threadgroup bytes, so the refused
+resource is not one the function reports, and neither folding `f_u` and
+`f_max` into one exchange nor reading the diagonal from the kernel buffer
+instead of a WSIZE threadgroup array made it launch. The row keeps the warp
+folds everywhere except NVIDIA above width 512, which takes the halving trees
+with a one-slot thread ballot again. Both schedules select the same element,
+so the bits are the same on every column.
+
 `svr_device_matches_oracle` had failed under IDENTICAL since the SVR path
 landed ("ws sequence differs at outer iteration 0", every SVR fixture; FAST
 only reported it). The solver's trace recorded the working set PROJECTED
