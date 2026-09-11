@@ -111,10 +111,13 @@ cmd_rent() {
     [ -s "$STATE_DIR/pod_id.txt" ] && die "a pod is already recorded in $STATE_DIR ($(cat "$STATE_DIR/pod_id.txt")); reap it first"
     rp_call GET /v1/pods
     [ "$RP_CODE" = "200" ] || die "pre-flight GET /v1/pods -> HTTP $RP_CODE; not renting"
-    _mine=$(rp_json "','.join(str(p.get('id','')) for p in (d.get('items') or d.get('pods') or d.get('data') or []) if str(p.get('name','')).startswith('mojolearn-trees-'))")
+    # TREES_LEG_NAME: the pod name prefix, so two lanes (or two legs of one
+    # lane, each with its own TREES_LEG_STATE) can hold one pod each.
+    _prefix="${TREES_LEG_NAME:-mojolearn-trees}"
+    _mine=$(rp_json "','.join(str(p.get('id','')) for p in (d.get('items') or d.get('pods') or d.get('data') or []) if str(p.get('name','')).startswith('$_prefix-'))")
     [ -z "$_mine" ] || die "this lane already has pod(s) up: $_mine; reap first"
     STAMP=$(date -u +%Y-%m-%d_%H%M%S)
-    POD_NAME="mojolearn-trees-$STAMP"
+    POD_NAME="$_prefix-$STAMP"
     python3 - "$TMPD/create.json" "$POD_NAME" "$IMAGE" "$GPU" <<'PY'
 import json, sys
 out, name, image, gpu = sys.argv[1:]

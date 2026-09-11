@@ -79,18 +79,27 @@ THE ARMS (0b-iii: only OUR IDENTICAL arm against the opponent's FAST arm)
                 OPENBLAS_NUM_THREADS or MKL_NUM_THREADS, no n_jobs cap
                 (n_jobs=-1 where the estimator takes one). The ready record
                 names the BLAS and OpenMP pools threadpoolctl reports.
+  cuml-gpu      RAPIDS cuML on NVIDIA (the GPU library on the box is the
+                opponent, DEVIATION 2571): KMeans, PCA(svd_solver='full'),
+                LinearRegression(algorithm='eig'), NearestNeighbors(brute),
+                KernelDensity and SVC, output_type='cupy'. Their FAST arm:
+                inputs are cupy arrays uploaded BEFORE the clock (upload_ms in
+                the ready record), kNN and KDE fit before the clock (kneighbors
+                and score_samples timed), the clock ends at
+                cupy.cuda.runtime.deviceSynchronize().
   torch-gpu     PyTorch on the box's GPU (ROCm on the MI325X, CUDA on NVIDIA),
                 written the way a competent user writes it: Lloyd iterations
                 with a chunked addmm assignment; PCA by covariance eigh; OLS
-                by centered normal equations through eigh with a
+                by torch.linalg.lstsq on centered data (on CUDA its only
+                driver is gels, QR without pivoting, which assumes full rank);
+                brute-force kNN by torch.cdist plus topk per 1024-query chunk.
+                Their FAST arm: the inputs are uploaded BEFORE the clock
+                (upload_ms is in the ready record), the clock ends at
+                torch.cuda.synchronize(). Not written for kde and svc.
+  torch-gpu-eigh  OLS only: centered normal equations through eigh with a
                 pseudo-inverse cutoff (the algorithm class of ours and of
-                cuML's algorithm='eig'; a QR lstsq has no pivoting on the GPU
-                and Istella has near-constant columns); brute-force kNN by
-                addmm plus topk. Their FAST arm: the inputs are uploaded and
-                the index norms computed BEFORE the clock (upload_ms is in the
-                ready record), the clock ends at torch.cuda.synchronize().
-                Not written for kde and svc (rule 3 names kmeans, pca, ols and
-                knn).
+                cuML's algorithm='eig'; Istella has near-constant columns, so
+                it is kept beside the lstsq arm).
 
 INTERLEAVING. One worker process per arm holds the data and its library for
 the whole (lane, dataset); the conductor sends `round r` to each arm in turn,
@@ -104,9 +113,10 @@ by one float64 NumPy function per lane, never by the libraries' own scorers:
   kmeans  inertia of the final centroids over the fit rows, and n_iter
   pca     explained-variance ratio of the 8 components over the fit rows
   ols     R2 and RMSE on the eval rows
-  knn     tie-aware recall@10 against scikit-learn's brute-force neighbours
-          (a neighbour counts when its float64 distance is within the
+  knn     tie-aware recall@10 against a float64 NumPy brute force computed
+          here (a neighbour counts when its float64 distance is within the
           reference's 10th distance), distinct ids only
+  (kmeans inertia is also given as a ratio over ours)
   kde     mean log-likelihood of the queries
   svc     accuracy on the eval rows
 
@@ -136,13 +146,15 @@ REPO = os.path.dirname(HERE)
 
 LANES = ("kmeans", "pca", "ols", "knn", "kde", "svc")
 DATASETS = ("taxi", "istella")
+#: Every arm a lane has. A leg names the ones it races with --arms (NVIDIA:
+#: ours, cuml-gpu and torch; AMD: ours, torch ROCm and scikit-learn on the CPU).
 ARMS = {
-    "kmeans": ("ours", "sklearn-cpu", "torch-gpu"),
-    "pca": ("ours", "sklearn-cpu", "torch-gpu"),
-    "ols": ("ours", "sklearn-cpu", "torch-gpu"),
-    "knn": ("ours", "sklearn-cpu", "torch-gpu"),
-    "kde": ("ours", "sklearn-cpu"),
-    "svc": ("ours", "sklearn-cpu"),
+    "kmeans": ("ours", "cuml-gpu", "torch-gpu", "sklearn-cpu"),
+    "pca": ("ours", "cuml-gpu", "torch-gpu", "sklearn-cpu"),
+    "ols": ("ours", "cuml-gpu", "torch-gpu", "torch-gpu-eigh", "sklearn-cpu"),
+    "knn": ("ours", "cuml-gpu", "torch-gpu", "sklearn-cpu"),
+    "kde": ("ours", "cuml-gpu", "sklearn-cpu"),
+    "svc": ("ours", "cuml-gpu", "sklearn-cpu"),
 }
 BLOCK_OF = {"kmeans": "big", "pca": "big", "ols": "big", "knn": "knn",
             "kde": "kde", "svc": "svc"}
@@ -282,10 +294,22 @@ def prep(args):
     os.makedirs(args.data, exist_ok=True)
     harness = _module("speed_gbdt_arm")
     blocks = sorted({BLOCK_OF[l] for l in lanes})
+    # --max-rows: the SMOKE shape (a harness bug costs minutes, not a lease).
+    # Every block is capped; a smoke block is never a timing row.
+    cap = int(args.max_rows) if args.max_rows else None
+    big_rows = min(BIG_ROWS, cap) if cap else BIG_ROWS
+    eval_cap = cap
+    knn_index = min(400_000, cap) if cap else 400_000
+    knn_queries = min(4_000, max(64, cap // 50)) if cap else 4_000
+    kde_train = min(KDE_TRAIN, cap) if cap else KDE_TRAIN
+    kde_query = min(KDE_QUERY, max(64, cap // 100)) if cap else KDE_QUERY
+    svc_train = min(SVC_TRAIN, max(256, cap // 10)) if cap else SVC_TRAIN
+    svc_eval = min(SVC_EVAL, max(256, cap // 10)) if cap else SVC_EVAL
     for ds in datasets:
         t0 = time.perf_counter()
         base = {"dataset": ds, "data_root": harness.data_root(),
-                "rule": "ENGINEERING_RULES.md section 9; DEVIATION 2570"}
+                "rule": "ENGINEERING_RULES.md section 9; DEVIATION 2570",
+                "smoke_max_rows": cap}
         reg = None
         if "big" in blocks or "kde" in blocks:
             if ds == "taxi":
@@ -300,9 +324,11 @@ def prep(args):
             ytr = np.ascontiguousarray(reg.y_train, dtype=np.float32)
             yte = np.ascontiguousarray(reg.y_test, dtype=np.float32)
         if "big" in blocks:
-            n = min(BIG_ROWS, xtr.shape[0])
+            n = min(big_rows, xtr.shape[0])
             X, bad_x = clean_sentinel(xtr[:n])
-            Xq, bad_q = clean_sentinel(xte)
+            n_eval = min(eval_cap, xte.shape[0]) if eval_cap else xte.shape[0]
+            Xq, bad_q = clean_sentinel(xte[:n_eval])
+            yte = yte[:n_eval]
             init, init_rows = distinct_init_rows(X, KMEANS_K)
             rec = dict(base, block="big", lanes=["kmeans", "pca", "ols"],
                        loader=loader, fit_rows=[0, n],
@@ -319,8 +345,8 @@ def prep(args):
                          {"X": X, "y": ytr[:n], "Xq": Xq, "yq": yte,
                           "init": init}, rec)
         if "kde" in blocks:
-            fit_idx = stride_rows(xtr.shape[0], KDE_TRAIN)
-            q_idx = stride_rows(xte.shape[0], KDE_QUERY)
+            fit_idx = stride_rows(xtr.shape[0], kde_train)
+            q_idx = stride_rows(xte.shape[0], kde_query)
             Xf, bad_x = clean_sentinel(xtr[fit_idx])
             Xq, bad_q = clean_sentinel(xte[q_idx])
             Xf, Xq = standardize(Xf, Xq)
@@ -348,8 +374,8 @@ def prep(args):
                 cy_tr = (reg.y_train > 0).astype(np.float32)
                 cy_te = (reg.y_test > 0).astype(np.float32)
                 cloader = "speed_gbdt_arm.load_istella('shipped', regression=True), label relevance > 0"
-            fit_idx = stride_rows(ctr.shape[0], SVC_TRAIN)
-            ev_idx = stride_rows(cte.shape[0], SVC_EVAL)
+            fit_idx = stride_rows(ctr.shape[0], svc_train)
+            ev_idx = stride_rows(cte.shape[0], svc_eval)
             Xf, bad_x = clean_sentinel(ctr[fit_idx])
             Xq, bad_q = clean_sentinel(cte[ev_idx])
             Xf, Xq = standardize(Xf, Xq)
@@ -368,7 +394,7 @@ def prep(args):
             _write_block(args.data, "svc-" + ds, {"X": Xf, "y": y, "Xq": Xq, "yq": yq}, rec)
         if "knn" in blocks:
             knn_ds = _module("knn_datasets")
-            blk = knn_ds.real_block(ds)
+            blk = knn_ds.real_block(ds, n_index=knn_index, n_queries=knn_queries)
             index, bad_i = clean_sentinel(blk["index"])
             queries, bad_q = clean_sentinel(blk["queries"])
             src = {k: v for k, v in blk["source"].items()}
@@ -421,9 +447,12 @@ def _torch_sync():
 
 
 def _to_host(a):
-    """Host NumPy copy of a torch tensor, mojolearn Array or NumPy array."""
+    """Host NumPy copy of a torch tensor, cupy array, mojolearn Array or
+    NumPy array."""
     if hasattr(a, "detach"):
         return a.detach().cpu().numpy()
+    if type(a).__module__.split(".")[0] == "cupy":
+        return a.get()
     return np.array(a, copy=True)
 
 
@@ -866,6 +895,37 @@ class TorchPCA:
 
 
 class TorchOLS:
+    """torch.linalg.lstsq on centered data, the call a competent user writes.
+    On CUDA its only driver is gels (QR without pivoting, full rank assumed);
+    the quality beside the cell says what that costs on Istella's
+    near-constant columns."""
+
+    def __init__(self, data, rec):
+        self.torch, self.dev, t, self.info = _torch_setup({"X": data["X"], "y": data["y"]})
+        self.x, self.y = t["X"], t["y"]
+        self.info["config"] = ("xc = x - mean, yc = y - mean; torch.linalg.lstsq(xc, yc[:, None]) "
+                               "(default driver; gels on CUDA); intercept = ymean - xmean @ coef")
+        self.coef = self.intercept = None
+
+    def call(self):
+        torch = self.torch
+        x, y = self.x, self.y
+        xm = x.mean(dim=0)
+        ym = y.mean()
+        sol = torch.linalg.lstsq(x - xm, (y - ym).unsqueeze(1)).solution
+        coef = sol[: x.shape[1], 0]
+        self.coef = coef
+        self.intercept = ym - xm @ coef
+
+    def sync(self):
+        _torch_sync()
+
+    def outputs(self):
+        return {"coef": _to_host(self.coef).astype(np.float64),
+                "intercept": np.array([float(_to_host(self.intercept))], dtype=np.float64)}
+
+
+class TorchOLSEigh:
     def __init__(self, data, rec):
         self.torch, self.dev, t, self.info = _torch_setup({"X": data["X"], "y": data["y"]})
         self.x, self.y = t["X"], t["y"]
@@ -902,10 +962,8 @@ class TorchKNN:
         self.torch, self.dev, t, self.info = _torch_setup({"index": data["index"],
                                                            "queries": data["queries"]})
         self.index, self.q = t["index"], t["queries"]
-        self.index_sq = (self.index * self.index).sum(dim=1)
-        _torch_sync()
-        self.info["config"] = ("brute force: per 1024-query chunk addmm(||index||^2, q, index.T, alpha=-2) "
-                               "then topk(10, largest=False); index norms before the clock")
+        self.info["config"] = ("brute force: per 1024-query chunk torch.cdist(q, index) "
+                               "(default compute_mode) then topk(10, largest=False)")
         self.ind = None
 
     def call(self):
@@ -915,7 +973,7 @@ class TorchKNN:
         ind = torch.empty((nq, KNN_K), dtype=torch.long, device=self.dev)
         for s in range(0, nq, TORCH_KNN_QUERY_CHUNK):
             e = min(s + TORCH_KNN_QUERY_CHUNK, nq)
-            d = torch.addmm(self.index_sq.unsqueeze(0), q[s:e], index.T, beta=1.0, alpha=-2.0)
+            d = torch.cdist(q[s:e], index)
             _vals, idx = torch.topk(d, KNN_K, dim=1, largest=False)
             ind[s:e] = idx
         self.ind = ind
@@ -927,13 +985,204 @@ class TorchKNN:
         return {"ind": _to_host(self.ind).astype(np.int64)}
 
 
+# ---- cuML (DEVIATION 2571: the GPU library on the box is the opponent) ----------
+
+def _cupy_sync():
+    import cupy as cp
+    cp.cuda.runtime.deviceSynchronize()
+
+
+def _cuml_setup(arrays):
+    """Upload `arrays` to the GPU as cupy arrays before any clock. Returns
+    (tensors, info)."""
+    import cupy as cp
+    import cuml
+    cp.cuda.runtime.deviceSynchronize()
+    t0 = time.perf_counter()
+    dev = {k: cp.asarray(np.ascontiguousarray(v)) for k, v in arrays.items()}
+    cp.cuda.runtime.deviceSynchronize()
+    upload_ms = (time.perf_counter() - t0) * 1000.0
+    try:
+        name = cp.cuda.runtime.getDeviceProperties(0)["name"]
+        name = name.decode() if isinstance(name, bytes) else str(name)
+    except Exception as exc:  # noqa: BLE001
+        name = "unavailable (%r)" % (exc,)
+    info = {"library": "cuml", "version": cuml.__version__, "cupy": cp.__version__,
+            "cuda_runtime": cp.cuda.runtime.runtimeGetVersion(),
+            "cuda_driver_api": cp.cuda.runtime.driverGetVersion(),
+            "device": "gpu", "device_name": name, "upload_ms_untimed": upload_ms}
+    info.update(_host_info())
+    return dev, info
+
+
+def _scalar(v):
+    return float(np.asarray(_to_host(v)).reshape(-1)[0]) if not isinstance(v, (int, float)) else float(v)
+
+
+class CumlKMeans:
+    def __init__(self, data, rec):
+        from cuml.cluster import KMeans
+        self.KMeans = KMeans
+        t, self.info = _cuml_setup({"X": data["X"], "init": data["init"]})
+        self.x, self.init = t["X"], t["init"]
+        self.info["config"] = ("cuml.cluster.KMeans(n_clusters=64, init=<the shared array, on device>, "
+                               "n_init=1, max_iter=20, tol=0.0, output_type='cupy'); fit timed")
+        self.est = None
+
+    def call(self):
+        est = self.KMeans(n_clusters=KMEANS_K, init=self.init, n_init=1, max_iter=KMEANS_ITER,
+                          tol=0.0, output_type="cupy")
+        est.fit(self.x)
+        self.est = est
+
+    def sync(self):
+        _cupy_sync()
+
+    def outputs(self):
+        return {"centers": np.asarray(_to_host(self.est.cluster_centers_), dtype=np.float32),
+                "labels": np.asarray(_to_host(self.est.labels_), dtype=np.int32),
+                "n_iter": np.array([int(_scalar(self.est.n_iter_))], dtype=np.int64)}
+
+
+class CumlPCA:
+    def __init__(self, data, rec):
+        from cuml.decomposition import PCA
+        self.PCA = PCA
+        t, self.info = _cuml_setup({"X": data["X"]})
+        self.x = t["X"]
+        self.info["config"] = "cuml.decomposition.PCA(n_components=8, svd_solver='full', output_type='cupy'); fit timed"
+        self.est = None
+
+    def call(self):
+        est = self.PCA(n_components=PCA_COMPONENTS, svd_solver="full", output_type="cupy")
+        est.fit(self.x)
+        self.est = est
+
+    def sync(self):
+        _cupy_sync()
+
+    def outputs(self):
+        return {"components": np.asarray(_to_host(self.est.components_), dtype=np.float32),
+                "explained_variance": np.asarray(_to_host(self.est.explained_variance_), dtype=np.float32),
+                "mean": np.asarray(_to_host(self.est.mean_), dtype=np.float32).reshape(-1)}
+
+
+class CumlOLS:
+    def __init__(self, data, rec):
+        from cuml.linear_model import LinearRegression
+        self.LR = LinearRegression
+        t, self.info = _cuml_setup({"X": data["X"], "y": data["y"]})
+        self.x, self.y = t["X"], t["y"]
+        # copy_X=True where the build takes it: fit_intercept centers the
+        # design matrix, and a centered device X would change every later round.
+        self.kw = dict(algorithm="eig", fit_intercept=True, output_type="cupy")
+        try:
+            self.LR(copy_X=True, **self.kw)
+            self.kw["copy_X"] = True
+        except TypeError:
+            self.info["copy_X"] = "not a parameter of this build"
+        self.info["config"] = "cuml.linear_model.LinearRegression(%s); fit timed" % (
+            ", ".join("%s=%r" % kv for kv in sorted(self.kw.items())),)
+        self.est = None
+
+    def call(self):
+        est = self.LR(**self.kw)
+        est.fit(self.x, self.y)
+        self.est = est
+
+    def sync(self):
+        _cupy_sync()
+
+    def outputs(self):
+        return {"coef": np.asarray(_to_host(self.est.coef_), dtype=np.float64).reshape(-1),
+                "intercept": np.array([_scalar(self.est.intercept_)], dtype=np.float64)}
+
+
+class CumlKNN:
+    def __init__(self, data, rec):
+        from cuml.neighbors import NearestNeighbors
+        t, self.info = _cuml_setup({"index": data["index"], "queries": data["queries"]})
+        self.q = t["queries"]
+        self.nn = NearestNeighbors(n_neighbors=KNN_K, algorithm="brute", metric="euclidean",
+                                   output_type="cupy")
+        self.nn.fit(t["index"])
+        _cupy_sync()
+        self.info["config"] = ("cuml.neighbors.NearestNeighbors(n_neighbors=10, algorithm='brute', "
+                               "metric='euclidean', output_type='cupy'); fit before the clock, kneighbors timed")
+        self.out = None
+
+    def call(self):
+        self.out = self.nn.kneighbors(self.q)
+
+    def sync(self):
+        _cupy_sync()
+
+    def outputs(self):
+        dist, ind = self.out
+        return {"ind": np.asarray(_to_host(ind), dtype=np.int64),
+                "dist": np.asarray(_to_host(dist), dtype=np.float32)}
+
+
+class CumlKDE:
+    def __init__(self, data, rec):
+        from cuml.neighbors import KernelDensity
+        t, self.info = _cuml_setup({"X": data["X"], "Xq": data["Xq"]})
+        self.q = t["Xq"]
+        self.kd = KernelDensity(bandwidth=rec["kde"]["bandwidth"], kernel="gaussian",
+                                metric="euclidean", output_type="cupy")
+        self.kd.fit(t["X"])
+        _cupy_sync()
+        self.info["config"] = ("cuml.neighbors.KernelDensity(bandwidth=scott, kernel='gaussian', "
+                               "metric='euclidean', output_type='cupy'); fit before the clock, score_samples timed")
+        self.scores = None
+
+    def call(self):
+        self.scores = self.kd.score_samples(self.q)
+
+    def sync(self):
+        _cupy_sync()
+
+    def outputs(self):
+        return {"scores": np.asarray(_to_host(self.scores), dtype=np.float64).reshape(-1)}
+
+
+class CumlSVC:
+    def __init__(self, data, rec):
+        from cuml.svm import SVC
+        self.SVC = SVC
+        t, self.info = _cuml_setup({"X": data["X"], "y": data["y"], "Xq": data["Xq"]})
+        self.x, self.y, self.xq = t["X"], t["y"], t["Xq"]
+        self.gamma = float(rec["svc"]["gamma"])
+        self.info["config"] = ("cuml.svm.SVC(C=1.0, kernel='rbf', gamma=1/d, tol=1e-3, cache_size default, "
+                               "output_type='cupy'); fit timed")
+        self.est = None
+
+    def call(self):
+        est = self.SVC(C=SVC_C, kernel="rbf", gamma=self.gamma, tol=SVC_TOL, output_type="cupy")
+        est.fit(self.x, self.y)
+        self.est = est
+
+    def sync(self):
+        _cupy_sync()
+
+    def outputs(self):
+        pred = self.est.predict(self.xq)
+        return {"pred": np.asarray(_to_host(pred), dtype=np.float64).reshape(-1),
+                "n_support": np.array([int(np.asarray(_to_host(self.est.support_)).shape[0])],
+                                      dtype=np.int64)}
+
+
 BUILDERS = {
     ("kmeans", "ours"): OursKMeans, ("kmeans", "sklearn-cpu"): SkKMeans, ("kmeans", "torch-gpu"): TorchKMeans,
+    ("kmeans", "cuml-gpu"): CumlKMeans,
     ("pca", "ours"): OursPCA, ("pca", "sklearn-cpu"): SkPCA, ("pca", "torch-gpu"): TorchPCA,
+    ("pca", "cuml-gpu"): CumlPCA,
     ("ols", "ours"): OursOLS, ("ols", "sklearn-cpu"): SkOLS, ("ols", "torch-gpu"): TorchOLS,
+    ("ols", "torch-gpu-eigh"): TorchOLSEigh, ("ols", "cuml-gpu"): CumlOLS,
     ("knn", "ours"): OursKNN, ("knn", "sklearn-cpu"): SkKNN, ("knn", "torch-gpu"): TorchKNN,
-    ("kde", "ours"): OursKDE, ("kde", "sklearn-cpu"): SkKDE,
-    ("svc", "ours"): OursSVC, ("svc", "sklearn-cpu"): SkSVC,
+    ("knn", "cuml-gpu"): CumlKNN,
+    ("kde", "ours"): OursKDE, ("kde", "sklearn-cpu"): SkKDE, ("kde", "cuml-gpu"): CumlKDE,
+    ("svc", "ours"): OursSVC, ("svc", "sklearn-cpu"): SkSVC, ("svc", "cuml-gpu"): CumlSVC,
 }
 
 
@@ -1104,10 +1353,10 @@ def quality(lane, data, outs, rec):
                 d = (xb * xb).sum(axis=1)[:, None] - 2.0 * (xb @ C.T) + c2[None, :]
                 total += float(np.maximum(d.min(axis=1), 0.0).sum())
             q[arm] = {"inertia": total, "n_iter": int(o["n_iter"][0])}
-        ref = q.get("sklearn-cpu", {}).get("inertia")
+        ref = q.get("ours", {}).get("inertia")
         for arm in q:
             if ref:
-                q[arm]["inertia_over_sklearn"] = q[arm]["inertia"] / ref
+                q[arm]["inertia_over_ours"] = q[arm]["inertia"] / ref
     elif lane == "pca":
         X = data["X"]
         n = X.shape[0]
@@ -1139,24 +1388,42 @@ def quality(lane, data, outs, rec):
     elif lane == "knn":
         index = data["index"].astype(np.float64)
         Q = data["queries"].astype(np.float64)
+        nq = Q.shape[0]
+        shortlist = min(4 * KNN_K, index.shape[0])
 
-        def d64(ids):
-            diff = Q[:, None, :] - index[ids]
+        def d64(qrows, ids):
+            diff = Q[qrows][:, None, :] - index[ids]
             return (diff * diff).sum(axis=2)
 
-        ref = outs.get("sklearn-cpu")
-        kth = d64(ref["ind"]).max(axis=1) if ref is not None else None
+        # THE REFERENCE IS OURS TO COMPUTE, NOT AN ARM'S: float64 NumPy brute
+        # force. A norm-expansion shortlist of 40 per query, unioned with every
+        # arm's returned ids, then exact float64 differences over that union;
+        # the reference is its 10th smallest distance. An id an arm found that
+        # the shortlist missed is in the union, so it cannot be scored a miss.
+        x2 = (index * index).sum(axis=1)
+        kth = np.empty(nq)
+        for s in range(0, nq, 64):
+            e = min(s + 64, nq)
+            qb = Q[s:e]
+            dd = (qb * qb).sum(axis=1)[:, None] - 2.0 * (qb @ index.T) + x2[None, :]
+            cand = np.argpartition(dd, shortlist - 1, axis=1)[:, :shortlist]
+            union = np.concatenate([cand] + [o["ind"][s:e].astype(np.int64) for o in outs.values()],
+                                   axis=1)
+            exact = d64(np.arange(s, e), union)
+            for r in range(e - s):
+                _u, first = np.unique(union[r], return_index=True)
+                kth[s + r] = np.sort(exact[r, first])[KNN_K - 1]
         for arm, o in outs.items():
-            ids = o["ind"]
-            entry = {"reference": "sklearn-cpu brute force" if kth is not None else "none"}
+            ids = o["ind"].astype(np.int64)
+            entry = {"reference": "float64 NumPy brute force (shortlist 40 plus every arm's ids, exact differences)"}
             srt = np.sort(ids, axis=1)
             distinct = 1 + (np.diff(srt, axis=1) != 0).sum(axis=1)
             entry["rows_with_repeated_ids"] = int((distinct < KNN_K).sum())
-            if kth is not None:
-                d = d64(ids)
-                within = d <= kth[:, None] * (1.0 + 1e-9) + 1e-12
-                hits = np.minimum(within.sum(axis=1), distinct)
-                entry["recall_at_10"] = float(hits.mean() / KNN_K)
+            d = np.concatenate([d64(np.arange(s, min(s + 256, nq)), ids[s:s + 256])
+                                for s in range(0, nq, 256)], axis=0)
+            within = d <= kth[:, None] * (1.0 + 1e-9) + 1e-12
+            hits = np.minimum(within.sum(axis=1), distinct)
+            entry["recall_at_10"] = float(hits.mean() / KNN_K)
             q[arm] = entry
     elif lane == "kde":
         sentinel = -3.0e38
@@ -1340,6 +1607,8 @@ def main():
     p.add_argument("--data", required=True)
     p.add_argument("--lanes", default=",".join(LANES))
     p.add_argument("--datasets", default=",".join(DATASETS))
+    p.add_argument("--max-rows", type=int, default=0,
+                   help="SMOKE shape: cap every block near this many rows (0 = the lane shapes)")
     w = sub.add_parser("worker")
     w.add_argument("--arm", required=True)
     w.add_argument("--lane", required=True, choices=LANES)
