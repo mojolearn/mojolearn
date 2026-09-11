@@ -346,10 +346,43 @@ running:
 On the classification cells alone 32768 leads 16384 by 1.7 percent, which is
 inside the band in rule 2, so as of this writing 16384 is the candidate.
 
-### Speed
+### Speed, over all four cells the switch reaches
 
-Pending: batch C's A/B, batch D's verdict, and (only if a flip is on the table)
-batch F's two regression cells.
+Ours against ours, not an opponent race: `ctl` is this lane's build at cuML's
+shipped `max_batch_size` of 4096; the trial sets are the same source built with
+`-D MOJOLEARN_ET_DEVICE_BATCH_16384=1` and `_32768=1`. Two passes in rotated
+order (3 rounds each, 2 for istellareg), ours-only, pooled medians.
+
+| cell | columns sampled | ctl (4096) ms | 16384 ms | ratio | 32768 ms | ratio | hash (all three) |
+|---|---|---|---|---|---|---|---|
+| et taxi | 4 of 16 | 1907.7 | 1616.3 | 0.847 | 1587.3 | 0.832 | `e683f121d11f59dd` |
+| et Istella-S | 14 of 220 | 5026.6 | 4596.3 | 0.914 | 4519.0 | 0.899 | `40b1c5b03ba40420` |
+| et taxireg | 11 of 11 | 5350.0 | 5292.7 | 0.989 | 5285.8 | 0.988 | `9844a40ba74bc375` |
+| et istellareg | 220 of 220 | 67051.0 | 67476.6 | 1.006 | 67293.4 | 1.004 | `59547e3a9db9ecd8` |
+
+Geometric means: classification pair 0.880 / 0.865, ALL FOUR CELLS 0.9371 at
+16384 and 0.9280 at 32768. Quality is equal in every cell (the model hash is
+one value per cell across all three widths, and `flip_verdict`'s deltas are
++0.000000), so section 9 flips the switch.
+
+THE LOSS IS REPORTED, NOT AVERAGED AWAY: istellareg reads 1.006 and 1.004,
+about half a percent slower. That cell samples all 220 columns at every node,
+so DEVIATION 205's rescue -- the thing a wider batch actually saves -- can
+fire only when every column is constant at once, and what remains is the
+larger per-cycle staging compare that the wider capacity costs.
+
+DECISION: 16384 becomes the default; 32768 stays a measurement arm. Under the
+rule pre-registered above, 32768's 0.9280 beats 16384's 0.9371 by 0.97 percent,
+inside the 2 percent margin, and it doubles the level workspace (about 800 MB
+at 220 columns against 400 MB) on every vendor this library ships to, for time
+measured on an 80 GB H100. `-D MOJOLEARN_ET_DEVICE_BATCH_4096=1` restores
+cuML's shipped width for anyone A/B-ing it.
+
+### The default as it will ship (batch G)
+
+A trial binary carrying a define is not the binary that ships. Batch G rebuilds
+`_mojolearn_trees.so` from the edited source with NO defines, fingerprints it,
+diffs it against the lane set and re-times one cell per dataset.
 
 Big logs are outside the repo in
 `~/mojolearn-evidence/forest-finish-2026-09-11/`.
