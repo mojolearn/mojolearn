@@ -75,8 +75,10 @@ def main():
     first.fit(X, y, permutation=permutation, sample_weight=weights)
     model_text = str(first.model_)
     require("trees 3\n" in model_text, "wrong exported tree count")
-    prediction = first.predict(X)
-    query_prediction = first.predict(query)
+    # Estimators return mojolearn.Array (no NumPy at runtime); this gate
+    # compares bits, so view every prediction through NumPy once.
+    prediction = np.asarray(first.predict(X))
+    query_prediction = np.asarray(first.predict(query))
     require(prediction.dtype == np.float32 and prediction.shape == (32,),
             "prediction dtype/shape mismatch")
     require(np.isfinite(prediction).all() and np.isfinite(query_prediction).all(),
@@ -95,7 +97,7 @@ def main():
         X.copy(order="C"), y.copy(), permutation=permutation.copy(),
         sample_weight=weights.copy(),
     )
-    repeat_prediction = second.predict(X)
+    repeat_prediction = np.asarray(second.predict(X))
     repeat_exact = (model_text == str(second.model_)
                     and np.array_equal(prediction.view(np.uint32),
                                        repeat_prediction.view(np.uint32)))
@@ -107,8 +109,8 @@ def main():
         set_numeric_mode("fast" if mode != "fast" else "identical")
         restored = OrderedRMSE.load(path)
         require(restored.numeric_mode == mode, "saved numeric mode was not restored")
-        restored_prediction = restored.predict(X)
-        restored_query = restored.predict(query)
+        restored_prediction = np.asarray(restored.predict(X))
+        restored_query = np.asarray(restored.predict(query))
         require(str(restored.model_) == model_text, "serialized model text changed")
         require(np.array_equal(prediction.view(np.uint32), restored_prediction.view(np.uint32)),
                 "save/load prediction bits differ")

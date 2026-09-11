@@ -20,7 +20,9 @@ def main():
             states = [trainer.state_dict() for trainer in trainers]
             for key, value in states[0].items():
                 other = states[1][key]
-                if isinstance(value, np.ndarray):
+                if hasattr(value, 'tobytes'):
+                    # numpy.ndarray or mojolearn.Array; NumPy views both.
+                    value, other = np.asarray(value), np.asarray(other)
                     assert value.dtype == other.dtype and value.shape == other.shape
                     assert value.tobytes() == other.tobytes(), key
                 else:
