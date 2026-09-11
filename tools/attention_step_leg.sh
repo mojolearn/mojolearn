@@ -52,6 +52,13 @@
 # and occupancy attributes) into resources.txt. The settings for that leg
 # live in tools/attention_dkdv_leg.sh.
 #
+# DEVIATION 2598 (brief section 17, priced against the shipped NVIDIA default
+# stash_tiled_fgrid_r32_qres_pf) adds, after `_pf` and before the kv tokens,
+# `_zdefer` (the zdot stash kernel's stash stores deferred into the next
+# staging round trip) or `_zlag` (the same, with its z fold lagged into that
+# phase); a zsched arm's price run adds a REACH_Z line. The settings for that
+# leg live in tools/attention_zdot_leg.sh.
+#
 # DEVIATION 2534 (brief section 15): the shipped default is a kernel-matrix
 # row per column (`attn_default_arm_for`: NVIDIA stash_tiled_fgrid_r32_qres_pf,
 # AMD baseline, every other column stash_tiled), and a trial binding runs it when
@@ -245,7 +252,7 @@ run() {
     echo "root=$ROOT"
     echo "arms=$ARMS"
     echo "lm_arms=$LM_ARMS"
-    echo "baseline_arm=$BASE deviations_second_round=2528,2530,2531,2533 deviations_dkdv=2596,2597"
+    echo "baseline_arm=$BASE deviations_second_round=2528,2530,2531,2533 deviations_dkdv=2596,2597 deviation_zdot=2598"
     echo "rounds=$ROUNDS warmups=$WARMUPS deadline=$DEADLINE"
     echo "vendor=$VENDOR gpu_archs=$MOJOLEARN_GPU_ARCHS column=$MOJOLEARN_TARGET_COLUMN jobs=$JOBS"
     echo "skip_timers=${MOJOLEARN_ATTN_LEG_SKIP_TIMERS:-0} skip_lm=${MOJOLEARN_ATTN_LEG_SKIP_LM:-0}"

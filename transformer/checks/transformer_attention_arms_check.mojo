@@ -23,7 +23,8 @@ WHAT IT ASSERTS.
     stash_tiled_fgrid_r32_qres (2530) and stash_tiled_fgrid_r32_qres_pf
     (NVIDIA's shipped default, DEVIATION 2534), then five arms on that one:
     `_kvrecompute` (DEVIATION 2596) and `_kvgrid_r64`, `_kvgrid_r32`,
-    `_kvsplit`, `_kvgrid_r32_kvsplit` (DEVIATION 2597), so every second-round
+    `_kvsplit`, `_kvgrid_r32_kvsplit` (DEVIATION 2597), then `_zdefer`,
+    `_zlag` and `_zlag_kvgrid_r32` (DEVIATION 2598), so every second-round
     forward instantiation (rows 64 and 32, Q residency, preflush) and every
     second-round backward launch runs, and "new arm = eager" and
     "default = eager" hold in one run):
@@ -55,6 +56,10 @@ WHAT IT ASSERTS.
         move zdot and hold dv when 2528 is not in the arm (2528's y flip
         moves every backward buffer, so a composed arm is attributed per
         direction only).
+      - DEVIATION 2598 (brief section 17.4): under sabotage_new the zdot
+        schedule copy flips zdot at ODD flat rows only, so an arm carrying
+        `_zdefer` or `_zlag` must move zdot at odd rows and hold it at even
+        rows (2533's flip moves every row), on top of 2533's attribution.
       - DK/DV REACH for the DEVIATION 2596 / 2597 arms, a third run under
         ATTN_ARM_SABOTAGE_KV: at head_dim 64 dk and dv must move and zdot,
         dq and the forward must hold (brief section 16.4).
@@ -96,6 +101,8 @@ from transformer.impl.llama.fused_attention import (
     ATTN_ARM_BWD_KVSPLIT,
     ATTN_ARM_BWD_STASH,
     ATTN_ARM_BWD_TILED,
+    ATTN_ARM_BWD_ZDEFER,
+    ATTN_ARM_BWD_ZLAG,
     ATTN_ARM_BWD_ZTILED,
     ATTN_ARM_FROWS32,
     ATTN_ARM_FROWS64,
@@ -121,6 +128,7 @@ from transformer.impl.llama.fused_attention import (
     fused_attention_arm_backward_resolved,
     fused_attention_arm_forward_resolved,
     fused_attention_arm_reach_bit,
+    fused_attention_arm_zsched,
     fused_backward_launch_ran,
     fused_forward_launch_ran,
 )
@@ -167,6 +175,11 @@ def arms() -> List[Int]:
     out.append(r3 | ATTN_ARM_BWD_KVGRID | ATTN_ARM_KVROWS32)
     out.append(r3 | ATTN_ARM_BWD_KVSPLIT)
     out.append(r3 | ATTN_ARM_BWD_KVGRID | ATTN_ARM_KVROWS32 | ATTN_ARM_BWD_KVSPLIT)
+    # DEVIATION 2598 (brief section 17), on the round 3 arm, and composed
+    # with the 2597 32-key dk/dv fold.
+    out.append(r3 | ATTN_ARM_BWD_ZDEFER)
+    out.append(r3 | ATTN_ARM_BWD_ZLAG)
+    out.append(r3 | ATTN_ARM_BWD_ZLAG | ATTN_ARM_BWD_KVGRID | ATTN_ARM_KVROWS32)
     return out^
 
 
@@ -206,6 +219,13 @@ def check_names(mut failures: List[String]) raises:
     good.append("stash_tiled_pf_kvgrid_r64_kvsplit+sabotage+sabotage_new+sabotage_kv")
     good.append("stash_tiled_fgrid_r32_qres_pf_kvrecompute")
     good.append("bwd_stash_tiled_pf_kvrecompute+sabotage_kv")
+    # DEVIATION 2598 (brief section 17).
+    good.append("stash_tiled_pf_zdefer")
+    good.append("stash_tiled_fgrid_r32_qres_pf_zlag")
+    good.append("bwd_stash_tiled_pf_zlag+sabotage_new")
+    good.append("stash_tiled_fgrid_r32_qres_pf_zlag_kvgrid_r32")
+    good.append("stash_tiled_pf_zdefer_kvrecompute+sabotage_kv")
+    good.append("stash_tiled_pf_zlag_kvsplit")
     for i in range(len(good)):
         var n = String(good[i])
         var got = fused_attention_arm_name(fused_attention_arm_parse(n))
@@ -252,6 +272,16 @@ def check_names(mut failures: List[String]) raises:
     bad.append("stash_tiled_pf_kvsplit+sabotage_kv+sabotage_new")
     bad.append("stash_tiled_kvrecompute")
     bad.append("stash_tiled_pf_kvrecompute_kvsplit")
+    # DEVIATION 2598: no `_pf`, out of order, both schedules, with `_ztiled`,
+    # without the tiled stash backward, after a kv token.
+    bad.append("stash_tiled_zlag")
+    bad.append("stash_tiled_zdefer_pf")
+    bad.append("stash_tiled_pf_zdefer_zlag")
+    bad.append("stash_tiled_pf_zlag_zdefer")
+    bad.append("stash_tiled_ztiled_r64_pf_zlag")
+    bad.append("fwd_sstash_pf_zlag")
+    bad.append("stash_tiled_pf_kvsplit_zlag")
+    bad.append("bwd_stash_pf_zdefer")
     for i in range(len(bad)):
         var refused = False
         try:
@@ -276,6 +306,21 @@ def moved_from_column(a: List[Float32], b: List[Float32], hd: Int, lo: Int) -> I
     var n = 0
     for i in range(m):
         if i % hd >= lo:
+            if bitcast[DType.uint32](a[i]) != bitcast[DType.uint32](b[i]):
+                n += 1
+    return n
+
+
+def moved_at_parity(a: List[Float32], b: List[Float32], parity: Int) -> Int:
+    """Cells that differ BY BITS at flat indices of the given parity (0 even,
+    1 odd). On zdot the flat index is the row `(bb * nh + h) * L + t`, the
+    parity DEVIATION 2598's sabotage keys on."""
+    var m = len(a)
+    if len(b) < m:
+        m = len(b)
+    var n = 0
+    for i in range(m):
+        if i % 2 == parity:
             if bitcast[DType.uint32](a[i]) != bitcast[DType.uint32](b[i]):
                 n += 1
     return n
@@ -366,6 +411,7 @@ def run_case(ctx: DeviceContext, c: FusedCase, mut failures: List[String]) raise
         var qres = (arm & ATTN_ARM_FWD_QRES) != 0
         var preflush = (arm & ATTN_ARM_PREFLUSH) != 0
         var ztiled = (arm & ATTN_ARM_BWD_ZTILED) != 0
+        var zsched = fused_attention_arm_zsched(arm) != 0
         var kv = fused_attention_arm_kv(arm)
         for sab in range(3):
             # sab 2: DEVIATIONS 2596 / 2597, the dk/dv launch's own flip
@@ -429,8 +475,13 @@ def run_case(ctx: DeviceContext, c: FusedCase, mut failures: List[String]) raise
             var m_dq = 0
             var m_dk = 0
             var m_dv = 0
+            var m_z_even = 0
+            var m_z_odd = 0
             if bs == FUSED_RAN:
-                m_z = compare(c.name, label + " bwd zdot", e_z, _download(ctx, zdot, rn))
+                var got_z = _download(ctx, zdot, rn)
+                m_z = compare(c.name, label + " bwd zdot", e_z, got_z)
+                m_z_even = moved_at_parity(e_z, got_z, 0)
+                m_z_odd = moved_at_parity(e_z, got_z, 1)
                 m_dq = compare(c.name, label + " bwd dq", e_dq, _download(ctx, dq, qn))
                 m_dk = compare(c.name, label + " bwd dk", e_dk, _download(ctx, dk, kn))
                 m_dv = compare(c.name, label + " bwd dv", e_dv, _download(ctx, dv, kn))
@@ -474,9 +525,16 @@ def run_case(ctx: DeviceContext, c: FusedCase, mut failures: List[String]) raise
                             if preflush and m_ctx_hi > 0:
                                 failures.append(c.name + ": " + label + " moved " + String(m_ctx_hi) + " ctx cells at columns 16 and up; the 2533 forward flip reaches columns 0 to 15 only (the preflushed instantiation did not run)")
                     if second and need_bwd and not ztiled and bs == FUSED_RAN:
-                        print("    REACH " + label + " zdot_moved=" + String(m_z) + " dv_moved=" + String(m_dv))
+                        print(
+                            "    REACH " + label + " zdot_moved=" + String(m_z) + " dv_moved=" + String(m_dv)
+                            + " zdot_moved_even_rows=" + String(m_z_even) + " zdot_moved_odd_rows=" + String(m_z_odd)
+                        )
                         if m_z == 0 or m_dv > 0:
                             failures.append(c.name + ": " + label + ": the DEVIATION 2533 backward flip (the stored zdot) must move zdot and hold dv; zdot moved " + String(m_z) + ", dv moved " + String(m_dv))
+                        # DEVIATION 2598 (brief 17.4): the schedule copy flips
+                        # odd rows only, so it is told apart from 2533's copy.
+                        if zsched and (m_z_odd == 0 or m_z_even > 0):
+                            failures.append(c.name + ": " + label + ": the DEVIATION 2598 flip moves zdot at odd rows only; zdot moved at " + String(m_z_odd) + " odd and " + String(m_z_even) + " even rows (the zdot schedule copy did not run)")
                 elif fwd_moved + bwd_moved > 0:
                     failures.append(c.name + ": " + label + " moved " + String(fwd_moved + bwd_moved) + " cells at head_dim " + String(c.hd) + ", where every arm runs the shipped kernels")
             # ---- dk/dv reach (DEVIATIONS 2596 and 2597, brief 16.4) ------
