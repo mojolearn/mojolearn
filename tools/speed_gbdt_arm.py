@@ -224,6 +224,18 @@ def device_string():
             return name[0].strip().replace(" ", "_")
     except (OSError, subprocess.SubprocessError):
         pass
+    # An AMD box has no nvidia-smi; `rocm-smi --showproductname` names the
+    # card ("Card Series: AMD Instinct MI325X").
+    try:
+        out = subprocess.run(
+            ["rocm-smi", "--showproductname"],
+            capture_output=True, text=True, timeout=20, check=False,
+        )
+        for line in out.stdout.splitlines():
+            if "Card Series" in line and ":" in line:
+                return line.rsplit(":", 1)[1].strip().replace(" ", "_")
+    except (OSError, subprocess.SubprocessError):
+        pass
     return (platform.system() + "_" + platform.machine()).replace(" ", "_")
 
 
@@ -1272,6 +1284,8 @@ def catboost_arms(lane, cfg, data, devices):
 
     out = []
     for dev in devices:
+        if dev == "opencl":
+            continue                   # LightGBM's device name only
         task_type = "CPU" if dev == "cpu" else "GPU"
         out.append(Arm(
             "catboost-" + dev,
@@ -1340,6 +1354,9 @@ def xgboost_arms(lane, cfg, data, devices):
 
     out = []
     for dev in devices:
+        if dev == "opencl":
+            continue                   # LightGBM's device name only
+        # "cuda" is also the device string of AMD's ROCm build (amd_xgboost).
         device = "cpu" if dev == "cpu" else "cuda"
         out.append(Arm(
             "xgboost-" + dev,
@@ -1425,9 +1442,11 @@ def lightgbm_arms(lane, cfg, data, devices):
 
     out = []
     for dev in devices:
-        device_type = "cpu" if dev == "cpu" else "cuda"
+        # `opencl` is LightGBM's OpenCL learner (device_type 'gpu', a
+        # USE_GPU=ON build), the GPU build that can run on an AMD box.
+        device_type = {"cpu": "cpu", "opencl": "gpu"}.get(dev, "cuda")
         out.append(Arm(
-            "lightgbm-" + ("cpu" if dev == "cpu" else "cuda"),
+            "lightgbm-" + {"cpu": "cpu", "opencl": "opencl"}.get(dev, "cuda"),
             (lambda dt: (lambda: make(dt)))(device_type),
             lambda m, d: m.fit(d.X_train, d.y_train),
             _score_sklearn_like,
@@ -1661,14 +1680,14 @@ def opponent_builders(lane, cfg, data, devices):
         if lane == "gbdt-lossguide":
             # Leaf-wise growth IS LightGBM's algorithm; this is the only
             # boosting lane it belongs in.
-            builders.append((["lightgbm-cpu", "lightgbm-cuda"],
+            builders.append((["lightgbm-cpu", "lightgbm-cuda", "lightgbm-opencl"],
                              lambda: lightgbm_arms(lane, cfg, data, devices)))
     elif lane == "rf":
         builders.append((["cuml-rf-gpu"],
                          lambda: [cuml_rf_arm(lane, cfg, data)]))
         builders.append((["sklearn-rf-cpu"],
                          lambda: [sklearn_forest_arm(lane, cfg, data)]))
-        builders.append((["lightgbm-cpu", "lightgbm-cuda"],
+        builders.append((["lightgbm-cpu", "lightgbm-cuda", "lightgbm-opencl"],
                          lambda: lightgbm_arms(lane, cfg, data, devices)))
     elif lane == "et":
         # Named `cuml-et-gpu` so the refusal reads as "cuML has no ExtraTrees"
@@ -1677,7 +1696,7 @@ def opponent_builders(lane, cfg, data, devices):
                          lambda: [cuml_rf_arm(lane, cfg, data)]))
         builders.append((["sklearn-et-cpu"],
                          lambda: [sklearn_forest_arm(lane, cfg, data)]))
-        builders.append((["lightgbm-cpu", "lightgbm-cuda"],
+        builders.append((["lightgbm-cpu", "lightgbm-cuda", "lightgbm-opencl"],
                          lambda: lightgbm_arms(lane, cfg, data, devices)))
     elif lane == "iforest":
         builders.append((["cuml-iforest-gpu"],
@@ -1703,10 +1722,26 @@ def accel_visible():
     return bool(shutil.which("nvidia-smi") or shutil.which("rocm-smi"))
 
 
+def accel_vendor():
+    """'nvidia', 'amd' or None: which GPU vendor's box this is. NVIDIA wins
+    when both tools are present (a CUDA image with rocm-smi installed is
+    still an NVIDIA box)."""
+    if shutil.which("nvidia-smi"):
+        return "nvidia"
+    if shutil.which("rocm-smi") or os.path.exists("/dev/kfd"):
+        return "amd"
+    return None
+
+
 def resolve_devices(requested, lane=None):
     """Which device arms of each opponent may run here.
 
-    THE RULE, AND IT IS NOT A PREFERENCE. On NVIDIA and on AMD we compare
+    CORRECTED 2026-09-11 (ENGINEERING_RULES.md section 10): on AMD a library
+    with no AMD GPU path runs on the box's CPU on all cores when `cpu` is
+    requested by name, and every arm name says -cpu or -gpu; the GPU-only
+    rule below now binds NVIDIA only.
+
+    THE RULE, AND IT IS NOT A PREFERENCE. On NVIDIA we compare
     against the vendor's GPU path ONLY. Their CPU path is for the MacBook,
     where it is the only path they have.
 
@@ -1729,6 +1764,8 @@ def resolve_devices(requested, lane=None):
     NO legal opponent, and every arm they would have had is refused BY NAME.
     That is a finding about the vendor's GPU coverage. It is not a licence
     to run scikit-learn on the host CPU and call it an opponent.
+    CORRECTED 2026-09-11: `et` on NVIDIA with `cpu` requested by name runs
+    scikit-learn's ExtraTrees on the pod CPU, labeled CPU (lane trees-taxi-h100).
     """
     want = [d.strip().lower() for d in (requested or "").split(",")
             if d.strip()]
@@ -1737,17 +1774,32 @@ def resolve_devices(requested, lane=None):
         auto = True
     else:
         auto = False
-    if "cpu" in want and accel_visible():
+    if "cpu" in want and accel_visible() and accel_vendor() == "amd":
+        if lane is not None:
+            emit_note(
+                lane, want, "devices", float(len(want)),
+                "AMD box: CPU arms run for libraries with no AMD GPU path, "
+                "on all cores (ENGINEERING_RULES.md section 10); every arm "
+                "name carries its device")
+    elif "cpu" in want and accel_visible() and lane == "et" and not auto:
+        # CORRECTED 2026-09-11 (lane trees-taxi-h100): NVIDIA has no GPU
+        # ExtraTrees, so an explicit `cpu` admits scikit-learn's
+        # ExtraTreesClassifier on the pod CPU for `et` only, labeled -cpu.
+        if lane is not None:
+            emit_note(
+                lane, want, "devices", float(len(want)),
+                "NVIDIA box, lane et: no GPU ExtraTrees exists, so the CPU "
+                "arm requested by name runs on all cores and is labeled CPU")
+    elif "cpu" in want and accel_visible():
         dropped = [d for d in want if d == "cpu"]
         want = [d for d in want if d != "cpu"]
         if lane is not None and dropped:
             emit_refused(
                 lane, "*-cpu",
                 "GPU-PATH-ONLY: an accelerator is visible on this box, so the "
-                "vendors' CPU arms do not run. On NVIDIA and AMD we compare "
-                "against the vendor's GPU arm only; the CPU arm is the "
-                "MacBook's. Set MOJOLEARN_SPEED_DEVICES=cpu to override, and "
-                "then say out loud beside the number that you did.")
+                "vendors' CPU arms do not run. On NVIDIA we compare against "
+                "the vendor's GPU arm only; the CPU arm is the MacBook's. An "
+                "explicit cpu is admitted on NVIDIA for lane et only.")
     if not want:
         want = ["gpu"]
     return want, auto
@@ -1770,10 +1822,11 @@ def build_opponents(lane, cfg, data, devices):
         blocked = [n for n in names if n.endswith("-cpu")] if not allow_cpu else []
         for name in blocked:
             emit_refused(lane, name,
-                         "GPU-PATH-ONLY: %s is a CPU arm and this box has an "
-                         "accelerator. On NVIDIA and AMD we compare against "
-                         "the vendor's GPU path only; their CPU path is the "
-                         "MacBook's." % name)
+                         "GPU-PATH-ONLY: %s is a CPU arm and cpu was not "
+                         "requested on this accelerator box. On NVIDIA we "
+                         "compare against the vendor's GPU path only; on AMD "
+                         "request cpu by name (ENGINEERING_RULES.md section "
+                         "10)." % name)
         if blocked and len(blocked) == len(names):
             continue
         try:
