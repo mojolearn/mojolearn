@@ -394,7 +394,10 @@ class LinearRegression(NumericModeMixin):
     designs; cuML's SVD and QR solvers (`lstsqSvdJacobi`, `lstsqSvdQR`,
     `lstsqQR`) are not written here (glm/NOT_IMPLEMENTED.tsv). A design with
     more features than samples takes a second Gram route instead of an SVD;
-    see the `n_features > n` row below.
+    see the `n_features > n` row below. On the tall route the Gram matrix is
+    equilibrated by exact power-of-two column scales and its pseudo-inverse
+    keeps eigenvalues above ``n_features * eps32 * max`` (DEVIATIONS 2620,
+    2621), so a column's units no longer change the model's rank.
 
     WHAT IS HONORED, WHAT IS REFUSED, AND WHY (measured row by row by
     `tools/e2u_matrix_fit.py`):

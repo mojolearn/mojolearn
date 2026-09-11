@@ -283,9 +283,11 @@ def divide_columns_by_nonzero_kernel(
         # seam-producing operation row 10 names, `qs` is read by
         # `gemm_nt`, and `q / lam` with a barely-above-threshold `lam`
         # is exactly where a denormal appears. The compare above needs
-        # no flush: `thresh_in` is 1e-10 at the one call site, twenty-
-        # eight orders of magnitude above the largest denormal, so a
-        # denormal `lam` takes the zero arm on every backend and can
+        # no flush: `thresh_in` is 1e-10 (`lstsq_min_norm`) or, since
+        # DEVIATION 2621, `n * eps32 * max|lam|` of an equilibrated Gram
+        # whose largest eigenvalue is at least 0.5 when any column is
+        # nonzero (`lstsq_eig`); both are far above the largest denormal,
+        # so a denormal `lam` takes the zero arm on every backend and can
         # never reach this division.
         qs.unsafe_store(idx, ftz(q.unsafe_load(idx) / lam))
     else:
