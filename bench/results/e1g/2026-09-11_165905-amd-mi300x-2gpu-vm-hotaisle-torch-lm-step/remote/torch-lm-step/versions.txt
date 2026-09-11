@@ -1,0 +1,9 @@
+python 3.12.11 /root/.venv-torch-lm-step/bin/python
+torch 2.6.0+rocm6.4.1.git1ded221d
+torch.version.cuda None
+torch.version.hip 6.4.43483-a187df25c
+cuda api available True
+device AMD Instinct MI300X VF capability (9, 4)
+cudnn/miopen 3004000
+cuda bf16 supported True
+numpy 1.26.4

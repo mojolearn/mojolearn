@@ -1,0 +1,36 @@
+FSPEED-NOTE lane=rf arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); AMD box: an opponent with an AMD GPU path runs on the GPU, one without runs on this box's CPU on all cores (ENGINEERING_RULES.md section 10); the arm name says which
+17687 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x520ec0000000, nodemask=1)
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=hip path=/root/mojolearn/python/mojolearn/identical/_mojolearn_rf.so
+FSPEED-AB lane=rf arm=ours-ab numeric_mode='fast' (arm ours keeps the estimator default)
+BENCH_BINDING arm=ours-ab requested=fast resolved=fast compiled=fast vendor=hip path=/root/mojolearn/python/mojolearn/_mojolearn_rf.so
+FSPEED-SCALE stage=before rows=1000000 features=220 input_mib=839.2 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=rf arm=ours mode=IDENTICAL device=AMD_Instinct_MI300X rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=rf arm=ours-ab mode=IDENTICAL device=AMD_Instinct_MI300X rounds=5 size=shipped
+FSPEED-WARMUP lane=rf arm=ours shape=istella-1000000x220 ms=5870.102
+FSPEED-WARMUP lane=rf arm=ours-ab shape=istella-1000000x220 ms=2615.364
+FSPEED-ORDER lane=rf round=1 arms=ours,ours-ab
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=1 ms=2548.219 hash=574b24d0d7af51d0
+FSPEED lane=rf arm=ours-ab shape=istella-1000000x220 round=1 ms=2407.546 hash=fb659d3a82056bb6
+FSPEED-ORDER lane=rf round=2 arms=ours,ours-ab
+17687 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x520f00000000, nodemask=1)
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=2 ms=2337.265 hash=574b24d0d7af51d0
+FSPEED lane=rf arm=ours-ab shape=istella-1000000x220 round=2 ms=2399.498 hash=fb659d3a82056bb6
+FSPEED-ORDER lane=rf round=3 arms=ours,ours-ab
+17687 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x520f40000000, nodemask=1)
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=3 ms=2345.664 hash=574b24d0d7af51d0
+FSPEED lane=rf arm=ours-ab shape=istella-1000000x220 round=3 ms=2371.969 hash=fb659d3a82056bb6
+FSPEED-ORDER lane=rf round=4 arms=ours,ours-ab
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=4 ms=2396.864 hash=574b24d0d7af51d0
+17687 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x520f80000000, nodemask=1)
+FSPEED lane=rf arm=ours-ab shape=istella-1000000x220 round=4 ms=2402.496 hash=fb659d3a82056bb6
+FSPEED-ORDER lane=rf round=5 arms=ours,ours-ab
+17687 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7a10c0000000, nodemask=2)
+FSPEED lane=rf arm=ours shape=istella-1000000x220 round=5 ms=2403.373 hash=574b24d0d7af51d0
+FSPEED lane=rf arm=ours-ab shape=istella-1000000x220 round=5 ms=2424.681 hash=fb659d3a82056bb6
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.145560
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.964538
+FSPEED-ACC lane=rf arm=ours-ab metric=logloss value=0.145536
+FSPEED-ACC lane=rf arm=ours-ab metric=auc value=0.964539
+FSPEED-SCALE stage=after rows=1000000 features=220 input_mib=839.2 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.

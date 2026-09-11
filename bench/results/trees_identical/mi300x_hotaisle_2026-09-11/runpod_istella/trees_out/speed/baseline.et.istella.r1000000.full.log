@@ -1,0 +1,35 @@
+FSPEED-NOTE lane=et arms=cpu,gpu,opencl metric=devices delta=3.000000 reason=AMD box: CPU arms run for libraries with no AMD GPU path, on all cores (ENGINEERING_RULES.md section 10); every arm name carries its device
+FSPEED-NOTE lane=et arms=ours metric=devices delta=3.000000 reason=devices=cpu,gpu,opencl (explicit); AMD box: an opponent with an AMD GPU path runs on the GPU, one without runs on this box's CPU on all cores (ENGINEERING_RULES.md section 10); the arm name says which
+FSPEED-IMPORT-ORDER lane=et first=opponents
+FSPEED-REFUSED lane=et arm=cuml-et-gpu reason=ModuleNotFoundError: No module named 'cuml'
+14180 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x31dfc0000000, nodemask=1)
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=hip path=/root/mojolearn/python/mojolearn/identical/_mojolearn_trees.so
+FSPEED-SCALE stage=before rows=1000000 features=220 input_mib=839.2 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=et arm=ours mode=IDENTICAL device=AMD_Instinct_MI300X rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=et arm=sklearn-et-cpu mode=IDENTICAL device=AMD_Instinct_MI300X rounds=5 size=shipped
+FSPEED-WARMUP lane=et arm=ours shape=istella-1000000x220 ms=18533.127
+FSPEED-WARMUP lane=et arm=sklearn-et-cpu shape=istella-1000000x220 ms=13625.608
+FSPEED-ORDER lane=et round=1 arms=ours,sklearn-et-cpu
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=1 ms=15459.514 hash=40b1c5b03ba40420
+FSPEED lane=et arm=sklearn-et-cpu shape=istella-1000000x220 round=1 ms=14194.833 hash=6ece2c9624341a31
+FSPEED-ORDER lane=et round=2 arms=ours,sklearn-et-cpu
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=2 ms=15457.000 hash=40b1c5b03ba40420
+FSPEED lane=et arm=sklearn-et-cpu shape=istella-1000000x220 round=2 ms=15481.752 hash=23c4f9ddce7c90a3
+FSPEED-ORDER lane=et round=3 arms=ours,sklearn-et-cpu
+14180 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x31e000000000, nodemask=1)
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=3 ms=15454.476 hash=40b1c5b03ba40420
+FSPEED lane=et arm=sklearn-et-cpu shape=istella-1000000x220 round=3 ms=13821.540 hash=c759a3528f92e1f7
+FSPEED-ORDER lane=et round=4 arms=ours,sklearn-et-cpu
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=4 ms=15457.702 hash=40b1c5b03ba40420
+FSPEED lane=et arm=sklearn-et-cpu shape=istella-1000000x220 round=4 ms=13802.355 hash=d69e00e275924f6d
+FSPEED-ORDER lane=et round=5 arms=ours,sklearn-et-cpu
+14180 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x31e040000000, nodemask=1)
+FSPEED lane=et arm=ours shape=istella-1000000x220 round=5 ms=15435.183 hash=40b1c5b03ba40420
+FSPEED lane=et arm=sklearn-et-cpu shape=istella-1000000x220 round=5 ms=14306.852 hash=6ab46badb0939eb4
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.188191
+FSPEED-ACC lane=et arm=ours metric=auc value=0.938768
+FSPEED-ACC lane=et arm=sklearn-et-cpu metric=logloss value=0.187901
+FSPEED-ACC lane=et arm=sklearn-et-cpu metric=auc value=0.939528
+FSPEED-SCALE stage=after rows=1000000 features=220 input_mib=839.2 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.

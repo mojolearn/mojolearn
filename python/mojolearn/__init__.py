@@ -5,7 +5,9 @@
 The same source tree targets Apple Metal, NVIDIA CUDA, and AMD HIP.
 ``identical`` is the default mode and promises cross-vendor bit identity for
 configurations certified in the project's support matrix. A GPU is required
-and there is no CPU fallback.
+for every estimator, block and trainer, and there is no CPU fallback for them.
+The one CPU surface is ``LanguageModelInference``, byte LM inference on the
+CPU, certified only on the CPUs listed in docs/BYTE_LM_CPU_INFERENCE.md.
 
 The tree and classical estimators additionally offer ``fast`` and
 ``deterministic``. THE NEURAL SURFACE DOES NOT: ``TransformerBlock``, the
@@ -57,8 +59,10 @@ set_numeric_mode = _backend.set_default_mode
 #: 'hip', read back out of the binaries (`checks/vendor.mojo`). On Linux
 #: one wheel carries a CUDA set and a HIP set and `_backend._layout()` picks
 #: one at import; `vendor()` is what it picked, cross-checked against what
-#: the binaries answer. There is no CPU path: a Linux box with neither
-#: device refuses at import, naming what it looked for.
+#: the binaries answer. A box with neither device refuses at import, naming
+#: what it looked for, UNLESS the CPU inference binding is built. Then the
+#: package imports, every GPU binding raises by name on use, and `vendor()`
+#: answers 'cpu' (DEVIATION 2615).
 vendor = _backend.vendor
 
 #: The GPU architecture directory this process loads from ('sm_80',
@@ -136,7 +140,8 @@ from . import umap
 from .umap import UMAP
 from .neural_network import SmallMLPTrainer
 from .language_model import (SmallByteLanguageModelTrainer, ByteLanguageModelConfig,
-                             LanguageModelTrainer, LanguageModelConfig)
+                             LanguageModelTrainer, LanguageModelConfig,
+                             LanguageModelInference)
 from ._svm_impl import SVC, SVR
 from ._arima_impl import ARIMA
 from ._tsa_impl import ExponentialSmoothing, kpss_test, select_d
@@ -289,6 +294,7 @@ __all__ = [
     "ByteLanguageModelConfig",
     "LanguageModelConfig",
     "LanguageModelTrainer",
+    "LanguageModelInference",
     "kpss_test",
     "linalg",
     "matmul",

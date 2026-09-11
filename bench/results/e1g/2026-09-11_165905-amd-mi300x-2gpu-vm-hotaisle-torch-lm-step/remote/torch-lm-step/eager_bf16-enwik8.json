@@ -1,0 +1,233 @@
+{
+  "schema": "mojolearn.torch-lm-step-opponent.v1",
+  "opponent": "torch byte LM training step (bench/OPPONENT_REFERENCE.md rows owed, item 5)",
+  "column": "eager_bf16",
+  "column_role": "extra",
+  "column_flags": {
+    "tf32": false,
+    "compile": false,
+    "compile_backend": null,
+    "compile_mode": null,
+    "dtype": "autocast_bfloat16",
+    "autocast_dtype": "bfloat16",
+    "autocast_device_type": "cuda",
+    "autocast_scope": "forward and mean cross entropy; backward and AdamW outside",
+    "parameter_dtype": "float32",
+    "gradient_dtype": "float32",
+    "optimizer_state_dtype": "float32",
+    "grad_scaler": null,
+    "autocast_applicable": true,
+    "autocast_probe": {
+      "device_type": "cuda",
+      "dtype": "bfloat16",
+      "amp_is_autocast_available": true,
+      "cuda_is_bf16_supported": true,
+      "cuda_is_bf16_supported_native": true,
+      "probe_output_dtype": "bfloat16",
+      "probe_grad_dtype": "float32",
+      "probe_ok": true,
+      "applicable": true,
+      "probe": "F.linear float32 [2, 8] x [8, 8] under torch.autocast('cuda', bfloat16), then backward"
+    },
+    "nondeterministic_label": true,
+    "determinism_asserted": false,
+    "tf32_applicable": false,
+    "tf32_note": "TF32 is an NVIDIA CUDA (Ampere+) matmul mode; this torch/device accepts the flag and does nothing with it",
+    "cuda_matmul_allow_tf32": false,
+    "cudnn_allow_tf32": false,
+    "float32_matmul_precision": "highest"
+  },
+  "shape_name": "target",
+  "shape": {
+    "batch": 1,
+    "length": 2048,
+    "d_model": 768,
+    "n_heads": 12,
+    "n_kv": 12,
+    "head_dim": 64,
+    "intermediate": 2048,
+    "n_layers": 12,
+    "vocab_size": 50257
+  },
+  "parameters_expected": 162147840,
+  "tokens_per_step": 2048,
+  "corpus": {
+    "name": "enwik8",
+    "path": "training/corpus/enwik8/input.txt",
+    "sha256": "2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8",
+    "bytes": 100000000,
+    "manifest_sha256": "c65094a4d6a494d2882d972c20138015b4a258b310d662d4be05fb7ba2e9b423",
+    "source_url": "http://mattmahoney.net/dc/enwik8.zip",
+    "manifest_train_batch_schedule": "step k zero-based, row b: bytes[(k*batch*2048 + b*2048) % (100000000 - 2049) : start+2049]; targets shifted one byte (tools/lm_step_memory_probe.py --corpus, tools/torch_lm_step_opponent.py); a timing run of a few steps reads inside train_range",
+    "schedule_used": "step k (zero-based, warmups first) row b: bytes[(k*batch*length + b*length) % (bytes - length - 1) : +length+1]; inputs [:, :length], targets [:, 1:] (tools/lm_step_memory_probe.py CorpusBatches)"
+  },
+  "device": "cuda",
+  "torch_build": "rocm",
+  "gpu_name": "AMD Instinct MI300X VF",
+  "gpu_capability": [
+    9,
+    4
+  ],
+  "driver": {
+    "rocm-smi": {
+      "cmd": "rocm-smi --showproductname --showdriverversion",
+      "exit": 0,
+      "output": "============================ ROCm System Management Interface ============================\n============================== Version of System Component ===============================\nDriver version: 6.16.13\n==========================================================================================\n====================================== Product Info ======================================\nGPU[0]\t\t: Card Series: \t\tAMD Instinct MI300X VF\nGPU[0]\t\t: Card Model: \t\t0x74b5\nGPU[0]\t\t: Card Vendor: \t\tAdvanced Micro Devices, Inc. [AMD/ATI]\nGPU[0]\t\t: Card SKU: \t\tM3000108\nGPU[0]\t\t: Subsystem ID: \t0x74a1\nGPU[0]\t\t: Device Rev: \t\t0x00\nGPU[0]\t\t: Node ID: \t\t3\nGPU[0]\t\t: GUID: \t\t46235\nGPU[0]\t\t: GFX Version: \t\tgfx942\n==========================================================================================\n================================== End of ROCm SMI Log ===================================",
+      "stderr": null
+    },
+    "amd-smi": {
+      "cmd": "amd-smi version",
+      "exit": 0,
+      "output": "AMDSMI Tool: 25.4.2+aca1101 | AMDSMI Library version: 25.4.0 | ROCm version: 6.4.1 | amdgpu version: 6.16.13 | amd_hsmp version: N/A",
+      "stderr": null
+    },
+    "rocm_version_file": {
+      "path": "/opt/rocm/.info/version",
+      "output": "6.4.1-83"
+    }
+  },
+  "torch_version": "2.6.0+rocm6.4.1.git1ded221d",
+  "torch_cuda": null,
+  "torch_hip": "6.4.43483-a187df25c",
+  "cudnn_or_miopen_version": 3004000,
+  "python": "3.12.11",
+  "python_executable": "/root/.venv-torch-lm-step/bin/python",
+  "host": "enc1-gpuvm005",
+  "machine": "x86_64",
+  "repo_commit": "593e580d5acc16064fab106a894a3d8e7c7ecb16",
+  "repo_commit_source": "MOJOLEARN_REPO_COMMIT",
+  "harness_sha256": "cc5b6a43b6aa16e6608535188c442a1924e68d307f16f828cbb616436ad616e6",
+  "status": "measured",
+  "sdpa": {
+    "requested": "auto",
+    "backend": "torch_default",
+    "selection": "auto on an autocast bfloat16 column: no switch set, torch picks per call (switches read back below are torch defaults)",
+    "probes": [],
+    "enabled": {
+      "efficient": true,
+      "flash": true,
+      "math": true,
+      "cudnn": true
+    },
+    "probe_shape": null,
+    "observed": {
+      "kernels": {
+        "aten::scaled_dot_product_attention": 24,
+        "aten::_scaled_dot_product_flash_attention": 12,
+        "aten::_flash_attention_forward": 12,
+        "aten::_scaled_dot_product_flash_attention_backward": 12,
+        "aten::_flash_attention_backward": 12
+      },
+      "backends": [
+        "flash"
+      ],
+      "backend": "flash",
+      "step_index": 1
+    },
+    "observed_matches_selected": null
+  },
+  "optimizer": {
+    "kind": "torch.optim.AdamW",
+    "lr": 0.001,
+    "betas": [
+      0.9,
+      0.999
+    ],
+    "eps": 1e-08,
+    "weight_decay": 0.01,
+    "impl_requested": "default",
+    "constructor_kwargs": {},
+    "applies_to": "every parameter tensor (embed, norms, projections, lm_head)"
+  },
+  "parameters": 162147840,
+  "init": {
+    "source": "numpy default_rng(93261).normal(0, .02, n_total) float32, +1 on norms (tools/lm_step_memory_probe.py init)",
+    "sha256": "0e36d8d036d8c4cf9704babd096061006e48071187c793c6ee471e05b449572e",
+    "seed": 93261
+  },
+  "setup_seconds": 4.889485100999991,
+  "warmup_steps": [
+    {
+      "step_index": 0,
+      "seconds": 3.4182181520000086,
+      "loss": 10.90386962890625,
+      "ids_sha256": "c9cfaa8fb1358fb7f7b5a53eebd59b9abd169288153d3a4099b30d6703b5fef3"
+    },
+    {
+      "step_index": 1,
+      "seconds": 0.047556868000128816,
+      "loss": 8.26995849609375,
+      "ids_sha256": "c0566cdf476743cf528117d89154c53504817a0fc378832117107db6fbdc8e94",
+      "profiled": true
+    }
+  ],
+  "timed_steps": [
+    {
+      "step_index": 2,
+      "seconds": 0.03558655500000896,
+      "loss": 57.5869140625,
+      "ids_sha256": "7c488589d936ac1c2188a74d02f7a03a667a61a49fa91edac40f621dfb1381c5"
+    },
+    {
+      "step_index": 3,
+      "seconds": 0.03359888799991495,
+      "loss": 14.54571533203125,
+      "ids_sha256": "648b83351a0668b42a9a1795e071b70dff3533dc7e57ca09a0e8041de0296af2"
+    },
+    {
+      "step_index": 4,
+      "seconds": 0.033391523999853234,
+      "loss": 29.335229873657227,
+      "ids_sha256": "52b5ee3b9b2f3400aec4efa473decc7b1e6915d66c34f40f7fa032ac34888cca"
+    },
+    {
+      "step_index": 5,
+      "seconds": 0.03330225800004882,
+      "loss": 14.44476318359375,
+      "ids_sha256": "8a80580ec3da34b87a17dd953dcd489e216a1964de870dcc5b43d34cfb463e3a"
+    },
+    {
+      "step_index": 6,
+      "seconds": 0.03374608000012813,
+      "loss": 37.78302001953125,
+      "ids_sha256": "2718fb09f9d8986db6ae96f4ec68d0753ab5db5d1ec1e10e8dbec58e4e25a772"
+    },
+    {
+      "step_index": 7,
+      "seconds": 0.0342792300000383,
+      "loss": 40.05706787109375,
+      "ids_sha256": "edef8fb8d7c39e1b9d9e2cd41840705cc024c57102bea225b4dc2550a97041c7"
+    },
+    {
+      "step_index": 8,
+      "seconds": 0.034263964000047054,
+      "loss": 25.869670867919922,
+      "ids_sha256": "da972d4a8f6d13f9afbc6163d97ced1c2c74e2829d6f8eb98b0a97b20cec8ae1"
+    }
+  ],
+  "step_seconds": [
+    0.03558655500000896,
+    0.03359888799991495,
+    0.033391523999853234,
+    0.03330225800004882,
+    0.03374608000012813,
+    0.0342792300000383,
+    0.034263964000047054
+  ],
+  "losses": [
+    10.90386962890625,
+    8.26995849609375,
+    57.5869140625,
+    14.54571533203125,
+    29.335229873657227,
+    14.44476318359375,
+    37.78302001953125,
+    40.05706787109375,
+    25.869670867919922
+  ],
+  "median_seconds": 0.03374608000012813,
+  "tokens_per_second": 60688.530341664096,
+  "peak_memory_allocated_bytes": 4307842560,
+  "timing_boundary": "synchronize; clock; host ids (pinned) to device; zero_grad; forward + mean cross entropy inside torch.autocast('cuda', bfloat16); backward; AdamW step; loss.item(); synchronize; clock. Warmups (compilation included for compile columns) are untimed; the last warmup runs under the CPU op profiler to record the SDPA kernels.",
+  "qualification": "opponent measurement for our IDENTICAL step at the same shape and corpus; extra columns are nondeterministic by label; no learning claim"
+}

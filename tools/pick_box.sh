@@ -6,11 +6,13 @@
 # ENGINEERING_RULES 10 sets (Andrew, 2026-09-11: "use hot aisle first if we
 # can, digital ocean second if we can, runpod 3rd.. DO NOT WAIT").
 #
-#   tools/pick_box.sh [--need amd|any] [--spec 13core|8core] [--gpu "NVIDIA H100 80GB HBM3"]
+#   tools/pick_box.sh [--need amd|any] [--spec 13core|8core|2gpu] [--gpu "NVIDIA H100 80GB HBM3"]
 #
 # Prints exactly one word on stdout and the reasons on stderr:
 #   hotaisle      a Hot Aisle slot is free, the spec is in stock, balance >= $5
 #                 -> tools/hotaisle_leg.sh amd --rent
+#                 (--spec 2gpu: the 2x MI300X VM for two GPU-only bodies,
+#                 MOJOLEARN_HOTAISLE_SPEC=2gpu MOJOLEARN_HOTAISLE_GPU_ONLY=1)
 #   do            the DigitalOcean GPU lock is free and no GPU droplet is live
 #                 -> tools/do_extra_leg.sh amd (it takes the lock itself)
 #   runpod-amd    RunPod has AMD MI300X stock and fewer than MOJOLEARN_RUNPOD_MAX_PODS (default 5) non-samba pods
@@ -39,7 +41,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 case "$NEED" in amd|any) ;; *) echo "--need must be amd or any" >&2; exit 2 ;; esac
-case "$SPEC" in 13core) CORES=13 ;; 8core) CORES=8 ;; *) echo "--spec must be 13core or 8core" >&2; exit 2 ;; esac
+case "$SPEC" in 13core) CORES=13; NGPU=1 ;; 8core) CORES=8; NGPU=1 ;; 2gpu) CORES=0; NGPU=2 ;; *) echo "--spec must be 13core, 8core or 2gpu" >&2; exit 2 ;; esac
 
 HA_KEY=${MOJOLEARN_HOTAISLE_KEY_FILE:-$HOME/.mojolearn_hotaisle_key}
 DO_KEY=${MOJOLEARN_DO_TOKEN_FILE:-$HOME/.mojolearn_do_token}
@@ -64,7 +66,7 @@ try:
     for v in avail:
         specs = (v or {}).get('Specs') or {}
         gpus = sum(int((g or {}).get('count') or 0) for g in (specs.get('gpus') or []))
-        if specs.get('cpu_cores') == $CORES and gpus == 1:
+        if ($CORES == 0 or specs.get('cpu_cores') == $CORES) and gpus == $NGPU:
             qty += int(v.get('Quantity') or 0)
 except Exception as e:   # a malformed answer means Hot Aisle is not usable now, never a crash
     print('no api:', type(e).__name__, e); sys.exit()

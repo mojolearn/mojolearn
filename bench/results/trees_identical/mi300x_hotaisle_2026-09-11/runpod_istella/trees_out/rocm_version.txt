@@ -1,0 +1,2 @@
+userland (the body's runtime) 6.4.1-83
+/opt/rocm-6.4.1

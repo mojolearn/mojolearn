@@ -1,0 +1,8 @@
+total 2656668
+drwxr-xr-x 3 root root        141 Sep 11 16:43 .
+drwxr-xr-x 3 root root         29 Sep 11 16:34 ..
+-r--r--r-- 1  500  500       2537 May 13  2016 README
+-r--r--r-- 1  500  500       6108 May  9  2016 istella-letor-LA.txt
+-rw-r--r-- 1 root root  472129615 Sep 11 16:40 istella-s-letor.tar.gz
+-rw-r--r-- 1 root root 2248281826 Sep 11 16:43 istella_speed.npz
+dr-xr-xr-x 2  500  500         71 Mar 31  2016 sample

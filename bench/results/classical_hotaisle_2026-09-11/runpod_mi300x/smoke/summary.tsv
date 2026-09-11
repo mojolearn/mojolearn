@@ -1,0 +1,47 @@
+lane	dataset	shape	arm	device	device_name	status	median_ms	min_ms	max_ms	rounds	digest_stable	quality	ours_over_this
+kde	istella	20000x220	ours	gpu	hip	ok	54.1466	54.1466	54.1466	1	True	mean_log_likelihood=-214.152,rows_without_density=0	
+kde	istella	20000x220	sklearn-cpu	cpu	AMD EPYC 9474F 48-Core Processor	ok	1142.5827	1142.5827	1142.5827	1	True	mean_log_likelihood=-213.56,rows_without_density=0	0.0474
+kde	istella	20000x220	sklearn-cpu-quota	cpu	AMD EPYC 9474F 48-Core Processor	ok	1150.9611	1150.9611	1150.9611	1	True	mean_log_likelihood=-213.56,rows_without_density=0	0.0470
+kde	taxi	20000x11	ours	gpu	hip	ok	24.3731	24.3731	24.3731	1	True	mean_log_likelihood=-10.2982,rows_without_density=0	
+kde	taxi	20000x11	sklearn-cpu	cpu	AMD EPYC 9474F 48-Core Processor	ok	151.0837	151.0837	151.0837	1	True	mean_log_likelihood=-10.2982,rows_without_density=0	0.1613
+kde	taxi	20000x11	sklearn-cpu-quota	cpu	AMD EPYC 9474F 48-Core Processor	ok	153.2969	153.2969	153.2969	1	True	mean_log_likelihood=-10.2982,rows_without_density=0	0.1590
+kmeans	istella	20000x220	ours	gpu	hip	ok	52.9293	52.9293	52.9293	1	True	inertia=1.10982e+15,inertia_over_ours=1,n_iter=21	
+kmeans	istella	20000x220	sklearn-cpu	cpu	AMD EPYC 9474F 48-Core Processor	ok	46.9761	46.9761	46.9761	1	True	inertia=1.10979e+15,inertia_over_ours=0.999965,n_iter=20	1.1267
+kmeans	istella	20000x220	sklearn-cpu-quota	cpu	AMD EPYC 9474F 48-Core Processor	ok	45.2106	45.2106	45.2106	1	True	inertia=1.10979e+15,inertia_over_ours=0.999965,n_iter=20	1.1707
+kmeans	istella	20000x220	torch-gpu	gpu	AMD Instinct MI300X	ok	6.6034	6.6034	6.6034	1	True	inertia=1.10979e+15,inertia_over_ours=0.999965,n_iter=20	8.0154
+kmeans	taxi	20000x11	ours	gpu	hip	ok	22.2204	22.2204	22.2204	1	True	inertia=111304,inertia_over_ours=1,n_iter=21	
+kmeans	taxi	20000x11	sklearn-cpu	cpu	AMD EPYC 9474F 48-Core Processor	ok	25.0660	25.0660	25.0660	1	True	inertia=111308,inertia_over_ours=1.00003,n_iter=20	0.8865
+kmeans	taxi	20000x11	sklearn-cpu-quota	cpu	AMD EPYC 9474F 48-Core Processor	ok	24.0656	24.0656	24.0656	1	True	inertia=111308,inertia_over_ours=1.00003,n_iter=20	0.9233
+kmeans	taxi	20000x11	torch-gpu	gpu	AMD Instinct MI300X	ok	4.3807	4.3807	4.3807	1	True	inertia=111278,inertia_over_ours=0.999759,n_iter=20	5.0723
+knn	istella	20000x220	ours	gpu	hip	ok	18.0580	18.0580	18.0580	1	True	recall_at_10=0.98675,rows_with_repeated_ids=0	
+knn	istella	20000x220	sklearn-cpu	cpu	AMD EPYC 9474F 48-Core Processor	ok	14.7326	14.7326	14.7326	1	True	recall_at_10=1,rows_with_repeated_ids=0	1.2257
+knn	istella	20000x220	sklearn-cpu-quota	cpu	AMD EPYC 9474F 48-Core Processor	ok	14.9283	14.9283	14.9283	1	True	recall_at_10=1,rows_with_repeated_ids=0	1.2096
+knn	istella	20000x220	torch-gpu	gpu	AMD Instinct MI300X	ok	1.1485	1.1485	1.1485	1	True	recall_at_10=0.9885,rows_with_repeated_ids=0	15.7225
+knn	taxi	20000x11	ours	gpu	hip	ok	16.8741	16.8741	16.8741	1	True	recall_at_10=1,rows_with_repeated_ids=0	
+knn	taxi	20000x11	sklearn-cpu	cpu	AMD EPYC 9474F 48-Core Processor	ok	13.3233	13.3233	13.3233	1	True	recall_at_10=1,rows_with_repeated_ids=0	1.2665
+knn	taxi	20000x11	sklearn-cpu-quota	cpu	AMD EPYC 9474F 48-Core Processor	ok	10.9646	10.9646	10.9646	1	True	recall_at_10=1,rows_with_repeated_ids=0	1.5390
+knn	taxi	20000x11	torch-gpu	gpu	AMD Instinct MI300X	ok	1.2207	1.2207	1.2207	1	True	recall_at_10=1,rows_with_repeated_ids=0	13.8234
+ols	istella	20000x220	ours	gpu	hip	ok	402.5595	402.5595	402.5595	1	True	finite=True,r2=-0.451577,rmse=1.07458	
+ols	istella	20000x220	sklearn-cpu	cpu	AMD EPYC 9474F 48-Core Processor	ok	83.4825	83.4825	83.4825	1	True	finite=True,r2=-1.18819,rmse=1.31936	4.8221
+ols	istella	20000x220	sklearn-cpu-quota	cpu	AMD EPYC 9474F 48-Core Processor	ok	71.4591	71.4591	71.4591	1	True	finite=True,r2=-1.18858,rmse=1.31948	5.6334
+ols	istella	20000x220	torch-gpu	gpu	AMD Instinct MI300X	ok	108.0811	108.0811	108.0811	1	True	finite=False,r2=nan,rmse=nan	3.7246
+ols	istella	20000x220	torch-gpu-eigh	gpu	AMD Instinct MI300X	ok	17.5595	17.5595	17.5595	1	True	finite=True,r2=0.0492849,rmse=0.869651	22.9254
+ols	taxi	20000x11	ours	gpu	hip	ok	18.2772	18.2772	18.2772	1	True	finite=True,r2=0.751134,rmse=8.88605	
+ols	taxi	20000x11	sklearn-cpu	cpu	AMD EPYC 9474F 48-Core Processor	ok	4.8795	4.8795	4.8795	1	True	finite=True,r2=0.751119,rmse=8.88633	3.7457
+ols	taxi	20000x11	sklearn-cpu-quota	cpu	AMD EPYC 9474F 48-Core Processor	ok	4.6111	4.6111	4.6111	1	True	finite=True,r2=0.751119,rmse=8.88633	3.9637
+ols	taxi	20000x11	torch-gpu	gpu	AMD Instinct MI300X	ok	30.7263	30.7263	30.7263	1	True	finite=True,r2=0.751155,rmse=8.88569	0.5948
+ols	taxi	20000x11	torch-gpu-eigh	gpu	AMD Instinct MI300X	ok	2.1567	2.1567	2.1567	1	True	finite=True,r2=0.747162,rmse=8.95669	8.4745
+pca	istella	20000x220	ours	gpu	hip	ok	378.7148	378.7148	378.7148	1	True	explained_variance_ratio_sum=1	
+pca	istella	20000x220	sklearn-cpu	cpu	AMD EPYC 9474F 48-Core Processor	ok	18.6724	18.6724	18.6724	1	True	explained_variance_ratio_sum=1	20.2821
+pca	istella	20000x220	sklearn-cpu-quota	cpu	AMD EPYC 9474F 48-Core Processor	ok	18.5368	18.5368	18.5368	1	True	explained_variance_ratio_sum=1	20.4304
+pca	istella	20000x220	torch-gpu	gpu	AMD Instinct MI300X	ok	17.1445	17.1445	17.1445	1	True	explained_variance_ratio_sum=1	22.0896
+pca	taxi	20000x11	ours	gpu	hip	ok	17.6213	17.6213	17.6213	1	True	explained_variance_ratio_sum=0.999748	
+pca	taxi	20000x11	sklearn-cpu	cpu	AMD EPYC 9474F 48-Core Processor	ok	1.6922	1.6922	1.6922	1	True	explained_variance_ratio_sum=0.999747	10.4132
+pca	taxi	20000x11	sklearn-cpu-quota	cpu	AMD EPYC 9474F 48-Core Processor	ok	2.3194	2.3194	2.3194	1	True	explained_variance_ratio_sum=0.999747	7.5974
+pca	taxi	20000x11	torch-gpu	gpu	AMD Instinct MI300X	ok	1.6550	1.6550	1.6550	1	True	explained_variance_ratio_sum=0.999747	10.6471
+svc	istella	2000x220	ours	gpu	hip	ok	50.3818	50.3818	50.3818	1	True	accuracy=0.9165,n_support=584	
+svc	istella	2000x220	sklearn-cpu	cpu	AMD EPYC 9474F 48-Core Processor	ok	65.8276	65.8276	65.8276	1	True	accuracy=0.9165,n_support=584	0.7654
+svc	istella	2000x220	sklearn-cpu-quota	cpu	AMD EPYC 9474F 48-Core Processor	ok	72.0449	72.0449	72.0449	1	True	accuracy=0.9165,n_support=584	0.6993
+svc	taxi	2000x11	ours	gpu	hip	ok	143.7599	143.7599	143.7599	1	True	accuracy=0.7645,n_support=1126	
+svc	taxi	2000x11	sklearn-cpu	cpu	AMD EPYC 9474F 48-Core Processor	ok	110.1847	110.1847	110.1847	1	True	accuracy=0.7645,n_support=1135	1.3047
+svc	taxi	2000x11	sklearn-cpu-quota	cpu	AMD EPYC 9474F 48-Core Processor	ok	113.0412	113.0412	113.0412	1	True	accuracy=0.7645,n_support=1135	1.2717

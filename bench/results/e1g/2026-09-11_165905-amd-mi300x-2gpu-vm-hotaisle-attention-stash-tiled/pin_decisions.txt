@@ -1,0 +1,5 @@
+gpu0 candidate=1 devices=/dev/kfd,/dev/dri/renderD128 rocr=0 hip=0 via=hip+rocminfo count=1 bus=fd:00.0 host_bdf=0000:fd:00.0
+gpu0 PINNED to candidate 1
+gpu1 candidate=1 devices=/dev/kfd,/dev/dri/renderD136 rocr=1 hip=1 via=hip count=0 bus=none host_bdf=0000:ff:00.0
+gpu1 candidate=2 devices=/dev/kfd,/dev/dri/renderD136 rocr=0 hip=0 via=hip+rocminfo count=1 bus=ff:00.0 host_bdf=0000:ff:00.0
+gpu1 PINNED to candidate 2

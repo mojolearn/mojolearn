@@ -1,0 +1,14 @@
+/root/.venv-torch-lm-step/lib/python3.12/site-packages/torch/autograd/function.py:575: UserWarning: Using AOTriton backend for Flash Attention forward... (Triggered internally at /pytorch/aten/src/ATen/native/transformers/hip/flash_attn/flash_api.h:267.)
+  return super().apply(*args, **kwargs)  # type: ignore[misc]
+/root/.venv-torch-lm-step/lib/python3.12/site-packages/torch/autograd/graph.py:823: UserWarning: Using AOTriton backend for Flash Attention backward... (Triggered internally at /pytorch/aten/src/ATen/native/transformers/hip/flash_attn/flash_api.h:452.)
+  return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+{"event": "warmup", "step_index": 0, "seconds": 13.030114121999986, "loss": 11.120841979980469, "ids_sha256": "7626015c8a8cb90b13e0d44eff53262a36025184a4adfb88591a93ba18857518"}
+{"event": "warmup", "step_index": 1, "seconds": 0.023939442000028066, "loss": 8.36800765991211, "ids_sha256": "e3243c9e1a96ab00d87299616d5c9ad1664c577266d456056e2cbf1a9687624d", "profiled": true}
+{"event": "step", "step_index": 2, "seconds": 0.02154309699994883, "loss": 14.818192481994629, "ids_sha256": "a107e1251c51b4f925b78e3999e73d4e1ed1ee7eb9a809ae29c3180a5d55d2d1"}
+{"event": "step", "step_index": 3, "seconds": 0.020544364999977915, "loss": 9.701728820800781, "ids_sha256": "83cf870838988438412d6aa1b6dc8fca4eb3b9304adab782abd2131328806367"}
+{"event": "step", "step_index": 4, "seconds": 0.020503011000073457, "loss": 24.75238800048828, "ids_sha256": "9831f135e7303a58bf21d426e312b98da26604c4349652e4e51e85b0d3625b32"}
+{"event": "step", "step_index": 5, "seconds": 0.02044932399985555, "loss": 10.0785551071167, "ids_sha256": "4adcd4f5496c529d8716a8617755e453b28ac79e01fb36a35b62abcce780259d"}
+{"event": "step", "step_index": 6, "seconds": 0.020497535000004063, "loss": 21.446861267089844, "ids_sha256": "69d4ac11d6bc4325ea912950e4036a7737c26a80e57d3501848cbbe331b6df8b"}
+{"event": "step", "step_index": 7, "seconds": 0.02066212800014, "loss": 25.98767852783203, "ids_sha256": "0f94cde0e869ae9770c5d74d4ddfc0871fb48ceef08c76e78a32507f484d5686"}
+{"event": "step", "step_index": 8, "seconds": 0.020788690000017596, "loss": 22.399349212646484, "ids_sha256": "36db857be1576a9c331c422940afbc7072d8460c3fc30fa0c4daece4abff10c9"}
+{"event": "result", "column": "compile_bf16", "corpus": "pile_github", "shape": "target", "median_seconds": 0.020544364999977915, "tokens_per_second": 99686.70241217976, "sdpa_backend": "torch_default", "sdpa_observed": "flash", "torch": "2.6.0+rocm6.4.1.git1ded221d", "torch_build": "rocm", "out": "/root/gemm_leg_out/torch-lm-step/compile_bf16-pile_github.json"}

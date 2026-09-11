@@ -1,0 +1,1 @@
+torch_source=repo.radeon.com rocm-rel-6.4.1 torch 2.6.0 (probe ran eigh, cdist, topk, lstsq, addmm on the GPU)

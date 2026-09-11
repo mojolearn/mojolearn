@@ -1,0 +1,17 @@
+CTD-ROUND lane=kde dataset=istella arm=ours round=0 ms=1499.934 digest=81d11ed7fcd9eb38
+CTD-ROUND lane=kde dataset=istella arm=sklearn-cpu round=0 ms=79599.462 digest=183e1d5cdab67a03
+CTD-ROUND lane=kde dataset=istella arm=sklearn-cpu-quota round=0 ms=78883.557 digest=183e1d5cdab67a03
+CTD-ROUND lane=kde dataset=istella arm=sklearn-cpu round=1 ms=79026.368 digest=183e1d5cdab67a03
+CTD-ROUND lane=kde dataset=istella arm=sklearn-cpu-quota round=1 ms=79221.838 digest=183e1d5cdab67a03
+CTD-ROUND lane=kde dataset=istella arm=ours round=1 ms=629.018 digest=81d11ed7fcd9eb38
+CTD-ROUND lane=kde dataset=istella arm=sklearn-cpu-quota round=2 ms=79351.276 digest=183e1d5cdab67a03
+CTD-ROUND lane=kde dataset=istella arm=ours round=2 ms=741.441 digest=81d11ed7fcd9eb38
+CTD-ROUND lane=kde dataset=istella arm=sklearn-cpu round=2 ms=78859.754 digest=183e1d5cdab67a03
+CTD-ROUND lane=kde dataset=istella arm=ours round=3 ms=770.828 digest=81d11ed7fcd9eb38
+CTD-ROUND lane=kde dataset=istella arm=sklearn-cpu round=3 ms=79413.545 digest=183e1d5cdab67a03
+CTD-ROUND lane=kde dataset=istella arm=sklearn-cpu-quota round=3 ms=79337.879 digest=183e1d5cdab67a03
+CTD-ROUND lane=kde dataset=istella arm=sklearn-cpu round=4 ms=79014.741 digest=183e1d5cdab67a03
+CTD-ROUND lane=kde dataset=istella arm=sklearn-cpu-quota round=4 ms=79000.095 digest=183e1d5cdab67a03
+CTD-ROUND lane=kde dataset=istella arm=ours round=4 ms=651.374 digest=81d11ed7fcd9eb38
+CTD-ROUND lane=kde dataset=istella arm=sklearn-cpu-quota round=5 ms=79117.936 digest=183e1d5cdab67a03
+CTD-ROUND lane=kde dataset=istella arm=ours round=5 ms=608.114 digest=81d11ed7fcd9eb38

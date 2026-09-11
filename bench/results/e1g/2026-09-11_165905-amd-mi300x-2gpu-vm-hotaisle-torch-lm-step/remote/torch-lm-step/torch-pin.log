@@ -1,0 +1,81 @@
+found torch '', pin 2.6.0+rocm6.4.1.git1ded221d; installing into /root/.venv-torch-lm-step
+venv base python: NONE of 3.12 on PATH (python3 is Python 3.10.12)
+== bootstrap: uv 0.8.0 into /root/.uv-torch-lm-step
+== fetch https://astral.sh/uv/0.8.0/install.sh
+fetch exit 0
+installer sha256 b401df929555c1e7f310912cbe61a603edc9fa46c41a73dd242fe167bc84ad74
+== run the installer (UV_UNMANAGED_INSTALL=/root/.uv-torch-lm-step/bin)
+downloading uv 0.8.0 x86_64-unknown-linux-gnu
+no checksums to verify
+installing to /root/.uv-torch-lm-step/bin
+  uv
+  uvx
+everything's installed!
+installer exit 0
+uv /root/.uv-torch-lm-step/bin/uv: uv 0.8.0
+== uv venv --seed --python 3.12 /root/.venv-torch-lm-step (managed CPython only, into /root/.uv-torch-lm-step/python)
+Downloading cpython-3.12.11-linux-x86_64-gnu (download) (32.8MiB)
+ Downloading cpython-3.12.11-linux-x86_64-gnu (download)
+Using CPython 3.12.11
+Creating virtual environment with seed packages at: /root/.venv-torch-lm-step
+ + pip==26.2.1
+uv venv exit 0
+venv python: Python 3.12.11 at /root/.venv-torch-lm-step/bin/python -> /root/.uv-torch-lm-step/python/cpython-3.12.11-linux-x86_64-gnu/bin/python3.12
+bootstrap exit 0
+Collecting pytorch-triton-rocm==3.2.0+rocm6.4.1.git6da9e660
+  Downloading pytorch_triton_rocm-3.2.0%2Brocm6.4.1.git6da9e660-cp312-cp312-linux_x86_64.whl (399.1 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 399.1/399.1 MB 44.8 MB/s  0:00:08
+Collecting torch==2.6.0+rocm6.4.1.git1ded221d
+  Downloading torch-2.6.0%2Brocm6.4.1.git1ded221d-cp312-cp312-linux_x86_64.whl (3117.0 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3.1/3.1 GB 16.9 MB/s  0:01:40
+Collecting numpy==1.26.4
+  Downloading numpy-1.26.4-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (61 kB)
+Collecting filelock (from torch==2.6.0+rocm6.4.1.git1ded221d)
+  Downloading filelock-3.32.6-py3-none-any.whl.metadata (2.0 kB)
+Collecting typing-extensions>=4.10.0 (from torch==2.6.0+rocm6.4.1.git1ded221d)
+  Downloading typing_extensions-4.16.0-py3-none-any.whl.metadata (3.3 kB)
+Collecting setuptools (from torch==2.6.0+rocm6.4.1.git1ded221d)
+  Downloading setuptools-84.0.0-py3-none-any.whl.metadata (6.6 kB)
+Collecting sympy==1.13.1 (from torch==2.6.0+rocm6.4.1.git1ded221d)
+  Downloading sympy-1.13.1-py3-none-any.whl.metadata (12 kB)
+Collecting networkx (from torch==2.6.0+rocm6.4.1.git1ded221d)
+  Downloading networkx-3.6.1-py3-none-any.whl.metadata (6.8 kB)
+Collecting jinja2 (from torch==2.6.0+rocm6.4.1.git1ded221d)
+  Downloading jinja2-3.1.6-py3-none-any.whl.metadata (2.9 kB)
+Collecting fsspec (from torch==2.6.0+rocm6.4.1.git1ded221d)
+  Downloading fsspec-2026.7.0-py3-none-any.whl.metadata (10 kB)
+Collecting mpmath<1.4,>=1.1.0 (from sympy==1.13.1->torch==2.6.0+rocm6.4.1.git1ded221d)
+  Downloading mpmath-1.3.0-py3-none-any.whl.metadata (8.6 kB)
+Collecting MarkupSafe>=2.0 (from jinja2->torch==2.6.0+rocm6.4.1.git1ded221d)
+  Downloading markupsafe-3.0.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (2.7 kB)
+Downloading numpy-1.26.4-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (18.0 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 18.0/18.0 MB 48.3 MB/s  0:00:00
+Downloading sympy-1.13.1-py3-none-any.whl (6.2 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 6.2/6.2 MB 87.5 MB/s  0:00:00
+Downloading mpmath-1.3.0-py3-none-any.whl (536 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 536.2/536.2 kB 20.7 MB/s  0:00:00
+Downloading typing_extensions-4.16.0-py3-none-any.whl (45 kB)
+Downloading filelock-3.32.6-py3-none-any.whl (100 kB)
+Downloading fsspec-2026.7.0-py3-none-any.whl (206 kB)
+Downloading jinja2-3.1.6-py3-none-any.whl (134 kB)
+Downloading markupsafe-3.0.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (22 kB)
+Downloading networkx-3.6.1-py3-none-any.whl (2.1 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.1/2.1 MB 64.0 MB/s  0:00:00
+Downloading setuptools-84.0.0-py3-none-any.whl (818 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 818.2/818.2 kB 37.1 MB/s  0:00:00
+Installing collected packages: pytorch-triton-rocm, mpmath, typing-extensions, sympy, setuptools, numpy, networkx, MarkupSafe, fsspec, filelock, jinja2, torch
+
+Successfully installed MarkupSafe-3.0.3 filelock-3.32.6 fsspec-2026.7.0 jinja2-3.1.6 mpmath-1.3.0 networkx-3.6.1 numpy-1.26.4 pytorch-triton-rocm-3.2.0+rocm6.4.1.git6da9e660 setuptools-84.0.0 sympy-1.13.1 torch-2.6.0+rocm6.4.1.git1ded221d typing-extensions-4.16.0
+pip exit 0
+filelock==3.32.6
+fsspec==2026.7.0
+Jinja2==3.1.6
+MarkupSafe==3.0.3
+mpmath==1.3.0
+networkx==3.6.1
+numpy==1.26.4
+pytorch-triton-rocm @ https://repo.radeon.com/rocm/manylinux/rocm-rel-6.4.1/pytorch_triton_rocm-3.2.0%2Brocm6.4.1.git6da9e660-cp312-cp312-linux_x86_64.whl#sha256=1d97c15798bf178299328032141a21d9777e7cdef59d5a7e3ac74e297c17198e
+setuptools==84.0.0
+sympy==1.13.1
+torch @ https://repo.radeon.com/rocm/manylinux/rocm-rel-6.4.1/torch-2.6.0%2Brocm6.4.1.git1ded221d-cp312-cp312-linux_x86_64.whl#sha256=6b141e1a03148b007c6217519cd9947d760123ded5caebadffec22cba7358d2d
+typing_extensions==4.16.0

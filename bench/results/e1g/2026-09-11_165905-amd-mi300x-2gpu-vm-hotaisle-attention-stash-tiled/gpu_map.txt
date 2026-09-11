@@ -1,0 +1,69 @@
+== kfd topology: KFD <node> <drm_render_minor> <pci address>
+KFD 2 128 0000:fd:00.0
+KFD 3 136 0000:ff:00.0
+== drm render nodes: DRM <minor> <node> <driver> <pci address>
+DRM 128 renderD128 amdgpu 0000:fd:00.0
+DRM 129 renderD129 driver amdgpu_xcp_0
+DRM 130 renderD130 driver amdgpu_xcp_1
+DRM 131 renderD131 driver amdgpu_xcp_2
+DRM 132 renderD132 driver amdgpu_xcp_3
+DRM 133 renderD133 driver amdgpu_xcp_4
+DRM 134 renderD134 driver amdgpu_xcp_5
+DRM 135 renderD135 driver amdgpu_xcp_6
+DRM 136 renderD136 amdgpu 0000:ff:00.0
+DRM 137 renderD137 driver amdgpu_xcp_7
+DRM 138 renderD138 driver amdgpu_xcp_8
+DRM 139 renderD139 driver amdgpu_xcp_9
+DRM 140 renderD140 driver amdgpu_xcp_10
+DRM 141 renderD141 driver amdgpu_xcp_11
+DRM 142 renderD142 driver amdgpu_xcp_12
+DRM 143 renderD143 driver amdgpu_xcp_13
+== rocm-smi --showbus: SMI <index> <pci address>
+RAW 
+RAW 
+RAW ============================ ROCm System Management Interface ============================
+RAW ======================================= PCI Bus ID =======================================
+RAW GPU[0]		: PCI Bus: 0000:FD:00.0
+RAW GPU[1]		: PCI Bus: 0000:FF:00.0
+RAW ==========================================================================================
+RAW ================================== End of ROCm SMI Log ===================================
+SMI 0 0000:fd:00.0
+SMI 1 0000:ff:00.0
+== devices
+crw-rw---- 1 root render 237, 0 Sep 11 16:50 /dev/kfd
+
+/dev/dri:
+total 0
+drwxr-xr-x 2 root root        680 Sep 11 16:50 by-path
+crw-rw---- 1 root video  226,   0 Sep 11 16:50 card0
+crw-rw---- 1 root video  226,   1 Sep 11 16:50 card1
+crw-rw---- 1 root video  226,  10 Sep 11 16:50 card10
+crw-rw---- 1 root video  226,  11 Sep 11 16:50 card11
+crw-rw---- 1 root video  226,  12 Sep 11 16:50 card12
+crw-rw---- 1 root video  226,  13 Sep 11 16:50 card13
+crw-rw---- 1 root video  226,  14 Sep 11 16:50 card14
+crw-rw---- 1 root video  226,  15 Sep 11 16:50 card15
+crw-rw---- 1 root video  226,   2 Sep 11 16:50 card2
+crw-rw---- 1 root video  226,   3 Sep 11 16:50 card3
+crw-rw---- 1 root video  226,   4 Sep 11 16:50 card4
+crw-rw---- 1 root video  226,   5 Sep 11 16:50 card5
+crw-rw---- 1 root video  226,   6 Sep 11 16:50 card6
+crw-rw---- 1 root video  226,   7 Sep 11 16:50 card7
+crw-rw---- 1 root video  226,   8 Sep 11 16:50 card8
+crw-rw---- 1 root video  226,   9 Sep 11 16:50 card9
+crw-rw---- 1 root render 226, 128 Sep 11 16:50 renderD128
+crw-rw---- 1 root render 226, 129 Sep 11 16:50 renderD129
+crw-rw---- 1 root render 226, 130 Sep 11 16:50 renderD130
+crw-rw---- 1 root render 226, 131 Sep 11 16:50 renderD131
+crw-rw---- 1 root render 226, 132 Sep 11 16:50 renderD132
+crw-rw---- 1 root render 226, 133 Sep 11 16:50 renderD133
+crw-rw---- 1 root render 226, 134 Sep 11 16:50 renderD134
+crw-rw---- 1 root render 226, 135 Sep 11 16:50 renderD135
+crw-rw---- 1 root render 226, 136 Sep 11 16:50 renderD136
+crw-rw---- 1 root render 226, 137 Sep 11 16:50 renderD137
+crw-rw---- 1 root render 226, 138 Sep 11 16:50 renderD138
+crw-rw---- 1 root render 226, 139 Sep 11 16:50 renderD139
+crw-rw---- 1 root render 226, 140 Sep 11 16:50 renderD140
+crw-rw---- 1 root render 226, 141 Sep 11 16:50 renderD141
+crw-rw---- 1 root render 226, 142 Sep 11 16:50 renderD142
+crw-rw---- 1 root render 226, 143 Sep 11 16:50 renderD143

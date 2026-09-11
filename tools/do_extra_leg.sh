@@ -140,7 +140,7 @@ usage() {
 VENDOR=""; MINUTES=60; DRY=0; GATES=1
 while [ $# -gt 0 ]; do
   case "$1" in
-    amd|nv)
+    amd|nv|cpu-intel|cpu-amd)
       [ -z "$VENDOR" ] || { echo "one vendor per leg" >&2; exit 2; }
       VENDOR=$1 ;;
     --minutes) shift; MINUTES="${1:-}" ;;
@@ -167,6 +167,22 @@ case "$VENDOR" in
   nv)  NAME=mojolearn-extra-nv;  REGION=nyc2; SIZE=gpu-h100x1-80gb;   IMAGE=236925144
        BODY_VENDOR=nvidia; COLUMN=nvidia; GPU_LABEL=nvidia-h100
        SMI_CMD='nvidia-smi --query-gpu=name,driver_version --format=csv,noheader' ;;
+  # DEVIATION 2614: CPU-only droplets for the byte LM CPU inference leg. Stock
+  # Ubuntu, no GPU, so the GPU gates are forced off, each CPU vendor takes its
+  # own lock, and list_live counts only a droplet with this leg's own name, so a
+  # CPU leg neither waits on nor blocks a GPU leg. GitHub Actions is the default
+  # home of that gate (.github/workflows/byte-lm-cpu-gate.yml); this is the fallback.
+  cpu-intel) NAME=mojolearn-extra-cpu-intel; REGION=nyc3; SIZE=s-4vcpu-8gb-intel; IMAGE='"ubuntu-24-04-x64"'
+       BODY_VENDOR=cpu;    COLUMN=cpu;    GPU_LABEL=cpu-intel
+       SMI_CMD='lscpu' ;;
+  cpu-amd)   NAME=mojolearn-extra-cpu-amd;   REGION=nyc1; SIZE=s-4vcpu-8gb-amd;   IMAGE='"ubuntu-24-04-x64"'
+       BODY_VENDOR=cpu;    COLUMN=cpu;    GPU_LABEL=cpu-amd
+       SMI_CMD='lscpu' ;;
+esac
+case "$VENDOR" in
+  cpu-*)
+    GATES=0
+    [ -z "${MOJOLEARN_GPU_ARCHS:-}" ] || { echo "MOJOLEARN_GPU_ARCHS names a GPU; a CPU-only droplet has none. Unset it." >&2; exit 2; } ;;
 esac
 
 GPU_ARCHS="${MOJOLEARN_GPU_ARCHS:-}"
@@ -191,7 +207,11 @@ TOKFILE="${MOJOLEARN_DO_TOKEN_FILE:-$HOME/.mojolearn_do_token}"
 STAMP="$(date -u +%Y-%m-%d_%H%M%S)"
 # THE SHARED GPU LOCK (ENGINEERING_RULES 10). A lock older than 100 minutes
 # with no GPU or mojolearn droplet live is an orphan and may be broken.
-GPU_LOCK="${MOJOLEARN_DO_GPU_LOCK:-/tmp/mojolearn-do-gpu.lock}"
+case "$VENDOR" in
+  cpu-*) _DEFAULT_LOCK="/tmp/mojolearn-do-$VENDOR.lock" ;;
+  *)     _DEFAULT_LOCK=/tmp/mojolearn-do-gpu.lock ;;
+esac
+GPU_LOCK="${MOJOLEARN_DO_GPU_LOCK:-$_DEFAULT_LOCK}"
 LOCK_STALE_SECONDS=6000
 LOCK_LANE="${MOJOLEARN_DO_LOCK_LANE:-extra:$(basename "$LEG_EXTRA" .sh)}"
 case "$LOCK_LANE" in *[!A-Za-z0-9_.,:-]*) echo "MOJOLEARN_DO_LOCK_LANE: letters, digits and _.,:- only" >&2; exit 2 ;; esac
@@ -912,13 +932,17 @@ list_live() {  # prints every GPU droplet (size_slug gpu-*) and any droplet name
   local c
   c=$(http_code GET "$API/droplets?per_page=200" "$TMPD/all_droplets.json")
   [ "$c" = 200 ] || { printf 'HTTP %s' "$c"; return 1; }
-  python3 - "$TMPD/all_droplets.json" "$NAME" <<'PY'
+  python3 - "$TMPD/all_droplets.json" "$NAME" "$VENDOR" <<'PY'
 import json, sys
 d = json.load(open(sys.argv[1]))
 own_name = sys.argv[2]
+# DEVIATION 2614: a CPU leg is not a GPU and takes no GPU quota, so only a
+# droplet with its own name refuses it.
+cpu_leg = sys.argv[3].startswith("cpu-")
 for x in d.get("droplets", []):
     t = set(x.get("tags") or [])
-    if str(x.get("size_slug", "")).startswith("gpu-") or str(x.get("name", "")) == own_name:
+    gpu = str(x.get("size_slug", "")).startswith("gpu-") and not cpu_leg
+    if gpu or str(x.get("name", "")) == own_name:
         print("  id=%s name=%s size=%s region=%s tags=%s created=%s" % (
             x.get("id"), x.get("name"), x.get("size_slug"),
             (x.get("region") or {}).get("slug"), ",".join(sorted(t)), x.get("created_at")))

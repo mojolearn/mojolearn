@@ -214,6 +214,9 @@ mojolearn = [
     "CITATION.cff",
     "ALPHA_API.md",
     "*.so", "identical/*.so", "deterministic/*.so", ".dylibs/*.dylib",
+    # DEVIATION 2610: the CPU inference binding, loaded by path, never by
+    # the GPU vendor selector.
+    "host/*.so",
     "cuda/*.so", "cuda/identical/*.so", "cuda/deterministic/*.so", "cuda/.libs/*",
     "cuda/sm_*/*.so", "cuda/sm_*/identical/*.so", "cuda/sm_*/deterministic/*.so", "cuda/sm_*/.libs/*",
     "hip/*.so", "hip/identical/*.so", "hip/deterministic/*.so", "hip/.libs/*",

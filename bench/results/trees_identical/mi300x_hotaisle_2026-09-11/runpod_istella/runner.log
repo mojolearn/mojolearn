@@ -1,0 +1,150 @@
+== gemm.fp32.v1 remote leg (DEVIATION 536) ==
+   profile:  mojolearn.identical.gemm.fp32.v1
+   vendor:   amd    label in the diff: AMD
+   payload:  gemm
+   mode:     rent
+   gpu:      AMD Instinct MI300X OAM
+   image:    rocm/dev-ubuntu-22.04:6.4.1-complete
+   lease:    60 minutes (hard cap 60)
+   out:      /Users/andrewhendel/mojolearn-evidence/trees-hotaisle/runpod_mi300x_istella2
+
+   commit:   8af3b8f0 parent 6f107d7c
+
+== step 1: the Apple reference card ==
+[12:31:47 amd] local card SUPPLIED (not generated): /Users/andrewhendel/mojolearn-evidence/trees-hotaisle/runpod_mi300x_istella2/local/apple.card
+[12:31:47 amd]   nothing here can check it came from this commit. That is on the operator.
+  local card: mode read back from the run itself = [IDENTICAL]
+  local card: /Users/andrewhendel/mojolearn-evidence/trees-hotaisle/runpod_mi300x_istella2/local/apple.card (61 lines)
+
+== step 2: pre-flight ==
+  pre-flight: this machine's uplink
+    uplink up on all three probes
+  pre-flight: existing leases on this machine
+    no leases recorded in /Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-aeba2dfe19fdbd6ca/tools/../bench/results/runpod_leases
+  pre-flight: pods already up on this account
+    CONCURRENT: pod(s) already up and NOT reaped: suzi3ktegog2m6,wcx3pe8t815wr2
+    --allow-concurrent was passed. This leg creates its own
+    pod, terminates BY ITS OWN POD ID, and arms a dead-man
+    keyed to its own name, so it will not touch those. YOU
+    are now responsible for confirming ALL of them are gone:
+      tools/gemm_remote_leg.sh reap <pod-id>
+    none named mojolearn-gemm-*
+
+== step 3: the box ==
+[12:32:04 amd] dead-man ARMED before the create: pid 60370, fires in 4500s, keyed by name mojolearn-gemm-amd-2026-09-11_123147
+[12:32:04 amd]   cancel by hand only after the pod is confirmed gone:  kill 60370; rm -rf /var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T//mojolearn-gemm-deadman-60002
+[12:32:04 amd] creating mojolearn-gemm-amd-2026-09-11_123147 (AMD Instinct MI300X OAM, rocm/dev-ubuntu-22.04:6.4.1-complete)
+[12:32:04 amd]   THE BILL STARTS HERE and the box is NOT YET ARMED.
+[12:32:05 amd] pod mdv9clyq6r73bz created
+[12:32:49 amd] ssh target: -p 13317 root@213.173.96.55
+[12:32:50 amd] ssh up after 1 attempt(s)
+
+== step 4: the lease, BEFORE any work ==
+[12:32:50 amd] ARMING THE LEASE BEFORE ANY WORK (60 minutes)
+    arming a 60-minute self-kill on pod mdv9clyq6r73bz ...
+    ARMED. Pod mdv9clyq6r73bz is TERMINATED through the API in 60 minutes.
+      lease: /Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-aeba2dfe19fdbd6ca/tools/../bench/results/runpod_leases/mdv9clyq6r73bz.lease
+      extend with: tools/runpod_guard.sh extend mdv9clyq6r73bz '-p 13317 root@213.173.96.55' <minutes>
+    mdv9clyq6r73bz: 60 minutes left of a 60-minute lease
+
+== step 5: the key on the pod, and where it is visible ==
+    -rw------- 1 root root 50 Sep 11 16:32 /root/.mojolearn-rp.key
+    KEY_NOT_IN_PS
+
+== step 6: the source ==
+[12:32:58 amd] shipping the COMMIT (8af3b8f0b46ed24479fbbc9d5ba128570261cc39), not the working tree
+[12:33:01 amd]   archive source sha256: 2855bae2af902e01623663e94d8f5d26
+[12:33:32 amd] shipped the extra body: tools/trees_istella_body.sh
+[12:33:34 amd] starting the payload DETACHED on the box, then polling for it
+    REMOTE_PID=800
+[12:33:36 amd]   remote pid 800; polling every 30s, giving up after 3240s
+[13:17:30 amd]   the payload finished (its sentinel is on the box)
+    REMOTE_BODY_DONE
+
+== step 7: fetch ==
+    source_sha256.txt
+    uname.txt
+    pixi_env.log
+    trees_out
+    gpu.txt
+    amd.card
+    extra.log
+    device_check.log
+    pixi_install.log
+    pixi_which.txt
+    mojo_version.txt
+    leg.txt
+    card_driver.log
+    amd.card.log
+
+== step 8: what came home ==
+  remote card: mode read back from the run itself = [IDENTICAL]
+  remote device check: mode read back from the run itself = [IDENTICAL]
+  source sha256 MATCHES on both ends (2855bae2af902e01...)
+  gpu on the box:
+    
+    
+    ============================ ROCm System Management Interface ============================
+    ====================================== Product Info ======================================
+    vendor=amd
+    commit=8af3b8f0b46ed24479fbbc9d5ba128570261cc39
+    card_full=
+    trace_dump=
+    started=2026-09-11T16:33:36Z
+    pixi_install_exit=0
+    device_check_exit=0
+    card_exit=0
+    extra_exit=0
+    finished=2026-09-11T17:17:12Z
+  the device kernel's own gates: GREEN on this silicon
+
+== step 9: Apple vs AMD ==
+    ==============================================================================
+    IDENTITY TRACE DIFF
+    ==============================================================================
+      APPLE = /var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/gemm-leg.bRszQ3/blk_a.1
+      AMD = /var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/gemm-leg.bRszQ3/blk_b.1
+    
+    STEP 1 -- PARSE
+      APPLE: 60 record(s), 1 comment line(s), 1 blank line(s)
+      AMD: 60 record(s), 1 comment line(s), 1 blank line(s)
+    
+    STEP 1b -- DUMP INTEGRITY (re-hash every .bin found)
+    
+    STEP 2 -- ALIGNMENT (tag sequence, computed BEFORE any hash compare)
+      matched stage pairs: 60
+      unmatched in APPLE: 0    unmatched in AMD: 0
+      TAG SEQUENCES ARE IDENTICAL.
+    
+    STEP 3 -- HASH WALK over 60 matched pair(s)
+      All 60 matched pair(s) agree on dtype, count and hash.
+    
+    ==============================================================================
+    RESULT: IDENTICAL. Same stage sequence, same counts, same hashes.
+      Caveat: a matching hash means the buffers agreed at each
+      checkpoint, NOT that the computation was identical, and nothing
+      is known about whatever the trace did not checkpoint.
+    ==============================================================================
+
+  NO DIVERGENCE at any matched stage, in any of 1 block(s).
+  Read that as what it is: the two buffers held the same bits at
+  every checkpoint the card hashes. It is not proof the two
+  computations were identical, and anything not hashed is
+  invisible.
+
+== step 10: terminate at the end of the WORK ==
+  lease at exit:
+    mdv9clyq6r73bz: 15 minutes left of a 60-minute lease
+  terminating mdv9clyq6r73bz (layer two, from this machine)
+    DELETE /v1/pods/mdv9clyq6r73bz -> HTTP 204
+  VERIFIED: mdv9clyq6r73bz is gone (HTTP 404).
+
+artifacts: /Users/andrewhendel/mojolearn-evidence/trees-hotaisle/runpod_mi300x_istella2
+next: archive/evidence/gemm/E1G_RUNBOOK.md, 'reading the result'. Write the row into
+E1G_RESULTS.md before the pod's details are only in this scrollback.
+
+== teardown (exit 0) ==
+  lease at exit:
+    NO LEASE for mdv9clyq6r73bz -- it is unguarded.
+  dead-man cancelled (pid 60370)
+/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T//mojolearn-leg-snapshot-60002/gemm_remote_leg.sh: line 2439: 60370 Terminated: 15          nohup sh -c 'trap "" HUP INT; exec sh "$0"' "$DEADMAN_DIR/deadman.sh" > /dev/null 2>&1 < /dev/null

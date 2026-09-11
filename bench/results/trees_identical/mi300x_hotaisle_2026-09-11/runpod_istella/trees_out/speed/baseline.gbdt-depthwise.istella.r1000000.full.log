@@ -1,0 +1,47 @@
+FSPEED-NOTE lane=gbdt-depthwise arms=cpu,gpu,opencl metric=devices delta=3.000000 reason=AMD box: CPU arms run for libraries with no AMD GPU path, on all cores (ENGINEERING_RULES.md section 10); every arm name carries its device
+FSPEED-NOTE lane=gbdt-depthwise arms=ours metric=devices delta=3.000000 reason=devices=cpu,gpu,opencl (explicit); AMD box: an opponent with an AMD GPU path runs on the GPU, one without runs on this box's CPU on all cores (ENGINEERING_RULES.md section 10); the arm name says which
+FSPEED-IMPORT-ORDER lane=gbdt-depthwise first=opponents
+16278 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x717200000000, nodemask=1)
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=hip path=/root/mojolearn/python/mojolearn/identical/_mojolearn_gbdt.so
+FSPEED-SCALE stage=before rows=1000000 features=220 input_mib=839.2 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=gbdt-depthwise arm=ours mode=IDENTICAL device=AMD_Instinct_MI300X rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-depthwise arm=catboost-cpu mode=IDENTICAL device=AMD_Instinct_MI300X rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-depthwise arm=xgboost-cpu mode=IDENTICAL device=AMD_Instinct_MI300X rounds=5 size=shipped
+16278 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x717240000000, nodemask=1)
+16415 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x19ea00000000, nodemask=2)
+16572 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x717280000000, nodemask=1)
+FSPEED-WARMUP lane=gbdt-depthwise arm=ours shape=istella-1000000x220 ms=4878.678
+FSPEED-WARMUP lane=gbdt-depthwise arm=catboost-cpu shape=istella-1000000x220 ms=10427.183
+FSPEED-WARMUP lane=gbdt-depthwise arm=xgboost-cpu shape=istella-1000000x220 ms=3833.536
+FSPEED-ORDER lane=gbdt-depthwise round=1 arms=ours,catboost-cpu,xgboost-cpu
+FSPEED lane=gbdt-depthwise arm=ours shape=istella-1000000x220 round=1 ms=3034.477 hash=5d053cd086658072
+FSPEED lane=gbdt-depthwise arm=catboost-cpu shape=istella-1000000x220 round=1 ms=9915.296 hash=0df4b2a25d5c9de2
+FSPEED lane=gbdt-depthwise arm=xgboost-cpu shape=istella-1000000x220 round=1 ms=4414.900 hash=0d844a0ee7f63cb5
+FSPEED-ORDER lane=gbdt-depthwise round=2 arms=ours,catboost-cpu,xgboost-cpu
+FSPEED lane=gbdt-depthwise arm=ours shape=istella-1000000x220 round=2 ms=2906.554 hash=5d053cd086658072
+FSPEED lane=gbdt-depthwise arm=catboost-cpu shape=istella-1000000x220 round=2 ms=10250.404 hash=0df4b2a25d5c9de2
+FSPEED lane=gbdt-depthwise arm=xgboost-cpu shape=istella-1000000x220 round=2 ms=4044.111 hash=0d844a0ee7f63cb5
+FSPEED-ORDER lane=gbdt-depthwise round=3 arms=ours,catboost-cpu,xgboost-cpu
+16278 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7172c0000000, nodemask=1)
+FSPEED lane=gbdt-depthwise arm=ours shape=istella-1000000x220 round=3 ms=2924.156 hash=5d053cd086658072
+FSPEED lane=gbdt-depthwise arm=catboost-cpu shape=istella-1000000x220 round=3 ms=10625.135 hash=0df4b2a25d5c9de2
+FSPEED lane=gbdt-depthwise arm=xgboost-cpu shape=istella-1000000x220 round=3 ms=4928.669 hash=0d844a0ee7f63cb5
+FSPEED-ORDER lane=gbdt-depthwise round=4 arms=ours,catboost-cpu,xgboost-cpu
+FSPEED lane=gbdt-depthwise arm=ours shape=istella-1000000x220 round=4 ms=3095.290 hash=5d053cd086658072
+FSPEED lane=gbdt-depthwise arm=catboost-cpu shape=istella-1000000x220 round=4 ms=11055.835 hash=0df4b2a25d5c9de2
+FSPEED lane=gbdt-depthwise arm=xgboost-cpu shape=istella-1000000x220 round=4 ms=4591.632 hash=0d844a0ee7f63cb5
+FSPEED-ORDER lane=gbdt-depthwise round=5 arms=ours,catboost-cpu,xgboost-cpu
+16278 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x19ea40000000, nodemask=2)
+16278 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x19ea80000000, nodemask=2)
+FSPEED lane=gbdt-depthwise arm=ours shape=istella-1000000x220 round=5 ms=3067.248 hash=5d053cd086658072
+FSPEED lane=gbdt-depthwise arm=catboost-cpu shape=istella-1000000x220 round=5 ms=11212.224 hash=0df4b2a25d5c9de2
+FSPEED lane=gbdt-depthwise arm=xgboost-cpu shape=istella-1000000x220 round=5 ms=4706.276 hash=0d844a0ee7f63cb5
+FSPEED-ACC lane=gbdt-depthwise arm=ours metric=logloss value=0.126517
+FSPEED-ACC lane=gbdt-depthwise arm=ours metric=auc value=0.971896
+FSPEED-ACC lane=gbdt-depthwise arm=catboost-cpu metric=logloss value=0.128097
+FSPEED-ACC lane=gbdt-depthwise arm=catboost-cpu metric=auc value=0.971895
+FSPEED-ACC lane=gbdt-depthwise arm=xgboost-cpu metric=logloss value=0.125270
+FSPEED-ACC lane=gbdt-depthwise arm=xgboost-cpu metric=auc value=0.973728
+FSPEED-SCALE stage=after rows=1000000 features=220 input_mib=839.2 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.

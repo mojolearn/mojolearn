@@ -1,0 +1,28 @@
+arms: xgboost=xgboost-cpu lightgbm=lightgbm-cpu lightgbm_params=min_child_weight=1e-3 python=/root/venv-gpu/bin/python
+cell rf istella 1000000 16:43:17 load 8.88 7.56 4.58
+speed_exit baseline.rf.istella.r1000000.full=0 16:47:31
+cell et istella 1000000 16:47:31 load 22.19 14.83 8.20
+speed_exit baseline.et.istella.r1000000.full=0 16:51:38
+PHASE_F1_DONE 16:51:38
+cell rf istella 2000000 16:51:38 load 22.20 17.51 10.79
+speed_exit baseline.rf.istella.r2000000.full=0 16:58:43
+PHASE_F2_DONE 16:58:43
+cell gbdt-symmetric istella 1000000 16:58:43 load 18.25 23.52 16.42
+speed_exit baseline.gbdt-symmetric.istella.r1000000.full=0 16:59:54
+cell gbdt-depthwise istella 1000000 16:59:54 load 24.22 23.94 17.08
+speed_exit baseline.gbdt-depthwise.istella.r1000000.full=0 17:02:00
+cell gbdt-lossguide istella 1000000 17:02:00 load 21.01 22.86 17.55
+speed_exit baseline.gbdt-lossguide.istella.r1000000.full=0 17:05:27
+PHASE_G_DONE 17:05:27
+cell fast.rf istella 17:05:27 load 17.76 21.26 18.12
+speed_exit baseline.rf.istella.r1000000.ours.fastab=0 17:09:13
+cell fast.gbdt-symmetric istella 17:09:13 load 9.81 14.97 16.23
+speed_exit baseline.gbdt-symmetric.istella.r1000000.ours.fastab=0 17:09:57
+cell fast.gbdt-depthwise istella 17:09:57 load 7.74 13.74 15.75
+speed_exit baseline.gbdt-depthwise.istella.r1000000.ours.fastab=0 17:10:48
+cell fast.gbdt-lossguide istella 17:10:48 load 7.29 12.73 15.31
+speed_exit baseline.gbdt-lossguide.istella.r1000000.ours.fastab=0 17:11:58
+cell fast.et istella 17:11:58 load 9.40 12.42 15.02
+speed_exit baseline.et.istella.r1000000.ours.fastab=0 17:17:12
+PHASE_FAST_DONE 17:17:12
+body end 17:17:12

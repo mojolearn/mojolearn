@@ -1,0 +1,8 @@
+TABLE kind=file:operands-enwik8 shape=B1_L2048_nh12_nkv12_hd64_win0 column=amd default_arm=stash_tiled visible_cells=25178112 (useful flops: fwd 4*cells*hd, bwd 10*cells*hd; executed multiplier of the shipped kernels: fwd dots 3 of 2 contractions, bwd dots 6 of 5)
+TABLE arm | fwd median ms | fwd useful TFLOP/s | fwd+bwd median ms | bwd (derived) ms | bwd useful TFLOP/s | fwd ratio | fwd+bwd ratio
+TABLE baseline | 8.828952 | 0.7300522952214487 | 22.931567 | 14.102615000000002 | 1.1426243771102025 | 1.0 | 1.0
+TABLE stash_tiled | 4.754828 | 1.3555898703381069 | 45.588847 | 40.834019 | 0.39462174124961835 | 1.8568394061783096 | 0.503008268667115
+TABLE kind=file:operands-pilegithub shape=B1_L2048_nh12_nkv12_hd64_win0 column=amd default_arm=stash_tiled visible_cells=25178112 (useful flops: fwd 4*cells*hd, bwd 10*cells*hd; executed multiplier of the shipped kernels: fwd dots 3 of 2 contractions, bwd dots 6 of 5)
+TABLE arm | fwd median ms | fwd useful TFLOP/s | fwd+bwd median ms | bwd (derived) ms | bwd useful TFLOP/s | fwd ratio | fwd+bwd ratio
+TABLE baseline | 8.762826 | 0.7355614127223341 | 22.8472 | 14.084374 | 1.144104216488429 | 1.0 | 1.0
+TABLE stash_tiled | 4.759969 | 1.354125766785456 | 45.713394 | 40.953425 | 0.3934711609590651 | 1.8409418212597604 | 0.4997922490725585

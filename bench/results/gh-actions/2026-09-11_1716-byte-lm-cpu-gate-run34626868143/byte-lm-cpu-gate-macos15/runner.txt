@@ -1,0 +1,4 @@
+Darwin sat12-dp147-35a71220-4523-41d7-83a5-3536921fc40c-8A4503E81BC6.local 24.6.0 Darwin Kernel Version 24.6.0: Tue Jul 21 20:51:34 PDT 2026; root:xnu-11417.140.69.711.44~1/RELEASE_ARM64_VMAPPLE arm64
+Python 3.12.10
+Apple M1 (Virtual)
+15.7.9

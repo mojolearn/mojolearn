@@ -1,0 +1,70 @@
+{
+  "schema": "mojolearn.lm-step-memory-probe.v3",
+  "shape": {
+    "batch": 1,
+    "length": 2048,
+    "d_model": 768,
+    "n_heads": 12,
+    "n_kv": 12,
+    "head_dim": 64,
+    "intermediate": 2048,
+    "n_layers": 12,
+    "vocab_size": 50257
+  },
+  "parameters": 162147840,
+  "steps_completed": 1,
+  "resident": true,
+  "step_result": "lean",
+  "witness_every_step": false,
+  "witness_source": "export_gradients(named=False) + export_state() once after the last untimed step",
+  "corpus": {
+    "path": "training/corpus/pile_github/input.txt",
+    "sha256": "52a5b4c36ab9119c15505331c10e3b23690377d40fbac3e598c7fafe13a324df",
+    "manifest_sha256": "e3f46ca3870913aabd179647f5ab7e66b829c30c3cbcbf4b2862e2790d94cda5",
+    "bytes": 97124565,
+    "source_url": "https://huggingface.co/datasets/monology/pile-uncopyrighted/resolve/3be90335b66f24456a5d6659d9c8d208c0357119/val.jsonl.zst",
+    "schedule": "step k row b: bytes[(k*batch*length + b*length) % (bytes - length - 1) : +length+1] as int32; targets shifted one byte"
+  },
+  "attention_arm": "baseline",
+  "attention_arm_source": "binding",
+  "attention_arm_requested": "baseline",
+  "attention_arm_default": "stash_tiled",
+  "attention_arm_is_default": false,
+  "attention_arm_resolved_hd64": "baseline",
+  "attention_arm_trial_build": true,
+  "gemm_arm": null,
+  "gemm_plan": null,
+  "step_witnesses": [
+    {
+      "step": 1,
+      "completed_steps": 1,
+      "sha256": {
+        "loss": "fb1bfea4e8daa3b31227ff49a404e36a58fe27b98856af4d27a24872b0e9abf2"
+      }
+    }
+  ],
+  "final_witness": {
+    "step": 1,
+    "completed_steps": 1,
+    "sha256": {
+      "gradients": "85d053a482668fd958df0e32325fc47f9ba10ec630ff63557c7b79c5bd85b0e3",
+      "parameters": "1b32246046a72ada00e3c8ec04d079beb629d8e314f860bc7106d42c5996a8ca",
+      "m": "8dbf0dfcb08f29687241a6586a7ef8224fde5877a7aeb490b9701d24d5812524",
+      "v": "227d2c36dbd16e9acf0556ec491d8b6431a8e4cc5b235b8d81011996a9bc05be",
+      "flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb"
+    },
+    "export_seconds": 13.625915058000146,
+    "source": "export_gradients(named=False) + export_state() once after the last untimed step"
+  },
+  "first_call_seconds": 14.890214262999962,
+  "steady_step_seconds": [],
+  "steady_median_seconds": null,
+  "steady_median_tokens_per_second": null,
+  "peak_device_process_bytes": "unavailable",
+  "peak_device_wide_bytes": 189334155264,
+  "process_ru_maxrss_bytes": 9554395136,
+  "budget_seconds": 300.0,
+  "limited": false,
+  "component_timing_step_seconds": null,
+  "qualification": "complete-step probe; device peak from a polled vendor tool; host RSS is a separate boundary; no opponent, no default gate, no target-scale qualification claim"
+}

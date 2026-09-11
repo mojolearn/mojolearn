@@ -1,0 +1,311 @@
+{
+ "binary": {
+  "path": "/root/host-sab/_mojolearn_byte_lm_host.so",
+  "sha256": "24c861a1277cb6fd8cc298cd96489c7f3798b45c6e6a378a5e96eb307c017c57"
+ },
+ "capture": "bench/results/resume/2026-09-07-root-byte-lm-three-vendor/apple",
+ "capture_comparison_sha256": "eb5f8514d76153dc89e62dd6de2eaa3a382cf8afb2d9b7eeb8f5ae4e4e8e6641",
+ "commit": null,
+ "compared": 33,
+ "deviation": 2613,
+ "equal": 24,
+ "expect_mismatch": true,
+ "first_mismatches": [
+  {
+   "case": "heldout-final/batch01",
+   "equal": false,
+   "got": "40335754",
+   "seconds": 0.022377,
+   "want": "40335753"
+  },
+  {
+   "case": "heldout-final/batch06",
+   "equal": false,
+   "got": "4041cb57",
+   "seconds": 0.026901,
+   "want": "4041cb56"
+  },
+  {
+   "case": "step000024",
+   "equal": false,
+   "got": "40397a9e",
+   "seconds": 0.021335,
+   "want": "40397aa0"
+  },
+  {
+   "case": "step000032",
+   "equal": false,
+   "got": "405da261",
+   "seconds": 0.027522,
+   "want": "405da262"
+  },
+  {
+   "case": "step000040",
+   "equal": false,
+   "got": "406b70a8",
+   "seconds": 0.028564,
+   "want": "406b70a7"
+  }
+ ],
+ "host": {
+  "cpu": "DO-Premium-Intel",
+  "isa": [
+   "avx2",
+   "fma"
+  ],
+  "machine": "x86_64",
+  "python": "3.12.3",
+  "release": "6.8.0-124-generic",
+  "system": "Linux"
+ },
+ "mismatched": 9,
+ "probes": {
+  "final_heldout00_full": "fce4448fc459b447b75cbceb3a6a72222833cbca2c4563aad74322c1696da4d9",
+  "final_heldout00_next_bytes": [
+   32,
+   32
+  ],
+  "final_heldout00_row0_len1": "864a04f3413d226d791bc5ac096ff8830347182cb19c66cd08b01270574b07ed"
+ },
+ "rows": [
+  {
+   "case": "heldout-initial/batch00",
+   "equal": true,
+   "got": "40b14e0a",
+   "seconds": 0.027855,
+   "want": "40b14e0a"
+  },
+  {
+   "case": "heldout-initial/batch01",
+   "equal": true,
+   "got": "40b17f4e",
+   "seconds": 0.026709,
+   "want": "40b17f4e"
+  },
+  {
+   "case": "heldout-initial/batch02",
+   "equal": true,
+   "got": "40b13049",
+   "seconds": 0.022014,
+   "want": "40b13049"
+  },
+  {
+   "case": "heldout-initial/batch03",
+   "equal": true,
+   "got": "40b1669f",
+   "seconds": 0.024131,
+   "want": "40b1669f"
+  },
+  {
+   "case": "heldout-initial/batch04",
+   "equal": true,
+   "got": "40b15ac7",
+   "seconds": 0.02624,
+   "want": "40b15ac7"
+  },
+  {
+   "case": "heldout-initial/batch05",
+   "equal": true,
+   "got": "40b130e8",
+   "seconds": 0.025212,
+   "want": "40b130e8"
+  },
+  {
+   "case": "heldout-initial/batch06",
+   "equal": true,
+   "got": "40b178a1",
+   "seconds": 0.02579,
+   "want": "40b178a1"
+  },
+  {
+   "case": "heldout-initial/batch07",
+   "equal": true,
+   "got": "40b129fc",
+   "seconds": 0.027917,
+   "want": "40b129fc"
+  },
+  {
+   "case": "heldout-final/batch00",
+   "equal": true,
+   "got": "40355d9c",
+   "seconds": 0.028126,
+   "want": "40355d9c"
+  },
+  {
+   "case": "heldout-final/batch01",
+   "equal": false,
+   "got": "40335754",
+   "seconds": 0.022377,
+   "want": "40335753"
+  },
+  {
+   "case": "heldout-final/batch02",
+   "equal": true,
+   "got": "402de0d9",
+   "seconds": 0.02269,
+   "want": "402de0d9"
+  },
+  {
+   "case": "heldout-final/batch03",
+   "equal": true,
+   "got": "4048e58a",
+   "seconds": 0.02297,
+   "want": "4048e58a"
+  },
+  {
+   "case": "heldout-final/batch04",
+   "equal": true,
+   "got": "403b4f0b",
+   "seconds": 0.02857,
+   "want": "403b4f0b"
+  },
+  {
+   "case": "heldout-final/batch05",
+   "equal": true,
+   "got": "403107dc",
+   "seconds": 0.028627,
+   "want": "403107dc"
+  },
+  {
+   "case": "heldout-final/batch06",
+   "equal": false,
+   "got": "4041cb57",
+   "seconds": 0.026901,
+   "want": "4041cb56"
+  },
+  {
+   "case": "heldout-final/batch07",
+   "equal": true,
+   "got": "40225445",
+   "seconds": 0.026985,
+   "want": "40225445"
+  },
+  {
+   "case": "step000001",
+   "equal": true,
+   "got": "40b0f007",
+   "seconds": 0.022407,
+   "want": "40b0f007"
+  },
+  {
+   "case": "step000008",
+   "equal": true,
+   "got": "409a6e9c",
+   "seconds": 0.023889,
+   "want": "409a6e9c"
+  },
+  {
+   "case": "step000016",
+   "equal": true,
+   "got": "4065d912",
+   "seconds": 0.029949,
+   "want": "4065d912"
+  },
+  {
+   "case": "step000024",
+   "equal": false,
+   "got": "40397a9e",
+   "seconds": 0.021335,
+   "want": "40397aa0"
+  },
+  {
+   "case": "step000032",
+   "equal": false,
+   "got": "405da261",
+   "seconds": 0.027522,
+   "want": "405da262"
+  },
+  {
+   "case": "step000040",
+   "equal": false,
+   "got": "406b70a8",
+   "seconds": 0.028564,
+   "want": "406b70a7"
+  },
+  {
+   "case": "step000048",
+   "equal": true,
+   "got": "4045e948",
+   "seconds": 0.022774,
+   "want": "4045e948"
+  },
+  {
+   "case": "step000056",
+   "equal": false,
+   "got": "40409fbf",
+   "seconds": 0.025058,
+   "want": "40409fc1"
+  },
+  {
+   "case": "step000064",
+   "equal": true,
+   "got": "40510baa",
+   "seconds": 0.023301,
+   "want": "40510baa"
+  },
+  {
+   "case": "step000072",
+   "equal": true,
+   "got": "404e2fe8",
+   "seconds": 0.027336,
+   "want": "404e2fe8"
+  },
+  {
+   "case": "step000080",
+   "equal": true,
+   "got": "4039d49e",
+   "seconds": 0.023515,
+   "want": "4039d49e"
+  },
+  {
+   "case": "step000088",
+   "equal": true,
+   "got": "4050499c",
+   "seconds": 0.028605,
+   "want": "4050499c"
+  },
+  {
+   "case": "step000096",
+   "equal": true,
+   "got": "40385bd4",
+   "seconds": 0.02821,
+   "want": "40385bd4"
+  },
+  {
+   "case": "step000104",
+   "equal": false,
+   "got": "403c010f",
+   "seconds": 0.025689,
+   "want": "403c010d"
+  },
+  {
+   "case": "step000112",
+   "equal": true,
+   "got": "40387c2e",
+   "seconds": 0.026761,
+   "want": "40387c2e"
+  },
+  {
+   "case": "step000120",
+   "equal": false,
+   "got": "40244b79",
+   "seconds": 0.026786,
+   "want": "40244b77"
+  },
+  {
+   "case": "step000128",
+   "equal": false,
+   "got": "403dd2e3",
+   "seconds": 0.025027,
+   "want": "403dd2e5"
+  }
+ ],
+ "schema": "mojolearn.byte-lm-host-gate.v1",
+ "timing": {
+  "loss_calls": 33,
+  "max_seconds": 0.029949,
+  "min_seconds": 0.021335,
+  "total_seconds": 0.849842
+ },
+ "verdict": "PASS"
+}

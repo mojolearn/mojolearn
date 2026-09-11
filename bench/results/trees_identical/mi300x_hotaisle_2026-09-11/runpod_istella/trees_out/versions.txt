@@ -1,0 +1,7 @@
+python 3.12.14
+numpy 2.5.3
+sklearn 1.9.1
+catboost 1.2.10
+lightgbm 4.7.0 /root/venv-gpu/lib/python3.12/site-packages/lightgbm/__init__.py
+xgboost 3.4.1 /root/venv-gpu/lib/python3.12/site-packages/xgboost/__init__.py
+joblib.cpu_count 21

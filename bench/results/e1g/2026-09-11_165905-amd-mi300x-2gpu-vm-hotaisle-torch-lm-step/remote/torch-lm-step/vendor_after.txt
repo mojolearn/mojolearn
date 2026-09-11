@@ -1,0 +1,43 @@
+== date 2026-09-11T17:11:52Z
+== rocm-smi --showproductname --showdriverversion
+
+
+============================ ROCm System Management Interface ============================
+============================== Version of System Component ===============================
+Driver version: 6.16.13
+==========================================================================================
+====================================== Product Info ======================================
+GPU[0]		: Card Series: 		AMD Instinct MI300X VF
+GPU[0]		: Card Model: 		0x74b5
+GPU[0]		: Card Vendor: 		Advanced Micro Devices, Inc. [AMD/ATI]
+GPU[0]		: Card SKU: 		M3000108
+GPU[0]		: Subsystem ID: 	0x74a1
+GPU[0]		: Device Rev: 		0x00
+GPU[0]		: Node ID: 		3
+GPU[0]		: GUID: 		46235
+GPU[0]		: GFX Version: 		gfx942
+==========================================================================================
+================================== End of ROCm SMI Log ===================================
+== rocm-smi --showuse --showmemuse --showtemp
+
+
+============================ ROCm System Management Interface ============================
+====================================== Temperature =======================================
+GPU[0]		: Temperature (Sensor junction) (C): 44.0
+GPU[0]		: Temperature (Sensor memory) (C): 38.0
+==========================================================================================
+=================================== % time GPU is busy ===================================
+GPU[0]		: GPU use (%): 0
+==========================================================================================
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 0
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Not supported on the given system
+==========================================================================================
+================================== End of ROCm SMI Log ===================================
+== amd-smi version
+AMDSMI Tool: 25.4.2+aca1101 | AMDSMI Library version: 25.4.0 | ROCm version: 6.4.1 | amdgpu version: 6.16.13 | amd_hsmp version: N/A
+== /opt/rocm/.info/version
+6.4.1-83
+/opt/rocm-6.4.1
