@@ -44,6 +44,13 @@ SABOTAGE (rule 7). On the AMD column, restoring any one peel bound
 must make that file's fixture fail here. A green run on a 32-lane column
 proves nothing about the defect; it is the reference side.
 
+MEASURED on a Hot Aisle MI300X, 2026-09-11, source 02d4f387: the fixed
+build 16/16 PASS in two processes; the build with every bound restored 0/16
+(bin2 DIVERGENT, ties/bits5/bits6 MOVED); restoring one file at a time,
+hist_half_byte 12/16 (ties MOVED only), hist_binary 12/16 (bin2 DIVERGENT
+only), hist_2_one_byte_base 8/16 (bits5 and bits6 MOVED only). On an H100
+both builds gave the same bits in all 16 cells.
+
 RUN OWED, Apple M4 (the orchestrator's light local check; small fixtures,
 no benchmark). From the repository root:
 

@@ -2343,10 +2343,12 @@ def launch_histograms_for_blocks[
             # WHAT IS ELIGIBLE WAS NOT WHAT WAS VERIFIED. Sub-byte blocks
             # first executed on 64-wide hardware on the MI325X on 2026-09-11
             # (identity_break `ties`, taxi, Istella-S under IDENTICAL), and
-            # the fit moved between repeats: the head/tail peel gave the
-            # block a non-uniform count of threadgroup barriers. DEVIATION
-            # 2600 fixed the peel; `checks/gbdt_sub_byte_identity_check.py`
-            # is the gate.
+            # the fit moved between repeats (on the MI300X the binary arm
+            # instead gave one wrong answer every time): the head/tail peel
+            # gave the block a non-uniform count of threadgroup barriers.
+            # DEVIATION 2600 fixed the peel, measured with and without it on
+            # the MI300X; `checks/gbdt_sub_byte_identity_check.py` is the
+            # gate.
             # ==================================================
             if depth == 0:
                 ctx.enqueue_function[binary_hist_kernel](
