@@ -21,7 +21,9 @@ WHAT IT ASSERTS.
     (2528 with 2533), stash_tiled_pf (2533), stash_tiled_fgrid_r64 and
     stash_tiled_fgrid_r32 (2531), stash_tiled_fgrid_r32_pf,
     stash_tiled_fgrid_r32_qres (2530) and stash_tiled_fgrid_r32_qres_pf
-    (NVIDIA's shipped default, DEVIATION 2534), so every second-round
+    (NVIDIA's shipped default, DEVIATION 2534), then five arms on that one:
+    `_kvrecompute` (DEVIATION 2596) and `_kvgrid_r64`, `_kvgrid_r32`,
+    `_kvsplit`, `_kvgrid_r32_kvsplit` (DEVIATION 2597), so every second-round
     forward instantiation (rows 64 and 32, Q residency, preflush) and every
     second-round backward launch runs, and "new arm = eager" and
     "default = eager" hold in one run):
@@ -53,6 +55,9 @@ WHAT IT ASSERTS.
         move zdot and hold dv when 2528 is not in the arm (2528's y flip
         moves every backward buffer, so a composed arm is attributed per
         direction only).
+      - DK/DV REACH for the DEVIATION 2596 / 2597 arms, a third run under
+        ATTN_ARM_SABOTAGE_KV: at head_dim 64 dk and dv must move and zdot,
+        dq and the forward must hold (brief section 16.4).
       - at any other head dim every arm takes the shipped kernels by
         design, and a sabotage run must move nothing.
 Without -D MOJOLEARN_ATTN_ARM_TRIAL=1 every non-default arm runs the
@@ -86,6 +91,9 @@ from transformer.checks.transformer_fused_check import (
     status_name,
 )
 from transformer.impl.llama.fused_attention import (
+    ATTN_ARM_BWD_KVGRID,
+    ATTN_ARM_BWD_KVRECOMPUTE,
+    ATTN_ARM_BWD_KVSPLIT,
     ATTN_ARM_BWD_STASH,
     ATTN_ARM_BWD_TILED,
     ATTN_ARM_BWD_ZTILED,
@@ -94,14 +102,18 @@ from transformer.impl.llama.fused_attention import (
     ATTN_ARM_FWD_GRID,
     ATTN_ARM_FWD_QRES,
     ATTN_ARM_FWD_SSTASH,
+    ATTN_ARM_KVROWS32,
+    ATTN_ARM_KVROWS64,
     ATTN_ARM_PREFLUSH,
     ATTN_ARM_SABOTAGE,
+    ATTN_ARM_SABOTAGE_KV,
     ATTN_ARM_SABOTAGE_NEW,
     ATTN_ARM_TRIAL,
     ATTN_ARM_ZROWS32,
     ATTN_ARM_ZROWS64,
     ATTN_STASH_HD,
     FUSED_RAN,
+    fused_attention_arm_kv,
     fused_attention_arm_name,
     fused_attention_arm_new_backward,
     fused_attention_arm_new_forward,
@@ -148,6 +160,13 @@ def arms() -> List[Int]:
     out.append(stash_tiled | grid32 | ATTN_ARM_PREFLUSH)
     out.append(stash_tiled | grid32 | ATTN_ARM_FWD_QRES)
     out.append(stash_tiled | grid32 | ATTN_ARM_FWD_QRES | ATTN_ARM_PREFLUSH)
+    # DEVIATIONS 2596 and 2597 (brief section 16), on the round 3 arm.
+    comptime r3 = stash_tiled | grid32 | ATTN_ARM_FWD_QRES | ATTN_ARM_PREFLUSH
+    out.append(r3 | ATTN_ARM_BWD_KVRECOMPUTE)
+    out.append(r3 | ATTN_ARM_BWD_KVGRID | ATTN_ARM_KVROWS64)
+    out.append(r3 | ATTN_ARM_BWD_KVGRID | ATTN_ARM_KVROWS32)
+    out.append(r3 | ATTN_ARM_BWD_KVSPLIT)
+    out.append(r3 | ATTN_ARM_BWD_KVGRID | ATTN_ARM_KVROWS32 | ATTN_ARM_BWD_KVSPLIT)
     return out^
 
 
@@ -178,6 +197,15 @@ def check_names(mut failures: List[String]) raises:
     good.append("stash_tiled_ztiled_r64_pf")
     good.append("stash_tiled_ztiled_r32_fgrid_r32_qres_pf+sabotage_new")
     good.append("bwd_stash_tiled_ztiled_pf+sabotage+sabotage_new")
+    good.append("stash_tiled_pf_kvsplit")
+    good.append("bwd_stash_tiled_pf_kvgrid")
+    good.append("stash_tiled_pf_kvgrid_r32")
+    good.append("stash_tiled_fgrid_r32_qres_pf_kvgrid_r64")
+    good.append("stash_tiled_fgrid_r32_qres_pf_kvgrid_r32_kvsplit")
+    good.append("stash_tiled_fgrid_r32_qres_pf_kvsplit+sabotage_kv")
+    good.append("stash_tiled_pf_kvgrid_r64_kvsplit+sabotage+sabotage_new+sabotage_kv")
+    good.append("stash_tiled_fgrid_r32_qres_pf_kvrecompute")
+    good.append("bwd_stash_tiled_pf_kvrecompute+sabotage_kv")
     for i in range(len(good)):
         var n = String(good[i])
         var got = fused_attention_arm_name(fused_attention_arm_parse(n))
@@ -185,14 +213,14 @@ def check_names(mut failures: List[String]) raises:
             failures.append("NAMES: '" + n + "' parses and names back as '" + got + "'")
     var all_arms = arms()
     for i in range(len(all_arms)):
-        for extra in range(4):
+        for extra in range(8):
             var a = all_arms[i]
-            if extra == 1:
+            if (extra & 1) != 0:
                 a = a | ATTN_ARM_SABOTAGE
-            elif extra == 2:
+            if (extra & 2) != 0:
                 a = a | ATTN_ARM_SABOTAGE_NEW
-            elif extra == 3:
-                a = a | ATTN_ARM_SABOTAGE | ATTN_ARM_SABOTAGE_NEW
+            if (extra & 4) != 0:
+                a = a | ATTN_ARM_SABOTAGE_KV
             var back = fused_attention_arm_parse(fused_attention_arm_name(a))
             if back != a:
                 failures.append("NAMES: arm " + String(a) + " names as '" + fused_attention_arm_name(a) + "' and parses back as " + String(back))
@@ -215,6 +243,15 @@ def check_names(mut failures: List[String]) raises:
     bad.append("stash_tiled_pf_fgrid_r32")
     bad.append("stash_tiled_fgrid_r32_r64")
     bad.append("stash_tiled_qres_fgrid_r32")
+    bad.append("stash_tiled_kvsplit")
+    bad.append("fwd_sstash_pf_kvgrid")
+    bad.append("stash_tiled_ztiled_r64_pf_kvsplit")
+    bad.append("stash_tiled_pf_kvsplit_kvgrid")
+    bad.append("stash_tiled_pf_kvgrid_r32_r64")
+    bad.append("stash_tiled_kvgrid_pf")
+    bad.append("stash_tiled_pf_kvsplit+sabotage_kv+sabotage_new")
+    bad.append("stash_tiled_kvrecompute")
+    bad.append("stash_tiled_pf_kvrecompute_kvsplit")
     for i in range(len(bad)):
         var refused = False
         try:
@@ -225,7 +262,7 @@ def check_names(mut failures: List[String]) raises:
             failures.append("NAMES: '" + bad[i] + "' was accepted; the parser must refuse it")
     print(
         "  names: " + String(len(good)) + " spellings and "
-        + String(4 * len(all_arms)) + " arm values round-trip, "
+        + String(8 * len(all_arms)) + " arm values round-trip, "
         + String(len(bad)) + " invalid spellings refused"
     )
 
@@ -329,10 +366,17 @@ def run_case(ctx: DeviceContext, c: FusedCase, mut failures: List[String]) raise
         var qres = (arm & ATTN_ARM_FWD_QRES) != 0
         var preflush = (arm & ATTN_ARM_PREFLUSH) != 0
         var ztiled = (arm & ATTN_ARM_BWD_ZTILED) != 0
-        for sab in range(2):
+        var kv = fused_attention_arm_kv(arm)
+        for sab in range(3):
+            # sab 2: DEVIATIONS 2596 / 2597, the dk/dv launch's own flip
+            # (ATTN_ARM_SABOTAGE_KV), for the arms that carry one.
+            if sab == 2 and not kv:
+                continue
             var this_arm = arm
             if sab == 1:
                 this_arm = arm | reach_bit
+            elif sab == 2:
+                this_arm = arm | ATTN_ARM_SABOTAGE_KV
             var label = fused_attention_arm_name(this_arm)
             # ---- forward ------------------------------------------------
             var ctxv = _upload(ctx, List[Float32](length=qn, fill=Float32(0.0)))
@@ -433,6 +477,23 @@ def run_case(ctx: DeviceContext, c: FusedCase, mut failures: List[String]) raise
                         print("    REACH " + label + " zdot_moved=" + String(m_z) + " dv_moved=" + String(m_dv))
                         if m_z == 0 or m_dv > 0:
                             failures.append(c.name + ": " + label + ": the DEVIATION 2533 backward flip (the stored zdot) must move zdot and hold dv; zdot moved " + String(m_z) + ", dv moved " + String(m_dv))
+                elif fwd_moved + bwd_moved > 0:
+                    failures.append(c.name + ": " + label + " moved " + String(fwd_moved + bwd_moved) + " cells at head_dim " + String(c.hd) + ", where every arm runs the shipped kernels")
+            # ---- dk/dv reach (DEVIATIONS 2596 and 2597, brief 16.4) ------
+            if sab == 2:
+                if c.hd == ATTN_STASH_HD:
+                    if bs == FUSED_RAN:
+                        print(
+                            "    REACH " + label + " dk_moved=" + String(m_dk) + " dv_moved=" + String(m_dv)
+                            + " zdot_moved=" + String(m_z) + " dq_moved=" + String(m_dq)
+                            + " forward_moved=" + String(fwd_moved)
+                        )
+                        if c.expect_bwd == FUSED_RAN and (m_dk == 0 or m_dv == 0):
+                            failures.append(c.name + ": DK/DV REACH NOT PROVEN for " + label + " (dk moved " + String(m_dk) + ", dv moved " + String(m_dv) + "; both must move)")
+                        if m_z + m_dq > 0:
+                            failures.append(c.name + ": " + label + " moved " + String(m_z + m_dq) + " zdot or dq cells; the DEVIATION 2596 / 2597 flips reach dk and dv only")
+                    if st == FUSED_RAN and fwd_moved > 0:
+                        failures.append(c.name + ": " + label + " moved " + String(fwd_moved) + " forward cells; the DEVIATION 2596 / 2597 flips reach dk and dv only")
                 elif fwd_moved + bwd_moved > 0:
                     failures.append(c.name + ": " + label + " moved " + String(fwd_moved + bwd_moved) + " cells at head_dim " + String(c.hd) + ", where every arm runs the shipped kernels")
             _ = ctxv^

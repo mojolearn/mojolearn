@@ -93,7 +93,7 @@ stash_tiled_fgrid_r32_qres, stash_tiled_fgrid_r32_qres_pf),
 MOJOLEARN_ATTN_BASELINE (default baseline; stash_tiled is the baseline a
 second-round arm is priced against). Either name may be `default`, the
 column's shipped arm (kernel matrix `attn_default_arm_for`, DEVIATION 2534:
-NVIDIA stash_tiled_fgrid_r32_qres_pf, every other column stash_tiled); the
+NVIDIA stash_tiled_fgrid_r32_qres_pf, AMD baseline, every other column stash_tiled); the
 harness prints the explicit name everywhere and a `DEFAULT` line beside the
 request. The two `PATH` lines print each arm's resolved kernels
 (`is_default`, `resolved_hd64`), and every correctness run prints a `RAN`
@@ -101,14 +101,24 @@ line naming the kernels that launched and fails at head_dim 64 when they are
 not the arm's. MOJOLEARN_ATTN_KINDS
 (default hashed; the leg passes file:<dir> per corpus), MOJOLEARN_ATTN_L, _NH, _NKV, _HD, _B, _WINDOW,
 MOJOLEARN_ATTN_ROUNDS, _WARMUPS, MOJOLEARN_ATTN_ORACLE (1),
-MOJOLEARN_ATTN_REACH (1), MOJOLEARN_ATTN_TIMING (1).
+MOJOLEARN_ATTN_REACH (1), MOJOLEARN_ATTN_TIMING (1),
+MOJOLEARN_ATTN_RESOURCES (1).
+
+DEVIATIONS 2596 AND 2597 (brief section 16). A candidate carrying
+`_kvrecompute`, `_kvgrid` or `_kvsplit` proves its dk/dv launch's reach with
+a further run under ATTN_ARM_SABOTAGE_KV (a `REACH_KV` line): dk and dv must
+move, zdot, dq and the forward must hold. MOJOLEARN_ATTN_RESOURCES=1 prints,
+before the kinds, the compiled attributes of the backward kernels at head_dim
+64 (`RESOURCES` lines: regs, local, shared, const, max_threads,
+blocks_per_sm_256, beside each kernel's source counts), a readback brief 16.3
+reads against the step timers; it launches nothing.
 """
 
 from std.math import exp
 from std.memory import bitcast, memcpy
 from std.os import getenv
 from std.time import perf_counter_ns
-from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.host import Attribute, DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace
 from checks.kernel_matrix import TARGET_COLUMN, column_name
@@ -120,10 +130,12 @@ from transformer.checks.transformer_backward import (
 )
 from transformer.impl.llama.fused_attention import (
     ATTN_ARM_BASELINE,
+    ATTN_ARM_BWD_KVSPLIT,
     ATTN_ARM_BWD_ZTILED,
     ATTN_ARM_DEFAULT,
     ATTN_ARM_FWD_QRES,
     ATTN_ARM_PREFLUSH,
+    ATTN_ARM_SABOTAGE_KV,
     ATTN_ARM_SABOTAGE_NEW,
     ATTN_ARM_TRIAL,
     ATTN_PHASE_TIMERS,
@@ -131,15 +143,24 @@ from transformer.impl.llama.fused_attention import (
     FUSED_RAN,
     fused_attention_arm_backward_resolved,
     fused_attention_arm_forward_resolved,
+    fused_attention_arm_kv,
     fused_attention_arm_name,
     fused_attention_arm_new_backward,
     fused_attention_arm_new_forward,
     fused_attention_arm_parse,
     fused_attention_arm_reach_bit,
     fused_attention_fwd_rows,
+    fused_attention_kv_keys,
     fused_attention_zdot_rows,
     fused_backward_launch_arm,
     fused_backward_launch_ran,
+    fused_bwd_dkdv_kernel,
+    fused_bwd_dkdv_r2_kernel,
+    fused_bwd_dkdv_tiled_kernel,
+    fused_bwd_dkdv_tiled_pf_kernel,
+    fused_bwd_dq_tiled_pf_kernel,
+    fused_bwd_kvfold_r2_kernel,
+    fused_bwd_zdot_stash_pf_kernel,
     fused_forward_launch_arm,
     fused_forward_launch_ran,
 )
@@ -197,6 +218,11 @@ def _path_line(role: String, arm: Int) -> String:
     var reach = String("sabotage")
     if fused_attention_arm_reach_bit(arm) == ATTN_ARM_SABOTAGE_NEW:
         reach = String("sabotage_new")
+    # DEVIATIONS 2596 and 2597: the dk/dv launch's keys per block (`-` when
+    # the arm names neither; 4 for `_kvrecompute`), and whether it splits.
+    var kv = String("-")
+    if fused_attention_arm_kv(arm):
+        kv = String(fused_attention_kv_keys(arm))
     var resolved = fused_attention_arm_forward_resolved(arm) | fused_attention_arm_backward_resolved(arm)
     return (
         "PATH " + role + " arm=" + fused_attention_arm_name(arm)
@@ -204,6 +230,7 @@ def _path_line(role: String, arm: Int) -> String:
         + " resolved_hd64=" + fused_attention_arm_name(resolved)
         + " zdot_rows=" + rows + " fwd_rows=" + frows + " preflush="
         + String((arm & ATTN_ARM_PREFLUSH) != 0) + " reach_bit=" + reach
+        + " kv_keys=" + kv + " kv_split=" + String((arm & ATTN_ARM_BWD_KVSPLIT) != 0)
     )
 
 
@@ -770,6 +797,160 @@ def eager_oracle(ctx: DeviceContext, mut c: Case) raises -> Outputs:
     return o^
 
 
+# ---------------------------------------------------------------------------
+# RESOURCES (DEVIATIONS 2596 and 2597, brief section 16.3): the compiled
+# backward kernels' own attributes, the calls
+# bench/gemm_step_resources_main.mojo reads. Launches nothing. Each kernel
+# prints its source counts first (per thread, at head_dim 64), then one line
+# per attribute, so a vendor that answers some attributes and raises on
+# another keeps what it answered; each kernel is its own try.
+# ---------------------------------------------------------------------------
+
+
+def _res_begin(label: String, geometry: String, acc: Int, operands: Int, local_floats: Int, page: Int, allocs: Int):
+    print(
+        "RESOURCES_BEGIN label=" + label + " " + geometry
+        + " accumulators_per_thread=" + String(acc)
+        + " operand_registers_per_thread=" + String(operands)
+        + " thread_local_floats=" + String(local_floats)
+        + " page_bytes=" + String(page) + " allocations=" + String(allocs)
+        + " threads_per_block=256"
+    )
+
+
+def _res_zdot_stash_pf(ctx: DeviceContext) raises:
+    comptime kern = fused_bwd_zdot_stash_pf_kernel[ATTN_STASH_HD, 4, False]
+    var label = String("zdot_stash_pf")
+    _res_begin(label, "rows=4 keys_per_iteration=32", 2, 4, 64, 17696, 4)
+    var f = ctx.compile_function[kern]()
+    print("RESOURCES label=", label, " regs=", f.get_attribute(Attribute.NUM_REGS), sep="")
+    print("RESOURCES label=", label, " local=", f.get_attribute(Attribute.LOCAL_SIZE_BYTES), sep="")
+    print("RESOURCES label=", label, " shared=", f.get_attribute(Attribute.SHARED_SIZE_BYTES), sep="")
+    print("RESOURCES label=", label, " const=", f.get_attribute(Attribute.CONST_SIZE_BYTES), sep="")
+    print("RESOURCES label=", label, " max_threads=", f.get_attribute(Attribute.MAX_THREADS_PER_BLOCK), sep="")
+    print("RESOURCES label=", label, " blocks_per_sm_256=", f.occupancy_max_active_blocks_per_multiprocessor(256, 0), sep="")
+
+
+def _res_dq_tiled_pf(ctx: DeviceContext) raises:
+    comptime kern = fused_bwd_dq_tiled_pf_kernel[ATTN_STASH_HD]
+    var label = String("dq_tiled_pf")
+    _res_begin(label, "rows=64 keys_per_tile=16", 16, 5, 0, 8448, 3)
+    var f = ctx.compile_function[kern]()
+    print("RESOURCES label=", label, " regs=", f.get_attribute(Attribute.NUM_REGS), sep="")
+    print("RESOURCES label=", label, " local=", f.get_attribute(Attribute.LOCAL_SIZE_BYTES), sep="")
+    print("RESOURCES label=", label, " shared=", f.get_attribute(Attribute.SHARED_SIZE_BYTES), sep="")
+    print("RESOURCES label=", label, " const=", f.get_attribute(Attribute.CONST_SIZE_BYTES), sep="")
+    print("RESOURCES label=", label, " max_threads=", f.get_attribute(Attribute.MAX_THREADS_PER_BLOCK), sep="")
+    print("RESOURCES label=", label, " blocks_per_sm_256=", f.occupancy_max_active_blocks_per_multiprocessor(256, 0), sep="")
+
+
+def _res_dkdv_recompute(ctx: DeviceContext) raises:
+    """The `baseline` arm's dk/dv kernel, which DEVIATION 2596 launches."""
+    comptime kern = fused_bwd_dkdv_kernel[ATTN_STASH_HD, 4]
+    var label = String("dkdv_recompute")
+    _res_begin(label, "keys=4 queries_per_iteration=32", 3, 4, 64, 17696, 4)
+    var f = ctx.compile_function[kern]()
+    print("RESOURCES label=", label, " regs=", f.get_attribute(Attribute.NUM_REGS), sep="")
+    print("RESOURCES label=", label, " local=", f.get_attribute(Attribute.LOCAL_SIZE_BYTES), sep="")
+    print("RESOURCES label=", label, " shared=", f.get_attribute(Attribute.SHARED_SIZE_BYTES), sep="")
+    print("RESOURCES label=", label, " const=", f.get_attribute(Attribute.CONST_SIZE_BYTES), sep="")
+    print("RESOURCES label=", label, " max_threads=", f.get_attribute(Attribute.MAX_THREADS_PER_BLOCK), sep="")
+    print("RESOURCES label=", label, " blocks_per_sm_256=", f.occupancy_max_active_blocks_per_multiprocessor(256, 0), sep="")
+
+
+def _res_dkdv_tiled(ctx: DeviceContext) raises:
+    comptime kern = fused_bwd_dkdv_tiled_kernel[ATTN_STASH_HD, False]
+    var label = String("dkdv_tiled")
+    _res_begin(label, "keys=64 queries_per_tile=16", 32, 10, 0, 16384, 4)
+    var f = ctx.compile_function[kern]()
+    print("RESOURCES label=", label, " regs=", f.get_attribute(Attribute.NUM_REGS), sep="")
+    print("RESOURCES label=", label, " local=", f.get_attribute(Attribute.LOCAL_SIZE_BYTES), sep="")
+    print("RESOURCES label=", label, " shared=", f.get_attribute(Attribute.SHARED_SIZE_BYTES), sep="")
+    print("RESOURCES label=", label, " const=", f.get_attribute(Attribute.CONST_SIZE_BYTES), sep="")
+    print("RESOURCES label=", label, " max_threads=", f.get_attribute(Attribute.MAX_THREADS_PER_BLOCK), sep="")
+    print("RESOURCES label=", label, " blocks_per_sm_256=", f.occupancy_max_active_blocks_per_multiprocessor(256, 0), sep="")
+
+
+def _res_dkdv_tiled_pf(ctx: DeviceContext) raises:
+    comptime kern = fused_bwd_dkdv_tiled_pf_kernel[ATTN_STASH_HD]
+    var label = String("dkdv_tiled_pf")
+    _res_begin(label, "keys=64 queries_per_tile=16", 32, 10, 0, 16384, 4)
+    var f = ctx.compile_function[kern]()
+    print("RESOURCES label=", label, " regs=", f.get_attribute(Attribute.NUM_REGS), sep="")
+    print("RESOURCES label=", label, " local=", f.get_attribute(Attribute.LOCAL_SIZE_BYTES), sep="")
+    print("RESOURCES label=", label, " shared=", f.get_attribute(Attribute.SHARED_SIZE_BYTES), sep="")
+    print("RESOURCES label=", label, " const=", f.get_attribute(Attribute.CONST_SIZE_BYTES), sep="")
+    print("RESOURCES label=", label, " max_threads=", f.get_attribute(Attribute.MAX_THREADS_PER_BLOCK), sep="")
+    print("RESOURCES label=", label, " blocks_per_sm_256=", f.occupancy_max_active_blocks_per_multiprocessor(256, 0), sep="")
+
+
+def _res_dkdv_r2[BJ: Int](ctx: DeviceContext, label: String) raises:
+    comptime kern = fused_bwd_dkdv_r2_kernel[ATTN_STASH_HD, BJ, False]
+    _res_begin(label, "keys=" + String(BJ) + " queries_per_tile=16", 2 * (BJ // 16) * 4, 10, 0, (2048 + 32 * BJ) * 4, 4)
+    var f = ctx.compile_function[kern]()
+    print("RESOURCES label=", label, " regs=", f.get_attribute(Attribute.NUM_REGS), sep="")
+    print("RESOURCES label=", label, " local=", f.get_attribute(Attribute.LOCAL_SIZE_BYTES), sep="")
+    print("RESOURCES label=", label, " shared=", f.get_attribute(Attribute.SHARED_SIZE_BYTES), sep="")
+    print("RESOURCES label=", label, " const=", f.get_attribute(Attribute.CONST_SIZE_BYTES), sep="")
+    print("RESOURCES label=", label, " max_threads=", f.get_attribute(Attribute.MAX_THREADS_PER_BLOCK), sep="")
+    print("RESOURCES label=", label, " blocks_per_sm_256=", f.occupancy_max_active_blocks_per_multiprocessor(256, 0), sep="")
+
+
+def _res_kvfold_r2[BJ: Int](ctx: DeviceContext, label: String) raises:
+    comptime kern = fused_bwd_kvfold_r2_kernel[ATTN_STASH_HD, BJ, False]
+    _res_begin(label, "keys=" + String(BJ) + " queries_per_tile=16", (BJ // 16) * 4, 5, 0, (1024 + 16 * BJ) * 4, 2)
+    var f = ctx.compile_function[kern]()
+    print("RESOURCES label=", label, " regs=", f.get_attribute(Attribute.NUM_REGS), sep="")
+    print("RESOURCES label=", label, " local=", f.get_attribute(Attribute.LOCAL_SIZE_BYTES), sep="")
+    print("RESOURCES label=", label, " shared=", f.get_attribute(Attribute.SHARED_SIZE_BYTES), sep="")
+    print("RESOURCES label=", label, " const=", f.get_attribute(Attribute.CONST_SIZE_BYTES), sep="")
+    print("RESOURCES label=", label, " max_threads=", f.get_attribute(Attribute.MAX_THREADS_PER_BLOCK), sep="")
+    print("RESOURCES label=", label, " blocks_per_sm_256=", f.occupancy_max_active_blocks_per_multiprocessor(256, 0), sep="")
+
+
+def run_resources(ctx: DeviceContext) raises:
+    """The RESOURCES section: nine backward kernels at head_dim 64, each in
+    its own try."""
+    print("RESOURCES_DEVICE column=" + column_name(TARGET_COLUMN) + " source_counts=per_thread_hd64")
+    try:
+        _res_zdot_stash_pf(ctx)
+    except e:
+        print("RESOURCES_ERROR label=zdot_stash_pf error=", e, sep="")
+    try:
+        _res_dq_tiled_pf(ctx)
+    except e:
+        print("RESOURCES_ERROR label=dq_tiled_pf error=", e, sep="")
+    try:
+        _res_dkdv_recompute(ctx)
+    except e:
+        print("RESOURCES_ERROR label=dkdv_recompute error=", e, sep="")
+    try:
+        _res_dkdv_tiled(ctx)
+    except e:
+        print("RESOURCES_ERROR label=dkdv_tiled error=", e, sep="")
+    try:
+        _res_dkdv_tiled_pf(ctx)
+    except e:
+        print("RESOURCES_ERROR label=dkdv_tiled_pf error=", e, sep="")
+    try:
+        _res_dkdv_r2[64](ctx, String("kvgrid_r64"))
+    except e:
+        print("RESOURCES_ERROR label=kvgrid_r64 error=", e, sep="")
+    try:
+        _res_dkdv_r2[32](ctx, String("kvgrid_r32"))
+    except e:
+        print("RESOURCES_ERROR label=kvgrid_r32 error=", e, sep="")
+    try:
+        _res_kvfold_r2[64](ctx, String("kvsplit_r64_fold"))
+    except e:
+        print("RESOURCES_ERROR label=kvsplit_r64_fold error=", e, sep="")
+    try:
+        _res_kvfold_r2[32](ctx, String("kvsplit_r32_fold"))
+    except e:
+        print("RESOURCES_ERROR label=kvsplit_r32_fold error=", e, sep="")
+    print("RESOURCES_DONE")
+
+
 def time_ms(ctx: DeviceContext, mut c: Case, arm: Int, with_backward: Bool, label: String) raises -> Float64:
     ctx.synchronize()
     var t0 = perf_counter_ns()
@@ -843,6 +1024,10 @@ def main() raises:
         print("NOTE: no -D MOJOLEARN_ATTN_ARM_TRIAL=1: the candidate arm runs the shipped kernels; reach will FAIL")
 
     var ctx = DeviceContext()
+    # DEVIATIONS 2596 and 2597 (brief section 16.3): the compiled backward
+    # kernels' attributes, once per process, before anything launches.
+    if _env_int("MOJOLEARN_ATTN_RESOURCES", 1) != 0:
+        run_resources(ctx)
     var failures = List[String]()
     for ki in range(len(kinds)):
         var kind_spec = String(kinds[ki])
@@ -895,6 +1080,30 @@ def main() raises:
             var ctx_hi_moved = moved_cells_from_column(refout.ctxv, sab.ctxv, c.hd, 16)
             var zdot_moved = moved_cells(refout.zdot, sab.zdot)
             var dv_moved = moved_cells(refout.dv, sab.dv)
+            # DEVIATIONS 2596 and 2597 (brief section 16.4): the dk/dv
+            # launch's own flip, before the clean restore below.
+            if fused_attention_arm_kv(cand):
+                var kv_arm = cand | ATTN_ARM_SABOTAGE_KV
+                var kv_name = fused_attention_arm_name(kv_arm)
+                c.clear_outputs(ctx)
+                c.run_both(ctx, kv_arm, kind + " " + kv_name)
+                var kvo = c.download(ctx)
+                var kv_flipped = compare_outputs(kind, kv_name + "_vs_" + base_name, refout, kvo)
+                var kv_fwd = moved_cells(refout.ctxv, kvo.ctxv) + moved_cells(refout.amax, kvo.amax) + moved_cells(refout.denom, kvo.denom)
+                var kv_z = moved_cells(refout.zdot, kvo.zdot)
+                var kv_dq = moved_cells(refout.dq, kvo.dq)
+                var kv_dk = moved_cells(refout.dk, kvo.dk)
+                var kv_dv = moved_cells(refout.dv, kvo.dv)
+                print(
+                    "REACH_KV " + kind + " " + cand_name + " sabotage_flipped_cells=" + String(kv_flipped)
+                    + " reach_bit=" + kv_name + " dk_moved=" + String(kv_dk) + " dv_moved=" + String(kv_dv)
+                    + " zdot_moved=" + String(kv_z) + " dq_moved=" + String(kv_dq)
+                    + " forward_moved=" + String(kv_fwd)
+                )
+                if kv_dk == 0 or kv_dv == 0:
+                    failures.append(kind + ": DK/DV REACH NOT PROVEN for " + cand_name + " (" + kv_name + " moved dk in " + String(kv_dk) + " and dv in " + String(kv_dv) + " cells; both must move)")
+                if kv_fwd + kv_z + kv_dq > 0:
+                    failures.append(kind + ": " + kv_name + " moved " + String(kv_fwd + kv_z + kv_dq) + " forward, zdot or dq cells; the DEVIATION 2596 / 2597 flips reach dk and dv only")
             c.clear_outputs(ctx)
             c.run_both(ctx, cand, kind + " " + cand_name + " (restore)")
             var again = c.download(ctx)

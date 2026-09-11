@@ -43,9 +43,18 @@
 # stash_tiled_fgrid_r32_qres_pf, stash_tiled_ztiled_r64_pf. The settings for
 # that leg live in tools/attention_round3_leg.sh, which calls this body.
 #
+# DEVIATIONS 2596 and 2597 (brief section 16, priced against `baseline`, the
+# shipped AMD default) add, after `_pf`, `_kvrecompute` (dk/dv by the shipped
+# recompute kernel with the stashes freed) or `_kvgrid`, `_kvgrid_r32`,
+# `_kvgrid_r64` (the tiled dk/dv fold's keys per block) and `_kvsplit` (that
+# fold as two kernels). The first price run also prints the harness's
+# RESOURCES readback (the compiled backward kernels' register, local, shared
+# and occupancy attributes) into resources.txt. The settings for that leg
+# live in tools/attention_dkdv_leg.sh.
+#
 # DEVIATION 2534 (brief section 15): the shipped default is a kernel-matrix
 # row per column (`attn_default_arm_for`: NVIDIA stash_tiled_fgrid_r32_qres_pf,
-# every other column stash_tiled), and a trial binding runs it when
+# AMD baseline, every other column stash_tiled), and a trial binding runs it when
 # MOJOLEARN_ATTN_ARM is unset or empty. So that baseline, stash_tiled and the
 # default can never be confused in a result: the harness takes the name
 # `default` as an alias and prints only the explicit name (a `DEFAULT
@@ -236,7 +245,7 @@ run() {
     echo "root=$ROOT"
     echo "arms=$ARMS"
     echo "lm_arms=$LM_ARMS"
-    echo "baseline_arm=$BASE deviations_second_round=2528,2530,2531,2533"
+    echo "baseline_arm=$BASE deviations_second_round=2528,2530,2531,2533 deviations_dkdv=2596,2597"
     echo "rounds=$ROUNDS warmups=$WARMUPS deadline=$DEADLINE"
     echo "vendor=$VENDOR gpu_archs=$MOJOLEARN_GPU_ARCHS column=$MOJOLEARN_TARGET_COLUMN jobs=$JOBS"
     echo "skip_timers=${MOJOLEARN_ATTN_LEG_SKIP_TIMERS:-0} skip_lm=${MOJOLEARN_ATTN_LEG_SKIP_LM:-0}"
@@ -297,7 +306,7 @@ for arm in $(echo "$ARMS" | tr ',' ' '); do
     first=0
     MOJOLEARN_ATTN_ARM="$arm" MOJOLEARN_ATTN_KINDS=hashed,heavytail MOJOLEARN_ATTN_TIMING=0 \
     MOJOLEARN_ATTN_BASELINE="$BASE" \
-    MOJOLEARN_ATTN_ORACLE="$oracle" MOJOLEARN_ATTN_REACH=1 \
+    MOJOLEARN_ATTN_ORACLE="$oracle" MOJOLEARN_ATTN_REACH=1 MOJOLEARN_ATTN_RESOURCES=0 \
     run "smoke-$arm" timeout "$DEADLINE" "$OUT/bin/attn-price"
 done
 # The trial build's column default as the harness names it (DEVIATION 2534).
@@ -370,6 +379,7 @@ if [ -n "$FILE_KINDS" ]; then
         MOJOLEARN_ATTN_ARM="$arm" MOJOLEARN_ATTN_KINDS="$FILE_KINDS" \
         MOJOLEARN_ATTN_BASELINE="$BASE" \
         MOJOLEARN_ATTN_ORACLE="$oracle" MOJOLEARN_ATTN_REACH=1 \
+        MOJOLEARN_ATTN_RESOURCES="$oracle" \
         MOJOLEARN_ATTN_ROUNDS="$ROUNDS" MOJOLEARN_ATTN_WARMUPS="$WARMUPS" \
         run "price-$arm" timeout "$DEADLINE" "$OUT/bin/attn-price"
     done
@@ -378,7 +388,7 @@ if [ -n "$FILE_KINDS" ]; then
         [ -x "$OUT/bin/attn-timers" ] || break
         MOJOLEARN_ATTN_ARM="$arm" MOJOLEARN_ATTN_KINDS="$FILE_KINDS" \
         MOJOLEARN_ATTN_BASELINE="$BASE" \
-        MOJOLEARN_ATTN_ORACLE=0 MOJOLEARN_ATTN_REACH=0 \
+        MOJOLEARN_ATTN_ORACLE=0 MOJOLEARN_ATTN_REACH=0 MOJOLEARN_ATTN_RESOURCES=0 \
         MOJOLEARN_ATTN_ROUNDS=1 MOJOLEARN_ATTN_WARMUPS=1 MOJOLEARN_TRANSFORMER_TIMING=1 \
         run "timers-$arm" timeout "$DEADLINE" "$OUT/bin/attn-timers"
     done
@@ -389,6 +399,9 @@ else
 fi
 # One TABLE block per arm and kind, for the brief.
 grep -h '^TABLE' "$OUT"/price-*.log > "$OUT/price_tables.txt" 2>/dev/null
+# DEVIATIONS 2596 and 2597: the compiled backward kernels' attributes (first
+# price run only).
+grep -h '^RESOURCES' "$OUT"/price-*.log > "$OUT/resources.txt" 2>/dev/null
 grep -h '^REACH\|^BITS .*MOVED\|^FAIL\|PASS' "$OUT"/smoke-*.log "$OUT"/price-*.log > "$OUT/price_verdicts.txt" 2>/dev/null
 # Sum the `timing attn.<kernel> <ms> ms` lines by name per run. Both arms
 # print in every run (the harness alternates them), so the per-arm split
@@ -474,5 +487,6 @@ rm -rf "${OUT:?}/bin"
 echo "finished=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$OUT/gate.txt"
 [ -f "$OUT/price_tables.txt" ] && cat "$OUT/price_tables.txt"
 [ -f "$OUT/price_verdicts.txt" ] && cat "$OUT/price_verdicts.txt"
+[ -f "$OUT/resources.txt" ] && cat "$OUT/resources.txt"
 cat "$OUT/status.tsv"
 exit "$rc"

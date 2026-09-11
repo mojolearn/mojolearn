@@ -66,18 +66,19 @@ kernel-matrix ROUTING row per column (`attn_default_arm_for`, DEVIATION
 2534): `stash_tiled` on every column since the first 2026-09-11 H100 leg
 (a bit-equal 1.47x on the lean target step on both corpora), and on NVIDIA
 `stash_tiled_fgrid_r32_qres_pf` since the round 3 H100 leg (lean step 0.87
-of stash_tiled's on both corpora, every witness equal) and on AMD since the
-round 3 MI325X and MI300X legs (lean step geomean 0.930 and 0.933 of
-stash_tiled's, every witness equal). The kernels above
+of stash_tiled's on both corpora, every witness equal); on AMD `baseline`,
+which one RunPod MI300X pod put ahead of both stash_tiled and the round 3
+arm in the lean step. The kernels above
 remain the path for every head dim other than 64 and the reference every
 arm is gated against. See the arm hook below. DEVIATION 2528 (the second
 round, brief section 12) and DEVIATIONS 2533, 2531 and 2530 (the third
 round, brief section 14: preflushed seams, the forward grid, forward Q
 residency) are trial-build arms on top of stash_tiled, and DEVIATIONS 2596
-and 2597 (brief section 16: the dk/dv folds as two kernels, and their keys
-per block) trial-build arms on the preflushed tiled stash backward; a
-shipped build compiles only the clean third-round instantiations its
-column's default needs.
+and 2597 (brief section 16: dk/dv by the recompute kernel with the stashes
+freed; the tiled dk/dv fold's keys per block and a split into two kernels)
+trial-build arms on the preflushed tiled stash backward; a shipped build
+compiles only the clean third-round instantiations its column's default
+needs.
 
 `[[ALWAYS GPU-agnostic]]`: one source and no vendor branch; the rows read
 (`lib_hardware_ftz_fma_for`, the scheduling rows, `attn_default_arm_for`)
@@ -199,16 +200,21 @@ comptime FUSED_HW_FTZ_FMA = lib_hardware_ftz_fma_for[TARGET_COLUMN]()
 #                                      32 rows only; the tokens compose,
 #                                      e.g. stash_tiled_ztiled_r64_pf,
 #                                      stash_tiled_fgrid_r32_qres_pf
-#   MOJOLEARN_ATTN_ARM=stash_tiled_fgrid_r32_qres_pf_kvsplit
+#   MOJOLEARN_ATTN_ARM=stash_tiled_fgrid_r32_qres_pf_kvrecompute
 #                                      DEVIATION 2596 (brief section 16):
-#                                      the dk and dv folds as two launches
-#                                      of one single-fold kernel;
-#                                      `_kvgrid_r32` / `_kvgrid_r64`
-#                                      (DEVIATION 2597) set their keys per
-#                                      block, bare `_kvgrid` reads the
-#                                      kernel-matrix row
-#                                      `attn_dkdv_keys_per_block_for`; both
-#                                      need `_pf` on the tiled stash backward
+#                                      the preflushed zdot and dq, the
+#                                      stashes freed, then dk/dv by the
+#                                      shipped recompute kernel
+#   MOJOLEARN_ATTN_ARM=stash_tiled_fgrid_r32_qres_pf_kvsplit
+#                                      DEVIATION 2597 (brief section 16):
+#                                      the tiled dk and dv folds as two
+#                                      launches of one single-fold kernel;
+#                                      `_kvgrid_r32` / `_kvgrid_r64` set
+#                                      their keys per block, bare `_kvgrid`
+#                                      reads the kernel-matrix row
+#                                      `attn_dkdv_keys_per_block_for`; all
+#                                      three need `_pf` on the tiled stash
+#                                      backward
 #   unset or empty                     the column's build default,
 #                                      ATTN_ARM_DEFAULT (kernel matrix row
 #                                      `attn_default_arm_for`)
@@ -229,7 +235,7 @@ comptime FUSED_HW_FTZ_FMA = lib_hardware_ftz_fma_for[TARGET_COLUMN]()
 # It was `baseline` until the 2026-09-11 H100 leg flipped it to stash_tiled;
 # it is now the kernel-matrix row `attn_default_arm_for` (NVIDIA
 # stash_tiled_fgrid_r32_qres_pf since the round 3 H100 leg, DEVIATION 2534,
-# and AMD the same arm since the round 3 MI325X and MI300X legs; see its
+# and AMD `baseline` again after one RunPod MI300X pod; see its
 # docstring). A shipped build compiles only the default arm's clean
 # kernels (ATTN_ARM_COMPILED, ATTN_SHIPPED_FWD_R2, ATTN_SHIPPED_BWD_PF), and
 # `fused_forward_launch_ran` / `fused_backward_launch_ran` report which
@@ -303,7 +309,7 @@ comptime ATTN_ARM_FROWS64 = 4096
 """Trial geometry knob: DEVIATION 2531 at 64 query rows per block, on any
 column (arm-name token `_fgrid_r64`)."""
 comptime ATTN_ARM_BWD_KVSPLIT = 8192
-"""Bit: DEVIATION 2596 (trial builds only; brief section 16), the preflushed
+"""Bit: DEVIATION 2597 (trial builds only; brief section 16), the preflushed
 tiled stash backward's dk and dv folds as TWO launches of one single-fold
 kernel (`fused_bwd_kvfold_r2_kernel`): 16 accumulators and 5 operand
 registers per thread and an 8,192-byte page at 64 keys per block, against
@@ -321,15 +327,24 @@ comptime ATTN_ARM_KVROWS64 = 65536
 """Trial geometry knob: DEVIATION 2597 at 64 keys per block, on any column
 (arm-name token `_kvgrid_r64`)."""
 comptime ATTN_ARM_SABOTAGE_KV = 131072
-"""OR'd into the arm value: the DEVIATION 2596 and 2597 dk/dv kernels'
+"""OR'd into the arm value: the DEVIATION 2596 and 2597 dk/dv launches'
 sabotage only (arm-name token `+sabotage_kv`,
-MOJOLEARN_ATTN_ARM_SABOTAGE=kv). Each flips one ulp of every staged cell
-operand (dcell for dk, y for dv), so dk and dv move and zdot, dq and the
+MOJOLEARN_ATTN_ARM_SABOTAGE=kv). The 2597 kernels flip one ulp of every
+staged cell operand (dcell for dk, y for dv); the 2596 launch hands the
+recompute kernel a copy of `denom` with every row flipped one ulp, so y and
+through it dcell move. Either way dk and dv move and zdot, dq and the
 forward hold; every other kernel the arm runs is its clean instantiation
 under this bit."""
-comptime ATTN_ARM_KV_BITS = ATTN_ARM_BWD_KVSPLIT | ATTN_ARM_BWD_KVGRID
-"""The DEVIATION 2596 / 2597 kernel bits; an arm carrying either proves the
-dk/dv kernels' reach with ATTN_ARM_SABOTAGE_KV."""
+comptime ATTN_ARM_BWD_KVRECOMPUTE = 262144
+"""Bit: DEVIATION 2596 (trial builds only; brief section 16), the preflushed
+tiled stash backward's zdot and dq, then both stashes FREED and dk/dv from
+the shipped recompute kernel `fused_bwd_dkdv_kernel[64, 4]` (the `baseline`
+arm's dk/dv, which reads no stash). Needs `_pf` on the tiled stash backward
+and refuses `_ztiled`, `_kvgrid` and `_kvsplit` (arm-name token
+`_kvrecompute`)."""
+comptime ATTN_ARM_KV_BITS = ATTN_ARM_BWD_KVSPLIT | ATTN_ARM_BWD_KVGRID | ATTN_ARM_BWD_KVRECOMPUTE
+"""The DEVIATION 2596 / 2597 bits; an arm carrying any of them proves the
+dk/dv launch's reach with ATTN_ARM_SABOTAGE_KV."""
 comptime ATTN_ARM_BASE_BITS = ATTN_ARM_FWD_SSTASH | ATTN_ARM_BWD_STASH | ATTN_ARM_BWD_TILED
 comptime ATTN_ARM_NEW_BITS = (
     ATTN_ARM_BWD_ZTILED | ATTN_ARM_FWD_QRES | ATTN_ARM_FWD_GRID | ATTN_ARM_PREFLUSH
@@ -353,7 +368,7 @@ comptime ATTN_ARM_DEFAULT_REFUSED_BITS = (
     ATTN_ARM_SABOTAGE | ATTN_ARM_SABOTAGE_NEW | ATTN_ARM_BWD_ZTILED
     | ATTN_ARM_ZROWS32 | ATTN_ARM_ZROWS64 | ATTN_ARM_SABOTAGE_KV
     | ATTN_ARM_BWD_KVSPLIT | ATTN_ARM_BWD_KVGRID | ATTN_ARM_KVROWS32
-    | ATTN_ARM_KVROWS64
+    | ATTN_ARM_KVROWS64 | ATTN_ARM_BWD_KVRECOMPUTE
 )
 """Bits a default arm may not carry: the sabotages, DEVIATION 2528, whose
 kernels a shipped build does not compile (no NVIDIA flip, brief section 13),
@@ -376,9 +391,13 @@ bench/results/e1g/2026-09-11_154257-nvidia-h100-80gb-hbm3-attention-round3
 step witness equal). The DigitalOcean MI325X and RunPod MI300X legs
 (bench/results/e1g/2026-09-11_163917-amd-mi325x-do-attention-round3,
 bench/results/e1g/2026-09-11_163024-amd-mi300x-runpod-attention-round3)
-flipped AMD to the same arm (lean step geomean 0.9297 and 0.9325 of
-stash_tiled's, every step witness equal). Apple and the other columns stay
-stash_tiled. A leg that flips again edits the matrix row and the brief."""
+moved AMD to the same arm, measured against stash_tiled only; the same-pod
+RunPod MI300X leg
+bench/results/e1g/2026-09-11_171959-amd-mi300x-runpod-attention-three then
+put AMD back to `baseline` (lean step geomean 1.041 for that arm and 1.166
+for stash_tiled, both over baseline, every step witness equal). Apple and the
+other columns stay stash_tiled. A leg that flips again edits the matrix row
+and the brief."""
 comptime ATTN_ARM_COMPILED = ATTN_ARM_TRIAL or (ATTN_ARM_DEFAULT != ATTN_ARM_BASELINE)
 """Whether the launchers compile the arm kernels at all: on a trial build
 (every arm, clean and sabotage) or when the build default is an arm (the
@@ -409,9 +428,9 @@ def _attn_arm_base_from_name(base: String, full: String) raises -> Int:
         + base + "' is not one of baseline, bwd_stash, fwd_sstash,"
         + " bwd_stash_tiled, stash, stash_tiled (then optionally _ztiled,"
         + " _ztiled_r32 or _ztiled_r64, then _fgrid, _fgrid_r32 or"
-        + " _fgrid_r64, then _qres, then _pf, then _kvgrid, _kvgrid_r32 or"
-        + " _kvgrid_r64, then _kvsplit, then +sabotage, +sabotage_new and/or"
-        + " +sabotage_kv, in that order)"
+        + " _fgrid_r64, then _qres, then _pf, then _kvrecompute, then _kvgrid,"
+        + " _kvgrid_r32 or _kvgrid_r64, then _kvsplit, then +sabotage,"
+        + " +sabotage_new and/or +sabotage_kv, in that order)"
     )
 
 
@@ -424,18 +443,20 @@ def fused_attention_arm_parse(name: String) raises -> Int:
     `_r32` or `_r64` (its rows per block, forcing the kernel-matrix row),
     then `_fgrid` (DEVIATION 2531) optionally followed by `_r32` or `_r64`
     (likewise), then `_qres` (DEVIATION 2530), then `_pf` (DEVIATION 2533),
-    then `_kvgrid` (DEVIATION 2597) optionally followed by `_r32` or `_r64`
-    (its keys per block), then `_kvsplit` (DEVIATION 2596), then `+sabotage`
-    (first-round kernels), `+sabotage_new` (second-round kernels) and
-    `+sabotage_kv` (the 2596 / 2597 dk/dv kernels). A rows token belongs to
+    then `_kvrecompute` (DEVIATION 2596), then `_kvgrid` (DEVIATION 2597)
+    optionally followed by `_r32` or `_r64` (its keys per block), then
+    `_kvsplit` (DEVIATION 2597), then `+sabotage` (first-round kernels),
+    `+sabotage_new` (second-round kernels) and `+sabotage_kv` (the 2596 /
+    2597 dk/dv launches). A rows token belongs to
     the group token right before it, so `_ztiled_r32`, `_fgrid_r32` and
     `_kvgrid_r32` are each read as one token.
     Raises on an unknown base, a token out of order, or a token whose
     prerequisite is missing: `_ztiled` without the tiled stash backward,
     `_fgrid` without the forward score stash, `_qres` without `_fgrid_r32`,
     `_pf` with no stash kernel to act on or with the 2525 non-tiled stash
-    backward (which has no preflushed copy), `_kvgrid` or `_kvsplit` without
-    `_pf` on the tiled stash backward or together with `_ztiled`."""
+    backward (which has no preflushed copy), `_kvrecompute`, `_kvgrid` or
+    `_kvsplit` without `_pf` on the tiled stash backward or together with
+    `_ztiled`, and `_kvrecompute` together with `_kvgrid` or `_kvsplit`."""
     var rest = String(name)
     var arm = 0
     # Each suffix is copied out into a fresh String before it replaces
@@ -468,6 +489,10 @@ def fused_attention_arm_parse(name: String) raises -> Int:
     elif rest.endswith("_kvgrid"):
         arm = arm | ATTN_ARM_BWD_KVGRID
         var trimmed = String(rest.removesuffix("_kvgrid"))
+        rest = trimmed^
+    if rest.endswith("_kvrecompute"):
+        arm = arm | ATTN_ARM_BWD_KVRECOMPUTE
+        var trimmed = String(rest.removesuffix("_kvrecompute"))
         rest = trimmed^
     if rest.endswith("_pf"):
         arm = arm | ATTN_ARM_PREFLUSH
@@ -551,16 +576,22 @@ def fused_attention_arm_parse(name: String) raises -> Int:
     if (arm & ATTN_ARM_KV_BITS) != 0:
         if (arm & tiled_stash) != tiled_stash or (arm & ATTN_ARM_PREFLUSH) == 0:
             raise Error(
-                "attention arm '" + name + "': _kvgrid (DEVIATION 2597) and"
-                + " _kvsplit (DEVIATION 2596) are copies of the preflushed"
-                + " tiled stash backward's dk/dv fold and need it"
+                "attention arm '" + name + "': _kvrecompute (DEVIATION 2596),"
+                + " _kvgrid and _kvsplit (DEVIATION 2597) replace the dk/dv"
+                + " fold of the preflushed tiled stash backward and need it"
                 + " (bwd_stash_tiled or stash_tiled, with _pf)"
             )
         if (arm & ATTN_ARM_BWD_ZTILED) != 0:
             raise Error(
-                "attention arm '" + name + "': _kvgrid and _kvsplit do not"
-                + " compose with _ztiled (DEVIATION 2528 launches its own dq"
-                + " and dk/dv folds)"
+                "attention arm '" + name + "': _kvrecompute, _kvgrid and"
+                + " _kvsplit do not compose with _ztiled (DEVIATION 2528"
+                + " launches its own dq and dk/dv folds)"
+            )
+        if (arm & ATTN_ARM_BWD_KVRECOMPUTE) != 0 and (arm & (ATTN_ARM_BWD_KVGRID | ATTN_ARM_BWD_KVSPLIT)) != 0:
+            raise Error(
+                "attention arm '" + name + "': _kvrecompute runs the shipped"
+                + " recompute dk/dv kernel, so _kvgrid and _kvsplit (the tiled"
+                + " fold's geometry) have nothing to act on"
             )
     return arm
 
@@ -648,7 +679,7 @@ def fused_attention_arm_name(arm: Int) -> String:
         | ATTN_ARM_FROWS64 | ATTN_ARM_FWD_QRES | ATTN_ARM_PREFLUSH
         | ATTN_ARM_SABOTAGE | ATTN_ARM_SABOTAGE_NEW | ATTN_ARM_BWD_KVGRID
         | ATTN_ARM_KVROWS32 | ATTN_ARM_KVROWS64 | ATTN_ARM_BWD_KVSPLIT
-        | ATTN_ARM_SABOTAGE_KV
+        | ATTN_ARM_SABOTAGE_KV | ATTN_ARM_BWD_KVRECOMPUTE
     )
     var other = arm - (arm & known)
     if (arm & ATTN_ARM_BWD_ZTILED) != 0:
@@ -671,6 +702,8 @@ def fused_attention_arm_name(arm: Int) -> String:
         name += "_qres"
     if (arm & ATTN_ARM_PREFLUSH) != 0:
         name += "_pf"
+    if (arm & ATTN_ARM_BWD_KVRECOMPUTE) != 0:
+        name += "_kvrecompute"
     if (arm & ATTN_ARM_BWD_KVGRID) != 0:
         name += "_kvgrid"
         if (arm & ATTN_ARM_KVROWS32) != 0:
@@ -846,19 +879,23 @@ comptime ATTN_KV_KEYS_COLUMN = attn_dkdv_keys_per_block_for[TARGET_COLUMN]()
 
 
 def fused_attention_arm_kv(arm: Int) -> Bool:
-    """Whether `arm` names DEVIATION 2596 (`_kvsplit`) or 2597 (`_kvgrid`)."""
+    """Whether `arm` names DEVIATION 2596 (`_kvrecompute`) or 2597
+    (`_kvgrid`, `_kvsplit`)."""
     return (arm & ATTN_ARM_KV_BITS) != 0
 
 
 def fused_attention_kv_keys(arm: Int) -> Int:
-    """Keys per block the DEVIATION 2596 / 2597 dk/dv folds run for `arm`:
-    0 when the arm names neither; for `_kvgrid`, the `_kvgrid_r32` /
-    `_kvgrid_r64` knob, else the column's kernel-matrix row; for `_kvsplit`
-    alone, 64 (the shipped geometry). 0 as well when that page does not fit
-    the column; the launcher then runs the plain `_pf` backward and the
-    harness prints the 0."""
+    """Keys per block the DEVIATION 2596 / 2597 dk/dv launch runs for `arm`:
+    0 when the arm names none; for `_kvrecompute`, `fused_rows_per_block(64)`
+    (4, the shipped recompute kernel's geometry); for `_kvgrid`, the
+    `_kvgrid_r32` / `_kvgrid_r64` knob, else the column's kernel-matrix row;
+    for `_kvsplit` alone, 64 (the shipped tiled geometry). 0 as well when a
+    2597 page does not fit the column; the launcher then runs the plain `_pf`
+    backward and the harness prints the 0."""
     if not fused_attention_arm_kv(arm):
         return 0
+    if (arm & ATTN_ARM_BWD_KVRECOMPUTE) != 0:
+        return fused_rows_per_block(ATTN_STASH_HD)
     var keys = 64
     if (arm & ATTN_ARM_BWD_KVGRID) != 0:
         keys = ATTN_KV_KEYS_COLUMN
@@ -880,8 +917,8 @@ def fused_attention_kv_keys(arm: Int) -> Int:
 def _attn_kv_ran_bits(arm: Int, keys: Int) -> Int:
     """The DEVIATION 2596 / 2597 part of the arm word a launch at `keys` keys
     per block reports: `_kvgrid` with its keys resolved when the arm has it,
-    and the arm's `_kvsplit`. No sabotage bit."""
-    var w = arm & ATTN_ARM_BWD_KVSPLIT
+    and the arm's `_kvsplit` or `_kvrecompute`. No sabotage bit."""
+    var w = arm & (ATTN_ARM_BWD_KVSPLIT | ATTN_ARM_BWD_KVRECOMPUTE)
     if (arm & ATTN_ARM_BWD_KVGRID) != 0:
         w = w | ATTN_ARM_BWD_KVGRID
         if keys == 32:
@@ -4085,9 +4122,10 @@ def fused_bwd_dkdv_tiled_pf_kernel[HD: Int](
 
 
 # ===========================================================================
-# DEVIATIONS 2596 (arm token `_kvsplit`) AND 2597 (arm token `_kvgrid`),
-# TRIAL BUILDS ONLY; brief docs/lanes/BRIEF_attention_step_2026-09-11.md
-# section 16.
+# DEVIATION 2597 (arm tokens `_kvgrid` and `_kvsplit`), TRIAL BUILDS ONLY;
+# brief docs/lanes/BRIEF_attention_step_2026-09-11.md section 16. DEVIATION
+# 2596 (`_kvrecompute`) launches shipped kernels only; see
+# `_launch_bwd_stash_tiled_kvre`.
 #
 # THE READING (brief 16.1 to 16.3). In the lean LM step on the MI325X the
 # preflushed tiled dk/dv fold costs about 41 times its H100 time while the
@@ -4106,7 +4144,7 @@ def fused_bwd_dkdv_tiled_pf_kernel[HD: Int](
 #              the kernel-matrix row `attn_dkdv_keys_per_block_for`). At 32 a
 #              thread holds keys `tr + 16u` (u < 2): 8 dk and 8 dv
 #              accumulators, a 12,288-byte page, grid B * n_kv * ceil(S / 32).
-#   kvfold_r2  (2596) ONE fold, `dst[j, d]` over (head of the kv group
+#   kvfold_r2  (2597, `_kvsplit`) ONE fold, `dst[j, d]` over (head of the kv group
 #              ascending, queries ascending) of `_step_preflushed(cell[t, j],
 #              col[t, d], acc)`, launched twice by one instantiation: dk with
 #              `cell` the dy stash (dcell after dq) and `col` q_rope, then dv
@@ -4297,7 +4335,7 @@ def fused_bwd_kvfold_r2_kernel[HD: Int, BJ: Int, SAB: Bool](
     key_lo_in: Int32,
     window_in: Int32,
 ):
-    """DEVIATION 2596: ONE of `fused_bwd_dkdv_tiled_pf_kernel`'s two folds,
+    """DEVIATION 2597 (`_kvsplit`): ONE of `fused_bwd_dkdv_tiled_pf_kernel`'s two folds,
     `dst[j, d]` over (head of the kv group ascending, queries ascending) of
     `_step_preflushed(cell_st[t, j], ftz(col_src[t, d]), acc)`, at `BJ` (64,
     or DEVIATION 2597's 32) keys per block. The dk launch passes (dk, the dy
@@ -5201,6 +5239,250 @@ def _launch_bwd_stash_tiled_pf[HD: Int, ZSAB: Bool](
     _ = dy_st^
 
 
+def _attn_flip_copy_kernel(
+    dst: MutPointer[Float32, MutAnyOrigin],
+    src: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+):
+    """DEVIATION 2596's sabotage (trial builds only): `dst[i] =
+    _flip_ulp(src[i])`, one cell per thread. Launched only under
+    ATTN_ARM_SABOTAGE_KV, on a scratch the recompute dk/dv kernel then reads
+    in place of `denom`."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n_in):
+        dst.unsafe_store(i, _flip_ulp(src.unsafe_load(i)))
+
+
+def _launch_bwd_stash_zdq_pf[HD: Int](
+    ctx: DeviceContext,
+    on: Bool,
+    mut tk: Int,
+    mut zdot: DeviceBuffer[DType.float32],
+    mut dq: DeviceBuffer[DType.float32],
+    mut corner: DeviceBuffer[DType.float32],
+    mut y_st: DeviceBuffer[DType.float32],
+    mut dy_st: DeviceBuffer[DType.float32],
+    mut q_rope: DeviceBuffer[DType.float32],
+    mut dctx: DeviceBuffer[DType.float32],
+    mut k_cache: DeviceBuffer[DType.float32],
+    mut v_cache: DeviceBuffer[DType.float32],
+    mut amax: DeviceBuffer[DType.float32],
+    mut denom: DeviceBuffer[DType.float32],
+    b: Int, l: Int, nh: Int, nkv: Int, s: Int, pos0: Int, key_lo: Int,
+    window: Int, scale: Float32, zsab: Bool,
+) raises:
+    """The first two kernels of `_launch_bwd_stash_tiled_pf`, in its order
+    and geometry, for DEVIATIONS 2596 and 2597 (trial builds only): the
+    preflushed zdot stash (its sabotage_new instantiation when `zsab`, as
+    `_launch_bwd_stash_tiled_pf[HD, True]` launches it), a wait, then the
+    preflushed tiled dq, which writes dcell over `dy_st`. Nothing waits for
+    dq here; the caller owns both stashes."""
+    comptime TQ = FUSED_THREADS // HD
+    var z_blocks = b * nh * ((l + TQ - 1) // TQ)
+    if zsab:
+        comptime zks = fused_bwd_zdot_stash_pf_kernel[HD, TQ, True]
+        ctx.enqueue_function[zks](
+            zdot.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
+            dy_st.unsafe_ptr(), q_rope.unsafe_ptr(), dctx.unsafe_ptr(),
+            k_cache.unsafe_ptr(), v_cache.unsafe_ptr(), amax.unsafe_ptr(),
+            denom.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv),
+            Int32(s), Int32(pos0), Int32(key_lo), Int32(window), scale,
+            grid_dim=(z_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
+        )
+    else:
+        comptime zkc = fused_bwd_zdot_stash_pf_kernel[HD, TQ, False]
+        ctx.enqueue_function[zkc](
+            zdot.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
+            dy_st.unsafe_ptr(), q_rope.unsafe_ptr(), dctx.unsafe_ptr(),
+            k_cache.unsafe_ptr(), v_cache.unsafe_ptr(), amax.unsafe_ptr(),
+            denom.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv),
+            Int32(s), Int32(pos0), Int32(key_lo), Int32(window), scale,
+            grid_dim=(z_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
+        )
+    ctx.synchronize()
+    _attn_tick(ctx, on, tk, "bwd_zdot_stash_pf")
+    var dq_blocks = b * nh * ((l + 63) // 64)
+    comptime qp = fused_bwd_dq_tiled_pf_kernel[HD]
+    ctx.enqueue_function[qp](
+        dq.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
+        dy_st.unsafe_ptr(), k_cache.unsafe_ptr(), zdot.unsafe_ptr(),
+        Int32(b), Int32(l), Int32(nh), Int32(nkv), Int32(s),
+        Int32(pos0), Int32(key_lo), Int32(window), scale,
+        grid_dim=(dq_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
+    )
+    _attn_tick(ctx, on, tk, "bwd_dq_tiled_pf")
+
+
+def _launch_bwd_stash_tiled_kvre[HD: Int](
+    ctx: DeviceContext,
+    on: Bool,
+    mut tk: Int,
+    mut zdot: DeviceBuffer[DType.float32],
+    mut dq: DeviceBuffer[DType.float32],
+    mut dk: DeviceBuffer[DType.float32],
+    mut dv: DeviceBuffer[DType.float32],
+    mut corner: DeviceBuffer[DType.float32],
+    mut q_rope: DeviceBuffer[DType.float32],
+    mut dctx: DeviceBuffer[DType.float32],
+    mut k_cache: DeviceBuffer[DType.float32],
+    mut v_cache: DeviceBuffer[DType.float32],
+    mut amax: DeviceBuffer[DType.float32],
+    mut denom: DeviceBuffer[DType.float32],
+    b: Int, l: Int, nh: Int, nkv: Int, s: Int, pos0: Int, key_lo: Int,
+    window: Int, scale: Float32, zsab: Bool, ksab: Bool,
+) raises:
+    """DEVIATION 2596's backward (trial builds only; brief section 16.4): the
+    two stashes, `_launch_bwd_stash_zdq_pf`, a wait, both stashes FREED, then
+    dk and dv from the shipped recompute kernel `fused_bwd_dkdv_kernel[HD,
+    TQ]` at its shipped geometry: the `baseline` arm's dk/dv, which reads q,
+    dctx, k, v, amax, denom and zdot and no stash. Under `ksab`
+    (ATTN_ARM_SABOTAGE_KV) that kernel reads a one-ulp-flipped copy of
+    `denom` instead. Generic, so a shipped build instantiates none of it."""
+    comptime TQ = FUSED_THREADS // HD
+    var cells = b * nh * l * s
+    var y_st = ctx.enqueue_create_buffer[DType.float32](cells)
+    var dy_st = ctx.enqueue_create_buffer[DType.float32](cells)
+    ctx.synchronize()
+    _attn_tick(ctx, on, tk, "bwd_scratch_alloc")
+    _launch_bwd_stash_zdq_pf[HD](
+        ctx, on, tk, zdot, dq, corner, y_st, dy_st, q_rope, dctx, k_cache,
+        v_cache, amax, denom, b, l, nh, nkv, s, pos0, key_lo, window, scale,
+        zsab,
+    )
+    # Nothing reads the stashes after dq: wait for it, then free both before
+    # dk/dv runs (a buffer is freed at its last use; these are the last uses).
+    ctx.synchronize()
+    _ = y_st^
+    _ = dy_st^
+    _attn_tick(ctx, on, tk, "bwd_kvre_stash_free")
+    var key_blocks = b * nkv * ((s + TQ - 1) // TQ)
+    var rows_n = b * nh * l
+    comptime kvr = fused_bwd_dkdv_kernel[HD, TQ]
+    if ksab:
+        var dflip = ctx.enqueue_create_buffer[DType.float32](rows_n)
+        ctx.enqueue_function[_attn_flip_copy_kernel](
+            dflip.unsafe_ptr(), denom.unsafe_ptr(), Int32(rows_n),
+            grid_dim=((rows_n + 255) // 256, 1, 1), block_dim=(256, 1, 1),
+        )
+        ctx.enqueue_function[kvr](
+            dk.unsafe_ptr(), dv.unsafe_ptr(), corner.unsafe_ptr(),
+            q_rope.unsafe_ptr(), dctx.unsafe_ptr(), k_cache.unsafe_ptr(),
+            v_cache.unsafe_ptr(), amax.unsafe_ptr(), dflip.unsafe_ptr(),
+            zdot.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv),
+            Int32(s), Int32(pos0), Int32(key_lo), Int32(window), scale,
+            grid_dim=(key_blocks, 1, 1), block_dim=(HD * TQ, 1, 1),
+        )
+        ctx.synchronize()
+        _ = dflip^
+    else:
+        ctx.enqueue_function[kvr](
+            dk.unsafe_ptr(), dv.unsafe_ptr(), corner.unsafe_ptr(),
+            q_rope.unsafe_ptr(), dctx.unsafe_ptr(), k_cache.unsafe_ptr(),
+            v_cache.unsafe_ptr(), amax.unsafe_ptr(), denom.unsafe_ptr(),
+            zdot.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv),
+            Int32(s), Int32(pos0), Int32(key_lo), Int32(window), scale,
+            grid_dim=(key_blocks, 1, 1), block_dim=(HD * TQ, 1, 1),
+        )
+    _attn_tick(ctx, on, tk, "bwd_kvre_dkdv")
+
+
+def _launch_bwd_stash_tiled_kv[HD: Int, BJ: Int, SPLIT: Bool](
+    ctx: DeviceContext,
+    on: Bool,
+    mut tk: Int,
+    mut zdot: DeviceBuffer[DType.float32],
+    mut dq: DeviceBuffer[DType.float32],
+    mut dk: DeviceBuffer[DType.float32],
+    mut dv: DeviceBuffer[DType.float32],
+    mut corner: DeviceBuffer[DType.float32],
+    mut q_rope: DeviceBuffer[DType.float32],
+    mut dctx: DeviceBuffer[DType.float32],
+    mut k_cache: DeviceBuffer[DType.float32],
+    mut v_cache: DeviceBuffer[DType.float32],
+    mut amax: DeviceBuffer[DType.float32],
+    mut denom: DeviceBuffer[DType.float32],
+    b: Int, l: Int, nh: Int, nkv: Int, s: Int, pos0: Int, key_lo: Int,
+    window: Int, scale: Float32, zsab: Bool, ksab: Bool,
+) raises:
+    """DEVIATION 2597's backward (trial builds only; brief section 16.4): the
+    two stashes, `_launch_bwd_stash_zdq_pf`, then the dk/dv folds over the
+    stash at `BJ` keys per block, as the joint `fused_bwd_dkdv_r2_kernel` or
+    (`SPLIT`) as two launches of `fused_bwd_kvfold_r2_kernel`, dk first.
+    `ksab` picks the sabotage_kv instantiations. Generic, so a shipped build
+    instantiates none of it."""
+    var cells = b * nh * l * s
+    var y_st = ctx.enqueue_create_buffer[DType.float32](cells)
+    var dy_st = ctx.enqueue_create_buffer[DType.float32](cells)
+    ctx.synchronize()
+    _attn_tick(ctx, on, tk, "bwd_scratch_alloc")
+    _launch_bwd_stash_zdq_pf[HD](
+        ctx, on, tk, zdot, dq, corner, y_st, dy_st, q_rope, dctx, k_cache,
+        v_cache, amax, denom, b, l, nh, nkv, s, pos0, key_lo, window, scale,
+        zsab,
+    )
+    var kv_blocks = b * nkv * ((s + BJ - 1) // BJ)
+    comptime if SPLIT:
+        # dk: the dcell stash (dq wrote it over dy) against q; dv: the y
+        # stash against dctx. One instantiation, two launches.
+        if ksab:
+            comptime fks = fused_bwd_kvfold_r2_kernel[HD, BJ, True]
+            ctx.enqueue_function[fks](
+                dk.unsafe_ptr(), corner.unsafe_ptr(), dy_st.unsafe_ptr(),
+                q_rope.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv),
+                Int32(s), Int32(pos0), Int32(key_lo), Int32(window),
+                grid_dim=(kv_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
+            )
+            _attn_tick(ctx, on, tk, "bwd_kvsplit_dk_pf")
+            ctx.enqueue_function[fks](
+                dv.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
+                dctx.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv),
+                Int32(s), Int32(pos0), Int32(key_lo), Int32(window),
+                grid_dim=(kv_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
+            )
+            _attn_tick(ctx, on, tk, "bwd_kvsplit_dv_pf")
+        else:
+            comptime fkc = fused_bwd_kvfold_r2_kernel[HD, BJ, False]
+            ctx.enqueue_function[fkc](
+                dk.unsafe_ptr(), corner.unsafe_ptr(), dy_st.unsafe_ptr(),
+                q_rope.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv),
+                Int32(s), Int32(pos0), Int32(key_lo), Int32(window),
+                grid_dim=(kv_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
+            )
+            _attn_tick(ctx, on, tk, "bwd_kvsplit_dk_pf")
+            ctx.enqueue_function[fkc](
+                dv.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
+                dctx.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv),
+                Int32(s), Int32(pos0), Int32(key_lo), Int32(window),
+                grid_dim=(kv_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
+            )
+            _attn_tick(ctx, on, tk, "bwd_kvsplit_dv_pf")
+    else:
+        if ksab:
+            comptime jks = fused_bwd_dkdv_r2_kernel[HD, BJ, True]
+            ctx.enqueue_function[jks](
+                dk.unsafe_ptr(), dv.unsafe_ptr(), corner.unsafe_ptr(),
+                y_st.unsafe_ptr(), dy_st.unsafe_ptr(), q_rope.unsafe_ptr(),
+                dctx.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv),
+                Int32(s), Int32(pos0), Int32(key_lo), Int32(window),
+                grid_dim=(kv_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
+            )
+        else:
+            comptime jkc = fused_bwd_dkdv_r2_kernel[HD, BJ, False]
+            ctx.enqueue_function[jkc](
+                dk.unsafe_ptr(), dv.unsafe_ptr(), corner.unsafe_ptr(),
+                y_st.unsafe_ptr(), dy_st.unsafe_ptr(), q_rope.unsafe_ptr(),
+                dctx.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv),
+                Int32(s), Int32(pos0), Int32(key_lo), Int32(window),
+                grid_dim=(kv_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
+            )
+        _attn_tick(ctx, on, tk, "bwd_kvgrid_dkdv_pf")
+    # The stashes must outlive the enqueued kernels: synchronize, then the
+    # explicit last use (a buffer is freed at its last use).
+    ctx.synchronize()
+    _ = y_st^
+    _ = dy_st^
+
+
 def _launch_bwd_ztiled[HD: Int, TQZ: Int, ZSAB: Bool, PF: Bool](
     ctx: DeviceContext,
     on: Bool,
@@ -5431,6 +5713,10 @@ def fused_backward_launch_ran(
             var zrows = fused_attention_zdot_rows(arm)
             var bpf = (arm & ATTN_ARM_PREFLUSH) != 0
             var zsab = (arm & ATTN_ARM_SABOTAGE_NEW) != 0
+            var kvkeys = fused_attention_kv_keys(arm)
+            var ksab = (arm & ATTN_ARM_SABOTAGE_KV) != 0
+            var ksplit = (arm & ATTN_ARM_BWD_KVSPLIT) != 0
+            var kvre = (arm & ATTN_ARM_BWD_KVRECOMPUTE) != 0
             if (arm & ATTN_ARM_BWD_ZTILED) != 0 and want_stash and want_tiled and zrows != 0:
                 if zrows == 32:
                     if bpf:
@@ -5491,6 +5777,45 @@ def fused_backward_launch_ran(
                     ran = ran | ATTN_ARM_ZROWS32
                 else:
                     ran = ran | ATTN_ARM_ZROWS64
+                ran_arm = True
+            elif bpf and want_stash and want_tiled and kvkeys != 0:
+                # DEVIATIONS 2596 and 2597 (brief section 16), trial builds
+                # only: the preflushed zdot and dq, then dk/dv by the shipped
+                # recompute kernel with both stashes freed (2596), or by the
+                # 2597 folds over the stash at the resolved keys per block.
+                if kvre:
+                    _launch_bwd_stash_tiled_kvre[HD](
+                        ctx, ton, tk, zdot, dq, dk, dv, corner, q_rope, dctx,
+                        k_cache, v_cache, amax, denom, b, l, nh, nkv, s, pos0,
+                        key_lo, window, scale, zsab, ksab,
+                    )
+                elif kvkeys == 32:
+                    if ksplit:
+                        _launch_bwd_stash_tiled_kv[HD, 32, True](
+                            ctx, ton, tk, zdot, dq, dk, dv, corner, q_rope, dctx,
+                            k_cache, v_cache, amax, denom, b, l, nh, nkv, s, pos0,
+                            key_lo, window, scale, zsab, ksab,
+                        )
+                    else:
+                        _launch_bwd_stash_tiled_kv[HD, 32, False](
+                            ctx, ton, tk, zdot, dq, dk, dv, corner, q_rope, dctx,
+                            k_cache, v_cache, amax, denom, b, l, nh, nkv, s, pos0,
+                            key_lo, window, scale, zsab, ksab,
+                        )
+                else:
+                    if ksplit:
+                        _launch_bwd_stash_tiled_kv[HD, 64, True](
+                            ctx, ton, tk, zdot, dq, dk, dv, corner, q_rope, dctx,
+                            k_cache, v_cache, amax, denom, b, l, nh, nkv, s, pos0,
+                            key_lo, window, scale, zsab, ksab,
+                        )
+                    else:
+                        _launch_bwd_stash_tiled_kv[HD, 64, False](
+                            ctx, ton, tk, zdot, dq, dk, dv, corner, q_rope, dctx,
+                            k_cache, v_cache, amax, denom, b, l, nh, nkv, s, pos0,
+                            key_lo, window, scale, zsab, ksab,
+                        )
+                ran = ATTN_ARM_BWD_STASH | ATTN_ARM_BWD_TILED | ATTN_ARM_PREFLUSH | _attn_kv_ran_bits(arm, kvkeys)
                 ran_arm = True
             elif bpf and want_stash and want_tiled:
                 if zsab:
