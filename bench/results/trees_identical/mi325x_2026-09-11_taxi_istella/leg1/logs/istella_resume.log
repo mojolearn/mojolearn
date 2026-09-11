@@ -1,0 +1,6 @@
+resume_start 13:10:16 size=454285384
+curl: (22) The requested URL returned error: 504
+resume_curl_exit=22 size=454285384 13:11:17
+full_redownload_start 13:11:17
+full_exit=0 size=472129615 13:26:33
+TAR_OK

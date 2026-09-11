@@ -1,0 +1,37 @@
+The virtual environment was not created successfully because ensurepip is not
+available.  On Debian/Ubuntu systems, you need to install the python3-venv
+package using the following command.
+
+    apt install python3.12-venv
+
+You may need to use sudo with that command.  After installing the python3-venv
+package, recreate your virtual environment.
+
+Failing command: /root/venv-gpu/bin/python3
+
+Collecting virtualenv
+  Downloading virtualenv-21.7.9-py3-none-any.whl.metadata (3.5 kB)
+Collecting distlib<1,>=0.3.7 (from virtualenv)
+  Downloading distlib-0.4.3-py2.py3-none-any.whl.metadata (5.3 kB)
+Collecting filelock<4,>=3.24.2 (from virtualenv)
+  Downloading filelock-3.32.6-py3-none-any.whl.metadata (2.0 kB)
+Collecting platformdirs<5,>=3.9.1 (from virtualenv)
+  Downloading platformdirs-4.11.8-py3-none-any.whl.metadata (5.5 kB)
+Collecting python-discovery>=1.6 (from virtualenv)
+  Downloading python_discovery-1.6.0-py3-none-any.whl.metadata (5.1 kB)
+Downloading virtualenv-21.7.9-py3-none-any.whl (5.3 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 5.3/5.3 MB 137.7 MB/s eta 0:00:00
+Downloading distlib-0.4.3-py2.py3-none-any.whl (470 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 470.6/470.6 kB 199.9 MB/s eta 0:00:00
+Downloading filelock-3.32.6-py3-none-any.whl (100 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100.2/100.2 kB 84.9 MB/s eta 0:00:00
+Downloading platformdirs-4.11.8-py3-none-any.whl (24 kB)
+Downloading python_discovery-1.6.0-py3-none-any.whl (38 kB)
+Installing collected packages: distlib, platformdirs, filelock, python-discovery, virtualenv
+Successfully installed distlib-0.4.3 filelock-3.32.6 platformdirs-4.11.8 python-discovery-1.6.0 virtualenv-21.7.9
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv
+created virtual environment CPython3.12.3.final.0-64-x86_64 in 92ms
+  creator CPython3Posix(dest=/root/venv-gpu, clear=False, no_vcs_ignore=False, global=True)
+  seeder FromAppData(download=False, pip=bundle, via=copy, app_data_dir=/root/.cache/virtualenv)
+    added seed packages: pip==26.2.1
+  activators BashActivator,CShellActivator,FishActivator,NushellActivator,PowerShellActivator,PythonActivator,XonshActivator

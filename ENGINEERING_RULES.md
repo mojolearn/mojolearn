@@ -364,6 +364,15 @@ never again after that.
 
 ## 10. Tune on AMD, confirm on NVIDIA
 
+**In force from 2026-09-11 night until AMD capacity exists: measurement runs
+on NVIDIA H100 on RunPod.** Andrew: "just do nvidia on fucking runpod". The
+DigitalOcean account runs one GPU droplet at a time, so every lane waited in
+one line, and RunPod had no AMD stock. Legs run in parallel on RunPod
+(at most three of this project's pods at once, the home uplink's limit),
+results are labeled NVIDIA, and a flip decided there ships. AMD returns as
+the tuning column when the DigitalOcean GPU limit is raised or another AMD
+cloud (Hot Aisle) is set up; the rest of this section then applies again.
+
 Andrew, 2026-09-11: "lets use and tune on amd instead of nvidia going
 forward ... idea is everybody else tunes to nvidia so doing amd will be
 distinguishing. also amd is cheaper."

@@ -1,0 +1,31 @@
+FSPEED-NOTE lane=gbdt-lossguide arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); AMD box: an opponent with an AMD GPU path runs on the GPU, one without runs on this box's CPU on all cores (ENGINEERING_RULES.md section 10); the arm name says which
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=hip path=/root/mojolearn/python/mojolearn/identical/_mojolearn_gbdt.so
+FSPEED-AB lane=gbdt-lossguide arm=ours-ab numeric_mode='fast' (arm ours keeps the estimator default)
+BENCH_BINDING arm=ours-ab requested=fast resolved=fast compiled=fast vendor=hip path=/root/mojolearn/python/mojolearn/_mojolearn_gbdt.so
+FSPEED-SCALE stage=before rows=1000000 features=220 input_mib=839.2 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=ours mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=ours-ab mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED-WARMUP lane=gbdt-lossguide arm=ours shape=istella-1000000x220 ms=3097.025
+FSPEED-WARMUP lane=gbdt-lossguide arm=ours-ab shape=istella-1000000x220 ms=2835.940
+FSPEED-ORDER lane=gbdt-lossguide round=1 arms=ours,ours-ab
+FSPEED lane=gbdt-lossguide arm=ours shape=istella-1000000x220 round=1 ms=2621.983 hash=7d63a6c8e841d921
+FSPEED lane=gbdt-lossguide arm=ours-ab shape=istella-1000000x220 round=1 ms=2687.124 hash=2d1269e673556c4c
+FSPEED-ORDER lane=gbdt-lossguide round=2 arms=ours,ours-ab
+FSPEED lane=gbdt-lossguide arm=ours shape=istella-1000000x220 round=2 ms=2601.425 hash=f30a2518cca02195
+FSPEED lane=gbdt-lossguide arm=ours-ab shape=istella-1000000x220 round=2 ms=2701.796 hash=70a722505acf6f8b
+FSPEED-ORDER lane=gbdt-lossguide round=3 arms=ours,ours-ab
+FSPEED lane=gbdt-lossguide arm=ours shape=istella-1000000x220 round=3 ms=2635.062 hash=80c9b7339140e085
+FSPEED lane=gbdt-lossguide arm=ours-ab shape=istella-1000000x220 round=3 ms=2701.161 hash=4482f5893e33a113
+FSPEED-ORDER lane=gbdt-lossguide round=4 arms=ours,ours-ab
+FSPEED lane=gbdt-lossguide arm=ours shape=istella-1000000x220 round=4 ms=2647.214 hash=15a308cc7f6e0e3c
+FSPEED lane=gbdt-lossguide arm=ours-ab shape=istella-1000000x220 round=4 ms=2742.564 hash=66895c13b95d469f
+FSPEED-ORDER lane=gbdt-lossguide round=5 arms=ours,ours-ab
+FSPEED lane=gbdt-lossguide arm=ours shape=istella-1000000x220 round=5 ms=2642.766 hash=3ed405fd6589db39
+FSPEED lane=gbdt-lossguide arm=ours-ab shape=istella-1000000x220 round=5 ms=2755.896 hash=30d19cc7e69b01f6
+FSPEED-ACC lane=gbdt-lossguide arm=ours metric=logloss value=0.126710
+FSPEED-ACC lane=gbdt-lossguide arm=ours metric=auc value=0.973161
+FSPEED-ACC lane=gbdt-lossguide arm=ours-ab metric=logloss value=0.126243
+FSPEED-ACC lane=gbdt-lossguide arm=ours-ab metric=auc value=0.973379
+FSPEED-SCALE stage=after rows=1000000 features=220 input_mib=839.2 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.

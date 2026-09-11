@@ -207,7 +207,7 @@ def our_gbdt_arm(lane, cfg, data, extra=None):
                     sync=_our_sync, library="mojolearn")
 
 
-def our_rf_arm(lane, cfg, data):
+def our_rf_arm(lane, cfg, data, extra=None):
     """`mojolearn.RandomForest*`, the cuML RandomForest implementation (`ensemble/`).
 
     `device='gpu'` is explicit and never 'auto', so a run that cannot reach
@@ -233,6 +233,8 @@ def our_rf_arm(lane, cfg, data):
         random_state=cfg["seed"],
         device="gpu",
     )
+    if extra:
+        common.update(extra)       # `--ours-ab`: one keyword changed
 
     def make():
         if data.task == "regression":
@@ -244,7 +246,7 @@ def our_rf_arm(lane, cfg, data):
                     sync=_our_sync, library="mojolearn")
 
 
-def our_et_arm(lane, cfg, data):
+def our_et_arm(lane, cfg, data, extra=None):
     """`mojolearn.ExtraTrees*`, the cuML-design ExtraTrees implementation
     (`extratrees/`).
 
@@ -267,6 +269,8 @@ def our_et_arm(lane, cfg, data):
         random_state=cfg["seed"],
         device="gpu",
     )
+    if extra:
+        common.update(extra)       # `--ours-ab`: one keyword changed
 
     def make():
         if data.task == "regression":
@@ -368,9 +372,10 @@ OUR_BUILDERS = {
 }
 
 
-def verify_our_arm(arm):
-    """Resolve and verify this arm before any fit timer starts."""
-    requested = os.environ.get("MOJOLEARN_NUMERIC_MODE", "").strip().lower()
+def verify_our_arm(arm, requested=None):
+    """Resolve and verify this arm before any fit timer starts. `requested`
+    overrides the environment's tier for an `--ours-ab numeric_mode=...` arm."""
+    requested = (requested or os.environ.get("MOJOLEARN_NUMERIC_MODE", "")).strip().lower()
     codes = {0: "fast", 1: "identical", 2: "deterministic"}
     if requested not in codes.values():
         raise RuntimeError("set MOJOLEARN_NUMERIC_MODE explicitly before benchmarking")
@@ -405,13 +410,13 @@ def build_ours(lane, cfg, data, name="ours", extra=None):
     (the `--ours-ab` arm) changes one GBDT estimator keyword."""
     try:
         if extra:
-            if not lane.startswith("gbdt-"):
-                raise RuntimeError("--ours-ab reaches the GBDT lanes only")
-            arm = our_gbdt_arm(lane, cfg, data, extra=extra)
+            if lane not in ("rf", "et") and not lane.startswith("gbdt-"):
+                raise RuntimeError("--ours-ab reaches the gbdt, rf and et lanes only")
+            arm = OUR_BUILDERS[lane](lane, cfg, data, extra=extra)
             arm.name = name
         else:
             arm = OUR_BUILDERS[lane](lane, cfg, data)
-        verify_our_arm(arm)
+        verify_our_arm(arm, requested=(extra or {}).get("numeric_mode"))
         return [arm]
     except Exception as exc:                       # noqa: BLE001
         spec.emit_refused(lane, name, "%s: %s"
@@ -456,10 +461,11 @@ def build_parser():
                         "`ours` always runs; the filter reads opponents only.")
     p.add_argument("--ours-ab", default=None, metavar="PARAM=VALUE",
                    help="add a second ours arm, `ours-ab`, equal to `ours` "
-                        "except one GradientBoosting keyword (a Python "
-                        "literal, e.g. use_pointwise_searcher=True), timed "
-                        "round by round beside `ours` in this process; GBDT "
-                        "lanes only, and it runs under --ours-only too")
+                        "except one estimator keyword (a Python literal, "
+                        "e.g. use_pointwise_searcher=True or "
+                        "numeric_mode='fast'), timed round by round beside "
+                        "`ours` in this process; gbdt, rf and et lanes, and "
+                        "it runs under --ours-only too")
     p.add_argument("--opponents-first", action="store_true",
                    help="import and construct the opponents BEFORE our "
                         "binding in this process (the import order that "

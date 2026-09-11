@@ -1,0 +1,172 @@
+batchT start 13:00:57
+speed baseline gbdt-symmetric taxi 1000000 rounds=5 mode=ours extra='--devices auto' 13:00:57
+speed_exit baseline.gbdt-symmetric.taxi.r1000000.ours.pointwise=0 13:01:14
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours-ab mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED lane=gbdt-symmetric arm=ours shape=taxi-1000000x16 round=1 ms=438.858 hash=7c72c9d359778e42
+FSPEED lane=gbdt-symmetric arm=ours-ab shape=taxi-1000000x16 round=1 ms=1049.734 hash=97222a45020a166c
+FSPEED lane=gbdt-symmetric arm=ours shape=taxi-1000000x16 round=2 ms=452.120 hash=af9b4eb0f2483727
+FSPEED lane=gbdt-symmetric arm=ours-ab shape=taxi-1000000x16 round=2 ms=1028.062 hash=97222a45020a166c
+FSPEED lane=gbdt-symmetric arm=ours shape=taxi-1000000x16 round=3 ms=442.476 hash=059337ffaebfb1c0
+FSPEED lane=gbdt-symmetric arm=ours-ab shape=taxi-1000000x16 round=3 ms=1028.878 hash=97222a45020a166c
+FSPEED lane=gbdt-symmetric arm=ours shape=taxi-1000000x16 round=4 ms=439.227 hash=7dfacde31c2075c1
+FSPEED lane=gbdt-symmetric arm=ours-ab shape=taxi-1000000x16 round=4 ms=1023.089 hash=97222a45020a166c
+FSPEED lane=gbdt-symmetric arm=ours shape=taxi-1000000x16 round=5 ms=437.849 hash=d348a92e826a8d0c
+FSPEED lane=gbdt-symmetric arm=ours-ab shape=taxi-1000000x16 round=5 ms=1036.740 hash=97222a45020a166c
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=logloss value=0.527339
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=auc value=0.615520
+FSPEED-ACC lane=gbdt-symmetric arm=ours-ab metric=logloss value=0.525668
+FSPEED-ACC lane=gbdt-symmetric arm=ours-ab metric=auc value=0.619093
+speed baseline gbdt-symmetric taxi 1000000 rounds=1 mode=stage extra='--devices auto' 13:01:14
+speed_exit baseline.gbdt-symmetric.taxi.r1000000.stage=0 13:01:17
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=1 size=shipped
+FSPEED lane=gbdt-symmetric arm=ours shape=taxi-1000000x16 round=1 ms=550.189 hash=8dbbd709c0290f8e
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=logloss value=0.529256
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=auc value=0.610006
+speed baseline gbdt-depthwise taxi 1000000 rounds=1 mode=stage extra='--devices auto' 13:01:17
+speed_exit baseline.gbdt-depthwise.taxi.r1000000.stage=0 13:01:21
+FSPEED-HEADER family=forest lane=gbdt-depthwise arm=ours mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=1 size=shipped
+FSPEED lane=gbdt-depthwise arm=ours shape=taxi-1000000x16 round=1 ms=924.348 hash=007ce4cf646dd892
+FSPEED-ACC lane=gbdt-depthwise arm=ours metric=logloss value=0.527304
+FSPEED-ACC lane=gbdt-depthwise arm=ours metric=auc value=0.616841
+speed baseline gbdt-lossguide taxi 1000000 rounds=1 mode=stage extra='--devices auto' 13:01:21
+speed_exit baseline.gbdt-lossguide.taxi.r1000000.stage=0 13:01:27
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=ours mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=1 size=shipped
+FSPEED lane=gbdt-lossguide arm=ours shape=taxi-1000000x16 round=1 ms=1886.693 hash=1330842b324c2fb5
+FSPEED-ACC lane=gbdt-lossguide arm=ours metric=logloss value=0.526512
+FSPEED-ACC lane=gbdt-lossguide arm=ours metric=auc value=0.617256
+PHASE_TS_DONE 13:01:27
+arms: xgboost=xgboost-gpu lightgbm=lightgbm-cpu python=/root/venv-gpu/bin/python
+speed baseline gbdt-symmetric taxi 1000000 rounds=5 mode=full extra='--devices cpu,gpu,opencl --arms catboost-cpu --opponents-first' 13:09:08
+speed_exit baseline.gbdt-symmetric.taxi.r1000000.full=0 13:09:23
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=catboost-cpu mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED lane=gbdt-symmetric arm=ours shape=taxi-1000000x16 round=1 ms=461.031 hash=32278d63a3461c07
+FSPEED lane=gbdt-symmetric arm=catboost-cpu shape=taxi-1000000x16 round=1 ms=1033.697 hash=e127ef39e1772f6c
+FSPEED lane=gbdt-symmetric arm=ours shape=taxi-1000000x16 round=2 ms=456.681 hash=9665c941e0430a1e
+FSPEED lane=gbdt-symmetric arm=catboost-cpu shape=taxi-1000000x16 round=2 ms=1034.927 hash=e127ef39e1772f6c
+FSPEED lane=gbdt-symmetric arm=ours shape=taxi-1000000x16 round=3 ms=452.469 hash=0a2e9cdf50b332ad
+FSPEED lane=gbdt-symmetric arm=catboost-cpu shape=taxi-1000000x16 round=3 ms=1043.508 hash=e127ef39e1772f6c
+FSPEED lane=gbdt-symmetric arm=ours shape=taxi-1000000x16 round=4 ms=457.024 hash=33b333bbf7334864
+FSPEED lane=gbdt-symmetric arm=catboost-cpu shape=taxi-1000000x16 round=4 ms=1042.397 hash=e127ef39e1772f6c
+FSPEED lane=gbdt-symmetric arm=ours shape=taxi-1000000x16 round=5 ms=453.715 hash=23c3f32b70d94ef3
+FSPEED lane=gbdt-symmetric arm=catboost-cpu shape=taxi-1000000x16 round=5 ms=1030.233 hash=e127ef39e1772f6c
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=logloss value=0.529216
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=auc value=0.608483
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-cpu metric=logloss value=0.525674
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-cpu metric=auc value=0.617966
+speed baseline rf taxi 1000000 rounds=5 mode=full extra='--devices cpu,gpu,opencl --arms sklearn-rf-cpu --opponents-first' 13:09:23
+speed_exit baseline.rf.taxi.r1000000.full=0 13:10:59
+FSPEED-REFUSED lane=rf arm=cuml-rf-gpu reason=ModuleNotFoundError: No module named 'cuml'
+FSPEED-HEADER family=forest lane=rf arm=ours mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=rf arm=sklearn-rf-cpu mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED lane=rf arm=ours shape=taxi-1000000x16 round=1 ms=1180.408 hash=d8f64dae01de00bd
+FSPEED lane=rf arm=sklearn-rf-cpu shape=taxi-1000000x16 round=1 ms=4072.252 hash=1df6bb7cf972886a
+FSPEED lane=rf arm=ours shape=taxi-1000000x16 round=2 ms=1179.944 hash=d8f64dae01de00bd
+FSPEED lane=rf arm=sklearn-rf-cpu shape=taxi-1000000x16 round=2 ms=4054.356 hash=7795bc0c8ef4b22e
+FSPEED lane=rf arm=ours shape=taxi-1000000x16 round=3 ms=1182.284 hash=d8f64dae01de00bd
+FSPEED lane=rf arm=sklearn-rf-cpu shape=taxi-1000000x16 round=3 ms=4068.616 hash=77be7b0c1a02b316
+FSPEED lane=rf arm=ours shape=taxi-1000000x16 round=4 ms=1171.575 hash=d8f64dae01de00bd
+FSPEED lane=rf arm=sklearn-rf-cpu shape=taxi-1000000x16 round=4 ms=4130.382 hash=29072865ad0a16dd
+FSPEED lane=rf arm=ours shape=taxi-1000000x16 round=5 ms=1172.179 hash=d8f64dae01de00bd
+FSPEED lane=rf arm=sklearn-rf-cpu shape=taxi-1000000x16 round=5 ms=4057.979 hash=a6539a3783d018d9
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.525910
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.617154
+FSPEED-ACC lane=rf arm=sklearn-rf-cpu metric=logloss value=0.525336
+FSPEED-ACC lane=rf arm=sklearn-rf-cpu metric=auc value=0.617420
+speed baseline gbdt-depthwise taxi 1000000 rounds=5 mode=full extra='--devices cpu,gpu,opencl --arms catboost-cpu,xgboost-gpu --opponents-first' 13:10:59
+speed_exit baseline.gbdt-depthwise.taxi.r1000000.full=0 13:11:27
+FSPEED-HEADER family=forest lane=gbdt-depthwise arm=ours mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-depthwise arm=catboost-cpu mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-depthwise arm=xgboost-gpu mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED lane=gbdt-depthwise arm=ours shape=taxi-1000000x16 round=1 ms=802.416 hash=274c5c185e5f8344
+FSPEED lane=gbdt-depthwise arm=catboost-cpu shape=taxi-1000000x16 round=1 ms=2149.996 hash=d46ebc8ea717cec9
+FSPEED lane=gbdt-depthwise arm=xgboost-gpu shape=taxi-1000000x16 round=1 ms=328.740 hash=348bf22bf60a14bc
+FSPEED lane=gbdt-depthwise arm=ours shape=taxi-1000000x16 round=2 ms=802.476 hash=166919091a9e5c12
+FSPEED lane=gbdt-depthwise arm=catboost-cpu shape=taxi-1000000x16 round=2 ms=2195.495 hash=d46ebc8ea717cec9
+FSPEED lane=gbdt-depthwise arm=xgboost-gpu shape=taxi-1000000x16 round=2 ms=337.978 hash=348bf22bf60a14bc
+FSPEED lane=gbdt-depthwise arm=ours shape=taxi-1000000x16 round=3 ms=799.723 hash=475dd568ce4730e3
+FSPEED lane=gbdt-depthwise arm=catboost-cpu shape=taxi-1000000x16 round=3 ms=2204.407 hash=d46ebc8ea717cec9
+FSPEED lane=gbdt-depthwise arm=xgboost-gpu shape=taxi-1000000x16 round=3 ms=329.327 hash=348bf22bf60a14bc
+FSPEED lane=gbdt-depthwise arm=ours shape=taxi-1000000x16 round=4 ms=804.412 hash=7515faefcc85b4bd
+FSPEED lane=gbdt-depthwise arm=catboost-cpu shape=taxi-1000000x16 round=4 ms=2227.099 hash=d46ebc8ea717cec9
+FSPEED lane=gbdt-depthwise arm=xgboost-gpu shape=taxi-1000000x16 round=4 ms=343.044 hash=348bf22bf60a14bc
+FSPEED lane=gbdt-depthwise arm=ours shape=taxi-1000000x16 round=5 ms=798.656 hash=0a1d866f26034f3c
+FSPEED lane=gbdt-depthwise arm=catboost-cpu shape=taxi-1000000x16 round=5 ms=2228.928 hash=d46ebc8ea717cec9
+FSPEED lane=gbdt-depthwise arm=xgboost-gpu shape=taxi-1000000x16 round=5 ms=336.822 hash=348bf22bf60a14bc
+FSPEED-ACC lane=gbdt-depthwise arm=ours metric=logloss value=0.527313
+FSPEED-ACC lane=gbdt-depthwise arm=ours metric=auc value=0.616813
+FSPEED-ACC lane=gbdt-depthwise arm=catboost-cpu metric=logloss value=0.525755
+FSPEED-ACC lane=gbdt-depthwise arm=catboost-cpu metric=auc value=0.620508
+FSPEED-ACC lane=gbdt-depthwise arm=xgboost-gpu metric=logloss value=0.525221
+FSPEED-ACC lane=gbdt-depthwise arm=xgboost-gpu metric=auc value=0.620149
+speed baseline gbdt-lossguide taxi 1000000 rounds=5 mode=full extra='--devices cpu,gpu,opencl --arms catboost-cpu,xgboost-gpu,lightgbm-cpu --opponents-first' 13:11:28
+speed_exit baseline.gbdt-lossguide.taxi.r1000000.full=0 13:12:11
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=ours mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=catboost-cpu mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=xgboost-gpu mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=lightgbm-cpu mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED-REFUSED lane=gbdt-lossguide arm=lightgbm-cpu reason=LightGBMError during warm-up: Check failed: (best_split_info.left_count) > (0) at /tmp/pip-install-9iwjisv5/lightgbm_56ca6931feef440791e97710f9b5efdb/src/treelearner/serial_tree_learner.cpp, line 860 .
+FSPEED lane=gbdt-lossguide arm=ours shape=taxi-1000000x16 round=1 ms=1518.550 hash=0fcbc31183d8e62b
+FSPEED lane=gbdt-lossguide arm=catboost-cpu shape=taxi-1000000x16 round=1 ms=3543.436 hash=37d3cda55fec49eb
+FSPEED lane=gbdt-lossguide arm=xgboost-gpu shape=taxi-1000000x16 round=1 ms=560.494 hash=348bf22bf60a14bc
+FSPEED lane=gbdt-lossguide arm=ours shape=taxi-1000000x16 round=2 ms=1505.421 hash=bd811753b39bfacd
+FSPEED lane=gbdt-lossguide arm=catboost-cpu shape=taxi-1000000x16 round=2 ms=3667.663 hash=37d3cda55fec49eb
+FSPEED lane=gbdt-lossguide arm=xgboost-gpu shape=taxi-1000000x16 round=2 ms=555.325 hash=348bf22bf60a14bc
+FSPEED lane=gbdt-lossguide arm=ours shape=taxi-1000000x16 round=3 ms=1528.013 hash=a62d1d37c3de39a8
+FSPEED lane=gbdt-lossguide arm=catboost-cpu shape=taxi-1000000x16 round=3 ms=3691.862 hash=37d3cda55fec49eb
+FSPEED lane=gbdt-lossguide arm=xgboost-gpu shape=taxi-1000000x16 round=3 ms=537.133 hash=348bf22bf60a14bc
+FSPEED lane=gbdt-lossguide arm=ours shape=taxi-1000000x16 round=4 ms=1508.704 hash=11881254e3001325
+FSPEED lane=gbdt-lossguide arm=catboost-cpu shape=taxi-1000000x16 round=4 ms=3598.179 hash=37d3cda55fec49eb
+FSPEED lane=gbdt-lossguide arm=xgboost-gpu shape=taxi-1000000x16 round=4 ms=559.885 hash=348bf22bf60a14bc
+FSPEED lane=gbdt-lossguide arm=ours shape=taxi-1000000x16 round=5 ms=1539.062 hash=049f0776d6751743
+FSPEED lane=gbdt-lossguide arm=catboost-cpu shape=taxi-1000000x16 round=5 ms=3649.687 hash=37d3cda55fec49eb
+FSPEED lane=gbdt-lossguide arm=xgboost-gpu shape=taxi-1000000x16 round=5 ms=558.893 hash=348bf22bf60a14bc
+FSPEED-ACC lane=gbdt-lossguide arm=ours metric=logloss value=0.526799
+FSPEED-ACC lane=gbdt-lossguide arm=ours metric=auc value=0.614677
+FSPEED-ACC lane=gbdt-lossguide arm=catboost-cpu metric=logloss value=0.526113
+FSPEED-ACC lane=gbdt-lossguide arm=catboost-cpu metric=auc value=0.619758
+FSPEED-ACC lane=gbdt-lossguide arm=xgboost-gpu metric=logloss value=0.525221
+FSPEED-ACC lane=gbdt-lossguide arm=xgboost-gpu metric=auc value=0.620149
+speed baseline et taxi 1000000 rounds=5 mode=full extra='--devices cpu,gpu,opencl --arms sklearn-et-cpu --opponents-first' 13:12:11
+speed_exit baseline.et.taxi.r1000000.full=0 13:13:24
+FSPEED-REFUSED lane=et arm=cuml-et-gpu reason=ModuleNotFoundError: No module named 'cuml'
+FSPEED-HEADER family=forest lane=et arm=ours mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=et arm=sklearn-et-cpu mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=1 ms=3837.498 hash=e683f121d11f59dd
+FSPEED lane=et arm=sklearn-et-cpu shape=taxi-1000000x16 round=1 ms=2558.284 hash=fe8f7ed49f5154da
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=2 ms=3840.428 hash=e683f121d11f59dd
+FSPEED lane=et arm=sklearn-et-cpu shape=taxi-1000000x16 round=2 ms=2512.372 hash=cbeb59a521dd5e5d
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=3 ms=3833.070 hash=e683f121d11f59dd
+FSPEED lane=et arm=sklearn-et-cpu shape=taxi-1000000x16 round=3 ms=2556.846 hash=6224aca640f29fec
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=4 ms=3840.383 hash=e683f121d11f59dd
+FSPEED lane=et arm=sklearn-et-cpu shape=taxi-1000000x16 round=4 ms=2511.515 hash=1671e982fee73a11
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=5 ms=3835.276 hash=e683f121d11f59dd
+FSPEED lane=et arm=sklearn-et-cpu shape=taxi-1000000x16 round=5 ms=2512.532 hash=aa08f1ccb01234af
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.527541
+FSPEED-ACC lane=et arm=ours metric=auc value=0.608084
+FSPEED-ACC lane=et arm=sklearn-et-cpu metric=logloss value=0.527011
+FSPEED-ACC lane=et arm=sklearn-et-cpu metric=auc value=0.611206
+PHASE_T1_DONE 13:13:24
+speed baseline rf taxi 2000000 rounds=5 mode=full extra='--devices cpu,gpu,opencl --arms sklearn-rf-cpu --opponents-first' 13:13:24
+speed_exit baseline.rf.taxi.r2000000.full=0 13:15:36
+FSPEED-REFUSED lane=rf arm=cuml-rf-gpu reason=ModuleNotFoundError: No module named 'cuml'
+FSPEED-HEADER family=forest lane=rf arm=ours mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=rf arm=sklearn-rf-cpu mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=5 size=shipped
+FSPEED lane=rf arm=ours shape=taxi-2000000x16 round=1 ms=1741.257 hash=f1240292e3b1dd3f
+FSPEED lane=rf arm=sklearn-rf-cpu shape=taxi-2000000x16 round=1 ms=8871.327 hash=c2c1d594248846fc
+FSPEED lane=rf arm=ours shape=taxi-2000000x16 round=2 ms=1734.245 hash=f1240292e3b1dd3f
+FSPEED lane=rf arm=sklearn-rf-cpu shape=taxi-2000000x16 round=2 ms=8857.611 hash=900b55727d827aca
+FSPEED lane=rf arm=ours shape=taxi-2000000x16 round=3 ms=1733.274 hash=f1240292e3b1dd3f
+FSPEED lane=rf arm=sklearn-rf-cpu shape=taxi-2000000x16 round=3 ms=9540.847 hash=9659eb2fd39a8a52
+FSPEED lane=rf arm=ours shape=taxi-2000000x16 round=4 ms=1722.982 hash=f1240292e3b1dd3f
+FSPEED lane=rf arm=sklearn-rf-cpu shape=taxi-2000000x16 round=4 ms=8865.334 hash=09945aaaaca05986
+FSPEED lane=rf arm=ours shape=taxi-2000000x16 round=5 ms=1742.761 hash=f1240292e3b1dd3f
+FSPEED lane=rf arm=sklearn-rf-cpu shape=taxi-2000000x16 round=5 ms=8916.257 hash=88f795165eb374bf
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.524221
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.622648
+FSPEED-ACC lane=rf arm=sklearn-rf-cpu metric=logloss value=0.523834
+FSPEED-ACC lane=rf arm=sklearn-rf-cpu metric=auc value=0.622621
+PHASE_T2_DONE 13:15:36
+speed baseline gbdt-symmetric istella 1000000 rounds=5 mode=full extra='--devices cpu,gpu,opencl --arms catboost-cpu --opponents-first' 13:15:36
+speed_exit baseline.gbdt-symmetric.istella.r1000000.full=143 13:15:37

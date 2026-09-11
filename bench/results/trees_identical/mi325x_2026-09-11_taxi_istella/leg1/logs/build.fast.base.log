@@ -1,0 +1,1 @@
+build.sh: only the tree lanes (gbdt, rf, trees) ship fast and deterministic; every other binding builds MOJOLEARN_NUMERIC_MODE=identical only (DEVIATION 2490, 0.8.0).
