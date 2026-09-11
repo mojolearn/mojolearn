@@ -20,10 +20,10 @@ from std.time import perf_counter_ns
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from bindings.hostptr import copy_f32
+from bindings.hostptr import copy_f32, f32_ptr
 from checks.numerics import ftz, identical_log, numeric_mode_name
 from core.identity_trace import IdentityTrace
-from kde.estimator import kde_score_samples_host
+from kde.estimator import kde_score_samples_host, kde_score_samples_host_ptr
 from kde.impl.distance.distance import pairwise_distance
 from kde.impl.distance.distance_ops import DIST_L2_SQRT_UNEXPANDED
 from kde.impl.neighbors.kernel_density import (
@@ -31,6 +31,7 @@ from kde.impl.neighbors.kernel_density import (
     kde_score_samples_device,
     kde_score_samples_tiled_identical,
     kde_validate_data,
+    kde_validate_data_ptr,
     log_kernel_matrix_kernel,
     log_kernel_norm,
     logsumexp_kernel,
@@ -107,6 +108,25 @@ def _profile(n_train: Int, n_query: Int, d: Int, reps: Int) raises:
         var t1 = perf_counter_ns()
         _say(shape, rep, "host_entry_total", _ms(t0, t1))
         print("KDE-PROFILE shape=" + shape + " rep=" + String(rep) + " hash_host_entry=" + String(_hash(out)))
+
+    # DEVIATION 2660: the binding's entry now, over the caller's memory.
+    for rep in range(reps):
+        var outp = List[Float32](length=n_query, fill=Float32(0))
+        var tp = f32_ptr(Int(train.unsafe_ptr()))
+        var qp = f32_ptr(Int(query.unsafe_ptr()))
+        var op = f32_ptr(Int(outp.unsafe_ptr()))
+        var t0 = perf_counter_ns()
+        kde_score_samples_host_ptr(
+            tp, n_train, qp, n_query, d, h, "gaussian", "euclidean", none, False, op,
+        )
+        var t1 = perf_counter_ns()
+        _say(shape, rep, "host_ptr_entry_total", _ms(t0, t1))
+        print("KDE-PROFILE shape=" + shape + " rep=" + String(rep) + " hash_host_ptr_entry=" + String(_hash(outp)))
+        t0 = perf_counter_ns()
+        kde_validate_data_ptr(tp, n_train, d, metric, "train")
+        kde_validate_data_ptr(qp, n_query, d, metric, "query")
+        t1 = perf_counter_ns()
+        _say(shape, rep, "host_validate_ptr", _ms(t0, t1))
 
     for rep in range(reps):
         var t0 = perf_counter_ns()

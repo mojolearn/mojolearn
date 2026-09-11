@@ -117,9 +117,7 @@ from kde.impl.distance.distance_ops import (
 )
 from neighbors.impl.distance.detail.distance_ops import (
     cosine_zero_norm_row,
-    l1_core,
-    l2_unexp_core,
-    linf_core,
+    cosine_zero_norm_row_ptr,
     validate_metric_arg,
 )
 from checks.numerics import (
@@ -127,10 +125,12 @@ from checks.numerics import (
     NUMERIC_FAST,
     NUMERIC_IDENTICAL,
     ftz,
+    ftz_simd,
     identical_cos,
     identical_exp,
     identical_log,
     identical_mul_add,
+    identical_mul_add_simd,
     identical_sqrt,
 )
 
@@ -250,6 +250,94 @@ def kde_validate_data(
                 " inf - inf; row " + String(i // n_features) + ", column "
                 + String(i % n_features) + " is " + String(v) + " (DEVIATION 604)"
             )
+
+
+# ---------------------------------------------------------------------------
+# DEVIATION 2660 (2026-09-11): DEVIATION 604'S DATA RULES OVER THE CALLER'S
+# MEMORY, BLOCK SCREENED
+# ---------------------------------------------------------------------------
+# THEIRS: cuML's `fit` and `score_samples` read the caller's array in place
+# (`input_to_cuml_array`); no host copy.
+# OURS BEFORE: `kde_score_samples_binding` copied X and the queries into two
+# `List`s (36 to 54 ms at 100,000 x 220 on the H100), then
+# `kde_validate_data` walked every value with an early-exit loop that does
+# not vectorize (39 ms), then `_upload` copied the List again into pinned
+# memory.
+# OURS NOW: `kde_validate_data_ptr` takes the caller's pointer. Blocks of
+# `KDE_VALIDATE_W` values are screened with one mask each: an exponent field
+# of all ones (exactly the values where `v != v or v == inf or v == -inf`),
+# and under sqeuclidean `abs(v) >= bound`. The first block that screens
+# positive, and the tail, run `kde_validate_data`'s own per-value loop from
+# that block's first index, so the refusal names the same first value, in
+# the same words, as before. Host-only, no device bit depends on it; the
+# score bits are unchanged because the uploaded values are the caller's.
+# The cosine zero-row rule (DEVIATION 553) runs first, as before, through
+# `cosine_zero_norm_row_ptr`. The length rule is the caller's: the pointer
+# entry runs after `kde_fit_validate` and the `n_query` check, so both
+# dimensions are positive and the span is `n_rows * n_features` by
+# construction. Gate: `kde/checks/kde_check.mojo::check_kde_host_ptr_equals_list`.
+comptime KDE_VALIDATE_W = 16
+
+
+def kde_validate_data_ptr(
+    x: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    n_features: Int,
+    metric: Int,
+    what: String,
+) raises:
+    """DEVIATION 2660: `kde_validate_data` over a host pointer, same rules,
+    same first refusal, same message."""
+    if n_rows <= 0 or n_features <= 0:
+        raise Error(
+            "kde: " + what + " must have positive dimensions, got "
+            + String(n_rows) + " x " + String(n_features)
+        )
+    if metric == DIST_COSINE_EXPANDED:
+        var zr = cosine_zero_norm_row_ptr(x, n_rows, n_features)
+        if zr >= 0:
+            raise Error(
+                "kde: metric='cosine' but " + what + " row " + String(zr)
+                + " is all zeros; cosine distance divides by ||x|| and is"
+                " undefined at the origin (DEVIATION 553)"
+            )
+    var bound = Float32(0.0)
+    var bounded = metric == DIST_L2_EXPANDED
+    if bounded:
+        bound = Float32(9.223372036854775808e18 / sqrt(Float64(n_features)))
+    var n = n_rows * n_features
+    var expm = SIMD[DType.uint32, KDE_VALIDATE_W](UInt32(0x7F800000))
+    var one = SIMD[DType.uint32, KDE_VALIDATE_W](UInt32(1))
+    var zero = SIMD[DType.uint32, KDE_VALIDATE_W](UInt32(0))
+    var boundv = SIMD[DType.float32, KDE_VALIDATE_W](bound)
+    var i = 0
+    var body = n - n % KDE_VALIDATE_W
+    while i < body:
+        var v = x.unsafe_load[width=KDE_VALIDATE_W](i)
+        var hit = (bitcast[DType.uint32](v) & expm).eq(expm).select(one, zero).reduce_max()
+        if bounded:
+            hit = hit | abs(v).ge(boundv).select(one, zero).reduce_max()
+        if hit != UInt32(0):
+            break
+        i += KDE_VALIDATE_W
+    # The screened-positive block (if any) and the tail, value by value in
+    # `kde_validate_data`'s order and words.
+    while i < n:
+        var v = x.unsafe_load(i)
+        if v != v or v == kde_inf() or v == -kde_inf():
+            raise Error(
+                "kde: " + what + " contains " + ("NaN" if v != v else "infinity")
+                + " at row " + String(i // n_features) + ", column "
+                + String(i % n_features) + " (DEVIATION 604)"
+            )
+        if bounded and abs(v) >= bound:
+            raise Error(
+                "kde: metric='sqeuclidean' needs |" + what + "| < 2^63/sqrt("
+                + String(n_features) + ") so the expanded identity cannot form"
+                " inf - inf; row " + String(i // n_features) + ", column "
+                + String(i % n_features) + " is " + String(v) + " (DEVIATION 604)"
+            )
+        i += 1
 
 
 def kernel_from_name(name: String) raises -> Int:
@@ -1523,7 +1611,11 @@ def _kde_score_samples_fused(
 #      is idempotent, so no bit moves. The log-kernel is WRITTEN to the
 #      `n_query x n_train` matrix (the distance matrix is never allocated)
 #      and each (query, chunk) thread keeps the chunk's max by strict `>`
-#      from `-inf`.
+#      from `-inf`. DEVIATION 2626 (2026-09-11): the 64 accumulators of a
+#      cell tile are one `SIMD[float32, 64]` value in registers, advanced
+#      a whole tile row per feature (`ftz_simd`, `identical_mul_add_simd`,
+#      lane-wise `abs` and a strict `>` select); each lane is its scalar
+#      core operation for operation, so the matrix is unchanged.
 #   2. `kde_rowmax_reduce_kernel`: the chunk maxima folded in ascending
 #      chunk order by strict `>`. The staged fold is strict `>` from
 #      `logk[0]` over ascending `j`; both return the value AND the bits of
@@ -1614,7 +1706,6 @@ def kde_tiled_logk_kernel(
         Scalar[DType.float32],
         address_space = AddressSpace.SHARED,
     ]()
-    var acc = stack_allocation[KDE_TILED_CELL, Scalar[DType.float32]]()
 
     var neg_inf = bitcast[DType.float32](UInt32(0xFF800000))
     var m = neg_inf
@@ -1626,8 +1717,12 @@ def kde_tiled_logk_kernel(
         var cells = j_end - j_base
         if cells > KDE_TILED_CELL:
             cells = KDE_TILED_CELL
-        for c in range(KDE_TILED_CELL):
-            acc.unsafe_store(c, Float32(0.0))
+        # DEVIATION 2626: the cell tile's accumulators as ONE SIMD value in
+        # registers, lane c = cell c. Every lane runs the scalar core's
+        # operations in the scalar core's order (see the block comment
+        # above `KDE_TILED_FEAT`); lanes past `cells` fold the tile's zero
+        # padding and are never read.
+        var acc = SIMD[DType.float32, KDE_TILED_CELL](0.0)
         var f0 = 0
         while f0 < d:
             var feats = d - f0
@@ -1646,34 +1741,47 @@ def kde_tiled_logk_kernel(
                 idx += tpb
             barrier()
             if valid:
+                # DEVIATION 2626: one tile row (64 train values of feature
+                # `f0 + feat`) against the query value, lane by lane:
+                #   euclidean  `l2_unexp_core`: diff = ftz(q - t);
+                #              acc = ftz(identical_mul_add(diff, diff, acc))
+                #   l1         `l1_core`: acc = ftz(acc + abs(ftz(q - t)))
+                #   chebyshev  `linf_core`: diff = abs(ftz(q - t));
+                #              acc = diff > acc ? diff : acc (row 39, strict)
+                # `ftz_simd` is `ftz` on each lane and
+                # `identical_mul_add_simd` is one `fma` per lane, so each
+                # lane is bit for bit the scalar core it replaces.
                 if metric == DIST_L2_SQRT_UNEXPANDED:
                     for feat in range(feats):
-                        var qv = ftz(query.unsafe_load(qbase + f0 + feat))
-                        var row = feat * KDE_TILED_CELL
-                        for c in range(cells):
-                            acc.unsafe_store(
-                                c, l2_unexp_core(acc.unsafe_load(c), qv, tile.unsafe_load(row + c))
-                            )
+                        var qv = SIMD[DType.float32, KDE_TILED_CELL](
+                            ftz(query.unsafe_load(qbase + f0 + feat))
+                        )
+                        var row = tile.unsafe_load[width=KDE_TILED_CELL](feat * KDE_TILED_CELL)
+                        var diff = ftz_simd[KDE_TILED_CELL](qv - row)
+                        acc = ftz_simd[KDE_TILED_CELL](
+                            identical_mul_add_simd[KDE_TILED_CELL](diff, diff, acc)
+                        )
                 elif metric == DIST_L1:
                     for feat in range(feats):
-                        var qv = ftz(query.unsafe_load(qbase + f0 + feat))
-                        var row = feat * KDE_TILED_CELL
-                        for c in range(cells):
-                            acc.unsafe_store(
-                                c, l1_core(acc.unsafe_load(c), qv, tile.unsafe_load(row + c))
-                            )
+                        var qv = SIMD[DType.float32, KDE_TILED_CELL](
+                            ftz(query.unsafe_load(qbase + f0 + feat))
+                        )
+                        var row = tile.unsafe_load[width=KDE_TILED_CELL](feat * KDE_TILED_CELL)
+                        acc = ftz_simd[KDE_TILED_CELL](
+                            acc + abs(ftz_simd[KDE_TILED_CELL](qv - row))
+                        )
                 else:
                     for feat in range(feats):
-                        var qv = ftz(query.unsafe_load(qbase + f0 + feat))
-                        var row = feat * KDE_TILED_CELL
-                        for c in range(cells):
-                            acc.unsafe_store(
-                                c, linf_core(acc.unsafe_load(c), qv, tile.unsafe_load(row + c))
-                            )
+                        var qv = SIMD[DType.float32, KDE_TILED_CELL](
+                            ftz(query.unsafe_load(qbase + f0 + feat))
+                        )
+                        var row = tile.unsafe_load[width=KDE_TILED_CELL](feat * KDE_TILED_CELL)
+                        var diff = abs(ftz_simd[KDE_TILED_CELL](qv - row))
+                        acc = diff.gt(acc).select(diff, acc)
             f0 += KDE_TILED_FEAT
         if valid:
             for c in range(cells):
-                var dist = acc.unsafe_load(c)
+                var dist = acc[c]
                 if metric == DIST_L2_SQRT_UNEXPANDED:
                     # `pairwise_unexpanded_kernel`'s epilog.
                     dist = ftz(identical_sqrt(dist))

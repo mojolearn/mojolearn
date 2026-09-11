@@ -132,8 +132,11 @@ from kde.impl.distance.distance_ops import (
     DIST_LINF,
     DIST_LP_UNEXPANDED,
 )
+from bindings.hostptr import f32_ptr
+from kde.estimator import kde_score_samples_host, kde_score_samples_host_ptr
 from kde.impl.kde import score_samples
 from kde.impl.neighbors.kernel_density import (
+    kde_validate_data_ptr,
     KDE_ELEM_TPB,
     KDE_KERNEL_COSINE,
     KDE_KERNEL_EPANECHNIKOV,
@@ -1609,9 +1612,118 @@ def check_kde_tiled_equals_staged() raises:
     )
 
 
+def _ptr_of(x: List[Float32]) raises -> MutPointer[Float32, MutUntrackedOrigin]:
+    return f32_ptr(Int(x.unsafe_ptr()))
+
+
+def _validate_msg(x: List[Float32], n: Int, d: Int, metric: Int, by_ptr: Bool) -> String:
+    try:
+        if by_ptr:
+            kde_validate_data_ptr(_ptr_of(x), n, d, metric, "train")
+        else:
+            kde_validate_data(x, n, d, metric, "train")
+    except e:
+        return String(e)
+    return String("no refusal")
+
+
+def check_kde_host_ptr_equals_list() raises:
+    """DEVIATION 2660's gate, host-only, so it asserts in every tier.
+    (1) `kde_score_samples_host_ptr` (the binding's entry now) returns the
+    List entry's bits on every score, 6 metrics x 2 kernels x weighted and
+    unweighted, on a shape whose value count is not a multiple of the
+    16-value screen. (2) `kde_validate_data_ptr` raises the List
+    validator's message, naming the same first value, for NaN, +inf and
+    -inf planted in the first block, a middle block and the tail, for two
+    offenders in one block and in two blocks, for the sqeuclidean bound
+    (alone and after a NaN at a later index of the same block), and for a
+    cosine all-zero row; clean data raises in neither."""
+    var nt = 203
+    var nq = 41
+    var d = 7
+    var train = _train_fixture(nt, d, 11)
+    var query = _query_fixture(train, nt, nq, d, 13)
+    var w = _weight_fixture(nt, 17)
+    var none = List[Float32]()
+    var metrics: List[Int] = [
+        DIST_L2_SQRT_UNEXPANDED, DIST_L2_EXPANDED, DIST_L1, DIST_LINF, DIST_COSINE_EXPANDED, DIST_LP_UNEXPANDED,
+    ]
+    var kernels: List[Int] = [KDE_KERNEL_GAUSSIAN, KDE_KERNEL_EPANECHNIKOV]
+    var n_cells = 0
+    var n_bad = 0
+    for metric in metrics:
+        for kernel in kernels:
+            for weighted in range(2):
+                var hw = weighted == 1
+                var a = kde_score_samples_host(
+                    train, nt, query, nq, d, BANDWIDTH, kernel_name(kernel), metric_name(metric), w if hw else none, hw,
+                )
+                var b = List[Float32](length=nq, fill=Float32(0))
+                kde_score_samples_host_ptr(
+                    _ptr_of(train), nt, _ptr_of(query), nq, d, BANDWIDTH, kernel_name(kernel), metric_name(metric),
+                    w if hw else none, hw, _ptr_of(b),
+                )
+                for q in range(nq):
+                    n_cells += 1
+                    if bitcast[DType.uint32](a[q]) != bitcast[DType.uint32](b[q]):
+                        n_bad += 1
+    if n_bad > 0:
+        raise Error(
+            "check_kde_host_ptr_equals_list FAILED: " + String(n_bad) + " of " + String(n_cells)
+            + " scores differ between the List and pointer entries"
+        )
+
+    var nan = bitcast[DType.float32](UInt32(0x7FC00000))
+    var inf = bitcast[DType.float32](UInt32(0x7F800000))
+    var n_cases = 0
+    # (position, value) pairs per case; value codes 0 NaN, 1 +inf, 2 -inf, 3 1e19.
+    var cases_pos: List[List[Int]] = [[3], [800], [1415], [900, 805], [812, 810], [1420, 1409], [805, 900]]
+    var cases_val: List[List[Int]] = [[0], [1], [2], [0, 1], [0, 3], [2, 0], [3, 0]]
+    var check_metrics: List[Int] = [DIST_L2_SQRT_UNEXPANDED, DIST_L2_EXPANDED]
+    for metric in check_metrics:
+        var clean_l = _validate_msg(train, nt, d, metric, False)
+        var clean_p = _validate_msg(train, nt, d, metric, True)
+        if clean_l != "no refusal" or clean_p != "no refusal":
+            raise Error("check_kde_host_ptr_equals_list: clean data refused: " + clean_l + " / " + clean_p)
+        for c in range(len(cases_pos)):
+            var x = train.copy()
+            for k in range(len(cases_pos[c])):
+                var code = cases_val[c][k]
+                var v = nan
+                if code == 1:
+                    v = inf
+                elif code == 2:
+                    v = -inf
+                elif code == 3:
+                    v = Float32(1e19)
+                x[cases_pos[c][k]] = v
+            var ml = _validate_msg(x, nt, d, metric, False)
+            var mp = _validate_msg(x, nt, d, metric, True)
+            n_cases += 1
+            if ml != mp:
+                raise Error(
+                    "check_kde_host_ptr_equals_list FAILED: case " + String(c) + " metric " + metric_name(metric)
+                    + ": List says '" + ml + "', pointer says '" + mp + "'"
+                )
+    var z = train.copy()
+    for f in range(d):
+        z[150 * d + f] = Float32(0.0)
+    var zl = _validate_msg(z, nt, d, DIST_COSINE_EXPANDED, False)
+    var zp = _validate_msg(z, nt, d, DIST_COSINE_EXPANDED, True)
+    n_cases += 1
+    if zl != zp or zl == "no refusal":
+        raise Error("check_kde_host_ptr_equals_list FAILED: cosine zero row: '" + zl + "' / '" + zp + "'")
+    print(
+        "check_kde_host_ptr_equals_list OK [" + _mode_name() + "]: " + String(n_cells)
+        + " scores, 6 metrics x 2 kernels x weighted/unweighted, 0 differ; " + String(n_cases)
+        + " refusal cases, same message"
+    )
+
+
 def main() raises:
     print("== kde/checks/kde_check.mojo [" + _mode_name() + "] ==")
     check_kde_tiled_equals_staged()
+    check_kde_host_ptr_equals_list()
     check_kde_refusals()
     check_kde_zero_sign_cannot_leak()
     check_kde_log_norm_closed_form()

@@ -80,8 +80,32 @@ Taxi race on the same pod before this change (binding at 36ca51fd):
 ours 39.2 ms against cuML 2.37 ms (16.55x), mean log-likelihood -9.58207
 against -9.58205.
 
-RUN OWED (none of these ran; the pod was reaped at the orchestrator's
-wind-down):
+## SIMD accumulators and host staging (DEVIATIONS 2626 and 2660, 2026-09-11)
+
+DEVIATION 2626. `kde_tiled_logk_kernel` holds the 64 accumulators of a
+cell tile as one `SIMD[float32, 64]` value and advances a whole tile row
+per feature, for all three tiled metrics (euclidean: `ftz_simd` of the
+difference, `identical_mul_add_simd`, `ftz_simd`; l1: `ftz_simd(acc +
+abs(ftz_simd(q - t)))`; chebyshev: `abs(ftz_simd(q - t))` and a strict
+`>` select, row 39). Each lane is the scalar core it replaces, operation
+for operation; weights, the six kernels and the epilog are untouched. This
+is `t1_simd_logk_kernel` from `kde/checks/kde_dist_attribution.mojo`
+generalized and shipped.
+
+DEVIATION 2660. `kde_score_samples_binding` no longer copies X and the
+queries into `List`s. `kde/estimator.mojo::kde_score_samples_host_ptr`
+validates the caller's memory with `kde_validate_data_ptr` (16-value
+blocks screened by one mask, the first positive block and the tail walked
+by the original per-value loop, so the refusal is the same first value in
+the same words), stages it once into pinned memory and writes the scores
+to the caller's output from the pinned download. Gate:
+`check_kde_host_ptr_equals_list` (host only, asserts in every tier).
+
+The measurements, identity evidence and flip verdict for both are in the
+section below this list and in `bench/results/kde_finish_2026-09-11/`.
+
+RUN OWED from DEVIATION 2625's lane (items 1 and 4 are DEVIATIONS 2626 and
+2660 above; the pod was reaped at the orchestrator's wind-down):
 1. Port `t1_simd_logk_kernel`'s SIMD accumulator into
    `kde_tiled_logk_kernel` for all three metrics, weights and kernels, then
    on the H100 `pixi run mojo run -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1
