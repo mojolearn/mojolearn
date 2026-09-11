@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The classical GEMM callers under the ksplit default against the old plan
-(docs/lanes/BRIEF_gemm_long_k_2026-09-11.md section 11, job 2).
+(docs/lanes/BRIEF_gemm_long_k_2026-09-11.md section 11, job 2, and section 12).
 
 ENGINEERING_RULES.md section 9: a shared kernel's flip must hold for every
 lane it reaches. DEVIATION 2595 made `ksplit` the shipped GEMM plan on NVIDIA
@@ -13,12 +13,14 @@ the trial arm `tuned128` (the old TUNED 128x128 plan) and once under the
 shipped default, through the PUBLIC estimators of IDENTICAL bindings built
 with `-D MOJOLEARN_GEMM_ARM_TRIAL=1`, so `MOJOLEARN_GEMM_ARM` picks the plan
 on every GEMM call. `tools/gemm_ksplit_classical_leg.sh` drives it on the
-box.
+H100 and `tools/gemm_ksplit_classical_amd_leg.sh` on the Hot Aisle MI300X.
 
-    python tools/gemm_ksplit_classical_ab.py smoke
+    python tools/gemm_ksplit_classical_ab.py smoke [--lanes gp,ols,pca]
     python tools/gemm_ksplit_classical_ab.py time --lane ols --dataset taxi \\
         --arm-name tuned128 --block 1 [--rounds 3] [--rows 4000000] \\
         [--gp-train 4000] [--gp-test 1000] [--prep standardize] [--device NAME]
+    python tools/gemm_ksplit_classical_ab.py time --lane svc --dataset istella \\
+        --arm-name default --block 2 --source ctd [--data /root/ctd-data]
     python tools/gemm_ksplit_classical_ab.py verdict --out DIR [--lanes gp,ols,pca]
 
 WHY NOT bench/speed/classical_speed_main.mojo. That driver is the classical
@@ -30,15 +32,16 @@ estimator of a trial binding). This file follows that pattern and the FSPEED
 record format of `classical_speed_main.mojo` and `tools/speed_cuml_arm.py`,
 so `tools/flip_verdict.py` reads its logs unchanged.
 
-THE DATA. The trees harness's caches (`tools/speed_gbdt_arm.py --download
-taxi|istella`, under GBM_BENCH_DATA), loaded through that harness's own
-`load_taxi` / `load_istella` with `regression=True`, so the rows, the split
-and the column selection cannot drift from the lane that built them. Taxi
-takes its 11 `TAXI_NUMERIC` columns (target: fare), Istella-S its 220
-features (target: the 0..4 grade). OLS and PCA take the first `--rows` train
-rows (section 9: 4,000,000; Istella-S's train split holds 2,043,304, so it
-takes them all); quality is scored on the harness's test rows. GP takes the
-first `--gp-train` train rows and the first `--gp-test` test rows; section 9
+THE DATA, `--source trees` (the default; the H100 leg of section 11). The
+trees harness's caches (`tools/speed_gbdt_arm.py --download taxi|istella`,
+under GBM_BENCH_DATA), loaded through that harness's own `load_taxi` /
+`load_istella` with `regression=True`, so the rows, the split and the column
+selection cannot drift from the lane that built them. Taxi takes its 11
+`TAXI_NUMERIC` columns (target: fare), Istella-S its 220 features (target:
+the 0..4 grade). OLS and PCA take the first `--rows` train rows (section 9:
+4,000,000; Istella-S's train split holds 2,043,304, so it takes them all);
+quality is scored on the harness's test rows. GP takes the first
+`--gp-train` train rows and the first `--gp-test` test rows; section 9
 declares no GP shape, so 4,000 is a rung of the declared GP ladder
 (`bench/speed/classical_ladder_main.mojo`) where the cubic factor, not the
 launch, is the cost.
@@ -50,6 +53,22 @@ arms, and it is needed: Istella-S carries float32-max sentinels, and a
 float32 Gram of raw sentinels overflows to inf. GP also standardizes `y` and
 scores RMSE in the original units. `--prep raw` feeds the cache as is.
 
+THE DATA, `--source ctd` (the AMD leg of section 12). The classical lane's own
+blocks, written once per box by `tools/classical_two_datasets.py prep` under
+`--data`, and the classical lane's own `ours` runners
+(`classical_two_datasets.BUILDERS[(lane, "ours")]`), so the timed region, the
+rows, the cleaning and the quality function are the classical lane's rows
+exactly: `ols` and `pca` on the `big` block (taxi 4,000,000 x 11, Istella-S
+2,043,304 x 220, raw columns with the sentinel cleaned), `kde` on the `kde`
+block (100,000 fit rows, 2,000 queries, standardized; `score_samples` timed,
+the fit before the clock) and `svc` on the `svc` block (10,000 fit rows,
+standardized; the fit timed). Quality is that harness's `quality()`: OLS r2
+and rmse on the eval rows, PCA `explained_variance_ratio_sum`, KDE
+`mean_log_likelihood`, SVC `accuracy`. The hash is that harness's `_digest`
+(sha256 over the sorted outputs, 16 hex). `gp` has no classical block, so
+under `--source ctd` it takes the trees source above at the same rung.
+`kde` and `svc` exist only under `--source ctd`.
+
 THE RECORD (one process = one lane, one dataset, one arm, one block):
 
     FSPEED-HEADER family=classical lane=<l> arm=ours mode=IDENTICAL device=<d> rounds=<n> size=section9
@@ -57,19 +76,22 @@ THE RECORD (one process = one lane, one dataset, one arm, one block):
     FSPEED-GEMM lane=<l> caller=<name.dataset> op=<NN|NT|TN> m=<m> n=<n> k=<k>
     FSPEED-WARMUP lane=<l> arm=ours shape=<tag> ms=<float>
     FSPEED lane=<l> arm=ours shape=<tag> round=<i> ms=<float> hash=<16 hex>
-    FSPEED-ACC lane=<l> arm=ours metric=<rmse|mse> value=<float>
+    FSPEED-ACC lane=<l> arm=ours metric=<name> value=<float>
 
 `arm=ours` on both sides is deliberate: flip_verdict compares its BEFORE logs
 (the `tuned128` blocks) against its AFTER logs (the default blocks) at one
-lane and one arm name. `hash` is FNV-1a64 over the output bytes (OLS coef_
-and intercept, PCA components_ and explained_variance_, GP predictive means).
-IDENTICAL promises the same bits under both plans (brief section 5), so every
-hash of a caller and dataset must agree across arms and blocks; the verdict
-calls a disagreement an IDENTITY-BREAK. `FSPEED-GEMM` names each GEMM the
-caller issues through `identical_gemm_into` at this shape; the leg turns
-each into a DISPATCH line with the Mojo dispatch itself
-(`bench/gemm_step_price_main.mojo` label mode), which says whether the ksplit
-default takes it. No rule is re-spelled here.
+lane and one arm name. Under `--source trees`, `hash` is FNV-1a64 over the
+output bytes (OLS coef_ and intercept, PCA components_ and
+explained_variance_, GP predictive means). IDENTICAL promises the same bits
+under both plans (brief section 5), so every hash of a caller and dataset
+must agree across arms and blocks; the verdict calls a disagreement an
+IDENTITY-BREAK. `FSPEED-GEMM` names each GEMM the caller issues through
+`identical_gemm_into` at this shape; the leg turns each into a DISPATCH line
+with the Mojo dispatch itself (`bench/gemm_step_price_main.mojo` label mode,
+built and run ON THE BOX, so the answer is that column's kernel matrix row),
+which says whether the ksplit default takes it. No rule is re-spelled here.
+A caller that issues no GEMM through the entry prints
+`FSPEED-NOTE ... gemm_entry=none` instead (KDE under IDENTICAL).
 
 THE VERDICT, per caller: flip_verdict's own output (both ratios, the geomean,
 the quality lines, FLIP or NO FLIP, where FLIP means the default is faster),
@@ -86,6 +108,7 @@ import glob
 import hashlib
 import importlib.util
 import io
+import json
 import math
 import os
 import re
@@ -95,7 +118,14 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
-LANES = ("gp", "ols", "pca")
+LANES = ("gp", "ols", "pca", "kde", "svc")
+#: The H100 leg's callers, the default of `smoke` and `verdict`.
+H100_LANES = ("gp", "ols", "pca")
+#: Lanes `tools/classical_two_datasets.py` has an `ours` runner and a block for.
+CTD_LANES = ("ols", "pca", "kde", "svc")
+#: Lanes that exist only under `--source ctd`.
+CTD_ONLY_LANES = ("kde", "svc")
+SOURCES = ("trees", "ctd")
 DATASETS = ("taxi", "istella")
 ARM_NAMES = ("tuned128", "default")
 #: `cholesky/checks/potrf.mojo::CHOL_NB_PINNED`, the IDENTICAL panel width and
@@ -103,8 +133,15 @@ ARM_NAMES = ("tuned128", "default")
 #: FSPEED-GEMM record only; whether the default takes that call is the Mojo
 #: dispatch's answer on the box (dispatch.txt), never this file's.
 CHOL_NB_PINNED = 32
+#: `svm/impl/workingset.mojo`: `n_ws = min(1024, n_train)` for C-SVC.
+#: Transcribed for the FSPEED-GEMM record only, like CHOL_NB_PINNED.
+SMO_WS_SIZE = 1024
 PCA_COMPONENTS = 8
 GP_ALPHA = 0.1
+#: Quality metrics of the classical harness that tools/flip_verdict.py has no
+#: built-in direction for.
+QUALITY_DIRECTIONS = (("mean_log_likelihood", "higher"),
+                      ("explained_variance_ratio_sum", "higher"))
 
 EXIT_OK, EXIT_VERDICT, EXIT_REFUSED = 0, 1, 3
 
@@ -269,6 +306,78 @@ def lane_gp(mojolearn, np, x, y, xq, yq, dataset):
 LANE_BUILDERS = {"ols": lane_ols, "pca": lane_pca, "gp": lane_gp}
 
 
+def ctd_lane(np, lane, dataset, data_dir):
+    """One classical lane on its `tools/classical_two_datasets.py` block,
+    through that harness's own `ours` runner, `_digest` and `quality`.
+    Returns (fit, digest, quality, shape tag, GEMM shapes, note text)."""
+    ctd = _load_module("classical_two_datasets",
+                       os.path.join(HERE, "classical_two_datasets.py"))
+    block = os.path.join(data_dir, "%s-%s" % (ctd.BLOCK_OF[lane], dataset))
+    with np.load(block + ".npz") as z:
+        data = {k: np.ascontiguousarray(z[k]) for k in z.files}
+    with open(block + ".json") as fh:
+        rec = json.load(fh)
+    # The runner's constructor is untimed: it imports the IDENTICAL package,
+    # reads back numeric_mode_used() (it raises unless "identical") and, for
+    # kde, fits the estimator, exactly as the classical lane's worker does.
+    runner = ctd.BUILDERS[(lane, "ours")](data, rec)
+    x = data["X"]
+    rows, d = x.shape
+    memo = {}
+
+    def fit():
+        runner.call()
+        runner.sync()
+        return runner
+
+    def digest(result):
+        memo["out"] = result.outputs()
+        return ctd._digest(memo["out"])
+
+    def quality(result):
+        out = memo["out"] if "out" in memo else result.outputs()
+        q = ctd.quality(lane, data, {"ours": out}, rec).get("ours", {})
+        return sorted(q.items())
+
+    if lane == "ols":
+        # The same entry as the trees source: TN d x d x rows.
+        shape = "%s-%dx%d-ctd" % (dataset, rows, d)
+        shapes = [("ols.gram", "TN", d, d, rows)]
+    elif lane == "pca":
+        shape = "%s-%dx%dc%d-ctd" % (dataset, rows, d, ctd.PCA_COMPONENTS)
+        shapes = [("pca.cov", "TN", d, d, rows)]
+    elif lane == "kde":
+        # kde/impl/distance/distance.mojo: under IDENTICAL the L2Expanded arm
+        # is `pinned_distance_tile_kernel` (IDENTITY_PATHS row 24), and
+        # core/gemm.mojo::gemm_nt is the pinned NT kernel; no call reaches
+        # `identical_gemm_into`, so there is no caller shape to dispatch.
+        shape = "%s-%dx%dq%d-ctd" % (dataset, rows, d, data["Xq"].shape[0])
+        shapes = []
+    else:
+        # svm/impl/kernelcache.mojo -> svm/impl/distance/kernel_matrices.mojo::
+        # kernel_op -> identical_gemm_into(m, n, k = d, OP_NT) under IDENTICAL:
+        # the square tile n_ws x n_ws once per outer SMO iteration, and the
+        # batch tile nnz_da x n_rows (nnz_da data-dependent, 1..n_ws; the
+        # 1 GiB tile limit does not split 10,000 rows). The two batch lines
+        # bracket nnz_da: 128 (the one value where m reaches the 128x128
+        # tuned floor with a single tile row) and n_ws (the largest).
+        ws = min(SMO_WS_SIZE, rows)
+        shape = "%s-%dx%d-ctd" % (dataset, rows, d)
+        shapes = [("svc.square_tile", "NT", ws, ws, d),
+                  ("svc.batch_tile_nnz128", "NT", min(128, ws), rows, d),
+                  ("svc.batch_tile_nnzws", "NT", ws, rows, d)]
+    arrays = rec.get("arrays", {})
+    note = ("rows=%d features=%d test_rows=%d x_sha256=%s block=%s numeric_mode_used=%s "
+            "vendor_used=%s smoke_max_rows=%s"
+            % (rows, d, data["Xq"].shape[0],
+               str(arrays.get("X", {}).get("sha256", "-"))[:16],
+               os.path.basename(block),
+               _no_spaces(runner.info.get("numeric_mode_used", "-")),
+               _no_spaces(runner.info.get("vendor_used", "-")),
+               rec.get("smoke_max_rows")))
+    return fit, digest, quality, shape, shapes, note
+
+
 # ------------------------------------------------------------------- time
 
 def cmd_time(args):
@@ -280,32 +389,53 @@ def cmd_time(args):
         _say("FSPEED-REFUSED lane=%s arm=ours reason=--arm-name=%s_but_MOJOLEARN_GEMM_ARM=%s"
              % (lane, args.arm_name, gemm_arm or "(unset)"))
         return EXIT_REFUSED
+    source = "ctd" if (args.source == "ctd" and lane in CTD_LANES) else "trees"
+    if lane in CTD_ONLY_LANES and source != "ctd":
+        _say("FSPEED-REFUSED lane=%s arm=ours reason=lane_%s_exists_only_under_--source_ctd"
+             % (lane, lane))
+        return EXIT_REFUSED
     _say("FSPEED-HEADER family=classical lane=%s arm=ours mode=IDENTICAL device=%s rounds=%d "
          "size=section9" % (lane, _no_spaces(args.device), args.rounds))
     try:
         mojolearn = _import_mojolearn()
-        x, y, xq, yq = load_dataset(dataset, args.gp_train if lane == "gp" else args.rows)
-        if lane == "gp":
-            x, y = x[:args.gp_train], y[:args.gp_train]
-            xq, yq = xq[:args.gp_test], yq[:args.gp_test]
-        if args.prep == "standardize":
-            x, xq = standardize(x, xq)
-        x = np.ascontiguousarray(x, dtype=np.float32)
-        xq = np.ascontiguousarray(xq, dtype=np.float32)
-        fit, digest, quality, shape, shapes = LANE_BUILDERS[lane](
-            mojolearn, np, x, y, xq, yq, dataset)
+        if source == "ctd":
+            fit, digest, quality, shape, shapes, note = ctd_lane(np, lane, dataset, args.data)
+        else:
+            x, y, xq, yq = load_dataset(dataset, args.gp_train if lane == "gp" else args.rows)
+            if lane == "gp":
+                x, y = x[:args.gp_train], y[:args.gp_train]
+                xq, yq = xq[:args.gp_test], yq[:args.gp_test]
+            if args.prep == "standardize":
+                x, xq = standardize(x, xq)
+            x = np.ascontiguousarray(x, dtype=np.float32)
+            xq = np.ascontiguousarray(xq, dtype=np.float32)
+            fit, digest, quality, shape, shapes = LANE_BUILDERS[lane](
+                mojolearn, np, x, y, xq, yq, dataset)
     except Exception as exc:  # noqa: BLE001
         _say("FSPEED-REFUSED lane=%s arm=ours reason=%s" % (lane, _no_spaces(exc)))
         return EXIT_REFUSED
-    _say("FSPEED-NOTE lane=%s arm=ours gemm_arm=%s gemm_plan=%s block=%s dataset=%s prep=%s "
-         "rows=%d features=%d test_rows=%d x_sha256=%s mojolearn=%s"
-         % (lane, args.arm_name, _no_spaces(os.environ.get("MOJOLEARN_GEMM_PLAN_LABEL", "unlabeled")),
-            args.block, dataset, args.prep, x.shape[0], x.shape[1], xq.shape[0],
-            hashlib.sha256(x.tobytes()).hexdigest()[:16],
-            _no_spaces(getattr(mojolearn, "__file__", "?"))))
+    plan_label = _no_spaces(os.environ.get("MOJOLEARN_GEMM_PLAN_LABEL", "unlabeled"))
+    if source == "ctd":
+        _say("FSPEED-NOTE lane=%s arm=ours gemm_arm=%s gemm_plan=%s block=%s dataset=%s "
+             "source=ctd data=%s %s mojolearn=%s"
+             % (lane, args.arm_name, plan_label, args.block, dataset, _no_spaces(args.data),
+                note, _no_spaces(getattr(mojolearn, "__file__", "?"))))
+    else:
+        _say("FSPEED-NOTE lane=%s arm=ours gemm_arm=%s gemm_plan=%s block=%s dataset=%s prep=%s "
+             "rows=%d features=%d test_rows=%d x_sha256=%s mojolearn=%s"
+             % (lane, args.arm_name, plan_label,
+                args.block, dataset, args.prep, x.shape[0], x.shape[1], xq.shape[0],
+                hashlib.sha256(x.tobytes()).hexdigest()[:16],
+                _no_spaces(getattr(mojolearn, "__file__", "?"))))
+    context = os.environ.get("MOJOLEARN_CLASSICAL_AB_CONTEXT", "")
+    if context:
+        _say("FSPEED-NOTE lane=%s arm=ours context=%s" % (lane, _no_spaces(context)))
     for caller, op, m, n, k in shapes:
         _say("FSPEED-GEMM lane=%s caller=%s.%s op=%s m=%d n=%d k=%d"
              % (lane, caller, dataset, op, m, n, k))
+    if not shapes:
+        _say("FSPEED-NOTE lane=%s arm=ours gemm_entry=none (no call of this caller reaches "
+             "identical_gemm_into under IDENTICAL; both arms run the same launches)" % lane)
     hashes = []
     last = None
     for r in range(args.rounds + 1):
@@ -333,44 +463,64 @@ def cmd_time(args):
         _say("FSPEED-NOTE lane=%s arm=ours hash moved across rounds: %s"
              % (lane, " ".join(sorted(set(hashes)))))
     try:
-        metric, value = quality(last)
+        got = quality(last)
     except Exception as exc:  # noqa: BLE001
         _say("FSPEED-NOTE lane=%s arm=ours quality not computed: %s" % (lane, _no_spaces(exc)))
         return EXIT_OK
-    if math.isfinite(value):
-        _say("FSPEED-ACC lane=%s arm=ours metric=%s value=%.9g" % (lane, metric, value))
-    else:
-        # flip_verdict refuses a non-finite before value; the round hashes
-        # still carry the equality of the outputs.
-        _say("FSPEED-NOTE lane=%s arm=ours quality %s=%r is not finite, no FSPEED-ACC line"
-             % (lane, metric, value))
+    pairs = got if isinstance(got, list) else [got]
+    for metric, value in pairs:
+        if not isinstance(value, float):
+            _say("FSPEED-NOTE lane=%s arm=ours quality_extra %s=%s"
+                 % (lane, metric, _no_spaces(value)))
+        elif math.isfinite(value):
+            _say("FSPEED-ACC lane=%s arm=ours metric=%s value=%.9g" % (lane, metric, value))
+        else:
+            # flip_verdict refuses a non-finite before value; the round hashes
+            # still carry the equality of the outputs.
+            _say("FSPEED-NOTE lane=%s arm=ours quality %s=%r is not finite, no FSPEED-ACC line"
+                 % (lane, metric, value))
     return EXIT_OK
 
 
 # ------------------------------------------------------------------ smoke
 
 def cmd_smoke(args):
-    """Import the IDENTICAL package and fit each estimator once on a tiny
-    generated table, so a missing or unloadable binding is named before any
-    dataset is read. A check, never a timing."""
+    """Import the IDENTICAL package and fit each requested estimator once on
+    a tiny generated table, so a missing or unloadable binding is named
+    before any dataset is read. A check, never a timing."""
     import numpy as np  # noqa: PLC0415
     mojolearn = _import_mojolearn()
-    from mojolearn import RBF, GaussianProcessRegressor  # noqa: PLC0415
-    from mojolearn.decomposition import PCA  # noqa: PLC0415
-    from mojolearn.linear_model import LinearRegression  # noqa: PLC0415
+    lanes = [l for l in args.lanes.split(",") if l]
     gen = np.random.default_rng(20260911)
     x = np.ascontiguousarray(gen.standard_normal((64, 4)), dtype=np.float32)
     y = np.ascontiguousarray(x @ np.arange(1, 5, dtype=np.float32), dtype=np.float32)
     print("mojolearn=%s mode_env=%s gemm_arm=%s" % (
         mojolearn.__file__, os.environ.get("MOJOLEARN_NUMERIC_MODE"),
         os.environ.get("MOJOLEARN_GEMM_ARM", "")), flush=True)
-    ols = LinearRegression().fit(x, y)
-    print("ols coef=%s mode=%s" % (np.asarray(ols.coef_).tolist(), ols.numeric_mode_used()), flush=True)
-    pca = PCA(n_components=2, svd_solver="covariance_eigh").fit(x)
-    print("pca explained_variance=%s" % np.asarray(pca.explained_variance_).tolist(), flush=True)
-    gp = GaussianProcessRegressor(kernel=RBF(length_scale=2.0), alpha=GP_ALPHA).fit(x[:16], y[:16])
-    print("gp info=%r mean0=%r" % (getattr(gp, "info_", None),
-                                   float(np.asarray(gp.predict(x[:2]))[0])), flush=True)
+    if "ols" in lanes:
+        from mojolearn.linear_model import LinearRegression  # noqa: PLC0415
+        ols = LinearRegression().fit(x, y)
+        print("ols coef=%s mode=%s" % (np.asarray(ols.coef_).tolist(), ols.numeric_mode_used()), flush=True)
+    if "pca" in lanes:
+        from mojolearn.decomposition import PCA  # noqa: PLC0415
+        pca = PCA(n_components=2, svd_solver="covariance_eigh").fit(x)
+        print("pca explained_variance=%s" % np.asarray(pca.explained_variance_).tolist(), flush=True)
+    if "gp" in lanes:
+        from mojolearn import RBF, GaussianProcessRegressor  # noqa: PLC0415
+        gp = GaussianProcessRegressor(kernel=RBF(length_scale=2.0), alpha=GP_ALPHA).fit(x[:16], y[:16])
+        print("gp info=%r mean0=%r" % (getattr(gp, "info_", None),
+                                       float(np.asarray(gp.predict(x[:2]))[0])), flush=True)
+    if "kde" in lanes:
+        kd = mojolearn.KernelDensity(bandwidth=1.0, kernel="gaussian")
+        kd.fit(x)
+        print("kde score0=%r mode=%s" % (float(np.asarray(kd.score_samples(x[:4]))[0]),
+                                         kd.numeric_mode_used()), flush=True)
+    if "svc" in lanes:
+        labels = np.ascontiguousarray((y > np.median(y)).astype(np.float32))
+        svc = mojolearn.SVC(C=1.0, kernel="rbf", gamma=0.25, tol=1e-3)
+        svc.fit(x, labels)
+        print("svc n_support=%r pred0=%r" % (getattr(svc, "n_support_", None),
+                                             float(np.asarray(svc.predict(x[:2]))[0])), flush=True)
     return EXIT_OK
 
 
@@ -398,6 +548,8 @@ def cmd_verdict(args):
         print("== caller %s ==" % lane, flush=True)
         logs = {}
         argv = ["--lane", lane, "--arm", "ours"]
+        for metric, way in QUALITY_DIRECTIONS:
+            argv += ["--metric-direction", "%s=%s" % (metric, way)]
         for ds in DATASETS:
             for arm in ARM_NAMES:
                 logs[(ds, arm)] = _block_logs(args.out, lane, ds, arm)
@@ -499,10 +651,16 @@ def build_parser():
     t.add_argument("--gp-test", type=int, default=1000)
     t.add_argument("--prep", choices=("standardize", "raw"), default="standardize")
     t.add_argument("--device", default="unknown")
-    sub.add_parser("smoke", help="import the IDENTICAL package and fit each estimator once, tiny")
+    t.add_argument("--source", choices=SOURCES, default="trees",
+                   help="trees: the H100 leg's loader (default); ctd: the classical "
+                        "lane's blocks and runners (ols, pca, kde, svc; gp keeps trees)")
+    t.add_argument("--data", default="/root/ctd-data",
+                   help="tools/classical_two_datasets.py prep --data directory (--source ctd)")
+    s = sub.add_parser("smoke", help="import the IDENTICAL package and fit each estimator once, tiny")
+    s.add_argument("--lanes", default=",".join(H100_LANES))
     v = sub.add_parser("verdict", help="per-caller verdict from the logs in --out")
     v.add_argument("--out", required=True)
-    v.add_argument("--lanes", default=",".join(LANES))
+    v.add_argument("--lanes", default=",".join(H100_LANES))
     return p
 
 

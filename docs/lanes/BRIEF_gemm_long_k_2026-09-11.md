@@ -1414,3 +1414,259 @@ Read back from `<leg out>/remote/ksplit-classical/`:
   same launches. A HOLDS here says the default costs these callers nothing;
   it does not price ksplit on classical work. That price is owed on the
   families 11.2 names, once they have section 9 shapes.
+
+## 12. The classical caller A/B on AMD: `tuned128` against the shipped default on the Hot Aisle MI300X
+
+September 11, 2026, fifth session, worktree branch `lane/ksplit-classical-amd`
+off origin/main at 190fb7a4 (the AMD row set to 110). The branch merges
+`origin/lane/classical-hotaisle-run`, which brings in
+`tools/classical_two_datasets.py`. That merge had one conflict, in
+`tools/trees_leg.sh`, and took main's side, which already contains the
+branch's pod-prefix change. SOURCE ONLY. Nothing in this section was built,
+compiled or run, on the Mac or on a GPU. The syntax checks in 12.5 are the
+only commands run. No kernel, no kernel matrix value and no shipped binding
+build changed, so no DEVIATION number is taken.
+
+### 12.1 Why
+
+190fb7a4 set the AMD value of `lib_gemm_block_parallelism_for` to 110. The
+ksplit default therefore runs on AMD wherever the group rule takes a call
+through `identical_gemm_into`, at `S = 110`: fewer than 110 tiles, where
+NVIDIA allows 132. Section 11 wrote the H100 A/B for OLS, PCA and GP.
+ENGINEERING_RULES 9 requires every lane a shared kernel's flip reaches to
+hold, and rule 10 makes AMD the tuning column. The classical lane runs KDE
+and SVC on this box on Istella-S at d = 220, above the `k >= 129` floor, so
+every number it has for them predates ksplit.
+
+### 12.2 The callers, their shapes, and what the rule predicts
+
+The rule at `S = 110` is section 11.2's with 110 in place of 132:
+
+- `choose_gemm_plan` answers TUNED 128x128: `m >= 128`, `n >= 128`, at least
+  131,072 output cells, and no SPLIT plan chosen first.
+- `P >= 2`, that is `k >= 129` (`CONTRACT_K_LEAF_MIN = 128`).
+- Two groups fit the 64 M float workspace.
+- Fewer than 110 tiles of 128x128.
+
+The `tuned128` arm forces the old plan only on calls `choose_gemm_plan` sends
+to TUNED 128x128, and every other call falls through to the default. The two
+arms of a caller therefore differ exactly on the calls the default takes.
+Everything below is read from source at this commit. The DISPATCH lines the
+leg writes on the box are the measurement.
+
+| order | caller | shape and entry | GEMM through `identical_gemm_into` (op, m x n x k) | `choose_gemm_plan` by this reading | default takes it |
+|---|---|---|---|---|---|
+| 1 | KDE `score_samples` (fit before the clock) | `kde` block: 100,000 fit rows, 2,000 queries, standardized; taxi d = 11, Istella-S d = 220 | none | - | NOT REACHED |
+| 2 | SVC fit (`C=1`, RBF, `gamma=1/d`) | `svc` block: 10,000 fit rows, 10,000 eval rows, standardized | square tile NT 1024 x 1024 x d once per outer SMO iteration; batch tile NT nnz_da x 10,000 x d | TUNED 128x128 on both datasets | Istella-S: the square tile YES (1 leaf per group, 2 groups, 64 tiles); the batch tile only when nnz_da = 128 (79 tiles). Taxi: never (k = 11, P = 1) |
+| 3 | GP fit and predict | 4,000 train and 1,000 test rows, trees loader, standardized (the H100 rung) | mean TN 1000 x 1 x 4000; Cholesky trailing NT 3968 x 3968 x 32 | mean PLAN_SPLIT_16_1X1; trailing TUNED 128x128 | no (n = 1; P = 1) |
+| 4 | OLS fit | `big` block: taxi 4,000,000 x 11, Istella-S 2,043,304 x 220, raw columns, sentinel cleaned | Gram TN d x d x rows | taxi PLAN_SPLIT_16_1X1; Istella-S PLAN_SPLIT_64_4X4 | no |
+| 5 | PCA fit (8 components, `covariance_eigh`) | the same `big` block | covariance TN d x d x rows | the same | no |
+
+**KDE is not a caller ksplit takes.** The job named it as one, but source
+says otherwise. Under IDENTICAL, `kde/impl/distance/distance.mojo` runs the
+L2Expanded arm as `pinned_distance_tile_kernel` (IDENTITY_PATHS row 24).
+`core/gemm.mojo::gemm_nt` is the pinned NT kernel, and nothing under `kde/`
+calls `identical_gemm_into`. The KDE A/B therefore runs the same launches on
+both arms. It stays in the leg, first, as the null control for the noise band
+on this box: a KDE ratio beyond noise is box drift, not a plan effect.
+
+**SVC on Istella-S is the one real question.** Where the default takes the
+square tile, each call allocates 2 x 1024 x 1024 floats (8 MB) and
+synchronizes twice (10.2), and SMO issues that tile once per outer iteration.
+The batch tile is taken only at nnz_da = 128. Below 128, m is under the
+tuned floor. From 129 to 1024 the tiles run from 158 to 632, and the rule
+declines. How many outer iterations reach nnz_da = 128 is data-dependent,
+and the host has no count of it. Taxi SVC runs the same launches on both
+arms. The same square tile is also taken on NVIDIA (64 tiles is under 132),
+and section 11's H100 leg does not run SVC.
+
+**A correction to 11.3 item 4.** That item expected `choose_plan=[TILE 16x16 ...]`
+for `ols.gram.istella` at 220x220x2,043,304. By this reading it is
+PLAN_SPLIT_64_4X4. P is 1024 (L = 1996), the SPLITK workspace of 48,400 x
+1024 = 49,561,600 floats fits the 64 M cap, and 48,400 cells is under
+128x1024. TILE 16x16 is `choose_gemm_plan_untuned`'s answer. Either plan is
+outside TUNED 128x128, so neither arm changes the call. The box's DISPATCH
+line settles the label.
+
+Predicted verdicts: KDE HOLDS, a null; SVC measured (taxi a null, Istella-S
+the reading); GP, OLS and PCA HOLDS with ratios near 1. Every witness is
+equal on every caller.
+
+### 12.3 What was built
+
+- **`tools/gemm_ksplit_classical_ab.py`**, shared with the H100 leg.
+  - `time --source ctd` makes `ols`, `pca`, `kde` and `svc` run on the
+    classical lane's blocks under `--data`, through
+    `classical_two_datasets.BUILDERS[(lane, "ours")]`, that harness's
+    `_digest` and its `quality()`. The timed region, the rows, the cleaning
+    and the quality function are the classical lane's own. `gp` has no block,
+    so it keeps the trees loader.
+  - New lanes `kde` and `svc`, refused without `--source ctd`. Shape tags
+    under ctd end in `-ctd`.
+  - FSPEED-ACC lines are written for every float metric: r2 and rmse for
+    OLS, `explained_variance_ratio_sum` for PCA, `mean_log_likelihood` for
+    KDE, `accuracy` for SVC. Other quality entries become NOTE lines.
+  - KDE prints `gemm_entry=none`. SVC prints three FSPEED-GEMM lines: the
+    square tile, and the batch tile at nnz_da 128 and at n_ws.
+    `SMO_WS_SIZE = 1024` is transcribed from `svm/impl/workingset.mojo`
+    for those records only.
+  - `smoke --lanes`, a `verdict` that tells flip_verdict the direction of
+    the two classical metrics it does not know, and an optional
+    `MOJOLEARN_CLASSICAL_AB_CONTEXT` NOTE line.
+  - Defaults are unchanged: `time` defaults to `--source trees`, and `smoke`
+    and `verdict` default to `gp,ols,pca`. Every line the H100 body's calls
+    print is the text they printed before.
+- **`tools/gemm_ksplit_classical_amd_leg.sh`**, the new `tools/hotaisle_leg.sh`
+  body. Its header lists every step.
+  - At t=0: the Istella-S tarball (curl, resumable, sha256-checked,
+    untarred) and the taxi months (sha256-checked), in the background.
+  - numpy and pyarrow in the pixi python. A uv Python 3.12 venv takes over
+    the decode and the prep if pyarrow will not import there.
+  - Per dataset, in the background: `tools/speed_gbdt_arm.py --download`,
+    then `tools/classical_two_datasets.py prep` for the lanes with a block.
+  - The label binary (`bench/gemm_step_price_main.mojo`, IDENTICAL plus
+    trial), outside the fetched tree.
+  - The IDENTICAL bindings the lanes import, each with the trial define:
+    build.sh, build_svm.sh, build_estimators.sh, build_gp.sh.
+  - `smoke`, then a wait until the data is ready or until
+    `MOJOLEARN_CLASSICAL_AB_TIMING_FLOOR` seconds (1500) are left.
+  - The ABBA blocks: the FIRST group (default `kde,svc`) before the rest,
+    taxi before Istella-S inside a group. Items that cannot start in time
+    are SKIPPED_DEADLINE, items whose data failed SKIPPED_NODATA.
+  - `dispatch.txt` from the box's own label binary, then `verdicts`.
+  - The deadline is the Hot Aisle runner's work bound, read from the
+    container's PID 1 `timeout` and `started=`, less 150 s.
+- **`bindings/build_svm.sh`** gains the `MOJOLEARN_BUILD_EXTRA_DEFINES` hook
+  that build.sh, build_estimators.sh and build_gp.sh already have. It expands
+  to nothing when unset, so a release build is unchanged.
+- **`tools/gemm_ksplit_classical_leg.sh`**, the H100 body, is unchanged.
+
+**Why a second body.** RunPod passes a body no environment, so the H100
+body's defaults are the H100 leg itself. This leg needs a different lane set
+and order, the classical prep, the SVM binding, the Hot Aisle deadline and a
+resumable fetch. Putting those behind vendor branches in the H100 body would
+change the file that leg ships while its run is still owed. The driver is
+the shared, vendor-agnostic part.
+
+### 12.4 The record and the verdict
+
+- Everything from 11.2 holds.
+- Logs are `<lane>.<dataset>.<tuned128|default>.<block>.log` under
+  `<leg out>/remote/ksplit-classical-amd/`.
+- `status.tsv` also carries `fetch-*`, `untar-istella`, `download-*`,
+  `prep-*`, `wait-data`, and the SKIPPED rows.
+- A timed process that ran beside a decode or a prep carries
+  `FSPEED-NOTE ... context=bg=data_work_running`.
+- `gate.txt` carries the box's DEFAULT line. On this commit it should read
+  `block_parallelism_row=110 ksplit_default=on trial_ksplit_S=110`.
+- `plans.tsv` should read `shipped: default=ksplit(S=110) else tuned128`.
+- `bindings.sha256` shows each binding's `gfx942` string count, which must
+  be above 0.
+
+### 12.5 RUN OWED, Mac, no cost, run by the orchestrator
+
+1. `sh -n tools/gemm_ksplit_classical_amd_leg.sh && dash -n tools/gemm_ksplit_classical_amd_leg.sh`
+2. `sh -n bindings/build_svm.sh && dash -n bindings/build_svm.sh`, and
+   `sh -n tools/gemm_ksplit_classical_leg.sh` (unchanged, still parses).
+3. `python3 -m py_compile tools/gemm_ksplit_classical_ab.py tools/classical_two_datasets.py`
+4. One dry run, from a `git worktree add --detach` checkout of the merge
+   commit that carries this section:
+   `MOJOLEARN_GEMM_LEG_EXTRA=tools/gemm_ksplit_classical_amd_leg.sh MOJOLEARN_HOTAISLE_EXTRA_ENV=MOJOLEARN_CLASSICAL_AB_LANES=kde,svc bash tools/hotaisle_leg.sh amd`.
+   Without a mode flag the runner reads no key, calls no API and creates
+   nothing. Expect `ok the extra body is valid sh`,
+   `ok the extra body environment: 1 export(s)`, the bundle under its cap,
+   and `DRY RUN: GREEN. Nothing rented.` A BLOCK for a dirty tree is about
+   the checkout, not the body.
+
+This lane ran items 1 to 3 on its own worktree. `sh -n` and `dash -n`
+(/bin/dash) passed on all three shell files, `py_compile` passed on both
+Python files, and a grep of the new body for bashisms found none. The
+orchestrator repeats them at the merge commit, and the item 4 dry run is
+still owed. The trial SVM binding has never been built anywhere. Its first
+build is on the box, and a red `build-binding-svm` row names it.
+
+### 12.6 The legs
+
+The lease cap is 60 minutes. On the 164818 leg the body got
+`work_seconds=3204`, after an image pull of 106 s. Setup on that box:
+
+- Builds. The price harness took 31 s and the base binding 46 s there. The
+  SVM, estimators and GP bindings have never been timed on this box.
+- Data, beside the builds. Istella-S is a 472 MB fetch, an untar, the trees
+  decode and the prep. None of that has been timed on Hot Aisle (the
+  classical Hot Aisle body is NOT RUN).
+
+All five callers are 40 timed processes (5 x 2 datasets x 2 arms x 2
+blocks). The Istella-S OLS and PCA fits alone are 16 fits of a 99 GFLOP Gram,
+each process loading a 1.8 GB block. That does not fit in one lease beside
+the setup, so **the set is split into two legs, KDE and SVC first**. The two
+can run at the same time on two VMs (the team limit is 2), and each caller's
+two arms always run on one VM.
+
+Leg 1, KDE and SVC (16 timed processes):
+
+```sh
+MOJOLEARN_GEMM_LEG_EXTRA=tools/gemm_ksplit_classical_amd_leg.sh \
+MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/$(date -u +%Y-%m-%d_%H%M%S)-amd-mi300x-hotaisle-gemm-ksplit-classical-kde-svc \
+MOJOLEARN_HOTAISLE_EXTRA_ENV=MOJOLEARN_CLASSICAL_AB_LANES=kde,svc \
+bash tools/hotaisle_leg.sh amd --rent --minutes 60 --skip-gates
+```
+
+Leg 2, GP, OLS and PCA (24 timed processes):
+
+```sh
+MOJOLEARN_GEMM_LEG_EXTRA=tools/gemm_ksplit_classical_amd_leg.sh \
+MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/$(date -u +%Y-%m-%d_%H%M%S)-amd-mi300x-hotaisle-gemm-ksplit-classical-gp-ols-pca \
+MOJOLEARN_HOTAISLE_EXTRA_ENV=MOJOLEARN_CLASSICAL_AB_LANES=gp,ols,pca \
+bash tools/hotaisle_leg.sh amd --rent --minutes 60 --skip-gates
+```
+
+With no extra environment, the body runs all five callers in priority order,
+and the deadline turns whatever does not fit into UNMEASURED.
+
+Read back from `<leg out>/remote/ksplit-classical-amd/`:
+
+- `status.tsv`: fetches, decodes, preps, builds, `smoke`, `wait-data`, the
+  16 or 24 timed items, `dispatch`, `verdicts`.
+- `gate.txt` and `plans.tsv`: the row-110 DEFAULT line and the labels from
+  12.4.
+- `dispatch.txt`: section 12.2 predicts `ksplit_default_takes=yes` on
+  `svc.square_tile.istella.NT` and `svc.batch_tile_nnz128.istella.NT`, and
+  `no` on every other line.
+- `verdicts.log`: `CLASSICAL KSPLIT A/B kde=... svc=...` (leg 1) and
+  `gp=... ols=... pca=...` (leg 2).
+
+A caller left UNMEASURED gets a new leg with only that caller in
+`MOJOLEARN_CLASSICAL_AB_LANES`, never a longer lease. A REGRESSES verdict is
+fenced by one of the two ways in 11.2, never with a vendor branch.
+
+### 12.7 Risks only a build or a box can settle
+
+- **Never built or run.** The trial define in the SVM binding. The trial hook
+  reading the environment on every SVC kernel call. The driver's ctd path:
+  runner constructors, `outputs()` every round, `quality()` on a 2 GB block.
+  The body: the deadline read from `/proc/1/cmdline`, `date -d`, and the
+  `rocminfo` Marketing Name parse.
+- **Python in the pixi environment.** Pixi's Python is 3.14 and needs numpy
+  and pyarrow installed by pip. If pyarrow will not import, the uv 3.12 venv
+  runs only the decode and the prep. The timed processes always need numpy
+  in the pixi Python.
+- **Data time on Hot Aisle is unmeasured.** If Istella-S is not ready at the
+  timing floor, taxi items run beside the decode, and those logs say so.
+  Istella-S items then wait until the item floor, and a cut leaves callers
+  UNMEASURED.
+- **Round times on the MI300X are unmeasured** for all five callers. SVC's
+  per-round digest calls `predict`, which is untimed but still spends lease
+  time.
+- **How often SVC hits nnz_da = 128 is data-dependent**, and nothing on the
+  host counts it. SVC `predict` may be taken too (batch x n_support x 220
+  under 110 tiles), but it is untimed and outside the verdict.
+- **Noise.** KDE, and taxi SVC, are nulls by the rule. If either moves beyond
+  its block band, the band belongs to the box, and the Istella-S SVC ratio
+  has to be read against it.
+- **The NVIDIA confirmation is owed** (rule 10). The H100 default takes the
+  same SVC square tile, and section 11.4's leg does not run SVC. The body is
+  vendor-agnostic, but its deadline comes from the Hot Aisle runner. On
+  RunPod, which passes no environment, `MOJOLEARN_CLASSICAL_AB_BODY_SECONDS`
+  would have to be set in the checkout's defaults.
+- **Evidence size.** Build logs over 100 KB stay outside the repository.
