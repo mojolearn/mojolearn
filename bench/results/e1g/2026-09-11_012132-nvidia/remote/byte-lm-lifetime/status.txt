@@ -1,0 +1,14 @@
+root=/root/mojolearn
+arch=sm_89
+target_column=
+deadline_s=120
+started=2026-09-11T05:37:11Z
+build_base_exit=0
+build_trees_exit=0
+build_exit=0 build_seconds=188
+readback_exit=0
+gdb=/usr/bin/gdb
+py-spy=none
+native_stack_lib=/root/gemm_leg_out/byte-lm-lifetime/native_stack_dump.so cc=/usr/bin/cc
+harness_exit=1 run_seconds=52
+finished=2026-09-11T05:42:48Z total_seconds=337

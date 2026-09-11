@@ -423,31 +423,26 @@ def case_failure_recovery(rec):
 
 
 def case_resident_mismatch_recovery(rec):
-    # tools/byte_lm_session_check.py's control: the host mirror is altered,
-    # the resident admission must refuse INSIDE the native call (a failure
-    # after context creation), the failed session is discarded, and a
-    # restored state must resume on a NEW context.
-    from mojolearn._buffer import frombytes
+    # DEVIATION 2514 changed this control: a resident session owns its state
+    # on the device and holds no host mirror, so "alter the mirror" is gone.
+    # The replacement is design gate G3: an exported array is a copy, so
+    # mutating it cannot reach the session, and the next step must equal a
+    # clean session's second step (second_step_equality checks the hash);
+    # then a restore from the saved export continues on the same session.
     shape, parameters, tokens, _ = _make_inputs(FIXTURE)
     trainer = _trainer(shape, parameters, True)
     try:
         _step(rec, trainer, tokens, 'step1')
         saved = trainer.state_dict()
-        current = trainer._state['parameters']
+        exported = trainer.export_state()
+        current = exported['parameters']
         raw = bytearray(current.tobytes())
         struct.pack_into('<f', raw, 0, struct.unpack_from('<f', raw, 0)[0] + .25)
-        trainer._state['parameters'] = frombytes(bytes(raw), '<f4', current.shape)
-        rec.event('mirror_altered')
-        try:
-            trainer.train_step(tokens)
-        except Exception as error:
-            rec.event('mismatch_refused', error=str(error)[:200],
-                      session_released=trainer._native_session is None)
-        else:
-            raise AssertionError('resident mismatch control did not fire')
+        rec.event('export_mutated', export_is_copy=(trainer.export_state()['parameters'].tobytes() != bytes(raw)))
+        _step(rec, trainer, tokens, 'step2')
         trainer.load_state_dict(saved)
         rec.event('state_restored', completed_steps=trainer.step_)
-        _step(rec, trainer, tokens, 'step2')
+        _step(rec, trainer, tokens, 'step2_after_restore')
     finally:
         trainer.close()
 

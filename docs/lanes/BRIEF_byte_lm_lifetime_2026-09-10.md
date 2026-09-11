@@ -887,3 +887,21 @@ runtime defect (a context destroyed with pending stream-ordered frees
 should not leave a global lock held); the drain is our contract until it is
 fixed upstream. Confirmation run: the full 17-case set on the 4090 with the
 switches off.
+
+## Run 7: confirmation on the RTX 4090 with the drain as the default (2026-09-11 05:27Z, `bench/results/e1g/2026-09-11_012132-nvidia/remote/byte-lm-lifetime`)
+
+All 19 cases with every switch off (the drain of DEVIATION 2520 is the
+shipped behavior): 18 PASSED, 0 HUNG, 52 s for the whole harness where
+runs 3, 4 and 6 spent two minutes per hung case. First-step and
+second-step loss, gradients and state bit-equal across every compared
+case; the KMeans and ExtraTrees controls bit-equal fit to fit. The one
+failure was the harness's own `resident_mismatch_recovery`, which altered a
+host mirror that a resident session no longer holds (DEVIATION 2514 owns
+the state on the device); it is now the export-mutation control of design
+gate G3 and passes on the M4.
+
+Closed: the stateless-then-anything hang on the RTX 4090 was our teardown
+destroying a context with its stream-ordered buffer frees in flight, which
+left the MAX runtime allocator's lock held. The drain fixes it on every
+column. Upstream: a context destroyed with pending frees should not wedge a
+process-wide lock; to be reported with the run 6 backtrace.

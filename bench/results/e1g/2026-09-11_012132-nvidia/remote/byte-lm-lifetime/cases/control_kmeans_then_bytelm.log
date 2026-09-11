@@ -1,0 +1,8 @@
+[control_kmeans_then_bytelm]   0.093s imported {"mojolearn_file": "/root/mojolearn/python/mojolearn/__init__.py", "version": "0.8.0"}
+[control_kmeans_then_bytelm]   0.315s binding {"sha256": "b9c8ba0b0dca", "vendor": "cuda"}
+[control_kmeans_then_bytelm]   0.325s native_call_begin {"binding": "_mojolearn", "entry": "kmeans_fit", "features": 4, "label": "fit1", "rows": 256}
+[control_kmeans_then_bytelm]   1.696s native_call_end {"inertia": 686.8068237304688, "label": "fit1", "n_iter": 8}
+[control_kmeans_then_bytelm]   1.697s hashed {"label": "fit1"}
+[control_kmeans_then_bytelm]   1.698s native_call_begin {"completed_steps": 0, "label": "step1", "resident": false}
+[control_kmeans_then_bytelm]   1.727s native_call_end {"keep_context_env": null, "keeper_active": false, "label": "step1"}
+[control_kmeans_then_bytelm]   1.728s hashed {"label": "step1", "loss": 5.548226833343506, "step": 1}

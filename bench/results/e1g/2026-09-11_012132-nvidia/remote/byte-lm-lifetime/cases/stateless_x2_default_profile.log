@@ -1,0 +1,9 @@
+[stateless_x2_default_profile]   0.092s imported {"mojolearn_file": "/root/mojolearn/python/mojolearn/__init__.py", "version": "0.8.0"}
+[stateless_x2_default_profile]   0.258s binding {"sha256": "b9c8ba0b0dca", "vendor": "cuda"}
+[stateless_x2_default_profile]   0.259s profile {"profile": "mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1"}
+[stateless_x2_default_profile]   0.260s native_call_begin {"completed_steps": 0, "label": "step1", "resident": false}
+[stateless_x2_default_profile]   1.713s native_call_end {"keep_context_env": null, "keeper_active": false, "label": "step1"}
+[stateless_x2_default_profile]   1.714s hashed {"label": "step1", "loss": 5.545339107513428, "step": 1}
+[stateless_x2_default_profile]   1.715s native_call_begin {"completed_steps": 1, "label": "step2", "resident": false}
+[stateless_x2_default_profile]   1.733s native_call_end {"keep_context_env": null, "keeper_active": false, "label": "step2"}
+[stateless_x2_default_profile]   1.734s hashed {"label": "step2", "loss": 5.544347763061523, "step": 2}

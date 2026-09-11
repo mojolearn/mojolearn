@@ -1,0 +1,181 @@
+{
+ "argv": [
+  "/root/mojolearn/.pixi/envs/default/bin/python3",
+  "/root/mojolearn/tools/byte_lm_lifetime_diag.py",
+  "--case",
+  "control_kmeans_x2",
+  "--record",
+  "/root/gemm_leg_out/byte-lm-lifetime/cases/control_kmeans_x2.json",
+  "--deadline",
+  "120.0"
+ ],
+ "case": "control_kmeans_x2",
+ "deadline_s": 120.0,
+ "env_overrides": {},
+ "exit_code": 0,
+ "hang_diagnostics": null,
+ "log": "/root/gemm_leg_out/byte-lm-lifetime/cases/control_kmeans_x2.log",
+ "native_stack": {
+  "file": "/root/gemm_leg_out/byte-lm-lifetime/cases/control_kmeans_x2.native_stack.txt",
+  "handler_installed": true,
+  "installed_line": true,
+  "samples": 0
+ },
+ "python_stacks": "",
+ "record": {
+  "binding": null,
+  "case": "control_kmeans_x2",
+  "control_binding": {
+   "binding_file": "/root/mojolearn/python/mojolearn/identical/_mojolearn.so",
+   "binding_sha256": "56293086ed09f83c1559c7054d0df41e75a80d2261e05c709e57c44b9ae7c8f6",
+   "name": "_mojolearn",
+   "native_numeric_mode": 1,
+   "native_vendor": "cuda"
+  },
+  "elapsed_s": 1.833,
+  "error": null,
+  "events": [
+   {
+    "mojolearn_file": "/root/mojolearn/python/mojolearn/__init__.py",
+    "name": "imported",
+    "t": 0.091,
+    "version": "0.8.0"
+   },
+   {
+    "binding": "_mojolearn",
+    "entry": "kmeans_fit",
+    "features": 4,
+    "label": "fit1",
+    "name": "native_call_begin",
+    "rows": 256,
+    "t": 0.102
+   },
+   {
+    "inertia": 686.8068237304688,
+    "label": "fit1",
+    "n_iter": 8,
+    "name": "native_call_end",
+    "t": 1.827
+   },
+   {
+    "label": "fit1",
+    "name": "hashed",
+    "t": 1.828
+   },
+   {
+    "binding": "_mojolearn",
+    "entry": "kmeans_fit",
+    "features": 4,
+    "label": "fit2",
+    "name": "native_call_begin",
+    "rows": 256,
+    "t": 1.829
+   },
+   {
+    "inertia": 686.8068237304688,
+    "label": "fit2",
+    "n_iter": 8,
+    "name": "native_call_end",
+    "t": 1.832
+   },
+   {
+    "label": "fit2",
+    "name": "hashed",
+    "t": 1.832
+   }
+  ],
+  "fixture": {
+   "control": {
+    "extratrees": {
+     "classes": 2,
+     "features": 8,
+     "max_depth": 6,
+     "n_estimators": 8,
+     "rows": 512,
+     "seed": 2513
+    },
+    "kmeans": {
+     "clusters": 4,
+     "features": 4,
+     "rows": 256,
+     "seed": 2513
+    }
+   }
+  },
+  "hashes": {
+   "fit1": {
+    "cluster_centers_": {
+     "dtype": "<f4",
+     "nbytes": 64,
+     "sha256": "0b2abc23162bfc98eea9264aefbb1f1823ef2f947d939b8d772073120dd389e7",
+     "shape": [
+      4,
+      4
+     ]
+    },
+    "inertia_": {
+     "dtype": "<f4",
+     "nbytes": 4,
+     "sha256": "dd56b95566c1b18830538f0a57c116e532441c651142caddf92a9a5e18f6e9d4",
+     "shape": [],
+     "value": 686.8068237304688
+    },
+    "labels_": {
+     "dtype": "<i4",
+     "nbytes": 1024,
+     "sha256": "3b206a8a1bced43f48ef9823b395fb6d47e754653ed35806d145735c0a1a9e80",
+     "shape": [
+      256
+     ]
+    },
+    "n_iter_": {
+     "value": 8
+    }
+   },
+   "fit2": {
+    "cluster_centers_": {
+     "dtype": "<f4",
+     "nbytes": 64,
+     "sha256": "0b2abc23162bfc98eea9264aefbb1f1823ef2f947d939b8d772073120dd389e7",
+     "shape": [
+      4,
+      4
+     ]
+    },
+    "inertia_": {
+     "dtype": "<f4",
+     "nbytes": 4,
+     "sha256": "dd56b95566c1b18830538f0a57c116e532441c651142caddf92a9a5e18f6e9d4",
+     "shape": [],
+     "value": 686.8068237304688
+    },
+    "labels_": {
+     "dtype": "<i4",
+     "nbytes": 1024,
+     "sha256": "3b206a8a1bced43f48ef9823b395fb6d47e754653ed35806d145735c0a1a9e80",
+     "shape": [
+      256
+     ]
+    },
+    "n_iter_": {
+     "value": 8
+    }
+   }
+  },
+  "native_stack": {
+   "file": "/root/gemm_leg_out/byte-lm-lifetime/cases/control_kmeans_x2.native_stack.txt",
+   "handler_installed": true,
+   "ld_preload": "/root/gemm_leg_out/byte-lm-lifetime/native_stack_dump.so",
+   "main_thread_native_id": 3651,
+   "watchdog_armed": true
+  },
+  "numeric_mode": "identical",
+  "pid": 3651,
+  "python": "3.14.7",
+  "schema": "byte-lm-lifetime-diag.record.v1",
+  "status": "passed"
+ },
+ "status": "passed",
+ "timed_out": false,
+ "wall_s": 2.62
+}

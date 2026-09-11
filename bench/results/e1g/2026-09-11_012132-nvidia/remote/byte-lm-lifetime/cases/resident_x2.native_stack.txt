@@ -1,0 +1,3 @@
+=== native stack handler installed pid 2436 tid 2436 time 1789105325.083995488 signal SIGUSR2
+=== native stack handler installed pid 2439 tid 2439 time 1789105325.165653351 signal SIGUSR2
+=== native stack handler installed pid 2440 tid 2440 time 1789105325.169006488 signal SIGUSR2
