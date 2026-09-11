@@ -54,6 +54,17 @@ out=$tmpdir/_mojolearn_preprocessing.so
 pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib \
     $target_flags $link_flags $mode_flags $column_flags -I . -I bindings \
     bindings/_mojolearn_preprocessing.mojo -o "$out"
+# The gate below needs NumPy in the gating interpreter, which a fresh Linux
+# build box does not have; the caller that sets MOJOLEARN_SKIP_BUILD_GATE
+# (build_sets.sh, build_release_wheel.sh) owns end-to-end verification, the
+# same contract as build_metrics.sh and build_svm.sh. First seen on the AMD
+# 0.8.0 release leg: this script was the one binding of 22 that did not build.
+if [ -n "${MOJOLEARN_SKIP_BUILD_GATE:-}" ] || [ "$(uname)" != "Darwin" ]; then
+    mkdir -p "$outdir"
+    mv "$out" "$outdir/_mojolearn_preprocessing.so"
+    echo "built $outdir/_mojolearn_preprocessing.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)"
+    exit 0
+fi
 "${MOJOLEARN_PYTHON:-python3}" - "$out" "$expected" <<'PY'
 import importlib.util
 import sys
