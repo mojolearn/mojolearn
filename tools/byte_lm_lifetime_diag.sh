@@ -148,6 +148,15 @@ cat "$OUT/binding_readback.txt"
 # outer timeout only protects the lease if the harness itself wedges.
 cases_arg=""
 [ -z "${BYTE_LM_LIFETIME_CASES:-}" ] || cases_arg="--cases $BYTE_LM_LIFETIME_CASES"
+# A native stack of a hung child is the datum the Python stacks cannot give
+# (run 3 and 4 on the RTX 4090 had neither tool). Best effort, root pod only:
+# gdb from apt, py-spy from pip into the pixi interpreter.
+if ! command -v gdb >/dev/null 2>&1 && command -v apt-get >/dev/null 2>&1; then
+    (apt-get update -qq && apt-get install -y -qq gdb) > "$OUT/gdb_install.log" 2>&1 || true
+fi
+pixi run python3 -m pip install -q py-spy > "$OUT/pyspy_install.log" 2>&1 || true
+export PATH="$ROOT/.pixi/envs/default/bin:$PATH"
+{ echo "gdb=$(command -v gdb || echo none)"; echo "py-spy=$(command -v py-spy || echo none)"; } >> "$OUT/status.txt"
 run_started=$(date +%s)
 MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH="$ROOT/python" PYTHONUNBUFFERED=1 \
     timeout -k 30 3000 pixi run python3 tools/byte_lm_lifetime_diag.py \
