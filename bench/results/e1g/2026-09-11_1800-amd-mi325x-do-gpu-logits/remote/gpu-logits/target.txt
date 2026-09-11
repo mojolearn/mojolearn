@@ -1,0 +1,4 @@
+vendor=amd
+gpu_archs=gfx942
+target_column=amd
+commit=652b93fe37513a61d4a073a9f968de120cb49564

@@ -1,0 +1,6 @@
+sweep: PASS: 1680/1680 comparisons equal (768 logits_resident, 96 logits_stateless, 768 next_bytes, 48 loss_bits) over 3 states, batch 1..8, length 1..32, 256 byte values, vendor hip
+sweep: gpu logits sha256 initial 6db55997f1e4d1e9aa08bfaf082ebe48c1b03eec121ebaf6ddf3a0bdbad7e61f
+sweep: gpu logits sha256 step000064 30a89281f2daac140dc9fb440b4476dfe53dd3dcfd5dc4746a84a6fc74ee26f5
+sweep: gpu logits sha256 final b518e71ecf5ac01e743f5d5b46df6687e9eefa80a9d627580162305a083f70b2
+sweep: digests equal the CPU sweep: True
+sweep: negative control: {'states': ['initial', 'step000064'], 'seed': 2641, 'batch': 2, 'length': 32, 'differ': True}
