@@ -369,6 +369,59 @@ No AMD timing of this step exists at the target shape.
      refuses; the ridge is pinned by the Cholesky profile). No rerun owed for
      these callers; the ones ksplit can take (kernel matrices at d >= 129,
      GMM E-step, Nystroem, RBFSampler, linalg GEMM) still owe an A/B.
+0f. RUNPOD NVIDIA ONLY, 2026-09-11 ~18:20Z onward (Andrew: "lets do everything
+   on runpod with nvidia and run our comparisons there"; ~19:30Z "no new agents
+   for now", so the orchestrator runs merges, gates and legs itself).
+   - **zdot arms MERGED 6d4bd867** (DEVIATION 2598 `_zdefer`, `_zlag`, trial
+     only). H100 leg bench/results/e1g/2026-09-11_185833-nvidia-h100-80gb-hbm3-attention-zdot
+     (1980 MHz pod, card IDENTICAL, every witness equal) against the NVIDIA
+     default `stash_tiled_fgrid_r32_qres_pf` (0.2929 / 0.2926 s):
+     `_kvgrid_r32` geomean 0.9908 (0.2900 / 0.2901 s), `_zlag_kvgrid_r32`
+     0.9902, `_zlag` 0.9968, `_kvsplit` NO FLIP 1.0131. The zdot phase stays
+     5.5 ms per call under `_zlag`, so 2598 does not move NVIDIA; dk/dv goes
+     from 1.0 to 0.8 ms per call. Brief section 19.
+   - **NVIDIA attention default flipped to `stash_tiled_fgrid_r32_qres_pf_kvgrid_r32`,
+     pushed 272011ae** (word 52327, the word AMD already ships, so no new
+     shipped kernel). `_zlag_kvgrid_r32` stays trial only: its gain is inside
+     the noise of `_kvgrid_r32` and it would add a kernel to every shipped
+     build. **Same-pod confirmation** (bench/results/e1g/2026-09-11_193203-nvidia-h100-80gb-hbm3-kv-default-torch,
+     1980 MHz, commit 272011ae): shipped check names word 52327 with the
+     r2 dk/dv kernel, witnesses equal, step 0.2941 / 0.2940 -> 0.2919 / 0.2906 s.
+     Torch on the same pod: ours = 14.5x compile_bf16 (enwik8), 9.1x
+     compile_tf32, 4.8x eager_fp32 (bench/OPPONENT_REFERENCE.md).
+   - **Where the NVIDIA step stands.** 0.565 -> 0.383 -> 0.295 -> 0.290 s over
+     the day; the last round of three lanes gave 1 percent and six of the last
+     eight trial arms were flat or slower. What remains is kernel arithmetic
+     (GEMM 48 percent, attention 39 percent), so small-step tuning here has
+     stopped paying; the next move is Andrew's call.
+   - **Step breakdown MERGED, pushed c8b9cba7** (DEVIATION 2630, timers only).
+     H100 leg bench/results/e1g/2026-09-11_190725-nvidia-h100-80gb-hbm3-step-breakdown,
+     bits identical with timers compiled in, off and on; both bindings build
+     on the box. Per step GEMM 145 ms (48%), attention kernels 116 ms (39%),
+     scans 6.4, RMSNorm forward 6.1, AdamW 4.0, nothing else over 3 ms. The
+     52.9 ms that looked unmeasured inside the backward blocks is GEMM. **The
+     next NVIDIA target is GEMM.** The lane's Mac binding build command could
+     never run (tools/macos_serial_guard.py admits tiny jobs only); fixed in
+     the briefs; binding builds are proven on the GPU box.
+   - **GEMM kernel arms MERGED e6ffb6f4** (DEVIATION 2599 `kpack`,
+     `kpack_wide`, trial only). The first M4 build refused a 12-wide SIMD
+     (`kpack_wide` at K step 12 staged B in 3 slots of 4); the fix pads the
+     staging register to a power of two (brief section 11). **H100 leg
+     bench/results/e1g/2026-09-11_191151-nvidia-h100-80gb-hbm3-gemm-kernel:
+     NO FLIP, both slower.** Card IDENTICAL, every witness and every call's
+     bits equal, reach 117/117. Lean step `kpack` geomean 1.2436, `kpack_wide`
+     1.3982; GEMM per step 143 to 216 and 257 ms; saturated calls fall from
+     about 11.3 to 7.2 and 6.3 TFLOP/s with the same 255 registers and one
+     block per SM. The NVIDIA GEMM plan stays ksplit(S=132) else tuned128.
+     Brief section 12. Per-step loads from a packed page look dearer than the
+     per-window register copies they replace (a reading, not measured).
+   - SVC on CUDA above 512 rows is fixed by the trees session (DEVIATION
+     2623, merged f7a10cd9).
+   - Owed, not started: a next GEMM arm that keeps per-window register
+     staging (C1 and C5 of the GEMM kernel brief remain); AMD shipped-binding
+     confirmation for kvgrid_r32 (waits for Andrew, NVIDIA only now); H100 SVC
+     ksplit A/B; a clean 1x MI300X torch ROCm row.
+
 1. The DigitalOcean runner is merged and its dry run is green (section 3);
    its first paid run is also its bring-up. Tuning on AMD is now a repo rule
    for every lane (ENGINEERING_RULES.md section 10), and the account allows

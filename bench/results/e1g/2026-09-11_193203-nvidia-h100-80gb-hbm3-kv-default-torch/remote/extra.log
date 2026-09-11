@@ -1,0 +1,220 @@
+TABLE kind=file:operands-enwik8 shape=B1_L2048_nh12_nkv12_hd64_win0 column=nvidia default_arm=stash_tiled_fgrid_r32_qres_pf_kvgrid_r32 visible_cells=25178112 (useful flops: fwd 4*cells*hd, bwd 10*cells*hd; executed multiplier of the shipped kernels: fwd dots 3 of 2 contractions, bwd dots 6 of 5)
+TABLE arm | fwd median ms | fwd useful TFLOP/s | fwd+bwd median ms | bwd (derived) ms | bwd useful TFLOP/s | fwd ratio | fwd+bwd ratio
+TABLE stash_tiled_fgrid_r32_qres_pf | 1.856634 | 3.471657134362508 | 9.593151 | 7.736517000000001 | 2.082848351525628 | 1.0 | 1.0
+TABLE stash_tiled_fgrid_r32_qres_pf_kvgrid_r32 | 1.848143 | 3.4876071126530794 | 9.371474 | 7.523330999999999 | 2.141869296990921 | 1.0045943414551795 | 1.0236544432604733
+TABLE kind=file:operands-pilegithub shape=B1_L2048_nh12_nkv12_hd64_win0 column=nvidia default_arm=stash_tiled_fgrid_r32_qres_pf_kvgrid_r32 visible_cells=25178112 (useful flops: fwd 4*cells*hd, bwd 10*cells*hd; executed multiplier of the shipped kernels: fwd dots 3 of 2 contractions, bwd dots 6 of 5)
+TABLE arm | fwd median ms | fwd useful TFLOP/s | fwd+bwd median ms | bwd (derived) ms | bwd useful TFLOP/s | fwd ratio | fwd+bwd ratio
+TABLE stash_tiled_fgrid_r32_qres_pf | 1.849575 | 3.4849068959085194 | 9.597275 | 7.7477 | 2.0798419763284586 | 1.0 | 1.0
+TABLE stash_tiled_fgrid_r32_qres_pf_kvgrid_r32 | 1.856335 | 3.4722163144044584 | 9.383461 | 7.527126000000001 | 2.140789416837183 | 0.9963584159109212 | 1.0227862619133814
+BITS hashed stash_tiled_fgrid_r32_qres_pf_kvgrid_r32+sabotage_new_vs_stash_tiled_fgrid_r32_qres_pf ctx MOVED 1218822 of 1572864
+BITS hashed stash_tiled_fgrid_r32_qres_pf_kvgrid_r32+sabotage_new_vs_stash_tiled_fgrid_r32_qres_pf amax MOVED 14352 of 24576
+BITS hashed stash_tiled_fgrid_r32_qres_pf_kvgrid_r32+sabotage_new_vs_stash_tiled_fgrid_r32_qres_pf denom MOVED 15187 of 24576
+BITS hashed stash_tiled_fgrid_r32_qres_pf_kvgrid_r32+sabotage_new_vs_stash_tiled_fgrid_r32_qres_pf zdot MOVED 22086 of 24576
+BITS hashed stash_tiled_fgrid_r32_qres_pf_kvgrid_r32+sabotage_new_vs_stash_tiled_fgrid_r32_qres_pf dq MOVED 1281154 of 1572864
+BITS hashed stash_tiled_fgrid_r32_qres_pf_kvgrid_r32+sabotage_new_vs_stash_tiled_fgrid_r32_qres_pf dk MOVED 1372506 of 1572864
+BITS hashed stash_tiled_fgrid_r32_qres_pf_kvgrid_r32+sabotage_new_vs_stash_tiled_fgrid_r32_qres_pf dv MOVED 1173396 of 1572864
+BITS hashed stash_tiled_fgrid_r32_qres_pf_kvgrid_r32+sabotage_kv_vs_stash_tiled_fgrid_r32_qres_pf dk MOVED 1388284 of 1572864
+BITS hashed stash_tiled_fgrid_r32_qres_pf_kvgrid_r32+sabotage_kv_vs_stash_tiled_fgrid_r32_qres_pf dv MOVED 1231330 of 1572864
+REACH_KV hashed stash_tiled_fgrid_r32_qres_pf_kvgrid_r32 sabotage_flipped_cells=2619614 reach_bit=stash_tiled_fgrid_r32_qres_pf_kvgrid_r32+sabotage_kv dk_moved=1388284 dv_moved=1231330 zdot_moved=0 dq_moved=0 forward_moved=0
+REACH hashed stash_tiled_fgrid_r32_qres_pf_kvgrid_r32 sabotage_flipped_cells=5097503 clean_restored=True reach_bit=stash_tiled_fgrid_r32_qres_pf_kvgrid_r32+sabotage_new forward_moved=1248361 backward_moved=3849142 amax_denom_moved=29539 ctx_moved_columns_16_up=912964 zdot_moved=22086 dv_moved=1173396 zdot_moved_even_rows=11078 zdot_moved_odd_rows=11008
+BITS heavytail stash_tiled_fgrid_r32_qres_pf_kvgrid_r32+sabotage_new_vs_stash_tiled_fgrid_r32_qres_pf ctx MOVED 1319012 of 1572864
+BITS heavytail stash_tiled_fgrid_r32_qres_pf_kvgrid_r32+sabotage_new_vs_stash_tiled_fgrid_r32_qres_pf amax MOVED 14424 of 24576
+BITS heavytail stash_tiled_fgrid_r32_qres_pf_kvgrid_r32+sabotage_new_vs_stash_tiled_fgrid_r32_qres_pf denom MOVED 17032 of 24576
+BITS heavytail stash_tiled_fgrid_r32_qres_pf_kvgrid_r32+sabotage_new_vs_stash_tiled_fgrid_r32_qres_pf zdot MOVED 22764 of 24576
+BITS heavytail stash_tiled_fgrid_r32_qres_pf_kvgrid_r32+sabotage_new_vs_stash_tiled_fgrid_r32_qres_pf dq MOVED 1195083 of 1572864
+BITS heavytail stash_tiled_fgrid_r32_qres_pf_kvgrid_r32+sabotage_new_vs_stash_tiled_fgrid_r32_qres_pf dk MOVED 1408959 of 1572864
+BITS heavytail stash_tiled_fgrid_r32_qres_pf_kvgrid_r32+sabotage_new_vs_stash_tiled_fgrid_r32_qres_pf dv MOVED 1317301 of 1572864
+BITS heavytail stash_tiled_fgrid_r32_qres_pf_kvgrid_r32+sabotage_kv_vs_stash_tiled_fgrid_r32_qres_pf dk MOVED 1379904 of 1572864
+BITS heavytail stash_tiled_fgrid_r32_qres_pf_kvgrid_r32+sabotage_kv_vs_stash_tiled_fgrid_r32_qres_pf dv MOVED 1306569 of 1572864
+REACH_KV heavytail stash_tiled_fgrid_r32_qres_pf_kvgrid_r32 sabotage_flipped_cells=2686473 reach_bit=stash_tiled_fgrid_r32_qres_pf_kvgrid_r32+sabotage_kv dk_moved=1379904 dv_moved=1306569 zdot_moved=0 dq_moved=0 forward_moved=0
+REACH heavytail stash_tiled_fgrid_r32_qres_pf_kvgrid_r32 sabotage_flipped_cells=5294575 clean_restored=True reach_bit=stash_tiled_fgrid_r32_qres_pf_kvgrid_r32+sabotage_new forward_moved=1350468 backward_moved=3944107 amax_denom_moved=31456 ctx_moved_columns_16_up=989046 zdot_moved=22764 dv_moved=1317301 zdot_moved_even_rows=11414 zdot_moved_odd_rows=11350
+attention_step_price: PASS (stash_tiled_fgrid_r32_qres_pf_kvgrid_r32 vs stash_tiled_fgrid_r32_qres_pf)
+BITS file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf_kvgrid_r32+sabotage_new_vs_stash_tiled_fgrid_r32_qres_pf ctx MOVED 857282 of 1572864
+BITS file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf_kvgrid_r32+sabotage_new_vs_stash_tiled_fgrid_r32_qres_pf amax MOVED 16316 of 24576
+BITS file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf_kvgrid_r32+sabotage_new_vs_stash_tiled_fgrid_r32_qres_pf denom MOVED 12712 of 24576
+BITS file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf_kvgrid_r32+sabotage_new_vs_stash_tiled_fgrid_r32_qres_pf zdot MOVED 21014 of 24576
+BITS file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf_kvgrid_r32+sabotage_new_vs_stash_tiled_fgrid_r32_qres_pf dq MOVED 1411791 of 1572864
+BITS file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf_kvgrid_r32+sabotage_new_vs_stash_tiled_fgrid_r32_qres_pf dk MOVED 1453564 of 1572864
+BITS file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf_kvgrid_r32+sabotage_new_vs_stash_tiled_fgrid_r32_qres_pf dv MOVED 1058201 of 1572864
+BITS file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf_kvgrid_r32+sabotage_kv_vs_stash_tiled_fgrid_r32_qres_pf dk MOVED 1303215 of 1572864
+BITS file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf_kvgrid_r32+sabotage_kv_vs_stash_tiled_fgrid_r32_qres_pf dv MOVED 1159315 of 1572864
+REACH_KV file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf_kvgrid_r32 sabotage_flipped_cells=2462530 reach_bit=stash_tiled_fgrid_r32_qres_pf_kvgrid_r32+sabotage_kv dk_moved=1303215 dv_moved=1159315 zdot_moved=0 dq_moved=0 forward_moved=0
+REACH file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf_kvgrid_r32 sabotage_flipped_cells=4830880 clean_restored=True reach_bit=stash_tiled_fgrid_r32_qres_pf_kvgrid_r32+sabotage_new forward_moved=886310 backward_moved=3944570 amax_denom_moved=29028 ctx_moved_columns_16_up=644351 zdot_moved=21014 dv_moved=1058201 zdot_moved_even_rows=10559 zdot_moved_odd_rows=10455
+BITS file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf_kvgrid_r32+sabotage_new_vs_stash_tiled_fgrid_r32_qres_pf ctx MOVED 849951 of 1572864
+BITS file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf_kvgrid_r32+sabotage_new_vs_stash_tiled_fgrid_r32_qres_pf amax MOVED 16133 of 24576
+BITS file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf_kvgrid_r32+sabotage_new_vs_stash_tiled_fgrid_r32_qres_pf denom MOVED 12833 of 24576
+BITS file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf_kvgrid_r32+sabotage_new_vs_stash_tiled_fgrid_r32_qres_pf zdot MOVED 21192 of 24576
+BITS file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf_kvgrid_r32+sabotage_new_vs_stash_tiled_fgrid_r32_qres_pf dq MOVED 1405497 of 1572864
+BITS file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf_kvgrid_r32+sabotage_new_vs_stash_tiled_fgrid_r32_qres_pf dk MOVED 1442892 of 1572864
+BITS file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf_kvgrid_r32+sabotage_new_vs_stash_tiled_fgrid_r32_qres_pf dv MOVED 1027539 of 1572864
+BITS file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf_kvgrid_r32+sabotage_kv_vs_stash_tiled_fgrid_r32_qres_pf dk MOVED 1300949 of 1572864
+BITS file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf_kvgrid_r32+sabotage_kv_vs_stash_tiled_fgrid_r32_qres_pf dv MOVED 1141578 of 1572864
+REACH_KV file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf_kvgrid_r32 sabotage_flipped_cells=2442527 reach_bit=stash_tiled_fgrid_r32_qres_pf_kvgrid_r32+sabotage_kv dk_moved=1300949 dv_moved=1141578 zdot_moved=0 dq_moved=0 forward_moved=0
+REACH file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf_kvgrid_r32 sabotage_flipped_cells=4776037 clean_restored=True reach_bit=stash_tiled_fgrid_r32_qres_pf_kvgrid_r32+sabotage_new forward_moved=878917 backward_moved=3897120 amax_denom_moved=28966 ctx_moved_columns_16_up=637501 zdot_moved=21192 dv_moved=1027539 zdot_moved_even_rows=10634 zdot_moved_odd_rows=10558
+attention_step_price: PASS (stash_tiled_fgrid_r32_qres_pf_kvgrid_r32 vs stash_tiled_fgrid_r32_qres_pf)
+RESOURCES_DEVICE column=nvidia source_counts=per_thread_hd64
+RESOURCES_BEGIN label=zdot_stash_pf rows=4 keys_per_iteration=32 accumulators_per_thread=2 operand_registers_per_thread=4 thread_local_floats=64 page_bytes=17696 allocations=4 threads_per_block=256
+RESOURCES label=zdot_stash_pf regs=134
+RESOURCES label=zdot_stash_pf local=0
+RESOURCES label=zdot_stash_pf shared=17696
+RESOURCES label=zdot_stash_pf const=0
+RESOURCES label=zdot_stash_pf max_threads=384
+RESOURCES label=zdot_stash_pf blocks_per_sm_256=1
+RESOURCES_BEGIN label=zdot_zdefer_pf rows=4 keys_per_iteration=32 accumulators_per_thread=2 operand_registers_per_thread=4 thread_local_floats=64 page_bytes=17696 allocations=4 threads_per_block=256
+RESOURCES label=zdot_zdefer_pf regs=152
+RESOURCES label=zdot_zdefer_pf local=0
+RESOURCES label=zdot_zdefer_pf shared=17696
+RESOURCES label=zdot_zdefer_pf const=0
+RESOURCES label=zdot_zdefer_pf max_threads=384
+RESOURCES label=zdot_zdefer_pf blocks_per_sm_256=1
+RESOURCES_BEGIN label=zdot_zlag_pf rows=4 keys_per_iteration=32 accumulators_per_thread=2 operand_registers_per_thread=4 thread_local_floats=64 page_bytes=17696 allocations=4 threads_per_block=256
+RESOURCES label=zdot_zlag_pf regs=165
+RESOURCES label=zdot_zlag_pf local=0
+RESOURCES label=zdot_zlag_pf shared=17696
+RESOURCES label=zdot_zlag_pf const=0
+RESOURCES label=zdot_zlag_pf max_threads=384
+RESOURCES label=zdot_zlag_pf blocks_per_sm_256=1
+RESOURCES_BEGIN label=dq_tiled_pf rows=64 keys_per_tile=16 accumulators_per_thread=16 operand_registers_per_thread=5 thread_local_floats=0 page_bytes=8448 allocations=3 threads_per_block=256
+RESOURCES label=dq_tiled_pf regs=118
+RESOURCES label=dq_tiled_pf local=0
+RESOURCES label=dq_tiled_pf shared=8448
+RESOURCES label=dq_tiled_pf const=0
+RESOURCES label=dq_tiled_pf max_threads=512
+RESOURCES label=dq_tiled_pf blocks_per_sm_256=2
+RESOURCES_BEGIN label=dkdv_recompute keys=4 queries_per_iteration=32 accumulators_per_thread=3 operand_registers_per_thread=4 thread_local_floats=64 page_bytes=17696 allocations=4 threads_per_block=256
+RESOURCES label=dkdv_recompute regs=135
+RESOURCES label=dkdv_recompute local=0
+RESOURCES label=dkdv_recompute shared=17696
+RESOURCES label=dkdv_recompute const=0
+RESOURCES label=dkdv_recompute max_threads=384
+RESOURCES label=dkdv_recompute blocks_per_sm_256=1
+RESOURCES_BEGIN label=dkdv_tiled keys=64 queries_per_tile=16 accumulators_per_thread=32 operand_registers_per_thread=10 thread_local_floats=0 page_bytes=16384 allocations=4 threads_per_block=256
+RESOURCES label=dkdv_tiled regs=106
+RESOURCES label=dkdv_tiled local=0
+RESOURCES label=dkdv_tiled shared=16384
+RESOURCES label=dkdv_tiled const=0
+RESOURCES label=dkdv_tiled max_threads=512
+RESOURCES label=dkdv_tiled blocks_per_sm_256=2
+RESOURCES_BEGIN label=dkdv_tiled_pf keys=64 queries_per_tile=16 accumulators_per_thread=32 operand_registers_per_thread=10 thread_local_floats=0 page_bytes=16384 allocations=4 threads_per_block=256
+RESOURCES label=dkdv_tiled_pf regs=106
+RESOURCES label=dkdv_tiled_pf local=0
+RESOURCES label=dkdv_tiled_pf shared=16384
+RESOURCES label=dkdv_tiled_pf const=0
+RESOURCES label=dkdv_tiled_pf max_threads=512
+RESOURCES label=dkdv_tiled_pf blocks_per_sm_256=2
+RESOURCES_BEGIN label=kvgrid_r64 keys=64 queries_per_tile=16 accumulators_per_thread=32 operand_registers_per_thread=10 thread_local_floats=0 page_bytes=16384 allocations=4 threads_per_block=256
+RESOURCES label=kvgrid_r64 regs=106
+RESOURCES label=kvgrid_r64 local=0
+RESOURCES label=kvgrid_r64 shared=16384
+RESOURCES label=kvgrid_r64 const=0
+RESOURCES label=kvgrid_r64 max_threads=512
+RESOURCES label=kvgrid_r64 blocks_per_sm_256=2
+RESOURCES_BEGIN label=kvgrid_r32 keys=32 queries_per_tile=16 accumulators_per_thread=16 operand_registers_per_thread=10 thread_local_floats=0 page_bytes=12288 allocations=4 threads_per_block=256
+RESOURCES label=kvgrid_r32 regs=63
+RESOURCES label=kvgrid_r32 local=0
+RESOURCES label=kvgrid_r32 shared=12288
+RESOURCES label=kvgrid_r32 const=0
+RESOURCES label=kvgrid_r32 max_threads=1024
+RESOURCES label=kvgrid_r32 blocks_per_sm_256=4
+RESOURCES_BEGIN label=kvsplit_r64_fold keys=64 queries_per_tile=16 accumulators_per_thread=16 operand_registers_per_thread=5 thread_local_floats=0 page_bytes=8192 allocations=2 threads_per_block=256
+RESOURCES label=kvsplit_r64_fold regs=79
+RESOURCES label=kvsplit_r64_fold local=0
+RESOURCES label=kvsplit_r64_fold shared=8192
+RESOURCES label=kvsplit_r64_fold const=0
+RESOURCES label=kvsplit_r64_fold max_threads=768
+RESOURCES label=kvsplit_r64_fold blocks_per_sm_256=3
+RESOURCES_BEGIN label=kvsplit_r32_fold keys=32 queries_per_tile=16 accumulators_per_thread=8 operand_registers_per_thread=5 thread_local_floats=0 page_bytes=6144 allocations=2 threads_per_block=256
+RESOURCES label=kvsplit_r32_fold regs=48
+RESOURCES label=kvsplit_r32_fold local=0
+RESOURCES label=kvsplit_r32_fold shared=6144
+RESOURCES label=kvsplit_r32_fold const=0
+RESOURCES label=kvsplit_r32_fold max_threads=1024
+RESOURCES label=kvsplit_r32_fold blocks_per_sm_256=5
+RESOURCES_DONE
+build-price	0	55s
+build-arms-check	0	51s
+arms-check	0	2s
+build-shipped-fused-check	0	41s
+shipped-fused-check	0	1s
+smoke-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32	0	2s
+build-binding-base	0	47s
+build-binding-byte-lm	0	101s
+corpus-enwik8	0	6s
+corpus-pile-github	0	19s
+dump-enwik8	0	195s
+dump-pilegithub	0	69s
+price-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32	0	3s
+lm-stash_tiled_fgrid_r32_qres_pf-enwik8	0	92s
+lmtiming-stash_tiled_fgrid_r32_qres_pf-enwik8	0	43s
+lm-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-enwik8	0	80s
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-enwik8	0	76s
+lm-stash_tiled_fgrid_r32_qres_pf-pilegithub	0	82s
+lmtiming-stash_tiled_fgrid_r32_qres_pf-pilegithub	0	62s
+lm-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-pilegithub	0	103s
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-pilegithub	0	44s
+---- vendor=nvidia
+== date 2026-09-11T19:56:39Z
+name, driver_version, compute_cap, uuid, clocks.current.sm [MHz], temperature.gpu
+NVIDIA H100 80GB HBM3, 580.126.09, 9.0, GPU-e811b963-bdba-20c7-497c-302112d9b6b0, 1980 MHz, 39
+Fri Sep 11 19:56:39 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 580.126.09             Driver Version: 580.126.09     CUDA Version: 13.0     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA H100 80GB HBM3          On  |   00000000:19:00.0 Off |                    0 |
+| N/A   39C    P0            127W /  700W |       0MiB /  81559MiB |      0%      Default |
+|                                         |                        |             Disabled |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+---- versions (/usr/bin/python3)
+python 3.11.10 /usr/bin/python3
+torch 2.4.1+cu124
+torch.version.cuda 12.4
+torch.version.hip None
+cuda api available True
+device NVIDIA H100 80GB HBM3 capability (9, 0)
+cudnn/miopen 90100
+cuda bf16 supported True
+numpy 1.26.3
+---- summary
+column	corpus	median_seconds	tokens_per_second	sdpa_selected	sdpa_observed
+eager_fp32	enwik8	0.061139	33497.4	efficient	efficient
+eager_fp32	pile_github	0.061364	33374.7	efficient	efficient
+eager_tf32	enwik8	0.038018	53868.7	efficient	efficient
+eager_tf32	pile_github	0.038030	53851.6	efficient	efficient
+eager_bf16	enwik8	0.040149	51009.5	torch_default	flash
+eager_bf16	pile_github	0.038060	53809.9	torch_default	flash
+compile_fp32	enwik8	0.057358	35705.7	efficient	efficient
+compile_fp32	pile_github	0.056894	35996.7	efficient	efficient
+compile_tf32	enwik8	0.031983	64033.4	efficient	efficient
+compile_tf32	pile_github	0.031920	64160.5	efficient	efficient
+compile_bf16	enwik8	0.020170	101535.3	torch_default	flash
+compile_bf16	pile_github	0.023555	86943.9	torch_default	flash
+---- status
+torch-python	0	2s
+torch-pin	0	1s
+corpus-enwik8	0	0s
+corpus-pile-github	0	1s
+eager_fp32-enwik8	0	10s
+eager_fp32-pile_github	0	8s
+eager_tf32-enwik8	0	7s
+eager_tf32-pile_github	0	9s
+eager_bf16-enwik8	0	9s
+eager_bf16-pile_github	0	8s
+compile_fp32-enwik8	0	27s
+compile_fp32-pile_github	0	23s
+compile_tf32-enwik8	0	24s
+compile_tf32-pile_github	0	23s
+compile_bf16-enwik8	0	28s
+compile_bf16-pile_github	0	27s
+summary	0	0s

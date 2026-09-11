@@ -361,6 +361,37 @@ default already `ksplit`) ran 0.3414 / 0.3409 s. Every torch column is
 nondeterministic by label; ours is bitwise identical across Apple, NVIDIA
 and AMD.
 
+#### Same pod, after the NVIDIA dk/dv flip (2026-09-11 19:32Z)
+
+Source: `bench/results/e1g/2026-09-11_193203-nvidia-h100-80gb-hbm3-kv-default-torch/remote/`
+(`attention-step/lm_summary.tsv`, `torch-lm-step/summary.tsv`), RunPod pod
+2zjzt53vh0tpz1, driver 580.126.09 (1980 MHz clock reading), commit 272011ae,
+same harness, shape, init, AdamW, clock and corpora as the tables above. OUR
+IDENTICAL arm is the shipped NVIDIA default at that commit: GEMM `ksplit`
+(DEVIATION 2595) and attention `stash_tiled_fgrid_r32_qres_pf_kvgrid_r32`
+(DEVIATIONS 2534 and 2597), named by the shipped fused check on the pod
+(`DEFAULT column=nvidia ... word=52327`, `is_default=True`, dk/dv
+`fused_bwd_dkdv_r2_kernel[64,32]`). Every step witness equals the previous
+default's on both corpora. Operand dumps are outside the repository in
+`~/mojolearn-evidence/` under the same leg name. SDPA observed: `efficient`
+for the float32 columns, `flash` for the bf16 columns.
+
+| column | enwik8 s | Pile GitHub s | our IDENTICAL / column (enwik8, Pile GitHub) |
+|---|---|---|---|
+| compile_bf16 (their fastest measured) | 0.02017 | 0.02355 | 14.47x, 12.34x |
+| compile_tf32 | 0.03198 | 0.03192 | 9.13x, 9.10x |
+| eager_tf32 | 0.03802 | 0.03803 | 7.68x, 7.64x |
+| eager_bf16 | 0.04015 | 0.03806 | 7.27x, 7.64x |
+| compile_fp32 | 0.05736 | 0.05689 | 5.09x, 5.11x |
+| eager_fp32 | 0.06114 | 0.06136 | 4.77x, 4.74x |
+| ours IDENTICAL (shipped defaults, bits equal on every vendor) | 0.2919 | 0.2906 | 1 |
+
+On the same pod the previous attention default (`stash_tiled_fgrid_r32_qres_pf`)
+ran 0.2941 / 0.2940 s, so the flip is 0.9925 / 0.9884 here (0.9908 on the
+zdot leg's pod). compile_bf16 on Pile GitHub (0.02355) sits 1.17x above its
+enwik8 cell and 1.13x above the 16:41Z pod's 0.02085; quote the enwik8 cell as
+their fastest. Every torch column is nondeterministic by label.
+
 ### kNN second kind (HIGGS rows)
 
 Every kNN row above is dyadic-v1, a generator, and the gate's `large`

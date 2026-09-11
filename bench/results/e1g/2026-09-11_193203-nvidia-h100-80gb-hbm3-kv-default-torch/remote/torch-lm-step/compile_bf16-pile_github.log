@@ -1,0 +1,10 @@
+{"event": "warmup", "step_index": 0, "seconds": 17.365032493136823, "loss": 11.120920181274414, "ids_sha256": "7626015c8a8cb90b13e0d44eff53262a36025184a4adfb88591a93ba18857518"}
+{"event": "warmup", "step_index": 1, "seconds": 0.049047600477933884, "loss": 8.36862850189209, "ids_sha256": "e3243c9e1a96ab00d87299616d5c9ad1664c577266d456056e2cbf1a9687624d", "profiled": true}
+{"event": "step", "step_index": 2, "seconds": 0.020255981013178825, "loss": 14.818099975585938, "ids_sha256": "a107e1251c51b4f925b78e3999e73d4e1ed1ee7eb9a809ae29c3180a5d55d2d1"}
+{"event": "step", "step_index": 3, "seconds": 0.02071826159954071, "loss": 9.701723098754883, "ids_sha256": "83cf870838988438412d6aa1b6dc8fca4eb3b9304adab782abd2131328806367"}
+{"event": "step", "step_index": 4, "seconds": 0.02250394131988287, "loss": 24.941429138183594, "ids_sha256": "9831f135e7303a58bf21d426e312b98da26604c4349652e4e51e85b0d3625b32"}
+{"event": "step", "step_index": 5, "seconds": 0.023555406369268894, "loss": 10.014162063598633, "ids_sha256": "4adcd4f5496c529d8716a8617755e453b28ac79e01fb36a35b62abcce780259d"}
+{"event": "step", "step_index": 6, "seconds": 0.024096532724797726, "loss": 21.422821044921875, "ids_sha256": "69d4ac11d6bc4325ea912950e4036a7737c26a80e57d3501848cbbe331b6df8b"}
+{"event": "step", "step_index": 7, "seconds": 0.024695618078112602, "loss": 25.559459686279297, "ids_sha256": "0f94cde0e869ae9770c5d74d4ddfc0871fb48ceef08c76e78a32507f484d5686"}
+{"event": "step", "step_index": 8, "seconds": 0.024407892487943172, "loss": 21.831058502197266, "ids_sha256": "36db857be1576a9c331c422940afbc7072d8460c3fc30fa0c4daece4abff10c9"}
+{"event": "result", "column": "compile_bf16", "corpus": "pile_github", "shape": "target", "median_seconds": 0.023555406369268894, "tokens_per_second": 86943.94687547754, "sdpa_backend": "torch_default", "sdpa_observed": "flash", "torch": "2.4.1+cu124", "torch_build": "cuda", "out": "/root/gemm_leg_out/torch-lm-step/compile_bf16-pile_github.json"}
