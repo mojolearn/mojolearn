@@ -3,7 +3,7 @@
 """k-means on the GPU, mirroring cuVS."""
 
 from . import _mojolearn
-from ._buffer import addr, addr_ro, as_f32_c, empty, frombytes, zeros
+from ._buffer import addr, addr_ro, as_f32_c, empty, zeros
 from ._mode import NumericModeMixin
 
 INIT_KMEANS_PLUS_PLUS = 0
@@ -140,7 +140,13 @@ class KMeans(NumericModeMixin):
             centers = c0.copy()
         else:
             centers = zeros((self.n_clusters, d), "<f4")
-        labels = empty((n,), "<u4")
+        # DEVIATION 2672: ALLOCATED AS THE ATTRIBUTE'S OWN DTYPE. The kernel
+        # writes uint32 cluster ids and every id is below 2**31, so int32 is
+        # the same bytes; allocating int32 here lets the kernel write the
+        # array the caller keeps. It used to be `<u4` and `labels_` was then
+        # `frombytes(labels.tobytes(), "<i4", (n,))`, two host copies of the
+        # label vector per fit (16 MB each at 4,000,000 rows).
+        labels = empty((n,), "<i4")
 
         if sample_weight is None:
             n_weights = 0
@@ -175,10 +181,12 @@ class KMeans(NumericModeMixin):
 
         self.cluster_centers_ = centers
         # The kernel writes uint32 cluster ids; scikit-learn's attribute is
-        # signed. Every id is below 2**31, so int32 is the SAME BYTES: one
-        # memcpy through `frombytes`, no Python loop (it was
-        # `labels.astype(np.int32)`, DEVIATION 2369).
-        self.labels_ = frombytes(labels.tobytes(), "<i4", (n,))
+        # signed. Every id is below 2**31, so int32 is the SAME BYTES, and
+        # since DEVIATION 2672 the array the kernel wrote IS that int32
+        # array (it was `<u4` plus `frombytes(labels.tobytes(), "<i4")`,
+        # two host copies per fit; before that a `labels.astype(np.int32)`
+        # Python loop, DEVIATION 2369).
+        self.labels_ = labels
         self.inertia_ = inertia
         self.n_iter_ = n_iter
         self.sum_scale_ = sum_scale

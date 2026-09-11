@@ -1886,6 +1886,29 @@ def prepare_cuml_labels(data):
 # The runner. Arms ALTERNATE; they never run in blocks.
 # --------------------------------------------------------------------------
 
+def prepare_anomaly_labels(lane, data):
+    """The iforest lane on a labeled dataset (taxi, Istella-S; ENGINEERING_RULES.md
+    section 9, lane forest-speed 2026-09-11). Neither has planted anomalies, so
+    the AUC column is a PROXY: the anomaly score against the training set's
+    minority class on the test rows (taxi: no 20% tip, about 24%; Istella-S:
+    relevance above 0, about 11%). It checks that two forests rank the same
+    rows alike; it is not a detection-quality claim. The fixture lane keeps
+    its planted labels."""
+    if lane != "iforest" or getattr(data, "y_anom", None) is not None:
+        return
+    if data.task != "binary":
+        raise SystemExit("iforest on %r needs a binary dataset for the proxy "
+                         "AUC; use taxi, istella or anomaly" % data.name)
+    positive_share = float(np.mean(np.asarray(data.y_train) > 0.5))
+    minority = 1.0 if positive_share <= 0.5 else 0.0
+    data.y_anom = (np.asarray(data.y_test) > 0.5).astype(np.float32)
+    if minority == 0.0:
+        data.y_anom = (1.0 - data.y_anom).astype(np.float32)
+    emit_note(lane, ["*"], "auc", positive_share,
+              "proxy AUC: anomaly score against the minority class (label %d) "
+              "of %s, no planted anomalies" % (int(minority), data.name))
+
+
 def dataset_scale(data):
     """Visible workload heuristic, not a performance acceptance criterion."""
     rows, features = data.X_train.shape

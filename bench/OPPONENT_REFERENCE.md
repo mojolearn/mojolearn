@@ -1235,6 +1235,40 @@ about 810 to 1805 ms) and changes its taxi model (logloss 0.525668 to
 0.525925); greedy bits and times do not move. Every pointwise time and
 verdict in this file was measured before it.
 
+What 2624 cost can be won back, but NOT with 2624's bits (lane
+pointwise-speed, 2026-09-11 night, RunPod H100 `eqxtzdcpctpnkh`).
+**DEVIATION 2669 is impossible and the lane proved it rather than trying it:**
+a fixed-order fold of per-document-block partials is not the multiplier-1
+sequential sum, because each partial rounds without the other blocks'
+documents (float32 `x = (1e8, 1, -1e8, 1)`: sequential 1, two-block fold 2),
+and the only exact schedule chains the blocks and so serializes them.
+**DEVIATION 2670 (opt-in, `-D MOJOLEARN_2670_PW_PRIVATE_DOC_SLOTS=1`, NOT
+flipped, NOT merged)** takes the speed back with NEW bits: the multiplier is
+`EstimateBlockPerFeatureMultiplier` at a PINNED SM count (`PW_2670_PINNED_SM
+= 128`, never the device's), every document block stores into its own scratch
+slot, and one launch folds slots 0..M-1 onto `binSums` in block order, so
+there is no atomic and no dependence on `MULTIPROCESSOR_COUNT`. On the H100,
+IDENTICAL, both trees built on that pod and interleaved at the process level
+(three outer rounds, three timed rounds each, medians of nine): the opt-in
+pointwise arm on taxi 1M went 1803.3 to 795.4 ms (0.441x) with logloss
+0.525925 to 0.525668, while the greedy control held 309.3 to 308.9 ms
+(0.999x) at hash 90c3558501933f47. **The Istella-S 1M cell is RUN OWED**: the
+pod's Istella download was killed by its own timeout at 464 of 472 MB, the
+speed harness then fell back to its synthetic fixture and labeled the rows
+`shape=synthclf-720000x100`, and those rows were deleted rather than quoted.
+So 2670 has NO flip verdict: one dataset is not a result (section 9).
+Identity traces name where the new bits come from, 20-tree fits, main against
+2670: `onebyte` IDENTICAL at 182 of 182 stages (that family accumulates in
+Int32 fixed point, DEVIATION 93, so its cells fold exactly in any order),
+while `halfbyte`, `binary`, `mixed` and `wide220` all diverge at
+`tree001.depth00.hist`. Gates on the H100: `check-pointwise-identical-multiplier-2670`
+G1 (896 grids, the multiplier independent of `sm_count` at every one, 832 of
+them splitting) and G2 (55,290 cells bit-equal across sm 1/16/132/4096 and
+three repeats), plus `check-pointwise-dispatch-2670` F1-F7 on integer stats
+against a host tally. Merging it needs the Apple M4 and an AMD box first;
+evidence in `bench/results/pointwise_speed_2026-09-11/README.md` on branch
+`lane/pointwise-speed`.
+
 Taxi, 1,000,000 training rows (2,000,000 for RF 2M), leg 1 (droplet
 599636038):
 
@@ -1592,3 +1626,157 @@ query tile. Evidence: `bench/results/knn_finish_2026-09-11/`.
 
 Ours before DEVIATION 2631 on the same pod, in the same races, was 22.14 ms
 (taxi) and 100.29 ms (Istella-S), so the ratios there were 2.49x and 1.93x.
+### H100 forests same-pod baseline, taxi and Istella-S (2026-09-11 night, lane forest-speed)
+
+Pod f2zzlf4dj4it1p (verified gone, HTTP 404), NVIDIA H100 80GB HBM3, driver
+580.126.09, GPU-539422f5-3a31-9491-3564-da52a8f316de, runpod/pytorch:2.4.0-py3.11-cuda12.4.1
+container, Intel Xeon Platinum 8480+ (224 logical CPUs visible, cgroup quota
+23.8 CPUs, joblib cpu_count 24). Source 36ca51fd (main), IDENTICAL tier, the
+setup-built bindings plus the svm extension. Same process, arms alternating,
+1 warm-up plus 3 rounds, ms median (min..max), 1,000,000 training rows,
+logloss / AUC on the fixed test tail. Configs as the Istella-S rows above
+(100 trees, depth 16, sqrt features, 128 bins for RF, bootstrap for RF only,
+seed 7). Evidence: `bench/results/forest_speed_2026-09-11/`.
+
+| family | dataset | opponent | device | opponent ms | opponent logloss / AUC | ours IDENTICAL ms | ours logloss / AUC | ours / opponent |
+|---|---|---|---|---|---|---|---|---|
+| RF | taxi | cuML RandomForestClassifier 26.08.00 | GPU, H100 | 1980 (1942..1984) | 0.525800 / 0.617582 | 877 (876..914), hash d8f64dae01de00bd | 0.525910 / 0.617154 | 0.44x |
+| RF | Istella-S | cuML RandomForestClassifier 26.08.00 | GPU, H100 | 3668 (3633..3855) | 0.145504 / 0.964577 | 2113 (2100..2170), hash 574b24d0d7af51d0 | 0.145560 / 0.964538 | 0.58x |
+| ET | taxi | scikit-learn ExtraTreesClassifier 1.9.1 (cuML has none) | CPU, 24-core quota, n_jobs=-1 | 4075 (3799..4179) | 0.527011 / 0.611206 | 2058 (2015..2115), hash e683f121d11f59dd | 0.527541 / 0.608084 | 0.51x |
+| ET | Istella-S | scikit-learn ExtraTreesClassifier 1.9.1 | CPU, 24-core quota | 16259 (15756..16302) | 0.187901 / 0.939528 | 6073 (5977..6208), hash 40b1c5b03ba40420 | 0.188191 / 0.938768 | 0.37x |
+| IsolationForest | taxi | cuML IsolationForest 26.08.00 (`cuml.ensemble.isolation_forest`) | GPU, H100 | 63 (59..125) | proxy AUC 0.553631 | REFUSED by the harness (below) | - | owed |
+| IsolationForest | Istella-S | cuML IsolationForest 26.08.00 | GPU, H100 | 1526 (1477..1911) | proxy AUC 0.821218 | REFUSED by the harness | - | owed |
+
+cuML 26.08.00 does ship IsolationForest; the Aug 28 `cuml-iforest-gpu` row
+(85.159 ms) was that estimator against our arm labeled FAST. Our iforest arm
+was refused here by `verify_our_arm` ("native compiled-mode readback missing
+for _mojolearn": the class inherits `_BINDING = "_mojolearn"` while its code
+is in `_mojolearn_svm`), fixed on lane/forest-speed and not re-run. The
+iforest AUC is a proxy (anomaly score against the minority class; neither
+dataset has planted anomalies). Every ours hash held in 3 of 3 rounds; RF
+and ET hashes equal the AMD MI325X and MI300X rows above (and the Sep 11
+H100 Istella-S rows), so these four forests are cross-vendor identical on
+both datasets. `identity_break` rf-clf, rf-reg, et-clf, et-reg, iforest: 45
+of 45 cells stable, and the forest lanes IDENTICAL against the Sep 11 H100
+confirmation set. Setup's `check_buffer_foreign_argtypes.py --real-cuml`
+exited 0 on this pod (the 0.8.1 check owed on NVIDIA).
+
+### H100 forests BEFORE and AFTER DEVIATIONS 2637 and 2638, taxi and Istella-S (2026-09-11 night, lane forest-finish)
+
+Pod `8gsem9f3thnhvu` (NVIDIA H100 80GB HBM3, driver 580.126.09,
+`GPU-b645d4a6-3c99-a75a-6492-0b26a9929031`, Intel Xeon Platinum 8470, 208
+logical CPUs, cgroup quota 22.1 CPUs, joblib `cpu_count` 23),
+runpod/pytorch:2.4.0-py3.11-cuda12.4.1 container, cuML 26.08.00, scikit-learn
+1.9.1, numpy 2.4.6. IDENTICAL tier. BEFORE is main `4dc4346a` built in a SECOND
+CHECKOUT ON THIS POD; AFTER is lane/forest-finish `600dcec0` (DEVIATIONS 2637
+and 2638). 1,000,000 training rows, 100 trees, depth 16, sqrt features, 128
+bins for RF, bootstrap for RF only, seed 7. One warm-up plus 3 rounds, arms
+alternating in one process, ms median (min..max). Each opponent column is the
+run that carried the AFTER arm, so ours/opponent is a same-process ratio.
+Evidence: `bench/results/forest_finish_2026-09-11/`.
+
+| family | dataset | opponent | device | opponent ms | ours BEFORE ms | ours AFTER ms | after/before | ours/opponent AFTER | quality ours (before = after) | opponent quality |
+|---|---|---|---|---|---|---|---|---|---|---|
+| RF | taxi | cuML RandomForestClassifier 26.08.00 | GPU, H100 | 1860 (1856..1938) | 826 (822..850) | 811 (806..817) | 0.98 | 0.44x | logloss 0.525910 / AUC 0.617154 | 0.525800 / 0.617582 |
+| RF | Istella-S | cuML RandomForestClassifier 26.08.00 | GPU, H100 | 3885 (3735..3943) | 1977 (1972..2040) | 1333 (1323..1346) | 0.67 | 0.34x | logloss 0.145560 / AUC 0.964538 | 0.145504 / 0.964577 |
+| ET | taxi | scikit-learn ExtraTreesClassifier 1.9.1 (cuML has none) | CPU, 23-core quota | 3295 (3254..3310) | 1894 (1883..1937) | 1831 (1830..1904) | 0.97 | 0.56x | logloss 0.527541 / AUC 0.608084 | 0.527011 / 0.611206 |
+| ET | Istella-S | scikit-learn ExtraTreesClassifier 1.9.1 | CPU, 23-core quota | 15502 (15428..15688) | 5782 (5693..5816) | 4947 (4915..4961) | 0.86 | 0.32x | logloss 0.188191 / AUC 0.938768 | 0.187901 / 0.939528 |
+| IsolationForest | taxi | cuML IsolationForest 26.08.00 | GPU, H100 | 54.4 (48.9..55.4) | 290 (277..344) | 95.4 (94.3..97.7) | 0.33 | 1.75x | proxy AUC 0.553631 | 0.553631 |
+| IsolationForest | Istella-S | cuML IsolationForest 26.08.00 | GPU, H100 | 1001 (999..1062) | 4456 (4409..4629) | 155 (154..162) | 0.035 | 0.16x | proxy AUC 0.821218 | 0.821218 |
+
+Section 9 geometric means of after/before over the two datasets: RF 0.81, ET
+0.91, IsolationForest 0.11.
+BOTH PASSES, because one pass is one measurement. Each cell was run twice: an
+interleaved pass against the opponent (the table above) and an ours-only pass
+in the reverse set order (ABBA). after/before per pass, interleaved then
+ours-only: RF taxi 0.98 / 0.93, RF Istella-S 0.67 / 0.60, ET taxi 0.97 / 1.03,
+ET Istella-S 0.86 / 0.86, iforest taxi 0.33 / 0.36, iforest Istella-S
+0.035 / 0.034. Every cell holds its hash in both passes.
+
+ET ON TAXI IS FLAT, AND THE TWO PASSES DISAGREE ON ITS SIGN (0.97 against
+1.03), so it is noise around 1 and not a win: 16 columns of staging is not
+where a taxi ExtraTrees fit spends its time. ET's geometric mean is below 1
+either way (0.91 with the interleaved pass, 0.94 with the ours-only one)
+because Istella-S carries it at 0.86 in both. RF's taxi cell is the same story
+one notch milder (0.98 / 0.93).
+ Quality is BYTE-EQUAL before and after in every
+cell, so all three flip; 2637 and 2638 are the shipped path on this branch
+rather than opt-in switches, and these rows are what keeps them.
+
+THE ISOLATION FOREST ROWS ARE THIS LANE'S FIRST for our arm. The Sep 11
+baseline leg could not measure it at all -- `verify_our_arm` asked
+`_mojolearn` for the mode of a class whose code lives in `_mojolearn_svm` --
+so the section above carries "owed" in both cells and this section replaces
+them. cuML's own row moved between the two runs (taxi 56.0 then 54.4,
+Istella-S 828 then 1001), which is why every ratio here is quoted against the
+opponent measured in the SAME process as the arm it is compared with.
+
+Every model hash held one value in 3 of 3 rounds and is EQUAL before and
+after: RF taxi `d8f64dae01de00bd`, RF Istella-S `574b24d0d7af51d0`, ET taxi
+`e683f121d11f59dd`, ET Istella-S `40b1c5b03ba40420`, iforest taxi
+`6f68d48431290524`, iforest Istella-S `a1902225f8730abf`. `identity_break`
+rf-clf, rf-reg, et-clf, et-reg, iforest read 45 of 45 cells stable on EACH
+set, with no DIVERGENT, MOVED or REFUSED row in the diff; `check-if` passed
+under IDENTICAL; the non-finite refusal raised through the Python surface is
+byte-equal between the sets for C-order and F-order input alike.
+
+The iforest proxy AUC is an anomaly score against the minority class; neither
+dataset has planted anomalies, so it is a sanity column and not a benchmark.
+
+### Classical OLS, PCA, k-means and DBSCAN on both datasets (September 11, pod 1yxsotvvcbxtuu, lane linear-cluster-istella)
+
+RunPod H100 80GB HBM3, driver 570.195.03, cuML 26.08 (cuml-cu12 26.8.0) in the
+image's Python 3.11; ours IDENTICAL built on the pod (sm_90a) from this lane and
+from origin/main 8dc33f00 (which carries DEVIATIONS 2632 and 2633), both trees on
+the SAME pod, raced interleaved. A driver below 580 cannot take Mojo's own PTX
+path, so every run here exports `MODULAR_NVPTX_COMPILER_PATH` at a CUDA 12.8
+`ptxas` (`nvidia-cuda-nvcc-cu12`); the image's own 12.4 ptxas refuses Mojo's PTX
+8.5. `tools/classical_two_datasets.py race`, 1 warm-up plus 5 interleaved rounds,
+ms median. Taxi 4,000,000 x 11 and Istella-S 2,043,304 x 220; k-means k 64, 20
+iterations, shared init, tol 1e-7 on both arms; cuML PCA `svd_solver='full'`,
+ours `covariance_eigh`; cuML OLS `algorithm='eig'`.
+
+| lane | dataset | opponent | opponent ms | opponent quality | ours before (8dc33f00) ms | ours after (2671, 2672) ms | after / before | ours after / opponent | ours quality, digest before = after |
+|---|---|---|---|---|---|---|---|---|---|
+| ols | taxi | cuML LinearRegression eig | 21.67 | R2 0.90883616 | 139.65 | 135.76 | 0.972 | 6.26x | R2 0.90883698, `fb86358654367fa0` |
+| ols | Istella-S | cuML LinearRegression eig | 84.85 | R2 -6473.68 | 2529.06 | 2402.44 | 0.950 | 28.31x | R2 0.33194438, one digest, equal |
+| pca | taxi | cuML PCA full | 19.54 | EVR sum 0.99786046 | 28.46 | 26.32 | 0.925 | 1.35x | EVR sum 0.99786071, `c790338770a4c120` |
+| pca | Istella-S | cuML PCA full | 81.91 | EVR sum 1.0000000156 | 713.09 | 686.27 | 0.962 | 8.38x | EVR sum 1.0000000146, one digest, equal |
+| kmeans | taxi | cuML KMeans | 129.28 | inertia 1.2019161e8, 20 iter, digest different every round | 216.59 | 211.99 | 0.979 | 1.64x | inertia 1.2062766e8, 21 iter, `89520efe99a08d5f` |
+| kmeans | Istella-S | cuML KMeans | 171.81 | inertia 1.2855462e17, 20 iter, digest different every round | see the lane README (instance spread exceeds the effect) | | | 7.56x | inertia 1.3128483e17, 21 iter, `7f720b0b76896308` |
+
+OLS and PCA reach the device Jacobi and k-means does not, so those rows isolate
+DEVIATION 2671 (two barriers per rotation instead of four, same bits) and the
+k-means row isolates DEVIATION 2672 (host staging removed from the k-means fit).
+Flip verdicts under ENGINEERING_RULES section 9: OLS geomean 0.9610 and PCA
+geomean 0.9435, both below 1 with quality equal and bits equal on both datasets,
+so 2671 is the default. The k-means A/B swung 1.066 then 0.950 between race
+instances against an effect the stage probe puts at about 5 ms of host work, so
+2672 is decided on pooled instances in
+`bench/results/linear_cluster_istella_2026-09-11/README.md`.
+
+**Where the Istella-S time goes** (stage probe, IDENTICAL, same pod): the OLS
+device solve is 1744 to 1775 ms, of which the 220-column Jacobi is 1656 ms at 12
+sweeps and the Gram is 23.6 ms; PCA is upload 34.9, covariance 30.0 and Jacobi
+418.3 at 3 sweeps. On the same matrices the four-phase kernel takes 1825.8 and
+466.6 ms, and the two kernels agree at every one of 48,400 matrix cells and
+48,400 eigenvector cells.
+
+#### DBSCAN and HDBSCAN at 1,000,000 rows (first rows for this pair)
+
+Blocks are 1,000,000 rows of each dataset's train split, sentinel cleaned and
+standardized by their own float64 mean and standard deviation, so one eps means
+the same thing on every column. eps is the p75 quantile of the min_samples-th
+nearest neighbor distance measured on the block itself (`dbscan_eps.py`), the
+SAME value for every arm, min_samples 10. Ours runs its default ball cover;
+`cuml-gpu` is cuML's default brute force. 1 warm-up plus 3 rounds.
+
+| lane | dataset | eps | opponent | opponent ms | ours IDENTICAL ms | ours / opponent | agreement |
+|---|---|---|---|---|---|---|---|
+| dbscan | taxi (11 features) | 0.177 | cuML DBSCAN brute | 13631.0 | 1129.8 | 0.083x | 2900 clusters and noise fraction 0.2161 on both arms, adjusted Rand index 0.99999999908, noise agreement 1.000 |
+| dbscan | Istella-S (220 features) | 4.17 | cuML DBSCAN brute | pending | pending | | |
+| hdbscan | taxi, 100,000 rows | - | cuML HDBSCAN (min_samples 10, min_cluster_size 100, eom) | 191.2 | no arm | - | 159 clusters, noise fraction 0.1310; this library ships no HDBSCAN |
+
+cuML's `algorithm='rbc'` arm refused both datasets at this size ("An overflow
+occurred with the current choice of precision and the number of samples"), so
+cuML's own ball cover has no row here.

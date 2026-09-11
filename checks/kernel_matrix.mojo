@@ -488,6 +488,21 @@ def pointwise_doc_split_for[column: Int, ordered: Bool]() -> Bool:
     return True
 
 
+#: DEVIATION 2670 (OPT-IN, NOT FLIPPED): the multiprocessor count the ordered
+#: tiers' pointwise multiplier estimate reads on EVERY vendor, in place of
+#: the device's own. A power of two near an H100's 132; NUMERIC, never tuned
+#: per vendor, because the multiplier decides which document lands in which
+#: block and therefore the float fold.
+comptime PW_2670_PINNED_SM = 128
+
+
+def pointwise_private_doc_slots_sm_for[column: Int, ordered: Bool]() -> Int:
+    """NUMERIC row (DEVIATION 2670, opt-in behind `-D MOJOLEARN_2670_PW_PRIVATE_DOC_SLOTS=1`): 0 keeps DEVIATION 2624 (one document block per feature group per part). Non-zero splits the document axis in the ordered tiers at the multiplier `EstimateBlockPerFeatureMultiplier` gives for THIS pinned SM count, every document block writes its partial into its OWN scratch slot with a plain store, and one launch folds the slots into `binSums` in block order 0..M-1. New bits against 2624 (float addition is not associative, DEVIATION 2669), the same bits at every launch geometry and on every vendor; see `pw_block_multiplier` in `gbdt/methods/pointwise_kernels.mojo`."""
+    comptime if ordered and is_defined["MOJOLEARN_2670_PW_PRIVATE_DOC_SLOTS"]():
+        return PW_2670_PINNED_SM
+    return 0
+
+
 def greedy_one_byte_fixed_for[column: Int, identical: Bool]() -> Bool:
     """SCHEDULING row (DEVIATION 1906, NARROWED by DEVIATION 1947): whether the GREEDY one-byte family routes EVERY width through the fused 8-bit fixed-point kernel (`hist_2_one_byte_8bit.mojo`) instead of CatBoost's maxBins ladder."""
     comptime if identical:

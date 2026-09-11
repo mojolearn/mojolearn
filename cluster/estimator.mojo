@@ -109,6 +109,7 @@ from max.gpu.host import DeviceContext
 
 from cluster.impl.detail.kmeans_common import metric_is_sqrt
 from cluster.impl.kmeans import fit_predict
+from core.device_zero import enqueue_fill
 from core.row_norms import NORM_TPB, row_norm_kernel
 from cluster.impl.kmeans_params import (
     INIT_ARRAY,
@@ -302,15 +303,18 @@ def kmeans_fit(
 
     ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
 
-    var hw = ctx.enqueue_create_host_buffer[DType.float32](n_samples)
-    ctx.synchronize()
+    # DEVIATION 2672 (2026-09-11, linear-cluster-istella): NO HOST WEIGHT
+    # VECTOR. The fit used to allocate an `n_samples` pinned host buffer,
+    # store 1.0 (or copy the caller's weights) into it one row at a time on
+    # one thread, and upload it. Unit weights are now the device fill of
+    # the same value (`core/device_zero.enqueue_fill`, an exact 1.0 in every
+    # cell), and supplied weights upload from the caller's memory directly,
+    # as `x` does. The bytes on the device are the bytes the loop wrote, so
+    # nothing downstream can move.
     if n_weights != 0:
-        for r in range(n_samples):
-            hw.unsafe_ptr().unsafe_store(r, weights_ptr.unsafe_load(r))
+        ctx.enqueue_copy(dst_buf=weights, src_ptr=weights_ptr)
     else:
-        for r in range(n_samples):
-            hw.unsafe_ptr().unsafe_store(r, Float32(1.0))
-    ctx.enqueue_copy(dst_buf=weights, src_ptr=hw.unsafe_ptr())
+        enqueue_fill[DType.float32](ctx, weights, Float32(1.0))
 
     # INIT_ARRAY is the one init that READS this buffer. The others overwrite
     # it, so uploading unconditionally would be wasted traffic on the common
@@ -357,17 +361,15 @@ def kmeans_fit(
         Float32(weight_scale),
     )
 
-    var hc = ctx.enqueue_create_host_buffer[DType.float32](cd)
-    var hl = ctx.enqueue_create_host_buffer[DType.uint32](n_samples)
+    # DEVIATION 2672: THE RESULTS LAND IN THE CALLER'S MEMORY DIRECTLY. This
+    # used to allocate a pinned host buffer for each output (at 4,000,000
+    # rows the label buffer alone is 16 MB of pinned memory per fit), copy
+    # the device into them, and then copy them value by value on one thread
+    # into the caller's arrays. The copy engine writes the caller's pages
+    # instead, which is the same bytes and two host passes fewer.
+    ctx.enqueue_copy(dst_ptr=out_centroids_ptr, src_buf=centroids)
+    ctx.enqueue_copy(dst_ptr=out_labels_ptr, src_buf=labels)
     ctx.synchronize()
-    ctx.enqueue_copy(dst_ptr=hc.unsafe_ptr(), src_buf=centroids)
-    ctx.enqueue_copy(dst_ptr=hl.unsafe_ptr(), src_buf=labels)
-    ctx.synchronize()
-
-    for i in range(cd):
-        out_centroids_ptr.unsafe_store(i, hc.unsafe_ptr().unsafe_load(i))
-    for i in range(n_samples):
-        out_labels_ptr.unsafe_store(i, hl.unsafe_ptr().unsafe_load(i))
 
     return KMeansFitResult(
         result.inertia, result.n_iter, sum_scale, weight_scale

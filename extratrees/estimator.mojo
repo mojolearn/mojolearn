@@ -134,6 +134,7 @@ from extratrees.impl.randomforest.randomforest import (
     fit_regression_device,
 )
 from max.gpu.host import DeviceContext
+from std.sys.compile import is_defined
 
 
 comptime DEPTH_SLACK: Int32 = 16
@@ -418,6 +419,38 @@ struct FitPlan(ImplicitlyCopyable, Movable):
     count the fit used."""
 
 
+
+comptime ET_DEVICE_BATCH = _et_device_batch()
+"""The frontier batch width every ExtraTrees fit plans with (DEVIATION 2663)."""
+
+
+def _et_device_batch() -> Int:
+    """DEVIATION 2663: the level loop's batch width, chosen at compile time.
+
+    cuML's `max_batch_size` default is 4096 (`decisiontree.hpp:86-95`) and
+    this lane plans every fit with it. It is a SCHEDULING parameter: every
+    draw is keyed by (seed, tree, node, feature), the score counts are
+    integer atomics per cell, the reduction is per node and the partition is
+    range addressed, so a wider batch runs the same trees through fewer
+    level cycles (`device_batched_check`'s "max_batch_size=3 must not move a
+    tree" is the gate). Each cycle ends in one drain and a host pass over
+    its splits, and DEVIATION 211's merged frontier puts up to 67 trees in
+    one group at 1M rows, so at depth 16 a 4096 batch runs many cycles.
+
+    The defines are the measurement arms (lane forest-finish, 2026-09-11):
+    `-D MOJOLEARN_ET_DEVICE_BATCH_16384=1` and `_32768=1`. 32768 is the
+    widest a CUDA launch admits, because `split_reduce_kernel` puts the node
+    count on grid axis y (65535). The workspace grows as batch x n_cols
+    cells (DEVIATION 205's survey reads every column): about 400 MB at 16384
+    and 800 MB at 32768 with 220 columns. None is set by a build script.
+    """
+    if is_defined["MOJOLEARN_ET_DEVICE_BATCH_32768"]():
+        return 32768
+    if is_defined["MOJOLEARN_ET_DEVICE_BATCH_16384"]():
+        return 16384
+    return 4096
+
+
 def resolve(
     config: ExtraTreesConfig, n_rows: Int, n_features: Int
 ) raises -> FitPlan:
@@ -442,6 +475,8 @@ def resolve(
     # cap (DEVIATION 466). It was refused by name until 2026-09-01 and is
     # now carried; `validity_check` below applies sklearn's `>= 2` bound.
     params.max_leaf_nodes = config.max_leaf_nodes
+    # DEVIATION 2663: the device frontier's batch width (see `_et_device_batch`).
+    params.max_batch_size = Int32(ET_DEVICE_BATCH)
 
     var unlimited = config.max_depth < 0
     if unlimited:
@@ -542,6 +577,7 @@ def fit_extra_trees_classifier_device(
     n_classes: Int32,
     config: ExtraTreesConfig,
     x_addr: Int = 0,
+    x_row_major: Bool = False,  # DEVIATION 2637: a borrowed ROW-major X
 ) raises -> FitResult:
     """`ExtraTreesClassifier.fit` with the split search on the GPU.
 
@@ -581,6 +617,7 @@ def fit_extra_trees_classifier_device(
         plan.bootstrap,
         plan.n_sampled_rows,
         x_addr=x_addr,
+        x_row_major=x_row_major,
     )
     var bound = depth_cap_bound(forest, plan)
     return FitResult(forest^, plan, bound)
@@ -657,6 +694,7 @@ def fit_extra_trees_regressor_device(
     n_features: Int32,
     config: ExtraTreesConfig,
     x_addr: Int = 0,
+    x_row_major: Bool = False,  # DEVIATION 2637: a borrowed ROW-major X
 ) raises -> FitResult:
     """`ExtraTreesRegressor.fit` with the split search on the GPU.
 
@@ -701,6 +739,7 @@ def fit_extra_trees_regressor_device(
         plan.bootstrap,
         plan.n_sampled_rows,
         x_addr=x_addr,
+        x_row_major=x_row_major,
     )
     var bound = depth_cap_bound(forest, plan)
     return FitResult(forest^, plan, bound)

@@ -72,7 +72,7 @@ import numbers
 from . import _mojolearn_rf, _serialize
 from ._array import Array
 from ._buffer import (
-    addr, addr_ro, all_finite, as_f32_c, as_f32_colmajor, empty,
+    addr, addr_ro, all_finite, as_f32_c, as_f32_colmajor, as_f32_forest_layout, empty,
 )
 from ._labels import (
     argmax_rows, classes_from_member, classes_member, decode_labels,
@@ -80,7 +80,8 @@ from ._labels import (
 )
 from ._mode import NumericModeMixin
 from ._forest_protocol import (ForestProtocol, forest_estimator,
-                               _forest_fit_function, _forest_fit_arrays)
+                               _forest_fit_function, _forest_fit_arrays,
+                               _rowmajor_fit_function)
 
 #: The npz model-file format tag `save` writes and `load` requires.
 _MODEL_FORMAT = "mojolearn-randomforest-1"
@@ -464,13 +465,21 @@ class _RandomForestBase(ForestProtocol, NumericModeMixin):
             cfg["max_batch_size"],
         ]
 
-    def _fit_arrays(self, X, y_arr, n_classes, fit_fn):
+    def _fit_arrays(self, X, y_arr, n_classes, fit_fn, rowmajor_fit_fn=None):
         # Column-major is the builder's layout (cuML's `data` is
         # column-major); `as_f32_colmajor` is that copy, named in the
         # module docstring, and zero for a float32 F-order input
         # (DEVIATION 2341). Its 2-D refusal reads "mojolearn: X must be
         # 2-D, got ...", the wording `_arrays.py` used.
-        Xf, _ = as_f32_colmajor(X, name="X")
+        # DEVIATION 2637: a C-order float32 X is lent row-major to the
+        # `*_rowmajor` entry, which transposes it into its pinned stage
+        # across the host pool (same staged bytes, one pass fewer).
+        if rowmajor_fit_fn is not None:
+            Xf, row_major = as_f32_forest_layout(X, name="X")
+            if row_major:
+                fit_fn = rowmajor_fit_fn
+        else:
+            Xf, _ = as_f32_colmajor(X, name="X")
         n_rows, n_features = Xf.shape
         if len(y_arr) != n_rows:
             raise ValueError(f"y has {len(y_arr)} rows, X has {n_rows}")
@@ -646,14 +655,16 @@ class RandomForestClassifier(_RandomForestBase):
                    _class_weight_rows(self.class_weight, self.classes_, y32.tolist()))
         binding = self._bind("_mojolearn_rf")
         fit_fn = _forest_fit_function(binding, "rf_classifier_fit")
+        rowmajor_fn = _rowmajor_fit_function(binding, "rf_classifier_fit")
         if weights is not None:
+            rowmajor_fn = None
             weighted_fit = (_forest_fit_function(binding, "rf_classifier_fit_weighted")
                             if hasattr(binding, "rf_classifier_fit_weighted") else None)
             if weighted_fit is None:
                 raise RuntimeError("rebuild the RF binding for class_weight support")
             def fit_fn(x_addr, y_addr, params, criterion):
                 return weighted_fit(x_addr, y_addr, params, criterion, addr_ro(weights, name="weights"))
-        return self._fit_arrays(X, y32, self.n_classes_, fit_fn)
+        return self._fit_arrays(X, y32, self.n_classes_, fit_fn, rowmajor_fn)
 
     def predict_proba(self, X):
         """Per-class vote fractions, `(n_samples, n_classes)` float32
@@ -775,7 +786,9 @@ class RandomForestRegressor(_RandomForestBase):
                     " (objectives.cuh:279-281, :306-308), which would fit"
                     " a stump silently"
                 )
-        return self._fit_arrays(X, y32, 0, _forest_fit_function(self._bind("_mojolearn_rf"), "rf_regressor_fit"))
+        binding = self._bind("_mojolearn_rf")
+        return self._fit_arrays(X, y32, 0, _forest_fit_function(binding, "rf_regressor_fit"),
+                                _rowmajor_fit_function(binding, "rf_regressor_fit"))
 
     def predict(self, X):
         """The forest mean per row, a float32 `Array` of `(n_samples,)`."""

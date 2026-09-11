@@ -326,6 +326,15 @@ def _forest_fit_function(native, name):
     return fit
 
 
+def _rowmajor_fit_function(native, name):
+    """DEVIATION 2637: the `<name>_rowmajor` fit (X lent ROW-major) through
+    the same export selection as `_forest_fit_function`, or None when this
+    binary predates it (the caller then keeps the column-major path)."""
+    if not hasattr(native, name + "_rowmajor_export"):
+        return None
+    return _forest_fit_function(native, name + "_rowmajor")
+
+
 def _forest_fit_arrays(result):
     """One RF/ET model conversion; native exported arrays are retained directly."""
     *fields, meta = result

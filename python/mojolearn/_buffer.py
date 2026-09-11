@@ -584,6 +584,21 @@ def as_f32_colmajor(obj, *, name):
     return _as_typed(obj, "<f4", "F", 2, name)
 
 
+def as_f32_forest_layout(obj, *, name):
+    """`(array, row_major)` for a forest fit (DEVIATION 2637).
+
+    A 2-D float32 C-order input comes back AS IS, a zero-copy borrow with
+    `row_major` True, so the native fit transposes it straight into its
+    pinned stage across the host pool. Every other input takes
+    `as_f32_colmajor` exactly as before, with `row_major` False. Either way
+    the native side stages the same column-major bytes."""
+    a, _ = _materialize(obj, name)
+    if (a.ndim == 2 and a.dtype == "<f4" and a.size
+            and a.order == "C" and not a._both_orders()):
+        return a, True
+    return as_f32_colmajor(a, name=name)[0], False
+
+
 def as_i32_c(obj, *, ndim=1, name):
     return _as_typed(obj, "<i4", "C", ndim, name)
 
