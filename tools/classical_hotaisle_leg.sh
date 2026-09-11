@@ -100,6 +100,19 @@ if [ -n "$_cap" ] && [ "$_cap" -lt "$MOJOLEARN_CTD_BODY_SECONDS" ]; then
     MOJOLEARN_CTD_BODY_SECONDS=$_cap
 fi
 MOJOLEARN_CTD_PROVIDER=$_provider
+# A CFS quota below the visible CPU count (a RunPod pod saw 192 CPUs and was
+# allowed 20.4): scikit-learn's pools size to 192, so the capped arm
+# sklearn-cpu-quota runs beside the uncapped one and both are reported.
+_qcpus=""
+if [ -r /sys/fs/cgroup/cpu.max ]; then
+    _qcpus=$(awk '$1 != "max" && $2 > 0 {print int($1 / $2)}' /sys/fs/cgroup/cpu.max)
+elif [ -r /sys/fs/cgroup/cpu/cpu.cfs_quota_us ]; then
+    _qcpus=$(awk -v p="$(cat /sys/fs/cgroup/cpu/cpu.cfs_period_us 2>/dev/null)" '$1 > 0 && p > 0 {print int($1 / p)}' /sys/fs/cgroup/cpu/cpu.cfs_quota_us)
+fi
+if [ -n "$_qcpus" ] && [ "$_qcpus" -lt "$(nproc)" ] && [ -z "${MOJOLEARN_CTD_EXTRA_ARMS:-}" ]; then
+    MOJOLEARN_CTD_EXTRA_ARMS=sklearn-cpu-quota
+    export MOJOLEARN_CTD_EXTRA_ARMS
+fi
 export MOJOLEARN_CTD_BODY_START MOJOLEARN_CTD_BODY_SECONDS MOJOLEARN_CTD_OUT MOJOLEARN_COMPILE_JOBS MOJOLEARN_CTD_PROVIDER
 
 # The IDENTICAL bindings build for the box's gfx target: the runner exports

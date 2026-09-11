@@ -496,8 +496,11 @@ class OursKMeans:
                                  max_iter=KMEANS_ITER, tol=self.tol,
                                  init_centroids=self.init)
             est.fit(self.X)
-        except ValueError:
-            if self.tol != 0.0:
+        except Exception as exc:  # noqa: BLE001
+            # The binding refuses tol = 0 with a plain Exception('invalid
+            # parameter (tol<=0)'), not a ValueError (RunPod MI300X,
+            # 2026-09-11: every ours kmeans round died on it).
+            if self.tol != 0.0 or "tol" not in str(exc):
                 raise
             # tol = 0 refused by the surface: the speed driver's 1e-7.
             self.tol = 1e-7
@@ -1172,6 +1175,66 @@ class CumlSVC:
                                       dtype=np.int64)}
 
 
+def _cgroup_cpus():
+    """(CPUs the cgroup CPU quota allows, where it was read), or (None, reason).
+    A container can see every host CPU (os.cpu_count, sched_getaffinity) while
+    a CFS quota holds it to far fewer: a RunPod MI300X pod on 2026-09-11 saw
+    192 and was allowed 20.4."""
+    try:
+        with open("/sys/fs/cgroup/cpu.max") as fh:
+            quota, period = fh.read().split()[:2]
+        if quota != "max":
+            return float(quota) / float(period), "cgroup v2 cpu.max"
+    except (OSError, ValueError):
+        pass
+    for base in ("/sys/fs/cgroup/cpu", "/sys/fs/cgroup/cpu,cpuacct"):
+        try:
+            with open(base + "/cpu.cfs_quota_us") as fh:
+                quota = int(fh.read())
+            with open(base + "/cpu.cfs_period_us") as fh:
+                period = int(fh.read())
+            if quota > 0 and period > 0:
+                return quota / period, "cgroup v1 %s/cpu.cfs_quota_us" % base
+        except (OSError, ValueError):
+            pass
+    return None, "no cgroup CPU quota"
+
+
+class SkQuota:
+    """sklearn-cpu-quota: the same scikit-learn call, its BLAS and OpenMP pools
+    (and kNN's n_jobs) capped at the whole CPUs the cgroup quota allows. The
+    uncapped sklearn-cpu arm sizes its pools to every VISIBLE CPU, which on a
+    quota-limited container oversubscribes the quota; this arm is the
+    opponent's better configuration on such a box, and both are reported."""
+
+    def __init__(self, inner_cls, data, rec):
+        from threadpoolctl import threadpool_limits
+        self.limits = threadpool_limits
+        cpus, source = _cgroup_cpus()
+        self.cap = max(1, int(cpus)) if cpus else (os.cpu_count() or 1)
+        with self.limits(limits=self.cap):
+            self.inner = inner_cls(data, rec)
+            if hasattr(self.inner, "nn"):
+                self.inner.nn.set_params(n_jobs=self.cap)
+            self.info = _sklearn_info()
+        self.info["config"] = self.inner.info.get("config", "") + (
+            "; threadpool_limits(limits=%d) around construction and every call" % self.cap)
+        self.info["thread_cap"] = {"threads": self.cap, "quota_cpus": cpus, "source": source}
+        for k in ("tree_fit_ms_untimed",):
+            if k in self.inner.info:
+                self.info[k] = self.inner.info[k]
+
+    def call(self):
+        with self.limits(limits=self.cap):
+            self.inner.call()
+
+    def sync(self):
+        pass
+
+    def outputs(self):
+        return self.inner.outputs()
+
+
 BUILDERS = {
     ("kmeans", "ours"): OursKMeans, ("kmeans", "sklearn-cpu"): SkKMeans, ("kmeans", "torch-gpu"): TorchKMeans,
     ("kmeans", "cuml-gpu"): CumlKMeans,
@@ -1184,6 +1247,10 @@ BUILDERS = {
     ("kde", "ours"): OursKDE, ("kde", "sklearn-cpu"): SkKDE, ("kde", "cuml-gpu"): CumlKDE,
     ("svc", "ours"): OursSVC, ("svc", "sklearn-cpu"): SkSVC, ("svc", "cuml-gpu"): CumlSVC,
 }
+for _lane in LANES:
+    BUILDERS[(_lane, "sklearn-cpu-quota")] = (
+        lambda data, rec, _c=BUILDERS[(_lane, "sklearn-cpu")]: SkQuota(_c, data, rec))
+    ARMS[_lane] = ARMS[_lane] + ("sklearn-cpu-quota",)
 
 
 def _digest(outputs):
