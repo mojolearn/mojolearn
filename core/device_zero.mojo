@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""DEVIATION 2501 (2026-09-10): zero a device span with a KERNEL, not
+"""DEVIATION 2512 (2026-09-10): zero a device span with a KERNEL, not
 `enqueue_memset`.
 
 Measured on the Apple M4 under MAX 26.5 (`bench/results/rf_fast_mac_2026-09-10/`):

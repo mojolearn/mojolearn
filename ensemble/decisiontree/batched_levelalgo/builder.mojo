@@ -1823,7 +1823,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         # the default `max_batch_size` 4096 that is a constant ~100x the
         # bytes their launch touches whenever the live batch is small.)
         var len_histograms = n_bins * n_classes * n_blocks_dimy * n_work_items
-        # DEVIATION 2501: the zero rides a kernel launch, not
+        # DEVIATION 2512: the zero rides a kernel launch, not
         # `enqueue_memset`. On Metal under MAX 26.5 a memset between two
         # launches cost 650 us of HOST time per round here (9.5 s of a
         # 14.4 s HIGGS 1M FAST fit on the M4, `core/device_zero.mojo`);

@@ -1,4 +1,4 @@
-# RandomForest on the Apple M4, 2026-09-10 night: DEVIATION 2500, 2501, 2502
+# RandomForest on the Apple M4, 2026-09-10 night: DEVIATION 2500, 2512, 2502
 
 HIGGS first 1,000,000 rows x 28 features, 100 trees, depth 16, sqrt
 features, 128 bins, bootstrap, seed 7; `bench/speed/forest_speed_arm.py
@@ -37,7 +37,7 @@ On the H100 the same `other` was 0.49 s. The M4's host side was the fit.
   up to 21 MB); the histogram launch 0.15 s and the best-split launch
   0.12 s beside it.
 
-## DEVIATION 2501: histogram zero as a kernel (`core/device_zero.mojo`)
+## DEVIATION 2512: histogram zero as a kernel (`core/device_zero.mojo`)
 
 `logs/stage.fast.zero_kernel.log`: host_hist_zero 0.14 s (was 9.48),
 fit 12.6 s, hash 3ffa2951595422d4 unchanged; device_wait rose 4.4 -> 11.0 s
@@ -87,9 +87,9 @@ Result (`logs/speed.fast.2501_2502.log`, `logs/speed.identical.2501_2502.log`):
 | tier | fit ms (7 or 3 rounds) | hash | logloss | AUC | histogram rounds |
 |---|---:|---|---:|---:|---:|
 | FAST, before tonight | 16,100 to 20,800 | 3ffa2951595422d4 | 0.538850 | 0.809906 | 14,640 |
-| FAST, 2501 only | 12,354 to 12,397 | 3ffa2951595422d4 | 0.538850 | 0.809906 | 14,640 |
-| FAST, 2501 + 2502 | 8,988 to 9,234 | efd14ab2c09ff57c | 0.538817 | 0.809830 | 3,627 |
-| IDENTICAL, 2501 + 2502 | 8,867 to 8,904 | efd14ab2c09ff57c | 0.538817 | 0.809830 | 3,627 |
+| FAST, 2512 only | 12,354 to 12,397 | 3ffa2951595422d4 | 0.538850 | 0.809906 | 14,640 |
+| FAST, 2512 + 2502 | 8,988 to 9,234 | efd14ab2c09ff57c | 0.538817 | 0.809830 | 3,627 |
+| IDENTICAL, 2512 + 2502 | 8,867 to 8,904 | efd14ab2c09ff57c | 0.538817 | 0.809830 | 3,627 |
 
 The forest changed: skipped pure-node splits shift every later node's
 tree index, and the column sampler seeds on that index. Identity holds:

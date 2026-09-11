@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""DEVIATION 2501: `core/device_zero.mojo` zeroes EXACTLY the span it is
+"""DEVIATION 2512: `core/device_zero.mojo` zeroes EXACTLY the span it is
 given. Every byte inside is 0 afterwards, every byte outside keeps its
 0xA5 fill, over offsets and lengths that exercise the aligned body, the
 byte tail, the unaligned-start arm and the empty span. Run:

@@ -35,7 +35,7 @@ RF round). `encode_labels` runs the same ORDER RULE in the base binding
 for one numeric buffer: 8 ms. Forest hash unchanged. The H100 night leg
 measured its effect: RF 1M 2234 -> 1516, 2M 3743 -> 2283, ET 1M 3314 -> 2578.
 
-### DEVIATION 2501 (`core/device_zero.mojo`)
+### DEVIATION 2512 (`core/device_zero.mojo`)
 
 The histogram zero rides a kernel launch. Hash unchanged
 (3ffa2951595422d4, 3 of 3), M4 FAST fit 12.4 s. `pixi run check-device-zero`.
@@ -75,7 +75,7 @@ histogram rounds on every vendor.
   device_wait at 1M). The rf-clf fingerprints will move to the 2502 set;
   rf-reg, et, gbdt must not.
 - Apple M4: gbdt-symmetric, depthwise, lossguide FAST stage splits at 1M
-  to price their memsets (DEVIATION 2501 candidates); ET 1M stage split.
+  to price their memsets (DEVIATION 2512 candidates); ET 1M stage split.
 - The nine-lane Apple identity JSON regeneration now has two reasons
   (DEVIATION 2340 predict dtype, DEVIATION 2502 rf-clf).
 
