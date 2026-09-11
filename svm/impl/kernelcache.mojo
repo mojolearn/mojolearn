@@ -181,21 +181,33 @@ struct KernelCache(Movable):
             w = 1
         self.gemm_ws = ctx.enqueue_create_buffer[DType.float32](w + scratch_pad)
         ctx.synchronize()
-        ctx.enqueue_function[fill_f32_kernel](
-            self.kernel_tile.unsafe_ptr(), scratch_poison,
-            Int32(len(self.kernel_tile)),
-            grid_dim=_grid(len(self.kernel_tile)), block_dim=SEL_TPB,
-        )
-        ctx.enqueue_function[fill_f32_kernel](
-            self.x_ws_dense.unsafe_ptr(), scratch_poison,
-            Int32(len(self.x_ws_dense)),
-            grid_dim=_grid(len(self.x_ws_dense)), block_dim=SEL_TPB,
-        )
-        ctx.enqueue_function[fill_f32_kernel](
-            self.gemm_ws.unsafe_ptr(), scratch_poison, Int32(len(self.gemm_ws)),
-            grid_dim=_grid(len(self.gemm_ws)), block_dim=SEL_TPB,
-        )
-        ctx.synchronize()
+        # DEVIATION 2665 (2026-09-11): the three scratch fills run only for
+        # the launch-invariance gate's padded or poisoned arms. No cell's
+        # starting value reaches an output: the square tile's n_ws x n_ws
+        # and each batch's nnz x batch are written before the block solve and
+        # `update_f` read them, the gathered rows before the kernel reads
+        # them, and the GEMM workspace is the GEMM's own. That is what
+        # `svc_check.mojo::check_device_is_launch_invariant` asserts under
+        # IDENTICAL: arms (d) to (f) fill with -7.25e20 and 3.0e-39 under
+        # paddings 37 and 1029 and must equal the base arm byte for byte, and
+        # the base arm (pad 0, poison 0) now runs unfilled. A production fit
+        # at 10,000 rows and a 1,024 working set skips a 41 MB tile fill.
+        if scratch_pad != 0 or scratch_poison != Float32(0.0):
+            ctx.enqueue_function[fill_f32_kernel](
+                self.kernel_tile.unsafe_ptr(), scratch_poison,
+                Int32(len(self.kernel_tile)),
+                grid_dim=_grid(len(self.kernel_tile)), block_dim=SEL_TPB,
+            )
+            ctx.enqueue_function[fill_f32_kernel](
+                self.x_ws_dense.unsafe_ptr(), scratch_poison,
+                Int32(len(self.x_ws_dense)),
+                grid_dim=_grid(len(self.x_ws_dense)), block_dim=SEL_TPB,
+            )
+            ctx.enqueue_function[fill_f32_kernel](
+                self.gemm_ws.unsafe_ptr(), scratch_poison, Int32(len(self.gemm_ws)),
+                grid_dim=_grid(len(self.gemm_ws)), block_dim=SEL_TPB,
+            )
+            ctx.synchronize()
         # store matrix l2 norm for RBF kernels
         if kp.kernel == KERNEL_RBF:
             row_norms_l2sq(ctx, self.matrix_l2, x, n_rows, n_cols)

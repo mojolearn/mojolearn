@@ -1,0 +1,27 @@
+# svm-finish lane, the SVC race. NVIDIA H200 (RunPod pod 4oih8bhjepzlmm, driver 570.211.01,
+# ptxas 12.9.86 through MODULAR_NVPTX_COMPILER_PATH, Mojo's documented older-driver path).
+# tools/classical_two_datasets_leg.sh, MOJOLEARN_CTD_LANES=svc, 1 warm-up plus 5 interleaved
+# rounds per arm, the arm order rotating each round; blocks 10,000 fit rows, 10,000 eval rows,
+# RBF, C 1, gamma 1/d, tol 1e-3. OURS IS IDENTICAL, cuML IS ITS OWN FAST ARM.
+#   before (arm ours-base) = origin/main 2c64a778 built on this pod, _mojolearn_svm.so 474c93fccdba1463
+#   after  (arm ours)      = lane/svm-finish, DEVIATIONS 2665 and 2666,          so 77511819e0235951
+#   cuml-gpu               = cuml-cu12 26.8.0, cuml.svm.SVC, default cache_size
+# Both of our arms ran from the same conductor in the same race, so the box is the same heat.
+lane	dataset	shape	arm	device	median_ms	min_ms	max_ms	rounds	digest_stable	accuracy	n_support
+svc	taxi	10000x11	cuml-gpu	NVIDIA H200	418.4124	417.9005	418.9163	5	True	0.7675	5586
+svc	taxi	10000x11	ours-base (before)	NVIDIA H200	865.0429	864.1071	868.2484	5	True	0.7675	5527
+svc	taxi	10000x11	ours (after)	NVIDIA H200	768.7060	767.9081	769.5405	5	True	0.7675	5527
+svc	istella	10000x220	cuml-gpu	NVIDIA H200	20.2908	19.9473	20.3493	5	True	0.9222	2401
+svc	istella	10000x220	ours-base (before)	NVIDIA H200	72.1767	68.5553	73.1325	5	True	0.9222	2400
+svc	istella	10000x220	ours (after)	NVIDIA H200	61.3350	60.3625	66.5869	5	True	0.9222	2400
+#
+# THE VERDICT (ENGINEERING_RULES.md section 9), by hand from the two race JSONs because
+# tools/flip_verdict.py reads FSPEED lines and this harness writes CTD lines:
+#   after / before  taxi     768.7060 / 865.0429 = 0.8886
+#   after / before  istella   61.3350 /  72.1767 = 0.8498
+#   geometric mean  sqrt(0.8886 * 0.8498)        = 0.8690   -> below 1
+#   accuracy        taxi 0.7675 = 0.7675, istella 0.9222 = 0.9222, n_support unchanged (5527, 2400)
+#   FLIP. Both deviations ship on by default, 2666 through the NVIDIA row only.
+# Against the opponent, ours IDENTICAL over cuML FAST: taxi 2.0674 -> 1.8372, istella 3.5570 -> 3.0228.
+# Every arm held one digest across all five rounds (digest_stable True), and our two arms held
+# the same model on each dataset as the block-solve variants did.

@@ -1,0 +1,22 @@
+# svm-finish lane: which of the two deviations buys what. Same pod, same probe, same heat
+# window as the race (NVIDIA H200, RunPod 4oih8bhjepzlmm, driver 570.211.01, ptxas 12.9.86).
+# svm_probe.py time: 1 warm fit then 5 fits, IDENTICAL, no stage clock.
+#   main      = origin/main 2c64a778 built on the pod          (_mojolearn_svm.so 474c93fccdba1463)
+#   2665 only = lane/svm-finish built -D MOJOLEARN_SVM_SCHED_TREE, so the schedule row is
+#               forced back to what 2623 gives NVIDIA above width 512  (so 6e17d4fdb6a1aa0e)
+#   2665+2666 = the shipped AFTER build                                 (so 77511819e0235951)
+# The AFTER binary was rebuilt after the forced-TREE build and came back byte for byte
+# identical (77511819e0235951 again), so the three arms differ only where they claim to.
+arm	dataset	median_ms	all_ms	vs_main	accuracy	n_support	fit_hash
+main (before)	taxi	866.3	866.4,866.2,866.7,866.3,866.2	1.0000	0.7675	5527	b0f91a7958162936
+2665 only	taxi	865.7	866.7,865.8,864.9,865.5,865.7	0.9993	0.7675	5527	b0f91a7958162936
+2665+2666 (after)	taxi	772.2	772.8,772.2,772.2,772.5,771.9	0.8913	0.7675	5527	b0f91a7958162936
+main (before)	istella	67.2	72.7,67.4,67.1,67.2,67.2	1.0000	0.9222	2400	5c19df95159208ef
+2665 only	istella	60.9	64.8,61.3,60.6,60.8,60.9	0.9063	0.9222	2400	5c19df95159208ef
+2665+2666 (after)	istella	57.8	62.2,58.3,57.8,57.8,57.8	0.8601	0.9222	2400	5c19df95159208ef
+#
+# READ: taxi is 11 columns, so 2665's fixed cost (the X host List copy, the pinned staging
+# copy, the serial finiteness walk) is nearly nothing there and the whole taxi win is the
+# schedule. Istella-S is 220 columns and 8.8 MB of X per fit, so 2665 carries most of that
+# dataset's win and the schedule adds the rest. The 41 MB kernel tile fill is skipped on both.
+# Every arm holds the dataset fit hash of the H100 rows, on both datasets.

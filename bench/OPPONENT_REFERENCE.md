@@ -570,6 +570,35 @@ ON by default under ENGINEERING_RULES.md section 9. cuML held one digest per
 dataset as well (cdce01475f9e6977, 3f4541591da35fc6). The cuML taxi row is
 the first of the two races on this pod; in the second, cuML's taxi arm took
 a 22.1 ms round and read 3.56 ms median, against which ours reads 8.14x.
+## NVIDIA H200, driver 570.211.01, CUDA 12.8 (ptxas 12.9.86 override), cuml-cu12 26.8.0
+
+RunPod pod `4oih8bhjepzlmm` (`svm-finish-2026-09-11_213129`), image
+`runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04`, 96 vCPUs. THE HOST
+DRIVER IS BELOW MOJO'S CUDA FLOOR (it asks for 580 or newer, CUDA 13), so
+every run in this section exports `MODULAR_NVPTX_COMPILER_PATH` pointing at the
+pod's ptxas 12.9.86, which is Modular's documented older-driver path. The fits
+it produces hash equal to the H100 and MI300X rows (n=400/600/2000
+457e29b82bca9df9, 733a383c5699f427, 2b66bc991a9c9ed0), so the assembler moves
+no bits. H200 is its own tuple: these rows are never mixed with the H100 rows
+above.
+
+### SVC on taxi and Istella-S (September 11, svm-finish lane)
+
+1 warm-up plus 5 interleaved rounds through
+`tools/classical_two_datasets_leg.sh` with `MOJOLEARN_CTD_LANES=svc`, blocks of
+10,000 standardized fit rows and 10,000 eval rows, RBF, C 1, gamma 1/d, tol
+1e-3, quality computed by `tools/classical_two_datasets.py`. Ours is IDENTICAL
+at `lane/svm-finish` (DEVIATIONS 2665 and 2666). Evidence
+`bench/results/svm_finish_2026-09-11/`.
+
+| lane | dataset | opponent | device | opponent ms | opponent quality | ours IDENTICAL ms | ours quality | ours / opponent |
+|---|---|---|---|---|---|---|---|---|
+| svc | taxi | cuML SVC | GPU, H200 | 418.4 (417.9..418.9) | accuracy 0.7675, 5586 SV | 768.7 (767.9..769.5) | accuracy 0.7675, 5527 SV | 1.84x |
+| svc | Istella-S | cuML SVC | GPU, H200 | 20.29 (19.95..20.35) | accuracy 0.9222, 2401 SV | 61.3 (60.4..66.6) | accuracy 0.9222, 2400 SV | 3.02x |
+
+The same race carried a before arm, origin/main 2c64a778 built on this pod and
+raced in the same conductor: taxi 865.0 ms (2.07x) and Istella-S 72.2 ms
+(3.56x). Every arm held one digest across its five rounds.
 
 ## NVIDIA L40S, driver 580.126.09, CUDA 12.4, torch 2.4.1+cu124, cuBLAS 120402, cupy 14.2.0
 
