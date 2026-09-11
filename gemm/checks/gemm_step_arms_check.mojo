@@ -203,7 +203,10 @@ def _trial_hint() -> String:
 def _arm_names() -> List[String]:
     var names: List[String] = [
         "shipped", "lfold", "half", "half_ks16", "quarter", "head", "half_head",
-        "ksplit", "ksplit_leaf", "tuned128", "kpack", "kpack_wide"
+        "ksplit", "ksplit_leaf", "tuned128", "kpack", "kpack_wide",
+        # DEVIATIONS 2640 and 2641 (docs/lanes/BRIEF_gemm_final_2026-09-11.md):
+        # geometries 12 and 13, forced in the ragged part by GEMM_GEOM_COUNT.
+        "kfoldv", "kfoldv_leaf"
     ]
     return names^
 

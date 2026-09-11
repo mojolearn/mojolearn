@@ -1,0 +1,26 @@
+{
+ "default_threaded": true,
+ "default_threads": null,
+ "params_equal_step128": true,
+ "heldout_loss_bytes_equal": {
+  "default": 8,
+  "reference": 8,
+  "of": 8
+ },
+ "heldout_mean_equals_record": true,
+ "logits_hash_default": true,
+ "logits_hash_reference": true,
+ "refusals": {
+  "logits token 300": "ValueError",
+  "logits token -1": "ValueError",
+  "loss input 256": "ValueError",
+  "loss target -1": "ValueError"
+ },
+ "ignore_index_last_column": {
+  "default": "40340a11",
+  "reference": "40340a11",
+  "equal": true,
+  "differs_from_unignored": true
+ },
+ "PASS": true
+}

@@ -1,0 +1,49 @@
+{
+ "binary": {
+  "path": "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/346eb287-4215-40b7-b624-13252a1fcbb5/scratchpad/wt-sweep/python/mojolearn/host/_mojolearn_byte_lm_host.so",
+  "sha256": "fd3d3bbfa378ce27f0a8844af15a875dcae48af1a3fc718f10001eecc0ddd873"
+ },
+ "byte_values_seen": 256,
+ "commit": "23a28ba6dc023ebda97d1e2bdf48a99594d28b28+default-threaded",
+ "compared": {
+  "logits": 2304,
+  "loss_bits": 144,
+  "next_bytes": 2304
+ },
+ "deviation": 2640,
+ "first_mismatches": [],
+ "host": {
+  "cpu": "Apple M4",
+  "machine": "arm64",
+  "python": "3.13.15",
+  "release": "25.5.0",
+  "system": "Darwin"
+ },
+ "length": 32,
+ "max_batch": 8,
+ "mismatched": 0,
+ "parameter_sha256": {
+  "final": "e7c9c226dfa550446799ca930480f972ca8942c023df1e0c5c70a1526bfcd258",
+  "initial": "b87a6075597a82c94b68b810bef74f6331b86579d4d434d95455866ada3ba424",
+  "step000064": "c95553ef5ae7b3715f72ca9b190310f1539e3916f5aa29d5b1277e2d42082f67"
+ },
+ "reference_logits_sha256": {
+  "final": "b518e71ecf5ac01e743f5d5b46df6687e9eefa80a9d627580162305a083f70b2",
+  "initial": "6db55997f1e4d1e9aa08bfaf082ebe48c1b03eec121ebaf6ddf3a0bdbad7e61f",
+  "step000064": "30a89281f2daac140dc9fb440b4476dfe53dd3dcfd5dc4746a84a6fc74ee26f5"
+ },
+ "schema": "mojolearn.byte-lm-host-path-sweep.v1",
+ "seconds": 52.158,
+ "seed": 2640,
+ "states": [
+  "initial",
+  "step000064",
+  "final"
+ ],
+ "threads": [
+  1,
+  2,
+  3
+ ],
+ "verdict": "PASS"
+}

@@ -67,16 +67,26 @@ def byte_lm_host_profile_binding(shape: PythonObject) raises -> PythonObject:
     return PythonObject(cfg.profile())
 
 
+def _thread_count(threads: PythonObject) raises -> Int:
+    var count = _index(threads)
+    if count < 0 or count > 1024:
+        raise Error("byte LM host: threads must be in [0, 1024] (0: one per physical core)")
+    return count
+
+
 def byte_lm_host_logits_binding(addresses: PythonObject, dims: PythonObject,
-                                shape: PythonObject, threaded: PythonObject) raises -> PythonObject:
+                                shape: PythonObject, threaded: PythonObject,
+                                threads: PythonObject) raises -> PythonObject:
     """Logits for addresses [params f32 (n_total), ids i32 (batch * length),
     out logits f32 (batch * length * vocab)] and dims [batch, length].
-    `threaded` is 0 for the reference path, 1 for DEVIATION 2616's.
-    Returns the number of logits written."""
+    `threaded` is 0 for the reference path, 1 for the threaded path of
+    DEVIATIONS 2616 and 2640, which runs on at most `threads` threads (0: one
+    per physical core). Returns the number of logits written."""
     var cfg = _host_config(shape)
     var use_threads = _index(threaded)
     if use_threads != 0 and use_threads != 1:
         raise Error("byte LM host: threaded must be 0 or 1")
+    var thread_count = _thread_count(threads)
     if len(addresses) != 3 or len(dims) != 2:
         raise Error("byte LM host: expected 3 addresses and 2 dims")
     var batch = _index(dims[0])
@@ -93,7 +103,7 @@ def byte_lm_host_logits_binding(addresses: PythonObject, dims: PythonObject,
     var ids = read_i32(ids_addr, m)
     var logits: List[Float32]
     if use_threads == 1:
-        logits = byte_host_logits_threaded(params, ids, batch, length, cfg)
+        logits = byte_host_logits_threaded(params, ids, batch, length, cfg, thread_count)
     else:
         logits = byte_host_logits(params, ids, batch, length, cfg)
     var out = f32_ptr(out_addr)
@@ -103,18 +113,19 @@ def byte_lm_host_logits_binding(addresses: PythonObject, dims: PythonObject,
 
 
 def byte_lm_host_loss_binding(addresses: PythonObject, shape: PythonObject,
-                              threaded: PythonObject) raises -> PythonObject:
+                              threaded: PythonObject, threads: PythonObject) raises -> PythonObject:
     """Loss for addresses [params f32 (n_total), ids i32 (batch * (length + 1))].
-    `threaded` is 0 or 1 as for logits. Returns the mean loss's IEEE-754 bits."""
+    `threaded` and `threads` as for logits. Returns the mean loss's IEEE-754 bits."""
     var cfg = _host_config(shape)
     if len(addresses) != 2:
         raise Error("byte LM host: expected 2 addresses")
     var use_threads = _index(threaded)
     if use_threads != 0 and use_threads != 1:
         raise Error("byte LM host: threaded must be 0 or 1")
+    var thread_count = _thread_count(threads)
     var params = read_f32(_index(addresses[0]), cfg.n_total())
     var ids = read_i32(_index(addresses[1]), cfg.batch * (cfg.length + 1))
-    var loss = byte_host_loss(params, ids, cfg, use_threads == 1)
+    var loss = byte_host_loss(params, ids, cfg, use_threads == 1, thread_count)
     return PythonObject(Int(bitcast[DType.uint32](loss)))
 
 

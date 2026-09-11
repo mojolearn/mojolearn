@@ -1,0 +1,2 @@
+machine: Apple M4, 10 cores, macOS 26.5.2
+uptime/load at capture: 16:19  up 5 days,  8:40, 1 user, load averages: 4.49 3.64 3.33
