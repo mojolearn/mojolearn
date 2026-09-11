@@ -1,0 +1,230 @@
+=== attention step price, mode IDENTICAL, column amd, generator shape B1_L2048_nh12_nkv12_hd64_win0 (a file: kind carries its own shape)
+trial_hook=True phase_timers_built=False
+DEFAULT column=amd arm=baseline source=kernel_matrix.attn_default_arm_for baseline_is_default=True candidate_is_default=False baseline_requested=baseline candidate_requested=stash_tiled_fgrid_r32_qres_pf_kvrecompute
+baseline=baseline candidate=stash_tiled_fgrid_r32_qres_pf_kvrecompute rounds=7 warmups=2
+PATH baseline arm=baseline is_default=True resolved_hd64=baseline zdot_rows=- fwd_rows=- preflush=False reach_bit=sabotage kv_keys=- kv_split=False
+PATH candidate arm=stash_tiled_fgrid_r32_qres_pf_kvrecompute is_default=False resolved_hd64=stash_tiled_fgrid_r32_qres_pf_kvrecompute zdot_rows=- fwd_rows=32 preflush=True reach_bit=sabotage_new kv_keys=4 kv_split=False
+RESOURCES_DEVICE column=amd source_counts=per_thread_hd64
+RESOURCES_BEGIN label=zdot_stash_pf rows=4 keys_per_iteration=32 accumulators_per_thread=2 operand_registers_per_thread=4 thread_local_floats=64 page_bytes=17696 allocations=4 threads_per_block=256
+RESOURCES label=zdot_stash_pf regs=118
+RESOURCES label=zdot_stash_pf local=0
+RESOURCES label=zdot_stash_pf shared=17696
+RESOURCES label=zdot_stash_pf const=-1
+RESOURCES label=zdot_stash_pf max_threads=1024
+RESOURCES label=zdot_stash_pf blocks_per_sm_256=3
+RESOURCES_BEGIN label=dq_tiled_pf rows=64 keys_per_tile=16 accumulators_per_thread=16 operand_registers_per_thread=5 thread_local_floats=0 page_bytes=8448 allocations=3 threads_per_block=256
+RESOURCES label=dq_tiled_pf regs=128
+RESOURCES label=dq_tiled_pf local=140
+RESOURCES label=dq_tiled_pf shared=8448
+RESOURCES label=dq_tiled_pf const=-1
+RESOURCES label=dq_tiled_pf max_threads=1024
+RESOURCES label=dq_tiled_pf blocks_per_sm_256=4
+RESOURCES_BEGIN label=dkdv_recompute keys=4 queries_per_iteration=32 accumulators_per_thread=3 operand_registers_per_thread=4 thread_local_floats=64 page_bytes=17696 allocations=4 threads_per_block=256
+RESOURCES label=dkdv_recompute regs=119
+RESOURCES label=dkdv_recompute local=0
+RESOURCES label=dkdv_recompute shared=17696
+RESOURCES label=dkdv_recompute const=-1
+RESOURCES label=dkdv_recompute max_threads=1024
+RESOURCES label=dkdv_recompute blocks_per_sm_256=3
+RESOURCES_BEGIN label=dkdv_tiled keys=64 queries_per_tile=16 accumulators_per_thread=32 operand_registers_per_thread=10 thread_local_floats=0 page_bytes=16384 allocations=4 threads_per_block=256
+RESOURCES label=dkdv_tiled regs=128
+RESOURCES label=dkdv_tiled local=520
+RESOURCES label=dkdv_tiled shared=16384
+RESOURCES label=dkdv_tiled const=-1
+RESOURCES label=dkdv_tiled max_threads=1024
+RESOURCES label=dkdv_tiled blocks_per_sm_256=4
+RESOURCES_BEGIN label=dkdv_tiled_pf keys=64 queries_per_tile=16 accumulators_per_thread=32 operand_registers_per_thread=10 thread_local_floats=0 page_bytes=16384 allocations=4 threads_per_block=256
+RESOURCES label=dkdv_tiled_pf regs=128
+RESOURCES label=dkdv_tiled_pf local=460
+RESOURCES label=dkdv_tiled_pf shared=16384
+RESOURCES label=dkdv_tiled_pf const=-1
+RESOURCES label=dkdv_tiled_pf max_threads=1024
+RESOURCES label=dkdv_tiled_pf blocks_per_sm_256=4
+RESOURCES_BEGIN label=kvgrid_r64 keys=64 queries_per_tile=16 accumulators_per_thread=32 operand_registers_per_thread=10 thread_local_floats=0 page_bytes=16384 allocations=4 threads_per_block=256
+RESOURCES label=kvgrid_r64 regs=128
+RESOURCES label=kvgrid_r64 local=460
+RESOURCES label=kvgrid_r64 shared=16384
+RESOURCES label=kvgrid_r64 const=-1
+RESOURCES label=kvgrid_r64 max_threads=1024
+RESOURCES label=kvgrid_r64 blocks_per_sm_256=4
+RESOURCES_BEGIN label=kvgrid_r32 keys=32 queries_per_tile=16 accumulators_per_thread=16 operand_registers_per_thread=10 thread_local_floats=0 page_bytes=12288 allocations=4 threads_per_block=256
+RESOURCES label=kvgrid_r32 regs=92
+RESOURCES label=kvgrid_r32 local=0
+RESOURCES label=kvgrid_r32 shared=12288
+RESOURCES label=kvgrid_r32 const=-1
+RESOURCES label=kvgrid_r32 max_threads=1024
+RESOURCES label=kvgrid_r32 blocks_per_sm_256=5
+RESOURCES_BEGIN label=kvsplit_r64_fold keys=64 queries_per_tile=16 accumulators_per_thread=16 operand_registers_per_thread=5 thread_local_floats=0 page_bytes=8192 allocations=2 threads_per_block=256
+RESOURCES label=kvsplit_r64_fold regs=128
+RESOURCES label=kvsplit_r64_fold local=36
+RESOURCES label=kvsplit_r64_fold shared=8192
+RESOURCES label=kvsplit_r64_fold const=-1
+RESOURCES label=kvsplit_r64_fold max_threads=1024
+RESOURCES label=kvsplit_r64_fold blocks_per_sm_256=4
+RESOURCES_BEGIN label=kvsplit_r32_fold keys=32 queries_per_tile=16 accumulators_per_thread=8 operand_registers_per_thread=5 thread_local_floats=0 page_bytes=6144 allocations=2 threads_per_block=256
+RESOURCES label=kvsplit_r32_fold regs=60
+RESOURCES label=kvsplit_r32_fold local=0
+RESOURCES label=kvsplit_r32_fold shared=6144
+RESOURCES label=kvsplit_r32_fold const=-1
+RESOURCES label=kvsplit_r32_fold max_threads=1024
+RESOURCES label=kvsplit_r32_fold blocks_per_sm_256=8
+RESOURCES_DONE
+--- kind file:operands-enwik8
+shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 S=2048 key_lo=0 pos0=0
+RAN file:operands-enwik8 baseline forward=baseline backward=baseline
+DIGEST file:operands-enwik8 baseline ctx 5f01fc3a9bcec9c9 amax d89905a2e4307303 denom 195b4567d81c06fc zdot 8300ce7d2f4755d5 dq e0625e227bed3164 dk 27853f72872d8fc9 dv 95007640dca74d09
+DIGEST file:operands-enwik8 eager ctx 5f01fc3a9bcec9c9 amax d89905a2e4307303 denom 195b4567d81c06fc zdot 8300ce7d2f4755d5 dq e0625e227bed3164 dk 27853f72872d8fc9 dv 95007640dca74d09
+BITS file:operands-enwik8 baseline_vs_eager ctx MATCH 0 of 1572864
+BITS file:operands-enwik8 baseline_vs_eager amax MATCH 0 of 24576
+BITS file:operands-enwik8 baseline_vs_eager denom MATCH 0 of 24576
+BITS file:operands-enwik8 baseline_vs_eager zdot MATCH 0 of 24576
+BITS file:operands-enwik8 baseline_vs_eager dq MATCH 0 of 1572864
+BITS file:operands-enwik8 baseline_vs_eager dk MATCH 0 of 1572864
+BITS file:operands-enwik8 baseline_vs_eager dv MATCH 0 of 1572864
+RAN file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf_kvrecompute forward=fwd_sstash_fgrid_r32_qres_pf backward=bwd_stash_tiled_pf_kvrecompute
+DIGEST file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf_kvrecompute ctx 5f01fc3a9bcec9c9 amax d89905a2e4307303 denom 195b4567d81c06fc zdot 8300ce7d2f4755d5 dq e0625e227bed3164 dk 27853f72872d8fc9 dv 95007640dca74d09
+BITS file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf_kvrecompute_vs_baseline ctx MATCH 0 of 1572864
+BITS file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf_kvrecompute_vs_baseline amax MATCH 0 of 24576
+BITS file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf_kvrecompute_vs_baseline denom MATCH 0 of 24576
+BITS file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf_kvrecompute_vs_baseline zdot MATCH 0 of 24576
+BITS file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf_kvrecompute_vs_baseline dq MATCH 0 of 1572864
+BITS file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf_kvrecompute_vs_baseline dk MATCH 0 of 1572864
+BITS file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf_kvrecompute_vs_baseline dv MATCH 0 of 1572864
+RAN file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf_kvrecompute+sabotage_new forward=fwd_sstash_fgrid_r32_qres_pf backward=bwd_stash_tiled_pf_kvrecompute
+BITS file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf_kvrecompute+sabotage_new_vs_baseline ctx MOVED 857282 of 1572864
+BITS file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf_kvrecompute+sabotage_new_vs_baseline amax MOVED 16316 of 24576
+BITS file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf_kvrecompute+sabotage_new_vs_baseline denom MOVED 12712 of 24576
+BITS file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf_kvrecompute+sabotage_new_vs_baseline zdot MOVED 21014 of 24576
+BITS file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf_kvrecompute+sabotage_new_vs_baseline dq MOVED 1411791 of 1572864
+BITS file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf_kvrecompute+sabotage_new_vs_baseline dk MOVED 1453564 of 1572864
+BITS file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf_kvrecompute+sabotage_new_vs_baseline dv MOVED 1058201 of 1572864
+RAN file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf_kvrecompute+sabotage_kv forward=fwd_sstash_fgrid_r32_qres_pf backward=bwd_stash_tiled_pf_kvrecompute
+BITS file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf_kvrecompute+sabotage_kv_vs_baseline ctx MATCH 0 of 1572864
+BITS file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf_kvrecompute+sabotage_kv_vs_baseline amax MATCH 0 of 24576
+BITS file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf_kvrecompute+sabotage_kv_vs_baseline denom MATCH 0 of 24576
+BITS file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf_kvrecompute+sabotage_kv_vs_baseline zdot MATCH 0 of 24576
+BITS file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf_kvrecompute+sabotage_kv_vs_baseline dq MATCH 0 of 1572864
+BITS file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf_kvrecompute+sabotage_kv_vs_baseline dk MOVED 1296561 of 1572864
+BITS file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf_kvrecompute+sabotage_kv_vs_baseline dv MOVED 1145981 of 1572864
+REACH_KV file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf_kvrecompute sabotage_flipped_cells=2442542 reach_bit=stash_tiled_fgrid_r32_qres_pf_kvrecompute+sabotage_kv dk_moved=1296561 dv_moved=1145981 zdot_moved=0 dq_moved=0 forward_moved=0
+RAN file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf_kvrecompute (restore) forward=fwd_sstash_fgrid_r32_qres_pf backward=bwd_stash_tiled_pf_kvrecompute
+BITS file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf_kvrecompute_restored_vs_baseline ctx MATCH 0 of 1572864
+BITS file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf_kvrecompute_restored_vs_baseline amax MATCH 0 of 24576
+BITS file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf_kvrecompute_restored_vs_baseline denom MATCH 0 of 24576
+BITS file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf_kvrecompute_restored_vs_baseline zdot MATCH 0 of 24576
+BITS file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf_kvrecompute_restored_vs_baseline dq MATCH 0 of 1572864
+BITS file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf_kvrecompute_restored_vs_baseline dk MATCH 0 of 1572864
+BITS file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf_kvrecompute_restored_vs_baseline dv MATCH 0 of 1572864
+REACH file:operands-enwik8 stash_tiled_fgrid_r32_qres_pf_kvrecompute sabotage_flipped_cells=4830880 clean_restored=True reach_bit=stash_tiled_fgrid_r32_qres_pf_kvrecompute+sabotage_new forward_moved=886310 backward_moved=3944570 amax_denom_moved=29028 ctx_moved_columns_16_up=644351 zdot_moved=21014 dv_moved=1058201
+PRICE attention baseline fwd file:operands-enwik8 8.852236 ms
+PRICE attention baseline fwdbwd file:operands-enwik8 22.488757 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_kvrecompute fwd file:operands-enwik8 2.508332 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_kvrecompute fwdbwd file:operands-enwik8 13.65017 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_kvrecompute fwd file:operands-enwik8 2.505263 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_kvrecompute fwdbwd file:operands-enwik8 13.717125 ms
+PRICE attention baseline fwd file:operands-enwik8 8.792771 ms
+PRICE attention baseline fwdbwd file:operands-enwik8 22.631745 ms
+PRICE attention baseline fwd file:operands-enwik8 8.802191 ms
+PRICE attention baseline fwdbwd file:operands-enwik8 22.704507 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_kvrecompute fwd file:operands-enwik8 2.506511 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_kvrecompute fwdbwd file:operands-enwik8 13.736361 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_kvrecompute fwd file:operands-enwik8 2.500813 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_kvrecompute fwdbwd file:operands-enwik8 13.653949 ms
+PRICE attention baseline fwd file:operands-enwik8 8.849246 ms
+PRICE attention baseline fwdbwd file:operands-enwik8 22.586699 ms
+PRICE attention baseline fwd file:operands-enwik8 8.775133 ms
+PRICE attention baseline fwdbwd file:operands-enwik8 22.909468 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_kvrecompute fwd file:operands-enwik8 2.530239 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_kvrecompute fwdbwd file:operands-enwik8 13.753571 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_kvrecompute fwd file:operands-enwik8 2.510352 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_kvrecompute fwdbwd file:operands-enwik8 13.716863 ms
+PRICE attention baseline fwd file:operands-enwik8 8.832568 ms
+PRICE attention baseline fwdbwd file:operands-enwik8 22.504255 ms
+PRICE attention baseline fwd file:operands-enwik8 8.824677 ms
+PRICE attention baseline fwdbwd file:operands-enwik8 22.650833 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_kvrecompute fwd file:operands-enwik8 2.515741 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_kvrecompute fwdbwd file:operands-enwik8 13.615433 ms
+TABLE kind=file:operands-enwik8 shape=B1_L2048_nh12_nkv12_hd64_win0 column=amd default_arm=baseline visible_cells=25178112 (useful flops: fwd 4*cells*hd, bwd 10*cells*hd; executed multiplier of the shipped kernels: fwd dots 3 of 2 contractions, bwd dots 6 of 5)
+TABLE arm | fwd median ms | fwd useful TFLOP/s | fwd+bwd median ms | bwd (derived) ms | bwd useful TFLOP/s | fwd ratio | fwd+bwd ratio
+TABLE baseline | 8.824677 | 0.7304059595608995 | 22.631745 | 13.807068 | 1.1670828071535535 | 1.0 | 1.0
+TABLE stash_tiled_fgrid_r32_qres_pf_kvrecompute | 2.508332 | 2.5696744577671535 | 13.716863 | 11.208531 | 1.4376542010723796 | 3.518145524595628 | 1.6499213413445917
+--- kind file:operands-pilegithub
+shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 S=2048 key_lo=0 pos0=0
+RAN file:operands-pilegithub baseline forward=baseline backward=baseline
+DIGEST file:operands-pilegithub baseline ctx 2a3a48d476868ddf amax c87795424c4ce74a denom 3b946f3ab306552a zdot 18417cee822a4690 dq dce688e9f43ba511 dk b7bdacf0394a4c64 dv 36950bfa379abbf6
+DIGEST file:operands-pilegithub eager ctx 2a3a48d476868ddf amax c87795424c4ce74a denom 3b946f3ab306552a zdot 18417cee822a4690 dq dce688e9f43ba511 dk b7bdacf0394a4c64 dv 36950bfa379abbf6
+BITS file:operands-pilegithub baseline_vs_eager ctx MATCH 0 of 1572864
+BITS file:operands-pilegithub baseline_vs_eager amax MATCH 0 of 24576
+BITS file:operands-pilegithub baseline_vs_eager denom MATCH 0 of 24576
+BITS file:operands-pilegithub baseline_vs_eager zdot MATCH 0 of 24576
+BITS file:operands-pilegithub baseline_vs_eager dq MATCH 0 of 1572864
+BITS file:operands-pilegithub baseline_vs_eager dk MATCH 0 of 1572864
+BITS file:operands-pilegithub baseline_vs_eager dv MATCH 0 of 1572864
+RAN file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf_kvrecompute forward=fwd_sstash_fgrid_r32_qres_pf backward=bwd_stash_tiled_pf_kvrecompute
+DIGEST file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf_kvrecompute ctx 2a3a48d476868ddf amax c87795424c4ce74a denom 3b946f3ab306552a zdot 18417cee822a4690 dq dce688e9f43ba511 dk b7bdacf0394a4c64 dv 36950bfa379abbf6
+BITS file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf_kvrecompute_vs_baseline ctx MATCH 0 of 1572864
+BITS file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf_kvrecompute_vs_baseline amax MATCH 0 of 24576
+BITS file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf_kvrecompute_vs_baseline denom MATCH 0 of 24576
+BITS file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf_kvrecompute_vs_baseline zdot MATCH 0 of 24576
+BITS file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf_kvrecompute_vs_baseline dq MATCH 0 of 1572864
+BITS file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf_kvrecompute_vs_baseline dk MATCH 0 of 1572864
+BITS file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf_kvrecompute_vs_baseline dv MATCH 0 of 1572864
+RAN file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf_kvrecompute+sabotage_new forward=fwd_sstash_fgrid_r32_qres_pf backward=bwd_stash_tiled_pf_kvrecompute
+BITS file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf_kvrecompute+sabotage_new_vs_baseline ctx MOVED 849951 of 1572864
+BITS file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf_kvrecompute+sabotage_new_vs_baseline amax MOVED 16133 of 24576
+BITS file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf_kvrecompute+sabotage_new_vs_baseline denom MOVED 12833 of 24576
+BITS file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf_kvrecompute+sabotage_new_vs_baseline zdot MOVED 21192 of 24576
+BITS file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf_kvrecompute+sabotage_new_vs_baseline dq MOVED 1405497 of 1572864
+BITS file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf_kvrecompute+sabotage_new_vs_baseline dk MOVED 1442892 of 1572864
+BITS file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf_kvrecompute+sabotage_new_vs_baseline dv MOVED 1027539 of 1572864
+RAN file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf_kvrecompute+sabotage_kv forward=fwd_sstash_fgrid_r32_qres_pf backward=bwd_stash_tiled_pf_kvrecompute
+BITS file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf_kvrecompute+sabotage_kv_vs_baseline ctx MATCH 0 of 1572864
+BITS file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf_kvrecompute+sabotage_kv_vs_baseline amax MATCH 0 of 24576
+BITS file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf_kvrecompute+sabotage_kv_vs_baseline denom MATCH 0 of 24576
+BITS file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf_kvrecompute+sabotage_kv_vs_baseline zdot MATCH 0 of 24576
+BITS file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf_kvrecompute+sabotage_kv_vs_baseline dq MATCH 0 of 1572864
+BITS file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf_kvrecompute+sabotage_kv_vs_baseline dk MOVED 1294690 of 1572864
+BITS file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf_kvrecompute+sabotage_kv_vs_baseline dv MOVED 1130645 of 1572864
+REACH_KV file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf_kvrecompute sabotage_flipped_cells=2425335 reach_bit=stash_tiled_fgrid_r32_qres_pf_kvrecompute+sabotage_kv dk_moved=1294690 dv_moved=1130645 zdot_moved=0 dq_moved=0 forward_moved=0
+RAN file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf_kvrecompute (restore) forward=fwd_sstash_fgrid_r32_qres_pf backward=bwd_stash_tiled_pf_kvrecompute
+BITS file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf_kvrecompute_restored_vs_baseline ctx MATCH 0 of 1572864
+BITS file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf_kvrecompute_restored_vs_baseline amax MATCH 0 of 24576
+BITS file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf_kvrecompute_restored_vs_baseline denom MATCH 0 of 24576
+BITS file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf_kvrecompute_restored_vs_baseline zdot MATCH 0 of 24576
+BITS file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf_kvrecompute_restored_vs_baseline dq MATCH 0 of 1572864
+BITS file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf_kvrecompute_restored_vs_baseline dk MATCH 0 of 1572864
+BITS file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf_kvrecompute_restored_vs_baseline dv MATCH 0 of 1572864
+REACH file:operands-pilegithub stash_tiled_fgrid_r32_qres_pf_kvrecompute sabotage_flipped_cells=4776037 clean_restored=True reach_bit=stash_tiled_fgrid_r32_qres_pf_kvrecompute+sabotage_new forward_moved=878917 backward_moved=3897120 amax_denom_moved=28966 ctx_moved_columns_16_up=637501 zdot_moved=21192 dv_moved=1027539
+PRICE attention baseline fwd file:operands-pilegithub 8.758726 ms
+PRICE attention baseline fwdbwd file:operands-pilegithub 22.545953 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_kvrecompute fwd file:operands-pilegithub 2.489658 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_kvrecompute fwdbwd file:operands-pilegithub 13.660209 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_kvrecompute fwd file:operands-pilegithub 2.494087 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_kvrecompute fwdbwd file:operands-pilegithub 13.725112 ms
+PRICE attention baseline fwd file:operands-pilegithub 8.818352 ms
+PRICE attention baseline fwdbwd file:operands-pilegithub 22.70205 ms
+PRICE attention baseline fwd file:operands-pilegithub 8.755847 ms
+PRICE attention baseline fwdbwd file:operands-pilegithub 22.608558 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_kvrecompute fwd file:operands-pilegithub 2.521624 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_kvrecompute fwdbwd file:operands-pilegithub 13.635072 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_kvrecompute fwd file:operands-pilegithub 2.526045 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_kvrecompute fwdbwd file:operands-pilegithub 13.64771 ms
+PRICE attention baseline fwd file:operands-pilegithub 8.753638 ms
+PRICE attention baseline fwdbwd file:operands-pilegithub 22.491178 ms
+PRICE attention baseline fwd file:operands-pilegithub 8.82005 ms
+PRICE attention baseline fwdbwd file:operands-pilegithub 22.745575 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_kvrecompute fwd file:operands-pilegithub 2.496206 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_kvrecompute fwdbwd file:operands-pilegithub 13.617732 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_kvrecompute fwd file:operands-pilegithub 2.492996 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_kvrecompute fwdbwd file:operands-pilegithub 13.775548 ms
+PRICE attention baseline fwd file:operands-pilegithub 8.853098 ms
+PRICE attention baseline fwdbwd file:operands-pilegithub 22.662244 ms
+PRICE attention baseline fwd file:operands-pilegithub 8.84095 ms
+PRICE attention baseline fwdbwd file:operands-pilegithub 22.48637 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_kvrecompute fwd file:operands-pilegithub 2.499637 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_kvrecompute fwdbwd file:operands-pilegithub 13.654639 ms
+TABLE kind=file:operands-pilegithub shape=B1_L2048_nh12_nkv12_hd64_win0 column=amd default_arm=baseline visible_cells=25178112 (useful flops: fwd 4*cells*hd, bwd 10*cells*hd; executed multiplier of the shipped kernels: fwd dots 3 of 2 contractions, bwd dots 6 of 5)
+TABLE arm | fwd median ms | fwd useful TFLOP/s | fwd+bwd median ms | bwd (derived) ms | bwd useful TFLOP/s | fwd ratio | fwd+bwd ratio
+TABLE baseline | 8.818352 | 0.7309298463023477 | 22.608558 | 13.790205999999998 | 1.168509859823704 | 1.0 | 1.0
+TABLE stash_tiled_fgrid_r32_qres_pf_kvrecompute | 2.496206 | 2.5821573507955673 | 13.654639 | 11.158432999999999 | 1.4441088349950215 | 3.5327020285986017 | 1.6557419057362117
+attention_step_price: PASS (stash_tiled_fgrid_r32_qres_pf_kvrecompute vs baseline)

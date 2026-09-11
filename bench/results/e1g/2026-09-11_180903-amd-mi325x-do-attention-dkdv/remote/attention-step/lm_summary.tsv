@@ -1,0 +1,238 @@
+lm-baseline-enwik8	steady_median_seconds=1.6229623264999873	limited=False	arm=baseline	arm_requested=baseline	arm_default=baseline	arm_is_default=True	arm_resolved_hd64=baseline	corpus_sha256=2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8
+lm-baseline-enwik8	step=1	sha256={"flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb", "gradients": "01d5fa4ae0299bbbd2de8f47d6d0d1e3c525c57b13cfa0244b130a7d7bb813f7", "loss": "a39d1a773245b9bb9f5a25aac121f308d875d0f0a5a7d827bc21552112023c71", "m": "b3fafccc62a0feab9ae135d3053054ea3ea8b131bbb0247959d212e13c727c0c", "parameters": "84f96dc296e50b8cea15b54787e7fbede994b0730ee5d3ed86c620cf539c05c9", "v": "ae18e62bdf7a1dab7177ff4af00bf7d185845716e1af365e0bc52e362666a8f6"}
+lm-baseline-enwik8	step=2	sha256={"flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb", "gradients": "4b7fc425a350d5b505ce3dcdc47f74607dafc21833171dfdc3d5fdfcd34228d5", "loss": "0ea11db969cf635b5f6ce89ea6b4c6db630e3e15286d515a9195af6b49963a33", "m": "3929767028f4d6bf8b73bd47515e113e25a5126aa94051182da074089e7f6d9d", "parameters": "86b04b9ddc53a2d6c4a71437107f4a86ec3dbe0d451fcb846829504c28a779f5", "v": "a71175cfa54e1067bc6dcdd5c8e740f5784e78aef2f7a35667f43e6f1df7c5db"}
+lm-baseline-enwik8	step=3	sha256={"flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb", "gradients": "80502bcbaa38a7f5c40a0f9886a7300b13ea31aaef29ac93a241adc4fe601b0d", "loss": "f6408c14717053270ac93f48f0bb9dcd3f35f7c6edf30f5e322d280cec467f83", "m": "62a57517ac0891e078a2d17199044887b3e460bf5e42af74859ccf584be9a6eb", "parameters": "cb6cfb17e14fc800c38b68bb37a6453a782a8d13de0107dd077aa5a2759ac808", "v": "eca204720d5c1c692d2ae808d79fb51bf90a502961202b0450615b7f0e4c2d6d"}
+lm-baseline-enwik8.log	no result.json
+lm-baseline-pilegithub	steady_median_seconds=1.6326118229999906	limited=False	arm=baseline	arm_requested=baseline	arm_default=baseline	arm_is_default=True	arm_resolved_hd64=baseline	corpus_sha256=52a5b4c36ab9119c15505331c10e3b23690377d40fbac3e598c7fafe13a324df
+lm-baseline-pilegithub	step=1	sha256={"flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb", "gradients": "85d053a482668fd958df0e32325fc47f9ba10ec630ff63557c7b79c5bd85b0e3", "loss": "fb1bfea4e8daa3b31227ff49a404e36a58fe27b98856af4d27a24872b0e9abf2", "m": "8dbf0dfcb08f29687241a6586a7ef8224fde5877a7aeb490b9701d24d5812524", "parameters": "1b32246046a72ada00e3c8ec04d079beb629d8e314f860bc7106d42c5996a8ca", "v": "227d2c36dbd16e9acf0556ec491d8b6431a8e4cc5b235b8d81011996a9bc05be"}
+lm-baseline-pilegithub	step=2	sha256={"flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb", "gradients": "defa184dcfcf29c7650972fa5372f463679eb4c46daa463aef108a2882a169f5", "loss": "ddb267519e68048079f2a5320ecdd60baeb59036301a115827a9dced054ff2bd", "m": "abe0098ba41bcb6298497c575d2768d6486d514bd41d2a7a72b7592c8cd3455c", "parameters": "33e2bad344f1f355e40abeff6165ce36d1a74004ec0ce5d405254cf971dd412f", "v": "8ef9e39530fd6f585c23d30dbd3e846af65da81262d0b303d216a178e4905035"}
+lm-baseline-pilegithub	step=3	sha256={"flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb", "gradients": "a736cdce5bb28a804c2e28abd2b2b561598bac2cd93b051e7535f32cbdab3a67", "loss": "5aa104f9260207f9e1eec2787cddbc7cc83096d02f0010439df163e3e18ce443", "m": "dbcce767d3558558631d631862966e6a37c6cf0eeb0132fa49e4175e25549ca3", "parameters": "4185581a78053257fc376373ba15a99ce705437ada726ec604f990cc96211dcc", "v": "accb7ae950dc3c72b04b96e3df10b2c9850b27fee86deafdc0069ac74ea7f26d"}
+lm-baseline-pilegithub.log	no result.json
+lm-stash_tiled_fgrid_r32_qres_pf-enwik8	steady_median_seconds=1.8463618950000011	limited=False	arm=stash_tiled_fgrid_r32_qres_pf	arm_requested=stash_tiled_fgrid_r32_qres_pf	arm_default=baseline	arm_is_default=False	arm_resolved_hd64=stash_tiled_fgrid_r32_qres_pf	corpus_sha256=2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8
+lm-stash_tiled_fgrid_r32_qres_pf-enwik8	step=1	sha256={"flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb", "gradients": "01d5fa4ae0299bbbd2de8f47d6d0d1e3c525c57b13cfa0244b130a7d7bb813f7", "loss": "a39d1a773245b9bb9f5a25aac121f308d875d0f0a5a7d827bc21552112023c71", "m": "b3fafccc62a0feab9ae135d3053054ea3ea8b131bbb0247959d212e13c727c0c", "parameters": "84f96dc296e50b8cea15b54787e7fbede994b0730ee5d3ed86c620cf539c05c9", "v": "ae18e62bdf7a1dab7177ff4af00bf7d185845716e1af365e0bc52e362666a8f6"}
+lm-stash_tiled_fgrid_r32_qres_pf-enwik8	step=2	sha256={"flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb", "gradients": "4b7fc425a350d5b505ce3dcdc47f74607dafc21833171dfdc3d5fdfcd34228d5", "loss": "0ea11db969cf635b5f6ce89ea6b4c6db630e3e15286d515a9195af6b49963a33", "m": "3929767028f4d6bf8b73bd47515e113e25a5126aa94051182da074089e7f6d9d", "parameters": "86b04b9ddc53a2d6c4a71437107f4a86ec3dbe0d451fcb846829504c28a779f5", "v": "a71175cfa54e1067bc6dcdd5c8e740f5784e78aef2f7a35667f43e6f1df7c5db"}
+lm-stash_tiled_fgrid_r32_qres_pf-enwik8	step=3	sha256={"flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb", "gradients": "80502bcbaa38a7f5c40a0f9886a7300b13ea31aaef29ac93a241adc4fe601b0d", "loss": "f6408c14717053270ac93f48f0bb9dcd3f35f7c6edf30f5e322d280cec467f83", "m": "62a57517ac0891e078a2d17199044887b3e460bf5e42af74859ccf584be9a6eb", "parameters": "cb6cfb17e14fc800c38b68bb37a6453a782a8d13de0107dd077aa5a2759ac808", "v": "eca204720d5c1c692d2ae808d79fb51bf90a502961202b0450615b7f0e4c2d6d"}
+lm-stash_tiled_fgrid_r32_qres_pf-enwik8.log	no result.json
+lm-stash_tiled_fgrid_r32_qres_pf-pilegithub	steady_median_seconds=1.8650831989999688	limited=False	arm=stash_tiled_fgrid_r32_qres_pf	arm_requested=stash_tiled_fgrid_r32_qres_pf	arm_default=baseline	arm_is_default=False	arm_resolved_hd64=stash_tiled_fgrid_r32_qres_pf	corpus_sha256=52a5b4c36ab9119c15505331c10e3b23690377d40fbac3e598c7fafe13a324df
+lm-stash_tiled_fgrid_r32_qres_pf-pilegithub	step=1	sha256={"flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb", "gradients": "85d053a482668fd958df0e32325fc47f9ba10ec630ff63557c7b79c5bd85b0e3", "loss": "fb1bfea4e8daa3b31227ff49a404e36a58fe27b98856af4d27a24872b0e9abf2", "m": "8dbf0dfcb08f29687241a6586a7ef8224fde5877a7aeb490b9701d24d5812524", "parameters": "1b32246046a72ada00e3c8ec04d079beb629d8e314f860bc7106d42c5996a8ca", "v": "227d2c36dbd16e9acf0556ec491d8b6431a8e4cc5b235b8d81011996a9bc05be"}
+lm-stash_tiled_fgrid_r32_qres_pf-pilegithub	step=2	sha256={"flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb", "gradients": "defa184dcfcf29c7650972fa5372f463679eb4c46daa463aef108a2882a169f5", "loss": "ddb267519e68048079f2a5320ecdd60baeb59036301a115827a9dced054ff2bd", "m": "abe0098ba41bcb6298497c575d2768d6486d514bd41d2a7a72b7592c8cd3455c", "parameters": "33e2bad344f1f355e40abeff6165ce36d1a74004ec0ce5d405254cf971dd412f", "v": "8ef9e39530fd6f585c23d30dbd3e846af65da81262d0b303d216a178e4905035"}
+lm-stash_tiled_fgrid_r32_qres_pf-pilegithub	step=3	sha256={"flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb", "gradients": "a736cdce5bb28a804c2e28abd2b2b561598bac2cd93b051e7535f32cbdab3a67", "loss": "5aa104f9260207f9e1eec2787cddbc7cc83096d02f0010439df163e3e18ce443", "m": "dbcce767d3558558631d631862966e6a37c6cf0eeb0132fa49e4175e25549ca3", "parameters": "4185581a78053257fc376373ba15a99ce705437ada726ec604f990cc96211dcc", "v": "accb7ae950dc3c72b04b96e3df10b2c9850b27fee86deafdc0069ac74ea7f26d"}
+lm-stash_tiled_fgrid_r32_qres_pf-pilegithub.log	no result.json
+lm-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-enwik8	steady_median_seconds=1.3759575154999766	limited=False	arm=stash_tiled_fgrid_r32_qres_pf_kvgrid_r32	arm_requested=stash_tiled_fgrid_r32_qres_pf_kvgrid_r32	arm_default=baseline	arm_is_default=False	arm_resolved_hd64=stash_tiled_fgrid_r32_qres_pf_kvgrid_r32	corpus_sha256=2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8
+lm-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-enwik8	step=1	sha256={"flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb", "gradients": "01d5fa4ae0299bbbd2de8f47d6d0d1e3c525c57b13cfa0244b130a7d7bb813f7", "loss": "a39d1a773245b9bb9f5a25aac121f308d875d0f0a5a7d827bc21552112023c71", "m": "b3fafccc62a0feab9ae135d3053054ea3ea8b131bbb0247959d212e13c727c0c", "parameters": "84f96dc296e50b8cea15b54787e7fbede994b0730ee5d3ed86c620cf539c05c9", "v": "ae18e62bdf7a1dab7177ff4af00bf7d185845716e1af365e0bc52e362666a8f6"}
+lm-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-enwik8	step=2	sha256={"flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb", "gradients": "4b7fc425a350d5b505ce3dcdc47f74607dafc21833171dfdc3d5fdfcd34228d5", "loss": "0ea11db969cf635b5f6ce89ea6b4c6db630e3e15286d515a9195af6b49963a33", "m": "3929767028f4d6bf8b73bd47515e113e25a5126aa94051182da074089e7f6d9d", "parameters": "86b04b9ddc53a2d6c4a71437107f4a86ec3dbe0d451fcb846829504c28a779f5", "v": "a71175cfa54e1067bc6dcdd5c8e740f5784e78aef2f7a35667f43e6f1df7c5db"}
+lm-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-enwik8	step=3	sha256={"flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb", "gradients": "80502bcbaa38a7f5c40a0f9886a7300b13ea31aaef29ac93a241adc4fe601b0d", "loss": "f6408c14717053270ac93f48f0bb9dcd3f35f7c6edf30f5e322d280cec467f83", "m": "62a57517ac0891e078a2d17199044887b3e460bf5e42af74859ccf584be9a6eb", "parameters": "cb6cfb17e14fc800c38b68bb37a6453a782a8d13de0107dd077aa5a2759ac808", "v": "eca204720d5c1c692d2ae808d79fb51bf90a502961202b0450615b7f0e4c2d6d"}
+lm-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-enwik8.log	no result.json
+lm-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-pilegithub	steady_median_seconds=1.3704245879999917	limited=False	arm=stash_tiled_fgrid_r32_qres_pf_kvgrid_r32	arm_requested=stash_tiled_fgrid_r32_qres_pf_kvgrid_r32	arm_default=baseline	arm_is_default=False	arm_resolved_hd64=stash_tiled_fgrid_r32_qres_pf_kvgrid_r32	corpus_sha256=52a5b4c36ab9119c15505331c10e3b23690377d40fbac3e598c7fafe13a324df
+lm-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-pilegithub	step=1	sha256={"flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb", "gradients": "85d053a482668fd958df0e32325fc47f9ba10ec630ff63557c7b79c5bd85b0e3", "loss": "fb1bfea4e8daa3b31227ff49a404e36a58fe27b98856af4d27a24872b0e9abf2", "m": "8dbf0dfcb08f29687241a6586a7ef8224fde5877a7aeb490b9701d24d5812524", "parameters": "1b32246046a72ada00e3c8ec04d079beb629d8e314f860bc7106d42c5996a8ca", "v": "227d2c36dbd16e9acf0556ec491d8b6431a8e4cc5b235b8d81011996a9bc05be"}
+lm-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-pilegithub	step=2	sha256={"flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb", "gradients": "defa184dcfcf29c7650972fa5372f463679eb4c46daa463aef108a2882a169f5", "loss": "ddb267519e68048079f2a5320ecdd60baeb59036301a115827a9dced054ff2bd", "m": "abe0098ba41bcb6298497c575d2768d6486d514bd41d2a7a72b7592c8cd3455c", "parameters": "33e2bad344f1f355e40abeff6165ce36d1a74004ec0ce5d405254cf971dd412f", "v": "8ef9e39530fd6f585c23d30dbd3e846af65da81262d0b303d216a178e4905035"}
+lm-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-pilegithub	step=3	sha256={"flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb", "gradients": "a736cdce5bb28a804c2e28abd2b2b561598bac2cd93b051e7535f32cbdab3a67", "loss": "5aa104f9260207f9e1eec2787cddbc7cc83096d02f0010439df163e3e18ce443", "m": "dbcce767d3558558631d631862966e6a37c6cf0eeb0132fa49e4175e25549ca3", "parameters": "4185581a78053257fc376373ba15a99ce705437ada726ec604f990cc96211dcc", "v": "accb7ae950dc3c72b04b96e3df10b2c9850b27fee86deafdc0069ac74ea7f26d"}
+lm-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-pilegithub.log	no result.json
+lm-stash_tiled_fgrid_r32_qres_pf_kvrecompute-enwik8	steady_median_seconds=1.3964067335000436	limited=False	arm=stash_tiled_fgrid_r32_qres_pf_kvrecompute	arm_requested=stash_tiled_fgrid_r32_qres_pf_kvrecompute	arm_default=baseline	arm_is_default=False	arm_resolved_hd64=stash_tiled_fgrid_r32_qres_pf_kvrecompute	corpus_sha256=2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8
+lm-stash_tiled_fgrid_r32_qres_pf_kvrecompute-enwik8	step=1	sha256={"flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb", "gradients": "01d5fa4ae0299bbbd2de8f47d6d0d1e3c525c57b13cfa0244b130a7d7bb813f7", "loss": "a39d1a773245b9bb9f5a25aac121f308d875d0f0a5a7d827bc21552112023c71", "m": "b3fafccc62a0feab9ae135d3053054ea3ea8b131bbb0247959d212e13c727c0c", "parameters": "84f96dc296e50b8cea15b54787e7fbede994b0730ee5d3ed86c620cf539c05c9", "v": "ae18e62bdf7a1dab7177ff4af00bf7d185845716e1af365e0bc52e362666a8f6"}
+lm-stash_tiled_fgrid_r32_qres_pf_kvrecompute-enwik8	step=2	sha256={"flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb", "gradients": "4b7fc425a350d5b505ce3dcdc47f74607dafc21833171dfdc3d5fdfcd34228d5", "loss": "0ea11db969cf635b5f6ce89ea6b4c6db630e3e15286d515a9195af6b49963a33", "m": "3929767028f4d6bf8b73bd47515e113e25a5126aa94051182da074089e7f6d9d", "parameters": "86b04b9ddc53a2d6c4a71437107f4a86ec3dbe0d451fcb846829504c28a779f5", "v": "a71175cfa54e1067bc6dcdd5c8e740f5784e78aef2f7a35667f43e6f1df7c5db"}
+lm-stash_tiled_fgrid_r32_qres_pf_kvrecompute-enwik8	step=3	sha256={"flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb", "gradients": "80502bcbaa38a7f5c40a0f9886a7300b13ea31aaef29ac93a241adc4fe601b0d", "loss": "f6408c14717053270ac93f48f0bb9dcd3f35f7c6edf30f5e322d280cec467f83", "m": "62a57517ac0891e078a2d17199044887b3e460bf5e42af74859ccf584be9a6eb", "parameters": "cb6cfb17e14fc800c38b68bb37a6453a782a8d13de0107dd077aa5a2759ac808", "v": "eca204720d5c1c692d2ae808d79fb51bf90a502961202b0450615b7f0e4c2d6d"}
+lm-stash_tiled_fgrid_r32_qres_pf_kvrecompute-enwik8.log	no result.json
+lm-stash_tiled_fgrid_r32_qres_pf_kvrecompute-pilegithub	steady_median_seconds=1.4202628114999811	limited=False	arm=stash_tiled_fgrid_r32_qres_pf_kvrecompute	arm_requested=stash_tiled_fgrid_r32_qres_pf_kvrecompute	arm_default=baseline	arm_is_default=False	arm_resolved_hd64=stash_tiled_fgrid_r32_qres_pf_kvrecompute	corpus_sha256=52a5b4c36ab9119c15505331c10e3b23690377d40fbac3e598c7fafe13a324df
+lm-stash_tiled_fgrid_r32_qres_pf_kvrecompute-pilegithub	step=1	sha256={"flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb", "gradients": "85d053a482668fd958df0e32325fc47f9ba10ec630ff63557c7b79c5bd85b0e3", "loss": "fb1bfea4e8daa3b31227ff49a404e36a58fe27b98856af4d27a24872b0e9abf2", "m": "8dbf0dfcb08f29687241a6586a7ef8224fde5877a7aeb490b9701d24d5812524", "parameters": "1b32246046a72ada00e3c8ec04d079beb629d8e314f860bc7106d42c5996a8ca", "v": "227d2c36dbd16e9acf0556ec491d8b6431a8e4cc5b235b8d81011996a9bc05be"}
+lm-stash_tiled_fgrid_r32_qres_pf_kvrecompute-pilegithub	step=2	sha256={"flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb", "gradients": "defa184dcfcf29c7650972fa5372f463679eb4c46daa463aef108a2882a169f5", "loss": "ddb267519e68048079f2a5320ecdd60baeb59036301a115827a9dced054ff2bd", "m": "abe0098ba41bcb6298497c575d2768d6486d514bd41d2a7a72b7592c8cd3455c", "parameters": "33e2bad344f1f355e40abeff6165ce36d1a74004ec0ce5d405254cf971dd412f", "v": "8ef9e39530fd6f585c23d30dbd3e846af65da81262d0b303d216a178e4905035"}
+lm-stash_tiled_fgrid_r32_qres_pf_kvrecompute-pilegithub	step=3	sha256={"flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb", "gradients": "a736cdce5bb28a804c2e28abd2b2b561598bac2cd93b051e7535f32cbdab3a67", "loss": "5aa104f9260207f9e1eec2787cddbc7cc83096d02f0010439df163e3e18ce443", "m": "dbcce767d3558558631d631862966e6a37c6cf0eeb0132fa49e4175e25549ca3", "parameters": "4185581a78053257fc376373ba15a99ce705437ada726ec604f990cc96211dcc", "v": "accb7ae950dc3c72b04b96e3df10b2c9850b27fee86deafdc0069ac74ea7f26d"}
+lm-stash_tiled_fgrid_r32_qres_pf_kvrecompute-pilegithub.log	no result.json
+lm-stash_tiled_fgrid_r32_qres_pf_kvsplit-enwik8	steady_median_seconds=1.383427428999994	limited=False	arm=stash_tiled_fgrid_r32_qres_pf_kvsplit	arm_requested=stash_tiled_fgrid_r32_qres_pf_kvsplit	arm_default=baseline	arm_is_default=False	arm_resolved_hd64=stash_tiled_fgrid_r32_qres_pf_kvsplit	corpus_sha256=2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8
+lm-stash_tiled_fgrid_r32_qres_pf_kvsplit-enwik8	step=1	sha256={"flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb", "gradients": "01d5fa4ae0299bbbd2de8f47d6d0d1e3c525c57b13cfa0244b130a7d7bb813f7", "loss": "a39d1a773245b9bb9f5a25aac121f308d875d0f0a5a7d827bc21552112023c71", "m": "b3fafccc62a0feab9ae135d3053054ea3ea8b131bbb0247959d212e13c727c0c", "parameters": "84f96dc296e50b8cea15b54787e7fbede994b0730ee5d3ed86c620cf539c05c9", "v": "ae18e62bdf7a1dab7177ff4af00bf7d185845716e1af365e0bc52e362666a8f6"}
+lm-stash_tiled_fgrid_r32_qres_pf_kvsplit-enwik8	step=2	sha256={"flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb", "gradients": "4b7fc425a350d5b505ce3dcdc47f74607dafc21833171dfdc3d5fdfcd34228d5", "loss": "0ea11db969cf635b5f6ce89ea6b4c6db630e3e15286d515a9195af6b49963a33", "m": "3929767028f4d6bf8b73bd47515e113e25a5126aa94051182da074089e7f6d9d", "parameters": "86b04b9ddc53a2d6c4a71437107f4a86ec3dbe0d451fcb846829504c28a779f5", "v": "a71175cfa54e1067bc6dcdd5c8e740f5784e78aef2f7a35667f43e6f1df7c5db"}
+lm-stash_tiled_fgrid_r32_qres_pf_kvsplit-enwik8	step=3	sha256={"flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb", "gradients": "80502bcbaa38a7f5c40a0f9886a7300b13ea31aaef29ac93a241adc4fe601b0d", "loss": "f6408c14717053270ac93f48f0bb9dcd3f35f7c6edf30f5e322d280cec467f83", "m": "62a57517ac0891e078a2d17199044887b3e460bf5e42af74859ccf584be9a6eb", "parameters": "cb6cfb17e14fc800c38b68bb37a6453a782a8d13de0107dd077aa5a2759ac808", "v": "eca204720d5c1c692d2ae808d79fb51bf90a502961202b0450615b7f0e4c2d6d"}
+lm-stash_tiled_fgrid_r32_qres_pf_kvsplit-enwik8.log	no result.json
+lm-stash_tiled_fgrid_r32_qres_pf_kvsplit-pilegithub	steady_median_seconds=1.4007237860000146	limited=False	arm=stash_tiled_fgrid_r32_qres_pf_kvsplit	arm_requested=stash_tiled_fgrid_r32_qres_pf_kvsplit	arm_default=baseline	arm_is_default=False	arm_resolved_hd64=stash_tiled_fgrid_r32_qres_pf_kvsplit	corpus_sha256=52a5b4c36ab9119c15505331c10e3b23690377d40fbac3e598c7fafe13a324df
+lm-stash_tiled_fgrid_r32_qres_pf_kvsplit-pilegithub	step=1	sha256={"flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb", "gradients": "85d053a482668fd958df0e32325fc47f9ba10ec630ff63557c7b79c5bd85b0e3", "loss": "fb1bfea4e8daa3b31227ff49a404e36a58fe27b98856af4d27a24872b0e9abf2", "m": "8dbf0dfcb08f29687241a6586a7ef8224fde5877a7aeb490b9701d24d5812524", "parameters": "1b32246046a72ada00e3c8ec04d079beb629d8e314f860bc7106d42c5996a8ca", "v": "227d2c36dbd16e9acf0556ec491d8b6431a8e4cc5b235b8d81011996a9bc05be"}
+lm-stash_tiled_fgrid_r32_qres_pf_kvsplit-pilegithub	step=2	sha256={"flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb", "gradients": "defa184dcfcf29c7650972fa5372f463679eb4c46daa463aef108a2882a169f5", "loss": "ddb267519e68048079f2a5320ecdd60baeb59036301a115827a9dced054ff2bd", "m": "abe0098ba41bcb6298497c575d2768d6486d514bd41d2a7a72b7592c8cd3455c", "parameters": "33e2bad344f1f355e40abeff6165ce36d1a74004ec0ce5d405254cf971dd412f", "v": "8ef9e39530fd6f585c23d30dbd3e846af65da81262d0b303d216a178e4905035"}
+lm-stash_tiled_fgrid_r32_qres_pf_kvsplit-pilegithub	step=3	sha256={"flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb", "gradients": "a736cdce5bb28a804c2e28abd2b2b561598bac2cd93b051e7535f32cbdab3a67", "loss": "5aa104f9260207f9e1eec2787cddbc7cc83096d02f0010439df163e3e18ce443", "m": "dbcce767d3558558631d631862966e6a37c6cf0eeb0132fa49e4175e25549ca3", "parameters": "4185581a78053257fc376373ba15a99ce705437ada726ec604f990cc96211dcc", "v": "accb7ae950dc3c72b04b96e3df10b2c9850b27fee86deafdc0069ac74ea7f26d"}
+lm-stash_tiled_fgrid_r32_qres_pf_kvsplit-pilegithub.log	no result.json
+lm-stash_tiled_fgrid_r32_qres_pf-enwik8	witnesses_equal_baseline=True	reference=lm-baseline-enwik8
+lm-stash_tiled_fgrid_r32_qres_pf-pilegithub	witnesses_equal_baseline=True	reference=lm-baseline-pilegithub
+lm-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-enwik8	witnesses_equal_baseline=True	reference=lm-baseline-enwik8
+lm-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-pilegithub	witnesses_equal_baseline=True	reference=lm-baseline-pilegithub
+lm-stash_tiled_fgrid_r32_qres_pf_kvrecompute-enwik8	witnesses_equal_baseline=True	reference=lm-baseline-enwik8
+lm-stash_tiled_fgrid_r32_qres_pf_kvrecompute-pilegithub	witnesses_equal_baseline=True	reference=lm-baseline-pilegithub
+lm-stash_tiled_fgrid_r32_qres_pf_kvsplit-enwik8	witnesses_equal_baseline=True	reference=lm-baseline-enwik8
+lm-stash_tiled_fgrid_r32_qres_pf_kvsplit-pilegithub	witnesses_equal_baseline=True	reference=lm-baseline-pilegithub
+lmtiming-baseline-enwik8	envelope.native_call	1640.450
+lmtiming-baseline-enwik8	bwd.attention	380.751
+lmtiming-baseline-enwik8	block.attention_total	265.818
+lmtiming-baseline-enwik8	attn.bwd_dkdv	169.835
+lmtiming-baseline-enwik8	attn.bwd_zdot	156.625
+lmtiming-baseline-enwik8	attn.qkv_proj	145.114
+lmtiming-baseline-enwik8	attn.core	106.382
+lmtiming-baseline-enwik8	attn.fwd_kernel	103.199
+lmtiming-baseline-enwik8	attn.bwd_dq	49.923
+lmtiming-baseline-enwik8	attn.o_proj	13.004
+lmtiming-baseline-enwik8	attn.bwd_regime_scan	3.531
+lmtiming-baseline-enwik8	attn.fwd_regime_scan	2.461
+lmtiming-baseline-enwik8	attn.rope_and_cache	1.274
+lmtiming-baseline-enwik8	attn.bwd_corner_flag	0.618
+lmtiming-baseline-enwik8	attn.fwd_corner_flag	0.526
+lmtiming-baseline-enwik8.log	no result.json
+lmtiming-baseline-pilegithub	envelope.native_call	1624.330
+lmtiming-baseline-pilegithub	bwd.attention	272.435
+lmtiming-baseline-pilegithub	block.attention_total	263.594
+lmtiming-baseline-pilegithub	attn.bwd_zdot	156.549
+lmtiming-baseline-pilegithub	attn.qkv_proj	142.937
+lmtiming-baseline-pilegithub	attn.core	106.370
+lmtiming-baseline-pilegithub	attn.fwd_kernel	103.272
+lmtiming-baseline-pilegithub	attn.bwd_dkdv	61.521
+lmtiming-baseline-pilegithub	attn.bwd_dq	49.976
+lmtiming-baseline-pilegithub	attn.o_proj	12.953
+lmtiming-baseline-pilegithub	attn.bwd_regime_scan	3.586
+lmtiming-baseline-pilegithub	attn.fwd_regime_scan	2.408
+lmtiming-baseline-pilegithub	attn.rope_and_cache	1.296
+lmtiming-baseline-pilegithub	attn.bwd_corner_flag	0.583
+lmtiming-baseline-pilegithub	attn.fwd_corner_flag	0.513
+lmtiming-baseline-pilegithub.log	no result.json
+lmtiming-stash_tiled_fgrid_r32_qres_pf-enwik8	envelope.native_call	1872.691
+lmtiming-stash_tiled_fgrid_r32_qres_pf-enwik8	bwd.attention	900.565
+lmtiming-stash_tiled_fgrid_r32_qres_pf-enwik8	attn.bwd_dkdv_tiled_pf	406.201
+lmtiming-stash_tiled_fgrid_r32_qres_pf-enwik8	attn.bwd_zdot_stash_pf	142.402
+lmtiming-stash_tiled_fgrid_r32_qres_pf-enwik8	attn.bwd_dq_tiled_pf	131.911
+lmtiming-stash_tiled_fgrid_r32_qres_pf-enwik8	attn.bwd_corner_flag	112.785
+lmtiming-stash_tiled_fgrid_r32_qres_pf-enwik8	attn.bwd_regime_scan	105.835
+lmtiming-stash_tiled_fgrid_r32_qres_pf-enwik8	block.attention_total	84.194
+lmtiming-stash_tiled_fgrid_r32_qres_pf-enwik8	attn.qkv_proj	39.424
+lmtiming-stash_tiled_fgrid_r32_qres_pf-enwik8	attn.core	30.480
+lmtiming-stash_tiled_fgrid_r32_qres_pf-enwik8	attn.fwd_r2_kernel	23.942
+lmtiming-stash_tiled_fgrid_r32_qres_pf-enwik8	attn.o_proj	12.973
+lmtiming-stash_tiled_fgrid_r32_qres_pf-enwik8	attn.fwd_corner_flag	3.144
+lmtiming-stash_tiled_fgrid_r32_qres_pf-enwik8	attn.fwd_regime_scan	2.463
+lmtiming-stash_tiled_fgrid_r32_qres_pf-enwik8	attn.rope_and_cache	1.281
+lmtiming-stash_tiled_fgrid_r32_qres_pf-enwik8	attn.bwd_scratch_alloc	1.153
+lmtiming-stash_tiled_fgrid_r32_qres_pf-enwik8	attn.fwd_scratch_alloc	0.690
+lmtiming-stash_tiled_fgrid_r32_qres_pf-enwik8.log	no result.json
+lmtiming-stash_tiled_fgrid_r32_qres_pf-pilegithub	envelope.native_call	1870.373
+lmtiming-stash_tiled_fgrid_r32_qres_pf-pilegithub	bwd.attention	695.244
+lmtiming-stash_tiled_fgrid_r32_qres_pf-pilegithub	attn.bwd_dkdv_tiled_pf	408.047
+lmtiming-stash_tiled_fgrid_r32_qres_pf-pilegithub	attn.bwd_zdot_stash_pf	140.150
+lmtiming-stash_tiled_fgrid_r32_qres_pf-pilegithub	attn.bwd_dq_tiled_pf	135.329
+lmtiming-stash_tiled_fgrid_r32_qres_pf-pilegithub	block.attention_total	84.989
+lmtiming-stash_tiled_fgrid_r32_qres_pf-pilegithub	attn.qkv_proj	39.351
+lmtiming-stash_tiled_fgrid_r32_qres_pf-pilegithub	attn.core	31.200
+lmtiming-stash_tiled_fgrid_r32_qres_pf-pilegithub	attn.fwd_r2_kernel	23.950
+lmtiming-stash_tiled_fgrid_r32_qres_pf-pilegithub	attn.o_proj	12.996
+lmtiming-stash_tiled_fgrid_r32_qres_pf-pilegithub	attn.bwd_corner_flag	5.840
+lmtiming-stash_tiled_fgrid_r32_qres_pf-pilegithub	attn.bwd_regime_scan	4.369
+lmtiming-stash_tiled_fgrid_r32_qres_pf-pilegithub	attn.fwd_regime_scan	3.130
+lmtiming-stash_tiled_fgrid_r32_qres_pf-pilegithub	attn.fwd_corner_flag	3.118
+lmtiming-stash_tiled_fgrid_r32_qres_pf-pilegithub	attn.rope_and_cache	1.403
+lmtiming-stash_tiled_fgrid_r32_qres_pf-pilegithub	attn.bwd_scratch_alloc	1.238
+lmtiming-stash_tiled_fgrid_r32_qres_pf-pilegithub	attn.fwd_scratch_alloc	0.751
+lmtiming-stash_tiled_fgrid_r32_qres_pf-pilegithub.log	no result.json
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-enwik8	envelope.native_call	1339.154
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-enwik8	bwd.attention	200.705
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-enwik8	attn.bwd_dq_tiled_pf	135.301
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-enwik8	block.attention_total	81.787
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-enwik8	attn.qkv_proj	38.574
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-enwik8	attn.bwd_zdot_stash_pf	33.689
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-enwik8	attn.core	29.425
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-enwik8	attn.fwd_r2_kernel	23.982
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-enwik8	attn.bwd_kvgrid_dkdv_pf	21.168
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-enwik8	attn.o_proj	12.645
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-enwik8	attn.bwd_corner_flag	5.690
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-enwik8	attn.bwd_regime_scan	3.492
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-enwik8	attn.fwd_corner_flag	2.767
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-enwik8	attn.fwd_regime_scan	1.917
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-enwik8	attn.bwd_scratch_alloc	1.115
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-enwik8	attn.rope_and_cache	1.109
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-enwik8	attn.fwd_scratch_alloc	0.576
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-enwik8.log	no result.json
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-pilegithub	envelope.native_call	1381.950
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-pilegithub	bwd.attention	93.232
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-pilegithub	block.attention_total	87.149
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-pilegithub	attn.qkv_proj	40.934
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-pilegithub	attn.bwd_zdot_stash_pf	33.910
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-pilegithub	attn.core	30.641
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-pilegithub	attn.bwd_dq_tiled_pf	27.478
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-pilegithub	attn.fwd_r2_kernel	23.925
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-pilegithub	attn.bwd_kvgrid_dkdv_pf	21.047
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-pilegithub	attn.o_proj	14.240
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-pilegithub	attn.bwd_corner_flag	5.685
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-pilegithub	attn.bwd_regime_scan	3.663
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-pilegithub	attn.fwd_corner_flag	3.137
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-pilegithub	attn.fwd_regime_scan	2.500
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-pilegithub	attn.rope_and_cache	1.293
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-pilegithub	attn.bwd_scratch_alloc	1.181
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-pilegithub	attn.fwd_scratch_alloc	0.823
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvgrid_r32-pilegithub.log	no result.json
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvrecompute-enwik8	envelope.native_call	1424.680
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvrecompute-enwik8	bwd.attention	242.449
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvrecompute-enwik8	attn.bwd_kvre_dkdv	170.598
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvrecompute-enwik8	block.attention_total	83.615
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvrecompute-enwik8	attn.qkv_proj	39.086
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvrecompute-enwik8	attn.bwd_zdot_stash_pf	33.783
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvrecompute-enwik8	attn.core	30.360
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvrecompute-enwik8	attn.bwd_dq_tiled_pf	27.579
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvrecompute-enwik8	attn.fwd_r2_kernel	23.985
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvrecompute-enwik8	attn.o_proj	12.867
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvrecompute-enwik8	attn.bwd_kvre_stash_free	4.872
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvrecompute-enwik8	attn.bwd_regime_scan	3.626
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvrecompute-enwik8	attn.fwd_corner_flag	3.026
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvrecompute-enwik8	attn.fwd_regime_scan	2.439
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvrecompute-enwik8	attn.rope_and_cache	1.266
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvrecompute-enwik8	attn.bwd_scratch_alloc	1.128
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvrecompute-enwik8	attn.fwd_scratch_alloc	0.674
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvrecompute-enwik8	attn.bwd_corner_flag	0.639
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvrecompute-enwik8.log	no result.json
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvrecompute-pilegithub	envelope.native_call	1422.618
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvrecompute-pilegithub	bwd.attention	340.430
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvrecompute-pilegithub	attn.bwd_kvre_dkdv	268.588
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvrecompute-pilegithub	block.attention_total	84.184
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvrecompute-pilegithub	attn.qkv_proj	39.444
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvrecompute-pilegithub	attn.bwd_zdot_stash_pf	33.656
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvrecompute-pilegithub	attn.core	30.469
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvrecompute-pilegithub	attn.bwd_dq_tiled_pf	27.611
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvrecompute-pilegithub	attn.fwd_r2_kernel	24.036
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvrecompute-pilegithub	attn.o_proj	12.983
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvrecompute-pilegithub	attn.bwd_kvre_stash_free	4.983
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvrecompute-pilegithub	attn.bwd_regime_scan	3.489
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvrecompute-pilegithub	attn.fwd_corner_flag	3.106
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvrecompute-pilegithub	attn.fwd_regime_scan	2.381
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvrecompute-pilegithub	attn.rope_and_cache	1.254
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvrecompute-pilegithub	attn.bwd_scratch_alloc	1.167
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvrecompute-pilegithub	attn.bwd_corner_flag	0.714
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvrecompute-pilegithub	attn.fwd_scratch_alloc	0.701
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvrecompute-pilegithub.log	no result.json
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvsplit-enwik8	envelope.native_call	1408.999
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvsplit-enwik8	bwd.attention	121.252
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvsplit-enwik8	block.attention_total	83.994
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvsplit-enwik8	attn.qkv_proj	39.405
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvsplit-enwik8	attn.bwd_zdot_stash_pf	33.624
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvsplit-enwik8	attn.core	30.344
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvsplit-enwik8	attn.bwd_dq_tiled_pf	27.503
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvsplit-enwik8	attn.bwd_kvsplit_dk_pf	24.775
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvsplit-enwik8	attn.bwd_kvsplit_dv_pf	24.773
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvsplit-enwik8	attn.fwd_r2_kernel	24.055
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvsplit-enwik8	attn.o_proj	13.003
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvsplit-enwik8	attn.bwd_corner_flag	5.611
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvsplit-enwik8	attn.bwd_regime_scan	3.554
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvsplit-enwik8	attn.fwd_corner_flag	3.084
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvsplit-enwik8	attn.fwd_regime_scan	2.302
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvsplit-enwik8	attn.rope_and_cache	1.206
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvsplit-enwik8	attn.bwd_scratch_alloc	1.151
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvsplit-enwik8	attn.fwd_scratch_alloc	0.667
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvsplit-enwik8.log	no result.json
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvsplit-pilegithub	envelope.native_call	1393.830
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvsplit-pilegithub	block.attention_total	186.160
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvsplit-pilegithub	attn.qkv_proj	141.834
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvsplit-pilegithub	bwd.attention	121.552
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvsplit-pilegithub	attn.bwd_zdot_stash_pf	33.665
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvsplit-pilegithub	attn.core	30.281
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvsplit-pilegithub	attn.bwd_dq_tiled_pf	27.430
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvsplit-pilegithub	attn.bwd_kvsplit_dv_pf	24.970
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvsplit-pilegithub	attn.bwd_kvsplit_dk_pf	24.865
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvsplit-pilegithub	attn.fwd_r2_kernel	23.963
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvsplit-pilegithub	attn.o_proj	12.791
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvsplit-pilegithub	attn.bwd_corner_flag	5.608
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvsplit-pilegithub	attn.bwd_regime_scan	3.580
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvsplit-pilegithub	attn.fwd_corner_flag	2.944
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvsplit-pilegithub	attn.fwd_regime_scan	2.459
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvsplit-pilegithub	attn.rope_and_cache	1.218
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvsplit-pilegithub	attn.bwd_scratch_alloc	1.183
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvsplit-pilegithub	attn.fwd_scratch_alloc	0.682
+lmtiming-stash_tiled_fgrid_r32_qres_pf_kvsplit-pilegithub.log	no result.json

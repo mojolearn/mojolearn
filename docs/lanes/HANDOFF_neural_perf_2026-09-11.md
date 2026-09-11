@@ -330,7 +330,20 @@ No AMD timing of this step exists at the target shape.
      step-only cost for the stash arms (likeliest the two 201 MB y/dy stash
      allocations per call; not measured). The commit message of fc742e62
      repeats the forward-as-fwd+bwd misreading; the decision there rests on
-     the same-pod lean steps and stands. The AMD row of
+     the same-pod lean steps and stands.
+   - **AMD dk/dv arms FLIP against baseline** (bench/results/e1g/2026-09-11_180903-amd-mi325x-do-attention-dkdv,
+     DigitalOcean MI325X, commit 5cc3b8df, witnesses equal on every step):
+     lean step baseline 1.623 / 1.633 s; `stash_tiled_fgrid_r32_qres_pf`
+     1.846 / 1.865 s (NO FLIP, geomean 1.140); `_kvrecompute` 1.396 / 1.420 s
+     (FLIP, 0.865); `_kvsplit` 1.383 / 1.401 s (FLIP, 0.855); `_kvgrid_r32`
+     1.376 / 1.370 s (FLIP, 0.844, the winner). In-step dk/dv: baseline 169.8
+     ms, round 3 tiled 406.2 ms, kvgrid_r32 21.2 ms, kvsplit 24.8 + 24.8 ms,
+     kvrecompute 170.6 ms; bwd.attention 380.8 (baseline) against 200.7
+     (kvgrid_r32). NOT YET THE AMD DEFAULT: `ATTN_ARM_DEFAULT_REFUSED_BITS`
+     refuses the 2596 and 2597 bits because a shipped build does not compile
+     those kernels; a wiring lane (`lane/attention-kv-default`) makes them
+     shippable and sets the AMD row to the kvgrid_r32 winner. The H100 zdot
+     leg also carries kvgrid_r32 and kvsplit as LM arms for the NVIDIA reading. The AMD row of
      `attn_default_arm_for` goes back to `baseline`; the dk/dv lane
      (`lane/attention-dkdv-amd`) was sent this evidence and now targets the
      step-versus-harness gap with baseline as the AMD reference.

@@ -1,0 +1,11 @@
+local_deadman_pid=60711
+local_deadman_dir=/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-do-extra-deadman-60254
+local_deadman_seconds=3600
+local_deadman_fires_at=2026-09-11T19:09:21Z
+local_deadman_keyed_by=tag extra + name mojolearn-extra-amd (+ id once known)
+on_droplet_deadman_seconds=3526
+on_droplet_deadman_fires_at=2026-09-11T19:09:25Z
+on_droplet_ON_DROPLET_DEADMAN_ARMED
+on_droplet_ID_BAKED_IN=1
+on_droplet_TOKEN_GET_HTTP=200
+local_deadman=cancelled 2026-09-11T18:25:00Z
