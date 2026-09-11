@@ -1,0 +1,5 @@
+lane	dataset	shape	arm	device	device_name	status	median_ms	min_ms	max_ms	rounds	digest_stable	quality	ours_over_this
+kde	istella	100000x220	cuml-gpu	gpu	NVIDIA H100 80GB HBM3	ok	6.7908	6.7172	7.3041	3	True	mean_log_likelihood=-212.117,rows_without_density=0	32.2537
+kde	istella	100000x220	ours	gpu	cuda	ok	219.0299	194.4137	227.3354	3	True	mean_log_likelihood=-212.117,rows_without_density=0	
+svc	istella	10000x220	cuml-gpu	gpu	NVIDIA H100 80GB HBM3	ok	20.9638	20.6867	23.7296	3	True	accuracy=0.9222,n_support=2401	
+svc	istella	10000x220	ours	gpu	cuda	error				0		-	

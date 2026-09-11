@@ -1,0 +1,12 @@
+2427 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5ab980000000, nodemask=2)
+2427 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x53c080000000, nodemask=1)
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/classical_two_datasets.py", line 1296, in worker
+    runner.call()
+  File "/root/mojolearn/tools/classical_two_datasets.py", line 622, in call
+    est.fit(self.X, self.y)
+  File "/root/mojolearn/python/mojolearn/_svm_impl.py", line 499, in fit
+    n_support = _extension(getattr(self, 'numeric_mode', None)).svc_fit(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Exception: ./svm/impl/smosolver.mojo:281:59 failed calling <smo_block_solve_kernel[1024]> on device cuda:0 with error 'CUDA call failed: CUDA_ERROR_LAUNCH_OUT_OF_RESOURCES (too many resources requested for launch)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.'
