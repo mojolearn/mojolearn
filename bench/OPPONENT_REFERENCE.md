@@ -1162,6 +1162,40 @@ about 810 to 1805 ms) and changes its taxi model (logloss 0.525668 to
 0.525925); greedy bits and times do not move. Every pointwise time and
 verdict in this file was measured before it.
 
+What 2624 cost can be won back, but NOT with 2624's bits (lane
+pointwise-speed, 2026-09-11 night, RunPod H100 `eqxtzdcpctpnkh`).
+**DEVIATION 2669 is impossible and the lane proved it rather than trying it:**
+a fixed-order fold of per-document-block partials is not the multiplier-1
+sequential sum, because each partial rounds without the other blocks'
+documents (float32 `x = (1e8, 1, -1e8, 1)`: sequential 1, two-block fold 2),
+and the only exact schedule chains the blocks and so serializes them.
+**DEVIATION 2670 (opt-in, `-D MOJOLEARN_2670_PW_PRIVATE_DOC_SLOTS=1`, NOT
+flipped, NOT merged)** takes the speed back with NEW bits: the multiplier is
+`EstimateBlockPerFeatureMultiplier` at a PINNED SM count (`PW_2670_PINNED_SM
+= 128`, never the device's), every document block stores into its own scratch
+slot, and one launch folds slots 0..M-1 onto `binSums` in block order, so
+there is no atomic and no dependence on `MULTIPROCESSOR_COUNT`. On the H100,
+IDENTICAL, both trees built on that pod and interleaved at the process level
+(three outer rounds, three timed rounds each, medians of nine): the opt-in
+pointwise arm on taxi 1M went 1803.3 to 795.4 ms (0.441x) with logloss
+0.525925 to 0.525668, while the greedy control held 309.3 to 308.9 ms
+(0.999x) at hash 90c3558501933f47. **The Istella-S 1M cell is RUN OWED**: the
+pod's Istella download was killed by its own timeout at 464 of 472 MB, the
+speed harness then fell back to its synthetic fixture and labeled the rows
+`shape=synthclf-720000x100`, and those rows were deleted rather than quoted.
+So 2670 has NO flip verdict: one dataset is not a result (section 9).
+Identity traces name where the new bits come from, 20-tree fits, main against
+2670: `onebyte` IDENTICAL at 182 of 182 stages (that family accumulates in
+Int32 fixed point, DEVIATION 93, so its cells fold exactly in any order),
+while `halfbyte`, `binary`, `mixed` and `wide220` all diverge at
+`tree001.depth00.hist`. Gates on the H100: `check-pointwise-identical-multiplier-2670`
+G1 (896 grids, the multiplier independent of `sm_count` at every one, 832 of
+them splitting) and G2 (55,290 cells bit-equal across sm 1/16/132/4096 and
+three repeats), plus `check-pointwise-dispatch-2670` F1-F7 on integer stats
+against a host tally. Merging it needs the Apple M4 and an AMD box first;
+evidence in `bench/results/pointwise_speed_2026-09-11/README.md` on branch
+`lane/pointwise-speed`.
+
 Taxi, 1,000,000 training rows (2,000,000 for RF 2M), leg 1 (droplet
 599636038):
 
