@@ -1,0 +1,16 @@
+deviations=2525-2527
+started=2026-09-11T19:00:35Z
+root=/root/mojolearn
+arms=stash_tiled_fgrid_r32_qres_pf_zlag,stash_tiled_fgrid_r32_qres_pf_zdefer,stash_tiled_fgrid_r32_qres_pf_kvgrid_r32,stash_tiled_fgrid_r32_qres_pf_kvsplit,stash_tiled_fgrid_r32_qres_pf_zlag_kvgrid_r32
+lm_arms=stash_tiled_fgrid_r32_qres_pf,stash_tiled_fgrid_r32_qres_pf_zlag,stash_tiled_fgrid_r32_qres_pf_kvgrid_r32,stash_tiled_fgrid_r32_qres_pf_kvsplit,stash_tiled_fgrid_r32_qres_pf_zlag_kvgrid_r32
+baseline_arm=stash_tiled_fgrid_r32_qres_pf deviations_second_round=2528,2530,2531,2533 deviations_dkdv=2596,2597 deviation_zdot=2598
+rounds=7 warmups=2 deadline=300
+vendor=nvidia gpu_archs=sm_90a column=nvidia jobs=8
+skip_timers=1 skip_lm=0
+vendor=nvidia
+commit=6d4bd867b513b050b9a4665163a86e201f0afb53
+deviation_default_row=2534 shipped_check=0
+harness: DEFAULT column=nvidia arm=stash_tiled_fgrid_r32_qres_pf source=kernel_matrix.attn_default_arm_for baseline_is_default=True candidate_is_default=False baseline_requested=stash_tiled_fgrid_r32_qres_pf candidate_requested=stash_tiled_fgrid_r32_qres_pf_kvgrid_r32
+corpora= enwik8=training/corpus/enwik8/input.txt pilegithub=training/corpus/pile_github/input.txt
+file_kinds=file:/root/gemm_leg_out/attention-step/operands-enwik8,file:/root/gemm_leg_out/attention-step/operands-pilegithub
+finished=2026-09-11T19:23:03Z

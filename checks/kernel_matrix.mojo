@@ -870,7 +870,17 @@ def attn_default_arm_for[column: Int]() -> Int:
     comptime if is_defined["MOJOLEARN_ATTN_DEFAULT_R3_EVERY_COLUMN"]():
         return ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF
     if column == COLUMN_NVIDIA:
-        return ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF
+        # Measured 2026-09-11 on a RunPod H100 80GB HBM3 (1980 MHz) against the
+        # previous NVIDIA default stash_tiled_fgrid_r32_qres_pf, commit 6d4bd867,
+        # every step witness equal, card IDENTICAL
+        # (bench/results/e1g/2026-09-11_185833-nvidia-h100-80gb-hbm3-attention-zdot):
+        #   verdict stash_tiled_fgrid_r32_qres_pf_kvgrid_r32 FLIP geomean=0.9908
+        #   enwik8=0.9901 pilegithub=0.9915 (vs the previous default, same pod)
+        # Lean step 0.2929 / 0.2926 -> 0.2900 / 0.2901 s (enwik8 / Pile GitHub).
+        # Same leg: _zlag_kvgrid_r32 0.9902 (its DEVIATION 2598 zdot schedule is
+        # compiled on trial builds only), _zlag 0.9968, _kvsplit NO FLIP 1.0131.
+        # Before it: stash_tiled_fgrid_r32_qres_pf (round 3, e1g/...154257).
+        return ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_KVGRID_R32
     if column == COLUMN_AMD:
         # Measured 2026-09-11 on the DigitalOcean MI325X against the previous
         # AMD default baseline, commit 5cc3b8df, every step witness equal

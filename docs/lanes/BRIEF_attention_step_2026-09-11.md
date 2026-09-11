@@ -2797,3 +2797,46 @@ whose `lm_summary.tsv` rows must read
 `arm=stash_tiled_fgrid_r32_qres_pf_kvgrid_r32 arm_is_default=True` with
 witnesses equal. Andrew has moved new legs to RunPod NVIDIA, so this leg waits
 for his go. Nothing in this lane rents.
+
+## 19. The zdot H100 leg and the NVIDIA dk/dv flip (2026-09-11, measured)
+
+Leg `bench/results/e1g/2026-09-11_185833-nvidia-h100-80gb-hbm3-attention-zdot`,
+commit 6d4bd867, one RunPod H100 80GB HBM3 pod at 1980 MHz, card IDENTICAL,
+every phase exit 0, every LM step witness equal to the reference (the previous
+NVIDIA default `stash_tiled_fgrid_r32_qres_pf`). Operand dumps are kept outside
+the repository in `~/mojolearn-evidence/` under the same leg name.
+
+Lean LM step, steady medians in seconds, ratio to the previous default:
+
+| arm | enwik8 | Pile GitHub | geomean | verdict |
+|---|---|---|---|---|
+| `stash_tiled_fgrid_r32_qres_pf` (previous default) | 0.2929 | 0.2926 | 1.0000 | reference |
+| `_kvgrid_r32` | 0.2900 (0.9901) | 0.2901 (0.9915) | 0.9908 | FLIP |
+| `_zlag_kvgrid_r32` | 0.2895 (0.9881) | 0.2903 (0.9922) | 0.9902 | FLIP, trial only |
+| `_zlag` | 0.2917 (0.9958) | 0.2919 (0.9978) | 0.9968 | FLIP, trial only |
+| `_kvsplit` | 0.2978 (1.0166) | 0.2954 (1.0096) | 1.0131 | NO FLIP |
+
+Real-activation price, fwd+bwd ratio to the previous default (above 1 is
+cheaper): `_kvgrid_r32` 1.021 on both corpora, `_zlag` 1.007 and 1.008,
+`_zdefer` 1.006 and 1.009, `_zlag_kvgrid_r32` in the same band, `_kvsplit`
+0.978 and 0.975. In the step timers the zdot phase reads 5.5 ms per call under
+both the stash copy and `_zlag`, so the 2598 schedule does not move the zdot
+kernel on NVIDIA; the dk/dv phase moves from 1.0 ms (`bwd_dkdv_tiled_pf`) to
+0.8 ms (`bwd_kvgrid_dkdv_pf`) per call.
+
+Decision. `_kvgrid_r32` flips the NVIDIA row of `attn_default_arm_for` to
+`ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_KVGRID_R32`, the word AMD
+already ships, so the shipped NVIDIA build now compiles the same 2597 dk/dv
+kernel as AMD and nothing new. `_zlag_kvgrid_r32` measured 0.9902, which is
+inside the noise of `_kvgrid_r32` (0.9908), and its DEVIATION 2598 zdot
+schedule is compiled on trial builds only, so shipping it would add a kernel
+to every shipped build for no separable gain; it stays a trial arm. A
+same-pod confirmation leg (the shipped check naming the new default, both
+defaults' lean steps, and every torch column) follows the flip.
+
+What is left in the step. The step breakdown leg on the same day
+(`bench/results/e1g/2026-09-11_190725-nvidia-h100-80gb-hbm3-step-breakdown`,
+bits identical with timers compiled in and switched on) attributes 145 ms of
+the 300 ms native call to GEMM (48%) and 116 ms to attention kernels (39%);
+nothing else exceeds 7 ms. The next NVIDIA target is GEMM
+(`docs/lanes/BRIEF_gemm_kernel_2026-09-11.md`), not attention.
