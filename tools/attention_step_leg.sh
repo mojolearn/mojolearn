@@ -1,9 +1,39 @@
 #!/bin/sh
 # tools/attention_step_leg.sh -- DEVIATIONS 2525 to 2527, the attention
-# step lane's on-box work. Runs ON THE POD as tools/gemm_remote_leg.sh's
-# MOJOLEARN_GEMM_LEG_EXTRA hook (after the leg's own IDENTICAL device check
-# and card), from /root/mojolearn with pixi on PATH; everything it writes
-# under /root/gemm_leg_out/attention-step/ comes home with the leg's fetch.
+# step lane's on-box work. VENDOR-AGNOSTIC: runs ON THE BOX as the
+# MOJOLEARN_GEMM_LEG_EXTRA body of tools/do_extra_leg.sh (DigitalOcean, AMD
+# first, ENGINEERING_RULES 10) or of tools/gemm_remote_leg.sh (RunPod, the
+# NVIDIA confirmation column), from /root/mojolearn with pixi on PATH;
+# everything it writes under /root/gemm_leg_out/attention-step/ comes home
+# with the leg's fetch.
+#
+# AMD (the deciding column), from a `git worktree add --detach` checkout:
+#
+#   MOJOLEARN_DO_TOKEN_FILE=$HOME/.mojolearn_do_token \
+#   MOJOLEARN_GPU_ARCHS=gfx942 \
+#   MOJOLEARN_GEMM_LEG_EXTRA=tools/attention_step_leg.sh \
+#   MOJOLEARN_DO_EXTRA_ENV="MOJOLEARN_ATTN_LEG_ARMS=stash_tiled MOJOLEARN_ATTN_LEG_SKIP_TIMERS=1" \
+#   MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/$(date -u +%Y-%m-%d_%H%M%S)-amd-mi325x-attention-step \
+#   bash tools/do_extra_leg.sh amd --minutes 60 --skip-gates
+#
+# The vendor comes from MOJOLEARN_TARGET_COLUMN when the runner exports it,
+# else from the box (a working nvidia-smi, or /dev/kfd / rocm-smi / amd-smi);
+# the CUDA assembler override runs on NVIDIA only; the arch comes from
+# MOJOLEARN_GPU_ARCHS (required on AMD, derived from nvidia-smi on NVIDIA);
+# gpu_before.txt / gpu_after.txt come from nvidia-smi or rocm-smi.
+# MOJOLEARN_ATTN_LEG_SKIP_TIMERS=1 skips the standalone timer harness.
+#
+# DEVIATION 2528 (second round, brief section 12) is priced against the
+# shipped default. MOJOLEARN_ATTN_BASELINE (default baseline) is the
+# harness's baseline arm for every smoke, price and timer run, and the
+# lm-<arm>-<corpus> run that lm_summary.tsv compares witnesses with (so it
+# belongs in MOJOLEARN_ATTN_LEG_LM_ARMS too). New arm names:
+# stash_tiled_ztiled (rows per block from the kernel-matrix row),
+# stash_tiled_ztiled_r64 and stash_tiled_ztiled_r32 (forced geometry):
+#
+#   MOJOLEARN_DO_EXTRA_ENV="MOJOLEARN_ATTN_BASELINE=stash_tiled MOJOLEARN_ATTN_LEG_ARMS=stash_tiled_ztiled_r64,stash_tiled_ztiled_r32 MOJOLEARN_ATTN_LEG_LM_ARMS=stash_tiled,stash_tiled_ztiled_r64,stash_tiled_ztiled_r32 MOJOLEARN_ATTN_LEG_SKIP_TIMERS=1"
+#
+# NVIDIA confirmation:
 #
 #   MOJOLEARN_RUNPOD_KEY_FILE=$HOME/.mojolearn_runpod_key \
 #   MOJOLEARN_GPU_ARCHS=sm_90a \
@@ -37,18 +67,20 @@
 #                 hook, the phase timers and the operand dump riding
 #                 MOJOLEARN_BUILD_EXTRA_DEFINES, as tools/lm_step_memory_probe.sh
 #                 builds them.
-#   corpus-*      the two ORDINARY corpora: English text
-#                 (training/corpus/tinyshakespeare, committed, sha256 checked)
-#                 and source code (training/corpus/cpython312_lib, fetched by
-#                 tools/fetch_corpus_cpython312_lib.sh from the versioned
-#                 tarball and verified against its manifest).
+#   corpus-*      the two BENCHMARK corpora (ENGINEERING_RULES section 9):
+#                 English text (training/corpus/enwik8, fetched by
+#                 tools/fetch_corpus_enwik8.sh) and source code
+#                 (training/corpus/pile_github, fetched by
+#                 tools/fetch_corpus_pile_github.sh), each verified against
+#                 its manifest; run names call them enwik8 and pilegithub.
 #   dump-<corpus> one lean target step on the corpus with
 #                 MOJOLEARN_ATTN_OPERAND_DUMP_DIR set: the backward launcher's
 #                 first call writes the last layer's q, k, v, dctx and meta.txt
 #                 under operands-<corpus>/ (real activations of the real
 #                 training path).
-#   price-<arm>   the harness on file:operands-shakespeare and
-#                 file:operands-cpython, candidate <arm> against baseline:
+#   price-<arm>   the harness on file:operands-enwik8 and
+#                 file:operands-pilegithub, candidate <arm> against
+#                 MOJOLEARN_ATTN_BASELINE (default baseline):
 #                 eager oracle (first arm only), bit equality, reach by
 #                 sabotage, then 2 warmups and 7 alternated rounds; PRICE and
 #                 TABLE lines in the log. THESE are the timing inputs.
@@ -88,6 +120,7 @@ ROOT=${MOJOLEARN_ATTN_ROOT:-/root/mojolearn}
 OUT=${MOJOLEARN_ATTN_LEG_OUT:-/root/gemm_leg_out/attention-step}
 ARMS=${MOJOLEARN_ATTN_LEG_ARMS:-bwd_stash,fwd_sstash,bwd_stash_tiled,stash_tiled}
 LM_ARMS=${MOJOLEARN_ATTN_LEG_LM_ARMS:-baseline,stash_tiled}
+BASE=${MOJOLEARN_ATTN_BASELINE:-baseline}
 ROUNDS=${MOJOLEARN_ATTN_LEG_ROUNDS:-7}
 WARMUPS=${MOJOLEARN_ATTN_LEG_WARMUPS:-2}
 JOBS=${MOJOLEARN_COMPILE_JOBS:-2}
@@ -97,27 +130,63 @@ cd "$ROOT" || exit 9
 export PATH="$HOME/.pixi/bin:$PATH"
 export OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 NUMEXPR_NUM_THREADS=2
 export MOJOLEARN_NUMERIC_MODE=identical
-export MOJOLEARN_TARGET_COLUMN="${MOJOLEARN_TARGET_COLUMN:-nvidia}"
 
-# MAX's bundled CUDA 13 assembler needs driver 580. Older-driver pods use
-# their installed assembler at BOTH build and runtime.
-driver_major=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null | head -1 | cut -d. -f1)
-case "$driver_major" in
-    ''|*[!0-9]*) ;;
-    *) if [ "$driver_major" -lt 580 ] && [ -x /usr/local/cuda/bin/ptxas ]; then
-           export MODULAR_NVPTX_COMPILER_PATH=${MODULAR_NVPTX_COMPILER_PATH:-/usr/local/cuda/bin/ptxas}
+# THE VENDOR. tools/do_extra_leg.sh exports MOJOLEARN_TARGET_COLUMN (amd or
+# nvidia); tools/gemm_remote_leg.sh exports nothing, so the box is read: a
+# working nvidia-smi is NVIDIA, /dev/kfd or an AMD tool is AMD (/dev/dri alone
+# is not AMD evidence). The kernel-matrix column follows the vendor.
+case "${MOJOLEARN_TARGET_COLUMN:-}" in
+    amd|nvidia) VENDOR=$MOJOLEARN_TARGET_COLUMN ;;
+    *) if command -v nvidia-smi > /dev/null 2>&1 && nvidia-smi -L > /dev/null 2>&1; then
+           VENDOR=nvidia
+       elif [ -e /dev/kfd ] || command -v rocm-smi > /dev/null 2>&1 || command -v amd-smi > /dev/null 2>&1; then
+           VENDOR=amd
+       else
+           VENDOR=unknown
        fi ;;
 esac
+if [ "$VENDOR" = unknown ]; then
+    echo "vendor=unknown: no working nvidia-smi, no /dev/kfd, no rocm-smi or amd-smi; nothing run" > "$OUT/gate.txt"
+    exit 9
+fi
+export MOJOLEARN_TARGET_COLUMN="$VENDOR"
 
-# One mojo build is one GPU arch; read it from the leg's environment first,
-# else from the device (9.0 is spelled sm_90a, DEVIATION 2293).
-if [ -z "${MOJOLEARN_GPU_ARCHS:-}" ]; then
+gpu_snapshot() {  # <file>
+    if [ "$VENDOR" = nvidia ]; then
+        nvidia-smi --query-gpu=name,driver_version,uuid,clocks.sm,temperature.gpu --format=csv > "$1" 2>&1
+    else
+        { rocm-smi --showproductname --showdriverversion --showuse --showmemuse --showtemp 2>&1 \
+            || echo "rocm-smi did not answer"; } > "$1"
+    fi
+}
+
+if [ "$VENDOR" = nvidia ]; then
+    # MAX's bundled CUDA 13 assembler needs driver 580. Older-driver pods use
+    # their installed assembler at BOTH build and runtime.
+    driver_major=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null | head -1 | cut -d. -f1)
+    case "$driver_major" in
+        ''|*[!0-9]*) ;;
+        *) if [ "$driver_major" -lt 580 ] && [ -x /usr/local/cuda/bin/ptxas ]; then
+               export MODULAR_NVPTX_COMPILER_PATH=${MODULAR_NVPTX_COMPILER_PATH:-/usr/local/cuda/bin/ptxas}
+           fi ;;
+    esac
+fi
+
+# One mojo build is one GPU arch; read it from the leg's environment first.
+# NVIDIA can derive it from the device (9.0 is spelled sm_90a, DEVIATION
+# 2293); AMD has no such read in this body, so the runner must say it (the
+# MI325X is gfx942).
+if [ -z "${MOJOLEARN_GPU_ARCHS:-}" ] && [ "$VENDOR" = nvidia ]; then
     cap=$(nvidia-smi -i 0 --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | head -1 | tr -d ' ')
     case "$cap" in
         9.0) MOJOLEARN_GPU_ARCHS=sm_90a ;;
         [0-9].[0-9]) MOJOLEARN_GPU_ARCHS="sm_$(echo "$cap" | tr -d .)" ;;
         *) MOJOLEARN_GPU_ARCHS="" ;;
     esac
+fi
+if [ -z "${MOJOLEARN_GPU_ARCHS:-}" ]; then
+    echo "vendor=$VENDOR gpu_archs=MISSING: one mojo build is one GPU arch; set MOJOLEARN_GPU_ARCHS; nothing run" > "$OUT/gate.txt"
+    exit 9
 fi
 export MOJOLEARN_GPU_ARCHS
 
@@ -140,11 +209,13 @@ run() {
     echo "root=$ROOT"
     echo "arms=$ARMS"
     echo "lm_arms=$LM_ARMS"
+    echo "baseline_arm=$BASE deviations_second_round=2528"
     echo "rounds=$ROUNDS warmups=$WARMUPS deadline=$DEADLINE"
-    echo "gpu_archs=$MOJOLEARN_GPU_ARCHS column=$MOJOLEARN_TARGET_COLUMN"
-    [ -f /root/gemm_leg_out/leg.txt ] && grep -E '^(commit|vendor)=' /root/gemm_leg_out/leg.txt
+    echo "vendor=$VENDOR gpu_archs=$MOJOLEARN_GPU_ARCHS column=$MOJOLEARN_TARGET_COLUMN jobs=$JOBS"
+    echo "skip_timers=${MOJOLEARN_ATTN_LEG_SKIP_TIMERS:-0} skip_lm=${MOJOLEARN_ATTN_LEG_SKIP_LM:-0}"
+    [ -f /root/gemm_leg_out/leg.txt ] && grep -E '^(commit|vendor|provider|size)=' /root/gemm_leg_out/leg.txt
 } > "$OUT/gate.txt"
-nvidia-smi --query-gpu=name,driver_version,uuid,clocks.sm,temperature.gpu --format=csv > "$OUT/gpu_before.csv" 2>&1
+gpu_snapshot "$OUT/gpu_before.txt"
 pixi run mojo --version > "$OUT/mojo_version.txt" 2>&1
 
 IDENT="-D MOJOLEARN_NUMERIC_IDENTICAL=1"
@@ -155,9 +226,14 @@ TIMERS="-D MOJOLEARN_ATTN_PHASE_TIMERS=1"
 # shellcheck disable=SC2086
 run build-price pixi run mojo build -j "$JOBS" -I . $IDENT $TRIAL \
     bench/attention_step_price_main.mojo -o "$OUT/bin/attn-price"
-# shellcheck disable=SC2086
-run build-timers pixi run mojo build -j "$JOBS" -I . $IDENT $TRIAL $TIMERS \
-    bench/attention_step_price_main.mojo -o "$OUT/bin/attn-timers"
+# The standalone per-kernel breakdown. MOJOLEARN_ATTN_LEG_SKIP_TIMERS=1 drops
+# it to fit a lease: the lmtiming-* probes still carry the attn.* phase lines
+# of the real training step.
+if [ "${MOJOLEARN_ATTN_LEG_SKIP_TIMERS:-0}" != "1" ]; then
+    # shellcheck disable=SC2086
+    run build-timers pixi run mojo build -j "$JOBS" -I . $IDENT $TRIAL $TIMERS \
+        bench/attention_step_price_main.mojo -o "$OUT/bin/attn-timers"
+fi
 # shellcheck disable=SC2086
 run build-arms-check pixi run mojo build -j "$JOBS" -I . $IDENT $TRIAL \
     transformer/checks/transformer_attention_arms_check.mojo -o "$OUT/bin/arms-check"
@@ -176,6 +252,7 @@ for arm in $(echo "$ARMS" | tr ',' ' '); do
     [ "$first" = 1 ] && oracle=1
     first=0
     MOJOLEARN_ATTN_ARM="$arm" MOJOLEARN_ATTN_KINDS=hashed,heavytail MOJOLEARN_ATTN_TIMING=0 \
+    MOJOLEARN_ATTN_BASELINE="$BASE" \
     MOJOLEARN_ATTN_ORACLE="$oracle" MOJOLEARN_ATTN_REACH=1 \
     run "smoke-$arm" timeout "$DEADLINE" "$OUT/bin/attn-price"
 done
@@ -203,20 +280,16 @@ if [ "${MOJOLEARN_ATTN_LEG_SKIP_LM:-0}" != "1" ]; then
     [ -f python/mojolearn/identical/_mojolearn_byte_lm.so ] && LM_OK=1
 fi
 
-# ---- the two corpora (section 9: two ordinary corpora of different kinds) --
-# English text is committed and pinned; source code is fetched on the box
-# from the versioned tarball and verified against its manifest.
-run corpus-tinyshakespeare sh -c 'test -f training/corpus/tinyshakespeare/input.txt && python3 -c "
-import hashlib, json, sys
-m = json.load(open(\"training/corpus/tinyshakespeare/manifest.json\"))
-raw = open(\"training/corpus/tinyshakespeare/input.txt\", \"rb\").read()
-ok = hashlib.sha256(raw).hexdigest() == m[\"sha256\"] and len(raw) == m[\"bytes\"]
-print(\"tinyshakespeare\", \"ok\" if ok else \"MISMATCH\", len(raw))
-sys.exit(0 if ok else 1)"'
-run corpus-cpython312-lib sh tools/fetch_corpus_cpython312_lib.sh
+# ---- the two corpora (section 9: two benchmark corpora of different kinds) --
+# English text (enwik8) and source code (the Pile's GitHub component), both
+# fetched on the box from pinned sources and verified against their
+# manifests. A corpus whose fetch is red is not timed. Names carry no '-'
+# (lm_summary splits run names on it).
 CORPORA=""
-[ -f training/corpus/tinyshakespeare/input.txt ] && CORPORA="$CORPORA shakespeare=training/corpus/tinyshakespeare/input.txt"
-[ -f training/corpus/cpython312_lib/input.txt ] && CORPORA="$CORPORA cpython=training/corpus/cpython312_lib/input.txt"
+run corpus-enwik8 sh tools/fetch_corpus_enwik8.sh \
+    && CORPORA="$CORPORA enwik8=training/corpus/enwik8/input.txt"
+run corpus-pile-github sh tools/fetch_corpus_pile_github.sh \
+    && CORPORA="$CORPORA pilegithub=training/corpus/pile_github/input.txt"
 echo "corpora=$CORPORA" >> "$OUT/gate.txt"
 
 # ---- real activations: one lean step per corpus dumps the last layer's ----
@@ -249,14 +322,16 @@ if [ -n "$FILE_KINDS" ]; then
         [ "$first" = 1 ] && oracle=1
         first=0
         MOJOLEARN_ATTN_ARM="$arm" MOJOLEARN_ATTN_KINDS="$FILE_KINDS" \
+        MOJOLEARN_ATTN_BASELINE="$BASE" \
         MOJOLEARN_ATTN_ORACLE="$oracle" MOJOLEARN_ATTN_REACH=1 \
         MOJOLEARN_ATTN_ROUNDS="$ROUNDS" MOJOLEARN_ATTN_WARMUPS="$WARMUPS" \
         run "price-$arm" timeout "$DEADLINE" "$OUT/bin/attn-price"
     done
     # ---- the per-kernel breakdown (serialized; never a price) --------------
-    for arm in baseline $(echo "$ARMS" | tr ',' ' '); do
+    for arm in "$BASE" $(echo "$ARMS" | tr ',' ' '); do
         [ -x "$OUT/bin/attn-timers" ] || break
         MOJOLEARN_ATTN_ARM="$arm" MOJOLEARN_ATTN_KINDS="$FILE_KINDS" \
+        MOJOLEARN_ATTN_BASELINE="$BASE" \
         MOJOLEARN_ATTN_ORACLE=0 MOJOLEARN_ATTN_REACH=0 \
         MOJOLEARN_ATTN_ROUNDS=1 MOJOLEARN_ATTN_WARMUPS=1 MOJOLEARN_TRANSFORMER_TIMING=1 \
         run "timers-$arm" timeout "$DEADLINE" "$OUT/bin/attn-timers"
@@ -299,9 +374,11 @@ if [ "$LM_OK" = 1 ]; then
     # The lean step medians and the per-step witnesses, one line each: the
     # baseline arm's witnesses on a corpus are the reference every other arm
     # on that corpus must equal (compared here and again at home).
-    pixi run python - "$OUT" <<'PY' > "$OUT/lm_summary.tsv" 2>> "$OUT/lm_summary.err"
+    pixi run python - "$OUT" "$BASE" <<'PY' > "$OUT/lm_summary.tsv" 2>> "$OUT/lm_summary.err"
 import json, sys, pathlib
 out = pathlib.Path(sys.argv[1])
+# The reference arm: MOJOLEARN_ATTN_BASELINE (default baseline).
+ref_arm = sys.argv[2] if len(sys.argv) > 2 else 'baseline'
 rows = {}
 for d in sorted(out.glob('lm-*')):
     r = d / 'result.json'
@@ -320,9 +397,9 @@ for name, hashes in rows.items():
     parts = name.split('-')
     if len(parts) < 3:
         continue
-    base = 'lm-baseline-' + '-'.join(parts[2:])
+    base = 'lm-' + ref_arm + '-' + '-'.join(parts[2:])
     if base in rows and base != name:
-        print(f"{name}\twitnesses_equal_baseline={hashes == rows[base] and len(hashes) > 0}")
+        print(f"{name}\twitnesses_equal_baseline={hashes == rows[base] and len(hashes) > 0}\treference={base}")
 for d in sorted(out.glob('lmtiming-*')):
     r = d / 'result.json'
     if not r.exists():
@@ -336,9 +413,9 @@ for d in sorted(out.glob('lmtiming-*')):
 PY
 fi
 
-nvidia-smi --query-gpu=name,driver_version,uuid,clocks.sm,temperature.gpu --format=csv > "$OUT/gpu_after.csv" 2>&1
+gpu_snapshot "$OUT/gpu_after.txt"
 # Binaries stay on the box: they are not evidence and the blob fences refuse them.
-rm -rf "$OUT/bin"
+rm -rf "${OUT:?}/bin"
 echo "finished=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$OUT/gate.txt"
 [ -f "$OUT/price_tables.txt" ] && cat "$OUT/price_tables.txt"
 [ -f "$OUT/price_verdicts.txt" ] && cat "$OUT/price_verdicts.txt"

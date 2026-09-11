@@ -1,0 +1,8 @@
+python 3.11.10 /usr/bin/python3
+torch 2.4.1+cu124
+torch.version.cuda 12.4
+torch.version.hip None
+cuda api available True
+device NVIDIA H100 80GB HBM3 capability (9, 0)
+cudnn/miopen 90100
+numpy 1.26.3

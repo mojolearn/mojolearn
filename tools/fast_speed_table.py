@@ -13,7 +13,7 @@ the same six line kinds and nothing else that this file looks at:
     FSPEED         lane= arm= shape= round= ms= hash=
     FSPEED-WARMUP  lane= arm= shape= ms=
     FSPEED-ACC     lane= arm= metric= value=
-    FSPEED-NOTE    lane= arm= <free text>
+    FSPEED-NOTE    lane= arms= metric= delta= reason=
     FSPEED-REFUSED lane= arm= reason=
 
 The run directory is a flat set of `<family>.<lane>.<arm>.log` files, one per

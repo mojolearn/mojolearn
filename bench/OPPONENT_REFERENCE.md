@@ -296,6 +296,36 @@ timed rounds. Admission compares neighbour indices; it does not assert
 bitwise equality of cuML distances. Request includes host transfers and
 device excludes them, as specified in `tools/knn_cuml_reference.py`.
 
+### torch byte-LM training step (target shape, enwik8 and Pile GitHub)
+
+Source: `bench/results/e1g/2026-09-11_133041-nvidia-h100-attention-torch/remote/torch-lm-step/`
+(`summary.tsv`, one JSON per column and corpus), RunPod pod quf7729vxu5q66,
+driver 580.126.09, torch 2.4.1+cu124, CUDA 12.4, cuDNN 90100, Python 3.11.10,
+harness `tools/torch_lm_step_opponent.py` (sha256 16b44393...) at commit
+cd086f67. Shape: batch 1, length 2048, d_model 768, 12 heads (12 KV), head_dim
+64, intermediate 2048, 12 layers, vocab 50257, 162,147,840 parameters, AdamW
+(lr 1e-3, betas 0.9/0.999, eps 1e-8, weight decay 0.01) on every parameter,
+the same init as our probe (seed 93261). SDPA backend `efficient` (flash is
+not available in float32). Clock: synchronize; ids to device; zero_grad;
+forward and mean cross entropy; backward; AdamW step; `loss.item()`;
+synchronize. 2 warmups (compilation included for compile), then 7 timed steps
+in one process per column and corpus; median seconds.
+
+OUR IDENTICAL arm on the SAME pod: the shipped `stash_tiled` lean step from
+`remote/attention-step/lm_summary.tsv`, same shape, parameters and corpora.
+
+| column | enwik8 s | Pile GitHub s | our IDENTICAL / column (enwik8, Pile GitHub) |
+|---|---|---|---|
+| eager_tf32 (their fastest measured) | 0.03794 | 0.03776 | 10.11x, 10.15x |
+| compile_fp32 (inductor, default mode) | 0.05744 | 0.05760 | 6.68x, 6.66x |
+| eager_fp32 | 0.06174 | 0.06184 | 6.21x, 6.20x |
+| ours IDENTICAL (`stash_tiled`, bits equal on every vendor) | 0.3835 | 0.3833 | 1 |
+
+Not measured, so their true fast column may be faster still: compile with
+TF32, and mixed precision (bf16 autocast). Our number is the step time for
+bitwise identical results across Apple, NVIDIA and AMD; theirs carries no
+such property (`nondeterministic_label` true on every column).
+
 ### kNN second kind (HIGGS rows)
 
 Every kNN row above is dyadic-v1, a generator, and the gate's `large`
@@ -504,8 +534,10 @@ opponent here is torch `cdist` + `topk`, NOT cuML.
    (the H100 has 20k and 100k, the L40S has 1M; ours IDENTICAL was measured
    on the L40S at all three on 2026-09-09, so no same-GPU ratio exists yet
    below 1M).
-5. torch byte-LM training step time on H100 (the Sep 7 comparison in this
-   tree is a correctness record with no torch timing).
+5. (closed 2026-09-11 on the H100: the "torch byte-LM training step" table
+   in the H100 section, eager fp32, eager TF32 and compile fp32 on enwik8 and
+   Pile GitHub. Still owed: the same row on the AMD MI325X with ROCm torch,
+   and compile TF32 and bf16 autocast columns on the H100.)
 6. cuML brute-force kNN on the taxi and Istella-S prefixes (DEVIATION 2524
    moved the kNN tooling off HIGGS, which is retired; the "kNN second kind
    (HIGGS rows)" table above is history), H100, k 10 and 15, measured once

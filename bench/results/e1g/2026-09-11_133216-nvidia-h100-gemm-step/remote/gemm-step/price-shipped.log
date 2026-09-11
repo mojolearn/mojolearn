@@ -1,0 +1,125 @@
+1061 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x101c40000000, nodemask=1)
+== bench/gemm_step_price_main.mojo [IDENTICAL] arm=shipped trial=True column=2 rounds=7 warmups=2 ==
+timing=host-synchronized median ms; raw samples below; the BITS pass is not a warmup
+TABLE call | op | m x n x k | per step | shipped plan | arm geometry | shipped blocks | arm blocks | shipped median ms | arm median ms | ratio
+BITS proj_fwd EQUAL cells=1572864 digest=0xdd3c876b6b377944
+SAMPLE proj_fwd round=0 arm_first=False shipped_ns=327512 arm_ns=327461
+SAMPLE proj_fwd round=1 arm_first=True shipped_ns=327221 arm_ns=327297
+SAMPLE proj_fwd round=2 arm_first=False shipped_ns=327348 arm_ns=327026
+SAMPLE proj_fwd round=3 arm_first=True shipped_ns=325979 arm_ns=327294
+SAMPLE proj_fwd round=4 arm_first=False shipped_ns=329517 arm_ns=326796
+SAMPLE proj_fwd round=5 arm_first=True shipped_ns=327404 arm_ns=326170
+SAMPLE proj_fwd round=6 arm_first=False shipped_ns=326333 arm_ns=327475
+PRICE gemm shipped proj_fwd shipped_ms=0.327348 arm_ms=0.327294 ratio=0.9998350379412735 shipped_tflops=7.380277576157484 arm_tflops=7.381495242809217 plan=[TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] geometry=[shipped TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)]
+TABLE proj_fwd | NT | 2048 x 768 x 768 | 48 | TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) | shipped TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) | 96 | 96 | 0.327348 | 0.327294 | 0.9998350379412735
+BITS proj_dA EQUAL cells=1572864 digest=0x4a06fac1f8e83213
+SAMPLE proj_dA round=0 arm_first=False shipped_ns=330843 arm_ns=331989
+SAMPLE proj_dA round=1 arm_first=True shipped_ns=331151 arm_ns=331637
+SAMPLE proj_dA round=2 arm_first=False shipped_ns=332157 arm_ns=331209
+SAMPLE proj_dA round=3 arm_first=True shipped_ns=330908 arm_ns=331552
+SAMPLE proj_dA round=4 arm_first=False shipped_ns=330995 arm_ns=331891
+SAMPLE proj_dA round=5 arm_first=True shipped_ns=331736 arm_ns=330836
+SAMPLE proj_dA round=6 arm_first=False shipped_ns=331036 arm_ns=332036
+PRICE gemm shipped proj_dA shipped_ms=0.331036 arm_ms=0.331637 ratio=1.0018155125122343 shipped_tflops=7.2980555105789096 arm_tflops=7.284829810907709 plan=[TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] geometry=[shipped TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)]
+TABLE proj_dA | NN | 2048 x 768 x 768 | 48 | TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) | shipped TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) | 96 | 96 | 0.331036 | 0.331637 | 1.0018155125122343
+BITS proj_dB EQUAL cells=589824 digest=0x1da75dd594f0934a
+SAMPLE proj_dB round=0 arm_first=False shipped_ns=888607 arm_ns=885638
+SAMPLE proj_dB round=1 arm_first=True shipped_ns=889345 arm_ns=885867
+SAMPLE proj_dB round=2 arm_first=False shipped_ns=888720 arm_ns=887855
+SAMPLE proj_dB round=3 arm_first=True shipped_ns=885438 arm_ns=888241
+SAMPLE proj_dB round=4 arm_first=False shipped_ns=884574 arm_ns=887352
+SAMPLE proj_dB round=5 arm_first=True shipped_ns=885860 arm_ns=885882
+SAMPLE proj_dB round=6 arm_first=False shipped_ns=885781 arm_ns=888495
+PRICE gemm shipped proj_dB shipped_ms=0.88586 arm_ms=0.887352 ratio=1.0016842390445444 shipped_tflops=2.7272019325852845 arm_tflops=2.7226163957482488 plan=[TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] geometry=[shipped TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)]
+TABLE proj_dB | TN | 768 x 768 x 2048 | 48 | TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) | shipped TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) | 36 | 36 | 0.88586 | 0.887352 | 1.0016842390445444
+BITS gateup_fwd EQUAL cells=4194304 digest=0xe05cc5aa93a62891
+SAMPLE gateup_fwd round=0 arm_first=False shipped_ns=667465 arm_ns=666345
+SAMPLE gateup_fwd round=1 arm_first=True shipped_ns=672698 arm_ns=667813
+SAMPLE gateup_fwd round=2 arm_first=False shipped_ns=666111 arm_ns=667778
+SAMPLE gateup_fwd round=3 arm_first=True shipped_ns=671889 arm_ns=665832
+SAMPLE gateup_fwd round=4 arm_first=False shipped_ns=669084 arm_ns=668559
+SAMPLE gateup_fwd round=5 arm_first=True shipped_ns=665246 arm_ns=666370
+SAMPLE gateup_fwd round=6 arm_first=False shipped_ns=666132 arm_ns=665468
+PRICE gemm shipped gateup_fwd shipped_ms=0.667465 arm_ms=0.66637 ratio=0.9983594645412119 shipped_tflops=9.652118004689385 arm_tflops=9.667978666506595 plan=[TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] geometry=[shipped TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)]
+TABLE gateup_fwd | NT | 2048 x 2048 x 768 | 24 | TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) | shipped TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) | 256 | 256 | 0.667465 | 0.66637 | 0.9983594645412119
+BITS gateup_dA EQUAL cells=1572864 digest=0x46dcce99fe75e276
+SAMPLE gateup_dA round=0 arm_first=False shipped_ns=902850 arm_ns=904263
+SAMPLE gateup_dA round=1 arm_first=True shipped_ns=903407 arm_ns=903325
+SAMPLE gateup_dA round=2 arm_first=False shipped_ns=901708 arm_ns=903957
+SAMPLE gateup_dA round=3 arm_first=True shipped_ns=903239 arm_ns=902563
+SAMPLE gateup_dA round=4 arm_first=False shipped_ns=903829 arm_ns=903937
+SAMPLE gateup_dA round=5 arm_first=True shipped_ns=903679 arm_ns=903018
+SAMPLE gateup_dA round=6 arm_first=False shipped_ns=903216 arm_ns=904760
+PRICE gemm shipped gateup_dA shipped_ms=0.903239 arm_ms=0.903937 ratio=1.0007727744262593 shipped_tflops=7.132609358099019 arm_tflops=7.127101716159423 plan=[TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] geometry=[shipped TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)]
+TABLE gateup_dA | NN | 2048 x 768 x 2048 | 24 | TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) | shipped TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) | 96 | 96 | 0.903239 | 0.903937 | 1.0007727744262593
+BITS gateup_dB EQUAL cells=1572864 digest=0xb0d0047e75bc15a7
+SAMPLE gateup_dB round=0 arm_first=False shipped_ns=907732 arm_ns=907802
+SAMPLE gateup_dB round=1 arm_first=True shipped_ns=906554 arm_ns=907035
+SAMPLE gateup_dB round=2 arm_first=False shipped_ns=906613 arm_ns=907881
+SAMPLE gateup_dB round=3 arm_first=True shipped_ns=907966 arm_ns=909095
+SAMPLE gateup_dB round=4 arm_first=False shipped_ns=908518 arm_ns=908153
+SAMPLE gateup_dB round=5 arm_first=True shipped_ns=909098 arm_ns=908807
+SAMPLE gateup_dB round=6 arm_first=False shipped_ns=907433 arm_ns=906975
+PRICE gemm shipped gateup_dB shipped_ms=0.907732 arm_ms=0.907881 ratio=1.000164145364491 shipped_tflops=7.0973050900486045 arm_tflops=7.096140291513976 plan=[TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] geometry=[shipped TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)]
+TABLE gateup_dB | TN | 2048 x 768 x 2048 | 24 | TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) | shipped TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) | 96 | 96 | 0.907732 | 0.907881 | 1.000164145364491
+BITS down_fwd EQUAL cells=1572864 digest=0x63592259bcb93a54
+SAMPLE down_fwd round=0 arm_first=False shipped_ns=887132 arm_ns=886845
+SAMPLE down_fwd round=1 arm_first=True shipped_ns=887370 arm_ns=886653
+SAMPLE down_fwd round=2 arm_first=False shipped_ns=886619 arm_ns=886746
+SAMPLE down_fwd round=3 arm_first=True shipped_ns=886870 arm_ns=886824
+SAMPLE down_fwd round=4 arm_first=False shipped_ns=885766 arm_ns=886990
+SAMPLE down_fwd round=5 arm_first=True shipped_ns=887245 arm_ns=886155
+SAMPLE down_fwd round=6 arm_first=False shipped_ns=886922 arm_ns=885692
+PRICE gemm shipped down_fwd shipped_ms=0.886922 arm_ms=0.886746 ratio=0.9998015609038902 shipped_tflops=7.263830352612744 arm_tflops=7.2652720666346395 plan=[TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] geometry=[shipped TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)]
+TABLE down_fwd | NT | 2048 x 768 x 2048 | 12 | TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) | shipped TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) | 96 | 96 | 0.886922 | 0.886746 | 0.9998015609038902
+BITS down_dA EQUAL cells=4194304 digest=0x5b61bc9fe00905
+SAMPLE down_dA round=0 arm_first=False shipped_ns=677448 arm_ns=675339
+SAMPLE down_dA round=1 arm_first=True shipped_ns=674766 arm_ns=676252
+SAMPLE down_dA round=2 arm_first=False shipped_ns=679775 arm_ns=1235836
+SAMPLE down_dA round=3 arm_first=True shipped_ns=680725 arm_ns=703324
+SAMPLE down_dA round=4 arm_first=False shipped_ns=675952 arm_ns=676293
+SAMPLE down_dA round=5 arm_first=True shipped_ns=682661 arm_ns=676459
+SAMPLE down_dA round=6 arm_first=False shipped_ns=676860 arm_ns=679018
+PRICE gemm shipped down_dA shipped_ms=0.677448 arm_ms=0.676459 ratio=0.9985401093515665 shipped_tflops=9.509882594678853 arm_tflops=9.52378628120847 plan=[TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] geometry=[shipped TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)]
+TABLE down_dA | NN | 2048 x 2048 x 768 | 12 | TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) | shipped TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) | 256 | 256 | 0.677448 | 0.676459 | 0.9985401093515665
+BITS down_dB EQUAL cells=1572864 digest=0xa58e713f45edd8ed
+SAMPLE down_dB round=0 arm_first=False shipped_ns=917907 arm_ns=915993
+SAMPLE down_dB round=1 arm_first=True shipped_ns=916134 arm_ns=917437
+SAMPLE down_dB round=2 arm_first=False shipped_ns=915456 arm_ns=917763
+SAMPLE down_dB round=3 arm_first=True shipped_ns=916489 arm_ns=921207
+SAMPLE down_dB round=4 arm_first=False shipped_ns=915518 arm_ns=915702
+SAMPLE down_dB round=5 arm_first=True shipped_ns=915798 arm_ns=916349
+SAMPLE down_dB round=6 arm_first=False shipped_ns=917600 arm_ns=915422
+PRICE gemm shipped down_dB shipped_ms=0.916134 arm_ms=0.916349 ratio=1.000234681826021 shipped_tflops=7.032214658554317 arm_tflops=7.03056471278956 plan=[TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] geometry=[shipped TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)]
+TABLE down_dB | TN | 768 x 2048 x 2048 | 12 | TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) | shipped TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) | 96 | 96 | 0.916134 | 0.916349 | 1.000234681826021
+BITS head_fwd EQUAL cells=102926336 digest=0xe1e8e917ef51cb67
+SAMPLE head_fwd round=0 arm_first=False shipped_ns=16590354 arm_ns=16571071
+SAMPLE head_fwd round=1 arm_first=True shipped_ns=16590801 arm_ns=16590294
+SAMPLE head_fwd round=2 arm_first=False shipped_ns=16578747 arm_ns=16594899
+SAMPLE head_fwd round=3 arm_first=True shipped_ns=16572006 arm_ns=16580034
+SAMPLE head_fwd round=4 arm_first=False shipped_ns=16586306 arm_ns=16597069
+SAMPLE head_fwd round=5 arm_first=True shipped_ns=16578848 arm_ns=16582887
+SAMPLE head_fwd round=6 arm_first=False shipped_ns=16573072 arm_ns=16581035
+PRICE gemm shipped head_fwd shipped_ms=16.578848 arm_ms=16.582887 ratio=1.0002436236824175 shipped_tflops=9.535937122772342 arm_tflops=9.533614508499033 plan=[TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] geometry=[shipped TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)]
+TABLE head_fwd | NT | 2048 x 50257 x 768 | 1 | TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) | shipped TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) | 6288 | 6288 | 16.578848 | 16.582887 | 1.0002436236824175
+BITS head_dA EQUAL cells=1572864 digest=0x287761cb23fe7292
+SAMPLE head_dA round=0 arm_first=False shipped_ns=22029537 arm_ns=22026701
+SAMPLE head_dA round=1 arm_first=True shipped_ns=22029076 arm_ns=22031080
+SAMPLE head_dA round=2 arm_first=False shipped_ns=21990704 arm_ns=21992009
+SAMPLE head_dA round=3 arm_first=True shipped_ns=21993398 arm_ns=21991532
+SAMPLE head_dA round=4 arm_first=False shipped_ns=22010413 arm_ns=22030502
+SAMPLE head_dA round=5 arm_first=True shipped_ns=22030891 arm_ns=22026306
+SAMPLE head_dA round=6 arm_first=False shipped_ns=22026702 arm_ns=21992052
+PRICE gemm shipped head_dA shipped_ms=22.026702 arm_ms=22.026306 ratio=0.9999820218206067 shipped_tflops=7.177418212494998 arm_tflops=7.177547251727094 plan=[TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] geometry=[shipped TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)]
+TABLE head_dA | NN | 2048 x 768 x 50257 | 1 | TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) | shipped TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) | 96 | 96 | 22.026702 | 22.026306 | 0.9999820218206067
+BITS head_dB EQUAL cells=38597376 digest=0x48cf871761b383a8
+SAMPLE head_dB round=0 arm_first=False shipped_ns=16760516 arm_ns=16728619
+SAMPLE head_dB round=1 arm_first=True shipped_ns=16729362 arm_ns=16714977
+SAMPLE head_dB round=2 arm_first=False shipped_ns=16712651 arm_ns=16702487
+SAMPLE head_dB round=3 arm_first=True shipped_ns=16740227 arm_ns=16732722
+SAMPLE head_dB round=4 arm_first=False shipped_ns=16740415 arm_ns=16734436
+SAMPLE head_dB round=5 arm_first=True shipped_ns=16758815 arm_ns=16752484
+SAMPLE head_dB round=6 arm_first=False shipped_ns=16736971 arm_ns=16704372
+PRICE gemm shipped head_dB shipped_ms=16.740227 arm_ms=16.728619 ratio=0.9993065804902166 shipped_tflops=9.444008859378071 arm_tflops=9.450562063491315 plan=[TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] geometry=[shipped TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)]
+TABLE head_dB | TN | 50257 x 768 x 2048 | 1 | TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) | shipped TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) | 2358 | 2358 | 16.740227 | 16.728619 | 0.9993065804902166
+STEP gemm arm=shipped ratio=1.0003317285256277 shipped_ms=218.71800100000002 arm_ms=218.79055599999998 calls=12 moved=0 (per-call medians weighted by per-step counts; a GEMM sum, not a step time)

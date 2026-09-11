@@ -162,8 +162,9 @@ So the rule, stated so it binds the next family too:
 
 - **The only number is OUR IDENTICAL arm against THE OPPONENT'S FAST arm**,
   with exactly one exception: the three tree lanes, where `fast` is a
-  shipped tier and MAY be timed on Apple silicon
-  (`bench/speed/forest_speed_arm.py`). Everywhere else, timing a `fast` or
+  shipped tier aimed at the Mac and MAY be timed
+  (`bench/speed/forest_speed_arm.py`). Where it is timed is section 10:
+  never on the orchestrator's own laptop. Everywhere else, timing a `fast` or
   `deterministic` arm is timing a binary that does not ship -- see 0b-iii.
   Do not build one to benchmark it.
 - **Never compare our fast arm to our identical arm and call it a result.**
@@ -280,7 +281,9 @@ at the lane's shape and on the same box in one heat window:
 - A win on one kind with the other unmeasured is still no flip: the second
   dataset has to run first. That is what stays strict.
 Applied the same evening: DEVIATION 2502 (pure node is a leaf) went ON by
-default on ratios 0.89 (taxi) and 0.45 (Istella-S) with equal logloss.
+default on ratios 0.90 (taxi) and 0.44 (Istella-S), logloss not worse on
+either (0.525912 to 0.525910, 0.145578 to 0.145560; M4 logs in
+`bench/results/rf_2502_m4_2026-09-11/logs`).
 
 The verdict is mechanical, so a tool prints it. `tools/flip_verdict.py`
 reads the before and after speed logs for both datasets (FSPEED and
@@ -301,13 +304,37 @@ runs on TWO different kinds of data**, two corpora or two generating
 distributions, not two seeds of one corpus and not two lengths of one file.
 Same reason, same shape of the rule. Andrew, 2026-09-11: "2 different but
 relatively normal things to train on, not edge cases; we build our
-software to handle GENERAL NORMAL CASES." So the two kinds are two
-ordinary training corpora that differ in what they are (today: English
-text, `training/corpus/tinyshakespeare`, and source code, to be pinned by
-sha256 and manifest the same way), never an adversarial or heavy-tailed
-fixture standing in as the second kind. Adversarial fixtures stay where
-they are, in the correctness checks; they are not what a kernel is TUNED
-on, and a timing or throughput claim quotes the two normal corpora only.
+software to handle GENERAL NORMAL CASES." Never an adversarial or
+heavy-tailed fixture standing in as the second kind. Adversarial fixtures
+stay where they are, in the correctness checks; they are not what a kernel
+is TUNED on, and a timing or throughput claim quotes the two corpora only.
+
+**The two neural corpora are medium-large, standard and benchmarked
+(2026-09-11 night).** Andrew: "we should be using 2 medium large data seeds
+to determine if we have speed wins or losses", then "is shakespeare a good
+file? what generalizes? what is the norm? what are the benchmarks? we
+should take 2 corpora that generalize and that have benchmarks". A toy file
+cannot say whether a win generalizes, and a corpus with no published
+numbers cannot say whether our quality is ordinary. So:
+
+- **English: enwik8** (`training/corpus/enwik8`, 100,000,000 bytes of
+  English Wikipedia, `tools/fetch_corpus_enwik8.sh`): the Hutter Prize file
+  and the standard byte-level language modeling benchmark, 90M/5M/5M split,
+  bits per character (Transformer-XL 1.06 at 12 layers).
+- **Code: the Pile's GitHub component** (`training/corpus/pile_github`,
+  97,124,565 bytes, every GitHub record of `monology/pile-uncopyrighted`
+  `val.jsonl.zst` at a pinned revision, `tools/fetch_corpus_pile_github.sh`):
+  ordinary GitHub code in many languages, bits per byte published for GPT-2,
+  GPT-3 and byte-level transformers.
+
+Both are pinned by manifest and sha256, fetched on the box without
+credentials, and never committed. Medium-large means large enough to be the
+real thing and small enough to fetch in a minute on a rented box; step time
+does not depend on corpus size, so nothing larger buys evidence.
+`training/corpus/tinyshakespeare` (a 1.1 MB quick-start demo with no
+leaderboard) and `training/corpus/cpython312_lib` (4.5 MB of one project)
+are RETIRED as timing corpora; their evidence stays readable and
+tinyshakespeare still pins the byte LM validation runs.
 
 The 1,000,000-row floor for tree timing (2026-09-01) stands underneath this
 rule; this one adds the second kind, and removes the size sweep as a
@@ -345,8 +372,24 @@ distinguishing. also amd is cheaper."
 decides a kernel geometry, a default flip under section 9, a deviation A/B,
 a stage profile or a new opponent row is an AMD Instinct GPU on
 DigitalOcean (MI325X, size `gpu-mi325x1-256gb`, region `tor1`). NVIDIA is
-the confirmation column. Apple stays where the tree FAST tier is timed
-(0b-iii).
+the confirmation column.
+
+**The tree FAST tier is for the Mac, and the Mac it is built on is not a
+benchmark box.** Andrew, 2026-09-11 night: "i do want fast mode on trees
+with an aim to being good on mac... i just think there are confounding
+factors and it is hard to measure and risks crashing the device". The
+laptop is shared by several sessions and drifts 1.7x within twenty minutes,
+so a timing there is confounded as well as risky. So the FAST tier is
+tuned on the MI325X too, A/B'd beside IDENTICAL. Work removed on AMD
+(host round trips, histograms not built, fewer launches) is removed on the
+Mac as well, but the size of the win does not carry over: Metal pays more
+per launch and per fill, unified memory makes a host copy cheaper than
+PCIe does, and kernel geometry is per vendor (DEVIATION 2512 halved M4
+fills and was neutral on CUDA). A FAST default flip therefore gets one
+local Mac confirmation, scheduled on purpose: one lane, `nice -n 19`, two
+threads, nothing else heavy running on the machine, both datasets. Cloud
+Macs are not used (Andrew, 2026-09-11: the 24-hour minimum rules them
+out).
 
 Tuning on one vendor costs nothing in correctness. IDENTICAL makes the bits
 equal on every vendor, so where a kernel was tuned never changes an answer

@@ -1,0 +1,29 @@
+{
+  "schema": "mojolearn.byte-lm.corpus.v1",
+  "source_url": "https://huggingface.co/datasets/monology/pile-uncopyrighted/resolve/3be90335b66f24456a5d6659d9c8d208c0357119/val.jsonl.zst",
+  "source_commit": "monology/pile-uncopyrighted revision 3be90335b66f24456a5d6659d9c8d208c0357119, val.jsonl.zst 338,045,152 bytes, sha256 db5e5d1532bf8dc33a6589b50ecba1a8c96f7b4b9cb343d168e603c393007c26",
+  "selection": "every record whose meta.pile_set_name is \"Github\", in file order, its text encoded UTF-8 and followed by one newline byte, concatenated and truncated to 100,000,000 bytes; the file holds 18,337 such records and 97,124,565 bytes, so nothing is truncated",
+  "sha256": "52a5b4c36ab9119c15505331c10e3b23690377d40fbac3e598c7fafe13a324df",
+  "bytes": 97124565,
+  "encoding": "raw bytes; no normalization",
+  "train_range": [
+    0,
+    97124565
+  ],
+  "validation_range": [
+    0,
+    0
+  ],
+  "vocabulary": 256,
+  "batch": 1,
+  "context": 2048,
+  "planned_steps": 3,
+  "train_batch_schedule": "step k zero-based, row b: bytes[(k*batch*2048 + b*2048) % (97124565 - 2049) : start+2049]; targets shifted one byte (tools/lm_step_memory_probe.py --corpus, tools/torch_lm_step_opponent.py)",
+  "validation_batch_starts": [],
+  "benchmark": {
+    "name": "the Pile, GitHub component, byte-level language modeling",
+    "metric": "bits per byte on the Pile test split's GitHub records (the same selection applied to test.jsonl.zst of the same revision, sha256 a6cafe820e9c350af95b57ec75d35d7c8b479de2eb87caabe6fb6b567e639c3a)",
+    "published": "GPT-2 small 1.7912 and GPT-3 davinci 0.5635 (Gao et al., arXiv 2101.00027); byte-level Transformer 0.655, MegaByte 0.570, SpaceByte 0.500 (arXiv 2404.14408)"
+  },
+  "scope": "source-code kind for the two-corpus neural rule (ENGINEERING_RULES section 9, from 2026-09-11 night); the source is the Pile validation file, used here as training bytes for timing; input.txt is fetched by tools/fetch_corpus_pile_github.sh and is not committed"
+}

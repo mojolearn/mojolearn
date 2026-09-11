@@ -1,6 +1,7 @@
 # GEMM step lane, the IDENTICAL GEMMs of the byte LM training step (DEVIATIONS 2540 to 2544)
 
-Source-only lane, September 11, 2026, IDENTICAL only. STATUS: WIP, wound
+Source-only lane, September 11, 2026, IDENTICAL only. STATUS: BUILT, NOT
+RUN (second session, same day; section 10). The first session was wound
 down by Andrew's order before any code was written. This brief holds the
 reading, the counted model, the arm designs and the identity argument for
 every arm. No kernel, harness, check or leg exists yet (section 9 lists
@@ -302,3 +303,287 @@ file of section 7, the trial hook in `identical_gemm_into`, the arm kernel
 and launchers, the probe field. DEVIATIONS 2542 (hook and selector), 2543
 (check, price, resources) and 2544 (leg and probe field) are reserved for
 those and not yet used.
+
+## 10. Build lane (September 11, 2026, second session)
+
+Source only, like the first session: nothing below ran on the Mac or on a
+GPU. Section 10.1 and 10.2 were written before the kernel code they
+describe; 10.3 onward after it.
+
+### 10.1 The identity argument for the kernel as built
+
+`gemm/checks/gemm_identical.mojo::identical_gemm_step_arm_kernel[RPT, CPT,
+TC, KS, PAGES, LFOLD, SAB]` is `identical_gemm_tuned_kernel` with `SPLIT =
+False`, `FS = TUNED_FOLD_SLOTS` and `SWIZZLE_NONE` fixed. Copied unchanged:
+the prologue, `_tuned_g2r` for both operands, the register to shared copy
+into page `w % PAGES` in both staging mappings, the prefetch, both
+accumulate paths through `_tuned_loaded_operand` and `_tuned_step`, the
+`PAGES == 1` barrier, and the leaf boundary test `win[2] == 1`. What
+differs, and why no stored bit can move:
+
+1. The LFOLD leaf boundary (2540). `depth` is the number of trailing one
+   bits of `occ`, computed once per thread per leaf. If `depth >= FS` the
+   thread returns: that is fold overflow, `P >= 2^16`, unreachable under
+   the profile cap `P <= 1024`, and block uniform because `occ` is a
+   function of the leaf count alone, so every thread of the block returns
+   at the same window and no barrier is left waiting. Otherwise, for each
+   cell `e` ascending, `val = ftz(acc[e])` (5d); for `d` in `0 .. depth-1`,
+   `val = ftz(ftz(stack[d NCELL + e]) + ftz(val))` (5e, 5f, the slot on the
+   left); `stack[depth NCELL + e] = val`; then `occ += 1`.
+   `_fold_push_local` merges every cell at once at `d = 0, 1, ...` while
+   bit `d` is set, stores at the first clear bit, and computes
+   `occ - (2^depth - 1) + 2^depth`, which is `occ + 1`. Same operands, same
+   order, same slot, per cell. Cells share no float, so walking them one at
+   a time cannot reorder any cell's additions.
+2. The LFOLD drain. Per cell, `_fold_drain_local`'s element expression
+   (ascending `d`, the first occupied slot copied bit for bit, each later one
+   `ftz(ftz(slot) + ftz(root))`), then the stored `ftz(root)` (5g). The arm
+   drains only cells inside the output (`gi < m`, `gj < n`); the shipped
+   kernel drains every lane and masks the store. A drain that is never
+   stored moves no stored bit.
+3. `LFOLD = False` keeps the shipped lane-wide `_fold_push_local` and
+   `_fold_drain_local` calls. It is not an arm: it is the resources
+   control, the trimmed copy at the shipped geometry.
+4. No swizzle: `tile = raw`, the identity bijection, which is what the
+   shipped plan passes (`SWIZZLE_NONE`).
+5. The arm kernel names none of the file's global sabotage switches itself
+   (the shared helpers it calls keep theirs). The arms check refuses to run
+   on a build that defines one, because its baseline would be a sabotaged
+   kernel.
+6. `SAB = True` (reach, 6.3). At the store, thread 0's cell `(u, v) = (0,
+   0)`, which is output cell `(i0, j0)` and always inside the output,
+   stores `_gemm_step_arm_sabotage(value)`: `+-0.0` becomes `+-2^-100` (bit
+   pattern `0x0D800000` with the sign kept, a normal no later seam
+   flushes), any other pattern becomes the pattern plus one. The `k == 0`
+   store does the same. So a sabotage launch moves exactly one cell per
+   block, and the check requires `moved == blocks` of that geometry, which
+   also names the geometry that ran (`half` at proj fwd is 192 blocks, the
+   shipped 96).
+7. The geometries (execution plan, contract 6.1). `lfold`: `(2 TUNED_RPT,
+   2 TUNED_CPT, TUNED_TC, 16)`, 128x128. `half`: `(TUNED_RPT, 2 TUNED_CPT,
+   TUNED_TC, GEMM_HALF_KS)`, 64x128, `GEMM_HALF_KS` 32 where
+   `lib_smem_pages_for` answers 2 for the 27,648 B page at KS 32, else 16.
+   `half_ks16`: the same at 16. `quarter`: `(TUNED_RPT, TUNED_CPT,
+   TUNED_TC, TUNED_64_KS)`, 64x64. `head`: with `W =
+   lib_lane_width_for[TARGET_COLUMN]` when `W` is a power of two in 8 ..
+   256 and the block is 256 threads, else 16. N-wide (`n >= m`): `TC = W`,
+   `RPT = 32 / (256 / W)`, `CPT = 256 / W`, tile 32x256. M-wide (`m > n`):
+   `TC = 256 / W`, `RPT = 256 / W`, `CPT = 32 / (256 / W)`, tile 256x32.
+   KS 16. AMD (`W = 64`): N-wide reg 8x4 TC 64, M-wide reg 4x8 TC 4.
+   NVIDIA and Apple (`W = 32`): N-wide reg 4x8 TC 32, M-wide 8x4 TC 8.
+   `PAGES` from `lib_smem_pages_for` at `(BM + BN)(KS + 4) 4` bytes, and a
+   comptime assert that one page fits (`lib_smem_page_fits_for`). None of
+   these reaches `leaf_in` or `p_in`, which the launcher takes from
+   `contract_partition(k)` exactly as `identical_gemm_with_plan` does.
+8. Applicability (2542). `gemm_step_arm_geometry(arm, m, n, k)` returns the
+   shipped geometry unless `choose_gemm_plan(m, n, k)` is
+   `PLAN_TUNED_128_8X8`; `head` also requires `max(m, n, k) >= 16,384`. It
+   reads `m`, `n`, `k` and returns a geometry id, never a partition.
+
+### 10.2 A claim of 6.2 the ownership rule does not support
+
+6.2 says the head tile puts "one wavefront or warp" on "consecutive cells of
+the long axis". That holds for the N-wide tile only. Thread `tid` owns rows
+`tid / TC + u TR` and columns `tid mod TC + v TC`. With `TC = W`, a lane's
+`W` threads share one `accrow` and take every `acccol`, so one lane owns
+all 256 columns of the tile. The M-wide tile's long axis is rows, and a
+lane of `W` threads spans only `W / TC = W^2 / 256` consecutive `accrow`
+values (16 on AMD, 4 on NVIDIA), each strided by `TR = W`. Under this
+kernel's ownership rule no M-wide geometry with `W < 256` puts a lane on
+consecutive long-axis rows. The geometry is still legal execution plan and
+is built as designed; a head dA or head dB price is not evidence about lane
+alignment.
+
+### 10.3 What was built, per deviation
+
+Nothing ran. Nothing flips a default. In `identical_gemm_into` the shipped
+dispatch line is unchanged, and the hook sits in front of it under `comptime
+if GEMM_ARM_TRIAL`. The other edits to shipped files are three imports in
+`gemm_identical.mojo` (`bitcast`, `getenv`, `lib_lane_width_for`) and one
+recorded field in the probe.
+
+- **2542 BUILT** (`gemm/checks/gemm_identical.mojo`, the section after
+  `identical_gemm_into`). `GEMM_ARM_TRIAL`; the hook; `gemm_step_arm_from_env`
+  (a shipped build reads no environment); `gemm_step_arm_parse` (raises on an
+  unknown name, the empty name is `shipped`); `gemm_step_arm_name`;
+  `gemm_step_arm_geometry` (the applicability predicate of 10.1 item 8);
+  `gemm_step_geometry_tile`, `_blocks` and `_name`;
+  `identical_gemm_step_geometry_into` (a forced geometry, clean or sabotage,
+  for the harnesses; on a non-trial build every geometry runs the shipped
+  plan); `_gemm_step_arm_hook`.
+- **2540 BUILT.** `identical_gemm_step_arm_kernel[RPT, CPT, TC, KS, PAGES,
+  LFOLD, SAB]`, `_launch_step_arm`, `_step_geometry_launch`; geometries
+  `lfold`, `half`, `half_ks16`, `quarter`.
+- **2541 BUILT.** Geometries `head_n` and `head_m` from the lane width;
+  arms `head` and `half_head`.
+- **2543 BUILT.** `gemm/checks/gemm_step_arms.mojo` holds the twelve LM
+  calls, derived from each layer's forward `OP_NT` through
+  `gemm_backward_a_call` and `gemm_backward_b_call`, plus the fill, poison,
+  readback, compare, digest and median helpers.
+  `gemm/checks/gemm_step_arms_check.mojo` runs in three parts. The selector
+  part checks that names round-trip and that an unknown name raises from the
+  parser and from `identical_gemm_into`. The ragged part runs all three ops;
+  `k` in {0, 1, 128, 129, 300, 1000, 2049, 50257}; `m x n` of 1x3, 33x70,
+  129x257, 300x129 and 257x520; and the subnormal-product kind at 129x257.
+  There every geometry must match the shipped 128x128 plan and FLAT bit for
+  bit, with reach as `moved == blocks`. The LM part sends the twelve calls,
+  the three head calls among them, through `identical_gemm_into` under
+  every arm by `setenv`, with bits and reach checked per call.
+  `bench/gemm_step_price_main.mojo` prints BITS, SAMPLE, PRICE, TABLE and
+  STEP lines, naming the plan and the geometry beside each timing.
+  `bench/gemm_step_resources_main.mojo` prints registers, local, shared,
+  const, max threads and blocks per SM for the shipped kernel, a trimmed
+  control (`LFOLD = False` at 128x128) and every geometry. Each attribute
+  is its own print, and each geometry its own try. It runs on any vendor
+  and needs no ptxas.
+- **2544 BUILT.** `tools/gemm_step_leg.sh` passes `sh -n` and `dash -n`.
+  `tools/lm_step_memory_probe.py` records `gemm_arm` in the run mode, the
+  setup event (`gemm_arm_requested`) and `result.json`.
+
+Departures from the section 7 design:
+
+- The arm kernel lives in `gemm_identical.mojo`, not
+  `gemm_step_arms.mojo`: the hook dispatches it, so a separate module would
+  be a circular import.
+- The check refuses a build that defines a global GEMM sabotage.
+- The leg brackets each corpus with `lm-shipped-<corpus>` first and
+  `lm-shippedclose-<corpus>` last, and each ratio is taken against the
+  mean of the two.
+- `lmtiming-*` is opt-in (`MOJOLEARN_GEMM_STEP_LEG_LMTIMING=1`) so the leg
+  fits the lease.
+- Spill counts are not captured: the only instrument for them is
+  NVIDIA-only.
+
+### 10.4 RUN OWED, in order
+
+M4, light, run by the orchestrator:
+
+1. The gate on a trial build:
+   `pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_GEMM_ARM_TRIAL=1 -I . gemm/checks/gemm_step_arms_check.mojo -o /tmp/gemm-step-check`
+   then
+   `MOJOLEARN_GEMM_STEP_CHECK_LM=0 MOJOLEARN_GEMM_STEP_CHECK_FLOPS=50000000 /tmp/gemm-step-check`.
+   Expect PASS, and every `REACH ragged` line at N/N.
+2. The same check on a build WITHOUT the trial define:
+   `pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . gemm/checks/gemm_step_arms_check.mojo -o /tmp/gemm-step-check-notrial`
+   then
+   `MOJOLEARN_GEMM_STEP_CHECK_LM=0 MOJOLEARN_GEMM_STEP_CHECK_FLOPS=50000000 /tmp/gemm-step-check-notrial`.
+   Expect FAIL, naming the missing define (reach is not provable there).
+3. The shipped path:
+   `pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . gemm/checks/gemm_device_check.mojo -o /tmp/gemm-device-check && /tmp/gemm-device-check`
+   stays green. On any shipped byte LM binding built from this commit,
+   `nm -C _mojolearn_byte_lm.so | grep -c step_arm` prints 0.
+4. Builds only, no run:
+   `pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_GEMM_ARM_TRIAL=1 -I . bench/gemm_step_price_main.mojo -o /tmp/gemm-step-price`
+   and the same for `bench/gemm_step_resources_main.mojo`.
+
+AMD, the deciding column:
+
+5. The leg in 10.5, from a `git worktree add --detach` checkout of the
+   commit that carries this lane.
+6. Read these back:
+   - `status.tsv`: every item should exit 0.
+   - `step-check.log`: PASS, and an OK `LM` line for each of the 7 arms on
+     each of the 12 calls.
+   - `resources_lines.txt`: the repo's first AMD register and occupancy
+     readback, or the raise that says HIP does not answer.
+   - `price_step.txt` and `price_tables.txt`.
+   - `lm_summary.tsv`: `witnesses_equal_baseline`, `ratio_vs_shipped` and
+     the `verdict` lines.
+
+   A FLIP verdict on the MI325X flips the arm as the default in the same
+   session (ENGINEERING_RULES 8, 9 and 10). The H100 confirmation leg
+   follows it (`tools/gemm_step_leg.sh` header).
+
+### 10.5 The AMD leg
+
+```sh
+MOJOLEARN_DO_TOKEN_FILE=$HOME/.mojolearn_do_token \
+MOJOLEARN_GPU_ARCHS=gfx942 \
+MOJOLEARN_GEMM_LEG_EXTRA=tools/gemm_step_leg.sh \
+MOJOLEARN_DO_EXTRA_ENV="MOJOLEARN_GEMM_STEP_LEG_ARMS=shipped,lfold,half,half_ks16,quarter,head,half_head MOJOLEARN_GEMM_STEP_LEG_LM_ARMS=auto" \
+MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/$(date -u +%Y-%m-%d_%H%M%S)-amd-mi325x-gemm-step \
+bash tools/do_extra_leg.sh amd --minutes 60 --skip-gates
+```
+
+`LM_ARMS=auto` probes the arm with the lowest STEP ratio among the price
+runs that exited 0. Name arms explicitly (`MOJOLEARN_GEMM_STEP_LEG_LM_ARMS=
+half,half_head`) when the lease allows more probes: each extra arm adds two
+probes of one to two minutes.
+
+### 10.6 Risks that need a build or a box
+
+- **API use not compiled here.**
+  - `bitcast` inside a kernel (`metrics/impl/binary_ranking.mojo` does it).
+  - `setenv` in a check (`checks/e2_growth_cards.mojo` does it).
+  - `HostBuffer.unsafe_ptr()` on an immutable argument, which the helpers'
+    compare, digest and poison count use. `kmeans_check.mojo` takes a
+    `HostBuffer` immutably; the build decides.
+- **Whether a non-trial build elaborates any of the new section.**
+  RUN OWED 3 checks with `nm`.
+- **Compile time.** A trial build instantiates 12 arm kernels (6
+  geometries, clean and sabotage) in the check, the price and the byte LM
+  binding. HIP compile time for them is unknown and could crowd the
+  60-minute lease. If it does, the knobs are
+  `MOJOLEARN_GEMM_STEP_LEG_SKIP_RESOURCES=1` and a shorter
+  `MOJOLEARN_GEMM_STEP_LEG_ARMS`.
+- **1-D grid sizes.** At head fwd, `quarter` launches 25,152 blocks and
+  `half` and `head` 12,608, against the shipped 6,288. A vendor grid limit
+  would show as a launch error in the check.
+- **Unknown until the resources driver prints.** Register counts of every
+  arm, AMD occupancy, and whether `compile_function` attributes answer on
+  HIP at all. Whether rate follows occupied SMs on AMD (section 8) stays
+  open until the price lines exist.
+- **Host memory.** The check and the price hold two 412 MB host buffers at
+  head fwd.
+- **The trial binding reads the environment on every GEMM call.** That is
+  about 300 calls per step, the same per-call pattern as the attention
+  lane's hook.
+
+### 10.7 H100 leg result (2026-09-11, RunPod, commit cd086f67): NO FLIP
+
+Run on NVIDIA first because the shared DigitalOcean GPU was held by the trees
+lane (Andrew: "use runpod then and just do nvidia for now"). The AMD leg in
+10.5 is still owed, so this is not a verdict for the deciding column.
+
+Evidence: bench/results/e1g/2026-09-11_133216-nvidia-h100-gemm-step
+(`NVIDIA H100 80GB HBM3`, driver 580.126.09, sm_90a, pod tr4o460ozelb4s
+terminated and verified, 19 minutes on the pod). Command: 10.5 with
+`tools/gemm_remote_leg.sh nvidia --payload gemm --rent --minutes 60 --gpu
+"NVIDIA H100 80GB HBM3" --allow-concurrent` and the default arms. The leg's
+own device card matched the M4 card generated at the same commit on all 60
+stages.
+
+- `status.tsv`: all 22 items exit 0. The Pile GitHub fetch took 426 s.
+- `step-check.log`: PASS. Every geometry bit-equal to the shipped plan and to
+  FLAT, reach proven per geometry, and an OK `LM` line for every arm on the
+  twelve target-shape calls, including the three vocab-sized head calls the
+  M4 skipped.
+- `resources_lines.txt` (registers, local floats, blocks per 256-thread SM):
+  shipped 255, 4144, 1; lfold 254, 4352, 1; half and half_ks16 226, 2176, 1;
+  quarter 214, 1088, 1; head_n and head_m 254, 2176, 1. **No arm crosses to
+  two blocks per SM.** The register cut is real but too small to change the
+  block count, so each arm pays for its extra launches and gets nothing back.
+- `price_step.txt` (GEMM sum per step, 12 calls weighted by count; shipped
+  about 219 ms): quarter 1.270, head 1.277, half 1.842, half_ks16 1.844,
+  half_head 1.878, lfold 2.862, shipped control 1.000. Only proj_dB (768 x
+  768 x 2048) comes in under 1.0 for half (0.991), inside noise.
+- `lm_summary.tsv` (`LM_ARMS=auto` picked quarter): lean step shipped
+  0.4573 s (enwik8) and 0.4556 s (Pile GitHub), shipped close 0.4557 and
+  0.4552, quarter 0.5145 and 0.5143. Witnesses equal on every step.
+  `verdict quarter NO FLIP geomean=1.1282 enwik8=1.1271 pilegithub=1.1292`.
+
+Reading: on the H100 the shipped 128x128 plan already fits one block per SM,
+and the occupancy arms as built do not move that. They are declined on
+NVIDIA. Whether HIP on the MI325X has a different register budget or SM
+geometry is exactly what the AMD leg's `resources_lines.txt` answers; do not
+build more occupancy arms before it has been read.
+
+Open, not attributed: this leg's shipped lean step (0.4573 / 0.4556 s) is
+slower than the same commit's shipped step on the concurrent attention leg
+(`stash_tiled` 0.3835 / 0.3833 s, bench/results/e1g/2026-09-11_133041-nvidia-h100-attention-torch),
+on a different H100 pod. The GEMM binding here is a `MOJOLEARN_GEMM_ARM_TRIAL`
+build whose hook reads the environment on every GEMM call (10.6); the box
+also differs. Nothing measured separates the two. Both the numerator and the
+denominator of the NO FLIP ratio carry whatever it is, so the verdict stands,
+but a shipped (non-trial) binding probe on the same box is owed before any
+GEMM step time from a trial build is quoted.

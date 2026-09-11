@@ -106,7 +106,10 @@ SHAPES = {
 SHAPE_FIELDS = ('batch', 'length', 'd_model', 'n_heads', 'n_kv', 'head_dim',
                 'intermediate', 'n_layers', 'vocab_size')
 EXPECTED_PARAMETERS = {'control': 20453376, 'target': 162147840}
-CORPORA = ('tinyshakespeare', 'cpython312_lib')
+# ENGINEERING_RULES 9: enwik8 and pile_github are the two corpora from
+# 2026-09-11 night; tinyshakespeare and cpython312_lib are retired timing
+# corpora, still accepted so older evidence can be re-read.
+CORPORA = ('enwik8', 'pile_github', 'tinyshakespeare', 'cpython312_lib')
 COLUMNS = {
     'eager_fp32': dict(tf32=False, compile=False, role='row', nondeterministic_label=False),
     'eager_tf32': dict(tf32=True, compile=False, role='extra', nondeterministic_label=True),
@@ -169,7 +172,8 @@ class Corpus:
         if self.manifest.get('schema') != 'mojolearn.byte-lm.corpus.v1':
             refuse('corpus manifest schema is not mojolearn.byte-lm.corpus.v1')
         if not self.path.is_file():
-            hint = ' (run sh tools/fetch_corpus_cpython312_lib.sh)' if name == 'cpython312_lib' else ''
+            fetch = REPO / 'tools' / ('fetch_corpus_%s.sh' % name)
+            hint = ' (run sh tools/%s)' % fetch.name if fetch.is_file() else ''
             refuse('no corpus %s%s' % (self.path, hint))
         raw = self.path.read_bytes()
         self.sha256 = _sha(raw)

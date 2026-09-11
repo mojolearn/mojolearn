@@ -1,0 +1,5 @@
+# The 100 MB corpus bytes are fetched by tools/fetch_corpus_enwik8.sh and
+# verified against manifest.json; the manifest and the script are the pinned
+# artifact, the bytes are not committed.
+input.txt
+input.txt.part
