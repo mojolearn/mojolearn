@@ -253,6 +253,7 @@ landed first, so the kernels are DEVIATION 2640 from the merge on.
 | `185ad160` | GitHub run 34643134242: Neoverse N2, Apple M1 (virtual), EPYC 7763 in three draws, EPYC 9V74 in two | 33 of 33 on both paths; 9 of 33 caught on both | PASS | 0 of 4294967296 differ, at 8 lanes on x86-64 and 4 on ARM64 | `bench/results/gh-actions/2026-09-11_2014-byte-lm-cpu-gate-run34643134242` |
 | `450addf1` | Apple M4, bare metal, `--threads 3` | 144 of 144 on both paths; 65 of 144 caught on both; user path through `from_checkpoint` PASS | PASS | 0 of 4294967296 differ | `bench/results/local/2026-09-11_1618-apple-m4-byte-lm-cpu-speed` |
 | `450addf1` | GitHub run 34643527802: Neoverse N2, Apple M1 (virtual), EPYC 9V74 in three draws, EPYC 9V45, EPYC 7763 | 33 of 33 on both paths; 9 of 33 caught on both; plumbing tests 9 passed | PASS | 0 of 4294967296 differ, at 8 lanes on x86-64 and 4 on ARM64 | `bench/results/gh-actions/2026-09-11_2018-byte-lm-cpu-gate-run34643527802` |
+| `3798fbf3` (main, the merge) | GitHub run 34644483255: Neoverse N2, Apple M1 (virtual), EPYC 7763 in four draws, EPYC 9V45 | 33 of 33 on both paths; 9 of 33 caught on both; plumbing tests 9 passed | PASS | 0 of 4294967296 differ, at 8 lanes on x86-64 and 4 on ARM64 | `bench/results/gh-actions/2026-09-11_2029-byte-lm-cpu-gate-run34644483255` |
 
 Not measured with the kernels: any Intel CPU (no Intel host was drawn in
 these runs) and the DigitalOcean droplets.
