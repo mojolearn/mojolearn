@@ -1764,6 +1764,8 @@ def resolve_devices(requested, lane=None):
     NO legal opponent, and every arm they would have had is refused BY NAME.
     That is a finding about the vendor's GPU coverage. It is not a licence
     to run scikit-learn on the host CPU and call it an opponent.
+    CORRECTED 2026-09-11: `et` on NVIDIA with `cpu` requested by name runs
+    scikit-learn's ExtraTrees on the pod CPU, labeled CPU (lane trees-taxi-h100).
     """
     want = [d.strip().lower() for d in (requested or "").split(",")
             if d.strip()]
@@ -1779,6 +1781,16 @@ def resolve_devices(requested, lane=None):
                 "AMD box: CPU arms run for libraries with no AMD GPU path, "
                 "on all cores (ENGINEERING_RULES.md section 10); every arm "
                 "name carries its device")
+    elif "cpu" in want and accel_visible() and lane == "et" and not auto:
+        # CORRECTED 2026-09-11 (lane trees-taxi-h100): NVIDIA has no GPU
+        # ExtraTrees, so an explicit `cpu` admits scikit-learn's
+        # ExtraTreesClassifier on the pod CPU for `et` only, labeled -cpu.
+        if lane is not None:
+            emit_note(
+                lane, want, "devices", float(len(want)),
+                "NVIDIA box, lane et: no GPU ExtraTrees exists, so the CPU "
+                "arm requested by name runs on all cores and is labeled CPU")
+>>>>>>> origin/lane/trees-taxi-h100
     elif "cpu" in want and accel_visible():
         dropped = [d for d in want if d == "cpu"]
         want = [d for d in want if d != "cpu"]
@@ -1786,10 +1798,9 @@ def resolve_devices(requested, lane=None):
             emit_refused(
                 lane, "*-cpu",
                 "GPU-PATH-ONLY: an accelerator is visible on this box, so the "
-                "vendors' CPU arms do not run. On NVIDIA and AMD we compare "
-                "against the vendor's GPU arm only; the CPU arm is the "
-                "MacBook's. Set MOJOLEARN_SPEED_DEVICES=cpu to override, and "
-                "then say out loud beside the number that you did.")
+                "vendors' CPU arms do not run. On NVIDIA we compare against "
+                "the vendor's GPU arm only; the CPU arm is the MacBook's. An "
+                "explicit cpu is admitted on NVIDIA for lane et only.")
     if not want:
         want = ["gpu"]
     return want, auto
