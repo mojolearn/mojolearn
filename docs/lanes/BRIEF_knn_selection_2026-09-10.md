@@ -1495,3 +1495,212 @@ ld.local/st.local, for K=1, 10 and 15. If the list is in local memory the
 fix is a fully unrolled compare-and-shift with constant indices (or a
 sorting network) so the list stays in registers; if occupancy is the
 limiter the fix is a smaller CAP for small k.
+
+## Implementation pass, kernel resource stats (DEVIATION 2519; source only, 2026-09-11)
+
+Step 5 left one question the gate cannot answer: is the CAP=16 UInt64
+list in registers, and if so does it cost occupancy? Both are properties
+of the compiled kernel, read off the compiled kernel. Nothing in this pass
+touches the kernel or the gate; it adds a leg extra body and its parser:
+
+- `tools/knn_selector_kernel_stats.sh` (the leg extra body; runs on the
+  pod under `MOJOLEARN_GEMM_LEG_EXTRA`, writes
+  `/root/gemm_leg_out/knn-kernel-stats/`)
+- `tools/knn_selector_kernel_stats.py` (the parser; `--selftest` on
+  embedded ptxas / cuobjdump / PTX / SASS / driver-log samples passes on
+  the Mac; `--out <dir>` writes `stats.tsv`; `--split-driver-log` and
+  `--extract-ptx` are the body's helpers)
+
+A note on the premise. Step 5 suspected "a runtime slot index forces the
+list into local memory". The source does not have one: every index into
+`local_keys` (a `SIMD[DType.uint64, CAP]`) is a `comptime for` constant,
+guarded by a runtime `slot < k` predicate on the generic bucket and folded
+on the K-specialized ones; `threshold` is its own register. So the answer
+is not in the source, which is exactly why it is measured: LLVM may still
+demote a 16-wide 64-bit vector that is rewritten under predication in a
+deep loop, and the register count of an in-register list is itself the
+occupancy question.
+
+### Method (documented API first, repo-proven route as cross-check)
+
+1. Runtime attributes, the authoritative numbers. A Mojo driver, generated
+   by the body on the pod (it must track the kernel's parameter list and
+   the lane may not edit the kernel; the generated text is kept beside
+   the results as `driver_files.mojo` / `driver_stdout.mojo`), calls for
+   each instantiation
+   `DeviceContext.compile_function[kernel, dump_asm=..., _dump_sass=..., _ptxas_info_verbose=True]()`
+   and reads `DeviceFunction.get_attribute(Attribute.NUM_REGS)`,
+   `Attribute.LOCAL_SIZE_BYTES`, `Attribute.SHARED_SIZE_BYTES`,
+   `Attribute.CONST_SIZE_BYTES`, `Attribute.MAX_THREADS_PER_BLOCK` and
+   `DeviceFunction.occupancy_max_active_blocks_per_multiprocessor(256, 0)`.
+   These are the driver's own answers about the cubin it will launch
+   (`Attribute` mirrors `CUfunction_attribute`: NUM_REGS = "the number of
+   registers used by each thread of this function", LOCAL_SIZE_BYTES =
+   "the size in bytes of local memory used by each thread"). Citation:
+   max.modular.com/api/mojo/max/gpu/host/device_context/DeviceContext
+   (`compile_function`, parameters `dump_asm`, `dump_llvm`, `_dump_sass`,
+   `_ptxas_info_verbose`), .../device_context/DeviceFunction
+   (`get_attribute`, `occupancy_max_active_blocks_per_multiprocessor`,
+   `dump_rep`), .../func_attribute/Attribute. The docs say `_dump_sass`
+   and `_ptxas_info_verbose` are NVIDIA-only and need the CUDA toolkit on
+   the box, so the body requests them only when it finds `ptxas` and
+   `cuobjdump`. `dump_asm` takes `True` (stdout), a `Path`, a static
+   string, or a function returning a `Path`; the body builds the
+   function-returning-Path variant first (dumps land in `dumps/<label>.ptx`
+   and `.sass`), and if that variant does not compile it builds the `True`
+   variant and the parser cuts each instantiation's PTX and SASS out of
+   `driver.log`. Nothing is launched; the kernel body is the shipped one
+   (the trial define only gates host dispatch and the timing-only PHASE
+   assert, so it is needed for the CAP=1 scanonly1 instantiation and
+   changes nothing else).
+2. Spills and executed local traffic. `ptxas --verbose --gpu-name <the
+   PTX's .target>` on each dumped PTX reports "N bytes stack frame, N
+   bytes spill stores, N bytes spill loads" and "Used N registers"; then
+   `cuobjdump --dump-resource-usage` (REG / STACK / SHARED / LOCAL) and
+   `cuobjdump --dump-sass` (LDL / STL counts) on the cubin. This is the
+   GEMM lane's H100 procedure (`tools/gemm_cuda_resources.py`,
+   docs/lanes/HANDOFF_speed_gemm_2026-09-10.md "H100 resource
+   inspection": 255 registers, 4144-byte stack, 44-byte spills, one block
+   per SM), NVIDIA's binary-utilities tools. An offline `ptxas` is that
+   toolkit's answer, not necessarily the runtime JIT's; where they
+   disagree the runtime attribute wins and stats.tsv carries both. On a
+   pod without the toolkit the spill columns and SASS counts are OWED
+   and the runtime attributes plus the PTX-level `ld.local` / `st.local`
+   counts stand.
+3. The repo-proven sidecar route as a cross-check and as the fallback if
+   the driver does not build: `mojo build --emit asm` of
+   `bench/knn_reference_price_main.mojo` retains one
+   `<out>_<module>_<hash>.ptx` per GPU kernel (the form behind
+   bench/results/gemm_swizzle_2026-09-10/h100-current-128.ptx.gz). Entry
+   names carry module and hash, not parameters, so instantiations are
+   identified by elimination: the default build has [16,10], [16,15],
+   [16,0], [32,0], [64,0]; the `-D MOJOLEARN_KNN_IDENTICAL_GENERIC_K=1`
+   build has only the three K=0 buckets; the two sidecars present only in
+   the default build are the k10 / k15 specializations (`emit/manifest.tsv`).
+4. The trial binding is built the way the gate builds it
+   (`bindings/build.sh` with `-D MOJOLEARN_KNN_SELECT_TRIAL=1` through
+   `MOJOLEARN_BUILD_EXTRA_DEFINES`), hashed, and scanned for NVPTX text
+   blobs (an attempt; whether a Mojo shared library embeds PTX as text is
+   not documented, and `binding_ptx_blobs=` in `stats.txt` records the
+   answer either way).
+
+Instantiations measured (rows of `stats.tsv`): `cap16_k0_generic` (the
+bucket k=1 and every other k <= 16 hits without the specialization),
+`cap16_k10`, `cap16_k15` (the shipped specializations), `cap1_k1_scanonly1`
+(the CAP=1 / K=1 SKIPRANK form from step 4), `cap32_k0_generic`,
+`cap64_k0_generic` (the k <= 32 and k <= 64 buckets, for the CAP curve),
+plus one row per emit-asm sidecar (`emit_default_*`, `emit_generic_*`).
+Columns: label, cap, k, entry, registers, local_bytes, spill_stores,
+spill_loads, ld_local, st_local, sass_ldl, sass_stl, shared_bytes,
+blocks_per_sm_by_regs, blocks_per_sm_by_shared, blocks_per_sm_max,
+occupancy_pct, runtime_blocks_per_sm, runtime_occupancy_pct, sources.
+Occupancy is computed as the brief asked (65,536 registers per SM, 2,048
+threads per SM, 256 threads per block; registers rounded up to the 8 per
+thread allocation unit, 32 blocks per SM and 228 KB shared per SM as the
+other limits) and the runtime's own `occupancy_max_active_blocks_per_multiprocessor`
+answer sits beside it; when they disagree the runtime's is the number.
+Raw resource text is kept (`dumps/<label>.ptxas.log`, `.resources.log`),
+dumps over 256 KB are gzipped, binaries and cubins are deleted, and the
+directory is fenced at 2 MB. Smoke: the body ran on the Mac against stub
+`pixi` / `nvidia-smi` / `ptxas` / `cuobjdump` / `bindings/build.sh` (no
+Mojo, no build, no GPU) end to end, both driver variants, the stdout
+split, the emit manifest and the size fence; the selftest covers the
+parsers and the occupancy arithmetic at the thresholds named below.
+
+### RUN OWED (orchestrator; nothing ran on a GPU)
+
+Commit this pass first (the leg ships `git archive` of the COMMITTED
+tree). One H100 leg, 60 minutes, the body as the leg extra; the leg's own
+device check and card run first, then the binding build (about 5 min), the
+driver build and run (two compiles at most), two `--emit asm` builds and
+the assembly step. Nothing in it is a timing number.
+
+```
+MOJOLEARN_RUNPOD_KEY_FILE=$HOME/.mojolearn_runpod_key \
+MOJOLEARN_GEMM_LEG_EXTRA=tools/knn_selector_kernel_stats.sh \
+MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/$(date +%Y-%m-%d_%H%M%S)-nvidia-h100-knn-kernel-stats \
+sh tools/gemm_remote_leg.sh nvidia --rent --minutes 60 \
+    --gpu "NVIDIA H100 80GB HBM3" \
+    --local-card bench/results/e1/2026-08-28_131651-runpod-nvidia/lanes/gemm.identical.card
+cat <leg>/remote/knn-kernel-stats/stats.txt
+cat <leg>/remote/knn-kernel-stats/stats.tsv
+cat <leg>/remote/knn-kernel-stats/status.tsv
+cat <leg>/remote/knn-kernel-stats/driver_lines.txt
+cat <leg>/remote/knn-kernel-stats/emit/manifest.tsv
+```
+
+The GPU is named because the numbers are per architecture (sm_90a; the
+PTX `.target` is read back and recorded in `tools.txt` / the ptxas logs)
+and the step 4 and 5 costs they explain were measured on the H100. Green
+is: `status.tsv` shows `driver 0` (or, failing that, both `emit-asm-*`
+rows 0 with a nonempty `emit/manifest.tsv`), `stats.tsv` has the three
+rows `cap16_k0_generic`, `cap16_k10`, `cap16_k15` with `sources`
+containing `runtime` (or `ptxas`), and `cuda_toolkit=1` in `stats.txt`
+(without it the spill columns are blank and OWED, not zero).
+
+### How to read the result
+
+For each of `cap16_k10`, `cap16_k15` and `cap16_k0_generic`:
+
+- `local_bytes > 0`, or `spill_stores`/`spill_loads > 0`, or `ld_local` /
+  `st_local` (PTX) or `sass_ldl` / `sass_stl` (SASS) nonzero: the list
+  (or part of the scan state) is in local memory and every K-chain step
+  is a memory access, which is a K-proportional cost paid whether or not
+  the lane inserts and explains why halving the insertion events did not
+  move it. The fix is a list whose every touch the compiler keeps in
+  registers: the constant-index compare-and-shift written so the
+  predicated stores are selects on scalars rather than element writes
+  into one wide vector (CAP scalars, or a sorting network for the K=10 /
+  K=15 specializations), and no wide `SIMD` value live across the batch
+  loop. `cap1_k1_scanonly1` is the control: a one-key list must show
+  zero local traffic; if it does not, the local memory belongs to the
+  scan state rather than the list, and that is a different fix (the
+  `batch[8]` unroll or the composite-key temporaries).
+- `local_bytes == 0` and no local traffic, but `registers > 128`: the
+  list is in registers and its footprint holds the SM at one 256-thread
+  block (`blocks_per_sm_by_regs = 1`, 12.5% occupancy; with the 8 per
+  thread allocation unit, 81 to 128 registers gives 2 blocks at 25%, 65
+  to 80 gives 3, 33 to 64 gives 4 to 6, 32 or fewer gives the full 8 at
+  100%). The K-slope is then the
+  latency the missing warps would have hidden, and the fix is a smaller
+  CAP for small k (CAP 16 costs 32 registers for the list alone on
+  every k <= 16; a CAP=8 bucket for k <= 8 and the K=10 / K=15
+  specializations at CAP=K would cut that), read against the CAP curve
+  in the `cap32` / `cap64` rows. `runtime_blocks_per_sm` is the driver's
+  answer to the same question and wins.
+- neither (no local traffic, registers at or below 64, two or more
+  blocks per SM): the cost is instruction count, sixteen predicated
+  compare-and-shift steps per element on every lane, and the fix is a
+  cheaper chain: a shorter one (CAP=K on the specializations, K-1
+  compares instead of CAP), a compare-and-swap whose per-step cost is
+  one `setp` plus two `selp` rather than a compare, a copy and a store,
+  or the bitonic per-warp merge that C5 deferred.
+
+The generic bucket at K=0 is expected to be the worst of the three (its
+`slot < k` guards are runtime predicates on a 16-deep chain); if the K=10
+and K=15 rows differ from it only in instruction count and not in local
+traffic or registers, that difference is the whole specialization win of
+2026-09-09 (20.3 to 9.1 ms) and the same mechanism bounds what CAP=K can
+still buy.
+
+### What the docs did not settle
+
+- Whether `_ptxas_info_verbose=True` prints the `ptxas -v` summary or
+  changes what `dump_asm` writes: the doc says it "changes dump_asm to
+  output verbose PTX assembly". The body captures stdout either way and
+  runs its own `ptxas --verbose` on the dumped PTX, so the spill counts
+  do not depend on it.
+- Which of the four `dump_asm` Variant members is accepted at parameter
+  position for a file path (a `Path` value, a static string, or a
+  function returning a `Path`): the body builds the function form first
+  and the `True` (stdout) form second, and records which one compiled in
+  `stats.txt` (`driver_variant=`).
+- Whether `mojo build --emit asm` on the pod (native target) writes the
+  same `<out>_<module>_<hash>.ptx` sidecars the Mac cross-compile wrote
+  on 2026-09-10; the manifest records what appeared.
+- The MAX environment-variable reference (max.modular.com/environment-variables)
+  lists no variable that dumps PTX or SASS for Mojo-compiled kernels
+  (`MODULAR_DEBUG=ir-output-dir=` dumps MAX graph-compiler IR, not
+  `mojo build` kernels), and the `mojo build` CLI reference is not in the
+  MAX docs index reachable here, so `--emit asm` is cited from the repo's
+  own use rather than from a doc page.
