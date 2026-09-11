@@ -1,0 +1,140 @@
+== hotaisle_leg: one Hot Aisle 1x MI300X leg running an extra body ==
+   mode      rent
+   commit    8d7e129c parent fb3217a5 6ad945c6
+   spec      13core (1x MI300X, 13 cores), team andrews-team
+   lease     60 minutes (Mac dead-man and on-box watchdog at that deadline)
+   body      tools/trees_hotaisle_body.sh   lane trees-hotaisle
+   gates     SKIPPED (--skip-gates)
+   archs     <unset: read from rocminfo on the VM>   column amd
+   runtime   auto (image rocm/dev-ubuntu-22.04:6.4.1-complete)
+   out       /Users/andrewhendel/mojolearn-evidence/trees-hotaisle/mi300x_taxi2
+
+== local checks ==
+  ok     the tree is clean (minus bench/results)
+  ok     the extra body is valid sh: tools/trees_hotaisle_body.sh
+  ok     the extra body environment: 2 export(s): MOJOLEARN_TREES_HA_LEG=taxi MOJOLEARN_TREES_HA_LGBM_OPENCL=1
+  ok     key file present, 0600, outside the repository
+  ok     ssh key /Users/andrewhendel/.ssh/id_ed25519 is the registered one (SHA256:pqDQ15Jijc636E5M3/2IvTGR7YKL11+JzQwGYtBvtQU)
+  info   slots:
+         slot 1  HELD 293s  lane=neural-gemm-longk pid=37084 nonce=37084-20260911T160518Z utc=2026-09-11T16:05:24Z out=/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/ece6c35f-471f-4b93-8fcf-f6462a0e5568/scratchpad/wt-ha/bench/results/e1g/2026-09-11_160518-amd-mi300x-hotaisle-gemm-longk 
+         slot 2  HELD 845s  lane=trees-hotaisle pid=27700 nonce=27700-20260911T155607Z utc=2026-09-11T15:56:12Z out=/Users/andrewhendel/mojolearn-evidence/trees-hotaisle/mi300x_taxi vm_ref=2853007f-916a-4627-9dc1-2339e67a4e11 vm_name=enc1-gpuvm013 
+         slot 3  free
+  ok     bundle 9662961 bytes gzipped, 2018 files, sha256 e8e433471c8bccb8
+  ok     the remote body, watchdog, arm, unpack, start, pull and Mac dead-man scripts substitute cleanly and pass sh -n, dash -n and the bashism scan
+
+== pre-flight ==
+[12:10:22 hotaisle] team andrews-team balance at the start $47.91 (4791 cents); VM limit 2, slots 2
+[12:10:23 hotaisle] slot /tmp/mojolearn-hotaisle-slot.2 taken (lane trees-hotaisle)
+[12:10:24 hotaisle] no stock on 13core (HTTP 200, none, quantity 0); retrying in 60 s
+[12:11:25 hotaisle] spec 13core: quantity 1, 299 cents/hour, minimum reservation 1 min; 60 min costs at most $3.00
+[12:11:26 hotaisle] Mac dead-man ARMED before the create: pid 42911, fires at 2026-09-11T17:11:25Z
+
+== the VM ==
+[12:11:27 hotaisle] creating 1x MI300X 13core
+[12:11:30 hotaisle] VM enc1-gpuvm013 deployment_id 9b86604d-7cbc-488a-9785-6cfbf4287041 (Mac dead-man now keyed by it)
+[12:11:34 hotaisle] description mojolearn:trees-hotaisle:20260911T161125Z
+[12:11:36 hotaisle] running after 11s; ssh hotaisle@23.183.40.78 -p 22
+[12:12:31 hotaisle] ssh settled after 66s
+    WATCHDOG_ALIVE pid=2079
+    REF_BAKED_IN=1
+    TOKEN_GET_HTTP=200
+    DESC_MATCH
+    WATCHDOG_STILL_ALIVE_SECOND_SESSION
+[12:12:43 hotaisle] on-box watchdog ARMED and verified (pid 2079 alive in two sessions, ref 9b86604d-7cbc-488a-9785-6cfbf4287041, GET 200, description matches, 3533s)
+    [box] == os
+    [box] OS=Ubuntu 24.04.4 LTS
+    [box] 6.8.0-124-generic
+    [box] == cpu
+    [box] NPROC=13
+    [box] CPU(s):                                  13
+    [box] Model name:                              Intel(R) Xeon(R) Platinum 8470
+    [box] Thread(s) per core:                      1
+    [box] Core(s) per socket:                      13
+    [box] Socket(s):                               1
+    [box] == memory
+    [box]                total        used        free      shared  buff/cache   available
+    [box] Mem:             220           5         215           0           1         215
+    [box] == disk
+    [box] Filesystem      Size  Used Avail Use% Mounted on
+    [box] /dev/vda2        12T   32G   12T   1% /
+    [box] /dev/vda2        12T   32G   12T   1% /
+    [box] == python
+    [box] Python 3.12.3
+    [box] == devices
+    [box] crw-rw---- 1 root render 237, 0 Sep 11 16:12 /dev/kfd
+    [box] 
+    [box] /dev/dri:
+    [box] total 0
+    [box] drwxr-xr-x 2 root root        360 Sep 11 16:12 by-path
+    [box] crw-rw---- 1 root video  226,   0 Sep 11 16:12 card0
+    [box] crw-rw---- 1 root video  226,   1 Sep 11 16:12 card1
+    [box] crw-rw---- 1 root video  226,   2 Sep 11 16:12 card2
+    [box] crw-rw---- 1 root video  226,   3 Sep 11 16:12 card3
+    [box] crw-rw---- 1 root video  226,   4 Sep 11 16:12 card4
+    [box] crw-rw---- 1 root video  226,   5 Sep 11 16:12 card5
+    [box] crw-rw---- 1 root video  226,   6 Sep 11 16:12 card6
+    [box] KFD_PRESENT
+    [box] amdgpu              20250624  0
+    [box] == rocm
+    [box] /opt/rocm
+    [box] /opt/rocm-7.2.4
+    [box] ROCM_SMI_PRESENT
+    [box] 
+    [box] 
+    [box] ============================ ROCm System Management Interface ============================
+    [box] ====================================== Product Info ======================================
+    [box] GPU[0]		: Card Series: 		AMD Instinct MI300X VF
+    [box] GPU[0]		: Card Model: 		0x74b5
+    [box] GPU[0]		: Card Vendor: 		Advanced Micro Devices, Inc. [AMD/ATI]
+    [box] GPU[0]		: Card SKU: 		M3000108
+    [box] GPU[0]		: Subsystem ID: 	0x74a1
+    [box] GPU[0]		: Device Rev: 		0x00
+    [box] GPU[0]		: Node ID: 		1
+    [box] GPU[0]		: GUID: 		46235
+    [box] GPU[0]		: GFX Version: 		gfx942
+    [box] ==========================================================================================
+    [box] ================================== End of ROCm SMI Log ===================================
+    [box] ROCMINFO_PRESENT
+    [box] GFX=gfx942
+    [box] == runtimes
+    [box] DOCKER_OK
+    [box] Docker version 29.5.3, build d1c06ef
+    [box] PODMAN_OK
+    [box] podman version 4.9.3
+    [box] TOOL_setsid=/usr/bin/setsid
+    [box] TOOL_timeout=/usr/bin/timeout
+    [box] TOOL_curl=/usr/bin/curl
+    [box] TOOL_tar=/usr/bin/tar
+    [box] TOOL_gzip=/usr/bin/gzip
+    [box] TOOL_sha256sum=/usr/bin/sha256sum
+[12:12:49 hotaisle] runtime docker
+[12:12:50 hotaisle] image pull started in the background: PULL_STARTED 
+[12:12:50 hotaisle] MOJOLEARN_GPU_ARCHS=gfx942 read from rocminfo
+
+== the source ==
+[12:12:54 hotaisle] uploaded 9662961 bytes in 4s over ssh stdin
+    ARCHIVE-SHA-OK
+    UNPACKED 2018 files
+[12:13:01 hotaisle] shipped the extra body (tools/trees_hotaisle_body.sh, sha256 5a7f1527ce868c23) and the remote body
+[12:13:01 hotaisle] waiting for the image pull
+[12:14:41 hotaisle] image pull: pull_exit=0 pull_seconds=101
+
+== the work ==
+[12:14:43 hotaisle] remote pid 3659 (docker), bound 3164s; polling every 30 s
+[12:43:10 hotaisle] the body finished (sentinel on the VM)
+
+== fetch ==
+[12:43:12 hotaisle] fetched /root/gemm_leg_out -> /Users/andrewhendel/mojolearn-evidence/trees-hotaisle/mi300x_taxi2/remote/ (53451 bytes)
+[12:43:14 hotaisle]   pixi_install_exit=0
+[12:43:14 hotaisle]   pixi_install_seconds=4
+[12:43:14 hotaisle]   device_check_exit=SKIPPED
+[12:43:14 hotaisle]   card_exit=SKIPPED
+[12:43:14 hotaisle]   extra_exit=0
+[12:43:14 hotaisle]   body_exit=0
+[12:43:14 hotaisle] leg done; deleting (EXIT trap)
+[12:43:14 hotaisle] teardown (exit 0)
+[12:43:20 hotaisle] DELETE 9b86604d-7cbc-488a-9785-6cfbf4287041 ?force=true -> HTTP 204
+[12:43:23 hotaisle] verified_gone ref=9b86604d-7cbc-488a-9785-6cfbf4287041 yes get=404 list=200 listed=no state=n/a utc=2026-09-11T16:43:23Z after=3s
+[12:43:23 hotaisle] Mac dead-man cancelled (pid 42911)
+[12:43:23 hotaisle] released /tmp/mojolearn-hotaisle-slot.2
+[12:43:24 hotaisle] team balance at the end $45.71 (at the start $47.91)
