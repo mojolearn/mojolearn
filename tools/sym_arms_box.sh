@@ -31,6 +31,20 @@ if mountpoint -q /mnt/mojolearn-data 2>/dev/null; then
 fi
 export DEBIAN_FRONTEND=noninteractive
 BPATH="$ROOT/.pixi/envs/default/bin:$PATH"
+# The vendor from the box (ENGINEERING_RULES 10, 2026-09-11 afternoon:
+# measurement moved to a RunPod NVIDIA H100): cuda under nvidia-smi, else hip.
+if command -v nvidia-smi > /dev/null 2>&1; then
+    VENDOR=cuda
+    GPU_NAME="$(nvidia-smi --query-gpu=name --format=csv,noheader | head -1 | tr ' ' '_')"
+else
+    VENDOR=hip
+    GPU_NAME="$(rocm-smi --showproductname 2>/dev/null | sed -n 's/.*Card Series:[[:space:]]*//p' | head -1 | tr ' ' '_')"
+fi
+IB_VENDOR="${VENDOR}-${GPU_NAME:-unknown}"
+# retained fingerprint sets to diff against, space separated
+RETAINED_FILES="${SYMARMS_RETAINED_FILES:-$(ls /root/retained/*.json 2>/dev/null | tr '\n' ' ')}"
+# tools/trees_identical_remote.sh, when it set the box up
+TREES_OUT=/root/trees_out
 ARMS="default a2580 b2581 ab"
 TIERS="${SYMARMS_TIERS:-identical fast}"
 ROWS="${SYMARMS_ROWS:-1000000}"
@@ -109,10 +123,15 @@ build_one() {
 }
 
 phase_builds() {
-    # shared identical bindings the package imports beside gbdt
-    for s in build.sh build_rf.sh build_trees.sh; do
-        build_one "$s" identical shared ""
-    done
+    # shared identical bindings the package imports beside gbdt, unless
+    # tools/trees_identical_remote.sh already built them
+    if [ -f "$TREES_OUT/track_mojo.done" ]; then
+        note "shared_bindings_from_trees_identical_remote"
+    else
+        for s in build.sh build_rf.sh build_trees.sh; do
+            build_one "$s" identical shared ""
+        done
+    fi
     for tier in $TIERS; do
         for arm in default ab a2580 b2581; do
             build_one build_gbdt.sh "$tier" "$arm" "$(defines_for "$arm")"
@@ -142,7 +161,7 @@ phase_identity() {
         MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH="$ROOT/python" timeout -k 30 900 \
             "$PY" -u tools/identity_break.py \
             --lanes gbdt-symmetric,gbdt-depthwise,gbdt-lossguide,gbdt-rmse \
-            --vendor "amd-mi325x-$arm" --json "$OUT/ib/identical.$arm.json" \
+            --vendor "$IB_VENDOR-$arm" --json "$OUT/ib/identical.$arm.json" \
             > "$OUT/ib/identical.$arm.txt" 2>&1
         note "ib_exit identical.$arm=$?"
     done
@@ -150,9 +169,9 @@ phase_identity() {
     for arm in default ab a2580 b2581; do
         [ -f "$OUT/ib/identical.$arm.json" ] && _sets="$_sets $OUT/ib/identical.$arm.json"
     done
+    note "ib_retained $RETAINED_FILES"
     # shellcheck disable=SC2086
-    "$PY" tools/identity_break.py --diff /root/retained/amd-mi325x.identical.json \
-        /root/retained/apple-m4.identical.json $_sets > "$OUT/ib/diff.retained.txt" 2>&1
+    "$PY" tools/identity_break.py --diff $RETAINED_FILES $_sets > "$OUT/ib/diff.retained.txt" 2>&1
     note "ib_diff_retained_exit=$?"
     grep -E '^\| gbdt-|gbdt-' "$OUT/ib/diff.retained.txt" | head -60 > "$OUT/ib/diff.gbdt.txt"
 }
@@ -165,7 +184,8 @@ speed_one() {
     _dir="$OUT/speed"; _extra=""
     if [ "$_mode" = stage ]; then _dir="$OUT/stage"; _extra="MOJOLEARN_STAGE_TIMES=1"; fi
     echo "SYMARMS-ROUND tier=$_t arm=$_a dataset=$_d round=$_r $(date -u +%H:%M:%S)" >> "$_dir/$_t.$_a.$_d.log"
-    env $_extra MOJOLEARN_NUMERIC_MODE="$_t" MOJOLEARN_SPEED_EXPECTED_VENDOR=hip \
+    env $_extra MOJOLEARN_NUMERIC_MODE="$_t" MOJOLEARN_SPEED_EXPECTED_VENDOR="$VENDOR" \
+        MOJOLEARN_SPEED_DEVICE="$GPU_NAME" \
         MOJOLEARN_SPEED_SIZE=shipped MOJOLEARN_SPEED_BUDGET_S=900 \
         MOJOLEARN_SPEED_DEADLINE_S=1200 MOJOLEARN_SPEED_ROUNDS=1 \
         MOJOLEARN_GBDT_PATH=1 PYTHONPATH="$ROOT/python" \
@@ -186,7 +206,8 @@ rotate() {
 
 phase_speed() {
     _w=0
-    while [ ! -f "$OUT/DONE.download" ] && [ "$(left)" -gt 600 ]; do sleep 10; _w=$((_w + 10)); done
+    while [ ! -f "$OUT/DONE.download" ] && [ ! -f "$TREES_OUT/track_pip.done" ] \
+        && [ "$(left)" -gt 600 ]; do sleep 10; _w=$((_w + 10)); done
     note "download_wait_s=$_w"
     _tiers="$TIERS"
     _r=1
@@ -256,6 +277,20 @@ case "${1:-}" in
     verdict) phase_verdict ;;
     all)
         phase_setup; touch "$OUT/DONE.setup"
+        phase_builds; touch "$OUT/DONE.builds"
+        phase_checks; touch "$OUT/DONE.checks"
+        phase_identity; touch "$OUT/DONE.identity"
+        phase_speed; touch "$OUT/DONE.speed"
+        phase_stage; touch "$OUT/DONE.stage"
+        phase_verdict; touch "$OUT/DONE.verdict"
+        touch "$OUT/DONE.all" ;;
+    pod)
+        # a box set up by tools/trees_identical_remote.sh (RunPod): wait for
+        # its sentinel, then everything but this script's own setup
+        while [ ! -f "$TREES_OUT/setup.done" ] && [ "$(left)" -gt 900 ]; do sleep 15; done
+        note "pod_setup_done=$([ -f "$TREES_OUT/setup.done" ] && echo yes || echo NO) vendor=$VENDOR gpu=$GPU_NAME"
+        cat "$TREES_OUT/setup.txt" >> "$OUT/ab.txt" 2>/dev/null
+        nvidia-smi --query-gpu=name,driver_version --format=csv,noheader > "$OUT/gpu.txt" 2>&1
         phase_builds; touch "$OUT/DONE.builds"
         phase_checks; touch "$OUT/DONE.checks"
         phase_identity; touch "$OUT/DONE.identity"
