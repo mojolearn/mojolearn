@@ -226,9 +226,19 @@ because this library ships no HDBSCAN.
 
 ## RUN OWED
 
-DEVIATION 2671 changes a GPU kernel's phase structure, so it is the one that
-needs other vendors even though it cannot move a bit by construction. Every
-command below is IDENTICAL and is run from a checkout of this branch.
+**Both deviations flip, so both are owed on the other two vendors.** DEVIATION
+2671 changes a GPU kernel's phase structure (OLS, PCA, truncated SVD and every
+other caller of the device Jacobi) and DEVIATION 2672 changes how the k-means
+fit stages its weights and reads its results back (`cluster/estimator.mojo`,
+`python/mojolearn/cluster.py`). Neither can move a bit by construction, which
+is exactly why the gates below are the evidence rather than the argument.
+Every command is IDENTICAL and is run from a checkout of this branch.
+
+On the H100 in this lane all of them are green: `jacobi_check` (including
+`check_jacobi_merged_phases_equal_four_phase`, 0 differing cells at n = 2, 3,
+11, 33, 64, 129 and 220), `glm/ols_main.mojo`, `check-kmeans-identity`,
+`check-kmeans` (whose `check_kmeans_fit_weight_arms_agree` is the one that
+covers 2672's device weight fill) and `check-dbscan`.
 
 1. **Apple M4 (local, one deliberate run, nothing else heavy running).**
 
