@@ -30,6 +30,22 @@ import numpy as np
 
 import mojolearn
 
+# A foreign library's argtypes on the shared ctypes.pythonapi buffer pointers
+# (treelite.model's spelling, as cuML imports it), armed after the import and
+# before any fit, so every fit below also proves our conversions no longer
+# share them (the 0.8.0 bug; tools/check_buffer_foreign_argtypes.py says why
+# the order matters).
+import importlib.util as _ilu
+import pathlib as _pl
+
+_spec = _ilu.spec_from_file_location(
+    "check_buffer_foreign_argtypes",
+    _pl.Path(__file__).resolve().parents[2] / "tools" / "check_buffer_foreign_argtypes.py")
+_foreign = _ilu.module_from_spec(_spec)
+_spec.loader.exec_module(_foreign)
+if _foreign.poison_pythonapi() is None:
+    raise SystemExit("foreign argtypes did not land on ctypes.pythonapi.PyObject_GetBuffer")
+
 NO_GPU = "--no-gpu" in sys.argv
 
 if NO_GPU:
