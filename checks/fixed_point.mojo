@@ -1,12 +1,31 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Fixed-point accumulation, because Metal has no float atomic add.
+"""Fixed-point accumulation, because a float atomic is order-dependent
+on every vendor.
 
 NO CATBOOST COUNTERPART. This is in `checks/` because CatBoost never has
 to solve it: it flushes histograms with `atomicAdd` on `float` and accepts a
-non-deterministic answer. Metal has no such instruction, so the port needs an
-accumulator CatBoost's source does not contain, and inventing one is the
-largest piece of non-port work this tree requires.
+non-deterministic answer. Every mode above `DETERMINISM_OFF` refuses that
+answer, so the implementation needs an accumulator CatBoost's source does not contain,
+and inventing one is the largest piece of non-implementation work this tree requires.
+
+CORRECTED 2026-09-10. THIS HEADER USED TO SAY "because Metal has no float
+atomic add", AND THAT IS FALSE. `gbdt/options/catboost_options.mojo`
+(`DETERMINISM_DEVICE`) carries the measurement that disproves it: 1024
+threads each adding 1.0 through `Atomic.fetch_add` returns exactly 1024.0 on
+this machine, and `checks/kernel_matrix.mojo::column_has_float_atomics`
+reports true for `COLUMN_APPLE`. `cluster/checks/reduce_by_key.mojo:129`
+already said so in as many words and pointed AT THIS DOCSTRING for the
+reason, which is the shape of the defect: the correct sentence was written
+once, downstream, while the wrong one stayed at the entry point everybody
+reads first. What Metal actually lacks is a THREADGROUP float atomic
+(`mamba/impl/ops/selective_scan_backward.mojo:1171`,
+`gbdt/methods/doc_parallel_boosting.mojo:1797`), so IDENTITY_PATHS row 2's
+shared accumulation has no float spelling on Apple at any width. Row 1's
+global flush does have one, and IDENTICAL declines it anyway, for the reason
+in the title. Declining an available instruction COSTS something, and that
+cost is still UNRECORDED: no interleaved measurement of the two flushes
+exists (`catboost_options.mojo`, `DETERMINISM_DEVICE`).
 
 WHY INTEGERS
 ------------
