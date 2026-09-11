@@ -97,8 +97,25 @@ the within-pod drift control. Medians over the nine rounds.
 |---|---|---|---|---|---|---|---|---|
 | taxi 1M x 16 | pointwise (`ours-ab`) | 1803.3 | **795.4** | **0.441** | 0.525925 | 0.525668 | c56ab803f4d1e84a | 97222a45020a166c |
 | taxi 1M x 16 | greedy control (`ours`) | 309.3 | 308.9 | 0.999 | 0.525735 | 0.525735 | 90c3558501933f47 | 90c3558501933f47 |
-| Istella-S 1M x 220 | pointwise (`ours-ab`) | ISTELLA_POINTWISE | | | | | | |
-| Istella-S 1M x 220 | greedy control (`ours`) | ISTELLA_GREEDY | | | | | | |
+| Istella-S 1M x 220 | pointwise (`ours-ab`) | RUN OWED | RUN OWED | - | - | - | - | - |
+| Istella-S 1M x 220 | greedy control (`ours`) | RUN OWED | RUN OWED | - | - | - | - | - |
+
+**Istella-S is RUN OWED, and the reason is worth writing down.** The pod's
+Istella-S download was killed by its own `timeout` at 464 of 472 MB
+(`download_istella=124`), the setup script wrote its ready sentinel anyway,
+and `bench/speed/forest_speed_arm.py` then did exactly what it promises in
+that case: it said `istella is not downloaded ... falling back to the
+synthetic fixture` and labeled every row `shape=synthclf-720000x100`. Six
+such processes ran before the labels were read. **Those rows were deleted,
+not quoted** -- a synthetic 720,000 x 100 fixture is not the wide numeric
+table section 9 asks for, and a fallback silently counted as Istella-S is how
+a missing download becomes a published ratio. `tools/../ptws_medians.py` now
+refuses any row whose `shape=` does not match its dataset, and the setup
+script writes the sentinel only on a zero exit. A second, clean download was
+started; whether it finished is recorded below.
+
+So this lane has ONE dataset, and one dataset is not a result: **2670 gets NO
+flip verdict here** (section 9), however large the taxi win is.
 
 On taxi the opt-in pointwise arm takes 0.441 of its 2624 time, which is the
 pre-2624 speed (the 2624 merge recorded about 810 ms before and 1805 ms
