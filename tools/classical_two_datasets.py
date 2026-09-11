@@ -1247,6 +1247,14 @@ BUILDERS = {
     ("kde", "ours"): OursKDE, ("kde", "sklearn-cpu"): SkKDE, ("kde", "cuml-gpu"): CumlKDE,
     ("svc", "ours"): OursSVC, ("svc", "sklearn-cpu"): SkSVC, ("svc", "cuml-gpu"): CumlSVC,
 }
+# `ours-base`: OUR SAME estimator from a second Python tree
+# (MOJOLEARN_CTD_BASE_PY, a copy of `python/` holding the BEFORE bindings), so
+# a before/after A/B interleaves round by round in one race instead of two
+# races minutes apart (lane linear-cluster-speed f3de0b36, 2026-09-11; taken
+# here for the SVC before/after). It is never an opponent: ratios against it
+# are ours-vs-ours and are not quoted as one.
+for _lane in LANES:
+    BUILDERS[(_lane, "ours-base")] = BUILDERS[(_lane, "ours")]
 for _lane in LANES:
     BUILDERS[(_lane, "sklearn-cpu-quota")] = (
         lambda data, rec, _c=BUILDERS[(_lane, "sklearn-cpu")]: SkQuota(_c, data, rec))
@@ -1399,9 +1407,14 @@ def _worker_env(arm, root):
     env = dict(os.environ)
     for k in THREAD_ENV:
         env.pop(k, None)
-    if arm == "ours":
+    if arm in ("ours", "ours-base"):
         env["MOJOLEARN_NUMERIC_MODE"] = "identical"
-        env["PYTHONPATH"] = os.path.join(root, "python") + (
+        tree = os.path.join(root, "python")
+        if arm == "ours-base":
+            tree = os.environ.get("MOJOLEARN_CTD_BASE_PY", "")
+            if not tree or not os.path.isdir(tree):
+                raise SystemExit("arm ours-base needs MOJOLEARN_CTD_BASE_PY, a python/ tree holding the before bindings")
+        env["PYTHONPATH"] = tree + (
             os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
     return env
 
@@ -1525,7 +1538,7 @@ def race(args):
     tag = "%s-%s" % (lane, ds)
     workers = {}
     for arm in arms:
-        py = args.ours_python if arm == "ours" else args.theirs_python
+        py = args.ours_python if arm in ("ours", "ours-base") else args.theirs_python
         cmd = shlex.split(py) + [os.path.abspath(__file__), "worker", "--arm", arm,
                                  "--lane", lane, "--dataset", ds, "--data", args.data]
         workers[arm] = Worker(arm, cmd, _worker_env(arm, args.root),
