@@ -54,7 +54,8 @@
 #
 # DEVIATION 2534 (brief section 15): the shipped default is a kernel-matrix
 # row per column (`attn_default_arm_for`: NVIDIA stash_tiled_fgrid_r32_qres_pf,
-# AMD baseline, every other column stash_tiled), and a trial binding runs it when
+# AMD stash_tiled_fgrid_r32_qres_pf_kvgrid_r32 since brief section 18, every
+# other column stash_tiled), and a trial binding runs it when
 # MOJOLEARN_ATTN_ARM is unset or empty. So that baseline, stash_tiled and the
 # default can never be confused in a result: the harness takes the name
 # `default` as an alias and prints only the explicit name (a `DEFAULT
@@ -291,7 +292,7 @@ if [ "${MOJOLEARN_ATTN_LEG_SHIPPED_CHECK:-0}" = "1" ]; then
         transformer/checks/transformer_fused_check.mojo -o "$OUT/bin/shipped-fused-check"
     if [ -x "$OUT/bin/shipped-fused-check" ]; then
         run shipped-fused-check timeout "$DEADLINE" "$OUT/bin/shipped-fused-check"
-        grep -h '^DEFAULT\|^ARM \|^transformer_fused_check:' "$OUT/shipped-fused-check.log" \
+        grep -h '^DEFAULT\|^ARM \|^DKDV \|^transformer_fused_check:' "$OUT/shipped-fused-check.log" \
             | sed 's/^/shipped_check: /' >> "$OUT/gate.txt"
     fi
 fi

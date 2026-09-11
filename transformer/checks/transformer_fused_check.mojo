@@ -32,8 +32,9 @@ exists to say so ([[reached-but-inert]]).
 WHICH ARM RAN (DEVIATION 2534, brief
 docs/lanes/BRIEF_attention_step_2026-09-11.md section 15). The shipped
 attention arm is a kernel-matrix row per column (`attn_default_arm_for`:
-NVIDIA `stash_tiled_fgrid_r32_qres_pf`, AMD, Apple and the rest
-`stash_tiled`). The direct launches here go through
+NVIDIA `stash_tiled_fgrid_r32_qres_pf`, AMD
+`stash_tiled_fgrid_r32_qres_pf_kvgrid_r32` (brief section 18), Apple and the
+rest `stash_tiled`). The direct launches here go through
 `fused_forward_launch_ran` / `fused_backward_launch_ran`, which report the
 arm word of the kernels that actually launched, set inside the branch that
 launched them. The check prints a `DEFAULT` line (column, arm, word), proves
@@ -46,6 +47,17 @@ run on a column is "the default ran there and is bit-identical to eager".
 `-D MOJOLEARN_ATTN_DEFAULT_R3_EVERY_COLUMN=1` gives every column NVIDIA's
 default, so the same no-trial check reaches the shipped round 3 branch on a
 Mac.
+
+WHICH DK/DV KERNEL RAN (brief section 18). A `DKDV` line names the dk/dv
+kernel the default's backward launches at head_dim 64 and the one this run's
+arm launches, with `shipped_kv_branch=` (whether this build compiles the
+column default's DEVIATION 2597 dk/dv instantiation) and `default_kv_keys=`.
+The check FAILS when the arm's resolved backward carries a DEVIATION 2596 /
+2597 token and no direct backward launch reported it, or when a launch
+reported one the arm does not resolve to. `-D
+MOJOLEARN_ATTN_DEFAULT_KVGRID_EVERY_COLUMN=1` gives every column AMD's
+default (`stash_tiled_fgrid_r32_qres_pf_kvgrid_r32`), so the same no-trial
+check reaches the shipped 2597 dk/dv branch on a Mac.
 
 The forward wrapper (`eager_attention_forward`, trace off, path auto) is
 what the surface calls, so its output is compared too: it must equal the
@@ -65,8 +77,18 @@ from transformer.checks.transformer_backward import (
 )
 from transformer.impl.llama.fused_attention import (
     ATTN_ARM_BASELINE,
+    ATTN_ARM_BWD_KVGRID,
+    ATTN_ARM_BWD_KVRECOMPUTE,
+    ATTN_ARM_BWD_KVSPLIT,
+    ATTN_ARM_BWD_STASH,
+    ATTN_ARM_BWD_TILED,
     ATTN_ARM_DEFAULT,
+    ATTN_ARM_KV_BITS,
+    ATTN_ARM_KVROWS32,
+    ATTN_ARM_PREFLUSH,
     ATTN_ARM_TRIAL,
+    ATTN_DEFAULT_KV_KEYS,
+    ATTN_SHIPPED_BWD_KV,
     ATTN_STASH_HD,
     FUSED_CORNER,
     FUSED_RAN,
@@ -215,9 +237,44 @@ def require_ran(name: String, direction: String, got: Int, want: Int) raises:
         )
 
 
-def run_case(ctx: DeviceContext, c: FusedCase, arm: Int, mut arm_launches: Int) raises -> Int:
+def dkdv_kernel_name(word: Int) -> String:
+    """The dk/dv launch a BACKWARD arm word names at head_dim 64 (brief
+    sections 4, 12, 14, 16 and 18): the shipped recompute kernel for word 0,
+    the 2525 stash kernel, the 2527 tiled fold or its 2533 preflushed copy,
+    the 2596 recompute kernel after the stashes are freed, the 2597 joint
+    kernel at its keys per block, or the 2597 single fold launched twice.
+    Read from a `ran` or resolved word, so it names what the launcher
+    reported, never a copy of the dispatch."""
+    if (word & ATTN_ARM_BWD_STASH) == 0:
+        return String("fused_bwd_dkdv_kernel[64,4]")
+    if (word & ATTN_ARM_BWD_TILED) == 0:
+        return String("fused_bwd_dkdv_stash_kernel[64,4]")
+    if (word & ATTN_ARM_BWD_KVRECOMPUTE) != 0:
+        return String("fused_bwd_dkdv_kernel[64,4]_stashes_freed")
+    var keys = 64
+    if (word & ATTN_ARM_KVROWS32) != 0:
+        keys = 32
+    if (word & ATTN_ARM_BWD_KVSPLIT) != 0:
+        return String("fused_bwd_kvfold_r2_kernel[64,") + String(keys) + String("]x2")
+    if (word & ATTN_ARM_BWD_KVGRID) != 0:
+        return String("fused_bwd_dkdv_r2_kernel[64,") + String(keys) + String("]")
+    if (word & ATTN_ARM_PREFLUSH) != 0:
+        return String("fused_bwd_dkdv_tiled_pf_kernel[64]")
+    return String("fused_bwd_dkdv_tiled_kernel[64]")
+
+
+def run_case(
+    ctx: DeviceContext,
+    c: FusedCase,
+    arm: Int,
+    mut arm_launches: Int,
+    mut bwd_launches: Int,
+    mut kv_launches: Int,
+) raises -> Int:
     """Returns the number of moved cells across every compared buffer;
-    `arm_launches` counts the direct launches that ran an arm (word not 0)."""
+    `arm_launches` counts the direct launches that ran an arm (word not 0),
+    `bwd_launches` the backward ones among them, and `kv_launches` the
+    backward launches that reported a DEVIATION 2596 / 2597 dk/dv token."""
     var dm = c.nh * c.hd
     var dims = LlamaDims(dm, c.nh, c.nkv, c.hd, 4 * dm)
     dims.validate()
@@ -335,6 +392,9 @@ def run_case(ctx: DeviceContext, c: FusedCase, arm: Int, mut arm_launches: Int) 
     require_ran(c.name, "backward", ran_b, expected_ran(c.hd, bs, fused_attention_arm_backward_resolved(arm)))
     if ran_b != ATTN_ARM_BASELINE:
         arm_launches += 1
+        bwd_launches += 1
+    if (ran_b & ATTN_ARM_KV_BITS) != 0:
+        kv_launches += 1
     if bs == FUSED_RAN:
         moved += compare(c.name, "bwd zdot", e_z, _download(ctx, bst.attn_zdot, b * c.nh * l))
         moved += compare(c.name, "bwd dq", e_dq, _download(ctx, bst.d_q_rope, qn))
@@ -382,14 +442,27 @@ def main() raises:
         "ARM this_run=" + arm_name + " is_default=" + String(arm == ATTN_ARM_DEFAULT)
         + " forward_hd64=" + fwd_name + " backward_hd64=" + bwd_name
     )
+    # Brief section 18: which dk/dv kernel the default's and this run's
+    # backward launch at head_dim 64 on this build.
+    var default_bwd = fused_attention_arm_backward_resolved(ATTN_ARM_DEFAULT)
+    var arm_bwd = fused_attention_arm_backward_resolved(arm)
+    var arm_dkdv = dkdv_kernel_name(arm_bwd)
+    print(
+        "DKDV default_hd64=" + dkdv_kernel_name(default_bwd)
+        + " this_run_hd64=" + arm_dkdv
+        + " shipped_kv_branch=" + String(ATTN_SHIPPED_BWD_KV)
+        + " default_kv_keys=" + String(ATTN_DEFAULT_KV_KEYS)
+    )
     var ctx = DeviceContext()
     var all_cases = cases()
     var total_moved = 0
     var arm_launches = 0
+    var bwd_launches = 0
+    var kv_launches = 0
     var n = 0
     for i in range(len(all_cases)):
         var c = all_cases[i].copy()
-        total_moved += run_case(ctx, c, arm, arm_launches)
+        total_moved += run_case(ctx, c, arm, arm_launches, bwd_launches, kv_launches)
         n += 1
     if total_moved > 0:
         raise Error(
@@ -401,11 +474,25 @@ def main() raises:
             "transformer_fused_check: no direct launch ran the arm " + arm_name
             + " (every one ran the shipped kernels); the head_dim 64 cases did not reach it"
         )
+    var arm_kv = (arm_bwd & ATTN_ARM_KV_BITS) != 0
+    if arm_kv and kv_launches == 0:
+        raise Error(
+            "transformer_fused_check: the arm " + arm_name + " resolves its dk/dv"
+            + " to " + arm_dkdv + " at head_dim 64 on this build and no direct"
+            + " backward launch reported that kernel"
+        )
+    if (not arm_kv) and kv_launches > 0:
+        raise Error(
+            "transformer_fused_check: " + String(kv_launches) + " direct backward"
+            + " launches reported a DEVIATION 2596 / 2597 dk/dv kernel and the arm "
+            + arm_name + " resolves to " + arm_dkdv
+        )
     print(
         "transformer_fused_check: PASS, " + String(n)
         + " cases, every compared buffer bit-identical, every status as expected;"
         + " column " + column_name(TARGET_COLUMN) + " arm " + arm_name
         + " (default " + default_name + "), " + String(arm_launches)
-        + " direct launches RAN " + fwd_name + " / " + bwd_name + " at head_dim 64"
+        + " direct launches RAN " + fwd_name + " / " + bwd_name + " at head_dim 64;"
+        + " dk/dv " + arm_dkdv + " in " + String(bwd_launches) + " backward launches"
     )
     _ = ctx^
