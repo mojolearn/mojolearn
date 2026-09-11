@@ -647,3 +647,58 @@ Reading the two arms together:
 - **The section 3 model is a reading.** C1 to C5 are competing causes named
   from source and retained lines. None is measured as the cause, and the
   arms were chosen to separate them, not on a prediction that either wins.
+
+## 11. First build, a width-12 register, and the fix (branch `lane/gemm-kernel-h100-fix`)
+
+**What failed.** The M4 trial build of the step check, merged onto main,
+stopped in the offload pass with
+`SIMD vector length must be a power of two between 1 and 2^15, found '!kgen.simd<12, f32>'`.
+The no-trial build compiled, and the check had built with the earlier trial
+arms, so the lane diff was the source.
+
+**The cause.** `identical_gemm_kpack_kernel` called
+`_tuned_g2r[BSLOTS, VEC, KV, BN, NTH]` (the prologue, the two-page prefetch
+and the one-page refill), and `_tuned_g2r` returns
+`SIMD[DType.float32, SLOTS * VEC]`. For `kpack_wide` at KS 12, B has 256
+lines and KV is 3, so `BSLOTS = (256 x 3 + 255) // 256 = 3` and the register
+is 12 wide. Every column where two guarded 128x256 pages at KS 16 do not fit
+takes KS 12, which is Apple and NVIDIA, so the H100 build would have failed
+the same way. The other instantiations were already powers of two (A is 2
+slots, 8 wide, at KS 12 and 16; `kpack` is 8 and 8; AMD at KS 16 gives B 4
+slots, 16 wide). No other width in the lane can be 12. `FS` 12 sizes only
+thread-local memory walked by runtime loops (`_fold_push_local`,
+`_fold_drain_local`, `_group_node`), `KS` 12 feeds only integer arithmetic
+(`_tuned_window`, `_tuned_windows_per_leaf`, page sizes) and runtime or
+comptime loop bounds, and the loads are `RPT` 8 and `CPT` 16 wide.
+
+**The fix.** `gemm_kpack_register_slots(slots)` gives the least power of two
+at or above the slot count. The kernel instantiates `_tuned_g2r` at
+`AREG = gemm_kpack_register_slots(ASLOTS)` and
+`BREG = gemm_kpack_register_slots(BSLOTS)` (B at KS 12 is now 4 slots, 16
+wide), asserts `VEC` is a power of two and that the padding covers the
+slots, and leaves every other line alone. The staging stores still walk
+`ASLOTS` and `BSLOTS`. `_tuned_g2r` itself, `KS`, the page, the loads, the
+accumulate and the fold are unchanged, as is every shipped kernel and
+dispatch line.
+
+**Why no bit moves.** A slot's content in `_tuned_g2r` is a function of
+`tid`, its own index, `VEC`, `KV`, the line count, the strides and the
+window, never of the instantiated slot count, so slots below `BSLOTS` hold
+the same words as before. A padded slot `s >= BSLOTS` is never staged, since
+`idx = tid + s 256 >= BSLOTS 256 >= lines KV` under the p-contiguous mapping
+and `idx0 >= BSLOTS 4 256 >= lines KV 4` under the outer-contiguous one. So
+`_tuned_g2r` leaves it `+0.0`, no store visits it (the store loops stop at
+`BSLOTS`) and no read touches it (the accumulate reads only the page). The
+page therefore holds the same words at the same addresses, and section 5
+holds unchanged. `check_kpack_page_is_a_bijection` now walks the padded
+slots of every case and fails if one would stage a pair. Its lines add
+`register_slots=`, which reads 4 for `kpack_wide B KS=12` and equals `slots`
+everywhere else. The padded slots are dead in the kernel, so the compiler
+should drop them. If the resources line for `kpack_wide` at KS 12 shows 4
+more registers than expected, this is where they come from.
+
+**Still unsettled by source reading.** The section 10 compile risks other
+than this one (a Tuple reassigned inside a kernel, width-16 shared loads in
+a kernel, 128-cell accumulators) are all power-of-two or front-end
+constructs that the failed build had already type-checked. None is clearly
+a compile failure, so they are unchanged and the next M4 build settles them.

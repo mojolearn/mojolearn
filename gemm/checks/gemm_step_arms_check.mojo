@@ -128,6 +128,7 @@ from gemm.checks.gemm_identical import (
     gemm_default_ksplit_leaves,
     gemm_default_ksplit_leaves_at,
     gemm_kpack_addr,
+    gemm_kpack_register_slots,
     gemm_kpack_stage_outer,
     gemm_kpack_stage_p,
     gemm_plan_name,
@@ -495,6 +496,18 @@ def _kpack_page_case(
         return
     var kv = ks // VEC
     var slots = (lines * kv + NTH - 1) // NTH
+    # The kernel instantiates `_tuned_g2r` with this padded count, because a
+    # SIMD width must be a power of two (brief section 11). Every padded slot
+    # must stage nothing under either mapping.
+    var reg_slots = gemm_kpack_register_slots(slots)
+    var reg_width = reg_slots * VEC
+    if reg_slots < slots or reg_width <= 0 or (reg_width & (reg_width - 1)) != 0:
+        failures.append(
+            tag + ": " + String(slots) + " staging slots pad to " + String(reg_slots)
+            + ", register width " + String(reg_width) + " is not a power of two at or above "
+            + String(slots * VEC)
+        )
+        return
     var total = lines * ks
     var hits = List[Int]()
     var at_line = List[Int]()
@@ -506,7 +519,7 @@ def _kpack_page_case(
     var bad = 0
     var first = String("")
     for tid in range(NTH):
-        for s in range(slots):
+        for s in range(reg_slots):
             for e in range(VEC):
                 var want_ok = False
                 var want_line = 0
@@ -523,6 +536,18 @@ def _kpack_page_case(
                     want_ok = idx < lines * kv
                     want_line = idx // kv
                     want_step = (idx - want_line * kv) * VEC + e
+                if s >= slots:
+                    # A padded register slot: `_tuned_g2r` must leave it
+                    # `+0.0` and the kernel's stores never visit it.
+                    if want_ok or sp[2]:
+                        bad += 1
+                        if first.byte_length() == 0:
+                            first = (
+                                "tid " + String(tid) + " padded slot (" + String(s) + ", "
+                                + String(e) + ") past " + String(slots) + " would stage line "
+                                + String(want_line) + " step " + String(want_step)
+                            )
+                    continue
                 if sp[2] != want_ok or (want_ok and (sp[0] != want_line or sp[1] != want_step)):
                     bad += 1
                     if first.byte_length() == 0:
@@ -576,7 +601,7 @@ def _kpack_page_case(
         failures.append(tag + ": " + String(bad) + " disagreements; first " + first)
     print(
         tag + " lines=" + String(lines) + " group_lines=" + String(group_lines) + " per_thread="
-        + String(per_thread) + " KS=" + String(ks) + " slots=" + String(slots) + " addresses="
+        + String(per_thread) + " KS=" + String(ks) + " slots=" + String(slots) + " register_slots=" + String(reg_slots) + " addresses="
         + String(total) + " disagreements=" + String(bad)
     )
 

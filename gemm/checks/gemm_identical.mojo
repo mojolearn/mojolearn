@@ -4625,6 +4625,44 @@ def gemm_kpack_stage_outer(
     return (idx0 % lines, idx0 // lines, idx0 < lines * ks)
 
 
+@always_inline
+def gemm_kpack_register_slots(slots: Int) -> Int:
+    """The slot count `identical_gemm_kpack_kernel` INSTANTIATES `_tuned_g2r`
+    with for an operand that stages into `slots` slots, the least power of two
+    at or above `slots` (0 above 256, which the kernel asserts against).
+
+    `_tuned_g2r[SLOTS, VEC, ...]` returns `SIMD[DType.float32, SLOTS * VEC]`
+    and a SIMD width must be a power of two. `kpack_wide` at KS 12 stages B
+    (256 lines, KV 3) in 3 slots, width 12, which the offload pass refuses
+    (found by the M4 trial build, brief section 11). The staging stores still
+    walk only the `slots` real slots. A padded slot `s >= slots` is never
+    staged under either mapping (`idx = tid + s NTH >= lines KV` and
+    `idx0 = tid + (s VEC + e) NTH >= lines KV VEC`), so `_tuned_g2r` leaves it
+    `+0.0`, nothing stores it and nothing reads it, and slots below `slots`
+    hold the same words at any instantiation. `check_kpack_page_is_a_bijection`
+    walks the padded slots too. Loop free, so it evaluates at comptime the way
+    `column_shared_limit` does."""
+    if slots <= 1:
+        return 1
+    if slots <= 2:
+        return 2
+    if slots <= 4:
+        return 4
+    if slots <= 8:
+        return 8
+    if slots <= 16:
+        return 16
+    if slots <= 32:
+        return 32
+    if slots <= 64:
+        return 64
+    if slots <= 128:
+        return 128
+    if slots <= 256:
+        return 256
+    return 0
+
+
 def identical_gemm_kpack_kernel[
     RPT: Int, CPT: Int, TC: Int, KS: Int, FS: Int, PAGES: Int, GROUP: Bool, SAB: Bool
 ](
@@ -4690,10 +4728,25 @@ def identical_gemm_kpack_kernel[
     comptime NCOL = CPT
     comptime ASLOTS = (BM * KV + NTH - 1) // NTH
     comptime BSLOTS = (BN * KV + NTH - 1) // NTH
+    # The slot counts `_tuned_g2r` is instantiated with, so its
+    # `SIMD[DType.float32, SLOTS * VEC]` register is a power of two wide
+    # (`kpack_wide` at KS 12 stages B in 3 slots, width 12). The staging stores
+    # below walk only ASLOTS and BSLOTS; the padded slots stage nothing, stay
+    # `+0.0` and are never stored or read (`gemm_kpack_register_slots`).
+    comptime AREG = gemm_kpack_register_slots(ASLOTS)
+    comptime BREG = gemm_kpack_register_slots(BSLOTS)
 
     comptime assert KS % VEC == 0, (
         "identical_gemm_kpack_kernel: KS must be a VEC multiple, so a staged"
         " window is a whole number of vector slots"
+    )
+    comptime assert (VEC & (VEC - 1)) == 0, (
+        "identical_gemm_kpack_kernel: VEC must be a power of two, so a"
+        " power-of-two slot count gives a power-of-two register width"
+    )
+    comptime assert AREG >= ASLOTS and BREG >= BSLOTS, (
+        "identical_gemm_kpack_kernel: gemm_kpack_register_slots covers at most"
+        " 256 staging slots"
     )
     comptime assert NTH % TC == 0, (
         "identical_gemm_kpack_kernel: TC must divide the block size"
@@ -4795,10 +4848,10 @@ def identical_gemm_kpack_kernel[
 
     # ---- PROLOGUE: the first window, DRAM to registers (shipped lines).
     var w0 = _tuned_window[KS](w, wpl, leaf, k, p_count)
-    var pa = _tuned_g2r[ASLOTS, VEC, KV, BM, NTH](
+    var pa = _tuned_g2r[AREG, VEC, KV, BM, NTH](
         a, a_si, a_sp, i0, m, w0[0], w0[1], tid
     )
-    var pb = _tuned_g2r[BSLOTS, VEC, KV, BN, NTH](
+    var pb = _tuned_g2r[BREG, VEC, KV, BN, NTH](
         b, b_sj, b_sp, j0, n, w0[0], w0[1], tid
     )
 
@@ -4836,10 +4889,10 @@ def identical_gemm_kpack_kernel[
         comptime if PAGES == 2:
             if w + 1 < w_end:
                 var wn = _tuned_window[KS](w + 1, wpl, leaf, k, p_count)
-                pa = _tuned_g2r[ASLOTS, VEC, KV, BM, NTH](
+                pa = _tuned_g2r[AREG, VEC, KV, BM, NTH](
                     a, a_si, a_sp, i0, m, wn[0], wn[1], tid
                 )
-                pb = _tuned_g2r[BSLOTS, VEC, KV, BN, NTH](
+                pb = _tuned_g2r[BREG, VEC, KV, BN, NTH](
                     b, b_sj, b_sp, j0, n, wn[0], wn[1], tid
                 )
 
@@ -4892,10 +4945,10 @@ def identical_gemm_kpack_kernel[
             barrier()
             if w + 1 < w_end:
                 var wn1 = _tuned_window[KS](w + 1, wpl, leaf, k, p_count)
-                pa = _tuned_g2r[ASLOTS, VEC, KV, BM, NTH](
+                pa = _tuned_g2r[AREG, VEC, KV, BM, NTH](
                     a, a_si, a_sp, i0, m, wn1[0], wn1[1], tid
                 )
-                pb = _tuned_g2r[BSLOTS, VEC, KV, BN, NTH](
+                pb = _tuned_g2r[BREG, VEC, KV, BN, NTH](
                     b, b_sj, b_sp, j0, n, wn1[0], wn1[1], tid
                 )
 
