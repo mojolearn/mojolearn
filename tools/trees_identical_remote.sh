@@ -71,6 +71,9 @@ track_pip() {
         rm -f "$_hd/higgs.zip"
     fi
     step download_higgs 2400 python3 tools/speed_gbdt_arm.py --download higgs
+    # Istella-S LETOR (3.4M x 220), the high-feature second kind of
+    # ENGINEERING_RULES.md section 9. Direct 472 MB download, no credentials.
+    step download_istella 1800 python3 tools/speed_gbdt_arm.py --download istella
     : > "$OUT/track_pip.done"
 }
 

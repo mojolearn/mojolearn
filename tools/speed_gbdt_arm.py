@@ -639,6 +639,118 @@ def load_higgs(size, rows_cap=None):
     return Data("higgs", x_train, x_test, y_train, y_test, "binary", 2)
 
 
+ISTELLA_URL = "http://library.istella.it/dataset/istella-s-letor.tar.gz"
+ISTELLA_FEATURES = 220
+ISTELLA_N_TEST = 500000
+
+
+def _decode_letor(path, n_features):
+    """SVMlight/LETOR text ("rel qid:N 1:v ... F:v" per line, every feature
+    present and in order) to (x float32 [rows, F], y float32 [rows]). The
+    'k:' prefixes are stripped per 64 MB chunk with one regex and the rest
+    is one `np.fromstring`, which is what makes a 2M-line file a few
+    minutes instead of an hour. Istella marks a missing value with the
+    float64 maximum (1.797e308); that is above float32 and would become
+    inf, so anything at or above 1e300 is clamped to the float32 maximum:
+    still the largest value in its column, so every threshold rule sees
+    the same ordering, and finite for every library's binning."""
+    import re
+    strip = re.compile(rb" \d+:")
+    xs, ys = [], []
+    tail = b""
+    with open(path, "rb") as f:
+        while True:
+            block = f.read(64 << 20)
+            if not block:
+                break
+            block = tail + block
+            cut = block.rfind(b"\n")
+            if cut < 0:
+                tail = block
+                continue
+            chunk, tail = block[:cut + 1], block[cut + 1:]
+            chunk = strip.sub(b" ", chunk.replace(b" qid:", b" "))
+            arr = np.fromstring(chunk.decode("ascii"), sep=" ",
+                                dtype=np.float64)
+            arr = arr.reshape(-1, n_features + 2)
+            ys.append(arr[:, 0].astype(np.float32))
+            feats = arr[:, 2:]
+            big = feats >= 1e300
+            if big.any():
+                feats = feats.copy()
+                feats[big] = np.finfo(np.float32).max
+            xs.append(feats.astype(np.float32))
+    if tail.strip():
+        raise RuntimeError("%s: trailing partial line" % path)
+    return (np.ascontiguousarray(np.concatenate(xs)),
+            np.ascontiguousarray(np.concatenate(ys)))
+
+
+def load_istella(size, rows_cap=None, regression=False):
+    """Istella-S LETOR, 3,408,630 x 220, THE HIGH-FEATURE LARGE DATASET
+    (ENGINEERING_RULES.md section 9, the second kind beside HIGGS).
+
+    Real web-search query/document feature vectors from the istella search
+    engine (Dato et al., ACM TOIS 2016), dense, 220 numeric features,
+    graded relevance 0..4. train.txt is 2,043,304 rows, test.txt 681,250.
+    Binary target: relevance > 0 (about 11% positive); `regression=True`
+    keeps the 0..4 grade as a float target (the RMSE cell). The test rows
+    are the first ISTELLA_N_TEST rows of test.txt at every rung, the train
+    rows the first `rows_cap` of train.txt, so rungs are comparable the way
+    HIGGS rungs are. Direct download, no credentials (Bosch needs Kaggle).
+
+    THE DOWNLOAD IS 472 MB and is a SEPARATE, EXPLICITLY NAMED STEP
+    (`--download istella`); the decode is minutes and is done there too."""
+    folder = os.path.join(data_root(), "istella")
+    npz_path = os.path.join(folder, "istella_speed.npz")
+    cached = None
+    if os.path.exists(npz_path) and os.path.getsize(npz_path) > 0:
+        try:
+            cached = np.load(npz_path)
+        except Exception as exc:                   # noqa: BLE001
+            sys.stderr.write(
+                "speed_gbdt_arm: %s is unreadable (%s); re-decoding from "
+                "the text files beside it\n" % (npz_path, exc))
+            cached = None
+    if cached is not None:
+        x_tr, r_tr = cached["x_train"], cached["r_train"]
+        x_te, r_te = cached["x_test"], cached["r_test"]
+    else:
+        train_txt = _find_file(folder, "train.txt")
+        test_txt = _find_file(folder, "test.txt")
+        if train_txt is None or test_txt is None:
+            raise RuntimeError(
+                "istella is not downloaded: train.txt/test.txt missing under "
+                "%s. Run `python tools/speed_gbdt_arm.py --download istella` "
+                "first (472 MB), OUTSIDE the timed run." % folder)
+        x_tr, r_tr = _decode_letor(train_txt, ISTELLA_FEATURES)
+        x_te, r_te = _decode_letor(test_txt, ISTELLA_FEATURES)
+        x_te = np.ascontiguousarray(x_te[:ISTELLA_N_TEST])
+        r_te = np.ascontiguousarray(r_te[:ISTELLA_N_TEST])
+        np.savez(npz_path, x_train=x_tr, r_train=r_tr, x_test=x_te,
+                 r_test=r_te)
+    n_train = x_tr.shape[0]
+    if size == "smoke":
+        rows_cap = min(rows_cap or 50000, 50000)
+    if rows_cap:
+        n_train = min(n_train, rows_cap)
+    x_train = np.ascontiguousarray(x_tr[:n_train])
+    r_train = np.ascontiguousarray(r_tr[:n_train])
+    if regression:
+        return Data("istellareg", x_train, x_te, r_train, r_te,
+                    "regression", 0)
+    y_train = (r_train > 0).astype(np.float32)
+    y_test = (r_te > 0).astype(np.float32)
+    return Data("istella", x_train, x_te, y_train, y_test, "binary", 2)
+
+
+def _find_file(folder, name):
+    for root, _dirs, files in os.walk(folder):
+        if name in files:
+            return os.path.join(root, name)
+    return None
+
+
 #: Which dataset each lane runs by default, and what it falls back to.
 #: `year` for the boosting lanes because it is the regression dataset the
 #: existing M4 GBDT tables were taken on; `covtype` for the forest lanes
@@ -665,6 +777,10 @@ def load_dataset(name, size, rows_cap=None):
         d = load_higgs(size, rows_cap)
         return Data("higgsreg", d.X_train, d.X_test, d.y_train, d.y_test,
                     "regression", 0)
+    if name == "istella":
+        return load_istella(size, rows_cap)
+    if name == "istellareg":
+        return load_istella(size, rows_cap, regression=True)
     if name == "year":
         return load_year(size, rows_cap)
     if name == "covtype":
@@ -693,7 +809,7 @@ def load_with_fallback(name, size, rows_cap=None):
             "the synthetic fixture. Every line will say so in shape=.\n"
             % (name, exc)
         )
-        if name in ("covtype", "covtype2", "synthclf", "higgs"):
+        if name in ("covtype", "covtype2", "synthclf", "higgs", "istella"):
             return load_dataset("synthclf", size, rows_cap)
         if name == "higgsreg":
             return load_dataset("synthclf", size, rows_cap)
@@ -724,6 +840,27 @@ def download(name):
         d = load_higgs("shipped")
         print("higgs decoded to %s (train %d x %d, test %d)"
               % (os.path.join(folder, "higgs_speed.npz"),
+                 d.X_train.shape[0], d.X_train.shape[1], d.X_test.shape[0]))
+        return
+    if name == "istella":
+        import tarfile
+        import urllib.request
+        folder = os.path.join(data_root(), "istella")
+        os.makedirs(folder, exist_ok=True)
+        dest = os.path.join(folder, "istella-s-letor.tar.gz")
+        if os.path.isfile(dest):
+            print("istella already present: %s (%.1f MB)"
+                  % (dest, os.path.getsize(dest) / 1e6))
+        else:
+            print("downloading %s -> %s (about 472 MB)" % (ISTELLA_URL, dest))
+            urllib.request.urlretrieve(ISTELLA_URL, dest)
+            print("istella: %.1f MB" % (os.path.getsize(dest) / 1e6))
+        if _find_file(folder, "train.txt") is None:
+            with tarfile.open(dest) as tar:
+                tar.extractall(folder)
+        d = load_istella("shipped")
+        print("istella decoded to %s (train %d x %d, test %d)"
+              % (os.path.join(folder, "istella_speed.npz"),
                  d.X_train.shape[0], d.X_train.shape[1], d.X_test.shape[0]))
         return
     if name == "year":
@@ -1680,7 +1817,7 @@ def build_parser(prog=None):
                    help="which lane to run; ONE lane per process, because a "
                         "lane that segfaults must not take the others down")
     p.add_argument("--dataset", default=None,
-                   help="higgs, year, covtype, covtype2, synth, synthclf, "
+                   help="higgs, istella, year, covtype, covtype2, synth, synthclf, "
                         "anomaly; the lane's own default if unset. `higgs` "
                         "is the LARGE-LOAD dataset (11M x 28) and is what "
                         "--rows climbs.")

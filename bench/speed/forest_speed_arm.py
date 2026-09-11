@@ -417,7 +417,7 @@ def build_parser():
     )
     p.add_argument("--lane", required=True, choices=spec.LANE_NAMES)
     p.add_argument("--dataset", default=None,
-                   help="higgs, higgsreg, year, covtype, covtype2, synth, "
+                   help="higgs, higgsreg, istella, istellareg, year, covtype, covtype2, synth, "
                         "synthclf, anomaly; the lane's own default if "
                         "unset. `higgsreg` is higgs with its label as a "
                         "float target (the RMSE cell). `higgs` "
