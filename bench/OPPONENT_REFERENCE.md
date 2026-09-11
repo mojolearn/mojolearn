@@ -506,10 +506,10 @@ opponent here is torch `cdist` + `topk`, NOT cuML.
    below 1M).
 5. torch byte-LM training step time on H100 (the Sep 7 comparison in this
    tree is a correctness record with no torch timing).
-6. cuML brute-force kNN on the HIGGS prefix (the kNN second kind, DEVIATION
-   2524; the "kNN second kind (HIGGS rows)" table above), H100, k 10 and
-   15, measured once by `tools/knn_selection_gate.sh` under
-   `MOJOLEARN_KNN_SELECTION_OPPONENT=1`.
+6. cuML brute-force kNN on the taxi and Istella-S prefixes (DEVIATION 2524
+   moved the kNN tooling off HIGGS, which is retired; the "kNN second kind
+   (HIGGS rows)" table above is history), H100, k 10 and 15, measured once
+   by `tools/knn_selection_gate.sh` under `MOJOLEARN_KNN_SELECTION_OPPONENT=1`.
 
 ## Rows never to quote
 

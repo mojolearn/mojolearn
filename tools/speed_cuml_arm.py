@@ -395,6 +395,7 @@ def gpu_only():
     THE RULE, AND IT IS NOT A PREFERENCE. On NVIDIA and on AMD we compare
     against the vendor's GPU path ONLY. Their CPU path is for the MacBook,
     where it is the only path they have.
+    CORRECTED 2026-09-11 (ENGINEERING_RULES.md section 10): on AMD a library with no ROCm path (cuML) is measured on the same box's CPU on all cores, labeled CPU, with a torch ROCm arm beside it; this file still refuses CPU arms, so AMD classical rows come from tools/classical_two_datasets.py.
 
     A GPU-versus-CPU ratio is not the claim this project makes and it is
     not the claim a reader will take from it. `catboost-cpu` beside

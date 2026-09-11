@@ -44,7 +44,8 @@ path that deliberately uses TF32 compares with a correspondingly labelled TF32 a
 |---|---|---|
 | GEMM | `gemm_speed_main.mojo` | `../../tools/speed_gemm_arm.py` |
 | Transformer/Mamba | `seq_speed_main.mojo` | `../../tools/speed_torch_seq.py` |
-| Classical ML | `classical_speed_main.mojo` | `../../tools/speed_cuml_arm.py` |
+| Classical ML (generator fixtures: correctness and smoke only) | `classical_speed_main.mojo` | `../../tools/speed_cuml_arm.py` |
+| Classical ML on taxi and Istella-S (ENGINEERING_RULES.md section 9, the timing path) | `../../tools/classical_two_datasets.py` (public binding, IDENTICAL) | same file: scikit-learn CPU, torch GPU |
 | Forests/boosting | `forest_speed_arm.py` | `../../tools/speed_gbdt_arm.py` |
 
 The parsers consume the `FSPEED-*` record format emitted by these drivers. Preserve existing field

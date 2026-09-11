@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+# ENGINEERING_RULES.md section 9 (2026-09-11): torch.rand data here is a smoke fixture only; the classical timing path on taxi and Istella-S is tools/classical_two_datasets.py (DEVIATION 2570).
 """THE GPU BASELINE THAT ACTUALLY EXISTS ON THIS MACHINE.
 
 Andrew's rule, 2026-08-20: if a GPU library for the algorithm runs on the
