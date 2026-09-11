@@ -107,6 +107,24 @@ after) with the fold added, and taxi's logloss is 0.525668 against 2624's
 hash 97222a45020a166c). The greedy control moved 0.1%, so the pod was not
 drifting under the pointwise rows.
 
+### The pinned SM constant is not what the win rests on
+
+`PW_2670_PINNED_SM` is a NUMERIC constant I chose, so it was measured rather
+than argued. A third tree built from the 2670 tree with the constant set to 32
+instead of 128, taxi 1M, the two interleaved in one job on the same pod (two
+outer rounds, three timed rounds each):
+
+| pinned SM | taxi pointwise ms, per round | model hash |
+|---|---|---|
+| 128 | 787.4, 785.7, 787.9, 793.5, 789.5, 794.2 | 97222a45020a166c |
+| 32 | 798.5, 801.2, 803.4, 837.1, 794.7, 805.0 | 97222a45020a166c |
+
+32 is about 1 to 2 percent slower on this shape and gives the SAME model
+hash, so on taxi the constant moves the schedule inside 2670's bits rather
+than the bits themselves (a shape whose multiplier ladder lands differently
+at the two constants would move them; that is not this shape). The win is
+not an artifact of picking 128.
+
 ## 4. What is NOT done
 
 - 2670 is opt-in and default OFF. Flipping it needs the Apple M4 and an AMD
