@@ -89,6 +89,53 @@ No AMD timing of this step exists at the target shape.
    DEVIATIONS 2528, 2531, 2533, 2530 (section 11 order) and GEMM
    DEVIATIONS 2540 to 2544. AMD leg 1 invocation:
    `MOJOLEARN_DO_TOKEN_FILE=$HOME/.mojolearn_do_token MOJOLEARN_GPU_ARCHS=gfx942 MOJOLEARN_GEMM_LEG_EXTRA=tools/attention_step_leg.sh MOJOLEARN_DO_EXTRA_ENV="MOJOLEARN_ATTN_LEG_ARMS=stash_tiled MOJOLEARN_ATTN_LEG_SKIP_TIMERS=1" MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/<UTC stamp>-amd-mi325x-attention-step bash tools/do_extra_leg.sh amd --minutes 60 --skip-gates`.
+0b. MERGED 2026-09-11 night after orchestrator M4 gates (lane code is never
+   compiled by the lanes): DEVIATION 2528 zdot tiled, trial arms
+   `stash_tiled_ztiled_r64` / `_r32` (25a0356c; transformer_fused_check
+   PASS, arms check PASS with sabotage_new moving only the backward; the
+   parser needed a String aliasing fix before it compiled), and GEMM
+   DEVIATIONS 2540 to 2544, trial only (63e9077f; step arms check PASS on
+   102 ragged cases x 6 geometries with reach 102/102, the no-trial build
+   fails naming the define, gemm_device_check green). Defaults unchanged.
+   2531, 2533 and 2530 are not built. AMD leg 1 (attention, from commit
+   63325cf7) waits behind amd-trees-leg through a launcher; its env prices
+   stash_tiled and both 2528 row counts against baseline and runs the LM
+   step for baseline and stash_tiled on both corpora. Next AMD legs, in
+   the agreed alternation: the torch opponent row, then
+   `MOJOLEARN_DO_TOKEN_FILE=$HOME/.mojolearn_do_token MOJOLEARN_GPU_ARCHS=gfx942 MOJOLEARN_GEMM_LEG_EXTRA=tools/gemm_step_leg.sh MOJOLEARN_DO_EXTRA_ENV="MOJOLEARN_GEMM_STEP_LEG_ARMS=shipped,lfold,half,half_ks16,quarter,head,half_head MOJOLEARN_GEMM_STEP_LEG_LM_ARMS=auto" MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/<UTC stamp>-amd-mi325x-gemm-step bash tools/do_extra_leg.sh amd --minutes 60 --skip-gates`,
+   then the 2528 LM step leg against stash_tiled (brief section 12).
+0c. NVIDIA FIRST, 2026-09-11 ~13:30Z. Andrew: "use runpod then and just do
+   nvidia for now" while the trees lane held the DigitalOcean GPU. The AMD
+   attention launcher was stopped before it took the lock and mojolearn-83
+   was told neural yields its AMD turns until neural messages again. Two
+   concurrent RunPod H100 legs at commit cd086f67, both pods terminated and
+   verified, both device cards IDENTICAL to the M4 card from the same commit:
+   - Attention plus torch, one pod
+     (bench/results/e1g/2026-09-11_133041-nvidia-h100-attention-torch; attention
+     brief section 13). `stash_tiled` holds on the benchmark corpora: lean step
+     0.5625 -> 0.3835 s (enwik8), 0.5628 -> 0.3833 s (Pile GitHub), witnesses
+     equal. DEVIATION 2528 NO FLIP on NVIDIA: r64 step 1.084x stash_tiled on
+     both corpora (y/dy kernel 115.5 + fold 6.6 ms against the stash read's
+     89.9 ms); r32 prices worse than r64.
+   - GEMM step arms (bench/results/e1g/2026-09-11_133216-nvidia-h100-gemm-step;
+     GEMM brief 10.7). NO FLIP: quarter step 1.128x shipped, every arm slower
+     in price (quarter 1.27 to lfold 2.86), every arm still one block per SM
+     at 214 to 254 registers. The step check passed on the H100 including the
+     three vocab-sized head calls.
+   - The first torch row (bench/OPPONENT_REFERENCE.md, H100 section). Same pod,
+     same shape, same corpora: our IDENTICAL step takes 10.1x torch eager TF32's
+     time (0.383 s against 0.038 s), 6.7x compile fp32's and 6.2x eager fp32's.
+     Compile with TF32 and bf16 autocast were not measured.
+   What that says about where to work next: the GEMM price harness puts the
+   twelve GEMM call kinds at about 219 ms of the 384 ms step (the three vocab
+   calls alone about 55 ms) and the attention timers put attention at about
+   165 ms, so the matrix multiplies are the larger share against a whole torch
+   step of 38 ms. Still owed: the AMD legs (attention 12.7 second leg for 2528
+   at 32 rows, GEMM 10.5 for the first AMD register readback, the torch ROCm
+   row) whenever neural takes an AMD turn again, and a shipped non-trial
+   binding probe to explain the GEMM leg's 0.457 s shipped step (GEMM brief
+   10.7). `tools/gemm_remote_leg.sh` has no extra-env plumbing; the attention
+   settings rode in a wrapper body the leg copied to `extra_body.sh`.
 1. The DigitalOcean runner is merged and its dry run is green (section 3);
    its first paid run is also its bring-up. Tuning on AMD is now a repo rule
    for every lane (ENGINEERING_RULES.md section 10), and the account allows

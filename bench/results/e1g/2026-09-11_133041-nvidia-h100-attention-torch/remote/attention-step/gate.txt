@@ -1,0 +1,14 @@
+deviations=2525-2527
+started=2026-09-11T13:33:28Z
+root=/root/mojolearn
+arms=stash_tiled,stash_tiled_ztiled_r64,stash_tiled_ztiled_r32
+lm_arms=baseline,stash_tiled,stash_tiled_ztiled_r64
+baseline_arm=baseline deviations_second_round=2528
+rounds=7 warmups=2 deadline=300
+vendor=nvidia gpu_archs=sm_90a column=nvidia jobs=8
+skip_timers=1 skip_lm=0
+vendor=nvidia
+commit=cd086f673d708051a65837484a31602d02e6e24c
+corpora= enwik8=training/corpus/enwik8/input.txt pilegithub=training/corpus/pile_github/input.txt
+file_kinds=file:/root/gemm_leg_out/attention-step/operands-enwik8,file:/root/gemm_leg_out/attention-step/operands-pilegithub
+finished=2026-09-11T13:52:48Z

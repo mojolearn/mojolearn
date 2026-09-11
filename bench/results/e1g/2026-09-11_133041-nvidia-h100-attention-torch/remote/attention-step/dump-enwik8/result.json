@@ -1,0 +1,63 @@
+{
+  "schema": "mojolearn.lm-step-memory-probe.v3",
+  "shape": {
+    "batch": 1,
+    "length": 2048,
+    "d_model": 768,
+    "n_heads": 12,
+    "n_kv": 12,
+    "head_dim": 64,
+    "intermediate": 2048,
+    "n_layers": 12,
+    "vocab_size": 50257
+  },
+  "parameters": 162147840,
+  "steps_completed": 1,
+  "resident": true,
+  "step_result": "lean",
+  "witness_every_step": false,
+  "witness_source": "export_gradients(named=False) + export_state() once after the last untimed step",
+  "corpus": {
+    "path": "training/corpus/enwik8/input.txt",
+    "sha256": "2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8",
+    "manifest_sha256": "c65094a4d6a494d2882d972c20138015b4a258b310d662d4be05fb7ba2e9b423",
+    "bytes": 100000000,
+    "source_url": "http://mattmahoney.net/dc/enwik8.zip",
+    "schedule": "step k row b: bytes[(k*batch*length + b*length) % (bytes - length - 1) : +length+1] as int32; targets shifted one byte"
+  },
+  "attention_arm": "baseline",
+  "gemm_arm": null,
+  "step_witnesses": [
+    {
+      "step": 1,
+      "completed_steps": 1,
+      "sha256": {
+        "loss": "a39d1a773245b9bb9f5a25aac121f308d875d0f0a5a7d827bc21552112023c71"
+      }
+    }
+  ],
+  "final_witness": {
+    "step": 1,
+    "completed_steps": 1,
+    "sha256": {
+      "gradients": "01d5fa4ae0299bbbd2de8f47d6d0d1e3c525c57b13cfa0244b130a7d7bb813f7",
+      "parameters": "84f96dc296e50b8cea15b54787e7fbede994b0730ee5d3ed86c620cf539c05c9",
+      "m": "b3fafccc62a0feab9ae135d3053054ea3ea8b131bbb0247959d212e13c727c0c",
+      "v": "ae18e62bdf7a1dab7177ff4af00bf7d185845716e1af365e0bc52e362666a8f6",
+      "flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb"
+    },
+    "export_seconds": 13.528043780475855,
+    "source": "export_gradients(named=False) + export_state() once after the last untimed step"
+  },
+  "first_call_seconds": 17.095722876489162,
+  "steady_step_seconds": [],
+  "steady_median_seconds": null,
+  "steady_median_tokens_per_second": null,
+  "peak_device_process_bytes": "unavailable",
+  "peak_device_wide_bytes": 14284750848,
+  "process_ru_maxrss_bytes": 8314703872,
+  "budget_seconds": 300.0,
+  "limited": false,
+  "component_timing_step_seconds": null,
+  "qualification": "complete-step probe; device peak from a polled vendor tool; host RSS is a separate boundary; no opponent, no default gate, no target-scale qualification claim"
+}

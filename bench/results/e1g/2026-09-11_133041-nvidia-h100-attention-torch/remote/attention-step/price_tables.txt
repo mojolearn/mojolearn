@@ -1,0 +1,24 @@
+TABLE kind=file:operands-enwik8 shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 (useful flops: fwd 4*cells*hd, bwd 10*cells*hd; executed multiplier of the shipped kernels: fwd dots 3 of 2 contractions, bwd dots 6 of 5)
+TABLE arm | fwd median ms | fwd useful TFLOP/s | fwd+bwd median ms | bwd (derived) ms | bwd useful TFLOP/s | fwd ratio | fwd+bwd ratio
+TABLE baseline | 6.802001 | 0.9476030174062015 | 28.625316 | 21.823315 | 0.7383842317264815 | 1.0 | 1.0
+TABLE stash_tiled | 3.157075 | 2.0416355873712217 | 13.616099 | 10.459024 | 1.5406783348044713 | 2.1545262624422925 | 2.10231403282247
+TABLE kind=file:operands-pilegithub shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 (useful flops: fwd 4*cells*hd, bwd 10*cells*hd; executed multiplier of the shipped kernels: fwd dots 3 of 2 contractions, bwd dots 6 of 5)
+TABLE arm | fwd median ms | fwd useful TFLOP/s | fwd+bwd median ms | bwd (derived) ms | bwd useful TFLOP/s | fwd ratio | fwd+bwd ratio
+TABLE baseline | 6.72739 | 0.9581125327950364 | 28.568046 | 21.840656 | 0.737797970903438 | 1.0 | 1.0
+TABLE stash_tiled | 3.153763 | 2.0437796600442075 | 13.640837 | 10.487074 | 1.5365574496756673 | 2.1331311198717215 | 2.0943030108782916
+TABLE kind=file:operands-enwik8 shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 (useful flops: fwd 4*cells*hd, bwd 10*cells*hd; executed multiplier of the shipped kernels: fwd dots 3 of 2 contractions, bwd dots 6 of 5)
+TABLE arm | fwd median ms | fwd useful TFLOP/s | fwd+bwd median ms | bwd (derived) ms | bwd useful TFLOP/s | fwd ratio | fwd+bwd ratio
+TABLE baseline | 6.71993 | 0.9591761628469344 | 28.565155 | 21.845225 | 0.737643658053419 | 1.0 | 1.0
+TABLE stash_tiled_ztiled_r32 | 3.190408 | 2.020304823709068 | 16.786025 | 13.595616999999999 | 1.1852343060267145 | 2.1062917344740857 | 1.7017224149255112
+TABLE kind=file:operands-pilegithub shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 (useful flops: fwd 4*cells*hd, bwd 10*cells*hd; executed multiplier of the shipped kernels: fwd dots 3 of 2 contractions, bwd dots 6 of 5)
+TABLE arm | fwd median ms | fwd useful TFLOP/s | fwd+bwd median ms | bwd (derived) ms | bwd useful TFLOP/s | fwd ratio | fwd+bwd ratio
+TABLE baseline | 6.769866 | 0.9521010714244565 | 28.648742 | 21.878875999999998 | 0.7365091186585636 | 1.0 | 1.0
+TABLE stash_tiled_ztiled_r32 | 3.185545 | 2.0233889874417095 | 16.77628 | 13.590735 | 1.185660060327863 | 2.1251829749697464 | 1.7076933622948591
+TABLE kind=file:operands-enwik8 shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 (useful flops: fwd 4*cells*hd, bwd 10*cells*hd; executed multiplier of the shipped kernels: fwd dots 3 of 2 contractions, bwd dots 6 of 5)
+TABLE arm | fwd median ms | fwd useful TFLOP/s | fwd+bwd median ms | bwd (derived) ms | bwd useful TFLOP/s | fwd ratio | fwd+bwd ratio
+TABLE baseline | 6.895486 | 0.9347559652793146 | 28.722173 | 21.826687 | 0.738270158911428 | 1.0 | 1.0
+TABLE stash_tiled_ztiled_r64 | 3.183749 | 2.024530411159925 | 16.33303 | 13.149281 | 1.2254656113897027 | 2.1658384502044603 | 1.7585330462259605
+TABLE kind=file:operands-pilegithub shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 (useful flops: fwd 4*cells*hd, bwd 10*cells*hd; executed multiplier of the shipped kernels: fwd dots 3 of 2 contractions, bwd dots 6 of 5)
+TABLE arm | fwd median ms | fwd useful TFLOP/s | fwd+bwd median ms | bwd (derived) ms | bwd useful TFLOP/s | fwd ratio | fwd+bwd ratio
+TABLE baseline | 6.898645 | 0.9343279255563955 | 28.870821 | 21.972175999999997 | 0.7333816951038442 | 1.0 | 1.0
+TABLE stash_tiled_ztiled_r64 | 3.186222 | 2.0229590631161294 | 16.328958 | 13.142736 | 1.2260758855690321 | 2.1651488816535696 | 1.768074913292079

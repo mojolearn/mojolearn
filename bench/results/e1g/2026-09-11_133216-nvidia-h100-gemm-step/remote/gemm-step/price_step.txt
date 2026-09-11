@@ -1,0 +1,7 @@
+STEP gemm arm=half ratio=1.8423807561829322 shipped_ms=219.33137199999996 arm_ms=404.0918989999999 calls=12 moved=0 (per-call medians weighted by per-step counts; a GEMM sum, not a step time)
+STEP gemm arm=half_head ratio=1.8780245491602439 shipped_ms=219.28073899999995 arm_ms=411.814611 calls=12 moved=0 (per-call medians weighted by per-step counts; a GEMM sum, not a step time)
+STEP gemm arm=half_ks16 ratio=1.8442706984244295 shipped_ms=219.41503400000002 arm_ms=404.660718 calls=12 moved=0 (per-call medians weighted by per-step counts; a GEMM sum, not a step time)
+STEP gemm arm=head ratio=1.2772298058562774 shipped_ms=218.83014999999997 arm_ms=279.49639 calls=12 moved=0 (per-call medians weighted by per-step counts; a GEMM sum, not a step time)
+STEP gemm arm=lfold ratio=2.8615473921499666 shipped_ms=220.92035299999995 arm_ms=632.1740599999999 calls=12 moved=0 (per-call medians weighted by per-step counts; a GEMM sum, not a step time)
+STEP gemm arm=quarter ratio=1.270271754810438 shipped_ms=219.43276699999998 arm_ms=278.739246 calls=12 moved=0 (per-call medians weighted by per-step counts; a GEMM sum, not a step time)
+STEP gemm arm=shipped ratio=1.0003317285256277 shipped_ms=218.71800100000002 arm_ms=218.79055599999998 calls=12 moved=0 (per-call medians weighted by per-step counts; a GEMM sum, not a step time)

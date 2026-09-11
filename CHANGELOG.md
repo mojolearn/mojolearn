@@ -3,7 +3,11 @@
 This file records release-level changes, not the development diary. Git history and archived evidence
 contain the detailed investigation record.
 
-## 0.8.1 (unreleased 2026-09-11)
+## 0.8.1 (published 2026-09-11)
+
+Linux x86-64 wheel (CUDA sm_89, CUDA sm_90a, HIP gfx942) and macOS arm64 wheel, both from
+commit 343ffa35 (tags alpha-api-0.8.1-20260911 and v0.8.1), on PyPI 2026-09-11 12:53Z and
+13:08Z (release runs 34601165603 and 34601500930).
 
 A patch on the 0.8.0 line. Branch release-0.8.1 starts at tag v0.8.0
 (4a3c22c3, which is the 0.8.0 Linux build commit 9392320e plus two

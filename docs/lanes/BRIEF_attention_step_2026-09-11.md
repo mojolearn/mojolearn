@@ -1019,3 +1019,51 @@ timing); if the lease must be 60 minutes, drop the slower geometry from
 ENGINEERING_RULES 9 (the geometric mean of the enwik8 and pile_github
 ratios below 1, loss not worse on either); a flip also writes
 `attn_zdot_rows_per_block_for`'s AMD value from the same leg.
+
+## 13. H100 leg on the benchmark corpora (2026-09-11, RunPod, commit cd086f67): 2528 NO FLIP on NVIDIA
+
+Run on NVIDIA first because the shared DigitalOcean GPU was held by the trees
+lane (Andrew: "use runpod then and just do nvidia for now"). The AMD legs in
+12.7 are still owed; this is the confirmation column, not the deciding one.
+
+Evidence: bench/results/e1g/2026-09-11_133041-nvidia-h100-attention-torch
+(`NVIDIA H100 80GB HBM3`, pod quf7729vxu5q66 terminated and verified, 24
+minutes on the pod). Operand dumps (48 MB) are outside the repo at
+~/mojolearn-evidence/attention-step-2026-09-11_133041-nvidia-h100-attention-torch/,
+sha256 list beside the evidence. `tools/gemm_remote_leg.sh` has no extra-env
+plumbing, so the settings live in the body the leg copied to `extra_body.sh`:
+`MOJOLEARN_ATTN_LEG_ARMS=stash_tiled,stash_tiled_ztiled_r64,stash_tiled_ztiled_r32`,
+`MOJOLEARN_ATTN_LEG_LM_ARMS=baseline,stash_tiled,stash_tiled_ztiled_r64`,
+`MOJOLEARN_ATTN_LEG_SKIP_TIMERS=1`, `MOJOLEARN_COMPILE_JOBS=8`, then the torch
+opponent leg on the same box (bench/OPPONENT_REFERENCE.md).
+
+- `status.tsv`: all 27 items exit 0. `arms-check`: PASS, names inverse, 15
+  cases x 6 arms, reach proven per branch on the H100.
+- Price on real activations (`price_tables.txt`, fwd+bwd median ms, enwik8 /
+  Pile GitHub; each arm ran against its own baseline run):
+
+  | arm | fwd+bwd | bwd (derived) | fwd+bwd ratio vs baseline |
+  |---|---|---|---|
+  | baseline | 28.57 to 28.87 | 21.82 to 21.97 | 1.0 |
+  | stash_tiled (shipped) | 13.62 / 13.64 | 10.46 / 10.49 | 2.102 / 2.094 |
+  | stash_tiled_ztiled_r64 | 16.33 / 16.33 | 13.15 / 13.14 | 1.759 / 1.768 |
+  | stash_tiled_ztiled_r32 | 16.79 / 16.78 | 13.60 / 13.59 | 1.702 / 1.708 |
+
+  Every `REACH` line: `clean_restored=True`, `sabotage_new` moves only the
+  backward (`forward_moved=0`) on hashed, heavytail and both dump kinds.
+- Lean LM step (`lm_summary.tsv`, steady median seconds, enwik8 / Pile
+  GitHub), witnesses equal to baseline on every step for every arm:
+  baseline 0.5625 / 0.5628; stash_tiled 0.3835 / 0.3833 (0.682 / 0.681 of
+  baseline, the default flip holds on the benchmark corpora);
+  stash_tiled_ztiled_r64 0.4157 / 0.4154, which is **1.084 / 1.084 of
+  stash_tiled, geomean 1.084: NO FLIP.** r32 was not probed; its price is
+  worse than r64's.
+- Timers: `attn.bwd_zdot_stash` 89.9 ms (stash_tiled) against
+  `attn.bwd_ydy_tiled` 115.5 ms plus `attn.bwd_zfold` 6.6 ms (r64). The
+  register-blocked y/dy kernel costs 32 ms more per step than the stash
+  read it replaces, which is the whole step difference.
+
+Reading: on the H100, 2528 at either row count is slower than the shipped
+`stash_tiled` backward, and 32 rows is slower than 64. It stays a trial arm.
+Whether the MI325X prices it differently (its kernel matrix row is 32) is the
+12.7 second leg; 2531 still waits on that AMD reading.
