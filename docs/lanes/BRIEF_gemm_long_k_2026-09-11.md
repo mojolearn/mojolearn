@@ -1,10 +1,12 @@
 # GEMM long-k lane, the IDENTICAL GEMM calls whose blocks cannot fill the machine (DEVIATIONS 2590 to 2594)
 
-Source-only lane, September 11, 2026, IDENTICAL only. STATUS: INCOMPLETE,
-wound down by Andrew's order after the reading, the design and the
-identity argument; the arm kernel, the arms, the check, the harness
-changes and the leg wrapper are NOT BUILT (section 6 lists what exists).
-Nothing here was built, compiled or timed on the Mac or on a GPU.
+Source-only lane, September 11, 2026, IDENTICAL only. STATUS: SOURCE
+BUILT, NOTHING COMPILED OR RUN. The first session wound down after the
+reading, the design and the identity argument (sections 1 to 8). A second
+session built DEVIATIONS 2590 to 2594 from that design (section 9): the
+group kernel, the two arms, the host and device checks, the harness lines
+and the leg wrapper. Nothing here was built, compiled or timed on the Mac
+or on a GPU; section 9.4 is the RUN OWED list and 9.5 the two legs.
 Numbers not copied from an evidence path are counted from source or fitted
 to the evidence table and say which. Sections 1 to 5 were written before
 any code; sections 6 onward after it.
@@ -333,6 +335,9 @@ read only by the arm section.
 
 ## 6. State at wind-down (same day; Andrew asked every lane to stop)
 
+SUPERSEDED by section 9, which records what the second session built. Kept
+as the first session's record.
+
 The lane was stopped after sections 1 to 5 and before the kernel. What
 exists on the branch, all unbuilt:
 
@@ -379,7 +384,9 @@ exists on the branch, all unbuilt:
   `MOJOLEARN_GEMM_STEP_CONTROLS=1`, `_LEG_OUT=/root/gemm_leg_out/gemm-longk`,
   then `cd /root/mojolearn && exec sh tools/gemm_step_leg.sh`).
 
-## 7. RUN OWED as it stands
+## 7. RUN OWED as it stood at wind-down
+
+SUPERSEDED by sections 9.4 and 9.5. Kept as the first session's record.
 
 Nothing to time: no arm exists. The two edits that do exist can only be
 checked by a build, on the M4, run by the orchestrator:
@@ -416,3 +423,292 @@ enwik8 and Pile GitHub lean step ratios below 1, every step witness equal.
   output sizes. The PHASE lines were designed to.
 - A 14-argument kernel and a `(tiles, G)` grid are untried on HIP and
   Metal.
+
+## 9. Build lane (September 11, 2026, second session, worktree)
+
+Source only. Nothing below was compiled, run or timed, on the Mac or on a
+GPU. It builds sections 4 and 5 as designed; where the code departs from
+section 6's NOT BUILT list, 9.2 says so. The identity argument is section 5,
+unchanged; 9.1 names the lines it binds to.
+
+### 9.1 The identity argument, bound to the code
+
+- **The leaf partials (5.1).**
+  `gemm/checks/gemm_identical.mojo::identical_gemm_ksplit_kernel[RPT, CPT,
+  TC, KS, PAGES, SAB]` is `identical_gemm_step_arm_kernel` with `LFOLD =
+  False`, line for line, except for three things. The block reads
+  `raw = block_idx.x` and `q = block_idx.y`. The window loop runs from
+  `lbeg * wpl` to `lend * wpl`, with `lbeg = q * gleaves` and
+  `lend = min(lbeg + gleaves, P)`. The store is described next.
+  `leaf_in` and `p_in` come from `contract_partition(k)` in
+  `identical_gemm_step_ksplit_into`. `gleaves` never reaches
+  `_tuned_window`.
+- **The group node (Lemmas A and B).** Each block pushes its own leaves into
+  a fresh `_fold_push_local` stack and stores `_fold_drain_local`'s value
+  unflushed at `ws[q * m * n + cell]` for in-range cells. That is the SPLIT
+  plans' leaf-major layout.
+- **The fold of the nodes (Lemma C).** `_ksplit_fold_launch` is
+  `_launch_split`'s fold dispatch with `G` as the count:
+  `identical_gemm_fold_kernel[True]` at `m n <= SPLIT_BLOCK_FOLD_MAX_CELLS`,
+  else `identical_gemm_fold_stack_kernel`. Both store `ftz(root)`.
+- **Groups are powers of two aligned at leaf 0.** `_ksplit_resolve_leaves`
+  raises on any other size, and on a size above `2^20`, because the size
+  travels as an Int32.
+- **`k == 0`** takes `_launch_step_arm[128x128, LFOLD = False]` and no group
+  launch.
+- **Barriers.** The two early returns (`raw >= n_tiles or q >= groups`, and
+  an empty group) read only block-uniform values and come before any
+  barrier. Every thread of block `(tile, q)` walks the same window range.
+- **Reach (5.6).** `SAB = True` stores `1.0e30` in place of the node of the
+  cell of thread `q mod 256`, register cell `q // 256`, when that cell is in
+  the output. `gemm_step_ksplit_reach` counts exactly those cells, so it
+  names the group count. At `k == 0` the step arm kernel's sabotage moves
+  one cell per tile, and the reach says so.
+- **Checked on the host.** Lemmas A to C are checked exhaustively by
+  `check_group_fold_is_the_contract_tree` (9.3), with the device's own
+  push, drain and fold functions.
+
+### 9.2 What was built, per deviation
+
+- **2590 BUILT** (`gemm/checks/gemm_identical.mojo`, the section "THE
+  LONG-K GROUP ARMS" after `_step_geometry_launch`):
+  - the group kernel of 9.1;
+  - `_ksplit_groups_launch[RPT, CPT, TC, KS, SAB]`, with PAGES from
+    `lib_smem_pages_for` at `_launch_tuned`'s page bytes, a comptime page
+    fit assert, and grid `(tiles, G, 1)`;
+  - `_ksplit_fold_launch` and `_ksplit_resolve_leaves`;
+  - `identical_gemm_step_ksplit_into(ctx, c, a, b, ws, m, n, k, op,
+    group_leaves, sabotage)`, which allocates `m n G` floats, synchronizes,
+    launches both, synchronizes again, and keeps the buffer past the wait.
+    On a non-trial build it runs PLAN_TUNED_128_8X8 and synchronizes;
+  - `identical_gemm_step_ksplit_phase_into` (returns `(alloc_ns, group_ns,
+    fold_ns)`, each phase host-synchronized);
+  - `identical_gemm_step_ksplit_workspace_floats`.
+  The shipped file gained one import (`perf_counter_ns`). The shipped
+  dispatch line in `identical_gemm_into` is untouched, and the trial hook
+  is still the only way in.
+- **2591 BUILT.**
+  - Ids: `GEMM_ARM_KSPLIT = 7`, `GEMM_ARM_KSPLIT_LEAF = 8`, geometries 7
+    and 8, and both counts at 9.
+  - Wiring: parse, name, tile (128x128) and geometry name entries
+    (`_ksplit_geometry_name`, built from the bound constants). The ksplit
+    branch sits in `gemm_step_arm_geometry` after the
+    `choose_gemm_plan != PLAN_TUNED_128_8X8` test.
+  - The rule is `gemm_step_ksplit_rule(m, n, k, s, read_s)`, section 4
+    rules 1 to 4, with `GEMM_KSPLIT_SLACK = 4` and
+    `gemm_step_ksplit_finest_leaves` for rule 2.
+    `gemm_step_ksplit_group_leaves(geom, ...)` binds it: `ksplit` reads
+    `GEMM_KSPLIT_S = lib_gemm_block_parallelism_for[TARGET_COLUMN]()`, and
+    `ksplit_leaf` reads nothing.
+  - Reach and blocks: `gemm_step_ksplit_reach`, `gemm_step_geometry_reach`
+    and `gemm_step_geometry_launched_blocks`.
+  - `gemm_step_geometry_group_leaves` gives the leaves a FORCED launch uses.
+  - The dispatch is in `identical_gemm_step_geometry_into`'s trial block.
+  - `checks/kernel_matrix.mojo::lib_gemm_block_parallelism_for`: NVIDIA
+    132; **AMD 110 from a reading, not a measurement.** The attention brief
+    section 11.1 transcribes 110 CUs (the MI250X) and resident blocks per
+    CU as `min(8, 65536 // page bytes)`. The shipped 128x128 block holds two
+    20,480 B pages, so one block per CU. The MI300X leg's CONTROL pair
+    decides it. Every other column is 0.
+- **2592 BUILT** (`gemm/checks/gemm_step_arms_check.mojo`):
+  - `check_group_fold_is_the_contract_tree` (section 5.4, on the host):
+    - covers every `P` in 1 to 1,100 and every power-of-two group size
+      from 1 to the first at or above `2 P`, on 4 cells, with two partial
+      kinds (the 13-bit significand generator, and the same with about one
+      partial in five replaced by `-0.0`);
+    - builds the nodes with `_fold_push_local` and `_fold_drain_local`;
+    - folds them with `_fold_push`, `_fold_drain` and `ftz`, and with
+      `fold_balanced_tree`;
+    - requires both to equal `fold_balanced_tree` over all `P` partials.
+  - `check_group_rule_hand_counts` (host): `gemm_step_ksplit_rule` at
+    `S = 132`, and with no reading, at the twelve LM calls, against section
+    4's hand counts in leaves per group. `ksplit`: 1, 1, 1, 0, 2, 2, 2, 0,
+    2, 0, 64, 0. `ksplit_leaf`: 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 16, 0.
+  - Ragged part: every geometry 1 to 8 forced, with expected reach from
+    `gemm_step_geometry_reach`, plus a `RUN_KSPLIT` loop through
+    `identical_gemm_step_ksplit_into` at group sizes {1, 2, 4, 16, 64},
+    clean bits and reach per size, with its own REACH lines.
+  - `ksplit` and `ksplit_leaf` are in `_arm_names`.
+  - LM part: expected reach from `gemm_step_geometry_reach`, and each LM
+    line prints group leaves and launched blocks.
+- **2593 BUILT.**
+  - `bench/gemm_step_price_main.mojo`: the per-call body is `_price_call`.
+    LM calls keep their salts, and the STEP line format is unchanged (the
+    step leg's auto pick parses it).
+  - Under `MOJOLEARN_GEMM_STEP_CONTROLS=1`, the six `ctl_*` calls each
+    print BITS, SAMPLE and one CONTROL line, never weighted into STEP.
+  - Where the arm's geometry is ksplit: a PHASEBITS equality pass, then one
+    PHASE line with the median allocation, group launch and fold launch.
+  - PRICE gains `arm_launched_blocks=` and `group_leaves=` before `plan=[`.
+    TABLE gains two trailing columns.
+  - `bench/gemm_step_resources_main.mojo`: a `ksplit_128x128` row (the
+    group kernel, clean, at the shipped geometry).
+- **2594 BUILT.** `tools/gemm_longk_leg.sh` passes `sh -n` and `dash -n`
+  (a parse, not a run). It exports:
+  - `MOJOLEARN_GEMM_STEP_LEG_ARMS=shipped,ksplit,ksplit_leaf`;
+  - `MOJOLEARN_GEMM_STEP_LEG_LM_ARMS=ksplit,ksplit_leaf`;
+  - `MOJOLEARN_GEMM_STEP_LEG_LMTIMING=1`;
+  - `MOJOLEARN_GEMM_STEP_LEG_CHECK_ARMS=shipped,ksplit,ksplit_leaf`;
+  - `MOJOLEARN_GEMM_STEP_CONTROLS=1`;
+  - `MOJOLEARN_GEMM_STEP_LEG_OUT=/root/gemm_leg_out/gemm-longk`.
+
+  A value the runner already exported wins. The wrapper writes
+  `longk.txt`, refuses an LM arm list that names only `shipped` (the step
+  leg drops it as the bracket, so it would resolve to none), changes into
+  the source root and execs `sh tools/gemm_step_leg.sh`.
+  `tools/gemm_step_leg.sh` changes by one line: `price_tables.txt` also
+  collects CONTROL, PHASE and PHASEBITS lines.
+
+Departures from section 6's list, and decisions it left open:
+
+- **A forced ksplit launch at a shape the rule declines** uses the finest
+  group under the cap (`gemm_step_geometry_group_leaves`), and 1 at
+  `k == 0`. It raises when the output alone exceeds the cap. The ragged
+  part forces ksplit geometries at shapes the rule declines (every ragged
+  output under 128 K cells), and this keeps the group kernel under test
+  there. The hook never forces: `gemm_step_arm_geometry` returns shipped
+  wherever the rule declines.
+- **The rule takes `S` as an argument** so that a host check can hold it to
+  the hand counts on every column. `check_group_rule_hand_counts` is new;
+  section 6 did not list it.
+- **`identical_gemm_step_ksplit_phase_into` takes the caller's `ws`**, like
+  the other entries, so its non-trial fallback can run the shipped plan.
+- **The leg wrapper also exports** `_CHECK_ARMS`, `CONTROLS` and `_LEG_OUT`,
+  the three knobs section 6 listed beyond the task's three.
+- **No other arm, kernel or default changed.**
+
+### 9.3 What the check proves when it passes, and what it cannot
+
+- **When it passes on a trial build:**
+  - the group fold is the contract tree for every `P` the profile allows
+    and every group size;
+  - the rule gives the section 4 hand counts;
+  - every forced ksplit launch and every explicit group size stores the
+    shipped plan's bits and FLAT's, on all three ops, ragged `m x n`,
+    `k` in {0, 1, 128, 129, 300, 1000, 2049, 50257} and the subnormal
+    kind;
+  - every sabotage moves exactly its reach.
+- **On a GPU box** the LM part adds the twelve target-shape calls through
+  `identical_gemm_into` under `shipped`, `ksplit` and `ksplit_leaf`.
+- **What it cannot prove:** the M4 run with `MOJOLEARN_GEMM_STEP_CHECK_LM=0`
+  reaches only one shape where the rule applies: 257x520 at `k` of 129
+  (`P = 2`) and 300 (`P = 3`). At `k` of 1000 that shape is 134 M flops,
+  over the 50 M budget. The box's 400 M budget adds `k` of 1000 and 2049.
+  So the LM calls on the box are the first applicable launches at step
+  shapes.
+
+### 9.4 RUN OWED, M4, light, run by the orchestrator one at a time
+
+1. The gate on a trial build (the host fold check and the rule check run
+   first in the same binary):
+   `pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_GEMM_ARM_TRIAL=1 -I . gemm/checks/gemm_step_arms_check.mojo -o /tmp/gemm-step-check`
+   then
+   `MOJOLEARN_GEMM_STEP_CHECK_LM=0 MOJOLEARN_GEMM_STEP_CHECK_FLOPS=50000000 /tmp/gemm-step-check`.
+   Expect:
+   - `check_group_fold_is_the_contract_tree: ... 0 disagree`;
+   - twelve RULE lines and `check_group_rule_hand_counts: 0 failures`;
+   - every `REACH ragged [...]` line at N/N for all eight geometries,
+     `ksplit` and `ksplit_leaf` included, and for each of the five
+     `ksplit group=` sizes;
+   - PASS.
+2. The same check on a build WITHOUT the trial define:
+   `pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . gemm/checks/gemm_step_arms_check.mojo -o /tmp/gemm-step-check-notrial`
+   then
+   `MOJOLEARN_GEMM_STEP_CHECK_LM=0 MOJOLEARN_GEMM_STEP_CHECK_FLOPS=50000000 /tmp/gemm-step-check-notrial`.
+   Expect FAIL, and failure lines naming the missing define ("this build
+   lacks -D MOJOLEARN_GEMM_ARM_TRIAL=1"). The two host checks still pass
+   there.
+3. The shipped path:
+   `pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . gemm/checks/gemm_device_check.mojo -o /tmp/gemm-device-check && /tmp/gemm-device-check`
+   stays green. Shipped-file edits: one import, the arm section, and the
+   AMD value of a row the shipped build reads nowhere.
+4. Builds only, no run:
+   `pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_GEMM_ARM_TRIAL=1 -I . bench/gemm_step_price_main.mojo -o /tmp/gemm-step-price`
+   and
+   `pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_GEMM_ARM_TRIAL=1 -I . bench/gemm_step_resources_main.mojo -o /tmp/gemm-step-resources`.
+
+### 9.5 The legs
+
+Both legs start from a `git worktree add --detach` checkout of the commit
+that carries this section, after 9.4 is green.
+
+NVIDIA H100, RunPod. The card comes from
+`tools/gemm_card.sh device /tmp/gemm-longk-apple.card`, run at that commit.
+
+```sh
+MOJOLEARN_RUNPOD_KEY_FILE=$HOME/.mojolearn_runpod_key MOJOLEARN_GPU_ARCHS=sm_90a \
+MOJOLEARN_GEMM_LEG_EXTRA=tools/gemm_longk_leg.sh \
+MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/$(date -u +%Y-%m-%d_%H%M%S)-nvidia-h100-gemm-longk \
+sh tools/gemm_remote_leg.sh nvidia --payload gemm --rent --minutes 60 \
+    --gpu "NVIDIA H100 80GB HBM3" --local-card /tmp/gemm-longk-apple.card
+```
+
+AMD MI300X, Hot Aisle. The runner `tools/hotaisle_leg.sh` belongs to
+another lane and was a skeleton that exits 2 when this section was written.
+Its intended body interface is `tools/do_extra_leg.sh`'s.
+
+```sh
+MOJOLEARN_GEMM_LEG_EXTRA=tools/gemm_longk_leg.sh \
+MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/$(date -u +%Y-%m-%d_%H%M%S)-amd-mi300x-hotaisle-gemm-longk \
+bash tools/hotaisle_leg.sh --rent --minutes 60 --skip-gates
+```
+
+Read back from `<leg out>/remote/gemm-longk/`:
+
+- `status.tsv`: every item exits 0.
+- `step-check.log`: PASS. An OK `LM` line for `shipped`, `ksplit` and
+  `ksplit_leaf` on each of the twelve calls. The ksplit reach at head_dA
+  is 672 (96 tiles, 7 groups) under `ksplit` on NVIDIA and 2,400 (25
+  groups) under `ksplit_leaf`.
+- `resources_lines.txt`: the `ksplit_128x128` row against the shipped row.
+- `price_tables.txt` holds several readings:
+  - PRICE and TABLE per arm;
+  - the six CONTROL lines per arm. The shipped run's CONTROL lines are the
+    section 3.2 readings: `ctl_nt_768x768x2048` against
+    `ctl_tn_768x768x768` for E2, E3 and E4, and `ctl_nt_1536x1408x768`
+    against `ctl_nt_1664x1408x768` for rounds and `S`;
+  - the PHASE lines (allocation, group launch, fold launch) that price
+    `F`.
+- `price_step.txt`: the GEMM sum ratio per arm.
+- `lm_summary.tsv`: `witnesses_equal_baseline`, `ratio_vs_shipped` and
+  one verdict line per arm; `lmtiming-*` holds the component breakdowns.
+
+**The flip rule** (ENGINEERING_RULES 9): the geometric mean of the enwik8
+and pilegithub lean step ratios below 1, with every step witness equal to
+shipped on both corpora. The verdict line computes it.
+
+On AMD, the shipped run's CONTROL pair also reads `S` for
+`lib_gemm_block_parallelism_for[COLUMN_AMD]`. That row follows the reading,
+whatever the verdict.
+
+### 9.6 Risks only a build or a box can settle
+
+- **API and syntax never compiled:**
+  - a 14-argument kernel on a 2-D grid of `(tiles, G)`;
+  - `-Float32(0.0)` as the signed zero in the host check;
+  - importing `_value` and the underscore fold helpers into the check (the
+    device check does the same for the fold helpers);
+  - a `List[Int]` borrowed into `_ragged_case`;
+  - the phase function's tuple of `perf_counter_ns` differences.
+- **Per-call cost on a trial build.** Every applicable GEMM of the LM step
+  allocates its workspace and synchronizes twice inside
+  `identical_gemm_into`, about 180 calls per step. That sits in the
+  numerator of the LM ratio; the PHASE lines show how much of it is
+  allocation. The workspace peaks near 100 MB per call (gateup_dA and the
+  other `P = 16` calls under `ksplit_leaf`).
+- **Section 3.2's model is a fit.** If the CONTROL lines refute E1, the
+  arms have no mechanism to win, and the verdict will say so.
+- **Compile time.** A trial build now instantiates the group kernel clean
+  and sabotaged, plus both fold kernels, in the check, the price harness
+  and the byte LM binding. HIP compile time for them is unknown. The knobs
+  are `MOJOLEARN_GEMM_STEP_LEG_SKIP_RESOURCES=1` and a shorter arm list
+  through the runner's environment.
+- **Lease.** LMTIMING adds six probes to the eight LM probes, and the Pile
+  GitHub fetch took 426 s on the last H100 leg. The previous leg used 19
+  minutes of pod time; this one is expected longer and has not been timed.
+- **AMD arch.** `tools/gemm_step_leg.sh` refuses to run on AMD without
+  `MOJOLEARN_GPU_ARCHS`. The Hot Aisle runner must export the MI300X's
+  arch; this lane does not know it.
+- **The 0.457 s question** (BRIEF_gemm_step section 10.7) still stands: a
+  trial binding's step time is not a shipped step time. The ratio is
+  trial against trial, so the verdict holds either way.

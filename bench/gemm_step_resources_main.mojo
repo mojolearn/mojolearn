@@ -24,7 +24,11 @@ stay an NVIDIA confirmation item (tools/gemm_cuda_resources.py).
 Rows: the shipped `identical_gemm_tuned_kernel` at 128x128; the trimmed arm
 kernel at the same geometry with the shipped lane-wide fold (`LFOLD =
 False`, the control: it should read like the shipped row); then `lfold`,
-`half`, `half_ks16`, `quarter`, `head` N-wide and `head` M-wide.
+`half`, `half_ks16`, `quarter`, `head` N-wide and `head` M-wide; then
+`ksplit_128x128` (DEVIATION 2593), the long-k group kernel
+`identical_gemm_ksplit_kernel` at the shipped geometry, which should also
+read like the shipped row (docs/lanes/BRIEF_gemm_long_k_2026-09-11.md
+section 5.1: same per-window body, two more Int32 arguments, a 2-D grid).
 """
 from max.gpu.host import Attribute, DeviceContext
 
@@ -40,9 +44,13 @@ from gemm.checks.gemm_identical import (
     GEMM_GEOM_HALF_KS16,
     GEMM_GEOM_HEAD_M,
     GEMM_GEOM_HEAD_N,
+    GEMM_GEOM_KSPLIT,
     GEMM_GEOM_LFOLD,
     GEMM_GEOM_QUARTER,
     GEMM_HALF_KS,
+    GEMM_KSPLIT_CPT,
+    GEMM_KSPLIT_KS,
+    GEMM_KSPLIT_RPT,
     GEMM_HEAD_W,
     GEMM_HEADM_CPT,
     GEMM_HEADM_RPT,
@@ -58,6 +66,7 @@ from gemm.checks.gemm_identical import (
     TUNED_TPB,
     TUNED_VECLEN,
     gemm_step_geometry_name,
+    identical_gemm_ksplit_kernel,
     identical_gemm_step_arm_kernel,
     identical_gemm_tuned_kernel,
 )
@@ -95,6 +104,34 @@ def _stat_arm[
     print(
         "GEMM_STEP_RESOURCES_BEGIN label=", label, " tile=", BM, "x", BN, " reg=", RPT, "x", CPT,
         " tc=", TC, " ks=", KS, " pages=", PAGES, " lfold=", LFOLD, sep="",
+    )
+    var f = ctx.compile_function[kern]()
+    print("GEMM_STEP_RESOURCES label=", label, " regs=", f.get_attribute(Attribute.NUM_REGS), sep="")
+    print("GEMM_STEP_RESOURCES label=", label, " local=", f.get_attribute(Attribute.LOCAL_SIZE_BYTES), sep="")
+    print("GEMM_STEP_RESOURCES label=", label, " shared=", f.get_attribute(Attribute.SHARED_SIZE_BYTES), sep="")
+    print("GEMM_STEP_RESOURCES label=", label, " const=", f.get_attribute(Attribute.CONST_SIZE_BYTES), sep="")
+    print("GEMM_STEP_RESOURCES label=", label, " max_threads=", f.get_attribute(Attribute.MAX_THREADS_PER_BLOCK), sep="")
+    print(
+        "GEMM_STEP_RESOURCES label=", label, " blocks_per_sm_256=",
+        f.occupancy_max_active_blocks_per_multiprocessor(TUNED_TPB, 0), sep="",
+    )
+
+
+def _stat_ksplit(ctx: DeviceContext, label: String) raises:
+    """DEVIATION 2593: the group kernel at the shipped 128x128 geometry, clean."""
+    comptime TR = TUNED_TPB // TUNED_TC
+    comptime BM = GEMM_KSPLIT_RPT * TR
+    comptime BN = GEMM_KSPLIT_CPT * TUNED_TC
+    comptime PAGES = lib_smem_pages_for[
+        TARGET_COLUMN, (BM + BN) * (GEMM_KSPLIT_KS + TUNED_VECLEN) * 4
+    ]()
+    comptime kern = identical_gemm_ksplit_kernel[
+        GEMM_KSPLIT_RPT, GEMM_KSPLIT_CPT, TUNED_TC, GEMM_KSPLIT_KS, PAGES, False
+    ]
+    print(
+        "GEMM_STEP_RESOURCES_BEGIN label=", label, " tile=", BM, "x", BN, " reg=", GEMM_KSPLIT_RPT,
+        "x", GEMM_KSPLIT_CPT, " tc=", TUNED_TC, " ks=", GEMM_KSPLIT_KS, " pages=", PAGES,
+        " groups=grid.y", sep="",
     )
     var f = ctx.compile_function[kern]()
     print("GEMM_STEP_RESOURCES label=", label, " regs=", f.get_attribute(Attribute.NUM_REGS), sep="")
@@ -154,4 +191,9 @@ def main() raises:
         _stat_arm[GEMM_HEADM_RPT, GEMM_HEADM_CPT, GEMM_HEADM_TC, 16, True](ctx, String("head_m"))
     except e:
         print("GEMM_STEP_RESOURCES_ERROR label=head_m error=", e, sep="")
+    print("GEMM_STEP_RESOURCES_GEOMETRY label=ksplit_128x128 ", gemm_step_geometry_name(GEMM_GEOM_KSPLIT), sep="")
+    try:
+        _stat_ksplit(ctx, String("ksplit_128x128"))
+    except e:
+        print("GEMM_STEP_RESOURCES_ERROR label=ksplit_128x128 error=", e, sep="")
     print("GEMM_STEP_RESOURCES_DONE")
