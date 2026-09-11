@@ -58,7 +58,11 @@ if [ -e "$byte_lm_destination" ] || [ -L "$byte_lm_destination" ]; then
 fi
 byte_lm_tmpdir=$(mktemp -d "$byte_lm_outdir/.byte-lm-build.XXXXXX")
 trap 'rm -rf "$byte_lm_tmpdir"' EXIT HUP INT TERM
-pixi run mojo build -j 2 --emit shared-lib "$@" \
+# MOJOLEARN_BUILD_EXTRA_DEFINES (optional, empty by default): extra flags
+# appended verbatim, word-split, for trial builds (for example
+# -D MOJOLEARN_BYTE_LM_FAULT_INJECT=1 for the session gate's native faults),
+# the same hook bindings/build.sh carries. Production builds leave it empty.
+pixi run mojo build -j 2 --emit shared-lib "$@" ${MOJOLEARN_BUILD_EXTRA_DEFINES:-} \
     -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . -I bindings \
     bindings/_mojolearn_byte_lm.mojo -o "$byte_lm_tmpdir/_mojolearn_byte_lm.so"
 ln "$byte_lm_tmpdir/_mojolearn_byte_lm.so" "$byte_lm_destination"

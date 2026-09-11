@@ -59,6 +59,135 @@ class FakeByteLM:
         self.eval_mutation = None
         self.wrong_step = False
         self.leave_gradient_unwritten = False
+        self.lose_on_rollback = False
+
+    def enable_sessions(self):
+        """DEVIATION 2514: the device-owned session entries, over a fake
+        device state per session so exports and rollback are observable.
+        Not installed by default: the wrapper must refuse a binding without
+        them (ImportError) rather than fall back. Returns (created, closed,
+        calls) as the session tests read them. The fake step mirrors the
+        native contract: a failure after its update is rolled back inside
+        the call, `export_gradients` is refused unless the last completed
+        step's gradient is present, `rollback` is a no-op with no shadow.
+        Sentinel arithmetic only (p += 1, m += 2, v += 3, grad = .125,
+        loss = 1.25); no numerical reference for a language model."""
+        created, closed, calls = [], [], []
+        fake = self
+
+        class Session:
+            def __init__(self):
+                self.p = self.m = self.v = self.flags = self.grad = self.shadow = None
+                self.completed = -1
+                self.grad_step = -1
+                self.usable = True
+                self.open = False
+
+        def create():
+            session = Session()
+            created.append(session)
+            return session
+
+        def close(session):
+            assert session not in closed
+            closed.append(session)
+            session.open = False
+
+        def open_(session, addresses, params, shape):
+            assert len(addresses) == 4 and len(params) == 12 and not session.open
+            session.p, session.m, session.v = (buffer(a, 34944).copy() for a in addresses[:3])
+            session.flags = buffer(addresses[3], 20, True).copy()
+            session.completed = params[1]
+            session.grad = session.shadow = None
+            session.grad_step = -1
+            session.open = session.usable = True
+            return session.completed
+
+        def admit(session, params, in_flags):
+            assert session.open and session.usable and session not in closed
+            if params[1] != session.completed:
+                raise RuntimeError('byte LM: resident completed-step mismatch')
+            if not np.array_equal(buffer(in_flags, 20, True), session.flags):
+                raise RuntimeError('byte LM: resident flags mismatch')
+
+        def rollback(session):
+            assert session.open and session not in closed
+            if session.shadow is not None:
+                session.p, session.m, session.v, session.flags, session.completed = session.shadow
+                session.shadow = None
+            session.grad_step = -1
+            if fake.lose_on_rollback:
+                session.usable = False
+                raise RuntimeError('byte LM: session lost: rollback re-scan failed')
+            return session.completed
+
+        def step(session, addresses, params, shape):
+            assert len(addresses) == 4 and len(params) == 12 and params[0] == 1
+            calls.append(session)
+            fake.calls.append((list(addresses), list(params)))
+            admit(session, params, addresses[1])
+            if fake.modify_input:
+                buffer(addresses[0], 66, True)[0] = 99
+            session.shadow = (session.p.copy(), session.m.copy(), session.v.copy(),
+                              session.flags.copy(), session.completed)
+            session.p += 1
+            session.m += 2
+            session.v += 3
+            session.flags[:] = 1
+            session.grad = np.full(34944, .125, np.float32)
+            if fake.nonfinite_after_write:
+                session.v[0] = np.nan
+            if not np.isfinite(session.v).all():
+                # The trainer's device validate_after: refuse and roll back.
+                rollback(session)
+                raise RuntimeError('byte LM: nonfinite second moments at 0')
+            if fake.fail_after_write:
+                rollback(session)
+                raise RuntimeError('injected byte-LM failure after writes')
+            session.completed += 1
+            session.grad_step = session.completed
+            buffer(addresses[2], 1)[0] = 1.25
+            buffer(addresses[3], 20, True)[:] = session.flags
+            return session.completed + int(fake.wrong_step)
+
+        def evaluate(session, addresses, params, shape):
+            assert len(addresses) == 3 and len(params) == 12 and params[0] == 0
+            calls.append(session)
+            fake.calls.append((list(addresses), list(params)))
+            admit(session, params, addresses[1])
+            buffer(addresses[2], 1)[0] = 1.25
+            return session.completed
+
+        def export_state(session, addresses, shape):
+            assert len(addresses) == 4 and session.open and session.usable
+            for source, target in zip((session.p, session.m, session.v), addresses[:3]):
+                buffer(target, 34944)[:] = source
+            buffer(addresses[3], 20, True)[:] = session.flags
+            return session.completed
+
+        def export_gradients(session, addresses, shape):
+            assert len(addresses) == 1 and session.open and session.usable
+            if session.grad_step != session.completed:
+                raise RuntimeError('byte LM: no gradient to export; complete a step first')
+            if not fake.leave_gradient_unwritten:
+                buffer(addresses[0], 34944)[:] = session.grad
+            return session.grad_step
+
+        def info(session):
+            return [session.completed if session.open else -1,
+                    session.grad_step if session.open else -1,
+                    int(session.usable), int(session.open)]
+
+        self.byte_lm_session_create = create
+        self.byte_lm_session_close = close
+        self.byte_lm_session_open = open_
+        self.byte_lm_session_step = step
+        self.byte_lm_session_eval = evaluate
+        self.byte_lm_session_export_state = export_state
+        self.byte_lm_session_export_gradients = export_gradients
+        self.byte_lm_session_rollback = rollback
+        self.byte_lm_session_info = info
+        return created, closed, calls
 
     def byte_lm_numeric_mode(self):
         return self.mode
