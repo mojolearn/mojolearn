@@ -280,7 +280,9 @@ at the lane's shape and on the same box in one heat window:
 - A win on one kind with the other unmeasured is still no flip: the second
   dataset has to run first. That is what stays strict.
 Applied the same evening: DEVIATION 2502 (pure node is a leaf) went ON by
-default on ratios 0.89 (taxi) and 0.45 (Istella-S) with equal logloss.
+default on ratios 0.90 (taxi) and 0.44 (Istella-S), logloss not worse on
+either (0.525912 to 0.525910, 0.145578 to 0.145560; M4 logs in
+`bench/results/rf_2502_m4_2026-09-11/logs`).
 
 The verdict is mechanical, so a tool prints it. `tools/flip_verdict.py`
 reads the before and after speed logs for both datasets (FSPEED and
