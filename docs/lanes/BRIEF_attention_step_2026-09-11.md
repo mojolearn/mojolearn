@@ -1693,3 +1693,416 @@ and `_fgrid_r64` prices.
    `run_metadata()`, before the first step instead of during it.
 6. AMD: the default and `attn_fwd_rows_per_block_for`'s 32 are placeholders
    until the MI300X leg reads them.
+
+## 16. The dk/dv fold on AMD (2026-09-11, worktree lane, source built, nothing run): DEVIATIONS 2596 and 2597
+
+STATUS: 16.1 reads legs already filed; everything from 16.2 on is source
+only. Nothing here was compiled or run (no build on the Mac, by rule). The
+orchestrator's M4 commands in 16.7 are the first compile. The shipped path
+is unchanged: a build without `-D MOJOLEARN_ATTN_ARM_TRIAL=1` compiles none
+of the kernels below and dispatches exactly as before.
+
+### 16.1 The measurement (filed legs, lean LM step component timers, ms per step)
+
+AMD's shipped default is `stash_tiled_fgrid_r32_qres_pf` since the round 3
+AMD legs (kernel matrix `attn_default_arm_for`; lean step geomean 0.9297 of
+stash_tiled on the MI325X and 0.9325 on the MI300X, witnesses equal). Its
+backward is `_launch_bwd_stash_tiled_pf`: the preflushed zdot stash, dq tiled
+and dk/dv tiled kernels.
+
+| box, arm, corpus | dkdv tiled | dq tiled | zdot stash | bwd.attention | envelope |
+|---|---:|---:|---:|---:|---:|
+| MI325X DO, stash_tiled, enwik8 | 705.0 | 31.9 | 51.0 | 798.3 | 3406.6 |
+| MI325X DO, stash_tiled, Pile GitHub | 703.8 | 32.0 | 51.0 | 798.2 | 3344.5 |
+| MI325X DO, default (`_pf` kernels), enwik8 | 511.2 | 27.7 | 34.5 | 584.6 | 3102.0 |
+| MI325X DO, default, Pile GitHub | 519.3 | 27.9 | 34.5 | 592.7 | 3102.0 |
+| MI325X DO, stash_tiled_pf, enwik8 / Pile GitHub | 515.0 / 516.2 | 27.9 / 27.7 | 34.4 / 34.2 | 690.4 / 589.2 | |
+| MI300X RunPod, stash_tiled, enwik8 / Pile GitHub | 626.1 / 736.8 | 34.7 / 34.8 | 51.4 / 51.3 | 717.8 / 829.6 | |
+| MI300X RunPod, default, enwik8 / Pile GitHub | 646.0 / 733.2 | 30.4 / 30.4 | 34.7 / 34.7 | 716.7 / 804.0 | |
+| H100, stash_tiled, enwik8 | 18.5 | 15.5 | 89.9 | 126.2 | 384.5 |
+| H100, default (`_pf` kernels), enwik8 | 12.4 | 12.5 | 66.2 | 93.4 | 334.5 |
+
+AMD over H100, same arm: dk/dv 38x (stash_tiled) and 41x (default); dq
+2.1x and 2.2x; zdot stash 0.57x and 0.52x. Under the AMD default dk/dv is 87
+percent of `bwd.attention` and 16.5 percent of the MI325X timing step.
+
+Two further readings of the same files, both measured and neither a cause.
+
+1. The harness and the LM step disagree on AMD only. `price_tables.txt`
+   prices one layer at the LM shape (B 1, L 2048, 12 heads, 12 kv heads,
+   hd 64) on that corpus's real activations; the LM step runs 12 such
+   layers. Twelve times the harness's derived backward against the LM
+   step's `bwd.attention`: H100 stash_tiled 12 x 10.47 = 125.7 against
+   126.2, default 12 x 7.78 = 93.3 against 93.4 (equal to a percent). MI325X
+   stash_tiled 12 x 40.07 = 480.8 against 798.3 (1.66x), default 12 x 31.54
+   = 378.5 against 584.6 (1.54x); MI300X stash_tiled 12 x 41.56 = 498.7
+   against 717.8 (1.44x). Under the default the LM step's dk/dv alone (511.2
+   / 12 = 42.6 ms per layer) exceeds the harness's whole backward per layer
+   (31.5 ms). Subtracting the LM's zdot, dq, scans and corner reads per
+   layer from the harness backward leaves at most about 32 ms per layer for
+   dk/dv under stash_tiled and about 26 under the default, still about 20
+   to 25 times the H100's 1.5 and 1.0. So the kernel is anomalous on its own
+   and the LM step's context adds more on AMD. The harness's per-kernel
+   timers (`timers-<arm>`) were skipped on both AMD legs
+   (`MOJOLEARN_ATTN_LEG_SKIP_TIMERS=1`), so the split between the two is not
+   measured.
+2. The AMD timers are one timing step per arm and corpus and move by about
+   100 ms outside dk/dv between corpora on the same box (MI325X `attn.core`
+   166.4 against 60.6, `attn.o_proj` 128.4 against 26.1,
+   `attn.bwd_corner_flag` 107.1 against 5.8), and dk/dv itself reads 424 to
+   737 ms on the MI300X. Per-kernel AMD ratios are read to a factor, not a
+   percent.
+
+### 16.2 The source reading: the tiled dq fold beside the tiled dk/dv fold
+
+`fused_bwd_dq_tiled_pf_kernel` and `fused_bwd_dkdv_tiled_pf_kernel`
+(`transformer/impl/llama/fused_attention.mojo`; the first-round
+`fused_bwd_dq_tiled_kernel` and `fused_bwd_dkdv_tiled_kernel` differ only in
+`_step` for `_step_preflushed` and a sabotage flag). Counts at the target
+shape, causal, `n_rep == 1`.
+
+| | dq tiled | dk/dv tiled |
+|---|---|---|
+| block | 64 query rows of one (batch, head) | 64 keys of one (batch, kv head) |
+| grid | 12 x 32 = 384 | 12 x 32 = 384 |
+| tile | 16 keys | 16 queries, per head of the kv group |
+| tiles per head, summed over blocks | 4 x (1 + ... + 32) = 1,984 | 4 x (32 + ... + 1) = 1,984 |
+| barriers per tile | 2 (plus one per block for `zs`) | 2 |
+| shared allocations, page | `kst` 1,024, `dst` 1,024, `zs` 64 floats: 3, 8,448 B | `qs`, `dcs`, `ys`, `dss` 1,024 floats each: 4, 16,384 B |
+| resident blocks per CU by 11.1 (`min(2048 // 256, 65536 // page)`) | 7 | 4 |
+| staging per thread per tile | 4 K slots (1 global load, 1 shared store) and 4 dcell slots (row range, 2 stash loads, 1 shared load, 2 `_pmul`, 1 stash store, 1 shared store): 12 global loads, 4 global stores, 8 shared stores | 4 Q/dctx slots (2 global loads, 2 shared stores) and 4 y/dcell slots (key range, 2 stash loads, 2 shared stores): 16 global loads, 16 shared stores |
+| fold per thread per tile | 16 keys x (4 column loads + 4 x (1 cell load + 4 steps)): 128 shared loads, 256 steps | 16 queries x (8 column loads + 4 x (2 cell loads + 8 steps)): 256 shared loads, 512 steps |
+| thread state | 16 accumulators, 4 column operands, 1 cell operand, 8 Int32 range bounds | 32 accumulators, 8 column operands, 2 cell operands, 8 Int32 range bounds, the corner Bool |
+| stash access per tile | 64 rows x 16 adjacent keys; the next tile reads the same 64 rows, 16 keys on | 16 rows x 64 adjacent keys; the next tile reads 16 new rows, 16 x 2,048 floats (131 KB) further on |
+
+By count dk/dv does exactly twice dq's fold work and twice its shared
+stores per tile, over the same tile and barrier count. Counting cannot make
+a 20x difference. What dk/dv carries and dq does not is a footprint that
+could cross a vendor threshold: twice the thread state, twice the page in
+one more allocation, and a column-major walk of the row-major
+`[B, n_heads, L, S]` stashes.
+
+### 16.3 Competing explanations, and what the box must show to separate them
+
+None of these is measured. Each names the readback, timer or price that
+would confirm or refute it.
+
+- C1, thread state over the HIP register budget. If 32 accumulators, 10
+  operand registers and 8 range bounds cannot stay register-resident, the
+  compiler spills to thread-local memory, and every step pays local loads
+  and stores. If local memory is partitioned per CU the way shared memory
+  is (11.1), the spill can also lower resident blocks. Consistent with the
+  filed readings: dq (16 accumulators) costs 2x the H100 and the zdot stash
+  (two scalar chains) 0.5x, and the 32-row forward (12 accumulators against
+  24) gained 1.72x on the MI325X against 1.36x on the H100, though its page
+  also shrank. Confirms it: `RESOURCES label=dkdv_tiled_pf regs=` above
+  dq_tiled_pf's with `local=` above 0 for dk/dv only, and both `_kvsplit`
+  and `_kvgrid_r32` (16 accumulators each) well below the default in the
+  dk/dv timer lines, with `_kvgrid_r64` (the copy at the shipped geometry)
+  at the default's.
+- C2, page occupancy. 16,384 B leaves 4 resident blocks per CU against dq's
+  7 by the 11.1 formula. At 110 CUs (an UNVALIDATED MI250X transcription)
+  that is 440 blocks, above the 384-block grid, so the formula says the
+  grid still fits one wave. C2 needs the formula to be wrong on these boxes
+  (16,384 B is exactly a quarter of 64 KB, so any per-allocation padding
+  gives 3, and a 32 KB partition gives 2). The zdot stash's larger 17,696 B
+  page over a 6,144-block grid runs at 0.5x the H100, which argues against a
+  general AMD page penalty. Confirms it: `blocks_per_sm_256=` for dk/dv
+  below dq's (at or below 3), and `_kvsplit` (8,192 B) clearly below
+  `_kvgrid_r32` (12,288 B) though both hold 16 accumulators.
+- C3, the stash walk. The volume of stash reads is identical and the
+  locality is not: a dq block walks 64 rows along the key axis; a dk/dv
+  block walks 2,048 rows down the query axis, 16 new rows per tile. If HIP's
+  global memory path is miss- or translation-bound, dk/dv pays per tile
+  what dq pays per 32 tiles. Confirms it: resources for dk/dv equal to dq's
+  (C1, C2 and C4 refuted) and every arm below near 1.00 of the default in
+  the dk/dv timers (none changes the walk), `_kvsplit` possibly above 1.00
+  (two walks). The build that attacks it is a transposed copy of the two
+  stashes (a copy kernel, no arithmetic) that the fold then reads row-major.
+- C4, a serial fallback. A runtime that cannot place the kernel's resources
+  might run fewer threads per block or one block per CU. Confirms it:
+  `max_threads=` below 256 or `blocks_per_sm_256=1` for dk/dv only.
+- C5, the LM step's context (16.1 item 1). Confirms it: the harness's
+  per-kernel breakdown (`timers-<arm>`, `MOJOLEARN_ATTN_LEG_SKIP_TIMERS=0`)
+  on the same dumps. If its `attn.bwd_dkdv_tiled_pf` per call is about the
+  LM line over 12, the cost is the kernel's; if it is about half, the LM
+  step adds the rest (memory pool, buffer placement, the timing step's
+  synchronizes), and no kernel arm reaches that half. The LM backward's dk
+  and dv are zeroed stage buffers like dq's
+  (`transformer/checks/transformer_backward.mojo`, `LlamaBackwardStages`),
+  so first touch of the outputs is not a dk/dv-only term.
+
+Order of likelihood from the source: C1 first (it is the only footprint
+term consistent with both AMD-cheap kernels), then C2, then C3. C4 and C5
+are read by the same leg at no extra build.
+
+### 16.4 Identity argument (written before the code)
+
+Kernels. `fused_bwd_dkdv_r2_kernel[HD, BJ, SAB]` (DEVIATION 2597): a
+generic copy of `fused_bwd_dkdv_tiled_pf_kernel` with `BJ` keys per block
+(64 or 32). `fused_bwd_kvfold_r2_kernel[HD, BJ, SAB]` (DEVIATION 2596): one
+fold, `dst[j, d]` over (head in the kv group ascending, query tiles
+ascending, queries ascending in a tile) of
+`_step_preflushed(cell[t, j], col[t, d], acc)`, launched twice by one
+instantiation: dk with `cell` the dy stash (which holds dcell after dq) and
+`col` q_rope, then dv with `cell` the y stash and `col` dctx. Both are
+launched by the trial-only generic `_launch_bwd_stash_tiled_kv[HD, BJ,
+SPLIT]`, which first launches the shipped `_pf` zdot stash and dq tiled
+instantiations exactly as `_launch_bwd_stash_tiled_pf` does.
+
+Claim: every dk, dv, zdot and dq bit, and the corner flag, equal the default
+arm's (and so the eager oracle's, which the arms check and the H100 and AMD
+legs measured for the default).
+
+1. zdot and dq. The same `fused_bwd_zdot_stash_pf_kernel[64, 4, ZSAB]` and
+   `fused_bwd_dq_tiled_pf_kernel[64]` instantiations on the same buffers, in
+   the same order, with the same grids. The y stash and the dcell values dq
+   writes over the dy stash are therefore bit-equal to the default's.
+2. One dk chain. For key `j` and column `d` the shipped chain starts at
+   +0.0 and steps `_step_preflushed(dcell[t, j], ftz(q[t, d]), acc)` for
+   each head `h` of the kv group ascending, then each query `t` ascending
+   over the queries that see `j` (`_key_query_range`), skipping the rest.
+   In both new kernels the accumulator for (j, d) starts at +0.0 per block,
+   the head loop and the query-tile loop run ascending, the queries inside
+   a tile run ascending, and the step is taken exactly where the copied
+   test `t < l and lo[u] <= t <= hi[u]` holds, with `lo[u], hi[u]` the
+   key's `_key_query_range`. The operands are staged as the shipped kernel
+   stages them: `ftz(q)` in the column tile, the stash value as stored in
+   the cell tile, and the step reads them in the shipped order (cell first,
+   column second). So the chain is the same terms in the same order.
+3. One dv chain. Likewise with `y[t, j]` and `ftz(dctx[t, d])`.
+4. Keys per block. The blocks partition the keys `0 .. S - 1` into runs of
+   `BJ`, and inside a block thread `(tr, tc)` (`tid // 16`, `tid % 16`)
+   holds keys `j0 + tr + 16u` for `u < BJ // 16` and columns `tc + 16v` for
+   `v < HD // 16`, so every (j, d) chain is held by exactly one thread. The
+   query-tile loop runs the block's union range, from the first key's first
+   visible query to the last key's last visible query (both bounds increase
+   with `j`), and steps only visible queries, so a narrower block skips
+   fewer tiles and adds no term. Which thread holds a chain and how many
+   chains a thread holds are execution-plan choices the contract does not
+   read.
+5. Two kernels. dk and dv share no accumulator and no stored value in the
+   shipped kernel; their chains read disjoint buffers and write disjoint
+   outputs. Folding them in two launches changes no chain. The dk launch
+   and the dv launch read only buffers no kernel writes after dq, so their
+   order changes nothing.
+6. The corner flag. The shipped kernel sets `corner` to 1.0 when some
+   accumulator of the thread holds -0.0 at the end of some head's run and
+   the thread holds at least one key below `S`. The dk launch sets it under
+   that condition over its dk accumulators, the dv launch over its dv
+   accumulators; the flag is written only with 1.0 from 0.0, so the value
+   after both launches is the OR, which is the shipped condition. dq and
+   zdot write it as before. The launcher's status is therefore the
+   default's.
+7. The seam. Every step is `_step_preflushed` on operands that are not
+   nonzero subnormals (14.2 item 3: staged `ftz`, a `_pmul` output, an
+   `ftz(identical_div)` output), so it equals `_step`.
+
+Sabotage (reach, `+sabotage_kv`, `MOJOLEARN_ATTN_ARM_SABOTAGE=kv`). Each new
+kernel flips one ulp of every staged cell operand (the joint kernel both the
+y and the dcell tiles; the fold its cell tile, so the dk launch flips dcell
+and the dv launch flips y). dk and dv move; zdot, dq and the forward hold,
+because the flip is in a staging page no other kernel reads. The arms check
+and the harness assert both halves. Under `+sabotage_new` the same arms flip
+the zdot stash copy as the default does, and the new kernels run clean, so
+14.5's 2533 attribution (zdot moves, dv holds) still reads the backward.
+
+### 16.5 What was built, per file
+
+Arm bits and names (extends 14.1; the parser and the name function stay
+inverses):
+
+| bit | constant | token | meaning |
+|---:|---|---|---|
+| 8192 | `ATTN_ARM_BWD_KVSPLIT` | `_kvsplit` | DEVIATION 2596 |
+| 16384 | `ATTN_ARM_BWD_KVGRID` | `_kvgrid` | DEVIATION 2597, keys from `attn_dkdv_keys_per_block_for` |
+| 32768, 65536 | `ATTN_ARM_KVROWS32`, `ATTN_ARM_KVROWS64` | `_kvgrid_r32`, `_kvgrid_r64` | 2597 geometry |
+| 131072 | `ATTN_ARM_SABOTAGE_KV` | `+sabotage_kv` | flips in the 2596 / 2597 kernels only |
+
+Grammar: base, `_ztiled[_r32|_r64]`, `_fgrid[_r32|_r64]`, `_qres`, `_pf`,
+`_kvgrid[_r32|_r64]`, `_kvsplit`, `+sabotage`, `+sabotage_new`,
+`+sabotage_kv`. The parser refuses `_kvgrid` or `_kvsplit` without `_pf` on
+the tiled stash backward (`stash_tiled_kvsplit`, `fwd_sstash_pf_kvgrid`),
+with `_ztiled` (2528 launches its own folds), and out of order.
+
+| arm | keys per block | dk/dv accumulators per thread | operand registers | page per launch |
+|---|---:|---:|---:|---:|
+| `stash_tiled_fgrid_r32_qres_pf` (AMD default) | 64 | 32 | 10 | 16,384 B, 4 allocations |
+| `..._pf_kvgrid_r64` (control, the copy) | 64 | 32 | 10 | 16,384 B, 4 |
+| `..._pf_kvgrid_r32` (2597) | 32 | 16 | 10 | 12,288 B, 4 |
+| `..._pf_kvsplit` (2596) | 64 | 16 per launch | 5 | 8,192 B, 2 |
+| `..._pf_kvgrid_r32_kvsplit` | 32 | 8 per launch | 5 | 6,144 B, 2 |
+
+- `transformer/impl/llama/fused_attention.mojo`: the bits, parser, name
+  function and `MOJOLEARN_ATTN_ARM_SABOTAGE=kv`; `_kv_r2_page_bytes`,
+  `fused_attention_arm_kv`, `fused_attention_kv_keys` (the knob, else the
+  matrix row, else 64 for `_kvsplit` alone; 0 when the page does not fit,
+  and then the plain `_pf` backward runs) and `_attn_kv_ran_bits`; the two
+  kernels of 16.4; `_launch_bwd_stash_tiled_kv[HD, BJ, SPLIT]` (runtime
+  `zsab` and `ksab` pick the sabotage instantiations); in
+  `fused_backward_launch_ran` a trial-only branch before the plain `_pf`
+  branch; `fused_attention_arm_backward_resolved` reports the kv word; the
+  new bits join `ATTN_ARM_DEFAULT_REFUSED_BITS` (a shipped build compiles
+  none of these kernels, so no default may name them). New timer lines
+  under `MOJOLEARN_ATTN_PHASE_TIMERS`: `attn.bwd_kvgrid_dkdv_pf`, or
+  `attn.bwd_kvsplit_dk_pf` then `attn.bwd_kvsplit_dv_pf` (beside the
+  default's `attn.bwd_dkdv_tiled_pf`). Stale AMD sentences in the header
+  and in `ATTN_ARM_DEFAULT`'s docstring now say AMD runs the round 3 arm.
+- `checks/kernel_matrix.mojo`: `attn_dkdv_keys_per_block_for[column]` (AMD
+  32, others 64, UNMEASURED; the forced `_kvgrid_r32` / `_kvgrid_r64` names
+  are the evidence-bearing ones). `attn_default_arm_for`'s docstring no
+  longer says AMD waits on the MI300X leg.
+- `transformer/checks/transformer_attention_arms_check.mojo`: 17 arms (14.6's
+  13 plus the four in the table above); names: 31 spellings round-trip, 17
+  arms times 8 sabotage combinations (three sabotage bits) round-trip as
+  values, 25 invalid spellings refused; a third run per kv arm under
+  `+sabotage_kv` that must move dk and dv and hold zdot, dq and the forward
+  at head_dim 64, and move nothing at other head dims.
+- `bench/attention_step_price_main.mojo`: `PATH` gains `kv_keys=` and
+  `kv_split=`; a `REACH_KV` line per kind for a kv arm (a `+sabotage_kv` run
+  between the `+sabotage_new` run and the clean restore) with `dk_moved`,
+  `dv_moved`, `zdot_moved`, `dq_moved`, `forward_moved`, failing unless dk
+  and dv move and the rest hold; and `MOJOLEARN_ATTN_RESOURCES` (default 1):
+  before the kinds, `DeviceContext.compile_function` on eight kernels at
+  head_dim 64 (`zdot_stash_pf`, `dq_tiled_pf`, `dkdv_tiled`,
+  `dkdv_tiled_pf`, `kvgrid_r64`, `kvgrid_r32`, `kvsplit_r64_fold`,
+  `kvsplit_r32_fold`), each a `RESOURCES_BEGIN` line with the source counts
+  (geometry, accumulators, operand registers, thread-local floats, page
+  bytes, allocations) and one `RESOURCES` line per runtime attribute
+  (`regs`, `local`, `shared`, `const`, `max_threads`, `blocks_per_sm_256`),
+  each kernel in its own try (`RESOURCES_ERROR`), as
+  `bench/gemm_step_resources_main.mojo` reads them. It launches nothing.
+- `tools/attention_step_leg.sh`: smokes and timer runs pass
+  `MOJOLEARN_ATTN_RESOURCES=0`, the first price run 1 (one readback per
+  leg), `resources.txt` collects the lines, `gate.txt` names 2596 and 2597.
+- `tools/attention_dkdv_leg.sh`: the body wrapper (16.8).
+
+A trial build instantiates 8 more kernel pipelines (two kernels times two
+geometries times the sabotage flag) and the harness compiles 8 kernels for
+the readback.
+
+### 16.6 Risks only a build or a box can settle
+
+1. Nothing was compiled. Likeliest faults: one comptime kernel alias
+   launched twice with different buffers in `_launch_bwd_stash_tiled_kv`;
+   runtime `if ksab:` holding comptime aliases inside `comptime if SPLIT:`;
+   `ctx.compile_function` on the generic kernels in the harness; the
+   `continue` in the arms check's sabotage loop.
+2. A one-ulp flip of every staged dcell or y is assumed to move some dk and
+   some dv cell on every head_dim 64 case, as the first-round dq and dk/dv
+   flips did. A flip that moves nothing fails reach loudly.
+3. If C3 or C5 is the cause, no arm here reaches it; the leg's resources,
+   the dk/dv timer lines and (with `MOJOLEARN_ATTN_LEG_SKIP_TIMERS=0`) the
+   standalone breakdown say which, and the transposed stash is the next
+   build.
+4. `_kvsplit` pays two launches, two staging walks of the query tiles and
+   two sets of barriers. If the thread state is not the cause it prices
+   above 1.00; on the H100, where dk/dv is 12 ms of a 334 ms step, it may
+   price above 1.00 regardless.
+5. `_kvgrid_r32` doubles the dk/dv grid (768 blocks) and the per-block fixed
+   work (the key ranges, the per-block tile bounds).
+6. The compile readback may raise on AMD for some attributes (the
+   occupancy query is the likeliest); each prints or raises by itself. It
+   also adds eight pipeline compiles to the first price run.
+7. The kernel-matrix row's AMD value (32) is a placeholder, as 12.5 item 4.
+8. The AMD timers are one sample each and noisy (16.1 item 2); the flip
+   reads the lean step medians, never the timers.
+
+### 16.7 RUN OWED on the M4 (the orchestrator's light commands, one at a time)
+
+1. The shipped path, no trial define:
+   `nice -n 19 pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . transformer/checks/transformer_fused_check.mojo -o /tmp/fused-check`
+   then `nice -n 19 /tmp/fused-check`. Expect 15.4 item 1 unchanged:
+   `DEFAULT column=apple arm=stash_tiled word=7`,
+   `ARM this_run=stash_tiled is_default=True forward_hd64=fwd_sstash backward_hd64=bwd_stash_tiled`,
+   `transformer_fused_check: PASS, 15 cases, ...`.
+2. The arms gate, trial define:
+   `nice -n 19 pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_ATTN_ARM_TRIAL=1 -I . transformer/checks/transformer_attention_arms_check.mojo -o /tmp/arms-check`
+   then `nice -n 19 /tmp/arms-check`. Expect
+   `names: 31 spellings and 136 arm values round-trip, 25 invalid spellings refused`,
+   status lines such as
+   `stash_tiled_fgrid_r32_qres_pf_kvsplit backward status: RAN  ran bwd_stash_tiled_pf_kvsplit`
+   and `... ran bwd_stash_tiled_pf_kvgrid_r32_kvsplit`, at head_dim 64
+   `REACH stash_tiled_fgrid_r32_qres_pf_kvsplit+sabotage_kv dk_moved=<n> dv_moved=<n> zdot_moved=0 dq_moved=0 forward_moved=0`
+   with both counts above 0 for each of the four kv arms, and
+   `transformer_attention_arms_check: PASS, names inverse, 15 cases x 17 arms`.
+3. The harness at L 512 against the column default (on the M4 `default`
+   resolves to stash_tiled), correctness only:
+   `nice -n 19 pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_ATTN_ARM_TRIAL=1 -I . bench/attention_step_price_main.mojo -o /tmp/attn-price`
+   then
+   `MOJOLEARN_ATTN_BASELINE=default MOJOLEARN_ATTN_ARM=stash_tiled_fgrid_r32_qres_pf_kvsplit MOJOLEARN_ATTN_KINDS=hashed,heavytail MOJOLEARN_ATTN_TIMING=0 MOJOLEARN_ATTN_RESOURCES=1 MOJOLEARN_ATTN_L=512 MOJOLEARN_ATTN_NH=4 MOJOLEARN_ATTN_NKV=2 nice -n 19 /tmp/attn-price`,
+   then the same with `MOJOLEARN_ATTN_ORACLE=0 MOJOLEARN_ATTN_RESOURCES=0`
+   for `MOJOLEARN_ATTN_ARM=stash_tiled_fgrid_r32_qres_pf_kvgrid_r32`, then
+   `stash_tiled_fgrid_r32_qres_pf_kvgrid_r64`, then
+   `stash_tiled_fgrid_r32_qres_pf_kvgrid_r32_kvsplit`. Expect
+   `DEFAULT column=apple arm=stash_tiled ...`,
+   `PATH candidate arm=stash_tiled_fgrid_r32_qres_pf_kvsplit is_default=False resolved_hd64=stash_tiled_fgrid_r32_qres_pf_kvsplit ... kv_keys=64 kv_split=True`
+   (`kv_keys=32` for the `_kvgrid_r32` arms),
+   `RAN hashed stash_tiled_fgrid_r32_qres_pf_kvsplit forward=fwd_sstash_fgrid_r32_qres_pf backward=bwd_stash_tiled_pf_kvsplit`,
+   every `BITS ... _vs_stash_tiled` MATCH,
+   `REACH ... clean_restored=True reach_bit=stash_tiled_fgrid_r32_qres_pf_kvsplit+sabotage_new`,
+   `REACH_KV ... dk_moved=<above 0> dv_moved=<above 0> zdot_moved=0 dq_moved=0 forward_moved=0`,
+   eight `RESOURCES_BEGIN` labels on the first run, each followed by
+   `RESOURCES` lines or a `RESOURCES_ERROR` (Metal may refuse an attribute;
+   that is a reading, not a failure), and
+   `attention_step_price: PASS (stash_tiled_fgrid_r32_qres_pf_kvsplit vs stash_tiled)`.
+
+### 16.8 The AMD leg
+
+The body is `tools/attention_dkdv_leg.sh`. Each setting only when unset:
+`MOJOLEARN_ATTN_BASELINE=stash_tiled_fgrid_r32_qres_pf` (the shipped AMD
+default),
+`MOJOLEARN_ATTN_LEG_ARMS=stash_tiled_fgrid_r32_qres_pf_kvsplit,stash_tiled_fgrid_r32_qres_pf_kvgrid_r32,stash_tiled_fgrid_r32_qres_pf_kvgrid_r64,stash_tiled_fgrid_r32_qres_pf_kvgrid_r32_kvsplit`,
+`MOJOLEARN_ATTN_LEG_LM_ARMS=stash_tiled_fgrid_r32_qres_pf,stash_tiled_fgrid_r32_qres_pf_kvsplit,stash_tiled_fgrid_r32_qres_pf_kvgrid_r32,stash_tiled_fgrid_r32_qres_pf_kvgrid_r32_kvsplit`,
+`MOJOLEARN_ATTN_LEG_SKIP_TIMERS=1`, `MOJOLEARN_COMPILE_JOBS=8` and
+`MOJOLEARN_GPU_ARCHS=gfx942` (tools/gemm_remote_leg.sh does not export the
+arch; the Hot Aisle and DigitalOcean runners do, and theirs wins). It
+refuses LM arms without the baseline, then runs
+`sh tools/attention_step_leg.sh`: four smokes, four prices on both corpora's
+activations (the first with the resource readback) and 16 LM probes, the
+load of 14.9's round 3 leg.
+
+First `tools/pick_box.sh --need amd`, then the runner it names, from a
+`git worktree add --detach` checkout at the lane's merge commit:
+
+    # hotaisle
+    MOJOLEARN_GEMM_LEG_EXTRA=tools/attention_dkdv_leg.sh \
+    MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/$(date -u +%Y-%m-%d_%H%M%S)-amd-mi300x-hotaisle-attention-dkdv \
+    bash tools/hotaisle_leg.sh amd --rent --minutes 60 --skip-gates
+
+    # do
+    MOJOLEARN_DO_TOKEN_FILE=$HOME/.mojolearn_do_token \
+    MOJOLEARN_GPU_ARCHS=gfx942 \
+    MOJOLEARN_GEMM_LEG_EXTRA=tools/attention_dkdv_leg.sh \
+    MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/$(date -u +%Y-%m-%d_%H%M%S)-amd-mi325x-do-attention-dkdv \
+    bash tools/do_extra_leg.sh amd --minutes 60 --skip-gates
+
+    # runpod-amd (as the round 3 MI300X leg ran, its leg.txt)
+    MOJOLEARN_RUNPOD_KEY_FILE=$HOME/.mojolearn_runpod_key \
+    MOJOLEARN_GEMM_LEG_EXTRA=tools/attention_dkdv_leg.sh \
+    MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/$(date -u +%Y-%m-%d_%H%M%S)-amd-mi300x-runpod-attention-dkdv \
+    sh tools/gemm_remote_leg.sh amd --payload gemm --rent --minutes 60 \
+        --gpu "AMD Instinct MI300X OAM"
+
+`MOJOLEARN_HOTAISLE_EXTRA_ENV` or `MOJOLEARN_DO_EXTRA_ENV` with
+`MOJOLEARN_ATTN_LEG_SKIP_TIMERS=0` adds the standalone per-kernel breakdown
+that separates C5, when the lease allows; if the lease runs short, drop LM
+arms after the price lines rank them, never the baseline.
+
+Gates: section 6 with the AMD default in place of `baseline` (arms check
+exit 0, smokes exit 0, every `BITS ... _vs_stash_tiled_fgrid_r32_qres_pf`
+MATCH on both corpora's activations, `REACH` and `REACH_KV` proven, lean
+steps `limited: false`). Flip rule, ENGINEERING_RULES 9: for an arm, the
+geometric mean of its enwik8 and pilegithub lean step ratios
+(`steady_median_seconds` of `lm-<arm>-<corpus>` over
+`lm-stash_tiled_fgrid_r32_qres_pf-<corpus>`, same leg) below 1, and
+`witnesses_equal_baseline=True` for every step on both corpora. A flip
+edits `attn_default_arm_for`'s AMD word (after its lane adds the shipped
+branch and takes the bits out of `ATTN_ARM_DEFAULT_REFUSED_BITS`) and, for
+`_kvgrid`, `attn_dkdv_keys_per_block_for`'s AMD value from the same leg.
+
+Reading the leg against 16.3: `resources.txt` (regs, local, occupancy for
+dq against dk/dv and the new kernels) and the `lmtiming-*` dk/dv lines
+(`attn.bwd_dkdv_tiled_pf` against `attn.bwd_kvgrid_dkdv_pf` or the sum of
+`attn.bwd_kvsplit_dk_pf` and `attn.bwd_kvsplit_dv_pf`) say which cause
+holds; the lean step medians decide the flip.

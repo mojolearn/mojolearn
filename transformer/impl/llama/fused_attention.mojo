@@ -66,14 +66,18 @@ kernel-matrix ROUTING row per column (`attn_default_arm_for`, DEVIATION
 2534): `stash_tiled` on every column since the first 2026-09-11 H100 leg
 (a bit-equal 1.47x on the lean target step on both corpora), and on NVIDIA
 `stash_tiled_fgrid_r32_qres_pf` since the round 3 H100 leg (lean step 0.87
-of stash_tiled's on both corpora, every witness equal). The kernels above
+of stash_tiled's on both corpora, every witness equal) and on AMD since the
+round 3 MI325X and MI300X legs (lean step geomean 0.930 and 0.933 of
+stash_tiled's, every witness equal). The kernels above
 remain the path for every head dim other than 64 and the reference every
 arm is gated against. See the arm hook below. DEVIATION 2528 (the second
 round, brief section 12) and DEVIATIONS 2533, 2531 and 2530 (the third
 round, brief section 14: preflushed seams, the forward grid, forward Q
-residency) are trial-build arms on top of stash_tiled; a shipped build
-compiles only the clean third-round instantiations its column's default
-needs.
+residency) are trial-build arms on top of stash_tiled, and DEVIATIONS 2596
+and 2597 (brief section 16: the dk/dv folds as two kernels, and their keys
+per block) trial-build arms on the preflushed tiled stash backward; a
+shipped build compiles only the clean third-round instantiations its
+column's default needs.
 
 `[[ALWAYS GPU-agnostic]]`: one source and no vendor branch; the rows read
 (`lib_hardware_ftz_fma_for`, the scheduling rows, `attn_default_arm_for`)
@@ -100,6 +104,7 @@ from checks.kernel_matrix import (
     ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF,
     TARGET_COLUMN,
     attn_default_arm_for,
+    attn_dkdv_keys_per_block_for,
     attn_fwd_rows_per_block_for,
     attn_zdot_rows_per_block_for,
     lib_hardware_ftz_fma_for,
@@ -193,6 +198,16 @@ comptime FUSED_HW_FTZ_FMA = lib_hardware_ftz_fma_for[TARGET_COLUMN]()
 #                                      32 rows only; the tokens compose,
 #                                      e.g. stash_tiled_ztiled_r64_pf,
 #                                      stash_tiled_fgrid_r32_qres_pf
+#   MOJOLEARN_ATTN_ARM=stash_tiled_fgrid_r32_qres_pf_kvsplit
+#                                      DEVIATION 2596 (brief section 16):
+#                                      the dk and dv folds as two launches
+#                                      of one single-fold kernel;
+#                                      `_kvgrid_r32` / `_kvgrid_r64`
+#                                      (DEVIATION 2597) set their keys per
+#                                      block, bare `_kvgrid` reads the
+#                                      kernel-matrix row
+#                                      `attn_dkdv_keys_per_block_for`; both
+#                                      need `_pf` on the tiled stash backward
 #   unset or empty                     the column's build default,
 #                                      ATTN_ARM_DEFAULT (kernel matrix row
 #                                      `attn_default_arm_for`)
@@ -203,14 +218,18 @@ comptime FUSED_HW_FTZ_FMA = lib_hardware_ftz_fma_for[TARGET_COLUMN]()
 #                                      value only that kernel produces)
 #   MOJOLEARN_ATTN_ARM_SABOTAGE=new    the second-round kernels' sabotage
 #                                      only (ATTN_ARM_SABOTAGE_NEW)
+#   MOJOLEARN_ATTN_ARM_SABOTAGE=kv     the DEVIATION 2596 / 2597 dk/dv
+#                                      kernels' sabotage only
+#                                      (ATTN_ARM_SABOTAGE_KV)
 # The name grammar and `fused_attention_arm_parse`, its inverse, are in
 # brief section 12.1.
 #
 # ATTN_ARM_DEFAULT is what the shipped build runs; it reads no environment.
 # It was `baseline` until the 2026-09-11 H100 leg flipped it to stash_tiled;
 # it is now the kernel-matrix row `attn_default_arm_for` (NVIDIA
-# stash_tiled_fgrid_r32_qres_pf since the round 3 H100 leg, DEVIATION 2534;
-# see its docstring). A shipped build compiles only the default arm's clean
+# stash_tiled_fgrid_r32_qres_pf since the round 3 H100 leg, DEVIATION 2534,
+# and AMD the same arm since the round 3 MI325X and MI300X legs; see its
+# docstring). A shipped build compiles only the default arm's clean
 # kernels (ATTN_ARM_COMPILED, ATTN_SHIPPED_FWD_R2, ATTN_SHIPPED_BWD_PF), and
 # `fused_forward_launch_ran` / `fused_backward_launch_ran` report which
 # kernels launched. The arms instantiate at head_dim 64 (the
@@ -282,6 +301,34 @@ column (arm-name token `_fgrid_r32`)."""
 comptime ATTN_ARM_FROWS64 = 4096
 """Trial geometry knob: DEVIATION 2531 at 64 query rows per block, on any
 column (arm-name token `_fgrid_r64`)."""
+comptime ATTN_ARM_BWD_KVSPLIT = 8192
+"""Bit: DEVIATION 2596 (trial builds only; brief section 16), the preflushed
+tiled stash backward's dk and dv folds as TWO launches of one single-fold
+kernel (`fused_bwd_kvfold_r2_kernel`): 16 accumulators and 5 operand
+registers per thread and an 8,192-byte page at 64 keys per block, against
+the joint kernel's 32, 10 and 16,384. Needs `_pf` on the tiled stash
+backward and refuses `_ztiled` (arm-name token `_kvsplit`)."""
+comptime ATTN_ARM_BWD_KVGRID = 16384
+"""Bit: DEVIATION 2597 (trial builds only; brief section 16), the dk/dv folds
+at the keys per block `_kvgrid_r32` / `_kvgrid_r64` force, else the
+kernel-matrix row `attn_dkdv_keys_per_block_for`. Needs `_pf` on the tiled
+stash backward and refuses `_ztiled` (arm-name token `_kvgrid`)."""
+comptime ATTN_ARM_KVROWS32 = 32768
+"""Trial geometry knob: DEVIATION 2597 at 32 keys per block, on any column
+(arm-name token `_kvgrid_r32`)."""
+comptime ATTN_ARM_KVROWS64 = 65536
+"""Trial geometry knob: DEVIATION 2597 at 64 keys per block, on any column
+(arm-name token `_kvgrid_r64`)."""
+comptime ATTN_ARM_SABOTAGE_KV = 131072
+"""OR'd into the arm value: the DEVIATION 2596 and 2597 dk/dv kernels'
+sabotage only (arm-name token `+sabotage_kv`,
+MOJOLEARN_ATTN_ARM_SABOTAGE=kv). Each flips one ulp of every staged cell
+operand (dcell for dk, y for dv), so dk and dv move and zdot, dq and the
+forward hold; every other kernel the arm runs is its clean instantiation
+under this bit."""
+comptime ATTN_ARM_KV_BITS = ATTN_ARM_BWD_KVSPLIT | ATTN_ARM_BWD_KVGRID
+"""The DEVIATION 2596 / 2597 kernel bits; an arm carrying either proves the
+dk/dv kernels' reach with ATTN_ARM_SABOTAGE_KV."""
 comptime ATTN_ARM_BASE_BITS = ATTN_ARM_FWD_SSTASH | ATTN_ARM_BWD_STASH | ATTN_ARM_BWD_TILED
 comptime ATTN_ARM_NEW_BITS = (
     ATTN_ARM_BWD_ZTILED | ATTN_ARM_FWD_QRES | ATTN_ARM_FWD_GRID | ATTN_ARM_PREFLUSH
@@ -303,11 +350,15 @@ comptime ATTN_ARM_R3_DEFAULT = (
 2533 on top of stash_tiled."""
 comptime ATTN_ARM_DEFAULT_REFUSED_BITS = (
     ATTN_ARM_SABOTAGE | ATTN_ARM_SABOTAGE_NEW | ATTN_ARM_BWD_ZTILED
-    | ATTN_ARM_ZROWS32 | ATTN_ARM_ZROWS64
+    | ATTN_ARM_ZROWS32 | ATTN_ARM_ZROWS64 | ATTN_ARM_SABOTAGE_KV
+    | ATTN_ARM_BWD_KVSPLIT | ATTN_ARM_BWD_KVGRID | ATTN_ARM_KVROWS32
+    | ATTN_ARM_KVROWS64
 )
-"""Bits a default arm may not carry: the sabotages, and DEVIATION 2528,
-whose kernels a shipped build does not compile (no NVIDIA flip, brief
-section 13)."""
+"""Bits a default arm may not carry: the sabotages, DEVIATION 2528, whose
+kernels a shipped build does not compile (no NVIDIA flip, brief section 13),
+and DEVIATIONS 2596 and 2597, whose kernels a shipped build does not compile
+either (trial arms until a leg flips one and its lane adds the shipped
+branch, brief section 16)."""
 comptime ATTN_ARM_DEFAULT = attn_default_arm_for[TARGET_COLUMN]()
 """THE SHIPPED ARM, per column, from the kernel-matrix ROUTING row
 `attn_default_arm_for` (DEVIATION 2534, brief section 15; this file names no
@@ -321,9 +372,12 @@ column to stash_tiled (DEVIATIONS 2525 to 2527; lean target step
 bench/results/e1g/2026-09-11_154257-nvidia-h100-80gb-hbm3-attention-round3
 (commit 5bcfa71d) then flipped NVIDIA to stash_tiled_fgrid_r32_qres_pf
 (lean step 0.3845/0.3819 s -> 0.3346/0.3340 s, enwik8/Pile GitHub, every
-step witness equal). AMD stays stash_tiled until the MI300X leg reads it;
-Apple and the other columns stay stash_tiled. A leg that flips again edits
-the matrix row and the brief."""
+step witness equal). The DigitalOcean MI325X and RunPod MI300X legs
+(bench/results/e1g/2026-09-11_163917-amd-mi325x-do-attention-round3,
+bench/results/e1g/2026-09-11_163024-amd-mi300x-runpod-attention-round3)
+flipped AMD to the same arm (lean step geomean 0.9297 and 0.9325 of
+stash_tiled's, every step witness equal). Apple and the other columns stay
+stash_tiled. A leg that flips again edits the matrix row and the brief."""
 comptime ATTN_ARM_COMPILED = ATTN_ARM_TRIAL or (ATTN_ARM_DEFAULT != ATTN_ARM_BASELINE)
 """Whether the launchers compile the arm kernels at all: on a trial build
 (every arm, clean and sabotage) or when the build default is an arm (the
@@ -354,8 +408,9 @@ def _attn_arm_base_from_name(base: String, full: String) raises -> Int:
         + base + "' is not one of baseline, bwd_stash, fwd_sstash,"
         + " bwd_stash_tiled, stash, stash_tiled (then optionally _ztiled,"
         + " _ztiled_r32 or _ztiled_r64, then _fgrid, _fgrid_r32 or"
-        + " _fgrid_r64, then _qres, then _pf, then +sabotage and/or"
-        + " +sabotage_new, in that order)"
+        + " _fgrid_r64, then _qres, then _pf, then _kvgrid, _kvgrid_r32 or"
+        + " _kvgrid_r64, then _kvsplit, then +sabotage, +sabotage_new and/or"
+        + " +sabotage_kv, in that order)"
     )
 
 
@@ -368,19 +423,27 @@ def fused_attention_arm_parse(name: String) raises -> Int:
     `_r32` or `_r64` (its rows per block, forcing the kernel-matrix row),
     then `_fgrid` (DEVIATION 2531) optionally followed by `_r32` or `_r64`
     (likewise), then `_qres` (DEVIATION 2530), then `_pf` (DEVIATION 2533),
-    then `+sabotage` (first-round kernels) and `+sabotage_new`
-    (second-round kernels). A rows token belongs to the group token right
-    before it, so `_ztiled_r32` and `_fgrid_r32` are each read as one token.
+    then `_kvgrid` (DEVIATION 2597) optionally followed by `_r32` or `_r64`
+    (its keys per block), then `_kvsplit` (DEVIATION 2596), then `+sabotage`
+    (first-round kernels), `+sabotage_new` (second-round kernels) and
+    `+sabotage_kv` (the 2596 / 2597 dk/dv kernels). A rows token belongs to
+    the group token right before it, so `_ztiled_r32`, `_fgrid_r32` and
+    `_kvgrid_r32` are each read as one token.
     Raises on an unknown base, a token out of order, or a token whose
     prerequisite is missing: `_ztiled` without the tiled stash backward,
     `_fgrid` without the forward score stash, `_qres` without `_fgrid_r32`,
     `_pf` with no stash kernel to act on or with the 2525 non-tiled stash
-    backward (which has no preflushed copy)."""
+    backward (which has no preflushed copy), `_kvgrid` or `_kvsplit` without
+    `_pf` on the tiled stash backward or together with `_ztiled`."""
     var rest = String(name)
     var arm = 0
     # Each suffix is copied out into a fresh String before it replaces
     # `rest`: assigning a String built from `rest`'s own slice back to
     # `rest` aliases the borrow and does not compile.
+    if rest.endswith("+sabotage_kv"):
+        arm = arm | ATTN_ARM_SABOTAGE_KV
+        var trimmed = String(rest.removesuffix("+sabotage_kv"))
+        rest = trimmed^
     if rest.endswith("+sabotage_new"):
         arm = arm | ATTN_ARM_SABOTAGE_NEW
         var trimmed = String(rest.removesuffix("+sabotage_new"))
@@ -388,6 +451,22 @@ def fused_attention_arm_parse(name: String) raises -> Int:
     if rest.endswith("+sabotage"):
         arm = arm | ATTN_ARM_SABOTAGE
         var trimmed = String(rest.removesuffix("+sabotage"))
+        rest = trimmed^
+    if rest.endswith("_kvsplit"):
+        arm = arm | ATTN_ARM_BWD_KVSPLIT
+        var trimmed = String(rest.removesuffix("_kvsplit"))
+        rest = trimmed^
+    if rest.endswith("_kvgrid_r64"):
+        arm = arm | ATTN_ARM_BWD_KVGRID | ATTN_ARM_KVROWS64
+        var trimmed = String(rest.removesuffix("_kvgrid_r64"))
+        rest = trimmed^
+    elif rest.endswith("_kvgrid_r32"):
+        arm = arm | ATTN_ARM_BWD_KVGRID | ATTN_ARM_KVROWS32
+        var trimmed = String(rest.removesuffix("_kvgrid_r32"))
+        rest = trimmed^
+    elif rest.endswith("_kvgrid"):
+        arm = arm | ATTN_ARM_BWD_KVGRID
+        var trimmed = String(rest.removesuffix("_kvgrid"))
         rest = trimmed^
     if rest.endswith("_pf"):
         arm = arm | ATTN_ARM_PREFLUSH
@@ -463,6 +542,25 @@ def fused_attention_arm_parse(name: String) raises -> Int:
                 + " stash kernel to act on (fwd_sstash, bwd_stash_tiled or"
                 + " stash_tiled)"
             )
+    if (arm & (ATTN_ARM_KVROWS32 | ATTN_ARM_KVROWS64)) != 0 and (arm & ATTN_ARM_BWD_KVGRID) == 0:
+        raise Error(
+            "attention arm '" + name + "': the dk/dv keys knobs set the keys"
+            + " per block of DEVIATION 2597 and need _kvgrid"
+        )
+    if (arm & ATTN_ARM_KV_BITS) != 0:
+        if (arm & tiled_stash) != tiled_stash or (arm & ATTN_ARM_PREFLUSH) == 0:
+            raise Error(
+                "attention arm '" + name + "': _kvgrid (DEVIATION 2597) and"
+                + " _kvsplit (DEVIATION 2596) are copies of the preflushed"
+                + " tiled stash backward's dk/dv fold and need it"
+                + " (bwd_stash_tiled or stash_tiled, with _pf)"
+            )
+        if (arm & ATTN_ARM_BWD_ZTILED) != 0:
+            raise Error(
+                "attention arm '" + name + "': _kvgrid and _kvsplit do not"
+                + " compose with _ztiled (DEVIATION 2528 launches its own dq"
+                + " and dk/dv folds)"
+            )
     return arm
 
 
@@ -472,7 +570,8 @@ def fused_attention_arm_from_env() raises -> Int:
     Trial builds read `MOJOLEARN_ATTN_ARM` (any name
     `fused_attention_arm_parse` accepts; unset = the build default,
     anything else raises) and `MOJOLEARN_ATTN_ARM_SABOTAGE` (exactly "1"
-    sets ATTN_ARM_SABOTAGE, exactly "new" sets ATTN_ARM_SABOTAGE_NEW).
+    sets ATTN_ARM_SABOTAGE, exactly "new" sets ATTN_ARM_SABOTAGE_NEW,
+    exactly "kv" sets ATTN_ARM_SABOTAGE_KV).
     Every other build returns ATTN_ARM_DEFAULT without reading the
     environment at all.
 
@@ -490,8 +589,9 @@ def fused_attention_arm_from_env() raises -> Int:
         " the literal there"
     )
     comptime assert (ATTN_ARM_DEFAULT & ATTN_ARM_DEFAULT_REFUSED_BITS) == 0, (
-        "attn_default_arm_for names a sabotage or a DEVIATION 2528 arm, whose"
-        " kernels a shipped build does not compile"
+        "attn_default_arm_for names a sabotage, a DEVIATION 2528 arm or a"
+        " DEVIATION 2596 / 2597 arm, whose kernels a shipped build does not"
+        " compile"
     )
     comptime assert (not fused_attention_arm_new_forward(ATTN_ARM_DEFAULT)) or ATTN_DEFAULT_FWD_ROWS != 0, (
         "attn_default_arm_for names a second-round forward whose page does not"
@@ -511,6 +611,8 @@ def fused_attention_arm_from_env() raises -> Int:
         arm = arm | ATTN_ARM_SABOTAGE
     elif sab == "new":
         arm = arm | ATTN_ARM_SABOTAGE_NEW
+    elif sab == "kv":
+        arm = arm | ATTN_ARM_SABOTAGE_KV
     return arm
 
 
@@ -540,7 +642,9 @@ def fused_attention_arm_name(arm: Int) -> String:
         ATTN_ARM_BASE_BITS | ATTN_ARM_BWD_ZTILED | ATTN_ARM_ZROWS32
         | ATTN_ARM_ZROWS64 | ATTN_ARM_FWD_GRID | ATTN_ARM_FROWS32
         | ATTN_ARM_FROWS64 | ATTN_ARM_FWD_QRES | ATTN_ARM_PREFLUSH
-        | ATTN_ARM_SABOTAGE | ATTN_ARM_SABOTAGE_NEW
+        | ATTN_ARM_SABOTAGE | ATTN_ARM_SABOTAGE_NEW | ATTN_ARM_BWD_KVGRID
+        | ATTN_ARM_KVROWS32 | ATTN_ARM_KVROWS64 | ATTN_ARM_BWD_KVSPLIT
+        | ATTN_ARM_SABOTAGE_KV
     )
     var other = arm - (arm & known)
     if (arm & ATTN_ARM_BWD_ZTILED) != 0:
@@ -563,12 +667,24 @@ def fused_attention_arm_name(arm: Int) -> String:
         name += "_qres"
     if (arm & ATTN_ARM_PREFLUSH) != 0:
         name += "_pf"
+    if (arm & ATTN_ARM_BWD_KVGRID) != 0:
+        name += "_kvgrid"
+        if (arm & ATTN_ARM_KVROWS32) != 0:
+            name += "_r32"
+        if (arm & ATTN_ARM_KVROWS64) != 0:
+            name += "_r64"
+    else:
+        other = other | (arm & (ATTN_ARM_KVROWS32 | ATTN_ARM_KVROWS64))
+    if (arm & ATTN_ARM_BWD_KVSPLIT) != 0:
+        name += "_kvsplit"
     if other != 0:
         name += "_bits" + String(other)
     if (arm & ATTN_ARM_SABOTAGE) != 0:
         name += "+sabotage"
     if (arm & ATTN_ARM_SABOTAGE_NEW) != 0:
         name += "+sabotage_new"
+    if (arm & ATTN_ARM_SABOTAGE_KV) != 0:
+        name += "+sabotage_kv"
     return name
 
 
@@ -698,6 +814,79 @@ def fused_attention_fwd_rows(arm: Int) -> Int:
     return 0
 
 
+comptime ATTN_KV_TT = 16
+"""Queries per staged tile of the DEVIATION 2596 / 2597 dk/dv kernels (the
+shipped `TILED_TT`)."""
+
+
+def _kv_r2_page_bytes(keys: Int, split: Bool) -> Int:
+    """The shared page per block of the DEVIATION 2596 / 2597 dk/dv kernels
+    at head_dim 64, in bytes: per fold a `[16][64]` column tile (Q for dk,
+    dctx for dv) and a `[16][keys]` cell tile (dcell for dk, y for dv). The
+    joint kernel (`fused_bwd_dkdv_r2_kernel`) holds both folds' tiles: 16,384
+    B at 64 keys (the shipped `fused_bwd_dkdv_tiled_pf_kernel` page) and
+    12,288 B at 32. One `_kvsplit` fold (`fused_bwd_kvfold_r2_kernel`) holds
+    one fold's: 8,192 B at 64 keys and 6,144 B at 32."""
+    var one = ATTN_KV_TT * ATTN_STASH_HD + ATTN_KV_TT * keys
+    if split:
+        return one * 4
+    return 2 * one * 4
+
+
+comptime ATTN_KV_FITS_32 = lib_smem_page_fits_for[TARGET_COLUMN, _kv_r2_page_bytes(32, False)]()
+comptime ATTN_KV_FITS_64 = lib_smem_page_fits_for[TARGET_COLUMN, _kv_r2_page_bytes(64, False)]()
+comptime ATTN_KV_FITS_32S = lib_smem_page_fits_for[TARGET_COLUMN, _kv_r2_page_bytes(32, True)]()
+comptime ATTN_KV_FITS_64S = lib_smem_page_fits_for[TARGET_COLUMN, _kv_r2_page_bytes(64, True)]()
+comptime ATTN_KV_KEYS_COLUMN = attn_dkdv_keys_per_block_for[TARGET_COLUMN]()
+"""The column's SCHEDULING row for DEVIATION 2597 (kernel matrix)."""
+
+
+def fused_attention_arm_kv(arm: Int) -> Bool:
+    """Whether `arm` names DEVIATION 2596 (`_kvsplit`) or 2597 (`_kvgrid`)."""
+    return (arm & ATTN_ARM_KV_BITS) != 0
+
+
+def fused_attention_kv_keys(arm: Int) -> Int:
+    """Keys per block the DEVIATION 2596 / 2597 dk/dv folds run for `arm`:
+    0 when the arm names neither; for `_kvgrid`, the `_kvgrid_r32` /
+    `_kvgrid_r64` knob, else the column's kernel-matrix row; for `_kvsplit`
+    alone, 64 (the shipped geometry). 0 as well when that page does not fit
+    the column; the launcher then runs the plain `_pf` backward and the
+    harness prints the 0."""
+    if not fused_attention_arm_kv(arm):
+        return 0
+    var keys = 64
+    if (arm & ATTN_ARM_BWD_KVGRID) != 0:
+        keys = ATTN_KV_KEYS_COLUMN
+        if (arm & ATTN_ARM_KVROWS32) != 0:
+            keys = 32
+        elif (arm & ATTN_ARM_KVROWS64) != 0:
+            keys = 64
+    var split = (arm & ATTN_ARM_BWD_KVSPLIT) != 0
+    if keys == 32:
+        if (split and ATTN_KV_FITS_32S) or ((not split) and ATTN_KV_FITS_32):
+            return 32
+        return 0
+    if keys == 64:
+        if (split and ATTN_KV_FITS_64S) or ((not split) and ATTN_KV_FITS_64):
+            return 64
+    return 0
+
+
+def _attn_kv_ran_bits(arm: Int, keys: Int) -> Int:
+    """The DEVIATION 2596 / 2597 part of the arm word a launch at `keys` keys
+    per block reports: `_kvgrid` with its keys resolved when the arm has it,
+    and the arm's `_kvsplit`. No sabotage bit."""
+    var w = arm & ATTN_ARM_BWD_KVSPLIT
+    if (arm & ATTN_ARM_BWD_KVGRID) != 0:
+        w = w | ATTN_ARM_BWD_KVGRID
+        if keys == 32:
+            w = w | ATTN_ARM_KVROWS32
+        else:
+            w = w | ATTN_ARM_KVROWS64
+    return w
+
+
 def _attn_fwd_r2_key(arm: Int) -> Int:
     """Which second-round forward instantiation `arm` resolves to, as one
     integer: `rows * 4 + 2 * qres + pf`, 0 when it runs none (DEVIATION
@@ -794,6 +983,12 @@ def fused_attention_arm_backward_resolved(arm: Int) -> Int:
                 return tiled_stash | ATTN_ARM_BWD_ZTILED | ATTN_ARM_ZROWS32 | (arm & ATTN_ARM_PREFLUSH)
             if zrows == 64:
                 return tiled_stash | ATTN_ARM_BWD_ZTILED | ATTN_ARM_ZROWS64 | (arm & ATTN_ARM_PREFLUSH)
+        # DEVIATIONS 2596 and 2597 (brief section 16): the kv word, keys
+        # resolved, when the arm has `_pf` and the page fits.
+        if (arm & ATTN_ARM_PREFLUSH) != 0:
+            var kvkeys = fused_attention_kv_keys(arm)
+            if kvkeys != 0:
+                return tiled_stash | ATTN_ARM_PREFLUSH | _attn_kv_ran_bits(arm, kvkeys)
         return tiled_stash | (arm & ATTN_ARM_PREFLUSH)
     comptime if ATTN_SHIPPED_BWD_PF:
         return tiled_stash | (arm & ATTN_ARM_PREFLUSH)
@@ -3883,6 +4078,338 @@ def fused_bwd_dkdv_tiled_pf_kernel[HD: Int](
             comptime for v in range(CPT):
                 dk.unsafe_store(kvbase + jc * HD + tc + v * 16, dk_acc[u * CPT + v])
                 dv.unsafe_store(kvbase + jc * HD + tc + v * 16, dv_acc[u * CPT + v])
+
+
+# ===========================================================================
+# DEVIATIONS 2596 (arm token `_kvsplit`) AND 2597 (arm token `_kvgrid`),
+# TRIAL BUILDS ONLY; brief docs/lanes/BRIEF_attention_step_2026-09-11.md
+# section 16.
+#
+# THE READING (brief 16.1 to 16.3). In the lean LM step on the MI325X the
+# preflushed tiled dk/dv fold costs about 41 times its H100 time while the
+# tiled dq fold, its sibling, costs about 2 times. By count dk/dv does twice
+# dq's fold work per tile over the same 1,984 tiles per head, which cannot
+# make 20 times. What it carries and dq does not is a footprint: 32
+# accumulators and 10 operand registers per thread (dq: 16 and 5), a
+# 16,384-byte page in four allocations (dq: 8,448 in three), and a
+# column-major walk of the row-major stashes. These kernels shrink the first
+# two and leave the walk alone, so their prices and the harness's resource
+# readback separate the causes.
+#
+# THE MECHANISM.
+#   dkdv_r2    (2597) `fused_bwd_dkdv_tiled_pf_kernel` with BJ keys per
+#              block, 64 or 32 (the `_kvgrid_r32` / `_kvgrid_r64` knob, else
+#              the kernel-matrix row `attn_dkdv_keys_per_block_for`). At 32 a
+#              thread holds keys `tr + 16u` (u < 2): 8 dk and 8 dv
+#              accumulators, a 12,288-byte page, grid B * n_kv * ceil(S / 32).
+#   kvfold_r2  (2596) ONE fold, `dst[j, d]` over (head of the kv group
+#              ascending, queries ascending) of `_step_preflushed(cell[t, j],
+#              col[t, d], acc)`, launched twice by one instantiation: dk with
+#              `cell` the dy stash (dcell after dq) and `col` q_rope, then dv
+#              with `cell` the y stash and `col` dctx. 16 accumulators and a
+#              two-allocation 8,192-byte page at 64 keys (8 and 6,144 at 32).
+#
+# WHY NO BIT MOVES (brief 16.4 in full). Every dk and dv output is one chain
+# from +0.0 with the shipped terms in the shipped order: heads of the kv
+# group ascending, query tiles ascending, queries ascending inside a tile, a
+# step only where the query sees the key (the copied `_key_query_range`
+# test), operands staged as shipped (`ftz` on q and dctx, the stash value as
+# stored) and stepped in the shipped order (cell, then column). Keys per
+# block partition the keys; the query-tile loop runs the block's union range
+# and steps only visible queries, so a narrower block skips fewer tiles and
+# adds no term. dk and dv share no accumulator, so two launches change no
+# chain. The corner flag is written only with 1.0, and the dk and dv
+# launches together set it exactly when the joint kernel does (the OR of
+# their conditions). `_step_preflushed` equals `_step` on these operands by
+# brief 14.2.
+#
+# SABOTAGE (reach, ATTN_ARM_SABOTAGE_KV): each kernel flips one ulp of every
+# staged cell operand (the joint kernel the y and the dcell tiles; the fold
+# its cell tile, so the dk launch flips dcell and the dv launch flips y). dk
+# and dv move; zdot, dq and the forward hold.
+# ===========================================================================
+
+
+def fused_bwd_dkdv_r2_kernel[HD: Int, BJ: Int, SAB: Bool](
+    dk: MutPointer[Float32, MutAnyOrigin],
+    dv: MutPointer[Float32, MutAnyOrigin],
+    corner: MutPointer[Float32, MutAnyOrigin],
+    y_st: MutPointer[Float32, MutAnyOrigin],
+    ds_st: MutPointer[Float32, MutAnyOrigin],
+    q_rope: MutPointer[Float32, MutAnyOrigin],
+    dctx: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32,
+    l_in: Int32,
+    nh_in: Int32,
+    nkv_in: Int32,
+    s_in: Int32,
+    pos0_in: Int32,
+    key_lo_in: Int32,
+    window_in: Int32,
+):
+    """DEVIATION 2597: `fused_bwd_dkdv_tiled_pf_kernel` with `BJ` (64 or 32)
+    keys per block; `SAB` (ATTN_ARM_SABOTAGE_KV) flips one ulp of every
+    staged y and dcell. See the comment above. 256 threads."""
+    comptime RPT = BJ // 16
+    comptime CPT = HD // 16
+    comptime TT = ATTN_KV_TT
+    var qs = stack_allocation[TT * HD, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var dcs = stack_allocation[TT * HD, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var ys = stack_allocation[TT * BJ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var dss = stack_allocation[TT * BJ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+
+    var b = Int(b_in)
+    var l = Int(l_in)
+    var nh = Int(nh_in)
+    var nkv = Int(nkv_in)
+    var s = Int(s_in)
+    var pos0 = Int(pos0_in)
+    var key_lo = Int(key_lo_in)
+    var window = Int(window_in)
+    var n_rep = nh // nkv
+
+    var njb = (s + BJ - 1) // BJ
+    var raw = Int(block_idx.x)
+    var jb = raw % njb
+    var rest = raw // njb
+    var kvh = rest % nkv
+    var bb = rest // nkv
+    if bb >= b:
+        return
+
+    var tid = Int(thread_idx.x)
+    var tr = tid // 16
+    var tc = tid % 16
+    var j0 = jb * BJ
+    var j1 = j0 + BJ - 1
+    if j1 > s - 1:
+        j1 = s - 1
+    var q0 = _key_query_range(j0, pos0, key_lo, window, l)
+    var q1 = _key_query_range(j1, pos0, key_lo, window, l)
+    var tb_lo = q0[0] // TT
+    var tb_hi = q1[1] // TT
+    if q1[1] < q0[0]:
+        tb_hi = tb_lo - 1
+
+    var kvbase = (bb * nkv + kvh) * s * HD
+
+    # The keys this thread folds: their visible query ranges, once.
+    var lo = SIMD[DType.int32, RPT](0)
+    var hi = SIMD[DType.int32, RPT](-1)
+    comptime for u in range(RPT):
+        var jc = j0 + tr + u * 16
+        if jc < s:
+            var qr = _key_query_range(jc, pos0, key_lo, window, l)
+            lo[u] = Int32(qr[0])
+            hi[u] = Int32(qr[1])
+
+    var dk_acc = SIMD[DType.float32, RPT * CPT](0.0)
+    var dv_acc = SIMD[DType.float32, RPT * CPT](0.0)
+    var hit = False
+    for hh in range(n_rep):
+        var h = kvh * n_rep + hh
+        var hbase = (bb * nh + h) * l
+        for tb in range(tb_lo, tb_hi + 1):
+            var tq0 = tb * TT
+            # Q and dctx tiles [TT][HD], coalesced along d.
+            comptime for si in range(TT * HD // 256):
+                var i = tid + si * 256
+                var r = i // HD
+                var c = i - r * HD
+                var t = tq0 + r
+                var qv = Float32(0.0)
+                var dcv = Float32(0.0)
+                if t < l:
+                    var off = (bb * l + t) * nh * HD + h * HD + c
+                    qv = ftz(q_rope.unsafe_load(off))
+                    dcv = ftz(dctx.unsafe_load(off))
+                qs.unsafe_store(i, qv)
+                dcs.unsafe_store(i, dcv)
+            # y and dcell tiles [TT][BJ], coalesced along j.
+            comptime for si in range(TT * BJ // 256):
+                var i = tid + si * 256
+                var r = i // BJ
+                var c = i - r * BJ
+                var t = tq0 + r
+                var jc = j0 + c
+                var yv = Float32(0.0)
+                var dsv = Float32(0.0)
+                if t < l and jc < s:
+                    var cr = _key_query_range(jc, pos0, key_lo, window, l)
+                    if t >= cr[0] and t <= cr[1]:
+                        var cell = (hbase + t) * s + jc
+                        yv = y_st.unsafe_load(cell)
+                        dsv = ds_st.unsafe_load(cell)
+                comptime if SAB:
+                    ys.unsafe_store(i, _flip_ulp(yv))
+                    dss.unsafe_store(i, _flip_ulp(dsv))
+                else:
+                    ys.unsafe_store(i, yv)
+                    dss.unsafe_store(i, dsv)
+            barrier()
+            comptime for tk in range(TT):
+                var t = tq0 + tk
+                var qa = SIMD[DType.float32, CPT](0.0)
+                var da = SIMD[DType.float32, CPT](0.0)
+                comptime for v in range(CPT):
+                    qa[v] = qs.unsafe_load(tk * HD + tc + v * 16)
+                    da[v] = dcs.unsafe_load(tk * HD + tc + v * 16)
+                comptime for u in range(RPT):
+                    if t < l and Int32(t) >= lo[u] and Int32(t) <= hi[u]:
+                        var dcell = dss.unsafe_load(tk * BJ + tr + u * 16)
+                        var yv = ys.unsafe_load(tk * BJ + tr + u * 16)
+                        comptime for v in range(CPT):
+                            dk_acc[u * CPT + v] = _step_preflushed(dcell, qa[v], dk_acc[u * CPT + v])
+                            dv_acc[u * CPT + v] = _step_preflushed(yv, da[v], dv_acc[u * CPT + v])
+            barrier()
+        # The end of this head's visible run for every key this thread
+        # holds: a `-0.0` here could be laundered by the masked tail.
+        comptime for i in range(RPT * CPT):
+            if bitcast[DType.uint32](dk_acc[i]) == NEG_ZERO_BITS:
+                hit = True
+            if bitcast[DType.uint32](dv_acc[i]) == NEG_ZERO_BITS:
+                hit = True
+    comptime for u in range(RPT):
+        var jc = j0 + tr + u * 16
+        if jc < s:
+            if hit:
+                corner.unsafe_store(0, Float32(1.0))
+            comptime for v in range(CPT):
+                dk.unsafe_store(kvbase + jc * HD + tc + v * 16, dk_acc[u * CPT + v])
+                dv.unsafe_store(kvbase + jc * HD + tc + v * 16, dv_acc[u * CPT + v])
+
+
+def fused_bwd_kvfold_r2_kernel[HD: Int, BJ: Int, SAB: Bool](
+    dst: MutPointer[Float32, MutAnyOrigin],
+    corner: MutPointer[Float32, MutAnyOrigin],
+    cell_st: MutPointer[Float32, MutAnyOrigin],
+    col_src: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32,
+    l_in: Int32,
+    nh_in: Int32,
+    nkv_in: Int32,
+    s_in: Int32,
+    pos0_in: Int32,
+    key_lo_in: Int32,
+    window_in: Int32,
+):
+    """DEVIATION 2596: ONE of `fused_bwd_dkdv_tiled_pf_kernel`'s two folds,
+    `dst[j, d]` over (head of the kv group ascending, queries ascending) of
+    `_step_preflushed(cell_st[t, j], ftz(col_src[t, d]), acc)`, at `BJ` (64,
+    or DEVIATION 2597's 32) keys per block. The dk launch passes (dk, the dy
+    stash that holds dcell after dq, q_rope); the dv launch (dv, the y
+    stash, dctx). `SAB` (ATTN_ARM_SABOTAGE_KV) flips one ulp of every staged
+    cell operand. See the comment above. 256 threads."""
+    comptime RPT = BJ // 16
+    comptime CPT = HD // 16
+    comptime TT = ATTN_KV_TT
+    var cs = stack_allocation[TT * HD, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var es = stack_allocation[TT * BJ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+
+    var b = Int(b_in)
+    var l = Int(l_in)
+    var nh = Int(nh_in)
+    var nkv = Int(nkv_in)
+    var s = Int(s_in)
+    var pos0 = Int(pos0_in)
+    var key_lo = Int(key_lo_in)
+    var window = Int(window_in)
+    var n_rep = nh // nkv
+
+    var njb = (s + BJ - 1) // BJ
+    var raw = Int(block_idx.x)
+    var jb = raw % njb
+    var rest = raw // njb
+    var kvh = rest % nkv
+    var bb = rest // nkv
+    if bb >= b:
+        return
+
+    var tid = Int(thread_idx.x)
+    var tr = tid // 16
+    var tc = tid % 16
+    var j0 = jb * BJ
+    var j1 = j0 + BJ - 1
+    if j1 > s - 1:
+        j1 = s - 1
+    var q0 = _key_query_range(j0, pos0, key_lo, window, l)
+    var q1 = _key_query_range(j1, pos0, key_lo, window, l)
+    var tb_lo = q0[0] // TT
+    var tb_hi = q1[1] // TT
+    if q1[1] < q0[0]:
+        tb_hi = tb_lo - 1
+
+    var kvbase = (bb * nkv + kvh) * s * HD
+
+    # The keys this thread folds: their visible query ranges, once.
+    var lo = SIMD[DType.int32, RPT](0)
+    var hi = SIMD[DType.int32, RPT](-1)
+    comptime for u in range(RPT):
+        var jc = j0 + tr + u * 16
+        if jc < s:
+            var qr = _key_query_range(jc, pos0, key_lo, window, l)
+            lo[u] = Int32(qr[0])
+            hi[u] = Int32(qr[1])
+
+    var acc = SIMD[DType.float32, RPT * CPT](0.0)
+    var hit = False
+    for hh in range(n_rep):
+        var h = kvh * n_rep + hh
+        var hbase = (bb * nh + h) * l
+        for tb in range(tb_lo, tb_hi + 1):
+            var tq0 = tb * TT
+            # The column tile [TT][HD] (q for dk, dctx for dv), coalesced
+            # along d, through `ftz` as the joint kernel stages it.
+            comptime for si in range(TT * HD // 256):
+                var i = tid + si * 256
+                var r = i // HD
+                var c = i - r * HD
+                var t = tq0 + r
+                var cv = Float32(0.0)
+                if t < l:
+                    cv = ftz(col_src.unsafe_load((bb * l + t) * nh * HD + h * HD + c))
+                cs.unsafe_store(i, cv)
+            # The cell tile [TT][BJ] (dcell for dk, y for dv), coalesced
+            # along j, the stash value as stored (as the joint kernel).
+            comptime for si in range(TT * BJ // 256):
+                var i = tid + si * 256
+                var r = i // BJ
+                var c = i - r * BJ
+                var t = tq0 + r
+                var jc = j0 + c
+                var ev = Float32(0.0)
+                if t < l and jc < s:
+                    var cr = _key_query_range(jc, pos0, key_lo, window, l)
+                    if t >= cr[0] and t <= cr[1]:
+                        ev = cell_st.unsafe_load((hbase + t) * s + jc)
+                comptime if SAB:
+                    es.unsafe_store(i, _flip_ulp(ev))
+                else:
+                    es.unsafe_store(i, ev)
+            barrier()
+            comptime for tk in range(TT):
+                var t = tq0 + tk
+                var ca = SIMD[DType.float32, CPT](0.0)
+                comptime for v in range(CPT):
+                    ca[v] = cs.unsafe_load(tk * HD + tc + v * 16)
+                comptime for u in range(RPT):
+                    if t < l and Int32(t) >= lo[u] and Int32(t) <= hi[u]:
+                        var ecell = es.unsafe_load(tk * BJ + tr + u * 16)
+                        comptime for v in range(CPT):
+                            acc[u * CPT + v] = _step_preflushed(ecell, ca[v], acc[u * CPT + v])
+            barrier()
+        # The end of this head's visible run for every key this thread
+        # holds: a `-0.0` here could be laundered by the masked tail.
+        comptime for i in range(RPT * CPT):
+            if bitcast[DType.uint32](acc[i]) == NEG_ZERO_BITS:
+                hit = True
+    comptime for u in range(RPT):
+        var jc = j0 + tr + u * 16
+        if jc < s:
+            if hit:
+                corner.unsafe_store(0, Float32(1.0))
+            comptime for v in range(CPT):
+                dst.unsafe_store(kvbase + jc * HD + tc + v * 16, acc[u * CPT + v])
 
 
 # ===========================================================================
