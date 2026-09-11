@@ -1801,7 +1801,7 @@ def _quantize_training_columns(
             k: Int
         ) {imm pd, imm fi, imm colp, imm sn, imm nrr, imm sidx, imm flg}:
             var fcol = fi.unsafe_load(k)
-            var src = colp.unsafe_load(fcol)
+            var src = colp[fcol]
             for i in range(sn):
                 pd.unsafe_store(
                     k * sn + i,

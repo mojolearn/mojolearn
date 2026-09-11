@@ -2028,12 +2028,14 @@ def launch_one_byte_arms[level_quant: Bool, group_width: Bool, fused_all: Bool](
         stats.unsafe_ptr()
     )
     comptime if level_quant:
-        if not qstats:
+        if not qstats.__bool__():
             raise Error(
                 "DEVIATION 2580 is compiled in and no Int32 plane was passed"
             )
+        # a var handle: `unsafe_ptr` takes a mutable receiver (core/gemm.mojo)
+        var qplane = qstats.value()
         stats_ptr = rebind[MutPointer[Float32, MutAnyOrigin]](
-            qstats.value().unsafe_ptr()
+            qplane.unsafe_ptr()
         )
     comptime if group_width:
         var pi = -1
@@ -2046,18 +2048,16 @@ def launch_one_byte_arms[level_quant: Bool, group_width: Bool, fused_all: Bool](
                 + String(block_index) + " has no width plan"
             )
         ref plan = width_plans[pi]
-        var f0 = rebind[MutPointer[UInt32, MutAnyOrigin]](
-            plan.folds.unsafe_ptr()
-        )
-        var f1 = rebind[MutPointer[UInt32, MutAnyOrigin]](
-            plan.fold_off.unsafe_ptr()
-        )
-        var f2 = rebind[MutPointer[UInt32, MutAnyOrigin]](
-            plan.grp_off.unsafe_ptr()
-        )
-        var f3 = rebind[MutPointer[UInt32, MutAnyOrigin]](
-            plan.grp_sz.unsafe_ptr()
-        )
+        # var handles: `unsafe_ptr` takes a mutable receiver, and
+        # `width_plans` is borrowed immutably
+        var pb0 = plan.folds
+        var pb1 = plan.fold_off
+        var pb2 = plan.grp_off
+        var pb3 = plan.grp_sz
+        var f0 = rebind[MutPointer[UInt32, MutAnyOrigin]](pb0.unsafe_ptr())
+        var f1 = rebind[MutPointer[UInt32, MutAnyOrigin]](pb1.unsafe_ptr())
+        var f2 = rebind[MutPointer[UInt32, MutAnyOrigin]](pb2.unsafe_ptr())
+        var f3 = rebind[MutPointer[UInt32, MutAnyOrigin]](pb3.unsafe_ptr())
         for wi in range(4):
             var n = plan.feat_count[wi]
             if n == 0:
