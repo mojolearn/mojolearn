@@ -1021,6 +1021,16 @@ comptime SVM_SCHED_TREE = 0
 comptime SVM_SCHED_WARP = 1
 comptime SVM_SCHED_WARP_LANE0 = 2
 comptime SVM_SCHED_FUSED_TREE = 3
+comptime SVM_SCHED_RARY_TREE = 4
+
+
+def svm_block_solve_tree_arity_for[column: Int, width: Int]() -> Int:
+    """SCHEDULING row (2026-09-11, DEVIATION 2628): the arity R of SVM_SCHED_RARY_TREE's threadgroup tree (a power of two; levels = ceil(log_R(width))). Selection under a total order, so no bits depend on it. `-D MOJOLEARN_SVM_ARITY_16` / `_64` for an A/B; default 32."""
+    comptime if is_defined["MOJOLEARN_SVM_ARITY_16"]():
+        return 16
+    comptime if is_defined["MOJOLEARN_SVM_ARITY_64"]():
+        return 64
+    return 32
 
 
 def svm_block_solve_schedule_for[column: Int, width: Int]() -> Int:

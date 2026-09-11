@@ -85,16 +85,20 @@ from checks.numerics import ftz, identical_mul_add
 from checks.kernel_matrix import (
     TARGET_COLUMN,
     SVM_SCHED_FUSED_TREE,
+    SVM_SCHED_RARY_TREE,
     SVM_SCHED_TREE,
     SVM_SCHED_WARP,
     SVM_SCHED_WARP_LANE0,
     svm_block_solve_schedule_for,
+    svm_block_solve_tree_arity_for,
 )
 from svm.checks.pinned_argreduce import (
     block_argext,
     block_argext_lane0,
     pinned_block_argext_tid,
+    pinned_block_argext_tid_rary,
     pinned_block_argmin_argmax_tid,
+    pinned_block_argmin_argmax_tid_rary,
     pinned_block_argmax,
     pinned_block_argmin,
     sabotage_block_max_hw,
@@ -153,8 +157,16 @@ def smo_block_solve_kernel[
     comptime SCHED_ROW = svm_block_solve_schedule_for[TARGET_COLUMN, WSIZE]()
     comptime SAB_FMAX_ANY = SAB_FMAX_NOKEY or SAB_FMAX_HWMAX or SAB_FMAX_HWMAX_SWAP
     comptime SCHED = SVM_SCHED_TREE if (
-        SCHED_ROW == SVM_SCHED_FUSED_TREE and SAB_FMAX_ANY
+        (SCHED_ROW == SVM_SCHED_FUSED_TREE or SCHED_ROW == SVM_SCHED_RARY_TREE)
+        and SAB_FMAX_ANY
     ) else SCHED_ROW
+    #: DEVIATION 2628's R-ary tree: its arity, whether each reduction keeps
+    #: its trailing barrier, and whether the alpha update keeps its second.
+    comptime ARITY = svm_block_solve_tree_arity_for[TARGET_COLUMN, WSIZE]()
+    comptime RARY_PROTECT = not is_defined["MOJOLEARN_SVM_RARY_NO_TRAILING"]()
+    comptime UPDATE_SECOND_BARRIER = SCHED != SVM_SCHED_RARY_TREE or not is_defined[
+        "MOJOLEARN_SVM_UPDATE_ONE_BARRIER"
+    ]()
     comptime WARP_FOLDS = SCHED == SVM_SCHED_WARP
     #: DEVIATION 2627's trailing barrier after each lane-0 fold (on unless
     #: `-D MOJOLEARN_SVM_LANE0_NO_TRAILING`).
@@ -216,6 +228,14 @@ def smo_block_solve_kernel[
             # DEVIATION 2628: one tree for the argmin (with its thread) and
             # the argmax, no ballot.
             var rf = pinned_block_argmin_argmax_tid[WSIZE](f_tmp, f_lo, key)
+            f_u = rf[0]
+            u = Int(rf[1])
+            f_max = rf[2]
+        elif SCHED == SVM_SCHED_RARY_TREE:
+            # DEVIATION 2628: the same selections on the R-ary tree.
+            var rf = pinned_block_argmin_argmax_tid_rary[WSIZE, ARITY, RARY_PROTECT](
+                f_tmp, f_lo, key
+            )
             f_u = rf[0]
             u = Int(rf[1])
             f_max = rf[2]
@@ -292,6 +312,11 @@ def smo_block_solve_kernel[
         elif SCHED == SVM_SCHED_FUSED_TREE:
             var res2 = pinned_block_argext_tid[WSIZE, True](f_tmp, key)
             l = Int(res2[2])
+        elif SCHED == SVM_SCHED_RARY_TREE:
+            var res2 = pinned_block_argext_tid_rary[WSIZE, ARITY, True, RARY_PROTECT](
+                f_tmp, key
+            )
+            l = Int(res2[2])
         else:
             var res2 = pinned_block_argmax[WSIZE](f_tmp, key)
             if active and key == res2[1]:
@@ -318,7 +343,11 @@ def smo_block_solve_kernel[
         var tmp_u = sh_tmp[0]
         var tmp_l2 = sh_tmp[1]
         var q = tmp_u if tmp_u < tmp_l2 else tmp_l2
-        barrier()
+        # The second barrier protects `sh_tmp` for a write in the next
+        # segment; only the tree ballot writes it there, so the R-ary
+        # schedule may drop it (DEVIATION 2628).
+        comptime if UPDATE_SECOND_BARRIER:
+            barrier()
         if tid == u:
             a = ftz(a + q * y)
         if tid == l:

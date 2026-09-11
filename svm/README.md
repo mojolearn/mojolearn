@@ -78,6 +78,20 @@ advantage here); Istella-S 12 and 4,503, 20.4 ms. Istella-S also spends
 about 36 ms outside the solver's stage clock. Evidence
 `~/mojolearn-evidence/svm-speed-2026-09-11/`.
 
+SVM_SCHED_RARY_TREE (4, 2628's second shape, UNBUILT, RUN OWED):
+`pinned_block_argmin_argmax_tid_rary` and `pinned_block_argext_tid_rary`
+fold the same selections on a threadgroup tree of arity R
+(`svm_block_solve_tree_arity_for`, default 32), two levels at width 1024,
+so about 10 barriers per inner iteration where FUSED_TREE has 26, with no
+warp shuffles. `-D MOJOLEARN_SVM_RARY_NO_TRAILING` and
+`-D MOJOLEARN_SVM_UPDATE_ONE_BARRIER` drop the trailing and second update
+barriers. Not compiled anywhere yet. RUN OWED on an H100 from this branch,
+after the classical setup phase (`bench/results/svm_speed_2026-09-11/`):
+`bash variants.sh rary32:MOJOLEARN_SVM_SCHED_RARY_TREE
+rary16:MOJOLEARN_SVM_SCHED_RARY_TREE,MOJOLEARN_SVM_ARITY_16
+rary32nt:MOJOLEARN_SVM_SCHED_RARY_TREE,MOJOLEARN_SVM_RARY_NO_TRAILING,MOJOLEARN_SVM_UPDATE_ONE_BARRIER
+fused:MOJOLEARN_SVM_SCHED_FUSED_TREE tree:MOJOLEARN_SVM_SCHED_TREE`.
+
 `svr_device_matches_oracle` had failed under IDENTICAL since the SVR path
 landed ("ws sequence differs at outer iteration 0", every SVR fixture; FAST
 only reported it). The solver's trace recorded the working set PROJECTED
