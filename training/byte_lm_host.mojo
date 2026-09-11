@@ -35,17 +35,27 @@ with the same k-term chain folded in REVERSE order through the same seam. At
 the admitted profile k = 32, which `contract_leaf_size` makes one serial
 leaf, so the reversal changes the fold and nothing else. It is the gate's
 negative control: a build with it defined must fail the loss comparison, or
-the comparison is not reaching the arithmetic.
+the comparison is not reaching the arithmetic. The threaded path reverses the
+fold inside the kernel it actually runs (`gemm_nt_rows(..., reverse=True)`).
 """
 
 from std.sys.compile import is_defined
+from std.sys.info import num_physical_cores
 
 from max.algorithm import sync_parallelize
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, identical_mul_add
-from embedding.checks.embedding_oracle import EmbConfig, emb_forward_oracle
-from gemm.checks.gemm_oracle import OP_NT, contract_leaf_size, gemm_oracle, gemm_oracle_cell
+from embedding.checks.embedding_oracle import EmbConfig, emb_forward_oracle, refuse_nonfinite
+from gemm.checks.gemm_oracle import OP_NT, gemm_oracle
 from training.byte_lm_config import ByteConfig
+from training.byte_lm_host_kernels import (
+    all_finite_span,
+    ce_causal_mean_loss_fast,
+    flushed_span,
+    gemm_nt_rows,
+    hidden_fast,
+    pack_nt_span,
+)
 from training.checks.loss_oracle import CeConfig, ce_forward_oracle
 from transformer.checks.transformer_fixture import (
     ScorePlant,
@@ -53,6 +63,7 @@ from transformer.checks.transformer_fixture import (
     TransformerWeights,
 )
 from transformer.checks.transformer_oracle import (
+    RopeTable,
     TransformerKVCache,
     build_rope_table,
     refuse_bad_weights,
@@ -61,6 +72,7 @@ from transformer.checks.transformer_oracle import (
 
 
 comptime BYTE_HOST_SABOTAGE = is_defined["MOJOLEARN_BYTE_LM_HOST_SABOTAGE"]()
+comptime BYTE_HOST_MAX_THREADS = 1024
 
 
 def byte_host_sabotage_compiled() -> Bool:
@@ -110,8 +122,7 @@ def byte_host_block_weights(params: List[Float32], offsets: List[Int], block: In
 
 
 def _sabotaged_cell(a: List[Float32], b: List[Float32], i: Int, j: Int, k: Int) -> Float32:
-    """DEVIATION 2612 only. One OP_NT cell with k walked DESCENDING. Both the
-    reference and the threaded head use this one spelling."""
+    """DEVIATION 2612 only. One OP_NT cell with k walked DESCENDING."""
     var acc = Float32(0.0)
     var kk = k - 1
     while kk >= 0:
@@ -184,102 +195,169 @@ def byte_host_logits(params: List[Float32], inputs: List[Int32], batch: Int,
 
 
 # ===========================================================================
-# THE THREADED PATH (DEVIATION 2616)
+# THE THREADED PATH (DEVIATIONS 2616, 2640)
 # ===========================================================================
-# Same bits as the reference BY CONSTRUCTION, and gated to prove it. Threads
-# split only along axes the contracts already make independent, so no float
-# ever crosses a thread boundary and no fold changes order:
+# Same bits as the reference, and gated to prove it. Since DEVIATION 2640 it
+# runs `training/byte_lm_host_kernels.mojo`: the oracles' arithmetic, per
+# output value in the oracles' order, without their per-cell allocation,
+# with operands flushed and packed once per call and the cells of a row
+# advanced as SIMD lanes. It runs on at most `threads` threads (0: one per
+# physical core). Threads split only along axes the contracts already make
+# independent, so no float crosses a thread boundary and no fold changes
+# order:
 #
-#   batch > 1   one task per batch row, each running THE REFERENCE PATH at
-#               batch 1 and writing its own disjoint slice of the logits.
-#               Rows share nothing in any block or head contract.
-#   batch == 1  the blocks run on the calling thread; the head product runs
-#               one task per token row, each cell through `gemm_oracle_cell`
-#               at `contract_leaf_size(k)`, which is exactly what
-#               `gemm_oracle` loops over.
+#   rows        batch rows in at most `threads` contiguous chunks, each chunk
+#               running its rows one after another into disjoint slices.
+#               Rows share nothing in any block or head contract. One row,
+#               or one thread, runs on the calling thread. (The first cut
+#               also split a single row's head product across threads; on
+#               the M4 at [1, 32] that measured slower, 0.70 against 0.57
+#               ms, and it was removed.)
+#   loss        `ce_causal_mean_loss_fast` on the calling thread, the loss
+#               oracle's seams with its folds through `gemm_nt_rows`.
 #
 # No task starts another parallel region. Owners that tasks read through a
 # pointer are transferred only AFTER the join (the step-33 race class,
-# `gbdt/train.mojo`). Within one row or cell the arithmetic is the oracle's,
-# scalar and in order; this path divides work across cores and does not
-# vectorize anything.
+# `gbdt/train.mojo`).
 
 
-def _head_rows_threaded(x: List[Float32], head: List[Float32], m: Int, n: Int, k: Int) -> List[Float32]:
-    var logits = List[Float32](length=m * n, fill=Float32(0.0))
-    var op = logits.unsafe_ptr()
-    var operands = List[List[Float32]]()
-    operands.append(x.copy())
-    operands.append(head.copy())
-    var mats = operands.unsafe_ptr()
-    var leaf = contract_leaf_size(k)
-
-    def _head_task(i: Int) {imm op, imm mats, imm m, imm n, imm k, imm leaf}:
-        for j in range(n):
-            comptime if BYTE_HOST_SABOTAGE:
-                op.unsafe_store(i * n + j, _sabotaged_cell(mats[], (mats + 1)[], i, j, k))
-            else:
-                op.unsafe_store(i * n + j,
-                    gemm_oracle_cell(mats[], (mats + 1)[], OP_NT, i, j, m, n, k, leaf))
-
-    sync_parallelize(_head_task, m)
-    _ = operands^
-    return logits^
+def byte_host_worker_count(threads: Int) raises -> Int:
+    """`threads` in [1, BYTE_HOST_MAX_THREADS] as given; 0 is one per
+    physical core."""
+    if threads < 0 or threads > BYTE_HOST_MAX_THREADS:
+        raise Error("byte LM host: threads must be in [0, " + String(BYTE_HOST_MAX_THREADS) + "]")
+    if threads > 0:
+        return threads
+    var cores = num_physical_cores()
+    if cores < 1:
+        return 1
+    return cores
 
 
-def byte_host_logits_threaded(params: List[Float32], inputs: List[Int32], batch: Int,
-                              length: Int, config: ByteConfig) raises -> List[Float32]:
-    """`byte_host_logits` across threads; same arguments, same bits."""
-    _validate_logits_inputs(params, inputs, batch, length, config)
+def _span(offsets: List[Int], j: Int, want: Int) raises -> Int:
+    """The offset of registry tensor `j`, refusing a size other than `want`."""
+    if offsets[j + 1] - offsets[j] != want:
+        raise Error("byte LM host: tensor " + String(j) + " holds " + String(offsets[j + 1] - offsets[j])
+                    + " values, expected " + String(want))
+    return offsets[j]
+
+
+def byte_host_fast_tensors(params: List[Float32], config: ByteConfig) raises -> List[List[Float32]]:
+    """The threaded path's operands, prepared once per call in registry
+    order and read straight from `params` by offset: the flushed embedding;
+    per block norm1 flushed, q, k, v, o packed, norm2 flushed, gate, up, down
+    packed; then the packed head.
+
+    The reference path refuses a non-finite embedding (`emb_forward_oracle`)
+    or block weight (`refuse_bad_weights`) and nothing in the head. So the
+    embedding and the blocks are screened lane-wise, and a non-finite value
+    there re-enters those same refusals, which raise with their own messages.
+    (On the M4 the element-by-element copies and scans were about 90% of a
+    one-token call.)"""
+    var offsets = config.offsets()
+    var dims = byte_host_dims(config)
+    var dm = config.d_model
+    var qw = dims.q_width()
+    var kw = dims.kv_width()
+    var ff = config.intermediate
+    var head_j = config.n_tensors() - 1
+    if not all_finite_span(params, 0, offsets[head_j]):
+        refuse_nonfinite(String("W"), _slice(params, offsets, 0))
+        for layer in range(config.n_layers):
+            _ = byte_host_block_weights(params, offsets, layer, dims)
+        raise Error("byte LM host: a non-finite parameter that no refusal named")
+    var out = List[List[Float32]]()
+    out.append(flushed_span(params, _span(offsets, 0, config.vocab_size * dm), offsets[1]))
+    for layer in range(config.n_layers):
+        var base = 1 + 9 * layer
+        out.append(flushed_span(params, _span(offsets, base, dm), offsets[base + 1]))
+        out.append(pack_nt_span(params, _span(offsets, base + 1, qw * dm), qw, dm))
+        out.append(pack_nt_span(params, _span(offsets, base + 2, kw * dm), kw, dm))
+        out.append(pack_nt_span(params, _span(offsets, base + 3, kw * dm), kw, dm))
+        out.append(pack_nt_span(params, _span(offsets, base + 4, dm * qw), dm, qw))
+        out.append(flushed_span(params, _span(offsets, base + 5, dm), offsets[base + 6]))
+        out.append(pack_nt_span(params, _span(offsets, base + 6, ff * dm), ff, dm))
+        out.append(pack_nt_span(params, _span(offsets, base + 7, ff * dm), ff, dm))
+        out.append(pack_nt_span(params, _span(offsets, base + 8, dm * ff), dm, ff))
+    out.append(pack_nt_span(params, _span(offsets, head_j, config.vocab_size * dm), config.vocab_size, dm))
+    return out^
+
+
+def _threaded_rows(params: List[Float32], inputs: List[Int32], batch: Int, length: Int,
+                   config: ByteConfig, workers: Int) raises -> List[Float32]:
     var vocab = config.vocab_size
-    if batch == 1:
-        var hidden = _byte_host_hidden(params, inputs, 1, length, config)
-        var head = _slice(params, config.offsets(), config.n_tensors() - 1)
-        return _head_rows_threaded(hidden, head, length, vocab, config.d_model)
+    var layers = config.n_layers
+    var head_index = 1 + 9 * layers
+    var reverse = byte_host_sabotage_compiled()
+    var held = List[List[List[Float32]]]()
+    held.append(byte_host_fast_tensors(params, config))
+    var ropes = List[RopeTable]()
+    ropes.append(build_rope_table(byte_host_dims(config)))
     var logits = List[Float32](length=batch * length * vocab, fill=Float32(0.0))
-    var failed = List[Int](length=batch, fill=0)
+    var tasks = workers
+    if tasks > batch:
+        tasks = batch
+    var chunk = (batch + tasks - 1) // tasks
+    var failed = List[Int](length=tasks, fill=0)
     var op = logits.unsafe_ptr()
     var fp = failed.unsafe_ptr()
     var ip = inputs.unsafe_ptr()
-    var held = List[List[Float32]]()
-    held.append(params.copy())
-    var pp = held.unsafe_ptr()
-    var c_batch = config.batch
-    var c_length = config.length
+    var tp = held.unsafe_ptr()
+    var rp = ropes.unsafe_ptr()
     var c_dm = config.d_model
     var c_heads = config.n_heads
     var c_kv = config.n_kv
     var c_hd = config.head_dim
     var c_ff = config.intermediate
-    var c_layers = config.n_layers
+    var c_len = config.length
 
-    def _row_task(r: Int) {imm op, imm fp, imm ip, imm pp, imm length, imm vocab, imm c_batch,
-                           imm c_length, imm c_dm, imm c_heads, imm c_kv, imm c_hd, imm c_ff,
-                           imm c_layers}:
+    def _row_task(c: Int) {imm op, imm fp, imm ip, imm tp, imm rp, imm chunk, imm batch, imm length,
+                           imm vocab, imm layers, imm head_index, imm reverse, imm c_dm, imm c_heads,
+                           imm c_kv, imm c_hd, imm c_ff, imm c_len}:
         try:
-            var row = List[Int32](capacity=length)
-            for t in range(length):
-                row.append(ip.unsafe_load(r * length + t))
-            var cfg = ByteConfig(c_batch, c_length, c_dm, c_heads, c_kv, c_hd, c_ff, c_layers, vocab)
-            var row_logits = byte_host_logits(pp[], row, 1, length, cfg)
-            for c in range(len(row_logits)):
-                op.unsafe_store(r * length * vocab + c, row_logits[c])
+            var lo = c * chunk
+            var hi = lo + chunk
+            if hi > batch:
+                hi = batch
+            var dims = TransformerDims(c_dm, c_heads, c_kv, c_hd, c_ff, c_len)
+            var row_ids = List[Int32](length=length, fill=Int32(0))
+            var part = List[Float32](length=length * vocab, fill=Float32(0.0))
+            for r in range(lo, hi):
+                for t in range(length):
+                    row_ids[t] = ip.unsafe_load(r * length + t)
+                var hidden = hidden_fast(tp[], rp[], row_ids, length, dims, layers)
+                gemm_nt_rows(hidden, tp[][head_index], vocab, c_dm, 0, length, part, reverse)
+                for q in range(length * vocab):
+                    op.unsafe_store(r * length * vocab + q, part[q])
         except:
-            fp.unsafe_store(r, 1)
+            fp.unsafe_store(c, 1)
 
-    sync_parallelize(_row_task, batch)
+    if tasks == 1:
+        _row_task(0)
+    else:
+        sync_parallelize(_row_task, tasks)
     _ = held^
-    for r in range(batch):
-        if failed[r] != 0:
-            raise Error("byte LM host: threaded row " + String(r) + " raised")
+    _ = ropes^
+    for c in range(tasks):
+        if failed[c] != 0:
+            raise Error("byte LM host: threaded row chunk " + String(c) + " raised")
     return logits^
 
 
+def byte_host_logits_threaded(params: List[Float32], inputs: List[Int32], batch: Int,
+                              length: Int, config: ByteConfig, threads: Int = 0) raises -> List[Float32]:
+    """`byte_host_logits` through the DEVIATION 2640 kernels on at most
+    `threads` threads (0: one per physical core); same arguments, same bits."""
+    _validate_logits_inputs(params, inputs, batch, length, config)
+    return _threaded_rows(params, inputs, batch, length, config, byte_host_worker_count(threads))
+
+
 def byte_host_loss(params: List[Float32], ids: List[Int32], config: ByteConfig,
-                   threaded: Bool = False) raises -> Float32:
+                   threaded: Bool = False, threads: Int = 0) raises -> Float32:
     """Mean next-byte cross-entropy of ids `[batch, length + 1]` at the
     configured shape, split exactly as `_byte_forward_loss` splits them.
-    The loss itself is the one-thread oracle on both paths."""
+    The loss runs on the calling thread: the oracle on the reference path,
+    `ce_causal_mean_loss_fast` on the threaded path."""
     config.validate()
     var b = config.batch
     var l = config.length
@@ -291,10 +369,9 @@ def byte_host_loss(params: List[Float32], ids: List[Int32], config: ByteConfig,
         for li in range(l):
             inputs.append(ids[bi * (l + 1) + li])
             targets.append(ids[bi * (l + 1) + li + 1])
-    var logits: List[Float32]
     if threaded:
-        logits = byte_host_logits_threaded(params, inputs, b, l, config)
-    else:
-        logits = byte_host_logits(params, inputs, b, l, config)
+        var fast_logits = byte_host_logits_threaded(params, inputs, b, l, config, threads)
+        return ce_causal_mean_loss_fast(fast_logits, targets, config.vocab_size)
+    var logits = byte_host_logits(params, inputs, b, l, config)
     var st = ce_forward_oracle(logits, targets, CeConfig.causal_lm(config.vocab_size))
     return st.loss[0]

@@ -63,6 +63,16 @@ and the fold launch apart (`identical_gemm_step_kpack_phase_into`). Where it
 declines, the arm runs the whole leaf range in one launch and there is no
 PHASE line (as for `tuned128`).
 
+DEVIATIONS 2640 to 2642 (docs/lanes/BRIEF_gemm_final_2026-09-11.md sections 4
+and 6). The arms `kfoldv` and `kfoldv_leaf` get PRICE and TABLE lines like every
+arm. Where an arm's rule takes a call, a PHASEBITS pass and a PHASE line with
+`phase_of=arm_kfold` price the allocation, the shipped group launch at the
+arm's group size and the LANE fold apart
+(`identical_gemm_step_kfold_phase_into`). Its `fold_ms` against the
+`shipped_default` PHASE line of the `shipped` run on the same pod is what reads
+brief section 4.4's models A to C. Where the rule declines, the arm runs the
+shipped dispatch and the call carries the shipped default's PHASE line.
+
 Operands are the hashed ordinary kind. This is a per-call kernel price; the
 default-flip input under ENGINEERING_RULES 9 is the LM step on the two
 corpora (`tools/gemm_step_leg.sh`), never this harness.
@@ -76,6 +86,8 @@ from checks.numerics import numeric_mode_name
 from gemm.checks.gemm_identical import (
     GEMM_ARM_SABOTAGE,
     GEMM_ARM_TRIAL,
+    GEMM_GEOM_KFOLDV,
+    GEMM_GEOM_KFOLDV_LEAF,
     GEMM_GEOM_KPACK,
     GEMM_GEOM_KPACK_WIDE,
     GEMM_GEOM_KSPLIT,
@@ -96,6 +108,7 @@ from gemm.checks.gemm_identical import (
     gemm_step_geometry_name,
     identical_gemm_shipped_into,
     identical_gemm_step_geometry_into,
+    identical_gemm_step_kfold_phase_into,
     identical_gemm_step_kpack_phase_into,
     identical_gemm_step_ksplit_phase_into,
     identical_gemm_workspace_max_floats,
@@ -277,7 +290,14 @@ def _price_call(
     var phase_of = String("")
     # DEVIATION 2599: the kpack arms time their own packed group launch.
     var kpack_phase = False
-    if geom == GEMM_GEOM_KSPLIT or geom == GEMM_GEOM_KSPLIT_LEAF:
+    # DEVIATIONS 2640 and 2641: the lane fold arms time their own fold launch.
+    var kfold_phase = False
+    if (geom == GEMM_GEOM_KFOLDV or geom == GEMM_GEOM_KFOLDV_LEAF) and gleaves > 0:
+        pleaves = gleaves
+        pblocks = launched
+        phase_of = String("arm_kfold")
+        kfold_phase = True
+    elif geom == GEMM_GEOM_KSPLIT or geom == GEMM_GEOM_KSPLIT_LEAF:
         pleaves = gleaves
         pblocks = launched
         phase_of = String("arm")
@@ -292,7 +312,9 @@ def _price_call(
         phase_of = String("shipped_default")
     if pleaves > 0:
         gemm_step_poison(ctx, dc, hgot, mn)
-        if kpack_phase:
+        if kfold_phase:
+            _ = identical_gemm_step_kfold_phase_into(ctx, dc, da, db, dw, m, n, k, op, geom)
+        elif kpack_phase:
             _ = identical_gemm_step_kpack_phase_into(ctx, dc, da, db, dw, m, n, k, op, geom)
         else:
             _ = identical_gemm_step_ksplit_phase_into(ctx, dc, da, db, dw, m, n, k, op, pleaves)
@@ -312,7 +334,9 @@ def _price_call(
             var s_sum = List[Int]()
             for _ in range(rounds):
                 var ph = (Int(0), Int(0), Int(0))
-                if kpack_phase:
+                if kfold_phase:
+                    ph = identical_gemm_step_kfold_phase_into(ctx, dc, da, db, dw, m, n, k, op, geom)
+                elif kpack_phase:
                     ph = identical_gemm_step_kpack_phase_into(ctx, dc, da, db, dw, m, n, k, op, geom)
                 else:
                     ph = identical_gemm_step_ksplit_phase_into(ctx, dc, da, db, dw, m, n, k, op, pleaves)
