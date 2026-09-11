@@ -22,14 +22,27 @@ ladder). So for any given slot the sequence of adds is program order inside
 one tile, whatever the barrier's width, and the histogram is bit-for-bit the
 same either way. That is what makes this a per-column row at all.
 
-THE PARTICIPATION REQUIREMENT IS ALREADY MET, which is the other half of why
-`barrier()` may stand here. Every call in these families is UNCONDITIONAL
-inside a loop whose trip count is block-uniform by construction
-(`requires_uniform_iteration_for`, and the `max_iters` derivation each kernel
-carries beside it), so no thread can skip a barrier its neighbours reach.
-That property was bought for a different reason -- CatBoost's warp-local sync
-is what our threadgroup barrier could not be -- and it is what lets this file
-take a threadgroup barrier without a second thought.
+THE PARTICIPATION REQUIREMENT, which is the other half of why `barrier()` may
+stand here. Every call in these families is UNCONDITIONAL, so what must be
+block-uniform is the trip count of every loop around one. The striped loop's
+is (`requires_uniform_iteration_for`, and the `max_iters` derivation each
+kernel carries beside it).
+
+THE HEAD/TAIL PEEL'S WAS NOT, UNTIL DEVIATION 2600 (2026-09-11). It copied
+CatBoost's `for (idx = tid; idx < alignSize; idx += BlockSize)`, which gives a
+thread with `tid >= alignSize` NO trip. `alignSize` is 128 (half-byte) or 256
+(binary, hist_2) against a 512-thread block, so threads 0..127 or 0..255 ran
+the peel's `AddPoint` syncs and the rest of the block did not. Their sync is
+warp-local and `alignSize` is a multiple of the warp, so every warp stays
+uniform and nothing is wrong on a column where `turn_sync` is `syncwarp`. On
+the 64-lane AMD column `turn_sync` is this `barrier()`, a barrier part of the
+block skips. The IDENTICAL binary, half-byte, 5-bit and 6-bit kernels carry
+it (the 7-bit and 8-bit IDENTICAL arms issue no turn sync, and the one-byte
+PASS family's shared-Int32 block equals its `alignSize`). Each peel now runs
+to `PEEL_END`, `alignSize` rounded up to the block, so every thread makes the
+same trips. A trip at or past `alignSize` fails both load guards (`head_len`
+and `tail_len` never exceed `alignSize`) and adds a zero point into cells the
+kernel zeroed a statement earlier, so no histogram bit moves on any column.
 
 THE COLUMNS. `apple`, `nvidia`, `amd-rdna` and the identity column are
 exactly 32 lanes wide and keep `syncwarp`, byte for byte and cycle for cycle.
