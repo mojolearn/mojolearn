@@ -42,7 +42,7 @@ sections 9 and 10 and bench/OPPONENT_REFERENCE.md before touching a lane.
 | forest-finish, DEVIATIONS 2637, 2638, 2663 | b3d6eeb5 | RF **0.775**, ET **0.929**, iforest **0.108**; 2663 at bw16k **0.880** and bw32k **0.865**. Every quality delta exactly +0.000000. ET is SLOWER on taxi (1.018) and is not claimed there |
 | gbdt-finish, DEVIATIONS 2634, 2635, 2636 (2661 opt-in) | 5030ebc3 | identity only: 36/36 cells stable on four sets, sub-byte 16/16 PASS. **NO speed claim** — timing was still running at merge |
 | pointwise-speed | 652ccd8f | merged on Andrew's instruction while the lane was still running; its verdicts are owed |
-| linear-cluster-istella, DEVIATION 2671 | 0c6c1249 | Jacobi with two barriers per rotation: OLS geomean 0.9610, PCA 0.9435, 0 of 48,400 matrix and 0 of 48,400 eigenvector cells differing. **DEVIATION 2672 is UNRESOLVED** (taxi 0.979, Istella-S 1.066 then 0.950) and must not be read as a win until the pooled tie-break returns |
+| linear-cluster-istella, DEVIATION 2671 | 0c6c1249 | Jacobi with two barriers per rotation: OLS geomean 0.9610, PCA 0.9435, 0 of 48,400 matrix and 0 of 48,400 eigenvector cells differing. **DEVIATION 2672 RESOLVED as a flip**: the single 1.066 instance was noise; pooled over five race instances it reads taxi 0.8979 and Istella-S 0.9943, geomean 0.9449, digests equal. k-means 2672 and OLS/PCA 2671 both ship on |
 
 Apple M4 gates passed before each merge: check-knn-identity, check-knn,
 query_batch_check; kde_check 15/15 and kde_stage_profile; svc_main 44/44 plus
@@ -176,8 +176,8 @@ the H100, then gate the Apple M4 and an AMD box before merging.
    - GBDT 2634/2635/2636: the ab and phase 2 medians, per-switch, through
      `tools/flip_verdict.py`. If any loses, turn it off; it is merged as
      default-on with identity proven but speed unproven.
-   - DEVIATION 2672 (k-means host staging): the pooled tie-break across five
-     race instances per dataset. If it loses, revert its two hunks.
+   - DEVIATION 2672: DONE, it flips (pooled geomean 0.9449). What remains
+     from that lane is the Istella-S DBSCAN median, still RUN OWED.
    - DEVIATION 2663 regression: the ExtraTrees istellareg cells and the
      pre-registered width rule (taxireg was flat at 0.989/0.988, and the
      mechanism is structurally absent at max_features=1.0).
