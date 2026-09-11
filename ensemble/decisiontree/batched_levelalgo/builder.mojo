@@ -461,17 +461,21 @@ struct SplitSummary[dtype: DType](TrivialRegisterPassable):
     retry it with fresh columns."""
 
 
-comptime RETRY_PURE_NODES = not is_defined["MOJOLEARN_2502_PURE_LEAF"]()
-"""DEVIATION 2502 (2026-09-10), OFF BY DEFAULT since 2026-09-11: opt in with
-`-D MOJOLEARN_2502_PURE_LEAF=1`. Andrew, 2026-09-11: the win below was
-measured on ONE kind of data (HIGGS, 28 features, depth 16, where three
-quarters of the histogram rounds were pure-node retries) and a change to
-the forest a classifier ships is not flipped on one kind
-(ENGINEERING_RULES.md section 9). It stays off until it has run on the
-high-feature set at or above 1M rows beside HIGGS, on the H100 and the M4,
-and Andrew has ratified it. The shipped forest is the previous one (HIGGS
-1M hash 3ffa2951595422d4; the rf-clf fingerprints in the retained sets).
-The text below describes the opt-in arm.
+comptime RETRY_PURE_NODES = is_defined["MOJOLEARN_2502_RETRY_PURE"]()
+"""DEVIATION 2502 (2026-09-10), ON BY DEFAULT since 2026-09-11 evening: opt
+out with `-D MOJOLEARN_2502_RETRY_PURE=1` to get the previous forest. It was
+taken to opt-in on 2026-09-11 morning because its win had been measured on
+ONE kind of data (HIGGS, since retired, ENGINEERING_RULES.md section 9). It
+then ran on the two datasets of section 9 at 1M rows, IDENTICAL tier, on the
+M4 (`bench/results/rf_2502_m4_2026-09-11/`): taxi 7206..7295 -> 6403..6554
+ms, logloss 0.525912 -> 0.525910; Istella-S 34667..42381 -> 16346..18130 ms,
+logloss 0.145578 -> 0.145560. A fit-time win on both kinds with equal
+logloss is the flip condition, and Andrew ratified it the same day: "if
+things are improving now with these 2 datasets we should be turning those
+deviations on". The forest a classifier ships CHANGED with this flip (taxi
+1M IDENTICAL hash 0ae984630cfca2a8 -> d8f64dae01de00bd, Istella
+15e38312cb4bb870 -> 574b24d0d7af51d0; the rf-clf fingerprints move, rf-reg
+does not). The text below describes the ON arm.
 
 A PURE NODE IS A LEAF. Their `doSplit`
 retries every node whose sampled columns found no valid split, up to
