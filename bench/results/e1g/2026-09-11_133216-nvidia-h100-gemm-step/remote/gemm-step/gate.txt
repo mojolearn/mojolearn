@@ -1,0 +1,14 @@
+deviations=2540-2544
+started=2026-09-11T13:34:13Z
+root=/root/mojolearn
+arms=shipped,lfold,half,half_ks16,quarter,head,half_head
+lm_arms=auto
+check_arms=all
+rounds=7 warmups=2 deadline=300 check_deadline=900 lm_steps=3
+vendor=nvidia gpu_archs=sm_90a column=nvidia jobs=2
+skip_resources=0 skip_lm=0 lmtiming=0
+vendor=nvidia
+commit=cd086f673d708051a65837484a31602d02e6e24c
+lm_arms_resolved=quarter
+corpora= enwik8=training/corpus/enwik8/input.txt pilegithub=training/corpus/pile_github/input.txt
+finished=2026-09-11T13:51:07Z

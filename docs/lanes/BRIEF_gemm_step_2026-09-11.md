@@ -538,3 +538,42 @@ probes of one to two minutes.
 - **The trial binding reads the environment on every GEMM call.** That is
   about 300 calls per step, the same per-call pattern as the attention
   lane's hook.
+
+### 10.7 H100 leg result (2026-09-11, RunPod, commit cd086f67): NO FLIP
+
+Run on NVIDIA first because the shared DigitalOcean GPU was held by the trees
+lane (Andrew: "use runpod then and just do nvidia for now"). The AMD leg in
+10.5 is still owed, so this is not a verdict for the deciding column.
+
+Evidence: bench/results/e1g/2026-09-11_133216-nvidia-h100-gemm-step
+(`NVIDIA H100 80GB HBM3`, driver 580.126.09, sm_90a, pod tr4o460ozelb4s
+terminated and verified, 19 minutes on the pod). Command: 10.5 with
+`tools/gemm_remote_leg.sh nvidia --payload gemm --rent --minutes 60 --gpu
+"NVIDIA H100 80GB HBM3" --allow-concurrent` and the default arms. The leg's
+own device card matched the M4 card generated at the same commit on all 60
+stages.
+
+- `status.tsv`: all 22 items exit 0. The Pile GitHub fetch took 426 s.
+- `step-check.log`: PASS. Every geometry bit-equal to the shipped plan and to
+  FLAT, reach proven per geometry, and an OK `LM` line for every arm on the
+  twelve target-shape calls, including the three vocab-sized head calls the
+  M4 skipped.
+- `resources_lines.txt` (registers, local floats, blocks per 256-thread SM):
+  shipped 255, 4144, 1; lfold 254, 4352, 1; half and half_ks16 226, 2176, 1;
+  quarter 214, 1088, 1; head_n and head_m 254, 2176, 1. **No arm crosses to
+  two blocks per SM.** The register cut is real but too small to change the
+  block count, so each arm pays for its extra launches and gets nothing back.
+- `price_step.txt` (GEMM sum per step, 12 calls weighted by count; shipped
+  about 219 ms): quarter 1.270, head 1.277, half 1.842, half_ks16 1.844,
+  half_head 1.878, lfold 2.862, shipped control 1.000. Only proj_dB (768 x
+  768 x 2048) comes in under 1.0 for half (0.991), inside noise.
+- `lm_summary.tsv` (`LM_ARMS=auto` picked quarter): lean step shipped
+  0.4573 s (enwik8) and 0.4556 s (Pile GitHub), shipped close 0.4557 and
+  0.4552, quarter 0.5145 and 0.5143. Witnesses equal on every step.
+  `verdict quarter NO FLIP geomean=1.1282 enwik8=1.1271 pilegithub=1.1292`.
+
+Reading: on the H100 the shipped 128x128 plan already fits one block per SM,
+and the occupancy arms as built do not move that. They are declined on
+NVIDIA. Whether HIP on the MI325X has a different register budget or SM
+geometry is exactly what the AMD leg's `resources_lines.txt` answers; do not
+build more occupancy arms before it has been read.
