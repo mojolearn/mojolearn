@@ -345,7 +345,6 @@ def worker(args):
     emit(dict(event='setup', schema=SCHEMA, shape=shape.to_dict(), profile=shape.profile,
               parameters=shape.n_total, n_tensors=shape.n_tensors, tokens_per_step=tokens_per_step,
               seed=args.seed, budget_seconds=args.budget_seconds, **mode,
-              corpus=corpus.describe() if corpus is not None else None,
               attention_arm_requested=os.environ.get('MOJOLEARN_ATTN_ARM'),
               attention_path_requested=os.environ.get('MOJOLEARN_TRANSFORMER_ATTN_PATH'),
               numeric_mode_env=os.environ.get('MOJOLEARN_NUMERIC_MODE'),
