@@ -1,0 +1,10 @@
+lane=classical-two-datasets (DEVIATION 2570, 2571)
+invoked=2026-09-11T19:10:07Z phases=prep races smoke_rows=none
+vendor=nvidia provider=runpod
+commit=94c82db87f2e91fe0f0d8cb24678f75de74e257c
+lanes=svc
+datasets=taxi istella
+rounds=3 body_seconds=2400 min_race=240 race_seconds=900 jobs=8
+gpu_archs=
+ours_python=python3 theirs_python=python3 extra_arms=
+finished=2026-09-11T19:10:34Z phases=prep races

@@ -479,21 +479,22 @@ scikit-learn arm runs here. Evidence
 | lane | dataset | opponent | device | opponent ms | opponent quality | ours IDENTICAL ms | ours quality | ours / opponent |
 |---|---|---|---|---|---|---|---|---|
 | kde | Istella-S | cuML KernelDensity | GPU, H100 | 6.79 (6.72..7.30) | mean log-lik -212.117 | 219 (194..227) | mean log-lik -212.117 | 32.25x |
-| svc | Istella-S | cuML SVC | GPU, H100 | 20.96 (20.69..23.73) | accuracy 0.9222, 2401 SV | FAILED | none | not quoted (ours fails) |
+| svc | Istella-S | cuML SVC | GPU, H100 | 20.64 (19.91..24.56) | accuracy 0.9222, 2401 SV | 70.7 (65.7..73.1), with DEVIATION 2623 | accuracy 0.9222, 2400 SV | 3.43x |
+| svc | taxi | cuML SVC | GPU, H100 | 415 (414..415) | accuracy 0.7675, 5586 SV | 857 (857..860), with DEVIATION 2623 | accuracy 0.7675, 5527 SV | 2.06x |
 
-Both KDE arms and the cuML SVC arm held one digest across their rounds.
+Every arm held one digest across its rounds.
 
-Ours SVC fails on this GPU for every fit with more than 512 training rows.
-`n_ws = min(1024, n_train)` selects `smo_block_solve_kernel[1024]`, and CUDA
-refuses that launch with CUDA_ERROR_LAUNCH_OUT_OF_RESOURCES. A fit on 400
-rows (width 512) completes, and the same width 1024 launch works on the MI300X
-and the Apple M4. Probe kernels on this pod show that a 48 KB SHARED array, 64
-barriers, 16 SHARED arrays, three tree-path `pinned_block_argmax[1024]`
-reductions and two warp-path `block_argext[1024]` reductions all launch,
-while three warp-path `block_argext[1024]` reductions do not, and that is the
-solve's shape since DEVIATION 2491. No NVIDIA SVC row exists until that is
-fixed. The scikit-learn KDE row on Istella-S in the MI300X section is still
-owed.
+At 94c82db8 our SVC failed on this GPU for every fit with more than 512
+training rows. `n_ws = min(1024, n_train)` selects
+`smo_block_solve_kernel[1024]`, and CUDA refused DEVIATION 2491's warp-fold
+kernel at that width with CUDA_ERROR_LAUNCH_OUT_OF_RESOURCES, while the
+MI300X and the Apple M4 launch it. The first Istella-S race recorded that
+failure (cuML 20.96 ms in it). DEVIATION 2623 adds a kernel-matrix row that
+sends NVIDIA above width 512 back to the pre-2491 halving trees. The SVC rows
+above are a second race, 19:10Z on the same pod, with the SVM binding rebuilt
+from 94c82db8 plus that change (branch `lane/svc-cuda-1024`, 11928fec).
+Taxi was prepped for this race only. The scikit-learn KDE row on Istella-S
+in the MI300X section is still owed.
 
 ## NVIDIA L40S, driver 580.126.09, CUDA 12.4, torch 2.4.1+cu124, cuBLAS 120402, cupy 14.2.0
 
