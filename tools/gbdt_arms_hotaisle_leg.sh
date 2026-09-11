@@ -11,7 +11,7 @@
 #   MOJOLEARN_GEMM_LEG_EXTRA=tools/gbdt_arms_hotaisle_leg.sh \
 #   MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/<stamp>-amd-mi300x-hotaisle-gbdt-arms-<group> \
 #   MOJOLEARN_HOTAISLE_EXTRA_ENV='MOJOLEARN_GBDT_ARMS_GROUP=<perround|sym>' \
-#   bash tools/hotaisle_leg.sh --rent --minutes 60
+#   bash tools/hotaisle_leg.sh amd --rent --minutes 60 --skip-gates
 #
 # ENV (values limited to the runner's [A-Za-z0-9_.,:/=-])
 #   MOJOLEARN_GBDT_ARMS_GROUP   perround: sets default a2550 a2551, combo
@@ -64,7 +64,11 @@ COMBOS="${MOJOLEARN_GBDT_ARMS_COMBOS:-1}"
 
 # THE DEADLINE: the start wrapper's timeout bound, from its argv and the
 # remote body's started= line; the budget env or a conservative bound else.
-WORK=$(ps -eo args | sed -n 's/^timeout -k [0-9]* \([0-9][0-9]*\) sh \/root\/gemm_leg\.sh.*$/\1/p' | head -n 1)
+# Read from /proc first: the Hot Aisle body runs in the ROCm container,
+# where procps is not guaranteed; `ps` is the fallback.
+WORK=$(for _f in /proc/[0-9]*/cmdline; do tr '\000' ' ' < "$_f" 2>/dev/null; echo; done \
+    | sed -n 's/^timeout -k [0-9]* \([0-9][0-9]*\) sh \/root\/gemm_leg\.sh.*$/\1/p' | head -n 1)
+[ -n "$WORK" ] || WORK=$(ps -eo args 2>/dev/null | sed -n 's/^timeout -k [0-9]* \([0-9][0-9]*\) sh \/root\/gemm_leg\.sh.*$/\1/p' | head -n 1)
 STARTED=$(sed -n 's/^started=//p' /root/gemm_leg_out/leg.txt 2>/dev/null | head -n 1)
 ST_EPOCH=$(date -u -d "$STARTED" +%s 2>/dev/null || echo "")
 if [ -n "$WORK" ] && [ -n "$ST_EPOCH" ]; then
@@ -183,6 +187,16 @@ for _t in $TIERS; do
         build "$_t" "$_s" bindings/build_gbdt.sh _mojolearn_gbdt.so "$(defines_for "$_s")"
     done
 done
+# No default gbdt build in any tier: nothing below can measure, so end the
+# body now and let the runner DELETE the VM (the bill is per minute).
+_any_default=0
+for _t in $TIERS; do
+    [ -f "$BINS/$_t/default/_mojolearn_gbdt.so" ] && _any_default=1
+done
+if [ "$_any_default" = 0 ]; then
+    status no_default_gbdt_build 3
+    exit 3
+fi
 if [ "$COMBOS" = 1 ]; then
     for _t in $TIERS; do
         build "$_t" "$COMBO" bindings/build_gbdt.sh _mojolearn_gbdt.so "$(defines_for "$COMBO")"
