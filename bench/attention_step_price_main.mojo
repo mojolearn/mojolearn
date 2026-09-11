@@ -90,9 +90,15 @@ any name `fused_attention_arm_parse` reads, brief section 12.1, e.g.
 stash_tiled_ztiled, stash_tiled_ztiled_r32, stash_tiled_ztiled_r64, and
 section 14's stash_tiled_pf, stash_tiled_fgrid_r32, stash_tiled_fgrid_r64,
 stash_tiled_fgrid_r32_qres, stash_tiled_fgrid_r32_qres_pf),
-MOJOLEARN_ATTN_BASELINE (default baseline; stash_tiled, the shipped
-default, is the baseline a second-round arm is priced against), the two
-`PATH` lines print each arm's resolved kernels, MOJOLEARN_ATTN_KINDS
+MOJOLEARN_ATTN_BASELINE (default baseline; stash_tiled is the baseline a
+second-round arm is priced against). Either name may be `default`, the
+column's shipped arm (kernel matrix `attn_default_arm_for`, DEVIATION 2534:
+NVIDIA stash_tiled_fgrid_r32_qres_pf, every other column stash_tiled); the
+harness prints the explicit name everywhere and a `DEFAULT` line beside the
+request. The two `PATH` lines print each arm's resolved kernels
+(`is_default`, `resolved_hd64`), and every correctness run prints a `RAN`
+line naming the kernels that launched and fails at head_dim 64 when they are
+not the arm's. MOJOLEARN_ATTN_KINDS
 (default hashed; the leg passes file:<dir> per corpus), MOJOLEARN_ATTN_L, _NH, _NKV, _HD, _B, _WINDOW,
 MOJOLEARN_ATTN_ROUNDS, _WARMUPS, MOJOLEARN_ATTN_ORACLE (1),
 MOJOLEARN_ATTN_REACH (1), MOJOLEARN_ATTN_TIMING (1).
@@ -115,12 +121,16 @@ from transformer.checks.transformer_backward import (
 from transformer.impl.llama.fused_attention import (
     ATTN_ARM_BASELINE,
     ATTN_ARM_BWD_ZTILED,
+    ATTN_ARM_DEFAULT,
     ATTN_ARM_FWD_QRES,
     ATTN_ARM_PREFLUSH,
     ATTN_ARM_SABOTAGE_NEW,
     ATTN_ARM_TRIAL,
     ATTN_PHASE_TIMERS,
+    ATTN_STASH_HD,
     FUSED_RAN,
+    fused_attention_arm_backward_resolved,
+    fused_attention_arm_forward_resolved,
     fused_attention_arm_name,
     fused_attention_arm_new_backward,
     fused_attention_arm_new_forward,
@@ -129,7 +139,9 @@ from transformer.impl.llama.fused_attention import (
     fused_attention_fwd_rows,
     fused_attention_zdot_rows,
     fused_backward_launch_arm,
+    fused_backward_launch_ran,
     fused_forward_launch_arm,
+    fused_forward_launch_ran,
 )
 from transformer.impl.llama.modeling_llama import (
     LlamaDeviceStages,
@@ -171,7 +183,11 @@ def _path_line(role: String, arm: Int) -> String:
     (DEVIATIONS 2531 and 2530, and 2533's forward half: `-` when the arm
     runs no second-round forward, 0 when its page does not fit and the
     first-round sstash kernel runs); `preflush` says whether DEVIATION 2533
-    is in the arm; `reach_bit` is the sabotage this arm's reach proof uses."""
+    is in the arm; `reach_bit` is the sabotage this arm's reach proof uses.
+    `is_default` says whether the arm is this column's shipped default
+    (kernel matrix `attn_default_arm_for`, DEVIATION 2534) and
+    `resolved_hd64` names the kernels the launchers run for it at head_dim
+    64 on this build (geometry resolved)."""
     var rows = String("-")
     if (arm & ATTN_ARM_BWD_ZTILED) != 0:
         rows = String(fused_attention_zdot_rows(arm))
@@ -181,11 +197,24 @@ def _path_line(role: String, arm: Int) -> String:
     var reach = String("sabotage")
     if fused_attention_arm_reach_bit(arm) == ATTN_ARM_SABOTAGE_NEW:
         reach = String("sabotage_new")
+    var resolved = fused_attention_arm_forward_resolved(arm) | fused_attention_arm_backward_resolved(arm)
     return (
         "PATH " + role + " arm=" + fused_attention_arm_name(arm)
+        + " is_default=" + String(arm == ATTN_ARM_DEFAULT)
+        + " resolved_hd64=" + fused_attention_arm_name(resolved)
         + " zdot_rows=" + rows + " fwd_rows=" + frows + " preflush="
         + String((arm & ATTN_ARM_PREFLUSH) != 0) + " reach_bit=" + reach
     )
+
+
+def _resolve_arm_name(raw: String) -> String:
+    """`default` is an alias for this column's shipped default arm
+    (DEVIATION 2534); the harness replaces it with the explicit name before
+    anything is printed, so no PRICE, BITS, REACH or TABLE line ever says
+    `default`."""
+    if raw == "default":
+        return fused_attention_arm_name(ATTN_ARM_DEFAULT)
+    return raw
 
 
 def _median(var xs: List[Float64]) -> Float64:
@@ -644,12 +673,41 @@ struct Case(Movable):
         )
 
     def run_both(mut self, ctx: DeviceContext, arm: Int, label: String) raises:
-        var sf = self.forward(ctx, arm)
+        """Forward then backward under `arm`, each FUSED_RAN, then a `RAN`
+        line naming the kernels that launched (DEVIATION 2534). At head_dim
+        64 they must be the arm's resolved kernels on this build, so a
+        result line can never carry one arm's name over another's kernels."""
+        var ran_f = -1
+        var sf = fused_forward_launch_ran(
+            ctx, self.ctxv, self.amax, self.denom, self.q, self.k, self.v,
+            self.b, self.l, self.nh, self.nkv, self.hd, self.s, self.pos0,
+            self.key_lo, self.window, self.scale, arm, ran_f,
+        )
         if sf != FUSED_RAN:
             raise Error(label + ": the fused forward did not report FUSED_RAN (status " + String(sf) + ")")
-        var sb = self.backward(ctx, arm)
+        var ran_b = -1
+        var sb = fused_backward_launch_ran(
+            ctx, self.zdot, self.dq, self.dk, self.dv, self.q, self.dctx,
+            self.k, self.v, self.amax, self.denom, self.b, self.l, self.nh,
+            self.nkv, self.hd, self.s, self.pos0, self.key_lo, self.window,
+            self.scale, arm, ran_b,
+        )
         if sb != FUSED_RAN:
             raise Error(label + ": the fused backward did not report FUSED_RAN (status " + String(sb) + ")")
+        print(
+            "RAN " + label + " forward=" + fused_attention_arm_name(ran_f)
+            + " backward=" + fused_attention_arm_name(ran_b)
+        )
+        if self.hd == ATTN_STASH_HD:
+            var want_f = fused_attention_arm_forward_resolved(arm)
+            var want_b = fused_attention_arm_backward_resolved(arm)
+            if ran_f != want_f or ran_b != want_b:
+                raise Error(
+                    label + ": RAN forward " + fused_attention_arm_name(ran_f)
+                    + " backward " + fused_attention_arm_name(ran_b)
+                    + " and this build resolves " + fused_attention_arm_name(want_f)
+                    + " / " + fused_attention_arm_name(want_b)
+                )
 
     def download(mut self, ctx: DeviceContext) raises -> Outputs:
         var o = Outputs()
@@ -740,8 +798,12 @@ def main() raises:
     var want_oracle = _env_int("MOJOLEARN_ATTN_ORACLE", 1) != 0
     var want_reach = _env_int("MOJOLEARN_ATTN_REACH", 1) != 0
     var want_timing = _env_int("MOJOLEARN_ATTN_TIMING", 1) != 0
-    var cand_name = _env_str("MOJOLEARN_ATTN_ARM", "bwd_stash")
-    var base_name = _env_str("MOJOLEARN_ATTN_BASELINE", "baseline")
+    var cand_raw = _env_str("MOJOLEARN_ATTN_ARM", "bwd_stash")
+    var base_raw = _env_str("MOJOLEARN_ATTN_BASELINE", "baseline")
+    # DEVIATION 2534: `default` becomes the column's explicit arm name here,
+    # before any line is printed.
+    var cand_name = _resolve_arm_name(cand_raw)
+    var base_name = _resolve_arm_name(base_raw)
     var kinds = _split_list(_env_str("MOJOLEARN_ATTN_KINDS", "hashed"))
     var cand = fused_attention_arm_parse(cand_name)
     var base = fused_attention_arm_parse(base_name)
@@ -762,6 +824,16 @@ def main() raises:
         + " (a file: kind carries its own shape)"
     )
     print("trial_hook=" + String(ATTN_ARM_TRIAL) + " phase_timers_built=" + String(ATTN_PHASE_TIMERS))
+    # DEVIATION 2534: the column's shipped default, beside what this run
+    # asked for, so baseline, stash_tiled and the default are never confused.
+    print(
+        "DEFAULT column=" + column_name(TARGET_COLUMN) + " arm="
+        + fused_attention_arm_name(ATTN_ARM_DEFAULT)
+        + " source=kernel_matrix.attn_default_arm_for baseline_is_default="
+        + String(base == ATTN_ARM_DEFAULT) + " candidate_is_default="
+        + String(cand == ATTN_ARM_DEFAULT) + " baseline_requested=" + base_raw
+        + " candidate_requested=" + cand_raw
+    )
     comptime if ATTN_PHASE_TIMERS:
         print("NOTE: built with MOJOLEARN_ATTN_PHASE_TIMERS; under MOJOLEARN_TRANSFORMER_TIMING=1 every launch is serialized and PRICE lines are a breakdown, not a price")
     print("baseline=" + base_name + " candidate=" + cand_name + " rounds=" + String(rounds) + " warmups=" + String(warmups))
@@ -900,7 +972,7 @@ def main() raises:
             var bb = _median(base_both.copy())
             var cf = _median(cand_fwd.copy())
             var cb = _median(cand_both.copy())
-            print("TABLE kind=" + kind + " shape=" + shape + " visible_cells=" + String(cells) + " (useful flops: fwd 4*cells*hd, bwd 10*cells*hd; executed multiplier of the shipped kernels: fwd dots 3 of 2 contractions, bwd dots 6 of 5)")
+            print("TABLE kind=" + kind + " shape=" + shape + " column=" + column_name(TARGET_COLUMN) + " default_arm=" + fused_attention_arm_name(ATTN_ARM_DEFAULT) + " visible_cells=" + String(cells) + " (useful flops: fwd 4*cells*hd, bwd 10*cells*hd; executed multiplier of the shipped kernels: fwd dots 3 of 2 contractions, bwd dots 6 of 5)")
             print("TABLE arm | fwd median ms | fwd useful TFLOP/s | fwd+bwd median ms | bwd (derived) ms | bwd useful TFLOP/s | fwd ratio | fwd+bwd ratio")
             print(
                 "TABLE " + base_name + " | " + String(bf) + " | " + String(useful_fwd / (bf * 1e9))

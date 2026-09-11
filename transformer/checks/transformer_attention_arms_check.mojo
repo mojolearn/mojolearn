@@ -16,16 +16,22 @@ WHAT IT ASSERTS.
     invalid spellings (brief sections 12.1 and 14.1).
   * For every case of `transformer_fused_check.cases()` and every arm
     (bwd_stash, fwd_sstash, bwd_stash_tiled, stash_tiled (the shipped
-    default), stash_tiled_ztiled_r64 and stash_tiled_ztiled_r32
-    (DEVIATION 2528), stash_tiled_ztiled_r64_pf (2528 with 2533),
-    stash_tiled_pf (2533), stash_tiled_fgrid_r64 and stash_tiled_fgrid_r32
-    (2531), stash_tiled_fgrid_r32_pf, stash_tiled_fgrid_r32_qres (2530) and
-    stash_tiled_fgrid_r32_qres_pf, so every second-round forward
-    instantiation (rows 64 and 32, Q residency, preflush) and every
+    default on every column but NVIDIA), stash_tiled_ztiled_r64 and
+    stash_tiled_ztiled_r32 (DEVIATION 2528), stash_tiled_ztiled_r64_pf
+    (2528 with 2533), stash_tiled_pf (2533), stash_tiled_fgrid_r64 and
+    stash_tiled_fgrid_r32 (2531), stash_tiled_fgrid_r32_pf,
+    stash_tiled_fgrid_r32_qres (2530) and stash_tiled_fgrid_r32_qres_pf
+    (NVIDIA's shipped default, DEVIATION 2534), so every second-round
+    forward instantiation (rows 64 and 32, Q residency, preflush) and every
     second-round backward launch runs, and "new arm = eager" and
     "default = eager" hold in one run):
       - the arm's launcher reports the status the case expects (RAN, the
         regime refusal, the corner), exactly as the shipped kernels must;
+      - DEVIATION 2534: the launcher reports (`fused_forward_launch_ran`,
+        `fused_backward_launch_ran`) that it ran the arm's resolved kernels
+        at head_dim 64 (`fused_attention_arm_forward_resolved`,
+        `fused_attention_arm_backward_resolved`), and the shipped kernels at
+        every other head dim or on a refusal, clean and sabotaged alike;
       - on RAN, ctx, amax, denom (forward) and zdot, dq, dk, dv (backward)
         equal the eager kernels' bits;
       - REACH, on a head-dim-64 case, with the arm's reach bit
@@ -75,6 +81,7 @@ from transformer.checks.transformer_fused_check import (
     SEED,
     cases,
     compare,
+    expected_ran,
     scaled,
     status_name,
 )
@@ -99,9 +106,11 @@ from transformer.impl.llama.fused_attention import (
     fused_attention_arm_new_backward,
     fused_attention_arm_new_forward,
     fused_attention_arm_parse,
+    fused_attention_arm_backward_resolved,
+    fused_attention_arm_forward_resolved,
     fused_attention_arm_reach_bit,
-    fused_backward_launch_arm,
-    fused_forward_launch_arm,
+    fused_backward_launch_ran,
+    fused_forward_launch_ran,
 )
 from transformer.impl.llama.modeling_llama import (
     LlamaDeviceStages,
@@ -329,12 +338,18 @@ def run_case(ctx: DeviceContext, c: FusedCase, mut failures: List[String]) raise
             var ctxv = _upload(ctx, List[Float32](length=qn, fill=Float32(0.0)))
             var amax = _upload(ctx, List[Float32](length=rn, fill=Float32(0.0)))
             var denom = _upload(ctx, List[Float32](length=rn, fill=Float32(0.0)))
-            var st = fused_forward_launch_arm(
+            var ran_f = -1
+            var st = fused_forward_launch_ran(
                 ctx, ctxv, amax, denom, stages.q_rope, stages.k_cache,
                 stages.v_cache, b, l, c.nh, c.nkv, c.hd, s, pos0, key_lo,
-                window, scale, this_arm,
+                window, scale, this_arm, ran_f,
             )
-            print("    " + label + " forward status: " + status_name(st))
+            print("    " + label + " forward status: " + status_name(st) + "  ran " + fused_attention_arm_name(ran_f))
+            # DEVIATION 2534: the kernels that launched are the arm's resolved
+            # forward (the shipped kernels at other head dims or on a refusal).
+            var want_f = expected_ran(c.hd, st, fused_attention_arm_forward_resolved(this_arm))
+            if ran_f != want_f:
+                failures.append(c.name + " " + label + ": forward RAN " + fused_attention_arm_name(ran_f) + " and the build resolves " + fused_attention_arm_name(want_f))
             var m_ctx = 0
             var m_amax = 0
             var m_den = 0
@@ -356,12 +371,16 @@ def run_case(ctx: DeviceContext, c: FusedCase, mut failures: List[String]) raise
             var dq = _upload(ctx, List[Float32](length=qn, fill=Float32(0.0)))
             var dk = _upload(ctx, List[Float32](length=kn, fill=Float32(0.0)))
             var dv = _upload(ctx, List[Float32](length=kn, fill=Float32(0.0)))
-            var bs = fused_backward_launch_arm(
+            var ran_b = -1
+            var bs = fused_backward_launch_ran(
                 ctx, zdot, dq, dk, dv, stages.q_rope, bst.d_attn_ctx,
                 stages.k_cache, stages.v_cache, f_amax, f_den, b, l, c.nh,
-                c.nkv, c.hd, s, pos0, key_lo, window, scale, this_arm,
+                c.nkv, c.hd, s, pos0, key_lo, window, scale, this_arm, ran_b,
             )
-            print("    " + label + " backward status: " + status_name(bs))
+            print("    " + label + " backward status: " + status_name(bs) + "  ran " + fused_attention_arm_name(ran_b))
+            var want_b = expected_ran(c.hd, bs, fused_attention_arm_backward_resolved(this_arm))
+            if ran_b != want_b:
+                failures.append(c.name + " " + label + ": backward RAN " + fused_attention_arm_name(ran_b) + " and the build resolves " + fused_attention_arm_name(want_b))
             var m_z = 0
             var m_dq = 0
             var m_dk = 0

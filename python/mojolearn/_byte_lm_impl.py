@@ -322,10 +322,20 @@ def _binding_metadata(binding):
     # Installed wheels may lack native sources; the Python source and exact
     # loaded binding are still identified. Do not claim a full source audit.
     inventory['loaded_python_wrapper'] = _sha(__file__)
+    # DEVIATION 2534: the attention arm the native launchers run, the
+    # column's default and whether the binding is a trial build, so a run
+    # names its arm instead of an environment variable that may be unset.
+    # None for a binding built before the read-back existed.
+    attention = None
+    if hasattr(binding, 'byte_lm_attention_arm'):
+        arm, default, trial, resolved = binding.byte_lm_attention_arm()
+        attention = dict(arm=str(arm), default=str(default), trial_build=bool(int(trial)),
+                         resolved_hd64=str(resolved))
     return dict(binding_file=binding.__file__, binding_sha256=_sha(binding.__file__),
                 native_profile=str(binding.byte_lm_profile()),
                 native_vendor=str(binding.byte_lm_vendor()),
                 native_numeric_mode=int(binding.byte_lm_numeric_mode()),
+                native_attention_arm=attention,
                 source_sha256=inventory,
                 source_scope='available direct source files; binding SHA identifies the compiled artifact')
 
