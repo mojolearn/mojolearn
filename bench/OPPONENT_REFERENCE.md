@@ -160,6 +160,8 @@ lacked it, fixed in `tools/trees_identical_remote.sh`) and is kept as
 | XGBoost GPU lossguide, Logloss | 3.2.0 | same, grow_policy lossguide, max_leaves 64; hash 377719029530ae62 and accuracy equal to its depthwise row (every depth-6 leaf is reached at 1M rows) | 1845 (1762..1940) | not run | same |
 | LightGBM CUDA (rf and lossguide) | 4.7.0 pip wheel | REFUSED: CUDA Tree Learner not enabled in this build (USE_CUDA build skipped on this leg) | refused | refused | same logs |
 
+Note (2026-09-11, AMD trees leg): the XGBoost lossguide row above is XGBoost's depthwise tree, because at depth 6 the 64-leaf cap never binds on any arm, ours included (our Lossguide stops a leaf at max_depth, `greedy_search_helper_depthwise.mojo` `is_terminal_leaf`); the config already matches our lossguide arm, and a lossguide cell where max_leaves binds needs max_depth above 6 on every arm.
+
 Our identical arm in the same process on that H100, Istella-S, hash the same
 on every round: RF 1M 3265 (3233..3482) hash 15e38312cb4bb870, logloss
 0.145578, AUC 0.964548, 0.93x of the cuML row; RF 2M 5103 (4964..5738) hash
@@ -926,3 +928,62 @@ same-model/driver/shape/fixture/scope cached-reference ratios from different
 physical rentals, not a fresh paired opponent comparison. No opponent ran
 and no new opponent tuple was introduced. The earlier 6.33% isolated
 component gain does not describe complete requests.
+
+## AMD Instinct MI325X, amdgpu 6.12.12, ROCm 6.4.0, DigitalOcean tor1
+
+Droplet `gpu-mi325x1-256gb` (the card reports AMD Instinct Mi325X VF,
+gfx942), AMD EPYC 9575F with 20 vCPUs, Ubuntu 24.04.2, Python 3.12.3, Mojo
+1.0.0 (ed45d567). ENGINEERING_RULES.md section 10 applies here. An opponent
+with an AMD GPU path runs on the GPU, one without (cuML, CatBoost GPU) runs
+on this box's CPU on all 20 cores, and each row names its device. Ours is
+the IDENTICAL tier at the default build (DEVIATION 2502 on), source 92b4bf9b
+with the harness of aca4c256. Same process as our arm, arms alternating per
+round, opponents imported before our binding, 1 warm-up plus 5 rounds, ms
+median (min..max). Configs are the H100 Istella-S rows' (boosting 100
+estimators, depth 6, lr 0.1, l2 1, 254 borders or max_bin 255, no bagging,
+Plain, seed 7, max_leaves 64 for lossguide; forests 100 trees, depth 16,
+sqrt features, bootstrap for RF only, seed 7). Accuracy is logloss / AUC on
+the fixed test tail. LightGBM 4.7.0 refused the taxi lossguide cell in both
+the PyPI wheel and a USE_GPU (OpenCL) build ("Check failed:
+(best_split_info.left_count) > (0)"), so no LightGBM row exists here yet.
+Evidence: `bench/results/trees_identical/mi325x_2026-09-11_taxi_istella/`.
+
+Identity caveat for this box. Our IDENTICAL GBDT arms (symmetric, depthwise,
+lossguide) returned a different prediction hash in every round on taxi, and
+`identity_break` here moves the gbdt `ties` fixture between its two repeats
+on all four gbdt lanes (77 of 81 cells stable; the H100 set is 81 of 81).
+RF and ET held one hash (RF once gave a second hash in 30 taxi rounds). The
+GBDT times are real fits, but the IDENTICAL contract does not hold for them
+on AMD until that is fixed, and their accuracy column is the last round's
+model.
+
+Taxi, 1,000,000 training rows (2,000,000 for RF 2M), leg 1 (droplet
+599636038):
+
+| lane | opponent | version | device | config | opponent ms | opponent logloss / AUC | ours IDENTICAL ms | ours logloss / AUC | ours / opponent | log |
+|---|---|---|---|---|---|---|---|---|---|---|
+| RF 1M | scikit-learn RandomForestClassifier | 1.9.1 | CPU, 20 cores (n_jobs=-1) | exact thresholds (no bins) | 4069 (4054..4130) | 0.525336 / 0.617420 | 1180 (1172..1182) | 0.525910 / 0.617154 | 0.29x | baseline.rf.taxi.r1000000.full.log |
+| RF 2M | scikit-learn RandomForestClassifier | 1.9.1 | CPU, 20 cores | same | 8871 (8858..9541) | 0.523834 / 0.622621 | 1734 (1723..1743) | 0.524221 / 0.622648 | 0.20x | baseline.rf.taxi.r2000000.full.log |
+| ET 1M | scikit-learn ExtraTreesClassifier | 1.9.1 | CPU, 20 cores | no bootstrap | 2513 (2512..2558) | 0.527011 / 0.611206 | 3837 (3833..3840) | 0.527541 / 0.608084 | 1.53x | baseline.et.taxi.r1000000.full.log |
+| symmetric 1M | CatBoost SymmetricTree | 1.2.10 | CPU, 20 threads | task_type CPU | 1035 (1030..1044) | 0.525674 / 0.617966 | 457 (452..461) | 0.529216 / 0.608483 | 0.44x | baseline.gbdt-symmetric.taxi.r1000000.full.log |
+| depthwise 1M | CatBoost Depthwise | 1.2.10 | CPU, 20 threads | task_type CPU | 2204 (2150..2229) | 0.525755 / 0.620508 | 802 (799..804) | 0.527313 / 0.616813 | 0.36x | baseline.gbdt-depthwise.taxi.r1000000.full.log |
+| depthwise 1M | XGBoost, AMD ROCm build `amd_xgboost` (pypi.amd.com rocm-6.4.4) | 3.1.1 | GPU (USE_HIP; setup probe config device cuda:0, rocm-smi 21 and 56 percent) | tree_method hist, device cuda | 337 (329..343) | 0.525221 / 0.620149 | 802 (799..804) | 0.527313 / 0.616813 | 2.38x | same |
+| lossguide 1M | CatBoost Lossguide | 1.2.10 | CPU, 20 threads | task_type CPU | 3650 (3543..3692) | 0.526113 / 0.619758 | 1519 (1505..1539) | 0.526799 / 0.614677 | 0.42x | baseline.gbdt-lossguide.taxi.r1000000.full.log |
+| lossguide 1M | XGBoost `amd_xgboost` | 3.1.1 | GPU | grow_policy lossguide; hash 348bf22bf60a14bc, equal to its depthwise row | 559 (537..560) | 0.525221 / 0.620149 | 1519 (1505..1539) | 0.526799 / 0.614677 | 2.72x | same |
+| lossguide 1M | LightGBM | 4.7.0 | CPU | refused (above) | refused | - | - | - | - | same, and *.full.lgbmwheel.log |
+
+A second lossguide pass with the PyPI LightGBM wheel
+(`baseline.gbdt-lossguide.taxi.r1000000.full.lgbmwheel.log`) gave ours 1516
+(1489..1529), CatBoost CPU 3567 (3550..3606), XGBoost GPU 549 (538..551).
+
+Our FAST tier beside IDENTICAL on taxi, ours only, same box, interleaved in
+one process (`*.ours.fastab2.log`), FAST then IDENTICAL: symmetric 509
+(494..524) and 438 (416..448); depthwise 882 (868..885) and 785 (773..794);
+lossguide 1627 (1607..1637) and 1498 (1449..1529); RF 1178 (1174..1181) and
+1174 (1169..1182); ET 3838 (3833..3840) and 3836 (3835..3839). Against the
+opponent rows above, FAST is 0.49x of CatBoost symmetric, 0.40x of CatBoost
+and 2.62x of XGBoost depthwise, 0.45x of CatBoost and 2.91x of XGBoost
+lossguide, 0.29x of scikit-learn RF and 1.53x of scikit-learn ET.
+
+Istella-S 1M and 2M on this box: owed to the next leg (the setup's fetch of
+the tar was truncated on leg 1; the decoded cache is now on the tor1 volume).
