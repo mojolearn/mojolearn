@@ -114,6 +114,32 @@ Hashes held one value in 3 of 3 rounds and are equal before and after: RF taxi
 `e683f121d11f59dd`, ET Istella-S `40b1c5b03ba40420`, iforest taxi
 `6f68d48431290524`, iforest Istella-S `a1902225f8730abf`.
 
+## REACH: the row-major entries are the ones that ran
+
+An unchanged model hash proves nothing if the new path was never taken, so the
+probe wraps every `*_fit*` entry of the binding an estimator actually calls
+(`_bind` is `_backend.binding(name, mode)`) and counts the calls. Lane build,
+50,000 x 32 float32, one fit per estimator per layout:
+
+| input layout | estimator | entry called (once) | predict hash |
+|---|---|---|---|
+| C-order | RandomForestClassifier | `rf_classifier_fit_rowmajor_export` | `0c098cc86bfc87d7` |
+| C-order | ExtraTreesClassifier | `et_classifier_fit_rowmajor_export` | `fded7b6d0467eaef` |
+| C-order | RandomForestRegressor | `rf_regressor_fit_rowmajor_export` | `ac736dfceab2e31b` |
+| C-order | ExtraTreesRegressor | `et_regressor_fit_rowmajor_export` | `b29e30335566a2d9` |
+| F-order | RandomForestClassifier | `rf_classifier_fit_export` | `0c098cc86bfc87d7` |
+| F-order | ExtraTreesClassifier | `et_classifier_fit_export` | `fded7b6d0467eaef` |
+| F-order | RandomForestRegressor | `rf_regressor_fit_export` | `ac736dfceab2e31b` |
+| F-order | ExtraTreesRegressor | `et_regressor_fit_export` | `b29e30335566a2d9` |
+
+Each row is exactly one call: the C-order fits never touch the column-major
+entry and the F-order fits never touch the row-major one, which is the routing
+`as_f32_forest_layout` promises. The predict hash is the SAME for both layouts
+of the same estimator, so the two entries build the same model from the same
+data in either layout. Batch E repeats this against the `baseline` set as the
+control, where the row-major entries do not exist and both layouts must take
+the plain ones.
+
 ## Where the ExtraTrees Istella-S fit actually spends its time
 
 One untimed stage replicate on the lane's build (`speed rowmajor et <ds>
