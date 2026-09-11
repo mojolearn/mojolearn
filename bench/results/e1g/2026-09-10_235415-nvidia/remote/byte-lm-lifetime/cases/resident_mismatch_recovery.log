@@ -1,0 +1,9 @@
+[resident_mismatch_recovery]   0.119s imported {"mojolearn_file": "/root/mojolearn/python/mojolearn/__init__.py", "version": "0.8.0"}
+[resident_mismatch_recovery]   0.376s binding {"sha256": "dffb708f7365", "vendor": "cuda"}
+[resident_mismatch_recovery]   0.377s native_call_begin {"completed_steps": 0, "label": "step1", "resident": true}
+[resident_mismatch_recovery]   1.951s native_call_end {"keep_context_env": null, "keeper_active": false, "label": "step1"}
+[resident_mismatch_recovery]   1.952s hashed {"label": "step1", "loss": 5.548226833343506, "step": 1}
+[resident_mismatch_recovery]   1.953s mirror_altered 
+[resident_mismatch_recovery]   1.956s mismatch_refused {"error": "byte LM: authoritative state bits mismatch", "session_released": true}
+[resident_mismatch_recovery]   1.958s state_restored {"completed_steps": 1}
+[resident_mismatch_recovery]   1.958s native_call_begin {"completed_steps": 1, "label": "step2", "resident": true}

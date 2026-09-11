@@ -1,0 +1,5 @@
+pod='o8q8dklahstpoz'
+target='-p 14530 root@64.247.206.214'
+armed_utc='2026-09-10T02:05:22Z'
+deadline_epoch=1789007122
+minutes=20
