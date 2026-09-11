@@ -1165,3 +1165,49 @@ Taxi, 1,000,000 training rows (2,000,000 for RF 2M), VM 9b86604d:
 | lossguide 1M | XGBoost (PyPI) | 3.4.1 | CPU, 13 threads (same reason) | grow_policy lossguide; hash 98e44c1ffb4f3ad5, equal to its depthwise row | 1034 (982..1491) | 0.525332 / 0.620103 | 1774 (1741..1779) | 0.525504 / 0.619386 | 1.72x | 1837 (1821..1859) | 1.78x |
 | lossguide 1M | LightGBM | 4.7.0 | CPU, 13 threads | min_child_weight=1e-3 (retry); OpenCL build failed its probe | 952 (930..988) | 0.525029 / 0.620694 | 1774 (1741..1779) | 0.525504 / 0.619386 | 1.86x | 1837 (1821..1859) | 1.93x |
 | depthwise, lossguide 1M | XGBoost `amd_xgboost` | - | GPU | - | owed (needs a glibc 2.39 image) | - | - | - | - | - | - |
+
+### AMD Instinct MI300X on RunPod
+
+Istella-S ran on one RunPod AMD pod (mdv9clyq6r73bz, verified gone with HTTP
+404) because no Hot Aisle slot was free (ENGINEERING_RULES.md section 10 box
+order). This pod is its own box and its rows are never set against the Hot
+Aisle table above. The card reports AMD Instinct MI300X, gfx942, amdgpu
+6.10.5. The pod shows 192 logical CPUs of two AMD EPYC 9474F 48-core
+processors and allots 21 of them (`joblib.cpu_count` 21), so scikit-learn ran
+on 21 cores and CatBoost on its default thread count. The host is shared, and
+the load average reached 22 to 24 during the GBDT cells, so absolute times
+are noisy. Every arm alternates round by round in the same process, so each
+ratio below holds within this pod. The body ran in
+`rocm/dev-ubuntu-22.04:6.4.1-complete` (Ubuntu 22.04.5, glibc 2.35, ROCm 6.4.1
+userland), CPython 3.12.14, source 8af3b8f0 (the AMD GBDT identity fix
+included), same configs and protocol as the Hot Aisle section. The same glibc
+2.35 kept `amd_xgboost` from installing, so XGBoost is the PyPI build on the
+CPU and the amd_xgboost GPU row is owed on this pod. LightGBM 4.7.0 ran on the
+CPU with `min_child_weight=1e-3`; the one OpenCL attempt belonged to the taxi
+leg and was not repeated here. Evidence is in
+`bench/results/trees_identical/mi300x_hotaisle_2026-09-11/runpod_istella/`.
+
+Identity on this pod. Each of our IDENTICAL GBDT lanes returned one prediction
+hash across all ten fits in both of its cells (symmetric 238d3abce0cabf43,
+depthwise 5d053cd086658072, lossguide 6182fd2bee4fb941), and their logloss
+equals the H100 values quoted in the MI325X section (0.138653, 0.126517,
+0.122045). Our RF and ET hashes are the ones that section records as equal to
+the H100's (RF 1M 574b24d0d7af51d0, RF 2M cc25cb08f8b5a813, ET
+40b1c5b03ba40420). FAST GBDT held one hash of its own for symmetric and two
+across five rounds for depthwise and lossguide, FAST RF one of its own, and
+FAST ET returns the IDENTICAL hash.
+
+Istella-S, 1,000,000 training rows (2,000,000 for RF 2M), pod mdv9clyq6r73bz:
+
+| lane | opponent | version | device | config | opponent ms | opponent logloss / AUC | ours IDENTICAL ms | ours logloss / AUC | IDENTICAL / opponent | ours FAST ms | FAST / opponent |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| RF 1M | scikit-learn RandomForestClassifier | 1.9.1 | CPU, 21 cores (n_jobs=-1) | exact thresholds (no bins) | 21217 (20864..21759) | 0.146188 / 0.964092 | 2360 (2343..2458) | 0.145560 / 0.964538 | 0.11x | 2402 (2372..2425) | 0.11x |
+| RF 2M | scikit-learn RandomForestClassifier | 1.9.1 | CPU, 21 cores | same | 47043 (46123..47921) | 0.145257 / 0.964663 | 3862 (3838..3907) | 0.144845 / 0.964998 | 0.08x | not run (FAST cells are 1M) | - |
+| ET 1M | scikit-learn ExtraTreesClassifier | 1.9.1 | CPU, 21 cores | no bootstrap | 14195 (13802..15482) | 0.187901 / 0.939528 | 15457 (15435..15460) | 0.188191 / 0.938768 | 1.09x | 15483 (15463..15536) | 1.09x |
+| symmetric 1M | CatBoost SymmetricTree | 1.2.10 | CPU, default threads | task_type CPU | 7063 (6784..7171) | 0.138897 / 0.966996 | 2382 (2359..2456) | 0.138653 / 0.966990 | 0.34x | 1876 (1832..2480) | 0.27x |
+| depthwise 1M | CatBoost Depthwise | 1.2.10 | CPU, default threads | task_type CPU | 10625 (9915..11212) | 0.128097 / 0.971895 | 3034 (2907..3095) | 0.126517 / 0.971896 | 0.29x | 2554 (2510..2651) | 0.24x |
+| depthwise 1M | XGBoost (PyPI) | 3.4.1 | CPU (amd_xgboost not installable on the glibc 2.35 image) | tree_method hist, device cpu | 4592 (4044..4929) | 0.125270 / 0.973728 | 3034 (2907..3095) | 0.126517 / 0.971896 | 0.66x | 2554 (2510..2651) | 0.56x |
+| lossguide 1M | CatBoost Lossguide | 1.2.10 | CPU, default threads | task_type CPU | 16190 (16047..16764) | 0.127841 / 0.972012 | 4304 (4262..4380) | 0.122045 / 0.975037 | 0.27x | 4371 (4116..4430) | 0.27x |
+| lossguide 1M | XGBoost (PyPI) | 3.4.1 | CPU (same reason) | grow_policy lossguide; hash 0d844a0ee7f63cb5, equal to its depthwise row | 6133 (5530..6731) | 0.125270 / 0.973728 | 4304 (4262..4380) | 0.122045 / 0.975037 | 0.70x | 4371 (4116..4430) | 0.71x |
+| lossguide 1M | LightGBM | 4.7.0 | CPU, default threads | min_child_weight=1e-3 (retry) | 4687 (4318..4776) | 0.125178 / 0.973695 | 4304 (4262..4380) | 0.122045 / 0.975037 | 0.92x | 4371 (4116..4430) | 0.93x |
+| depthwise, lossguide 1M | XGBoost `amd_xgboost` | - | GPU | - | owed on this pod (glibc 2.35 image) | - | - | - | - | - | - |

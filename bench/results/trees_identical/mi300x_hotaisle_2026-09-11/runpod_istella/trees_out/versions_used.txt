@@ -1,0 +1,6 @@
+python 3.12.14
+catboost 1.2.10
+sklearn 1.9.1
+xgboost 3.4.1 /root/venv-gpu/lib/python3.12/site-packages/xgboost/__init__.py
+lightgbm 4.7.0 /root/venv-gpu/lib/python3.12/site-packages/lightgbm/__init__.py
+numpy 2.5.3

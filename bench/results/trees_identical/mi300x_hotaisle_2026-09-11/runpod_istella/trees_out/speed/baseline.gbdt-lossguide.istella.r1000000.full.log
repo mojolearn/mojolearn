@@ -1,0 +1,56 @@
+FSPEED-NOTE lane=gbdt-lossguide arms=cpu,gpu,opencl metric=devices delta=3.000000 reason=AMD box: CPU arms run for libraries with no AMD GPU path, on all cores (ENGINEERING_RULES.md section 10); every arm name carries its device
+FSPEED-NOTE lane=gbdt-lossguide arms=ours metric=devices delta=3.000000 reason=devices=cpu,gpu,opencl (explicit); AMD box: an opponent with an AMD GPU path runs on the GPU, one without runs on this box's CPU on all cores (ENGINEERING_RULES.md section 10); the arm name says which
+FSPEED-IMPORT-ORDER lane=gbdt-lossguide first=opponents
+FSPEED-NOTE lane=gbdt-lossguide arms=lightgbm-* metric=params delta=1.000000 reason=MOJOLEARN_SPEED_LGBM_PARAMS overrides the harness LightGBM params: min_child_weight=0.001
+16953 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x110840000000, nodemask=1)
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=hip path=/root/mojolearn/python/mojolearn/identical/_mojolearn_gbdt.so
+FSPEED-SCALE stage=before rows=1000000 features=220 input_mib=839.2 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=ours mode=IDENTICAL device=AMD_Instinct_MI300X rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=catboost-cpu mode=IDENTICAL device=AMD_Instinct_MI300X rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=xgboost-cpu mode=IDENTICAL device=AMD_Instinct_MI300X rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=lightgbm-cpu mode=IDENTICAL device=AMD_Instinct_MI300X rounds=5 size=shipped
+16953 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x110880000000, nodemask=1)
+17082 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3ad640000000, nodemask=2)
+17269 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1108c0000000, nodemask=1)
+FSPEED-WARMUP lane=gbdt-lossguide arm=ours shape=istella-1000000x220 ms=6143.841
+FSPEED-WARMUP lane=gbdt-lossguide arm=catboost-cpu shape=istella-1000000x220 ms=15674.752
+FSPEED-WARMUP lane=gbdt-lossguide arm=xgboost-cpu shape=istella-1000000x220 ms=5331.453
+FSPEED-WARMUP lane=gbdt-lossguide arm=lightgbm-cpu shape=istella-1000000x220 ms=4478.381
+FSPEED-ORDER lane=gbdt-lossguide round=1 arms=ours,catboost-cpu,xgboost-cpu,lightgbm-cpu
+FSPEED lane=gbdt-lossguide arm=ours shape=istella-1000000x220 round=1 ms=4305.052 hash=6182fd2bee4fb941
+FSPEED lane=gbdt-lossguide arm=catboost-cpu shape=istella-1000000x220 round=1 ms=16046.745 hash=05ec5e14f256128f
+FSPEED lane=gbdt-lossguide arm=xgboost-cpu shape=istella-1000000x220 round=1 ms=5530.355 hash=0d844a0ee7f63cb5
+FSPEED lane=gbdt-lossguide arm=lightgbm-cpu shape=istella-1000000x220 round=1 ms=4686.642 hash=0f5ae6760b0b2482
+FSPEED-ORDER lane=gbdt-lossguide round=2 arms=ours,catboost-cpu,xgboost-cpu,lightgbm-cpu
+FSPEED lane=gbdt-lossguide arm=ours shape=istella-1000000x220 round=2 ms=4380.325 hash=6182fd2bee4fb941
+FSPEED lane=gbdt-lossguide arm=catboost-cpu shape=istella-1000000x220 round=2 ms=16124.883 hash=05ec5e14f256128f
+FSPEED lane=gbdt-lossguide arm=xgboost-cpu shape=istella-1000000x220 round=2 ms=5675.649 hash=0d844a0ee7f63cb5
+FSPEED lane=gbdt-lossguide arm=lightgbm-cpu shape=istella-1000000x220 round=2 ms=4317.802 hash=0f5ae6760b0b2482
+FSPEED-ORDER lane=gbdt-lossguide round=3 arms=ours,catboost-cpu,xgboost-cpu,lightgbm-cpu
+16953 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x110900000000, nodemask=1)
+FSPEED lane=gbdt-lossguide arm=ours shape=istella-1000000x220 round=3 ms=4278.829 hash=6182fd2bee4fb941
+FSPEED lane=gbdt-lossguide arm=catboost-cpu shape=istella-1000000x220 round=3 ms=16340.627 hash=05ec5e14f256128f
+FSPEED lane=gbdt-lossguide arm=xgboost-cpu shape=istella-1000000x220 round=3 ms=6133.332 hash=0d844a0ee7f63cb5
+FSPEED lane=gbdt-lossguide arm=lightgbm-cpu shape=istella-1000000x220 round=3 ms=4775.656 hash=0f5ae6760b0b2482
+FSPEED-ORDER lane=gbdt-lossguide round=4 arms=ours,catboost-cpu,xgboost-cpu,lightgbm-cpu
+FSPEED lane=gbdt-lossguide arm=ours shape=istella-1000000x220 round=4 ms=4303.603 hash=6182fd2bee4fb941
+FSPEED lane=gbdt-lossguide arm=catboost-cpu shape=istella-1000000x220 round=4 ms=16190.104 hash=05ec5e14f256128f
+FSPEED lane=gbdt-lossguide arm=xgboost-cpu shape=istella-1000000x220 round=4 ms=6402.836 hash=0d844a0ee7f63cb5
+FSPEED lane=gbdt-lossguide arm=lightgbm-cpu shape=istella-1000000x220 round=4 ms=4587.279 hash=0f5ae6760b0b2482
+FSPEED-ORDER lane=gbdt-lossguide round=5 arms=ours,catboost-cpu,xgboost-cpu,lightgbm-cpu
+FSPEED lane=gbdt-lossguide arm=ours shape=istella-1000000x220 round=5 ms=4261.995 hash=6182fd2bee4fb941
+FSPEED lane=gbdt-lossguide arm=catboost-cpu shape=istella-1000000x220 round=5 ms=16764.305 hash=05ec5e14f256128f
+FSPEED lane=gbdt-lossguide arm=xgboost-cpu shape=istella-1000000x220 round=5 ms=6731.302 hash=0d844a0ee7f63cb5
+FSPEED lane=gbdt-lossguide arm=lightgbm-cpu shape=istella-1000000x220 round=5 ms=4749.583 hash=0f5ae6760b0b2482
+16953 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3ad680000000, nodemask=2)
+FSPEED-ACC lane=gbdt-lossguide arm=ours metric=logloss value=0.122045
+FSPEED-ACC lane=gbdt-lossguide arm=ours metric=auc value=0.975037
+FSPEED-ACC lane=gbdt-lossguide arm=catboost-cpu metric=logloss value=0.127841
+FSPEED-ACC lane=gbdt-lossguide arm=catboost-cpu metric=auc value=0.972012
+FSPEED-ACC lane=gbdt-lossguide arm=xgboost-cpu metric=logloss value=0.125270
+FSPEED-ACC lane=gbdt-lossguide arm=xgboost-cpu metric=auc value=0.973728
+FSPEED-ACC lane=gbdt-lossguide arm=lightgbm-cpu metric=logloss value=0.125178
+FSPEED-ACC lane=gbdt-lossguide arm=lightgbm-cpu metric=auc value=0.973695
+FSPEED-SCALE stage=after rows=1000000 features=220 input_mib=839.2 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
