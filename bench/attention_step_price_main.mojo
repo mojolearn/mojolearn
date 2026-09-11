@@ -122,6 +122,14 @@ reads the clean amax and denom even when the arm's Q residency flip would move
 them. zdot must move at odd flat rows and hold at even rows (2533's flip moves
 every row), dv and the forward must hold. `PATH` prints `zsched=`, and the
 RESOURCES readback covers the two schedule copies.
+
+DEVIATION 2653 (brief docs/lanes/BRIEF_attention_regs_2026-09-11.md). On a
+trial build the RESOURCES readback also covers the SECOND-ROUND FORWARD at
+its six clean instantiations (fwd_r2_r32_qres_pf, the NVIDIA default's
+forward, then _r32_qres, _r32_pf, _r32, _r64_pf and _r64), the one attention
+kernel of the step whose register count had never been read back on any
+column. It launches nothing and instantiates no kernel a trial build does not
+already compile for the DEVIATION 2530, 2531 and 2533 arms.
 """
 
 from std.math import exp
@@ -153,6 +161,7 @@ from transformer.impl.llama.fused_attention import (
     ATTN_PHASE_TIMERS,
     ATTN_STASH_HD,
     FUSED_RAN,
+    _fwd_r2_page_bytes,
     fused_attention_arm_backward_resolved,
     fused_attention_arm_estash,
     fused_attention_arm_forward_resolved,
@@ -168,6 +177,7 @@ from transformer.impl.llama.fused_attention import (
     fused_attention_zdot_rows,
     fused_attention_estash_name,
     fused_attention_zsched_name,
+    fused_attn_forward_r2_kernel,
     fused_backward_launch_estash_ran,
     fused_bwd_dkdv_kernel,
     fused_bwd_dkdv_r2_kernel,
@@ -951,6 +961,43 @@ def _res_zdot_estash[DRES: Bool](ctx: DeviceContext, label: String) raises:
     print("RESOURCES label=", label, " blocks_per_sm_256=", f.occupancy_max_active_blocks_per_multiprocessor(256, 0), sep="")
 
 
+def _res_fwd_r2[TQ: Int, QRES: Bool, PF: Bool](ctx: DeviceContext, label: String) raises:
+    """DEVIATION 2653 (brief docs/lanes/BRIEF_attention_regs_2026-09-11.md
+    sections 4 and 7): the SECOND-ROUND FORWARD kernel's own attributes. It
+    is the one attention kernel of the step that no readback has ever
+    covered, and the NVIDIA default runs `[64, 32, True, True, False]` for
+    20.7 ms of a 290 ms step, so whether it is at one block per SM or at
+    three is unknown from the source alone.
+
+    Source counts per thread at head_dim 64, from the kernel: `TQ // 16` row
+    maximum parts, one denominator accumulator and `(TQ // 16) * 4` context
+    accumulators live for the whole kernel; `(TQ // 16) * 2` score
+    accumulators, `TQ // 16` staged Q operands and 2 staged K operands live
+    inside pass 1, and 4 staged V operands inside pass 3, so the operand
+    count below is pass 1's, the larger. There is no thread-local array (the
+    zdot kernels' 64-float `vec` has no counterpart here; every operand comes
+    from the shared page), hence `thread_local_floats=0`. The allocation
+    count is `_launch_fwd_r2`'s own score and exp scratch; the caller's
+    corner flag and, under `_estash`, the kept buffer are not counted here.
+    Launches nothing."""
+    comptime kern = fused_attn_forward_r2_kernel[ATTN_STASH_HD, TQ, QRES, PF, False]
+    comptime acc = TQ // 16 + 1 + (TQ // 16) * 4
+    comptime operands = (TQ // 16) * 2 + TQ // 16 + 2
+    _res_begin(
+        label,
+        "rows=" + String(TQ) + " keys_per_iteration=32 qres=" + String(QRES)
+        + " preflush=" + String(PF),
+        acc, operands, 0, _fwd_r2_page_bytes(TQ, QRES), 1,
+    )
+    var f = ctx.compile_function[kern]()
+    print("RESOURCES label=", label, " regs=", f.get_attribute(Attribute.NUM_REGS), sep="")
+    print("RESOURCES label=", label, " local=", f.get_attribute(Attribute.LOCAL_SIZE_BYTES), sep="")
+    print("RESOURCES label=", label, " shared=", f.get_attribute(Attribute.SHARED_SIZE_BYTES), sep="")
+    print("RESOURCES label=", label, " const=", f.get_attribute(Attribute.CONST_SIZE_BYTES), sep="")
+    print("RESOURCES label=", label, " max_threads=", f.get_attribute(Attribute.MAX_THREADS_PER_BLOCK), sep="")
+    print("RESOURCES label=", label, " blocks_per_sm_256=", f.occupancy_max_active_blocks_per_multiprocessor(256, 0), sep="")
+
+
 def _res_dq_tiled_pf(ctx: DeviceContext) raises:
     comptime kern = fused_bwd_dq_tiled_pf_kernel[ATTN_STASH_HD]
     var label = String("dq_tiled_pf")
@@ -1031,7 +1078,11 @@ def _res_kvfold_r2[BJ: Int](ctx: DeviceContext, label: String) raises:
 def run_resources(ctx: DeviceContext) raises:
     """The RESOURCES section: eleven backward kernels at head_dim 64, each in
     its own try (the two DEVIATION 2598 zdot schedule copies beside the zdot
-    stash copy they reschedule)."""
+    stash copy they reschedule), and on a trial build the two DEVIATION 2650
+    / 2651 zdot copies and the six clean instantiations of the second-round
+    FORWARD (DEVIATION 2653, brief
+    docs/lanes/BRIEF_attention_regs_2026-09-11.md), whose register count no
+    leg had ever read back on any column."""
     print("RESOURCES_DEVICE column=" + column_name(TARGET_COLUMN) + " source_counts=per_thread_hd64")
     try:
         _res_zdot_stash_pf(ctx)
@@ -1054,6 +1105,36 @@ def run_resources(ctx: DeviceContext) raises:
             _res_zdot_estash[True](ctx, String("zdot_estash_dres_pf"))
         except e:
             print("RESOURCES_ERROR label=zdot_estash_dres_pf error=", e, sep="")
+    comptime if ATTN_ARM_TRIAL:
+        # DEVIATION 2653 (brief docs/lanes/BRIEF_attention_regs_2026-09-11.md
+        # section 7): the second-round forward, the NVIDIA default's
+        # instantiation first, then each round 3 knob on its own, so the rows
+        # say what `_qres`, `_pf` and the rows count each cost in registers.
+        # Every one is a pipeline a trial build already compiles.
+        try:
+            _res_fwd_r2[32, True, True](ctx, String("fwd_r2_r32_qres_pf"))
+        except e:
+            print("RESOURCES_ERROR label=fwd_r2_r32_qres_pf error=", e, sep="")
+        try:
+            _res_fwd_r2[32, True, False](ctx, String("fwd_r2_r32_qres"))
+        except e:
+            print("RESOURCES_ERROR label=fwd_r2_r32_qres error=", e, sep="")
+        try:
+            _res_fwd_r2[32, False, True](ctx, String("fwd_r2_r32_pf"))
+        except e:
+            print("RESOURCES_ERROR label=fwd_r2_r32_pf error=", e, sep="")
+        try:
+            _res_fwd_r2[32, False, False](ctx, String("fwd_r2_r32"))
+        except e:
+            print("RESOURCES_ERROR label=fwd_r2_r32 error=", e, sep="")
+        try:
+            _res_fwd_r2[64, False, True](ctx, String("fwd_r2_r64_pf"))
+        except e:
+            print("RESOURCES_ERROR label=fwd_r2_r64_pf error=", e, sep="")
+        try:
+            _res_fwd_r2[64, False, False](ctx, String("fwd_r2_r64"))
+        except e:
+            print("RESOURCES_ERROR label=fwd_r2_r64 error=", e, sep="")
     try:
         _res_dq_tiled_pf(ctx)
     except e:
