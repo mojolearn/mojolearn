@@ -817,6 +817,15 @@ List, appended it again to transpose, scanned it and wrote it to pinned memory,
 all in one thread; the binding now lends the block by address and one threaded
 pass stages `ftz(cell)` in column-major order with the finite scan.
 
-Neither was compiled or run: the lane wound down first. RUN OWED commands are
-in commit c4056486's message. The same-pod baseline taken before the wind-down
-is in `bench/results/forest_speed_2026-09-11/`.
+BOTH WERE BUILT AND RUN on 2026-09-11 night by lane forest-finish, pod
+`8gsem9f3thnhvu` (NVIDIA H100 80GB HBM3, driver 580.126.09), against a main
+build (`4dc4346a`) made in a second checkout on the SAME pod. Identity:
+`identity_break` rf-clf, rf-reg, et-clf, et-reg, iforest read 45 of 45 cells
+stable on each set, the baseline-to-lane diff carried no DIVERGENT, MOVED or
+REFUSED row, `check-if` passed under IDENTICAL, and the non-finite refusal
+raised through the Python surface is byte-equal between the sets. Every model
+hash held one value in 3 of 3 timed rounds. The speed rows, the flip verdicts
+and the leg's own notes are in `bench/results/forest_finish_2026-09-11/`; the
+same-pod baseline taken before the earlier wind-down is in
+`bench/results/forest_speed_2026-09-11/`. RUN OWED: the same identity lanes on
+the Apple M4 and on an AMD box against this H100 set.

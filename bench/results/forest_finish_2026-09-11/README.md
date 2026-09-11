@@ -42,6 +42,14 @@ DEVIATION 2663 trial (the ExtraTrees frontier batch width).
   ours-only A/B on both datasets.
 - **D** runs `tools/flip_verdict.py` for every switch.
 
+## Owed elsewhere, closed here
+
+Setup's `tools/check_buffer_foreign_argtypes.py --real-cuml` exited 0 on this
+pod at 21:58:54Z (`logs/buffer_foreign_argtypes_cuml.log` in the evidence
+tarball): mojolearn imported beside real cuML and treelite, one small RF fit
+and predict, no ctypes argtypes clash. That is the 0.8.1 check the release
+notes still carried as owed on NVIDIA.
+
 ## Results
 
 Filled in when the leg finishes; the tables live in
