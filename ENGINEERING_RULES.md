@@ -244,7 +244,15 @@ that, and is not flipped as a default until it is understood.
 **Neural (byte-LM, Mamba, transformer): every training or inference claim
 runs on TWO different kinds of data**, two corpora or two generating
 distributions, not two seeds of one corpus and not two lengths of one file.
-Same reason, same shape of the rule.
+Same reason, same shape of the rule. Andrew, 2026-09-11: "2 different but
+relatively normal things to train on, not edge cases; we build our
+software to handle GENERAL NORMAL CASES." So the two kinds are two
+ordinary training corpora that differ in what they are (today: English
+text, `training/corpus/tinyshakespeare`, and source code, to be pinned by
+sha256 and manifest the same way), never an adversarial or heavy-tailed
+fixture standing in as the second kind. Adversarial fixtures stay where
+they are, in the correctness checks; they are not what a kernel is TUNED
+on, and a timing or throughput claim quotes the two normal corpora only.
 
 The 1,000,000-row floor for tree timing (2026-09-01) stands underneath this
 rule; this one adds the second kind, and removes the size sweep as a
