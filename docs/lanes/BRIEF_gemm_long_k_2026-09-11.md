@@ -11,6 +11,13 @@ Numbers not copied from an evidence path are counted from source or fitted
 to the evidence table and say which. Sections 1 to 5 were written before
 any code; sections 6 onward after it.
 
+UPDATE, same day, third session. The H100 leg of 9.5 read `ksplit` FLIP
+(lean step geometric mean 0.895, every step witness equal). Section 10
+makes `ksplit` the shipped GEMM plan where the kernel matrix row enables it
+(NVIDIA 132; AMD 0 until the MI300X leg), DEVIATION 2595, SOURCE ONLY, NOT
+BUILT. Sections 5.6 and 9 describe the trial-only state before that flip and
+are kept as the record.
+
 Arithmetic boundary is the one of
 [HANDOFF_speed_gemm_2026-09-10.md](HANDOFF_speed_gemm_2026-09-10.md) and
 [BRIEF_gemm_step_2026-09-11.md](BRIEF_gemm_step_2026-09-11.md) section 5.
@@ -712,3 +719,347 @@ whatever the verdict.
 - **The 0.457 s question** (BRIEF_gemm_step section 10.7) still stands: a
   trial binding's step time is not a shipped step time. The ratio is
   trial against trial, so the verdict holds either way.
+
+## 10. The flip, `ksplit` as the shipped GEMM plan where the kernel matrix row enables it (DEVIATION 2595)
+
+September 11, 2026, third session, worktree lane. SOURCE ONLY. Nothing in
+this section was built, compiled or run, on the Mac or on a GPU. 10.7 is the
+RUN OWED list and 10.8 the two confirmation legs. There is no DEVIATIONS
+register file in the repository (DEVIATIONS 2590 to 2594 are recorded only
+here), so this section is the record of 2595.
+
+### 10.1 The H100 leg that decides it
+
+Evidence `bench/results/e1g/2026-09-11_152822-nvidia-h100-80gb-hbm3-gemm-longk/remote/gemm-longk/`
+(NVIDIA H100 80GB HBM3, the 9.5 command). The numbers below are the
+orchestrator's reading of that directory, which was not yet on this branch
+when this section was written.
+
+| corpus | shipped lean step s | ksplit lean step s | ratio | step witnesses |
+|---|---:|---:|---:|---|
+| enwik8 | 0.3833 | 0.3423 | 0.892 | equal on every step |
+| Pile GitHub | 0.3836 | 0.3450 | 0.899 | equal on every step |
+
+The geometric mean is 0.895, below 1, with every step witness equal on both
+corpora, so ENGINEERING_RULES 9 flips the arm in the same session. The price
+harness points the same way. The weighted GEMM sum per step went from
+183.6 ms (shipped) to 142.6 ms (ksplit), and proj_dB, the outlier of section
+2, from 0.746 ms to 0.265 ms. Every BITS and PHASEBITS line reads EQUAL. The
+step check passed on the H100, the twelve LM calls through
+`identical_gemm_into` included. Both sides of the ratio ran in one trial
+binding on one pod, the only comparison BRIEF_gemm_step section 10.7
+allows.
+
+The AMD MI300X verdict (Hot Aisle) is still owed, so AMD stays on the old
+plan in the shipped default until that leg reads it.
+
+Not a claim against anyone. The torch step at the target shape is an owed
+opponent row (bench/OPPONENT_REFERENCE.md); until it exists these are
+internal before and after numbers.
+
+### 10.2 How the dispatch decides
+
+`identical_gemm_into` keeps its FAST branch (not compiled under IDENTICAL)
+and its trial hook (compiled only under `-D MOJOLEARN_GEMM_ARM_TRIAL=1`). Its
+last line is now `identical_gemm_shipped_into`, which reads one kernel matrix
+row and no environment.
+
+- **The switch.** `GEMM_KSPLIT_DEFAULT_S = lib_gemm_block_parallelism_for[TARGET_COLUMN]()`.
+  Above 0 (`GEMM_KSPLIT_DEFAULT_ON`) the dispatch is
+  `identical_gemm_shipped_at_row_into[False]` at that row. At 0 it is a
+  `comptime` branch to the old line,
+  `identical_gemm_with_plan(..., choose_gemm_plan(m, n, k))`, and the group
+  kernel is not referenced.
+- **The body.** `identical_gemm_shipped_at_row_into[SAB]` asks
+  `gemm_default_ksplit_leaves_at(m, n, k, row)`, which answers 0 at any row
+  at or below 0 and otherwise `gemm_step_ksplit_rule(m, n, k, row, True)`,
+  the section 4 group rule (rules 1, 2 and 4, `GEMM_KSPLIT_SLACK = 4`). A
+  positive answer runs `_ksplit_run[SAB]` at that group size; 0 runs the old
+  line.
+- **One body for the arm and the default.** `_ksplit_run[SAB]` is the trial
+  arm's `P >= 1` path moved unchanged out of `identical_gemm_step_ksplit_into`
+  (allocate `m n G` floats, synchronize, group launch, fold launch,
+  synchronize, keep the buffer). The arm now calls it too.
+- **The kernel matrix.** `lib_gemm_block_parallelism_for` is NVIDIA 132 (the
+  value the H100 leg ran), AMD 0 with a docstring saying the MI300X leg
+  decides the AMD value, every other column 0. The `ksplit` trial arm reads
+  a second row, `lib_gemm_block_parallelism_trial_for`: the shipped row where
+  it is above 0, AMD 110 (the section 9.2 reading), every other column 0. So
+  the MI300X leg can still force `ksplit` at 110 while the AMD default is
+  off. `gemm/checks/gemm_identical.mojo` reads no vendor name; both values
+  live in the matrix.
+- **Same calls, same groups as the H100 arm.** On NVIDIA the default and the
+  trial arm read the same `S = 132`, so the default takes the calls and group
+  sizes the leg timed (the section 4 hand counts). proj_fwd, proj_dA and
+  proj_dB run at 1 leaf per group, the four `P = 16` 96-block calls at 2,
+  head_dA at 64. gateup_fwd, down_dA, head_fwd and head_dB stay on the old
+  plan. `check_group_rule_hand_counts` holds the default's rule to those
+  counts at row 132 and to 0 at row 0.
+- **A synchronize inside the entry.** Where the default takes a call,
+  `identical_gemm_into` allocates the node workspace and synchronizes before
+  it returns, and its docstring now says so. The wait is ordered on the
+  caller's stream, so no caller's result moves. The H100 step time already
+  carried the same allocation and waits.
+
+### 10.3 How the old plan stays reachable
+
+- `identical_gemm_with_plan(..., PLAN_TUNED_128_8X8)` is untouched, and every
+  check still takes its reference from it by name.
+- **The trial arm `tuned128`** (`GEMM_ARM_TUNED128 = 9`,
+  `GEMM_GEOM_TUNED128 = 9`, both counts now 10) runs PLAN_TUNED_128_8X8 on
+  every call `choose_gemm_plan` sends there. Other calls fall through to the
+  shipped dispatch. The forced geometry runs the old plan on every build;
+  through `identical_gemm_into` it needs the trial define like every arm. Its
+  reach is 0 (the old plan has no sabotage instantiation), and the ragged
+  part checks that per case.
+- **The other arms.** `ksplit`, `ksplit_leaf` and the 2540 and 2541 arms are
+  unchanged. A call an arm does not take now falls through to the shipped
+  DEFAULT, so on NVIDIA the non-head calls of `head` and the calls `ksplit`
+  declines run the default. That is what `shipped` means everywhere now.
+- **Non-trial fallbacks.** On a build without the trial define,
+  `identical_gemm_step_geometry_into`, `identical_gemm_step_ksplit_into` and
+  `identical_gemm_step_ksplit_phase_into` run the shipped dispatch rather than
+  the old plan by name, so their "the shipped default ran" labels are true.
+
+### 10.4 Labels, so no line can confuse the two plans
+
+- `gemm_step_geometry_name(GEMM_GEOM_SHIPPED)` is now
+  `gemm_shipped_plan_summary()`, which says whether the ksplit default is on
+  and at which row. `tuned128` names itself the old shipped plan.
+- `gemm_shipped_dispatch_name(m, n, k)` names the plan the shipped dispatch
+  ran at that call. Where ksplit ran it gives the group size, group count and
+  launched blocks; elsewhere the old plan and the reason (row 0, or the rule
+  declined).
+- `gemm_step_arm_plan_label(arm)` is one line per arm, for example
+  `shipped: default=ksplit(S=132) else tuned128` on NVIDIA and
+  `shipped: default=tuned128 (block parallelism row 0)` on AMD and Apple.
+- **Price harness.**
+  - The reference is `identical_gemm_shipped_into`.
+  - The header prints
+    `DEFAULT gemm column=... block_parallelism_row=... ksplit_default=on|off trial_ksplit_S=... shipped=[...]`
+    and `PLANLABEL arm=... label=...`.
+  - PRICE and CONTROL gain `shipped_launched_blocks=`,
+    `shipped_group_leaves=`, `choose_plan=[...]` and `shipped_plan=[...]`,
+    which replace `plan=[...]`.
+  - TABLE's shipped plan column is the plan that ran, its shipped blocks
+    column the launched blocks, and a trailing column the shipped group
+    leaves.
+  - PHASE lines carry `phase_of=arm` or `phase_of=shipped_default` (the
+    default's own phases on the `shipped` run).
+  - `MOJOLEARN_GEMM_STEP_LABEL_ONLY=1` exits after the header, before a
+    DeviceContext.
+  - The STEP line is unchanged, because the leg's auto pick parses it.
+- **Step arms check.** LM lines gain `shipped_plan=[...]` and
+  `arm_plan=[...]`. DEFAULT lines carry `plan=[...]` per row.
+- **Resources harness.** It gains a
+  `GEMM_STEP_RESOURCES_GEOMETRY label=shipped_default` line.
+- **`tools/gemm_step_leg.sh`.**
+  - `plans.tsv` maps each price and LM arm to its PLANLABEL from the leg's
+    own step-price binary, and `gate.txt` gains `shipped_plan=`.
+  - Every probe runs with `MOJOLEARN_GEMM_PLAN_LABEL`, and
+    `tools/lm_step_memory_probe.py` records it as `gemm_plan` beside
+    `gemm_arm` (setup event and result.json).
+  - `lm_summary.tsv` prints `gemm_plan=` per run, and every verdict line ends
+    with `arm_plan=` and `shipped_plan=`.
+  - `price_tables.txt` also collects DEFAULT and PLANLABEL lines.
+- **`tools/gemm_longk_leg.sh`.** Its defaults are now the NVIDIA confirmation
+  (10.8); the AMD leg narrows them through `MOJOLEARN_HOTAISLE_EXTRA_ENV`.
+
+### 10.5 The checks
+
+- **`gemm/checks/gemm_device_check.mojo`, GATE 4
+  `check_device_default_dispatch`** (shipped build, no trial define).
+  - Shapes: five over the 128 K-cell floor, where `choose_gemm_plan` answers
+    PLAN_TUNED_128_8X8. 257x520x300 NT (P 3), 520x257x129 TN (P 2),
+    257x520x129 NN (P 2), 257x520x1000 TN (P 8), and 257x520x128 NT (P 1,
+    where the rule declines).
+  - Each shape runs four ways, all required bit-identical. FLAT, the old
+    plan by name, `identical_gemm_into` at the column's own row, and the
+    shipped body at row 132 (`identical_gemm_shipped_at_row_into[False]`).
+  - So the M4 exercises the default's body on Metal at four shapes while its
+    own entry runs the old plan, and an NVIDIA box exercises the body through
+    the entry.
+  - Guards raise when the enabled row takes no shape, when a column whose
+    row is above 0 takes none through its entry, and when a column whose row
+    is 0 takes any.
+- **`gemm/checks/gemm_step_arms_check.mojo`, new `check_default_dispatch`**
+  (after the ragged part).
+  - Shapes: 257x520 and 520x257, all three ops, `k` in {128, 129, 300, 1000}
+    under the flop budget.
+  - The shipped body at three rows (the column's, 0 and 132), clean and
+    sabotaged, against the old plan. Clean moves nothing. Sabotaged moves
+    exactly `gemm_step_ksplit_reach` at the default's group size where the
+    row takes the call, and nothing where it does not.
+  - Then the column's entry. `identical_gemm_shipped_into` clean, and
+    `identical_gemm_into` with `MOJOLEARN_GEMM_ARM` unset and
+    `MOJOLEARN_GEMM_ARM_SABOTAGE=1`, which the trial hook serves through
+    `identical_gemm_shipped_at_row_into[True]` at the column's row. That run
+    must move exactly the column's default reach.
+  - On a column whose row is above 0 this proves the default's reach through
+    the entry, a sabotage that moves exactly the group launch's cells. At row
+    0, on any column, the sabotage moves nothing, which proves the old plan
+    runs.
+  - The same vacuity guards as the device gate. `REACH default` lines
+    summarize per row and for the entry.
+- **The LM part.** `gemm_step_geometry_reach(GEMM_GEOM_SHIPPED, ...)` is now
+  the default's reach. `arm=shipped` expects the group launch's cells on
+  NVIDIA (head_dA 672, 96 tiles by 7 groups) and 0 on AMD and Apple;
+  `arm=tuned128` expects 0 everywhere.
+- **Sabotage stays out of shipped builds.** The sabotaged instantiation of
+  the shipped body is referenced only under the trial define (the hook and
+  the check's `_run`), so a shipped build never compiles it.
+
+### 10.6 Why every identity card is unchanged
+
+- **Apple.** `tools/gemm_card.sh device` drives
+  `bench/gemm_card_main.mojo::_device_product`, which calls
+  `identical_gemm_into`. The Apple column's `lib_gemm_block_parallelism_for`
+  row is 0, so `GEMM_KSPLIT_DEFAULT_ON` is False and
+  `identical_gemm_shipped_into` compiles to the old line. Not one launch of
+  the card changes, and the card must be byte-identical to one made at the
+  parent commit.
+- **AMD.** The row is 0, so the same argument holds and the card is unchanged
+  launch for launch.
+- **NVIDIA.** Card shapes the rule takes now run the group kernel and its
+  fold instead of the TUNED 128x128 kernel. By section 5 (Lemmas A to C,
+  checked exhaustively on the host by `check_group_fold_is_the_contract_tree`)
+  every stored cell is the same bits, so the card is unchanged. The H100
+  leg's `--local-card` diff against the Apple card at this commit confirms
+  it, and GATE 4 checks the bits on the box first.
+
+### 10.7 RUN OWED, M4, light, run by the orchestrator one at a time
+
+1. **The shipped device gates**, no trial define:
+   `pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . gemm/checks/gemm_device_check.mojo -o /tmp/gemm-device-check && /tmp/gemm-device-check`.
+   Expect `gemm device kernel + gates: all green [IDENTICAL]  (8 gates, sabotage: none)`
+   and `check_device_default_dispatch [IDENTICAL] OK: 5 shapes bit-identical to FLAT and the old plan; the shipped entry took ksplit at 0 (column row 0), the enabled row at 4`.
+2. **The trial step check**:
+   `pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_GEMM_ARM_TRIAL=1 -I . gemm/checks/gemm_step_arms_check.mojo -o /tmp/gemm-step-check`
+   then
+   `MOJOLEARN_GEMM_STEP_CHECK_LM=0 MOJOLEARN_GEMM_STEP_CHECK_FLOPS=50000000 /tmp/gemm-step-check`.
+   Expect:
+   - the 9.4 lines unchanged;
+   - twelve RULE lines with `default(row=132)` equal to `ksplit(S=132)`,
+     `default(row=0)=0` and `default(column row=0)=0`;
+   - `REACH ragged [tuned128 (the OLD shipped plan, forced) ...] N/N`;
+   - `REACH default [row=0 (this column's row)] 18/18` (took 0),
+     `REACH default [row=0 (off)] 18/18` (took 0),
+     `REACH default [row=132 (enabled, the H100 row)] 18/18` (the ksplit body
+     took 12, every `P >= 2` case), and
+     `REACH default [shipped entry, column row=0] 18/18` (ksplit took 0);
+   - PASS.
+3. **The same check without the trial define**:
+   `pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . gemm/checks/gemm_step_arms_check.mojo -o /tmp/gemm-step-check-notrial`
+   then
+   `MOJOLEARN_GEMM_STEP_CHECK_LM=0 MOJOLEARN_GEMM_STEP_CHECK_FLOPS=50000000 /tmp/gemm-step-check-notrial`.
+   Expect FAIL, with failures naming the missing define. The host checks
+   pass. In the default part only the row-132 sabotage runs fail (12 cases);
+   row 0, the column row and the entry pass.
+4. **The price harness build** (no timing run):
+   `pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_GEMM_ARM_TRIAL=1 -I . bench/gemm_step_price_main.mojo -o /tmp/gemm-step-price`.
+   Optional, no device work (it exits before a DeviceContext):
+   `MOJOLEARN_GEMM_STEP_LABEL_ONLY=1 MOJOLEARN_GEMM_ARM=tuned128 /tmp/gemm-step-price`
+   prints `DEFAULT gemm column=... block_parallelism_row=0 ksplit_default=off trial_ksplit_S=0 ...`
+   and a `PLANLABEL arm=tuned128` line.
+5. **The resources harness build** (no run):
+   `pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_GEMM_ARM_TRIAL=1 -I . bench/gemm_step_resources_main.mojo -o /tmp/gemm-step-resources`.
+6. **The byte LM binding, build only** (no import, no step), shipped
+   defines:
+   `MOJOLEARN_NUMERIC_MODE=identical python3 tools/macos_serial_guard.py --seconds 900 --rss-gib 12 -- sh bindings/build_byte_lm.sh`.
+   On the built `_mojolearn_byte_lm.so`, `nm -C <binding> | grep -c ksplit`
+   should print 0 (the Apple row compiles the old line).
+
+### 10.8 The two confirmation legs
+
+Both start from a `git worktree add --detach` checkout of the merge commit
+that carries this section, after 10.7 is green.
+
+**NVIDIA H100, RunPod: LM `tuned128` against the new default.** RunPod passes
+no extra environment to the body, so `tools/gemm_longk_leg.sh`'s defaults are
+this leg: price arms `shipped,tuned128,ksplit,ksplit_leaf`, LM arms
+`tuned128`, check arms `shipped,tuned128,ksplit,ksplit_leaf`, CONTROL lines
+and LM timing on. The Apple card comes first, at that commit:
+`tools/gemm_card.sh device /tmp/gemm-ksplit-default-apple.card`.
+
+```sh
+MOJOLEARN_RUNPOD_KEY_FILE=$HOME/.mojolearn_runpod_key MOJOLEARN_GPU_ARCHS=sm_90a \
+MOJOLEARN_GEMM_LEG_EXTRA=tools/gemm_longk_leg.sh \
+MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/$(date -u +%Y-%m-%d_%H%M%S)-nvidia-h100-gemm-ksplit-default \
+sh tools/gemm_remote_leg.sh nvidia --payload gemm --rent --minutes 60 \
+    --gpu "NVIDIA H100 80GB HBM3" --local-card /tmp/gemm-ksplit-default-apple.card
+```
+
+Read back:
+
+- `device_check.log`: 8 gates green, GATE 4 with the shipped entry taking
+  ksplit at 4 shapes (column row 132).
+- The NVIDIA card equal to the Apple card on every stage.
+- `step-check.log`: PASS, with `REACH default [row=132 (this column's row)]`
+  and `[shipped entry, column row=132]` at N/N with ksplit taken. LM lines
+  `arm=shipped` with the default's reach (head_dA 672) and
+  `shipped_plan=[DEFAULT ksplit ...]`, and `arm=tuned128` with reach 0.
+- `plans.tsv` and `gate.txt`: `shipped: default=ksplit(S=132) else tuned128`.
+- `price_step.txt`: `STEP gemm arm=tuned128` above 1 if the 183.6 against
+  142.6 ms reading repeats, and `STEP gemm arm=ksplit` near 1 (on NVIDIA the
+  arm and the default are one body at one `S`).
+- `lm_summary.tsv`: `verdict tuned128 NO FLIP` with a geometric mean above 1
+  is the confirmation. `gemm_plan=` on every row says which plan ran.
+
+**AMD MI300X, Hot Aisle: LM `ksplit` against `shipped`** (the AMD default is
+still the old plan):
+
+```sh
+MOJOLEARN_GEMM_LEG_EXTRA=tools/gemm_longk_leg.sh \
+MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/$(date -u +%Y-%m-%d_%H%M%S)-amd-mi300x-hotaisle-gemm-ksplit-default \
+MOJOLEARN_HOTAISLE_EXTRA_ENV="MOJOLEARN_GEMM_STEP_LEG_ARMS=shipped,ksplit,ksplit_leaf MOJOLEARN_GEMM_STEP_LEG_LM_ARMS=ksplit" \
+bash tools/hotaisle_leg.sh amd --rent --minutes 60 --skip-gates
+```
+
+Read back:
+
+- `plans.tsv`: `shipped: default=tuned128 (block parallelism row 0)` and
+  `ksplit(S=110) where its rule takes the call, else default=tuned128 ...`.
+- `step-check.log`: PASS; `arm=shipped` reach 0 on every LM call.
+- The shipped run's CONTROL pair (`ctl_nt_1536x1408x768` against
+  `ctl_nt_1664x1408x768`) reads `S` for the MI300X.
+- `lm_summary.tsv`: `verdict ksplit ...`.
+
+A FLIP sets the AMD value of `lib_gemm_block_parallelism_for` in the same
+session (the trial row then follows it). The value to set is 110, the one
+that leg measured. If the CONTROL reading differs from 110, a different value
+needs its own leg before it ships.
+
+### 10.9 Risks only a build or a box can settle
+
+- **Syntax never compiled.**
+  - `comptime if GEMM_KSPLIT_DEFAULT_ON: ... else: ...` around calls in
+    `identical_gemm_shipped_into` and in `identical_gemm_step_geometry_into`.
+  - `comptime shipped = lib_gemm_block_parallelism_for[column]()` inside the
+    new matrix row.
+  - `_ksplit_run[SAB]` taking the callers' `mut` buffers.
+  - The `comptime if GEMM_ARM_TRIAL` nested under a runtime `if` in the
+    check's `_run`.
+- **Every NVIDIA IDENTICAL caller, not only the LM step.** Any GEMM through
+  `identical_gemm_into` with at least 128 K output cells, `P >= 2`, fewer than
+  132 tiles and a workspace under 64 M floats now takes ksplit. That covers
+  the transformer and byte LM, and also GP, kernel methods, Cholesky,
+  mixture and Mamba backward where their shapes qualify. Each such call
+  allocates up to 256 MB and synchronizes twice. Bits cannot move (section
+  5); the time is measured only on the LM step. A smaller NVIDIA card may
+  feel the per-call allocations (the 4090 pending-frees hang, DEVIATION
+  2520, is the precedent).
+- **FAST and DETERMINISTIC builds on NVIDIA** reach the default for the
+  calls that fall through the vendor path (OP_TN, `allow_vendor=False`).
+  Nothing has measured them there.
+- **Compile time and binary size.** Every shipped NVIDIA binary that reaches
+  `identical_gemm_into` now instantiates the group kernel (clean). The shipped
+  device check also instantiates it on Metal through the row-132 run; the
+  trial check already compiled it on the M4, the shipped check had not.
+- **Global sabotage builds.** The `-D MOJOLEARN_GEMM_SABOTAGE_*` switches live
+  in the tuned and SPLIT kernels, not in the group kernel. On an NVIDIA
+  sabotage build, calls the default takes do not carry the sabotage, so GATE
+  4 would read OK there while other gates fail. The recorded sabotage
+  evidence is Apple's (row 0), so nothing already on file changes.
+- **Lease.** The NVIDIA confirmation prices four arms with CONTROL lines and
+  probes one LM arm plus the brackets on two corpora, with timing probes.
+  The Pile GitHub fetch alone took 426 s on an earlier leg.

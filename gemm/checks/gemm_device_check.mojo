@@ -64,9 +64,11 @@ from bench.gemm_shapes import OP_TN as TBL_OP_TN
 from gemm.checks.gemm_identical import (
     GEMM_FOLD_LEVELS,
     GEMM_FOLD_SLOTS,
+    GEMM_KSPLIT_DEFAULT_S,
     GEMM_PLAN_COUNT,
     PLAN_FLAT,
     PLAN_SPLITK,
+    PLAN_TUNED_128_8X8,
     TUNED_FOLD_SLOTS,
     _fold_drain,
     _fold_drain_local,
@@ -74,10 +76,15 @@ from gemm.checks.gemm_identical import (
     _fold_push_local,
     choose_gemm_plan,
     contract_partition,
+    gemm_default_ksplit_leaves,
+    gemm_default_ksplit_leaves_at,
     gemm_operand_strides,
     gemm_plan_name,
     gemm_sabotage_name,
+    gemm_shipped_dispatch_name,
+    gemm_shipped_dispatch_name_at,
     identical_gemm_into,
+    identical_gemm_shipped_at_row_into,
     identical_gemm_with_plan,
     identical_gemm_workspace_floats,
     identical_gemm_workspace_max_floats,
@@ -102,6 +109,13 @@ comptime IDENTICAL_BUILD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 #: of products. Contract section 8 makes this load-bearing at `k == 0`, where
 #: the required answer `+0.0` must be STORED rather than the store skipped.
 comptime POISON = Float32(-987654.0)
+
+#: `_run_device`'s plan argument for the shipped dispatch's body at an
+#: ENABLED block parallelism row (DEVIATION 2595), on every column.
+#: `-1` is the shipped entry itself (`identical_gemm_into`).
+comptime RUN_SHIPPED_AT_ROW_ON = -2
+#: The enabled row that plan runs at: the H100 row the flip was measured at.
+comptime DEVICE_ROW_ON = 132
 
 
 def _mode_name() -> String:
@@ -529,7 +543,11 @@ def _run_device(
     ctx.enqueue_copy(dst_buf=db, src_ptr=hB.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=dc, src_ptr=hC.unsafe_ptr())
     ctx.synchronize()
-    if plan < 0:
+    if plan == RUN_SHIPPED_AT_ROW_ON:
+        identical_gemm_shipped_at_row_into[False](
+            ctx, dc, da, db, dw, m, n, k, op, DEVICE_ROW_ON
+        )
+    elif plan < 0:
         identical_gemm_into(ctx, dc, da, db, dw, m, n, k, op)
     else:
         identical_gemm_with_plan(ctx, dc, da, db, dw, m, n, k, op, plan)
@@ -1554,6 +1572,198 @@ def check_device_is_batch_invariant() raises:
 
 
 # ===========================================================================
+# GATE 4: THE SHIPPED KSPLIT DEFAULT (DEVIATION 2595)
+# ===========================================================================
+
+
+def _count_bad(got: List[Float32], want: List[Float32], count: Int) -> Int:
+    var bad = 0
+    for c in range(count):
+        if _bits(got[c]) != _bits(want[c]):
+            bad += 1
+    return bad
+
+
+def check_device_default_dispatch() raises:
+    """**GATE 4 (DEVIATION 2595).** The shipped dispatch stores the bits of
+    FLAT and of the old TUNED 128x128 plan where it takes the `ksplit`
+    default, and where it does not.
+
+    `docs/lanes/BRIEF_gemm_long_k_2026-09-11.md` section 10: a column whose
+    `lib_gemm_block_parallelism_for` row is above 0 (NVIDIA) runs the group
+    kernel over power-of-two leaf groups plus one fold launch on every call
+    the long-k group rule takes; a column whose row is 0 (Apple, AMD until
+    the MI300X leg) compiles the old line. Five shapes over the tuned plans'
+    128 K-cell floor, so `choose_gemm_plan` answers PLAN_TUNED_128_8X8 at all
+    of them: 257x520 and 520x257 with `P` of 2, 3 and 8 (the rule at row
+    132 takes them, 15 tiles, one leaf per group) and `P = 1` (the rule
+    declines). Each shape runs four ways, all required bit-identical:
+
+        FLAT                              the reference
+        PLAN_TUNED_128_8X8                the old plan, by name
+        identical_gemm_into               the shipped entry at THIS column's row
+        shipped body at row 132           `identical_gemm_shipped_at_row_into`,
+                                          the enabled row, on every column
+
+    So a column whose row is 0 still exercises the default's body on its own
+    device, and a column whose row is above 0 exercises it through the
+    entry. Non-vacuous: the enabled row must take ksplit at some shape, the
+    entry must take it at some shape on a column whose row is above 0, and
+    nowhere on a column whose row is 0. Reach (a sabotage that moves exactly
+    the group launch's cells) is `gemm_step_arms_check`'s
+    `check_default_dispatch`; this gate is the shipped build's bits.
+
+    ASSERTED IN BOTH MODES, for the reason GATE 2 gives.
+    """
+    print(
+        "check_device_default_dispatch ["
+        + _mode_name()
+        + "]: column block parallelism row="
+        + String(GEMM_KSPLIT_DEFAULT_S)
+        + ", enabled row="
+        + String(DEVICE_ROW_ON)
+    )
+    var fails = 0
+    var took_col = 0
+    var took_on = 0
+    var shapes_run = 0
+    with DeviceContext() as ctx:
+        for si in range(5):
+            var op = OP_NT
+            var m = 257
+            var n = 520
+            var k = 300
+            var label = String("257x520x300  P=3  NT")
+            if si == 1:
+                op = OP_TN
+                m = 520
+                n = 257
+                k = 129
+                label = String("520x257x129  P=2  TN")
+            elif si == 2:
+                op = OP_NN
+                m = 257
+                n = 520
+                k = 129
+                label = String("257x520x129  P=2  NN")
+            elif si == 3:
+                op = OP_TN
+                m = 257
+                n = 520
+                k = 1000
+                label = String("257x520x1000 P=8  TN")
+            elif si == 4:
+                op = OP_NT
+                m = 257
+                n = 520
+                k = 128
+                label = String("257x520x128  P=1  NT (the rule declines)")
+            var mn = m * n
+            var ha = _fill(_a_elems(op, m, n, k), 61, False)
+            var hb = _fill(_b_elems(op, m, n, k), 67, False)
+            var flat = _run_device(ctx, ha, hb, op, m, n, k, PLAN_FLAT, label)
+            var got_old = _run_device(ctx, ha, hb, op, m, n, k, PLAN_TUNED_128_8X8, label)
+            var got_entry = _run_device(ctx, ha, hb, op, m, n, k, -1, label)
+            var got_on = _run_device(ctx, ha, hb, op, m, n, k, RUN_SHIPPED_AT_ROW_ON, label)
+            shapes_run += 1
+            var gl_col = gemm_default_ksplit_leaves(m, n, k)
+            var gl_on = gemm_default_ksplit_leaves_at(m, n, k, DEVICE_ROW_ON)
+            if gl_col > 0:
+                took_col += 1
+            if gl_on > 0:
+                took_on += 1
+            var bad_old = _count_bad(got_old, flat, mn)
+            var bad_entry = _count_bad(got_entry, flat, mn)
+            var bad_on = _count_bad(got_on, flat, mn)
+            var line = (
+                "  "
+                + label
+                + "  plan chosen="
+                + gemm_plan_name(choose_gemm_plan(m, n, k))
+            )
+            print(line)
+            print(
+                "      entry  ran ["
+                + gemm_shipped_dispatch_name(m, n, k)
+                + "]  cells differing from FLAT: "
+                + String(bad_entry)
+            )
+            print(
+                "      row "
+                + String(DEVICE_ROW_ON)
+                + " ran ["
+                + gemm_shipped_dispatch_name_at(m, n, k, DEVICE_ROW_ON)
+                + "]  cells differing from FLAT: "
+                + String(bad_on)
+            )
+            print(
+                "      old plan by name  cells differing from FLAT: "
+                + String(bad_old)
+            )
+            if bad_old != 0 or bad_entry != 0 or bad_on != 0:
+                fails += 1
+                print(
+                    "      FAIL "
+                    + label
+                    + ": old plan "
+                    + String(bad_old)
+                    + ", shipped entry "
+                    + String(bad_entry)
+                    + ", shipped body at row "
+                    + String(DEVICE_ROW_ON)
+                    + " "
+                    + String(bad_on)
+                    + " cells differ from FLAT"
+                )
+            else:
+                print("      OK   all four bit-identical")
+    if took_on == 0:
+        raise Error(
+            "check_device_default_dispatch: the enabled row took ksplit at none of "
+            + String(shapes_run)
+            + " shapes; the gate is vacuous"
+        )
+    if GEMM_KSPLIT_DEFAULT_S > 0 and took_col == 0:
+        raise Error(
+            "check_device_default_dispatch: this column's row is "
+            + String(GEMM_KSPLIT_DEFAULT_S)
+            + " and the shipped entry took ksplit at none of the shapes"
+        )
+    if GEMM_KSPLIT_DEFAULT_S <= 0 and took_col != 0:
+        raise Error(
+            "check_device_default_dispatch: this column's row is 0 and the"
+            " shipped entry took ksplit at "
+            + String(took_col)
+            + " shapes"
+        )
+    if fails != 0:
+        raise Error(
+            "check_device_default_dispatch ["
+            + _mode_name()
+            + "]: "
+            + String(fails)
+            + " of "
+            + String(shapes_run)
+            + " shapes stored DIFFERENT BITS through the shipped dispatch or"
+            " the old plan (lines above). The ksplit default is an execution"
+            " plan and may not move a cell."
+        )
+    print(
+        "check_device_default_dispatch ["
+        + _mode_name()
+        + "] OK: "
+        + String(shapes_run)
+        + " shapes bit-identical to FLAT and the old plan; the shipped entry"
+        " took ksplit at "
+        + String(took_col)
+        + " (column row "
+        + String(GEMM_KSPLIT_DEFAULT_S)
+        + "), the enabled row at "
+        + String(took_on)
+    )
+
+
+# ===========================================================================
 
 
 def _gate(name: String, mut ran: Int, mut failed: Int, e: String):
@@ -1618,6 +1828,11 @@ def main() raises:
         _gate(String("check_device_is_batch_invariant"), ran, failed, String(""))
     except e:
         _gate(String("check_device_is_batch_invariant"), ran, failed, String(e))
+    try:
+        check_device_default_dispatch()
+        _gate(String("check_device_default_dispatch"), ran, failed, String(""))
+    except e:
+        _gate(String("check_device_default_dispatch"), ran, failed, String(e))
 
     if failed != 0:
         raise Error(

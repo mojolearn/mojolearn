@@ -29,6 +29,24 @@ A fused path that silently skipped the corner would pass every ordinary
 case here and differ from eager on `underflow` -- which is the case that
 exists to say so ([[reached-but-inert]]).
 
+WHICH ARM RAN (DEVIATION 2534, brief
+docs/lanes/BRIEF_attention_step_2026-09-11.md section 15). The shipped
+attention arm is a kernel-matrix row per column (`attn_default_arm_for`:
+NVIDIA `stash_tiled_fgrid_r32_qres_pf`, AMD, Apple and the rest
+`stash_tiled`). The direct launches here go through
+`fused_forward_launch_ran` / `fused_backward_launch_ran`, which report the
+arm word of the kernels that actually launched, set inside the branch that
+launched them. The check prints a `DEFAULT` line (column, arm, word), proves
+the default word names itself and runs as named at head_dim 64 on this
+build, and FAILS when a launch at head_dim 64 ran anything but the resolved
+half of the arm (or when a launch at another head dim, or a refused launch,
+ran anything but the shipped kernels). On a build without
+`-D MOJOLEARN_ATTN_ARM_TRIAL=1` the arm is the column's default, so a green
+run on a column is "the default ran there and is bit-identical to eager".
+`-D MOJOLEARN_ATTN_DEFAULT_R3_EVERY_COLUMN=1` gives every column NVIDIA's
+default, so the same no-trial check reaches the shipped round 3 branch on a
+Mac.
+
 The forward wrapper (`eager_attention_forward`, trace off, path auto) is
 what the surface calls, so its output is compared too: it must equal the
 eager core whatever status it took.
@@ -38,6 +56,7 @@ from std.memory import bitcast
 from max.gpu.host import DeviceContext
 
 from core.identity_trace import IdentityTrace
+from checks.kernel_matrix import TARGET_COLUMN, column_name
 from checks.numerics import numeric_mode_name
 from transformer.checks.transformer_fixture import bits32_hex, fixture_tensor
 from transformer.checks.transformer_backward import (
@@ -45,11 +64,20 @@ from transformer.checks.transformer_backward import (
     bwd_attention_eager_stages,
 )
 from transformer.impl.llama.fused_attention import (
+    ATTN_ARM_BASELINE,
+    ATTN_ARM_DEFAULT,
+    ATTN_ARM_TRIAL,
+    ATTN_STASH_HD,
     FUSED_CORNER,
     FUSED_RAN,
     FUSED_REFUSED_REGIME,
-    fused_backward_launch,
-    fused_forward_launch,
+    fused_attention_arm_backward_resolved,
+    fused_attention_arm_forward_resolved,
+    fused_attention_arm_from_env,
+    fused_attention_arm_name,
+    fused_attention_arm_parse,
+    fused_backward_launch_ran,
+    fused_forward_launch_ran,
     fused_supported_head_dim,
     fused_forward_supported_head_dim,
 )
@@ -168,8 +196,28 @@ def scaled(values: List[Float32], f: Float64) -> List[Float32]:
     return out^
 
 
-def run_case(ctx: DeviceContext, c: FusedCase) raises -> Int:
-    """Returns the number of moved cells across every compared buffer."""
+def expected_ran(hd: Int, st: Int, resolved: Int) -> Int:
+    """The arm word a launch must report: nothing but the shipped kernels
+    (word 0) when it refused before any kernel, or at a head dim other than
+    the arms' 64; otherwise the arm's resolved half for this build."""
+    if st == FUSED_REFUSED_REGIME or hd != ATTN_STASH_HD:
+        return ATTN_ARM_BASELINE
+    return resolved
+
+
+def require_ran(name: String, direction: String, got: Int, want: Int) raises:
+    if got != want:
+        raise Error(
+            name + ": the fused " + direction + " RAN "
+            + fused_attention_arm_name(got) + " (word " + String(got)
+            + ") and this build resolves " + fused_attention_arm_name(want)
+            + " (word " + String(want) + ")"
+        )
+
+
+def run_case(ctx: DeviceContext, c: FusedCase, arm: Int, mut arm_launches: Int) raises -> Int:
+    """Returns the number of moved cells across every compared buffer;
+    `arm_launches` counts the direct launches that ran an arm (word not 0)."""
     var dm = c.nh * c.hd
     var dims = LlamaDims(dm, c.nh, c.nkv, c.hd, 4 * dm)
     dims.validate()
@@ -219,19 +267,23 @@ def run_case(ctx: DeviceContext, c: FusedCase) raises -> Int:
     var e_den = _download(ctx, stages.denom, b * c.nh * l)
 
     var moved = 0
-    # ---- the fused forward, directly ------------------------------------
+    # ---- the fused forward, directly, with the arm it ran ------------------
     stages.ctxv = _upload(ctx, List[Float32](length=qn, fill=Float32(0.0)))
-    var st = fused_forward_launch(
+    var ran_f = -1
+    var st = fused_forward_launch_ran(
         ctx, stages.ctxv, stages.amax, stages.denom, stages.q_rope,
         stages.k_cache, stages.v_cache, b, l, c.nh, c.nkv, c.hd, s, pos0,
-        key_lo, window, scale,
+        key_lo, window, scale, arm, ran_f,
     )
-    print("    fused forward status: " + status_name(st))
+    print("    fused forward status: " + status_name(st) + "  ran " + fused_attention_arm_name(ran_f))
     if c.expect_fwd != EXPECT_ANY and st != c.expect_fwd:
         raise Error(
             c.name + ": the fused forward reported " + status_name(st)
             + " and the case expects " + status_name(c.expect_fwd)
         )
+    require_ran(c.name, "forward", ran_f, expected_ran(c.hd, st, fused_attention_arm_forward_resolved(arm)))
+    if ran_f != ATTN_ARM_BASELINE:
+        arm_launches += 1
     if st == FUSED_RAN:
         moved += compare(c.name, "fwd ctx (direct)", e_ctx, _download(ctx, stages.ctxv, qn))
         moved += compare(c.name, "fwd amax", e_max, _download(ctx, stages.amax, b * c.nh * l))
@@ -267,18 +319,22 @@ def run_case(ctx: DeviceContext, c: FusedCase) raises -> Int:
     bst.d_q_rope = _upload(ctx, List[Float32](length=qn, fill=Float32(0.0)))
     bst.d_k_cache = _upload(ctx, List[Float32](length=kn, fill=Float32(0.0)))
     bst.d_v_cache = _upload(ctx, List[Float32](length=kn, fill=Float32(0.0)))
-    var bs = fused_backward_launch(
+    var ran_b = -1
+    var bs = fused_backward_launch_ran(
         ctx, bst.attn_zdot, bst.d_q_rope, bst.d_k_cache, bst.d_v_cache,
         stages.q_rope, bst.d_attn_ctx, stages.k_cache, stages.v_cache,
         stages.amax, stages.denom, b, l, c.nh, c.nkv, c.hd, s, pos0, key_lo,
-        window, scale,
+        window, scale, arm, ran_b,
     )
-    print("    fused backward status: " + status_name(bs))
+    print("    fused backward status: " + status_name(bs) + "  ran " + fused_attention_arm_name(ran_b))
     if c.expect_bwd != EXPECT_ANY and bs != c.expect_bwd:
         raise Error(
             c.name + ": the fused backward reported " + status_name(bs)
             + " and the case expects " + status_name(c.expect_bwd)
         )
+    require_ran(c.name, "backward", ran_b, expected_ran(c.hd, bs, fused_attention_arm_backward_resolved(arm)))
+    if ran_b != ATTN_ARM_BASELINE:
+        arm_launches += 1
     if bs == FUSED_RAN:
         moved += compare(c.name, "bwd zdot", e_z, _download(ctx, bst.attn_zdot, b * c.nh * l))
         moved += compare(c.name, "bwd dq", e_dq, _download(ctx, bst.d_q_rope, qn))
@@ -291,21 +347,65 @@ def run_case(ctx: DeviceContext, c: FusedCase) raises -> Int:
 
 def main() raises:
     print("=== transformer fused attention vs eager, BITWISE (mode " + numeric_mode_name() + ")")
+    # The arm every launch below runs: the column's default on a build
+    # without the trial define (it reads no environment), else
+    # MOJOLEARN_ATTN_ARM or the default when that is unset.
+    var arm = fused_attention_arm_from_env()
+    var default_name = fused_attention_arm_name(ATTN_ARM_DEFAULT)
+    print(
+        "DEFAULT column=" + column_name(TARGET_COLUMN) + " arm=" + default_name
+        + " word=" + String(ATTN_ARM_DEFAULT)
+        + " source=kernel_matrix.attn_default_arm_for trial_hook=" + String(ATTN_ARM_TRIAL)
+    )
+    if fused_attention_arm_parse(default_name) != ATTN_ARM_DEFAULT:
+        raise Error(
+            "transformer_fused_check: the default arm word " + String(ATTN_ARM_DEFAULT)
+            + " names itself '" + default_name + "', which parses back as another arm"
+        )
+    var default_resolved = (
+        fused_attention_arm_forward_resolved(ATTN_ARM_DEFAULT)
+        | fused_attention_arm_backward_resolved(ATTN_ARM_DEFAULT)
+    )
+    print("DEFAULT resolved_hd64=" + fused_attention_arm_name(default_resolved))
+    if default_resolved != ATTN_ARM_DEFAULT:
+        raise Error(
+            "transformer_fused_check: the column's default arm " + default_name
+            + " resolves to " + fused_attention_arm_name(default_resolved)
+            + " at head_dim 64 on this build (a page that does not fit this"
+            + " column, or a kernel this build does not compile); the kernel"
+            + " matrix row names an arm the column cannot run as named"
+        )
+    var arm_name = fused_attention_arm_name(arm)
+    var fwd_name = fused_attention_arm_name(fused_attention_arm_forward_resolved(arm))
+    var bwd_name = fused_attention_arm_name(fused_attention_arm_backward_resolved(arm))
+    print(
+        "ARM this_run=" + arm_name + " is_default=" + String(arm == ATTN_ARM_DEFAULT)
+        + " forward_hd64=" + fwd_name + " backward_hd64=" + bwd_name
+    )
     var ctx = DeviceContext()
     var all_cases = cases()
     var total_moved = 0
+    var arm_launches = 0
     var n = 0
     for i in range(len(all_cases)):
         var c = all_cases[i].copy()
-        total_moved += run_case(ctx, c)
+        total_moved += run_case(ctx, c, arm, arm_launches)
         n += 1
     if total_moved > 0:
         raise Error(
             "transformer_fused_check: " + String(total_moved)
             + " cells MOVED between the eager and the fused attention"
         )
+    if arm_launches == 0 and arm != ATTN_ARM_BASELINE:
+        raise Error(
+            "transformer_fused_check: no direct launch ran the arm " + arm_name
+            + " (every one ran the shipped kernels); the head_dim 64 cases did not reach it"
+        )
     print(
         "transformer_fused_check: PASS, " + String(n)
-        + " cases, every compared buffer bit-identical, every status as expected"
+        + " cases, every compared buffer bit-identical, every status as expected;"
+        + " column " + column_name(TARGET_COLUMN) + " arm " + arm_name
+        + " (default " + default_name + "), " + String(arm_launches)
+        + " direct launches RAN " + fwd_name + " / " + bwd_name + " at head_dim 64"
     )
     _ = ctx^

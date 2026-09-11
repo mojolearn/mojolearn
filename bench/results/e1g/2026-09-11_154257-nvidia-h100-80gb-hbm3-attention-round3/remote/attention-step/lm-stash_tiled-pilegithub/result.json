@@ -1,0 +1,83 @@
+{
+  "schema": "mojolearn.lm-step-memory-probe.v3",
+  "shape": {
+    "batch": 1,
+    "length": 2048,
+    "d_model": 768,
+    "n_heads": 12,
+    "n_kv": 12,
+    "head_dim": 64,
+    "intermediate": 2048,
+    "n_layers": 12,
+    "vocab_size": 50257
+  },
+  "parameters": 162147840,
+  "steps_completed": 3,
+  "resident": true,
+  "step_result": "lean",
+  "witness_every_step": true,
+  "witness_source": "export_gradients(named=False) + export_state() after every step (outside the timed boundary)",
+  "corpus": {
+    "path": "training/corpus/pile_github/input.txt",
+    "sha256": "52a5b4c36ab9119c15505331c10e3b23690377d40fbac3e598c7fafe13a324df",
+    "manifest_sha256": "e3f46ca3870913aabd179647f5ab7e66b829c30c3cbcbf4b2862e2790d94cda5",
+    "bytes": 97124565,
+    "source_url": "https://huggingface.co/datasets/monology/pile-uncopyrighted/resolve/3be90335b66f24456a5d6659d9c8d208c0357119/val.jsonl.zst",
+    "schedule": "step k row b: bytes[(k*batch*length + b*length) % (bytes - length - 1) : +length+1] as int32; targets shifted one byte"
+  },
+  "attention_arm": "stash_tiled",
+  "gemm_arm": null,
+  "step_witnesses": [
+    {
+      "step": 1,
+      "completed_steps": 1,
+      "sha256": {
+        "loss": "fb1bfea4e8daa3b31227ff49a404e36a58fe27b98856af4d27a24872b0e9abf2",
+        "gradients": "85d053a482668fd958df0e32325fc47f9ba10ec630ff63557c7b79c5bd85b0e3",
+        "parameters": "1b32246046a72ada00e3c8ec04d079beb629d8e314f860bc7106d42c5996a8ca",
+        "m": "8dbf0dfcb08f29687241a6586a7ef8224fde5877a7aeb490b9701d24d5812524",
+        "v": "227d2c36dbd16e9acf0556ec491d8b6431a8e4cc5b235b8d81011996a9bc05be",
+        "flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb"
+      }
+    },
+    {
+      "step": 2,
+      "completed_steps": 2,
+      "sha256": {
+        "loss": "ddb267519e68048079f2a5320ecdd60baeb59036301a115827a9dced054ff2bd",
+        "gradients": "defa184dcfcf29c7650972fa5372f463679eb4c46daa463aef108a2882a169f5",
+        "parameters": "33e2bad344f1f355e40abeff6165ce36d1a74004ec0ce5d405254cf971dd412f",
+        "m": "abe0098ba41bcb6298497c575d2768d6486d514bd41d2a7a72b7592c8cd3455c",
+        "v": "8ef9e39530fd6f585c23d30dbd3e846af65da81262d0b303d216a178e4905035",
+        "flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb"
+      }
+    },
+    {
+      "step": 3,
+      "completed_steps": 3,
+      "sha256": {
+        "loss": "5aa104f9260207f9e1eec2787cddbc7cc83096d02f0010439df163e3e18ce443",
+        "gradients": "a736cdce5bb28a804c2e28abd2b2b561598bac2cd93b051e7535f32cbdab3a67",
+        "parameters": "4185581a78053257fc376373ba15a99ce705437ada726ec604f990cc96211dcc",
+        "m": "dbcce767d3558558631d631862966e6a37c6cf0eeb0132fa49e4175e25549ca3",
+        "v": "accb7ae950dc3c72b04b96e3df10b2c9850b27fee86deafdc0069ac74ea7f26d",
+        "flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb"
+      }
+    }
+  ],
+  "final_witness": null,
+  "first_call_seconds": 14.189284517429769,
+  "steady_step_seconds": [
+    0.3821804402396083,
+    0.3816605554893613
+  ],
+  "steady_median_seconds": 0.3819204978644848,
+  "steady_median_tokens_per_second": 5362.372565629308,
+  "peak_device_process_bytes": "unavailable",
+  "peak_device_wide_bytes": 14555283456,
+  "process_ru_maxrss_bytes": 8267730944,
+  "budget_seconds": 300.0,
+  "limited": false,
+  "component_timing_step_seconds": null,
+  "qualification": "complete-step probe; device peak from a polled vendor tool; host RSS is a separate boundary; no opponent, no default gate, no target-scale qualification claim"
+}

@@ -1,0 +1,4 @@
+arming a 60-minute self-kill on pod efukbwtpx5vrhn ...
+ARMED. Pod efukbwtpx5vrhn is TERMINATED through the API in 60 minutes.
+  lease: /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/ece6c35f-471f-4b93-8fcf-f6462a0e5568/scratchpad/wt-attn3/tools/../bench/results/runpod_leases/efukbwtpx5vrhn.lease
+  extend with: tools/runpod_guard.sh extend efukbwtpx5vrhn '-p 12395 root@103.207.149.173' <minutes>
