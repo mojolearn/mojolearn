@@ -21,6 +21,7 @@ on:
   workflow_dispatch:
   push:
     branches:
+      - "main"
       - "lane/cpu-inference"
       - "lane/cpu-inference-threads"
     paths:
@@ -41,13 +42,32 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # GitHub does not let a workflow choose Intel or AMD for x86-64; Azure
+        # assigns the host. So x86-64 runs as several independent draws on two
+        # images, each report records the CPU it got, and a vendor enters the
+        # certified table only from a report that names it.
         include:
           - runner: ubuntu-24.04-arm
+            slot: arm64
             label: ARM64 Linux (Azure Cobalt 100)
-          - runner: ubuntu-24.04
-            label: x86-64 Linux (hosted)
           - runner: macos-15
+            slot: macos15
             label: Apple M1 macOS (hosted)
+          - runner: ubuntu-24.04
+            slot: x86-a
+            label: x86-64 Linux draw a (24.04)
+          - runner: ubuntu-24.04
+            slot: x86-b
+            label: x86-64 Linux draw b (24.04)
+          - runner: ubuntu-24.04
+            slot: x86-c
+            label: x86-64 Linux draw c (24.04)
+          - runner: ubuntu-22.04
+            slot: x86-d
+            label: x86-64 Linux draw d (22.04)
+          - runner: ubuntu-22.04
+            slot: x86-e
+            label: x86-64 Linux draw e (22.04)
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     permissions:
@@ -88,6 +108,13 @@ jobs:
               grep -m1 -E '^(flags|Features)' /proc/cpuinfo
             fi
           } 2>&1 | tee "$GATE_OUT/runner.txt"
+          if [ "$(uname -s)" = Darwin ]; then
+            cpu="$(sysctl -n machdep.cpu.brand_string)"
+          else
+            cpu="$(grep -m1 -E '^model name' /proc/cpuinfo | cut -d: -f2- | sed 's/^ //')"
+            [ -n "$cpu" ] || cpu="$(lscpu | grep -m1 'Model name' | cut -d: -f2- | sed 's/^ *//')"
+          fi
+          echo "### ${{ matrix.slot }}: ${cpu:-unknown CPU} ($(uname -m))" >> "$GITHUB_STEP_SUMMARY"
           test -f bench/results/resume/2026-09-07-root-byte-lm-three-vendor/comparison.json
 
       - uses: prefix-dev/setup-pixi@v0.10.1
@@ -127,10 +154,22 @@ jobs:
           python3 tools/byte_lm_host_gate.py --steps every:8 --expect-mismatch \
             --report "$GATE_OUT/gate_sab.json" 2>&1 | tee "$GATE_OUT/gate_sab.log"
 
+      # Fake-binding plumbing tests (python/mojolearn/tests/test_byte_lm_host.py):
+      # refusals, the threaded flag, the helper fallback and the CPU-only
+      # selector. They prove wiring, never arithmetic, and need the production
+      # binding built above so `import mojolearn` takes the CPU-only path.
+      - name: Host plumbing tests
+        if: always()
+        run: |
+          set -o pipefail
+          python3 -m pip install --quiet numpy pytest
+          cd python
+          python3 -m pytest -q mojolearn/tests/test_byte_lm_host.py 2>&1 | tee "$GATE_OUT/pytest_host.log"
+
       - name: Upload reports and logs
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: byte-lm-cpu-gate-${{ matrix.runner }}
+          name: byte-lm-cpu-gate-${{ matrix.slot }}
           path: cpu-gate-out/
           if-no-files-found: warn
