@@ -1,4 +1,4 @@
-# Byte LM CPU inference gate (DEVIATIONS 2610-2616) on GitHub's free standard
+# Byte LM CPU inference gate (DEVIATIONS 2610-2616, 2624) on GitHub's free standard
 # runners: ARM64 Linux (Azure Cobalt 100), x86-64 Linux and Apple M1 macOS.
 #
 # What it proves on each runner, and nothing more: the CPU binding built ON
@@ -24,8 +24,11 @@ on:
       - "main"
       - "lane/cpu-inference"
       - "lane/cpu-inference-threads"
+      - "lane/cpu-speed"
     paths:
       - "training/byte_lm_host.mojo"
+      - "training/byte_lm_host_kernels.mojo"
+      - "python/mojolearn/tests/test_byte_lm_host.py"
       - "bindings/_mojolearn_byte_lm_host.mojo"
       - "bindings/build_byte_lm_host.sh"
       - "python/mojolearn/_byte_lm_host.py"

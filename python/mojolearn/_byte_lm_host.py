@@ -77,22 +77,41 @@ def _native_shape(shape):
             shape.head_dim, shape.intermediate, shape.n_layers, shape.vocab_size]
 
 
+_MAX_THREADS = 1024
+
+
+def _thread_count(value):
+    """None is one thread per physical core, sent to the binding as 0."""
+    if value is None:
+        return 0
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise TypeError('threads must be an int or None')
+    if not 1 <= value <= _MAX_THREADS:
+        raise ValueError(f'threads must be in [1, {_MAX_THREADS}]')
+    return value
+
+
 class LanguageModelInference:
     """Forward-only byte LM on the CPU. The parameters are copied at
     construction and never change afterward.
 
-    `threaded=True` splits the work across cores along axes the contracts
-    make independent (DEVIATION 2616): the same bits as the one-thread
-    reference path, which the gate checks on every certified CPU. Each call
-    may override the instance default."""
+    `threaded=True` runs the threaded path (DEVIATIONS 2616, 2624): host
+    kernels that spend the oracles' arithmetic in the oracles' order without
+    their per-cell allocation, advanced as SIMD lanes and split across at
+    most `threads` threads (None: one per physical core) along axes the
+    contracts make independent. The same bits as the one-thread reference
+    path, which the gate checks on every certified CPU. Each call may
+    override both instance defaults."""
 
-    def __init__(self, parameters, *, shape=None, threaded=False):
+    def __init__(self, parameters, *, shape=None, threaded=False, threads=None):
         shape = ByteLanguageModelConfig() if shape is None else shape
         if not isinstance(shape, ByteLanguageModelConfig):
             raise TypeError('shape must be a ByteLanguageModelConfig')
         if not isinstance(threaded, bool):
             raise TypeError('threaded must be a bool')
+        _thread_count(threads)
         self._threaded = threaded
+        self._threads = threads
         array, _ = as_f32_c(parameters, ndim=1, name='parameters')
         if tuple(array.shape) != (shape.n_total,):
             raise ValueError(f'parameters must be float32 [{shape.n_total}]')
@@ -107,20 +126,23 @@ class LanguageModelInference:
             raise RuntimeError(f'byte LM host profile mismatch: {compiled} != {shape.profile}')
 
     @classmethod
-    def from_checkpoint(cls, path, *, threaded=False):
+    def from_checkpoint(cls, path, *, threaded=False, threads=None):
         """Parameters from a `mojolearn.small-byte-lm-json-checkpoint.v1`
         file, through the trainer's own decoder and integrity checks."""
         from ._byte_lm_impl import _CHECKPOINT_LIMIT, _decode_checkpoint
         with Path(path).open('rb') as stream:
             encoded = stream.read(_CHECKPOINT_LIMIT + 1)
         state, shape = _decode_checkpoint(encoded)
-        return cls(state['parameters'], shape=shape, threaded=threaded)
+        return cls(state['parameters'], shape=shape, threaded=threaded, threads=threads)
 
     def _threads_flag(self, threaded):
         value = self._threaded if threaded is None else threaded
         if not isinstance(value, bool):
             raise TypeError('threaded must be a bool or None')
         return 1 if value else 0
+
+    def _threads_arg(self, threads):
+        return _thread_count(self._threads if threads is None else threads)
 
     @property
     def shape(self):
@@ -133,10 +155,11 @@ class LanguageModelInference:
     def parameters_sha256(self):
         return hashlib.sha256(le_bytes(self._parameters, 'f')).hexdigest()
 
-    def logits(self, ids, *, threaded=None):
+    def logits(self, ids, *, threaded=None, threads=None):
         """Float32 logits `[batch, length, vocab]` for int32 ids
         `[batch, length]`, positions from 0, length at most `shape.length`."""
         flag = self._threads_flag(threaded)
+        count = self._threads_arg(threads)
         tokens, _ = as_i32_c(ids, ndim=2, name='ids')
         batch, length = tokens.shape
         if batch <= 0 or not 0 < length <= self._shape.length:
@@ -145,29 +168,31 @@ class LanguageModelInference:
         written = self._binding.byte_lm_host_logits(
             [addr_ro(self._parameters, name='parameters'), addr_ro(tokens, name='ids'),
              addr(out, name='logits')],
-            [batch, length], self._native, flag)
+            [batch, length], self._native, flag, count)
         if int(written) != batch * length * self._shape.vocab_size:
             raise RuntimeError('byte LM host wrote an unexpected number of logits')
         return out
 
-    def loss_bits(self, ids, *, threaded=None):
+    def loss_bits(self, ids, *, threaded=None, threads=None):
         """IEEE-754 bits of the mean next-byte loss of int32 ids
         `[shape.batch, shape.length + 1]`, the training batch layout."""
         flag = self._threads_flag(threaded)
+        count = self._threads_arg(threads)
         tokens, _ = as_i32_c(ids, ndim=2, name='ids')
         if tuple(tokens.shape) != (self._shape.batch, self._shape.length + 1):
             raise ValueError(f'ids must be [{self._shape.batch}, {self._shape.length + 1}]')
         return int(self._binding.byte_lm_host_loss(
             [addr_ro(self._parameters, name='parameters'), addr_ro(tokens, name='ids')],
-            self._native, flag))
+            self._native, flag, count))
 
-    def loss(self, ids, *, threaded=None):
-        return struct.unpack('<f', struct.pack('<I', self.loss_bits(ids, threaded=threaded)))[0]
+    def loss(self, ids, *, threaded=None, threads=None):
+        bits = self.loss_bits(ids, threaded=threaded, threads=threads)
+        return struct.unpack('<f', struct.pack('<I', bits))[0]
 
-    def next_bytes(self, ids, *, threaded=None):
+    def next_bytes(self, ids, *, threaded=None, threads=None):
         """Greedy next byte after each row of ids `[batch, length]`; ties go
         to the lowest byte value."""
-        out = self.logits(ids, threaded=threaded)
+        out = self.logits(ids, threaded=threaded, threads=threads)
         batch, length, vocab = out.shape
         flat = flat_view(out, 'f')
         result = []
