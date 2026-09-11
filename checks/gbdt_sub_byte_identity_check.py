@@ -43,6 +43,21 @@ SABOTAGE (rule 7). On the AMD column, restoring any one peel bound
 (`while pe < PEEL_END` back to `while pe < ALIGN_SIZE`) in one kernel file
 must make that file's fixture fail here. A green run on a 32-lane column
 proves nothing about the defect; it is the reference side.
+
+RUN OWED, Apple M4 (the orchestrator's light local check; small fixtures,
+no benchmark). From the repository root:
+
+    MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH=python python3 tools/identity_break.py \\
+        --lanes gbdt-symmetric,gbdt-depthwise,gbdt-lossguide,gbdt-rmse \\
+        --vendor apple-m4 --json /tmp/apple-m4.gbdt.json
+    python3 tools/identity_break.py --diff \\
+        bench/results/identity_break/apple-m4.identical.json /tmp/apple-m4.gbdt.json
+    MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH=python \\
+        python3 checks/gbdt_sub_byte_identity_check.py --json /tmp/apple-m4.sub_byte.json
+
+Expected: the diff reads IDENTICAL on all 36 gbdt cells (the other lanes
+are ONE-COLUMN), and this check reads 16/16 PASS against the H100
+references above.
 """
 import argparse
 import importlib.util
