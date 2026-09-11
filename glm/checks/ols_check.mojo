@@ -1275,6 +1275,238 @@ def _fit_f32_dropped(
     return dropped
 
 
+def _fit_wide_dropped(
+    ctx: DeviceContext,
+    a: List[Float32],
+    b: List[Float32],
+    n: Int,
+    d: Int,
+    mut coef: List[Float32],
+) raises -> Int:
+    """`_fit_f32_dropped` for a WIDE design (`d > n`), which `ols_fit` sends
+    to `lstsq_min_norm`. That route's `QS` is `n x n` (the eigenvectors of
+    `A A^T`) written into the first `n * n` cells, so the dropped count is
+    read over `n` columns of stride `n`, not `d` columns of stride `d`."""
+    var da = ctx.enqueue_create_buffer[DType.float32](n * d)
+    var db = ctx.enqueue_create_buffer[DType.float32](n)
+    var dw = ctx.enqueue_create_buffer[DType.float32](d)
+    var cov = ctx.enqueue_create_buffer[DType.float32](d * d)
+    var q = ctx.enqueue_create_buffer[DType.float32](d * d)
+    var qs = ctx.enqueue_create_buffer[DType.float32](d * d)
+    var sv = ctx.enqueue_create_buffer[DType.float32](d)
+    var ab = ctx.enqueue_create_buffer[DType.float32](d)
+    var inv = ctx.enqueue_create_buffer[DType.float32](d * d)
+    var xa = ctx.enqueue_create_buffer[DType.float32](n * d)
+    var xa2 = ctx.enqueue_create_buffer[DType.float32](n * d)
+    ctx.synchronize()
+    var ha = ctx.enqueue_create_host_buffer[DType.float32](n * d)
+    var hb = ctx.enqueue_create_host_buffer[DType.float32](n)
+    ctx.synchronize()
+    for i in range(n * d):
+        ha.unsafe_ptr().unsafe_store(i, a[i])
+    for i in range(n):
+        hb.unsafe_ptr().unsafe_store(i, b[i])
+    ctx.enqueue_copy(dst_buf=da, src_ptr=ha.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=db, src_ptr=hb.unsafe_ptr())
+    ctx.synchronize()
+    ols_fit(
+        ctx, da, db, dw, cov, q, qs, sv, ab, inv, xa, xa2, n, d, OLS_ALGO_EIG,
+    )
+    var hw = ctx.enqueue_create_host_buffer[DType.float32](d)
+    var hq = ctx.enqueue_create_host_buffer[DType.float32](d * d)
+    ctx.enqueue_copy(dst_ptr=hw.unsafe_ptr(), src_buf=dw)
+    ctx.enqueue_copy(dst_ptr=hq.unsafe_ptr(), src_buf=qs)
+    ctx.synchronize()
+    for k in range(d):
+        coef.append(hw.unsafe_ptr().unsafe_load(k))
+    var dropped = 0
+    for c in range(n):
+        var all_zero = True
+        for r in range(n):
+            if hq.unsafe_ptr().unsafe_load(r * n + c) != Float32(0.0):
+                all_zero = False
+        if all_zero:
+            dropped += 1
+    _ = da
+    _ = db
+    _ = dw
+    _ = cov
+    _ = q
+    _ = qs
+    _ = sv
+    _ = ab
+    _ = inv
+    _ = xa
+    _ = xa2
+    _ = ha^
+    _ = hb^
+    _ = hw^
+    _ = hq^
+    return dropped
+
+
+# THE WIDE ROUTE, DEVIATION 2622 (2026-09-11). `lstsq_min_norm` solves
+# `w = A^T (A A^T)^+ b` through the ROW Gram and used the same absolute 1e-10
+# the tall route dropped. It now equilibrates `A A^T` and cuts relative, and
+# these two checks are the wide mirrors of the tall ones:
+#
+#   check_ols_wide_rank_guard_is_scale_invariant
+#       a full-row-rank 8 x 64 design at scale 1 and 2^-24: same rank, and
+#       every coefficient at 2^-24 BIT FOR BIT 2^24 times scale 1. The
+#       absolute threshold gives rank 0 at 2^-24 (row-Gram eigenvalues about
+#       1e-13), the zero model.
+#   check_ols_wide_rank_deficient_design_drops_the_noise_direction
+#       a 12 x 96 design whose last row is the float32 rounding of the sum of
+#       the first two: exactly one direction dropped; the absolute threshold
+#       keeps the rounding eigenvalue and divides by it.
+
+
+def check_ols_wide_rank_guard_is_scale_invariant() raises:
+    """The wide mirror of `check_ols_rank_guard_is_scale_invariant`.
+
+    Scaling the design by 2^-24 scales `A A^T` by exactly 2^-48; the
+    shift-invariant scales absorb it, the eigensolver sees the same bits,
+    step 4b multiplies `(S G S)^+` back by exactly 2^48, `z` scales by 2^48
+    and `w = A^T z` by 2^24. No product here is subnormal, so the comparison
+    is bitwise. THE NEGATIVE CONTROL: 2^23 must not match every coefficient.
+    """
+    comptime N = 8
+    comptime D = 64
+    var a0 = List[Float32]()
+    var a1 = List[Float32]()
+    for i in range(N * D):
+        var v = _hash_f32(i, 4252)
+        a0.append(v)
+        a1.append(_pow2_scaled(v, -24))
+    var b = List[Float32]()
+    for i in range(N):
+        b.append(_hash_f32(i, 4253))
+    var w0 = List[Float32]()
+    var w1 = List[Float32]()
+    var drop0 = 0
+    var drop1 = 0
+    with DeviceContext() as ctx:
+        drop0 = _fit_wide_dropped(ctx, a0, b, N, D, w0)
+        drop1 = _fit_wide_dropped(ctx, a1, b, N, D, w1)
+    if drop0 != 0:
+        raise Error(
+            "check_ols_wide_rank_guard_is_scale_invariant: the unscaled"
+            " design already dropped " + String(drop0) + " of " + String(N)
+            + " row directions, so it is not the full-row-rank fixture this"
+            " check needs."
+        )
+    if drop1 != drop0:
+        raise Error(
+            "check_ols_wide_rank_guard_is_scale_invariant: the SAME wide design"
+            " has row rank " + String(N - drop0) + " at scale 1 and "
+            + String(N - drop1) + " at scale 2^-24. lstsq_min_norm's cutoff"
+            " depends on the units of the data (the absolute threshold is"
+            " back, or the row-Gram equilibration is gone)."
+        )
+    var moved = 0
+    var control_hits = 0
+    for k in range(D):
+        var want = bitcast[DType.uint32](_pow2_scaled(w0[k], 24))
+        var got = bitcast[DType.uint32](w1[k])
+        if got != want:
+            moved += 1
+            if moved <= 4:
+                print(
+                    "  coefficient " + String(k) + ": scale 1 gives "
+                    + String(w0[k]) + ", scale 2^-24 gives " + String(w1[k])
+                    + ", expected exactly " + String(_pow2_scaled(w0[k], 24))
+                )
+        if got == bitcast[DType.uint32](_pow2_scaled(w0[k], 23)):
+            control_hits += 1
+    if moved != 0:
+        raise Error(
+            "check_ols_wide_rank_guard_is_scale_invariant: " + String(moved)
+            + " of " + String(D) + " coefficients at scale 2^-24 are not BIT"
+            " FOR BIT 2^24 times the scale-1 coefficients. The row-Gram"
+            " equilibration or its undo (step 4b) is not exact."
+        )
+    if control_hits == D:
+        raise Error(
+            "check_ols_wide_rank_guard_is_scale_invariant: the NEGATIVE CONTROL"
+            " (2^23 instead of 2^24) matched every coefficient, so the bitwise"
+            " comparison above cannot fail."
+        )
+    print(
+        "check_ols_wide_rank_guard_is_scale_invariant OK [" + _mode_name()
+        + "]: row rank " + String(N - drop0) + " at scale 1 and at 2^-24,"
+        " all " + String(D) + " coefficients exactly 2^24 times (the 2^23"
+        " control matches " + String(control_hits) + ")"
+    )
+
+
+def check_ols_wide_rank_deficient_design_drops_the_noise_direction() raises:
+    """The wide mirror of
+    `check_ols_rank_deficient_design_drops_the_noise_direction`.
+
+    A 12 x 96 hash design whose last ROW is `Float32(Float64(row 0) +
+    Float64(row 1))` per cell: `A A^T` is singular up to one ulp per cell, so
+    exactly one eigen-direction of the row Gram is rounding. ASSERTED: one
+    dropped (read off the device's `QS`), finite coefficients. THE NEGATIVE
+    CONTROL replaces the last row by an independent hash row and must drop
+    nothing.
+    """
+    comptime N = 12
+    comptime D = 96
+    var dep = List[Float32]()
+    var full = List[Float32]()
+    for i in range(N):
+        for k in range(D):
+            var v = _hash_f32(i * D + k, 7511)
+            full.append(v)
+            if i == N - 1:
+                var s = Float64(_hash_f32(k, 7511)) + Float64(
+                    _hash_f32(D + k, 7511)
+                )
+                dep.append(Float32(s))
+            else:
+                dep.append(v)
+    var b = List[Float32]()
+    for i in range(N):
+        b.append(_hash_f32(i, 7512))
+    var w_dep = List[Float32]()
+    var w_full = List[Float32]()
+    var ctx = DeviceContext()
+    var dropped_dep = _fit_wide_dropped(ctx, dep, b, N, D, w_dep)
+    var dropped_full = _fit_wide_dropped(ctx, full, b, N, D, w_full)
+    if dropped_full != 0:
+        raise Error(
+            "check_ols_wide_rank_deficient_design_drops_the_noise_direction:"
+            " the NEGATIVE CONTROL (a full-row-rank " + String(N) + " x "
+            + String(D) + " hash design) dropped " + String(dropped_full)
+            + " directions; the cutoff is removing real data."
+        )
+    var biggest = 0.0
+    for k in range(D):
+        var m = abs(Float64(w_dep[k]))
+        if not (m < 1.0e30):
+            raise Error(
+                "check_ols_wide_rank_deficient_design_drops_the_noise_direction:"
+                " coefficient " + String(k) + " is " + String(w_dep[k])
+            )
+        if m > biggest:
+            biggest = m
+    if dropped_dep != 1:
+        raise Error(
+            "check_ols_wide_rank_deficient_design_drops_the_noise_direction: a"
+            " wide design whose last row is the rounded sum of the first two"
+            " dropped " + String(dropped_dep) + " row directions, not 1"
+            " (largest |coefficient| " + String(biggest) + "). lstsq_min_norm"
+            " is dividing by an eigenvalue that is only rounding; is its"
+            " cutoff still n * eps32 * max|lam|?"
+        )
+    print(
+        "check_ols_wide_rank_deficient_design_drops_the_noise_direction OK ["
+        + _mode_name() + "]: 1 row direction dropped on the rounded-sum"
+        " design, 0 on the full-row-rank control, largest |coefficient| "
+        + String(biggest)
+    )
+
+
 def check_ols_rank_guard_is_scale_invariant() raises:
     """The same design in units scaled by an exact power of two is the same
     model: the same rank, and coefficients BIT FOR BIT scaled back.

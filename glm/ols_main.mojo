@@ -51,6 +51,8 @@ from glm.checks.ols_check import (
     check_ols_scale_invariant,
     check_ols_single_column_matches_the_closed_form,
     check_ols_wide_is_the_minimum_norm_solution,
+    check_ols_wide_rank_deficient_design_drops_the_noise_direction,
+    check_ols_wide_rank_guard_is_scale_invariant,
     _mode_name,
 )
 
@@ -74,5 +76,7 @@ def main() raises:
     check_ols_rank_guard_is_scale_invariant()
     check_ols_mixed_scale_design_matches_float64_oracle()
     check_ols_rank_deficient_design_drops_the_noise_direction()
+    check_ols_wide_rank_guard_is_scale_invariant()
+    check_ols_wide_rank_deficient_design_drops_the_noise_direction()
     check_ols_card_hashes_raw_bytes()
     check_ols_card_is_emitted()
