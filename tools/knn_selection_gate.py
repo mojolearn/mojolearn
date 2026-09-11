@@ -44,11 +44,16 @@ THE SWITCHES (runtime, read by the native side per request)
                                     2026-09-09 kernel), `uniform` (C4,
                                     DEVIATION 2497), `headbound` (C4 +
                                     C1, DEVIATION 2498; NEGATIVE on the
-                                    H100 2026-09-11) or `warpbound` (C4 +
+                                    H100 2026-09-11), `warpbound` (C4 +
                                     C2, DEVIATION 2515: warp-scope group
-                                    bound, shuffles only). Unset = the
-                                    build's default. Unknown names RAISE
-                                    on the native side, never fall back.
+                                    bound, shuffles only; NEGATIVE on the
+                                    H100 2026-09-11) or `deferred` (C4 +
+                                    DEVIATION 2517: admitted keys queue in
+                                    four registers per lane and the
+                                    K-chain runs only at warp-uniform
+                                    drains). Unset = the build's default.
+                                    Unknown names RAISE on the native side,
+                                    never fall back.
   MOJOLEARN_KNN_SELECT_SABOTAGE=1   deliberately perturbs the selected
                                     arm's own code path so a reached arm
                                     cannot return clean bits: baseline and
@@ -61,7 +66,9 @@ THE SWITCHES (runtime, read by the native side per request)
                                     warpbound clears bit 63 of its reduced
                                     bound inside its refresh, so every
                                     non-negative-distance key after the
-                                    first 4,096 columns is rejected.
+                                    first 4,096 columns is rejected;
+                                    deferred skips the newest queued key
+                                    at every drain, inside its drain.
 
 Both are honored only by a binding built with
 `-D MOJOLEARN_KNN_SELECT_TRIAL=1` (the hook the brief specifies; not on any
@@ -1010,7 +1017,7 @@ def selftest_backend(log):
         def kneighbors(self, q):
             arm = os.environ.get(arm_env)
             timing_only = ("skiprank", "skipscan", "scanonly1")
-            if arm not in (None, "baseline", "uniform", "headbound", "warpbound") + timing_only:
+            if arm not in (None, "baseline", "uniform", "headbound", "warpbound", "deferred") + timing_only:
                 raise ValueError(f"unknown arm {arm!r}")
             if arm in timing_only and os.environ.get(sab_env) == "1":
                 raise ValueError("timing-only arms carry no sabotage")

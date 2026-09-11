@@ -1241,3 +1241,233 @@ list: bit-identical by construction. Per lane about 32 insertions happen in
 often. Expected: scan 8.8 to about 4 ms at k10 and 12.8 to about 5.5 ms at
 k15; a request from 31 to about 26 ms and 36 to about 29 ms. Measured next
 as arm `deferred` under the same define and the same gate.
+
+## Implementation pass, deferred insertion (DEVIATION 2517; source only, 2026-09-11)
+
+Nothing here was built or run on the Mac (py_compile of the gate and a
+pure-Python event model only; no test, no native, no mojo). The step 4
+verdict is the premise: of the scan's 8.8 (k10) to 12.8 ms (k15), 3.2 ms is
+k-independent and 5.6 to 9.6 ms is the per-lane K-deep list, 0.80 ms per
+unit of k, and both bound arms halved the lanes' insertion EVENTS and lost,
+so the K-chain is paid on every element step whether or not a lane inserts.
+The lever is how often the chain EXECUTES, not how often a lane admits.
+Files touched by this pass (uncommitted, working tree):
+
+- `neighbors/checks/select_smallk_identical_candidate.mojo`: eighth kernel
+  parameter `DEFERRED` on `smallk_bucket_kernel` (after `PHASE`, default
+  False, so every seven-parameter instantiation is unchanged), the helpers
+  `_smallk_append` and `_smallk_drain`, the comptime knob `SMALLK_DEFER_Q =
+  4`, the ballot width `SMALLK_MASK_DT`, the default `SMALLK_DEFERRED_DEFAULT
+  = False`, the arm `SMALLK_ARM_DEFERRED = 7` in `smallk_select_arm_from_env`
+  and `_smallk_launch_bucket`, `DEFERRED` on `_smallk_enqueue`, the hook
+  comment and the module docstring. `vote` imported beside `shuffle_xor`.
+- `neighbors/checks/knn_selector_arms_check.mojo`: the fifth arm in the
+  equality and reach properties, same 18 cases; the REACH_PASS line gains a
+  fifth count.
+- `tools/knn_selection_gate.py`: docstring for the arm name and its
+  sabotage; the numpy selftest accepts `deferred`. The harness selects arms
+  by name from `--arms`, which the shell script fills from
+  `MOJOLEARN_KNN_SELECTION_ARMS`, so `uniform,deferred` needs no code.
+- this section.
+
+The shipped default path is untouched: without the trial define the only
+instantiations are `[CAP, K, True, False, False, False, FULL, False]`, in
+which the queue and its count are constants, every `comptime if DEFERRED`
+folds away, the per-element test is `pending < threshold` followed by
+`_smallk_insert` as before, and the tail loop, the epilogue and the rank
+phase are textually the uniform arm's. `SMALLK_DEFERRED_DEFAULT` excludes
+both bound defaults by `comptime assert`.
+
+### Mechanism
+
+Per lane, an element step under `deferred` does: the composite key, one
+compare against the lane's threshold, and, when admitted, an append into a
+`SMALLK_DEFER_Q = 4` slot queue held in registers (newest at slot 0: three
+comptime-indexed 64-bit moves and a store, plus a counter increment). No
+K-chain per element. The queue drains at WARP-UNIFORM points only:
+
+- at the end of every unrolled batch (block-uniform under C4), and
+- immediately after any element step at which `vote[SMALLK_MASK_DT](count
+  == Q)` over the warp is nonzero (some lane's queue is full). The ballot
+  width follows the column's lane count, the ball-cover kernel's rule (a
+  64-lane wavefront needs a 64-bit ballot). Every lane reaches the vote:
+  the append is closed before it and the batch trip count has no `tid` in
+  it, so it is convergent.
+
+A drain runs `_smallk_insert` (unchanged) once per queued key, predicated
+per slot on the lane's count, then clears the count; the warp therefore
+executes the chain max(count over its 32 lanes) times per drain instead of
+once per element step. The drain has no collective of its own (the chain is
+per lane); warp uniformity is a scheduling choice that makes the lanes'
+chains coincide. After the batch loop one more drain runs (a guard: the
+queue is already empty, every batch drained at its end), then the tail loop
+(the remainder under 2,048 columns, a per-lane trip count where a vote
+would not be convergent) inserts eagerly through the same chain from that
+empty queue; it holds at most eight elements per lane, nothing to defer.
+The rank phase starts with every lane's list exactly as the eager arm
+leaves it.
+
+Why Q = 4: half an unrolled batch. Past the fourth batch at k in 9..16 a
+lane admits under 2.4 elements per batch in expectation, so four slots
+rarely fill and the cadence is the batch end; four UInt64 are eight
+32-bit registers on top of the list's 32 at CAP = 16, where eight slots
+would be sixteen for a six percent smaller chain count (model below).
+Register pressure is the risk this arm carries that the bound arms did
+not: nine extra live registers per thread (the queue and its count) at 256
+threads per block; if the gate shows the arm register-bound (a resident
+block per SM lost at a 64-register boundary shows as a scan that does not
+speed up although the chain count fell), `SMALLK_DEFER_Q = 2` is the first
+knob (0.66x / 0.74x in the model) and 8 the second.
+
+### Why the bits are unchanged
+
+1. Let S be the set of keys a lane scans; keys are unique (each carries its
+   column). The eager path keeps L_e, the k smallest of the prefix seen so
+   far, and admits p iff p < threshold_e, the k-th smallest of that prefix
+   (sentinel while fewer than k). The deferred path keeps L_d, the k
+   smallest of the set I of keys DRAINED so far, and admits p iff p <
+   threshold_d, the k-th smallest of I.
+2. I is a subset of the prefix, so threshold_d >= threshold_e at every
+   step: the stale threshold admits a SUPERSET of what the eager path
+   admits, never a subset.
+3. Take any x among the k smallest of S. When x is scanned, at most k - 1
+   keys of S are below x, hence at most k - 1 keys of I, and x is not in I,
+   so the k-th smallest of I is above x (or the sentinel): x is admitted,
+   queued, and inserted at the next drain. It never leaves L_d afterwards,
+   because a key leaves only when k smaller keys of the same lane have
+   been inserted and only k - 1 exist.
+4. Every extra key the stale threshold admitted goes through the same
+   `_smallk_insert`, which keeps "the list is the k smallest of everything
+   inserted so far" under ANY insertion order and leaves the list unchanged
+   for a key at or above its current k-th (the carry runs off the end). So
+   after the last drain L_d holds every one of the k smallest of S, exactly
+   min(k, |S|) keys, and only keys of S: L_d is the k smallest of S sorted,
+   which is L_e. Equality of sets of unique keys is equality of the sorted
+   lists slot for slot.
+5. The rank phase reads only those lists (never the threshold), pops the
+   union's exact minima with the same UInt64 compare, decides ties by the
+   same index half, and gathers the winner's value from the same tile
+   cell. Corners: the queue is empty before the tail loop and the rank
+   phase (batch-end drains plus the guard drain); the tail inserts eagerly;
+   a partition too short for one batch (the carved k-wide tail) never
+   enters the batch loop and is the uniform arm by construction.
+
+### Sabotage (reach)
+
+At every drain the newest queued key (slot 0) is skipped on every lane
+whose count is nonzero, inside `_smallk_drain` only. Late in the scan a
+lane's queue at the batch-end drain usually holds one key, so a true
+neighbor admitted there is the newest and is dropped with high
+probability; a row has k of them, so on the hashed fixtures thousands of
+cells move per request. On the arms check it is certain: the planted +0.0
+at column length - 1 is the last element of the last batch, hence the
+newest in lane 255's queue at that batch's drain, and it is a top-k key of
+rows 0 and 1 (the keys below it are the -0.0, the other zeros and the
+subnormal). The uniform arm's index flip is excluded from the deferred
+instantiation so a flip proves the drain path, not the loop.
+
+### Expected cost (model; the gate's numbers replace it)
+
+Event model, pure Python (iid keys, 256 elements per lane, 32 lanes, 400
+trials, the brief's section 2 model with the queue simulated): chain
+executions per warp per 65,536-column launch, eager 231 (k10) and 246 (k15)
+against deferred with Q = 4 drained every batch and on any full queue 116
+(0.50x) and 138 (0.56x). Q = 2: 0.66x / 0.74x. Q = 8: 0.47x / 0.52x. Q = 8
+drained every second batch: 0.42x / 0.47x. The floor is the first batches
+(every lane admits every element, the queues fill every Q elements, the
+cost equals today's) plus the warp MAXIMUM of a small binomial per batch
+afterwards (two to three chains per batch of eight), not Q. Step 4's "an
+order of magnitude less often" counted one lane's 32 admissions in 256;
+the warp pays the max over its lanes, so the honest model is 2x, not 8x.
+
+In the phase split's terms: the K-deep list is 5.6 ms at k10 and 9.6 ms at
+k15 (0.80 ms per unit of k) and scales with the chain frequency, so 0.50 x
+5.6 = 2.8 ms and 0.56 x 9.6 = 5.4 ms, a saving of 2.8 / 4.2 ms. Against it
+the new k-independent work per lane: about 232 / 246 warp-level append
+events at about 9 instructions, 256 votes at about 3, and 41 / 45 drains at
+about 6 for the slot predicates, about 3.3k instructions, which at the
+chain's measured rate (5.6 ms for 231 x 72 instructions per lane at k10,
+about 0.34 ms per thousand) is about +1.2 ms unless it hides under the load
+latency the k-independent 3.2 ms already pays.
+
+Expected `select_ms` (56 launches, phase-timer build): k10 10.27 -> about
+8.7 ms, k15 14.69 -> about 11.7 ms. Brackets: BEST CASE the append and vote
+hide under the loads, 7.5 / 10.5 ms; IF-CONVERTED DRAIN (the compiler runs
+all Q chains per drain regardless of the counts: 164 / 180 executions,
+0.71x / 0.73x), 9.9 / 13.3 ms; WORST CASE as C1 and C2 showed, the extra
+live state changes the code the compiler emits and nothing is saved, +1.2
+ms. On an unserialized request that is about 31 -> 29.4 ms (k10) and 36 ->
+33 ms (k15) at the model's center, which is what the promotion run reads.
+
+### RUN OWED (orchestrator; nothing ran)
+
+Commit this pass first (the leg ships `git archive` of the COMMITTED tree).
+The arms line is the regression fence for all five arms; the gate pairs
+`uniform` (the shipped default) with `deferred`, no timing-only arms, phase
+timers ON so `select_ms` per arm is READ from `phase_ms_median` rather than
+inferred from request deltas, profile skipped (measured).
+
+```
+cat > /tmp/knn_deferred_extra.sh <<'SH'
+#!/bin/sh
+export MOJOLEARN_KNN_SELECTION_ARMS=uniform,deferred
+export MOJOLEARN_KNN_SELECTION_PHASE_TIMERS=1
+export MOJOLEARN_KNN_SELECTION_SKIP_PROFILE=1
+cd /root/mojolearn && PATH="$HOME/.pixi/bin:$PATH" pixi run mojo run \
+    -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_KNN_SELECT_TRIAL=1 \
+    -I . neighbors/checks/knn_selector_arms_check.mojo \
+    > /root/gemm_leg_out/knn-selector-arms-check.log 2>&1
+echo "arms_check_exit=$?" >> /root/gemm_leg_out/leg.txt
+exec sh /root/mojolearn/tools/knn_selection_gate.sh
+SH
+MOJOLEARN_RUNPOD_KEY_FILE=$HOME/.mojolearn_runpod_key \
+MOJOLEARN_GEMM_LEG_EXTRA=/tmp/knn_deferred_extra.sh \
+MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/$(date +%Y-%m-%d_%H%M%S)-nvidia-h100-knn-selection-deferred \
+sh tools/gemm_remote_leg.sh nvidia --rent --minutes 60 \
+    --gpu "NVIDIA H100 80GB HBM3" \
+    --local-card bench/results/e1/2026-08-28_131651-runpod-nvidia/lanes/gemm.identical.card
+cat <leg>/remote/knn-selector-arms-check.log | tail -3
+cat <leg>/remote/knn-selection/summary.txt
+cat <leg>/remote/knn-selection/status.tsv
+```
+
+Verdict lines: `KNN SELECTOR ARMS PASS` with `SELECTOR_ARMS_REACH_PASS 65536
+<k> <base> <uni> <hb> <wb> <df>` all five counts nonzero; in the gate JSON
+every fixture (large, dyadic, ties, divergent_tail) at k10 and k15 shows
+`deferred` and `default` equal to `uniform`, row order, planted and oracle
+green, reach flipped > 0 on `uniform`, `deferred` and `default` with clean
+bits restored; then the `timing` block's `phase_ms_median.select_ms` per
+arm, pooled and per order (the two orders must agree within the pair
+spread or the row is noise), read against the expected 8.7 / 11.7 ms and
+the brackets above. Request medians on that build are serialized and are
+NOT a price.
+
+### Promotion rule
+
+Two runs, in this order. The phase-timer run above is the mechanism
+verdict only: it says whether the chain count fell (`select_ms` down at
+both k) and by how much. It promotes nothing. If it is green and
+`select_ms(deferred) < select_ms(uniform)` at both k, the PROMOTION RUN is
+the same wrapper WITHOUT `MOJOLEARN_KNN_SELECTION_PHASE_TIMERS` (an
+unserialized build, request-level timing at the `NearestNeighbors.kneighbors`
+boundary). `SMALLK_DEFERRED_DEFAULT` flips to True (and moves into the
+kernel-matrix SCHEDULING row in the same session) ONLY IF, on that second
+run: every correctness check is green on every fixture and k; reach flipped
+on `uniform`, `deferred` and `default` with clean bits restored; AND all
+EIGHT request-level timing cells (both orders' medians, `dyadic` and `large`,
+k10 and k15) favor `deferred`. The phase-timer split, the event model, the
+arms check's tile and any per-launch number are not promotion evidence. A
+split verdict leaves the default off, the arm stays behind the define as a
+measured result, and the JSON path is recorded here beside C1 and C2. After
+a flip: rebuild without the trial define, rerun the gate with `--arms
+uniform` plus default to show the default equals the explicit arm, and
+record the `dyadic` medians against the cached rows in
+`bench/OPPONENT_REFERENCE.md` as cached-reference ratios (never as a paired
+opponent measurement; cuML is not rerun). Apple (the Mac, orchestrator
+only, one light thing, after the H100 verdict: `MOJOLEARN_NUMERIC_MODE=identical
+MOJOLEARN_BUILD_EXTRA_DEFINES="-D MOJOLEARN_KNN_SELECT_TRIAL=1" sh
+bindings/build.sh`, then `PYTHONPATH=python MOJOLEARN_NUMERIC_MODE=identical
+python3 tools/knn_selection_gate.py --out /tmp/knn-sel-apple --arms
+uniform,deferred --pairs 2 --deadline 300`) and AMD (a DigitalOcean MI325X
+droplet; 64-lane wavefront, 64-bit ballot by `SMALLK_MASK_DT`) are RUN OWED
+before any column other than NVIDIA takes the row.

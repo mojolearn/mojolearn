@@ -22,23 +22,29 @@ The optional specialized arm fixes K=8/10/16 at compile time, unrolling
 insertion and shifts so local SIMD indexing cannot spill via runtime indices.
 Other K values use the retained runtime baseline.
 
-`smallk_bucket_kernel` carries three gated candidates behind the selection
+`smallk_bucket_kernel` carries the gated candidates behind the selection
 trial hook (`-D MOJOLEARN_KNN_SELECT_TRIAL=1`, arms chosen per request from
-MOJOLEARN_KNN_SELECT): the block-uniform trip count (DEVIATION 2497, C4),
-the block head-bound rejection (DEVIATION 2498, C1, measured NEGATIVE on
-the H100 2026-09-11 and kept as that record) and the warp-scope group
-bound (DEVIATION 2515, C2). See the hook comment above the kernel; without
+MOJOLEARN_KNN_SELECT): the block-uniform trip count (DEVIATION 2497, C4,
+the shipped default since 2026-09-11), the block head-bound rejection
+(DEVIATION 2498, C1) and the warp-scope group bound (DEVIATION 2515, C2),
+both measured NEGATIVE on the H100 2026-09-11 and kept as that record, and
+deferred insertion (DEVIATION 2517). See the hook comment above the kernel; without
 the define the shipped kernel is the 2026-09-09 one plus C4. The same hook
 carries three TIMING-ONLY arms (DEVIATION 2516) whose output is invalid by
 construction: `skiprank`, `skipscan` and `scanonly1` measure the scan phase
 and the rank phase of the shipped kernel separately; the gate runs them in
-its timing block alone, never in a correctness or reach section.
+its timing block alone, never in a correctness or reach section. Their
+verdict (the per-lane K-deep list is the k-proportional cost, and it is paid
+per element step whether or not a lane inserts) is what the fourth gated
+candidate answers: `deferred` (DEVIATION 2517) makes the per-element work
+K-independent by queueing admitted keys and running the K-chain only at
+warp-uniform drains.
 """
 from std.gpu import block_idx, thread_idx
 from std.os import getenv
 from std.sys.compile import is_defined
 from neighbors.checks.lane_minimum import shuffle_min_u64
-from std.gpu.primitives.warp import shuffle_xor
+from std.gpu.primitives.warp import shuffle_xor, vote
 from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
@@ -265,8 +271,14 @@ comptime SMALLK_SCAN_SPAN = SMALLK_SCAN_UNROLL * SMALLK_BLOCK
 #                                    (DEVIATION 2498; NEGATIVE on the H100,
 #                                    kept as the measured record)
 #   MOJOLEARN_KNN_SELECT=warpbound   C4 + C2 warp-scope group bound
-#                                    (DEVIATION 2515): shuffles only, no
-#                                    barrier, no shared memory
+#                                    (DEVIATION 2515; NEGATIVE on the H100
+#                                    2026-09-11, kept as the record)
+#   MOJOLEARN_KNN_SELECT=deferred    C4 + deferred insertion (DEVIATION
+#                                    2517): per element only key, compare
+#                                    and a SMALLK_DEFER_Q-slot register
+#                                    queue; the K-chain runs at warp-uniform
+#                                    drains (every batch, and as soon as a
+#                                    `vote` says any lane's queue is full)
 #   unset or empty                   the build default, SMALLK_ARM_DEFAULT
 #   anything else                    RAISES; the gate harness relies on it
 #   MOJOLEARN_KNN_SELECT_SABOTAGE=1  the chosen arm's SABOTAGE instantiation
@@ -306,25 +318,28 @@ comptime SMALLK_SCAN_SPAN = SMALLK_SCAN_UNROLL * SMALLK_BLOCK
 # returns SMALLK_ARM_DEFAULT without touching the environment, the launch
 # refuses any other arm, and the only instantiations in the binary are
 # `smallk_bucket_kernel[CAP, K, SMALLK_UNIFORM_TRIP_DEFAULT,
-# SMALLK_HEAD_BOUND_DEFAULT, False, SMALLK_WARPBOUND_DEFAULT]`. With the two
-# bound defaults False (the state until a bound gate passes) that is the
+# SMALLK_HEAD_BOUND_DEFAULT, False, SMALLK_WARPBOUND_DEFAULT,
+# SMALLK_PHASE_FULL, SMALLK_DEFERRED_DEFAULT]`. With the two bound defaults
+# and the deferred default False (the state until a gate passes) that is the
 # [CAP, K] kernel of 2026-09-09 under C4's trip count: the `comptime if`
 # arms below fold away and the non-trial code path is the one that shipped.
 #
-# THE DEFAULTS. Three comptime switches here rather than kernel-matrix rows,
+# THE DEFAULTS. Four comptime switches here rather than kernel-matrix rows,
 # because this lane may not edit `checks/kernel_matrix.mojo`; the flip that
 # promotes an arm moves them into a SCHEDULING row
 # (`knn_selector_head_bound_for[column, identical]`, brief section 4) in
 # the same session as the measured win. Order of flips: UNIFORM first
 # (gated alone, arms baseline,uniform, equality on every fixture including
-# `divergent_tail`; DONE 2026-09-11), then ONE bound arm (arms
-# baseline,<bound arm>, equality plus the request-level price). Every bound
-# arm requires UNIFORM; HEAD_BOUND and WARPBOUND exclude each other.
+# `divergent_tail`; DONE 2026-09-11), then ONE candidate arm (arms
+# uniform,<arm>, equality plus the request-level price). Every candidate
+# arm requires UNIFORM; HEAD_BOUND, WARPBOUND and DEFERRED exclude each
+# other.
 # ---------------------------------------------------------------------------
 comptime SMALLK_SELECT_TRIAL = is_defined["MOJOLEARN_KNN_SELECT_TRIAL"]()
 comptime SMALLK_UNIFORM_TRIP_DEFAULT = True  # DEVIATION 2497: flipped 2026-09-11 on the H100 and M4 gates
 comptime SMALLK_HEAD_BOUND_DEFAULT = False  # DEVIATION 2498: NEGATIVE on the H100 2026-09-11, stays off
-comptime SMALLK_WARPBOUND_DEFAULT = False  # DEVIATION 2515: RUN OWED (brief, "Implementation pass, C2")
+comptime SMALLK_WARPBOUND_DEFAULT = False  # DEVIATION 2515: NEGATIVE on the H100 2026-09-11, stays off
+comptime SMALLK_DEFERRED_DEFAULT = False  # DEVIATION 2517: RUN OWED (brief, "Implementation pass, deferred")
 
 comptime SMALLK_ARM_BASELINE = 0
 comptime SMALLK_ARM_UNIFORM = 1
@@ -334,6 +349,8 @@ comptime SMALLK_ARM_WARPBOUND = 3
 comptime SMALLK_ARM_SKIPRANK = 4
 comptime SMALLK_ARM_SKIPSCAN = 5
 comptime SMALLK_ARM_SCANONLY1 = 6
+# Deferred insertion (DEVIATION 2517); see the comment above `_smallk_drain`.
+comptime SMALLK_ARM_DEFERRED = 7
 # OR'd into the arm value; the launch strips it.
 comptime SMALLK_ARM_SABOTAGE = 16
 
@@ -345,7 +362,9 @@ comptime SMALLK_PHASE_SKIPRANK = 1
 comptime SMALLK_PHASE_SKIPSCAN = 2
 comptime SMALLK_ARM_DEFAULT = SMALLK_ARM_HEADBOUND if SMALLK_HEAD_BOUND_DEFAULT else (
     SMALLK_ARM_WARPBOUND if SMALLK_WARPBOUND_DEFAULT else (
-        SMALLK_ARM_UNIFORM if SMALLK_UNIFORM_TRIP_DEFAULT else SMALLK_ARM_BASELINE
+        SMALLK_ARM_DEFERRED if SMALLK_DEFERRED_DEFAULT else (
+            SMALLK_ARM_UNIFORM if SMALLK_UNIFORM_TRIP_DEFAULT else SMALLK_ARM_BASELINE
+        )
     )
 )
 
@@ -354,10 +373,11 @@ def smallk_select_arm_from_env() raises -> Int:
     """The selector arm for THIS request, read once on the host.
 
     Trial builds read `MOJOLEARN_KNN_SELECT` (baseline / uniform / headbound /
-    warpbound, the timing-only skiprank / skipscan / scanonly1, unset = the
-    build default, anything else raises) and `MOJOLEARN_KNN_SELECT_SABOTAGE`
-    (exactly "1" sets the SMALLK_ARM_SABOTAGE bit). Every other build returns
-    SMALLK_ARM_DEFAULT without reading the environment at all.
+    warpbound / deferred, the timing-only skiprank / skipscan / scanonly1,
+    unset = the build default, anything else raises) and
+    `MOJOLEARN_KNN_SELECT_SABOTAGE` (exactly "1" sets the SMALLK_ARM_SABOTAGE
+    bit). Every other build returns SMALLK_ARM_DEFAULT without reading the
+    environment at all.
     """
     comptime if not SMALLK_SELECT_TRIAL:
         return SMALLK_ARM_DEFAULT
@@ -379,11 +399,13 @@ def smallk_select_arm_from_env() raises -> Int:
         arm = SMALLK_ARM_SKIPSCAN
     elif name == "scanonly1":
         arm = SMALLK_ARM_SCANONLY1
+    elif name == "deferred":
+        arm = SMALLK_ARM_DEFERRED
     else:
         raise Error(
             "MOJOLEARN_KNN_SELECT='" + name
             + "' is not a selector arm (baseline, uniform, headbound, warpbound,"
-            + " the timing-only skiprank, skipscan, scanonly1, or unset)"
+            + " deferred, the timing-only skiprank, skipscan, scanonly1, or unset)"
         )
     if String(getenv("MOJOLEARN_KNN_SELECT_SABOTAGE")) == "1":
         arm = arm | SMALLK_ARM_SABOTAGE
@@ -520,9 +542,136 @@ def _smallk_warpbound_refresh_due(done: Int, fill: Int) -> Bool:
     return done >= fill and (done - fill) % SMALLK_WARPBOUND_EVERY == 0
 
 
+# ---------------------------------------------------------------------------
+# DEFERRED INSERTION (DEVIATION 2517): the K-chain leaves the element step.
+#
+# WHAT THE PHASE SPLIT SAID (brief, "Step 4 result"). Of the 8.8 (k10) to
+# 12.8 ms (k15) scan, 3.2 ms is k-independent and 5.6 to 9.6 ms is the
+# per-lane K-deep list, 0.80 ms per unit of k; and both bound arms halved
+# the lanes' insertion events and LOST, so the K-chain's cost is paid on
+# every element step whether or not the lane inserts (the warp executes the
+# chain for its whole unrolled batch whenever any lane's predicate is on,
+# and the predicate is on somewhere in the warp nearly always). The lever is
+# therefore how often the chain EXECUTES, not how often a lane admits.
+#
+# THE MECHANISM. Per lane, an element step does only: the key, one compare
+# against the lane's threshold, and, when admitted, an append into a
+# SMALLK_DEFER_Q-slot queue held in registers (newest at slot 0, a shift of
+# Q - 1 comptime-indexed moves, plus a counter). No K-chain per element.
+# The queue is drained at WARP-UNIFORM points: at the end of every unrolled
+# batch, and immediately after any element step at which a `vote` over the
+# warp says some lane's queue is full. A drain runs `_smallk_insert`
+# (unchanged) once per queued key, predicated per slot on the lane's count,
+# so the warp executes the chain max(count over its lanes) times per drain
+# instead of once per element step, then clears the counts. When queues
+# rarely fill (the steady state: a lane admits its i-th element with
+# probability about k / i), a batch costs the warp about max over 32 lanes
+# of a small binomial, two to three chains instead of eight; in the first
+# batches, where every lane admits everything, the queues fill every Q
+# elements and the cost equals today's. Event model (pure Python, iid keys,
+# 256 elements per lane, 32 lanes, 400 trials): chain executions per warp
+# per launch 231 -> 116 at k10 (0.50x) and 246 -> 138 at k15 (0.56x) with
+# Q = 4; Q = 8 gives 0.47x / 0.52x for twice the queue registers; Q = 2
+# gives 0.66x / 0.74x. The floor is the early batches plus the warp maximum
+# per batch, not Q.
+#
+# WHY Q = 4. Half an unrolled batch: past the fourth batch at k in 9..16 a
+# lane admits under 2.4 elements per batch in expectation, so four slots
+# rarely fill and the drain cadence is the batch end; four UInt64 are eight
+# 32-bit registers on top of the list's 32 (CAP = 16), where eight slots
+# would be sixteen for a six percent smaller chain count in the model.
+# SMALLK_DEFER_Q is the comptime knob; if the gate shows the arm
+# register-bound (occupancy: 256 threads a block, and every extra register
+# per thread past a 64-register boundary costs a resident block per SM),
+# Q = 2 is the first thing to try, Q = 8 if it is not.
+#
+# WHY THE OUTPUT BITS ARE UNCHANGED. Let S be the set of keys a lane scans
+# (unique: each carries its column). The eager path keeps L_e = the k
+# smallest of the prefix seen so far and admits p iff p < threshold_e, the
+# k-th smallest of that prefix (sentinel while fewer than k). The deferred
+# path keeps L_d = the k smallest of the set I of keys DRAINED so far and
+# admits p iff p < threshold_d, the k-th smallest of I. I is a subset of
+# the prefix, so threshold_d >= threshold_e at every step: whatever the
+# eager path admits, the deferred path admits (a SUPERSET, never a subset).
+# Take any x among the k smallest of S. When x is scanned, at most k - 1
+# keys of S are below x, so at most k - 1 keys of I are below x, and x is
+# not in I (not drained yet), so the k-th smallest of I is above x (or the
+# sentinel): x is admitted, queued, and inserted at the next drain; it then
+# never leaves L_d, because a key leaves only when k smaller keys of the
+# same lane have been inserted and only k - 1 exist. So after the last
+# drain L_d holds every one of the k smallest of S, holds exactly min(k,
+# |S|) keys, and holds only keys of S: L_d is the k smallest of S, sorted,
+# which is L_e. Every extra key the stale threshold admitted was inserted
+# by the same `_smallk_insert`, which keeps "the list is the k smallest of
+# everything inserted so far" under ANY insertion order and leaves the
+# list unchanged for a key at or above its k-th (the carry runs off the
+# end), so the extras cost chain executions and change nothing. Equality
+# of sets of unique keys is equality of the sorted lists slot for slot;
+# the rank phase reads only those lists (never the threshold), pops the
+# union's exact minima with the same UInt64 compare, decides ties by the
+# same index half, and gathers the winner's value from the same tile cell.
+# CORNERS: the queue must be empty before the rank phase (the batch loop
+# drains at every batch end and once more after the loop, a guard for any
+# future cadence), and the tail loop (C4's remainder under 2,048 columns,
+# a per-lane trip count where a `vote` would not be convergent) inserts
+# eagerly through the same chain, starting from an empty queue; at most
+# eight elements per lane, so nothing to defer there. Partitions too short
+# for one batch (the carved k-wide tail) never enter the batch loop and are
+# the uniform arm by construction.
+#
+# THE `vote`. One ballot per element step over the warp, `count == Q`, on
+# the mask width of the column's lane count (SMALLK_MASK_DT, the
+# ball-cover kernel's rule: a 64-lane wavefront needs a 64-bit ballot).
+# Every lane reaches it (the append is closed before it, the batch trip
+# count is block-uniform under C4), so it is convergent. The drain itself
+# has no collective: the chain is per lane, and warp uniformity is a
+# scheduling choice that makes the lanes' chains coincide.
+#
+# SABOTAGE (reach): at every drain the newest queued key (slot 0) is
+# skipped, never inserted, on every lane whose count is nonzero. Late in
+# the scan a lane's queue at the batch-end drain usually holds one key, so
+# a true neighbor admitted there is the newest and is dropped with high
+# probability; a row has k of them, so on the hashed fixtures thousands
+# of cells move per request. On the arms check it is certain: the planted
+# +0.0 at column length - 1 (the last element of the last batch, so the
+# newest in lane 255's queue at that drain) is a top-k key of rows 0 and 1
+# and vanishes.
+# ---------------------------------------------------------------------------
+comptime SMALLK_DEFER_Q = 4
+comptime SMALLK_MASK_DT = DType.uint64 if SMALLK_LANES == 64 else DType.uint32
+
+
+@always_inline
+def _smallk_drain[CAP: Int, SABOTAGE: Bool](
+    mut local_keys: SIMD[DType.uint64, CAP], mut threshold: UInt64,
+    queue: SIMD[DType.uint64, SMALLK_DEFER_Q], mut qcount: Int, k: Int,
+):
+    """Insert every queued key (slots `0 .. qcount - 1`, newest first) through
+    the unchanged K-chain and clear the count. Predicated per slot, so a
+    warp executes the chain max(qcount over its lanes) times. Under SABOTAGE
+    slot 0 (the newest key) is never inserted."""
+    comptime for s in range(SMALLK_DEFER_Q):
+        comptime if not (SABOTAGE and s == 0):
+            if s < qcount:
+                _smallk_insert[CAP](local_keys, threshold, queue[s], k)
+    qcount = 0
+
+
+@always_inline
+def _smallk_append(mut queue: SIMD[DType.uint64, SMALLK_DEFER_Q], mut qcount: Int, pending: UInt64):
+    """Push `pending` at slot 0, shifting the older keys up one slot. Every
+    index is a comptime constant, so the queue stays in registers. The
+    caller drains before the count can exceed SMALLK_DEFER_Q."""
+    comptime for i in range(SMALLK_DEFER_Q - 1):
+        comptime s = SMALLK_DEFER_Q - 1 - i
+        queue[s] = queue[s - 1]
+    queue[0] = pending
+    qcount += 1
+
+
 def smallk_bucket_kernel[
     CAP: Int, K: Int = 0, UNIFORM: Bool = False, BOUND: Bool = False, SABOTAGE: Bool = False,
-    WARPBOUND: Bool = False, PHASE: Int = SMALLK_PHASE_FULL,
+    WARPBOUND: Bool = False, PHASE: Int = SMALLK_PHASE_FULL, DEFERRED: Bool = False,
 ](
     values: MutPointer[Float32, MutAnyOrigin],
     out_values: MutPointer[Float32, MutAnyOrigin],
@@ -554,10 +703,19 @@ def smallk_bucket_kernel[
     SMALLK_PHASE_SKIPSCAN skips the scan, fills every lane's k slots with a
     synthetic pattern and runs the rank phase. Trial builds only, the
     uniform scan form only, no bound, no sabotage. See the hook comment.
+    DEFERRED (DEVIATION 2517): admitted keys go to a SMALLK_DEFER_Q-slot
+    register queue and the K-chain runs only at warp-uniform drains (every
+    batch end, and right after any element step at which a `vote` finds a
+    full queue in the warp). Requires UNIFORM (the vote must be convergent)
+    and a fixed-lane-width column; excludes both bounds. See the comment
+    above `_smallk_drain` for the argument and the sabotage.
     """
     comptime assert UNIFORM or not BOUND, "C1's in-loop barrier needs C4's block-uniform trip count"
     comptime assert UNIFORM or not WARPBOUND, "C2's in-loop shuffles need C4's block-uniform trip count"
     comptime assert not (BOUND and WARPBOUND), "one bound arm at most"
+    comptime assert UNIFORM or not DEFERRED, "the deferred arm's in-loop vote needs C4's block-uniform trip count"
+    comptime assert not (DEFERRED and (BOUND or WARPBOUND)), "the deferred arm carries no bound"
+    comptime assert PHASE == SMALLK_PHASE_FULL or not DEFERRED, "the deferred arm is a full kernel, not a timing-only phase"
     comptime assert PHASE == SMALLK_PHASE_FULL or SMALLK_SELECT_TRIAL, "timing-only phases exist on trial builds only"
     comptime assert PHASE == SMALLK_PHASE_FULL or (UNIFORM and not BOUND and not WARPBOUND and not SABOTAGE), "a timing-only phase measures the uniform default: no bound, no sabotage"
     var length = Int(length_in)
@@ -620,6 +778,11 @@ def smallk_bucket_kernel[
     var wb_group = 1
     while (SMALLK_LANES // (wb_group * 2)) * wb_depth >= k:
         wb_group *= 2
+    # DEFERRED state (DEVIATION 2517): the register queue of admitted keys
+    # (newest at slot 0) and its count. Constants unless DEFERRED, so they
+    # fold away on every other instantiation.
+    var queue = SIMD[DType.uint64, SMALLK_DEFER_Q](sentinel)
+    var qcount = 0
     # THE SCAN, unrolled SMALLK_SCAN_UNROLL loads deep (2026-09-09). The
     # loop body is a load, a key, a compare and a rarely taken insertion;
     # written one element at a time, each iteration waits for its own
@@ -660,7 +823,7 @@ def smallk_bucket_kernel[
                 var pending = composite_key(
                     batch[u], UInt32(batch_base + tid + u * SMALLK_BLOCK), select_min
                 )
-                comptime if SABOTAGE and (not BOUND) and (not WARPBOUND) and u == 0:
+                comptime if SABOTAGE and (not BOUND) and (not WARPBOUND) and (not DEFERRED) and u == 0:
                     # `uniform` arm reach: bit 0 of the index half of the
                     # first element of every batch is flipped, so one
                     # candidate column in eight carries its neighbor's
@@ -671,9 +834,25 @@ def smallk_bucket_kernel[
                     if pending < gate:
                         _smallk_insert[CAP](local_keys, threshold, pending, k)
                         gate = threshold if threshold < bound else bound
+                elif DEFERRED:
+                    # DEFERRED element step: key, compare, append. The
+                    # threshold may be stale (last drain), which admits a
+                    # superset of the eager path's keys; see `_smallk_drain`.
+                    if pending < threshold:
+                        _smallk_append(queue, qcount, pending)
+                    # Warp-uniform full test: every lane votes, every lane
+                    # drains, so the lanes' chains coincide. Convergent: the
+                    # append above is closed and the batch trip count is
+                    # block-uniform (C4).
+                    if vote[SMALLK_MASK_DT](qcount == SMALLK_DEFER_Q) != Scalar[SMALLK_MASK_DT](0):
+                        _smallk_drain[CAP, SABOTAGE](local_keys, threshold, queue, qcount, k)
                 else:
                     if pending < threshold:
                         _smallk_insert[CAP](local_keys, threshold, pending, k)
+            comptime if DEFERRED:
+                # Batch-end drain, block-uniform under C4: after it every
+                # lane's threshold is its true k-th of everything scanned.
+                _smallk_drain[CAP, SABOTAGE](local_keys, threshold, queue, qcount, k)
             batch_base += SMALLK_SCAN_SPAN
             done += 1
             comptime if WARPBOUND and SMALLK_SHUFFLE:
@@ -816,6 +995,16 @@ def smallk_bucket_kernel[
                             rounds += 1
                     bound = kth
                     gate = threshold if threshold < bound else bound
+        comptime if DEFERRED:
+            # The queue MUST be empty before the tail loop and the rank
+            # phase. It already is (every batch drained at its end); this
+            # drain is the guard that keeps the invariant if the cadence
+            # ever moves, and it costs SMALLK_DEFER_Q compares once. The
+            # tail loop below inserts eagerly through the same chain from
+            # this empty queue; a `vote` there would not be convergent (the
+            # tail's trip count is per lane), and it holds at most eight
+            # elements per lane.
+            _smallk_drain[CAP, SABOTAGE](local_keys, threshold, queue, qcount, k)
         col = batch_base + tid
     else:
         # The 2026-09-09 form: the batch condition is per thread.
@@ -940,7 +1129,7 @@ def smallk_bucket_kernel[
 @always_inline
 def _smallk_enqueue[
     CAP: Int, K: Int, UNIFORM: Bool, BOUND: Bool, SABOTAGE: Bool, WARPBOUND: Bool = False,
-    PHASE: Int = SMALLK_PHASE_FULL,
+    PHASE: Int = SMALLK_PHASE_FULL, DEFERRED: Bool = False,
 ](
     ctx: DeviceContext,
     values: MutPointer[Float32, MutAnyOrigin],
@@ -948,7 +1137,7 @@ def _smallk_enqueue[
     out_indices: MutPointer[UInt32, MutAnyOrigin],
     rows: Int, length: Int, k: Int, select_min: Bool,
 ) raises:
-    ctx.enqueue_function[smallk_bucket_kernel[CAP, K, UNIFORM, BOUND, SABOTAGE, WARPBOUND, PHASE]](
+    ctx.enqueue_function[smallk_bucket_kernel[CAP, K, UNIFORM, BOUND, SABOTAGE, WARPBOUND, PHASE, DEFERRED]](
         values, out_values, out_indices,
         Int32(length), Int32(k), Int32(select_min),
         grid_dim=(rows, 1, 1), block_dim=(SMALLK_BLOCK, 1, 1),
@@ -967,6 +1156,7 @@ def _smallk_launch_bucket[CAP: Int, K: Int](
     build default otherwise (any other arm is refused there, so a check
     that asks for an arm cannot pass silently on a non-trial build)."""
     comptime assert not (SMALLK_HEAD_BOUND_DEFAULT and SMALLK_WARPBOUND_DEFAULT), "one bound arm at most"
+    comptime assert not (SMALLK_DEFERRED_DEFAULT and (SMALLK_HEAD_BOUND_DEFAULT or SMALLK_WARPBOUND_DEFAULT)), "the deferred default excludes both bound defaults"
     comptime if SMALLK_SELECT_TRIAL:
         var sabotage = (arm & SMALLK_ARM_SABOTAGE) != 0
         var which = arm & (SMALLK_ARM_SABOTAGE - 1)
@@ -996,6 +1186,21 @@ def _smallk_launch_bucket[CAP: Int, K: Int](
                 _smallk_enqueue[CAP, K, True, False, True, True](ctx, values, out_values, out_indices, rows, length, k, select_min)
             else:
                 _smallk_enqueue[CAP, K, True, False, False, True](ctx, values, out_values, out_indices, rows, length, k, select_min)
+        elif which == SMALLK_ARM_DEFERRED:
+            comptime if not SMALLK_SHUFFLE:
+                # The full test is a warp ballot on the column's lane
+                # width; a column whose lane width the vendor's compiler
+                # chooses per kernel has no convergent warp to ballot.
+                # Refuse rather than run the uniform arm under this name.
+                raise Error("small-k selector: the deferred arm needs a fixed-lane-width column")
+            if sabotage:
+                _smallk_enqueue[CAP, K, True, False, True, False, SMALLK_PHASE_FULL, True](
+                    ctx, values, out_values, out_indices, rows, length, k, select_min
+                )
+            else:
+                _smallk_enqueue[CAP, K, True, False, False, False, SMALLK_PHASE_FULL, True](
+                    ctx, values, out_values, out_indices, rows, length, k, select_min
+                )
         elif which == SMALLK_ARM_SKIPRANK or which == SMALLK_ARM_SKIPSCAN or which == SMALLK_ARM_SCANONLY1:
             # TIMING-ONLY arms (DEVIATION 2516): the uniform default's scan
             # form, no bound, and never a sabotage instantiation (their
@@ -1027,7 +1232,8 @@ def _smallk_launch_bucket[CAP: Int, K: Int](
                 + " needs a build with -D MOJOLEARN_KNN_SELECT_TRIAL=1"
             )
         _smallk_enqueue[
-            CAP, K, SMALLK_UNIFORM_TRIP_DEFAULT, SMALLK_HEAD_BOUND_DEFAULT, False, SMALLK_WARPBOUND_DEFAULT
+            CAP, K, SMALLK_UNIFORM_TRIP_DEFAULT, SMALLK_HEAD_BOUND_DEFAULT, False, SMALLK_WARPBOUND_DEFAULT,
+            SMALLK_PHASE_FULL, SMALLK_DEFERRED_DEFAULT,
         ](ctx, values, out_values, out_indices, rows, length, k, select_min)
 
 

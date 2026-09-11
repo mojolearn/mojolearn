@@ -2,11 +2,12 @@
 """Check the small-k selector's trial arms against each other and the host.
 
 DEVIATION 2497 (C4, block-uniform trip count), 2498 (C1, block head-bound
-rejection; measured NEGATIVE on the H100 2026-09-11, kept as the record) and
-2515 (C2, warp-scope group bound: shuffles only, no barrier). Needs a build
-with `-D MOJOLEARN_KNN_SELECT_TRIAL=1`; without it the launch refuses every
-non-default arm and this check raises, which is the point: it cannot pass on
-a binary that has only one arm.
+rejection) and 2515 (C2, warp-scope group bound), both bounds measured
+NEGATIVE on the H100 2026-09-11 and kept as the record, and 2517 (deferred
+insertion: a four-slot register queue per lane, the K-chain run only at
+warp-uniform drains). Needs a build with `-D MOJOLEARN_KNN_SELECT_TRIAL=1`;
+without it the launch refuses every non-default arm and this check raises,
+which is the point: it cannot pass on a binary that has only one arm.
 
 Planted tile: every cell a splitmix64 hash of (row, column, seed) quantized to
 61 distinct values so value ties are dense and the index tie-break decides;
@@ -18,21 +19,31 @@ composite keys.
 
 Two properties, k = 10 and 15:
 
-1. arms: `baseline`, `uniform`, `headbound` and `warpbound` give identical
-   (value bits, index) output and match the host oracle, on lengths chosen
-   so that (length - 1792) mod 2048 is in 1..255 (the per-thread trip count
-   of the baseline diverges across threads: 1793, 2047, 3940, 4095, 65281,
-   65535, 65536 + 3940) and at 65535, 65536, 65537; 65536 and 69476 run all
-   four head-bound refreshes (after batches 1, 4, 12, 28) and sixteen
-   warp-bound refreshes (every second batch from batch 2); 1793, 2047 and
-   3940 have at most one batch, so the warpbound arm never refreshes there
-   and must equal the uniform arm by construction.
+1. arms: `baseline`, `uniform`, `headbound`, `warpbound` and `deferred`
+   give identical (value bits, index) output and match the host oracle, on
+   lengths chosen so that (length - 1792) mod 2048 is in 1..255 (the
+   per-thread trip count of the baseline diverges across threads: 1793,
+   2047, 3940, 4095, 65281, 65535, 65536 + 3940) and at 65535, 65536, 65537;
+   65536 and 69476 run all four head-bound refreshes (after batches 1, 4,
+   12, 28) and sixteen warp-bound refreshes (every second batch from batch
+   2); 1793, 2047 and 3940 have at most one batch, so the warpbound arm
+   never refreshes there and must equal the uniform arm by construction.
+   For the deferred arm the same lengths exercise: a partition with no
+   batch (1793, 2047: the tail loop alone, eager inserts from an empty
+   queue), one batch plus a tail (3940, 4095), full-queue drains inside a
+   batch (the first batches of every row admit every element, so the
+   queues fill every four elements), batch-end drains with partial queues
+   (the later batches), a tail after 32 batches (65537, 69476) and the
+   all-equal row 2 (every key admitted by index order alone).
 2. reach: each arm's SABOTAGE instantiation changes at least one output
-   cell on a 65,536-column row, so a green property 1 is a green on four
+   cell on a 65,536-column row, so a green property 1 is a green on five
    arms that actually ran. The warpbound sabotage rejects every
    non-negative-distance key after its first refresh (4,096 columns), so
    the planted +0.0 at length / 2 and length - 1 must vanish from rows 0
-   and 1.
+   and 1. The deferred sabotage skips the newest queued key at every
+   drain; the planted +0.0 at length - 1 is the last element of the last
+   batch, hence the newest in lane 255's queue at that batch's drain, and
+   must vanish from rows 0 and 1.
 
 RUN OWED (any GPU box, never the Mac):
     pixi run mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_KNN_SELECT_TRIAL=1 \\
@@ -44,6 +55,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from neighbors.checks.select_radix_identical import composite_key
 from neighbors.checks.select_smallk_identical_candidate import (
     SMALLK_ARM_BASELINE,
+    SMALLK_ARM_DEFERRED,
     SMALLK_ARM_HEADBOUND,
     SMALLK_ARM_SABOTAGE,
     SMALLK_ARM_UNIFORM,
@@ -148,10 +160,13 @@ def check_case(length: Int, k: Int, reach: Bool) raises:
         var hb_i: List[UInt32] = []
         var wb_d: List[UInt32] = []
         var wb_i: List[UInt32] = []
+        var df_d: List[UInt32] = []
+        var df_i: List[UInt32] = []
         run_arm(ctx, values_ptr, length, k, SMALLK_ARM_BASELINE, base_d, base_i)
         run_arm(ctx, values_ptr, length, k, SMALLK_ARM_UNIFORM, uni_d, uni_i)
         run_arm(ctx, values_ptr, length, k, SMALLK_ARM_HEADBOUND, hb_d, hb_i)
         run_arm(ctx, values_ptr, length, k, SMALLK_ARM_WARPBOUND, wb_d, wb_i)
+        run_arm(ctx, values_ptr, length, k, SMALLK_ARM_DEFERRED, df_d, df_i)
 
         # 1a. The baseline against the exhaustive host rank.
         var host_ptr = host.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
@@ -166,16 +181,19 @@ def check_case(length: Int, k: Int, reach: Bool) raises:
                 if base_d[cell] != expected:
                     raise Error("baseline value bits differ from the tile cell at length " + String(length) + " k " + String(k))
                 previous = composite_key(host_ptr.unsafe_load(row * length + selected), UInt32(selected), True)
-        # 1b. C4, C1 and C2 against the baseline, cell for cell.
+        # 1b. C4, C1, C2 and deferred against the baseline, cell for cell.
         var d_uni = cells_differ(base_d, base_i, uni_d, uni_i)
         var d_hb = cells_differ(base_d, base_i, hb_d, hb_i)
         var d_wb = cells_differ(base_d, base_i, wb_d, wb_i)
+        var d_df = cells_differ(base_d, base_i, df_d, df_i)
         if d_uni != 0:
             raise Error("uniform arm differs from baseline in " + String(d_uni) + " cells at length " + String(length) + " k " + String(k))
         if d_hb != 0:
             raise Error("headbound arm differs from baseline in " + String(d_hb) + " cells at length " + String(length) + " k " + String(k))
         if d_wb != 0:
             raise Error("warpbound arm differs from baseline in " + String(d_wb) + " cells at length " + String(length) + " k " + String(k))
+        if d_df != 0:
+            raise Error("deferred arm differs from baseline in " + String(d_df) + " cells at length " + String(length) + " k " + String(k))
         print("SELECTOR_ARMS_CASE_PASS", length, k, ROWS * k)
 
         # 2. Reach: every arm's sabotage must move at least one cell.
@@ -190,13 +208,15 @@ def check_case(length: Int, k: Int, reach: Bool) raises:
             var f_hb = cells_differ(base_d, base_i, sab_d, sab_i)
             run_arm(ctx, values_ptr, length, k, SMALLK_ARM_WARPBOUND | SMALLK_ARM_SABOTAGE, sab_d, sab_i)
             var f_wb = cells_differ(base_d, base_i, sab_d, sab_i)
-            if f_base == 0 or f_uni == 0 or f_hb == 0 or f_wb == 0:
+            run_arm(ctx, values_ptr, length, k, SMALLK_ARM_DEFERRED | SMALLK_ARM_SABOTAGE, sab_d, sab_i)
+            var f_df = cells_differ(base_d, base_i, sab_d, sab_i)
+            if f_base == 0 or f_uni == 0 or f_hb == 0 or f_wb == 0 or f_df == 0:
                 raise Error(
                     "REACH NOT PROVEN: sabotage flipped baseline " + String(f_base)
                     + ", uniform " + String(f_uni) + ", headbound " + String(f_hb)
-                    + ", warpbound " + String(f_wb) + " cells"
+                    + ", warpbound " + String(f_wb) + ", deferred " + String(f_df) + " cells"
                 )
-            print("SELECTOR_ARMS_REACH_PASS", length, k, f_base, f_uni, f_hb, f_wb)
+            print("SELECTOR_ARMS_REACH_PASS", length, k, f_base, f_uni, f_hb, f_wb, f_df)
         _ = host^
         _ = values^
 
