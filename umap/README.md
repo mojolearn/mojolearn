@@ -223,3 +223,18 @@ What remains between 0.9323 and the host loop's 0.9796 is the order ACROSS
 vertices: the host loop is a Gauss-Seidel sweep in which a vertex sees every
 earlier vertex's move of the same epoch, and that order has no parallel form
 whose bits are a function of the inputs alone.
+
+In the interleaved race on taxi (100,000 rows, 3 timed rounds) the fold costs
+nothing: ours 2548.4 ms before and 2556.3 after (1.003), against cuML's
+4784.6 ms at trustworthiness 0.9683. No UMAP time ratio against cuML is
+quoted as a result while their embedding differs every round
+(`digest_stable=False`) and the quality question is open.
+
+The gate (`tools/umap_lane_pod_run.sh`'s own, on the H200 2026-09-11): the
+2668 build's 20,000-row embedding is ONE fingerprint
+`4040033352384472344` (sha256 `2050168fc2799235`) at launch widths 64, 128
+and 256, so the new fold is as width-independent as the old one, and
+`umap/checks/identity_check.mojo` and `identity_broader_check.mojo` both
+pass on it. The snapshot fold's value on the same box is
+`15879769428157041013` (`87f68de9a3471687`), which is the re-baseline: any
+card carrying the old number describes the snapshot fold.

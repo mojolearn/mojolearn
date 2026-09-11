@@ -1138,7 +1138,14 @@ def knn_distance_exact_chain_for[column: Int, identical: Bool]() -> Bool:
     return False
 
 
-comptime KNN_IDENTICAL_WIDE_QUERY_TILE = 512
+#: DEVIATION 2631's measured tile, FLIPPED 2026-09-11 on the H200 (pod
+#: `zwmta1li2twxx2`): synthetic 400k x 4k x d32 request 23.53 -> 21.38 ms at
+#: k10 (0.909) and 25.98 -> 23.52 at k15 (0.905) against the 512 default,
+#: taxi 22.14 -> 19.92 ms (0.900) and Istella-S 100.29 -> 95.51 (0.952) in
+#: interleaved races, geomean 0.926, recall@10 unchanged on both datasets and
+#: every output bit equal. At 4,000 queries `plan_query_tile`'s query clamp
+#: lowers it to 4,000, so the benchmark shape runs as ONE query tile.
+comptime KNN_IDENTICAL_WIDE_QUERY_TILE = 4096
 
 
 @always_inline

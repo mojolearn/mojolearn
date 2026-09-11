@@ -1465,3 +1465,20 @@ float32-max sentinel set to 0.0). Evidence:
 | knn | Istella-S | cuML NearestNeighbors brute | 51.11 (median of 4 races, 50.51..52.13) | recall@10 0.92205 | 124.71 (median of 2 races, 119.93..128.71) | recall@10 0.923025 | 2.44x |
 | knn | dyadic-v1 400k x 4k x d32, k10 | cuML NearestNeighbors brute (`tools/knn_cuml_reference.py`, request) | 10.05 | 4000 of 4000 rows ordered-equal | 23.66 | same | 2.36x |
 | knn | dyadic-v1, k15 | same | 10.22 | 4000 of 4000 rows ordered-equal | 26.21 | same | 2.57x |
+
+### kNN on taxi and Istella-S against cuML, same pod (September 11, knn-finish lane, pod zwmta1li2twxx2)
+
+A NEW TUPLE: NVIDIA H200 143,771 MiB, driver 580.159.03, cuML 26.8.0. The
+H100 80GB HBM3 and H100 NVL pools were empty, so these are H200 rows and are
+never mixed with the H100 rows above. Same harness and shape as that section
+(`race --lane knn`, index 400,000 x queries 4,000, k10, 1 warm-up plus 5
+interleaved rounds); ours is the IDENTICAL arm at DEVIATION 2631's flipped
+query tile. Evidence: `bench/results/knn_finish_2026-09-11/`.
+
+| lane | dataset | opponent | opponent ms | opponent quality | ours ms | ours quality | ratio |
+|---|---|---|---:|---|---:|---|---:|
+| knn | taxi | cuML NearestNeighbors brute | 8.90 (8.56..9.23) | recall@10 0.99925 | 19.92 (19.79..20.37) | recall@10 0.99915 | 2.24x |
+| knn | Istella-S | cuML NearestNeighbors brute | 52.10 (51.61..132.92) | recall@10 0.92205 | 95.51 (94.62..96.01) | recall@10 0.923025 | 1.83x |
+
+Ours before DEVIATION 2631 on the same pod, in the same races, was 22.14 ms
+(taxi) and 100.29 ms (Istella-S), so the ratios there were 2.49x and 1.93x.

@@ -76,7 +76,12 @@ runs per arm): request k10 23.53 ms at 512 to 22.39 at 1024, 21.69 at 2048
 and 21.38 at 4096 (0.909), k15 25.98 to 23.52 (0.905), the scratch shrink
 alone flat at 0.999; distance 15.30 to 14.43 ms, selection 7.33 to 5.99 ms,
 merges 0.45 to 0.14 ms, launches 56/56/48 to 14/14/12. Every dumped index
-and distance equals the 512 build's.
+and distance equals the 512 build's. In the interleaved races on the two
+datasets (400,000 x 4,000, k10, 5 rounds, the before tree as a second arm in
+the same race) taxi went 22.14 to 19.92 ms (0.900) and Istella-S 100.29 to
+95.51 (0.952), geomean 0.926 with recall@10 and the output digest unchanged
+on both, so the row FLIPPED ON at 4,096; against cuML 26.8 on that pod ours
+is 2.24x on taxi and 1.83x on Istella-S.
 `-D MOJOLEARN_KNN_QUERY_TILE_ARM_512` / `_1024` / `_2048` / `_4096` are the
 A/B arms and `-D MOJOLEARN_KNN_IDENTICAL_FULL_RADIX_SCRATCH=1` keeps the old
 scratch. Evidence: `bench/results/knn_finish_2026-09-11/`.
@@ -89,7 +94,10 @@ the shape of cuVS's `fusedL2Knn` (`knn_brute_force.cuh:447-451`). Same bits
 (every dumped index and distance equal to the two-launch form on both k;
 `-D MOJOLEARN_KNN_FUSED_SELECT_SABOTAGE=1` moves them, so the scan is
 reached), and 1.41x to 1.48x the request time at the best tile on the H200
-(k10 33.26 ms against 21.38, k15 38.34 against 23.52). The distance matrix
+(k10 33.26 ms against 21.38, k15 38.34 against 23.52); in the races it is
+1.119 on taxi and 2.073 on Istella-S, geomean 1.523, and Istella-S is the
+worst case because a fused thread walks 220 features for each of its 8 cells
+where the register tile walks them once for 32. The distance matrix
 was not the cost: the fused block owns ONE query row, so it reads 1.125
 operands per cell per feature where the register tile's 8x4 cells per thread
 read 0.375, and the fused launch class (33.3 ms at tile 2048) is larger than

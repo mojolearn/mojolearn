@@ -23,10 +23,12 @@ through without a second representation being invented in between.
 THE POLICY CHOICES
 ------------------
 
-1. `query_tile` defaults to 512 on NVIDIA IDENTICAL and 256 on other
-   columns and numeric modes. The NVIDIA default is backed by the large
-   query-batch evidence in `bench/OPPONENT_REFERENCE.md`; the legacy override
-   restores 256. `knn_search` reports the tile actually used after planning.
+1. `query_tile` defaults to the kernel-matrix row `knn_query_tile_for`
+   (DEVIATION 2631: 4,096 on NVIDIA IDENTICAL, clamped to the query count
+   when the request is narrower) and 256 on other columns and numeric modes.
+   The NVIDIA default is backed by the large query-batch evidence in
+   `bench/OPPONENT_REFERENCE.md`; the legacy override restores 256.
+   `knn_search` reports the tile actually used after planning.
 
 2. THE DISTANCE WORKSPACE IS CAPPED AND THE CAP CAN LOWER THE TILE.
    The cap is 768 MiB for the distance tile alone, not total request memory.
