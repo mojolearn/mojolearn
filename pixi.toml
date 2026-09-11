@@ -636,6 +636,12 @@ check-pointwise-vs-greedy = "mojo run -I . checks/pointwise_vs_greedy_check.mojo
 # flag was ignored. Own main(); a GPU, ~40 s.
 check-fit-pointwise = "mojo run -I . checks/fit_pointwise_check.mojo"
 
+# DEVIATION 2624: the ordered tiers keep the pointwise document axis whole,
+# so a histogram is bit-equal across sm_count and repeats on REAL-VALUED
+# stats (integer stats add exactly in any order and hid the float atomicAdd
+# writeback). Sabotage: pointwise_doc_split_for True fails G1 and G2. A GPU.
+check-pointwise-identical-multiplier = "mojo run -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 checks/pointwise_identical_multiplier_check.mojo"
+
 # The two measurements archive/reference/PORTING.md 98a and 106 said were a measurement's job.
 # Both interleave their arms and report the MIN of each, because another
 # session runs GPU work on this box and a sequential A-then-B measurement

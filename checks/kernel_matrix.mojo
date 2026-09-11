@@ -481,6 +481,13 @@ def pointwise_one_byte_fixed_for[column: Int, identical: Bool]() -> Bool:
     return column == COLUMN_APPLE
 
 
+def pointwise_doc_split_for[column: Int, ordered: Bool]() -> Bool:
+    """NUMERIC row (DEVIATION 2624): whether the POINTWISE histogram launchers split the DOCUMENT axis `EstimateBlockPerFeatureMultiplier` ways. Above one, every document block of a feature float-`atomicAdd`s its partial into the same `binSums` cell in whatever order the device finishes them, and the multiplier itself follows `sm_count`, so the ordered tiers (deterministic and identical) keep one block per feature group per part; see `pw_block_multiplier` in `gbdt/methods/pointwise_kernels.mojo`."""
+    comptime if ordered:
+        return False
+    return True
+
+
 def greedy_one_byte_fixed_for[column: Int, identical: Bool]() -> Bool:
     """SCHEDULING row (DEVIATION 1906, NARROWED by DEVIATION 1947): whether the GREEDY one-byte family routes EVERY width through the fused 8-bit fixed-point kernel (`hist_2_one_byte_8bit.mojo`) instead of CatBoost's maxBins ladder."""
     comptime if identical:

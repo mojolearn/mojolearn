@@ -1144,6 +1144,24 @@ fix and are not re-run; they are not IDENTICAL results. The shipped 0.8.1 wheel
 moves on `ties` on the MI300X (it carries the defect). The pointwise arm's
 second hash is not explained by this fix and was not re-measured.
 
+The pointwise arm's second hash has its own cause, found and fixed
+2026-09-11 (DEVIATION 2624, lane/pointwise-hash-drift). The three pointwise
+histogram launchers split each part's documents `multiplier` ways (a count
+derived from the column's multiprocessor count) and every document block
+added its partial histogram into the same float cell in completion order,
+so the cells jittered and a near-tied split could flip. In the deterministic
+and identical tiers the multiplier is now 1 (`checks/kernel_matrix.mojo::pointwise_doc_split_for`),
+gated by `checks/pointwise_identical_multiplier_check.mojo` (896 grids,
+55,290 cells bit-equal; it fails with the old multiplier). Verified on an
+H100 (three fits in one process trace-identical on Istella 1M and two
+synthetic fixtures), on a Hot Aisle MI300X (the check, and pointwise and
+greedy model hashes on five 1M-row synthetic fixtures in 3 of 3 rounds all
+equal to the H100's) and on the Apple M4 (the check). It costs the opt-in
+pointwise arm time on the H100 (Istella 1M about 1690 to 2750 ms, taxi 1M
+about 810 to 1805 ms) and changes its taxi model (logloss 0.525668 to
+0.525925); greedy bits and times do not move. Every pointwise time and
+verdict in this file was measured before it.
+
 Taxi, 1,000,000 training rows (2,000,000 for RF 2M), leg 1 (droplet
 599636038):
 
@@ -1201,7 +1219,8 @@ hash; FAST RF holds one hash of its own; FAST GBDT hashes move every round.
 
 Verdicts on this box (tools/flip_verdict.py, both datasets): symmetric
 `use_pointwise_searcher=True` NO FLIP geomean=1.816 taxi=2.342
-istella=1.408 reason=time (quality better on both); DEVIATION 2512 on
+istella=1.408 reason=time (quality better on both; measured before
+DEVIATION 2624, which makes that arm slower still); DEVIATION 2512 on
 against off, RF NO FLIP geomean=1.001 taxi=0.999 istella=1.004 (bits equal),
 symmetric NO FLIP geomean=1.011 taxi=0.999 istella=1.023 (its quality delta
 is inside the round-to-round movement above), so 2512 is neutral on AMD.
