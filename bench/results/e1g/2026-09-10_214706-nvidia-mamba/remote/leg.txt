@@ -1,0 +1,10 @@
+vendor=nvidia
+payload=mamba
+knn_layout_only=0
+nvidia_campaign=7
+commit=e376e1c611df3485ce2fe1f2dfcada4f0bd7f73f
+started=2026-09-11T01:48:39Z
+pixi_install_exit=0
+release_tools_setup_exit=0
+release_build_exit=1
+scope=one actual CUDA architecture full46 build; no installed wheel qualification

@@ -1,0 +1,6 @@
+E: Could not get lock /var/lib/apt/lists/lock. It is held by process 1889 (apt-get)
+E: Unable to lock directory /var/lib/apt/lists/
+E: Failed to fetch http://security.ubuntu.com/ubuntu/pool/universe/p/python-pip/python3-pip-whl_24.0%2bdfsg-1ubuntu1.1_all.deb  404  Not Found [IP: 10.118.15.254 80]
+E: Failed to fetch http://security.ubuntu.com/ubuntu/pool/universe/p/python3.12/python3.12-venv_3.12.3-1ubuntu0.5_amd64.deb  404  Not Found [IP: 10.118.15.254 80]
+E: Failed to fetch http://mirrors.digitalocean.com/ubuntu/pool/universe/p/python3-defaults/python3-venv_3.12.3-0ubuntu2_amd64.deb  404  Not Found [IP: 10.118.15.254 80]
+E: Unable to fetch some archives, maybe run apt-get update or try with --fix-missing?

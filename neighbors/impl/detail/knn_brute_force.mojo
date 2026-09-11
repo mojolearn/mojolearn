@@ -112,6 +112,7 @@ from neighbors.checks.select_radix_identical import (
 from neighbors.checks.select_smallk_identical_candidate import (
     SMALLK_MAX_K,
     partial_topk_merge_launch,
+    smallk_select_arm_from_env,
     smallk_select_launch,
 )
 from neighbors.checks.transposed_index_distance_candidate import transposed_index_distance_kernel
@@ -597,6 +598,12 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
     comptime if KNN_PHASE_TIMERS:
         ctx.synchronize()
 
+    # The small-k selector's arm for this request (DEVIATION 2497/2498):
+    # read from MOJOLEARN_KNN_SELECT / _SABOTAGE once here, on a build with
+    # -D MOJOLEARN_KNN_SELECT_TRIAL=1 only; every other build gets the
+    # constant default without touching the environment.
+    var select_arm = smallk_select_arm_from_env()
+
     var q = 0
     while q < n_queries:
         var rows = min(query_tile, n_queries - q)
@@ -913,7 +920,7 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
                             smallk_select_launch(
                                 ctx,
                                 dist_tile.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                                sel_dist, sel_idx, rows, cols, k, True,
+                                sel_dist, sel_idx, rows, cols, k, True, select_arm,
                             )
                             selected_smallk = True
                     if not selected_smallk:

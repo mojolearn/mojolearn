@@ -1,0 +1,8 @@
+[restore_then_step]   0.089s imported {"mojolearn_file": "/root/mojolearn/python/mojolearn/__init__.py", "version": "0.8.0"}
+[restore_then_step]   0.251s binding {"sha256": "9a81c0300ae8", "vendor": "cuda"}
+[restore_then_step]   0.253s native_call_begin {"completed_steps": 0, "label": "step1", "resident": false}
+[restore_then_step]   1.624s native_call_end {"label": "step1"}
+[restore_then_step]   1.626s hashed {"label": "step1", "loss": 5.548226833343506, "step": 1}
+[restore_then_step]   1.630s checkpoint_saved {"nbytes": 339938, "sha256": "a2c24f119a9e6ab5935be8fade9a535c21d00b6207939561ea8c1db6e5c0bc93"}
+[restore_then_step]   1.635s checkpoint_restored {"completed_steps": 1}
+[restore_then_step]   1.635s native_call_begin {"completed_steps": 1, "label": "step2", "resident": false}

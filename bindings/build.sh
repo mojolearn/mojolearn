@@ -15,6 +15,13 @@
 #
 # packaging/macos/build_release_wheel.sh runs this script rather than
 # repeating the command, so the flags live in exactly one place.
+#
+# MOJOLEARN_BUILD_EXTRA_DEFINES (optional, empty by default): extra flags
+# appended verbatim, word-split, to the `mojo build` command, for trial
+# builds that need a define this script does not know (for example
+# `-D MOJOLEARN_KNN_SELECT_TRIAL=1`, the kNN selection gate's arm hook,
+# tools/knn_selection_gate.sh). A release build leaves it unset; nothing
+# else in this script reads it.
 set -eu
 
 here=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
@@ -305,9 +312,10 @@ tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/mojolearn-build.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT INT TERM
 out="$tmpdir/_mojolearn.so"
 
-# shellcheck disable=SC2086  # both flag strings are deliberately word-split
+# shellcheck disable=SC2086  # the flag strings are deliberately word-split
 pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib \
     $TARGET_FLAGS $COLUMN_DEFINE $MODE_DEFINE \
+    ${MOJOLEARN_BUILD_EXTRA_DEFINES:-} \
     $LINK_FLAGS \
     -I . -I bindings \
     bindings/_mojolearn.mojo \

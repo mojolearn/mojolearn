@@ -1,0 +1,10 @@
+root=/root/mojolearn
+arch=sm_89
+target_column=
+deadline_s=120
+started=2026-09-11T03:10:26Z
+build_base_exit=0
+build_exit=0 build_seconds=97
+readback_exit=0
+harness_exit=0 run_seconds=26
+finished=2026-09-11T03:12:29Z total_seconds=123

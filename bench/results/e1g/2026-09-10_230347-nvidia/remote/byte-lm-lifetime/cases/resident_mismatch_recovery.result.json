@@ -1,0 +1,57 @@
+{
+ "argv": [
+  "/root/mojolearn/.pixi/envs/default/bin/python3",
+  "/root/mojolearn/tools/byte_lm_lifetime_diag.py",
+  "--case",
+  "resident_mismatch_recovery",
+  "--record",
+  "/root/gemm_leg_out/byte-lm-lifetime/cases/resident_mismatch_recovery.json",
+  "--deadline",
+  "120.0"
+ ],
+ "case": "resident_mismatch_recovery",
+ "deadline_s": 120.0,
+ "env_overrides": {},
+ "exit_code": 1,
+ "hang_diagnostics": null,
+ "log": "/root/gemm_leg_out/byte-lm-lifetime/cases/resident_mismatch_recovery.log",
+ "python_stacks": "",
+ "record": {
+  "case": "resident_mismatch_recovery",
+  "elapsed_s": 0.279,
+  "error": "ImportError: mojolearn: the base binding has no `all_finite_f32`; the compiled _mojolearn extension is older than this Python layer, or the identical set is not built. Rebuild it with\n    MOJOLEARN_NUMERIC_MODE=identical sh bindings/build.sh",
+  "events": [
+   {
+    "mojolearn_file": "/root/mojolearn/python/mojolearn/__init__.py",
+    "name": "imported",
+    "t": 0.063,
+    "version": "0.8.0"
+   }
+  ],
+  "fixture": {
+   "n_total": 14080,
+   "profile": "mojolearn.byte-lm.b1-l5-d16-h2-kv1-hd8-ff24-v257-blocks3.fp32.v3",
+   "shape": {
+    "batch": 1,
+    "d_model": 16,
+    "head_dim": 8,
+    "intermediate": 24,
+    "length": 5,
+    "n_heads": 2,
+    "n_kv": 1,
+    "n_layers": 3,
+    "vocab_size": 257
+   },
+   "source": "numpy.default_rng(19) standard_normal*0.02 then integers"
+  },
+  "hashes": {},
+  "numeric_mode": "identical",
+  "pid": 2004,
+  "python": "3.14.7",
+  "schema": "byte-lm-lifetime-diag.record.v1",
+  "status": "failed"
+ },
+ "status": "failed",
+ "timed_out": false,
+ "wall_s": 0.398
+}

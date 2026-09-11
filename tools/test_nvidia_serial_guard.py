@@ -49,6 +49,24 @@ class GuardTests(unittest.TestCase):
             self.assertEqual(launch.call_args.args[0][:3], ['taskset', '-c', '0,1'])
             self.assertEqual(launch.call_args.kwargs['env']['MAX_JOBS'], '2')
 
+    def test_cores_option_widens_within_the_parent_allowance(self):
+        # DEVIATION 2501: --cores 4 on a three-core parent pins to those three.
+        proc = Mock(pid=4321, returncode=0)
+        proc.poll.side_effect = [None, 0]
+        with tempfile.TemporaryFile() as lock, contextlib.ExitStack() as stack:
+            stack.enter_context(patch.object(guard.sys, 'platform', 'linux'))
+            stack.enter_context(patch.object(guard.Path, 'is_dir', return_value=True))
+            stack.enter_context(patch('builtins.open', return_value=lock))
+            stack.enter_context(patch.object(guard.fcntl, 'flock'))
+            stack.enter_context(patch.object(guard, 'gpu_memory', return_value=(0, 24000)))
+            stack.enter_context(patch.object(guard, 'memory', return_value=(0, 8 * 2**30)))
+            stack.enter_context(patch.object(guard.os, 'sched_getaffinity', return_value={0, 1, 2}, create=True))
+            stack.enter_context(patch.object(guard.signal, 'signal'))
+            stack.enter_context(patch.object(guard.time, 'sleep'))
+            launch = stack.enter_context(patch.object(guard.subprocess, 'Popen', return_value=proc))
+            guard.run(argparse.Namespace(command=['fake-command'], seconds=10, rss_gib=1, cores=4))
+            self.assertEqual(launch.call_args.args[0][:3], ['taskset', '-c', '0,1,2'])
+
     def test_rss_stops_entire_group(self):
         self.exercise('rss')
 

@@ -1,0 +1,17 @@
+Unable to find image 'python:3.12-slim' locally
+3.12-slim: Pulling from library/python
+56235e424563: Pulling fs layer
+6310eb16bf42: Pulling fs layer
+dbd0b7849e6c: Pulling fs layer
+1560cfed01dc: Pulling fs layer
+56235e424563: Download complete
+dbd0b7849e6c: Download complete
+1560cfed01dc: Download complete
+6310eb16bf42: Download complete
+6310eb16bf42: Pull complete
+dbd0b7849e6c: Pull complete
+56235e424563: Pull complete
+1560cfed01dc: Pull complete
+Digest: sha256:78387bc3881b8273120a12ebe6c1ab22b018ccc2c9adf565ae1ac9b536e184ea
+Status: Downloaded newer image for python:3.12-slim
+Checking /r/mojolearn-0.8.0-py3-none-manylinux_2_35_x86_64.whl: [32mPASSED[0m

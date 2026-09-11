@@ -1,0 +1,4 @@
+APT_EXIT=0 need= patchelf python3-venv python3-pip
+PIXI_INSTALL_EXIT=0
+patchelf 0.18.0
+PIXI_ENV_OK

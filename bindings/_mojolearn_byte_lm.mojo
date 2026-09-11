@@ -12,8 +12,9 @@ synchronization; the stateless ABI also tears down its context before return.
 # DEVIATION 2486: shared byte-preserving host copies.
 from bindings.hostptr import f32_ptr, read_f32, copy_f32
 from std.memory import bitcast
-from std.os import abort
+from std.os import abort, getenv
 from std.python import Python, PythonObject
+from std.time import perf_counter_ns
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from max.gpu.host import DeviceContext
@@ -133,6 +134,27 @@ def _write_f32(address: Int, values: List[Float32]) raises:
     copy_f32(values.unsafe_ptr(), f32_ptr(address), len(values))
 
 
+def _btick(on: Bool, mut t: Int, name: String):
+    """DEVIATION 2499: host-side phase timer for the binding, the same line
+    shape as the transformer binding's `_btick` and the block timers
+    (`timing <name> <ms> ms`), behind `MOJOLEARN_TRANSFORMER_TIMING=1`.
+    No device wait here: every phase this brackets is host work, or ends
+    with a `download_f32` (which waits inside) or the trainer's own waits."""
+    if not on:
+        return
+    var now = Int(perf_counter_ns())
+    print(
+        "timing " + name + " " + String(Float64(now - t) / 1000000.0) + " ms"
+    )
+    t = now
+
+
+def _bbytes(on: Bool, name: String, n_bytes: Int):
+    if not on:
+        return
+    print("timing " + name + " " + String(n_bytes) + " bytes")
+
+
 def _require_same_bits(before: List[Float32], after: List[Float32]) raises:
     if len(before) != len(after):
         raise Error("byte LM: authoritative state length mismatch")
@@ -181,6 +203,8 @@ def _byte_lm_run(addresses: PythonObject, params: PythonObject, shape: ByteConfi
     for i in range(11):
         addr.append(Int(py=addresses[i]))
     _validate_addresses(addr, action, shape)
+    var ton = String(getenv("MOJOLEARN_TRANSFORMER_TIMING")) != ""
+    var tk = Int(perf_counter_ns())
     # No GPU work before all borrowed inputs become validated owned host lists.
     var initial_p = _read_f32(addr[0], n)
     var initial_m = _read_f32(addr[1], n)
@@ -196,8 +220,12 @@ def _byte_lm_run(addresses: PythonObject, params: PythonObject, shape: ByteConfi
         flags.append(flag == 1)
     for i in range(shape.batch * (shape.length + 1)):
         ids.append(ids_ptr.unsafe_load(i))
+    # Host-to-host: three n-float Lists plus flags and ids from Python memory.
+    _btick(ton, tk, "step.bind_read_inputs")
+    _bbytes(ton, "step.bind_read_inputs_bytes", 3 * n * 4 + shape.n_tensors() * 4 + shape.batch * (shape.length + 1) * 4)
     byte_validate_state(initial_p, initial_m, initial_v, flags, completed, shape)
     byte_validate_tokens(ids, shape)
+    _btick(ton, tk, "step.bind_validate_inputs")
     var out_p = List[Float32]()
     var out_m = List[Float32]()
     var out_v = List[Float32]()
@@ -217,6 +245,8 @@ def _byte_lm_run(addresses: PythonObject, params: PythonObject, shape: ByteConfi
                 session.trainer = ByteTrainer(session.ctx.value(), initial_p, initial_m,
                     initial_v, flags, completed, cfg, shape)
             ref ctx = session.ctx.value()
+            # First call only: context and ByteTrainer construction (uploads).
+            _btick(ton, tk, "step.bind_context_or_trainer_setup")
             if reused:
                 # Reuse must never silently ignore a supplied checkpoint/config.
                 if session.trainer.value().config.profile() != shape.profile():
@@ -237,8 +267,16 @@ def _byte_lm_run(addresses: PythonObject, params: PythonObject, shape: ByteConfi
                 for i in range(shape.n_tensors()):
                     if flags[i] != session.trainer.value().buffers.buf_initialized[i]:
                         raise Error("byte LM: resident flags mismatch")
+                # Three download_f32 (each waits inside) plus three host
+                # bit compares; the device queue is empty at this tick.
+                _btick(ton, tk, "step.bind_resident_admission")
+                _bbytes(ton, "step.bind_resident_admission_bytes", 3 * n * 4)
             if action == 1:
                 var capture = byte_train_step(ctx, session.trainer.value(), ids)
+                # The trainer printed its own `step.*` lines; its last tick
+                # (`step.capture_copy`) ended with nothing queued.
+                if ton:
+                    tk = Int(perf_counter_ns())
                 loss = capture.loss
                 result_step = capture.completed_steps
                 out_p = capture.after_params^
@@ -251,8 +289,11 @@ def _byte_lm_run(addresses: PythonObject, params: PythonObject, shape: ByteConfi
                 capture.gradients = List[Float32]()
                 out_flags = capture.after_flags^
                 capture.after_flags = List[Bool]()
+                _btick(ton, tk, "step.bind_move_outputs")
             else:
                 loss = byte_eval_loss(ctx, session.trainer.value(), ids)
+                if ton:
+                    tk = Int(perf_counter_ns())
                 # Read actual post-evaluation state rather than simply echoing the
                 # inputs, which would hide an accidental mutation in evaluation.
                 out_p = download_f32(ctx, session.trainer.value().buffers.param, n)
@@ -266,6 +307,8 @@ def _byte_lm_run(addresses: PythonObject, params: PythonObject, shape: ByteConfi
                 for i in range(shape.n_tensors()):
                     if flags[i] != out_flags[i]:
                         raise Error("byte LM eval changed momentum flags")
+                _btick(ton, tk, "step.bind_eval_readback")
+                _bbytes(ton, "step.bind_eval_readback_bytes", 3 * n * 4)
             byte_validate_state(out_p, out_m, out_v, out_flags, result_step, shape)
             if result_step != completed + action:
                 raise Error("byte LM: successful result has wrong completed step")
@@ -277,7 +320,10 @@ def _byte_lm_run(addresses: PythonObject, params: PythonObject, shape: ByteConfi
                 for i in range(n):
                     if (bitcast[DType.uint32](out_g[i]) & UInt32(0x7F800000)) == UInt32(0x7F800000):
                         raise Error("byte LM: nonfinite returned gradient")
+            # Host scans of out_p/m/v (byte_validate_state) and out_g.
+            _btick(ton, tk, "step.bind_validate_outputs")
             ctx.synchronize()
+            _btick(ton, tk, "step.bind_final_sync")
             if not retain:
                 # Already synchronized: preserve the stateless teardown without
                 # adding close()'s second drain to the comparison baseline.
@@ -300,6 +346,9 @@ def _byte_lm_run(addresses: PythonObject, params: PythonObject, shape: ByteConfi
         flags_out.unsafe_store(i, Int32(out_flags[i]))
     var loss_out = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addr[10])
     loss_out.unsafe_store(0, loss)
+    # Host-to-host: the four n-float outputs copied into Python memory.
+    _btick(ton, tk, "step.bind_publish")
+    _bbytes(ton, "step.bind_publish_bytes", (3 + action) * n * 4)
     return PythonObject(result_step)
 
 

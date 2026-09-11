@@ -1,0 +1,207 @@
+{
+ "binding": {
+  "binding_file": "/root/mojolearn/python/mojolearn/identical/_mojolearn_byte_lm.so",
+  "binding_sha256": "9a81c0300ae8e93edde074686bfda4affe93ec3137e98bf4831ae0c4610f0462",
+  "native_profile": "mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1",
+  "native_vendor": "cuda"
+ },
+ "case": "restore_then_step",
+ "elapsed_s": 1.325,
+ "error": null,
+ "events": [
+  {
+   "mojolearn_file": "/root/mojolearn/python/mojolearn/__init__.py",
+   "name": "imported",
+   "t": 0.062,
+   "version": "0.8.0"
+  },
+  {
+   "name": "binding",
+   "sha256": "9a81c0300ae8",
+   "t": 0.229,
+   "vendor": "cuda"
+  },
+  {
+   "completed_steps": 0,
+   "label": "step1",
+   "name": "native_call_begin",
+   "resident": false,
+   "t": 0.23
+  },
+  {
+   "label": "step1",
+   "name": "native_call_end",
+   "t": 1.188
+  },
+  {
+   "label": "step1",
+   "loss": 5.548226833343506,
+   "name": "hashed",
+   "step": 1,
+   "t": 1.213
+  },
+  {
+   "name": "checkpoint_saved",
+   "nbytes": 339938,
+   "sha256": "a2c24f119a9e6ab5935be8fade9a535c21d00b6207939561ea8c1db6e5c0bc93",
+   "t": 1.255
+  },
+  {
+   "completed_steps": 1,
+   "name": "checkpoint_restored",
+   "t": 1.273
+  },
+  {
+   "completed_steps": 1,
+   "label": "step2",
+   "name": "native_call_begin",
+   "resident": false,
+   "t": 1.287
+  },
+  {
+   "label": "step2",
+   "name": "native_call_end",
+   "t": 1.316
+  },
+  {
+   "label": "step2",
+   "loss": 5.547558784484863,
+   "name": "hashed",
+   "step": 2,
+   "t": 1.324
+  }
+ ],
+ "fixture": {
+  "n_total": 14080,
+  "profile": "mojolearn.byte-lm.b1-l5-d16-h2-kv1-hd8-ff24-v257-blocks3.fp32.v3",
+  "shape": {
+   "batch": 1,
+   "d_model": 16,
+   "head_dim": 8,
+   "intermediate": 24,
+   "length": 5,
+   "n_heads": 2,
+   "n_kv": 1,
+   "n_layers": 3,
+   "vocab_size": 257
+  },
+  "source": "numpy.default_rng(19) standard_normal*0.02 then integers"
+ },
+ "hashes": {
+  "step1": {
+   "flat_gradients": {
+    "dtype": "<f4",
+    "nbytes": 56320,
+    "sha256": "59ee565645507db79d7f0d260a9b63781a389560b6ef208568e9bb29b69ada5b",
+    "shape": [
+     14080
+    ]
+   },
+   "loss": {
+    "dtype": "<f4",
+    "nbytes": 4,
+    "sha256": "2e835026b33d1c82bfc4d98d72916e8170cb50e85edb43a08aa41e34e9737c72",
+    "shape": [],
+    "value": 5.548226833343506
+   },
+   "state.completed_steps": {
+    "value": 1
+   },
+   "state.flags": {
+    "dtype": "<i4",
+    "nbytes": 116,
+    "sha256": "5b517952cbe9c4c147bc3f3434f9d82409e76d09ea58905aefe7fb5415912d9a",
+    "shape": [
+     29
+    ]
+   },
+   "state.m": {
+    "dtype": "<f4",
+    "nbytes": 56320,
+    "sha256": "0c1b2b285f4c2421009e1ac1382f6af5f87496498b5727243e9db799962a907a",
+    "shape": [
+     14080
+    ]
+   },
+   "state.parameters": {
+    "dtype": "<f4",
+    "nbytes": 56320,
+    "sha256": "5f07d63108aab735d66bdae38d508f387726ca447f70198154d0e87e513b6fe4",
+    "shape": [
+     14080
+    ]
+   },
+   "state.v": {
+    "dtype": "<f4",
+    "nbytes": 56320,
+    "sha256": "c33462c1b5d15bcde76a0875757b935117d51b2cd99678be2a87047a897c5660",
+    "shape": [
+     14080
+    ]
+   },
+   "step": {
+    "value": 1
+   }
+  },
+  "step2": {
+   "flat_gradients": {
+    "dtype": "<f4",
+    "nbytes": 56320,
+    "sha256": "d3d0381dbe468c16b3d50fa7bf91b8b036f8aa60e5ad48422db241621f031b6e",
+    "shape": [
+     14080
+    ]
+   },
+   "loss": {
+    "dtype": "<f4",
+    "nbytes": 4,
+    "sha256": "8e76817cafe5ebddbaafe019c96e99b188db54ccb6a68c7a209f249331e7b910",
+    "shape": [],
+    "value": 5.547558784484863
+   },
+   "state.completed_steps": {
+    "value": 2
+   },
+   "state.flags": {
+    "dtype": "<i4",
+    "nbytes": 116,
+    "sha256": "5b517952cbe9c4c147bc3f3434f9d82409e76d09ea58905aefe7fb5415912d9a",
+    "shape": [
+     29
+    ]
+   },
+   "state.m": {
+    "dtype": "<f4",
+    "nbytes": 56320,
+    "sha256": "b3f519c61219f3cf0d9584e8dac11d746d578eac7633036c98ffd59ab1ad3941",
+    "shape": [
+     14080
+    ]
+   },
+   "state.parameters": {
+    "dtype": "<f4",
+    "nbytes": 56320,
+    "sha256": "47b4fddd6309db219506dc9b7d21df887026cfff0f0ea847eaaf2c0e9fcd3904",
+    "shape": [
+     14080
+    ]
+   },
+   "state.v": {
+    "dtype": "<f4",
+    "nbytes": 56320,
+    "sha256": "b78812e28d5f70cdc4aff5c866877a1a96b50af77f63ded0242485274a744b4a",
+    "shape": [
+     14080
+    ]
+   },
+   "step": {
+    "value": 2
+   }
+  }
+ },
+ "numeric_mode": "identical",
+ "pid": 1798,
+ "python": "3.14.7",
+ "schema": "byte-lm-lifetime-diag.record.v1",
+ "status": "passed"
+}

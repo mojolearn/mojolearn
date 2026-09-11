@@ -1,0 +1,29 @@
+{
+  "schema": "mojolearn.lm-step-memory-probe.v1",
+  "shape": {
+    "batch": 1,
+    "length": 2048,
+    "d_model": 384,
+    "n_heads": 6,
+    "n_kv": 6,
+    "head_dim": 64,
+    "intermediate": 1024,
+    "n_layers": 8,
+    "vocab_size": 8192
+  },
+  "parameters": 20453376,
+  "steps_completed": 3,
+  "first_call_seconds": 10.31644388847053,
+  "steady_step_seconds": [
+    5.811120351776481,
+    5.256561892107129
+  ],
+  "steady_median_seconds": 5.533841121941805,
+  "steady_median_tokens_per_second": 370.08651944842325,
+  "peak_device_process_bytes": "unavailable",
+  "peak_device_wide_bytes": 4637851648,
+  "process_ru_maxrss_bytes": 3963658240,
+  "budget_seconds": 300.0,
+  "limited": false,
+  "qualification": "complete-step probe; device peak from a polled vendor tool; host RSS is a separate boundary; no opponent, no default gate, no target-scale qualification claim"
+}

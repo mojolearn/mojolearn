@@ -1,0 +1,39 @@
+2436 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x119900000000, nodemask=1)
+[stateless_x2_launch_blocking]   0.064s imported {"mojolearn_file": "/root/mojolearn/python/mojolearn/__init__.py", "version": "0.8.0"}
+Traceback (most recent call last):
+  File "/root/mojolearn/python/mojolearn/_buffer.py", line 678, in _native
+    fn = getattr(_backend.binding("_mojolearn", mode="identical"), key)
+                 ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_backend.py", line 1074, in binding
+    module = getattr(selected, name)
+  File "/root/mojolearn/python/mojolearn/_backend.py", line 948, in __getattr__
+    raise ImportError(
+    ...<5 lines>...
+    )
+ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn.so, which is not built. Build it with
+    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build.sh
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/byte_lm_lifetime_diag.py", line 427, in run_child
+    witness = _trainer(probe[0], probe[1], False).run_metadata()
+              ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/byte_lm_lifetime_diag.py", line 118, in _trainer
+    return LanguageModelTrainer(parameters, shape=shape, resident=resident,
+                                data_schedule={'dataset': tag, 'deviation': 2494})
+  File "/root/mojolearn/python/mojolearn/_byte_lm_impl.py", line 326, in __init__
+    flat = _parameters(parameters, shape)
+  File "/root/mojolearn/python/mojolearn/_byte_lm_impl.py", line 171, in _parameters
+    return _array(value, (shape.n_total,), 'parameters')
+  File "/root/mojolearn/python/mojolearn/_byte_lm_impl.py", line 154, in _array
+    if dtype == '<f4' and not all_finite(arr):
+                              ~~~~~~~~~~^^^^^
+  File "/root/mojolearn/python/mojolearn/_buffer.py", line 646, in all_finite
+    fn = _native("all_finite_f32" if arr.dtype == "<f4" else "all_finite_f64")
+  File "/root/mojolearn/python/mojolearn/_buffer.py", line 680, in _native
+    raise ImportError(
+    ...<4 lines>...
+    ) from exc
+ImportError: mojolearn: the base binding has no `all_finite_f32`; the compiled _mojolearn extension is older than this Python layer, or the identical set is not built. Rebuild it with
+    MOJOLEARN_NUMERIC_MODE=identical sh bindings/build.sh

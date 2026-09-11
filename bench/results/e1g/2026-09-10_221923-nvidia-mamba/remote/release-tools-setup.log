@@ -1,0 +1,7 @@
+Collecting patchelf==0.17.2.4
+  Downloading patchelf-0.17.2.4-py3-none-manylinux1_x86_64.manylinux_2_5_x86_64.musllinux_1_1_x86_64.whl.metadata (3.7 kB)
+Downloading patchelf-0.17.2.4-py3-none-manylinux1_x86_64.manylinux_2_5_x86_64.musllinux_1_1_x86_64.whl (482 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 482.8/482.8 kB 8.8 MB/s eta 0:00:00
+Installing collected packages: patchelf
+Successfully installed patchelf-0.17.2.4
+{"guard": "nvidia-root-serial-v1", "reason": null, "cpu_affinity": "0,1", "thread_limit": 2, "returncode": 0}

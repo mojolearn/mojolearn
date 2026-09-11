@@ -1,0 +1,26 @@
+{
+  "wheel": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/releases/2026-09-10-linux-0.8.0/dist/mojolearn-0.8.0-py3-none-linux_x86_64.whl",
+  "compressed_bytes": 51912507,
+  "compressed_mb": 51.91,
+  "pypi_limit_bytes": 104857600,
+  "over_limit": false,
+  "libs_layout": "shared mojolearn/.libs",
+  "sets": {
+    "cuda/sm_89": {
+      "extensions_bytes": 87182319,
+      "runtime_libs_bytes": 3200416,
+      "driver_libs_not_staged": []
+    },
+    "cuda/sm_90a": {
+      "extensions_bytes": 87186415,
+      "runtime_libs_bytes": 3200416,
+      "driver_libs_not_staged": []
+    },
+    "hip/gfx942": {
+      "extensions_bytes": 54287343,
+      "runtime_libs_bytes": 3200416,
+      "driver_libs_not_staged": []
+    }
+  },
+  "tag": "py3-none-linux_x86_64"
+}

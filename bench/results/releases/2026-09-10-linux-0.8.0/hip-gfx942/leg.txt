@@ -1,0 +1,21 @@
+vendor=amd
+arch=hip/gfx942
+image=188571990
+size=gpu-mi325x1-256gb
+region=tor1
+commit=9392320e6c67210c45681063c580fac2df9351c9
+archive_sha256=20d6c009ac5b19a30714d6a6c40eb752738439504c3013fd5958418bf6b3834b
+archive_bytes=9308553
+deadman_seconds=3600
+fetch_reserve=900
+started=2026-09-11T02:20:32Z
+droplet=599513675
+created=2026-09-11T02:20:33Z
+ip=143.110.212.35
+ON_DROPLET_DEADMAN_ARMED
+work_seconds=2400
+build_exit=0
+admission=REFUSED expected 46 extensions
+destroyed=2026-09-11T02:34:25Z verified_http_404
+finished=2026-09-11T02:34:25Z rc=0
+admission=BUILT_NOT_INSTALLED hip/gfx942 23 extensions, fetched bytes match proof (re-run 22:40 EDT with tools/do_release061_leg.sh admission count derived from verify_linux_surface_qualification; the 46 literal refused a correct build)

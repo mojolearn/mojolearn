@@ -1,0 +1,9 @@
+status: passed
+timing large k10: baseline median 30.473678 ms (min 30.404552), uniform median 30.406149 ms (min 30.336920)
+timing large k15: baseline median 35.637957 ms (min 35.596838), uniform median 35.628849 ms (min 35.582992)
+timing dyadic k10: baseline median 30.544711 ms (min 30.443516), uniform median 30.451085 ms (min 30.378270)
+  cached-reference ratios (NOT a paired opponent): baseline 2.987x, uniform 2.978x
+timing dyadic k15: baseline median 35.658507 ms (min 35.606697), uniform median 35.656737 ms (min 35.625503)
+  cached-reference ratios (NOT a paired opponent): baseline 3.297x, uniform 3.296x
+build-binding-trial	0	71s
+gate	0	11s

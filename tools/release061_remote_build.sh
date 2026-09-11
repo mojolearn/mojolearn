@@ -34,16 +34,23 @@ export MOJOLEARN_GPU_ARCHS="$arch" MOJOLEARN_COMMIT="$commit"
 export MOJOLEARN_TARGET_COLUMN="$column" MOJOLEARN_LINUX_CPU=x86-64-v3
 unset MOJOLEARN_GPU_ARCH MOJOLEARN_VENDOR PYTHONHOME PYTHONPATH
 export PYTHONNOUSERSITE=1 PYTHONUNBUFFERED=1
-export MOJOLEARN_BUILD_JOBS=1 MOJOLEARN_COMPILE_JOBS=2 MAX_JOBS=2 CMAKE_BUILD_PARALLEL_LEVEL=2
+# DEVIATION 2501: the 23 extension builds run MOJOLEARN_BUILD_JOBS at a time
+# (default 4), each still capped at two compiler workers and one BLAS thread;
+# the campaign's affinity is 2 x jobs cores and only the build step's guard
+# is widened to it. Every other step keeps the serial two-core cap.
+BUILD_JOBS=${MOJOLEARN_BUILD_JOBS:-4}
+[[ "$BUILD_JOBS" =~ ^[1-9][0-9]?$ && "$BUILD_JOBS" -le 16 ]] || { echo 'MOJOLEARN_BUILD_JOBS must be 1..16' >&2; exit 2; }
+BUILD_CORES=$((2 * BUILD_JOBS))
+export MOJOLEARN_BUILD_JOBS=$BUILD_JOBS MOJOLEARN_COMPILE_JOBS=2 MAX_JOBS=2 CMAKE_BUILD_PARALLEL_LEVEL=2
 export MOJOLEARN_CPU_THREADS=2 CARGO_BUILD_JOBS=2 RAYON_NUM_THREADS=2
 export OMP_NUM_THREADS=1 OMP_THREAD_LIMIT=1 OMP_MAX_ACTIVE_LEVELS=1
 export OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 BLIS_NUM_THREADS=1
 export NUMEXPR_NUM_THREADS=1 NUMEXPR_MAX_THREADS=1 VECLIB_MAXIMUM_THREADS=1
 export MAKEFLAGS=-j2 MFLAGS=-j2 GNUMAKEFLAGS=
-cores=$("$PY" -c 'import os; print(",".join(map(str, sorted(os.sched_getaffinity(0))[:2])))')
+cores=$("$PY" -c 'import os, sys; print(",".join(map(str, sorted(os.sched_getaffinity(0))[:int(sys.argv[1])])))' "$BUILD_CORES")
 [[ -n "$cores" ]] || exit 2
 taskset -pc "$cores" $$
-"$PY" -c 'import os; assert 1 <= len(os.sched_getaffinity(0)) <= 2'
+"$PY" -c 'import os, sys; assert 1 <= len(os.sched_getaffinity(0)) <= int(sys.argv[1])' "$BUILD_CORES"
 umask 077
 mkdir "$OUT"
 deadline=$(($(date +%s) + seconds - 30))
@@ -66,7 +73,7 @@ trap 'exit 130' INT
 : > "$OUT/results.tsv"
 cp "$ROOT/tools/release061_remote_build.sh" "$OUT/campaign-source.sh"
 printf '%s\n' "vendor=$vendor" "architecture=$arch" "source_commit=$commit" \
-    "cpu_affinity=$cores" "work_seconds=$seconds" 'rss_gib=12' 'pixi_environment=default' \
+    "cpu_affinity=$cores" "build_jobs=$BUILD_JOBS" "build_cores=$BUILD_CORES" "work_seconds=$seconds" 'rss_gib=12' 'pixi_environment=default' \
     "kernel_column=$column" 'linux_cpu=x86-64-v3' "patchelf=$(command -v patchelf)" \
     'scope=one architecture full46 build; byte LM IDENTICAL only; no installed wheel or numerical admission' > "$OUT/campaign.txt"
 run() {
@@ -78,9 +85,12 @@ run() {
         return 124
     fi
     ((cap <= remaining)) || cap=$remaining
-    printf '%q ' "$PY" "$guard" --seconds "$cap" --rss-gib 12 -- "$@" > "$OUT/$name.command.txt"
+    # The build step alone runs on BUILD_CORES; every other job stays on two.
+    local guard_cores=2
+    [[ "$name" = full46-build ]] && guard_cores=$BUILD_CORES
+    printf '%q ' "$PY" "$guard" --seconds "$cap" --rss-gib 12 --cores "$guard_cores" -- "$@" > "$OUT/$name.command.txt"
     printf '\n' >> "$OUT/$name.command.txt"
-    "$PY" "$guard" --seconds "$cap" --rss-gib 12 -- "$@" > "$OUT/$name.log" 2>&1 &
+    "$PY" "$guard" --seconds "$cap" --rss-gib 12 --cores "$guard_cores" -- "$@" > "$OUT/$name.log" 2>&1 &
     active_guard=$!
     status=0
     wait "$active_guard" || status=$?
@@ -142,7 +152,15 @@ if (proof.get('complete') is not True or proof.get('build_exit') != 0
         or proof.get('source_inventory') != before['source_inventory']
         or proof.get('source_sha256') != before['source_sha256']):
     raise SystemExit('Build proof differs from preflight or is incomplete')
-prefix = 'mojolearn/' + before['vendor'] + '/' + before['device_architecture'] + '/'
+# DEVIATION 2293, postflight side: the device reports sm_90 and the build is
+# sm_90a; the same suffix rule the preflight applies holds here, cuda only.
+# Until 2026-09-10 this check demanded string equality and marked every
+# green H100 leg (0.7.0 included) build-proof-check 1.
+built = {p.split('/')[2] for p in proof.get('extensions', {})}
+witness = before['device_architecture']
+if len(built) != 1 or not (built == {witness} or (before['vendor'] == 'cuda' and built == {witness + 'a'})):
+    raise SystemExit('Built architecture differs from physical GPU witness: ' + repr((sorted(built), witness)))
+prefix = 'mojolearn/' + before['vendor'] + '/' + next(iter(built)) + '/'
 if len(proof.get('extensions', {})) != expected_count or not all(p.startswith(prefix) for p in proof['extensions']):
     raise SystemExit('Built architecture differs from physical GPU witness')
 byte_members = {p for p in proof['extensions'] if p.endswith('/_mojolearn_byte_lm.so')}

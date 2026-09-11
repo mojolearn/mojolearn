@@ -1,0 +1,64 @@
+pid 2719's current affinity list: 0,1
+pid 2719's new affinity list: 0,1
+pid 2730's current affinity list: 0,1
+pid 2730's new affinity list: 0,1
+[01:44:36 build_sets] repo /root/mojolearn, dest /root/rel061-build/build, tiers: fast deterministic identical, jobs: 1
+[01:44:36 build_sets] pixi env: default
+[01:52:33 build_sets] FINDING: identical bindings/build_preprocessing.sh did not build; first error:
+[01:56:08 build_sets] builds finished in 692s (rc=1)
+[01:56:09 build_sets] vendor read-back per binary:
+    fast _mojolearn_gbdt hip
+    fast _mojolearn_rf hip
+    fast _mojolearn_trees hip
+    deterministic _mojolearn_gbdt hip
+    deterministic _mojolearn_rf hip
+    deterministic _mojolearn_trees hip
+    identical _mojolearn_gbdt hip
+    identical _mojolearn_rf hip
+    identical _mojolearn_trees hip
+    identical _mojolearn hip
+    identical _mojolearn_estimators hip
+    identical _mojolearn_svm hip
+    identical _mojolearn_solver hip
+    identical _mojolearn_metrics hip
+    identical _mojolearn_preprocessing MISSING
+    identical _mojolearn_tsa hip
+    identical _mojolearn_linalg hip
+    identical _mojolearn_arima hip
+    identical _mojolearn_gp hip
+    identical _mojolearn_training hip
+    identical _mojolearn_mamba hip
+    identical _mojolearn_transformer hip
+    identical _mojolearn_byte_lm hip
+[01:56:09 build_sets] GPU architectures embedded, per binary:
+         22 gfx942
+          1 MISSING
+[01:56:09 build_sets] architecture set: gfx942 
+[01:56:09 build_sets] architecture: gfx942 (requested: gfx942)
+[01:56:09 build_sets] vendor: hip
+[01:56:24 build_sets] CPU ISA baseline: clean at x86-64-v3 (22 binaries)
+[01:56:24 build_sets] patchelf: /root/release-tools/bin/patchelf
+[01:56:24 build_sets] pixi env lib: /root/mojolearn/.pixi/envs/default/lib
+  closure verified: 4 libraries, nothing unresolved
+  staged 4: libKGENCompilerRTShared.so, libAsyncRTMojoBindings.so, libMSupportGlobals.so, libAsyncRTRuntimeGlobals.so
+  driver libraries left to the box: none
+  extensions 54.0 MB, runtime libraries 3.2 MB, uncompressed set 57.2 MB
+vendor=hip
+arch=gfx942
+gpu_archs_requested=gfx942
+build_rc=1 stage_rc=0
+build_seconds=709
+set_fast_count=3
+set_fast_bytes=9102355
+set_deterministic_count=3
+set_deterministic_bytes=9102379
+set_identical_count=16
+set_identical_bytes=35752280
+runtime_libs_bytes=3200416
+runtime_libs=libAsyncRTMojoBindings.so libAsyncRTRuntimeGlobals.so libKGENCompilerRTShared.so libMSupportGlobals.so 
+driver_libs_not_staged=
+set_tar_gz_bytes=14634518
+Traceback (most recent call last):
+  File "<stdin>", line 23, in <module>
+AssertionError: Build/staging failed; retained provenance is not admissible
+{"guard": "amd-root-serial-v1", "reason": null, "cpu_affinity": "0,1", "thread_limit": 2, "device_sysfs": "/sys/devices/pci0000:80/0000:80:00.0/0000:81:00.0/0000:82:00.0/0000:83:00.0", "vram_total_bytes": 274542362624, "telemetry": {"initial_vram_bytes": 299687936, "peak_vram_bytes": 299687936, "last_vram_bytes": 299687936, "initial_rss_bytes": 3440640, "peak_rss_bytes": 2042585088, "last_rss_bytes": 21086208, "initial_host_available_bytes": 162252607488, "last_host_available_bytes": 162563457024, "samples": 706, "last_elapsed_seconds": 709.726935169, "crossing_sample": null}, "returncode": 1}

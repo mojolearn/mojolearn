@@ -1,0 +1,10 @@
+1068 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x12ae40000000, nodemask=1)
+1068 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1ab6c0000000, nodemask=2)
+[stateless_x2]   0.063s imported {"mojolearn_file": "/root/mojolearn/python/mojolearn/__init__.py", "version": "0.8.0"}
+[stateless_x2]   0.229s binding {"sha256": "9a81c0300ae8", "vendor": "cuda"}
+[stateless_x2]   0.230s native_call_begin {"completed_steps": 0, "label": "step1", "resident": false}
+[stateless_x2]   1.174s native_call_end {"label": "step1"}
+[stateless_x2]   1.176s hashed {"label": "step1", "loss": 5.548226833343506, "step": 1}
+[stateless_x2]   1.176s native_call_begin {"completed_steps": 1, "label": "step2", "resident": false}
+[stateless_x2]   1.186s native_call_end {"label": "step2"}
+[stateless_x2]   1.186s hashed {"label": "step2", "loss": 5.547558784484863, "step": 2}

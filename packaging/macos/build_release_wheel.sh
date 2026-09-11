@@ -173,21 +173,39 @@ if [ "$PACKAGE_BYTE_LM" = 0 ]; then
     }
 fi
 
-for mode in $MODES; do
-    for script in $BUILD_SCRIPTS; do
-        echo "== $script ($mode)"
-        MOJOLEARN_NUMERIC_MODE=$mode MOJOLEARN_SKIP_BUILD_GATE=1 ./bindings/$script
+# DEVIATION 2501: the builds run MOJOLEARN_BUILD_JOBS at a time (default 4)
+# through xargs -P; each (mode, script) pair writes its own log, printed in
+# full when it finishes so the transcript reads as before. Every pair has its
+# own output directory and mktemp scratch, so the pairs are independent. The
+# identical tier is queued first because it holds the most scripts. Any
+# failure fails the build after the running pairs finish (xargs exits 123).
+BUILD_JOBS="${MOJOLEARN_BUILD_JOBS:-4}"
+case "$BUILD_JOBS" in ''|*[!0-9]*|0) echo 'MOJOLEARN_BUILD_JOBS must be 1..16' >&2; exit 2;; esac
+[ "$BUILD_JOBS" -le 16 ] || { echo 'MOJOLEARN_BUILD_JOBS must be 1..16' >&2; exit 2; }
+BUILD_LOGS=$(mktemp -d "${TMPDIR:-/tmp}/mojolearn-release-builds.XXXXXX")
+build_pairs() {
+    for mode in $MODES; do
+        [ "$mode" = identical ] || continue
+        for script in $BUILD_SCRIPTS; do printf '%s %s\n' "$mode" "$script"; done
+        for script in $IDENTICAL_ONLY_SCRIPTS; do printf '%s %s\n' "$mode" "$script"; done
+        if [ "$PACKAGE_BYTE_LM" = 1 ]; then printf '%s %s\n' "$mode" build_byte_lm.sh; fi
     done
-    if [ "$mode" = identical ]; then
-        for script in $IDENTICAL_ONLY_SCRIPTS; do
-            echo "== $script ($mode, identical-only lane)"
-            MOJOLEARN_NUMERIC_MODE=$mode MOJOLEARN_SKIP_BUILD_GATE=1 ./bindings/$script
-        done
-    fi
-    if [ "$PACKAGE_BYTE_LM" = 1 ] && [ "$mode" = identical ]; then
-        MOJOLEARN_NUMERIC_MODE=identical bash ./bindings/build_byte_lm.sh
-    fi
-done
+    for mode in $MODES; do
+        [ "$mode" = identical ] && continue
+        for script in $BUILD_SCRIPTS; do printf '%s %s\n' "$mode" "$script"; done
+    done
+}
+echo "== building $(build_pairs | wc -l | tr -d ' ') extensions, $BUILD_JOBS at a time (logs in $BUILD_LOGS)"
+build_pairs | xargs -P "$BUILD_JOBS" -n 2 sh -c '
+    logs=$1; mode=$2; script=$3; log="$logs/${mode}_${script%.sh}.log"
+    # The byte LM build keeps its own gate on, as it always did here.
+    skip=1; [ "$script" = build_byte_lm.sh ] && skip=
+    if MOJOLEARN_NUMERIC_MODE=$mode MOJOLEARN_SKIP_BUILD_GATE=$skip bash "./bindings/$script" > "$log" 2>&1; then
+        { echo "== $script ($mode) OK"; cat "$log"; }
+    else
+        { echo "== $script ($mode) FAILED"; cat "$log"; }
+        exit 1
+    fi' build_one_pair "$BUILD_LOGS" 2>&1 || { echo "== at least one extension failed to build (logs in $BUILD_LOGS)" >&2; exit 1; }
 
 # THE FILES THE REST OF THIS SCRIPT GATES: EXT_NAMES x MODES (three tree
 # bindings x three tiers = nine) plus IDENTICAL_ONLY_NAMES in identical/

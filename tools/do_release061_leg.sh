@@ -405,6 +405,7 @@ if [ "$LEG_MODE" = qualify ]; then
 else
 $SSH "cd /root/mojolearn && nohup bash -c 'export PATH=/root/release-tools/bin:/root/.pixi/bin:\$PATH; \
   MOJOLEARN_COMMIT=$COMMIT MOJOLEARN_PYTHON=$REMOTE_PY MOJOLEARN_RELEASE_BUILD_SECONDS=$WORK_SECONDS \
+  MOJOLEARN_BUILD_JOBS=${MOJOLEARN_BUILD_JOBS:-4} \
   timeout -k 20 $((WORK_SECONDS + 40)) bash tools/release061_remote_build.sh $LEG_VENDOR $LEG_ARCH $REMOTE_OUT > $REMOTE_LOG 2>&1; \
   echo \$? > /root/rel061.exit' > /dev/null 2>&1 < /dev/null &" || { log "could not start the build"; exit 9; }
 fi
@@ -455,7 +456,7 @@ except Exception as exc:
     print('qualify_error=%s' % exc)
 PYQ
 else
-python3 - "$OUT/release-build" "$COMMIT" "$OUT/source_inventory_local.json" <<'PY' 2>&1 | tee -a "$STATE"
+python3 - "$OUT/release-build" "$COMMIT" "$OUT/source_inventory_local.json" "$REPO/tools" <<'PY' 2>&1 | tee -a "$STATE"
 import hashlib, json, pathlib, sys
 out, commit = pathlib.Path(sys.argv[1]), sys.argv[2]
 local = json.loads(pathlib.Path(sys.argv[3]).read_text())
@@ -466,11 +467,15 @@ try:
     assert proof.get('complete') is True and proof.get('build_exit') == 0 and proof.get('source_commit') == commit, 'proof incomplete'
     assert pre.get('vendor') == 'hip' and pre.get('device_architecture') == 'gfx942', 'physical witness is not hip/gfx942'
     assert pre['source_inventory'] == proof['source_inventory'] == local, 'local/preflight/proof inventories differ'
-    assert len(proof['extensions']) == 46, 'expected 46 extensions'
+    # DEVIATION 2490: the count is the verifier's (23 with the byte LM), never a literal here.
+    sys.path.insert(0, sys.argv[4])
+    from verify_linux_surface_qualification import MODES, expected_bindings
+    expected = sum(len(expected_bindings(mode, True)) for mode in MODES)
+    assert len(proof['extensions']) == expected, 'expected %d extensions, proof has %d' % (expected, len(proof['extensions']))
     for name, digest in proof['extensions'].items():
         assert name.startswith('mojolearn/hip/gfx942/'), 'wrong architecture path ' + name
         assert hashlib.sha256((out / 'build/sets' / name[len('mojolearn/'):]).read_bytes()).hexdigest() == digest, 'fetched byte mismatch ' + name
-    print('admission=BUILT_NOT_INSTALLED hip/gfx942 46 extensions, fetched bytes match proof')
+    print('admission=BUILT_NOT_INSTALLED hip/gfx942 %d extensions, fetched bytes match proof' % expected)
 except Exception as exc:
     print('admission=REFUSED ' + str(exc))
 PY

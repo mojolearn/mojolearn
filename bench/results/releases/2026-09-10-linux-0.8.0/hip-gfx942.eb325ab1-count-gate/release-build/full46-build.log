@@ -1,0 +1,62 @@
+pid 2722's current affinity list: 0,1
+pid 2722's new affinity list: 0,1
+pid 2733's current affinity list: 0,1
+pid 2733's new affinity list: 0,1
+[02:00:56 build_sets] repo /root/mojolearn, dest /root/rel061-build/build, tiers: fast deterministic identical, jobs: 1
+[02:00:56 build_sets] pixi env: default
+[02:12:23 build_sets] builds finished in 687s (rc=0)
+[02:12:25 build_sets] vendor read-back per binary:
+    fast _mojolearn_gbdt hip
+    fast _mojolearn_rf hip
+    fast _mojolearn_trees hip
+    deterministic _mojolearn_gbdt hip
+    deterministic _mojolearn_rf hip
+    deterministic _mojolearn_trees hip
+    identical _mojolearn_gbdt hip
+    identical _mojolearn_rf hip
+    identical _mojolearn_trees hip
+    identical _mojolearn hip
+    identical _mojolearn_estimators hip
+    identical _mojolearn_svm hip
+    identical _mojolearn_solver hip
+    identical _mojolearn_metrics hip
+    identical _mojolearn_preprocessing hip
+    identical _mojolearn_tsa hip
+    identical _mojolearn_linalg hip
+    identical _mojolearn_arima hip
+    identical _mojolearn_gp hip
+    identical _mojolearn_training hip
+    identical _mojolearn_mamba hip
+    identical _mojolearn_transformer hip
+    identical _mojolearn_byte_lm hip
+[02:12:25 build_sets] GPU architectures embedded, per binary:
+         23 gfx942
+[02:12:25 build_sets] architecture set: gfx942 
+[02:12:25 build_sets] architecture: gfx942 (requested: gfx942)
+[02:12:25 build_sets] vendor: hip
+[02:12:40 build_sets] CPU ISA baseline: clean at x86-64-v3 (23 binaries)
+[02:12:40 build_sets] patchelf: /root/release-tools/bin/patchelf
+[02:12:40 build_sets] pixi env lib: /root/mojolearn/.pixi/envs/default/lib
+  closure verified: 4 libraries, nothing unresolved
+  staged 4: libKGENCompilerRTShared.so, libAsyncRTMojoBindings.so, libMSupportGlobals.so, libAsyncRTRuntimeGlobals.so
+  driver libraries left to the box: none
+  extensions 54.3 MB, runtime libraries 3.2 MB, uncompressed set 57.5 MB
+vendor=hip
+arch=gfx942
+gpu_archs_requested=gfx942
+build_rc=0 stage_rc=0
+build_seconds=705
+set_fast_count=3
+set_fast_bytes=9102355
+set_deterministic_count=3
+set_deterministic_bytes=9102379
+set_identical_count=17
+set_identical_bytes=36082609
+runtime_libs_bytes=3200416
+runtime_libs=libAsyncRTMojoBindings.so libAsyncRTRuntimeGlobals.so libKGENCompilerRTShared.so libMSupportGlobals.so 
+driver_libs_not_staged=
+set_tar_gz_bytes=14707343
+Traceback (most recent call last):
+  File "<stdin>", line 24, in <module>
+AssertionError: Incomplete build outputs
+{"guard": "amd-root-serial-v1", "reason": null, "cpu_affinity": "0,1", "thread_limit": 2, "device_sysfs": "/sys/devices/pci0000:80/0000:80:00.0/0000:81:00.0/0000:82:00.0/0000:83:00.0", "vram_total_bytes": 274542362624, "telemetry": {"initial_vram_bytes": 299687936, "peak_vram_bytes": 299687936, "last_vram_bytes": 299687936, "initial_rss_bytes": 3440640, "peak_rss_bytes": 2042630144, "last_rss_bytes": 29769728, "initial_host_available_bytes": 162367553536, "last_host_available_bytes": 162606211072, "samples": 702, "last_elapsed_seconds": 705.517879966, "crossing_sample": null}, "returncode": 1}

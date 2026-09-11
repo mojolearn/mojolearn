@@ -93,3 +93,7 @@ bench/results/**/*.tar.gz
 bench/results/**/*.tgz
 bench/results/**/*.fixture
 bench/results/**/remote/dump/
+
+# A release leg fetches the pod's patchelf venv beside its evidence; a
+# venv is a tool, not evidence (2026-09-10, five legs x 800 files).
+bench/results/e1g/*/remote/tools-venv/

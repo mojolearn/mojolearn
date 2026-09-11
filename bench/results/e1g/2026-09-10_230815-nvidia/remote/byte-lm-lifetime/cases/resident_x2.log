@@ -1,0 +1,13 @@
+1360 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x393f40000000, nodemask=2)
+[resident_x2]   0.107s imported {"mojolearn_file": "/root/mojolearn/python/mojolearn/__init__.py", "version": "0.8.0"}
+[resident_x2]   0.289s binding {"sha256": "9a81c0300ae8", "vendor": "cuda"}
+[resident_x2]   0.304s native_call_begin {"completed_steps": 0, "label": "step1", "resident": true}
+1360 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x115880000000, nodemask=1)
+[resident_x2]   1.319s native_call_end {"label": "step1"}
+[resident_x2]   1.322s hashed {"label": "step1", "loss": 5.548226833343506, "step": 1}
+[resident_x2]   1.322s native_call_begin {"completed_steps": 1, "label": "step2", "resident": true}
+[resident_x2]   1.329s native_call_end {"label": "step2"}
+[resident_x2]   1.330s hashed {"label": "step2", "loss": 5.547558784484863, "step": 2}
+[resident_x2]   1.330s native_call_begin {"action": "eval", "completed_steps": 2, "label": "eval_after_step2", "resident": true}
+[resident_x2]   1.334s native_call_end {"label": "eval_after_step2"}
+[resident_x2]   1.335s hashed {"label": "eval_after_step2", "loss": 5.5468902587890625}

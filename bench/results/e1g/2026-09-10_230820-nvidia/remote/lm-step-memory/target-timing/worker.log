@@ -1,0 +1,140 @@
+3639 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x735fc0000000, nodemask=1)
+{"event": "setup", "schema": "mojolearn.lm-step-memory-probe.v1", "shape": {"batch": 1, "length": 2048, "d_model": 768, "n_heads": 12, "n_kv": 12, "head_dim": 64, "intermediate": 2048, "n_layers": 12, "vocab_size": 50257}, "profile": "mojolearn.byte-lm.b1-l2048-d768-h12-kv12-hd64-ff2048-v50257-blocks12.fp32.v3", "parameters": 162147840, "n_tensors": 110, "tokens_per_step": 2048, "resident": true, "seed": 93261, "budget_seconds": 300.0, "attention_path_requested": null, "numeric_mode_env": "identical", "runtime": {"binding_file": "/root/mojolearn/python/mojolearn/identical/_mojolearn_byte_lm.so", "binding_sha256": "84ea03d535a72245132520ed96f8905947b73d01d7339e0e18466cc462d41889", "native_numeric_mode": 1, "native_profile": "mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1", "native_vendor": "cuda", "source_scope": "available direct source files; binding SHA identifies the compiled artifact", "source_sha256": {"bindings/_mojolearn_byte_lm.mojo": "b1091854dc2ef562b22f8e68c45c6737b555ff4e618d7b51b9c360f0e3eff2ca", "loaded_python_wrapper": "2575ce9d6595bf75eaa6a4c296dccdc23cce762c12596ecc4b94b1a335eedace", "python/mojolearn/_byte_lm_config.py": "440ca11e33cfed741c8a812a8dac74ad4e938ab8e16f84ed2af5b61d3fbe56b8", "python/mojolearn/_byte_lm_impl.py": "2575ce9d6595bf75eaa6a4c296dccdc23cce762c12596ecc4b94b1a335eedace", "python/mojolearn/language_model.py": "90a5ab496af2b82ba1dd98e14dc442d4a39b8f1663cd1fe49e411fb886314e3f", "training/byte_lm.mojo": "5fe86848d62a90cdac990fc2484e7a137ab481c6fb8d125c2d251391f012e41b", "training/byte_lm_config.mojo": "a620c17cff6cbe5f96097609105acf774a732b72aa118d342bfbbe5e084d8606"}, "schema": "small-byte-lm.run-metadata.v1", "qualification": "authored/unqualified", "profile": "mojolearn.byte-lm.b1-l2048-d768-h12-kv12-hd64-ff2048-v50257-blocks12.fp32.v3", "device_state_lifetime": "resident", "config": {"lr": 0.0010000000474974513, "beta1": 0.8999999761581421, "beta2": 0.9990000128746033, "eps": 9.99999993922529e-09, "weight_decay": 0.009999999776482582, "kind": 2, "momentum": 0.0, "dampening": 0.0, "nesterov": false, "max_norm": 0.0}, "data_schedule": {"batches": "synthetic uniform token ids, no corpus", "fixture": "lm step memory probe", "seed": 93261}, "completed_steps": 0, "next_batch_index": 0}, "initial_parameters_sha256": "0e36d8d036d8c4cf9704babd096061006e48071187c793c6ee471e05b449572e", "host_before_first_call": {"vm_rss_bytes": 2650775552, "vm_hwm_bytes": 3296534528, "ru_maxrss_bytes": 3296534528, "boundary": "process host memory (Python + native + pinned staging); not device memory"}, "device_tool": "nvidia-smi", "qualification": "complete-step probe at the named shape; not an opponent ratio, not a default gate", "t": 1789096688.0272772}
+{"event": "step_start", "step": 1, "first_call_includes_setup": true, "ids_sha256": "4218de35e9a3053104806cf4864831cbf1246da1e11a666e6cf38fc2eefe393b", "t": 1789096688.0277472}
+3639 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x736000000000, nodemask=1)
+3639 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x736040000000, nodemask=1)
+3639 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x736080000000, nodemask=1)
+3639 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7360c0000000, nodemask=1)
+3639 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x736100000000, nodemask=1)
+3639 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x736140000000, nodemask=1)
+3639 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x736180000000, nodemask=1)
+3639 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7361c0000000, nodemask=1)
+3639 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x736200000000, nodemask=1)
+3639 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x736240000000, nodemask=1)
+3639 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x736280000000, nodemask=1)
+3639 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7362c0000000, nodemask=1)
+3639 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x736300000000, nodemask=1)
+3639 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x736340000000, nodemask=1)
+{"event": "step_end", "step": 1, "seconds": 48.70264454931021, "tokens_per_second": 42.051104595079046, "first_call_includes_setup": true, "timing_boundary": "public train_step call; native binding synchronizes the context before publishing outputs; includes host readbacks, validation and gradient copies", "loss": 10.947830200195312, "sha256": {"loss": "7755ecd0d22543abbe76932aa276e43572b7a3ceb8a561956df2a157f3a50c04", "gradients": "5055aee89c800d3463962f4e9deafa191a16ba024b66728b9e41546f82c9687b", "parameters": "e463f82574506fbaccae2b832d6fc735164c5583bb88d60c0e11c42129e4a441", "m": "7e61441b6bf58c983aa6c739adf8b96e62513288cb787f83b6c2fdb1ef7e567e", "v": "2b75b19c6a3accbe949859fe9afbce983b3a34b5a496c368ecdeae1062eeca48", "flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb"}, "completed_steps": 1, "host": {"vm_rss_bytes": 11475546112, "vm_hwm_bytes": 20578361344, "ru_maxrss_bytes": 20578361344, "boundary": "process host memory (Python + native + pinned staging); not device memory"}, "device": {"tool": "nvidia-smi", "peak_process_bytes": "unavailable", "peak_device_bytes": 12143558656, "device_total_bytes": 85520809984, "sample_interval_seconds": 0.2, "samples_total": 123, "errors_total": 0, "boundary": "vendor tool polled at the interval; peaks shorter than one interval are missed; device-wide used memory includes other processes; torch.cuda allocator statistics do not cover Mojo allocations and are not used"}, "t": 1789096741.2992904}
+{"event": "component_timing_step_start", "note": "MOJOLEARN_TRANSFORMER_TIMING=1; not a timing sample", "t": 1789096741.4752913}
+timing block.norm1 0.340184 ms
+timing attn.qkv_proj 0.840451 ms
+timing attn.rope_and_cache 0.132422 ms
+timing attn.core 6.837798 ms
+timing attn.o_proj 0.291842 ms
+timing block.attention_total 8.143855 ms
+timing block.mlp_and_residuals 2.218595 ms
+timing block.norm1 0.300162 ms
+timing attn.qkv_proj 0.826844 ms
+timing attn.rope_and_cache 0.108055 ms
+timing attn.core 6.852495 ms
+timing attn.o_proj 0.29203 ms
+timing block.attention_total 8.084384 ms
+timing block.mlp_and_residuals 2.20382 ms
+timing block.norm1 0.306524 ms
+timing attn.qkv_proj 0.825362 ms
+timing attn.rope_and_cache 0.112818 ms
+timing attn.core 6.838616 ms
+timing attn.o_proj 0.291823 ms
+timing block.attention_total 8.074487 ms
+timing block.mlp_and_residuals 2.19647 ms
+timing block.norm1 0.302931 ms
+timing attn.qkv_proj 0.826062 ms
+timing attn.rope_and_cache 0.110138 ms
+timing attn.core 7.009897 ms
+timing attn.o_proj 0.292456 ms
+timing block.attention_total 8.243641 ms
+timing block.mlp_and_residuals 2.209613 ms
+timing block.norm1 0.308664 ms
+timing attn.qkv_proj 0.822745 ms
+timing attn.rope_and_cache 0.106518 ms
+timing attn.core 6.846707 ms
+timing attn.o_proj 0.293121 ms
+timing block.attention_total 8.073699 ms
+timing block.mlp_and_residuals 2.201644 ms
+timing block.norm1 0.302207 ms
+timing attn.qkv_proj 0.82879 ms
+timing attn.rope_and_cache 0.104529 ms
+timing attn.core 6.856607 ms
+timing attn.o_proj 0.291759 ms
+timing block.attention_total 8.088143 ms
+timing block.mlp_and_residuals 2.197086 ms
+timing block.norm1 0.306506 ms
+timing attn.qkv_proj 0.826788 ms
+timing attn.rope_and_cache 0.106476 ms
+timing attn.core 6.748066 ms
+timing attn.o_proj 0.292009 ms
+timing block.attention_total 7.97816 ms
+timing block.mlp_and_residuals 2.199089 ms
+timing block.norm1 0.305292 ms
+timing attn.qkv_proj 0.825993 ms
+timing attn.rope_and_cache 0.107743 ms
+timing attn.core 6.876112 ms
+timing attn.o_proj 0.291698 ms
+timing block.attention_total 8.10724 ms
+timing block.mlp_and_residuals 2.204481 ms
+timing block.norm1 0.306037 ms
+timing attn.qkv_proj 0.828717 ms
+timing attn.rope_and_cache 0.106753 ms
+timing attn.core 6.829608 ms
+timing attn.o_proj 0.291328 ms
+timing block.attention_total 8.061126 ms
+timing block.mlp_and_residuals 2.19746 ms
+timing block.norm1 0.314323 ms
+timing attn.qkv_proj 0.824802 ms
+timing attn.rope_and_cache 0.106352 ms
+timing attn.core 6.754987 ms
+timing attn.o_proj 0.291982 ms
+timing block.attention_total 7.984055 ms
+timing block.mlp_and_residuals 2.19847 ms
+timing block.norm1 0.302386 ms
+timing attn.qkv_proj 0.825976 ms
+timing attn.rope_and_cache 0.105083 ms
+timing attn.core 6.78238 ms
+timing attn.o_proj 0.292355 ms
+timing block.attention_total 8.010509 ms
+timing block.mlp_and_residuals 2.200492 ms
+timing block.norm1 0.311776 ms
+timing attn.qkv_proj 0.827666 ms
+timing attn.rope_and_cache 0.108632 ms
+timing attn.core 6.862584 ms
+timing attn.o_proj 0.292265 ms
+timing block.attention_total 8.096536 ms
+timing block.mlp_and_residuals 2.192917 ms
+timing bwd.before_attention 0.003064 ms
+timing bwd.attention 21.859488 ms
+timing bwd.after_attention 3.398615 ms
+timing bwd.before_attention 0.002965 ms
+timing bwd.attention 21.906539 ms
+timing bwd.after_attention 3.375603 ms
+timing bwd.before_attention 0.002963 ms
+timing bwd.attention 21.80333 ms
+timing bwd.after_attention 3.384963 ms
+timing bwd.before_attention 0.003001 ms
+timing bwd.attention 21.796119 ms
+timing bwd.after_attention 3.380674 ms
+timing bwd.before_attention 0.003018 ms
+timing bwd.attention 21.843035 ms
+timing bwd.after_attention 3.383774 ms
+timing bwd.before_attention 0.003027 ms
+timing bwd.attention 21.787017 ms
+timing bwd.after_attention 3.378612 ms
+timing bwd.before_attention 0.002952 ms
+timing bwd.attention 21.778427 ms
+timing bwd.after_attention 3.378428 ms
+timing bwd.before_attention 0.002981 ms
+timing bwd.attention 21.920606 ms
+timing bwd.after_attention 3.376038 ms
+timing bwd.before_attention 0.002984 ms
+timing bwd.attention 21.742447 ms
+timing bwd.after_attention 3.376181 ms
+timing bwd.before_attention 0.002945 ms
+timing bwd.attention 21.768324 ms
+timing bwd.after_attention 3.382507 ms
+timing bwd.before_attention 0.002987 ms
+timing bwd.attention 21.784037 ms
+timing bwd.after_attention 3.38453 ms
+timing bwd.before_attention 0.002996 ms
+timing bwd.attention 21.836131 ms
+timing bwd.after_attention 3.375376 ms
+{"event": "component_timing_step_end", "t": 1789096785.3096294}

@@ -1,0 +1,8 @@
+[failure_recovery]   0.094s imported {"mojolearn_file": "/root/mojolearn/python/mojolearn/__init__.py", "version": "0.8.0"}
+[failure_recovery]   0.294s binding {"sha256": "9a81c0300ae8", "vendor": "cuda"}
+[failure_recovery]   0.295s native_call_begin {"completed_steps": 0, "label": "step1", "resident": false}
+[failure_recovery]   1.743s native_call_end {"label": "step1"}
+[failure_recovery]   1.744s hashed {"label": "step1", "loss": 5.548226833343506, "step": 1}
+[failure_recovery]   1.745s bad_shape_call_begin {"shape": [1, 5]}
+[failure_recovery]   1.746s bad_shape_refused {"error": "Byte-LM ids requires finite shape (1, 6)"}
+[failure_recovery]   1.746s native_call_begin {"completed_steps": 1, "label": "step2", "resident": false}

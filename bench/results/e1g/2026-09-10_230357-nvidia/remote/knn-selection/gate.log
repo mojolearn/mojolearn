@@ -1,0 +1,97 @@
+1252 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x512ec0000000, nodemask=1)
+1252 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x386b40000000, nodemask=2)
+[03:08:24] library: {'mojolearn_version': '0.8.0', 'numeric_mode_used': 'identical', 'vendor_used': 'cuda', 'binding_path': '/root/mojolearn/python/mojolearn/identical/_mojolearn.so', 'binding_sha256': 'f91faea9b56546b5a9ef44299a21d433561509f36532eacc612b0551857b0843'}
+[03:10:57] fixtures built in 152.9 s: large 400000x32/4000, dyadic 400000x32/4000, ties 131079x32/700, divergent_tail 397156x32/600
+[03:10:58] large k10 arm baseline: 1056.097 ms (untimed correctness call)
+[03:10:58] large k10 arm headbound: 33.074 ms (untimed correctness call)
+[03:10:58] large k10 arm default: 32.778 ms (untimed correctness call)
+[03:11:06] large k10: arms equal=True order=ok planted=ok oracle={'rows': 64, 'hard_mismatch_rows': [], 'ambiguous_rows': 0, 'distance_mismatch_rows': [101, 104, 107, 110, 111, 113, 114, 115]}
+[03:11:06] large k10 reach baseline: sabotage flipped 0 cells, restored=True
+[03:11:06] large k10 reach headbound: sabotage flipped 0 cells, restored=True
+[03:11:06] large k10 reach default: sabotage flipped 0 cells, restored=True
+[03:11:06] large k15 arm baseline: 38.670 ms (untimed correctness call)
+[03:11:06] large k15 arm headbound: 39.499 ms (untimed correctness call)
+[03:11:06] large k15 arm default: 38.927 ms (untimed correctness call)
+[03:11:13] large k15: arms equal=True order=ok planted=ok oracle={'rows': 64, 'hard_mismatch_rows': [], 'ambiguous_rows': 0, 'distance_mismatch_rows': [101, 104, 107, 110, 111, 113, 114, 115]}
+[03:11:13] large k15 reach baseline: sabotage flipped 0 cells, restored=True
+[03:11:13] large k15 reach headbound: sabotage flipped 0 cells, restored=True
+[03:11:13] large k15 reach default: sabotage flipped 0 cells, restored=True
+[03:11:13] dyadic k10 arm baseline: 32.977 ms (untimed correctness call)
+[03:11:13] dyadic k10 arm headbound: 32.748 ms (untimed correctness call)
+[03:11:13] dyadic k10 arm default: 32.557 ms (untimed correctness call)
+[03:11:15] dyadic k10: arms equal=True order=ok planted=ok oracle={'rows': 48, 'hard_mismatch_rows': [], 'ambiguous_rows': 0, 'distance_mismatch_rows': []}
+[03:11:15] dyadic k10 reach baseline: sabotage flipped 0 cells, restored=True
+[03:11:15] dyadic k10 reach headbound: sabotage flipped 0 cells, restored=True
+[03:11:15] dyadic k10 reach default: sabotage flipped 0 cells, restored=True
+[03:11:15] dyadic k15 arm baseline: 37.478 ms (untimed correctness call)
+[03:11:15] dyadic k15 arm headbound: 37.341 ms (untimed correctness call)
+[03:11:15] dyadic k15 arm default: 37.305 ms (untimed correctness call)
+[03:11:18] dyadic k15: arms equal=True order=ok planted=ok oracle={'rows': 48, 'hard_mismatch_rows': [], 'ambiguous_rows': 0, 'distance_mismatch_rows': []}
+[03:11:18] dyadic k15 reach baseline: sabotage flipped 0 cells, restored=True
+[03:11:18] dyadic k15 reach headbound: sabotage flipped 0 cells, restored=True
+[03:11:18] dyadic k15 reach default: sabotage flipped 0 cells, restored=True
+[03:11:18] ties k10 arm baseline: 4.676 ms (untimed correctness call)
+[03:11:18] ties k10 arm headbound: 3.960 ms (untimed correctness call)
+[03:11:18] ties k10 arm default: 3.298 ms (untimed correctness call)
+[03:11:23] ties k10: arms equal=True order=ok planted=ok oracle={'rows': 700, 'hard_mismatch_rows': [], 'ambiguous_rows': 1, 'distance_mismatch_rows': [0, 4, 9, 12, 13, 15, 17, 22, 24, 25, 27, 28, 34, 39, 40, 42, 43, 46, 47, 51, 55, 57, 59, 60, 62, 63, 64, 67, 68, 71, 72, 73, 75, 76, 78]}
+[03:11:23] ties k10 reach baseline: sabotage flipped 0 cells, restored=True
+[03:11:23] ties k10 reach headbound: sabotage flipped 0 cells, restored=True
+[03:11:23] ties k10 reach default: sabotage flipped 0 cells, restored=True
+[03:11:23] ties k15 arm baseline: 3.724 ms (untimed correctness call)
+[03:11:23] ties k15 arm headbound: 3.628 ms (untimed correctness call)
+[03:11:23] ties k15 arm default: 3.620 ms (untimed correctness call)
+[03:11:24] ties k15: arms equal=True order=ok planted=ok oracle={'rows': 700, 'hard_mismatch_rows': [], 'ambiguous_rows': 1, 'distance_mismatch_rows': [0, 4, 9, 12, 13, 15, 17, 22, 24, 25, 27, 28, 34, 39, 40, 42, 43, 46, 47, 51, 55, 57, 59, 60, 62, 63, 64, 67, 68, 71, 72, 73, 75, 76, 78]}
+[03:11:24] ties k15 reach baseline: sabotage flipped 0 cells, restored=True
+[03:11:24] ties k15 reach headbound: sabotage flipped 0 cells, restored=True
+[03:11:24] ties k15 reach default: sabotage flipped 0 cells, restored=True
+[03:11:24] divergent_tail k10 arm baseline: 10.428 ms (untimed correctness call)
+[03:11:24] divergent_tail k10 arm headbound: 10.198 ms (untimed correctness call)
+[03:11:24] divergent_tail k10 arm default: 10.075 ms (untimed correctness call)
+[03:11:24] divergent_tail k10: arms equal=True order=ok planted=ok oracle={'rows': 47, 'hard_mismatch_rows': [], 'ambiguous_rows': 0, 'distance_mismatch_rows': []}
+[03:11:24] divergent_tail k10 reach baseline: sabotage flipped 0 cells, restored=True
+[03:11:24] divergent_tail k10 reach headbound: sabotage flipped 0 cells, restored=True
+[03:11:24] divergent_tail k10 reach default: sabotage flipped 0 cells, restored=True
+[03:11:24] divergent_tail k15 arm baseline: 8.905 ms (untimed correctness call)
+[03:11:24] divergent_tail k15 arm headbound: 9.045 ms (untimed correctness call)
+[03:11:24] divergent_tail k15 arm default: 8.967 ms (untimed correctness call)
+[03:11:24] divergent_tail k15: arms equal=True order=ok planted=ok oracle={'rows': 45, 'hard_mismatch_rows': [], 'ambiguous_rows': 0, 'distance_mismatch_rows': []}
+[03:11:24] divergent_tail k15 reach baseline: sabotage flipped 0 cells, restored=True
+[03:11:24] divergent_tail k15 reach headbound: sabotage flipped 0 cells, restored=True
+[03:11:24] divergent_tail k15 reach default: sabotage flipped 0 cells, restored=True
+[03:11:24] large k10 warmup baseline: 33.607 ms
+[03:11:24] large k10 warmup headbound: 33.703 ms
+[03:11:24] large k10 order0 pair0: baseline 33.832 ms, headbound 33.464 ms, headbound/baseline 0.9891
+[03:11:25] large k10 order0 pair1: baseline 33.296 ms, headbound 33.254 ms, headbound/baseline 0.9987
+[03:11:25] large k10 order0 pair2: baseline 33.379 ms, headbound 33.928 ms, headbound/baseline 1.0165
+[03:11:25] large k10 order1 pair0: baseline 33.678 ms, headbound 33.645 ms, headbound/baseline 0.9990
+[03:11:25] large k10 order1 pair1: baseline 33.888 ms, headbound 33.889 ms, headbound/baseline 1.0000
+[03:11:25] large k10 order1 pair2: baseline 33.628 ms, headbound 33.291 ms, headbound/baseline 0.9900
+[03:11:25] large k10: baseline median 33.653 ms, headbound median 33.555 ms, paired median headbound/baseline 0.9989, 4/6 pairs favor headbound
+[03:11:25] large k15 warmup baseline: 38.637 ms
+[03:11:25] large k15 warmup headbound: 39.062 ms
+[03:11:25] large k15 order0 pair0: baseline 38.731 ms, headbound 38.916 ms, headbound/baseline 1.0048
+[03:11:25] large k15 order0 pair1: baseline 38.386 ms, headbound 38.545 ms, headbound/baseline 1.0042
+[03:11:25] large k15 order0 pair2: baseline 38.603 ms, headbound 38.593 ms, headbound/baseline 0.9997
+[03:11:25] large k15 order1 pair0: baseline 38.437 ms, headbound 38.559 ms, headbound/baseline 1.0032
+[03:11:25] large k15 order1 pair1: baseline 38.227 ms, headbound 38.443 ms, headbound/baseline 1.0056
+[03:11:25] large k15 order1 pair2: baseline 38.225 ms, headbound 37.936 ms, headbound/baseline 0.9924
+[03:11:25] large k15: baseline median 38.411 ms, headbound median 38.552 ms, paired median headbound/baseline 1.0037, 2/6 pairs favor headbound
+[03:11:25] dyadic k10 warmup baseline: 33.648 ms
+[03:11:25] dyadic k10 warmup headbound: 33.539 ms
+[03:11:26] dyadic k10 order0 pair0: baseline 33.243 ms, headbound 33.008 ms, headbound/baseline 0.9930
+[03:11:26] dyadic k10 order0 pair1: baseline 32.997 ms, headbound 32.698 ms, headbound/baseline 0.9909
+[03:11:26] dyadic k10 order0 pair2: baseline 32.647 ms, headbound 32.388 ms, headbound/baseline 0.9921
+[03:11:26] dyadic k10 order1 pair0: baseline 32.028 ms, headbound 32.082 ms, headbound/baseline 1.0017
+[03:11:26] dyadic k10 order1 pair1: baseline 32.024 ms, headbound 32.031 ms, headbound/baseline 1.0002
+[03:11:26] dyadic k10 order1 pair2: baseline 32.033 ms, headbound 32.036 ms, headbound/baseline 1.0001
+[03:11:26] dyadic k10: baseline median 32.340 ms, headbound median 32.235 ms, paired median headbound/baseline 0.9965, 3/6 pairs favor headbound
+[03:11:26] dyadic k15 warmup baseline: 37.355 ms
+[03:11:26] dyadic k15 warmup headbound: 37.400 ms
+[03:11:26] dyadic k15 order0 pair0: baseline 37.366 ms, headbound 37.272 ms, headbound/baseline 0.9975
+[03:11:26] dyadic k15 order0 pair1: baseline 37.271 ms, headbound 37.163 ms, headbound/baseline 0.9971
+[03:11:26] dyadic k15 order0 pair2: baseline 36.911 ms, headbound 36.074 ms, headbound/baseline 0.9773
+[03:11:26] dyadic k15 order1 pair0: baseline 35.520 ms, headbound 35.520 ms, headbound/baseline 1.0000
+[03:11:26] dyadic k15 order1 pair1: baseline 35.349 ms, headbound 35.546 ms, headbound/baseline 1.0056
+[03:11:26] dyadic k15 order1 pair2: baseline 35.175 ms, headbound 35.930 ms, headbound/baseline 1.0215
+[03:11:26] dyadic k15: baseline median 36.215 ms, headbound median 36.002 ms, paired median headbound/baseline 0.9987, 4/6 pairs favor headbound
+[03:11:26] FAILED (see failures)
