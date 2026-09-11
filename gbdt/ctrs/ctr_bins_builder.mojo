@@ -61,6 +61,7 @@ position `i` -- `gbdt/data/permutation.mojo` and `archive/reference/PORTING.md` 
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
+from core.device_zero import enqueue_fill
 
 from gbdt.ctrs.ctr import TCtrConfig, CTR_FEATURE_FREQ
 from gbdt.ctrs.index_wrapper import (
@@ -501,8 +502,8 @@ struct TCtrBinBuilderGpu(Movable):
         )
 
         ctx.enqueue_copy(dst_buf=self.indices, src_ptr=h.unsafe_ptr())
-        ctx.enqueue_memset(self.bins, UInt32(0))
-        ctx.enqueue_memset(self.current_bins, UInt32(0))
+        enqueue_fill(ctx, self.bins, UInt32(0))
+        enqueue_fill(ctx, self.current_bins, UInt32(0))
         ctx.synchronize()
         _ = h^  # past the drain (step-33 race class)
 

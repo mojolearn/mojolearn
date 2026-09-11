@@ -25,6 +25,7 @@ aligned takes the byte kernel for the whole span.
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.math import ceildiv
+from std.sys.info import size_of
 
 comptime ZERO_TPB = 256
 comptime ZERO_MAX_BLOCKS = 2048
@@ -94,7 +95,43 @@ def enqueue_zero_buffer[
     dt: DType
 ](ctx: DeviceContext, buf: DeviceBuffer[dt]) raises:
     """`enqueue_zero_bytes` over a whole device buffer."""
-    var nbytes = len(buf) * dt.size_of()
-    enqueue_zero_bytes(
-        ctx, buf.unsafe_ptr().unsafe_bitcast[UInt8]().unsafe_origin_cast[MutAnyOrigin](), nbytes
+    var nbytes = len(buf) * size_of[Scalar[dt]]()
+    # The buffer is borrowed immutably here; the device memory behind it is
+    # what the kernel writes, addressed as the caller's memset would.
+    var p8 = MutPointer[UInt8, MutAnyOrigin](
+        unsafe_from_address=Int(buf.unsafe_ptr())
+    )
+    enqueue_zero_bytes(ctx, p8, nbytes)
+
+
+def fill_kernel[dt: DType](
+    dst: MutPointer[Scalar[dt], MutAnyOrigin], n: Int32, value: Scalar[dt]
+):
+    """`n` copies of `value`, one per thread, grid-stride."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while i < Int(n):
+        dst.unsafe_store(i, value)
+        i += stride
+
+
+def enqueue_fill[
+    dt: DType
+](ctx: DeviceContext, buf: DeviceBuffer[dt], value: Scalar[dt]) raises:
+    """`enqueue_memset(buf, value)` as a kernel launch (DEVIATION 2512):
+    the same bytes, none of Metal's memset-between-launches host cost. A
+    zero goes through the SIMD zero kernel; any other value through the
+    scalar fill. Nothing is enqueued for an empty buffer."""
+    var n = len(buf)
+    if n <= 0:
+        return
+    if value == Scalar[dt](0):
+        enqueue_zero_buffer(ctx, buf)
+        return
+    var p = MutPointer[Scalar[dt], MutAnyOrigin](
+        unsafe_from_address=Int(buf.unsafe_ptr())
+    )
+    ctx.enqueue_function[fill_kernel[dt]](
+        p, Int32(n), value,
+        grid_dim=_blocks_for(n), block_dim=ZERO_TPB,
     )

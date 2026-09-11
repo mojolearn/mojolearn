@@ -4,6 +4,7 @@
 
 from gbdt.options.child_hessian import child_hessian_threshold, check_child_hessian_objective
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+from core.device_zero import enqueue_fill
 from max.gpu.host.device_attribute import DeviceAttribute
 from std.math import isfinite
 from gbdt.methods.kernel_add_model_value import add_model_value_kernel
@@ -213,7 +214,7 @@ def make_test_arm(
         blocks = multilogit_blocks(n)
     var max_leaves = 1 << max_depth
     var w = ctx.enqueue_create_buffer[DType.float32](n)
-    ctx.enqueue_memset(w, Float32(1.0))
+    enqueue_fill(ctx, w, Float32(1.0))
     return TestArm(
         n_rows,
         cindex^, targets^, w^,
@@ -1156,7 +1157,7 @@ def fit_with_test(
         approx_dim * n_rows
     )
     # every plane, not only the first
-    ctx.enqueue_memset(cursor, start_value)
+    enqueue_fill(ctx, cursor, start_value)
 
     # ---- the permutations -------------------------------------------
     #
@@ -1192,7 +1193,7 @@ def fit_with_test(
             )
             # `cursors->Cursors[i]`, ALL written to the same starting
             # value (`doc_parallel_boosting.h:180-186`)
-            ctx.enqueue_memset(c, start_value)
+            enqueue_fill(ctx, c, start_value)
             cursors.append(c^)
 
     # their der/der2 buffers, in the two-plane layout the histogram kernels
@@ -1339,7 +1340,7 @@ def fit_with_test(
         # `StartingPoint` (the CB_ENSURE at `:174-182` names
         # TestDataProvider precisely because the seed reaches it)
         ref t_arm = test.value()
-        ctx.enqueue_memset(t_arm.cursor, start_value)
+        enqueue_fill(ctx, t_arm.cursor, start_value)
     var detector = make_overfitting_detector(
         od_type, False, od_pvalue, od_wait, has_test
     )
@@ -2280,7 +2281,7 @@ def predict(
     # `doc_parallel_boosting.h:434`): a fit under `boost_from_average`
     # grew every tree against a cursor seeded there, so an apply that
     # started at zero would return the residual, not the target.
-    ctx.enqueue_memset(cursor, Float32(model.bias))
+    enqueue_fill(ctx, cursor, Float32(model.bias))
 
     if not model.is_oblivious():
         # THE NON-SYMMETRIC SHAPE (DEVIATION 259): their

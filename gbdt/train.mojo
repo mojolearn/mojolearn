@@ -19,6 +19,7 @@ the oracle fixture.
 
 from gbdt.options.child_hessian import child_hessian_threshold, check_child_hessian_objective
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+from core.device_zero import enqueue_fill
 
 from core.identity_trace import IdentityTrace
 from ensemble.instruments import StageTimes as HostStageTimes
@@ -220,7 +221,7 @@ def _build_cindex_from_floats(
     var cindex = ctx.enqueue_create_buffer[DType.uint32](
         n_rows * lay.columns
     )
-    ctx.enqueue_memset(cindex, UInt32(0))
+    enqueue_fill(ctx, cindex, UInt32(0))
 
     # DEVIATION 2485 (boundary-tax WP5): mirror the existing columns
     # staging ring. Bulk copy unchanged AsIs values; retain NaN scanning
@@ -320,7 +321,7 @@ def _build_cindex_from_columns(
     var cindex = ctx.enqueue_create_buffer[DType.uint32](
         n_rows * lay.columns
     )
-    ctx.enqueue_memset(cindex, UInt32(0))
+    enqueue_fill(ctx, cindex, UInt32(0))
 
     comptime _CINDEX_SLOTS = 8
     var xdevs = List[DeviceBuffer[DType.float32]]()

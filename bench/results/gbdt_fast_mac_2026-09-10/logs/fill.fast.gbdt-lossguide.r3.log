@@ -1,0 +1,16 @@
+FSPEED-NOTE lane=gbdt-lossguide arms=ours metric=devices delta=1.000000 reason=devices=cpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+BENCH_BINDING arm=ours requested=fast resolved=fast compiled=fast vendor=metal path=/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/7de13e6c-b220-4235-a53a-461fcad83192/scratchpad/wt-trees/python/mojolearn/_mojolearn_gbdt.so
+FSPEED-SCALE stage=before rows=1000000 features=28 input_mib=106.8 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=ours mode=FAST device=Darwin_arm64 rounds=3 size=shipped
+FSPEED-WARMUP lane=gbdt-lossguide arm=ours shape=higgs-1000000x28 ms=11173.442
+FSPEED-ORDER lane=gbdt-lossguide round=1 arms=ours
+FSPEED lane=gbdt-lossguide arm=ours shape=higgs-1000000x28 round=1 ms=10864.904 hash=144e7b90f8144f3b
+FSPEED-ORDER lane=gbdt-lossguide round=2 arms=ours
+FSPEED lane=gbdt-lossguide arm=ours shape=higgs-1000000x28 round=2 ms=11232.087 hash=144e7b90f8144f3b
+FSPEED-ORDER lane=gbdt-lossguide round=3 arms=ours
+FSPEED lane=gbdt-lossguide arm=ours shape=higgs-1000000x28 round=3 ms=10932.172 hash=144e7b90f8144f3b
+FSPEED-ACC lane=gbdt-lossguide arm=ours metric=logloss value=0.525733
+FSPEED-ACC lane=gbdt-lossguide arm=ours metric=auc value=0.812999
+FSPEED-SCALE stage=after rows=1000000 features=28 input_mib=106.8 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.

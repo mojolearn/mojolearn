@@ -3,6 +3,7 @@
 """CatBoost optimization-subset state and its depth-to-depth transition."""
 
 from max.gpu.host import DeviceBuffer, DeviceContext
+from core.device_zero import enqueue_fill
 from max.gpu.host.device_attribute import DeviceAttribute
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 
@@ -620,7 +621,7 @@ def reset_subsets(
     subsets.fold_count = UInt32(fold_count)
     subsets.fold_bits = UInt32(fold_bits)
 
-    ctx.enqueue_memset(subsets.bins, UInt32(0))
+    enqueue_fill(ctx, subsets.bins, UInt32(0))
     launch_make_sequence(ctx, UInt32(0), subsets.indices, subsets.doc_count)
     launch_make_sequence(
         ctx, UInt32(0), subsets.part_ids, subsets.max_part_count

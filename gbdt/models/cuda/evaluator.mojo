@@ -459,6 +459,7 @@ def eval_oblivious_trees_kernel[need_xor_mask: Bool = False](
 # ---------------------------------------------------------------------------
 
 from max.gpu.host import DeviceBuffer, DeviceContext
+from core.device_zero import enqueue_fill
 
 from gbdt.methods.doc_parallel_boosting import model_approx_dim
 from gbdt.models.oblivious_model import (
@@ -698,7 +699,7 @@ def launch_eval(
     """`EvalQuantizedData` (`evaluator.cu:344-368`): clear results, one
     kernel over (tree blocks, doc blocks). The clear value is the model's
     bias -- the ProcessResults deviation in the module docstring."""
-    ctx.enqueue_memset(results, m.bias)
+    enqueue_fill(ctx, results, m.bias)
     # the adaptive sub-block width of the kernel's DEVIATION BLOCK: fill
     # all eight tree sub-blocks at any model size
     var ext_width = (m.tree_count + 63) // 64

@@ -55,6 +55,7 @@ ordered on the one queue. Nothing else about the class changes.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+from core.device_zero import enqueue_fill
 
 from gbdt.gpu_data.compressed_index_builder import (
     CompressedIndexLayout,
@@ -277,7 +278,7 @@ struct PolicyScoreHelper(Movable):
         self.d_hist = ctx.enqueue_create_buffer[DType.float32](
             self.hist_helper.histogram_alloc_size(total)
         )
-        ctx.enqueue_memset(self.d_hist, Float32(0.0))
+        enqueue_fill(ctx, self.d_hist, Float32(0.0))
 
         # THE WEIGHTS ARE INDEXED BY FEATURE ID, NOT BY BIN-FEATURE ID, so
         # they are sized by FEATURE COUNT. They were sized `total`, the
@@ -524,7 +525,7 @@ struct PolicyScoreHelper(Movable):
         from-scratch level adds onto whatever the buffer holds, and
         after a tree it holds the previous tree's SCANNED sums.
         """
-        ctx.enqueue_memset(self.d_hist, Float32(0.0))
+        enqueue_fill(ctx, self.d_hist, Float32(0.0))
         self.hist_helper.reset()
 
 

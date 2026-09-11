@@ -69,6 +69,7 @@ streams only overlap the FILLS, never the layout.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
+from core.device_zero import enqueue_fill
 
 from gbdt.gpu_util.gpu_data.partitions import DataPartition
 from gbdt.methods.dynamic_boosting_folds import TFold
@@ -196,7 +197,7 @@ def write_fold_based_initial_bins(
         # odd one, because they advance `currentBin += 2` per task and this
         # list is two entries per task in the same order
         var view = ctx.enqueue_create_buffer[DType.uint32](Int(part.size))
-        ctx.enqueue_memset(view, UInt32(p))
+        enqueue_fill(ctx, view, UInt32(p))
         ctx.enqueue_copy(
             dst_ptr=bins.unsafe_ptr().unsafe_offset(Int(part.offset)),
             src_buf=view,

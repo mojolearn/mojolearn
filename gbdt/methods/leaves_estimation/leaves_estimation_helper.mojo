@@ -28,6 +28,7 @@ leaf order and a prefix sum of the sizes would be the wrong one.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+from core.device_zero import enqueue_fill
 
 from gbdt.gpu_util.kernel.reorder_one_bit import REORDER_BLOCK
 from gbdt.gpu_util.kernel.segmented_sort import (
@@ -200,7 +201,7 @@ def compute_weighted_quantile(
     )
 
     # `FillBuffer(endOfBinsFlags, 0); MakeEndOfBinsFlags(...)` (`:114-117`)
-    ctx.enqueue_memset(s.flags, UInt32(0))
+    enqueue_fill(ctx, s.flags, UInt32(0))
     ctx.enqueue_function[make_end_of_bins_flags_kernel](
         seg_offsets.unsafe_ptr(), seg_sizes.unsafe_ptr(),
         s.flags.unsafe_ptr(), UInt32(EXACT_FLAG_MASK),
@@ -217,7 +218,7 @@ def compute_weighted_quantile(
     )
 
     # `FillBuffer(needWeights, 0.0f); ComputeNeedWeights(...)` (`:125-132`)
-    ctx.enqueue_memset(s.need_weights, Float32(0.0))
+    enqueue_fill(ctx, s.need_weights, Float32(0.0))
     ctx.enqueue_function[compute_need_weights_kernel](
         s.ordered_weights.unsafe_ptr(),
         seg_offsets.unsafe_ptr(), seg_sizes.unsafe_ptr(),

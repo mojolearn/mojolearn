@@ -114,6 +114,7 @@ device-wide scan (`archive/reference/VENDOR_LIBS.md` 3b/3c), so it is written ou
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
+from core.device_zero import enqueue_fill
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
@@ -505,7 +506,7 @@ def launch_segmented_scan_and_scatter_non_negative(
     if size <= 0:
         return
     if not inclusive:
-        ctx.enqueue_memset(output, Float32(0.0))
+        enqueue_fill(ctx, output, Float32(0.0))
 
     _run_segmented_scan[True](
         ctx, size, SEGMENT_START_MASK, values, indices, scanned, has_flag,

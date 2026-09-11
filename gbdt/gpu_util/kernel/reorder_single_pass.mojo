@@ -151,6 +151,7 @@ from std.atomic import Atomic, Ordering
 from std.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
+from core.device_zero import enqueue_fill
 from max.gpu.memory import AddressSpace
 from max.gpu.primitives.block import broadcast as block_broadcast
 from max.gpu.primitives.block import prefix_sum as block_prefix_sum
@@ -472,8 +473,8 @@ def launch_single_pass_partition[
             " launch_stable_partition"
         )
 
-    ctx.enqueue_memset(chunk_zeros, UInt32(0))
-    ctx.enqueue_memset(chunk_offsets, UInt32(0))
+    enqueue_fill(ctx, chunk_zeros, UInt32(0))
+    enqueue_fill(ctx, chunk_offsets, UInt32(0))
 
     var chunk_grid = max_chunks
     if sm_count > 0:

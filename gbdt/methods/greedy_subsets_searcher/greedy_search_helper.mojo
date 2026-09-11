@@ -5,6 +5,7 @@
 from std.math import sqrt
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+from core.device_zero import enqueue_fill
 from max.gpu.host.device_attribute import DeviceAttribute
 
 from checks.fixed_point import choose_scale
@@ -549,7 +550,7 @@ def run_one_level(
     # (`split_properties_helper.cpp:1061`). The histogram kernels do not
     # write a cell whose accumulator is zero, so an unfilled allocation is
     # read back as whatever the driver handed us.
-    ctx.enqueue_memset(hist, Float32(0.0))
+    enqueue_fill(ctx, hist, Float32(0.0))
     # run_one_level is depth 0 with one block per partition, so the
     # multi-block flush never fires; the scratch satisfies the signature.
     var acc_scratch = ctx.enqueue_create_buffer[DType.int32](hist_cells)
@@ -985,7 +986,7 @@ def run_tree(
     # only the leaves a level rebuilds, and the histogram kernels skip a cell
     # whose accumulator is zero, so an unfilled allocation is never fully
     # overwritten.
-    ctx.enqueue_memset(hist, Float32(0.0))
+    enqueue_fill(ctx, hist, Float32(0.0))
 
     # FIXED-POINT ACCUMULATOR for replicated blocks under
     # `NUMERIC_IDENTICAL`: partial histograms from blocks sharing a partition
@@ -1013,7 +1014,7 @@ def run_tree(
         acc_cells = 1
     var acc_i32 = ctx.enqueue_create_buffer[DType.int32](acc_cells)
     comptime if _ACC_LIVE:
-        ctx.enqueue_memset(acc_i32, Int32(0))
+        enqueue_fill(ctx, acc_i32, Int32(0))
 
     # The scale bounds every partial sum. A cell can hold at most the sum of
     # magnitudes of the plane it accumulates, and one scale serves both
@@ -2322,7 +2323,7 @@ def launch_histograms_for_blocks[
             run_fixed_bridge and blk.policy == POLICY_ONE_BYTE
         )
         if not scratch_dead:
-            ctx.enqueue_memset(block_hist, Float32(0.0))
+            enqueue_fill(ctx, block_hist, Float32(0.0))
 
         if blk.policy == POLICY_BINARY:
             # ================= DEVIATION 1947 =================
@@ -3478,7 +3479,7 @@ struct TSynchronizedSymmetricLevelState(Movable):
             dst_buf=workspace.p_sz, src_ptr=workspace.h_sz.unsafe_ptr()
         )
         if workspace.acc_live_key:
-            ctx.enqueue_memset(workspace.acc_i32, Int32(0))
+            enqueue_fill(ctx, workspace.acc_i32, Int32(0))
         var magnitude = Float64(weight_magnitude)
         if magnitude < 0.0:
             magnitude = -magnitude
@@ -4317,7 +4318,7 @@ def run_tree_layout_traced[
     # truth the bridge arms read; the fixed-point builds keep it
     # byte-for-byte.
     comptime if _ACC_LIVE:
-        ctx.enqueue_memset(acc_i32, Int32(0))
+        enqueue_fill(ctx, acc_i32, Int32(0))
 
     # See the note in `run_tree`: one scale serves both accumulated planes,
     # so the bound is the larger of the two sums of magnitudes, and

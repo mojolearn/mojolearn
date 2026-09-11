@@ -14,6 +14,7 @@ There is no host gradient/leaf reduction or alternate CPU training path.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
+from core.device_zero import enqueue_fill
 from std.gpu import block_idx, block_dim, thread_idx
 from std.math import isfinite
 from checks.numerics import ftz, identical_mul, identical_mul_add
@@ -223,11 +224,11 @@ def fit_ordered_rmse(
     for f in range(len(folds)):
         var size = folds[f].quality_evaluate_samples.right
         var cursor = ctx.enqueue_create_buffer[DType.float32](size)
-        ctx.enqueue_memset(cursor, Float32(0))
+        enqueue_fill(ctx, cursor, Float32(0))
         cursors.append(cursor^)
         total += size
     var estimation = ctx.enqueue_create_buffer[DType.float32](n)
-    ctx.enqueue_memset(estimation, Float32(0))
+    enqueue_fill(ctx, estimation, Float32(0))
     var model = TAdditiveModel()
     var pool = List[PointwiseTreeWorkspace]()
     var trace = IdentityTrace()
@@ -260,7 +261,7 @@ def fit_ordered_rmse(
         )
         var bins = ctx.enqueue_create_buffer[DType.uint32](n)
         if len(splits) == 0:
-            ctx.enqueue_memset(bins, UInt32(0))
+            enqueue_fill(ctx, bins, UInt32(0))
         else:
             compute_bins_for_model(ctx, layout, splits, len(splits), cindex, n, bins)
         var n_leaves = 1 << len(splits)

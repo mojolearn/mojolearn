@@ -4,6 +4,7 @@
 
 from gbdt.options.child_hessian import child_hessian_threshold
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+from core.device_zero import enqueue_fill
 
 from checks.fixed_point import choose_scale
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -398,7 +399,7 @@ struct TDepthwiseWorkspace(Movable):
             self.d_qacc = ctx.enqueue_create_buffer[DType.int32](
                 max_leaves * stat_count * hist_cells
             )
-            ctx.enqueue_memset(self.d_qacc, Int32(0))
+            enqueue_fill(ctx, self.d_qacc, Int32(0))
         else:
             self.d_qstats = ctx.enqueue_create_buffer[DType.uint64](1)
             self.d_qacc = ctx.enqueue_create_buffer[DType.int32](1)
@@ -1034,13 +1035,13 @@ def fit_non_symmetric_tree[
     h_sz.unsafe_ptr().unsafe_store(0, UInt32(n_rows))
     ctx.enqueue_copy(dst_buf=p_off, src_ptr=h_off.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=p_sz, src_ptr=h_sz.unsafe_ptr())
-    ctx.enqueue_memset(hist, Float32(0.0))
+    enqueue_fill(ctx, hist, Float32(0.0))
     # DEVIATION 1892: same gate as the symmetric driver's per-tree memset
     # -- under a float flush with the warp-private `hist2` arm nothing
     # writes or reads `acc_i32`, so the per-tree zeroing is skipped and
     # the buffer is the pool's one-cell placeholder.
     comptime if _ACC_LIVE:
-        ctx.enqueue_memset(acc_i32, Int32(0))
+        enqueue_fill(ctx, acc_i32, Int32(0))
 
     # The fixed-point scale, host-derived. DEVIATION 95's device derivation
     # is not wired here: it exists to remove the boosting loop's per-tree

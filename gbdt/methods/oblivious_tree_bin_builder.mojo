@@ -94,6 +94,7 @@ here.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
+from core.device_zero import enqueue_fill
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 
 from gbdt.models.oblivious_model import TBinarySplit
@@ -499,7 +500,7 @@ struct TTreeUpdater(Movable):
         """
         self.doc_count = doc_count
         self.learn_bins = ctx.enqueue_create_buffer[DType.uint32](doc_count)
-        ctx.enqueue_memset(self.learn_bins, UInt32(0))
+        enqueue_fill(ctx, self.learn_bins, UInt32(0))
         var packed = compressed_split_size(doc_count)
         if packed < 1:
             packed = 1
