@@ -708,3 +708,30 @@ were within noise, as expected for a trip-count change (large k10 30.47 vs
 30.41 ms, k15 35.64 vs 35.63 ms). C4 is the prerequisite, not a win;
 SMALLK_UNIFORM_TRIP_DEFAULT flipped to True on this evidence and the M4
 check. Step 2 (headbound) runs next.
+
+## Step 2 result: C1 headbound is NEGATIVE (H100, 2026-09-11 03:48Z, `bench/results/e1g/2026-09-10_234251-nvidia/remote/knn-selection`)
+
+Correctness: every fixture at k10 and k15 bit-equal across baseline,
+headbound and default, order ok, planted ok, oracle clean; reach proven
+for headbound on every fixture (36,556 / 75,129 / 36,208 / 74,708 / 9,408 /
+16,396 / 5,256 cells flipped, restored). The arms check passed on the box.
+
+Timing, full requests, three alternating pairs per order:
+
+| fixture | k | baseline median ms | headbound median ms | delta |
+|---|---:|---:|---:|---:|
+| large | 10 | 31.15 | 33.53 | +2.38 |
+| large | 15 | 35.93 | 39.09 | +3.16 |
+| dyadic | 10 | 30.81 | 33.28 | +2.47 |
+| dyadic | 15 | 35.98 | 39.36 | +3.39 |
+
+Headbound loses on both fixtures at both k, in both orders. The four
+block-wide refreshes (each a k-round butterfly with a barrier per round,
+plus the publish and the 256-way k-th smallest) cost more than the
+insertion chain they remove; the model in this brief priced the saved
+insertions and not the refresh. SMALLK_HEAD_BOUND_DEFAULT stays False.
+The code stays behind the trial define as a measured negative, and the
+next candidate is C2 warpbound: the same bound at warp scope with shuffles
+and no barriers, refreshed more often because it is cheap, which the
+model in this brief already ranked second. C1's arm also gives C2 its
+gate for free (same harness, arms baseline,warpbound).
