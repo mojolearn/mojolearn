@@ -72,13 +72,35 @@ WIDTHS = {
 #: NVIDIA H100 80GB, IDENTICAL, cell hash per lane. `ties` is the retained
 #: identity_break set (bench/results/trees_identical/
 #: mi325x_2026-09-11_taxi_istella/leg1/ib/h100_baseline.json, equal to
-#: bench/results/identity_break/apple-m4.identical.json).
+#: bench/results/identity_break/apple-m4.identical.json). `bin2`, `bits5`
+#: and `bits6` were recorded on a RunPod H100 80GB HBM3 (pod
+#: b8rlb4ggl30u4o, driver 580.126.09) at source 8020a0c9 on 2026-09-11,
+#: both fits of every cell equal; the same build reproduced all 36 retained
+#: identity_break gbdt cells.
 REFERENCE = {
+    "bin2": {
+        "gbdt-symmetric": "9c9c2617381e9485",
+        "gbdt-depthwise": "70c30f14ccb609d5",
+        "gbdt-lossguide": "b502d21f4bb0a0c9",
+        "gbdt-rmse": "c052ad32dd3c6c19",
+    },
     "ties": {
         "gbdt-symmetric": "b32c469f812adf25",
         "gbdt-depthwise": "465cb10f303e005a",
         "gbdt-lossguide": "19d199f7bfa16c25",
         "gbdt-rmse": "88cba1574daa922e",
+    },
+    "bits5": {
+        "gbdt-symmetric": "63fe2511e3730346",
+        "gbdt-depthwise": "c8b57b95de2052f7",
+        "gbdt-lossguide": "e69d957f80a7a128",
+        "gbdt-rmse": "00856961d10e9f11",
+    },
+    "bits6": {
+        "gbdt-symmetric": "c5507a51d232bd6f",
+        "gbdt-depthwise": "caf1feee1cff20be",
+        "gbdt-lossguide": "654bcd575d6b3c2e",
+        "gbdt-rmse": "4ba67877a807c141",
     },
 }
 
