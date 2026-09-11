@@ -324,6 +324,19 @@ No AMD timing of this step exists at the target shape.
      `attn_default_arm_for` goes back to `baseline`; the dk/dv lane
      (`lane/attention-dkdv-amd`) was sent this evidence and now targets the
      step-versus-harness gap with baseline as the AMD reference.
+   - **H100 classical GEMM caller A/B** (bench/results/e1g/2026-09-11_170957-nvidia-h100-80gb-hbm3-gemm-ksplit-classical,
+     commit 519f84fa): the on-box DISPATCH lines under the NVIDIA row (132)
+     read `ksplit_default_takes=no`, with the same plan for default and
+     tuned128, for the OLS Gram and PCA covariance on Istella-S (220 x 220 x
+     2,043,304), the GP posterior mean (1000 x 1 x 4000) and the GP Cholesky
+     trailing update (3968 x 3968 x 32): those callers are unchanged by the
+     ksplit default by construction. Istella-S timing with quality equal: OLS
+     default/tuned128 0.985 (block noise 0.042), PCA 1.007 (identical plans,
+     so drift). Not measured: taxi (no `pyarrow` on the RunPod image, every
+     taxi cell refused) and GP (the driver passed alpha 0.1, which IDENTICAL
+     refuses; the ridge is pinned by the Cholesky profile). No rerun owed for
+     these callers; the ones ksplit can take (kernel matrices at d >= 129,
+     GMM E-step, Nystroem, RBFSampler, linalg GEMM) still owe an A/B.
 1. The DigitalOcean runner is merged and its dry run is green (section 3);
    its first paid run is also its bring-up. Tuning on AMD is now a repo rule
    for every lane (ENGINEERING_RULES.md section 10), and the account allows

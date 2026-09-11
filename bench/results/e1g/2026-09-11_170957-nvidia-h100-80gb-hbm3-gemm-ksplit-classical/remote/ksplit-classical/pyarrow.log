@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import pyarrow
+ModuleNotFoundError: No module named 'pyarrow'
+/root/mojolearn/.pixi/envs/default/bin/python: No module named pip

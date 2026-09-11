@@ -1,0 +1,4 @@
+gp.chol_trailing.istella NT 3968 3968 32
+gp.mean.istella TN 1000 1 4000
+ols.gram.istella TN 220 220 2043304
+pca.cov.istella TN 220 220 2043304

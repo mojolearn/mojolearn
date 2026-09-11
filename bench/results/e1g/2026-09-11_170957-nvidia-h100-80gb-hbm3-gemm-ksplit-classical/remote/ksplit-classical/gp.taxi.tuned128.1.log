@@ -1,0 +1,3 @@
+FSPEED-HEADER family=classical lane=gp arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=section9
+1919 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5841c0000000, nodemask=2)
+FSPEED-REFUSED lane=gp arm=ours reason=No_module_named_'pyarrow'

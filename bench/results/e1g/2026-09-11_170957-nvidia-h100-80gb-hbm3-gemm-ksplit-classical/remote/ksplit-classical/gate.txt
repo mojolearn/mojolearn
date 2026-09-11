@@ -1,0 +1,13 @@
+brief=docs/lanes/BRIEF_gemm_long_k_2026-09-11.md section 11 (job 2)
+started=2026-09-11T17:12:22Z
+root=/root/mojolearn
+lanes=gp,ols,pca datasets=taxi,istella
+rounds=3 blocks=2 order=ABBA rows=4000000 gp_train=4000 gp_test=1000 prep=standardize deadline=1200
+vendor=nvidia gpu=NVIDIA_H100_80GB_HBM3 gpu_archs=sm_90a column=nvidia jobs=4
+data_root=/root/datasets/gbm-bench
+vendor=nvidia
+commit=519f84fa6076f0b418ce91140c1f7c615fc99e4d
+DEFAULT gemm column=2 block_parallelism_row=132 ksplit_default=on trial_ksplit_S=132 shipped=[shipped DEFAULT ksplit (DEVIATION 2595, block parallelism row S=132 slack=4) where the group rule takes the call, else choose_gemm_plan's plan (TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) on the step's calls)]
+plan shipped=shipped: default=ksplit(S=132) else tuned128
+plan tuned128=tuned128: the old TUNED 128x128 plan forced on every call it served
+finished=2026-09-11T17:41:19Z
