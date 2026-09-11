@@ -1,0 +1,24 @@
+build_exit baseline.base=0 04:10:34
+ede5592fbaec09220b6390a14e3091a839b40e62ededced46f904b5543da5f14  /root/bins/baseline/_mojolearn.so
+build_exit baseline.gbdt=0 04:10:55
+79284946e80f59683e31c006b574ffb32c37d1a0b9bbe3ec51b7fed6b8cc044f  /root/bins/baseline/_mojolearn_gbdt.so
+build_exit baseline.rf=0 04:11:02
+a1052460053a3b81ad37f87edc57405779455b74acf1f4aea2e756a8db74e5c9  /root/bins/baseline/_mojolearn_rf.so
+build_exit baseline.trees=0 04:11:09
+7d64b467271edb0522b0a8a45c4ed7b25ea45efd331063c39481fa43bd848dc0  /root/bins/baseline/_mojolearn_trees.so
+PHASE_A_DONE 04:11:09
+ib_exit baseline=0 04:11:19
+ib_diff sep10b_baseline vs baseline exit=1 04:11:19
+ib_diff apple_rf2502 vs baseline exit=0 04:11:19
+PHASE_B_DONE 04:11:19
+speed_exit baseline.rf.higgs.r1000000.ours=0 04:14:25
+speed_exit baseline.gbdt-symmetric.higgs.r1000000.ours=0 04:14:42
+speed_exit baseline.rf.higgs.r2000000.ours=0 04:18:00
+speed_exit baseline.gbdt-symmetric.higgs.r1000000.ours=0 04:18:16
+speed_exit baseline.gbdt-depthwise.higgs.r1000000.ours=0 04:18:37
+speed_exit baseline.gbdt-lossguide.higgs.r1000000.ours=0 04:19:02
+speed_exit baseline.et.higgs.r1000000.ours=0 04:21:07
+speed_exit baseline.rf.higgs.r1000000.ours=0 04:24:06
+PHASE_C_DONE 04:24:06
+speed_exit baseline.rf.higgs.r1000000.stage=0 04:25:12
+PHASE_D_DONE 04:25:12

@@ -9,6 +9,144 @@ against each opponent's FAST arm on NVIDIA. Wind-down ordered by the
 orchestrator before tasks 4 and 5 were measured on the H100; everything
 below is either measured with a log path or marked not run.
 
+## 2026-09-11 H100 confirmation leg (branch `lane/nvidia-identical-trees-0911`, source 352d9781)
+
+Box: RunPod NVIDIA H100 80GB HBM3 (81559 MiB), driver 580.126.09, kernel
+6.8.0-106, runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04, the
+same GPU model, image and driver as the 2026-09-10 night leg (7cebeecf) on
+a different physical pod. Pod bai1webdyjdqtx 04:00 to 04:26 UTC (26 minutes
+of a 90-minute lease), reaped, HTTP 404 verified. Ours IDENTICAL only
+(MOJOLEARN_NUMERIC_MODE=identical), alone in the process; no opponent ran,
+no FAST or DETERMINISTIC arm was built. A measurement leg: main at 352d9781
+carries, since 7cebeecf, DEVIATION 2512 (histogram zero and gbdt fills as
+kernel launches), DEVIATION 2502 (a pure classification node is a leaf,
+never retried) and the DEVIATION 2510 stamps (off unless
+MOJOLEARN_STAGE_TIMES=1). Evidence:
+`bench/results/trees_identical/h100_2026-09-11/{speed,ib,logs}/`;
+`logs/batchP.sh` is the whole run in order, `logs/ab.txt` the exit-code
+ledger, `logs/bins_sha256.txt` the four .so (the setup script's build and
+the brief's rebuild of each binding produced byte-equal .so,
+`logs/setup_so_sha256.txt` = `logs/baseline_so_sha256.txt`),
+`speed/SUMMARY.md` the table below from `logs/summarize_speed.py`.
+
+### Fingerprints (identity_break, IDENTICAL, 9 fixtures x2 per lane)
+
+| lane | vs Sep 10 night H100 (`ib/sep10b_baseline.json`, 7cebeecf) | vs Apple M4 2502 (`ib/apple_rf2502.json`) |
+|---|---|---|
+| rf-clf | MOVED 9 of 9, parts predict and proba (expected: DEVIATION 2502) | IDENTICAL 9 of 9 |
+| rf-reg | IDENTICAL 9 of 9 | IDENTICAL 9 of 9 |
+| et-clf | IDENTICAL 9 of 9 | not in the Apple file |
+| et-reg | IDENTICAL 9 of 9 | not in the Apple file |
+| gbdt-symmetric | IDENTICAL 9 of 9 | not in the Apple file |
+| gbdt-depthwise | IDENTICAL 9 of 9 | not in the Apple file |
+| gbdt-lossguide | IDENTICAL 9 of 9 | not in the Apple file |
+| gbdt-rmse | IDENTICAL 9 of 9 | not in the Apple file |
+| kmeans | IDENTICAL 9 of 9 | not in the Apple file |
+
+Exactly the brief's expectation: the only movement is rf-clf, and the new
+rf-clf forest is bit-identical to the Apple M4's on all nine fixtures
+(cross-vendor identity of the DEVIATION 2502 forest). DEVIATION 2512
+moved nothing (`ib/diff.sep10b_baseline.baseline.txt`,
+`ib/diff.apple_rf2502.baseline.txt`). No finding.
+
+### Timing, ours IDENTICAL alone in the process, HIGGS first-N rows, ms median (min..max)
+
+Run in this order, interleaved so drift is visible: rf 1M (pass1),
+symmetric 1M (pass1), rf 2M, symmetric 1M (pass2), depthwise 1M, lossguide
+1M, et 1M, rf 1M (pass2), then the rf 1M stage replicate. Opponent rows are
+quoted from `bench/OPPONENT_REFERENCE.md` by name and were not re-run;
+"Sep 9 row" = the 2026-09-09 same-image table, "Aug 28 row" = the
+`e1g/2026-08-28_030908` table (different container).
+
+| lane | rows | rounds | median | min..max | hash | Sep 10 night (7cebeecf) | opponent row (ms) | ours / theirs |
+|---|---|---|---|---|---|---|---|---|
+| rf (pass1) | 1M | 5 | 1088 | 1071..1108 | efd14ab2c09ff57c | 1516 (3ffa2951595422d4) | cuML RF 3314 (Sep 9 row) | 0.33x |
+| rf (pass2, last cell) | 1M | 5 | 1081 | 1051..1099 | efd14ab2c09ff57c | 1521 (baseline2) | same | 0.33x |
+| rf | 2M | 5 | 1760 | 1716..1792 | 7fd9fda29a4fa81d | 2283 (67d883dc6079b90f) | cuML RF 4543.0 (Aug 28 row) | 0.39x |
+| gbdt-symmetric (pass1) | 1M | 7 | 527 | 463..602 | dac2cf366e219cec | 533 | CatBoost GPU symmetric 900 (Sep 9); 846.1 (Aug 28) | 0.59x; 0.62x |
+| gbdt-symmetric (pass2) | 1M | 7 | 493 | 472..578 | dac2cf366e219cec | 533 | same | 0.55x; 0.58x |
+| gbdt-depthwise | 1M | 7 | 1016 | 986..1083 | 592afa74b0d96982 | 1070 | XGBoost GPU depthwise 617.3; CatBoost GPU depthwise 1232.5 (Aug 28 rows) | 1.65x; 0.82x |
+| gbdt-lossguide | 1M | 7 | 1610 | 1602..1649 | 4f02e5cb8088b281 | 1652 | XGBoost GPU lossguide 816.9; LightGBM CUDA 1313.7; CatBoost 1600.6 (Aug 28 rows) | 1.97x; 1.23x; 1.01x |
+| et | 1M | 5 | 2504 | 2476..2585 | 2c192f6b12dbb6c5 | 2578 | no valid NVIDIA row | n/a |
+
+FSPEED-ACC: rf 1M logloss 0.538817 / auc 0.809830 on both passes (the
+Apple M4 DEVIATION 2502 numbers exactly; the previous forest gave 0.538850 /
+0.809906); rf 2M 0.536959 / 0.811575 (previous forest 0.537060 / 0.811483);
+symmetric 0.542067 / 0.800716, depthwise 0.525450 / 0.813518, lossguide
+0.525348 / 0.813238, et 0.622379 / 0.762400, all equal to the Sep 10 night
+cells, as their hashes require.
+
+Reading: the RF classifier at 1M went 1516 to 1088 and 1081 (0.72x of the
+Sep 10 night round) and at 2M 2283 to 1760 (0.77x); the drift control
+(first and last cell, 25 minutes apart) agrees within 7 ms of median. The
+forest changed (DEVIATION 2502), so this is a different fit, not the same
+fit made cheaper: the behavior change is Andrew's call (see the Apple
+section below). Every hash-unchanged lane is within 3 to 7 percent of the
+Sep 10 night pod and lower: symmetric 533 to 527/493, depthwise 1070 to
+1016, lossguide 1652 to 1610, et 2578 to 2504. Those gaps are on a
+different physical pod and were not isolated against a 7cebeecf build in
+the same window, so they are NOT attributed to DEVIATION 2512; the
+brief's expectation (neutral on CUDA) is consistent with them and nothing
+here contradicts it. The symmetric 478 (Sep 10) vs 533 (Sep 10 night) vs
+527/493 (here) spread is the size of one pod's drift and stays UNRESOLVED
+as a gbdt-path question.
+
+### RF HIGGS 1M per-stage split (MOJOLEARN_STAGE_TIMES=1, one replicate, drains per stage, not a timing)
+
+`speed/baseline.rf.higgs.r1000000.stage.log`, round 1139 (warm-up 1876),
+hash efd14ab2c09ff57c; the Sep 10 night `stamps2` column is round 1552.
+
+| where | stage | Sep 11 ms | Sep 10 night ms |
+|---|---|---|---|
+| fit_forest | device_wait | 454 | 761 |
+| fit_forest | host_enq_partition (stage + enqueue the node split) | 112 | 102 |
+| fit_forest | host_queue_push (children into the host tree) | 111 | 104 |
+| fit_forest | host_enq_hist (next batch's histogram round) | 104 | 82 |
+| fit_forest | host_enq_hist_retry (retry sampling rounds) | stamp did not fire: no retry round | 89 |
+| fit_forest | leaf_values | 71 | 71 |
+| fit_forest | tree_copy | 35 | 33 |
+| fit_forest | host_read_splits | 18 | 18 |
+| fit_forest | flush_splits | 5 | 6 |
+| fit_forest | host_begin_tree + row_sampling + quantiles + bin_dataset + host_setup + host_teardown | 7 | 6 |
+| fit_forest | fit_total | 941 | 1342 |
+| binding | bind_host_copy 20 + bind_h2d 2 + ctx/pinned/release/retain < 0.2 | 23 | 22 |
+| binding | binding_total | 964 | 1361 |
+| Python | round minus binding_total | 175 | 191 |
+
+The 352d9781 stamps also print the pieces nested INSIDE `host_enq_hist`
+(host_stage_items 31, host_phase_upload 8, host_launch_setup 7,
+host_hist_zero 5, host_hist_launch 5, host_best_launch 5); they are
+double-counted against the parent, which is why `other` prints negative
+(-37). Under DEVIATION 2502 the retry stamp never fired on HIGGS 1M: every
+node that ended a batch without a valid split was pure, so the 89 ms of
+retry enqueue is gone along with the retry rounds' device time; device_wait
+761 to 454 is the rest of the round-count drop. The remaining host-side
+enqueue and queue work (about 330 ms of the 941) is unchanged from the Sep
+10 night candidates list, which still applies.
+
+### RUN OWED
+
+- Isolate DEVIATION 2512 on CUDA: a 7cebeecf-source and a 352d9781-source
+  build of the gbdt and rf bindings, both IDENTICAL, interleaved on one pod
+  in one window at 1M and 2M (the 3 to 7 percent lower hash-unchanged
+  cells here are drift-sized and unattributed).
+- RF 2M stage split and the gbdt 1M stage splits at 352d9781 (only the RF
+  1M stage replicate ran here).
+- Depthwise and lossguide 2M cells at 352d9781 (the brief's list stopped at
+  1M for the gbdt lanes; the Sep 10 night 2M cells are 1917 and 2451).
+- Extra trees still has no valid NVIDIA opponent row.
+- The nine-lane Apple identity JSON regeneration (DEVIATION 2340 dtype,
+  DEVIATION 2502 rf-clf) is still owed; this leg diffed against the
+  two-lane Apple 2502 file only.
+- Andrew's decision on DEVIATION 2502 as the default classifier forest;
+  the cross-vendor identity of the new forest is now established
+  (Apple M4 and H100 18 of 18).
+
+### What landed (commits, `%h parent %p`)
+
+- the evidence directory, this section and the OPPONENT_REFERENCE note:
+  see the branch `lane/nvidia-identical-trees-0911`, NOT merged to main.
+
 ## 2026-09-10 night, Apple M4: RF host tax and pure nodes (branch `lane/trees-perf-0910b`)
 
 Evidence: `bench/results/rf_fast_mac_2026-09-10/` (README carries every
@@ -85,10 +223,10 @@ row ids; the M4 has about 100 GB/s).
 
 ### RUN OWED
 
-- H100: RF 1M and 2M at this source (expect the round count to fall 4x;
-  the Sep 10 night RF stage split had 89 ms of retry enqueue and 761 ms of
-  device_wait at 1M). The rf-clf fingerprints will move to the 2502 set;
-  rf-reg, et, gbdt must not.
+- H100: RF 1M and 2M at this source. RAN 2026-09-11 (section above):
+  RF 1M 1088/1081, 2M 1760, hash efd14ab2c09ff57c at 1M equal to the M4;
+  the retry stamp did not fire and device_wait fell 761 to 454; rf-clf
+  moved 9 of 9 and nothing else moved.
 - Apple M4: gbdt-symmetric, depthwise, lossguide FAST stage splits at 1M
   to price their memsets (DEVIATION 2512 candidates); ET 1M stage split.
 - The nine-lane Apple identity JSON regeneration now has two reasons

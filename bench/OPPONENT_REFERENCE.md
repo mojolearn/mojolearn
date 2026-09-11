@@ -92,6 +92,31 @@ physical pod and the gap is unresolved. ET 1M 2578 (2543..2616), still no
 valid NVIDIA opponent row. Fingerprints 81/81 IDENTICAL against the Sep 10
 set. Detail: `docs/lanes/HANDOFF_trees.md`, "2026-09-10 night H100 leg".
 
+Our identical arm, 2026-09-11 confirmation leg, same GPU model and image,
+driver 580.126.09, source 352d9781 (DEVIATION 2502 pure-node leaf, 2512
+kernel zero), ours alone in the process, no opponent re-measured
+(`bench/results/trees_identical/h100_2026-09-11/speed/`, ms median with
+min..max, 5 rounds RF/ET, 7 rounds the gbdt cells; RF 1M and symmetric 1M
+were each run twice, first and last, as the drift control): RF 1M 1088
+(1071..1108) and 1081 (1051..1099), hash efd14ab2c09ff57c (the DEVIATION
+2502 forest, equal to the Apple M4 hash); RF 2M 1760 (1716..1792), hash
+7fd9fda29a4fa81d. Quote the cuML 1M row above (3314, Sep 9) against the 1M
+cells and the Aug 28 cuML 2M row (4543.0, different container) against the
+2M cell: 0.33x and 0.39x of their time (the Sep 10 night leg's 0.46x and
+0.50x at the previous forest). Symmetric Logloss 1M 527 (463..602) and 493
+(472..578), hash dac2cf366e219cec unchanged: against the Sep 9 CatBoost row
+(900) 0.59x and 0.55x, against the Aug 28 row (846.1) 0.62x and 0.58x.
+Depthwise Logloss 1M 1016 (986..1083), hash unchanged: against the Aug 28
+XGBoost GPU depthwise row (617.3) 1.65x, CatBoost depthwise (1232.5) 0.82x.
+Lossguide Logloss 1M 1610 (1602..1649), hash unchanged: against the Aug 28
+XGBoost lossguide row (816.9) 1.97x, LightGBM CUDA lossguide (1313.7) 1.23x,
+CatBoost lossguide (1600.6) 1.01x. ET 1M 2504 (2476..2585), hash unchanged,
+still no valid NVIDIA opponent row. Fingerprints against the Sep 10 night
+set: rf-clf moved 9 of 9 (the DEVIATION 2502 forest), 72 of 72 IDENTICAL on
+the other eight lanes; rf-clf and rf-reg 18 of 18 IDENTICAL against the
+Apple M4 2502 set. Detail: `docs/lanes/HANDOFF_trees.md`, "2026-09-11 H100
+confirmation leg".
+
 Extra trees therefore has NO valid NVIDIA opponent row. That measurement
 is owed (a LightGBM build with USE_CUDA, or cuML RF with `split_criterion`
 random thresholds if cuML admits it).

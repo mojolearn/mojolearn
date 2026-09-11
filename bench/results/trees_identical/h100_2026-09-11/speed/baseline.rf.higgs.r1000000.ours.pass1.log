@@ -1,0 +1,24 @@
+FSPEED-NOTE lane=rf arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on a GPU vendor's box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+2541 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x187dc0000000, nodemask=2)
+2541 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x12b400000000, nodemask=1)
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=cuda path=/root/mojolearn/python/mojolearn/identical/_mojolearn_rf.so
+FSPEED-SCALE stage=before rows=1000000 features=28 input_mib=106.8 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=rf arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+2541 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x187e00000000, nodemask=2)
+2541 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x187e40000000, nodemask=2)
+FSPEED-WARMUP lane=rf arm=ours shape=higgs-1000000x28 ms=1860.127
+FSPEED-ORDER lane=rf round=1 arms=ours
+FSPEED lane=rf arm=ours shape=higgs-1000000x28 round=1 ms=1108.179 hash=efd14ab2c09ff57c
+FSPEED-ORDER lane=rf round=2 arms=ours
+FSPEED lane=rf arm=ours shape=higgs-1000000x28 round=2 ms=1073.600 hash=efd14ab2c09ff57c
+FSPEED-ORDER lane=rf round=3 arms=ours
+FSPEED lane=rf arm=ours shape=higgs-1000000x28 round=3 ms=1071.444 hash=efd14ab2c09ff57c
+FSPEED-ORDER lane=rf round=4 arms=ours
+FSPEED lane=rf arm=ours shape=higgs-1000000x28 round=4 ms=1104.611 hash=efd14ab2c09ff57c
+FSPEED-ORDER lane=rf round=5 arms=ours
+FSPEED lane=rf arm=ours shape=higgs-1000000x28 round=5 ms=1087.831 hash=efd14ab2c09ff57c
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.538817
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.809830
+FSPEED-SCALE stage=after rows=1000000 features=28 input_mib=106.8 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
