@@ -142,20 +142,28 @@ Istella-S was not measured (download 980 s).
 
 ## 5. Lane branches
 
-All seven finish lanes are MERGED (section 2). Four branches remain ahead of
-main and were deliberately NOT merged:
+All seven finish lanes are MERGED (section 2). `lane/cpu-sweep` (byte LM GPU
+logits, verified 1680/1680 equal to the CPU reference on an H100 and an
+MI325X) was ALSO merged by the neural session after it renumbered its
+DEVIATION 2660 to 2658, which resolved the collision with KDE's 2660. Main
+now has exactly one meaning for 2660.
+
+Branches still ahead of main, deliberately not merged here:
 
 | branch | what is on it | why not merged |
 |---|---|---|
-| lane/cpu-sweep | byte LM GPU logits, verified 1680/1680 equal to the CPU reference on an H100 AND an MI325X | **DEVIATION 2660 COLLISION**: main already uses 2660 for KDE host-pointer staging, this uses it for byte-LM forward-only logits. Renumber before merging. It touches no classical file, so it merges cleanly once renumbered |
-| lane/attention-regs-h100 | attention register pressure, DEVIATIONS 2653, 2654; 2655 and 2656 named, NOT BUILT | neural, owned by the peer session; partly unbuilt |
-| lane/trees-hotaisle-run | trees-hotaisle body switch | its own commit says "NOT RUN: lane stopped as a duplicate" |
 | lane/amd-gbdt-identity-verify | nothing unique | zero non-merge commits ahead of main; only a stale merge commit |
+| lane/linear-cluster-istella | see the branch | not reviewed this session |
+| lane/pointwise-speed | see the branch | not reviewed this session |
+| lane/trees-hotaisle-run | trees-hotaisle body switch | its own commit says "NOT RUN: lane stopped as a duplicate" |
 
 **Deviation-number collisions are a recurring failure here.** 2624 collided
-with `lane/cpu-speed` and 2660 now collides with `lane/cpu-sweep`, both byte-LM
-lanes from other sessions. Always run `git grep -n "DEVIATION 26[0-9][0-9]"`
-across main AND every open branch before taking a number.
+with `lane/cpu-speed` and 2660 collided with `lane/cpu-sweep`, both byte-LM
+lanes from other sessions drawing from the same range; the 2660 one was caught
+and renumbered to 2658 before it merged. Always run
+`git grep -n "DEVIATION 26[0-9][0-9]"` across main AND every open branch
+before taking a number.
+
 ## 6. Next steps, in the order I would take them
 
 Rules: runs on RunPod NVIDIA H100 through `tools/trees_leg.sh` (one pod per
