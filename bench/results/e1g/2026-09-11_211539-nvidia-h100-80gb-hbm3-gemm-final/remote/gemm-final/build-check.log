@@ -1,0 +1,18 @@
+1256 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5bad00000000, nodemask=2)
+/root/mojolearn/gemm/checks/gemm_step_arms_check.mojo:529:33: warning: assignment to 'want_step' was never used; assign to '_' instead?
+                var want_step = 0
+                                ^
+/root/mojolearn/gemm/checks/gemm_step_arms_check.mojo:528:33: warning: assignment to 'want_line' was never used; assign to '_' instead?
+                var want_line = 0
+                                ^
+/root/mojolearn/gemm/checks/gemm_step_arms_check.mojo:527:31: warning: assignment to 'want_ok' was never used; assign to '_' instead?
+                var want_ok = False
+                              ^
+Included from /root/mojolearn/gemm/checks/gemm_step_arms_check.mojo:98:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:3082:19: warning: assignment to 's' was never used; assign to '_' instead?
+    var s = String("")
+                  ^
+Included from /root/mojolearn/gemm/checks/gemm_step_arms_check.mojo:98:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:4181:19: warning: assignment to 's' was never used; assign to '_' instead?
+    var s = String("")
+                  ^

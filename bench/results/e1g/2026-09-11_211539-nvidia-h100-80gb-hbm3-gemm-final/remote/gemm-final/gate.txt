@@ -1,0 +1,15 @@
+deviations=2540-2544,2595
+started=2026-09-11T21:18:36Z
+root=/root/mojolearn
+arms=shipped,ksplit_leaf,kfoldv,kfoldv_leaf
+lm_arms=kfoldv,kfoldv_leaf
+check_arms=shipped,kfoldv,kfoldv_leaf
+rounds=7 warmups=2 deadline=300 check_deadline=900 lm_steps=3
+vendor=nvidia gpu_archs=sm_90a column=nvidia jobs=2
+skip_resources=0 skip_lm=0 lmtiming=1
+vendor=nvidia
+commit=d368b6d8f5a319ea2642ff875328c3b61b4e0f1d
+lm_arms_resolved=kfoldv,kfoldv_leaf
+shipped_plan=shipped: default=ksplit(S=132) else tuned128
+corpora= enwik8=training/corpus/enwik8/input.txt pilegithub=training/corpus/pile_github/input.txt
+finished=2026-09-11T21:39:09Z

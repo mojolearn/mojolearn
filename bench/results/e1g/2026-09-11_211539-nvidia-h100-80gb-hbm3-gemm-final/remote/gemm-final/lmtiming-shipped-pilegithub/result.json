@@ -1,0 +1,302 @@
+{
+  "schema": "mojolearn.lm-step-memory-probe.v3",
+  "shape": {
+    "batch": 1,
+    "length": 2048,
+    "d_model": 768,
+    "n_heads": 12,
+    "n_kv": 12,
+    "head_dim": 64,
+    "intermediate": 2048,
+    "n_layers": 12,
+    "vocab_size": 50257
+  },
+  "parameters": 162147840,
+  "steps_completed": 1,
+  "resident": true,
+  "step_result": "lean",
+  "witness_every_step": false,
+  "witness_source": "export_gradients(named=False) + export_state() once after the last untimed step",
+  "corpus": {
+    "path": "training/corpus/pile_github/input.txt",
+    "sha256": "52a5b4c36ab9119c15505331c10e3b23690377d40fbac3e598c7fafe13a324df",
+    "manifest_sha256": "e3f46ca3870913aabd179647f5ab7e66b829c30c3cbcbf4b2862e2790d94cda5",
+    "bytes": 97124565,
+    "source_url": "https://huggingface.co/datasets/monology/pile-uncopyrighted/resolve/3be90335b66f24456a5d6659d9c8d208c0357119/val.jsonl.zst",
+    "schedule": "step k row b: bytes[(k*batch*length + b*length) % (bytes - length - 1) : +length+1] as int32; targets shifted one byte"
+  },
+  "attention_arm": "stash_tiled_fgrid_r32_qres_pf_kvgrid_r32",
+  "attention_arm_source": "binding",
+  "attention_arm_requested": null,
+  "attention_arm_default": "stash_tiled_fgrid_r32_qres_pf_kvgrid_r32",
+  "attention_arm_is_default": true,
+  "attention_arm_resolved_hd64": "stash_tiled_fgrid_r32_qres_pf_kvgrid_r32",
+  "attention_arm_trial_build": false,
+  "gemm_arm": "shipped",
+  "gemm_plan": "shipped: default=ksplit(S=132) else tuned128",
+  "step_witnesses": [
+    {
+      "step": 1,
+      "completed_steps": 1,
+      "sha256": {
+        "loss": "fb1bfea4e8daa3b31227ff49a404e36a58fe27b98856af4d27a24872b0e9abf2"
+      }
+    }
+  ],
+  "final_witness": {
+    "step": 1,
+    "completed_steps": 1,
+    "sha256": {
+      "gradients": "85d053a482668fd958df0e32325fc47f9ba10ec630ff63557c7b79c5bd85b0e3",
+      "parameters": "1b32246046a72ada00e3c8ec04d079beb629d8e314f860bc7106d42c5996a8ca",
+      "m": "8dbf0dfcb08f29687241a6586a7ef8224fde5877a7aeb490b9701d24d5812524",
+      "v": "227d2c36dbd16e9acf0556ec491d8b6431a8e4cc5b235b8d81011996a9bc05be",
+      "flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb"
+    },
+    "export_seconds": 13.8648610599339,
+    "source": "export_gradients(named=False) + export_state() once after the last untimed step"
+  },
+  "first_call_seconds": 13.608764031901956,
+  "steady_step_seconds": [],
+  "steady_median_seconds": null,
+  "steady_median_tokens_per_second": null,
+  "peak_device_process_bytes": "unavailable",
+  "peak_device_wide_bytes": 14553186304,
+  "process_ru_maxrss_bytes": 8268832768,
+  "budget_seconds": 300.0,
+  "limited": false,
+  "component_timing_step_seconds": 0.2939536105841398,
+  "component_timing_steps": 1,
+  "component_timing_step_seconds_all": [
+    0.2939536105841398
+  ],
+  "component_timing_witnesses": [],
+  "qualification": "complete-step probe; device peak from a polled vendor tool; host RSS is a separate boundary; no opponent, no default gate, no target-scale qualification claim",
+  "component_timing_ms": {
+    "attn.core": 22.423965,
+    "attn.o_proj": 3.3389699999999998,
+    "attn.qkv_proj": 9.709972,
+    "attn.rope_and_cache": 1.325753,
+    "block.attention_total": 36.866509,
+    "block.mlp_and_residuals": 24.692853,
+    "block.norm1": 3.723856,
+    "bwd.after_attention": 23.422347000000002,
+    "bwd.attention": 91.338375,
+    "bwd.before_attention": 0.036437,
+    "envelope.blocks_backward": 168.170155,
+    "envelope.blocks_forward": 65.349963,
+    "envelope.native_call": 293.26302371919155,
+    "step.bind_final_sync": 0.001815,
+    "step.bind_publish": 0.00541,
+    "step.bind_scalar_admission": 0.007174,
+    "step.ce_backward": 0.985414,
+    "step.ce_forward": 1.709209,
+    "step.ce_refuse_scan": 0.388669,
+    "step.embedding_backward": 2.550858,
+    "step.embedding_forward": 0.057177,
+    "step.head_backward_da": 14.39355,
+    "step.head_backward_db": 14.012126,
+    "step.head_forward": 13.892347,
+    "step.loss_download": 0.018527,
+    "step.opt_refuse_scan": 2.175315,
+    "step.optimizer": 1.720758,
+    "step.pack_grads": 1.11636,
+    "step.py_flags": 0.15863962471485138,
+    "step.py_tokens": 0.3490019589662552,
+    "step.shadow_copy": 2.308212,
+    "step.unpack_weights": 1.15458,
+    "step.upload_inputs": 0.161669,
+    "step.validate_after_scan": 2.15382,
+    "step.validate_grads_scan": 0.557394
+  },
+  "component_timing_ms_per_step": {
+    "attn.core": [
+      22.423965
+    ],
+    "attn.o_proj": [
+      3.3389699999999998
+    ],
+    "attn.qkv_proj": [
+      9.709972
+    ],
+    "attn.rope_and_cache": [
+      1.325753
+    ],
+    "block.attention_total": [
+      36.866509
+    ],
+    "block.mlp_and_residuals": [
+      24.692853
+    ],
+    "block.norm1": [
+      3.723856
+    ],
+    "bwd.after_attention": [
+      23.422347000000002
+    ],
+    "bwd.attention": [
+      91.338375
+    ],
+    "bwd.before_attention": [
+      0.036437
+    ],
+    "envelope.blocks_backward": [
+      168.170155
+    ],
+    "envelope.blocks_forward": [
+      65.349963
+    ],
+    "envelope.native_call": [
+      293.26302371919155
+    ],
+    "step.bind_final_sync": [
+      0.001815
+    ],
+    "step.bind_publish": [
+      0.00541
+    ],
+    "step.bind_scalar_admission": [
+      0.007174
+    ],
+    "step.ce_backward": [
+      0.985414
+    ],
+    "step.ce_forward": [
+      1.709209
+    ],
+    "step.ce_refuse_scan": [
+      0.388669
+    ],
+    "step.embedding_backward": [
+      2.550858
+    ],
+    "step.embedding_forward": [
+      0.057177
+    ],
+    "step.head_backward_da": [
+      14.39355
+    ],
+    "step.head_backward_db": [
+      14.012126
+    ],
+    "step.head_forward": [
+      13.892347
+    ],
+    "step.loss_download": [
+      0.018527
+    ],
+    "step.opt_refuse_scan": [
+      2.175315
+    ],
+    "step.optimizer": [
+      1.720758
+    ],
+    "step.pack_grads": [
+      1.11636
+    ],
+    "step.py_flags": [
+      0.15863962471485138
+    ],
+    "step.py_tokens": [
+      0.3490019589662552
+    ],
+    "step.shadow_copy": [
+      2.308212
+    ],
+    "step.unpack_weights": [
+      1.15458
+    ],
+    "step.upload_inputs": [
+      0.161669
+    ],
+    "step.validate_after_scan": [
+      2.15382
+    ],
+    "step.validate_grads_scan": [
+      0.557394
+    ]
+  },
+  "component_bytes": {
+    "step.bind_publish_bytes": 444,
+    "step.ce_refuse_scan_bytes": 411705344,
+    "step.ce_refuse_scan_download_bytes": 8192,
+    "step.loss_download_bytes": 4,
+    "step.opt_refuse_scan_bytes": 2594365440,
+    "step.opt_refuse_scan_download_bytes": 0,
+    "step.pack_grads_bytes": 648591360,
+    "step.py_flags_bytes": 440,
+    "step.py_tokens_bytes": 8196,
+    "step.shadow_copy_bytes": 1945774080,
+    "step.unpack_weights_bytes": 648591360,
+    "step.upload_inputs_bytes": 16384,
+    "step.validate_after_scan_bytes": 2594365440,
+    "step.validate_grads_scan_bytes": 648591360
+  },
+  "component_counts": {},
+  "component_line_counts": {
+    "attn.core": 12,
+    "attn.o_proj": 12,
+    "attn.qkv_proj": 12,
+    "attn.rope_and_cache": 12,
+    "block.attention_total": 12,
+    "block.mlp_and_residuals": 12,
+    "block.norm1": 12,
+    "bwd.after_attention": 12,
+    "bwd.attention": 12,
+    "bwd.before_attention": 12,
+    "envelope.blocks_backward": 1,
+    "envelope.blocks_forward": 1,
+    "envelope.native_call": 1,
+    "step.bind_final_sync": 1,
+    "step.bind_publish": 1,
+    "step.bind_publish_bytes": 1,
+    "step.bind_scalar_admission": 1,
+    "step.ce_backward": 1,
+    "step.ce_forward": 1,
+    "step.ce_refuse_scan": 1,
+    "step.ce_refuse_scan_bytes": 1,
+    "step.ce_refuse_scan_download_bytes": 1,
+    "step.embedding_backward": 1,
+    "step.embedding_forward": 1,
+    "step.head_backward_da": 1,
+    "step.head_backward_db": 1,
+    "step.head_forward": 1,
+    "step.loss_download": 1,
+    "step.loss_download_bytes": 1,
+    "step.opt_refuse_scan": 1,
+    "step.opt_refuse_scan_bytes": 1,
+    "step.opt_refuse_scan_download_bytes": 1,
+    "step.optimizer": 1,
+    "step.pack_grads": 1,
+    "step.pack_grads_bytes": 1,
+    "step.py_flags": 1,
+    "step.py_flags_bytes": 1,
+    "step.py_tokens": 1,
+    "step.py_tokens_bytes": 1,
+    "step.shadow_copy": 1,
+    "step.shadow_copy_bytes": 1,
+    "step.unpack_weights": 1,
+    "step.unpack_weights_bytes": 1,
+    "step.upload_inputs": 1,
+    "step.upload_inputs_bytes": 1,
+    "step.validate_after_scan": 1,
+    "step.validate_after_scan_bytes": 1,
+    "step.validate_grads_scan": 1,
+    "step.validate_grads_scan_bytes": 1
+  },
+  "component_timing_steps_parsed": 1,
+  "component_timing_uneven": [],
+  "component_timing_total_ms": 239.9584025836811,
+  "component_timing_excluded_from_total": [
+    "attn.core",
+    "attn.o_proj",
+    "attn.qkv_proj",
+    "attn.rope_and_cache",
+    "envelope.blocks_backward",
+    "envelope.blocks_forward",
+    "envelope.native_call"
+  ],
+  "step_seconds": 0.2939536105841398,
+  "component_timing_covered_fraction": 0.8163138466196748,
+  "component_timing_boundary": "one step under MOJOLEARN_TRANSFORMER_TIMING=1; every tick waits on the device, so neither the parts nor step_seconds are a timing sample; the uncovered remainder (1 - covered fraction) is time no timer brackets"
+}

@@ -1466,3 +1466,22 @@ breakdown and logs).
 | kmeans | taxi | cuML KMeans | 128.2 (127.4..129.0) | inertia 1.20192e8, 20 iter | 304.0 (279.6..368.6) | inertia 1.20628e8 | 2.37x | 216.2 (196.2..222.7), 1.68x of that race's cuML 128.9, same centroid digest |
 
 cuML k-means returned a different centroid digest in every round; ours held one.
+
+Istella-S, measured by the orchestrator the same night on RunPod pod
+n03kul7dt759n0 (NVIDIA H200, driver 580.95.05; H100 stock was out, same sm_90a
+build), cuML 26.08, both trees built on that pod, the same harness, 1 warm-up plus
+5 interleaved rounds. Istella-S 2,043,304 x 220. Evidence
+`~/mojolearn-evidence/linear-cluster-speed-2026-09-11/pod2-h200-istella/`,
+summary `bench/results/linear_cluster_speed_2026-09-11/istella_h200_summary.tsv`.
+
+| lane | dataset | opponent | opponent ms | opponent quality | ours before (36ca51fd) ms | ours after (2632, 2633) ms | after / before | ours after / opponent | ours quality, digest before = after |
+|---|---|---|---|---|---|---|---|---|---|
+| ols | Istella-S | cuML LinearRegression eig | 83.48 (83.29..83.54) | R2 -6473.68 | 4110.0 (4068.5..4320.3) | 2565.1 (2524.0..2585.7) | 0.624 | 30.73x | R2 0.331944, 6f12cfc209ecd1f9 |
+| pca | Istella-S | cuML PCA full | 81.32 (81.26..116.80) | EVR sum 1.0000000156 | 687.8 (687.7..689.4) | 687.4 (684.2..688.6) | 0.999 (unchanged code) | 8.45x | EVR sum 1.0000000146, e43f2f52f20f511a |
+| kmeans | Istella-S | cuML KMeans | 173.80 (173.60..176.06) | inertia 1.28555e17 (0.979 of ours), 20 iter, digest different every round | 2021.1 (2015.4..2023.3) | 805.7 (796.0..824.2) | 0.399 | 4.64x | inertia 1.31285e17, 21 iter, 7f720b0b76896308 |
+
+Flip verdict (ENGINEERING_RULES section 9, geomean of after/before over taxi and
+Istella-S): OLS sqrt(0.67 x 0.624) = 0.65, k-means sqrt(0.71 x 0.399) = 0.53, both
+below 1 with bits unchanged on both datasets, so DEVIATIONS 2632 and 2633 are the
+default (merged into main). cuML's eig OLS again returns a broken fit on Istella-S
+(R2 -6473.68), the failure DEVIATIONS 2620 and 2621 fixed in ours.

@@ -1,0 +1,4 @@
+STEP gemm arm=kfoldv ratio=1.1425612807693903 shipped_ms=142.551939 arm_ms=162.874326 calls=12 moved=0 (per-call medians weighted by per-step counts; a GEMM sum, not a step time)
+STEP gemm arm=kfoldv_leaf ratio=1.2633434848274794 shipped_ms=143.58411800000002 arm_ms=181.39606000000003 calls=12 moved=0 (per-call medians weighted by per-step counts; a GEMM sum, not a step time)
+STEP gemm arm=ksplit_leaf ratio=1.01551134156592 shipped_ms=141.71050200000002 arm_ms=143.908622 calls=12 moved=0 (per-call medians weighted by per-step counts; a GEMM sum, not a step time)
+STEP gemm arm=shipped ratio=1.0004583305130172 shipped_ms=141.38487 arm_ms=141.449671 calls=12 moved=0 (per-call medians weighted by per-step counts; a GEMM sum, not a step time)

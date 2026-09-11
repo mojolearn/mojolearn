@@ -84,13 +84,25 @@ other 4M-row arms.
 
 ## Flip verdict
 
-None computed. ENGINEERING_RULES section 9 needs after/before on taxi AND
-Istella-S; Istella-S is RUN OWED. Taxi after/before: 0.67 (OLS), 0.71 (k-means),
-bits unchanged. `tools/flip_verdict.py` reads FSPEED logs, which this harness does
-not write; the geomean is to be taken by hand from the two race JSONs.
+FLIP (orchestrator, 2026-09-11 about 21:40Z). Istella-S ran on RunPod pod
+n03kul7dt759n0, an NVIDIA H200 (H100 stock was out; same sm_90a build), both trees
+built on that pod, `ab.sh istella OUT ols,kmeans,pca ours,ours-base,cuml-gpu 5`
+(`istella_h200_summary.tsv`, logs in
+`~/mojolearn-evidence/linear-cluster-speed-2026-09-11/pod2-h200-istella/`):
+OLS 4110.0 to 2565.1 ms (0.624, coefficient digest 6f12cfc209ecd1f9 both), KMeans
+2021.1 to 805.7 ms (0.399, digest 7f720b0b76896308 both), PCA 687.8 to 687.4 ms
+(0.999, unchanged code, digest e43f2f52f20f511a both). Geomean of after/before over
+taxi and Istella-S: OLS 0.65, k-means 0.53, quality unchanged (same bits), so the
+change is merged as the default. The host arithmetic has no multiply-add pair (sums
+of `x` or `abs(x)`, a subtraction, one multiply per stored element), so no
+contraction decision can differ on another host CPU. Apple M4 (orchestrator):
+`pixi run check-kmeans` OK, `check-kmeans-identity` OK, `glm/ols_main.mojo` 17/17.
 
 ## RUN OWED
 
+0. DONE: item 1 (Istella-S on an H200) and the check-kmeans and ols_main parts of
+   item 2. Still owed: `test_native_helpers.py` and `helpers_ident.py` on the M4,
+   item 3 (AMD) and item 4.
 1. Istella-S baseline and after on an H100 (same pod, both trees):
    `sh tools/classical_two_datasets_leg.sh` with `MOJOLEARN_CTD_PHASES="setup prep"
    MOJOLEARN_CTD_LANES=kmeans,pca,ols MOJOLEARN_CTD_DATASETS=istella

@@ -1,0 +1,10 @@
+lane	dataset	shape	arm	device	device_name	status	median_ms	min_ms	max_ms	rounds	digest_stable	quality	ours_over_this
+kmeans	istella	2043304x220	cuml-gpu	gpu	NVIDIA H200	ok	173.8005	173.6005	176.0575	5	False	inertia=1.28555e+17,inertia_over_ours=0.979204,n_iter=20	4.6359
+kmeans	istella	2043304x220	ours	gpu	cuda	ok	805.7242	795.9674	824.1969	5	True	inertia=1.31285e+17,inertia_over_ours=1,n_iter=21	
+kmeans	istella	2043304x220	ours-base	gpu	cuda	ok	2021.0975	2015.3849	2023.3271	5	True	inertia=1.31285e+17,inertia_over_ours=1,n_iter=21	0.3987
+ols	istella	2043304x220	cuml-gpu	gpu	NVIDIA H200	ok	83.4798	83.2854	83.5396	5	True	finite=True,r2=-6473.68,rmse=67.1436	30.7270
+ols	istella	2043304x220	ours	gpu	cuda	ok	2565.0805	2523.9850	2585.7228	5	True	finite=True,r2=0.331944,rmse=0.682027	
+ols	istella	2043304x220	ours-base	gpu	cuda	ok	4109.9602	4068.5380	4320.3422	5	True	finite=True,r2=0.331944,rmse=0.682027	0.6241
+pca	istella	2043304x220	cuml-gpu	gpu	NVIDIA H200	ok	81.3230	81.2561	116.7972	5	True	explained_variance_ratio_sum=1	8.4523
+pca	istella	2043304x220	ours	gpu	cuda	ok	687.3637	684.1929	688.5614	5	True	explained_variance_ratio_sum=1	
+pca	istella	2043304x220	ours-base	gpu	cuda	ok	687.7663	687.6841	689.4067	5	True	explained_variance_ratio_sum=1	0.9994

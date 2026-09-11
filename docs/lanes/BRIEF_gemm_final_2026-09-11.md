@@ -456,3 +456,61 @@ verdicts.
   would pay the traffic section 3.4 avoids.
 - Model C (DRAM traffic bound fold): `kfoldv` flat and `kfoldv_leaf` about
   2 ms slower.
+
+## 8. H100 leg results (2026-09-11 21:15Z to 21:40Z, RunPod NVIDIA H100 80GB HBM3 at 1980 MHz, commit d368b6d8, run by the neural session mojolearn-d1): NO FLIP, both arms
+
+Evidence `bench/results/e1g/2026-09-11_211539-nvidia-h100-80gb-hbm3-gemm-final`
+(`remote/gemm-final/` holds the on-box files). Gates: `status.tsv` every
+item 0 (builds, step-check, resources, four prices, both bindings, both
+corpora, 16 LM probes); `diff_apple_vs_nvidia.txt` `RESULT: IDENTICAL`;
+`lm_summary.tsv` `witnesses_equal_baseline=True` for both arms on both
+corpora and for the closing shipped run. The M4 gates of section 7 were
+green before the leg (trial arms check PASS with `REACH ragged` 102/102 for
+both arms, no-trial run FAIL naming the define, device check all green,
+price and resources builds). The host checks of section 6 were not in this
+commit; mojolearn-df added them on main afterwards (2c64a778, kernels
+unchanged), so the leg measured exactly these kernels.
+
+Lean step, steady median seconds, one pod:
+
+| run | enwik8 | Pile GitHub | ratio over shipped | verdict |
+|---|---:|---:|---:|---|
+| shipped (`ksplit(S=132) else tuned128`) | 0.2940 | 0.2924 | 1 | reference |
+| shipped, closing run | 0.2935 | 0.2906 | 0.998 / 0.994 | drift bracket |
+| `kfoldv` (2640) | 0.3151 | 0.3167 | 1.0727 / 1.0864, geomean 1.0795 | NO FLIP |
+| `kfoldv_leaf` (2641) | 0.3329 | 0.3318 | 1.1331 / 1.1382, geomean 1.1357 | NO FLIP |
+
+GEMM sum per step (`price_step.txt` STEP lines, per-call medians weighted
+by per-step counts): shipped 141.4 ms, `ksplit_leaf` 143.9 (1.016),
+`kfoldv` 162.9 (1.143), `kfoldv_leaf` 181.4 (1.263); `moved=0` everywhere.
+
+The fold launch per call (`price_tables.txt` PHASE lines, `fold_ms`,
+milliseconds; groups in parentheses):
+
+| call | shipped fold | `kfoldv` fold | `kfoldv_leaf` fold | `ksplit_leaf` fold (shipped kernel, finer rule) |
+|---|---:|---:|---:|---:|
+| proj_fwd, proj_dA (2048 x 768 x 768) | 0.060 (6) | 0.155 (6) | 0.154 (6) | 0.060 (6) |
+| proj_dB | 0.050 (16) | 0.115 (16) | 0.116 (16) | 0.051 (16) |
+| gateup, down (2048 x 3072 x 768 and back) | 0.069 (8) | 0.191 (8) | 0.334 (16) | 0.115 (16) |
+| head_dA (2048 x 768 x 50257) | 0.067 (7) | 0.162 (7) | 0.478 (25) | 0.163 (25) |
+
+The reading. The lane fold (16 cells per thread through an 8-level
+register stack) takes 2.3x to 2.8x the shipped fold's time at the same
+group count on every call, and the shipped fold at 16 groups costs the same
+as at 6 (0.050 against 0.060 ms) where the lane fold scales with the groups
+it loads (0.115 at 16, 0.155 at 6, 0.334 at 16 on the wider calls). So the
+fold's cost was never the per-thread push instructions section 3.2 fitted;
+the shipped one-thread-per-cell fold is already at its traffic and launch
+floor at these sizes, and a fold that reads every group into one thread's
+lanes pays its loads serially. Section 3.2's fit read launch-count scaling
+as instruction count. `kfoldv_leaf` adds the finer rule's extra groups on
+top. `ksplit_leaf`, the price-only control (the shipped fold under the finer
+rule), takes head_dA from 14.31 to 12.97 ms per call (its 25 groups against
+7) and loses about 0.03 ms on each of the 20 small calls, so its GEMM sum is
+1.016x shipped: not a flip either, and not an LM arm here.
+
+No register readback for the fold kernels exists in this leg (the resources
+rows of section 6 item 3 landed after it, 2c64a778); a later leg at that
+commit prints them. Nothing else is owed on these arms: the fold is bound by
+traffic, and the trial arms stay as trial arms (`MOJOLEARN_GEMM_ARM_TRIAL`
+only), never a default.
