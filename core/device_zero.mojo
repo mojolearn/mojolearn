@@ -25,12 +25,21 @@ aligned takes the byte kernel for the whole span.
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.math import ceildiv
+from std.sys.compile import is_defined
 from std.sys.info import size_of
 
 comptime ZERO_TPB = 256
 comptime ZERO_MAX_BLOCKS = 2048
 comptime ZERO_LANES = 4
 """Four uint32 lanes, 16 bytes, per thread per grid stride."""
+
+comptime MEMSET_FILL = is_defined["MOJOLEARN_2560_MEMSET_FILL"]()
+"""DEVIATION 2560 (2026-09-11): opt-out switch for `enqueue_fill` only.
+`-D MOJOLEARN_2560_MEMSET_FILL=1` restores `ctx.enqueue_memset` at every
+gbdt fill site (the pre-89cb86ee launch sequence) so the section-9 A/B on
+taxi and Istella-S runs from one source. The RF builder's
+`enqueue_zero_bytes` is not switched. Both sides are held to the same
+bytes by `pixi run check-device-zero` and `check-device-zero-memset`."""
 
 
 def zero_words_kernel(dst: MutPointer[UInt32, MutAnyOrigin], n_vec: Int32):
@@ -115,23 +124,42 @@ def fill_kernel[dt: DType](
         i += stride
 
 
+def _all_zero_bits[dt: DType](value: Scalar[dt]) -> Bool:
+    """True when every byte of `value` is 0x00. DEVIATION 2561: `value ==
+    0` is also true for a float -0.0, whose bytes are not zero, so a -0.0
+    fill routed to the zero kernel wrote +0.0 where the memset it replaced
+    wrote -0.0. The test is on the bytes, as a memset's result is."""
+    var v = value
+    var p = MutPointer(to=v).unsafe_bitcast[UInt8]()
+    for i in range(size_of[Scalar[dt]]()):
+        if p[unsafe_offset=i] != UInt8(0):
+            return False
+    return True
+
+
 def enqueue_fill[
     dt: DType
-](ctx: DeviceContext, buf: DeviceBuffer[dt], value: Scalar[dt]) raises:
+](ctx: DeviceContext, mut buf: DeviceBuffer[dt], value: Scalar[dt]) raises:
     """`enqueue_memset(buf, value)` as a kernel launch (DEVIATION 2512):
-    the same bytes, none of Metal's memset-between-launches host cost. A
-    zero goes through the SIMD zero kernel; any other value through the
-    scalar fill. Nothing is enqueued for an empty buffer."""
-    var n = len(buf)
-    if n <= 0:
-        return
-    if value == Scalar[dt](0):
-        enqueue_zero_buffer(ctx, buf)
-        return
-    var p = MutPointer[Scalar[dt], MutAnyOrigin](
-        unsafe_from_address=Int(buf.unsafe_ptr())
-    )
-    ctx.enqueue_function[fill_kernel[dt]](
-        p, Int32(n), value,
-        grid_dim=_blocks_for(n), block_dim=ZERO_TPB,
-    )
+    the same bytes, none of Metal's memset-between-launches host cost. An
+    all-zero-bytes value goes through the SIMD zero kernel (DEVIATION
+    2561); any other value, -0.0 and NaN included, through the scalar
+    fill. Nothing is enqueued for an empty buffer. `buf` is `mut` because
+    the DEVIATION 2560 arm hands it to `enqueue_memset`, which every
+    caller in the repository passes a mutable buffer."""
+    comptime if MEMSET_FILL:
+        ctx.enqueue_memset(buf, value)
+    else:
+        var n = len(buf)
+        if n <= 0:
+            return
+        if _all_zero_bits[dt](value):
+            enqueue_zero_buffer(ctx, buf)
+            return
+        var p = MutPointer[Scalar[dt], MutAnyOrigin](
+            unsafe_from_address=Int(buf.unsafe_ptr())
+        )
+        ctx.enqueue_function[fill_kernel[dt]](
+            p, Int32(n), value,
+            grid_dim=_blocks_for(n), block_dim=ZERO_TPB,
+        )
