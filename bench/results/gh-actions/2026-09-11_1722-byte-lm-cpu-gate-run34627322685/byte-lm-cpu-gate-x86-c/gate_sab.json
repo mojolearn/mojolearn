@@ -1,0 +1,479 @@
+{
+ "binary": {
+  "path": "/home/runner/work/_temp/host-sab/_mojolearn_byte_lm_host.so",
+  "sha256": "0fdd75ebfecf9683c7145f9234672d10cf720b2b8b68fc08166445047379e722"
+ },
+ "capture": "bench/results/resume/2026-09-07-root-byte-lm-three-vendor/apple",
+ "capture_comparison_sha256": "eb5f8514d76153dc89e62dd6de2eaa3a382cf8afb2d9b7eeb8f5ae4e4e8e6641",
+ "commit": "155f619564a846369849915d3c86f504e35f61fe",
+ "compared": 33,
+ "deviation": 2613,
+ "equal": 24,
+ "expect_mismatch": true,
+ "first_mismatches": [
+  {
+   "case": "heldout-final/batch01",
+   "equal": false,
+   "equal_reference": false,
+   "equal_threaded": false,
+   "got": "40335754",
+   "got_threaded": "40335754",
+   "seconds": 0.011014,
+   "seconds_threaded": 0.010597,
+   "want": "40335753"
+  },
+  {
+   "case": "heldout-final/batch06",
+   "equal": false,
+   "equal_reference": false,
+   "equal_threaded": false,
+   "got": "4041cb57",
+   "got_threaded": "4041cb57",
+   "seconds": 0.011015,
+   "seconds_threaded": 0.007054,
+   "want": "4041cb56"
+  },
+  {
+   "case": "step000024",
+   "equal": false,
+   "equal_reference": false,
+   "equal_threaded": false,
+   "got": "40397a9e",
+   "got_threaded": "40397a9e",
+   "seconds": 0.011017,
+   "seconds_threaded": 0.007133,
+   "want": "40397aa0"
+  },
+  {
+   "case": "step000032",
+   "equal": false,
+   "equal_reference": false,
+   "equal_threaded": false,
+   "got": "405da261",
+   "got_threaded": "405da261",
+   "seconds": 0.011051,
+   "seconds_threaded": 0.007094,
+   "want": "405da262"
+  },
+  {
+   "case": "step000040",
+   "equal": false,
+   "equal_reference": false,
+   "equal_threaded": false,
+   "got": "406b70a8",
+   "got_threaded": "406b70a8",
+   "seconds": 0.011034,
+   "seconds_threaded": 0.006865,
+   "want": "406b70a7"
+  }
+ ],
+ "host": {
+  "cpu": "AMD EPYC 7763 64-Core Processor",
+  "family": "25",
+  "isa": [
+   "avx2",
+   "fma"
+  ],
+  "machine": "x86_64",
+  "model": "1",
+  "python": "3.12.14",
+  "release": "6.17.0-1022-azure",
+  "stepping": "1",
+  "system": "Linux",
+  "vendor": "AuthenticAMD"
+ },
+ "mismatched": 9,
+ "mismatched_reference": 9,
+ "mismatched_threaded": 9,
+ "probe_paths_equal": true,
+ "probes": {
+  "final_heldout00_full": "fce4448fc459b447b75cbceb3a6a72222833cbca2c4563aad74322c1696da4d9",
+  "final_heldout00_full_threaded": "fce4448fc459b447b75cbceb3a6a72222833cbca2c4563aad74322c1696da4d9",
+  "final_heldout00_next_bytes": [
+   32,
+   32
+  ],
+  "final_heldout00_next_bytes_threaded": [
+   32,
+   32
+  ],
+  "final_heldout00_row0": "89634187f64702d9e579ec03aaedf49fbba27b28b2833aaccd4fd01c51b8167f",
+  "final_heldout00_row0_len1": "864a04f3413d226d791bc5ac096ff8830347182cb19c66cd08b01270574b07ed",
+  "final_heldout00_row0_len1_threaded": "864a04f3413d226d791bc5ac096ff8830347182cb19c66cd08b01270574b07ed",
+  "final_heldout00_row0_threaded": "89634187f64702d9e579ec03aaedf49fbba27b28b2833aaccd4fd01c51b8167f"
+ },
+ "rows": [
+  {
+   "case": "heldout-initial/batch00",
+   "equal": true,
+   "equal_reference": true,
+   "equal_threaded": true,
+   "got": "40b14e0a",
+   "got_threaded": "40b14e0a",
+   "seconds": 0.012014,
+   "seconds_threaded": 0.007162,
+   "want": "40b14e0a"
+  },
+  {
+   "case": "heldout-initial/batch01",
+   "equal": true,
+   "equal_reference": true,
+   "equal_threaded": true,
+   "got": "40b17f4e",
+   "got_threaded": "40b17f4e",
+   "seconds": 0.011761,
+   "seconds_threaded": 0.007087,
+   "want": "40b17f4e"
+  },
+  {
+   "case": "heldout-initial/batch02",
+   "equal": true,
+   "equal_reference": true,
+   "equal_threaded": true,
+   "got": "40b13049",
+   "got_threaded": "40b13049",
+   "seconds": 0.011629,
+   "seconds_threaded": 0.00728,
+   "want": "40b13049"
+  },
+  {
+   "case": "heldout-initial/batch03",
+   "equal": true,
+   "equal_reference": true,
+   "equal_threaded": true,
+   "got": "40b1669f",
+   "got_threaded": "40b1669f",
+   "seconds": 0.011681,
+   "seconds_threaded": 0.007179,
+   "want": "40b1669f"
+  },
+  {
+   "case": "heldout-initial/batch04",
+   "equal": true,
+   "equal_reference": true,
+   "equal_threaded": true,
+   "got": "40b15ac7",
+   "got_threaded": "40b15ac7",
+   "seconds": 0.011647,
+   "seconds_threaded": 0.007464,
+   "want": "40b15ac7"
+  },
+  {
+   "case": "heldout-initial/batch05",
+   "equal": true,
+   "equal_reference": true,
+   "equal_threaded": true,
+   "got": "40b130e8",
+   "got_threaded": "40b130e8",
+   "seconds": 0.01182,
+   "seconds_threaded": 0.012141,
+   "want": "40b130e8"
+  },
+  {
+   "case": "heldout-initial/batch06",
+   "equal": true,
+   "equal_reference": true,
+   "equal_threaded": true,
+   "got": "40b178a1",
+   "got_threaded": "40b178a1",
+   "seconds": 0.011739,
+   "seconds_threaded": 0.007297,
+   "want": "40b178a1"
+  },
+  {
+   "case": "heldout-initial/batch07",
+   "equal": true,
+   "equal_reference": true,
+   "equal_threaded": true,
+   "got": "40b129fc",
+   "got_threaded": "40b129fc",
+   "seconds": 0.011772,
+   "seconds_threaded": 0.007419,
+   "want": "40b129fc"
+  },
+  {
+   "case": "heldout-final/batch00",
+   "equal": true,
+   "equal_reference": true,
+   "equal_threaded": true,
+   "got": "40355d9c",
+   "got_threaded": "40355d9c",
+   "seconds": 0.011098,
+   "seconds_threaded": 0.007249,
+   "want": "40355d9c"
+  },
+  {
+   "case": "heldout-final/batch01",
+   "equal": false,
+   "equal_reference": false,
+   "equal_threaded": false,
+   "got": "40335754",
+   "got_threaded": "40335754",
+   "seconds": 0.011014,
+   "seconds_threaded": 0.010597,
+   "want": "40335753"
+  },
+  {
+   "case": "heldout-final/batch02",
+   "equal": true,
+   "equal_reference": true,
+   "equal_threaded": true,
+   "got": "402de0d9",
+   "got_threaded": "402de0d9",
+   "seconds": 0.011032,
+   "seconds_threaded": 0.007048,
+   "want": "402de0d9"
+  },
+  {
+   "case": "heldout-final/batch03",
+   "equal": true,
+   "equal_reference": true,
+   "equal_threaded": true,
+   "got": "4048e58a",
+   "got_threaded": "4048e58a",
+   "seconds": 0.011001,
+   "seconds_threaded": 0.007094,
+   "want": "4048e58a"
+  },
+  {
+   "case": "heldout-final/batch04",
+   "equal": true,
+   "equal_reference": true,
+   "equal_threaded": true,
+   "got": "403b4f0b",
+   "got_threaded": "403b4f0b",
+   "seconds": 0.011012,
+   "seconds_threaded": 0.006873,
+   "want": "403b4f0b"
+  },
+  {
+   "case": "heldout-final/batch05",
+   "equal": true,
+   "equal_reference": true,
+   "equal_threaded": true,
+   "got": "403107dc",
+   "got_threaded": "403107dc",
+   "seconds": 0.011021,
+   "seconds_threaded": 0.007055,
+   "want": "403107dc"
+  },
+  {
+   "case": "heldout-final/batch06",
+   "equal": false,
+   "equal_reference": false,
+   "equal_threaded": false,
+   "got": "4041cb57",
+   "got_threaded": "4041cb57",
+   "seconds": 0.011015,
+   "seconds_threaded": 0.007054,
+   "want": "4041cb56"
+  },
+  {
+   "case": "heldout-final/batch07",
+   "equal": true,
+   "equal_reference": true,
+   "equal_threaded": true,
+   "got": "40225445",
+   "got_threaded": "40225445",
+   "seconds": 0.011036,
+   "seconds_threaded": 0.006937,
+   "want": "40225445"
+  },
+  {
+   "case": "step000001",
+   "equal": true,
+   "equal_reference": true,
+   "equal_threaded": true,
+   "got": "40b0f007",
+   "got_threaded": "40b0f007",
+   "seconds": 0.011564,
+   "seconds_threaded": 0.007352,
+   "want": "40b0f007"
+  },
+  {
+   "case": "step000008",
+   "equal": true,
+   "equal_reference": true,
+   "equal_threaded": true,
+   "got": "409a6e9c",
+   "got_threaded": "409a6e9c",
+   "seconds": 0.011021,
+   "seconds_threaded": 0.007117,
+   "want": "409a6e9c"
+  },
+  {
+   "case": "step000016",
+   "equal": true,
+   "equal_reference": true,
+   "equal_threaded": true,
+   "got": "4065d912",
+   "got_threaded": "4065d912",
+   "seconds": 0.011036,
+   "seconds_threaded": 0.006886,
+   "want": "4065d912"
+  },
+  {
+   "case": "step000024",
+   "equal": false,
+   "equal_reference": false,
+   "equal_threaded": false,
+   "got": "40397a9e",
+   "got_threaded": "40397a9e",
+   "seconds": 0.011017,
+   "seconds_threaded": 0.007133,
+   "want": "40397aa0"
+  },
+  {
+   "case": "step000032",
+   "equal": false,
+   "equal_reference": false,
+   "equal_threaded": false,
+   "got": "405da261",
+   "got_threaded": "405da261",
+   "seconds": 0.011051,
+   "seconds_threaded": 0.007094,
+   "want": "405da262"
+  },
+  {
+   "case": "step000040",
+   "equal": false,
+   "equal_reference": false,
+   "equal_threaded": false,
+   "got": "406b70a8",
+   "got_threaded": "406b70a8",
+   "seconds": 0.011034,
+   "seconds_threaded": 0.006865,
+   "want": "406b70a7"
+  },
+  {
+   "case": "step000048",
+   "equal": true,
+   "equal_reference": true,
+   "equal_threaded": true,
+   "got": "4045e948",
+   "got_threaded": "4045e948",
+   "seconds": 0.011076,
+   "seconds_threaded": 0.007188,
+   "want": "4045e948"
+  },
+  {
+   "case": "step000056",
+   "equal": false,
+   "equal_reference": false,
+   "equal_threaded": false,
+   "got": "40409fbf",
+   "got_threaded": "40409fbf",
+   "seconds": 0.011,
+   "seconds_threaded": 0.007176,
+   "want": "40409fc1"
+  },
+  {
+   "case": "step000064",
+   "equal": true,
+   "equal_reference": true,
+   "equal_threaded": true,
+   "got": "40510baa",
+   "got_threaded": "40510baa",
+   "seconds": 0.011024,
+   "seconds_threaded": 0.007037,
+   "want": "40510baa"
+  },
+  {
+   "case": "step000072",
+   "equal": true,
+   "equal_reference": true,
+   "equal_threaded": true,
+   "got": "404e2fe8",
+   "got_threaded": "404e2fe8",
+   "seconds": 0.011079,
+   "seconds_threaded": 0.007101,
+   "want": "404e2fe8"
+  },
+  {
+   "case": "step000080",
+   "equal": true,
+   "equal_reference": true,
+   "equal_threaded": true,
+   "got": "4039d49e",
+   "got_threaded": "4039d49e",
+   "seconds": 0.011002,
+   "seconds_threaded": 0.00707,
+   "want": "4039d49e"
+  },
+  {
+   "case": "step000088",
+   "equal": true,
+   "equal_reference": true,
+   "equal_threaded": true,
+   "got": "4050499c",
+   "got_threaded": "4050499c",
+   "seconds": 0.011117,
+   "seconds_threaded": 0.011552,
+   "want": "4050499c"
+  },
+  {
+   "case": "step000096",
+   "equal": true,
+   "equal_reference": true,
+   "equal_threaded": true,
+   "got": "40385bd4",
+   "got_threaded": "40385bd4",
+   "seconds": 0.011072,
+   "seconds_threaded": 0.007258,
+   "want": "40385bd4"
+  },
+  {
+   "case": "step000104",
+   "equal": false,
+   "equal_reference": false,
+   "equal_threaded": false,
+   "got": "403c010f",
+   "got_threaded": "403c010f",
+   "seconds": 0.011048,
+   "seconds_threaded": 0.007213,
+   "want": "403c010d"
+  },
+  {
+   "case": "step000112",
+   "equal": true,
+   "equal_reference": true,
+   "equal_threaded": true,
+   "got": "40387c2e",
+   "got_threaded": "40387c2e",
+   "seconds": 0.011063,
+   "seconds_threaded": 0.006982,
+   "want": "40387c2e"
+  },
+  {
+   "case": "step000120",
+   "equal": false,
+   "equal_reference": false,
+   "equal_threaded": false,
+   "got": "40244b79",
+   "got_threaded": "40244b79",
+   "seconds": 0.011046,
+   "seconds_threaded": 0.007094,
+   "want": "40244b77"
+  },
+  {
+   "case": "step000128",
+   "equal": false,
+   "equal_reference": false,
+   "equal_threaded": false,
+   "got": "403dd2e3",
+   "got_threaded": "403dd2e3",
+   "seconds": 0.01101,
+   "seconds_threaded": 0.007228,
+   "want": "403dd2e5"
+  }
+ ],
+ "schema": "mojolearn.byte-lm-host-gate.v1",
+ "timing": {
+  "loss_calls": 33,
+  "max_seconds": 0.012014,
+  "min_seconds": 0.011,
+  "total_seconds": 0.370552,
+  "total_seconds_threaded": 0.248282
+ },
+ "verdict": "PASS"
+}

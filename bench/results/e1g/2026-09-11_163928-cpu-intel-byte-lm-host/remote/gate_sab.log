@@ -1,0 +1,5 @@
+gate: PASS: 24/33 loss bytes equal (sabotage build, a mismatch was required)
+gate: host DO-Premium-Intel x86_64
+gate: probe final_heldout00_full fce4448fc459b447b75cbceb3a6a72222833cbca2c4563aad74322c1696da4d9
+gate: probe final_heldout00_row0_len1 864a04f3413d226d791bc5ac096ff8830347182cb19c66cd08b01270574b07ed
+gate: probe final_heldout00_next_bytes [32, 32]
