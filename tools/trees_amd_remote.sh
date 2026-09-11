@@ -70,7 +70,7 @@ track_mojo() {
 
 track_pip() {
     if ! python3 -c 'import pip, venv, ensurepip' > /dev/null 2>&1; then
-        step apt_pip 600 sh -c 'apt-get update && apt-get install -y --no-install-recommends python3-pip python3-venv'
+        step apt_pip 600 sh -c 'apt-get -o DPkg::Lock::Timeout=180 update -qq; apt-get -o DPkg::Lock::Timeout=180 install -y --no-install-recommends python3-pip python3-venv'
     fi
     step pip_base 900 python3 -m pip install --break-system-packages --no-input --disable-pip-version-check \
         numpy pandas pyarrow scikit-learn catboost lightgbm xgboost
@@ -156,7 +156,7 @@ track_gpu_opponents() {
     if [ "${MOJOLEARN_TREES_SKIP_LGBM_OPENCL:-0}" != 1 ]; then
         # Lowest priority, fifteen minutes including the build dependencies.
         _t0=$(date +%s)
-        step apt_lgbm_opencl 420 sh -c 'apt-get install -y --no-install-recommends cmake build-essential libboost-dev libboost-system-dev libboost-filesystem-dev ocl-icd-opencl-dev opencl-headers clinfo'
+        step apt_lgbm_opencl 420 sh -c 'apt-get -o DPkg::Lock::Timeout=180 update -qq; apt-get -o DPkg::Lock::Timeout=180 install -y --no-install-recommends cmake build-essential libboost-dev libboost-system-dev libboost-filesystem-dev ocl-icd-opencl-dev opencl-headers clinfo'
         clinfo -l > "$LOGS/clinfo.log" 2>&1
         _left=$((900 - $(date +%s) + _t0))
         [ "$_left" -lt 60 ] && _left=60
