@@ -26,14 +26,8 @@ grep -m1 -E '^(flags|Features)' /proc/cpuinfo > "$OUT/cpu_flags.txt" 2>&1 || tru
 nproc > "$OUT/nproc.txt" 2>&1 || true
 
 if ! command -v cc > /dev/null 2>&1; then
-    # A fresh droplet's cloud-init runs apt itself; on 2026-09-11 it held
-    # /var/lib/apt/lists/lock, apt exited 100 and the link step found no C
-    # compiler. Wait for cloud-init, then give apt a lock timeout as well.
-    if command -v cloud-init > /dev/null 2>&1; then
-        cloud-init status --wait > "$OUT/cloud_init_wait.log" 2>&1 || true
-    fi
-    { DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 update -qq \
-        && DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 install -y -qq build-essential; } > "$OUT/apt.log" 2>&1
+    { DEBIAN_FRONTEND=noninteractive apt-get update -qq \
+        && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq build-essential; } > "$OUT/apt.log" 2>&1
     echo "apt_build_essential_exit=$?" >> "$OUT/leg.txt"
 fi
 

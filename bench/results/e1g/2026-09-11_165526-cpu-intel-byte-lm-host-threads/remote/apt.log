@@ -1,0 +1,2 @@
+E: Could not get lock /var/lib/apt/lists/lock. It is held by process 8014 (apt-get)
+E: Unable to lock directory /var/lib/apt/lists/
