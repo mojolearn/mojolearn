@@ -80,6 +80,20 @@ if [ -e "$DEST" ] || [ -L "$DEST" ]; then
     say "byte-lm-lifetime: moved a prior binding aside"
 fi
 build_started=$(date +%s)
+# The NumPy-free Python layer resolves its host helpers (all_finite_f32 and
+# the buffer converters) from the IDENTICAL base binding, so that binding
+# is built first; without it every case fails at input validation in 0.3 s
+# (first L40S run, 2026-09-11 03:06Z).
+rm -f python/mojolearn/identical/_mojolearn.so
+MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_GPU_ARCHS="$ARCH" MOJOLEARN_SKIP_BUILD_GATE=1 \
+    timeout -k 30 1500 sh bindings/build.sh > "$OUT/build_base.log" 2>&1
+base_rc=$?
+echo "build_base_exit=$base_rc" >> "$OUT/status.txt"
+if [ "$base_rc" != 0 ] || [ ! -f python/mojolearn/identical/_mojolearn.so ]; then
+    say "byte-lm-lifetime: BASE BUILD FAILED; see $OUT/build_base.log"
+    echo "finished=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$OUT/status.txt"
+    exit 1
+fi
 MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_GPU_ARCHS="$ARCH" \
 MOJOLEARN_BYTE_LM_OUTDIR="$DEST_DIR" \
     timeout -k 30 1500 sh bindings/build_byte_lm.sh > "$OUT/build.log" 2>&1

@@ -66,7 +66,15 @@ echo "gpu_archs=$MOJOLEARN_GPU_ARCHS column=$MOJOLEARN_TARGET_COLUMN" >> "$ST"
 
 # 1. BUILD ONLY THE BYTE LM BINDING. The build script refuses to overwrite,
 # so a stale box copy (never the repo's) is removed first.
-rm -f python/mojolearn/identical/_mojolearn_byte_lm.so
+# The NumPy-free Python layer needs the IDENTICAL base binding for its host
+# helpers (all_finite_f32, converters); build it first (first H100 run,
+# 2026-09-11 03:06Z, failed at import without it).
+rm -f python/mojolearn/identical/_mojolearn.so python/mojolearn/identical/_mojolearn_byte_lm.so
+_t0=$(date +%s)
+MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_SKIP_BUILD_GATE=1 sh bindings/build.sh > "$OUT/build_base.log" 2>&1
+_rc=$?
+echo "build base exit=$_rc secs=$(( $(date +%s) - _t0 ))" >> "$ST"
+[ "$_rc" -eq 0 ] || { echo "base build failed; nothing run" >> "$ST"; exit 1; }
 _t0=$(date +%s)
 sh bindings/build_byte_lm.sh > "$OUT/build_byte_lm.log" 2>&1
 _rc=$?
