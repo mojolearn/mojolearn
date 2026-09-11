@@ -22,17 +22,19 @@ The optional specialized arm fixes K=8/10/16 at compile time, unrolling
 insertion and shifts so local SIMD indexing cannot spill via runtime indices.
 Other K values use the retained runtime baseline.
 
-`smallk_bucket_kernel` carries two gated candidates behind the selection
+`smallk_bucket_kernel` carries three gated candidates behind the selection
 trial hook (`-D MOJOLEARN_KNN_SELECT_TRIAL=1`, arms chosen per request from
-MOJOLEARN_KNN_SELECT): the block-uniform trip count (DEVIATION 2497, C4)
-and the block head-bound rejection (DEVIATION 2498, C1). See the hook
-comment above the kernel; without the define the shipped kernel is the
-2026-09-09 one.
+MOJOLEARN_KNN_SELECT): the block-uniform trip count (DEVIATION 2497, C4),
+the block head-bound rejection (DEVIATION 2498, C1, measured NEGATIVE on
+the H100 2026-09-11 and kept as that record) and the warp-scope group
+bound (DEVIATION 2515, C2). See the hook comment above the kernel; without
+the define the shipped kernel is the 2026-09-09 one plus C4.
 """
 from std.gpu import block_idx, thread_idx
 from std.os import getenv
 from std.sys.compile import is_defined
 from neighbors.checks.lane_minimum import shuffle_min_u64
+from std.gpu.primitives.warp import shuffle_xor
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
@@ -256,7 +258,11 @@ comptime SMALLK_SCAN_SPAN = SMALLK_SCAN_UNROLL * SMALLK_BLOCK
 #   MOJOLEARN_KNN_SELECT=uniform     C4 only: block-uniform trip count
 #                                    (DEVIATION 2497), no bound
 #   MOJOLEARN_KNN_SELECT=headbound   C4 + C1 block head-bound rejection
-#                                    (DEVIATION 2498)
+#                                    (DEVIATION 2498; NEGATIVE on the H100,
+#                                    kept as the measured record)
+#   MOJOLEARN_KNN_SELECT=warpbound   C4 + C2 warp-scope group bound
+#                                    (DEVIATION 2515): shuffles only, no
+#                                    barrier, no shared memory
 #   unset or empty                   the build default, SMALLK_ARM_DEFAULT
 #   anything else                    RAISES; the gate harness relies on it
 #   MOJOLEARN_KNN_SELECT_SABOTAGE=1  the chosen arm's SABOTAGE instantiation
@@ -266,39 +272,44 @@ comptime SMALLK_SCAN_SPAN = SMALLK_SCAN_UNROLL * SMALLK_BLOCK
 # returns SMALLK_ARM_DEFAULT without touching the environment, the launch
 # refuses any other arm, and the only instantiations in the binary are
 # `smallk_bucket_kernel[CAP, K, SMALLK_UNIFORM_TRIP_DEFAULT,
-# SMALLK_HEAD_BOUND_DEFAULT, False]`. With both defaults False (the state
-# until the C4 gate and then the C1 gate pass) that is the [CAP, K] kernel
-# of 2026-09-09: the `comptime if` arms below fold away and the non-trial
-# code path is the one that shipped.
+# SMALLK_HEAD_BOUND_DEFAULT, False, SMALLK_WARPBOUND_DEFAULT]`. With the two
+# bound defaults False (the state until a bound gate passes) that is the
+# [CAP, K] kernel of 2026-09-09 under C4's trip count: the `comptime if`
+# arms below fold away and the non-trial code path is the one that shipped.
 #
-# THE DEFAULTS. Two comptime switches here rather than kernel-matrix rows,
+# THE DEFAULTS. Three comptime switches here rather than kernel-matrix rows,
 # because this lane may not edit `checks/kernel_matrix.mojo`; the flip that
 # promotes an arm moves them into a SCHEDULING row
 # (`knn_selector_head_bound_for[column, identical]`, brief section 4) in
 # the same session as the measured win. Order of flips: UNIFORM first
 # (gated alone, arms baseline,uniform, equality on every fixture including
-# `divergent_tail`), then HEAD_BOUND (arms baseline,headbound, equality
-# plus the request-level price). HEAD_BOUND requires UNIFORM.
+# `divergent_tail`; DONE 2026-09-11), then ONE bound arm (arms
+# baseline,<bound arm>, equality plus the request-level price). Every bound
+# arm requires UNIFORM; HEAD_BOUND and WARPBOUND exclude each other.
 # ---------------------------------------------------------------------------
 comptime SMALLK_SELECT_TRIAL = is_defined["MOJOLEARN_KNN_SELECT_TRIAL"]()
 comptime SMALLK_UNIFORM_TRIP_DEFAULT = True  # DEVIATION 2497: flipped 2026-09-11 on the H100 and M4 gates
-comptime SMALLK_HEAD_BOUND_DEFAULT = False
+comptime SMALLK_HEAD_BOUND_DEFAULT = False  # DEVIATION 2498: NEGATIVE on the H100 2026-09-11, stays off
+comptime SMALLK_WARPBOUND_DEFAULT = False  # DEVIATION 2515: RUN OWED (brief, "Implementation pass, C2")
 
 comptime SMALLK_ARM_BASELINE = 0
 comptime SMALLK_ARM_UNIFORM = 1
 comptime SMALLK_ARM_HEADBOUND = 2
+comptime SMALLK_ARM_WARPBOUND = 3
 # OR'd into the arm value; the launch strips it.
 comptime SMALLK_ARM_SABOTAGE = 16
 comptime SMALLK_ARM_DEFAULT = SMALLK_ARM_HEADBOUND if SMALLK_HEAD_BOUND_DEFAULT else (
-    SMALLK_ARM_UNIFORM if SMALLK_UNIFORM_TRIP_DEFAULT else SMALLK_ARM_BASELINE
+    SMALLK_ARM_WARPBOUND if SMALLK_WARPBOUND_DEFAULT else (
+        SMALLK_ARM_UNIFORM if SMALLK_UNIFORM_TRIP_DEFAULT else SMALLK_ARM_BASELINE
+    )
 )
 
 
 def smallk_select_arm_from_env() raises -> Int:
     """The selector arm for THIS request, read once on the host.
 
-    Trial builds read `MOJOLEARN_KNN_SELECT` (baseline / uniform / headbound,
-    unset = the build default, anything else raises) and
+    Trial builds read `MOJOLEARN_KNN_SELECT` (baseline / uniform / headbound /
+    warpbound, unset = the build default, anything else raises) and
     `MOJOLEARN_KNN_SELECT_SABOTAGE` (exactly "1" sets the SMALLK_ARM_SABOTAGE
     bit). Every other build returns SMALLK_ARM_DEFAULT without reading the
     environment at all.
@@ -315,10 +326,12 @@ def smallk_select_arm_from_env() raises -> Int:
         arm = SMALLK_ARM_UNIFORM
     elif name == "headbound":
         arm = SMALLK_ARM_HEADBOUND
+    elif name == "warpbound":
+        arm = SMALLK_ARM_WARPBOUND
     else:
         raise Error(
             "MOJOLEARN_KNN_SELECT='" + name
-            + "' is not a selector arm (baseline, uniform, headbound, or unset)"
+            + "' is not a selector arm (baseline, uniform, headbound, warpbound, or unset)"
         )
     if String(getenv("MOJOLEARN_KNN_SELECT_SABOTAGE")) == "1":
         arm = arm | SMALLK_ARM_SABOTAGE
@@ -360,8 +373,104 @@ def _smallk_bound_refresh_due(done: Int) -> Bool:
     return done == 1 or done == 4 or done == 12 or done == 28
 
 
+# ---------------------------------------------------------------------------
+# C2 (DEVIATION 2515): the warp-scope group bound.
+#
+# THE BOUND. Every lane publishes its `depth`-th smallest key (depth =
+# ceil(k / LANES), so its head for k <= LANES). The warp is cut into
+# LANES / group aligned groups of `group` lanes, `group` the largest power
+# of two with (LANES / group) * depth >= k; each group takes the MINIMUM of
+# its published keys, and the bound is the MAXIMUM over the groups. Both
+# folds are xor butterflies on the 64-bit key taken as two 32-bit halves
+# (the rank phase's `shuffle_min_u64` shape), five steps on 32 lanes, no
+# barrier, no shared memory. For k = 10 and 15 on 32 lanes: depth 1, group
+# 2, sixteen pairs.
+#
+# WHY IT IS AN UPPER BOUND ON THE WARP UNION'S k-TH SMALLEST. A group's
+# minimum m_q is the published key of some lane L_q of that group, and L_q
+# holds `depth` keys <= m_q (its `depth` smallest). The bound B is >= every
+# m_q, so every L_q holds `depth` keys <= B; the L_q are distinct lanes
+# (groups are disjoint) and no key lives in two lanes (each column is
+# scanned by one lane), so at least (LANES / group) * depth >= k distinct
+# keys of the warp's union are <= B. The warp's union is a subset of the
+# block's, so the block union has at least k keys <= B as well: a pending
+# key at or above B is not among the row's k smallest. The rest of C1's
+# argument (the count never drops, equality is impossible because keys carry
+# their column, the rank phase pops exact minima of a union that still
+# holds the true top-k) is unchanged; see the refresh in the kernel.
+#
+# WHY THIS BOUND AND NOT THE WARP MINIMUM OF THE LANES' k-TH KEYS. That one
+# is valid too (the lane attaining the minimum holds k keys at or below it)
+# and costs the same five steps, but a lane's k-th key sits near the k/i
+# quantile after i elements (Gamma(k)/i, spread sqrt(k)/i) and the minimum
+# over 32 such is still near 4.7/i at k10 and 8.2/i at k15, which leaves
+# the warp-level "some lane inserts" probability near 1 for most of a
+# 256-element lane sequence; the event model in the brief gives it 0.88x
+# (k10) to 0.94x (k15) of the scan's instructions. The group bound sits
+# near 1.7/i at k <= 16 (the maximum over 16 pairs of the pair's minimum
+# head, independent of k) and models at 0.62x / 0.55x with the
+# every-second-batch cadence. The k-th smallest of the 32 heads (k removal
+# rounds) would sit near 0.4/i (k10) to 0.6/i (k15) but costs k times the
+# shuffles; C1's measured loss says the refresh price, not the bound's
+# tightness, is what decides.
+#
+# THE CADENCE. `SMALLK_WARPBOUND_EVERY` completed batches, starting at the
+# first batch count after which every lane holds k keys (ceil(k / 8): 2 for
+# k in 9..16), so every published key is real and the lane's own threshold
+# is real too. Before that, and in every partition with fewer full batches
+# than that (fewer than 4,096 columns for k in 9..16: the 3,940-column
+# `divergent_tail` remainder and the carved k-wide tail), `bound` stays the
+# sentinel and min(threshold, sentinel) = threshold: the uniform arm by
+# construction. Two is the default because one refresh is about 45
+# instructions, under one insertion chain at k10 (about 60) and half of one
+# at k15 (about 90): the model's saving from refreshing every batch instead
+# of every second is three events (about 180 instructions) against sixteen
+# more refreshes (about 700), and every fourth batch is flat at k10 and one
+# percent worse at k15. The cadence is a scheduling choice: any bound that
+# is an upper bound on the union's k-th smallest at any moment is
+# admissible, so the parameter is free to move without an order argument.
+# ---------------------------------------------------------------------------
+comptime SMALLK_WARPBOUND_EVERY = 2
+
+
+@always_inline
+def _smallk_shuffle_xor_u64(value: UInt64, offset: Int) -> UInt64:
+    var hi = shuffle_xor(UInt32(value >> UInt64(32)), UInt32(offset))
+    var lo = shuffle_xor(UInt32(value & UInt64(0xFFFFFFFF)), UInt32(offset))
+    return (UInt64(hi) << UInt64(32)) | UInt64(lo)
+
+
+@always_inline
+def _smallk_warp_group_bound[LANES: Int](published: UInt64, group: Int) -> UInt64:
+    """Maximum over the LANES / group aligned lane groups of each group's
+    minimum published key. Every lane of the warp must call this
+    convergently (`group` and the trip counts are warp-uniform: they derive
+    from k and the partition length alone) and every lane returns the same
+    value. Integer min and max are associative, commutative and idempotent,
+    so the result does not depend on the butterfly's step order."""
+    var v = published
+    var offset = 1
+    while offset < group:
+        var other = _smallk_shuffle_xor_u64(v, offset)
+        if other < v:
+            v = other
+        offset *= 2
+    while offset < LANES:
+        var other = _smallk_shuffle_xor_u64(v, offset)
+        if other > v:
+            v = other
+        offset *= 2
+    return v
+
+
+@always_inline
+def _smallk_warpbound_refresh_due(done: Int, fill: Int) -> Bool:
+    return done >= fill and (done - fill) % SMALLK_WARPBOUND_EVERY == 0
+
+
 def smallk_bucket_kernel[
-    CAP: Int, K: Int = 0, UNIFORM: Bool = False, BOUND: Bool = False, SABOTAGE: Bool = False
+    CAP: Int, K: Int = 0, UNIFORM: Bool = False, BOUND: Bool = False, SABOTAGE: Bool = False,
+    WARPBOUND: Bool = False,
 ](
     values: MutPointer[Float32, MutAnyOrigin],
     out_values: MutPointer[Float32, MutAnyOrigin],
@@ -378,10 +487,20 @@ def smallk_bucket_kernel[
     BOUND (DEVIATION 2498, C1): at `_smallk_bound_refresh_due` points the
     block computes the k-th smallest of its 256 list heads and every lane
     rejects pending keys at or above min(own k-th, that bound). Requires
-    UNIFORM (the refresh has a barrier in the loop).
+    UNIFORM (the refresh has a barrier in the loop). Measured NEGATIVE on
+    the H100 (2026-09-11); kept as the record.
+    WARPBOUND (DEVIATION 2515, C2): every SMALLK_WARPBOUND_EVERY batches
+    once the lists are full, each warp folds its lanes' heads into the
+    group bound described above `_smallk_warp_group_bound` with shuffles
+    only, and every lane of that warp rejects pending keys at or above
+    min(own k-th, that bound). Requires UNIFORM (the shuffles must be
+    convergent) and a fixed-lane-width column (SMALLK_SHUFFLE); excludes
+    BOUND.
     SABOTAGE: reach proof for the gate, per arm. Never on by default.
     """
     comptime assert UNIFORM or not BOUND, "C1's in-loop barrier needs C4's block-uniform trip count"
+    comptime assert UNIFORM or not WARPBOUND, "C2's in-loop shuffles need C4's block-uniform trip count"
+    comptime assert not (BOUND and WARPBOUND), "one bound arm at most"
     var length = Int(length_in)
     var k = K if K > 0 else Int(k_in)
     var tid = Int(thread_idx.x)
@@ -409,6 +528,15 @@ def smallk_bucket_kernel[
     var bound = sentinel
     var gate = sentinel
     var rounds = 0
+    # C2 state (constants under comptime K; folded away unless WARPBOUND).
+    # `wb_fill`: batches after which every lane holds k keys; `wb_depth`:
+    # the published slot + 1; `wb_group`: lanes per group. See the comment
+    # above `_smallk_warp_group_bound`.
+    var wb_fill = (k + SMALLK_SCAN_UNROLL - 1) // SMALLK_SCAN_UNROLL
+    var wb_depth = (k + SMALLK_LANES - 1) // SMALLK_LANES
+    var wb_group = 1
+    while (SMALLK_LANES // (wb_group * 2)) * wb_depth >= k:
+        wb_group *= 2
     # THE SCAN, unrolled SMALLK_SCAN_UNROLL loads deep (2026-09-09). The
     # loop body is a load, a key, a compare and a rarely taken insertion;
     # written one element at a time, each iteration waits for its own
@@ -449,14 +577,14 @@ def smallk_bucket_kernel[
                 var pending = composite_key(
                     batch[u], UInt32(batch_base + tid + u * SMALLK_BLOCK), select_min
                 )
-                comptime if SABOTAGE and (not BOUND) and u == 0:
+                comptime if SABOTAGE and (not BOUND) and (not WARPBOUND) and u == 0:
                     # `uniform` arm reach: bit 0 of the index half of the
                     # first element of every batch is flipped, so one
                     # candidate column in eight carries its neighbor's
                     # index and the gathered value moves with it. Only
                     # this loop form carries it: a flip proves this loop.
                     pending = pending ^ UInt64(1)
-                comptime if BOUND:
+                comptime if BOUND or WARPBOUND:
                     if pending < gate:
                         _smallk_insert[CAP](local_keys, threshold, pending, k)
                         gate = threshold if threshold < bound else bound
@@ -465,6 +593,62 @@ def smallk_bucket_kernel[
                         _smallk_insert[CAP](local_keys, threshold, pending, k)
             batch_base += SMALLK_SCAN_SPAN
             done += 1
+            comptime if WARPBOUND and SMALLK_SHUFFLE:
+                if _smallk_warpbound_refresh_due(done, wb_fill):
+                    # C2 REFRESH. `done` is block-uniform (C4), so every
+                    # lane of every warp is here, and the butterfly is
+                    # convergent. Every lane publishes its wb_depth-th
+                    # smallest key (a real key: the lists are full), the
+                    # warp folds them into the group bound, and the gate
+                    # becomes min(threshold, bound). No barrier, no shared
+                    # memory, `rounds` untouched, so the rank phase below
+                    # starts from the same parity as the uniform arm.
+                    #
+                    # WHY THE OUTPUT BITS ARE UNCHANGED. At least k keys of
+                    # the warp's union, hence of the block's, are <= bound
+                    # (the argument above `_smallk_warp_group_bound`). That
+                    # count never drops afterwards: a key leaves a list only
+                    # when a smaller key from the same lane pushes it off
+                    # the end, and the smaller key is <= bound too. A pending
+                    # key p >= bound therefore has at least k union keys
+                    # below it and cannot be among the row's k smallest
+                    # (p == bound is impossible: p's column is in no list,
+                    # and keys carry their column). Dropping it is the same
+                    # act as the baseline's dropping of a key at or above
+                    # the lane's own k-th. So the union still contains the
+                    # true top-k after the scan, the rank phase pops the
+                    # union's exact minima k times, the k-th and the ties
+                    # are decided by the same UInt64 key compare, and the
+                    # value is still read from the original tile cell. Warps
+                    # hold different bounds; each is a bound on its own
+                    # union, which is a subset of the block's, so the
+                    # argument holds per warp.
+                    var published = sentinel
+                    comptime for slot in range(CAP):
+                        if slot == wb_depth - 1:
+                            published = local_keys[slot]
+                    var found = _smallk_warp_group_bound[SMALLK_LANES](published, wb_group)
+                    comptime if SABOTAGE:
+                        # `warpbound` arm reach: bit 63 of the reduced bound
+                        # is cleared. `twiddle_in` sets bit 31 of every
+                        # non-negative float's bits, so every composite key
+                        # with a non-negative distance has bit 63 set and
+                        # the sabotaged bound sits below all of them: from
+                        # the first refresh on, every lane rejects every
+                        # non-negative-distance key, and the output is the
+                        # top-k of the first wb_fill batches (4,096 columns
+                        # at k in 9..16). That differs from the true top-k
+                        # whenever one true neighbor lies beyond those
+                        # columns: certain on the arms check (a planted +0.0
+                        # at length / 2 and length - 1) and with probability
+                        # 1 - (4096 / 65536)^k on a hashed row. Only the
+                        # reduction's own result is sabotaged, and only when
+                        # it is a real key: a refresh that never produced
+                        # one cannot prove reach.
+                        if found != sentinel:
+                            found = found & UInt64(0x7FFFFFFFFFFFFFFF)
+                    bound = found
+                    gate = threshold if threshold < bound else bound
             comptime if BOUND:
                 if _smallk_bound_refresh_due(done):
                     # C1 REFRESH. Every thread publishes its head
@@ -567,7 +751,7 @@ def smallk_bucket_kernel[
             col += SMALLK_SCAN_SPAN
     while col < length:
         var pending = composite_key(values.unsafe_load(base + col), UInt32(col), select_min)
-        comptime if BOUND:
+        comptime if BOUND or WARPBOUND:
             if pending < gate:
                 _smallk_insert[CAP](local_keys, threshold, pending, k)
                 gate = threshold if threshold < bound else bound
@@ -626,14 +810,16 @@ def smallk_bucket_kernel[
 
 
 @always_inline
-def _smallk_enqueue[CAP: Int, K: Int, UNIFORM: Bool, BOUND: Bool, SABOTAGE: Bool](
+def _smallk_enqueue[
+    CAP: Int, K: Int, UNIFORM: Bool, BOUND: Bool, SABOTAGE: Bool, WARPBOUND: Bool = False
+](
     ctx: DeviceContext,
     values: MutPointer[Float32, MutAnyOrigin],
     out_values: MutPointer[Float32, MutAnyOrigin],
     out_indices: MutPointer[UInt32, MutAnyOrigin],
     rows: Int, length: Int, k: Int, select_min: Bool,
 ) raises:
-    ctx.enqueue_function[smallk_bucket_kernel[CAP, K, UNIFORM, BOUND, SABOTAGE]](
+    ctx.enqueue_function[smallk_bucket_kernel[CAP, K, UNIFORM, BOUND, SABOTAGE, WARPBOUND]](
         values, out_values, out_indices,
         Int32(length), Int32(k), Int32(select_min),
         grid_dim=(rows, 1, 1), block_dim=(SMALLK_BLOCK, 1, 1),
@@ -651,6 +837,7 @@ def _smallk_launch_bucket[CAP: Int, K: Int](
     """One capacity bucket: the arm's instantiation on a trial build, the
     build default otherwise (any other arm is refused there, so a check
     that asks for an arm cannot pass silently on a non-trial build)."""
+    comptime assert not (SMALLK_HEAD_BOUND_DEFAULT and SMALLK_WARPBOUND_DEFAULT), "one bound arm at most"
     comptime if SMALLK_SELECT_TRIAL:
         var sabotage = (arm & SMALLK_ARM_SABOTAGE) != 0
         var which = arm & (SMALLK_ARM_SABOTAGE - 1)
@@ -669,6 +856,17 @@ def _smallk_launch_bucket[CAP: Int, K: Int](
                 _smallk_enqueue[CAP, K, True, True, True](ctx, values, out_values, out_indices, rows, length, k, select_min)
             else:
                 _smallk_enqueue[CAP, K, True, True, False](ctx, values, out_values, out_indices, rows, length, k, select_min)
+        elif which == SMALLK_ARM_WARPBOUND:
+            comptime if not SMALLK_SHUFFLE:
+                # The refresh is shuffles; a column whose lane width the
+                # vendor's compiler chooses per kernel has no convergent
+                # warp to fold. Refuse rather than run the uniform arm under
+                # this name.
+                raise Error("small-k selector: the warpbound arm needs a fixed-lane-width column")
+            if sabotage:
+                _smallk_enqueue[CAP, K, True, False, True, True](ctx, values, out_values, out_indices, rows, length, k, select_min)
+            else:
+                _smallk_enqueue[CAP, K, True, False, False, True](ctx, values, out_values, out_indices, rows, length, k, select_min)
         else:
             raise Error("small-k selector: unknown arm " + String(arm))
     else:
@@ -677,9 +875,9 @@ def _smallk_launch_bucket[CAP: Int, K: Int](
                 "small-k selector: arm " + String(arm)
                 + " needs a build with -D MOJOLEARN_KNN_SELECT_TRIAL=1"
             )
-        _smallk_enqueue[CAP, K, SMALLK_UNIFORM_TRIP_DEFAULT, SMALLK_HEAD_BOUND_DEFAULT, False](
-            ctx, values, out_values, out_indices, rows, length, k, select_min
-        )
+        _smallk_enqueue[
+            CAP, K, SMALLK_UNIFORM_TRIP_DEFAULT, SMALLK_HEAD_BOUND_DEFAULT, False, SMALLK_WARPBOUND_DEFAULT
+        ](ctx, values, out_values, out_indices, rows, length, k, select_min)
 
 
 def smallk_select_launch(

@@ -39,9 +39,12 @@
 #
 # THE ARMS (MOJOLEARN_KNN_SELECTION_ARMS, default baseline,headbound):
 # `baseline` is the 2026-09-09 kernel, `uniform` is C4 alone (DEVIATION
-# 2497), `headbound` is C4 + C1 (DEVIATION 2498). Gate C4 first, alone
-# (ARMS=baseline,uniform), then C1 (the default pair). On a build without
-# the hook the gate phase FAILS at its reach check and says so.
+# 2497), `headbound` is C4 + C1 (DEVIATION 2498, NEGATIVE on the H100
+# 2026-09-11), `warpbound` is C4 + C2 (DEVIATION 2515). Names pass through
+# to the harness unchecked; the native side raises on an unknown one. C4
+# was gated alone (ARMS=baseline,uniform); a bound arm is gated as
+# ARMS=baseline,<arm>. On a build without the hook the gate phase FAILS at
+# its reach check and says so.
 # MOJOLEARN_KNN_SELECTION_SKIP_GATE=1 runs the profile alone;
 # MOJOLEARN_KNN_SELECTION_SKIP_PROFILE=1 skips the profile (already measured
 # 2026-09-11 on the H100; the brief's "Run 1 results").

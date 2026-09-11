@@ -735,3 +735,212 @@ next candidate is C2 warpbound: the same bound at warp scope with shuffles
 and no barriers, refreshed more often because it is cheap, which the
 model in this brief already ranked second. C1's arm also gives C2 its
 gate for free (same harness, arms baseline,warpbound).
+
+## Implementation pass, C2 warpbound (DEVIATION 2515; source only, 2026-09-11)
+
+Nothing here was built or run on the Mac. The C1 arm is untouched and stays
+the measured negative. Files touched by this pass (uncommitted, working
+tree):
+
+- `neighbors/checks/select_smallk_identical_candidate.mojo`: sixth kernel
+  parameter `WARPBOUND` on `smallk_bucket_kernel` (after `SABOTAGE`, so the
+  five-parameter instantiations are unchanged), the helpers
+  `_smallk_shuffle_xor_u64`, `_smallk_warp_group_bound`,
+  `_smallk_warpbound_refresh_due`, the comptime cadence
+  `SMALLK_WARPBOUND_EVERY = 2`, the default `SMALLK_WARPBOUND_DEFAULT =
+  False`, the arm `SMALLK_ARM_WARPBOUND = 3` in `smallk_select_arm_from_env`
+  and `_smallk_launch_bucket`, and the module docstring.
+- `neighbors/checks/knn_selector_arms_check.mojo`: the fourth arm in the
+  equality and reach properties, same 18 cases.
+- `tools/knn_selection_gate.py`: docstring for the arm name and its
+  sabotage; the numpy selftest accepts `warpbound`. The harness already
+  selects arms by name from `--arms`, which the shell script fills from
+  `MOJOLEARN_KNN_SELECTION_ARMS`, so `baseline,warpbound` needs no code.
+- `tools/knn_selection_gate.sh`: the arm comment only (names pass through
+  unchecked; the native side raises on an unknown one).
+- this section.
+
+### Mechanism
+
+At a refresh point every lane publishes its `depth`-th smallest key,
+`depth = ceil(k / lanes)` (its head for k <= 32 on NVIDIA). The warp is cut
+into `lanes / group` aligned groups of `group` lanes, `group` the largest
+power of two with `(lanes / group) * depth >= k`; each group takes the
+MINIMUM of its published keys and the warp bound is the MAXIMUM over the
+groups. Both folds are the rank phase's xor butterfly on the 64-bit key as
+two 32-bit halves: five `shuffle_xor` steps on 32 lanes (one min step, four
+max steps for k in 9..16), about 45 instructions, no barrier, no shared
+memory, `rounds` untouched. For k = 10 and 15 on 32 lanes: depth 1, group 2,
+sixteen pairs. Rejection is `pending < min(threshold, bound)` exactly as in
+C1; the tail loop uses the same gate.
+
+Refresh cadence: after every `SMALLK_WARPBOUND_EVERY = 2` completed batches,
+starting at the first batch count after which every lane holds k keys
+(`ceil(k / 8)`, so after batch 2 for k in 9..16), so every published key is
+real. A 65,536-column partition refreshes 16 times (batches 2, 4, ..., 32);
+the 6,784-column last partition of 400k once (batch 2); the 3,940-column
+`divergent_tail` remainder (one batch) and the carved k-wide tail (none)
+never, and there `bound` stays the sentinel, `min(threshold, sentinel) =
+threshold`, and the arm IS the uniform arm by construction. A partition
+between 2,048 and 4,095 columns at k in 9..16 is the same case (one batch).
+
+Why this bound and not the one the lane brief suggested (the warp minimum
+of the lanes' own k-th keys). That one is valid too and costs the same five
+steps, but a lane's k-th key after i elements is Gamma(k)/i, spread
+sqrt(k)/i, and the minimum over 32 of them sits near 4.7/i at k10 and 8.2/i
+at k15 (Monte Carlo, 200k draws), not near k/(32 i): with 32 lanes each
+passing at that rate the warp-level "some lane inserts" probability is
+`1 - (1 - 4.7/i)^32`, above 0.5 until i is past 200 of the 256 elements a
+lane sees, so almost no insertion chain is removed (event model: 0.88x of
+the scan's instructions at k10, 0.94x at k15). The figure k/(32 i) belongs
+to the k-th smallest of the 32 lane HEADS (0.37/i at k10, 0.62/i at k15),
+which needs k removal rounds (450 to 675 instructions per refresh). The
+group bound is the one-round compromise: 1.69/i (the maximum over 16 pairs
+of the pair's minimum, independent of k). Against C1's block k-th of 256
+heads (0.040/i at k10, 0.060/i at k15) it is 30 to 40 times looser, and it
+is refreshed 16 times instead of 4 at a tenth of the price each.
+
+### Why the bits are unchanged
+
+1. A group's minimum m_q is the published key of some lane L_q of that
+   group, and L_q holds `depth` keys at or below m_q (its `depth` smallest).
+   The bound B is at or above every m_q, so every L_q holds `depth` keys at
+   or below B; the L_q are distinct lanes (groups are disjoint) and no key
+   lives in two lanes (each column is scanned by exactly one lane), so at
+   least `(lanes / group) * depth >= k` distinct keys of the warp's union
+   are at or below B. The warp's union is a subset of the block's, so the
+   block union holds at least k keys at or below B.
+2. That count never decreases afterwards: a key leaves a list only when a
+   smaller key from the same lane pushes it off the end, and the smaller
+   key is at or below B as well.
+3. A pending key p >= B therefore has at least k union keys below it and is
+   not among the row's k smallest; p == B is impossible because keys carry
+   their column and p's column is in no list. Dropping it is the same act
+   as the baseline's dropping of a key at or above the lane's own k-th.
+4. Warps hold different bounds; each is a bound on its own union, a subset
+   of the block's, so 1 to 3 hold per warp, and the union of all 256 lists
+   still contains the row's true top-k after the scan under every arm.
+5. The rank phase is untouched (no shared memory, no barrier, `rounds`
+   stays 0, so the butterfly's page parity is the uniform arm's): k exact
+   UInt64 minima of the union, ties decided by the index half of the same
+   composite key, the winner's value read back from the original tile
+   cell. Before the first refresh, and in every partition with fewer than
+   `ceil(k / 8)` full batches, `bound` is the sentinel and the arm is the
+   uniform arm by construction, not by argument.
+
+### Sabotage (reach)
+
+Inside the refresh, bit 63 of the reduced bound is cleared, and only when
+the reduction returned a real key (a refresh that never produced one cannot
+prove reach). `twiddle_in` sets bit 31 of every non-negative float's bits,
+so every composite key with a non-negative distance has bit 63 set and the
+sabotaged bound sits below all of them: from the first refresh on, every
+lane rejects every non-negative-distance key, and the output is the top-k
+of the first 4,096 columns (k in 9..16). That differs from the true top-k
+whenever one true neighbor lies beyond those columns: certain on the arms
+check (a planted +0.0 at length / 2 and at length - 1 on rows 0 and 1) and
+with probability `1 - (4096 / 65536)^k` on every hashed row of every
+partition with at least two batches (`large`, `dyadic`, `ties`, and the six
+full partitions of `divergent_tail`). The two suggestions in the lane brief
+were rejected on the arms-check fixture: its rows 0 and 1 are 61 consecutive
+float bit patterns from 1.0 plus the planted specials, so the true top-k is
+decided inside batch 1 except for the far zeros, which are the extreme
+minimum and pass any bound that is merely too tight by a lane offset or by
+one head; only a bound below the +0.0 key flips them.
+
+### Expected cost (model; the gate's numbers replace it)
+
+Event model (per warp per 65,536-column launch, iid keys; the brief's
+section 2 model with the refresh priced): baseline 231 events at k10 and
+246 at k15; warpbound 116 at k10 and 116 at k15 (the group bound does not
+depend on k) plus 16 refreshes of about 45 instructions. Instructions per
+lane: 16.4k -> 10.2k at k10 (0.62x), 24.7k -> 13.6k at k15 (0.55x). With the
+profile's 1.7 ms tile-read intercept held: selection 10.28 -> about 7.0 ms
+at k10 (about 3.3 ms per request) and 14.60 -> about 8.8 ms at k15 (about
+5.8 ms per request). C1's refresh under the same model: 4 x k rounds x
+about 90 instructions plus 10 to 15 barriers each, about 3.6k (k10) to 5.4k
+(k15) instructions per lane, and the model priced it at 0.34x; it measured
++2.4 / +3.2 ms. So the model has been wrong once by about 8 ms, and the
+honest expectation is bracketed: BEST CASE the model's 3.3 / 5.8 ms saving;
+WORST CASE the insertion saving does not exist (the chain is not what the
+k-slope measures, or the extra live state changes the code the compiler
+emits, as C1 may have shown) and the arm costs its refresh alone, 16 x 45 =
+720 instructions per lane, about 4 percent of the scan, about +0.4 ms at
+k10 and +0.3 ms at k15 on a full request, inside the pair spread seen in
+step 1 (30.47 vs 30.41 ms). Warpbound is therefore the discriminating
+experiment for the whole bound family: with no barrier and a refresh an
+order of magnitude cheaper than C1's, a neutral or negative result says the
+insertion chain is not a divergent-branch cost the scan can shed, and C3
+(compaction) is dead for the same reason; the next candidate is then C6
+(fused distance and select) or the request-level non-kernel time (7.7 ms
+of every request is outside the three kernels, "Run 1 results").
+
+Refresh cost per batch, side by side: C1 (per refresh, four per partition)
+k rounds of 10 shuffles + 1 shared store + 1 barrier + 8 shared loads + 7
+compares; C2 (per refresh, sixteen per partition) 10 shuffles + 5
+compares + 5 selects, no barrier, no shared memory, no loop over k.
+
+### RUN OWED (orchestrator; nothing ran)
+
+Commit this pass first (the leg ships `git archive` of the COMMITTED tree).
+Same wrapper shape as step 1; the arm pair rides in the wrapper because the
+local environment does not reach the pod.
+
+```
+cat > /tmp/knn_c2_extra.sh <<'SH'
+#!/bin/sh
+export MOJOLEARN_KNN_SELECTION_ARMS=baseline,warpbound
+export MOJOLEARN_KNN_SELECTION_SKIP_PROFILE=1
+cd /root/mojolearn && PATH="$HOME/.pixi/bin:$PATH" pixi run mojo run \
+    -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_KNN_SELECT_TRIAL=1 \
+    -I . neighbors/checks/knn_selector_arms_check.mojo \
+    > /root/gemm_leg_out/knn-selector-arms-check.log 2>&1
+echo "arms_check_exit=$?" >> /root/gemm_leg_out/leg.txt
+exec sh /root/mojolearn/tools/knn_selection_gate.sh
+SH
+MOJOLEARN_RUNPOD_KEY_FILE=$HOME/.mojolearn_runpod_key \
+MOJOLEARN_GEMM_LEG_EXTRA=/tmp/knn_c2_extra.sh \
+MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/$(date +%Y-%m-%d_%H%M%S)-nvidia-h100-knn-selection-c2 \
+sh tools/gemm_remote_leg.sh nvidia --rent --minutes 60 \
+    --gpu "NVIDIA H100 80GB HBM3" \
+    --local-card bench/results/e1/2026-08-28_131651-runpod-nvidia/lanes/gemm.identical.card
+cat <leg>/remote/knn-selector-arms-check.log | tail -3
+cat <leg>/remote/knn-selection/summary.txt
+cat <leg>/remote/knn-selection/status.tsv
+```
+
+Verdict lines: `KNN SELECTOR ARMS PASS` with `SELECTOR_ARMS_REACH_PASS
+65536 <k> <base> <uni> <hb> <wb>` all four counts nonzero; in the gate JSON
+every fixture and k shows `warpbound` and `default` equal to `baseline`,
+row order, planted and oracle green, reach flipped > 0 on `baseline`,
+`warpbound` and `default` with clean bits restored; then the `timing`
+block. Apple column after the H100 verdict, orchestrator only, one light
+thing: `MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_BUILD_EXTRA_DEFINES="-D
+MOJOLEARN_KNN_SELECT_TRIAL=1" sh bindings/build.sh`, then
+`PYTHONPATH=python MOJOLEARN_NUMERIC_MODE=identical python3
+tools/knn_selection_gate.py --out /tmp/knn-sel-apple --arms
+baseline,warpbound --pairs 2 --deadline 300`. AMD: the same script on a
+DigitalOcean MI325X droplet (64-lane wavefront: depth 1, group 4, sixteen
+groups of four, the same argument). Both RUN OWED before any column other
+than NVIDIA takes the row.
+
+### Promotion rule
+
+`SMALLK_WARPBOUND_DEFAULT` flips to True (and moves into the kernel-matrix
+SCHEDULING row in the same session) ONLY IF: every correctness check is
+green on every fixture and k; reach flipped on `baseline`, `warpbound` and
+`default` with clean bits restored; AND both timed orders' medians favor
+`warpbound` on `dyadic` AND `large` at k10 AND k15 in the gate JSON's
+`timing` block, the request-level `NearestNeighbors.kneighbors` boundary
+(eight cells, all eight for warpbound). The phase-timer split, the event
+model above, the arms check's tile and any per-launch number are NOT
+promotion evidence: a tile or kernel win alone cannot promote a request
+default. A split verdict leaves the default off, the arm stays behind the
+define as a measured result, and the JSON path is recorded here. After a
+flip: rebuild without the trial define, rerun the gate with `--arms
+baseline` plus default to show the default equals the explicit arm, and
+record the `dyadic` medians against the cached rows in
+`bench/OPPONENT_REFERENCE.md` as cached-reference ratios (never as a paired
+opponent measurement; cuML is not rerun). If warpbound is neutral or
+negative, record it beside C1 and close the bound family (C2, C3) in
+section 3 with the JSON path.

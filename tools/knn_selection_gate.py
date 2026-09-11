@@ -42,8 +42,11 @@ THE SWITCHES (runtime, read by the native side per request)
 -----------------------------------------------------------
   MOJOLEARN_KNN_SELECT=<name>       explicit arm: `baseline` (the
                                     2026-09-09 kernel), `uniform` (C4,
-                                    DEVIATION 2497) or `headbound` (C4 +
-                                    C1, DEVIATION 2498). Unset = the
+                                    DEVIATION 2497), `headbound` (C4 +
+                                    C1, DEVIATION 2498; NEGATIVE on the
+                                    H100 2026-09-11) or `warpbound` (C4 +
+                                    C2, DEVIATION 2515: warp-scope group
+                                    bound, shuffles only). Unset = the
                                     build's default. Unknown names RAISE
                                     on the native side, never fall back.
   MOJOLEARN_KNN_SELECT_SABOTAGE=1   deliberately perturbs the selected
@@ -54,7 +57,11 @@ THE SWITCHES (runtime, read by the native side per request)
                                     of every unrolled batch, inside their
                                     own loop form; headbound takes the
                                     block minimum head as the bound
-                                    instead of the k-th, inside the refresh.
+                                    instead of the k-th, inside the refresh;
+                                    warpbound clears bit 63 of its reduced
+                                    bound inside its refresh, so every
+                                    non-negative-distance key after the
+                                    first 4,096 columns is rejected.
 
 Both are honored only by a binding built with
 `-D MOJOLEARN_KNN_SELECT_TRIAL=1` (the hook the brief specifies; not on any
@@ -795,7 +802,7 @@ def selftest_backend(log):
 
         def kneighbors(self, q):
             arm = os.environ.get(arm_env)
-            if arm not in (None, "baseline", "uniform", "headbound"):
+            if arm not in (None, "baseline", "uniform", "headbound", "warpbound"):
                 raise ValueError(f"unknown arm {arm!r}")
             xi = self.x.astype(np.float64)
             xq = np.asarray(q, dtype=np.float32).astype(np.float64)
