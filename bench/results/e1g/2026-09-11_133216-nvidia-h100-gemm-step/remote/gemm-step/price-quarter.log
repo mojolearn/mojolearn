@@ -1,0 +1,125 @@
+1173 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x32f100000000, nodemask=1)
+== bench/gemm_step_price_main.mojo [IDENTICAL] arm=quarter trial=True column=2 rounds=7 warmups=2 ==
+timing=host-synchronized median ms; raw samples below; the BITS pass is not a warmup
+TABLE call | op | m x n x k | per step | shipped plan | arm geometry | shipped blocks | arm blocks | shipped median ms | arm median ms | ratio
+BITS proj_fwd EQUAL cells=1572864 digest=0xdd3c876b6b377944
+SAMPLE proj_fwd round=0 arm_first=False shipped_ns=328946 arm_ns=435741
+SAMPLE proj_fwd round=1 arm_first=True shipped_ns=329102 arm_ns=424557
+SAMPLE proj_fwd round=2 arm_first=False shipped_ns=326979 arm_ns=435559
+SAMPLE proj_fwd round=3 arm_first=True shipped_ns=329002 arm_ns=424855
+SAMPLE proj_fwd round=4 arm_first=False shipped_ns=327563 arm_ns=436793
+SAMPLE proj_fwd round=5 arm_first=True shipped_ns=328881 arm_ns=424983
+SAMPLE proj_fwd round=6 arm_first=False shipped_ns=326792 arm_ns=436143
+PRICE gemm quarter proj_fwd shipped_ms=0.328881 arm_ms=0.435559 ratio=1.3243665641979927 shipped_tflops=7.345876180138105 arm_tflops=5.5467091806161735 plan=[TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] geometry=[quarter 64x64 reg4x4 TC=16 KS=32 pages=2 fold=cell-serial local tpb=256 hwftz=True]
+TABLE proj_fwd | NT | 2048 x 768 x 768 | 48 | TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) | quarter 64x64 reg4x4 TC=16 KS=32 pages=2 fold=cell-serial local tpb=256 hwftz=True | 96 | 384 | 0.328881 | 0.435559 | 1.3243665641979927
+BITS proj_dA EQUAL cells=1572864 digest=0x4a06fac1f8e83213
+SAMPLE proj_dA round=0 arm_first=False shipped_ns=336481 arm_ns=447450
+SAMPLE proj_dA round=1 arm_first=True shipped_ns=335090 arm_ns=437829
+SAMPLE proj_dA round=2 arm_first=False shipped_ns=333336 arm_ns=448685
+SAMPLE proj_dA round=3 arm_first=True shipped_ns=333966 arm_ns=437316
+SAMPLE proj_dA round=4 arm_first=False shipped_ns=333110 arm_ns=447249
+SAMPLE proj_dA round=5 arm_first=True shipped_ns=333583 arm_ns=439200
+SAMPLE proj_dA round=6 arm_first=False shipped_ns=333252 arm_ns=447871
+PRICE gemm quarter proj_dA shipped_ms=0.333583 arm_ms=0.447249 ratio=1.3407427836550423 shipped_tflops=7.242332804729258 arm_tflops=5.401731706499064 plan=[TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] geometry=[quarter 64x64 reg4x4 TC=16 KS=32 pages=2 fold=cell-serial local tpb=256 hwftz=True]
+TABLE proj_dA | NN | 2048 x 768 x 768 | 48 | TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) | quarter 64x64 reg4x4 TC=16 KS=32 pages=2 fold=cell-serial local tpb=256 hwftz=True | 96 | 384 | 0.333583 | 0.447249 | 1.3407427836550423
+BITS proj_dB EQUAL cells=589824 digest=0x1da75dd594f0934a
+SAMPLE proj_dB round=0 arm_first=False shipped_ns=893805 arm_ns=737747
+SAMPLE proj_dB round=1 arm_first=True shipped_ns=890956 arm_ns=724255
+SAMPLE proj_dB round=2 arm_first=False shipped_ns=886430 arm_ns=737044
+SAMPLE proj_dB round=3 arm_first=True shipped_ns=891103 arm_ns=725461
+SAMPLE proj_dB round=4 arm_first=False shipped_ns=887880 arm_ns=736958
+SAMPLE proj_dB round=5 arm_first=True shipped_ns=893111 arm_ns=727191
+SAMPLE proj_dB round=6 arm_first=False shipped_ns=885734 arm_ns=736151
+PRICE gemm quarter proj_dB shipped_ms=0.890956 arm_ms=0.736151 ratio=0.8262484342661142 shipped_tflops=2.7116031588540848 arm_tflops=3.281825473306428 plan=[TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] geometry=[quarter 64x64 reg4x4 TC=16 KS=32 pages=2 fold=cell-serial local tpb=256 hwftz=True]
+TABLE proj_dB | TN | 768 x 768 x 2048 | 48 | TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) | quarter 64x64 reg4x4 TC=16 KS=32 pages=2 fold=cell-serial local tpb=256 hwftz=True | 36 | 144 | 0.890956 | 0.736151 | 0.8262484342661142
+BITS gateup_fwd EQUAL cells=4194304 digest=0xe05cc5aa93a62891
+SAMPLE gateup_fwd round=0 arm_first=False shipped_ns=671052 arm_ns=1099239
+SAMPLE gateup_fwd round=1 arm_first=True shipped_ns=669164 arm_ns=1090841
+SAMPLE gateup_fwd round=2 arm_first=False shipped_ns=666762 arm_ns=1099079
+SAMPLE gateup_fwd round=3 arm_first=True shipped_ns=670643 arm_ns=1088212
+SAMPLE gateup_fwd round=4 arm_first=False shipped_ns=665388 arm_ns=1096005
+SAMPLE gateup_fwd round=5 arm_first=True shipped_ns=670448 arm_ns=1091103
+SAMPLE gateup_fwd round=6 arm_first=False shipped_ns=666164 arm_ns=1096227
+PRICE gemm quarter gateup_fwd shipped_ms=0.669164 arm_ms=1.096005 ratio=1.637872031370486 shipped_tflops=9.627611383756449 arm_tflops=5.878121855283507 plan=[TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] geometry=[quarter 64x64 reg4x4 TC=16 KS=32 pages=2 fold=cell-serial local tpb=256 hwftz=True]
+TABLE gateup_fwd | NT | 2048 x 2048 x 768 | 24 | TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) | quarter 64x64 reg4x4 TC=16 KS=32 pages=2 fold=cell-serial local tpb=256 hwftz=True | 256 | 1024 | 0.669164 | 1.096005 | 1.637872031370486
+BITS gateup_dA EQUAL cells=1572864 digest=0x46dcce99fe75e276
+SAMPLE gateup_dA round=0 arm_first=False shipped_ns=904495 arm_ns=1106838
+SAMPLE gateup_dA round=1 arm_first=True shipped_ns=905724 arm_ns=1097129
+SAMPLE gateup_dA round=2 arm_first=False shipped_ns=904404 arm_ns=1105639
+SAMPLE gateup_dA round=3 arm_first=True shipped_ns=903885 arm_ns=1094734
+SAMPLE gateup_dA round=4 arm_first=False shipped_ns=903602 arm_ns=1108668
+SAMPLE gateup_dA round=5 arm_first=True shipped_ns=904434 arm_ns=1094888
+SAMPLE gateup_dA round=6 arm_first=False shipped_ns=901618 arm_ns=1108618
+PRICE gemm quarter gateup_dA shipped_ms=0.904404 arm_ms=1.105639 ratio=1.2225056501298093 shipped_tflops=7.123421550545995 arm_tflops=5.826902763017586 plan=[TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] geometry=[quarter 64x64 reg4x4 TC=16 KS=32 pages=2 fold=cell-serial local tpb=256 hwftz=True]
+TABLE gateup_dA | NN | 2048 x 768 x 2048 | 24 | TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) | quarter 64x64 reg4x4 TC=16 KS=32 pages=2 fold=cell-serial local tpb=256 hwftz=True | 96 | 384 | 0.904404 | 1.105639 | 1.2225056501298093
+BITS gateup_dB EQUAL cells=1572864 digest=0xb0d0047e75bc15a7
+SAMPLE gateup_dB round=0 arm_first=False shipped_ns=913807 arm_ns=1128362
+SAMPLE gateup_dB round=1 arm_first=True shipped_ns=911435 arm_ns=1117242
+SAMPLE gateup_dB round=2 arm_first=False shipped_ns=913325 arm_ns=1130825
+SAMPLE gateup_dB round=3 arm_first=True shipped_ns=911942 arm_ns=1116050
+SAMPLE gateup_dB round=4 arm_first=False shipped_ns=909277 arm_ns=1129817
+SAMPLE gateup_dB round=5 arm_first=True shipped_ns=914409 arm_ns=1117094
+SAMPLE gateup_dB round=6 arm_first=False shipped_ns=909086 arm_ns=1128335
+PRICE gemm quarter gateup_dB shipped_ms=0.911942 arm_ms=1.128335 ratio=1.2372881170074412 shipped_tflops=7.06454022733902 arm_tflops=5.7096969818360686 plan=[TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] geometry=[quarter 64x64 reg4x4 TC=16 KS=32 pages=2 fold=cell-serial local tpb=256 hwftz=True]
+TABLE gateup_dB | TN | 2048 x 768 x 2048 | 24 | TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) | quarter 64x64 reg4x4 TC=16 KS=32 pages=2 fold=cell-serial local tpb=256 hwftz=True | 96 | 384 | 0.911942 | 1.128335 | 1.2372881170074412
+BITS down_fwd EQUAL cells=1572864 digest=0x63592259bcb93a54
+SAMPLE down_fwd round=0 arm_first=False shipped_ns=889824 arm_ns=1082654
+SAMPLE down_fwd round=1 arm_first=True shipped_ns=889812 arm_ns=1069888
+SAMPLE down_fwd round=2 arm_first=False shipped_ns=888783 arm_ns=1080223
+SAMPLE down_fwd round=3 arm_first=True shipped_ns=889840 arm_ns=1059893
+SAMPLE down_fwd round=4 arm_first=False shipped_ns=887935 arm_ns=1084390
+SAMPLE down_fwd round=5 arm_first=True shipped_ns=888933 arm_ns=1064640
+SAMPLE down_fwd round=6 arm_first=False shipped_ns=888447 arm_ns=1073841
+PRICE gemm quarter down_fwd shipped_ms=0.888933 arm_ms=1.073841 ratio=1.2080111774453193 shipped_tflops=7.247397659891128 arm_tflops=5.999445862096903 plan=[TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] geometry=[quarter 64x64 reg4x4 TC=16 KS=32 pages=2 fold=cell-serial local tpb=256 hwftz=True]
+TABLE down_fwd | NT | 2048 x 768 x 2048 | 12 | TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) | quarter 64x64 reg4x4 TC=16 KS=32 pages=2 fold=cell-serial local tpb=256 hwftz=True | 96 | 384 | 0.888933 | 1.073841 | 1.2080111774453193
+BITS down_dA EQUAL cells=4194304 digest=0x5b61bc9fe00905
+SAMPLE down_dA round=0 arm_first=False shipped_ns=680359 arm_ns=1130058
+SAMPLE down_dA round=1 arm_first=True shipped_ns=698855 arm_ns=1341117
+SAMPLE down_dA round=2 arm_first=False shipped_ns=682634 arm_ns=1133154
+SAMPLE down_dA round=3 arm_first=True shipped_ns=681105 arm_ns=1122557
+SAMPLE down_dA round=4 arm_first=False shipped_ns=674816 arm_ns=1129397
+SAMPLE down_dA round=5 arm_first=True shipped_ns=680472 arm_ns=1123793
+SAMPLE down_dA round=6 arm_first=False shipped_ns=676516 arm_ns=1135449
+PRICE gemm quarter down_dA shipped_ms=0.680472 arm_ms=1.130058 ratio=1.660697280711036 shipped_tflops=9.467620921948294 arm_tflops=5.7009914039810345 plan=[TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] geometry=[quarter 64x64 reg4x4 TC=16 KS=32 pages=2 fold=cell-serial local tpb=256 hwftz=True]
+TABLE down_dA | NN | 2048 x 2048 x 768 | 12 | TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) | quarter 64x64 reg4x4 TC=16 KS=32 pages=2 fold=cell-serial local tpb=256 hwftz=True | 256 | 1024 | 0.680472 | 1.130058 | 1.660697280711036
+BITS down_dB EQUAL cells=1572864 digest=0xa58e713f45edd8ed
+SAMPLE down_dB round=0 arm_first=False shipped_ns=923024 arm_ns=1141680
+SAMPLE down_dB round=1 arm_first=True shipped_ns=920535 arm_ns=1134743
+SAMPLE down_dB round=2 arm_first=False shipped_ns=917520 arm_ns=1142025
+SAMPLE down_dB round=3 arm_first=True shipped_ns=921177 arm_ns=1134780
+SAMPLE down_dB round=4 arm_first=False shipped_ns=916624 arm_ns=1142696
+SAMPLE down_dB round=5 arm_first=True shipped_ns=920097 arm_ns=1136899
+SAMPLE down_dB round=6 arm_first=False shipped_ns=914572 arm_ns=1145015
+PRICE gemm quarter down_dB shipped_ms=0.920097 arm_ms=1.14168 ratio=1.2408256955516646 shipped_tflops=7.001925823038223 arm_tflops=5.642956821526172 plan=[TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] geometry=[quarter 64x64 reg4x4 TC=16 KS=32 pages=2 fold=cell-serial local tpb=256 hwftz=True]
+TABLE down_dB | TN | 768 x 2048 x 2048 | 12 | TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) | quarter 64x64 reg4x4 TC=16 KS=32 pages=2 fold=cell-serial local tpb=256 hwftz=True | 96 | 384 | 0.920097 | 1.14168 | 1.2408256955516646
+BITS head_fwd EQUAL cells=102926336 digest=0xe1e8e917ef51cb67
+SAMPLE head_fwd round=0 arm_first=False shipped_ns=16597793 arm_ns=27042529
+SAMPLE head_fwd round=1 arm_first=True shipped_ns=16574491 arm_ns=27036257
+SAMPLE head_fwd round=2 arm_first=False shipped_ns=16586549 arm_ns=27047747
+SAMPLE head_fwd round=3 arm_first=True shipped_ns=16596668 arm_ns=27038803
+SAMPLE head_fwd round=4 arm_first=False shipped_ns=16570877 arm_ns=27051956
+SAMPLE head_fwd round=5 arm_first=True shipped_ns=16604295 arm_ns=27039708
+SAMPLE head_fwd round=6 arm_first=False shipped_ns=16591748 arm_ns=27049576
+PRICE gemm quarter head_fwd shipped_ms=16.591748 arm_ms=27.042529 ratio=1.629878238266396 shipped_tflops=9.528522979977758 arm_tflops=5.84615633012726 plan=[TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] geometry=[quarter 64x64 reg4x4 TC=16 KS=32 pages=2 fold=cell-serial local tpb=256 hwftz=True]
+TABLE head_fwd | NT | 2048 x 50257 x 768 | 1 | TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) | quarter 64x64 reg4x4 TC=16 KS=32 pages=2 fold=cell-serial local tpb=256 hwftz=True | 6288 | 25152 | 16.591748 | 27.042529 | 1.629878238266396
+BITS head_dA EQUAL cells=1572864 digest=0x287761cb23fe7292
+SAMPLE head_dA round=0 arm_first=False shipped_ns=22008703 arm_ns=26877245
+SAMPLE head_dA round=1 arm_first=True shipped_ns=22038394 arm_ns=26762519
+SAMPLE head_dA round=2 arm_first=False shipped_ns=22029304 arm_ns=26799596
+SAMPLE head_dA round=3 arm_first=True shipped_ns=22001084 arm_ns=26772744
+SAMPLE head_dA round=4 arm_first=False shipped_ns=21998389 arm_ns=26842054
+SAMPLE head_dA round=5 arm_first=True shipped_ns=22044738 arm_ns=26839371
+SAMPLE head_dA round=6 arm_first=False shipped_ns=22052115 arm_ns=26826280
+PRICE gemm quarter head_dA shipped_ms=22.029304 arm_ms=26.82628 ratio=1.2177543148889316 shipped_tflops=7.176570448889352 arm_tflops=5.8932827099396565 plan=[TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] geometry=[quarter 64x64 reg4x4 TC=16 KS=32 pages=2 fold=cell-serial local tpb=256 hwftz=True]
+TABLE head_dA | NN | 2048 x 768 x 50257 | 1 | TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) | quarter 64x64 reg4x4 TC=16 KS=32 pages=2 fold=cell-serial local tpb=256 hwftz=True | 96 | 384 | 22.029304 | 26.82628 | 1.2177543148889316
+BITS head_dB EQUAL cells=38597376 digest=0x48cf871761b383a8
+SAMPLE head_dB round=0 arm_first=False shipped_ns=16737419 arm_ns=27091621
+SAMPLE head_dB round=1 arm_first=True shipped_ns=16709710 arm_ns=27075606
+SAMPLE head_dB round=2 arm_first=False shipped_ns=16715759 arm_ns=27131474
+SAMPLE head_dB round=3 arm_first=True shipped_ns=16748972 arm_ns=27064551
+SAMPLE head_dB round=4 arm_first=False shipped_ns=16754901 arm_ns=27110528
+SAMPLE head_dB round=5 arm_first=True shipped_ns=16708957 arm_ns=27093961
+SAMPLE head_dB round=6 arm_first=False shipped_ns=16721291 arm_ns=27101584
+PRICE gemm quarter head_dB shipped_ms=16.721291 arm_ms=27.093961 ratio=1.6203271027338737 shipped_tflops=9.45470371253033 arm_tflops=5.835058672152071 plan=[TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)] geometry=[quarter 64x64 reg4x4 TC=16 KS=32 pages=2 fold=cell-serial local tpb=256 hwftz=True]
+TABLE head_dB | TN | 50257 x 768 x 2048 | 1 | TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle) | quarter 64x64 reg4x4 TC=16 KS=32 pages=2 fold=cell-serial local tpb=256 hwftz=True | 2358 | 9432 | 16.721291 | 27.093961 | 1.6203271027338737
+STEP gemm arm=quarter ratio=1.270271754810438 shipped_ms=219.43276699999998 arm_ms=278.739246 calls=12 moved=0 (per-call medians weighted by per-step counts; a GEMM sum, not a step time)

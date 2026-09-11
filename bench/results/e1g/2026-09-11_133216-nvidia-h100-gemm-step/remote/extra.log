@@ -1,0 +1,100 @@
+STEP gemm arm=half ratio=1.8423807561829322 shipped_ms=219.33137199999996 arm_ms=404.0918989999999 calls=12 moved=0 (per-call medians weighted by per-step counts; a GEMM sum, not a step time)
+STEP gemm arm=half_head ratio=1.8780245491602439 shipped_ms=219.28073899999995 arm_ms=411.814611 calls=12 moved=0 (per-call medians weighted by per-step counts; a GEMM sum, not a step time)
+STEP gemm arm=half_ks16 ratio=1.8442706984244295 shipped_ms=219.41503400000002 arm_ms=404.660718 calls=12 moved=0 (per-call medians weighted by per-step counts; a GEMM sum, not a step time)
+STEP gemm arm=head ratio=1.2772298058562774 shipped_ms=218.83014999999997 arm_ms=279.49639 calls=12 moved=0 (per-call medians weighted by per-step counts; a GEMM sum, not a step time)
+STEP gemm arm=lfold ratio=2.8615473921499666 shipped_ms=220.92035299999995 arm_ms=632.1740599999999 calls=12 moved=0 (per-call medians weighted by per-step counts; a GEMM sum, not a step time)
+STEP gemm arm=quarter ratio=1.270271754810438 shipped_ms=219.43276699999998 arm_ms=278.739246 calls=12 moved=0 (per-call medians weighted by per-step counts; a GEMM sum, not a step time)
+STEP gemm arm=shipped ratio=1.0003317285256277 shipped_ms=218.71800100000002 arm_ms=218.79055599999998 calls=12 moved=0 (per-call medians weighted by per-step counts; a GEMM sum, not a step time)
+GEMM_STEP_RESOURCES_DEVICE name=NVIDIA H100 80GB HBM3 mode=IDENTICAL column=2 lane_width=32 shared_limit=49152 head_w=32 tpb=256
+GEMM_STEP_RESOURCES_BEGIN label=shipped_128x128 tile=128x128 pages=2
+GEMM_STEP_RESOURCES label=shipped_128x128 regs=255
+GEMM_STEP_RESOURCES label=shipped_128x128 local=4144
+GEMM_STEP_RESOURCES label=shipped_128x128 shared=40960
+GEMM_STEP_RESOURCES label=shipped_128x128 const=0
+GEMM_STEP_RESOURCES label=shipped_128x128 max_threads=256
+GEMM_STEP_RESOURCES label=shipped_128x128 blocks_per_sm_256=1
+GEMM_STEP_RESOURCES_BEGIN label=control_128x128_lanefold tile=128x128 reg=8x8 tc=16 ks=16 pages=2 lfold=False
+GEMM_STEP_RESOURCES label=control_128x128_lanefold regs=255
+GEMM_STEP_RESOURCES label=control_128x128_lanefold local=4144
+GEMM_STEP_RESOURCES label=control_128x128_lanefold shared=40960
+GEMM_STEP_RESOURCES label=control_128x128_lanefold const=0
+GEMM_STEP_RESOURCES label=control_128x128_lanefold max_threads=256
+GEMM_STEP_RESOURCES label=control_128x128_lanefold blocks_per_sm_256=1
+GEMM_STEP_RESOURCES_GEOMETRY label=lfold lfold 128x128 reg8x8 TC=16 KS=16 pages=2 fold=cell-serial local tpb=256 hwftz=True
+GEMM_STEP_RESOURCES_BEGIN label=lfold tile=128x128 reg=8x8 tc=16 ks=16 pages=2 lfold=True
+GEMM_STEP_RESOURCES label=lfold regs=254
+GEMM_STEP_RESOURCES label=lfold local=4352
+GEMM_STEP_RESOURCES label=lfold shared=40960
+GEMM_STEP_RESOURCES label=lfold const=0
+GEMM_STEP_RESOURCES label=lfold max_threads=256
+GEMM_STEP_RESOURCES label=lfold blocks_per_sm_256=1
+GEMM_STEP_RESOURCES_GEOMETRY label=half half 64x128 reg4x8 TC=16 KS=16 pages=2 fold=cell-serial local tpb=256 hwftz=True
+GEMM_STEP_RESOURCES_BEGIN label=half tile=64x128 reg=4x8 tc=16 ks=16 pages=2 lfold=True
+GEMM_STEP_RESOURCES label=half regs=226
+GEMM_STEP_RESOURCES label=half local=2176
+GEMM_STEP_RESOURCES label=half shared=30720
+GEMM_STEP_RESOURCES label=half const=0
+GEMM_STEP_RESOURCES label=half max_threads=256
+GEMM_STEP_RESOURCES label=half blocks_per_sm_256=1
+GEMM_STEP_RESOURCES_GEOMETRY label=half_ks16 half_ks16 64x128 reg4x8 TC=16 KS=16 pages=2 fold=cell-serial local tpb=256 hwftz=True
+GEMM_STEP_RESOURCES_BEGIN label=half_ks16 tile=64x128 reg=4x8 tc=16 ks=16 pages=2 lfold=True
+GEMM_STEP_RESOURCES label=half_ks16 regs=226
+GEMM_STEP_RESOURCES label=half_ks16 local=2176
+GEMM_STEP_RESOURCES label=half_ks16 shared=30720
+GEMM_STEP_RESOURCES label=half_ks16 const=0
+GEMM_STEP_RESOURCES label=half_ks16 max_threads=256
+GEMM_STEP_RESOURCES label=half_ks16 blocks_per_sm_256=1
+GEMM_STEP_RESOURCES_GEOMETRY label=quarter quarter 64x64 reg4x4 TC=16 KS=32 pages=2 fold=cell-serial local tpb=256 hwftz=True
+GEMM_STEP_RESOURCES_BEGIN label=quarter tile=64x64 reg=4x4 tc=16 ks=32 pages=2 lfold=True
+GEMM_STEP_RESOURCES label=quarter regs=214
+GEMM_STEP_RESOURCES label=quarter local=1088
+GEMM_STEP_RESOURCES label=quarter shared=36864
+GEMM_STEP_RESOURCES label=quarter const=0
+GEMM_STEP_RESOURCES label=quarter max_threads=256
+GEMM_STEP_RESOURCES label=quarter blocks_per_sm_256=1
+GEMM_STEP_RESOURCES_GEOMETRY label=head_n head_n 32x256 reg4x8 TC=32 KS=16 pages=2 fold=cell-serial local tpb=256 hwftz=True
+GEMM_STEP_RESOURCES_BEGIN label=head_n tile=32x256 reg=4x8 tc=32 ks=16 pages=2 lfold=True
+GEMM_STEP_RESOURCES label=head_n regs=254
+GEMM_STEP_RESOURCES label=head_n local=2176
+GEMM_STEP_RESOURCES label=head_n shared=46080
+GEMM_STEP_RESOURCES label=head_n const=0
+GEMM_STEP_RESOURCES label=head_n max_threads=256
+GEMM_STEP_RESOURCES label=head_n blocks_per_sm_256=1
+GEMM_STEP_RESOURCES_GEOMETRY label=head_m head_m 256x32 reg8x4 TC=8 KS=16 pages=2 fold=cell-serial local tpb=256 hwftz=True
+GEMM_STEP_RESOURCES_BEGIN label=head_m tile=256x32 reg=8x4 tc=8 ks=16 pages=2 lfold=True
+GEMM_STEP_RESOURCES label=head_m regs=254
+GEMM_STEP_RESOURCES label=head_m local=2176
+GEMM_STEP_RESOURCES label=head_m shared=46080
+GEMM_STEP_RESOURCES label=head_m const=0
+GEMM_STEP_RESOURCES label=head_m max_threads=256
+GEMM_STEP_RESOURCES label=head_m blocks_per_sm_256=1
+GEMM_STEP_RESOURCES_DONE
+lm-quarter-enwik8	witnesses_equal_baseline=True
+lm-quarter-enwik8	ratio_vs_shipped=1.1271	shipped_brackets=2
+lm-quarter-pilegithub	witnesses_equal_baseline=True
+lm-quarter-pilegithub	ratio_vs_shipped=1.1292	shipped_brackets=2
+lm-shippedclose-enwik8	witnesses_equal_baseline=True
+lm-shippedclose-pilegithub	witnesses_equal_baseline=True
+verdict	quarter	NO FLIP	geomean=1.1282	enwik8=1.1271	pilegithub=1.1292	quality=identical (every step witness equal to shipped)
+build-check	0	27s
+build-price	0	20s
+build-resources	0	10s
+step-check	0	9s
+resources	0	1s
+price-shipped	0	4s
+price-lfold	0	5s
+price-half	0	5s
+price-half_ks16	0	5s
+price-quarter	0	4s
+price-head	0	5s
+price-half_head	0	5s
+build-binding-base	0	44s
+build-binding-byte-lm	0	64s
+corpus-enwik8	0	2s
+corpus-pile-github	0	426s
+lm-shipped-enwik8	0	68s
+lm-quarter-enwik8	0	65s
+lm-shippedclose-enwik8	0	62s
+lm-shipped-pilegithub	0	62s
+lm-quarter-pilegithub	0	61s
+lm-shippedclose-pilegithub	0	60s

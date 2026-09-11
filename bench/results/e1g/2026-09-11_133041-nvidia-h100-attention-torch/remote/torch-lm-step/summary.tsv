@@ -1,0 +1,7 @@
+column	corpus	median_seconds	tokens_per_second
+eager_fp32	enwik8	0.061743	33169.6
+eager_fp32	pile_github	0.061835	33120.3
+eager_tf32	enwik8	0.037938	53982.5
+eager_tf32	pile_github	0.037756	54242.6
+compile_fp32	enwik8	0.057435	35657.9
+compile_fp32	pile_github	0.057597	35557.6
