@@ -1459,6 +1459,20 @@ def llama_rms_norm(
     `llama_rms_norm_kernel` is deleted. This launcher exists so that the
     swap touches one function and no call site.
     """
+    # DEVIATION 2645 (docs/lanes/BRIEF_step_glue_2026-09-11.md section 4.1):
+    # a trial build under an arm carrying `rows16`, `rows8` or `rows4` launches
+    # the same kernel at that many threads per block. The kernel owns one
+    # token row per thread and reads `block_dim` only to index its row, so
+    # every geometry covering [0, m) computes the same bits. On a build
+    # without -D MOJOLEARN_STEP_GLUE_TRIAL=1 the two values below are the
+    # shipped `_grid(m)` and `LLAMA_TPB`.
+    var norm_blocks = _grid(m)
+    var norm_threads = LLAMA_TPB
+    comptime if STEP_GLUE_TRIAL:
+        var glue_rows = step_glue_rows_of(step_glue_arm_from_env())
+        if glue_rows > 0:
+            norm_blocks = step_glue_blocks(m, glue_rows)
+            norm_threads = glue_rows
     step_count_launch()
     ctx.enqueue_function[llama_rms_norm_kernel](
         sumsq.unsafe_ptr(),
@@ -1468,8 +1482,8 @@ def llama_rms_norm(
         Int32(m),
         Int32(d_model),
         eps,
-        grid_dim=(_grid(m), 1, 1),
-        block_dim=(LLAMA_TPB, 1, 1),
+        grid_dim=(norm_blocks, 1, 1),
+        block_dim=(norm_threads, 1, 1),
     )
 
 

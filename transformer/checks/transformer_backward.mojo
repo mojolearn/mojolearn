@@ -2578,6 +2578,20 @@ def bwd_rms_norm[which: Int = 0](
     )
     step_count_sync()
     ctx.synchronize()
+    # DEVIATION 2645 (docs/lanes/BRIEF_step_glue_2026-09-11.md section 4.1):
+    # a trial build under an arm carrying `rows16`, `rows8` or `rows4` launches
+    # the ONE row kernel here (the `c` fold) at that many threads per block;
+    # the two cell kernels keep `BWD_TPB`. One token row per thread, the fold
+    # never leaves the thread, so every geometry covering [0, m) computes the
+    # same bits. Without -D MOJOLEARN_STEP_GLUE_TRIAL=1 the two values below
+    # are the shipped `_grid(m)` and `BWD_TPB`.
+    var dot_blocks = _grid(m)
+    var dot_threads = BWD_TPB
+    comptime if STEP_GLUE_TRIAL:
+        var glue_rows = step_glue_rows_of(step_glue_arm_from_env())
+        if glue_rows > 0:
+            dot_blocks = step_glue_blocks(m, glue_rows)
+            dot_threads = glue_rows
     step_count_launch()
     ctx.enqueue_function[bwd_norm_dot_kernel](
         dot_out.unsafe_ptr(),
@@ -2589,8 +2603,8 @@ def bwd_rms_norm[which: Int = 0](
         Int32(m),
         Int32(dm),
         eps,
-        grid_dim=(_grid(m), 1, 1),
-        block_dim=(BWD_TPB, 1, 1),
+        grid_dim=(dot_blocks, 1, 1),
+        block_dim=(dot_threads, 1, 1),
     )
     step_count_sync()
     ctx.synchronize()
