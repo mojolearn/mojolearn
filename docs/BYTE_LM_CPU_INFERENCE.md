@@ -44,12 +44,17 @@ the qualification.
 - One model family, the byte LM profile
   `mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1`.
 - FP32, forward only. No training, no backward pass, no optimizer on the CPU.
-- The reference path is the oracles as written, single-threaded scalar loops.
-  `threaded=True` runs the kernels described above and splits batch rows
-  across at most `threads` threads (`None` is one per physical core);
-  `threaded=True, threads=1` is the kernels on one core. No float crosses a
-  thread and no fold changes order, and the gate requires both paths to
-  reproduce the capture bytes and each other's logits.
+- By default (`threaded=True`) calls run the kernels described above and split
+  batch rows across at most `threads` threads (`None` is one per physical
+  core); `threads=1` is the kernels on one core. `threaded=False` runs the
+  reference path, the oracles as written, single-threaded scalar loops, and
+  stays available for verification. No float crosses a thread and no fold
+  changes order, and the gate and the path sweep require both paths to
+  reproduce the capture bytes and each other's outputs.
+- Ids must be byte values in `[0, 256)`, and anything else raises `ValueError`
+  before any native call. The one exception is the last column of a
+  `loss_bits` batch, which is only ever a target: `-100` there is ignored, as
+  the loss oracle ignores torch's `ignore_index`.
 - Every GPU estimator, block and trainer still requires a GPU. On a CPU-only
   install they raise by name on use (DEVIATION 2615).
 
@@ -236,8 +241,9 @@ recorded bytes on both paths, their `math.fsum` mean equals the recorded
 2.8436418771743774 exactly, the logits hash is `2e2408f4...` on both paths, the
 package imports through the CPU-only path (`vendor()` is `cpu`), and an
 out-of-range token, an over-length input and a wrong loss shape are refused.
-The out-of-range token is refused by the native binding as a bare `Exception`
-rather than a `ValueError`.
+At that commit the out-of-range token was refused by the native binding as a
+bare `Exception`. The Python surface now refuses it with `ValueError` before
+any native call (see Scope).
 
 Not measured here: a Qualcomm CPU (no rentable cloud offers one), an installed
 wheel (the CPU binding is not packaged yet), and a binary built on one CPU and

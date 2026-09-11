@@ -72,6 +72,40 @@ def test_threaded_flag_reaches_the_binding_as_an_int(fake_host):
         host_mod.LanguageModelInference(np.zeros(34944, np.float32), threaded='yes')
 
 
+def test_default_is_the_threaded_path_on_every_core(fake_host):
+    model = host_mod.LanguageModelInference(np.zeros(34944, np.float32))
+    model.loss_bits(np.zeros((2, 33), np.int32))
+    model.logits(np.zeros((1, 4), np.int32))
+    model.logits(np.zeros((1, 4), np.int32), threaded=False)
+    assert fake_host.calls == [('loss', 1, 0), ('logits', [1, 4], 1, 0), ('logits', [1, 4], 0, 0)]
+
+
+def test_out_of_range_ids_raise_value_error_before_the_binding(fake_host):
+    model = host_mod.LanguageModelInference(np.zeros(34944, np.float32))
+    for bad in (-1, 256, -100, 1 << 30):
+        ids = np.zeros((1, 4), np.int32)
+        ids[0, 2] = bad
+        with pytest.raises(ValueError, match='byte values'):
+            model.logits(ids)
+        with pytest.raises(ValueError, match='byte values'):
+            model.next_bytes(ids, threaded=False)
+        batch = np.zeros((2, 33), np.int32)
+        batch[1, 5] = bad
+        with pytest.raises(ValueError, match='byte values'):
+            model.loss_bits(batch)
+    for bad in (-1, 256):
+        batch = np.zeros((2, 33), np.int32)
+        batch[0, 32] = bad
+        with pytest.raises(ValueError, match='byte values'):
+            model.loss_bits(batch)
+    assert fake_host.calls == []
+    # -100 in the target-only last column is the loss oracle's ignore_index.
+    batch = np.zeros((2, 33), np.int32)
+    batch[1, 32] = -100
+    assert model.loss_bits(batch) == 0x3F800000
+    assert fake_host.calls == [('loss', 1, 0)]
+
+
 def test_thread_count_reaches_the_binding_and_is_refused_out_of_range(fake_host):
     model = host_mod.LanguageModelInference(np.zeros(34944, np.float32), threaded=True, threads=3)
     model.loss_bits(np.zeros((2, 33), np.int32))

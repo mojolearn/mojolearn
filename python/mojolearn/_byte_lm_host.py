@@ -78,6 +78,25 @@ def _native_shape(shape):
 
 
 _MAX_THREADS = 1024
+#: torch's `ignore_index`, which the loss oracle skips as a target.
+_IGNORE_INDEX = -100
+
+
+def _refuse_ids(tokens, vocab, batch, width, target_column):
+    """ValueError unless every id is a byte value in [0, vocab). When
+    `target_column` is set, that column of each row feeds only the loss as a
+    target and may also hold `_IGNORE_INDEX`, exactly what the native loss
+    admits; every other position is a model input."""
+    flat = flat_view(tokens, 'i')
+    for r in range(batch):
+        base = r * width
+        for c in range(width):
+            v = flat[base + c]
+            if 0 <= v < vocab:
+                continue
+            if target_column is not None and c == target_column and v == _IGNORE_INDEX:
+                continue
+            raise ValueError(f'ids must be byte values in [0, {vocab}); got {v} at row {r}, position {c}')
 
 
 def _thread_count(value):
@@ -95,15 +114,16 @@ class LanguageModelInference:
     """Forward-only byte LM on the CPU. The parameters are copied at
     construction and never change afterward.
 
-    `threaded=True` runs the threaded path (DEVIATIONS 2616, 2640): host
-    kernels that spend the oracles' arithmetic in the oracles' order without
-    their per-cell allocation, advanced as SIMD lanes and split across at
-    most `threads` threads (None: one per physical core) along axes the
-    contracts make independent. The same bits as the one-thread reference
-    path, which the gate checks on every certified CPU. Each call may
-    override both instance defaults."""
+    By default (`threaded=True`) calls run the threaded path (DEVIATIONS
+    2616, 2640): host kernels that spend the oracles' arithmetic in the
+    oracles' order without their per-cell allocation, advanced as SIMD lanes
+    and split across at most `threads` threads (None: one per physical core)
+    along axes the contracts make independent. `threaded=False` runs the
+    reference path, the oracles as written on one thread. Both give the same
+    bits, which the gate and tools/byte_lm_host_path_sweep.py check on every
+    certified CPU. Each call may override both instance defaults."""
 
-    def __init__(self, parameters, *, shape=None, threaded=False, threads=None):
+    def __init__(self, parameters, *, shape=None, threaded=True, threads=None):
         shape = ByteLanguageModelConfig() if shape is None else shape
         if not isinstance(shape, ByteLanguageModelConfig):
             raise TypeError('shape must be a ByteLanguageModelConfig')
@@ -126,7 +146,7 @@ class LanguageModelInference:
             raise RuntimeError(f'byte LM host profile mismatch: {compiled} != {shape.profile}')
 
     @classmethod
-    def from_checkpoint(cls, path, *, threaded=False, threads=None):
+    def from_checkpoint(cls, path, *, threaded=True, threads=None):
         """Parameters from a `mojolearn.small-byte-lm-json-checkpoint.v1`
         file, through the trainer's own decoder and integrity checks."""
         from ._byte_lm_impl import _CHECKPOINT_LIMIT, _decode_checkpoint
@@ -164,6 +184,7 @@ class LanguageModelInference:
         batch, length = tokens.shape
         if batch <= 0 or not 0 < length <= self._shape.length:
             raise ValueError(f'ids must be [batch, 1..{self._shape.length}]')
+        _refuse_ids(tokens, self._shape.vocab_size, batch, length, None)
         out = zeros((batch, length, self._shape.vocab_size), '<f4')
         written = self._binding.byte_lm_host_logits(
             [addr_ro(self._parameters, name='parameters'), addr_ro(tokens, name='ids'),
@@ -175,12 +196,16 @@ class LanguageModelInference:
 
     def loss_bits(self, ids, *, threaded=None, threads=None):
         """IEEE-754 bits of the mean next-byte loss of int32 ids
-        `[shape.batch, shape.length + 1]`, the training batch layout."""
+        `[shape.batch, shape.length + 1]`, the training batch layout. The last
+        column is only ever a target, and -100 there is ignored as the loss
+        oracle ignores it."""
         flag = self._threads_flag(threaded)
         count = self._threads_arg(threads)
         tokens, _ = as_i32_c(ids, ndim=2, name='ids')
         if tuple(tokens.shape) != (self._shape.batch, self._shape.length + 1):
             raise ValueError(f'ids must be [{self._shape.batch}, {self._shape.length + 1}]')
+        _refuse_ids(tokens, self._shape.vocab_size, self._shape.batch, self._shape.length + 1,
+                    self._shape.length)
         return int(self._binding.byte_lm_host_loss(
             [addr_ro(self._parameters, name='parameters'), addr_ro(tokens, name='ids')],
             self._native, flag, count))
