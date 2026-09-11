@@ -247,7 +247,7 @@ rows), then the `lean` rows.
    (expect PASS both; the second prints `fwd.*`, `grad.*`, `gemm.*`,
    `launches.*` and `syncs.*` lines).
 5. The byte LM binding builds with the timers (macOS guard):
-   `MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_BYTE_LM_OUTDIR=/tmp/step-timers-bytelm MOJOLEARN_BUILD_EXTRA_DEFINES="-D MOJOLEARN_STEP_PHASE_TIMERS=1 -D MOJOLEARN_ATTN_PHASE_TIMERS=1" python3 tools/macos_serial_guard.py --seconds 900 --rss-gib 12 -- sh bindings/build_byte_lm.sh`.
+   `MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_BYTE_LM_OUTDIR=/tmp/step-timers-bytelm MOJOLEARN_BUILD_EXTRA_DEFINES="-D MOJOLEARN_STEP_PHASE_TIMERS=1 -D MOJOLEARN_ATTN_PHASE_TIMERS=1" sh bindings/build_byte_lm.sh`, on a GPU box and not on the Mac: a full binding build is heavy, and `tools/macos_serial_guard.py` admits tiny jobs only (1 to 180 s, 1 to 4 GiB), so the guarded spelling this item first carried can never run.
 6. Only if the M4 already runs the probe at the control shape (the neural
    handoff's rehearse-before-renting rule), in a detached worktree with
    that binding installed as `python/mojolearn/identical/_mojolearn_byte_lm.so`
@@ -291,7 +291,7 @@ TIME, before the H100 leg:
    then `nice -n 19 /tmp/arms-check` (expect
    `transformer_attention_arms_check: PASS, names inverse, 15 cases x 18 arms`).
 7. The byte LM timers binding build:
-   `MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_BYTE_LM_OUTDIR=/tmp/step-timers-bytelm MOJOLEARN_BUILD_EXTRA_DEFINES="-D MOJOLEARN_STEP_PHASE_TIMERS=1 -D MOJOLEARN_ATTN_PHASE_TIMERS=1" python3 tools/macos_serial_guard.py --seconds 900 --rss-gib 12 -- sh bindings/build_byte_lm.sh`.
+   `MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_BYTE_LM_OUTDIR=/tmp/step-timers-bytelm MOJOLEARN_BUILD_EXTRA_DEFINES="-D MOJOLEARN_STEP_PHASE_TIMERS=1 -D MOJOLEARN_ATTN_PHASE_TIMERS=1" sh bindings/build_byte_lm.sh`, on a GPU box and not on the Mac: a full binding build is heavy, and `tools/macos_serial_guard.py` admits tiny jobs only (1 to 180 s, 1 to 4 GiB), so the guarded spelling this item first carried can never run.
 
 Not covered by these checks: the counters inside the shipped kv helper are
 compiled with the define only on a column whose default carries a

@@ -1,0 +1,4 @@
+arming a 60-minute self-kill on pod 1tl366n59wjxae ...
+ARMED. Pod 1tl366n59wjxae is TERMINATED through the API in 60 minutes.
+  lease: /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/ece6c35f-471f-4b93-8fcf-f6462a0e5568/scratchpad/wt-merge-bd2/tools/../bench/results/runpod_leases/1tl366n59wjxae.lease
+  extend with: tools/runpod_guard.sh extend 1tl366n59wjxae '-p 18080 root@103.207.149.141' <minutes>

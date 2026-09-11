@@ -1,0 +1,9 @@
+deviation=2630
+started=2026-09-11T19:10:35Z
+root=/root/mojolearn timed_steps=3 lean_steps=4 deadline=300 jobs=2
+vendor=nvidia gpu_archs=sm_90a column=nvidia
+timers_defines=-D MOJOLEARN_STEP_PHASE_TIMERS=1 -D MOJOLEARN_ATTN_PHASE_TIMERS=1 (no trial define)
+vendor=nvidia
+commit=b4ddb4585cb05cbc98b2ffe3d78bd7d82d5015f3
+corpora= enwik8=training/corpus/enwik8/input.txt pilegithub=training/corpus/pile_github/input.txt
+finished=2026-09-11T19:24:17Z

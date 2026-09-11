@@ -1,0 +1,62 @@
+== enwik8: bits_identical=True
+  remainder      0.364 ms   0.0012  remainder:envelope.native_call
+  category     144.900 ms   0.4833  gemm (every GEMM call, head and RMSNorm weight gradients included)
+  category     116.226 ms   0.3877  attention kernels (fused launchers, regime scans, corner flags)
+  category       6.356 ms   0.0212  refusal and validation scans
+  category       6.139 ms   0.0205  rmsnorm forward
+  category       4.262 ms   0.0142  remainders (timer prints, host work between ticks, untimed code)
+  category       4.045 ms   0.0135  rmsnorm backward kernels (weight gradient GEMM under gemm)
+  category       4.022 ms   0.0134  adamw update and its shadow copy
+  category       2.716 ms   0.0091  logits softmax and cross entropy, forward and backward, loss readback
+  category       2.583 ms   0.0086  embedding forward and backward
+  category       2.505 ms   0.0084  ids upload, weight unpack and gradient pack copies
+  category       2.363 ms   0.0079  attention rope and kv cache
+  category       1.825 ms   0.0061  residual adds, copies and fan-in adds
+  category       1.066 ms   0.0036  swiglu activation backward (gate product, silu)
+  category       0.737 ms   0.0025  swiglu activation forward (silu, gate product)
+  category       0.031 ms   0.0001  binding admission, final wait and publish
+  lean         295.789 ms   0.9867  lean.shipped_build
+  lean         294.746 ms   0.9832  lean.timers_build_switch_off
+  lean         300.441 ms   1.0022  lean.timers_build_switch_on_wall
+  lean         294.408 ms   0.9821  lean.shipped_build_again
+  lean          -1.043 ms  -0.0035  overhead.compiled_in_switch_off
+  lean           4.653 ms   0.0155  overhead.switch_on
+  envelope     299.784 ms   1.0000  envelope.native_call
+== pilegithub: bits_identical=True
+  remainder      0.358 ms   0.0012  remainder:envelope.native_call
+  category     144.883 ms   0.4835  gemm (every GEMM call, head and RMSNorm weight gradients included)
+  category     116.283 ms   0.3881  attention kernels (fused launchers, regime scans, corner flags)
+  category       6.354 ms   0.0212  refusal and validation scans
+  category       6.138 ms   0.0205  rmsnorm forward
+  category       4.199 ms   0.0140  remainders (timer prints, host work between ticks, untimed code)
+  category       4.048 ms   0.0135  rmsnorm backward kernels (weight gradient GEMM under gemm)
+  category       4.022 ms   0.0134  adamw update and its shadow copy
+  category       2.714 ms   0.0091  logits softmax and cross entropy, forward and backward, loss readback
+  category       2.585 ms   0.0086  embedding forward and backward
+  category       2.413 ms   0.0081  ids upload, weight unpack and gradient pack copies
+  category       2.349 ms   0.0078  attention rope and kv cache
+  category       1.823 ms   0.0061  residual adds, copies and fan-in adds
+  category       1.062 ms   0.0035  swiglu activation backward (gate product, silu)
+  category       0.739 ms   0.0025  swiglu activation forward (silu, gate product)
+  category       0.025 ms   0.0001  binding admission, final wait and publish
+  lean         294.686 ms   0.9834  lean.shipped_build
+  lean         295.049 ms   0.9847  lean.timers_build_switch_off
+  lean         300.253 ms   1.0020  lean.timers_build_switch_on_wall
+  lean                 ms           lean.shipped_build_again
+  lean           0.363 ms   0.0012  overhead.compiled_in_switch_off
+  lean           5.567 ms   0.0186  overhead.switch_on
+  envelope     299.647 ms   1.0000  envelope.native_call
+bits_identical_all=True
+build-binding-base	0	52s
+build-byte-lm-shipped	0	77s
+build-byte-lm-timers	0	70s
+corpus-enwik8	0	6s
+corpus-pile-github	0	19s
+lean-shipped-enwik8	0	87s
+lean-timers-enwik8	0	83s
+timing-enwik8	0	84s
+lean-shipped-pilegithub	0	84s
+lean-timers-pilegithub	0	87s
+timing-pilegithub	0	84s
+lean-shipped2-enwik8	0	87s
+summary	0	0s
