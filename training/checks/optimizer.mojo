@@ -102,10 +102,15 @@ The full list is contract section 16. The five that bear on THIS file.
    zero times.
 2. A `kernel_matrix.mojo` row for `OPT_TPB`. It is a literal 256 and
    `column_max_block_size(COLUMN_SPEC_BASELINE)` is 128.
-3. A DEVICE-SIDE non-finite refusal pass. `identical_clip_grad_norm`
+3. ~~A DEVICE-SIDE non-finite refusal pass. `identical_clip_grad_norm`
    refuses only the scalar `clip.total_norm`; the oracle refuses all four
    buffers. The device path is weaker than the contract and says so at
-   the function.
+   the function.~~ PAID in two parts: DEVIATION 1496 added
+   `opt_refuse_device_inputs` (all four buffers, the oracle's order, by
+   download), and DEVIATION 2514 step 3 made it four device scans
+   (`core/device_scan.mojo`) with the oracle's own message
+   (`opt_nonfinite_message`), so nothing is downloaded and the message
+   equality is a clause of `optimizer_check` (f).
 4. A BATCHED clip launcher. This one synchronizes once per tensor to keep
    `create_sub_buffer` views alive past their `.unsafe_ptr()`, which is
    `J` waits per step and an unpriced cost (`IDENTITY IS NOT FREE`).
@@ -124,6 +129,10 @@ from gemm.checks.gemm_identical import (
     identical_gemm_workspace_max_floats,
 )
 from gemm.checks.gemm_oracle import OP_NT
+from core.device_scan import (
+    device_classify_nonfinite,
+    device_first_nonfinite,
+)
 from checks.numerics import (
     ftz,
     identical_div,
@@ -139,8 +148,8 @@ from training.checks.optimizer_oracle import (
     OptimizerConfig,
     StepScalars,
     clip_eps,
+    opt_nonfinite_message,
     pow_int_f32,
-    refuse_nonfinite,
     refuse_nonfinite_scalar,
     step_scalars,
 )
@@ -1100,6 +1109,23 @@ def _step_timing_tick(
     t = now
 
 
+def _opt_refuse_device_buffer(
+    ctx: DeviceContext,
+    name: String,
+    mut buf: DeviceBuffer[DType.float32],
+    n: Int,
+) raises:
+    """One of the four scans: `device_first_nonfinite` over `buf[0:n]`,
+    the offending element classified, `opt_nonfinite_message` raised. The
+    host `refuse_nonfinite(name, List)` on the same bytes produces the
+    same string, by construction (one builder) and by gate (clause (f))."""
+    var idx = device_first_nonfinite(ctx, buf, n)
+    if idx < 0:
+        return
+    var is_nan = device_classify_nonfinite(ctx, buf, idx)
+    raise Error(opt_nonfinite_message(name, idx, is_nan))
+
+
 def opt_refuse_device_inputs(
     ctx: DeviceContext,
     mut param: DeviceBuffer[DType.float32],
@@ -1110,7 +1136,7 @@ def opt_refuse_device_inputs(
     cfg: OptimizerConfig,
 ) raises:
     """Contract 8a ON THE DEVICE ENTRY POINT, which is where it was missing.
-    DEVIATION 1496.
+    DEVIATION 1496; the scans moved to the device at DEVIATION 2514 step 3.
 
     **THE GAP THIS CLOSES WAS MEASURED, NOT SUSPECTED.**
     `optimizer_check.mojo` clause (f), first execution 2026-08-25: with
@@ -1128,19 +1154,27 @@ def opt_refuse_device_inputs(
     run rather than a step. The clipping-on path caught `grad` alone, which
     is one of four.
 
-    **IT CALLS THE ORACLE'S OWN `refuse_nonfinite` AND DOES NOT RESTATE IT**,
-    so the two sides fail with the same name and the same message and can be
-    compared at all. Same reason the loss lane's DEVIATION 1495 does it, and
-    the same precedent (`llama_refuse_bad_inputs`).
+    **FOUR DEVICE SCANS, IN THE ORACLE'S ORDER, WITH THE ORACLE'S MESSAGE.**
+    `param`, `grad`, then `exp_avg` and `exp_avg_sq` (AdamW) or
+    `momentum_buffer` (SGD): the order `optimizer_step_oracle` refuses in,
+    so the two sides name the SAME buffer first on an input that is bad in
+    more than one place. Each scan is `core/device_scan.device_first_nonfinite`
+    (one read of the buffer on the device, an integer minimum over block
+    partials, so the index is THE SMALLEST on every vendor), the one
+    offending element is read back (4 B) to say NaN or infinity, and the
+    refusal is the oracle's own `opt_nonfinite_message`, which is also what
+    the host `refuse_nonfinite` raises through. optimizer_check clause (f)
+    asserts the device message EQUALS the host message on the same planted
+    List, so "same name, same first index, same message" is a gate and not
+    a promise (design section 7, G4).
 
-    **THE COST IS A DOWNLOAD OF ALL FOUR BUFFERS PER STEP.** For a real model
-    that is the whole parameter set crossing the bus every step, which is not
-    affordable and is stated rather than hidden. A device-side scan writing
-    one count per buffer is OWED; it must produce the SAME name and the SAME
-    first offending index or it is a different refusal wearing this one's
-    name. Until then a caller who needs the speed and accepts the risk can
-    build with `-D MOJOLEARN_OPT_TRUST_INPUTS=1`, which is a DELIBERATE
-    downgrade of the profile and is named so it appears in the banner.
+    **WHAT CROSSES THE BUS: NOTHING BUT THE HIT.** The four pinned mirrors,
+    four D2H copies and four List copies DEVIATION 1496 paid (4n floats,
+    2.59 GB and 3,122 ms per step at the LM target shape, measured
+    2026-09-10) are gone; the scans read 4n floats of HBM, about 1 ms there.
+    `-D MOJOLEARN_OPT_TRUST_INPUTS=1` still means "no refusal": it is a
+    DELIBERATE downgrade of the profile, named so it appears in the banner,
+    and its behavior is unchanged by the move.
 
     **INPUTS, NOT INTERMEDIATES**, the stated gap every lane here carries.
     """
@@ -1149,38 +1183,28 @@ def opt_refuse_device_inputs(
     var n = offsets[len(offsets) - 1] if len(offsets) > 0 else 0
     if n <= 0:
         return
-    var hp = ctx.enqueue_create_host_buffer[DType.float32](n)
-    var hg = ctx.enqueue_create_host_buffer[DType.float32](n)
-    var hm = ctx.enqueue_create_host_buffer[DType.float32](n)
-    var hv = ctx.enqueue_create_host_buffer[DType.float32](n)
-    ctx.synchronize()
-    ctx.enqueue_copy(dst_ptr=hp.unsafe_ptr(), src_buf=param)
-    ctx.enqueue_copy(dst_ptr=hg.unsafe_ptr(), src_buf=grad)
-    ctx.enqueue_copy(dst_ptr=hm.unsafe_ptr(), src_buf=m_state)
-    ctx.enqueue_copy(dst_ptr=hv.unsafe_ptr(), src_buf=v_state)
-    ctx.synchronize()
-    var lp = List[Float32]()
-    var lg = List[Float32]()
-    var lm = List[Float32]()
-    var lv = List[Float32]()
-    for i in range(n):
-        lp.append(hp.unsafe_ptr().unsafe_load(i))
-        lg.append(hg.unsafe_ptr().unsafe_load(i))
-        lm.append(hm.unsafe_ptr().unsafe_load(i))
-        lv.append(hv.unsafe_ptr().unsafe_load(i))
     # ORDER MATCHES THE ORACLE'S so the two sides name the SAME buffer first
     # on an input that is bad in more than one place.
-    refuse_nonfinite(String("param"), lp)
-    refuse_nonfinite(String("grad"), lg)
+    _opt_refuse_device_buffer(ctx, String("param"), param, n)
+    _opt_refuse_device_buffer(ctx, String("grad"), grad, n)
     if cfg.kind != OPT_SGD:
-        refuse_nonfinite(String("exp_avg"), lm)
-        refuse_nonfinite(String("exp_avg_sq"), lv)
+        _opt_refuse_device_buffer(ctx, String("exp_avg"), m_state, n)
+        _opt_refuse_device_buffer(ctx, String("exp_avg_sq"), v_state, n)
     else:
-        refuse_nonfinite(String("momentum_buffer"), lm)
-    _ = hp
-    _ = hg
-    _ = hm
-    _ = hv
+        _opt_refuse_device_buffer(ctx, String("momentum_buffer"), m_state, n)
+
+
+def opt_refuse_scan_bytes(offsets: List[Int], cfg: OptimizerConfig) -> Int:
+    """The bytes `opt_refuse_device_inputs` READS ON THE DEVICE per step
+    (four scans of n floats under AdamW, three under SGD; 0 when the build
+    trusts its inputs), for the `step.opt_refuse_scan_bytes` timing line."""
+    comptime if is_defined["MOJOLEARN_OPT_TRUST_INPUTS"]():
+        return 0
+    var n = offsets[len(offsets) - 1] if len(offsets) > 0 else 0
+    if n <= 0:
+        return 0
+    var scans = 3 if cfg.kind == OPT_SGD else 4
+    return scans * n * 4
 
 
 def identical_optimizer_step(
@@ -1250,25 +1274,30 @@ def identical_optimizer_step(
     # in a PARAMETER reached param.out, because the only device-side
     # refusal lives in identical_clip_grad_norm and does not run.
     # FIRST statement in the body: "before any recorded stage".
-    # DEVIATION 2499: timed as `step.opt_refuse_download` (ends on the host
-    # after the four scans; the device queue is empty at the tick) with its
-    # byte count, and the rest of the step as `step.optimizer` (this entry
-    # waits before it returns, so that tick's wait is a no-op).
+    # DEVIATION 2499: timed as `step.opt_refuse_scan` (was
+    # `step.opt_refuse_download` until DEVIATION 2514 step 3 moved the four
+    # scans onto the device; the phase still ends on the host after the
+    # last scan's partials are folded, with the device queue empty at the
+    # tick) with the bytes the scans READ ON THE DEVICE (0 downloaded), and
+    # the rest of the step as `step.optimizer` (this entry waits before it
+    # returns, so that tick's wait is a no-op).
     var ton = _step_timing_on()
     var tk = Int(perf_counter_ns())
     opt_refuse_device_inputs(
         ctx, param, grad, m_state, v_state, offsets, cfg
     )
-    _step_timing_tick(ctx, ton, tk, "step.opt_refuse_download")
+    _step_timing_tick(ctx, ton, tk, "step.opt_refuse_scan")
     if ton:
-        var refused_n = offsets[len(offsets) - 1] if len(offsets) > 0 else 0
-        comptime if is_defined["MOJOLEARN_OPT_TRUST_INPUTS"]():
-            refused_n = 0
+        # Two four-token lines (`timing <name> <value> bytes`, the shape
+        # `tools/lm_step_memory_probe.py::parse_timing_lines` sums): the
+        # bytes the scans READ ON THE DEVICE, and the bytes DOWNLOADED,
+        # which is now 0 (the hit's one element on a refusal aside).
         print(
-            "timing step.opt_refuse_download_bytes "
-            + String(4 * refused_n * 4)
+            "timing step.opt_refuse_scan_bytes "
+            + String(opt_refuse_scan_bytes(offsets, cfg))
             + " bytes"
         )
+        print("timing step.opt_refuse_scan_download_bytes 0 bytes")
 
     var j_count = len(offsets) - 1
     if j_count <= 0:

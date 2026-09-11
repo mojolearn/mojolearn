@@ -31,6 +31,7 @@ from gemm.checks.gemm_oracle import OP_NN, contract_leaf_size
 from transformer.checks.transformer_fixture import fixture_splitmix64
 from training.checks.loss import (
     ANY_LOSS_SABOTAGE,
+    ce_refuse_device_inputs,
     identical_ce_backward_into,
     identical_ce_forward_into,
     identical_ce_ones_floats,
@@ -2687,18 +2688,20 @@ def clause_e_float64_report(k: Int) raises:
 # COMPARE, because Metal flushes compare operands (row 49) so a
 # compare-written test has two meanings across columns.
 #
-# **AND THE FINDING THIS CLAUSE EXISTS TO MAKE, DEVIATION 1460.**
-# `training/checks/loss.mojo` NEVER CALLS `ce_refuse_inputs`. The
-# refusal lives entirely in `ce_forward_oracle`, on the host, and
-# `identical_ce_forward_into` has no refusal of any kind -- not for a
-# non-finite logit, not for an out-of-range target, not for `count == 0`.
-# So contract section 8's "REFUSED BY NAME before any recorded stage" is a
-# property of the ORACLE and not of the profile, and a caller who reaches
-# the device entry point directly gets a vendor-shaped NaN into a certified
-# stage. This clause MEASURES that gap rather than describing it: it plants
-# a NaN, calls the device WITHOUT the refusal, reads the stages back, and
-# requires a non-finite cell to be there. A gate that only tested the
-# oracle would have reported clause (f) GREEN with the hole wide open.
+# **AND THE FINDING THIS CLAUSE EXISTED TO MAKE, DEVIATION 1460, NOW
+# CLOSED.** On its first execution (2026-08-25) `training/checks/loss.mojo`
+# NEVER CALLED `ce_refuse_inputs`: the refusal lived entirely in
+# `ce_forward_oracle`, on the host, and a NaN planted in the logits reached
+# 40 recorded cells, first at `ce.max`. DEVIATION 1495 added
+# `ce_refuse_device_inputs` as the first statement of
+# `identical_ce_forward_into`, and DEVIATION 2514 step 2 moved its scan onto
+# the device. So the device arm below is the branch the old error message
+# anticipated: it ASSERTS the refusal, by name, and then asserts the ONE
+# thing a device scan could get wrong that a download could not -- that
+# its message is CHARACTER FOR CHARACTER the host oracle's message on the
+# same planted List (design `DESIGN_lm_device_owned_step_2026-09-11.md`
+# section 7, gate G4). It keeps the distinction the old arm drew: a finite
+# run with no raise is a LAUNDERED NaN, worse than a propagated one.
 # ===========================================================================
 
 
@@ -2726,7 +2729,8 @@ def clause_f_names() -> List[String]:
 
 
 def clause_f(ctx: DeviceContext, k: Int) raises:
-    """The audit, its control, and the measured device gap."""
+    """The audit, its control, the device refusal asserted, and the
+    host-versus-device message equality (DEVIATION 2514, gate G4)."""
     var c = ce_case(k)
     var logits = ce_case_logits(c)
     var targets = ce_case_targets(c)
@@ -2889,44 +2893,184 @@ def clause_f(ctx: DeviceContext, k: Int) raises:
         " non-finite cell read back by bits"
     )
 
-    # ---- THE MEASURED GAP, DEVIATION 1460 -------------------------------
-    var run = run_device_rows(ctx, c, planted, targets, host_count(c, targets))
-    var leaked = 0
-    var first_stage = String("")
-    for i in range(CE_STAGE_COUNT):
-        if stage_is_int(i) or not stage_present(i, c):
-            continue
-        if i == ST_INPUT_LOGITS:
-            continue
-        var here = nonfinite_cells(run.dump[i])
-        if here > 0:
-            leaked += here
-            if first_stage == "":
-                first_stage = ce_stage_tag(i) + " (" + String(here) + " cells)"
-    if leaked == 0:
+    # ---- THE DEVICE REFUSAL, ASSERTED (DEVIATION 1460 CLOSED by 1495) --
+    # `run_device_rows` calls `identical_ce_forward_into`, whose FIRST
+    # statement is `ce_refuse_device_inputs`; the planted NaN must raise
+    # there, by name, and no stage may come back non-finite because no
+    # stage may run.
+    var refused = False
+    var refuse_msg = String("")
+    var leaked = -1
+    try:
+        var run = run_device_rows(
+            ctx, c, planted, targets, host_count(c, targets)
+        )
+        leaked = 0
+        for i in range(CE_STAGE_COUNT):
+            if stage_is_int(i) or not stage_present(i, c):
+                continue
+            if i == ST_INPUT_LOGITS:
+                continue
+            leaked += nonfinite_cells(run.dump[i])
+    except e:
+        refused = True
+        refuse_msg = String(e)
+    if not refused:
+        if leaked == 0:
+            raise Error(
+                String("loss_check: CLAUSE (f) -- a NaN was planted in the")
+                + " logits, the device did NOT refuse, and NOT ONE recorded"
+                + " stage came back non-finite. That is a LAUNDERED NaN and"
+                + " it is a worse finding than a propagated one, because it"
+                + " means a stage is not a function of its input."
+            )
         raise Error(
-            String("loss_check: CLAUSE (f) -- a NaN was planted in the")
-            + " logits, MEASURED on the device, and NOT ONE recorded stage"
-            + " came back non-finite. Either `loss.mojo` has grown a"
-            + " refusal since this file was written (in which case"
-            + " DEVIATION 1460 is closed and this arm must be rewritten as"
-            + " an assertion that it refuses BY NAME), or the NaN was"
-            + " LAUNDERED somewhere -- and a laundered NaN is a worse"
-            + " finding than a propagated one, because it means a stage is"
-            + " not a function of its input."
+            String("loss_check: CLAUSE (f) -- DEVIATION 1495's refusal did")
+            + " not fire. A NaN planted in the logits reached "
+            + String(leaked)
+            + " recorded cells. Contract section 8's 'REFUSED BY NAME"
+            + " before any recorded stage' is again a property of the"
+            + " ORACLE and not of the device entry point."
+        )
+    if refuse_msg.find(String("logits")) < 0:
+        raise Error(
+            String("loss_check: CLAUSE (f) -- the device refused, but NOT")
+            + " BY THE NAME contract section 8 requires. A refusal that"
+            + " does not name the offending input cannot be compared"
+            + " against the oracle's. Got: "
+            + refuse_msg
         )
     print(
-        "clause (f) DEVICE GAP, MEASURED (DEVIATION 1460): `loss.mojo`"
-        " never calls `ce_refuse_inputs`, so a planted NaN reached "
-        + String(leaked)
-        + " recorded cells, first at "
-        + first_stage
-        + ". Contract section 8's 'REFUSED BY NAME before any recorded"
-        " stage' is a property of the ORACLE and NOT of the device entry"
-        " point. A caller that reaches `identical_ce_forward_into` directly"
-        " puts a vendor-shaped payload into a certified stage. The fix is a"
-        " refusal in `loss.mojo`, which this lane may not edit; it is in"
-        " the OWED block."
+        "clause (f) DEVICE REFUSAL, ASSERTED (DEVIATION 1460 CLOSED by"
+        " 1495): a NaN planted in the logits is REFUSED BY NAME by the"
+        " device entry point, not merely by the oracle: "
+        + refuse_msg
+    )
+
+    # ---- MESSAGE EQUALITY, DEVIATION 2514 (design gate G4) --------------
+    # The device scan (`core/device_scan.device_first_nonfinite`) and the
+    # host loop (`refuse_nonfinite`) must report the SAME first index and
+    # spell the SAME message through the oracle's `ce_nonfinite_message`,
+    # or the device refusal is a different refusal wearing this one's
+    # name. Both bit patterns, and TWO plant sites so the index in the
+    # message is seen to move: cell len/2 (the site above) and cell
+    # len-1 (the last cell, the highest block's highest thread), plus a
+    # two-plant buffer where the smaller index must be the one named.
+    var eq_patterns: List[UInt32] = [BITS_QNAN, BITS_POS_INF]
+    var eq_names: List[String] = [String("NaN"), String("infinity")]
+    var eq_checked = 0
+    for pk in range(len(eq_patterns)):
+        for site in range(3):
+            var bad = logits.copy()
+            var where = String("")
+            if site == 0:
+                bad[cells // 2] = f32_from_bits(eq_patterns[pk])
+                where = String("cell len/2")
+            elif site == 1:
+                bad[cells - 1] = f32_from_bits(eq_patterns[pk])
+                where = String("cell len-1")
+            else:
+                bad[cells // 3] = f32_from_bits(eq_patterns[pk])
+                bad[cells - 1] = f32_from_bits(eq_patterns[pk])
+                where = String("cells len/3 and len-1 (the smaller wins)")
+            var host_msg = String("")
+            try:
+                _ = ce_refuse_inputs(bad, targets, cfg)
+            except e:
+                host_msg = String(e)
+            if host_msg == "":
+                raise Error(
+                    String("loss_check: CLAUSE (f) IS VACUOUS for the")
+                    + " message equality: the host oracle did not refuse "
+                    + eq_names[pk]
+                    + " at "
+                    + where
+                )
+            var d_bad = _upload_f32(ctx, bad)
+            var d_tgt = _upload_i32(ctx, targets)
+            var dev_msg = String("")
+            try:
+                ce_refuse_device_inputs(ctx, d_bad, d_tgt, n, cfg)
+            except e:
+                dev_msg = String(e)
+            _ = d_bad^
+            _ = d_tgt^
+            if dev_msg == "":
+                raise Error(
+                    String("loss_check: CLAUSE (f) FAILED. The device entry")
+                    + " did not refuse "
+                    + eq_names[pk]
+                    + " at "
+                    + where
+                    + " while the host oracle did: "
+                    + host_msg
+                )
+            if dev_msg != host_msg:
+                raise Error(
+                    String("loss_check: CLAUSE (f) FAILED (design gate G4).")
+                    + " The device refusal and the host refusal for the SAME"
+                    + " planted "
+                    + eq_names[pk]
+                    + " at "
+                    + where
+                    + " are DIFFERENT MESSAGES, so the device scan is a"
+                    + " different refusal wearing the oracle's name."
+                    + "\n  host:   "
+                    + host_msg
+                    + "\n  device: "
+                    + dev_msg
+                )
+            eq_checked += 1
+    # and the control for the equality: a clean upload must NOT be refused
+    # by the device entry, or the equality above compares two constants
+    var d_clean = _upload_f32(ctx, logits)
+    var d_ctgt = _upload_i32(ctx, targets)
+    var clean_raised = False
+    try:
+        ce_refuse_device_inputs(ctx, d_clean, d_ctgt, n, cfg)
+    except e:
+        clean_raised = True
+    _ = d_clean^
+    _ = d_ctgt^
+    if clean_raised:
+        raise Error(
+            "loss_check: CLAUSE (f) IS VACUOUS. `ce_refuse_device_inputs`"
+            " fired on CLEAN inputs."
+        )
+    # a bad target after clean logits: the device walk reaches the third
+    # part of the oracle's order and names the row, as the host does
+    var bad_t = targets.copy()
+    bad_t[len(bad_t) // 2] = Int32(v + 7)
+    var host_tmsg = String("")
+    try:
+        _ = ce_refuse_inputs(logits, bad_t, cfg)
+    except e:
+        host_tmsg = String(e)
+    var d_tl = _upload_f32(ctx, logits)
+    var d_bt = _upload_i32(ctx, bad_t)
+    var dev_tmsg = String("")
+    try:
+        ce_refuse_device_inputs(ctx, d_tl, d_bt, n, cfg)
+    except e:
+        dev_tmsg = String(e)
+    _ = d_tl^
+    _ = d_bt^
+    if host_tmsg == "" or dev_tmsg != host_tmsg:
+        raise Error(
+            String("loss_check: CLAUSE (f) FAILED (design gate G4). An")
+            + " out-of-range target is refused differently by the two"
+            + " paths.\n  host:   "
+            + host_tmsg
+            + "\n  device: "
+            + dev_tmsg
+        )
+    print(
+        "clause (f) MESSAGE EQUALITY (DEVIATION 2514, gate G4): "
+        + String(eq_checked)
+        + " planted logits (NaN and infinity, at len/2, at len-1, and at"
+        " two sites) and one out-of-range target refused by the device"
+        " entry with CHARACTER-FOR-CHARACTER the host oracle's message;"
+        " a clean upload is not refused"
     )
 
 
@@ -3778,10 +3922,11 @@ def main() raises:
     else:
         print(
             "clause (f): SKIPPED (set MOJOLEARN_LOSS_CHECK_CLAUSE_F=1)."
-            " NOTE: it carries the MEASURED finding that `loss.mojo` never"
-            " calls `ce_refuse_inputs` at all (DEVIATION 1460), so a leg"
-            " that skips it has not looked at the refusal on the DEVICE"
-            " side even once."
+            " NOTE: it is the only clause that exercises the DEVICE-side"
+            " refusal (`ce_refuse_device_inputs`, DEVIATIONS 1495 and"
+            " 2514) and its message equality against the host oracle, so"
+            " a leg that skips it has not looked at the device refusal"
+            " even once."
         )
 
     print(

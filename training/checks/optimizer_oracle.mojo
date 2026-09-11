@@ -35,29 +35,43 @@ def clip_eps() -> Float32:
 
 
 
+def opt_nonfinite_message(name: String, index: Int, is_nan: Bool) -> String:
+    """THE ONE SPELLING of this profile's non-finite refusal (DEVIATION
+    2514 step 3). `refuse_nonfinite` below raises through it over a host
+    List, and `training/checks/optimizer.mojo::opt_refuse_device_inputs`
+    raises through it with the index `device_first_nonfinite` returned, so
+    the host and device paths cannot produce two messages for one defect.
+    The two strings are byte for byte the ones `refuse_nonfinite` built
+    inline before this function existed; optimizer_check clause (f) asserts
+    the device message EQUALS the host message on the same planted List."""
+    if is_nan:
+        return (
+            String("optimizer: NaN in ")
+            + name
+            + String(" at flat index ")
+            + String(index)
+            + String(" REFUSED (row 39: NaN payloads are vendor-shaped")
+            + String("; no stage may record one)")
+        )
+    return (
+        String("optimizer: infinity in ")
+        + name
+        + String(" at flat index ")
+        + String(index)
+        + String(" REFUSED (row 39)")
+    )
+
+
 def refuse_nonfinite(name: String, values: List[Float32]) raises:
-    """Row 39. A NaN or infinity in a gradient, a parameter or a state is REFUSED BY NAME before any recorded stage."""
+    """Row 39. A NaN or infinity in a gradient, a parameter or a state is REFUSED BY NAME before any recorded stage. The message is `opt_nonfinite_message`'s (DEVIATION 2514)."""
     from std.memory import bitcast
 
     for i in range(len(values)):
         var au = bitcast[DType.uint32](values[i]) & UInt32(0x7FFFFFFF)
         if au > INF_BITS:
-            raise Error(
-                String("optimizer: NaN in ")
-                + name
-                + String(" at flat index ")
-                + String(i)
-                + String(" REFUSED (row 39: NaN payloads are vendor-shaped")
-                + String("; no stage may record one)")
-            )
+            raise Error(opt_nonfinite_message(name, i, True))
         if au == INF_BITS:
-            raise Error(
-                String("optimizer: infinity in ")
-                + name
-                + String(" at flat index ")
-                + String(i)
-                + String(" REFUSED (row 39)")
-            )
+            raise Error(opt_nonfinite_message(name, i, False))
 
 
 def refuse_nonfinite_scalar(name: String, v: Float32) raises:

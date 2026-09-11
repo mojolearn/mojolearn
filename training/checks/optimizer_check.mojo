@@ -225,6 +225,7 @@ from gemm.checks.gemm_oracle import OP_NT, contract_leaf_size, gemm_oracle
 from transformer.checks.transformer_fixture import fixture_splitmix64
 from training.checks.loss_fixture import ce_splitmix64
 from training.checks.optimizer import (
+    opt_refuse_device_inputs,
     OPT_RECORD_INTERMEDIATES,
     device_step_scalars,
     identical_optimizer_step,
@@ -2217,14 +2218,26 @@ def clause_e() raises:
 #
 # Every test is BY BITS AND NEVER BY A COMPARE (row 49).
 #
-# **AND THE MEASURED FINDING, DEVIATION 1478.** The device path is WEAKER
-# than the contract. `identical_clip_grad_norm` refuses only the SCALAR
-# `clip.total_norm` -- one float to copy back -- and it does not run at all
-# when clipping is off. `identical_optimizer_step` has no refusal of its
-# own. So a non-finite PARAMETER, or a non-finite `m` or `v`, or ANY
-# non-finite input on a run with clipping off, reaches `param.out`.
-# `optimizer.mojo`'s own docstring says so; this clause MEASURES it.
+# **AND THE MEASURED FINDING, DEVIATION 1478, CLOSED BY 1496.** On first
+# execution the device path was WEAKER than the contract:
+# `identical_clip_grad_norm` refused only the SCALAR `clip.total_norm` and
+# did not run at all when clipping was off, and `identical_optimizer_step`
+# had no refusal of its own, so a non-finite PARAMETER reached `param.out`.
+# DEVIATION 1496 added `opt_refuse_device_inputs`; DEVIATION 2514 step 3
+# made it four DEVICE scans, so the clause now also asserts that the scan's
+# message is CHARACTER FOR CHARACTER the host loop's on the same planted
+# List (design `DESIGN_lm_device_owned_step_2026-09-11.md` gate G4).
 # ===========================================================================
+
+
+def _host_refusal(name: String, values: List[Float32]) -> String:
+    """The host loop's message for `values` under `name`, or "" when it
+    does not refuse. The reference side of the message equality."""
+    try:
+        refuse_nonfinite(name, values)
+    except e:
+        return String(e)
+    return String("")
 
 
 def clause_f(ctx: DeviceContext) raises:
@@ -2383,6 +2396,155 @@ def clause_f(ctx: DeviceContext) raises:
         " REFUSED BY NAME by the device entry point, not merely by the"
         " oracle. The refusal names the buffer: "
         + refuse_msg
+    )
+
+    # ---- MESSAGE EQUALITY, DEVIATION 2514 (design gate G4) --------------
+    # Since step 3 the device refusal is four scans on the device
+    # (`core/device_scan.device_first_nonfinite`) and not a download plus
+    # the host loop, so "same name, same first index, same message" is no
+    # longer true by construction of a shared loop: it is true only if the
+    # scan's index equals the loop's and both spell the message through the
+    # oracle's `opt_nonfinite_message`. This asserts it: for each of the
+    # four buffers, both bit patterns, at cell len/2 and at the last cell,
+    # and a two-plant buffer where the smaller index must be the one
+    # named, the host `refuse_nonfinite(name, List)` message must EQUAL
+    # the `opt_refuse_device_inputs` message on the uploaded bytes. The
+    # step-level refusal above is one of these (param, NaN, len/2), so the
+    # entry point and the helper are checked to agree as well.
+    if refuse_msg != _host_refusal(String("param"), bad_param):
+        raise Error(
+            String("optimizer_check: CLAUSE (f) FAILED (design gate G4).")
+            + " The step's device refusal differs from the host loop's on"
+            + " the same planted List.\n  host:   "
+            + _host_refusal(String("param"), bad_param)
+            + "\n  device: "
+            + refuse_msg
+        )
+    var dev_names: List[String] = [
+        String("param"), String("grad"), String("exp_avg"),
+        String("exp_avg_sq"),
+    ]
+    var eq_patterns: List[UInt32] = [BITS_QNAN, BITS_POS_INF]
+    var eq_pat_names: List[String] = [String("NaN"), String("infinity")]
+    var eq_checked = 0
+    for pk in range(len(eq_patterns)):
+        for which in range(len(dev_names)):
+            for site in range(3):
+                var p = opt_case_param(c)
+                var g = opt_case_grad(c, 1)
+                var m = opt_case_m(c)
+                var v = opt_case_v(c)
+                var val = f32_from_bits(eq_patterns[pk])
+                var sites = List[Int]()
+                var where = String("")
+                if site == 0:
+                    sites.append(n // 2)
+                    where = String("cell len/2")
+                elif site == 1:
+                    sites.append(n - 1)
+                    where = String("cell len-1")
+                else:
+                    sites.append(n // 3)
+                    sites.append(n - 1)
+                    where = String("cells len/3 and len-1 (the smaller wins)")
+                var host_msg = String("")
+                for si in range(len(sites)):
+                    var at_i = sites[si]
+                    if which == 0:
+                        p[at_i] = val
+                    elif which == 1:
+                        g[at_i] = val
+                    elif which == 2:
+                        m[at_i] = val
+                    else:
+                        v[at_i] = val
+                if which == 0:
+                    host_msg = _host_refusal(dev_names[which], p)
+                elif which == 1:
+                    host_msg = _host_refusal(dev_names[which], g)
+                elif which == 2:
+                    host_msg = _host_refusal(dev_names[which], m)
+                else:
+                    host_msg = _host_refusal(dev_names[which], v)
+                if host_msg == "":
+                    raise Error(
+                        String("optimizer_check: CLAUSE (f) IS VACUOUS for")
+                        + " the message equality: the host loop did not"
+                        + " refuse "
+                        + eq_pat_names[pk]
+                        + " in "
+                        + dev_names[which]
+                        + " at "
+                        + where
+                    )
+                var est = DeviceOptState(ctx, c, p, m, v)
+                var d_g = _upload_f32(ctx, g)
+                var dev_msg = String("")
+                try:
+                    opt_refuse_device_inputs(
+                        ctx, est.param, d_g, est.m_state, est.v_state, off,
+                        cfg,
+                    )
+                except e:
+                    dev_msg = String(e)
+                _ = d_g^
+                _ = est^
+                if dev_msg == "":
+                    raise Error(
+                        String("optimizer_check: CLAUSE (f) FAILED. The")
+                        + " device scans did not refuse "
+                        + eq_pat_names[pk]
+                        + " in "
+                        + dev_names[which]
+                        + " at "
+                        + where
+                        + " while the host loop did: "
+                        + host_msg
+                    )
+                if dev_msg != host_msg:
+                    raise Error(
+                        String("optimizer_check: CLAUSE (f) FAILED (design")
+                        + " gate G4). The device refusal and the host"
+                        + " refusal for the SAME planted "
+                        + eq_pat_names[pk]
+                        + " in "
+                        + dev_names[which]
+                        + " at "
+                        + where
+                        + " are DIFFERENT MESSAGES, so the device scan is a"
+                        + " different refusal wearing the oracle's name."
+                        + "\n  host:   "
+                        + host_msg
+                        + "\n  device: "
+                        + dev_msg
+                    )
+                eq_checked += 1
+    # the control for the equality: clean buffers must NOT be refused by
+    # the device scans, or the equality above compared two constants
+    var cst0 = DeviceOptState(ctx, c, opt_case_param(c), opt_case_m(c),
+                              opt_case_v(c))
+    var d_g0 = _upload_f32(ctx, opt_case_grad(c, 1))
+    var clean_dev_raised = False
+    try:
+        opt_refuse_device_inputs(
+            ctx, cst0.param, d_g0, cst0.m_state, cst0.v_state, off, cfg
+        )
+    except e:
+        clean_dev_raised = True
+    _ = d_g0^
+    _ = cst0^
+    if clean_dev_raised:
+        raise Error(
+            "optimizer_check: CLAUSE (f) IS VACUOUS."
+            " `opt_refuse_device_inputs` fired on CLEAN buffers."
+        )
+    print(
+        "clause (f) MESSAGE EQUALITY (DEVIATION 2514, gate G4): "
+        + String(eq_checked)
+        + " plants (NaN and infinity, in each of param, grad, exp_avg,"
+        " exp_avg_sq, at len/2, at len-1 and at two sites) refused by the"
+        " device scans with CHARACTER-FOR-CHARACTER the host loop's"
+        " message; clean buffers are not refused"
     )
     return
     print(
@@ -3276,10 +3438,11 @@ def main() raises:
     else:
         print(
             "clause (f): SKIPPED (set MOJOLEARN_OPT_CHECK_CLAUSE_F=1)."
-            " NOTE: it carries the MEASURED finding that the DEVICE path"
-            " refuses only `clip.total_norm` and does not refuse at all"
-            " when clipping is off (DEVIATION 1478), so a leg that skips it"
-            " has not looked at the device-side refusal even once."
+            " NOTE: it is the only clause that exercises the DEVICE-side"
+            " refusal (`opt_refuse_device_inputs`, DEVIATIONS 1496 and"
+            " 2514) and its message equality against the host loop, so a"
+            " leg that skips it has not looked at the device refusal even"
+            " once."
         )
 
     print(

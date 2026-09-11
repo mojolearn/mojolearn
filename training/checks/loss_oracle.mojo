@@ -39,21 +39,35 @@ def neg_by_bits(x: Float32) -> Float32:
     return bitcast[DType.float32](b ^ CE_SIGN_BIT)
 
 
+def ce_nonfinite_message(name: String, index: Int, is_nan: Bool) -> String:
+    """THE ONE SPELLING of this profile's non-finite refusal (DEVIATION
+    2514 step 2). `refuse_nonfinite` below raises through it over a host
+    List, and `training/checks/loss.mojo::ce_refuse_device_inputs` raises
+    through it with the index `device_first_nonfinite` returned, so the
+    host and device paths cannot produce two messages for one defect. The
+    two strings are byte for byte the ones `refuse_nonfinite` built inline
+    before this function existed; loss_check clause (f) asserts the
+    device message EQUALS the host message on the same planted List."""
+    if is_nan:
+        return (
+            String("ce: NaN in ") + name + " at flat index " + String(index)
+            + " REFUSED (row 39: NaN payloads are vendor-shaped; no"
+            + " stage may record one)"
+        )
+    return (
+        String("ce: infinity in ") + name + " at flat index "
+        + String(index) + " REFUSED (row 39)"
+    )
+
+
 def refuse_nonfinite(name: String, values: List[Float32]) raises:
-    """IDENTITY_PATHS row 39: a NaN or an infinity in an input is REFUSED BY NAME before any recorded stage. DEVIATION 1164.** The first is `mamba/checks/mamba_oracle.mojo:57` and the second is `training/checks/optimizer_oracle.mojo:162`, landed by the concurrent optimizer lane on 2026-08-25; all three must stay the same shape."""
+    """IDENTITY_PATHS row 39: a NaN or an infinity in an input is REFUSED BY NAME before any recorded stage. DEVIATION 1164.** The first is `mamba/checks/mamba_oracle.mojo:57` and the second is `training/checks/optimizer_oracle.mojo:162`, landed by the concurrent optimizer lane on 2026-08-25; all three must stay the same shape. The message is `ce_nonfinite_message`'s (DEVIATION 2514)."""
     for i in range(len(values)):
         var au = rebind[UInt32](values[i].to_bits()) & UInt32(0x7FFFFFFF)
         if au > CE_POS_INF_BITS:
-            raise Error(
-                String("ce: NaN in ") + name + " at flat index " + String(i)
-                + " REFUSED (row 39: NaN payloads are vendor-shaped; no"
-                + " stage may record one)"
-            )
+            raise Error(ce_nonfinite_message(name, i, True))
         if au == CE_POS_INF_BITS:
-            raise Error(
-                String("ce: infinity in ") + name + " at flat index "
-                + String(i) + " REFUSED (row 39)"
-            )
+            raise Error(ce_nonfinite_message(name, i, False))
 
 
 
@@ -228,10 +242,14 @@ struct CeStages(Movable):
 
 
 
-def ce_refuse_inputs(
-    logits: List[Float32], targets: List[Int32], cfg: CeConfig
-) raises -> Int:
-    """Every refusal of contract section 8 and section 3, in one place, BEFORE any recorded stage. **A target equal to `ignore_index` is ignored even when `ignore_index` happens to be a valid class index.** That is torch's behavior and it is admitted rather than refused, so a caller who sets `ignore_index = 0` on a real vocabulary loses class 0 and this profile does not stop them."""
+def ce_refuse_shape(n: Int, n_logits: Int, cfg: CeConfig) raises:
+    """The scalar refusals of `ce_refuse_inputs`, first third: vocab, N,
+    the logits length and the smoothing constant, in that order. `n` is
+    the row count (`len(targets)` on the host, `n_rows` on the device) and
+    `n_logits` the logits length. Split out at DEVIATION 2514 step 2 so the
+    device entry can run the same checks in the same order without a List;
+    `ce_refuse_inputs` calls this, then `refuse_nonfinite`, then
+    `ce_refuse_targets`, and its walk is unchanged."""
     if cfg.vocab < 1:
         raise Error(String("ce: vocab ") + String(cfg.vocab) + " < 1 REFUSED")
     if cfg.vocab > CE_MAX_EXACT_COUNT:
@@ -240,7 +258,6 @@ def ce_refuse_inputs(
             + " exceeds CE_MAX_EXACT_COUNT; Float32(vocab) would round and"
             + " seam L10's divide would stop being checkable by hand"
         )
-    var n = len(targets)
     if n < 1:
         raise Error(String("ce: N < 1 REFUSED"))
     if n > CE_MAX_ROWS:
@@ -249,9 +266,9 @@ def ce_refuse_inputs(
             + " fold's k would leave the range gemm v1's own sweep has"
             + " exercised (contract section 3)"
         )
-    if len(logits) != n * cfg.vocab:
+    if n_logits != n * cfg.vocab:
         raise Error(
-            String("ce: logits hold ") + String(len(logits))
+            String("ce: logits hold ") + String(n_logits)
             + " floats, expected N*V = " + String(n * cfg.vocab)
         )
     var eb = rebind[UInt32](cfg.eps.to_bits()) & UInt32(0x7FFFFFFF)
@@ -262,8 +279,14 @@ def ce_refuse_inputs(
             String("ce: label_smoothing must be in [0, 1) (contract"
                    " section 3)")
         )
-    refuse_nonfinite("logits", logits)
-    for i in range(n):
+
+
+def ce_refuse_targets(targets: List[Int32], cfg: CeConfig) raises:
+    """The last third of `ce_refuse_inputs`: every target in `[0, vocab)`
+    or equal to `ignore_index`, walked in row order. An INTEGER refusal;
+    the same loop serves the host and the device entry (which downloads
+    the M int32 targets, see `ce_refuse_device_inputs`)."""
+    for i in range(len(targets)):
         var t = Int(targets[i])
         if t == cfg.ignore_index:
             continue
@@ -272,6 +295,16 @@ def ce_refuse_inputs(
                 String("ce: target ") + String(t) + " at row " + String(i)
                 + " is neither ignore_index nor in [0, vocab) REFUSED"
             )
+
+
+def ce_refuse_inputs(
+    logits: List[Float32], targets: List[Int32], cfg: CeConfig
+) raises -> Int:
+    """Every refusal of contract section 8 and section 3, in one place, BEFORE any recorded stage. **A target equal to `ignore_index` is ignored even when `ignore_index` happens to be a valid class index.** That is torch's behavior and it is admitted rather than refused, so a caller who sets `ignore_index = 0` on a real vocabulary loses class 0 and this profile does not stop them. Since DEVIATION 2514 step 2 it is the three parts in the order they always ran: shape, the non-finite scan of `logits`, the targets walk."""
+    var n = len(targets)
+    ce_refuse_shape(n, len(logits), cfg)
+    refuse_nonfinite("logits", logits)
+    ce_refuse_targets(targets, cfg)
     return n
 
 

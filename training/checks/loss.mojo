@@ -125,13 +125,19 @@ from gemm.checks.gemm_identical import (
     identical_gemm_workspace_max_floats,
 )
 from gemm.checks.gemm_oracle import OP_NN
+from core.device_scan import (
+    device_classify_nonfinite,
+    device_first_nonfinite,
+)
 from training.checks.loss_oracle import (
     CE_NEG_INF_BITS,
     CeConfig,
     REDUCTION_NONE,
     ce_divisor,
+    ce_nonfinite_message,
     ce_one_minus_eps,
-    ce_refuse_inputs,
+    ce_refuse_shape,
+    ce_refuse_targets,
     ce_smoothing_targets,
     neg_by_bits,
 )
@@ -1252,7 +1258,8 @@ def ce_refuse_device_inputs(
     cfg: CeConfig,
 ) raises:
     """Contract section 8 ON THE DEVICE ENTRY POINT, which is where it was
-    missing. DEVIATION 1495.
+    missing. DEVIATION 1495; the scan moved to the device at DEVIATION 2514
+    step 2.
 
     **THE GAP THIS CLOSES WAS MEASURED, NOT SUSPECTED.** `loss_check.mojo`
     clause (f), first execution 2026-08-25, planted a quiet NaN in `logits`
@@ -1266,19 +1273,27 @@ def ce_refuse_device_inputs(
     so a stage hash containing one cannot match across vendors and the
     profile's whole claim fails on that input.
 
-    **IT CALLS THE ORACLE'S OWN `ce_refuse_inputs` AND DOES NOT RESTATE IT.**
-    A second copy of the refusal is a second thing to keep in step, and the
-    property that matters is that the two sides fail IDENTICALLY -- same
-    order, same name, same message. The transformer lane's
-    `llama_refuse_bad_inputs` is the precedent and it downloads for the same
-    reason.
+    **IT IS THE ORACLE'S WALK IN THE ORACLE'S ORDER, AND IT DOES NOT RESTATE
+    IT.** `ce_refuse_inputs` is shape, then the non-finite scan of `logits`,
+    then the targets; this function is the oracle's own `ce_refuse_shape`,
+    then `device_first_nonfinite` over `logits` with the refusal spelled by
+    the oracle's own `ce_nonfinite_message`, then the oracle's own
+    `ce_refuse_targets`. The property that matters is that the two sides
+    fail IDENTICALLY -- same order, same name, same first index, same
+    message -- and loss_check clause (f) asserts the device message EQUALS
+    the host message on the same planted List, so "same message" is a gate
+    and not a promise (design section 7, G4).
 
-    **THE COST IS A FULL DOWNLOAD OF `logits`, AND IT IS REAL.** At the
-    shipped vocabulary that is `n_rows * 128256` floats crossing the bus
-    before any arithmetic. This is correctness before speed and it is stated
-    rather than hidden. A device-side scan writing one count would be
-    cheaper; it is OWED, and it must produce the SAME message for the SAME
-    first offending cell or it is a different refusal wearing this one's name.
+    **WHAT CROSSES THE BUS.** `logits` (`n_rows * vocab` floats) is read
+    ONCE on the device by the scan and never downloaded; on a hit, the one
+    offending element (4 B) comes back to say NaN or infinity. The targets
+    are downloaded: `n_rows` int32 (8 KB at the LM target shape), because
+    the range walk is an integer refusal that names the ROW and the offending
+    VALUE, its cost is a handful of microseconds, and the one spelling of
+    that walk is the oracle's List loop, which is kept rather than restated
+    as a kernel plus a second message builder. The `(n_rows * vocab)`-float
+    host mirror and its List copy that DEVIATION 1495 paid (0.41 GB at the
+    LM target, 264 ms per step measured 2026-09-10) are gone.
 
     **THE REFUSAL COVERS INPUTS AND NOT INTERMEDIATES**, the same stated gap
     the transformer lane carries at its DEVIATION 815. A computed non-finite
@@ -1286,23 +1301,28 @@ def ce_refuse_device_inputs(
     cannot match.
     """
     var nv = n_rows * cfg.vocab
-    var hl = ctx.enqueue_create_host_buffer[DType.float32](nv if nv > 0 else 1)
-    var ht = ctx.enqueue_create_host_buffer[DType.int32](
-        n_rows if n_rows > 0 else 1
-    )
+    ce_refuse_shape(n_rows, nv, cfg)
+    var idx = device_first_nonfinite(ctx, logits, nv)
+    if idx >= 0:
+        var is_nan = device_classify_nonfinite(ctx, logits, idx)
+        raise Error(ce_nonfinite_message("logits", idx, is_nan))
+    var ht = ctx.enqueue_create_host_buffer[DType.int32](n_rows)
     ctx.synchronize()
-    ctx.enqueue_copy(dst_ptr=hl.unsafe_ptr(), src_buf=logits)
     ctx.enqueue_copy(dst_ptr=ht.unsafe_ptr(), src_buf=targets)
     ctx.synchronize()
-    var hx = List[Float32]()
-    for i in range(nv):
-        hx.append(hl.unsafe_ptr().unsafe_load(i))
     var ht_l = List[Int32]()
     for i in range(n_rows):
         ht_l.append(ht.unsafe_ptr().unsafe_load(i))
-    _ = ce_refuse_inputs(hx, ht_l, cfg)
-    _ = hl
-    _ = ht
+    _ = ht^
+    ce_refuse_targets(ht_l, cfg)
+
+
+def ce_refuse_scan_bytes(n_rows: Int, cfg: CeConfig) -> Int:
+    """The bytes `ce_refuse_device_inputs` READS ON THE DEVICE per call
+    (the logits scan), for the `step.ce_refuse_scan_bytes` timing line.
+    The targets download is `n_rows * 4` bytes and is reported as
+    `step.ce_refuse_scan_download_bytes` beside it."""
+    return n_rows * cfg.vocab * 4
 
 
 def identical_ce_forward_into(
@@ -1361,18 +1381,30 @@ def identical_ce_forward_into(
     # missing by loss_check clause (f) -- a planted NaN reached 40
     # recorded cells, first at `ce.max`. This is the FIRST statement in
     # the body because "before any recorded stage" is the clause.
-    # DEVIATION 2499: timed as `step.ce_refuse_download` (the phase ends
-    # on the host, after the scan; nothing is queued on the device when the
-    # tick reads the clock) with its byte count beside it, and the seams
-    # below as `step.ce_forward`, whose wait exists only under the switch.
+    # DEVIATION 2499: timed as `step.ce_refuse_scan` (was
+    # `step.ce_refuse_download` until DEVIATION 2514 step 2 moved the scan
+    # onto the device; the phase still ends on the host, after the targets
+    # walk, with nothing queued on the device when the tick reads the
+    # clock). The bytes line is what the scan READ ON THE DEVICE, and the
+    # downloaded bytes beside it are the targets only. The seams below are
+    # `step.ce_forward`, whose wait exists only under the switch.
     var ton = _step_timing_on()
     var tk = Int(perf_counter_ns())
     ce_refuse_device_inputs(ctx, logits, targets, n_rows, cfg)
-    _step_timing_tick(ctx, ton, tk, "step.ce_refuse_download")
+    _step_timing_tick(ctx, ton, tk, "step.ce_refuse_scan")
     if ton:
+        # Two four-token lines (`timing <name> <value> bytes`, the shape
+        # `tools/lm_step_memory_probe.py::parse_timing_lines` sums): the
+        # bytes the scan READ ON THE DEVICE, and the bytes DOWNLOADED
+        # (the targets only).
         print(
-            "timing step.ce_refuse_download_bytes "
-            + String((n_rows * cfg.vocab + n_rows) * 4)
+            "timing step.ce_refuse_scan_bytes "
+            + String(ce_refuse_scan_bytes(n_rows, cfg))
+            + " bytes"
+        )
+        print(
+            "timing step.ce_refuse_scan_download_bytes "
+            + String(n_rows * 4)
             + " bytes"
         )
 
