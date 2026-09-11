@@ -24,7 +24,12 @@
 #   MOJOLEARN_GEMM_LEG_OUT=$HOME/mojolearn-evidence/classical-two-datasets-$(date -u +%Y-%m-%d_%H%M%S)-amd-leg1 \
 #   bash tools/do_extra_leg.sh amd --minutes 60 --skip-gates
 #
-# The runner passes no environment to a body, so the lane list is this file's
+# AMD (Hot Aisle MI300X, DEVIATION 2572): tools/classical_hotaisle_leg.sh is the
+# tools/hotaisle_leg.sh body; it calls this file once per phase group (setup,
+# smoke, prep, leg 1, leg 2) under one deadline. Evidence:
+# bench/results/classical_hotaisle_2026-09-11/.
+#
+# The DigitalOcean runner passes no environment to a body, so the lane list is this file's
 # default (kmeans,pca,ols,knn) and the second lease runs
 # tools/classical_two_datasets_leg2.sh (kde,svc), which sets
 # MOJOLEARN_CTD_LANES and execs this file.
@@ -62,8 +67,9 @@ DATA=${MOJOLEARN_CTD_DATA:-/root/ctd-data}
 WORK=${MOJOLEARN_CTD_WORK:-/root/ctd-work}
 VENV=${MOJOLEARN_CTD_VENV:-/root/ctd-venv}
 LANES=${MOJOLEARN_CTD_LANES:-kmeans,pca,ols,knn}
-DATASETS=${MOJOLEARN_CTD_DATASETS:-taxi istella}
-PHASES=${MOJOLEARN_CTD_PHASES:-setup prep races}
+# Commas or spaces (DEVIATION 2572: a runner env value may not hold a space).
+DATASETS=$(echo "${MOJOLEARN_CTD_DATASETS:-taxi istella}" | tr ',' ' ')
+PHASES=$(echo "${MOJOLEARN_CTD_PHASES:-setup prep races}" | tr ',' ' ')
 SMOKE=${MOJOLEARN_CTD_SMOKE_ROWS:-}
 ROUNDS=${MOJOLEARN_CTD_ROUNDS:-5}
 if [ -n "$SMOKE" ]; then
@@ -76,7 +82,13 @@ MIN_RACE=${MOJOLEARN_CTD_MIN_RACE:-240}
 RACE_SECONDS=${MOJOLEARN_CTD_RACE_SECONDS:-900}
 JOBS=${MOJOLEARN_COMPILE_JOBS:-8}
 EXTRA_ARMS=${MOJOLEARN_CTD_EXTRA_ARMS:-}
-BODY_START=$(date +%s)
+# One deadline across several calls of this file in one body (DEVIATION 2572).
+BODY_START=${MOJOLEARN_CTD_BODY_START:-$(date +%s)}
+# The Mac's copies of the two TLC months (2026-09-11), checked after any fetch.
+TAXI_SHA_2024_01=c4d59da7bbc8abaeeeb1727947ee93d9891a71acb42854bd80db1571b2030510
+TAXI_SHA_2024_02=c76c43c18c6c6664080dd920baab4928988d5786a6b65980792ca7cd796f9f20
+ISTELLA_TGZ_SHA=41b21116a3650cc043dbe16f02ee39f4467f9405b37fdbcc9a6a05e230a38981
+TAXI_WAIT=${MOJOLEARN_CTD_TAXI_WAIT:-0}
 
 mkdir -p "$OUT" "$DATA" "$WORK"
 cd "$ROOT" || exit 9
@@ -90,8 +102,9 @@ COMMIT=$(sed -n 's/^commit=//p' /root/gemm_leg_out/leg.txt 2>/dev/null | head -1
 MOJOLEARN_REPO_COMMIT=${COMMIT:-unknown}
 export MOJOLEARN_REPO_COMMIT
 VENDOR=$(sed -n 's/^vendor=//p' /root/gemm_leg_out/leg.txt 2>/dev/null | head -1)
+PROVIDER=$(sed -n 's/^provider=//p' /root/gemm_leg_out/leg.txt 2>/dev/null | head -1)
 if [ -z "$VENDOR" ]; then
-    if [ -e /dev/kfd ] && command -v rocm-smi > /dev/null 2>&1; then VENDOR=amd
+    if [ -e /dev/kfd ] && { command -v rocm-smi || command -v rocminfo || command -v amd-smi; } > /dev/null 2>&1; then VENDOR=amd
     elif command -v nvidia-smi > /dev/null 2>&1; then VENDOR=nvidia
     else VENDOR=unknown; fi
 fi
@@ -108,7 +121,7 @@ touch "$OUT/status.tsv"
 {
     echo "lane=classical-two-datasets (DEVIATION 2570, 2571)"
     echo "invoked=$(date -u +%Y-%m-%dT%H:%M:%SZ) phases=$PHASES smoke_rows=${SMOKE:-none}"
-    echo "vendor=$VENDOR"
+    echo "vendor=$VENDOR provider=${PROVIDER:-unknown}"
     echo "commit=$MOJOLEARN_REPO_COMMIT"
     echo "lanes=$LANES"
     echo "datasets=$DATASETS"
@@ -173,6 +186,10 @@ if has_phase setup; then
         fi
         if command -v amd-smi > /dev/null 2>&1; then
             echo "== amd-smi version"; amd-smi version 2>&1
+            echo "== amd-smi static --asic"; amd-smi static --asic 2>&1 | head -40
+        fi
+        if command -v rocminfo > /dev/null 2>&1; then
+            echo "== rocminfo (names)"; rocminfo 2>&1 | grep -E 'Marketing Name|Name: +gfx|Compute Unit' | head -20
         fi
         if [ -f /opt/rocm/.info/version ]; then
             echo "== /opt/rocm/.info/version"; cat /opt/rocm/.info/version
@@ -190,9 +207,61 @@ if has_phase setup; then
     } > "$OUT/env.txt" 2>&1
     record env 0 0
 
-    # ---- background: the opponents' Python, then the downloads ----------------
-    # Istella starts only after pip has finished, so no download process has
-    # numpy loaded while pip replaces it underneath.
+    # ---- background, at once: the raw fetches (curl, no numpy) ----------------
+    # DEVIATION 2572: the 472 MB Istella tarball and the two taxi months start at
+    # t=0 beside pixi and the builds; only the decode waits for the venv. Each
+    # file is checked against the Mac's sha256; a mismatch is deleted, so the
+    # decode step below either fetches again or reports the miss.
+    (
+        mkdir -p "$GBM_BENCH_DATA/istella" "$GBM_BENCH_DATA/taxi"
+        _t0=$(date +%s)
+        _tgz="$GBM_BENCH_DATA/istella/istella-s-letor.tar.gz"
+        if [ ! -f "$_tgz" ]; then
+            timeout -k 10 1500 curl -fsSL --retry 2 -o "$_tgz.part" \
+                http://library.istella.it/dataset/istella-s-letor.tar.gz && mv "$_tgz.part" "$_tgz"
+        fi
+        _got=$(sha256sum "$_tgz" 2>/dev/null | cut -c1-64)
+        [ "$_got" = "$ISTELLA_TGZ_SHA" ] || rm -f "$_tgz"
+        echo "istella_tgz sha256=${_got:-none} expected=$ISTELLA_TGZ_SHA seconds=$(( $(date +%s) - _t0 ))" >> "$OUT/fetch.txt"
+        if [ -f "$_tgz" ]; then
+            _t0=$(date +%s)
+            tar -xzf "$_tgz" -C "$GBM_BENCH_DATA/istella" > "$OUT/istella_untar.log" 2>&1
+            echo "istella_untar rc=$? seconds=$(( $(date +%s) - _t0 ))" >> "$OUT/fetch.txt"
+        fi
+        : > "$OUT/fetch_istella.done"
+    ) &
+    (
+        _t0=$(date +%s)
+        for m in 2024-01 2024-02; do
+            _f="$GBM_BENCH_DATA/taxi/yellow_tripdata_$m.parquet"
+            [ -f "$_f" ] || { timeout -k 10 600 curl -fsSL --retry 2 -o "$_f.part" -w '%{http_code}' \
+                "https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_$m.parquet" \
+                > "$OUT/taxi_curl_$m.txt" 2>&1 && mv "$_f.part" "$_f"; }
+            rm -f "$_f.part"
+        done
+        # A CDN that blocks the box: MOJOLEARN_CTD_TAXI_WAIT seconds for the
+        # Mac to upload the two months beside the cache (sha256 checked).
+        while :; do
+            _ok=1
+            for m in 2024-01 2024-02; do
+                _f="$GBM_BENCH_DATA/taxi/yellow_tripdata_$m.parquet"
+                case $m in 2024-01) _want=$TAXI_SHA_2024_01 ;; *) _want=$TAXI_SHA_2024_02 ;; esac
+                [ "$(sha256sum "$_f" 2>/dev/null | cut -c1-64)" = "$_want" ] || _ok=0
+            done
+            [ "$_ok" = 1 ] && break
+            [ $(( $(date +%s) - _t0 )) -ge "$TAXI_WAIT" ] && break
+            sleep 15
+        done
+        for m in 2024-01 2024-02; do
+            _f="$GBM_BENCH_DATA/taxi/yellow_tripdata_$m.parquet"
+            echo "taxi_$m curl_http=$(cat "$OUT/taxi_curl_$m.txt" 2>/dev/null) sha256=$(sha256sum "$_f" 2>/dev/null | cut -c1-64) sha_ok=$_ok seconds=$(( $(date +%s) - _t0 ))" >> "$OUT/fetch.txt"
+        done
+        : > "$OUT/fetch_taxi.done"
+    ) &
+
+    # ---- background: the opponents' Python, then the decodes -----------------
+    # The decodes start only after pip has finished, so no process has numpy
+    # loaded while pip replaces it underneath.
     (
         if [ "$VENDOR" = nvidia ]; then
             run pip-base timeout -k 30 900 "$PY" -m pip install --no-input --disable-pip-version-check \
@@ -202,15 +271,30 @@ if has_phase setup; then
         else
             BASE=/usr/bin/python3
             PIN="https://repo.radeon.com/rocm/manylinux/rocm-rel-6.4.1/pytorch_triton_rocm-3.2.0%2Brocm6.4.1.git6da9e660-cp312-cp312-linux_x86_64.whl#sha256=1d97c15798bf178299328032141a21d9777e7cdef59d5a7e3ac74e297c17198e https://repo.radeon.com/rocm/manylinux/rocm-rel-6.4.1/torch-2.6.0%2Brocm6.4.1.git1ded221d-cp312-cp312-linux_x86_64.whl#sha256=6b141e1a03148b007c6217519cd9947d760123ded5caebadffec22cba7358d2d"
-            if ! "$BASE" -m venv "$VENV" > "$OUT/venv-first.log" 2>&1; then
-                DEBIAN_FRONTEND=noninteractive timeout -k 10 120 apt-get update -qq > "$OUT/venv-apt.log" 2>&1
-                DEBIAN_FRONTEND=noninteractive timeout -k 10 300 apt-get install -y -qq python3-venv python3-pip >> "$OUT/venv-apt.log" 2>&1
+            # DEVIATION 2572: the pinned wheels are cp312. A box whose python3
+            # is not 3.12 (or has no venv module) gets a 3.12 venv from uv.
+            if "$BASE" -c 'import sys, venv, ensurepip; sys.exit(0 if sys.version_info[:2] == (3, 12) else 3)' > /dev/null 2>&1; then
+                run venv "$BASE" -m venv "$VENV"
+            else
+                run uv-get sh -c 'curl -LsSf https://astral.sh/uv/install.sh | env UV_UNMANAGED_INSTALL=/root/.local/uv sh'
+                run venv /root/.local/uv/uv venv --seed --python 3.12 "$VENV"
             fi
-            run venv "$BASE" -m venv "$VENV"
+            # The opponent as a user installs it today: scikit-learn, NumPy and
+            # SciPy current from PyPI (the H100 recipe; the MI325X trees rows ran
+            # 1.9.1), versions in versions.txt and pip_freeze.txt.
             # shellcheck disable=SC2086
             run wheels timeout -k 30 1200 "$VENV/bin/pip" install --disable-pip-version-check --no-input \
-                --only-binary=:all: $PIN numpy==1.26.4 scipy==1.14.1 scikit-learn==1.5.2 \
-                threadpoolctl==3.5.0 joblib==1.4.2 pyarrow==17.0.0
+                --only-binary=:all: $PIN numpy scipy scikit-learn threadpoolctl joblib pyarrow
+            # torch sees the GPU, or the second pin (PyTorch's own ROCm 6.2.4 wheel,
+            # ROCm libraries bundled) replaces it; torch_source.txt says which.
+            if "$VENV/bin/python" -c 'import sys, torch; sys.exit(0 if torch.cuda.is_available() else 3)' > "$OUT/torch_probe1.log" 2>&1; then
+                echo "torch_source=repo.radeon.com rocm-rel-6.4.1 torch 2.6.0 (cuda.is_available True)" > "$OUT/torch_source.txt"
+            else
+                run torch-fallback timeout -k 30 1200 "$VENV/bin/pip" install --disable-pip-version-check --no-input \
+                    --force-reinstall --index-url https://download.pytorch.org/whl/rocm6.2.4 'torch==2.6.0+rocm6.2.4'
+                "$VENV/bin/python" -c 'import sys, torch; sys.exit(0 if torch.cuda.is_available() else 3)' > "$OUT/torch_probe2.log" 2>&1
+                echo "torch_source=download.pytorch.org rocm6.2.4 torch 2.6.0 (probe2 rc=$?; the repo.radeon.com pin did not see the GPU, torch_probe1.log)" > "$OUT/torch_source.txt"
+            fi
         fi
         "$PY" -m pip freeze > "$OUT/pip_freeze.txt" 2>&1
         "$PY" - > "$OUT/versions.txt" 2>&1 <<'PYV'
@@ -231,6 +315,8 @@ for name in ("torch", "cuml", "cupy", "sklearn", "scipy", "pyarrow"):
     except Exception as exc:  # noqa: BLE001
         print(name, "NOT IMPORTABLE", repr(exc))
 PYV
+        # The raw fetches first (a second writer on the same file is a torn file).
+        while [ ! -f "$OUT/fetch_istella.done" ] || [ ! -f "$OUT/fetch_taxi.done" ]; do sleep 5; done
         ( run download-istella timeout -k 30 2700 "$PY" tools/speed_gbdt_arm.py --download istella
           echo "rc=$?" > "$OUT/istella.done" ) &
         run download-taxi timeout -k 30 1500 "$PY" tools/speed_gbdt_arm.py --download taxi
@@ -254,8 +340,10 @@ PYV
     ls -la python/mojolearn/identical > "$OUT/identical_bindings.txt" 2>&1
     for so in python/mojolearn/identical/*.so; do
         [ -f "$so" ] || continue
-        printf '%s sha256=%s sm_90a=%s gfx942=%s\n' "$so" "$(sha256sum "$so" | cut -c1-16)" \
-            "$(strings "$so" 2>/dev/null | grep -c sm_90a)" "$(strings "$so" 2>/dev/null | grep -c gfx942)"
+        printf '%s sha256=%s sm_90a=%s gfx942=%s %s=%s\n' "$so" "$(sha256sum "$so" | cut -c1-16)" \
+            "$(strings "$so" 2>/dev/null | grep -c sm_90a)" "$(strings "$so" 2>/dev/null | grep -c gfx942)" \
+            "${MOJOLEARN_GPU_ARCHS:-box_arch_unset}" \
+            "$( [ -n "${MOJOLEARN_GPU_ARCHS:-}" ] && strings "$so" 2>/dev/null | grep -c "${MOJOLEARN_GPU_ARCHS%%,*}")"
     done > "$OUT/identical_archs.txt" 2>&1
     record builds-done 0 "$(( $(date +%s) - BODY_START ))"
     # pip may still be replacing numpy; the import waits for the background
