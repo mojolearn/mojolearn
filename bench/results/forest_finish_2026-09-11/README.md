@@ -301,6 +301,26 @@ moved thousands of nodes (scalar-tree 2688 / 2052 clf/reg, shared-row-base
 2499 / 2598), so the gate that says batch width cannot move a tree is a gate
 that can fail.
 
+### Why the REGRESSION cells are expected to be flat, and the first pass says so
+
+The taxi win comes from DEVIATION 205's rescue: 4 columns are sampled out of
+16, all four are often constant inside a node, and every cycle carrying a retry
+pays two extra staged sub-batches whose cost scales with CYCLE COUNT. The
+ExtraTrees regressor runs `max_features=1.0` -- EVERY column is sampled at
+every node -- so a node can only trigger the rescue if ALL of its columns are
+constant, which is rare. The mechanism that pays on classification is therefore
+structurally absent from the regression cells, whatever the batch width.
+
+First pass on taxireg (11 columns, 3 rounds, ours-only, superseded by the
+pooled table below when both passes land): ctl 5343.1 ms, bw16k 5268.6 (0.986),
+bw32k 5250.8 (0.983), all three at hash `9844a40ba74bc375`. Flat, as predicted,
+and not a refusal: a switch whose geometric mean over the cells it reaches
+stays below 1 still flips, it simply collects nothing here.
+
+This is why the switch is decided over four cells and not two. A classification
+only reading (0.880 and 0.865) would have overstated what this width buys a
+user fitting a regressor.
+
 ### Speed
 
 Pending: batch C's A/B, batch D's verdict, and (only if a flip is on the table)
