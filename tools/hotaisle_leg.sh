@@ -1129,6 +1129,7 @@ cp "$TMPD/j.py" "$DEADMAN_DIR/j.py"
 subst "$TMPD/deadman.sh.template" "$DEADMAN_DIR/deadman.sh" || die "THE MAC DEAD-MAN DID NOT BUILD. Nothing was created." 1
 nohup sh -c 'trap "" HUP INT TERM; exec sh "$0"' "$DEADMAN_DIR/deadman.sh" > /dev/null 2>&1 < /dev/null &
 DEADMAN_PID=$!
+disown "$DEADMAN_PID" 2>/dev/null  # no "Killed: 9" job line when a clean teardown cancels it
 sleep 1
 kill -0 "$DEADMAN_PID" 2>/dev/null || { DEADMAN_PID=""; die "THE MAC DEAD-MAN DID NOT START. Nothing was created." 1; }
 {
