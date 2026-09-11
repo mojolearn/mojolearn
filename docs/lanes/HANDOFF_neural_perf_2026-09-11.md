@@ -89,6 +89,21 @@ No AMD timing of this step exists at the target shape.
    DEVIATIONS 2528, 2531, 2533, 2530 (section 11 order) and GEMM
    DEVIATIONS 2540 to 2544. AMD leg 1 invocation:
    `MOJOLEARN_DO_TOKEN_FILE=$HOME/.mojolearn_do_token MOJOLEARN_GPU_ARCHS=gfx942 MOJOLEARN_GEMM_LEG_EXTRA=tools/attention_step_leg.sh MOJOLEARN_DO_EXTRA_ENV="MOJOLEARN_ATTN_LEG_ARMS=stash_tiled MOJOLEARN_ATTN_LEG_SKIP_TIMERS=1" MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/<UTC stamp>-amd-mi325x-attention-step bash tools/do_extra_leg.sh amd --minutes 60 --skip-gates`.
+0b. MERGED 2026-09-11 night after orchestrator M4 gates (lane code is never
+   compiled by the lanes): DEVIATION 2528 zdot tiled, trial arms
+   `stash_tiled_ztiled_r64` / `_r32` (25a0356c; transformer_fused_check
+   PASS, arms check PASS with sabotage_new moving only the backward; the
+   parser needed a String aliasing fix before it compiled), and GEMM
+   DEVIATIONS 2540 to 2544, trial only (63e9077f; step arms check PASS on
+   102 ragged cases x 6 geometries with reach 102/102, the no-trial build
+   fails naming the define, gemm_device_check green). Defaults unchanged.
+   2531, 2533 and 2530 are not built. AMD leg 1 (attention, from commit
+   63325cf7) waits behind amd-trees-leg through a launcher; its env prices
+   stash_tiled and both 2528 row counts against baseline and runs the LM
+   step for baseline and stash_tiled on both corpora. Next AMD legs, in
+   the agreed alternation: the torch opponent row, then
+   `MOJOLEARN_DO_TOKEN_FILE=$HOME/.mojolearn_do_token MOJOLEARN_GPU_ARCHS=gfx942 MOJOLEARN_GEMM_LEG_EXTRA=tools/gemm_step_leg.sh MOJOLEARN_DO_EXTRA_ENV="MOJOLEARN_GEMM_STEP_LEG_ARMS=shipped,lfold,half,half_ks16,quarter,head,half_head MOJOLEARN_GEMM_STEP_LEG_LM_ARMS=auto" MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/<UTC stamp>-amd-mi325x-gemm-step bash tools/do_extra_leg.sh amd --minutes 60 --skip-gates`,
+   then the 2528 LM step leg against stash_tiled (brief section 12).
 1. The DigitalOcean runner is merged and its dry run is green (section 3);
    its first paid run is also its bring-up. Tuning on AMD is now a repo rule
    for every lane (ENGINEERING_RULES.md section 10), and the account allows
