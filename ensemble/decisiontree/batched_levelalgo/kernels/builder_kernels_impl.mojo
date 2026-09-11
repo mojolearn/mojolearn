@@ -2842,6 +2842,10 @@ def find_best_splits_kernel[
     # unconditional. `ScanBin` is DEVIATION 129b.
     var scan_histogram = histogram.unsafe_bitcast[ScanBin[O.BinT]]()
     var global_sample_count = Int64(0)
+    # DEVIATION 2502: the largest single-class count, for the pure-node
+    # mark after the merge. Every column's histogram sums to the node's
+    # class totals, so any column block may compute it.
+    var max_class_count = Int64(0)
     comptime class_limit_all = sabotage != 1
     comptime cdf_sab = 2 if sabotage == 2 else 0
     for c in range(Int(n_classes)):
@@ -2851,12 +2855,15 @@ def find_best_splits_kernel[
             address_space = AddressSpace.GENERIC,
             sabotage=cdf_sab,
         ](scan_histogram.unsafe_offset(Int(n_bins) * c), n_bins)
+        var class_count = Int64(Int(total.b.Count()))
+        if class_count > max_class_count:
+            max_class_count = class_count
         comptime if class_limit_all:
-            global_sample_count += Int64(Int(total.b.Count()))
+            global_sample_count += class_count
         else:
             # SABOTAGE: only class 0 reaches the total.
             if c == 0:
-                global_sample_count += Int64(Int(total.b.Count()))
+                global_sample_count += class_count
 
     # `:389`
     barrier()
@@ -2865,6 +2872,15 @@ def find_best_splits_kernel[
     var sp = objective.Gain(
         histogram, quantiles_for_split, col, global_sample_count, n_bins
     )
+    # DEVIATION 2502: every thread's candidate carries the node's purity,
+    # so whichever candidate the block publishes writes the same flag.
+    var node_pure = (
+        n_classes > Int32(1)
+        and global_sample_count > Int64(0)
+        and max_class_count == global_sample_count
+        and objective.PureNodeIsTerminal()
+    )
+    sp.pure = Int32(1) if node_pure else Int32(0)
 
     # `:393`
     barrier()
@@ -2891,6 +2907,19 @@ def find_best_splits_kernel[
             quantiles_for_split,
             n_bins,
         )
+
+    # DEVIATION 2502: the node's purity goes to the slot's own field. A
+    # merge above writes the same value (`_publish_to_global`), so the
+    # order of this store and any merge does not matter; a node no block
+    # published keeps initSplit's 0 until this store. The host reads it
+    # as `terminal` and leaves the node out regardless of `colid`
+    # (`_read_splits`). Regression has one plane and is never marked.
+    if Int(block_idx.y) == 0 and Int(thread_idx.x) == 0:
+        # A word store through the field's own pointer: a struct-level
+        # read-modify-write here could race a concurrent publish.
+        Split[O.DataT].pure_flag_ptr(splits.unsafe_offset(Int(nid)))[
+            unsafe_offset=0
+        ] = sp.pure
 
 
 def launch_find_best_splits_kernel[

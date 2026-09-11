@@ -248,6 +248,17 @@ struct Split[dtype: DType](TrivialRegisterPassable):
     widths are theirs.
     """
 
+    # OURS, DEVIATION 2502: 1 when the node's rows all carry one class.
+    # FIRST FIELD ON PURPOSE: `find_best_splits_kernel` stores it through
+    # an Int32 pointer at the slot's address (`pure_flag_ptr`), never
+    # through a struct copy, so the store cannot clobber a concurrent
+    # mutex-guarded publish of the other fields. Every publisher of the
+    # slot writes the SAME value for it (each column block computes it
+    # from its own histogram, and all histograms of a node sum to the same
+    # class totals), so the slot ends the round holding the node's purity
+    # whatever the order of the stores. Not part of the merge decision
+    # and never read on the device.
+    var pure: Int32
     # `split.cuh:43` -- threshold to compare in this node
     var quesval: Scalar[Self.dtype]
     # `split.cuh:45` -- feature index
@@ -263,6 +274,15 @@ struct Split[dtype: DType](TrivialRegisterPassable):
     var split_start: Int32
     # `split.cuh:55` -- last quantile index of that range
     var split_end: Int32
+
+    @staticmethod
+    @always_inline
+    def pure_flag_ptr[
+        o: MutOrigin, //
+    ](slot: MutPointer[Self, o]) -> MutPointer[Int32, o]:
+        """The `pure` word of `slot[0]`, as an Int32 pointer (DEVIATION
+        2502). `pure` is the first field, so this is the slot's address."""
+        return slot.unsafe_bitcast[Int32]()
 
     @staticmethod
     @always_inline
@@ -289,6 +309,7 @@ struct Split[dtype: DType](TrivialRegisterPassable):
         self.local_nLeft = 0
         self.split_start = -1
         self.split_end = -1
+        self.pure = 0
 
     @always_inline
     def __init__(
@@ -308,6 +329,7 @@ struct Split[dtype: DType](TrivialRegisterPassable):
         self.local_nLeft = local_nLeft
         self.split_start = split_start
         self.split_end = split_end
+        self.pure = 0
 
     @always_inline
     def IsValid(self) -> Bool:
@@ -649,6 +671,10 @@ struct Split[dtype: DType](TrivialRegisterPassable):
         )
         # `:262-269`
         if update_result:
+            # DEVIATION 2502: the publisher's purity rides the write-back
+            # (see `pure`), so a merge and the kernel's direct store of
+            # the flag can land in any order.
+            split_reg.pure = self.pure
             split[unsafe_offset=0] = split_reg.copy()
 
         # `:270-271` -- their `__threadfence(); atomicExch(mutex,

@@ -407,6 +407,15 @@ trait ObjectiveLike(Copyable & Deinitable):
         """`objectives.cuh:150` / `:361`."""
         ...
 
+    def PureNodeIsTerminal(self) -> Bool:
+        """DEVIATION 2502, ours. True when a node whose rows all carry one
+        class can never split under this objective's gain rule, so the
+        builder may stop retrying it with fresh columns: classification
+        with a non-negative `min_impurity_decrease` (a pure node's Gini and
+        entropy gains are exactly 0 for every threshold). False for
+        regression, whose single histogram plane cannot show purity."""
+        ...
+
     def Scales(self) -> BinScales:
         """NOT theirs. DEVIATION 101b's fixed-point scales, which
         `SetLeafVector` needs and their two-argument static did not."""
@@ -722,6 +731,12 @@ struct ClassificationObjectiveFunction[
     def NumClasses(self) -> Int32:
         """`objectives.cuh:150`."""
         return self.nclasses
+
+    @always_inline
+    def PureNodeIsTerminal(self) -> Bool:
+        """DEVIATION 2502: a pure node's gain is exactly 0 under Gini and
+        entropy, and `Gain` admits only `gain > min_impurity_decrease`."""
+        return self.min_impurity_decrease >= Scalar[Self.dtype](0)
 
     @always_inline
     def Scales(self) -> BinScales:
@@ -1261,6 +1276,11 @@ struct RegressionObjectiveFunction[
     def NumClasses(self) -> Int32:
         """`objectives.cuh:351` -- `return 1`."""
         return 1
+
+    @always_inline
+    def PureNodeIsTerminal(self) -> Bool:
+        """DEVIATION 2502: never marked; one plane shows no purity."""
+        return False
 
     @always_inline
     def Scales(self) -> BinScales:
