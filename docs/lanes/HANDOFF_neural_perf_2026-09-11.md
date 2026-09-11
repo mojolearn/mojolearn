@@ -33,7 +33,7 @@ Declined on measurement (do not reopen without a new mechanism):
 
 | lane | branch | commit | state |
 |---|---|---|---|
-| GEMM occupancy and head arms (DEVIATIONS 2540 to 2544) | `worktree-agent-a3de8dcf2fbc0a07c` (worktree under .claude/worktrees/) | still finishing its current piece when this file was first committed | source only, nothing built or run; its brief is docs/lanes/BRIEF_gemm_step_2026-09-11.md on that branch |
+| GEMM occupancy and head arms (DEVIATIONS 2540 to 2544) | MERGED to main | 8c2a1922 (branch tip 722162c1) | design only: docs/lanes/BRIEF_gemm_step_2026-09-11.md with the identity argument per arm; no hook, kernel, check, price harness or leg exists; nothing built or run |
 | DigitalOcean extra-body leg runner (`tools/do_extra_leg.sh`) | MERGED to main | aeb4dd90 (branch tip 93786fd8) | Mac `--dry-run` GREEN (bundle 9,512,631 bytes, no token, no API call); never run against a droplet, so the first paid run is also its bring-up; see step 1 of section 6 |
 
 ## 4. Decisions Andrew made today (binding)
@@ -106,8 +106,21 @@ No AMD timing of this step exists at the target shape.
    forward grid, 2533 preflushed seams, 2530 forward Q residency at 32 rows
    only. 2532 (keep y for the backward) needs the callers' stage structs and
    2.42 GB of device memory; out of this lane's files.
-6. GEMM arms per their brief once merged (section 3): read the occupancy
-   evidence per column before timing; ptxas is an NVIDIA-only instrument.
+6. GEMM arms per docs/lanes/BRIEF_gemm_step_2026-09-11.md. Every GEMM in
+   the step reaches `identical_gemm_into` (gemm/checks/gemm_identical.mojo),
+   so one trial hook covers the head, block forward and block backward
+   calls. Its model (fitted to H100 timers, not measured): per-layer calls
+   are block-count bound (36 to 96 blocks against 132 SMs) and the shipped
+   kernel fits one block per SM at 255 registers. Arm A (2540: `lfold`,
+   `half`, `half_ks16`, `quarter`) folds leaf cells through thread-local
+   memory to cut registers; arm B (2541: `head`, `half_head`) tiles the
+   three vocab-sized calls along the long axis. To build: the hook and
+   `MOJOLEARN_GEMM_ARM` selector (2542), the kernel, check, price and
+   resource harnesses (2543), a vendor-agnostic tools/gemm_step_leg.sh and a
+   `gemm_arm` probe field (2544). Register counts per arm and all AMD
+   occupancy facts are unknown until a box reads them back; ptxas is an
+   NVIDIA-only instrument. First M4 command once the hook exists:
+   `nice -n 19 pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . gemm/checks/gemm_tuned_probe.mojo -o /tmp/gemm_shipped_probe`.
 7. NVIDIA confirmation: the torch H100 row
    (`tools/torch_lm_step_opponent_leg.sh` through tools/gemm_remote_leg.sh)
    and one H100 leg for every arm that flips on AMD.
