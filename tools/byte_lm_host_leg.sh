@@ -28,15 +28,18 @@ if ! command -v cc > /dev/null 2>&1; then
     echo "apt_build_essential_exit=$?" >> "$OUT/leg.txt"
 fi
 
-MOJOLEARN_BYTE_LM_HOST_OUTDIR=/root/host-prod sh bindings/build_byte_lm_host.sh > "$OUT/build_prod.log" 2>&1
+# The production binding goes to its installed path, python/mojolearn/host/,
+# because that file is how `_backend` recognizes a CPU-only install
+# (DEVIATION 2615). No GPU set is built on this box, so the gate's
+# `import mojolearn` takes exactly the path a CPU-only user's does.
+sh bindings/build_byte_lm_host.sh > "$OUT/build_prod.log" 2>&1
 prod_build=$?
 echo "build_prod_exit=$prod_build" >> "$OUT/leg.txt"
 
 prod_gate=9
 if [ "$prod_build" = 0 ]; then
-    cp /root/host-prod/_mojolearn_byte_lm_host.so "$OUT/_mojolearn_byte_lm_host.prod.so"
-    MOJOLEARN_BYTE_LM_HOST_BINARY=/root/host-prod/_mojolearn_byte_lm_host.so \
-        python3 tools/byte_lm_host_gate.py --capture "$CAPTURE" --steps "$STEPS" \
+    cp python/mojolearn/host/_mojolearn_byte_lm_host.so "$OUT/_mojolearn_byte_lm_host.prod.so"
+    python3 tools/byte_lm_host_gate.py --capture "$CAPTURE" --steps "$STEPS" \
         --report "$OUT/gate_prod.json" > "$OUT/gate_prod.log" 2>&1
     prod_gate=$?
 fi

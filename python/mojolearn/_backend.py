@@ -585,6 +585,8 @@ def gpu_arch():
     """The architecture directory this process loads from ('sm_80',
     'gfx942', ...), or None on the flat and arch-less layouts (where no
     choice was made)."""
+    if _CPU_ONLY is not None:
+        return None
     _layout()
     return _ARCH_SELECTED
 
@@ -593,6 +595,8 @@ def gpu_arch_how():
     """How the architecture was decided, for `mojolearn doctor` and the
     smoke: 'exact match for the device (...)', 'MOJOLEARN_GPU_ARCH in the
     environment', 'same-family lower architecture (...)', ..."""
+    if _CPU_ONLY is not None:
+        return "no GPU binary set loaded (CPU-only install, DEVIATION 2615)"
     _layout()
     return _ARCH_HOW
 
@@ -774,6 +778,63 @@ def requested_mode():
     return mode
 
 
+# ===================================================================
+# A CPU-ONLY INSTALL (DEVIATION 2615)
+# ===================================================================
+# The no-GPU refusal below is deliberate and stays the rule for every GPU
+# binding. The ONE exception is a box where no GPU set loads but the CPU
+# inference binding (`host/_mojolearn_byte_lm_host.so`, DEVIATION 2610) is
+# built. Then the package imports, every GPU binding is a `_NoGpuBinding`
+# stub that raises BY NAME on use with the original refusal attached, and
+# `vendor()` answers 'cpu'. Nothing falls back: a GPU estimator on that box
+# fails exactly as loudly as before, only at use instead of at import.
+
+#: The refusal `select()` would have raised, when it installed the CPU-only
+#: stubs instead; None on every install that loaded a GPU set.
+_CPU_ONLY = None
+
+
+def host_binding_path():
+    """Where the CPU inference binding lives on this install."""
+    return os.path.join(_pkg_dir(), "host", "_mojolearn_byte_lm_host.so")
+
+
+def host_binding_built():
+    return os.path.exists(host_binding_path())
+
+
+class _NoGpuBinding(type(sys)):
+    """Stands in for every GPU binding on a CPU-only install."""
+
+    def __init__(self, full, reason):
+        super().__init__(full)
+        self.__reason = reason
+
+    def __getattr__(self, item):
+        if item.startswith("__"):
+            raise AttributeError(item)
+        raise ImportError(
+            "mojolearn: this process loaded NO GPU binary set, so every GPU "
+            "estimator, block and trainer is unavailable here. The only surface "
+            "that computes on this box is LanguageModelInference (byte LM "
+            "inference on the CPU). Why no GPU set loaded:\n" + self.__reason
+        )
+
+
+def _select_cpu_only(pkg, mode, reason):
+    global _SELECTED, _CPU_ONLY
+    for name in _MODULES:
+        full = f"{pkg.__name__}.{name}"
+        module = _NoGpuBinding(full, reason)
+        sys.modules[full] = module
+        setattr(pkg, name, module)
+        if name not in _MISSING:
+            _MISSING.append(name)
+    _CPU_ONLY = reason
+    _SELECTED = mode
+    return _SELECTED
+
+
 def select():
     """Install the requested binary set under the canonical module names.
     Called once from `mojolearn/__init__.py` before any submodule imports a
@@ -788,8 +849,14 @@ def select():
     # the package directory on macOS and on a flat Linux checkout, and
     # python/mojolearn/<vendor>/ on the Linux wheel. `_layout()` raises here,
     # at import, when the wheel layout is present and no vendor can be
-    # picked; that is the no-GPU refusal and it is deliberate.
-    ident_dir = tier_dir(mode)
+    # picked; that is the no-GPU refusal and it is deliberate. DEVIATION
+    # 2615 turns it into by-name stubs only when the CPU binding is built.
+    try:
+        ident_dir = tier_dir(mode)
+    except ImportError as exc:
+        if not host_binding_built():
+            raise
+        return _select_cpu_only(pkg, mode, str(exc))
     if mode == "fast" and ident_dir == pkg_dir:
         # FAST USED TO RETURN HERE, INSTALLING NOTHING, and that made it the
         # ONLY tier that cannot survive a partial build. An upper tier gets a
@@ -875,11 +942,14 @@ def select():
         sys.modules[full] = module
         setattr(pkg, name, module)
     if len(missing) == len(_MODULES):
-        raise ImportError(
+        refusal = (
             f"mojolearn: MOJOLEARN_NUMERIC_MODE={mode} but no {mode} "
             f"binary exists under {ident_dir}. Build them with\n    "
             f"MOJOLEARN_NUMERIC_MODE={mode} bash bindings/build*.sh"
         )
+        if host_binding_built():
+            return _select_cpu_only(pkg, mode, refusal)
+        raise ImportError(refusal)
     _SELECTED = mode
     _MISSING.extend(missing)
     return _SELECTED
@@ -1244,6 +1314,8 @@ def vendor():
     (before 2026-08-29), and says so in `vendor_how()` rather than
     inventing a name from the platform."""
     global _VENDOR_SELECTED
+    if _CPU_ONLY is not None:
+        return "cpu"
     kind, base = _layout()
     loaded = default_mode()
     try:
@@ -1280,5 +1352,7 @@ def vendor_how():
     `mojolearn doctor`: 'flat layout; read from the loaded binaries',
     'MOJOLEARN_VENDOR in the environment', or 'the box probe (device nodes
     and driver libraries)'."""
+    if _CPU_ONLY is not None:
+        return "no GPU binary set loaded; the CPU inference binding only (DEVIATION 2615)"
     _layout()
     return _VENDOR_HOW

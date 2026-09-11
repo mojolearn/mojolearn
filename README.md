@@ -208,7 +208,10 @@ Mamba and Transformer APIs, including UMAP transform and CSR support. Newer
 Python API exposure does not inherit every numerical certificate. See
 [CHANGELOG.md](CHANGELOG.md) and the
 [support matrix](SUPPORT_MATRIX.md) for exact artifacts and limits.
-There is no CPU fallback.
+There is no CPU fallback for estimators or training. Byte LM inference can run
+on a CPU with no GPU through `LanguageModelInference`; see
+[docs/BYTE_LM_CPU_INFERENCE.md](docs/BYTE_LM_CPU_INFERENCE.md) for the CPUs it
+is certified on.
 Run the diagnostic command before depending on a new machine:
 
 ```sh
@@ -401,8 +404,10 @@ under `bench/results/` and `archive/` are evidence, not current guidance.
 
 What will get in your way first:
 
-- GPU hardware is required. There is no CPU fallback, and the library refuses
-  rather than silently running elsewhere.
+- GPU hardware is required for every estimator and for training. There is no
+  CPU fallback for them, and the library refuses rather than silently running
+  elsewhere. The one exception is byte LM inference, which runs on certified
+  CPUs through its own explicitly named class.
 - mojolearn is not a drop-in replacement for scikit-learn, CatBoost or cuML.
   Parameter coverage is intentionally smaller than any of them, and
   unsupported parameters raise.

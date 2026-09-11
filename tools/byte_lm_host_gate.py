@@ -98,14 +98,10 @@ def main():
     args = parser.parse_args()
 
     sys.path.insert(0, str(ROOT / 'python'))
-    # `import mojolearn` selects a GPU binary set and, under identical, refuses
-    # when none is built, which is every CPU-only box. The CPU binding is
-    # loaded by path and reads no process tier, so the gate imports the
-    # package under fast, whose selector installs by-name stubs for missing
-    # GPU bindings instead of raising. The binding's own read-back still
-    # requires IDENTICAL. `_backend` refuses the wheel layout with no GPU
-    # before this matters; the gate runs from a source checkout.
-    os.environ['MOJOLEARN_NUMERIC_MODE'] = 'fast'
+    # The package imports under its default tier through the CPU-only path of
+    # DEVIATION 2615, which is part of what this gate exercises. The binding
+    # under test is copied to python/mojolearn/host/ by the leg before this
+    # runs, because that path is how `_backend` recognizes a CPU-only install.
     try:
         from mojolearn._buffer import frombytes
         from mojolearn._byte_lm_config import ByteLanguageModelConfig

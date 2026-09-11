@@ -8,7 +8,8 @@ be audited years later, not so that you have to absorb them to fix a bug.
 ## 1. What you need
 
 One GPU supported by the installed Mojo toolchain and this checkout. There is
-no CPU path. Released wheels support a narrower, explicitly packaged set of
+no CPU path except byte LM inference ([BYTE_LM_CPU_INFERENCE.md](BYTE_LM_CPU_INFERENCE.md)).
+Released wheels support a narrower, explicitly packaged set of
 architectures; see [the support matrix](../SUPPORT_MATRIX.md) rather than
 inferring wheel support from a GPU family name.
 
