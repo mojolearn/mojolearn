@@ -239,9 +239,33 @@ log "payload started; box deadline $(date -u -r "$BOX_DEADLINE" +%H:%M:%S 2>/dev
 
 SSH_RSYNC="ssh -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=$EVID/known_hosts -o BatchMode=yes -o ConnectTimeout=10"
 WORK_END=$(( T_CREATE + LEASE - FETCH_RESERVE ))
+PATCHES=0
 while [ "$(date +%s)" -lt "$WORK_END" ]; do
-    sleep 60
-    $SSH 'test -f /root/symarms_out/DONE.all' 2>/dev/null && { log "payload DONE.all"; break; }
+    sleep 30
+    # THE PATCH LOOP. A compile error found on the box should cost minutes,
+    # not a lease: when every gbdt build failed the droplet is kept, and a
+    # committed fix named in $EVID/patch.list (paths relative to the repo)
+    # is rsynced over and the payload restarts under the same deadline.
+    if [ -f "$EVID/patch.list" ]; then
+        PATCHES=$((PATCHES + 1))
+        log "patch $PATCHES at $(git -C "$REPO" rev-parse --short HEAD): $(tr '\n' ' ' < "$EVID/patch.list")"
+        $SSH 'pkill -f sym_arms_box.sh; pkill -f forest_speed_arm.py; pkill -f "mojo build"; pkill -f "mojo run"; true' 2>/dev/null
+        ( cd "$REPO" && rsync -az --relative -e "$SSH_RSYNC" $(cat "$EVID/patch.list") "root@$IP:/root/mojolearn/" ) \
+            && log "patch $PATCHES shipped" || log "patch $PATCHES rsync FAILED"
+        $SSH "echo patch$PATCHES $(git -C "$REPO" rev-parse HEAD) >> /root/symarms_out/commit.txt; rm -f /root/symarms_out/DONE.*; cd /root/mojolearn && SYMARMS_DEADLINE=$BOX_DEADLINE SYMARMS_TIERS='$TIERS' nohup bash tools/sym_arms_box.sh all >> /root/symarms_out/payload.log 2>&1 < /dev/null & echo restarted" | tee -a "$LOG"
+        mv "$EVID/patch.list" "$EVID/patch.$PATCHES.applied"
+        continue
+    fi
+    if $SSH 'test -f /root/symarms_out/DONE.all' 2>/dev/null; then
+        rsync -az -e "$SSH_RSYNC" "root@$IP:/root/symarms_out/" "$EVID/out/" 2>/dev/null
+        if ! grep -q 'build_exit build_gbdt.sh.*=0' "$EVID/out/ab.txt" 2>/dev/null; then
+            log "BUILDS FAILED: every gbdt build failed; holding the droplet for $EVID/patch.list"
+            $SSH 'rm -f /root/symarms_out/DONE.all'
+            continue
+        fi
+        log "payload DONE.all"
+        break
+    fi
     last=$($SSH 'tail -1 /root/symarms_out/ab.txt 2>/dev/null' 2>/dev/null)
     log "progress: $last"
     rsync -az -e "$SSH_RSYNC" "root@$IP:/root/symarms_out/" "$EVID/out/" 2>/dev/null

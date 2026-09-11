@@ -2171,7 +2171,9 @@ def launch_hist2_8bit[ridx_stats: Bool = False](
         groups, n_live, 1, sm_count, gather=(depth > 0)
     )
     if depth == 0:
-        ctx.enqueue_function[hist2_8bit_kernel](
+        # bound explicitly: the kernel carries DEVIATION 2580/2581's comptime
+        # parameters, and an unbound name is a generic enqueue refuses
+        ctx.enqueue_function[hist2_8bit_kernel[False, False]](
             blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
             blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
             Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line),
@@ -2185,7 +2187,9 @@ def launch_hist2_8bit[ridx_stats: Bool = False](
     else:
         # `ridx_stats` (DEVIATION 1902): the gather arm's stat loads go
         # through the row index when the ridx-only split route is on.
-        ctx.enqueue_function[hist2_8bit_gather_kernel[ridx_stats]](
+        ctx.enqueue_function[
+            hist2_8bit_gather_kernel[ridx_stats, False, False]
+        ](
             blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
             blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
             Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line),
@@ -2431,7 +2435,9 @@ def launch_hist2_one_byte[
 
     if depth == 0:
         if is_odd == 1:
-            ctx.enqueue_function[hist2_one_byte_kernel[bits, True, smem_mode]](
+            ctx.enqueue_function[
+                hist2_one_byte_kernel[bits, True, smem_mode, False, False]
+            ](
                 blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
                 blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
                 Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line),
@@ -2443,7 +2449,9 @@ def launch_hist2_one_byte[
                 block_dim=(BLOCK, 1, 1),
             )
         else:
-            ctx.enqueue_function[hist2_one_byte_kernel[bits, False, smem_mode]](
+            ctx.enqueue_function[
+                hist2_one_byte_kernel[bits, False, smem_mode, False, False]
+            ](
                 blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
                 blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
                 Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line),
@@ -2458,7 +2466,9 @@ def launch_hist2_one_byte[
         if is_odd == 1:
             # `ridx_stats` (DEVIATION 1902) on both gather arms below.
             ctx.enqueue_function[
-                hist2_one_byte_gather_kernel[bits, True, smem_mode, ridx_stats]
+                hist2_one_byte_gather_kernel[
+                    bits, True, smem_mode, ridx_stats, False, False
+                ]
             ](
                 blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
                 blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
@@ -2473,7 +2483,9 @@ def launch_hist2_one_byte[
             )
         else:
             ctx.enqueue_function[
-                hist2_one_byte_gather_kernel[bits, False, smem_mode, ridx_stats]
+                hist2_one_byte_gather_kernel[
+                    bits, False, smem_mode, ridx_stats, False, False
+                ]
             ](
                 blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
                 blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
