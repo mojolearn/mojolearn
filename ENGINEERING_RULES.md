@@ -249,3 +249,25 @@ Same reason, same shape of the rule.
 The 1,000,000-row floor for tree timing (2026-09-01) stands underneath this
 rule; this one adds the second kind, and removes the size sweep as a
 substitute for it.
+
+**Non-tree classical (kNN, kmeans, ols, pca, iforest and the rest): the same
+rule at the lane's large shape.** Andrew, 2026-09-11, on the kNN selection
+default: "use 2 different reasonably large datasets since the large case is
+the one we should be optimizing for, but not too large because I don't want
+to waste that much time, and 2 of them that are different so they
+generalize." Reasonably large means the shape at which the kernel, not the
+launch or the transfer, is the cost (kNN today: 400,000 x 32 index with
+4,000 queries; kmeans, ols and pca: 4,000,000 x 32), and no larger: a bigger
+shape buys rental time, not evidence. Different in kind means one real
+dataset beside one generator, or two real sets of different structure. Two
+generators of the same shape are ONE kind: the kNN gate's `dyadic` and
+`large` fixtures are both 400,000 x 32 synthetic blocks, so a selection win
+timed on both has been timed on one kind. A win timed on one kind is
+provisional; it may stay flipped for the vendor it was measured on while
+the second kind is owed, and the brief says so.
+
+**Opponents under this rule.** An opponent row is measured ONCE per (GPU,
+driver, opponent version, dataset) and cached in `bench/OPPONENT_REFERENCE.md`;
+later rounds run ours alone against the cached row. A second dataset kind is
+a new tuple, so its opponent row is measured once on its first leg, and
+never again after that.
