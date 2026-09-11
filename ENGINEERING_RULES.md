@@ -282,6 +282,12 @@ at the lane's shape and on the same box in one heat window:
 Applied the same evening: DEVIATION 2502 (pure node is a leaf) went ON by
 default on ratios 0.89 (taxi) and 0.45 (Istella-S) with equal logloss.
 
+The verdict is mechanical, so a tool prints it. `tools/flip_verdict.py`
+reads the before and after speed logs for both datasets (FSPEED and
+FSPEED-ACC lines) and prints both ratios, the geometric mean, the quality
+deltas and FLIP or NO FLIP. From 2026-09-11 every deviation commit ends its
+body with that one line.
+
 **HIGGS is RETIRED (2026-09-11)** as a benchmark dataset for trees and
 classical lanes: 28 dense continuous physics features, balanced classes, no
 missing values, no categoricals, and noise so heavy that depth-16 leaves
@@ -328,3 +334,45 @@ driver, opponent version, dataset) and cached in `bench/OPPONENT_REFERENCE.md`;
 later rounds run ours alone against the cached row. A second dataset kind is
 a new tuple, so its opponent row is measured once on its first leg, and
 never again after that.
+
+## 10. Tune on AMD, confirm on NVIDIA
+
+Andrew, 2026-09-11: "lets use and tune on amd instead of nvidia going
+forward ... idea is everybody else tunes to nvidia so doing amd will be
+distinguishing. also amd is cheaper."
+
+**Every lane (trees, classical, neural) tunes on AMD.** The rented box that
+decides a kernel geometry, a default flip under section 9, a deviation A/B,
+a stage profile or a new opponent row is an AMD Instinct GPU on
+DigitalOcean (MI325X, size `gpu-mi325x1-256gb`, region `tor1`). NVIDIA is
+the confirmation column. Apple stays where the tree FAST tier is timed
+(0b-iii).
+
+Tuning on one vendor costs nothing in correctness. IDENTICAL makes the bits
+equal on every vendor, so where a kernel was tuned never changes an answer
+anywhere. It changes only which vendor runs closest to its best speed, and
+the whole field already tunes to NVIDIA. A library that is fast on ROCm is
+the rarer thing.
+
+So:
+
+- **New legs start on the MI325X** through the DigitalOcean path
+  (`tools/e2_remote_leg.sh` and the `tools/do_*` legs, token at
+  `~/.mojolearn_do_token`). A RunPod NVIDIA leg is a confirmation leg and
+  its commit says so.
+- **The opponent on AMD is the fastest thing a user can run on that box.** A
+  library with a ROCm GPU path (PyTorch ROCm, XGBoost ROCm, LightGBM's GPU
+  build where it runs on AMD) is measured on the GPU. A library with no AMD
+  GPU path (cuML, CatBoost GPU) is measured on the same box's CPU on all
+  cores. Every row and every table cell names GPU or CPU. That is the
+  access thesis seen from the other side, and a torch ROCm arm that a
+  competent user would write belongs on the board beside it.
+- **A flip decided on AMD ships.** The NVIDIA confirmation leg follows. If
+  it measures a loss on NVIDIA beyond noise, NVIDIA gets its own kernel
+  matrix row; shared code never grows a vendor branch.
+- **AMD legs serialize.** The DigitalOcean account runs one GPU droplet at
+  a time across every session. A leg takes `mkdir /tmp/mojolearn-do-gpu.lock`
+  before the create and removes it only after the destroy is verified.
+- **NVIDIA rows already in `bench/OPPONENT_REFERENCE.md` stay valid for
+  their tuple.** A ratio never mixes vendors: ours on the MI325X is quoted
+  only against an opponent row measured on the MI325X.
