@@ -88,8 +88,54 @@
 #   reset is complete. STOP KEEPS BILLING; only DELETE ends it. SSH user
 #   `hotaisle`, port from ssh_access.port.
 #
-# RUNNER RESULTS
-#   (filled in by the three tests below)
+# RUNNER RESULTS, 2026-09-11, team andrews-team (VM limit 2, so 2 slots)
+#   1. WATCHDOG (--test-watchdog, 8core, --minutes 4): VM d74538ca-d6f8-4b86-
+#      a435-0e22805d863e. Watchdog fired 15:27:27Z; the Mac sent no DELETE and
+#      verified GONE 15:27:36Z (GET 404, absent from the 200 listing), 26 s
+#      after the deadline; Mac dead-man cancelled unfired. $0.10. PASS.
+#   2. TRAP (--bare, 8core, --minutes 10): VM 88b94dcb-1bc1-4400-95c3-
+#      a030ed98a679. TERM to the runner 31 s into the body (15:37:57Z); trap
+#      DELETE 204 at 15:38:05Z, verified GONE 15:38:07Z. $0.10. PASS. (A first
+#      attempt, VM c1fdd781, killed too late and ended by the normal teardown.)
+#   3. BODY SMOKE (13core, --minutes 20, --skip-gates, tools/hotaisle_smoke_body.sh):
+#      VM 86fe2678-3a9e-4e8b-8078-652e07dd5910, docker runtime, commit
+#      1346e447. pixi_install_exit=0, extra_exit=0, body_exit=0; normal
+#      teardown DELETE 204, verified GONE 1 s later. $0.20. PASS. (A first
+#      attempt, VM 5e7aedaf, installed no pixi: a `< /dev/null` on the
+#      installer's `sh` fed it nothing. Fixed; that VM was verified gone.)
+#   TOTAL SPEND, all five VMs: 80 to 90 cents (2500 -> 2490 -> 4955 -> 4945
+#   -> 4940 -> 4920 at the last teardown, 4910 minutes later with no VM live:
+#   charges keep posting briefly after a delete; the 4955 includes a $25.00
+#   top-up made outside this lane).
+#   THE BOX. Ubuntu 24.04.4, kernel 6.8, amdgpu, host ROCm 7.2.4 with rocm-smi
+#   and rocminfo ("AMD Instinct MI300X VF", gfx942; a bare gfx grep also hits
+#   a stray "gfx9", so only the rocminfo Name: field is read). /dev/kfd and
+#   /dev/dri present. Passwordless sudo for hotaisle. Docker 29.5.3 and podman
+#   4.9.3 answer, so runtime auto is docker. Host python3 3.12.3; in the
+#   rocm/dev-ubuntu-22.04:6.4.1-complete container 3.10.12, curl present.
+#   Disk 12T (51G used). 13core = Xeon Platinum 8470, 13 cores, 224 GB;
+#   8core = Xeon Platinum 8462Y+, 8 cores. CREATE returns 200 in about 5 s,
+#   state running 11 to 15 s after, ssh settled 35 to 80 s after. Names are
+#   RECYCLED (enc1-gpuvm015 came back for three deployments), so every
+#   delete is keyed by deployment_id, never the name. DELETE ?force=true
+#   answers 204 in about 7 s and GET is 404 within 3 s.
+#   TIMINGS. Image pull 97 to 112 s (in the background during upload).
+#   Bundle 9.65 MB over ssh stdin in 3 to 4 s. pixi install (cold, fresh VM,
+#   inside the container, pixi installer included) 4 s; Mojo 1.0.0
+#   (ed45d567), pixi python 3.14.7. Base binding, IDENTICAL, gfx942
+#   (tools/with_identical_mode.sh sh bindings/build.sh, default
+#   MOJOLEARN_COMPILE_JOBS) 56 s, exit 0, wrote
+#   python/mojolearn/identical/_mojolearn.so ("gate SKIPPED by
+#   MOJOLEARN_SKIP_BUILD_GATE" in its log). Create to body finished: 5.5 min.
+#   DATA FROM THE VM. NYC TLC CDN yellow_tripdata_2024-01.parquet HEAD: HTTP/2
+#   200, 49,961,641 bytes (reachable, unlike the DigitalOcean droplets).
+#   Istella-S (tools/speed_gbdt_arm.py ISTELLA_URL) HEAD: HTTP 200,
+#   472,129,615 bytes.
+#   KNOWN LIMITS. Slots and the create lock live in /tmp on THIS Mac: a leg
+#   launched from another machine is not counted (the team VM limit of 2
+#   still refuses a third create; the spec says HTTP 401, not observed). Opponent rows from this box are a
+#   new tuple (Hot Aisle MI300X VF); never mix them with MI325X or H100 rows.
+#   The body runs in a ROCm 6.4.1 userland on a ROCm 7.2.4 host driver.
 set -uo pipefail
 
 # RUN FROM AN IMMUTABLE SNAPSHOT (tools/do_extra_leg.sh does the same): bash

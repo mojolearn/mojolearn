@@ -38,7 +38,7 @@ rc=$?
 {
     echo "== build (tools/with_identical_mode.sh sh bindings/build.sh)"
     echo "build_exit=$rc build_seconds=$(( $(date +%s) - t0 ))"
-    ls -l python/mojolearn/_mojolearn*.so 2>&1
+    ls -l python/mojolearn/identical/_mojolearn*.so python/mojolearn/_mojolearn*.so 2>&1
 } >> "$O"
 cat "$O"
 exit "$rc"
