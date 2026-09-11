@@ -44,6 +44,15 @@ same trips. A trip at or past `alignSize` fails both load guards (`head_len`
 and `tail_len` never exceed `alignSize`) and adds a zero point into cells the
 kernel zeroed a statement earlier, so no histogram bit moves on any column.
 
+MEASURED 2026-09-11. Hot Aisle MI300X (gfx942, 64 lanes), the same source
+built with and without the bound: without it the half-byte, 5-bit and 6-bit
+fits moved between two fits in one process and the binary fit gave one wrong
+answer every time; the stage trace first parted at `tree000.depth02.hist`;
+with it `checks/gbdt_sub_byte_identity_check.py` read 16/16 against the H100
+and taxi 1M symmetric held the H100's hash for ten rounds. Restoring the old
+bound in one kernel file failed exactly that file's fixtures. On an H100 the
+two builds gave the same bits in every cell.
+
 THE COLUMNS. `apple`, `nvidia`, `amd-rdna` and the identity column are
 exactly 32 lanes wide and keep `syncwarp`, byte for byte and cycle for cycle.
 `amd` (CDNA, 64) and the variable-width columns take `barrier()`. See
