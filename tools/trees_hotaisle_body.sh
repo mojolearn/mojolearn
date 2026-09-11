@@ -153,12 +153,20 @@ PYEOF
 }
 
 track_py() {
-    # uv only supplies CPython 3.12 (the MI325X leg's 3.12.3) and a seeded
-    # venv without apt; every package then comes from pip, as on the MI325X.
-    if [ ! -x /root/.uvbin/uv ]; then
-        curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/root/.uvbin UV_NO_MODIFY_PATH=1 sh > "$LOGS/uv_get.log" 2>&1
+    # The MI325X route first: the image's python3 when it is 3.12 (the MI325X
+    # ran 3.12.3) and can make a venv. Otherwise uv supplies CPython 3.12 and
+    # a seeded venv without apt. Every package then comes from pip either way.
+    _sys="$(python3 -c 'import sys; print("%d.%d" % sys.version_info[:2])' 2>/dev/null)"
+    if [ "$_sys" = 3.12 ] && step venv 300 python3 -m venv "$VENV" && [ -x "$PY" ] && "$PY" -m pip --version > /dev/null 2>&1; then
+        echo "venv_via=system python3 $_sys" >> "$OUT/setup.txt"
+    else
+        rm -rf "$VENV"
+        if [ ! -x /root/.uvbin/uv ]; then
+            curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/root/.uvbin UV_NO_MODIFY_PATH=1 sh > "$LOGS/uv_get.log" 2>&1
+        fi
+        step venv_uv 600 /root/.uvbin/uv venv --seed --python 3.12 "$VENV"
+        echo "venv_via=uv CPython 3.12 (system python3 was '$_sys')" >> "$OUT/setup.txt"
     fi
-    step venv 600 /root/.uvbin/uv venv --seed --python 3.12 "$VENV"
     step pip_base 900 "$PY" -m pip install --no-input --disable-pip-version-check \
         numpy pandas pyarrow scikit-learn catboost lightgbm joblib
     : > "$OUT/track_pip_base.done"
