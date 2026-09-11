@@ -51,8 +51,10 @@ hist_half_byte 12/16 (ties MOVED only), hist_binary 12/16 (bin2 DIVERGENT
 only), hist_2_one_byte_base 8/16 (bits5 and bits6 MOVED only). On an H100
 both builds gave the same bits in all 16 cells.
 
-RUN OWED, Apple M4 (the orchestrator's light local check; small fixtures,
-no benchmark). From the repository root:
+MEASURED on the Apple M4, 2026-09-11, source a5f0b584: identity_break's 36
+gbdt cells IDENTICAL to bench/results/identity_break/apple-m4.identical.json
+and this check 16/16 PASS against the H100 references, so DEVIATION 2600
+holds on all three vendors. To re-run on Apple, from the repository root:
 
     MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH=python python3 tools/identity_break.py \\
         --lanes gbdt-symmetric,gbdt-depthwise,gbdt-lossguide,gbdt-rmse \\

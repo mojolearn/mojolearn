@@ -587,3 +587,15 @@ also differs. Nothing measured separates the two. Both the numerator and the
 denominator of the NO FLIP ratio carry whatever it is, so the verdict stands,
 but a shipped (non-trial) binding probe on the same box is owed before any
 GEMM step time from a trial build is quoted.
+
+RESOLVED 2026-09-11 (bench/results/e1g/2026-09-11_150622-nvidia-h100-80gb-hbm3-trial-overhead2,
+one H100 pod, commit cd086f67): the attention trial binding's `stash_tiled`
+step is 0.4561 / 0.4556 s and the GEMM trial binding's shipped step is
+0.4556 / 0.4550 s on the SAME pod, so the GEMM trial build costs nothing
+measurable; the 0.457 against 0.383 gap was the pod. Every component timer on
+that pod is about 20% longer (`attn.bwd_zdot_stash` 108.8 ms against 89.9).
+Across the four pods of the day the `nvidia-smi` clock reading at the start
+separates the two speeds (1980 MHz pods 0.380 to 0.383 s, 1590 MHz pods
+0.455 to 0.457 s); that is a correlation over four boxes, not a measured
+cause. quarter on this pod: 1.1298 / 1.1311, NO FLIP again. Compare step
+times only within one pod.

@@ -246,7 +246,8 @@ for arm in $(echo "$ARMS" | tr ',' ' '); do
         MOJOLEARN_GEMM_STEP_ROUNDS="$ROUNDS" MOJOLEARN_GEMM_STEP_WARMUPS="$WARMUPS" \
         timeout "$DEADLINE" "$OUT/bin/step-price"
 done
-grep -h '^STEP\|^PRICE\|^TABLE\|^BITS' "$OUT"/price-*.log > "$OUT/price_tables.txt" 2>/dev/null
+# CONTROL, PHASE and PHASEBITS lines: DEVIATION 2593 (tools/gemm_longk_leg.sh).
+grep -h '^STEP\|^PRICE\|^TABLE\|^BITS\|^CONTROL\|^PHASE' "$OUT"/price-*.log > "$OUT/price_tables.txt" 2>/dev/null
 grep -h '^STEP' "$OUT"/price-*.log > "$OUT/price_step.txt" 2>/dev/null
 
 # THE AUTO PICK: the lowest STEP ratio among price runs that exited 0 (a run
