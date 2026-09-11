@@ -153,8 +153,6 @@ Branches still ahead of main, deliberately not merged here:
 | branch | what is on it | why not merged |
 |---|---|---|
 | lane/amd-gbdt-identity-verify | nothing unique | zero non-merge commits ahead of main; only a stale merge commit |
-| lane/linear-cluster-istella | see the branch | not reviewed this session |
-| lane/pointwise-speed | see the branch | not reviewed this session |
 | lane/trees-hotaisle-run | trees-hotaisle body switch | its own commit says "NOT RUN: lane stopped as a duplicate" |
 
 **Deviation-number collisions are a recurring failure here.** 2624 collided
