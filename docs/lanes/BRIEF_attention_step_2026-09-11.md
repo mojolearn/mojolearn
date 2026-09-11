@@ -905,6 +905,9 @@ blocks, 192 rows; 12,672 B at 32 rows, 5 blocks, 160 rows), and 11.4's
   untouched. New timer lines under `MOJOLEARN_ATTN_PHASE_TIMERS`:
   `attn.bwd_ydy_tiled`, `attn.bwd_zfold` (then the existing
   `attn.bwd_dq_tiled`, `attn.bwd_dkdv_tiled`).
+- (Section 14 later built 2533, 2531 and 2530 as trial arms, source only,
+  on the orchestrator's instruction after section 13's H100 reading; the
+  three bullets below are this round's record.)
 - DEVIATION 2531, NOT BUILT. 2528's `_r32` and `_r64` price on the MI325X
   answers the question 2531 depends on (whether 32-row blocks pay on
   that column), and the page-only count in 12.2 does not favor them;
@@ -1067,3 +1070,360 @@ Reading: on the H100, 2528 at either row count is slower than the shipped
 `stash_tiled` backward, and 32 rows is slower than 64. It stays a trial arm.
 Whether the MI325X prices it differently (its kernel matrix row is 32) is the
 12.7 second leg; 2531 still waits on that AMD reading.
+
+## 14. Third round, source built (2026-09-11, worktree lane, nothing run): DEVIATIONS 2533, 2531 and 2530 as trial arms
+
+STATUS: source only. Nothing in this section was compiled or run (no build on
+the Mac, by rule; the orchestrator's M4 build in 14.8 is the first compile).
+The shipped default is still `stash_tiled`. A build without
+`-D MOJOLEARN_ATTN_ARM_TRIAL=1` compiles none of the kernels below and runs
+what it ran before. Order of work, per 11.2 as section 13 adjusts it: 2533
+first, because section 13 puts the NVIDIA floor in the backward and 2533
+applies to the shipped stash_tiled backward folds with or without 2528 at
+either row count; then 2531; then 2530 on 2531's 32-row geometry.
+
+### 14.1 Arm bits and names (extends 12.1; the parser and the name function stay inverses)
+
+| bit | constant | name token | meaning |
+|---:|---|---|---|
+| 8 | `ATTN_ARM_BWD_ZTILED` | `_ztiled` | DEVIATION 2528 (section 12) |
+| 16 | `ATTN_ARM_SABOTAGE` | `+sabotage` | flips in the first-round kernel instantiations the arm runs |
+| 32 | `ATTN_ARM_FWD_QRES` | `_qres` | DEVIATION 2530, needs `_fgrid_r32` |
+| 64 | `ATTN_ARM_FWD_GRID` | `_fgrid` | DEVIATION 2531, needs the forward score stash |
+| 128 | `ATTN_ARM_SABOTAGE_NEW` | `+sabotage_new` | flips in the second-round kernels only |
+| 256, 512 | `ATTN_ARM_ZROWS32`, `ATTN_ARM_ZROWS64` | `_ztiled_r32`, `_ztiled_r64` | 2528 geometry |
+| 1024 | `ATTN_ARM_PREFLUSH` | `_pf` | DEVIATION 2533 |
+| 2048, 4096 | `ATTN_ARM_FROWS32`, `ATTN_ARM_FROWS64` | `_fgrid_r32`, `_fgrid_r64` | 2531 geometry |
+
+Grammar: base, `_ztiled[_r32|_r64]`, `_fgrid[_r32|_r64]`, `_qres`, `_pf`,
+`+sabotage`, `+sabotage_new`. A rows token belongs to the group token right
+before it, so section 12's names are unchanged. The parser refuses an unknown
+base, a token out of order (`stash_tiled_pf_fgrid_r32`), `_ztiled` without the
+tiled stash backward, `_fgrid` without `fwd_sstash` (`bwd_stash_tiled_fgrid`),
+`_qres` without `_fgrid_r32` (`stash_tiled_fgrid_qres`,
+`stash_tiled_fgrid_r64_qres`), `_pf` with no stash kernel (`baseline_pf`) and
+`_pf` with the 2525 non-tiled stash backward (`stash_pf`, `bwd_stash_pf`),
+which has no preflushed copy. The name function spells a rows knob without its
+group bit as `_bits<N>`. Without that, an invalid arm such as
+`_ztiled` plus the forward 32-row knob would have named itself
+`..._ztiled_r32` and read back as a different, valid arm.
+
+`_pf` acts on whichever stash kernels the arm runs: `fwd_sstash_pf` is forward
+only, `bwd_stash_tiled_pf` backward only, `stash_tiled_pf` both.
+`_fgrid` without a rows token reads the new kernel-matrix SCHEDULING row
+`attn_fwd_rows_per_block_for[column]` (32 on AMD, 64 elsewhere, the shipped
+value; UNMEASURED); `_fgrid_r32` and `_fgrid_r64` force the geometry on any
+column. `_pf` without `_fgrid` runs the second-round forward at 64 rows.
+
+`+sabotage` is narrowed in wording, not in behavior for any earlier arm: it
+flips only first-round kernel instantiations that the arm runs, and a
+second-round copy that replaces a first-round kernel carries no first-round
+flip. So `stash_tiled_fgrid_r32+sabotage` flips the backward only, and
+`stash_tiled_ztiled_r64_pf+sabotage` flips nothing (every backward kernel it
+runs is a second-round one). Without `_pf`, 2528 still honors `+sabotage` in
+the tiled folds as section 12 built it. Reach for every second-round arm uses
+`+sabotage_new`, as before.
+
+### 14.2 DEVIATION 2533, preflushed seams: identity argument (written before the code)
+
+Claim: at every rewritten step, `_step(a, b, acc)` and
+`_step_preflushed(a, b, acc)` return the same bits.
+
+1. By the two bodies, `_step(a, b, acc)` is `_step_preflushed(ftz(a), ftz(b),
+   acc)` on every column (NVIDIA: `fma.rn` then `mul.rn.ftz` by 1.0 in both;
+   the others: `ftz(identical_mul_add(...))` in both).
+2. `ftz` (`checks/numerics.mojo`) changes a value only when its exponent field
+   is zero and its mantissa is not, a nonzero subnormal, which it maps to the
+   zero of its sign. Zeros, normals, infinities and NaNs pass unchanged. So
+   when neither operand is a nonzero subnormal, `ftz(a) == a` and
+   `ftz(b) == b` bitwise, and the two spellings agree.
+3. No rewritten operand is a nonzero subnormal. Each is the output of `ftz`,
+   of a seam whose last operation is a flush (`_step`, `_step_preflushed`,
+   `_pmul`: `mul.rn.ftz` or `ftz`), or of `_flip_ulp` of such a value (bit 0 of
+   a normal leaves its exponent field nonzero; a zero becomes 2^-100, a
+   normal). Per site:
+   - zdot stash, y dot: `vec` holds `ftz(q)`, `ks` holds staged `ftz(k)`.
+     dy dot: `vec` holds `ftz(dctx)`, `vs` staged `ftz(v)`. z fold: `dys` is
+     `ftz(dy)`, `ys` is `ftz(identical_div(...))`.
+   - 2528 kernel B, z fold: `dy_st` is kernel A's `ftz(ddots)`, `y_st` its
+     `ftz(identical_div(...))` or that value's sabotage flip.
+   - tiled dq fold: `dcell` is `_pmul(ftz(ds), scale)` (or 0.0 at a masked
+     cell, which the fold never steps); `ka` is staged `ftz(k)`.
+   - tiled dk and dv folds: the staged `dcell` is the value the dq kernel wrote
+     over `dy_st` at that visible cell (a `_pmul` output); the staged `y` is the
+     zdot kernel's (or kernel A's) `ftz(identical_div(...))` or its flip; `qa`
+     and `da` are staged `ftz(q)` and `ftz(dctx)`.
+   - forward context chain: `w` is `ftz(identical_div(ftz(e), ftz(denom)))`;
+     `va` is staged `ftz(v)`.
+4. A masked cell never reaches a rewritten step (the visibility tests are
+   copied), so the zeros that stand in for masked cells do not matter.
+5. Everything else is the shipped code: the same staging, chain order, corner
+   tests and stores. The rewritten steps live in copies
+   (`fused_bwd_zdot_stash_pf_kernel[HD, TQ, SABN]`,
+   `fused_bwd_dq_tiled_pf_kernel[HD]`, `fused_bwd_dkdv_tiled_pf_kernel[HD]`),
+   in the PF parameter of the trial-only 2528 kernel B
+   (`fused_bwd_zfold_kernel[TZ, PF]`) and in the PF parameter of the
+   second-round forward (14.3). The shipped kernels are not edited.
+
+Not rewritten: the per-cell `_pmul` (one seam per cell against 64 or 128 per
+cell in the chains) and the forward denominator `ftz(ftz(dacc) + ftz(e))`,
+which is not an fma chain.
+
+Counted expectation (no number): each rewritten term drops two software `ftz`
+calls (a bit test and a select each). Per visible cell that is 128 terms plus
+the z fold in the zdot stash kernel (89.9 ms of section 13's step), 64 in the
+dq fold, 128 in the dk/dv folds and 64 in the forward context chain. If the
+backend already removed those flushes, 2533 prices at 1.00.
+
+Sabotage (reach, `+sabotage_new`). Backward: the zdot stash copy stores each
+row's zdot flipped one ulp, so zdot moves (dq and dk move through z) and dv
+does not (dv reads y and dctx only). The dq and dk/dv copies have no flip of
+their own: `_launch_bwd_stash_tiled_pf[HD, ZSAB]` launches them
+unconditionally in the same comptime instantiation, so the zdot flip proves
+all three ran (the 2528 kernel B precedent). Forward: 14.3's PF site.
+
+### 14.3 DEVIATION 2531, forward grid: identity argument (written before the code)
+
+Kernel `fused_attn_forward_r2_kernel[HD, TQ, QRES, PF, SABN]`, a generic copy
+of `fused_attn_forward_regblocked_sstash_kernel`, instantiated at HD 64 with TQ
+64 or 32. At TQ 32 thread `(tr, tc)` holds rows `tr + 16u` (u < 2), keys
+`tc + 16v` (v < 2) of each 32-key block iteration and context columns
+`tc + 16v` (v < 4): 4 dot and 8 context accumulators per thread, grid
+`B * nh * ceil(L / 32)`, launched by the trial-only `_launch_fwd_r2`.
+
+1. Scores. Each cell's dot is `_step_preflushed(ftz(q[t, p]), ftz(k[j, p]),
+   dot)` over p ascending from +0.0 across the four 16-wide windows, on the
+   same staged values the shipped kernel stages. Only the thread holding it
+   changes.
+2. Row maximum. `mpart[u]` folds one row's cells for two keys per key block;
+   16 slots per row are then folded by threads `tid < TQ`. Keys per thread are
+   unchanged, so the grouping is in fact the shipped one. Either way it is an
+   `identical_fmax` fold over values that are never -0.0 (the `+ 0.0` mask
+   add) and never NaN (the regime), so its grouping is free (contract 5.1).
+3. Stash, exp, weight. The shipped sstash code on the same stash cell
+   `stbase + t * s + j` and the same stats slots (`stats[r]` the maximum,
+   `stats[TQ + r]` the denominator, r the row inside the block, written once
+   each before they are read).
+4. Denominator. Thread `tid < TQ` folds row `t0 + tid` over key blocks
+   ascending and keys ascending from +0.0: the shipped serial chain.
+5. Context. `cacc[u * 4 + v]` folds `(row tr + 16u, column tc + 16v)` over key
+   blocks ascending and keys ascending with `_step(w, v, acc)`, or
+   `_step_preflushed` under PF by 14.2: the shipped chain.
+6. Corner. The shipped test per (row, column) chain.
+7. Rows per block is a partition of consecutive rows. Every row lies in
+   exactly one block, the loop bounds are block-uniform, and every thread
+   reaches every barrier.
+
+Page: 12,672 B at 32 rows, 17,152 B at 64 (the shipped page). At TQ 64 with
+QRES and PF off the copy runs the shipped sstash arithmetic, so
+`stash_tiled_fgrid_r64` prices the copy itself against `stash_tiled`.
+
+Sabotage (`+sabotage_new`, not QRES, not PF): the pass-3 weight stored in the
+tile is flipped one ulp, so ctx moves and amax and denom hold. The first-round
+sstash sabotage, by contrast, flips the pass-1 score and moves denom.
+
+### 14.4 DEVIATION 2530, forward Q residency: identity argument (written before the code)
+
+QRES, at TQ 32 only (the parser requires `_fgrid_r32`, and
+`fused_attention_fwd_rows` returns 0 otherwise). Before pass 1 the block stages
+its query rows once, coalesced `[32][64]` through `ftz` (8 slots per thread,
+one barrier). Each p window of pass 1 stages K only, `[32][16]` at stride 20,
+at offset 2,048 of the same page (2 slots per thread instead of 4). Pass 3
+stages V into `[0, 2048)`, over the Q rows.
+
+1. The dots read `stg[(tr + 16u) * 64 + pw * 16 + p]`, which is
+   `ftz(q[t, pw * 16 + p])`: the value the per-window staging stores, since
+   `ftz` of a global value is the same whenever it is computed. The K
+   operands, the p order and the chain are unchanged.
+2. Q is read in pass 1 only; passes 2 and 3 read the stash. V overwriting the
+   Q rows in pass 3 therefore changes no value a later read sees, and V's
+   range `[0, 2048)` does not reach the K rows at 2,048.
+3. Everything else is 14.3.
+
+Page: 15,232 B (2,048 Q/V + 640 K + 1,056 tile + 64 stats floats). Counted:
+two staging loads per thread per window instead of four, plus one staging
+round trip and one barrier per block. Section 11.5 expected a small effect on
+the H100.
+
+Sabotage (`+sabotage_new`): every staged Q value is flipped one ulp (a zero
+becomes 2^-100), so the scores move and amax or denom move. That distinguishes
+it from the 2531 and 2533 forward flips, which hold both. In a `_qres_pf` arm
+only the Q flip is compiled.
+
+### 14.5 Reach and attribution (the arms check and the harness)
+
+| second-round flip | moves | must hold |
+|---|---|---|
+| 2528 kernel A, stored y | zdot, dq, dk, dv | forward |
+| 2533 backward, stored zdot | zdot (dq, dk through z) | dv, forward |
+| 2533 forward, ctx of context lane 0 | ctx columns 0 to 15 | amax, denom, ctx columns 16 to 63, backward |
+| 2531, pass-3 weight in the tile | ctx | amax, denom, backward |
+| 2530, every staged Q value | amax or denom, and ctx | nothing in the forward |
+
+Per branch, under `+sabotage_new`: an arm with a second-round forward kernel
+(`fused_attention_arm_new_forward`) must move the forward, and one without
+must move no forward cell. The same holds for the backward
+(`fused_attention_arm_new_backward`). In the arms check the backward reads the
+eager amax and denom, so both directions are independent. In the harness the
+backward reads the sabotaged forward's amax and denom, so backward-must-hold
+and the 2533 backward attribution are asserted only when amax and denom held.
+Attribution follows the table: `_qres` must move amax or denom; a non-QRES
+second-round forward must hold them; the 2533 forward flip must hold ctx
+columns 16 and up; the 2533 backward flip must move zdot and hold dv when
+2528 is not in the arm. A `_ztiled..._pf` arm is attributed per direction
+only, because 2528's y flip moves every backward buffer. The geometry (32 or
+64 rows) is not attributable from the outputs, the same as 2528's. The
+harness prints it in its `PATH` line (`fwd_rows=`, `preflush=`, beside
+`zdot_rows=`).
+
+### 14.6 What was built, per file
+
+- `transformer/impl/llama/fused_attention.mojo`:
+  - the bits, parser and name function of 14.1;
+  - `fused_attention_arm_new_forward` and `fused_attention_arm_new_backward`;
+  - `_fwd_r2_page_bytes`, `fused_attention_fwd_rows` (the knob, else the
+    matrix row, else 0 when the page does not fit);
+  - the kernels of 14.2 to 14.4;
+  - the generic launch helpers `_launch_fwd_r2[HD, TQ, QRES, PF, SABN]` and
+    `_launch_bwd_stash_tiled_pf[HD, ZSAB]`, and
+    `_launch_bwd_ztiled[HD, TQZ, ZSAB, PF]`.
+
+  In `fused_forward_launch_arm`, a `comptime if ATTN_ARM_TRIAL` branch
+  precedes the first-round branch, whose condition became
+  `if want_sstash and not ran_arm:`. That is the only edit to a shipped
+  line, the same pattern 2528 used in the backward; on a shipped build
+  `ran_arm` is `False` there. In `fused_backward_launch_arm`, the trial
+  branch dispatches 2528 with PF, then `_pf` alone on the tiled stash
+  backward. New timer lines (under `MOJOLEARN_ATTN_PHASE_TIMERS`):
+  `attn.fwd_r2_kernel`, `attn.bwd_zdot_stash_pf`, `attn.bwd_dq_tiled_pf`,
+  `attn.bwd_dkdv_tiled_pf`, `attn.bwd_zfold_pf`.
+- `checks/kernel_matrix.mojo`: `attn_fwd_rows_per_block_for[column]`.
+- `transformer/checks/transformer_attention_arms_check.mojo`: 13 arms
+  (section 12's six, plus `stash_tiled_ztiled_r64_pf`, `stash_tiled_pf`,
+  `stash_tiled_fgrid_r64`, `stash_tiled_fgrid_r32`,
+  `stash_tiled_fgrid_r32_pf`, `stash_tiled_fgrid_r32_qres`,
+  `stash_tiled_fgrid_r32_qres_pf`). Together they run every second-round
+  forward instantiation (rows 64 and 32, with and without Q residency and
+  preflush) and both second-round backward launches. The names section
+  has 24 spellings round-tripping and 18 invalid spellings refused; reach is
+  checked both directions per branch and attributed as in 14.5. The hd 16,
+  24 and 128 cases assert that every arm's sabotage moves nothing.
+- `bench/attention_step_price_main.mojo`: the `PATH` fields, the `REACH`
+  fields `amax_denom_moved`, `ctx_moved_columns_16_up`, `zdot_moved`,
+  `dv_moved`, and the per-branch and attribution failures of 14.5.
+- `tools/attention_step_leg.sh`: header and `gate.txt` only (names pass
+  through).
+- `tools/attention_round3_leg.sh`: the leg body wrapper (14.9).
+
+A trial build now instantiates 18 more kernel pipelines: 12 forward (six
+geometry and flag combinations times the sabotage flag), two zdot stash
+copies, one dq copy, one dk/dv copy and two kernel B variants.
+
+### 14.7 Risks only a build or a box can settle
+
+1. Nothing was compiled. The likeliest faults are in the generic forward
+   kernel's comptime expressions (`SPG` and `KOFF` as conditional
+   expressions, `comptime if SABN and PF and not QRES and v == 0` on a
+   comptime-for variable), the `comptime if PF` blocks that bind kernel
+   aliases in host helpers (the early `return` inside one in
+   `_launch_bwd_ztiled`), and the widened helper signatures.
+2. Build time: every trial build (arms check, harness, both leg bindings)
+   compiles 18 more pipelines; the binding builds are not under the leg's
+   `timeout`.
+3. 2533 may price at 1.00 if the backend already removed the operand flushes;
+   only the leg says.
+4. 2531 at 32 rows doubles the blocks and the per-block fixed work (row
+   ranges, the reductions' barriers). On the H100, 2528's r32 was slower than
+   r64, so the same is plausible here. Whether AMD's partitioned shared memory
+   reverses that is the AMD leg's question.
+5. 2530 adds a round trip and a barrier per block and halves per-window
+   staging loads. 11.5 expected a small effect on the H100.
+6. Attribution assumes a one-ulp weight flip moves some ctx cell and a one-ulp
+   Q flip moves some amax or denom cell. Flips of this kind held for the
+   first-round and 2528 sabotages on the H100, and a flip that moves nothing
+   fails reach loudly, never silently.
+7. `attn_fwd_rows_per_block_for`'s AMD value (32) is a placeholder; only the
+   forced `_fgrid_r32` and `_fgrid_r64` names are evidence-bearing until a leg
+   flips the row.
+8. The Hot Aisle runner (`tools/hotaisle_leg.sh`) is a skeleton that refuses
+   every mode; the AMD command in 14.9 waits for it. The MI300X arch is taken
+   as gfx942 (docs/MLP_AMD_NEXT_RUN.md), and the runner's design refuses a
+   mismatch with the box.
+
+### 14.8 RUN OWED, in order (M4 light checks, one at a time)
+
+1. The shipped path still builds and is still bit-identical (no trial
+   define):
+   `nice -n 19 pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . transformer/checks/transformer_fused_check.mojo -o /tmp/fused-check`
+   then `nice -n 19 /tmp/fused-check` (expect
+   `transformer_fused_check: PASS, 15 cases`, the head_dim 64 cases RAN
+   through `stash_tiled`).
+2. The arms gate:
+   `nice -n 19 pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_ATTN_ARM_TRIAL=1 -I . transformer/checks/transformer_attention_arms_check.mojo -o /tmp/arms-check`
+   then `nice -n 19 /tmp/arms-check` (expect
+   `names: 24 spellings and 52 arm values round-trip, 18 invalid spellings refused`
+   and `transformer_attention_arms_check: PASS, names inverse, 15 cases x 13 arms`,
+   with per-branch `REACH` lines at head_dim 64: `forward_flipped_cells`,
+   `backward_flipped_cells`, `forward_cells_that_must_hold_moved=0`,
+   `backward_cells_that_must_hold_moved=0`, `amax_denom_moved`,
+   `ctx_moved_columns_16_up=0` for the `_pf` forward arms, `zdot_moved` and
+   `dv_moved=0` for `stash_tiled_pf` and the `_fgrid..._pf` arms).
+3. The harness at a small shape, correctness only
+   (`MOJOLEARN_ATTN_TIMING=0`), against stash_tiled:
+   `nice -n 19 pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_ATTN_ARM_TRIAL=1 -I . bench/attention_step_price_main.mojo -o /tmp/attn-price`
+   then
+   `MOJOLEARN_ATTN_BASELINE=stash_tiled MOJOLEARN_ATTN_ARM=stash_tiled_pf MOJOLEARN_ATTN_KINDS=hashed,heavytail MOJOLEARN_ATTN_TIMING=0 MOJOLEARN_ATTN_L=512 MOJOLEARN_ATTN_NH=4 MOJOLEARN_ATTN_NKV=2 nice -n 19 /tmp/attn-price`
+   and the same with `MOJOLEARN_ATTN_ORACLE=0` for
+   `MOJOLEARN_ATTN_ARM=stash_tiled_fgrid_r32`, then
+   `stash_tiled_fgrid_r32_qres_pf`, then `stash_tiled_ztiled_r64_pf`. Expect
+   `PATH candidate ... fwd_rows=64 preflush=True` (`fwd_rows=32` for the
+   `_fgrid_r32` arms), every `BITS ... _vs_stash_tiled` MATCH,
+   `REACH ... clean_restored=True reach_bit=...+sabotage_new`, and
+   `attention_step_price: PASS`.
+
+### 14.9 The legs
+
+The body is `tools/attention_round3_leg.sh`. It exports
+`MOJOLEARN_ATTN_BASELINE=stash_tiled`,
+`MOJOLEARN_ATTN_LEG_ARMS=stash_tiled_pf,stash_tiled_fgrid_r64,stash_tiled_fgrid_r32,stash_tiled_fgrid_r32_qres,stash_tiled_fgrid_r32_qres_pf`,
+`MOJOLEARN_ATTN_LEG_LM_ARMS=stash_tiled,stash_tiled_pf,stash_tiled_fgrid_r32,stash_tiled_fgrid_r32_qres_pf`,
+`MOJOLEARN_ATTN_LEG_SKIP_TIMERS=1` and `MOJOLEARN_COMPILE_JOBS=8`, each only
+when unset, refuses LM arms without the baseline, and runs
+`sh tools/attention_step_leg.sh`. That is five smokes, five prices on both
+corpora's activations and 16 LM probes, against section 13's 27 items in 24
+pod minutes.
+
+NVIDIA, RunPod (the measurement column while ENGINEERING_RULES 10's NVIDIA
+clause is in force), from a `git worktree add --detach` checkout at the lane's
+merge commit:
+
+    MOJOLEARN_RUNPOD_KEY_FILE=$HOME/.mojolearn_runpod_key \
+    MOJOLEARN_GPU_ARCHS=sm_90a \
+    MOJOLEARN_GEMM_LEG_EXTRA=tools/attention_round3_leg.sh \
+    MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/$(date -u +%Y-%m-%d_%H%M%S)-nvidia-h100-attention-round3 \
+    sh tools/gemm_remote_leg.sh nvidia --payload gemm --rent --minutes 60 \
+        --gpu "NVIDIA H100 80GB HBM3"
+
+AMD, Hot Aisle MI300X, once `tools/hotaisle_leg.sh` is built (its interface
+mirrors `tools/do_extra_leg.sh`; the extra env overrides the wrapper's
+defaults by name):
+
+    MOJOLEARN_HOTAISLE_TEAM=<team handle> \
+    MOJOLEARN_GPU_ARCHS=gfx942 \
+    MOJOLEARN_GEMM_LEG_EXTRA=tools/attention_round3_leg.sh \
+    MOJOLEARN_HOTAISLE_EXTRA_ENV="MOJOLEARN_ATTN_BASELINE=stash_tiled MOJOLEARN_ATTN_LEG_ARMS=stash_tiled_pf,stash_tiled_fgrid_r64,stash_tiled_fgrid_r32,stash_tiled_fgrid_r32_qres,stash_tiled_fgrid_r32_qres_pf MOJOLEARN_ATTN_LEG_LM_ARMS=stash_tiled,stash_tiled_pf,stash_tiled_fgrid_r32,stash_tiled_fgrid_r32_qres_pf MOJOLEARN_ATTN_LEG_SKIP_TIMERS=1 MOJOLEARN_COMPILE_JOBS=8" \
+    MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/$(date -u +%Y-%m-%d_%H%M%S)-amd-mi300x-hotaisle-attention-round3 \
+    bash tools/hotaisle_leg.sh --rent --minutes 90 --skip-gates --gpu MI300X
+
+Every value is inside the runners' value set (letters, digits, `_.,:/=-`).
+Gates: section 6 with `stash_tiled` in place of `baseline` (arms check exit 0,
+smokes exit 0, every `BITS ... _vs_stash_tiled` MATCH on both corpora's
+activations with reach proven, lean steps `limited: false`). Flip rule,
+ENGINEERING_RULES 9: for an arm, the geometric mean of its enwik8 and
+pilegithub lean step ratios (`steady_median_seconds` of `lm-<arm>-<corpus>`
+over `lm-stash_tiled-<corpus>`, same leg) below 1, and
+`witnesses_equal_baseline=True` for every step on both corpora. A flip edits
+`ATTN_ARM_DEFAULT` (and, for `_fgrid`, `attn_fwd_rows_per_block_for`'s row for
+that column from the same leg) in the same session as the evidence filing. If
+the lease runs short, drop LM arms after the price lines rank them, never
+`stash_tiled` (the witness reference).

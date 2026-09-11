@@ -33,6 +33,16 @@
 #
 #   MOJOLEARN_DO_EXTRA_ENV="MOJOLEARN_ATTN_BASELINE=stash_tiled MOJOLEARN_ATTN_LEG_ARMS=stash_tiled_ztiled_r64,stash_tiled_ztiled_r32 MOJOLEARN_ATTN_LEG_LM_ARMS=stash_tiled,stash_tiled_ztiled_r64,stash_tiled_ztiled_r32 MOJOLEARN_ATTN_LEG_SKIP_TIMERS=1"
 #
+# The third round (brief section 14), also against stash_tiled, adds three
+# name tokens that compose with the ones above in this order: `_fgrid`,
+# `_fgrid_r32` or `_fgrid_r64` (DEVIATION 2531, the forward at 32 or 64 rows
+# per block; bare `_fgrid` reads the kernel-matrix row
+# attn_fwd_rows_per_block_for), `_qres` (DEVIATION 2530, needs `_fgrid_r32`)
+# and `_pf` (DEVIATION 2533, preflushed seams in whichever stash kernels the
+# arm runs). Examples: stash_tiled_pf, stash_tiled_fgrid_r32,
+# stash_tiled_fgrid_r32_qres_pf, stash_tiled_ztiled_r64_pf. The settings for
+# that leg live in tools/attention_round3_leg.sh, which calls this body.
+#
 # NVIDIA confirmation:
 #
 #   MOJOLEARN_RUNPOD_KEY_FILE=$HOME/.mojolearn_runpod_key \
@@ -209,7 +219,7 @@ run() {
     echo "root=$ROOT"
     echo "arms=$ARMS"
     echo "lm_arms=$LM_ARMS"
-    echo "baseline_arm=$BASE deviations_second_round=2528"
+    echo "baseline_arm=$BASE deviations_second_round=2528,2530,2531,2533"
     echo "rounds=$ROUNDS warmups=$WARMUPS deadline=$DEADLINE"
     echo "vendor=$VENDOR gpu_archs=$MOJOLEARN_GPU_ARCHS column=$MOJOLEARN_TARGET_COLUMN jobs=$JOBS"
     echo "skip_timers=${MOJOLEARN_ATTN_LEG_SKIP_TIMERS:-0} skip_lm=${MOJOLEARN_ATTN_LEG_SKIP_LM:-0}"
