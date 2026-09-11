@@ -206,11 +206,15 @@ def binary_hist_kernel(
     #     if (unalignedTail) { if (blockId == 0) { ...tail... } }
     #     partSize -= unalignedTail;
     #
-    # Their head and tail loops run to a FIXED `alignSize` bound, so every
-    # thread of block 0 makes the same number of trips and the syncs inside
-    # `AddPoint` stay uniform across the warp. Blocks other than 0 make the
-    # trips too and contribute zeros, which keeps the count uniform without a
-    # second code path.
+    # Their head and tail loops run from `tid` to a FIXED `alignSize` bound.
+    # That makes the trip count uniform across a WARP (alignSize is a
+    # multiple of 32) but NOT across the block: a thread at or past
+    # `alignSize` makes no trip. Their sync is warp-local, so that is sound
+    # for them; `turn_sync` is a threadgroup `barrier()` off 32-lane hardware,
+    # where it is a barrier some threads skip. DEVIATION 2600 runs the loop
+    # to `PEEL_END`, the bound rounded up to the block, so every thread makes
+    # the same trips (argument in `lane_sync.mojo`). Blocks other than 0 make
+    # the trips too and contribute zeros.
     comptime ALIGN_SIZE = LOAD_SIZE * LANE_WIDTH * UNROLL
 
     var head_len = p_size
@@ -226,8 +230,14 @@ def binary_hist_kernel(
     var tail_len = body_size % ALIGN_SIZE
     var tail_start = p_offset + head_len + (body_size - tail_len)
 
+    # DEVIATION 2600: every thread (tid < BLOCK_SIZE) makes the same trips;
+    # a trip at or past ALIGN_SIZE fails both load guards (head_len and
+    # tail_len never exceed ALIGN_SIZE) and adds a zero point.
+    comptime PEEL_END = (
+        (ALIGN_SIZE + BLOCK_SIZE - 1) // BLOCK_SIZE
+    ) * BLOCK_SIZE
     var pe = tid
-    while pe < ALIGN_SIZE:
+    while pe < PEEL_END:
         var hb = UInt32(0)
         var hs = Float32(0.0)
         if local_block_idx == 0 and pe < head_len:
@@ -677,11 +687,15 @@ def binary_hist_gather_kernel[ridx_stats: Bool = False](
     #     if (unalignedTail) { if (blockId == 0) { ...tail... } }
     #     partSize -= unalignedTail;
     #
-    # Their head and tail loops run to a FIXED `alignSize` bound, so every
-    # thread of block 0 makes the same number of trips and the syncs inside
-    # `AddPoint` stay uniform across the warp. Blocks other than 0 make the
-    # trips too and contribute zeros, which keeps the count uniform without a
-    # second code path.
+    # Their head and tail loops run from `tid` to a FIXED `alignSize` bound.
+    # That makes the trip count uniform across a WARP (alignSize is a
+    # multiple of 32) but NOT across the block: a thread at or past
+    # `alignSize` makes no trip. Their sync is warp-local, so that is sound
+    # for them; `turn_sync` is a threadgroup `barrier()` off 32-lane hardware,
+    # where it is a barrier some threads skip. DEVIATION 2600 runs the loop
+    # to `PEEL_END`, the bound rounded up to the block, so every thread makes
+    # the same trips (argument in `lane_sync.mojo`). Blocks other than 0 make
+    # the trips too and contribute zeros.
     comptime ALIGN_SIZE = LOAD_SIZE * LANE_WIDTH * UNROLL
 
     var head_len = p_size
@@ -697,8 +711,12 @@ def binary_hist_gather_kernel[ridx_stats: Bool = False](
     var tail_len = body_size % ALIGN_SIZE
     var tail_start = p_offset + head_len + (body_size - tail_len)
 
+    # DEVIATION 2600: the block-rounded bound, as in the direct kernel.
+    comptime PEEL_END = (
+        (ALIGN_SIZE + BLOCK_SIZE - 1) // BLOCK_SIZE
+    ) * BLOCK_SIZE
     var pe = tid
-    while pe < ALIGN_SIZE:
+    while pe < PEEL_END:
         var hb = UInt32(0)
         var hs = Float32(0.0)
         if local_block_idx == 0 and pe < head_len:
