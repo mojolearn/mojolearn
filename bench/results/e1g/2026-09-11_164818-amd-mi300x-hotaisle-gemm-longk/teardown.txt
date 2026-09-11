@@ -1,0 +1,5 @@
+== teardown 2026-09-11T17:11:10Z exit=0 vm=5d37f344-645f-4d33-be96-a539dfc2073a ==
+delete ref=5d37f344-645f-4d33-be96-a539dfc2073a attempt 1 -> HTTP 204 utc=2026-09-11T17:11:17Z body=
+verified_gone ref=5d37f344-645f-4d33-be96-a539dfc2073a yes get=404 list=200 listed=no state=n/a utc=2026-09-11T17:11:18Z after=1s
+destroy_confirmed=1
+exit=0
