@@ -93,6 +93,9 @@ excludes, packed at its repository paths; the body unpacks it.
 | Intel x86_64, DigitalOcean Premium Intel (model name masked by QEMU; AVX2, FMA), 4 vCPU | Ubuntu 24.04, Linux 6.8, Python 3.12.3 | `--target-cpu x86-64-v3`, Mojo 1.0.0, commit `146becba` (reference path only) | 33 of 33 (16 held-out, 17 training steps) | yes, 9 of 33 differ | `bench/results/e1g/2026-09-11_163928-cpu-intel-byte-lm-host` |
 | AMD x86_64, DigitalOcean Premium AMD (model name masked by QEMU; family 23 model 49, Zen 2; AVX2, FMA), 4 vCPU | Ubuntu 24.04, Python 3.12.3 | `--target-cpu x86-64-v3`, Mojo 1.0.0, commit `da4fe0c6` | 33 of 33 on the reference AND threaded paths | yes, 9 of 33 on both paths | `bench/results/e1g/2026-09-11_165210-cpu-amd-byte-lm-host-threads` |
 | AMD x86_64, EPYC 9V45 (Zen 5, family 26 model 2; AVX2, FMA, AVX-512 present but not targeted), GitHub `ubuntu-24.04` | Ubuntu 24.04, Python 3.12 | `--target-cpu x86-64-v3`, Mojo 1.0.0, commit `5e10863b` | 33 of 33 on the reference AND threaded paths | yes, 9 of 33 on both paths | `bench/results/gh-actions/2026-09-11_165309-byte-lm-cpu-gate-run34624545221/byte-lm-cpu-gate-ubuntu-24.04` |
+| Intel x86_64, Xeon 6973P-C (Granite Rapids, family 6 model 173; AVX2, FMA, AVX-512 present but not targeted), GitHub `ubuntu-22.04` | Ubuntu 22.04, Linux 6.8, Python 3.12.14 | `--target-cpu x86-64-v3`, Mojo 1.0.0, commit `205b22fa` (main merged) | 33 of 33 on the reference AND threaded paths; plumbing tests 8 passed | yes, 9 of 33 on both paths | `bench/results/gh-actions/2026-09-11_1716-byte-lm-cpu-gate-run34626867783/byte-lm-cpu-gate-x86-e` |
+| AMD x86_64, EPYC 7763 (Zen 3, family 25 model 1; AVX2, FMA), GitHub `ubuntu-24.04` and `ubuntu-22.04` | Ubuntu 24.04 and 22.04 | `--target-cpu x86-64-v3`, Mojo 1.0.0, commit `205b22fa` | 33 of 33 on both paths in six draws; plumbing tests 8 passed | yes, 9 of 33 on both paths | runs 34626868143 (x86-b, c, e) and 34626867783 (x86-a, b, d) |
+| AMD x86_64, EPYC 9V74 (Zen 4, family 25 model 17), GitHub `ubuntu-24.04` and `ubuntu-22.04` | Ubuntu 24.04 and 22.04 | `--target-cpu x86-64-v3`, Mojo 1.0.0, commit `205b22fa` | 33 of 33 on both paths in three draws; plumbing tests 8 passed | yes, 9 of 33 on both paths | runs 34626868143 (x86-a, d) and 34626867783 (x86-c) |
 | ARM64, Azure Cobalt 100 (Arm Neoverse N2, implementer 0x41 part 0xd49; ASIMD, SVE, SVE2), GitHub `ubuntu-24.04-arm` | Ubuntu 24.04, Python 3.12 | no CPU flag (aarch64 default), Mojo 1.0.0, commit `5e10863b` | 33 of 33 on both paths | yes, 9 of 33 on both paths | `.../byte-lm-cpu-gate-ubuntu-24.04-arm` |
 | Apple M1 (virtual), GitHub `macos-15` | macOS 15, Python 3.12 | `--target-cpu apple-m1`, Mojo 1.0.0, commit `5e10863b` | 33 of 33 on both paths | yes, 9 of 33 on both paths | `.../byte-lm-cpu-gate-macos-15` |
 
@@ -114,10 +117,18 @@ Operational timing, not a benchmark and not comparable across rows (different
 machines and load): one `[2, 32]` forward plus the loss took 29 to 56 ms on the
 Intel droplet and 8 to 24 ms on the GitHub runners through the Python surface.
 
+The runs on commit `205b22fa` (main merged into the lane) repeat the Apple M1
+row, and all ten x86-64 draws pass. In both of those runs the ARM64 job stopped
+in its "Runner facts" step before building: the step shell is `bash -eo
+pipefail` and ARM64 `/proc/cpuinfo` has no `model name` line. That is a
+workflow defect, fixed in the next commit, and not a result for ARM64 either
+way; the ARM64 row stands on run 34624545221 until the rerun reports.
+
 Not measured here: a Qualcomm CPU (no rentable cloud offers one), bare-metal
-Apple silicon, a binary built on one CPU and run on another, and the threaded
-path on an Intel CPU. The Intel droplet leg for commit `5e10863b`
+Apple silicon, and a binary built on one CPU and run on another. The Intel
+droplet leg for commit `5e10863b`
 (`bench/results/e1g/2026-09-11_165526-cpu-intel-byte-lm-host-threads`) never
 built: cloud-init held the apt lock, `build-essential` did not install, and the
 link step found no C compiler. That is an infrastructure failure with no
-numerical result in either direction; the leg body now waits for cloud-init.
+numerical result in either direction; the leg body waits for cloud-init. The
+threaded path on Intel is measured instead on the Xeon 6973P-C row above.

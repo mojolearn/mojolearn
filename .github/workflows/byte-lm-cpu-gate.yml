@@ -108,11 +108,13 @@ jobs:
               grep -m1 -E '^(flags|Features)' /proc/cpuinfo
             fi
           } 2>&1 | tee "$GATE_OUT/runner.txt"
+          # The step shell is `bash -eo pipefail`, and ARM64 /proc/cpuinfo has no
+          # `model name`, so every lookup here must tolerate no match.
           if [ "$(uname -s)" = Darwin ]; then
-            cpu="$(sysctl -n machdep.cpu.brand_string)"
+            cpu="$(sysctl -n machdep.cpu.brand_string || true)"
           else
-            cpu="$(grep -m1 -E '^model name' /proc/cpuinfo | cut -d: -f2- | sed 's/^ //')"
-            [ -n "$cpu" ] || cpu="$(lscpu | grep -m1 'Model name' | cut -d: -f2- | sed 's/^ *//')"
+            cpu="$( (grep -m1 -E '^model name' /proc/cpuinfo || true) | cut -d: -f2- | sed 's/^ //')"
+            [ -n "$cpu" ] || cpu="$( (lscpu | grep -m1 'Model name' || true) | cut -d: -f2- | sed 's/^ *//')"
           fi
           echo "### ${{ matrix.slot }}: ${cpu:-unknown CPU} ($(uname -m))" >> "$GITHUB_STEP_SUMMARY"
           test -f bench/results/resume/2026-09-07-root-byte-lm-three-vendor/comparison.json
