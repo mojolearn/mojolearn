@@ -1,0 +1,60 @@
+run	corpus	arm_requested	arm_ran	trial_build	steady_median_s	ratio_vs_glue_shipped	ratio_vs_shipped_build	witness_steps	witnesses_equal_shipped
+lean-glue-shipped-enwik8	enwik8	shipped	shipped	True	0.2911095693707466	1.0000	0.9987	4	True
+lean-glue-shipped-pilegithub	pilegithub	shipped	shipped	True	0.2921260129660368	1.0000	0.9986	4	True
+lean-glue-optskip_noshadow-enwik8	enwik8	optskip_noshadow	optskip_noshadow	True	0.28662378527224064	0.9846	0.9833	4	True
+lean-glue-optskip_noshadow-pilegithub	pilegithub	optskip_noshadow	optskip_noshadow	True	0.2877916134893894	0.9852	0.9838	4	True
+lean-glue-rows16-enwik8	enwik8	rows16	rows16	True	0.28684261813759804	0.9853	0.9840	4	True
+lean-glue-rows16-pilegithub	pilegithub	rows16	rows16	True	0.2877813894301653	0.9851	0.9838	4	True
+lean-glue-rows8-enwik8	enwik8	rows8	rows8	True	0.28781234845519066	0.9887	0.9873	4	True
+lean-glue-rows8-pilegithub	pilegithub	rows8	rows8	True	0.2880002073943615	0.9859	0.9845	4	True
+lean-glue-optskip_noshadow_rows16-enwik8	enwik8	optskip_noshadow_rows16	optskip_noshadow_rows16	True	0.28365296870470047	0.9744	0.9731	4	True
+lean-glue-optskip_noshadow_rows16-pilegithub	pilegithub	optskip_noshadow_rows16	optskip_noshadow_rows16	True	0.2834441903978586	0.9703	0.9690	4	True
+lean-glue-optskip_noshadow_rows8-enwik8	enwik8	optskip_noshadow_rows8	optskip_noshadow_rows8	True	0.28329928405582905	0.9732	0.9719	4	True
+lean-glue-optskip_noshadow_rows8-pilegithub	pilegithub	optskip_noshadow_rows8	optskip_noshadow_rows8	True	0.28443268314003944	0.9737	0.9723	4	True
+drift	enwik8	shipped	shipped		0.29268896393477917	1.0054			True
+verdict optskip_noshadow FLIP geomean=0.9849 enwik8=0.9846 pilegithub=0.9852 witnesses_equal_shipped=True arm_named=True (vs lean-glue-shipped, same pod)
+verdict rows16 FLIP geomean=0.9852 enwik8=0.9853 pilegithub=0.9851 witnesses_equal_shipped=True arm_named=True (vs lean-glue-shipped, same pod)
+verdict rows8 FLIP geomean=0.9873 enwik8=0.9887 pilegithub=0.9859 witnesses_equal_shipped=True arm_named=True (vs lean-glue-shipped, same pod)
+verdict optskip_noshadow_rows16 FLIP geomean=0.9723 enwik8=0.9744 pilegithub=0.9703 witnesses_equal_shipped=True arm_named=True (vs lean-glue-shipped, same pod)
+verdict optskip_noshadow_rows8 FLIP geomean=0.9734 enwik8=0.9732 pilegithub=0.9737 witnesses_equal_shipped=True arm_named=True (vs lean-glue-shipped, same pod)
+component	shipped_ms	optskip_noshadow_rows16_ms	delta_ms
+envelope.native_call	297.32910729944706	289.3306575715542	-7.998
+fwd.norm1	3.06776	1.554151	-1.514
+fwd.norm2	3.076562	1.56212	-1.514
+grad.norm1_kernels	2.025714	1.39926	-0.626
+grad.norm2_kernels	2.038154	1.392515	-0.646
+step.validate_grads_scan	0.558668	0.556923	-0.002
+step.shadow_copy	2.308929	None	NA
+step.opt_refuse_scan	2.175149	None	NA
+step.optimizer	1.714676	1.727251	0.013
+step.validate_after_scan	2.14745	2.14858	0.001
+step.embedding_backward	2.552331	2.545274	-0.007
+step.unpack_weights	1.163773	1.165635	0.002
+step.pack_grads	1.122067	1.124994	0.003
+timing_witnesses_equal	True
+build-binding-base	0	56s
+build-byte-lm-shipped	0	79s
+build-byte-lm-glue	0	72s
+build-byte-lm-gluetimers	0	72s
+build-glue-check	0	81s
+glue-check	0	2s
+corpus-enwik8	0	5s
+corpus-pile-github	0	21s
+lean-shipped-enwik8	0	89s
+lean-glue-shipped-enwik8	0	85s
+lean-glue-optskip_noshadow-enwik8	0	84s
+lean-glue-rows16-enwik8	0	87s
+lean-glue-rows8-enwik8	0	87s
+lean-glue-optskip_noshadow_rows16-enwik8	0	85s
+lean-glue-optskip_noshadow_rows8-enwik8	0	85s
+lean-shipped-pilegithub	0	89s
+lean-glue-shipped-pilegithub	0	84s
+lean-glue-optskip_noshadow-pilegithub	0	85s
+lean-glue-rows16-pilegithub	0	84s
+lean-glue-rows8-pilegithub	0	86s
+lean-glue-optskip_noshadow_rows16-pilegithub	0	85s
+lean-glue-optskip_noshadow_rows8-pilegithub	0	88s
+lean-glue-shipped2-enwik8	0	85s
+timing-shipped-enwik8	0	86s
+timing-optskip_noshadow_rows16-enwik8	0	86s
+summary	0	0s

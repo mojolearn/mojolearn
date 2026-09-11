@@ -1,0 +1,19 @@
+run	corpus	arm_requested	arm_ran	trial_build	steady_median_s	ratio_vs_glue_shipped	ratio_vs_shipped_build	witness_steps	witnesses_equal_shipped
+lean-glue-shipped-enwik8	enwik8	shipped	shipped	True	0.2911095693707466	1.0000	0.9987	4	True
+lean-glue-shipped-pilegithub	pilegithub	shipped	shipped	True	0.2921260129660368	1.0000	0.9986	4	True
+lean-glue-optskip_noshadow-enwik8	enwik8	optskip_noshadow	optskip_noshadow	True	0.28662378527224064	0.9846	0.9833	4	True
+lean-glue-optskip_noshadow-pilegithub	pilegithub	optskip_noshadow	optskip_noshadow	True	0.2877916134893894	0.9852	0.9838	4	True
+lean-glue-rows16-enwik8	enwik8	rows16	rows16	True	0.28684261813759804	0.9853	0.9840	4	True
+lean-glue-rows16-pilegithub	pilegithub	rows16	rows16	True	0.2877813894301653	0.9851	0.9838	4	True
+lean-glue-rows8-enwik8	enwik8	rows8	rows8	True	0.28781234845519066	0.9887	0.9873	4	True
+lean-glue-rows8-pilegithub	pilegithub	rows8	rows8	True	0.2880002073943615	0.9859	0.9845	4	True
+lean-glue-optskip_noshadow_rows16-enwik8	enwik8	optskip_noshadow_rows16	optskip_noshadow_rows16	True	0.28365296870470047	0.9744	0.9731	4	True
+lean-glue-optskip_noshadow_rows16-pilegithub	pilegithub	optskip_noshadow_rows16	optskip_noshadow_rows16	True	0.2834441903978586	0.9703	0.9690	4	True
+lean-glue-optskip_noshadow_rows8-enwik8	enwik8	optskip_noshadow_rows8	optskip_noshadow_rows8	True	0.28329928405582905	0.9732	0.9719	4	True
+lean-glue-optskip_noshadow_rows8-pilegithub	pilegithub	optskip_noshadow_rows8	optskip_noshadow_rows8	True	0.28443268314003944	0.9737	0.9723	4	True
+drift	enwik8	shipped	shipped		0.29268896393477917	1.0054			True
+verdict optskip_noshadow FLIP geomean=0.9849 enwik8=0.9846 pilegithub=0.9852 witnesses_equal_shipped=True arm_named=True (vs lean-glue-shipped, same pod)
+verdict rows16 FLIP geomean=0.9852 enwik8=0.9853 pilegithub=0.9851 witnesses_equal_shipped=True arm_named=True (vs lean-glue-shipped, same pod)
+verdict rows8 FLIP geomean=0.9873 enwik8=0.9887 pilegithub=0.9859 witnesses_equal_shipped=True arm_named=True (vs lean-glue-shipped, same pod)
+verdict optskip_noshadow_rows16 FLIP geomean=0.9723 enwik8=0.9744 pilegithub=0.9703 witnesses_equal_shipped=True arm_named=True (vs lean-glue-shipped, same pod)
+verdict optskip_noshadow_rows8 FLIP geomean=0.9734 enwik8=0.9732 pilegithub=0.9737 witnesses_equal_shipped=True arm_named=True (vs lean-glue-shipped, same pod)
