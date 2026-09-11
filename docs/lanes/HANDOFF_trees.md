@@ -68,6 +68,21 @@ ANDREW DECIDES whether the default stays: it is a behavior change to the
 classifier's forest, shipped ON here because it removes 75% of the
 histogram rounds on every vendor.
 
+### DEVIATION 2512 in gbdt (`bench/results/gbdt_fast_mac_2026-09-10/`)
+
+All 32 `enqueue_memset` sites under gbdt/ go through
+`core/device_zero.enqueue_fill`. Same bytes, hashes unchanged, IDENTICAL
+gbdt fingerprints 36 of 36 equal. M4 FAST HIGGS 1M: symmetric 4,312 ->
+2,544..2,591 ms; depthwise 8,499 -> 6,318..6,500; lossguide 17,713 ->
+10,865..11,232. IDENTICAL symmetric 2,837..2,871 (hash dac2cf366e219cec).
+
+### ExtraTrees on the M4 (`bench/results/et_fast_mac_2026-09-10/`)
+
+FAST 1M fit 11.0 s: stage + feature sampler 2.0 s, range pass 3.0 s, score
+pass 3.8 s, partition 2.4 s, host 0.1 s. Kernel time, no host tax; a
+kernel lane (the range and score passes read the node rows through
+row ids; the M4 has about 100 GB/s).
+
 ### RUN OWED
 
 - H100: RF 1M and 2M at this source (expect the round count to fall 4x;
