@@ -1,0 +1,16 @@
+642 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3ae000000000, nodemask=10)
+--- default identity profile (the shape every byte LM check runs)
+  length=32 largest_product=16384 verdict=OK
+  length=128 largest_product=131072 verdict=OK
+  length=512 largest_product=2097152 verdict=OK
+  length=2048 largest_product=33554432 verdict=OK
+  length=8192 largest_product=536870912 verdict=OK
+  at length=8192 the largest accepted batch is 7; batch=8 has largest_product=2147483648 and is refused: byte LM: shape product exceeds int32 indexing
+--- LM target shape b1 d768 h12 kv12 hd64 ff2048 blocks12 v50257
+  length=32 largest_product=1608224 verdict=OK
+  length=128 largest_product=6432896 verdict=OK
+  length=512 largest_product=25731584 verdict=OK
+  length=2048 largest_product=102926336 verdict=OK
+  length=8192 largest_product=805306368 verdict=OK
+  at length=8192 the largest accepted batch is 2; batch=3 has largest_product=2415919104 and is refused: byte LM: shape product exceeds int32 indexing
+PASS byte LM length sweep: boundaries printed above

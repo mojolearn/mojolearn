@@ -1,0 +1,31 @@
+length	arm	oracle	exit	seconds	verdict
+32	stash_tiled	1	0	1s	PASS
+32	stash_tiled (repeat)	1	0	1s	REPEAT_IDENTICAL
+32	stash_tiled_fgrid_r32	0	0	1s	PASS
+32	stash_tiled_ztiled_r32	0	0	1s	PASS
+32	stash_tiled_fgrid_r32_qres_pf_kvgrid_r32	0	0	2s	PASS
+128	stash_tiled	1	0	1s	PASS
+128	stash_tiled (repeat)	1	0	1s	REPEAT_IDENTICAL
+128	stash_tiled_fgrid_r32	0	0	1s	PASS
+128	stash_tiled_ztiled_r32	0	0	1s	PASS
+128	stash_tiled_fgrid_r32_qres_pf_kvgrid_r32	0	0	1s	PASS
+512	stash_tiled	1	0	1s	PASS
+512	stash_tiled (repeat)	1	0	1s	REPEAT_IDENTICAL
+512	stash_tiled_fgrid_r32	0	0	2s	PASS
+512	stash_tiled_ztiled_r32	0	0	1s	PASS
+512	stash_tiled_fgrid_r32_qres_pf_kvgrid_r32	0	0	1s	PASS
+2048	stash_tiled	1	0	2s	PASS
+2048	stash_tiled (repeat)	1	0	2s	REPEAT_IDENTICAL
+2048	stash_tiled_fgrid_r32	0	0	1s	PASS
+2048	stash_tiled_ztiled_r32	0	0	2s	PASS
+2048	stash_tiled_fgrid_r32_qres_pf_kvgrid_r32	0	0	2s	PASS
+8192	stash_tiled	1	0	7s	PASS
+8192	stash_tiled (repeat)	1	0	6s	REPEAT_IDENTICAL
+8192	stash_tiled_fgrid_r32	0	0	6s	PASS
+8192	stash_tiled_ztiled_r32	0	0	5s	PASS
+8192	stash_tiled_fgrid_r32_qres_pf_kvgrid_r32	0	0	6s	PASS
+8191	stash_tiled	1	0	6s	PASS
+8191	stash_tiled (repeat)	1	0	7s	REPEAT_IDENTICAL
+8191	stash_tiled_fgrid_r32	0	0	6s	PASS
+8191	stash_tiled_ztiled_r32	0	0	5s	PASS
+8191	stash_tiled_fgrid_r32_qres_pf_kvgrid_r32	0	0	6s	PASS

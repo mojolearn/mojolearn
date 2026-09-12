@@ -1,0 +1,1 @@
+transformer_attention_arms_check: PASS, names inverse, 15 cases x 23 arms, every RAN buffer bit-identical to eager, every status as expected, reach proven per branch at head_dim 64 with the second-round flips attributed, nothing moved at other head dims

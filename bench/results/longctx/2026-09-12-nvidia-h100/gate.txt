@@ -1,0 +1,17 @@
+lane=long-context-identity
+started=2026-09-12T18:30:08Z
+vendor=nvidia arch=sm_90a
+lengths=32 128 512 2048 8192 ragged=8191
+arms=stash_tiled stash_tiled_fgrid_r32 stash_tiled_ztiled_r32 stash_tiled_fgrid_r32_qres_pf_kvgrid_r32
+kinds=hashed,heavytail timing=off
+commit=d53671a6846cd74e5e553e2030e3286ac57621a4
+finished=2026-09-12T18:33:21Z
+overall_exit=0
+--- per-length verdicts
+length=32 runs=5 ALL IDENTICAL
+length=128 runs=5 ALL IDENTICAL
+length=512 runs=5 ALL IDENTICAL
+length=2048 runs=5 ALL IDENTICAL
+length=8191 runs=5 ALL IDENTICAL
+length=8192 runs=5 ALL IDENTICAL
+--- FAIL lines, if any
