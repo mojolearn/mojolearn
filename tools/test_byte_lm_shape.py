@@ -140,6 +140,24 @@ def test_parse_accepts_the_spellings_the_tools_pass():
             shape_module.parse(bad)
 
 
+def test_two_independently_loaded_copies_compare_equal():
+    """Every tool loads this module by path under its own private name, so two
+    copies define two different classes. An isinstance based equality would be
+    False between them for the same nine dimensions, and a shape handed from one
+    tool to another would take the wrong branch without saying anything."""
+    other = _load('byte_lm_shape')
+    assert other is not shape_module and other.Shape is not Shape
+    assert other.Shape() == Shape()
+    assert Shape() == other.Shape()
+    four = [4, 32, 32, 4, 2, 8, 64, 2, 256]
+    assert other.Shape(four) == Shape(four)
+    assert other.Shape(four) != Shape()
+    assert Shape() != other.Shape(four)
+    # Something that is not a shape at all must not compare equal to one.
+    for wrong in (None, 'b2-l32', (2, 32, 32, 4, 2, 8, 64, 2, 256), 42):
+        assert Shape() != wrong
+
+
 def test_a_shape_that_cannot_hold_out_evenly_is_refused_rather_than_rounded():
     """512 targets must divide into whole batches, or two shapes' held-out
     losses would be means over different amounts of text."""

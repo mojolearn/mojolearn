@@ -203,7 +203,22 @@ class Shape:
         return dict(zip(FIELDS, self.fields))
 
     def __eq__(self, other):
-        return isinstance(other, Shape) and self.fields == other.fields
+        # DUCK TYPED ON PURPOSE, and this is not a style preference. Every tool
+        # here loads this module BY PATH, under its own private module name,
+        # because these scripts run on a leased host where the tools directory
+        # is not on the import path. That means two loaded copies define two
+        # different Shape classes, and an isinstance test between them is False
+        # even when the nine dimensions are identical. A shape passed from one
+        # tool to another would then silently take the wrong branch, which is
+        # how a second shape's tree gets admitted against the first shape's
+        # counts. Compare what a shape IS, which is its nine integers.
+        fields = getattr(other, 'fields', None)
+        if not isinstance(fields, tuple) or len(fields) != 9:
+            return NotImplemented
+        return self.fields == fields
+
+    def __hash__(self):
+        return hash(self.fields)
 
     def __repr__(self):
         return f'Shape{self.fields}'

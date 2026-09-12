@@ -10,8 +10,9 @@ import os
 from pathlib import Path
 import stat
 
+import byte_lm_state_compare as _state
 from byte_lm_state_compare import (
-    COUNTS, PROFILE, canonical, checkpoint, check_metadata, compatible,
+    canonical, checkpoint, check_metadata, compatible,
     load_capture, parse, read, receipt, registry, require, same_steps, sha,
     signature, safe_path, initial_raw, filename,
 )
@@ -19,6 +20,20 @@ from byte_lm_validation_admit import admit
 
 SCHEMA = 'mojolearn.byte-lm.compact-handoff.v1'
 MAX_HANDOFF = 2 * 1024 * 1024
+
+
+def require_default_shape():
+    """The compact handoff path has not been extended past the certified shape.
+
+    DEVIATION 2682 made the comparator's profile and array counts follow whichever
+    shape a run binds. This file reads both, so it must read them off the module
+    rather than copies taken at import, or it would quietly check a second shape's
+    capture against the first shape's counts. It does read them live now, and it
+    still refuses anything but the default by name, because carrying a second
+    shape through checkpoint transfer is work nobody has done or tested."""
+    require(_state.SHAPE == _state.byte_lm_shape.Shape(),
+            'compact handoff covers the certified b2-l32 shape only; this run is '
+            + _state.PROFILE)
 
 
 def bundle_bound(directory):
@@ -124,8 +139,9 @@ def author(baseline, head, output):
         binary = read(baseline / 'bindings/_mojolearn_byte_lm.so')
         require(sha(binary) == admitted['binding_sha256'], 'baseline binding changed')
         exclusive(output / 'binding/_mojolearn_byte_lm.so', binary)
+    require_default_shape()
     handoff = dict(schema=SCHEMA, kind='head64' if head is not None else 'baseline128',
-        profile=PROFILE, vendor=vendor, binding_sha256=capture['runtime']['binding_sha256'],
+        profile=_state.PROFILE, vendor=vendor, binding_sha256=capture['runtime']['binding_sha256'],
         binding_file=None if head is not None else 'binding/_mojolearn_byte_lm.so',
         source=capture['source'], runtime=capture['runtime'], metadata=capture['metadata'],
         summary_sha256=capture['summary_sha256'], baseline_summary_sha256=base['summary_sha256'],
@@ -154,7 +170,8 @@ def load_handoff(directory, expected_sha, *, kind=None, vendor=None):
     raw = read(directory / 'handoff.json', limit=MAX_HANDOFF)
     require(sha(raw) == expected_sha, 'handoff differs from root-pinned SHA')
     item = parse(raw)
-    require(item['schema'] == SCHEMA and item['profile'] == PROFILE and
+    require_default_shape()
+    require(item['schema'] == SCHEMA and item['profile'] == _state.PROFILE and
             item['kind'] in ('baseline128', 'head64') and item['vendor'] in ('cuda', 'hip') and
             (kind is None or item['kind'] == kind) and (vendor is None or item['vendor'] == vendor),
             'wrong compact handoff profile/kind/vendor')
@@ -163,7 +180,7 @@ def load_handoff(directory, expected_sha, *, kind=None, vendor=None):
             item['root_admission']['binding_sha256'] == item['binding_sha256'] and
             item['runtime']['binding_sha256'] == item['binding_sha256'] and
             item['runtime']['native_vendor'] == item['vendor'] and
-            item['runtime']['native_profile'] == PROFILE and item['runtime']['native_numeric_mode'] == 1,
+            item['runtime']['native_profile'] == _state.PROFILE and item['runtime']['native_numeric_mode'] == 1,
             'root admission/runtime handoff mismatch')
     check_metadata(item['metadata'], item['schedule'])
     end = 128 if item['kind'] == 'baseline128' else 64
@@ -174,13 +191,13 @@ def load_handoff(directory, expected_sha, *, kind=None, vendor=None):
         manifest = record['manifest']
         require(record['step'] == number and sha(canonical(manifest)) == record['manifest_sha256'] and
                 manifest['schema'] == 'mojolearn.byte-lm.gradient-capture.v1' and
-                manifest['registry'] == registry() and set(manifest['arrays']) == set(COUNTS),
+                manifest['registry'] == registry() and set(manifest['arrays']) == set(_state.COUNTS),
                 'malformed compact step manifest')
-        require(manifest['config'] == dict(profile=PROFILE, numeric_mode='identical', vendor=item['vendor'],
+        require(manifest['config'] == dict(profile=_state.PROFILE, numeric_mode='identical', vendor=item['vendor'],
                 completed_steps=number - 1, post_completed_steps=number, optimizer=item['metadata']['config']) and
                 manifest['input_state'] == previous and manifest['output_state']['completed_steps'] == number,
                 'compact configuration/state hash chain differs')
-        for key, count in COUNTS.items():
+        for key, count in _state.COUNTS.items():
             require(manifest['arrays'][key]['count'] == count and digest(manifest['arrays'][key]['sha256']),
                     'malformed compact raw array witness')
         previous = manifest['output_state']

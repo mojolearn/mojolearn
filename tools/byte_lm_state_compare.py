@@ -49,13 +49,28 @@ _receipt_policy = importlib.util.module_from_spec(_receipt_spec)
 _receipt_spec.loader.exec_module(_receipt_policy)
 validate_guard_terminal = _receipt_policy.validate_guard_terminal
 
-PROFILE = 'mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1'
+# DEVIATION 2682. The shape was literals here. It now comes from the shared
+# module, loaded the same way and for the same reason as the policy above, so
+# this comparator and the capture harness cannot describe two different models
+# to each other. The helper asserts at import that its default derivation equals
+# the certified literals, so the b2-l32 path cannot move underneath this.
+_shape_spec = importlib.util.spec_from_file_location(
+    '_byte_lm_shape', Path(__file__).with_name('byte_lm_shape.py'))
+byte_lm_shape = importlib.util.module_from_spec(_shape_spec)
+_shape_spec.loader.exec_module(byte_lm_shape)
+
+#: The shape this run is reading. It starts as the certified default, which is
+#: what every capture written before DEVIATION 2682 is, and `use_shape` replaces
+#: it once a run says otherwise. One binding point, because every reader below
+#: needs the same answer and a second source would be a second opinion.
+SHAPE = byte_lm_shape.Shape()
+PROFILE = SHAPE.profile
 CORPUS_SHA = '86c4e6aa9db7c042ec79f339dcb96d42b0075e16b8fc2e86bf0ca57e2dc565ed'
 INIT_ID = 'u32-avalanche-index-xor-42595445-top8-centered128-div1024-norm1.v1'
-N = 34944
+N = SHAPE.n_total
 STATE_NAMES = {'parameters': 'p', 'm': 'm', 'v': 'v', 'flags': 'flags'}
-COUNTS = {key: N for key in ('initial_p', 'initial_m', 'initial_v', 'post_p', 'post_m', 'post_v', 'grad')}
-COUNTS.update(initial_flags=20, post_flags=20, loss=1, ids=66)
+COUNTS = SHAPE.counts()
+_BOUND = False
 MAX_FILE = 16 * 1024 * 1024
 MAX_TREE = 256 * 1024 * 1024
 MAX_FILES = 2048
@@ -66,6 +81,21 @@ ORACLE_TOLERANCES = {
     'post_m': {'atol': 2e-7, 'rtol': 2e-5},
     'post_v': {'atol': 2e-9, 'rtol': 2e-5},
 }
+
+
+def use_shape(shape):
+    """Bind this run to one shape, once, and refuse a second one.
+
+    One run compares one trajectory against another, so a second shape inside it
+    would mean the counts and the registry changed underneath a comparison that
+    had already started."""
+    global SHAPE, PROFILE, N, COUNTS, _BOUND
+    if _BOUND and shape != SHAPE:
+        raise ValueError('one run compares one shape; this run is bound to '
+                         f'{SHAPE.profile} and was asked for {shape.profile}')
+    _BOUND = True
+    SHAPE, PROFILE, N, COUNTS = shape, shape.profile, shape.n_total, shape.counts()
+    return shape
 
 
 def require(condition, message):
@@ -155,19 +185,12 @@ def tree_bound(root):
 
 
 def registry():
-    shapes = [('embed', [256, 32])]
-    for block in range(2):
-        shapes += [(f'block{block}.{name}', shape) for name, shape in (
-            ('norm1_w', [32]), ('w_q', [32, 32]), ('w_k', [16, 32]),
-            ('w_v', [16, 32]), ('w_o', [32, 32]), ('norm2_w', [32]),
-            ('w_gate', [64, 32]), ('w_up', [64, 32]), ('w_down', [32, 64]))]
-    shapes += [('lm_head', [256, 32])]
-    result, offset = [], 0
-    for name, shape in shapes:
-        count = math.prod(shape)
-        result.append(dict(name=name, shape=shape, offset=offset, count=count))
-        offset += count
-    require(offset == N, 'internal registry mismatch')
+    # The parameter tensors of the bound shape, in flat order. A capture's own
+    # registry is admitted against this, and the capture harness admits the same
+    # derivation against the native one, so what is checked here is still the
+    # native layout rather than this file's opinion of it.
+    result = SHAPE.registry()
+    require(result[-1]['offset'] + result[-1]['count'] == N, 'internal registry mismatch')
     return result
 
 
@@ -232,7 +255,7 @@ def checkpoint(directory, name, descriptor):
     metadata = dict(payload)
     for key in STATE_NAMES:
         item = metadata.pop(key)
-        count = 20 if key == 'flags' else N
+        count = SHAPE.n_flags if key == 'flags' else N
         require(set(item) == {'dtype', 'shape', 'hex'} and item['shape'] == [count] and
                 item['dtype'] == ('<i4' if key == 'flags' else '<f4') and
                 isinstance(item['hex'], str) and len(item['hex']) == count * 8,
@@ -264,21 +287,25 @@ def initial_raw(directory):
 
 
 def heldout(root, name, expected, state, schedule_raw):
+    # Held-out batches, their byte size and their starts all follow from the
+    # bound shape. Every shape reads the same held-out target bytes, as fewer
+    # batches of more rows or the reverse.
+    batches, size, starts = SHAPE.validation_batches, SHAPE.n_ids * 4, SHAPE.validation_starts
     report = parse(read(root / name / 'evaluation.json', limit=65536))
     require(report == expected and report['state_before'] == state == report['state_after'] and
-            report['state_unchanged'] is True and len(report['batches']) == 8,
+            report['state_unchanged'] is True and len(report['batches']) == batches,
             'heldout state/report mismatch')
     losses = []
     for index, batch in enumerate(report['batches']):
-        ids = read(root / name / f'batch{index:02}.ids.i32', size=264)
+        ids = read(root / name / f'batch{index:02}.ids.i32', size=size)
         loss = read(root / name / f'batch{index:02}.loss.f32', size=4)
         value = struct.unpack('<f', loss)[0]
         require(math.isfinite(value) and value > 0 and batch['loss'] == value and
-                batch['start'] == 65536 + 64 * index and
+                batch['start'] == starts[index] and
                 batch['ids_sha256'] == sha(ids) and batch['loss_sha256'] == sha(loss) and
-                ids == schedule_raw[index * 264:(index + 1) * 264], 'heldout raw witness mismatch')
+                ids == schedule_raw[index * size:(index + 1) * size], 'heldout raw witness mismatch')
         losses.append(value)
-    require(report['mean_loss'] == math.fsum(losses) / 8, 'heldout aggregation mismatch')
+    require(report['mean_loss'] == math.fsum(losses) / batches, 'heldout aggregation mismatch')
     return report
 
 
@@ -320,8 +347,9 @@ def load_capture(path, expected_action, expected_vendor=None):
             all(key == 'loaded_python_wrapper' or source.get(key) == value
                 for key, value in loaded_sources.items()), 'loaded Python/direct source witness mismatch')
     schedule = summary['schedule']
-    train = read(root / 'train-schedule.i32', size=128 * 264)
-    evaluation = read(root / 'heldout-schedule.i32', size=8 * 264)
+    ids_bytes = SHAPE.n_ids * 4
+    train = read(root / 'train-schedule.i32', size=128 * ids_bytes)
+    evaluation = read(root / 'heldout-schedule.i32', size=SHAPE.validation_batches * ids_bytes)
     init = read(root / 'frozen-initial-parameters.f32', size=N * 4)
     require(init == frozen_initial_bytes(), 'initial parameters differ from declared deterministic formula')
     corpus = read(root / 'corpus-manifest.json', limit=65536)
@@ -330,9 +358,10 @@ def load_capture(path, expected_action, expected_vendor=None):
             manifest['schema'] == 'mojolearn.byte-lm.corpus.v1' and
             manifest['bytes'] == 1115394 and manifest['train_range'] == [0, 65536] and
             manifest['validation_range'] == [65536, 73728] and
-            manifest['vocabulary'] == 256 and manifest['batch'] == 2 and manifest['context'] == 32 and
+            manifest['vocabulary'] == SHAPE.vocab_size and manifest['batch'] == SHAPE.batch and
+            manifest['context'] == SHAPE.length and
             manifest['planned_steps'] == 128 and
-            manifest['validation_batch_starts'] == list(range(65536, 66048, 64)) and
+            manifest['validation_batch_starts'] == SHAPE.validation_starts and
             manifest['learning_gate']['heldout_mean_loss_ratio_max'] == .9,
             'wrong pinned corpus/heldout threshold')
     require(schedule == dict(schema='mojolearn.byte-lm.real-text-schedule.v1',
@@ -375,15 +404,23 @@ def load_capture(path, expected_action, expected_vendor=None):
         require(sha(raw) == record['capture_sha256'] and capture['schema'] ==
                 'mojolearn.byte-lm.gradient-capture.v1' and capture['registry'] == registry() and
                 set(capture['arrays']) == set(COUNTS), 'step manifest mismatch')
-        require(capture['config'] == dict(profile=PROFILE, numeric_mode='identical',
+        # DEVIATION 2682. A step may record `model_shape`, and when it does it
+        # must be this run's shape, which the profile alone already pins because
+        # the profile spells out all nine dimensions. A step that records none is
+        # the default by construction, since that was the only shape that existed
+        # when it was written.
+        expected_config = dict(profile=PROFILE, numeric_mode='identical',
                 vendor=runtime['native_vendor'], completed_steps=number - 1,
-                post_completed_steps=number, optimizer=metadata['config']), 'step config mismatch')
+                post_completed_steps=number, optimizer=metadata['config'])
+        if isinstance(capture['config'], dict) and 'model_shape' in capture['config']:
+            expected_config['model_shape'] = SHAPE.to_json()
+        require(capture['config'] == expected_config, 'step config mismatch')
         arrays = {key: array_read(root / folder, key, capture['arrays'][key]) for key in COUNTS}
         before = {k: arrays['initial_' + suffix] for k, suffix in STATE_NAMES.items()}
         after = {k: arrays['post_' + suffix] for k, suffix in STATE_NAMES.items()}
         require(before == previous and capture['input_state'] == signature(metadata, before, number - 1) and
                 capture['output_state'] == signature(metadata, after, number), 'broken full-state chain')
-        require(arrays['ids'] == train[(number - 1) * 264:number * 264] and
+        require(arrays['ids'] == train[(number - 1) * ids_bytes:number * ids_bytes] and
                 record['loss'] == struct.unpack('<f', arrays['loss'])[0], 'token/loss record mismatch')
         steps[number] = dict(directory=root / folder, manifest=capture, sha256=sha(raw))
         previous = after
@@ -523,14 +560,14 @@ def resume_control(head, resumed, control, continuous):
             (head, 'heldout-initial', continuous, 'heldout-initial'),
             (head, 'heldout-final', resumed, 'heldout-initial'),
             (resumed, 'heldout-final', continuous, 'heldout-final')):
-        for index in range(8):
+        for index in range(SHAPE.validation_batches):
             for suffix in ('ids.i32', 'loss.f32'):
                 name = f'batch{index:02}.{suffix}'
                 require(read(left['root'] / left_folder / name) == read(right['root'] / right_folder / name),
                         'resume heldout byte chain differs')
     legit = initial_raw(control['root'] / 'legitimate-head64')
     head_final = {k: read(head['steps'][64]['directory'] / filename('post_' + v),
-                          size=(20 if k == 'flags' else N) * 4) for k, v in STATE_NAMES.items()}
+                          size=(SHAPE.n_flags if k == 'flags' else N) * 4) for k, v in STATE_NAMES.items()}
     require(legit == head_final and control['initial']['parameters'] == legit['parameters'] and
             control['initial']['flags'] == legit['flags'] and all(any(legit[k]) for k in ('m', 'v')) and
             all(not any(control['initial'][k]) for k in ('m', 'v')), 'ineffective/malformed planted moment control')
@@ -564,7 +601,7 @@ def compare_continuous(a, b):
             'full continuous checkpoint comparison failed')
     # Heldout raw bytes are included, independently of learning admission.
     for folder in ('heldout-initial', 'heldout-final'):
-        for index in range(8):
+        for index in range(SHAPE.validation_batches):
             for suffix in ('ids.i32', 'loss.f32'):
                 name = f'batch{index:02}.{suffix}'
                 require(read(a['root'] / folder / name) ==
@@ -573,6 +610,9 @@ def compare_continuous(a, b):
 
 
 def compare(args):
+    # DEVIATION 2682. One run compares one shape, because identity is claimed per
+    # shape. Absent, it is the certified default, which is every retained tree.
+    use_shape(byte_lm_shape.parse(getattr(args, 'shape', None)))
     captures = {name: load_capture(getattr(args, name), 'continuous', name) for name in ('cuda', 'hip')}
     continuous_vendors = ['cuda', 'hip']
     count = compare_continuous(captures['cuda'], captures['hip'])
@@ -631,6 +671,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--cuda', type=Path, required=True)
     parser.add_argument('--hip', type=Path, required=True)
+    parser.add_argument('--shape', default=None,
+                        help='batch,length or the nine dimensions; the default is the certified b2-l32')
     parser.add_argument('--metal', type=Path,
                         help='optional continuous128 Metal capture; requires guard metal=FILE, no Metal oracle/resume claim')
     for name in ('head', 'resume', 'control'):
