@@ -134,6 +134,28 @@ jobs:
           pixi run mojo --version | tee "$GATE_OUT/mojo_version.txt"
           sh bindings/build_byte_lm_host.sh 2>&1 | tee "$GATE_OUT/build_prod.log"
 
+      # DEVIATION 2680 PROBE, NOT A GATE, hence continue-on-error: it must
+      # never be able to fail this workflow. One question, measured instead of
+      # argued from a comment: transformer/checks/transformer_backward_oracle
+      # computes on the host but imports three names from gemm/checks/
+      # gemm_backward, which imports max.gpu.host, and one from
+      # core/identity_trace, which does too. _mojolearn_byte_lm_host.mojo says
+      # HOST ONLY, nothing imported from the GPU side. If the toolchain
+      # enforces that, this compile fails here with no accelerator target and
+      # the error names what has to move; if it succeeds, the rule is policy
+      # the compiler does not enforce and the CPU trainer needs no refactor.
+      # Compiling the module is the test: an import forces its transitive
+      # imports to be analyzed. Delete the step and the probe once answered.
+      - name: Probe, does the host backward oracle compile with no GPU
+        if: always()
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          pixi run mojo build -j 1 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . -I bindings \
+            training/checks/byte_lm_host_bwd_probe.mojo -o "$GATE_OUT/bwd_probe" 2>&1 \
+            | tee "$GATE_OUT/bwd_probe.log"
+          echo "probe exit ${PIPESTATUS[0]}" | tee -a "$GATE_OUT/bwd_probe.log"
+
       - name: Gate, production build must reproduce every loss byte
         run: |
           set -o pipefail
@@ -183,6 +205,26 @@ jobs:
           set -o pipefail
           python3 tools/byte_lm_host_path_sweep.py --threads 1,2,3 --max-batch 8 \
             --report "$GATE_OUT/path_sweep.json" 2>&1 | tee "$GATE_OUT/path_sweep.log"
+
+      # DEVIATION 2680: re-derive the three-vendor TRAINING agreement from the
+      # retained raw bytes, every one of the 128 steps, all 11 arrays per step
+      # including the gradient and both Adam moments, each checked against the
+      # SHA-256 its own capture.json records. The gate above reads parameters
+      # and loss only, and trusted comparison.json's identity_admitted flag
+      # for the rest; this reads the bytes. No GPU, no binding, about a second.
+      - name: Training capture, recorded digests and any vendors present
+        if: always()
+        run: |
+          set -o pipefail
+          # --require-vendors 1 is deliberate and the verdict line says which
+          # trees it had. The checkout above fetches only the three-vendor
+          # bundle, whose raw capture is Apple; the CUDA and HIP trees are
+          # separate result trees totalling about 308 MB and are not worth
+          # pulling onto seven runners per push. The cross-vendor comparison is
+          # run with --require-vendors 3 from a full checkout instead.
+          python3 tools/byte_lm_cpu_train_gate.py vendors --steps all --verify-digests \
+            --require-vendors 1 \
+            --report "$GATE_OUT/train_capture.json" 2>&1 | tee "$GATE_OUT/train_capture.log"
 
       # DEVIATION 2640's two Mojo checks, built with the binding's CPU target so
       # they test the codegen the gate ran: the host kernels against the
