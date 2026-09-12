@@ -1,0 +1,2 @@
+xgboost 3.2.0 numpy 2.4.6
+torch 2.4.1+cu124 cuda 12.4

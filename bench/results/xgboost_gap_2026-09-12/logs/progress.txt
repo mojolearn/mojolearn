@@ -1,0 +1,17 @@
+control_taxi start 19:42:36
+control_taxi=0 19:42:49
+decompose_taxi start 19:42:49
+decompose_taxi=1 19:42:52
+stages_taxi start 19:42:52
+stages_taxi=0 19:42:56
+decompose_istella start 19:42:56
+decompose_istella=1 19:43:03
+body_done 19:43:03
+control_taxi start 19:44:40
+control_taxi=0 19:44:59
+decompose_taxi start 19:44:59
+decompose_taxi=0 19:45:11
+stages_taxi=SKIPPED_ALREADY_RUN 19:45:11
+decompose_istella start 19:45:11
+decompose_istella=0 19:45:44
+body_done 19:45:44

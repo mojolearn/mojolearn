@@ -1,0 +1,40 @@
+FSPEED-NOTE lane=gbdt-lossguide arms=ours metric=devices delta=1.000000 reason=devices=gpu (explicit); on an NVIDIA box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+1972 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x129240000000, nodemask=1)
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=cuda path=/root/mojolearn/python/mojolearn/identical/_mojolearn_gbdt.so
+BENCH_PATHS arm=ours 2550_borrow_x=1 2551_device_partition=1 2580_level_quant=0 2581_group_width=1
+FSPEED-REFUSED lane=gbdt-lossguide arm=catboost-cpu reason=GPU-PATH-ONLY: catboost-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare against the vendor's GPU path only; on AMD request cpu by name (ENGINEERING_RULES.md section 10).
+FSPEED-REFUSED lane=gbdt-lossguide arm=catboost-cpu reason=ModuleNotFoundError: No module named 'catboost'
+FSPEED-REFUSED lane=gbdt-lossguide arm=catboost-gpu reason=ModuleNotFoundError: No module named 'catboost'
+FSPEED-REFUSED lane=gbdt-lossguide arm=xgboost-cpu reason=GPU-PATH-ONLY: xgboost-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare against the vendor's GPU path only; on AMD request cpu by name (ENGINEERING_RULES.md section 10).
+FSPEED-REFUSED lane=gbdt-lossguide arm=lightgbm-cpu reason=GPU-PATH-ONLY: lightgbm-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare against the vendor's GPU path only; on AMD request cpu by name (ENGINEERING_RULES.md section 10).
+FSPEED-REFUSED lane=gbdt-lossguide arm=lightgbm-cpu reason=ModuleNotFoundError: No module named 'lightgbm'
+FSPEED-REFUSED lane=gbdt-lossguide arm=lightgbm-cuda reason=ModuleNotFoundError: No module named 'lightgbm'
+FSPEED-REFUSED lane=gbdt-lossguide arm=lightgbm-opencl reason=ModuleNotFoundError: No module named 'lightgbm'
+FSPEED-SCALE stage=before rows=1000000 features=16 input_mib=61.0 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=xgboost-gpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+1972 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x58a480000000, nodemask=2)
+FSPEED-WARMUP lane=gbdt-lossguide arm=ours shape=taxi-1000000x16 ms=1883.722
+FSPEED-WARMUP lane=gbdt-lossguide arm=xgboost-gpu shape=taxi-1000000x16 ms=506.101
+FSPEED-ORDER lane=gbdt-lossguide round=1 arms=ours,xgboost-gpu
+FSPEED lane=gbdt-lossguide arm=ours shape=taxi-1000000x16 round=1 ms=934.660 hash=0dd8bcfc3c3a4a1d
+FSPEED lane=gbdt-lossguide arm=xgboost-gpu shape=taxi-1000000x16 round=1 ms=408.967 hash=44d0d2cc41991bb1
+FSPEED-ORDER lane=gbdt-lossguide round=2 arms=ours,xgboost-gpu
+FSPEED lane=gbdt-lossguide arm=ours shape=taxi-1000000x16 round=2 ms=921.141 hash=0dd8bcfc3c3a4a1d
+FSPEED lane=gbdt-lossguide arm=xgboost-gpu shape=taxi-1000000x16 round=2 ms=458.560 hash=44d0d2cc41991bb1
+FSPEED-ORDER lane=gbdt-lossguide round=3 arms=ours,xgboost-gpu
+FSPEED lane=gbdt-lossguide arm=ours shape=taxi-1000000x16 round=3 ms=910.834 hash=0dd8bcfc3c3a4a1d
+FSPEED lane=gbdt-lossguide arm=xgboost-gpu shape=taxi-1000000x16 round=3 ms=433.557 hash=44d0d2cc41991bb1
+FSPEED-ORDER lane=gbdt-lossguide round=4 arms=ours,xgboost-gpu
+FSPEED lane=gbdt-lossguide arm=ours shape=taxi-1000000x16 round=4 ms=911.711 hash=0dd8bcfc3c3a4a1d
+FSPEED lane=gbdt-lossguide arm=xgboost-gpu shape=taxi-1000000x16 round=4 ms=429.839 hash=44d0d2cc41991bb1
+FSPEED-ORDER lane=gbdt-lossguide round=5 arms=ours,xgboost-gpu
+FSPEED lane=gbdt-lossguide arm=ours shape=taxi-1000000x16 round=5 ms=930.459 hash=0dd8bcfc3c3a4a1d
+FSPEED lane=gbdt-lossguide arm=xgboost-gpu shape=taxi-1000000x16 round=5 ms=454.455 hash=44d0d2cc41991bb1
+FSPEED-ACC lane=gbdt-lossguide arm=ours metric=logloss value=0.525504
+FSPEED-ACC lane=gbdt-lossguide arm=ours metric=auc value=0.619386
+FSPEED-ACC lane=gbdt-lossguide arm=xgboost-gpu metric=logloss value=0.525227
+FSPEED-ACC lane=gbdt-lossguide arm=xgboost-gpu metric=auc value=0.620101
+FSPEED-SCALE stage=after rows=1000000 features=16 input_mib=61.0 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
