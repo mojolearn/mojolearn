@@ -1,0 +1,54 @@
+CTD-SPAN lane=kmeans dataset=taxi arm=ours input_home=host inside_clock=host_to_device_upload,host_validation,call upload_ms_untimed=- fit_ms_untimed=- pre_clock_fit=false pre_clock_fit_source=declared
+CTD-SPAN lane=kmeans dataset=taxi arm=cuml-gpu input_home=device inside_clock=call upload_ms_untimed=128.269 fit_ms_untimed=- pre_clock_fit=false pre_clock_fit_source=declared
+CTD-SPAN lane=kmeans dataset=taxi arm=torch-gpu input_home=device inside_clock=call upload_ms_untimed=19.611 fit_ms_untimed=- pre_clock_fit=false pre_clock_fit_source=declared
+CTD-RATIO lane=kmeans dataset=taxi ours/cuml-gpu=1.5351 ours/torch-gpu=1.1630 span_asymmetry=cuml-gpu:upload_outside_its_clock(128.269_ms),torch-gpu:upload_outside_its_clock(19.611_ms)
+CTD-SPAN lane=kmeans dataset=istella arm=ours input_home=host inside_clock=host_to_device_upload,host_validation,call upload_ms_untimed=- fit_ms_untimed=- pre_clock_fit=false pre_clock_fit_source=declared
+CTD-SPAN lane=kmeans dataset=istella arm=cuml-gpu input_home=device inside_clock=call upload_ms_untimed=1122.432 fit_ms_untimed=- pre_clock_fit=false pre_clock_fit_source=declared
+CTD-SPAN lane=kmeans dataset=istella arm=torch-gpu input_home=device inside_clock=call upload_ms_untimed=194.039 fit_ms_untimed=- pre_clock_fit=false pre_clock_fit_source=declared
+CTD-RATIO lane=kmeans dataset=istella ours/cuml-gpu=7.3442 ours/torch-gpu=9.2436 span_asymmetry=cuml-gpu:upload_outside_its_clock(1122.432_ms),torch-gpu:upload_outside_its_clock(194.039_ms)
+CTD-SPAN lane=pca dataset=taxi arm=ours input_home=host inside_clock=host_to_device_upload,host_validation,call upload_ms_untimed=- fit_ms_untimed=- pre_clock_fit=false pre_clock_fit_source=declared
+CTD-SPAN lane=pca dataset=taxi arm=cuml-gpu input_home=device inside_clock=call upload_ms_untimed=127.392 fit_ms_untimed=- pre_clock_fit=false pre_clock_fit_source=declared
+CTD-SPAN lane=pca dataset=taxi arm=torch-gpu input_home=device inside_clock=call upload_ms_untimed=19.414 fit_ms_untimed=- pre_clock_fit=false pre_clock_fit_source=declared
+CTD-RATIO lane=pca dataset=taxi ours/cuml-gpu=1.3179 ours/torch-gpu=19.3214 span_asymmetry=cuml-gpu:upload_outside_its_clock(127.392_ms),torch-gpu:upload_outside_its_clock(19.414_ms)
+CTD-SPAN lane=pca dataset=istella arm=ours input_home=host inside_clock=host_to_device_upload,host_validation,call upload_ms_untimed=- fit_ms_untimed=- pre_clock_fit=false pre_clock_fit_source=declared
+CTD-SPAN lane=pca dataset=istella arm=cuml-gpu input_home=device inside_clock=call upload_ms_untimed=1431.812 fit_ms_untimed=- pre_clock_fit=false pre_clock_fit_source=declared
+CTD-SPAN lane=pca dataset=istella arm=torch-gpu input_home=device inside_clock=call upload_ms_untimed=617.371 fit_ms_untimed=- pre_clock_fit=false pre_clock_fit_source=declared
+CTD-RATIO lane=pca dataset=istella ours/cuml-gpu=4.6690 ours/torch-gpu=42.9817 span_asymmetry=cuml-gpu:upload_outside_its_clock(1431.812_ms),torch-gpu:upload_outside_its_clock(617.371_ms)
+CTD-SPAN lane=ols dataset=taxi arm=ours input_home=host inside_clock=host_to_device_upload,host_validation,call upload_ms_untimed=- fit_ms_untimed=- pre_clock_fit=false pre_clock_fit_source=declared
+CTD-SPAN lane=ols dataset=taxi arm=cuml-gpu input_home=device inside_clock=call upload_ms_untimed=140.397 fit_ms_untimed=- pre_clock_fit=false pre_clock_fit_source=declared
+CTD-SPAN lane=ols dataset=taxi arm=torch-gpu input_home=device inside_clock=call upload_ms_untimed=21.647 fit_ms_untimed=- pre_clock_fit=false pre_clock_fit_source=declared
+CTD-SPAN lane=ols dataset=taxi arm=torch-gpu-eigh input_home=device inside_clock=call upload_ms_untimed=28.786 fit_ms_untimed=- pre_clock_fit=false pre_clock_fit_source=declared
+CTD-RATIO lane=ols dataset=taxi ours/cuml-gpu=7.7455 ours/torch-gpu=2.5030 ours/torch-gpu-eigh=85.2365 span_asymmetry=cuml-gpu:upload_outside_its_clock(140.397_ms),torch-gpu:upload_outside_its_clock(21.647_ms),torch-gpu-eigh:upload_outside_its_clock(28.786_ms)
+CTD-SPAN lane=ols dataset=istella arm=ours input_home=host inside_clock=host_to_device_upload,host_validation,call upload_ms_untimed=- fit_ms_untimed=- pre_clock_fit=false pre_clock_fit_source=declared
+CTD-SPAN lane=ols dataset=istella arm=cuml-gpu input_home=device inside_clock=call upload_ms_untimed=1046.664 fit_ms_untimed=- pre_clock_fit=false pre_clock_fit_source=declared
+CTD-SPAN lane=ols dataset=istella arm=torch-gpu input_home=device inside_clock=call upload_ms_untimed=194.552 fit_ms_untimed=- pre_clock_fit=false pre_clock_fit_source=declared
+CTD-SPAN lane=ols dataset=istella arm=torch-gpu-eigh input_home=device inside_clock=call upload_ms_untimed=625.370 fit_ms_untimed=- pre_clock_fit=false pre_clock_fit_source=declared
+CTD-RATIO lane=ols dataset=istella ours/cuml-gpu=15.4645 ours/torch-gpu=13.8699 ours/torch-gpu-eigh=135.4335 span_asymmetry=cuml-gpu:upload_outside_its_clock(1046.664_ms),torch-gpu:upload_outside_its_clock(194.552_ms),torch-gpu-eigh:upload_outside_its_clock(625.370_ms)
+CTD-SPAN lane=knn dataset=taxi arm=ours input_home=host inside_clock=host_to_device_upload,host_validation,call upload_ms_untimed=- fit_ms_untimed=- pre_clock_fit=false pre_clock_fit_source=declared
+CTD-SPAN lane=knn dataset=taxi arm=cuml-gpu input_home=device inside_clock=call upload_ms_untimed=19.554 fit_ms_untimed=- pre_clock_fit=true pre_clock_fit_source=declared
+CTD-SPAN lane=knn dataset=taxi arm=torch-gpu input_home=device inside_clock=call upload_ms_untimed=2.912 fit_ms_untimed=- pre_clock_fit=false pre_clock_fit_source=declared
+CTD-RATIO lane=knn dataset=taxi ours/cuml-gpu=2.3846 ours/torch-gpu=0.6955 span_asymmetry=cuml-gpu:upload_outside_its_clock(19.554_ms)+fit_before_its_clock(unmeasured),torch-gpu:upload_outside_its_clock(2.912_ms)
+CTD-SPAN lane=knn dataset=istella arm=ours input_home=host inside_clock=host_to_device_upload,host_validation,call upload_ms_untimed=- fit_ms_untimed=- pre_clock_fit=false pre_clock_fit_source=declared
+CTD-SPAN lane=knn dataset=istella arm=cuml-gpu input_home=device inside_clock=call upload_ms_untimed=270.183 fit_ms_untimed=- pre_clock_fit=true pre_clock_fit_source=declared
+CTD-SPAN lane=knn dataset=istella arm=torch-gpu input_home=device inside_clock=call upload_ms_untimed=53.672 fit_ms_untimed=- pre_clock_fit=false pre_clock_fit_source=declared
+CTD-RATIO lane=knn dataset=istella ours/cuml-gpu=2.3037 ours/torch-gpu=2.3307 span_asymmetry=cuml-gpu:upload_outside_its_clock(270.183_ms)+fit_before_its_clock(unmeasured),torch-gpu:upload_outside_its_clock(53.672_ms)
+CTD-SPAN lane=kde dataset=taxi arm=ours input_home=host inside_clock=host_to_device_upload,host_validation,call upload_ms_untimed=- fit_ms_untimed=- pre_clock_fit=false pre_clock_fit_source=declared
+CTD-SPAN lane=kde dataset=taxi arm=cuml-gpu input_home=device inside_clock=call upload_ms_untimed=7.876 fit_ms_untimed=- pre_clock_fit=true pre_clock_fit_source=declared
+CTD-RATIO lane=kde dataset=taxi ours/cuml-gpu=11.7192 span_asymmetry=cuml-gpu:upload_outside_its_clock(7.876_ms)+fit_before_its_clock(unmeasured)
+CTD-SPAN lane=kde dataset=istella arm=ours input_home=host inside_clock=host_to_device_upload,host_validation,call upload_ms_untimed=- fit_ms_untimed=- pre_clock_fit=false pre_clock_fit_source=declared
+CTD-SPAN lane=kde dataset=istella arm=cuml-gpu input_home=device inside_clock=call upload_ms_untimed=65.854 fit_ms_untimed=- pre_clock_fit=true pre_clock_fit_source=declared
+CTD-RATIO lane=kde dataset=istella ours/cuml-gpu=8.9050 span_asymmetry=cuml-gpu:upload_outside_its_clock(65.854_ms)+fit_before_its_clock(unmeasured)
+CTD-SPAN lane=svc dataset=taxi arm=ours input_home=host inside_clock=host_to_device_upload,host_validation,call upload_ms_untimed=- fit_ms_untimed=- pre_clock_fit=false pre_clock_fit_source=declared
+CTD-SPAN lane=svc dataset=taxi arm=cuml-gpu input_home=device inside_clock=call upload_ms_untimed=3.873 fit_ms_untimed=- pre_clock_fit=false pre_clock_fit_source=declared
+CTD-RATIO lane=svc dataset=taxi ours/cuml-gpu=1.8344 span_asymmetry=cuml-gpu:upload_outside_its_clock(3.873_ms)
+CTD-SPAN lane=svc dataset=istella arm=ours input_home=host inside_clock=host_to_device_upload,host_validation,call upload_ms_untimed=- fit_ms_untimed=- pre_clock_fit=false pre_clock_fit_source=declared
+CTD-SPAN lane=svc dataset=istella arm=cuml-gpu input_home=device inside_clock=call upload_ms_untimed=13.897 fit_ms_untimed=- pre_clock_fit=false pre_clock_fit_source=declared
+CTD-RATIO lane=svc dataset=istella ours/cuml-gpu=3.0725 span_asymmetry=cuml-gpu:upload_outside_its_clock(13.897_ms)
+CTD-SPAN lane=dbscan dataset=taxi arm=ours input_home=host inside_clock=host_to_device_upload,host_validation,call upload_ms_untimed=- fit_ms_untimed=- pre_clock_fit=false pre_clock_fit_source=declared
+CTD-SPAN lane=dbscan dataset=taxi arm=cuml-gpu input_home=device inside_clock=call upload_ms_untimed=37.156 fit_ms_untimed=- pre_clock_fit=false pre_clock_fit_source=declared
+CTD-RATIO lane=dbscan dataset=taxi ours/cuml-gpu=0.0839 span_asymmetry=cuml-gpu:upload_outside_its_clock(37.156_ms)
+CTD-SPAN lane=dbscan dataset=istella arm=ours input_home=host inside_clock=host_to_device_upload,host_validation,call upload_ms_untimed=- fit_ms_untimed=- pre_clock_fit=false pre_clock_fit_source=declared
+CTD-SPAN lane=dbscan dataset=istella arm=cuml-gpu input_home=device inside_clock=call upload_ms_untimed=500.604 fit_ms_untimed=- pre_clock_fit=false pre_clock_fit_source=declared
+CTD-RATIO lane=dbscan dataset=istella ours/cuml-gpu=6.1215 span_asymmetry=cuml-gpu:upload_outside_its_clock(500.604_ms)
+CTD-SPAN lane=hdbscan dataset=taxi arm=cuml-gpu input_home=device inside_clock=call upload_ms_untimed=7.626 fit_ms_untimed=- pre_clock_fit=false pre_clock_fit_source=declared
+CTD-SPAN lane=hdbscan dataset=istella arm=cuml-gpu input_home=device inside_clock=call upload_ms_untimed=65.838 fit_ms_untimed=- pre_clock_fit=false pre_clock_fit_source=declared

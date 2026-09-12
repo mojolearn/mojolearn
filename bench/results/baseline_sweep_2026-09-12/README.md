@@ -489,3 +489,46 @@ the GPU opponents are timed with inputs already device-resident while ours
 uploads and validates inside the call (see the span table). Two of them --
 cuML's OLS and torch's OLS on Istella-S -- are struck entirely, because a
 solver that returns R2 = -6473 or NaN is not a faster solver.
+
+## Owed item 3: DEVIATION 2634 on criteo is INERT, so the old 2.1% was never 2634
+
+`OPPONENT_REFERENCE.md:2274-2320` recorded a 2634 A/B that measured a clean
+2.1% separation and refused to claim it, because nothing observed whether the
+branch executed. The worry was specific: 2634 gates on
+`len(dependent_configs) > 0 and ctr_prep_wanted`, and if `dependent_configs`
+were EMPTY on criteo then neither build built the prep and the gap belonged to
+something else. Re-run here with the marker in the log, 1,000,000 rows, 3
+rounds, ours-vs-ours:
+
+| build | `.so` sha256 | marker | median ms |
+|---|---|---|---:|
+| ctr_on (shipped) | `9e354d27…` | `dependent=3 cat_columns=26 ctr_prep_wanted=True prep=ran gate_2634=on` | 14,264.5 |
+| ctr_off (`-D MOJOLEARN_2634_CTR_PREP_OFF=1`) | `17246d59…` | `dependent=3 cat_columns=26 ctr_prep_wanted=True prep=ran gate_2634=off` | 14,180.4 |
+
+**`dependent=3`, not 0 -- so the feared explanation is ruled out. And `prep=ran`
+on BOTH SIDES, which is the actual answer: 2634 is behaviorally INERT on
+criteo.** The deviation skips the CTR target prep when NO column is
+categorical; criteo declares 26, so the skip never fires and the two builds do
+identical work. Everything downstream agrees: identical quality (logloss
+0.128083, AUC 0.742472) and **the identical model hash `70e7ff4f27045344`
+across both builds and all six rounds**, while the compiled binaries genuinely
+differ. The 0.6% by which ctr_on is SLOWER is run-to-run noise, not a
+mechanism.
+
+So the published 2.1% cannot have been 2634 either -- not because the branch
+never ran, but because the gate cannot change the outcome on the one dataset
+chosen to exercise it. **2634 is measurable only where there are NO categorical
+columns**, which is exactly where its 0.9603 flip verdict was taken (taxi and
+Istella-S). criteo can price the CTR PATH; it cannot price this switch.
+
+**A correction to this lane's own tooling.** `criteo_2634_ab.sh` prints a
+legend enumerating two outcomes -- `prep=ran` on both, or `dependent=0` on both
+-- and the case actually observed is a third one it did not name: the gate
+compiles differently, `dependent>0`, `prep=ran` on both, and the behaviour is
+nonetheless identical because the skip condition is false. The legend is
+incomplete and is recorded here as incomplete rather than quietly reinterpreted
+to fit.
+
+Nothing here moves a default. criteo is not a section 9 gating dataset, both
+arms are ours, and the finding is that a switch is untestable on this fixture
+-- which is a statement about the fixture, not a verdict on the switch.
