@@ -18,7 +18,22 @@
 name: Byte LM CPU gate
 
 on:
+  # DEVIATION 2680. `train_steps` narrows the CPU training comparison without a
+  # commit; the default is ALL 128 steps.
+  #
+  # An earlier revision sampled `every:16` on the reasoning that a replay costs
+  # about ten seconds per step, so 128 would be twenty minutes on each of seven
+  # runners. That estimate was wrong by roughly twentyfold: it came from a
+  # 32-second window that actually contained a binding build. Measured, the full
+  # 128-step job takes 2m23s against the sample's 2m6s, so sampling bought
+  # seventeen seconds and cost 119 steps of coverage. Narrowing is now only for
+  # bisecting a failure to one step.
   workflow_dispatch:
+    inputs:
+      train_steps:
+        description: "CPU training steps to compare: all, every:N, or a comma list"
+        required: false
+        default: "all"
   push:
     branches:
       - "main"
@@ -192,7 +207,8 @@ jobs:
           set -o pipefail
           python3 -m pip install --quiet numpy pytest
           cd python
-          python3 -m pytest -q mojolearn/tests/test_byte_lm_host.py 2>&1 | tee "$GATE_OUT/pytest_host.log"
+          python3 -m pytest -q mojolearn/tests/test_byte_lm_host.py \
+            mojolearn/tests/test_byte_lm_host_trainer.py 2>&1 | tee "$GATE_OUT/pytest_host.log"
 
       # DEVIATION 2640: the threaded path against the reference path byte for
       # byte through the public surface, at every batch from 1 to 8 and every
@@ -205,6 +221,52 @@ jobs:
           set -o pipefail
           python3 tools/byte_lm_host_path_sweep.py --threads 1,2,3 --max-batch 8 \
             --report "$GATE_OUT/path_sweep.json" 2>&1 | tee "$GATE_OUT/path_sweep.log"
+
+      # DEVIATION 2680, AND THIS ONE IS ALLOWED TO FAIL THE WORKFLOW, because a
+      # gate that cannot fail is worthless. The first comparison of a CPU
+      # TRAINING step against recorded GPU bytes: it replays a step of the
+      # retained capture from that step's own initial parameters, moments and
+      # token ids, runs forward, backward and AdamW on this runner's CPU, and
+      # requires the gradient, the loss, and the post-step parameters and both
+      # Adam moments to equal the Apple/Metal bytes exactly. Each step is
+      # judged in isolation, so a failure names the step and the tensor.
+      # A few steps rather than all 128 while this is new; widen once it holds.
+      - name: CPU training step against the recorded Metal bytes
+        if: always()
+        run: |
+          set -o pipefail
+          python3 tools/byte_lm_cpu_train_gate.py cpu \
+            --steps "${{ github.event.inputs.train_steps || 'all' }}" --verify-digests \
+            --vendor apple --report "$GATE_OUT/cpu_train.json" 2>&1 \
+            | tee "$GATE_OUT/cpu_train.log"
+
+      # THE TRAINING PATH'S OWN NEGATIVE CONTROL, and it was missing until now.
+      # DEVIATION 2612's arm reverses a fold inside byte_host_logits, which the
+      # training step never calls: it goes to gemm_oracle directly. So a 2612
+      # sabotage build computes a CORRECT training step, and the gate above had
+      # never been shown capable of failing. These two steps fix that with the
+      # GEMM lane's own arm, which drops the transpose bookkeeping in the
+      # backward routing the host step calls through, so the gradient it
+      # produces is wrong by construction.
+      - name: Build the backward-sabotage binding (SAB_BWD_UNTRANSPOSED)
+        if: always()
+        env:
+          MOJOLEARN_BYTE_LM_HOST_OUTDIR: ${{ runner.temp }}/host-bwd-sab
+          MOJOLEARN_BUILD_EXTRA_DEFINES: "-D MOJOLEARN_GEMM_SABOTAGE_BWD_UNTRANSPOSED=1"
+        run: |
+          set -o pipefail
+          sh bindings/build_byte_lm_host.sh 2>&1 | tee "$GATE_OUT/build_bwd_sab.log"
+
+      - name: CPU training gate must catch the wrong gradient
+        if: always()
+        env:
+          MOJOLEARN_BYTE_LM_HOST_ALLOW_SABOTAGE: "1"
+          MOJOLEARN_BYTE_LM_HOST_BINARY: ${{ runner.temp }}/host-bwd-sab/_mojolearn_byte_lm_host.so
+        run: |
+          set -o pipefail
+          python3 tools/byte_lm_cpu_train_gate.py cpu --steps 1,64 --expect-mismatch \
+            --vendor apple --report "$GATE_OUT/cpu_train_sab.json" 2>&1 \
+            | tee "$GATE_OUT/cpu_train_sab.log"
 
       # DEVIATION 2680: re-derive the three-vendor TRAINING agreement from the
       # retained raw bytes, every one of the 128 steps, all 11 arrays per step

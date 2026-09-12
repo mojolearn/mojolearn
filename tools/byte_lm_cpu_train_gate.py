@@ -66,6 +66,10 @@ VENDORS = {
 PROFILE = 'mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1'
 N = 34944
 STEPS = 128
+#: The capture's training shape. `ids` is 66 int32 per step, which is
+#: `BATCH * (LENGTH + 1)`, the training batch layout the loss admits.
+BATCH = 2
+LENGTH = 32
 COUNTS = {key: N for key in
           ('initial_p', 'initial_m', 'initial_v', 'post_p', 'post_m', 'post_v', 'grad')}
 COUNTS.update(initial_flags=20, post_flags=20, loss=1, ids=66)
@@ -181,10 +185,52 @@ def locate(got, want, key):
     return None
 
 
+#: `kind` in a recorded optimizer config. The byte LM trainer admits only
+#: AdamW, and so does the CPU surface, so any other value is refused here
+#: rather than quietly compared against arithmetic it does not describe.
+OPT_ADAMW = 2
+
+
+def optimizer_config(tree, number):
+    """The optimizer configuration that produced this recorded step.
+
+    Read rather than assumed. The capture's own `config.optimizer` block is
+    what the GPU ran, and `post_p` is the only array that reads `lr` or
+    `weight_decay`, so a default guessed here fails the gate on
+    hyperparameters while the backward pass may be agreeing perfectly."""
+    meta = json.loads(read_text(step_dir(tree, number) / 'capture.json'))
+    config = meta.get('config', {})
+    opt = config.get('optimizer')
+    if not isinstance(opt, dict):
+        raise ValueError(f'step {number} records no optimizer configuration')
+    if opt.get('kind') != OPT_ADAMW:
+        raise ValueError(f'step {number} was not AdamW (kind {opt.get("kind")!r}); '
+                         'the CPU surface admits AdamW only')
+    for name in ('max_norm', 'momentum', 'dampening'):
+        if float(opt.get(name, 0.0)) != 0.0:
+            raise ValueError(f'step {number} used {name}={opt[name]}, which the '
+                             'CPU surface refuses')
+    if opt.get('nesterov'):
+        raise ValueError(f'step {number} used nesterov, which the CPU surface refuses')
+    for name in ('lr', 'beta1', 'beta2', 'eps', 'weight_decay'):
+        if name not in opt:
+            raise ValueError(f'step {number} records no {name}')
+    return opt
+
+
 def selected(argument):
-    """`all`, or a comma list of step numbers, or `a-b`."""
+    """`all`, `every:N`, a comma list of step numbers, or `a-b`.
+
+    `every:N` is step 1 and every Nth step after it, always including the
+    last, which is how a CI run samples the capture without paying for all
+    128 steps of a reference-path replay."""
     if argument == 'all':
         return list(range(1, STEPS + 1))
+    if argument.startswith('every:'):
+        stride = int(argument.split(':', 1)[1])
+        if stride < 1:
+            raise ValueError('every:N needs N >= 1')
+        return sorted({1, STEPS} | set(range(1, STEPS + 1, stride)))
     out = []
     for piece in argument.split(','):
         piece = piece.strip()
@@ -270,9 +316,14 @@ def mode_vendors(args):
 def mode_cpu(args):
     """The gate proper. Replay steps on the CPU and compare with one vendor.
 
-    The CPU training surface does not exist yet. This refuses rather than
-    reporting a vacuous pass, and names what it looked for, so the lane that
-    builds the host backward knows exactly what has to appear."""
+    Each step is replayed from its OWN recorded starting state, its own token
+    ids and its own optimizer configuration, so a step is judged in isolation
+    and a failure at step 87 needs no replay of the 86 before it. The gradient,
+    the loss bits, and the post-step parameters and both Adam moments must equal
+    the recorded bytes exactly.
+
+    If the surface is absent this refuses with exit 2 and names what it looked
+    for, rather than reporting a pass over nothing."""
     tree = VENDORS.get(args.vendor)
     if tree is None or not tree.is_dir():
         print(f'gate: vendor tree not present: {args.vendor}', file=sys.stderr)
@@ -290,29 +341,50 @@ def mode_cpu(args):
         import importlib
         module = importlib.import_module('mojolearn._byte_lm_host')
         trainer = getattr(module, 'LanguageModelHostTrainer', None)
+        le_bytes = importlib.import_module('mojolearn._bufcheck').le_bytes
+        frombytes = importlib.import_module('mojolearn._buffer').frombytes
     except Exception as exc:
         reason = f'{type(exc).__name__}: {exc}'
     if trainer is None:
         if reason is not None:
             print(f'gate: could not reach the host module ({reason})', file=sys.stderr)
         print('gate: no CPU training surface. This gate needs '
-              'mojolearn.LanguageModelHostTrainer with train_step(ids) returning the '
-              'loss and exposing the gradient and the Adam moments, built from the '
-              'host backward pass (DEVIATION 2680). Until it exists there is nothing '
-              'to compare and this is not a pass.', file=sys.stderr)
+              'mojolearn._byte_lm_host.LanguageModelHostTrainer, built from the host '
+              'backward pass (DEVIATION 2680) with the binding entry '
+              'byte_lm_host_train_step. Until it exists there is nothing to compare '
+              'and this is not a pass.', file=sys.stderr)
         return 2, None
     steps = selected(args.steps)
     compared, mismatches = 0, []
+    used_optimizer = None
     for number in steps:
         desc = descriptors(tree, number) if args.verify_digests else {}
         start = {key: array(tree, number, key, desc.get(key))
                  for key in ('initial_p', 'initial_m', 'initial_v', 'ids')}
-        model = trainer.from_state(start['initial_p'], start['initial_m'], start['initial_v'],
-                                   completed_steps=number - 1)
-        model.train_step(start['ids'])
-        produced = dict(grad=model.gradient_bytes(), loss=model.loss_bytes(),
-                        post_p=model.parameter_bytes(), post_m=model.moment_bytes('m'),
-                        post_v=model.moment_bytes('v'))
+        # The recorded arrays are raw little-endian bytes, which is what the
+        # surface accepts as parameters and moments, and the ids are int32.
+        # THE OPTIMIZER COMES FROM THE CAPTURE, NOT FROM DEFAULTS. Each step's
+        # capture.json records the configuration that produced it (lr 0.003 and
+        # weight_decay 0.01 here, not the surface's 0.001 and 0.0), and post_p
+        # is the only array that reads either. Assuming defaults made this gate
+        # fail on hyperparameters while the backward pass was in fact agreeing,
+        # which is a gate testing the wrong thing.
+        opt = optimizer_config(tree, number)
+        used_optimizer = opt
+        model = trainer.from_state(
+            frombytes(start['initial_p'], '<f4', (N,)),
+            frombytes(start['initial_m'], '<f4', (N,)),
+            frombytes(start['initial_v'], '<f4', (N,)),
+            completed_steps=number - 1,
+            lr=opt['lr'], betas=(opt['beta1'], opt['beta2']), eps=opt['eps'],
+            weight_decay=opt['weight_decay'])
+        ids = frombytes(start['ids'], '<i4', (BATCH, LENGTH + 1))
+        bits = model.train_step(ids)
+        produced = dict(grad=le_bytes(model.gradient_, 'f'),
+                        loss=struct.pack('<I', bits),
+                        post_p=le_bytes(model.parameters_, 'f'),
+                        post_m=le_bytes(model.m_, 'f'),
+                        post_v=le_bytes(model.v_, 'f'))
         for key, got in produced.items():
             compared += 1
             want = array(tree, number, key, desc.get(key))
@@ -321,13 +393,31 @@ def mode_cpu(args):
                 row.update(step=number, vendor=args.vendor)
                 if len(mismatches) < 20:
                     mismatches.append(row)
-    verdict = 'PASS' if not mismatches else 'FAIL'
+    # A SABOTAGE BUILD MUST FAIL THIS GATE. With --expect-mismatch the verdict
+    # inverts: agreement becomes the failure, because a control that cannot
+    # fire proves nothing about the gate it is meant to validate.
+    if args.expect_mismatch:
+        verdict = 'PASS' if mismatches else 'FAIL'
+    else:
+        verdict = 'PASS' if not mismatches else 'FAIL'
     report = dict(schema='mojolearn.byte-lm-cpu-train-gate.v1', mode='cpu',
                   deviation=2680, profile=PROFILE, vendor=args.vendor,
                   steps=len(steps), compared=compared, mismatched=len(mismatches),
-                  first_mismatches=mismatches, verdict=verdict)
+                  first_mismatches=mismatches, optimizer=used_optimizer,
+                  expect_mismatch=args.expect_mismatch, verdict=verdict)
     print(f'gate: {verdict}: {compared - len(mismatches)}/{compared} array comparisons equal '
-          f'over {len(steps)} steps against {args.vendor}')
+          f'over {len(steps)} steps against {args.vendor}'
+          f'{" (sabotage build, a mismatch was required)" if args.expect_mismatch else ""}')
+    if used_optimizer is not None:
+        # State the optimizer, so a hyperparameter error is distinguishable
+        # from an arithmetic one without re-deriving it.
+        print('gate: optimizer from the capture: '
+              + ' '.join(f'{k}={used_optimizer[k]!r}'
+                         for k in ('lr', 'beta1', 'beta2', 'eps', 'weight_decay')))
+    # NAME THE TENSOR. A verdict of 12/15 with nothing else said is close to
+    # useless: it cannot tell a wrong gradient from a wrong hyperparameter.
+    for row in mismatches[:10]:
+        print(f'gate: mismatch {row}')
     return (0 if verdict == 'PASS' else 1), report
 
 
@@ -340,6 +430,9 @@ def main(argv=None):
                         help='which tree the cpu mode compares against')
     parser.add_argument('--verify-digests', action='store_true',
                         help='also check every array against the SHA-256 its capture.json records')
+    parser.add_argument('--expect-mismatch', action='store_true',
+                        help='cpu mode only: invert the verdict, so a sabotage build '
+                             'that still agrees is the failure')
     parser.add_argument('--require-vendors', type=int, default=1, metavar='N',
                         help='refuse unless at least N vendor trees are present (default 1). '
                              'Pass 3 where a cross-vendor comparison is the point; CI holds '

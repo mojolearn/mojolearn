@@ -18,12 +18,25 @@ from std.python.bindings import PythonModuleBuilder
 
 from bindings.hostptr import f32_ptr, f64_ptr, read_f32, read_i32
 from checks.numerics import GLOBAL_NUMERIC_MODE
+# DEVIATION 2680. The GEMM lane's backward sabotage arms, so a build carrying
+# one reads back as a sabotage build rather than as a clean one. Reachable
+# because the host backward routing already calls into this module; the probe
+# measured that a CPU-only build of it compiles (exit 0 on seven runners).
+from gemm.checks.gemm_backward import ANY_BWD_SABOTAGE
 from training.byte_lm_config import ByteConfig
 from training.byte_lm_host import (
     byte_host_logits,
     byte_host_logits_threaded,
     byte_host_loss,
     byte_host_sabotage_compiled,
+)
+# DEVIATION 2680. The CPU training step. This import is what puts the host
+# backward pass inside the certified CPU inference artifact, so the loss gate's
+# 33 of 33 and the DEVIATION 2612 sabotage catch must both be unmoved
+# afterwards; either one shifting is a stop, not something to reconcile.
+from training.byte_lm_host_backward import (
+    byte_host_adamw,
+    byte_host_train_step,
 )
 
 
@@ -59,7 +72,17 @@ def byte_lm_host_vendor_binding() raises -> PythonObject:
 
 
 def byte_lm_host_sabotage_binding() raises -> PythonObject:
-    return PythonObject(byte_host_sabotage_compiled())
+    """Whether this binary computes wrong answers on purpose, from ANY arm.
+
+    DEVIATION 2680 widened this. It used to report the DEVIATION 2612 host arm
+    alone, which reverses a fold inside `byte_host_logits`. That arm cannot
+    reach the training step, which calls `gemm_oracle` directly, so the GEMM
+    lane's backward arms are the ones that corrupt a gradient here. A binary
+    built with one of those would have computed wrong gradients while reading
+    back as clean, and `_byte_lm_host.py` refuses a sabotage build on exactly
+    this answer, so the refusal would not have fired. Either family is a
+    sabotage build and this says so."""
+    return PythonObject(byte_host_sabotage_compiled() or ANY_BWD_SABOTAGE)
 
 
 def byte_lm_host_profile_binding(shape: PythonObject) raises -> PythonObject:
@@ -110,6 +133,69 @@ def byte_lm_host_logits_binding(addresses: PythonObject, dims: PythonObject,
     for i in range(len(logits)):
         out.unsafe_store(i, logits[i])
     return PythonObject(len(logits))
+
+
+def _write_span(address: Int, values: List[Float32]) raises:
+    """Copy a host list into a caller-owned buffer at `address`.
+
+    `raises` because `f32_ptr` refuses a null address, and a function that
+    calls a raising function must say so."""
+    var out = f32_ptr(address)
+    for i in range(len(values)):
+        out.unsafe_store(i, values[i])
+
+
+def byte_lm_host_train_step_binding(addresses: PythonObject, shape: PythonObject,
+                                    scalars: PythonObject,
+                                    completed: PythonObject) raises -> PythonObject:
+    """One CPU training step (DEVIATION 2680). Reference path only.
+
+    `addresses` is eight, the first four read and the last four written:
+
+        params f32 (n_total)        m f32 (n_total)      v f32 (n_total)
+        ids i32 (batch * (length + 1))
+        grad f32 (n_total)          post_p f32 (n_total)
+        post_m f32 (n_total)        post_v f32 (n_total)
+
+    `scalars` is five floats, the AdamW configuration `(lr, beta1, beta2, eps,
+    weight_decay)`, spelled the one way `byte_validate_optimizer` allows: no
+    clipping, no momentum, no dampening, no nesterov. `completed` is the number
+    of steps ALREADY taken, so the optimizer's `t` is `completed + 1`.
+
+    Returns the loss's IEEE-754 bits, as `byte_lm_host_loss` does, because a
+    loss compared as a float is a loss compared with a tolerance.
+
+    NO THREADED PATH. The threaded forward (DEVIATION 2640) has no backward
+    twin and must not grow one by accident: a weight gradient sums over every
+    row of the batch, so unlike the forward it crosses every thread boundary
+    and needs a fixed cross-thread fold rather than threads accumulating as
+    they finish.
+    """
+    var cfg = _host_config(shape)
+    if len(addresses) != 8:
+        raise Error("byte LM host: train step expects 8 addresses")
+    if len(scalars) != 5:
+        raise Error("byte LM host: train step expects 5 optimizer scalars")
+    var completed_steps = _index(completed)
+    if completed_steps < 0:
+        raise Error("byte LM host: completed_steps must not be negative")
+    var n = cfg.n_total()
+    var params = read_f32(_index(addresses[0]), n)
+    var m_state = read_f32(_index(addresses[1]), n)
+    var v_state = read_f32(_index(addresses[2]), n)
+    var ids = read_i32(_index(addresses[3]), cfg.batch * (cfg.length + 1))
+    var opt = byte_host_adamw(
+        Float32(Float64(py=scalars[0])), Float32(Float64(py=scalars[1])),
+        Float32(Float64(py=scalars[2])), Float32(Float64(py=scalars[3])),
+        Float32(Float64(py=scalars[4])),
+    )
+    var step = byte_host_train_step(params, m_state, v_state, ids, cfg, opt,
+                                   completed_steps)
+    _write_span(_index(addresses[4]), step.grad)
+    _write_span(_index(addresses[5]), step.param)
+    _write_span(_index(addresses[6]), step.m_state)
+    _write_span(_index(addresses[7]), step.v_state)
+    return PythonObject(Int(bitcast[DType.uint32](step.loss)))
 
 
 def byte_lm_host_loss_binding(addresses: PythonObject, shape: PythonObject,
@@ -203,6 +289,7 @@ def PyInit__mojolearn_byte_lm_host() abi("C") -> PythonObject:
         module.def_function[byte_lm_host_profile_binding]("byte_lm_host_profile")
         module.def_function[byte_lm_host_logits_binding]("byte_lm_host_logits")
         module.def_function[byte_lm_host_loss_binding]("byte_lm_host_loss")
+        module.def_function[byte_lm_host_train_step_binding]("byte_lm_host_train_step")
         module.def_function[all_finite_f32_binding]("all_finite_f32")
         module.def_function[all_finite_f64_binding]("all_finite_f64")
         module.def_function[cast_f64_to_f32_binding]("cast_f64_to_f32")

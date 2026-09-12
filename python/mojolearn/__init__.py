@@ -6,8 +6,15 @@ The same source tree targets Apple Metal, NVIDIA CUDA, and AMD HIP.
 ``identical`` is the default mode and promises cross-vendor bit identity for
 configurations certified in the project's support matrix. A GPU is required
 for every estimator, block and trainer, and there is no CPU fallback for them.
-The one CPU surface is ``LanguageModelInference``, byte LM inference on the
-CPU, certified only on the CPUs listed in docs/BYTE_LM_CPU_INFERENCE.md.
+There are two CPU surfaces, both for the byte LM and both certified only on the
+CPUs their docs list. ``LanguageModelInference`` runs the forward pass
+(docs/BYTE_LM_CPU_INFERENCE.md). ``LanguageModelHostTrainer`` runs one training
+step, forward, backward and the AdamW update
+(docs/BYTE_LM_CPU_TRAINING.md), and reproduces the recorded GPU bytes of the
+retained three-vendor capture for all 128 of its steps: the gradient, the loss,
+and the post-step parameters and both Adam moments. Both are one model profile
+at one batch shape; identity is claimed per shape, because the weight gradients
+contract over the token count.
 
 The tree and classical estimators additionally offer ``fast`` and
 ``deterministic``. THE NEURAL SURFACE DOES NOT: ``TransformerBlock``, the
@@ -141,7 +148,7 @@ from .umap import UMAP
 from .neural_network import SmallMLPTrainer
 from .language_model import (SmallByteLanguageModelTrainer, ByteLanguageModelConfig,
                              LanguageModelTrainer, LanguageModelConfig,
-                             LanguageModelInference)
+                             LanguageModelInference, LanguageModelHostTrainer)
 from ._svm_impl import SVC, SVR
 from ._arima_impl import ARIMA
 from ._tsa_impl import ExponentialSmoothing, kpss_test, select_d
@@ -295,6 +302,7 @@ __all__ = [
     "LanguageModelConfig",
     "LanguageModelTrainer",
     "LanguageModelInference",
+    "LanguageModelHostTrainer",
     "kpss_test",
     "linalg",
     "matmul",
