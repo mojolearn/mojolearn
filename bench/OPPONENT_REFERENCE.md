@@ -2268,6 +2268,25 @@ What is owed to close it: emit the CTR config split and a prep-ran/prep-skipped
 marker from the fit, then re-run this A/B. The purpose-built probe
 (`tools/criteo_ours_cat_ab.py`) could not run at all here -- it hit the same
 density refusal -- so it has never priced 2634 either.
+
+**HALF OF THAT IS NOW DONE (2026-09-12, lane harness-honesty): THE MARKER
+EXISTS, THE RE-RUN IS STILL OWED.** `gbdt/train.mojo` prints, once per fit
+under `MOJOLEARN_CTR_TRACE=1`, every term of the gate and what the prep
+produced:
+
+    [ctr-2634] simple_ctr_configs=N independent=N dependent=N cat_columns=N \
+      ctr_prep_wanted=True prep=ran|skipped gate_2634=on|off permutations=N \
+      target_classes=N binarized_target_rows=N ctr_orders=N
+
+`dependent=` is the term whose emptiness would have made the 2.1% above belong
+to something else; `prep=` is the branch itself. The library stays silent
+unless the variable is set, and `bench/speed/forest_speed_arm.py` sets it on
+every run, so no leg has to remember to. The density refusal that blocked
+`criteo_ours_cat_ab.py` is also gone from the loader: `_criteo_densify_slice`
+re-ranks within the train slice. Nothing above is restated as attributable
+until the A/B is re-run with the marker in the log and `prep=ran` on the ON
+side and `prep=skipped` on the OFF side -- the marker makes the next run
+attributable, it does not retroactively attribute this one.
 ## NCCL all-reduce determinism, 4x NVIDIA A40, driver 570.195.03, torch 2.4.1+cu124, NCCL 2.20.5+cuda12.4
 
 Measured 2026-09-12 on RunPod pod `j3uf4hx92kqmwv` (4x A40, PCIe, no NVLink,

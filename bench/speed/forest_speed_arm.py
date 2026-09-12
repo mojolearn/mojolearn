@@ -533,6 +533,20 @@ def main(argv=None):
             "rest) on EVERY arm instead")
         dataset = "covtype2"
 
+    # DEVIATION 2634's REACH, turned on for every run of this harness
+    # (2026-09-12, lane harness-honesty). `gbdt/train.mojo` gates the CTR
+    # target prep on `len(dependent_configs) > 0 and ctr_prep_wanted` and
+    # nothing logged either term, so the 2.1% band its criteo A/B measured
+    # could not be attributed to the branch under test -- the reached-but-inert
+    # trap, recorded in OPPONENT_REFERENCE.md. The fit now prints the CTR
+    # config split and a prep=ran/skipped marker when this is set, and the
+    # LIBRARY stays silent unless it is: a shipped fit does not print.
+    # The harness always asks, so no leg has to remember to.
+    os.environ.setdefault("MOJOLEARN_CTR_TRACE", "1")
+    print("FSPEED-CTR-TRACE lane=%s MOJOLEARN_CTR_TRACE=%s (the fit prints its "
+          "CTR config split and prep marker; DEVIATION 2634 is observable)"
+          % (lane, os.environ["MOJOLEARN_CTR_TRACE"]), flush=True)
+
     data = spec.load_with_fallback(dataset, size, args.rows)
     cfg = spec.lane_config(lane, size)
     spec.prepare_cuml_labels(data)
@@ -595,7 +609,11 @@ def main(argv=None):
         spec.emit_refused(lane, "all", "nothing could be constructed on this "
                                        "box; see the refusals above")
         return 1
-    spec.run(lane, arms, data, spec.rounds(), size)
+    # `cfg` reaches the runner so the FIT-EQUIVALENCE check can hold each
+    # arm's FITTED tree count against the count this lane asked for. Without
+    # it the shapes are still reported and that one check is skipped; an
+    # expectation is never invented.
+    spec.run(lane, arms, data, spec.rounds(), size, cfg=cfg)
     return 0
 
 

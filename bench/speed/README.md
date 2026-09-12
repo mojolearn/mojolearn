@@ -51,6 +51,19 @@ path that deliberately uses TF32 compares with a correspondingly labelled TF32 a
 The parsers consume the `FSPEED-*` record format emitted by these drivers. Preserve existing field
 names when extending it; unknown records should remain visible as notes rather than disappearing.
 
+The forest/boosting driver also emits, after every timer, what each arm actually BUILT:
+`FSPEED-FIT` (trees, nodes, leaves, max depth, and the library API that answered),
+`FSPEED-FIT-NOTE`, and `FSPEED-FIT-VERDICT` (`COMPARABLE`, `NOT-COMPARABLE` or `UNKNOWN`). Holding a
+config equal is not the same as fitting comparable models: an arm that silently builds fewer or
+shallower trees just looks faster. `UNKNOWN` means the shapes could not be read and is **not** a
+pass. `tools/test_fit_equivalence.py` gates the extraction and the verdict on fixtures, with no GPU
+and no vendor library.
+
+A dataset that is missing on the box is a **refusal**, not a substitution. The loader used to fall
+back to a synthetic fixture and let the run succeed while every line described a different dataset;
+it now names the missing key and the manifest it was pinned in and stops. Generated fixtures are
+still reachable by name (`--dataset synthclf`, `synth`, `anomaly`).
+
 ## NVIDIA execution
 
 Guarded remote legs are launched through `tools/gemm_remote_leg.sh` with a bounded rental:

@@ -118,6 +118,21 @@ given identical configurations, whatever the config dict says, and a timing
 table that does not say so is reporting the speed of two different problems.
 A parser keyed on the four contract prefixes ignores it.
 
+Three more records are additive in the same way (2026-09-12, lane
+harness-honesty), and they answer the question nothing above them asked --
+what did each arm actually BUILD?
+
+    FSPEED-FIT lane=<l> arm=<a> library=<lib> trees=<n|-> nodes=<n|-> \
+        leaves=<n|-> depth_max=<n|-> source=<api>
+    FSPEED-FIT-NOTE lane=<l> arm=<a> <field>=<one line>
+    FSPEED-FIT-VERDICT lane=<l> arms=<a,b> leaves=<a:n,b:n> spread=<f> \
+        verdict=<COMPARABLE|NOT-COMPARABLE|UNKNOWN>
+
+Holding the config equal is not the same as fitting comparable models, and
+until these existed nothing in this file read a fitted ensemble at all. See
+FIT EQUIVALENCE below for what each field is read from and why UNAVAILABLE is
+reported by name instead of being left blank.
+
 BUDGET, BECAUSE THE BOX IS RENTED AND THE HOUR IS SHORT
 --------------------------------------------------------
 `MOJOLEARN_SPEED_BUDGET_S` (default 300) is a per-arm wall budget and
@@ -1163,27 +1178,99 @@ def load_dataset(name, size, rows_cap=None):
     raise SystemExit("unknown dataset " + repr(name))
 
 
+#: Where `tools/dataset_store.sh` pins every dataset it can stage onto a box:
+#: one row of key, byte size, sha256. The refusal below names it, so a missing
+#: dataset sends the reader to the one file that says what it should have been.
+DATASET_MANIFEST = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "bench", "results", "dataset_store", "manifest.tsv")
+
+#: The manifest key a dataset's decoded cache is staged under, for the ones
+#: the R2 store carries. A dataset absent from this table is not pinned and is
+#: fetched with `--download <name>`; the refusal says which case it is.
+DATASET_STORE_KEYS = {
+    "taxi": "gbm-bench/taxi/taxi_speed.npz",
+    "taxireg": "gbm-bench/taxi/taxi_speed.npz",
+    "istella": "gbm-bench/istella/istella_speed.npz",
+    "istellareg": "gbm-bench/istella/istella_speed.npz",
+}
+
+#: Generated in process, so they cannot be missing and are never a substitute
+#: for anything. Asking for one BY NAME is legitimate; being handed one is not.
+GENERATED_DATASETS = ("synth", "synthclf", "anomaly")
+
+
+def _manifest_pin(key):
+    """`(size, sha256)` for `key` in the dataset-store manifest, or None."""
+    try:
+        with open(DATASET_MANIFEST, "r") as fh:
+            for line in fh:
+                fields = line.rstrip("\n").split("\t")
+                if len(fields) >= 3 and fields[0] == key:
+                    return fields[1], fields[2]
+    except OSError:
+        return None
+    return None
+
+
 def load_with_fallback(name, size, rows_cap=None):
-    """A download that failed must not cost the lease. Fall back to the
-    synthetic fixture of the SAME task, say so on stderr, and let every line
-    carry the fallback's own `shape=` tag so nobody reads a synth number as a
-    year number."""
+    """A MISSING DATASET IS A REFUSAL. THERE IS NO FALLBACK.
+
+    THIS FUNCTION USED TO SUBSTITUTE (removed 2026-09-12, lane
+    harness-honesty). When a download had failed it quietly loaded the
+    SYNTHETIC fixture of the same task, wrote one line to stderr, and let the
+    run continue. The reasoning was that a failed fetch must not cost the
+    lease. The effect was the worst failure mode a benchmark has: **the run
+    SUCCEEDED**. It printed a full table of plausible timings, an accuracy
+    column, model hashes and a flip verdict, all describing a different
+    dataset than the one every line above them named. stderr is not where a
+    results file is read, `shape=` was a tag nobody diffed, and a leg once
+    measured `synthclf` while believing it had Istella-S
+    (`tools/dataset_store.sh`'s own header records it, and
+    `tools/gbdt_accuracy_ab.sh` had to grow a shape-tag guard downstream to
+    catch it).
+
+    A benchmark suite that substitutes data on failure is a benchmark suite
+    that lies, and it lies in the direction nobody checks, because a run that
+    crashes gets investigated and a run that prints numbers does not.
+
+    So: the loader's own error is re-raised as a refusal that names the
+    dataset, the error, and the manifest the dataset is pinned in. The lease
+    is not the thing being protected here; the number is.
+
+    THE SYNTHETIC FIXTURES ARE STILL REACHABLE, BY NAME. `--dataset synthclf`,
+    `--dataset synth` and `--dataset anomaly` load exactly what they say and
+    tag every line with it. You may ASK for generated data. You may not be
+    GIVEN it."""
+    if name in GENERATED_DATASETS:
+        return load_dataset(name, size, rows_cap)
     try:
         return load_dataset(name, size, rows_cap)
     except Exception as exc:                       # noqa: BLE001
-        sys.stderr.write(
-            "speed_gbdt_arm: dataset %r unavailable (%s); falling back to "
-            "the synthetic fixture. Every line will say so in shape=.\n"
-            % (name, exc)
-        )
-        if name in ("covtype", "covtype2", "synthclf", "higgs", "istella",
-                    "taxi"):
-            return load_dataset("synthclf", size, rows_cap)
-        if name in ("higgsreg", "istellareg", "taxireg"):
-            return load_dataset("synth", size, rows_cap)
-        if name == "anomaly":
-            return load_dataset("anomaly", size, rows_cap)
-        return load_dataset("synth", size, rows_cap)
+        key = DATASET_STORE_KEYS.get(name)
+        pin = _manifest_pin(key) if key else None
+        if pin is not None:
+            where = ("%s is pinned in %s at %s bytes, sha256 %s; stage it with "
+                     "`sh tools/dataset_store.sh stage \"<ssh flags+target>\" %s`"
+                     % (key, DATASET_MANIFEST, pin[0], pin[1], key))
+        elif key:
+            where = ("%s is NOT pinned in %s (the manifest has no row for it); "
+                     "fetch it with `python tools/speed_gbdt_arm.py --download "
+                     "%s`" % (key, DATASET_MANIFEST, name))
+        else:
+            where = ("%r has no key in the dataset store (%s pins taxi and "
+                     "Istella-S only); fetch it with `python "
+                     "tools/speed_gbdt_arm.py --download %s`"
+                     % (name, DATASET_MANIFEST, name))
+        raise SystemExit(
+            "speed_gbdt_arm: REFUSING to run. Dataset %r is unavailable on "
+            "this box: %s: %s. %s. There is no synthetic fallback: a run that "
+            "substitutes data succeeds while describing a different dataset "
+            "than every line it prints. To measure generated data, ask for it "
+            "by name with --dataset synthclf, --dataset synth or --dataset "
+            "anomaly."
+            % (name, exc.__class__.__name__, " ".join(str(exc).split()),
+               where))
 
 
 def download(name):
@@ -1479,6 +1566,10 @@ class Arm(object):
         self.sync = sync or (lambda: None)
         #: Arms sharing a library are cross-checked for accuracy agreement.
         self.library = library or name.split("-")[0]
+        #: Set by `run` after the last round: what this arm's FITTED MODEL
+        #: turned out to be (trees, nodes, leaves, depth), read back through
+        #: the library's own API. See FIT EQUIVALENCE below.
+        self.fit_shape = None
 
 
 def _cuda_sync():
@@ -1664,12 +1755,43 @@ def xgboost_arms(lane, cfg, data, devices):
         intent... which is exactly why it is measured: the conversion is part
         of what an XGBoost user pays to use categoricals, the same way our
         staging cost is part of ours. It is not hidden from the clock for one
-        arm and charged to another."""
+        arm and charged to another.
+
+        ONE `CategoricalDtype` PER COLUMN, SHARED BY FIT AND PREDICT
+        (FIXED 2026-09-12, lane harness-honesty; found by lane criteo-smoke on
+        pod 0zl2hrxqq26b0t). This used to call plain `.astype("category")`,
+        which DERIVES the category set from the values in front of it -- so
+        the fit frame and the predict frame got two different sets and
+        XGBoost 3.2.0 raised while scoring:
+
+            Found a category not in the training set for the 32th (0-based)
+            column: 679286
+
+        The timings survived that and the QUALITY COLUMN DID NOT, which is the
+        shape of failure this lane exists for: the table still printed, one
+        column just quietly went missing. The category set is pinned to
+        `range(k)` over BOTH matrices, so fit and predict agree by
+        construction and a test-only code is a declared category the model
+        never split on rather than an error."""
         import pandas as pd
+        from pandas.api.types import CategoricalDtype
         df = pd.DataFrame(x)
         for j in cat_idx:
-            df[j] = df[j].astype("int64").astype("category")
+            k = _cat_levels[j]
+            df[j] = df[j].astype("int64").astype(
+                CategoricalDtype(categories=list(range(k))))
         return df
+
+    # The category count per declared column, over the train AND test blocks,
+    # computed ONCE here so both frames are built from the same table. Our
+    # loader maps a test value unseen in train to code k (one past the train
+    # maximum), so the test block legitimately carries a code the train block
+    # does not and `range(k)` has to span both.
+    _cat_levels = {}
+    for _j in (data.cat_idx or ()):
+        _hi = max(float(np.max(data.X_train[:, _j])),
+                  float(np.max(data.X_test[:, _j])))
+        _cat_levels[_j] = int(_hi) + 1
 
     def _fit(m, d):
         if not d.cat_idx:
@@ -2009,6 +2131,483 @@ score_sklearn_like = _score_sklearn_like
 
 
 # --------------------------------------------------------------------------
+# FIT EQUIVALENCE: compare the MODELS, not only the configs.
+# --------------------------------------------------------------------------
+#
+# THE HOLE THIS CLOSES (2026-09-12, lane harness-honesty). Every cell above
+# holds the hyper-parameters equal, spells them in ONE place (`lane_config`)
+# and prints them. Until today that was the entire fairness argument: two arms
+# were "the same problem" because one dict said so. NOTHING READ THE MODELS
+# THAT CAME OUT. An arm that silently built fewer trees, shallower trees or
+# fewer leaves -- because a library clamped a knob, because a default did not
+# mean what the table assumed, because a grow policy ran out of gain and
+# stopped early -- would simply look FASTER, and no line of the output would
+# say so. `_check_same_library_agreement` (DEVIATION 1839) catches only the
+# case where two arms OF ONE LIBRARY disagree on ACCURACY; it is blind to a
+# cross-library size difference, and blind to any difference that does not
+# move a metric.
+#
+# IT IS NOT HYPOTHETICAL. A hand-written check in
+# `tools/gbdt_fairness_probe.py` (lane gbdt-fairness, 2026-09-12) measured
+# CatBoost building about 120 FEWER LEAVES than ours on Istella-S under an
+# identical config. That one came out in OUR favour -- we were solving the
+# harder problem -- which is exactly why it had to be measured rather than
+# assumed: the same silence hides the reverse just as well, and the reverse is
+# a benchmark we would have published.
+#
+# WHAT THIS REPORTS, AND WHAT IT REFUSES TO GUESS. After the timed rounds and
+# outside every timer, each arm's LAST FITTED MODEL is read back through its
+# own library's API: tree count, node count, leaf count, maximum depth. Every
+# number carries the API that answered it, because `get_tree_leaf_counts` and
+# `get_leaf_values` are not the same measurement, and a reader comparing model
+# sizes is entitled to know which one this is. An arm whose library exposes
+# nothing says UNAVAILABLE BY NAME and the cell's verdict becomes UNKNOWN.
+#
+# **UNAVAILABLE IS NOT A PASS.** A cell where the shapes could not be read is
+# reported as UNKNOWN, never as comparable. The whole point is that an
+# unexamined comparison stops being quietly assumed to be fair.
+#
+# NOTHING HERE READS A CONFIG BACK AS EVIDENCE. `n_estimators` is what we
+# ASKED for; it is used only as the expectation a fitted tree count is checked
+# AGAINST, and it is never reported as if it were the tree count that came
+# out. An estimator that exposes only its constructor arguments exposes
+# nothing about its fit.
+
+#: Relative spread in total leaf count, across the arms of one cell, above
+#: which the arms are not solving comparable problems. Wide, deliberately: two
+#: libraries' growers legitimately differ (sklearn searches exact thresholds,
+#: cuML and ours bin; a lossguide budget lands differently), and this is a
+#: tripwire for a FACTOR, not a referee for a few percent.
+_FIT_LEAF_TOL = 0.10
+
+#: A depth walk is a host loop over every node of every tree. Above this many
+#: nodes the depth is reported as unknown rather than spending a minute of a
+#: rented box proving what the tree count and leaf count already said.
+_FIT_WALK_NODE_CAP = 20_000_000
+
+
+def _int_list(seq):
+    """A `mojolearn.Array`, a numpy array or a plain sequence -> list of int."""
+    if seq is None:
+        return None
+    return [int(v) for v in np.asarray(seq).ravel().tolist()]
+
+
+def _exact_log2(n):
+    """`d` when `n == 2 ** d`, else None. No float log: `log2(2**53+...)`
+    rounding is exactly the sort of thing that would put a wrong depth in a
+    table (`[[mojo-log-breaks-ties]]` is the same lesson one language over)."""
+    if n is None or n < 1:
+        return None
+    d, v = 0, int(n)
+    while v > 1:
+        if v & 1:
+            return None
+        v >>= 1
+        d += 1
+    return d
+
+
+def _flat_forest_depths(offsets, left_child):
+    """Max depth per tree of a flat cuML-shaped forest, or None.
+
+    `ensemble/flatnode.mojo`: a node is a LEAF iff `left_child == -1`
+    (`flatnode.h:58`) and the right child is `left_child + 1`, the sibling
+    rule (`flatnode.h:45`). `offsets[t]..offsets[t+1]` is tree `t`'s node
+    block and child indices are read as TREE-LOCAL.
+
+    A child index that does not land inside its own tree's block, or a walk
+    that visits more nodes than the tree has, returns None for the WHOLE
+    forest. It does not quietly reinterpret the index as a global one and
+    carry on: a depth computed by a walk that does not match the model's
+    layout is a wrong number, and a wrong number here is worse than no number,
+    which is this entire file's argument applied to itself.
+
+    Level by level in numpy, so the cost is O(depth) array operations per tree
+    rather than O(nodes) Python iterations."""
+    left = np.asarray(left_child, dtype=np.int64).ravel()
+    offs = np.asarray(offsets, dtype=np.int64).ravel()
+    if offs.size < 2 or int(offs[-1]) != left.size:
+        return None
+    depths = []
+    for t in range(offs.size - 1):
+        start, end = int(offs[t]), int(offs[t + 1])
+        n = end - start
+        if n <= 0:
+            return None
+        block = left[start:end]
+        cur = np.zeros(1, dtype=np.int64)
+        depth, visited = 0, 0
+        while cur.size:
+            visited += int(cur.size)
+            if visited > n:
+                return None                 # a cycle: the walk is not the layout
+            lc = block[cur]
+            internal = lc >= 0
+            if not internal.any():
+                break
+            kids = lc[internal]
+            if int(kids.min()) < 0 or int(kids.max()) + 1 >= n:
+                return None                 # not tree-local after all
+            cur = np.concatenate((kids, kids + 1))
+            depth += 1
+        depths.append(depth)
+    return depths
+
+
+def _shape_mojolearn(model):
+    """OUR arm. Two shapes live under one name and they are read differently.
+
+    GradientBoosting keeps its ensemble as MODEL TEXT (`model_`, the format in
+    `gbdt/models/model_text.mojo`), so the counts come from the public
+    accessor `get_tree_leaf_counts` -- CatBoost's own spelling, host-side,
+    launching no GPU work -- cross-checked against a parse of the text's own
+    `tree`/`ntree` records. The two disagreeing would itself be a defect, so
+    the disagreement is reported rather than resolved.
+
+    The forests (`RandomForest*`, `ExtraTrees*`) keep flat cuML-shaped arrays,
+    so the counts come from those directly."""
+    if hasattr(model, "get_tree_leaf_counts"):
+        counts = _int_list(model.get_tree_leaf_counts())
+        out = dict(library="mojolearn", source="get_tree_leaf_counts",
+                   trees=len(counts), leaves=int(sum(counts)))
+        declared, depths, internal, text_leaves = None, [], 0, 0
+        for line in str(getattr(model, "model_", "") or "").splitlines():
+            f = line.split()
+            if not f:
+                continue
+            if f[0] == "trees":
+                declared = int(f[1])
+            elif f[0] == "tree":                 # oblivious: `tree t depth d`
+                d = int(f[3])
+                depths.append(d)
+                text_leaves += 1 << d
+                internal += (1 << d) - 1
+            elif f[0] == "ntree":                # non-symmetric: `ntree t nodes n`
+                n = int(f[3])
+                text_leaves += n + 1
+                internal += n
+        out["nodes"] = int(internal + out["leaves"])
+        if depths and len(depths) == out["trees"]:
+            out["depth_max"] = int(max(depths))
+        else:
+            # A Depthwise/Lossguide model text carries node counts, not depth;
+            # recovering it needs the pre-order subtree walk, which is not
+            # worth a second parser here. Say so instead of leaving it blank.
+            out["depth_max"] = None
+            out["depth_note"] = "non-symmetric model text carries nodes, not depth"
+        if declared is not None and declared != out["trees"]:
+            out["disagreement"] = ("model text declares %d trees, "
+                                   "get_tree_leaf_counts returned %d"
+                                   % (declared, out["trees"]))
+        if text_leaves and text_leaves != out["leaves"]:
+            out["disagreement"] = ("model text holds %d leaves, "
+                                   "get_tree_leaf_counts returned %d"
+                                   % (text_leaves, out["leaves"]))
+        if getattr(model, "stopped_early_", False):
+            out["early_stopped"] = True
+            out["best_iteration"] = int(getattr(model, "best_iteration_", -1))
+        return out
+    if hasattr(model, "_offsets"):
+        offsets = _int_list(model._offsets)
+        left = np.asarray(model._left_child, dtype=np.int64).ravel()
+        out = dict(library="mojolearn", source="flat forest arrays",
+                   trees=len(offsets) - 1, nodes=int(left.size),
+                   leaves=int((left == -1).sum()))
+        if left.size <= _FIT_WALK_NODE_CAP:
+            depths = _flat_forest_depths(offsets, left)
+            out["depth_max"] = None if depths is None else int(max(depths))
+            if depths is None:
+                out["depth_note"] = "child indices do not match the flat layout"
+        else:
+            out["depth_max"] = None
+            out["depth_note"] = "%d nodes is above the walk cap" % left.size
+        return out
+    return dict(library="mojolearn", source="none",
+                note="this estimator exposes no fitted ensemble; "
+                     "IsolationForest rebuilds its forest per call "
+                     "(DEVIATION 874/1836) and keeps nothing to read")
+
+
+def _shape_catboost(model):
+    """CatBoost. `tree_count_` is the fitted count; the leaves come from
+    `get_tree_leaf_counts` where the build has it and from the flat
+    `get_leaf_values` where it does not. The two are labeled separately and
+    never merged, because they are not the same measurement."""
+    out = dict(library="catboost")
+    try:
+        out["trees"] = int(model.tree_count_)
+    except Exception as exc:                       # noqa: BLE001
+        out["trees"] = None
+        out["note"] = "tree_count_ unavailable: %s" % exc
+    counts = None
+    for name in ("get_tree_leaf_counts", "_get_tree_leaf_counts"):
+        try:
+            counts = _int_list(getattr(model, name)())
+            if counts:
+                out["source"] = name
+                break
+        except Exception:                          # noqa: BLE001
+            counts = None
+    if counts:
+        out["leaves"] = int(sum(counts))
+        out["nodes"] = None                        # their surface exposes none
+        per = max(counts)
+        if min(counts) == per:
+            out["depth_max"] = _exact_log2(per)    # oblivious: 2**depth leaves
+    else:
+        try:
+            out["leaves"] = int(np.asarray(model.get_leaf_values()).size)
+            out["source"] = "get_leaf_values"
+            out["leaves_note"] = ("flat leaf values, one per leaf for a "
+                                  "single-dimension objective")
+        except Exception as exc:                   # noqa: BLE001
+            out["leaves"] = None
+            out["note"] = "no leaf accessor answered: %s" % exc
+    return out
+
+
+def _shape_xgboost(model):
+    """XGBoost, from the booster's own text dump: one line per node, a leaf
+    line carries `leaf=`, and the depth is the deepest indentation."""
+    booster = model.get_booster()
+    dump = booster.get_dump(with_stats=False)
+    leaves, nodes, depth = 0, 0, 0
+    for tree in dump:
+        for line in tree.splitlines():
+            stripped = line.lstrip("\t")
+            if not stripped:
+                continue
+            nodes += 1
+            if "leaf=" in stripped:
+                leaves += 1
+            depth = max(depth, len(line) - len(stripped))
+    return dict(library="xgboost", source="booster.get_dump", trees=len(dump),
+                nodes=nodes, leaves=leaves, depth_max=depth)
+
+
+def _shape_lightgbm(model):
+    """LightGBM, from `dump_model`'s `tree_info`. `num_leaves` is exact and
+    free; the depth walk is bounded by the same node cap as everything else."""
+    info = model.booster_.dump_model()["tree_info"]
+    leaves = int(sum(int(t.get("num_leaves", 0)) for t in info))
+    out = dict(library="lightgbm", source="booster_.dump_model", trees=len(info),
+               leaves=leaves, nodes=max(0, 2 * leaves - len(info)))
+    if leaves > _FIT_WALK_NODE_CAP:
+        out["depth_max"] = None
+        out["depth_note"] = "%d leaves is above the walk cap" % leaves
+        return out
+    depth = 0
+    for tree in info:
+        stack = [(tree.get("tree_structure", {}), 0)]
+        while stack:
+            node, d = stack.pop()
+            if not isinstance(node, dict) or "split_index" not in node:
+                depth = max(depth, d)
+                continue
+            for side in ("left_child", "right_child"):
+                if side in node:
+                    stack.append((node[side], d + 1))
+    out["depth_max"] = depth
+    return out
+
+
+def _shape_sklearn(model):
+    """scikit-learn, from the fitted `estimators_` themselves. `tree_` carries
+    the node count, the children arrays and the realized depth exactly, so
+    this is the one arm where nothing has to be inferred."""
+    trees = list(getattr(model, "estimators_", []) or [])
+    if not trees:
+        return dict(library="sklearn", source="none",
+                    note="the fitted estimator exposes no estimators_")
+    nodes = int(sum(int(e.tree_.node_count) for e in trees))
+    leaves = int(sum(int(np.sum(np.asarray(e.tree_.children_left) == -1))
+                     for e in trees))
+    return dict(library="sklearn", source="estimators_[i].tree_",
+                trees=len(trees), nodes=nodes, leaves=leaves,
+                depth_max=int(max(int(e.tree_.max_depth) for e in trees)))
+
+
+def _shape_cuml(model):
+    """cuML. Their Python forest exposes no node or leaf accessor; the JSON
+    dump is the only door, it is not on every build, and on a big forest it is
+    a large string. Tried, bounded, and reported UNAVAILABLE by name when it
+    does not answer -- never backfilled from `n_estimators`, which is the
+    config we asked for and says nothing about the fit."""
+    import json
+    dumper = None
+    for name in ("get_json", "dump_as_json"):
+        if callable(getattr(model, name, None)):
+            dumper = getattr(model, name)
+            break
+    if dumper is None:
+        return dict(library="cuml", source="none",
+                    note="this cuML build exposes neither get_json nor "
+                         "dump_as_json, so its fitted shape cannot be read")
+    try:
+        trees = json.loads(dumper())
+    except Exception as exc:                       # noqa: BLE001
+        return dict(library="cuml", source="get_json",
+                    note="the JSON dump did not parse: %s" % exc)
+    if not isinstance(trees, list):
+        trees = [trees]
+    nodes = leaves = 0
+    depth = 0
+    for tree in trees:
+        stack = [(tree, 0)]
+        while stack:
+            node, d = stack.pop()
+            if not isinstance(node, dict):
+                continue
+            nodes += 1
+            kids = node.get("children")
+            if not kids:
+                leaves += 1
+                depth = max(depth, d)
+                continue
+            for kid in kids:
+                stack.append((kid, d + 1))
+    return dict(library="cuml", source="get_json", trees=len(trees),
+                nodes=nodes, leaves=leaves, depth_max=depth)
+
+
+#: Which reader answers for which library. Keyed on `Arm.library`, which every
+#: arm already sets, so a new opponent gets a reader or gets UNAVAILABLE --
+#: it cannot get a silent pass.
+MODEL_SHAPE_READERS = {
+    "mojolearn": _shape_mojolearn,
+    "catboost": _shape_catboost,
+    "xgboost": _shape_xgboost,
+    "lightgbm": _shape_lightgbm,
+    "sklearn": _shape_sklearn,
+    "cuml": _shape_cuml,
+}
+
+
+def model_shape(arm, model):
+    """`arm`'s fitted model as a shape dict. NEVER RAISES: a benchmark that
+    dies while inspecting a model it already timed has thrown away the
+    measurement it paid a rented box for."""
+    reader = MODEL_SHAPE_READERS.get(arm.library)
+    if reader is None:
+        return dict(library=arm.library, source="none",
+                    note="no fit-shape reader for this library")
+    try:
+        return reader(model)
+    except Exception as exc:                       # noqa: BLE001
+        return dict(library=arm.library, source="none",
+                    note="%s while reading the fitted model: %s"
+                         % (exc.__class__.__name__,
+                            " ".join(str(exc).split())[:160]))
+
+
+def _fit_field(shape, key):
+    v = shape.get(key)
+    return "-" if v is None else str(int(v))
+
+
+def emit_fit(lane, arm_name, shape):
+    print("FSPEED-FIT lane=%s arm=%s library=%s trees=%s nodes=%s leaves=%s "
+          "depth_max=%s source=%s"
+          % (lane, arm_name, shape.get("library", "-"),
+             _fit_field(shape, "trees"), _fit_field(shape, "nodes"),
+             _fit_field(shape, "leaves"), _fit_field(shape, "depth_max"),
+             shape.get("source", "-")))
+    for key in ("note", "leaves_note", "depth_note", "disagreement"):
+        if shape.get(key):
+            print("FSPEED-FIT-NOTE lane=%s arm=%s %s=%s"
+                  % (lane, arm_name, key, " ".join(str(shape[key]).split())))
+    sys.stdout.flush()
+
+
+def check_fit_equivalence(lane, arms, models, cfg=None):
+    """Read every arm's fitted model back, print it, and say whether the arms
+    of this cell were solving comparable problems.
+
+    Two separate questions, and they are answered separately on purpose:
+
+    1. **Did an arm build what it was asked to build?** A fitted tree count
+       below the lane's `n_estimators` is a REFUSAL by name, because that arm
+       did less work than the cell says it did and its time is not the time of
+       the job in the header. Early stopping is the one legitimate reason and
+       the arm has to SAY so (ours sets `stopped_early_`); an arm that just
+       came up short is refused.
+
+    2. **Were the arms solving comparable problems?** Compared across
+       libraries, on total leaves, with a wide tolerance. A difference here is
+       NOT automatically a defect -- two growers legitimately differ, and the
+       120-leaf CatBoost gap that motivated this check was real and in our
+       favour -- so it is a loud NOTE carrying both numbers, never a refusal.
+       What it is not is invisible.
+
+    The verdict line is COMPARABLE, NOT-COMPARABLE or UNKNOWN. UNKNOWN is
+    where the shapes could not be read, and it is not a pass."""
+    shapes = {}
+    for arm in arms:
+        model = models.get(arm.name)
+        if model is None:
+            continue
+        shape = model_shape(arm, model)
+        arm.fit_shape = shape
+        shapes[arm.name] = shape
+        emit_fit(lane, arm.name, shape)
+
+    expected = (cfg or {}).get("n_estimators")
+    for name, shape in sorted(shapes.items()):
+        trees = shape.get("trees")
+        if expected is None or trees is None:
+            continue
+        if trees < int(expected) and not shape.get("early_stopped"):
+            emit_refused(
+                lane, name,
+                "FIT-EQUIVALENCE: this arm FITTED %d trees where the lane's "
+                "config asked for %d, and it did not report early stopping. "
+                "Its timing is the time of a smaller job than the header "
+                "names and must not be put in a ratio against an arm that "
+                "built the full ensemble." % (trees, int(expected)))
+        elif trees != int(expected):
+            emit_note(lane, [name], "trees", float(trees - int(expected)),
+                      "FIT-EQUIVALENCE: fitted %d trees against a requested "
+                      "%d%s" % (trees, int(expected),
+                                "; the arm reports early stopping at "
+                                "iteration %d" % shape.get("best_iteration", -1)
+                                if shape.get("early_stopped") else ""))
+
+    known = {n: int(s["leaves"]) for n, s in shapes.items()
+             if s.get("leaves") is not None}
+    unknown = sorted(n for n in shapes if n not in known)
+    listing = ",".join("%s:%d" % kv for kv in sorted(known.items())) or "-"
+    if len(known) < 2:
+        print("FSPEED-FIT-VERDICT lane=%s arms=%s leaves=%s spread=- "
+              "verdict=UNKNOWN reason=fewer than two arms exposed a leaf "
+              "count; an unread comparison is not a fair one"
+              % (lane, ",".join(sorted(shapes)) or "-", listing))
+        sys.stdout.flush()
+        return shapes
+    lo, hi = min(known.values()), max(known.values())
+    spread = (hi - lo) / float(hi) if hi else 0.0
+    verdict = "NOT-COMPARABLE" if spread > _FIT_LEAF_TOL else "COMPARABLE"
+    if unknown:
+        verdict = "UNKNOWN"
+    print("FSPEED-FIT-VERDICT lane=%s arms=%s leaves=%s spread=%.4f "
+          "verdict=%s%s"
+          % (lane, ",".join(sorted(shapes)), listing, spread, verdict,
+             " unread=" + ",".join(unknown) if unknown else ""))
+    sys.stdout.flush()
+    if spread > _FIT_LEAF_TOL:
+        emit_note(
+            lane, sorted(known), "leaves", spread,
+            "FIT-EQUIVALENCE: the arms of this cell built ensembles differing "
+            "by %.1f%% in TOTAL LEAVES (%s), above the %.0f%% tripwire. The "
+            "configs were held equal, so the growers disagree about what that "
+            "config means: the arm with fewer leaves is solving a smaller "
+            "problem and the ratio prices two different jobs. This is not "
+            "automatically a defect -- it is a fact the table must carry."
+            % (100.0 * spread, listing, 100.0 * _FIT_LEAF_TOL))
+    return shapes
+
+
+# --------------------------------------------------------------------------
 # The opponent roster for a lane.
 # --------------------------------------------------------------------------
 
@@ -2249,7 +2848,8 @@ def emit_scale_reminder(data, stage):
              "Also test representative large datasets (taxi and istella at 1M rows or more)."))
 
 
-def run(lane, arms, data, n_rounds, size, dev=None, *, rotate_order=False, fit_context=None):
+def run(lane, arms, data, n_rounds, size, dev=None, *, rotate_order=False,
+        fit_context=None, cfg=None):
     """One untimed warm-up per arm, then `n_rounds` timed rounds in which
     every surviving arm takes one turn before any arm takes its second.
     Optional rotate_order advances the first arm each round to distribute
@@ -2367,6 +2967,12 @@ def run(lane, arms, data, n_rounds, size, dev=None, *, rotate_order=False, fit_c
                             " ".join(str(exc).split())))
 
     _check_same_library_agreement(lane, scores)
+    # FIT EQUIVALENCE, after every timer and after the accuracy column: what
+    # did each arm actually BUILD? `cfg` is the lane's own config dict, so the
+    # tree-count expectation is the one the table already published; passing
+    # None keeps the shape report and skips that one check rather than
+    # inventing an expectation.
+    check_fit_equivalence(lane, arms, last_model, cfg)
     emit_scale_reminder(data, "after")
     return live
 
@@ -2494,7 +3100,7 @@ def main(argv=None):
         emit_refused(args.lane, "all-opponents",
                      "no opponent could be constructed on this box")
         return 1
-    run(args.lane, arms, data, rounds(), size)
+    run(args.lane, arms, data, rounds(), size, cfg=cfg)
     return 0
 
 
