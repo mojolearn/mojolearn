@@ -1,0 +1,50 @@
+commit=bb679f19 parent 00cd9a5f
+commit_sha=bb679f1952527581c57fbb4cb0066d4a071cb58a
+provider=hotaisle
+vendor=amd
+team=andrews-team
+spec=13core
+lane=step-glue-amd
+minutes=60
+gates=1
+bare=0
+test_watchdog=0
+gpu_archs_requested=<unset>
+target_column=amd
+runtime_requested=auto
+image=rocm/dev-ubuntu-22.04:6.4.1-complete
+extra=/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/ece6c35f-471f-4b93-8fcf-f6462a0e5568/scratchpad/amd_glue_body.sh
+extra_sha256=c9879992b65f25ce87150a528a95e89b5ef1ac85c3d6663f71c610f571f73c11
+bundle_bytes=10261646
+bundle_sha256=4754ef4b856883767e0d46703e0b28e8d43fb0e12e218d7049e4058ee5d35c93
+source_sha256_local=afc19c2c7dea83ed382755d13fc77c5a5adff1f798be313675342269296ec6c4
+mode=rent
+started=2026-09-12T13:30:16Z
+balance_before_cents=2842
+slot=/tmp/mojolearn-hotaisle-slot.2 taken 2026-09-12T13:30:19Z
+price_cents_per_hour=299 min_reservation_minutes=1
+local_key_in_ps=not_visible
+create_http=200 create_utc=2026-09-12T13:30:31Z
+vm_ref=41001039-ac06-4550-b20c-326ea5322788
+vm_name=enc1-gpuvm016
+description=mojolearn:step-glue-amd:20260912T133020Z
+ssh=hotaisle@23.183.40.86:22 running_after_seconds=17
+box_key_in_ps=not_visible
+runtime=docker
+box_gfx=gfx942
+gpu_archs=gfx942
+upload_seconds=6
+image_pull=pull_exit=0 pull_seconds=96
+work_seconds=3205
+body=done
+source_sha256_match=yes
+remote_pixi_install_exit=0
+remote_pixi_install_seconds=3
+remote_device_check_exit=0
+remote_card_exit=0
+remote_extra_exit=0
+remote_body_exit=0
+finished=2026-09-12T13:49:31Z
+lease_used_seconds=1151
+slot=released /tmp/mojolearn-hotaisle-slot.2 2026-09-12T13:49:38Z
+balance_after_cents=2673

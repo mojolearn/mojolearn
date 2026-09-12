@@ -642,3 +642,103 @@ and on both of those columns `step_glue_default_arm_for` still returns
 all and there is no price to pay there yet. No bits were compared in this
 main: it is a timing harness, and the bit safety of the rows arms rests
 where it already rested, on section 4.1 and on the M4 gates of section 11.
+
+## 13. AMD flips it too (2026-09-12, measured): DEVIATION 2649 on gfx942
+
+Section 11 flipped NVIDIA and left every other column on `shipped`, with the
+AMD price unmeasured. It is measured now, on a Hot Aisle MI300X (gfx942), and
+the arm wins there as well, so `step_glue_default_arm_for` returns the winner
+for `COLUMN_AMD` too.
+
+Evidence `bench/results/e1g/2026-09-12_133013-amd-mi300x-hotaisle-step-glue`,
+commit bb679f19, one VM, one heat window, the arm against the SAME build's
+`shipped` arm:
+
+    verdict optskip_noshadow_rows16 FLIP geomean=0.9854
+    enwik8=0.9854 pilegithub=0.9853 witnesses_equal_shipped=True
+
+Lean step 0.7634 / 0.7620 to 0.7523 / 0.7509 s (enwik8 / Pile GitHub), and
+0.9848 / 0.9839 against the separately built shipped binding. Quality is
+stronger than ENGINEERING_RULES 9 requires: the witnesses are EQUAL, so no bit
+moved, which is what section 4.1 predicted.
+
+THE DRIFT CONTROL EARNS ITS PLACE HERE. The gain is 1.5 percent, small enough
+that a warming board could have invented it. The leg re-runs `shipped` last
+(`lean-glue-shipped2-enwik8`) and it came back at 0.9971 of the first
+`shipped` run, so the board drifted about a third of a percent across the
+window while the arm won 1.5. The verdict survives its own control.
+
+WHY THE GAIN IS HALF OF NVIDIA'S (0.9723 there). The same occupancy argument
+of section 1.2, read from the other end. 2,048 token rows at `LLAMA_TPB` 128
+are 16 blocks either way; 16 blocks starve an H100's 132 SMs harder than they
+starve this board, so there is less to win back here. The arm still wins on
+both corpora, and the rule sets no magnitude bar.
+
+`step_glue_check: PASS` on the same box under the trial define, with the reach
+lines for every arm (`threads_per_block=16 first_moved_row=32` forward and
+backward, `update first_moved_element=768`), so the arms behave on gfx942
+exactly as they do on the M4 and the H100.
+
+WHAT THIS SECTION DOES NOT CLAIM. The leg measured a TRIAL arm against the old
+shipped default. A shipped gfx942 build had never compiled
+`STEP_GLUE_SHIPPED_ROWS` or `STEP_GLUE_SHIPPED_UPDATE`, because until the
+routing change the AMD column carried no glue bit. That branch is gated
+separately (section 14) and the flip does not reach main without it.
+
+## 14. The gfx942 shipped branch gate (2026-09-12, run): both flips clear to merge
+
+Sections 13 and BRIEF_attention_step section 21 each end by refusing to merge
+without this. Here it is, and it is green.
+
+THE GAP IT CLOSES. Both AMD legs measured TRIAL arms against the OLD shipped
+defaults. Until the routing change the AMD column carried neither a glue bit
+nor an estash bit, so `STEP_GLUE_SHIPPED_ROWS`, `STEP_GLUE_SHIPPED_UPDATE` and
+`ATTN_SHIPPED_BWD_ESTASH` had never once been true on gfx942 and no compiler
+had ever built those branches for that target. On the NVIDIA side that exact
+gap hid a real defect: `_byte_glue_update`'s `comptime assert not
+BYTE_LM_FAULT_INJECT` sat inside `comptime if STEP_GLUE_TRIAL`, so a shipped
+glue build would have reached the glue update with the refusal silently gone.
+A measurement cannot find that. Only a shipped build can.
+
+Evidence `bench/results/e1g/2026-09-12_135531-amd-mi300x-hotaisle-ship-gate`,
+Hot Aisle MI300X, gfx942, body `amd_ship_body.sh` (copied into the evidence as
+`remote/extra_body.sh`). EVERY BUILD BELOW IS A SHIPPED BUILD: no
+`MOJOLEARN_ATTN_ARM_TRIAL`, no `MOJOLEARN_STEP_GLUE_TRIAL` except where the
+phase name says so, and no `EVERY_COLUMN` knob, because the point is that the
+AMD column's own routing rows resolve the winners unaided.
+
+| gate | what it proves | result |
+|---|---|---|
+| shipped `transformer_fused_check` | DEVIATION 2657's branch compiles and is bit-equal on gfx942 | PASS, 15 cases |
+| shipped `transformer_backward_check` | DEVIATION 2649's row geometry is bit-equal on gfx942 | PASS, 37/37 stages, 412,172 cells |
+| trial `step_glue_check` | the 16 trial arms are unchanged by the flip | PASS, with reach |
+| shipped byte LM binding readback | the comptime constants resolve to the winner at runtime, in a binary with no trial hook | `arm=optskip_noshadow_rows16 trial=0` |
+
+All nine phases exit 0 and the body reports `AMD_SHIP_GATES_OK=1`.
+
+The fused line is the one to read twice, because it names the kernels that
+actually ran rather than the arm that was requested:
+
+    DEFAULT column=amd arm=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32
+    word=6343783 source=kernel_matrix.attn_default_arm_for trial_hook=False
+    ... 17 direct launches RAN fwd_sstash_fgrid_r32_qres_pf /
+    bwd_stash_tiled_pf_estash_dres_kvgrid_r32 at head_dim 64
+
+`trial_hook=False` with the estash backward named in the RAN list is the whole
+claim: a shipped AMD build reached the flipped kernel and produced identical
+bits. The binding readback is its twin for the glue half, a runtime
+observation of a comptime constant rather than an inference from source.
+
+A DEFECT IN MY OWN GATE, RECORDED. `gate.txt` says `commit=unknown`. The body
+read `/root/mojolearn/COMMIT`, which the Hot Aisle runner does not write, so
+the gate file cannot name what it built. The provenance is still sound but it
+comes from the runner rather than from the gate: `leg.txt` records
+`commit=e72b55e4`, the upload verified `ARCHIVE-SHA-OK` against a bundle whose
+sha256 is recorded on both ends, and the body's own sha256 (57b8e01f3b731f78)
+is in the leg log. A future run of this body should read the commit the way
+the other legs do rather than trust a file that is not there.
+
+WHAT IS STILL NOT CLAIMED. Nothing here is a speed measurement; sections 13
+and 21 are. No Apple build compiles either branch (M4 gate C confirmed Apple
+still resolves `stash_tiled` and `shipped` with no knobs), and no RDNA or
+other column is touched.

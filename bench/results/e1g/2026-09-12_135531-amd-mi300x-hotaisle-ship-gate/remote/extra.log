@@ -1,0 +1,31 @@
+build-fused	0
+fused	0
+build-bwd	0
+bwd	0
+build-glue-check	0
+glue-check	0
+build-binding-base	0
+build-byte-lm	0
+readback	0
+started=2026-09-12T13:59:51Z
+vendor=amd archs=gfx942 jobs=8
+commit=unknown
+fused: DEFAULT column=amd arm=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 word=6343783 source=kernel_matrix.attn_default_arm_for trial_hook=False
+fused: DEFAULT resolved_hd64=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32
+fused: transformer_fused_check: PASS, 15 cases, every compared buffer bit-identical, every status as expected; column amd arm stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 (default stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32), 17 direct launches RAN fwd_sstash_fgrid_r32_qres_pf / bwd_stash_tiled_pf_estash_dres_kvgrid_r32 at head_dim 64; dk/dv fused_bwd_dkdv_r2_kernel[64,32] in 8 backward launches
+bwd: clause (a): 17 fixture cases, all 37 stages, device vs host oracle, BITWISE
+bwd: clause (a): PASS, 17 cases, 37/37 stages bit-identical to the oracle on all 412172 cells, 37/37 card tags
+glue_check: REACH norm_forward rows16 threads_per_block=16 first_moved_row=32
+glue_check: REACH norm_forward rows8 threads_per_block=8 first_moved_row=40
+glue_check: REACH norm_forward rows4 threads_per_block=4 first_moved_row=44
+glue_check: REACH norm_forward optskip_noshadow_rows16 threads_per_block=16 first_moved_row=32
+glue_check: REACH norm_backward rows16 threads_per_block=16 first_moved_row=32
+glue_check: REACH norm_backward rows8 threads_per_block=8 first_moved_row=40
+glue_check: REACH norm_backward rows4 threads_per_block=4 first_moved_row=44
+glue_check: REACH norm_backward optskip_noshadow_rows16 threads_per_block=16 first_moved_row=32
+glue_check: REACH update noshadow first_moved_element=768
+glue_check: step_glue_check: PASS (names, norm forward and backward with reach, update with reach, step, refusal, rollback)
+binding: READBACK arm=optskip_noshadow_rows16 trial=0
+binding: READBACK OK
+finished=2026-09-12T14:05:24Z
+AMD_SHIP_GATES_OK=1

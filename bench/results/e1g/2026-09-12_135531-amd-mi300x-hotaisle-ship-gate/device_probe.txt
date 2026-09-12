@@ -1,0 +1,66 @@
+== os
+OS=Ubuntu 24.04.4 LTS
+6.8.0-124-generic
+== cpu
+NPROC=13
+CPU(s):                                  13
+Model name:                              Intel(R) Xeon(R) Platinum 8470
+Thread(s) per core:                      1
+Core(s) per socket:                      13
+Socket(s):                               1
+== memory
+               total        used        free      shared  buff/cache   available
+Mem:             220           5         215           0           1         215
+== disk
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/vda2        12T   32G   12T   1% /
+/dev/vda2        12T   32G   12T   1% /
+== python
+Python 3.12.3
+== devices
+crw-rw---- 1 root render 237, 0 Sep 12 13:52 /dev/kfd
+
+/dev/dri:
+total 0
+drwxr-xr-x 2 root root        360 Sep 12 13:52 by-path
+crw-rw---- 1 root video  226,   0 Sep 12 13:52 card0
+crw-rw---- 1 root video  226,   1 Sep 12 13:52 card1
+crw-rw---- 1 root video  226,   2 Sep 12 13:52 card2
+crw-rw---- 1 root video  226,   3 Sep 12 13:52 card3
+crw-rw---- 1 root video  226,   4 Sep 12 13:52 card4
+crw-rw---- 1 root video  226,   5 Sep 12 13:52 card5
+crw-rw---- 1 root video  226,   6 Sep 12 13:52 card6
+KFD_PRESENT
+amdgpu              20250624  0
+== rocm
+/opt/rocm
+/opt/rocm-7.2.4
+ROCM_SMI_PRESENT
+
+
+============================ ROCm System Management Interface ============================
+====================================== Product Info ======================================
+GPU[0]		: Card Series: 		AMD Instinct MI300X VF
+GPU[0]		: Card Model: 		0x74b5
+GPU[0]		: Card Vendor: 		Advanced Micro Devices, Inc. [AMD/ATI]
+GPU[0]		: Card SKU: 		M3000108
+GPU[0]		: Subsystem ID: 	0x74a1
+GPU[0]		: Device Rev: 		0x00
+GPU[0]		: Node ID: 		1
+GPU[0]		: GUID: 		46235
+GPU[0]		: GFX Version: 		gfx942
+==========================================================================================
+================================== End of ROCm SMI Log ===================================
+ROCMINFO_PRESENT
+GFX=gfx942
+== runtimes
+DOCKER_OK
+Docker version 29.5.3, build d1c06ef
+PODMAN_OK
+podman version 4.9.3
+TOOL_setsid=/usr/bin/setsid
+TOOL_timeout=/usr/bin/timeout
+TOOL_curl=/usr/bin/curl
+TOOL_tar=/usr/bin/tar
+TOOL_gzip=/usr/bin/gzip
+TOOL_sha256sum=/usr/bin/sha256sum

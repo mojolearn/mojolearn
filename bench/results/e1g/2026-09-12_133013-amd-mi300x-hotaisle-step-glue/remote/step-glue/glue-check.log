@@ -1,0 +1,19 @@
+PASS names: 16 words read back, 8 invalid spellings refused
+REACH norm_forward rows16 threads_per_block=16 first_moved_row=32
+REACH norm_forward rows8 threads_per_block=8 first_moved_row=40
+REACH norm_forward rows4 threads_per_block=4 first_moved_row=44
+REACH norm_forward optskip_noshadow_rows16 threads_per_block=16 first_moved_row=32
+PASS norm_forward: 3 shapes x 4 arms bit-equal, reach named on every arm
+REACH norm_backward rows16 threads_per_block=16 first_moved_row=32
+REACH norm_backward rows8 threads_per_block=8 first_moved_row=40
+REACH norm_backward rows4 threads_per_block=4 first_moved_row=44
+REACH norm_backward optskip_noshadow_rows16 threads_per_block=16 first_moved_row=32
+PASS norm_backward: 3 shapes x 4 arms bit-equal, reach named on every arm
+REACH update noshadow first_moved_element=768
+PASS update: in place and out of place bit-equal to identical_optimizer_step (infinite moments included), input untouched, reach named
+PASS step: 3 resident steps x 8 arms bit-equal to shipped (loss, gradient, param, m, v)
+REFUSAL case 0 shipped: raised=True msg='byte LM: nonfinite parameters at 129' restored=True completed=0 healthy=True second_rollback=False
+REFUSAL case 1 shipped: raised=True msg='byte LM: nonfinite parameters at 0' restored=True completed=0 healthy=True second_rollback=False
+PASS refusal: 2 cases x 8 arms raise the shipped message and restore the shipped state
+PASS rollback: one step then byte_rollback restores the pre-step bits in 9 arms
+step_glue_check: PASS (names, norm forward and backward with reach, update with reach, step, refusal, rollback)

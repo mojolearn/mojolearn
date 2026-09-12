@@ -1,0 +1,23 @@
+deviations=2525-2527
+started=2026-09-12T13:34:19Z
+root=/root/mojolearn
+arms=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32
+lm_arms=stash_tiled_fgrid_r32_qres_pf_kvgrid_r32,stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32
+baseline_arm=stash_tiled_fgrid_r32_qres_pf_kvgrid_r32 deviations_second_round=2528,2530,2531,2533 deviations_dkdv=2596,2597 deviation_zdot=2598
+rounds=7 warmups=2 deadline=300
+vendor=amd gpu_archs=gfx942 column=amd jobs=8
+skip_timers=1 skip_lm=0
+vendor=amd
+commit=bb679f1952527581c57fbb4cb0066d4a071cb58a
+provider=hotaisle
+size=mi300x-13core
+deviation_default_row=2534 shipped_check=1
+shipped_check: DEFAULT column=amd arm=stash_tiled_fgrid_r32_qres_pf_kvgrid_r32 word=52327 source=kernel_matrix.attn_default_arm_for trial_hook=False
+shipped_check: DEFAULT resolved_hd64=stash_tiled_fgrid_r32_qres_pf_kvgrid_r32
+shipped_check: ARM this_run=stash_tiled_fgrid_r32_qres_pf_kvgrid_r32 is_default=True forward_hd64=fwd_sstash_fgrid_r32_qres_pf backward_hd64=bwd_stash_tiled_pf_kvgrid_r32
+shipped_check: DKDV default_hd64=fused_bwd_dkdv_r2_kernel[64,32] this_run_hd64=fused_bwd_dkdv_r2_kernel[64,32] shipped_kv_branch=True default_kv_keys=32
+shipped_check: transformer_fused_check: PASS, 15 cases, every compared buffer bit-identical, every status as expected; column amd arm stash_tiled_fgrid_r32_qres_pf_kvgrid_r32 (default stash_tiled_fgrid_r32_qres_pf_kvgrid_r32), 17 direct launches RAN fwd_sstash_fgrid_r32_qres_pf / bwd_stash_tiled_pf_kvgrid_r32 at head_dim 64; dk/dv fused_bwd_dkdv_r2_kernel[64,32] in 8 backward launches
+harness: DEFAULT column=amd arm=stash_tiled_fgrid_r32_qres_pf_kvgrid_r32 source=kernel_matrix.attn_default_arm_for baseline_is_default=True candidate_is_default=False baseline_requested=stash_tiled_fgrid_r32_qres_pf_kvgrid_r32 candidate_requested=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32
+corpora= enwik8=training/corpus/enwik8/input.txt pilegithub=training/corpus/pile_github/input.txt
+file_kinds=file:/root/gemm_leg_out/attention-step/operands-enwik8,file:/root/gemm_leg_out/attention-step/operands-pilegithub
+finished=2026-09-12T13:49:49Z

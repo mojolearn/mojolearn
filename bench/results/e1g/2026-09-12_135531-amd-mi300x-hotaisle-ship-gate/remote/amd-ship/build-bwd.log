@@ -1,0 +1,53 @@
+/root/mojolearn/transformer/checks/transformer_backward_check.mojo:2076:8: warning: doc string summary should end with a period '.', exclamation mark '!', question mark '?', or backtick '`', but this ends with '*'
+    """Plan 6.2 clause (c), the length half, **with DEVIATION 1529's
+       ^
+/root/mojolearn/transformer/checks/transformer_backward_check.mojo:2602:8: warning: doc string summary should end with a period '.', exclamation mark '!', question mark '?', or backtick '`', but this ends with '*'
+    """Plan 5.3, DEVIATION 1416, **demonstrated and NOT gated, and DEVIATION
+       ^
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:359:
+/root/mojolearn/transformer/impl/llama/modeling_llama.mojo:727:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:359:
+/root/mojolearn/transformer/impl/llama/modeling_llama.mojo:759:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:304:
+/root/mojolearn/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:304:
+/root/mojolearn/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:371:
+/root/mojolearn/transformer/checks/transformer_backward.mojo:131:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:304:
+/root/mojolearn/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:371:
+Imported from /root/mojolearn/transformer/checks/transformer_backward.mojo:53:
+/root/mojolearn/transformer/impl/llama/fused_attention.mojo:1458:32: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+    var raw = host.unsafe_ptr().bitcast[UInt8]()
+              ~~~~~~~~~~~~~~~~~^~~~~~~~
+                                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Included from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:371:
+/root/mojolearn/transformer/checks/transformer_backward.mojo:2742:28: warning: assignment to 'cells' was never used; assign to '_' instead?
+    var cells = b * nh * l * s
+                           ^

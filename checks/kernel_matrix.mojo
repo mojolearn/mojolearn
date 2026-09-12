@@ -927,18 +927,31 @@ def attn_default_arm_for[column: Int]() -> Int:
         # (round 3, e1g/...154257).
         return ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_ESTASH_DRES_KVGRID_R32
     if column == COLUMN_AMD:
-        # Measured 2026-09-11 on the DigitalOcean MI325X against the previous
-        # AMD default baseline, commit 5cc3b8df, every step witness equal
-        # (bench/results/e1g/2026-09-11_180903-amd-mi325x-do-attention-dkdv):
-        #   verdict stash_tiled_fgrid_r32_qres_pf_kvgrid_r32 FLIP geomean=0.8436
-        #   enwik8=0.8478 pilegithub=0.8394 (vs baseline, DO MI325X, witnesses equal)
-        # Lean step 1.623 / 1.633 -> 1.376 / 1.370 s (enwik8 / Pile GitHub); in-step
-        # dk/dv 169.8 ms (baseline) -> 21.2 ms. The runners-up on the same leg:
-        # _kvsplit FLIP 0.8552, _kvrecompute FLIP 0.8652, and the round 3 arm
-        # without a dk/dv token NO FLIP 1.1400. ENGINEERING_RULES 9 flips the
-        # winner. Before it: baseline, from one RunPod MI300X pod
+        # DEVIATION 2657 ON AMD TOO. Measured 2026-09-12 on a Hot Aisle MI300X
+        # (gfx942) against the previous AMD default
+        # stash_tiled_fgrid_r32_qres_pf_kvgrid_r32, commit bb679f19, one VM and
+        # one heat window, every step witness equal on both corpora
+        # (bench/results/e1g/2026-09-12_133010-amd-mi300x-hotaisle-attn-estash):
+        #   verdict stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 FLIP
+        #   geomean=0.9716 enwik8=0.9724 pilegithub=0.9709
+        #   witnesses_equal_baseline=True on both corpora
+        # Lean step 0.7573 / 0.7593 -> 0.7363 / 0.7372 s (enwik8 / Pile GitHub).
+        # The gain is a third of NVIDIA's (0.8207 there) and the register lens
+        # on this same VM says why. The shipped zdot kernel `zdot_stash_pf` is
+        # 118 regs at a 17,696 byte page and ALREADY fits 3 blocks per CU here,
+        # where on the H100 the same kernel was 134 regs at 1 block per SM. The
+        # flipped kernel `zdot_estash_dres_pf` is 60 regs at 12,480 bytes and 5
+        # blocks per CU (the plain `_estash` variant is 116 regs, 10,432 bytes,
+        # 4 blocks). So AMD goes 3 -> 5 blocks where NVIDIA went 1 -> 4, and it
+        # was never as starved to begin with, which is the whole difference in
+        # the two gains. ENGINEERING_RULES 9 takes the win anyway: below 1 on
+        # both corpora with the bits unmoved, and the rule sets no magnitude bar.
+        # Before it: stash_tiled_fgrid_r32_qres_pf_kvgrid_r32, measured
+        # 2026-09-11 on the DigitalOcean MI325X against baseline, commit
+        # 5cc3b8df (e1g/2026-09-11_180903-amd-mi325x-do-attention-dkdv, FLIP
+        # geomean=0.8436, in-step dk/dv 169.8 -> 21.2 ms); before that baseline
         # (e1g/2026-09-11_171959-amd-mi300x-runpod-attention-three).
-        return ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_KVGRID_R32
+        return ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_ESTASH_DRES_KVGRID_R32
     return ATTN_DEFAULT_WORD_STASH_TILED
 
 
@@ -968,6 +981,26 @@ def step_glue_default_arm_for[column: Int]() -> Int:
         # leg all FLIP too: optskip_noshadow_rows8 0.9734, optskip_noshadow
         # 0.9849, rows16 0.9852, rows8 0.9873. ENGINEERING_RULES 9 takes the
         # winner.
+        return STEP_GLUE_DEFAULT_WORD_OPTSKIP_NOSHADOW_ROWS16
+    if column == COLUMN_AMD:
+        # DEVIATION 2649 ON AMD TOO. Measured 2026-09-12 on a Hot Aisle MI300X
+        # (gfx942) against the SAME BUILD's `shipped` arm, commit bb679f19, one
+        # VM and one heat window
+        # (bench/results/e1g/2026-09-12_133013-amd-mi300x-hotaisle-step-glue):
+        #   verdict optskip_noshadow_rows16 FLIP geomean=0.9854
+        #   enwik8=0.9854 pilegithub=0.9853 witnesses_equal_shipped=True
+        # Lean step 0.7634 / 0.7620 -> 0.7523 / 0.7509 s (enwik8 / Pile
+        # GitHub), and against the separate SHIPPED build 0.9848 / 0.9839. The
+        # drift control re-ran `shipped` last at 0.9971 of the first `shipped`
+        # run, which is smaller than the 1.5 percent gain, so the win is not
+        # the VM warming up. `step_glue_check: PASS` on the same box with the
+        # reach lines for every arm (threads_per_block=16 first_moved_row=32
+        # forward and backward, update first_moved_element=768).
+        # The gain is half of NVIDIA's (0.9723 there) and the reason is the
+        # same occupancy story read the other way: 2,048 token rows at
+        # LLAMA_TPB 128 are 16 blocks, which starve an H100's 132 SMs harder
+        # than they starve this board. ENGINEERING_RULES 9 sets no magnitude
+        # bar, and both corpora are below 1 with the bits unmoved.
         return STEP_GLUE_DEFAULT_WORD_OPTSKIP_NOSHADOW_ROWS16
     return STEP_GLUE_DEFAULT_WORD_SHIPPED
 

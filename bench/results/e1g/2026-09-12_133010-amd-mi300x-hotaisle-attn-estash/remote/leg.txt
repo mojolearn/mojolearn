@@ -1,0 +1,22 @@
+vendor=amd
+commit=bb679f1952527581c57fbb4cb0066d4a071cb58a
+card_full=
+trace_dump=
+started=2026-09-12T13:32:58Z
+provider=hotaisle
+size=mi300x-13core
+runtime=docker
+image=rocm/dev-ubuntu-22.04:6.4.1-complete
+gates=1
+bare=0
+gpu_archs=gfx942
+target_column=amd
+pixi_install_exit=0
+pixi_install_seconds=3
+device_check_exit=0
+card_exit=0
+attention_leg_exit=0
+amd_default=stash_tiled_fgrid_r32_qres_pf_kvgrid_r32 amd_arm=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32
+extra_exit=0
+finished=2026-09-12T13:49:49Z
+body_exit=0
