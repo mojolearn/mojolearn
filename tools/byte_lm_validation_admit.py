@@ -22,39 +22,52 @@ JOBS = ('byte-venv', 'byte-dependencies', 'dependencies', 'dependency-freeze',
 SECOND_SHAPE_JOBS = ('byte-step1', 'byte-gradient-oracle', 'byte-full128')
 
 
+#: The build and its checks, which every campaign runs whatever it captures.
+CORE_JOBS = JOBS[:9]
+#: The certified shape's three captures, which a shape-only campaign skips.
+CAPTURE_JOBS = JOBS[9:]
+
+
 def campaign_rows(rows, shape):
     """Check the job ledger and return the tree suffix this shape reads.
 
-    One campaign can produce two shapes, so the ledger may carry the certified
-    twelve alone or the twelve followed by one shape's three. Either way every
-    row must have exited zero, and nothing unrecognized may appear. Each shape
-    is then admitted separately, against its own directories, because identity
+    Three ledgers are legal. The certified twelve alone. The twelve followed by
+    one second shape's three. And the nine build jobs followed by only a second
+    shape's three, which is what a lease dedicated to that shape runs, because
+    one lease cannot hold two 128-step captures inside its work deadline.
+    Every row must have exited zero, nothing unrecognized may appear, and each
+    shape is admitted separately against its own directories, because identity
     is claimed per shape and two certificates are two certificates."""
     require(all(len(row) == 2 and row[1] == '0' for row in rows),
             'missing, duplicate, reordered or failed job')
     names = [row[0] for row in rows]
-    require(names[:len(JOBS)] == list(JOBS),
+    require(names[:len(CORE_JOBS)] == list(CORE_JOBS),
             'missing, duplicate, reordered or failed job')
-    extra = names[len(JOBS):]
+    rest = names[len(CORE_JOBS):]
+    default_ran = rest[:len(CAPTURE_JOBS)] == list(CAPTURE_JOBS)
+    if default_ran:
+        rest = rest[len(CAPTURE_JOBS):]
     # A slug is what remains after a KNOWN job name, not whatever follows the
     # second dash. Splitting on dashes reads 'byte-gradient-oracle-b4-l32' as
     # the slug 'oracle-b4-l32', which would then match nothing and refuse a
     # perfectly good campaign for the wrong reason.
-    slugs = set()
-    for name in extra:
-        rest = [name[len(job) + 1:] for job in SECOND_SHAPE_JOBS
-                if name.startswith(job + '-')]
-        require(rest, 'unrecognized second-shape job: ' + name)
-        slugs.add(max(rest, key=len))
-    if extra:
+    slug = None
+    if rest:
+        slugs = set()
+        for name in rest:
+            found = [name[len(job) + 1:] for job in SECOND_SHAPE_JOBS
+                     if name.startswith(job + '-')]
+            require(found, 'unrecognized second-shape job: ' + name)
+            slugs.add(max(found, key=len))
         require(len(slugs) == 1, 'campaign mixes more than one second shape')
         slug = next(iter(slugs))
-        require(extra == [f'{name}-{slug}' for name in SECOND_SHAPE_JOBS],
+        require(rest == [f'{name}-{slug}' for name in SECOND_SHAPE_JOBS],
                 'unrecognized or incomplete second-shape jobs')
-    default = byte_lm_shape.Shape()
-    if shape == default:
+    if shape == byte_lm_shape.Shape():
+        require(default_ran, 'this campaign captured no certified-shape run, '
+                             'so there is nothing to admit at that shape')
         return ''
-    require(shape.slug in slugs,
+    require(slug == shape.slug,
             f'this campaign ran no {shape.slug} jobs, so there is nothing to admit')
     return '-' + shape.slug
 
