@@ -134,6 +134,28 @@ jobs:
           pixi run mojo --version | tee "$GATE_OUT/mojo_version.txt"
           sh bindings/build_byte_lm_host.sh 2>&1 | tee "$GATE_OUT/build_prod.log"
 
+      # DEVIATION 2680 PROBE, NOT A GATE, hence continue-on-error: it must
+      # never be able to fail this workflow. One question, measured instead of
+      # argued from a comment: transformer/checks/transformer_backward_oracle
+      # computes on the host but imports three names from gemm/checks/
+      # gemm_backward, which imports max.gpu.host, and one from
+      # core/identity_trace, which does too. _mojolearn_byte_lm_host.mojo says
+      # HOST ONLY, nothing imported from the GPU side. If the toolchain
+      # enforces that, this compile fails here with no accelerator target and
+      # the error names what has to move; if it succeeds, the rule is policy
+      # the compiler does not enforce and the CPU trainer needs no refactor.
+      # Compiling the module is the test: an import forces its transitive
+      # imports to be analyzed. Delete the step and the probe once answered.
+      - name: Probe, does the host backward oracle compile with no GPU
+        if: always()
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          pixi run mojo build -j 1 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . -I bindings \
+            training/checks/byte_lm_host_bwd_probe.mojo -o "$GATE_OUT/bwd_probe" 2>&1 \
+            | tee "$GATE_OUT/bwd_probe.log"
+          echo "probe exit ${PIPESTATUS[0]}" | tee -a "$GATE_OUT/bwd_probe.log"
+
       - name: Gate, production build must reproduce every loss byte
         run: |
           set -o pipefail
