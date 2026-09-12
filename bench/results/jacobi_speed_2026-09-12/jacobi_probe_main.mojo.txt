@@ -1,0 +1,350 @@
+# Lane jacobi-speed (2026-09-12), DEVIATION 2680. Not a check and not a timing
+# row: it builds the EXACT matrix the shipped OLS and PCA paths feed the device
+# eigensolver on the benchmark blocks, then runs the solver at six LAUNCH
+# WIDTHS on that matrix and counts differing bits against the fold-width rung.
+# Extends bench/results/linear_cluster_istella_2026-09-11/stage_probe_main.mojo.txt,
+# whose OLS and PCA staging this copies so the input is the same bytes.
+#
+#   cp jacobi_probe_main.mojo.txt /root/mojolearn/jacobi_probe_main.mojo
+#   pixi run mojo build -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 jacobi_probe_main.mojo -o jacobi_probe
+#   ./jacobi_probe <ols|pca> <prefix> <rows> <cols> <reps>
+#
+# <prefix>_X.bin, _Xc.bin, _yc.bin from probe_bins.py.
+from std.memory import memcpy
+from std.sys import argv
+from std.time import perf_counter_ns
+from std.collections.string import atol
+from max.gpu.host import DeviceBuffer, DeviceContext
+
+from core.column_stats import STATS_TPB, diagonal_to_vector_kernel
+from core.gemm import gemm_tn
+from decomposition.checks.jacobi_eigh_device import (
+    JACOBI_ROT_TPB,
+    JACOBI_SWEEPS,
+    JACOBI_TOL,
+    JACOBI_TPB,
+    jacobi_eigh_kernel,
+    jacobi_eigh_kernel_four_phase,
+)
+from decomposition.impl.linalg.detail.pca import compute_covariance
+from glm.impl.linalg.detail.lstsq import ols_equilibration_scale
+from glm.impl.matrix.math import (
+    matrix_vector_binary_mult_kernel,
+    row_vector_binary_mult_kernel,
+)
+
+
+def _load(path: String, n: Int) raises -> List[UInt8]:
+    var f = open(path, "r")
+    var b = f.read_bytes()
+    f.close()
+    if len(b) != n * 4:
+        raise Error(
+            path + " holds " + String(len(b)) + " bytes, expected "
+            + String(n * 4)
+        )
+    return b^
+
+
+def _ms(t0: Int) -> Float64:
+    return Float64(Int(perf_counter_ns()) - t0) / 1.0e6
+
+
+def _now() -> Int:
+    return Int(perf_counter_ns())
+
+
+def _arm[w: Int](
+    ctx: DeviceContext,
+    host_a: MutPointer[Float32, MutUntrackedOrigin],
+    n: Int,
+    reps: Int,
+    out_a: MutPointer[Float32, MutUntrackedOrigin],
+    out_v: MutPointer[Float32, MutUntrackedOrigin],
+) raises -> Float64:
+    """`reps` timed runs of the merged kernel at launch width `w`, best kept."""
+    var best = Float64(1.0e30)
+    var sweeps = 0
+    for _rep in range(reps):
+        var a = ctx.enqueue_create_buffer[DType.float32](n * n)
+        var q = ctx.enqueue_create_buffer[DType.float32](n * n)
+        var info = ctx.enqueue_create_buffer[DType.float32](3)
+        ctx.enqueue_copy(dst_buf=a, src_ptr=host_a)
+        ctx.synchronize()
+        var t0 = _now()
+        ctx.enqueue_function[jacobi_eigh_kernel[w]](
+            a.unsafe_ptr(),
+            q.unsafe_ptr(),
+            info.unsafe_ptr(),
+            Int32(n),
+            Int32(JACOBI_SWEEPS),
+            Float32(JACOBI_TOL),
+            grid_dim=(1, 1, 1),
+            block_dim=(w, 1, 1),
+        )
+        ctx.synchronize()
+        var t = _ms(t0)
+        if t < best:
+            best = t
+        var h = ctx.enqueue_create_host_buffer[DType.float32](3)
+        ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=info)
+        ctx.enqueue_copy(dst_ptr=out_a, src_buf=a)
+        ctx.enqueue_copy(dst_ptr=out_v, src_buf=q)
+        ctx.synchronize()
+        sweeps = Int(h.unsafe_ptr().unsafe_load(2))
+        _ = h^
+        _ = a^
+        _ = q^
+        _ = info^
+    var rot = sweeps * n * (n - 1) // 2
+    var per = Float64(0.0)
+    if rot > 0:
+        per = best * 1000.0 / Float64(rot)
+    print(
+        "  jacobi merged w=" + String(w) + " n=" + String(n)
+        + " best_ms=" + String(best) + " sweeps=" + String(sweeps)
+        + " rotations=" + String(rot) + " us_per_rotation=" + String(per)
+    )
+    return best
+
+
+def _arm_four_phase(
+    ctx: DeviceContext,
+    host_a: MutPointer[Float32, MutUntrackedOrigin],
+    n: Int,
+    reps: Int,
+) raises -> Float64:
+    """The pre-2671 four-barrier kernel, at its own width, for the record."""
+    var best = Float64(1.0e30)
+    var sweeps = 0
+    for _rep in range(reps):
+        var a = ctx.enqueue_create_buffer[DType.float32](n * n)
+        var q = ctx.enqueue_create_buffer[DType.float32](n * n)
+        var info = ctx.enqueue_create_buffer[DType.float32](3)
+        ctx.enqueue_copy(dst_buf=a, src_ptr=host_a)
+        ctx.synchronize()
+        var t0 = _now()
+        ctx.enqueue_function[jacobi_eigh_kernel_four_phase](
+            a.unsafe_ptr(),
+            q.unsafe_ptr(),
+            info.unsafe_ptr(),
+            Int32(n),
+            Int32(JACOBI_SWEEPS),
+            Float32(JACOBI_TOL),
+            grid_dim=(1, 1, 1),
+            block_dim=(JACOBI_TPB, 1, 1),
+        )
+        ctx.synchronize()
+        var t = _ms(t0)
+        if t < best:
+            best = t
+        var h = ctx.enqueue_create_host_buffer[DType.float32](3)
+        ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=info)
+        ctx.synchronize()
+        sweeps = Int(h.unsafe_ptr().unsafe_load(2))
+        _ = h^
+        _ = a^
+        _ = q^
+        _ = info^
+    print(
+        "  jacobi four_phase w=" + String(JACOBI_TPB) + " n=" + String(n)
+        + " best_ms=" + String(best) + " sweeps=" + String(sweeps)
+    )
+    return best
+
+
+def _bits_differ(
+    x: MutPointer[Float32, MutUntrackedOrigin],
+    y: MutPointer[Float32, MutUntrackedOrigin],
+    n: Int,
+) -> Int:
+    var d = 0
+    for i in range(n):
+        if x.unsafe_load(i).to_bits() != y.unsafe_load(i).to_bits():
+            d += 1
+    return d
+
+
+def _ladder(
+    ctx: DeviceContext,
+    host_a: MutPointer[Float32, MutUntrackedOrigin],
+    n: Int,
+    reps: Int,
+) raises:
+    """Every launch width on ONE matrix, timed, with the bit count."""
+    var ra = ctx.enqueue_create_host_buffer[DType.float32](n * n)
+    var rv = ctx.enqueue_create_host_buffer[DType.float32](n * n)
+    var ca = ctx.enqueue_create_host_buffer[DType.float32](n * n)
+    var cv = ctx.enqueue_create_host_buffer[DType.float32](n * n)
+    ctx.synchronize()
+    var t32 = _arm[32](ctx, host_a, n, reps, ra.unsafe_ptr(), rv.unsafe_ptr())
+    _ = _arm_four_phase(ctx, host_a, n, reps)
+    var widths: List[Int] = [64, 128, 256, 512, 1024]
+    var times: List[Float64] = [
+        _arm[64](ctx, host_a, n, reps, ca.unsafe_ptr(), cv.unsafe_ptr()),
+    ]
+    var da = _bits_differ(ca.unsafe_ptr(), ra.unsafe_ptr(), n * n)
+    var dv = _bits_differ(cv.unsafe_ptr(), rv.unsafe_ptr(), n * n)
+    print("  bits w=64 a_differ=" + String(da) + " v_differ=" + String(dv))
+    times.append(
+        _arm[128](ctx, host_a, n, reps, ca.unsafe_ptr(), cv.unsafe_ptr())
+    )
+    da = _bits_differ(ca.unsafe_ptr(), ra.unsafe_ptr(), n * n)
+    dv = _bits_differ(cv.unsafe_ptr(), rv.unsafe_ptr(), n * n)
+    print("  bits w=128 a_differ=" + String(da) + " v_differ=" + String(dv))
+    times.append(
+        _arm[256](ctx, host_a, n, reps, ca.unsafe_ptr(), cv.unsafe_ptr())
+    )
+    da = _bits_differ(ca.unsafe_ptr(), ra.unsafe_ptr(), n * n)
+    dv = _bits_differ(cv.unsafe_ptr(), rv.unsafe_ptr(), n * n)
+    print("  bits w=256 a_differ=" + String(da) + " v_differ=" + String(dv))
+    times.append(
+        _arm[512](ctx, host_a, n, reps, ca.unsafe_ptr(), cv.unsafe_ptr())
+    )
+    da = _bits_differ(ca.unsafe_ptr(), ra.unsafe_ptr(), n * n)
+    dv = _bits_differ(cv.unsafe_ptr(), rv.unsafe_ptr(), n * n)
+    print("  bits w=512 a_differ=" + String(da) + " v_differ=" + String(dv))
+    times.append(
+        _arm[1024](ctx, host_a, n, reps, ca.unsafe_ptr(), cv.unsafe_ptr())
+    )
+    da = _bits_differ(ca.unsafe_ptr(), ra.unsafe_ptr(), n * n)
+    dv = _bits_differ(cv.unsafe_ptr(), rv.unsafe_ptr(), n * n)
+    print("  bits w=1024 a_differ=" + String(da) + " v_differ=" + String(dv))
+    for i in range(len(widths)):
+        print(
+            "  RATIO w=" + String(widths[i]) + " over w=32 "
+            + String(times[i] / t32)
+        )
+    print("  SHIPPED launch width is " + String(JACOBI_ROT_TPB))
+    _ = ra^
+    _ = rv^
+    _ = ca^
+    _ = cv^
+
+
+def main() raises:
+    var args = argv()
+    var mode = String(args[1])
+    var prefix = String(args[2])
+    var rows = Int(atol(String(args[3])))
+    var cols = Int(atol(String(args[4])))
+    var reps = Int(atol(String(args[5])))
+    var cells = rows * cols
+    var ctx = DeviceContext()
+    print(
+        "jacobi_probe mode=" + mode + " rows=" + String(rows)
+        + " cols=" + String(cols) + " reps=" + String(reps)
+        + " fold_width=" + String(JACOBI_TPB)
+    )
+
+    if mode == "pca":
+        var bx = _load(prefix + "_X.bin", cells)
+        var hx = ctx.enqueue_create_host_buffer[DType.float32](cells)
+        ctx.synchronize()
+        memcpy(
+            dest=hx.unsafe_ptr().bitcast[UInt8](),
+            src=bx.unsafe_ptr(),
+            count=cells * 4,
+        )
+        _ = bx^
+        var x = ctx.enqueue_create_buffer[DType.float32](cells)
+        var xa = ctx.enqueue_create_buffer[DType.float32](cells)
+        var xa2 = ctx.enqueue_create_buffer[DType.float32](cells)
+        var mu = ctx.enqueue_create_buffer[DType.float32](cols)
+        var cov = ctx.enqueue_create_buffer[DType.float32](cols * cols)
+        ctx.synchronize()
+        ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
+        ctx.synchronize()
+        var t0 = _now()
+        compute_covariance(ctx, x, xa, xa2, mu, cov, rows, cols, True)
+        ctx.synchronize()
+        print("pca covariance_ms=" + String(_ms(t0)))
+        var hc = ctx.enqueue_create_host_buffer[DType.float32](cols * cols)
+        ctx.enqueue_copy(dst_ptr=hc.unsafe_ptr(), src_buf=cov)
+        ctx.synchronize()
+        _ladder(ctx, hc.unsafe_ptr(), cols, reps)
+        _ = hc^
+        _ = x^
+        _ = xa^
+        _ = xa2^
+        _ = mu^
+        _ = cov^
+        _ = hx^
+        return
+
+    if mode == "ols":
+        var bx = _load(prefix + "_Xc.bin", cells)
+        var hx = ctx.enqueue_create_host_buffer[DType.float32](cells)
+        ctx.synchronize()
+        memcpy(
+            dest=hx.unsafe_ptr().bitcast[UInt8](),
+            src=bx.unsafe_ptr(),
+            count=cells * 4,
+        )
+        _ = bx^
+        var x = ctx.enqueue_create_buffer[DType.float32](cells)
+        var xa = ctx.enqueue_create_buffer[DType.float32](cells)
+        var xa2 = ctx.enqueue_create_buffer[DType.float32](cells)
+        var cov = ctx.enqueue_create_buffer[DType.float32](cols * cols)
+        var sv = ctx.enqueue_create_buffer[DType.float32](cols)
+        var scale = ctx.enqueue_create_buffer[DType.float32](cols)
+        ctx.synchronize()
+        ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
+        ctx.synchronize()
+        var t0 = _now()
+        gemm_tn(ctx, cov, x, xa, xa2, cols, cols, rows)
+        ctx.synchronize()
+        print("ols gram_ms=" + String(_ms(t0)))
+        t0 = _now()
+        ctx.enqueue_function[diagonal_to_vector_kernel](
+            sv.unsafe_ptr(),
+            cov.unsafe_ptr(),
+            Int32(cols),
+            grid_dim=((cols + 255) // 256, 1, 1),
+            block_dim=(256, 1, 1),
+        )
+        var hd = ctx.enqueue_create_host_buffer[DType.float32](cols)
+        var hs = ctx.enqueue_create_host_buffer[DType.float32](cols)
+        ctx.enqueue_copy(dst_ptr=hd.unsafe_ptr(), src_buf=sv)
+        ctx.synchronize()
+        for i in range(cols):
+            hs.unsafe_ptr().unsafe_store(
+                i, ols_equilibration_scale(hd.unsafe_ptr().unsafe_load(i))
+            )
+        ctx.enqueue_copy(dst_buf=scale, src_ptr=hs.unsafe_ptr())
+        ctx.synchronize()
+        ctx.enqueue_function[row_vector_binary_mult_kernel](
+            cov.unsafe_ptr(),
+            scale.unsafe_ptr(),
+            Int32(cols),
+            Int32(cols),
+            grid_dim=((cols * cols + 255) // 256, 1, 1),
+            block_dim=(256, 1, 1),
+        )
+        ctx.enqueue_function[matrix_vector_binary_mult_kernel](
+            cov.unsafe_ptr(),
+            scale.unsafe_ptr(),
+            Int32(cols),
+            Int32(cols),
+            grid_dim=((cols * cols + 255) // 256, 1, 1),
+            block_dim=(256, 1, 1),
+        )
+        ctx.synchronize()
+        print("ols equilibrate_ms=" + String(_ms(t0)))
+        var hc = ctx.enqueue_create_host_buffer[DType.float32](cols * cols)
+        ctx.enqueue_copy(dst_ptr=hc.unsafe_ptr(), src_buf=cov)
+        ctx.synchronize()
+        _ladder(ctx, hc.unsafe_ptr(), cols, reps)
+        _ = hc^
+        _ = hd^
+        _ = hs^
+        _ = x^
+        _ = xa^
+        _ = xa2^
+        _ = cov^
+        _ = sv^
+        _ = scale^
+        _ = hx^
+        return
+
+    raise Error("mode must be ols or pca")

@@ -50,7 +50,7 @@ from core.identity_trace import IdentityTrace
 from decomposition.checks.jacobi_eigh_device import (
     JACOBI_SWEEPS,
     JACOBI_TOL,
-    JACOBI_TPB,
+    JACOBI_ROT_TPB,
     jacobi_eigh_kernel,
 )
 from glm.impl.matrix.math import (
@@ -126,7 +126,7 @@ def svd_eig_traced(
     # eigDC -> V, S. `svd.cuh:146`. The device Jacobi (row 31) consumes
     # `cov` and leaves S on its diagonal; `eigDC` ABORTS on a non-zero
     # `dev_info` (`raft/linalg/detail/eig.cuh:149-151`) and so does this.
-    ctx.enqueue_function[jacobi_eigh_kernel](
+    ctx.enqueue_function[jacobi_eigh_kernel[JACOBI_ROT_TPB]](
         cov.unsafe_ptr(),
         v_raw.unsafe_ptr(),
         info_buf.unsafe_ptr(),
@@ -134,7 +134,7 @@ def svd_eig_traced(
         Int32(JACOBI_SWEEPS),
         Float32(JACOBI_TOL),
         grid_dim=(1, 1, 1),
-        block_dim=(JACOBI_TPB, 1, 1),
+        block_dim=(JACOBI_ROT_TPB, 1, 1),
     )
     ctx.enqueue_function[diagonal_to_vector_kernel](
         s_raw.unsafe_ptr(),
