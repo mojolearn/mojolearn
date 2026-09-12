@@ -219,9 +219,37 @@ jobs:
         if: always()
         run: |
           set -o pipefail
-          python3 tools/byte_lm_cpu_train_gate.py cpu --steps 1,64,128 --verify-digests \
+          python3 tools/byte_lm_cpu_train_gate.py cpu --steps every:16 --verify-digests \
             --vendor apple --report "$GATE_OUT/cpu_train.json" 2>&1 \
             | tee "$GATE_OUT/cpu_train.log"
+
+      # THE TRAINING PATH'S OWN NEGATIVE CONTROL, and it was missing until now.
+      # DEVIATION 2612's arm reverses a fold inside byte_host_logits, which the
+      # training step never calls: it goes to gemm_oracle directly. So a 2612
+      # sabotage build computes a CORRECT training step, and the gate above had
+      # never been shown capable of failing. These two steps fix that with the
+      # GEMM lane's own arm, which drops the transpose bookkeeping in the
+      # backward routing the host step calls through, so the gradient it
+      # produces is wrong by construction.
+      - name: Build the backward-sabotage binding (SAB_BWD_UNTRANSPOSED)
+        if: always()
+        env:
+          MOJOLEARN_BYTE_LM_HOST_OUTDIR: ${{ runner.temp }}/host-bwd-sab
+          MOJOLEARN_BUILD_EXTRA_DEFINES: "-D MOJOLEARN_GEMM_SABOTAGE_BWD_UNTRANSPOSED=1"
+        run: |
+          set -o pipefail
+          sh bindings/build_byte_lm_host.sh 2>&1 | tee "$GATE_OUT/build_bwd_sab.log"
+
+      - name: CPU training gate must catch the wrong gradient
+        if: always()
+        env:
+          MOJOLEARN_BYTE_LM_HOST_ALLOW_SABOTAGE: "1"
+          MOJOLEARN_BYTE_LM_HOST_BINARY: ${{ runner.temp }}/host-bwd-sab/_mojolearn_byte_lm_host.so
+        run: |
+          set -o pipefail
+          python3 tools/byte_lm_cpu_train_gate.py cpu --steps 1,64 --expect-mismatch \
+            --vendor apple --report "$GATE_OUT/cpu_train_sab.json" 2>&1 \
+            | tee "$GATE_OUT/cpu_train_sab.log"
 
       # DEVIATION 2680: re-derive the three-vendor TRAINING agreement from the
       # retained raw bytes, every one of the 128 steps, all 11 arrays per step

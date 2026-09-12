@@ -219,9 +219,18 @@ def optimizer_config(tree, number):
 
 
 def selected(argument):
-    """`all`, or a comma list of step numbers, or `a-b`."""
+    """`all`, `every:N`, a comma list of step numbers, or `a-b`.
+
+    `every:N` is step 1 and every Nth step after it, always including the
+    last, which is how a CI run samples the capture without paying for all
+    128 steps of a reference-path replay."""
     if argument == 'all':
         return list(range(1, STEPS + 1))
+    if argument.startswith('every:'):
+        stride = int(argument.split(':', 1)[1])
+        if stride < 1:
+            raise ValueError('every:N needs N >= 1')
+        return sorted({1, STEPS} | set(range(1, STEPS + 1, stride)))
     out = []
     for piece in argument.split(','):
         piece = piece.strip()
@@ -384,14 +393,21 @@ def mode_cpu(args):
                 row.update(step=number, vendor=args.vendor)
                 if len(mismatches) < 20:
                     mismatches.append(row)
-    verdict = 'PASS' if not mismatches else 'FAIL'
+    # A SABOTAGE BUILD MUST FAIL THIS GATE. With --expect-mismatch the verdict
+    # inverts: agreement becomes the failure, because a control that cannot
+    # fire proves nothing about the gate it is meant to validate.
+    if args.expect_mismatch:
+        verdict = 'PASS' if mismatches else 'FAIL'
+    else:
+        verdict = 'PASS' if not mismatches else 'FAIL'
     report = dict(schema='mojolearn.byte-lm-cpu-train-gate.v1', mode='cpu',
                   deviation=2680, profile=PROFILE, vendor=args.vendor,
                   steps=len(steps), compared=compared, mismatched=len(mismatches),
                   first_mismatches=mismatches, optimizer=used_optimizer,
-                  verdict=verdict)
+                  expect_mismatch=args.expect_mismatch, verdict=verdict)
     print(f'gate: {verdict}: {compared - len(mismatches)}/{compared} array comparisons equal '
-          f'over {len(steps)} steps against {args.vendor}')
+          f'over {len(steps)} steps against {args.vendor}'
+          f'{" (sabotage build, a mismatch was required)" if args.expect_mismatch else ""}')
     if used_optimizer is not None:
         # State the optimizer, so a hyperparameter error is distinguishable
         # from an arithmetic one without re-deriving it.
@@ -414,6 +430,9 @@ def main(argv=None):
                         help='which tree the cpu mode compares against')
     parser.add_argument('--verify-digests', action='store_true',
                         help='also check every array against the SHA-256 its capture.json records')
+    parser.add_argument('--expect-mismatch', action='store_true',
+                        help='cpu mode only: invert the verdict, so a sabotage build '
+                             'that still agrees is the failure')
     parser.add_argument('--require-vendors', type=int, default=1, metavar='N',
                         help='refuse unless at least N vendor trees are present (default 1). '
                              'Pass 3 where a cross-vendor comparison is the point; CI holds '

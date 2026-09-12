@@ -18,6 +18,11 @@ from std.python.bindings import PythonModuleBuilder
 
 from bindings.hostptr import f32_ptr, f64_ptr, read_f32, read_i32
 from checks.numerics import GLOBAL_NUMERIC_MODE
+# DEVIATION 2680. The GEMM lane's backward sabotage arms, so a build carrying
+# one reads back as a sabotage build rather than as a clean one. Reachable
+# because the host backward routing already calls into this module; the probe
+# measured that a CPU-only build of it compiles (exit 0 on seven runners).
+from gemm.checks.gemm_backward import ANY_BWD_SABOTAGE
 from training.byte_lm_config import ByteConfig
 from training.byte_lm_host import (
     byte_host_logits,
@@ -67,7 +72,17 @@ def byte_lm_host_vendor_binding() raises -> PythonObject:
 
 
 def byte_lm_host_sabotage_binding() raises -> PythonObject:
-    return PythonObject(byte_host_sabotage_compiled())
+    """Whether this binary computes wrong answers on purpose, from ANY arm.
+
+    DEVIATION 2680 widened this. It used to report the DEVIATION 2612 host arm
+    alone, which reverses a fold inside `byte_host_logits`. That arm cannot
+    reach the training step, which calls `gemm_oracle` directly, so the GEMM
+    lane's backward arms are the ones that corrupt a gradient here. A binary
+    built with one of those would have computed wrong gradients while reading
+    back as clean, and `_byte_lm_host.py` refuses a sabotage build on exactly
+    this answer, so the refusal would not have fired. Either family is a
+    sabotage build and this says so."""
+    return PythonObject(byte_host_sabotage_compiled() or ANY_BWD_SABOTAGE)
 
 
 def byte_lm_host_profile_binding(shape: PythonObject) raises -> PythonObject:
