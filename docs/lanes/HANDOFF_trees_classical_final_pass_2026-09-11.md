@@ -241,18 +241,42 @@ the H100, then gate the Apple M4 and an AMD box before merging.
    `kde_stage_profile`; `svm/svc_main.mojo` 44/44 plus the hash probe
    (457e29b82bca9df9, 733a383c5699f427, 2b66bc991a9c9ed0); `check-if`,
    `check-forest-resident-layouts` and `device_batched_check`.
-4. **A RunPod network volume for the datasets. This is the highest-value
-   infrastructure fix left, and it cost real results tonight.** Istella-S is
-   472,129,615 bytes and every new pod refetches it from library.istella.it at
-   86 to 285 KB/s. It blew the gbdt lane's 2400 s download timeout (the leg
-   only survived because `curl -C -` resumed the partial file;
-   `urllib.request.urlretrieve`, which `speed_gbdt_arm.py` uses, CANNOT
-   resume), and on the pointwise pod the download was killed by its own
-   `timeout` at 464 of 472 MB while **the setup script wrote its ready
-   sentinel anyway**, so the arm silently fell back to synthclf. That
-   fallback-instead-of-fail is a second bug worth fixing on its own: a dataset
-   that did not download must refuse, not substitute. Pattern to copy:
-   `samba-sweep/tools/train_leg.sh`.
+4. **The per-pod dataset tax is SOLVED as of 2026-09-12: Cloudflare R2.**
+   Every new box used to rebuild Istella-S from library.istella.it (472,129,615
+   bytes at 86 KB/s to 1.2 MB/s) and then spend about 18 minutes decoding the
+   LETOR text into the 2.25 GB npz. On 2026-09-12 a GBDT leg spent 21 minutes
+   of setup to produce 4.5 minutes of measurement, and it had already blown a
+   2400 s download timeout the night before.
+   - Bucket `mojolearn-data` on Andrew's Cloudflare account, credentials in
+     `~/.mojolearn_r2` (mode 600, outside the repo; verified absent from the
+     working tree and from history).
+   - `tools/dataset_store.sh` holds it: `manifest` pins every file by size and
+     sha256 into `bench/results/dataset_store/manifest.tsv`, `push` uploads,
+     and **`stage "<ssh flags+target>" <key>...`** is what a leg calls after
+     renting. `stage` mints a short-lived presigned URL locally and pipes a
+     self-verifying fetch to the box over stdin, so the R2 secret never leaves
+     the Mac and the URL never appears in the box's process list. The box
+     refuses the file unless size AND sha256 equal the pins.
+   - Five keys, 2.9 GB total: taxi npz, Istella-S npz (decoded, so the 18
+     minute parse never happens again), the Istella-S source tarball (so a
+     decode stays reproducible if the origin server dies), and both neural
+     corpora (enwik8, pile_github -- their bytes are gitignored, so they were
+     being refetched from mattmahoney.net and HuggingFace the same way).
+   - MEASURED, not estimated: the whole 2.9 GB uploaded in 5 min 26 s (about
+     8.9 MB/s) and a full round trip -- pull all five back and re-hash -- took
+     2 min 17 s with 5 of 5 sha256 matching. I had estimated 40 minutes for the
+     upload from a bad 1.1 MB/s sample taken while two scp transfers competed;
+     that was wrong by 8x and the old number should not be re-derived.
+   - A RunPod network volume is now only an optional hot cache, not the fix.
+     It is region-locked and RunPod-only, whereas R2 also serves the
+     DigitalOcean and Hot Aisle boxes the AMD legs need.
+   - STILL OWED and worth doing on its own: a dataset that failed to download
+     must REFUSE, not substitute. On the pointwise pod the fetch was killed at
+     464 of 472 MB, the setup script wrote its ready sentinel anyway, and the
+     arm silently fell back to synthclf. `body_setup.sh` was since fixed to
+     write `data.done` only on a real decode; the arm's own fallback path has
+     not been.
+
 5. **Before the next Linux release**: confirm the installed FAST and
    DETERMINISTIC smoke passes on main (`run_installed.py` asks
    `_backend.binding('_mojolearn')` in tiers DEVIATION 2490 removed; the fix
