@@ -225,11 +225,16 @@ jobs:
       # with one derivation, so the derivation is checked against the literals
       # the certified b2-l32 run was produced and admitted with. If it ever
       # drifts, this fails here rather than on a leased box.
-      - name: Shape derivation against the certified literals
+      # The witness tests are here for a specific reason: the capture harness
+      # runs only where a GPU is, so its checks are otherwise first executed on
+      # a rented box, and two leases were spent on failures that needed no GPU
+      # to find.
+      - name: Shape derivation and the capture witness, against the certified literals
         if: always()
         run: |
           set -o pipefail
-          python3 -m pytest -q tools/test_byte_lm_shape.py 2>&1 \
+          python3 -m pytest -q tools/test_byte_lm_shape.py \
+            tools/test_byte_lm_capture_witness.py 2>&1 \
             | tee "$GATE_OUT/pytest_shape.log"
 
       # DEVIATION 2640: the threaded path against the reference path byte for

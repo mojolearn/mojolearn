@@ -313,6 +313,28 @@ def validate_platform_vendor(expected_vendor):
         raise ValueError('requires explicit IDENTICAL and matching Linux CUDA/HIP or Darwin Metal')
 
 
+def admit_runtime(runtime, expected_vendor, shape):
+    """The loaded binary's witness against the run being captured.
+
+    TWO PROFILES, AND THEY ARE NOT THE SAME THING. `native_profile` is the
+    BINARY's identity, a constant compiled into the shared object; the loader
+    refuses a binary reporting anything but the default, and it does not vary
+    with the shape, because one binary runs every shape. The RUN's identity is
+    `profile`, taken from the surface's own state, which the binding validates
+    separately through byte_lm_config_profile. An earlier revision compared
+    `native_profile` against the run's shape, which is false by construction at
+    any shape but the default, and a rented box is where that was discovered.
+
+    A FUNCTION RATHER THAN AN INLINE CHECK because it runs only where a GPU is,
+    so the only place it can be exercised cheaply is a test with a synthetic
+    witness. Two leases have now been spent on failures of exactly this class,
+    which no local test could see."""
+    return (runtime.get('native_vendor') == expected_vendor
+            and runtime.get('native_profile') == byte_lm_shape.DEFAULT_PROFILE
+            and runtime.get('profile') == shape.profile
+            and runtime.get('native_numeric_mode') == 1)
+
+
 SOURCE_DIRECTORIES = ('checks', 'core', 'gemm', 'embedding', 'transformer', 'training', 'mamba')
 REQUIRED_MAMBA_SOURCES = (
     'mamba/impl/modeling/modeling_mamba.mojo',
@@ -429,8 +451,7 @@ def main():
     runtime['host_runtime'] = dict(system=platform.system(), release=platform.release(),
                                   machine=platform.machine(), python=sys.version,
                                   macos_version=platform.mac_ver()[0] if sys.platform == 'darwin' else None)
-    if (runtime['native_vendor'] != args.expected_vendor or runtime['native_profile'] != shape.profile
-            or runtime['native_numeric_mode'] != 1):
+    if not admit_runtime(runtime, args.expected_vendor, shape):
         raise ValueError('native runtime witness differs')
     if file_sha(runtime['binding_file']) != runtime['binding_sha256']:
         raise ValueError('loaded binding artifact changed before capture')
