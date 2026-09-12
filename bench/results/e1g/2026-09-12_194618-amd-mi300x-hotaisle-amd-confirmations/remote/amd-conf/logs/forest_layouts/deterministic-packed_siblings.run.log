@@ -1,0 +1,17 @@
+RESIDENT_LAYOUT_PACKED True
+LAYOUT_PASS RF_INPUT True outputs 1
+LAYOUT_PASS RF_INPUT False outputs 1
+LAYOUT_PASS RF_INPUT True outputs 2
+LAYOUT_PASS RF_INPUT False outputs 2
+LAYOUT_PASS RF_INPUT True outputs 3
+LAYOUT_PASS RF_INPUT False outputs 3
+LAYOUT_PASS RF_INPUT True outputs 5
+LAYOUT_PASS RF_INPUT False outputs 5
+LAYOUT_PASS RF_INPUT True outputs 8
+LAYOUT_PASS RF_INPUT False outputs 8
+LAYOUT_PASS RF_INPUT True outputs 9
+LAYOUT_PASS RF_INPUT False outputs 9
+WORKSPACE_PASS RF_INPUT True cached/uncached resize/reuse/empty/changed-input/close
+WORKSPACE_PASS RF_INPUT False cached/uncached resize/reuse/empty/changed-input/close
+RESIDENT_MODE 2 VENDOR hip
+RESIDENT_FOREST_PASS repeated borrowed/List/transient/stump, release/stale/newID, dimensions/finite input+output/graph, destruction

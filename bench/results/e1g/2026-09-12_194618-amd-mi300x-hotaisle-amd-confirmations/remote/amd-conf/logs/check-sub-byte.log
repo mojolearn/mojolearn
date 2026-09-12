@@ -1,0 +1,16 @@
+Imported from /root/mojolearn/gbdt/methods/greedy_subsets_searcher/kernel/sub_byte_layout_gate.mojo:89:
+/root/mojolearn/gbdt/methods/greedy_subsets_searcher/kernel/hist_one_byte.mojo:234:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/gbdt/methods/greedy_subsets_searcher/kernel/sub_byte_layout_gate.mojo:94:
+/root/mojolearn/gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_base.mojo:200:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+sub_byte_layout_gate: column amd, hardware lanes 64, logical replica lanes 32
+  matrix rows: layout constant 32 on every family, amd builds with sync row 0 (0 = block barrier, 1 = lane sync)
+  half-byte fold stride: shipped 512 keeps 16/16 replicas; re-coupled 1024 keeps 8/16 (must differ)
+  one-byte replica occupancy: shipped 32 gives 0 colliding pairs; re-coupled 64 gives 128 (must be 0 and non-zero)
+  hist_2 shared allocation: needs 8192 slots, shipped gives 8192, re-coupled gives 4096 (shipped must cover, re-coupled must not)
+sub_byte_layout_gate OK: four arms live, three sabotage arms failed as required (DEVIATION 1947)

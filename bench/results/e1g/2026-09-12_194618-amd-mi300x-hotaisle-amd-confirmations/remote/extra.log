@@ -1,0 +1,122 @@
+=== status.tsv ===
+build-base	0	46
+build-estimators	0	54
+build-rf	0	28
+build-trees	0	27
+build-gbdt	0	82
+build-svm	0	43
+ib-forest	0	12
+ib-wide	0	14
+check-if	0	15
+check-et-batched	0	21
+check-knn-identity	0	31
+check-knn	0	37
+check-knn-qbatch	0	30
+check-kde	0	26
+kde-stage-profile	0	40
+check-svm	0	53
+check-sub-byte	0	4
+check-forest-layouts	0	54
+check-jacobi	0	25
+check-ols	0	39
+check-pca	1	35
+svc-hash	0	6
+ab-et2663-ib-dflt	0	8
+ab-et2663-build	0	28
+ab-et2663-ib-arm	0	3
+ab-et2663-diff	0	0
+ab-knn2631-ib-dflt	0	6
+ab-knn2631-build	0	49
+ab-svm2666-ib-dflt	0	8
+ab-svm2666-build	0	46
+ab-svm2666-ib-arm	0	8
+ab-svm2666-diff	0	0
+ab-gbdt2634-ib-dflt	0	11
+ab-gbdt2634-build	0	90
+ab-gbdt2634-ib-arm	0	7
+ab-gbdt2634-diff	0	1
+build-arima	0	14
+build-byte_lm	0	105
+build-byte_lm_host	2	0
+build-gp	0	36
+build-linalg	0	31
+build-mamba	0	63
+build-metrics	0	63
+build-preprocessing	0	9
+build-solver	0	39
+build-training	0	39
+build-transformer	0	53
+build-tsa	0	13
+=== gate.txt ===
+started=2026-09-12T19:49:13Z
+vendor=amd archs=gfx942 jobs=8
+commit=unknown
+device_gfx=gfx942
+bindings_built=6
+f04216f18789578260dd2eb442139e38c1fcf7efadcd6b977552f4861586f545  python/mojolearn/identical/_mojolearn.so
+a838c8986219d1ff0746bb2a47efde8525d57842dd63df7fa4e2d523644d74a0  python/mojolearn/identical/_mojolearn_estimators.so
+6d897a417669b4f06c914419a4eedb900ff92dd1793eafe9d7e8f0470caed4c5  python/mojolearn/identical/_mojolearn_gbdt.so
+cec7d6cc3158ba7d73519fc2dd637a564711b3202e8908bff154879bebc1c41d  python/mojolearn/identical/_mojolearn_rf.so
+604ea5fe7862e81d3e01553d9a7d910c542d7ec860047e446ff41f37d396fe1d  python/mojolearn/identical/_mojolearn_svm.so
+a763f4a3ba15557ea9aa258cf094cc565ac140a6a01ae67e593ce8f294d85a55  python/mojolearn/identical/_mojolearn_trees.so
+jacobi:   check_jacobi_is_launch_invariant n = 3 block 32 (the fold width, the reference rung) sweeps 2
+jacobi:   check_jacobi_is_launch_invariant n = 3 block 64 (fold stays 32 ) sweeps 2 cells differing 0 of 21
+jacobi:   check_jacobi_is_launch_invariant n = 3 block 128 (fold stays 32 ) sweeps 2 cells differing 0 of 21
+jacobi:   check_jacobi_is_launch_invariant n = 3 block 256 (fold stays 32 ) sweeps 2 cells differing 0 of 21
+jacobi:   check_jacobi_is_launch_invariant n = 3 block 512 (fold stays 32 ) sweeps 2 cells differing 0 of 21
+jacobi:   check_jacobi_is_launch_invariant n = 11 block 32 (the fold width, the reference rung) sweeps 4
+jacobi:   check_jacobi_is_launch_invariant n = 11 block 64 (fold stays 32 ) sweeps 4 cells differing 0 of 245
+jacobi:   check_jacobi_is_launch_invariant n = 11 block 128 (fold stays 32 ) sweeps 4 cells differing 0 of 245
+jacobi:   check_jacobi_is_launch_invariant n = 11 block 256 (fold stays 32 ) sweeps 4 cells differing 0 of 245
+jacobi:   check_jacobi_is_launch_invariant n = 11 block 512 (fold stays 32 ) sweeps 4 cells differing 0 of 245
+jacobi:   check_jacobi_is_launch_invariant n = 33 block 32 (the fold width, the reference rung) sweeps 6
+jacobi:   check_jacobi_is_launch_invariant n = 33 block 64 (fold stays 32 ) sweeps 6 cells differing 0 of 2181
+jacobi:   check_jacobi_is_launch_invariant n = 33 block 128 (fold stays 32 ) sweeps 6 cells differing 0 of 2181
+jacobi:   check_jacobi_is_launch_invariant n = 33 block 256 (fold stays 32 ) sweeps 6 cells differing 0 of 2181
+jacobi:   check_jacobi_is_launch_invariant n = 33 block 512 (fold stays 32 ) sweeps 6 cells differing 0 of 2181
+jacobi:   check_jacobi_is_launch_invariant n = 64 block 32 (the fold width, the reference rung) sweeps 6
+jacobi:   check_jacobi_is_launch_invariant n = 64 block 64 (fold stays 32 ) sweeps 6 cells differing 0 of 8195
+jacobi:   check_jacobi_is_launch_invariant n = 64 block 128 (fold stays 32 ) sweeps 6 cells differing 0 of 8195
+jacobi:   check_jacobi_is_launch_invariant n = 64 block 256 (fold stays 32 ) sweeps 6 cells differing 0 of 8195
+jacobi:   check_jacobi_is_launch_invariant n = 64 block 512 (fold stays 32 ) sweeps 6 cells differing 0 of 8195
+jacobi:   check_jacobi_is_launch_invariant n = 129 block 32 (the fold width, the reference rung) sweeps 8
+jacobi:   check_jacobi_is_launch_invariant n = 129 block 64 (fold stays 32 ) sweeps 8 cells differing 0 of 33285
+jacobi:   check_jacobi_is_launch_invariant n = 129 block 128 (fold stays 32 ) sweeps 8 cells differing 0 of 33285
+jacobi:   check_jacobi_is_launch_invariant n = 129 block 256 (fold stays 32 ) sweeps 8 cells differing 0 of 33285
+jacobi:   check_jacobi_is_launch_invariant n = 129 block 512 (fold stays 32 ) sweeps 8 cells differing 0 of 33285
+jacobi:   check_jacobi_is_launch_invariant n = 220 block 32 (the fold width, the reference rung) sweeps 8
+jacobi:   check_jacobi_is_launch_invariant n = 220 block 64 (fold stays 32 ) sweeps 8 cells differing 0 of 96803
+jacobi:   check_jacobi_is_launch_invariant n = 220 block 128 (fold stays 32 ) sweeps 8 cells differing 0 of 96803
+jacobi:   check_jacobi_is_launch_invariant n = 220 block 256 (fold stays 32 ) sweeps 8 cells differing 0 of 96803
+jacobi:   check_jacobi_is_launch_invariant n = 220 block 512 (fold stays 32 ) sweeps 8 cells differing 0 of 96803
+jacobi: check_jacobi_is_launch_invariant OK (IDENTICAL): the fold width stayed 32 while the block ran 64/128/256/512 threads, and 0 output cells moved over seven sizes. The shipped launch width is 256.
+jacobi:   check_jacobi_merged_phases_equal_four_phase n = 2 sweeps merged 1 four-phase 1 cells differing 0 of 11
+jacobi:   check_jacobi_merged_phases_equal_four_phase n = 3 sweeps merged 2 four-phase 2 cells differing 0 of 21
+jacobi:   check_jacobi_merged_phases_equal_four_phase n = 11 sweeps merged 4 four-phase 4 cells differing 0 of 245
+jacobi:   check_jacobi_merged_phases_equal_four_phase n = 33 sweeps merged 6 four-phase 6 cells differing 0 of 2181
+jacobi:   check_jacobi_merged_phases_equal_four_phase n = 64 sweeps merged 6 four-phase 6 cells differing 0 of 8195
+jacobi:   check_jacobi_merged_phases_equal_four_phase n = 129 sweeps merged 8 four-phase 8 cells differing 0 of 33285
+jacobi:   check_jacobi_merged_phases_equal_four_phase n = 220 sweeps merged 8 four-phase 8 cells differing 0 of 96803
+jacobi: check_jacobi_merged_phases_equal_four_phase OK (IDENTICAL): cells differing over all sizes 0
+jacobi: check_jacobi_fold_shape OK (IDENTICAL): device fold == host halving tree bit for bit at width 32 (bits 1266679831 ), and the fixture separates that shape from a sequential fold ( 16777262.0 vs 16777278.0 ). The library fold on THIS device was NOT INSTANTIABLE at this width (block size must exceed the lane width; DEVIATION 528), so no comparison was taken
+ols: check_ols_host_surface_takes_the_guard OK [IDENTICAL]: the Python-facing entry interpolates a 6 x 16 design (residual 2.5087931404543795e-07), i.e. it takes the min-norm route and not lstsq_eig; the 16 x 6 control does not (0.5533459960525986)
+ols: check_ols_rank_guard_is_scale_invariant OK [IDENTICAL]: rank 8 at scale 1 and at 2^-24, and all 8 coefficients at 2^-24 are exactly 2^24 times those at scale 1 (the 2^23 control matches 0)
+ols: check_ols_mixed_scale_design_matches_float64_oracle OK [IDENTICAL]: residual 3.389513003445434 vs float64 3.3895128278528994 (bound 3.392902340680752, 0 dropped); the uncorrelated answer gives 1172.3229203893322
+ols: check_ols_rank_deficient_design_drops_the_noise_direction OK [IDENTICAL]: the rank-deficient design dropped 1 direction (largest |coefficient| 0.062438931316137314), the full-rank control dropped 0
+ols: check_ols_card_hashes_raw_bytes OK [IDENTICAL]: 0x3f00004b and 0x3f00004c both print 0.5000045 -- decimal text cannot separate them, FNV-1a64 over raw bytes gives 0xeba04fe033207f3f vs 0xcbbb21b684141e94
+ols: check_ols_card_is_emitted OK [IDENTICAL]: 11 stages, and two fits of one fixture agree on every one of them
+pca: check_covariance_is_symmetric OK: all 6 off-diagonal pairs bitwise equal
+svc_hash: SVCHASH n=400 457e29b82bca9df9 want=457e29b82bca9df9 MATCH
+svc_hash: SVCHASH n=600 733a383c5699f427 want=733a383c5699f427 MATCH
+svc_hash: SVCHASH n=2000 2b66bc991a9c9ed0 want=2b66bc991a9c9ed0 MATCH
+svc_hash: SVCHASH_OK=1
+ab_et2663: so_dflt=a763f4a3ba15557e so_arm=c9c91af89157fe79 defines='-D MOJOLEARN_ET_DEVICE_BATCH_4096=1'
+ab_et2663: summary: IDENTICAL=18
+ab_knn2631: so_dflt=f04216f187895782 so_arm=f04216f187895782 defines='-D MOJOLEARN_KNN_LEGACY_QUERY_TILE=1 -D MOJOLEARN_KNN_IDENTICAL_FULL_RADIX_SCRATCH=1'
+ab_knn2631: REACH FAILED -- the arm's .so equals the default's, so the define selected NOTHING; this comparison is inert
+ab_svm2666: so_dflt=604ea5fe7862e81d so_arm=0e8082ae8f386d12 defines='-D MOJOLEARN_SVM_TREE_FOLDS=1'
+ab_svm2666: summary: IDENTICAL=18
+ab_gbdt2634: so_dflt=6d897a417669b4f0 so_arm=67a253bbddee5da2 defines='-D MOJOLEARN_2634_CTR_PREP_OFF=1 -D MOJOLEARN_2635_LINEAR_BOUNDS=1'
+ab_gbdt2634: summary: IDENTICAL=36
+finished=2026-09-12T20:13:28Z
+AMD_CONF_OK=0

@@ -1,0 +1,135 @@
+!! MOJOLEARN_GPU_ARCHS=gfx942 (--target-accelerator); read the architecture back out of the built .so
+/root/mojolearn/bindings/_mojolearn_training.mojo:391:8: warning: doc string summary should begin with a capital letter or non-alpha character, but this begins with 'p'
+    """params=[rows,cols]; all three borrowed buffers hold rows*cols f32.
+       ^
+/root/mojolearn/bindings/_mojolearn_training.mojo:414:8: warning: doc string summary should begin with a capital letter or non-alpha character, but this begins with 'p'
+    """params=[rows,cols]; borrow rows*cols input and cols output f32.
+       ^
+/root/mojolearn/bindings/_mojolearn_training.mojo:466:8: warning: doc string summary should begin with a capital letter or non-alpha character, but this begins with 'a'
+    """addresses = [y (n_positions*width f32, written), w (vocab*width f32),
+       ^
+/root/mojolearn/bindings/_mojolearn_training.mojo:486:8: warning: doc string summary should begin with a capital letter or non-alpha character, but this begins with 'a'
+    """addresses = [dw (vocab*width f32, written), dy (n_positions*width f32),
+       ^
+/root/mojolearn/bindings/_mojolearn_training.mojo:506:8: warning: doc string summary should begin with a capital letter or non-alpha character, but this begins with 'a'
+    """addresses = [y (m*dm f32, written), x (m*dm f32), w (dm f32)];
+       ^
+/root/mojolearn/bindings/_mojolearn_training.mojo:525:8: warning: doc string summary should begin with a capital letter or non-alpha character, but this begins with 'a'
+    """addresses = [dx (m*dm f32, written), dw (dm f32, written), dy (m*dm
+       ^
+/root/mojolearn/bindings/_mojolearn_training.mojo:564:8: warning: doc string summary should begin with a capital letter or non-alpha character, but this begins with 'a'
+    """addresses = [da (m*k, written), dw (n*k, written), dc (m*n), a (m*k),
+       ^
+/root/mojolearn/bindings/_mojolearn_training.mojo:616:8: warning: doc string summary should begin with a capital letter or non-alpha character, but this begins with 'a'
+    """addresses = [out (n f32, written), inp (n f32 for the dropout kinds,
+       ^
+Imported from /root/mojolearn/bindings/_mojolearn_training.mojo:74:
+Imported from ./training/estimator.mojo:98:
+./training/checks/loss.mojo:519:8: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    red[tid] = value
+    ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_training.mojo:74:
+Imported from ./training/estimator.mojo:98:
+./training/checks/loss.mojo:524:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var other = red[tid + step]
+                        ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_training.mojo:74:
+Imported from ./training/estimator.mojo:98:
+./training/checks/loss.mojo:528:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                if other > red[tid]:
+                           ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_training.mojo:74:
+Imported from ./training/estimator.mojo:98:
+./training/checks/loss.mojo:529:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    red[tid] = other
+                    ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_training.mojo:74:
+Imported from ./training/estimator.mojo:98:
+./training/checks/loss.mojo:531:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = identical_fmax(red[tid], other)
+                ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_training.mojo:74:
+Imported from ./training/estimator.mojo:98:
+./training/checks/loss.mojo:531:46: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = identical_fmax(red[tid], other)
+                                          ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_training.mojo:74:
+Imported from ./training/estimator.mojo:98:
+./training/checks/loss.mojo:534:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var total = red[0]
+                ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_training.mojo:220:19: warning: assignment to 'n_total' was never used; assign to '_' instead?
+    var n_total = 0
+                  ^
+/root/mojolearn/bindings/_mojolearn_training.mojo:274:19: warning: assignment to 'n_total' was never used; assign to '_' instead?
+    var n_total = 0
+                  ^
+/root/mojolearn/bindings/_mojolearn_training.mojo:350:17: warning: assignment to 'count' was never used; assign to '_' instead?
+    var count = 0
+                ^
+/root/mojolearn/bindings/_mojolearn_training.mojo:380:17: warning: assignment to 'count' was never used; assign to '_' instead?
+    var count = 0
+                ^
+/root/mojolearn/bindings/_mojolearn_training.mojo:404:17: warning: assignment to 'count' was never used; assign to '_' instead?
+    var count = 0
+                ^
+/root/mojolearn/bindings/_mojolearn_training.mojo:425:17: warning: assignment to 'count' was never used; assign to '_' instead?
+    var count = 0
+                ^
+/root/mojolearn/bindings/_mojolearn_training.mojo:473:17: warning: assignment to 'count' was never used; assign to '_' instead?
+    var count = 0
+                ^
+/root/mojolearn/bindings/_mojolearn_training.mojo:493:17: warning: assignment to 'count' was never used; assign to '_' instead?
+    var count = 0
+                ^
+/root/mojolearn/bindings/_mojolearn_training.mojo:513:17: warning: assignment to 'count' was never used; assign to '_' instead?
+    var count = 0
+                ^
+/root/mojolearn/bindings/_mojolearn_training.mojo:532:17: warning: assignment to 'count' was never used; assign to '_' instead?
+    var count = 0
+                ^
+/root/mojolearn/bindings/_mojolearn_training.mojo:552:17: warning: assignment to 'count' was never used; assign to '_' instead?
+    var count = 0
+                ^
+/root/mojolearn/bindings/_mojolearn_training.mojo:571:17: warning: assignment to 'count' was never used; assign to '_' instead?
+    var count = 0
+                ^
+/root/mojolearn/bindings/_mojolearn_training.mojo:593:17: warning: assignment to 'count' was never used; assign to '_' instead?
+    var count = 0
+                ^
+/root/mojolearn/bindings/_mojolearn_training.mojo:631:17: warning: assignment to 'count' was never used; assign to '_' instead?
+    var count = 0
+                ^
+Included from /root/mojolearn/bindings/_mojolearn_training.mojo:74:
+Included from ./training/estimator.mojo:111:
+./training/checks/optimizer.mojo:579:20: warning: assignment to 'm' was never used; assign to '_' instead?
+    var m = Float32(0.0)
+                   ^
+Included from /root/mojolearn/bindings/_mojolearn_training.mojo:74:
+Included from ./training/estimator.mojo:111:
+./training/checks/optimizer.mojo:589:20: warning: assignment to 'v' was never used; assign to '_' instead?
+    var v = Float32(0.0)
+                   ^
+Included from /root/mojolearn/bindings/_mojolearn_training.mojo:74:
+Included from ./training/estimator.mojo:111:
+./training/checks/optimizer.mojo:609:21: warning: assignment to 'dn' was never used; assign to '_' instead?
+    var dn = Float32(0.0)
+                    ^
+Included from /root/mojolearn/bindings/_mojolearn_training.mojo:74:
+Included from ./training/estimator.mojo:111:
+./training/checks/optimizer.mojo:610:20: warning: assignment to 'q' was never used; assign to '_' instead?
+    var q = Float32(0.0)
+                   ^
+Included from /root/mojolearn/bindings/_mojolearn_training.mojo:74:
+Included from ./training/estimator.mojo:111:
+./training/checks/optimizer.mojo:657:24: warning: assignment to 'p_out' was never used; assign to '_' instead?
+    var p_out = Float32(0.0)
+                       ^
+built python/mojolearn/identical/_mojolearn_training.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)

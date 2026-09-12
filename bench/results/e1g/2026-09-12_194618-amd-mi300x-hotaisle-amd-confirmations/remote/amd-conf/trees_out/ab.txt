@@ -1,0 +1,8 @@
+build_exit et2663.trees=0 20:01:51
+c9c91af89157fe792a155f4591f7bb675e168f455cc1f1d2ecb205fdac54ab1e  /root/bins/et2663/_mojolearn_trees.so
+build_exit knn2631.base=0 20:02:49
+f04216f18789578260dd2eb442139e38c1fcf7efadcd6b977552f4861586f545  /root/bins/knn2631/_mojolearn.so
+build_exit svm2666.svm=0 20:03:43
+0e8082ae8f386d12047a813b03927268ac4848c77fdbccb5201c7c4e839402cc  /root/bins/svm2666/_mojolearn_svm.so
+build_exit gbdt2634.gbdt=0 20:05:33
+67a253bbddee5da2ff0a9ada36b132d917af9d7218a2eca5bfa3446949049e75  /root/bins/gbdt2634/_mojolearn_gbdt.so

@@ -1,0 +1,229 @@
+Imported from /root/mojolearn/glm/checks/ols_check.mojo:490:
+/root/mojolearn/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+/root/mojolearn/glm/checks/ols_check.mojo:550:36: warning: 'if' condition always evaluates to 'False'; 'if' branch is unreachable
+    if GRAM_SPLITK_RESOLVED_COLUMN != expected:
+                                   ^
+/root/mojolearn/glm/checks/ols_check.mojo:1864:53: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+        UInt64(0xCBF29CE484222325), one.unsafe_ptr().bitcast[UInt8](), 4
+                                    ~~~~~~~~~~~~~~~~^~~~~~~~
+                                                     unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+/root/mojolearn/glm/checks/ols_check.mojo:1867:53: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+        UInt64(0xCBF29CE484222325), two.unsafe_ptr().bitcast[UInt8](), 4
+                                    ~~~~~~~~~~~~~~~~^~~~~~~~
+                                                     unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+/root/mojolearn/glm/checks/ols_check.mojo:2670:8: warning: doc string summary should end with a period '.', exclamation mark '!', question mark '?', or backtick '`', but this ends with '*'
+    """**THE GATE THE PYTHON SURFACE RESTS ON.**
+       ^
+Imported from /root/mojolearn/glm/checks/ols_check.mojo:490:
+/root/mojolearn/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/glm/checks/ols_check.mojo:490:
+/root/mojolearn/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/glm/checks/ols_check.mojo:490:
+/root/mojolearn/core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/glm/checks/ols_check.mojo:106:
+Imported from /root/mojolearn/glm/impl/ols.mojo:155:
+Imported from /root/mojolearn/glm/impl/linalg/detail/lstsq.mojo:136:
+/root/mojolearn/core/column_stats.mojo:438:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            tile[ty * (TRANSPOSE_TILE + 1) + tx] = src.unsafe_load(
+            ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/glm/checks/ols_check.mojo:106:
+Imported from /root/mojolearn/glm/impl/ols.mojo:155:
+Imported from /root/mojolearn/glm/impl/linalg/detail/lstsq.mojo:136:
+/root/mojolearn/core/column_stats.mojo:447:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                r2 * n_rows + c2, tile[tx * (TRANSPOSE_TILE + 1) + ty]
+                                  ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/glm/checks/ols_check.mojo:106:
+Imported from /root/mojolearn/glm/impl/ols.mojo:155:
+Imported from /root/mojolearn/glm/impl/linalg/detail/lstsq.mojo:143:
+/root/mojolearn/decomposition/checks/jacobi_eigh_device.mojo:360:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    rot[0] = cs[0]
+                    ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/glm/checks/ols_check.mojo:106:
+Imported from /root/mojolearn/glm/impl/ols.mojo:155:
+Imported from /root/mojolearn/glm/impl/linalg/detail/lstsq.mojo:143:
+/root/mojolearn/decomposition/checks/jacobi_eigh_device.mojo:361:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    rot[1] = cs[1]
+                    ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/glm/checks/ols_check.mojo:106:
+Imported from /root/mojolearn/glm/impl/ols.mojo:155:
+Imported from /root/mojolearn/glm/impl/linalg/detail/lstsq.mojo:143:
+/root/mojolearn/decomposition/checks/jacobi_eigh_device.mojo:364:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                var c = rot[0]
+                        ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/glm/checks/ols_check.mojo:106:
+Imported from /root/mojolearn/glm/impl/ols.mojo:155:
+Imported from /root/mojolearn/glm/impl/linalg/detail/lstsq.mojo:143:
+/root/mojolearn/decomposition/checks/jacobi_eigh_device.mojo:365:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                var s = rot[1]
+                        ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/glm/checks/ols_check.mojo:106:
+Imported from /root/mojolearn/glm/impl/ols.mojo:155:
+Imported from /root/mojolearn/glm/impl/linalg/detail/lstsq.mojo:136:
+Imported from /root/mojolearn/core/column_stats.mojo:94:
+/root/mojolearn/core/pinned_reduce.mojo:125:8: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    red[tid] = value
+    ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/glm/checks/ols_check.mojo:106:
+Imported from /root/mojolearn/glm/impl/ols.mojo:155:
+Imported from /root/mojolearn/glm/impl/linalg/detail/lstsq.mojo:136:
+Imported from /root/mojolearn/core/column_stats.mojo:94:
+/root/mojolearn/core/pinned_reduce.mojo:130:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            v[j] = red[tid + j * P]
+                   ~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/glm/checks/ols_check.mojo:106:
+Imported from /root/mojolearn/glm/impl/ols.mojo:155:
+Imported from /root/mojolearn/glm/impl/linalg/detail/lstsq.mojo:136:
+Imported from /root/mojolearn/core/column_stats.mojo:94:
+/root/mojolearn/core/pinned_reduce.mojo:136:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        red[tid] = v[0]
+        ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/glm/checks/ols_check.mojo:106:
+Imported from /root/mojolearn/glm/impl/ols.mojo:155:
+Imported from /root/mojolearn/glm/impl/linalg/detail/lstsq.mojo:136:
+Imported from /root/mojolearn/core/column_stats.mojo:94:
+/root/mojolearn/core/pinned_reduce.mojo:140:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        w[t] = red[t]
+               ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/glm/checks/ols_check.mojo:490:
+/root/mojolearn/core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/glm/checks/ols_check.mojo:106:
+Imported from /root/mojolearn/glm/impl/ols.mojo:155:
+Imported from /root/mojolearn/glm/impl/linalg/detail/lstsq.mojo:143:
+/root/mojolearn/decomposition/checks/jacobi_eigh_device.mojo:142:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            red[tid] = value
+            ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/glm/checks/ols_check.mojo:106:
+Imported from /root/mojolearn/glm/impl/ols.mojo:155:
+Imported from /root/mojolearn/glm/impl/linalg/detail/lstsq.mojo:143:
+/root/mojolearn/decomposition/checks/jacobi_eigh_device.mojo:147:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                v[j] = red[tid + j * P]
+                       ~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/glm/checks/ols_check.mojo:106:
+Imported from /root/mojolearn/glm/impl/ols.mojo:155:
+Imported from /root/mojolearn/glm/impl/linalg/detail/lstsq.mojo:143:
+/root/mojolearn/decomposition/checks/jacobi_eigh_device.mojo:152:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            red[tid] = v[0]
+            ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/glm/checks/ols_check.mojo:106:
+Imported from /root/mojolearn/glm/impl/ols.mojo:155:
+Imported from /root/mojolearn/glm/impl/linalg/detail/lstsq.mojo:143:
+/root/mojolearn/decomposition/checks/jacobi_eigh_device.mojo:156:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            w[t] = red[t]
+                   ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/glm/checks/ols_check.mojo:486:
+/root/mojolearn/core/gram_splitk.mojo:612:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    tile[i] = ftz(
+                    ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/glm/checks/ols_check.mojo:486:
+/root/mojolearn/core/gram_splitk.mojo:617:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    tile[i] = x.unsafe_load(t * m + i)
+                    ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/glm/checks/ols_check.mojo:486:
+/root/mojolearn/core/gram_splitk.mojo:632:37: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        cv[b] = tile[base + bj0 + b]
+                                ~~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/glm/checks/ols_check.mojo:486:
+/root/mojolearn/core/gram_splitk.mojo:634:38: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        var xi = tile[base + bi0 + a]
+                                 ~~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/glm/checks/ols_check.mojo:486:
+/root/mojolearn/core/gram_splitk.mojo:651:30: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                var xj = tile[base + jm]
+                         ~~~~^~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/glm/checks/ols_check.mojo:486:
+/root/mojolearn/core/gram_splitk.mojo:656:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            tile[base + Int(ii[c])], xj, acc[c]
+                            ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/glm/checks/ols_check.mojo:486:
+/root/mojolearn/core/gram_splitk.mojo:670:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            tile[base + Int(ii[c])],
+                            ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/glm/checks/ols_check.mojo:486:
+/root/mojolearn/core/gram_splitk.mojo:671:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            tile[base + Int(jj[c])],
+                            ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/glm/checks/ols_check.mojo:1386:17: warning: assignment to 'drop0' was never used; assign to '_' instead?
+    var drop0 = 0
+                ^
+/root/mojolearn/glm/checks/ols_check.mojo:1387:17: warning: assignment to 'drop1' was never used; assign to '_' instead?
+    var drop1 = 0
+                ^
+/root/mojolearn/glm/checks/ols_check.mojo:1549:17: warning: assignment to 'drop0' was never used; assign to '_' instead?
+    var drop0 = 0
+                ^
+/root/mojolearn/glm/checks/ols_check.mojo:1550:17: warning: assignment to 'drop1' was never used; assign to '_' instead?
+    var drop1 = 0
+                ^
+/root/mojolearn/glm/checks/ols_check.mojo:1915:14: warning: assignment to 'n1' was never used; assign to '_' instead?
+    var n1 = 0
+             ^
+Included from /root/mojolearn/glm/checks/ols_check.mojo:106:
+Included from /root/mojolearn/glm/impl/ols.mojo:155:
+Included from /root/mojolearn/glm/impl/linalg/detail/lstsq.mojo:143:
+/root/mojolearn/decomposition/checks/jacobi_eigh_device.mojo:196:20: warning: assignment to 't' was never used; assign to '_' instead?
+    var t = Float32(0.0)
+                   ^
+== glm/checks/ols_check.mojo [IDENTICAL] ==
+check_ols_exact OK: all 8 coefficients recovered within 1.0% from a noiseless planted model (worst relative 3.814697266957273e-06; vendor fp32 product on this column: fp32)
+check_ols_scale_invariant OK: y x5 scaled every coefficient by exactly 5, which is the reach evidence for xty_kernel
+check_ols_beats_truth_on_noise OK: fitted residual 85.0002889571526 against the true model's 85.21995181198805
+check_ols_dispatch_routes_special_shapes OK: 6x16 -> min-norm, 64x1 -> eig, 256x4 untouched, explicit algo 0 refused by name
+check_ols_wide_is_the_minimum_norm_solution OK [IDENTICAL]: 6 x 16, residual 2.5087931404543795e-07 <= 0.0001; ||w_fit|| 1.0578852647208397 < ||w*|| 1.3852573255838199; float64 oracle within 1.9855885247110905e-07; both negative controls rejected
+check_ols_single_column_matches_the_closed_form OK [IDENTICAL]: 3.2484779357910156 vs 3.248477637502271 (|delta| 2.982887448155225e-07); the wrong closed form 0.30032332635564307 is distinguishable
+check_ols_normal_equation_residual_is_zero OK [IDENTICAL]: ||A^T (A w - b)||_inf 7.79028011805659e-05 <= 0.5092932597037362; the perturbed vector gives 2.3376952948422898
+check_ols_duplicating_a_row_equals_doubling_its_weight OK [IDENTICAL]: worst |delta| 9.5367431640625e-07 <= 0.01375846330413849; the unweighted control is 1.714409589767456 away, so the weights demonstrably reached the fit
+check_ols_sample_weight_restores_its_operands OK [IDENTICAL]: A within 5.960464477539063e-08, b within 1.4901161193847656e-08, w within 0.0; the scaling itself moves A by 1.9497298002243042
+check_ols_sample_weight_host_rescale_matches_device OK [IDENTICAL]: all 5 coefficients byte-identical between ols_fit_weighted_host and the host rescale; a different weight vector moves 5 of them
+check_ols_arms_are_pinned OK [IDENTICAL]: step 1 compiles against column bit-identical and the pinned Gram kernel serves 8, 16 and 128 features
+check_ols_over_capacity_fits OK [IDENTICAL]: 512 x 130 fits through the whole estimator (worst |w - w*| = 0.00033879280090354236, run-to-run coefficients moved: 0)
+check_ols_is_launch_invariant OK [IDENTICAL]: all 12 coefficients bit-identical across elem_tpb 256/64, 0/37 floats of buffer padding and two different scratch poisons (coef[0] = 0xbc0517a9), and the A-vs-A control agrees
+check_ols_host_surface_takes_the_guard OK [IDENTICAL]: the Python-facing entry interpolates a 6 x 16 design (residual 2.5087931404543795e-07), i.e. it takes the min-norm route and not lstsq_eig; the 16 x 6 control does not (0.5533459960525986)
+check_ols_rank_guard_is_scale_invariant OK [IDENTICAL]: rank 8 at scale 1 and at 2^-24, and all 8 coefficients at 2^-24 are exactly 2^24 times those at scale 1 (the 2^23 control matches 0)
+check_ols_mixed_scale_design_matches_float64_oracle OK [IDENTICAL]: residual 3.389513003445434 vs float64 3.3895128278528994 (bound 3.392902340680752, 0 dropped); the uncorrelated answer gives 1172.3229203893322
+check_ols_rank_deficient_design_drops_the_noise_direction OK [IDENTICAL]: the rank-deficient design dropped 1 direction (largest |coefficient| 0.062438931316137314), the full-rank control dropped 0
+check_ols_card_hashes_raw_bytes OK [IDENTICAL]: 0x3f00004b and 0x3f00004c both print 0.5000045 -- decimal text cannot separate them, FNV-1a64 over raw bytes gives 0xeba04fe033207f3f vs 0xcbbb21b684141e94
+check_ols_card_is_emitted OK [IDENTICAL]: 11 stages, and two fits of one fixture agree on every one of them

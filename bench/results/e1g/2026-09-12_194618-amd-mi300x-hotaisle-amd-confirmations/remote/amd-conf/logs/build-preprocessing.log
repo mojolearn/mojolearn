@@ -1,0 +1,7 @@
+Imported from /root/mojolearn/bindings/_mojolearn_preprocessing.mojo:5:
+./bindings/hostptr.mojo:58:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+built python/mojolearn/identical/_mojolearn_preprocessing.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)

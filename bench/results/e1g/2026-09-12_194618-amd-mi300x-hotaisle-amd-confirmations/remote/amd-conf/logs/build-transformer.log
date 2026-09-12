@@ -1,0 +1,73 @@
+!! MOJOLEARN_GPU_ARCHS=gfx942 (--target-accelerator); read the architecture back out of the built .so
+/root/mojolearn/bindings/_mojolearn_transformer.mojo:210:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=host.unsafe_ptr(), src=p, count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+/root/mojolearn/bindings/_mojolearn_transformer.mojo:242:5: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+    memcpy(dest=p, src=host.unsafe_ptr(), count=n)
+    ^~~~~~
+    unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_transformer.mojo:124:
+./bindings/hostptr.mojo:58:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_transformer.mojo:157:
+./transformer/impl/llama/modeling_llama.mojo:727:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_transformer.mojo:157:
+./transformer/impl/llama/modeling_llama.mojo:759:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_transformer.mojo:171:
+./transformer/checks/transformer_backward.mojo:131:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_transformer.mojo:137:
+./core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_transformer.mojo:137:
+./core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_transformer.mojo:137:
+./core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_transformer.mojo:154:
+./transformer/impl/llama/fused_attention.mojo:1458:32: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+    var raw = host.unsafe_ptr().bitcast[UInt8]()
+              ~~~~~~~~~~~~~~~~~^~~~~~~~
+                                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+/root/mojolearn/bindings/_mojolearn_transformer.mojo:486:19: warning: assignment to 'out_len' was never used; assign to '_' instead?
+    var out_len = 0
+                  ^
+/root/mojolearn/bindings/_mojolearn_transformer.mojo:573:19: warning: assignment to 'out_len' was never used; assign to '_' instead?
+    var out_len = 0
+                  ^
+/root/mojolearn/bindings/_mojolearn_transformer.mojo:613:19: warning: assignment to 'out_len' was never used; assign to '_' instead?
+    var out_len = 0
+                  ^
+Included from /root/mojolearn/bindings/_mojolearn_transformer.mojo:171:
+./transformer/checks/transformer_backward.mojo:2742:28: warning: assignment to 'cells' was never used; assign to '_' instead?
+    var cells = b * nh * l * s
+                           ^
+built python/mojolearn/identical/_mojolearn_transformer.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)

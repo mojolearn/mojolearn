@@ -1,0 +1,364 @@
+{
+ "mode": "identical",
+ "repeats": 2,
+ "platform": "Linux-6.8.0-124-generic-x86_64-with-glibc2.35",
+ "vendor": "amd-gfx942",
+ "commit": "",
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  },
+  "ties": {
+   "X": "186fe2109fc34ad5",
+   "y_clf": "f33cf521f758ae3c",
+   "y_reg": "047d4652a4d56bc3"
+  },
+  "hashed": {
+   "X": "c93497b26fe65cda",
+   "y_clf": "d104ead2f62bdd03",
+   "y_reg": "ce4959d8070bb069"
+  },
+  "wide": {
+   "X": "35f6a8481e649eb8",
+   "y_clf": "276ebacc29267948",
+   "y_reg": "611fc5dd6367bef5"
+  },
+  "denormal": {
+   "X": "752323c375a1cbf5",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "denormal_ftz": {
+   "X": "34c156b0d0e8a891",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "dupes": {
+   "X": "9d9d9db7c7785a14",
+   "y_clf": "d390ee2944b13e1d",
+   "y_reg": "135ce10f2a0817fe"
+  },
+  "odd": {
+   "X": "93d9611a09107bb9",
+   "y_clf": "273a388a705a4f40",
+   "y_reg": "25f3d126c81ca0ec"
+  },
+  "negative": {
+   "X": "08106ffff3256313",
+   "y_clf": "294ce4d7dadaf0bb",
+   "y_reg": "ce1914d5f78f5707"
+  }
+ },
+ "cells": {
+  "svc/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "dec306e940b8a444",
+    "dec306e940b8a444"
+   ],
+   "parts": [
+    {
+     "decision": "bc93f457d0db96fa",
+     "predict": "d74169c2807d19ae"
+    },
+    {
+     "decision": "bc93f457d0db96fa",
+     "predict": "d74169c2807d19ae"
+    }
+   ]
+  },
+  "svc/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2093351e33d072ed",
+    "2093351e33d072ed"
+   ],
+   "parts": [
+    {
+     "decision": "6b7d18bf8b333ba8",
+     "predict": "f5dde57c378b8acb"
+    },
+    {
+     "decision": "6b7d18bf8b333ba8",
+     "predict": "f5dde57c378b8acb"
+    }
+   ]
+  },
+  "svc/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "274bf9087fb0750e",
+    "274bf9087fb0750e"
+   ],
+   "parts": [
+    {
+     "decision": "86d61b4178a67c42",
+     "predict": "21dceccb7d0caa56"
+    },
+    {
+     "decision": "86d61b4178a67c42",
+     "predict": "21dceccb7d0caa56"
+    }
+   ]
+  },
+  "svc/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "550d1845e417ca18",
+    "550d1845e417ca18"
+   ],
+   "parts": [
+    {
+     "decision": "a93e7175d10f7a9f",
+     "predict": "654d2a7440a1dd55"
+    },
+    {
+     "decision": "a93e7175d10f7a9f",
+     "predict": "654d2a7440a1dd55"
+    }
+   ]
+  },
+  "svc/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "549c0b5c319d84cf",
+    "549c0b5c319d84cf"
+   ],
+   "parts": [
+    {
+     "decision": "ba4d8feada4e8399",
+     "predict": "ef6db6821fc1cd85"
+    },
+    {
+     "decision": "ba4d8feada4e8399",
+     "predict": "ef6db6821fc1cd85"
+    }
+   ]
+  },
+  "svc/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "549c0b5c319d84cf",
+    "549c0b5c319d84cf"
+   ],
+   "parts": [
+    {
+     "decision": "ba4d8feada4e8399",
+     "predict": "ef6db6821fc1cd85"
+    },
+    {
+     "decision": "ba4d8feada4e8399",
+     "predict": "ef6db6821fc1cd85"
+    }
+   ]
+  },
+  "svc/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "b2f0d9a49c9f241c",
+    "b2f0d9a49c9f241c"
+   ],
+   "parts": [
+    {
+     "decision": "5bda15bfbf079592",
+     "predict": "6c75a8a88974a90d"
+    },
+    {
+     "decision": "5bda15bfbf079592",
+     "predict": "6c75a8a88974a90d"
+    }
+   ]
+  },
+  "svc/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "61b1676a7e40c914",
+    "61b1676a7e40c914"
+   ],
+   "parts": [
+    {
+     "decision": "a1840ff9323dfb43",
+     "predict": "e60a550c23201171"
+    },
+    {
+     "decision": "a1840ff9323dfb43",
+     "predict": "e60a550c23201171"
+    }
+   ]
+  },
+  "svc/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "667155f7eda847aa",
+    "667155f7eda847aa"
+   ],
+   "parts": [
+    {
+     "decision": "4af67d7a35072dcd",
+     "predict": "e7a4a3e66c8954dc"
+    },
+    {
+     "decision": "4af67d7a35072dcd",
+     "predict": "e7a4a3e66c8954dc"
+    }
+   ]
+  },
+  "iforest/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "8703d4a008ffd13d",
+    "8703d4a008ffd13d"
+   ],
+   "parts": [
+    {
+     "scores": "334ba456c6bb7644",
+     "predict": "783494719cce7fde"
+    },
+    {
+     "scores": "334ba456c6bb7644",
+     "predict": "783494719cce7fde"
+    }
+   ]
+  },
+  "iforest/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "5043855ee14799da",
+    "5043855ee14799da"
+   ],
+   "parts": [
+    {
+     "scores": "0eb4335ab7d510af",
+     "predict": "39d365e57226ca9f"
+    },
+    {
+     "scores": "0eb4335ab7d510af",
+     "predict": "39d365e57226ca9f"
+    }
+   ]
+  },
+  "iforest/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "72260557474879ae",
+    "72260557474879ae"
+   ],
+   "parts": [
+    {
+     "scores": "f9a5baaf99d16f40",
+     "predict": "af7efbad04571b64"
+    },
+    {
+     "scores": "f9a5baaf99d16f40",
+     "predict": "af7efbad04571b64"
+    }
+   ]
+  },
+  "iforest/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "8703d4a008ffd13d",
+    "8703d4a008ffd13d"
+   ],
+   "parts": [
+    {
+     "scores": "334ba456c6bb7644",
+     "predict": "783494719cce7fde"
+    },
+    {
+     "scores": "334ba456c6bb7644",
+     "predict": "783494719cce7fde"
+    }
+   ]
+  },
+  "iforest/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "54ea9b5c8c3fc38b",
+    "54ea9b5c8c3fc38b"
+   ],
+   "parts": [
+    {
+     "scores": "e2e670dd46c7bcc3",
+     "predict": "b4103763a390908e"
+    },
+    {
+     "scores": "e2e670dd46c7bcc3",
+     "predict": "b4103763a390908e"
+    }
+   ]
+  },
+  "iforest/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "54ea9b5c8c3fc38b",
+    "54ea9b5c8c3fc38b"
+   ],
+   "parts": [
+    {
+     "scores": "e2e670dd46c7bcc3",
+     "predict": "b4103763a390908e"
+    },
+    {
+     "scores": "e2e670dd46c7bcc3",
+     "predict": "b4103763a390908e"
+    }
+   ]
+  },
+  "iforest/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "b879bcf3dcf99f38",
+    "b879bcf3dcf99f38"
+   ],
+   "parts": [
+    {
+     "scores": "b023c64f428903d2",
+     "predict": "d76c6de1083ac41d"
+    },
+    {
+     "scores": "b023c64f428903d2",
+     "predict": "d76c6de1083ac41d"
+    }
+   ]
+  },
+  "iforest/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "9b849a13c8d35adb",
+    "9b849a13c8d35adb"
+   ],
+   "parts": [
+    {
+     "scores": "22032d4d5949b5e7",
+     "predict": "9e68a8d1f1fb4a33"
+    },
+    {
+     "scores": "22032d4d5949b5e7",
+     "predict": "9e68a8d1f1fb4a33"
+    }
+   ]
+  },
+  "iforest/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a5b7676e39778af5",
+    "a5b7676e39778af5"
+   ],
+   "parts": [
+    {
+     "scores": "2ddbc37b8532f49b",
+     "predict": "563941fd368a828d"
+    },
+    {
+     "scores": "2ddbc37b8532f49b",
+     "predict": "563941fd368a828d"
+    }
+   ]
+  }
+ },
+ "complete": true,
+ "skipped": []
+}

@@ -1,0 +1,152 @@
+Imported from /root/mojolearn/decomposition/checks/jacobi_check.mojo:51:
+/root/mojolearn/core/pinned_reduce.mojo:125:8: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    red[tid] = value
+    ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/jacobi_check.mojo:51:
+/root/mojolearn/core/pinned_reduce.mojo:130:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            v[j] = red[tid + j * P]
+                   ~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/jacobi_check.mojo:51:
+/root/mojolearn/core/pinned_reduce.mojo:136:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        red[tid] = v[0]
+        ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/jacobi_check.mojo:51:
+/root/mojolearn/core/pinned_reduce.mojo:140:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        w[t] = red[t]
+               ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/jacobi_check.mojo:54:
+/root/mojolearn/decomposition/checks/jacobi_eigh_device.mojo:360:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    rot[0] = cs[0]
+                    ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/jacobi_check.mojo:54:
+/root/mojolearn/decomposition/checks/jacobi_eigh_device.mojo:361:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    rot[1] = cs[1]
+                    ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/jacobi_check.mojo:54:
+/root/mojolearn/decomposition/checks/jacobi_eigh_device.mojo:364:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                var c = rot[0]
+                        ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/jacobi_check.mojo:54:
+/root/mojolearn/decomposition/checks/jacobi_eigh_device.mojo:365:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                var s = rot[1]
+                        ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/jacobi_check.mojo:54:
+/root/mojolearn/decomposition/checks/jacobi_eigh_device.mojo:464:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    rot[0] = cs[0]
+                    ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/jacobi_check.mojo:54:
+/root/mojolearn/decomposition/checks/jacobi_eigh_device.mojo:465:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    rot[1] = cs[1]
+                    ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/jacobi_check.mojo:54:
+/root/mojolearn/decomposition/checks/jacobi_eigh_device.mojo:468:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                var c = rot[0]
+                        ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/jacobi_check.mojo:54:
+/root/mojolearn/decomposition/checks/jacobi_eigh_device.mojo:469:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                var s = rot[1]
+                        ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/jacobi_check.mojo:54:
+/root/mojolearn/decomposition/checks/jacobi_eigh_device.mojo:142:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            red[tid] = value
+            ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/jacobi_check.mojo:54:
+/root/mojolearn/decomposition/checks/jacobi_eigh_device.mojo:147:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                v[j] = red[tid + j * P]
+                       ~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/jacobi_check.mojo:54:
+/root/mojolearn/decomposition/checks/jacobi_eigh_device.mojo:152:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            red[tid] = v[0]
+            ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/jacobi_check.mojo:54:
+/root/mojolearn/decomposition/checks/jacobi_eigh_device.mojo:156:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            w[t] = red[t]
+                   ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/decomposition/checks/jacobi_check.mojo:1014:36: warning: assignment to 't' was never used; assign to '_' instead?
+                    var t = Float32(0.0)
+                                   ^
+Included from /root/mojolearn/decomposition/checks/jacobi_check.mojo:52:
+/root/mojolearn/decomposition/checks/jacobi_eigh.mojo:87:25: warning: assignment to 't' was never used; assign to '_' instead?
+                var t = 0.0
+                        ^
+Included from /root/mojolearn/decomposition/checks/jacobi_check.mojo:54:
+/root/mojolearn/decomposition/checks/jacobi_eigh_device.mojo:196:20: warning: assignment to 't' was never used; assign to '_' instead?
+    var t = Float32(0.0)
+                   ^
+jacobi_check -- build mode: IDENTICAL
+  check_jacobi_is_launch_invariant n = 2 block 32 (the fold width, the reference rung) sweeps 1
+  check_jacobi_is_launch_invariant n = 2 block 64 (fold stays 32 ) sweeps 1 cells differing 0 of 11
+  check_jacobi_is_launch_invariant n = 2 block 128 (fold stays 32 ) sweeps 1 cells differing 0 of 11
+  check_jacobi_is_launch_invariant n = 2 block 256 (fold stays 32 ) sweeps 1 cells differing 0 of 11
+  check_jacobi_is_launch_invariant n = 2 block 512 (fold stays 32 ) sweeps 1 cells differing 0 of 11
+  check_jacobi_is_launch_invariant n = 3 block 32 (the fold width, the reference rung) sweeps 2
+  check_jacobi_is_launch_invariant n = 3 block 64 (fold stays 32 ) sweeps 2 cells differing 0 of 21
+  check_jacobi_is_launch_invariant n = 3 block 128 (fold stays 32 ) sweeps 2 cells differing 0 of 21
+  check_jacobi_is_launch_invariant n = 3 block 256 (fold stays 32 ) sweeps 2 cells differing 0 of 21
+  check_jacobi_is_launch_invariant n = 3 block 512 (fold stays 32 ) sweeps 2 cells differing 0 of 21
+  check_jacobi_is_launch_invariant n = 11 block 32 (the fold width, the reference rung) sweeps 4
+  check_jacobi_is_launch_invariant n = 11 block 64 (fold stays 32 ) sweeps 4 cells differing 0 of 245
+  check_jacobi_is_launch_invariant n = 11 block 128 (fold stays 32 ) sweeps 4 cells differing 0 of 245
+  check_jacobi_is_launch_invariant n = 11 block 256 (fold stays 32 ) sweeps 4 cells differing 0 of 245
+  check_jacobi_is_launch_invariant n = 11 block 512 (fold stays 32 ) sweeps 4 cells differing 0 of 245
+  check_jacobi_is_launch_invariant n = 33 block 32 (the fold width, the reference rung) sweeps 6
+  check_jacobi_is_launch_invariant n = 33 block 64 (fold stays 32 ) sweeps 6 cells differing 0 of 2181
+  check_jacobi_is_launch_invariant n = 33 block 128 (fold stays 32 ) sweeps 6 cells differing 0 of 2181
+  check_jacobi_is_launch_invariant n = 33 block 256 (fold stays 32 ) sweeps 6 cells differing 0 of 2181
+  check_jacobi_is_launch_invariant n = 33 block 512 (fold stays 32 ) sweeps 6 cells differing 0 of 2181
+  check_jacobi_is_launch_invariant n = 64 block 32 (the fold width, the reference rung) sweeps 6
+  check_jacobi_is_launch_invariant n = 64 block 64 (fold stays 32 ) sweeps 6 cells differing 0 of 8195
+  check_jacobi_is_launch_invariant n = 64 block 128 (fold stays 32 ) sweeps 6 cells differing 0 of 8195
+  check_jacobi_is_launch_invariant n = 64 block 256 (fold stays 32 ) sweeps 6 cells differing 0 of 8195
+  check_jacobi_is_launch_invariant n = 64 block 512 (fold stays 32 ) sweeps 6 cells differing 0 of 8195
+  check_jacobi_is_launch_invariant n = 129 block 32 (the fold width, the reference rung) sweeps 8
+  check_jacobi_is_launch_invariant n = 129 block 64 (fold stays 32 ) sweeps 8 cells differing 0 of 33285
+  check_jacobi_is_launch_invariant n = 129 block 128 (fold stays 32 ) sweeps 8 cells differing 0 of 33285
+  check_jacobi_is_launch_invariant n = 129 block 256 (fold stays 32 ) sweeps 8 cells differing 0 of 33285
+  check_jacobi_is_launch_invariant n = 129 block 512 (fold stays 32 ) sweeps 8 cells differing 0 of 33285
+  check_jacobi_is_launch_invariant n = 220 block 32 (the fold width, the reference rung) sweeps 8
+  check_jacobi_is_launch_invariant n = 220 block 64 (fold stays 32 ) sweeps 8 cells differing 0 of 96803
+  check_jacobi_is_launch_invariant n = 220 block 128 (fold stays 32 ) sweeps 8 cells differing 0 of 96803
+  check_jacobi_is_launch_invariant n = 220 block 256 (fold stays 32 ) sweeps 8 cells differing 0 of 96803
+  check_jacobi_is_launch_invariant n = 220 block 512 (fold stays 32 ) sweeps 8 cells differing 0 of 96803
+check_jacobi_is_launch_invariant OK (IDENTICAL): the fold width stayed 32 while the block ran 64/128/256/512 threads, and 0 output cells moved over seven sizes. The shipped launch width is 256.
+  check_jacobi_merged_phases_equal_four_phase n = 2 sweeps merged 1 four-phase 1 cells differing 0 of 11
+  check_jacobi_merged_phases_equal_four_phase n = 3 sweeps merged 2 four-phase 2 cells differing 0 of 21
+  check_jacobi_merged_phases_equal_four_phase n = 11 sweeps merged 4 four-phase 4 cells differing 0 of 245
+  check_jacobi_merged_phases_equal_four_phase n = 33 sweeps merged 6 four-phase 6 cells differing 0 of 2181
+  check_jacobi_merged_phases_equal_four_phase n = 64 sweeps merged 6 four-phase 6 cells differing 0 of 8195
+  check_jacobi_merged_phases_equal_four_phase n = 129 sweeps merged 8 four-phase 8 cells differing 0 of 33285
+  check_jacobi_merged_phases_equal_four_phase n = 220 sweeps merged 8 four-phase 8 cells differing 0 of 96803
+check_jacobi_merged_phases_equal_four_phase OK (IDENTICAL): cells differing over all sizes 0
+check_jacobi_fold_width_is_pinned OK (IDENTICAL): K_LIB_JACOBI_EIGH resolves to 32/32/32 (Apple/NVIDIA/AMD) against the identity floor's 32; this build compiles against 32, a power of two. NOTE: 32 threads is HALF an AMD CDNA wavefront -- under IDENTICAL the halving tree touches only the 32 slots real threads wrote, so that is a scheduling question there and not a numeric one.
+check_jacobi_fold_shape OK (IDENTICAL): device fold == host halving tree bit for bit at width 32 (bits 1266679831 ), and the fixture separates that shape from a sequential fold ( 16777262.0 vs 16777278.0 ). The library fold on THIS device was NOT INSTANTIABLE at this width (block size must exceed the lane width; DEVIATION 528), so no comparison was taken
+  n = 16: ||V^T V - I||_max = 2.2055316433178263e-06, worst cell of A V - V diag(lam) / ||A||_F = 3.9326846734917236e-07, vs host Float64 spectrum = 4.7406244756425484e-07, sweeps = 5.0, final ||offdiag||/||A|| = 1.6239991597051355e-14
+  n = 32: ||V^T V - I||_max = 4.6393667185729015e-06, worst cell of A V - V diag(lam) / ||A||_F = 8.884839656725514e-07, vs host Float64 spectrum = 1.359163922639069e-06, sweeps = 6.0, final ||offdiag||/||A|| = 1.4610857554213375e-14
+  n = 33: ||V^T V - I||_max = 5.3953843690557335e-06, worst cell of A V - V diag(lam) / ||A||_F = 8.150119279240711e-07, vs host Float64 spectrum = 1.2495353475647258e-06, sweeps = 6.0, final ||offdiag||/||A|| = 1.6011260514040698e-13
+  n = 64: ||V^T V - I||_max = 9.964469844359058e-06, worst cell of A V - V diag(lam) / ||A||_F = 1.0236893925458682e-06, vs host Float64 spectrum = 2.1899346918636515e-06, sweeps = 8.0, final ||offdiag||/||A|| = 1.178193448175374e-16
+  n = 128: ||V^T V - I||_max = 2.7999649614418587e-05, worst cell of A V - V diag(lam) / ||A||_F = 1.7865548505927997e-06, vs host Float64 spectrum = 4.303615591535728e-06, sweeps = 8.0, final ||offdiag||/||A|| = 1.6565786286129591e-12
+  n = 256: ||V^T V - I||_max = 6.15335694860164e-05, worst cell of A V - V diag(lam) / ||A||_F = 2.2086276877903174e-06, vs host Float64 spectrum = -1.0, sweeps = 9.0, final ||offdiag||/||A|| = 3.3043224189829856e-13 (skipped, host too slow)
+check_jacobi_device_sizes OK: 16, 32, 33, 64, 128, 256 all satisfy A V = V diag(lambda) and V^T V = I. The 32-feature cap is gone.
+check_jacobi_reaches_past_32 OK: top eigenvalue 9.598471641540527 -> 1001.3273315429688 for a +1000 spike at index 63 (past the old cap), and -> 1006.0556640625 for the same spike at index 5 (inside it). Both move, so the kernel reads the whole matrix.
+check_jacobi_scale_invariance OK: A and 1000 A both converge in 7.0 sweeps to relative off-diagonal 3.129391927883529e-12 and 3.0815703721404075e-12, and the spectra agree to 3.935608404764001e-07 after dividing out the scale
+check_jacobi_is_a_pure_function_of_its_input OK (IDENTICAL): n = 33 -- all 2178 output cells bit-identical to a host Float32 replay of the same partials, the same halving fold and the same pinned rotation, in 6 sweeps. Every pin in the kernel is REACHED.
+check_jacobi_sweep_count_is_a_knife_edge OK (IDENTICAL): n = 64, tol bits 877130934 -> 877130935 (ONE ulp, 1.8622345e-07 -> 1.8622346e-07, found in 28 probes) moves the executed sweeps 7 -> 6 and with them 1325 of 4096 eigenvector cells, worst |delta| 1.9194558262825012e-06, worst eigenvalue |delta| 0.0. A last-bit difference in the exit quantity is NOT a last-bit difference in the answer. Repeat runs at a fixed tolerance are bit-identical.
+check_jacobi_fold_shape_decides_the_sweep_count OK (IDENTICAL): n = 32, seed 1. The halving fold changes its mind at tol bits 853093745 and a sequential fold at 853093746. At tol = 2.528279e-08 the two shapes execute 6 and 7 sweeps ON THE SAME INPUT, and their eigenvectors then differ in 190 of 1024 cells, worst |delta| 1.341104507446289e-06. The device (sweeps = 6) takes the halving shape. THAT is why the fold is not a library call any more.
+check_jacobi_denormal_exit_test OK (IDENTICAL): the device converged at sweep 0 on an 8 x 8 matrix whose exit test is entirely denormal, and returned it untouched. The same numbers unflushed on this host give limit = 2.205718e-39 (denormal) and 2*off = 1.3166577e-37 over 28 denormal squares, so a denormal-honoring backend would run its whole 15-sweep budget instead and return a DIFFERENT matrix. That is the discrete consequence row 10's ftz aligns; it is one compare, not a last bit.
+check_jacobi_reports_the_sweep_cap OK (IDENTICAL): the fixture converges in 7 sweeps; capped at 2 the kernel reports converged = 0, sweeps = 2 and a relative off-diagonal of 0.27800614, and its eigenvectors are 0.6270713657140732 away from the converged ones at the worst cell. Both callers RAISE on that flag in both modes, which is the deviation from RAFT's Jacobi arm recorded in DEVIATION BLOCK 2.
