@@ -1098,6 +1098,12 @@ check-grow-policy = "mojo run -I . checks/grow_policy_check.mojo"
 check-cd = "mojo run -I . solver/checks/cd_check.mojo"
 cd-main = "mojo run -I . solver/cd_main.mojo"
 check-kde = "mojo run -I . kde/checks/kde_check.mojo"
+# THE TOKENIZER LANE, 2026-09-12. GPT-2 byte-level BPE (`tokenizer/`) against
+# 43 cases recorded from tiktoken 0.14.0: EXACT id-sequence equality and a
+# byte-exact decode round trip, plus the pattern/table/bijection
+# preconditions and the pre-tokenizer reach arms. Host integers and tables
+# only -- no device, no float, so there is no IDENTICAL arm to run.
+check-tokenizer = "mojo run -I . tokenizer/checks/tokenizer_check.mojo"
 # THE METRIC LANE, 2026-09-01. `CosineExpanded`, `LpUnexpanded` and
 # `weights='distance'`: the eight ported DistanceType values against a
 # float32 second spelling and a float64 reference computed a third way,
