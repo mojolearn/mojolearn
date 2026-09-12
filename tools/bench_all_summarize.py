@@ -109,17 +109,43 @@ def parse_tree_log(path):
     return arms, verdict, shape
 
 
+def speed_dirs(out_dir):
+    """Where `trees_identical_ab.sh` actually writes its speed logs.
+
+    IT IS NOT UNDER --out, AND ASSUMING IT WAS COST A WHOLE TREE HALF. That
+    script has its own OUT (/root/trees_out) and writes to $OUT/speed, while
+    this sweep's --out is $OUT/bench_all. Looking only under --out therefore
+    reported all twelve tree cells as UNKNOWN(no log) while the logs sat one
+    directory up, fully populated. Found by running this against a live pod's
+    logs instead of against the fixtures it was written with -- the fixtures
+    put the logs where the code expected them, so they could never have caught
+    it. Both locations are searched, and MOJOLEARN_SPEED_LOG_DIR overrides."""
+    out_dir = os.path.abspath(out_dir)
+    cands = [os.path.join(out_dir, "speed"),
+             os.path.join(os.path.dirname(out_dir), "speed")]
+    env = os.environ.get("MOJOLEARN_SPEED_LOG_DIR")
+    if env:
+        cands.insert(0, env)
+    seen, out = set(), []
+    for d in cands:
+        if d not in seen and os.path.isdir(d):
+            seen.add(d)
+            out.append(d)
+    return out
+
+
 def tree_rows(out_dir, lanes, datasets, rounds):
-    speed = os.path.join(out_dir, "speed")
+    dirs = speed_dirs(out_dir)
     rows = []
     for lane in lanes:
         for ds in datasets:
             # trees_identical_ab.sh: <set>.<lane>.<ds>.r<rows>.<mode>[.tag].log
             logs = []
-            if os.path.isdir(speed):
-                logs = [os.path.join(speed, n) for n in sorted(os.listdir(speed))
-                        if n.endswith(".log")
-                        and ".%s.%s.r" % (lane, ds) in "." + n]
+            for speed in dirs:
+                logs += [os.path.join(speed, n) for n in sorted(os.listdir(speed))
+                         if n.endswith(".log")
+                         and ".%s.%s.r" % (lane, ds) in "." + n]
+            logs.sort(key=lambda p: os.path.getmtime(p))
             if not logs:
                 rows.append(dict(lane=lane, dataset=ds, arm="ours", shape="-",
                                  status="UNKNOWN(no log)"))
