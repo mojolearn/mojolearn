@@ -51,6 +51,7 @@ from gbdt.models.ctr_value_table import (
 )
 from gbdt.models.tensor_ctr_value_table import TTensorCtrRegistry
 from std.math import isfinite, log2
+from std.os import getenv
 
 # DEVIATION 258: the probability links (double, as CatBoost computes them)
 # go through the host-portable exp64 under IDENTICAL; FAST is the stdlib
@@ -82,6 +83,26 @@ from gbdt.gpu_util.kernel.bootstrap import (
 #: `SetDefault(0.8)` at `catboost_options.cpp:798` is the MVS arm only,
 #: and MVS does not reach their GPU oblivious searcher.
 comptime DEFAULT_SUBSAMPLE = Float32(0.66)
+
+comptime CTR_TRACE_ENV = "MOJOLEARN_CTR_TRACE"
+"""DEVIATION 2634's REACH MARKER (2026-09-12, lane harness-honesty).
+
+`MOJOLEARN_CTR_TRACE=1` makes `train()` print, once per fit, the CTR config
+split it computed and whether the target prep below actually RAN. Unset --
+the shipping state, and what a user's fit does -- it costs one `getenv` per
+fit and prints nothing.
+
+WHY IT EXISTS. 2634's criteo A/B measured a clean 2.1% band between a build
+with the gate ON and one with it OFF (11,790.0 ms against 12,045.3 ms,
+non-overlapping, model hashes identical both sides) and the run NEVER
+OBSERVED WHETHER THE BRANCH UNDER TEST EXECUTED. The gate is
+`len(dependent_configs) > 0 and ctr_prep_wanted`, and `dependent_configs`
+holds only the PERMUTATION-DEPENDENT CTR types; if that list is empty on the
+dataset in hand then NEITHER build ran the prep and the 2.1% belongs to
+something else entirely. A number whose mechanism was never witnessed is the
+reached-but-inert trap (ENGINEERING_RULES.md section 8: a benchmark prints
+which path it took, beside the timing), so the honest record said the gap was
+real and its cause unknown. This is what makes the re-run attributable."""
 
 comptime CTR_TARGET_PREP_NEEDS_CAT_2634 = not is_defined[
     "MOJOLEARN_2634_CTR_PREP_OFF"
@@ -1166,6 +1187,46 @@ def train(
             ctr_orders.append(
                 ctrs_estimation_permutation(n_rows, p).fill_order()
             )
+
+    # DEVIATION 2634, THE REACH MARKER (see `CTR_TRACE_ENV`). Every term of
+    # the gate, plus what the prep produced, so an A/B on this switch can say
+    # which side of it ran instead of inferring it from a time.
+    if getenv(CTR_TRACE_ENV) == "1":
+        var cat_columns = 0
+        if len(cat_features) == n_features:
+            for f in range(n_features):
+                if cat_features[f]:
+                    cat_columns += 1
+        var prep_state = String("skipped")
+        if len(dependent_configs) > 0 and ctr_prep_wanted:
+            prep_state = String("ran")
+        var gate_state = String("off")
+        comptime if CTR_TARGET_PREP_NEEDS_CAT_2634:
+            gate_state = String("on")
+        print(
+            String("[ctr-2634] simple_ctr_configs=")
+            + String(len(configs))
+            + " independent="
+            + String(len(independent_configs))
+            + " dependent="
+            + String(len(dependent_configs))
+            + " cat_columns="
+            + String(cat_columns)
+            + " ctr_prep_wanted="
+            + String(ctr_prep_wanted)
+            + " prep="
+            + prep_state
+            + " gate_2634="
+            + gate_state
+            + " permutations="
+            + String(perm_count)
+            + " target_classes="
+            + String(target_classes_count)
+            + " binarized_target_rows="
+            + String(len(binarized_target))
+            + " ctr_orders="
+            + String(len(ctr_orders))
+        )
 
     for f in range(n_features):
         var is_cat = len(cat_features) == n_features and cat_features[f]
