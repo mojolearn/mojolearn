@@ -138,6 +138,8 @@ from kde.impl.kde import score_samples
 from kde.impl.neighbors.kernel_density import (
     kde_validate_data_ptr,
     KDE_ELEM_TPB,
+    KDE_FUSED_ID_K,
+    KDE_FUSED_ID_TPB,
     KDE_KERNEL_COSINE,
     KDE_KERNEL_EPANECHNIKOV,
     KDE_KERNEL_EXPONENTIAL,
@@ -151,6 +153,7 @@ from kde.impl.neighbors.kernel_density import (
     kde_float32_min,
     kde_identical_tiled_applies,
     kde_score_samples_device,
+    kde_score_samples_fused_identical,
     kde_score_samples_tiled_identical,
     kde_validate_data,
     kernel_from_name,
@@ -1501,9 +1504,14 @@ def _scores_by_path(
     path: Int,
     q_tpb: Int,
     chunk_rows: Int,
+    k_cells: Int = KDE_FUSED_ID_K,
+    sum_tpb: Int = KDE_FUSED_ID_TPB,
 ) raises -> List[Float32]:
-    """path 0: the staged pass forced; 1: the entry's own dispatch; 2: the
-    tiled pass called directly with `q_tpb` / `chunk_rows`."""
+    """path 0: the staged pass forced; 1: the entry's own dispatch (which is
+    DEVIATION 2690's fused pass under IDENTICAL); 2: the tiled MATRIX pass
+    (DEVIATION 2625) called directly with `q_tpb` / `chunk_rows`; 3: the
+    fused pass on its default schedule; 4: the fused pass on `q_tpb` /
+    `chunk_rows` for its max pass and `k_cells` / `sum_tpb` for its sum."""
     var poison = Float32(-987654.0)
     kde_validate_data(train, n_train, d, metric, "train")
     kde_validate_data(query, n_query, d, metric, "query")
@@ -1529,10 +1537,27 @@ def _scores_by_path(
             ctx, dtrain, dquery, dweights, has_weights, sum_w, n_train, n_query, d,
             h, kernel, metric, dout, tr, KDE_ELEM_TPB, KDE_LSE_TPB, Float32(2.0), path == 0,
         )
-    else:
+    elif path == 2:
+        # DEVIATION 2691: the QUERY-MAJOR matrix, the layout before it.
         kde_score_samples_tiled_identical(
             ctx, dtrain, dquery, dweights, has_weights, sum_w, n_train, n_query, d,
-            h, kernel, metric, dout, 64, 32, q_tpb, chunk_rows,
+            h, kernel, metric, dout, 64, 32, q_tpb, chunk_rows, False,
+        )
+    elif path == 5:
+        # DEVIATION 2691's train-major matrix on the same alt schedule.
+        kde_score_samples_tiled_identical(
+            ctx, dtrain, dquery, dweights, has_weights, sum_w, n_train, n_query, d,
+            h, kernel, metric, dout, 64, 32, q_tpb, chunk_rows, True,
+        )
+    elif path == 3:
+        kde_score_samples_fused_identical(
+            ctx, dtrain, dquery, dweights, has_weights, sum_w, n_train, n_query, d,
+            h, kernel, metric, dout,
+        )
+    else:
+        kde_score_samples_fused_identical(
+            ctx, dtrain, dquery, dweights, has_weights, sum_w, n_train, n_query, d,
+            h, kernel, metric, dout, 64, 32, q_tpb, chunk_rows, k_cells, sum_tpb,
         )
     var out = _read(ctx, dout, n_query)
     for i in range(n_query):
@@ -1546,14 +1571,27 @@ def _scores_by_path(
 
 
 def check_kde_tiled_equals_staged() raises:
-    """DEVIATION 2625's gate: the tiled IDENTICAL pass returns the staged
-    pass's bits on every score, over 6 kernels x the 3 unexpanded metrics x
-    weighted and unweighted, on shapes that straddle the 64-row cell tile,
-    the 64-feature tile and the chunk edge, under the default schedule and
-    under q_tpb 32 with 100-row chunks. REACH: the entry's own dispatch is
-    compared too, and `kde_identical_tiled_applies` must say the entry takes
-    the tiled pass for these metrics under IDENTICAL. Asserts under
-    IDENTICAL; a REPORT elsewhere (the tiled pass is not dispatched there)."""
+    """DEVIATIONS 2625 and 2690's gate: every IDENTICAL fast path returns the
+    staged pass's bits on every score, over 6 kernels x the 3 unexpanded
+    metrics x weighted and unweighted, on shapes that straddle the 64-row
+    cell tile, the 64-feature tile and the chunk edge.
+
+    FIVE arms against the staged reference, so neither the STRUCTURE, the
+    SCHEDULE nor the LAYOUT may move a bit:
+      1. the entry's own dispatch (DEVIATION 2691's train-major matrix);
+      2. the QUERY-MAJOR matrix at q_tpb 32 with 100-row chunks, which is
+         the layout before 2691 and cuML's own;
+      3. the TRAIN-MAJOR matrix on that same schedule, so the layout is the
+         only thing that differs between arms 2 and 3;
+      4. DEVIATION 2690's fused pass, which never writes a matrix at all,
+         on its default schedule;
+      5. the fused pass at k_cells 16 / sum_tpb 128 over a 32-wide, 100-row
+         max pass -- 4 helper threads on a query and 32 queries in a block,
+         so a DIFFERENT thread computes each term while the SAME owner
+         thread folds them in the same ascending order.
+    REACH: `kde_identical_tiled_applies` must say the entry takes a fast
+    path for these metrics under IDENTICAL. Asserts under IDENTICAL; a
+    REPORT elsewhere (none of these passes is dispatched there)."""
     var ctx = DeviceContext()
     var metrics: List[Int] = [DIST_L2_SQRT_UNEXPANDED, DIST_L1, DIST_LINF]
     # (n_train, n_query, d): d straddles the 64-feature tile (1, 7, 64, 65,
@@ -1587,10 +1625,23 @@ def check_kde_tiled_equals_staged() raises:
                     var staged = _scores_by_path(ctx, train, query, w if hw else none, hw, nt, nq, d, h, kernel, metric, 0, 0, 0)
                     var entry = _scores_by_path(ctx, train, query, w if hw else none, hw, nt, nq, d, h, kernel, metric, 1, 0, 0)
                     var alt = _scores_by_path(ctx, train, query, w if hw else none, hw, nt, nq, d, h, kernel, metric, 2, 32, 100)
+                    # DEVIATION 2690's two arms: the fused pass on its default
+                    # schedule and on a second one (k_cells 16, so 4 helpers
+                    # per query, 32 queries a block, over a 32-wide/100-row
+                    # max pass). A schedule may not move a bit.
+                    var trans_alt = _scores_by_path(ctx, train, query, w if hw else none, hw, nt, nq, d, h, kernel, metric, 5, 32, 100)
+                    var fused = _scores_by_path(ctx, train, query, w if hw else none, hw, nt, nq, d, h, kernel, metric, 3, 0, 0)
+                    var fused_alt = _scores_by_path(ctx, train, query, w if hw else none, hw, nt, nq, d, h, kernel, metric, 4, 32, 100, 16, 128)
                     for q in range(nq):
                         n_cells += 1
                         var sb = bitcast[DType.uint32](staged[q])
-                        if bitcast[DType.uint32](entry[q]) != sb or bitcast[DType.uint32](alt[q]) != sb:
+                        if (
+                            bitcast[DType.uint32](entry[q]) != sb
+                            or bitcast[DType.uint32](alt[q]) != sb
+                            or bitcast[DType.uint32](trans_alt[q]) != sb
+                            or bitcast[DType.uint32](fused[q]) != sb
+                            or bitcast[DType.uint32](fused_alt[q]) != sb
+                        ):
                             n_bad += 1
                             if first_bad == "":
                                 first_bad = (
@@ -1598,6 +1649,8 @@ def check_kde_tiled_equals_staged() raises:
                                     + " shape " + String(nt) + "x" + String(nq) + "x" + String(d) + " query " + String(q)
                                     + ": staged " + _hex32(staged[q]) + " entry " + _hex32(entry[q])
                                     + " tiled(32,100) " + _hex32(alt[q])
+                                    + " fused " + _hex32(fused[q])
+                                    + " fused(k16,tpb128,32,100) " + _hex32(fused_alt[q])
                                 )
     if n_bad > 0:
         var msg = String(n_bad) + " of " + String(n_cells) + " scores differ; first: " + first_bad
@@ -1607,8 +1660,9 @@ def check_kde_tiled_equals_staged() raises:
             print("  report " + msg)
     print(
         "check_kde_tiled_equals_staged " + ("OK" if IDENTICAL else "REPORT") + " [" + _mode_name() + "]: "
-        + String(n_cells) + " scores, 6 kernels x 3 metrics x weighted/unweighted x 5 shapes, entry dispatch and"
-        " tiled(q_tpb 32, chunk 100) vs staged, " + String(n_bad) + " differ"
+        + String(n_cells) + " scores, 6 kernels x 3 metrics x weighted/unweighted x 5 shapes, 5 arms vs staged"
+        " (entry dispatch, query-major matrix and train-major matrix both at q_tpb 32/chunk 100,"
+        " fused default, fused k_cells 16/sum_tpb 128), " + String(n_bad) + " differ"
     )
 
 

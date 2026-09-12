@@ -1,0 +1,6 @@
+Mojo 1.0.0 (ed45d567)
+cuml 26.08.00
+sklearn 1.9.1
+numpy 2.4.6
+datasets: gbm-bench/taxi/taxi_speed.npz and gbm-bench/istella/istella_speed.npz from R2,
+  size+sha256 verified on the box against bench/results/dataset_store/manifest.tsv

@@ -644,7 +644,42 @@ an opponent row. Evidence `bench/results/kde_finish_2026-09-11/`.
 | kde | taxi | cuML KernelDensity | GPU, H100 | 2.02 (1.98..2.06) | mean log-lik -9.58205 | 28.94 (28.92..28.97) | mean log-lik -9.58207 | 14.30x |
 | kde | Istella-S | cuML KernelDensity | GPU, H100 | 6.95 (6.92..7.14) | mean log-lik -212.117 | 67.94 (67.46..68.79) | mean log-lik -212.117 | 9.78x |
 
-Ours before this lane, same pod, same window, same harness: taxi 35.69
+### Classical KDE on both datasets, and two refused structures (September 12, pod ndscc544rcf8ek)
+
+Pod `ndscc544rcf8ek` (`kde-fused-2026-09-12_190726`), NVIDIA H100 80GB HBM3,
+driver 580.126.20, the image above, cuML 26.08.00, scikit-learn 1.9.1, NumPy
+2.4.6. The driver is above Mojo's CUDA floor, so unlike the pods below NO
+`ptxas` override was used anywhere in this lane. Datasets from R2, size and
+sha256 verified on the box against `bench/results/dataset_store/manifest.tsv`.
+Ours is IDENTICAL on `lane/kde-fused`; `ours-base` is `origin/main` built on
+this same pod and raced beside it, so it is OURS, never an opponent row. The
+kde lane's shape and harness as in the rows above, 1 warm-up plus 5
+interleaved rounds, ms median (min..max). TWO full races, because round 1's
+Istella-S `ours/ours-base` looked like an effect and did not reproduce.
+Evidence `bench/results/kde_fused_2026-09-12/`.
+
+| lane | dataset | opponent | device | opponent ms | opponent quality | ours IDENTICAL ms | ours quality | ours / opponent |
+|---|---|---|---|---|---|---|---|---|
+| kde | taxi | cuML KernelDensity | GPU, H100 | 2.54 (2.15..2.64) | mean log-lik -9.58205 | 28.96 (28.94..29.17) | mean log-lik -9.58207 | 11.40x |
+| kde | taxi | cuML KernelDensity | GPU, H100 | 3.00 (2.61..3.23) | mean log-lik -9.58205 | 29.39 (29.08..30.12) | mean log-lik -9.58207 | 9.79x |
+| kde | Istella-S | cuML KernelDensity | GPU, H100 | 7.37 (7.31..7.79) | mean log-lik -212.117 | 64.30 (63.81..66.35) | mean log-lik -212.117 | 8.72x |
+| kde | Istella-S | cuML KernelDensity | GPU, H100 | 7.36 (7.19..7.44) | mean log-lik -212.117 | 70.49 (69.62..71.98) | mean log-lik -212.117 | 9.58x |
+
+THE LANE CHANGED NO DEFAULT, and the two rows per dataset are the two races,
+not two configurations. `ours` against `ours-base` read 0.9932 then 1.0165 on
+taxi and 0.9182 then 1.0047 on Istella-S -- parity, with the score digests
+equal between the arms on both datasets (taxi `aa8ac4159ad2cbfa`, Istella-S
+`81d11ed7fcd9eb38`, the same digests the 2026-09-11 lane recorded). Two
+structural attempts to stop materializing the `n_query x n_train` log-kernel
+matrix were built, gated bit-for-bit and MEASURED SLOWER than the matrix they
+delete: a fully fused pass (109.8 ms against 36.9 ms of device entry at
+d = 220) and a train-major matrix layout (the serial fold 37.74 ms against
+9.48 ms). Both stay as opt-in arms with their numbers; `kde/README.md` carries
+the stage split that explains them, including that the matrix WRITE is only
+~1.5 ms of the 36.9 ms device entry while the per-cell distance arithmetic is
+25.0 ms.
+
+Ours before the 2026-09-11 lane, same pod, same window, same harness: taxi 35.69
 (35.64..35.99) ms, 17.64x; Istella-S 218.73 (217.91..221.95) ms, 31.49x. The
 after/before ratios are 0.811 and 0.311, geometric mean 0.502, and the score
 digests are equal between the two arms on both datasets (taxi

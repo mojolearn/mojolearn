@@ -1,0 +1,4 @@
+RunPod pod ndscc544rcf8ek (kde-fused-2026-09-12_190726), NVIDIA H100 80GB HBM3
+driver 580.126.20 (above Mojo 1.0.0 GPU floor, so no ptxas override was needed)
+kernel 6.8.0-107-generic
+image runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04

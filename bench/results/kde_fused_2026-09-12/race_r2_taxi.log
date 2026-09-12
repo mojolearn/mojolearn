@@ -1,0 +1,22 @@
+CTD-ROUND lane=kde dataset=taxi arm=ours round=0 ms=873.862 digest=aa8ac4159ad2cbfa
+CTD-ROUND lane=kde dataset=taxi arm=cuml-gpu round=0 ms=81.156 digest=cdce01475f9e6977
+CTD-ROUND lane=kde dataset=taxi arm=ours-base round=0 ms=660.549 digest=aa8ac4159ad2cbfa
+CTD-ROUND lane=kde dataset=taxi arm=cuml-gpu round=1 ms=2.612 digest=cdce01475f9e6977
+CTD-ROUND lane=kde dataset=taxi arm=ours-base round=1 ms=28.827 digest=aa8ac4159ad2cbfa
+CTD-ROUND lane=kde dataset=taxi arm=ours round=1 ms=29.686 digest=aa8ac4159ad2cbfa
+CTD-ROUND lane=kde dataset=taxi arm=ours-base round=2 ms=28.769 digest=aa8ac4159ad2cbfa
+CTD-ROUND lane=kde dataset=taxi arm=ours round=2 ms=29.257 digest=aa8ac4159ad2cbfa
+CTD-ROUND lane=kde dataset=taxi arm=cuml-gpu round=2 ms=3.232 digest=cdce01475f9e6977
+CTD-ROUND lane=kde dataset=taxi arm=ours round=3 ms=30.121 digest=aa8ac4159ad2cbfa
+CTD-ROUND lane=kde dataset=taxi arm=cuml-gpu round=3 ms=2.748 digest=cdce01475f9e6977
+CTD-ROUND lane=kde dataset=taxi arm=ours-base round=3 ms=28.916 digest=aa8ac4159ad2cbfa
+CTD-ROUND lane=kde dataset=taxi arm=cuml-gpu round=4 ms=3.003 digest=cdce01475f9e6977
+CTD-ROUND lane=kde dataset=taxi arm=ours-base round=4 ms=28.963 digest=aa8ac4159ad2cbfa
+CTD-ROUND lane=kde dataset=taxi arm=ours round=4 ms=29.392 digest=aa8ac4159ad2cbfa
+CTD-ROUND lane=kde dataset=taxi arm=ours-base round=5 ms=29.282 digest=aa8ac4159ad2cbfa
+CTD-ROUND lane=kde dataset=taxi arm=ours round=5 ms=29.079 digest=aa8ac4159ad2cbfa
+CTD-ROUND lane=kde dataset=taxi arm=cuml-gpu round=5 ms=3.059 digest=cdce01475f9e6977
+CTD lane=kde dataset=taxi arm=ours device=gpu status=ok median_ms=29.392438009381294 min_ms=29.079152271151543 max_ms=30.12058325111866 digest_stable=True quality={"mean_log_likelihood": -9.582071959257126, "rows_without_density": 0}
+CTD lane=kde dataset=taxi arm=cuml-gpu device=gpu status=ok median_ms=3.0031800270080566 min_ms=2.612164244055748 max_ms=3.2316111028194427 digest_stable=True quality={"mean_log_likelihood": -9.58205059337616, "rows_without_density": 0}
+CTD lane=kde dataset=taxi arm=ours-base device=gpu status=ok median_ms=28.916144743561745 min_ms=28.769003227353096 max_ms=29.281945899128914 digest_stable=True quality={"mean_log_likelihood": -9.582071959257126, "rows_without_density": 0}
+CTD-RATIO lane=kde dataset=taxi ours/cuml-gpu=9.7871 ours/ours-base=1.0165
