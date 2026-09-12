@@ -374,3 +374,32 @@ equal tie-aware recall@10 (0.99915 against 0.999325, measured here against a
 float64 NumPy brute force, not against an arm's own scorer). On Istella-S at
 d=220 torch pulls ahead (2.331x) and its recall is better (0.93835 against our
 0.923025), which is a real quality gap and not only a speed one.
+
+### KDE and SVC: the widest gaps on the board, on identical answers
+
+| lane | dataset | ours ms (min..max) | cuml-gpu ms | ratio | quality ours vs theirs |
+|---|---|---|---|---:|---|
+| kde | taxi | 29.0 (28.2..30.1) | 2.48 (2.36..2.60) | **11.72** | mean log-lik -9.582072 vs -9.582051 |
+| kde | Istella-S | 63.8 (62.0..69.1) | 7.16 (6.31..7.49) | **8.91** | -212.117468 vs -212.117465 |
+| svc | taxi | 774.3 (774.2..775.3) | 422.1 (420.0..450.3) | 1.83 | accuracy 0.7675 both; support 5527 vs 5586 |
+| svc | Istella-S | 61.4 (60.8..67.9) | 20.0 (19.8..23.3) | 3.07 | accuracy 0.9222 both; support 2400 vs 2401 |
+
+**KDE is our worst lane and the two arms compute the same density** -- the mean
+log-likelihoods agree to eight significant figures on both datasets, with zero
+rows lacking a density on either side. So this is a pure speed gap on an agreed
+answer, which is the cleanest kind of gap to have and the kind worth working
+on. SVC likewise: identical accuracy on both datasets and support-vector counts
+within 1.1%, so its 1.83x and 3.07x are like-for-like.
+
+**KDE/taxi is the starkest span asymmetry on the whole board.** cuML's timed
+median is 2.48 ms while the upload it does NOT time is 7.876 ms -- the work
+excluded from its clock is more than three times the work inside it -- and it
+also fits before the clock starts, a magnitude the harness reports as
+`unmeasured` rather than as a dash that could be read as zero. Ours uploads,
+validates and fits inside its 29.0 ms. The 11.72x is therefore an upper bound
+on the real gap, it runs against us, and it is published in that shape rather
+than quietly adjusted.
+
+Both arms are `digest_stable=True` in all four of these cells; the
+non-determinism seen elsewhere on this board is specific to `catboost-gpu`,
+`sklearn-et-cpu`, and cuML/torch on kmeans and pca.
