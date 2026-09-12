@@ -6,9 +6,23 @@
 The claim under test (bench/OPPONENT_REFERENCE.md, September 12, pod
 u4elzj1eo486ps): our IDENTICAL arm at 1,000,000 taxi rows fits 100 symmetric
 trees in 310.1 ms against CatBoost GPU's 709.0, a ratio of 0.437x. CatBoost's
-CUDA learner is a production implementation and our arm additionally pays for
-bitwise determinism, so the ratio is not credible on its face and every
-subcommand here exists to attack one way it could be wrong.
+CUDA learner is a production implementation, so the ratio is not credible on
+its face and every subcommand here exists to attack one way it could be wrong.
+
+OUTCOME (2026-09-12, merge 6a779d0e). The claim partly broke. Our model
+reproduced bit for bit, but CatBoost ran 624-636 ms on a second pod against the
+709.0 recorded above, so the published row was timed against a CatBoost sample
+at the slow end: taxi symmetric is 0.525x and taxi depthwise 0.591x. The
+leading hypothesis below (`race`) is DEAD -- a real-drain arm came out 1%
+FASTER. What `decompose` found is the real story: ours is 86.1 ms fixed +
+2.297 ms/tree against CatBoost's 346.0 ms fixed + 2.809 ms/tree, so the
+advantage is 4.0x before the first tree and only 1.22x per tree, and it shrinks
+to about 0.75x at CatBoost's own 1000-iteration default.
+
+Note on framing: do NOT describe any of this as a price paid for bitwise
+determinism. That quantity is not measurable here -- it would require our
+deterministic arm against our own OPTIMIZED non-deterministic arm of the same
+code, which does not exist -- and the framing is withdrawn project-wide.
 
     python3 tools/gbdt_fairness_probe.py race      --dataset taxi
     python3 tools/gbdt_fairness_probe.py models    --dataset taxi

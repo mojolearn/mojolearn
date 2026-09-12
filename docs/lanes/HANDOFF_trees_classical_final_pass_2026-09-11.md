@@ -192,11 +192,19 @@ the H100, then gate the Apple M4 and an AMD box before merging.
      on a second pod (u4elzj1eo486ps) that had to repay the whole setup because
      I reaped the first one ~20 minutes early. Rows in
      bench/OPPONENT_REFERENCE.md: ours beats CatBoost on four of six cells
-     (symmetric 0.437x taxi and 0.830x Istella-S on CatBoost's own policy) but
+     (symmetric taxi and Istella-S on CatBoost's own policy) but
      is 1.030x on Istella-S depthwise and 0.997x parity on Istella-S lossguide,
      and XGBoost is faster wherever it competes, up to 1.995x on taxi lossguide.
      That XGBoost lossguide gap is the biggest single number left on the GBDT
      board. Rule now in ENGINEERING_RULES 11: never cancel a run that is owed.
+     CORRECTED 2026-09-12 (lane gbdt-fairness, merge 6a779d0e): the taxi
+     CatBoost cells here were timed against a slow CatBoost sample. Symmetric
+     taxi is 0.525x, not 0.437x, and depthwise taxi is 0.591x, not 0.518x;
+     Istella-S symmetric is 0.811x. More importantly the win is a FIXED-COST
+     win: ours is 86.1 ms fixed + 2.297 ms/tree against CatBoost's 346.0 ms
+     fixed + 2.809 ms/tree, so we start 4.0x faster and boost only 1.22x
+     faster, and at CatBoost's own 1000-iteration default the ratio goes to
+     about 0.75x. Do not quote an unqualified multiple.
    - **Pointwise Istella-S** (`ours-ab` and the greedy control). The taxi
      result stands and is strong: the opt-in pointwise arm 1803.3 -> 795.4 ms
      (0.441x, medians of nine interleaved rounds), logloss 0.525925 ->
