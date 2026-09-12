@@ -360,7 +360,14 @@ def source_inventory():
         'bindings/_mojolearn_byte_lm.mojo', 'bindings/build_byte_lm.sh',
         'python/mojolearn/_byte_lm_impl.py', 'python/mojolearn/language_model.py',
         'tools/byte_lm_real_text_capture.py', 'tools/byte_lm_gradient_oracle.py',
-        'tools/byte_lm_shape.py', 'pixi.toml', 'pixi.lock'))
+        'tools/byte_lm_shape.py',
+        # The surface digests this file too, and has since 9bf5115a added the
+        # runtime shape. It was never added here, so every capture taken after
+        # that commit names a source the inventory does not carry and CANNOT BE
+        # ADMITTED, at the certified shape as much as at any other. It also
+        # belongs here on its own merits, because it defines the shape.
+        'python/mojolearn/_byte_lm_config.py',
+        'pixi.toml', 'pixi.lock'))
     return {str(path.relative_to(ROOT)): sha(path.read_bytes()) for path in sorted(set(paths))}
 
 

@@ -124,7 +124,14 @@ def admit(root, shape=None):
             and first_summary['action'] == 'continuous'
             and first_summary['runtime'] == first_runtime
             and first_runtime['binding_sha256'] == binding
-            and first_runtime['native_vendor'] == vendor and first_runtime['native_profile'] == shape.profile
+            # native_profile is the BINARY's identity and never varies with the
+            # shape, because one binary runs every shape; the RUN's identity is
+            # `profile`. Comparing the first against the run's shape is true only
+            # at the default, and a four-row capture on an L40S is where that was
+            # found. Both are required here.
+            and first_runtime['native_vendor'] == vendor
+            and first_runtime['native_profile'] == byte_lm_shape.DEFAULT_PROFILE
+            and first_runtime.get('profile') == shape.profile
             and first_runtime['native_numeric_mode'] == 1
             and first_runtime['source_sha256'] == capture['runtime']['source_sha256']
             and parse(read(first / 'source.json')) == capture['source']

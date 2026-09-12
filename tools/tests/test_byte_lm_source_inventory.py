@@ -19,6 +19,9 @@ def fixture_source(root):
               # DEVIATION 2682: the shape module decides what the capture even
               # means, so it belongs in the inventory the run is pinned to.
               'tools/byte_lm_shape.py',
+              # The surface digests this one and the inventory did not carry it,
+              # which made every capture taken after 9bf5115a unadmittable.
+              'python/mojolearn/_byte_lm_config.py',
               'pixi.toml', 'pixi.lock']
     for name in names:
         path = root / name

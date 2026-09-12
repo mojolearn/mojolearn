@@ -1856,7 +1856,12 @@ RELEASE_ADMIT
     if [ "$NVIDIA_CAMPAIGN" = 5 ]; then
         grep -q '^byte_lm_validation_exit=0$' "$OUT/remote/leg.txt" || return 1
         cmp "$OUT/source_inventory_local.json" "$OUT/remote/source_inventory.json" || return 1
-        python3 tools/byte_lm_validation_admit.py "$OUT/remote/byte-lm-validation"
+        # Admit the shape this campaign was asked to capture. Without the shape
+        # a dedicated second-shape lease asks to admit the certified shape, finds
+        # no certified captures because it was told not to make any, and refuses
+        # itself while the tree it did make sits there correct and unadmitted.
+        python3 tools/byte_lm_validation_admit.py "$OUT/remote/byte-lm-validation" \
+            ${BYTE_LM_SHAPE:+--shape "$BYTE_LM_SHAPE"}
         return $?
     fi
     if [ "$NVIDIA_CAMPAIGN" = 4 ]; then
