@@ -209,13 +209,18 @@ def retain_step(directory, before, after, result, ids, previous, registry, vendo
         for source, target in (('parameters', 'post_p'), ('m', 'post_m'), ('v', 'post_v'), ('flags', 'post_flags')):
             if key == target:
                 new_previous[source] = path
-    # DEVIATION 2682: `model_shape` is recorded so a reader knows which shape it
-    # is holding rather than inferring it from an array length. A capture from
-    # before this change carries no such key and is the default by construction,
-    # since that was the only shape that existed when it was written.
+    # DEVIATION 2682: a non-default shape records `model_shape`, so a reader
+    # knows which shape it is holding rather than inferring it from an array
+    # length. THE DEFAULT RECORDS NOTHING, deliberately. Absence already means
+    # the default, because that was the only shape that existed when every
+    # retained capture was written, and writing the key for the default would
+    # change the bytes of a file every existing reader already validates. A
+    # certified shape's capture.json stays exactly what it was.
     config = dict(profile=shape.profile, numeric_mode='identical', vendor=vendor,
                   completed_steps=before['completed_steps'], post_completed_steps=after['completed_steps'],
-                  optimizer=before['config'], model_shape=shape.to_json())
+                  optimizer=before['config'])
+    if shape != byte_lm_shape.Shape():
+        config['model_shape'] = shape.to_json()
     manifest = dict(schema='mojolearn.byte-lm.gradient-capture.v1', registry=registry,
                     config=config, arrays=descriptors,
                     input_state=state_signature(before, shape), output_state=state_signature(after, shape))

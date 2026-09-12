@@ -16,6 +16,9 @@ def fixture_source(root):
     names += ['bindings/_mojolearn_byte_lm.mojo', 'bindings/build_byte_lm.sh',
               'python/mojolearn/_byte_lm_impl.py', 'python/mojolearn/language_model.py',
               'tools/byte_lm_real_text_capture.py', 'tools/byte_lm_gradient_oracle.py',
+              # DEVIATION 2682: the shape module decides what the capture even
+              # means, so it belongs in the inventory the run is pinned to.
+              'tools/byte_lm_shape.py',
               'pixi.toml', 'pixi.lock']
     for name in names:
         path = root / name
