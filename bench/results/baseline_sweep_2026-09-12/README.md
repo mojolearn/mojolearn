@@ -313,3 +313,64 @@ This is reported as measured and is not a price-of-determinism figure: that
 quantity needs our deterministic arm against our own OPTIMIZED
 non-deterministic arm, which does not exist, and the claim is withdrawn
 project-wide.
+
+### A RATIO AGAINST A SOLVER THAT DID NOT SOLVE IS NOT A SPEED RESULT
+
+The single most important thing the classical half produced, and it is a
+validity finding rather than a timing one. **OLS on Istella-S, 2,043,304 x 220:**
+
+| arm | median ms | R2 | finite | is the ratio meaningful? |
+|---|---:|---:|---|---|
+| ours | 1318.9 | **0.3319** | yes | -- |
+| cuml-gpu | 85.3 | **-6473.68** | yes | **NO** |
+| torch-gpu | 95.1 | **NaN** | **no** | **NO** |
+| torch-gpu-eigh | 9.7 | 0.1516 | yes | yes, but a much worse fit |
+
+`CTD-RATIO` prints `ours/cuml-gpu=15.4645` and `ours/torch-gpu=13.8699` for
+this cell. **Neither is a speed result.** cuML returned a fit 6,473 times worse
+than predicting the mean, and torch's `lstsq` (driver `gels`, QR without
+pivoting, which assumes full rank) returned NaN outright. Istella-S has 45
+near-constant columns; a solver that assumes full rank does not survive them.
+Being fast at not solving the problem is not a number this board will quote as
+a gap, and the ratios are printed only because the harness prints every ratio
+it computes -- they are struck here, by name.
+
+On taxi every arm solves and agrees to six digits (R2 ~ 0.90884 for all four),
+so **taxi's `ours/cuml-gpu=7.7455` IS a real gap** and is the honest OLS number
+on this board. The `torch-gpu-eigh` arm -- the same algorithm class as ours --
+solves both datasets and is far faster than us on both (85.2x on taxi, 135.4x
+on Istella-S), at a materially worse Istella fit (0.1516 against our 0.3319).
+That is where our OLS work has room, and it is visible only because quality was
+computed beside every cell.
+
+### The classical half, and what is inside each clock
+
+`CTD-RATIO` is OURS median / OPPONENT median. Every GPU opponent is timed with
+its inputs ALREADY DEVICE-RESIDENT, while ours uploads and validates inside the
+timed call, because that is what a caller of our public surface pays. The
+harness names the gap on every line rather than equalizing it.
+
+| lane | dataset | ours/cuml-gpu | ours/torch-gpu | opponent upload EXCLUDED from its clock |
+|---|---|---:|---:|---|
+| kmeans | taxi | 1.535 | 1.163 | cuml 128.3 ms, torch 19.6 ms |
+| kmeans | Istella-S | 7.344 | 9.244 | cuml 1122.4 ms, torch 194.0 ms |
+| pca | taxi | 1.318 | 19.321 | cuml 127.4 ms, torch 19.4 ms |
+| pca | Istella-S | 4.669 | 42.982 | cuml 1431.8 ms, torch 617.4 ms |
+| ols | taxi | 7.746 | 2.503 | cuml 140.4 ms, torch 21.6 ms |
+| ols | Istella-S | *struck, see above* | *struck* | cuml 1046.7 ms, torch 194.6 ms |
+| knn | taxi | 2.385 | **0.696** | cuml 19.6 ms + fit before its clock |
+| knn | Istella-S | 2.304 | 2.331 | cuml 270.2 ms + fit before its clock |
+
+**The asymmetry is not a rounding detail.** On kmeans/taxi cuML's excluded
+upload (128.3 ms) is LARGER than its entire timed median (126.6 ms), and on
+pca/Istella-S it excludes 1431.8 ms. cuML's kNN also fits before its clock
+starts and the harness reports that magnitude as `unmeasured` rather than
+printing a dash that could be read as zero. Every one of these runs AGAINST us:
+our published classical gaps are worse than the code deserves. Nothing was
+moved into or out of any clock to improve them.
+
+**kNN taxi is a win: ours 22.5 ms against torch-gpu 32.3 ms (0.696x)**, at
+equal tie-aware recall@10 (0.99915 against 0.999325, measured here against a
+float64 NumPy brute force, not against an arm's own scorer). On Istella-S at
+d=220 torch pulls ahead (2.331x) and its recall is better (0.93835 against our
+0.923025), which is a real quality gap and not only a speed one.
