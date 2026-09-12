@@ -184,11 +184,24 @@ The cost of the readback itself is zero launches and, on the leg, one build
 of the price harness and one run of it at L 512 with timing off, about four
 minutes (section 8).
 
-## 6. The two arms, named and NOT built (DEVIATIONS 2655 and 2656 reserved)
+## 6. The two arms, named and NOT built (DEVIATIONS 2655 and 2656, REFUSED BY THE READBACK 2026-09-12)
 
-Neither is written on this branch. Each inherits an identity argument that
-is already filed, which is the reason each is cheap to build once the number
-says which.
+**NEITHER ARM WILL BE BUILT. THE NUMBER CAME BACK AND CLOSED THE WINDOW.**
+The forward reads 100 registers at TWO blocks per SM (section 8), which is
+the first row of section 4's table: "No arm. File the number and stop." The
+arithmetic is tighter than that row assumed and worth writing down, because
+it is what forecloses a later lane re-arguing it. Three blocks per SM needs
+`pad8(regs) <= 85`, so 80 registers or fewer, a cut of 20 from 100. At most
+19 floats can move (the 11 persistent plus the 4 pass-1 score accumulators
+plus the 4 staged operands), so moving EVERY movable float lands at 81, pads
+to 88, and still reads two blocks per SM. The forward cannot reach the next
+occupancy class by moving floats at all, which is exactly the property the
+zdot kernel did not have (134 to 64, four blocks).
+
+Both arms are kept described below, unbuilt, because the description is what
+makes the refusal checkable. Neither is written on this branch. Each
+inherits an identity argument that is already filed, which is the reason
+each would have been cheap to build had the number said so.
 
 DEVIATION 2655, `_fres` (the context accumulators in the shared page). The 8
 `cacc` floats per thread become a `[32][64]` page written by the same
@@ -263,6 +276,53 @@ is the reading round 3 could not do, and the r32 to r64 pair says whether
 the rows knob crosses a boundary by itself.
 
 ## 8. The H100 leg
+
+### WHAT IT FOUND (2026-09-12, measured): the forward register count
+
+RunPod pod 4pmnz0eju0iptm, NVIDIA H100 80GB HBM3, driver 580.126.09, commit
+5b7e1e41, phase one only (`MOJOLEARN_ATTN_REGS_FULL=0`), 58 seconds of
+build and 2 seconds of readback. Evidence
+`bench/results/e1g/2026-09-12_124715-nvidia-h100-owed/remote/attention-regs/`
+(`resources.txt`, `gate.txt`, `status.tsv`). Both stages exit 0, the run
+ends `attention_step_price: PASS`, and there are ZERO `RESOURCES_ERROR`
+rows: this is the first box on which the forward's count has ever been read,
+because Metal refuses the attribute outright.
+
+| forward instantiation | regs | pad8 | blocks_per_sm_256 |
+|---|---:|---:|---:|
+| `fwd_r2_r32_qres_pf` (the shipped NVIDIA default) | 100 | 104 | 2 |
+| `fwd_r2_r32_qres` | 102 | 104 | 2 |
+| `fwd_r2_r32_pf` | 96 | 96 | 2 |
+| `fwd_r2_r32` | 96 | 96 | 2 |
+| `fwd_r2_r64_pf` | 166 | 168 | 1 |
+| `fwd_r2_r64` | 166 | 168 | 1 |
+
+Three readings, in order of what they settle.
+
+1. THE ARMS ARE REFUSED. 100 registers is section 4's first row, so
+   DEVIATIONS 2655 and 2656 are not built (section 6 carries the
+   arithmetic). Section 4's own guess is falsified in the useful direction:
+   it said the count "could plausibly land anywhere from the seventies to
+   the one fifties", and the answer is at the low end, so the forward was
+   never the register-bound kernel the zdot was.
+2. THE 32-ROW GEOMETRY IS EXPLAINED, not just measured. `_fgrid_r64` reads
+   166 registers at ONE block per SM against `_fgrid_r32`'s 100 at two.
+   Section 15's H100 result (lean step 0.3845 to 0.3346 s when 64 rows
+   became 32) had no mechanism attached to it until now; the occupancy
+   class is the mechanism.
+3. THE LENS REPRODUCES ACROSS PODS. The same readback re-measured the zdot
+   rows on a second pod and a later commit: `zdot_stash_pf` 134 at one
+   block, `zdot_estash_pf` 125 at two, `zdot_estash_dres_pf` 64 at four,
+   identical to the numbers section 20.11 of the attention step brief took
+   from pod 43v3euoz80r9zy. Also filed: `dq_tiled_pf` 118 at two (section 3
+   argued no mechanism takes it to three, and the count agrees),
+   `dkdv_tiled_pf` 106 at two, `kvgrid_r32` 63 at four, `kvsplit_r32_fold`
+   48 at five.
+
+Phase two was not run (`attention_step_leg=NOT RUN`), so this leg carries no
+timing and no arm, which is what section 8 always said it was for.
+
+### The body
 
 Body `tools/attention_regs_leg.sh`, two phases.
 

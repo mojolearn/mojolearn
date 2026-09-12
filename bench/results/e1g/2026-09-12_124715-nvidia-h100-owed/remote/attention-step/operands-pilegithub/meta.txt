@@ -1,0 +1,5 @@
+1 2048 12 12 64 2048 0 0 0 1040187392
+q.bin [B*L][nh*hd] float32 little-endian
+dctx.bin [B*L][nh*hd] float32 little-endian
+k.bin [B][nkv][S][hd] float32 little-endian
+v.bin [B][nkv][S][hd] float32 little-endian

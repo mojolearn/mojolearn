@@ -1,0 +1,13 @@
+column	corpus	median_seconds	tokens_per_second	sdpa_selected	sdpa_observed
+eager_fp32	enwik8	0.061828	33123.9	efficient	efficient
+eager_fp32	pile_github	0.061478	33312.5	efficient	efficient
+eager_tf32	enwik8	0.037727	54284.8	efficient	efficient
+eager_tf32	pile_github	0.037784	54203.1	efficient	efficient
+eager_bf16	enwik8	0.035538	57628.2	torch_default	flash
+eager_bf16	pile_github	0.034481	59395.4	torch_default	flash
+compile_fp32	enwik8	0.057772	35449.5	efficient	efficient
+compile_fp32	pile_github	0.057728	35476.5	efficient	efficient
+compile_tf32	enwik8	0.031980	64040.9	efficient	efficient
+compile_tf32	pile_github	0.031803	64396.1	efficient	efficient
+compile_bf16	enwik8	0.021522	95156.7	torch_default	flash
+compile_bf16	pile_github	0.022909	89396.1	torch_default	flash

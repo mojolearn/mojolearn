@@ -1,0 +1,12 @@
+lane=torch byte LM step opponent (OPPONENT_REFERENCE rows owed, item 5)
+started=2026-09-12T13:01:36Z
+vendor=nvidia
+root=/root/mojolearn
+commit=5b7e1e41e431b2264c7c027fcbfc94e8529b0f76
+columns=eager_fp32,eager_tf32,eager_bf16,compile_fp32,compile_tf32,compile_bf16
+corpora=enwik8 pile_github
+shape=target warmup=2 steps=7 deadline=300
+torch_pin=2.4.1+cu124
+python_found=/usr/bin/python3
+torch_found=2.4.1+cu124
+finished=2026-09-12T13:05:39Z
