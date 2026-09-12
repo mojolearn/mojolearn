@@ -1,0 +1,223 @@
+{
+  "schema": "mojolearn.torch-lm-step-opponent.v1",
+  "opponent": "torch byte LM training step (bench/OPPONENT_REFERENCE.md rows owed, item 5)",
+  "column": "eager_bf16",
+  "column_role": "extra",
+  "column_flags": {
+    "tf32": false,
+    "compile": false,
+    "compile_backend": null,
+    "compile_mode": null,
+    "dtype": "autocast_bfloat16",
+    "autocast_dtype": "bfloat16",
+    "autocast_device_type": "cuda",
+    "autocast_scope": "forward and mean cross entropy; backward and AdamW outside",
+    "parameter_dtype": "float32",
+    "gradient_dtype": "float32",
+    "optimizer_state_dtype": "float32",
+    "grad_scaler": null,
+    "autocast_applicable": true,
+    "autocast_probe": {
+      "device_type": "cuda",
+      "dtype": "bfloat16",
+      "amp_is_autocast_available": true,
+      "cuda_is_bf16_supported": true,
+      "cuda_is_bf16_supported_native": true,
+      "probe_output_dtype": "bfloat16",
+      "probe_grad_dtype": "float32",
+      "probe_ok": true,
+      "applicable": true,
+      "probe": "F.linear float32 [2, 8] x [8, 8] under torch.autocast('cuda', bfloat16), then backward"
+    },
+    "nondeterministic_label": true,
+    "determinism_asserted": false,
+    "tf32_applicable": true,
+    "tf32_note": null,
+    "cuda_matmul_allow_tf32": false,
+    "cudnn_allow_tf32": false,
+    "float32_matmul_precision": "highest"
+  },
+  "shape_name": "target",
+  "shape": {
+    "batch": 1,
+    "length": 2048,
+    "d_model": 768,
+    "n_heads": 12,
+    "n_kv": 12,
+    "head_dim": 64,
+    "intermediate": 2048,
+    "n_layers": 12,
+    "vocab_size": 50257
+  },
+  "parameters_expected": 162147840,
+  "tokens_per_step": 2048,
+  "corpus": {
+    "name": "enwik8",
+    "path": "training/corpus/enwik8/input.txt",
+    "sha256": "2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8",
+    "bytes": 100000000,
+    "manifest_sha256": "c65094a4d6a494d2882d972c20138015b4a258b310d662d4be05fb7ba2e9b423",
+    "source_url": "http://mattmahoney.net/dc/enwik8.zip",
+    "manifest_train_batch_schedule": "step k zero-based, row b: bytes[(k*batch*2048 + b*2048) % (100000000 - 2049) : start+2049]; targets shifted one byte (tools/lm_step_memory_probe.py --corpus, tools/torch_lm_step_opponent.py); a timing run of a few steps reads inside train_range",
+    "schedule_used": "step k (zero-based, warmups first) row b: bytes[(k*batch*length + b*length) % (bytes - length - 1) : +length+1]; inputs [:, :length], targets [:, 1:] (tools/lm_step_memory_probe.py CorpusBatches)"
+  },
+  "device": "cuda",
+  "torch_build": "cuda",
+  "gpu_name": "NVIDIA H100 80GB HBM3",
+  "gpu_capability": [
+    9,
+    0
+  ],
+  "driver": {
+    "nvidia-smi": {
+      "cmd": "nvidia-smi --query-gpu=name,driver_version,compute_cap --format=csv,noheader",
+      "exit": 0,
+      "output": "NVIDIA H100 80GB HBM3, 580.126.09, 9.0",
+      "stderr": null
+    }
+  },
+  "torch_version": "2.4.1+cu124",
+  "torch_cuda": "12.4",
+  "torch_hip": null,
+  "cudnn_or_miopen_version": 90100,
+  "python": "3.11.10",
+  "python_executable": "/usr/bin/python3",
+  "host": "20aed3d3de4e",
+  "machine": "x86_64",
+  "repo_commit": "bb679f1952527581c57fbb4cb0066d4a071cb58a",
+  "repo_commit_source": "MOJOLEARN_REPO_COMMIT",
+  "harness_sha256": "cc5b6a43b6aa16e6608535188c442a1924e68d307f16f828cbb616436ad616e6",
+  "status": "measured",
+  "sdpa": {
+    "requested": "auto",
+    "backend": "torch_default",
+    "selection": "auto on an autocast bfloat16 column: no switch set, torch picks per call (switches read back below are torch defaults)",
+    "probes": [],
+    "enabled": {
+      "efficient": true,
+      "flash": true,
+      "math": true,
+      "cudnn": false
+    },
+    "probe_shape": null,
+    "observed": {
+      "kernels": {
+        "aten::scaled_dot_product_attention": 24,
+        "aten::_scaled_dot_product_flash_attention": 12,
+        "aten::_flash_attention_forward": 12,
+        "aten::_scaled_dot_product_flash_attention_backward": 12,
+        "aten::_flash_attention_backward": 12
+      },
+      "backends": [
+        "flash"
+      ],
+      "backend": "flash",
+      "step_index": 1
+    },
+    "observed_matches_selected": null
+  },
+  "optimizer": {
+    "kind": "torch.optim.AdamW",
+    "lr": 0.001,
+    "betas": [
+      0.9,
+      0.999
+    ],
+    "eps": 1e-08,
+    "weight_decay": 0.01,
+    "impl_requested": "default",
+    "constructor_kwargs": {},
+    "applies_to": "every parameter tensor (embed, norms, projections, lm_head)"
+  },
+  "parameters": 162147840,
+  "init": {
+    "source": "numpy default_rng(93261).normal(0, .02, n_total) float32, +1 on norms (tools/lm_step_memory_probe.py init)",
+    "sha256": "0e36d8d036d8c4cf9704babd096061006e48071187c793c6ee471e05b449572e",
+    "seed": 93261
+  },
+  "setup_seconds": 3.8491405360400677,
+  "warmup_steps": [
+    {
+      "step_index": 0,
+      "seconds": 0.23708796873688698,
+      "loss": 10.9041748046875,
+      "ids_sha256": "c9cfaa8fb1358fb7f7b5a53eebd59b9abd169288153d3a4099b30d6703b5fef3"
+    },
+    {
+      "step_index": 1,
+      "seconds": 0.05297243222594261,
+      "loss": 8.19256591796875,
+      "ids_sha256": "c0566cdf476743cf528117d89154c53504817a0fc378832117107db6fbdc8e94",
+      "profiled": true
+    }
+  ],
+  "timed_steps": [
+    {
+      "step_index": 2,
+      "seconds": 0.037635210901498795,
+      "loss": 54.9287109375,
+      "ids_sha256": "7c488589d936ac1c2188a74d02f7a03a667a61a49fa91edac40f621dfb1381c5"
+    },
+    {
+      "step_index": 3,
+      "seconds": 0.03734219819307327,
+      "loss": 14.559425354003906,
+      "ids_sha256": "648b83351a0668b42a9a1795e071b70dff3533dc7e57ca09a0e8041de0296af2"
+    },
+    {
+      "step_index": 4,
+      "seconds": 0.03856201842427254,
+      "loss": 29.680349349975586,
+      "ids_sha256": "52b5ee3b9b2f3400aec4efa473decc7b1e6915d66c34f40f7fa032ac34888cca"
+    },
+    {
+      "step_index": 5,
+      "seconds": 0.036197513341903687,
+      "loss": 14.976165771484375,
+      "ids_sha256": "8a80580ec3da34b87a17dd953dcd489e216a1964de870dcc5b43d34cfb463e3a"
+    },
+    {
+      "step_index": 6,
+      "seconds": 0.03619902580976486,
+      "loss": 36.871337890625,
+      "ids_sha256": "2718fb09f9d8986db6ae96f4ec68d0753ab5db5d1ec1e10e8dbec58e4e25a772"
+    },
+    {
+      "step_index": 7,
+      "seconds": 0.03586169332265854,
+      "loss": 38.3248291015625,
+      "ids_sha256": "edef8fb8d7c39e1b9d9e2cd41840705cc024c57102bea225b4dc2550a97041c7"
+    },
+    {
+      "step_index": 8,
+      "seconds": 0.03564244136214256,
+      "loss": 23.53430938720703,
+      "ids_sha256": "da972d4a8f6d13f9afbc6163d97ced1c2c74e2829d6f8eb98b0a97b20cec8ae1"
+    }
+  ],
+  "step_seconds": [
+    0.037635210901498795,
+    0.03734219819307327,
+    0.03856201842427254,
+    0.036197513341903687,
+    0.03619902580976486,
+    0.03586169332265854,
+    0.03564244136214256
+  ],
+  "losses": [
+    10.9041748046875,
+    8.19256591796875,
+    54.9287109375,
+    14.559425354003906,
+    29.680349349975586,
+    14.976165771484375,
+    36.871337890625,
+    38.3248291015625,
+    23.53430938720703
+  ],
+  "median_seconds": 0.03619902580976486,
+  "tokens_per_second": 56576.108173815606,
+  "peak_memory_allocated_bytes": 4385922560,
+  "timing_boundary": "synchronize; clock; host ids (pinned) to device; zero_grad; forward + mean cross entropy inside torch.autocast('cuda', bfloat16); backward; AdamW step; loss.item(); synchronize; clock. Warmups (compilation included for compile columns) are untimed; the last warmup runs under the CPU op profiler to record the SDPA kernels.",
+  "qualification": "opponent measurement for our IDENTICAL step at the same shape and corpus; extra columns are nondeterministic by label; no learning claim"
+}

@@ -558,11 +558,87 @@ WHAT IS NOT CLAIMED. The rows arms move the launch geometry of
 including `training/samba_ops.mojo`, which the leg never timed. Bits are
 safe there by section 4.1 (one token row per thread, the fold never leaves
 the thread, `step_glue_blocks` never returns 0), and this is a schedule and
-never a numeric term, but the PRICE on the samba path at 16 threads per
-block is unmeasured. Separately, the flip makes dead code of the shipped
+never a numeric term. THE SAMBA PRICE IS NO LONGER UNMEASURED; section 12
+has it, and it is a gain rather than a price. Separately, the flip makes dead code of the shipped
 shadow copy and `identical_optimizer_step` inside `_byte_step_device` on
 NVIDIA without deleting either; both stay compiled, and
 `identical_optimizer_step` is exported and used elsewhere regardless.
 `adam_update_oop_kernel` was already compiled into every build (`byte_lm.mojo`
 imports it unconditionally); what changed is that a shipped NVIDIA build now
 reaches it.
+
+## 12. The samba RMSNorm price (2026-09-12, measured): DEVIATION 2649's reach beyond the byte LM
+
+Section 11 closed with the samba path listed as an unmeasured price. It is
+measured now, on the H100, and it is not a price at all. Every shape and
+every stage got faster, so nothing here asks for a change.
+
+THE QUESTION. 2649 flips the NVIDIA column's step glue default to
+`optskip_noshadow_rows16`, and the `rows16` token moves `llama_rms_norm` and
+`bwd_rms_norm` from `LLAMA_TPB` / `BWD_TPB` = 128 threads per block to 16, one
+token row per thread either way. The flip was decided on the byte LM step.
+`training/samba_ops.mojo` calls the same two launchers through
+`samba_rms_norm_forward_host` and `samba_rms_norm_backward_host`, and those
+calls were never timed under either geometry.
+
+THE HARNESS. `bench/samba_rms_price_main.mojo`, built ONCE with
+`-D MOJOLEARN_STEP_GLUE_TRIAL=1` and run under
+`MOJOLEARN_STEP_GLUE_ARM=shipped` and `=optskip_noshadow_rows16`, three
+rounds each, whole processes alternated. One binary for both arms is the
+leg's own reference pattern and is why a compiler difference cannot be read
+here as a geometry difference. Each process prints its own reach line; all
+six are in `remote/samba-rms/arms.txt` and read
+`ARM shipped rows 0 mode IDENTICAL` and
+`ARM optskip_noshadow_rows16 rows 16 mode IDENTICAL`, so both arms are
+confirmed resolved rather than assumed.
+
+TWO STAGES. `kernel` times the two launchers on resident device buffers,
+which is the geometry alone. `host` times the samba entry points end to end
+exactly as `bindings/_mojolearn_training.mojo` calls them, which is what a
+samba caller pays, including the `_refuse_nonfinite` host scan over every
+input float. That scan is O(m * dm) on the CPU and is identical under both
+arms, which is exactly why the two stages read so differently.
+
+Medians of 7 repeats per round (kernel) and 3 (host), milliseconds, ratio is
+rows16 over shipped, so below 1 is the winner:
+
+| shape (m x dm) | stage | shipped | rows16 | ratio |
+|---|---|---|---|---|
+| 512 x 64 | kernel.forward | 0.0260 | 0.0186 | 0.716 |
+| 512 x 64 | kernel.backward | 0.0567 | 0.0513 | 0.904 |
+| 512 x 64 | host.forward | 0.0741 | 0.0660 | 0.890 |
+| 512 x 64 | host.backward | 0.1818 | 0.1680 | 0.924 |
+| 2048 x 512 | kernel.forward | 0.1482 | 0.0824 | 0.556 |
+| 2048 x 512 | kernel.backward | 0.1461 | 0.1031 | 0.706 |
+| 2048 x 512 | host.forward | 0.6626 | 0.6082 | 0.918 |
+| 2048 x 512 | host.backward | 1.2301 | 1.1278 | 0.917 |
+| 8192 x 768 | kernel.forward | 0.2770 | 0.1889 | 0.682 |
+| 8192 x 768 | kernel.backward | 0.2842 | 0.2385 | 0.839 |
+| 8192 x 768 | host.forward | 3.2828 | 3.2695 | 0.996 |
+| 8192 x 768 | host.backward | 6.5305 | 6.2717 | 0.960 |
+
+Geometric means over the three shapes: `kernel.forward` 0.6475,
+`kernel.backward` 0.8124, `host.forward` 0.9336, `host.backward` 0.9335.
+
+THE READING. The mechanism is occupancy and nothing subtler. At 128 threads
+per block the documented samba shape (`tools/samba_train_run.py` defaults,
+batch 8 x seq 64, d_model 64, so m = 512) is FOUR blocks, which occupies four
+of the H100's 132 SMs; at 16 threads it is 32 blocks. The same argument holds
+at every shape measured, which is why no row loses and why the forward, whose
+single kernel is pure row work, gains most. The backward gains less because
+three of its four stages are not the row kernel.
+
+WHAT THE HOST STAGE SAYS, and it is the more useful half for a caller. The
+geometry is real but it is nearly invisible from outside `samba_ops`, because
+the entry points spend most of their time in the host `_refuse_nonfinite`
+scan and in the upload and download around the kernels. At 8192 x 768 the
+forward's kernel gain of 0.088 ms sits inside a 3.28 ms call and the ratio
+comes back 0.996. A caller who wants that gain should be told the refusal
+scan is the cost, not the launch geometry.
+
+WHAT IS NOT CLAIMED HERE. NVIDIA only. No AMD or Apple samba timing exists,
+and on both of those columns `step_glue_default_arm_for` still returns
+`shipped`, so neither compiles the 16-thread geometry into a shipped build at
+all and there is no price to pay there yet. No bits were compared in this
+main: it is a timing harness, and the bit safety of the rows arms rests
+where it already rested, on section 4.1 and on the M4 gates of section 11.
