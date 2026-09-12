@@ -1,0 +1,15 @@
+vendor=nvidia
+commit=bb679f1952527581c57fbb4cb0066d4a071cb58a
+card_full=
+trace_dump=
+started=2026-09-12T13:31:11Z
+pixi_install_exit=0
+device_check_exit=0
+card_exit=0
+attention_leg_exit=0
+torch_leg_exit=0
+samba_build_exit=0
+samba_runs_exit=0
+attention=0 torch=0 samba_build=0 samba_runs=0
+extra_exit=0
+finished=2026-09-12T13:45:05Z

@@ -424,6 +424,51 @@ they sat (compile_bf16 0.02017 -> 0.02152 on enwik8, inside the spread these
 columns already show pod to pod). Every torch column is nondeterministic by
 label; ours is bitwise identical across Apple, NVIDIA and AMD.
 
+THIS TABLE DOES NOT INCLUDE DEVIATION 2649. It was measured at 5b7e1e41 and
+the step glue flip merged after that pod died. The table below supersedes it.
+
+#### Same pod, after the step glue flip as well (2026-09-12 13:45Z)
+
+Source: `bench/results/e1g/2026-09-12_133007-nvidia-h100-owed-rest/remote/`
+(`attention-step/lm_summary.tsv`, `torch-lm-step/summary.tsv`), RunPod pod
+aylfazvhgd6g8d, driver 580.126.09, commit bb679f19 (main 00cd9a5f plus one
+bench file), same harness, shape, init, AdamW, clock and corpora as the
+tables above. This is the first opponent table measured at a commit carrying
+BOTH neural flips of this pass, DEVIATION 2657 (attention estash) and
+DEVIATION 2649 (byte LM step glue). OUR IDENTICAL arm is the shipped NVIDIA
+default, named by the shipped fused check on the pod itself (`DEFAULT
+column=nvidia arm=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32
+word=6343783 trial_hook=False`, `arm_is_default=True` on both corpora,
+`transformer_fused_check: PASS, 15 cases, every compared buffer
+bit-identical`). SDPA observed: `efficient` for the float32 and tf32
+columns, `flash` for the bf16 columns.
+
+| column | enwik8 s | Pile GitHub s | our IDENTICAL / column (enwik8, Pile GitHub) |
+|---|---|---|---|
+| compile_bf16 (their fastest measured) | 0.01955 | 0.02016 | 11.90x, 11.45x |
+| compile_tf32 | 0.03183 | 0.03166 | 7.31x, 7.29x |
+| eager_bf16 | 0.03620 | 0.03634 | 6.43x, 6.35x |
+| eager_tf32 | 0.03780 | 0.03785 | 6.15x, 6.10x |
+| compile_fp32 | 0.05682 | 0.05740 | 4.09x, 4.02x |
+| eager_fp32 | 0.06153 | 0.06076 | 3.78x, 3.80x |
+| ours IDENTICAL (shipped defaults, bits equal on every vendor) | 0.2326 | 0.2309 | 1 |
+
+BOTH CELLS MOVED THIS TIME, and the ratios must not be read as one number
+moving. Ours went 0.2411 / 0.2396 to 0.2326 / 0.2309, which is 3.5% and 3.6%
+and is where DEVIATION 2649 lands. But `compile_bf16` moved too, 0.02152 /
+0.02291 to 0.01955 / 0.02016, about 9% and 12% on a different physical H100,
+so THAT ratio got WORSE (11.20x / 10.46x to 11.90x / 11.45x) even though our
+own step improved. At the other end `eager_fp32` barely moved at all (0.06183
+/ 0.06148 to 0.06153 / 0.06076) and that ratio improved, 3.90x / 3.90x to
+3.78x / 3.80x. The reading is that the compiled bf16 column is the volatile
+one pod to pod and the eager float32 column is the stable one, so a ratio
+against `compile_bf16` carries pod noise that a ratio against `eager_fp32`
+does not. The 12:49Z table's claim that only our cell moves was true of that
+pair of runs and is not a general rule.
+
+Every torch column is nondeterministic by label; ours is bitwise identical
+across Apple, NVIDIA and AMD.
+
 THIS TABLE DOES NOT INCLUDE THE STEP GLUE FLIP. The pod ran commit
 5b7e1e41, which carries DEVIATION 2657 but NOT DEVIATION 2649
 (`optskip_noshadow_rows16`, merged afterwards at 65a889bf, measured FLIP

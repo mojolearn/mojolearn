@@ -1,0 +1,6 @@
+round=1 arm=shipped exit=0
+round=1 arm=optskip_noshadow_rows16 exit=0
+round=2 arm=shipped exit=0
+round=2 arm=optskip_noshadow_rows16 exit=0
+round=3 arm=shipped exit=0
+round=3 arm=optskip_noshadow_rows16 exit=0

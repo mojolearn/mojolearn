@@ -1,0 +1,17 @@
+torch-python	0	1s
+torch-pin	0	1s
+corpus-enwik8	0	0s
+corpus-pile-github	0	1s
+eager_fp32-enwik8	0	7s
+eager_fp32-pile_github	0	7s
+eager_tf32-enwik8	0	7s
+eager_tf32-pile_github	0	7s
+eager_bf16-enwik8	0	7s
+eager_bf16-pile_github	0	7s
+compile_fp32-enwik8	0	25s
+compile_fp32-pile_github	0	19s
+compile_tf32-enwik8	0	21s
+compile_tf32-pile_github	0	20s
+compile_bf16-enwik8	0	24s
+compile_bf16-pile_github	0	22s
+summary	0	0s
