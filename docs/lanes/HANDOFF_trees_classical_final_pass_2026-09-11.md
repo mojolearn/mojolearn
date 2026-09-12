@@ -44,7 +44,7 @@ sections 9 and 10 and bench/OPPONENT_REFERENCE.md before touching a lane.
 | kde-finish, DEVIATIONS 2625, 2626, 2660 | 44bf06a0 | taxi 0.811, Istella-S 0.311, **geomean 0.502**, log-likelihood identical to the last digit |
 | svm-finish, DEVIATIONS 2665, 2666 | aede96e8 | taxi 0.8886, Istella-S 0.8498, **geomean 0.869**, accuracy unchanged. Also fixed a REAL BUG in 48f92b19: the RARY_TREE arity row had no dispatch branch, so that define silently selected the default and three earlier "rary" measurements measured nothing |
 | forest-finish, DEVIATIONS 2637, 2638, 2663 | b3d6eeb5 | RF **0.775**, ET **0.929**, iforest **0.108**; 2663 at bw16k **0.880** and bw32k **0.865**. Every quality delta exactly +0.000000. ET is SLOWER on taxi (1.018) and is not claimed there |
-| gbdt-finish, DEVIATIONS 2634, 2635, 2636 (2661 opt-in) | 5030ebc3 | identity only: 36/36 cells stable on four sets, sub-byte 16/16 PASS. **NO speed claim** — the timing legs died with the pod before returning; see section 6 item 1, which says to re-run them and turn off anything that loses |
+| gbdt-finish, DEVIATIONS 2634, 2635, 2636 (2661 opt-in) | 5030ebc3 | identity 36/36 on four sets, sub-byte 16/16 PASS. **SPEED NOW MEASURED** (2026-09-12, pod n2ltmel2optel5): 2634 geomean 0.9603 FLIP and 2635 0.9913 FLIP both stay on; **2636 is 1.0006 NO FLIP and was turned OPT-IN in 31f0142f**; total baseline->all 0.9526. Quality equal in all 24 cells |
 | pointwise-speed | 652ccd8f | merged on Andrew's instruction while the lane was still running; its verdicts are owed |
 | linear-cluster-istella, DEVIATION 2671 | 0c6c1249 | Jacobi with two barriers per rotation: OLS geomean 0.9610, PCA 0.9435, 0 of 48,400 matrix and 0 of 48,400 eigenvector cells differing. **DEVIATION 2672 RESOLVED as a flip**: the single 1.066 instance was noise; pooled over five race instances it reads taxi 0.8979 and Istella-S 0.9943, geomean 0.9449, digests equal. k-means 2672 and OLS/PCA 2671 both ship on |
 
@@ -176,14 +176,15 @@ the H100, then gate the Apple M4 and an AMD box before merging.
 
 1. **Re-run the three results that died with their pods.** All three had paid
    their setup cost and were minutes from finishing.
-   - **GBDT 2634, 2635, 2636 speed.** THIS IS THE IMPORTANT ONE: those three
-     are merged DEFAULT-ON in 5030ebc3 with identity fully proven (36/36 cells
-     on four sets, sub-byte 16/16) but **no speed verdict at all**. The
-     Istella-S redo was about 20 minutes from done. Re-run the ab and phase 2
-     legs, put them through `tools/flip_verdict.py`, and if a switch loses,
-     TURN IT OFF. Do not leave them default-on unmeasured indefinitely.
-     DEVIATION 2661 is opt-in and already proven bit-identical
-     (`ib_diff all vs a2661` IDENTICAL=36).
+   - **GBDT 2634, 2635, 2636 speed: DONE 2026-09-12.** Re-run on a fresh
+     H100 (pod n2ltmel2optel5). 2634 six-cell geomean 0.9603 FLIP and 2635
+     0.9913 FLIP stay default-on; **2636 measured 1.0006 and is now OPT-IN**
+     behind `-D MOJOLEARN_2636_PARALLEL_STAGING=1` (commit 31f0142f, gated on
+     the Apple M4: both arms build to different binaries so the switch still
+     flips, sub-byte 16/16 PASS on each and byte-identical between them).
+     Quality equal in all 24 cells. Tables in `bench/OPPONENT_REFERENCE.md`.
+     STILL OWED from that pod: the CatBoost and XGBoost opponent cells and the
+     DEVIATION 2661 A/B (2661 is opt-in either way, so no default rides on it).
    - **Pointwise Istella-S** (`ours-ab` and the greedy control). The taxi
      result stands and is strong: the opt-in pointwise arm 1803.3 -> 795.4 ms
      (0.441x, medians of nine interleaved rounds), logloss 0.525925 ->
@@ -314,6 +315,11 @@ sessions picking from the same range.
 - The lane worktrees live in the orchestrator's scratchpad under /private/tmp
   and will not survive a reboot. Every branch is pushed and all evidence is
   copied out, so they can be removed.
+- TRAP that cost 40 minutes on 2026-09-12: `body_phase2.sh` waits on
+  `$OUT/istella_real.done`, which ONLY the resumed-fetch path writes, while the
+  normal setup path writes `$OUT/data.done`. A recovery chain that writes
+  `data.done` therefore deadlocks phase 2 forever. Write BOTH markers, or key
+  phase 2 off the dataset itself.
 - Useful traps learned tonight: macOS has no `timeout` (the wrapped command
   never runs); `pkill -f PAT` inside an ssh command matches that command's own
   line and kills the remote shell, so break the pattern (`"istella_re[s]ume"`);

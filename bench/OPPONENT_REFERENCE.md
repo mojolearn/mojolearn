@@ -1934,3 +1934,46 @@ this is the evidence, not the argument.
 The shipped default was rebuilt with NO defines and re-timed: et taxi 1617.9 ms
 and et Istella-S 4634.7 ms, hashes `e683f121d11f59dd` and `40b1c5b03ba40420`,
 logloss 0.527541 and 0.188191 -- where the trial width landed.
+
+### GBDT host-work switches, before and after on one H100 (September 12, pod n2ltmel2optel5)
+
+OURS AGAINST OURS, not an opponent row: each pair differs by exactly one
+compile define and nothing else, which the four distinct `_mojolearn_gbdt.so`
+prove (baseline 069feb45, a2634 0d12ac1d, both 20633cd7, all 8c20150a). NVIDIA
+H100 80GB HBM3, driver 580.126.09, 224 host cores; our IDENTICAL arm only,
+1,000,000 rows, 100 trees, depth 6, 5 timed fits per process, 3 rounds
+alternating PROCESSES over the sets (two `.so` sets cannot share a process, and
+the order rotates each round so a set is never compared across heat windows).
+Quality is equal in all 24 cells and no model bit moves in any of them.
+Evidence `bench/results/gbdt_finish_2026-09-11/` and
+`~/mojolearn-evidence/gbdt-redo-2026-09-12/`.
+
+Medians in ms, by grow policy:
+
+| chain step | switch | sym taxi | dep taxi | loss taxi | sym Istella-S | dep Istella-S | loss Istella-S |
+|---|---|---:|---:|---:|---:|---:|---:|
+| baseline | none | 341.1 | 462.9 | 999.0 | 1370.5 | 1924.6 | 2539.4 |
+| a2634 | 2634 on | 312.6 | 434.2 | 962.5 | 1303.8 | 1912.4 | 2544.8 |
+| both | 2634, 2635 on | 311.3 | 434.2 | 965.1 | 1309.1 | 1840.5 | 2502.8 |
+| all | 2634, 2635, 2636 on | 303.4 | 438.2 | 938.3 | 1341.5 | 1867.7 | 2526.1 |
+
+Per-switch after/before and the section 9 verdict (a shared switch has ONE
+default, gated on the geometric mean over all six (policy, dataset) cells):
+
+| switch | pair | sym/dep/loss taxi | sym/dep/loss Istella-S | six-cell geomean | verdict |
+|---|---|---|---|---:|---|
+| 2634 | baseline -> a2634 | 0.916 / 0.938 / 0.964 | 0.951 / 0.994 / 1.002 | 0.9603 | FLIP, ships on |
+| 2635 | a2634 -> both | 0.996 / 1.000 / 1.003 | 1.004 / 0.962 / 0.984 | 0.9913 | FLIP, ships on |
+| 2636 | both -> all | 0.975 / 1.009 / 0.972 | 1.025 / 1.015 / 1.009 | 1.0006 | NO FLIP, now OPT-IN |
+| total | baseline -> all | 0.889 / 0.947 / 0.939 | 0.979 / 0.970 / 0.995 | 0.9526 | FLIP |
+
+DEVIATION 2636 is the one that lost, and the shape says why: it parallelizes the
+host fills of a ring revolution, but the uploads and binarize kernels still
+enqueue serially in the same order, so the device stays the bottleneck and the
+880 MB of single-thread memcpy it removes was never on the critical path.
+gbdt-depthwise is a clear 1.012 loss. 2634 and 2635 carry the win without it,
+0.9603 x 0.9913 being essentially all of the 0.9526 measured end to end, so
+2636 moved to `-D MOJOLEARN_2636_PARALLEL_STAGING=1` (commit 31f0142f).
+
+RUN OWED for this tuple: the CatBoost and XGBoost opponent cells, and the
+DEVIATION 2661 A/B, were still running on that pod when this landed.
