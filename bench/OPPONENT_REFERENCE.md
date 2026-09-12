@@ -1998,5 +1998,9 @@ measured against is no longer the shipped default: this pod's `all` set was
 built before DEVIATION 2636 became opt-in, so 2661 was timed with 2636 ON
 underneath. Re-measure it against the new default before making it one.
 
-RUN OWED for this tuple: the CatBoost and XGBoost opponent cells were still
-running on that pod when this landed.
+RUN OWED for this tuple, and the reason is a mistake of mine, not a shortfall
+of the box: the CatBoost and XGBoost opponent cells were about 20 MINUTES from
+finishing when I reaped the pod. That pod had already paid the whole setup, a
+472 MB Istella-S fetch, a 2,248,281,826 byte decode and four set builds, so
+killing it discharged nothing and the next attempt repays all of it. Do not
+reap a pod while a run that is OWED is still in flight.

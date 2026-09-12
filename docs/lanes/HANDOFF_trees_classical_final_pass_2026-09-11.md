@@ -183,8 +183,16 @@ the H100, then gate the Apple M4 and an AMD box before merging.
      the Apple M4: both arms build to different binaries so the switch still
      flips, sub-byte 16/16 PASS on each and byte-identical between them).
      Quality equal in all 24 cells. Tables in `bench/OPPONENT_REFERENCE.md`.
-     STILL OWED from that pod: the CatBoost and XGBoost opponent cells and the
-     DEVIATION 2661 A/B (2661 is opt-in either way, so no default rides on it).
+     DEVIATION 2661 also measured: six-cell geomean 0.9968, identity clean
+     (IDENTICAL=36, sub-byte 16/16). It clears the threshold but STAYS OPT-IN,
+     because the margin is 0.3 percent with gbdt-symmetric at 1.000 and because
+     it was timed with 2636 ON underneath, which is no longer the default.
+     Re-measure it against the new default before promoting it.
+     STILL OWED: the CatBoost and XGBoost opponent cells for this tuple. They
+     were ~20 minutes from done when I REAPED THE POD, which was wrong: the run
+     was up because those rows are owed, and the box had already paid the 472 MB
+     fetch, the decode and four builds. A fresh pod repays all of that. Rule
+     now recorded: never reap while an owed run is in flight.
    - **Pointwise Istella-S** (`ours-ab` and the greedy control). The taxi
      result stands and is strong: the opt-in pointwise arm 1803.3 -> 795.4 ms
      (0.441x, medians of nine interleaved rounds), logloss 0.525925 ->
