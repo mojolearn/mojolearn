@@ -2022,6 +2022,29 @@ has no gbdt-symmetric cell. Evidence
 | lossguide | taxi | 950.0 (945.2..1043.9) | 1094.6 (1091.8..1144.3) | **0.868x** | 476.2 (469.6..491.2) | 1.995x |
 | lossguide | Istella-S | 2504.3 (2463.8..2782.2) | 2510.8 (2426.0..2608.0) | 0.997x | 1994.7 (1946.5..2516.4) | 1.256x |
 
+**THE CatBoost COLUMN ABOVE IS SUPERSEDED FOR THE TWO taxi CELLS (2026-09-12,
+lane gbdt-fairness, merge 6a779d0e).** A second pod re-ran these arms and our
+model reproduced BIT FOR BIT (hash `90c3558501933f47`, logloss 0.525735), but
+CatBoost came in at 624-636 ms against the 709.0 ms recorded here, so the rows
+below were timed against a CatBoost sample at the slow end. Corrected ratios:
+
+| policy | dataset | published here | CORRECTED |
+|---|---|---:|---:|
+| symmetric | taxi | 0.437x | **0.525x** |
+| depthwise | taxi | 0.518x | **0.591x** |
+| symmetric | Istella-S | 0.830x | 0.811x (holds) |
+
+**AND THE SHAPE OF THE WIN IS NOT WHAT A RATIO SUGGESTS.** Timed at 1, 10 and
+100 trees, ours costs 86.1 ms fixed plus 2.297 ms per tree; CatBoost costs
+346.0 ms fixed plus 2.809 ms per tree. We are **4.0x cheaper before the first
+tree and only 1.22x cheaper per tree.** At the `n_estimators=100` pinned here,
+CatBoost's fixed cost is 55% of its total, which is where the headline comes
+from; extrapolated to CatBoost's own default of 1000 iterations the ratio goes
+to about **0.75x**. 100 trees was picked to match `tools/nvidia_forest_bench.sh`,
+not because it is what a CatBoost user runs. State it as "we start 4x faster and
+boost 1.2x faster", never as an unqualified multiple. Full audit:
+`bench/results/gbdt_fairness_2026-09-12/`.
+
 Quality, same fits: symmetric ours logloss 0.138653 / AUC 0.966990 against
 CatBoost 0.139154 / 0.966719 (ours very slightly better on both); depthwise
 ours 0.126517 / 0.971896, CatBoost 0.125832 / 0.972819, XGBoost 0.125110 /
@@ -2029,8 +2052,10 @@ ours 0.126517 / 0.971896, CatBoost 0.125832 / 0.972819, XGBoost 0.125110 /
 XGBoost 0.125110 / 0.973774.
 
 READ THIS HONESTLY. We beat CatBoost on four of its six cells, and the two
-symmetric cells are the strongest (0.437x on taxi, 0.830x on Istella-S) on
-CatBoost's OWN policy. On Istella-S depthwise we are 1.030x, slightly behind,
+symmetric cells are the strongest (0.525x on taxi as CORRECTED above, 0.811x on
+Istella-S) on CatBoost's OWN policy -- and most of the taxi margin is the fixed
+cost we pay before the first tree, not a faster boosting loop. On Istella-S
+depthwise we are 1.030x, slightly behind,
 and on Istella-S lossguide 0.997x is parity, not a win. XGBoost is FASTER THAN
 US wherever it competes: 1.196x and 1.039x on depthwise, and 1.995x on taxi
 lossguide, which is the largest single gap on the board. Quality is within a
