@@ -1,0 +1,519 @@
+{
+ "encoding": "gpt2",
+ "n_vocab": 50257,
+ "pat_str": "'(?:[sdmt]|ll|ve|re)| ?\\p{L}++| ?\\p{N}++| ?[^\\s\\p{L}\\p{N}]++|\\s++$|\\s+(?!\\S)|\\s",
+ "tiktoken_version": "0.14.0",
+ "cases": [
+  {
+   "name": "empty",
+   "text": "",
+   "ids": [],
+   "roundtrip_ok": true
+  },
+  {
+   "name": "ascii_word",
+   "text": "hello",
+   "ids": [
+    31373
+   ],
+   "roundtrip_ok": true
+  },
+  {
+   "name": "leading_space",
+   "text": " hello",
+   "ids": [
+    23748
+   ],
+   "roundtrip_ok": true
+  },
+  {
+   "name": "two_words",
+   "text": "hello world",
+   "ids": [
+    31373,
+    995
+   ],
+   "roundtrip_ok": true
+  },
+  {
+   "name": "contraction_s",
+   "text": "it's",
+   "ids": [
+    270,
+    338
+   ],
+   "roundtrip_ok": true
+  },
+  {
+   "name": "contraction_ll",
+   "text": "we'll",
+   "ids": [
+    732,
+    1183
+   ],
+   "roundtrip_ok": true
+  },
+  {
+   "name": "contraction_ve",
+   "text": "they've",
+   "ids": [
+    9930,
+    1053
+   ],
+   "roundtrip_ok": true
+  },
+  {
+   "name": "contraction_re",
+   "text": "you're",
+   "ids": [
+    5832,
+    821
+   ],
+   "roundtrip_ok": true
+  },
+  {
+   "name": "contraction_d",
+   "text": "I'd",
+   "ids": [
+    40,
+    1549
+   ],
+   "roundtrip_ok": true
+  },
+  {
+   "name": "contraction_t",
+   "text": "don't",
+   "ids": [
+    9099,
+    470
+   ],
+   "roundtrip_ok": true
+  },
+  {
+   "name": "contraction_upper",
+   "text": "IT'S",
+   "ids": [
+    2043,
+    6,
+    50
+   ],
+   "roundtrip_ok": true
+  },
+  {
+   "name": "apostrophe_alone",
+   "text": "'",
+   "ids": [
+    6
+   ],
+   "roundtrip_ok": true
+  },
+  {
+   "name": "apostrophe_word",
+   "text": "'hello",
+   "ids": [
+    6,
+    31373
+   ],
+   "roundtrip_ok": true
+  },
+  {
+   "name": "long_letters",
+   "text": "abcdefghijklmnopqrstuvwxyz",
+   "ids": [
+    39305,
+    4299,
+    456,
+    2926,
+    41582,
+    10295,
+    404,
+    80,
+    81,
+    301,
+    14795,
+    86,
+    5431,
+    89
+   ],
+   "roundtrip_ok": true
+  },
+  {
+   "name": "long_digits",
+   "text": "12345678901234567890",
+   "ids": [
+    10163,
+    2231,
+    3134,
+    4531,
+    486,
+    1954,
+    2231,
+    30924,
+    3829
+   ],
+   "roundtrip_ok": true
+  },
+  {
+   "name": "digits_letters",
+   "text": "abc123def456",
+   "ids": [
+    39305,
+    10163,
+    4299,
+    29228
+   ],
+   "roundtrip_ok": true
+  },
+  {
+   "name": "number_comma",
+   "text": "1,234,567.89",
+   "ids": [
+    16,
+    11,
+    24409,
+    11,
+    20,
+    3134,
+    13,
+    4531
+   ],
+   "roundtrip_ok": true
+  },
+  {
+   "name": "trailing_space",
+   "text": "hello ",
+   "ids": [
+    31373,
+    220
+   ],
+   "roundtrip_ok": true
+  },
+  {
+   "name": "trailing_spaces",
+   "text": "hello    ",
+   "ids": [
+    31373,
+    220,
+    220,
+    220,
+    220
+   ],
+   "roundtrip_ok": true
+  },
+  {
+   "name": "trailing_newline",
+   "text": "hello\n",
+   "ids": [
+    31373,
+    198
+   ],
+   "roundtrip_ok": true
+  },
+  {
+   "name": "only_spaces",
+   "text": "    ",
+   "ids": [
+    220,
+    220,
+    220,
+    220
+   ],
+   "roundtrip_ok": true
+  },
+  {
+   "name": "only_newlines",
+   "text": "\n\n\n",
+   "ids": [
+    628,
+    198
+   ],
+   "roundtrip_ok": true
+  },
+  {
+   "name": "interior_runs",
+   "text": "a  b   c",
+   "ids": [
+    64,
+    220,
+    275,
+    220,
+    220,
+    269
+   ],
+   "roundtrip_ok": true
+  },
+  {
+   "name": "tab_mix",
+   "text": "a\tb\t\tc",
+   "ids": [
+    64,
+    197,
+    65,
+    197,
+    197,
+    66
+   ],
+   "roundtrip_ok": true
+  },
+  {
+   "name": "crlf",
+   "text": "line1\r\nline2",
+   "ids": [
+    1370,
+    16,
+    201,
+    198,
+    1370,
+    17
+   ],
+   "roundtrip_ok": true
+  },
+  {
+   "name": "punct_run",
+   "text": "!!!???",
+   "ids": [
+    10185,
+    28358
+   ],
+   "roundtrip_ok": true
+  },
+  {
+   "name": "punct_space",
+   "text": " ...!!!",
+   "ids": [
+    2644,
+    10185
+   ],
+   "roundtrip_ok": true
+  },
+  {
+   "name": "brackets",
+   "text": "({[<>]})",
+   "ids": [
+    15090,
+    58,
+    27,
+    37981,
+    30072
+   ],
+   "roundtrip_ok": true
+  },
+  {
+   "name": "accented",
+   "text": "café naïve",
+   "ids": [
+    66,
+    1878,
+    2634,
+    41492
+   ],
+   "roundtrip_ok": true
+  },
+  {
+   "name": "cjk",
+   "text": "日本語のテキスト",
+   "ids": [
+    33768,
+    98,
+    17312,
+    105,
+    45739,
+    252,
+    5641,
+    24336,
+    25084,
+    43302
+   ],
+   "roundtrip_ok": true
+  },
+  {
+   "name": "cyrillic",
+   "text": "Привет мир",
+   "ids": [
+    140,
+    253,
+    21169,
+    18849,
+    38857,
+    16843,
+    20375,
+    12466,
+    120,
+    18849,
+    21169
+   ],
+   "roundtrip_ok": true
+  },
+  {
+   "name": "arabic",
+   "text": "مرحبا بالعالم",
+   "ids": [
+    25405,
+    26897,
+    148,
+    255,
+    39848,
+    12919,
+    17550,
+    101,
+    23525,
+    44690,
+    23525,
+    25405
+   ],
+   "roundtrip_ok": true
+  },
+  {
+   "name": "greek_math",
+   "text": "α + β = γ",
+   "ids": [
+    17394,
+    1343,
+    27169,
+    796,
+    7377,
+    111
+   ],
+   "roundtrip_ok": true
+  },
+  {
+   "name": "emoji",
+   "text": "hello 👋 world",
+   "ids": [
+    31373,
+    50169,
+    233,
+    995
+   ],
+   "roundtrip_ok": true
+  },
+  {
+   "name": "emoji_zwj",
+   "text": "👨‍👩‍👧‍👦",
+   "ids": [
+    41840,
+    101,
+    447,
+    235,
+    41840,
+    102,
+    447,
+    235,
+    41840,
+    100,
+    447,
+    235,
+    41840,
+    99
+   ],
+   "roundtrip_ok": true
+  },
+  {
+   "name": "emoji_skin",
+   "text": "👍🏽",
+   "ids": [
+    41840,
+    235,
+    8582,
+    237,
+    121
+   ],
+   "roundtrip_ok": true
+  },
+  {
+   "name": "combining",
+   "text": "é vs é",
+   "ids": [
+    2634,
+    3691,
+    304,
+    136,
+    223
+   ],
+   "roundtrip_ok": true
+  },
+  {
+   "name": "code",
+   "text": "def f(x):\n    return x ** 2\n",
+   "ids": [
+    4299,
+    277,
+    7,
+    87,
+    2599,
+    198,
+    220,
+    220,
+    220,
+    1441,
+    2124,
+    12429,
+    362,
+    198
+   ],
+   "roundtrip_ok": true
+  },
+  {
+   "name": "json",
+   "text": "{\"a\": 1, \"b\": [2, 3]}",
+   "ids": [
+    4895,
+    64,
+    1298,
+    352,
+    11,
+    366,
+    65,
+    1298,
+    685,
+    17,
+    11,
+    513,
+    48999
+   ],
+   "roundtrip_ok": true
+  },
+  {
+   "name": "raw_bytes",
+   "text": "\u0000\u0001",
+   "ids": [
+    188,
+    189,
+    221
+   ],
+   "roundtrip_ok": true
+  },
+  {
+   "name": "nbsp",
+   "text": "a b",
+   "ids": [
+    64,
+    1849,
+    65
+   ],
+   "roundtrip_ok": true
+  },
+  {
+   "name": "endoftext_as_text",
+   "text": "<|endoftext|>",
+   "ids": [
+    27,
+    91,
+    437,
+    1659,
+    5239,
+    91,
+    29
+   ],
+   "roundtrip_ok": true
+  },
+  {
+   "name": "endoftext_as_special",
+   "text": "<|endoftext|>",
+   "ids": [
+    50256
+   ],
+   "roundtrip_ok": true
+  }
+ ]
+}

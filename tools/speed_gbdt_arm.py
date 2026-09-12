@@ -361,7 +361,7 @@ class Data(object):
     one even if somebody loses the header."""
 
     def __init__(self, name, x_train, x_test, y_train, y_test, task,
-                 n_classes=0, y_anom=None):
+                 n_classes=0, y_anom=None, cat_idx=None):
         self.name = name
         self.X_train = x_train
         self.X_test = x_test
@@ -371,6 +371,15 @@ class Data(object):
         self.n_classes = n_classes
         # Only for the anomaly lane: the planted anomaly labels of X_test.
         self.y_anom = y_anom
+        # Column indices holding DENSE CATEGORY CODES 0..k-1, or () when every
+        # column is numeric. Until criteo landed (2026-09-12) this was always
+        # empty, which is why no benchmark had ever exercised the categorical
+        # path: DEVIATION 2634 skips the CTR target prep when no column is
+        # categorical, so its measured 0.9603 came entirely from the SKIP side.
+        # An arm that can use categoricals reads this; one that cannot ignores
+        # it and is then timed on a different problem, so a lane that passes
+        # cat_idx to one arm must pass it to all of them.
+        self.cat_idx = tuple(cat_idx or ())
         self.tag = "%s-%dx%d" % (name, x_train.shape[0], x_train.shape[1])
 
 
@@ -918,7 +927,151 @@ LANE_DEFAULT_DATASET = {
 }
 
 
+#: Criteo display-advertising click logs, the CATEGORICAL dataset. Public on
+#: HuggingFace, ungated (the API reports gated:false and an unauthenticated
+#: range request returns 206), so it needs no credentials -- which is why it is
+#: usable where Bosch was not. One `part-*` file is about 97 MB and 1,529,035
+#: rows; three reach ~4.6M, past the section 9 million-row floor.
+CRITEO_BASE = ("https://huggingface.co/datasets/criteo/CriteoClickLogs/"
+               "resolve/main/data/day=2015-02-15/")
+CRITEO_PARTS = (
+    "part-00015-99c339d5-fbac-4110-9dcf-75453a61a5c1.c000.snappy.parquet",
+    "part-00079-99c339d5-fbac-4110-9dcf-75453a61a5c1.c000.snappy.parquet",
+    "part-00104-99c339d5-fbac-4110-9dcf-75453a61a5c1.c000.snappy.parquet",
+)
+CRITEO_N_INT = 13
+CRITEO_N_CAT = 26
+CRITEO_N_TEST = 500000
+
+
+def _decode_criteo(paths):
+    """Criteo parquet -> (X float32, y float32, cat_idx).
+
+    Layout is `label`, `integer_feature_1..13`, `categorical_feature_1..26`
+    (40 columns, verified against the file). The integers keep -1 for missing,
+    the same convention `_decode_taxi_month` uses, so one arm cannot read a
+    missing value as a real one while another refuses it.
+
+    THE CATEGORY CODES ARE DETERMINISTIC BY CONSTRUCTION, and that is
+    load-bearing rather than tidiness. Our surface wants DENSE CODES 0..k-1
+    (`ensemble.py`: CatBoost's own dispatch then picks one-hot for a small
+    cardinality and target statistics for a large one). Criteo ships 32-bit
+    HASHED STRINGS instead, so the codes have to be assigned here -- and if
+    they came from dict or hash iteration order, two decodes of the same rows
+    would produce different codes, hence different borders, different splits
+    and a different model hash. The identity property would break on the one
+    dataset whose reason for existing is to exercise the categorical path.
+    So: codes are the rank of the string in SORTED UNIQUE order per column,
+    computed once over the decoded rows and frozen in the npz beside the
+    matrix. NULL is a category of its own (`cat_14`, `cat_16`, `cat_17` and
+    `cat_23` are 34.3% null and `cat_1` 3.9%: the missingness clusters, so
+    folding it into an arbitrary code would destroy signal).
+
+    Measured on `part-00015` (1,529,035 rows, 3.21% positive): cardinality
+    runs from 3 (`cat_6`, `cat_17`) to 371,237 (`cat_20`), 1,697,108 distinct
+    over the 26 columns. That spread is the point -- the small columns take
+    CatBoost's one-hot branch and the large ones force the CTR branch, so one
+    dataset covers both sides of the dispatch."""
+    try:
+        import pyarrow.parquet as pq
+    except ImportError:
+        raise RuntimeError(
+            "criteo needs pyarrow to decode parquet; it is a download-step "
+            "dependency only, never imported inside a timed run")
+    tables = [pq.read_table(p) for p in paths]
+    int_cols = ["integer_feature_%d" % i for i in range(1, CRITEO_N_INT + 1)]
+    cat_cols = ["categorical_feature_%d" % i for i in range(1, CRITEO_N_CAT + 1)]
+    y = np.concatenate([
+        np.asarray(t.column("label").to_numpy(zero_copy_only=False),
+                   dtype=np.float32) for t in tables])
+    n = y.shape[0]
+    x = np.empty((n, CRITEO_N_INT + CRITEO_N_CAT), dtype=np.float32)
+    for j, name in enumerate(int_cols):
+        col = np.concatenate([
+            np.asarray(t.column(name).to_numpy(zero_copy_only=False),
+                       dtype=np.float64) for t in tables])
+        # -1 marks missing for every arm, as in taxi
+        col = np.where(np.isnan(col), -1.0, col)
+        x[:, j] = col.astype(np.float32)
+    tables_cat = {}
+    for j, name in enumerate(cat_cols):
+        parts = []
+        for t in tables:
+            parts.append(np.asarray(t.column(name).to_pylist(), dtype=object))
+        col = np.concatenate(parts)
+        col = np.where(col == None, "\x00NULL", col)        # noqa: E711
+        col = col.astype(str)
+        # sorted unique -> rank. np.unique sorts, so the mapping is a pure
+        # function of the value set and never of iteration order.
+        uniq, codes = np.unique(col, return_inverse=True)
+        x[:, CRITEO_N_INT + j] = codes.astype(np.float32)
+        tables_cat[name] = uniq
+    cat_idx = tuple(range(CRITEO_N_INT, CRITEO_N_INT + CRITEO_N_CAT))
+    return x, y, cat_idx, tables_cat
+
+
+def load_criteo(size, rows_cap=None):
+    """Criteo click logs, 13 integer + 26 categorical, THE CATEGORICAL SET.
+
+    NOT a section 9 gating dataset. taxi and Istella-S remain the two kinds
+    every flip verdict is computed over; criteo exists to tune and check the
+    categorical and CTR paths, which taxi's low-cardinality ids and
+    Istella-S's 220 dense numerics never reach. A win measured here alone is
+    a one-kind win and stays opt-in, exactly as the rules say.
+
+    Binary target `label` (about 3.2% positive, so far more skewed than
+    taxi's 76% or Istella-S's 11%). The test rows are the LAST
+    CRITEO_N_TEST rows at every rung and the train rows the first
+    `rows_cap`, so rungs are comparable.
+
+    THE DOWNLOAD IS ABOUT 291 MB of parquet over three parts and is a
+    SEPARATE, EXPLICITLY NAMED STEP (`--download criteo`, needs pyarrow);
+    timed runs load the NumPy cache only."""
+    folder = os.path.join(data_root(), "criteo")
+    npz_path = os.path.join(folder, "criteo_speed.npz")
+    cached = None
+    if os.path.exists(npz_path) and os.path.getsize(npz_path) > 0:
+        try:
+            cached = np.load(npz_path, allow_pickle=False)
+        except Exception as exc:                   # noqa: BLE001
+            sys.stderr.write(
+                "speed_gbdt_arm: %s is unreadable (%s); re-decoding from the "
+                "parquet parts beside it\n" % (npz_path, exc))
+            cached = None
+    if cached is not None:
+        x_all, y_all = cached["x_all"], cached["y_all"]
+        cat_idx = tuple(int(v) for v in cached["cat_idx"])
+    else:
+        paths = [os.path.join(folder, p) for p in CRITEO_PARTS]
+        missing = [p for p in paths if not os.path.isfile(p)]
+        if missing:
+            raise RuntimeError(
+                "criteo is not downloaded: %d of %d parquet parts missing "
+                "under %s. Run `python tools/speed_gbdt_arm.py --download "
+                "criteo` first (about 291 MB), OUTSIDE the timed run."
+                % (len(missing), len(paths), folder))
+        x_all, y_all, cat_idx, _codes = _decode_criteo(paths)
+        os.makedirs(folder, exist_ok=True)
+        np.savez(npz_path, x_all=x_all, y_all=y_all,
+                 cat_idx=np.asarray(cat_idx, dtype=np.int32))
+    n_all = x_all.shape[0]
+    n_test = min(CRITEO_N_TEST, max(1, n_all // 5))
+    x_te = np.ascontiguousarray(x_all[n_all - n_test:])
+    y_te = np.ascontiguousarray(y_all[n_all - n_test:])
+    n_train = n_all - n_test
+    if size == "smoke":
+        rows_cap = min(rows_cap or 50000, 50000)
+    if rows_cap:
+        n_train = min(n_train, rows_cap)
+    x_train = np.ascontiguousarray(x_all[:n_train])
+    y_train = np.ascontiguousarray(y_all[:n_train])
+    return Data("criteo", x_train, x_te, y_train, y_te, "binary", 2,
+                cat_idx=cat_idx)
+
+
 def load_dataset(name, size, rows_cap=None):
+    if name == "criteo":
+        return load_criteo(size, rows_cap)
     if name == "higgs":
         return load_higgs(size, rows_cap)
     if name == "higgsreg":
@@ -1056,6 +1209,34 @@ def download(name):
         print("istella decoded to %s (train %d x %d, test %d)"
               % (os.path.join(folder, "istella_speed.npz"),
                  d.X_train.shape[0], d.X_train.shape[1], d.X_test.shape[0]))
+        return
+    if name == "criteo":
+        import urllib.request
+        folder = os.path.join(data_root(), "criteo")
+        os.makedirs(folder, exist_ok=True)
+        for part in CRITEO_PARTS:
+            dest = os.path.join(folder, part)
+            if os.path.isfile(dest) and os.path.getsize(dest) > 0:
+                print("criteo part already present: %s (%.1f MB)"
+                      % (part, os.path.getsize(dest) / 1e6))
+                continue
+            url = CRITEO_BASE + part
+            print("downloading %s -> %s (about 97 MB)" % (url, dest))
+            # .part then rename, so an interrupted fetch cannot leave a
+            # truncated file that the size>0 check above would accept as
+            # complete. urlretrieve cannot resume, and a half file that
+            # counts as present is how a leg once measured synthetic data
+            # while believing it had Istella-S.
+            tmp = dest + ".part"
+            urllib.request.urlretrieve(url, tmp)
+            os.replace(tmp, dest)
+            print("criteo part: %.1f MB" % (os.path.getsize(dest) / 1e6))
+        d = load_criteo("shipped")
+        print("criteo decoded to %s (train %d x %d, test %d, %d categorical "
+              "columns at %s)"
+              % (os.path.join(folder, "criteo_speed.npz"),
+                 d.X_train.shape[0], d.X_train.shape[1], d.X_test.shape[0],
+                 len(d.cat_idx), ",".join(str(i) for i in d.cat_idx[:4]) + ",..."))
         return
     if name == "year":
         import urllib.request
@@ -1293,11 +1474,53 @@ def catboost_arms(lane, cfg, data, devices):
 
     def make(task_type):
         p = _params(task_type)
+        # DEVIATION 2634's other side. `cat_features` is what makes CatBoost
+        # run the CTR machinery at all: its own dispatch
+        # (binarizations_manager.cpp:106-115) takes one-hot below a
+        # cardinality threshold and target statistics above it. criteo spans
+        # 3 to 371,237 distinct per column, so one dataset exercises both
+        # branches. Passing the indices is also what makes the comparison
+        # honest: without them CatBoost would treat 26 hashed-id columns as
+        # ORDERED NUMBERS and be timed on a different, easier problem than
+        # ours.
+        if data.cat_idx:
+            p["cat_features"] = list(data.cat_idx)
         if data.task == "regression":
             return catboost.CatBoostRegressor(loss_function="RMSE", **p)
         if data.task == "binary":
             return catboost.CatBoostClassifier(loss_function="Logloss", **p)
         return catboost.CatBoostClassifier(loss_function="MultiClass", **p)
+
+    def _cat_frame(x, cat_idx):
+        """float32 matrix -> object matrix with the declared columns integral.
+
+        CatBoost refuses float columns named in `cat_features` ("Invalid type
+        for cat_feature"), so those columns go in as integers. The codes are
+        already dense 0..k-1 integers held exactly in float32 (the largest is
+        371,237, well inside float32's 24-bit exact-integer range), so the
+        cast moves no value."""
+        out = x.astype(object)
+        for j in cat_idx:
+            out[:, j] = x[:, j].astype(np.int64)
+        return out
+
+    def _fit(m, d):
+        if not d.cat_idx:
+            return m.fit(d.X_train, d.y_train)
+        return m.fit(_cat_frame(d.X_train, d.cat_idx), d.y_train)
+
+    def _score(m, d):
+        if not d.cat_idx:
+            return _score_sklearn_like(m, d)
+        # predict MUST see the same column types the fit saw. Without this the
+        # scorer would hand raw float32 test rows to a model fitted with
+        # cat_features and CatBoost would raise -- a failure that would have
+        # looked like "criteo is broken" rather than "the scorer was not
+        # wired". Reuse the shared scorer so the metric stays defined once.
+        shim = Data(d.name, d.X_train, _cat_frame(d.X_test, d.cat_idx),
+                    d.y_train, d.y_test, d.task, d.n_classes,
+                    y_anom=d.y_anom, cat_idx=d.cat_idx)
+        return _score_sklearn_like(m, shim)
 
     out = []
     for dev in devices:
@@ -1307,8 +1530,8 @@ def catboost_arms(lane, cfg, data, devices):
         out.append(Arm(
             "catboost-" + dev,
             (lambda tt: (lambda: make(tt)))(task_type),
-            lambda m, d: m.fit(d.X_train, d.y_train),
-            _score_sklearn_like,
+            _fit,
+            _score,
             sync=lambda: _blocking("catboost"),
             library="catboost",
         ))
@@ -1362,12 +1585,50 @@ def xgboost_arms(lane, cfg, data, devices):
 
     def make(device):
         p = _params(device)
+        # XGBoost's categorical support is opt-in and needs the columns to
+        # arrive as pandas `category` dtype; raw integer codes would be split
+        # as ORDERED NUMBERS, which is a different (easier) problem than the
+        # partition search CatBoost and ours do. Declaring it is what keeps
+        # the three arms on the same problem.
+        if data.cat_idx:
+            p["enable_categorical"] = True
+            p["max_cat_to_onehot"] = 1      # force partition search, not one-hot
         if data.task == "regression":
             return xgb.XGBRegressor(objective="reg:squarederror", **p)
         if data.task == "binary":
             return xgb.XGBClassifier(objective="binary:logistic", **p)
         return xgb.XGBClassifier(objective="multi:softprob",
                                  num_class=data.n_classes, **p)
+
+    def _frame(x, cat_idx):
+        """float32 matrix -> DataFrame with the declared columns as category.
+
+        Built once per fit and per predict, OUTSIDE the timed region's
+        intent... which is exactly why it is measured: the conversion is part
+        of what an XGBoost user pays to use categoricals, the same way our
+        staging cost is part of ours. It is not hidden from the clock for one
+        arm and charged to another."""
+        import pandas as pd
+        df = pd.DataFrame(x)
+        for j in cat_idx:
+            df[j] = df[j].astype("int64").astype("category")
+        return df
+
+    def _fit(m, d):
+        if not d.cat_idx:
+            return m.fit(d.X_train, d.y_train)
+        return m.fit(_frame(d.X_train, d.cat_idx), d.y_train)
+
+    def _score(m, d):
+        if not d.cat_idx:
+            return _score_sklearn_like(m, d)
+        # predict must see the SAME dtypes the fit saw, or XGBoost raises on
+        # the category mismatch. Swap in a framed test matrix and reuse the
+        # shared scorer so the metric definition stays in one place.
+        shim = Data(d.name, d.X_train, _frame(d.X_test, d.cat_idx),
+                    d.y_train, d.y_test, d.task, d.n_classes,
+                    y_anom=d.y_anom, cat_idx=d.cat_idx)
+        return _score_sklearn_like(m, shim)
 
     out = []
     for dev in devices:
@@ -1378,8 +1639,8 @@ def xgboost_arms(lane, cfg, data, devices):
         out.append(Arm(
             "xgboost-" + dev,
             (lambda dv: (lambda: make(dv)))(device),
-            lambda m, d: m.fit(d.X_train, d.y_train),
-            _score_sklearn_like,
+            _fit,
+            _score,
             sync=_cuda_sync,
             library="xgboost",
         ))

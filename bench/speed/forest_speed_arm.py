@@ -196,6 +196,26 @@ def our_gbdt_arm(lane, cfg, data, extra=None):
     )
     if cfg["grow_policy"] == "Lossguide":
         params["max_leaves"] = cfg["max_leaves"]
+    if data.cat_idx:
+        # DEVIATION 2634's OTHER SIDE. `cat_features` is the only way to reach
+        # the CTR target prep at all: with no categorical column 2634 skips it,
+        # which is the only path anything had ever measured (its 0.9603 verdict
+        # of 2026-09-12 came entirely from the skip side, on taxi and
+        # Istella-S, neither of which has a categorical column). criteo spans 3
+        # to 371,237 distinct per column, so CatBoost's own dispatch
+        # (binarizations_manager.cpp:106-115) takes one-hot on the small
+        # columns and target statistics on the large ones, and ours follows it.
+        #
+        # The codes must be DENSE 0..k-1, which `_decode_criteo` guarantees by
+        # assigning them as the rank in sorted-unique order.
+        #
+        # NOTE the refusal this must not trip: `ensemble.py` raises
+        # NotImplementedError for feature_fraction < 1 together with
+        # cat_features. cfg pins no bagging (DEVIATION 1833) and never sets
+        # feature_fraction, so the default 1.0 stands -- but an `--ours-ab`
+        # that lowers it on criteo will refuse by name rather than silently
+        # dropping the categorical path.
+        params["cat_features"] = list(data.cat_idx)
     if extra:
         # `--ours-ab`: one estimator keyword changed, everything else equal.
         params.update(extra)
