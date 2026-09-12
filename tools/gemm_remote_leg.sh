@@ -2807,8 +2807,24 @@ if [ ! -x "$HOME/.pixi/bin/pixi" ] && ! command -v pixi >/dev/null 2>&1; then
   if [ "@NVIDIACAMPAIGN@" != 0 ] || [ "@KNNLAYOUTONLY@" = 1 ]; then
     # DEVIATION 2269: 30 s was not enough for the pod to fetch the pixi tarball
     # from GitHub on 2026-09-08 (two release builds died at bootstrap, exit 127);
-    # the unbounded installer the speed legs use never failed. 300 s, one retry.
-    timeout -k 10 400 sh -c 'curl -fsSL --max-time 300 https://pixi.sh/install.sh | sh || (sleep 10; curl -fsSL --max-time 300 https://pixi.sh/install.sh | sh)' > "$OUT/pixi_install.log" 2>&1
+    # the unbounded installer the speed legs use never failed. 300 s per try.
+    #
+    # 2026-09-12: a byte LM lease died the same way a third time, and the log
+    # says exactly where. The installer printed its banner and its download URL
+    # and nothing else, and no binary existed afterward, so the flaky step is
+    # the tarball fetch and one retry is not enough. Three tries now, each
+    # logged, and the loop stops on THE BINARY BEING THERE rather than on the
+    # installer's exit status, which today was not the thing that was wrong.
+    # The campaign's own bootstrap check still refuses the run if all three
+    # fail, so this only widens the window, it does not soften a refusal.
+    for _pixi_try in 1 2 3; do
+      [ -x "$HOME/.pixi/bin/pixi" ] && break
+      printf '=== pixi install attempt %s of 3 ===\n' "$_pixi_try" >> "$OUT/pixi_install.log"
+      timeout -k 10 400 sh -c 'curl -fsSL --max-time 300 https://pixi.sh/install.sh | sh' >> "$OUT/pixi_install.log" 2>&1
+      [ -x "$HOME/.pixi/bin/pixi" ] && break
+      printf '=== attempt %s left no binary at %s ===\n' "$_pixi_try" "$HOME/.pixi/bin/pixi" >> "$OUT/pixi_install.log"
+      sleep 10
+    done
   else
     curl -fsSL https://pixi.sh/install.sh | sh > "$OUT/pixi_install.log" 2>&1
   fi
