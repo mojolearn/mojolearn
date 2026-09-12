@@ -1,0 +1,14 @@
+FAIR dataset=istella shape=istella-1000000x220 task=binary rows=1000000 features=220
+FAIR sync-backend cupy UNAVAILABLE: No module named 'cupy'
+FAIR sync-backends armed=torch,cudart
+2361 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5a0080000000, nodemask=2)
+FAIR TIME ours trees=1 n=3 median=787.8 min=778.3 max=821.4 all=787.8,821.4,778.3
+FAIR TIME xgboost trees=1 n=3 median=1072.7 min=1064.6 max=1076.1 all=1072.7,1076.1,1064.6
+2430 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x31d080000000, nodemask=1)
+FAIR TIME ours trees=10 n=3 median=952.5 min=943.1 max=972.2 all=972.2,952.5,943.1
+FAIR TIME xgboost trees=10 n=3 median=1099.4 min=1068.0 max=1136.6 all=1136.6,1099.4,1068.0
+FAIR TIME ours trees=100 n=3 median=2235.5 min=2203.9 max=2376.0 all=2376.0,2235.5,2203.9
+FAIR TIME xgboost trees=100 n=3 median=1753.0 min=1709.2 max=1761.8 all=1761.8,1753.0,1709.2
+XGAP DECOMPOSE dataset=istella ours fixed_ms=773.1 per_tree_ms=14.624 at1=787.8 at100=2235.5
+XGAP DECOMPOSE dataset=istella xgboost fixed_ms=1065.8 per_tree_ms=6.872 at1=1072.7 at100=1753.0
+XGAP DECOMPOSE-VERDICT dataset=istella one_tree_ratio=0.7344 full_ratio=1.2752

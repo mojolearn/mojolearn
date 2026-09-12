@@ -1,0 +1,7 @@
+start commit=ba69c692a83c0b4cbc1324c0bf201ee17169bb37 19:38:18
+pixi_install=0 19:38:24
+pip_xgboost=0 19:38:26
+build_base=0 19:39:10
+build_gbdt=0 19:40:26
+import_identical=0 19:40:26
+setup_done 19:40:26

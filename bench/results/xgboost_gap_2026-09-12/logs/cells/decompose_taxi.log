@@ -1,0 +1,14 @@
+FAIR dataset=taxi shape=taxi-1000000x16 task=binary rows=1000000 features=16
+FAIR sync-backend cupy UNAVAILABLE: No module named 'cupy'
+FAIR sync-backends armed=torch,cudart
+2159 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3be040000000, nodemask=2)
+2159 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x500a00000000, nodemask=1)
+FAIR TIME ours trees=1 n=3 median=100.7 min=98.6 max=101.1 all=100.7,101.1,98.6
+FAIR TIME xgboost trees=1 n=3 median=138.2 min=134.9 max=153.8 all=153.8,138.2,134.9
+FAIR TIME ours trees=10 n=3 median=166.8 min=161.4 max=167.7 all=161.4,167.7,166.8
+FAIR TIME xgboost trees=10 n=3 median=296.4 min=279.4 max=677.9 all=677.9,296.4,279.4
+FAIR TIME ours trees=100 n=3 median=968.9 min=957.1 max=972.7 all=968.9,957.1,972.7
+FAIR TIME xgboost trees=100 n=3 median=569.7 min=522.8 max=628.9 all=628.9,569.7,522.8
+XGAP DECOMPOSE dataset=taxi ours fixed_ms=91.9 per_tree_ms=8.770 at1=100.7 at100=968.9
+XGAP DECOMPOSE dataset=taxi xgboost fixed_ms=133.8 per_tree_ms=4.359 at1=138.2 at100=569.7
+XGAP DECOMPOSE-VERDICT dataset=taxi one_tree_ratio=0.7286 full_ratio=1.7008
