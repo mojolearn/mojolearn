@@ -392,6 +392,44 @@ zdot leg's pod). compile_bf16 on Pile GitHub (0.02355) sits 1.17x above its
 enwik8 cell and 1.13x above the 16:41Z pod's 0.02085; quote the enwik8 cell as
 their fastest. Every torch column is nondeterministic by label.
 
+#### Same pod, after the NVIDIA attention estash flip (2026-09-12 12:49Z)
+
+Source: `bench/results/e1g/2026-09-12_124715-nvidia-h100-owed/remote/`
+(`attention-step/lm_summary.tsv`, `torch-lm-step/summary.tsv`), RunPod pod
+4pmnz0eju0iptm, driver 580.126.09, commit 5b7e1e41, same harness, shape,
+init, AdamW, clock and corpora as the tables above. OUR IDENTICAL arm is the
+shipped NVIDIA default at that commit, attention
+`stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32` (DEVIATION 2657),
+named by the shipped fused check on the pod itself (`DEFAULT column=nvidia
+... word=6343783`, `is_default=True`, `arm_is_default=True` on both corpora,
+`transformer_fused_check: PASS, 15 cases, every compared buffer
+bit-identical`). Operand dumps are outside the repository in
+`~/mojolearn-evidence/` under the same leg name. SDPA observed: `efficient`
+for the float32 and tf32 columns, `flash` for the bf16 columns.
+
+| column | enwik8 s | Pile GitHub s | our IDENTICAL / column (enwik8, Pile GitHub) |
+|---|---|---|---|
+| compile_bf16 (their fastest measured) | 0.02152 | 0.02291 | 11.20x, 10.46x |
+| compile_tf32 | 0.03198 | 0.03180 | 7.54x, 7.53x |
+| eager_bf16 | 0.03554 | 0.03448 | 6.78x, 6.95x |
+| eager_tf32 | 0.03773 | 0.03778 | 6.39x, 6.34x |
+| compile_fp32 | 0.05777 | 0.05773 | 4.17x, 4.15x |
+| eager_fp32 | 0.06183 | 0.06148 | 3.90x, 3.90x |
+| ours IDENTICAL (shipped defaults, bits equal on every vendor) | 0.2411 | 0.2396 | 1 |
+
+WHAT MOVED AND WHAT DID NOT. Every ratio here is smaller than in the 19:32Z
+table above, and the reason is OUR cell, not theirs: ours went 0.2919 /
+0.2906 to 0.2411 / 0.2396 on the estash flip, while their columns sit where
+they sat (compile_bf16 0.02017 -> 0.02152 on enwik8, inside the spread these
+columns already show pod to pod). Every torch column is nondeterministic by
+label; ours is bitwise identical across Apple, NVIDIA and AMD.
+
+THIS TABLE DOES NOT INCLUDE THE STEP GLUE FLIP. The pod ran commit
+5b7e1e41, which carries DEVIATION 2657 but NOT DEVIATION 2649
+(`optskip_noshadow_rows16`, merged afterwards at 65a889bf, measured FLIP
+geomean 0.9723 on its own leg). The next pod that measures this table should
+read a smaller cell for ours again.
+
 ### kNN second kind (HIGGS rows)
 
 Every kNN row above is dyadic-v1, a generator, and the gate's `large`

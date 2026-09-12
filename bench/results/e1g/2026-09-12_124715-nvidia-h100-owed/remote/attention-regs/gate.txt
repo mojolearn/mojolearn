@@ -1,0 +1,16 @@
+deviations=2653,2654
+started=2026-09-12T12:50:25Z
+root=/root/mojolearn
+default_arm=stash_tiled_fgrid_r32_qres_pf_kvgrid_r32 baseline_arm=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32
+arms=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 lm_arms=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32
+skip_timers=0 full=0 jobs=8
+gpu_archs=sm_90a
+product=six forward RESOURCES rows (DEVIATION 2653); no arm, no flip
+vendor=nvidia
+commit=5b7e1e41e431b2264c7c027fcbfc94e8529b0f76
+readback: DEFAULT column=nvidia arm=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 source=kernel_matrix.attn_default_arm_for baseline_is_default=True candidate_is_default=True baseline_requested=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 candidate_requested=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32
+readback: PATH baseline arm=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 is_default=True resolved_hd64=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 zdot_rows=- fwd_rows=32 preflush=True reach_bit=sabotage_new kv_keys=32 kv_split=False zsched=- estash=estash_dres
+readback: PATH candidate arm=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 is_default=True resolved_hd64=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 zdot_rows=- fwd_rows=32 preflush=True reach_bit=sabotage_new kv_keys=32 kv_split=False zsched=- estash=estash_dres
+readback: attention_step_price: PASS (stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 vs stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32)
+attention_step_leg=NOT RUN (MOJOLEARN_ATTN_REGS_FULL=0)
+finished=2026-09-12T12:51:23Z
