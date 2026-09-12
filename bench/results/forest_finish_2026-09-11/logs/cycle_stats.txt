@@ -1,0 +1,6 @@
+== stats.et.istella.r1000000.ours.log
+ET_CYCLE_STATS group= 0  trees= 67  cycles= 175  nodes= 682422  survey_nodes= 5456  rescued= 5143  max_batch= 4096
+ET_CYCLE_STATS group= 1  trees= 33  cycles= 91  nodes= 337807  survey_nodes= 2687  rescued= 2533  max_batch= 4096
+== stats.et.taxi.r1000000.ours.log
+ET_CYCLE_STATS group= 0  trees= 67  cycles= 127  nodes= 491170  survey_nodes= 24790  rescued= 24790  max_batch= 4096
+ET_CYCLE_STATS group= 1  trees= 33  cycles= 67  nodes= 240424  survey_nodes= 11571  rescued= 11571  max_batch= 4096

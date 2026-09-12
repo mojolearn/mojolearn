@@ -1,0 +1,64 @@
+=== flip_verdict lane=rf baseline -> rowmajor (DEVIATIONS 2637/2638)
+selected lane=rf arm=ours
+time taxi shape=taxi-1000000x16: before median=854.437 ms n=6, after median=808.763 ms n=6, ratio=0.947
+quality taxi auc: before=0.617154 after=0.617154 delta=+0.000000 n=2/2 higher-is-better tol=6.17e-05 ok
+quality taxi logloss: before=0.525910 after=0.525910 delta=+0.000000 n=2/2 lower-is-better tol=5.26e-05 ok
+time istella shape=istella-1000000x220: before median=2077.768 ms n=6, after median=1317.516 ms n=6, ratio=0.634
+quality istella auc: before=0.964538 after=0.964538 delta=+0.000000 n=2/2 higher-is-better tol=9.65e-05 ok
+quality istella logloss: before=0.145560 after=0.145560 delta=+0.000000 n=2/2 lower-is-better tol=1.46e-05 ok
+time geomean=0.774730 (decided unrounded, below 1 wins)
+FLIP geomean=0.775 taxi=0.947 istella=0.634 quality=ok
+verdict_exit rf=0
+=== flip_verdict lane=et baseline -> rowmajor (DEVIATIONS 2637/2638)
+selected lane=et arm=ours
+time taxi shape=taxi-1000000x16: before median=1885.307 ms n=6, after median=1918.525 ms n=6, ratio=1.018
+quality taxi auc: before=0.608084 after=0.608084 delta=+0.000000 n=2/2 higher-is-better tol=6.08e-05 ok
+quality taxi logloss: before=0.527541 after=0.527541 delta=+0.000000 n=2/2 lower-is-better tol=5.28e-05 ok
+time istella shape=istella-1000000x220: before median=5839.717 ms n=6, after median=4954.030 ms n=6, ratio=0.848
+quality istella auc: before=0.938768 after=0.938768 delta=+0.000000 n=2/2 higher-is-better tol=9.39e-05 ok
+quality istella logloss: before=0.188191 after=0.188191 delta=+0.000000 n=2/2 lower-is-better tol=1.88e-05 ok
+time geomean=0.929129 (decided unrounded, below 1 wins)
+FLIP geomean=0.929 taxi=1.018 istella=0.848 quality=ok
+verdict_exit et=0
+=== flip_verdict lane=iforest baseline -> rowmajor (DEVIATIONS 2637/2638)
+selected lane=iforest arm=ours
+time taxi shape=taxi-1000000x16: before median=281.337 ms n=6, after median=95.213 ms n=6, ratio=0.338
+quality taxi auc: before=0.553631 after=0.553631 delta=+0.000000 n=2/2 higher-is-better tol=5.54e-05 ok
+time istella shape=istella-1000000x220: before median=4432.460 ms n=6, after median=153.776 ms n=6, ratio=0.035
+quality istella auc: before=0.821218 after=0.821218 delta=+0.000000 n=2/2 higher-is-better tol=8.21e-05 ok
+time geomean=0.108357 (decided unrounded, below 1 wins)
+FLIP geomean=0.108 taxi=0.338 istella=0.035 quality=ok
+verdict_exit iforest=0
+=== flip_verdict lane=et ctl -> bw16k (DEVIATION 2663)
+selected lane=et arm=ours
+time taxi shape=taxi-1000000x16: before median=1907.749 ms n=6, after median=1616.350 ms n=6, ratio=0.847
+quality taxi auc: before=0.608084 after=0.608084 delta=+0.000000 n=2/2 higher-is-better tol=6.08e-05 ok
+quality taxi logloss: before=0.527541 after=0.527541 delta=+0.000000 n=2/2 lower-is-better tol=5.28e-05 ok
+time istella shape=istella-1000000x220: before median=5026.610 ms n=6, after median=4596.330 ms n=6, ratio=0.914
+quality istella auc: before=0.938768 after=0.938768 delta=+0.000000 n=2/2 higher-is-better tol=9.39e-05 ok
+quality istella logloss: before=0.188191 after=0.188191 delta=+0.000000 n=2/2 lower-is-better tol=1.88e-05 ok
+time geomean=0.880187 (decided unrounded, below 1 wins)
+FLIP geomean=0.880 taxi=0.847 istella=0.914 quality=ok
+verdict_exit et.bw16k=0
+=== flip_verdict lane=et ctl -> bw32k (DEVIATION 2663)
+selected lane=et arm=ours
+time taxi shape=taxi-1000000x16: before median=1907.749 ms n=6, after median=1587.332 ms n=6, ratio=0.832
+quality taxi auc: before=0.608084 after=0.608084 delta=+0.000000 n=2/2 higher-is-better tol=6.08e-05 ok
+quality taxi logloss: before=0.527541 after=0.527541 delta=+0.000000 n=2/2 lower-is-better tol=5.28e-05 ok
+time istella shape=istella-1000000x220: before median=5026.610 ms n=6, after median=4519.017 ms n=6, ratio=0.899
+quality istella auc: before=0.938768 after=0.938768 delta=+0.000000 n=2/2 higher-is-better tol=9.39e-05 ok
+quality istella logloss: before=0.188191 after=0.188191 delta=+0.000000 n=2/2 lower-is-better tol=1.88e-05 ok
+time geomean=0.864884 (decided unrounded, below 1 wins)
+FLIP geomean=0.865 taxi=0.832 istella=0.899 quality=ok
+verdict_exit et.bw32k=0
+=== DEVIATION 2663 regression cells (ours-only medians)
+REGCELL dataset=istellareg  set=bw16k  median_ms=  67476.6 n=2 hashes=59547e3a9db9ecd8
+REGCELL dataset=istellareg  set=bw32k  median_ms=  67293.4 n=2 hashes=59547e3a9db9ecd8
+REGCELL dataset=istellareg  set=ctl    median_ms=  67051.0 n=2 hashes=59547e3a9db9ecd8
+REGCELL dataset=taxireg     set=bw16k  median_ms=   5292.7 n=6 hashes=9844a40ba74bc375
+REGCELL dataset=taxireg     set=bw32k  median_ms=   5285.8 n=6 hashes=9844a40ba74bc375
+REGCELL dataset=taxireg     set=ctl    median_ms=   5350.0 n=6 hashes=9844a40ba74bc375
+REGRATIO dataset=istellareg  bw16k/ctl=1.006 SAME BITS
+REGRATIO dataset=istellareg  bw32k/ctl=1.004 SAME BITS
+REGRATIO dataset=taxireg     bw16k/ctl=0.989 SAME BITS
+REGRATIO dataset=taxireg     bw32k/ctl=0.988 SAME BITS

@@ -817,6 +817,35 @@ List, appended it again to transpose, scanned it and wrote it to pinned memory,
 all in one thread; the binding now lends the block by address and one threaded
 pass stages `ftz(cell)` in column-major order with the finite scan.
 
+## 2026-09-11 night, lane forest-finish: DEVIATION 2663 (ExtraTrees batch width, FLIPPED to 16384)
+
+`extratrees/estimator.mojo::resolve` planned every ExtraTrees fit with cuML's
+shipped `max_batch_size` of 4096. It is a scheduling parameter, so the bits do
+not move with it, and this leg measured what it costs. Over all FOUR cells the
+switch reaches (the regressor takes the same plan), pooled across two passes at
+1M rows: et taxi 0.847, et Istella-S 0.914, et taxireg 0.989, et istellareg
+1.006, geometric mean 0.9371 with quality equal in every cell. 32768 reads
+0.9280, better by 0.97 percent, inside the 2 percent margin this lane
+pre-registered before the last cell landed, and it doubles the level workspace
+to about 800 MB at 220 columns on every vendor, so 16384 ships and 32768 stays
+a measurement arm (`-D MOJOLEARN_ET_DEVICE_BATCH_4096=1` restores cuML's
+width).
+
+The mechanism is not the one the change was argued on. The cycle probe
+(`-D MOJOLEARN_ET_CYCLE_STATS=1`) measured 266 level cycles for a 100-tree
+Istella-S forest at 94 percent of batch capacity, with the whole host family
+about 3 percent of the loop. What pays is DEVIATION 205's rescue: taxi samples
+4 columns of 16 and 5.0 percent of its nodes draw an all-constant sample
+(Istella-S, 14 of 220, sees 0.8 percent), and every cycle carrying a retry runs
+two extra staged sub-batches, each restaging and draining, at a cost that
+scales with cycle count. At `max_features=1.0` a rescue needs every column
+constant at once, which is why the regression cells are flat.
+
+Identity: 45 of 45 cells stable at 4096, 16384, 32768 and at the rebuilt
+default, 46 IDENTICAL rows in every diff, ExtraTrees fingerprints equal at
+every width, `device_batched_check` PASS. RUN OWED: the Apple M4 and AMD
+identity sets against this H100 set.
+
 BOTH WERE BUILT AND RUN on 2026-09-11 night by lane forest-finish, pod
 `8gsem9f3thnhvu` (NVIDIA H100 80GB HBM3, driver 580.126.09), against a main
 build (`4dc4346a`) made in a second checkout on the SAME pod. Identity:

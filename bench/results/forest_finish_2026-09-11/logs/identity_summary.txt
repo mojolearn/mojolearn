@@ -1,0 +1,22 @@
+== baseline.txt
+cells=45 stable=45 moved=0 refused=0
+== bw16k.txt
+cells=45 stable=45 moved=0 refused=0
+== bw32k.txt
+cells=45 stable=45 moved=0 refused=0
+== ctl.txt
+cells=45 stable=45 moved=0 refused=0
+== dflt.txt
+cells=45 stable=45 moved=0 refused=0
+== diff.baseline.rowmajor.txt
+IDENTICAL rows: 46
+== diff.rowmajor.bw16k.txt
+IDENTICAL rows: 46
+== diff.rowmajor.bw32k.txt
+IDENTICAL rows: 46
+== diff.rowmajor.ctl.txt
+IDENTICAL rows: 46
+== diff.rowmajor.dflt.txt
+IDENTICAL rows: 46
+== rowmajor.txt
+cells=45 stable=45 moved=0 refused=0

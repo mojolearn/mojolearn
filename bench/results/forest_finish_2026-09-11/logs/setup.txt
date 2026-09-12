@@ -1,0 +1,15 @@
+started=2026-09-11T21:34:34Z commit=600dcec074283c1ae6524629551690f6369643a0
+lightgbm_cuda_build=SKIPPED requested focused competitor session
+pixi_install=0 21:34:40
+pip_base=0 21:34:54
+build_base=0 21:35:29
+pip_cuml=0 21:36:10
+pip_pyarrow=0 21:36:16
+download_taxi=0 21:36:21
+build_gbdt=0 21:36:53
+build_rf=0 21:37:17
+build_trees=0 21:37:43
+import_identical=0 21:37:43
+download_istella=0 21:58:51
+buffer_foreign_argtypes_cuml=0 21:58:54
+finished=2026-09-11T21:58:54Z

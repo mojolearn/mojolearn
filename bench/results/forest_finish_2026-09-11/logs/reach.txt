@@ -1,0 +1,37 @@
+== reach.rowmajor.log
+REACH C rf [('rf_classifier_fit_rowmajor_export', 1)] 0c098cc86bfc87d7
+REACH C et [('et_classifier_fit_rowmajor_export', 1)] fded7b6d0467eaef
+REACH C rfr [('rf_regressor_fit_rowmajor_export', 1)] ac736dfceab2e31b
+REACH C etr [('et_regressor_fit_rowmajor_export', 1)] b29e30335566a2d9
+REACH F rf [('rf_classifier_fit_export', 1)] 0c098cc86bfc87d7
+REACH F et [('et_classifier_fit_export', 1)] fded7b6d0467eaef
+REACH F rfr [('rf_regressor_fit_export', 1)] ac736dfceab2e31b
+REACH F etr [('et_regressor_fit_export', 1)] b29e30335566a2d9
+== reach2.rowmajor.log
+MODE identical package numeric_mode identical
+BINDING _mojolearn_rf mojolearn._mojolearn_rf /root/mojolearn/python/mojolearn/identical/_mojolearn_rf.so
+ENTRIES _mojolearn_rf ['rf_classifier_fit', 'rf_classifier_fit_export', 'rf_classifier_fit_rowmajor', 'rf_classifier_fit_rowmajor_export', 'rf_classifier_fit_weighted', 'rf_classifier_fit_weighted_export', 'rf_regressor_fit', 'rf_regressor_fit_export', 'rf_regressor_fit_rowmajor', 'rf_regressor_fit_rowmajor_export']
+BINDING _mojolearn_trees mojolearn._mojolearn_trees /root/mojolearn/python/mojolearn/identical/_mojolearn_trees.so
+ENTRIES _mojolearn_trees ['et_classifier_fit', 'et_classifier_fit_export', 'et_classifier_fit_rowmajor', 'et_classifier_fit_rowmajor_export', 'et_regressor_fit', 'et_regressor_fit_export', 'et_regressor_fit_rowmajor', 'et_regressor_fit_rowmajor_export']
+REACH C rf [('rf_classifier_fit_rowmajor_export', 1)] predict_hash f3456770b37fcf78
+REACH C et [('et_classifier_fit_rowmajor_export', 1)] predict_hash d502134482897f03
+REACH C rfreg [('rf_regressor_fit_rowmajor_export', 1)] predict_hash 4822690ce8bf5d21
+REACH C etreg [('et_regressor_fit_rowmajor_export', 1)] predict_hash 70032248949ccbaa
+REACH F rf [('rf_classifier_fit_export', 1)] predict_hash f3456770b37fcf78
+REACH F et [('et_classifier_fit_export', 1)] predict_hash d502134482897f03
+REACH F rfreg [('rf_regressor_fit_export', 1)] predict_hash 4822690ce8bf5d21
+REACH F etreg [('et_regressor_fit_export', 1)] predict_hash 70032248949ccbaa
+== reach2.baseline.log
+MODE identical package numeric_mode identical
+BINDING _mojolearn_rf mojolearn._mojolearn_rf /root/mojolearn/python/mojolearn/identical/_mojolearn_rf.so
+ENTRIES _mojolearn_rf ['rf_classifier_fit', 'rf_classifier_fit_export', 'rf_classifier_fit_weighted', 'rf_classifier_fit_weighted_export', 'rf_regressor_fit', 'rf_regressor_fit_export']
+BINDING _mojolearn_trees mojolearn._mojolearn_trees /root/mojolearn/python/mojolearn/identical/_mojolearn_trees.so
+ENTRIES _mojolearn_trees ['et_classifier_fit', 'et_classifier_fit_export', 'et_regressor_fit', 'et_regressor_fit_export']
+REACH C rf [('rf_classifier_fit_export', 1)] predict_hash f3456770b37fcf78
+REACH C et [('et_classifier_fit_export', 1)] predict_hash d502134482897f03
+REACH C rfreg [('rf_regressor_fit_export', 1)] predict_hash 4822690ce8bf5d21
+REACH C etreg [('et_regressor_fit_export', 1)] predict_hash 70032248949ccbaa
+REACH F rf [('rf_classifier_fit_export', 1)] predict_hash f3456770b37fcf78
+REACH F et [('et_classifier_fit_export', 1)] predict_hash d502134482897f03
+REACH F rfreg [('rf_regressor_fit_export', 1)] predict_hash 4822690ce8bf5d21
+REACH F etreg [('et_regressor_fit_export', 1)] predict_hash 70032248949ccbaa

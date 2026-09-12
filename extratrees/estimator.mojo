@@ -437,18 +437,44 @@ def _et_device_batch() -> Int:
     its splits, and DEVIATION 211's merged frontier puts up to 67 trees in
     one group at 1M rows, so at depth 16 a 4096 batch runs many cycles.
 
-    The defines are the measurement arms (lane forest-finish, 2026-09-11):
-    `-D MOJOLEARN_ET_DEVICE_BATCH_16384=1` and `_32768=1`. 32768 is the
-    widest a CUDA launch admits, because `split_reduce_kernel` puts the node
-    count on grid axis y (65535). The workspace grows as batch x n_cols
-    cells (DEVIATION 205's survey reads every column): about 400 MB at 16384
-    and 800 MB at 32768 with 220 columns. None is set by a build script.
+    FLIPPED TO 16384 ON 2026-09-11 (lane forest-finish, H100 pod
+    8gsem9f3thnhvu), over all four (lane, dataset) cells this switch reaches,
+    pooled across two passes, ours-only, 1M rows:
+
+        et taxi        0.847      et istella     0.914
+        et taxireg     0.989      et istellareg  1.006
+        geometric mean 0.9371, quality equal in every cell (identical model
+        hashes), so section 9 flips it.
+
+    32768 reads 0.9280 over the same four cells, 0.97 percent better, which is
+    inside this lane's pre-registered 2 percent margin, and it doubles the
+    level workspace (about 800 MB at 220 columns against 400 MB) on every
+    vendor. So 16384 ships and 32768 stays a measurement arm.
+
+    WHAT IT ACTUALLY BUYS, because the original argument was wrong. The
+    premise was that a 4096-node frontier runs many cycles, each paying a
+    drain and a host pass; the cycle probe measured 266 cycles for a 100-tree
+    Istella-S forest at 94 percent of capacity, with the whole host family
+    about 3 percent of the loop. What pays is DEVIATION 205's rescue: taxi
+    samples 4 columns of 16 and 5.0 percent of its nodes draw an all-constant
+    sample (Istella-S, 14 of 220, sees 0.8 percent), and every cycle carrying
+    a retry runs two extra staged sub-batches, each restaging and draining.
+    That cost scales with CYCLES, so a four-times wider batch pays it a
+    quarter as often. At `max_features=1.0` a rescue needs every column
+    constant at once, so the regression cells are flat (0.989) or slightly
+    negative (1.006), and the geometric mean carries them.
+
+    The defines are the measurement arms: `-D MOJOLEARN_ET_DEVICE_BATCH_4096=1`
+    restores cuML's shipped width for an A/B and `_32768=1` takes the widest a
+    CUDA launch admits, because `split_reduce_kernel` puts the node count on
+    grid axis y (65535). The workspace grows as batch x n_cols cells
+    (DEVIATION 205's survey reads every column). None is set by a build script.
     """
     if is_defined["MOJOLEARN_ET_DEVICE_BATCH_32768"]():
         return 32768
-    if is_defined["MOJOLEARN_ET_DEVICE_BATCH_16384"]():
-        return 16384
-    return 4096
+    if is_defined["MOJOLEARN_ET_DEVICE_BATCH_4096"]():
+        return 4096
+    return 16384
 
 
 def resolve(

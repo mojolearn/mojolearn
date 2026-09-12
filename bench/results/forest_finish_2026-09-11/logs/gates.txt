@@ -1,0 +1,23 @@
+== device_batched_check.log
+[regression] fit_regression_device vs one-tree builds
+    10 trees, 9 of 9 differ from tree 0; merged vs serial: 0 node diffs, 0 leaf-bit diffs
+[sabotage] the two isolation mechanisms, seen to hold the gate
+    scalar-tree moved 2688 / 2052 nodes (clf/reg); shared-row-base moved 2499 / 2598
+device_batched:  45 cells
+device_batched_check: PASS
+== check_if.rowmajor.log
+check_if_oracle_semantics OK [IDENTICAL]: 16 planted outliers all score above the blob median (0.66387546 > 0.43119183), 0 of 1008 blob rows have a path as short as the longest outlier path; 6 duplicates bit-identical; float32 vs float64 worst |diff| 1.0314366138963749e-07; n=100<256 samples every row once
+check_if_device_equals_oracle OK [IDENTICAL]: 6 fixtures, 37496 structure/pathlen/score cells bit-equal to the oracle; six forests pairwise distinct
+check_if_launch_invariance OK [IDENTICAL]: 3 fixtures x 4 arms (build_tpb 32/64/128/256, path_tpb 64/128/256, pad 0/37, poisons 0xffc0dead/-123456/NaN, run twice) byte-identical in every structure/pathlen/score cell; 3 probe rows scored alone == in a batch of 37 == at 3 positions of 4096 (9 cells)
+check_if_row39_signed_zero OK [IDENTICAL]: 128 x -0.0 and 128 x +0.0 planted in column 3; 337 nodes split on it (0 with a zero threshold); device == oracle bit for bit on both zero orders; swapping the zeros' positions moves NO stored bit (the positional strict-compare fold is sign-inert here); a {-0,+0}-only column is never split
+check_if_predict_thresholds OK [IDENTICAL]: 1024 labels == (score > 0.5 ? 1 : -1), 46 anomalies at 0.5; contamination=0.05 flags 52 (expected ~51) including all 16 planted outliers; percentile_linear hand case
+check_if_card_is_emitted OK [IDENTICAL]: 123 stages (if.rng.probe, 12 x {rows, features, meta, structure.feat/thr/left/right, split.bounds, split.choice, rng.final}, if.pathlen, if.scores), run-to-run control identical across build_tpb 128/32, pad 0/37, two poisons
+== refusal.diff.txt
+1c1
+< 2320 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x322200000000, nodemask=1)
+---
+> 2424 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x72f780000000, nodemask=1)
+== buffer_foreign_argtypes_cuml.log
+6907 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x339640000000, nodemask=1)
+armed (cuml 26.08.00): shared PyObject_GetBuffer retyped to LP__PyBuffer; a 0.8.0 caller gets: argument 2: TypeError: expected LP__PyBuffer instance instead of pointer to _Ours
+buffer-foreign-argtypes: PASS mojolearn 0.8.3 mode=identical vendor=cuda rf_train_accuracy=0.990 (cuml 26.08.00)
