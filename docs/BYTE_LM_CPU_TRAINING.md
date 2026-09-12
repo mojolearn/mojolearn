@@ -40,16 +40,29 @@ gate named the tensor, `block0.w_q` element 0, with both bit patterns.
   This limit does not retire when a second shape passes. Each shape is its own
   certificate, so a third shape would be a third certificate. Everything
   measured above is the two-row shape `b2-l32` and nothing else.
-- A second shape is committed as capability, not as a result. DEVIATION 2682
-  moves the shape into one shared helper, `tools/byte_lm_shape.py`, gives the
-  capture harness and the verifiers a `--shape` argument, and commits the
-  four-row schedule as
+- A second shape now holds, and it is a SECOND certificate rather than a wider
+  first one. DEVIATION 2682 moves the shape into one shared helper,
+  `tools/byte_lm_shape.py`, gives the capture harness and the verifiers a
+  `--shape` argument, and commits the four-row schedule as
   `training/corpus/tinyshakespeare/manifest-b4-l32.json`, batch 4 length 32,
   128 tokens a step against the default's 64, over the same pinned corpus and
-  the same 512 held-out target bytes. **No `b4-l32` capture exists.** No GPU
-  has produced one, no CPU has replayed one and no comparison has been run, so
-  the `b4-l32` certificate is owed and stays owed until a rented GPU capture is
-  retained and gated the way `b2-l32` was.
+  the same 512 held-out target bytes.
+
+| | |
+|---|---|
+| CPU step against the recorded four-row CUDA bytes | 640 of 640 per runner, **4480 of 4480** across seven CPUs, all 128 steps |
+| capture | NVIDIA L40S, `bench/results/resume/2026-09-12-root-byte-lm-b4l32-nvidia` |
+| held-out loss over the run | 5.5412992 to 2.7471306, ratio 0.4958 against a 0.9 threshold fixed beforehand |
+| negative control at this shape | caught on every runner, 8 of 10 wrong, the 2 right being the losses |
+| step cost | 44.5 to 72.5 ms on the Linux draws, 106.2 ms on Apple M1 |
+
+  **One vendor.** That tree is CUDA on an L40S, so this is a CPU against CUDA
+  statement at this shape. AMD and Apple at four rows are not captured and are
+  not claimed, which is the difference between this shape and the two-row one,
+  where the three retained vendor trees agree and byte equality is transitive.
+  The single-vendor learning admission is also still owed here, because the
+  tree was captured before the source inventory was fixed and genuinely lacks
+  an entry the comparator requires.
 - The reference path only, one thread, and that is a deliberate stop rather
   than an unfinished job. **Measured on 2026-09-12 across the seven runners of
   run 34701581834: a whole step is 23.5 to 38.7 ms on the Linux draws and

@@ -66,6 +66,23 @@ def install_fake_trainer(monkeypatch, tmp_path):
     binding.write_bytes(b'not a real binding, only its digest is checked')
     digest = hashlib.sha256(binding.read_bytes()).hexdigest()
 
+    def loaded_sources():
+        """What the real surface reports it loaded, digested from the real tree.
+
+        The comparator requires every name here to appear in the capture's own
+        inventory with the same digest, and that is how a capture taken after a
+        source was added to one list and not the other becomes unadmittable. A
+        stand in that returns a bare string cannot exercise that at all, which
+        is exactly what happened."""
+        names = ('python/mojolearn/_byte_lm_impl.py', 'python/mojolearn/language_model.py',
+                 'bindings/_mojolearn_byte_lm.mojo', 'training/byte_lm.mojo',
+                 'training/byte_lm_config.mojo', 'python/mojolearn/_byte_lm_config.py')
+        inventory = {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
+                     for name in names if (ROOT / name).is_file()}
+        inventory['loaded_python_wrapper'] = inventory.get(
+            'python/mojolearn/_byte_lm_impl.py', digest)
+        return inventory
+
     class Config:
         """Stands in for ByteLanguageModelConfig, holding the nine dimensions."""
 
@@ -160,7 +177,12 @@ def install_fake_trainer(monkeypatch, tmp_path):
                         native_profile=shape_module.DEFAULT_PROFILE,
                         native_numeric_mode=1, profile=self.shape.profile,
                         binding_file=str(binding), binding_sha256=digest,
-                        step_result='full', source_sha256='0' * 64)
+                        step_result='full',
+                        # A MAPPING, as the real surface reports, naming every
+                        # source it loaded. A bare string here is why the local
+                        # run never exercised the comparator's loaded-source
+                        # check and a rented capture was where that surfaced.
+                        source_sha256=loaded_sources())
 
         def save_checkpoint(self, path):
             Path(path).write_text(json.dumps(
