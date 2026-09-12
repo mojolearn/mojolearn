@@ -66,6 +66,10 @@ VENDORS = {
 PROFILE = 'mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1'
 N = 34944
 STEPS = 128
+#: The capture's training shape. `ids` is 66 int32 per step, which is
+#: `BATCH * (LENGTH + 1)`, the training batch layout the loss admits.
+BATCH = 2
+LENGTH = 32
 COUNTS = {key: N for key in
           ('initial_p', 'initial_m', 'initial_v', 'post_p', 'post_m', 'post_v', 'grad')}
 COUNTS.update(initial_flags=20, post_flags=20, loss=1, ids=66)
@@ -290,16 +294,18 @@ def mode_cpu(args):
         import importlib
         module = importlib.import_module('mojolearn._byte_lm_host')
         trainer = getattr(module, 'LanguageModelHostTrainer', None)
+        le_bytes = importlib.import_module('mojolearn._bufcheck').le_bytes
+        frombytes = importlib.import_module('mojolearn._buffer').frombytes
     except Exception as exc:
         reason = f'{type(exc).__name__}: {exc}'
     if trainer is None:
         if reason is not None:
             print(f'gate: could not reach the host module ({reason})', file=sys.stderr)
         print('gate: no CPU training surface. This gate needs '
-              'mojolearn.LanguageModelHostTrainer with train_step(ids) returning the '
-              'loss and exposing the gradient and the Adam moments, built from the '
-              'host backward pass (DEVIATION 2680). Until it exists there is nothing '
-              'to compare and this is not a pass.', file=sys.stderr)
+              'mojolearn._byte_lm_host.LanguageModelHostTrainer, built from the host '
+              'backward pass (DEVIATION 2680) with the binding entry '
+              'byte_lm_host_train_step. Until it exists there is nothing to compare '
+              'and this is not a pass.', file=sys.stderr)
         return 2, None
     steps = selected(args.steps)
     compared, mismatches = 0, []
@@ -307,12 +313,20 @@ def mode_cpu(args):
         desc = descriptors(tree, number) if args.verify_digests else {}
         start = {key: array(tree, number, key, desc.get(key))
                  for key in ('initial_p', 'initial_m', 'initial_v', 'ids')}
-        model = trainer.from_state(start['initial_p'], start['initial_m'], start['initial_v'],
-                                   completed_steps=number - 1)
-        model.train_step(start['ids'])
-        produced = dict(grad=model.gradient_bytes(), loss=model.loss_bytes(),
-                        post_p=model.parameter_bytes(), post_m=model.moment_bytes('m'),
-                        post_v=model.moment_bytes('v'))
+        # The recorded arrays are raw little-endian bytes, which is what the
+        # surface accepts as parameters and moments, and the ids are int32.
+        model = trainer.from_state(
+            frombytes(start['initial_p'], '<f4', (N,)),
+            frombytes(start['initial_m'], '<f4', (N,)),
+            frombytes(start['initial_v'], '<f4', (N,)),
+            completed_steps=number - 1)
+        ids = frombytes(start['ids'], '<i4', (BATCH, LENGTH + 1))
+        bits = model.train_step(ids)
+        produced = dict(grad=le_bytes(model.gradient_, 'f'),
+                        loss=struct.pack('<I', bits),
+                        post_p=le_bytes(model.parameters_, 'f'),
+                        post_m=le_bytes(model.m_, 'f'),
+                        post_v=le_bytes(model.v_, 'f'))
         for key, got in produced.items():
             compared += 1
             want = array(tree, number, key, desc.get(key))
