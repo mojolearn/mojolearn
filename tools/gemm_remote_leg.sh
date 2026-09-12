@@ -2149,7 +2149,7 @@ leg_archive_required() {
             echo "training/__init__.mojo training/mlp_ops.mojo training/estimator.mojo training/checks/train_loop.mojo training/checks/train_gradient_capture.mojo training/checks/optimizer.mojo training/checks/loss.mojo embedding/checks/embedding_identical.mojo gemm/host_entry.mojo tools/training_validation_serial.sh tools/training_validation_admit.py tools/transformer_training_gradient_oracle.py tools/nvidia_serial_guard.py tools/amd_serial_guard.py tools/test_nvidia_serial_guard.py tools/test_amd_serial_guard.py python/mojolearn/_mlp_impl.py python/mojolearn/neural_network.py python/mojolearn/tests/test_small_mlp_surface.py python/mojolearn/tests/test_small_mlp_numerical_edges.py"
         fi
         if [ "$NVIDIA_CAMPAIGN" = 5 ] || [ "$NVIDIA_CAMPAIGN" = 6 ]; then
-            echo "training/byte_lm.mojo training/corpus/tinyshakespeare/input.txt training/corpus/tinyshakespeare/manifest.json training/corpus/tinyshakespeare/manifest-b4-l32.json embedding/checks/embedding_identical.mojo gemm/host_entry.mojo bindings/_mojolearn_byte_lm.mojo bindings/build_byte_lm.sh python/mojolearn/language_model.py python/mojolearn/_byte_lm_impl.py python/mojolearn/tests/test_byte_lm_surface.py tools/training_validation_admit.py tools/byte_lm_validation_serial.sh tools/byte_lm_validation_admit.py tools/root_job_receipt.py tools/byte_lm_shape.py tools/byte_lm_real_text_capture.py tools/byte_lm_gradient_oracle.py tools/byte_lm_state_compare.py tools/tests/test_byte_lm_state_compare.py tools/nvidia_serial_guard.py tools/amd_serial_guard.py tools/test_nvidia_serial_guard.py tools/test_amd_serial_guard.py"
+            echo "training/byte_lm.mojo training/corpus/tinyshakespeare/input.txt training/corpus/tinyshakespeare/manifest.json training/corpus/tinyshakespeare/manifest-b4-l32.json embedding/checks/embedding_identical.mojo gemm/host_entry.mojo bindings/_mojolearn_byte_lm.mojo bindings/build_byte_lm.sh bindings/_mojolearn_byte_lm_host.mojo bindings/build_byte_lm_host.sh python/mojolearn/language_model.py python/mojolearn/_byte_lm_impl.py python/mojolearn/tests/test_byte_lm_surface.py tools/training_validation_admit.py tools/byte_lm_validation_serial.sh tools/byte_lm_validation_admit.py tools/root_job_receipt.py tools/byte_lm_shape.py tools/byte_lm_real_text_capture.py tools/byte_lm_gradient_oracle.py tools/byte_lm_state_compare.py tools/tests/test_byte_lm_state_compare.py tools/nvidia_serial_guard.py tools/amd_serial_guard.py tools/test_nvidia_serial_guard.py tools/test_amd_serial_guard.py"
         fi
     else
         echo "gemm/checks/gemm_identical.mojo"
@@ -2807,8 +2807,24 @@ if [ ! -x "$HOME/.pixi/bin/pixi" ] && ! command -v pixi >/dev/null 2>&1; then
   if [ "@NVIDIACAMPAIGN@" != 0 ] || [ "@KNNLAYOUTONLY@" = 1 ]; then
     # DEVIATION 2269: 30 s was not enough for the pod to fetch the pixi tarball
     # from GitHub on 2026-09-08 (two release builds died at bootstrap, exit 127);
-    # the unbounded installer the speed legs use never failed. 300 s, one retry.
-    timeout -k 10 400 sh -c 'curl -fsSL --max-time 300 https://pixi.sh/install.sh | sh || (sleep 10; curl -fsSL --max-time 300 https://pixi.sh/install.sh | sh)' > "$OUT/pixi_install.log" 2>&1
+    # the unbounded installer the speed legs use never failed. 300 s per try.
+    #
+    # 2026-09-12: a byte LM lease died the same way a third time, and the log
+    # says exactly where. The installer printed its banner and its download URL
+    # and nothing else, and no binary existed afterward, so the flaky step is
+    # the tarball fetch and one retry is not enough. Three tries now, each
+    # logged, and the loop stops on THE BINARY BEING THERE rather than on the
+    # installer's exit status, which today was not the thing that was wrong.
+    # The campaign's own bootstrap check still refuses the run if all three
+    # fail, so this only widens the window, it does not soften a refusal.
+    for _pixi_try in 1 2 3; do
+      [ -x "$HOME/.pixi/bin/pixi" ] && break
+      printf '=== pixi install attempt %s of 3 ===\n' "$_pixi_try" >> "$OUT/pixi_install.log"
+      timeout -k 10 400 sh -c 'curl -fsSL --max-time 300 https://pixi.sh/install.sh | sh' >> "$OUT/pixi_install.log" 2>&1
+      [ -x "$HOME/.pixi/bin/pixi" ] && break
+      printf '=== attempt %s left no binary at %s ===\n' "$_pixi_try" "$HOME/.pixi/bin/pixi" >> "$OUT/pixi_install.log"
+      sleep 10
+    done
   else
     curl -fsSL https://pixi.sh/install.sh | sh > "$OUT/pixi_install.log" 2>&1
   fi
