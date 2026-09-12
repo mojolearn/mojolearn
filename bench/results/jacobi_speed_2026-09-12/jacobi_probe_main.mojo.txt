@@ -179,7 +179,16 @@ def _ladder(
     ctx.synchronize()
     var t32 = _arm[32](ctx, host_a, n, reps, ra.unsafe_ptr(), rv.unsafe_ptr())
     _ = _arm_four_phase(ctx, host_a, n, reps)
-    var widths: List[Int] = [64, 128, 256, 512, 1024]
+    # THE LADDER STOPS AT 512, AND THAT IS A MEASUREMENT RATHER THAN A
+    # CHOICE. The 1024-thread rung was run on the H100 (sm_90a, driver
+    # 580.126.09) and the DRIVER REFUSED IT: `CUDA_ERROR_LAUNCH_OUT_OF
+    # RESOURCES (too many resources requested for launch)`, on all four
+    # (dataset, mode) cells. The kernel's per-thread register demand times
+    # 1024 threads is past what one block may claim, so 1024 is not a slow
+    # launch width, it is not a launch width at all here. 512 already reads
+    # a shade slower than 256 (Istella-S 624.8 against 614.7 ms), so the
+    # shipped 256 is not on the edge of this cliff.
+    var widths: List[Int] = [64, 128, 256, 512]
     var times: List[Float64] = [
         _arm[64](ctx, host_a, n, reps, ca.unsafe_ptr(), cv.unsafe_ptr()),
     ]

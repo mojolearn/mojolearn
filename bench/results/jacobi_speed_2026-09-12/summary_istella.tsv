@@ -1,0 +1,7 @@
+lane	dataset	shape	arm	device	device_name	status	median_ms	min_ms	max_ms	rounds	digest_stable	quality	ours_over_this
+ols	istella	2043304x220	cuml-gpu	gpu	NVIDIA H100 80GB HBM3	ok	85.6334	83.8302	95.0114	5	True	finite=True,r2=-6473.68,rmse=67.1436	15.0285
+ols	istella	2043304x220	ours	gpu	cuda	ok	1286.9427	1194.3663	1312.1104	5	True	finite=True,r2=0.331944,rmse=0.682027	
+ols	istella	2043304x220	ours-base	gpu	cuda	ok	2421.2870	2316.0229	2461.1508	5	True	finite=True,r2=0.331944,rmse=0.682027	0.5315
+pca	istella	2043304x220	cuml-gpu	gpu	NVIDIA H100 80GB HBM3	ok	82.1105	81.7228	83.3851	5	True	explained_variance_ratio_sum=1	4.6672
+pca	istella	2043304x220	ours	gpu	cuda	ok	383.2277	380.7381	417.0128	5	True	explained_variance_ratio_sum=1	
+pca	istella	2043304x220	ours-base	gpu	cuda	ok	653.7014	651.8608	657.6549	5	True	explained_variance_ratio_sum=1	0.5862
