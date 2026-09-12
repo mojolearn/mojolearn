@@ -36,6 +36,20 @@ if [[ -n "$shape" ]]; then
     # name the committed manifest-b4-l32.json already carries.
     slug="b${shape%,*}-l${shape#*,}"
 fi
+# A LEASE DEDICATED TO THE SECOND SHAPE. The work deadline caps this whole
+# campaign at 3000 s, and the certified shape's own captures spend most of it,
+# so a campaign that runs both reaches the second shape with a few hundred
+# seconds left and truncates its 128-step capture into SKIPPED_DEADLINE. That
+# is recorded rather than silent, but it is a lease that buys nothing. With
+# this set, the build and every check still run, and only the second shape is
+# captured. The certified captures are not skipped to save time in general;
+# they are skipped because this lease is not the one that produces them.
+shape_only=${MOJOLEARN_BYTE_LM_SHAPE_ONLY:-0}
+case "$shape_only" in
+    0) ;;
+    1) [[ -n "$shape" ]] || { echo 'MOJOLEARN_BYTE_LM_SHAPE_ONLY=1 needs a second shape to capture' >&2; exit 2; } ;;
+    *) echo "Refusing MOJOLEARN_BYTE_LM_SHAPE_ONLY='$shape_only'; use 0 or 1" >&2; exit 2 ;;
+esac
 commit=${MOJOLEARN_COMMIT:?frozen source commit required}
 mkdir -p "$OUT"
 deadline=$(($(date +%s) + seconds - 30))
@@ -52,6 +66,7 @@ printf '%s\n' "source=$commit" "vendor=$vendor" "gpu_arch=$arch" \
     > "$OUT/provenance.txt"
 # Only when a second shape was asked for, so the certified file is unchanged.
 [[ -z "$shape" ]] || printf '%s\n' "second_shape=$shape" \
+    "second_shape_only=$shape_only" \
     "second_shape_scope=own capture tree and own receipts; a separate per-shape certificate" \
     >> "$OUT/provenance.txt"
 
@@ -101,17 +116,19 @@ run byte-build 900 bash bindings/build_byte_lm.sh
 mkdir "$OUT/bindings"
 run retain-binding 30 cp "$MOJOLEARN_BYTE_LM_OUTDIR/_mojolearn_byte_lm.so" "$OUT/bindings/"
 run byte-host-mocks 120 "$PY" -m pytest -q python/mojolearn/tests/test_byte_lm_surface.py
-run byte-step1 240 "$PY" tools/byte_lm_real_text_capture.py \
-    --output "$OUT/step1" --expected-vendor "$vendor" --steps 1
-receipt byte-step1 capture "$OUT/step1/summary.json"
-run byte-gradient-oracle 240 "$PY" tools/byte_lm_gradient_oracle.py \
-    "$OUT/step1/step000001" --expected-vendor "$vendor" --output "$OUT/gradient-oracle.json"
-receipt byte-gradient-oracle oracle "$OUT/gradient-oracle.json"
-# set -e prevents expansion after a failed numerical gate or receipt. The
-# separate full run starts from the fixed initialization and actual text.
-run byte-full128 1500 "$PY" tools/byte_lm_real_text_capture.py \
-    --output "$OUT/full128" --expected-vendor "$vendor" --steps 128
-receipt byte-full128 capture "$OUT/full128/summary.json"
+if [[ "$shape_only" != 1 ]]; then
+    run byte-step1 240 "$PY" tools/byte_lm_real_text_capture.py \
+        --output "$OUT/step1" --expected-vendor "$vendor" --steps 1
+    receipt byte-step1 capture "$OUT/step1/summary.json"
+    run byte-gradient-oracle 240 "$PY" tools/byte_lm_gradient_oracle.py \
+        "$OUT/step1/step000001" --expected-vendor "$vendor" --output "$OUT/gradient-oracle.json"
+    receipt byte-gradient-oracle oracle "$OUT/gradient-oracle.json"
+    # set -e prevents expansion after a failed numerical gate or receipt. The
+    # separate full run starts from the fixed initialization and actual text.
+    run byte-full128 1500 "$PY" tools/byte_lm_real_text_capture.py \
+        --output "$OUT/full128" --expected-vendor "$vendor" --steps 128
+    receipt byte-full128 capture "$OUT/full128/summary.json"
+fi
 if [[ -n "$shape" ]]; then
     # The second shape runs LAST and entirely in its own subdirectories, so the
     # certified default is complete and retained before any of this starts, and

@@ -595,6 +595,16 @@ case "$BYTE_LM_PYTHON" in ''|*[!A-Za-z0-9_./-]*) echo 'Byte LM interpreter must 
 # leased box costs the lease.
 BYTE_LM_SHAPE=${MOJOLEARN_BYTE_LM_SHAPE:-}
 case "$BYTE_LM_SHAPE" in ''|4,32) ;; *) echo "Refusing byte-LM shape '$BYTE_LM_SHAPE'; 4,32 is the only committed second shape" >&2; exit 2 ;; esac
+# A lease dedicated to the second shape captures only that shape, because one
+# work deadline does not hold two 128-step captures. Refused without a shape,
+# since skipping the certified captures and capturing nothing else would rent a
+# box to build a binding.
+BYTE_LM_SHAPE_ONLY=${MOJOLEARN_BYTE_LM_SHAPE_ONLY:-0}
+case "$BYTE_LM_SHAPE_ONLY" in
+    0) ;;
+    1) [ -n "$BYTE_LM_SHAPE" ] || { echo 'MOJOLEARN_BYTE_LM_SHAPE_ONLY=1 needs MOJOLEARN_BYTE_LM_SHAPE' >&2; exit 2; } ;;
+    *) echo "Refusing MOJOLEARN_BYTE_LM_SHAPE_ONLY='$BYTE_LM_SHAPE_ONLY'; use 0 or 1" >&2; exit 2 ;;
+esac
 PUBLIC_GITHUB_SOURCE=${MOJOLEARN_PUBLIC_GITHUB_SOURCE:-}
 case "$PUBLIC_GITHUB_SOURCE" in
     ''|mojolearn/mojolearn) ;;
@@ -2965,6 +2975,7 @@ if [ "@NVIDIACAMPAIGN@" = 5 ]; then
           MOJOLEARN_BYTE_LM_EXPECT_VENDOR="$byte_vendor" MOJOLEARN_COMMIT="@COMMIT@" \
           MOJOLEARN_GPU_ARCHS="@GPUARCHS@" MOJOLEARN_BYTE_LM_VALIDATION_SECONDS="$work_remaining" \
           MOJOLEARN_PYTHON="@BYTELMPYTHON@" MOJOLEARN_BYTE_LM_SHAPE="@BYTELMSHAPE@" \
+          MOJOLEARN_BYTE_LM_SHAPE_ONLY="@BYTELMSHAPEONLY@" \
           timeout -k 10 "$work_remaining" bash tools/byte_lm_validation_serial.sh \
           > "$OUT/byte-lm-validation-console.log" 2>&1
         byte_rc=$?
@@ -4201,6 +4212,7 @@ leg_check_remote_body() {
         -e "s|@GPUARCHS@|$GPU_ARCHS|g" \
         -e "s|@BYTELMPYTHON@|$BYTE_LM_PYTHON|g" \
         -e "s|@BYTELMSHAPE@|$BYTE_LM_SHAPE|g" \
+        -e "s|@BYTELMSHAPEONLY@|$BYTE_LM_SHAPE_ONLY|g" \
         -e "s|@COMPACTACTION@|$BYTE_RESUME_ACTION|g" \
         -e "s|@BASEHANDOFFSHA@|$BYTE_BASE_SHA|g" \
         -e "s|@FOREIGNHANDOFFSHA@|$BYTE_FOREIGN_SHA|g" \
