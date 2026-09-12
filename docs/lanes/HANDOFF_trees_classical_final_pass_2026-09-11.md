@@ -7,21 +7,25 @@ gemm/, core/step_phase.mojo and the byte LM, and DEVIATIONS 2640 to 2659.
 This file covers trees and classical only. Read ENGINEERING_RULES.md
 sections 9 and 10 and bench/OPPONENT_REFERENCE.md before touching a lane.
 
-## 1. State now (2026-09-11 night, after the merges)
+## 1. State now (2026-09-12, after the merges)
 
-- **Everything from the final pass is merged into main and pushed.** The
-  seven finish lanes (kde, svm, knn, forest, gbdt, pointwise, linear-cluster)
-  all landed; section 2 has the commits.
-- **Four pods were still running when this was written** and MUST be reaped
-  (`tools/trees_leg.sh reap`, then confirm HTTP 404): forest
-  `8gsem9f3thnhvu` (lease to 23:52), gbdt `dk14p0y15w0ig5`, pointwise
-  `eqxtzdcpctpnkh`, linear-cluster-istella `1yxsotvvcbxtuu`. The kde, svm and
-  knn pods are already reaped and verified gone.
-- Never touch `samba-*` (another program) or `mojolearn-gemm-nvidia-*` (the
-  neural session).
-- Every measurement here is our IDENTICAL arm against the opponent's FAST
-  arm on the same pod unless a row says otherwise. Ratios are ours divided
-  by the opponent's time; after/before ratios below 1 mean we got faster.
+- **Everything is merged into main and pushed.** All seven finish lanes plus
+  their follow-ups; section 2 has the commits.
+- **Nothing is renting.** Every pod of this session is VERIFIED GONE by the
+  RunPod API (HTTP 404, and the account listing shows none of ours):
+  forest `8gsem9f3thnhvu` (DELETE 204 then GET 404 at 22:59:22Z), kde
+  `ur95zh3h9qbx2p`, svm `4oih8bhjepzlmm`, knn `zwmta1li2twxx2`,
+  linear-cluster `1yxsotvvcbxtuu`, pointwise `eqxtzdcpctpnkh`, gbdt
+  `dk14p0y15w0ig5`. Never touch `samba-*` (another program) or
+  `mojolearn-gemm-nvidia-*` (the neural session).
+- **Three legs died before handing back their final numbers** (their agents
+  stalled, then the pods' watchdogs fired). What was lost is listed as the
+  first item of section 6. Nothing merged depends on recovering them, but one
+  merged switch set is unproven for speed, which section 2 marks.
+- Every measurement here is our IDENTICAL arm against the opponent's FAST arm
+  on the same pod unless a row says otherwise. Ratios are ours divided by the
+  opponent's time; after/before ratios below 1 mean we got faster.
+
 ## 2. What landed on main
 
 | item | main commit | result |
@@ -40,7 +44,7 @@ sections 9 and 10 and bench/OPPONENT_REFERENCE.md before touching a lane.
 | kde-finish, DEVIATIONS 2625, 2626, 2660 | 44bf06a0 | taxi 0.811, Istella-S 0.311, **geomean 0.502**, log-likelihood identical to the last digit |
 | svm-finish, DEVIATIONS 2665, 2666 | aede96e8 | taxi 0.8886, Istella-S 0.8498, **geomean 0.869**, accuracy unchanged. Also fixed a REAL BUG in 48f92b19: the RARY_TREE arity row had no dispatch branch, so that define silently selected the default and three earlier "rary" measurements measured nothing |
 | forest-finish, DEVIATIONS 2637, 2638, 2663 | b3d6eeb5 | RF **0.775**, ET **0.929**, iforest **0.108**; 2663 at bw16k **0.880** and bw32k **0.865**. Every quality delta exactly +0.000000. ET is SLOWER on taxi (1.018) and is not claimed there |
-| gbdt-finish, DEVIATIONS 2634, 2635, 2636 (2661 opt-in) | 5030ebc3 | identity only: 36/36 cells stable on four sets, sub-byte 16/16 PASS. **NO speed claim** — timing was still running at merge |
+| gbdt-finish, DEVIATIONS 2634, 2635, 2636 (2661 opt-in) | 5030ebc3 | identity only: 36/36 cells stable on four sets, sub-byte 16/16 PASS. **NO speed claim** — the timing legs died with the pod before returning; see section 6 item 1, which says to re-run them and turn off anything that loses |
 | pointwise-speed | 652ccd8f | merged on Andrew's instruction while the lane was still running; its verdicts are owed |
 | linear-cluster-istella, DEVIATION 2671 | 0c6c1249 | Jacobi with two barriers per rotation: OLS geomean 0.9610, PCA 0.9435, 0 of 48,400 matrix and 0 of 48,400 eigenvector cells differing. **DEVIATION 2672 RESOLVED as a flip**: the single 1.066 instance was noise; pooled over five race instances it reads taxi 0.8979 and Istella-S 0.9943, geomean 0.9449, digests equal. k-means 2672 and OLS/PCA 2671 both ship on |
 
@@ -170,36 +174,73 @@ on the Mac; the flip rule of section 9 (geomean of after/before over taxi and
 Istella-S below 1, quality not worse on EITHER dataset); same bits proven on
 the H100, then gate the Apple M4 and an AMD box before merging.
 
-1. **Reap the four live pods** listed in section 1 and confirm HTTP 404. Do
-   this first; they bill by the minute.
-2. **Collect the verdicts the merges do not yet carry.**
-   - GBDT 2634/2635/2636: the ab and phase 2 medians, per-switch, through
-     `tools/flip_verdict.py`. If any loses, turn it off; it is merged as
-     default-on with identity proven but speed unproven.
-   - DEVIATION 2672: DONE, it flips (pooled geomean 0.9449). What remains
-     from that lane is the Istella-S DBSCAN median, still RUN OWED.
-   - DEVIATION 2663 regression: the ExtraTrees istellareg cells and the
-     pre-registered width rule (taxireg was flat at 0.989/0.988, and the
-     mechanism is structurally absent at max_features=1.0).
-   - The pointwise lane's own before/after table.
-3. **AMD confirmations for every lane merged tonight** (gfx942, Hot Aisle
+1. **Re-run the three results that died with their pods.** All three had paid
+   their setup cost and were minutes from finishing.
+   - **GBDT 2634, 2635, 2636 speed.** THIS IS THE IMPORTANT ONE: those three
+     are merged DEFAULT-ON in 5030ebc3 with identity fully proven (36/36 cells
+     on four sets, sub-byte 16/16) but **no speed verdict at all**. The
+     Istella-S redo was about 20 minutes from done. Re-run the ab and phase 2
+     legs, put them through `tools/flip_verdict.py`, and if a switch loses,
+     TURN IT OFF. Do not leave them default-on unmeasured indefinitely.
+     DEVIATION 2661 is opt-in and already proven bit-identical
+     (`ib_diff all vs a2661` IDENTICAL=36).
+   - **Pointwise Istella-S** (`ours-ab` and the greedy control). The taxi
+     result stands and is strong: the opt-in pointwise arm 1803.3 -> 795.4 ms
+     (0.441x, medians of nine interleaved rounds), logloss 0.525925 ->
+     0.525668, greedy control flat at 309.3 -> 308.9 ms with an unchanged
+     hash. DEVIATION 2670 stays opt-in until Istella-S plus M4 and AMD land.
+     DEVIATION 2669 was proven IMPOSSIBLE rather than built.
+   - **Istella-S DBSCAN median** for the linear-cluster lane. Its taxi row
+     stands (ours 1129.8 ms against cuML brute 13631.0, 2900 clusters, ARI
+     0.99999999908) and round 0 on Istella-S ran 337 s against cuML's 55 s,
+     so expect that shape to favour cuML at 220 features.
+2. **`identity_break` for DEVIATION 2663, on the Apple M4 and on AMD gfx942.**
+   2663 changes a SHIPPED DEFAULT ON EVERY VENDOR (ExtraTrees device batch
+   width 4,096 -> 16,384), so this is the one outstanding gate that blocks
+   nothing yet but should not stay open. On the M4 it refused for missing
+   builds, NOT for any divergence; build first:
+   ```
+   MOJOLEARN_NUMERIC_MODE=identical bash bindings/build.sh
+   MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_estimators.sh
+   MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_trees.sh
+   MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_svm.sh
+   MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH=python python3 tools/identity_break.py \
+     --lanes rf-clf,rf-reg,et-clf,et-reg,iforest --vendor <apple-m4|amd-mi300x> \
+     --json /tmp/ib_2663.json
+   PYTHONPATH=python python3 tools/identity_break.py --diff \
+     bench/results/forest_finish_2026-09-11/logs/identity_summary.txt /tmp/ib_2663.json
+   ```
+   `if_check` (8/8) and `device_batched_check` (45 cells, at the new 16,384
+   default) ALREADY PASS on the M4.
+3. **AMD confirmations for everything merged tonight** (gfx942, Hot Aisle
    first, then DigitalOcean): the three kNN checks; `kde_check` and
-   `kde_stage_profile`; `svm/svc_main.mojo` 44/44 plus the hash probe;
-   `check-if`, `check-forest-resident-layouts` and extratrees
-   `device_batched_check`.
-4. **A RunPod network volume for the datasets.** Istella-S is 472 MB and each
-   new pod refetches it from library.istella.it at 86 to 285 KB/s. Tonight it
-   cost the gbdt lane about 40 minutes and blew its 2400 s download timeout;
-   the leg only survived because `curl -C -` resumed the partial file
-   (`urllib.request.urlretrieve`, which the arm uses, cannot resume). Pattern
-   to copy: `samba-sweep/tools/train_leg.sh`. This is the single highest-value
-   infrastructure fix left.
+   `kde_stage_profile`; `svm/svc_main.mojo` 44/44 plus the hash probe
+   (457e29b82bca9df9, 733a383c5699f427, 2b66bc991a9c9ed0); `check-if`,
+   `check-forest-resident-layouts` and `device_batched_check`.
+4. **A RunPod network volume for the datasets. This is the highest-value
+   infrastructure fix left, and it cost real results tonight.** Istella-S is
+   472,129,615 bytes and every new pod refetches it from library.istella.it at
+   86 to 285 KB/s. It blew the gbdt lane's 2400 s download timeout (the leg
+   only survived because `curl -C -` resumed the partial file;
+   `urllib.request.urlretrieve`, which `speed_gbdt_arm.py` uses, CANNOT
+   resume), and on the pointwise pod the download was killed by its own
+   `timeout` at 464 of 472 MB while **the setup script wrote its ready
+   sentinel anyway**, so the arm silently fell back to synthclf. That
+   fallback-instead-of-fail is a second bug worth fixing on its own: a dataset
+   that did not download must refuse, not substitute. Pattern to copy:
+   `samba-sweep/tools/train_leg.sh`.
 5. **Before the next Linux release**: confirm the installed FAST and
    DETERMINISTIC smoke passes on main (`run_installed.py` asks
    `_backend.binding('_mojolearn')` in tiers DEVIATION 2490 removed; the fix
    cc117fdf is on main but was not on the 0.8.3 release branch), and qualify
    sm_89 installed (no L40S, RTX 4090 or L4 stock on RunPod that night).
 6. **Speed work still open**, in descending value:
+   - ExtraTrees: the 2663 win is DEVIATION 205's rescue paying two extra
+     staged sub-batches per cycle, so attack the rescue directly (batch the
+     surveys, or skip the re-stage when the retry set is a subset of the batch
+     already on the device). That should pay more than width did and would
+     help Istella-S, where width bought least. The score and range passes are
+     still 77 percent of the Istella-S loop and untouched.
    - kNN: a fused kernel only pays if a block owns SEVERAL query rows, which
      needs cuVS's shape of staging a rows-by-columns distance chunk in shared
      memory. 2667 failed because one block owning one row reads 1.125 operands
@@ -220,6 +261,7 @@ the H100, then gate the Apple M4 and an AMD box before merging.
 7. **Also owed, not speed**: Apple M4 pointwise model hashes were never
    compared; `test_native_helpers.py` and `helpers_ident.py` on the M4 for the
    linear-cluster work; scikit-learn KDE Istella-S row on AMD.
+
 ## 7. DEVIATION numbers
 
 Trees and classical have used 2620 to 2629, 2631 to 2638, and 2660 to 2672.
