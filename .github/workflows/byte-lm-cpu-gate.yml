@@ -18,17 +18,22 @@
 name: Byte LM CPU gate
 
 on:
-  # DEVIATION 2680. `train_steps` lets a one-off run widen the CPU training
-  # comparison without a commit. Pushes keep the nine-step sample, because a
-  # reference-path replay costs about ten seconds per step and all 128 would be
-  # roughly twenty minutes on each of seven runners; `all` is for when the full
-  # sweep is the point and someone is waiting for it.
+  # DEVIATION 2680. `train_steps` narrows the CPU training comparison without a
+  # commit; the default is ALL 128 steps.
+  #
+  # An earlier revision sampled `every:16` on the reasoning that a replay costs
+  # about ten seconds per step, so 128 would be twenty minutes on each of seven
+  # runners. That estimate was wrong by roughly twentyfold: it came from a
+  # 32-second window that actually contained a binding build. Measured, the full
+  # 128-step job takes 2m23s against the sample's 2m6s, so sampling bought
+  # seventeen seconds and cost 119 steps of coverage. Narrowing is now only for
+  # bisecting a failure to one step.
   workflow_dispatch:
     inputs:
       train_steps:
         description: "CPU training steps to compare: all, every:N, or a comma list"
         required: false
-        default: "every:16"
+        default: "all"
   push:
     branches:
       - "main"
@@ -231,7 +236,7 @@ jobs:
         run: |
           set -o pipefail
           python3 tools/byte_lm_cpu_train_gate.py cpu \
-            --steps "${{ github.event.inputs.train_steps || 'every:16' }}" --verify-digests \
+            --steps "${{ github.event.inputs.train_steps || 'all' }}" --verify-digests \
             --vendor apple --report "$GATE_OUT/cpu_train.json" 2>&1 \
             | tee "$GATE_OUT/cpu_train.log"
 

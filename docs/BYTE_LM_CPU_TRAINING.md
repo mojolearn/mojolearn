@@ -11,7 +11,7 @@ step's own parameters, Adam moments, token ids and recorded optimizer:
 
 | | |
 |---|---|
-| CPU step against the recorded Metal bytes | 45 of 45 array comparisons equal, 9 steps |
+| CPU step against the recorded Metal bytes | 640 of 640 array comparisons equal, **all 128 steps** |
 | arrays compared per step | gradient, loss bits, post-step parameters, post-step `m`, post-step `v` |
 | negative control, a wrong-gradient build | caught on every runner, 2 of 10 equal |
 | certified CPU inference, unmoved | loss gate 33 of 33, DEVIATION 2612 catch 24 of 33 |
@@ -29,8 +29,11 @@ gate named the tensor, `block0.w_q` element 0, with both bit patterns.
 
 ## What this does NOT say
 
-- Nine of 128 steps in CI, sampled as `every:16`. The full 128 is affordable
-  locally and on a box, and has not been run on every runner.
+- Every step is covered, so this limit is retired. CI runs all 128 on every
+  push, on all seven runners. An earlier revision sampled `every:16` because a
+  replay was estimated at ten seconds per step; measured, the full job takes
+  2m23s against the sample's 2m6s, so the sample bought seventeen seconds and
+  cost 119 steps.
 - One model profile, one batch shape. Nine of the gradients contract over the
   token count, so the same tokens in a different batch or microbatch schedule
   are a different sum. Identity here is per shape, exactly as inference is.
