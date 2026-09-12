@@ -267,3 +267,49 @@ Published 0.830x at 1M; **0.995x here at 2,043,304 rows** -- parity, not a win,
 on identical 6,400-leaf ensembles. It is recorded exactly as measured. A
 consistency sweep that only confirmed the flattering rows would not have been
 worth the lease.
+
+### The forest half, full size, same pod, same window
+
+| lane | dataset | ours ms (min..max) | opponent | opponent ms | ratio | leaves ours/theirs | verdict |
+|---|---|---|---|---|---:|---|---|
+| rf | taxi | 2242.1 (2222.5..2297.9) | cuml-rf-gpu | 4256.2 (4209.3..4435.2) | **0.527** | 1,718,168 / UNAVAILABLE | UNKNOWN |
+| rf | Istella-S | 2249.5 (2242.9..2258.9) | cuml-rf-gpu | 5894.7 (5754.3..5992.9) | **0.382** | 1,550,974 / UNAVAILABLE | UNKNOWN |
+| et | taxi | 5975.0 (5953.3..6039.5) | sklearn-et-cpu (224 cores) | 21323.5 (21209.4..21928.1) | **0.280** | 881,399 / 906,974 | COMPARABLE |
+| et | Istella-S | 9290.9 (9278.4..9352.7) | sklearn-et-cpu (224 cores) | 35426.0 (34998.3..35500.7) | **0.262** | 1,029,236 / 1,006,311 | COMPARABLE |
+| iforest | taxi | 147.3 (128.7..148.6) | cuml-iforest-gpu | 360.1 (332.1..1003.3) | **0.409** | UNAVAILABLE both | UNKNOWN |
+
+**The `rf` verdicts are UNKNOWN and that is not a pass.** cuML's Python forest
+exposes no node or leaf accessor and this build answered `source=none`, so
+nothing could be compared: `FSPEED-FIT-VERDICT ... verdict=UNKNOWN reason=fewer
+than two arms exposed a leaf count; an unread comparison is not a fair one`.
+The leaf count was NOT backfilled from `n_estimators`, which is the config we
+asked for and says nothing about the fit. `tools/cuml_forest_json_probe.py`
+(owed item 1, run after the sweep) settles whether that is a missing accessor
+on this build or a reader bug.
+
+`iforest` reads UNAVAILABLE on BOTH arms for a documented reason: our
+`IsolationForest` does not keep its forest -- `fit` builds it, scores one row
+and discards it, and every later scoring call rebuilds (DEVIATION 874/1836) --
+so there is no fitted ensemble to read back on either side.
+
+`et` is the one lane whose opponent is a CPU arm, and it is labeled `-cpu`
+throughout: no GPU ExtraTrees exists on any vendor, so `cuml-et-gpu` REFUSES BY
+NAME ("cuML has no ExtraTrees estimator: its RandomForest searches quantile
+splits, not the uniform-random thresholds that define ExtraTrees"). A
+GPU-versus-CPU ratio is a different claim from the GPU-versus-GPU ones above
+and must not be read as the same kind of number.
+
+### Determinism, observed rather than asserted
+
+Across every cell on this board, **our output hash is byte-identical on all
+five rounds**. Two opponents are not:
+
+* `catboost-gpu` alternates between two hash values INSIDE a single cell, on
+  every GBDT cell.
+* `sklearn-et-cpu` changes its prediction hash between rounds on both datasets,
+  despite `random_state=7` being pinned on every arm.
+
+This is reported as measured and is not a price-of-determinism figure: that
+quantity needs our deterministic arm against our own OPTIMIZED
+non-deterministic arm, which does not exist, and the claim is withdrawn
+project-wide.
