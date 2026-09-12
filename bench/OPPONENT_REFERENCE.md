@@ -2041,3 +2041,73 @@ The identity column no opponent has: ours returned ONE model hash per cell
 across all 5 rounds (symmetric Istella-S `238d3abce0cabf43`), while CatBoost
 returned a DIFFERENT hash in every round of the same cell (`1827fc2260f91628`,
 `0169524ba0e5364e`, `6c122f43cbd65ad0`, `725dc8116ae6e6cd`, `b38f6ba81e7fa984`).
+
+### GBDT on criteo, the CATEGORICAL set: our CTR path measured for the first time (September 12, pod 0zl2hrxqq26b0t)
+
+criteo is NOT a section 9 gating dataset. taxi and Istella-S remain the two
+kinds every flip verdict is computed over; criteo exists to reach the
+categorical and CTR code, which neither of them touches. A number here alone is
+a one-kind number.
+
+WHY IT IS THE FIRST TIME. `cat_features` reached no benchmark before
+2026-09-12, so DEVIATION 2634 ("skip the CTR target prep when no column is
+categorical") had only ever executed its SKIP branch. Its 0.9603 flip verdict
+was measured on taxi and Istella-S, neither of which declares a categorical
+column. Everything below is therefore a NEW measurement, not a confirmation.
+
+NVIDIA H100 80GB HBM3, driver 580.126.09; CatBoost 1.2.10; our IDENTICAL arm;
+1,000,000 train rows of criteo (13 integer + 26 hashed categorical, 3.22%
+positive), 100 trees, depth 6, 3 rounds, medians. Category codes re-ranked
+WITHIN the train slice (see the density note below).
+
+| policy | arm | median ms | AUC | logloss | ours / CatBoost |
+|---|---|---:|---|---|---:|
+| SymmetricTree | ours (categorical) | 11,913 | 0.742155 | 0.128135 | 1.21x |
+| SymmetricTree | CatBoost GPU | 9,883 | 0.741531 | 0.128211 | - |
+| SymmetricTree | ours-nocat (codes as numbers) | 425 | 0.723855 | 0.130338 | - |
+
+Read it honestly: on the CTR path we are 1.21x CatBoost's time, and slightly
+AHEAD of it on both quality figures (AUC 0.742155 against 0.741531, logloss
+0.128135 against 0.128211). The `ours-nocat` row is the more useful one: the
+same 26 columns split as ORDERED NUMBERS run 28x faster (425 ms) and score
+materially worse (AUC 0.7239), which both prices the categorical path and
+proves it is genuinely reached -- disabling it moves the time by 28x and the
+quality by 0.018 AUC.
+
+THE DECODE BUG THIS EXPOSED, and the refusal that caught it.
+`bench/speed/forest_speed_arm.py` cannot fit criteo on our arm at all as the
+loader first shipped: `gbdt/train.mojo:1231` refuses by name,
+
+    cat_features column 13 is not densely coded: category 1 is absent from 0..621909
+
+and the refusal is CORRECT. `_decode_criteo` ranked each category over every
+decoded row, then `load_criteo` fits a row SLICE, so any category living only
+in withheld rows is a hole in the codes that reach fit.
+`tools/criteo_density_audit.py` counts it rather than arguing about it:
+
+| slice | rows | non-dense columns | missing codes | worst column |
+|---|---:|---:|---:|---:|
+| all decoded rows | 3,061,005 | 0 of 26 | 0 | 0 |
+| train uncapped | 2,561,005 | 19 of 26 | 386,091 | 100,064 |
+| train 1,000,000 | 1,000,000 | 21 of 26 | 1,702,570 | 429,601 |
+| train 200,000 | 200,000 | 22 of 26 | 2,592,446 | 628,467 |
+| test tail | 500,000 | 22 of 26 | 2,163,064 | 537,863 |
+
+Dense over the matrix and dense over NO slice of it, the uncapped train split
+included -- so this is a property of the decode's global ranking, not a
+`--rows` artifact. Global sorted-unique ranking was chosen to make codes
+reproducible between runs; it does not make them dense in the slice that
+reaches fit, which is what our surface requires. The numbers above come from
+`tools/criteo_dense_arms.py`, which re-ranks within the train slice.
+
+A second wiring bug, same lane: `xgboost_arms._frame` built the pandas category
+dtype independently for fit and for predict, so XGBoost 3.2.0 raised while
+scoring ("Found a category not in the training set for the 32th column:
+679286"). Timings survived, quality did not, which is why the XGBoost criteo
+cells carry times and no quality. Both frames must share one
+`CategoricalDtype(range(k))`.
+
+The refusal probes behaved as designed: `feature_fraction < 1` with
+cat_features, `permutation_count` without cat_features, and
+`ctr_estimation_permutation_id` without cat_features all raised BY NAME, while
+`cat_features` alone was accepted.
