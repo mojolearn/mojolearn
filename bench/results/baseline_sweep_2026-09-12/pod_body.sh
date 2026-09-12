@@ -53,18 +53,31 @@ if [ ! -f "$OUT/setup.done" ]; then
             --force-reinstall --no-deps --no-binary lightgbm \
             --config-settings=cmake.define.USE_CUDA=ON lightgbm
     fi
-    step pixi_install 900 pixi install
-    # EVERY binding, twice. A lane whose extension is missing REFUSES by name
-    # rather than running, and the build gate is circular (it imports the tier
-    # it is building), so pass 1 runs with the gate off and pass 2 with it live.
-    _b="bindings/build.sh $(ls bindings/build_*.sh 2>/dev/null | tr '\n' ' ')"
-    for _pass in 1 2; do
-        [ "$_pass" = 1 ] && _skip=1 || _skip=0
-        for _s in $_b; do
-            MOJOLEARN_SKIP_BUILD_GATE="$_skip" \
-                step "build.p$_pass.$(basename "$_s" .sh)" 1500 bash "$_s"
-        done
+    # PIXI IS NOT ON THIS IMAGE AND NOTHING SAID SO. runpod/pytorch ships no
+    # pixi, so calling `pixi install` straight out returned 127 and then EVERY
+    # bindings/build_*.sh returned 127 in zero seconds -- a "finished" setup
+    # phase, 36 build steps, and not one .so. The sweep then ran to completion
+    # against no bindings at all. Bootstrap it first, and FAIL LOUDLY if the
+    # bootstrap did not produce a usable toolchain.
+    if [ ! -x "$HOME/.pixi/bin/pixi" ]; then
+        step pixi_bootstrap 900 sh -c 'curl -fsSL https://pixi.sh/install.sh | sh'
+    fi
+    PATH="$HOME/.pixi/bin:$PATH"; export PATH
+    command -v pixi > /dev/null 2>&1 || { say "FATAL: pixi missing after bootstrap"; exit 3; }
+    step pixi_install 1800 pixi install || { say "FATAL: pixi install failed"; exit 3; }
+    # The extensions these fourteen lanes actually reach, derived from each
+    # estimator's _BINDING: base = KMeans/NearestNeighbors, estimators =
+    # PCA/LinearRegression/KernelDensity/DBSCAN, svm = SVC/IsolationForest,
+    # plus the three tree extensions. One pass with the gate skipped, which is
+    # what every shipped leg does; the gate imports the whole package and so
+    # cannot run until every sibling exists.
+    export MOJOLEARN_SKIP_BUILD_GATE=1
+    for _s in build.sh build_estimators.sh build_svm.sh build_gbdt.sh build_rf.sh build_trees.sh; do
+        step "build.$(basename "$_s" .sh)" 1500 bash "bindings/$_s"
     done
+    # A build that produced nothing must not reach a timer.
+    [ -n "$(ls "$ROOT"/python/mojolearn/identical/*.so 2>/dev/null)" ] \
+        || { say "FATAL: no .so built; refusing to time a library that is not there"; exit 3; }
     # The witness that the tier and vendor we are about to time are the ones
     # that got built. A silent import failure here would be a whole wasted pod.
     step import_witness 300 python3 -c "

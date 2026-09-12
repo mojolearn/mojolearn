@@ -182,6 +182,37 @@ rows_for() {
     esac
 }
 
+# THE TREE HARNESS NEEDS A NAMED BINARY SET AND NOTHING EVER BUILT ONE.
+# `trees_identical_ab.sh speed <set>` calls cmd_use, which does
+# `[ -d /root/bins/<set> ] || exit 2` and then copies the .so FROM that
+# directory INTO python/mojolearn/identical/. A sweep that had just built its
+# extensions straight into the tier therefore failed EVERY tree cell with
+# "no set all" -- twelve cells, in milliseconds, before a single fit ran.
+# Populate the set from the tier the build produced, and refuse BY NAME when
+# there is nothing to populate it with, rather than letting each cell exit 2
+# with a message about a directory the operator never heard of.
+BINSET="${MOJOLEARN_BENCH_BINSET:-all}"
+TIER_DIR="${MOJOLEARN_ROOT:-/root/mojolearn}/python/mojolearn/identical"
+ensure_binset() {
+    _dst="/root/bins/$BINSET"
+    if [ -d "$_dst" ] && [ -n "$(ls "$_dst"/*.so 2>/dev/null)" ]; then return 0; fi
+    if [ -z "$(ls "$TIER_DIR"/*.so 2>/dev/null)" ]; then
+        echo "REFUSING: no built extensions in $TIER_DIR, so the tree lanes have" >&2
+        echo "  nothing to time. Build the IDENTICAL set first (bindings/build.sh," >&2
+        echo "  build_gbdt.sh, build_rf.sh, build_trees.sh, build_svm.sh," >&2
+        echo "  build_estimators.sh) -- pixi must be bootstrapped before they run." >&2
+        return 1
+    fi
+    mkdir -p "$_dst" && cp "$TIER_DIR"/*.so "$_dst"/ || return 1
+    note "populated $_dst from the built tier ($(ls "$_dst"/*.so | wc -l | tr -d ' ') extensions)"
+}
+for _l in $LANES; do
+    if is_tree_lane "$_l"; then
+        ensure_binset || exit 2
+        break
+    fi
+done
+
 note "sweep start rows=$ROWS rounds=$ROUNDS opponents=$OPPONENTS prep=$PREP"
 note "commit $(cat /root/mojolearn/SHIPPED_COMMIT.txt 2>/dev/null || git -C /root/mojolearn rev-parse HEAD 2>/dev/null || echo unknown)"
 nvidia-smi --query-gpu=name,driver_version --format=csv,noheader >> "$LOG" 2>&1 || true
@@ -223,12 +254,19 @@ for lane in $LANES; do
         n=$(rows_for "$ds")
         t0=$(date +%s)
         if is_tree_lane "$lane"; then
-            mode=ours; arms=ours
+            mode=ours; arms=ours; _opp=""
             if [ "$OPPONENTS" = 1 ]; then
                 _opp=$(tree_arms_for "$lane")
                 if [ -n "$_opp" ]; then mode=full; arms="ours,$_opp"; fi
             fi
-            MOJOLEARN_SPEED_ARMS="$arms" MOJOLEARN_SPEED_TAG=sweep \
+            # --arms FILTERS OPPONENTS ONLY; `ours` always runs and is never in
+            # that set (forest_speed_arm.py: `have = {a.name for a in
+            # opponents}`). Naming it there made every tree cell print
+            # "FSPEED-REFUSED arm=ours ... not built here" beside a perfectly
+            # good ours row -- a refusal line that reads like the lane failed
+            # when it did not. Pass the opponents; record "ours,<opp>" in the
+            # TSV, which is what actually ran.
+            MOJOLEARN_SPEED_ARMS="$_opp" MOJOLEARN_SPEED_TAG=sweep \
             MOJOLEARN_SPEED_DEVICES=$(tree_devices_for "$lane") \
                 sh tools/trees_identical_ab.sh speed all "$lane" "$ds" "$n" "$ROUNDS" "$mode" \
                 >> "$LOG" 2>&1
