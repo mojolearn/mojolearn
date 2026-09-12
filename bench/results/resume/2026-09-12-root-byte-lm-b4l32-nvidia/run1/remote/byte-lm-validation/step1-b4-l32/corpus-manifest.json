@@ -1,0 +1,33 @@
+{
+  "schema": "mojolearn.byte-lm.corpus.v1",
+  "source_url": "https://raw.githubusercontent.com/karpathy/char-rnn/6f9487a6fe5b420b7ca9afb0d7c078e37c1d1b4e/data/tinyshakespeare/input.txt",
+  "source_commit": "6f9487a6fe5b420b7ca9afb0d7c078e37c1d1b4e",
+  "sha256": "86c4e6aa9db7c042ec79f339dcb96d42b0075e16b8fc2e86bf0ca57e2dc565ed",
+  "bytes": 1115394,
+  "encoding": "raw bytes; no normalization",
+  "train_range": [
+    0,
+    65536
+  ],
+  "validation_range": [
+    65536,
+    73728
+  ],
+  "vocabulary": 256,
+  "batch": 4,
+  "context": 32,
+  "planned_steps": 128,
+  "train_batch_schedule": "step s zero-based: row b reads bytes[(s*128+b*32) % 65504 : start+33]; targets shifted one byte",
+  "validation_batch_starts": [
+    65536,
+    65664,
+    65792,
+    65920
+  ],
+  "learning_gate": {
+    "heldout_mean_loss_ratio_max": 0.9,
+    "compare": "final versus initial on same heldout batches",
+    "status": "predeclared; unexecuted"
+  },
+  "scope": "small-scale next-byte learning at the four-row shape; no useful text generation or contextual reasoning claim. The same pinned corpus and the same 512 held-out target bytes as the two-row schedule, read as four batches of four rows instead of eight batches of two, so the two shapes' held-out losses are means over the same text. This is a SEPARATE certificate: nine weight gradients contract over the token count, so 128 tokens a step is a different sum than 64, not a multiple of it."
+}

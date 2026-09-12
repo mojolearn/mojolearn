@@ -1,0 +1,29 @@
+{
+  "boundary": "Root-observed guard return status, including cleanup; file-only receipt writer",
+  "command": {
+    "bytes": 314,
+    "file": "byte-gradient-oracle-b4-l32.command.txt",
+    "sha256": "4c9e8946f763d5d352f13b8a9ba8b3fe780ea2be06ecec33aff33f0297202860"
+  },
+  "exit_code": 0,
+  "guard_log": {
+    "bytes": 110,
+    "file": "byte-gradient-oracle-b4-l32.log",
+    "sha256": "dd5b6a620b2f026b600b6af9016fd5b80872122c3359c673cbeb7ab26358295d"
+  },
+  "guard_terminal": {
+    "cpu_affinity": "0,1",
+    "guard": "nvidia-root-serial-v1",
+    "reason": null,
+    "returncode": 0,
+    "thread_limit": 2
+  },
+  "job_kind": "oracle",
+  "result": {
+    "bytes": 38486,
+    "file": "gradient-oracle-b4-l32.json",
+    "sha256": "41b8f029ac7a59ee446457312cb4c4feff46a7790c584894ca05cd87eec0d8f5"
+  },
+  "schema": "mojolearn.root-job-receipt.v1",
+  "vendor": "cuda"
+}

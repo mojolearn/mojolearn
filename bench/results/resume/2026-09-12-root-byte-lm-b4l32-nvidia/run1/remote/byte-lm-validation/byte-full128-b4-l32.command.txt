@@ -1,0 +1,1 @@
+python3 tools/nvidia_serial_guard.py --seconds 2867 -- /root/mojolearn/.byte-lm-validation-venv/bin/python tools/byte_lm_real_text_capture.py --shape 4\,32 --output /root/gemm_leg_out/byte-lm-validation/full128-b4-l32 --expected-vendor cuda --steps 128 
