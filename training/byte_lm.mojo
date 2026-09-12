@@ -25,11 +25,14 @@ from core.step_phase import (
     step_count_launch,
     step_count_sync,
 )
-# DEVIATIONS 2646 and 2647: the step glue update arms (core/step_glue.mojo;
-# their path is compiled only under -D MOJOLEARN_STEP_GLUE_TRIAL=1).
+# DEVIATIONS 2646 and 2647: the step glue update arms (core/step_glue.mojo).
+# Their path is compiled under -D MOJOLEARN_STEP_GLUE_TRIAL=1, and since
+# DEVIATION 2649 also on a shipped build whose column default carries an
+# update bit (`STEP_GLUE_SHIPPED_UPDATE`, NVIDIA only).
 from core.step_glue import (
     STEP_GLUE_NOSHADOW,
     STEP_GLUE_OPTSKIP,
+    STEP_GLUE_SHIPPED_UPDATE,
     STEP_GLUE_TRIAL,
     STEP_GLUE_UPDATE_BITS,
     step_glue_arm_from_env,
@@ -1005,12 +1008,13 @@ def _byte_step_device(ctx: DeviceContext, mut tr: ByteTrainer,
     var next_step = tr.completed_steps + 1
     # DEVIATIONS 2646 and 2647 (docs/lanes/BRIEF_step_glue_2026-09-11.md
     # sections 4.2, 4.3, 5.2, 5.3): a trial build under an arm carrying
-    # `optskip` or `noshadow` takes `_byte_glue_update` INSTEAD of the shadow
-    # copy and `identical_optimizer_step`. On a build without
-    # -D MOJOLEARN_STEP_GLUE_TRIAL=1 `glue_update` is the constant False and
-    # the block below is the shipped path, unchanged.
+    # `optskip` or `noshadow`, or (DEVIATION 2649) a shipped build whose
+    # column default carries one, takes `_byte_glue_update` INSTEAD of the
+    # shadow copy and `identical_optimizer_step`. On every other build
+    # `glue_update` is the constant False and the block below is the shipped
+    # path, unchanged.
     var glue_update = False
-    comptime if STEP_GLUE_TRIAL:
+    comptime if STEP_GLUE_TRIAL or STEP_GLUE_SHIPPED_UPDATE:
         var glue_arm = step_glue_arm_from_env()
         if (glue_arm & STEP_GLUE_UPDATE_BITS) != 0:
             glue_update = True
@@ -1072,9 +1076,11 @@ def byte_glue_update_launch(
     t: Int,
     out_of_place: Bool,
 ) raises:
-    """DEVIATIONS 2646 and 2647, TRIAL ONLY (reached from `_byte_glue_update`
-    and from `training/checks/step_glue_check.mojo`, both under
-    -D MOJOLEARN_STEP_GLUE_TRIAL=1): the Adam update of
+    """DEVIATIONS 2646 and 2647 (reached from `_byte_glue_update`, and from
+    `training/checks/step_glue_check.mojo` under
+    -D MOJOLEARN_STEP_GLUE_TRIAL=1; since DEVIATION 2649 also from a shipped
+    build whose column default carries an update bit, which on NVIDIA it
+    does): the Adam update of
     `identical_optimizer_step` WITHOUT its entry scans and without a clip,
     one launch over `n` elements, then a wait.
 
@@ -1091,7 +1097,7 @@ def byte_glue_update_launch(
     with per-tensor flags) and clipping (`max_norm > 0`). The byte LM admits
     neither (`byte_validate_optimizer`). Recorded intermediates are refused
     at compile time on the trial build."""
-    comptime if STEP_GLUE_TRIAL:
+    comptime if STEP_GLUE_TRIAL or STEP_GLUE_SHIPPED_UPDATE:
         comptime assert not OPT_RECORD_INTERMEDIATES, (
             "the step glue update path does not record denom/q; build the"
             " glue trial without MOJOLEARN_OPT_RECORD"
@@ -1172,9 +1178,11 @@ def byte_glue_update_launch(
 
 
 def _byte_glue_update(ctx: DeviceContext, mut tr: ByteTrainer, next_step: Int, arm: Int) raises:
-    """DEVIATIONS 2646 and 2647, TRIAL ONLY: the shadow point and the update
-    of `_byte_step_device` under a glue arm carrying `optskip` and/or
-    `noshadow` (brief sections 4.2, 4.3, 5.2, 5.3). Ends with the new state
+    """DEVIATIONS 2646 and 2647: the shadow point and the update of
+    `_byte_step_device` under a glue arm carrying `optskip` and/or
+    `noshadow` (brief sections 4.2, 4.3, 5.2, 5.3). Reached from a trial
+    build, and since DEVIATION 2649 from a shipped build whose column
+    default carries an update bit (NVIDIA today, no other column). Ends with the new state
     in `param`, `m_state`, `v_state`, the pre-update state in `shadow_*`,
     `flags_before` and `shadow_step` set and `shadow_valid` True, exactly
     the invariant the shipped shadow copy plus `identical_optimizer_step`
@@ -1191,11 +1199,14 @@ def _byte_glue_update(ctx: DeviceContext, mut tr: ByteTrainer, next_step: Int, a
     The fault-injection build is refused at compile time: its `opt_refuse`
     site writes `m_state` between the shadow copy and the optimizer, which
     is the one write the `optskip` argument excludes (brief section 5.2)."""
-    comptime if STEP_GLUE_TRIAL:
+    comptime if STEP_GLUE_TRIAL or STEP_GLUE_SHIPPED_UPDATE:
         comptime assert not BYTE_LM_FAULT_INJECT, (
-            "the step glue trial and MOJOLEARN_BYTE_LM_FAULT_INJECT are not"
-            " combined: the G4 fault sites assume the shipped update order"
-            " (docs/lanes/BRIEF_step_glue_2026-09-11.md section 5.2)"
+            "the step glue update path and MOJOLEARN_BYTE_LM_FAULT_INJECT are"
+            " not combined: the G4 fault sites assume the shipped update order"
+            " (docs/lanes/BRIEF_step_glue_2026-09-11.md section 5.2). Since"
+            " DEVIATION 2649 this refusal also covers a shipped build whose"
+            " column default carries an update bit, which is the build the"
+            " fault-inject harness would otherwise reach unguarded."
         )
     var n = tr.config.n_total()
     var ton = timing_on()

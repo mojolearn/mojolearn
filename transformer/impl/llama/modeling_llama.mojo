@@ -288,9 +288,12 @@ from core.step_phase import (
     step_count_launch,
     step_count_sync,
 )
-# DEVIATION 2645: the RMSNorm row launch geometry arm (core/step_glue.mojo;
-# its launch path is compiled only under -D MOJOLEARN_STEP_GLUE_TRIAL=1).
+# DEVIATION 2645: the RMSNorm row launch geometry arm (core/step_glue.mojo).
+# Its launch path is compiled under -D MOJOLEARN_STEP_GLUE_TRIAL=1, and since
+# DEVIATION 2649 also on a shipped build whose column default carries a rows
+# token (`STEP_GLUE_SHIPPED_ROWS`, NVIDIA only).
 from core.step_glue import (
+    STEP_GLUE_SHIPPED_ROWS,
     STEP_GLUE_TRIAL,
     step_glue_arm_from_env,
     step_glue_blocks,
@@ -1465,11 +1468,12 @@ def llama_rms_norm(
     # the same kernel at that many threads per block. The kernel owns one
     # token row per thread and reads `block_dim` only to index its row, so
     # every geometry covering [0, m) computes the same bits. On a build
-    # without -D MOJOLEARN_STEP_GLUE_TRIAL=1 the two values below are the
-    # shipped `_grid(m)` and `LLAMA_TPB`.
+    # without the trial define and without a column default carrying a rows
+    # token (DEVIATION 2649) the two values below are the shipped `_grid(m)`
+    # and `LLAMA_TPB`.
     var norm_blocks = _grid(m)
     var norm_threads = LLAMA_TPB
-    comptime if STEP_GLUE_TRIAL:
+    comptime if STEP_GLUE_TRIAL or STEP_GLUE_SHIPPED_ROWS:
         var glue_rows = step_glue_rows_of(step_glue_arm_from_env())
         if glue_rows > 0:
             norm_blocks = step_glue_blocks(m, glue_rows)

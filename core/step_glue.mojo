@@ -3,12 +3,23 @@
 """DEVIATIONS 2645 to 2648: the byte LM step glue arms
 (docs/lanes/BRIEF_step_glue_2026-09-11.md).
 
-EVERY NEW LAUNCH PATH BEHIND THESE HELPERS IS COMPILED ONLY UNDER
-`-D MOJOLEARN_STEP_GLUE_TRIAL=1` (`comptime STEP_GLUE_TRIAL`). On a build
-without the define `step_glue_arm_from_env()` returns `STEP_GLUE_SHIPPED`
-without reading the environment and `step_glue_sabotage()` returns False,
-and every caller guards its new branch with `comptime if STEP_GLUE_TRIAL`,
-so a shipped build compiles the shipped launches only.
+WHICH BUILDS COMPILE THE GLUE LAUNCHES (DEVIATION 2649 changed this). Until
+that deviation every new launch path here was compiled only under
+`-D MOJOLEARN_STEP_GLUE_TRIAL=1` (`comptime STEP_GLUE_TRIAL`). It is now
+compiled under the trial define OR on a shipped build whose COLUMN DEFAULT
+carries the matching bits, which is how the NVIDIA winner reaches the
+shipped path: `step_glue_default_arm_for` in checks/kernel_matrix.mojo is
+the routing row, `STEP_GLUE_ARM_DEFAULT` is this column's word, and the two
+predicates `STEP_GLUE_SHIPPED_UPDATE` and `STEP_GLUE_SHIPPED_ROWS` are what
+each caller ORs into its `comptime if`. On a build that is neither,
+`step_glue_arm_from_env()` returns `STEP_GLUE_ARM_DEFAULT` (which is
+`STEP_GLUE_SHIPPED`, 0, on every column but NVIDIA) without reading the
+environment, so that build compiles the shipped launches only, exactly as
+before.
+
+`step_glue_sabotage()` is NOT part of that widening. It stays False on
+every build without the trial define, so a shipped build never takes the
+floor in `step_glue_blocks` and never reads the sabotage variable.
 
 THE ARM NAME. `MOJOLEARN_STEP_GLUE_ARM` is `shipped` (or unset or empty),
 or tokens in this order joined by `_`:
@@ -39,6 +50,16 @@ Nothing here reads or writes a device buffer.
 from std.os import getenv
 from std.sys.compile import is_defined
 
+# DEVIATION 2649: the shipped arm comes from the kernel matrix's routing row,
+# so this file names no column. The matrix imports nothing of ours, so there
+# is no cycle (core/ already imports it in eight other files).
+from checks.kernel_matrix import (
+    STEP_GLUE_DEFAULT_WORD_OPTSKIP_NOSHADOW_ROWS16,
+    TARGET_COLUMN,
+    column_max_block_size,
+    step_glue_default_arm_for,
+)
+
 comptime STEP_GLUE_TRIAL = is_defined["MOJOLEARN_STEP_GLUE_TRIAL"]()
 
 comptime STEP_GLUE_SHIPPED = 0
@@ -51,6 +72,24 @@ comptime STEP_GLUE_UPDATE_BITS = 3
 """`optskip | noshadow`: an arm with either bit takes the glue update path."""
 comptime STEP_GLUE_ROWS_BITS = 28
 comptime STEP_GLUE_ALL_BITS = 31
+
+comptime STEP_GLUE_ARM_OPTSKIP_NOSHADOW_ROWS16 = (
+    STEP_GLUE_OPTSKIP | STEP_GLUE_NOSHADOW | STEP_GLUE_ROWS16
+)
+"""`optskip_noshadow_rows16`: DEVIATIONS 2646, 2647 and 2645 together, the
+arm DEVIATION 2649 flipped on NVIDIA (brief sections 2 and 7)."""
+
+comptime STEP_GLUE_ARM_DEFAULT = step_glue_default_arm_for[TARGET_COLUMN]()
+"""THE SHIPPED ARM for this column, from the kernel matrix ROUTING row
+(DEVIATION 2649). `STEP_GLUE_SHIPPED` (0) on Apple and every column but
+NVIDIA, so those builds are unchanged."""
+
+comptime STEP_GLUE_SHIPPED_UPDATE = (
+    (not STEP_GLUE_TRIAL) and (STEP_GLUE_ARM_DEFAULT & STEP_GLUE_UPDATE_BITS) != 0
+)
+"""DEVIATION 2649: a shipped build whose column default carries `optskip`
+and/or `noshadow`, so `_byte_step_device` takes `_byte_glue_update`. The
+analogue of `ATTN_SHIPPED_BWD_ESTASH` (DEVIATION 2657)."""
 
 
 def step_glue_trial_build() -> Bool:
@@ -84,6 +123,25 @@ def step_glue_rows_of(arm: Int) -> Int:
     if rows == STEP_GLUE_ROWS4:
         return 4
     return 0
+
+
+comptime STEP_GLUE_DEFAULT_ROWS = step_glue_rows_of(STEP_GLUE_ARM_DEFAULT)
+"""The default arm's RMSNorm threads per block, 0 for the shipped 128."""
+
+comptime STEP_GLUE_ROWS_FIT = (
+    STEP_GLUE_DEFAULT_ROWS == 0
+    or STEP_GLUE_DEFAULT_ROWS <= column_max_block_size(TARGET_COLUMN)
+)
+"""The fit predicate, the analogue of `ATTN_ES_FITS` (DEVIATION 2657): the
+default's block is inside this column's dispatch cap. Every rows token is a
+small power of two, so this holds on every column today; it is written down
+so a future rows token cannot silently name a geometry a column refuses."""
+
+comptime STEP_GLUE_SHIPPED_ROWS = (
+    (not STEP_GLUE_TRIAL) and STEP_GLUE_DEFAULT_ROWS != 0 and STEP_GLUE_ROWS_FIT
+)
+"""DEVIATION 2649: a shipped build whose column default carries a rows
+token, so the two RMSNorm row launchers use it."""
 
 
 def step_glue_arm_name(arm: Int) -> String:
@@ -127,9 +185,36 @@ def step_glue_arm_parse(name: String) raises -> Int:
 def step_glue_arm_from_env() raises -> Int:
     """The glue arm for THIS call, read on the host. Trial builds read
     `MOJOLEARN_STEP_GLUE_ARM` (raising on an invalid name); every other
-    build returns `STEP_GLUE_SHIPPED` without reading the environment."""
+    build returns `STEP_GLUE_ARM_DEFAULT`, its column's shipped word, without
+    reading the environment (DEVIATION 2649; it was the literal
+    `STEP_GLUE_SHIPPED` before that deviation, which is what the word still
+    is on every column but NVIDIA).
+
+    The early return matters for more than clarity: the two RMSNorm
+    launchers call this ONCE PER LAUNCH, so a shipped build must not reach
+    `getenv` or the 32-iteration name search below.
+
+    Every launcher calls this, so the build-time contract of the routing row
+    is asserted here, the way `fused_attention_arm_from_env` asserts the
+    attention words."""
+    comptime assert (
+        STEP_GLUE_DEFAULT_WORD_OPTSKIP_NOSHADOW_ROWS16
+        == STEP_GLUE_ARM_OPTSKIP_NOSHADOW_ROWS16
+    ), (
+        "checks/kernel_matrix.mojo STEP_GLUE_DEFAULT_WORD_OPTSKIP_NOSHADOW_ROWS16"
+        " no longer spells this file's optskip_noshadow_rows16 bits"
+        " (DEVIATION 2649); fix the literal there"
+    )
+    comptime assert step_glue_arm_valid(STEP_GLUE_ARM_DEFAULT), (
+        "step_glue_default_arm_for names a word the parser cannot produce"
+    )
+    comptime assert STEP_GLUE_TRIAL or STEP_GLUE_ROWS_FIT, (
+        "step_glue_default_arm_for names a rows token past this column's"
+        " dispatch cap; the shipped build would launch a geometry the vendor"
+        " refuses"
+    )
     comptime if not STEP_GLUE_TRIAL:
-        return STEP_GLUE_SHIPPED
+        return STEP_GLUE_ARM_DEFAULT
     return step_glue_arm_parse(String(getenv("MOJOLEARN_STEP_GLUE_ARM")))
 
 

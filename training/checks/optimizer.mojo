@@ -693,8 +693,12 @@ def adam_update_oop_kernel(
     decay_mul: Float32,
 ):
     """DEVIATION 2647 (docs/lanes/BRIEF_step_glue_2026-09-11.md section
-    4.3), TRIAL ONLY: launched solely by `training/byte_lm.mojo` under
-    `-D MOJOLEARN_STEP_GLUE_TRIAL=1`, never by a shipped build.
+    4.3): launched by `training/byte_lm.mojo` under
+    `-D MOJOLEARN_STEP_GLUE_TRIAL=1`, and since DEVIATION 2649 also on a
+    shipped build whose column default carries `noshadow`, which is the
+    NVIDIA default and no other column's. It was compiled into every build
+    before that deviation too (byte_lm.mojo imports it unconditionally);
+    what changed is that a shipped NVIDIA build now REACHES it.
 
     `adam_update_kernel`'s CLEAN path, seam for seam, reading element `i`
     of `param`, `grad`, `m_state`, `v_state` and writing element `i` of

@@ -942,6 +942,36 @@ def attn_default_arm_for[column: Int]() -> Int:
     return ATTN_DEFAULT_WORD_STASH_TILED
 
 
+comptime STEP_GLUE_DEFAULT_WORD_SHIPPED = 0
+comptime STEP_GLUE_DEFAULT_WORD_OPTSKIP_NOSHADOW_ROWS16 = 7
+"""The step glue arm word `optskip_noshadow_rows16`: bits 1 (optskip, DEVIATION 2646), 2 (noshadow, DEVIATION 2647) and 4 (rows16, DEVIATION 2645) of core/step_glue.mojo = 7. The matrix cannot import that file (it imports this one), so the word is a literal here and core/step_glue.mojo asserts at build time that it equals its own composition (`STEP_GLUE_ARM_OPTSKIP_NOSHADOW_ROWS16`)."""
+
+
+def step_glue_default_arm_for[column: Int]() -> Int:
+    """ROUTING row (DEVIATION 2649, 2026-09-12; brief docs/lanes/BRIEF_step_glue_2026-09-11.md sections 2, 4 and 5): the step glue arm word the SHIPPED build runs on this column (`STEP_GLUE_ARM_DEFAULT` in core/step_glue.mojo; a `-D MOJOLEARN_STEP_GLUE_TRIAL=1` build runs it when MOJOLEARN_STEP_GLUE_ARM is unset and keeps every other arm selectable by name). Every arm is bit-equal to the shipped step by the identity arguments of brief sections 4.1, 4.2 and 4.3 and refuses the same inputs by section 5, so this row picks a schedule and never a result. NVIDIA `optskip_noshadow_rows16`, MEASURED (the body names the evidence and the verdict). Apple and every other column `shipped`, unmeasured as a price. `-D MOJOLEARN_STEP_GLUE_DEFAULT_EVERY_COLUMN=1` returns the NVIDIA word on every column, so a no-trial build on a Mac reaches the shipped glue branch; this is how the M4 gates that branch, since Apple's own default carries no glue bit. A check knob, the `MOJOLEARN_EXPERIMENTAL_SMALLK_IDENTICAL` pattern; never a shipped build."""
+    comptime if is_defined["MOJOLEARN_STEP_GLUE_DEFAULT_EVERY_COLUMN"]():
+        return STEP_GLUE_DEFAULT_WORD_OPTSKIP_NOSHADOW_ROWS16
+    if column == COLUMN_NVIDIA:
+        # DEVIATION 2649. Measured 2026-09-11 on a RunPod H100 80GB HBM3,
+        # commit 030079af, one pod and one heat window, against the same
+        # build's `shipped` arm
+        # (bench/results/e1g/2026-09-11_215139-nvidia-h100-80gb-hbm3-step-glue):
+        #   verdict optskip_noshadow_rows16 FLIP geomean=0.9723
+        #   enwik8=0.9744 pilegithub=0.9703 witnesses_equal_shipped=True
+        # Lean step 0.2911 / 0.2921 -> 0.2837 / 0.2834 s (enwik8 / Pile
+        # GitHub). Attribution on the same box (timers build,
+        # timing_witnesses_equal=True), enwik8, ms: fwd.norm1 3.068 -> 1.554,
+        # fwd.norm2 3.077 -> 1.562, grad.norm1_kernels 2.026 -> 1.399,
+        # grad.norm2_kernels 2.038 -> 1.393, and step.shadow_copy (2.309) and
+        # step.opt_refuse_scan (2.175) gone; the optimizer, the scans and the
+        # packing are unchanged to within 0.013 ms. The runners-up on the same
+        # leg all FLIP too: optskip_noshadow_rows8 0.9734, optskip_noshadow
+        # 0.9849, rows16 0.9852, rows8 0.9873. ENGINEERING_RULES 9 takes the
+        # winner.
+        return STEP_GLUE_DEFAULT_WORD_OPTSKIP_NOSHADOW_ROWS16
+    return STEP_GLUE_DEFAULT_WORD_SHIPPED
+
+
 def knn_warpsort_select_for[column: Int, identical: Bool]() -> Bool:
     """SCHEDULING row (DEVIATION 1922): whether the k-NN TILED path's selector is the implemented RAFT WARPSORT (`select_warpsort.mojo`, `warpsort_topk_block_kernel`) instead of the implemented RAFT radix (`select_radix.mojo`) for `2 < k <= 256`."""
     comptime if identical:

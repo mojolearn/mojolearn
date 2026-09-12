@@ -1,12 +1,18 @@
 # Step glue lane: the byte LM step outside GEMM and attention (DEVIATIONS 2645 to 2648)
 
-Source-only lane, September 11, 2026, IDENTICAL only. STATUS: WRITTEN
-(every file in section 10), NOT BUILT, NOT RUN. The lane was wound down half
-written and resumed the same day on Andrew's order; main was merged in at
-4dc4346a (the attention `_estash` work) with no conflict. Nothing here was compiled or run on the Mac or on a GPU. The
-orchestrator's M4 build is the first compile (section 8), then one NVIDIA
-H100 leg (section 7). DEVIATIONS 2645 to 2648 are this lane's; 2649 is
-reserved and unused.
+Source-only lane, September 11, 2026, IDENTICAL only. STATUS: BUILT, RUN,
+MEASURED AND FLIPPED (section 11). The lane was wound down half written and
+resumed the same day on Andrew's order; main was merged in at 4dc4346a (the
+attention `_estash` work) with no conflict.
+
+**THIS PARAGRAPH USED TO SAY "NOT BUILT, NOT RUN" AND "DEVIATION 2649 IS
+RESERVED AND UNUSED". BOTH ARE NOW FALSE AND THE CORRECTION IS THE POINT.**
+It read that way while the code was unbuilt; the M4 compiled it, the H100
+leg of section 7 ran every arm on 2026-09-11 (commit 030079af), and
+DEVIATION 2649 flipped the winner into the shipped NVIDIA path on
+2026-09-12. Section 11 is the record.
+
+DEVIATIONS 2645 to 2648 are this lane's arms; 2649 is the flip.
 
 Branch `lane/step-glue-h100` (from origin/main 36ca51fd).
 
@@ -449,3 +455,114 @@ GPU box only (tools/macos_serial_guard.py admits tiny jobs only).
 - `python/mojolearn/_byte_lm_impl.py`, `tools/lm_step_memory_probe.py`
   (the arm in `run_metadata` and `result.json`)
 - `training/checks/step_glue_check.mojo` (new), `tools/step_glue_leg.sh` (new)
+
+## 11. The leg, the flip and the shipped branch (2026-09-11 and 12, measured): DEVIATION 2649
+
+THE LEG. RunPod NVIDIA H100 80GB HBM3, pod zlzx4eqhs62ahx, commit 030079af,
+one pod and one heat window, every arm timed against the SAME build's
+`shipped` arm. Evidence
+`bench/results/e1g/2026-09-11_215139-nvidia-h100-80gb-hbm3-step-glue`.
+
+| arm | enwik8 | pilegithub | geomean |
+|---|---:|---:|---:|
+| `optskip_noshadow` | 0.9846 | 0.9852 | 0.9849 |
+| `rows16` | 0.9853 | 0.9851 | 0.9852 |
+| `rows8` | 0.9887 | 0.9859 | 0.9873 |
+| `optskip_noshadow_rows8` | 0.9732 | 0.9737 | 0.9734 |
+| `optskip_noshadow_rows16` | 0.9744 | 0.9703 | **0.9723** |
+
+Every arm FLIPs. `witnesses_equal_shipped=True` on every arm and both
+corpora, `arm_named=True`, drift arm 1.0054 over the window, all 26 stages
+exit 0. Lean step 0.2911 / 0.2921 -> 0.2837 / 0.2834 s. ENGINEERING RULES 9
+takes the winner, `optskip_noshadow_rows16`.
+
+Attribution accounts for the whole 8.0 ms (timers build, same box,
+`timing_witnesses_equal=True`), enwik8, ms: `fwd.norm1` 3.068 -> 1.554,
+`fwd.norm2` 3.077 -> 1.562, `grad.norm1_kernels` 2.026 -> 1.399,
+`grad.norm2_kernels` 2.038 -> 1.393, and `step.shadow_copy` (2.309) and
+`step.opt_refuse_scan` (2.175) gone. The optimizer, the scans and the
+packing are unchanged to within 0.013 ms. Section 1.2's risk (the runtime
+packing 16-thread blocks so the rows arms read 1.00) did not happen.
+
+THE SHIPPED BRANCH (what the flip owed, the DEVIATION 2657 shape). The arms
+were reachable only under `-D MOJOLEARN_STEP_GLUE_TRIAL=1`, and
+`step_glue_arm_from_env` opened with `comptime if not STEP_GLUE_TRIAL:
+return STEP_GLUE_SHIPPED`, so moving a default alone would have changed
+nothing at all. DEVIATION 2649 adds:
+
+- `step_glue_default_arm_for` in `checks/kernel_matrix.mojo`, the ROUTING
+  row, with the word literal `STEP_GLUE_DEFAULT_WORD_OPTSKIP_NOSHADOW_ROWS16`
+  (7) and the check knob `MOJOLEARN_STEP_GLUE_DEFAULT_EVERY_COLUMN`. NVIDIA
+  returns the winner; every other column returns `shipped`, so Apple and AMD
+  are unmoved by construction.
+- `STEP_GLUE_ARM_DEFAULT`, `STEP_GLUE_SHIPPED_UPDATE`, `STEP_GLUE_ROWS_FIT`
+  and `STEP_GLUE_SHIPPED_ROWS` in `core/step_glue.mojo`, mirroring
+  `ATTN_ARM_DEFAULT` and `ATTN_SHIPPED_BWD_ESTASH`. The rows constants sit
+  after `step_glue_rows_of` because they call it.
+- `step_glue_arm_from_env` returns `STEP_GLUE_ARM_DEFAULT` instead of the
+  literal `STEP_GLUE_SHIPPED`, and asserts the matrix literal against this
+  file's composition. The early return stays ahead of `getenv`: the two
+  RMSNorm launchers call it once per launch.
+- The three entry points take `comptime if TRIAL or SHIPPED_*`.
+- `step_glue_sabotage()` does NOT widen. It stays trial-only, so a shipped
+  build never takes the floor in `step_glue_blocks`.
+
+A CORRECTNESS HOLE FOUND WHILE BUILDING IT. `_byte_glue_update`'s
+`comptime assert not BYTE_LM_FAULT_INJECT` sat INSIDE
+`comptime if STEP_GLUE_TRIAL`. A shipped glue build would have reached the
+glue update with that refusal silently gone, and section 5.2's `optskip`
+argument depends on it: the `opt_refuse` fault site writes `m_state`
+between the shadow copy and the optimizer, which is the one write the
+argument excludes. Both that assert and the `OPT_RECORD_INTERMEDIATES` one
+now carry the same two-part condition as the path they guard.
+
+THE M4 GATES (2026-09-12, on origin/main 5b7e1e41 plus the flip, one build
+at a time):
+
+1. `transformer_backward_check`, no trial define, knob ON: PASS, 17 cases,
+   37/37 stages bit-identical to the oracle on all 412,172 cells. The rows
+   branch is compiled into a SHIPPED build and changes no bit.
+2. The same check with no knob: PASS, identical clause line. The Apple
+   default is untouched.
+3. `transformer_fused_check`, no trial define, knob ON: PASS, 15 cases,
+   every compared buffer bit-identical.
+4. `step_glue_check` under `-D MOJOLEARN_STEP_GLUE_TRIAL=1`: PASS (names,
+   norm forward and backward with reach, update with reach, step, refusal,
+   rollback). The 16 trial arms are unchanged by the flip.
+5. The byte LM binding, no trial define, knob ON:
+   `byte_lm_step_glue_arm()` reads back `arm=optskip_noshadow_rows16
+   trial=0`.
+6. The same binding with no knob: `arm=shipped trial=0`.
+
+GATES 5 AND 6 ARE THE EVIDENCE THE KNOB WORKS, AND BINARY HASHES ARE NOT.
+Comparing the knob build against the no-knob build by sha256 looked like a
+clean control and is worthless: a CONTROL REBUILD OF THE SAME CONFIGURATION
+PRODUCED A DIFFERENT HASH, so this compiler's output is not byte
+reproducible and a hash difference carries no information about the define.
+The readback pair does: it is a runtime observation of a comptime constant
+resolving two different ways, and `STEP_GLUE_SHIPPED_ROWS` and
+`STEP_GLUE_SHIPPED_UPDATE` are derived from that same constant.
+
+WHAT THE M4 DID NOT OBSERVE. The 16-thread launch itself. The reach clause
+that names `threads_per_block=16` and `first_moved_row=32` is in
+`step_glue_check`, which refuses a non-trial build by design, so the rows
+geometry was directly observed only on the TRIAL build (on this M4 in gate
+4, and on the H100 during the leg). On a shipped build the chain is
+inferred, though every link is checked: the readback proves the default
+resolves to the winner, `step_glue_rows_of` of that word is 16, the two
+launchers call exactly those two functions, and gates 1 and 3 prove the
+result is bit-identical with the branch compiled in.
+
+WHAT IS NOT CLAIMED. The rows arms move the launch geometry of
+`llama_rms_norm` and `bwd_rms_norm` for EVERY caller on an NVIDIA build,
+including `training/samba_ops.mojo`, which the leg never timed. Bits are
+safe there by section 4.1 (one token row per thread, the fold never leaves
+the thread, `step_glue_blocks` never returns 0), and this is a schedule and
+never a numeric term, but the PRICE on the samba path at 16 threads per
+block is unmeasured. Separately, the flip makes dead code of the shipped
+shadow copy and `identical_optimizer_step` inside `_byte_step_device` on
+NVIDIA without deleting either; both stay compiled, and
+`identical_optimizer_step` is exported and used elsewhere regardless.
+`adam_update_oop_kernel` was already compiled into every build (`byte_lm.mojo`
+imports it unconditionally); what changed is that a shipped NVIDIA build now
+reaches it.
