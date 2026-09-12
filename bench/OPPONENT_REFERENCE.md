@@ -2111,3 +2111,44 @@ The refusal probes behaved as designed: `feature_fraction < 1` with
 cat_features, `permutation_count` without cat_features, and
 `ctr_estimation_permutation_id` without cat_features all raised BY NAME, while
 `cat_features` alone was accepted.
+
+All three policies, dense per-slice codes, 1M rows, 3 rounds:
+
+| policy | ours | CatBoost GPU | XGBoost GPU | ours/CB | cat-path cost |
+|---|---:|---:|---:|---:|---:|
+| SymmetricTree | 11,913 ms (AUC .742155) | 9,883 (.741531) | n/a (1831) | 1.205x | 28.0x |
+| Depthwise | 11,076 ms (.746089) | 10,627 (.746897) | 9,199 (.733105) | 1.042x | 20.4x |
+| Lossguide | 11,543 ms (.746?) | 10,573 | 11,405 (.733626) | 1.092x | 14.3x |
+
+XGBoost's Depthwise speed is not a like-for-like win: 9,199 ms at AUC 0.733105,
+against our 0.746089 and essentially equal to our own NUMERIC arm's 0.732205.
+On these columns it is not doing comparable categorical work.
+
+### DEVIATION 2634 on criteo: MEASURED BUT NOT ATTRIBUTABLE (September 12)
+
+A phase-3 A/B built 2634 ON and OFF from one source (`.so` sha256
+051d2f9a042edc56 and dd87622fd8fad09b, so the two builds genuinely differ) and
+timed SymmetricTree three rounds each:
+
+| build | round 1 | round 2 | round 3 | median |
+|---|---:|---:|---:|---:|
+| 2634 ON | 11,731.8 | 11,790.0 | 11,943.9 | 11,790.0 |
+| 2634 OFF | 12,032.7 | 12,149.5 | 12,045.3 | 12,045.3 |
+
+The bands do not overlap, a 2.1% separation, quality hashes identical
+(45aaef315ad72d45 both sides).
+
+THIS IS NOT REPORTED AS A 2634 RESULT, because the run never observed whether
+the branch under test executed. 2634 gates on
+`len(dependent_configs) > 0 and ctr_prep_wanted` (`gbdt/train.mojo`), where
+`dependent_configs` holds only PERMUTATION-DEPENDENT CTR types. Nothing in the
+logs records `dependent_configs`, the target borders or the binarized target,
+so if that list is empty on criteo then NEITHER build built the prep and the
+2.1% belongs to something else entirely. A number whose mechanism was never
+witnessed is the reached-but-inert trap, and the honest statement is that the
+gap is real and its cause is unknown.
+
+What is owed to close it: emit the CTR config split and a prep-ran/prep-skipped
+marker from the fit, then re-run this A/B. The purpose-built probe
+(`tools/criteo_ours_cat_ab.py`) could not run at all here -- it hit the same
+density refusal -- so it has never priced 2634 either.

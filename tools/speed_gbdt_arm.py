@@ -1006,6 +1006,9 @@ def _decode_criteo(paths):
         uniq, codes = np.unique(col, return_inverse=True)
         x[:, CRITEO_N_INT + j] = codes.astype(np.float32)
         tables_cat[name] = uniq
+    # NOTE: these codes are dense over THE DECODED MATRIX and over no slice of
+    # it. `load_criteo` re-densifies within the train slice; see the comment
+    # there and the audit numbers it cites.
     cat_idx = tuple(range(CRITEO_N_INT, CRITEO_N_INT + CRITEO_N_CAT))
     return x, y, cat_idx, tables_cat
 
@@ -1065,8 +1068,62 @@ def load_criteo(size, rows_cap=None):
         n_train = min(n_train, rows_cap)
     x_train = np.ascontiguousarray(x_all[:n_train])
     y_train = np.ascontiguousarray(y_all[:n_train])
+    x_train, x_te = _criteo_densify_slice(x_train, x_te, cat_idx)
     return Data("criteo", x_train, x_te, y_train, y_te, "binary", 2,
                 cat_idx=cat_idx)
+
+
+def _criteo_densify_slice(x_train, x_test, cat_idx):
+    """Re-rank each categorical column WITHIN the train slice, 0..k-1.
+
+    WHY THIS EXISTS, and why the obvious alternative is wrong.
+    `_decode_criteo` ranks each category over every decoded row, which makes
+    the codes dense over the whole matrix and dense over NO SLICE of it. Our
+    surface requires dense 0..k-1 in the rows that reach `fit`, and
+    `gbdt/train.mojo` refuses otherwise, by name:
+
+        cat_features column 13 is not densely coded: category 1 is absent
+        from 0..621909
+
+    and the refusal is CORRECT. `tools/criteo_density_audit.py` measured it on
+    an H100 (2026-09-12) rather than arguing about it: of 26 declared columns,
+    0 are non-dense over all 3,061,005 decoded rows, but 19 are non-dense over
+    the UNCAPPED train split (386,091 missing codes), 21 at 1,000,000 rows
+    (1,702,570 missing) and 22 at 200,000 (2,592,446 missing). So this is a
+    property of the global ranking, not an artefact of `--rows`: no train/test
+    split of criteo as decoded is densely coded.
+
+    The global ranking was chosen so codes reproduce between runs. It does
+    that, and it is still the wrong basis, because reproducibility of a code
+    that `fit` refuses to accept is worth nothing. Re-ranking per slice keeps
+    what matters -- the mapping is a pure function of the slice's value set
+    via `np.unique`'s sorted order, so the same rung decodes to the same codes
+    every time -- and gives up only cross-RUNG comparability of raw code
+    values, which nothing reads.
+
+    TEST ROWS. A category the train slice never saw has no code. It is mapped
+    to k (one past the train maximum), a single explicit unknown bucket per
+    column, rather than to an arbitrary in-range code that would silently
+    claim to be a category the model had learned. This is a REAL COST and it
+    is large: at 1M train rows the audit's shape put 493,612 of 500,000 test
+    rows carrying at least one unknown category. Quality figures on criteo
+    therefore describe a harder problem than a global-ranking split would, and
+    that belongs beside any number quoted from this loader."""
+    if not cat_idx:
+        return x_train, x_test
+    xtr = np.ascontiguousarray(x_train)
+    xte = np.ascontiguousarray(x_test)
+    for j in cat_idx:
+        uniq, codes = np.unique(xtr[:, j], return_inverse=True)
+        xtr[:, j] = codes.astype(np.float32)
+        # searchsorted gives the train rank; anything not present lands on the
+        # single unknown bucket k. `uniq` is sorted, which is what makes the
+        # lookup well defined.
+        pos = np.searchsorted(uniq, xte[:, j])
+        pos = np.clip(pos, 0, len(uniq) - 1)
+        hit = uniq[pos] == xte[:, j]
+        xte[:, j] = np.where(hit, pos, len(uniq)).astype(np.float32)
+    return xtr, xte
 
 
 def load_dataset(name, size, rows_cap=None):
