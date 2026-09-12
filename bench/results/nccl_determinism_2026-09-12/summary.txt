@@ -1,0 +1,154 @@
+=== stack ===
+  torch: 2.4.1+cu124
+  torch_cuda: 12.4
+  nccl_version: 2.20.5
+  device_name: NVIDIA A40
+
+=== 1. are the inputs order-sensitive at all? ===
+  world=4 float32   n=      256 distinct hashes over 4 summation orders: 4   ORDER MATTERS
+      forward  a2ce5f86122bb1885e5ea895aa6aa90c
+      reverse  d672f25c28a3dea7a236bd2717007292
+      rotate   86797e4dbff705b93487f5cfaadaec79
+      tree     84e565c020829c5de7036bf09bbfcccd
+  world=4 float32   n=   262144 distinct hashes over 4 summation orders: 4   ORDER MATTERS
+      forward  6ccf81f240c468aae5783702812dad26
+      reverse  ba5848d28d5257e15401bcb11c82c604
+      rotate   46ffa38bb069911eb3857b057f3d9103
+      tree     d28d3f96ed22e17e2bc02ed2597797b8
+  world=4 float32   n= 16777216 distinct hashes over 4 summation orders: 4   ORDER MATTERS
+      forward  7be814f7eec6b279515416949c597b4e
+      reverse  d5566f22a13631126b46a7a43172f853
+      rotate   df670a050de1498e6796d891e250beb7
+      tree     4253eee6ffa77fa327ac79255e0941f9
+  world=4 bfloat16  n=      256 distinct hashes over 4 summation orders: 4   ORDER MATTERS
+      forward  8539c1ed706416b2efa06b27a64e30b0
+      reverse  1dd10490607a0ed639e815d2668c3f04
+      rotate   eff66263363d19b39efcebcf0af021e5
+      tree     a3a5acacd10b5681e2b6f58d7eb02162
+  world=4 bfloat16  n=   262144 distinct hashes over 4 summation orders: 4   ORDER MATTERS
+      forward  4e1c28f4e9df9af1494ddf7eaf52f5a5
+      reverse  85a4f49de6ff731132d57b726eed2238
+      rotate   6a2e2e8938119f97486bf05bd9abe411
+      tree     73e89bd752a42692644fd7948eab5046
+  world=4 bfloat16  n= 16777216 distinct hashes over 4 summation orders: 4   ORDER MATTERS
+      forward  71effd22f8b0e57ef657707f1e186a63
+      reverse  564b61f9f42b236ab5c667309a096059
+      rotate   e68f4ea5af5675a7076293ad82620f71
+      tree     d895a00e684cb8b5a1fd6991789a7427
+  world=2 float32   n=      256 distinct hashes over 4 summation orders: 1   BENIGN -- verdicts void
+      forward  a011700f48991506f73a4b8b774f5374
+      reverse  a011700f48991506f73a4b8b774f5374
+      rotate   a011700f48991506f73a4b8b774f5374
+      tree     a011700f48991506f73a4b8b774f5374
+  world=2 float32   n=   262144 distinct hashes over 4 summation orders: 1   BENIGN -- verdicts void
+      forward  cea1c6dda8afcd6b188339e66ade0b1e
+      reverse  cea1c6dda8afcd6b188339e66ade0b1e
+      rotate   cea1c6dda8afcd6b188339e66ade0b1e
+      tree     cea1c6dda8afcd6b188339e66ade0b1e
+  world=2 float32   n= 16777216 distinct hashes over 4 summation orders: 1   BENIGN -- verdicts void
+      forward  0db7ca6d6194766d3cfda5cda538c70b
+      reverse  0db7ca6d6194766d3cfda5cda538c70b
+      rotate   0db7ca6d6194766d3cfda5cda538c70b
+      tree     0db7ca6d6194766d3cfda5cda538c70b
+  world=2 bfloat16  n=      256 distinct hashes over 4 summation orders: 1   BENIGN -- verdicts void
+      forward  dd504723c7c414527521f7c236e26a60
+      reverse  dd504723c7c414527521f7c236e26a60
+      rotate   dd504723c7c414527521f7c236e26a60
+      tree     dd504723c7c414527521f7c236e26a60
+  world=2 bfloat16  n=   262144 distinct hashes over 4 summation orders: 1   BENIGN -- verdicts void
+      forward  4369d5ffe4ddf4439ecc7460ff393f4e
+      reverse  4369d5ffe4ddf4439ecc7460ff393f4e
+      rotate   4369d5ffe4ddf4439ecc7460ff393f4e
+      tree     4369d5ffe4ddf4439ecc7460ff393f4e
+  world=2 bfloat16  n= 16777216 distinct hashes over 4 summation orders: 1   BENIGN -- verdicts void
+      forward  8c9836766a2d0f267765d8ff73dc1581
+      reverse  8c9836766a2d0f267765d8ff73dc1581
+      rotate   8c9836766a2d0f267765d8ff73dc1581
+      tree     8c9836766a2d0f267765d8ff73dc1581
+
+=== 2. does one process vary run to run? ===
+  168 configurations x their iterations; 0 produced more than one distinct result hash
+
+=== 3. stable across process restarts? (same config, run a vs run b) ===
+  84 config/dtype/size cells identical across restarts, 0 different
+
+=== 4. do the knobs change the bits? (per dtype and size) ===
+  world=2 bfloat16  n=      256 (512 bytes): 1 distinct result(s) over 8 configurations
+      dd504723c7c414527521f7c236e26a60  RingSimple_w2_a, RingSimple_w2_b, TreeSimple_w2_a, TreeSimple_w2_b, autow2p2p_w2_a, autow2p2p_w2_b, autow2shm_w2_a, autow2shm_w2_b
+  world=4 bfloat16  n=      256 (512 bytes): 2 distinct result(s) over 18 configurations
+      eff66263363d19b39efcebcf0af021e5  RingLL128_w4_a, RingLL128_w4_b, RingLL_w4_a, RingLL_w4_b, RingSimple_w4_a, RingSimple_w4_b, auto_full_w4_a, auto_full_w4_b, chan1_w4_a, chan1_w4_b, chan2_w4_a, chan2_w4_b
+      1dd10490607a0ed639e815d2668c3f04  TreeLL128_w4_a, TreeLL128_w4_b, TreeLL_w4_a, TreeLL_w4_b, TreeSimple_w4_a, TreeSimple_w4_b
+  world=4 bfloat16  n=    16384 (32768 bytes): 1 distinct result(s) over 2 configurations
+      976dc8739ae4b54d6fed41cd94ff8ac9  auto_full_w4_a, auto_full_w4_b
+  world=2 bfloat16  n=   262144 (524288 bytes): 1 distinct result(s) over 8 configurations
+      4369d5ffe4ddf4439ecc7460ff393f4e  RingSimple_w2_a, RingSimple_w2_b, TreeSimple_w2_a, TreeSimple_w2_b, autow2p2p_w2_a, autow2p2p_w2_b, autow2shm_w2_a, autow2shm_w2_b
+  world=4 bfloat16  n=   262144 (524288 bytes): 5 distinct result(s) over 18 configurations
+      1b0111b9f7616e80711deaf0b7db4288  RingLL128_w4_a, RingLL128_w4_b
+      abce11735b238c7b22ddfb892833b629  RingLL_w4_a, RingLL_w4_b
+      db21bd8b71ba045e56ec8c8dd34c4e2d  RingSimple_w4_a, RingSimple_w4_b, auto_full_w4_a, auto_full_w4_b, chan2_w4_a, chan2_w4_b
+      ce19b0fd19dcf836a5c15ca2a68d2852  TreeLL128_w4_a, TreeLL128_w4_b, TreeLL_w4_a, TreeLL_w4_b, TreeSimple_w4_a, TreeSimple_w4_b
+      c46226d84cf799c95cf330355d81632f  chan1_w4_a, chan1_w4_b
+  world=4 bfloat16  n=  2097152 (4194304 bytes): 1 distinct result(s) over 2 configurations
+      e34edfde2b75f1d1120fdfbcee699612  auto_full_w4_a, auto_full_w4_b
+  world=2 bfloat16  n= 16777216 (33554432 bytes): 1 distinct result(s) over 8 configurations
+      8c9836766a2d0f267765d8ff73dc1581  RingSimple_w2_a, RingSimple_w2_b, TreeSimple_w2_a, TreeSimple_w2_b, autow2p2p_w2_a, autow2p2p_w2_b, autow2shm_w2_a, autow2shm_w2_b
+  world=4 bfloat16  n= 16777216 (33554432 bytes): 4 distinct result(s) over 18 configurations
+      047adefbf29cbd03a13f3e0af7bff069  RingLL128_w4_a, RingLL128_w4_b
+      1513d934142ac39978709d353066a563  RingLL_w4_a, RingLL_w4_b
+      6f9ed5b4d4e5efeed5f4cd9d4f4643db  RingSimple_w4_a, RingSimple_w4_b, auto_full_w4_a, auto_full_w4_b, chan1_w4_a, chan1_w4_b, chan2_w4_a, chan2_w4_b
+      aae6c7ed6c08a77cc7e2913276eafd23  TreeLL128_w4_a, TreeLL128_w4_b, TreeLL_w4_a, TreeLL_w4_b, TreeSimple_w4_a, TreeSimple_w4_b
+  world=4 bfloat16  n= 67108864 (134217728 bytes): 1 distinct result(s) over 2 configurations
+      fce8aea0201e991687dbdb9775c285a3  auto_full_w4_a, auto_full_w4_b
+  world=2 float32   n=      256 (1024 bytes): 1 distinct result(s) over 8 configurations
+      a011700f48991506f73a4b8b774f5374  RingSimple_w2_a, RingSimple_w2_b, TreeSimple_w2_a, TreeSimple_w2_b, autow2p2p_w2_a, autow2p2p_w2_b, autow2shm_w2_a, autow2shm_w2_b
+  world=4 float32   n=      256 (1024 bytes): 3 distinct result(s) over 18 configurations
+      86797e4dbff705b93487f5cfaadaec79  RingLL128_w4_a, RingLL128_w4_b, RingSimple_w4_a, RingSimple_w4_b
+      516e18249a6d3dab1f7e866087a1c963  RingLL_w4_a, RingLL_w4_b, auto_full_w4_a, auto_full_w4_b, chan1_w4_a, chan1_w4_b, chan2_w4_a, chan2_w4_b
+      d8f588694ab73a9d192c348944c90a1b  TreeLL128_w4_a, TreeLL128_w4_b, TreeLL_w4_a, TreeLL_w4_b, TreeSimple_w4_a, TreeSimple_w4_b
+  world=4 float32   n=    16384 (65536 bytes): 1 distinct result(s) over 2 configurations
+      6112dab17b51e2b06bd52155c29f8e7f  auto_full_w4_a, auto_full_w4_b
+  world=2 float32   n=   262144 (1048576 bytes): 1 distinct result(s) over 8 configurations
+      cea1c6dda8afcd6b188339e66ade0b1e  RingSimple_w2_a, RingSimple_w2_b, TreeSimple_w2_a, TreeSimple_w2_b, autow2p2p_w2_a, autow2p2p_w2_b, autow2shm_w2_a, autow2shm_w2_b
+  world=4 float32   n=   262144 (1048576 bytes): 5 distinct result(s) over 18 configurations
+      24ffdcdfa17a03f8eeb61141f2b43a3d  RingLL128_w4_a, RingLL128_w4_b
+      240e1e8dd420204cfd02db1b9e50b95c  RingLL_w4_a, RingLL_w4_b
+      722d602fced81bb0a4b7ee94884166c2  RingSimple_w4_a, RingSimple_w4_b, auto_full_w4_a, auto_full_w4_b, chan2_w4_a, chan2_w4_b
+      d70f1e644ce529b651a2341dc0bfdd64  TreeLL128_w4_a, TreeLL128_w4_b, TreeLL_w4_a, TreeLL_w4_b, TreeSimple_w4_a, TreeSimple_w4_b
+      38ba3e8a60b16c6d6f45917d582b411d  chan1_w4_a, chan1_w4_b
+  world=4 float32   n=  2097152 (8388608 bytes): 1 distinct result(s) over 2 configurations
+      72ec879ade3779e77831d3d50a03ab01  auto_full_w4_a, auto_full_w4_b
+  world=2 float32   n= 16777216 (67108864 bytes): 1 distinct result(s) over 8 configurations
+      0db7ca6d6194766d3cfda5cda538c70b  RingSimple_w2_a, RingSimple_w2_b, TreeSimple_w2_a, TreeSimple_w2_b, autow2p2p_w2_a, autow2p2p_w2_b, autow2shm_w2_a, autow2shm_w2_b
+  world=4 float32   n= 16777216 (67108864 bytes): 4 distinct result(s) over 18 configurations
+      fc0eaf5b930a9c47dd2ab7632a879009  RingLL128_w4_a, RingLL128_w4_b
+      41c37aca6180136382ba00a52919f5af  RingLL_w4_a, RingLL_w4_b
+      b05c421e0d9eb287f06a2c468877c30c  RingSimple_w4_a, RingSimple_w4_b, auto_full_w4_a, auto_full_w4_b, chan1_w4_a, chan1_w4_b, chan2_w4_a, chan2_w4_b
+      3666ac3ee611469b288fec6f31d4bc91  TreeLL128_w4_a, TreeLL128_w4_b, TreeLL_w4_a, TreeLL_w4_b, TreeSimple_w4_a, TreeSimple_w4_b
+  world=4 float32   n= 67108864 (268435456 bytes): 1 distinct result(s) over 2 configurations
+      a119eee090133688cc85a112f3eed6ad  auto_full_w4_a, auto_full_w4_b
+
+=== 5. the price of a fixed-order all-reduce ===
+  float32   n=      256 (      1024 B)  nccl    0.485 ms   fixed-order     0.952 ms      1.97x   same bits as nccl: False
+  float32   n=    16384 (     65536 B)  nccl    0.317 ms   fixed-order     0.575 ms      1.81x   same bits as nccl: False
+  float32   n=   262144 (   1048576 B)  nccl    0.417 ms   fixed-order     0.607 ms      1.45x   same bits as nccl: False
+  float32   n=  2097152 (   8388608 B)  nccl    2.452 ms   fixed-order     2.757 ms      1.12x   same bits as nccl: False
+  float32   n= 16777216 (  67108864 B)  nccl   18.963 ms   fixed-order    20.237 ms      1.07x   same bits as nccl: False
+  float32   n= 67108864 ( 268435456 B)  nccl   74.103 ms   fixed-order    80.268 ms      1.08x   same bits as nccl: False
+  bfloat16  n=      256 (       512 B)  nccl    0.111 ms   fixed-order     0.235 ms      2.12x   same bits as nccl: False
+  bfloat16  n=    16384 (     32768 B)  nccl    0.119 ms   fixed-order     0.244 ms      2.04x   same bits as nccl: False
+  bfloat16  n=   262144 (    524288 B)  nccl    0.265 ms   fixed-order     0.386 ms      1.46x   same bits as nccl: False
+  bfloat16  n=  2097152 (   4194304 B)  nccl    1.252 ms   fixed-order     1.508 ms      1.20x   same bits as nccl: False
+  bfloat16  n= 16777216 (  33554432 B)  nccl    9.137 ms   fixed-order    10.231 ms      1.12x   same bits as nccl: False
+  bfloat16  n= 67108864 ( 134217728 B)  nccl   35.943 ms   fixed-order    40.212 ms      1.12x   same bits as nccl: False
+  float32   n=      256 (      1024 B)  nccl    0.413 ms   fixed-order     0.619 ms      1.50x   same bits as nccl: True
+  float32   n=    16384 (     65536 B)  nccl    0.326 ms   fixed-order     0.478 ms      1.47x   same bits as nccl: True
+  float32   n=   262144 (   1048576 B)  nccl    0.256 ms   fixed-order     0.380 ms      1.48x   same bits as nccl: True
+  float32   n=  2097152 (   8388608 B)  nccl    0.871 ms   fixed-order     1.136 ms      1.30x   same bits as nccl: True
+  float32   n= 16777216 (  67108864 B)  nccl    6.415 ms   fixed-order     7.492 ms      1.17x   same bits as nccl: True
+  float32   n= 67108864 ( 268435456 B)  nccl   25.316 ms   fixed-order    29.603 ms      1.17x   same bits as nccl: True
+  bfloat16  n=      256 (       512 B)  nccl    0.112 ms   fixed-order     0.179 ms      1.60x   same bits as nccl: True
+  bfloat16  n=    16384 (     32768 B)  nccl    0.108 ms   fixed-order     0.176 ms      1.63x   same bits as nccl: True
+  bfloat16  n=   262144 (    524288 B)  nccl    0.159 ms   fixed-order     0.238 ms      1.49x   same bits as nccl: True
+  bfloat16  n=  2097152 (   4194304 B)  nccl    0.485 ms   fixed-order     0.710 ms      1.46x   same bits as nccl: True
+  bfloat16  n= 16777216 (  33554432 B)  nccl    3.219 ms   fixed-order     3.826 ms      1.19x   same bits as nccl: True
+  bfloat16  n= 67108864 ( 134217728 B)  nccl   12.590 ms   fixed-order    14.850 ms      1.18x   same bits as nccl: True

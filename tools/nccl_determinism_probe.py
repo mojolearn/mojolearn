@@ -53,6 +53,24 @@ def bit_hash(t):
     return hashlib.sha256(b).hexdigest()[:32]
 
 
+def gather_to_zero(src, gathered, world, rank):
+    """Every rank's buffer on rank 0, by point-to-point send/recv.
+
+    Deliberately not the gather collective: the NCCL backend's support for it
+    varies by torch version, and irecv/isend moves the same bytes with the
+    transfers overlapped, so the fixed-order arm is not handicapped by a
+    serialized gather.
+    """
+    if rank == 0:
+        gathered[0].copy_(src)
+        reqs = [dist.irecv(gathered[i], src=i) for i in range(1, world)]
+        for q in reqs:
+            q.wait()
+    else:
+        dist.isend(src, dst=0).wait()
+    torch.cuda.synchronize()
+
+
 def make_input(rank, n, dtype, seed):
     """Deterministic per-rank buffer with magnitudes spread over 24 decades.
 
@@ -113,7 +131,7 @@ def mode_oracle(args, dtype, n, tag):
     rank, world = dist.get_rank(), dist.get_world_size()
     src = make_input(rank, n, dtype, args.seed).cuda()
     gathered = [torch.empty_like(src) for _ in range(world)] if rank == 0 else None
-    dist.gather(src, gathered, dst=0)
+    gather_to_zero(src, gathered, world, rank)
     if rank == 0:
         orders = {
             "forward": list(range(world)),
@@ -146,7 +164,7 @@ def det_allreduce(src, buf, gathered, world, rank):
     topology, message size or NCCL's algorithm choice, so its bits are a
     function of the inputs alone.
     """
-    dist.gather(src, gathered if rank == 0 else None, dst=0)
+    gather_to_zero(src, gathered, world, rank)
     if rank == 0:
         buf.copy_(gathered[0])
         for i in range(1, world):

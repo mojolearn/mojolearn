@@ -68,12 +68,14 @@ def main():
     print("\n=== 4. do the knobs change the bits? (per dtype and size) ===")
     cells = collections.defaultdict(dict)
     for r in hh:
-        cells[(r["dtype"], r["elements"])][r["case"]] = r["result_hash"]
-    for (dtype, n), d in sorted(cells.items(), key=lambda kv: (kv[0][0], kv[0][1])):
+        # World size is part of the key: fewer ranks reduce fewer buffers, so a
+        # different hash there is arithmetic, not an algorithm choice.
+        cells[(r["dtype"], r["elements"], r["world_size"])][r["case"]] = r["result_hash"]
+    for (dtype, n, world), d in sorted(cells.items(), key=lambda kv: kv[0]):
         groups = collections.defaultdict(list)
         for case, h in sorted(d.items()):
             groups[h].append(case)
-        print(f"  {dtype:9s} n={n:>9} ({n * (4 if dtype == 'float32' else 2)} bytes): "
+        print(f"  world={world} {dtype:9s} n={n:>9} ({n * (4 if dtype == 'float32' else 2)} bytes): "
               f"{len(groups)} distinct result(s) over {len(d)} configurations")
         for h, cases in sorted(groups.items(), key=lambda kv: kv[1][0]):
             print(f"      {h}  {', '.join(cases)}")
