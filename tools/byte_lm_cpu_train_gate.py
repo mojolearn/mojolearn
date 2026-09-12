@@ -45,8 +45,8 @@ Exit 0: every comparison equal. 1: any difference. 2: the gate could not run.
 """
 import argparse
 import hashlib
+import importlib.util
 import json
-import math
 import struct
 import sys
 import time
@@ -54,6 +54,17 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 RESUME = ROOT / 'bench/results/resume'
+
+# DEVIATION 2682. The shape used to be five literals here. It now comes from the
+# shared module, and from the CAPTURE rather than from an assumption, so this
+# gate reads a tree and learns which shape it is holding instead of insisting on
+# the only one that existed when it was written. The helper asserts at import
+# that its default derivation equals those literals, so the certified b2-l32
+# path cannot move underneath this.
+_shape_spec = importlib.util.spec_from_file_location(
+    '_byte_lm_shape', Path(__file__).with_name('byte_lm_shape.py'))
+byte_lm_shape = importlib.util.module_from_spec(_shape_spec)
+_shape_spec.loader.exec_module(byte_lm_shape)
 
 #: The three retained trees. Apple sits inside the three-vendor bundle; the
 #: other two are separate result trees that the bundle's comparator reads by
@@ -64,44 +75,55 @@ VENDORS = {
     'hip': RESUME / '2026-09-07-root-byte-lm-do-amd/run6/remote/byte-lm-do-output/byte-lm-validation/full128',
 }
 
-PROFILE = 'mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1'
-N = 34944
 STEPS = 128
-#: The capture's training shape. `ids` is 66 int32 per step, which is
-#: `BATCH * (LENGTH + 1)`, the training batch layout the loss admits.
-BATCH = 2
-LENGTH = 32
-COUNTS = {key: N for key in
-          ('initial_p', 'initial_m', 'initial_v', 'post_p', 'post_m', 'post_v', 'grad')}
-COUNTS.update(initial_flags=20, post_flags=20, loss=1, ids=66)
 #: Every array of a step, in a fixed order, so two runs of this gate compare
 #: the same things in the same sequence.
 KEYS = ('initial_p', 'initial_m', 'initial_v', 'initial_flags', 'ids',
         'grad', 'loss', 'post_p', 'post_m', 'post_v', 'post_flags')
 MAX_FILE = 16 * 1024 * 1024
 
-
-def registry():
-    """The 21 parameter tensors in their flat order, as the capture records
-    them. Offsets are what turn a flat element index into a name."""
-    shapes = [('embed', [256, 32])]
-    for block in range(2):
-        shapes += [(f'block{block}.{name}', shape) for name, shape in (
-            ('norm1_w', [32]), ('w_q', [32, 32]), ('w_k', [16, 32]),
-            ('w_v', [16, 32]), ('w_o', [32, 32]), ('norm2_w', [32]),
-            ('w_gate', [64, 32]), ('w_up', [64, 32]), ('w_down', [32, 64]))]
-    shapes += [('lm_head', [256, 32])]
-    out, offset = [], 0
-    for name, shape in shapes:
-        count = math.prod(shape)
-        out.append(dict(name=name, shape=shape, offset=offset, count=count))
-        offset += count
-    if offset != N:
-        raise ValueError('registry does not sum to the parameter count')
-    return out
+#: The shape the gate is currently reading. It starts as the certified default,
+#: which is what every capture written before DEVIATION 2682 is, and `use_shape`
+#: replaces it once a tree says otherwise. One binding point, because every
+#: reader below needs the same answer and a second source would be a second
+#: opinion.
+SHAPE = byte_lm_shape.Shape()
+PROFILE = SHAPE.profile
+N = SHAPE.n_total
+BATCH, LENGTH = SHAPE.batch, SHAPE.length
+COUNTS = SHAPE.counts()
+REGISTRY = SHAPE.registry()
+_BOUND = False
 
 
-REGISTRY = registry()
+def use_shape(shape):
+    """Bind the gate to one shape, once, and refuse a second one.
+
+    A single run compares one tree against one replay, so two shapes inside one
+    run would mean the counts and the registry changed underneath a comparison
+    that had already started."""
+    global SHAPE, PROFILE, N, BATCH, LENGTH, COUNTS, REGISTRY, _BOUND
+    if _BOUND and shape != SHAPE:
+        raise ValueError(f'one run compares one shape; this tree is {shape.profile} '
+                         f'and the run is already bound to {SHAPE.profile}')
+    _BOUND = True
+    SHAPE = shape
+    PROFILE = shape.profile
+    N = shape.n_total
+    BATCH, LENGTH = shape.batch, shape.length
+    COUNTS = shape.counts()
+    REGISTRY = shape.registry()
+    return shape
+
+
+def shape_of(tree, number=1):
+    """The shape a retained tree records, read from a step's own capture.json.
+
+    A capture from before DEVIATION 2682 records no `model_shape` and is the
+    default by construction, since that is the only shape that existed when it
+    was written."""
+    meta = json.loads(read_text(step_dir(tree, number) / 'capture.json'))
+    return byte_lm_shape.from_capture(meta.get('config', {}))
 
 
 def filename(key):
@@ -246,9 +268,45 @@ def selected(argument):
     return sorted(set(out))
 
 
-def present():
-    """The vendor trees that are actually on disk."""
-    return {name: path for name, path in VENDORS.items() if path.is_dir()}
+def present(args=None):
+    """The vendor trees that are actually on disk.
+
+    `--tree vendor=path` names a tree explicitly, which is how a second shape's
+    capture is read before it has a settled home under bench/results."""
+    trees = dict(VENDORS)
+    named = set()
+    for entry in getattr(args, 'tree', None) or ():
+        name, _, raw = entry.partition('=')
+        if not name or not raw:
+            raise ValueError('--tree takes vendor=path')
+        trees[name] = Path(raw)
+        named.add(name)
+    # A MISSING BUILT-IN TREE IS ABSENCE; A MISSING NAMED ONE IS AN ERROR. The
+    # built-in paths are filtered because a runner legitimately holds only some
+    # of them. A caller who spells out a path is saying to read that tree, so
+    # dropping it silently would compare whatever else happened to be there and
+    # report a pass over it, which is the failure this gate exists to refuse.
+    for name in sorted(named):
+        if not trees[name].is_dir():
+            raise ValueError(f'--tree {name}={trees[name]} is not a directory')
+    return {name: path for name, path in trees.items() if path.is_dir()}
+
+
+def bind_shape(trees, args):
+    """Bind the run to the shape its trees record, and refuse a mixed set.
+
+    Comparing two trees of different shapes would compare arrays of different
+    lengths, which is a failure worth naming rather than a mismatch to report."""
+    shapes = {name: shape_of(path) for name, path in trees.items()}
+    distinct = {s.fields for s in shapes.values()}
+    if len(distinct) > 1:
+        raise ValueError('trees record different shapes: '
+                         + ', '.join(f'{n}={s.profile}' for n, s in sorted(shapes.items())))
+    shape = use_shape(next(iter(shapes.values())))
+    wanted = getattr(args, 'shape', None)
+    if wanted is not None and byte_lm_shape.parse(wanted) != shape:
+        raise ValueError(f'--shape {wanted} does not describe these trees, which are {shape.profile}')
+    return shape
 
 
 def mode_vendors(args):
@@ -264,8 +322,10 @@ def mode_vendors(args):
 
     `--require-vendors N` is how a caller that MEANS to compare demands it.
     """
-    trees = present()
+    trees = present(args)
     names = sorted(trees)
+    if names:
+        bind_shape(trees, args)
     if len(names) < args.require_vendors:
         print(f'gate: {len(names)} vendor tree(s) present {names}, '
               f'--require-vendors {args.require_vendors} demands more', file=sys.stderr)
@@ -325,10 +385,11 @@ def mode_cpu(args):
 
     If the surface is absent this refuses with exit 2 and names what it looked
     for, rather than reporting a pass over nothing."""
-    tree = VENDORS.get(args.vendor)
+    tree = present(args).get(args.vendor)
     if tree is None or not tree.is_dir():
         print(f'gate: vendor tree not present: {args.vendor}', file=sys.stderr)
         return 2, None
+    shape = bind_shape({args.vendor: tree}, args)
     # `mojolearn/__init__.py` calls `_backend.select()` before it exposes any
     # CPU surface, and that refuses in a tree with no binary built. Importing
     # the package would therefore fail for a reason that has nothing to do
@@ -344,6 +405,11 @@ def mode_cpu(args):
         trainer = getattr(module, 'LanguageModelHostTrainer', None)
         le_bytes = importlib.import_module('mojolearn._bufcheck').le_bytes
         frombytes = importlib.import_module('mojolearn._buffer').frombytes
+        # The surface takes its own config object. Building it from the nine
+        # integers the capture recorded is what makes the replay the same shape
+        # as the tree, rather than the default the surface would otherwise pick.
+        config = importlib.import_module('mojolearn._byte_lm_config')
+        native = config.ByteLanguageModelConfig(**shape.to_json())
     except Exception as exc:
         reason = f'{type(exc).__name__}: {exc}'
     if trainer is None:
@@ -381,7 +447,7 @@ def mode_cpu(args):
             frombytes(start['initial_p'], '<f4', (N,)),
             frombytes(start['initial_m'], '<f4', (N,)),
             frombytes(start['initial_v'], '<f4', (N,)),
-            completed_steps=number - 1,
+            completed_steps=number - 1, shape=native,
             lr=opt['lr'], betas=(opt['beta1'], opt['beta2']), eps=opt['eps'],
             weight_decay=opt['weight_decay'])
         ids = frombytes(start['ids'], '<i4', (BATCH, LENGTH + 1))
@@ -452,6 +518,14 @@ def main(argv=None):
                         help='refuse unless at least N vendor trees are present (default 1). '
                              'Pass 3 where a cross-vendor comparison is the point; CI holds '
                              'only the Apple tree, the other two are about 308 MB')
+    parser.add_argument('--shape', default=None,
+                        help='DEVIATION 2682: assert the trees are this shape, as '
+                             'batch,length or nine dimensions. The shape is read '
+                             'from the capture either way; this is how a caller '
+                             'says which one it meant to be reading')
+    parser.add_argument('--tree', action='append', metavar='VENDOR=PATH',
+                        help='read this vendor tree from an explicit path, for a '
+                             'capture that has no settled home yet')
     parser.add_argument('--report', help='write the JSON report here (must not exist)')
     args = parser.parse_args(argv)
     try:

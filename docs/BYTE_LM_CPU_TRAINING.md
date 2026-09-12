@@ -37,6 +37,19 @@ gate named the tensor, `block0.w_q` element 0, with both bit patterns.
 - One model profile, one batch shape. Nine of the gradients contract over the
   token count, so the same tokens in a different batch or microbatch schedule
   are a different sum. Identity here is per shape, exactly as inference is.
+  This limit does not retire when a second shape passes. Each shape is its own
+  certificate, so a third shape would be a third certificate. Everything
+  measured above is the two-row shape `b2-l32` and nothing else.
+- A second shape is committed as capability, not as a result. DEVIATION 2682
+  moves the shape into one shared helper, `tools/byte_lm_shape.py`, gives the
+  capture harness and the verifiers a `--shape` argument, and commits the
+  four-row schedule as
+  `training/corpus/tinyshakespeare/manifest-b4-l32.json`, batch 4 length 32,
+  128 tokens a step against the default's 64, over the same pinned corpus and
+  the same 512 held-out target bytes. **No `b4-l32` capture exists.** No GPU
+  has produced one, no CPU has replayed one and no comparison has been run, so
+  the `b4-l32` certificate is owed and stays owed until a rented GPU capture is
+  retained and gated the way `b2-l32` was.
 - The reference path only, one thread, and that is a deliberate stop rather
   than an unfinished job. **Measured on 2026-09-12 across the seven runners of
   run 34701581834: a whole step is 23.5 to 38.7 ms on the Linux draws and
@@ -142,6 +155,11 @@ microbatch schedule is part of a training run's numerical specification. So CPU
 training identity is claimed per shape, exactly as the inference sweep claims
 it per shape.
 
+The harness and the verifiers now take a `--shape` argument and a second
+schedule is committed, which changes what can be attempted and changes nothing
+about what has been shown. A pass recorded for one shape is evidence for that
+shape alone. The `b4-l32` certificate is owed.
+
 ## What is still missing
 
 That table was wrong when first written and is corrected here. Almost none of
@@ -166,8 +184,12 @@ with its own registry, on one device.
 | The `cpu` mode of the gate | runs, and its negative control fires |
 
 Nothing in the list above is now missing. What remains is coverage rather than
-capability: nine of 128 steps in CI, one profile, one batch shape, and the
-reference path only. Widening any of those is measurement, not construction.
+capability. One profile, one certified batch shape, and the reference path
+only. The step sampling limit is gone, because CI replays all 128 on every
+push. An earlier revision of this paragraph still said nine of 128 and was
+stale. Widening what is left is measurement, not construction, and the second
+shape is the case in point. Its schedule and its `--shape` plumbing are
+committed, and its capture has not been taken, so nothing here counts it.
 
 ## The import question, measured
 

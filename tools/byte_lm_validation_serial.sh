@@ -19,6 +19,23 @@ OUT=${MOJOLEARN_BYTE_LM_VALIDATION_OUT:?new absolute output directory required}
 [[ "$OUT" = /* && ! -e "$OUT" && ! -L "$OUT" ]] || { echo 'Output must be a new absolute path' >&2; exit 2; }
 seconds=${MOJOLEARN_BYTE_LM_VALIDATION_SECONDS:-3000}
 [[ "$seconds" =~ ^[0-9]+$ ]] && ((seconds >= 60 && seconds <= 3000)) || exit 2
+# DEVIATION 2682. An OPTIONAL second training shape, added to the campaign.
+# Unset is the certified campaign unchanged, the same jobs under the same job
+# names writing the same paths under the same deadlines. Identity is claimed
+# per shape, because nine weight gradients contract over the token count, so a
+# second shape is a second certificate and never an extension of the first.
+shape=${MOJOLEARN_BYTE_LM_SHAPE:-}
+if [[ -n "$shape" ]]; then
+    # One explicit committed spelling. Anything else is refused here by name,
+    # before the lease is spent, the way a bad vendor or architecture is.
+    [[ "$shape" == '4,32' ]] || {
+        echo "Refusing byte-LM shape '$shape'; 4,32 is the only committed second shape" >&2
+        exit 2
+    }
+    # 4,32 -> b4-l32, which is the slug tools/byte_lm_shape.py derives and the
+    # name the committed manifest-b4-l32.json already carries.
+    slug="b${shape%,*}-l${shape#*,}"
+fi
 commit=${MOJOLEARN_COMMIT:?frozen source commit required}
 mkdir -p "$OUT"
 deadline=$(($(date +%s) + seconds - 30))
@@ -33,6 +50,10 @@ PY=${MOJOLEARN_PYTHON:-python3}
 printf '%s\n' "source=$commit" "vendor=$vendor" "gpu_arch=$arch" \
     'scope=single-vendor real-byte training and independent gradient gate; no cross-vendor certificate' \
     > "$OUT/provenance.txt"
+# Only when a second shape was asked for, so the certified file is unchanged.
+[[ -z "$shape" ]] || printf '%s\n' "second_shape=$shape" \
+    "second_shape_scope=own capture tree and own receipts; a separate per-shape certificate" \
+    >> "$OUT/provenance.txt"
 
 run() {
     local name=$1 cap=$2 remaining status
@@ -91,4 +112,35 @@ receipt byte-gradient-oracle oracle "$OUT/gradient-oracle.json"
 run byte-full128 1500 "$PY" tools/byte_lm_real_text_capture.py \
     --output "$OUT/full128" --expected-vendor "$vendor" --steps 128
 receipt byte-full128 capture "$OUT/full128/summary.json"
+if [[ -n "$shape" ]]; then
+    # The second shape runs LAST and entirely in its own subdirectories, so the
+    # certified default is complete and retained before any of this starts, and
+    # neither shape can read the other's tree. Distinct job names because a root
+    # receipt is keyed by job name. If the lease has run out, run() writes
+    # SKIPPED_DEADLINE, returns 124, and set -e stops the campaign there; the
+    # shortfall is recorded in results.tsv rather than passing silently.
+    #
+    # Deadlines. The default's 128-step capture is capped at 1500 s at 64 tokens
+    # a step. This shape trains 128 tokens a step over the same 128 steps, and
+    # the per-step work scales with the token count, so the step arithmetic
+    # roughly doubles: 2 * 1500 = 3000 s. Held-out evaluation reads the same 512
+    # target bytes in both shapes (four batches of four rows against eight of
+    # two), and the fixed costs of import, corpus verification and
+    # initialization do not change with the shape, so doubling those along with
+    # the step work makes 3000 a ceiling rather than an estimate. The one-step
+    # capture and the oracle double the same way: 2 * 240 = 480 s. All three are
+    # per-job ceilings, not a budget; run() clamps each to the time left.
+    run byte-step1-"$slug" 480 "$PY" tools/byte_lm_real_text_capture.py \
+        --shape "$shape" --output "$OUT/step1-$slug" \
+        --expected-vendor "$vendor" --steps 1
+    receipt byte-step1-"$slug" capture "$OUT/step1-$slug/summary.json"
+    run byte-gradient-oracle-"$slug" 480 "$PY" tools/byte_lm_gradient_oracle.py \
+        "$OUT/step1-$slug/step000001" --shape "$shape" --expected-vendor "$vendor" \
+        --output "$OUT/gradient-oracle-$slug.json"
+    receipt byte-gradient-oracle-"$slug" oracle "$OUT/gradient-oracle-$slug.json"
+    run byte-full128-"$slug" 3000 "$PY" tools/byte_lm_real_text_capture.py \
+        --shape "$shape" --output "$OUT/full128-$slug" \
+        --expected-vendor "$vendor" --steps 128
+    receipt byte-full128-"$slug" capture "$OUT/full128-$slug/summary.json"
+fi
 echo 'Raw captures and root receipts retained. Learning requires summary review; head/resume/control and cross-vendor comparison are separate future runs.'

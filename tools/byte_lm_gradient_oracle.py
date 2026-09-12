@@ -10,30 +10,48 @@ No native model, gradient oracle or numerical arithmetic module is imported.
 from __future__ import annotations
 import argparse
 import hashlib
+import importlib.util
 import io
 import json
 import math
 import os
 from pathlib import Path
 
-PROFILE = 'mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1'
+# DEVIATION 2682. The shape is no longer literals here, because identity is
+# claimed per shape and a shape spelled out in two places is eventually two
+# shapes. Loaded by path so this file never depends on tools/ being on sys.path,
+# the way the sibling comparator loads its receipt policy. The helper is pure
+# Python and imports nothing native, so the independence claimed below stands.
+_shape_spec = importlib.util.spec_from_file_location(
+    '_byte_lm_shape', Path(__file__).with_name('byte_lm_shape.py'))
+byte_lm_shape = importlib.util.module_from_spec(_shape_spec)
+_shape_spec.loader.exec_module(byte_lm_shape)
+
+#: The certified default. A capture written before DEVIATION 2682 records no
+#: shape and is this one by construction, since it was the only one that existed.
+DEFAULT_SHAPE = byte_lm_shape.Shape()
+PROFILE = DEFAULT_SHAPE.profile
 SCHEMA = 'mojolearn.byte-lm.gradient-capture.v1'
-SHAPES = [('embed', (256, 32))]
-for _block in range(2):
-    SHAPES += [(f'block{_block}.{name}', shape) for name, shape in (
-        ('norm1_w', (32,)), ('w_q', (32, 32)), ('w_k', (16, 32)),
-        ('w_v', (16, 32)), ('w_o', (32, 32)), ('norm2_w', (32,)),
-        ('w_gate', (64, 32)), ('w_up', (64, 32)), ('w_down', (32, 64)))]
-SHAPES += [('lm_head', (256, 32))]
-N = 34944
+SHAPES = [(entry['name'], tuple(entry['shape'])) for entry in DEFAULT_SHAPE.registry()]
+N = DEFAULT_SHAPE.n_total
 # Preset, provisional admission thresholds. Never inferred from observed errors.
 TOLERANCES = {'gradient': (2e-6, 2e-4), 'loss': (2e-6, 2e-6),
               'post_p': (2e-6, 2e-5), 'post_m': (2e-7, 2e-5),
               'post_v': (2e-9, 2e-5)}
-FLOAT_COUNTS = {name: N for name in ('initial_p', 'initial_m', 'initial_v',
-                                    'grad', 'post_p', 'post_m', 'post_v')}
-FLOAT_COUNTS['loss'] = 1
-INT_COUNTS = {'ids': 66, 'initial_flags': 20, 'post_flags': 20}
+#: The recorded arrays by dtype, in the order this file has always read them.
+FLOAT_KEYS = ('initial_p', 'initial_m', 'initial_v', 'grad', 'post_p', 'post_m',
+              'post_v', 'loss')
+INT_KEYS = ('ids', 'initial_flags', 'post_flags')
+
+
+def _split_counts(shape):
+    """One step's array element counts, split the way they are read."""
+    counts = shape.counts()
+    return ({key: counts[key] for key in FLOAT_KEYS},
+            {key: counts[key] for key in INT_KEYS})
+
+
+FLOAT_COUNTS, INT_COUNTS = _split_counts(DEFAULT_SHAPE)
 OPT_FIELDS = {'kind', 'lr', 'beta1', 'beta2', 'eps', 'weight_decay',
               'momentum', 'dampening', 'nesterov', 'max_norm'}
 
@@ -58,7 +76,8 @@ def model_dimensions(model_shape=None):
 
 
 def registry(model_shape=None):
-    _, _, dm, heads, kv, hd, ff, layers, vocab = model_dimensions(model_shape)
+    fields = model_dimensions(model_shape)
+    _, _, dm, heads, kv, hd, ff, layers, vocab = fields
     shapes = [('embed', (vocab, dm))]
     for block in range(layers):
         shapes += [(f'block{block}.{name}', shape) for name, shape in (
@@ -72,6 +91,12 @@ def registry(model_shape=None):
         size = math.prod(shape)
         entries.append(dict(name=name, shape=list(shape), offset=offset, count=size))
         offset += size
+    # DEVIATION 2682. The transcription stays local because a capture's own
+    # registry is admitted against it, and deriving both sides of that check
+    # from one module would only confirm that module. Agreement with the shared
+    # shape is still required, so the two cannot drift apart in silence.
+    if entries != byte_lm_shape.Shape(fields).registry():
+        raise ValueError('independent registry differs from the shared shape registry')
     return entries
 
 
@@ -180,9 +205,10 @@ def reference(initial_params, ids, *, wrong_silu_block=None, model_shape=None, o
     return value, gradients
 
 
-def _validate_config(config):
+def _validate_config(config, shape=None):
     import numpy as np
-    if (config.get('profile') != PROFILE or config.get('numeric_mode') != 'identical'
+    shape = DEFAULT_SHAPE if shape is None else shape
+    if (config.get('profile') != shape.profile or config.get('numeric_mode') != 'identical'
             or config.get('vendor') not in ('cuda', 'hip')):
         raise ValueError('wrong profile/mode/vendor')
     before, after = config.get('completed_steps'), config.get('post_completed_steps')
@@ -248,52 +274,60 @@ def _compare(actual, expected, tolerance):
 def evaluate_capture(arrays, config, *, reference_sink=None):
     """Validate one full native step against independent FP64 math.
 
-    arrays: float32 flat initial_p/initial_m/initial_v/grad/post_p/post_m/post_v
-    (34944 each), float32 loss(1), int32 ids(66), initial_flags/post_flags(20).
+    arrays: float32 flat initial_p/initial_m/initial_v/grad/post_p/post_m/post_v,
+    float32 loss(1), int32 ids, initial_flags/post_flags(20). Every count comes
+    from the shape the capture's own config records.
     config: profile, numeric_mode, vendor, completed_steps, post_completed_steps,
-    optimizer containing all OPT_FIELDS. Optional reference_sink is a NEW NPZ
-    path for raw FP64 reference and control arrays. Returns a JSON-safe verdict.
+    optimizer containing all OPT_FIELDS, and since DEVIATION 2682 an optional
+    model_shape. Optional reference_sink is a NEW NPZ path for raw FP64
+    reference and control arrays. Returns a JSON-safe verdict.
     No subprocesses, provisioning, timing or cross-vendor comparisons occur here.
     """
     import numpy as np
-    opt = _validate_config(config)
+    # The shape is read from the capture under evaluation, never assumed, so the
+    # model checked here is the one the capture says it holds.
+    shape = byte_lm_shape.from_capture(config)
+    float_counts, int_counts = _split_counts(shape)
+    opt = _validate_config(config, shape)
     if reference_sink is not None and os.path.lexists(reference_sink):
         raise FileExistsError('reference output already exists')
-    if set(arrays) != set(FLOAT_COUNTS) | set(INT_COUNTS):
+    if set(arrays) != set(float_counts) | set(int_counts):
         raise ValueError('capture array set differs from schema')
     owned = {}
-    for key, count in FLOAT_COUNTS.items():
+    for key, count in float_counts.items():
         value = np.asarray(arrays[key])
         if value.dtype != np.dtype('float32') or value.shape != (count,) or not np.isfinite(value).all():
             raise ValueError(f'{key}: expected finite float32[{count}]')
         owned[key] = value.copy()
-    for key, count in INT_COUNTS.items():
+    for key, count in int_counts.items():
         value = np.asarray(arrays[key])
         if value.dtype != np.dtype('int32') or value.shape != (count,):
             raise ValueError(f'{key}: expected int32[{count}]')
         owned[key] = value.copy()
-    _validate_inputs(owned['initial_p'], owned['ids'])
+    _validate_inputs(owned['initial_p'], owned['ids'], shape.fields)
     if (owned['initial_v'] < 0).any() or (owned['post_v'] < 0).any():
         raise ValueError('negative Adam second moment')
     for key in ('initial_flags', 'post_flags'):
         if not np.isin(owned[key], (0, 1)).all():
             raise ValueError('flags must be exactly zero or one')
     torch, vendor = _torch_device(config['vendor'])
-    loss, gradients = reference(owned['initial_p'], owned['ids'])
+    loss, gradients = reference(owned['initial_p'], owned['ids'], model_shape=shape.fields)
     gradient_results, sign_results = {}, {}
     reference_arrays = {'loss': np.asarray([loss], dtype='<f8')}
-    for entry in registry():
+    entries = registry(shape.fields)
+    for entry in entries:
         name, a, b = entry['name'], entry['offset'], entry['offset'] + entry['count']
         actual = owned['grad'][a:b].reshape(entry['shape'])
         gradient_results[name] = _compare(actual, gradients[name], TOLERANCES['gradient'])
         sign_results[name] = _compare(-actual, gradients[name], TOLERANCES['gradient'])
         reference_arrays['grad.' + name] = gradients[name]
     nonlinear_controls = {}
-    for block in range(2):
-        bad_loss, bad_gradients = reference(owned['initial_p'], owned['ids'], wrong_silu_block=block)
+    for block in range(shape.n_layers):
+        bad_loss, bad_gradients = reference(owned['initial_p'], owned['ids'],
+                                            wrong_silu_block=block, model_shape=shape.fields)
         forward = _compare(np.asarray([bad_loss]), np.asarray([loss]), TOLERANCES['loss'])
-        details = {name: _compare(bad_gradients[name], gradients[name], TOLERANCES['gradient'])
-                   for name, _ in SHAPES}
+        details = {entry['name']: _compare(bad_gradients[entry['name']], gradients[entry['name']],
+                                           TOLERANCES['gradient']) for entry in entries}
         # Require each altered block's own gate gradient to expose its missing
         # derivative, not merely an unrelated downstream difference.
         effective = not details[f'block{block}.w_gate']['passed']
@@ -305,7 +339,7 @@ def evaluate_capture(arrays, config, *, reference_sink=None):
     update_results = {}
     for key, values in updates.items():
         per_tensor = {}
-        for entry in registry():
+        for entry in entries:
             a, b = entry['offset'], entry['offset'] + entry['count']
             per_tensor[entry['name']] = _compare(owned[key][a:b], values[a:b], TOLERANCES[key])
         update_results[key] = per_tensor
@@ -321,8 +355,8 @@ def evaluate_capture(arrays, config, *, reference_sink=None):
               and flags_same and moved and sign_effective and nonlinear_effective)
     result = dict(schema='mojolearn.byte-lm.gradient-oracle.v1', passed=passed,
         claim='one-step FP64 tolerance correctness; no external bitwise or learning claim',
-        profile=PROFILE, vendor=vendor, torch_version=str(torch.__version__),
-        input_array_sha256={key: _sha(value.astype('<f4' if key in FLOAT_COUNTS else '<i4').tobytes())
+        profile=shape.profile, vendor=vendor, torch_version=str(torch.__version__),
+        input_array_sha256={key: _sha(value.astype('<f4' if key in float_counts else '<i4').tobytes())
                             for key, value in owned.items()},
         oracle_source_sha256=_sha(Path(__file__).read_bytes()),
         cuda_version=torch.version.cuda, hip_version=torch.version.hip,
@@ -351,15 +385,21 @@ def load_capture(directory):
     if len(raw) > 1048576:
         raise ValueError('capture manifest exceeds one MiB')
     manifest = json.loads(raw)
-    if manifest.get('schema') != SCHEMA or manifest.get('registry') != registry():
+    if manifest.get('schema') != SCHEMA:
+        raise ValueError('wrong capture schema/registry')
+    # The registry and the array lengths follow from the shape the capture
+    # records, so a second shape is never read with the first one's lengths.
+    shape = byte_lm_shape.from_capture(manifest.get('config'))
+    float_counts, int_counts = _split_counts(shape)
+    if manifest.get('registry') != registry(shape.fields):
         raise ValueError('wrong capture schema/registry')
     arrays = {}
-    expected = set(FLOAT_COUNTS) | set(INT_COUNTS)
+    expected = set(float_counts) | set(int_counts)
     if set(manifest.get('arrays', {})) != expected:
         raise ValueError('wrong capture array set')
     for key in expected:
-        floating = key in FLOAT_COUNTS
-        count = FLOAT_COUNTS[key] if floating else INT_COUNTS[key]
+        floating = key in float_counts
+        count = float_counts[key] if floating else int_counts[key]
         suffix, dtype = ('f32', '<f4') if floating else ('i32', '<i4')
         descriptor = manifest['arrays'][key]
         filename = key + '.' + suffix
@@ -377,6 +417,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('capture', type=Path)
     parser.add_argument('--expected-vendor', choices=('cuda', 'hip'), required=True)
+    parser.add_argument('--shape', default=None,
+                        help='batch,length or the nine dimensions; must agree with the capture')
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
     # Reserve primary output before model work. Failure leaves a new incomplete
@@ -385,6 +427,15 @@ def main():
         arrays, config, capture_sha = load_capture(args.capture)
         if config.get('vendor') != args.expected_vendor:
             raise ValueError('capture vendor differs from expected vendor')
+        # DEVIATION 2682. --shape states which shape the caller believes it
+        # fetched. It never reinterprets the capture, so a disagreement is
+        # refused by name rather than resolved in either direction.
+        if args.shape is not None:
+            wanted = byte_lm_shape.parse(args.shape)
+            actual = byte_lm_shape.from_capture(config)
+            if wanted != actual:
+                raise ValueError(f'--shape {args.shape} is {wanted.profile}; '
+                                 f'the capture is {actual.profile}')
         torch, _ = _torch_device(args.expected_vendor)
         torch.set_num_threads(1)
         torch.set_num_interop_threads(1)
