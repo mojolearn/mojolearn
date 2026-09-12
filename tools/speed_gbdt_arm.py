@@ -2467,6 +2467,30 @@ def _shape_cuml(model):
                 continue
             for kid in kids:
                 stack.append((kid, d + 1))
+    # THE DANGEROUS CASE IS NOT ABSENCE, IT IS A SCHEMA THAT PARSES
+    # (2026-09-12, lane harness-honesty). A cuML build without the dump is
+    # handled above and is SAFE, because it is loud: the cell reads UNKNOWN
+    # and a reader knows nothing was compared. The case that would put a wrong
+    # number in a table is a dump that parses into a shape this walk does not
+    # understand -- a flat per-tree node list, or a different spelling of
+    # `children` -- because then every internal node looks childless, every
+    # node counts as a leaf, and a PLAUSIBLE WRONG leaf count flows into
+    # FSPEED-FIT-VERDICT dressed as a measurement.
+    #
+    # Any real ensemble satisfies nodes >= leaves >= trees >= 1: a tree has at
+    # least its root, and no node is counted twice. A parse that violates it
+    # has been misread, so it degrades to UNAVAILABLE. This cannot rescue a
+    # schema that is wrong but self-consistent; it catches the one failure
+    # mode observed to produce numbers instead of errors.
+    # `tools/cuml_forest_json_probe.py` settles the schema in a minute.
+    if not (nodes >= leaves >= len(trees) >= 1):
+        return dict(library="cuml", source="get_json",
+                    note="the JSON dump parsed but violates nodes >= leaves >= "
+                         "trees >= 1 (trees=%d nodes=%d leaves=%d), so this "
+                         "build's schema is not the one this reader walks; "
+                         "reporting UNAVAILABLE rather than a plausible wrong "
+                         "leaf count (tools/cuml_forest_json_probe.py settles "
+                         "the schema)" % (len(trees), nodes, leaves))
     return dict(library="cuml", source="get_json", trees=len(trees),
                 nodes=nodes, leaves=leaves, depth_max=depth)
 

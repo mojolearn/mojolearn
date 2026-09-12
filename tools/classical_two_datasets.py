@@ -125,6 +125,19 @@ ready records, quality, ratios), <lane>-<dataset>-<arm>.log (worker stderr),
 CTD lines on stdout, and `summary` writes summary.tsv. Ratios are OURS
 median / OPPONENT median per cell (below 1 means our median is lower); a
 ratio is never a sentence here.
+
+CTD-SPAN, one per arm, says what was INSIDE that arm's clock and what was
+outside it: `input_home` (a device-resident input was uploaded before the
+clock started), `upload_ms_untimed`, `fit_ms_untimed`, `pre_clock_fit`.
+CTD-RATIO carries a `span_asymmetry=` field naming every opponent whose clock
+covers less work than ours. Every term of it was already being recorded in the
+ready records and none of it used to reach the line a reader reads. Ours
+uploads and validates INSIDE its clock and the GPU opponents do not, which on
+Istella-S KDE is roughly 19.7 ms of host work at d = 220 (7.28 ms of it
+validation) against 36.9 ms of device entry -- an asymmetry that runs AGAINST
+us. Nothing is equalized: no work moves into or out of any clock and no ratio
+changes. The point is that a ratio spanning two different amounts of work
+cannot be read as like-for-like without saying so.
 """
 import argparse
 import hashlib
@@ -1690,6 +1703,107 @@ def quality(lane, data, outs, rec):
     return q
 
 
+#: What each library's arm has OUTSIDE its clock, keyed on `info["library"]`.
+#: Read from the ready record every arm already sends; nothing here measures
+#: anything new and nothing here changes what is timed.
+def _span_facts(arm, info):
+    """What is inside this arm's timed region and what is outside it.
+
+    THE NUMBER WAS ALREADY MEASURED AND THEN THROWN AWAY (2026-09-12, lane
+    harness-honesty). `_cuml_setup` and `_torch_setup` have always recorded
+    `upload_ms_untimed`, `SkKDE` has always recorded `tree_fit_ms_untimed`,
+    and the module docstring has always said which arms fit before the clock.
+    All of it reached the JSON and none of it reached `CTD-RATIO`, which is
+    the one line a reader actually reads. This assembles it.
+
+    WHY IT MATTERS, WITH THE DIRECTION STATED. On Istella-S KDE the opponent's
+    X is device-resident before its clock starts while ours uploads inside the
+    timed call -- about 19.7 ms of host work at d = 220, of which 7.28 ms is
+    host validation (DEVIATION 604), against 36.9 ms of device entry
+    (`bench/results/kde_fused_2026-09-12/README.md`). That asymmetry runs
+    AGAINST US: our published KDE gap is worse than the code deserves. It is
+    surfaced for the same reason a gap in our favour would be -- a ratio whose
+    two sides cover different spans of work is not a like-for-like number, and
+    a reader is entitled to know before drawing a conclusion from it.
+
+    NOTHING IS EQUALIZED HERE. No work moves into or out of any clock and no
+    ratio changes; the asymmetry is named, not corrected. Correcting it on our
+    side is a bindings question (keeping the DeviceBuffer alive across fit),
+    it is legitimate only as a user-facing improvement because a user
+    re-fitting pays that upload too, and it must never be done to improve a
+    ratio."""
+    info = info or {}
+    library = info.get("library", "?")
+    config = str(info.get("config", ""))
+    facts = {
+        "upload_ms_untimed": info.get("upload_ms_untimed"),
+        "fit_ms_untimed": info.get("tree_fit_ms_untimed"),
+        # The two cuML arms whose fit runs before the clock say so in their own
+        # config string; SkKDE says it by recording the fit it already paid.
+        "pre_clock_fit": ("fit before the clock" in config
+                          or info.get("tree_fit_ms_untimed") is not None),
+    }
+    if library == "mojolearn":
+        # Our public call uploads and validates inside the clock, because that
+        # is what a caller of this surface pays. Stated, not measured here: a
+        # per-stage split needs the binding's own instrument, and this file
+        # must not invent a number it did not take in this run.
+        facts["inside_clock"] = "host_to_device_upload,host_validation,call"
+        facts["input_home"] = "host"
+    elif library in ("cuml", "torch"):
+        facts["inside_clock"] = "call"
+        facts["input_home"] = "device"
+    else:
+        facts["inside_clock"] = "call"
+        facts["input_home"] = "host"
+    facts["library"] = library
+    return facts
+
+
+def _fmt_span(v):
+    return "-" if v is None else ("%.3f" % v if isinstance(v, float) else str(v))
+
+
+def _span_qty(v):
+    """A magnitude for the asymmetry field, or the WORD `unmeasured`.
+
+    Not `-`: a dash beside `fit_before_its_clock` reads as a formatting fault
+    or, worse, as zero. The two facts are independent -- cuML's kNN and KDE
+    demonstrably fit before their clock and NO term in their ready record
+    times that fit, while scikit-learn's KDE records one. So the fact is
+    reported as measured and the missing magnitude is reported as missing."""
+    return "unmeasured" if v is None else "%.3f_ms" % v
+
+
+def _span_warnings(spans, opponents):
+    """Which opponents' clocks cover LESS WORK than ours, and why.
+
+    A separate function rather than a loop inside `race` so a check can reach
+    it without workers, a GPU and a dataset. The lane that added it is the one
+    that keeps finding numbers nobody could prove were produced by the code
+    they were attributed to; an emission path exercised only by a full rented
+    run is exactly that shape of risk (`tools/test_ctd_span.py`).
+
+    Returns a list of `arm:reason+reason` strings, empty when every arm's
+    clock covers the same span. Only asymmetries AGAINST ours are reported,
+    because those are the ones that make our own ratio look worse than the
+    code deserves and would otherwise be read as a like-for-like loss."""
+    ours_span = spans.get("ours", {})
+    warn = []
+    for k in sorted(opponents):
+        s = spans.get(k, {})
+        why = []
+        if s.get("input_home") == "device" and ours_span.get("input_home") == "host":
+            why.append("upload_outside_its_clock(%s)"
+                       % _span_qty(s.get("upload_ms_untimed")))
+        if s.get("pre_clock_fit") and not ours_span.get("pre_clock_fit"):
+            why.append("fit_before_its_clock(%s)"
+                       % _span_qty(s.get("fit_ms_untimed")))
+        if why:
+            warn.append("%s:%s" % (k, "+".join(why)))
+    return warn
+
+
 def race(args):
     lane, ds = args.lane, args.dataset
     arms = [a for a in (args.arms.split(",") if args.arms else ARMS[lane]) if a]
@@ -1781,6 +1895,7 @@ def race(args):
     ours = result["arms"].get("ours", {})
     ours_med = median(ours.get("ms", [])) if len(ours.get("ms", [])) == args.rounds else None
     result["ratios_ours_over"] = {}
+    spans = {}
     for arm in arms:
         a = result["arms"][arm]
         ok = a["status"] == "ok" and len(a["ms"]) == args.rounds
@@ -1794,12 +1909,35 @@ def race(args):
               "digest_stable=%s quality=%s"
               % (lane, ds, arm, dev, a["status"], a["median_ms"], a["min_ms"], a["max_ms"],
                  a["digest_stable"], json.dumps(qual, sort_keys=True)), flush=True)
+        # WHAT WAS INSIDE THIS ARM'S CLOCK, beside its time. Assembled from the
+        # ready record the arm already sent; no timing is affected.
+        span = _span_facts(arm, a.get("info"))
+        spans[arm] = span
+        a["span"] = span
+        print("CTD-SPAN lane=%s dataset=%s arm=%s input_home=%s inside_clock=%s "
+              "upload_ms_untimed=%s fit_ms_untimed=%s pre_clock_fit=%s"
+              % (lane, ds, arm, span["input_home"], span["inside_clock"],
+                 _fmt_span(span["upload_ms_untimed"]), _fmt_span(span["fit_ms_untimed"]),
+                 str(span["pre_clock_fit"]).lower()), flush=True)
         if arm != "ours" and ours_med and a["median_ms"]:
             result["ratios_ours_over"][arm] = ours_med / a["median_ms"]
+    result["spans"] = spans
     if result["ratios_ours_over"]:
-        print("CTD-RATIO lane=%s dataset=%s %s" % (lane, ds, " ".join(
-            "ours/%s=%.4f" % (k, v) for k, v in sorted(result["ratios_ours_over"].items()))),
+        # THE RATIO IS UNCHANGED. The `ours/<arm>=<float>` tokens are exactly
+        # what they were; a `span_asymmetry=` field is appended naming every
+        # opponent whose clock covers less work than ours, so the one line a
+        # reader reads cannot be read as like-for-like when it is not.
+        warn = _span_warnings(spans, result["ratios_ours_over"])
+        print("CTD-RATIO lane=%s dataset=%s %s%s" % (lane, ds, " ".join(
+            "ours/%s=%.4f" % (k, v) for k, v in sorted(result["ratios_ours_over"].items())),
+            (" span_asymmetry=" + ",".join(warn)) if warn else " span_asymmetry=none"),
             flush=True)
+        if warn:
+            print("CTD-SPAN-NOTE lane=%s dataset=%s the ratios above are NOT "
+                  "like-for-like spans: ours uploads (and validates) inside its "
+                  "clock while these arms do not. The asymmetry is named, not "
+                  "corrected; no work was moved into or out of any clock."
+                  % (lane, ds), flush=True)
     result["finished"] = now_utc()
     with open(os.path.join(args.out, tag + ".json"), "w") as fh:
         json.dump(result, fh, indent=2, sort_keys=True, default=str)
