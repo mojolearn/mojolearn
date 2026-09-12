@@ -328,7 +328,15 @@ def load_capture(path, expected_action, expected_vendor=None):
             len(summary['records']) == end - start, 'incomplete capture')
     runtime = parse(read(root / 'runtime.json', limit=65536))
     source = parse(read(root / 'source.json', limit=1024 * 1024))
-    require(runtime == summary['runtime'] and runtime['native_profile'] == PROFILE and
+    # TWO PROFILES, AND THEY ARE NOT THE SAME THING. `native_profile` is the
+    # BINARY's identity, a constant compiled into the shared object, and it does
+    # not vary with the shape because one binary runs every shape. The RUN's
+    # identity is `profile`. Comparing the first against the bound shape is true
+    # only at the default, which is why this held for every retained tree and
+    # then refused a four-row capture that was in fact correct. Both now.
+    require(runtime == summary['runtime']
+            and runtime['native_profile'] == byte_lm_shape.DEFAULT_PROFILE
+            and runtime.get('profile') == PROFILE and
             runtime['native_numeric_mode'] == 1 and (runtime['native_vendor'] in ('cuda', 'hip') or
                 (runtime['native_vendor'] == expected_vendor == 'metal' and expected_action == 'continuous')) and
             (expected_vendor is None or runtime['native_vendor'] == expected_vendor), 'runtime witness mismatch')
