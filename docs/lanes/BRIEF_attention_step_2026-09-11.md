@@ -3425,10 +3425,23 @@ The leg measured a TRIAL arm against the old shipped default. A shipped gfx942
 build had never compiled `ATTN_SHIPPED_BWD_ESTASH`, because until the routing
 change the AMD column carried no estash bit; the leg's own shipped fused check
 ran and passed, but it ran the OLD default and so is not evidence for the new
-one. That branch is gated separately and the flip does not reach main without
-it. `ATTN_ES_FITS` is safe by inspection at least: `column_shared_limit`
-gives AMD 64 KB against the 12,480 byte `_estash_dres` page, and this VM ran
-that kernel today.
+one. `ATTN_ES_FITS` is safe by inspection: `column_shared_limit` gives AMD
+64 KB against the 12,480 byte `_estash_dres` page, and this VM ran that kernel.
+
+GATED SEPARATELY, AND GREEN (2026-09-12,
+`bench/results/e1g/2026-09-12_135531-amd-mi300x-hotaisle-ship-gate`, recorded
+in full as BRIEF_step_glue section 14). A SHIPPED gfx942 build, no trial
+define and no knob, reports:
+
+    DEFAULT column=amd arm=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32
+    word=6343783 source=kernel_matrix.attn_default_arm_for trial_hook=False
+    transformer_fused_check: PASS, 15 cases, every compared buffer
+    bit-identical ... 17 direct launches RAN fwd_sstash_fgrid_r32_qres_pf /
+    bwd_stash_tiled_pf_estash_dres_kvgrid_r32 at head_dim 64
+
+`trial_hook=False` with the estash backward in the RAN list is the claim: the
+AMD column's own routing row resolved the flipped arm, a shipped build reached
+that kernel, and the bits did not move. So this section's flip merges.
 
 No Apple estash measurement exists and none is owed: Apple's default carries
 no estash bit, so a shipped Apple build compiles none of this branch, which

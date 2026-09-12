@@ -1,0 +1,100 @@
+Imported from /root/mojolearn/training/checks/step_glue_check.mojo:79:
+/root/mojolearn/transformer/impl/llama/modeling_llama.mojo:727:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/training/checks/step_glue_check.mojo:72:
+Imported from /root/mojolearn/training/byte_lm.mojo:42:
+/root/mojolearn/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/training/checks/step_glue_check.mojo:72:
+Imported from /root/mojolearn/training/byte_lm.mojo:42:
+/root/mojolearn/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/training/checks/step_glue_check.mojo:72:
+Imported from /root/mojolearn/training/byte_lm.mojo:42:
+/root/mojolearn/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/training/checks/step_glue_check.mojo:80:
+Imported from /root/mojolearn/transformer/checks/transformer_backward.mojo:53:
+/root/mojolearn/transformer/impl/llama/fused_attention.mojo:1458:32: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+    var raw = host.unsafe_ptr().bitcast[UInt8]()
+              ~~~~~~~~~~~~~~~~~^~~~~~~~
+                                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/training/checks/step_glue_check.mojo:72:
+Imported from /root/mojolearn/training/byte_lm.mojo:65:
+/root/mojolearn/training/checks/loss.mojo:519:8: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    red[tid] = value
+    ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/step_glue_check.mojo:72:
+Imported from /root/mojolearn/training/byte_lm.mojo:65:
+/root/mojolearn/training/checks/loss.mojo:524:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var other = red[tid + step]
+                        ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/step_glue_check.mojo:72:
+Imported from /root/mojolearn/training/byte_lm.mojo:65:
+/root/mojolearn/training/checks/loss.mojo:528:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                if other > red[tid]:
+                           ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/step_glue_check.mojo:72:
+Imported from /root/mojolearn/training/byte_lm.mojo:65:
+/root/mojolearn/training/checks/loss.mojo:529:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    red[tid] = other
+                    ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/step_glue_check.mojo:72:
+Imported from /root/mojolearn/training/byte_lm.mojo:65:
+/root/mojolearn/training/checks/loss.mojo:531:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = identical_fmax(red[tid], other)
+                ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/step_glue_check.mojo:72:
+Imported from /root/mojolearn/training/byte_lm.mojo:65:
+/root/mojolearn/training/checks/loss.mojo:531:46: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = identical_fmax(red[tid], other)
+                                          ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/step_glue_check.mojo:72:
+Imported from /root/mojolearn/training/byte_lm.mojo:65:
+/root/mojolearn/training/checks/loss.mojo:534:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var total = red[0]
+                ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Included from /root/mojolearn/training/checks/step_glue_check.mojo:66:
+/root/mojolearn/training/checks/optimizer.mojo:579:20: warning: assignment to 'm' was never used; assign to '_' instead?
+    var m = Float32(0.0)
+                   ^
+Included from /root/mojolearn/training/checks/step_glue_check.mojo:66:
+/root/mojolearn/training/checks/optimizer.mojo:589:20: warning: assignment to 'v' was never used; assign to '_' instead?
+    var v = Float32(0.0)
+                   ^
+Included from /root/mojolearn/training/checks/step_glue_check.mojo:66:
+/root/mojolearn/training/checks/optimizer.mojo:609:21: warning: assignment to 'dn' was never used; assign to '_' instead?
+    var dn = Float32(0.0)
+                    ^
+Included from /root/mojolearn/training/checks/step_glue_check.mojo:66:
+/root/mojolearn/training/checks/optimizer.mojo:610:20: warning: assignment to 'q' was never used; assign to '_' instead?
+    var q = Float32(0.0)
+                   ^
+Included from /root/mojolearn/training/checks/step_glue_check.mojo:66:
+/root/mojolearn/training/checks/optimizer.mojo:657:24: warning: assignment to 'p_out' was never used; assign to '_' instead?
+    var p_out = Float32(0.0)
+                       ^
+Included from /root/mojolearn/training/checks/step_glue_check.mojo:80:
+/root/mojolearn/transformer/checks/transformer_backward.mojo:2742:28: warning: assignment to 'cells' was never used; assign to '_' instead?
+    var cells = b * nh * l * s
+                           ^

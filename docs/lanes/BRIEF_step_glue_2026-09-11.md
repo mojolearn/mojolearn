@@ -684,3 +684,61 @@ shipped default. A shipped gfx942 build had never compiled
 `STEP_GLUE_SHIPPED_ROWS` or `STEP_GLUE_SHIPPED_UPDATE`, because until the
 routing change the AMD column carried no glue bit. That branch is gated
 separately (section 14) and the flip does not reach main without it.
+
+## 14. The gfx942 shipped branch gate (2026-09-12, run): both flips clear to merge
+
+Sections 13 and BRIEF_attention_step section 21 each end by refusing to merge
+without this. Here it is, and it is green.
+
+THE GAP IT CLOSES. Both AMD legs measured TRIAL arms against the OLD shipped
+defaults. Until the routing change the AMD column carried neither a glue bit
+nor an estash bit, so `STEP_GLUE_SHIPPED_ROWS`, `STEP_GLUE_SHIPPED_UPDATE` and
+`ATTN_SHIPPED_BWD_ESTASH` had never once been true on gfx942 and no compiler
+had ever built those branches for that target. On the NVIDIA side that exact
+gap hid a real defect: `_byte_glue_update`'s `comptime assert not
+BYTE_LM_FAULT_INJECT` sat inside `comptime if STEP_GLUE_TRIAL`, so a shipped
+glue build would have reached the glue update with the refusal silently gone.
+A measurement cannot find that. Only a shipped build can.
+
+Evidence `bench/results/e1g/2026-09-12_135531-amd-mi300x-hotaisle-ship-gate`,
+Hot Aisle MI300X, gfx942, body `amd_ship_body.sh` (copied into the evidence as
+`remote/extra_body.sh`). EVERY BUILD BELOW IS A SHIPPED BUILD: no
+`MOJOLEARN_ATTN_ARM_TRIAL`, no `MOJOLEARN_STEP_GLUE_TRIAL` except where the
+phase name says so, and no `EVERY_COLUMN` knob, because the point is that the
+AMD column's own routing rows resolve the winners unaided.
+
+| gate | what it proves | result |
+|---|---|---|
+| shipped `transformer_fused_check` | DEVIATION 2657's branch compiles and is bit-equal on gfx942 | PASS, 15 cases |
+| shipped `transformer_backward_check` | DEVIATION 2649's row geometry is bit-equal on gfx942 | PASS, 37/37 stages, 412,172 cells |
+| trial `step_glue_check` | the 16 trial arms are unchanged by the flip | PASS, with reach |
+| shipped byte LM binding readback | the comptime constants resolve to the winner at runtime, in a binary with no trial hook | `arm=optskip_noshadow_rows16 trial=0` |
+
+All nine phases exit 0 and the body reports `AMD_SHIP_GATES_OK=1`.
+
+The fused line is the one to read twice, because it names the kernels that
+actually ran rather than the arm that was requested:
+
+    DEFAULT column=amd arm=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32
+    word=6343783 source=kernel_matrix.attn_default_arm_for trial_hook=False
+    ... 17 direct launches RAN fwd_sstash_fgrid_r32_qres_pf /
+    bwd_stash_tiled_pf_estash_dres_kvgrid_r32 at head_dim 64
+
+`trial_hook=False` with the estash backward named in the RAN list is the whole
+claim: a shipped AMD build reached the flipped kernel and produced identical
+bits. The binding readback is its twin for the glue half, a runtime
+observation of a comptime constant rather than an inference from source.
+
+A DEFECT IN MY OWN GATE, RECORDED. `gate.txt` says `commit=unknown`. The body
+read `/root/mojolearn/COMMIT`, which the Hot Aisle runner does not write, so
+the gate file cannot name what it built. The provenance is still sound but it
+comes from the runner rather than from the gate: `leg.txt` records
+`commit=e72b55e4`, the upload verified `ARCHIVE-SHA-OK` against a bundle whose
+sha256 is recorded on both ends, and the body's own sha256 (57b8e01f3b731f78)
+is in the leg log. A future run of this body should read the commit the way
+the other legs do rather than trust a file that is not there.
+
+WHAT IS STILL NOT CLAIMED. Nothing here is a speed measurement; sections 13
+and 21 are. No Apple build compiles either branch (M4 gate C confirmed Apple
+still resolves `stash_tiled` and `shipped` with no knobs), and no RDNA or
+other column is touched.
