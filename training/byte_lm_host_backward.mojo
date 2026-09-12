@@ -161,9 +161,12 @@ def byte_host_gradient(params: List[Float32], ids: List[Int32],
     var v = config.vocab_size
     var emb_cfg = EmbConfig.llama(v, dm)
     var ce_cfg = CeConfig.causal_lm(v)
+    # `List` is not `ImplicitlyCopyable`, so reading a list out of a tuple is
+    # an explicit copy or a transfer. Copies here, because both are read again
+    # below (`inputs` by the embedding gradient, `targets` by the loss).
     var split = byte_host_split_ids(ids, config)
-    var inputs = split[0]
-    var targets = split[1]
+    var inputs = split[0].copy()
+    var targets = split[1].copy()
 
     # ---- forward, retaining every layer's stages AND its input ------------
     # `inputs_of[layer]` is what that layer's backward needs as `x`: the
@@ -253,9 +256,10 @@ def byte_host_train_step(params: List[Float32], m_state: List[Float32],
         raise Error("byte LM host step: parameters and moments must be n_total")
     if completed_steps < 0:
         raise Error("byte LM host step: completed_steps must not be negative")
+    # `loss` is a Float32 and copies implicitly; `grad` is a List and does not.
     var got = byte_host_gradient(params, ids, config)
     var loss = got[0]
-    var grad = got[1]
+    var grad = got[1].copy()
 
     # `optimizer_step_oracle` takes five `mut` arguments and clips `grad` in
     # place, so the locals are transferred into it rather than assigned.
