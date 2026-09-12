@@ -211,10 +211,18 @@ Mamba and Transformer APIs, including UMAP transform and CSR support. Newer
 Python API exposure does not inherit every numerical certificate. See
 [CHANGELOG.md](CHANGELOG.md) and the
 [support matrix](SUPPORT_MATRIX.md) for exact artifacts and limits.
-There is no CPU fallback for estimators or training. Byte LM inference can run
-on a CPU with no GPU through `LanguageModelInference`; see
+There is no CPU fallback for the estimators. The byte LM is the exception, and
+it has two CPU surfaces, both needing no GPU at all. `LanguageModelInference`
+runs the forward pass; see
 [docs/BYTE_LM_CPU_INFERENCE.md](docs/BYTE_LM_CPU_INFERENCE.md) for the CPUs it
-is certified on.
+is certified on. `LanguageModelHostTrainer` runs one training step, forward,
+backward and the AdamW update, and reproduces the recorded GPU bytes of the
+retained three-vendor capture for all 128 of its steps, the gradient and the
+loss and the post-step parameters and both Adam moments alike; see
+[docs/BYTE_LM_CPU_TRAINING.md](docs/BYTE_LM_CPU_TRAINING.md), which also states
+what it does not claim. Both are one model profile at one batch shape, and
+identity is claimed per shape because the weight gradients contract over the
+token count.
 Run the diagnostic command before depending on a new machine:
 
 ```sh
