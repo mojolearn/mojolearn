@@ -246,3 +246,157 @@ class LanguageModelInference:
         """Greedy next byte after each row of ids `[batch, length]`; ties go
         to the lowest byte value."""
         return _greedy_next_bytes(self.logits(ids, threaded=threaded, threads=threads))
+
+
+class LanguageModelHostTrainer:
+    """One byte LM training step on the CPU (DEVIATION 2680).
+
+    Forward, backward and the AdamW update, on the reference path, through
+    `byte_lm_host_train_step`. This module still holds no arithmetic; the step
+    is a composition of host oracles that are each the normative answer of
+    their own profile.
+
+    NOT CERTIFIED YET, AND NOTHING HERE SAYS OTHERWISE. The CPU inference
+    surface above is certified on the CPUs listed in
+    docs/BYTE_LM_CPU_INFERENCE.md. This one has a gate,
+    `tools/byte_lm_cpu_train_gate.py`, which compares a step's gradient, both
+    Adam moments and the loss against the retained Apple, NVIDIA and AMD
+    captures byte for byte, and docs/BYTE_LM_CPU_TRAINING.md records what that
+    gate has actually shown. Read it before believing a number from this class.
+
+    NO THREADED PATH. The threaded forward has no backward twin, because a
+    weight gradient sums over every row of the batch and so crosses every
+    thread boundary; that needs a fixed cross-thread fold, not threads
+    accumulating as they finish.
+
+    Batch composition is part of any claim made with this. Nine of the
+    gradients contract over the token count, so the gradient at one batch shape
+    is not the bits of the same tokens presented as two smaller batches.
+    """
+
+    def __init__(self, parameters, *, m=None, v=None, shape=None,
+                 completed_steps=0, lr=1e-3, betas=(.9, .999), eps=1e-8,
+                 weight_decay=0.0):
+        shape = ByteLanguageModelConfig() if shape is None else shape
+        self._shape = shape
+        self._native = _native_shape(shape)
+        self._binding = _load()
+        n = shape.n_total
+        array, _ = as_f32_c(parameters, ndim=1, name='parameters')
+        if array.size != n:
+            raise ValueError(f'parameters must hold {n} float32 values')
+        if not all_finite(array):
+            raise ValueError('parameters must be finite')
+        self._parameters = frombytes(le_bytes(array, 'f'), '<f4', (n,))
+        self._m = self._moment(m, 'm', n)
+        self._v = self._moment(v, 'v', n)
+        if not isinstance(completed_steps, int) or isinstance(completed_steps, bool):
+            raise ValueError('completed_steps must be an int')
+        if completed_steps < 0:
+            raise ValueError('completed_steps must not be negative')
+        self._completed = completed_steps
+        beta1, beta2 = betas
+        # The byte LM trainer's own validator admits positive-lr AdamW only,
+        # with no clipping and no SGD options, so this refuses the same set
+        # rather than passing a configuration the native side would reject.
+        for name, value in (('lr', lr), ('beta1', beta1), ('beta2', beta2),
+                            ('eps', eps), ('weight_decay', weight_decay)):
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise ValueError(f'{name} must be a real number')
+        if not lr > 0 or not eps > 0:
+            raise ValueError('lr and eps must be positive')
+        if not 0 <= beta1 < 1 or not 0 <= beta2 < 1:
+            raise ValueError('betas must be in [0, 1)')
+        if weight_decay < 0:
+            raise ValueError('weight_decay must not be negative')
+        self._scalars = [float(lr), float(beta1), float(beta2), float(eps),
+                         float(weight_decay)]
+        self._gradient = None
+
+    def _moment(self, given, name, n):
+        if given is None:
+            return zeros((n,), '<f4')
+        array, _ = as_f32_c(given, ndim=1, name=name)
+        if array.size != n:
+            raise ValueError(f'{name} must hold {n} float32 values')
+        if not all_finite(array):
+            raise ValueError(f'{name} must be finite')
+        return frombytes(le_bytes(array, 'f'), '<f4', (n,))
+
+    @classmethod
+    def from_state(cls, parameters, m, v, *, completed_steps=0, **kwargs):
+        """A trainer resuming a recorded step's starting state, which is how
+        the gate replays one step of the retained capture in isolation."""
+        return cls(parameters, m=m, v=v, completed_steps=completed_steps, **kwargs)
+
+    @property
+    def shape(self):
+        return self._shape
+
+    @property
+    def profile(self):
+        return self._shape.profile
+
+    @property
+    def completed_steps(self):
+        return self._completed
+
+    @property
+    def parameters_(self):
+        return self._parameters
+
+    @property
+    def m_(self):
+        return self._m
+
+    @property
+    def v_(self):
+        return self._v
+
+    @property
+    def gradient_(self):
+        """The last step's gradient, or None before any step. A failed step
+        leaves this None rather than a stale value."""
+        return self._gradient
+
+    def parameters_sha256(self):
+        return hashlib.sha256(le_bytes(self._parameters, 'f')).hexdigest()
+
+    def train_step(self, ids):
+        """One step on int32 ids `[shape.batch, shape.length + 1]`, the
+        training batch layout, returning the loss's IEEE-754 bits.
+
+        The last column is only ever a target and may hold the ignore index,
+        exactly as `loss_bits` admits it. On success the parameters and both
+        moments are replaced and the step count advances; if the native call
+        raises, none of them move and the gradient is cleared, because a
+        half-applied step is worse than a refused one."""
+        tokens, _ = as_i32_c(ids, ndim=2, name='ids')
+        if tuple(tokens.shape) != (self._shape.batch, self._shape.length + 1):
+            raise ValueError(f'ids must be [{self._shape.batch}, {self._shape.length + 1}]')
+        _refuse_ids(tokens, self._shape.vocab_size, self._shape.batch,
+                    self._shape.length + 1, self._shape.length)
+        n = self._shape.n_total
+        grad = zeros((n,), '<f4')
+        post_p = zeros((n,), '<f4')
+        post_m = zeros((n,), '<f4')
+        post_v = zeros((n,), '<f4')
+        self._gradient = None
+        bits = int(self._binding.byte_lm_host_train_step(
+            [addr_ro(self._parameters, name='parameters'),
+             addr_ro(self._m, name='m'), addr_ro(self._v, name='v'),
+             addr_ro(tokens, name='ids'),
+             addr(grad, name='grad'), addr(post_p, name='post_p'),
+             addr(post_m, name='post_m'), addr(post_v, name='post_v')],
+            self._native, self._scalars, self._completed))
+        self._gradient = grad
+        self._parameters = post_p
+        self._m = post_m
+        self._v = post_v
+        self._completed += 1
+        return bits
+
+    def loss(self, ids):
+        """`train_step`'s loss as a float. The bits are the comparable value;
+        this is for reading."""
+        return struct.unpack('<f', struct.pack('<I', self.train_step(ids)))[0]

@@ -1,9 +1,46 @@
 # Byte LM training on a CPU
 
-DEVIATION 2680. This file tracks work in progress. Today the CPU can run the
-byte LM's forward pass (docs/BYTE_LM_CPU_INFERENCE.md) and nothing else. There
-is no CPU backward pass and no CPU optimizer, so **nothing here claims CPU
-training yet.** What exists is the gate that will judge it.
+DEVIATION 2680. The CPU runs one byte LM training step, forward, backward and
+the AdamW update, and reproduces the recorded GPU bytes exactly.
+
+## What has been measured
+
+On all seven CI runners (five x86-64 Linux draws, ARM64 Linux on Azure Cobalt
+100, and Apple M1 macOS), replaying steps of the retained capture from each
+step's own parameters, Adam moments, token ids and recorded optimizer:
+
+| | |
+|---|---|
+| CPU step against the recorded Metal bytes | 45 of 45 array comparisons equal, 9 steps |
+| arrays compared per step | gradient, loss bits, post-step parameters, post-step `m`, post-step `v` |
+| negative control, a wrong-gradient build | caught on every runner, 2 of 10 equal |
+| certified CPU inference, unmoved | loss gate 33 of 33, DEVIATION 2612 catch 24 of 33 |
+
+Because `vendors` mode separately shows Apple, CUDA and HIP agreeing on all 128
+steps and all 11 arrays, a step that equals the Apple bytes equals all three
+vendors. So the CPU step agrees bitwise with AMD and NVIDIA as well, through the
+capture rather than through a fresh rental.
+
+**The control fires for the right reason, which is the part worth checking.**
+The wrong-gradient build got 8 of 10 arrays wrong and 2 right, and the 2 right
+are the loss: a backward-only corruption leaves the forward exact and then
+propagates from the gradient into both moments and the updated parameters. The
+gate named the tensor, `block0.w_q` element 0, with both bit patterns.
+
+## What this does NOT say
+
+- Nine of 128 steps in CI, sampled as `every:16`. The full 128 is affordable
+  locally and on a box, and has not been run on every runner.
+- One model profile, one batch shape. Nine of the gradients contract over the
+  token count, so the same tokens in a different batch or microbatch schedule
+  are a different sum. Identity here is per shape, exactly as inference is.
+- The reference path only. There is no threaded CPU training path, and the
+  threaded forward must not grow one by accident, because a weight gradient
+  sums over every row and so crosses every thread boundary.
+- Nothing about other algorithm families. Trees and the classical models have
+  no backward pass and remain GPU-only.
+- `LanguageModelHostTrainer` is deliberately not exported from
+  `mojolearn/__init__.py`. An unexported class cannot be mistaken for a promise.
 
 ## Why a gate came first
 
@@ -44,11 +81,25 @@ This needs no GPU, no binding and no build, and runs in about a second.
 | recorded digests verified | 4224 |
 | vendors | Apple M4 Metal, NVIDIA CUDA, AMD MI325X HIP |
 
-`cpu` is the gate proper and does not run yet. It replays selected steps
-through a CPU training surface and compares `grad`, `loss`, `post_p`, `post_m`
-and `post_v` against one vendor tree. It refuses with exit 2 while that surface
-is absent, and names what has to appear, rather than reporting a pass over
-nothing.
+`cpu` is the gate proper and it runs. It replays selected steps through
+`LanguageModelHostTrainer` and compares `grad`, `loss`, `post_p`, `post_m` and
+`post_v` against one vendor tree, taking each step's optimizer configuration
+from that step's own `capture.json` rather than from defaults. If the surface is
+absent it still refuses with exit 2 and names what has to appear, rather than
+reporting a pass over nothing.
+
+`--expect-mismatch` inverts the verdict, which is how the wrong-gradient build
+is required to be caught. CI runs both arms on every push: the clean binding
+must agree, and a binding built with
+`-D MOJOLEARN_GEMM_SABOTAGE_BWD_UNTRANSPOSED=1` must disagree.
+
+That arm was chosen because **DEVIATION 2612's arm cannot reach this path.**
+2612 reverses a fold inside `byte_host_logits`, and the training step calls
+`gemm_oracle` directly, so a 2612 build computes a correct training step. Until
+this control existed the training gate had never been shown capable of failing.
+`byte_lm_host_sabotage` was widened in the same change, because it reported the
+2612 flag alone and a binding carrying a GEMM backward arm would otherwise
+compute wrong gradients while reading back as clean.
 
 A difference is reported by tensor. The registry is a fixed order of 21
 tensors, so a flat element index is localized to a name, an index inside that
@@ -88,9 +139,14 @@ with its own registry, on one device.
 | Embedding gradient | normative host oracle, fixed ascending fold over sorted runs |
 | GEMM backward | host routing over the reference GEMM, `_gemm_bwd_a` / `_gemm_bwd_b` |
 | Decoder block backward, 37 stages | normative host oracle, already written |
-| Byte LM shaped composition, two blocks | `training/byte_lm_host_backward.mojo`, **compiles on seven CPUs**, never yet run |
-| Binding and Python surface | absent, this is the remaining work |
-| The `cpu` mode of the gate | refuses until that surface exists |
+| Byte LM shaped composition, two blocks | `training/byte_lm_host_backward.mojo`, compiles and **runs correctly on seven CPUs** |
+| Binding entry | `byte_lm_host_train_step`, eight addresses, five AdamW scalars, returns the loss bits |
+| Python surface | `LanguageModelHostTrainer`, unexported on purpose |
+| The `cpu` mode of the gate | runs, and its negative control fires |
+
+Nothing in the list above is now missing. What remains is coverage rather than
+capability: nine of 128 steps in CI, one profile, one batch shape, and the
+reference path only. Widening any of those is measurement, not construction.
 
 ## The import question, measured
 
