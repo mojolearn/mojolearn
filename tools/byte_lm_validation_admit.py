@@ -15,17 +15,18 @@ from byte_lm_gradient_oracle import TOLERANCES
 
 JOBS = ('byte-venv', 'byte-dependencies', 'dependencies', 'dependency-freeze',
         'guard-checks', 'comparator-fixtures', 'byte-build', 'retain-binding',
-        'byte-host-mocks', 'byte-step1', 'byte-gradient-oracle', 'byte-full128')
+        'byte-host-mocks', 'byte-host-build', 'byte-step1', 'byte-gradient-oracle',
+        'byte-full128')
 #: DEVIATION 2682. A campaign that was asked for a second shape runs these three
 #: as well, after the certified twelve and in their own directories, each name
 #: carrying the shape's slug because a receipt is keyed by job name.
 SECOND_SHAPE_JOBS = ('byte-step1', 'byte-gradient-oracle', 'byte-full128')
 
 
-#: The build and its checks, which every campaign runs whatever it captures.
-CORE_JOBS = JOBS[:9]
+#: The builds and their checks, which every campaign runs whatever it captures.
+CORE_JOBS = JOBS[:10]
 #: The certified shape's three captures, which a shape-only campaign skips.
-CAPTURE_JOBS = JOBS[9:]
+CAPTURE_JOBS = JOBS[10:]
 
 
 def campaign_rows(rows, shape):

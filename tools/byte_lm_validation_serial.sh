@@ -116,6 +116,19 @@ run byte-build 900 bash bindings/build_byte_lm.sh
 mkdir "$OUT/bindings"
 run retain-binding 30 cp "$MOJOLEARN_BYTE_LM_OUTDIR/_mojolearn_byte_lm.so" "$OUT/bindings/"
 run byte-host-mocks 120 "$PY" -m pytest -q python/mojolearn/tests/test_byte_lm_surface.py
+# WITHOUT THIS EVERY CAPTURE DIES AT INPUT VALIDATION, and it did: the first
+# rented run of this campaign after the NumPy-free change (637de940) failed in
+# one second at byte-step1, on a box where the build had just succeeded.
+# `_array` validates parameters with `all_finite`, which the Python layer
+# resolves from a NATIVE binding rather than a Python copy, and this campaign
+# builds the byte LM binding alone. The host binding carries the same helper
+# compiled from the same tree, which is what `_host_native` exists for, and it
+# costs about as much as the byte LM build rather than the 1500 seconds a full
+# base build is budgeted at elsewhere. The GPU path is unaffected: the CPU-only
+# selection is taken only when no identical module built at all, and the byte
+# LM binding above is one. GPU arch is unset because a host build targets no
+# accelerator.
+run byte-host-build 600 env -u MOJOLEARN_GPU_ARCHS sh bindings/build_byte_lm_host.sh
 if [[ "$shape_only" != 1 ]]; then
     run byte-step1 240 "$PY" tools/byte_lm_real_text_capture.py \
         --output "$OUT/step1" --expected-vendor "$vendor" --steps 1
