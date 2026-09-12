@@ -1975,5 +1975,28 @@ gbdt-depthwise is a clear 1.012 loss. 2634 and 2635 carry the win without it,
 0.9603 x 0.9913 being essentially all of the 0.9526 measured end to end, so
 2636 moved to `-D MOJOLEARN_2636_PARALLEL_STAGING=1` (commit 31f0142f).
 
-RUN OWED for this tuple: the CatBoost and XGBoost opponent cells, and the
-DEVIATION 2661 A/B, were still running on that pod when this landed.
+DEVIATION 2661 (non-symmetric group width), the same pod's phase 2, `all` ->
+`a2661`, 3 rounds, its own heat window (so its `all` medians differ slightly
+from the table above, which is why each pair is read only within its phase):
+
+| policy | dataset | before ms | after ms | after/before |
+|---|---|---:|---:|---:|
+| symmetric | taxi | 305.1 | 305.8 | 1.0023 |
+| depthwise | taxi | 430.3 | 429.8 | 0.9988 |
+| lossguide | taxi | 949.2 | 939.5 | 0.9898 |
+| symmetric | Istella-S | 1291.0 | 1288.3 | 0.9979 |
+| depthwise | Istella-S | 1873.7 | 1849.5 | 0.9871 |
+| lossguide | Istella-S | 2501.0 | 2513.8 | 1.0051 |
+
+Six-cell geomean 0.9968, quality equal in every cell, and it moves no bit
+(`ib_diff all vs a2661` IDENTICAL=36, `gbdt_sub_byte_identity_check` 16/16
+PASS). It CLEARS the section 9 threshold, and it STAYS OPT-IN anyway, for two
+reasons worth writing down rather than flipping on a technicality. The margin
+is 0.3 percent with a mixed per-policy split (gbdt-symmetric is NO FLIP at
+1.000, only depthwise 0.993 and lossguide 0.997 win), and the base it was
+measured against is no longer the shipped default: this pod's `all` set was
+built before DEVIATION 2636 became opt-in, so 2661 was timed with 2636 ON
+underneath. Re-measure it against the new default before making it one.
+
+RUN OWED for this tuple: the CatBoost and XGBoost opponent cells were still
+running on that pod when this landed.
