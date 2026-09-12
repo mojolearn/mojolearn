@@ -30,7 +30,10 @@
 #   sh tools/dataset_store.sh manifest              # hash local files, write the pins
 #   sh tools/dataset_store.sh push [key...]         # upload (default: all)
 #   sh tools/dataset_store.sh list
-#   sh tools/dataset_store.sh presign <key> [secs]  # URL to hand to a box
+#   sh tools/dataset_store.sh presign <key> [secs]  # GET URL to hand to a box
+#   sh tools/dataset_store.sh presign-put <key> [secs]
+#                                                   # WRITE URL, so a box can
+#                                                   # upload straight to R2
 #   sh tools/dataset_store.sh pull <key> [dest]     # fetch here, then verify
 #   sh tools/dataset_store.sh verify <key> [dest]   # size + sha256 against the pins
 #   sh tools/dataset_store.sh box-cmd <key>         # print the curl+verify a pod should run
@@ -41,6 +44,18 @@
 #   gbm-bench/istella/istella-s-letor.tar.gz    472,129,615   (source, so a decode is reproducible)
 #   corpus/enwik8/input.txt                     100,000,000   (neural, English kind)
 #   corpus/pile_github/input.txt                 97,124,565   (neural, source-code kind)
+#
+# And one MULTI-SHARD group, whose members are keys in their own right:
+#   corpus/fineweb-edu-10BT/NNN_00000.parquet  28,518,193,415 total, 14 shards
+#                                                 (FineWeb-Edu sample-10BT, the
+#                                                  corpus for a real LM run)
+#
+# BYTES NEED NOT PASS THROUGH THIS MACHINE. The FineWeb shards went
+# HuggingFace -> rented box -> R2 directly: the box fetched each shard,
+# computed its sha256 and PUT it with a presigned write URL minted here, then
+# deleted it locally. At this Mac's ~8.9 MB/s upstream, pushing 28.5 GB from
+# here would have cost about an hour of saturated uplink for bytes no local
+# code reads. That is what `presign-put` exists for.
 #
 # Needs the aws CLI (S3-compatible mode) for push/list/presign; pull/verify
 # need only curl and sha256sum/shasum. POSIX sh.
@@ -63,9 +78,42 @@ corpus/pile_github/input.txt	ROOT/training/corpus/pile_github/input.txt
 EOF
 }
 
+# A MULTI-SHARD GROUP: one logical corpus held as many objects. The catalog
+# above maps one key to exactly one file, which a 14-shard parquet corpus
+# breaks, so a group names a key prefix, the directory its shards live in
+# locally, and the shard file names. `push`, `verify` and `presign-put` take
+# either a plain key or a group name; a group expands to one key per shard, so
+# every shard still gets its own size+sha256 pin and nothing about the five
+# single-file keys changes.
+groups() {
+    cat <<'EOF'
+corpus/fineweb-edu-10BT	ROOT/training/corpus/fineweb-edu-10BT	000_00000.parquet 001_00000.parquet 002_00000.parquet 003_00000.parquet 004_00000.parquet 005_00000.parquet 006_00000.parquet 007_00000.parquet 008_00000.parquet 009_00000.parquet 010_00000.parquet 011_00000.parquet 012_00000.parquet 013_00000.parquet
+EOF
+}
+
+group_members() { groups | awk -F'\t' -v g="$1" '$1==g {print $3}'; }
+group_dir_for() { groups | awk -F'\t' -v g="$1" '$1==g {print $2}'; }
+
+# Expand group names to their member keys; a plain key expands to itself.
+expand_keys() {
+    for _a in "$@"; do
+        _mem=$(group_members "$_a")
+        if [ -n "$_mem" ]; then
+            for _m in $_mem; do echo "$_a/$_m"; done
+        else
+            echo "$_a"
+        fi
+    done
+}
+
 local_path_for() {
     _p=$(catalog | awk -F'\t' -v k="$1" '$1==k {print $2}')
-    [ -n "$_p" ] || return 1
+    if [ -z "$_p" ]; then
+        # maybe a shard of a group: <group key>/<shard file name>
+        _gd=$(group_dir_for "$(dirname "$1")")
+        [ -n "$_gd" ] || return 1
+        _p="$_gd/$(basename "$1")"
+    fi
     case "$_p" in
         HOME/*) echo "$HOME/${_p#HOME/}" ;;
         ROOT/*) echo "$ROOT/${_p#ROOT/}" ;;
@@ -104,6 +152,7 @@ cmd_manifest() {
     _tmp="$MANIFEST.new"
     : > "$_tmp"
     _missing=0
+    _hashed=0
     # keys come through `cut -f1`, NOT through IFS: a literal tab in an
     # `IFS=<tab> read` did not survive editing here and silently swallowed
     # every line into $key, so local_path_for matched nothing, `|| continue`
@@ -116,15 +165,35 @@ cmd_manifest() {
         _sz=$(size_of "$_lp"); _sh=$(sha256_of "$_lp")
         printf '%s\t%s\t%s\n' "$key" "$_sz" "$_sh" >> "$_tmp"
         printf '%-44s %14s  %s\n' "$key" "$_sz" "$_sh"
+        _hashed=$((_hashed + 1))
     done
+    # Rows this machine CANNOT hash are carried forward, not dropped. A
+    # multi-shard corpus is pinned by the box that fetched it, and its bytes
+    # deliberately never exist here; rebuilding the local pins must not
+    # silently un-pin 28.5 GB that is sitting in R2. Only keys in the local
+    # catalog are recomputed above.
+    _carried=0
+    if [ -f "$MANIFEST" ]; then
+        _localkeys=$(catalog | cut -f1)
+        while IFS= read -r _row; do
+            _k=$(printf '%s' "$_row" | cut -f1)
+            [ -n "$_k" ] || continue
+            printf '%s\n' "$_localkeys" | grep -qx "$_k" && continue
+            printf '%s\n' "$_row" >> "$_tmp"
+            _carried=$((_carried + 1))
+        done < "$MANIFEST"
+    fi
+    # the refusal below counts only LOCALLY HASHED rows on purpose: carried
+    # rows must never be able to disguise a catalog that resolved nothing.
     _rows=$(wc -l < "$_tmp" | tr -d ' ')
-    if [ "$_rows" = 0 ]; then
+    if [ "$_hashed" = 0 ]; then
         rm -f "$_tmp"
         echo "REFUSING to write an empty manifest: nothing in the catalog resolved" >&2
         return 1
     fi
+    LC_ALL=C sort -o "$_tmp" "$_tmp"
     mv "$_tmp" "$MANIFEST"
-    echo "wrote $MANIFEST ($_rows pinned)"
+    echo "wrote $MANIFEST ($_rows pinned: $_hashed hashed here, $_carried carried forward)"
     [ "$_missing" = 0 ] || echo "NOTE: some catalog entries were skipped (see above); push only what is pinned" >&2
 }
 
@@ -132,7 +201,7 @@ cmd_push() {
     need_aws || return 1
     load_creds || return 1
     [ -f "$MANIFEST" ] || { echo "run 'manifest' first so pushes are pinned" >&2; return 1; }
-    if [ "$#" -gt 0 ]; then _keys="$*"; else _keys=$(catalog | cut -f1); fi
+    if [ "$#" -gt 0 ]; then _keys=$(expand_keys "$@"); else _keys=$(catalog | cut -f1); fi
     for key in $_keys; do
         _lp=$(local_path_for "$key") || { echo "unknown key: $key" >&2; return 1; }
         [ -f "$_lp" ] || { echo "missing locally: $_lp" >&2; return 1; }
@@ -154,8 +223,78 @@ cmd_presign() {
     aws s3 presign "s3://$R2_BUCKET/$key" --expires-in "$secs" --endpoint-url "$ENDPOINT"
 }
 
+# A presigned PUT, which `aws s3 presign` cannot mint: it signs GET only, so a
+# box could read from R2 but never write to it, and every upload had to be run
+# from this machine. That is the whole reason a 28.5 GB corpus looked like it
+# needed an hour of Mac uplink. SigV4 is signed here in stdlib python3 (no
+# boto3, so this works on a bare checkout); the secret is passed through the
+# environment, never argv, and only the finished URL is printed.
+#
+# Hand the URL to a box INSIDE a piped script or a 0600 curl config file, the
+# way cmd_stage does, so it never lands in the box's process list.
+cmd_presign_put() {
+    load_creds || return 1
+    key="${1:?usage: presign-put <key|group> [seconds]}"; secs="${2:-7200}"
+    for _k in $(expand_keys "$key"); do
+        # load_creds only exports the AWS_* aliases, so the R2_* values are
+        # handed to the child as an env prefix: visible to python, absent from
+        # argv, and never exported into this shell's wider environment.
+        R2_ACCOUNT_ID="$R2_ACCOUNT_ID" R2_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID" \
+        R2_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY" R2_BUCKET="$R2_BUCKET" \
+        PRESIGN_KEY="$_k" PRESIGN_SECS="$secs" python3 - <<'PY' || return 1
+import datetime, hashlib, hmac, os, sys, urllib.parse
+
+def sign(k, m):
+    return hmac.new(k, m.encode(), hashlib.sha256).digest()
+
+acct = os.environ["R2_ACCOUNT_ID"]
+akid = os.environ["R2_ACCESS_KEY_ID"]
+secret = os.environ["R2_SECRET_ACCESS_KEY"]
+bucket = os.environ["R2_BUCKET"]
+key = os.environ["PRESIGN_KEY"]
+expires = int(os.environ["PRESIGN_SECS"])
+
+host = "%s.r2.cloudflarestorage.com" % acct
+now = datetime.datetime.now(datetime.timezone.utc)
+amzdate = now.strftime("%Y%m%dT%H%M%SZ")
+datestamp = now.strftime("%Y%m%d")
+region, service = "auto", "s3"
+scope = "%s/%s/%s/aws4_request" % (datestamp, region, service)
+uri = "/" + urllib.parse.quote("%s/%s" % (bucket, key), safe="/~")
+q = {"X-Amz-Algorithm": "AWS4-HMAC-SHA256",
+     "X-Amz-Credential": "%s/%s" % (akid, scope),
+     "X-Amz-Date": amzdate,
+     "X-Amz-Expires": str(expires),
+     "X-Amz-SignedHeaders": "host"}
+cqs = "&".join("%s=%s" % (urllib.parse.quote(k2, safe="-_.~"),
+                          urllib.parse.quote(v, safe="-_.~"))
+               for k2, v in sorted(q.items()))
+creq = "\n".join(["PUT", uri, cqs, "host:%s\n" % host, "host", "UNSIGNED-PAYLOAD"])
+sts = "\n".join(["AWS4-HMAC-SHA256", amzdate, scope,
+                 hashlib.sha256(creq.encode()).hexdigest()])
+k = sign(("AWS4" + secret).encode(), datestamp)
+for part in (region, service, "aws4_request"):
+    k = sign(k, part)
+sig = hmac.new(k, sts.encode(), hashlib.sha256).hexdigest()
+sys.stdout.write("https://%s%s?%s&X-Amz-Signature=%s\n" % (host, uri, cqs, sig))
+PY
+    done
+}
+
+# Accepts a group name, in which case every shard is checked against its pin.
 cmd_verify() {
-    key="${1:?usage: verify <key> [dest]}"
+    key="${1:?usage: verify <key|group> [dest]}"
+    if [ -n "$(group_members "$key")" ]; then
+        [ "$#" -le 1 ] || { echo "verify <group> takes no dest" >&2; return 1; }
+        _rc=0
+        for _k in $(expand_keys "$key"); do verify_one "$_k" || _rc=1; done
+        return "$_rc"
+    fi
+    verify_one "$@"
+}
+
+verify_one() {
+    key="$1"
     dest="${2:-$(local_path_for "$key")}"
     _pin=$(pinned "$key")
     [ -n "$_pin" ] || { echo "no pin for $key in $MANIFEST" >&2; return 1; }
@@ -219,16 +358,18 @@ cmd_stage() {
     target="${1:?usage: stage \"<ssh flags+target>\" <key> [key...]}"; shift
     [ "$#" -gt 0 ] || { echo "no keys given" >&2; return 1; }
     [ -f "$MANIFEST" ] || { echo "no $MANIFEST; run 'manifest' first" >&2; return 1; }
-    for key in "$@"; do
+    _staged=0
+    for key in $(expand_keys "$@"); do
         pinned "$key" > /dev/null || { echo "no pin for $key" >&2; return 1; }
         echo "staging $key ..."
+        _staged=$((_staged + 1))
         _url=$(cmd_presign "$key" 7200) || return 1
         # shellcheck disable=SC2086
         { printf "URL='%s'\n" "$_url"; cmd_box_cmd "$key"; } | ssh -o StrictHostKeyChecking=no \
             -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR $target 'sh -s' \
             || { echo "staging FAILED: $key" >&2; return 1; }
     done
-    echo "staged $# key(s); the box verified each against the pins"
+    echo "staged $_staged key(s); the box verified each against the pins"
 }
 
 case "${1:-}" in
@@ -237,6 +378,7 @@ case "${1:-}" in
     push)     shift; cmd_push "$@" ;;
     list)     shift; cmd_list "$@" ;;
     presign)  shift; cmd_presign "$@" ;;
+    presign-put) shift; cmd_presign_put "$@" ;;
     pull)     shift; cmd_pull "$@" ;;
     verify)   shift; cmd_verify "$@" ;;
     box-cmd)  shift; cmd_box_cmd "$@" ;;
