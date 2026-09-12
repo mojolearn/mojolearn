@@ -2152,16 +2152,37 @@ What is owed to close it: emit the CTR config split and a prep-ran/prep-skipped
 marker from the fit, then re-run this A/B. The purpose-built probe
 (`tools/criteo_ours_cat_ab.py`) could not run at all here -- it hit the same
 density refusal -- so it has never priced 2634 either.
-## NCCL all-reduce determinism and price, 4x NVIDIA A40, driver 570.195.03, torch 2.4.1+cu124, NCCL 2.20.5+cuda12.4
+## NCCL all-reduce determinism, 4x NVIDIA A40, driver 570.195.03, torch 2.4.1+cu124, NCCL 2.20.5+cuda12.4
 
 Measured 2026-09-12 on RunPod pod `j3uf4hx92kqmwv` (4x A40, PCIe, no NVLink,
 container `runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04`).
 Full write-up, every hash and the logs:
 `bench/results/nccl_determinism_2026-09-12/`.
 
-This is an opponent BEHAVIOR row, not a speed row: it prices what a
-deterministic all-reduce would cost us, and it settles what NCCL's own
-all-reduce does and does not guarantee bit-for-bit.
+**THE "PRICE OF DETERMINISM" HALF OF THIS SECTION IS WITHDRAWN (2026-09-12,
+Andrew).** The heading used to read "determinism and price" and the text used
+to conclude that determinism costs 7-20% at gradient-bucket sizes and about 2x
+at kilobyte messages. That is not a quantity this experiment can produce, and
+no rerun on better hardware would repair it:
+
+- Pricing determinism requires our deterministic arm against OUR OWN OPTIMIZED
+  NON-DETERMINISTIC arm of the same operation. We have no such arm for
+  all-reduce.
+- Timed against NCCL instead, the ratio is the SUM of three things -- the cost
+  of fixing the summation order, the gap between a few lines of gather/sum/
+  broadcast and NVIDIA's tuned collective, and whatever configuration each side
+  ran -- and nothing in the experiment separates them. The number is therefore
+  unfalsifiable as a claim about determinism.
+- A second confound sat underneath it: CUDA peer-to-peer hung this PCIe host at
+  >= 3 ranks, so every 4-rank case carried `NCCL_P2P_DISABLE=1` and BOTH arms
+  fell through shared memory, erasing ring's topology advantage. An NVLink
+  rerun was provisioned to remove that confound and was cancelled once the
+  framing defect was recognized -- a better-measured version of an
+  unfalsifiable number is still unfalsifiable.
+
+Never quote a ratio from this section as the price of determinism. What
+survives is below: NCCL's own behavior, which is falsifiable and needs no arm
+of ours to compare against.
 
 **NCCL's all-reduce is bit-reproducible for a fixed configuration and is not
 bit-stable across a change in one.** On this stack, 168 configurations x 15-25
@@ -2173,9 +2194,13 @@ and the channel count changes it again -- and NCCL picks all three for you from
 topology and message size. Reduction over 2 ranks has only one order and is
 invariant to every one of those knobs.
 
-Fixed-order all-reduce (gather to rank 0 over point-to-point, sum in rank
-order, broadcast) against NCCL's all-reduce, median of 15, arms serialized,
-same buffers, float32 / bfloat16:
+RAW TIMINGS, NOT A PRICE (see the withdrawal above). A naive fixed-order
+all-reduce (gather to rank 0 over point-to-point, sum in rank order, broadcast)
+against NCCL's all-reduce, median of 15, arms serialized, same buffers,
+float32 / bfloat16. These milliseconds were really measured; what they do NOT
+isolate is the cost of determinism, because the two arms differ in
+implementation quality and configuration as well as in summation order, and
+both arms here ran over shared memory with peer-to-peer disabled:
 
 | bytes per rank | 4 ranks fp32 | 4 ranks bf16 | 2 ranks fp32 | 2 ranks bf16 |
 |---|---|---|---|---|
@@ -2188,9 +2213,9 @@ same buffers, float32 / bfloat16:
 
 Absolute NCCL medians at 4 ranks, fp32: 0.485 ms (1 KB), 0.417 ms (1 MB),
 18.963 ms (64 MB), 74.103 ms (256 MB); the fixed-order arm is 0.952, 0.607,
-20.237 and 80.268 ms. At gradient-bucket sizes (>= 8 MB) determinism costs
-7-20%; at kilobyte messages it costs about 2x, where the cost is latency, not
-bandwidth.
+20.237 and 80.268 ms. The gap narrows as the message grows, which is what a
+fixed per-call overhead looks like; attributing that gap to determinism
+specifically is the withdrawn step, not the timing itself.
 
 Condition on the 4-rank rows: CUDA peer-to-peer over PCIe hangs the first
 all-reduce at 3 and 4 ranks on this host, so every >= 3 rank case carries
