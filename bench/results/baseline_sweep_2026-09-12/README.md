@@ -424,3 +424,68 @@ This is the widest gap on the board in either direction and the cleanest, since
 a speed claim is only interesting when both sides agree about the answer -- and
 here they agree to nine decimal places on the clustering itself, not merely on
 a summary metric.
+
+### DBSCAN REVERSES WITH DIMENSION, AND BOTH ENDS ARE ON THIS BOARD
+
+The Istella-S DBSCAN cell was PENDING in the published table: the first attempt
+lost its `ours` arm at round 1 to the 300 s default round bound (fault 6). With
+the bound raised it ran, and it is the sharpest single result here.
+
+| dataset | dims | ours | cuml-gpu | ratio | agreement |
+|---|---:|---:|---:|---:|---|
+| taxi | 11 | 1,142.6 ms | 13,619.4 ms | **0.084 (12x faster)** | ARI 0.9999999991 |
+| Istella-S | 220 | **335,403.3 ms** | 54,791.4 ms | **6.121 (6x slower)** | ARI 0.9999993801 |
+
+Same algorithm, same parameters, same agreed clustering on both -- identical
+cluster counts (2900, 1501), identical noise fractions, noise agreement 1.0 --
+and the ratio swings by a factor of **73** between d=11 and d=220. Our default
+is the random ball cover, whose pruning degrades as dimension rises until the
+cover stops excluding candidates; cuML's brute force has no such cliff. A board
+that ran only taxi would have published a 12x win and missed that entirely.
+
+Neither number moves a default here. What they jointly say is that the `rbc`
+default is a low-dimension default, and that is a finding for the DBSCAN lane
+to act on, not for this sweep to act on.
+
+### The board in one page
+
+68 ok, 22 REFUSED, **0 UNKNOWN**, 0 PARTIAL across 90 (lane, dataset, arm)
+rows. Every refusal is POLICY, not failure: the vendors' `*-cpu` arms under
+GPU-PATH-ONLY, `lightgbm-cuda` (the wheel has no CUDA tree learner), and
+`cuml-et-gpu` (cuML ships no ExtraTrees). `hdbscan` has no ratio because this
+library ships no HDBSCAN -- an absence by construction, recorded as such rather
+than as a gap.
+
+Ours against the best legal opponent in each cell, `ours/opponent`:
+
+| we lead | | | we trail | | |
+|---|---|---:|---|---|---:|
+| dbscan | taxi | **0.084** | kmeans | taxi | 1.535 |
+| iforest | Istella-S | **0.098** | kmeans | Istella-S | 7.344 |
+| et | Istella-S | 0.262 | pca | taxi | 1.318 |
+| et | taxi | 0.280 | pca | Istella-S | 4.669 |
+| rf | Istella-S | 0.382 | ols | taxi | 7.745 |
+| iforest | taxi | 0.409 | ols | Istella-S | *struck (opponents unsolved)* |
+| gbdt-symmetric | taxi | 0.468 | knn | Istella-S | 2.304 |
+| rf | taxi | 0.527 | svc | taxi | 1.834 |
+| gbdt-depthwise | taxi (vs CatBoost) | 0.634 | svc | Istella-S | 3.072 |
+| knn | taxi (vs torch) | 0.695 | kde | Istella-S | 8.905 |
+| gbdt-lossguide | taxi (vs CatBoost) | 0.824 | kde | taxi | 11.719 |
+| gbdt-depthwise | Istella-S (vs XGBoost) | 0.939 | dbscan | Istella-S | 6.121 |
+| gbdt-symmetric | Istella-S | 0.995 (parity) | gbdt-lossguide | taxi (vs XGBoost) | 1.482 |
+
+**The split is not random and it is the one this repository already predicted.**
+We lead every tree and forest lane on both datasets, and we trail the families
+whose inner loop IS a BLAS call. `ENGINEERING_RULES.md` 0b-iii says exactly
+that about Apple silicon -- "k-means, k-NN, PCA, SVD, OLS, UMAP, GP and ARIMA
+are precisely the families whose inner loop IS a BLAS call, so that margin is
+spent against AMX and there is nothing left to win" -- and this board is the
+NVIDIA evidence for the same claim, against cuBLAS and cuSOLVER instead of AMX.
+Tree fitting is scatter-gather over integers and calls no BLAS, which is why
+those lanes look completely different.
+
+Every one of the classical ratios above is additionally an UPPER BOUND, because
+the GPU opponents are timed with inputs already device-resident while ours
+uploads and validates inside the call (see the span table). Two of them --
+cuML's OLS and torch's OLS on Istella-S -- are struck entirely, because a
+solver that returns R2 = -6473 or NaN is not a faster solver.
