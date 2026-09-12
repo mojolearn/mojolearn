@@ -244,3 +244,51 @@ def test_profile_and_sha256_are_readable_without_a_step(fake_host):
     assert model.profile == SHAPE.profile
     assert model.shape is SHAPE or model.shape.profile == SHAPE.profile
     assert len(model.parameters_sha256()) == 64
+
+
+#: DEVIATION 2682. The four-row shape, whose capture is a separate certificate
+#: because nine weight gradients contract over the token count.
+FOUR = Shape(batch=4)
+
+
+def test_a_second_shape_reaches_the_binding_as_that_shape(fake_host):
+    """The surface has only ever been exercised at the certified shape. A
+    capture at another shape is worth nothing if the replay silently runs the
+    default, so this checks what actually crosses the boundary."""
+    calls = []
+
+    def train_step(addresses, native, scalars, completed):
+        assert list(native) == host_mod._native_shape(FOUR)
+        calls.append(dict(
+            native=list(native),
+            ids=buffer(addresses[3], FOUR.batch * (FOUR.length + 1), True).copy(),
+            params=buffer(addresses[0], FOUR.n_total).copy()))
+        for slot, value in ((4, 1.0), (5, 2.0), (6, 3.0), (7, 4.0)):
+            buffer(addresses[slot], FOUR.n_total)[:] = value
+        return 0x3F800000
+
+    fake_host.byte_lm_host_train_step = train_step
+    model = host_mod.LanguageModelHostTrainer(np.ones(FOUR.n_total, np.float32), shape=FOUR)
+    x = (np.arange(FOUR.batch * (FOUR.length + 1), dtype=np.int32) % 256
+         ).reshape(FOUR.batch, FOUR.length + 1)
+    model.train_step(x)
+    assert len(calls) == 1
+    # Four rows, and the batch dimension is what the native side is told.
+    assert calls[0]['native'][0] == 4
+    assert len(calls[0]['ids']) == FOUR.batch * (FOUR.length + 1) == 132
+    np.testing.assert_array_equal(calls[0]['ids'], x.ravel())
+    # Same parameter count at both shapes, which is the point: the arrays are
+    # the same size and the sums behind them are not.
+    assert FOUR.n_total == SHAPE.n_total
+    assert model.profile == FOUR.profile != SHAPE.profile
+    assert model.completed_steps == 1
+
+
+def test_the_certified_batch_layout_is_refused_at_the_second_shape(fake_host):
+    """A two-row batch is the right layout for the other shape and must not be
+    accepted here, or a replay would compare a different sum than it recorded."""
+    install(fake_host)
+    model = host_mod.LanguageModelHostTrainer(np.ones(FOUR.n_total, np.float32), shape=FOUR)
+    with pytest.raises(ValueError, match=r'ids must be \[4, 33\]'):
+        model.train_step(ids())
+    assert model.completed_steps == 0
