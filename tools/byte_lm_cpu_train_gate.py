@@ -49,6 +49,7 @@ import json
 import math
 import struct
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -357,6 +358,11 @@ def mode_cpu(args):
     steps = selected(args.steps)
     compared, mismatches = 0, []
     used_optimizer = None
+    # Time the STEP, not the window around it. An earlier estimate of this cost
+    # was taken from a window that contained a binding build and came out about
+    # twentyfold high, which is how a 119-step sample got justified. The clock
+    # here covers train_step alone, not the file reads or the comparisons.
+    step_seconds = 0.0
     for number in steps:
         desc = descriptors(tree, number) if args.verify_digests else {}
         start = {key: array(tree, number, key, desc.get(key))
@@ -379,7 +385,9 @@ def mode_cpu(args):
             lr=opt['lr'], betas=(opt['beta1'], opt['beta2']), eps=opt['eps'],
             weight_decay=opt['weight_decay'])
         ids = frombytes(start['ids'], '<i4', (BATCH, LENGTH + 1))
+        started = time.perf_counter()
         bits = model.train_step(ids)
+        step_seconds += time.perf_counter() - started
         produced = dict(grad=le_bytes(model.gradient_, 'f'),
                         loss=struct.pack('<I', bits),
                         post_p=le_bytes(model.parameters_, 'f'),
@@ -404,7 +412,10 @@ def mode_cpu(args):
                   deviation=2680, profile=PROFILE, vendor=args.vendor,
                   steps=len(steps), compared=compared, mismatched=len(mismatches),
                   first_mismatches=mismatches, optimizer=used_optimizer,
-                  expect_mismatch=args.expect_mismatch, verdict=verdict)
+                  expect_mismatch=args.expect_mismatch,
+                  step_seconds=round(step_seconds, 4),
+                  seconds_per_step=(round(step_seconds / len(steps), 4) if steps else None),
+                  verdict=verdict)
     print(f'gate: {verdict}: {compared - len(mismatches)}/{compared} array comparisons equal '
           f'over {len(steps)} steps against {args.vendor}'
           f'{" (sabotage build, a mismatch was required)" if args.expect_mismatch else ""}')
@@ -414,6 +425,10 @@ def mode_cpu(args):
         print('gate: optimizer from the capture: '
               + ' '.join(f'{k}={used_optimizer[k]!r}'
                          for k in ('lr', 'beta1', 'beta2', 'eps', 'weight_decay')))
+    if steps:
+        print(f'gate: train_step time: {step_seconds:.3f} s over {len(steps)} steps, '
+              f'{step_seconds / len(steps) * 1000:.1f} ms per step, forward and backward '
+              f'and the update, reference path, one thread')
     # NAME THE TENSOR. A verdict of 12/15 with nothing else said is close to
     # useless: it cannot tell a wrong gradient from a wrong hyperparameter.
     for row in mismatches[:10]:
