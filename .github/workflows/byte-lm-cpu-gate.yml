@@ -184,6 +184,19 @@ jobs:
           python3 tools/byte_lm_host_path_sweep.py --threads 1,2,3 --max-batch 8 \
             --report "$GATE_OUT/path_sweep.json" 2>&1 | tee "$GATE_OUT/path_sweep.log"
 
+      # DEVIATION 2680: re-derive the three-vendor TRAINING agreement from the
+      # retained raw bytes, every one of the 128 steps, all 11 arrays per step
+      # including the gradient and both Adam moments, each checked against the
+      # SHA-256 its own capture.json records. The gate above reads parameters
+      # and loss only, and trusted comparison.json's identity_admitted flag
+      # for the rest; this reads the bytes. No GPU, no binding, about a second.
+      - name: Training capture, three vendors must agree byte for byte
+        if: always()
+        run: |
+          set -o pipefail
+          python3 tools/byte_lm_cpu_train_gate.py vendors --steps all --verify-digests \
+            --report "$GATE_OUT/train_capture.json" 2>&1 | tee "$GATE_OUT/train_capture.log"
+
       # DEVIATION 2640's two Mojo checks, built with the binding's CPU target so
       # they test the codegen the gate ran: the host kernels against the
       # oracles by bits on shapes and planted values the captures never reach,
