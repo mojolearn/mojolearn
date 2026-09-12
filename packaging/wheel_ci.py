@@ -180,7 +180,14 @@ def pins(argv):
         # THE LINE THAT WAS MISSING WHEN 0.3.0 SHIPPED. Without it `mojo build`
         # targets the build box's own CPU; four build boxes in a row happened
         # to have AVX-512 and the wheel SIGILLed everywhere else.
-        if not re.search(r'--target-cpu \$\{MOJOLEARN_LINUX_CPU:-x86-64-v3\}', text):
+        # The quotes are OPTIONAL, and that is deliberate. This check rejected
+        # `--target-cpu "${MOJOLEARN_LINUX_CPU:-x86-64-v3}"` for months of
+        # nobody writing it, then build_byte_lm_host.sh wrote the quoted form
+        # -- which is the SAFER shell spelling -- and turned main red while
+        # pinning exactly the right baseline. Accepting both spellings weakens
+        # the assertion not at all: the variable and the default are still
+        # required verbatim.
+        if not re.search(r'--target-cpu "?\$\{MOJOLEARN_LINUX_CPU:-x86-64-v3\}"?', text):
             print(f"FAIL {s.name}: does not pin the Linux x86-64 baseline to "
                   f"x86-64-v3. 0.3.0 shipped without this and SIGILLed on "
                   f"every host without AVX-512.", file=sys.stderr)
