@@ -120,8 +120,11 @@ def byte_lm_host_logits_binding(addresses: PythonObject, dims: PythonObject,
     return PythonObject(len(logits))
 
 
-def _write_span(address: Int, values: List[Float32]):
-    """Copy a host list into a caller-owned buffer at `address`."""
+def _write_span(address: Int, values: List[Float32]) raises:
+    """Copy a host list into a caller-owned buffer at `address`.
+
+    `raises` because `f32_ptr` refuses a null address, and a function that
+    calls a raising function must say so."""
     var out = f32_ptr(address)
     for i in range(len(values)):
         out.unsafe_store(i, values[i])
