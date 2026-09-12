@@ -85,3 +85,37 @@ system Python because RAPIDS and the Mojo-built bindings can support different P
 - Refuse or reroute GEMV shapes that exceed backend grid-dimension limits.
 
 Treat these as hypotheses until a current, admitted run demonstrates them.
+
+## Checks that cannot fail
+
+Ask of every check here: **what would make this fail?** If the answer is
+"nothing", it is decoration, and it will read as a pass forever. This question
+found three real defects on 2026-09-12, all of which looked green:
+
+- a verification grep matching a phrase that is split across two source lines,
+  so it returned 0 on the broken side too;
+- a `git restore` that errored on an unsplit zsh variable, whose verification
+  errored the same way and printed nothing, which read as a clean bill of health;
+- fixtures built as hand-written dicts, which could not have noticed if the
+  declaration they were testing were deleted from the source.
+
+The fix in each case was a control: run the probe against the UNFIXED side and
+watch it fail, or sabotage the thing under test and confirm a named failure.
+`tools/test_ctd_span.py::test_source_declares_the_flag` is the pattern to copy --
+it reads the source file, because a fixture cannot see a deleted declaration.
+
+Two known instances of this shape are still OPEN. Neither is a defect on its own;
+both are places where a green result currently proves less than it appears to.
+
+- **`race()`'s own loop is exercised only by a live run with workers.** The
+  judgement inside it is reachable by test; the plumbing around it is not, so a
+  passing test suite does not mean a race would run. Closing this means a
+  worker-free harness for the loop itself.
+- **cuML's forest JSON schema is unsettled.** `_shape_cuml` rejects a parse
+  unless `nodes >= leaves >= trees >= 1`, which catches impossible counts but
+  CANNOT catch a wrong-but-self-consistent schema -- a flat per-tree node list
+  gives `leaves == nodes` and passes. `tools/cuml_forest_json_probe.py` settles
+  it in about a minute on any box with cuML, needs no dataset, and flags that
+  case as SUSPICIOUS by name. Until someone runs it, rf and et cells read
+  `verdict=UNKNOWN`. **Leave them UNKNOWN**; never backfill a fitted shape from
+  `n_estimators`, which would turn a missing number into a wrong one.
