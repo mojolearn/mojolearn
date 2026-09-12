@@ -50,3 +50,7 @@ mojolearn/.dylibs/
 dist/
 build/
 *.egg-info/
+
+# the byte LM host build writes its .so here (bindings/build_byte_lm_host.sh);
+# the sibling identical/ directory is already ignored above
+mojolearn/host/*.so
