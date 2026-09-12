@@ -1,0 +1,161 @@
+W0912 18:53:06.838000 139479718445696 torch/distributed/run.py:779] 
+W0912 18:53:06.838000 139479718445696 torch/distributed/run.py:779] *****************************************
+W0912 18:53:06.838000 139479718445696 torch/distributed/run.py:779] Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed. 
+W0912 18:53:06.838000 139479718445696 torch/distributed/run.py:779] *****************************************
+0c433d60ac00:4620:4620 [0] NCCL INFO Bootstrap : Using eth0:172.16.80.2<0>
+0c433d60ac00:4620:4620 [0] NCCL INFO NET/Plugin : dlerror=libnccl-net.so: cannot open shared object file: No such file or directory No plugin found (libnccl-net.so), using internal implementation
+0c433d60ac00:4620:4620 [0] NCCL INFO cudaDriverVersion 12080
+NCCL version 2.20.5+cuda12.4
+0c433d60ac00:4621:4621 [1] NCCL INFO cudaDriverVersion 12080
+0c433d60ac00:4621:4621 [1] NCCL INFO Bootstrap : Using eth0:172.16.80.2<0>
+0c433d60ac00:4621:4621 [1] NCCL INFO NET/Plugin : dlerror=libnccl-net.so: cannot open shared object file: No such file or directory No plugin found (libnccl-net.so), using internal implementation
+0c433d60ac00:4622:4622 [2] NCCL INFO cudaDriverVersion 12080
+0c433d60ac00:4622:4622 [2] NCCL INFO Bootstrap : Using eth0:172.16.80.2<0>
+0c433d60ac00:4623:4623 [3] NCCL INFO cudaDriverVersion 12080
+0c433d60ac00:4623:4623 [3] NCCL INFO Bootstrap : Using eth0:172.16.80.2<0>
+0c433d60ac00:4622:4622 [2] NCCL INFO NET/Plugin : dlerror=libnccl-net.so: cannot open shared object file: No such file or directory No plugin found (libnccl-net.so), using internal implementation
+0c433d60ac00:4623:4623 [3] NCCL INFO NET/Plugin : dlerror=libnccl-net.so: cannot open shared object file: No such file or directory No plugin found (libnccl-net.so), using internal implementation
+0c433d60ac00:4620:4656 [0] NCCL INFO Failed to open libibverbs.so[.1]
+0c433d60ac00:4620:4656 [0] NCCL INFO NET/Socket : Using [0]eth0:172.16.80.2<0>
+0c433d60ac00:4620:4656 [0] NCCL INFO Using non-device net plugin version 0
+0c433d60ac00:4620:4656 [0] NCCL INFO Using network Socket
+0c433d60ac00:4621:4657 [1] NCCL INFO Failed to open libibverbs.so[.1]
+0c433d60ac00:4621:4657 [1] NCCL INFO NET/Socket : Using [0]eth0:172.16.80.2<0>
+0c433d60ac00:4621:4657 [1] NCCL INFO Using non-device net plugin version 0
+0c433d60ac00:4621:4657 [1] NCCL INFO Using network Socket
+0c433d60ac00:4622:4658 [2] NCCL INFO Failed to open libibverbs.so[.1]
+0c433d60ac00:4622:4658 [2] NCCL INFO NET/Socket : Using [0]eth0:172.16.80.2<0>
+0c433d60ac00:4622:4658 [2] NCCL INFO Using non-device net plugin version 0
+0c433d60ac00:4622:4658 [2] NCCL INFO Using network Socket
+0c433d60ac00:4623:4659 [3] NCCL INFO Failed to open libibverbs.so[.1]
+0c433d60ac00:4623:4659 [3] NCCL INFO NET/Socket : Using [0]eth0:172.16.80.2<0>
+0c433d60ac00:4623:4659 [3] NCCL INFO Using non-device net plugin version 0
+0c433d60ac00:4623:4659 [3] NCCL INFO Using network Socket
+0c433d60ac00:4622:4658 [2] NCCL INFO comm 0x43580dd0 rank 2 nranks 4 cudaDev 2 nvmlDev 2 busId d5000 commId 0x87f54f33542a1c5c - Init START
+0c433d60ac00:4623:4659 [3] NCCL INFO comm 0x32c978e0 rank 3 nranks 4 cudaDev 3 nvmlDev 3 busId d6000 commId 0x87f54f33542a1c5c - Init START
+0c433d60ac00:4620:4656 [0] NCCL INFO comm 0x21f169b0 rank 0 nranks 4 cudaDev 0 nvmlDev 0 busId 57000 commId 0x87f54f33542a1c5c - Init START
+0c433d60ac00:4621:4657 [1] NCCL INFO comm 0x2c96ba90 rank 1 nranks 4 cudaDev 1 nvmlDev 1 busId d2000 commId 0x87f54f33542a1c5c - Init START
+0c433d60ac00:4622:4658 [2] NCCL INFO NCCL_P2P_LEVEL set by environment to LOC
+0c433d60ac00:4622:4658 [2] NCCL INFO Setting affinity for GPU 2 to ffffff00,0000ffff,ff000000
+0c433d60ac00:4622:4658 [2] NCCL INFO NVLS multicast support is not available on dev 2
+0c433d60ac00:4623:4659 [3] NCCL INFO NCCL_P2P_LEVEL set by environment to LOC
+0c433d60ac00:4623:4659 [3] NCCL INFO Setting affinity for GPU 3 to ffffff00,0000ffff,ff000000
+0c433d60ac00:4623:4659 [3] NCCL INFO NVLS multicast support is not available on dev 3
+0c433d60ac00:4621:4657 [1] NCCL INFO NCCL_P2P_LEVEL set by environment to LOC
+0c433d60ac00:4621:4657 [1] NCCL INFO Setting affinity for GPU 1 to ffffff00,0000ffff,ff000000
+0c433d60ac00:4621:4657 [1] NCCL INFO NVLS multicast support is not available on dev 1
+0c433d60ac00:4620:4656 [0] NCCL INFO NCCL_P2P_LEVEL set by environment to LOC
+0c433d60ac00:4620:4656 [0] NCCL INFO Setting affinity for GPU 0 to ff,ffff0000,00ffffff
+0c433d60ac00:4620:4656 [0] NCCL INFO NVLS multicast support is not available on dev 0
+0c433d60ac00:4623:4659 [3] NCCL INFO comm 0x32c978e0 rank 3 nRanks 4 nNodes 1 localRanks 4 localRank 3 MNNVL 0
+0c433d60ac00:4622:4658 [2] NCCL INFO comm 0x43580dd0 rank 2 nRanks 4 nNodes 1 localRanks 4 localRank 2 MNNVL 0
+0c433d60ac00:4621:4657 [1] NCCL INFO comm 0x2c96ba90 rank 1 nRanks 4 nNodes 1 localRanks 4 localRank 1 MNNVL 0
+0c433d60ac00:4620:4656 [0] NCCL INFO comm 0x21f169b0 rank 0 nRanks 4 nNodes 1 localRanks 4 localRank 0 MNNVL 0
+0c433d60ac00:4622:4658 [2] NCCL INFO Trees [0] 0/-1/-1->2->1 [1] 0/-1/-1->2->1
+0c433d60ac00:4623:4659 [3] NCCL INFO Trees [0] -1/-1/-1->3->0 [1] -1/-1/-1->3->0
+0c433d60ac00:4622:4658 [2] NCCL INFO P2P Chunksize set to 131072
+0c433d60ac00:4621:4657 [1] NCCL INFO Trees [0] 2/-1/-1->1->-1 [1] 2/-1/-1->1->-1
+0c433d60ac00:4623:4659 [3] NCCL INFO P2P Chunksize set to 131072
+0c433d60ac00:4620:4656 [0] NCCL INFO Channel 00/02 :    0   1   2   3
+0c433d60ac00:4621:4657 [1] NCCL INFO P2P Chunksize set to 131072
+0c433d60ac00:4620:4656 [0] NCCL INFO Channel 01/02 :    0   1   2   3
+0c433d60ac00:4620:4656 [0] NCCL INFO Trees [0] 3/-1/-1->0->2 [1] 3/-1/-1->0->2
+0c433d60ac00:4620:4656 [0] NCCL INFO P2P Chunksize set to 131072
+0c433d60ac00:4620:4656 [0] NCCL INFO Channel 00 : 0[0] -> 1[1] via SHM/direct/direct
+0c433d60ac00:4621:4657 [1] NCCL INFO Channel 00 : 1[1] -> 2[2] via SHM/direct/direct
+0c433d60ac00:4622:4658 [2] NCCL INFO Channel 00 : 2[2] -> 3[3] via SHM/direct/direct
+0c433d60ac00:4620:4656 [0] NCCL INFO Channel 01 : 0[0] -> 1[1] via SHM/direct/direct
+0c433d60ac00:4621:4657 [1] NCCL INFO Channel 01 : 1[1] -> 2[2] via SHM/direct/direct
+0c433d60ac00:4622:4658 [2] NCCL INFO Channel 01 : 2[2] -> 3[3] via SHM/direct/direct
+0c433d60ac00:4623:4659 [3] NCCL INFO Channel 00 : 3[3] -> 0[0] via SHM/direct/direct
+0c433d60ac00:4623:4659 [3] NCCL INFO Channel 01 : 3[3] -> 0[0] via SHM/direct/direct
+0c433d60ac00:4621:4657 [1] NCCL INFO Connected all rings
+0c433d60ac00:4622:4658 [2] NCCL INFO Connected all rings
+0c433d60ac00:4620:4656 [0] NCCL INFO Connected all rings
+0c433d60ac00:4623:4659 [3] NCCL INFO Connected all rings
+0c433d60ac00:4620:4656 [0] NCCL INFO Channel 00 : 0[0] -> 2[2] via SHM/direct/direct
+0c433d60ac00:4622:4658 [2] NCCL INFO Channel 00 : 2[2] -> 0[0] via SHM/direct/direct
+0c433d60ac00:4620:4656 [0] NCCL INFO Channel 01 : 0[0] -> 2[2] via SHM/direct/direct
+0c433d60ac00:4622:4658 [2] NCCL INFO Channel 01 : 2[2] -> 0[0] via SHM/direct/direct
+0c433d60ac00:4620:4656 [0] NCCL INFO Channel 00 : 0[0] -> 3[3] via SHM/direct/direct
+0c433d60ac00:4622:4658 [2] NCCL INFO Channel 00 : 2[2] -> 1[1] via SHM/direct/direct
+0c433d60ac00:4622:4658 [2] NCCL INFO Channel 01 : 2[2] -> 1[1] via SHM/direct/direct
+0c433d60ac00:4620:4656 [0] NCCL INFO Channel 01 : 0[0] -> 3[3] via SHM/direct/direct
+0c433d60ac00:4622:4658 [2] NCCL INFO Connected all trees
+0c433d60ac00:4621:4657 [1] NCCL INFO Connected all trees
+0c433d60ac00:4620:4656 [0] NCCL INFO Connected all trees
+0c433d60ac00:4623:4659 [3] NCCL INFO Connected all trees
+0c433d60ac00:4622:4658 [2] NCCL INFO threadThresholds 8/8/64 | 32/8/64 | 512 | 512
+0c433d60ac00:4621:4657 [1] NCCL INFO threadThresholds 8/8/64 | 32/8/64 | 512 | 512
+0c433d60ac00:4622:4658 [2] NCCL INFO 2 coll channels, 0 collnet channels, 0 nvls channels, 2 p2p channels, 2 p2p channels per peer
+0c433d60ac00:4621:4657 [1] NCCL INFO 2 coll channels, 0 collnet channels, 0 nvls channels, 2 p2p channels, 2 p2p channels per peer
+0c433d60ac00:4620:4656 [0] NCCL INFO   Algorithm   |                            Tree                  |                            Ring                  |                   CollNetDirect                  |
+0c433d60ac00:4623:4659 [3] NCCL INFO threadThresholds 8/8/64 | 32/8/64 | 512 | 512
+0c433d60ac00:4620:4656 [0] NCCL INFO   Protocol    |             LL |          LL128 |         Simple |             LL |          LL128 |         Simple |             LL |          LL128 |         Simple |
+0c433d60ac00:4623:4659 [3] NCCL INFO 2 coll channels, 0 collnet channels, 0 nvls channels, 2 p2p channels, 2 p2p channels per peer
+0c433d60ac00:4620:4656 [0] NCCL INFO  Max NThreads |            512 |            640 |            512 |            512 |            640 |            256 |              0 |              0 |            640 |
+0c433d60ac00:4620:4656 [0] NCCL INFO     Broadcast |     0.0/   0.0 |     0.0/   0.0 |     0.0/   0.0 |     7.6/   2.3 |    16.5/   0.0 |    14.1/   7.0 |     0.0/   0.0 |     0.0/   0.0 |     0.0/   0.0 |
+0c433d60ac00:4620:4656 [0] NCCL INFO        Reduce |     0.0/   0.0 |     0.0/   0.0 |     0.0/   0.0 |     7.6/   1.8 |    16.5/   0.0 |    14.1/   7.0 |     0.0/   0.0 |     0.0/   0.0 |     0.0/   0.0 |
+0c433d60ac00:4620:4656 [0] NCCL INFO     AllGather |     0.0/   0.0 |     0.0/   0.0 |     0.0/   0.0 |     9.6/   3.1 |    21.5/   0.0 |    25.5/   9.3 |     2.4/   0.0 |     2.4/   0.0 |    40.8/   0.0 |
+0c433d60ac00:4620:4656 [0] NCCL INFO ReduceScatter |     0.0/   0.0 |     0.0/   0.0 |     0.0/   0.0 |     9.6/   3.1 |    21.5/   0.0 |    25.5/   9.3 |     2.4/   0.0 |     2.4/   0.0 |    40.8/   0.0 |
+0c433d60ac00:4620:4656 [0] NCCL INFO     AllReduce |    12.8/   1.2 |    25.4/   0.0 |   168.0/   4.6 |    12.6/   1.2 |    29.0/   0.0 |    42.6/   4.7 |     2.4/   0.0 |     2.4/   0.0 |    40.8/   0.0 |
+0c433d60ac00:4620:4656 [0] NCCL INFO   Algorithm   |                    CollNetChain                  |                            NVLS                  |                        NVLSTree                  |
+0c433d60ac00:4620:4656 [0] NCCL INFO   Protocol    |             LL |          LL128 |         Simple |             LL |          LL128 |         Simple |             LL |          LL128 |         Simple |
+0c433d60ac00:4620:4656 [0] NCCL INFO  Max NThreads |              0 |              0 |            640 |              0 |              0 |            640 |              0 |              0 |            640 |
+0c433d60ac00:4620:4656 [0] NCCL INFO     Broadcast |     0.0/   0.0 |     0.0/   0.0 |     0.0/   0.0 |     0.0/   0.0 |     0.0/   0.0 |     0.0/   0.0 |     0.0/   0.0 |     0.0/   0.0 |     0.0/   0.0 |
+0c433d60ac00:4620:4656 [0] NCCL INFO        Reduce |     0.0/   0.0 |     0.0/   0.0 |     0.0/   0.0 |     0.0/   0.0 |     0.0/   0.0 |     0.0/   0.0 |     0.0/   0.0 |     0.0/   0.0 |     0.0/   0.0 |
+0c433d60ac00:4620:4656 [0] NCCL INFO     AllGather |     0.0/   0.0 |     0.0/   0.0 |     0.0/   0.0 |     0.0/   0.0 |     0.0/   0.0 |     0.0/   0.0 |     0.0/   0.0 |     0.0/   0.0 |     0.0/   0.0 |
+0c433d60ac00:4620:4656 [0] NCCL INFO ReduceScatter |     0.0/   0.0 |     0.0/   0.0 |     0.0/   0.0 |     0.0/   0.0 |     0.0/   0.0 |     0.0/   0.0 |     0.0/   0.0 |     0.0/   0.0 |     0.0/   0.0 |
+0c433d60ac00:4620:4656 [0] NCCL INFO     AllReduce |     0.0/   0.0 |     0.0/   0.0 |    46.8/   0.0 |     0.0/   0.0 |     0.0/   0.0 |     0.0/   0.0 |     0.0/   0.0 |     0.0/   0.0 |     0.0/   0.0 |
+0c433d60ac00:4620:4656 [0] NCCL INFO threadThresholds 8/8/64 | 32/8/64 | 512 | 512
+0c433d60ac00:4620:4656 [0] NCCL INFO 2 coll channels, 0 collnet channels, 0 nvls channels, 2 p2p channels, 2 p2p channels per peer
+0c433d60ac00:4622:4658 [2] NCCL INFO comm 0x43580dd0 rank 2 nranks 4 cudaDev 2 nvmlDev 2 busId d5000 commId 0x87f54f33542a1c5c - Init COMPLETE
+0c433d60ac00:4620:4656 [0] NCCL INFO comm 0x21f169b0 rank 0 nranks 4 cudaDev 0 nvmlDev 0 busId 57000 commId 0x87f54f33542a1c5c - Init COMPLETE
+0c433d60ac00:4621:4657 [1] NCCL INFO comm 0x2c96ba90 rank 1 nranks 4 cudaDev 1 nvmlDev 1 busId d2000 commId 0x87f54f33542a1c5c - Init COMPLETE
+0c433d60ac00:4623:4659 [3] NCCL INFO comm 0x32c978e0 rank 3 nranks 4 cudaDev 3 nvmlDev 3 busId d6000 commId 0x87f54f33542a1c5c - Init COMPLETE
+0c433d60ac00:4620:4620 [0] NCCL INFO 1024 Bytes -> Algo 1 proto 0 time 13.477715
+0c433d60ac00:4620:4620 [0] NCCL INFO 1024 Bytes -> Algo 1 proto 0 time 13.477715
+JSON|{"NCCL_ALGO": "", "NCCL_MAX_NCHANNELS": "", "NCCL_MIN_NCHANNELS": "", "NCCL_NTHREADS": "", "NCCL_P2P_DISABLE": "1", "NCCL_PROTO": "", "NCCL_SHM_DISABLE": "", "all_hashes": ["516e18249a6d3dab1f7e866087a1c963"], "bytes": 1024, "device_name": "NVIDIA A40", "distinct_result_hashes": 1, "dtype": "float32", "elements": 256, "iters": 2, "mode": "hashes", "nccl_version": "2.20.5", "rank0_input_hash": "68624e0a35f9c0b7ba422f98be861327", "result_hash": "516e18249a6d3dab1f7e866087a1c963", "tag": "debug_info", "torch": "2.4.1+cu124", "torch_cuda": "12.4", "world_size": 4}
+0c433d60ac00:4620:4620 [0] NCCL INFO 65536 Bytes -> Algo 1 proto 2 time 56.643425
+0c433d60ac00:4620:4620 [0] NCCL INFO 65536 Bytes -> Algo 1 proto 2 time 56.643425
+JSON|{"NCCL_ALGO": "", "NCCL_MAX_NCHANNELS": "", "NCCL_MIN_NCHANNELS": "", "NCCL_NTHREADS": "", "NCCL_P2P_DISABLE": "1", "NCCL_PROTO": "", "NCCL_SHM_DISABLE": "", "all_hashes": ["6112dab17b51e2b06bd52155c29f8e7f"], "bytes": 65536, "device_name": "NVIDIA A40", "distinct_result_hashes": 1, "dtype": "float32", "elements": 16384, "iters": 2, "mode": "hashes", "nccl_version": "2.20.5", "rank0_input_hash": "b9ac67f73234d07adfa7fa65238acf59", "result_hash": "6112dab17b51e2b06bd52155c29f8e7f", "tag": "debug_info", "torch": "2.4.1+cu124", "torch_cuda": "12.4", "world_size": 4}
+0c433d60ac00:4620:4620 [0] NCCL INFO 1048576 Bytes -> Algo 1 proto 2 time 267.294830
+0c433d60ac00:4620:4620 [0] NCCL INFO 1048576 Bytes -> Algo 1 proto 2 time 267.294830
+JSON|{"NCCL_ALGO": "", "NCCL_MAX_NCHANNELS": "", "NCCL_MIN_NCHANNELS": "", "NCCL_NTHREADS": "", "NCCL_P2P_DISABLE": "1", "NCCL_PROTO": "", "NCCL_SHM_DISABLE": "", "all_hashes": ["722d602fced81bb0a4b7ee94884166c2"], "bytes": 1048576, "device_name": "NVIDIA A40", "distinct_result_hashes": 1, "dtype": "float32", "elements": 262144, "iters": 2, "mode": "hashes", "nccl_version": "2.20.5", "rank0_input_hash": "ddfcfa3713e12cfbc67ea238b79826ff", "result_hash": "722d602fced81bb0a4b7ee94884166c2", "tag": "debug_info", "torch": "2.4.1+cu124", "torch_cuda": "12.4", "world_size": 4}
+0c433d60ac00:4620:4620 [0] NCCL INFO 8388608 Bytes -> Algo 1 proto 2 time 1840.158691
+0c433d60ac00:4620:4620 [0] NCCL INFO 8388608 Bytes -> Algo 1 proto 2 time 1840.158691
+JSON|{"NCCL_ALGO": "", "NCCL_MAX_NCHANNELS": "", "NCCL_MIN_NCHANNELS": "", "NCCL_NTHREADS": "", "NCCL_P2P_DISABLE": "1", "NCCL_PROTO": "", "NCCL_SHM_DISABLE": "", "all_hashes": ["72ec879ade3779e77831d3d50a03ab01"], "bytes": 8388608, "device_name": "NVIDIA A40", "distinct_result_hashes": 1, "dtype": "float32", "elements": 2097152, "iters": 2, "mode": "hashes", "nccl_version": "2.20.5", "rank0_input_hash": "8f70cfd6327ac8e078ec18b40252a9dd", "result_hash": "72ec879ade3779e77831d3d50a03ab01", "tag": "debug_info", "torch": "2.4.1+cu124", "torch_cuda": "12.4", "world_size": 4}
+0c433d60ac00:4620:4620 [0] NCCL INFO 67108864 Bytes -> Algo 1 proto 2 time 14423.069336
+0c433d60ac00:4620:4620 [0] NCCL INFO 67108864 Bytes -> Algo 1 proto 2 time 14423.069336
+JSON|{"NCCL_ALGO": "", "NCCL_MAX_NCHANNELS": "", "NCCL_MIN_NCHANNELS": "", "NCCL_NTHREADS": "", "NCCL_P2P_DISABLE": "1", "NCCL_PROTO": "", "NCCL_SHM_DISABLE": "", "all_hashes": ["b05c421e0d9eb287f06a2c468877c30c"], "bytes": 67108864, "device_name": "NVIDIA A40", "distinct_result_hashes": 1, "dtype": "float32", "elements": 16777216, "iters": 2, "mode": "hashes", "nccl_version": "2.20.5", "rank0_input_hash": "f2e6b43ff0f79cec2a01a3c39f1c4aa8", "result_hash": "b05c421e0d9eb287f06a2c468877c30c", "tag": "debug_info", "torch": "2.4.1+cu124", "torch_cuda": "12.4", "world_size": 4}
+0c433d60ac00:4620:4620 [0] NCCL INFO 268435456 Bytes -> Algo 1 proto 2 time 57564.480469
+0c433d60ac00:4620:4620 [0] NCCL INFO 268435456 Bytes -> Algo 1 proto 2 time 57564.480469
+JSON|{"NCCL_ALGO": "", "NCCL_MAX_NCHANNELS": "", "NCCL_MIN_NCHANNELS": "", "NCCL_NTHREADS": "", "NCCL_P2P_DISABLE": "1", "NCCL_PROTO": "", "NCCL_SHM_DISABLE": "", "all_hashes": ["a119eee090133688cc85a112f3eed6ad"], "bytes": 268435456, "device_name": "NVIDIA A40", "distinct_result_hashes": 1, "dtype": "float32", "elements": 67108864, "iters": 2, "mode": "hashes", "nccl_version": "2.20.5", "rank0_input_hash": "8551eecde58bbbb4c548b503f0f7a14b", "result_hash": "a119eee090133688cc85a112f3eed6ad", "tag": "debug_info", "torch": "2.4.1+cu124", "torch_cuda": "12.4", "world_size": 4}
+0c433d60ac00:4620:4620 [0] NCCL INFO 512 Bytes -> Algo 1 proto 0 time 13.038857
+0c433d60ac00:4620:4620 [0] NCCL INFO 512 Bytes -> Algo 1 proto 0 time 13.038857
+JSON|{"NCCL_ALGO": "", "NCCL_MAX_NCHANNELS": "", "NCCL_MIN_NCHANNELS": "", "NCCL_NTHREADS": "", "NCCL_P2P_DISABLE": "1", "NCCL_PROTO": "", "NCCL_SHM_DISABLE": "", "all_hashes": ["eff66263363d19b39efcebcf0af021e5"], "bytes": 512, "device_name": "NVIDIA A40", "distinct_result_hashes": 1, "dtype": "bfloat16", "elements": 256, "iters": 2, "mode": "hashes", "nccl_version": "2.20.5", "rank0_input_hash": "c733f27e0ca4503099d7ea2544e616fd", "result_hash": "eff66263363d19b39efcebcf0af021e5", "tag": "debug_info", "torch": "2.4.1+cu124", "torch_cuda": "12.4", "world_size": 4}
+0c433d60ac00:4620:4620 [0] NCCL INFO 32768 Bytes -> Algo 1 proto 0 time 40.686855
+0c433d60ac00:4620:4620 [0] NCCL INFO 32768 Bytes -> Algo 1 proto 0 time 40.686855
+JSON|{"NCCL_ALGO": "", "NCCL_MAX_NCHANNELS": "", "NCCL_MIN_NCHANNELS": "", "NCCL_NTHREADS": "", "NCCL_P2P_DISABLE": "1", "NCCL_PROTO": "", "NCCL_SHM_DISABLE": "", "all_hashes": ["976dc8739ae4b54d6fed41cd94ff8ac9"], "bytes": 32768, "device_name": "NVIDIA A40", "distinct_result_hashes": 1, "dtype": "bfloat16", "elements": 16384, "iters": 2, "mode": "hashes", "nccl_version": "2.20.5", "rank0_input_hash": "d898d7fd7590fca16f57f3080c4347ec", "result_hash": "976dc8739ae4b54d6fed41cd94ff8ac9", "tag": "debug_info", "torch": "2.4.1+cu124", "torch_cuda": "12.4", "world_size": 4}
+0c433d60ac00:4620:4620 [0] NCCL INFO 524288 Bytes -> Algo 1 proto 2 time 154.947418
+0c433d60ac00:4620:4620 [0] NCCL INFO 524288 Bytes -> Algo 1 proto 2 time 154.947418
+JSON|{"NCCL_ALGO": "", "NCCL_MAX_NCHANNELS": "", "NCCL_MIN_NCHANNELS": "", "NCCL_NTHREADS": "", "NCCL_P2P_DISABLE": "1", "NCCL_PROTO": "", "NCCL_SHM_DISABLE": "", "all_hashes": ["db21bd8b71ba045e56ec8c8dd34c4e2d"], "bytes": 524288, "device_name": "NVIDIA A40", "distinct_result_hashes": 1, "dtype": "bfloat16", "elements": 262144, "iters": 2, "mode": "hashes", "nccl_version": "2.20.5", "rank0_input_hash": "d004e9cec8b14a29044ccbc3121073c6", "result_hash": "db21bd8b71ba045e56ec8c8dd34c4e2d", "tag": "debug_info", "torch": "2.4.1+cu124", "torch_cuda": "12.4", "world_size": 4}
+0c433d60ac00:4620:4620 [0] NCCL INFO 4194304 Bytes -> Algo 1 proto 2 time 941.379333
+0c433d60ac00:4620:4620 [0] NCCL INFO 4194304 Bytes -> Algo 1 proto 2 time 941.379333
+JSON|{"NCCL_ALGO": "", "NCCL_MAX_NCHANNELS": "", "NCCL_MIN_NCHANNELS": "", "NCCL_NTHREADS": "", "NCCL_P2P_DISABLE": "1", "NCCL_PROTO": "", "NCCL_SHM_DISABLE": "", "all_hashes": ["e34edfde2b75f1d1120fdfbcee699612"], "bytes": 4194304, "device_name": "NVIDIA A40", "distinct_result_hashes": 1, "dtype": "bfloat16", "elements": 2097152, "iters": 2, "mode": "hashes", "nccl_version": "2.20.5", "rank0_input_hash": "dda5b58e728a52f3f4d9fcdbe4ce792c", "result_hash": "e34edfde2b75f1d1120fdfbcee699612", "tag": "debug_info", "torch": "2.4.1+cu124", "torch_cuda": "12.4", "world_size": 4}
+0c433d60ac00:4620:4620 [0] NCCL INFO 33554432 Bytes -> Algo 1 proto 2 time 7232.834961
+0c433d60ac00:4620:4620 [0] NCCL INFO 33554432 Bytes -> Algo 1 proto 2 time 7232.834961
+JSON|{"NCCL_ALGO": "", "NCCL_MAX_NCHANNELS": "", "NCCL_MIN_NCHANNELS": "", "NCCL_NTHREADS": "", "NCCL_P2P_DISABLE": "1", "NCCL_PROTO": "", "NCCL_SHM_DISABLE": "", "all_hashes": ["6f9ed5b4d4e5efeed5f4cd9d4f4643db"], "bytes": 33554432, "device_name": "NVIDIA A40", "distinct_result_hashes": 1, "dtype": "bfloat16", "elements": 16777216, "iters": 2, "mode": "hashes", "nccl_version": "2.20.5", "rank0_input_hash": "78d2d39b6287df57474f96642b2daf17", "result_hash": "6f9ed5b4d4e5efeed5f4cd9d4f4643db", "tag": "debug_info", "torch": "2.4.1+cu124", "torch_cuda": "12.4", "world_size": 4}
+0c433d60ac00:4620:4620 [0] NCCL INFO 134217728 Bytes -> Algo 1 proto 2 time 28803.539062
+0c433d60ac00:4620:4620 [0] NCCL INFO 134217728 Bytes -> Algo 1 proto 2 time 28803.539062
+JSON|{"NCCL_ALGO": "", "NCCL_MAX_NCHANNELS": "", "NCCL_MIN_NCHANNELS": "", "NCCL_NTHREADS": "", "NCCL_P2P_DISABLE": "1", "NCCL_PROTO": "", "NCCL_SHM_DISABLE": "", "all_hashes": ["fce8aea0201e991687dbdb9775c285a3"], "bytes": 134217728, "device_name": "NVIDIA A40", "distinct_result_hashes": 1, "dtype": "bfloat16", "elements": 67108864, "iters": 2, "mode": "hashes", "nccl_version": "2.20.5", "rank0_input_hash": "856315154b6ad63f61fe6dbde69811fa", "result_hash": "fce8aea0201e991687dbdb9775c285a3", "tag": "debug_info", "torch": "2.4.1+cu124", "torch_cuda": "12.4", "world_size": 4}
+0c433d60ac00:4620:4620 [0] NCCL INFO 1 Bytes -> Algo 1 proto 0 time 12.600858
+0c433d60ac00:4622:4660 [2] NCCL INFO [Service thread] Connection closed by localRank 2
+0c433d60ac00:4621:4662 [1] NCCL INFO [Service thread] Connection closed by localRank 1
+0c433d60ac00:4620:4661 [0] NCCL INFO [Service thread] Connection closed by localRank 0
+0c433d60ac00:4623:4663 [3] NCCL INFO [Service thread] Connection closed by localRank 3
+0c433d60ac00:4621:4673 [1] NCCL INFO comm 0x2c96ba90 rank 1 nranks 4 cudaDev 1 busId d2000 - Abort COMPLETE
+0c433d60ac00:4623:4675 [3] NCCL INFO comm 0x32c978e0 rank 3 nranks 4 cudaDev 3 busId d6000 - Abort COMPLETE
+0c433d60ac00:4622:4674 [2] NCCL INFO comm 0x43580dd0 rank 2 nranks 4 cudaDev 2 busId d5000 - Abort COMPLETE
+0c433d60ac00:4620:4672 [0] NCCL INFO comm 0x21f169b0 rank 0 nranks 4 cudaDev 0 busId 57000 - Abort COMPLETE
+rc=0

@@ -2152,3 +2152,49 @@ What is owed to close it: emit the CTR config split and a prep-ran/prep-skipped
 marker from the fit, then re-run this A/B. The purpose-built probe
 (`tools/criteo_ours_cat_ab.py`) could not run at all here -- it hit the same
 density refusal -- so it has never priced 2634 either.
+## NCCL all-reduce determinism and price, 4x NVIDIA A40, driver 570.195.03, torch 2.4.1+cu124, NCCL 2.20.5+cuda12.4
+
+Measured 2026-09-12 on RunPod pod `j3uf4hx92kqmwv` (4x A40, PCIe, no NVLink,
+container `runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04`).
+Full write-up, every hash and the logs:
+`bench/results/nccl_determinism_2026-09-12/`.
+
+This is an opponent BEHAVIOR row, not a speed row: it prices what a
+deterministic all-reduce would cost us, and it settles what NCCL's own
+all-reduce does and does not guarantee bit-for-bit.
+
+**NCCL's all-reduce is bit-reproducible for a fixed configuration and is not
+bit-stable across a change in one.** On this stack, 168 configurations x 15-25
+repetitions produced exactly one distinct result hash each, and all 84
+config/dtype/size cells were identical across independent process restarts.
+But forced `NCCL_ALGO=Tree` and forced `NCCL_ALGO=Ring` disagree bit-for-bit at
+every size and dtype measured at 4 ranks, `NCCL_PROTO` changes the Ring result,
+and the channel count changes it again -- and NCCL picks all three for you from
+topology and message size. Reduction over 2 ranks has only one order and is
+invariant to every one of those knobs.
+
+Fixed-order all-reduce (gather to rank 0 over point-to-point, sum in rank
+order, broadcast) against NCCL's all-reduce, median of 15, arms serialized,
+same buffers, float32 / bfloat16:
+
+| bytes per rank | 4 ranks fp32 | 4 ranks bf16 | 2 ranks fp32 | 2 ranks bf16 |
+|---|---|---|---|---|
+| 1 KB | 1.97x | 2.12x | 1.50x | 1.60x |
+| 64 KB | 1.81x | 2.04x | 1.47x | 1.63x |
+| 1 MB | 1.45x | 1.46x | 1.48x | 1.49x |
+| 8 MB | 1.12x | 1.20x | 1.30x | 1.46x |
+| 64 MB | 1.07x | 1.12x | 1.17x | 1.19x |
+| 256 MB | 1.08x | 1.12x | 1.17x | 1.18x |
+
+Absolute NCCL medians at 4 ranks, fp32: 0.485 ms (1 KB), 0.417 ms (1 MB),
+18.963 ms (64 MB), 74.103 ms (256 MB); the fixed-order arm is 0.952, 0.607,
+20.237 and 80.268 ms. At gradient-bucket sizes (>= 8 MB) determinism costs
+7-20%; at kilobyte messages it costs about 2x, where the cost is latency, not
+bandwidth.
+
+Condition on the 4-rank rows: CUDA peer-to-peer over PCIe hangs the first
+all-reduce at 3 and 4 ranks on this host, so every >= 3 rank case carries
+`NCCL_P2P_DISABLE=1` (shared-memory transport). The 2-rank cases were measured
+both ways and give the same bits, but 2 ranks admit only one summation order,
+so that is weak evidence about transport rather than strong. 4 ranks over
+peer-to-peer was not measured and is not claimed.
