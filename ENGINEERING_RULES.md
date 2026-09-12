@@ -469,3 +469,32 @@ So:
 - **NVIDIA rows already in `bench/OPPONENT_REFERENCE.md` stay valid for
   their tuple.** A ratio never mixes vendors: ours on the MI325X is quoted
   only against an opponent row measured on the MI325X.
+
+## 11. Never reap a rented box while an owed run is in flight
+
+The box is up because the number is owed. Stopping the run early discharges
+nothing: the item stays owed, and the setup already paid for -- dataset fetch,
+decode, builds -- has to be paid again from zero by whoever picks it up. The
+expensive part of a leg is the front half; the minutes you save by killing it
+are the cheap half.
+
+Reap only when one of these is true:
+
+- the run finished;
+- the run is proven broken or invalid (a refused driver, a dry dataset, a
+  gate that says the arm was never reached);
+- Andrew says to stop;
+- Andrew has named cost as the binding constraint for that box.
+
+"Finish up", "close the session" and "are we done" are NOT authorization to
+kill an owed run. Let it finish and report, or ask. There is no billing
+argument for an early kill either, because every rented box already carries a
+baked-in watchdog that terminates it (section 0a, `tools/runpod_guard.sh`), so
+an abandoned box cannot run away.
+
+What this rule is written from: on 2026-09-12 the orchestrator terminated pod
+`n2ltmel2optel5` while its CatBoost and XGBoost opponent cells were about 20
+minutes from done, reasoning that no shipped default depended on those rows.
+But they were RUN OWED, which is exactly why they were being measured, and the
+pod had already paid a 472 MB Istella-S fetch, a 2,248,281,826 byte decode and
+four set builds. The rows are still owed and the next pod repays all of it.
