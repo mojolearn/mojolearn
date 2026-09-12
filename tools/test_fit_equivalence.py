@@ -198,6 +198,55 @@ def test_shapes():
 
 # ------------------------------------------------------------- the verdicts
 
+class FakeCuml(object):
+    """cuML's only door onto a fitted forest. `payload` is whatever its
+    `get_json()` returns, as a JSON string."""
+
+    def __init__(self, payload):
+        self._payload = payload
+
+    def get_json(self):
+        import json as _json
+        return _json.dumps(self._payload)
+
+
+def test_cuml_schema_guard():
+    """The reader's three cuML outcomes, and the one it cannot have.
+
+    ABSENCE IS SAFE BECAUSE IT IS LOUD: no accessor means UNAVAILABLE means
+    verdict=UNKNOWN. The hazard is a dump that PARSES into a shape the walk
+    misreads and yields a plausible wrong leaf count that flows into the
+    verdict dressed as a measurement, so the reader carries
+    `nodes >= leaves >= trees >= 1` and degrades to UNAVAILABLE when it fails.
+    """
+    # A tree the walk understands: root with two leaf children.
+    good = [{"children": [{"leaf_value": 1.0}, {"leaf_value": 2.0}]}]
+    s = spec.model_shape(arm("cuml-rf-gpu", "cuml"), FakeCuml(good))
+    check("cuml good schema trees", s["trees"] == 1, s)
+    check("cuml good schema nodes", s["nodes"] == 3, s)
+    check("cuml good schema leaves", s["leaves"] == 2, s)
+
+    # A flat per-tree node LIST -- the schema this walk does not understand.
+    # Every entry is skipped, the counts come out impossible, and the
+    # invariant must refuse them rather than report leaves=0.
+    flat = [[{"nodeid": 0, "left": 1}, {"nodeid": 1}, {"nodeid": 2}]]
+    s = spec.model_shape(arm("cuml-rf-gpu", "cuml"), FakeCuml(flat))
+    check("cuml flat schema -> UNAVAILABLE", s.get("leaves") is None, s)
+    check("cuml flat schema says why", "nodes >= leaves" in (s.get("note") or ""), s)
+
+    # An accessor that is absent entirely.
+    s = spec.model_shape(arm("cuml-rf-gpu", "cuml"), object())
+    check("cuml no accessor -> UNAVAILABLE", s.get("leaves") is None, s)
+
+    # An UNAVAILABLE cuML arm must never let a cell read COMPARABLE.
+    arms = [arm("ours", "mojolearn"), arm("cuml-rf-gpu", "cuml")]
+    models = {"ours": FakeOurForest([0, 7], [1, 3, 5, -1, -1, -1, -1]),
+              "cuml-rf-gpu": FakeCuml(flat)}
+    _, out = captured(spec.check_fit_equivalence, "rf", arms, models, None)
+    check("cuml misread never reads COMPARABLE",
+          "verdict=COMPARABLE" not in out, out)
+
+
 def test_verdict_comparable():
     arms = [arm("ours", "mojolearn"), arm("catboost-gpu", "catboost")]
     models = {"ours": FakeOurGbdt((2, 2)), "catboost-gpu": FakeCatBoost()}
@@ -303,6 +352,7 @@ def test_generated_dataset_still_loads_by_name():
 
 def main():
     test_shapes()
+    test_cuml_schema_guard()
     test_verdict_comparable()
     test_verdict_not_comparable()
     test_verdict_unknown_is_not_a_pass()
