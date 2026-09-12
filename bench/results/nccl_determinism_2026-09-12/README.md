@@ -1,5 +1,19 @@
 # Is NCCL's all-reduce bitwise reproducible?
 
+> **THE PRICING HALF OF THIS WRITE-UP IS WITHDRAWN (2026-09-12, Andrew).**
+> Everything about NCCL's own behavior below stands -- bit-reproducibility per
+> configuration, Ring vs Tree, protocol and channel effects, the size at which
+> NCCL silently switches. What is withdrawn is every sentence that turns the
+> timing table into "the price of determinism": that comparison sets our naive
+> gather/sum/broadcast against NVIDIA's tuned collective, so its ratio is the
+> sum of determinism, implementation quality and configuration, and nothing
+> here separates them. A deterministic arm can only be priced against OUR OWN
+> optimized non-deterministic arm of the same operation, which does not exist
+> for all-reduce. An NVLink rerun (the timings below ran with peer-to-peer
+> DISABLED, which handicaps NCCL) was provisioned and then cancelled, because
+> measuring an unfalsifiable quantity more precisely does not make it
+> falsifiable. The milliseconds are real; the interpretation is not.
+
 Measured 2026-09-12, RunPod pod `j3uf4hx92kqmwv`, 4x NVIDIA A40. The question
 was asked because cross-device bitwise identity for a multi-GPU trainer stands
 or falls on the answer, and the usual wisdom -- "NCCL switches between ring and
@@ -30,11 +44,15 @@ reproducible -- they already are. It is needed only for identity **across**
 device counts and topologies, which no NCCL setting can give, because reducing
 N buffers in a ring and in a tree is genuinely different arithmetic.
 
-The cheap path exists and is worth taking: pinning `NCCL_ALGO`, `NCCL_PROTO`,
-`NCCL_MIN_NCHANNELS`/`NCCL_MAX_NCHANNELS` and the rank-to-device mapping makes
-the reduction bitwise repeatable at zero cost on a fixed rank count. The
-expensive path (a fixed-order reduction, which is also identical across rank
-counts) costs 7-20% at gradient-bucket sizes and about 2x at kilobyte messages.
+Pinning `NCCL_ALGO`, `NCCL_PROTO`, `NCCL_MIN_NCHANNELS`/`NCCL_MAX_NCHANNELS`
+and the rank-to-device mapping makes the reduction bitwise repeatable on a
+fixed rank count. This write-up originally called that "zero cost" -- THAT WAS
+NEVER MEASURED and should not be repeated; pinning takes the algorithm,
+protocol and channel count out of NCCL's hands, and whether that costs
+throughput at any size is an open question here. A fixed-order reduction is the
+only thing that is also identical across rank counts; what it costs relative to
+an optimized arm of ours is likewise unmeasured, for the reason in the
+withdrawal note at the top.
 
 ## The trap, and how it was avoided
 
@@ -122,7 +140,7 @@ both restarts) collapse to one hash per size and dtype, e.g.
 `0db7ca6d6194766d3cfda5cda538c70b` for float32 at 64 MB. As noted above that is
 arithmetic, not a determinism result.
 
-## The price of determinism
+## The timing table (NOT a price of determinism -- see the withdrawal at the top)
 
 `--mode timing`: NCCL's all-reduce against a fixed-order all-reduce -- gather
 every rank's buffer to rank 0 over point-to-point (overlapped `irecv`/`isend`,
@@ -150,10 +168,11 @@ buffers, run one at a time with nothing else on the GPUs.
 The fixed-order result never equals NCCL's bits at 4 ranks (a different order,
 as expected) and always equals them at 2 ranks (only one order exists).
 
-The shape of the cost is latency, not bandwidth: at and above 8 MB -- the size
-range gradient buckets actually live in -- determinism costs 7-20%, and the
-ratio keeps falling as the message grows. Below 1 MB it costs about 2x, because
-the extra hop dominates when there is nothing to transfer.
+The gap narrows as the message grows, which is the shape a fixed per-call
+overhead makes. Reading it as "determinism costs 7-20% at >= 8 MB and about 2x
+below 1 MB" is the withdrawn step: the arms differ in implementation quality
+and in configuration as well as in summation order, and both ran over shared
+memory with peer-to-peer disabled, so NCCL was handicapped here too.
 
 ## Exact stack
 
@@ -191,14 +210,16 @@ other than 2.20.5.
 
 1. Repeating a run on the same box with the same code and the same rank count
    already gives bit-identical reductions. Nothing needs building for that.
-2. Identity across a *configuration* change on the same rank count is cheap:
-   pin `NCCL_ALGO`, `NCCL_PROTO`, `NCCL_MIN_NCHANNELS`, `NCCL_MAX_NCHANNELS`
-   and the rank order, and the bits stop moving. Worth doing regardless,
-   because otherwise a message-size change silently moves them.
+2. Identity across a *configuration* change on the same rank count needs no new
+   code: pin `NCCL_ALGO`, `NCCL_PROTO`, `NCCL_MIN_NCHANNELS`,
+   `NCCL_MAX_NCHANNELS` and the rank order, and the bits stop moving. Worth
+   doing regardless, because otherwise a message-size change silently moves
+   them. Whether pinning costs throughput was NOT measured -- do not call it
+   cheap or free until it is.
 3. Identity across **rank counts or topologies** cannot come from configuring
    NCCL, at any price, because the arithmetic itself differs. That needs a
-   fixed-order reduction, and the price of one is now a number rather than a
-   guess: 7-20% at >= 8 MB, about 2x at kilobyte messages.
+   fixed-order reduction. What one COSTS is still a guess, and this lane cannot
+   settle it: see the withdrawal note at the top of this file.
 
 ## Reproducing
 
