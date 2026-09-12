@@ -269,9 +269,26 @@ the H100, then gate the Apple M4 and an AMD box before merging.
      order equal to the staged one, so it is a design question.
    - The kNN query tile row is NVIDIA only; Apple and AMD have never been
      timed at a wider tile and that is the cheapest kNN win left.
-7. **Also owed, not speed**: Apple M4 pointwise model hashes were never
-   compared; `test_native_helpers.py` and `helpers_ident.py` on the M4 for the
-   linear-cluster work; scikit-learn KDE Istella-S row on AMD.
+7. **Also owed, not speed** (two of these turned out not to be real work):
+   - `test_native_helpers.py` on the M4: **DONE, 18 of 18 passed** against
+     shipped main with the identical set built. Trap for whoever runs it next:
+     **pytest is declared NOWHERE in this project** (no pixi task, no
+     dependency) and is absent from both the pixi env and system python, so it
+     has to be driven from a throwaway venv (`python3 -m venv`, `pip install
+     pytest numpy`; two of its cases import numpy inside the test body even
+     though the fixtures themselves are `array.array` by design).
+   - `helpers_ident.py` on the M4: **NOT RUNNABLE AS WRITTEN, and it is not
+     really owed.** It hardcodes `/root/ctd-data/big-taxi.npz`, a pod path, so
+     it is a pod-only script. Its identity claim is ALREADY PROVEN from the
+     pod: before (`python_base`) and after (`python`) give identical mu64,
+     mu32, center and scale hashes on all four fixtures (taxi, planted_order,
+     wide, tiny) with `ymean` equal, recorded in
+     `bench/results/linear_cluster_speed_2026-09-11/helpers_ident_after2.log`.
+     Getting a VENDOR dimension out of it would need the taxi npz staged
+     locally and that path parameterized; until someone wants that, treat this
+     as closed rather than outstanding.
+   - Apple M4 pointwise model hashes were never compared. STILL OPEN.
+   - scikit-learn KDE Istella-S row on AMD. STILL OPEN.
 
 ## 7. DEVIATION numbers
 
