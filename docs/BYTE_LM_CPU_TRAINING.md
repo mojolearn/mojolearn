@@ -37,9 +37,17 @@ gate named the tensor, `block0.w_q` element 0, with both bit patterns.
 - One model profile, one batch shape. Nine of the gradients contract over the
   token count, so the same tokens in a different batch or microbatch schedule
   are a different sum. Identity here is per shape, exactly as inference is.
-- The reference path only. There is no threaded CPU training path, and the
-  threaded forward must not grow one by accident, because a weight gradient
-  sums over every row and so crosses every thread boundary.
+- The reference path only, one thread, and that is a deliberate stop rather
+  than an unfinished job. **Measured on 2026-09-12: a whole step is 37 to 39 ms
+  on the Linux runners and 69 ms on Apple M1**, forward, backward and the AdamW
+  update, so all 128 steps replay in under five seconds. Threading it would need
+  two fast GEMM orientations that do not exist (the host fast kernel is NT only;
+  the backward needs NN and TN) and leaf-parallel folding to keep the weight
+  gradients' summation order exact, because they sum across every row and so
+  cross every thread boundary. That is a large build whose payoff is making an
+  already-fast thing faster, against a real risk to the bit identity that is the
+  point. It should be justified by a workload that 37 ms a step makes painful,
+  not by the limit's existence.
 - Nothing about other algorithm families. Trees and the classical models have
   no backward pass and remain GPU-only.
 - `LanguageModelHostTrainer` is deliberately not exported from
