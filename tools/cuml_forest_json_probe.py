@@ -63,7 +63,12 @@ def main():
         say("PROBE-REFUSED this probe is for a box with cuML; nothing else "
             "about the harness depends on running it.")
         return 2
-    say("PROBE-VERSION cuml=%s" % getattr(cuml, "__version__", "unknown"))
+    # The version rides on every verdict line below, not only here: a reader
+    # finding one of those lines quoted in a log or a note needs to know which
+    # build the answer is about, and cuML's dump schema is exactly the kind of
+    # thing that changes between them.
+    ver = getattr(cuml, "__version__", "unknown")
+    say("PROBE-VERSION cuml=%s" % ver)
 
     rng = np.random.default_rng(7)
     x = rng.random((100, 4), dtype=np.float32)
@@ -81,7 +86,7 @@ def main():
     if dumper is None:
         say("PROBE-RESULT NO ACCESSOR: _shape_cuml will report UNAVAILABLE and "
             "every rf/et cell will read verdict=UNKNOWN on this build. That is "
-            "the safe outcome, not a bug to work around.")
+            "the safe outcome, not a bug to work around. [cuml=%s]" % ver)
         return 1
 
     raw = dumper()
@@ -89,7 +94,7 @@ def main():
     try:
         trees = json.loads(raw)
     except Exception as exc:                       # noqa: BLE001
-        say("PROBE-RESULT THE DUMP DID NOT PARSE: %r" % (exc,))
+        say("PROBE-RESULT THE DUMP DID NOT PARSE: %r [cuml=%s]" % (exc, ver))
         return 1
     if not isinstance(trees, list):
         say("PROBE-SHAPE top level is %s, NOT a list of trees"
@@ -130,18 +135,20 @@ def main():
     if not ok:
         say("PROBE-RESULT SCHEMA MISMATCH (impossible counts). _shape_cuml "
             "degrades to UNAVAILABLE, which is correct and safe. Fix the "
-            "reader against the sample above; do not loosen the invariant.")
+            "reader against the sample above; do not loosen the invariant. "
+            "[cuml=%s]" % ver)
         return 1
     if leaves == nodes:
         say("PROBE-RESULT SUSPICIOUS: every node counted as a leaf, which is "
             "what a FLAT node list looks like to this walk. The invariant "
             "cannot catch this because the counts stay self-consistent. Read "
             "the sample above and fix the reader before trusting any cuML "
-            "leaf count.")
+            "leaf count. [cuml=%s]" % ver)
         return 1
     say("PROBE-RESULT SCHEMA OK: internal nodes and leaves are distinguished "
         "(%d internal, %d leaves over %d trees). _shape_cuml may be trusted "
-        "on this cuML version." % (nodes - leaves, leaves, len(trees)))
+        "on this cuML version. [cuml=%s]"
+        % (nodes - leaves, leaves, len(trees), ver))
     return 0
 
 
