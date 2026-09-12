@@ -1,0 +1,19 @@
+FAIR start cmd=flags lane=gbdt-symmetric dataset=taxi rows=1000000 mode=identical
+FAIR dataset=taxi shape=taxi-1000000x16 task=binary rows=1000000 features=16
+FAIR sync-backend cupy UNAVAILABLE: No module named 'cupy'
+FAIR sync-backends armed=torch,cudart
+FAIR TIME catboost-pinned n=3 median=655.9 min=649.8 max=682.1 all=649.8,655.9,682.1
+FAIR FLAGS pinned median_ms=655.9 vs_pinned=1.0000 over={}
+FAIR TIME catboost-bootstrap_default n=3 median=651.8 min=648.4 max=687.4 all=687.4,651.8,648.4
+FAIR FLAGS bootstrap_default median_ms=651.8 vs_pinned=0.9937 over={"bootstrap_type": null}
+FAIR TIME catboost-bootstrap_bernoulli n=3 median=652.9 min=652.5 max=666.7 all=652.9,652.5,666.7
+FAIR FLAGS bootstrap_bernoulli median_ms=652.9 vs_pinned=0.9954 over={"bootstrap_type": "Bernoulli", "subsample": 0.8}
+FAIR TIME catboost-boosting_default n=3 median=652.9 min=642.2 max=669.7 all=669.7,652.9,642.2
+FAIR FLAGS boosting_default median_ms=652.9 vs_pinned=0.9954 over={"boosting_type": null}
+FAIR TIME catboost-borders_128_gpu_default n=3 median=636.3 min=624.9 max=636.4 all=636.3,636.4,624.9
+FAIR FLAGS borders_128_gpu_default median_ms=636.3 vs_pinned=0.9702 over={"border_count": 128}
+FAIR TIME catboost-borders_and_bootstrap_default n=3 median=637.3 min=628.8 max=637.4 all=637.4,628.8,637.3
+FAIR FLAGS borders_and_bootstrap_default median_ms=637.3 vs_pinned=0.9717 over={"bootstrap_type": null, "border_count": 128}
+FAIR TIME catboost-all_natural n=3 median=637.0 min=628.9 max=638.1 all=638.1,637.0,628.9
+FAIR FLAGS all_natural median_ms=637.0 vs_pinned=0.9711 over={"boosting_type": null, "bootstrap_type": null, "border_count": null}
+FAIR done cmd=flags

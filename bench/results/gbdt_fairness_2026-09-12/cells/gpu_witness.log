@@ -1,0 +1,8 @@
+FAIR catboost version 1.2.10
+FAIR catboost get_gpu_device_count 1
+0:	learn: 0.5983704	total: 8.05ms	remaining: 153ms
+5:	learn: 0.3142942	total: 19.3ms	remaining: 44.9ms
+10:	learn: 0.1780017	total: 28.8ms	remaining: 23.5ms
+15:	learn: 0.1044813	total: 38.3ms	remaining: 9.57ms
+19:	learn: 0.0692358	total: 45.8ms	remaining: 0us
+FAIR catboost fitted trees 20

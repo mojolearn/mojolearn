@@ -1,0 +1,18 @@
+t=19:08:58 gpu=2 %, 0 %, 0 MiB  apps=
+t=19:08:58 gpu=0 %, 0 %, 0 MiB  apps=
+t=19:08:59 gpu=0 %, 0 %, 0 MiB  apps=
+t=19:08:59 gpu=0 %, 0 %, 0 MiB  apps=
+t=19:08:59 gpu=0 %, 0 %, 0 MiB  apps=
+t=19:08:59 gpu=0 %, 0 %, 0 MiB  apps=
+t=19:09:00 gpu=0 %, 0 %, 0 MiB  apps=
+t=19:09:00 gpu=0 %, 0 %, 0 MiB  apps=
+t=19:09:00 gpu=0 %, 0 %, 4 MiB  apps=
+t=19:09:00 gpu=0 %, 0 %, 527 MiB  apps=6342, 774 MiB;
+t=19:09:01 gpu=0 %, 0 %, 783 MiB  apps=6342, 774 MiB;
+t=19:09:01 gpu=0 %, 0 %, 787 MiB  apps=6342, 776 MiB;
+t=19:09:01 gpu=90 %, 7 %, 787 MiB  apps=6342, 776 MiB;
+t=19:09:02 gpu=0 %, 0 %, 787 MiB  apps=6342, 776 MiB;
+t=19:09:02 gpu=0 %, 0 %, 77065 MiB  apps=6342, 77054 MiB;
+t=19:09:02 gpu=3 %, 0 %, 77069 MiB  apps=6342, 77058 MiB;
+t=19:09:02 gpu=61 %, 5 %, 791 MiB  apps=6342, 780 MiB;
+t=19:09:03 gpu=66 %, 9 %, 789 MiB  apps=6342, 778 MiB;

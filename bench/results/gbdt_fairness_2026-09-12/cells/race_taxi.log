@@ -1,0 +1,49 @@
+FAIR start cmd=race lane=gbdt-symmetric dataset=taxi rows=1000000 mode=identical
+FAIR dataset=taxi shape=taxi-1000000x16 task=binary rows=1000000 features=16
+FAIR sync-backend cupy UNAVAILABLE: No module named 'cupy'
+FAIR sync-backends armed=torch,cudart
+2211 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1922c0000000, nodemask=2)
+2211 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x51d780000000, nodemask=1)
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=cuda path=/root/mojolearn/python/mojolearn/identical/_mojolearn_gbdt.so
+BENCH_PATHS arm=ours 2550_borrow_x=1 2551_device_partition=1 2580_level_quant=0 2581_group_width=1
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=cuda path=/root/mojolearn/python/mojolearn/identical/_mojolearn_gbdt.so
+BENCH_PATHS arm=ours 2550_borrow_x=1 2551_device_partition=1 2580_level_quant=0 2581_group_width=1
+FSPEED-REFUSED lane=gbdt-symmetric arm=catboost-cpu reason=GPU-PATH-ONLY: catboost-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare against the vendor's GPU path only; on AMD request cpu by name (ENGINEERING_RULES.md section 10).
+FAIR race arms=ours,ours-sync,catboost-gpu rounds=5
+FSPEED-SCALE stage=before rows=1000000 features=16 input_mib=61.0 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours-sync mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=catboost-gpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-WARMUP lane=gbdt-symmetric arm=ours shape=taxi-1000000x16 ms=803.375
+FSPEED-WARMUP lane=gbdt-symmetric arm=ours-sync shape=taxi-1000000x16 ms=336.245
+FSPEED-WARMUP lane=gbdt-symmetric arm=catboost-gpu shape=taxi-1000000x16 ms=681.669
+FSPEED-ORDER lane=gbdt-symmetric round=1 arms=ours,ours-sync,catboost-gpu
+FSPEED lane=gbdt-symmetric arm=ours shape=taxi-1000000x16 round=1 ms=356.786 hash=90c3558501933f47
+FSPEED lane=gbdt-symmetric arm=ours-sync shape=taxi-1000000x16 round=1 ms=321.393 hash=90c3558501933f47
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=taxi-1000000x16 round=1 ms=612.310 hash=1a73bc17ca68be07
+FSPEED-ORDER lane=gbdt-symmetric round=2 arms=ours-sync,catboost-gpu,ours
+FSPEED lane=gbdt-symmetric arm=ours-sync shape=taxi-1000000x16 round=2 ms=324.437 hash=90c3558501933f47
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=taxi-1000000x16 round=2 ms=616.993 hash=1a73bc17ca68be07
+FSPEED lane=gbdt-symmetric arm=ours shape=taxi-1000000x16 round=2 ms=320.556 hash=90c3558501933f47
+FSPEED-ORDER lane=gbdt-symmetric round=3 arms=catboost-gpu,ours,ours-sync
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=taxi-1000000x16 round=3 ms=623.761 hash=1a73bc17ca68be07
+FSPEED lane=gbdt-symmetric arm=ours shape=taxi-1000000x16 round=3 ms=330.009 hash=90c3558501933f47
+FSPEED lane=gbdt-symmetric arm=ours-sync shape=taxi-1000000x16 round=3 ms=324.267 hash=90c3558501933f47
+FSPEED-ORDER lane=gbdt-symmetric round=4 arms=ours,ours-sync,catboost-gpu
+FSPEED lane=gbdt-symmetric arm=ours shape=taxi-1000000x16 round=4 ms=327.706 hash=90c3558501933f47
+FSPEED lane=gbdt-symmetric arm=ours-sync shape=taxi-1000000x16 round=4 ms=323.605 hash=90c3558501933f47
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=taxi-1000000x16 round=4 ms=627.917 hash=1a73bc17ca68be07
+FSPEED-ORDER lane=gbdt-symmetric round=5 arms=ours-sync,catboost-gpu,ours
+FSPEED lane=gbdt-symmetric arm=ours-sync shape=taxi-1000000x16 round=5 ms=324.801 hash=90c3558501933f47
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=taxi-1000000x16 round=5 ms=656.571 hash=1a73bc17ca68be07
+FSPEED lane=gbdt-symmetric arm=ours shape=taxi-1000000x16 round=5 ms=324.379 hash=90c3558501933f47
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=logloss value=0.525735
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=auc value=0.619460
+FSPEED-ACC lane=gbdt-symmetric arm=ours-sync metric=logloss value=0.525735
+FSPEED-ACC lane=gbdt-symmetric arm=ours-sync metric=auc value=0.619460
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-gpu metric=logloss value=0.525904
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-gpu metric=auc value=0.618511
+FSPEED-SCALE stage=after rows=1000000 features=16 input_mib=61.0 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FAIR done cmd=race
