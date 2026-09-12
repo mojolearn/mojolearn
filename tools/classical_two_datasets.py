@@ -522,6 +522,10 @@ def _ours_info(ml, est):
         except Exception as exc:  # noqa: BLE001
             info[name] = "unavailable (%r)" % (exc,)
     info["device"] = "gpu"
+    # Ours fits INSIDE its clock: the public call is what is timed, upload and
+    # host validation included. Declared rather than left absent so
+    # `_span_facts` never has to guess it from prose (see the note there).
+    info["pre_clock_fit"] = False
     if info.get("numeric_mode_used") != "identical":
         raise RuntimeError("ours is not IDENTICAL: numeric_mode_used() = %r"
                            % (info.get("numeric_mode_used"),))
@@ -685,8 +689,13 @@ class OursSVC:
 def _sklearn_info():
     import scipy
     import sklearn
+    # `pre_clock_fit` defaults to False for every scikit-learn arm and SkKDE
+    # overrides it, because its tree is built before the clock. Declared here
+    # so the field is present on EVERY ready record and its absence is an
+    # anomaly `_span_facts` can shout about rather than a case it must guess.
     info = {"library": "scikit-learn", "version": sklearn.__version__,
-            "scipy": scipy.__version__, "device": "cpu"}
+            "scipy": scipy.__version__, "device": "cpu",
+            "pre_clock_fit": False}
     info.update(_host_info())
     try:
         from threadpoolctl import threadpool_info
@@ -820,6 +829,10 @@ class SkKDE:
         self.info["config"] = ("KernelDensity(bandwidth=scott, kernel='gaussian', rtol=0, atol=0); "
                                "score_samples timed; single-threaded by design")
         self.info["tree_fit_ms_untimed"] = fit_ms
+        # The tree above was built before the clock, which times
+        # `score_samples` alone. The magnitude is recorded beside it; the flag
+        # is the fact, and it is what `_span_facts` reads.
+        self.info["pre_clock_fit"] = True
 
     def call(self):
         self.scores = self.kd.score_samples(self.q)
@@ -875,7 +888,9 @@ def _torch_setup(arrays):
             "torch_version_hip": getattr(torch.version, "hip", None),
             "torch_version_cuda": torch.version.cuda,
             "device": "gpu", "device_name": torch.cuda.get_device_name(0),
-            "upload_ms_untimed": upload_ms}
+            "upload_ms_untimed": upload_ms,
+            # No torch arm fits before its clock; declared, not left absent.
+            "pre_clock_fit": False}
     info.update(_host_info())
     return torch, dev, tensors, info
 
@@ -1062,7 +1077,10 @@ def _cuml_setup(arrays):
     info = {"library": "cuml", "version": cuml.__version__, "cupy": cp.__version__,
             "cuda_runtime": cp.cuda.runtime.runtimeGetVersion(),
             "cuda_driver_api": cp.cuda.runtime.driverGetVersion(),
-            "device": "gpu", "device_name": name, "upload_ms_untimed": upload_ms}
+            "device": "gpu", "device_name": name, "upload_ms_untimed": upload_ms,
+            # False by default; CumlKNN and CumlKDE set it True after the fit
+            # they perform before the clock starts.
+            "pre_clock_fit": False}
     info.update(_host_info())
     return dev, info
 
@@ -1174,6 +1192,12 @@ class CumlKNN:
                                    output_type="cupy")
         self.nn.fit(t["index"])
         _cupy_sync()
+        # THE FACT, DECLARED AT THE PLACE IT BECOMES TRUE: the fit above ran
+        # before any clock, so this arm's timed region covers `kneighbors`
+        # alone. The config string below says so too, for a human; the flag is
+        # what `_span_facts` reads, so rewording that prose cannot silently
+        # turn this fact false.
+        self.info["pre_clock_fit"] = True
         self.info["config"] = ("cuml.neighbors.NearestNeighbors(n_neighbors=10, algorithm='brute', "
                                "metric='euclidean', output_type='cupy'); fit before the clock, kneighbors timed")
         self.out = None
@@ -1199,6 +1223,9 @@ class CumlKDE:
                                 metric="euclidean", output_type="cupy")
         self.kd.fit(t["X"])
         _cupy_sync()
+        # Declared where it becomes true: the fit above is outside the clock,
+        # which times `score_samples` alone. See CumlKNN.
+        self.info["pre_clock_fit"] = True
         self.info["config"] = ("cuml.neighbors.KernelDensity(bandwidth=scott, kernel='gaussian', "
                                "metric='euclidean', output_type='cupy'); fit before the clock, score_samples timed")
         self.scores = None
@@ -1284,7 +1311,7 @@ class SkQuota:
         self.info["config"] = self.inner.info.get("config", "") + (
             "; threadpool_limits(limits=%d) around construction and every call" % self.cap)
         self.info["thread_cap"] = {"threads": self.cap, "quota_cpus": cpus, "source": source}
-        for k in ("tree_fit_ms_untimed",):
+        for k in ("tree_fit_ms_untimed", "pre_clock_fit"):
             if k in self.inner.info:
                 self.info[k] = self.inner.info[k]
 
@@ -1738,11 +1765,37 @@ def _span_facts(arm, info):
     facts = {
         "upload_ms_untimed": info.get("upload_ms_untimed"),
         "fit_ms_untimed": info.get("tree_fit_ms_untimed"),
-        # The two cuML arms whose fit runs before the clock say so in their own
-        # config string; SkKDE says it by recording the fit it already paid.
-        "pre_clock_fit": ("fit before the clock" in config
-                          or info.get("tree_fit_ms_untimed") is not None),
     }
+    # A PRE-CLOCK FIT IS A DECLARED FACT, NEVER AN INFERENCE FROM PROSE
+    # (2026-09-12, lane harness-honesty-3). This used to substring-match
+    # "fit before the clock" in the arm's own config string. That is a
+    # silent-zero generator of exactly the class this reporting exists to
+    # eliminate: reword the prose -- a tidy-up, a rename, a translation, a
+    # copy-edit -- and a TRUE fact turns false with no error, no missing
+    # output and nothing for a reader to notice. It is strictly worse than
+    # the problem it solved. Every ready record now carries the flag, set at
+    # the place the pre-clock fit actually happens (CumlKNN, CumlKDE, SkKDE)
+    # and defaulted to False in the four builders, so the field is ALWAYS
+    # present on a record built by this file.
+    #
+    # The prose fallback survives only for a record this file did not build
+    # (an older JSON replayed, a worker from another checkout), and it is
+    # LOUD: the source is reported on the CTD-SPAN line and a warning rides
+    # with it, because a guess that succeeds silently is the thing being
+    # removed here.
+    declared = info.get("pre_clock_fit")
+    if declared is None:
+        facts["pre_clock_fit"] = ("fit before the clock" in config
+                                  or info.get("tree_fit_ms_untimed") is not None)
+        facts["pre_clock_fit_source"] = "INFERRED-FROM-PROSE"
+        facts["pre_clock_fit_warning"] = (
+            "this arm's ready record carries no pre_clock_fit flag, so the "
+            "fact was GUESSED from its config text; a reworded string would "
+            "silently flip it. Set info['pre_clock_fit'] where the fit "
+            "happens.")
+    else:
+        facts["pre_clock_fit"] = bool(declared)
+        facts["pre_clock_fit_source"] = "declared"
     if library == "mojolearn":
         # Our public call uploads and validates inside the clock, because that
         # is what a caller of this surface pays. Stated, not measured here: a
@@ -1915,10 +1968,15 @@ def race(args):
         spans[arm] = span
         a["span"] = span
         print("CTD-SPAN lane=%s dataset=%s arm=%s input_home=%s inside_clock=%s "
-              "upload_ms_untimed=%s fit_ms_untimed=%s pre_clock_fit=%s"
+              "upload_ms_untimed=%s fit_ms_untimed=%s pre_clock_fit=%s "
+              "pre_clock_fit_source=%s"
               % (lane, ds, arm, span["input_home"], span["inside_clock"],
                  _fmt_span(span["upload_ms_untimed"]), _fmt_span(span["fit_ms_untimed"]),
-                 str(span["pre_clock_fit"]).lower()), flush=True)
+                 str(span["pre_clock_fit"]).lower(),
+                 span.get("pre_clock_fit_source", "declared")), flush=True)
+        if span.get("pre_clock_fit_warning"):
+            print("CTD-SPAN-WARNING lane=%s dataset=%s arm=%s %s"
+                  % (lane, ds, arm, span["pre_clock_fit_warning"]), flush=True)
         if arm != "ours" and ours_med and a["median_ms"]:
             result["ratios_ours_over"][arm] = ours_med / a["median_ms"]
     result["spans"] = spans
