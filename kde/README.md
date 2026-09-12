@@ -201,3 +201,124 @@ RUN OWED: `pixi run check-kde` under IDENTICAL on the Apple M4 and on an AMD
 MI300X (Hot Aisle), where the tiled pass is dispatched too and the SIMD
 accumulators and the pointer validator are new code. The commands are in the
 lane's commit message.
+
+## Two ways to delete the matrix, both measured, both refused (DEVIATIONS 2690 and 2691, 2026-09-12)
+
+This lane went after the structural difference against cuML: THEY never
+materialize the `n_query x n_train` log-kernel matrix and we write it. Two
+ways to stop writing it were implemented and measured on an H100 (RunPod pod
+`ndscc544rcf8ek`, driver 580.126.20, `kde/checks/kde_stage_profile.mojo`, 3
+repetitions after a warm-up, the rep 2 value, 100,000 fit rows x 2,000
+queries). Both are SLOWER than the matrix they remove, so **the shipped
+default is unchanged**, and both survive as opt-in arms with their numbers
+attached, because a refuted idea with a measurement on it is worth more than
+one nobody tried.
+
+### Where the time actually goes, stage by stage
+
+The premise needed checking first, and it did not survive. Each stage below
+is launched on its own and drained, so the device entry is ATTRIBUTED, not
+assumed.
+
+| stage | d = 220 | d = 11 |
+|---|---|---|
+| device entry, tiled matrix (the default) | 36.9 ms | 26.9 ms |
+| ... log-kernel matrix kernel, arithmetic + write | 26.5 ms | 16.5 ms |
+| ... the same kernel, matrix write elided | 25.0 ms | 13.4 ms |
+| ... row-max fold over chunk maxima | 0.05 ms | 0.05 ms |
+| ... terms, `exp(logk - max)` over every cell | 0.92 ms | 0.92 ms |
+| ... the serial ascending fold | 9.48 ms | 9.48 ms |
+| host work in the binding's call (validate + stage + upload) | ~19.7 ms | ~0.6 ms |
+| ... of which host validation (DEVIATION 604) | 7.28 ms | 0.21 ms |
+
+**THE MATRIX WRITE IS NOT THE COST.** Eliding the store saves 1.5 ms of 36.9
+at d = 220 and 3.1 ms of 26.9 at d = 11. The whole 800 MB round trip -- the
+write, the terms pass and the fold's re-read -- is about 11.9 ms of the 36.9,
+and the remaining 25.0 ms is the per-cell distance arithmetic, which is the
+same work whether a matrix exists or not. So the most a perfect fusion could
+win here is the round trip, and only if it costs nothing else. It costs
+something else.
+
+### DEVIATION 2690: fused, no matrix at all -- 2.5x slower at d = 220
+
+`kde_fused_sum_kernel` recomputes every cell and folds it in place, with the
+order-bound work (the adds) in ONE owner thread per query and the expensive
+per-cell work spread over `H` helper threads that hand terms across shared
+memory. It returns the staged path's bits (the gate proves it), and it never
+allocates, writes or reads a matrix.
+
+| shape | tiled matrix | fused, default | fused, best of a 13-point sweep |
+|---|---|---|---|
+| d = 220 | 36.9 ms | 109.8 ms | 91.1 ms (`k_cells` 2, 512 threads) |
+| d = 11 | 26.9 ms | 22.7 ms | 21.3 ms (`k_cells` 2, 512 threads) |
+
+The reason is the GRID, not the arithmetic. The row-max pass chunks train
+rows across grid y (391 chunks x 16 query blocks = 6,256 blocks) because a
+max may be folded from chunk maxima. The sum pass cannot: the fold is a
+dependent chain over all of `j`, so all of a query's terms must reach one
+thread, which costs the grid-y dimension and leaves 125 blocks for 132 SMs.
+Measured alone that sum pass is 84.6 ms at d = 220 against the 36.9 ms of the
+three matrix stages it replaces. It comes closest at d = 11, where the
+per-cell epilog dominates and there is little feature work to redo. Its
+deficit shrinks as `n_query` grows, so a caller scoring hundreds of thousands
+of queries is the case to re-measure; `fused_only` is there for it. The FAST
+tier's fused pass (DEVIATION 2490) is a different kernel and is unaffected.
+
+### DEVIATION 2691: transposing the matrix -- 4x slower, and the argument was the trap
+
+The fold reads `logk[q * n_train + j]` with one thread per query, so a warp's
+32 threads read 32 addresses `n_train * 4` bytes apart: the textbook
+uncoalesced access, and the profile charges it 9.48 ms. Storing the matrix
+train-major (`j * n_query + q`) makes a warp read 128 contiguous bytes per
+step. The argument is clean and the measurement refuses it.
+
+| stage | query-major (shipped) | train-major |
+|---|---|---|
+| serial ascending fold, d = 220 | 9.48 ms | 37.74 ms |
+| serial ascending fold, d = 11 | 9.48 ms | 37.74 ms |
+| whole tiled entry, d = 220 | 36.9 ms | 64.1 ms |
+| whole tiled entry, d = 11 | 26.9 ms | 52.5 ms |
+
+Counting transactions per warp-step is the wrong frame: it misses what each
+layout does to a THREAD's stream. Query-major gives each thread one long
+sequential run, so a single 128-byte line serves 32 of its iterations and the
+matrix is read as 2,000 streaming rows. Train-major gives each thread an
+`n_query * 4` byte stride, so each line is touched for 4 bytes and dropped,
+and 2,000 strided streams thrash where 2,000 sequential ones streamed. The
+layout is a `transposed` parameter, defaulting OFF.
+
+### Identity
+
+Neither arm moves a bit, and that is gated rather than asserted.
+`check_kde_tiled_equals_staged` now runs FIVE arms against the staged
+reference -- the entry's dispatch, the query-major matrix and the train-major
+matrix on one alternative schedule each, the fused pass on its default
+schedule, and the fused pass at `k_cells` 16 / `sum_tpb` 128 (4 helper
+threads per query, 32 queries a block, so a DIFFERENT thread computes each
+term while the SAME owner folds them in the same order) -- 33,300 scores, 0
+differ, and the whole `kde_check` is 15 checks green under IDENTICAL. The
+stage profile hashed 150 schedule/layout/structure combinations EQUAL on both
+shapes, at the two fingerprints this lane has carried since DEVIATION 2625:
+FNV 16594497303053393111 at d = 220 and 17888536843391681998 at d = 11.
+
+### The races, and what they are for
+
+Since no default changed, the race is a CONTROL: it has to show that the
+instruments, the new parameters and the two opt-in arms cost the shipped path
+nothing. `ours` is this branch, `ours-base` is `origin/main` built on the same
+pod, interleaved round by round, 1 warm-up plus 5 rounds, ms median.
+
+| dataset | round | cuML ms | ours ms | ours-base ms | ours / base | ours / cuML |
+|---|---|---|---|---|---|---|
+| taxi | 1 | 2.54 | 28.96 | 29.16 | 0.9932 | 11.40x |
+| taxi | 2 | 3.00 | 29.39 | 28.92 | 1.0165 | 9.79x |
+| Istella-S | 1 | 7.37 | 64.30 | 70.03 | 0.9182 | 8.72x |
+| Istella-S | 2 | 7.36 | 70.49 | 70.16 | 1.0047 | 9.58x |
+
+Parity on both datasets, quality equal to every printed digit, and the score
+digests equal between the two arms (taxi `aa8ac4159ad2cbfa`, Istella-S
+`81d11ed7fcd9eb38`). ROUND 1'S ISTELLA-S 0.9182 IS NOT AN EFFECT: it had no
+mechanism -- the shipped path is main's code -- so it was re-run, and round 2
+read 1.0047. One round would have reported a 8% win that does not exist.
+
+Evidence: `bench/results/kde_fused_2026-09-12/`.

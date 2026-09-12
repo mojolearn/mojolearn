@@ -1,0 +1,609 @@
+2108 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x30b680000000, nodemask=1)
+Imported from /root/mojolearn/kde/checks/kde_stage_profile.mojo:25:
+/root/mojolearn/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/kde/checks/kde_stage_profile.mojo:25:
+/root/mojolearn/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/kde/checks/kde_stage_profile.mojo:25:
+/root/mojolearn/core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/kde/checks/kde_stage_profile.mojo:26:
+Imported from /root/mojolearn/kde/estimator.mojo:48:
+Imported from /root/mojolearn/kde/impl/neighbors/kernel_density.mojo:116:
+Imported from /root/mojolearn/kde/impl/distance/distance_ops.mojo:111:
+Imported from /root/mojolearn/neighbors/impl/distance/detail/distance_ops.mojo:191:
+/root/mojolearn/core/pinned_reduce.mojo:125:8: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    red[tid] = value
+    ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/kde/checks/kde_stage_profile.mojo:26:
+Imported from /root/mojolearn/kde/estimator.mojo:48:
+Imported from /root/mojolearn/kde/impl/neighbors/kernel_density.mojo:116:
+Imported from /root/mojolearn/kde/impl/distance/distance_ops.mojo:111:
+Imported from /root/mojolearn/neighbors/impl/distance/detail/distance_ops.mojo:191:
+/root/mojolearn/core/pinned_reduce.mojo:130:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            v[j] = red[tid + j * P]
+                   ~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/kde/checks/kde_stage_profile.mojo:26:
+Imported from /root/mojolearn/kde/estimator.mojo:48:
+Imported from /root/mojolearn/kde/impl/neighbors/kernel_density.mojo:116:
+Imported from /root/mojolearn/kde/impl/distance/distance_ops.mojo:111:
+Imported from /root/mojolearn/neighbors/impl/distance/detail/distance_ops.mojo:191:
+/root/mojolearn/core/pinned_reduce.mojo:136:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        red[tid] = v[0]
+        ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/kde/checks/kde_stage_profile.mojo:26:
+Imported from /root/mojolearn/kde/estimator.mojo:48:
+Imported from /root/mojolearn/kde/impl/neighbors/kernel_density.mojo:116:
+Imported from /root/mojolearn/kde/impl/distance/distance_ops.mojo:111:
+Imported from /root/mojolearn/neighbors/impl/distance/detail/distance_ops.mojo:191:
+/root/mojolearn/core/pinned_reduce.mojo:140:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        w[t] = red[t]
+               ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/kde/checks/kde_stage_profile.mojo:25:
+/root/mojolearn/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/kde/checks/kde_stage_profile.mojo:25:
+/root/mojolearn/core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+== kde/checks/kde_stage_profile.mojo [IDENTICAL] ==
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=host_entry_total ms=1122.403322
+KDE-PROFILE shape=100000x2000x220 rep=0 hash_host_entry=16594497303053393111
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=host_entry_total ms=105.418989
+KDE-PROFILE shape=100000x2000x220 rep=1 hash_host_entry=16594497303053393111
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=host_entry_total ms=103.700702
+KDE-PROFILE shape=100000x2000x220 rep=2 hash_host_entry=16594497303053393111
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=host_ptr_entry_total ms=84.686292
+KDE-PROFILE shape=100000x2000x220 rep=0 hash_host_ptr_entry=16594497303053393111
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=host_validate_ptr ms=5.78989
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=host_ptr_entry_total ms=84.300737
+KDE-PROFILE shape=100000x2000x220 rep=1 hash_host_ptr_entry=16594497303053393111
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=host_validate_ptr ms=5.451044
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=host_ptr_entry_total ms=83.971409
+KDE-PROFILE shape=100000x2000x220 rep=2 hash_host_ptr_entry=16594497303053393111
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=host_validate_ptr ms=7.28329
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=host_list_copy ms=33.777017
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=host_validate ms=25.335654
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=device_context ms=0.02598
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=upload_train ms=18.856888
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=upload_query_weights_out ms=0.438099
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=alloc_two_matrices ms=0.592333
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=dev_pairwise_distance ms=96.111651
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=dev_log_kernel_matrix ms=0.841243
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=dev_logsumexp_tpb128 ms=27.833927
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=host_norm_and_dev_normalize ms=0.010355
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=download ms=0.02179
+KDE-PROFILE shape=100000x2000x220 rep=0 hash_staged_replay=16594497303053393111
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=dev_logsumexp_tpb16 ms=23.19641
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=dev_logsumexp_tpb32 ms=27.085955
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=dev_logsumexp_tpb64 ms=27.309145
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=dev_logsumexp_tpb512 ms=54.363343
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=dev_pairwise_distance_tpb1024 ms=90.54913
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=dev_pairwise_distance_tpb64 ms=94.767808
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=device_entry_staged_forced ms=124.536946
+KDE-PROFILE shape=100000x2000x220 rep=0 hash_device_staged=16594497303053393111
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=device_entry_dispatch ms=64.290883
+KDE-PROFILE shape=100000x2000x220 rep=0 hash_device_dispatch=16594497303053393111
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=tiled_q128_chunk256 ms=64.281056
+KDE-PROFILE shape=100000x2000x220 rep=0 tiled_q128_chunk256_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=tiled_q128_chunk1024 ms=65.781803
+KDE-PROFILE shape=100000x2000x220 rep=0 tiled_q128_chunk1024_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=tiled_q128_chunk4096 ms=76.855094
+KDE-PROFILE shape=100000x2000x220 rep=0 tiled_q128_chunk4096_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=tiled_q256_chunk256 ms=66.121836
+KDE-PROFILE shape=100000x2000x220 rep=0 tiled_q256_chunk256_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=tiled_q256_chunk1024 ms=67.820468
+KDE-PROFILE shape=100000x2000x220 rep=0 tiled_q256_chunk1024_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=tiled_q256_chunk4096 ms=78.250351
+KDE-PROFILE shape=100000x2000x220 rep=0 tiled_q256_chunk4096_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=tiled_q512_chunk256 ms=69.180617
+KDE-PROFILE shape=100000x2000x220 rep=0 tiled_q512_chunk256_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=tiled_q512_chunk1024 ms=69.854329
+KDE-PROFILE shape=100000x2000x220 rep=0 tiled_q512_chunk1024_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=tiled_q512_chunk4096 ms=79.411065
+KDE-PROFILE shape=100000x2000x220 rep=0 tiled_q512_chunk4096_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=tiled_elem1024_lse16 ms=67.836714
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=tiled_elem1024_lse64 ms=68.575732
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=tiled_elem1024_lse128 ms=67.907112
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=stage_maxpass_no_store ms=25.038943
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=stage_rowmax_reduce ms=0.054136
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=stage_logk_matrix_write_qmajor ms=26.396323
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=stage_lse_terms_qmajor ms=0.92545
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=stage_lse_serial_sum_qmajor ms=9.497513
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=stage_logk_matrix_write_tmajor ms=25.266841
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=stage_lse_terms_tmajor ms=1.192956
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=stage_lse_serial_sum_tmajor ms=37.73705
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=tiled_entry_qmajor ms=36.863577
+KDE-PROFILE shape=100000x2000x220 rep=0 tiled_entry_qmajor_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=tiled_entry_tmajor ms=64.202712
+KDE-PROFILE shape=100000x2000x220 rep=0 tiled_entry_tmajor_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=stage_fused_sumpass_k4 ms=84.853124
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=stage_fused_sumpass_k8 ms=94.427552
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=fused_k1_tpb128 ms=208.374162
+KDE-PROFILE shape=100000x2000x220 rep=0 fused_k1_tpb128_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=fused_k1_tpb256 ms=126.864083
+KDE-PROFILE shape=100000x2000x220 rep=0 fused_k1_tpb256_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=fused_k1_tpb512 ms=107.842281
+KDE-PROFILE shape=100000x2000x220 rep=0 fused_k1_tpb512_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=fused_k2_tpb128 ms=116.682246
+KDE-PROFILE shape=100000x2000x220 rep=0 fused_k2_tpb128_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=fused_k2_tpb256 ms=102.625
+KDE-PROFILE shape=100000x2000x220 rep=0 fused_k2_tpb256_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=fused_k2_tpb512 ms=90.820342
+KDE-PROFILE shape=100000x2000x220 rep=0 fused_k2_tpb512_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=fused_k4_tpb128 ms=116.885891
+KDE-PROFILE shape=100000x2000x220 rep=0 fused_k4_tpb128_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=fused_k4_tpb256 ms=109.768091
+KDE-PROFILE shape=100000x2000x220 rep=0 fused_k4_tpb256_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=fused_k4_tpb512 ms=104.774722
+KDE-PROFILE shape=100000x2000x220 rep=0 fused_k4_tpb512_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=fused_k8_tpb128 ms=135.57081
+KDE-PROFILE shape=100000x2000x220 rep=0 fused_k8_tpb128_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=fused_k8_tpb256 ms=119.489334
+KDE-PROFILE shape=100000x2000x220 rep=0 fused_k8_tpb256_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=fused_k8_tpb512 ms=160.600051
+KDE-PROFILE shape=100000x2000x220 rep=0 fused_k8_tpb512_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=fused_k16_tpb128 ms=199.251453
+KDE-PROFILE shape=100000x2000x220 rep=0 fused_k16_tpb128_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=0 stage=fused_k16_tpb256 ms=188.988807
+KDE-PROFILE shape=100000x2000x220 rep=0 fused_k16_tpb256_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=host_list_copy ms=51.274036
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=host_validate ms=24.048972
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=device_context ms=0.038049
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=upload_train ms=19.491391
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=upload_query_weights_out ms=0.439609
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=alloc_two_matrices ms=0.002922
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=dev_pairwise_distance ms=95.675124
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=dev_log_kernel_matrix ms=0.760578
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=dev_logsumexp_tpb128 ms=27.78945
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=host_norm_and_dev_normalize ms=0.009931
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=download ms=0.019303
+KDE-PROFILE shape=100000x2000x220 rep=1 hash_staged_replay=16594497303053393111
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=dev_logsumexp_tpb16 ms=23.206071
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=dev_logsumexp_tpb32 ms=27.146224
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=dev_logsumexp_tpb64 ms=27.315866
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=dev_logsumexp_tpb512 ms=54.208761
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=dev_pairwise_distance_tpb1024 ms=90.622955
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=dev_pairwise_distance_tpb64 ms=94.548811
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=device_entry_staged_forced ms=123.950314
+KDE-PROFILE shape=100000x2000x220 rep=1 hash_device_staged=16594497303053393111
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=device_entry_dispatch ms=64.214825
+KDE-PROFILE shape=100000x2000x220 rep=1 hash_device_dispatch=16594497303053393111
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=tiled_q128_chunk256 ms=64.217034
+KDE-PROFILE shape=100000x2000x220 rep=1 tiled_q128_chunk256_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=tiled_q128_chunk1024 ms=65.802069
+KDE-PROFILE shape=100000x2000x220 rep=1 tiled_q128_chunk1024_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=tiled_q128_chunk4096 ms=76.765976
+KDE-PROFILE shape=100000x2000x220 rep=1 tiled_q128_chunk4096_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=tiled_q256_chunk256 ms=66.103885
+KDE-PROFILE shape=100000x2000x220 rep=1 tiled_q256_chunk256_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=tiled_q256_chunk1024 ms=67.811452
+KDE-PROFILE shape=100000x2000x220 rep=1 tiled_q256_chunk1024_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=tiled_q256_chunk4096 ms=78.530545
+KDE-PROFILE shape=100000x2000x220 rep=1 tiled_q256_chunk4096_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=tiled_q512_chunk256 ms=69.109432
+KDE-PROFILE shape=100000x2000x220 rep=1 tiled_q512_chunk256_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=tiled_q512_chunk1024 ms=69.715472
+KDE-PROFILE shape=100000x2000x220 rep=1 tiled_q512_chunk1024_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=tiled_q512_chunk4096 ms=79.415626
+KDE-PROFILE shape=100000x2000x220 rep=1 tiled_q512_chunk4096_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=tiled_elem1024_lse16 ms=67.985653
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=tiled_elem1024_lse64 ms=68.429922
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=tiled_elem1024_lse128 ms=68.051044
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=stage_maxpass_no_store ms=24.995998
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=stage_rowmax_reduce ms=0.053647
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=stage_logk_matrix_write_qmajor ms=26.406661
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=stage_lse_terms_qmajor ms=0.928245
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=stage_lse_serial_sum_qmajor ms=9.48785
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=stage_logk_matrix_write_tmajor ms=25.14463
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=stage_lse_terms_tmajor ms=1.192338
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=stage_lse_serial_sum_tmajor ms=37.742373
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=tiled_entry_qmajor ms=36.888731
+KDE-PROFILE shape=100000x2000x220 rep=1 tiled_entry_qmajor_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=tiled_entry_tmajor ms=64.124184
+KDE-PROFILE shape=100000x2000x220 rep=1 tiled_entry_tmajor_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=stage_fused_sumpass_k4 ms=84.648929
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=stage_fused_sumpass_k8 ms=94.433334
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=fused_k1_tpb128 ms=205.072278
+KDE-PROFILE shape=100000x2000x220 rep=1 fused_k1_tpb128_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=fused_k1_tpb256 ms=126.693252
+KDE-PROFILE shape=100000x2000x220 rep=1 fused_k1_tpb256_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=fused_k1_tpb512 ms=107.909892
+KDE-PROFILE shape=100000x2000x220 rep=1 fused_k1_tpb512_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=fused_k2_tpb128 ms=116.968813
+KDE-PROFILE shape=100000x2000x220 rep=1 fused_k2_tpb128_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=fused_k2_tpb256 ms=102.645492
+KDE-PROFILE shape=100000x2000x220 rep=1 fused_k2_tpb256_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=fused_k2_tpb512 ms=90.90598
+KDE-PROFILE shape=100000x2000x220 rep=1 fused_k2_tpb512_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=fused_k4_tpb128 ms=116.635592
+KDE-PROFILE shape=100000x2000x220 rep=1 fused_k4_tpb128_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=fused_k4_tpb256 ms=109.650284
+KDE-PROFILE shape=100000x2000x220 rep=1 fused_k4_tpb256_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=fused_k4_tpb512 ms=104.783082
+KDE-PROFILE shape=100000x2000x220 rep=1 fused_k4_tpb512_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=fused_k8_tpb128 ms=135.55161
+KDE-PROFILE shape=100000x2000x220 rep=1 fused_k8_tpb128_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=fused_k8_tpb256 ms=119.353394
+KDE-PROFILE shape=100000x2000x220 rep=1 fused_k8_tpb256_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=fused_k8_tpb512 ms=160.762784
+KDE-PROFILE shape=100000x2000x220 rep=1 fused_k8_tpb512_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=fused_k16_tpb128 ms=198.921296
+KDE-PROFILE shape=100000x2000x220 rep=1 fused_k16_tpb128_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=1 stage=fused_k16_tpb256 ms=188.874112
+KDE-PROFILE shape=100000x2000x220 rep=1 fused_k16_tpb256_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=host_list_copy ms=34.045315
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=host_validate ms=24.786881
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=device_context ms=0.035352
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=upload_train ms=19.442162
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=upload_query_weights_out ms=0.46377
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=alloc_two_matrices ms=0.003401
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=dev_pairwise_distance ms=95.660064
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=dev_log_kernel_matrix ms=0.765886
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=dev_logsumexp_tpb128 ms=27.748648
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=host_norm_and_dev_normalize ms=0.009495
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=download ms=0.024254
+KDE-PROFILE shape=100000x2000x220 rep=2 hash_staged_replay=16594497303053393111
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=dev_logsumexp_tpb16 ms=23.167492
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=dev_logsumexp_tpb32 ms=27.056624
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=dev_logsumexp_tpb64 ms=27.361932
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=dev_logsumexp_tpb512 ms=54.387692
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=dev_pairwise_distance_tpb1024 ms=90.579733
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=dev_pairwise_distance_tpb64 ms=94.640112
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=device_entry_staged_forced ms=124.236215
+KDE-PROFILE shape=100000x2000x220 rep=2 hash_device_staged=16594497303053393111
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=device_entry_dispatch ms=64.232976
+KDE-PROFILE shape=100000x2000x220 rep=2 hash_device_dispatch=16594497303053393111
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=tiled_q128_chunk256 ms=64.137918
+KDE-PROFILE shape=100000x2000x220 rep=2 tiled_q128_chunk256_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=tiled_q128_chunk1024 ms=65.752028
+KDE-PROFILE shape=100000x2000x220 rep=2 tiled_q128_chunk1024_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=tiled_q128_chunk4096 ms=76.816345
+KDE-PROFILE shape=100000x2000x220 rep=2 tiled_q128_chunk4096_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=tiled_q256_chunk256 ms=66.118137
+KDE-PROFILE shape=100000x2000x220 rep=2 tiled_q256_chunk256_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=tiled_q256_chunk1024 ms=67.948525
+KDE-PROFILE shape=100000x2000x220 rep=2 tiled_q256_chunk1024_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=tiled_q256_chunk4096 ms=78.593742
+KDE-PROFILE shape=100000x2000x220 rep=2 tiled_q256_chunk4096_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=tiled_q512_chunk256 ms=69.123464
+KDE-PROFILE shape=100000x2000x220 rep=2 tiled_q512_chunk256_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=tiled_q512_chunk1024 ms=69.68126
+KDE-PROFILE shape=100000x2000x220 rep=2 tiled_q512_chunk1024_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=tiled_q512_chunk4096 ms=79.278348
+KDE-PROFILE shape=100000x2000x220 rep=2 tiled_q512_chunk4096_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=tiled_elem1024_lse16 ms=67.845847
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=tiled_elem1024_lse64 ms=68.520665
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=tiled_elem1024_lse128 ms=67.971592
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=stage_maxpass_no_store ms=25.014841
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=stage_rowmax_reduce ms=0.054352
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=stage_logk_matrix_write_qmajor ms=26.481017
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=stage_lse_terms_qmajor ms=0.924805
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=stage_lse_serial_sum_qmajor ms=9.484947
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=stage_logk_matrix_write_tmajor ms=25.20521
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=stage_lse_terms_tmajor ms=1.192144
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=stage_lse_serial_sum_tmajor ms=37.739775
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=tiled_entry_qmajor ms=36.899518
+KDE-PROFILE shape=100000x2000x220 rep=2 tiled_entry_qmajor_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=tiled_entry_tmajor ms=64.125158
+KDE-PROFILE shape=100000x2000x220 rep=2 tiled_entry_tmajor_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=stage_fused_sumpass_k4 ms=84.675095
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=stage_fused_sumpass_k8 ms=94.350593
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=fused_k1_tpb128 ms=205.187554
+KDE-PROFILE shape=100000x2000x220 rep=2 fused_k1_tpb128_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=fused_k1_tpb256 ms=126.765905
+KDE-PROFILE shape=100000x2000x220 rep=2 fused_k1_tpb256_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=fused_k1_tpb512 ms=107.873637
+KDE-PROFILE shape=100000x2000x220 rep=2 fused_k1_tpb512_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=fused_k2_tpb128 ms=116.694186
+KDE-PROFILE shape=100000x2000x220 rep=2 fused_k2_tpb128_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=fused_k2_tpb256 ms=102.616435
+KDE-PROFILE shape=100000x2000x220 rep=2 fused_k2_tpb256_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=fused_k2_tpb512 ms=90.890259
+KDE-PROFILE shape=100000x2000x220 rep=2 fused_k2_tpb512_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=fused_k4_tpb128 ms=116.610275
+KDE-PROFILE shape=100000x2000x220 rep=2 fused_k4_tpb128_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=fused_k4_tpb256 ms=109.712204
+KDE-PROFILE shape=100000x2000x220 rep=2 fused_k4_tpb256_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=fused_k4_tpb512 ms=104.883696
+KDE-PROFILE shape=100000x2000x220 rep=2 fused_k4_tpb512_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=fused_k8_tpb128 ms=135.524743
+KDE-PROFILE shape=100000x2000x220 rep=2 fused_k8_tpb128_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=fused_k8_tpb256 ms=119.370494
+KDE-PROFILE shape=100000x2000x220 rep=2 fused_k8_tpb256_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=fused_k8_tpb512 ms=160.685699
+KDE-PROFILE shape=100000x2000x220 rep=2 fused_k8_tpb512_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=fused_k16_tpb128 ms=198.887505
+KDE-PROFILE shape=100000x2000x220 rep=2 fused_k16_tpb128_equals_staged=True
+KDE-PROFILE shape=100000x2000x220 rep=2 stage=fused_k16_tpb256 ms=189.01448
+KDE-PROFILE shape=100000x2000x220 rep=2 fused_k16_tpb256_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=host_entry_total ms=54.551631
+KDE-PROFILE shape=100000x2000x11 rep=0 hash_host_entry=17888536843391681998
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=host_entry_total ms=54.782587
+KDE-PROFILE shape=100000x2000x11 rep=1 hash_host_entry=17888536843391681998
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=host_entry_total ms=54.328671
+KDE-PROFILE shape=100000x2000x11 rep=2 hash_host_entry=17888536843391681998
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=host_ptr_entry_total ms=53.334879
+KDE-PROFILE shape=100000x2000x11 rep=0 hash_host_ptr_entry=17888536843391681998
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=host_validate_ptr ms=0.210446
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=host_ptr_entry_total ms=53.170257
+KDE-PROFILE shape=100000x2000x11 rep=1 hash_host_ptr_entry=17888536843391681998
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=host_validate_ptr ms=0.202579
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=host_ptr_entry_total ms=53.127169
+KDE-PROFILE shape=100000x2000x11 rep=2 hash_host_ptr_entry=17888536843391681998
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=host_validate_ptr ms=0.218932
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=host_list_copy ms=0.644708
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=host_validate ms=1.262599
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=device_context ms=0.013515
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=upload_train ms=0.39285
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=upload_query_weights_out ms=0.042717
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=alloc_two_matrices ms=0.00255
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=dev_pairwise_distance ms=3.776909
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=dev_log_kernel_matrix ms=0.764577
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=dev_logsumexp_tpb128 ms=27.683257
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=host_norm_and_dev_normalize ms=0.009341
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=download ms=0.014247
+KDE-PROFILE shape=100000x2000x11 rep=0 hash_staged_replay=17888536843391681998
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=dev_logsumexp_tpb16 ms=23.171506
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=dev_logsumexp_tpb32 ms=27.087624
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=dev_logsumexp_tpb64 ms=27.332031
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=dev_logsumexp_tpb512 ms=54.332746
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=dev_pairwise_distance_tpb1024 ms=3.887915
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=dev_pairwise_distance_tpb64 ms=3.743906
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=device_entry_staged_forced ms=32.27801
+KDE-PROFILE shape=100000x2000x11 rep=0 hash_device_staged=17888536843391681998
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=device_entry_dispatch ms=52.53561
+KDE-PROFILE shape=100000x2000x11 rep=0 hash_device_dispatch=17888536843391681998
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=tiled_q128_chunk256 ms=52.546621
+KDE-PROFILE shape=100000x2000x11 rep=0 tiled_q128_chunk256_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=tiled_q128_chunk1024 ms=52.826238
+KDE-PROFILE shape=100000x2000x11 rep=0 tiled_q128_chunk1024_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=tiled_q128_chunk4096 ms=55.479188
+KDE-PROFILE shape=100000x2000x11 rep=0 tiled_q128_chunk4096_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=tiled_q256_chunk256 ms=52.39243
+KDE-PROFILE shape=100000x2000x11 rep=0 tiled_q256_chunk256_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=tiled_q256_chunk1024 ms=52.862376
+KDE-PROFILE shape=100000x2000x11 rep=0 tiled_q256_chunk1024_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=tiled_q256_chunk4096 ms=54.786721
+KDE-PROFILE shape=100000x2000x11 rep=0 tiled_q256_chunk4096_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=tiled_q512_chunk256 ms=52.354258
+KDE-PROFILE shape=100000x2000x11 rep=0 tiled_q512_chunk256_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=tiled_q512_chunk1024 ms=52.624567
+KDE-PROFILE shape=100000x2000x11 rep=0 tiled_q512_chunk1024_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=tiled_q512_chunk4096 ms=55.303655
+KDE-PROFILE shape=100000x2000x11 rep=0 tiled_q512_chunk4096_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=tiled_elem1024_lse16 ms=53.175715
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=tiled_elem1024_lse64 ms=53.756798
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=tiled_elem1024_lse128 ms=53.139454
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=stage_maxpass_no_store ms=13.450799
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=stage_rowmax_reduce ms=0.048766
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=stage_logk_matrix_write_qmajor ms=16.469566
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=stage_lse_terms_qmajor ms=0.923898
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=stage_lse_serial_sum_qmajor ms=9.485382
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=stage_logk_matrix_write_tmajor ms=13.534717
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=stage_lse_terms_tmajor ms=1.189652
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=stage_lse_serial_sum_tmajor ms=37.750117
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=tiled_entry_qmajor ms=26.922014
+KDE-PROFILE shape=100000x2000x11 rep=0 tiled_entry_qmajor_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=tiled_entry_tmajor ms=52.50579
+KDE-PROFILE shape=100000x2000x11 rep=0 tiled_entry_tmajor_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=stage_fused_sumpass_k4 ms=9.627442
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=stage_fused_sumpass_k8 ms=12.942755
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=fused_k1_tpb128 ms=34.573763
+KDE-PROFILE shape=100000x2000x11 rep=0 fused_k1_tpb128_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=fused_k1_tpb256 ms=26.867685
+KDE-PROFILE shape=100000x2000x11 rep=0 fused_k1_tpb256_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=fused_k1_tpb512 ms=24.560235
+KDE-PROFILE shape=100000x2000x11 rep=0 fused_k1_tpb512_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=fused_k2_tpb128 ms=26.028343
+KDE-PROFILE shape=100000x2000x11 rep=0 fused_k2_tpb128_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=fused_k2_tpb256 ms=22.946583
+KDE-PROFILE shape=100000x2000x11 rep=0 fused_k2_tpb256_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=fused_k2_tpb512 ms=21.43374
+KDE-PROFILE shape=100000x2000x11 rep=0 fused_k2_tpb512_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=fused_k4_tpb128 ms=24.875992
+KDE-PROFILE shape=100000x2000x11 rep=0 fused_k4_tpb128_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=fused_k4_tpb256 ms=22.806502
+KDE-PROFILE shape=100000x2000x11 rep=0 fused_k4_tpb256_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=fused_k4_tpb512 ms=24.031715
+KDE-PROFILE shape=100000x2000x11 rep=0 fused_k4_tpb512_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=fused_k8_tpb128 ms=27.21333
+KDE-PROFILE shape=100000x2000x11 rep=0 fused_k8_tpb128_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=fused_k8_tpb256 ms=26.392015
+KDE-PROFILE shape=100000x2000x11 rep=0 fused_k8_tpb256_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=fused_k8_tpb512 ms=29.777041
+KDE-PROFILE shape=100000x2000x11 rep=0 fused_k8_tpb512_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=fused_k16_tpb128 ms=35.636813
+KDE-PROFILE shape=100000x2000x11 rep=0 fused_k16_tpb128_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=0 stage=fused_k16_tpb256 ms=35.812536
+KDE-PROFILE shape=100000x2000x11 rep=0 fused_k16_tpb256_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=host_list_copy ms=0.730643
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=host_validate ms=1.33703
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=device_context ms=0.035046
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=upload_train ms=0.772573
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=upload_query_weights_out ms=0.049756
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=alloc_two_matrices ms=0.00327
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=dev_pairwise_distance ms=3.776211
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=dev_log_kernel_matrix ms=0.762616
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=dev_logsumexp_tpb128 ms=27.742782
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=host_norm_and_dev_normalize ms=0.009516
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=download ms=0.014397
+KDE-PROFILE shape=100000x2000x11 rep=1 hash_staged_replay=17888536843391681998
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=dev_logsumexp_tpb16 ms=23.160749
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=dev_logsumexp_tpb32 ms=27.062027
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=dev_logsumexp_tpb64 ms=27.37464
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=dev_logsumexp_tpb512 ms=54.394092
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=dev_pairwise_distance_tpb1024 ms=3.888229
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=dev_pairwise_distance_tpb64 ms=3.743552
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=device_entry_staged_forced ms=32.250631
+KDE-PROFILE shape=100000x2000x11 rep=1 hash_device_staged=17888536843391681998
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=device_entry_dispatch ms=52.490246
+KDE-PROFILE shape=100000x2000x11 rep=1 hash_device_dispatch=17888536843391681998
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=tiled_q128_chunk256 ms=52.504484
+KDE-PROFILE shape=100000x2000x11 rep=1 tiled_q128_chunk256_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=tiled_q128_chunk1024 ms=52.878886
+KDE-PROFILE shape=100000x2000x11 rep=1 tiled_q128_chunk1024_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=tiled_q128_chunk4096 ms=55.463062
+KDE-PROFILE shape=100000x2000x11 rep=1 tiled_q128_chunk4096_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=tiled_q256_chunk256 ms=52.402538
+KDE-PROFILE shape=100000x2000x11 rep=1 tiled_q256_chunk256_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=tiled_q256_chunk1024 ms=52.89418
+KDE-PROFILE shape=100000x2000x11 rep=1 tiled_q256_chunk1024_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=tiled_q256_chunk4096 ms=54.796413
+KDE-PROFILE shape=100000x2000x11 rep=1 tiled_q256_chunk4096_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=tiled_q512_chunk256 ms=52.351165
+KDE-PROFILE shape=100000x2000x11 rep=1 tiled_q512_chunk256_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=tiled_q512_chunk1024 ms=52.872825
+KDE-PROFILE shape=100000x2000x11 rep=1 tiled_q512_chunk1024_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=tiled_q512_chunk4096 ms=55.838158
+KDE-PROFILE shape=100000x2000x11 rep=1 tiled_q512_chunk4096_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=tiled_elem1024_lse16 ms=53.040594
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=tiled_elem1024_lse64 ms=53.791527
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=tiled_elem1024_lse128 ms=53.046189
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=stage_maxpass_no_store ms=13.419377
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=stage_rowmax_reduce ms=0.049854
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=stage_logk_matrix_write_qmajor ms=16.52576
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=stage_lse_terms_qmajor ms=0.923702
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=stage_lse_serial_sum_qmajor ms=9.476269
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=stage_logk_matrix_write_tmajor ms=13.571368
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=stage_lse_terms_tmajor ms=1.189833
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=stage_lse_serial_sum_tmajor ms=37.754693
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=tiled_entry_qmajor ms=26.954214
+KDE-PROFILE shape=100000x2000x11 rep=1 tiled_entry_qmajor_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=tiled_entry_tmajor ms=52.52975
+KDE-PROFILE shape=100000x2000x11 rep=1 tiled_entry_tmajor_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=stage_fused_sumpass_k4 ms=9.62704
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=stage_fused_sumpass_k8 ms=12.940041
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=fused_k1_tpb128 ms=34.577967
+KDE-PROFILE shape=100000x2000x11 rep=1 fused_k1_tpb128_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=fused_k1_tpb256 ms=26.850062
+KDE-PROFILE shape=100000x2000x11 rep=1 fused_k1_tpb256_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=fused_k1_tpb512 ms=24.583828
+KDE-PROFILE shape=100000x2000x11 rep=1 fused_k1_tpb512_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=fused_k2_tpb128 ms=26.001053
+KDE-PROFILE shape=100000x2000x11 rep=1 fused_k2_tpb128_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=fused_k2_tpb256 ms=22.954175
+KDE-PROFILE shape=100000x2000x11 rep=1 fused_k2_tpb256_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=fused_k2_tpb512 ms=21.461608
+KDE-PROFILE shape=100000x2000x11 rep=1 fused_k2_tpb512_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=fused_k4_tpb128 ms=24.835215
+KDE-PROFILE shape=100000x2000x11 rep=1 fused_k4_tpb128_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=fused_k4_tpb256 ms=22.74508
+KDE-PROFILE shape=100000x2000x11 rep=1 fused_k4_tpb256_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=fused_k4_tpb512 ms=23.951726
+KDE-PROFILE shape=100000x2000x11 rep=1 fused_k4_tpb512_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=fused_k8_tpb128 ms=27.222007
+KDE-PROFILE shape=100000x2000x11 rep=1 fused_k8_tpb128_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=fused_k8_tpb256 ms=26.39088
+KDE-PROFILE shape=100000x2000x11 rep=1 fused_k8_tpb256_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=fused_k8_tpb512 ms=29.819544
+KDE-PROFILE shape=100000x2000x11 rep=1 fused_k8_tpb512_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=fused_k16_tpb128 ms=35.605361
+KDE-PROFILE shape=100000x2000x11 rep=1 fused_k16_tpb128_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=1 stage=fused_k16_tpb256 ms=35.809467
+KDE-PROFILE shape=100000x2000x11 rep=1 fused_k16_tpb256_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=host_list_copy ms=0.694677
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=host_validate ms=1.219679
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=device_context ms=0.031368
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=upload_train ms=0.768658
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=upload_query_weights_out ms=0.047648
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=alloc_two_matrices ms=0.00291
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=dev_pairwise_distance ms=3.775004
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=dev_log_kernel_matrix ms=0.787717
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=dev_logsumexp_tpb128 ms=27.736192
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=host_norm_and_dev_normalize ms=0.009212
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=download ms=0.014322
+KDE-PROFILE shape=100000x2000x11 rep=2 hash_staged_replay=17888536843391681998
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=dev_logsumexp_tpb16 ms=23.168907
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=dev_logsumexp_tpb32 ms=27.02768
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=dev_logsumexp_tpb64 ms=27.337425
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=dev_logsumexp_tpb512 ms=54.314535
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=dev_pairwise_distance_tpb1024 ms=3.888682
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=dev_pairwise_distance_tpb64 ms=3.743563
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=device_entry_staged_forced ms=32.253773
+KDE-PROFILE shape=100000x2000x11 rep=2 hash_device_staged=17888536843391681998
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=device_entry_dispatch ms=52.500462
+KDE-PROFILE shape=100000x2000x11 rep=2 hash_device_dispatch=17888536843391681998
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=tiled_q128_chunk256 ms=52.492139
+KDE-PROFILE shape=100000x2000x11 rep=2 tiled_q128_chunk256_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=tiled_q128_chunk1024 ms=52.825692
+KDE-PROFILE shape=100000x2000x11 rep=2 tiled_q128_chunk1024_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=tiled_q128_chunk4096 ms=55.239182
+KDE-PROFILE shape=100000x2000x11 rep=2 tiled_q128_chunk4096_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=tiled_q256_chunk256 ms=52.409952
+KDE-PROFILE shape=100000x2000x11 rep=2 tiled_q256_chunk256_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=tiled_q256_chunk1024 ms=52.870198
+KDE-PROFILE shape=100000x2000x11 rep=2 tiled_q256_chunk1024_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=tiled_q256_chunk4096 ms=54.763659
+KDE-PROFILE shape=100000x2000x11 rep=2 tiled_q256_chunk4096_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=tiled_q512_chunk256 ms=52.312244
+KDE-PROFILE shape=100000x2000x11 rep=2 tiled_q512_chunk256_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=tiled_q512_chunk1024 ms=52.723242
+KDE-PROFILE shape=100000x2000x11 rep=2 tiled_q512_chunk1024_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=tiled_q512_chunk4096 ms=55.903684
+KDE-PROFILE shape=100000x2000x11 rep=2 tiled_q512_chunk4096_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=tiled_elem1024_lse16 ms=53.221767
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=tiled_elem1024_lse64 ms=53.840409
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=tiled_elem1024_lse128 ms=53.092564
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=stage_maxpass_no_store ms=13.402568
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=stage_rowmax_reduce ms=0.050018
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=stage_logk_matrix_write_qmajor ms=16.46586
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=stage_lse_terms_qmajor ms=0.92309
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=stage_lse_serial_sum_qmajor ms=9.484164
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=stage_logk_matrix_write_tmajor ms=13.537751
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=stage_lse_terms_tmajor ms=1.190273
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=stage_lse_serial_sum_tmajor ms=37.744701
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=tiled_entry_qmajor ms=26.91587
+KDE-PROFILE shape=100000x2000x11 rep=2 tiled_entry_qmajor_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=tiled_entry_tmajor ms=52.536849
+KDE-PROFILE shape=100000x2000x11 rep=2 tiled_entry_tmajor_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=stage_fused_sumpass_k4 ms=9.61809
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=stage_fused_sumpass_k8 ms=12.937016
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=fused_k1_tpb128 ms=34.517241
+KDE-PROFILE shape=100000x2000x11 rep=2 fused_k1_tpb128_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=fused_k1_tpb256 ms=26.858949
+KDE-PROFILE shape=100000x2000x11 rep=2 fused_k1_tpb256_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=fused_k1_tpb512 ms=24.653542
+KDE-PROFILE shape=100000x2000x11 rep=2 fused_k1_tpb512_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=fused_k2_tpb128 ms=26.059949
+KDE-PROFILE shape=100000x2000x11 rep=2 fused_k2_tpb128_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=fused_k2_tpb256 ms=22.944591
+KDE-PROFILE shape=100000x2000x11 rep=2 fused_k2_tpb256_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=fused_k2_tpb512 ms=21.435893
+KDE-PROFILE shape=100000x2000x11 rep=2 fused_k2_tpb512_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=fused_k4_tpb128 ms=24.864151
+KDE-PROFILE shape=100000x2000x11 rep=2 fused_k4_tpb128_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=fused_k4_tpb256 ms=22.749094
+KDE-PROFILE shape=100000x2000x11 rep=2 fused_k4_tpb256_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=fused_k4_tpb512 ms=24.014851
+KDE-PROFILE shape=100000x2000x11 rep=2 fused_k4_tpb512_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=fused_k8_tpb128 ms=27.206599
+KDE-PROFILE shape=100000x2000x11 rep=2 fused_k8_tpb128_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=fused_k8_tpb256 ms=26.404303
+KDE-PROFILE shape=100000x2000x11 rep=2 fused_k8_tpb256_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=fused_k8_tpb512 ms=29.773909
+KDE-PROFILE shape=100000x2000x11 rep=2 fused_k8_tpb512_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=fused_k16_tpb128 ms=35.640199
+KDE-PROFILE shape=100000x2000x11 rep=2 fused_k16_tpb128_equals_staged=True
+KDE-PROFILE shape=100000x2000x11 rep=2 stage=fused_k16_tpb256 ms=35.788267
+KDE-PROFILE shape=100000x2000x11 rep=2 fused_k16_tpb256_equals_staged=True
+PROFILE_EXIT=0

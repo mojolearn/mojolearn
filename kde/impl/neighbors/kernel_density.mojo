@@ -1689,11 +1689,20 @@ def kde_tiled_logk_kernel(
     bandwidth: Float32,
     kernel_in: Int32,
     metric_in: Int32,
+    store_logk_in: Int32,
+    trans_in: Int32,
 ):
     """DEVIATION 2625, step 1. Grid x: query blocks of `block_dim.x`
     threads; grid y: train chunks of `chunk_rows_in` rows. Writes
     `logk[q * n_train + j]` for the chunk's `j` and `part_max[q * n_chunks
-    + chunk]`."""
+    + chunk]`.
+
+    DEVIATION 2690: `store_logk_in == 0` elides the `logk` write and keeps
+    everything else -- the same cells in the same order through the same
+    arithmetic, the same strict `>` fold into the same `part_max`. That is
+    the fused pass's row-max pass, and `logk` may then be any one-float
+    buffer. The row max it writes is therefore the tiled path's own, which
+    is what lets the fused sum below reproduce the staged bits."""
     var n_query = Int(n_query_in)
     var n_train = Int(n_train_in)
     var d = Int(d_in)
@@ -1702,6 +1711,10 @@ def kde_tiled_logk_kernel(
     var has_weights = Int(has_weights_in) != 0
     var kernel = Int(kernel_in)
     var metric = Int(metric_in)
+    var store_logk = Int(store_logk_in) != 0
+    # DEVIATION 2691: 1 writes the cell at `j * n_query + q` (train-major),
+    # 0 at `q * n_train + j` (the query-major layout cuML's matrix has).
+    var trans = Int(trans_in) != 0
     var tpb = Int(block_dim.x)
     var tid = Int(thread_idx.x)
     var q = Int(block_idx.x) * tpb + tid
@@ -1801,7 +1814,11 @@ def kde_tiled_logk_kernel(
                 if has_weights:
                     # `add_log_weights_kernel`'s cell.
                     v = ftz(v + logw.unsafe_load(j_base + c))
-                logk.unsafe_store(obase + j_base + c, v)
+                if store_logk:
+                    if trans:
+                        logk.unsafe_store((j_base + c) * n_query + q, v)
+                    else:
+                        logk.unsafe_store(obase + j_base + c, v)
                 # Row 39: strict `>`, the first index attaining the max wins.
                 if v > m:
                     m = v
@@ -1836,16 +1853,25 @@ def kde_lse_terms_kernel(
     rowmax: MutPointer[Float32, MutAnyOrigin],
     n_query_in: Int32,
     n_train_in: Int32,
+    trans_in: Int32,
 ):
     """DEVIATION 2625, step 3: `logsumexp_kernel`'s term
     `ftz(identical_exp(ftz(logk - max)))`, in place, one thread per cell.
     A row whose max is `-inf` (DEVIATION 603) is left untouched: step 4
-    never reads it."""
+    never reads it.
+
+    DEVIATION 2691: the cell's own value does not depend on the layout, only
+    on WHICH query owns it, so the layout changes one index -- `idx //
+    n_train` query-major, `idx % n_query` train-major."""
     var n_train = Int(n_train_in)
+    var n_query = Int(n_query_in)
     var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if idx >= Int(n_query_in) * n_train:
+    if idx >= n_query * n_train:
         return
-    var mx = rowmax.unsafe_load(idx // n_train)
+    var qi = idx // n_train
+    if Int(trans_in) != 0:
+        qi = idx % n_query
+    var mx = rowmax.unsafe_load(qi)
     if mx == bitcast[DType.float32](UInt32(0xFF800000)):
         return
     logk.unsafe_store(idx, ftz(identical_exp(ftz(logk.unsafe_load(idx) - mx))))
@@ -1857,11 +1883,41 @@ def kde_lse_serial_sum_kernel(
     lse: MutPointer[Float32, MutAnyOrigin],
     n_query_in: Int32,
     n_train_in: Int32,
+    trans_in: Int32,
 ):
     """DEVIATION 2625, step 4: `logsumexp_kernel`'s serial ascending sum and
-    its `log(sum) + max`, one thread per query, DEVIATION 603 first."""
+    its `log(sum) + max`, one thread per query, DEVIATION 603 first.
+
+    ============ DEVIATION 2691 (2026-09-12): THE TRAIN-MAJOR READ IS
+    ============ SLOWER, MEASURED, AND IS THEREFORE OFF ==================
+    THE ARGUMENT THAT FAILED. The fold is one thread per query walking
+    `j = 0 .. n_train - 1`. In the query-major layout the 32 threads of a
+    warp read 32 addresses `n_train * 4` bytes apart, which reads as the
+    textbook uncoalesced access, and the profile charges this kernel 9.5 ms
+    of a 36.9 ms device entry. Train-major (`j * n_query + q`) puts cell `j`
+    of every query side by side, so a warp reading one `j` reads 128
+    contiguous bytes -- "obviously" the coalesced form.
+    WHAT THE MEASUREMENT SAID (H100, pod ndscc544rcf8ek, both profile
+    shapes, `kde/checks/kde_stage_profile.mojo`): the fold goes from 9.48 ms
+    to 37.74 ms, and the whole tiled entry from 36.9 ms to 64.1 ms at
+    d = 220 and 26.9 ms to 52.5 ms at d = 11. FOUR TIMES WORSE, not better.
+    The coalescing argument counts transactions per warp-step and misses
+    what each layout does to a THREAD's stream: query-major gives every
+    thread one long sequential run, so a single 128-byte line serves 32 of
+    its iterations and the whole matrix is read as 2,000 streaming rows.
+    Train-major gives each thread an `n_query * 4` byte stride, so the same
+    line is touched for 4 bytes and dropped, and 2,000 strided streams
+    thrash where 2,000 sequential ones streamed.
+    The layout is kept as a parameter, defaulting OFF, because a refuted
+    idea with a number on it is worth more than one that was never tried.
+    IT MOVES NO BIT either way: the ORDER each thread sums in is untouched
+    -- still ascending `j`, still `ftz(s + t)`, still left-associated -- and
+    so is every term's value; only the address changes, which is why
+    `check_kde_tiled_equals_staged` holds both layouts to the staged bits.
+    ======================================================================"""
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i >= Int(n_query_in):
+    var n_query = Int(n_query_in)
+    if i >= n_query:
         return
     var n_train = Int(n_train_in)
     var mx = rowmax.unsafe_load(i)
@@ -1870,8 +1926,12 @@ def kde_lse_serial_sum_kernel(
         return
     var base = i * n_train
     var s = Float32(0.0)
-    for j in range(n_train):
-        s = ftz(s + terms.unsafe_load(base + j))
+    if Int(trans_in) != 0:
+        for j in range(n_train):
+            s = ftz(s + terms.unsafe_load(j * n_query + i))
+    else:
+        for j in range(n_train):
+            s = ftz(s + terms.unsafe_load(base + j))
     lse.unsafe_store(i, ftz(identical_log(s) + mx))
 
 
@@ -1893,11 +1953,19 @@ def kde_score_samples_tiled_identical(
     lse_tpb: Int = KDE_LSE_TPB,
     q_tpb: Int = KDE_TILED_Q_TPB,
     chunk_rows_in: Int = KDE_TILED_CHUNK_ROWS,
+    transposed: Bool = False,
 ) raises:
     """DEVIATION 2625's host side: log-weights (if any), the tiled
     log-kernel matrix, the row max, the terms, the serial sum, the staged
     normalization. Five or six launches, one drain. `q_tpb` and
-    `chunk_rows_in` are scheduling, here so the gate can vary them."""
+    `chunk_rows_in` are scheduling, here so the gate can vary them.
+
+    `transposed` is DEVIATION 2691's train-major layout, and it DEFAULTS
+    OFF because it was MEASURED SLOWER (the fold goes 9.5 ms to 37.7 ms; see
+    that deviation's note on `kde_lse_serial_sum_kernel`). The default is
+    the query-major layout, cuML's own and this lane's before. The
+    parameter stays so the gate can hold both layouts to the same bits and
+    the profile can time them against each other in one process."""
     if n_query <= 0 or n_train <= 0 or n_features <= 0:
         raise Error(
             "kde: n_query, n_train and n_features must be positive, got "
@@ -1956,6 +2024,8 @@ def kde_score_samples_tiled_identical(
         bandwidth,
         Int32(kernel),
         Int32(metric),
+        Int32(1),
+        Int32(1 if transposed else 0),
         grid_dim=((n_query + q_tpb - 1) // q_tpb, n_chunks, 1),
         block_dim=(q_tpb, 1, 1),
     )
@@ -1972,6 +2042,7 @@ def kde_score_samples_tiled_identical(
         rowmax.unsafe_ptr(),
         Int32(n_query),
         Int32(n_train),
+        Int32(1 if transposed else 0),
         grid_dim=((cells + elem_tpb - 1) // elem_tpb, 1, 1),
         block_dim=(elem_tpb, 1, 1),
     )
@@ -1981,6 +2052,7 @@ def kde_score_samples_tiled_identical(
         lse.unsafe_ptr(),
         Int32(n_query),
         Int32(n_train),
+        Int32(1 if transposed else 0),
         grid_dim=((n_query + lse_tpb - 1) // lse_tpb, 1, 1),
         block_dim=(lse_tpb, 1, 1),
     )
@@ -1997,6 +2069,426 @@ def kde_score_samples_tiled_identical(
     )
     ctx.synchronize()
     _ = logk^
+    _ = part^
+    _ = rowmax^
+    _ = lse^
+    _ = logw^
+
+
+# ===========================================================================
+# DEVIATION 2690 (2026-09-12): THE LOG-KERNEL MATRIX IS NEVER WRITTEN, AND
+# THE SUMMATION ORDER IS STILL THE STAGED PATH'S
+# ===========================================================================
+# DEVIATION 2625 kept cuML's shape: an `n_query x n_train` log-kernel matrix
+# in device memory, read twice more (the terms in place, then the serial
+# fold). At the classical lane's KDE block that matrix is 2,000 x 100,000
+# floats = 800 MB, and the traffic, not the arithmetic, is what the profile
+# measures: the cells are written by one thread per query, so a warp's 32
+# stores land 400 KB apart and neither the write nor the fold's re-read
+# coalesces. cuML never materializes it.
+#
+# WHY IT COULD NOT SIMPLY BE FUSED. The fold is
+# `s = ftz(s + term_j)` for `j = 0 .. n_train - 1`, left-associated, and
+# under IDENTICAL that order IS the answer: reassociating it (a block tree,
+# a warp fold, an atomic) changes the bits, which is why
+# `logsumexp_kernel`'s docstring refuses the tree and why the FAST fused
+# pass (DEVIATION 2490) is FAST-only -- its online rescaling is a different
+# summation. A dependent chain of `n_train` adds also cannot be split, so
+# ONE thread must own each query's sum. One thread per query is 2,000
+# threads on a 132-SM card, which is why a naive fusion is far slower than
+# the matrix it saves.
+#
+# WHAT THIS DEVIATION DOES. It splits the two jobs that were welded
+# together. The EXPENSIVE job (a cell's distance, log-kernel, log-weight and
+# `exp`) is per-cell and thread-independent, so it is spread over `H`
+# HELPER threads per query. The ORDER-BOUND job (the adds) stays in ONE
+# owner thread per query, which reads the helpers' terms out of shared
+# memory in ascending `j` and folds them with the staged `ftz(s + t)`. Per
+# 64-row tile the helpers compute 64 terms in parallel, the block
+# synchronizes, and the owner folds those 64 in order -- so the accumulator
+# sees exactly `t_0, t_1, ... t_{n_train-1}`, the order
+# `kde_lse_serial_sum_kernel` defines, and the bits are that kernel's.
+# Two passes over the data replace three passes over an 800 MB matrix:
+#   1. `kde_tiled_logk_kernel` with `store_logk = 0` -- the row max only,
+#      chunked over grid y exactly as today, so `part_max` and the
+#      `kde_rowmax_reduce_kernel` fold are unchanged code on unchanged
+#      values;
+#   2. `kde_fused_sum_kernel` -- recomputes each cell and folds it.
+#
+# ===========================================================================
+# THE VERDICT IS THAT THIS IS SLOWER, AND IT IS THEREFORE OPT-IN
+# (`fused_only`), NOT THE DEFAULT.
+# ===========================================================================
+# H100, pod ndscc544rcf8ek, `kde/checks/kde_stage_profile.mojo`, 100,000 fit
+# rows x 2,000 queries, the whole device entry, best of a 13-point schedule
+# sweep against the tiled matrix pass it would replace:
+#
+#   | shape   | tiled matrix | fused, default | fused, best schedule |
+#   | d = 220 |    36.9 ms   |    109.8 ms    |  91.1 ms (k2, 512)   |
+#   | d = 11  |    26.9 ms   |     22.7 ms    |  21.3 ms (k2, 512)   |
+#
+# WHY, and it is not the arithmetic: the two passes do the same per-cell
+# work, but they cannot have the same GRID. The max pass chunks the train
+# rows across grid y (391 chunks x 16 query blocks = 6,256 blocks at the
+# lane's shape), because a max may be folded from chunk maxima. The sum pass
+# CANNOT be chunked that way -- the fold is a dependent chain over all of
+# `j`, so every one of a query's terms must reach ONE thread -- which costs
+# it the grid-y dimension and leaves 125 blocks to fill 132 SMs. Measured
+# alone, that sum pass is 84.6 ms at d = 220 against the 36.9 ms that the
+# matrix write (26.5, of which only ~1.5 is the store), the terms kernel
+# (0.9) and the serial fold (9.5) cost together. The 800 MB round trip is
+# real but it is CHEAPER than the parallelism the fold gives up for it, at
+# this query count. It is the narrow shape (d = 11), where per-cell epilog
+# dominates and the matrix traffic is the same, that comes closest.
+# WHEN IT WOULD WIN: the sum pass's parallelism is `n_query * H`, so its
+# deficit shrinks as `n_query` grows. At 2,000 queries it loses; a caller
+# scoring hundreds of thousands of queries is the case to re-measure, and
+# that is what `fused_only` is for. THE FAST TIER ALREADY FUSES
+# (DEVIATION 2490) and is unaffected by any of this.
+#
+# SCHEDULING, NOT ARITHMETIC. `K` (cells per helper, so `H = 64 / K`
+# helpers per query) and the block width are a schedule: they change which
+# thread computes a term, never a term's value and never the fold's order.
+# `check_kde_tiled_equals_staged` runs two of them against the staged path
+# and `kde/checks/kde_stage_profile.mojo` hashes a sweep of them equal.
+comptime KDE_FUSED_ID_MAXQ = 64
+comptime KDE_FUSED_ID_K = 4
+comptime KDE_FUSED_ID_TPB = 256
+
+
+def kde_fused_sum_kernel[K: Int](
+    lse: MutPointer[Float32, MutAnyOrigin],
+    rowmax: MutPointer[Float32, MutAnyOrigin],
+    query: MutPointer[Float32, MutAnyOrigin],
+    train: MutPointer[Float32, MutAnyOrigin],
+    logw: MutPointer[Float32, MutAnyOrigin],
+    n_query_in: Int32,
+    n_train_in: Int32,
+    d_in: Int32,
+    has_weights_in: Int32,
+    bandwidth: Float32,
+    kernel_in: Int32,
+    metric_in: Int32,
+):
+    """DEVIATION 2690, pass 2: every cell of a query's row recomputed and
+    folded in ascending `j`, with no matrix anywhere.
+
+    `K` cells per thread, so `H = 64 / K` threads share one query and
+    `block_dim.x / H` queries share a block. Thread `tid` takes query slot
+    `ql = tid // H` and cells `h * K .. h * K + K - 1` of each 64-row tile,
+    `h = tid - ql * H`. The per-cell arithmetic is
+    `kde_tiled_logk_kernel`'s, lane for lane (see the block comment above
+    `KDE_TILED_FEAT`); the term is `kde_lse_terms_kernel`'s
+    `ftz(identical_exp(ftz(logk - max)))`; the fold and the epilog are
+    `kde_lse_serial_sum_kernel`'s `ftz(s + t)` and
+    `ftz(identical_log(s) + max)`, including DEVIATION 603's all--inf row.
+
+    THE BARRIERS ARE BLOCK-WIDE AND UNCONDITIONAL. Every thread runs the
+    same tile loop and the same feature loop (their trip counts are
+    `n_train` and `d`, never a thread's own data), so a thread whose query
+    is past the end still reaches each `barrier()`. The owner's fold sits
+    between the barrier that follows the helpers' term writes and the next
+    tile's first barrier, so no helper can overwrite a term the owner has
+    not read. This is the AMD lesson of DEVIATION 2600 (a peeled block that
+    skipped a block-wide sync was correct on 32-lane hardware and wrong on
+    64): the sync is not conditional on anything."""
+    comptime H = KDE_TILED_CELL // K
+    var n_query = Int(n_query_in)
+    var n_train = Int(n_train_in)
+    var d = Int(d_in)
+    var has_weights = Int(has_weights_in) != 0
+    var kernel = Int(kernel_in)
+    var metric = Int(metric_in)
+    var tpb = Int(block_dim.x)
+    var tid = Int(thread_idx.x)
+    var qpb = tpb // H
+    var ql = tid // H
+    var h = tid - ql * H
+    var q = Int(block_idx.x) * qpb + ql
+    var valid = q < n_query
+
+    var tile = stack_allocation[
+        KDE_TILED_TILE_FLOATS,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var terms = stack_allocation[
+        KDE_FUSED_ID_MAXQ * KDE_TILED_CELL,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+
+    var neg_inf = bitcast[DType.float32](UInt32(0xFF800000))
+    var mx = neg_inf
+    if valid:
+        mx = rowmax.unsafe_load(q)
+    # DEVIATION 603: a row whose max is -inf is -inf, and its terms are
+    # never summed (`kde_lse_serial_sum_kernel` returns before the fold).
+    var dead = mx == neg_inf
+    var s = Float32(0.0)
+    var qbase = q * d
+    var tbase = ql * KDE_TILED_CELL + h * K
+
+    var j_base = 0
+    while j_base < n_train:
+        var cells = n_train - j_base
+        if cells > KDE_TILED_CELL:
+            cells = KDE_TILED_CELL
+        var acc = SIMD[DType.float32, K](0.0)
+        var f0 = 0
+        while f0 < d:
+            var feats = d - f0
+            if feats > KDE_TILED_FEAT:
+                feats = KDE_TILED_FEAT
+            # Cooperative load, slot = feat * CELL + cell (their layout).
+            barrier()
+            var idx = tid
+            while idx < KDE_TILED_TILE_FLOATS:
+                var feat = idx // KDE_TILED_CELL
+                var cell = idx - feat * KDE_TILED_CELL
+                var v = Float32(0.0)
+                if cell < cells and feat < feats:
+                    v = ftz(train.unsafe_load((j_base + cell) * d + f0 + feat))
+                tile.unsafe_store(idx, v)
+                idx += tpb
+            barrier()
+            if valid:
+                # DEVIATION 2626's cores, over this thread's K cells.
+                if metric == DIST_L2_SQRT_UNEXPANDED:
+                    for feat in range(feats):
+                        var qv = SIMD[DType.float32, K](
+                            ftz(query.unsafe_load(qbase + f0 + feat))
+                        )
+                        var row = tile.unsafe_load[width=K](feat * KDE_TILED_CELL + h * K)
+                        var diff = ftz_simd[K](qv - row)
+                        acc = ftz_simd[K](identical_mul_add_simd[K](diff, diff, acc))
+                elif metric == DIST_L1:
+                    for feat in range(feats):
+                        var qv = SIMD[DType.float32, K](
+                            ftz(query.unsafe_load(qbase + f0 + feat))
+                        )
+                        var row = tile.unsafe_load[width=K](feat * KDE_TILED_CELL + h * K)
+                        acc = ftz_simd[K](acc + abs(ftz_simd[K](qv - row)))
+                else:
+                    for feat in range(feats):
+                        var qv = SIMD[DType.float32, K](
+                            ftz(query.unsafe_load(qbase + f0 + feat))
+                        )
+                        var row = tile.unsafe_load[width=K](feat * KDE_TILED_CELL + h * K)
+                        var diff = abs(ftz_simd[K](qv - row))
+                        acc = diff.gt(acc).select(diff, acc)
+            f0 += KDE_TILED_FEAT
+        # The helpers' terms, `kde_tiled_logk_kernel`'s epilog followed by
+        # `kde_lse_terms_kernel`'s cell.
+        if valid:
+            comptime for c in range(K):
+                var jj = h * K + c
+                var t = Float32(0.0)
+                if jj < cells and not dead:
+                    var dist = acc[c]
+                    if metric == DIST_L2_SQRT_UNEXPANDED:
+                        dist = ftz(identical_sqrt(dist))
+                    var v = compute_log_kernel(ftz(dist), bandwidth, kernel)
+                    if has_weights:
+                        v = ftz(v + logw.unsafe_load(j_base + jj))
+                    t = ftz(identical_exp(ftz(v - mx)))
+                terms.unsafe_store(tbase + c, t)
+        barrier()
+        # THE ORDER-BOUND STEP: one thread, ascending j, the staged add.
+        if valid and h == 0 and not dead:
+            var fold_base = ql * KDE_TILED_CELL
+            for c in range(cells):
+                s = ftz(s + terms.unsafe_load(fold_base + c))
+        j_base += KDE_TILED_CELL
+    if valid and h == 0:
+        if dead:
+            lse.unsafe_store(q, mx)
+        else:
+            lse.unsafe_store(q, ftz(identical_log(s) + mx))
+
+
+def _launch_fused_sum[K: Int](
+    ctx: DeviceContext,
+    mut lse: DeviceBuffer[DType.float32],
+    mut rowmax: DeviceBuffer[DType.float32],
+    mut query: DeviceBuffer[DType.float32],
+    mut train: DeviceBuffer[DType.float32],
+    mut logw: DeviceBuffer[DType.float32],
+    n_query: Int,
+    n_train: Int,
+    n_features: Int,
+    has_weights: Bool,
+    bandwidth: Float32,
+    kernel: Int,
+    metric: Int,
+    grid: Int,
+    tpb: Int,
+) raises:
+    """One `K` of DEVIATION 2690's pass 2, so the dispatch below is a line
+    per schedule rather than a copy of the argument list per schedule."""
+    ctx.enqueue_function[kde_fused_sum_kernel[K]](
+        lse.unsafe_ptr(),
+        rowmax.unsafe_ptr(),
+        query.unsafe_ptr(),
+        train.unsafe_ptr(),
+        logw.unsafe_ptr(),
+        Int32(n_query),
+        Int32(n_train),
+        Int32(n_features),
+        Int32(1 if has_weights else 0),
+        bandwidth,
+        Int32(kernel),
+        Int32(metric),
+        grid_dim=(grid, 1, 1),
+        block_dim=(tpb, 1, 1),
+    )
+
+
+def kde_score_samples_fused_identical(
+    ctx: DeviceContext,
+    mut train: DeviceBuffer[DType.float32],
+    mut query: DeviceBuffer[DType.float32],
+    mut weights: DeviceBuffer[DType.float32],
+    has_weights: Bool,
+    sum_weights: Float32,
+    n_train: Int,
+    n_query: Int,
+    n_features: Int,
+    bandwidth: Float32,
+    kernel: Int,
+    metric: Int,
+    mut scores: DeviceBuffer[DType.float32],
+    elem_tpb: Int = KDE_ELEM_TPB,
+    lse_tpb: Int = KDE_LSE_TPB,
+    q_tpb: Int = KDE_TILED_Q_TPB,
+    chunk_rows_in: Int = KDE_TILED_CHUNK_ROWS,
+    k_cells: Int = KDE_FUSED_ID_K,
+    sum_tpb: Int = KDE_FUSED_ID_TPB,
+) raises:
+    """DEVIATION 2690's host side: the row-max pass (the tiled kernel with
+    its `logk` write elided), the chunk-max fold, the fused sum, the staged
+    normalization. Four or five launches, one drain, and NO
+    `n_query x n_train` buffer. `q_tpb` / `chunk_rows_in` schedule the max
+    pass and `k_cells` / `sum_tpb` the sum pass; all four are scheduling,
+    here so the gate and the profile can vary them."""
+    if n_query <= 0 or n_train <= 0 or n_features <= 0:
+        raise Error(
+            "kde: n_query, n_train and n_features must be positive, got "
+            + String(n_query) + ", " + String(n_train) + ", " + String(n_features)
+        )
+    if (
+        metric != DIST_L2_SQRT_UNEXPANDED
+        and metric != DIST_L1
+        and metric != DIST_LINF
+    ):
+        raise Error(
+            "kde: the fused pass (DEVIATION 2690) takes euclidean, l1 or"
+            " chebyshev; metric value " + String(metric)
+        )
+    if elem_tpb <= 0 or lse_tpb <= 0 or q_tpb <= 0 or chunk_rows_in <= 0 or sum_tpb <= 0:
+        raise Error("kde: block widths and the chunk length must be positive")
+    if q_tpb > KDE_TILED_TILE_FLOATS:
+        raise Error("kde: q_tpb must not exceed the tile (" + String(KDE_TILED_TILE_FLOATS) + ")")
+    if (
+        k_cells != 1 and k_cells != 2 and k_cells != 4
+        and k_cells != 8 and k_cells != 16 and k_cells != 32
+    ):
+        raise Error(
+            "kde: DEVIATION 2690's k_cells must be 1, 2, 4, 8, 16 or 32, got "
+            + String(k_cells)
+        )
+    var helpers = KDE_TILED_CELL // k_cells
+    if sum_tpb % helpers != 0:
+        raise Error(
+            "kde: the sum block width (" + String(sum_tpb) + ") must be a multiple of"
+            " the " + String(helpers) + " helpers a query takes at k_cells " + String(k_cells)
+        )
+    var qpb = sum_tpb // helpers
+    if qpb > KDE_FUSED_ID_MAXQ:
+        raise Error(
+            "kde: that schedule puts " + String(qpb) + " queries in a block and the"
+            " shared term tile holds " + String(KDE_FUSED_ID_MAXQ)
+        )
+    validate_metric_arg(metric, Float32(2.0))
+    # Grid y stays inside every vendor's 65,535 limit.
+    var chunk_rows = chunk_rows_in
+    var min_rows = (n_train + 32767) // 32768
+    if chunk_rows < min_rows:
+        chunk_rows = min_rows
+    var n_chunks = (n_train + chunk_rows - 1) // chunk_rows
+
+    var logw: DeviceBuffer[DType.float32]
+    if has_weights:
+        logw = ctx.enqueue_create_buffer[DType.float32](n_train)
+        ctx.enqueue_function[log_weights_kernel](
+            logw.unsafe_ptr(),
+            weights.unsafe_ptr(),
+            Int32(n_train),
+            grid_dim=((n_train + elem_tpb - 1) // elem_tpb, 1, 1),
+            block_dim=(elem_tpb, 1, 1),
+        )
+    else:
+        logw = ctx.enqueue_create_buffer[DType.float32](1)
+    # The matrix that is not written. One float, so the kernel has a legal
+    # pointer to ignore.
+    var nologk = ctx.enqueue_create_buffer[DType.float32](1)
+    var part = ctx.enqueue_create_buffer[DType.float32](n_query * n_chunks)
+    var rowmax = ctx.enqueue_create_buffer[DType.float32](n_query)
+    var lse = ctx.enqueue_create_buffer[DType.float32](n_query)
+    ctx.enqueue_function[kde_tiled_logk_kernel](
+        nologk.unsafe_ptr(),
+        part.unsafe_ptr(),
+        query.unsafe_ptr(),
+        train.unsafe_ptr(),
+        logw.unsafe_ptr(),
+        Int32(n_query),
+        Int32(n_train),
+        Int32(n_features),
+        Int32(n_chunks),
+        Int32(chunk_rows),
+        Int32(1 if has_weights else 0),
+        bandwidth,
+        Int32(kernel),
+        Int32(metric),
+        Int32(0),
+        Int32(0),
+        grid_dim=((n_query + q_tpb - 1) // q_tpb, n_chunks, 1),
+        block_dim=(q_tpb, 1, 1),
+    )
+    ctx.enqueue_function[kde_rowmax_reduce_kernel](
+        rowmax.unsafe_ptr(),
+        part.unsafe_ptr(),
+        Int32(n_query),
+        Int32(n_chunks),
+        grid_dim=((n_query + lse_tpb - 1) // lse_tpb, 1, 1),
+        block_dim=(lse_tpb, 1, 1),
+    )
+    var grid = (n_query + qpb - 1) // qpb
+    if k_cells == 1:
+        _launch_fused_sum[1](ctx, lse, rowmax, query, train, logw, n_query, n_train, n_features, has_weights, bandwidth, kernel, metric, grid, sum_tpb)
+    elif k_cells == 2:
+        _launch_fused_sum[2](ctx, lse, rowmax, query, train, logw, n_query, n_train, n_features, has_weights, bandwidth, kernel, metric, grid, sum_tpb)
+    elif k_cells == 4:
+        _launch_fused_sum[4](ctx, lse, rowmax, query, train, logw, n_query, n_train, n_features, has_weights, bandwidth, kernel, metric, grid, sum_tpb)
+    elif k_cells == 8:
+        _launch_fused_sum[8](ctx, lse, rowmax, query, train, logw, n_query, n_train, n_features, has_weights, bandwidth, kernel, metric, grid, sum_tpb)
+    elif k_cells == 16:
+        _launch_fused_sum[16](ctx, lse, rowmax, query, train, logw, n_query, n_train, n_features, has_weights, bandwidth, kernel, metric, grid, sum_tpb)
+    else:
+        _launch_fused_sum[32](ctx, lse, rowmax, query, train, logw, n_query, n_train, n_features, has_weights, bandwidth, kernel, metric, grid, sum_tpb)
+    var log_sw = ftz(identical_log(sum_weights))
+    var norm = log_kernel_norm(kernel, bandwidth, n_features)
+    ctx.enqueue_function[normalize_scores_kernel](
+        scores.unsafe_ptr(),
+        lse.unsafe_ptr(),
+        Int32(n_query),
+        log_sw,
+        norm,
+        grid_dim=((n_query + elem_tpb - 1) // elem_tpb, 1, 1),
+        block_dim=(elem_tpb, 1, 1),
+    )
+    ctx.synchronize()
+    _ = nologk^
     _ = part^
     _ = rowmax^
     _ = lse^
@@ -2022,6 +2514,7 @@ def kde_score_samples_device(
     lse_tpb: Int = KDE_LSE_TPB,
     metric_arg: Float32 = Float32(2.0),
     staged_only: Bool = False,
+    fused_only: Bool = False,
 ) raises:
     """`score_samples` (`:264-363`), stage by stage, with the card.
 
@@ -2039,12 +2532,23 @@ def kde_score_samples_device(
         raise Error("kde: block widths must be positive")
     # DEVIATION 2625: IDENTICAL with no trace recording takes the tiled
     # pass for the three unexpanded metrics; the same bits as below.
+    # DEVIATION 2691: with the matrix train-major. DEVIATION 2690's fused
+    # pass, which writes no matrix at all, is MEASURABLY SLOWER here and is
+    # an opt-in arm (`fused_only`), not the default; the numbers and the
+    # reason are in the block comment above `KDE_FUSED_ID_MAXQ`.
     if (not staged_only) and kde_identical_tiled_applies(metric, trace.enabled):
-        kde_score_samples_tiled_identical(
-            ctx, train, query, weights, has_weights, sum_weights,
-            n_train, n_query, n_features, bandwidth, kernel, metric, scores,
-            elem_tpb, lse_tpb,
-        )
+        if fused_only:
+            kde_score_samples_fused_identical(
+                ctx, train, query, weights, has_weights, sum_weights,
+                n_train, n_query, n_features, bandwidth, kernel, metric, scores,
+                elem_tpb, lse_tpb,
+            )
+        else:
+            kde_score_samples_tiled_identical(
+                ctx, train, query, weights, has_weights, sum_weights,
+                n_train, n_query, n_features, bandwidth, kernel, metric, scores,
+                elem_tpb, lse_tpb,
+            )
         return
     # DEVIATION 2490: FAST with no trace recording takes the fused pass.
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST:

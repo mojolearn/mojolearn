@@ -27,9 +27,21 @@ from kde.estimator import kde_score_samples_host, kde_score_samples_host_ptr
 from kde.impl.distance.distance import pairwise_distance
 from kde.impl.distance.distance_ops import DIST_L2_SQRT_UNEXPANDED
 from kde.impl.neighbors.kernel_density import (
+    KDE_FUSED_ID_K,
+    KDE_FUSED_ID_TPB,
     KDE_KERNEL_GAUSSIAN,
+    KDE_TILED_CELL,
+    KDE_TILED_CHUNK_ROWS,
+    KDE_TILED_Q_TPB,
+    _launch_fused_sum,
+    kde_fused_sum_kernel,
+    kde_lse_serial_sum_kernel,
+    kde_lse_terms_kernel,
+    kde_rowmax_reduce_kernel,
     kde_score_samples_device,
+    kde_score_samples_fused_identical,
     kde_score_samples_tiled_identical,
+    kde_tiled_logk_kernel,
     kde_validate_data,
     kde_validate_data_ptr,
     log_kernel_matrix_kernel,
@@ -289,6 +301,146 @@ def _profile(n_train: Int, n_query: Int, d: Int, reps: Int) raises:
             ctx.synchronize()
             t1 = perf_counter_ns()
             _say(shape, rep, "tiled_elem1024_lse" + String(ltpb), _ms(t0, t1))
+
+        # ===================================================================
+        # DEVIATION 2690. Where the tiled path's device milliseconds go, one
+        # kernel at a time, and what the fused pass costs instead. Each stage
+        # is launched on its own and drained, so the entry's total is
+        # ATTRIBUTED rather than assumed.
+        # ===================================================================
+        var n_chunks = (n_train + KDE_TILED_CHUNK_ROWS - 1) // KDE_TILED_CHUNK_ROWS
+        var part = ctx.enqueue_create_buffer[DType.float32](n_query * n_chunks)
+        ctx.synchronize()
+        var qgrid = (n_query + KDE_TILED_Q_TPB - 1) // KDE_TILED_Q_TPB
+        # The row-max pass: this kernel with its matrix write elided. The
+        # difference against the two writes below IS the write.
+        t0 = perf_counter_ns()
+        ctx.enqueue_function[kde_tiled_logk_kernel](
+            logk.unsafe_ptr(), part.unsafe_ptr(), dquery.unsafe_ptr(), dtrain.unsafe_ptr(),
+            dweights.unsafe_ptr(), Int32(n_query), Int32(n_train), Int32(d),
+            Int32(n_chunks), Int32(KDE_TILED_CHUNK_ROWS), Int32(0), h, Int32(kernel),
+            Int32(metric), Int32(0), Int32(0),
+            grid_dim=(qgrid, n_chunks, 1), block_dim=(KDE_TILED_Q_TPB, 1, 1),
+        )
+        ctx.synchronize()
+        t1 = perf_counter_ns()
+        _say(shape, rep, "stage_maxpass_no_store", _ms(t0, t1))
+        t0 = perf_counter_ns()
+        ctx.enqueue_function[kde_rowmax_reduce_kernel](
+            rowmax.unsafe_ptr(), part.unsafe_ptr(), Int32(n_query), Int32(n_chunks),
+            grid_dim=((n_query + 127) // 128, 1, 1), block_dim=(128, 1, 1),
+        )
+        ctx.synchronize()
+        t1 = perf_counter_ns()
+        _say(shape, rep, "stage_rowmax_reduce", _ms(t0, t1))
+        # DEVIATION 2691: the three matrix stages in BOTH layouts, each on
+        # the matrix its own write just produced. `_qmajor` is `q * n_train
+        # + j` (cuML's, and ours before this deviation), `_tmajor` is
+        # `j * n_query + q`. Only the addresses differ.
+        var layouts: List[Int] = [0, 1]
+        for lay in layouts:
+            var tr = lay
+            var tag = "_qmajor" if tr == 0 else "_tmajor"
+            t0 = perf_counter_ns()
+            ctx.enqueue_function[kde_tiled_logk_kernel](
+                logk.unsafe_ptr(), part.unsafe_ptr(), dquery.unsafe_ptr(), dtrain.unsafe_ptr(),
+                dweights.unsafe_ptr(), Int32(n_query), Int32(n_train), Int32(d),
+                Int32(n_chunks), Int32(KDE_TILED_CHUNK_ROWS), Int32(0), h, Int32(kernel),
+                Int32(metric), Int32(1), Int32(tr),
+                grid_dim=(qgrid, n_chunks, 1), block_dim=(KDE_TILED_Q_TPB, 1, 1),
+            )
+            ctx.synchronize()
+            t1 = perf_counter_ns()
+            _say(shape, rep, "stage_logk_matrix_write" + tag, _ms(t0, t1))
+            t0 = perf_counter_ns()
+            ctx.enqueue_function[kde_lse_terms_kernel](
+                logk.unsafe_ptr(), rowmax.unsafe_ptr(), Int32(n_query), Int32(n_train), Int32(tr),
+                grid_dim=((cells + 255) // 256, 1, 1), block_dim=(256, 1, 1),
+            )
+            ctx.synchronize()
+            t1 = perf_counter_ns()
+            _say(shape, rep, "stage_lse_terms" + tag, _ms(t0, t1))
+            t0 = perf_counter_ns()
+            ctx.enqueue_function[kde_lse_serial_sum_kernel](
+                logk.unsafe_ptr(), rowmax.unsafe_ptr(), lse.unsafe_ptr(),
+                Int32(n_query), Int32(n_train), Int32(tr),
+                grid_dim=((n_query + 127) // 128, 1, 1), block_dim=(128, 1, 1),
+            )
+            ctx.synchronize()
+            t1 = perf_counter_ns()
+            _say(shape, rep, "stage_lse_serial_sum" + tag, _ms(t0, t1))
+        # And the whole tiled entry in both layouts, default schedule, each
+        # hashed against the staged path.
+        for lay2 in layouts:
+            var tr2 = lay2
+            var tag2 = "_qmajor" if tr2 == 0 else "_tmajor"
+            t0 = perf_counter_ns()
+            kde_score_samples_tiled_identical(
+                ctx, dtrain, dquery, dweights, False, Float32(n_train), n_train, n_query, d,
+                h, kernel, metric, dout, 256, 128, KDE_TILED_Q_TPB,
+                KDE_TILED_CHUNK_ROWS, tr2 == 1,
+            )
+            ctx.synchronize()
+            t1 = perf_counter_ns()
+            _say(shape, rep, "tiled_entry" + tag2, _ms(t0, t1))
+            var ts2 = _read_scores(ctx, dout, n_query)
+            print(
+                "KDE-PROFILE shape=" + shape + " rep=" + String(rep)
+                + " tiled_entry" + tag2 + "_equals_staged="
+                + String(_hash(ts2) == _hash(staged_scores))
+            )
+        # The fused sum pass ALONE, on the row max just computed: the
+        # recompute-and-fold that replaces the three matrix passes above.
+        var helpers_k4 = KDE_TILED_CELL // 4
+        var fgrid_k4 = (n_query + (KDE_FUSED_ID_TPB // helpers_k4) - 1) // (KDE_FUSED_ID_TPB // helpers_k4)
+        t0 = perf_counter_ns()
+        _launch_fused_sum[4](
+            ctx, lse, rowmax, dquery, dtrain, dweights, n_query, n_train, d,
+            False, h, kernel, metric, fgrid_k4, KDE_FUSED_ID_TPB,
+        )
+        ctx.synchronize()
+        t1 = perf_counter_ns()
+        _say(shape, rep, "stage_fused_sumpass_k4", _ms(t0, t1))
+        var helpers_k8 = KDE_TILED_CELL // 8
+        var fgrid_k8 = (n_query + (KDE_FUSED_ID_TPB // helpers_k8) - 1) // (KDE_FUSED_ID_TPB // helpers_k8)
+        t0 = perf_counter_ns()
+        _launch_fused_sum[8](
+            ctx, lse, rowmax, dquery, dtrain, dweights, n_query, n_train, d,
+            False, h, kernel, metric, fgrid_k8, KDE_FUSED_ID_TPB,
+        )
+        ctx.synchronize()
+        t1 = perf_counter_ns()
+        _say(shape, rep, "stage_fused_sumpass_k8", _ms(t0, t1))
+
+        # The fused entry, over its schedule sweep. Every one of them must
+        # hash EQUAL to the staged path: a schedule is not arithmetic.
+        var fused_ks: List[Int] = [1, 2, 4, 8, 16]
+        var fused_tpbs: List[Int] = [128, 256, 512]
+        for a in fused_ks:
+            for b in fused_tpbs:
+                var kc = a
+                var tp = b
+                var hlp = KDE_TILED_CELL // kc
+                if tp % hlp != 0:
+                    continue
+                if tp // hlp > 64:
+                    continue
+                t0 = perf_counter_ns()
+                kde_score_samples_fused_identical(
+                    ctx, dtrain, dquery, dweights, False, Float32(n_train), n_train, n_query, d,
+                    h, kernel, metric, dout, 256, 128, KDE_TILED_Q_TPB,
+                    KDE_TILED_CHUNK_ROWS, kc, tp,
+                )
+                ctx.synchronize()
+                t1 = perf_counter_ns()
+                _say(shape, rep, "fused_k" + String(kc) + "_tpb" + String(tp), _ms(t0, t1))
+                var fs = _read_scores(ctx, dout, n_query)
+                print(
+                    "KDE-PROFILE shape=" + shape + " rep=" + String(rep)
+                    + " fused_k" + String(kc) + "_tpb" + String(tp)
+                    + "_equals_staged=" + String(_hash(fs) == _hash(staged_scores))
+                )
+        _ = part^
         _ = host^
         _ = dist^
         _ = logk^

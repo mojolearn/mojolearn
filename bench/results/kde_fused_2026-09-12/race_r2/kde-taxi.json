@@ -1,0 +1,224 @@
+{
+  "arms": {
+    "cuml-gpu": {
+      "command": [
+        "python3",
+        "/root/mojolearn/tools/classical_two_datasets.py",
+        "worker",
+        "--arm",
+        "cuml-gpu",
+        "--lane",
+        "kde",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/ctd-data"
+      ],
+      "digest_stable": true,
+      "digests": [
+        "cdce01475f9e6977",
+        "cdce01475f9e6977",
+        "cdce01475f9e6977",
+        "cdce01475f9e6977",
+        "cdce01475f9e6977",
+        "cdce01475f9e6977"
+      ],
+      "info": {
+        "config": "cuml.neighbors.KernelDensity(bandwidth=scott, kernel='gaussian', metric='euclidean', output_type='cupy'); fit before the clock, score_samples timed",
+        "cpu_model": "Intel(R) Xeon(R) Platinum 8470",
+        "cuda_driver_api": 13000,
+        "cuda_runtime": 12090,
+        "cupy": "14.2.0",
+        "device": "gpu",
+        "device_name": "NVIDIA H100 80GB HBM3",
+        "library": "cuml",
+        "numpy": "2.4.6",
+        "os_cpu_count": 208,
+        "python": "3.11.10",
+        "sched_affinity_cpus": 208,
+        "thread_env": {
+          "MKL_NUM_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "upload_ms_untimed": 10.587958618998528,
+        "version": "26.08.00"
+      },
+      "max_ms": 3.2316111028194427,
+      "median_ms": 3.0031800270080566,
+      "min_ms": 2.612164244055748,
+      "ms": [
+        2.612164244055748,
+        3.2316111028194427,
+        2.748003229498863,
+        3.0031800270080566,
+        3.0585117638111115
+      ],
+      "status": "ok",
+      "warmup_ms": 81.1558235436678
+    },
+    "ours": {
+      "command": [
+        "pixi",
+        "run",
+        "python3",
+        "/root/mojolearn/tools/classical_two_datasets.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "kde",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/ctd-data"
+      ],
+      "digest_stable": true,
+      "digests": [
+        "aa8ac4159ad2cbfa",
+        "aa8ac4159ad2cbfa",
+        "aa8ac4159ad2cbfa",
+        "aa8ac4159ad2cbfa",
+        "aa8ac4159ad2cbfa",
+        "aa8ac4159ad2cbfa"
+      ],
+      "info": {
+        "device": "gpu",
+        "library": "mojolearn",
+        "numeric_mode_env": "identical",
+        "numeric_mode_used": "identical",
+        "vendor_used": "cuda",
+        "version": "0.8.3"
+      },
+      "max_ms": 30.12058325111866,
+      "median_ms": 29.392438009381294,
+      "min_ms": 29.079152271151543,
+      "ms": [
+        29.685769230127335,
+        29.256517067551613,
+        30.12058325111866,
+        29.392438009381294,
+        29.079152271151543
+      ],
+      "status": "ok",
+      "warmup_ms": 873.8620784133673
+    },
+    "ours-base": {
+      "command": [
+        "pixi",
+        "run",
+        "python3",
+        "/root/mojolearn/tools/classical_two_datasets.py",
+        "worker",
+        "--arm",
+        "ours-base",
+        "--lane",
+        "kde",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/ctd-data"
+      ],
+      "digest_stable": true,
+      "digests": [
+        "aa8ac4159ad2cbfa",
+        "aa8ac4159ad2cbfa",
+        "aa8ac4159ad2cbfa",
+        "aa8ac4159ad2cbfa",
+        "aa8ac4159ad2cbfa",
+        "aa8ac4159ad2cbfa"
+      ],
+      "info": {
+        "device": "gpu",
+        "library": "mojolearn",
+        "numeric_mode_env": "identical",
+        "numeric_mode_used": "identical",
+        "vendor_used": "cuda",
+        "version": "0.8.3"
+      },
+      "max_ms": 29.281945899128914,
+      "median_ms": 28.916144743561745,
+      "min_ms": 28.769003227353096,
+      "ms": [
+        28.826989233493805,
+        28.769003227353096,
+        28.916144743561745,
+        28.963420540094376,
+        29.281945899128914
+      ],
+      "status": "ok",
+      "warmup_ms": 660.5489663779736
+    }
+  },
+  "block": {
+    "arrays": {
+      "X": {
+        "dtype": "float32",
+        "sha256": "3df831dcc01998b894c4d0d683fdf6ff844d159b93d0b7871f95f171b2faa30a",
+        "shape": [
+          100000,
+          11
+        ]
+      },
+      "Xq": {
+        "dtype": "float32",
+        "sha256": "3bebc71d0428b6ab51c1fb978e2b8a5c210a63ce8a5c7bbe7ce991f1f846d4dc",
+        "shape": [
+          2000,
+          11
+        ]
+      }
+    },
+    "block": "kde",
+    "data_root": "/root/datasets/gbm-bench",
+    "dataset": "taxi",
+    "fit_rows": "stride sample of 100000 of the train split's 5250086 rows",
+    "kde": {
+      "bandwidth": 0.4641588833612779,
+      "bandwidth_rule": "scott n**(-1/(d+4))",
+      "kernel": "gaussian",
+      "metric": "euclidean"
+    },
+    "lanes": [
+      "kde"
+    ],
+    "loader": "speed_gbdt_arm.load_taxi('shipped', regression=True), TAXI_NUMERIC columns",
+    "query_rows": "stride sample of 2000 of the test split's 500000 rows",
+    "rule": "ENGINEERING_RULES.md section 9; DEVIATION 2570",
+    "scaling": "standardized by the fit rows (float64 mean and std)",
+    "sentinel_cells_replaced": {
+      "X": 0,
+      "Xq": 0
+    },
+    "smoke_max_rows": null,
+    "written": "2026-09-12T19:15:46Z"
+  },
+  "commit": "unknown",
+  "dataset": "taxi",
+  "finished": "2026-09-12T19:44:37Z",
+  "finished_rounds": "2026-09-12T19:44:37Z",
+  "lane": "kde",
+  "quality": {
+    "cuml-gpu": {
+      "mean_log_likelihood": -9.58205059337616,
+      "rows_without_density": 0
+    },
+    "ours": {
+      "mean_log_likelihood": -9.582071959257126,
+      "rows_without_density": 0
+    },
+    "ours-base": {
+      "mean_log_likelihood": -9.582071959257126,
+      "rows_without_density": 0
+    }
+  },
+  "ratios_ours_over": {
+    "cuml-gpu": 9.787104917138038,
+    "ours-base": 1.016471534156558
+  },
+  "rounds_requested": 5,
+  "script": "tools/classical_two_datasets.py",
+  "started": "2026-09-12T19:44:20Z"
+}
