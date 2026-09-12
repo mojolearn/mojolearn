@@ -1,0 +1,7 @@
+PROBE-VERSION cuml=26.08.00
+PROBE-ACCESSOR get_json is ABSENT
+PROBE-ACCESSOR dump_as_json is ABSENT
+PROBE-RESULT NO ACCESSOR: _shape_cuml will report UNAVAILABLE and every rf/et cell will read verdict=UNKNOWN on this build. That is the safe outcome, not a bug to work around. [cuml=26.08.00]
+---- buffer ----
+armed (cuml 26.08.00): shared PyObject_GetBuffer retyped to LP__PyBuffer; a 0.8.0 caller gets: argument 2: TypeError: expected LP__PyBuffer instance instead of pointer to _Ours
+buffer-foreign-argtypes: PASS mojolearn 0.8.3 mode=identical vendor=cuda rf_train_accuracy=0.990 (cuml 26.08.00)
