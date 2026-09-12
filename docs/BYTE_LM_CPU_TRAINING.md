@@ -38,9 +38,10 @@ gate named the tensor, `block0.w_q` element 0, with both bit patterns.
   token count, so the same tokens in a different batch or microbatch schedule
   are a different sum. Identity here is per shape, exactly as inference is.
 - The reference path only, one thread, and that is a deliberate stop rather
-  than an unfinished job. **Measured on 2026-09-12: a whole step is 37 to 39 ms
-  on the Linux runners and 69 ms on Apple M1**, forward, backward and the AdamW
-  update, so all 128 steps replay in under five seconds. Threading it would need
+  than an unfinished job. **Measured on 2026-09-12 across the seven runners of
+  run 34701581834: a whole step is 23.5 to 38.7 ms on the Linux draws and
+  68.9 ms on Apple M1**, forward, backward and the AdamW update, so all 128
+  steps replay in under five seconds. Threading it would need
   two fast GEMM orientations that do not exist (the host fast kernel is NT only;
   the backward needs NN and TN) and leaf-parallel folding to keep the weight
   gradients' summation order exact, because they sum across every row and so
@@ -50,8 +51,17 @@ gate named the tensor, `block0.w_q` element 0, with both bit patterns.
   not by the limit's existence.
 - Nothing about other algorithm families. Trees and the classical models have
   no backward pass and remain GPU-only.
-- `LanguageModelHostTrainer` is deliberately not exported from
-  `mojolearn/__init__.py`. An unexported class cannot be mistaken for a promise.
+- `LanguageModelHostTrainer` is exported from `mojolearn/__init__.py` as of
+  `31af2404`. What it promises is this profile and this shape, and a binding
+  built before the training entry existed is refused at construction by name.
+
+The run behind the table is retained in full at
+`bench/results/gh-actions/2026-09-12_1513-byte-lm-cpu-gate-run34701581834`,
+one directory per runner, each holding its own `cpu_train.json`,
+`cpu_train_sab.json`, `train_capture.json`, the two inference gate reports and
+the build logs. `local-three-vendor-train-capture.json` beside them is the
+`vendors` mode run over all three retained trees, which the runners cannot do
+because CI sparse-checkout fetches one.
 
 ## Why a gate came first
 

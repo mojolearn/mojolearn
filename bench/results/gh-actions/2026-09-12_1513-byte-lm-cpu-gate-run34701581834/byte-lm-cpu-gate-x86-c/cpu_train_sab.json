@@ -1,0 +1,156 @@
+{
+ "compared": 10,
+ "deviation": 2680,
+ "expect_mismatch": true,
+ "first_mismatches": [
+  {
+   "element": 8224,
+   "got": -0.00012655316095333546,
+   "got_bits": "b904b35b",
+   "index_in_tensor": 0,
+   "key": "grad",
+   "shape": [
+    32,
+    32
+   ],
+   "step": 1,
+   "tensor": "block0.w_q",
+   "vendor": "apple",
+   "want": 2.375901567575056e-05,
+   "want_bits": "37c74e19"
+  },
+  {
+   "element": 8224,
+   "got": 0.0459672249853611,
+   "got_bits": "3d3c4821",
+   "index_in_tensor": 0,
+   "key": "post_p",
+   "shape": [
+    32,
+    32
+   ],
+   "step": 1,
+   "tensor": "block0.w_q",
+   "vendor": "apple",
+   "want": 0.03996872156858444,
+   "want_bits": "3d23b63e"
+  },
+  {
+   "element": 8224,
+   "got": -1.2655319551413413e-05,
+   "got_bits": "b754522f",
+   "index_in_tensor": 0,
+   "key": "post_m",
+   "shape": [
+    32,
+    32
+   ],
+   "step": 1,
+   "tensor": "block0.w_q",
+   "vendor": "apple",
+   "want": 2.375902113271877e-06,
+   "want_bits": "361f71b0"
+  },
+  {
+   "element": 8224,
+   "got": 1.6015496220878056e-11,
+   "got_bits": "2d8cdfb1",
+   "index_in_tensor": 0,
+   "key": "post_v",
+   "shape": [
+    32,
+    32
+   ],
+   "step": 1,
+   "tensor": "block0.w_q",
+   "vendor": "apple",
+   "want": 5.644835727319775e-13,
+   "want_bits": "2b1ee354"
+  },
+  {
+   "element": 8224,
+   "got": -0.0007562100072391331,
+   "got_bits": "ba463c65",
+   "index_in_tensor": 0,
+   "key": "grad",
+   "shape": [
+    32,
+    32
+   ],
+   "step": 64,
+   "tensor": "block0.w_q",
+   "vendor": "apple",
+   "want": 0.0009408468613401055,
+   "want_bits": "3a76a32a"
+  },
+  {
+   "element": 8224,
+   "got": -0.003451302647590637,
+   "got_bits": "bb622f40",
+   "index_in_tensor": 0,
+   "key": "post_p",
+   "shape": [
+    32,
+    32
+   ],
+   "step": 64,
+   "tensor": "block0.w_q",
+   "vendor": "apple",
+   "want": -0.004367231857031584,
+   "want_bits": "bb8f1aff"
+  },
+  {
+   "element": 8224,
+   "got": -0.0003821742138825357,
+   "got_bits": "b9c85e8e",
+   "index_in_tensor": 0,
+   "key": "post_m",
+   "shape": [
+    32,
+    32
+   ],
+   "step": 64,
+   "tensor": "block0.w_q",
+   "vendor": "apple",
+   "want": -0.00021246849792078137,
+   "want_bits": "b95eca14"
+  },
+  {
+   "element": 8224,
+   "got": 1.9589830202448866e-08,
+   "got_bits": "32a8467e",
+   "index_in_tensor": 0,
+   "key": "post_v",
+   "shape": [
+    32,
+    32
+   ],
+   "step": 64,
+   "tensor": "block0.w_q",
+   "vendor": "apple",
+   "want": 1.9903165338064355e-08,
+   "want_bits": "32aaf786"
+  }
+ ],
+ "mismatched": 8,
+ "mode": "cpu",
+ "optimizer": {
+  "beta1": 0.8999999761581421,
+  "beta2": 0.9990000128746033,
+  "dampening": 0.0,
+  "eps": 9.99999993922529e-09,
+  "kind": 2,
+  "lr": 0.003000000026077032,
+  "max_norm": 0.0,
+  "momentum": 0.0,
+  "nesterov": false,
+  "weight_decay": 0.009999999776482582
+ },
+ "profile": "mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1",
+ "schema": "mojolearn.byte-lm-cpu-train-gate.v1",
+ "seconds_per_step": 0.0264,
+ "step_seconds": 0.0528,
+ "steps": 2,
+ "vendor": "apple",
+ "verdict": "PASS"
+}

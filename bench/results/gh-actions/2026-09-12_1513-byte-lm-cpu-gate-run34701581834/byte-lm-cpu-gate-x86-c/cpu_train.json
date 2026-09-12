@@ -1,0 +1,27 @@
+{
+ "compared": 640,
+ "deviation": 2680,
+ "expect_mismatch": false,
+ "first_mismatches": [],
+ "mismatched": 0,
+ "mode": "cpu",
+ "optimizer": {
+  "beta1": 0.8999999761581421,
+  "beta2": 0.9990000128746033,
+  "dampening": 0.0,
+  "eps": 9.99999993922529e-09,
+  "kind": 2,
+  "lr": 0.003000000026077032,
+  "max_norm": 0.0,
+  "momentum": 0.0,
+  "nesterov": false,
+  "weight_decay": 0.009999999776482582
+ },
+ "profile": "mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1",
+ "schema": "mojolearn.byte-lm-cpu-train-gate.v1",
+ "seconds_per_step": 0.0251,
+ "step_seconds": 3.2175,
+ "steps": 128,
+ "vendor": "apple",
+ "verdict": "PASS"
+}

@@ -1,0 +1,18 @@
+{
+ "arrays_per_step": 11,
+ "compared": 4224,
+ "deviation": 2680,
+ "digests_verified": 4224,
+ "first_mismatches": [],
+ "mismatched": 0,
+ "mode": "vendors",
+ "profile": "mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1",
+ "schema": "mojolearn.byte-lm-cpu-train-gate.v1",
+ "steps": 128,
+ "vendors": [
+  "apple",
+  "cuda",
+  "hip"
+ ],
+ "verdict": "PASS"
+}

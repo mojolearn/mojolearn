@@ -1,0 +1,3 @@
+gate: PASS: 640/640 array comparisons equal over 128 steps against apple
+gate: optimizer from the capture: lr=0.003000000026077032 beta1=0.8999999761581421 beta2=0.9990000128746033 eps=9.99999993922529e-09 weight_decay=0.009999999776482582
+gate: train_step time: 4.746 s over 128 steps, 37.1 ms per step, forward and backward and the update, reference path, one thread
