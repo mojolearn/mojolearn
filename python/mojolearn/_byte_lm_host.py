@@ -281,6 +281,14 @@ class LanguageModelHostTrainer:
         self._shape = shape
         self._native = _native_shape(shape)
         self._binding = _load()
+        # A host binding built before DEVIATION 2680 loads fine and runs
+        # inference fine; it simply has no training entry. Say so by name at
+        # construction rather than letting the call fail later, which is what
+        # the GPU surface does for its own missing entries.
+        if not callable(getattr(self._binding, 'byte_lm_host_train_step', None)):
+            raise ImportError(
+                'byte LM host binding is missing byte_lm_host_train_step; '
+                'rebuild bindings/build_byte_lm_host.sh')
         n = shape.n_total
         array, _ = as_f32_c(parameters, ndim=1, name='parameters')
         if array.size != n:

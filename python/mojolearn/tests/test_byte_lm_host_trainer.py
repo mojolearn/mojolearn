@@ -68,6 +68,16 @@ def trainer(**kwargs):
     return host_mod.LanguageModelHostTrainer(np.ones(N, np.float32), **kwargs)
 
 
+def test_a_binding_without_the_training_entry_is_refused_by_name(fake_host):
+    """An older host binding runs inference fine and has no training entry.
+    The refusal names the entry and the build script, at construction, rather
+    than failing somewhere inside the first step."""
+    assert not hasattr(fake_host, 'byte_lm_host_train_step')
+    with pytest.raises(ImportError, match='byte_lm_host_train_step') as info:
+        trainer()
+    assert 'bindings/build_byte_lm_host.sh' in str(info.value)
+
+
 def test_a_step_reaches_the_binding_and_advances_the_state(fake_host):
     calls = install(fake_host)
     model = trainer()
