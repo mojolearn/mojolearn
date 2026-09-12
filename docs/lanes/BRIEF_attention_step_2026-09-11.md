@@ -3377,3 +3377,59 @@ word alone would have run the old backward silently. DEVIATION 2657 adds:
   third check knob, `MOJOLEARN_ATTN_DEFAULT_ESTASH_EVERY_COLUMN`, with the
   mutual exclusion assert widened to three. The knob is how the M4 gates a
   branch Apple's own default does not carry; never a shipped build.
+
+## 21. AMD flips estash too (2026-09-12, measured): DEVIATION 2657 on gfx942
+
+Section 20 flipped `_estash_dres` on NVIDIA and left AMD on
+`stash_tiled_fgrid_r32_qres_pf_kvgrid_r32`, the dk/dv winner of section 18,
+with the estash price on AMD unmeasured. It is measured now, on a Hot Aisle
+MI300X (gfx942), and it wins there too, so `attn_default_arm_for` returns the
+estash word for `COLUMN_AMD` as well and the two vendor columns agree on one
+arm name for the first time since section 15.
+
+Evidence `bench/results/e1g/2026-09-12_133010-amd-mi300x-hotaisle-attn-estash`,
+commit bb679f19, one VM, one heat window, against the previous AMD default:
+
+    verdict stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 FLIP
+    geomean=0.9716 enwik8=0.9724 pilegithub=0.9709
+    witnesses_equal_baseline=True on both corpora
+
+Lean step 0.7573 / 0.7593 to 0.7363 / 0.7372 s (enwik8 / Pile GitHub).
+
+### 21.1 The register lens on gfx942, and why the gain is a third of NVIDIA's
+
+The same `resources.txt` readback section 20.11 introduced, on this VM, at
+head_dim 64 and 256 threads per block:
+
+| kernel | regs | shared B | blocks per CU |
+|---|---:|---:|---:|
+| `zdot_stash_pf` (the shipped one) | 118 | 17,696 | 3 |
+| `zdot_zdefer_pf` | 116 | 17,696 | 3 |
+| `zdot_zlag_pf` | 117 | 17,696 | 3 |
+| `zdot_estash_pf` | 116 | 10,432 | 4 |
+| `zdot_estash_dres_pf` (the winner) | 60 | 12,480 | 5 |
+
+THIS IS THE WHOLE EXPLANATION OF THE DIFFERENCE BETWEEN THE COLUMNS. On the
+H100 the shipped zdot kernel was 134 registers at ONE block per SM and the
+flip took it to 64 registers at FOUR, which is why NVIDIA read 0.8207. Here
+the shipped kernel already fits THREE blocks per CU and the flip takes it to
+five. AMD was never as starved, so it has less to win back, and 0.9716 is
+what "less to win back" looks like in a number. The register counts themselves
+are nearly identical across the two vendors (118 against 134 shipped, 60
+against 64 flipped), which is the reassuring part: the same kernel compiles to
+about the same thread state on both, and only the occupancy arithmetic differs.
+
+### 21.2 What this section does not claim
+
+The leg measured a TRIAL arm against the old shipped default. A shipped gfx942
+build had never compiled `ATTN_SHIPPED_BWD_ESTASH`, because until the routing
+change the AMD column carried no estash bit; the leg's own shipped fused check
+ran and passed, but it ran the OLD default and so is not evidence for the new
+one. That branch is gated separately and the flip does not reach main without
+it. `ATTN_ES_FITS` is safe by inspection at least: `column_shared_limit`
+gives AMD 64 KB against the 12,480 byte `_estash_dres` page, and this VM ran
+that kernel today.
+
+No Apple estash measurement exists and none is owed: Apple's default carries
+no estash bit, so a shipped Apple build compiles none of this branch, which
+M4 gate C confirmed by still resolving `stash_tiled` with no knob.

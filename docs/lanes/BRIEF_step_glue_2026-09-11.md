@@ -642,3 +642,45 @@ and on both of those columns `step_glue_default_arm_for` still returns
 all and there is no price to pay there yet. No bits were compared in this
 main: it is a timing harness, and the bit safety of the rows arms rests
 where it already rested, on section 4.1 and on the M4 gates of section 11.
+
+## 13. AMD flips it too (2026-09-12, measured): DEVIATION 2649 on gfx942
+
+Section 11 flipped NVIDIA and left every other column on `shipped`, with the
+AMD price unmeasured. It is measured now, on a Hot Aisle MI300X (gfx942), and
+the arm wins there as well, so `step_glue_default_arm_for` returns the winner
+for `COLUMN_AMD` too.
+
+Evidence `bench/results/e1g/2026-09-12_133013-amd-mi300x-hotaisle-step-glue`,
+commit bb679f19, one VM, one heat window, the arm against the SAME build's
+`shipped` arm:
+
+    verdict optskip_noshadow_rows16 FLIP geomean=0.9854
+    enwik8=0.9854 pilegithub=0.9853 witnesses_equal_shipped=True
+
+Lean step 0.7634 / 0.7620 to 0.7523 / 0.7509 s (enwik8 / Pile GitHub), and
+0.9848 / 0.9839 against the separately built shipped binding. Quality is
+stronger than ENGINEERING_RULES 9 requires: the witnesses are EQUAL, so no bit
+moved, which is what section 4.1 predicted.
+
+THE DRIFT CONTROL EARNS ITS PLACE HERE. The gain is 1.5 percent, small enough
+that a warming board could have invented it. The leg re-runs `shipped` last
+(`lean-glue-shipped2-enwik8`) and it came back at 0.9971 of the first
+`shipped` run, so the board drifted about a third of a percent across the
+window while the arm won 1.5. The verdict survives its own control.
+
+WHY THE GAIN IS HALF OF NVIDIA'S (0.9723 there). The same occupancy argument
+of section 1.2, read from the other end. 2,048 token rows at `LLAMA_TPB` 128
+are 16 blocks either way; 16 blocks starve an H100's 132 SMs harder than they
+starve this board, so there is less to win back here. The arm still wins on
+both corpora, and the rule sets no magnitude bar.
+
+`step_glue_check: PASS` on the same box under the trial define, with the reach
+lines for every arm (`threads_per_block=16 first_moved_row=32` forward and
+backward, `update first_moved_element=768`), so the arms behave on gfx942
+exactly as they do on the M4 and the H100.
+
+WHAT THIS SECTION DOES NOT CLAIM. The leg measured a TRIAL arm against the old
+shipped default. A shipped gfx942 build had never compiled
+`STEP_GLUE_SHIPPED_ROWS` or `STEP_GLUE_SHIPPED_UPDATE`, because until the
+routing change the AMD column carried no glue bit. That branch is gated
+separately (section 14) and the flip does not reach main without it.
