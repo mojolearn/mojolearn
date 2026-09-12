@@ -22,6 +22,11 @@
 # resumable curl. The secret stays in ~/.mojolearn_r2, is never passed in
 # argv and is never printed.
 #
+#   sh tools/dataset_store.sh stage "<ssh flags+target>" <key>...
+#                                                   # THE ONE A LEG CALLS: put
+#                                                   # keys on a rented box,
+#                                                   # verified, no credential
+#                                                   # leaving this machine
 #   sh tools/dataset_store.sh manifest              # hash local files, write the pins
 #   sh tools/dataset_store.sh push [key...]         # upload (default: all)
 #   sh tools/dataset_store.sh list
@@ -29,6 +34,13 @@
 #   sh tools/dataset_store.sh pull <key> [dest]     # fetch here, then verify
 #   sh tools/dataset_store.sh verify <key> [dest]   # size + sha256 against the pins
 #   sh tools/dataset_store.sh box-cmd <key>         # print the curl+verify a pod should run
+#
+# The keys, as pinned in bench/results/dataset_store/manifest.tsv:
+#   gbm-bench/taxi/taxi_speed.npz               419,757,252
+#   gbm-bench/istella/istella_speed.npz       2,248,281,826   (decoded; skips the 18 min parse)
+#   gbm-bench/istella/istella-s-letor.tar.gz    472,129,615   (source, so a decode is reproducible)
+#   corpus/enwik8/input.txt                     100,000,000   (neural, English kind)
+#   corpus/pile_github/input.txt                 97,124,565   (neural, source-code kind)
 #
 # Needs the aws CLI (S3-compatible mode) for push/list/presign; pull/verify
 # need only curl and sha256sum/shasum. POSIX sh.
@@ -188,7 +200,39 @@ echo "ok $_rp \$sz \$sh"
 EOF
 }
 
+# Put keys onto a rented box, verified, without any credential leaving here.
+#
+#   sh tools/dataset_store.sh stage "-p 11827 root@1.2.3.4" <key> [key...]
+#
+# For each key: mint a short-lived presigned URL locally, then pipe a
+# self-verifying fetch script to the box over stdin. The URL travels INSIDE the
+# piped script, not in argv, so it never appears in the box's process list; the
+# R2 secret never leaves this machine at all. The box fetches with curl -C - and
+# refuses the file unless its size AND sha256 equal the committed pins, so a
+# truncated transfer cannot quietly become a dataset -- which is exactly how a
+# pointwise leg once measured synthclf while believing it had Istella-S.
+#
+# Any leg can call this after renting. It deliberately does NOT edit the
+# per-lane body scripts under bench/results/, because those are the record of
+# what a given night actually ran.
+cmd_stage() {
+    target="${1:?usage: stage \"<ssh flags+target>\" <key> [key...]}"; shift
+    [ "$#" -gt 0 ] || { echo "no keys given" >&2; return 1; }
+    [ -f "$MANIFEST" ] || { echo "no $MANIFEST; run 'manifest' first" >&2; return 1; }
+    for key in "$@"; do
+        pinned "$key" > /dev/null || { echo "no pin for $key" >&2; return 1; }
+        echo "staging $key ..."
+        _url=$(cmd_presign "$key" 7200) || return 1
+        # shellcheck disable=SC2086
+        { printf "URL='%s'\n" "$_url"; cmd_box_cmd "$key"; } | ssh -o StrictHostKeyChecking=no \
+            -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR $target 'sh -s' \
+            || { echo "staging FAILED: $key" >&2; return 1; }
+    done
+    echo "staged $# key(s); the box verified each against the pins"
+}
+
 case "${1:-}" in
+    stage)    shift; cmd_stage "$@" ;;
     manifest) shift; cmd_manifest "$@" ;;
     push)     shift; cmd_push "$@" ;;
     list)     shift; cmd_list "$@" ;;
