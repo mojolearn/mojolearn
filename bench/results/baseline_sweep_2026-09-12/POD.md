@@ -51,3 +51,22 @@ directly:
 up because the numbers are owed, and the expensive half of a leg is the front
 half -- dataset staging, pip, and the builds -- which the next attempt would
 pay again from zero.
+
+## Teardown, verified
+
+    [22:43:26] terminating 9imx21xh3yuqd8
+    [22:43:27]   DELETE -> HTTP 204
+    [22:43:27] VERIFIED: 9imx21xh3yuqd8 is gone (HTTP 404)
+
+Reaped at **2026-09-12T22:43:27Z**, about 2h28m into a 240-minute lease, after
+the box was confirmed idle and after every artifact had been pulled off it and
+pushed. `trees_leg.sh reap` does not trust the DELETE: it polls `GET /v1/pods`
+up to eight times and only reports success on a 404 or a TERMINATED status,
+because "the DELETE returned 200" and "the pod is gone" are different claims.
+
+Nothing was reaped while a cell was owed. The order was: 28/28 cells, then the
+two automatic owed items, then the criteo A/B, then the evidence pull, then the
+commit and push, and only then the terminate.
+
+The lease file now lives in `bench/results/runpod_leases/reaped.d/`, which is
+where this ledger keeps boxes that are confirmed gone.
