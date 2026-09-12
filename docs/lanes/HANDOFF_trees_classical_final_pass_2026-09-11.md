@@ -205,6 +205,22 @@ the H100, then gate the Apple M4 and an AMD box before merging.
      fixed + 2.809 ms/tree, so we start 4.0x faster and boost only 1.22x
      faster, and at CatBoost's own 1000-iteration default the ratio goes to
      about 0.75x. Do not quote an unqualified multiple.
+     AND THE TWO OPPONENTS ARE NOT EQUALLY FAST, which explains why we can
+     beat one while losing to the other: on every cell where both ran,
+     XGBoost beat CatBoost -- 2.31x on depthwise taxi, 2.30x on lossguide
+     taxi, 1.26x on lossguide Istella-S, 1.01x on depthwise Istella-S. On
+     depthwise taxi (one cell, one interleaved run, three arms) we are
+     1.196x XGBoost AND 0.518x CatBoost BECAUSE CatBoost is 2.31x XGBoost.
+     WE SIT BETWEEN THE TWO OPPONENTS; that is arithmetic, not a
+     contradiction. Consistency check: on Istella-S depthwise the opponents
+     converge (1.01x) and our margin over CatBoost disappears in the same
+     row (1.030x), so our position tracks the opponent spread rather than
+     moving on its own. The caveat that matters for quoting: our strongest
+     cells are symmetric, and XGBoost HAS NO SYMMETRIC CELL BY CONSTRUCTION
+     (no oblivious grower), so the headline is measured against the slower
+     opponent in the one policy the faster one cannot enter. Wherever
+     XGBoost competes we lose, by a per-tree factor of about two under BOTH
+     its policies (2.012x, 2.128x, 2.034x; lane gbdt-xgboost-gap).
    - **Pointwise Istella-S** (`ours-ab` and the greedy control). The taxi
      result stands and is strong: the opt-in pointwise arm 1803.3 -> 795.4 ms
      (0.441x, medians of nine interleaved rounds), logloss 0.525925 ->

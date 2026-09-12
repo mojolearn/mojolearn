@@ -2153,6 +2153,37 @@ lossguide, which is the largest single gap on the board. Quality is within a
 thousandth of both opponents everywhere, ahead of CatBoost on symmetric and
 marginally behind on the other two policies.
 
+THE TWO OPPONENTS ARE NOT EQUALLY FAST, AND THAT EXPLAINS THE WHOLE SHAPE OF
+THIS TABLE. On every cell where both of them ran, XGBoost beat CatBoost:
+
+| policy | dataset | XGBoost | ours | CatBoost | CatBoost/XGBoost |
+|---|---|---:|---:|---:|---:|
+| depthwise | taxi | 365.1 | 436.6 | 842.4 | **2.31x** |
+| lossguide | taxi | 476.2 | 950.0 | 1094.6 | **2.30x** |
+| lossguide | Istella-S | 1994.7 | 2504.3 | 2510.8 | 1.26x |
+| depthwise | Istella-S | 1769.2 | 1838.2 | 1784.8 | 1.01x |
+
+Depthwise taxi is ONE cell, one interleaved run, three arms: we are 1.196x
+XGBoost AND 0.518x CatBoost BECAUSE CatBoost is 2.31x XGBoost. Those are not
+three findings, they are one measurement stated three ways, and WE SIT BETWEEN
+THE TWO OPPONENTS. Beating one while losing to the other is arithmetic, not a
+contradiction.
+
+The Istella-S depthwise row is the consistency check worth keeping: there the
+two opponents nearly converge (1.01x) and our margin over CatBoost disappears in
+the same row (1.030x, slightly behind). Our position tracks the opponent spread
+rather than moving on its own, which is what a real measurement should do.
+
+AND THE CAVEAT THAT MATTERS MOST FOR HOW THIS GETS QUOTED: our strongest cells
+are the symmetric ones, and XGBoost HAS NO SYMMETRIC CELL BY CONSTRUCTION -- it
+has no oblivious grower, as the setup above says. So the headline number is
+measured against the SLOWER of the two opponents, in the one policy where the
+faster opponent structurally cannot compete. Wherever XGBoost can compete, we
+lose, and by a per-tree factor of about two under BOTH of its growth policies
+(2.012x, 2.128x and 2.034x across three cells, lane gbdt-xgboost-gap). State the
+board as "faster than CatBoost, slower than XGBoost", and never quote a win over
+one opponent without saying where the OTHER one sits in that same cell.
+
 The identity column no opponent has: ours returned ONE model hash per cell
 across all 5 rounds (symmetric Istella-S `238d3abce0cabf43`), while CatBoost
 returned a DIFFERENT hash in every round of the same cell (`1827fc2260f91628`,
