@@ -1876,6 +1876,62 @@ SAME value for every arm, min_samples 10. Ours runs its default ball cover;
 cuML's `algorithm='rbc'` arm refused both datasets at this size ("An overflow
 occurred with the current choice of precision and the number of samples"), so
 cuML's own ball cover has no row here.
+### Classical OLS and PCA on both datasets, the eigensolver's launch width (September 12, pod azqo0zzrudrwby, lane jacobi-speed, DEVIATION 2680)
+
+RunPod H100 80GB HBM3, **driver 580.126.09** (Mojo's own PTX path; no
+`MODULAR_NVPTX_COMPILER_PATH` shim, unlike the 570.x pods of the two previous
+classical lanes), cuML 26.08 (cuml-cu12 26.8.0) in the image's Python 3.11,
+torch 2.4.1+cu124, scikit-learn 1.9.1. Ours IDENTICAL built on the pod
+(sm_90a) from this lane AND from `84638fce`, both trees on the SAME pod, raced
+interleaved through `tools/classical_two_datasets.py race`, 1 warm-up plus 5
+rounds, ms median (min..max). Datasets came from the R2 store and the box
+verified both against `bench/results/dataset_store/manifest.tsv`. Taxi
+4,000,000 x 11 and Istella-S 2,043,304 x 220; cuML PCA `svd_solver='full'`,
+ours `covariance_eigh`; cuML OLS `algorithm='eig'`. Evidence
+`bench/results/jacobi_speed_2026-09-12/`.
+
+| lane | dataset | opponent | opponent ms | opponent quality | ours before (84638fce) ms | ours after (2680) ms | after / before | ours after / opponent | ours quality, digest before = after |
+|---|---|---|---|---|---|---|---|---|---|
+| ols | taxi | cuML LinearRegression eig | 27.82 (23.91..53.93) | R2 0.908836 | 178.76 (142.91..190.01) | 180.12 (160.68..188.93) | 1.0077 | 6.47x | R2 0.9088369847, `fb86358654367fa0` |
+| ols | Istella-S | cuML LinearRegression eig | 85.63 (83.83..95.01) | R2 -6473.68 | 2421.29 (2316.02..2461.15) | **1286.94** (1194.37..1312.11) | **0.5315** | **15.03x** | R2 0.3319443837, `6f12cfc209ecd1f9` |
+| pca | taxi | cuML PCA full | 20.04 (19.83..20.79) | EVR sum 0.9978604646 | 33.48 (32.23..38.01) | 32.71 (32.28..33.60) | 0.9771 | 1.63x | EVR sum 0.9978607071, `c790338770a4c120` |
+| pca | Istella-S | cuML PCA full | 82.11 (81.72..83.39) | EVR sum 1.0000000156 | 653.70 (651.86..657.65) | **383.23** (380.74..417.01) | **0.5862** | **4.67x** | EVR sum 1.0000000146, `e43f2f52f20f511a` |
+
+Flip verdict (ENGINEERING_RULES section 9, geomean of after/before over the
+two): **OLS sqrt(1.0077 x 0.5315) = 0.7318, PCA sqrt(0.9771 x 0.5862) =
+0.7568**, both below 1, quality not worse on either dataset and the bits
+IDENTICAL rather than merely not worse, so DEVIATION 2680 is the default.
+**The two worst opponent ratios on the classical board move together because
+they were the same kernel twice: OLS Istella-S 28.31x -> 15.03x and PCA
+Istella-S 8.38x -> 4.67x.** All four digests are unchanged from the values
+already on record and `digest_stable=True` on all twelve arm rows. cuML's eig
+OLS again returns a broken fit on Istella-S (R2 -6473.68), so its 85.63 ms is
+not a time for the same answer.
+
+**Where the time went, measured on the same pod** (`jacobi_probe`, IDENTICAL,
+on the matrix the shipped path feeds the solver). Istella-S OLS: Gram
+`gemm_tn` 23.99 ms, equilibration 0.17 ms, and the 220-column eigensolver
+**1685.4 ms at the old 32-thread launch, 614.7 ms at 256** (0.365, 12 sweeps,
+289,080 rotations); PCA: covariance 30.79 ms and the eigensolver 424.7 -> 155.1
+ms (0.365, 3 sweeps). Per rotation that is **5.83 us -> 2.13 us**, and taxi's
+n = 11 rotations cost **2.0 us at every launch width** -- so 2.0 us is what a
+rotation costs unstarved, and the 220-column kernel had been paying nearly
+three times that purely because 220 values had to pass through 32 lanes. The
+residual 2.1 us is the two barriers plus the serial `(c, s)` pick, a
+dependence of the cyclic ordering itself; removing it means changing the
+rotation order, which changes the bits. **At 220 columns the eigensolver is
+now within about 7 percent of the per-rotation floor this algorithm has**, and
+it is no longer the dominant term in either fit.
+
+Sweep counts are unchanged by launch width on every cell (12 and 3 on
+Istella-S, 5 and 4 on taxi), which is the fold pin holding: the sweep count is
+decided by a fold, and the fold keeps striding by `JACOBI_TPB = 32` over the
+first 32 lanes whatever the block width is. **A 1024-thread launch is REFUSED
+by the driver** on all four cells (`CUDA_ERROR_LAUNCH_OUT_OF_RESOURCES`), so
+1024 is not a slow width but no width at all here; 512 already reads a shade
+slower than 256 (624.8 against 614.7 ms), so the shipped 256 sits below that
+cliff.
+
 ### H100 ExtraTrees frontier batch width, DEVIATION 2663 (2026-09-11 night, lane forest-finish)
 
 Same pod as the section above (`8gsem9f3thnhvu`, NVIDIA H100 80GB HBM3, driver

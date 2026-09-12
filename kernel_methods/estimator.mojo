@@ -58,7 +58,7 @@ from core.identity_trace import IdentityTrace
 from decomposition.checks.jacobi_eigh_device import (
     JACOBI_SWEEPS,
     JACOBI_TOL,
-    JACOBI_TPB,
+    JACOBI_ROT_TPB,
     jacobi_eigh_kernel,
 )
 from decomposition.impl.linalg.detail.pca import (
@@ -595,12 +595,17 @@ def nystroem_fit_host(
     var dvec = ctx.enqueue_create_buffer[DType.float32](q * q)
     var dinfo = ctx.enqueue_create_buffer[DType.float32](3)
     ctx.synchronize()
-    # ONE BLOCK OF EXACTLY `JACOBI_TPB` THREADS. That file's header calls the
-    # block dim a CONTRACT rather than a suggestion: `pinned_block_sum`
-    # writes one threadgroup slot per thread into a `JACOBI_TPB`-wide slab,
-    # so a wider block writes past it and a narrower one folds a slot nobody
-    # wrote. All of its other call sites pass the same constant.
-    ctx.enqueue_function[jacobi_eigh_kernel](
+    # ONE BLOCK OF EXACTLY `JACOBI_ROT_TPB` THREADS, THE WIDTH THE KERNEL WAS
+    # INSTANTIATED AT. That file's header calls the block dim a CONTRACT
+    # rather than a suggestion, and it still is -- what changed with
+    # DEVIATION 2680 is WHICH constant it names. The fold slab is
+    # `JACOBI_TPB` wide and only the first `JACOBI_TPB` lanes write it, so
+    # the launch width is free; but the kernel indexes its rotation loop by
+    # exactly `rot_tpb`, so a block of any other size would leave rows
+    # unrotated (too few) or run lanes off the end (too many). Passing the
+    # same constant in the parameter and in `block_dim` is what makes the
+    # two impossible to drift apart. All of its other call sites do the same.
+    ctx.enqueue_function[jacobi_eigh_kernel[JACOBI_ROT_TPB]](
         dk.unsafe_ptr(),
         dvec.unsafe_ptr(),
         dinfo.unsafe_ptr(),
@@ -608,7 +613,7 @@ def nystroem_fit_host(
         Int32(JACOBI_SWEEPS),
         Float32(JACOBI_TOL),
         grid_dim=(1, 1, 1),
-        block_dim=(JACOBI_TPB, 1, 1),
+        block_dim=(JACOBI_ROT_TPB, 1, 1),
     )
     if sabotage != KMSAB_NO_SIGN_FLIP:
         ctx.enqueue_function[sign_flip_kernel](

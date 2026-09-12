@@ -51,6 +51,7 @@ from max.gpu.primitives.block import sum as block_sum
 from core.pinned_reduce import pinned_block_sum
 from decomposition.checks.jacobi_eigh import jacobi_eigh
 from decomposition.checks.jacobi_eigh_device import (
+    JACOBI_ROT_TPB,
     JACOBI_TPB,
     jacobi_eigh_kernel,
     jacobi_eigh_kernel_four_phase,
@@ -171,7 +172,7 @@ def _run_device(
     ctx.enqueue_copy(dst_buf=a_buf, src_ptr=h.unsafe_ptr())
     ctx.synchronize()
 
-    ctx.enqueue_function[jacobi_eigh_kernel](
+    ctx.enqueue_function[jacobi_eigh_kernel[JACOBI_ROT_TPB]](
         a_buf.unsafe_ptr(),
         v_buf.unsafe_ptr(),
         i_buf.unsafe_ptr(),
@@ -179,7 +180,7 @@ def _run_device(
         Int32(max_sweeps),
         Float32(tol),
         grid_dim=(1, 1, 1),
-        block_dim=(JACOBI_TPB, 1, 1),
+        block_dim=(JACOBI_ROT_TPB, 1, 1),
     )
     ctx.synchronize()
 
@@ -519,7 +520,7 @@ def _bits_f32(b: UInt32) -> Float32:
     return bitcast[DType.float32](b)
 
 
-def _run_device_f32(
+def _run_device_f32[rot_tpb: Int = JACOBI_ROT_TPB](
     ctx: DeviceContext,
     a: List[Float32],
     n: Int,
@@ -534,6 +535,11 @@ def _run_device_f32(
     Float32 the kernel wrote. A Float32 -> Float64 -> Float32 round trip is
     exact, so this is not a correctness difference; it is here so that a
     check about bits never has a conversion in its evidence chain.
+
+    `rot_tpb` is the LAUNCH WIDTH (DEVIATION 2680), defaulting to the shipped
+    one. `check_jacobi_is_launch_invariant` is the only caller that passes
+    anything else, and the block is always launched with exactly the width
+    the kernel was instantiated at -- the kernel's own contract.
     """
     var a_buf = ctx.enqueue_create_buffer[DType.float32](n * n)
     var v_buf = ctx.enqueue_create_buffer[DType.float32](n * n)
@@ -545,7 +551,7 @@ def _run_device_f32(
     ctx.enqueue_copy(dst_buf=a_buf, src_ptr=h.unsafe_ptr())
     ctx.synchronize()
 
-    ctx.enqueue_function[jacobi_eigh_kernel](
+    ctx.enqueue_function[jacobi_eigh_kernel[rot_tpb]](
         a_buf.unsafe_ptr(),
         v_buf.unsafe_ptr(),
         i_buf.unsafe_ptr(),
@@ -553,7 +559,7 @@ def _run_device_f32(
         Int32(max_sweeps),
         tol,
         grid_dim=(1, 1, 1),
-        block_dim=(JACOBI_TPB, 1, 1),
+        block_dim=(rot_tpb, 1, 1),
     )
     ctx.synchronize()
 
@@ -1951,8 +1957,161 @@ def check_jacobi_merged_phases_equal_four_phase() raises:
     )
 
 
+def _launch_arm[rot_tpb: Int](
+    ctx: DeviceContext,
+    a: List[Float32],
+    n: Int,
+    ref_a: List[Float32],
+    ref_v: List[Float32],
+    ref_i: List[Float32],
+) raises -> Int:
+    """One rung of the launch-width ladder, against the fold-width rung."""
+    var na = List[Float32]()
+    var nv = List[Float32]()
+    var ni = _run_device_f32[rot_tpb](
+        ctx, a, n, 15, Float32(1.0e-7), na, nv
+    )
+    var differ = 0
+    for i in range(3):
+        if _f32_bits(ni[i]) != _f32_bits(ref_i[i]):
+            differ += 1
+    for i in range(n * n):
+        if _f32_bits(na[i]) != _f32_bits(ref_a[i]):
+            differ += 1
+        if _f32_bits(nv[i]) != _f32_bits(ref_v[i]):
+            differ += 1
+    print(
+        "  check_jacobi_is_launch_invariant n =",
+        n,
+        "block",
+        rot_tpb,
+        "(fold stays",
+        JACOBI_TPB,
+        ") sweeps",
+        Int(ni[2]),
+        "cells differing",
+        differ,
+        "of",
+        2 * n * n + 3,
+    )
+    return differ
+
+
+def check_jacobi_is_launch_invariant() raises:
+    """DEVIATION 2680. THE SAME MATRIX, FIVE BLOCK WIDTHS, ONE ANSWER, BIT FOR BIT.
+
+    This is the check the deviation rests on, and it is the same shape as
+    `check_ols_is_launch_invariant` one level up: the eigensolver's answer
+    must be a function of its INPUT, never of how many threads the caller
+    chose to dispatch. The kernel is now parametric on that width
+    (`jacobi_eigh_kernel[rot_tpb]`), so the ladder runs the fold width
+    itself and then 2x, 4x, 8x and 16x it, on one matrix, and holds all five
+    equal at every matrix cell, every eigenvector cell and ALL THREE INFO
+    SLOTS -- the sweep count included, which is the slot that matters,
+    because the sweep count is decided by a FOLD and the whole claim is that
+    the fold did not move when the launch did.
+
+    WHY THE CLAIM IS STRUCTURAL AND NOT LUCK. Inside a rotation, lane `k`
+    reads and writes `(k, p)`, `(k, q)`, `(p, k)`, `(q, k)` of the matrix and
+    `(k, p)`, `(k, q)` of the basis. Two lanes with different `k` share no
+    cell, except in the 2 x 2 block `{p, q} x {p, q}`, which the single lane
+    `k == p` does alone in a fixed order (DEVIATION 2671). So no stored value
+    depends on how the `k` are handed out. The two folds keep striding by
+    `JACOBI_TPB` over the first `JACOBI_TPB` lanes whatever the block width
+    is, so their partials and their association are the ones the host replay
+    in this file transcribes -- which is why
+    `check_jacobi_is_a_pure_function_of_its_input` still binds this kernel to
+    a model that knows nothing about `rot_tpb`.
+
+    THE SIZES ARE THE ONES THAT SEPARATE. n = 2 and 3 are almost entirely
+    the 2 x 2 block; 33 is an unequal stride over 32 lanes; 129 crosses the
+    GEMM v1 cut; 220 is Istella-S, which is the shape the deviation was
+    written for AND the first size where the wide block has more lanes than
+    the narrow one can use in one pass. At n = 2 and 3 every rung past the
+    first has MORE threads than the matrix has rows, so the rungs also prove
+    that a lane with no `k` at all still reaches every barrier.
+
+    UNDER FAST THIS REPORTS AND DOES NOT ASSERT. FAST's fold IS the library
+    call, whose contract binds it to the block's own width, so a wide FAST
+    launch has no spelling that keeps FAST's bits; `JACOBI_ROT_TPB` is
+    therefore `JACOBI_TPB` under FAST and the wide rungs there fold through
+    the halving tree instead. That is a different sum by construction, so a
+    difference under FAST is information, not a failure.
+    """
+    var ctx = DeviceContext()
+    var sizes: List[Int] = [2, 3, 11, 33, 64, 129, 220]
+    var differ_total = 0
+    for si in range(len(sizes)):
+        var n = sizes[si]
+        var a64 = _make_symmetric(n, 23 + n, n // 2, 1.0e3)
+        var a = List[Float32]()
+        for i in range(n * n):
+            a.append(Float32(a64[i]))
+        var ba = List[Float32]()
+        var bv = List[Float32]()
+        var bi = _run_device_f32[JACOBI_TPB](
+            ctx, a, n, 15, Float32(1.0e-7), ba, bv
+        )
+        print(
+            "  check_jacobi_is_launch_invariant n =",
+            n,
+            "block",
+            JACOBI_TPB,
+            "(the fold width, the reference rung) sweeps",
+            Int(bi[2]),
+        )
+        differ_total += _launch_arm[2 * JACOBI_TPB](ctx, a, n, ba, bv, bi)
+        differ_total += _launch_arm[4 * JACOBI_TPB](ctx, a, n, ba, bv, bi)
+        differ_total += _launch_arm[8 * JACOBI_TPB](ctx, a, n, ba, bv, bi)
+        differ_total += _launch_arm[16 * JACOBI_TPB](ctx, a, n, ba, bv, bi)
+
+    comptime if IDENTICAL_BUILD:
+        if differ_total != 0:
+            raise Error(
+                "check_jacobi_is_launch_invariant (IDENTICAL): the"
+                " eigensolver's answer moved with the LAUNCH WIDTH at "
+                + String(differ_total)
+                + " output cells over the ladder. Either a fold stopped"
+                " striding by JACOBI_TPB over the first JACOBI_TPB lanes,"
+                " or two lanes of one phase now write a cell both read."
+                " DEVIATION 2680 claims neither can happen."
+            )
+        print(
+            "check_jacobi_is_launch_invariant OK (IDENTICAL): the fold"
+            " width stayed "
+            + String(JACOBI_TPB)
+            + " while the block ran "
+            + String(2 * JACOBI_TPB)
+            + "/"
+            + String(4 * JACOBI_TPB)
+            + "/"
+            + String(8 * JACOBI_TPB)
+            + "/"
+            + String(16 * JACOBI_TPB)
+            + " threads, and 0 output cells moved over seven sizes. The"
+            " shipped launch width is "
+            + String(JACOBI_ROT_TPB)
+            + "."
+        )
+    else:
+        print(
+            "check_jacobi_is_launch_invariant REPORT (FAST): cells"
+            " differing over the ladder "
+            + String(differ_total)
+            + ". Under FAST the fold is the library call, which is bound to"
+            " the block's own width, so the wide rungs fold through the"
+            " halving tree and a difference here is expected rather than"
+            " wrong; the shipped FAST launch width is "
+            + String(JACOBI_ROT_TPB)
+            + ", which equals the fold width "
+            + String(JACOBI_TPB)
+            + "."
+        )
+
+
 def main() raises:
     print("jacobi_check -- build mode: " + _mode_name())
+    check_jacobi_is_launch_invariant()
     check_jacobi_merged_phases_equal_four_phase()
     check_jacobi_fold_width_is_pinned()
     check_jacobi_fold_shape()

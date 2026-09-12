@@ -26,7 +26,7 @@ from decomposition.checks.jacobi_eigh import jacobi_eigh
 from decomposition.checks.jacobi_eigh_device import (
     JACOBI_SWEEPS,
     JACOBI_TOL,
-    JACOBI_TPB,
+    JACOBI_ROT_TPB,
     jacobi_eigh_kernel,
 )
 
@@ -262,7 +262,7 @@ def eig_and_truncate(
     var vec_buf = ctx.enqueue_create_buffer[DType.float32](n_cols * n_cols)
     var info_buf = ctx.enqueue_create_buffer[DType.float32](3)
     ctx.synchronize()
-    ctx.enqueue_function[jacobi_eigh_kernel](
+    ctx.enqueue_function[jacobi_eigh_kernel[JACOBI_ROT_TPB]](
         cov.unsafe_ptr(),
         vec_buf.unsafe_ptr(),
         info_buf.unsafe_ptr(),
@@ -270,7 +270,7 @@ def eig_and_truncate(
         Int32(JACOBI_SWEEPS),
         Float32(JACOBI_TOL),
         grid_dim=(1, 1, 1),
-        block_dim=(JACOBI_TPB, 1, 1),
+        block_dim=(JACOBI_ROT_TPB, 1, 1),
     )
 
     ctx.enqueue_function[sign_flip_kernel](
