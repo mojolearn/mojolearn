@@ -1,0 +1,12 @@
+FAIR start cmd=models lane=gbdt-symmetric dataset=taxi rows=1000000 mode=identical
+FAIR dataset=taxi shape=taxi-1000000x16 task=binary rows=1000000 features=16
+FAIR sync-backend cupy UNAVAILABLE: No module named 'cupy'
+FAIR sync-backends armed=torch,cudart
+6342 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1a0900000000, nodemask=2)
+6342 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x52ecc0000000, nodemask=1)
+FAIR models-fit ours ms=822.1
+FAIR MODEL {"leaves_per_tree_max": 64, "leaves_per_tree_mean": 64.0, "leaves_per_tree_min": 64, "leaves_total": 6400, "library": "mojolearn", "model_text_bytes": 222456, "trees": 100, "trees_declared": 100}
+FAIR models-fit catboost ms=689.6
+FAIR MODEL {"leaf_values": 6280, "leaves_per_tree_max": 64, "leaves_per_tree_mean": 62.8, "leaves_per_tree_min": 8, "leaves_total": 6280, "leaves_total_source": "get_tree_leaf_counts", "library": "catboost", "trees": 100}
+FAIR MODEL-VERDICT ours_leaves=6400 catboost_leaves=6280 catboost/ours=0.9812 ours_trees=100 catboost_trees=100
+FAIR done cmd=models

@@ -1,0 +1,23 @@
+fast_build_start 19:06:01
+fast_build=0 19:07:24
+control_taxi start 19:07:24
+control_taxi=0 19:07:41
+race_taxi start 19:07:41
+race_taxi=0 19:08:05
+race_istella start 19:08:05
+race_istella=0 19:08:58
+models_taxi start 19:08:58
+models_taxi=0 19:09:03
+models_istella start 19:09:03
+models_istella=0 19:09:12
+decompose_taxi start 19:09:12
+decompose_taxi=0 19:09:22
+flags_taxi start 19:09:22
+flags_taxi=0 19:09:39
+b2b_taxi start 19:09:39
+b2b_taxi=0 19:09:46
+fastab_taxi start 19:09:46
+fastab_taxi=0 19:10:04
+race_taxi_depthwise start 19:10:04
+race_taxi_depthwise=0 19:10:30
+body_done 19:10:30

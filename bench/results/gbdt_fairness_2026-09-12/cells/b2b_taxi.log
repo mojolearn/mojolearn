@@ -1,0 +1,9 @@
+FAIR start cmd=b2b lane=gbdt-symmetric dataset=taxi rows=1000000 mode=identical
+FAIR dataset=taxi shape=taxi-1000000x16 task=binary rows=1000000 features=16
+FAIR sync-backend cupy UNAVAILABLE: No module named 'cupy'
+FAIR sync-backends armed=torch,cudart
+9847 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3a06c0000000, nodemask=2)
+9992 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x303040000000, nodemask=1)
+FAIR TIME ours no-sync per-fit n=5 median=317.8 min=315.0 max=322.8 all=322.8,316.2,317.8,315.0,318.9
+FAIR B2B n=5 total_ms=1575.7 average_ms=315.1 per_fit_median_ms=317.8 average/median=0.9915
+FAIR done cmd=b2b

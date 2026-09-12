@@ -1,0 +1,16 @@
+FAIR start cmd=decompose lane=gbdt-symmetric dataset=taxi rows=1000000 mode=identical
+FAIR dataset=taxi shape=taxi-1000000x16 task=binary rows=1000000 features=16
+FAIR sync-backend cupy UNAVAILABLE: No module named 'cupy'
+FAIR sync-backends armed=torch,cudart
+7201 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5a4340000000, nodemask=2)
+7360 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x30da80000000, nodemask=1)
+FAIR TIME ours trees=1 n=3 median=88.4 min=86.6 max=127.5 all=127.5,88.4,86.6
+FAIR TIME catboost trees=1 n=3 median=348.8 min=292.8 max=354.0 all=292.8,354.0,348.8
+FAIR TIME ours trees=10 n=3 median=106.4 min=106.3 max=123.4 all=123.4,106.4,106.3
+FAIR TIME catboost trees=10 n=3 median=365.5 min=336.1 max=369.3 all=336.1,365.5,369.3
+FAIR TIME ours trees=100 n=3 median=315.8 min=315.7 max=336.8 all=336.8,315.8,315.7
+FAIR TIME catboost trees=100 n=3 median=626.9 min=594.6 max=631.9 all=594.6,631.9,626.9
+FAIR DECOMPOSE ours fixed_ms=86.1 per_tree_ms=2.297 at1=88.4 at100=315.8
+FAIR DECOMPOSE catboost fixed_ms=346.0 per_tree_ms=2.809 at1=348.8 at100=626.9
+FAIR DECOMPOSE-VERDICT one_tree_ratio=0.2533 full_ratio=0.5037
+FAIR done cmd=decompose

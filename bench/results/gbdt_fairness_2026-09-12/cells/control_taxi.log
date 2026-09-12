@@ -1,0 +1,33 @@
+FSPEED-NOTE lane=gbdt-symmetric arms=ours metric=devices delta=1.000000 reason=devices=gpu (explicit); on an NVIDIA box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+1073 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5ac040000000, nodemask=2)
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=cuda path=/root/mojolearn/python/mojolearn/identical/_mojolearn_gbdt.so
+BENCH_PATHS arm=ours 2550_borrow_x=1 2551_device_partition=1 2580_level_quant=0 2581_group_width=1
+FSPEED-REFUSED lane=gbdt-symmetric arm=catboost-cpu reason=GPU-PATH-ONLY: catboost-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare against the vendor's GPU path only; on AMD request cpu by name (ENGINEERING_RULES.md section 10).
+FSPEED-SCALE stage=before rows=1000000 features=16 input_mib=61.0 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=catboost-gpu mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=5 size=shipped
+1073 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x508580000000, nodemask=1)
+FSPEED-WARMUP lane=gbdt-symmetric arm=ours shape=taxi-1000000x16 ms=1230.142
+FSPEED-WARMUP lane=gbdt-symmetric arm=catboost-gpu shape=taxi-1000000x16 ms=706.110
+FSPEED-ORDER lane=gbdt-symmetric round=1 arms=ours,catboost-gpu
+FSPEED lane=gbdt-symmetric arm=ours shape=taxi-1000000x16 round=1 ms=363.460 hash=90c3558501933f47
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=taxi-1000000x16 round=1 ms=628.941 hash=1a73bc17ca68be07
+FSPEED-ORDER lane=gbdt-symmetric round=2 arms=ours,catboost-gpu
+FSPEED lane=gbdt-symmetric arm=ours shape=taxi-1000000x16 round=2 ms=325.869 hash=90c3558501933f47
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=taxi-1000000x16 round=2 ms=635.861 hash=1a73bc17ca68be07
+FSPEED-ORDER lane=gbdt-symmetric round=3 arms=ours,catboost-gpu
+FSPEED lane=gbdt-symmetric arm=ours shape=taxi-1000000x16 round=3 ms=324.187 hash=90c3558501933f47
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=taxi-1000000x16 round=3 ms=631.989 hash=1a73bc17ca68be07
+FSPEED-ORDER lane=gbdt-symmetric round=4 arms=ours,catboost-gpu
+FSPEED lane=gbdt-symmetric arm=ours shape=taxi-1000000x16 round=4 ms=328.626 hash=90c3558501933f47
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=taxi-1000000x16 round=4 ms=707.926 hash=1a73bc17ca68be07
+FSPEED-ORDER lane=gbdt-symmetric round=5 arms=ours,catboost-gpu
+FSPEED lane=gbdt-symmetric arm=ours shape=taxi-1000000x16 round=5 ms=318.893 hash=90c3558501933f47
+FSPEED lane=gbdt-symmetric arm=catboost-gpu shape=taxi-1000000x16 round=5 ms=653.436 hash=1a73bc17ca68be07
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=logloss value=0.525735
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=auc value=0.619460
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-gpu metric=logloss value=0.525904
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-gpu metric=auc value=0.618511
+FSPEED-SCALE stage=after rows=1000000 features=16 input_mib=61.0 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.

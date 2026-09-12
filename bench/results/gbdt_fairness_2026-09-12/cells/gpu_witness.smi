@@ -1,0 +1,5 @@
+t=19:10:33 gpu=0 %, 0 MiB  apps=
+t=19:10:33 gpu=0 %, 0 MiB  apps=
+t=19:10:33 gpu=0 %, 0 MiB  apps=
+t=19:10:34 gpu=0 %, 31 MiB  apps=12584, 518 MiB;
+t=19:10:34 gpu=5 %, 533 MiB  apps=12584, 524 MiB;

@@ -1,0 +1,40 @@
+t=19:10:40 gpu=2 %, 0 MiB  apps=
+t=19:10:41 gpu=0 %, 0 MiB  apps=
+t=19:10:41 gpu=0 %, 0 MiB  apps=
+t=19:10:41 gpu=0 %, 0 MiB  apps=
+t=19:10:41 gpu=0 %, 0 MiB  apps=
+t=19:10:42 gpu=0 %, 4 MiB  apps=
+t=19:10:42 gpu=0 %, 4 MiB  apps=
+t=19:10:42 gpu=0 %, 4 MiB  apps=
+t=19:10:42 gpu=0 %, 4 MiB  apps=
+t=19:10:43 gpu=0 %, 31 MiB  apps=13100, 518 MiB;
+t=19:10:43 gpu=2 %, 783 MiB  apps=13100, 774 MiB;
+t=19:10:43 gpu=0 %, 785 MiB  apps=13100, 774 MiB;
+t=19:10:44 gpu=0 %, 787 MiB  apps=13100, 776 MiB;
+t=19:10:44 gpu=91 %, 787 MiB  apps=13100, 776 MiB;
+t=19:10:44 gpu=81 %, 787 MiB  apps=13100, 776 MiB;
+t=19:10:44 gpu=0 %, 787 MiB  apps=13100, 776 MiB;
+t=19:10:45 gpu=0 %, 787 MiB  apps=13100, 776 MiB;
+t=19:10:45 gpu=0 %, 787 MiB  apps=13100, 776 MiB;
+t=19:10:45 gpu=91 %, 787 MiB  apps=13100, 776 MiB;
+t=19:10:45 gpu=3 %, 787 MiB  apps=13100, 776 MiB;
+t=19:10:46 gpu=0 %, 787 MiB  apps=13100, 776 MiB;
+t=19:10:46 gpu=0 %, 787 MiB  apps=13100, 776 MiB;
+t=19:10:46 gpu=0 %, 787 MiB  apps=13100, 776 MiB;
+t=19:10:46 gpu=48 %, 787 MiB  apps=13100, 776 MiB;
+t=19:10:47 gpu=0 %, 787 MiB  apps=13100, 776 MiB;
+t=19:10:47 gpu=0 %, 787 MiB  apps=13100, 776 MiB;
+t=19:10:47 gpu=0 %, 787 MiB  apps=13100, 776 MiB;
+t=19:10:47 gpu=91 %, 787 MiB  apps=13100, 776 MiB;
+t=19:10:48 gpu=0 %, 787 MiB  apps=13100, 776 MiB;
+t=19:10:48 gpu=0 %, 787 MiB  apps=13100, 776 MiB;
+t=19:10:48 gpu=0 %, 787 MiB  apps=13100, 776 MiB;
+t=19:10:48 gpu=0 %, 787 MiB  apps=13100, 776 MiB;
+t=19:10:49 gpu=69 %, 787 MiB  apps=13100, 776 MiB;
+t=19:10:49 gpu=0 %, 787 MiB  apps=13100, 776 MiB;
+t=19:10:49 gpu=0 %, 787 MiB  apps=13100, 776 MiB;
+t=19:10:49 gpu=0 %, 787 MiB  apps=13100, 776 MiB;
+t=19:10:50 gpu=2 %, 787 MiB  apps=13100, 776 MiB;
+t=19:10:50 gpu=0 %, 787 MiB  apps=13100, 776 MiB;
+t=19:10:50 gpu=0 %, 787 MiB  apps=13100, 776 MiB;
+t=19:10:50 gpu=0 %, 787 MiB  apps=13100, 776 MiB;
