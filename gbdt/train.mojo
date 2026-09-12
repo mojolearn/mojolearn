@@ -100,10 +100,12 @@ numeric fit reads changes, so model bits cannot move. `-D
 MOJOLEARN_2634_CTR_PREP_OFF=1` restores the unconditional build (the A/B
 arm)."""
 
-comptime CINDEX_PARALLEL_STAGING_2636 = not is_defined[
-    "MOJOLEARN_2636_SERIAL_STAGING"
+comptime CINDEX_PARALLEL_STAGING_2636 = is_defined[
+    "MOJOLEARN_2636_PARALLEL_STAGING"
 ]()
 """DEVIATION 2636 (2026-09-11, gbdt-finish lane), ours, host staging only.
+MEASURED AND NOT FLIPPED: OPT-IN, the serial fill below is the default.
+
 `_build_cindex_from_columns` (every fit without permutation-dependent
 columns) copies each float column into a pinned staging slot of an
 8-slot ring, one column after another on one thread, and uploads it to the
@@ -114,8 +116,28 @@ slots, host memory only, the device untouched inside the parallel region)
 run in `sync_parallelize`, and then the revolution's uploads and binarize
 kernels are enqueued in the serial loop's order with the same drain before
 the ring is reused. Same bytes into the same kernels in the same order, so
-the compressed index and the model cannot move. `-D
-MOJOLEARN_2636_SERIAL_STAGING=1` restores the serial fill (the A/B arm)."""
+the compressed index and the model cannot move.
+
+WHY IT IS NOT THE DEFAULT. Timed on an H100 (pod n2ltmel2optel5,
+2026-09-12, 1M rows, our IDENTICAL arm, 3 rounds alternating processes over
+the sets, `both` -> `all` so the ONLY difference is this define) it costs
+`after/before` 1.0006 as the geometric mean of six (policy, dataset) cells,
+with gbdt-depthwise a clear loss at 1.012: symmetric taxi 0.9746, depthwise
+taxi 1.0092, lossguide taxi 0.9723, symmetric Istella-S 1.0248, depthwise
+Istella-S 1.0148, lossguide Istella-S 1.0093. Quality is equal in every
+cell and no model bit moves either way, so this is a pure time verdict and
+ENGINEERING_RULES section 9 refuses it. The reason the parallelism does not
+pay is in the shape: the fills are parallelized but the uploads and the
+binarize kernels still enqueue serially in the same order, so the device
+stays the bottleneck and the host memcpy it removes was not on the critical
+path. DEVIATIONS 2634 and 2635 carry the lane's win without it
+(`baseline` -> `both` is 0.9603 x 0.9913, essentially all of the 0.9526
+measured from `baseline` -> `all`).
+
+`-D MOJOLEARN_2636_PARALLEL_STAGING=1` selects the parallel ring fill (the
+measurement arm). Re-measuring it needs a host whose staging IS on the
+critical path -- more host threads against a slower device than an H100, or
+a column count well above 220."""
 
 comptime BORROW_X_COLUMNS = not is_defined["MOJOLEARN_2550_HOST_COPY"]()
 """DEVIATION 2550 (2026-09-11), DEFAULT ON in both tiers since 2026-09-11
