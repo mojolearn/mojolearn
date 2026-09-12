@@ -140,7 +140,13 @@ def install_fake_trainer(monkeypatch, tmp_path):
             return dict(flat_gradients=gradient, loss=float(np.float32(1.5)))
 
         def evaluate(self, ids):
-            return float(np.float32(2.25))
+            # A FALLING held-out loss, so a full run exercises the learning gate
+            # as a gate rather than skipping past it. 2.0 over 2.5 is a ratio of
+            # 0.8, inside the harness's predeclared 0.9 threshold.
+            expected = (self.shape.batch, self.shape.length + 1)
+            if tuple(ids.shape) != expected:
+                raise AssertionError(f'heldout ids {tuple(ids.shape)}, shape implies {expected}')
+            return float(np.float32(2.5 if self.completed == 0 else 2.0))
 
         def export_gradients(self):
             return dict(flat_gradients=np.full(self.shape.n_total, np.float32(0.5),
@@ -277,3 +283,63 @@ def test_a_trainer_given_no_shape_fails_loudly(tmp_path, monkeypatch):
     with pytest.raises(AssertionError, match='must hand the trainer its shape'):
         trainer_class([0.0], data_schedule={}, lr=1e-3, betas=(.9, .999),
                       eps=1e-8, weight_decay=0.0)
+
+
+def run_full(monkeypatch, tmp_path, spec, patch=None):
+    """A complete 128-step run, which is the only path that evaluates held-out
+    batches and reaches the learning gate. `--steps 1` skips both."""
+    trainer_class = install_fake_trainer(monkeypatch, tmp_path)
+    if patch is not None:
+        monkeypatch.setattr(trainer_class, 'evaluate', patch)
+    monkeypatch.setenv('MOJOLEARN_NUMERIC_MODE', 'identical')
+    out = tmp_path / 'capture'
+    argv = ['byte_lm_real_text_capture.py', '--output', str(out),
+            '--expected-vendor', VENDOR, '--steps', '128']
+    if spec is not None:
+        argv += ['--shape', spec]
+    monkeypatch.setattr(sys, 'argv', argv)
+    return out, capture.main()
+
+
+def test_a_full_run_evaluates_heldout_at_the_second_shape(tmp_path, monkeypatch):
+    """The held-out schedule is where the shape threading is least obvious. The
+    four-row shape reads four batches of four rows where the default reads eight
+    of two, and both must cover the same 512 target bytes."""
+    shape = shape_module.parse('4,32')
+    out, code = run_full(monkeypatch, tmp_path, '4,32')
+    assert code == 0
+
+    summary = json.loads((out / 'summary.json').read_text())
+    assert summary['completed_steps'] == 128 and len(summary['records']) == 128
+    assert summary['learning']['eligible'] is True
+    assert summary['learning']['observed_gate_passed'] is True
+    assert summary['learning']['ratio'] == 2.0 / 2.5
+
+    for folder in ('heldout-initial', 'heldout-final'):
+        report = json.loads((out / folder / 'evaluation.json').read_text())
+        assert len(report['batches']) == shape.validation_batches == 4
+        assert report['state_unchanged'] is True
+        assert str(shape_module.VALIDATION_TARGETS) in report['aggregation']
+        for index, record in enumerate(report['batches']):
+            ids = (out / folder / f'batch{index:02d}.ids.i32').read_bytes()
+            assert len(ids) == shape.n_ids * 4 == 132 * 4
+            assert record['start'] == shape.validation_starts[index]
+
+
+def test_the_learning_gate_can_fail(tmp_path, monkeypatch):
+    """A gate that cannot fail proves nothing. A flat held-out loss is a ratio of
+    one, outside the predeclared threshold, and the run must say so and exit
+    non-zero while still retaining everything it captured."""
+    import numpy as np
+
+    out, code = run_full(monkeypatch, tmp_path, None,
+                         patch=lambda self, ids: float(np.float32(2.5)))
+    assert code == 1
+    summary = json.loads((out / 'summary.json').read_text())
+    assert summary['learning']['observed_gate_passed'] is False
+    assert summary['learning']['ratio'] == 1.0
+    assert summary['learning']['admitted'] is False
+    # The refusal is about the learning claim, not about the bytes: the capture
+    # is still complete and still self describing.
+    assert len(summary['records']) == 128
+    assert (out / 'step000128' / 'capture.json').exists()
