@@ -72,14 +72,46 @@ it per shape.
 
 ## What is still missing
 
+That table was wrong when first written and is corrected here. Almost none of
+it was missing. The decoder block backward exists in full as a host oracle,
+`transformer/checks/transformer_backward_oracle.mojo`, 1598 lines, all 37
+stages, alongside host RMS norm, SiLU, RoPE and softmax backward and the host
+GEMM backward routing. `training/checks/train_step_check.mojo` already composes
+an entire host step out of these and reports thirteen stages compared against
+the device bitwise with four negative controls firing, at a one block fixture
+with its own registry, on one device.
+
 | Piece | Status |
 |---|---|
-| AdamW | written as a normative host oracle, `training/checks/optimizer_oracle.mojo`, seams O1 to O14 |
-| Cross-entropy backward | written as a normative host oracle, `training/checks/loss_oracle.mojo` |
-| Embedding gradient | written as a normative host oracle, fixed ascending fold over sorted runs |
-| GEMM backward | routing only, over the GEMM the host already has; the reference supports all three orientations and the host fast kernel supports NT alone |
-| Decoder block backward, 37 stages per layer | absent, and the bulk of the remaining work |
-| The `cpu` mode of the gate | refuses until the surface above exists |
+| AdamW | normative host oracle, `training/checks/optimizer_oracle.mojo`, seams O1 to O14 |
+| Cross-entropy backward | normative host oracle, `training/checks/loss_oracle.mojo` |
+| Embedding gradient | normative host oracle, fixed ascending fold over sorted runs |
+| GEMM backward | host routing over the reference GEMM, `_gemm_bwd_a` / `_gemm_bwd_b` |
+| Decoder block backward, 37 stages | normative host oracle, already written |
+| Byte LM shaped composition, two blocks | `training/byte_lm_host_backward.mojo`, **compiles on seven CPUs**, never yet run |
+| Binding and Python surface | absent, this is the remaining work |
+| The `cpu` mode of the gate | refuses until that surface exists |
+
+## The import question, measured
+
+`transformer_backward_oracle.mojo` computes entirely on the host but imports
+three names from `gemm/checks/gemm_backward.mojo`, which imports
+`max.gpu.host`, and `IdentityTrace` from `core/identity_trace.mojo`, which does
+too. `bindings/_mojolearn_byte_lm_host.mojo` says "HOST ONLY. No DeviceContext,
+no kernel, no GPU, and nothing imported from the GPU side." Whether that rule
+is enforced decided whether a CPU trainer needed a refactor of shared certified
+files, so it was measured rather than argued from the comment.
+
+`training/checks/byte_lm_host_bwd_probe.mojo` imports the oracle and the host
+step and compiles with no accelerator target. **Exit 0 on all seven runners,
+x86-64, ARM64 and Apple.** So the rule is policy the toolchain does not enforce
+here, no shared file has to move, and no GPU code path is touched.
+
+The same probe compiles `byte_lm_host_backward.mojo`, which nothing else
+imports and which therefore no build would otherwise check. Its first pass
+produced three errors, all the same rule, that reading a `List` out of a tuple
+is an explicit copy or a transfer. Nothing structural failed, no import was
+rejected and no oracle was missing.
 
 The GPU backward is a useful starting point rather than a translation problem.
 It contains no float atomic anywhere. Every place that needs a fold or a
