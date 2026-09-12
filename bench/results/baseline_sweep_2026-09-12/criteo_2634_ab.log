@@ -1,0 +1,16 @@
+[22:34:15] seeded /root/bins/baseline with 6 extensions
+[22:34:15] downloading + decoding criteo (about 291 MB; not in the R2 store)
+[22:35:38] download rc=0
+[22:38:01] ctr_on  _mojolearn_gbdt.so 9e354d27774c8d34df424cda711d7fd52dde33f869cfd2ed892fec1f7e904e73
+[22:38:01] ctr_off _mojolearn_gbdt.so 17246d59d38c4bada411ff9f2aab71882c23231a994ba306173ec8aa061638ad
+[22:40:45] === THE MARKER, which is what makes this attributable ===
+[22:40:45] --- ctr_on  (/root/trees_out/speed/ctr_on.gbdt-symmetric.criteo.r1000000.ours.ctr_on.log)
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=26 ctr_prep_wanted=True prep=ran gate_2634=on permutations=4 target_classes=2 binarized_target_rows=1000000 ctr_orders=4
+[22:40:45] --- ctr_off  (/root/trees_out/speed/ctr_off.gbdt-symmetric.criteo.r1000000.ours.ctr_off.log)
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=26 ctr_prep_wanted=True prep=ran gate_2634=off permutations=4 target_classes=2 binarized_target_rows=1000000 ctr_orders=4
+[22:40:45] === READ IT LIKE THIS ===
+[22:40:45]   gate_2634=on  + prep=ran     on ctr_on   -> the shipped branch built the prep
+[22:40:45]   gate_2634=off + prep=ran     on ctr_off  -> the unconditional build did too
+[22:40:45]   dependent=0 on BOTH          -> NEITHER built it and any time gap is NOT 2634
+[22:40:45] A time difference without dependent>0 and prep=ran is the reached-but-inert
+[22:40:45] trap, and stays UNKNOWN no matter how clean the separation looks.
