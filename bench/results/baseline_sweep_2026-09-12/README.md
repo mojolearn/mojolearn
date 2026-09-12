@@ -403,3 +403,24 @@ than quietly adjusted.
 Both arms are `digest_stable=True` in all four of these cells; the
 non-determinism seen elsewhere on this board is specific to `catboost-gpu`,
 `sklearn-et-cpu`, and cuML/torch on kmeans and pca.
+
+### DBSCAN/taxi: the largest margin on the board, on the same clustering
+
+1,000,000 x 11, standardized, `eps=0.177 min_samples=10` -- the parameters that
+until today lived only in an operator's shell.
+
+| arm | median ms | clusters | noise fraction | agreement with ours |
+|---|---:|---:|---:|---|
+| ours | **1142.6** | 2900 | 0.216119 | -- |
+| cuml-gpu | 13619.4 | 2900 | 0.216119 | ARI **0.9999999991**, noise agreement **1.0** |
+
+**`ours/cuml-gpu = 0.0839` -- about twelve times faster, and it is the same
+answer**: identical cluster count, identical noise fraction, and an adjusted
+Rand index of 0.9999999991 against our labels. The span asymmetry is present
+and trivial at this scale (cuML excludes 37.2 ms of upload against its own
+13,619 ms), and it still runs against us.
+
+This is the widest gap on the board in either direction and the cleanest, since
+a speed claim is only interesting when both sides agree about the answer -- and
+here they agree to nine decimal places on the clustering itself, not merely on
+a summary metric.
