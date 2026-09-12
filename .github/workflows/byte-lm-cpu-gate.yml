@@ -51,6 +51,17 @@ on:
       - "python/mojolearn/_buffer.py"
       - "tools/byte_lm_host_gate.py"
       - "tools/byte_lm_host_path_sweep.py"
+      # These run in this workflow and were missing, so a change to the CPU
+      # TRAINING gate itself, or to the shape every comparison is made at,
+      # merged without this workflow running once. A gate that does not run
+      # when the gate changes is not a gate.
+      - "tools/byte_lm_cpu_train_gate.py"
+      - "tools/byte_lm_shape.py"
+      - "tools/test_byte_lm_shape.py"
+      - "python/mojolearn/tests/test_byte_lm_host_trainer.py"
+      - "python/mojolearn/_byte_lm_config.py"
+      - "training/byte_lm_host_backward.mojo"
+      - "training/checks/byte_lm_host_bwd_probe.mojo"
       - ".github/workflows/byte-lm-cpu-gate.yml"
 
 permissions: {}
