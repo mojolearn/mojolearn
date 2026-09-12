@@ -22,6 +22,22 @@ from transformer.checks.transformer_backward_oracle import (
     transformer_block_backward_oracle,
 )
 
+# ANSWERED 2026-09-12: probe exit 0 on all seven runners, x86-64, ARM64 and
+# Apple. The rule above is policy the toolchain does not enforce here, so the
+# CPU trainer needs no refactor and no shared certified file has to move.
+#
+# The probe now earns its keep a second way. It imports the byte LM host
+# training step so the same free runners COMPILE that file, which is otherwise
+# a module nothing imports and therefore a module no build would ever check.
+# Written code that has never been through a compiler is not evidence of
+# anything, and main must not carry a module in that state.
+from training.byte_lm_host_backward import (
+    byte_host_adamw,
+    byte_host_gradient,
+    byte_host_split_ids,
+    byte_host_train_step,
+)
+
 
 def main() raises:
     """Compiling is the test, not running.
