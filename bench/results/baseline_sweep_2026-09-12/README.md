@@ -185,3 +185,85 @@ as themselves rather than upgraded.
 `board.tsv` / `board.md` in this directory, harvested by
 `tools/bench_all_summarize.py`. Cells that did not run are listed as UNKNOWN
 with the reason, and are not rounded to green.
+
+### The GBDT half, full size, one pod, 5 rounds interleaved
+
+Ratio is OURS median / OPPONENT median; below 1 means our median is lower.
+`fit` is the total leaf count each arm actually BUILT, read back through that
+library's own API after the last round.
+
+taxi, shape `taxi-4110786x16`:
+
+| policy | ours ms (min..max) | CatBoost GPU | ours/CB | XGBoost GPU | ours/XGB | leaves ours/CB/XGB | verdict |
+|---|---|---|---:|---|---:|---|---|
+| symmetric | 795.8 (791.3..812.5) | 1699.2 (1662.1..1723.6) | **0.468** | n/a (no oblivious grower) | - | 6400 / 6400 / - | COMPARABLE |
+| depthwise | 1127.7 (1117.1..1136.4) | 1779.8 (1737.1..1817.3) | 0.634 | 1011.3 (976.1..1031.6) | 1.115 | 5903 / 5811 / **3883** | NOT-COMPARABLE (0.342) |
+| lossguide | 1651.5 (1645.2..1660.2) | 2005.4 (1991.5..2046.8) | 0.824 | 1114.0 (1081.8..1169.2) | 1.482 | 6239 / 4438 / **3883** | NOT-COMPARABLE (0.378) |
+
+Istella-S, shape `istella-2043304x220`:
+
+| policy | ours ms (min..max) | CatBoost GPU | ours/CB | XGBoost GPU | ours/XGB | leaves ours/CB/XGB | verdict |
+|---|---|---|---:|---|---:|---|---|
+| symmetric | 2223.9 (2187.7..2325.7) | 2236.1 (2209.2..2269.7) | **0.995** | n/a | - | 6400 / 6400 / - | COMPARABLE |
+| depthwise | 2931.1 (2867.9..2954.0) | 2446.7 (2415.4..2589.2) | 1.198 | 3122.9 (3102.6..3192.6) | **0.939** | 6345 / 6364 / 6297 | COMPARABLE (0.011) |
+| lossguide | 3494.9 (3481.1..3521.6) | 3248.9 (3230.4..3453.5) | 1.076 | 3124.6 (3061.0..3357.0) | 1.118 | 6396 / 6397 / 6297 | COMPARABLE (0.016) |
+
+Quality is within about a thousandth everywhere and ours is ahead of CatBoost
+on every symmetric and depthwise cell (taxi symmetric logloss 0.524213 against
+0.524485; Istella depthwise 0.126973 against 0.127425).
+
+**Our output hash is byte-identical across all five rounds in every cell.
+CatBoost's alternates between two values inside a single cell.** XGBoost's is
+stable.
+
+### What this board changes about the XGBoost claim
+
+`bench/OPPONENT_REFERENCE.md:2150-2152` says, merged on main:
+
+> XGBoost is FASTER THAN US wherever it competes: 1.196x and 1.039x on
+> depthwise, and 1.995x on taxi lossguide, which is the largest single gap on
+> the board.
+
+All three of those numbers were measured at the 1,000,000-row FLOOR. At full
+size, on one pod, every one of them moves toward us and one reverses:
+
+| cell | published @1M | this board @full | |
+|---|---:|---:|---|
+| depthwise taxi | 1.196x | 1.115x | gap narrows |
+| **depthwise Istella-S** | **1.039x** | **0.939x** | **REVERSES -- we are faster** |
+| lossguide taxi | 1.995x | 1.482x | gap narrows sharply |
+| lossguide Istella-S | 1.256x | 1.118x | gap narrows |
+
+Our ratio against XGBoost improves with scale in ALL FOUR cells, which is the
+signature of a fixed cost being amortized rather than a faster inner loop. So
+the claim is true at the floor and not in general, and a board that only ever
+ran at 1,000,000 rows could not have seen it.
+
+**Two qualifications that the fit-equivalence readback forced, and neither is
+visible in a timing column.**
+
+1. **XGBoost's lossguide column is not an independent measurement.** It builds
+   a model IDENTICAL to its own depthwise one on both datasets -- taxi 7,666
+   nodes / 3,883 leaves in both lanes, Istella-S 12,494 / 6,297 in both -- with
+   byte-identical quality to match. The lane pins `max_depth=6` and
+   `max_leaves=64`, and 64 = 2**6, so the depth cap binds first and leaf-wise
+   growth degenerates to level-wise. Reporting the two XGBoost cells as
+   separate evidence would be counting one measurement twice.
+2. **The taxi cells where XGBoost looks fastest are NOT LIKE-FOR-LIKE.** It
+   built 3,883 leaves against our 5,903 and CatBoost's 5,811 -- 34% fewer --
+   which trips the 10% leaf-spread tripwire in both taxi policies. A smaller
+   ensemble is a smaller job. The honest ground for an ours-versus-XGBoost
+   comparison is Istella-S, where all three arms agree to within 1.6%, and
+   there we lead depthwise (0.939x) and trail lossguide (1.118x).
+
+None of this is a defect in XGBoost and none of it is corrected here. It is
+reported because a ratio whose two sides built different-sized models cannot be
+read as a like-for-like result, and until this run nothing in the harness read
+the models at all.
+
+### Istella-S symmetric moved to parity, and that is unflattering
+
+Published 0.830x at 1M; **0.995x here at 2,043,304 rows** -- parity, not a win,
+on identical 6,400-leaf ensembles. It is recorded exactly as measured. A
+consistency sweep that only confirmed the flattering rows would not have been
+worth the lease.
