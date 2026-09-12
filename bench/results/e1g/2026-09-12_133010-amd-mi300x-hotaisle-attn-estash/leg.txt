@@ -1,0 +1,50 @@
+commit=bb679f19 parent 00cd9a5f
+commit_sha=bb679f1952527581c57fbb4cb0066d4a071cb58a
+provider=hotaisle
+vendor=amd
+team=andrews-team
+spec=13core
+lane=attn-estash-amd
+minutes=60
+gates=1
+bare=0
+test_watchdog=0
+gpu_archs_requested=<unset>
+target_column=amd
+runtime_requested=auto
+image=rocm/dev-ubuntu-22.04:6.4.1-complete
+extra=/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/ece6c35f-471f-4b93-8fcf-f6462a0e5568/scratchpad/amd_attn_body.sh
+extra_sha256=2b9539abde4bcc9dcbac12713d3d61836ea6cf36e493c2575731168aa3efb46c
+bundle_bytes=10261646
+bundle_sha256=c4d8fbde1fcd707820d7ea85c5e18e0211b4aee6a87fcdf2d94e67f26d828ba8
+source_sha256_local=afc19c2c7dea83ed382755d13fc77c5a5adff1f798be313675342269296ec6c4
+mode=rent
+started=2026-09-12T13:30:13Z
+balance_before_cents=2842
+slot=/tmp/mojolearn-hotaisle-slot.1 taken 2026-09-12T13:30:16Z
+price_cents_per_hour=299 min_reservation_minutes=1
+local_key_in_ps=not_visible
+create_http=200 create_utc=2026-09-12T13:30:23Z
+vm_ref=29ba5513-853c-4d2b-8df8-9c9ad656182f
+vm_name=enc1-gpuvm002
+description=mojolearn:attn-estash-amd:20260912T133017Z
+ssh=hotaisle@23.183.40.67:22 running_after_seconds=12
+box_key_in_ps=not_visible
+runtime=docker
+box_gfx=gfx942
+gpu_archs=gfx942
+upload_seconds=5
+image_pull=pull_exit=0 pull_seconds=97
+work_seconds=3215
+body=done
+source_sha256_match=yes
+remote_pixi_install_exit=0
+remote_pixi_install_seconds=3
+remote_device_check_exit=0
+remote_card_exit=0
+remote_extra_exit=0
+remote_body_exit=0
+finished=2026-09-12T13:50:33Z
+lease_used_seconds=1216
+slot=released /tmp/mojolearn-hotaisle-slot.1 2026-09-12T13:50:40Z
+balance_after_cents=2673

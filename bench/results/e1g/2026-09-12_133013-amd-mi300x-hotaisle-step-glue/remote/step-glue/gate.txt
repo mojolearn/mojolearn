@@ -1,0 +1,22 @@
+deviations=2645-2648
+started=2026-09-12T13:34:30Z
+root=/root/mojolearn timed_steps=3 lean_steps=4 deadline=300 jobs=8
+vendor=amd gpu_archs=gfx942 column=amd
+arms=optskip_noshadow_rows16 timing_arm=optskip_noshadow_rows16
+glue_define=-D MOJOLEARN_STEP_GLUE_TRIAL=1 timers_defines=-D MOJOLEARN_STEP_PHASE_TIMERS=1 -D MOJOLEARN_ATTN_PHASE_TIMERS=1
+vendor=amd
+commit=bb679f1952527581c57fbb4cb0066d4a071cb58a
+provider=hotaisle
+size=mi300x-13core
+glue_check: REACH norm_forward rows16 threads_per_block=16 first_moved_row=32
+glue_check: REACH norm_forward rows8 threads_per_block=8 first_moved_row=40
+glue_check: REACH norm_forward rows4 threads_per_block=4 first_moved_row=44
+glue_check: REACH norm_forward optskip_noshadow_rows16 threads_per_block=16 first_moved_row=32
+glue_check: REACH norm_backward rows16 threads_per_block=16 first_moved_row=32
+glue_check: REACH norm_backward rows8 threads_per_block=8 first_moved_row=40
+glue_check: REACH norm_backward rows4 threads_per_block=4 first_moved_row=44
+glue_check: REACH norm_backward optskip_noshadow_rows16 threads_per_block=16 first_moved_row=32
+glue_check: REACH update noshadow first_moved_element=768
+glue_check: step_glue_check: PASS (names, norm forward and backward with reach, update with reach, step, refusal, rollback)
+corpora= enwik8=training/corpus/enwik8/input.txt pilegithub=training/corpus/pile_github/input.txt
+finished=2026-09-12T13:49:06Z

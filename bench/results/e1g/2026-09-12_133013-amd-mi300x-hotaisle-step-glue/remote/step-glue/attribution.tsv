@@ -1,0 +1,15 @@
+component	shipped_ms	optskip_noshadow_rows16_ms	delta_ms
+envelope.native_call	None	None	NA
+fwd.norm1	None	None	NA
+fwd.norm2	None	None	NA
+grad.norm1_kernels	None	None	NA
+grad.norm2_kernels	None	None	NA
+step.validate_grads_scan	None	None	NA
+step.shadow_copy	None	None	NA
+step.opt_refuse_scan	None	None	NA
+step.optimizer	None	None	NA
+step.validate_after_scan	None	None	NA
+step.embedding_backward	None	None	NA
+step.unpack_weights	None	None	NA
+step.pack_grads	None	None	NA
+timing_witnesses_equal	True
