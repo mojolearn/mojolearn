@@ -1,0 +1,1 @@
+python3 tools/nvidia_serial_guard.py --seconds 30 -- python3 -m venv --system-site-packages /root/mojolearn/.byte-lm-validation-venv 

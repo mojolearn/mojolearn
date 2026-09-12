@@ -1,0 +1,10 @@
+896 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x113400000000, nodemask=1)
+{"completed_steps": 16, "loss": 3.5731422901153564}
+{"completed_steps": 32, "loss": 3.32855486869812}
+{"completed_steps": 48, "loss": 3.0357584953308105}
+{"completed_steps": 64, "loss": 3.1332080364227295}
+{"completed_steps": 80, "loss": 3.360982656478882}
+{"completed_steps": 96, "loss": 2.830451250076294}
+{"completed_steps": 112, "loss": 2.761718988418579}
+{"completed_steps": 128, "loss": 2.728069543838501}
+{"guard": "nvidia-root-serial-v1", "reason": null, "cpu_affinity": "0,1", "thread_limit": 2, "returncode": 0}

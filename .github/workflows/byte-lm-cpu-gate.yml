@@ -57,6 +57,9 @@ on:
       # when the gate changes is not a gate.
       - "tools/byte_lm_cpu_train_gate.py"
       - "tools/byte_lm_shape.py"
+      - "tools/byte_lm_real_text_capture.py"
+      - "tools/test_byte_lm_capture_endtoend.py"
+      - "tools/test_byte_lm_callsites.py"
       - "tools/test_byte_lm_shape.py"
       - "python/mojolearn/tests/test_byte_lm_host_trainer.py"
       - "python/mojolearn/_byte_lm_config.py"
@@ -119,6 +122,7 @@ jobs:
             /bench/results/resume/
             !/bench/results/resume/*
             /bench/results/resume/2026-09-07-root-byte-lm-three-vendor/
+            /bench/results/resume/2026-09-12-root-byte-lm-b4l32-nvidia/
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
@@ -298,6 +302,40 @@ jobs:
           python3 tools/byte_lm_cpu_train_gate.py cpu --steps 1,64 --expect-mismatch \
             --vendor apple --report "$GATE_OUT/cpu_train_sab.json" 2>&1 \
             | tee "$GATE_OUT/cpu_train_sab.log"
+
+      # DEVIATION 2682, THE SECOND SHAPE, AND IT IS A SEPARATE CERTIFICATE.
+      # Nine weight gradients contract over the token count, so 128 tokens in a
+      # step is a different sum from 64 and not two of them accumulated. Passing
+      # at the two-row shape says nothing here and passing here says nothing
+      # there. The tree is one vendor, an L40S, so this is a CPU against CUDA
+      # comparison at this shape and not a cross-vendor claim.
+      - name: CPU training step against the recorded four-row CUDA bytes
+        if: always()
+        env:
+          MOJOLEARN_BYTE_LM_HOST_BINARY: ""
+        run: |
+          set -o pipefail
+          python3 tools/byte_lm_cpu_train_gate.py cpu --steps all --verify-digests \
+            --shape 4,32 --vendor cuda \
+            --tree cuda=bench/results/resume/2026-09-12-root-byte-lm-b4l32-nvidia/run1/remote/byte-lm-validation/full128-b4-l32 \
+            --report "$GATE_OUT/cpu_train_b4l32.json" 2>&1 \
+            | tee "$GATE_OUT/cpu_train_b4l32.log"
+
+      # The same control at the new shape, reusing the sabotage binding built
+      # above. A gate that cannot fail proves nothing, and that is as true of
+      # the second shape as it was of the first.
+      - name: Four-row training gate must catch the wrong gradient
+        if: always()
+        env:
+          MOJOLEARN_BYTE_LM_HOST_ALLOW_SABOTAGE: "1"
+          MOJOLEARN_BYTE_LM_HOST_BINARY: ${{ runner.temp }}/host-bwd-sab/_mojolearn_byte_lm_host.so
+        run: |
+          set -o pipefail
+          python3 tools/byte_lm_cpu_train_gate.py cpu --steps 1,64 --expect-mismatch \
+            --shape 4,32 --vendor cuda \
+            --tree cuda=bench/results/resume/2026-09-12-root-byte-lm-b4l32-nvidia/run1/remote/byte-lm-validation/full128-b4-l32 \
+            --report "$GATE_OUT/cpu_train_b4l32_sab.json" 2>&1 \
+            | tee "$GATE_OUT/cpu_train_b4l32_sab.log"
 
       # DEVIATION 2680: re-derive the three-vendor TRAINING agreement from the
       # retained raw bytes, every one of the 128 steps, all 11 arrays per step
