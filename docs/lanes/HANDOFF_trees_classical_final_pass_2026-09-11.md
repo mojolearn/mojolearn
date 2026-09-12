@@ -194,24 +194,35 @@ the H100, then gate the Apple M4 and an AMD box before merging.
      stands (ours 1129.8 ms against cuML brute 13631.0, 2900 clusters, ARI
      0.99999999908) and round 0 on Istella-S ran 337 s against cuML's 55 s,
      so expect that shape to favour cuML at 220 features.
-2. **`identity_break` for DEVIATION 2663, on the Apple M4 and on AMD gfx942.**
-   2663 changes a SHIPPED DEFAULT ON EVERY VENDOR (ExtraTrees device batch
-   width 4,096 -> 16,384), so this is the one outstanding gate that blocks
-   nothing yet but should not stay open. On the M4 it refused for missing
-   builds, NOT for any divergence; build first:
+2. **`identity_break` for DEVIATION 2663: the Apple M4 is DONE, AMD gfx942 is
+   still owed.** 2663 changes a SHIPPED DEFAULT ON EVERY VENDOR (ExtraTrees
+   device batch width 4,096 -> 16,384), so it needs every vendor.
+   - **Apple M4, against shipped main 5b7e1e41: cells=45 stable=45 moved=0
+     refused=0, and diffed against the H100's own `dflt` set (the same 16,384
+     default) `summary: IDENTICAL=45`** -- every rf-clf, rf-reg, et-clf, et-reg
+     and iforest fixture equal bit for bit across the two vendors, the
+     denormal and denormal_ftz pairs included. Evidence
+     `bench/results/forest_finish_2026-09-11/logs/ib_2663_apple_m4.json`;
+     `if_check` 8/8 and `device_batched_check` (45 cells) also pass at the new
+     default.
+   - **AMD gfx942 is what remains.** Run it the same way:
    ```
-   MOJOLEARN_NUMERIC_MODE=identical bash bindings/build.sh
-   MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_estimators.sh
-   MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_trees.sh
-   MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_svm.sh
+   for f in bindings/build_*.sh; do MOJOLEARN_NUMERIC_MODE=identical bash "$f"; done
    MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH=python python3 tools/identity_break.py \
-     --lanes rf-clf,rf-reg,et-clf,et-reg,iforest --vendor <apple-m4|amd-mi300x> \
-     --json /tmp/ib_2663.json
+     --lanes rf-clf,rf-reg,et-clf,et-reg,iforest --vendor amd-mi300x \
+     --json /tmp/ib_2663_amd.json
    PYTHONPATH=python python3 tools/identity_break.py --diff \
-     bench/results/forest_finish_2026-09-11/logs/identity_summary.txt /tmp/ib_2663.json
+     bench/results/forest_finish_2026-09-11/logs/ib_2663_apple_m4.json /tmp/ib_2663_amd.json
    ```
-   `if_check` (8/8) and `device_batched_check` (45 cells, at the new 16,384
-   default) ALREADY PASS on the M4.
+   TWO TRAPS, both of which cost me repeated runs: `--diff` takes JSON files,
+   NOT `identity_summary.txt` (that is a text summary); and build EVERY
+   `bindings/build_*.sh`, because `identity_break` REFUSES a lane whose
+   extension is missing and a partial build looks like a result. The H100
+   per-set JSONs live inside
+   `~/mojolearn-evidence/forest-finish-2026-09-11/trees_out_FINAL.tgz` at
+   `trees_out/ib/*.json` (extract with the path as a plain operand; macOS
+   bsdtar has no `--wildcards`).
+
 3. **AMD confirmations for everything merged tonight** (gfx942, Hot Aisle
    first, then DigitalOcean): the three kNN checks; `kde_check` and
    `kde_stage_profile`; `svm/svc_main.mojo` 44/44 plus the hash probe
