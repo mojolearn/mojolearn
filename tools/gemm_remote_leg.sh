@@ -589,6 +589,12 @@ WHEEL_INDEX="${MOJOLEARN_WHEEL_INDEX:-testpypi}"
 GPU_ARCHS="${MOJOLEARN_GPU_ARCHS:-}"
 BYTE_LM_PYTHON=${MOJOLEARN_BYTE_LM_PYTHON:-python3}
 case "$BYTE_LM_PYTHON" in ''|*[!A-Za-z0-9_./-]*) echo 'Byte LM interpreter must be a literal executable path' >&2; exit 2 ;; esac
+# DEVIATION 2682. Empty is the certified b2-l32 campaign and is the default.
+# Only a shape whose schedule is COMMITTED can be asked for, because the capture
+# refuses against a manifest that is not in the tree, and finding that out on a
+# leased box costs the lease.
+BYTE_LM_SHAPE=${MOJOLEARN_BYTE_LM_SHAPE:-}
+case "$BYTE_LM_SHAPE" in ''|4,32) ;; *) echo "Refusing byte-LM shape '$BYTE_LM_SHAPE'; 4,32 is the only committed second shape" >&2; exit 2 ;; esac
 PUBLIC_GITHUB_SOURCE=${MOJOLEARN_PUBLIC_GITHUB_SOURCE:-}
 case "$PUBLIC_GITHUB_SOURCE" in
     ''|mojolearn/mojolearn) ;;
@@ -1340,7 +1346,7 @@ if [ "$NVIDIA_CAMPAIGN" = 4 ]; then
     LEG_ARCHIVE_PATHS_MAMBA="$LEG_ARCHIVE_PATHS_MAMBA tools/small_mlp_training_capture.py"
 fi
 if [ "$NVIDIA_CAMPAIGN" = 5 ] || [ "$NVIDIA_CAMPAIGN" = 6 ]; then
-    _byte_lm_paths="training embedding gemm transformer/__init__.mojo transformer/checks transformer/impl tools/training_validation_admit.py tools/byte_lm_validation_serial.sh tools/byte_lm_validation_admit.py tools/root_job_receipt.py tools/byte_lm_real_text_capture.py tools/byte_lm_gradient_oracle.py tools/byte_lm_state_compare.py tools/tests/test_byte_lm_state_compare.py tools/nvidia_serial_guard.py tools/amd_serial_guard.py tools/test_nvidia_serial_guard.py tools/test_amd_serial_guard.py"
+    _byte_lm_paths="training embedding gemm transformer/__init__.mojo transformer/checks transformer/impl tools/training_validation_admit.py tools/byte_lm_validation_serial.sh tools/byte_lm_validation_admit.py tools/root_job_receipt.py tools/byte_lm_shape.py tools/byte_lm_real_text_capture.py tools/byte_lm_gradient_oracle.py tools/byte_lm_state_compare.py tools/tests/test_byte_lm_state_compare.py tools/nvidia_serial_guard.py tools/amd_serial_guard.py tools/test_nvidia_serial_guard.py tools/test_amd_serial_guard.py"
     LEG_SOURCE_PATHS_MAMBA="$LEG_SOURCE_PATHS_MAMBA $_byte_lm_paths"
     LEG_ARCHIVE_PATHS_MAMBA="$LEG_ARCHIVE_PATHS_MAMBA $_byte_lm_paths"
 fi
@@ -2133,7 +2139,7 @@ leg_archive_required() {
             echo "training/__init__.mojo training/mlp_ops.mojo training/estimator.mojo training/checks/train_loop.mojo training/checks/train_gradient_capture.mojo training/checks/optimizer.mojo training/checks/loss.mojo embedding/checks/embedding_identical.mojo gemm/host_entry.mojo tools/training_validation_serial.sh tools/training_validation_admit.py tools/transformer_training_gradient_oracle.py tools/nvidia_serial_guard.py tools/amd_serial_guard.py tools/test_nvidia_serial_guard.py tools/test_amd_serial_guard.py python/mojolearn/_mlp_impl.py python/mojolearn/neural_network.py python/mojolearn/tests/test_small_mlp_surface.py python/mojolearn/tests/test_small_mlp_numerical_edges.py"
         fi
         if [ "$NVIDIA_CAMPAIGN" = 5 ] || [ "$NVIDIA_CAMPAIGN" = 6 ]; then
-            echo "training/byte_lm.mojo training/corpus/tinyshakespeare/input.txt training/corpus/tinyshakespeare/manifest.json embedding/checks/embedding_identical.mojo gemm/host_entry.mojo bindings/_mojolearn_byte_lm.mojo bindings/build_byte_lm.sh python/mojolearn/language_model.py python/mojolearn/_byte_lm_impl.py python/mojolearn/tests/test_byte_lm_surface.py tools/training_validation_admit.py tools/byte_lm_validation_serial.sh tools/byte_lm_validation_admit.py tools/root_job_receipt.py tools/byte_lm_real_text_capture.py tools/byte_lm_gradient_oracle.py tools/byte_lm_state_compare.py tools/tests/test_byte_lm_state_compare.py tools/nvidia_serial_guard.py tools/amd_serial_guard.py tools/test_nvidia_serial_guard.py tools/test_amd_serial_guard.py"
+            echo "training/byte_lm.mojo training/corpus/tinyshakespeare/input.txt training/corpus/tinyshakespeare/manifest.json training/corpus/tinyshakespeare/manifest-b4-l32.json embedding/checks/embedding_identical.mojo gemm/host_entry.mojo bindings/_mojolearn_byte_lm.mojo bindings/build_byte_lm.sh python/mojolearn/language_model.py python/mojolearn/_byte_lm_impl.py python/mojolearn/tests/test_byte_lm_surface.py tools/training_validation_admit.py tools/byte_lm_validation_serial.sh tools/byte_lm_validation_admit.py tools/root_job_receipt.py tools/byte_lm_shape.py tools/byte_lm_real_text_capture.py tools/byte_lm_gradient_oracle.py tools/byte_lm_state_compare.py tools/tests/test_byte_lm_state_compare.py tools/nvidia_serial_guard.py tools/amd_serial_guard.py tools/test_nvidia_serial_guard.py tools/test_amd_serial_guard.py"
         fi
     else
         echo "gemm/checks/gemm_identical.mojo"
@@ -2958,7 +2964,7 @@ if [ "@NVIDIACAMPAIGN@" = 5 ]; then
         MOJOLEARN_BYTE_LM_VALIDATION_OUT="$OUT/byte-lm-validation" \
           MOJOLEARN_BYTE_LM_EXPECT_VENDOR="$byte_vendor" MOJOLEARN_COMMIT="@COMMIT@" \
           MOJOLEARN_GPU_ARCHS="@GPUARCHS@" MOJOLEARN_BYTE_LM_VALIDATION_SECONDS="$work_remaining" \
-          MOJOLEARN_PYTHON="@BYTELMPYTHON@" \
+          MOJOLEARN_PYTHON="@BYTELMPYTHON@" MOJOLEARN_BYTE_LM_SHAPE="@BYTELMSHAPE@" \
           timeout -k 10 "$work_remaining" bash tools/byte_lm_validation_serial.sh \
           > "$OUT/byte-lm-validation-console.log" 2>&1
         byte_rc=$?
@@ -4194,6 +4200,7 @@ leg_check_remote_body() {
         -e "s|@WHEELINDEX@|$WHEEL_INDEX|g" \
         -e "s|@GPUARCHS@|$GPU_ARCHS|g" \
         -e "s|@BYTELMPYTHON@|$BYTE_LM_PYTHON|g" \
+        -e "s|@BYTELMSHAPE@|$BYTE_LM_SHAPE|g" \
         -e "s|@COMPACTACTION@|$BYTE_RESUME_ACTION|g" \
         -e "s|@BASEHANDOFFSHA@|$BYTE_BASE_SHA|g" \
         -e "s|@FOREIGNHANDOFFSHA@|$BYTE_FOREIGN_SHA|g" \

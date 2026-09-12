@@ -210,6 +210,17 @@ jobs:
           python3 -m pytest -q mojolearn/tests/test_byte_lm_host.py \
             mojolearn/tests/test_byte_lm_host_trainer.py 2>&1 | tee "$GATE_OUT/pytest_host.log"
 
+      # DEVIATION 2682. The shape helper replaced five sets of shape literals
+      # with one derivation, so the derivation is checked against the literals
+      # the certified b2-l32 run was produced and admitted with. If it ever
+      # drifts, this fails here rather than on a leased box.
+      - name: Shape derivation against the certified literals
+        if: always()
+        run: |
+          set -o pipefail
+          python3 -m pytest -q tools/test_byte_lm_shape.py 2>&1 \
+            | tee "$GATE_OUT/pytest_shape.log"
+
       # DEVIATION 2640: the threaded path against the reference path byte for
       # byte through the public surface, at every batch from 1 to 8 and every
       # length from 1 to 32, next bytes and losses, three parameter states,
@@ -230,7 +241,9 @@ jobs:
       # requires the gradient, the loss, and the post-step parameters and both
       # Adam moments to equal the Apple/Metal bytes exactly. Each step is
       # judged in isolation, so a failure names the step and the tensor.
-      # A few steps rather than all 128 while this is new; widen once it holds.
+      # All 128 steps by default. The shape is read from the capture rather
+      # than assumed (DEVIATION 2682), so this compares whatever shape the
+      # tree on this runner records, which today is the certified b2-l32.
       - name: CPU training step against the recorded Metal bytes
         if: always()
         run: |

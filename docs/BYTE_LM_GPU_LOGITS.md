@@ -91,6 +91,19 @@ so nothing here should be read as covering it. What is owed is one compile of
 `bindings/_mojolearn_byte_lm.mojo` on an Apple GPU followed by
 `tools/byte_lm_gpu_logits_sweep.py`.
 
+**On 2026-09-12 the same wall was measured precisely enough to say what it is,
+and it is not the admission gate.** A launcher that reads the pressure level and
+starts the guarded build in the same instant, rather than checking and then
+launching, was admitted at pressure 1. The compiler started and the guard killed
+it **6.1 seconds later**, returncode 143, reason `compressed memory grew by more
+than 256 MiB`. Its samples show the process at 2 MB, then 103 MB, then 242 MB,
+then 480 MB of resident memory, against 5.47 GB already compressed and 9.8 GB of
+swap in use. So the compile is not too slow for the window and does not lose a
+race at the door. An ordinary Mojo compile allocates faster than the guard's
+growth limit allows on a machine with no headroom, and that limit is there to
+keep this laptop usable. **Retrying cannot close this row. Freeing memory can,
+and so can any Apple machine that is not already swapping.**
+
 This work was written as DEVIATION 2660 and renumbered to 2658 before it
 merged, because 2660 was already taken on `main` by
 `bindings/_mojolearn_estimators.mojo` and 2660 upward is where the trees and
