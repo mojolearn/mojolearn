@@ -1,0 +1,9 @@
+# identity_break  mode=identical  2026-09-12 20:01:55  Linux-6.8.0-124-generic-x86_64-with-glibc2.35
+| lane             | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+| knn              | 6869ae45e01fcb7a | 23daf3a923d4c74f | 96db6b5a57d4d248 | 3956d623d56e1786 | c5404ea40ba502da | c5404ea40ba502da | 55dffcfe5d6aa112 | f4ddd08c4744ae8d | b73513bc451075d0 |
+| knn-clf          | 7fb71bb7ee2b9cbf | e49edb14ac08e443 | 9ddcb99c00d6b865 | a3167e29faf6ab4f | eb1e9c1b10e931a6 | eb1e9c1b10e931a6 | 855703a33d6460e5 | b875a97832653115 | 14109bcae1b2b950 |
+| knn-reg          | 33e7da5c3fdd343c | 556283a80ad1e387 | 81f9b8890b3f8185 | 0d128580a2408383 | 4c84ea510c9509c5 | 4c84ea510c9509c5 | 3bb71dcd3b676bd6 | 4fddd38927851559 | b34860cd7e03c8fe |
+
+cells=27 stable=27 moved=0 refused=0
+wrote /root/gemm_leg_out/amd-conf/ib/ab_knn2631_dflt.json

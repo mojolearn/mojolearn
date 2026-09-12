@@ -1,0 +1,5 @@
+ext /root/mojolearn/python/mojolearn/identical/_mojolearn_svm.so
+SVCHASH n=400 457e29b82bca9df9 want=457e29b82bca9df9 MATCH
+SVCHASH n=600 733a383c5699f427 want=733a383c5699f427 MATCH
+SVCHASH n=2000 2b66bc991a9c9ed0 want=2b66bc991a9c9ed0 MATCH
+SVCHASH_OK=1

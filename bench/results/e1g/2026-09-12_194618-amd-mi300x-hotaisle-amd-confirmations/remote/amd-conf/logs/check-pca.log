@@ -1,0 +1,238 @@
+Imported from /root/mojolearn/decomposition/checks/pca_check.mojo:53:
+/root/mojolearn/decomposition/impl/linalg/detail/pca.mojo:167:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        sh[0] = reduced_max
+        ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/pca_check.mojo:53:
+/root/mojolearn/decomposition/impl/linalg/detail/pca.mojo:169:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var biggest = sh[0]
+                  ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/pca_check.mojo:53:
+/root/mojolearn/decomposition/impl/linalg/detail/pca.mojo:181:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        sh[1] = reduced_first
+        ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/pca_check.mojo:53:
+/root/mojolearn/decomposition/impl/linalg/detail/pca.mojo:182:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        sh[2] = Float32(1.0)
+        ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/pca_check.mojo:53:
+/root/mojolearn/decomposition/impl/linalg/detail/pca.mojo:184:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var first = sh[1]
+                ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/pca_check.mojo:53:
+/root/mojolearn/decomposition/impl/linalg/detail/pca.mojo:190:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                sh[2] = Float32(-1.0)
+                ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/pca_check.mojo:53:
+/root/mojolearn/decomposition/impl/linalg/detail/pca.mojo:192:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                sh[2] = Float32(1.0)
+                ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/pca_check.mojo:53:
+/root/mojolearn/decomposition/impl/linalg/detail/pca.mojo:196:10: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    if sh[2] < Float32(0.0):
+       ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/pca_check.mojo:1730:
+/root/mojolearn/core/column_stats.mojo:438:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            tile[ty * (TRANSPOSE_TILE + 1) + tx] = src.unsafe_load(
+            ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/pca_check.mojo:1730:
+/root/mojolearn/core/column_stats.mojo:447:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                r2 * n_rows + c2, tile[tx * (TRANSPOSE_TILE + 1) + ty]
+                                  ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/pca_check.mojo:53:
+Imported from /root/mojolearn/decomposition/impl/linalg/detail/pca.mojo:10:
+/root/mojolearn/core/pinned_reduce.mojo:125:8: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    red[tid] = value
+    ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/pca_check.mojo:53:
+Imported from /root/mojolearn/decomposition/impl/linalg/detail/pca.mojo:10:
+/root/mojolearn/core/pinned_reduce.mojo:130:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            v[j] = red[tid + j * P]
+                   ~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/pca_check.mojo:53:
+Imported from /root/mojolearn/decomposition/impl/linalg/detail/pca.mojo:10:
+/root/mojolearn/core/pinned_reduce.mojo:136:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        red[tid] = v[0]
+        ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/pca_check.mojo:53:
+Imported from /root/mojolearn/decomposition/impl/linalg/detail/pca.mojo:10:
+/root/mojolearn/core/pinned_reduce.mojo:140:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        w[t] = red[t]
+               ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/pca_check.mojo:53:
+Imported from /root/mojolearn/decomposition/impl/linalg/detail/pca.mojo:10:
+/root/mojolearn/core/pinned_reduce.mojo:215:8: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    red[tid] = value
+    ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/pca_check.mojo:53:
+Imported from /root/mojolearn/decomposition/impl/linalg/detail/pca.mojo:10:
+/root/mojolearn/core/pinned_reduce.mojo:220:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var other = red[tid + step]
+                        ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/pca_check.mojo:53:
+Imported from /root/mojolearn/decomposition/impl/linalg/detail/pca.mojo:10:
+/root/mojolearn/core/pinned_reduce.mojo:221:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            if other > red[tid]:
+                       ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/pca_check.mojo:53:
+Imported from /root/mojolearn/decomposition/impl/linalg/detail/pca.mojo:10:
+/root/mojolearn/core/pinned_reduce.mojo:222:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = other
+                ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/pca_check.mojo:53:
+Imported from /root/mojolearn/decomposition/impl/linalg/detail/pca.mojo:10:
+/root/mojolearn/core/pinned_reduce.mojo:225:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var total = red[0]
+                ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/pca_check.mojo:53:
+Imported from /root/mojolearn/decomposition/impl/linalg/detail/pca.mojo:10:
+/root/mojolearn/core/pinned_reduce.mojo:244:8: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    red[tid] = value
+    ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/pca_check.mojo:53:
+Imported from /root/mojolearn/decomposition/impl/linalg/detail/pca.mojo:10:
+/root/mojolearn/core/pinned_reduce.mojo:249:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var other = red[tid + step]
+                        ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/pca_check.mojo:53:
+Imported from /root/mojolearn/decomposition/impl/linalg/detail/pca.mojo:10:
+/root/mojolearn/core/pinned_reduce.mojo:250:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            if other < red[tid]:
+                       ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/pca_check.mojo:53:
+Imported from /root/mojolearn/decomposition/impl/linalg/detail/pca.mojo:10:
+/root/mojolearn/core/pinned_reduce.mojo:251:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = other
+                ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/pca_check.mojo:53:
+Imported from /root/mojolearn/decomposition/impl/linalg/detail/pca.mojo:10:
+/root/mojolearn/core/pinned_reduce.mojo:254:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var total = red[0]
+                ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/pca_check.mojo:53:
+Imported from /root/mojolearn/decomposition/impl/linalg/detail/pca.mojo:30:
+/root/mojolearn/decomposition/checks/jacobi_eigh_device.mojo:360:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    rot[0] = cs[0]
+                    ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/pca_check.mojo:53:
+Imported from /root/mojolearn/decomposition/impl/linalg/detail/pca.mojo:30:
+/root/mojolearn/decomposition/checks/jacobi_eigh_device.mojo:361:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    rot[1] = cs[1]
+                    ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/pca_check.mojo:53:
+Imported from /root/mojolearn/decomposition/impl/linalg/detail/pca.mojo:30:
+/root/mojolearn/decomposition/checks/jacobi_eigh_device.mojo:364:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                var c = rot[0]
+                        ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/pca_check.mojo:53:
+Imported from /root/mojolearn/decomposition/impl/linalg/detail/pca.mojo:30:
+/root/mojolearn/decomposition/checks/jacobi_eigh_device.mojo:365:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                var s = rot[1]
+                        ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/pca_check.mojo:53:
+Imported from /root/mojolearn/decomposition/impl/linalg/detail/pca.mojo:30:
+/root/mojolearn/decomposition/checks/jacobi_eigh_device.mojo:142:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            red[tid] = value
+            ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/pca_check.mojo:53:
+Imported from /root/mojolearn/decomposition/impl/linalg/detail/pca.mojo:30:
+/root/mojolearn/decomposition/checks/jacobi_eigh_device.mojo:147:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                v[j] = red[tid + j * P]
+                       ~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/pca_check.mojo:53:
+Imported from /root/mojolearn/decomposition/impl/linalg/detail/pca.mojo:30:
+/root/mojolearn/decomposition/checks/jacobi_eigh_device.mojo:152:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            red[tid] = v[0]
+            ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/pca_check.mojo:53:
+Imported from /root/mojolearn/decomposition/impl/linalg/detail/pca.mojo:30:
+/root/mojolearn/decomposition/checks/jacobi_eigh_device.mojo:156:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            w[t] = red[t]
+                   ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/pca_check.mojo:378:
+/root/mojolearn/core/gram_splitk.mojo:612:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    tile[i] = ftz(
+                    ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/pca_check.mojo:378:
+/root/mojolearn/core/gram_splitk.mojo:617:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    tile[i] = x.unsafe_load(t * m + i)
+                    ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/pca_check.mojo:378:
+/root/mojolearn/core/gram_splitk.mojo:632:37: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        cv[b] = tile[base + bj0 + b]
+                                ~~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/pca_check.mojo:378:
+/root/mojolearn/core/gram_splitk.mojo:634:38: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        var xi = tile[base + bi0 + a]
+                                 ~~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/pca_check.mojo:378:
+/root/mojolearn/core/gram_splitk.mojo:651:30: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                var xj = tile[base + jm]
+                         ~~~~^~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/pca_check.mojo:378:
+/root/mojolearn/core/gram_splitk.mojo:656:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            tile[base + Int(ii[c])], xj, acc[c]
+                            ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/pca_check.mojo:378:
+/root/mojolearn/core/gram_splitk.mojo:670:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            tile[base + Int(ii[c])],
+                            ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/decomposition/checks/pca_check.mojo:378:
+/root/mojolearn/core/gram_splitk.mojo:671:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            tile[base + Int(jj[c])],
+                            ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/decomposition/checks/pca_check.mojo:2299:9: warning: ref 'c' was never used, remove it?
+    for c in range(nc):
+        ^
+Included from /root/mojolearn/decomposition/checks/pca_check.mojo:53:
+Included from /root/mojolearn/decomposition/impl/linalg/detail/pca.mojo:30:
+/root/mojolearn/decomposition/checks/jacobi_eigh_device.mojo:196:20: warning: assignment to 't' was never used; assign to '_' instead?
+    var t = Float32(0.0)
+                   ^
+Included from /root/mojolearn/decomposition/checks/pca_check.mojo:1742:
+/root/mojolearn/decomposition/checks/pca_sabotage.mojo:152:20: warning: assignment to 'v' was never used; assign to '_' instead?
+    var v = Float32(0.0)
+                   ^
+check_covariance_is_symmetric OK: all 6 off-diagonal pairs bitwise equal
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: the 129-column FALLBACK arm COMPLETED under IDENTICAL. It cannot have run on the split-K kernel at that width, so it ran on the vendor matmul and returned a model this mode promises is vendor-independent and is not.
+/root/mojolearn/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1

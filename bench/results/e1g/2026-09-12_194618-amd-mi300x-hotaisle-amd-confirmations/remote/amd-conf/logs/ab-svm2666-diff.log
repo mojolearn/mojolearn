@@ -1,0 +1,22 @@
+| lane/fixture                 | verdict    | amd-gfx942       | amd-gfx942       |
+|------------------------------|------------|------------------|------------------|
+| iforest/base                 | IDENTICAL x2 | 8703d4a008ffd13d | 8703d4a008ffd13d |
+| iforest/denormal             | IDENTICAL x2 | 54ea9b5c8c3fc38b | 54ea9b5c8c3fc38b |
+| iforest/denormal_ftz         | IDENTICAL x2 | 54ea9b5c8c3fc38b | 54ea9b5c8c3fc38b |
+| iforest/dupes                | IDENTICAL x2 | b879bcf3dcf99f38 | b879bcf3dcf99f38 |
+| iforest/hashed               | IDENTICAL x2 | 72260557474879ae | 72260557474879ae |
+| iforest/negative             | IDENTICAL x2 | a5b7676e39778af5 | a5b7676e39778af5 |
+| iforest/odd                  | IDENTICAL x2 | 9b849a13c8d35adb | 9b849a13c8d35adb |
+| iforest/ties                 | IDENTICAL x2 | 5043855ee14799da | 5043855ee14799da |
+| iforest/wide                 | IDENTICAL x2 | 8703d4a008ffd13d | 8703d4a008ffd13d |
+| svc/base                     | IDENTICAL x2 | dec306e940b8a444 | dec306e940b8a444 |
+| svc/denormal                 | IDENTICAL x2 | 549c0b5c319d84cf | 549c0b5c319d84cf |
+| svc/denormal_ftz             | IDENTICAL x2 | 549c0b5c319d84cf | 549c0b5c319d84cf |
+| svc/dupes                    | IDENTICAL x2 | b2f0d9a49c9f241c | b2f0d9a49c9f241c |
+| svc/hashed                   | IDENTICAL x2 | 274bf9087fb0750e | 274bf9087fb0750e |
+| svc/negative                 | IDENTICAL x2 | 667155f7eda847aa | 667155f7eda847aa |
+| svc/odd                      | IDENTICAL x2 | 61b1676a7e40c914 | 61b1676a7e40c914 |
+| svc/ties                     | IDENTICAL x2 | 2093351e33d072ed | 2093351e33d072ed |
+| svc/wide                     | IDENTICAL x2 | 550d1845e417ca18 | 550d1845e417ca18 |
+
+summary: IDENTICAL=18

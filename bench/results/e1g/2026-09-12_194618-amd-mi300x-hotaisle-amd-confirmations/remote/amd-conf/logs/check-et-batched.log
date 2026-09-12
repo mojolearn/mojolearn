@@ -1,0 +1,106 @@
+Imported from /root/mojolearn/extratrees/checks/device_batched_check.mojo:51:
+/root/mojolearn/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:2045:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=h_data.unsafe_ptr(), src=x_col_major.unsafe_ptr(), count=count)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/extratrees/checks/device_batched_check.mojo:51:
+/root/mojolearn/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:2046:5: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+    memcpy(dest=h_labels.unsafe_ptr(), src=class_ids.unsafe_ptr(), count=Int(n_rows))
+    ^~~~~~
+    unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/extratrees/checks/device_batched_check.mojo:51:
+Imported from /root/mojolearn/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:78:
+/root/mojolearn/core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/extratrees/checks/device_batched_check.mojo:51:
+Imported from /root/mojolearn/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:1996:
+/root/mojolearn/ensemble/host_layout.mojo:84:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=dst, src=src, count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/extratrees/checks/device_batched_check.mojo:51:
+Imported from /root/mojolearn/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:1996:
+/root/mojolearn/ensemble/host_layout.mojo:93:24: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        memcpy(dest=dp + i0, src=sp + i0, count=i1 - i0)
+                    ~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn/extratrees/checks/device_batched_check.mojo:51:
+Imported from /root/mojolearn/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:1996:
+/root/mojolearn/ensemble/host_layout.mojo:93:37: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        memcpy(dest=dp + i0, src=sp + i0, count=i1 - i0)
+                                 ~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn/extratrees/checks/device_batched_check.mojo:51:
+Imported from /root/mojolearn/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:1996:
+/root/mojolearn/ensemble/host_layout.mojo:93:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=dp + i0, src=sp + i0, count=i1 - i0)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/extratrees/checks/device_batched_check.mojo:51:
+Imported from /root/mojolearn/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:78:
+/root/mojolearn/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/extratrees/checks/device_batched_check.mojo:51:
+Imported from /root/mojolearn/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:78:
+/root/mojolearn/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/extratrees/checks/device_batched_check.mojo:51:
+Imported from /root/mojolearn/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:78:
+/root/mojolearn/core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/extratrees/checks/device_batched_check.mojo:51:
+Imported from /root/mojolearn/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:78:
+/root/mojolearn/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/extratrees/checks/device_batched_check.mojo:51:
+/root/mojolearn/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:2803:24: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            var sb = sp.bitcast[UInt8]()
+                     ~~^~~~~~~~
+                        unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/extratrees/checks/device_batched_check.mojo:51:
+/root/mojolearn/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:2804:24: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            var hb = hp.bitcast[UInt8]()
+                     ~~^~~~~~~~
+                        unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/extratrees/checks/device_batched_check.mojo:51:
+/root/mojolearn/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:2824:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=hp, src=sp, count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+[device] the batched forest on AMD Instinct MI300X VF
+[classification] fit_classification_device vs one-tree builds
+    12 trees, 11 of 11 differ from tree 0; merged vs serial: 0 node diffs, 0 leaf-bit diffs
+[batch width] max_batch_size=3 must not move a tree
+    8 trees at width 3: identical
+[max_leaves] the budget's break order survives merging
+    6 trees at max_leaves=9: identical
+[groups] row_slot_cap at two trees: three groups, same forest
+    5 trees in groups of 2: identical
+[regression] fit_regression_device vs one-tree builds
+    10 trees, 9 of 9 differ from tree 0; merged vs serial: 0 node diffs, 0 leaf-bit diffs
+[sabotage] the two isolation mechanisms, seen to hold the gate
+    scalar-tree moved 2688 / 2052 nodes (clf/reg); shared-row-base moved 2716 / 2676
+device_batched:  45 cells
+device_batched_check: PASS

@@ -1,0 +1,13 @@
+CHECK resident layout=separate_arrays mode=fast (small correctness fixture)
+RESIDENT_FOREST_PASS repeated borrowed/List/transient/stump, release/stale/newID, dimensions/finite input+output/graph, destruction
+CHECK resident layout=packed_siblings mode=fast (small correctness fixture)
+RESIDENT_FOREST_PASS repeated borrowed/List/transient/stump, release/stale/newID, dimensions/finite input+output/graph, destruction
+CHECK resident layout=separate_arrays mode=deterministic (small correctness fixture)
+RESIDENT_FOREST_PASS repeated borrowed/List/transient/stump, release/stale/newID, dimensions/finite input+output/graph, destruction
+CHECK resident layout=packed_siblings mode=deterministic (small correctness fixture)
+RESIDENT_FOREST_PASS repeated borrowed/List/transient/stump, release/stale/newID, dimensions/finite input+output/graph, destruction
+CHECK resident layout=separate_arrays mode=identical (small correctness fixture)
+RESIDENT_FOREST_PASS repeated borrowed/List/transient/stump, release/stale/newID, dimensions/finite input+output/graph, destruction
+CHECK resident layout=packed_siblings mode=identical (small correctness fixture)
+RESIDENT_FOREST_PASS repeated borrowed/List/transient/stump, release/stale/newID, dimensions/finite input+output/graph, destruction
+PASS forest resident layout matrix; logs: /root/gemm_leg_out/amd-conf/logs/forest_layouts

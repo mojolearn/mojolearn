@@ -1,0 +1,25 @@
+Imported from /root/mojolearn/checks/forest_inference_model.mojo:8:
+/root/mojolearn/core/forest_inference.mojo:171:5: warning: '@parameter for' is deprecated; use 'comptime for'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/checks/forest_inference_model.mojo:8:
+/root/mojolearn/core/forest_inference.mojo:178:13: warning: '@parameter for' is deprecated; use 'comptime for'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /root/mojolearn/checks/forest_inference_model.mojo:8:
+/root/mojolearn/core/forest_inference.mojo:184:5: warning: '@parameter for' is deprecated; use 'comptime for'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/checks/forest_inference_model.mojo:8:
+/root/mojolearn/core/forest_inference.mojo:191:13: warning: '@parameter for' is deprecated; use 'comptime for'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /root/mojolearn/checks/forest_inference_model.mojo:8:
+/root/mojolearn/core/forest_inference.mojo:197:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 

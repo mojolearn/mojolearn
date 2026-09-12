@@ -1,0 +1,50 @@
+commit=5696ff68 parent ba69c692
+commit_sha=5696ff68bfab6aa531da7425e2d6f17bbd331df3
+provider=hotaisle
+vendor=amd
+team=andrews-team
+spec=13core
+lane=amd-confirmations
+minutes=60
+gates=0
+bare=0
+test_watchdog=0
+gpu_archs_requested=<unset>
+target_column=amd
+runtime_requested=auto
+image=rocm/dev-ubuntu-22.04:6.4.1-complete
+extra=/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/bd222cd8-b516-43e7-bdbd-5681737e5302/scratchpad/amd_conf_body.sh
+extra_sha256=5ae140435564bfbbaa06f10b679360919254a04fe68e53b3365961174aa82254
+bundle_bytes=10758024
+bundle_sha256=4bcd8a4dd1be7dc06cb961fa4ecf780901afd9399ba8367d00c563111e6d5188
+source_sha256_local=576aab9236bafeec7e07da32d7e4f7606b6510d0b34984420f28661dd31b0367
+mode=rent
+started=2026-09-12T19:46:21Z
+balance_before_cents=2598
+slot=/tmp/mojolearn-hotaisle-slot.1 taken 2026-09-12T19:46:24Z
+price_cents_per_hour=299 min_reservation_minutes=1
+local_key_in_ps=not_visible
+create_http=200 create_utc=2026-09-12T19:46:31Z
+vm_ref=b9edb560-eb3b-4633-abd3-b54dcd429f42
+vm_name=enc1-gpuvm016
+description=mojolearn:amd-confirmations:20260912T194625Z
+ssh=hotaisle@23.183.40.86:22 running_after_seconds=13
+box_key_in_ps=not_visible
+runtime=docker
+box_gfx=gfx942
+gpu_archs=gfx942
+upload_seconds=7
+image_pull=pull_exit=0 pull_seconds=94
+work_seconds=3212
+body=done
+source_sha256_match=yes
+remote_pixi_install_exit=0
+remote_pixi_install_seconds=4
+remote_device_check_exit=SKIPPED
+remote_card_exit=SKIPPED
+remote_extra_exit=1
+remote_body_exit=0
+finished=2026-09-12T20:13:54Z
+lease_used_seconds=1649
+slot=released /tmp/mojolearn-hotaisle-slot.1 2026-09-12T20:14:02Z
+balance_after_cents=4973

@@ -1,0 +1,8 @@
+# identity_break  mode=identical  2026-09-12 20:02:50  Linux-6.8.0-124-generic-x86_64-with-glibc2.35
+| lane             | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+| svc              | dec306e940b8a444 | 2093351e33d072ed | 274bf9087fb0750e | 550d1845e417ca18 | 549c0b5c319d84cf | 549c0b5c319d84cf | b2f0d9a49c9f241c | 61b1676a7e40c914 | 667155f7eda847aa |
+| iforest          | 8703d4a008ffd13d | 5043855ee14799da | 72260557474879ae | 8703d4a008ffd13d | 54ea9b5c8c3fc38b | 54ea9b5c8c3fc38b | b879bcf3dcf99f38 | 9b849a13c8d35adb | a5b7676e39778af5 |
+
+cells=18 stable=18 moved=0 refused=0
+wrote /root/gemm_leg_out/amd-conf/ib/ab_svm2666_dflt.json

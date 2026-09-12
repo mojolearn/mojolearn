@@ -1,0 +1,12 @@
+mac_deadman_pid=69939
+mac_deadman_dir=/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-hotaisle-deadman-69729
+mac_deadman_fires_at=2026-09-12T20:46:25Z
+mac_deadman_keyed_by=vm_ref.txt (deployment_id from the create response) and description mojolearn:amd-confirmations:20260912T194625Z
+watchdog_seconds=3570
+watchdog_fires_at=2026-09-12T20:46:36Z
+watchdog_WATCHDOG_ALIVE pid=2108
+watchdog_REF_BAKED_IN=1
+watchdog_TOKEN_GET_HTTP=200
+watchdog_DESC_MATCH
+watchdog_WATCHDOG_STILL_ALIVE_SECOND_SESSION
+mac_deadman=cancelled 2026-09-12T20:14:02Z

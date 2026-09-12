@@ -1,0 +1,40 @@
+| lane/fixture                 | verdict    | amd-gfx942       | amd-gfx942       |
+|------------------------------|------------|------------------|------------------|
+| gbdt-depthwise/base          | IDENTICAL x2 | 38726fc0c93c0bff | 38726fc0c93c0bff |
+| gbdt-depthwise/denormal      | IDENTICAL x2 | 64ba350c759ff2e9 | 64ba350c759ff2e9 |
+| gbdt-depthwise/denormal_ftz  | IDENTICAL x2 | 64ba350c759ff2e9 | 64ba350c759ff2e9 |
+| gbdt-depthwise/dupes         | IDENTICAL x2 | e521424a96e216cb | e521424a96e216cb |
+| gbdt-depthwise/hashed        | IDENTICAL x2 | 9455870882645f48 | 9455870882645f48 |
+| gbdt-depthwise/negative      | IDENTICAL x2 | d77fc9f6a3eee0a2 | d77fc9f6a3eee0a2 |
+| gbdt-depthwise/odd           | IDENTICAL x2 | fb9e5c03088814f6 | fb9e5c03088814f6 |
+| gbdt-depthwise/ties          | IDENTICAL x2 | 465cb10f303e005a | 465cb10f303e005a |
+| gbdt-depthwise/wide          | IDENTICAL x2 | 2a77ec865e62539a | 2a77ec865e62539a |
+| gbdt-lossguide/base          | IDENTICAL x2 | bc3017cb29615105 | bc3017cb29615105 |
+| gbdt-lossguide/denormal      | IDENTICAL x2 | b0a6d4a26ed4d77c | b0a6d4a26ed4d77c |
+| gbdt-lossguide/denormal_ftz  | IDENTICAL x2 | b0a6d4a26ed4d77c | b0a6d4a26ed4d77c |
+| gbdt-lossguide/dupes         | IDENTICAL x2 | b1546f9b3c4293a5 | b1546f9b3c4293a5 |
+| gbdt-lossguide/hashed        | IDENTICAL x2 | 3841103ecb3ac05d | 3841103ecb3ac05d |
+| gbdt-lossguide/negative      | IDENTICAL x2 | 67b332fcf8b5d0dd | 67b332fcf8b5d0dd |
+| gbdt-lossguide/odd           | IDENTICAL x2 | 9fd309c55a93e6c3 | 9fd309c55a93e6c3 |
+| gbdt-lossguide/ties          | IDENTICAL x2 | 19d199f7bfa16c25 | 19d199f7bfa16c25 |
+| gbdt-lossguide/wide          | IDENTICAL x2 | b9cc1b2b55425cdc | b9cc1b2b55425cdc |
+| gbdt-rmse/base               | IDENTICAL x2 | 3f8aef8d73be249c | 3f8aef8d73be249c |
+| gbdt-rmse/denormal           | IDENTICAL x2 | 400f099e655dc453 | 400f099e655dc453 |
+| gbdt-rmse/denormal_ftz       | IDENTICAL x2 | 400f099e655dc453 | 400f099e655dc453 |
+| gbdt-rmse/dupes              | IDENTICAL x2 | 49848bfd3c26b52e | 49848bfd3c26b52e |
+| gbdt-rmse/hashed             | IDENTICAL x2 | a89dba586c0f1ab4 | a89dba586c0f1ab4 |
+| gbdt-rmse/negative           | IDENTICAL x2 | e54f74cdab3f29f0 | e54f74cdab3f29f0 |
+| gbdt-rmse/odd                | IDENTICAL x2 | 7b54ca9d69e29714 | 7b54ca9d69e29714 |
+| gbdt-rmse/ties               | IDENTICAL x2 | 88cba1574daa922e | 88cba1574daa922e |
+| gbdt-rmse/wide               | IDENTICAL x2 | 5ea3a06d9df1d862 | 5ea3a06d9df1d862 |
+| gbdt-symmetric/base          | IDENTICAL x2 | 56560dec5bdb6cb9 | 56560dec5bdb6cb9 |
+| gbdt-symmetric/denormal      | IDENTICAL x2 | 56560dec5bdb6cb9 | 56560dec5bdb6cb9 |
+| gbdt-symmetric/denormal_ftz  | IDENTICAL x2 | 56560dec5bdb6cb9 | 56560dec5bdb6cb9 |
+| gbdt-symmetric/dupes         | IDENTICAL x2 | 9d55545ce5f2ac2b | 9d55545ce5f2ac2b |
+| gbdt-symmetric/hashed        | IDENTICAL x2 | cf3de2636433b65a | cf3de2636433b65a |
+| gbdt-symmetric/negative      | IDENTICAL x2 | fb9966f26639c286 | fb9966f26639c286 |
+| gbdt-symmetric/odd           | IDENTICAL x2 | 0836bd47530040d0 | 0836bd47530040d0 |
+| gbdt-symmetric/ties          | IDENTICAL x2 | b32c469f812adf25 | b32c469f812adf25 |
+| gbdt-symmetric/wide          | IDENTICAL x2 | bc0084b9b1e30f87 | bc0084b9b1e30f87 |
+
+summary: IDENTICAL=36
