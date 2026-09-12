@@ -234,7 +234,8 @@ jobs:
         run: |
           set -o pipefail
           python3 -m pytest -q tools/test_byte_lm_shape.py \
-            tools/test_byte_lm_capture_witness.py 2>&1 \
+            tools/test_byte_lm_capture_witness.py \
+            tools/test_byte_lm_callsites.py 2>&1 \
             | tee "$GATE_OUT/pytest_shape.log"
 
       # DEVIATION 2640: the threaded path against the reference path byte for
