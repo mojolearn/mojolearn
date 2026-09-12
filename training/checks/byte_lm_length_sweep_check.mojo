@@ -6,7 +6,9 @@ Every byte LM identity check in the tree runs the default profile, whose
 `length` is 32. `ByteConfig.validate` carries two guards that a longer
 sequence walks into, and NOBODY HAD MEASURED WHICH ONE BINDS FIRST:
 
-  * the length cap, "length exceeds RoPE table limit 8192";
+  * the length cap, "length exceeds the absolute-position ceiling 8192"
+    (DEVIATION 812: the Cody-Waite domain of `_cephes_sincosf_core`, NOT a
+    table size -- nothing is tabulated at 8192 entries);
   * the int32 indexing guard on the shape products, whose largest term is
     `batch * length * n_heads * length` -- QUADRATIC in length, so it is
     the term that grows fastest and the one a long-context sweep meets.

@@ -4,6 +4,26 @@
 comptime BYTE_CONFIG_LIMIT = 2147483647
 comptime BYTE_DEFAULT_PROFILE = "mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1"
 
+comptime BYTE_MAX_ABS_POSITION = 8192
+"""Contract section 3 and DEVIATION 812: the Cody-Waite domain of
+`_cephes_sincosf_core`, shared by `portable_sinf` and `portable_cosf`.
+
+NOT A TABLE SIZE. Nothing is tabulated at 8192 entries; this is the largest
+absolute position whose sine and cosine the portable kernels can argument-reduce
+without losing the bits that identity depends on. The guard below used to call
+it a "RoPE table limit", which sent readers hunting for a table that is not the
+constraint. The genuine table bounds live elsewhere and are a different check:
+`byte_lm_host.mojo` and `byte_lm_host_kernels.mojo` refuse a length past the
+rotary table the RUNNING model was actually built for, which is a configured
+size, not this ceiling.
+
+Duplicated deliberately rather than imported from
+`transformer/impl/llama/modeling_llama.mojo`, whose `MAX_ABS_POSITION` is the
+same 8192: that module carries GPU imports and this one is host-only by
+contract. `transformer/checks/transformer_fixture.mojo` duplicates it for the
+same reason. STRICTLY GREATER THAN refuses, so a length of exactly 8192 is
+legal, matching llama."""
+
 
 def _byte_product(a: Int, b: Int) raises -> Int:
     if a < 0 or b < 0 or (b > 0 and a > BYTE_CONFIG_LIMIT // b):
@@ -42,8 +62,16 @@ struct ByteConfig(Copyable, Movable):
         for value in fields:
             if value <= 0 or value > 1048576:
                 raise Error("byte LM: shape fields must be in [1,1048576]")
-        if self.length > 8192:
-            raise Error("byte LM: length exceeds RoPE table limit 8192")
+        if self.length > BYTE_MAX_ABS_POSITION:
+            raise Error(
+                String("byte LM: length ")
+                + String(self.length)
+                + " exceeds the absolute-position ceiling "
+                + String(BYTE_MAX_ABS_POSITION)
+                + " (DEVIATION 812: the Cody-Waite domain of"
+                + " _cephes_sincosf_core, shared by portable_sinf and"
+                + " portable_cosf)"
+            )
         if self.d_model != _byte_product(self.n_heads, self.head_dim):
             raise Error("byte LM: d_model must equal n_heads*head_dim")
         if self.n_heads % self.n_kv != 0:

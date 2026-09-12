@@ -17,6 +17,25 @@ def refused(config: ByteConfig) raises:
     require(rejected, "invalid configuration accepted")
 
 
+def refused_naming(config: ByteConfig, needle: String) raises:
+    """Refused BY NAME: `refused` above only proves that SOME guard fired, so a
+    guard whose message drifts, or a case that trips a different guard than the
+    author intended, both still pass it. This one pins WHICH refusal happened by
+    requiring the message to contain `needle`."""
+    var rejected = False
+    var message = String("")
+    try:
+        config.validate()
+    except e:
+        rejected = True
+        message = String(e)
+    require(rejected, "invalid configuration accepted")
+    require(
+        message.find(needle) >= 0,
+        String("refusal did not name '") + needle + "': " + message,
+    )
+
+
 def main() raises:
     var default = ByteConfig()
     default.validate()
@@ -57,7 +76,12 @@ def main() raises:
     refused(ByteConfig(0))
     refused(ByteConfig(-1))
     refused(ByteConfig(1048577))
-    refused(ByteConfig(2, 8193))
+    # DEVIATION 812's ceiling, pinned BY NAME: this case is the only one that
+    # trips the absolute-position guard, and the guard's whole value is saying
+    # which bound it is. `refused` alone would still pass if the message drifted
+    # back to calling 8192 a "RoPE table limit", which it is not -- nothing is
+    # tabulated at 8192 entries.
+    refused_naming(ByteConfig(2, 8193), "absolute-position ceiling")
     refused(ByteConfig(2, 32, 33))
     refused(ByteConfig(2, 32, 32, 4, 3))
     refused(ByteConfig(2, 32, 12, 4, 2, 3))
