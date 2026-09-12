@@ -212,11 +212,18 @@ jobs:
       # SHA-256 its own capture.json records. The gate above reads parameters
       # and loss only, and trusted comparison.json's identity_admitted flag
       # for the rest; this reads the bytes. No GPU, no binding, about a second.
-      - name: Training capture, three vendors must agree byte for byte
+      - name: Training capture, recorded digests and any vendors present
         if: always()
         run: |
           set -o pipefail
+          # --require-vendors 1 is deliberate and the verdict line says which
+          # trees it had. The checkout above fetches only the three-vendor
+          # bundle, whose raw capture is Apple; the CUDA and HIP trees are
+          # separate result trees totalling about 308 MB and are not worth
+          # pulling onto seven runners per push. The cross-vendor comparison is
+          # run with --require-vendors 3 from a full checkout instead.
           python3 tools/byte_lm_cpu_train_gate.py vendors --steps all --verify-digests \
+            --require-vendors 1 \
             --report "$GATE_OUT/train_capture.json" 2>&1 | tee "$GATE_OUT/train_capture.log"
 
       # DEVIATION 2640's two Mojo checks, built with the binding's CPU target so
