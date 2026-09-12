@@ -188,11 +188,15 @@ the H100, then gate the Apple M4 and an AMD box before merging.
      because the margin is 0.3 percent with gbdt-symmetric at 1.000 and because
      it was timed with 2636 ON underneath, which is no longer the default.
      Re-measure it against the new default before promoting it.
-     STILL OWED: the CatBoost and XGBoost opponent cells for this tuple. They
-     were ~20 minutes from done when I REAPED THE POD, which was wrong: the run
-     was up because those rows are owed, and the box had already paid the 472 MB
-     fetch, the decode and four builds. A fresh pod repays all of that. Rule
-     now recorded: never reap while an owed run is in flight.
+     The CatBoost and XGBoost opponent cells for this tuple are now DONE too,
+     on a second pod (u4elzj1eo486ps) that had to repay the whole setup because
+     I reaped the first one ~20 minutes early. Rows in
+     bench/OPPONENT_REFERENCE.md: ours beats CatBoost on four of six cells
+     (symmetric 0.437x taxi and 0.830x Istella-S on CatBoost's own policy) but
+     is 1.030x on Istella-S depthwise and 0.997x parity on Istella-S lossguide,
+     and XGBoost is faster wherever it competes, up to 1.995x on taxi lossguide.
+     That XGBoost lossguide gap is the biggest single number left on the GBDT
+     board. Rule now in ENGINEERING_RULES 11: never cancel a run that is owed.
    - **Pointwise Istella-S** (`ours-ab` and the greedy control). The taxi
      result stands and is strong: the opt-in pointwise arm 1803.3 -> 795.4 ms
      (0.441x, medians of nine interleaved rounds), logloss 0.525925 ->

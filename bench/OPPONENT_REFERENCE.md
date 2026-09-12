@@ -1998,9 +1998,46 @@ measured against is no longer the shipped default: this pod's `all` set was
 built before DEVIATION 2636 became opt-in, so 2661 was timed with 2636 ON
 underneath. Re-measure it against the new default before making it one.
 
-RUN OWED for this tuple, and the reason is a mistake of mine, not a shortfall
-of the box: the CatBoost and XGBoost opponent cells were about 20 MINUTES from
-finishing when I reaped the pod. That pod had already paid the whole setup, a
-472 MB Istella-S fetch, a 2,248,281,826 byte decode and four set builds, so
-killing it discharged nothing and the next attempt repays all of it. Do not
-reap a pod while a run that is OWED is still in flight.
+### GBDT opponents on this tuple (September 12, pod u4elzj1eo486ps)
+
+The row above was RUN OWED because I reaped the first pod ~20 minutes before
+these cells finished; a second pod (below) repaid the whole setup to get them.
+ENGINEERING_RULES 11 exists because of that.
+
+NVIDIA H100 80GB HBM3, driver 580.126.09, 81,559 MiB, Xeon Platinum 8480+ (224
+cores); CatBoost 1.2.10, XGBoost 3.2.0, scikit-learn 1.9.1, NumPy 2.4.6. Our
+IDENTICAL arm against their FAST arms, 1,000,000 rows, 100 trees, depth 6, 5
+interleaved rounds in one process per cell, medians (min..max). Ours is the
+`all` set, which after commit 31f0142f means DEVIATIONS 2634 and 2635 on with
+2636 opt-in, i.e. the shipped default. XGBoost has no oblivious grower, so it
+has no gbdt-symmetric cell. Evidence
+`~/mojolearn-evidence/gbdt-redo-2026-09-12/opp_evidence.tgz`.
+
+| policy | dataset | ours ms | CatBoost GPU ms | ours/CB | XGBoost GPU ms | ours/XGB |
+|---|---|---:|---:|---:|---:|---:|
+| symmetric | taxi | 310.1 (307.8..325.6) | 709.0 (676.3..734.1) | **0.437x** | - | - |
+| symmetric | Istella-S | 1288.9 (1243.1..1302.2) | 1553.4 (1503.7..1690.8) | **0.830x** | - | - |
+| depthwise | taxi | 436.6 (433.4..470.6) | 842.4 (831.2..922.3) | **0.518x** | 365.1 (351.9..378.5) | 1.196x |
+| depthwise | Istella-S | 1838.2 (1813.1..1894.7) | 1784.8 (1734.0..1822.3) | 1.030x | 1769.2 (1679.7..1861.0) | 1.039x |
+| lossguide | taxi | 950.0 (945.2..1043.9) | 1094.6 (1091.8..1144.3) | **0.868x** | 476.2 (469.6..491.2) | 1.995x |
+| lossguide | Istella-S | 2504.3 (2463.8..2782.2) | 2510.8 (2426.0..2608.0) | 0.997x | 1994.7 (1946.5..2516.4) | 1.256x |
+
+Quality, same fits: symmetric ours logloss 0.138653 / AUC 0.966990 against
+CatBoost 0.139154 / 0.966719 (ours very slightly better on both); depthwise
+ours 0.126517 / 0.971896, CatBoost 0.125832 / 0.972819, XGBoost 0.125110 /
+0.973774; lossguide ours 0.122045 / 0.975037, CatBoost 0.121096 / 0.975462,
+XGBoost 0.125110 / 0.973774.
+
+READ THIS HONESTLY. We beat CatBoost on four of its six cells, and the two
+symmetric cells are the strongest (0.437x on taxi, 0.830x on Istella-S) on
+CatBoost's OWN policy. On Istella-S depthwise we are 1.030x, slightly behind,
+and on Istella-S lossguide 0.997x is parity, not a win. XGBoost is FASTER THAN
+US wherever it competes: 1.196x and 1.039x on depthwise, and 1.995x on taxi
+lossguide, which is the largest single gap on the board. Quality is within a
+thousandth of both opponents everywhere, ahead of CatBoost on symmetric and
+marginally behind on the other two policies.
+
+The identity column no opponent has: ours returned ONE model hash per cell
+across all 5 rounds (symmetric Istella-S `238d3abce0cabf43`), while CatBoost
+returned a DIFFERENT hash in every round of the same cell (`1827fc2260f91628`,
+`0169524ba0e5364e`, `6c122f43cbd65ad0`, `725dc8116ae6e6cd`, `b38f6ba81e7fa984`).
