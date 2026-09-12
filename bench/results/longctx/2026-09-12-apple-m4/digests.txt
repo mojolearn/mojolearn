@@ -1,0 +1,30 @@
+== m4-L32.log
+shape=B1_L32_nh12_nkv12_hd64_win0 visible_cells=6336 S=32 key_lo=0 pos0=0
+DIGEST hashed baseline ctx 7dfbb19bce702d3a amax 931fc043d20c1955 denom ebe3ec9ca4a2c9a5 zdot 5b1cbeed380fcc27 dq d29df356f8e02ece dk e3213d4789d25791 dv cfeb21849c020d97
+DIGEST hashed eager ctx 7dfbb19bce702d3a amax 931fc043d20c1955 denom ebe3ec9ca4a2c9a5 zdot 5b1cbeed380fcc27 dq d29df356f8e02ece dk e3213d4789d25791 dv cfeb21849c020d97
+DIGEST hashed stash_tiled ctx 7dfbb19bce702d3a amax 931fc043d20c1955 denom ebe3ec9ca4a2c9a5 zdot 5b1cbeed380fcc27 dq d29df356f8e02ece dk e3213d4789d25791 dv cfeb21849c020d97
+DIGEST heavytail baseline ctx 8b211386ec588c76 amax 49497972810a22e2 denom 563388caf3b91c54 zdot 5508bdffbf7de20e dq 7f80313153b71ac5 dk 52d1c9d63670145a dv fa029afe121313fb
+DIGEST heavytail eager ctx 8b211386ec588c76 amax 49497972810a22e2 denom 563388caf3b91c54 zdot 5508bdffbf7de20e dq 7f80313153b71ac5 dk 52d1c9d63670145a dv fa029afe121313fb
+DIGEST heavytail stash_tiled ctx 8b211386ec588c76 amax 49497972810a22e2 denom 563388caf3b91c54 zdot 5508bdffbf7de20e dq 7f80313153b71ac5 dk 52d1c9d63670145a dv fa029afe121313fb
+== m4-L128.log
+shape=B1_L128_nh12_nkv12_hd64_win0 visible_cells=99072 S=128 key_lo=0 pos0=0
+DIGEST hashed baseline ctx acbd2434ecadde6b amax da608bb6699b49b7 denom 2e273363bca21d02 zdot 4543b007d5ecf84a dq 456a52edec73b195 dk 6e74b1049e7b52ac dv 8a9786e12c70593c
+DIGEST hashed eager ctx acbd2434ecadde6b amax da608bb6699b49b7 denom 2e273363bca21d02 zdot 4543b007d5ecf84a dq 456a52edec73b195 dk 6e74b1049e7b52ac dv 8a9786e12c70593c
+DIGEST hashed stash_tiled ctx acbd2434ecadde6b amax da608bb6699b49b7 denom 2e273363bca21d02 zdot 4543b007d5ecf84a dq 456a52edec73b195 dk 6e74b1049e7b52ac dv 8a9786e12c70593c
+DIGEST heavytail baseline ctx c71f045320842983 amax 4e82e812c43db5b8 denom d28ab733f0ee295e zdot 0c217e6a3f36c3d5 dq ba05c943a456c403 dk 6eca7eb6785ba410 dv ac09439281d18df9
+DIGEST heavytail eager ctx c71f045320842983 amax 4e82e812c43db5b8 denom d28ab733f0ee295e zdot 0c217e6a3f36c3d5 dq ba05c943a456c403 dk 6eca7eb6785ba410 dv ac09439281d18df9
+DIGEST heavytail stash_tiled ctx c71f045320842983 amax 4e82e812c43db5b8 denom d28ab733f0ee295e zdot 0c217e6a3f36c3d5 dq ba05c943a456c403 dk 6eca7eb6785ba410 dv ac09439281d18df9
+== m4-L512.log
+shape=B1_L512_nh12_nkv12_hd64_win0 visible_cells=1575936 S=512 key_lo=0 pos0=0
+DIGEST hashed baseline ctx 9efec464b6b68f8e amax 47c7df39ff18c8ed denom 2cc89c6344f65870 zdot 68ab98b87c7aab7f dq a8da9bef09da8d80 dk c67cb6477583fdc9 dv 59c79bee08cb2542
+DIGEST hashed eager ctx 9efec464b6b68f8e amax 47c7df39ff18c8ed denom 2cc89c6344f65870 zdot 68ab98b87c7aab7f dq a8da9bef09da8d80 dk c67cb6477583fdc9 dv 59c79bee08cb2542
+DIGEST hashed stash_tiled ctx 9efec464b6b68f8e amax 47c7df39ff18c8ed denom 2cc89c6344f65870 zdot 68ab98b87c7aab7f dq a8da9bef09da8d80 dk c67cb6477583fdc9 dv 59c79bee08cb2542
+DIGEST heavytail baseline ctx 4d3c75f0da309e61 amax 8312e30384936f83 denom bf17c5e8b53942fc zdot 909a7f39813d038f dq 1d1e7e7c4cb2dfa6 dk badb0325e1fcf611 dv e962f9f754cdf30c
+DIGEST heavytail eager ctx 4d3c75f0da309e61 amax 8312e30384936f83 denom bf17c5e8b53942fc zdot 909a7f39813d038f dq 1d1e7e7c4cb2dfa6 dk badb0325e1fcf611 dv e962f9f754cdf30c
+DIGEST heavytail stash_tiled ctx 4d3c75f0da309e61 amax 8312e30384936f83 denom bf17c5e8b53942fc zdot 909a7f39813d038f dq 1d1e7e7c4cb2dfa6 dk badb0325e1fcf611 dv e962f9f754cdf30c
+== m4-L2048.log
+shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 S=2048 key_lo=0 pos0=0
+DIGEST hashed baseline ctx 13ccc93eac28789a amax afaf4c3ad51a2071 denom 461ef8b28777ac11 zdot aba1ca249126f2a9 dq d66200e4f5fecee1 dk cec17a18979026ec dv 1082386d9d9af404
+DIGEST hashed stash_tiled ctx 13ccc93eac28789a amax afaf4c3ad51a2071 denom 461ef8b28777ac11 zdot aba1ca249126f2a9 dq d66200e4f5fecee1 dk cec17a18979026ec dv 1082386d9d9af404
+DIGEST heavytail baseline ctx aff4e652e9f55718 amax 839832dc27b619dc denom 7cbf2d64fd3477b2 zdot 3b3f30c9c44ac436 dq f46bc57e6248e259 dk 6eefe3816467e38d dv 65573d5a06bdfda8
+DIGEST heavytail stash_tiled ctx aff4e652e9f55718 amax 839832dc27b619dc denom 7cbf2d64fd3477b2 zdot 3b3f30c9c44ac436 dq f46bc57e6248e259 dk 6eefe3816467e38d dv 65573d5a06bdfda8

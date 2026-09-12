@@ -1,0 +1,48 @@
+== L32-stash_tiled.log
+shape=B1_L32_nh12_nkv12_hd64_win0 visible_cells=6336 S=32 key_lo=0 pos0=0
+DIGEST hashed baseline ctx 7dfbb19bce702d3a amax 931fc043d20c1955 denom ebe3ec9ca4a2c9a5 zdot 5b1cbeed380fcc27 dq d29df356f8e02ece dk e3213d4789d25791 dv cfeb21849c020d97
+DIGEST hashed eager ctx 7dfbb19bce702d3a amax 931fc043d20c1955 denom ebe3ec9ca4a2c9a5 zdot 5b1cbeed380fcc27 dq d29df356f8e02ece dk e3213d4789d25791 dv cfeb21849c020d97
+DIGEST hashed stash_tiled ctx 7dfbb19bce702d3a amax 931fc043d20c1955 denom ebe3ec9ca4a2c9a5 zdot 5b1cbeed380fcc27 dq d29df356f8e02ece dk e3213d4789d25791 dv cfeb21849c020d97
+DIGEST heavytail baseline ctx 8b211386ec588c76 amax 49497972810a22e2 denom 563388caf3b91c54 zdot 5508bdffbf7de20e dq 7f80313153b71ac5 dk 52d1c9d63670145a dv fa029afe121313fb
+DIGEST heavytail eager ctx 8b211386ec588c76 amax 49497972810a22e2 denom 563388caf3b91c54 zdot 5508bdffbf7de20e dq 7f80313153b71ac5 dk 52d1c9d63670145a dv fa029afe121313fb
+DIGEST heavytail stash_tiled ctx 8b211386ec588c76 amax 49497972810a22e2 denom 563388caf3b91c54 zdot 5508bdffbf7de20e dq 7f80313153b71ac5 dk 52d1c9d63670145a dv fa029afe121313fb
+== L128-stash_tiled.log
+shape=B1_L128_nh12_nkv12_hd64_win0 visible_cells=99072 S=128 key_lo=0 pos0=0
+DIGEST hashed baseline ctx acbd2434ecadde6b amax da608bb6699b49b7 denom 2e273363bca21d02 zdot 4543b007d5ecf84a dq 456a52edec73b195 dk 6e74b1049e7b52ac dv 8a9786e12c70593c
+DIGEST hashed eager ctx acbd2434ecadde6b amax da608bb6699b49b7 denom 2e273363bca21d02 zdot 4543b007d5ecf84a dq 456a52edec73b195 dk 6e74b1049e7b52ac dv 8a9786e12c70593c
+DIGEST hashed stash_tiled ctx acbd2434ecadde6b amax da608bb6699b49b7 denom 2e273363bca21d02 zdot 4543b007d5ecf84a dq 456a52edec73b195 dk 6e74b1049e7b52ac dv 8a9786e12c70593c
+DIGEST heavytail baseline ctx c71f045320842983 amax 4e82e812c43db5b8 denom d28ab733f0ee295e zdot 0c217e6a3f36c3d5 dq ba05c943a456c403 dk 6eca7eb6785ba410 dv ac09439281d18df9
+DIGEST heavytail eager ctx c71f045320842983 amax 4e82e812c43db5b8 denom d28ab733f0ee295e zdot 0c217e6a3f36c3d5 dq ba05c943a456c403 dk 6eca7eb6785ba410 dv ac09439281d18df9
+DIGEST heavytail stash_tiled ctx c71f045320842983 amax 4e82e812c43db5b8 denom d28ab733f0ee295e zdot 0c217e6a3f36c3d5 dq ba05c943a456c403 dk 6eca7eb6785ba410 dv ac09439281d18df9
+== L512-stash_tiled.log
+shape=B1_L512_nh12_nkv12_hd64_win0 visible_cells=1575936 S=512 key_lo=0 pos0=0
+DIGEST hashed baseline ctx 9efec464b6b68f8e amax 47c7df39ff18c8ed denom 2cc89c6344f65870 zdot 68ab98b87c7aab7f dq a8da9bef09da8d80 dk c67cb6477583fdc9 dv 59c79bee08cb2542
+DIGEST hashed eager ctx 9efec464b6b68f8e amax 47c7df39ff18c8ed denom 2cc89c6344f65870 zdot 68ab98b87c7aab7f dq a8da9bef09da8d80 dk c67cb6477583fdc9 dv 59c79bee08cb2542
+DIGEST hashed stash_tiled ctx 9efec464b6b68f8e amax 47c7df39ff18c8ed denom 2cc89c6344f65870 zdot 68ab98b87c7aab7f dq a8da9bef09da8d80 dk c67cb6477583fdc9 dv 59c79bee08cb2542
+DIGEST heavytail baseline ctx 4d3c75f0da309e61 amax 8312e30384936f83 denom bf17c5e8b53942fc zdot 909a7f39813d038f dq 1d1e7e7c4cb2dfa6 dk badb0325e1fcf611 dv e962f9f754cdf30c
+DIGEST heavytail eager ctx 4d3c75f0da309e61 amax 8312e30384936f83 denom bf17c5e8b53942fc zdot 909a7f39813d038f dq 1d1e7e7c4cb2dfa6 dk badb0325e1fcf611 dv e962f9f754cdf30c
+DIGEST heavytail stash_tiled ctx 4d3c75f0da309e61 amax 8312e30384936f83 denom bf17c5e8b53942fc zdot 909a7f39813d038f dq 1d1e7e7c4cb2dfa6 dk badb0325e1fcf611 dv e962f9f754cdf30c
+== L2048-stash_tiled.log
+shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 S=2048 key_lo=0 pos0=0
+DIGEST hashed baseline ctx 13ccc93eac28789a amax afaf4c3ad51a2071 denom 461ef8b28777ac11 zdot aba1ca249126f2a9 dq d66200e4f5fecee1 dk cec17a18979026ec dv 1082386d9d9af404
+DIGEST hashed eager ctx 13ccc93eac28789a amax afaf4c3ad51a2071 denom 461ef8b28777ac11 zdot aba1ca249126f2a9 dq d66200e4f5fecee1 dk cec17a18979026ec dv 1082386d9d9af404
+DIGEST hashed stash_tiled ctx 13ccc93eac28789a amax afaf4c3ad51a2071 denom 461ef8b28777ac11 zdot aba1ca249126f2a9 dq d66200e4f5fecee1 dk cec17a18979026ec dv 1082386d9d9af404
+DIGEST heavytail baseline ctx aff4e652e9f55718 amax 839832dc27b619dc denom 7cbf2d64fd3477b2 zdot 3b3f30c9c44ac436 dq f46bc57e6248e259 dk 6eefe3816467e38d dv 65573d5a06bdfda8
+DIGEST heavytail eager ctx aff4e652e9f55718 amax 839832dc27b619dc denom 7cbf2d64fd3477b2 zdot 3b3f30c9c44ac436 dq f46bc57e6248e259 dk 6eefe3816467e38d dv 65573d5a06bdfda8
+DIGEST heavytail stash_tiled ctx aff4e652e9f55718 amax 839832dc27b619dc denom 7cbf2d64fd3477b2 zdot 3b3f30c9c44ac436 dq f46bc57e6248e259 dk 6eefe3816467e38d dv 65573d5a06bdfda8
+== L8192-stash_tiled.log
+shape=B1_L8192_nh12_nkv12_hd64_win0 visible_cells=402702336 S=8192 key_lo=0 pos0=0
+DIGEST hashed baseline ctx a5af22f9d4fe6b8d amax d76e882c9334ba32 denom dc67deff38936ff9 zdot d17e03fb56ed71e0 dq da09d4d0de2f7e90 dk a646bd979ae2a979 dv d1efb63a4ad12a9d
+DIGEST hashed eager ctx a5af22f9d4fe6b8d amax d76e882c9334ba32 denom dc67deff38936ff9 zdot d17e03fb56ed71e0 dq da09d4d0de2f7e90 dk a646bd979ae2a979 dv d1efb63a4ad12a9d
+DIGEST hashed stash_tiled ctx a5af22f9d4fe6b8d amax d76e882c9334ba32 denom dc67deff38936ff9 zdot d17e03fb56ed71e0 dq da09d4d0de2f7e90 dk a646bd979ae2a979 dv d1efb63a4ad12a9d
+DIGEST heavytail baseline ctx cd244739d7709890 amax 50ecd481269e7d09 denom c381964757528b01 zdot 9a19e35d4e3c15a8 dq f912e7cc49587f57 dk 0939e1e77a952dbe dv 0b19660e55577199
+DIGEST heavytail eager ctx cd244739d7709890 amax 50ecd481269e7d09 denom c381964757528b01 zdot 9a19e35d4e3c15a8 dq f912e7cc49587f57 dk 0939e1e77a952dbe dv 0b19660e55577199
+DIGEST heavytail stash_tiled ctx cd244739d7709890 amax 50ecd481269e7d09 denom c381964757528b01 zdot 9a19e35d4e3c15a8 dq f912e7cc49587f57 dk 0939e1e77a952dbe dv 0b19660e55577199
+== L8191-stash_tiled.log
+shape=B1_L8191_nh12_nkv12_hd64_win0 visible_cells=402604032 S=8191 key_lo=0 pos0=0
+DIGEST hashed baseline ctx a2643e928c44ef47 amax 6b5abe85a730bd0f denom e7fbac33a2099ad8 zdot 6f1df5d23a06510b dq 9821ac71bea39d4d dk b03a0a62334335ac dv 55b7823237bac2a0
+DIGEST hashed eager ctx a2643e928c44ef47 amax 6b5abe85a730bd0f denom e7fbac33a2099ad8 zdot 6f1df5d23a06510b dq 9821ac71bea39d4d dk b03a0a62334335ac dv 55b7823237bac2a0
+DIGEST hashed stash_tiled ctx a2643e928c44ef47 amax 6b5abe85a730bd0f denom e7fbac33a2099ad8 zdot 6f1df5d23a06510b dq 9821ac71bea39d4d dk b03a0a62334335ac dv 55b7823237bac2a0
+DIGEST heavytail baseline ctx 8b88ac3b531a0d0a amax 07e7bfc4e9bf910c denom 118b6b3c06a91a6d zdot b6953a759793689d dq dcd9cff0ae109738 dk 4f1d06eb2d7b6f57 dv 2cba7ee722b82b86
+DIGEST heavytail eager ctx 8b88ac3b531a0d0a amax 07e7bfc4e9bf910c denom 118b6b3c06a91a6d zdot b6953a759793689d dq dcd9cff0ae109738 dk 4f1d06eb2d7b6f57 dv 2cba7ee722b82b86
+DIGEST heavytail stash_tiled ctx 8b88ac3b531a0d0a amax 07e7bfc4e9bf910c denom 118b6b3c06a91a6d zdot b6953a759793689d dq dcd9cff0ae109738 dk 4f1d06eb2d7b6f57 dv 2cba7ee722b82b86

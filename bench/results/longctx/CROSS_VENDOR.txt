@@ -1,0 +1,18 @@
+CROSS-VENDOR BITWISE IDENTITY OF THE FUSED ATTENTION, BY SEQUENCE LENGTH
+nvidia: RunPod H100 80GB HBM3, sm_90a, driver 580.126.09, pod 3bcwphffif64sg
+apple:  local Apple M4 (column apple), same commit, same generated inputs
+Each line compares the 64-bit FNV-1a digest of all seven attention buffers
+(ctx, amax, denom, zdot, dq, dk, dv) of the shipped kernels on both vendors.
+
+L=32    kind=hashed    IDENTICAL
+L=128   kind=hashed    IDENTICAL
+L=512   kind=hashed    IDENTICAL
+L=2048  kind=hashed    IDENTICAL
+L=32    kind=heavytail IDENTICAL
+L=128   kind=heavytail IDENTICAL
+L=512   kind=heavytail IDENTICAL
+L=2048  kind=heavytail IDENTICAL
+
+L=8191 and L=8192 ran on nvidia only: the eager oracle allocates four
+[B,n_heads,L,S] buffers (12.9 GB at L=8192, n_heads 12), which is a memory
+bound, not an identity one. No timing was measured on either vendor.
