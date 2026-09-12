@@ -1,0 +1,4 @@
+/Users/runner/work/mojolearn/mojolearn/training/checks/byte_lm_host_bwd_probe.mojo:3:4: warning: doc string summary should end with a period '.', exclamation mark '!', question mark '?', or backtick '`', but this ends with ')'
+"""Does the host backward oracle compile into a CPU-only build? (DEVIATION 2680)
+   ^
+probe exit 0

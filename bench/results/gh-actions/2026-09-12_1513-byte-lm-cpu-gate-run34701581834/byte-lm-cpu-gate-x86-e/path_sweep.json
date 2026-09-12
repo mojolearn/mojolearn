@@ -1,0 +1,58 @@
+{
+ "binary": {
+  "path": "/home/runner/work/mojolearn/mojolearn/python/mojolearn/host/_mojolearn_byte_lm_host.so",
+  "sha256": "0b1c68a108b3021735763f3f5772bf150d912322c1ac05e47b1e190ee2802fdf"
+ },
+ "byte_values_seen": 256,
+ "commit": "07ff43dd3cb4946ad1b68cd36c72a3af0269806a",
+ "compared": {
+  "logits": 2304,
+  "loss_bits": 144,
+  "next_bytes": 2304
+ },
+ "deviation": 2640,
+ "first_mismatches": [],
+ "host": {
+  "cpu": "Intel(R) Xeon(R) 6973P-C",
+  "family": "6",
+  "isa": [
+   "avx2",
+   "avx512f",
+   "fma"
+  ],
+  "machine": "x86_64",
+  "model": "173",
+  "python": "3.12.14",
+  "release": "6.8.0-1064-azure",
+  "stepping": "1",
+  "system": "Linux",
+  "vendor": "GenuineIntel"
+ },
+ "length": 32,
+ "max_batch": 8,
+ "mismatched": 0,
+ "parameter_sha256": {
+  "final": "e7c9c226dfa550446799ca930480f972ca8942c023df1e0c5c70a1526bfcd258",
+  "initial": "b87a6075597a82c94b68b810bef74f6331b86579d4d434d95455866ada3ba424",
+  "step000064": "c95553ef5ae7b3715f72ca9b190310f1539e3916f5aa29d5b1277e2d42082f67"
+ },
+ "reference_logits_sha256": {
+  "final": "b518e71ecf5ac01e743f5d5b46df6687e9eefa80a9d627580162305a083f70b2",
+  "initial": "6db55997f1e4d1e9aa08bfaf082ebe48c1b03eec121ebaf6ddf3a0bdbad7e61f",
+  "step000064": "30a89281f2daac140dc9fb440b4476dfe53dd3dcfd5dc4746a84a6fc74ee26f5"
+ },
+ "schema": "mojolearn.byte-lm-host-path-sweep.v1",
+ "seconds": 17.691,
+ "seed": 2640,
+ "states": [
+  "initial",
+  "step000064",
+  "final"
+ ],
+ "threads": [
+  1,
+  2,
+  3
+ ],
+ "verdict": "PASS"
+}

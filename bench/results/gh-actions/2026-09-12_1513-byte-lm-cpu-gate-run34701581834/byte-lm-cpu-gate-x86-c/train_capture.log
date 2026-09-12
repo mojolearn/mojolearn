@@ -1,0 +1,1 @@
+gate: PASS: NO CROSS-VENDOR COMPARISON, only the apple tree is present (128 steps, 1408 recorded digests verified, 0 array comparisons). The CUDA and HIP trees are about 308 MB and CI does not check them out.
