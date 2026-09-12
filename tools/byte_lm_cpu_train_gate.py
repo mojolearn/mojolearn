@@ -185,6 +185,39 @@ def locate(got, want, key):
     return None
 
 
+#: `kind` in a recorded optimizer config. The byte LM trainer admits only
+#: AdamW, and so does the CPU surface, so any other value is refused here
+#: rather than quietly compared against arithmetic it does not describe.
+OPT_ADAMW = 2
+
+
+def optimizer_config(tree, number):
+    """The optimizer configuration that produced this recorded step.
+
+    Read rather than assumed. The capture's own `config.optimizer` block is
+    what the GPU ran, and `post_p` is the only array that reads `lr` or
+    `weight_decay`, so a default guessed here fails the gate on
+    hyperparameters while the backward pass may be agreeing perfectly."""
+    meta = json.loads(read_text(step_dir(tree, number) / 'capture.json'))
+    config = meta.get('config', {})
+    opt = config.get('optimizer')
+    if not isinstance(opt, dict):
+        raise ValueError(f'step {number} records no optimizer configuration')
+    if opt.get('kind') != OPT_ADAMW:
+        raise ValueError(f'step {number} was not AdamW (kind {opt.get("kind")!r}); '
+                         'the CPU surface admits AdamW only')
+    for name in ('max_norm', 'momentum', 'dampening'):
+        if float(opt.get(name, 0.0)) != 0.0:
+            raise ValueError(f'step {number} used {name}={opt[name]}, which the '
+                             'CPU surface refuses')
+    if opt.get('nesterov'):
+        raise ValueError(f'step {number} used nesterov, which the CPU surface refuses')
+    for name in ('lr', 'beta1', 'beta2', 'eps', 'weight_decay'):
+        if name not in opt:
+            raise ValueError(f'step {number} records no {name}')
+    return opt
+
+
 def selected(argument):
     """`all`, or a comma list of step numbers, or `a-b`."""
     if argument == 'all':
@@ -274,9 +307,14 @@ def mode_vendors(args):
 def mode_cpu(args):
     """The gate proper. Replay steps on the CPU and compare with one vendor.
 
-    The CPU training surface does not exist yet. This refuses rather than
-    reporting a vacuous pass, and names what it looked for, so the lane that
-    builds the host backward knows exactly what has to appear."""
+    Each step is replayed from its OWN recorded starting state, its own token
+    ids and its own optimizer configuration, so a step is judged in isolation
+    and a failure at step 87 needs no replay of the 86 before it. The gradient,
+    the loss bits, and the post-step parameters and both Adam moments must equal
+    the recorded bytes exactly.
+
+    If the surface is absent this refuses with exit 2 and names what it looked
+    for, rather than reporting a pass over nothing."""
     tree = VENDORS.get(args.vendor)
     if tree is None or not tree.is_dir():
         print(f'gate: vendor tree not present: {args.vendor}', file=sys.stderr)
@@ -309,17 +347,28 @@ def mode_cpu(args):
         return 2, None
     steps = selected(args.steps)
     compared, mismatches = 0, []
+    used_optimizer = None
     for number in steps:
         desc = descriptors(tree, number) if args.verify_digests else {}
         start = {key: array(tree, number, key, desc.get(key))
                  for key in ('initial_p', 'initial_m', 'initial_v', 'ids')}
         # The recorded arrays are raw little-endian bytes, which is what the
         # surface accepts as parameters and moments, and the ids are int32.
+        # THE OPTIMIZER COMES FROM THE CAPTURE, NOT FROM DEFAULTS. Each step's
+        # capture.json records the configuration that produced it (lr 0.003 and
+        # weight_decay 0.01 here, not the surface's 0.001 and 0.0), and post_p
+        # is the only array that reads either. Assuming defaults made this gate
+        # fail on hyperparameters while the backward pass was in fact agreeing,
+        # which is a gate testing the wrong thing.
+        opt = optimizer_config(tree, number)
+        used_optimizer = opt
         model = trainer.from_state(
             frombytes(start['initial_p'], '<f4', (N,)),
             frombytes(start['initial_m'], '<f4', (N,)),
             frombytes(start['initial_v'], '<f4', (N,)),
-            completed_steps=number - 1)
+            completed_steps=number - 1,
+            lr=opt['lr'], betas=(opt['beta1'], opt['beta2']), eps=opt['eps'],
+            weight_decay=opt['weight_decay'])
         ids = frombytes(start['ids'], '<i4', (BATCH, LENGTH + 1))
         bits = model.train_step(ids)
         produced = dict(grad=le_bytes(model.gradient_, 'f'),
@@ -339,9 +388,20 @@ def mode_cpu(args):
     report = dict(schema='mojolearn.byte-lm-cpu-train-gate.v1', mode='cpu',
                   deviation=2680, profile=PROFILE, vendor=args.vendor,
                   steps=len(steps), compared=compared, mismatched=len(mismatches),
-                  first_mismatches=mismatches, verdict=verdict)
+                  first_mismatches=mismatches, optimizer=used_optimizer,
+                  verdict=verdict)
     print(f'gate: {verdict}: {compared - len(mismatches)}/{compared} array comparisons equal '
           f'over {len(steps)} steps against {args.vendor}')
+    if used_optimizer is not None:
+        # State the optimizer, so a hyperparameter error is distinguishable
+        # from an arithmetic one without re-deriving it.
+        print('gate: optimizer from the capture: '
+              + ' '.join(f'{k}={used_optimizer[k]!r}'
+                         for k in ('lr', 'beta1', 'beta2', 'eps', 'weight_decay')))
+    # NAME THE TENSOR. A verdict of 12/15 with nothing else said is close to
+    # useless: it cannot tell a wrong gradient from a wrong hyperparameter.
+    for row in mismatches[:10]:
+        print(f'gate: mismatch {row}')
     return (0 if verdict == 'PASS' else 1), report
 
 
