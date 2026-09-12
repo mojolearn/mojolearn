@@ -18,9 +18,12 @@ from core.step_phase import (
     step_count_launch,
     step_count_sync,
 )
-# DEVIATION 2645: the RMSNorm row launch geometry arm (core/step_glue.mojo;
-# its launch path is compiled only under -D MOJOLEARN_STEP_GLUE_TRIAL=1).
+# DEVIATION 2645: the RMSNorm row launch geometry arm (core/step_glue.mojo).
+# Its launch path is compiled under -D MOJOLEARN_STEP_GLUE_TRIAL=1, and since
+# DEVIATION 2649 also on a shipped build whose column default carries a rows
+# token (`STEP_GLUE_SHIPPED_ROWS`, NVIDIA only).
 from core.step_glue import (
+    STEP_GLUE_SHIPPED_ROWS,
     STEP_GLUE_TRIAL,
     step_glue_arm_from_env,
     step_glue_blocks,
@@ -2584,11 +2587,12 @@ def bwd_rms_norm[which: Int = 0](
     # the ONE row kernel here (the `c` fold) at that many threads per block;
     # the two cell kernels keep `BWD_TPB`. One token row per thread, the fold
     # never leaves the thread, so every geometry covering [0, m) computes the
-    # same bits. Without -D MOJOLEARN_STEP_GLUE_TRIAL=1 the two values below
-    # are the shipped `_grid(m)` and `BWD_TPB`.
+    # same bits. Without the trial define and without a column default
+    # carrying a rows token (DEVIATION 2649) the two values below are the
+    # shipped `_grid(m)` and `BWD_TPB`.
     var dot_blocks = _grid(m)
     var dot_threads = BWD_TPB
-    comptime if STEP_GLUE_TRIAL:
+    comptime if STEP_GLUE_TRIAL or STEP_GLUE_SHIPPED_ROWS:
         var glue_rows = step_glue_rows_of(step_glue_arm_from_env())
         if glue_rows > 0:
             dot_blocks = step_glue_blocks(m, glue_rows)
