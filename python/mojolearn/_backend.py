@@ -815,9 +815,11 @@ class _NoGpuBinding(type(sys)):
             raise AttributeError(item)
         raise ImportError(
             "mojolearn: this process loaded NO GPU binary set, so every GPU "
-            "estimator, block and trainer is unavailable here. The only surface "
-            "that computes on this box is LanguageModelInference (byte LM "
-            "inference on the CPU). Why no GPU set loaded:\n" + self.__reason
+            "estimator, block and trainer is unavailable here. The surfaces "
+            "that compute on this box are LanguageModelInference (byte LM "
+            "forward pass on the CPU) and LanguageModelHostTrainer (one byte LM "
+            "training step on the CPU: forward, backward and the AdamW update). "
+            "Why no GPU set loaded:\n" + self.__reason
         )
 
 
