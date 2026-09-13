@@ -1,7 +1,0 @@
-{
-  "rows": 200,
-  "features": 8,
-  "seed": 11,
-  "generator": "splitmix64-uniform-f32-v1",
-  "x_sha256": null
-}

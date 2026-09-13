@@ -78,6 +78,19 @@ and is not. Recorded as pre-existing on NVIDIA and AMD in the
 [AMD confirmations brief](docs/lanes/BRIEF_amd_confirmations_2026-09-12.md)
 (finding 3); the refusal past capacity is still owed.
 
+**Known cross-vendor divergence.** `ExperimentalTwoLevelFeatureFreq` (the
+experimental one-tree feature-frequency combination estimator) does not give
+the same predictions on the three GPU vendors. On 2026-09-13 the 46-lane run
+of `tools/identity_break.py` found it different between every pair of an
+Apple M4, an NVIDIA H100 and an AMD MI325X on 8 of 9 hostile fixtures, with
+only the fixture that has no ties agreeing, while the other 43 lanes that ran
+everywhere were identical
+([record](bench/results/identity_break/2026-09-13_46-lanes/README.md)). Its
+earlier evidence was AMD against NVIDIA only. Do not rely on this estimator
+under the cross-vendor claim until
+`docs/lanes/BRIEF_feature_freq_divergence_2026-09-13.md` records a fix with
+before and after hashes.
+
 | Surface | Public availability | Strongest retained identity evidence | Important open work |
 |---|---|---|---|
 | Gradient boosting | Beta | Three-vendor cards for recorded configurations | Numeric single-permutation ordered RMSE passes AMD/NVIDIA at `6dd44ac5`, with 130 bitwise-matching records. Broader categorical/CTR coverage and external parity remain. |

@@ -43,9 +43,9 @@ disagreeing with itself and a DIVERGENT column is two vendors disagreeing.
             `n/a:<reason>` and never a hash of training-row output.
             transductive means the labels belong to the fitted rows only
             (DBSCAN, agglomerative, spectral); no-predict means KMeans has
-            no predict or transform; forecast means Holt-Winters takes no
-            new rows; function means the lane is not an estimator (linalg,
-            metrics).
+            no predict or transform; forecast means Holt-Winters and ARIMA
+            take no new rows; function means the lane is not an estimator
+            (linalg, metrics).
     model   sha256 of the bytes `save(path)` wrote, for every estimator that
             has `save` and `load` (the random forests, the extra trees and
             every GradientBoosting lane). It supports ARTIFACT identity, the
@@ -53,7 +53,27 @@ disagreeing with itself and a DIVERGENT column is two vendors disagreeing.
             back and asked for the held-out rows again; if that hash differs
             from `infer` the column is RELOAD-MOVED, a file that does not
             predict what the model in memory predicts. Estimators without
-            save/load record `n/a:no-save`.
+            save/load record `n/a:no-save`. The trainers and SambaStack
+            offer `save_checkpoint`/`from_checkpoint` instead; that pair
+            feeds the same column (2026-09-13).
+
+THE LANES, 46 (2026-09-13), one per public estimator plus linalg and metrics.
+
+    trees      rf-clf rf-reg et-clf et-reg gbdt-symmetric gbdt-depthwise
+               gbdt-lossguide gbdt-rmse gbdt-ordered-rmse gbdt-feature-freq
+               iforest (last on purpose, see its comment)
+    classical  kmeans knn knn-clf knn-reg radius dbscan pca tsvd ols ridge
+               logistic lasso elasticnet svc svr kde gp agglomerative
+               spectral holtwinters arima umap standard-scaler minmax-scaler
+    neural     mlp byte-lm byte-lm-host-infer byte-lm-host-train mamba1
+               mamba2 mamba3 transformer samba
+    functions  gemm-pinned metrics
+
+The 18 lanes added on 2026-09-13 (svr through samba above) are fed the SAME
+fixture bytes in the shape their estimator wants; the derivation rules are
+the helpers under "derived inputs". Where an estimator's own docstring says
+its identity card is one vendor or two, the lane's docstring repeats that;
+the tool measures, it does not claim.
 
     MOJOLEARN_NUMERIC_MODE=identical python3 tools/identity_break.py --json apple.json
     python3 tools/identity_break.py --diff apple.json nvidia.json amd.json
@@ -595,6 +615,361 @@ def _(ml, X, yc, yr, Xh=None):
     ))
 
 
+# ---------------------------------------------------------------- derived inputs
+# The lanes below (2026-09-13) cover the estimators that were not in the
+# probe, the ones whose natural input is not a feature matrix (a batch of
+# series, a token stream, a (batch, length, d_model) activation slab) get it
+# DERIVED FROM THE FIXTURE BYTES by the rules here, so every vendor is handed
+# the same hostile values in a different shape. Anything that has to be the
+# same on every box and is NOT part of the answer (weights, permutations, a
+# radius) comes from the hashed stream or from fixed-order host arithmetic,
+# never from a host BLAS or a host transcendental (labels_for's lesson).
+
+def _hw(shape, seed, lo, hi):
+    """A float32 tensor of `shape` from the hashed stream, uniform on
+    [lo, hi); the seed is a string naming the lane and the tensor."""
+    n = int(np.prod(shape))
+    u = _hashed_uniform(n, 1, seed).reshape(-1)
+    return np.ascontiguousarray((u * np.float32(hi - lo) + np.float32(lo)).astype(np.float32).reshape(shape))
+
+
+def _seq(X, b, l, dm, skip=0):
+    """A (b, l, dm) float32 activation slab, the fixture's values in
+    row-major order, `skip` values in, the next b*l*dm of them. The
+    `odd` fixture has 12345*17 values, enough for every slab asked for."""
+    flat = np.ascontiguousarray(X).reshape(-1)
+    return np.ascontiguousarray(flat[skip: skip + b * l * dm].reshape(b, l, dm)).astype(np.float32)
+
+
+def _ids(X, b, l, vocab=256):
+    """A (b, l) int32 token stream, the first b*l BYTES of the fixture
+    (its float32 values viewed as bytes), so the `ties` fixture hands the
+    language models a stream heavy in repeated bytes and `hashed` a flat
+    one."""
+    raw = np.frombuffer(np.ascontiguousarray(X).tobytes()[: b * l], dtype=np.uint8)
+    return np.ascontiguousarray((raw.astype(np.int32) % vocab).reshape(b, l))
+
+
+def _three_class(X):
+    """Targets in 0..2 for the fixed 8-16-3 MLP, from the two columns
+    no fixture perturbs (the same ones labels_for reads)."""
+    return ((X[:, 3] > 0).astype(np.int32) + (X[:, 4] > 0).astype(np.int32)).astype(np.int32)
+
+
+def _coded(X):
+    """The FeatureFreq estimator wants dense categorical codes in its
+    source columns, two code columns (a 2-way and a 4-way split on
+    columns 4, 5 and 6 at their medians) in front of the first eight
+    numeric columns, which vary in every fixture (`dupes` holds its
+    constant and its zero column at the end)."""
+    c0 = (X[:, 4] > np.median(X[:, 4])).astype(np.float32)
+    c1 = (2 * (X[:, 5] > np.median(X[:, 5])).astype(np.int32)
+          + (X[:, 6] > np.median(X[:, 6])).astype(np.int32)).astype(np.float32)
+    return np.ascontiguousarray(np.column_stack([c0, c1, X[:, :8]]).astype(np.float32))
+
+
+def _radius_for(index, queries):
+    """A radius scaled to the fixture, six tenths of the median distance
+    from the query rows to the first index row, in fixed-order float64
+    host arithmetic (elementwise, no BLAS), then rounded to float32. A
+    fixed radius would return nothing on `ties` and everything on
+    `denormal`."""
+    ref = index[0].astype(np.float64)
+    d2 = np.zeros(queries.shape[0], dtype=np.float64)
+    for j in range(index.shape[1]):
+        d2 = d2 + (queries[:, j].astype(np.float64) - ref[j]) ** 2
+    return float(np.float32(0.6 * np.median(np.sqrt(d2))))
+
+
+def _ragged(result):
+    """The arrays to hash for a ragged radius query. Per-row counts, then
+    every distance and every index in row order (sorted within a row by
+    the estimator, `sort_results=True`)."""
+    dists, idx = result
+    lens = np.asarray([np.asarray(a).size for a in idx], dtype=np.int64)
+    dd = np.concatenate([np.asarray(a, dtype=np.float32).reshape(-1) for a in dists])
+    ii = np.concatenate([np.asarray(a).reshape(-1).astype(np.int64) for a in idx])
+    return lens, dd, ii
+
+
+def _byte_lm_params(shape):
+    """Named tensors for the byte LM from the hashed stream, norms at one
+    and everything else uniform on [-1/8, 1/8) (the fan-in scale of a
+    32-wide model as a dyadic rational, so no host sqrt). The same on
+    every fixture, because the fixture is the TOKEN stream, not the weights.
+    Returns (named dict, flat registry-order vector)."""
+    named = {}
+    for name, shp in zip(shape.parameter_names, shape.parameter_shapes):
+        if name.endswith("norm1_w") or name.endswith("norm2_w"):
+            named[name] = np.ones(shp, dtype=np.float32)
+        else:
+            named[name] = _hw(shp, "byte-lm:" + name, -0.125, 0.125)
+    flat = np.ascontiguousarray(np.concatenate([named[n].reshape(-1) for n in shape.parameter_names]))
+    return named, flat
+
+
+def _block_weights(lane, shapes, ones=()):
+    """A weight dict for a sequence block. `ones` names get a vector of
+    ones (the norms), the rest are hashed uniform on [-1/8, 1/8)."""
+    return {name: (np.ones(shp, dtype=np.float32) if name in ones
+                   else _hw(shp, f"{lane}:{name}", -0.125, 0.125))
+            for name, shp in shapes.items()}
+
+
+def _block_fit(blk, x, g, state_kw):
+    """The train column shared by the four sequence blocks. A stateless
+    prefill, the same prefill into a fresh state followed by one decode
+    step, and the backward pass (IDENTICAL only, by the blocks' own
+    contract) with a fixture-derived cotangent."""
+    y = np.asarray(blk.forward(x))
+    st = blk.allocate_state(x.shape[0], **state_kw)
+    y_state = np.asarray(blk.forward(x, st))
+    y_step = np.asarray(blk.step(np.ascontiguousarray(x[:, :1, :]), st))
+    grads = blk.backward(x, g)
+    return dict(forward=_h(y), prefill=_h(y_state), step=_h(y_step),
+                backward=_h(*[np.asarray(grads[k]) for k in sorted(grads)]))
+
+
+# ---------------------------------------------------------------- lanes (2026-09-13)
+# The estimators that were not in the probe. Cross-vendor standing is per
+# estimator and is NOT this tool's claim; where the estimator's own
+# docstring says its identity card is one vendor or two, the lane says so
+# and measures anyway.
+
+@lane("svr")
+def _(ml, X, yc, yr, Xh=None):
+    """SVR's docstring says it makes no cross-vendor claim and a three-vendor
+    card is owed. Sized like the svc lane."""
+    m = ml.SVR(C=1.0, kernel="rbf", epsilon=0.1, max_iter=200).fit(X[:2000], yr[:2000])
+    return _fit(dict(predict=_h(m.predict(X[2000:2256]))), m, lambda e: (e.predict(Xh[:256]),))
+
+
+@lane("arima")
+def _(ml, X, yc, yr, Xh=None):
+    """Four series of 512 observations, the first four columns of the
+    fixture, transposed. ARIMA's docstring says the three-vendor card
+    covers the filter and the fit is one vendor. Like holtwinters there are no new
+    rows to feed, the forecast is the train column."""
+    series = np.ascontiguousarray(X[:512, :4].T)
+    m = ml.ARIMA(order=(1, 0, 0)).fit(series)
+    return _fit(dict(ar=_h(m.ar_), mu=_h(m.mu_), sigma2=_h(m.sigma2_), forecast=_h(m.forecast(24))),
+                m, "n/a:forecast")
+
+
+@lane("gp")
+def _(ml, X, yc, yr, Xh=None):
+    """The dense Cholesky is n^2 memory, so 256 rows of four columns, with
+    a white-noise term so duplicate rows (`ties`) still factor. The GP's
+    docstring says Apple and AMD IDENTICAL card, no NVIDIA card."""
+    k = ml.ConstantKernel(1.0) * ml.RBF(1.0) + ml.WhiteKernel(0.1)
+    m = ml.GaussianProcessRegressor(kernel=k).fit(X[:256, :4], yr[:256])
+    mean, std = m.predict(X[256:320, :4], return_std=True)
+    return _fit(dict(alpha=_h(m.alpha_), L=_h(m.L_), lml=_h(np.float64(m.log_marginal_likelihood_value_)),
+                     mean=_h(mean), std=_h(std)),
+                m, lambda e: e.predict(Xh[:64, :4], return_std=True))
+
+
+@lane("umap")
+def _(ml, X, yc, yr, Xh=None):
+    """Exact neighbor search is quadratic, so 1024 rows of eight columns
+    and eight epochs. UMAP's docstring says fit certificates do not certify
+    transform, which is what the infer column asks."""
+    m = ml.UMAP(n_neighbors=8, n_components=2, n_epochs=8, random_state=3).fit(X[:1024, :8])
+    return _fit(dict(embedding=_h(m.embedding_)), m, lambda e: (e.transform(Xh[:64, :8]),))
+
+
+@lane("radius")
+def _(ml, X, yc, yr, Xh=None):
+    """Sized like the knn lane; the radius is scaled to the fixture by
+    _radius_for and is part of the train column. Results sorted within a
+    row so the hash asks about membership and order, not device order."""
+    index, q = X[:4096], X[4096:4160]
+    r = _radius_for(index, q)
+    m = ml.RadiusNeighbors(radius=r).fit(index)
+    lens, dd, ii = _ragged(m.radius_neighbors(q, sort_results=True))
+    return _fit(dict(radius=_h(np.float32(r)), counts=_h(lens), dist=_h(dd), idx=_h(ii)),
+                m, lambda e: _ragged(e.radius_neighbors(Xh[:64], sort_results=True)))
+
+
+@lane("standard-scaler")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.StandardScaler().fit(X)
+    t = m.transform(X[:256])
+    return _fit(dict(mean=_h(m.mean_), var=_h(m.var_), scale=_h(m.scale_), transform=_h(t),
+                     inverse=_h(m.inverse_transform(t))),
+                m, lambda e: (e.transform(Xh[:256]),))
+
+
+@lane("minmax-scaler")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.MinMaxScaler().fit(X)
+    t = m.transform(X[:256])
+    return _fit(dict(data_min=_h(m.data_min_), data_max=_h(m.data_max_), scale=_h(m.scale_), min=_h(m.min_),
+                     transform=_h(t), inverse=_h(m.inverse_transform(t))),
+                m, lambda e: (e.transform(Xh[:256]),))
+
+
+@lane("gbdt-ordered-rmse")
+def _(ml, X, yc, yr, Xh=None):
+    """OrderedRMSE takes one explicit row permutation; it is the stable
+    argsort of a hashed stream, the same on every box."""
+    perm = np.argsort(_hashed_uniform(X.shape[0], 1, "ordered-permutation").reshape(-1), kind="stable")
+    m = ml.OrderedRMSE(n_estimators=20, max_depth=6).fit(X, yr, permutation=perm)
+    return _fit(dict(predict=_h(m.predict(X))), m, lambda e: (e.predict(Xh),))
+
+
+@lane("gbdt-feature-freq")
+def _(ml, X, yc, yr, Xh=None):
+    """ExperimentalTwoLevelFeatureFreq, one depth-two tree over two coded
+    source columns (_coded) and eight numeric columns."""
+    m = ml.ExperimentalTwoLevelFeatureFreq(sources=[0, 1], random_state=7).fit(_coded(X), yr)
+    return _fit(dict(predict=_h(m.predict(_coded(X)))), m, lambda e: (e.predict(_coded(Xh)),))
+
+
+@lane("mlp")
+def _(ml, X, yc, yr, Xh=None):
+    """SmallMLPTrainer, the fixed 8-16-3 network. Three AdamW steps on
+    three 64-row batches of the first eight columns, targets from
+    _three_class, starting weights the surface test's arange rule. Train
+    column is the three losses, the weights after the steps and the
+    logits on the 256 training rows; the checkpoint is the model column."""
+    w = [((np.arange(int(np.prod(s)), dtype=np.float32) % 7 - 3) / 32).reshape(s).astype(np.float32)
+         for s in ((16, 8), (16,), (3, 16), (3,))]
+    m = ml.SmallMLPTrainer(*w, data_schedule={"dataset": "identity_break", "order": "sequential"})
+    Xm = np.ascontiguousarray(X[:256, :8])
+    t = _three_class(X[:256])
+    losses = [np.float64(m.train_step(Xm[64 * k:64 * (k + 1)], t[64 * k:64 * (k + 1)])["loss"]) for k in range(3)]
+    return _fit(dict(loss=_h(np.asarray(losses)),
+                     weights=_h(*[np.asarray(m.weights_[k]) for k in sorted(m.weights_)]),
+                     logits=_h(np.asarray(m.predict_logits(Xm)))),
+                m, lambda e: (np.asarray(e.predict_logits(np.ascontiguousarray(Xh[:256, :8]))),))
+
+
+@lane("byte-lm")
+def _(ml, X, yc, yr, Xh=None):
+    """SmallByteLanguageModelTrainer (LanguageModelTrainer is the same
+    class) at the default b2-l32-d32 profile, 34944 parameters. Three
+    AdamW steps on three (2, 33) windows of the fixture bytes (_ids),
+    weights from _byte_lm_params. The identity claim is per shape by the
+    trainer's own contract; this is one shape."""
+    shape = ml.ByteLanguageModelConfig()
+    named, _ = _byte_lm_params(shape)
+    m = ml.SmallByteLanguageModelTrainer(named, data_schedule={"dataset": "identity_break", "order": "sequential"},
+                                         shape=shape)
+    ids = _ids(X, 3 * shape.batch, shape.length + 1)
+    losses = [np.float64(m.train_step(ids[2 * k:2 * k + 2])["loss"]) for k in range(3)]
+    return _fit(dict(loss=_h(np.asarray(losses)), params=_h(np.asarray(m.parameters_)),
+                     logits=_h(np.asarray(m.logits(ids[:2, :-1])))),
+                m, lambda e: (np.asarray(e.logits(_ids(Xh, shape.batch, shape.length))),))
+
+
+@lane("byte-lm-host-infer")
+def _(ml, X, yc, yr, Xh=None):
+    """LanguageModelInference, the CPU forward path, on the reference
+    (unthreaded) arm, from the same starting weights as byte-lm. Its
+    certificate is per CPU (docs/BYTE_LM_CPU_INFERENCE.md); this lane
+    measures whatever CPU the box has."""
+    shape = ml.ByteLanguageModelConfig()
+    _, flat = _byte_lm_params(shape)
+    m = ml.LanguageModelInference(flat, shape=shape, threaded=False)
+    ids = _ids(X, shape.batch, shape.length + 1)
+    return _fit(dict(loss_bits=_h(np.uint32(m.loss_bits(ids))), logits=_h(np.asarray(m.logits(ids[:, :-1]))),
+                     next=_h(np.asarray(m.next_bytes(ids[:, :-1])))),
+                m, lambda e: (np.asarray(e.logits(_ids(Xh, shape.batch, shape.length))),))
+
+
+@lane("byte-lm-host-train")
+def _(ml, X, yc, yr, Xh=None):
+    """LanguageModelHostTrainer, one CPU training step (its docstring says not
+    certified yet). It has no evaluation-only entry (`loss` IS a step), so
+    the held-out probe is the loss bits of a second step on the held-out
+    window."""
+    shape = ml.ByteLanguageModelConfig()
+    _, flat = _byte_lm_params(shape)
+    m = ml.LanguageModelHostTrainer(flat, shape=shape)
+    bits = m.train_step(_ids(X, shape.batch, shape.length + 1))
+    return _fit(dict(loss_bits=_h(np.uint32(bits)), params=_h(np.asarray(m.parameters_)), m=_h(np.asarray(m.m_))),
+                m, lambda e: (np.uint32(e.train_step(_ids(Xh, shape.batch, shape.length + 1))),))
+
+
+# The sequence blocks: (2, 16, 32) slabs from the fixture (_seq), hashed
+# weights at the smallest legal d_model (32, the Mamba-2/3 rule). Their
+# docstrings say the IDENTICAL card is one vendor (transformer) or that
+# broader backward qualification is open (Mamba); measured here on all.
+
+@lane("mamba1")
+def _(ml, X, yc, yr, Xh=None):
+    dm, di, r = 32, 64, 2
+    w = _block_weights("mamba1", {
+        "norm.weight": (dm,), "in_proj.weight": (2 * di, dm), "conv1d.weight": (di, 1, 4),
+        "conv1d.bias": (di,), "x_proj.weight": (r + 32, di), "dt_proj.weight": (di, r),
+        "dt_proj.bias": (di,), "A_log": (di, 16), "D": (di,), "out_proj.weight": (dm, di)},
+        ones=("norm.weight",))
+    blk = ml.Mamba1Block(w)
+    parts = _block_fit(blk, _seq(X, 2, 16, dm), _seq(X, 2, 16, dm, skip=1024), {})
+    return _fit(parts, blk, lambda e: (np.asarray(e.forward(_seq(Xh, 2, 16, dm))),))
+
+
+@lane("mamba2")
+def _(ml, X, yc, yr, Xh=None):
+    dm, di, nh = 32, 64, 1
+    cd, dip = di + 256, 2 * di + 256 + nh
+    w = _block_weights("mamba2", {
+        "block_norm.weight": (dm,), "in_proj.weight": (dip, dm), "conv1d.weight": (cd, 1, 4),
+        "conv1d.bias": (cd,), "dt_bias": (nh,), "A_log": (nh,), "D": (nh,), "norm.weight": (di,),
+        "out_proj.weight": (dm, di)},
+        ones=("block_norm.weight", "norm.weight"))
+    blk = ml.Mamba2Block(w)
+    parts = _block_fit(blk, _seq(X, 2, 16, dm), _seq(X, 2, 16, dm, skip=1024), {})
+    return _fit(parts, blk, lambda e: (np.asarray(e.forward(_seq(Xh, 2, 16, dm))),))
+
+
+@lane("mamba3")
+def _(ml, X, yc, yr, Xh=None):
+    dm, di, nh = 32, 64, 1
+    dip = 2 * di + 256 + 3 * nh + 32
+    w = _block_weights("mamba3", {
+        "block_norm.weight": (dm,), "in_proj.weight": (dip, dm), "dt_bias": (nh,),
+        "B_norm.weight": (128,), "C_norm.weight": (128,), "B_bias": (nh, 128), "C_bias": (nh, 128),
+        "D": (nh,), "out_proj.weight": (dm, di)},
+        ones=("block_norm.weight", "B_norm.weight", "C_norm.weight"))
+    blk = ml.Mamba3Block(w)
+    parts = _block_fit(blk, _seq(X, 2, 16, dm), _seq(X, 2, 16, dm, skip=1024), {})
+    return _fit(parts, blk, lambda e: (np.asarray(e.forward(_seq(Xh, 2, 16, dm))),))
+
+
+@lane("transformer")
+def _(ml, X, yc, yr, Xh=None):
+    dm, nh, nkv, hd, it = 32, 2, 1, 16, 64
+    w = _block_weights("transformer", {
+        "input_layernorm.weight": (dm,), "post_attention_layernorm.weight": (dm,),
+        "q_proj.weight": (nh * hd, dm), "k_proj.weight": (nkv * hd, dm), "v_proj.weight": (nkv * hd, dm),
+        "o_proj.weight": (dm, nh * hd), "gate_proj.weight": (it, dm), "up_proj.weight": (it, dm),
+        "down_proj.weight": (dm, it)},
+        ones=("input_layernorm.weight", "post_attention_layernorm.weight"))
+    blk = ml.TransformerBlock(w, n_heads=nh, n_kv_heads=nkv)
+    parts = _block_fit(blk, _seq(X, 2, 16, dm), _seq(X, 2, 16, dm, skip=1024), dict(max_tokens=32))
+    return _fit(parts, blk, lambda e: (np.asarray(e.forward(_seq(Xh, 2, 16, dm))),))
+
+
+@lane("samba")
+def _(ml, X, yc, yr, Xh=None):
+    """SambaStack, one Mamba-3 layer and one attention layer at d_model 32
+    over a 256-byte vocabulary, weights from the stack's own seeded
+    generator, three AdamW steps on three (2, 17) windows of the fixture
+    bytes. SUPPORT_MATRIX says cross-vendor qualification of the training
+    surface is open. The checkpoint is the model column."""
+    cfg = ml.SambaConfig(vocab=256, d_model=32, layers=("mamba3", "attention"), n_heads=2, intermediate=64)
+    m = ml.SambaStack(cfg, generator=ml.training.Generator(1), lr=1e-3)
+    ids = _ids(X, 6, 17)
+    losses = [np.float64(m.train_step(ids[2 * k:2 * k + 2, :-1], ids[2 * k:2 * k + 2, 1:])["loss"])
+              for k in range(3)]
+    params = m.parameters()
+    return _fit(dict(loss=_h(np.asarray(losses)), logits=_h(np.asarray(m.forward(ids[:2, :-1]))),
+                     params=_h(*[np.asarray(params[k]) for k in sorted(params)])),
+                m, lambda e: (np.asarray(e.forward(_ids(Xh, 2, 16))),))
+
+
 # LAST ON PURPOSE (2026-08-29): on a RunPod RTX 4090 the isolation forest
 # binding hung at its first fit in every tier (a second DeviceContext beside
 # the caller's deadlocked at teardown on sm_89; fixed by DEVIATION 1944, the
@@ -616,9 +991,21 @@ def _(ml, X, yc, yr, Xh=None):
 
 # ---------------------------------------------------------------- run / diff
 
+def _save_load(est):
+    """The (save method, load classmethod, suffix) an estimator offers.
+    `save`/`load` on the forests and the boosting lanes, written to `.npz`
+    as always, or `save_checkpoint`/`from_checkpoint` on the trainers and
+    SambaStack (2026-09-13), a JSON envelope. None where it has neither."""
+    if est is None:
+        return None
+    for s, l, suffix in (("save", "load", ".npz"), ("save_checkpoint", "from_checkpoint", ".json")):
+        if callable(getattr(est, s, None)) and callable(getattr(type(est), l, None)):
+            return s, l, suffix
+    return None
+
+
 def _has_save_load(est):
-    return est is not None and callable(getattr(est, "save", None)) \
-        and callable(getattr(type(est), "load", None))
+    return _save_load(est) is not None
 
 
 def _probe_fit(fit, name):
@@ -635,12 +1022,13 @@ def _probe_fit(fit, name):
         return None, None, None, f"infer: {type(exc).__name__}: {exc}"
     if not _has_save_load(fit.est):
         return infer, "n/a:no-save", None, None
+    save, load, suffix = _save_load(fit.est)
     try:
         with tempfile.TemporaryDirectory(prefix="identity_break_") as tmp:
-            path = os.path.join(tmp, f"{name}.npz")
-            fit.est.save(path)
+            path = os.path.join(tmp, f"{name}{suffix}")
+            getattr(fit.est, save)(path)
             model = _hfile(path)
-            back = type(fit.est).load(path)
+            back = getattr(type(fit.est), load)(path)
             reload = _h(*fit.probe(back))
     except Exception as exc:
         return infer, None, None, f"model: {type(exc).__name__}: {exc}"
