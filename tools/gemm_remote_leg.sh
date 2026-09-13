@@ -4446,6 +4446,25 @@ RELEASE_SOURCE
         cp "$LEG_EXTRA" "$OUT/extra_body.sh"
         leg_ssh 'umask 022; cat > /root/gemm_leg_extra.sh' < "$LEG_EXTRA"
         leg_say "shipped the extra body: $LEG_EXTRA"
+        # DEVIATION 2704 (Andrew, 2026-09-13: "cloudflare has datasets already
+        # saved and when using runpod we should always use them"). The step
+        # leg's fetchers downloaded enwik8 and the Pile GitHub component from
+        # their origins on EVERY pod (426 s once) while both sat in R2. Stage
+        # them now, after the source is unpacked, into the store's box path,
+        # then link them where tools/fetch_corpus_*.sh look, whose --check
+        # then passes without a download. The credential never leaves this
+        # machine (dataset_store.sh presigns). MOJOLEARN_GEMM_LEG_STAGE_KEYS=""
+        # turns it off; a failure here is reported and the fetchers still run.
+        _stage_keys="${MOJOLEARN_GEMM_LEG_STAGE_KEYS-corpus/enwik8/input.txt corpus/pile_github/input.txt}"
+        if [ -n "$_stage_keys" ] && [ -f "${MOJOLEARN_R2_FILE:-$HOME/.mojolearn_r2}" ]; then
+            # shellcheck disable=SC2086
+            if sh tools/dataset_store.sh stage "$SSH_TARGET" $_stage_keys > "$OUT/stage.log" 2>&1; then
+                leg_ssh 'for c in enwik8 pile_github; do s=/root/CascadeProjects/mojolearn/training/corpus/$c/input.txt; [ -f "$s" ] || continue; mkdir -p /root/mojolearn/training/corpus/$c && ln -f "$s" /root/mojolearn/training/corpus/$c/input.txt && echo "linked $c"; done' >> "$OUT/stage.log" 2>&1 || true
+                leg_say "staged from R2: $(grep -c '^ok ' "$OUT/stage.log") key(s) verified on the box, $(grep -c '^linked ' "$OUT/stage.log") linked into /root/mojolearn"
+            else
+                leg_say "R2 staging FAILED (stage.log); the body's fetchers will download from the origins"
+            fi
+        fi
     else
         leg_ssh 'rm -f /root/gemm_leg_extra.sh' > /dev/null 2>&1 || true
     fi
