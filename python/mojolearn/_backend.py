@@ -888,6 +888,11 @@ _HOST_MODULES = {
     # other _mojolearn_estimators function (dbscan_fit, pca_fit, tsvd_fit,
     # ols_fit, ridge_fit, qn_fit, ...) is absent and refuses by name.
     "_mojolearn_estimators": "_mojolearn_estimators_host",
+    # holtwinters (phase 1, 2026-09-13): bindings/_mojolearn_tsa_host.mojo
+    # over holtwinters/checks/hw_oracle.mojo::oracle_fit[float32] and
+    # oracle_forecast; exports holtwinters_fit, holtwinters_forecast,
+    # tsa_vendor. kpss_test and select_d (ARIMA's) are absent and refuse.
+    "_mojolearn_tsa": "_mojolearn_tsa_host",
 }
 
 #: The env switch the CPU identity gate sets to load a host binding built

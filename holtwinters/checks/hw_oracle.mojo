@@ -20,6 +20,7 @@ design -- that is the pin -- and `hw_eval.mojo`'s header names it.
 """
 
 from std.math import fma, sqrt
+from std.sys.compile import is_defined
 
 from holtwinters.impl.internal.hw_decompose import host_filter, host_r1qt
 from holtwinters.impl.internal.hw_optim import (
@@ -53,6 +54,17 @@ from holtwinters.impl.tsa.holtwinters_params import (
     SEASONAL_ADDITIVE,
 )
 from checks.numerics import ftz, identical_mul_add, identical_sqrt
+
+#: THE NEGATIVE CONTROL OF THE CPU IDENTITY GATE (the CPU training lane,
+#: 2026-09-13, brief section 3.4). `-D MOJOLEARN_HOST_SABOTAGE=1` makes
+#: `oracle_eval` accumulate the SSE as `error + (diff * diff)` with two
+#: roundings instead of the one fused multiply-add the device pins, so the
+#: tsa host binding built with it optimizes a different loss and the
+#: holtwinters lane must read DIVERGENT against the GPU columns. Passed by
+#: the host build scripts only; a host binding that carries it says so
+#: through `<prefix>_sabotage()` and is refused outside the gate
+#: (`python/mojolearn/_backend.py::load_host_module`).
+comptime HW_ORACLE_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
 
 # ---------------------------------------------------------------------------
@@ -247,7 +259,12 @@ def oracle_eval[dt: DType](
         else:
             xhat_ = _f[dt](leveltrend * stmp)
         var diff = _f[dt](pts - xhat_)
-        error_ = _f[dt](_mad[dt](diff, diff, error_))
+        comptime if HW_ORACLE_HOST_SABOTAGE:
+            # THE SABOTAGE ARM: the fused SSE step split into two roundings.
+            # Wrong on purpose; see HW_ORACLE_HOST_SABOTAGE.
+            error_ = _f[dt](error_ + _f[dt](diff * diff))
+        else:
+            error_ = _f[dt](_mad[dt](diff, diff, error_))
         if additive:
             clevel = _mix[dt](alpha_, _f[dt](pts - stmp), oma, leveltrend)
         else:

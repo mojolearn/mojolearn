@@ -975,3 +975,45 @@ infer rows read `IDENTICAL x4`; model is `n/a:no-save`. Sabotage
 (`KDE_ORACLE_HOST_SABOTAGE`, every logsumexp row summed descending): 9 of 9
 train cells and 9 of 9 infer cells `DIVERGENT`, `parts differ: scores`
 (base a58ce84d395f4d1e against e0d6e3d0623d6112).
+
+### holtwinters, IDENTICAL x4
+
+Binding `bindings/_mojolearn_tsa_host.mojo` (`bindings/build_tsa_host.sh`),
+routed by `_backend._HOST_MODULES["_mojolearn_tsa"]`, exporting
+`holtwinters_fit`, `holtwinters_forecast`, `tsa_vendor` under the GPU
+binding's address contract and packed layouts, over
+`holtwinters/checks/hw_oracle.mojo::oracle_fit[DType.float32]` and
+`oracle_forecast`, with the GPU entry's validation in its order
+(`holtwinters_fit_ptr`'s extent guards, `seasonal_from_name`,
+`holtwinters_validate_params`, `holtwinters_validate_data`).
+`python/mojolearn/_tsa_impl.py` is unchanged. `kpss_test` and `select_d`
+are absent and refuse by name. `hw_oracle.mojo` imports `runner.mojo`,
+`hw_decompose.mojo` and `hw_optim.mojo`, each with kernels and `std.gpu`;
+the host-only build compiled them (risk 1, answered for this family too).
+The attributes the CPU column certifies are the ones the train column
+hashes, the forecast; `n_iter_` and `criterion_` are written from the
+oracle's `niter` and `criterion`, which `hw_check::_compare_fit` holds
+bitwise to the device's, but no identity_break cell hashes them.
+
+| fixture | forecast hash (all four columns) |
+|---|---|
+| base | 9781c2061a287937 |
+| ties | b2a5df45db1395b0 |
+| hashed | 66f688c307cabc3b |
+| wide | 560cdc45a69cc987 |
+| denormal | db35c88da059e9e1 |
+| denormal_ftz | db35c88da059e9e1 |
+| dupes | 9781c2061a287937 |
+| odd | 8fb4dd76d8080a46 |
+| negative | 8fa4116875bdf59c |
+
+`require-columns 4 over ['holtwinters']: OK`; the nine rows read
+`IDENTICAL x4`; infer is `n/a:forecast`, model `n/a:no-save`. Sabotage
+(`HW_ORACLE_HOST_SABOTAGE`, the SSE fused multiply-add split into two
+roundings): 6 of 9 cells `DIVERGENT`, `parts differ: forecast` (base
+3bf92be9d53726e1 against 9781c2061a287937); `denormal`, `denormal_ftz` and
+`wide` stay `IDENTICAL x4`, because the lane's series (a cumulative sum of
+column 0 plus 50) is nearly constant on those fixtures and BFGS ends at the
+same parameters under both spellings of the loss. The gate requires
+`DIVERGENT` in the summary, which holds; a fixture the arm cannot move is
+recorded, not hidden.
