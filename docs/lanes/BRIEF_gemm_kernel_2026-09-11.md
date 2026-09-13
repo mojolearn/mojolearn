@@ -1149,3 +1149,48 @@ crashes the compiler (exit 139, tried locally), the stdlib carries no
 `MAX_THREADS_PER_BLOCK_METADATA` symbol, and the PTX has no `.maxntid`. A
 second block per SM can only come from fewer live values in source, which
 is why the census comes before any occupancy arm.
+
+### 15.4 The H100 leg (2026-09-13, measured): 8x fewer shared-load instructions moved the rate 1 percent
+
+Evidence: `bench/results/e1g/2026-09-13_165544-nvidia-h100-gemm-padv-census/remote/gemm-kernel/` (RunPod H100 80GB HBM3, commit
+b12f2a83, pod c4agpfxgw1hbla terminated and verified). `status.tsv`: all
+26 items exit 0; `step-check.log` PASS with `kpack_padv` bit-equal on
+every LM call; the box's device card matched the M4 card.
+
+**LM verdict** (`lm_summary.tsv`, every step witness equal to shipped on both
+corpora, 2 brackets):
+
+| arm | enwik8 | Pile GitHub | geomean | verdict |
+|---|---:|---:|---:|---|
+| `kpack_pad` (scalar loads, same page) | 1.0115 | 1.0131 | 1.0123 | NO FLIP |
+| `kpack_padv` (aligned, `ld.shared.v4`) | 1.0122 | 1.0112 | 1.0117 | NO FLIP |
+
+**GEMM sum** (`price_step.txt`): shipped 1.000, `kpack_pad` 1.025,
+`kpack_padv` 1.016. Per call `kpack_padv` is 0.3 to 1.5 percent faster than
+`kpack_pad` everywhere, and against shipped it reads 0.966 (head_dB), 0.972
+(down_dA), 0.977 (gateup_fwd), 0.990 (head_fwd) on the all-leaves calls and
+1.014 to 1.058 on the group launches, the same shape as 13.5.
+
+**Resources**: `kpack_padv_all` and `_group` 255 registers, one block per
+SM, like every kernel in this brief.
+
+**Reading.** Cutting the shared-load instructions from 256 to 32 per thread
+per window, with the arithmetic, the DRAM words, the page and the registers
+unchanged, bought about one percent. So the block is not bound by
+shared-load issue slots or by the LSU either. Section 15.1's finding stands
+as a fact about the code (every "vector" load is scalar) and as a small,
+real gain, and it does not explain the 34 percent. What is left of section
+3.6 is C1 read as the SCHEDULE of the two-instruction chain and the
+occupancy that hides it, and C5, and both need the SASS, which this leg did
+not get: the runtime's `_dump_sass` wrote empty files, and the image's
+ptxas 12.4 refuses Mojo's PTX 8.5 ("Unsupported .version 8.5; current
+version is '8.4'"), the failure the 2026-09-10 lane hit and fixed with
+`pip install nvidia-cuda-nvcc-cu12==12.6.85` (bench/results/gemm_resources_2026-09-10/README.md).
+The census body takes that ptxas next, and asks Nsight Compute for the
+stall breakdown where the box allows it, which is the one instrument that
+names latency against issue directly instead of by elimination.
+
+**Decision.** NO FLIP. `kpack_padv` stays trial only, beside `kpack_pad`.
+The aligned-page spelling is the right one for any future kernel body (it
+is free and it is 1 percent), and the shipped kernel's own scalar loads are
+a shipped-path change to make once a kernel-body arm is worth flipping.
