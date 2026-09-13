@@ -827,8 +827,18 @@ def host_binding_built():
     return bool(host_families_built())
 
 
+#: Names another directory of host bindings; how the CPU identity gate
+#: (.github/workflows/cpu-identity-gate.yml) loads the set it built with
+#: -D MOJOLEARN_HOST_SABOTAGE=1 without touching the production set.
+_HOST_DIR_ENV = "MOJOLEARN_HOST_DIR"
+
+
 def host_dir():
-    """Where every CPU binding lives on this install, `mojolearn/host/`."""
+    """Where every CPU binding lives on this install, `mojolearn/host/`, or
+    the directory MOJOLEARN_HOST_DIR names."""
+    override = os.environ.get(_HOST_DIR_ENV, "").strip()
+    if override:
+        return os.path.abspath(override)
     return os.path.join(_pkg_dir(), "host")
 
 

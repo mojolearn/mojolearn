@@ -1,0 +1,363 @@
+# CPU identity gate (the CPU training lane, 2026-09-13; brief
+# docs/lanes/BRIEF_cpu_training_2026-09-13.md section 3.4) on GitHub's free
+# standard runners: ARM64 Linux (Azure Cobalt 100), x86-64 Linux and Apple M1
+# macOS, the byte LM CPU gate's matrix. This is the FOURTH COLUMN of
+# tools/identity_break.py, a CPU beside the three committed GPU columns under
+# bench/results/identity_break/2026-09-13_three-columns/.
+#
+# What it proves on each runner, and nothing more. The two host bindings that
+# exist (bindings/build_byte_lm_host.sh, bindings/build_forest_host.sh) build
+# ON THAT RUNNER with no accelerator target as the kernel matrix's CPU column
+# (checks/kernel_matrix.mojo COLUMN_CPU; each binding asserts it at build time
+# and reads it back). The checkout's package takes the CPU-only path
+# (vendor() is cpu). The forest host binding reproduces every RECORDED
+# forest and GBDT prediction (tools/forest_host_gate.py check) and a sabotage
+# build of it is caught. tools/identity_break.py loads on the CPU, diffs the
+# three committed GPU columns to IDENTICAL x3 on all 252 cells, and, run on
+# this runner, writes a CPU column whose provenance is derived (vendor
+# cpu-<cpu model slug>, commit = the workflow's SHA, host.column cpu) and
+# whose cells read REFUSED BY NAME for every lane without a CPU
+# implementation and STABLE for every lane in COVERED_LANES.
+#
+# COVERED_LANES is the list of identity_break lanes that have a CPU
+# implementation. IT IS EMPTY TODAY: phase 0 is the pattern, and phase 1 of
+# the brief adds lanes here as each host fit lands (gemm-pinned first). While
+# it is empty the "covered" steps say so and run nothing; they are not a
+# pass, they are a statement. The smoke step runs regardless and FAILS if the
+# run produces no cell, a cell that is not the refusal by name, a vendor label
+# that is not derived, or an empty commit.
+#
+# A green job enters the brief's certified table only after its uploaded
+# JSON is read and its host.cpu_model names the CPU; the job summary is not
+# the record.
+
+name: CPU identity gate
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "main"
+      - "lane/cpu-training-phase0"
+      - "lane/cpu-training-*"
+    paths:
+      - "checks/kernel_matrix.mojo"
+      - "checks/hardware_matrix.mojo"
+      - "checks/numerics.mojo"
+      - "bindings/_mojolearn_byte_lm_host.mojo"
+      - "bindings/_mojolearn_forest_host.mojo"
+      - "bindings/build_byte_lm_host.sh"
+      - "bindings/build_forest_host.sh"
+      - "bindings/host_helpers.mojo"
+      - "bindings/hostptr.mojo"
+      - "core/forest_host_predict.mojo"
+      - "core/gbdt_host_predict.mojo"
+      - "training/byte_lm_host.mojo"
+      - "training/byte_lm_host_backward.mojo"
+      - "python/mojolearn/_backend.py"
+      - "python/mojolearn/_buffer.py"
+      - "python/mojolearn/_forest_host.py"
+      - "python/mojolearn/_gbdt_host.py"
+      - "python/mojolearn/_byte_lm_host.py"
+      - "tools/identity_break.py"
+      - "tools/forest_host_gate.py"
+      - "tools/cpu_identity_gate_check.py"
+      - "bench/results/identity_break/2026-09-13_three-columns/**"
+      - "bench/results/forest_host/**"
+      - ".github/workflows/cpu-identity-gate.yml"
+
+permissions: {}
+
+env:
+  # The identity_break lanes with a CPU implementation, comma separated, no
+  # spaces. Empty until phase 1 lands its first lane. A lane listed here must
+  # read STABLE on every fixture and IDENTICAL x4 against the three GPU
+  # columns; a lane not listed must read REFUSED by name.
+  COVERED_LANES: ""
+  # The three committed GPU columns the CPU column is diffed against.
+  GPU_COLUMNS: >-
+    bench/results/identity_break/2026-09-13_three-columns/apple-m4.json
+    bench/results/identity_break/2026-09-13_three-columns/nvidia-h100-sm_90a.json
+    bench/results/identity_break/2026-09-13_three-columns/amd-mi325x-gfx942.json
+
+jobs:
+  gate:
+    name: ${{ matrix.label }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # GitHub does not let a workflow choose Intel or AMD for x86-64; Azure
+        # assigns the host. So x86-64 runs as several independent draws on two
+        # images, each report records the CPU it got, and a vendor enters the
+        # certified table only from a report that names it.
+        include:
+          - runner: ubuntu-24.04-arm
+            slot: arm64
+            label: ARM64 Linux (Azure Cobalt 100)
+          - runner: macos-15
+            slot: macos15
+            label: Apple M1 macOS (hosted)
+          - runner: ubuntu-24.04
+            slot: x86-a
+            label: x86-64 Linux draw a (24.04)
+          - runner: ubuntu-24.04
+            slot: x86-b
+            label: x86-64 Linux draw b (24.04)
+          - runner: ubuntu-24.04
+            slot: x86-c
+            label: x86-64 Linux draw c (24.04)
+          - runner: ubuntu-22.04
+            slot: x86-d
+            label: x86-64 Linux draw d (22.04)
+          - runner: ubuntu-22.04
+            slot: x86-e
+            label: x86-64 Linux draw e (22.04)
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    env:
+      MOJOLEARN_COMMIT: ${{ github.sha }}
+      MOJOLEARN_GATE_COMMIT: ${{ github.sha }}
+      MOJOLEARN_NUMERIC_MODE: identical
+      PYTHONPATH: ${{ github.workspace }}/python
+      GATE_OUT: ${{ github.workspace }}/cpu-identity-gate-out
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # bench/results is large; only the forest host fixtures and the three
+      # committed GPU columns come down.
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /*
+            !/bench/results/*
+            /bench/results/forest_host/
+            /bench/results/identity_break/
+            !/bench/results/identity_break/*
+            /bench/results/identity_break/2026-09-13_three-columns/
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+
+      - name: Runner facts
+        run: |
+          mkdir -p "$GATE_OUT"
+          {
+            uname -a
+            python3 --version
+            if [ "$(uname -s)" = Darwin ]; then
+              sysctl -n machdep.cpu.brand_string
+              sw_vers -productVersion
+            else
+              lscpu
+              grep -m1 -E '^(flags|Features)' /proc/cpuinfo
+            fi
+          } 2>&1 | tee "$GATE_OUT/runner.txt"
+          # The step shell is `bash -eo pipefail`, and ARM64 /proc/cpuinfo has no
+          # `model name`, so every lookup here must tolerate no match.
+          if [ "$(uname -s)" = Darwin ]; then
+            cpu="$(sysctl -n machdep.cpu.brand_string || true)"
+          else
+            cpu="$( (grep -m1 -E '^model name' /proc/cpuinfo || true) | cut -d: -f2- | sed 's/^ //')"
+            [ -n "$cpu" ] || cpu="$( (lscpu | grep -m1 'Model name' || true) | cut -d: -f2- | sed 's/^ *//')"
+          fi
+          echo "### ${{ matrix.slot }}: ${cpu:-unknown CPU} ($(uname -m))" >> "$GITHUB_STEP_SUMMARY"
+          # The --target-cpu the two host build scripts pass on this runner,
+          # recorded into the CPU column's host.target_cpu.
+          case "$(uname -s)-$(uname -m)" in
+            Linux-x86_64) target=x86-64-v3 ;;
+            Darwin-arm64) target=apple-m1 ;;
+            *) target=none ;;
+          esac
+          echo "MOJOLEARN_TARGET_CPU=$target" >> "$GITHUB_ENV"
+          python3 -m pip install --quiet numpy
+          ls bench/results/forest_host/ bench/results/identity_break/2026-09-13_three-columns/
+
+      - uses: prefix-dev/setup-pixi@v0.10.1
+        with:
+          run-install: true
+          cache: false
+
+      - name: Build the byte LM host binding (CPU column)
+        run: |
+          set -o pipefail
+          pixi run mojo --version | tee "$GATE_OUT/mojo_version.txt"
+          echo "MOJOLEARN_MOJO_VERSION=$(pixi run mojo --version | head -1)" >> "$GITHUB_ENV"
+          MOJOLEARN_BUILD_JOBS=2 sh bindings/build_byte_lm_host.sh 2>&1 | tee "$GATE_OUT/build_byte_lm_host.log"
+
+      - name: Build the forest host binding (CPU column)
+        run: |
+          set -o pipefail
+          MOJOLEARN_BUILD_JOBS=2 sh bindings/build_forest_host.sh 2>&1 | tee "$GATE_OUT/build_forest_host.log"
+
+      # The package must take the CPU-only path on this runner, and each host
+      # binding must read back as the CPU column. A binding that compiled as
+      # another column does not exist (its comptime assert refuses), so this
+      # is the read-back of the witness, not a second guess.
+      - name: Host bindings read back the CPU column
+        run: |
+          set -o pipefail
+          python3 tools/cpu_identity_gate_check.py readback \
+            --binding _mojolearn_byte_lm_host --binding _mojolearn_forest_host 2>&1 \
+            | tee "$GATE_OUT/readback.log"
+
+      # The fixture directories split by what expected.json says. Only
+      # RECORDED ones are compared here; the OWED ones are the forest host
+      # gate's concern (.github/workflows/forest-host-gate.yml fails on them).
+      - name: Sort forest fixtures into recorded and owed
+        run: |
+          recorded=""; owed=""
+          for d in bench/results/forest_host/*/; do
+            d="${d%/}"
+            [ -f "$d/fixture.json" ] || continue
+            status="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("status",""))' "$d/expected.json" 2>/dev/null || echo MISSING)"
+            if [ "$status" = RECORDED ]; then recorded="$recorded $d"; else owed="$owed $d"; fi
+          done
+          echo "recorded:$recorded" | tee -a "$GATE_OUT/fixtures.txt"
+          echo "owed:$owed" | tee -a "$GATE_OUT/fixtures.txt"
+          echo "RECORDED=$recorded" >> "$GITHUB_ENV"
+          [ -n "$recorded" ] || { echo "no recorded fixture to check" >&2; exit 2; }
+
+      - name: Forest host gate, every recorded prediction through the CPU column build
+        run: |
+          set -o pipefail
+          python3 tools/forest_host_gate.py check $RECORDED \
+            --report "$GATE_OUT/forest_gate_prod.json" 2>&1 | tee "$GATE_OUT/forest_gate_prod.log"
+
+      - name: Build the forest sabotage binding (MOJOLEARN_FOREST_HOST_SABOTAGE)
+        if: always()
+        env:
+          MOJOLEARN_FOREST_HOST_OUTDIR: ${{ runner.temp }}/forest-host-sab
+          MOJOLEARN_BUILD_EXTRA_DEFINES: "-D MOJOLEARN_FOREST_HOST_SABOTAGE=1"
+        run: |
+          set -o pipefail
+          MOJOLEARN_BUILD_JOBS=2 sh bindings/build_forest_host.sh 2>&1 | tee "$GATE_OUT/build_forest_sab.log"
+
+      # A gate that cannot fail proves nothing. The sabotage build divides the
+      # vote by n_trees + 1 and seeds the GBDT cursor at bias + 1, so every
+      # prediction differs and the gate must say so on every recorded fixture.
+      - name: Forest host gate, the sabotage build must be caught
+        if: always()
+        env:
+          MOJOLEARN_FOREST_HOST_ALLOW_SABOTAGE: "1"
+          MOJOLEARN_FOREST_HOST_BINARY: ${{ runner.temp }}/forest-host-sab/_mojolearn_forest_host.so
+        run: |
+          set -o pipefail
+          python3 tools/forest_host_gate.py check $RECORDED --expect-mismatch \
+            --report "$GATE_OUT/forest_gate_sab.json" 2>&1 | tee "$GATE_OUT/forest_gate_sab.log"
+
+      # The tool loads on this CPU and the three committed GPU columns still
+      # diff to IDENTICAL x3 on all 252 train cells. The exact summary token is
+      # required: a diff that printed nothing, or fewer cells, is a failure.
+      - name: identity_break --diff over the three committed GPU columns (require 3)
+        if: always()
+        run: |
+          set -o pipefail
+          python3 tools/identity_break.py --diff $GPU_COLUMNS --require-columns 3 2>&1 \
+            | tee "$GATE_OUT/diff_gpu3.txt"
+          grep -F 'summary: IDENTICAL=252' "$GATE_OUT/diff_gpu3.txt"
+          grep -F 'summary (infer/model): IDENTICAL=261, N/A=243' "$GATE_OUT/diff_gpu3.txt"
+
+      # The control for the step above: demanding a fourth real hash on a lane
+      # no CPU column has covered must FAIL. If it passes, --require-columns
+      # is not reading what it claims to.
+      - name: identity_break --diff must refuse a fourth column that is not there
+        if: always()
+        run: |
+          set -o pipefail
+          if python3 tools/identity_break.py --diff $GPU_COLUMNS --require-columns 4 --lanes gemm-pinned \
+               > "$GATE_OUT/diff_gpu4_control.txt" 2>&1; then
+            echo "control FAIL: --require-columns 4 over three columns exited 0" >&2
+            exit 1
+          fi
+          grep -F 'REQUIRE FAIL gemm-pinned/base train' "$GATE_OUT/diff_gpu4_control.txt"
+          echo "control OK: --require-columns 4 refused three columns"
+
+      # THE FOURTH COLUMN, THE PLUMBING SMOKE. Two lanes, one fixture, one
+      # repeat, on this CPU, through the CPU-only package. Every cell must
+      # exist and read REFUSED with the by-name sentence (or STABLE if the lane
+      # is in COVERED_LANES); the vendor label must be the derived cpu-<model>;
+      # the commit must be this workflow's SHA; host.column must be cpu and
+      # both host bindings must appear in host.families as cpu. A JSON with no
+      # cell fails.
+      - name: The CPU column, plumbing smoke (two lanes, one fixture)
+        if: always()
+        timeout-minutes: 20
+        run: |
+          set -o pipefail
+          python3 tools/identity_break.py --lanes gemm-pinned,kde --fixtures base --repeats 1 \
+            --json "$GATE_OUT/cpu-smoke-${{ matrix.slot }}.json" 2>&1 | tee "$GATE_OUT/cpu_smoke.log"
+          python3 tools/cpu_identity_gate_check.py column "$GATE_OUT/cpu-smoke-${{ matrix.slot }}.json" \
+            --covered "$COVERED_LANES" --commit "$MOJOLEARN_COMMIT" \
+            --binding _mojolearn_byte_lm_host,_mojolearn_forest_host 2>&1 | tee "$GATE_OUT/cpu_smoke_check.log"
+
+      # THE FOURTH COLUMN, THE COVERED LANES. Every fixture, two repeats, then
+      # the four-way diff with --require-columns 4 on exactly those lanes.
+      # Empty COVERED_LANES runs nothing and says so; that is a statement about
+      # phase 1, not a pass.
+      - name: The CPU column, covered lanes (every fixture)
+        if: always()
+        timeout-minutes: 50
+        run: |
+          set -o pipefail
+          if [ -z "$COVERED_LANES" ]; then
+            echo "no identity_break lane has a CPU implementation yet (COVERED_LANES is empty); phase 1 of docs/lanes/BRIEF_cpu_training_2026-09-13.md adds the first (gemm-pinned). Nothing run, nothing certified." | tee "$GATE_OUT/cpu_column.log"
+            exit 0
+          fi
+          python3 tools/identity_break.py --lanes "$COVERED_LANES" \
+            --json "$GATE_OUT/cpu-${{ matrix.slot }}.json" 2>&1 | tee "$GATE_OUT/cpu_column.log"
+          python3 tools/cpu_identity_gate_check.py column "$GATE_OUT/cpu-${{ matrix.slot }}.json" \
+            --covered "$COVERED_LANES" --commit "$MOJOLEARN_COMMIT" \
+            --binding _mojolearn_byte_lm_host,_mojolearn_forest_host 2>&1 | tee "$GATE_OUT/cpu_column_check.log"
+          python3 tools/identity_break.py --diff $GPU_COLUMNS "$GATE_OUT/cpu-${{ matrix.slot }}.json" \
+            --require-columns 4 --lanes "$COVERED_LANES" 2>&1 | tee "$GATE_OUT/diff_four_columns.txt"
+
+      # The covered lanes' negative control (brief section 3.4). A gate that
+      # cannot fail proves nothing, so the whole host set is built again with
+      # -D MOJOLEARN_HOST_SABOTAGE=1 into its own directory (honored in
+      # gemm_oracle by reversing the leaf fold, and in the ET and iforest RNGs
+      # by one extra draw, both landing with phase 1's first lanes), loaded
+      # through MOJOLEARN_HOST_DIR with MOJOLEARN_HOST_ALLOW_SABOTAGE=1, run on
+      # the covered lanes, and the four-way diff must exit non-zero with
+      # DIVERGENT on them. Every covered cell must still be STABLE (a wrong
+      # answer, not a refusal). Empty COVERED_LANES skips it with the same
+      # statement as above.
+      - name: The CPU column, covered lanes must diverge under MOJOLEARN_HOST_SABOTAGE
+        if: always()
+        timeout-minutes: 50
+        env:
+          MOJOLEARN_BYTE_LM_HOST_OUTDIR: ${{ runner.temp }}/host-sab
+          MOJOLEARN_FOREST_HOST_OUTDIR: ${{ runner.temp }}/host-sab
+          MOJOLEARN_BUILD_EXTRA_DEFINES: "-D MOJOLEARN_HOST_SABOTAGE=1"
+        run: |
+          set -o pipefail
+          if [ -z "$COVERED_LANES" ]; then
+            echo "no covered lane, no sabotage arm to run (COVERED_LANES is empty)" | tee "$GATE_OUT/cpu_sabotage.log"
+            exit 0
+          fi
+          MOJOLEARN_BUILD_JOBS=2 sh bindings/build_byte_lm_host.sh 2>&1 | tee "$GATE_OUT/build_byte_lm_host_sab.log"
+          MOJOLEARN_BUILD_JOBS=2 sh bindings/build_forest_host.sh 2>&1 | tee "$GATE_OUT/build_forest_host_sab.log"
+          export MOJOLEARN_HOST_DIR="${{ runner.temp }}/host-sab" MOJOLEARN_HOST_ALLOW_SABOTAGE=1
+          python3 tools/identity_break.py --lanes "$COVERED_LANES" \
+            --json "$GATE_OUT/cpu-sab-${{ matrix.slot }}.json" 2>&1 | tee "$GATE_OUT/cpu_sabotage.log"
+          python3 tools/cpu_identity_gate_check.py column "$GATE_OUT/cpu-sab-${{ matrix.slot }}.json" \
+            --covered "$COVERED_LANES" --commit "$MOJOLEARN_COMMIT" 2>&1 | tee "$GATE_OUT/cpu_sabotage_check.log"
+          if python3 tools/identity_break.py --diff $GPU_COLUMNS "$GATE_OUT/cpu-sab-${{ matrix.slot }}.json" \
+               --require-columns 4 --lanes "$COVERED_LANES" > "$GATE_OUT/diff_four_columns_sab.txt" 2>&1; then
+            echo "SABOTAGE NOT CAUGHT: the sabotage host set diffed IDENTICAL against the GPU columns" >&2
+            exit 1
+          fi
+          grep -E '^summary: .*DIVERGENT=' "$GATE_OUT/diff_four_columns_sab.txt"
+          echo "sabotage caught on the covered lanes"
+
+      - name: Upload reports and logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: cpu-identity-gate-${{ matrix.slot }}
+          path: cpu-identity-gate-out/
+          if-no-files-found: warn
