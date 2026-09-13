@@ -3675,8 +3675,9 @@ comptime GEMM_KSPLIT_SLACK = 4
 #: reading.
 comptime GEMM_KSPLIT_S = lib_gemm_block_parallelism_trial_for[TARGET_COLUMN]()
 #: DEVIATION 2595: `S` the SHIPPED dispatch reads. Above 0 turns the ksplit
-#: default on (NVIDIA 132); 0 compiles the old dispatch line (AMD until the
-#: MI300X leg decides, Apple, every other column).
+#: default on (NVIDIA 132; AMD 110, measured 2026-09-11 on the MI300X, see
+#: `lib_gemm_block_parallelism_for`); 0 compiles the old dispatch line (Apple,
+#: every other column).
 comptime GEMM_KSPLIT_DEFAULT_S = lib_gemm_block_parallelism_for[TARGET_COLUMN]()
 comptime GEMM_KSPLIT_DEFAULT_ON = GEMM_KSPLIT_DEFAULT_S > 0
 #: DEVIATION 2707: the KERNEL BODY row (kernel matrix `lib_gemm_kernel_body_for`).

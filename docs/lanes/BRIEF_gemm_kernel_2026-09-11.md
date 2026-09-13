@@ -1306,7 +1306,7 @@ no dataset needed).
 
 Evidence: `bench/results/e1g/2026-09-13_174125-nvidia-h100-gemm-diag2/remote/gemm-diag/diag.txt` (RunPod H100, 1980 MHz before
 and after, commit f66ab6e5; the first leg,
-`bench/results/e1g/2026-09-13_173408-nvidia-h100-gemm-diag`, is retained
+`bench/results/e1g/2026-09-13_173653-nvidia-h100-gemm-diag`, is retained
 with its `nofold` and `floor` lines INVALID: resetting the accumulator
 with no consumer let the compiler delete the whole FMA loop, which the
 cross-compiled sidecars showed as zero FMAs; the rerun keeps the
