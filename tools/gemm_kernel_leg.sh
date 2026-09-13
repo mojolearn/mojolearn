@@ -53,10 +53,13 @@ set -u
 # another pod). The LM probe runs both, the pair being the same-pod A/B.
 # DEVIATION 2703 (brief section 15): `kpack_padv` (aligned page, vector loads)
 # against `kpack_pad` (the same page, scalar loads) and `shipped`, same pod.
-MOJOLEARN_GEMM_STEP_LEG_ARMS=${MOJOLEARN_GEMM_STEP_LEG_ARMS:-shipped,kpack_pad,kpack_padv}
-MOJOLEARN_GEMM_STEP_LEG_LM_ARMS=${MOJOLEARN_GEMM_STEP_LEG_LM_ARMS:-kpack_pad,kpack_padv}
+# DEVIATION 2706 (brief section 17): the hardware fold flush (`kpack_hf`), the
+# gather staging (`kpack_gs`) and both (`kpack_hg`) against `kpack_padv` (their
+# base) and `shipped`, same pod.
+MOJOLEARN_GEMM_STEP_LEG_ARMS=${MOJOLEARN_GEMM_STEP_LEG_ARMS:-shipped,kpack_padv,kpack_hf,kpack_gs,kpack_hg}
+MOJOLEARN_GEMM_STEP_LEG_LM_ARMS=${MOJOLEARN_GEMM_STEP_LEG_LM_ARMS:-kpack_hf,kpack_gs,kpack_hg}
 MOJOLEARN_GEMM_STEP_LEG_LMTIMING=${MOJOLEARN_GEMM_STEP_LEG_LMTIMING:-1}
-MOJOLEARN_GEMM_STEP_LEG_CHECK_ARMS=${MOJOLEARN_GEMM_STEP_LEG_CHECK_ARMS:-shipped,kpack_pad,kpack_padv}
+MOJOLEARN_GEMM_STEP_LEG_CHECK_ARMS=${MOJOLEARN_GEMM_STEP_LEG_CHECK_ARMS:-shipped,kpack_padv,kpack_hf,kpack_gs,kpack_hg}
 MOJOLEARN_GEMM_STEP_LEG_OUT=${MOJOLEARN_GEMM_STEP_LEG_OUT:-/root/gemm_leg_out/gemm-kernel}
 export MOJOLEARN_GEMM_STEP_LEG_ARMS MOJOLEARN_GEMM_STEP_LEG_LM_ARMS \
     MOJOLEARN_GEMM_STEP_LEG_LMTIMING MOJOLEARN_GEMM_STEP_LEG_CHECK_ARMS \
@@ -73,7 +76,7 @@ if [ -z "$lm_left" ] && [ "$MOJOLEARN_GEMM_STEP_LEG_LM_ARMS" != auto ]; then
 fi
 
 {
-    echo "deviations=2599,2700,2703"
+    echo "deviations=2599,2700,2703,2706"
     echo "brief=docs/lanes/BRIEF_gemm_kernel_2026-09-11.md"
     echo "started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     echo "root=$ROOT"

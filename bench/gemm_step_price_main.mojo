@@ -91,6 +91,9 @@ from gemm.checks.gemm_identical import (
     GEMM_GEOM_KPACK,
     GEMM_GEOM_KPACK_PAD,
     GEMM_GEOM_KPACK_PADV,
+    GEMM_GEOM_KPACK_HF,
+    GEMM_GEOM_KPACK_GS,
+    GEMM_GEOM_KPACK_HG,
     GEMM_GEOM_KPACK_WIDE,
     GEMM_GEOM_KSPLIT,
     GEMM_GEOM_KSPLIT_LEAF,
@@ -306,6 +309,7 @@ def _price_call(
     elif (
         geom == GEMM_GEOM_KPACK or geom == GEMM_GEOM_KPACK_WIDE
         or geom == GEMM_GEOM_KPACK_PAD or geom == GEMM_GEOM_KPACK_PADV
+        or geom == GEMM_GEOM_KPACK_HF or geom == GEMM_GEOM_KPACK_GS or geom == GEMM_GEOM_KPACK_HG
     ) and gleaves > 0:
         pleaves = gleaves
         pblocks = launched
