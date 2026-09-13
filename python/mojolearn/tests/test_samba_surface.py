@@ -230,7 +230,12 @@ def arm_rng(rep):
     arm = "RNG"
     g = T.Generator(12345)
     u = g.uniform((1000,))
-    rep.check(arm, u.dtype == np.float32 and u.min() >= 0.0 and u.max() < 1.0, "uniform in [0, 1)")
+    # `Array.dtype` is the STRING '<f4', so `u.dtype == np.float32` was always
+    # False and this check could never pass once the RNG returned an Array --
+    # not a bad draw, a type mismatch. The reductions are fine (Array carries
+    # min/max); only the dtype comparison needed numpy's own answer.
+    rep.check(arm, np.asarray(u).dtype == np.float32 and u.min() >= 0.0 and u.max() < 1.0,
+              "uniform in [0, 1)")
     g2 = T.Generator(12345)
     rep.bits_equal(arm, g2.uniform((1000,)), u, "same seed, same counter, same bits")
     rep.check(arm, not np.array_equal(g.uniform((1000,)), u), "the next stream differs")

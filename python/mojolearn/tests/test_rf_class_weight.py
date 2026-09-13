@@ -44,7 +44,12 @@ def test_fit_dispatch(monkeypatch):
         seen.append(np.ctypeslib.as_array((ctypes.c_float * 4).from_address(address)).copy())
     binding = SimpleNamespace(rf_classifier_fit=plain, rf_classifier_fit_weighted=weighted)
     monkeypatch.setattr(RandomForestClassifier, '_bind', lambda *args: binding)
-    def arrays(self, x, y, nclasses, fit_fn):
+    def arrays(self, x, y, nclasses, fit_fn, rowmajor_fit_fn=None):
+        # The double must track `RandomForestClassifier._fit_arrays`, which
+        # grew `rowmajor_fit_fn` (the row-major borrow path). Without it this
+        # raised "takes 5 positional arguments but 6 were given" -- a STALE
+        # DOUBLE, not a library fault. It went unseen because pytest was
+        # declared nowhere and this file had never run outside CI.
         fit_fn(0, 0, [], 0)
         return self
     monkeypatch.setattr(RandomForestClassifier, '_fit_arrays', arrays)
