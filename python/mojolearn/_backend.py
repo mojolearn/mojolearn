@@ -882,6 +882,12 @@ _HOST_MODULES = {
     # definition; exports gemm, linalg_numeric_mode, linalg_vendor,
     # linalg_profile_version under the GPU binding's contract.
     "_mojolearn_linalg": "_mojolearn_linalg_host",
+    # kde (phase 1, 2026-09-13): bindings/_mojolearn_estimators_host.mojo
+    # over kde/checks/kde_oracle.mojo::oracle_score_samples; exports
+    # kde_score_samples, estimators_numeric_mode, estimators_vendor. Every
+    # other _mojolearn_estimators function (dbscan_fit, pca_fit, tsvd_fit,
+    # ols_fit, ridge_fit, qn_fit, ...) is absent and refuses by name.
+    "_mojolearn_estimators": "_mojolearn_estimators_host",
 }
 
 #: The env switch the CPU identity gate sets to load a host binding built

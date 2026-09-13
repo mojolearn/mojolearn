@@ -939,3 +939,39 @@ descending): 8 of 9 cells `DIVERGENT` with `parts differ: small,wide`
 (base 260c0a74b97fa901 against 931036cbc84c1ce0); `ties` stays
 `IDENTICAL x4` because an integer grid sums exactly in any order, which is
 why the gate requires `DIVERGENT` in the summary and not on every cell.
+
+### kde, IDENTICAL x4
+
+Binding `bindings/_mojolearn_estimators_host.mojo` (`bindings/build_estimators_host.sh`),
+routed by `_backend._HOST_MODULES["_mojolearn_estimators"]`, exporting
+`kde_score_samples`, `estimators_numeric_mode`, `estimators_vendor` under
+the GPU binding's address contract, over
+`kde/checks/kde_oracle.mojo::oracle_score_samples`, with the GPU entry's
+validation in the GPU entry's order (`kernel_from_name`, `metric_from_name`,
+`kde_fit_validate`, `kde_validate_data_ptr`, all host code in
+`kde/impl/neighbors/kernel_density.mojo`). `python/mojolearn/density.py` is
+unchanged. Every other `_mojolearn_estimators` function (dbscan, pca, tsvd,
+ols, ridge, logistic) is absent from the host binding and refuses by name.
+Risk 1 of section 5, answered for this family: `kde_oracle.mojo` imports
+`kde/impl/neighbors/kernel_density.mojo`, `kde/impl/distance/distance_ops.mojo`
+and `core/row_norms.mojo`, each of which defines kernels and imports
+`std.gpu`, and the host-only build (`--target-cpu apple-m1`, no accelerator
+target) compiled them in about a minute.
+
+| fixture | train (all four columns) | infer (all four columns) |
+|---|---|---|
+| base | e0d6e3d0623d6112 | 1a2c3054b661b72a |
+| ties | 0a800c7b3cca66e4 | 63b4da91ce458ab7 |
+| hashed | dc279c30b7c5d070 | f0d1cae79c88ca8a |
+| wide | 36c3cbb2ef71f768 | 39622885a3c508a9 |
+| denormal | 2128392fe1eb228a | 21caf753bc5b6352 |
+| denormal_ftz | 2128392fe1eb228a | 21caf753bc5b6352 |
+| dupes | e0d6e3d0623d6112 | 1a2c3054b661b72a |
+| odd | 8a2b6beee09a98f3 | e49f797e443af916 |
+| negative | 84ca35b6a157c265 | 30a64b99c13a89c4 |
+
+`require-columns 4 over ['kde']: OK`; the nine train rows and the nine
+infer rows read `IDENTICAL x4`; model is `n/a:no-save`. Sabotage
+(`KDE_ORACLE_HOST_SABOTAGE`, every logsumexp row summed descending): 9 of 9
+train cells and 9 of 9 infer cells `DIVERGENT`, `parts differ: scores`
+(base a58ce84d395f4d1e against e0d6e3d0623d6112).
