@@ -782,12 +782,27 @@ def requested_mode():
 # A CPU-ONLY INSTALL (DEVIATION 2615)
 # ===================================================================
 # The no-GPU refusal below is deliberate and stays the rule for every GPU
-# binding. The ONE exception is a box where no GPU set loads but the CPU
-# inference binding (`host/_mojolearn_byte_lm_host.so`, DEVIATION 2610) is
-# built. Then the package imports, every GPU binding is a `_NoGpuBinding`
-# stub that raises BY NAME on use with the original refusal attached, and
-# `vendor()` answers 'cpu'. Nothing falls back: a GPU estimator on that box
-# fails exactly as loudly as before, only at use instead of at import.
+# binding. The ONE exception is a box where no GPU set loads but a CPU
+# binding under mojolearn/host/ (`_mojolearn_byte_lm_host.so`, DEVIATION
+# 2610, or `_mojolearn_forest_host.so`, the forest host lane) is built. Then
+# the package imports, every GPU binding is a `_NoGpuBinding` stub that
+# raises BY NAME on use with the original refusal attached, and `vendor()`
+# answers 'cpu'. Nothing falls back: a GPU estimator on that box fails
+# exactly as loudly as before, only at use instead of at import.
+#
+# THE HOST BINDING SET (the CPU training lane, 2026-09-13; brief
+# docs/lanes/BRIEF_cpu_training_2026-09-13.md section 3.2). `_HOST_MODULES`
+# maps a `_MODULES` name to the host binding that exports the SAME function
+# names the GPU binding exports for the fits it covers. On a CPU-only
+# install `binding(name)` and the canonical `mojolearn.<name>` resolve a
+# listed family to that binding when its file is built, through a
+# `_HostBinding` proxy that raises BY NAME for any function the host
+# binding lacks, so a lane with no host fit reads REFUSED and never a hash
+# of something else. Two rules keep it honest: the host set loads only when
+# `_CPU_ONLY` is not None, so a box with a GPU never serves host arithmetic
+# under a GPU label, and every host binding is read back (`<prefix>_vendor()`
+# must answer "cpu", `<prefix>_numeric_mode()` 1 and `<prefix>_column()`
+# "cpu", the kernel matrix's CPU column) before a single function is served.
 
 #: The refusal `select()` would have raised, when it installed the CPU-only
 #: stubs instead; None on every install that loaded a GPU set.
@@ -806,47 +821,232 @@ def forest_host_binding_path():
 
 
 def host_binding_built():
-    """Whether ANY CPU inference binding is built. Either one is enough to
-    turn the no-GPU refusal into by-name stubs, because either one is a
-    surface that computes on this box."""
-    return os.path.exists(host_binding_path()) or os.path.exists(forest_host_binding_path())
+    """Whether ANY CPU binding is built. Any one is enough to turn the
+    no-GPU refusal into by-name stubs, because any one is a surface that
+    computes on this box."""
+    return bool(host_families_built())
+
+
+def host_dir():
+    """Where every CPU binding lives on this install, `mojolearn/host/`."""
+    return os.path.join(_pkg_dir(), "host")
+
+
+def host_module_path(basename):
+    """The file a host binding of `basename` (`_mojolearn_<family>_host`)
+    loads from."""
+    return os.path.join(host_dir(), basename + ".so")
+
+
+def host_families_built():
+    """The basenames of every `_mojolearn_*_host.so` under mojolearn/host/,
+    sorted. What `tools/identity_break.py` records as `host.families`, so a
+    REFUSED cell on the CPU column is attributable to an unbuilt family
+    rather than a bug."""
+    d = host_dir()
+    if not os.path.isdir(d):
+        return []
+    return sorted(
+        f[:-3] for f in os.listdir(d)
+        if f.startswith("_mojolearn_") and f.endswith("_host.so")
+    )
+
+
+#: `_MODULES` name -> the basename of the host binding under mojolearn/host/
+#: that exports the SAME function names the GPU binding exports for the fits
+#: it covers, plus `<prefix>_vendor()` answering "cpu", `<prefix>_numeric_mode()`
+#: answering 1 and `<prefix>_column()` answering "cpu". EMPTY until phase 1 of
+#: the CPU training brief lands its first family (gemm-pinned first, as
+#: `"_mojolearn_linalg": "_mojolearn_linalg_host"`); every family not listed
+#: here refuses BY NAME on a CPU-only install. The two host bindings that
+#: exist today, `_mojolearn_byte_lm_host` and `_mojolearn_forest_host`, export
+#: their own names (`byte_lm_host_*`, `forest_host_*`) for surfaces of their
+#: own (LanguageModelInference, LanguageModelHostTrainer, HostForest,
+#: HostGBDT), are loaded by path in `_byte_lm_host.py` and `_forest_host.py`,
+#: and are deliberately NOT in this table: mapping `_mojolearn_rf` to the
+#: forest host binding would route RandomForestClassifier.predict to an
+#: entry with a different address contract under the GPU entry's name.
+_HOST_MODULES = {}
+
+#: The env switch the CPU identity gate sets to load a host binding built
+#: with `-D MOJOLEARN_HOST_SABOTAGE=1`; refused otherwise.
+_HOST_ALLOW_SABOTAGE = "MOJOLEARN_HOST_ALLOW_SABOTAGE"
+
+_HOST_MODULE_PREFIX = "mojolearn._host."
+
+
+def _host_prefix(basename):
+    """`_mojolearn_linalg_host` -> `linalg_host`, the read-back prefix."""
+    return basename[len("_mojolearn_"):]
+
+
+def load_host_module(basename):
+    """Load (once per process, under `mojolearn._host.<basename>`, the same
+    name `_byte_lm_host.py` and `_forest_host.py` use so one file is never
+    initialized twice) and READ BACK a host binding: it must say it was
+    compiled for the CPU (`<prefix>_vendor() == "cpu"`), IDENTICAL
+    (`<prefix>_numeric_mode() == 1`) and as the kernel matrix's CPU column
+    (`<prefix>_column() == "cpu"`, the comptime assert's witness), and a
+    sabotage build is refused unless MOJOLEARN_HOST_ALLOW_SABOTAGE=1."""
+    path = host_module_path(basename)
+    if not os.path.exists(path):
+        raise ImportError(
+            f"mojolearn: {path} is not built. Build it with "
+            f"bindings/build_{_host_prefix(basename)}.sh"
+        )
+    full = _HOST_MODULE_PREFIX + basename
+    module = sys.modules.get(full)
+    if module is None:
+        loader = importlib.machinery.ExtensionFileLoader(full, path)
+        spec = importlib.util.spec_from_loader(full, loader, origin=path)
+        module = importlib.util.module_from_spec(spec)
+        loader.exec_module(module)
+        sys.modules[full] = module
+    prefix = _host_prefix(basename)
+
+    def read(fn):
+        f = getattr(module, prefix + "_" + fn, None)
+        if f is None:
+            raise ImportError(
+                f"mojolearn: {path} exports no {prefix}_{fn}(); a host binding "
+                "must read back its vendor, numeric mode and column"
+            )
+        return f()
+
+    said = str(read("vendor"))
+    if said != "cpu":
+        raise ImportError(
+            f"mojolearn: {path} was compiled for {said!r}, not the CPU; a "
+            "host binding is refused under any other vendor label"
+        )
+    compiled = _CODE_MODE.get(int(read("numeric_mode")), "unknown")
+    if compiled != "identical":
+        raise ImportError(
+            f"mojolearn: {path} was compiled {compiled}; a host binding is "
+            "IDENTICAL only. Rebuild it"
+        )
+    column = str(read("column"))
+    if column != "cpu":
+        raise ImportError(
+            f"mojolearn: {path} was compiled as the {column!r} kernel-matrix "
+            "column, not the CPU column; rebuild it with -D MOJOLEARN_COLUMN_CPU"
+        )
+    sabotage = getattr(module, prefix + "_sabotage", None)
+    if sabotage is not None and bool(sabotage()) and os.environ.get(_HOST_ALLOW_SABOTAGE) != "1":
+        raise ImportError(
+            f"mojolearn: {path} is a SABOTAGE build and computes wrong answers "
+            f"on purpose; it is refused outside the gate ({_HOST_ALLOW_SABOTAGE}=1)"
+        )
+    return module
+
+
+def _no_cpu_implementation(name, item, reason, basename=None):
+    """The by-name refusal of a CPU-only install, one sentence a caller can
+    act on first, the original no-GPU refusal after it."""
+    built = host_families_built()
+    where = (
+        f"the host binding {basename} is built but exports no {item}"
+        if basename else
+        f"no host binding covers {name}"
+    )
+    return (
+        f"mojolearn: no CPU implementation of {name}.{item} yet; see "
+        "docs/lanes/BRIEF_cpu_training_2026-09-13.md (" + where + "; host "
+        f"bindings built here: {', '.join(built) or 'none'}). This process "
+        "loaded NO GPU binary set, so every GPU estimator, block and trainer "
+        "without a host binding is unavailable here. The surfaces that "
+        "compute on this box today are LanguageModelInference (byte LM "
+        "forward pass on the CPU), LanguageModelHostTrainer (one byte LM "
+        "training step on the CPU: forward, backward and the AdamW update), "
+        "HostForest and HostGBDT (predict and predict_proba of a saved forest "
+        "or GradientBoosting model on the CPU), each only when its own host "
+        "binding under mojolearn/host/ is built. "
+        "Why no GPU set loaded:\n" + reason
+    )
 
 
 class _NoGpuBinding(type(sys)):
-    """Stands in for every GPU binding on a CPU-only install."""
+    """Stands in for a GPU binding with no host binding on a CPU-only
+    install. Every attribute raises BY NAME."""
 
     def __init__(self, full, reason):
         super().__init__(full)
+        self.__name = full.rsplit(".", 1)[-1]
         self.__reason = reason
 
     def __getattr__(self, item):
         if item.startswith("__"):
             raise AttributeError(item)
-        raise ImportError(
-            "mojolearn: this process loaded NO GPU binary set, so every GPU "
-            "estimator, block and trainer is unavailable here. The surfaces "
-            "that compute on this box are LanguageModelInference (byte LM "
-            "forward pass on the CPU), LanguageModelHostTrainer (one byte LM "
-            "training step on the CPU: forward, backward and the AdamW update) "
-            "and HostForest (predict and predict_proba of a saved RandomForest "
-            "or ExtraTrees model on the CPU), each only when its own host "
-            "binding under mojolearn/host/ is built. "
-            "Why no GPU set loaded:\n" + self.__reason
-        )
+        raise ImportError(_no_cpu_implementation(self.__name, item, self.__reason))
+
+
+class _HostBinding(type(sys)):
+    """Stands in for a GPU binding whose family HAS a host binding on a
+    CPU-only install. An attribute the host binding exports is served from
+    it (loaded and read back on first use); one it lacks raises BY NAME, so
+    a fit with no CPU implementation is a refusal and never a different
+    routine under the same name."""
+
+    def __init__(self, full, name, basename, reason):
+        super().__init__(full)
+        self.__name = name
+        self.__basename = basename
+        self.__reason = reason
+
+    def __getattr__(self, item):
+        if item.startswith("__"):
+            raise AttributeError(item)
+        module = load_host_module(self.__basename)
+        fn = getattr(module, item, None)
+        if fn is None:
+            raise ImportError(
+                _no_cpu_implementation(self.__name, item, self.__reason, self.__basename)
+            )
+        return fn
 
 
 def _select_cpu_only(pkg, mode, reason):
+    """Install the CPU-only set under the canonical names: a `_HostBinding`
+    for every family whose host binding is listed in `_HOST_MODULES` and
+    built, a `_NoGpuBinding` stub for the rest. Only the stubbed names are
+    MISSING; a routed family is present on this box."""
     global _SELECTED, _CPU_ONLY
     for name in _MODULES:
         full = f"{pkg.__name__}.{name}"
-        module = _NoGpuBinding(full, reason)
+        basename = _HOST_MODULES.get(name)
+        if basename and os.path.exists(host_module_path(basename)):
+            module = _HostBinding(full, name, basename, reason)
+        else:
+            module = _NoGpuBinding(full, reason)
+            if name not in _MISSING:
+                _MISSING.append(name)
         sys.modules[full] = module
         setattr(pkg, name, module)
-        if name not in _MISSING:
-            _MISSING.append(name)
     _CPU_ONLY = reason
     _SELECTED = mode
     return _SELECTED
+
+
+def _cpu_only_binding(name, requested):
+    """`binding()` on a CPU-only install: the module `_select_cpu_only`
+    installed under the canonical name, IDENTICAL only. A tier other than
+    identical is refused by name, because no host binding builds one."""
+    if name not in _MODULES:
+        raise ImportError(f"mojolearn: {name} is not a binding this package lists")
+    if requested != "identical":
+        raise ValueError(
+            f"mojolearn: {name} has no {requested!r} tier on a CPU-only install; "
+            "every host binding is IDENTICAL only. Drop numeric_mode= or pass "
+            "numeric_mode='identical'."
+        )
+    pkg = __name__.rsplit(".", 1)[0]
+    module = sys.modules.get(f"{pkg}.{name}")
+    if module is None:
+        raise ImportError(
+            f"mojolearn: {name} was not installed by the CPU-only selector; "
+            "import mojolearn first"
+        )
+    return module
 
 
 def select():
@@ -1154,6 +1354,12 @@ def binding(name, mode=None):
             "Drop numeric_mode= (identical is the default) or pass "
             "numeric_mode='identical'."
         )
+    # A CPU-ONLY INSTALL NEVER REACHES load_set: there is no tier directory
+    # to open, and `_layout()` would raise the no-GPU refusal again. The
+    # module the selector installed (a host binding proxy, or a stub that
+    # refuses by name) is the answer, and it is IDENTICAL only.
+    if _CPU_ONLY is not None:
+        return _cpu_only_binding(name, requested)
     selected = load_set(requested)
     module = getattr(selected, name)
     # A correctly built GBDT sibling does not establish RF/ET (or any other
@@ -1367,6 +1573,9 @@ def vendor_how():
     'MOJOLEARN_VENDOR in the environment', or 'the box probe (device nodes
     and driver libraries)'."""
     if _CPU_ONLY is not None:
-        return "no GPU binary set loaded; the CPU inference binding only (DEVIATION 2615)"
+        return (
+            "no GPU binary set loaded; the CPU bindings under mojolearn/host/ "
+            f"only (DEVIATION 2615; built: {', '.join(host_families_built()) or 'none'})"
+        )
     _layout()
     return _VENDOR_HOW

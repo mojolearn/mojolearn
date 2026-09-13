@@ -760,6 +760,13 @@ def _native(key):
     except Exception as exc:
         fn = _host_native(key)
         if fn is None:
+            if _backend._CPU_ONLY is not None and isinstance(exc, ImportError):
+                # A CPU-ONLY INSTALL (the CPU training lane, 2026-09-13). The
+                # base binding is not old, there is none, and the stub has
+                # already said so BY NAME ("no CPU implementation of
+                # _mojolearn.<key> yet"). That sentence is the one an
+                # identity_break cell must record, so it is re-raised as is.
+                raise
             raise ImportError(
                 f"mojolearn: the base binding has no `{key}`; the compiled "
                 "_mojolearn extension is older than this Python layer, or the "
