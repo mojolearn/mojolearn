@@ -941,3 +941,116 @@ started.
 `MOJOLEARN_GEMM_ARM_TRIAL`, beside `kpack` and `kpack_wide`. No shipped
 line, no matrix row changes. The lane branch merges because its checks pass
 on two vendors and its docs correct a wrong reading.
+
+## 14. The seam itself: what each column's native FMA does at the boundary (DEVIATION 2701, 2026-09-13, branch `lane/gemm-seam-probe`)
+
+### 14.1 Why this is the only lever on the ceiling
+
+Section 3.2 counted the contract's ceiling at 33.5 TFLOP/s on the H100
+because the seam `ftz(fma_rn(a, b, acc))`, round-then-flush, is two issued
+instructions per product step on NVIDIA. The single `fma.rn.ftz` was
+rejected on 2026-09-09 because at a=0x3f7fffff, b=0x00800000, acc=+0 it
+returns 0 where round-then-flush returns 0x00800000: it flushes BEFORE
+rounding (bench/results/attention_exact_fma_2026-09-09/README.md). The
+same day's kNN audit found Apple's native FMA does the same pre-round
+flush at that triple (bench/results/knn/2026-09-09-selector-final/apple/BOUNDARY.md),
+repaired it for kNN only at a 39% cost, and left "other Apple FMA
+consumers" as an open audit. The GEMM seam on Apple is one of those
+consumers.
+
+So the question is not "can NVIDIA be made to round-then-flush in one
+instruction" (it cannot) but "what does every column's native FMA actually
+do at the boundary, and do they agree with EACH OTHER". If they agree, a
+contract whose seam is the native instruction is one instruction per step
+on every column and the Apple gap closes with it.
+
+### 14.2 The probe
+
+`gemm/checks/gemm_seam_probe.mojo`: the 262,144 adversarial triples of
+`transformer/checks/attention_fma_boundary_check.mojo` (22 edge words, 42
+LCG words, full Cartesian product, operands and accumulator flushed as the
+production path flushes them), through four lanes on the device: the
+shipped seam (`_tuned_step`), the native FMA with no flush
+(`identical_mul_add`), the hardware ftz FMA where the column has one
+(NVIDIA's `llvm.nvvm.fma.rn.ftz.f`), and the software round-then-flush
+spelling. Each lane is hashed (FNV-1a 64 over the words in triple order).
+`tools/gemm_seam_probe_reference.py` recomputes `a b + acc` EXACTLY on the
+host (rationals, RN-even to binary32, signed zeros, overflow) under three
+semantics, round-then-flush (`rtf`, the contract), flush-before-round
+(`fbr`) and no flush (`none`), hashes each, and names which one every
+device lane equals. The device never sees the reference; a lane that equals
+none of the three is reported as such. 315 of the 262,144 triples separate
+`rtf` from `fbr`. `tools/gemm_seam_probe_leg.sh` is the on-box body; it
+fetches no dataset.
+
+### 14.3 Apple M4, measured (the same session, local)
+
+Every lane, the SHIPPED seam included, hashes to `fbr`
+(`f269fc70e5625987`), not to `rtf` (`62a6b5621e27c707`): all 262,144
+triples, 0 mismatches between lanes. So on Apple the shipped GEMM seam is
+flush-before-round at all 315 boundary triples, the contract's
+round-then-flush is not what the Apple column computes, and the identity
+cards agree across vendors only because no card and no LM witness has
+landed on one of those 315 patterns. The host reference is validated by the
+same line: its `fbr` hash equals the device's, byte for byte, over 262,144
+words.
+
+### 14.4 NVIDIA H100 and AMD MI300X, measured (2026-09-13, both legs the same hour)
+
+Evidence: `bench/results/e1g/2026-09-13_161417-nvidia-h100-seam-probe/remote/seam-probe/`
+(RunPod H100 80GB HBM3, pod odis4zq0db7yme terminated and verified) and
+`bench/results/e1g/2026-09-13_161422-amd-mi300x-hotaisle-seam-probe/remote/seam-probe/`
+(Hot Aisle MI300X gfx942, VM 71667ca0 deleted and verified). Both probes
+built and ran in under ten seconds; neither fetched a dataset.
+
+| column | shipped | fma (native, no flush) | hwftz | swrtf |
+|---|---|---|---|---|
+| Apple M4 | `fbr` | `fbr` | (= fma) `fbr` | `fbr` |
+| NVIDIA H100 | `rtf` | `none` | **NONE OF THE THREE** | `rtf` |
+| AMD MI300X | `rtf` | `none` | (= fma) `none` | `rtf` |
+
+Hashes: `rtf` 62a6b5621e27c707, `fbr` f269fc70e5625987, `none`
+aed7498f99e07f49; NVIDIA's `hwftz` lane eb76eb53d65e0007. Mismatch counts
+against the native no-flush lane: `rtf` 1,120 (every subnormal result,
+flushed), `fbr` 1,435 (those plus the 315 boundary triples), NVIDIA `hwftz`
+1,170. So `fma.rn.ftz` flushes the 1,120 subnormal results and 50 of the
+315 boundary triples, not all of them (a count inferred from the three
+totals, not a listing; the 24 printed diffs are all subnormal flushes and
+the literal a=0x3f7fffff b=0x00800000 acc=+0 case). Its rule is neither
+round-then-flush nor flush-before-round on the exact value; it is something
+internal to the unit. The literal boundary triple reads 0x00800000 on the
+NVIDIA and AMD shipped lanes and 0x00000000 on Apple's.
+
+### 14.5 Verdict: no single-instruction contract exists
+
+The three native FMAs disagree with one another: Apple flushes before
+rounding at every boundary triple, NVIDIA's hardware ftz FMA flushes at 50
+of 315 by a rule of its own, AMD's default mode flushes nothing. There is
+no semantics that every column computes in one instruction, so the seam
+cannot be made one instruction per step on NVIDIA by changing the contract.
+The ceiling of section 3.2 stands at 33.5 TFLOP/s. This closes the lever
+the plan named "the only lever on the ceiling itself".
+
+What the probe found instead, and what it is worth:
+
+1. **Apple's shipped GEMM seam does not implement the contract.** It is
+   `fbr` at all 315 boundary patterns of the triple set (14.3), the
+   contract is `rtf`, and NVIDIA and AMD compute `rtf`. Cross-vendor
+   identity on Apple is therefore conditional on no product landing in
+   `[2^-126 - 2^-150, 2^-126)`, an event no card or witness has produced
+   but which the contract promises against. The kNN repair of 2026-09-09
+   is the known fix and cost 39% there. Whether GEMM on Apple takes the
+   same repair, or the contract records the exception, is Andrew's call;
+   it is a correctness item, not a speed one.
+2. **AMD pays a software flush after every step.** Its native FMA keeps
+   subnormals and the shipped seam spells `ftz()` as bit operations
+   (bitcast, and, compare, and, compare, select) after the FMA. A
+   two-instruction spelling (`v_cmp_class_f32` for the subnormal class,
+   `v_cndmask_b32` to the signed zero) or a wave-mode flush at kernel
+   entry, IF AMD's output flush is post-round (`rtf`), would cut the AMD
+   seam from about six issued instructions to two or one. Unmeasured; the
+   MI300X lean step is 1.198 s against the H100's 0.232, and this is one
+   named piece of that gap. The mode probe is the same harness with one
+   more lane.
+3. **NVIDIA stays at two instructions**, and the kernel work of section 13
+   (latency-bound, register census) is the remaining lever there.
