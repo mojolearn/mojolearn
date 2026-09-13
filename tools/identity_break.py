@@ -646,6 +646,7 @@ def _(ml, X, yc, yr, Xh=None):
                 m, lambda e: (e.transform(Xh[:256]),))
 
 
+@lane("gbdt-ordered-rmse")
 def _(ml, X, yc, yr, Xh=None):
     """OrderedRMSE takes one explicit row permutation; it is the stable
     argsort of a hashed stream, the same on every box."""
@@ -654,6 +655,7 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(predict=_h(m.predict(X))), m, lambda e: (e.predict(Xh),))
 
 
+@lane("gbdt-feature-freq")
 def _(ml, X, yc, yr, Xh=None):
     """ExperimentalTwoLevelFeatureFreq, one depth-two tree over two coded
     source columns (_coded) and eight numeric columns."""
