@@ -995,6 +995,9 @@ check-column-invariance = "sh tools/check_column_invariance.sh"
 # process is one mode, so a run of a single arm proves half the property and
 # reads like the whole of it. Every check prints the mode it COMPILED in.
 check-linalg-identity = "sh tools/check_linalg_identity.sh"
+# The Python linalg gate with its oracle card produced first (2026-09-13): the
+# test FAILS without the card by design, and the card comes from the host oracle.
+check-linalg-python = "sh tools/linalg_python_gate.sh"
 
 # WHAT THAT GATE COSTS, in seconds rather than in argument. Alternates the
 # modes round by round (the M4's governor drifts up to 1.7x over twenty

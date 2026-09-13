@@ -1451,3 +1451,83 @@ body (group launch where the ksplit rule takes the call, all leaves
 otherwise), selected by a kernel-matrix row that is 0 on every other
 column, so Apple and AMD compile exactly what they compile today and the
 row is the switch. Section 18 is the ship.
+
+## 18. The ship (DEVIATION 2707, 2026-09-13, branch `lane/gemm-hg-flip`)
+
+### 18.1 The switch
+
+`checks/kernel_matrix.mojo::lib_gemm_kernel_body_for[column]`: 0 is the
+2595 dispatch as it stood, 1 is the `kpack_hg` body. NVIDIA 1, every other
+column 0, so Apple and AMD compile exactly the line they compiled before
+and the AMD row waits for its own MI300X leg. In `gemm_identical.mojo`,
+`GEMM_BODY_KPACK_HG` reads the row; `identical_gemm_shipped_into` runs
+`_shipped_body_kpack_hg[False]` where it is on: every call
+`choose_gemm_plan` sends to the TUNED 128x128 plan runs
+`identical_gemm_kpack_kernel` with the padded aligned page, gather staging
+and the hardware fold flush, the group launch plus the fold at the ksplit
+row's group size where the rule takes the call and all leaves otherwise;
+every other call keeps its plan. The trial hook's shipped sabotage runs
+the same body with `SAB`, and `gemm_step_geometry_reach(SHIPPED)` names
+that body's reach, so the arms check's shipped-entry case holds the new
+default to exactly `gemm_step_kpack_reach` where the body runs and to
+nothing where it does not. `identical_gemm_shipped_at_row_into` is
+untouched: it remains the ksplit body at a named row, which is what the
+check's three-row probe reads, and the row 0 case still proves the old
+plan. The plan summary, the per-call dispatch name and the arm plan label
+all say the body, so no probe row can confuse the two defaults.
+
+Without `-D MOJOLEARN_GEMM_ARM_TRIAL=1` the shipped NVIDIA build now
+compiles the kpack kernel (cross-compiled: two sidecars carry
+`st.shared.v4`), and the row at 0 compiles none of it: 0 is the revert.
+
+### 18.2 The gate
+
+- M4: the arms check (row 0 on Apple: the shipped path is the old one and
+  must stay bit-equal to FLAT; the new code must compile and the
+  `kpack_hg` arm must still reach 117/117).
+- H100, one leg: the gemm payload's device check and card, diffed against
+  the M4 card (the new shipped path against Apple's, three-vendor identity
+  through the two cards), then `tools/gemm_kernel_leg.sh` with `shipped`
+  (the new body), `ksplit` (EXACTLY the 2595 default it replaced, the
+  same-pod OLD reference) and `kpack_hg` (the arm it was flipped from,
+  which must now read 1.00 against shipped: the proof the shipped path IS
+  that body), price and LM on both corpora, every witness equal.
+- AMD: nothing changes on the AMD column; its row stays 0 until an MI300X
+  leg prices the gather staging there (the fold flush is NVIDIA's
+  instruction and does not apply).
+
+RUN OWED at the time of writing.
+
+### 18.3 The gate (2026-09-13, measured): the shipped path is the body, the card agrees with Apple, the old default reads 1.045
+
+Evidence: `bench/results/e1g/2026-09-13_183737-nvidia-h100-gemm-hg-flip/` (RunPod H100 80GB HBM3, commit 07707794, pod
+xnyxf5gvysup87 terminated and verified; corpora from R2 in 16 s).
+
+- **Card**: the gemm payload's device check on the NEW shipped path and its
+  card against the M4 card: NO DIVERGENCE at any matched stage
+  (`diff_apple_vs_nvidia.txt`). Three-vendor identity of the shipped body
+  through the two cards (AMD's row is 0 and unchanged).
+- **Step check** (`step-check.log`): PASS; the default dispatch section
+  reads `column row=132 [shipped DEFAULT kpack_hg body ...]`, the
+  shipped-entry case 24 OK 0 FAIL at the body's own reach, the three-row
+  probe unchanged.
+- **LM** (`lm_summary.tsv`, every step witness equal on both corpora):
+  shipped 0.2106 / 0.2112 s (the previous pods' shipped read 0.2318 /
+  0.2320); `kpack_hg` against the new shipped **1.0005** (the shipped
+  path IS that body); `ksplit`, the 2595 default's own group launch with
+  the tuned plan elsewhere, 1.0449 against the new shipped on this pod.
+- **GEMM sum** (`price_step.txt`): `kpack_hg` 0.999; `ksplit` 1.081
+  (131.6 against 121.8 ms). The `ksplit` ARM prices 131.6 where the old
+  shipped default priced 143 on every pod of the day: the arm and the old
+  default share the kernels but not every launch line, so the same-pod OLD
+  reference here is a lower bound of the gain, and the cross-pod shipped
+  numbers (0.232 to 0.211 on the step, 143 to 122 on the sum, a pod-to-pod
+  drift under 1 percent all day) are the measurement.
+- **One harness defect, fixed after**: the shipped noise-control price run
+  (`price-shipped`) exited 1 after its first call because the PHASE line's
+  second call site still passed the shipped geometry id to the kpack phase
+  timer ("geometry 0 is not a kpack geometry"). `bench/gemm_step_price_main.mojo`
+  now resolves the phase geometry once; `tools/gemm_price_shipped_leg.sh`
+  reruns only that control. The verdict does not rest on it.
+
+**SHIPPED.** The NVIDIA kernel body row is 1 on main; 0 is the revert.

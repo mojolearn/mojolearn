@@ -1395,9 +1395,11 @@ def check_default_dispatch(ctx: DeviceContext, mut failures: List[String]) raise
                         )
                 # The column's own shipped entry, clean and through the hook.
                 var glc = gemm_default_ksplit_leaves(m, n, k)
-                var reachc = 0
-                if glc > 0:
-                    reachc = gemm_step_ksplit_reach(m, n, k, glc)
+                # DEVIATION 2707: the entry's reach is the shipped BODY's reach
+                # (the kpack_hg body where the kernel body row is 1, the ksplit
+                # group launch where it is 0), from the one function that names it.
+                var reachc = gemm_step_geometry_reach(GEMM_GEOM_SHIPPED, m, n, k)
+                if reachc > 0:
                     entry_took += 1
                 _run(ctx, dc, da, db, dw, hgot, op, m, n, k, RUN_SHIPPED, 0, False)
                 var ce = gemm_step_compare(hgot, hexp, mn)
