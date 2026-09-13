@@ -1451,3 +1451,49 @@ body (group launch where the ksplit rule takes the call, all leaves
 otherwise), selected by a kernel-matrix row that is 0 on every other
 column, so Apple and AMD compile exactly what they compile today and the
 row is the switch. Section 18 is the ship.
+
+## 18. The ship (DEVIATION 2707, 2026-09-13, branch `lane/gemm-hg-flip`)
+
+### 18.1 The switch
+
+`checks/kernel_matrix.mojo::lib_gemm_kernel_body_for[column]`: 0 is the
+2595 dispatch as it stood, 1 is the `kpack_hg` body. NVIDIA 1, every other
+column 0, so Apple and AMD compile exactly the line they compiled before
+and the AMD row waits for its own MI300X leg. In `gemm_identical.mojo`,
+`GEMM_BODY_KPACK_HG` reads the row; `identical_gemm_shipped_into` runs
+`_shipped_body_kpack_hg[False]` where it is on: every call
+`choose_gemm_plan` sends to the TUNED 128x128 plan runs
+`identical_gemm_kpack_kernel` with the padded aligned page, gather staging
+and the hardware fold flush, the group launch plus the fold at the ksplit
+row's group size where the rule takes the call and all leaves otherwise;
+every other call keeps its plan. The trial hook's shipped sabotage runs
+the same body with `SAB`, and `gemm_step_geometry_reach(SHIPPED)` names
+that body's reach, so the arms check's shipped-entry case holds the new
+default to exactly `gemm_step_kpack_reach` where the body runs and to
+nothing where it does not. `identical_gemm_shipped_at_row_into` is
+untouched: it remains the ksplit body at a named row, which is what the
+check's three-row probe reads, and the row 0 case still proves the old
+plan. The plan summary, the per-call dispatch name and the arm plan label
+all say the body, so no probe row can confuse the two defaults.
+
+Without `-D MOJOLEARN_GEMM_ARM_TRIAL=1` the shipped NVIDIA build now
+compiles the kpack kernel (cross-compiled: two sidecars carry
+`st.shared.v4`), and the row at 0 compiles none of it: 0 is the revert.
+
+### 18.2 The gate
+
+- M4: the arms check (row 0 on Apple: the shipped path is the old one and
+  must stay bit-equal to FLAT; the new code must compile and the
+  `kpack_hg` arm must still reach 117/117).
+- H100, one leg: the gemm payload's device check and card, diffed against
+  the M4 card (the new shipped path against Apple's, three-vendor identity
+  through the two cards), then `tools/gemm_kernel_leg.sh` with `shipped`
+  (the new body), `ksplit` (EXACTLY the 2595 default it replaced, the
+  same-pod OLD reference) and `kpack_hg` (the arm it was flipped from,
+  which must now read 1.00 against shipped: the proof the shipped path IS
+  that body), price and LM on both corpora, every witness equal.
+- AMD: nothing changes on the AMD column; its row stays 0 until an MI300X
+  leg prices the gather staging there (the fold flush is NVIDIA's
+  instruction and does not apply).
+
+RUN OWED at the time of writing.

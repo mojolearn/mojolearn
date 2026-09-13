@@ -56,10 +56,14 @@ set -u
 # DEVIATION 2706 (brief section 17): the hardware fold flush (`kpack_hf`), the
 # gather staging (`kpack_gs`) and both (`kpack_hg`) against `kpack_padv` (their
 # base) and `shipped`, same pod.
-MOJOLEARN_GEMM_STEP_LEG_ARMS=${MOJOLEARN_GEMM_STEP_LEG_ARMS:-shipped,kpack_padv,kpack_hf,kpack_gs,kpack_hg}
-MOJOLEARN_GEMM_STEP_LEG_LM_ARMS=${MOJOLEARN_GEMM_STEP_LEG_LM_ARMS:-kpack_hf,kpack_gs,kpack_hg}
+# DEVIATION 2707 (brief section 18), the SHIP gate: `shipped` is now the kpack_hg
+# body on NVIDIA; `ksplit` is exactly the 2595 default it replaced (the same-pod
+# OLD reference, expected above 1), and `kpack_hg` is the arm it was flipped
+# from (expected 1.00: the proof the shipped path IS that body).
+MOJOLEARN_GEMM_STEP_LEG_ARMS=${MOJOLEARN_GEMM_STEP_LEG_ARMS:-shipped,ksplit,kpack_hg}
+MOJOLEARN_GEMM_STEP_LEG_LM_ARMS=${MOJOLEARN_GEMM_STEP_LEG_LM_ARMS:-ksplit,kpack_hg}
 MOJOLEARN_GEMM_STEP_LEG_LMTIMING=${MOJOLEARN_GEMM_STEP_LEG_LMTIMING:-1}
-MOJOLEARN_GEMM_STEP_LEG_CHECK_ARMS=${MOJOLEARN_GEMM_STEP_LEG_CHECK_ARMS:-shipped,kpack_padv,kpack_hf,kpack_gs,kpack_hg}
+MOJOLEARN_GEMM_STEP_LEG_CHECK_ARMS=${MOJOLEARN_GEMM_STEP_LEG_CHECK_ARMS:-shipped,ksplit,kpack_hg}
 MOJOLEARN_GEMM_STEP_LEG_OUT=${MOJOLEARN_GEMM_STEP_LEG_OUT:-/root/gemm_leg_out/gemm-kernel}
 export MOJOLEARN_GEMM_STEP_LEG_ARMS MOJOLEARN_GEMM_STEP_LEG_LM_ARMS \
     MOJOLEARN_GEMM_STEP_LEG_LMTIMING MOJOLEARN_GEMM_STEP_LEG_CHECK_ARMS \
@@ -76,7 +80,7 @@ if [ -z "$lm_left" ] && [ "$MOJOLEARN_GEMM_STEP_LEG_LM_ARMS" != auto ]; then
 fi
 
 {
-    echo "deviations=2599,2700,2703,2706"
+    echo "deviations=2599,2700,2703,2706,2707"
     echo "brief=docs/lanes/BRIEF_gemm_kernel_2026-09-11.md"
     echo "started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     echo "root=$ROOT"

@@ -156,6 +156,7 @@ from checks.kernel_matrix import (
     lib_hardware_ftz_fma_for,
     gemm_wide_split_for,
     lib_gemm_block_parallelism_for,
+    lib_gemm_kernel_body_for,
     lib_gemm_block_parallelism_trial_for,
     lib_lane_width_for,
     lib_smem_page_fits_for,
@@ -3678,6 +3679,12 @@ comptime GEMM_KSPLIT_S = lib_gemm_block_parallelism_trial_for[TARGET_COLUMN]()
 #: MI300X leg decides, Apple, every other column).
 comptime GEMM_KSPLIT_DEFAULT_S = lib_gemm_block_parallelism_for[TARGET_COLUMN]()
 comptime GEMM_KSPLIT_DEFAULT_ON = GEMM_KSPLIT_DEFAULT_S > 0
+#: DEVIATION 2707: the KERNEL BODY row (kernel matrix `lib_gemm_kernel_body_for`).
+#: 1 routes every call the TUNED 128x128 plan serves through the `kpack_hg`
+#: body (`_shipped_body_kpack_hg`), at the ksplit row's group sizes; 0 is the
+#: 2595 dispatch and compiles no kpack kernel into the shipped build.
+comptime GEMM_BODY_ROW = lib_gemm_kernel_body_for[TARGET_COLUMN]()
+comptime GEMM_BODY_KPACK_HG = GEMM_BODY_ROW == 1
 #: The largest group size `_ksplit_resolve_leaves` accepts (it travels as an
 #: Int32 kernel argument).
 comptime GEMM_KSPLIT_MAX_GROUP_LEAVES = 1 << 20
@@ -4199,6 +4206,41 @@ def identical_gemm_shipped_at_row_into[
     )
 
 
+def _shipped_body_kpack_hg[
+    SAB: Bool
+](
+    ctx: DeviceContext,
+    mut c: DeviceBuffer[DType.float32],
+    mut a: DeviceBuffer[DType.float32],
+    mut b: DeviceBuffer[DType.float32],
+    mut ws: DeviceBuffer[DType.float32],
+    m: Int,
+    n: Int,
+    k: Int,
+    op: Int,
+) raises:
+    """DEVIATION 2707: THE SHIPPED DISPATCH'S BODY where the kernel body row
+    is 1. Every call `choose_gemm_plan` sends to the TUNED 128x128 plan runs
+    `identical_gemm_kpack_kernel` as the `kpack_hg` arm ran it (padded
+    aligned page, gather staging, hardware fold flush): the group launch plus
+    the fold at the ksplit row's group size where the rule takes the call
+    (`_kpack_run` allocates the node workspace and SYNCHRONIZES, `ws`
+    unused), all leaves in one asynchronous launch otherwise. Every other
+    call keeps `choose_gemm_plan`'s plan. `SAB = True` is the trial hook's
+    sabotage of this body: exactly `gemm_step_kpack_reach` cells move."""
+    if m <= 0 or n <= 0:
+        return
+    if choose_gemm_plan(m, n, k) == PLAN_TUNED_128_8X8:
+        _kpack_run[
+            GEMM_KPACK_RPT, GEMM_KPACK_CPT, TUNED_TC, GEMM_KPACK_KS, GEMM_KPACK_FS, SAB,
+            GEMM_KPACK_PAD, GEMM_KPACK_ALIGN, 0, True, True,
+        ](ctx, c, a, b, m, n, k, op, gemm_default_ksplit_leaves(m, n, k))
+        return
+    identical_gemm_with_plan(
+        ctx, c, a, b, ws, m, n, k, op, choose_gemm_plan(m, n, k)
+    )
+
+
 def identical_gemm_shipped_into(
     ctx: DeviceContext,
     mut c: DeviceBuffer[DType.float32],
@@ -4215,9 +4257,13 @@ def identical_gemm_shipped_into(
     the reference every GEMM step harness calls `shipped`. It reads no
     environment on any build.
 
+    DEVIATION 2707: kernel body row 1 (NVIDIA): `_shipped_body_kpack_hg`.
     Row above 0 (NVIDIA): `identical_gemm_shipped_at_row_into[False]` at the
     row. Row 0 (AMD until the MI300X leg decides, Apple, every other column):
     the old line, and the ksplit path is not compiled at all."""
+    comptime if GEMM_BODY_KPACK_HG:
+        _shipped_body_kpack_hg[False](ctx, c, a, b, ws, m, n, k, op)
+        return
     comptime if GEMM_KSPLIT_DEFAULT_ON:
         identical_gemm_shipped_at_row_into[False](
             ctx, c, a, b, ws, m, n, k, op, GEMM_KSPLIT_DEFAULT_S
@@ -4231,6 +4277,13 @@ def identical_gemm_shipped_into(
 def gemm_shipped_plan_summary() -> String:
     """DEVIATION 2595: the shipped dispatch in one shape-free line, from the
     bound constants: whether the ksplit default is on and at which row."""
+    comptime if GEMM_BODY_KPACK_HG:
+        return (
+            String("shipped DEFAULT kpack_hg body (DEVIATION 2707, kernel body row 1: padded aligned page,")
+            + " gather staging, hardware fold flush) on every call the TUNED 128x128 plan serves, ksplit groups"
+            + " (block parallelism row S=" + String(GEMM_KSPLIT_DEFAULT_S) + " slack=" + String(GEMM_KSPLIT_SLACK)
+            + ") where the group rule takes the call, else all leaves; other calls choose_gemm_plan's plan"
+        )
     comptime if GEMM_KSPLIT_DEFAULT_ON:
         return (
             String("shipped DEFAULT ksplit (DEVIATION 2595, block parallelism row S=")
@@ -4252,6 +4305,14 @@ def gemm_shipped_dispatch_name_at(m: Int, n: Int, k: Int, row: Int) -> String:
     take the call."""
     var plan = choose_gemm_plan(m, n, k)
     var gl = gemm_default_ksplit_leaves_at(m, n, k, row)
+    comptime if GEMM_BODY_KPACK_HG:
+        if plan == PLAN_TUNED_128_8X8 and row == GEMM_KSPLIT_DEFAULT_S:
+            var sb = String("DEFAULT kpack_hg body (DEVIATION 2707) ") + gemm_step_geometry_name(GEMM_GEOM_KPACK_HG)
+            if gl > 0:
+                sb += " leaves_per_group=" + String(gl) + " groups=" + String((contract_partition(k)[1] + gl - 1) // gl)
+            else:
+                sb += " all leaves in one launch"
+            return sb
     if gl <= 0:
         var s = gemm_plan_name(plan)
         if plan == PLAN_TUNED_128_8X8:
@@ -4288,6 +4349,8 @@ def gemm_step_arm_plan_label(arm: Int) -> String:
     var dflt = String("default=tuned128 (block parallelism row 0)")
     comptime if GEMM_KSPLIT_DEFAULT_ON:
         dflt = String("default=ksplit(S=") + String(GEMM_KSPLIT_DEFAULT_S) + ") else tuned128"
+    comptime if GEMM_BODY_KPACK_HG:
+        dflt = String("default=kpack_hg body (2707) at ksplit(S=") + String(GEMM_KSPLIT_DEFAULT_S) + ") groups"
     var s = String("")
     if which == GEMM_ARM_SHIPPED:
         s = String("shipped: ") + dflt
@@ -4596,6 +4659,13 @@ def gemm_step_geometry_reach(geom: Int, m: Int, n: Int, k: Int) raises -> Int:
     where the old plan runs; 0 for `tuned128`; one per block for the 2540 and
     2541 geometries; `gemm_step_ksplit_reach` for ksplit."""
     if geom == GEMM_GEOM_SHIPPED:
+        comptime if GEMM_BODY_KPACK_HG:
+            # DEVIATION 2707: the kpack_hg body's reach on every call the
+            # TUNED plan serves (its rule reads the trial row, which is the
+            # shipped row wherever the shipped row is above 0).
+            if m <= 0 or n <= 0 or choose_gemm_plan(m, n, k) != PLAN_TUNED_128_8X8:
+                return 0
+            return gemm_step_kpack_reach(GEMM_GEOM_KPACK_HG, m, n, k)
         var gl0 = gemm_default_ksplit_leaves(m, n, k)
         if gl0 <= 0:
             return 0
@@ -4686,9 +4756,12 @@ def identical_gemm_step_geometry_into(
     if geom == GEMM_GEOM_SHIPPED:
         comptime if GEMM_ARM_TRIAL:
             if sabotage:
-                identical_gemm_shipped_at_row_into[True](
-                    ctx, c, a, b, ws, m, n, k, op, GEMM_KSPLIT_DEFAULT_S
-                )
+                comptime if GEMM_BODY_KPACK_HG:
+                    _shipped_body_kpack_hg[True](ctx, c, a, b, ws, m, n, k, op)
+                else:
+                    identical_gemm_shipped_at_row_into[True](
+                        ctx, c, a, b, ws, m, n, k, op, GEMM_KSPLIT_DEFAULT_S
+                    )
                 return
         identical_gemm_shipped_into(ctx, c, a, b, ws, m, n, k, op)
         return

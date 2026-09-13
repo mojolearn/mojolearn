@@ -97,11 +97,15 @@ FAILS rather than skips when no card is supplied.
 
 HOW TO RUN IT
 -------------
-    # 1. build both linalg extensions (the identical one is the gated one)
-    bash bindings/build_linalg.sh
+    pixi run check-linalg-python        # tools/linalg_python_gate.sh: the three
+                                        # steps below, the card produced first
+
+    # 1. build the IDENTICAL linalg extension (the only tier linalg ships
+    #    since DEVIATION 2490; bindings/build_linalg.sh refuses any other)
     MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_linalg.sh
 
-    # 2. emit the reference card from the NORMATIVE host oracle
+    # 2. emit the reference card from the NORMATIVE host oracle (it builds the
+    #    GEMM sources; about a minute; no GPU)
     tools/gemm_card.sh oracle /tmp/gemm_oracle.card
 
     # 3. the gate
@@ -109,10 +113,11 @@ HOW TO RUN IT
         MOJOLEARN_GEMM_CARD=/tmp/gemm_oracle.card \\
         python3 -m mojolearn.tests.test_linalg_identity
 
-    # 4. the FAST half, in its own process, because the mode is chosen at
-    #    import and cannot be changed inside one
-    cd python && MOJOLEARN_LINALG_GATE_ALLOW_FAST=1 \\
-        python3 -m mojolearn.tests.test_linalg_identity
+    The FAST half of the old recipe (MOJOLEARN_LINALG_GATE_ALLOW_FAST=1) is
+    RETIRED with the fast linalg tier (DEVIATION 2490): there is no fast
+    extension to load, so that run loads the identical one and, with no card,
+    reports RED as it must. Do not run it. (Measured 2026-09-13: with the card
+    the IDENTICAL gate is GREEN, 89 checks and the card arm.)
 
 `archive/evidence/gemm/PYTHON_SURFACE_GATE.md` is the maintainer's page for this file: what it
 proves, what it does not, and how to regenerate the reference after a

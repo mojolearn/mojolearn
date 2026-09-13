@@ -86,6 +86,7 @@ from checks.numerics import numeric_mode_name
 from gemm.checks.gemm_identical import (
     GEMM_ARM_SABOTAGE,
     GEMM_ARM_TRIAL,
+    GEMM_BODY_KPACK_HG,
     GEMM_GEOM_KFOLDV,
     GEMM_GEOM_KFOLDV_LEAF,
     GEMM_GEOM_KPACK,
@@ -319,12 +320,19 @@ def _price_call(
         pleaves = gleaves_shipped
         pblocks = launched_shipped
         phase_of = String("shipped_default")
+        # DEVIATION 2707: the shipped body is kpack_hg where the row says so.
+        comptime if GEMM_BODY_KPACK_HG:
+            phase_of = String("shipped_default_kpack_hg")
+            kpack_phase = True
     if pleaves > 0:
         gemm_step_poison(ctx, dc, hgot, mn)
         if kfold_phase:
             _ = identical_gemm_step_kfold_phase_into(ctx, dc, da, db, dw, m, n, k, op, geom)
         elif kpack_phase:
-            _ = identical_gemm_step_kpack_phase_into(ctx, dc, da, db, dw, m, n, k, op, geom)
+            var pgeom = geom
+            if geom == GEMM_GEOM_SHIPPED:
+                pgeom = GEMM_GEOM_KPACK_HG
+            _ = identical_gemm_step_kpack_phase_into(ctx, dc, da, db, dw, m, n, k, op, pgeom)
         else:
             _ = identical_gemm_step_ksplit_phase_into(ctx, dc, da, db, dw, m, n, k, op, pleaves)
         gemm_step_readback(ctx, dc, hgot)
