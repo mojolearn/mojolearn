@@ -78,18 +78,20 @@ and is not. Recorded as pre-existing on NVIDIA and AMD in the
 [AMD confirmations brief](docs/lanes/BRIEF_amd_confirmations_2026-09-12.md)
 (finding 3); the refusal past capacity is still owed.
 
-**Known cross-vendor divergence.** `ExperimentalTwoLevelFeatureFreq` (the
-experimental one-tree feature-frequency combination estimator) does not give
-the same predictions on the three GPU vendors. On 2026-09-13 the 46-lane run
-of `tools/identity_break.py` found it different between every pair of an
-Apple M4, an NVIDIA H100 and an AMD MI325X on 8 of 9 hostile fixtures, with
-only the fixture that has no ties agreeing, while the other 43 lanes that ran
-everywhere were identical
-([record](bench/results/identity_break/2026-09-13_46-lanes/README.md)). Its
-earlier evidence was AMD against NVIDIA only. Do not rely on this estimator
-under the cross-vendor claim until
-`docs/lanes/BRIEF_feature_freq_divergence_2026-09-13.md` records a fix with
-before and after hashes.
+**A cross-vendor divergence found and fixed (DEVIATION 2710).** On 2026-09-13 the
+46-lane run of `tools/identity_break.py` found `ExperimentalTwoLevelFeatureFreq`
+different between every pair of an Apple M4, an NVIDIA H100 and an AMD MI325X
+on 8 of 9 hostile fixtures while the other 43 lanes were identical. The cause
+was memory, not arithmetic: the synchronized tensor drivers sized and zeroed
+the fixed-point histogram accumulator by a literal dead flag, so under
+IDENTICAL the histogram kernels wrote 264 cells into a 4-byte, never-zeroed
+buffer and read back whatever each vendor's allocator had left there. Sized by
+the live flag, all three vendors give the Apple column's bits on every fixture
+and column (fixed arm base 7d9c56b51213cb42, hashed 9d97a55431b6f8e0; the old
+code, selectable with `-D MOJOLEARN_2710_TENSOR_ACC_DEAD=1`, reproduces each
+vendor's wrong hashes), see
+`docs/lanes/BRIEF_feature_freq_divergence_2026-09-13.md`. The fix is on main
+and ships in 0.8.5; 0.8.4 carries the defect on this estimator.
 
 | Surface | Public availability | Strongest retained identity evidence | Important open work |
 |---|---|---|---|

@@ -3,6 +3,16 @@
 This file records release-level changes, not the development diary. Git history and archived evidence
 contain the detailed investigation record.
 
+## 0.8.5 (unreleased)
+
+- `ExperimentalTwoLevelFeatureFreq` gave different predictions on the three GPU vendors, and
+  occasionally two different answers on one machine, because its histogram accumulator was sized
+  and zeroed by a hard-coded dead flag while the kernels wrote the live number of cells past its
+  end (DEVIATION 2710). The accumulator is sized by the live flag; every vendor now returns the
+  same bits on all nine hostile fixtures, proven with the old code selectable beside the fix on an
+  M4, an H100 and an MI325X. No other estimator's bits move (the five other gradient boosting
+  lanes are identical before and after on every vendor).
+
 ## 0.8.4 (published 2026-09-13)
 
 Linux x86-64 wheel (CUDA sm_89, CUDA sm_90a, HIP gfx942) and macOS arm64 wheel, both from
