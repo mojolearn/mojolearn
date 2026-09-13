@@ -1,0 +1,126 @@
+# The Python test suites, which until 2026-09-13 nothing ran.
+#
+# WHAT WAS WRONG. There are two shapes of test under python/mojolearn/tests/
+# and neither had a workflow:
+#
+#   - 37 pytest files (978 tests). pytest was DECLARED NOWHERE -- not in
+#     pixi.toml, not in any environment, and this repo has no pyproject.toml.
+#     byte-lm-cpu-gate.yml pip-installs it ad hoc for two files; every other
+#     one died locally on ModuleNotFoundError.
+#   - 13 GATE-STYLE files. They define no test functions, so pytest collects
+#     nothing from them -- correct, and exactly why they were invisible. ONE
+#     pixi task ran ONE of them (check-arima-surface).
+#
+# That is not hypothetical rot. test_samba_surface and test_transformer_hd128
+# sat RED for days after the numpy-free migration took `.view`/`.mean` off
+# Array; test_linalg_identity sat RED because nobody generated the 15-second
+# oracle card it asks for; test_rf_class_weight carried a stale double after
+# _fit_arrays grew an argument. Same disease as the packaging tests that
+# 88c0c33b wired up after one of them sat RED on main while 0.8.4 was cut.
+#
+# WHY macos-15 AND NOT ubuntu. These suites need REAL BINARIES: all 17
+# identical/*.so, one per bindings/build*.sh. On Darwin each script compiles
+# Metal AOT with no architecture flag. On Linux a build wants MOJOLEARN_GPU_ARCHS
+# naming EXACTLY ONE GPU architecture (bindings/build_rf.sh:60-73), which a
+# GPU-less hosted runner has no sensible value for. wheel-ci.yml already puts
+# the job that needs real binaries on macos-15.
+#
+# WHY THE PATHS ARE NARROW. The build is the cost here: the release checklist
+# measures the full binding set at about 8 minutes of compile
+# (docs/RELEASE_CHECKLIST.md:19), to protect suites that run in 7 s and 34 s.
+# So this triggers on what actually caused the breakage -- the array/buffer
+# boundary, the bindings themselves, the manifest, and the tests -- rather than
+# on all of python/mojolearn/**, which routine edits trip constantly.
+#
+# AND ON ITSELF, AND ON ITS RUNNER SCRIPT. byte-lm-cpu-gate.yml learned this
+# the hard way and says so in its own paths block: "A gate that does not run
+# when the gate changes is not a gate."
+name: Python tests
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "main"
+    paths:
+      # The boundary whose drift broke the gates: Array gained/lost methods,
+      # every converter routes through _buffer, _backend picks the binary.
+      - "python/mojolearn/_array.py"
+      - "python/mojolearn/_arrays.py"
+      - "python/mojolearn/_buffer.py"
+      - "python/mojolearn/_bufcheck.py"
+      - "python/mojolearn/_backend.py"
+      # The tests themselves.
+      - "python/mojolearn/tests/**"
+      # The bindings and their build scripts: these produce the binaries both
+      # suites import, so a change here can break every test at once.
+      - "bindings/**"
+      # The manifest carries [feature.test] and both task definitions.
+      - "pixi.toml"
+      - "pixi.lock"
+      # This workflow and the runner it calls.
+      - ".github/workflows/python-tests.yml"
+      - "tools/check_python_gates.sh"
+
+permissions:
+  contents: read
+
+jobs:
+  python-tests:
+    name: pytest suite and the 13 gates
+    runs-on: macos-15
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # bench/results is 2.6 GB and nothing here reads it.
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /*
+            !/bench/results/*
+
+      - uses: prefix-dev/setup-pixi@v0.10.1
+        with:
+          run-install: true
+          cache: false
+
+      - name: Runner facts
+        run: |
+          uname -a
+          sw_vers -productVersion
+          sysctl -n machdep.cpu.brand_string
+          pixi run mojo --version
+
+      # MOJOLEARN_NUMERIC_MODE defaults to identical in every build script, so
+      # one pass per script lands python/mojolearn/identical/*.so. A MISSING
+      # binary is not a silent downgrade: _backend.py raises rather than let a
+      # plain import resolve to the fast binary sitting beside it and return
+      # fast arithmetic under the identical label (_backend.py:139-143).
+      - name: Build the bindings (IDENTICAL)
+        run: |
+          set -o pipefail
+          for s in bindings/build*.sh; do
+            echo "== $s =="
+            sh "$s" 2>&1 | tail -3
+          done
+          echo "== built =="
+          ls python/mojolearn/identical/*.so | wc -l
+
+      - name: Import check, before anything claims to have tested
+        run: |
+          cd python
+          MOJOLEARN_NUMERIC_MODE=identical python3 -c \
+            "import mojolearn; print('import OK', mojolearn.__version__)"
+
+      # 978 tests, about 7 s. Every one imports mojolearn, so this is the first
+      # thing the build above is good for.
+      - name: pytest suite
+        run: pixi run -e test test-python
+
+      # The 13 module-style gates, about 34 s including the oracle card the
+      # linalg gate needs. Exits non-zero naming any that go RED.
+      - name: Gate-style tests
+        run: pixi run check-python-gates
