@@ -759,6 +759,15 @@ allows.
 The AMD MI300X verdict (Hot Aisle) is still owed, so AMD stays on the old
 plan in the shipped default until that leg reads it.
 
+**SUPERSEDED 2026-09-13.** That leg RAN the same day
+(`bench/results/e1g/2026-09-11_164818-amd-mi300x-hotaisle-gemm-longk`,
+finished 17:10:45Z, gfx942, commit 73d0e64b): `verdict ksplit FLIP
+geomean=0.6136` and `verdict ksplit_leaf FLIP geomean=0.6090`, lean step
+1.953 -> 1.198 s, every step witness equal. `lib_gemm_block_parallelism_for`
+now returns **110** on `COLUMN_AMD`, so the AMD default is ON and is the
+largest single step win measured on either vendor. The classical callers were
+checked to HOLD under it (`68be1c79`).
+
 Not a claim against anyone. The torch step at the target shape is an owed
 opponent row (bench/OPPONENT_REFERENCE.md); until it exists these are
 internal before and after numbers.
@@ -788,7 +797,8 @@ row and no environment.
   synchronize, keep the buffer). The arm now calls it too.
 - **The kernel matrix.** `lib_gemm_block_parallelism_for` is NVIDIA 132 (the
   value the H100 leg ran), AMD 0 with a docstring saying the MI300X leg
-  decides the AMD value, every other column 0. The `ksplit` trial arm reads
+  decides the AMD value, every other column 0. **SUPERSEDED 2026-09-13: AMD
+  is 110, measured, and the default is ON there** (see 10.1). The `ksplit` trial arm reads
   a second row, `lib_gemm_block_parallelism_trial_for`: the shipped row where
   it is above 0, AMD 110 (the section 9.2 reading), every other column 0. So
   the MI300X leg can still force `ksplit` at 110 while the AMD default is
