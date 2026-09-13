@@ -251,6 +251,8 @@ PYEOF
 
 fetch_taxi() {
     _d="$DATA/taxi"; mkdir -p "$_d"
+    # DEVIATION 2704: the runner staged the decoded npz from R2; no parquet fetch.
+    [ -s "$_d/taxi_speed.npz" ] && { echo "taxi_fetch=staged npz present (R2) $(date -u +%H:%M:%S)" >> "$OUT/setup.txt"; return 0; }
     for _m in 2024-01 2024-02; do
         curl -fL --retry 3 --max-time 600 -A "$UA" -o "$_d/yellow_tripdata_$_m.parquet.part" \
             "https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_$_m.parquet" \
@@ -269,6 +271,8 @@ fetch_taxi() {
 
 fetch_istella() {
     _d="$DATA/istella"; mkdir -p "$_d"; _t="$_d/istella-s-letor.tar.gz"
+    # DEVIATION 2704: the runner staged the decoded npz from R2; no tarball fetch.
+    [ -s "$_d/istella_speed.npz" ] && { echo "istella_fetch=staged npz present (R2) $(date -u +%H:%M:%S)" >> "$OUT/setup.txt"; return 0; }
     _i=0
     while [ "$_i" -lt 4 ]; do
         _i=$((_i + 1))

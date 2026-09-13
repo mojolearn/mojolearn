@@ -287,6 +287,9 @@ SELFKILL
     box "set -e; got=\$(sha256sum /root/src.tgz | awk '{print \$1}'); [ \"\$got\" = $sha ] || { echo SHA MISMATCH; exit 9; }
          rm -rf /root/mojolearn && mkdir -p /root/mojolearn /root/trees_out && tar xzf /root/src.tgz -C /root/mojolearn && rm /root/src.tgz
          echo $commit > /root/mojolearn/SHIPPED_COMMIT.txt; echo SOURCE-OK \$(find /root/mojolearn -type f | wc -l) files" || die "source unpack failed" 7
+    # DEVIATION 2704: the two board npz from R2, never a decode on the droplet.
+    MOJOLEARN_STAGE_KEYS="${MOJOLEARN_STAGE_KEYS-gbm-bench/taxi/taxi_speed.npz gbm-bench/istella/istella_speed.npz}" \
+        sh tools/stage_from_r2.sh "${RSH#ssh } root@$ip" 2>&1 | tail -1
 
     # VOLUME MOUNT.
     box "dev=/dev/disk/by-id/scsi-0DO_Volume_$VOLUME; for i in \$(seq 1 30); do [ -e \$dev ] && break; sleep 2; done

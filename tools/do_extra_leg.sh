@@ -1171,6 +1171,9 @@ log "uploaded after $(( $(date +%s) - LEG_START ))s of lease"
 sed 's/^/    /' "$TMPD/unpack.out"
 grep -q '^ARCHIVE-SHA-OK' "$TMPD/unpack.out" && grep -q '^UNPACKED ' "$TMPD/unpack.out" \
   || die "the box refused or failed to unpack the bundle" 7
+# DEVIATION 2704: datasets and corpora from R2, staged before the body runs.
+sh tools/stage_from_r2.sh "${SSH_OPTS[*]} root@$IP" > "$OUT/stage.log" 2>&1 || true
+log "$(tail -1 "$OUT/stage.log")"
 
 # MOJOLEARN_DO_EXTRA_UPLOAD: data the box cannot fetch, each file checked by
 # sha256 on the box against the one computed before the create.

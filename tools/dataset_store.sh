@@ -366,7 +366,7 @@ cmd_stage() {
         _url=$(cmd_presign "$key" 7200) || return 1
         # shellcheck disable=SC2086
         { printf "URL='%s'\n" "$_url"; cmd_box_cmd "$key"; } | ssh -o StrictHostKeyChecking=no \
-            -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR $target 'sh -s' \
+            -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR $target "${MOJOLEARN_STAGE_REMOTE_SH:-sh -s}" \
             || { echo "staging FAILED: $key" >&2; return 1; }
     done
     echo "staged $_staged key(s); the box verified each against the pins"
