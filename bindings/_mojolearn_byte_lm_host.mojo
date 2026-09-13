@@ -17,6 +17,12 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
 from bindings.hostptr import f32_ptr, f64_ptr, read_f32, read_i32
+from checks.kernel_matrix import (
+    COLUMN_CPU,
+    DETECTED_COLUMN,
+    TARGET_COLUMN,
+    column_name,
+)
 from checks.numerics import GLOBAL_NUMERIC_MODE
 # DEVIATION 2680. The GEMM lane's backward sabotage arms, so a build carrying
 # one reads back as a sabotage build rather than as a clean one. Reachable
@@ -69,6 +75,33 @@ def byte_lm_host_numeric_mode_binding() raises -> PythonObject:
 
 def byte_lm_host_vendor_binding() raises -> PythonObject:
     return PythonObject(String("cpu"))
+
+
+def byte_lm_host_column_binding() raises -> PythonObject:
+    """`column_name(TARGET_COLUMN)`, the comptime assert's witness: "cpu".
+
+    THE COLUMN IS THE CPU COLUMN, OR THIS DOES NOT BUILD (the CPU training
+    lane, 2026-09-13). This binding compiles gemm/checks/gemm_identical.mojo,
+    which reads the kernel matrix at TARGET_COLUMN; under the old Apple
+    fallthrough every row it reads answered the same value the CPU column
+    answers now (32 lanes, the 32 KB floor, kernel body 0, no hardware ftz),
+    which is why the seven-runner result stands. `bindings/build_byte_lm_host.sh`
+    passes -D MOJOLEARN_COLUMN_CPU; any other column stops here. The assert
+    lives in this function because Mojo takes a `comptime assert` inside a
+    function body only, and PyInit registers this function, so it is compiled
+    in every build of the module."""
+    comptime assert TARGET_COLUMN == COLUMN_CPU, (
+        "byte LM host: this binding compiles the CPU column only; pass"
+        " -D MOJOLEARN_COLUMN_CPU (bindings/build_byte_lm_host.sh does)"
+    )
+    return PythonObject(column_name(TARGET_COLUMN))
+
+
+def byte_lm_host_detected_column_binding() raises -> PythonObject:
+    """`column_name(DETECTED_COLUMN)`: what the accelerator predicates fold to
+    in THIS build, with no define. "cpu" on a build with no accelerator target;
+    a vendor's name means the predicate answered for the host machine."""
+    return PythonObject(column_name(DETECTED_COLUMN))
 
 
 def byte_lm_host_sabotage_binding() raises -> PythonObject:
@@ -285,6 +318,8 @@ def PyInit__mojolearn_byte_lm_host() abi("C") -> PythonObject:
         var module = PythonModuleBuilder("_mojolearn_byte_lm_host")
         module.def_function[byte_lm_host_numeric_mode_binding]("byte_lm_host_numeric_mode")
         module.def_function[byte_lm_host_vendor_binding]("byte_lm_host_vendor")
+        module.def_function[byte_lm_host_column_binding]("byte_lm_host_column")
+        module.def_function[byte_lm_host_detected_column_binding]("byte_lm_host_detected_column")
         module.def_function[byte_lm_host_sabotage_binding]("byte_lm_host_sabotage")
         module.def_function[byte_lm_host_profile_binding]("byte_lm_host_profile")
         module.def_function[byte_lm_host_logits_binding]("byte_lm_host_logits")

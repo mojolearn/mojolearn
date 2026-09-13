@@ -86,18 +86,181 @@ that predates the columns reads NOT-COMPARED, never DIVERGENT. It exits
 non-zero on any DIVERGENT, MOVED or RELOAD-MOVED cell. FAST is refused on
 purpose: a bitwise question to a FAST arm is a category error
 (fast-is-not-identical).
+
+THE FOURTH COLUMN, a CPU (the CPU training lane, 2026-09-13; brief
+docs/lanes/BRIEF_cpu_training_2026-09-13.md section 3.3). On an install whose
+`mojolearn.vendor()` is 'cpu' (no GPU set, a host binding under
+mojolearn/host/ built), `--vendor` defaults to `cpu-<cpu model slug>` read
+from the machine, the JSON gains a `host` object (cpu model, arch, the host
+bindings built and what each reads back as its kernel-matrix column), and a
+lane whose family has no host fit records REFUSED with the by-name sentence
+"no CPU implementation of <binding>.<function> yet", never a hash of
+something else. Two provenance rules apply to EVERY column since the same
+day. `--vendor` must be a box label matching ^[a-z0-9][a-z0-9_.-]*$ and not
+a placeholder (the 2026-09-13 NVIDIA column recorded "box-arch", an
+unexpanded env default in the leg body), and `commit` is REQUIRED, from
+MOJOLEARN_COMMIT, else `git rev-parse HEAD` of this checkout, else a COMMIT
+or commit.txt witness at the repository root; a JSON with an empty commit
+is not written (all three 2026-09-13 GPU columns carry "commit": "").
+`--diff ... --require-columns N --lanes a,b` exits non-zero when any named
+lane has fewer than N real hashes on a compared cell, because `IDENTICAL x3`
+on a lane the CPU column should cover is the CPU binding refusing, not a
+pass.
 """
 import argparse
 import hashlib
 import json
 import os
 import platform
+import re
+import subprocess
 import sys
 import tempfile
 import time
 import traceback
 
 import numpy as np
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+#: A box label: lowercase, digits, `_ . -`, never a placeholder.
+VENDOR_LABEL = re.compile(r"^[a-z0-9][a-z0-9_.-]*$")
+PLACEHOLDER_LABELS = frozenset({
+    "box-arch", "box", "arch", "vendor", "unknown", "none", "cpu", "gpu",
+    "label", "todo", "tbd", "placeholder", "x", "test",
+})
+COMMIT_HASH = re.compile(r"^[0-9a-f]{7,40}$")
+
+
+def cpu_model():
+    """This machine's CPU model string, or None. `sysctl -n
+    machdep.cpu.brand_string` on macOS; `model name` from /proc/cpuinfo, then
+    `lscpu` "Model name" on Linux (an ARM64 /proc/cpuinfo has no model name)."""
+    try:
+        if platform.system() == "Darwin":
+            out = subprocess.run(["sysctl", "-n", "machdep.cpu.brand_string"],
+                                 capture_output=True, text=True, timeout=10).stdout.strip()
+            return out or None
+        try:
+            with open("/proc/cpuinfo") as fh:
+                for line in fh:
+                    key, _, value = line.partition(":")
+                    if key.strip().lower() in ("model name", "cpu model") and value.strip():
+                        return value.strip()
+        except OSError:
+            pass
+        out = subprocess.run(["lscpu"], capture_output=True, text=True, timeout=10).stdout
+        for line in out.splitlines():
+            key, _, value = line.partition(":")
+            if key.strip().lower() == "model name" and value.strip():
+                return value.strip()
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return None
+
+
+def slug(text):
+    """`Apple M4` -> `apple-m4`, `Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz`
+    -> `intel-r-xeon-r-platinum-8272cl-cpu-2.60ghz`."""
+    s = re.sub(r"[^a-z0-9.]+", "-", text.lower()).strip("-.")
+    return re.sub(r"-{2,}", "-", s)
+
+
+def check_vendor_label(label):
+    """Refuse a label that is not a box: the regex, the placeholders, and any
+    unexpanded `$` or `{`."""
+    bad = (not label or not VENDOR_LABEL.match(label) or label in PLACEHOLDER_LABELS
+           or "$" in label or "{" in label)
+    if bad:
+        raise SystemExit(
+            f"REFUSING: --vendor {label!r} is not a box label. It must match "
+            "^[a-z0-9][a-z0-9_.-]*$ and must not be a placeholder "
+            f"({', '.join(sorted(PLACEHOLDER_LABELS))}). Name the box: apple-m4, "
+            "nvidia-h100-sm_90a, amd-mi325x-gfx942, cpu-<cpu model slug>. The "
+            "2026-09-13 NVIDIA column recorded \"box-arch\" from an unexpanded env "
+            "default in the leg body; this refusal is what stops the next one."
+        )
+    return label
+
+
+def default_vendor_label(ml):
+    """`cpu-<cpu model slug>` on a CPU-only install, derived from the machine
+    and never typed; `platform.machine()` elsewhere, as before."""
+    if ml.vendor() == "cpu":
+        model = cpu_model()
+        if not model:
+            raise SystemExit(
+                "REFUSING: on a CPU-only install --vendor defaults to cpu-<cpu "
+                "model slug> and this machine's CPU model could not be read; "
+                "pass --vendor cpu-<model> explicitly"
+            )
+        return "cpu-" + slug(model)
+    return platform.machine().lower()
+
+
+def commit_witness():
+    """(commit, source). MOJOLEARN_COMMIT wins; else `git rev-parse HEAD` of
+    the checkout this tool lives in; else a COMMIT or commit.txt witness at
+    its root (what a leg archive carries). Refuses an empty or malformed
+    value: a column with no commit cannot be tied to the source it ran."""
+    candidates = [("MOJOLEARN_COMMIT", os.environ.get("MOJOLEARN_COMMIT", "").strip())]
+    try:
+        git = subprocess.run(["git", "-C", ROOT, "rev-parse", "HEAD"],
+                             capture_output=True, text=True, timeout=10).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        git = ""
+    candidates.append(("git rev-parse HEAD", git))
+    for name in ("COMMIT", "commit.txt"):
+        p = os.path.join(ROOT, name)
+        if os.path.exists(p):
+            with open(p) as fh:
+                text = fh.read().strip()
+            candidates.append((name, text.split()[0] if text else ""))
+    for source, value in candidates:
+        if not value:
+            continue
+        if not COMMIT_HASH.match(value):
+            raise SystemExit(f"REFUSING: commit {value!r} from {source} is not a git hash")
+        return value, source
+    raise SystemExit(
+        "REFUSING: no commit witness. Set MOJOLEARN_COMMIT, run from a git "
+        "checkout, or place a COMMIT or commit.txt file at the repository root. "
+        "A JSON with an empty commit is not written."
+    )
+
+
+def host_record(ml):
+    """The `host` object of a CPU column: the machine, the host bindings
+    built, and what each reads back (its kernel-matrix column, the column
+    the accelerator predicates detected, its sabotage flag). A binding that
+    refuses to load records the refusal, so a REFUSED cell is attributable
+    to an unbuilt or refused family rather than a bug."""
+    from mojolearn import _backend
+    families = {}
+    for basename in _backend.host_families_built():
+        prefix = basename[len("_mojolearn_"):]
+        try:
+            m = _backend.load_host_module(basename)
+            fam = dict(column=str(getattr(m, prefix + "_column")()))
+            detected = getattr(m, prefix + "_detected_column", None)
+            if detected is not None:
+                fam["detected_column"] = str(detected())
+            sab = getattr(m, prefix + "_sabotage", None)
+            if sab is not None:
+                fam["sabotage"] = bool(sab())
+        except Exception as exc:
+            fam = dict(error=f"{type(exc).__name__}: {exc}"[:300])
+        families[basename] = fam
+    columns = sorted(set(f.get("column", "unreadable") for f in families.values()))
+    return dict(
+        cpu_model=cpu_model(), arch=platform.machine(),
+        target_cpu=os.environ.get("MOJOLEARN_TARGET_CPU", "unrecorded"),
+        mojo_version=os.environ.get("MOJOLEARN_MOJO_VERSION", "unrecorded"),
+        python=platform.python_version(),
+        column=(columns[0] if len(columns) == 1 else ("none-built" if not columns else "MIXED:" + ",".join(columns))),
+        routed=dict(_backend._HOST_MODULES),
+        families=families,
+    )
 
 
 def _h(*arrays):
@@ -904,7 +1067,19 @@ def run(args):
     if mode == "fast" and not args.allow_fast:
         raise SystemExit("REFUSING: this is a bitwise question and FAST makes no "
                          "bitwise promise; use MOJOLEARN_NUMERIC_MODE=identical")
+    # PROVENANCE BEFORE THE FIRST FIT. The label and the commit are refused
+    # here, in seconds, not after nine fixtures of fits.
+    vendor = check_vendor_label(args.vendor if args.vendor is not None else default_vendor_label(ml))
+    commit, commit_source = commit_witness()
+    host = host_record(ml) if ml.vendor() == "cpu" else None
+    print(f"# vendor={vendor} commit={commit} ({commit_source})"
+          + (f" host.cpu_model={host['cpu_model']!r} host.column={host['column']} "
+             f"host.families={sorted(host['families'])}" if host else ""))
 
+    if args.lanes:
+        unknown = [n for n in args.lanes.split(",") if n and n not in LANES]
+        if unknown:
+            raise SystemExit(f"REFUSING: --lanes names no lane: {unknown}; lanes are {sorted(LANES)}")
     lanes = [n for n in LANES if not args.lanes or n in args.lanes.split(",")]
     skip = set(x for x in args.skip.split(",") if x)
     lanes = [n for n in lanes if n not in skip]
@@ -923,12 +1098,15 @@ def run(args):
     cells = {}
 
     def dump(complete):
+        record = dict(mode=mode, repeats=args.repeats, platform=platform.platform(),
+                      vendor=vendor, commit=commit, commit_source=commit_source,
+                      heldout_seed=HELDOUT_SEED, fixtures=fixture_hashes,
+                      heldout=heldout_hashes, cells=cells, complete=complete,
+                      skipped=sorted(skip))
+        if host is not None:
+            record["host"] = host
         with open(args.json, "w") as fh:
-            json.dump(dict(mode=mode, repeats=args.repeats, platform=platform.platform(),
-                           vendor=args.vendor, commit=os.environ.get("MOJOLEARN_COMMIT", ""),
-                           heldout_seed=HELDOUT_SEED, fixtures=fixture_hashes,
-                           heldout=heldout_hashes, cells=cells, complete=complete,
-                           skipped=sorted(skip)), fh, indent=1)
+            json.dump(record, fh, indent=1)
 
     print(f"# identity_break  mode={mode}  {time.strftime('%Y-%m-%d %H:%M:%S')}  "
           f"{platform.platform()}")
@@ -1067,7 +1245,21 @@ def _diff_column(cols, k, col):
     return verdict, shown
 
 
-def diff(paths):
+def _real_count(verdict):
+    """How many real hashes a diff verdict rests on: `IDENTICAL xK` is K,
+    ONE-COLUMN is 1, REFUSED is 0; DIVERGENT, MOVED and RELOAD-MOVED already
+    fail on their own and are not counted here; N/A and NOT-COMPARED are
+    None (no requirement applies)."""
+    if verdict.startswith("IDENTICAL x"):
+        return int(verdict.split("x", 1)[1])
+    if verdict == "ONE-COLUMN":
+        return 1
+    if verdict == "REFUSED":
+        return 0
+    return None
+
+
+def diff(paths, require_columns=0, require_lanes=None):
     cols = []
     for p in paths:
         with open(p) as fh:
@@ -1075,6 +1267,23 @@ def diff(paths):
         cols.append((j.get("vendor") or os.path.basename(p), j))
     keys = sorted(set(k for _, j in cols for k in j["cells"]))
     names = [c for c, _ in cols]
+    if require_columns and require_columns > len(cols):
+        print(f"REQUIRE FAIL: --require-columns {require_columns} with {len(cols)} JSONs given")
+    required = set(require_lanes) if require_lanes else (set(k.split("/")[0] for k in keys) if require_columns else set())
+    short = []
+
+    def require(key, col, verdict):
+        if not require_columns or key.split("/")[0] not in required:
+            return
+        n = _real_count(verdict)
+        if n is not None and n < require_columns:
+            short.append((key, col, verdict, n))
+
+    for n_, (_, j) in zip(names, cols):
+        if j.get("host"):
+            h = j["host"]
+            print(f"NOTE: column {n_} is a CPU column: cpu_model={h.get('cpu_model')!r} "
+                  f"column={h.get('column')} families={sorted(h.get('families', {}))} commit={j.get('commit')}")
     for n, (_, j) in zip(names, cols):
         if not j.get("complete", True):
             print(f"NOTE: column {n} is INCOMPLETE (the run was killed); lanes after the last one written are absent, not clean")
@@ -1142,6 +1351,7 @@ def diff(paths):
             if per:
                 shown[0] = f"parts differ: {','.join(diverging) or '?'}; agree: {','.join(agreeing) or '-'}"
         counts[verdict.split(" ")[0]] = counts.get(verdict.split(" ")[0], 0) + 1
+        require(k, "train", verdict)
         print(f"| {k:<28} | {verdict:<10} | " + " | ".join(f"{s:<16}" for s in shown) + " |")
     print()
     print("summary: " + ", ".join(f"{k}={v}" for k, v in sorted(counts.items())))
@@ -1160,6 +1370,7 @@ def diff(paths):
             if verdict in ("MOVED", "DIVERGENT", "RELOAD-MOVED"):
                 bad += 1
             counts2[verdict.split(" ")[0]] = counts2.get(verdict.split(" ")[0], 0) + 1
+            require(k, col, verdict)
             rows.append((k, col, verdict, shown))
     print()
     if rows:
@@ -1173,6 +1384,19 @@ def diff(paths):
         print(f"infer/model: {uncarried} column cells not compared (no JSON here carries them; "
               f"they predate the columns)")
     print("summary (infer/model): " + ", ".join(f"{k}={v}" for k, v in sorted(counts2.items())))
+    if require_columns:
+        if require_columns > len(cols):
+            bad += 1
+        for key, col, verdict, n in short:
+            print(f"REQUIRE FAIL {key} {col}: {verdict} rests on {n} real hash(es), "
+                  f"--require-columns {require_columns} demands that many; a column that "
+                  "should cover this lane is refusing, which is not a pass")
+        missing = sorted(required - set(k.split("/")[0] for k in keys))
+        for lane_name in missing:
+            print(f"REQUIRE FAIL {lane_name}: no JSON carries a cell for this lane")
+        bad += len(short) + len(missing)
+        print(f"require-columns {require_columns} over {sorted(required)}: "
+              f"{'OK' if not short and not missing else str(len(short) + len(missing)) + ' short'}")
     return 1 if bad else 0
 
 
@@ -1183,14 +1407,24 @@ def main():
     ap.add_argument("--skip", default="", help="lanes to leave out, comma separated; each is reported as SKIPPED")
     ap.add_argument("--fixtures", default="")
     ap.add_argument("--repeats", type=int, default=2)
-    ap.add_argument("--vendor", default=platform.machine())
+    ap.add_argument("--vendor", default=None,
+                    help="the box label, ^[a-z0-9][a-z0-9_.-]*$ and not a placeholder; default "
+                         "cpu-<cpu model slug> on a CPU-only install, platform.machine() elsewhere")
     ap.add_argument("--allow-fast", action="store_true")
     ap.add_argument("--verbose", action="store_true")
     ap.add_argument("--diff", nargs="+", default=None, metavar="JSON",
                     help="compare JSONs cell by cell: the train column, then infer and model where carried")
+    ap.add_argument("--require-columns", type=int, default=0, metavar="N",
+                    help="with --diff: exit non-zero unless every compared cell of the lanes named by "
+                         "--lanes (every lane when --lanes is empty) rests on at least N real hashes")
     args = ap.parse_args()
     if args.diff:
-        return diff(args.diff)
+        lanes = [n for n in args.lanes.split(",") if n] if args.lanes else None
+        if lanes:
+            unknown = [n for n in lanes if n not in LANES]
+            if unknown:
+                raise SystemExit(f"REFUSING: --lanes names no lane: {unknown}; lanes are {sorted(LANES)}")
+        return diff(args.diff, args.require_columns, lanes)
     return run(args)
 
 

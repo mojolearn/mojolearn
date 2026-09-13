@@ -6,6 +6,7 @@ from std.sys.compile import is_defined
 from std.sys.info import (
     has_amd_gpu_accelerator,
     has_amd_rdna_gpu_accelerator,
+    has_apple_gpu_accelerator,
     has_nvidia_gpu_accelerator,
 )
 
@@ -28,7 +29,25 @@ comptime COLUMN_INTEL = 6
 
 comptime COLUMN_SPEC_BASELINE = 7
 
-comptime COLUMN_COUNT = 8
+#: THE CPU COLUMN (the CPU training lane, 2026-09-13; brief
+#: docs/lanes/BRIEF_cpu_training_2026-09-13.md section 2). A build with NO
+#: accelerator target compiles this column, never `COLUMN_APPLE`, which the
+#: fallthrough of `TARGET_COLUMN` handed every host build until this column
+#: existed. It is not a vendor: no kernel is launched on it, and every
+#: NUMERIC row it answers is the pinned `COLUMN_BIT_IDENTICAL` reading, so a
+#: host routine that MIRRORS a device fold reads the same widths and budgets
+#: the identical contract pins (32 lanes, the 32 KB identity floor, 1024
+#: threads). Every SCHEDULING and ROUTING row answers the non-vendor default,
+#: never NVIDIA's or AMD's measured schedule and never Apple's repairs (the
+#: kNN zero-FMA repair and preflight, the two-level quantize search, the
+#: subnormal-flushing compare), because a CPU FMA rounds once and flushes
+#: nothing. FAST rows never reach it: every `build_*_host.sh` is IDENTICAL
+#: only. `bindings/build_byte_lm_host.sh` and `bindings/build_forest_host.sh`
+#: pass `-D MOJOLEARN_COLUMN_CPU`, and each host binding carries
+#: `comptime assert TARGET_COLUMN == COLUMN_CPU`.
+comptime COLUMN_CPU = 8
+
+comptime COLUMN_COUNT = 9
 
 comptime COLUMN_METAL = COLUMN_APPLE
 comptime COLUMN_CUDA = COLUMN_NVIDIA
@@ -37,6 +56,7 @@ comptime COLUMN_CDNA = COLUMN_AMD
 comptime COLUMN_RDNA = COLUMN_AMD_RDNA
 comptime COLUMN_ADRENO = COLUMN_QUALCOMM
 comptime COLUMN_XE = COLUMN_INTEL
+comptime COLUMN_HOST = COLUMN_CPU
 
 
 def column_name(column: Int) -> String:
@@ -56,17 +76,23 @@ def column_name(column: Int) -> String:
         return String("amd-rdna")
     if column == COLUMN_SPEC_BASELINE:
         return String("spec-baseline")
+    if column == COLUMN_CPU:
+        return String("cpu")
     return String("unknown")
 
 
 def column_is_buildable(column: Int) -> Bool:
-    """Whether Mojo can emit a kernel for this column TODAY."""
+    """Whether Mojo can emit a kernel for this column TODAY. The CPU column
+    emits no kernel and is buildable in the only sense that matters here: a
+    host build with no accelerator target compiles it, on seven CI runners
+    (the byte LM CPU gate)."""
     return (
         column == COLUMN_BIT_IDENTICAL
         or column == COLUMN_APPLE
         or column == COLUMN_NVIDIA
         or column == COLUMN_AMD
         or column == COLUMN_AMD_RDNA
+        or column == COLUMN_CPU
     )
 
 comptime K_HIST_BINARY = 0
@@ -186,6 +212,15 @@ def column_shared_limit(column: Int) -> Int:
         return 64 * 1024
     if column == COLUMN_SPEC_BASELINE:
         return 16 * 1024
+    if column == COLUMN_CPU:
+        # No threadgroup memory exists on the host. The row sizes device
+        # pages only, and the identical reading is the one every host twin
+        # of a device fold must see, so this is the frozen floor and not a
+        # vendor's budget: the byte LM host binding compiles
+        # `lib_smem_pages_for` / `lib_smem_page_fits_for` through
+        # gemm/checks/gemm_identical.mojo, and 32 KB is the value it compiled
+        # under the Apple fallthrough on seven runners.
+        return IDENTITY_FLOOR_SHARED_BYTES
     return IDENTITY_FLOOR_SHARED_BYTES  # BIT_IDENTICAL: frozen, not derived
 
 
@@ -198,11 +233,18 @@ def column_has_float_atomics(column: Int) -> Bool:
         or column == COLUMN_AMD
         or column == COLUMN_AMD_RDNA
         or column == COLUMN_INTEL
+        # the identical reading; a host build is IDENTICAL only, where
+        # `deterministic_flush_for` is true whatever this row says
+        or column == COLUMN_CPU
     )
 
 
 def column_compares_flush_subnormals(column: Int) -> Bool:
-    """CAPABILITY."""
+    """CAPABILITY. The CPU column answers False: `ftz` is explicit under
+    IDENTICAL (checks/numerics.mojo flushes by bits, not by MXCSR), and a
+    host compare sees the subnormal it is handed."""
+    if column == COLUMN_CPU:
+        return False
     return column == COLUMN_APPLE
 
 
@@ -210,7 +252,9 @@ comptime VENDOR_TF32_PRODUCT_REL_BOUND = Float64(1.0e-3)
 
 
 def column_vendor_fp32_matmul_is_tf32(column: Int) -> Bool:
-    """CAPABILITY."""
+    """CAPABILITY. The CPU column answers False: a host fp32 product is fp32."""
+    if column == COLUMN_CPU:
+        return False
     return column == COLUMN_NVIDIA
 
 
@@ -251,6 +295,8 @@ def column_max_block_size(column: Int) -> Int:
     """Largest threadgroup the vendor will dispatch, before our budget bites."""
     if column == COLUMN_SPEC_BASELINE:
         return 128
+    if column == COLUMN_CPU:
+        return 1024  # the identical reading; no block is ever dispatched
     return 1024
 
 
@@ -266,11 +312,21 @@ def column_lane_width(column: Int) -> Int:
         return 32
     if column == COLUMN_SPEC_BASELINE:
         return 1
+    if column == COLUMN_CPU:
+        # PINNED_REPLICATION_LANES, the identical reading (`lane_width_for`
+        # answers it under IDENTICAL on every column). Not 1: a host has no
+        # lanes, but a host twin of a device fold restates a 32-lane group,
+        # and `GEMM_HEAD_LANES = lib_lane_width_for[TARGET_COLUMN]()` in
+        # gemm/checks/gemm_identical.mojo:2882 is compiled into the byte LM
+        # host binding, which matched the GPU bits on seven runners at 32.
+        return PINNED_REPLICATION_LANES
     return 32
 
 
 def column_lane_width_is_fixed(column: Int) -> Bool:
-    """Whether `column_lane_width` is a property of the DEVICE or a decision the vendor's compiler makes per kernel."""
+    """Whether `column_lane_width` is a property of the DEVICE or a decision the vendor's compiler makes per kernel. The CPU column answers True: its width is the pinned constant, not a compiler's choice."""
+    if column == COLUMN_CPU:
+        return True
     return (
         column != COLUMN_QUALCOMM
         and column != COLUMN_INTEL
@@ -345,7 +401,17 @@ def spec_for(kernel: Int, device: Int, mode: NumericMode) raises -> KernelSpec:
 
 
 
+#: The build's column. The `-D MOJOLEARN_COLUMN_*` define wins, the CPU
+#: define first (a host build script passes it and nothing else may); then
+#: the accelerator target the compiler was handed; and a build with no
+#: accelerator target at all is the CPU column. Until 2026-09-13 the last
+#: line read `COLUMN_APPLE` unconditionally, so every host build compiled as
+#: the Apple column (bit-inert for the rows the byte LM reaches, wrong for the
+#: kNN rows a host fit would reach). Apple is now behind its own predicate,
+#: the one `checks/vendor.mojo` already folds into `COMPILED_VENDOR`, so a
+#: Metal build still compiles Apple and a build with no accelerator does not.
 comptime TARGET_COLUMN = (
+    COLUMN_CPU if is_defined["MOJOLEARN_COLUMN_CPU"]() else
     COLUMN_APPLE if is_defined["MOJOLEARN_COLUMN_APPLE"]() else
     COLUMN_NVIDIA if is_defined["MOJOLEARN_COLUMN_NVIDIA"]() else
     COLUMN_AMD if is_defined["MOJOLEARN_COLUMN_AMD"]() else
@@ -357,7 +423,8 @@ comptime TARGET_COLUMN = (
     COLUMN_AMD_RDNA if has_amd_rdna_gpu_accelerator() else
     COLUMN_AMD if has_amd_gpu_accelerator() else
     COLUMN_NVIDIA if has_nvidia_gpu_accelerator() else
-    COLUMN_APPLE
+    COLUMN_APPLE if has_apple_gpu_accelerator() else
+    COLUMN_CPU
 )
 
 
@@ -365,13 +432,19 @@ comptime DETECTED_COLUMN = (
     COLUMN_AMD_RDNA if has_amd_rdna_gpu_accelerator() else
     COLUMN_AMD if has_amd_gpu_accelerator() else
     COLUMN_NVIDIA if has_nvidia_gpu_accelerator() else
-    COLUMN_APPLE
+    COLUMN_APPLE if has_apple_gpu_accelerator() else
+    COLUMN_CPU
 )
 
 
 def column_is_simulated() -> Bool:
     """True when `-D MOJOLEARN_COLUMN_*` names a vendor this device is not."""
     return TARGET_COLUMN != DETECTED_COLUMN
+
+
+def column_is_host(column: Int) -> Bool:
+    """Whether `column` is the CPU column, the one a build with no accelerator target compiles."""
+    return column == COLUMN_CPU
 
 
 def hist_floats_per_thread_for[kernel: Int]() -> Int:
@@ -819,8 +892,12 @@ def lib_hardware_ftz_fma_for[column: Int]() -> Bool:
     return zero where round-then-flush returns 0x00800000. Callers must
     preserve explicit round-then-flush semantics or correct that case;
     see the adversarial seam evidence from 2026-09-09.
-    Other columns retain their existing software spelling.
+    Other columns retain their existing software spelling. The CPU column
+    answers False, the software spelling: the host has no `.ftz` instruction
+    and the fold flush is `ftz` in checks/numerics.mojo.
     """
+    if column == COLUMN_CPU:
+        return False
     return column == COLUMN_NVIDIA
 
 
@@ -828,6 +905,8 @@ def attn_zdot_rows_per_block_for[column: Int]() -> Int:
     """SCHEDULING row (DEVIATION 2528, 2026-09-11, trial arm only; brief docs/lanes/BRIEF_attention_step_2026-09-11.md section 12): query rows per 256-thread block of the fused attention's register-blocked y/dy kernel (`fused_bwd_ydy_tiled_kernel`), 64 or 32. The kernel's shared page is `(2 * rows + 128) * 20` floats (20,480 B at 64, 15,360 B at 32), and on a column whose shared memory is partitioned per compute unit the page bounds the resident blocks. The rows are a schedule, never a numeric term: every chain keeps its terms and order at either value. UNMEASURED on every column. AMD reads 32 as the variant section 11.3 named to price; the page-only count (3 blocks x 64 rows vs 4 x 32 rows per CU) does not favor it, so the AMD leg prices both through the `_r32` / `_r64` arm names and this row follows that measurement. The shipped build reads it nowhere."""
     if column == COLUMN_AMD:
         return 32
+    if column == COLUMN_CPU:
+        return 64  # the non-vendor default; no attention kernel runs here
     return 64
 
 
@@ -840,6 +919,11 @@ def lib_gemm_block_parallelism_for[column: Int]() -> Int:
         # (e1g/2026-09-11_164818-amd-mi300x-hotaisle-gemm-longk): lean step
         # 1.953 -> 1.198 s on both corpora, geomean 0.614, witnesses equal.
         return 110
+    if column == COLUMN_CPU:
+        # 0: the host oracle (`gemm_oracle`) folds the contract tree without
+        # groups, and the dispatch compiles to the old line as it did under
+        # the Apple fallthrough.
+        return 0
     return 0
 
 
@@ -861,6 +945,8 @@ def lib_gemm_kernel_body_for[column: Int]() -> Int:
         # percent; one row value keeps one code path. Shipped-build gate on
         # the MI300X: brief section 18.4.
         return 1
+    if column == COLUMN_CPU:
+        return 0  # the revert line; no GEMM kernel body runs on the host
     return 0
 
 
@@ -871,6 +957,8 @@ def lib_gemm_block_parallelism_trial_for[column: Int]() -> Int:
         return shipped
     if column == COLUMN_AMD:
         return 110
+    if column == COLUMN_CPU:
+        return 0  # no reading: the host has no blocks to run side by side
     return 0
 
 
@@ -880,6 +968,8 @@ def attn_fwd_rows_per_block_for[column: Int]() -> Int:
         return 32
     if column == COLUMN_AMD:
         return 32
+    if column == COLUMN_CPU:
+        return 64  # the non-vendor default; no attention kernel runs here
     return 64
 
 
@@ -887,6 +977,8 @@ def attn_dkdv_keys_per_block_for[column: Int]() -> Int:
     """SCHEDULING row (DEVIATION 2597, 2026-09-11; brief docs/lanes/BRIEF_attention_step_2026-09-11.md sections 16 and 18): keys per 256-thread block of the fused attention's trial dk/dv folds over the stash (`fused_bwd_dkdv_r2_kernel`, and `fused_bwd_kvfold_r2_kernel` under the `_kvsplit` token), 64 (the shipped `fused_bwd_dkdv_tiled_pf_kernel` geometry) or 32, read by the bare `_kvgrid` arm token (`_kvgrid_r32` / `_kvgrid_r64` force it). At 32 keys a thread holds 8 dk and 8 dv accumulators instead of 16 and 16, and the joint page is `(2 * 16 * 64 + 2 * 16 * keys) * 4` bytes (16,384 B at 64, 12,288 B at 32; a `_kvsplit` fold page is half that). The keys per block are a schedule, never a numeric term: every dk and dv chain keeps its terms and its order (heads of the kv group ascending, queries ascending over the key's visible range) at either value. AMD 32, MEASURED: DigitalOcean MI325X leg bench/results/e1g/2026-09-11_180903-amd-mi325x-do-attention-dkdv (commit 5cc3b8df), `stash_tiled_fgrid_r32_qres_pf_kvgrid_r32` against `baseline` lean step 1.623 / 1.633 -> 1.376 / 1.370 s (enwik8 / Pile GitHub, FLIP geomean 0.8436, every step witness equal), in-step dk/dv 169.8 ms (baseline) -> 21.2 ms; section 16 had read 32 from the tiled dk/dv thread state (32 accumulators and 10 operand registers per thread, twice the tiled dq fold's). The AMD shipped default (`attn_default_arm_for`) forces the same 32 with `_kvgrid_r32` (brief section 18), so this row and the default agree on AMD and a bare `_kvgrid` resolves to the default's instantiation there. Every other column 64, unmeasured. A shipped build reads this row only for a default carrying bare `_kvgrid`, which no column's default does."""
     if column == COLUMN_AMD:
         return 32
+    if column == COLUMN_CPU:
+        return 64  # the non-vendor default; no attention kernel runs here
     return 64
 
 
@@ -973,6 +1065,11 @@ def attn_default_arm_for[column: Int]() -> Int:
         # geomean=0.8436, in-step dk/dv 169.8 -> 21.2 ms); before that baseline
         # (e1g/2026-09-11_171959-amd-mi300x-runpod-attention-three).
         return ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_ESTASH_DRES_KVGRID_R32
+    if column == COLUMN_CPU:
+        # The non-vendor default, the word the Apple fallthrough compiled into
+        # the byte LM host binding. No fused attention kernel runs on the
+        # host; the host step goes to the transformer oracles.
+        return ATTN_DEFAULT_WORD_STASH_TILED
     return ATTN_DEFAULT_WORD_STASH_TILED
 
 
@@ -1023,6 +1120,8 @@ def step_glue_default_arm_for[column: Int]() -> Int:
         # than they starve this board. ENGINEERING_RULES 9 sets no magnitude
         # bar, and both corpora are below 1 with the bits unmoved.
         return STEP_GLUE_DEFAULT_WORD_OPTSKIP_NOSHADOW_ROWS16
+    if column == COLUMN_CPU:
+        return STEP_GLUE_DEFAULT_WORD_SHIPPED  # the non-vendor default
     return STEP_GLUE_DEFAULT_WORD_SHIPPED
 
 
@@ -1030,6 +1129,8 @@ def knn_warpsort_select_for[column: Int, identical: Bool]() -> Bool:
     """SCHEDULING row (DEVIATION 1922): whether the k-NN TILED path's selector is the implemented RAFT WARPSORT (`select_warpsort.mojo`, `warpsort_topk_block_kernel`) instead of the implemented RAFT radix (`select_radix.mojo`) for `2 < k <= 256`."""
     comptime if identical:
         return False
+    if column == COLUMN_CPU:
+        return False  # FAST row; a host build is IDENTICAL only
     return column == COLUMN_NVIDIA
 
 
@@ -1037,6 +1138,8 @@ def knn_auto_follows_their_dispatch_for[column: Int, identical: Bool]() -> Bool:
     """SCHEDULING row (DEVIATION 1923): whether the k-NN AUTO arm follows cuVS's dispatch UNCONDITIONALLY -- `k <= 64` + row-major + L2 goes to `fusedL2Knn`, x-split included (`knn_brute_force.cuh:443`) -- instead of DEVIATION 36's shape test (fused only when `launchConfigGenerator` picks `grid_x == 1`, tiled when it would engage the x-split)."""
     comptime if identical:
         return False
+    if column == COLUMN_CPU:
+        return False  # FAST row; a host build is IDENTICAL only
     return column == COLUMN_NVIDIA
 
 
@@ -1052,6 +1155,8 @@ def quantize_search_for[column: Int]() -> Int:
     """SCHEDULING row: HOW the evaluator's quantize finds a value's bin."""
     if column == COLUMN_APPLE:
         return QUANTIZE_SEARCH_TWO_LEVEL
+    if column == COLUMN_CPU:
+        return QUANTIZE_SEARCH_LINEAR  # scheduling; never Apple's two-level
     return QUANTIZE_SEARCH_LINEAR
 
 
@@ -1062,6 +1167,9 @@ def _knn_identical_round_column(column: Int) -> Bool:
         or column == COLUMN_AMD
         or column == COLUMN_AMD_RDNA
         or column == COLUMN_APPLE
+        # the CPU column takes the 2026-09-09 IDENTICAL defaults too, so a
+        # host k-NN twin restates what all four GPU columns run
+        or column == COLUMN_CPU
     )
 
 
@@ -1109,6 +1217,8 @@ def knn_selector_specialize_common_for[column: Int, identical: Bool]() -> Bool:
         return False
     comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_SPECIALIZE_COMMON"]():
         return True
+    if column == COLUMN_CPU:
+        return False  # NVIDIA's schedule, never the host's
     return column == COLUMN_NVIDIA
 
 
@@ -1118,6 +1228,8 @@ def knn_selector_shuffle_for[column: Int, identical: Bool]() -> Bool:
         return False
     comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_TREE_SELECT"]():
         return False
+    if column == COLUMN_CPU:
+        return True  # the fixed-width reading, what every GPU column answers
     return column_lane_width_is_fixed(column)
 
 
@@ -1129,6 +1241,8 @@ def knn_selector_warpbound_guard_for[column: Int, identical: Bool]() -> Bool:
         return False
     comptime if not column_lane_width_is_fixed(column):
         return False
+    if column == COLUMN_CPU:
+        return False  # NVIDIA's schedule, never the host's
     return column == COLUMN_NVIDIA
 
 
@@ -1136,6 +1250,8 @@ def svm_block_solve_warp_folds_for[column: Int, width: Int]() -> Bool:
     """SCHEDULING row (2026-09-11, DEVIATION 2623): whether `svm/impl/smoblocksolve.mojo::smo_block_solve_kernel[width]` folds its three arg-reductions with `block_argext` warp butterflies (DEVIATION 2491) instead of the halving trees with a one-slot thread ballot that preceded it. Both select the same (value, key) element under a total order with unique keys, so no column's bits depend on this row. NVIDIA refuses the warp kernel at width 1024 (H100 80GB HBM3, driver 580.126.09, CUDA_ERROR_LAUNCH_OUT_OF_RESOURCES, so every SVC fit above 512 training rows failed from 2491 through 0.8.2) and launches it at 512; the tree kernel launches at 1024 there. Fusing two of the warp folds or dropping the WSIZE threadgroup diagonal did not make the warp kernel launch. The Apple M4 and the AMD MI300X launch the warp kernel at 1024. `-D MOJOLEARN_SVM_TREE_FOLDS` takes the tree schedule on every column for an A/B."""
     comptime if is_defined["MOJOLEARN_SVM_TREE_FOLDS"]():
         return False
+    if column == COLUMN_CPU:
+        return True  # the every-width reading; the oracle spells the fold serially
     return not (column == COLUMN_NVIDIA and width > 512)
 
 
@@ -1212,12 +1328,14 @@ def knn_index_tile_columns_for[column: Int, identical: Bool]() -> Int:
 
 
 def gemm_wide_split_for[column: Int]() -> Bool:
-    """Execution-only wide split-K tiles on the measured NVIDIA column.
+    """Execution-only wide split-K tiles on the measured NVIDIA column. The CPU column answers False.
 
     The 128x128/KS16 tile reduces operand reloads for complete output tiles.
     Other columns keep their previous dispatcher pending local timings;
     every column's all-plan correctness gate still exercises the new tile.
     """
+    if column == COLUMN_CPU:
+        return False
     return column == COLUMN_NVIDIA
 
 
@@ -1231,6 +1349,8 @@ def knn_distance_zero_fma_repair_for[column: Int, identical: Bool]() -> Bool:
     """
     comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_NO_ZERO_FMA_REPAIR"]():
         return False
+    if column == COLUMN_CPU:
+        return False  # a CPU FMA rounds once and does not pre-round underflow
     return identical and column == COLUMN_APPLE
 
 
@@ -1239,6 +1359,8 @@ def knn_distance_preflight_for[column: Int, identical: Bool]() -> Bool:
     """Exact whole-chain exponent admission avoids unnecessary Apple repairs."""
     comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_NO_PREFLIGHT"]():
         return False
+    if column == COLUMN_CPU:
+        return False  # Apple's repair admission; nothing to repair on a CPU
     return identical and column == COLUMN_APPLE
 
 
@@ -1263,6 +1385,8 @@ def knn_distance_hardware_flush_for[column: Int, identical: Bool]() -> Bool:
     """Fully rounded NVIDIA FMA followed by exact hardware FTZ multiplication."""
     comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_SOFTWARE_FLUSH"]():
         return False
+    if column == COLUMN_CPU:
+        return False  # the software flush, NVIDIA's instruction is not here
     return identical and column == COLUMN_NVIDIA
 
 
@@ -1275,6 +1399,8 @@ def knn_distance_rows_for[column: Int, identical: Bool]() -> Int:
     """
     comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_ROWS4"]():
         return 4
+    if column == COLUMN_CPU:
+        return 4  # scheduling; NVIDIA's eight-row tile is NVIDIA's
     return 8 if identical and column == COLUMN_NVIDIA else 4
 
 
@@ -1311,6 +1437,8 @@ def knn_query_tile_for[column: Int, identical: Bool]() -> Int:
         return 2048
     comptime if is_defined["MOJOLEARN_KNN_QUERY_TILE_ARM_4096"]():
         return 4096
+    if column == COLUMN_CPU:
+        return 0  # scheduling; the measured tile is NVIDIA's
     return KNN_IDENTICAL_WIDE_QUERY_TILE if column == COLUMN_NVIDIA else 0
 
 
@@ -1321,6 +1449,8 @@ def knn_radix_scratch_shrink_for[column: Int, identical: Bool]() -> Bool:
         return False
     comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_FULL_RADIX_SCRATCH"]():
         return False
+    if column == COLUMN_CPU:
+        return False  # scheduling; NVIDIA's
     return column == COLUMN_NVIDIA
 
 
