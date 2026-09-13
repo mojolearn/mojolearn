@@ -5,9 +5,21 @@ from mojolearn.transformer import TransformerBlock
 from mojolearn.tests.test_transformer_surface import _weights, _uniform
 
 
+def _u32(a):
+    """`a`'s bits as uint32, whether `a` is an ndarray or a mojolearn Array.
+
+    `Array` has NO `.view` (it exposes `tobytes()` and the buffer protocol),
+    so `a.view(np.uint32)` raised AttributeError on every library output once
+    the numpy-free migration landed. `np.ascontiguousarray` materializes
+    either kind without touching the bits, which is what makes this a bitwise
+    comparison and not a value one.
+    """
+    return np.ascontiguousarray(a, dtype=np.float32).ravel().view(np.uint32)
+
+
 def same_bits(left, right, name):
-    assert left.shape == right.shape, name
-    assert np.array_equal(left.view(np.uint32), right.view(np.uint32)), name
+    assert np.shape(left) == np.shape(right), name
+    assert np.array_equal(_u32(left), _u32(right)), name
 
 
 def main():

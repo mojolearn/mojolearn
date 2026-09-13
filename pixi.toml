@@ -1535,8 +1535,43 @@ catboost = ">=1.2"
 lightgbm = "*"
 tqdm = ">=4.70.0,<5"
 
+# THE PYTHON TEST SUITE, declared 2026-09-13. 37 of the 58 files under
+# python/mojolearn/tests/ import pytest -- parametrize in 35, raises in 34,
+# fixtures in 9, importorskip in 5, and NOT ONE of them imports it without
+# using its API -- yet pytest was declared NOWHERE: not here, not in any
+# environment, and this repository has no pyproject.toml. CI installed it ad
+# hoc (.github/workflows/byte-lm-cpu-gate.yml runs `pip install --quiet numpy
+# pytest`), so exactly two files ran there and none ran anywhere else.
+# Locally all 37 died on ModuleNotFoundError.
+#
+# That is not a theoretical gap. It is how test_optional_byte_lm_build_layout
+# came to sit RED on main while 0.8.4 was being cut: nothing looked (88c0c33b).
+#
+# A SEPARATE feature rather than additions to `bench`, for the reason `skgpu`
+# and `gbmbench` both give above: adding dependencies to `bench` would
+# re-solve the environment every recorded timing was taken under.
+#
+# python is pinned to 3.14 to match the prebuilt extension modules under
+# python/mojolearn/, the same pin `pkg` and `gbmbench` carry.
+[feature.test.dependencies]
+python = "3.14.*"
+numpy = "*"
+pytest = ">=8"
+
+[feature.test.tasks]
+# `pixi run -e test test-python`.
+# NOTE the two shapes of test in that directory. The pytest files are
+# collected here. The GATE-STYLE files (test_linalg_identity,
+# test_samba_surface, test_transformer_hd128, test_rf_leaf_budget and the
+# rest) define no test functions at all: they run as MODULES and print their
+# own verdicts, `cd python && python3 -m mojolearn.tests.<name>`. pytest
+# collects nothing from them, which is correct, not a skip -- running them is
+# a separate step and several require MOJOLEARN_NUMERIC_MODE=identical.
+test-python = "cd python && python3 -m pytest -q mojolearn/tests"
+
 [environments]
 bench = ["bench"]
 skgpu = ["skgpu"]
 pkg = ["pkg"]
 gbmbench = ["gbmbench"]
+test = ["test"]

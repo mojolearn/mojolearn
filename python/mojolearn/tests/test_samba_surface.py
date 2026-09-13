@@ -28,6 +28,19 @@ from mojolearn import _training_impl as T
 from mojolearn import _samba_impl as S
 
 
+def _u32(a):
+    """`a`'s bits as uint32, whether `a` is an ndarray or a mojolearn Array.
+
+    `Array` has NO `.view` (it exposes `tobytes()` and the buffer protocol),
+    so `a.view(np.uint32)` raises AttributeError on any library output since
+    the numpy-free migration. `np.ascontiguousarray` materializes either kind
+    without touching the bits, which is what keeps this a BITWISE comparison
+    rather than a value one. `Report.bits_equal` already spelled this inline;
+    this is the one definition both it and the repeatability check now use.
+    """
+    return np.ascontiguousarray(a, dtype=np.float32).ravel().view(np.uint32)
+
+
 class Report(object):
     def __init__(self):
         self.rows = []
@@ -41,8 +54,8 @@ class Report(object):
         self.rows.append(("rprt", arm, what))
 
     def bits_equal(self, arm, got, want, what, assert_bits=True):
-        g = np.ascontiguousarray(got, dtype=np.float32).ravel().view(np.uint32)
-        w = np.ascontiguousarray(want, dtype=np.float32).ravel().view(np.uint32)
+        g = _u32(got)
+        w = _u32(want)
         if g.shape != w.shape:
             return self.check(arm, False, what, "shapes differ")
         diff = np.flatnonzero(g != w)
@@ -226,8 +239,14 @@ def arm_rng(rep):
     part = T._rng_call(binding, T._RNG_UNIFORM, 300, 700, 12345, 0, 0.0, 1.0)
     rep.bits_equal(arm, part, whole[700:], "a slice at offset 700 equals the whole stream's elements 700..")
     nrm = T.Generator(7).normal((20000,), 0.0, 1.0)
-    rep.check(arm, abs(float(nrm.mean())) < 0.03 and abs(float(nrm.std()) - 1.0) < 0.03,
-              "normal(0, 1) sample mean/std within 0.03 (mean %.4f std %.4f)" % (nrm.mean(), nrm.std()))
+    # `Array` carries sum/max/min/ravel/astype/reshape but NOT the statistical
+    # reductions `mean` and `std`, so these raised AttributeError once the RNG
+    # returned an Array. This is a VALUE check on a sample, not a bitwise one,
+    # so numpy is where it belongs; converting once keeps it to one pass.
+    nrm_np = np.asarray(nrm)
+    rep.check(arm, abs(float(nrm_np.mean())) < 0.03 and abs(float(nrm_np.std()) - 1.0) < 0.03,
+              "normal(0, 1) sample mean/std within 0.03 (mean %.4f std %.4f)"
+              % (nrm_np.mean(), nrm_np.std()))
     rep.check(arm, np.isfinite(nrm).all(), "normal draws are finite")
     ku = T.Generator(3).kaiming_uniform((64, 32), fan_in=32)
     rep.check(arm, float(np.abs(ku).max()) <= 1.0 / math.sqrt(32.0) and ku.shape == (64, 32),
@@ -236,14 +255,30 @@ def arm_rng(rep):
     gd = T.Generator(99)
     y, key = gd.dropout(x, 0.25)
     kept = y != 0.0
-    frac = float(kept.mean())
+    # Two Array gaps meet here. `kept` is an Array (an Array comparison), and
+    # Array has no `mean`; separately, Array REFUSES a boolean-mask index
+    # (`_array.py:588`: "indices are ints, slices or tuples of them"), which
+    # numpy allows, so `y[kept]` below needs both sides in numpy. Converting
+    # once here serves the fraction and both masked comparisons. A keep
+    # FRACTION is a value, not bits, so np.asarray is the right conversion;
+    # `kept.astype` further down is untouched because Array does carry astype.
+    # `.astype(bool)` IS LOAD-BEARING. `y != 0.0` on an Array yields uint8
+    # (0/1), not bool, so a bare np.asarray gives an INTEGER index array and
+    # `y_np[kept_np]` becomes fancy-indexing that selects rows 0 and 1 over
+    # and over instead of masking. That silently passed 51412 of 262144 wrong
+    # cells to the bitwise comparison before this cast was added.
+    kept_np = np.asarray(kept).astype(bool)
+    y_np = np.asarray(y)
+    frac = float(kept_np.mean())
     rep.check(arm, 0.65 < frac < 0.85, "dropout p=0.25 keeps about 75%% (kept %.3f)" % frac)
     scale = np.float32(1.0 / (1.0 - np.float32(0.25)))
-    rep.bits_equal(arm, y[kept], (x * scale).astype(np.float32)[kept], "kept cells are x * scale bitwise")
+    rep.bits_equal(arm, y_np[kept_np], (x * scale).astype(np.float32)[kept_np],
+                   "kept cells are x * scale bitwise")
     dy = hashed((4, 256), 22)
     dx = gd.dropout_backward(dy, key)
     rep.bits_equal(arm, dx != 0.0, kept.astype(np.float32), "backward mask equals forward mask")
-    rep.bits_equal(arm, dx[kept], (dy * scale).astype(np.float32)[kept], "backward is dy * scale on kept cells")
+    rep.bits_equal(arm, np.asarray(dx)[kept_np], (dy * scale).astype(np.float32)[kept_np],
+                   "backward is dy * scale on kept cells")
     g3 = T.Generator(99)
     y2, _ = g3.dropout(x, 0.25)
     rep.bits_equal(arm, y2, y, "dropout replays from the same seed and counter")
@@ -275,7 +310,7 @@ def arm_stack(rep):
     rep.check(arm, [g.shape for g in grads] == [stack.shapes[n] for n in stack.names],
               "gradient shapes match the registry")
     loss2, grads2 = stack.loss_and_grads(inputs, targets)
-    rep.check(arm, all(np.array_equal(a.view(np.uint32), b.view(np.uint32)) for a, b in zip(grads, grads2)),
+    rep.check(arm, all(np.array_equal(_u32(a), _u32(b)) for a, b in zip(grads, grads2)),
               "loss_and_grads is repeatable bitwise in one process")
     before = stack.flat.copy()
     out = stack.train_step(inputs, targets)
