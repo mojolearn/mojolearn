@@ -18,49 +18,42 @@
 # _fit_arrays grew an argument. Same disease as the packaging tests that
 # 88c0c33b wired up after one of them sat RED on main while 0.8.4 was cut.
 #
-# WHY macos-15 AND NOT ubuntu. These suites need REAL BINARIES: all 17
-# identical/*.so, one per bindings/build*.sh. On Darwin each script compiles
-# Metal AOT with no architecture flag. On Linux a build wants MOJOLEARN_GPU_ARCHS
-# naming EXACTLY ONE GPU architecture (bindings/build_rf.sh:60-73), which a
-# GPU-less hosted runner has no sensible value for. wheel-ci.yml already puts
-# the job that needs real binaries on macos-15.
+# WHY A SELF-HOSTED MAC AND NOT macos-15. These suites need REAL BINARIES: all
+# 17 identical/*.so, one per bindings/build*.sh, and on Darwin each script
+# compiles Metal AOT with no architecture flag. A GitHub-hosted macOS runner
+# cannot do that compile: the first version of this workflow (5ae1c8ab) ran on
+# macos-15 and died three times in a row on the first script with
 #
-# WHY THE PATHS ARE NARROW. The build is the cost here: the release checklist
-# measures the full binding set at about 8 minutes of compile
-# (docs/RELEASE_CHECKLIST.md:19), to protect suites that run in 7 s and 34 s.
-# So this triggers on what actually caused the breakage -- the array/buffer
-# boundary, the bindings themselves, the manifest, and the tests -- rather than
-# on all of python/mojolearn/**, which routine edits trip constantly.
+#     mojo: error: failed to run the pass manager
 #
-# AND ON ITSELF, AND ON ITS RUNNER SCRIPT. byte-lm-cpu-gate.yml learned this
-# the hard way and says so in its own paths block: "A gate that does not run
-# when the gate changes is not a gate."
+# on "Apple M1 (Virtual)" (runs 34776442643, 34776679213, 34777296013). That
+# is the same wall release-provenance.yml's header records: a hosted runner
+# builds 0 AIR/metallib markers, and naming the architecture with
+# --target-accelerator makes the compile succeed while embedding no kernels
+# (bindings/build_arima.sh's header measured it). wheel-ci.yml runs on
+# macos-15 because it builds a METADATA-ONLY wheel; it never compiles a
+# binding. On Linux a build wants MOJOLEARN_GPU_ARCHS naming EXACTLY ONE GPU
+# architecture (bindings/build_rf.sh:60-73), which a GPU-less hosted runner
+# has no sensible value for either.
+#
+# So this job runs where the release wheel is built: the ephemeral runner
+# tools/release_runner.sh brings up on a real Apple GPU, under the labels
+# release-provenance.yml uses. That runner's security argument requires every
+# job targeting those labels to be workflow_dispatch ONLY (no push, no
+# pull_request; tools/release_runner.sh header), so this workflow has no push
+# trigger. It is dispatched by hand, and the same two commands run locally on
+# the Mac before a release (docs/RELEASE_CHECKLIST.md step 1):
+#
+#     tools/release_runner.sh &                     # one ephemeral runner
+#     gh workflow run python-tests.yml --ref main
+#
+# The build is the cost here: the release checklist measures the full binding
+# set at about 8 minutes of compile (docs/RELEASE_CHECKLIST.md:19), to
+# protect suites that run in 7 s and 34 s.
 name: Python tests
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - "main"
-    paths:
-      # The boundary whose drift broke the gates: Array gained/lost methods,
-      # every converter routes through _buffer, _backend picks the binary.
-      - "python/mojolearn/_array.py"
-      - "python/mojolearn/_arrays.py"
-      - "python/mojolearn/_buffer.py"
-      - "python/mojolearn/_bufcheck.py"
-      - "python/mojolearn/_backend.py"
-      # The tests themselves.
-      - "python/mojolearn/tests/**"
-      # The bindings and their build scripts: these produce the binaries both
-      # suites import, so a change here can break every test at once.
-      - "bindings/**"
-      # The manifest carries [feature.test] and both task definitions.
-      - "pixi.toml"
-      - "pixi.lock"
-      # This workflow and the runner it calls.
-      - ".github/workflows/python-tests.yml"
-      - "tools/check_python_gates.sh"
 
 permissions:
   contents: read
@@ -68,7 +61,7 @@ permissions:
 jobs:
   python-tests:
     name: pytest suite and the 13 gates
-    runs-on: macos-15
+    runs-on: [self-hosted, macos, arm64, metal, real-gpu]
     timeout-minutes: 45
     defaults:
       run:
@@ -82,10 +75,13 @@ jobs:
             /*
             !/bench/results/*
 
-      - uses: prefix-dev/setup-pixi@v0.10.1
-        with:
-          run-install: true
-          cache: false
+      # NOT setup-pixi: on the self-hosted Mac pixi is already installed and
+      # the action would fetch its own (release-provenance.yml:171).
+      - name: pixi is present
+        run: |
+          command -v pixi
+          pixi install --locked
+          pixi install --locked -e test
 
       - name: Runner facts
         run: |

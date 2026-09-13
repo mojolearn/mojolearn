@@ -38,6 +38,16 @@ pixi run check-docs-facts   # fails if a pin, a badge or a prose default drifted
 python3 packaging/check_ext_lists.py   # every pack/build/smoke list agrees with _backend
 ```
 
+```sh
+MOJOLEARN_NUMERIC_MODE=identical pixi run -e test test-python   # 978 pytest tests, about 7 s
+pixi run check-python-gates                                      # the 13 gate-style tests, about 34 s
+```
+
+Both need the 17 IDENTICAL bindings built on this Mac (`bindings/build*.sh`).
+They run here and not on a hosted runner because a GitHub macOS VM cannot
+compile Metal AOT (`.github/workflows/python-tests.yml` header); that workflow
+is dispatch-only on the same ephemeral runner as step 6.
+
 The wheel's contents are one rule: the three tree bindings in every tier,
 every other binding in `identical/` alone (DEVIATION 2490). The checker holds
 the pack and build lists to `_backend._TIERED` and `_MODULES`; a binding that
