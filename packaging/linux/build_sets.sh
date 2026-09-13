@@ -96,6 +96,18 @@ tier_scripts() {
   printf '%s' "$SCRIPTS"
   if [[ "$1" = identical ]]; then printf ' %s' "$IDENTICAL_ONLY_SCRIPTS"; fi
   if [[ "$PACKAGE_BYTE_LM" = 1 && "$1" = identical ]]; then printf ' build_byte_lm.sh'; fi
+  # THE CPU TRAINING BINDING IS BUILT HERE, in the identical tier's pass,
+  # because identical is the only tier it supports. It appears in tier_SCRIPTS
+  # and deliberately NOT in tier_NAMES: tier_names drives the per-tier
+  # read-back loop and the staging move, and this binary is neither a tier
+  # member nor a vendor member -- it answers 'cpu', carries no GPU code, and
+  # is staged once beside the tiers in <set>/host/.
+  #
+  # Omitting this line is what failed the first 0.8.4 gfx942 leg: everything
+  # downstream (read-back, arch read-back, staging, the build-provenance
+  # host_extension accounting) was in place around a build that never ran, so
+  # the leg reached its own assertion with nothing to count and refused.
+  if [[ "$PACKAGE_BYTE_LM" = 1 && "$1" = identical ]]; then printf ' build_byte_lm_host.sh'; fi
   printf '\n'
 }
 # THE CPU TRAINING BINDING IS NOT A TIER MEMBER AND NOT A VENDOR MEMBER.
@@ -121,14 +133,33 @@ for t in $TIERS; do
   case "$t" in fast) d=python/mojolearn ;; *) d=python/mojolearn/$t ;; esac
   rm -f "$d"/_mojolearn*.so
 done
+# The CPU training binding sits BESIDE the tiers, so the loop above never
+# reaches it, and bindings/build_byte_lm_host.sh REFUSES to overwrite an
+# existing output rather than silently replacing it. A leftover from an
+# earlier leg would therefore fail this build instead of being reused.
+rm -f "$HOST_SO"
 
 # ---------------------------------------------------------------- builds
 build_one() {
   local tier="$1" s="$2"
   local log="$DEST/build_logs/${tier}_${s%.sh}.log"
+  local rc=0
   { echo "start $(date -u +%FT%TZ)"; } > "$log"
-  if MOJOLEARN_NUMERIC_MODE=$tier MOJOLEARN_SKIP_BUILD_GATE=1 \
-       pixi run -e "$PIXI_ENV" bash "bindings/$s" >> "$log" 2>&1; then
+  if [[ "$s" = build_byte_lm_host.sh ]]; then
+    # THE HOST BUILD MUST NOT SEE AN ACCELERATOR TARGET. Every release leg
+    # exports MOJOLEARN_GPU_ARCHS (gfx942, sm_89, sm_90a) and this binding has
+    # no device code, so bindings/build_byte_lm_host.sh refuses that variable
+    # BY NAME on Linux. Its output directory is unset for the same reason the
+    # byte LM build unsets its own, so the binary lands at
+    # python/mojolearn/host/ where the staging move below looks for it.
+    MOJOLEARN_NUMERIC_MODE=$tier MOJOLEARN_SKIP_BUILD_GATE=1 \
+      env -u MOJOLEARN_GPU_ARCHS -u MOJOLEARN_BYTE_LM_HOST_OUTDIR \
+      pixi run -e "$PIXI_ENV" bash "bindings/$s" >> "$log" 2>&1 || rc=$?
+  else
+    MOJOLEARN_NUMERIC_MODE=$tier MOJOLEARN_SKIP_BUILD_GATE=1 \
+      pixi run -e "$PIXI_ENV" bash "bindings/$s" >> "$log" 2>&1 || rc=$?
+  fi
+  if [[ "$rc" = 0 ]]; then
     echo "end $(date -u +%FT%TZ) OK" >> "$log"
     say "built $tier bindings/$s"
   else
