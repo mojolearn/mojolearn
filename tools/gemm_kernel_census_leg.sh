@@ -35,7 +35,19 @@ find_tool() {
     printf '%s' "$_t"
 }
 PTXAS=$(find_tool ptxas); CUOBJDUMP=$(find_tool cuobjdump); NVDISASM=$(find_tool nvdisasm)
-note "ptxas=${PTXAS:-<none>} cuobjdump=${CUOBJDUMP:-<none>} nvdisasm=${NVDISASM:-<none>}"
+# The image's ptxas 12.4 refuses Mojo's PTX 8.5 (2026-09-13 leg: "Unsupported
+# .version 8.5; current version is '8.4'"). The 2026-09-10 lane's route
+# (bench/results/gemm_resources_2026-09-10/README.md): the pip nvcc wheel,
+# no deps, into its own directory; its ptxas assembles PTX 8.5.
+if [ -z "${MOJOLEARN_CENSUS_NO_PIP_PTXAS:-}" ]; then
+    python3 -m pip install --no-deps --target /root/cuda126-tools nvidia-cuda-nvcc-cu12==12.6.85 > "$OUT/pip-ptxas.log" 2>&1
+    note "pip_ptxas_exit=$?"
+    _p=$(find /root/cuda126-tools -type f -name ptxas 2>/dev/null | head -1)
+    [ -n "$_p" ] && { chmod +x "$_p"; PTXAS="$_p"; }
+    _d=$(find /root/cuda126-tools -type f -name nvdisasm 2>/dev/null | head -1)
+    [ -n "$_d" ] && { chmod +x "$_d"; NVDISASM="$_d"; }
+fi
+note "ptxas=${PTXAS:-<none>} ($( [ -n "$PTXAS" ] && "$PTXAS" --version 2>/dev/null | grep -o 'V[0-9.]*' | head -1)) cuobjdump=${CUOBJDUMP:-<none>} nvdisasm=${NVDISASM:-<none>}"
 HAVE_TOOLKIT=0; [ -n "$PTXAS" ] && [ -n "$CUOBJDUMP" ] && HAVE_TOOLKIT=1
 note "have_toolkit=$HAVE_TOOLKIT"
 
@@ -149,8 +161,36 @@ if [ "$HAVE_TOOLKIT" = 1 ]; then
         "$PTXAS" --verbose --gpu-name "${arch:-sm_90a}" -o "$stem.cubin" "$p" > "$stem.ptxas.log" 2>&1
         note "ptxas $(basename "$stem") exit=$? $(grep -h 'Used\|spill' "$stem.ptxas.log" | tr '\n' ' ' | tr -s ' ')"
         [ -f "$stem.cubin" ] && "$CUOBJDUMP" --dump-resource-usage "$stem.cubin" > "$stem.resources.log" 2>&1
-        [ -f "$stem.cubin" ] && [ ! -s "$stem.sass" ] && "$CUOBJDUMP" --dump-sass "$stem.cubin" > "$stem.sass" 2>&1
+        # The runtime's _dump_sass wrote EMPTY files on 2026-09-13; take the SASS
+        # from the cubin, nvdisasm first (the pip one reads its own cubins), then cuobjdump.
+        if [ -f "$stem.cubin" ] && [ ! -s "$stem.sass" ]; then
+            { [ -n "$NVDISASM" ] && "$NVDISASM" -c "$stem.cubin" > "$stem.sass" 2> "$stem.nvdisasm.err"; } \
+                || "$CUOBJDUMP" --dump-sass "$stem.cubin" > "$stem.sass" 2>&1
+            note "sass $(basename "$stem") bytes=$(wc -c < "$stem.sass" | tr -d ' ') ffma=$(grep -c FFMA "$stem.sass")"
+        fi
     done
+fi
+
+# ---- Nsight Compute: the stall breakdown, where the box allows counters ----
+# The one instrument that names latency against issue directly. Profiles the
+# price binary under the shipped arm, a handful of GEMM launches, sections
+# only (no full set), and records the permission refusal if the container
+# has none (ERR_NVGPUCTRPERM). Launches kernels; that is its purpose.
+NCU=$(find_tool ncu)
+[ -z "$NCU" ] && for d in /opt/nvidia/nsight-compute/*/ /usr/local/cuda/nsight-compute-*/; do [ -x "${d}ncu" ] && { NCU="${d}ncu"; break; }; done
+note "ncu=${NCU:-<none>}"
+if [ -n "$NCU" ]; then
+    if pixi run mojo build -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_GEMM_ARM_TRIAL=1 \
+        bench/gemm_step_price_main.mojo -o "$OUT/step-price" > "$OUT/build-price.log" 2>&1; then
+        env MOJOLEARN_GEMM_ARM=shipped MOJOLEARN_GEMM_ARM_SABOTAGE=0 MOJOLEARN_GEMM_STEP_ROUNDS=1 MOJOLEARN_GEMM_STEP_WARMUPS=0 \
+            "$NCU" --target-processes all --launch-count 16 --kernel-name regex:gemm \
+            --section SpeedOfLight --section Occupancy --section SchedulerStats --section WarpStateStats \
+            --section ComputeWorkloadAnalysis --section MemoryWorkloadAnalysis --section LaunchStats \
+            "$OUT/step-price" > "$OUT/ncu.log" 2>&1
+        note "ncu_exit=$? $(grep -c 'Section: Warp State' "$OUT/ncu.log") warp-state sections; $(grep -m1 -o 'ERR_NVGPUCTRPERM[^ ]*' "$OUT/ncu.log")"
+    else
+        note "ncu skipped: price build failed"
+    fi
 fi
 gzip -9 "$DUMP"/*.ptx "$DUMP"/*.sass 2>/dev/null
 rm -f "$DUMP"/*.cubin
