@@ -419,7 +419,9 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("metrics")
 def _(ml, X, yc, yr, Xh=None):
-    labels = ml.KMeans(n_clusters=4, random_state=3).fit(X[:3000, :4]).labels_
+    # labels_ is a mojolearn Array since the NumPy-free change; the modulo
+    # below and the metrics take ndarrays, so view it once.
+    labels = np.asarray(ml.KMeans(n_clusters=4, random_state=3).fit(X[:3000, :4]).labels_)
     mt = ml.metrics
     return _fit(dict(
         accuracy=_h(np.float64(mt.accuracy_score(yc[:3000], (labels % 2).astype(np.int32)))),
