@@ -1362,3 +1362,50 @@ Both are placement and spelling, both keep every term and every order,
 and together they bound at about 1.35x on the GEMM sum (142 to about 105
 ms, 37 ms of the 343 ms step). They are the kernel-body work the plan
 asked to size before opening, and they are the next arms (section 17).
+
+## 17. The two arms the decomposition named (DEVIATION 2706, 2026-09-13, branch `lane/gemm-hfgs`)
+
+### 17.1 `kpack_hf`: the hardware flush in the fold
+
+`_fold_flush[HW]`: on the NVIDIA column with `HW`, `ftz(x)` is spelled as
+`mul.rn.ftz(x, 1.0)`, the instruction the step seam has used since
+2026-09-09. Identity: `x` is a stored binary32, so the multiply by one is
+exact and its only effect is the flush of a subnormal to its signed zero,
+which is `ftz`'s definition; the 2026-09-09 gate measured the pair equal on
+262,144 words. `_fold_push_local`, `_fold_drain_local`, the leaf partial and
+the output flush take `HW` from the kernel's `HWFOLD`; every other caller
+(the shipped tuned kernel included) passes the default and keeps the
+six-operation software spelling, as does every other column, so no bit can
+move anywhere. Cross-compiled: the fold's `selp` count falls from 1,024 to
+128 and `mul.rn.ftz` rises by the flushes. Bounded by section 16.3's 20
+percent.
+
+### 17.2 `kpack_gs`: gather staging
+
+Under `GATHER`, thread `tid` stages line group `g` at window step `c`,
+`(g, c) = (tid div 16, tid mod 16)` for a p-contiguous operand and `(tid
+mod 16, tid div 16)` for an outer-contiguous one; it gathers the eight
+lines `g + 16 u` at step `c` from DRAM (`_kpack_gather`: zero past the
+matrix or the window, flushed at staging as `_tuned_g2r` flushes) and
+stores them as ONE 8-wide vector at `g stride + c 8`, which is
+`gemm_kpack_addr(g + 16 u, c)` for `u = 0..7`. The same words at the same
+addresses as the slot mapping, so the accumulate loop and every existing
+check are untouched; `check_kpack_gather_covers_the_page` walks the 256
+threads under both mappings and requires every data word stored exactly
+once and no pad word at all. Per thread per window: 16 scalar shared
+stores at a four-way conflict become two `st.shared.v4` that are
+conflict-free under both mappings (p-contiguous: a warp's 16 lanes at
+consecutive steps write 128 contiguous words; outer-contiguous: consecutive
+`g` at stride 132 words hit distinct bank groups). The global loads stay
+scalar and coalesce under both mappings (16 consecutive `p` of one line,
+or 16 consecutive lines at one `p`). Bounded by section 16.3's 33 percent,
+of which the barrier's own skew is not touched.
+
+### 17.3 `kpack_hg`: both
+
+The two are independent placements and compose. The leg prices
+`shipped, kpack_padv, kpack_hf, kpack_gs, kpack_hg` and runs the LM probe
+on the three, so each is read against its base (`kpack_padv`) and against
+shipped on the same pod. M4 arms check: all three 117/117 ragged reach,
+every LM call bit-equal to shipped, the gather coverage 4 cases 0 failures.
+RUN OWED at the time of writing.
