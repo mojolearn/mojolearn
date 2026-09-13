@@ -1,0 +1,4 @@
+{
+  "status": "OWED",
+  "note": "No nvidia recording exists. Fit a small sequential forest on a nvidia box under MOJOLEARN_NUMERIC_MODE=identical, save it here as model.npz, then run tools/forest_host_gate.py record on this directory. The gate exits 2 on this file and the workflow fails until then; that is deliberate."
+}

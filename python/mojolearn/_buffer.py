@@ -773,18 +773,33 @@ def _native(key):
 #: DEVIATION 2614: the helpers the CPU inference binding also exports, and the
 #: only ones `_native` may resolve from it.
 _HOST_NATIVE_KEYS = frozenset({"all_finite_f32", "all_finite_f64", "cast_f64_to_f32"})
+#: The forest host binding (the forest host lane, 2026-09-13,
+#: `bindings/host_helpers.mojo`) exports those three and the four
+#: `_labels.argmax_rows` and `_labels.decode_labels` resolve, so a saved
+#: forest's class labels decode on a CPU-only install through the same native
+#: helper the GPU path uses.
+_FOREST_HOST_NATIVE_KEYS = _HOST_NATIVE_KEYS | frozenset(
+    {"argmax_rows_f32", "argmax_rows_f64", "gather_i64", "gather_f64"})
 
 
 def _host_native(key):
-    """`key` from the CPU inference binding, on a box whose GPU base binding
+    """`key` from a CPU inference binding, on a box whose GPU base binding
     is not built (DEVIATION 2614). The same native helper compiled into a
     second binary, not a Python copy, so the no-Python-fallback rule above
-    holds. None when `key` is not one of the three or that binary is not
-    built either; a refused sabotage build raises rather than hiding."""
-    if key not in _HOST_NATIVE_KEYS:
-        return None
-    from . import _byte_lm_host
-    try:
-        return getattr(_byte_lm_host._load(), key)
-    except (ImportError, AttributeError):
-        return None
+    holds. The byte LM host binding is asked first for the three it carries,
+    then the forest host binding for its seven. None when `key` is not one of
+    them or neither binary is built; a refused sabotage build raises rather
+    than hiding."""
+    if key in _HOST_NATIVE_KEYS:
+        from . import _byte_lm_host
+        try:
+            return getattr(_byte_lm_host._load(), key)
+        except (ImportError, AttributeError):
+            pass
+    if key in _FOREST_HOST_NATIVE_KEYS:
+        from . import _forest_host
+        try:
+            return getattr(_forest_host._load(), key)
+        except (ImportError, AttributeError):
+            pass
+    return None

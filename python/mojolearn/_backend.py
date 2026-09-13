@@ -799,8 +799,17 @@ def host_binding_path():
     return os.path.join(_pkg_dir(), "host", "_mojolearn_byte_lm_host.so")
 
 
+def forest_host_binding_path():
+    """Where the CPU forest inference binding lives on this install (the
+    forest host lane, 2026-09-13, `_forest_host.py`)."""
+    return os.path.join(_pkg_dir(), "host", "_mojolearn_forest_host.so")
+
+
 def host_binding_built():
-    return os.path.exists(host_binding_path())
+    """Whether ANY CPU inference binding is built. Either one is enough to
+    turn the no-GPU refusal into by-name stubs, because either one is a
+    surface that computes on this box."""
+    return os.path.exists(host_binding_path()) or os.path.exists(forest_host_binding_path())
 
 
 class _NoGpuBinding(type(sys)):
@@ -817,8 +826,11 @@ class _NoGpuBinding(type(sys)):
             "mojolearn: this process loaded NO GPU binary set, so every GPU "
             "estimator, block and trainer is unavailable here. The surfaces "
             "that compute on this box are LanguageModelInference (byte LM "
-            "forward pass on the CPU) and LanguageModelHostTrainer (one byte LM "
-            "training step on the CPU: forward, backward and the AdamW update). "
+            "forward pass on the CPU), LanguageModelHostTrainer (one byte LM "
+            "training step on the CPU: forward, backward and the AdamW update) "
+            "and HostForest (predict and predict_proba of a saved RandomForest "
+            "or ExtraTrees model on the CPU), each only when its own host "
+            "binding under mojolearn/host/ is built. "
             "Why no GPU set loaded:\n" + self.__reason
         )
 

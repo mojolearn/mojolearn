@@ -157,3 +157,39 @@ compact leaf outputs while preserving the existing grove arithmetic. It is not
 a new engine or a production default. Both layouts pass the initial Metal FAST
 and IDENTICAL correctness matrix; NVIDIA qualification and large-data layout
 A/B remain pending. See the [layout experiment](lanes/GPU_FOREST_INFERENCE_NEXT.md#next-layout-experiment-after-io-measurement).
+
+## Host inference with no GPU
+
+A forest saved by `save` predicts on a CPU with no GPU through
+`mojolearn.HostForest`, the `sequential` algorithm compiled with no accelerator
+target (`bindings/build_forest_host.sh`, output
+`python/mojolearn/host/_mojolearn_forest_host.so`, IDENTICAL only). The GPU
+path and its defaults are unchanged; this is a second door onto a saved file.
+
+```python
+import mojolearn
+
+model = mojolearn.HostForest.from_file("forest.npz")   # any of the four estimators
+labels = model.predict(X_test)                          # what the GPU class returns
+probabilities = model.predict_proba(X_test)             # classifiers only
+
+mojolearn.host_predict("forest.npz", X_test)            # the one-call form
+```
+
+`predict` and `predict_proba` return the dtypes the GPU classes return for the
+same file. RF probabilities float32, RF regression float32, ET probabilities
+and regression float64, labels through `classes_`. A `parallel_groves` archive
+is refused by name, because the host engine is the sequential one. On a box
+with no GPU binary set the package imports as a CPU-only install when this
+binding is built (DEVIATION 2615 widened), `mojolearn.vendor()` answers
+`cpu`, and every GPU estimator raises by name on use.
+
+What this promises is only what has been measured. `tools/forest_host_gate.py
+record` runs on a GPU box and writes the SHA-256 of that box's predictions for
+a saved model and a regenerable fixture; `tools/forest_host_gate.py check`
+runs on the CPU box and exits 0 only when the host predictions hash the same.
+`.github/workflows/forest-host-gate.yml` runs the check on seven hosted CPUs
+against the fixtures under `bench/results/forest_host/`, and the brief
+[BRIEF_forest_host_inference_2026-09-13.md](lanes/BRIEF_forest_host_inference_2026-09-13.md)
+records which recordings exist and which are still owed. A CPU or a vendor
+not in that record is not certified.
