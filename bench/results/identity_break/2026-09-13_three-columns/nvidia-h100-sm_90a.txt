@@ -1,0 +1,69 @@
+2161 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1272c0000000, nodemask=1)
+# identity_break  mode=identical  2026-09-13 20:07:44  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows) and a `model` row (saved bytes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+| rf-clf                 | 21178dc5457bf5dc | 578c313bdad14449 | 30000a54b1ebf87f | e57dc48ebb4fda48 | 9ee018b4ad7d8c6c | 9ee018b4ad7d8c6c | 941ea7485b906b92 | 8eadf0d0c523cf9a | 5c321c2a1e99f705 |
+| rf-clf infer           | 3b30324dc0a909d3 | 122d0397afe9bc84 | 95452dea53316b5c | 576ce8ec7833b38d | 1f873a2912989c6e | 1f873a2912989c6e | f7836c254af7cb78 | e067dff805be210f | a8494465884e646a |
+| rf-clf model           | ed1592a2b0ab1658 | 2d8da1cf56084257 | 4acba627d01b9da9 | 76cb8029f7d6dc47 | ba7e1f6d84593ce4 | ba7e1f6d84593ce4 | a481d93b96bec8af | 2b4df5c88d1f8be8 | 58fcd13c13e9de79 |
+| rf-reg                 | f032017cfd1c73dd | ec6e7b28cd0d16a9 | c755113ac878c8b9 | 8d9b05172d7a3777 | feed3869ba06eaf7 | feed3869ba06eaf7 | 55f5becd2a3a172c | 33f207a8fab32866 | cd81c456c75aaaf0 |
+| rf-reg infer           | 16465c479f279614 | 9e088d6c6c1bf54b | c451d1194f8c47f5 | 1dddbff05a6645de | f2dbdf86d13054aa | f2dbdf86d13054aa | 76d74b876471a685 | c297fa86d8e8923e | b8e07686422213e6 |
+| rf-reg model           | ee1ec176625ae198 | a35ee93f7a000cbd | 3ce6c16334ce58a2 | f252dc1602084e7d | 477f1583967a6e80 | 477f1583967a6e80 | 1836f0b40183be27 | 95f31ab2b2ce0d0e | 9deda76973ef536f |
+2161 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x590340000000, nodemask=2)
+| et-clf                 | c586b27a3b049614 | 604f59c7a4203eeb | eb7aaadcd0843a6d | ee8b318d6bf698b2 | b40377fb35e52909 | b40377fb35e52909 | a24dcc8a93f699ff | 1da918353bb9f10e | e1409786c462d97b |
+| et-clf infer           | b728e73e5f84514c | 7aa541bcca22b6fd | 122107c8d8ef1916 | a5387ead8aca6bb0 | df1046f889386ad8 | df1046f889386ad8 | 55bed611333bec41 | 518eb1a0b0211a91 | 2b7903f4728bb9c0 |
+| et-clf model           | 58a53490a62fba59 | e63de8292d8384e4 | 94580dd625aaa11a | f792edfcd53b6aff | 5d348c7133844b3e | 5d348c7133844b3e | ff82d3ce7bd5651f | ed0c7e9a34735dbd | 974e58a34d03e07b |
+| et-reg                 | 754d8c127ecfc04d | e7072e1c8fe0083c | 4e0a0d9a4670ed5f | b745e53515f59cac | 19a23f6fea44befd | 19a23f6fea44befd | 9a63fea590f79a67 | c9fe7c90673c2661 | 3fd3dff94cc79fc2 |
+| et-reg infer           | f67822ca39ef408b | 25c3d08ea7aaac22 | 1ddc98bb1d441cac | 62bb5a2df07afdb7 | 406ff2c63a669110 | 406ff2c63a669110 | a531191ff80bfa39 | 27c45b87272bc27f | 9579a3dac3b9af8b |
+| et-reg model           | 1c0c6b20cc9be5bd | 0ae34e3bcc2b7391 | 029c99465d40dd66 | 6da81ae280958f67 | 8704471f45cc32d6 | 8704471f45cc32d6 | d99a54bf0717266d | d631aaa061d3f2e4 | 34d9143f7fc1fec7 |
+| gbdt-symmetric         | 56560dec5bdb6cb9 | b32c469f812adf25 | cf3de2636433b65a | bc0084b9b1e30f87 | 56560dec5bdb6cb9 | 56560dec5bdb6cb9 | 9d55545ce5f2ac2b | 0836bd47530040d0 | fb9966f26639c286 |
+| gbdt-symmetric infer   | e1db044dc82354ac | e71542e71394acc3 | 548cebaf2b1310eb | 9f7630d079f43f07 | e1db044dc82354ac | e1db044dc82354ac | 04bc7278a6524318 | 24dbd6988a519e0c | 3d7847393c2eeeed |
+| gbdt-symmetric model   | ee776c33f052679a | d01adab1226baf49 | 24d9422c46dcfff9 | 1cdaebf93c86aa45 | 4f2c8b24bbe2eb42 | 4f2c8b24bbe2eb42 | 534330823f304849 | 3dfdadfd1961d2b5 | 145ac848bbea01ba |
+| gbdt-depthwise         | 38726fc0c93c0bff | 465cb10f303e005a | 9455870882645f48 | 2a77ec865e62539a | 64ba350c759ff2e9 | 64ba350c759ff2e9 | e521424a96e216cb | fb9e5c03088814f6 | d77fc9f6a3eee0a2 |
+| gbdt-depthwise infer   | 688bf9a8e927232e | e299a1457dfaedc7 | d11cf64a629bd4fb | 65e906e50a54735e | 7b73dadeb43db4cf | 7b73dadeb43db4cf | fc255cbff38ea320 | 4ee637393df9aff7 | ddaa5cebdc9c1484 |
+| gbdt-depthwise model   | 448c1bcf37ffdc97 | ef4323cc40bbfd0a | 80b172e1332f9dd9 | 38d9c484d12b1f01 | a5f5c6eac0c3732c | a5f5c6eac0c3732c | ca399349c402761a | e4f63fb009a0a7b5 | 9c2f348d3bf8e73c |
+| gbdt-lossguide         | bc3017cb29615105 | 19d199f7bfa16c25 | 3841103ecb3ac05d | b9cc1b2b55425cdc | b0a6d4a26ed4d77c | b0a6d4a26ed4d77c | b1546f9b3c4293a5 | 9fd309c55a93e6c3 | 67b332fcf8b5d0dd |
+| gbdt-lossguide infer   | 38894a4992494eec | 37cf90363e2078cf | 6ad2edafdef76901 | 95431b9721836309 | 11691f0c929f3421 | 11691f0c929f3421 | 48a2422d07d569e8 | c61553f78e6fb798 | d3535f6580f644c7 |
+| gbdt-lossguide model   | 9e01e18241859f87 | 3653934f21f61d9d | efe7e6ef1fe94f1e | 0b24cabbdbb1f867 | cb45b0cc2830737b | cb45b0cc2830737b | 8c51a41b08c13e13 | 7393593a5fb3ed79 | f2f295f6c2c1929d |
+| gbdt-rmse              | 3f8aef8d73be249c | 88cba1574daa922e | a89dba586c0f1ab4 | 5ea3a06d9df1d862 | 400f099e655dc453 | 400f099e655dc453 | 49848bfd3c26b52e | 7b54ca9d69e29714 | e54f74cdab3f29f0 |
+| gbdt-rmse infer        | ba6284898fcd7adb | 4044415de3b73aee | b79afaae27b8bdb6 | 3f008ec3ab37ef2f | 86db747723f31263 | 86db747723f31263 | da755bd965b6c511 | 88f9e64eea1b35df | 2f7db100a96ca46b |
+| gbdt-rmse model        | 6a7e0d174aadda21 | b1eb77816b7f439a | e11795530a351b48 | 153340671f3c1919 | 70624119eb3559b1 | 70624119eb3559b1 | d9198fa372812bc0 | 7a0ea772f0108d40 | 70b2f95595d7194e |
+| kmeans                 | 5aa44cc11034dec9 | 3de3e103006de69c | 0a570e84b0002723 | 6f0529fcb3d60536 | 993fe5caff144b0c | 993fe5caff144b0c | 2ae942d45a51757a | 43d8a3d3859f4143 | d4cc38e75f8e2d75 |
+| knn                    | 6869ae45e01fcb7a | 23daf3a923d4c74f | 96db6b5a57d4d248 | 3956d623d56e1786 | c5404ea40ba502da | c5404ea40ba502da | 55dffcfe5d6aa112 | f4ddd08c4744ae8d | b73513bc451075d0 |
+| knn infer              | da53642fe53493ad | 234e9e649f45c983 | 906e8d5ef7d91305 | 3173e563e425be1c | 32426a86a46b417f | 32426a86a46b417f | 6776f2a2ef1528ee | ef7c64cd35cc99ad | aa5dd33322e1cb78 |
+| knn-clf                | 7fb71bb7ee2b9cbf | e49edb14ac08e443 | 9ddcb99c00d6b865 | a3167e29faf6ab4f | eb1e9c1b10e931a6 | eb1e9c1b10e931a6 | 855703a33d6460e5 | b875a97832653115 | 14109bcae1b2b950 |
+| knn-clf infer          | 8381d6badb2ee31b | d7292e53ec625170 | 7e895e275d390d17 | b128c6dd4d428648 | 3b26081dcfb54057 | 3b26081dcfb54057 | 20ea108e0746b7e5 | a593e7cc3b0f8144 | 4a407720c8a6509a |
+| knn-reg                | 33e7da5c3fdd343c | 556283a80ad1e387 | 81f9b8890b3f8185 | 0d128580a2408383 | 4c84ea510c9509c5 | 4c84ea510c9509c5 | 3bb71dcd3b676bd6 | 4fddd38927851559 | b34860cd7e03c8fe |
+| knn-reg infer          | 12b3c8b2763ae645 | fcbc1a112c60d1d0 | 4223804b361954e6 | 4b2e95d49bb291c5 | 511f71a64fa48d7a | 511f71a64fa48d7a | 0e04bd5ca4150340 | e53e4bfa78bd428a | ca725c74b7aec59b |
+| dbscan                 | 64df251bd00de81b | b7535355c1581603 | d17808b4b9261d5d | d17808b4b9261d5d | 9c0b3563fc16b652 | 9c0b3563fc16b652 | 64df251bd00de81b | 54d129f45630ea84 | bb6bd31e075693e9 |
+| pca                    | 426e098860cb885e | 2cc3098a82f5e29c | 9c43c580f84b913e | ee30334357c2fe6e | 632dd2d41a856846 | 632dd2d41a856846 | f0d80567379e28e4 | 2bde4e929e103470 | c4903e2bddacb305 |
+| pca infer              | 5ec98c317c9314a6 | 470065a905e144bf | da7f8a40931a091a | abbcfa36cfc4cc81 | d28a4176d38a79ad | d28a4176d38a79ad | 25b7f77104e4b5b3 | 9f765336b6cbcc11 | bed836c726c23255 |
+| tsvd                   | 8e8d20af1d08720c | 86d6e87cfc1f48c0 | 7eeaca88b0e6a8de | 975f2a167b1ac6d5 | 36d9e3d5aaadcd92 | 36d9e3d5aaadcd92 | 9a24cf55eff6013c | 452fd865062565da | 22e0958cc1ded92d |
+| tsvd infer             | 36793a22ecfc11d9 | 441e224141ca3ef4 | a253da0a489ff1d7 | cef9d6af2957dea2 | fc4af18e4659ab46 | fc4af18e4659ab46 | b20d1e18ded5c227 | 4ca5ee061209a589 | 47e1b7225f50fa55 |
+| ols                    | 3d1d7c30b12d9872 | c73c0c1158ebcb9e | 7a4cc4b643207e04 | 880f803e2a9840cf | f0e2e46f2203e17d | f0e2e46f2203e17d | 5d93af9edf61d3e7 | bfb2368a5a4871ba | 737566e6c5e95e7d |
+| ols infer              | 2546a13c03838433 | 55f61f34cae7e5ff | 73b6c23acb537f4f | c40c1d99f114c282 | 050118359943fcd8 | 050118359943fcd8 | 09ac924358918527 | 60eb6ff64dfbea28 | ddf1f9ebb606db70 |
+| ridge                  | a91478be750dc756 | 42410e35cdae30cb | fb5037b3d70d60ee | 7215c2605901cdc6 | 2eed6e454ed965da | 2eed6e454ed965da | c69b8fef7932da21 | bdaf14e02a8f07ec | 473e3ff40fc67b0e |
+| ridge infer            | a5a404bb201b0eeb | d23a652e5f82906f | 1f692bf67099df47 | cc8d5d1192f32b52 | 4233d399ae41d2e6 | 4233d399ae41d2e6 | 3e10053ac0b9fbd4 | 83420de0d62b5c95 | 174ab0d4049ee591 |
+| logistic               | 5b1e42c308451935 | aa9b1fa93dc2ad08 | ec4fd3f1b3f90393 | 4e980d6d6bb17dd2 | 6b67b6ba386c99c1 | 6b67b6ba386c99c1 | 8b3071b0cd8446b2 | 3c0d0924516a37e8 | b50b9cbe101d71d8 |
+| logistic infer         | 103f76e4a2b23c03 | 31ae5dc087daddea | dfe219d0b67a77ca | 0b4e034053a507a6 | 2092f79961286d8a | 2092f79961286d8a | df012d0cb1286818 | 7540ab14779d65c6 | 00fff477b42c65a0 |
+| lasso                  | 2fa3301e45a46091 | 1e207f82f555270b | 0446105edc307f9c | d0df889b0ede05a7 | 5374b434a96382d6 | 5374b434a96382d6 | beafb1d480c34cf4 | 5593579edd6113d6 | c332c713694ff28d |
+| lasso infer            | 7334b38e7b651e27 | ff61f45db38db46d | 482da47ba9b49877 | 1f85238c927b088e | b92e9bfda9b725b4 | b92e9bfda9b725b4 | 727d68f61ef51bfb | 1c17e2eb1ef6a2e2 | 0167126d36a4243d |
+| elasticnet             | 2cf742083831ee9d | 118eac19578010ab | 00b6923d62a41c0a | ef8800eaf0ca4f87 | 3add60ff69fd788c | 3add60ff69fd788c | 97d4c8c235d38bfe | 1a518e703b7dd1d9 | 7624315e7deffe10 |
+| elasticnet infer       | 483bce4b8cc1a137 | a767a79709358382 | db0926772dbaaff4 | e37614bc5b2ef0af | 0047832ca8c561a3 | 0047832ca8c561a3 | fc18f039274052f1 | 75a88217f1114867 | a21e833e3e925b89 |
+| svc                    | dec306e940b8a444 | 2093351e33d072ed | 274bf9087fb0750e | 550d1845e417ca18 | 549c0b5c319d84cf | 549c0b5c319d84cf | b2f0d9a49c9f241c | 61b1676a7e40c914 | 667155f7eda847aa |
+| svc infer              | 4aee3fcc51c4761e | e400ffe98db4b786 | 94cb46a9aa6a811c | ee2e31ef0e3bbfcb | ebc593040592ca1e | ebc593040592ca1e | 6e5c253fa1d7ea5b | acd970db5a3ae605 | 685bebcb29a0cf8c |
+| kde                    | e0d6e3d0623d6112 | 0a800c7b3cca66e4 | dc279c30b7c5d070 | 36c3cbb2ef71f768 | 2128392fe1eb228a | 2128392fe1eb228a | e0d6e3d0623d6112 | 8a2b6beee09a98f3 | 84ca35b6a157c265 |
+| kde infer              | 1a2c3054b661b72a | 63b4da91ce458ab7 | f0d1cae79c88ca8a | 39622885a3c508a9 | 21caf753bc5b6352 | 21caf753bc5b6352 | 1a2c3054b661b72a | e49f797e443af916 | 30a64b99c13a89c4 |
+| agglomerative          | ad11b976bfbfc20b | 7dea8a094150b8a9 | 196c79a60c16166c | 24b2baa4533fb568 | b05982504c7e8646 | b05982504c7e8646 | ad11b976bfbfc20b | c747a33eff11bbe1 | 795f9975eb5ed985 |
+| spectral               | 7dd80ac8f13fc9eb | f160e7dc7c262f73 | 2bd3b69e87fa6b9b | d1857f998728ef34 | 4544b0d64dd6ad84 | 4544b0d64dd6ad84 | 7dd80ac8f13fc9eb | a48b941d2c585a12 | de29c53c40a728c5 |
+| holtwinters            | 9781c2061a287937 | b2a5df45db1395b0 | 66f688c307cabc3b | 560cdc45a69cc987 | db35c88da059e9e1 | db35c88da059e9e1 | 9781c2061a287937 | 8fb4dd76d8080a46 | 8fa4116875bdf59c |
+| gemm-pinned            | 931036cbc84c1ce0 | 8ddd60b67526c1b1 | 06057c0eeb212963 | 01701582fa724ce4 | 026720f450eda8a3 | 026720f450eda8a3 | 4d5d6e4a621ef9af | d5a7a31e551215d9 | 1ef67a1833b19819 |
+| metrics                | 2e2d6c84f00b9a0b | ea3e4d8076a7ea42 | 2a276b0f2347d198 | 1244dee823ddccf9 | 70d525921f2192ca | 70d525921f2192ca | b9bf5106a8b03644 | 8a7b2852763f246e | 745d2eae0be9da2c |
+| iforest                | 8703d4a008ffd13d | 5043855ee14799da | 72260557474879ae | 8703d4a008ffd13d | 54ea9b5c8c3fc38b | 54ea9b5c8c3fc38b | b879bcf3dcf99f38 | 9b849a13c8d35adb | a5b7676e39778af5 |
+| iforest infer          | c4247bb3a6c4675e | 288c5e41c62cddea | e4d04598e6d55395 | a8612e7e09b4983b | f3dcde6748050803 | f3dcde6748050803 | db8a00a8aa424f7c | 7b104f74d47a6e15 | 99572e40ada83cdf |
+
+cells=252 stable=252 moved=0 refused=0
+infer: stable=189 n/a=63
+model: stable=72 n/a=180
+n/a: agglomerative infer n/a:transductive, agglomerative model n/a:no-save, dbscan infer n/a:transductive, dbscan model n/a:no-save, elasticnet model n/a:no-save, gemm-pinned infer n/a:function, gemm-pinned model n/a:no-save, holtwinters infer n/a:forecast, holtwinters model n/a:no-save, iforest model n/a:no-save, kde model n/a:no-save, kmeans infer n/a:no-predict, kmeans model n/a:no-save, knn model n/a:no-save, knn-clf model n/a:no-save, knn-reg model n/a:no-save, lasso model n/a:no-save, logistic model n/a:no-save, metrics infer n/a:function, metrics model n/a:no-save, ols model n/a:no-save, pca model n/a:no-save, ridge model n/a:no-save, spectral infer n/a:transductive, spectral model n/a:no-save, svc model n/a:no-save, tsvd model n/a:no-save
+wrote /root/gemm_leg_out/identity/identity_break.box-arch.json
