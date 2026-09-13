@@ -138,6 +138,12 @@ framework, or on a device that has not passed the same checks.
   predictions on rows the model never saw and 72 cells of saved model bytes
   for the forest and GBDT lanes, all identical across the three
   ([record](bench/results/identity_break/2026-09-13_three-columns/README.md)).
+  Fourth, the same day, CPUs with no GPU at all: random forests, Extra Trees
+  and the four gradient boosting variants trained on each of the three GPUs
+  save the same model bytes, and a CPU-only binding reproduces every
+  prediction digest of all 24 recordings on seven CPUs (Intel Xeon, AMD
+  EPYC, Azure Cobalt Neoverse-N2, Apple M1), with a sabotage build refused on
+  each ([fixtures](bench/results/forest_host/README.md), workflow run 34782452584).
 - **UMAP.** Neighbor selection and iterative updates match across the three
   vendors on named fixtures.
 
