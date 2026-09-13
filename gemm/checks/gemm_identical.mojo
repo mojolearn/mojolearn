@@ -5171,17 +5171,22 @@ def identical_gemm_kpack_kernel[
         # ---- THE LEAF BOUNDARY. Fires exactly once per logical leaf.
         # (DIAG 4 and 5: no push; the accumulator is reset and the drain
         # returns zeros.)
+        # DIAG 4 and 5 keep accumulating across leaves and store `acc` itself,
+        # so the FMA chain stays live (a reset-to-zero let the compiler delete
+        # the whole loop on the first diagnostic leg, 2026-09-13).
         if win[2] == 1:
             comptime if DIAG != 4 and DIAG != 5:
                 var part = SIMD[DType.float32, NCELL](0.0)
                 comptime for pe in range(NCELL):
                     part[pe] = ftz(acc[pe])  # 5d, the leaf partial
                 _ = _fold_push_local[NCELL, FS](fl, occ, part)
-            acc = SIMD[DType.float32, NCELL](0.0)
+                acc = SIMD[DType.float32, NCELL](0.0)
 
         w = w + 1
 
     var outv = _fold_drain_local[NCELL, FS](fl, occ)
+    comptime if DIAG == 4 or DIAG == 5:
+        outv = acc
     comptime for u4 in range(NR):
         comptime for v7 in range(NCOL):
             var gi = i0 + accrow + u4 * TR
