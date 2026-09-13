@@ -159,6 +159,57 @@ inside the host oracle, gated so it can never compile into a shipped binary and
 reported by `byte_lm_host_sabotage`, is what would close that and it does not
 exist.
 
+## The initialization is a seed, not a gift
+
+The free run above still reads step 1's parameters out of the capture, so the
+statement it supports is "given these starting bytes". A reader can fairly answer
+that the run was handed its initialization. It was not: the starting bytes are a
+pinned deterministic function of an index, and the three retained trees all
+record it under the same identifier,
+`u32-avalanche-index-xor-42595445-top8-centered128-div1024-norm1.v1`.
+
+    h = fmix32((i + 1) ^ 0x42595445)          # Murmur3 finalizer, UInt32
+    value = Float32(Int(h >> 24) - 128) * 2^-10
+    # then the four RMS norm vectors are overwritten with exactly 1.0
+
+**This is bit-exact by construction rather than by a measurement that passed.**
+`h >> 24` is eight bits, so the numerator is an integer in [-128, 127] and the
+divisor is a power of two; both are exactly representable in FP32 and the
+quotient is exact, so there is nothing to round differently on another vendor.
+There is no accumulator, so no fold order exists to disagree about, and no
+transcendental, which is where cross-vendor agreement actually breaks
+(DEVIATIONS 2260 to 2266). Element `i` depends on `i` alone, so no thread layout
+can move a value. The draw lands on a 257-value dyadic grid: 256 points spanning
+[-0.125, 0.125] plus the 1.0 the norm vectors carry.
+
+`training/byte_lm_init.mojo` is the library surface and
+`tools/byte_lm_seeded_init_gate.py` is the gate. The gate carries an INDEPENDENT
+reimplementation rather than importing the generator in
+`tools/byte_lm_real_text_capture.py`, because comparing that function against the
+bytes it produced would prove nothing.
+
+| | |
+|---|---|
+| vendor trees reproduced from the seed | Apple, CUDA and HIP, all three |
+| parameters per tree | 34944 of 34944 bytes equal |
+| recorded `initial_parameters_sha256` | `b87a6075...` on all three trees |
+| distinct values | 257, the dyadic grid |
+| **Mojo host implementation, full vector** | sha256 `b87a6075...`, byte-identical to the recorded `initial_p.f32` |
+| negative control, XOR constant off by one | refused on all three, naming `embed` element 0, `3d080000` against `bdb00000` |
+
+So the chain closes: a seed fixes the initialization, the initialization and the
+token stream fix the trained weights, and both halves hold on a CPU and across
+the three vendors. **No new capture and no rented GPU were needed** -- the
+retained trees already recorded a reproducible initialization; nothing had
+written down that it was reproducible.
+
+**Two limits.** The seed here is the XOR constant inside a fixed index hash, so
+this says the initialization is a pinned deterministic function, not that an
+arbitrary seed gives a cross-vendor identical draw; that would need the hash
+swept over many constants. And the proof above is the HOST path. Vendor agreement
+comes from the three captures sharing one recorded digest, not from running a
+device kernel; a device initializer that must equal the host vector is owed.
+
 The run behind the table is retained in full at
 `bench/results/gh-actions/2026-09-12_1513-byte-lm-cpu-gate-run34701581834`,
 one directory per runner, each holding its own `cpu_train.json`,

@@ -65,6 +65,13 @@ on:
       - "python/mojolearn/_byte_lm_config.py"
       - "training/byte_lm_host_backward.mojo"
       - "training/checks/byte_lm_host_bwd_probe.mojo"
+      # The seeded initializer and its gate. The whole chain from a seed to the
+      # trained weights runs through this arithmetic, so a change to it must
+      # bring this workflow with it.
+      - "training/byte_lm_init.mojo"
+      - "tools/byte_lm_seeded_init_gate.py"
+      - "tools/test_byte_lm_seeded_init.py"
+      - "tools/byte_lm_cpu_train_freerun.py"
       - ".github/workflows/byte-lm-cpu-gate.yml"
 
 permissions: {}
@@ -356,6 +363,55 @@ jobs:
           python3 tools/byte_lm_cpu_train_gate.py vendors --steps all --verify-digests \
             --require-vendors 1 \
             --report "$GATE_OUT/train_capture.json" 2>&1 | tee "$GATE_OUT/train_capture.log"
+
+      # THE INITIALIZATION IS A SEED, NOT A GIFT. Everything above starts from
+      # parameters read out of a capture, so the honest reading of it is "given
+      # these starting bytes". These steps show the starting bytes are a pinned
+      # deterministic function of an index -- fmix32((i+1) ^ 0x42595445) >> 24,
+      # centered at 128 over 2^-10, with the four RMS norm vectors set to
+      # exactly 1.0 -- which is what makes the chain end to end: a seed fixes
+      # the initialization, the initialization and the token stream fix the
+      # trained weights.
+      #
+      # It is bit-exact by construction rather than by a measurement that
+      # passed. An 8-bit integer over a power of two is exact in FP32, there is
+      # no accumulator so no fold order, and no transcendental, which is where
+      # cross-vendor agreement actually breaks. Element i depends on i alone.
+      - name: The seeded initializer, pinned without any capture
+        if: always()
+        run: |
+          set -o pipefail
+          # Needs no retained tree: it regenerates the vector and hashes it
+          # against the digest all three captures record. That is the claim in
+          # one line, and it runs on every runner.
+          python3 -m unittest -v tools.test_byte_lm_seeded_init 2>&1 \
+            | tee "$GATE_OUT/seeded_init_tests.log"
+
+      - name: The recorded initialization is reproduced from the seed
+        if: always()
+        run: |
+          set -o pipefail
+          # --require-vendors 1 for the same reason as the step above: this
+          # checkout holds the Apple tree only. The three-vendor form is run
+          # from a full checkout, where all three record one identifier and one
+          # initial digest.
+          python3 tools/byte_lm_seeded_init_gate.py --require-vendors 1 \
+            --verify-digests --report "$GATE_OUT/seeded_init.json" 2>&1 \
+            | tee "$GATE_OUT/seeded_init.log"
+
+      # The control, and it needs no sabotage BUILD because the seed is an
+      # input rather than compiled arithmetic: move the XOR constant by one and
+      # the digest must not survive. A generator that reproduced the recorded
+      # bytes under any constant would mean this gate reads something other
+      # than the draw.
+      - name: The seeded-init gate must refuse a wrong seed
+        if: always()
+        run: |
+          set -o pipefail
+          python3 tools/byte_lm_seeded_init_gate.py --require-vendors 1 \
+            --seed-xor 0x42595446 --expect-mismatch \
+            --report "$GATE_OUT/seeded_init_sab.json" 2>&1 \
+            | tee "$GATE_OUT/seeded_init_sab.log"
 
       # DEVIATION 2640's two Mojo checks, built with the binding's CPU target so
       # they test the codegen the gate ran: the host kernels against the
