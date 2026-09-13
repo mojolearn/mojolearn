@@ -223,11 +223,24 @@ class HostForest:
         return flat if self.family == 'rf' else flat.astype('<f8')
 
 
+def host_model(path):
+    """The host model for a saved file, by its `format` member: a
+    `HostForest` for a forest archive, a `HostGBDT` (`_gbdt_host.py`) for a
+    `GradientBoosting.save` archive. Any other format is refused with the
+    tag it carries."""
+    from ._gbdt_host import GBDT_FORMAT, HostGBDT
+    accepted = tuple(_FORMATS) + tuple(f + _GROVES_SUFFIX for f in _FORMATS) + (GBDT_FORMAT,)
+    fmt = _serialize.scalar_str(_serialize.read_npz(path, accepted), 'format')
+    if fmt == GBDT_FORMAT:
+        return HostGBDT.from_file(path)
+    return HostForest.from_file(path)
+
+
 def host_predict(path, X):
-    """`HostForest.from_file(path).predict(X)`."""
-    return HostForest.from_file(path).predict(X)
+    """`host_model(path).predict(X)`."""
+    return host_model(path).predict(X)
 
 
 def host_predict_proba(path, X):
-    """`HostForest.from_file(path).predict_proba(X)`."""
-    return HostForest.from_file(path).predict_proba(X)
+    """`host_model(path).predict_proba(X)`."""
+    return host_model(path).predict_proba(X)

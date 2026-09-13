@@ -1,19 +1,25 @@
 #!/usr/bin/env python3
-"""Forest host inference gate (the forest host lane, 2026-09-13).
+"""Forest host inference gate (the forest host lane, 2026-09-13; GBDT
+fixtures since the GBDT host lane the same day).
 
-Two halves, one fixture format.
+Two halves, one fixture format, and a fixture maker.
 
-  record   on a GPU box, through the normal package: load a saved forest with
+  make     on a GPU box, through the normal package: fit one small model of
+           a named kind on regenerated rows, save it as model.npz, write
+           fixture.json for the held-out rows and an OWED expected.json.
+  record   on a GPU box, through the normal package: load a saved model with
            its own estimator class, predict the fixture rows, write the
            SHA-256 of the predictions to expected.json together with the
            vendor and numeric mode that produced them.
-  check    on a CPU box, through mojolearn.HostForest: predict the same rows
-           with the host binding and require the same SHA-256.
+  check    on a CPU box, through mojolearn.host_model (HostForest or
+           HostGBDT by the file's format): predict the same rows with the
+           host binding and require the same SHA-256.
 
 A fixture directory holds
 
   model.npz       written by RandomForest*.save or ExtraTrees*.save (a
                   sequential archive; parallel_groves archives are refused)
+                  or by GradientBoosting.save
   fixture.json    {"rows": N, "features": F, "seed": S,
                    "generator": "splitmix64-uniform-f32-v1", "x_sha256": ...}
   expected.json   written by `record`; {"status": "OWED"} until then
@@ -25,7 +31,9 @@ predicting, so a mismatch can only be the prediction. The values are
 
 The hashes compared are `predict` and, for classifiers, `predict_proba`, over
 the raw bytes of the Array each returns (C order, native dtype); str labels
-hash their UTF-8 joined by newlines. The dtype and shape are recorded and
+hash their UTF-8 joined by newlines. A GradientBoosting fixture's `predict`
+is the raw float32 score, and `predict_proba` is recorded when the loss is
+Logloss or CrossEntropy (the float64 sigmoid columns). The dtype and shape are recorded and
 compared as well, so a float64 answer to a float32 question is a mismatch and
 not a coincidence of bytes.
 
@@ -48,7 +56,32 @@ ROOT = Path(__file__).resolve().parents[1]
 GENERATOR = 'splitmix64-uniform-f32-v1'
 MASK64 = (1 << 64) - 1
 ESTIMATORS = ('RandomForestClassifier', 'RandomForestRegressor',
-              'ExtraTreesClassifier', 'ExtraTreesRegressor')
+              'ExtraTreesClassifier', 'ExtraTreesRegressor', 'GradientBoosting')
+FOREST_FORMATS = ('mojolearn-randomforest-1', 'mojolearn-extratrees-1',
+                  'mojolearn-randomforest-1-parallel-groves-1', 'mojolearn-extratrees-1-parallel-groves-1')
+GBDT_FORMAT = 'mojolearn-gbdt-1'
+#: The kinds `make` fits, with the fixture parameters of the 2026-09-13 Apple
+#: recordings (forests: 8 trees, depth 6; GBDT: 8 trees, depth 4). The label
+#: rules are the brief's: `int((x0 * 7 + x1 * 13) * 3) % k` for classifiers
+#: (k = 3 for forests, 2 for the binary Logloss), `x1 * 2 + x2` for regressors.
+KINDS = {
+    'rf_classifier': dict(estimator='RandomForestClassifier', classes=3),
+    'rf_regressor': dict(estimator='RandomForestRegressor', classes=0),
+    'et_classifier': dict(estimator='ExtraTreesClassifier', classes=3),
+    'et_regressor': dict(estimator='ExtraTreesRegressor', classes=0),
+    'gbdt_symmetric': dict(estimator='GradientBoosting', classes=2, loss='Logloss', grow_policy='SymmetricTree'),
+    'gbdt_depthwise': dict(estimator='GradientBoosting', classes=2, loss='Logloss', grow_policy='Depthwise'),
+    'gbdt_lossguide': dict(estimator='GradientBoosting', classes=2, loss='Logloss', grow_policy='Lossguide'),
+    'gbdt_rmse': dict(estimator='GradientBoosting', classes=0, loss='RMSE', grow_policy='SymmetricTree'),
+}
+
+
+def proba_wanted(name, loss):
+    """Whether `predict_proba` is part of the recording: forest classifiers
+    always, GradientBoosting when its loss has the sigmoid link."""
+    if name == 'GradientBoosting':
+        return loss in ('Logloss', 'CrossEntropy')
+    return name.endswith('Classifier')
 
 
 def sha256_bytes(data):
@@ -145,19 +178,74 @@ def digests_for(model, X, is_classifier):
 
 
 def estimator_of(model_path):
-    """The `estimator` member of a saved forest, read with the codec and
-    nothing else, so `record` can pick the class without guessing."""
+    """`(estimator, loss)` of a saved model, read with the codec and nothing
+    else, so `record` can pick the class without guessing. `loss` is None
+    for a forest and the archive's `loss` member for GradientBoosting."""
     from mojolearn import _serialize
-    arrays = _serialize.read_npz(model_path, (
-        'mojolearn-randomforest-1', 'mojolearn-extratrees-1',
-        'mojolearn-randomforest-1-parallel-groves-1', 'mojolearn-extratrees-1-parallel-groves-1'))
+    arrays = _serialize.read_npz(model_path, FOREST_FORMATS + (GBDT_FORMAT,))
     fmt = _serialize.scalar_str(arrays, 'format')
     if fmt.endswith('-parallel-groves-1'):
         raise SystemExit(f'gate: {model_path} is a parallel_groves archive; the host engine is sequential')
     name = _serialize.scalar_str(arrays, 'estimator')
-    if name not in ESTIMATORS:
-        raise SystemExit(f'gate: {model_path} was saved by {name}, not a forest estimator')
-    return name
+    if name not in ESTIMATORS or (name == 'GradientBoosting') != (fmt == GBDT_FORMAT):
+        raise SystemExit(f'gate: {model_path} was saved by {name}, not an estimator this gate reads')
+    loss = _serialize.scalar_str(arrays, 'loss') if fmt == GBDT_FORMAT else None
+    return name, loss
+
+
+def do_make(args):
+    """A GPU box, the normal package: fit one fixture of `--kind`, save it,
+    and write fixture.json plus an OWED expected.json. Refuses a CPU-only
+    install for the same reason `record` does."""
+    package_root(args)
+    import mojolearn
+    from mojolearn._buffer import frombytes
+    from mojolearn._array import Array
+    vendor = mojolearn.vendor()
+    if vendor == 'cpu':
+        print('gate: make must run on a GPU box; this install is CPU-only', file=sys.stderr)
+        return 2
+    if mojolearn.numeric_mode() != 'identical':
+        print(f'gate: make requires MOJOLEARN_NUMERIC_MODE=identical, this process is '
+              f'{mojolearn.numeric_mode()}', file=sys.stderr)
+        return 2
+    kind = KINDS[args.kind]
+    directory = args.fixture_dir
+    if directory.exists() and any(directory.iterdir()):
+        print(f'gate: {directory} exists and is not empty; refusing to overwrite a fixture', file=sys.stderr)
+        return 2
+    directory.mkdir(parents=True, exist_ok=True)
+    rows, features = int(args.rows), int(args.features)
+    train_raw, _, _ = fixture_bytes(dict(rows=rows, features=features, seed=int(args.train_seed),
+                                         generator=GENERATOR))
+    Xt = frombytes(train_raw, '<f4', (rows, features))
+    xs = struct.unpack(f'<{rows * features}f', train_raw)
+    x = lambda r, c: xs[r * features + c]
+    if kind['classes']:
+        y = Array.from_list([int((x(r, 0) * 7 + x(r, 1) * 13) * 3) % kind['classes'] for r in range(rows)], '<i8')
+    else:
+        y = Array.from_list([x(r, 1) * 2 + x(r, 2) for r in range(rows)], '<f8')
+    cls = getattr(mojolearn, kind['estimator'])
+    if kind['estimator'] == 'GradientBoosting':
+        params = dict(n_estimators=8, max_depth=4, random_state=7, loss=kind['loss'],
+                      grow_policy=kind['grow_policy'], numeric_mode='identical')
+        if kind['grow_policy'] == 'Lossguide':
+            params['max_leaves'] = 16
+    else:
+        params = dict(n_estimators=8, max_depth=6, random_state=7, numeric_mode='identical',
+                      inference_engine='sequential')
+    model = cls(**params).fit(Xt, y)
+    model.save(str(directory / 'model.npz'))
+    spec = dict(rows=rows, features=features, seed=int(args.seed), generator=GENERATOR)
+    raw, _, _ = fixture_bytes(spec)
+    spec['x_sha256'] = sha256_bytes(raw)
+    (directory / 'fixture.json').write_text(json.dumps(spec, indent=2, sort_keys=True) + '\n')
+    (directory / 'expected.json').write_text(json.dumps(dict(
+        status='OWED', kind=args.kind, estimator=kind['estimator'],
+        note='run tools/forest_host_gate.py record on a GPU box'), indent=2, sort_keys=True) + '\n')
+    print(f"make wrote {directory} ({args.kind}, {kind['estimator']}, vendor {vendor}, "
+          f"model sha256 {sha256_bytes((directory / 'model.npz').read_bytes())})")
+    return 0
 
 
 def package_root(args):
@@ -185,16 +273,21 @@ def do_record(args):
     directory = args.fixture_dir
     spec, raw, rows, features = load_fixture(directory)
     X = frombytes(raw, '<f4', (rows, features))
-    name = estimator_of(directory / 'model.npz')
+    name, loss = estimator_of(directory / 'model.npz')
     cls = getattr(mojolearn, name)
     model = cls.load(str(directory / 'model.npz'))
     if getattr(model, 'inference_engine', 'sequential') != 'sequential':
         print('gate: the loaded model does not select the sequential engine', file=sys.stderr)
         return 2
-    mode = model._effective_mode() if hasattr(model, '_effective_mode') else mojolearn.numeric_mode()
-    digests = digests_for(model, X, name.endswith('Classifier'))
+    if hasattr(model, '_effective_mode'):
+        mode = model._effective_mode()
+    else:
+        # GradientBoosting.load restores the saved tier; None means the
+        # process default, which is what its predict would use
+        mode = getattr(model, 'numeric_mode', None) or mojolearn.numeric_mode()
+    digests = digests_for(model, X, proba_wanted(name, loss))
     report = dict(
-        status='RECORDED', estimator=name, vendor=vendor, gpu_arch=mojolearn.gpu_arch(),
+        status='RECORDED', estimator=name, loss=loss, vendor=vendor, gpu_arch=mojolearn.gpu_arch(),
         numeric_mode=mode, inference_engine='sequential',
         model_sha256=sha256_bytes((directory / 'model.npz').read_bytes()),
         x_sha256=sha256_bytes(raw), fixture=spec, host=host_info(), commit=git_commit(),
@@ -215,14 +308,14 @@ def do_record(args):
 
 
 def do_check(args):
-    """The CPU box, through HostForest. The package may be a CPU-only install
-    or a full GPU install; either way the prediction here is the host
-    binding's."""
+    """The CPU box, through HostForest or HostGBDT. The package may be a
+    CPU-only install or a full GPU install; either way the prediction here
+    is the host binding's."""
     package_root(args)
     try:
         import mojolearn
         from mojolearn._buffer import frombytes
-        from mojolearn._forest_host import HostForest, binary_path
+        from mojolearn._forest_host import binary_path, host_model
     except Exception as exc:  # the import itself is part of what is gated
         print(f'gate: import failed: {type(exc).__name__}: {exc}', file=sys.stderr)
         return 2
@@ -255,14 +348,18 @@ def do_check(args):
             return 2
         X = frombytes(raw, '<f4', (rows, features))
         try:
-            model = HostForest.from_file(str(model_path))
-            got = digests_for(model, X, model.is_classifier)
+            model = host_model(str(model_path))
+            got = digests_for(model, X, proba_wanted(model.estimator, getattr(model, 'loss', None)))
         except Exception as exc:
             print(f'gate: {directory} host predict failed: {type(exc).__name__}: {exc}', file=sys.stderr)
             return 2
         if model.estimator != expected.get('estimator'):
             print(f'gate: {directory} model is {model.estimator}, expected.json says '
                   f'{expected.get("estimator")}', file=sys.stderr)
+            return 2
+        if getattr(model, 'loss', None) != expected.get('loss'):
+            print(f'gate: {directory} model loss is {getattr(model, "loss", None)}, expected.json says '
+                  f'{expected.get("loss")}', file=sys.stderr)
             return 2
         want = expected['predictions']
         rows_out = []
@@ -280,7 +377,7 @@ def do_check(args):
                                  want_shape=want[key]['shape'], got_shape=got[key]['shape'], equal=equal))
             print(f"check {directory.name} {model.estimator} {key} {'EQUAL' if equal else 'DIFFER'} "
                   f"gpu {want[key]['sha256']} host {got[key]['sha256']}")
-        results.append(dict(fixture=directory.name, estimator=model.estimator,
+        results.append(dict(fixture=directory.name, estimator=model.estimator, loss=getattr(model, 'loss', None),
                             recorded_vendor=expected.get('vendor'), recorded_gpu_arch=expected.get('gpu_arch'),
                             recorded_numeric_mode=expected.get('numeric_mode'),
                             model_sha256=model_sha, host_model_sha256=model.model_sha256(),
@@ -311,6 +408,13 @@ def main():
                         help="directory to import mojolearn from (default: this checkout's python/; "
                              "'' for the installed package)")
     sub = parser.add_subparsers(dest='command', required=True)
+    mk = sub.add_parser('make', help='on a GPU box, fit and save one fixture of --kind into a new directory')
+    mk.add_argument('fixture_dir', type=Path)
+    mk.add_argument('--kind', required=True, choices=sorted(KINDS))
+    mk.add_argument('--rows', type=int, default=200)
+    mk.add_argument('--features', type=int, default=8)
+    mk.add_argument('--train-seed', type=int, default=1, help='SplitMix64 seed of the training rows')
+    mk.add_argument('--seed', type=int, default=7, help='SplitMix64 seed of the held-out fixture rows')
     rec = sub.add_parser('record', help='on a GPU box, write expected.json for one fixture directory')
     rec.add_argument('fixture_dir', type=Path)
     rec.add_argument('--overwrite', action='store_true')
@@ -321,6 +425,8 @@ def main():
     chk.add_argument('--report', type=Path, help='new exclusive JSON report')
     chk.add_argument('--expect-mismatch', action='store_true')
     args = parser.parse_args()
+    if args.command == 'make':
+        return do_make(args)
     if args.command == 'record':
         return do_record(args)
     return do_check(args)

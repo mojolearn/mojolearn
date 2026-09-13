@@ -7,8 +7,10 @@
 # reproduces, for every RECORDED fixture under bench/results/forest_host/,
 # the SHA-256 of the predictions a GPU box recorded for the same saved model
 # and the same regenerated rows (tools/forest_host_gate.py check), and a build
-# that divides the vote by the wrong tree count (MOJOLEARN_FOREST_HOST_SABOTAGE)
-# fails the same comparison. No GPU is used or wanted.
+# that divides the vote by the wrong tree count and seeds the GBDT cursor at
+# bias + 1 (MOJOLEARN_FOREST_HOST_SABOTAGE) fails the same comparison. No GPU
+# is used or wanted. The fixtures are forests (RF, ET) and, since the GBDT
+# host lane of 2026-09-13, GradientBoosting models of all three tree shapes.
 #
 # THE GPU-SIDE RECORDINGS ARE OWED. Only the Apple Metal recording made on the
 # lane's Mac exists today; the NVIDIA and AMD fixture directories hold an
@@ -31,6 +33,13 @@ on:
       - "lane/forest-host-inference"
     paths:
       - "core/forest_host_predict.mojo"
+      - "core/gbdt_host_predict.mojo"
+      - "gbdt/gpu_data/grid_policy.mojo"
+      - "gbdt/gpu_data/gpu_structures.mojo"
+      - "gbdt/gpu_data/compressed_index_builder.mojo"
+      - "gbdt/data/quantization.mojo"
+      - "gbdt/grid_creator/binarization.mojo"
+      - "gbdt/options/data_processing_options.mojo"
       - "bindings/host_helpers.mojo"
       - "bindings/hostptr.mojo"
       - "bindings/_mojolearn_forest_host.mojo"
@@ -40,6 +49,7 @@ on:
       - "extratrees/impl/decisiontree/flatnode.mojo"
       - "checks/numerics.mojo"
       - "python/mojolearn/_forest_host.py"
+      - "python/mojolearn/_gbdt_host.py"
       - "python/mojolearn/_backend.py"
       - "python/mojolearn/_buffer.py"
       - "python/mojolearn/_labels.py"

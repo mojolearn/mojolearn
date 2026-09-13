@@ -150,10 +150,12 @@ from .language_model import (SmallByteLanguageModelTrainer, ByteLanguageModelCon
                              LanguageModelTrainer, LanguageModelConfig,
                              LanguageModelInference, LanguageModelHostTrainer)
 # The forest host lane (2026-09-13): predict and predict_proba of a SAVED
-# RandomForest or ExtraTrees model on a CPU with no GPU, through
+# RandomForest, ExtraTrees or (the GBDT host lane, the same day)
+# GradientBoosting model on a CPU with no GPU, through
 # host/_mojolearn_forest_host.so. Resolves its binding on first use, so an
 # install without it still imports and raises BY NAME when touched.
-from ._forest_host import HostForest, host_predict, host_predict_proba
+from ._forest_host import HostForest, host_model, host_predict, host_predict_proba
+from ._gbdt_host import HostGBDT
 from ._svm_impl import SVC, SVR
 from ._arima_impl import ARIMA
 from ._tsa_impl import ExponentialSmoothing, kpss_test, select_d
@@ -309,6 +311,8 @@ __all__ = [
     "LanguageModelInference",
     "LanguageModelHostTrainer",
     "HostForest",
+    "HostGBDT",
+    "host_model",
     "host_predict",
     "host_predict_proba",
     "kpss_test",

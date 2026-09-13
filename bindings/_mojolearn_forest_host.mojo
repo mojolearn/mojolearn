@@ -1,14 +1,34 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""CPU inference binding for saved RandomForest and ExtraTrees models.
+"""CPU inference binding for saved RandomForest, ExtraTrees and
+GradientBoosting models.
 
 HOST ONLY. No DeviceContext, no kernel, no GPU, and nothing imported from
-`ensemble/randomforest.mojo` or `extratrees/impl/randomforest/randomforest.mojo`,
-which import the device side. The per-tree walks come from the files the GPU
-bindings compile; the forest loops around them are `core/forest_host_predict.mojo`,
-which says line by line what it MIRRORS. Every entry validates the counts and
-the spans before it dereferences an address, copies the inputs into owned
-Lists, computes, and only then writes the caller's output.
+`ensemble/randomforest.mojo`, `extratrees/impl/randomforest/randomforest.mojo`
+or `gbdt/train.mojo`, which import the device side. The forest per-tree walks
+come from the files the GPU bindings compile; the forest loops around them
+are `core/forest_host_predict.mojo`, and the GBDT quantize, walk and leaf sum
+are `core/gbdt_host_predict.mojo`, each saying line by line what it MIRRORS.
+Every entry validates the counts and the spans before it dereferences an
+address, copies the inputs into owned Lists, computes, and only then writes
+the caller's output.
+
+The GBDT entry (`forest_host_gbdt_predict`, the GBDT host lane, 2026-09-13)
+takes the model as FLAT ARRAYS parsed from the saved model text by
+`python/mojolearn/_gbdt_host.py`, not as the text the GPU binding takes,
+because the text parser lives in a module that imports the device side.
+Its address contract is `[border_offsets i32 (n_features + 1), borders f32,
+fold_counts i32 (n_features), one_hot i32 (n_features), nan_treatment i32
+(n_features), tree_offsets i32 (n_trees + 1), split_feature i32 (n_splits),
+split_bin i32 (n_splits), split_take_bin i32 (n_splits), node_left i32
+(n_splits), node_right i32 (n_splits), leaf_offsets i32 (n_trees + 1),
+leaves f32 (n_leaf_values), x f32 (n_rows * n_cols, COLUMN-major, as
+`gbdt_predict` takes it), out f32 (n_rows * dim, ROW-major)]`, `params` is
+`[n_rows, n_cols, n_trees, dim, non_symmetric, n_splits, n_leaf_values,
+n_borders]`, and `bias` is the model's float64 bias. It returns the rows
+written. `forest_host_gbdt_sigmoid` is `gbdt_sigmoid`'s body
+(`bindings/_mojolearn_gbdt.mojo:133-149`), the Logloss link the GPU binding
+already computes on the host.
 
 Address contract, shared by the three predict entries. `addresses` is
 `[offsets i32 (n_trees + 1), colid i32 (n_nodes), quesval f32 (n_nodes),
@@ -32,8 +52,8 @@ from bindings.host_helpers import (
     gather_f64_binding,
     gather_i64_binding,
 )
-from bindings.hostptr import f32_ptr, i32_ptr, read_f32
-from checks.numerics import GLOBAL_NUMERIC_MODE
+from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32
+from checks.numerics import GLOBAL_NUMERIC_MODE, identical_exp64
 from core.forest_host_predict import (
     FOREST_HOST_SABOTAGE,
     et_host_predict,
@@ -41,6 +61,7 @@ from core.forest_host_predict import (
     rf_host_predict,
     rf_host_trees,
 )
+from core.gbdt_host_predict import gbdt_host_predict
 
 
 comptime FAMILY_RF = 0
@@ -149,6 +170,90 @@ def forest_host_et_predict_binding(
     return _predict(addresses, params, FAMILY_ET, "forest_host_et_predict")
 
 
+def forest_host_gbdt_predict_binding(
+    addresses: PythonObject, params: PythonObject, bias: PythonObject
+) raises -> PythonObject:
+    """`gbdt_predict` / `gbdt_predict_multi` at `PREDICT_RAW` on the host:
+    the raw approxes, `n_rows * dim` float32, ROW-major. The link (the
+    Logloss sigmoid) is the Python layer's call to `forest_host_gbdt_sigmoid`,
+    as it is `gbdt_sigmoid` for the GPU binding."""
+    var entry = String("forest_host_gbdt_predict")
+    if len(addresses) != 15 or len(params) != 8:
+        raise Error(entry + ": expected 15 addresses and 8 params")
+    var n_rows = _index(params[0])
+    var n_cols = _index(params[1])
+    var n_trees = _index(params[2])
+    var dim = _index(params[3])
+    var non_symmetric = _index(params[4]) != 0
+    var n_splits = _index(params[5])
+    var n_leaf_values = _index(params[6])
+    var n_borders = _index(params[7])
+    if n_rows <= 0 or n_rows > FOREST_HOST_MAX_ROWS:
+        raise Error(entry + ": n_rows must be in [1, 2^30]")
+    if n_cols <= 0 or n_cols > FOREST_HOST_MAX_ROWS:
+        raise Error(entry + ": n_cols must be in [1, 2^30]")
+    if n_trees < 0 or n_trees > 2147483646:
+        raise Error(entry + ": n_trees must be in [0, 2^31 - 2]")
+    if dim <= 0 or dim > 65536:
+        raise Error(entry + ": dim must be in [1, 65536]")
+    if n_splits < 0 or n_leaf_values < 0 or n_borders < 0:
+        raise Error(entry + ": counts must be non-negative")
+    if n_splits > 2147483647 or n_leaf_values > 2147483647 or n_borders > 2147483647:
+        raise Error(entry + ": counts must fit int32")
+    var bias_value = Float64(py=bias)
+    var border_offsets_p = i32_ptr(_index(addresses[0]))
+    var borders_p = f32_ptr(_index(addresses[1]))
+    var fold_counts_p = i32_ptr(_index(addresses[2]))
+    var one_hot_p = i32_ptr(_index(addresses[3]))
+    var nan_p = i32_ptr(_index(addresses[4]))
+    var tree_offsets_p = i32_ptr(_index(addresses[5]))
+    var split_feature_p = i32_ptr(_index(addresses[6]))
+    var split_bin_p = i32_ptr(_index(addresses[7]))
+    var split_take_bin_p = i32_ptr(_index(addresses[8]))
+    var node_left_p = i32_ptr(_index(addresses[9]))
+    var node_right_p = i32_ptr(_index(addresses[10]))
+    var leaf_offsets_p = i32_ptr(_index(addresses[11]))
+    var leaves_p = f32_ptr(_index(addresses[12]))
+    var x_addr = _index(addresses[13])
+    var op = f32_ptr(_index(addresses[14]))
+    if Int(border_offsets_p[0]) != 0 or Int(border_offsets_p[n_cols]) != n_borders:
+        raise Error(entry + ": border_offsets must start at 0 and end at n_borders")
+
+    var wrote = 0
+    with GILReleased(Python()):
+        var rows = read_f32(x_addr, n_rows * n_cols)
+        var out = List[Float32](length=n_rows * dim, fill=Float32(0.0))
+        gbdt_host_predict(
+            rows, n_rows, n_cols,
+            border_offsets_p, borders_p, fold_counts_p, one_hot_p, nan_p,
+            tree_offsets_p, split_feature_p, split_bin_p, split_take_bin_p,
+            node_left_p, node_right_p, leaf_offsets_p, leaves_p,
+            n_trees, dim, non_symmetric, n_splits, n_leaf_values, bias_value,
+            out,
+        )
+        for i in range(n_rows * dim):
+            op[i] = out[i]
+        wrote = n_rows
+    return PythonObject(wrote)
+
+
+def forest_host_gbdt_sigmoid_binding(
+    raw_addr: PythonObject, out_addr: PythonObject, n: PythonObject
+) raises -> PythonObject:
+    """`gbdt_sigmoid` (`bindings/_mojolearn_gbdt.mojo:133-149`), the same
+    body: `out[i] = 1 / (1 + exp(-raw[i]))` in double through
+    `identical_exp64`, `n` values, both buffers float64."""
+    var rp = f64_ptr(_index(raw_addr))
+    var op = f64_ptr(_index(out_addr))
+    var count = _index(n)
+    if count < 0:
+        raise Error("forest_host_gbdt_sigmoid: n must be non-negative")
+    for i in range(count):
+        var r = rp.unsafe_load(i)
+        op.unsafe_store(i, 1.0 / (1.0 + identical_exp64(-r)))
+    return PythonObject(count)
+
+
 @export
 def PyInit__mojolearn_forest_host() abi("C") -> PythonObject:
     try:
@@ -159,6 +264,8 @@ def PyInit__mojolearn_forest_host() abi("C") -> PythonObject:
         module.def_function[forest_host_rf_predict_proba_binding]("forest_host_rf_predict_proba")
         module.def_function[forest_host_rf_predict_reg_binding]("forest_host_rf_predict_reg")
         module.def_function[forest_host_et_predict_binding]("forest_host_et_predict")
+        module.def_function[forest_host_gbdt_predict_binding]("forest_host_gbdt_predict")
+        module.def_function[forest_host_gbdt_sigmoid_binding]("forest_host_gbdt_sigmoid")
         module.def_function[all_finite_f32_binding]("all_finite_f32")
         module.def_function[all_finite_f64_binding]("all_finite_f64")
         module.def_function[cast_f64_to_f32_binding]("cast_f64_to_f32")

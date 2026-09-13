@@ -7,7 +7,7 @@ One directory per recording. Each holds
 
 | file | written by | holds |
 | --- | --- | --- |
-| `model.npz` | `RandomForest*.save` or `ExtraTrees*.save` on the GPU box | the five model arrays, a sequential archive, under 5 MB |
+| `model.npz` | `RandomForest*.save`, `ExtraTrees*.save` or `GradientBoosting.save` on the GPU box | the five forest model arrays (a sequential archive) or the GBDT model text, under 5 MB |
 | `fixture.json` | the recording script | `rows`, `features`, `seed`, `generator`, `x_sha256`; the rows are regenerated from the seed on both sides |
 | `expected.json` | `tools/forest_host_gate.py record` on the GPU box | `status`, the vendor and numeric mode, `model_sha256`, `x_sha256`, and the SHA-256, dtype and shape of `predict` and `predict_proba` |
 
@@ -25,5 +25,16 @@ python3 tools/forest_host_gate.py record bench/results/forest_host/<directory>
 
 The model must already be in the directory; fit it there with
 `inference_engine="sequential"` under `MOJOLEARN_NUMERIC_MODE=identical`, and
-keep it small. The 2026-09-13 Apple recordings were made by the smoke in the
-brief (200 rows, 8 features, 8 trees, depth 6).
+keep it small. The 2026-09-13 Apple forest recordings were made by the smoke
+in the brief (200 rows, 8 features, 8 trees, depth 6); `make` reproduces that
+fit for every kind, forests and GBDT alike:
+
+```
+python3 tools/forest_host_gate.py make bench/results/forest_host/<directory> --kind gbdt_depthwise
+python3 tools/forest_host_gate.py record bench/results/forest_host/<directory>
+```
+
+The kinds are `rf_classifier`, `rf_regressor`, `et_classifier`,
+`et_regressor`, `gbdt_symmetric`, `gbdt_depthwise`, `gbdt_lossguide` and
+`gbdt_rmse` (the four GBDT lanes of `tools/identity_break.py`; 200 rows,
+8 features, 8 trees, depth 4, `max_leaves=16` for Lossguide).
