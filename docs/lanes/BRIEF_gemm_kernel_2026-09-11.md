@@ -1409,3 +1409,45 @@ on the three, so each is read against its base (`kpack_padv`) and against
 shipped on the same pod. M4 arms check: all three 117/117 ragged reach,
 every LM call bit-equal to shipped, the gather coverage 4 cases 0 failures.
 RUN OWED at the time of writing.
+
+### 17.4 The H100 leg (2026-09-13, measured): all three FLIP; `kpack_hg` takes the lean step 0.232 to 0.211 s
+
+Evidence: `bench/results/e1g/2026-09-13_175602-nvidia-h100-gemm-hfgs/remote/gemm-kernel/` (RunPod H100 80GB HBM3, commit
+851a0090, pod 4n8lu2a0jn38lx terminated and verified; corpora staged from
+R2 in 16 s). `status.tsv`: every item exit 0; `step-check.log` PASS with
+all three arms bit-equal on every LM call; the box's device card matched
+the M4 card.
+
+**LM verdict** (`lm_summary.tsv`, lean step, every step witness equal to
+shipped on both corpora, 2 brackets; shipped 0.2319 / 0.2320 s):
+
+| arm | enwik8 | Pile GitHub | geomean | verdict |
+|---|---:|---:|---:|---|
+| `kpack_hf` (hardware fold flush) | 0.9695 | 0.9697 | **0.9696** | FLIP |
+| `kpack_gs` (gather staging) | 0.9462 | 0.9442 | **0.9452** | FLIP |
+| `kpack_hg` (both) | 0.9101 | 0.9070 | **0.9085** | FLIP |
+
+**GEMM sum per step** (`price_step.txt`, against shipped on the same pod):
+`kpack_padv` 1.015 (the base, as before), `kpack_hf` 0.951, `kpack_gs`
+0.913, `kpack_hg` **0.852** (143.2 to 121.9 ms). Per call, `kpack_hg`
+against shipped: head_dB 0.740, down_dA 0.773, head_fwd 0.780, gateup_fwd
+0.789, head_dA 0.813, the 2-leaf group calls 0.867 to 0.909, the 1-leaf
+proj calls 0.916 to 0.951. The two arms compose almost exactly (0.951 x
+0.913 = 0.868 against 0.852 measured). Resources: 255 registers, one
+block per SM, unchanged.
+
+**Reading.** The decomposition was right about where the time was and
+about what a placement-only change could recover: the staging phase gave
+back 9 of its 33 points on the sum and the fold 5 of its 20, with the
+loop, the seam and the page untouched. This is the first kernel-body win
+under the contract and the first flip since `ksplit`. What remains of the
+staging phase is the barrier's skew and the scalar global loads; what
+remains of the fold is its local-memory traffic and the level loop. Neither
+is the 3x the plan once hoped for; both are further arms of the same kind.
+
+**Decision.** FLIP `kpack_hg` on the NVIDIA column: the shipped dispatch
+routes every call the TUNED 128x128 plan serves through the `kpack_hg`
+body (group launch where the ksplit rule takes the call, all leaves
+otherwise), selected by a kernel-matrix row that is 0 on every other
+column, so Apple and AMD compile exactly what they compile today and the
+row is the switch. Section 18 is the ship.
