@@ -1,0 +1,5 @@
+guard=tools/nvidia_serial_guard.py
+seconds=120
+rss_gib=12
+python=/usr/bin/python3
+script=/root/gemm_leg_out/release-tools-setup.sh

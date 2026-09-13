@@ -1,0 +1,1 @@
+GPU[0]		: Card Series: 		AMD Instinct Mi325X VF
