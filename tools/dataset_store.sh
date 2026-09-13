@@ -326,7 +326,15 @@ cmd_box_cmd() {
     [ -n "$_pin" ] || { echo "no pin for $key" >&2; return 1; }
     _wsz=$(printf '%s' "$_pin" | cut -f1); _wsh=$(printf '%s' "$_pin" | cut -f2)
     _lp=$(local_path_for "$key")
-    case "$_lp" in "$HOME"/*) _rp="/root/${_lp#"$HOME"/}" ;; *) _rp="/root/$(basename "$key")" ;; esac
+    # The box path mirrors this Mac's checkout path under /root when the
+    # checkout is under $HOME. A checkout elsewhere (a worktree under
+    # /private/tmp, which is where lanes launch from) used to fall back to
+    # /root/<basename>, and two corpus keys are both named input.txt: on
+    # 2026-09-13 two Hot Aisle legs staged enwik8 to /root/input.txt, then
+    # pile_github to the same file, read enwik8's 100,000,000 bytes against
+    # pile_github's 97,124,565 pin and FAILED the whole staging. The fallback
+    # is keyed on the R2 key itself, which is unique by construction.
+    case "$_lp" in "$HOME"/*) _rp="/root/${_lp#"$HOME"/}" ;; *) _rp="/root/r2-stage/$key" ;; esac
     cat <<EOF
 # run ON THE BOX; \$URL is a presigned URL minted on the Mac (no credentials here)
 mkdir -p "\$(dirname $_rp)"
