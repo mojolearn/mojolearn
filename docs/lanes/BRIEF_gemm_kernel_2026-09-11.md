@@ -1362,3 +1362,92 @@ Both are placement and spelling, both keep every term and every order,
 and together they bound at about 1.35x on the GEMM sum (142 to about 105
 ms, 37 ms of the 343 ms step). They are the kernel-body work the plan
 asked to size before opening, and they are the next arms (section 17).
+
+## 17. The two arms the decomposition named (DEVIATION 2706, 2026-09-13, branch `lane/gemm-hfgs`)
+
+### 17.1 `kpack_hf`: the hardware flush in the fold
+
+`_fold_flush[HW]`: on the NVIDIA column with `HW`, `ftz(x)` is spelled as
+`mul.rn.ftz(x, 1.0)`, the instruction the step seam has used since
+2026-09-09. Identity: `x` is a stored binary32, so the multiply by one is
+exact and its only effect is the flush of a subnormal to its signed zero,
+which is `ftz`'s definition; the 2026-09-09 gate measured the pair equal on
+262,144 words. `_fold_push_local`, `_fold_drain_local`, the leaf partial and
+the output flush take `HW` from the kernel's `HWFOLD`; every other caller
+(the shipped tuned kernel included) passes the default and keeps the
+six-operation software spelling, as does every other column, so no bit can
+move anywhere. Cross-compiled: the fold's `selp` count falls from 1,024 to
+128 and `mul.rn.ftz` rises by the flushes. Bounded by section 16.3's 20
+percent.
+
+### 17.2 `kpack_gs`: gather staging
+
+Under `GATHER`, thread `tid` stages line group `g` at window step `c`,
+`(g, c) = (tid div 16, tid mod 16)` for a p-contiguous operand and `(tid
+mod 16, tid div 16)` for an outer-contiguous one; it gathers the eight
+lines `g + 16 u` at step `c` from DRAM (`_kpack_gather`: zero past the
+matrix or the window, flushed at staging as `_tuned_g2r` flushes) and
+stores them as ONE 8-wide vector at `g stride + c 8`, which is
+`gemm_kpack_addr(g + 16 u, c)` for `u = 0..7`. The same words at the same
+addresses as the slot mapping, so the accumulate loop and every existing
+check are untouched; `check_kpack_gather_covers_the_page` walks the 256
+threads under both mappings and requires every data word stored exactly
+once and no pad word at all. Per thread per window: 16 scalar shared
+stores at a four-way conflict become two `st.shared.v4` that are
+conflict-free under both mappings (p-contiguous: a warp's 16 lanes at
+consecutive steps write 128 contiguous words; outer-contiguous: consecutive
+`g` at stride 132 words hit distinct bank groups). The global loads stay
+scalar and coalesce under both mappings (16 consecutive `p` of one line,
+or 16 consecutive lines at one `p`). Bounded by section 16.3's 33 percent,
+of which the barrier's own skew is not touched.
+
+### 17.3 `kpack_hg`: both
+
+The two are independent placements and compose. The leg prices
+`shipped, kpack_padv, kpack_hf, kpack_gs, kpack_hg` and runs the LM probe
+on the three, so each is read against its base (`kpack_padv`) and against
+shipped on the same pod. M4 arms check: all three 117/117 ragged reach,
+every LM call bit-equal to shipped, the gather coverage 4 cases 0 failures.
+RUN OWED at the time of writing.
+
+### 17.4 The H100 leg (2026-09-13, measured): all three FLIP; `kpack_hg` takes the lean step 0.232 to 0.211 s
+
+Evidence: `bench/results/e1g/2026-09-13_175602-nvidia-h100-gemm-hfgs/remote/gemm-kernel/` (RunPod H100 80GB HBM3, commit
+851a0090, pod 4n8lu2a0jn38lx terminated and verified; corpora staged from
+R2 in 16 s). `status.tsv`: every item exit 0; `step-check.log` PASS with
+all three arms bit-equal on every LM call; the box's device card matched
+the M4 card.
+
+**LM verdict** (`lm_summary.tsv`, lean step, every step witness equal to
+shipped on both corpora, 2 brackets; shipped 0.2319 / 0.2320 s):
+
+| arm | enwik8 | Pile GitHub | geomean | verdict |
+|---|---:|---:|---:|---|
+| `kpack_hf` (hardware fold flush) | 0.9695 | 0.9697 | **0.9696** | FLIP |
+| `kpack_gs` (gather staging) | 0.9462 | 0.9442 | **0.9452** | FLIP |
+| `kpack_hg` (both) | 0.9101 | 0.9070 | **0.9085** | FLIP |
+
+**GEMM sum per step** (`price_step.txt`, against shipped on the same pod):
+`kpack_padv` 1.015 (the base, as before), `kpack_hf` 0.951, `kpack_gs`
+0.913, `kpack_hg` **0.852** (143.2 to 121.9 ms). Per call, `kpack_hg`
+against shipped: head_dB 0.740, down_dA 0.773, head_fwd 0.780, gateup_fwd
+0.789, head_dA 0.813, the 2-leaf group calls 0.867 to 0.909, the 1-leaf
+proj calls 0.916 to 0.951. The two arms compose almost exactly (0.951 x
+0.913 = 0.868 against 0.852 measured). Resources: 255 registers, one
+block per SM, unchanged.
+
+**Reading.** The decomposition was right about where the time was and
+about what a placement-only change could recover: the staging phase gave
+back 9 of its 33 points on the sum and the fold 5 of its 20, with the
+loop, the seam and the page untouched. This is the first kernel-body win
+under the contract and the first flip since `ksplit`. What remains of the
+staging phase is the barrier's skew and the scalar global loads; what
+remains of the fold is its local-memory traffic and the level loop. Neither
+is the 3x the plan once hoped for; both are further arms of the same kind.
+
+**Decision.** FLIP `kpack_hg` on the NVIDIA column: the shipped dispatch
+routes every call the TUNED 128x128 plan serves through the `kpack_hg`
+body (group launch where the ksplit rule takes the call, all leaves
+otherwise), selected by a kernel-matrix row that is 0 on every other
+column, so Apple and AMD compile exactly what they compile today and the
+row is the switch. Section 18 is the ship.

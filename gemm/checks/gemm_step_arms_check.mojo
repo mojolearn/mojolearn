@@ -118,6 +118,9 @@ from gemm.checks.gemm_identical import (
     GEMM_GEOM_KPACK,
     GEMM_GEOM_KPACK_PAD,
     GEMM_GEOM_KPACK_PADV,
+    GEMM_GEOM_KPACK_HF,
+    GEMM_GEOM_KPACK_GS,
+    GEMM_GEOM_KPACK_HG,
     GEMM_GEOM_KPACK_WIDE,
     GEMM_GEOM_SHIPPED,
     GEMM_GEOM_TUNED128,
@@ -154,6 +157,7 @@ from gemm.checks.gemm_identical import (
     gemm_kfold_blocks,
     gemm_default_ksplit_leaves,
     gemm_default_ksplit_leaves_at,
+    _kpack_gather_gs,
     gemm_kpack_addr,
     gemm_kpack_register_slots,
     gemm_kpack_stage_outer,
@@ -241,6 +245,9 @@ def _arm_names() -> List[String]:
         "kpack_pad",
         # DEVIATION 2703: geometry 15, the same page aligned, vector loads.
         "kpack_padv",
+        # DEVIATION 2706: geometries 16, 17, 18: hardware fold flush, gather
+        # staging, both.
+        "kpack_hf", "kpack_gs", "kpack_hg",
     ]
     return names^
 
@@ -696,6 +703,60 @@ def check_kpack_page_is_a_bijection(mut failures: List[String]) raises:
         + "; kpack_pad at pad " + String(GEMM_KPACK_PAD) + "), "
         + String(len(failures) - before) + " failures"
     )
+
+
+def check_kpack_gather_covers_the_page(mut failures: List[String]) raises:
+    """DEVIATION 2706: under GATHER every thread stores the `R` lines
+    `g + u G` at its `(g, step)` to `g stride + step R + u`; over the 256
+    threads, under both operand mappings, every data word of the padded
+    page receives exactly one store, no pad word receives any, and every
+    address equals `gemm_kpack_addr` of the pair it holds. Host only."""
+    comptime TR = TUNED_TPB // TUNED_TC
+    comptime NTH = TUNED_TPB
+    var before = len(failures)
+    var cases = 0
+    for oi in range(2):
+        var outer = oi == 1
+        for ai in range(2):
+            var is_a = ai == 0
+            var g_count = TR if is_a else TUNED_TC
+            var per = GEMM_KPACK_RPT if is_a else GEMM_KPACK_CPT
+            var ks = GEMM_KPACK_KS
+            var stride = ks * per + GEMM_KPACK_PAD
+            var total = g_count * stride
+            var hits = List[Int]()
+            for _ in range(total):
+                hits.append(0)
+            var bad = 0
+            for tid in range(NTH):
+                var gs = _kpack_gather_gs[16, 16](tid, outer)
+                var g = gs[0]
+                var step = gs[1]
+                if g < 0 or g >= g_count or step < 0 or step >= ks:
+                    bad += 1
+                    continue
+                for u in range(per):
+                    var ad = g * stride + step * per + u
+                    var line = g + u * g_count
+                    if ad >= total or gemm_kpack_addr(line, step, g_count, per, ks, GEMM_KPACK_PAD) != ad:
+                        bad += 1
+                        continue
+                    hits[ad] += 1
+            for ad2 in range(total):
+                var want = 1
+                if ad2 % stride >= ks * per:
+                    want = 0
+                if hits[ad2] != want:
+                    bad += 1
+            cases += 1
+            var tag = String("check_kpack_gather_covers_the_page [") + (String("A") if is_a else String("B"))
+            tag += String(" outer]") if outer else String(" p]")
+            print(tag + " threads=" + String(NTH) + " groups=" + String(g_count) + " per_thread=" + String(per)
+                  + " KS=" + String(ks) + " pad=" + String(GEMM_KPACK_PAD) + " addresses=" + String(total)
+                  + " disagreements=" + String(bad))
+            if bad != 0:
+                failures.append(tag + ": " + String(bad) + " disagreements")
+    print("check_kpack_gather_covers_the_page: " + String(cases) + " cases, " + String(len(failures) - before) + " failures")
 
 
 def check_kpack_rule_hand_counts(mut failures: List[String]) raises:
@@ -1587,6 +1648,11 @@ def main() raises:
         + gemm_step_geometry_name(GEMM_GEOM_KPACK_PADV) + "]"
     )
     print(
+        "   DEVIATION 2706; brief section 17; kpack_hf=[" + gemm_step_geometry_name(GEMM_GEOM_KPACK_HF)
+        + "] kpack_gs=[" + gemm_step_geometry_name(GEMM_GEOM_KPACK_GS) + "] kpack_hg=["
+        + gemm_step_geometry_name(GEMM_GEOM_KPACK_HG) + "]"
+    )
+    print(
         "   DEVIATIONS 2640 to 2642; docs/lanes/BRIEF_gemm_final_2026-09-11.md sections 4 to 6; kfoldv=["
         + gemm_step_geometry_name(GEMM_GEOM_KFOLDV) + "] kfoldv_leaf=["
         + gemm_step_geometry_name(GEMM_GEOM_KFOLDV_LEAF) + "]"
@@ -1595,6 +1661,7 @@ def main() raises:
     check_group_fold_is_the_contract_tree(failures)
     check_group_rule_hand_counts(failures)
     check_kpack_page_is_a_bijection(failures)
+    check_kpack_gather_covers_the_page(failures)
     check_kpack_rule_hand_counts(failures)
     check_kfold_lanes_is_the_stack_fold(failures)
     check_kfold_rule_hand_counts(failures)

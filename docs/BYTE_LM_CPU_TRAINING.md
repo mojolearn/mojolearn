@@ -1,13 +1,18 @@
 # Byte LM training on a CPU
 
 DEVIATION 2680. The CPU runs one byte LM training step, forward, backward and
-the AdamW update, and reproduces the recorded GPU bytes exactly.
+the AdamW update, and reproduces the recorded GPU bytes exactly. Two statements,
+and the difference between them matters: seven CPUs reproduce every recorded
+step when handed that step's own starting state, and one CPU, handed only the
+first step's state, free-runs all 128 and ends on the recorded final parameters
+and both Adam moments. The second is below under "The free-running run".
 
 ## What has been measured
 
 On all seven CI runners (five x86-64 Linux draws, ARM64 Linux on Azure Cobalt
 100, and Apple M1 macOS), replaying steps of the retained capture from each
-step's own parameters, Adam moments, token ids and recorded optimizer:
+step's own parameters, Adam moments, token ids and recorded optimizer. This is
+the per-step statement; the free-running one is a separate section below:
 
 | | |
 |---|---|
@@ -80,6 +85,79 @@ gate named the tensor, `block0.w_q` element 0, with both bit patterns.
 - `LanguageModelHostTrainer` is exported from `mojolearn/__init__.py` as of
   `31af2404`. What it promises is this profile and this shape, and a binding
   built before the training entry existed is refused at construction by name.
+
+## The free-running run
+
+The table above replays each step from its own recorded starting state, which is
+what makes a disagreement at step 87 debuggable without the 86 steps before it.
+It leaves one thing unsaid: whether a CPU left alone for a whole run arrives
+where the GPU did. That should follow from the table by induction, since
+`post_p`, `post_m` and `post_v` all agree at every step and so step N's output
+is step N+1's input, but an induction argument is not a measurement and a
+re-seed is exactly where a drift would hide. So it was run.
+
+`tools/byte_lm_cpu_train_freerun.py` reads step 1's `initial_p`, `initial_m` and
+`initial_v` and no recorded state after that. The model keeps its own parameters
+and moments for the rest of the run; per step it reads only `ids`, because token
+ids are the input data a training run consumes rather than state. The optimizer
+is fixed at construction, so the tool refuses a capture whose steps disagree on
+any hyperparameter rather than running 128 steps under step 1's numbers, and it
+refuses a non-contiguous step range, which would feed one step's tokens to a
+model that never consumed the step before it.
+
+| | |
+|---|---|
+| free-running steps, no re-seeding after step 1 | 128 |
+| arrays compared per step | 5: gradient, loss bits, post-step parameters, `m`, `v` |
+| comparisons per vendor | **640 of 640 equal** |
+| vendors | Apple Metal, NVIDIA CUDA and AMD HIP, 640 of 640 each |
+| final state after step 128 | `post_p`, `post_m` and `post_v` all equal to the recorded bytes |
+| recorded digests verified per run | 1408, being 128 steps of 11 arrays |
+| step cost | 36.7 to 37.0 ms, reference path, one thread |
+| whole run | 4.7 s |
+
+The four-row shape free-runs too, and it is a second certificate rather than a
+widening of the first, for the same reason the per-step result is: nine weight
+gradients contract over the token count.
+
+| | `b2-l32` | `b4-l32` |
+|---|---|---|
+| free-running comparisons | 640 of 640, three times | 640 of 640 |
+| vendors | Apple, CUDA and HIP | CUDA only, no other capture exists |
+| final `post_p`, `post_m`, `post_v` | all equal | all equal |
+| step cost | 36.7 to 37.0 ms | 83.5 ms |
+| whole run | 4.7 s | 10.7 s |
+
+The step cost rises 2.2x for 2x the tokens, which is the shape doubling and not
+a path that quietly reused the two-row batches.
+
+So the per-step result composes. A CPU given the initialization a GPU started
+from, and the same token stream, ends on that GPU's parameters and both Adam
+moments bit for bit: on all three vendors at two rows, and on CUDA at four.
+
+**One CPU, not seven.** These four runs are the bare-metal Apple M4 at commit
+`8c8a500c`, host binding `eaada7a1`. The seven-runner result above is the
+per-step one and stays that way; CI does not free-run yet. Widening this to the
+other six runners is measurement, not construction.
+
+Both captures recorded the same optimizer configuration, so one construction per
+run is valid and the tool's refusal for a capture whose hyperparameters move
+between steps has never fired. That guard is written, not exercised.
+
+**What falsifies it.** The free run compares the same five arrays the `cpu` mode
+of the gate compares, so the GEMM backward arm that fires there corrupts the
+same arithmetic here. For compounding specifically, flipping one mantissa bit of
+step 1's `initial_p` diverges `post_p` at step 1 and never recovers, ending on
+different final parameters, with the difference localized to `embed` element 0
+and tracking one ULP for all 128 steps. Both moments stayed equal under that
+perturbation, so it is evidence about parameter propagation and says nothing
+about the `post_m` and `post_v` comparisons. Those two are falsified only
+through the gradient today: no sabotage arm reaches the AdamW update on this
+path, because the host step calls `optimizer_step_oracle` and the twentyone
+`MOJOLEARN_OPT_SABOTAGE_*` arms live in the device file, not the oracle. An arm
+inside the host oracle, gated so it can never compile into a shipped binary and
+reported by `byte_lm_host_sabotage`, is what would close that and it does not
+exist.
 
 The run behind the table is retained in full at
 `bench/results/gh-actions/2026-09-12_1513-byte-lm-cpu-gate-run34701581834`,
