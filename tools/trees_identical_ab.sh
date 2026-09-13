@@ -77,7 +77,7 @@ cmd_use() {
 }
 
 cmd_ib() {
-    _set="$1"; _lanes="${2:-rf-clf,rf-reg,et-clf,et-reg,gbdt-symmetric,gbdt-depthwise,gbdt-lossguide,gbdt-rmse,kmeans}"
+    _set="$1"; _lanes="${2:-rf-clf,rf-reg,et-clf,et-reg,gbdt-symmetric,gbdt-depthwise,gbdt-lossguide,gbdt-rmse,gbdt-ordered-rmse,gbdt-feature-freq,kmeans}"
     cmd_use "$_set"
     echo "identity_break $_set lanes=$_lanes $(date -u +%H:%M:%S)"
     PYTHONPATH="$ROOT/python" timeout -k 30 1800 $PY -u tools/identity_break.py \

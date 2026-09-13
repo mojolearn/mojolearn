@@ -647,7 +647,8 @@ fi
 # wide dynamic range, denormals, duplicate rows, odd shapes, all-negative,
 # and the control), twice each, and writes one fingerprint per cell. Diffed
 # against the Mac's column by `tools/identity_break.py --diff a.json b.json`.
-# Opt-in because it needs the full identical set built (all ten bindings).
+# Opt-in because it needs the full identical set built (every binding; since
+# 2026-09-13 the 46 lanes reach all seventeen, the byte LM's included).
 if [ "${MOJOLEARN_P9_BREAK:-0}" = "1" ] && [ "${MOJOLEARN_P9_ONLY_DIAG:-0}" != "1" ]; then
   echo "--- identity_break (identical, every estimator, eight fixtures)"
   # `timeout`: the iforest binding hung a whole NVIDIA lease on 2026-08-29;
