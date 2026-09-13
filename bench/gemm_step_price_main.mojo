@@ -90,6 +90,7 @@ from gemm.checks.gemm_identical import (
     GEMM_GEOM_KFOLDV_LEAF,
     GEMM_GEOM_KPACK,
     GEMM_GEOM_KPACK_PAD,
+    GEMM_GEOM_KPACK_PADV,
     GEMM_GEOM_KPACK_WIDE,
     GEMM_GEOM_KSPLIT,
     GEMM_GEOM_KSPLIT_LEAF,
@@ -302,7 +303,10 @@ def _price_call(
         pleaves = gleaves
         pblocks = launched
         phase_of = String("arm")
-    elif (geom == GEMM_GEOM_KPACK or geom == GEMM_GEOM_KPACK_WIDE or geom == GEMM_GEOM_KPACK_PAD) and gleaves > 0:
+    elif (
+        geom == GEMM_GEOM_KPACK or geom == GEMM_GEOM_KPACK_WIDE
+        or geom == GEMM_GEOM_KPACK_PAD or geom == GEMM_GEOM_KPACK_PADV
+    ) and gleaves > 0:
         pleaves = gleaves
         pblocks = launched
         phase_of = String("arm_kpack")

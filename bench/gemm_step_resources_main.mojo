@@ -76,6 +76,7 @@ from gemm.checks.gemm_identical import (
     GEMM_GEOM_HALF_KS16,
     GEMM_GEOM_KPACK,
     GEMM_GEOM_KPACK_PAD,
+    GEMM_GEOM_KPACK_PADV,
     GEMM_GEOM_KPACK_WIDE,
     GEMM_KPACKW_CPT,
     GEMM_KPACKW_FS,
@@ -84,6 +85,7 @@ from gemm.checks.gemm_identical import (
     GEMM_KPACK_CPT,
     GEMM_KPACK_FS,
     GEMM_KPACK_KS,
+    GEMM_KPACK_ALIGN,
     GEMM_KPACK_PAD,
     GEMM_KPACK_PAGE_GUARD_BYTES,
     GEMM_KPACK_RPT,
@@ -195,7 +197,7 @@ def _stat_ksplit(ctx: DeviceContext, label: String) raises:
 
 
 def _stat_kpack[
-    RPT: Int, CPT: Int, TC: Int, KS: Int, FS: Int, GROUP: Bool, PAD: Int = 0
+    RPT: Int, CPT: Int, TC: Int, KS: Int, FS: Int, GROUP: Bool, PAD: Int = 0, ALIGN: Int = 4
 ](ctx: DeviceContext, label: String) raises:
     """DEVIATION 2599: the packed-page kernel, clean, with the PAGES its
     launcher binds (the matrix row at the packed page bytes plus the guard).
@@ -205,10 +207,10 @@ def _stat_kpack[
     comptime BN = CPT * TC
     comptime PAGE_BYTES = (BM * KS + TR * PAD + BN * KS + TC * PAD) * 4
     comptime PAGES = lib_smem_pages_for[TARGET_COLUMN, PAGE_BYTES + GEMM_KPACK_PAGE_GUARD_BYTES]()
-    comptime kern = identical_gemm_kpack_kernel[RPT, CPT, TC, KS, FS, PAGES, GROUP, False, PAD]
+    comptime kern = identical_gemm_kpack_kernel[RPT, CPT, TC, KS, FS, PAGES, GROUP, False, PAD, ALIGN]
     print(
         "GEMM_STEP_RESOURCES_BEGIN label=", label, " tile=", BM, "x", BN, " reg=", RPT, "x", CPT,
-        " tc=", TC, " ks=", KS, " fs=", FS, " pad=", PAD, " page_bytes=", PAGE_BYTES, " pages=", PAGES,
+        " tc=", TC, " ks=", KS, " fs=", FS, " pad=", PAD, " align=", ALIGN, " page_bytes=", PAGE_BYTES, " pages=", PAGES,
         " group=", GROUP, sep="",
     )
     var f = ctx.compile_function[kern]()
@@ -344,6 +346,21 @@ def main() raises:
         ](ctx, String("kpack_pad_group"))
     except e:
         print("GEMM_STEP_RESOURCES_ERROR label=kpack_pad_group error=", e, sep="")
+    print("GEMM_STEP_RESOURCES_GEOMETRY label=kpack_padv ", gemm_step_geometry_name(GEMM_GEOM_KPACK_PADV), sep="")
+    try:
+        _stat_kpack[
+            GEMM_KPACK_RPT, GEMM_KPACK_CPT, TUNED_TC, GEMM_KPACK_KS, GEMM_KPACK_FS, False, GEMM_KPACK_PAD,
+            GEMM_KPACK_ALIGN,
+        ](ctx, String("kpack_padv_all"))
+    except e:
+        print("GEMM_STEP_RESOURCES_ERROR label=kpack_padv_all error=", e, sep="")
+    try:
+        _stat_kpack[
+            GEMM_KPACK_RPT, GEMM_KPACK_CPT, TUNED_TC, GEMM_KPACK_KS, GEMM_KPACK_FS, True, GEMM_KPACK_PAD,
+            GEMM_KPACK_ALIGN,
+        ](ctx, String("kpack_padv_group"))
+    except e:
+        print("GEMM_STEP_RESOURCES_ERROR label=kpack_padv_group error=", e, sep="")
     print("GEMM_STEP_RESOURCES_GEOMETRY label=kpack_wide ", gemm_step_geometry_name(GEMM_GEOM_KPACK_WIDE), sep="")
     try:
         _stat_kpack[GEMM_KPACKW_RPT, GEMM_KPACKW_CPT, TUNED_TC, GEMM_KPACKW_KS, GEMM_KPACKW_FS, False](

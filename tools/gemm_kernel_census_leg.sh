@@ -78,15 +78,15 @@ comptime PAGES_KPACK_PAD = lib_smem_pages_for[
 ]()
 
 MOJO
-for l in $LABELS; do
-    printf 'def ptx_%s() -> Path:\n    return Path("%s/%s.ptx")\n\ndef sass_%s() -> Path:\n    return Path("%s/%s.sass")\n\n' "$l" "$DUMP" "$l" "$l" "$DUMP" "$l"
-done
 gen() {
-    # gen <label> "<kern expr>"
+    # gen <label> "<kern expr>". The dump parameters take a Path VALUE in this
+    # Mojo (the `fn() -> Path` member the kNN census used is gone from the
+    # Variant: "Type does not exist in Variant", 2026-09-13 leg). The fallback
+    # below rewrites them to the Bool form (stdout) if this does not build.
     if [ "$HAVE_TOOLKIT" = 1 ]; then
-        _dump="dump_asm=ptx_$1, _dump_sass=sass_$1, _ptxas_info_verbose=True"
+        _dump="dump_asm=Path(\"$DUMP/$1.ptx\"), _dump_sass=Path(\"$DUMP/$1.sass\"), _ptxas_info_verbose=True"
     else
-        _dump="dump_asm=ptx_$1"
+        _dump="dump_asm=Path(\"$DUMP/$1.ptx\")"
     fi
     cat <<MOJO
 def stat_$1(ctx: DeviceContext) raises:
@@ -126,8 +126,13 @@ if pixi run mojo build -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_GEMM_A
     note "build=0"
 else
     note "build=$?"
-    # Fallback: the Bool dump form to stdout, no SASS.
-    sed -i 's/dump_asm=ptx_[a-z_]*, _dump_sass=sass_[a-z_]*, _ptxas_info_verbose=True/dump_asm=True/; s/dump_asm=ptx_[a-z_]*/dump_asm=True/' "$DRIVER"
+    # Fallback: the Bool dump form, everything to stdout (PTX, and SASS plus
+    # ptxas info where the toolkit exists); tools/gemm_census_split.py cuts it.
+    if [ "$HAVE_TOOLKIT" = 1 ]; then
+        sed -i 's/dump_asm=Path("[^"]*"), _dump_sass=Path("[^"]*"), _ptxas_info_verbose=True/dump_asm=True, _dump_sass=True, _ptxas_info_verbose=True/' "$DRIVER"
+    else
+        sed -i 's/dump_asm=Path("[^"]*")/dump_asm=True/' "$DRIVER"
+    fi
     pixi run mojo build -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_GEMM_ARM_TRIAL=1 \
         "$DRIVER" -o "$OUT/census_driver" > "$OUT/build2.log" 2>&1 && note "build_fallback=0" || { note "build_fallback=$?"; exit 9; }
 fi

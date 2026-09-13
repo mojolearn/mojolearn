@@ -1054,3 +1054,98 @@ What the probe found instead, and what it is worth:
    more lane.
 3. **NVIDIA stays at two instructions**, and the kernel work of section 13
    (latency-bound, register census) is the remaining lever there.
+
+## 15. The census: every "vector" shared load is scalar (DEVIATIONS 2702 and 2703, 2026-09-13, branch `lane/gemm-census`)
+
+### 15.1 What the PTX says, read locally
+
+Section 13.5 asked where 255 registers go. Before the H100 census
+(15.3), the kernels were cross-compiled on the M4 to sm_90a PTX
+(`mojo build --emit asm --target-triple x86_64-unknown-linux-gnu
+--target-cpu x86-64-v3 --target-accelerator sm_90a -D MOJOLEARN_COLUMN_NVIDIA
+-D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_GEMM_ARM_TRIAL=1 -I .
+bench/gemm_step_resources_main.mojo`, the form the swizzle lane used on
+2026-09-10; the shipped kernel's sidecar hashes to the SAME `f9dade9e`
+module as the retained `bench/results/gemm_swizzle_2026-09-10/h100-current-128.ptx.gz`,
+so the shipped kernel has not changed since). Per basic block of the
+shipped 128x128 kernel, the accumulate window is
+
+| block | instructions | fma.rn | mul.rn.ftz | ld.shared.b32 | ld.shared.v4 |
+|---|---:|---:|---:|---:|---:|
+| the full window | 2,323 | 1,024 | 1,024 | 256 | 0 |
+| the ragged window | 149 | 64 | 64 | 16 | 0 |
+
+and the whole module has **no vector memory operation of any kind**: 272
+`ld.shared.b32`, 32 `st.shared.b32`, 96 `ld.global.b32`, 127
+`st.global.b32`, zero `.v4` or `.v2`. The two shared pages are declared
+`.shared .align 4`. So the "two 4-wide vector loads" and "4 vector stores"
+of section 3.1 are scalar in the code the H100 runs: 256 shared load
+instructions per thread per window against 2,048 arithmetic ones, 64
+per `kc` where the source spells 16. `kpack` and `kpack_pad` are the same:
+their `RPT`-wide loads lower to 8 scalar loads each, 256 per window.
+
+Two retained readings change under this:
+
+- E-b (section 3.5), the "scalar shared-load trial", compared scalar
+  loads against a baseline that was ALREADY scalar, and read flat. It
+  measured nothing.
+- Section 3.3's shared traffic count (64 four-word loads per window) is
+  256 transactions per thread per window, four times the count.
+
+The cause is alignment, not the instruction count in source: a
+`stack_allocation` in shared memory defaults to the element alignment (4
+bytes), and NVPTX cannot emit `ld.shared.v4.f32` (16-byte aligned by
+definition) from a load it cannot prove aligned, so LLVM splits every
+vector load into scalars. The pages are 16-byte aligned in fact (the
+runtime allocates them so) and every load start in the padded page is a
+multiple of 4 words, but neither is stated.
+
+The fold blocks are as section 3.1 counted: 1,485 and 1,472 instructions
+per merge level (64 `ld.local`, 384 `selp`, 576 `and`, 384 `setp`, 64
+`add`), a runtime loop over 16 levels with a 64-wide vector carried
+across iterations. That loop is where the software `ftz` mass lives, not
+the step, and it runs once per leaf. It is also the block with the most
+64-wide temporaries alive at once, which is the register question 15.3
+answers.
+
+### 15.2 The arm: `kpack_padv` (DEVIATION 2703)
+
+`identical_gemm_kpack_kernel` gains `ALIGN: Int = 4` (bytes): the two
+pages are `stack_allocation[..., alignment=ALIGN]` and the per-step loads
+are `load[width=RPT, alignment=ALIGN]`. `kpack_padv` = `kpack_pad` at
+`ALIGN` 16 (`GEMM_KPACK_ALIGN`); arm 15, geometry 15, plumbed everywhere
+`kpack_pad` is. Cross-compiled the same way, its sidecars carry 68
+`ld.shared.v4.f32` and 0 `ld.shared.b32`, `.shared .align 16`: 32 loads
+per window per operand pair where 2599's body issued 256. Same words, same
+order, no bit can move; the M4 arms check and the H100 step check say so
+before any price is read. The leg prices `shipped,kpack_pad,kpack_padv`
+and runs the LM probe on `kpack_pad` and `kpack_padv`, so the alignment is
+a same-pod A/B against the same page.
+
+What it can and cannot show. The shared-load instructions drop 8x; if the
+block was bound by issue slots or the LSU, the rate moves. If the block is
+latency-bound at two warps per scheduler (section 13.5's reading), the
+loads were already hiding and this reads flat, which is itself the
+separation the census wanted. The global loads stay scalar in this arm:
+`k = 50,257` rows are not 16-byte aligned, so a vector global load needs a
+block-uniform alignment branch, a later arm if this one moves.
+
+### 15.3 The H100 census (DEVIATION 2702)
+
+`tools/gemm_kernel_census_leg.sh`: a generated driver compiles the shipped
+tuned kernel, the ksplit group kernel, `kpack` and `kpack_pad` (all-leaves
+and group) through `compile_function[kern, dump_asm, _dump_sass,
+_ptxas_info_verbose=True]` and prints the runtime's own `NUM_REGS`, local,
+shared and blocks-per-SM, then `ptxas --verbose` for spills and `cuobjdump
+--dump-resource-usage` / `--dump-sass` per PTX. Launches nothing. The SASS
+is what names the registers: the maximum register index used inside the
+accumulate loop against inside the fold loop says whether the 255 is the
+loop's or the fold's. RUN OWED at the time of writing (launched the same
+hour as the `kpack_padv` build).
+
+There is no register cap or launch-bounds knob in this Mojo: an
+`@__llvm_metadata` annotation with `nvvm.minctasm` or `nvvm.maxnreg`
+crashes the compiler (exit 139, tried locally), the stdlib carries no
+`MAX_THREADS_PER_BLOCK_METADATA` symbol, and the PTX has no `.maxntid`. A
+second block per SM can only come from fewer live values in source, which
+is why the census comes before any occupancy arm.
