@@ -28,6 +28,32 @@ the gate rather than to the shipped class.
   A wheel that declared CPU training and shipped no binary, or shipped an inference only build with
   no training entry, now fails qualification rather than reaching a user.
 
+Neural training runs faster on NVIDIA and AMD with no bit moved. Every change below is a schedule
+chosen through a kernel matrix row; the arithmetic, the fold order and the words at every address
+are the ones the identity cards already pin, and each flip was gated on a shipped build against the
+Apple card before it merged.
+
+- GEMM on NVIDIA runs the `kpack_hg` body (DEVIATION 2707): a padded 16 byte aligned packed page,
+  one 8 wide conflict free shared store per thread per window instead of sixteen scalar stores at a
+  four way bank conflict, and the fold's flush spelled as the one hardware instruction the step seam
+  already uses. H100, same pod, every step witness equal to the previous default and the card
+  identical to the M4's: lean language model step 0.232 to 0.211 s on enwik8 and Pile GitHub,
+  GEMM sum 143 to 122 ms. AMD and Apple compile the line they compiled before; the AMD row is
+  measured separately.
+- Attention on NVIDIA and AMD keeps the exp stash through the backward (DEVIATION 2657). H100 lean
+  step 0.292 to 0.240 s; MI300X 0.757 to 0.736 s. Step glue on both vendors skips the optimizer
+  shadow copy and the refuse scan (DEVIATION 2649). H100 0.291 to 0.284 s; MI300X 0.763 to 0.752 s.
+  Apple stays on its previous schedule for both, unmeasured as a price.
+- The byte level language model's initialization is a pinned function of the parameter index
+  (`training/byte_lm_init.mojo`, exact in float32 by construction), and a gate regenerates the
+  recorded step 0 parameters of all three vendor captures from it, so a seed, a corpus and a config
+  determine the trained bits end to end. docs/BYTE_LM_CPU_TRAINING.md has the argument.
+- A GPU resident array (a torch or CuPy tensor, a MAX device buffer) handed to any estimator is now
+  refused by name, naming the type and the device, instead of failing later as "not a number"
+  (DEVIATION 2692). Accepting device input directly is not started.
+- Gradient boosting under IDENTICAL partitions leaves on the device (DEVIATION 2551) on every
+  vendor; taxi at 1M rows confirms the bits against the previous default.
+
 ## 0.8.3 (published 2026-09-11)
 
 Linux x86-64 wheel (CUDA sm_89, CUDA sm_90a, HIP gfx942) and macOS arm64 wheel, both from
