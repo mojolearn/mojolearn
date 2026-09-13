@@ -158,7 +158,7 @@ optimization gaps in the current kernels. A paper collecting the numbers is
 in preparation outside this repository; the raw records behind them live
 under `bench/results/`.
 
-**`identical` is the default**, in the published <!--fact:published_version-->0.8.3<!--/fact--> wheels and in this
+**`identical` is the default**, in the published <!--fact:published_version-->0.8.4<!--/fact--> wheels and in this
 source. For the tree estimators you opt out of it, not into it, by
 setting `MOJOLEARN_NUMERIC_MODE=fast` or `deterministic` in the environment
 before import, or by calling `mojolearn.set_numeric_mode(...)` in code.
@@ -217,7 +217,7 @@ source .venv/bin/activate
 pip install mojolearn
 ```
 
-Version **<!--fact:published_version-->0.8.3<!--/fact--> is published on PyPI** as an alpha API release, a macOS arm64
+Version **<!--fact:published_version-->0.8.4<!--/fact--> is published on PyPI** as an alpha API release, a macOS arm64
 wheel and one Linux x86-64 wheel that now carries **CUDA sm_89, CUDA sm_90 and
 HIP gfx942** together, the tree bindings in all three numeric modes and every other binding in identical only, plus the
 identical-mode byte-LM trainer extension per architecture. NVIDIA Linux is no
@@ -257,7 +257,7 @@ as released-wheel support.
 
 ### Stability and release cadence
 
-mojolearn went from 0.1.0 on 2026-08-23 to <!--fact:published_version-->0.8.3<!--/fact--> on <!--fact:published_date-->2026-09-11<!--/fact-->, eleven PyPI
+mojolearn went from 0.1.0 on 2026-08-23 to <!--fact:published_version-->0.8.4<!--/fact--> on <!--fact:published_date-->2026-09-13<!--/fact-->, eleven PyPI
 releases in under three weeks (0.1.0, 0.2.0, 0.3.0, 0.3.1, 0.5.0, 0.6.0,
 0.7.0, 0.8.0, 0.8.1, 0.8.2, 0.8.3; 0.3.2, 0.4.0 and 0.6.1 are recorded in [CHANGELOG.md](CHANGELOG.md) but
 were not published to PyPI). One release was yanked. 0.3.0, published

@@ -3,7 +3,19 @@
 This file records release-level changes, not the development diary. Git history and archived evidence
 contain the detailed investigation record.
 
-## 0.8.4 (unreleased 2026-09-12)
+## 0.8.4 (published 2026-09-13)
+
+Linux x86-64 wheel (CUDA sm_89, CUDA sm_90a, HIP gfx942) and macOS arm64 wheel, both from
+commit 0dcc1204 (tags alpha-api-0.8.4-20260913 and v0.8.4), on PyPI 2026-09-13 20:35Z and 20:45Z
+(release runs 34781180731 and 34781309801). The Linux wheel was not installed and qualified on
+GPUs; the identity evidence for this release is the source build at the same native inventory on
+all three vendors, `bench/results/identity_break/2026-09-13_three-columns/`: every public lane on
+nine hostile fixtures, 252 training cells, 189 held-out inference cells and 72 saved-model cells,
+identical on an Apple M4, an NVIDIA H100 and an AMD MI325X. Both wheels install and import from
+PyPI on a clean amd64 Linux container and on the Mac. The HIP set in the wheel was built on a Hot
+Aisle MI300X inside the 22.04 ROCm container rather than on the DigitalOcean 24.04 image, because
+the 24.04 linker gave the vendor-neutral CPU binding different bytes from the two CUDA legs and the
+packer refuses a disagreeing copy (`bench/results/releases/2026-09-13-linux-0.8.4/README.md`).
 
 Both wheels now carry the CPU training binding for the byte level language model, so
 `LanguageModelHostTrainer` runs a forward pass, a backward pass and the AdamW update on a machine
