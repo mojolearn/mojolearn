@@ -72,7 +72,22 @@ present, which is a real virtue in a reference.
 it prints hex bits beside every decimal.
 """
 
+from std.sys.compile import is_defined
+
 from checks.numerics import ftz, identical_mul_add
+
+#: THE NEGATIVE CONTROL OF THE CPU IDENTITY GATE (the CPU training lane,
+#: 2026-09-13, brief section 3.4). `-D MOJOLEARN_HOST_SABOTAGE=1` makes
+#: `oracle_leaf_partial` walk each leaf DESCENDING instead of ascending, so a
+#: host binding built with it computes a different fold order and every lane
+#: that reaches this oracle must read DIVERGENT against the GPU columns. A
+#: gate that cannot fail proves nothing. The define is passed by the host
+#: build scripts only (`bindings/build_*_host.sh` through
+#: MOJOLEARN_BUILD_EXTRA_DEFINES); a GPU binding never carries it, and a host
+#: binding that carries it says so through `<prefix>_sabotage()` and is
+#: refused by `python/mojolearn/_backend.py::load_host_module` outside the
+#: gate.
+comptime GEMM_ORACLE_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
 
 # ===========================================================================
@@ -260,14 +275,27 @@ def oracle_leaf_partial(
     sum of two zeros of opposite sign is `+0` in round-to-nearest.
     """
     var acc = Float32(0.0)
-    for p in range(p_begin, p_end):
-        acc = ftz(
-            identical_mul_add(
-                ftz(_a_at(a, op, i, p, m, k)),
-                ftz(_b_at(b, op, p, j, n, k)),
-                acc,
+    comptime if GEMM_ORACLE_HOST_SABOTAGE:
+        # THE SABOTAGE ARM: the same leaf, walked DESCENDING. Wrong on
+        # purpose; see GEMM_ORACLE_HOST_SABOTAGE.
+        for q in range(p_end - p_begin):
+            var p = p_end - 1 - q
+            acc = ftz(
+                identical_mul_add(
+                    ftz(_a_at(a, op, i, p, m, k)),
+                    ftz(_b_at(b, op, p, j, n, k)),
+                    acc,
+                )
             )
-        )
+    else:
+        for p in range(p_begin, p_end):
+            acc = ftz(
+                identical_mul_add(
+                    ftz(_a_at(a, op, i, p, m, k)),
+                    ftz(_b_at(b, op, p, j, n, k)),
+                    acc,
+                )
+            )
     # The seam a real split-K kernel writes the partial through. Bitwise a
     # no-op given the flush inside the loop; here because the contract names
     # it as a seam and a reader should not have to derive that it is

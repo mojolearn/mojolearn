@@ -890,3 +890,52 @@ files' own claims plus their gate files' existence, read at `0dcc1204e`; the
 GPU-import census is a printed grep; the hours are estimates against the
 byte LM and forest host lanes' actual cost. The certified table for the CPU
 column is empty until a workflow report is read.
+
+## Phase 1 results
+
+Branch `lane/cpu-training-phase1`, off `main` at `e32ddfaf3`, 2026-09-13.
+Every lane below was run on this Mac (Apple M4, host build `--target-cpu
+apple-m1`, Mojo 1.0.0) through a CPU-only package view (`python/mojolearn`
+without `identical/`, `fast/`, `deterministic/` and the tests, `host/`
+holding the phase 1 bindings, so `mojolearn.vendor()` is `cpu` and
+`--vendor cpu-apple-m4-host`), then diffed with `tools/identity_break.py
+--diff` against the three committed GPU columns
+`bench/results/identity_break/2026-09-13_46-lanes/{apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942}.json`
+with `--require-columns 4 --lanes <lane>`. The whole-column summary line
+carries the 46-lane column's own `DIVERGENT=8` (gbdt-feature-freq) and
+`ONE-COLUMN=18` (the two byte LM CPU lanes the GPU legs did not build); the
+lane's verdict is its nine rows and the `require-columns` line. Each lane's
+sabotage arm is the same binding built with `-D MOJOLEARN_HOST_SABOTAGE=1`,
+loaded through `MOJOLEARN_HOST_DIR` with `MOJOLEARN_HOST_ALLOW_SABOTAGE=1`.
+The seven-runner gate (`.github/workflows/cpu-identity-gate.yml`,
+`COVERED_LANES`) has not run on this branch; the certified table is still
+empty until a workflow report is read.
+
+### gemm-pinned, IDENTICAL x4
+
+Binding `bindings/_mojolearn_linalg_host.mojo` (`bindings/build_linalg_host.sh`),
+routed by `_backend._HOST_MODULES["_mojolearn_linalg"]`, exporting `gemm`,
+`linalg_numeric_mode`, `linalg_vendor` (answering `cpu`),
+`linalg_profile_version` under the GPU binding's address contract, over
+`gemm/checks/gemm_oracle.mojo::gemm_oracle`. `python/mojolearn/_linalg_impl.py`
+is unchanged.
+
+| fixture | hash (all four columns) |
+|---|---|
+| base | 931036cbc84c1ce0 |
+| ties | 8ddd60b67526c1b1 |
+| hashed | 06057c0eeb212963 |
+| wide | 01701582fa724ce4 |
+| denormal | 026720f450eda8a3 |
+| denormal_ftz | 026720f450eda8a3 |
+| dupes | 4d5d6e4a621ef9af |
+| odd | d5a7a31e551215d9 |
+| negative | 1ef67a1833b19819 |
+
+`require-columns 4 over ['gemm-pinned']: OK`; the nine rows read
+`IDENTICAL x4`. Infer and model are `n/a:function` and `n/a:no-save`, as on
+the GPU columns. Sabotage (`GEMM_ORACLE_HOST_SABOTAGE`, every leaf walked
+descending): 8 of 9 cells `DIVERGENT` with `parts differ: small,wide`
+(base 260c0a74b97fa901 against 931036cbc84c1ce0); `ties` stays
+`IDENTICAL x4` because an integer grid sums exactly in any order, which is
+why the gate requires `DIVERGENT` in the summary and not on every cell.

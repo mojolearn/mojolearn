@@ -865,10 +865,10 @@ def host_families_built():
 #: `_MODULES` name -> the basename of the host binding under mojolearn/host/
 #: that exports the SAME function names the GPU binding exports for the fits
 #: it covers, plus `<prefix>_vendor()` answering "cpu", `<prefix>_numeric_mode()`
-#: answering 1 and `<prefix>_column()` answering "cpu". EMPTY until phase 1 of
-#: the CPU training brief lands its first family (gemm-pinned first, as
-#: `"_mojolearn_linalg": "_mojolearn_linalg_host"`); every family not listed
-#: here refuses BY NAME on a CPU-only install. The two host bindings that
+#: answering 1 and `<prefix>_column()` answering "cpu". Phase 1 of the CPU
+#: training brief adds a family per lane as its host fit lands (gemm-pinned
+#: first, 2026-09-13); every family not listed here refuses BY NAME on a
+#: CPU-only install. The two host bindings that
 #: exist today, `_mojolearn_byte_lm_host` and `_mojolearn_forest_host`, export
 #: their own names (`byte_lm_host_*`, `forest_host_*`) for surfaces of their
 #: own (LanguageModelInference, LanguageModelHostTrainer, HostForest,
@@ -876,7 +876,13 @@ def host_families_built():
 #: and are deliberately NOT in this table: mapping `_mojolearn_rf` to the
 #: forest host binding would route RandomForestClassifier.predict to an
 #: entry with a different address contract under the GPU entry's name.
-_HOST_MODULES = {}
+_HOST_MODULES = {
+    # gemm-pinned (phase 1, 2026-09-13): bindings/_mojolearn_linalg_host.mojo
+    # over gemm/checks/gemm_oracle.mojo::gemm_oracle, the profile's
+    # definition; exports gemm, linalg_numeric_mode, linalg_vendor,
+    # linalg_profile_version under the GPU binding's contract.
+    "_mojolearn_linalg": "_mojolearn_linalg_host",
+}
 
 #: The env switch the CPU identity gate sets to load a host binding built
 #: with `-D MOJOLEARN_HOST_SABOTAGE=1`; refused otherwise.
