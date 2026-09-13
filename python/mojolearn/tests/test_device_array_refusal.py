@@ -117,6 +117,28 @@ class DeviceArrayRefusalTest(unittest.TestCase):
     def test_broken_dlpack_exporter_is_not_a_device_array(self):
         self.assertIsNone(_buffer._device_array_kind(_BadDlpackDevice()))
 
+    # ------------------------------------------- the address chokepoint
+
+    def test_addr_path_also_refuses_by_name(self):
+        """`view`/`addr`/`addr_ro` bypass `_materialize` and reach `Buf`.
+
+        Before DEVIATION 2692's second half these said "does not support the
+        buffer protocol" -- true, but silent about the GPU. No caller reaches
+        them with user input today (ARIMA converts through `_series_major`
+        first), so this is defence in depth against a future one.
+        """
+        for entry in ("view", "addr", "addr_ro"):
+            function = getattr(_buffer, entry)
+            with self.assertRaises(TypeError) as caught:
+                function(_CupyLike(), name="X")
+            message = str(caught.exception)
+            self.assertIn("DEVICE array", message, entry)
+            self.assertNotIn("does not support the buffer protocol", message)
+
+    def test_addr_path_still_accepts_host_memory(self):
+        storage = array.array("f", [1.0, 2.0, 3.0])
+        self.assertIsInstance(_buffer.addr_ro(storage, name="X"), int)
+
     def test_kind_discriminates(self):
         self.assertEqual(
             _buffer._device_array_kind(_CupyLike()), "__cuda_array_interface__"

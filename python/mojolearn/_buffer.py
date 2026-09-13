@@ -125,6 +125,23 @@ class Buf:
         if isinstance(obj, Array):
             self._from_array(obj, name)
             return
+        # DEVIATION 2692, defence in depth. Every public converter routes
+        # through `_materialize`, which refuses a device array by name before
+        # reaching here, and no caller currently hands user input straight to
+        # `view`/`addr`/`addr_ro` (ARIMA converts through `_series_major`
+        # first; everything else addressed here is library-allocated). This
+        # is the chokepoint for `view`, `addr`, `addr_ro` and the two direct
+        # `Buf(...)` uses below, so a future caller cannot open that door and
+        # get "does not support the buffer protocol" for memory whose real
+        # problem is that it lives on a GPU. ONE definition of the test.
+        device_kind = _device_array_kind(obj)
+        if device_kind is not None:
+            raise TypeError(
+                "mojolearn: %s is a DEVICE array (it exports %s). mojolearn "
+                "reads HOST memory only. Copy it to the host first: cupy "
+                "`x.get()`, torch `x.cpu()`, numba `x.copy_to_host()`."
+                % (name, device_kind)
+            )
         view = _PyBuffer()
         flags = PyBUF_FULL if writable else PyBUF_FULL_RO
         try:
