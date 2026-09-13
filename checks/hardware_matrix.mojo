@@ -68,6 +68,7 @@ from checks.kernel_matrix import (
     COLUMN_APPLE,
     COLUMN_AMD_RDNA,
     COLUMN_BIT_IDENTICAL,
+    COLUMN_CPU,
     COLUMN_INTEL,
     COLUMN_NVIDIA,
     COLUMN_QUALCOMM,
@@ -120,6 +121,12 @@ def gpu_cores_for[column: Int]() -> Int:
         #: and a grid sized from this asks for the least the standard
         #: promises, which is the only correct reading of a floor.
         return 1
+    if column == COLUMN_CPU:
+        #: No GPU core exists on the host and no grid is ever sized from
+        #: this row there. The bit-identical intersection, so a misdirected
+        #: read is conservative and equal to what a host build read under
+        #: the Apple fallthrough before the column existed.
+        return 10
     return 10  # apple, and the bit-identical intersection
 
 
@@ -145,6 +152,8 @@ def max_threads_per_core_for[column: Int]() -> Int:
         return 1024
     if column == COLUMN_SPEC_BASELINE:
         return 128  # the spec's guaranteed invocations per workgroup
+    if column == COLUMN_CPU:
+        return 2048  # the bit-identical intersection; no block is resident on a host
     return 2048  # nvidia, amd, and the bit-identical intersection
 
 
@@ -210,6 +219,8 @@ def smem_per_core_for[column: Int]() -> Int:
         return 64 * 1024  # LDS per WGP, RDNA3
     if column == COLUMN_SPEC_BASELINE:
         return 16 * 1024  # the spec floor, and nothing above it is promised
+    if column == COLUMN_CPU:
+        return 32 * 1024  # the bit-identical intersection; no pool is partitioned on a host
     return 32 * 1024  # apple, and the bit-identical intersection
 
 
@@ -275,6 +286,12 @@ def gram_splitk_is_target_arm[column: Int]() -> Bool:
 
     The bit-identical column answers True: the split-K kernel is the arm
     with the determinism guarantee (fixed chunk grid, serial ascending
-    fold), which is what that column exists to buy.
+    fold), which is what that column exists to buy. The CPU column answers
+    True with it: a host Gram that MIRRORS the identical arm restates the
+    split-K fold, never a vendor BLAS.
     """
-    return column == COLUMN_APPLE or column == COLUMN_BIT_IDENTICAL
+    return (
+        column == COLUMN_APPLE
+        or column == COLUMN_BIT_IDENTICAL
+        or column == COLUMN_CPU
+    )

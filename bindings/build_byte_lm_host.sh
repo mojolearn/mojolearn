@@ -3,11 +3,15 @@
 # No accelerator target. On the Mac, invoke through tools/macos_serial_guard.py.
 # IDENTICAL only. MOJOLEARN_BUILD_EXTRA_DEFINES carries trial defines, e.g.
 # -D MOJOLEARN_BYTE_LM_HOST_SABOTAGE=1 for the gate's negative control.
+# The kernel-matrix column is COLUMN_CPU (-D MOJOLEARN_COLUMN_CPU, the CPU
+# training lane 2026-09-13); MOJOLEARN_TARGET_COLUMN may only say `cpu`, and
+# the binding asserts at build time that it compiled as that column.
 set -eu
 MACOS_FLOOR="11.0"
 host_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$host_root"
 [ "${MOJOLEARN_NUMERIC_MODE:-identical}" = identical ] || { echo 'byte LM host supports only MOJOLEARN_NUMERIC_MODE=identical' >&2; exit 2; }
+[ "${MOJOLEARN_TARGET_COLUMN:-cpu}" = cpu ] || { echo "byte LM host compiles the CPU column only; MOJOLEARN_TARGET_COLUMN=$MOJOLEARN_TARGET_COLUMN is refused" >&2; exit 2; }
 host_system=$(uname -s)
 if [ "$host_system" = Darwin ]; then
     [ "$(uname -m)" = arm64 ] || { echo 'byte LM host: macOS requires Apple silicon' >&2; exit 2; }
@@ -35,8 +39,8 @@ if [ -e "$host_destination" ] || [ -L "$host_destination" ]; then
 fi
 host_tmpdir=$(mktemp -d "$host_outdir/.byte-lm-host-build.XXXXXX")
 trap 'rm -rf "$host_tmpdir"' EXIT HUP INT TERM
-pixi run mojo build -j 2 --emit shared-lib "$@" ${MOJOLEARN_BUILD_EXTRA_DEFINES:-} \
-    -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . -I bindings \
+pixi run mojo build -j "${MOJOLEARN_BUILD_JOBS:-2}" --emit shared-lib "$@" ${MOJOLEARN_BUILD_EXTRA_DEFINES:-} \
+    -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings \
     bindings/_mojolearn_byte_lm_host.mojo -o "$host_tmpdir/_mojolearn_byte_lm_host.so"
 ln "$host_tmpdir/_mojolearn_byte_lm_host.so" "$host_destination"
 echo "built $host_destination"

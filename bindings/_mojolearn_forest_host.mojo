@@ -53,6 +53,12 @@ from bindings.host_helpers import (
     gather_i64_binding,
 )
 from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32
+from checks.kernel_matrix import (
+    COLUMN_CPU,
+    DETECTED_COLUMN,
+    TARGET_COLUMN,
+    column_name,
+)
 from checks.numerics import GLOBAL_NUMERIC_MODE, identical_exp64
 from core.forest_host_predict import (
     FOREST_HOST_SABOTAGE,
@@ -84,6 +90,32 @@ def forest_host_numeric_mode_binding() raises -> PythonObject:
 
 def forest_host_vendor_binding() raises -> PythonObject:
     return PythonObject(String("cpu"))
+
+
+def forest_host_column_binding() raises -> PythonObject:
+    """`column_name(TARGET_COLUMN)`, the comptime assert's witness: "cpu".
+
+    THE COLUMN IS THE CPU COLUMN, OR THIS DOES NOT BUILD (the CPU training
+    lane, 2026-09-13). Until COLUMN_CPU existed a host build fell through to
+    COLUMN_APPLE, and a matched hash under that fallthrough was luck for the
+    rows the byte LM reaches and would have been Apple's kNN repairs for a
+    host fit. `bindings/build_forest_host.sh` passes -D MOJOLEARN_COLUMN_CPU;
+    a build that reaches this file any other way stops here with the column
+    it got. The assert lives in this function because Mojo takes a
+    `comptime assert` inside a function body only, and PyInit registers this
+    function, so it is compiled in every build of the module."""
+    comptime assert TARGET_COLUMN == COLUMN_CPU, (
+        "forest host: this binding compiles the CPU column only; pass"
+        " -D MOJOLEARN_COLUMN_CPU (bindings/build_forest_host.sh does)"
+    )
+    return PythonObject(column_name(TARGET_COLUMN))
+
+
+def forest_host_detected_column_binding() raises -> PythonObject:
+    """`column_name(DETECTED_COLUMN)`: what the accelerator predicates fold to
+    in THIS build, with no define. "cpu" on a build with no accelerator target;
+    a vendor's name means the predicate answered for the host machine."""
+    return PythonObject(column_name(DETECTED_COLUMN))
 
 
 def forest_host_sabotage_binding() raises -> PythonObject:
@@ -260,6 +292,8 @@ def PyInit__mojolearn_forest_host() abi("C") -> PythonObject:
         var module = PythonModuleBuilder("_mojolearn_forest_host")
         module.def_function[forest_host_numeric_mode_binding]("forest_host_numeric_mode")
         module.def_function[forest_host_vendor_binding]("forest_host_vendor")
+        module.def_function[forest_host_column_binding]("forest_host_column")
+        module.def_function[forest_host_detected_column_binding]("forest_host_detected_column")
         module.def_function[forest_host_sabotage_binding]("forest_host_sabotage")
         module.def_function[forest_host_rf_predict_proba_binding]("forest_host_rf_predict_proba")
         module.def_function[forest_host_rf_predict_reg_binding]("forest_host_rf_predict_reg")
