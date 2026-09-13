@@ -301,3 +301,24 @@ read.
 | CPU | recorded by | fixtures | verdict | report |
 | --- | --- | --- | --- | --- |
 | Apple M4 (this Mac, host cores) | Apple M4 Metal, IDENTICAL, `bfde04428` build | 4 (RF and ET, classifier and regressor) | IDENTICAL | the check lines above, 2026-09-13 |
+
+## Seven CPUs reproduce the Metal predictions (2026-09-13, run 34780078300)
+
+The workflow ran on the branch's first push. Every runner built the host binding and
+reported `gate verdict IDENTICAL (4 fixtures, exit 0)` on the four Apple M4 recordings,
+and `EXPECTED MISMATCH SEEN (4 fixtures, exit 0)` on the sabotage build, so the gate
+reads the predictions it claims to. The jobs are red only because the NVIDIA and AMD
+recordings are still the OWED placeholders, which is what the placeholders are for.
+
+| runner | CPU | verdict |
+|---|---|---|
+| x86-64 Linux draw a, b, c (24.04) | AMD EPYC 7763 | IDENTICAL |
+| x86-64 Linux draw d (22.04) | AMD EPYC 9V74 | IDENTICAL |
+| x86-64 Linux draw e (22.04) | GenuineIntel (Xeon, hosted) | IDENTICAL |
+| ARM64 Linux (Azure Cobalt 100) | Neoverse-N2 | IDENTICAL |
+| Apple M1 macOS (hosted) | Apple M1 (Virtual) | IDENTICAL |
+
+So a forest trained on an Apple GPU predicts the same bits on an Intel CPU, on AMD CPUs
+and on an ARM server CPU with no GPU present. This is the CPU half of the question
+"is inference bitwise identical on vendors whose GPUs Mojo cannot target". Their GPUs
+remain out of reach until a Mojo backend exists for them.
