@@ -324,6 +324,16 @@ fi
 # ---- the two corpora and the LM step under the arms -------------------------
 if [ "$LM_OK" = 1 ]; then
     CORPORA=""
+    # DEVIATION 2704: a corpus the runner staged from R2 (tools/dataset_store.sh
+    # stage, box path /root/CascadeProjects/mojolearn/...) is linked into place
+    # so the fetcher's own --check passes and nothing is downloaded.
+    for _c in enwik8 pile_github; do
+        _s=/root/CascadeProjects/mojolearn/training/corpus/$_c/input.txt
+        if [ -f "$_s" ] && [ ! -f "training/corpus/$_c/input.txt" ]; then
+            mkdir -p "training/corpus/$_c" && ln -f "$_s" "training/corpus/$_c/input.txt" \
+                && echo "corpus_$_c=staged_from_r2" >> "$OUT/gate.txt"
+        fi
+    done
     run corpus-enwik8 sh tools/fetch_corpus_enwik8.sh \
         && CORPORA="$CORPORA enwik8=training/corpus/enwik8/input.txt"
     run corpus-pile-github sh tools/fetch_corpus_pile_github.sh \

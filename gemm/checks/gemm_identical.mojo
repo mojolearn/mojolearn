@@ -2798,7 +2798,11 @@ comptime GEMM_ARM_KFOLDV_LEAF = 13
 #: a warp lands on distinct bank groups instead of one
 #: (docs/lanes/BRIEF_gemm_kernel_2026-09-11.md section 13).
 comptime GEMM_ARM_KPACK_PAD = 14
-comptime GEMM_ARM_COUNT = 15
+#: DEVIATION 2703: `kpack_pad` with the page 16-byte ALIGNED and the per-step
+#: loads spelled at that alignment, so they lower to `ld.shared.v4` instead
+#: of scalar `ld.shared.b32` (brief section 15).
+comptime GEMM_ARM_KPACK_PADV = 15
+comptime GEMM_ARM_COUNT = 16
 #: OR'd into an arm by MOJOLEARN_GEMM_ARM_SABOTAGE=1.
 comptime GEMM_ARM_SABOTAGE = 16
 
@@ -2825,7 +2829,9 @@ comptime GEMM_GEOM_KFOLDV = 12
 comptime GEMM_GEOM_KFOLDV_LEAF = 13
 #: DEVIATION 2700: `identical_gemm_kpack_kernel` at 128x128 with the padded page.
 comptime GEMM_GEOM_KPACK_PAD = 14
-comptime GEMM_GEOM_COUNT = 15
+#: DEVIATION 2703: the padded page, 16-byte aligned, vector loads.
+comptime GEMM_GEOM_KPACK_PADV = 15
+comptime GEMM_GEOM_COUNT = 16
 
 #: `head` applies to calls with `max(m, n, k)` at least this: the step's
 #: three head calls (V = 50,257), and no per-layer call (at most 2,048).
@@ -2903,10 +2909,12 @@ def gemm_step_arm_parse(name: String) raises -> Int:
         return GEMM_ARM_KFOLDV_LEAF
     if name == "kpack_pad":
         return GEMM_ARM_KPACK_PAD
+    if name == "kpack_padv":
+        return GEMM_ARM_KPACK_PADV
     raise Error(
         "MOJOLEARN_GEMM_ARM='" + name + "' is not a GEMM step arm (shipped, lfold,"
         + " half, half_ks16, quarter, head, half_head, ksplit, ksplit_leaf, tuned128,"
-        + " kpack, kpack_wide, kfoldv, kfoldv_leaf, kpack_pad, or unset)"
+        + " kpack, kpack_wide, kfoldv, kfoldv_leaf, kpack_pad, kpack_padv, or unset)"
     )
 
 
@@ -2944,6 +2952,8 @@ def gemm_step_arm_name(arm: Int) -> String:
         name = String("kfoldv_leaf")
     elif which == GEMM_ARM_KPACK_PAD:
         name = String("kpack_pad")
+    elif which == GEMM_ARM_KPACK_PADV:
+        name = String("kpack_padv")
     if (arm & GEMM_ARM_SABOTAGE) != 0:
         name += "+sabotage"
     return name
@@ -2986,6 +2996,9 @@ def gemm_step_arm_geometry(arm: Int, m: Int, n: Int, k: Int) raises -> Int:
     if which == GEMM_ARM_KPACK_PAD:
         # 2700: `kpack`'s calls and rule, on the padded page.
         return GEMM_GEOM_KPACK_PAD
+    if which == GEMM_ARM_KPACK_PADV:
+        # 2703: the same, aligned, vector loads.
+        return GEMM_GEOM_KPACK_PADV
     if which == GEMM_ARM_KFOLDV:
         # 2640: the rule decides applicability, as for ksplit (brief 4.2).
         if gemm_step_kfold_leaves(GEMM_GEOM_KFOLDV, m, n, k) > 0:
@@ -3038,6 +3051,7 @@ def gemm_step_geometry_tile(geom: Int) raises -> Tuple[Int, Int]:
         or geom == GEMM_GEOM_TUNED128
         or geom == GEMM_GEOM_KPACK
         or geom == GEMM_GEOM_KPACK_PAD
+        or geom == GEMM_GEOM_KPACK_PADV
         or geom == GEMM_GEOM_KFOLDV
         or geom == GEMM_GEOM_KFOLDV_LEAF
     ):
@@ -3123,6 +3137,11 @@ def gemm_step_geometry_name(geom: Int) -> String:
         s = _kpack_geometry_name[
             GEMM_KPACK_RPT, GEMM_KPACK_CPT, TUNED_TC, GEMM_KPACK_KS, GEMM_KPACK_FS, GEMM_KPACK_PAD
         ](String("kpack_pad"))
+    elif geom == GEMM_GEOM_KPACK_PADV:
+        s = _kpack_geometry_name[
+            GEMM_KPACK_RPT, GEMM_KPACK_CPT, TUNED_TC, GEMM_KPACK_KS, GEMM_KPACK_FS, GEMM_KPACK_PAD,
+            GEMM_KPACK_ALIGN,
+        ](String("kpack_padv"))
     elif geom == GEMM_GEOM_KFOLDV:
         s = _kfold_geometry_name(String("kfoldv"), True)
     elif geom == GEMM_GEOM_KFOLDV_LEAF:
@@ -4441,7 +4460,7 @@ def gemm_step_geometry_group_leaves(geom: Int, m: Int, n: Int, k: Int) raises ->
     launch runs). RAISES when not even one group fits the cap."""
     if geom == GEMM_GEOM_SHIPPED:
         return gemm_default_ksplit_leaves(m, n, k)
-    if geom == GEMM_GEOM_KPACK or geom == GEMM_GEOM_KPACK_WIDE or geom == GEMM_GEOM_KPACK_PAD:
+    if geom == GEMM_GEOM_KPACK or geom == GEMM_GEOM_KPACK_WIDE or geom == GEMM_GEOM_KPACK_PAD or geom == GEMM_GEOM_KPACK_PADV:
         # DEVIATION 2599: the arm's own rule; 0 means its all-leaves launch.
         return gemm_step_kpack_leaves(geom, m, n, k)
     if geom == GEMM_GEOM_KFOLDV or geom == GEMM_GEOM_KFOLDV_LEAF:
@@ -4511,7 +4530,7 @@ def gemm_step_geometry_reach(geom: Int, m: Int, n: Int, k: Int) raises -> Int:
         return gemm_step_ksplit_reach(m, n, k, gl0)
     if geom == GEMM_GEOM_TUNED128:
         return 0
-    if geom == GEMM_GEOM_KPACK or geom == GEMM_GEOM_KPACK_WIDE or geom == GEMM_GEOM_KPACK_PAD:
+    if geom == GEMM_GEOM_KPACK or geom == GEMM_GEOM_KPACK_WIDE or geom == GEMM_GEOM_KPACK_PAD or geom == GEMM_GEOM_KPACK_PADV:
         return gemm_step_kpack_reach(geom, m, n, k)
     if geom == GEMM_GEOM_KFOLDV or geom == GEMM_GEOM_KFOLDV_LEAF:
         return gemm_step_kfold_reach(geom, m, n, k)
@@ -4608,7 +4627,7 @@ def identical_gemm_step_geometry_into(
                 gemm_step_geometry_group_leaves(geom, m, n, k), sabotage,
             )
             return
-        if geom == GEMM_GEOM_KPACK or geom == GEMM_GEOM_KPACK_WIDE or geom == GEMM_GEOM_KPACK_PAD:
+        if geom == GEMM_GEOM_KPACK or geom == GEMM_GEOM_KPACK_WIDE or geom == GEMM_GEOM_KPACK_PAD or geom == GEMM_GEOM_KPACK_PADV:
             # DEVIATION 2599: synchronizes where the group launch runs (it
             # allocates the node workspace), asynchronous otherwise.
             identical_gemm_step_kpack_into(ctx, c, a, b, ws, m, n, k, op, geom, sabotage)
@@ -4684,6 +4703,9 @@ comptime GEMM_KPACK_FS = TUNED_FOLD_SLOTS
 #: geometry into 132, `4 mod 32`, so the per-step B loads of a warp's 16
 #: column threads spread over eight bank groups (the kernel's docstring).
 comptime GEMM_KPACK_PAD = TUNED_VECLEN
+#: DEVIATION 2703, `kpack_padv`: the shared page alignment in bytes at which
+#: the per-step loads become `ld.shared.v4` (brief section 15).
+comptime GEMM_KPACK_ALIGN = 16
 #: `kpack_wide`: register tile 8x16, output tile 128x256, a 12-level local
 #: fold stack (covers `P <= CONTRACT_MAX_LEAVES`, brief 5.4).
 comptime GEMM_KPACKW_RPT = TUNED_RPT * 2
@@ -4789,6 +4811,7 @@ def gemm_kpack_register_slots(slots: Int) -> Int:
 def identical_gemm_kpack_kernel[
     RPT: Int, CPT: Int, TC: Int, KS: Int, FS: Int, PAGES: Int, GROUP: Bool, SAB: Bool,
     PAD: Int = 0,
+    ALIGN: Int = 4,
 ](
     dst: MutPointer[Float32, MutAnyOrigin],
     a: MutPointer[Float32, MutAnyOrigin],
@@ -4841,6 +4864,16 @@ def identical_gemm_kpack_kernel[
     threads a 16-byte load phase serves take eight distinct bank groups. A
     placement only: the same words, the same `_tuned_step` order, no bit can
     move (`check_kpack_page_is_a_bijection` walks the padded page too).
+
+    DEVIATION 2703, `ALIGN` (bytes, default 4 = 2599's page): the alignment
+    the two shared pages are allocated at and the per-step loads are spelled
+    at. The local PTX census (brief section 15) found every shared load of
+    2599's body and of the shipped kernel lowered to scalar `ld.shared.b32`,
+    256 per thread per window, because the page is declared `.align 4` and
+    no vector load can be proven aligned. At `ALIGN` 16 with `PAD` a multiple
+    of `VEC`, every load start `g (KS R + PAD) + c R` is a multiple of 4
+    words, so an `RPT`-wide load is two `ld.shared.v4`. The same words in the
+    same order: no bit can move.
 
     Every thread of the block reaches every `barrier()`: the early returns
     (`raw >= tiles`, `q >= groups`, an empty group, `k == 0` in all-leaves
@@ -4901,6 +4934,9 @@ def identical_gemm_kpack_kernel[
         "identical_gemm_kpack_kernel: PAD must keep every line group start"
         " VEC-aligned, so the per-step vector loads stay aligned"
     )
+    comptime assert ALIGN == 4 or (ALIGN == 16 and PAD % VEC == 0 and RPT % VEC == 0 and CPT % VEC == 0), (
+        "identical_gemm_kpack_kernel: ALIGN 16 needs PAD, RPT and CPT to be VEC multiples"
+    )
     comptime assert FS >= GEMM_FOLD_LEVELS, (
         "identical_gemm_kpack_kernel: the local fold stack must cover the"
         " profile cap CONTRACT_MAX_LEAVES"
@@ -4925,11 +4961,13 @@ def identical_gemm_kpack_kernel[
     var as_ = stack_allocation[
         PAGES * APAGE,
         Scalar[DType.float32],
+        alignment=ALIGN,
         address_space = AddressSpace.SHARED,
     ]()
     var bs_ = stack_allocation[
         PAGES * BPAGE,
         Scalar[DType.float32],
+        alignment=ALIGN,
         address_space = AddressSpace.SHARED,
     ]()
 
@@ -5047,8 +5085,8 @@ def identical_gemm_kpack_kernel[
         var bbase = pgw * BPAGE + acccol * BSTRIDE
         if chunk == KS:
             comptime for c0 in range(KS):
-                var ra = as_.unsafe_load[width=RPT](abase + c0 * RPT)
-                var rb = bs_.unsafe_load[width=CPT](bbase + c0 * CPT)
+                var ra = as_.load[width=RPT, alignment=ALIGN](abase + c0 * RPT)
+                var rb = bs_.load[width=CPT, alignment=ALIGN](bbase + c0 * CPT)
                 comptime if TUNED_STAGE_FTZ:
                     # 5a and 5b were applied at staging (`_tuned_g2r`), where
                     # `_tuned_loaded_operand` is the identity: read the loads.
@@ -5071,8 +5109,8 @@ def identical_gemm_kpack_kernel[
             # THE RAGGED PATH, and the EMPTY one: `chunk` may be 0. Same loads,
             # same ascending steps, same seams; no zero slot is ever read.
             for cc in range(chunk):
-                var ra2 = as_.unsafe_load[width=RPT](abase + cc * RPT)
-                var rb2 = bs_.unsafe_load[width=CPT](bbase + cc * CPT)
+                var ra2 = as_.load[width=RPT, alignment=ALIGN](abase + cc * RPT)
+                var rb2 = bs_.load[width=CPT, alignment=ALIGN](bbase + cc * CPT)
                 var bfl2 = SIMD[DType.float32, CPT](0.0)
                 comptime for v5 in range(NCOL):
                     bfl2[v5] = _tuned_loaded_operand(rb2[v5])
@@ -5130,7 +5168,8 @@ def identical_gemm_kpack_kernel[
 
 
 def _kpack_launch[
-    RPT: Int, CPT: Int, TC: Int, KS: Int, FS: Int, GROUP: Bool, SAB: Bool, PAD: Int = 0
+    RPT: Int, CPT: Int, TC: Int, KS: Int, FS: Int, GROUP: Bool, SAB: Bool, PAD: Int = 0,
+    ALIGN: Int = 4,
 ](
     ctx: DeviceContext,
     mut dst: DeviceBuffer[DType.float32],
@@ -5162,7 +5201,7 @@ def _kpack_launch[
         "_kpack_launch: one packed page of this geometry exceeds the column's"
         " shared limit"
     )
-    comptime kern = identical_gemm_kpack_kernel[RPT, CPT, TC, KS, FS, PAGES, GROUP, SAB, PAD]
+    comptime kern = identical_gemm_kpack_kernel[RPT, CPT, TC, KS, FS, PAGES, GROUP, SAB, PAD, ALIGN]
     var g = _tile_grid(m, n, BM, BN, False)
     var gy = 1
     comptime if GROUP:
@@ -5188,7 +5227,7 @@ def _kpack_launch[
 
 
 def _kpack_run[
-    RPT: Int, CPT: Int, TC: Int, KS: Int, FS: Int, SAB: Bool, PAD: Int = 0
+    RPT: Int, CPT: Int, TC: Int, KS: Int, FS: Int, SAB: Bool, PAD: Int = 0, ALIGN: Int = 4
 ](
     ctx: DeviceContext,
     mut c: DeviceBuffer[DType.float32],
@@ -5212,14 +5251,14 @@ def _kpack_run[
     var p_count = part[1]
     var st = gemm_operand_strides(op, m, n, k)
     if group_leaves <= 0 or p_count <= 0:
-        _kpack_launch[RPT, CPT, TC, KS, FS, False, SAB, PAD](
+        _kpack_launch[RPT, CPT, TC, KS, FS, False, SAB, PAD, ALIGN](
             ctx, c, a, b, m, n, k, leaf, p_count, st, 0, 0
         )
         return
     var rg = _ksplit_resolve_leaves(group_leaves, p_count)
     var gws = ctx.enqueue_create_buffer[DType.float32](m * n * rg[1])
     ctx.synchronize()
-    _kpack_launch[RPT, CPT, TC, KS, FS, True, SAB, PAD](
+    _kpack_launch[RPT, CPT, TC, KS, FS, True, SAB, PAD, ALIGN](
         ctx, gws, a, b, m, n, k, leaf, p_count, st, rg[0], rg[1]
     )
     _ksplit_fold_launch(ctx, c, gws, m, n, rg[1])
@@ -5259,6 +5298,13 @@ def _kpack_geometry_run[
             GEMM_KPACK_PAD,
         ](ctx, c, a, b, m, n, k, op, gl)
         return
+    if geom == GEMM_GEOM_KPACK_PADV:
+        # DEVIATION 2703: the padded page, 16-byte aligned, vector loads.
+        _kpack_run[
+            GEMM_KPACK_RPT, GEMM_KPACK_CPT, TUNED_TC, GEMM_KPACK_KS, GEMM_KPACK_FS, SAB,
+            GEMM_KPACK_PAD, GEMM_KPACK_ALIGN,
+        ](ctx, c, a, b, m, n, k, op, gl)
+        return
     raise Error("_kpack_geometry_run: geometry " + String(geom) + " is not a kpack geometry")
 
 
@@ -5283,7 +5329,10 @@ def identical_gemm_step_kpack_into(
     Without `-D MOJOLEARN_GEMM_ARM_TRIAL=1` the kernel is not compiled and
     this runs the shipped dispatch, which READS `ws` (size it with
     `identical_gemm_workspace_max_floats`), and ignores `sabotage`."""
-    if geom != GEMM_GEOM_KPACK and geom != GEMM_GEOM_KPACK_WIDE and geom != GEMM_GEOM_KPACK_PAD:
+    if (
+        geom != GEMM_GEOM_KPACK and geom != GEMM_GEOM_KPACK_WIDE
+        and geom != GEMM_GEOM_KPACK_PAD and geom != GEMM_GEOM_KPACK_PADV
+    ):
         raise Error("identical_gemm_step_kpack_into: geometry " + String(geom) + " is not a kpack geometry")
     if m <= 0 or n <= 0:
         return
@@ -5314,7 +5363,10 @@ def identical_gemm_step_kpack_phase_into(
     line for the arms. Where the arm's rule declines, the all-leaves launch
     is reported as `group_ns`. A non-trial build runs the shipped dispatch
     and reports it all as `group_ns`."""
-    if geom != GEMM_GEOM_KPACK and geom != GEMM_GEOM_KPACK_WIDE and geom != GEMM_GEOM_KPACK_PAD:
+    if (
+        geom != GEMM_GEOM_KPACK and geom != GEMM_GEOM_KPACK_WIDE
+        and geom != GEMM_GEOM_KPACK_PAD and geom != GEMM_GEOM_KPACK_PADV
+    ):
         raise Error("identical_gemm_step_kpack_phase_into: geometry " + String(geom) + " is not a kpack geometry")
     if m <= 0 or n <= 0:
         return (0, 0, 0)
@@ -5342,6 +5394,11 @@ def identical_gemm_step_kpack_phase_into(
             _kpack_launch[
                 GEMM_KPACK_RPT, GEMM_KPACK_CPT, TUNED_TC, GEMM_KPACK_KS, GEMM_KPACK_FS, True, False,
                 GEMM_KPACK_PAD,
+            ](ctx, gws, a, b, m, n, k, leaf, p_count, st, rg[0], rg[1])
+        elif geom == GEMM_GEOM_KPACK_PADV:
+            _kpack_launch[
+                GEMM_KPACK_RPT, GEMM_KPACK_CPT, TUNED_TC, GEMM_KPACK_KS, GEMM_KPACK_FS, True, False,
+                GEMM_KPACK_PAD, GEMM_KPACK_ALIGN,
             ](ctx, gws, a, b, m, n, k, leaf, p_count, st, rg[0], rg[1])
         else:
             _kpack_launch[
@@ -5391,7 +5448,7 @@ def gemm_step_kpack_leaves(geom: Int, m: Int, n: Int, k: Int) raises -> Int:
     all-leaves launch. `kpack` reads `gemm_step_ksplit_rule` itself at the
     trial row `GEMM_KSPLIT_S` (the shipped default's group sizes on NVIDIA),
     `kpack_wide` the same rule on its 128x256 tile."""
-    if geom == GEMM_GEOM_KPACK or geom == GEMM_GEOM_KPACK_PAD:
+    if geom == GEMM_GEOM_KPACK or geom == GEMM_GEOM_KPACK_PAD or geom == GEMM_GEOM_KPACK_PADV:
         return gemm_step_ksplit_rule(m, n, k, GEMM_KSPLIT_S, True)
     if geom == GEMM_GEOM_KPACK_WIDE:
         return gemm_step_kpack_rule(m, n, k, GEMM_KSPLIT_S, GEMM_KPACKW_BM, GEMM_KPACKW_BN)
@@ -5414,7 +5471,7 @@ def gemm_step_kpack_reach(geom: Int, m: Int, n: Int, k: Int) raises -> Int:
         bn = GEMM_KPACKW_BN
         cpt = GEMM_KPACKW_CPT
         ncell = GEMM_KPACKW_RPT * GEMM_KPACKW_CPT
-    elif geom != GEMM_GEOM_KPACK and geom != GEMM_GEOM_KPACK_PAD:
+    elif geom != GEMM_GEOM_KPACK and geom != GEMM_GEOM_KPACK_PAD and geom != GEMM_GEOM_KPACK_PADV:
         raise Error("gemm_step_kpack_reach: geometry " + String(geom) + " is not a kpack geometry")
     if m <= 0 or n <= 0:
         return 0
@@ -5443,7 +5500,7 @@ def gemm_step_kpack_reach(geom: Int, m: Int, n: Int, k: Int) raises -> Int:
 
 
 def _kpack_geometry_name[
-    RPT: Int, CPT: Int, TC: Int, KS: Int, FS: Int, PAD: Int = 0
+    RPT: Int, CPT: Int, TC: Int, KS: Int, FS: Int, PAD: Int = 0, ALIGN: Int = 4
 ](label: String) -> String:
     """Built from the constants the launcher binds, never a literal."""
     comptime TR = TUNED_TPB // TC
@@ -5456,6 +5513,7 @@ def _kpack_geometry_name[
     var s = label + " " + String(BM) + "x" + String(BN)
     s += " reg" + String(RPT) + "x" + String(CPT) + " TC=" + String(TC)
     s += " KS=" + String(KS) + " page=packed(group,step,line) pad=" + String(PAD)
+    s += " align=" + String(ALIGN)
     s += " page_bytes=" + String(PAGE_BYTES)
     s += " pages=" + String(PAGES) + " load=per-step fold=lane-wide local FS=" + String(FS)
     s += " tpb=" + String(TUNED_TPB) + " hwftz=" + String(TUNED_HW_FTZ_FMA)

@@ -117,6 +117,7 @@ from gemm.checks.gemm_identical import (
     GEMM_GEOM_KFOLDV_LEAF,
     GEMM_GEOM_KPACK,
     GEMM_GEOM_KPACK_PAD,
+    GEMM_GEOM_KPACK_PADV,
     GEMM_GEOM_KPACK_WIDE,
     GEMM_GEOM_SHIPPED,
     GEMM_GEOM_TUNED128,
@@ -238,6 +239,8 @@ def _arm_names() -> List[String]:
         # DEVIATION 2700 (docs/lanes/BRIEF_gemm_kernel_2026-09-11.md section
         # 12): geometry 14, the padded packed page.
         "kpack_pad",
+        # DEVIATION 2703: geometry 15, the same page aligned, vector loads.
+        "kpack_padv",
     ]
     return names^
 
@@ -1580,7 +1583,8 @@ def main() raises:
     )
     print(
         "   DEVIATION 2700; docs/lanes/BRIEF_gemm_kernel_2026-09-11.md section 13; kpack_pad=["
-        + gemm_step_geometry_name(GEMM_GEOM_KPACK_PAD) + "]"
+        + gemm_step_geometry_name(GEMM_GEOM_KPACK_PAD) + "] kpack_padv=["
+        + gemm_step_geometry_name(GEMM_GEOM_KPACK_PADV) + "]"
     )
     print(
         "   DEVIATIONS 2640 to 2642; docs/lanes/BRIEF_gemm_final_2026-09-11.md sections 4 to 6; kfoldv=["
