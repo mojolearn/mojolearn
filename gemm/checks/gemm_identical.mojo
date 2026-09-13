@@ -4808,10 +4808,23 @@ def gemm_kpack_register_slots(slots: Int) -> Int:
     return 0
 
 
+@always_inline
+def _kpack_step[DIAG: Int](a: Float32, b: Float32, acc: Float32) -> Float32:
+    """DEVIATION 2705: the per-step seam of `identical_gemm_kpack_kernel`.
+    `DIAG` 0 is `_tuned_step` exactly. `DIAG` 1 and 5 (DIAGNOSTIC ONLY,
+    compiled only under -D MOJOLEARN_GEMM_DIAG=1, never bit-checked, never
+    shipped) drop the flush multiply so the cost of the second instruction
+    can be read by subtraction."""
+    comptime if DIAG == 1 or DIAG == 5:
+        return identical_mul_add(a, b, acc)
+    return _tuned_step(a, b, acc)
+
+
 def identical_gemm_kpack_kernel[
     RPT: Int, CPT: Int, TC: Int, KS: Int, FS: Int, PAGES: Int, GROUP: Bool, SAB: Bool,
     PAD: Int = 0,
     ALIGN: Int = 4,
+    DIAG: Int = 0,
 ](
     dst: MutPointer[Float32, MutAnyOrigin],
     a: MutPointer[Float32, MutAnyOrigin],
@@ -4937,6 +4950,14 @@ def identical_gemm_kpack_kernel[
     comptime assert ALIGN == 4 or (ALIGN == 16 and PAD % VEC == 0 and RPT % VEC == 0 and CPT % VEC == 0), (
         "identical_gemm_kpack_kernel: ALIGN 16 needs PAD, RPT and CPT to be VEC multiples"
     )
+    # DEVIATION 2705: the DIAGNOSTIC variants exist only in a build that says
+    # so. 1 = no flush multiply, 2 = operands loaded once per window (no
+    # per-step shared loads), 3 = no staging stores, no barrier, no prefetch,
+    # 4 = no fold push at the leaf boundary, 5 = all four (the FMA floor).
+    # Every one of them computes WRONG bits by design.
+    comptime assert DIAG == 0 or is_defined["MOJOLEARN_GEMM_DIAG"](), (
+        "identical_gemm_kpack_kernel: DIAG != 0 needs -D MOJOLEARN_GEMM_DIAG=1"
+    )
     comptime assert FS >= GEMM_FOLD_LEVELS, (
         "identical_gemm_kpack_kernel: the local fold stack must cover the"
         " profile cap CONTRACT_MAX_LEAVES"
@@ -5044,7 +5065,10 @@ def identical_gemm_kpack_kernel[
         # ---- REGISTERS TO THE PACKED PAGE `w % PAGES`. Slot `(s, e)` holds
         # the `(line, step)` its mapping names; it is stored at that pair's
         # packed address. A copy of one register slot, never arithmetic.
-        comptime for sa in range(ASLOTS):
+        # (DIAG 3 and 5: no stores, no barrier, no prefetch; the page is
+        # whatever it holds.)
+        comptime if DIAG != 3 and DIAG != 5:
+          comptime for sa in range(ASLOTS):
             comptime for ea in range(VEC):
                 var sla = gemm_kpack_stage_p(tid, sa, ea, BM, KV, VEC, NTH)
                 if a_outer_fast:
@@ -5054,7 +5078,7 @@ def identical_gemm_kpack_kernel[
                         pgw * APAGE + gemm_kpack_addr(sla[0], sla[1], TR, RPT, KS, PAD),
                         pa[sa * VEC + ea],
                     )
-        comptime for sb in range(BSLOTS):
+          comptime for sb in range(BSLOTS):
             comptime for eb in range(VEC):
                 var slb = gemm_kpack_stage_p(tid, sb, eb, BN, KV, VEC, NTH)
                 if b_outer_fast:
@@ -5064,10 +5088,10 @@ def identical_gemm_kpack_kernel[
                         pgw * BPAGE + gemm_kpack_addr(slb[0], slb[1], TC, CPT, KS, PAD),
                         pb[sb * VEC + eb],
                     )
-        barrier()
+          barrier()
 
-        # ---- PREFETCH window w+1 (shipped lines, DEVIATION 1256).
-        comptime if PAGES == 2:
+          # ---- PREFETCH window w+1 (shipped lines, DEVIATION 1256).
+          comptime if PAGES == 2:
             if w + 1 < w_end:
                 var wn = _tuned_window[KS](w + 1, wpl, leaf, k, p_count)
                 pa = _tuned_g2r[AREG, VEC, KV, BM, NTH](
@@ -5084,6 +5108,17 @@ def identical_gemm_kpack_kernel[
         var abase = pgw * APAGE + accrow * ASTRIDE
         var bbase = pgw * BPAGE + acccol * BSTRIDE
         if chunk == KS:
+          comptime if DIAG == 2 or DIAG == 5:
+            # DIAGNOSTIC: the step-0 operands for every step, no per-step load.
+            var ra1 = as_.load[width=RPT, alignment=ALIGN](abase)
+            var rb1 = bs_.load[width=CPT, alignment=ALIGN](bbase)
+            comptime for c1 in range(KS):
+                comptime for u6 in range(NR):
+                    comptime for v8 in range(NCOL):
+                        acc[u6 * CPT + v8] = _kpack_step[DIAG](
+                            ra1[u6], rb1[v8], acc[u6 * CPT + v8]
+                        )
+          else:
             comptime for c0 in range(KS):
                 var ra = as_.load[width=RPT, alignment=ALIGN](abase + c0 * RPT)
                 var rb = bs_.load[width=CPT, alignment=ALIGN](bbase + c0 * CPT)
@@ -5092,7 +5127,7 @@ def identical_gemm_kpack_kernel[
                     # `_tuned_loaded_operand` is the identity: read the loads.
                     comptime for u2 in range(NR):
                         comptime for v3 in range(NCOL):
-                            acc[u2 * CPT + v3] = _tuned_step(
+                            acc[u2 * CPT + v3] = _kpack_step[DIAG](
                                 ra[u2], rb[v3], acc[u2 * CPT + v3]
                             )
                 else:
@@ -5102,7 +5137,7 @@ def identical_gemm_kpack_kernel[
                     comptime for u3 in range(NR):
                         var afl = _tuned_loaded_operand(ra[u3])
                         comptime for v4 in range(NCOL):
-                            acc[u3 * CPT + v4] = _tuned_step(
+                            acc[u3 * CPT + v4] = _kpack_step[DIAG](
                                 afl, bfl[v4], acc[u3 * CPT + v4]
                             )
         else:
@@ -5117,7 +5152,7 @@ def identical_gemm_kpack_kernel[
                 comptime for u5 in range(NR):
                     var afl2 = _tuned_loaded_operand(ra2[u5])
                     comptime for v6 in range(NCOL):
-                        acc[u5 * CPT + v6] = _tuned_step(
+                        acc[u5 * CPT + v6] = _kpack_step[DIAG](
                             afl2, bfl2[v6], acc[u5 * CPT + v6]
                         )
 
@@ -5134,11 +5169,14 @@ def identical_gemm_kpack_kernel[
                 )
 
         # ---- THE LEAF BOUNDARY. Fires exactly once per logical leaf.
+        # (DIAG 4 and 5: no push; the accumulator is reset and the drain
+        # returns zeros.)
         if win[2] == 1:
-            var part = SIMD[DType.float32, NCELL](0.0)
-            comptime for pe in range(NCELL):
-                part[pe] = ftz(acc[pe])  # 5d, the leaf partial
-            _ = _fold_push_local[NCELL, FS](fl, occ, part)
+            comptime if DIAG != 4 and DIAG != 5:
+                var part = SIMD[DType.float32, NCELL](0.0)
+                comptime for pe in range(NCELL):
+                    part[pe] = ftz(acc[pe])  # 5d, the leaf partial
+                _ = _fold_push_local[NCELL, FS](fl, occ, part)
             acc = SIMD[DType.float32, NCELL](0.0)
 
         w = w + 1
@@ -5169,7 +5207,7 @@ def identical_gemm_kpack_kernel[
 
 def _kpack_launch[
     RPT: Int, CPT: Int, TC: Int, KS: Int, FS: Int, GROUP: Bool, SAB: Bool, PAD: Int = 0,
-    ALIGN: Int = 4,
+    ALIGN: Int = 4, DIAG: Int = 0,
 ](
     ctx: DeviceContext,
     mut dst: DeviceBuffer[DType.float32],
@@ -5201,7 +5239,7 @@ def _kpack_launch[
         "_kpack_launch: one packed page of this geometry exceeds the column's"
         " shared limit"
     )
-    comptime kern = identical_gemm_kpack_kernel[RPT, CPT, TC, KS, FS, PAGES, GROUP, SAB, PAD, ALIGN]
+    comptime kern = identical_gemm_kpack_kernel[RPT, CPT, TC, KS, FS, PAGES, GROUP, SAB, PAD, ALIGN, DIAG]
     var g = _tile_grid(m, n, BM, BN, False)
     var gy = 1
     comptime if GROUP:
@@ -5227,7 +5265,8 @@ def _kpack_launch[
 
 
 def _kpack_run[
-    RPT: Int, CPT: Int, TC: Int, KS: Int, FS: Int, SAB: Bool, PAD: Int = 0, ALIGN: Int = 4
+    RPT: Int, CPT: Int, TC: Int, KS: Int, FS: Int, SAB: Bool, PAD: Int = 0, ALIGN: Int = 4,
+    DIAG: Int = 0,
 ](
     ctx: DeviceContext,
     mut c: DeviceBuffer[DType.float32],
@@ -5251,14 +5290,14 @@ def _kpack_run[
     var p_count = part[1]
     var st = gemm_operand_strides(op, m, n, k)
     if group_leaves <= 0 or p_count <= 0:
-        _kpack_launch[RPT, CPT, TC, KS, FS, False, SAB, PAD, ALIGN](
+        _kpack_launch[RPT, CPT, TC, KS, FS, False, SAB, PAD, ALIGN, DIAG](
             ctx, c, a, b, m, n, k, leaf, p_count, st, 0, 0
         )
         return
     var rg = _ksplit_resolve_leaves(group_leaves, p_count)
     var gws = ctx.enqueue_create_buffer[DType.float32](m * n * rg[1])
     ctx.synchronize()
-    _kpack_launch[RPT, CPT, TC, KS, FS, True, SAB, PAD, ALIGN](
+    _kpack_launch[RPT, CPT, TC, KS, FS, True, SAB, PAD, ALIGN, DIAG](
         ctx, gws, a, b, m, n, k, leaf, p_count, st, rg[0], rg[1]
     )
     _ksplit_fold_launch(ctx, c, gws, m, n, rg[1])
