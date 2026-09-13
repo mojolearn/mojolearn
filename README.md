@@ -132,10 +132,12 @@ framework, or on a device that has not passed the same checks.
   NVIDIA H100 and an AMD MI300X), SVC (three fit hashes match) and GBDT (36 of
   36 cells on the 0.8.2 line)
   ([AMD confirmations brief](docs/lanes/BRIEF_amd_confirmations_2026-09-12.md),
-  [CHANGELOG](CHANGELOG.md)). Third, k-means, PCA, OLS, k-NN and KDE carry an
-  AMD witness at the 0.8.x defaults (108 cells stable on the box) with the
-  Apple and NVIDIA baselines at that default still owed, so their current
-  default rests on the August cards plus one vendor.
+  [CHANGELOG](CHANGELOG.md)). Third, September 13, every public lane at the
+  0.8.4 default: 28 estimators on nine hostile fixtures, 252 cells, identical
+  on an Apple M4, an NVIDIA H100 and an AMD MI325X, plus 189 cells of
+  predictions on rows the model never saw and 72 cells of saved model bytes
+  for the forest and GBDT lanes, all identical across the three
+  ([record](bench/results/identity_break/2026-09-13_three-columns/README.md)).
 - **UMAP.** Neighbor selection and iterative updates match across the three
   vendors on named fixtures.
 
