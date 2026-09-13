@@ -42,6 +42,10 @@ from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
     run_sequential_two_level_feature_freq_tree,
     run_synchronized_symmetric_level,
     run_tree_layout,
+    tensor_acc_live_for,
+)
+from gbdt.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_base import (
+    HIST2_SMEM_MODE,
 )
 from gbdt.gpu_data.feature_blocks import blocks_for
 from core.identity_trace import IdentityTrace
@@ -403,7 +407,8 @@ def main() raises:
     var sync_layout = pinned_initial.compressed.layout.copy()
     var sync_blocks = blocks_for(sync_layout, 6)
     var sync_state = TSynchronizedSymmetricLevelState(
-        ctx, sync_layout^, sync_blocks^, pinned_device^, 6, 2, 2, False
+        ctx, sync_layout^, sync_blocks^, pinned_device^, 6, 2, 2,
+        tensor_acc_live_for[HIST2_SMEM_MODE](),
     )
     sync_state.initialize_tree(ctx, Float32(6.0), grad_mag)
     var reference_rows = ctx.enqueue_create_buffer[DType.uint32](6)
@@ -414,7 +419,7 @@ def main() raises:
     var reference_blocks = blocks_for(reference_layout, 6)
     var reference_state = TSynchronizedSymmetricLevelState(
         ctx, reference_layout^, reference_blocks^, reference_device^,
-        6, 2, 2, False,
+        6, 2, 2, tensor_acc_live_for[HIST2_SMEM_MODE](),
     )
     reference_state.initialize_tree(ctx, Float32(6.0), grad_mag)
     var no_trace = IdentityTrace.disabled()
