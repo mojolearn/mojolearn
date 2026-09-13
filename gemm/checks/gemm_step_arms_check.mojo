@@ -116,6 +116,7 @@ from gemm.checks.gemm_identical import (
     GEMM_GEOM_KFOLDV,
     GEMM_GEOM_KFOLDV_LEAF,
     GEMM_GEOM_KPACK,
+    GEMM_GEOM_KPACK_PAD,
     GEMM_GEOM_KPACK_WIDE,
     GEMM_GEOM_SHIPPED,
     GEMM_GEOM_TUNED128,
@@ -132,6 +133,7 @@ from gemm.checks.gemm_identical import (
     GEMM_KPACKW_RPT,
     GEMM_KPACK_CPT,
     GEMM_KPACK_KS,
+    GEMM_KPACK_PAD,
     GEMM_KPACK_RPT,
     GEMM_KSPLIT_DEFAULT_S,
     PLAN_FLAT,
@@ -232,7 +234,10 @@ def _arm_names() -> List[String]:
         "ksplit", "ksplit_leaf", "tuned128", "kpack", "kpack_wide",
         # DEVIATIONS 2640 and 2641 (docs/lanes/BRIEF_gemm_final_2026-09-11.md):
         # geometries 12 and 13, forced in the ragged part by GEMM_GEOM_COUNT.
-        "kfoldv", "kfoldv_leaf"
+        "kfoldv", "kfoldv_leaf",
+        # DEVIATION 2700 (docs/lanes/BRIEF_gemm_kernel_2026-09-11.md section
+        # 12): geometry 14, the padded packed page.
+        "kpack_pad",
     ]
     return names^
 
@@ -498,6 +503,7 @@ def _kpack_page_case(
     ks: Int,
     outer: Bool,
     by_row: Bool,
+    pad: Int,
     mut failures: List[String],
 ) raises:
     """One operand of one geometry under one staging mapping, all 256
@@ -506,8 +512,10 @@ def _kpack_page_case(
     1. The helper the kernel's staging stores call
        (`gemm_kpack_stage_p` or `gemm_kpack_stage_outer`) names the same
        `(line, step, staged)` as `_tuned_g2r`'s own body, transcribed here.
-    2. Every staged pair lands at an address in `[0, lines KS)`, and every
-       address receives exactly one store (a bijection, no address shared).
+    2. Every staged pair lands at an address in `[0, G (KS R + pad))`, every
+       data address receives exactly one store (a bijection onto the data
+       words, no address shared), and every pad word (the last `pad` of each
+       line group, DEVIATION 2700) receives none.
     3. Every address a thread reads (its group `g`, step `c`, element `u`)
        holds line `g + u group_lines` at step `c`, and is `gemm_kpack_addr`
        of that pair.
@@ -537,7 +545,8 @@ def _kpack_page_case(
             + String(slots * VEC)
         )
         return
-    var total = lines * ks
+    var stride = ks * per_thread + pad
+    var total = group_lines * stride
     var hits = List[Int]()
     var at_line = List[Int]()
     var at_step = List[Int]()
@@ -589,7 +598,7 @@ def _kpack_page_case(
                     continue
                 if not want_ok:
                     continue
-                var ad = gemm_kpack_addr(want_line, want_step, group_lines, per_thread, ks)
+                var ad = gemm_kpack_addr(want_line, want_step, group_lines, per_thread, ks, pad)
                 if ad < 0 or ad >= total:
                     bad += 1
                     if first.byte_length() == 0:
@@ -602,23 +611,29 @@ def _kpack_page_case(
                 at_line[ad] = want_line
                 at_step[ad] = want_step
     for ad2 in range(total):
-        if hits[ad2] != 1:
+        var want_hits = 1
+        if ad2 % stride >= ks * per_thread:
+            want_hits = 0  # a pad word: never stored, never read
+        if hits[ad2] != want_hits:
             bad += 1
             if first.byte_length() == 0:
-                first = "address " + String(ad2) + " received " + String(hits[ad2]) + " stores"
+                first = (
+                    "address " + String(ad2) + " received " + String(hits[ad2])
+                    + " stores, wanted " + String(want_hits)
+                )
     for tid2 in range(NTH):
         var g = tid2 % TUNED_TC
         if by_row:
             g = tid2 // TUNED_TC
         for c0 in range(ks):
             for u in range(per_thread):
-                var ad3 = g * ks * per_thread + c0 * per_thread + u
+                var ad3 = g * stride + c0 * per_thread + u
                 var line = g + u * group_lines
                 if (
                     ad3 >= total
                     or at_line[ad3] != line
                     or at_step[ad3] != c0
-                    or gemm_kpack_addr(line, c0, group_lines, per_thread, ks) != ad3
+                    or gemm_kpack_addr(line, c0, group_lines, per_thread, ks, pad) != ad3
                 ):
                     bad += 1
                     if first.byte_length() == 0:
@@ -630,15 +645,17 @@ def _kpack_page_case(
         failures.append(tag + ": " + String(bad) + " disagreements; first " + first)
     print(
         tag + " lines=" + String(lines) + " group_lines=" + String(group_lines) + " per_thread="
-        + String(per_thread) + " KS=" + String(ks) + " slots=" + String(slots) + " register_slots=" + String(reg_slots) + " addresses="
+        + String(per_thread) + " KS=" + String(ks) + " pad=" + String(pad) + " slots=" + String(slots)
+        + " register_slots=" + String(reg_slots) + " addresses="
         + String(total) + " disagreements=" + String(bad)
     )
 
 
 def check_kpack_page_is_a_bijection(mut failures: List[String]) raises:
-    """`_kpack_page_case` for `kpack` (A and B, K step 16) and `kpack_wide`
-    (A and B at K steps 12 and 16, the two values its matrix read can take),
-    under both staging mappings. Host only."""
+    """`_kpack_page_case` for `kpack` (A and B, K step 16), `kpack_wide`
+    (A and B at K steps 12 and 16, the two values its matrix read can take)
+    and `kpack_pad` (A and B at `GEMM_KPACK_PAD`, DEVIATION 2700), under
+    both staging mappings. Host only."""
     comptime TR = TUNED_TPB // TUNED_TC
     var before = len(failures)
     var kss: List[Int] = [12, 16]
@@ -647,24 +664,33 @@ def check_kpack_page_is_a_bijection(mut failures: List[String]) raises:
         var mapping = String("outer") if outer else String("p")
         _kpack_page_case(
             String("kpack A ") + mapping, GEMM_KPACK_RPT * TR, TR, GEMM_KPACK_RPT,
-            GEMM_KPACK_KS, outer, True, failures,
+            GEMM_KPACK_KS, outer, True, 0, failures,
         )
         _kpack_page_case(
             String("kpack B ") + mapping, GEMM_KPACK_CPT * TUNED_TC, TUNED_TC, GEMM_KPACK_CPT,
-            GEMM_KPACK_KS, outer, False, failures,
+            GEMM_KPACK_KS, outer, False, 0, failures,
         )
         for si in range(len(kss)):
             _kpack_page_case(
                 String("kpack_wide A KS=") + String(kss[si]) + " " + mapping, GEMM_KPACKW_BM, TR,
-                GEMM_KPACKW_RPT, kss[si], outer, True, failures,
+                GEMM_KPACKW_RPT, kss[si], outer, True, 0, failures,
             )
             _kpack_page_case(
                 String("kpack_wide B KS=") + String(kss[si]) + " " + mapping, GEMM_KPACKW_BN,
-                TUNED_TC, GEMM_KPACKW_CPT, kss[si], outer, False, failures,
+                TUNED_TC, GEMM_KPACKW_CPT, kss[si], outer, False, 0, failures,
             )
+        _kpack_page_case(
+            String("kpack_pad A ") + mapping, GEMM_KPACK_RPT * TR, TR, GEMM_KPACK_RPT,
+            GEMM_KPACK_KS, outer, True, GEMM_KPACK_PAD, failures,
+        )
+        _kpack_page_case(
+            String("kpack_pad B ") + mapping, GEMM_KPACK_CPT * TUNED_TC, TUNED_TC, GEMM_KPACK_CPT,
+            GEMM_KPACK_KS, outer, False, GEMM_KPACK_PAD, failures,
+        )
     print(
-        "check_kpack_page_is_a_bijection: 12 cases (2 geometries, 2 operands, 2 mappings, kpack_wide"
-        " at KS 12 and 16; this column's kpack_wide KS=" + String(GEMM_KPACKW_KS) + "), "
+        "check_kpack_page_is_a_bijection: 16 cases (3 geometries, 2 operands, 2 mappings, kpack_wide"
+        " at KS 12 and 16; this column's kpack_wide KS=" + String(GEMM_KPACKW_KS)
+        + "; kpack_pad at pad " + String(GEMM_KPACK_PAD) + "), "
         + String(len(failures) - before) + " failures"
     )
 
@@ -1551,6 +1577,10 @@ def main() raises:
         "   DEVIATION 2599; docs/lanes/BRIEF_gemm_kernel_2026-09-11.md sections 5 and 6; kpack=["
         + gemm_step_geometry_name(GEMM_GEOM_KPACK) + "] kpack_wide=["
         + gemm_step_geometry_name(GEMM_GEOM_KPACK_WIDE) + "]"
+    )
+    print(
+        "   DEVIATION 2700; docs/lanes/BRIEF_gemm_kernel_2026-09-11.md section 13; kpack_pad=["
+        + gemm_step_geometry_name(GEMM_GEOM_KPACK_PAD) + "]"
     )
     print(
         "   DEVIATIONS 2640 to 2642; docs/lanes/BRIEF_gemm_final_2026-09-11.md sections 4 to 6; kfoldv=["

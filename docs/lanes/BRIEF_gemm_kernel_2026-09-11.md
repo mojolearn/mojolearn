@@ -771,3 +771,173 @@ left of section 3.6 after this leg is C1 (arithmetic issue capacity, which
 tracks the SM clock) and C5 (fold stack traffic at leaf boundaries). Any
 next GEMM arm should keep register staging per window and change something
 else. It is owed, not started.
+
+## 13. The page was bank-conflicted: `kpack_pad` (DEVIATION 2700, 2026-09-13, branch `lane/gemm-kpack-pad`)
+
+SOURCE BUILT, NOT YET RUN ON A GPU. Section 12 read the `kpack` loss as "a
+shared load per product step costs the H100 more than the register copies
+it replaces". That reading skipped the address arithmetic. This section
+counts it, from source.
+
+### 13.1 The counting
+
+`gemm_kpack_addr(r, c, G, R, KS) = (r mod G) KS R + c R + (r div G)`, and
+the accumulate loop reads B at `bbase = acccol KS CPT`, one `CPT`-wide load
+per step at `bbase + c CPT`. At the 128x128 geometry `KS CPT = 128` words.
+`acccol = tid mod 16`, so the 32 threads of one warp hold 16 distinct
+`acccol` values (twice each, at two `accrow`s that share A). Their B
+addresses at step `c` are `acccol 128 + c 8`: sixteen addresses 128 words
+apart. Shared memory on the H100 (and the MI300X, and Apple) is interleaved
+over 32 four-byte banks, a period of 32 words, and `128 mod 32 = 0`, so all
+sixteen land on the same bank group. A 16-byte load is served eight threads
+per phase; eight distinct addresses on one bank group is an eight-way
+conflict on every phase of every B load of every step. The A load is not
+conflicted: the two `accrow`s of a warp are two addresses, broadcast to 16
+threads each.
+
+Per thread per window that is 16 B loads (two 16-byte phases each) at
+eight-way conflict against the shipped kernel's 64 unconflicted 4-wide
+loads. The measured rate fell by a third (section 12) with the arithmetic,
+the DRAM words and the registers unchanged, which is the size of thing a
+serialized shared load in the step loop does. `kpack_wide` at `CPT 16`
+puts its groups `KS 16 = 192` (KS 12) or `256` words apart, both `0 mod
+32`, the same conflict on a wider load, and lost more.
+
+This is a count from source, not a measurement. What separates it from
+section 12's reading is one arm that keeps everything of `kpack` and moves
+only the group stride off the bank period.
+
+### 13.2 The arm
+
+`kpack_pad`: `identical_gemm_kpack_kernel` with a new parameter `PAD`
+(default 0, so `kpack` and `kpack_wide` compile to exactly what they were).
+Each line group is `KS R + PAD` words instead of `KS R`; the last `PAD`
+words of every group are never stored or read. `GEMM_KPACK_PAD = VEC = 4`
+makes the stride 132, `4 mod 32`, so the eight threads of a load phase take
+eight distinct bank groups (`4 g mod 32` for `g < 8`, and again for `8 <= g
+< 16`). Page bytes grow from 16,384 to 16,640 per operand pair; two guarded
+pages still fit 49,152. Nothing else changes: same tile, same register
+tile, same `_tuned_g2r` staging, same rule (`gemm_step_ksplit_rule` at
+`GEMM_KSPLIT_S`), same fold, same `_tuned_step` in the same order. A
+placement of the same words, so no bit can move (section 5's argument holds
+verbatim, with `total = G (KS R + PAD)` in place of `G KS R`).
+
+Plumbing: arm 14 `GEMM_ARM_KPACK_PAD`, geometry 14 `GEMM_GEOM_KPACK_PAD`,
+name `kpack_pad`, in every place `kpack` is named (`gemm_identical.mojo`,
+the arms check, the price and resources mains); `check_kpack_page_is_a_bijection`
+takes a `pad` argument, walks the padded page for `kpack_pad` A and B under
+both mappings (16 cases now), and requires every pad word to receive zero
+stores and every data word exactly one. `tools/gemm_kernel_leg.sh` prices
+`shipped,kpack,kpack_pad` (so the unpadded page is a same-pod CONTROL) and
+runs the LM probe on `kpack_pad` alone.
+
+### 13.3 What the leg decides
+
+Same rule as section 9: the geometric mean of the enwik8 and Pile GitHub
+lean step ratios against the shipped default on the same pod, every witness
+equal. Three readings are possible on the price lines, and each says
+something about section 3.6:
+
+- `kpack_pad` at or below `shipped` on the saturated calls (head_fwd,
+  head_dB, gateup_fwd, down_dA): the conflict was the whole `kpack` loss,
+  C3 (per-window copies) is back on the table, and the LM verdict decides
+  the flip.
+- `kpack_pad` between `kpack` and `shipped`: the conflict was part of it;
+  the remainder is the per-step shared load itself (section 12's reading),
+  and the next arm keeps the padded page and moves the load out of the
+  step (one `RPT`-wide and one `CPT`-wide load per `VEC` steps into
+  registers, the shipped `kc` shape, on the packed page).
+- `kpack_pad` equal to `kpack`: the count above is wrong for this hardware,
+  and section 12's reading stands.
+
+RUN OWED: the H100 leg of section 9 with this branch's commit.
+
+### 13.4 The ceiling, corrected (this belongs in the plan, and is)
+
+`docs/lanes/PLAN_next_2026-09-13.md` section 1 wrote the kernel at "about
+15% of peak" against a 67 TFLOP/s fp32 FMA peak. Section 3.2 above counted
+the contract's ceiling at 33.5 TFLOP/s at 1.98 GHz: the seam is TWO issued
+instructions per product step (`fma.rn` then `mul.rn.ftz`), and the single
+`fma.rn.ftz` was measured wrong at the smallest-normal boundary
+(`docs/lanes/HANDOFF_performance_followup_2026-09-09.md`, 262,144 adversarial
+triples on L40S and H100). The shipped 11.4 is 34% of what this contract
+can reach on this box, and a kernel rewrite under this contract is bounded
+at about 3x, realistically 2x. The only lever on the ceiling itself is the
+seam, which is a contract question (whether the three columns' native
+flush-to-zero FMAs agree with one another at the boundary), not a kernel
+one. Nobody has run that probe.
+
+### 13.5 The H100 leg (2026-09-13, measured): the conflict WAS the `kpack` loss; `kpack_pad` NO FLIP at 1.014
+
+Evidence: `bench/results/e1g/2026-09-13_150005-nvidia-h100-gemm-kpack-pad/remote/gemm-kernel/`
+(RunPod `NVIDIA H100 80GB HBM3`, sm_90a, commit 8e4d4539, pod jqy0074cwzbngu
+terminated and verified, 21 minutes of work on the box). `status.tsv`: all
+26 items exit 0. `step-check.log`: PASS, the padded page 16 bijection cases 0
+failures, every LM call `clean_moved=0`. The box's device card matched the
+M4 card generated at the same commit at every stage.
+
+**LM verdict** (`lm_summary.tsv`, lean step, 2 shipped brackets, every step
+witness equal to shipped on both corpora):
+
+| arm | enwik8 | Pile GitHub | geomean | verdict |
+|---|---:|---:|---:|---|
+| `kpack` (same pod, the unpadded CONTROL) | 1.3107 | 1.3056 | 1.3081 | NO FLIP |
+| `kpack_pad` | 1.0133 | 1.0150 | 1.0142 | NO FLIP |
+
+Shipped lean step 0.2317 / 0.2313 s; `kpack` 0.3044 / 0.3025; `kpack_pad`
+0.2353 / 0.2352.
+
+**GEMM sum per step** (`price_step.txt`): shipped against itself 1.000
+(141.6 ms); `kpack` 1.502 (214.0 against 142.5); `kpack_pad` 1.023 (145.7
+against 142.5). Per call, `kpack_pad` against shipped:
+
+| call | ran | ratio |
+|---|---|---:|
+| head_dB | all leaves, 2,358 blocks | 0.955 |
+| down_dA | all leaves, 256 | 0.972 |
+| gateup_fwd | all leaves, 256 | 0.986 |
+| head_fwd | all leaves, 6,288 | 0.996 |
+| gateup_dB, down_dB, proj_dB | group launch | 1.024 to 1.034 |
+| head_dA | group launch, 64 leaves | 1.043 |
+| proj_dA, gateup_dA, proj_fwd, down_fwd | group launch | 1.052 to 1.066 |
+
+`kpack` on the same pod: 1.37 to 1.63 on every call.
+
+**Resources** (`resources_lines.txt`): `kpack_pad_all` 255 registers, local
+4,200 B, shared 33,792 B, one block per SM; `kpack_pad_group` 255, 4,240,
+33,792, one. The same registers and block count as `kpack` and as shipped.
+
+**Reading.** Section 13.3's first case. Padding the stride by four words
+took the `kpack` loss from 1.31 to 1.01 on the step and from 1.50 to 1.02
+on the GEMM sum, with nothing else changed, so the eight-way bank conflict
+was the `kpack` loss and section 12's "a shared load per product step costs
+the H100 more than the register copies it replaces" is withdrawn: with the
+conflict gone, a per-step load from shared costs about what the per-window
+register copies cost, within a few percent either way. On the four
+all-leaves calls the copy-free body is 0.4 to 4.5 percent FASTER than
+shipped; on the group launches it is 2 to 7 percent slower, which is the
+kpack kernel's scalar staging stores (16 per thread per window against four
+vector stores) weighing more where a block walks 8 or 16 windows than where
+it walks 48 or more. Neither is a flip.
+
+What this settles about section 3.6: C3 is not the lever. The per-window
+copies and the per-step shared loads are interchangeable at this rate, so
+the block's time is not set by either. With C2 (DRAM words per flop, ruled
+by the same-shape flat lines), C3 and C4 (the register cap, unchanged at
+255 through every arm) off the table, what is left is C1 read as LATENCY
+rather than issue: an extra shared load per step hid completely, which a
+kernel at its issue limit could not have absorbed. The block runs eight
+warps, two per scheduler, and each cell's chain is two dependent
+instructions per step. The arm that separates latency-bound from
+issue-bound is one that raises the resident warps per SM, which means a
+second block per SM, which means at most 128 registers, and the 2540
+resources lines say cutting accumulators alone does not reach it (16 cells
+read 214). Where the other 100 or so registers go is a resources question
+before it is an arm: the `_tuned_g2r` staging registers, the fold stack's
+local addressing, or the 64-wide `acc` vector's spill pattern. Owed, not
+started.
+
+**Decision.** NO FLIP. `kpack_pad` stays trial only behind
+`MOJOLEARN_GEMM_ARM_TRIAL`, beside `kpack` and `kpack_wide`. No shipped
+line, no matrix row changes. The lane branch merges because its checks pass
+on two vendors and its docs correct a wrong reading.
