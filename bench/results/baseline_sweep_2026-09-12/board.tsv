@@ -1,0 +1,91 @@
+lane	dataset	shape	arm	status	median_ms	min_ms	max_ms	rounds	ratio_ours_over	quality	hash	hash_stable	fit	fit_verdict	span
+gbdt-symmetric	taxi	taxi-4110786x16	catboost-cpu	REFUSED(GPU-PATH-ONLY: catboost-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare against)	None	None	None	0	None	-	-	None	UNAVAILABLE	COMPARABLE	-
+gbdt-symmetric	taxi	taxi-4110786x16	catboost-gpu	ok	1699.2	1662.1	1723.6	5	0.468	auc=0.621228,logloss=0.524485	64b828cd4899d057	False	trees=100 leaves=6400 depth=6 src=get_tree_leaf_counts	COMPARABLE	-
+gbdt-symmetric	taxi	taxi-4110786x16	ours	ok	795.8	791.3	812.5	5	None	auc=0.622127,logloss=0.524213	174ad0b291963c5b	True	trees=100 leaves=6400 depth=6 src=get_tree_leaf_counts	COMPARABLE	-
+gbdt-symmetric	istella	istella-2043304x220	catboost-cpu	REFUSED(GPU-PATH-ONLY: catboost-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare against)	None	None	None	0	None	-	-	None	UNAVAILABLE	COMPARABLE	-
+gbdt-symmetric	istella	istella-2043304x220	catboost-gpu	ok	2236.1	2209.2	2269.7	5	0.995	auc=0.966322,logloss=0.139826	537d5dcefb50ef3e	False	trees=100 leaves=6400 depth=6 src=get_tree_leaf_counts	COMPARABLE	-
+gbdt-symmetric	istella	istella-2043304x220	ours	ok	2223.9	2187.7	2325.7	5	None	auc=0.966627,logloss=0.139668	9e61103f7610e6dc	True	trees=100 leaves=6400 depth=6 src=get_tree_leaf_counts	COMPARABLE	-
+gbdt-depthwise	taxi	taxi-4110786x16	catboost-cpu	REFUSED(GPU-PATH-ONLY: catboost-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare against)	None	None	None	0	None	-	-	None	UNAVAILABLE	NOT-COMPARABLE	-
+gbdt-depthwise	taxi	taxi-4110786x16	catboost-gpu	ok	1779.8	1737.1	1817.3	5	0.634	auc=0.626633,logloss=0.522989	a8d21627f5fade6f	False	trees=100 leaves=5811 depth=- src=get_tree_leaf_counts	NOT-COMPARABLE	-
+gbdt-depthwise	taxi	taxi-4110786x16	ours	ok	1127.7	1117.1	1136.4	5	None	auc=0.626771,logloss=0.522947	182f3901c8929e70	True	trees=100 leaves=5903 depth=- src=get_tree_leaf_counts	NOT-COMPARABLE	-
+gbdt-depthwise	taxi	taxi-4110786x16	xgboost-cpu	REFUSED(GPU-PATH-ONLY: xgboost-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare against )	None	None	None	0	None	-	-	None	UNAVAILABLE	NOT-COMPARABLE	-
+gbdt-depthwise	taxi	taxi-4110786x16	xgboost-gpu	ok	1011.3	976.1	1031.6	5	1.115	auc=0.624956,logloss=0.523444	22aa5a2b2c47f83c	True	trees=100 leaves=3883 depth=6 src=booster.get_dump	NOT-COMPARABLE	-
+gbdt-depthwise	istella	istella-2043304x220	catboost-cpu	REFUSED(GPU-PATH-ONLY: catboost-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare against)	None	None	None	0	None	-	-	None	UNAVAILABLE	COMPARABLE	-
+gbdt-depthwise	istella	istella-2043304x220	catboost-gpu	ok	2446.7	2415.4	2589.2	5	1.198	auc=0.972254,logloss=0.127425	4e596aeffd8255a9	False	trees=100 leaves=6364 depth=- src=get_tree_leaf_counts	COMPARABLE	-
+gbdt-depthwise	istella	istella-2043304x220	ours	ok	2931.1	2867.9	2954.0	5	None	auc=0.972354,logloss=0.126973	b567b41f7afb936f	True	trees=100 leaves=6345 depth=- src=get_tree_leaf_counts	COMPARABLE	-
+gbdt-depthwise	istella	istella-2043304x220	xgboost-cpu	REFUSED(GPU-PATH-ONLY: xgboost-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare against )	None	None	None	0	None	-	-	None	UNAVAILABLE	COMPARABLE	-
+gbdt-depthwise	istella	istella-2043304x220	xgboost-gpu	ok	3122.9	3102.6	3192.6	5	0.939	auc=0.973621,logloss=0.125719	5e42cc27fe6c9b69	True	trees=100 leaves=6297 depth=6 src=booster.get_dump	COMPARABLE	-
+gbdt-lossguide	taxi	taxi-4110786x16	catboost-cpu	REFUSED(GPU-PATH-ONLY: catboost-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare against)	None	None	None	0	None	-	-	None	UNAVAILABLE	NOT-COMPARABLE	-
+gbdt-lossguide	taxi	taxi-4110786x16	catboost-gpu	ok	2005.4	1991.5	2046.8	5	0.824	auc=0.625411,logloss=0.523275	0f76c79c6d10a21f	False	trees=100 leaves=4438 depth=- src=get_tree_leaf_counts	NOT-COMPARABLE	-
+gbdt-lossguide	taxi	taxi-4110786x16	lightgbm-cpu	REFUSED(GPU-PATH-ONLY: lightgbm-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare against)	None	None	None	0	None	-	-	None	UNAVAILABLE	NOT-COMPARABLE	-
+gbdt-lossguide	taxi	taxi-4110786x16	lightgbm-cuda	REFUSED(LightGBMError during warm-up: CUDA Tree Learner was not enabled in this build. Please recompile with CMake option)	None	None	None	0	None	-	-	None	UNAVAILABLE	NOT-COMPARABLE	-
+gbdt-lossguide	taxi	taxi-4110786x16	ours	ok	1651.5	1645.2	1660.2	5	None	auc=0.627224,logloss=0.522759	db30470a7ded964a	True	trees=100 leaves=6239 depth=- src=get_tree_leaf_counts	NOT-COMPARABLE	-
+gbdt-lossguide	taxi	taxi-4110786x16	xgboost-cpu	REFUSED(GPU-PATH-ONLY: xgboost-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare against )	None	None	None	0	None	-	-	None	UNAVAILABLE	NOT-COMPARABLE	-
+gbdt-lossguide	taxi	taxi-4110786x16	xgboost-gpu	ok	1114.0	1081.8	1169.2	5	1.482	auc=0.624956,logloss=0.523444	22aa5a2b2c47f83c	True	trees=100 leaves=3883 depth=6 src=booster.get_dump	NOT-COMPARABLE	-
+gbdt-lossguide	istella	istella-2043304x220	catboost-cpu	REFUSED(GPU-PATH-ONLY: catboost-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare against)	None	None	None	0	None	-	-	None	UNAVAILABLE	COMPARABLE	-
+gbdt-lossguide	istella	istella-2043304x220	catboost-gpu	ok	3248.9	3230.4	3453.5	5	1.076	auc=0.975095,logloss=0.122275	e4853bb4c89e70b3	False	trees=100 leaves=6397 depth=- src=get_tree_leaf_counts	COMPARABLE	-
+gbdt-lossguide	istella	istella-2043304x220	lightgbm-cpu	REFUSED(GPU-PATH-ONLY: lightgbm-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare against)	None	None	None	0	None	-	-	None	UNAVAILABLE	COMPARABLE	-
+gbdt-lossguide	istella	istella-2043304x220	lightgbm-cuda	REFUSED(LightGBMError during warm-up: CUDA Tree Learner was not enabled in this build. Please recompile with CMake option)	None	None	None	0	None	-	-	None	UNAVAILABLE	COMPARABLE	-
+gbdt-lossguide	istella	istella-2043304x220	ours	ok	3494.9	3481.1	3521.6	5	None	auc=0.974734,logloss=0.123184	f2d5c7a59bd27ed1	True	trees=100 leaves=6396 depth=- src=get_tree_leaf_counts	COMPARABLE	-
+gbdt-lossguide	istella	istella-2043304x220	xgboost-cpu	REFUSED(GPU-PATH-ONLY: xgboost-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare against )	None	None	None	0	None	-	-	None	UNAVAILABLE	COMPARABLE	-
+gbdt-lossguide	istella	istella-2043304x220	xgboost-gpu	ok	3124.6	3061.0	3357.0	5	1.118	auc=0.973621,logloss=0.125719	5e42cc27fe6c9b69	True	trees=100 leaves=6297 depth=6 src=booster.get_dump	COMPARABLE	-
+rf	taxi	taxi-4110786x16	cuml-rf-gpu	ok	4256.2	4209.3	4435.2	5	0.527	auc=0.625405,logloss=0.523497	f535e772c85f8f2e	True	trees=- leaves=- depth=- src=none	UNKNOWN	-
+rf	taxi	taxi-4110786x16	lightgbm-cpu	REFUSED(GPU-PATH-ONLY: lightgbm-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare against)	None	None	None	0	None	-	-	None	UNAVAILABLE	UNKNOWN	-
+rf	taxi	taxi-4110786x16	ours	ok	2242.1	2222.5	2297.9	5	None	auc=0.62544,logloss=0.5235	e02264c929721884	True	trees=100 leaves=1718168 depth=16 src=flat forest arrays	UNKNOWN	-
+rf	taxi	taxi-4110786x16	sklearn-rf-cpu	REFUSED(GPU-PATH-ONLY: sklearn-rf-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare again)	None	None	None	0	None	-	-	None	UNAVAILABLE	UNKNOWN	-
+rf	istella	istella-2043304x220	cuml-rf-gpu	ok	5894.7	5754.3	5992.9	5	0.382	auc=0.965239,logloss=0.14445	5fe72eea877cef41	True	trees=- leaves=- depth=- src=none	UNKNOWN	-
+rf	istella	istella-2043304x220	lightgbm-cpu	REFUSED(GPU-PATH-ONLY: lightgbm-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare against)	None	None	None	0	None	-	-	None	UNAVAILABLE	UNKNOWN	-
+rf	istella	istella-2043304x220	ours	ok	2249.5	2242.9	2258.9	5	None	auc=0.965173,logloss=0.144571	162227debfb7f71d	True	trees=100 leaves=1550974 depth=16 src=flat forest arrays	UNKNOWN	-
+rf	istella	istella-2043304x220	sklearn-rf-cpu	REFUSED(GPU-PATH-ONLY: sklearn-rf-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare again)	None	None	None	0	None	-	-	None	UNAVAILABLE	UNKNOWN	-
+et	taxi	taxi-4110786x16	cuml-et-gpu	REFUSED(RuntimeError: cuML has no ExtraTrees estimator: its RandomForest searches quantile splits, not the uniform-random thresh)	None	None	None	0	None	-	-	None	UNAVAILABLE	COMPARABLE	-
+et	taxi	taxi-4110786x16	ours	ok	5975.0	5953.3	6039.5	5	None	auc=0.618907,logloss=0.526142	8570e6992c12452d	True	trees=100 leaves=881399 depth=16 src=flat forest arrays	COMPARABLE	-
+et	taxi	taxi-4110786x16	sklearn-et-cpu	ok	21323.5	21209.4	21928.1	5	0.280	auc=0.619262,logloss=0.525951	fbede2c95b883374	False	trees=100 leaves=906974 depth=16 src=estimators_[i].tree_	COMPARABLE	-
+et	istella	istella-2043304x220	cuml-et-gpu	REFUSED(RuntimeError: cuML has no ExtraTrees estimator: its RandomForest searches quantile splits, not the uniform-random thresh)	None	None	None	0	None	-	-	None	UNAVAILABLE	COMPARABLE	-
+et	istella	istella-2043304x220	ours	ok	9290.9	9278.4	9352.7	5	None	auc=0.937987,logloss=0.189989	40a6bd5b6b694e15	True	trees=100 leaves=1029236 depth=16 src=flat forest arrays	COMPARABLE	-
+et	istella	istella-2043304x220	sklearn-et-cpu	ok	35426.0	34998.3	35500.7	5	0.262	auc=0.937659,logloss=0.190177	3fd152673dbc57f9	False	trees=100 leaves=1006311 depth=16 src=estimators_[i].tree_	COMPARABLE	-
+iforest	taxi	taxi-4110786x16	cuml-iforest-gpu	ok	360.1	332.1	1003.3	5	0.409	auc=0.551846	fa3fa07799f7dc28	True	trees=- leaves=- depth=- src=none	UNKNOWN	-
+iforest	taxi	taxi-4110786x16	ours	ok	147.3	128.7	148.6	5	None	auc=0.551846	0f75e4476502aa46	True	trees=- leaves=- depth=- src=none	UNKNOWN	-
+iforest	taxi	taxi-4110786x16	sklearn-iforest-cpu	REFUSED(GPU-PATH-ONLY: sklearn-iforest-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare )	None	None	None	0	None	-	-	None	UNAVAILABLE	UNKNOWN	-
+iforest	istella	istella-2043304x220	cuml-iforest-gpu	ok	2544.9	2530.1	2546.0	5	0.098	auc=0.830358	3ff96e9ccdd645c5	True	trees=- leaves=- depth=- src=none	UNKNOWN	-
+iforest	istella	istella-2043304x220	ours	ok	248.7	248.3	333.1	5	None	auc=0.830358	1cf6af0c1d5ee0fa	True	trees=- leaves=- depth=- src=none	UNKNOWN	-
+iforest	istella	istella-2043304x220	sklearn-iforest-cpu	REFUSED(GPU-PATH-ONLY: sklearn-iforest-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare )	None	None	None	0	None	-	-	None	UNAVAILABLE	UNKNOWN	-
+kmeans	taxi	4000000x11	cuml-gpu	ok	126.6	126.0	128.9	5	1.535	inertia=1.20191e+08,inertia_over_ours=0.996384,n_iter=20	b5e10f5f7928c06d	False	n/a (classical)	n/a	input_home=device pre_clock_fit=False
+kmeans	taxi	4000000x11	ours	ok	194.4	191.4	196.6	5	None	inertia=1.20628e+08,inertia_over_ours=1,n_iter=21	89520efe99a08d5f	True	n/a (classical)	n/a	input_home=host pre_clock_fit=False
+kmeans	taxi	4000000x11	torch-gpu	ok	167.1	166.5	168.5	5	1.163	inertia=1.20191e+08,inertia_over_ours=0.996383,n_iter=20	030f57f1028f7d59	False	n/a (classical)	n/a	input_home=device pre_clock_fit=False
+kmeans	istella	2043304x220	cuml-gpu	ok	171.7	171.5	266.5	5	7.344	inertia=1.28554e+17,inertia_over_ours=0.979203,n_iter=20	a870d53d4c4f897b	False	n/a (classical)	n/a	input_home=device pre_clock_fit=False
+kmeans	istella	2043304x220	ours	ok	1261.2	1256.0	1266.6	5	None	inertia=1.31285e+17,inertia_over_ours=1,n_iter=21	7f720b0b76896308	True	n/a (classical)	n/a	input_home=host pre_clock_fit=False
+kmeans	istella	2043304x220	torch-gpu	ok	136.4	136.0	136.9	5	9.244	inertia=1.28555e+17,inertia_over_ours=0.979204,n_iter=20	0e31f49990b5a657	False	n/a (classical)	n/a	input_home=device pre_clock_fit=False
+pca	taxi	4000000x11	cuml-gpu	ok	20.4	19.6	21.4	5	1.318	explained_variance_ratio_sum=0.99786	6f291999988db211	True	n/a (classical)	n/a	input_home=device pre_clock_fit=False
+pca	taxi	4000000x11	ours	ok	26.8	25.4	28.5	5	None	explained_variance_ratio_sum=0.997861	c790338770a4c120	True	n/a (classical)	n/a	input_home=host pre_clock_fit=False
+pca	taxi	4000000x11	torch-gpu	ok	1.4	1.1	1.5	5	19.321	explained_variance_ratio_sum=0.99786	5fca61545e865db5	True	n/a (classical)	n/a	input_home=device pre_clock_fit=False
+pca	istella	2043304x220	cuml-gpu	ok	83.1	82.0	83.4	5	4.669	explained_variance_ratio_sum=1	1421c1dc48098714	True	n/a (classical)	n/a	input_home=device pre_clock_fit=False
+pca	istella	2043304x220	ours	ok	387.8	385.0	389.0	5	None	explained_variance_ratio_sum=1	e43f2f52f20f511a	True	n/a (classical)	n/a	input_home=host pre_clock_fit=False
+pca	istella	2043304x220	torch-gpu	ok	9.0	8.6	9.1	5	42.982	explained_variance_ratio_sum=1	045a0aa7b030f2b1	True	n/a (classical)	n/a	input_home=device pre_clock_fit=False
+ols	taxi	4000000x11	cuml-gpu	ok	22.0	22.0	26.6	5	7.745	finite=True,r2=0.908836,rmse=4.69649	d4622a524ee36f81	True	n/a (classical)	n/a	input_home=device pre_clock_fit=False
+ols	taxi	4000000x11	ours	ok	170.6	137.9	185.0	5	None	finite=True,r2=0.908837,rmse=4.69647	fb86358654367fa0	True	n/a (classical)	n/a	input_home=host pre_clock_fit=False
+ols	taxi	4000000x11	torch-gpu	ok	68.2	68.0	68.2	5	2.503	finite=True,r2=0.908836,rmse=4.69648	04ab1a3d721ffe46	True	n/a (classical)	n/a	input_home=device pre_clock_fit=False
+ols	taxi	4000000x11	torch-gpu-eigh	ok	2.0	1.4	2.2	5	85.236	finite=True,r2=0.908836,rmse=4.6965	d7a02fd167acb194	True	n/a (classical)	n/a	input_home=device pre_clock_fit=False
+ols	istella	2043304x220	cuml-gpu	ok	85.3	84.9	85.9	5	15.464	finite=True,r2=-6473.68,rmse=67.1436	64abb72c0468eb90	True	n/a (classical)	n/a	input_home=device pre_clock_fit=False
+ols	istella	2043304x220	ours	ok	1318.9	1283.4	1338.4	5	None	finite=True,r2=0.331944,rmse=0.682027	6f12cfc209ecd1f9	True	n/a (classical)	n/a	input_home=host pre_clock_fit=False
+ols	istella	2043304x220	torch-gpu	ok	95.1	95.0	95.1	5	13.870	finite=False,r2=nan,rmse=nan	3f70c5566cde32d0	True	n/a (classical)	n/a	input_home=device pre_clock_fit=False
+ols	istella	2043304x220	torch-gpu-eigh	ok	9.7	9.5	11.2	5	135.433	finite=True,r2=0.151598,rmse=0.768592	857763e1df3cc083	True	n/a (classical)	n/a	input_home=device pre_clock_fit=False
+knn	taxi	400000x11	cuml-gpu	ok	9.4	8.1	9.7	5	2.385	recall_at_10=0.99925,rows_with_repeated_ids=0	8387e3cd3b50aba1	True	n/a (classical)	n/a	input_home=device pre_clock_fit=True
+knn	taxi	400000x11	ours	ok	22.5	21.7	27.9	5	None	recall_at_10=0.99915,rows_with_repeated_ids=0	635062839df98cb1	True	n/a (classical)	n/a	input_home=host pre_clock_fit=False
+knn	taxi	400000x11	torch-gpu	ok	32.3	32.0	32.4	5	0.695	recall_at_10=0.999325,rows_with_repeated_ids=0	59c1f7e552b4e31c	True	n/a (classical)	n/a	input_home=device pre_clock_fit=False
+knn	istella	400000x220	cuml-gpu	ok	50.9	50.6	51.9	5	2.304	recall_at_10=0.92205,rows_with_repeated_ids=0	6752e2a3aa6bf0c8	True	n/a (classical)	n/a	input_home=device pre_clock_fit=True
+knn	istella	400000x220	ours	ok	117.2	116.9	118.7	5	None	recall_at_10=0.923025,rows_with_repeated_ids=0	da603cde48f68136	True	n/a (classical)	n/a	input_home=host pre_clock_fit=False
+knn	istella	400000x220	torch-gpu	ok	50.3	50.2	50.5	5	2.331	recall_at_10=0.93835,rows_with_repeated_ids=0	66b40a8bcbdaccfe	True	n/a (classical)	n/a	input_home=device pre_clock_fit=False
+kde	taxi	100000x11	cuml-gpu	ok	2.5	2.4	2.6	5	11.719	mean_log_likelihood=-9.58205,rows_without_density=0	cdce01475f9e6977	True	n/a (classical)	n/a	input_home=device pre_clock_fit=True
+kde	taxi	100000x11	ours	ok	29.0	28.2	30.1	5	None	mean_log_likelihood=-9.58207,rows_without_density=0	aa8ac4159ad2cbfa	True	n/a (classical)	n/a	input_home=host pre_clock_fit=False
+kde	istella	100000x220	cuml-gpu	ok	7.2	6.3	7.5	5	8.905	mean_log_likelihood=-212.117,rows_without_density=0	3f4541591da35fc6	True	n/a (classical)	n/a	input_home=device pre_clock_fit=True
+kde	istella	100000x220	ours	ok	63.8	62.0	69.1	5	None	mean_log_likelihood=-212.117,rows_without_density=0	81d11ed7fcd9eb38	True	n/a (classical)	n/a	input_home=host pre_clock_fit=False
+svc	taxi	10000x11	cuml-gpu	ok	422.1	420.0	450.3	5	1.834	accuracy=0.7675,n_support=5586	8e5afbc3738c16ee	True	n/a (classical)	n/a	input_home=device pre_clock_fit=False
+svc	taxi	10000x11	ours	ok	774.3	774.2	775.3	5	None	accuracy=0.7675,n_support=5527	2d85d6008566c340	True	n/a (classical)	n/a	input_home=host pre_clock_fit=False
+svc	istella	10000x220	cuml-gpu	ok	20.0	19.8	23.3	5	3.072	accuracy=0.9222,n_support=2401	de5ac69d825801b3	True	n/a (classical)	n/a	input_home=device pre_clock_fit=False
+svc	istella	10000x220	ours	ok	61.4	60.8	67.9	5	None	accuracy=0.9222,n_support=2400	8963cdc33da9ec9e	True	n/a (classical)	n/a	input_home=host pre_clock_fit=False
+dbscan	taxi	1000000x11	cuml-gpu	ok	13619.4	13600.6	13730.4	5	0.084	ari_vs_ours=1,n_clusters=2900,noise_agreement_vs_ours=1,noise_fraction=0.216119,rows=1000000	67f7ed993025ab64	True	n/a (classical)	n/a	input_home=device pre_clock_fit=False
+dbscan	taxi	1000000x11	ours	ok	1142.6	1139.5	1153.5	5	None	n_clusters=2900,noise_fraction=0.216119,rows=1000000	196722efbba0c85e	True	n/a (classical)	n/a	input_home=host pre_clock_fit=False
+dbscan	istella	1000000x220	cuml-gpu	ok	54791.4	54688.4	56874.4	5	6.121	ari_vs_ours=0.999999,n_clusters=1501,noise_agreement_vs_ours=1,noise_fraction=0.16966,rows=1000000	ed564b859894f6c9	True	n/a (classical)	n/a	input_home=device pre_clock_fit=False
+dbscan	istella	1000000x220	ours	ok	335403.3	334849.1	335839.7	5	None	n_clusters=1501,noise_fraction=0.16966,rows=1000000	cbddf242723cb4b1	True	n/a (classical)	n/a	input_home=host pre_clock_fit=False
+hdbscan	taxi	1000000x11	cuml-gpu	ok	191.6	189.4	193.4	5	None	n_clusters=159,noise_fraction=0.13097,rows=100000	0e1d5bb909c81129	True	n/a (classical)	n/a	input_home=device pre_clock_fit=False
+hdbscan	istella	1000000x220	cuml-gpu	ok	562.0	559.0	564.5	5	None	n_clusters=53,noise_fraction=0.25628,rows=100000	53d70b2685220b45	True	n/a (classical)	n/a	input_home=device pre_clock_fit=False

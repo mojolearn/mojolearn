@@ -1,0 +1,48 @@
+=== ctr_on (/root/trees_out/speed/ctr_on.gbdt-symmetric.criteo.r1000000.ours.ctr_on.log)
+FSPEED-CTR-TRACE lane=gbdt-symmetric MOJOLEARN_CTR_TRACE=1 (the fit prints its CTR config split and prep marker; DEVIATION 2634 is observable)
+FSPEED-NOTE lane=gbdt-symmetric arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on an NVIDIA box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=cuda path=/root/mojolearn/python/mojolearn/identical/_mojolearn_gbdt.so
+FSPEED-SCALE stage=before rows=1000000 features=39 input_mib=148.8 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=26 ctr_prep_wanted=True prep=ran gate_2634=on permutations=4 target_classes=2 binarized_target_rows=1000000 ctr_orders=4
+FSPEED-WARMUP lane=gbdt-symmetric arm=ours shape=criteo-1000000x39 ms=15057.908
+FSPEED-ORDER lane=gbdt-symmetric round=1 arms=ours
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=26 ctr_prep_wanted=True prep=ran gate_2634=on permutations=4 target_classes=2 binarized_target_rows=1000000 ctr_orders=4
+FSPEED lane=gbdt-symmetric arm=ours shape=criteo-1000000x39 round=1 ms=14249.291 hash=70e7ff4f27045344
+FSPEED-ORDER lane=gbdt-symmetric round=2 arms=ours
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=26 ctr_prep_wanted=True prep=ran gate_2634=on permutations=4 target_classes=2 binarized_target_rows=1000000 ctr_orders=4
+FSPEED lane=gbdt-symmetric arm=ours shape=criteo-1000000x39 round=2 ms=14314.583 hash=70e7ff4f27045344
+FSPEED-ORDER lane=gbdt-symmetric round=3 arms=ours
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=26 ctr_prep_wanted=True prep=ran gate_2634=on permutations=4 target_classes=2 binarized_target_rows=1000000 ctr_orders=4
+FSPEED lane=gbdt-symmetric arm=ours shape=criteo-1000000x39 round=3 ms=14264.535 hash=70e7ff4f27045344
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=logloss value=0.128083
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=auc value=0.742472
+FSPEED-FIT lane=gbdt-symmetric arm=ours library=mojolearn trees=100 nodes=12700 leaves=6400 depth_max=6 source=get_tree_leaf_counts
+FSPEED-FIT-VERDICT lane=gbdt-symmetric arms=ours leaves=ours:6400 spread=- verdict=UNKNOWN reason=fewer than two arms exposed a leaf count; an unread comparison is not a fair one
+FSPEED-SCALE stage=after rows=1000000 features=39 input_mib=148.8 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+=== ctr_off (/root/trees_out/speed/ctr_off.gbdt-symmetric.criteo.r1000000.ours.ctr_off.log)
+FSPEED-CTR-TRACE lane=gbdt-symmetric MOJOLEARN_CTR_TRACE=1 (the fit prints its CTR config split and prep marker; DEVIATION 2634 is observable)
+FSPEED-NOTE lane=gbdt-symmetric arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on an NVIDIA box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=cuda path=/root/mojolearn/python/mojolearn/identical/_mojolearn_gbdt.so
+FSPEED-SCALE stage=before rows=1000000 features=39 input_mib=148.8 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours mode=IDENTICAL device=NVIDIA_H100_80GB_HBM3 rounds=3 size=shipped
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=26 ctr_prep_wanted=True prep=ran gate_2634=off permutations=4 target_classes=2 binarized_target_rows=1000000 ctr_orders=4
+FSPEED-WARMUP lane=gbdt-symmetric arm=ours shape=criteo-1000000x39 ms=15269.440
+FSPEED-ORDER lane=gbdt-symmetric round=1 arms=ours
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=26 ctr_prep_wanted=True prep=ran gate_2634=off permutations=4 target_classes=2 binarized_target_rows=1000000 ctr_orders=4
+FSPEED lane=gbdt-symmetric arm=ours shape=criteo-1000000x39 round=1 ms=14153.361 hash=70e7ff4f27045344
+FSPEED-ORDER lane=gbdt-symmetric round=2 arms=ours
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=26 ctr_prep_wanted=True prep=ran gate_2634=off permutations=4 target_classes=2 binarized_target_rows=1000000 ctr_orders=4
+FSPEED lane=gbdt-symmetric arm=ours shape=criteo-1000000x39 round=2 ms=14235.227 hash=70e7ff4f27045344
+FSPEED-ORDER lane=gbdt-symmetric round=3 arms=ours
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=26 ctr_prep_wanted=True prep=ran gate_2634=off permutations=4 target_classes=2 binarized_target_rows=1000000 ctr_orders=4
+FSPEED lane=gbdt-symmetric arm=ours shape=criteo-1000000x39 round=3 ms=14180.366 hash=70e7ff4f27045344
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=logloss value=0.128083
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=auc value=0.742472
+FSPEED-FIT lane=gbdt-symmetric arm=ours library=mojolearn trees=100 nodes=12700 leaves=6400 depth_max=6 source=get_tree_leaf_counts
+FSPEED-FIT-VERDICT lane=gbdt-symmetric arms=ours leaves=ours:6400 spread=- verdict=UNKNOWN reason=fewer than two arms exposed a leaf count; an unread comparison is not a fair one
+FSPEED-SCALE stage=after rows=1000000 features=39 input_mib=148.8 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.

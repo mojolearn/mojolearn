@@ -2147,11 +2147,42 @@ symmetric cells are the strongest (0.525x on taxi as CORRECTED above, 0.811x on
 Istella-S) on CatBoost's OWN policy -- and most of the taxi margin is the fixed
 cost we pay before the first tree, not a faster boosting loop. On Istella-S
 depthwise we are 1.030x, slightly behind,
-and on Istella-S lossguide 0.997x is parity, not a win. XGBoost is FASTER THAN
-US wherever it competes: 1.196x and 1.039x on depthwise, and 1.995x on taxi
-lossguide, which is the largest single gap on the board. Quality is within a
+and on Istella-S lossguide 0.997x is parity, not a win. Quality is within a
 thousandth of both opponents everywhere, ahead of CatBoost on symmetric and
 marginally behind on the other two policies.
+
+**THE XGBOOST SENTENCE THAT STOOD HERE IS SUPERSEDED (2026-09-12, lane
+baseline-sweep, merge ffd4af6c).** It read: "XGBoost is FASTER THAN US wherever
+it competes: 1.196x and 1.039x on depthwise, and 1.995x on taxi lossguide, which
+is the largest single gap on the board." All three figures were measured at the
+1,000,000-row FLOOR. Re-measured at full size on one pod (taxi 4,110,786 x 16,
+Istella-S 2,043,304 x 220, 5 interleaved rounds) they are:
+
+| cell | at the 1M floor | at full size |
+|---|---:|---:|
+| depthwise taxi | 1.196x | 1.115x, and NOT-COMPARABLE |
+| depthwise Istella-S | 1.039x | **0.939x -- REVERSES, we lead** |
+| lossguide taxi | 1.995x | 1.482x, and not an independent measurement |
+
+Two qualifications the fit readback forced, neither of which was visible before
+arms were compared on what they BUILT rather than on what they were configured
+to build:
+
+- **XGBoost's lossguide column is not an independent measurement.** With
+  max_depth=6 and max_leaves=64=2^6 the depth cap binds first, so its lossguide
+  arm returns a BYTE-IDENTICAL model to its own depthwise arm (prediction hash
+  22aa5a2b2c47f83c on taxi, 5e42cc27fe6c9b69 on Istella-S, the same value in
+  both policies). Timing it twice does not make it two results.
+- **Its taxi wins are NOT-COMPARABLE.** XGBoost built 3,883 leaves there against
+  our 5,903 and CatBoost's 5,811, a 34% smaller ensemble, so those cells are not
+  like-for-like at all.
+
+What survives: on Istella-S, where all three arms ARE comparable (6,297 / 6,345
+/ 6,364 leaves, spread 1-1.6%), we lead depthwise at 0.939x and trail lossguide
+at 1.118x, narrowed from 1.256x. So the honest statement is that the us-versus-
+XGBoost ranking CHANGES WITH SCALE, and "faster wherever it competes" was true
+only at the floor. Full board and provenance:
+`bench/results/baseline_sweep_2026-09-12/`.
 
 THE TWO OPPONENTS ARE NOT EQUALLY FAST, AND THAT EXPLAINS THE WHOLE SHAPE OF
 THIS TABLE. On every cell where both of them ran, XGBoost beat CatBoost:

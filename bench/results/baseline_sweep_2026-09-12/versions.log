@@ -1,0 +1,11 @@
+cuml 26.08.00
+cupy 14.2.0
+sklearn 1.9.1
+numpy 2.4.6
+scipy 1.17.1
+catboost 1.2.10
+xgboost 3.2.0
+lightgbm 4.7.0
+torch 2.4.1+cu124
+--- gpu ---
+NVIDIA H100 80GB HBM3, 580.126.09, 81559 MiB
