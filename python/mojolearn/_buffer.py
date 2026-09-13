@@ -341,11 +341,50 @@ def addr_ro(obj, *, name):
 # ------------------------------------------------------------ conversion
 
 
+_DLPACK_CPU_DEVICES = (1, 3, 10)  # kDLCPU, kDLCUDAHost, kDLCUDAManaged
+
+
+def _device_array_kind(obj):
+    """The protocol by which `obj` announces it lives on a device, or None.
+
+    DEVIATION 2692. Detection only: no pointer is read and no device is
+    touched. A CPU tensor that exports DLPack is NOT a device array, so the
+    DLPack arm asks `__dlpack_device__` for the device type and accepts only
+    a non-CPU one -- otherwise a host torch tensor, which also exports the
+    buffer protocol, would lose its existing zero-copy path.
+    """
+    if hasattr(obj, "__cuda_array_interface__"):
+        return "__cuda_array_interface__"
+    if hasattr(obj, "__dlpack_device__"):
+        try:
+            device_type = tuple(obj.__dlpack_device__())[0]
+        except Exception:
+            return None
+        if device_type not in _DLPACK_CPU_DEVICES:
+            return "__dlpack__ (device type %r)" % (device_type,)
+    return None
+
+
 def _materialize(obj, name):
     """`obj` as an Array (zero-copy when it already is one or exports a
     contiguous supported buffer), plus whether that copied."""
     if isinstance(obj, Array):
         return obj, False
+    # DEVIATION 2692: a device array has no host buffer, so without this it
+    # falls into the nested-list branch below and dies as "holds a
+    # <ClassName>, not a number" -- an error about element types, for input
+    # whose real problem is that the memory is on a GPU. REFUSE BY NAME.
+    kind = _device_array_kind(obj)
+    if kind is not None:
+        raise TypeError(
+            "mojolearn: %s is a DEVICE array (it exports %s). mojolearn "
+            "reads HOST memory only: every converter here takes a raw address "
+            "through the Python buffer protocol, which device memory does not "
+            "export. There is no implicit device-to-host copy, because moving "
+            "%s silently would hide a transfer the caller did not ask for. "
+            "Copy it yourself first: cupy `x.get()`, torch `x.cpu()`, "
+            "numba `x.copy_to_host()`." % (name, kind, name)
+        )
     if isinstance(obj, (list, tuple)) or not _has_buffer(obj):
         if isinstance(obj, (str, bytes)):
             raise TypeError(
