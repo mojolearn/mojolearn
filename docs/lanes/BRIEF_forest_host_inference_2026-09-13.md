@@ -189,7 +189,115 @@ through `decode_labels`.
 
 ## 3. Verdict and owed items
 
-See section 5 for the Apple data point recorded on this Mac. The NVIDIA and
-AMD recordings are OWED. Until they exist their fixture directories hold an
-`expected.json` whose `status` is `OWED`, which the gate reports as exit 2
-and the workflow fails on.
+Feasible, built, and shown on one machine and one vendor (section 5). The
+host binding compiles with no accelerator target from the GPU bindings' own
+per-tree walks, and on this Mac it reproduced every prediction hash the Metal
+IDENTICAL build recorded, for all four estimators.
+
+Owed, in order.
+
+1. The NVIDIA and AMD recordings. `bench/results/forest_host/OWED-nvidia/`
+   and `OWED-amd/` hold a `fixture.json` and an `expected.json` whose
+   `status` is `OWED` and no `model.npz`. On each box, fit a small sequential
+   forest under `MOJOLEARN_NUMERIC_MODE=identical`, save it there, run
+   `tools/forest_host_gate.py record <dir>`, commit. The gate exits 2 on the
+   placeholder and the workflow fails until then, on purpose.
+2. The Linux x86 and ARM64 runs of `.github/workflows/forest-host-gate.yml`.
+   Nothing on a CPU other than this Mac's has run the host binding. The
+   workflow triggers on push to `main` and to this lane; this branch is not
+   pushed.
+3. The sabotage build. The workflow builds it and requires the gate to catch
+   it. It was not built on this Mac (one host build was the budget). The
+   gate's own ability to fail was shown instead by tampering a recorded hash
+   (section 5).
+4. Cross-vendor. A CPU reproducing Apple's bits and the same CPU reproducing
+   NVIDIA's bits is the claim Andrew wants; today only the first half has a
+   recording, and only on Apple's own host CPU.
+
+## 4. The gate
+
+`tools/forest_host_gate.py record <dir>` on a GPU box loads `model.npz` with
+its own estimator class through the normal package, regenerates the rows
+from `fixture.json` (SplitMix64, `(bits >> 40) / 2^24` as float32, verified
+against `x_sha256`), predicts, and writes `expected.json` with the SHA-256,
+dtype and shape of `predict` and, for classifiers, `predict_proba`, plus the
+vendor, numeric mode and model file hash. It refuses a CPU-only install, so
+the host binding can never record its own answer as the reference.
+
+`tools/forest_host_gate.py check <dir>...` on the CPU box does the same
+through `HostForest` and exits 0 only when every hash, dtype and shape is
+equal. 1 on a mismatch, 2 when it cannot run, which includes an OWED
+placeholder, a model file whose hash is not the recorded one, and fixture
+rows that do not regenerate to `x_sha256`. `--expect-mismatch` inverts the
+verdict for the sabotage build. `--package-root` says where `mojolearn` is
+imported from, which is how the Mac recording below used the GPU build in the
+main checkout while running the tool from this worktree.
+
+`.github/workflows/forest-host-gate.yml` runs on the byte LM CPU gate's seven
+runners. Per runner it builds the host binding, checks every RECORDED fixture,
+builds the sabotage binding and requires the gate to catch it, then runs the
+gate over the OWED directories and fails.
+
+## 5. The Apple data point, 2026-09-13
+
+Machine, Apple M4, macOS 26.5.2, Python 3.14.7, Mojo 1.0.0 (ed45d567). GPU
+side, the main checkout's Metal IDENTICAL build of `bfde04428` (its
+`python/mojolearn/identical/*.so`, built the same afternoon). Host side, this
+worktree at `b0da9af0f` with no GPU binary at all, so the package imported as
+a CPU-only install (`mojolearn.vendor()` answered `cpu`,
+`gpu_arch_how()` answered "no GPU binary set loaded (CPU-only install,
+DEVIATION 2615)") and the host binding built once on this Mac with
+`MOJOLEARN_BUILD_JOBS=1 nice -n 19 sh bindings/build_forest_host.sh` (exit 0,
+266,264 bytes, the same deprecation warnings the GPU bindings print).
+
+The smoke. Four forests fitted on Metal through the normal package on 200
+rows of 8 features (SplitMix64 seed 1), labels `int((x0 * 7 + x1 * 13) * 3) % 3`
+for the classifiers and `x1 * 2 + x2` for the regressors, `n_estimators=8,
+max_depth=6, random_state=7, numeric_mode='identical',
+inference_engine='sequential'`, saved with `save`, then predicted on 200
+held-out rows (seed 7, `x_sha256`
+`6f4b874d9d5a82d52b6754df37b8f1f0b56c29ed311ff311b4413c2ac40dcc0b`) by the
+GPU class (`record`) and by `HostForest` (`check`).
+
+| fixture | estimator | nodes | output | GPU sha256 | host sha256 | equal |
+| --- | --- | --- | --- | --- | --- | --- |
+| apple-m4-rf_classifier | RandomForestClassifier | 426 | predict `<i8` [200] | `4202c25dfdabe4cda3373ccd9b3564b00bdf29910edeca82b302f2a07897a502` | same | yes |
+| apple-m4-rf_classifier | RandomForestClassifier | 426 | predict_proba `<f4` [200, 3] | `49d496cff13daff8540b266415f33ee39c3b4b48a8c27f61d38af509c6b128f4` | same | yes |
+| apple-m4-rf_regressor | RandomForestRegressor | 904 | predict `<f4` [200] | `6b1e214356a98d98d8b8e83f3236f60c4a751a56c0c58ed45c85d2783da2781f` | same | yes |
+| apple-m4-et_classifier | ExtraTreesClassifier | 652 | predict `<i8` [200] | `1febdff20a95525b8716892b70950e35405aa67b1516597a3898601003d455c3` | same | yes |
+| apple-m4-et_classifier | ExtraTreesClassifier | 652 | predict_proba `<f8` [200, 3] | `178c5a299a623a67144eda04d9120387c5bec3260b21d8dad0368258c9e1de10` | same | yes |
+| apple-m4-et_regressor | ExtraTreesRegressor | 792 | predict `<f8` [200] | `32f5d5961e9aa131a700cee9b6255ad7ebba09d26e74f32eb1d7b692ce88bd5c` | same | yes |
+
+"same" means the `check` line printed the host hash equal to the GPU hash
+character for character; the verbatim lines are
+
+```
+check 2026-09-13-apple-m4-rf_classifier RandomForestClassifier predict EQUAL gpu 4202c25d... host 4202c25d...
+check 2026-09-13-apple-m4-rf_classifier RandomForestClassifier predict_proba EQUAL gpu 49d496cf... host 49d496cf...
+check 2026-09-13-apple-m4-rf_regressor RandomForestRegressor predict EQUAL gpu 6b1e2143... host 6b1e2143...
+check 2026-09-13-apple-m4-et_classifier ExtraTreesClassifier predict EQUAL gpu 1febdff2... host 1febdff2...
+check 2026-09-13-apple-m4-et_classifier ExtraTreesClassifier predict_proba EQUAL gpu 178c5a29... host 178c5a29...
+check 2026-09-13-apple-m4-et_regressor ExtraTreesRegressor predict EQUAL gpu 32f5d596... host 32f5d596...
+gate verdict IDENTICAL (4 fixtures, exit 0)
+```
+
+and the full hashes are in each fixture's `expected.json` under
+`bench/results/forest_host/2026-09-13-apple-m4-*/`.
+
+The gate can fail. A copy of the RF classifier fixture with the first
+character of its recorded `predict_proba` hash changed (`49d496cf` to
+`09d496cf`) gave `predict EQUAL`, `predict_proba DIFFER`, verdict MISMATCH,
+exit 1; the same copy under `--expect-mismatch` gave EXPECTED MISMATCH SEEN,
+exit 0; `check bench/results/forest_host/OWED-nvidia` gave exit 2 naming the
+owed recording.
+
+What this is and is not. It is one machine whose GPU (Metal) and whose CPU
+(the M4's own cores) agree on 1,200 predictions of six kinds through two
+different binaries, the GPU binding's sequential engine and the host
+binding. It is not a second CPU, not a second vendor, and not a large model.
+The certified table below grows only from gate reports, one row per report
+read.
+
+| CPU | recorded by | fixtures | verdict | report |
+| --- | --- | --- | --- | --- |
+| Apple M4 (this Mac, host cores) | Apple M4 Metal, IDENTICAL, `bfde04428` build | 4 (RF and ET, classifier and regressor) | IDENTICAL | the check lines above, 2026-09-13 |
