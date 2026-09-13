@@ -1194,3 +1194,58 @@ names latency against issue directly instead of by elimination.
 The aligned-page spelling is the right one for any future kernel body (it
 is free and it is 1 percent), and the shipped kernel's own scalar loads are
 a shipped-path change to make once a kernel-body arm is worth flipping.
+
+### 15.5 The SASS census (2026-09-13, measured): ptxas re-vectorized the loads, the loop is clean, and the 34 percent is not in the loop's instruction count
+
+Evidence: `bench/results/e1g/2026-09-13_171857-nvidia-h100-gemm-census2/remote/gemm-census/` (RunPod H100, commit 8c8a500c; PTX
+and SASS per kernel in `dumps/`, `ptxas --verbose` 12.6.85 from the pip
+wheel, the 12.4 cuobjdump reading its cubins). `tools/gemm_census_split.py`
+reads it. The R2 staging of DEVIATION 2704 ran on this leg for the first
+time: two corpora verified on the box in 21 s.
+
+**Registers and spills (ptxas 12.6.85, sm_90a):**
+
+| kernel | registers | spill bytes | stack | accumulate loop: insns / FFMA / FMUL / LDS.128 / max register |
+|---|---:|---:|---:|---|
+| shipped tuned 128 | 255 | 44 | 4,144 | 2,060 / 1,024 / 981 / 55 / R220 |
+| ksplit group | 255 | 0 | 4,096 | 2,037 / 1,024 / 960 / 53 / R252 |
+| kpack (all leaves) | 255 | 104 | 4,200 | 2,044 / 1,024 / 960 / 60 / R160 |
+| kpack_pad (all leaves) | 255 | 104 | 4,200 | 2,044 / 1,024 / 960 / 60 / R160 |
+
+Three things the SASS settles:
+
+1. **ptxas re-vectorized the shared loads.** The PTX carries 256 scalar
+   `ld.shared.b32` per window (15.1); the SASS carries 55 `LDS.128` in the
+   loop and no scalar shared load. The assembler proved the alignment the
+   front end could not. That is why `kpack_padv` bought one percent (15.4):
+   at the SASS level there was nothing left to vectorize. Section 15.1's
+   finding stands as a fact about the PTX and as a guarantee the aligned
+   spelling makes explicit, not as a lever.
+2. **The accumulate loop is clean.** 2,060 instructions for 2,048 math
+   operations, 55 loads, no local-memory traffic, no barrier, no branch.
+   The dependent pair is scheduled in groups of seven cells (shipped:
+   seven FFMA, seven FMUL on the same registers, distance 8) or deeply
+   interleaved (kpack: FMUL 109 instructions after its FFMA); the shared
+   load reaches its first consumer after 31 (shipped) to 46 (ksplit)
+   instructions. Nothing in the loop's own text is a 3x.
+3. **The 255 registers are not the loop's.** The loop's highest register
+   is R220 in the shipped kernel and R160 in the kpack kernels; R252 is
+   used outside it, in the fold and the staging. So the register cap is set
+   by the once-per-leaf fold spelling, which is the place a second block
+   per SM would have to be won, and even then the kpack loop's R160 says
+   the loop itself would need re-allocation to fit 128.
+
+**What is NOT settled, and cannot be from static text.** Nsight Compute on
+the RunPod container refuses the performance counters (`ERR_NVGPUCTRPERM`,
+`ncu.log`), so the stall breakdown is unavailable there. Per block-window
+the measured time is about 11,960 cycles against 4,120 issue cycles for
+the loop's instructions on four schedulers; where the other 7,800 go
+(barrier imbalance across the eight warps, the two-warp-per-scheduler
+occupancy against the 4-cycle dependent latency, operand-bank stalls,
+the staging head) is exactly what the counters would name. The next
+instrument is a DIAGNOSTIC arm set behind its own define, never bit-checked
+and never shipped: the loop with the FMUL removed, with the shared loads
+replaced by register reuse, and with the barrier and staging removed, each
+priced against the shipped kernel so the 7,800 cycles are decomposed by
+subtraction. That is one H100 hour and the last question before the
+kernel-body decision.
