@@ -55,7 +55,6 @@ from bindings.host_helpers import (
 from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32
 from checks.kernel_matrix import (
     COLUMN_CPU,
-    DETECTED_COLUMN,
     TARGET_COLUMN,
     column_name,
 )
@@ -111,11 +110,14 @@ def forest_host_column_binding() raises -> PythonObject:
     return PythonObject(column_name(TARGET_COLUMN))
 
 
-def forest_host_detected_column_binding() raises -> PythonObject:
-    """`column_name(DETECTED_COLUMN)`: what the accelerator predicates fold to
-    in THIS build, with no define. "cpu" on a build with no accelerator target;
-    a vendor's name means the predicate answered for the host machine."""
-    return PythonObject(column_name(DETECTED_COLUMN))
+# There is no `forest_host_detected_column` read-back. The 2026-09-13 phase 0
+# witness returned the name of the kernel matrix's detected column, which folds
+# to the GPU of the machine that ran the build, so the 0.8.5 CPU training
+# binding built on the NVIDIA legs carried the string "nvidia" and the copy
+# from the AMD leg "amd" (43 bytes apart: that string, its length, its symbol
+# name and the build id) and packaging/linux/pack_wheel.py refused the wheel.
+# A vendor-neutral binary must not depend on the builder's accelerator; the
+# comptime assert above is the load-bearing check and needs no such witness.
 
 
 def forest_host_sabotage_binding() raises -> PythonObject:
@@ -293,7 +295,6 @@ def PyInit__mojolearn_forest_host() abi("C") -> PythonObject:
         module.def_function[forest_host_numeric_mode_binding]("forest_host_numeric_mode")
         module.def_function[forest_host_vendor_binding]("forest_host_vendor")
         module.def_function[forest_host_column_binding]("forest_host_column")
-        module.def_function[forest_host_detected_column_binding]("forest_host_detected_column")
         module.def_function[forest_host_sabotage_binding]("forest_host_sabotage")
         module.def_function[forest_host_rf_predict_proba_binding]("forest_host_rf_predict_proba")
         module.def_function[forest_host_rf_predict_reg_binding]("forest_host_rf_predict_reg")

@@ -22,7 +22,7 @@ carries
 | `commit`, `commit_source` | the commit the run was made from (`MOJOLEARN_COMMIT`, `git rev-parse HEAD`, or a `COMMIT` / `commit.txt` witness); required, a JSON with an empty commit is never written |
 | `host.cpu_model`, `host.arch`, `host.target_cpu`, `host.mojo_version`, `host.python` | the machine and the build it ran |
 | `host.column` | what the host bindings read back as their kernel-matrix column (`cpu`, the `COLUMN_CPU` of `checks/kernel_matrix.mojo`, asserted at build time) |
-| `host.families` | every `_mojolearn_*_host.so` built, with its `column`, `detected_column` and `sabotage` read-backs, so a REFUSED cell is attributable to an unbuilt family rather than a bug |
+| `host.families` | every `_mojolearn_*_host.so` built, with its `column` and `sabotage` read-backs (the `detected_column` witness of 2026-09-13 was removed the same day: it embedded the build box's GPU name into a vendor-neutral binary), so a REFUSED cell is attributable to an unbuilt family rather than a bug |
 | `host.routed` | the `_HOST_MODULES` table the run resolved through |
 
 The workflow's `COVERED_LANES` is the list of lanes with a CPU
