@@ -70,6 +70,10 @@ on:
       - "python/**"
       - "CITATION.cff"
       - ".github/workflows/wheel-ci.yml"
+      # The packaging tests live in tools/ but gate packaging/, so an edit to
+      # a test must trigger the job that runs it. packaging/** already covers
+      # the scripts they read.
+      - "tools/test_*.py"
 
 permissions: {}
 
@@ -365,3 +369,85 @@ jobs:
             exit 1
           fi
           echo "the gate refused it, as it must"
+
+  # ------------------------------------------------------------------------
+  # THE PACKAGING TESTS THAT NOTHING RAN. Six files, 39 tests, and until
+  # 2026-09-13 not one of them was invoked by any workflow -- the only python
+  # tests in CI were byte-lm-cpu-gate.yml's two pytest lines. That is how
+  # tools/test_optional_byte_lm_build_layout.py came to sit RED on main while
+  # 0.8.4 was being cut: tier_scripts grew the CPU training binding's build
+  # script (DEVIATION 2680) and the count that test asserts stayed at 17.
+  # Nothing failed, because nothing looked.
+  #
+  # There was never a cost reason for this. Every import in all six files is
+  # stdlib -- no numpy, no pytest, no pixi, no Mojo -- so the whole suite is
+  # seconds on a plain runner.
+  #
+  # The working directories are not decoration: three of these files import a
+  # sibling module by bare name (`import check_linux_release_qualification`),
+  # so they resolve only with their own directory as cwd.
+  # ------------------------------------------------------------------------
+  packaging-tests:
+    name: The packaging and release tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Runner python
+        run: python3 -VV
+
+      - name: Qualification, build-layout and build-limit tests
+        working-directory: tools
+        run: |
+          set -euo pipefail
+          python3 -m unittest -v \
+            test_build_sets_host_reductions \
+            test_optional_byte_lm_build_layout \
+            test_release061_end_to_end \
+            test_check_linux_release_qualification \
+            test_linux_build_limits
+
+      - name: The wheel inventory test
+        working-directory: packaging/linux
+        run: python3 -m unittest -v test_release_061_inventory
+
+      # Same principle as the ISA job above, and for a defect that cost more:
+      # a guard that has never refused anything is not evidence. Add a fifth
+      # read-back reduction that forgets `$1!="host"` and require the guard to
+      # catch it. That omission is what refused two rented GPU builds on
+      # 2026-09-12 with "the binaries do not agree on ONE architecture:
+      # gfx942" while the read-back named exactly one architecture: the CPU
+      # training binding answers NONE-BY-DESIGN, and an un-excluded reduction
+      # counts that as a second value.
+      - name: The host-reduction guard REFUSES a bad build_sets.sh
+        run: |
+          set -euo pipefail
+          work=$(mktemp -d)
+          mkdir -p "$work/tools" "$work/packaging/linux"
+          cp tools/test_build_sets_host_reductions.py "$work/tools/"
+          cat > "$work/extra.txt" <<'EOF'
+          EXTRA=$(awk '$3!="MISSING"{print $3}' "$ARCHBACK" | sort -u)
+          EOF
+          awk 'NR==FNR{extra = extra $0 ORS; next}
+               {print}
+               /^ARCH_SET=/ && !ins {printf "%s", extra; ins = 1}' \
+              "$work/extra.txt" packaging/linux/build_sets.sh \
+              > "$work/packaging/linux/build_sets.sh"
+          grep -q '^EXTRA=' "$work/packaging/linux/build_sets.sh" || {
+            echo "::error::the fixture did not inject a reduction, so this step"
+            echo "::error::would prove nothing. The ARCH_SET line moved: find"
+            echo "::error::it in packaging/linux/build_sets.sh and fix the anchor."
+            exit 1
+          }
+          if (cd "$work" && python3 -m unittest tools.test_build_sets_host_reductions); then
+            echo "::error::tools/test_build_sets_host_reductions.py PASSED a"
+            echo "::error::build_sets.sh whose read-back reduction does not skip"
+            echo "::error::the host row. That is the defect that burned two"
+            echo "::error::rented GPU builds, and the guard against it does not"
+            echo "::error::work. Do not rent hardware until this is fixed."
+            exit 1
+          fi
+          echo "the guard refused it, as it must"

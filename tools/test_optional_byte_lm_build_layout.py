@@ -17,6 +17,13 @@ ROOT = Path(__file__).resolve().parents[1]
 EVERY_TIER = 3
 IDENTICAL_ONLY = 13
 
+#: The CPU training binding (DEVIATION 2680, 2026-09-12). It builds in the
+#: identical tier only, and it is named in tier_SCRIPTS but deliberately NOT in
+#: tier_NAMES -- see test_optional_native_exists_once_in_identical_only for the
+#: reason and for what goes wrong when a name-keyed list picks it up.
+HOST_NAME = '_mojolearn_byte_lm_host'
+HOST_SCRIPT = 'build_byte_lm_host.sh'
+
 
 class OptionalBuildLayoutTests(unittest.TestCase):
     def rows(self, enabled, function):
@@ -70,10 +77,26 @@ class OptionalBuildLayoutTests(unittest.TestCase):
         scripts = self.rows(1, 'tier_scripts')
         full = EVERY_TIER + IDENTICAL_ONLY + 1
         self.assertEqual([len(row) for row in names], [EVERY_TIER, EVERY_TIER, full])
-        self.assertEqual([len(row) for row in scripts], [EVERY_TIER, EVERY_TIER, full])
+        # tier_SCRIPTS CARRIES ONE MORE ENTRY THAN tier_NAMES, ON PURPOSE, AND
+        # THE ASYMMETRY IS THE POINT OF THIS ASSERTION. The CPU training
+        # binding builds in the identical tier's pass and is absent from
+        # tier_names, because names drive the per-tier read-back loop and the
+        # staging move while this binary is neither a tier member nor a vendor
+        # member: it answers 'cpu', carries no GPU code, and is staged once
+        # beside the tiers in <set>/host/. Folding it into any name-keyed list
+        # gets it refused as a non-GPU vendor, so it carries named checks of
+        # its own instead -- tools/test_build_sets_host_reductions.py is the
+        # one that keeps the read-back REDUCTIONS excluding its row.
+        self.assertEqual([len(row) for row in scripts],
+                         [EVERY_TIER, EVERY_TIER, full + 1])
+        self.assertNotIn(HOST_NAME, names[2])
+        self.assertEqual(scripts[2][-1], HOST_SCRIPT)
+        self.assertEqual(scripts[2][-2], 'build_byte_lm.sh')
+        for row in (names[0], names[1], scripts[0], scripts[1]):
+            self.assertNotIn(HOST_NAME, row)
+            self.assertNotIn(HOST_SCRIPT, row)
         self.assertEqual(names[0], names[1])
         self.assertEqual(names[2][-1], '_mojolearn_byte_lm')
-        self.assertEqual(scripts[2][-1], 'build_byte_lm.sh')
         for row in names + scripts:
             self.assertEqual(len(row), len(set(row)))
 
