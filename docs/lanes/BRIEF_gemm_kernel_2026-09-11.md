@@ -1301,3 +1301,64 @@ frees issue slots). Readings:
 
 RUN OWED at the time of writing (launched the same hour, `--minutes 30`,
 no dataset needed).
+
+### 16.3 Measured (2026-09-13, two H100 legs): the staging phase is a third of the window and the fold is a fifth
+
+Evidence: `bench/results/e1g/2026-09-13_174125-nvidia-h100-gemm-diag2/remote/gemm-diag/diag.txt` (RunPod H100, 1980 MHz before
+and after, commit f66ab6e5; the first leg,
+`bench/results/e1g/2026-09-13_173408-nvidia-h100-gemm-diag`, is retained
+with its `nofold` and `floor` lines INVALID: resetting the accumulator
+with no consumer let the compiler delete the whole FMA loop, which the
+cross-compiled sidecars showed as zero FMAs; the rerun keeps the
+accumulator live and stores it). Seven rounds, two warmups, medians;
+`base` reproduces the priced `kpack_padv` line (145 against 145 ms).
+
+**GEMM sum per step, each variant against `base`:**
+
+| variant | removed | ratio | cost of the removed thing |
+|---|---|---:|---:|
+| `nomul` | the flush multiply | 0.824 | 18 percent |
+| `noload` | the per-step shared loads | 0.982 | 2 percent |
+| `nostage` | staging stores, barrier, prefetch | 0.666 | **33 percent** |
+| `nofold` | the fold push at the leaf boundary | 0.799 | **20 percent** |
+| `floor` | all four | 0.312 | 69 percent |
+
+Per call the pattern holds everywhere: `nostage` 0.58 to 0.72, `nofold`
+0.71 to 0.88 (0.74 on the three head calls, which fold 6 to 393 leaves),
+`nomul` 0.79 to 0.85, `noload` 0.975 to 0.993. The four costs are
+close to additive (73 percent summed against 69 measured).
+
+**Reading.**
+
+1. **The loop is not the time.** The shared loads are 2 percent and the
+   second instruction 18, where an issue-bound loop would pay 50 for it.
+   `floor`, the bare FMA chain, runs the sum in 45 ms, about 34 TFLOP/s,
+   half the 67 one-instruction peak: that is the latency floor of two
+   warps per scheduler, and it says a second block per SM would be worth
+   up to 2x on the loop ITSELF, if the registers ever allowed it.
+2. **The staging phase is a third.** Sixteen scalar shared stores per
+   thread per window at a four-way bank conflict (the packed page puts the
+   four threads that stage one line's four steps on one bank), 16 scalar
+   global loads, and the barrier that holds all eight warps in the same
+   phase so the FMA pipe idles while the LSU works. A staging that stores
+   one 8-wide vector per thread, conflict-free under both operand
+   mappings (each thread gathers the 8 lines `g + 16 u` at one step; the
+   p-contiguous operand maps `g = tid div 16, step = tid mod 16`, the
+   outer-contiguous one the transpose, so the loads coalesce and the
+   stores land on distinct bank groups), cuts the stores 8x and the
+   conflict to none. Bounded by the 33.
+3. **The fold is a fifth**, from once per eight windows. Its per-level
+   block is 1,485 instructions for 64 cells because `ftz` is spelled as
+   six integer operations and the merge spells three of them per cell
+   (`ftz(ftz(a) + ftz(b))`). On the NVIDIA column the hardware flush the
+   step seam already uses, `mul.rn.ftz` by one, is one instruction and
+   was measured equal to the software `ftz` on the 262,144 words
+   (2026-09-09). The same spelling in the push, the drain and the leaf
+   partial takes the per-level block from about 23 instructions per cell
+   to about 5. Bounded by the 20. NVIDIA only; every other column keeps
+   the software spelling, so no bit can move anywhere.
+
+Both are placement and spelling, both keep every term and every order,
+and together they bound at about 1.35x on the GEMM sum (142 to about 105
+ms, 37 ms of the 343 ms step). They are the kernel-body work the plan
+asked to size before opening, and they are the next arms (section 17).
