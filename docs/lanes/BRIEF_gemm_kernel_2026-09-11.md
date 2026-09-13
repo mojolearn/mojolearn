@@ -1249,3 +1249,55 @@ replaced by register reuse, and with the barrier and staging removed, each
 priced against the shipped kernel so the 7,800 cycles are decomposed by
 subtraction. That is one H100 hour and the last question before the
 kernel-body decision.
+
+## 16. The diagnostic decomposition (DEVIATION 2705, 2026-09-13, branch `lane/gemm-diag`)
+
+### 16.1 Why by subtraction
+
+Section 15.5 left about 7,800 of the 11,960 cycles a block spends per
+window unexplained by the loop's own text, and Nsight Compute is refused
+in the RunPod container. So the window is decomposed by REMOVING one thing
+at a time from the `kpack_padv` body (the cleanest body: R160 in the loop,
+aligned vector loads, the padded page) and pricing what is left against
+the unmodified body, same pod, same twelve LM calls, same group rule:
+
+| variant | what is removed | what its price isolates |
+|---|---|---|
+| `base` | nothing (DIAG 0, the `kpack_padv` body) | the reference |
+| `nomul` | the flush multiply: one instruction per step | the second instruction's issue cost, and whether the FFMA/FMUL chain is the stall |
+| `noload` | the per-step shared loads: step-0 operands for all 16 steps | shared-memory latency and LSU time inside the loop |
+| `nostage` | the staging stores, the barrier and the prefetch | the barrier's warp imbalance and the window head |
+| `nofold` | the fold push at the leaf boundary | the once-per-leaf local-memory work |
+| `floor` | all four | the FMA chain alone at two warps per scheduler: the latency floor |
+
+`bench/gemm_step_diag_main.mojo` and `tools/gemm_diag_leg.sh`. EVERY VARIANT
+BUT `base` COMPUTES WRONG BITS BY DESIGN; the variants exist only under
+`-D MOJOLEARN_GEMM_DIAG=1` (a comptime assert refuses them otherwise), they
+are not arms, geometries or candidates, the arms check never builds with
+the define, and nothing here can reach a shipped line. Cross-compiled
+sidecars confirm each variant drops exactly what it says (no `mul.rn.ftz`
+in `nomul`, 8 instead of 68 `ld.shared.v4` in `noload`, no `bar.sync` in
+`nostage`).
+
+### 16.2 How to read it
+
+Let `t` be `base`'s time and `t_x` a variant's. `t - t_x` is the cost of
+the removed thing IN THIS SCHEDULE, upper-bounded (removing work also
+frees issue slots). Readings:
+
+- `floor` near `base`: the FMA chain itself is the time; the block is
+  latency-bound at two warps per scheduler and only occupancy (a second
+  block per SM, which means the fold's registers) or a shorter dependent
+  chain per cell can move it. Under the contract the chain is fixed, so
+  occupancy is the whole remaining lever.
+- `nomul` far below `base` (near half): the two-instruction seam is the
+  time and section 14 already closed that lever; GEMM on NVIDIA is done.
+- `nostage` far below `base`: the barrier's imbalance across eight warps
+  is the time, and a deeper prefetch or a split barrier is the next arm.
+- `noload` far below `base`: the loop's shared loads are exposed after
+  all, and software-pipelining the operand registers is the next arm.
+- `nofold` far below `base`: the once-per-leaf fold is the time (E-e's
+  reading), and the fold spelling is the next arm.
+
+RUN OWED at the time of writing (launched the same hour, `--minutes 30`,
+no dataset needed).
