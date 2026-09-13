@@ -7,6 +7,10 @@ from gbdt.gpu_data.compressed_index_builder import build_layout
 from gbdt.gpu_data.feature_blocks import blocks_for
 from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
     TSynchronizedSymmetricLevelState,
+    tensor_acc_live_for,
+)
+from gbdt.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_base import (
+    HIST2_SMEM_MODE,
 )
 
 
@@ -18,7 +22,8 @@ def main() raises:
     var cindex = ctx.enqueue_create_buffer[DType.uint32](16)
     ctx.enqueue_memset(cindex, UInt32(0))
     var state = TSynchronizedSymmetricLevelState(
-        ctx, layout^, blocks^, cindex^, 8, 2, 2, False
+        ctx, layout^, blocks^, cindex^, 8, 2, 2,
+        tensor_acc_live_for[HIST2_SMEM_MODE](),
     )
     state.initialize_tree(ctx, Float32(8.0), Float32(8.0))
     var regenerated = ctx.enqueue_create_buffer[DType.uint32](16)

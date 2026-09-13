@@ -3297,6 +3297,36 @@ def acc_i32_is_live[hist2_smem_mode: Int]() -> Bool:
     )
 
 
+# DEVIATION 2710 (docs/lanes/BRIEF_feature_freq_divergence_2026-09-13.md):
+# the synchronized tensor driver's accumulator liveness. Both tensor entries
+# (`run_sequential_two_level_feature_freq_tree`,
+# `run_bounded_synchronized_tensor_tree`) constructed their
+# `TSynchronizedSymmetricLevelState` with a literal `False`, so under
+# `NUMERIC_IDENTICAL`, where the flush is fixed point everywhere and
+# `acc_i32_is_live` is True, the workspace allocated the Int32 accumulator
+# at ONE cell and never zeroed it while every histogram kernel wrote its
+# `(leaf, stat, bin)` cells into it and `write_reduces_from_fixed_kernel`
+# read them back. The level winner then depended on whatever the device
+# allocator had placed after those four bytes, which is different on each
+# vendor (identity_break `gbdt-feature-freq`, 2026-09-13: Apple, NVIDIA
+# and AMD gave three answers on eight of nine fixtures while every other
+# GBDT lane was IDENTICAL) and can move on one box under allocator
+# pressure (the lone MOVED `base` cell on the M4). The rule is the
+# baseline's own (`acc_i32_is_live`), delegated rather than restated; the
+# define keeps the literal selectable for the A/B.
+comptime TENSOR_ACC_DEAD_2710 = is_defined["MOJOLEARN_2710_TENSOR_ACC_DEAD"]()
+
+
+def tensor_acc_live_for[hist2_smem_mode: Int]() -> Bool:
+    """DEVIATION 2710: the tensor driver's accumulator liveness, the
+    baseline's rule unless `MOJOLEARN_2710_TENSOR_ACC_DEAD` restores the
+    literal `False` the driver shipped with."""
+    comptime if TENSOR_ACC_DEAD_2710:
+        return False
+    else:
+        return acc_i32_is_live[hist2_smem_mode]()
+
+
 struct TTreeWorkspace(Movable):
     """The three large planes a tree grows in, owned by the FIT.
 
@@ -4482,7 +4512,7 @@ def run_sequential_two_level_feature_freq_tree[
     var blocks = blocks_for(layout, n_rows)
     var state = TSynchronizedSymmetricLevelState(
         ctx, layout.copy(), blocks^, initial_device^,
-        n_rows, stat_count, 2, False,
+        n_rows, stat_count, 2, tensor_acc_live_for[hist2_smem_mode](),
     )
     state.initialize_tree(ctx, weight_magnitude, gradient_magnitude)
     var splits = List[TBinarySplit]()
@@ -4580,7 +4610,7 @@ def run_bounded_synchronized_tensor_tree[
         raise Error("bounded tensor tree has invalid row/stat shape")
     var state = TSynchronizedSymmetricLevelState(
         ctx, layout.copy(), blocks.copy(), level_cindexes[0].copy(),
-        n_rows, stat_count, depth, False,
+        n_rows, stat_count, depth, tensor_acc_live_for[hist2_smem_mode](),
     )
     state.initialize_tree(ctx, weight_magnitude, gradient_magnitude)
     var splits = List[TBinarySplit]()
