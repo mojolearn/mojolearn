@@ -286,6 +286,34 @@ for so in $ALL_SOS; do
     [ "$so" -nt "$STAMP" ] || { echo "ERROR: $so predates this build (stale)" >&2; exit 1; }
 done
 
+# AND NOTHING ELSE. The loop above walks ALL_SOS, so it can only ever check a
+# file it already expects; a .so that is on NO list is neither required nor
+# refused. pyproject.toml's package-data globs `*.so`, `deterministic/*.so` and
+# `identical/*.so` unconditionally, so such a file is not absent from the wheel,
+# it SHIPS -- built by a different commit, for a different layout, with nothing
+# anywhere naming it.
+#
+# This is not hypothetical. On 2026-09-12 this tree held eighteen extensions
+# dated to the 0.6.0 build, nine in `fast` and nine in `deterministic`, from
+# before DEVIATION 2490 narrowed the lower tiers to the three tree lanes. Every
+# gate in this script passed over them in silence. PyPI was spared only because
+# the published wheel is built by release-provenance.yml on a FRESH CHECKOUT,
+# where .gitignore means they do not exist -- luck of the build environment, not
+# a check. A local build had no such luck, and this is the check.
+EXPECTED_SOS=$(mktemp "${TMPDIR:-/tmp}/mojolearn-expected-sos.XXXXXX")
+for so in $ALL_SOS; do printf '%s\n' "${so#"$PKG/"}"; done | sort -u > "$EXPECTED_SOS"
+UNEXPECTED_SOS=$( (cd "$PKG" && find . -name '*.so') | sed 's|^\./||' | sort -u \
+    | grep -Fxv -f "$EXPECTED_SOS" || true )
+rm -f "$EXPECTED_SOS"
+if [ -n "$UNEXPECTED_SOS" ]; then
+    echo "ERROR: $PKG holds extensions this build does not expect." >&2
+    echo "       They are not absent from the wheel; package-data globs *.so," >&2
+    echo "       so they SHIP STALE. Remove them and build again:" >&2
+    printf '%s\n' "$UNEXPECTED_SOS" | sed 's|^|           '"$PKG"'/|' >&2
+    exit 1
+fi
+echo "package tree: exactly the $(printf '%s\n' $ALL_SOS | sort -u | wc -l | tr -d ' ') expected extensions, no strays"
+
 # The FULL transitive closure, walked rather than sampled. See
 # packaging/macos/stage_dylibs.py: reading only the extension's direct
 # dependencies staged 2 dylibs when the real closure is 4, and shipped a wheel
@@ -335,8 +363,27 @@ pixi run -e pkg python "$here/packaging/isa_baseline.py" $ALL_SOS
 # emits the host half and silently no Metal shader code, exits 0, and produces
 # a wheel that imports and then dies on the first fit. That shipped once, as
 # TestPyPI 0.1.0a2. See packaging/macos/check_gpu_embedded.py.
+#
+# EVERY EXTENSION EXCEPT THE CPU TRAINING BINDING (DEVIATION 2680). That one is
+# built with `env -u MOJOLEARN_GPU_ARCHS`, contains no device code by design and
+# reads back vendor 'cpu', so it has ZERO AIR markers and this gate refuses it
+# correctly. The exclusion is HERE, at the call site, and NOT inside
+# check_gpu_embedded.py: that script exists because 0.1.0a2 shipped a host-only
+# build that passed every other gate, so teaching it to skip a file whose name
+# looks host-like would reopen the hole it was written to close. Every other
+# consumer of ALL_SOS still sees the host binding, and must: stage_dylibs.py
+# wipes and rebuilds the one .dylibs directory, the minos loop keeps the wheel
+# tag honest as the floor of everything inside, and isa_baseline.py is a
+# HOST-code check, which is precisely what this binary is.
+GPU_SOS=""
+for so in $ALL_SOS; do
+    case "$so" in
+        *"/host/_mojolearn_byte_lm_host.so") ;;
+        *) GPU_SOS="$GPU_SOS $so" ;;
+    esac
+done
 # shellcheck disable=SC2086
-pixi run -e pkg python "$here/packaging/macos/check_gpu_embedded.py" $ALL_SOS
+pixi run -e pkg python "$here/packaging/macos/check_gpu_embedded.py" $GPU_SOS
 
 cd "$here/python"
 rm -rf dist build ./*.egg-info
