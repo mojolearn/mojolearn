@@ -55,6 +55,8 @@ on:
       - "gemm/checks/gemm_oracle.mojo"
       - "kde/checks/kde_oracle.mojo"
       - "holtwinters/checks/hw_oracle.mojo"
+      - "solver/checks/cd_oracle.mojo"
+      - "solver/checks/profile_dot.mojo"
       - "bindings/host_helpers.mojo"
       - "bindings/hostptr.mojo"
       - "core/forest_host_predict.mojo"
@@ -80,14 +82,14 @@ env:
   # spaces. A lane listed here must read STABLE on every fixture and
   # IDENTICAL x4 against the three GPU columns; a lane not listed must read
   # REFUSED by name.
-  COVERED_LANES: "gemm-pinned,kde,holtwinters"
+  COVERED_LANES: "gemm-pinned,kde,holtwinters,lasso,elasticnet"
   # The phase 1 host binding families, space separated: each is built by
   # bindings/build_<family>_host.sh into MOJOLEARN_<FAMILY>_HOST_OUTDIR (the
   # production set under python/mojolearn/host/, then the sabotage set under
   # runner.temp), read back as the CPU column, and named in host.families.
-  HOST_FAMILIES: "linalg estimators tsa"
+  HOST_FAMILIES: "core linalg estimators tsa solver"
   # The same list as the read-back's --binding arguments.
-  HOST_BINDINGS: "_mojolearn_linalg_host _mojolearn_estimators_host _mojolearn_tsa_host"
+  HOST_BINDINGS: "_mojolearn_core_host _mojolearn_linalg_host _mojolearn_estimators_host _mojolearn_tsa_host _mojolearn_solver_host"
   # The three committed GPU columns the CPU column is diffed against.
   GPU_COLUMNS: >-
     bench/results/identity_break/2026-09-13_three-columns/apple-m4.json

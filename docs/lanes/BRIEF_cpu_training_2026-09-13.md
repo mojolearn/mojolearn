@@ -1017,3 +1017,61 @@ column 0 plus 50) is nearly constant on those fixtures and BFGS ends at the
 same parameters under both spellings of the loss. The gate requires
 `DIVERGENT` in the summary, which holds; a fixture the arm cannot move is
 recorded, not hidden.
+
+### lasso and elasticnet, IDENTICAL x4
+
+Binding `bindings/_mojolearn_solver_host.mojo` (`bindings/build_solver_host.sh`),
+routed by `_backend._HOST_MODULES["_mojolearn_solver"]`, exporting `cd_fit`,
+`cd_predict`, `solver_vendor` under the GPU binding's address contract
+(column-major design, the nine-value and three-value params lists). The
+fit is `solver/checks/cd_oracle.mojo::cd_oracle_fit` at `profile=True`
+(every reduction a `gemm_oracle_cell`); the predict restates
+`linearRegH`'s IDENTICAL arm, `gemm_oracle(x, coef, OP_TN, n_rows, 1,
+n_cols)` then `ftz(v + intercept)`, because `solver/impl/functions/linear_reg.mojo`
+defines the kernels beside it. The guards are `cd_fit_host`'s then
+`cd_fit_traced`'s, in their order and words (`sample_weight` and `shuffle`
+refused by name as on the device). `python/mojolearn/_solver_impl.py` is
+unchanged. `linkage_fit` is absent until the agglomerative lane.
+`cd_oracle.mojo` imports `solver/checks/profile_dot.mojo`, which imports
+`max.gpu.host` and `gemm/checks/gemm_identical.mojo` (the kernels); the
+host-only build compiled it (the risk named in section 1.1 for this lane,
+answered).
+
+A FINDING ON THE WAY. The first run REFUSED every cell at
+`_mojolearn.transpose_f32`: `python/mojolearn/_buffer.py::_native` resolves
+the input converters (`transpose_f32`, `cast_colmajor_f64_to_f32`,
+`cast_f64_to_f32`, `all_finite_*`) from the BASE binding, and `cdFit`'s
+Fortran-order design goes through `transpose_f32`, which no host binding
+carried (`_host_native` covers only the byte LM and forest host sets, none
+of which has the transpose). Section 3.2's "the Python estimator classes
+need no change" holds, but the base binding's host helpers are a
+dependency of every lane whose Python layer converts an array, not of
+kmeans and knn alone. `bindings/_mojolearn_core_host.mojo`
+(`bindings/build_core_host.sh`, routed by `_HOST_MODULES["_mojolearn"]`)
+carries the eleven helpers under the base binding's names (the transpose
+pair MIRRORS `_tiled_transpose_to_f32` element for element; the rest are
+`bindings/host_helpers.mojo`), and nothing else, so kmeans and knn keep
+refusing by name. It moves bytes and folds nothing, so it has no sabotage
+arm; `core_host_sabotage()` reports the define so a sabotage set loads as
+one set.
+
+| fixture | lasso train | lasso infer | elasticnet train | elasticnet infer |
+|---|---|---|---|---|
+| base | 2fa3301e45a46091 | 7334b38e7b651e27 | 2cf742083831ee9d | 483bce4b8cc1a137 |
+| ties | 1e207f82f555270b | ff61f45db38db46d | 118eac19578010ab | a767a79709358382 |
+| hashed | 0446105edc307f9c | 482da47ba9b49877 | 00b6923d62a41c0a | db0926772dbaaff4 |
+| wide | d0df889b0ede05a7 | 1f85238c927b088e | ef8800eaf0ca4f87 | e37614bc5b2ef0af |
+| denormal | 5374b434a96382d6 | b92e9bfda9b725b4 | 3add60ff69fd788c | 0047832ca8c561a3 |
+| denormal_ftz | 5374b434a96382d6 | b92e9bfda9b725b4 | 3add60ff69fd788c | 0047832ca8c561a3 |
+| dupes | beafb1d480c34cf4 | 727d68f61ef51bfb | 97d4c8c235d38bfe | fc18f039274052f1 |
+| odd | 5593579edd6113d6 | 1c17e2eb1ef6a2e2 | 1a518e703b7dd1d9 | 75a88217f1114867 |
+| negative | c332c713694ff28d | 0167126d36a4243d | 7624315e7deffe10 | a21e833e3e925b89 |
+
+`require-columns 4 over ['lasso']: OK` and `require-columns 4 over
+['elasticnet']: OK`; all 36 rows (nine train and nine infer per lane) read
+`IDENTICAL x4`; model is `n/a:no-save`. Sabotage (the GEMM oracle's
+descending leaf, reached through every `gemm_oracle_cell` reduction of the
+CD oracle): 9 of 9 train and 9 of 9 infer cells `DIVERGENT` on each lane,
+`parts differ: coef,predict` (lasso base 61a6ae20cfafca49 against
+2fa3301e45a46091; elasticnet base 3bde50d4452e548a against
+2cf742083831ee9d).

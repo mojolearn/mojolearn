@@ -877,6 +877,13 @@ def host_families_built():
 #: forest host binding would route RandomForestClassifier.predict to an
 #: entry with a different address contract under the GPU entry's name.
 _HOST_MODULES = {
+    # The base binding's HOST HELPERS (phase 1, 2026-09-13):
+    # bindings/_mojolearn_core_host.mojo carries transpose_f32,
+    # cast_colmajor_f64_to_f32, cast_f64_to_f32, all_finite_*, gather_*,
+    # argmax_rows_* under the base binding's names, so _buffer._native and
+    # _labels resolve on a CPU-only install; the estimator entries (kmeans,
+    # knn, rbc, radius) are absent and refuse by name.
+    "_mojolearn": "_mojolearn_core_host",
     # gemm-pinned (phase 1, 2026-09-13): bindings/_mojolearn_linalg_host.mojo
     # over gemm/checks/gemm_oracle.mojo::gemm_oracle, the profile's
     # definition; exports gemm, linalg_numeric_mode, linalg_vendor,
@@ -893,6 +900,11 @@ _HOST_MODULES = {
     # oracle_forecast; exports holtwinters_fit, holtwinters_forecast,
     # tsa_vendor. kpss_test and select_d (ARIMA's) are absent and refuse.
     "_mojolearn_tsa": "_mojolearn_tsa_host",
+    # lasso, elasticnet (phase 1, 2026-09-13): bindings/_mojolearn_solver_host.mojo
+    # over solver/checks/cd_oracle.mojo::cd_oracle_fit and gemm_oracle for
+    # the predict; exports cd_fit, cd_predict, solver_vendor. linkage_fit
+    # is absent until the agglomerative lane lands and refuses by name.
+    "_mojolearn_solver": "_mojolearn_solver_host",
 }
 
 #: The env switch the CPU identity gate sets to load a host binding built
