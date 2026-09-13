@@ -298,3 +298,17 @@ The evidence sits in `bench/results/identity_break/2026-09-13_feature_freq_2710/
    host oracle says Apple's tree is the argmax there, so the leg should
    show both moving to `9d97a55431b6f8e0`. If ARM fixed on AMD still reads
    `b99acd4c`, the diagnosis is incomplete and section 3 reopens.
+
+## The two owed legs (2026-09-13 evening): AMD and NVIDIA both move to the Apple column
+
+AMD MI325X (`bench/results/e1g/2026-09-13_214941-amd-mi325x-do-feature-freq-2710`) and NVIDIA
+H100 (`bench/results/e1g/2026-09-13_221244-nvidia-h100-feature-freq-2710`), each on one box from one source, three arms: the dead arm
+(`-D MOJOLEARN_2710_TENSOR_ACC_DEAD=1`) reproduces that vendor's Sep 13 hashes exactly (AMD base
+459e5ba5892267e5, NVIDIA base 944e48bbb96131b5, both hashed b99acd4c05cb3998); the fixed arm
+equals the Apple column cell for cell on all nine fixtures in train, infer and model (base
+7d9c56b51213cb42, ties 57ff9964d1af1d4a, hashed 9d97a55431b6f8e0, wide c6d7fccba2483372,
+denormal and denormal_ftz e7f1da14d1a9794b, dupes e8c61a9407503755, odd c481331145bfb998,
+negative 75028913a14bb938); fixed_again equals fixed (`summary: IDENTICAL=54`); the other five
+GBDT lanes are IDENTICAL in every arm (45 cells). On the Mac the diff of the committed Apple
+column against each vendor's fixed arm reads `IDENTICAL=53` on the six lanes plus the committed
+Apple base mover, which is the pre-fix run's own single event. Three vendors, one answer.
