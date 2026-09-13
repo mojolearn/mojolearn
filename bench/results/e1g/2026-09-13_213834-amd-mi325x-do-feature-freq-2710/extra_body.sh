@@ -81,8 +81,7 @@ IB="env MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH=/root/mojolearn/python pixi 
 built=0; failed=""
 for s in bindings/build*.sh; do
     n=$(basename "$s" .sh)
-    # CPU-only host bindings take no MOJOLEARN_GPU_ARCHS and no GBDT lane reads them.
-    case "$n" in build_byte_lm_host|build_forest_host) continue ;; esac
+    case "$n" in build_byte_lm_host) continue ;; esac
     if run "$n" $BUILD_ENV sh "$s"; then built=$((built + 1)); else failed="$failed $n"; fi
 done
 say "bindings_built=$built failed=${failed:-none}"
