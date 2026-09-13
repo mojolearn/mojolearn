@@ -866,3 +866,78 @@ at about 3x, realistically 2x. The only lever on the ceiling itself is the
 seam, which is a contract question (whether the three columns' native
 flush-to-zero FMAs agree with one another at the boundary), not a kernel
 one. Nobody has run that probe.
+
+### 13.5 The H100 leg (2026-09-13, measured): the conflict WAS the `kpack` loss; `kpack_pad` NO FLIP at 1.014
+
+Evidence: `bench/results/e1g/2026-09-13_150005-nvidia-h100-gemm-kpack-pad/remote/gemm-kernel/`
+(RunPod `NVIDIA H100 80GB HBM3`, sm_90a, commit 8e4d4539, pod jqy0074cwzbngu
+terminated and verified, 21 minutes of work on the box). `status.tsv`: all
+26 items exit 0. `step-check.log`: PASS, the padded page 16 bijection cases 0
+failures, every LM call `clean_moved=0`. The box's device card matched the
+M4 card generated at the same commit at every stage.
+
+**LM verdict** (`lm_summary.tsv`, lean step, 2 shipped brackets, every step
+witness equal to shipped on both corpora):
+
+| arm | enwik8 | Pile GitHub | geomean | verdict |
+|---|---:|---:|---:|---|
+| `kpack` (same pod, the unpadded CONTROL) | 1.3107 | 1.3056 | 1.3081 | NO FLIP |
+| `kpack_pad` | 1.0133 | 1.0150 | 1.0142 | NO FLIP |
+
+Shipped lean step 0.2317 / 0.2313 s; `kpack` 0.3044 / 0.3025; `kpack_pad`
+0.2353 / 0.2352.
+
+**GEMM sum per step** (`price_step.txt`): shipped against itself 1.000
+(141.6 ms); `kpack` 1.502 (214.0 against 142.5); `kpack_pad` 1.023 (145.7
+against 142.5). Per call, `kpack_pad` against shipped:
+
+| call | ran | ratio |
+|---|---|---:|
+| head_dB | all leaves, 2,358 blocks | 0.955 |
+| down_dA | all leaves, 256 | 0.972 |
+| gateup_fwd | all leaves, 256 | 0.986 |
+| head_fwd | all leaves, 6,288 | 0.996 |
+| gateup_dB, down_dB, proj_dB | group launch | 1.024 to 1.034 |
+| head_dA | group launch, 64 leaves | 1.043 |
+| proj_dA, gateup_dA, proj_fwd, down_fwd | group launch | 1.052 to 1.066 |
+
+`kpack` on the same pod: 1.37 to 1.63 on every call.
+
+**Resources** (`resources_lines.txt`): `kpack_pad_all` 255 registers, local
+4,200 B, shared 33,792 B, one block per SM; `kpack_pad_group` 255, 4,240,
+33,792, one. The same registers and block count as `kpack` and as shipped.
+
+**Reading.** Section 13.3's first case. Padding the stride by four words
+took the `kpack` loss from 1.31 to 1.01 on the step and from 1.50 to 1.02
+on the GEMM sum, with nothing else changed, so the eight-way bank conflict
+was the `kpack` loss and section 12's "a shared load per product step costs
+the H100 more than the register copies it replaces" is withdrawn: with the
+conflict gone, a per-step load from shared costs about what the per-window
+register copies cost, within a few percent either way. On the four
+all-leaves calls the copy-free body is 0.4 to 4.5 percent FASTER than
+shipped; on the group launches it is 2 to 7 percent slower, which is the
+kpack kernel's scalar staging stores (16 per thread per window against four
+vector stores) weighing more where a block walks 8 or 16 windows than where
+it walks 48 or more. Neither is a flip.
+
+What this settles about section 3.6: C3 is not the lever. The per-window
+copies and the per-step shared loads are interchangeable at this rate, so
+the block's time is not set by either. With C2 (DRAM words per flop, ruled
+by the same-shape flat lines), C3 and C4 (the register cap, unchanged at
+255 through every arm) off the table, what is left is C1 read as LATENCY
+rather than issue: an extra shared load per step hid completely, which a
+kernel at its issue limit could not have absorbed. The block runs eight
+warps, two per scheduler, and each cell's chain is two dependent
+instructions per step. The arm that separates latency-bound from
+issue-bound is one that raises the resident warps per SM, which means a
+second block per SM, which means at most 128 registers, and the 2540
+resources lines say cutting accumulators alone does not reach it (16 cells
+read 214). Where the other 100 or so registers go is a resources question
+before it is an arm: the `_tuned_g2r` staging registers, the fold stack's
+local addressing, or the 64-wide `acc` vector's spill pattern. Owed, not
+started.
+
+**Decision.** NO FLIP. `kpack_pad` stays trial only behind
+`MOJOLEARN_GEMM_ARM_TRIAL`, beside `kpack` and `kpack_wide`. No shipped
+line, no matrix row changes. The lane branch merges because its checks pass
+on two vendors and its docs correct a wrong reading.
