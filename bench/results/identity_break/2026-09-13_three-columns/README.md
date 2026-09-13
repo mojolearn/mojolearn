@@ -30,4 +30,11 @@ GEMM and metrics functions; `model` is n/a where no save/load exists. Fixtures a
 20,000 rows by 16 columns. The NVIDIA leg's byte-LM binding build failed on the box
 (`gate.txt`: `failed= build_byte_lm`); no identity_break lane uses it. The NVIDIA JSON's
 `vendor` field reads `box-arch` because the RunPod runner passes no environment to the body;
-the box is named in its leg directory.
+the box is named in its leg directory. All three JSONs carry `"commit": ""` for the same
+reason (MOJOLEARN_COMMIT was never exported into the body). Since the CPU training lane
+(2026-09-13, phase 0) `tools/identity_break.py` REFUSES both: a `--vendor` that is not a box
+label (`^[a-z0-9][a-z0-9_.-]*$`, never `box-arch` or another placeholder) and a run with no
+commit witness (MOJOLEARN_COMMIT, `git rev-parse HEAD`, or a COMMIT / commit.txt file at the
+repository root). These three files are kept as recorded; the next GPU columns cannot repeat
+the defect. Their cells' hashed bytes are unchanged by that tool change, and `--diff` still
+reads them.
