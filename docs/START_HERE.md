@@ -71,8 +71,12 @@ numerical changes.
 If you add a numerical pin, the test for it must first be shown to FAIL when
 the pin is removed or spelled the other way. A test that passes under both
 spellings has measured nothing, however green it is. In this tree that
-deliberate break is called a sabotage arm, and every claim of the form "this is
-bit-identical" is backed by one.
+deliberate break is called a sabotage arm, and every new claim of the form
+"this is bit-identical" is backed by one. Eight earlier flips (DEVIATIONS 2620,
+2621, 2622, 2671, 2672, 2625, 2626 and 2660) have no build switch, because
+their old code was deleted rather than gated; for those, cross-vendor identity
+at the shipped default is the only question that can still be asked
+([AMD confirmations brief](lanes/BRIEF_amd_confirmations_2026-09-12.md)).
 
 So a numerical contribution has two halves. The change, and the demonstration
 that its check can tell the difference. If you send the first half only, that

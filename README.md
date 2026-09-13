@@ -4,13 +4,18 @@
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22068632.svg)](https://doi.org/10.5281/zenodo.22068632)
 
 **Machine learning that trains and predicts bitwise identically across Apple,
-NVIDIA and AMD GPUs.**
+NVIDIA and AMD GPUs, for certified configurations.**
 
-Give mojolearn the same code, data, hyperparameters and seed on an Apple M4,
-an NVIDIA H100 and an AMD MI325X, and you get the same bits on all three. Not
-close, not within a tolerance. The same bits. A model trained on AMD and the
-same model trained on NVIDIA are byte for byte the same model, and either one
-makes exactly the same predictions. This is `identical` mode, and **it is the
+Give mojolearn the same code, data, hyperparameters and seed on two certified
+machines and you get the same bits on both. Not close, not within a tolerance.
+The same bits. The byte-level language model record holds on an NVIDIA RTX
+4090 (sm_89), an AMD MI325X (gfx942) and an Apple M4
+([record](bench/results/resume/2026-09-07-root-byte-lm-three-vendor/README.md));
+the forest record of September 12 holds on an NVIDIA H100 (sm_90a), an AMD
+MI300X (gfx942) and an Apple M4
+([brief](docs/lanes/BRIEF_amd_confirmations_2026-09-12.md)). A model trained
+on AMD and the same model trained on NVIDIA are byte for byte the same model,
+and either one makes exactly the same predictions. This is `identical` mode, and **it is the
 default**. The claim is proven by stage-level identity cards and separating
 sabotage tests, never inferred from a final-output hash, and it holds only for
 the configurations recorded in [the support matrix](SUPPORT_MATRIX.md).
@@ -19,12 +24,11 @@ RF/ET offer `inference_engine="sequential"` (existing host prediction) and
 experimental `inference_engine="parallel_groves"` (shared GPU prediction).
 Both retain GPU training; see the [inference algorithms and numerical contract](docs/FOREST_INFERENCE_ENGINES.md).
 
-The unreleased 0.8.0 source removes the NumPy runtime dependency and returns
+Since 0.8.0 the library has no NumPy runtime dependency and returns
 `mojolearn.Array` objects. Existing NumPy inputs remain supported; callers can
 use `numpy.asarray(result)` for a zero-copy view. See the
 [NumPy-free contract](python/mojolearn/NUMPY_FREE_CONTRACT.md) and
 [qualification roadmap](docs/lanes/NUMPY_FREE_RESIDUAL_2026-09-10.md).
-The published version below retains its existing API.
 
 Random forest and ExtraTrees fit now export model bytes directly into owned
 Array buffers, avoiding per-node Python objects; see the
@@ -116,11 +120,22 @@ framework, or on a device that has not passed the same checks.
   preserves the uninterrupted training trajectory
   ([cross-vendor record](bench/results/resume/2026-09-06-root-byte-lm-cross-vendor/README.md)).
   Metal checkpoint resume remains open.
-- **Trees and classical learning.** Gradient boosting, random forests, Extra
-  Trees, k-means, DBSCAN, k-NN, PCA, truncated SVD, OLS, ridge, logistic
-  regression, FP32 matrix multiplication, isolation forest and ARIMA filtering
-  carry three-vendor cards for recorded configurations. Model state and
-  recorded training stages match, not only predictions.
+- **Trees and classical learning.** Three layers of evidence, each scoped to
+  its commit. First, stage-level three-vendor identity cards for gradient
+  boosting, random forests, Extra Trees, k-means, DBSCAN, k-NN, PCA, truncated
+  SVD, OLS, ridge, logistic regression, FP32 matrix multiplication, isolation
+  forest and ARIMA filtering, recorded at August 2026 commits
+  ([identity-path ledger](IDENTITY_PATHS.md)); model state and recorded
+  training stages match there, not only predictions. Second, a three-vendor
+  prediction diff at the current default, September 12, for random forest,
+  Extra Trees and isolation forest (45 of 45 cells equal on an Apple M4, an
+  NVIDIA H100 and an AMD MI300X), SVC (three fit hashes match) and GBDT (36 of
+  36 cells on the 0.8.2 line)
+  ([AMD confirmations brief](docs/lanes/BRIEF_amd_confirmations_2026-09-12.md),
+  [CHANGELOG](CHANGELOG.md)). Third, k-means, PCA, OLS, k-NN and KDE carry an
+  AMD witness at the 0.8.x defaults (108 cells stable on the box) with the
+  Apple and NVIDIA baselines at that default still owed, so their current
+  default rests on the August cards plus one vendor.
 - **UMAP.** Neighbor selection and iterative updates match across the three
   vendors on named fixtures.
 
@@ -137,8 +152,9 @@ Bitwise identity carries implementation and execution costs. Measured against
 cuML, cuBLAS and PyTorch, `identical` mode is competitive on some measured
 tree workloads and substantially slower on many classical, matrix and neural
 workloads. Those measurements reflect both the numerical constraints and
-optimization gaps in the current kernels. The numbers are in the accompanying
-paper; the raw records behind them live under `bench/results/`.
+optimization gaps in the current kernels. A paper collecting the numbers is
+in preparation outside this repository; the raw records behind them live
+under `bench/results/`.
 
 **`identical` is the default**, in the published <!--fact:published_version-->0.8.3<!--/fact--> wheels and in this
 source. For the tree estimators you opt out of it, not into it, by
@@ -181,7 +197,8 @@ cross-vendor bitwise identity is available nowhere else.
 
 - People who need a reproducibility contract, same bits on repeated runs or
   across vendors, and will pay for it in time. The cost is small on some
-  measured tree workloads and large elsewhere; see the paper before deciding.
+  measured tree workloads and large elsewhere; read the records under
+  `bench/results/` before deciding.
 - People on Apple silicon who want GPU gradient boosting, random forests,
   Extra Trees, clustering, nearest neighbors, decompositions and linear
   models without leaving the machine.
@@ -268,9 +285,11 @@ not covered by it.
 The project has one maintainer today. Three things limit what that means for
 a reader.
 
-Every claim in this repository is backed by a recorded artifact under
-`bench/results/` that names its commit, device, toolchain, mode and
-limitations, and each is reproducible from the commands in the docs
+The identity cards and legs cited in this README are recorded under
+`bench/results/`, each naming its commit, device, toolchain, mode and
+limitations. The per-release install qualification logs are retained outside
+the tree and summarized per release in [CHANGELOG.md](CHANGELOG.md). Each
+recorded card is reproducible from the commands in the docs
 ([verification](docs/VERIFY.md), [conformance bundles](docs/CONFORMANCE.md),
 [release runbook](docs/PYPI_RELEASE.md)). Historical cards and investigations
 under `bench/results/` and `archive/` are evidence, not current guidance;
@@ -301,8 +320,10 @@ repository uses. `python -m mojolearn conformance` exports and validates
 bundles so another implementation can compare itself without running Mojo,
 and `tools/verify_umap_qualification.py` rechecks retained release evidence
 against a wheel without GPU work. One local run establishes one build on one
-device; a cross-vendor claim needs every named leg, and the cards for each
-leg are in the tree.
+device; a cross-vendor claim needs every named leg, and the identity cards
+for each leg are under `bench/results/`. The per-release install
+qualification logs are kept outside the tree and summarized in
+[CHANGELOG.md](CHANGELOG.md).
 
 ## Quick start
 
@@ -390,7 +411,13 @@ same bits, and either model produces exactly the same predictions. This is a
 claim about the trained model, not byte-for-byte equality of archive
 metadata. If a configuration cannot meet the contract, the library raises a
 named error instead of silently returning a possibly different model; a
-refusal is reported as a refusal, never counted as a pass.
+refusal is reported as a refusal, never counted as a pass. The claim is
+float32 only. Float64 input is converted with a copy for most estimators
+(`python/mojolearn/_buffer.py`) and refused by name on the linalg
+(`python/mojolearn/_linalg_impl.py`) and Mamba (`python/mojolearn/_mamba_impl.py`)
+surfaces. The cross-vendor identity cells behind the September 12 diff are
+recorded at fixtures of up to 20,000 rows by 16 columns
+(`tools/identity_break.py`), not at the 1M-row speed workloads.
 
 Cross-vendor identity is a profile, not a statement that every GPU operation
 is universally identical. A profile fixes relevant reduction order,

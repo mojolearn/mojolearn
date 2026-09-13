@@ -1,12 +1,17 @@
 # Support and certification
 
-MojoLearn **0.6.0 is published on PyPI** for macOS arm64 and AMD Linux
-x86-64 (`gfx942`) as an explicit alpha API release. NVIDIA Linux remains
-source-build-only. [Exact index hashes and provenance](bench/results/releases/2026-09-06-alpha-api/README.md)
-separate published Python API availability from inherited native binaries
-and numerical certification. Missing extensions, including the new byte-LM
-native trainer, still require a source build. Publication does not certify
-all features, architectures or current source edits.
+mojolearn **0.8.3 is published on PyPI** as a Linux x86-64 wheel (CUDA sm_89,
+CUDA sm_90a, HIP gfx942) and a macOS arm64 wheel, both from commit f8b65ee2
+(tags alpha-api-0.8.3-20260911 and v0.8.3), published 2026-09-11. The installed
+Linux wheel passed its identical qualification jobs on HIP gfx942 and CUDA
+sm_90a (29 smoke lanes, equal hashes on both); sm_89 was not qualified
+installed. Only the three tree bindings (GBDT, Random Forest, Extra Trees) ship
+the `fast` and `deterministic` tiers; every other binding builds and ships
+`identical` only, and asking one of them for a lower tier raises a named error
+(DEVIATION 2490, 0.8.0). The per-release detail, including what each patch
+release changed and what was not qualified, is in [CHANGELOG.md](CHANGELOG.md).
+Publication does not certify all features, architectures or current source
+edits.
 
 The [September 6 Apple 0.6.0 candidate](bench/results/resume/2026-09-06-feature-finish/README.md)
 rebuilds all 45 extensions and passes all fifteen installed Python 3.10–3.14 /
@@ -43,20 +48,35 @@ device.
 
 | Platform | Status | Qualification |
 |---|---|---|
-| macOS arm64 / Apple silicon | Primary packaged platform | Built at the Apple M1 ISA floor. Current packaging inventory contains 15 extensions in each of three modes. The 0.5.0 wheel passed every Python 3.10–3.14/mode combination on Apple M4 and fresh PyPI-install API checks. The older 0.6.0 macOS candidate passed its installed checks; current OrderedRMSE/sequence/serialization bytes need a fresh build and qualification. |
-| Linux x86-64 / NVIDIA CUDA | Frozen CUDA candidate built; full qualification failed | At `eb835021`, all 45 `sm_89` extensions build and 19/24 installed jobs pass; Mamba accuracy and Transformer stalls fail the full candidate. Source overlays fix Transformer, with one Mamba3 non-IDENTICAL tolerance gap remaining. Device code is architecture-specific. Certification on one NVIDIA architecture does not certify another. Release 0.3.0 had an AVX-512 host-code defect; it is historical and must not be used as current evidence. |
-| Linux x86-64 / AMD HIP | Published 0.6.0 alpha HIP wheel; base qualification retained | At `eb835021`, all 45 `gfx942` extensions and all 24 installed jobs pass. Newer sequence/serialization fixes still need fresh AMD qualification. Measured chiefly on `gfx942`. That is not evidence for every AMD architecture. |
+| macOS arm64 / Apple silicon | Published 0.8.3 wheel | Built at the Apple M1 ISA floor from commit f8b65ee2. The tree bindings ship three tiers; every other binding ships `identical` only (DEVIATION 2490). The 0.8.3 SVC fix was verified on the Apple M4 and the 0.8.2 GBDT fix gave 36/36 identity cells equal to the H100 on the Apple M4 ([CHANGELOG.md](CHANGELOG.md)). |
+| Linux x86-64 / NVIDIA CUDA | Published 0.8.3 wheel, `sm_89` and `sm_90a` | Installed 0.8.3 wheel passed its identical qualification jobs on CUDA sm_90a (29 smoke lanes) and fit SVC at 400, 600 and 2,000 rows on an H100 with the source builds' bits; sm_89 was not qualified installed. Device code is architecture-specific. Certification on one NVIDIA architecture does not certify another. Release 0.3.0 had an AVX-512 host-code defect; it is historical and must not be used as current evidence. |
+| Linux x86-64 / AMD HIP | Published 0.8.3 wheel, `gfx942` | Installed 0.8.3 wheel passed its identical qualification jobs on HIP gfx942 (29 smoke lanes, hashes equal to sm_90a). The 0.8.2 GBDT sync fix (DEVIATION 2600) was verified 36/36 identity cells equal to the H100 on an MI300X. Measured chiefly on `gfx942`. That is not evidence for every AMD architecture. |
 | CPU-only and other accelerators | Unsupported, except the byte LM | No CPU implementation of any estimator, block or trainer other than the byte LM, and no CPU fallback for them. The byte LM has two CPU surfaces needing no GPU: `LanguageModelInference` for the forward pass ([docs/BYTE_LM_CPU_INFERENCE.md](docs/BYTE_LM_CPU_INFERENCE.md)), and `LanguageModelHostTrainer` for one training step, forward, backward and the AdamW update, which reproduces the recorded GPU bytes of the retained three-vendor capture for all 128 of its steps, gradient and loss and post-step parameters and both Adam moments alike, on seven CPUs, with a wrong-gradient build required to fail the same gate ([docs/BYTE_LM_CPU_TRAINING.md](docs/BYTE_LM_CPU_TRAINING.md)). Both are one model profile at one batch shape; identity is claimed per shape, because the weight gradients contract over the token count. Reference path, one thread: a whole step measured 37 to 39 ms on the Linux CI runners and 69 ms on Apple M1. |
 
 Before publishing a release, validate the installed wheel rather than only the
-source tree: import it in a clean environment, load all 15 extensions in each
-included mode, and run the public smoke suite. See [release instructions](docs/PYPI_RELEASE.md).
+source tree. Import it in a clean environment, load every shipped extension in
+each tier it ships (three tiers for the tree bindings, `identical` only for the
+rest), and run the public smoke suite. See [release instructions](docs/PYPI_RELEASE.md)
+and the [release checklist](docs/RELEASE_CHECKLIST.md).
 
 ## Capability snapshot
 
 The table groups public surfaces by the strongest evidence currently retained.
 “Three-vendor card” means at least one named fixture has matching IDENTICAL
-cards on Apple, NVIDIA, and AMD; it does not extend beyond that fixture.
+cards on Apple, NVIDIA, and AMD; it does not extend beyond that fixture. Each
+row's evidence was recorded at the commit its cited card or brief names, and a
+row that names no commit is certified only at the commit of its linked record,
+not at the current source.
+
+**Known IDENTICAL violation.** The Gram product `A^T A` that PCA, truncated
+SVD and OLS run their first step through ([IDENTITY_PATHS.md](IDENTITY_PATHS.md)
+row 27) falls back to the vendor matmul under IDENTICAL when the design has
+more columns than the split-K kernel's capacity, instead of refusing. The
+129-column fallback arm of `decomposition/checks/pca_check.mojo` completes
+under IDENTICAL and returns a model that mode promises is vendor-independent
+and is not. Recorded as pre-existing on NVIDIA and AMD in the
+[AMD confirmations brief](docs/lanes/BRIEF_amd_confirmations_2026-09-12.md)
+(finding 3); the refusal past capacity is still owed.
 
 | Surface | Public availability | Strongest retained identity evidence | Important open work |
 |---|---|---|---|
