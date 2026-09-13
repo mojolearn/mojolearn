@@ -1531,3 +1531,25 @@ xnyxf5gvysup87 terminated and verified; corpora from R2 in 16 s).
   reruns only that control. The verdict does not rest on it.
 
 **SHIPPED.** The NVIDIA kernel body row is 1 on main; 0 is the revert.
+
+### 18.4 The AMD row (2026-09-13, measured and gated on a Hot Aisle MI300X)
+
+Two legs, both on the 8core MI300X VM in the rocm/dev-ubuntu-22.04 container, one heat
+window each, commit bfde0442 for the price and this branch for the gate.
+
+The price (`bench/results/e1g/2026-09-13_193949-amd-mi300x-hotaisle-gemm-amd-row`, on main):
+`kpack_gs` FLIP geomean 0.9570 (enwik8 0.9559, Pile GitHub 0.9580) and `kpack_hg` FLIP 0.9585
+(0.9573, 0.9597) lean step against shipped, GEMM sum 592 to 561 ms (0.947) and 559 ms (0.944),
+every step witness equal to shipped on both corpora, step check PASS. On this column the body's
+hardware fold flush compiles out (`comptime if HW and TUNED_HW_FTZ_FMA`, NVIDIA only), so
+`kpack_hg` here IS the gather staging alone and the two arms price the same to 0.15 percent.
+The row (`lib_gemm_kernel_body_for`) is 1 on AMD as on NVIDIA, one value and one code path.
+
+The gate (`bench/results/e1g/2026-09-13_201129-amd-mi300x-hotaisle-gemm-amd-row-gate`), the same shape as 18.3 with the row flipped: the card under the new
+shipped path diffed against the M4's (`identity_trace_diff.py`: IDENTICAL, same stage
+sequence, same counts, same hashes), the step check PASS with the body's reach, and the
+kernel leg with `shipped` (the new body), `ksplit` (exactly the row-0 dispatch at S=110 it
+replaced) and `kpack_hg` (the arm it was flipped from): `kpack_hg` reads 1.0006 against
+shipped (enwik8 1.0019, Pile GitHub 0.9993; GEMM sum 0.9994), the proof that the shipped path
+is that body; `ksplit` reads 1.0342 (1.0366, 1.0318; GEMM sum 1.041), the old default slower
+by the amount the price leg promised; every witness equal on both corpora.
