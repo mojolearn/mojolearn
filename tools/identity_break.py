@@ -663,6 +663,7 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(predict=_h(m.predict(_coded(X)))), m, lambda e: (e.predict(_coded(Xh)),))
 
 
+@lane("mlp")
 def _(ml, X, yc, yr, Xh=None):
     """SmallMLPTrainer, the fixed 8-16-3 network. Three AdamW steps on
     three 64-row batches of the first eight columns, targets from
@@ -681,6 +682,7 @@ def _(ml, X, yc, yr, Xh=None):
                 m, lambda e: (np.asarray(e.predict_logits(np.ascontiguousarray(Xh[:256, :8]))),))
 
 
+@lane("byte-lm")
 def _(ml, X, yc, yr, Xh=None):
     """SmallByteLanguageModelTrainer (LanguageModelTrainer is the same
     class) at the default b2-l32-d32 profile, 34944 parameters. Three
@@ -698,6 +700,7 @@ def _(ml, X, yc, yr, Xh=None):
                 m, lambda e: (np.asarray(e.logits(_ids(Xh, shape.batch, shape.length))),))
 
 
+@lane("byte-lm-host-infer")
 def _(ml, X, yc, yr, Xh=None):
     """LanguageModelInference, the CPU forward path, on the reference
     (unthreaded) arm, from the same starting weights as byte-lm. Its
@@ -712,6 +715,7 @@ def _(ml, X, yc, yr, Xh=None):
                 m, lambda e: (np.asarray(e.logits(_ids(Xh, shape.batch, shape.length))),))
 
 
+@lane("byte-lm-host-train")
 def _(ml, X, yc, yr, Xh=None):
     """LanguageModelHostTrainer, one CPU training step (its docstring says not
     certified yet). It has no evaluation-only entry (`loss` IS a step), so
@@ -725,6 +729,12 @@ def _(ml, X, yc, yr, Xh=None):
                 m, lambda e: (np.uint32(e.train_step(_ids(Xh, shape.batch, shape.length + 1))),))
 
 
+# The sequence blocks: (2, 16, 32) slabs from the fixture (_seq), hashed
+# weights at the smallest legal d_model (32, the Mamba-2/3 rule). Their
+# docstrings say the IDENTICAL card is one vendor (transformer) or that
+# broader backward qualification is open (Mamba); measured here on all.
+
+@lane("mamba1")
 def _(ml, X, yc, yr, Xh=None):
     dm, di, r = 32, 64, 2
     w = _block_weights("mamba1", {
@@ -737,6 +747,7 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(parts, blk, lambda e: (np.asarray(e.forward(_seq(Xh, 2, 16, dm))),))
 
 
+@lane("mamba2")
 def _(ml, X, yc, yr, Xh=None):
     dm, di, nh = 32, 64, 1
     cd, dip = di + 256, 2 * di + 256 + nh
@@ -750,6 +761,7 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(parts, blk, lambda e: (np.asarray(e.forward(_seq(Xh, 2, 16, dm))),))
 
 
+@lane("mamba3")
 def _(ml, X, yc, yr, Xh=None):
     dm, di, nh = 32, 64, 1
     dip = 2 * di + 256 + 3 * nh + 32
@@ -763,6 +775,7 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(parts, blk, lambda e: (np.asarray(e.forward(_seq(Xh, 2, 16, dm))),))
 
 
+@lane("transformer")
 def _(ml, X, yc, yr, Xh=None):
     dm, nh, nkv, hd, it = 32, 2, 1, 16, 64
     w = _block_weights("transformer", {
@@ -776,6 +789,7 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(parts, blk, lambda e: (np.asarray(e.forward(_seq(Xh, 2, 16, dm))),))
 
 
+@lane("samba")
 def _(ml, X, yc, yr, Xh=None):
     """SambaStack, one Mamba-3 layer and one attention layer at d_model 32
     over a 256-byte vocabulary, weights from the stack's own seeded
