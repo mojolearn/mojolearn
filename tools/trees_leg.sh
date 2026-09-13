@@ -192,6 +192,9 @@ cmd_ship() {
     pod_ssh 'cd /root/mojolearn && tar xzf -' < "$TMPD/src.tgz"
     git rev-parse HEAD | pod_ssh 'cat > /root/mojolearn/SHIPPED_COMMIT.txt'
     say "shipped"
+    # DEVIATION 2704: the two board npz from R2, never a decode on the pod.
+    say "$(MOJOLEARN_STAGE_KEYS="${MOJOLEARN_STAGE_KEYS-gbm-bench/taxi/taxi_speed.npz gbm-bench/istella/istella_speed.npz}" \
+        sh tools/stage_from_r2.sh "$SSH_TARGET" 2>&1 | tail -1)"
 }
 
 cmd_ssh() { current_pod; pod_ssh "$@"; }

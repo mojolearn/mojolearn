@@ -110,6 +110,9 @@ record env 0 0
     (
         _tgz="$GBM_BENCH_DATA/istella/istella-s-letor.tar.gz"
         _i=0
+        _staged=0
+        # DEVIATION 2704: the runner staged the decoded npz from R2; no tarball.
+        [ -f "$GBM_BENCH_DATA/istella/istella_speed.npz" ] && { _i=4; _staged=1; }
         while [ "$_i" -lt 4 ] && [ "$(sha256sum "$_tgz" 2>/dev/null | cut -c1-64)" != "$ISTELLA_TGZ_SHA" ]; do
             _i=$((_i + 1))
             [ "$_i" -ge 3 ] && rm -f "$_tgz"
@@ -119,6 +122,8 @@ record env 0 0
         done
         if [ "$(sha256sum "$_tgz" 2>/dev/null | cut -c1-64)" = "$ISTELLA_TGZ_SHA" ]; then
             run istella-untar tar -xzf "$_tgz" -C "$GBM_BENCH_DATA/istella"
+        elif [ "$_staged" = 1 ]; then
+            record istella-fetch 0 "staged npz present (R2), tarball not fetched"
         else
             record istella-fetch SHA_MISMATCH 0
         fi

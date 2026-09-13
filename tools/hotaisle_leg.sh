@@ -2497,6 +2497,10 @@ if [ "$SHIPS_SOURCE" = 1 ]; then
   echo "upload_seconds=$_up_s" >> "$OUT/leg.txt"
   subst "$TMPD/remote_unpack.sh.template" "$TMPD/remote_unpack.sh" || die "the unpack script did not substitute" 1
   rexec "$TMPD/remote_unpack.sh" > "$TMPD/unpack.out" 2>&1
+  # DEVIATION 2704: datasets and corpora from R2, staged as root before the
+  # body runs (the container mounts /root:/root, so it sees them).
+  MOJOLEARN_STAGE_REMOTE_SH='sudo -n -H sh -s' sh tools/stage_from_r2.sh "${SSH_OPTS[*]} hotaisle@$SSH_IP" > "$OUT/stage.log" 2>&1 || true
+  log "$(tail -1 "$OUT/stage.log")"
   sed 's/^/    /' "$TMPD/unpack.out"
   grep -q '^ARCHIVE-SHA-OK' "$TMPD/unpack.out" && grep -q '^UNPACKED ' "$TMPD/unpack.out" || die "the VM refused or failed to unpack the bundle" 7
 else

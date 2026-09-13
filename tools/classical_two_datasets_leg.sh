@@ -225,6 +225,8 @@ if has_phase setup; then
         # Resumed attempts, a clean restart from the third (the MI325X got HTTP
         # 504 on a resume; tools/trees_hotaisle_body.sh).
         _i=0
+        # DEVIATION 2704: the runner staged the decoded npz from R2; no tarball.
+        [ -f "$GBM_BENCH_DATA/istella/istella_speed.npz" ] && { _i=4; echo "istella=staged npz present (R2), tarball not fetched" >> "$OUT/fetch.txt"; }
         while [ "$_i" -lt 4 ] && [ "$(sha256sum "$_tgz" 2>/dev/null | cut -c1-64)" != "$ISTELLA_TGZ_SHA" ]; do
             _i=$((_i + 1))
             [ "$_i" -ge 3 ] && rm -f "$_tgz"

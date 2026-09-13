@@ -1288,6 +1288,7 @@ def download(name):
                   % (dest, os.path.getsize(dest) / 1e6))
         else:
             print("downloading %s -> %s (about 2.6 GB)" % (url, dest))
+            print("R2_STAGING_MISSED: downloading from the origin on this box; the runner should have staged it (tools/stage_from_r2.sh, Andrew 2026-09-13: always use R2)")
             urllib.request.urlretrieve(url, dest)
             print("higgs: %.1f MB" % (os.path.getsize(dest) / 1e6))
         # Decode once, here. The gzip csv parse is several MINUTES and it
@@ -1344,6 +1345,7 @@ def download(name):
                   % (dest, os.path.getsize(dest) / 1e6))
         else:
             print("downloading %s -> %s (about 472 MB)" % (ISTELLA_URL, dest))
+            print("R2_STAGING_MISSED: downloading from the origin on this box; the runner should have staged it (tools/stage_from_r2.sh, Andrew 2026-09-13: always use R2)")
             urllib.request.urlretrieve(ISTELLA_URL, dest)
             print("istella: %.1f MB" % (os.path.getsize(dest) / 1e6))
         if _find_file(folder, "train.txt") is None:
@@ -1372,6 +1374,7 @@ def download(name):
             # counts as present is how a leg once measured synthetic data
             # while believing it had Istella-S.
             tmp = dest + ".part"
+            print("R2_STAGING_MISSED: downloading from the origin on this box; the runner should have staged it (tools/stage_from_r2.sh, Andrew 2026-09-13: always use R2)")
             urllib.request.urlretrieve(url, tmp)
             os.replace(tmp, dest)
             print("criteo part: %.1f MB" % (os.path.getsize(dest) / 1e6))
@@ -1394,6 +1397,7 @@ def download(name):
                   % (dest, os.path.getsize(dest) / 1e6))
         else:
             print("downloading %s -> %s (about 211 MB)" % (url, dest))
+            print("R2_STAGING_MISSED: downloading from the origin on this box; the runner should have staged it (tools/stage_from_r2.sh, Andrew 2026-09-13: always use R2)")
             urllib.request.urlretrieve(url, dest)
             print("year: %.1f MB" % (os.path.getsize(dest) / 1e6))
         # Decode once, here, so the first timed run does not pay a
