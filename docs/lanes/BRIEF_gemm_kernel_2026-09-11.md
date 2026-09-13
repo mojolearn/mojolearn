@@ -1497,3 +1497,37 @@ compiles the kpack kernel (cross-compiled: two sidecars carry
   instruction and does not apply).
 
 RUN OWED at the time of writing.
+
+### 18.3 The gate (2026-09-13, measured): the shipped path is the body, the card agrees with Apple, the old default reads 1.045
+
+Evidence: `bench/results/e1g/2026-09-13_183737-nvidia-h100-gemm-hg-flip/` (RunPod H100 80GB HBM3, commit 07707794, pod
+xnyxf5gvysup87 terminated and verified; corpora from R2 in 16 s).
+
+- **Card**: the gemm payload's device check on the NEW shipped path and its
+  card against the M4 card: NO DIVERGENCE at any matched stage
+  (`diff_apple_vs_nvidia.txt`). Three-vendor identity of the shipped body
+  through the two cards (AMD's row is 0 and unchanged).
+- **Step check** (`step-check.log`): PASS; the default dispatch section
+  reads `column row=132 [shipped DEFAULT kpack_hg body ...]`, the
+  shipped-entry case 24 OK 0 FAIL at the body's own reach, the three-row
+  probe unchanged.
+- **LM** (`lm_summary.tsv`, every step witness equal on both corpora):
+  shipped 0.2106 / 0.2112 s (the previous pods' shipped read 0.2318 /
+  0.2320); `kpack_hg` against the new shipped **1.0005** (the shipped
+  path IS that body); `ksplit`, the 2595 default's own group launch with
+  the tuned plan elsewhere, 1.0449 against the new shipped on this pod.
+- **GEMM sum** (`price_step.txt`): `kpack_hg` 0.999; `ksplit` 1.081
+  (131.6 against 121.8 ms). The `ksplit` ARM prices 131.6 where the old
+  shipped default priced 143 on every pod of the day: the arm and the old
+  default share the kernels but not every launch line, so the same-pod OLD
+  reference here is a lower bound of the gain, and the cross-pod shipped
+  numbers (0.232 to 0.211 on the step, 143 to 122 on the sum, a pod-to-pod
+  drift under 1 percent all day) are the measurement.
+- **One harness defect, fixed after**: the shipped noise-control price run
+  (`price-shipped`) exited 1 after its first call because the PHASE line's
+  second call site still passed the shipped geometry id to the kpack phase
+  timer ("geometry 0 is not a kpack geometry"). `bench/gemm_step_price_main.mojo`
+  now resolves the phase geometry once; `tools/gemm_price_shipped_leg.sh`
+  reruns only that control. The verdict does not rest on it.
+
+**SHIPPED.** The NVIDIA kernel body row is 1 on main; 0 is the revert.
