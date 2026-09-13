@@ -208,8 +208,12 @@ build_pairs | xargs -P "$BUILD_JOBS" -n 2 sh -c '
     # code, and MOJOLEARN_GPU_ARCHS reaching it is the one way it can be
     # silently wrong. Its own output directory is unset for the same reason
     # the byte LM build unsets it, so it lands in the package tree.
+    # It compiles the CPU column only and refuses any other
+    # MOJOLEARN_TARGET_COLUMN by name, so the column is pinned to cpu here
+    # (packaging/linux/build_sets.sh does the same; the Linux legs export the
+    # GPU column to every build).
     if [ "$script" = build_byte_lm_host.sh ]; then
-        if MOJOLEARN_NUMERIC_MODE=$mode MOJOLEARN_SKIP_BUILD_GATE=$skip \
+        if MOJOLEARN_NUMERIC_MODE=$mode MOJOLEARN_SKIP_BUILD_GATE=$skip MOJOLEARN_TARGET_COLUMN=cpu \
              env -u MOJOLEARN_GPU_ARCHS -u MOJOLEARN_BYTE_LM_HOST_OUTDIR \
              bash "./bindings/$script" > "$log" 2>&1; then
             { echo "== $script ($mode) OK"; cat "$log"; }

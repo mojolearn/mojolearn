@@ -152,7 +152,12 @@ build_one() {
     # BY NAME on Linux. Its output directory is unset for the same reason the
     # byte LM build unsets its own, so the binary lands at
     # python/mojolearn/host/ where the staging move below looks for it.
-    MOJOLEARN_NUMERIC_MODE=$tier MOJOLEARN_SKIP_BUILD_GATE=1 \
+    # It compiles the CPU column (COLUMN_CPU, the CPU training lane
+    # 2026-09-13) and refuses any other MOJOLEARN_TARGET_COLUMN by name, while
+    # tools/release061_remote_build.sh exports the leg's GPU column to every
+    # build; the 0.8.5 H100 leg failed here with "MOJOLEARN_TARGET_COLUMN=
+    # nvidia is refused", so the column is pinned to cpu for this one build.
+    MOJOLEARN_NUMERIC_MODE=$tier MOJOLEARN_SKIP_BUILD_GATE=1 MOJOLEARN_TARGET_COLUMN=cpu \
       env -u MOJOLEARN_GPU_ARCHS -u MOJOLEARN_BYTE_LM_HOST_OUTDIR \
       pixi run -e "$PIXI_ENV" bash "bindings/$s" >> "$log" 2>&1 || rc=$?
   else
