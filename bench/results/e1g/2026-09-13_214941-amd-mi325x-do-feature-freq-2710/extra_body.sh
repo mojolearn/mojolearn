@@ -78,26 +78,11 @@ LABEL=${MOJOLEARN_IDENTITY_VENDOR_LABEL:-${MOJOLEARN_TARGET_COLUMN:-box}-${MOJOL
 IB="env MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH=/root/mojolearn/python pixi run python tools/identity_break.py --lanes $LANES"
 
 # every IDENTICAL binding once: identity_break imports the whole package
-# The RunPod runner passes no environment to the body and bindings/build_byte_lm.sh
-# refuses without an explicit architecture, which cost this leg its second NVIDIA
-# attempt on 2026-09-13; resolve the architecture from the device when unset, and
-# skip the byte LM bindings, which no GBDT lane reads.
-if [ -z "${MOJOLEARN_GPU_ARCHS:-}" ]; then
-    if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1; then
-        _cc=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader | head -1 | tr -d ' ')
-        case "$_cc" in 9.0) MOJOLEARN_GPU_ARCHS=sm_90a ;; 8.9) MOJOLEARN_GPU_ARCHS=sm_89 ;; 8.6) MOJOLEARN_GPU_ARCHS=sm_86 ;; 8.0) MOJOLEARN_GPU_ARCHS=sm_80 ;; *) MOJOLEARN_GPU_ARCHS="sm_$(echo "$_cc" | tr -d .)" ;; esac
-    elif command -v rocminfo >/dev/null 2>&1; then
-        MOJOLEARN_GPU_ARCHS=$(rocminfo 2>/dev/null | grep -m1 -oE 'gfx[0-9a-z]+')
-    fi
-    export MOJOLEARN_GPU_ARCHS
-fi
-[ -n "${MOJOLEARN_TARGET_COLUMN:-}" ] || { case "${MOJOLEARN_GPU_ARCHS:-}" in sm_*) MOJOLEARN_TARGET_COLUMN=nvidia ;; gfx*) MOJOLEARN_TARGET_COLUMN=amd ;; esac; export MOJOLEARN_TARGET_COLUMN; }
-say "gpu_archs_resolved=${MOJOLEARN_GPU_ARCHS:-unset} column=${MOJOLEARN_TARGET_COLUMN:-unset}"
 built=0; failed=""
 for s in bindings/build*.sh; do
     n=$(basename "$s" .sh)
     # CPU-only host bindings take no MOJOLEARN_GPU_ARCHS and no GBDT lane reads them.
-    case "$n" in build_byte_lm|build_byte_lm_host|build_forest_host) continue ;; esac
+    case "$n" in build_byte_lm_host|build_forest_host) continue ;; esac
     if run "$n" $BUILD_ENV sh "$s"; then built=$((built + 1)); else failed="$failed $n"; fi
 done
 say "bindings_built=$built failed=${failed:-none}"
