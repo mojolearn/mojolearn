@@ -844,8 +844,22 @@ def lib_gemm_block_parallelism_for[column: Int]() -> Int:
 
 
 def lib_gemm_kernel_body_for[column: Int]() -> Int:
-    """SCHEDULING row, SHIPPED since DEVIATION 2707 (2026-09-13; brief docs/lanes/BRIEF_gemm_kernel_2026-09-11.md sections 16 to 18): which KERNEL BODY the IDENTICAL GEMM dispatch runs on every call the TUNED 128x128 plan serves. 0 is the 2595 dispatch as it stood (`identical_gemm_tuned_kernel` where the ksplit rule declines the call, `identical_gemm_ksplit_kernel` groups where it takes it). 1 is the `kpack_hg` body (DEVIATION 2706): `identical_gemm_kpack_kernel` at the shipped 128x128 geometry with the padded, 16-byte-aligned packed page (2700, 2703), ONE 8-wide conflict-free shared store per thread per window instead of sixteen scalar stores at a four-way bank conflict (gather staging), and the fold's flush spelled as the hardware `mul.rn.ftz` by one that the step seam already uses (one instruction for six); the same group rule at the same row, the same fold tree, the same words at the same addresses in the same order, so no bit moves and the M4 arms check and the H100 step check say so. NVIDIA 1, MEASURED 2026-09-13 on a RunPod H100 (bench/results/e1g/2026-09-13_175602-nvidia-h100-gemm-hfgs): lean step 0.232 -> 0.211 s on enwik8 and Pile GitHub (geomean 0.9085), GEMM sum 143 -> 122 ms (0.852), every step witness equal to shipped; the decomposition that named the two costs is bench/results/e1g/2026-09-13_174125-nvidia-h100-gemm-diag2 (staging phase a third of the window, fold a fifth). Every other column 0: Apple and AMD compile exactly the line they compiled before, and the AMD row waits for its own MI300X leg (the gather staging is placement and would apply; the fold flush is NVIDIA's instruction and would not). A wrong value costs time and can never move a bit. This row is the switch: 0 here is the revert."""
+    """SCHEDULING row, SHIPPED since DEVIATION 2707 (2026-09-13; brief docs/lanes/BRIEF_gemm_kernel_2026-09-11.md sections 16 to 18): which KERNEL BODY the IDENTICAL GEMM dispatch runs on every call the TUNED 128x128 plan serves. 0 is the 2595 dispatch as it stood (`identical_gemm_tuned_kernel` where the ksplit rule declines the call, `identical_gemm_ksplit_kernel` groups where it takes it). 1 is the `kpack_hg` body (DEVIATION 2706): `identical_gemm_kpack_kernel` at the shipped 128x128 geometry with the padded, 16-byte-aligned packed page (2700, 2703), ONE 8-wide conflict-free shared store per thread per window instead of sixteen scalar stores at a four-way bank conflict (gather staging), and the fold's flush spelled as the hardware `mul.rn.ftz` by one that the step seam already uses (one instruction for six); the same group rule at the same row, the same fold tree, the same words at the same addresses in the same order, so no bit moves and the M4 arms check and the H100 step check say so. NVIDIA 1, MEASURED 2026-09-13 on a RunPod H100 (bench/results/e1g/2026-09-13_175602-nvidia-h100-gemm-hfgs): lean step 0.232 -> 0.211 s on enwik8 and Pile GitHub (geomean 0.9085), GEMM sum 143 -> 122 ms (0.852), every step witness equal to shipped; the decomposition that named the two costs is bench/results/e1g/2026-09-13_174125-nvidia-h100-gemm-diag2 (staging phase a third of the window, fold a fifth). AMD 1 as well, MEASURED 2026-09-13 on a Hot Aisle MI300X (the body's comment names the leg): the gather staging is placement and applies, the fold flush is NVIDIA's instruction and compiles out there. Apple and every other column 0: they compile exactly the line they compiled before. A wrong value costs time and can never move a bit. This row is the switch: 0 here is the revert."""
     if column == COLUMN_NVIDIA:
+        return 1
+    if column == COLUMN_AMD:
+        # AMD 1, MEASURED 2026-09-13 on a Hot Aisle MI300X (gfx942), 8core VM,
+        # one heat window, commit bfde0442
+        # (bench/results/e1g/2026-09-13_193949-amd-mi300x-hotaisle-gemm-amd-row):
+        #   verdict kpack_gs FLIP geomean=0.9570 enwik8=0.9559 pilegithub=0.9580
+        #   verdict kpack_hg FLIP geomean=0.9585 enwik8=0.9573 pilegithub=0.9597
+        #   every step witness equal to shipped on both corpora; step check PASS
+        # GEMM sum 592 -> 561 ms (kpack_gs 0.947) and 559 ms (kpack_hg 0.944).
+        # On this column the body's hardware fold flush compiles out
+        # (`comptime if HW and TUNED_HW_FTZ_FMA`, NVIDIA only), so 1 here IS
+        # the gather staging alone and the two arms price the same to 0.15
+        # percent; one row value keeps one code path. Shipped-build gate on
+        # the MI300X: brief section 18.4.
         return 1
     return 0
 
