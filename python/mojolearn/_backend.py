@@ -905,6 +905,12 @@ _HOST_MODULES = {
     # the predict; exports cd_fit, cd_predict, solver_vendor. linkage_fit
     # is absent until the agglomerative lane lands and refuses by name.
     "_mojolearn_solver": "_mojolearn_solver_host",
+    # svc (phase 1, 2026-09-13): bindings/_mojolearn_svm_host.mojo over
+    # svm/checks/smo_oracle.mojo::smo_oracle_fit and smo_oracle_decision;
+    # exports svc_fit, svc_predict, svm_vendor, svm_numeric_mode. svr_fit,
+    # svr_predict and iforest_run are absent and refuse by name until their
+    # lanes land.
+    "_mojolearn_svm": "_mojolearn_svm_host",
 }
 
 #: The env switch the CPU identity gate sets to load a host binding built

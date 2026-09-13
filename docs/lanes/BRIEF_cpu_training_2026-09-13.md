@@ -1075,3 +1075,42 @@ CD oracle): 9 of 9 train and 9 of 9 infer cells `DIVERGENT` on each lane,
 `parts differ: coef,predict` (lasso base 61a6ae20cfafca49 against
 2fa3301e45a46091; elasticnet base 3bde50d4452e548a against
 2cf742083831ee9d).
+
+### svc, IDENTICAL x4
+
+Binding `bindings/_mojolearn_svm_host.mojo` (`bindings/build_svm_host.sh`),
+routed by `_backend._HOST_MODULES["_mojolearn_svm"]`, exporting `svc_fit`,
+`svc_predict`, `svm_vendor`, `svm_numeric_mode` under the GPU binding's
+address contract (worst-case sized outputs, the five float64 info slots),
+over `svm/checks/smo_oracle.mojo::smo_oracle_fit[DType.float32]` and
+`smo_oracle_decision`, with the GPU entry's guards in its order
+(`svc_fit_host_borrowed`, `svc_fit_borrowed`, `_svc_label_model`), the
+one-vs-rest targets by `ovr_labels_kernel`'s rule, the support matrix by
+`CollectSupportVectorMatrix`'s gather, and `applyPrediction`'s epilogue
+`label0 if val < 0 else label1`. `python/mojolearn/_svm_impl.py` is
+unchanged. `svr_fit`, `svr_predict` and `iforest_run` are absent and refuse
+by name. `smo_oracle.mojo` imports `svm/impl/smosolver.mojo` (kernels,
+`std.gpu`) for `fold_order_for` and `hash_f32_list`; the host-only build
+compiled it. The lane's `max_iter=200` fixture converges the same way on
+all four columns (the risk named in section 1.1). `n_iter_` is the oracle's
+inner iteration count, held to the device per outer iteration by
+`svc_check` but hashed by no cell.
+
+| fixture | train (decision, predict) | infer |
+|---|---|---|
+| base | dec306e940b8a444 | 4aee3fcc51c4761e |
+| ties | 2093351e33d072ed | e400ffe98db4b786 |
+| hashed | 274bf9087fb0750e | 94cb46a9aa6a811c |
+| wide | 550d1845e417ca18 | ee2e31ef0e3bbfcb |
+| denormal | 549c0b5c319d84cf | ebc593040592ca1e |
+| denormal_ftz | 549c0b5c319d84cf | ebc593040592ca1e |
+| dupes | b2f0d9a49c9f241c | 6e5c253fa1d7ea5b |
+| odd | 61b1676a7e40c914 | acd970db5a3ae605 |
+| negative | 667155f7eda847aa | 685bebcb29a0cf8c |
+
+`require-columns 4 over ['svc']: OK`; the nine train rows and the nine
+infer rows read `IDENTICAL x4`; model is `n/a:no-save`. Sabotage
+(`SMO_ORACLE_HOST_SABOTAGE`, the SMO oracle's GEMM leaf walked descending):
+8 of 9 train cells `DIVERGENT` (`parts differ: decision`, and on `wide`
+the predicted labels too) and 8 of 9 infer cells; `ties` stays
+`IDENTICAL x4`, the integer grid summing exactly in any order.

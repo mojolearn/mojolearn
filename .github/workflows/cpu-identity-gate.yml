@@ -57,6 +57,7 @@ on:
       - "holtwinters/checks/hw_oracle.mojo"
       - "solver/checks/cd_oracle.mojo"
       - "solver/checks/profile_dot.mojo"
+      - "svm/checks/smo_oracle.mojo"
       - "bindings/host_helpers.mojo"
       - "bindings/hostptr.mojo"
       - "core/forest_host_predict.mojo"
@@ -82,14 +83,14 @@ env:
   # spaces. A lane listed here must read STABLE on every fixture and
   # IDENTICAL x4 against the three GPU columns; a lane not listed must read
   # REFUSED by name.
-  COVERED_LANES: "gemm-pinned,kde,holtwinters,lasso,elasticnet"
+  COVERED_LANES: "gemm-pinned,kde,holtwinters,lasso,elasticnet,svc"
   # The phase 1 host binding families, space separated: each is built by
   # bindings/build_<family>_host.sh into MOJOLEARN_<FAMILY>_HOST_OUTDIR (the
   # production set under python/mojolearn/host/, then the sabotage set under
   # runner.temp), read back as the CPU column, and named in host.families.
-  HOST_FAMILIES: "core linalg estimators tsa solver"
+  HOST_FAMILIES: "core linalg estimators tsa solver svm"
   # The same list as the read-back's --binding arguments.
-  HOST_BINDINGS: "_mojolearn_core_host _mojolearn_linalg_host _mojolearn_estimators_host _mojolearn_tsa_host _mojolearn_solver_host"
+  HOST_BINDINGS: "_mojolearn_core_host _mojolearn_linalg_host _mojolearn_estimators_host _mojolearn_tsa_host _mojolearn_solver_host _mojolearn_svm_host"
   # The three committed GPU columns the CPU column is diffed against.
   GPU_COLUMNS: >-
     bench/results/identity_break/2026-09-13_three-columns/apple-m4.json
@@ -349,8 +350,9 @@ jobs:
       # gemm_oracle by walking every leaf DESCENDING, which reaches every
       # lane whose host oracle folds through gemm_oracle_cell, and in
       # kde_oracle by summing every logsumexp row descending, in hw_oracle
-      # by splitting the SSE fused multiply-add; each further phase 1
-      # binding names the fold its arm moves), loaded through
+      # by splitting the SSE fused multiply-add, in smo_oracle by walking
+      # its GEMM leaf descending; each further phase 1 binding names the
+      # fold its arm moves), loaded through
       # MOJOLEARN_HOST_DIR with MOJOLEARN_HOST_ALLOW_SABOTAGE=1, run on the
       # covered lanes, and the four-way diff must exit non-zero with
       # DIVERGENT on them. Every covered cell must still be STABLE (a wrong
