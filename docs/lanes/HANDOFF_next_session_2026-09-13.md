@@ -18,33 +18,16 @@ merge. 0.8.4 is on PyPI (Linux 20:35Z, macOS 20:45Z, tags at `0dcc1204`).
 
 ## Open lanes and how to restart them
 
-### 1. `lane/feature-freq-divergence` (DEVIATION 2710), nearly done
+### 1. DEVIATION 2710, feature-freq: MERGED, 0.8.5 owed
 
-The 46-lane run found `ExperimentalTwoLevelFeatureFreq` divergent between every vendor pair.
-Cause (brief `docs/lanes/BRIEF_feature_freq_divergence_2026-09-13.md` on the branch): the
-synchronized tensor drivers constructed their workspace with a literal `acc_live=False`, so
-under IDENTICAL the histogram kernels wrote 264 Int32 cells into a 4-byte, never-zeroed
-accumulator and read them back; three vendors, three allocator leftovers. Fix
-`tensor_acc_live_for` in `gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo`,
-old code behind `-D MOJOLEARN_2710_TENSOR_ACC_DEAD=1`.
-
-Proof so far: Mac inert by bytes and host winner oracle 18 of 18; AMD MI325X leg
-(`2026-09-13_214941-amd-mi325x-do-feature-freq-2710` on the branch) dead arm reproduces the
-Sep 13 AMD hashes, fixed arm equals the Apple column cell for cell, fixed_again equals fixed.
-NVIDIA: two setup failures (the leg script did not resolve the architecture on RunPod), the
-third attempt was launched at the end of the session with the corrected script
-(`tools/feature_freq_identity_leg.sh`); its output lands under the branch worktree
-`.claude/worktrees/agent-ac8a426b053e609f2/bench/results/e1g/<stamp>-nvidia-h100-feature-freq-2710/`.
-
-To finish: read that leg's `remote/feature_freq/gate.txt` (expect `diff_fixed_vs_dead_exit=1`
-on gbdt-feature-freq only, `diff_fixed_vs_fixed_again_exit=0`, and the fixed arm's `hashed`
-hash `9d97a55431b6f8e0`), diff its `identity_break.*.2710.json` against
-`bench/results/identity_break/2026-09-13_46-lanes/apple-m4.json` on the six GBDT lanes
-(expect IDENTICAL=53 plus the committed Apple base mover), commit the evidence on the branch,
-merge to main, replace the "Known cross-vendor divergence" paragraph in `SUPPORT_MATRIX.md`
-with the fix and its hashes, rerun the two edited checks (`checks/tensor_sync_state_check.mojo`,
-`checks/tree_ctr_slice_check.mojo`), then cut 0.8.5 as a correctness patch (the HIP set on Hot
-Aisle in the 22.04 container, never the DigitalOcean 24.04 image, see the 0.8.4 README).
+The third NVIDIA leg landed (`2026-09-13_221232-nvidia-h100-feature-freq-2710` on the branch,
+now on main): dead arm reproduces the H100's Sep 13 hashes, fixed arm equals the Apple column on
+every fixture and column, fixed_again equals fixed. With the AMD leg that is three vendors, one
+answer. The branch is merged to main, SUPPORT_MATRIX says found and fixed, CHANGELOG has the
+0.8.5 entry. Still owed: rerun the two edited checks (`checks/tensor_sync_state_check.mojo`,
+`checks/tree_ctr_slice_check.mojo`, each compiles the whole gbdt package, do it on a rented box
+or on the Mac under the two-core cap one at a time), then cut 0.8.5 by the release checklist
+with the HIP set on Hot Aisle in the 22.04 container (never the DigitalOcean 24.04 image).
 
 ### 2. CPU training phase 1, never started
 
