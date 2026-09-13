@@ -324,7 +324,7 @@ say "architecture set: $ARCH_SET"
 # sm_80-asking leg on an A40 got twenty-seven sm_86 binaries from the nine
 # scripts that never saw the flag. The read-back, not the flag, names the
 # set's directory.
-N_ARCH=$(awk '$3!="MISSING"{print $3}' "$ARCHBACK" | sort -u | wc -l | tr -d ' ')
+N_ARCH=$(awk '$1!="host" && $3!="MISSING"{print $3}' "$ARCHBACK" | sort -u | wc -l | tr -d ' ')
 if [ "$N_ARCH" != 1 ]; then
   say "REFUSING: the binaries do not agree on ONE architecture: $ARCH_SET"
   say "  A set is one architecture. A mixed read-back means some builds"
@@ -332,7 +332,7 @@ if [ "$N_ARCH" != 1 ]; then
   awk '{print "    " $1 " " $2 " " $3}' "$ARCHBACK" | head -8
   exit 5
 fi
-ARCH=$(awk '$3!="MISSING"{print $3}' "$ARCHBACK" | sort -u)
+ARCH=$(awk '$1!="host" && $3!="MISSING"{print $3}' "$ARCHBACK" | sort -u)
 case "$ARCH" in
   *,*)
     say "REFUSING: a single binary names several architectures ($ARCH);"
@@ -347,7 +347,13 @@ if [ -n "${MOJOLEARN_GPU_ARCHS:-}" ] && [ "$ARCH" != "$MOJOLEARN_GPU_ARCHS" ]; t
   exit 5
 fi
 say "architecture: $ARCH (requested: ${MOJOLEARN_GPU_ARCHS:-the box GPU itself})"
-VENDORS=$(awk '$3!="MISSING"{print $3}' "$READBACK" | sort -u | tr '\n' ' ')
+# THE HOST ROW IS EXCLUDED HERE TOO, and for the same reason as the
+# architecture checks above: it answers 'cpu', which is not a GPU API, so a
+# set carrying it would read as two vendors and be refused as a mixed build.
+# Every check that reduces a read-back file to one value must skip $1=="host";
+# the ones that merely PRINT the file (the per-binary summaries) must not, or
+# the evidence stops showing the binary it is evidence for.
+VENDORS=$(awk '$1!="host" && $3!="MISSING"{print $3}' "$READBACK" | sort -u | tr '\n' ' ')
 VENDOR=$(echo "$VENDORS" | awk '{print $1}')
 case "$VENDORS" in
   "cuda "|"hip "|"metal ") ;;
