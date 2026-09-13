@@ -98,6 +98,15 @@ tier_scripts() {
   if [[ "$PACKAGE_BYTE_LM" = 1 && "$1" = identical ]]; then printf ' build_byte_lm.sh'; fi
   printf '\n'
 }
+# THE CPU TRAINING BINDING IS NOT A TIER MEMBER AND NOT A VENDOR MEMBER.
+# It has no GPU code, answers 'cpu' when asked its vendor, and the runtime
+# loads it from <package>/host/ through its own path helper rather than
+# through _backend.binding(), so it belongs in neither tier_names nor the
+# per-vendor directories. It is carried once, beside them, and every check
+# below that assumes "vendor binary in a tier" is given an explicit
+# exception rather than being loosened for everything.
+HOST_NAME="_mojolearn_byte_lm_host"
+HOST_SO="python/mojolearn/host/$HOST_NAME.so"
 say() { echo "[$(date +%T) build_sets] $*"; }
 
 say "repo $REPO, dest $DEST, tiers: $TIERS, jobs: $JOBS"
@@ -186,6 +195,28 @@ PY
     echo "$t $n $v" >> "$READBACK"
   done
 done
+# The host binding is asked the same question by the same mechanism, and it
+# must answer 'cpu'. A GPU vendor here would mean the CPU-only build picked up
+# an accelerator target, which is the one way this binary could be wrong in a
+# way that still loads.
+if [[ "$PACKAGE_BYTE_LM" = 1 ]]; then
+  if [[ -f "$HOST_SO" ]]; then
+    hv=$(pixi run -e "$PIXI_ENV" python3 - "$HOST_SO" "$HOST_NAME" <<'PY' 2>&1 | tail -1
+import importlib.machinery, importlib.util, sys
+so, name = sys.argv[1], sys.argv[2]
+loader = importlib.machinery.ExtensionFileLoader(name, so)
+spec = importlib.util.spec_from_loader(name, loader, origin=so)
+m = importlib.util.module_from_spec(spec)
+loader.exec_module(m)
+assert m.byte_lm_host_numeric_mode() == 1, 'CPU training binding must be IDENTICAL'
+print(str(m.byte_lm_host_vendor()))
+PY
+)
+    echo "host $HOST_NAME $hv" >> "$READBACK"
+  else
+    echo "host $HOST_NAME MISSING" >> "$READBACK"
+  fi
+fi
 say "vendor read-back per binary:"
 sed 's/^/    /' "$READBACK"
 
@@ -219,9 +250,29 @@ for t in $TIERS; do
     echo "$t $n ${a:-NONE}" >> "$ARCHBACK"
   done
 done
+# NONE IS THE CORRECT ANSWER FOR THE HOST BINDING, and the only one. Every
+# check below reads $3, and an empty architecture is refused there by design
+# because for a GPU binary it means the device code was suppressed. This
+# binary has no device code to suppress, so it is recorded with a value that
+# says so in words and is excluded from the architecture agreement checks by
+# name rather than by being allowed to look like a GPU set.
+if [[ "$PACKAGE_BYTE_LM" = 1 ]]; then
+  if [[ -f "$HOST_SO" ]]; then
+    ha=$(arch_of "$HOST_SO")
+    if [[ -n "$ha" ]]; then
+      say "REFUSING: the CPU training binding names GPU architectures ($ha)."
+      say "  It is built with no accelerator target, so device code in it means"
+      say "  MOJOLEARN_GPU_ARCHS reached a build that must never see it."
+      exit 4
+    fi
+    echo "host $HOST_NAME NONE-BY-DESIGN" >> "$ARCHBACK"
+  else
+    echo "host $HOST_NAME MISSING" >> "$ARCHBACK"
+  fi
+fi
 say "GPU architectures embedded, per binary:"
 awk '{print $3}' "$ARCHBACK" | sort | uniq -c | sort -rn | sed 's/^/    /'
-ARCH_SET=$(awk '$3!="MISSING"{print $3}' "$ARCHBACK" | sort -u | tr '\n' ' ')
+ARCH_SET=$(awk '$1!="host" && $3!="MISSING"{print $3}' "$ARCHBACK" | sort -u | tr '\n' ' ')
 if awk '$3=="NONE"{found=1} END{exit !found}' "$ARCHBACK"; then
   say "REFUSING: at least one binary names NO GPU architecture, so it carries"
   say "  no device code. If MOJOLEARN_GPU_ARCHS is set, this is the Metal"
@@ -290,6 +341,12 @@ for t in $TIERS; do
     [ -f "$src/$n.so" ] && mv "$src/$n.so" "$dst/$n.so"
   done
 done
+# host/ sits beside the tiers, not inside one, mirroring where the runtime
+# looks for it in an installed package.
+if [[ "$PACKAGE_BYTE_LM" = 1 && -f "$HOST_SO" ]]; then
+  mkdir -p "$SET/host"
+  mv "$HOST_SO" "$SET/host/$HOST_NAME.so"
+fi
 cp "$READBACK" "$SET/readback.txt"
 cp "$ARCHBACK" "$SET/arch_readback.txt"
 

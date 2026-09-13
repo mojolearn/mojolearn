@@ -119,6 +119,24 @@ def expected_bindings(mode, byte_lm=False):
     return set(TIERED)
 
 
+def check_byte_lm_host(installed, audit):
+    """The CPU TRAINING binding of an installed release wheel (DEVIATION 2680).
+
+    Separate from check_byte_lm because this binary is not in
+    `installed_bindings`: that inventory's every row is asserted to read back
+    the leg's GPU vendor, and this one reads back 'cpu' by design and is loaded
+    by path rather than through _backend's selector. A wheel that declared CPU
+    training and shipped no binary would pass every other check here.
+    """
+    host = installed.get('installed_host_binding')
+    require(isinstance(host, dict), 'Installed record carries no CPU training binding')
+    require(host.get('vendor') == 'cpu' and host.get('numeric_mode') == 1,
+            'Installed CPU training binding vendor/mode differs')
+    member = 'host/' + '_mojolearn_byte_lm_host.so'
+    require(host.get('sha256') == audit.get('host_extension_hashes', {}).get(member),
+            'Installed CPU training binding differs from the wheel')
+
+
 def check_byte_lm(out, installed):
     import math
     for name in BYTE_FILES:
@@ -300,6 +318,7 @@ def verify(root, out):
                           bindings['_mojolearn_metrics']['sha256'])
         if surface == 'byte-lm':
             check_byte_lm(out, record)
+            check_byte_lm_host(record, audit)
         records[name] = sha(out / (name + '.installed.json'))
     return {'schema': 'mojolearn.linux.installed-surfaces.v1', 'status': 'PASSED',
             'vendor': audit['qualification_vendor'], 'wheel_sha256': audit['sha256'],

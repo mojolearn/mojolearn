@@ -3,6 +3,31 @@
 This file records release-level changes, not the development diary. Git history and archived evidence
 contain the detailed investigation record.
 
+## 0.8.4 (unreleased 2026-09-12)
+
+Both wheels now carry the CPU training binding for the byte level language model, so
+`LanguageModelHostTrainer` runs a forward pass, a backward pass and the AdamW update on a machine
+with no GPU. The binding ships IDENTICAL only, like every family outside the tree lanes, and it is
+the same binary the gate measures. One vendor neutral copy sits at `mojolearn/host/` in the Linux
+wheel, beside the architecture trees rather than inside one, because it targets no GPU and reads
+back vendor `cpu`.
+
+What the binding does and does not claim is in docs/BYTE_LM_CPU_TRAINING.md. Identity is held per
+batch shape rather than across a range, because nine of the weight gradients contract over the
+token count, and two shapes are certified today.
+
+There are no auditing switches to turn off for speed. A training step validates its token ids and
+zeroes its output buffers, and that is all the Python side does; the finite checks and the state
+copies happen once when the trainer is constructed, and the per array digest comparison belongs to
+the gate rather than to the shipped class.
+
+- Packaging gates extended to cover the new binary, since no existing check could see it. The
+  build inventory counts it apart from the per tier GPU extensions so the architecture counts stay
+  exact, the wheel audit admits its member and proves it by digest against the build proof, the
+  installed record reads it back through its own path helper, and the release payload must name it.
+  A wheel that declared CPU training and shipped no binary, or shipped an inference only build with
+  no training entry, now fails qualification rather than reaching a user.
+
 ## 0.8.3 (published 2026-09-11)
 
 Linux x86-64 wheel (CUDA sm_89, CUDA sm_90a, HIP gfx942) and macOS arm64 wheel, both from

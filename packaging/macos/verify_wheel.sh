@@ -98,6 +98,21 @@ assert not (package / '_mojolearn_byte_lm.so').exists()
 assert not (package / 'deterministic/_mojolearn_byte_lm.so').exists()
 assert native.byte_lm_numeric_mode() == 1 and native.byte_lm_vendor() == 'metal'
 assert native.byte_lm_profile() == 'mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1'
+# THE CPU TRAINING BINDING, FROM THE INSTALLED WHEEL. It is reached through its
+# own path helper rather than _backend.binding(), so nothing above would notice
+# its absence, and a LanguageModelHostTrainer that raises at construction is
+# exactly what shipping the export without the binary produces.
+from mojolearn import _byte_lm_host
+host_so = package / 'host' / '_mojolearn_byte_lm_host.so'
+assert host_so.exists(), f'installed wheel has no CPU training binding at {host_so}'
+assert pathlib.Path(_byte_lm_host.binary_path()).resolve() == host_so
+host = _byte_lm_host._load()
+assert host.byte_lm_host_numeric_mode() == 1
+assert host.byte_lm_host_vendor() == 'cpu'
+from mojolearn import LanguageModelHostTrainer, ByteLanguageModelConfig
+_shape = ByteLanguageModelConfig()
+LanguageModelHostTrainer([0.0] * _shape.n_total, lr=1e-3)
+print('PASS installed CPU training binding')
 print('Byte LM IDENTICAL-only native available; numerical training qualification separate')
 PYBYTE
         ); then :; else

@@ -102,8 +102,18 @@ status, action = int(sys.argv[3]), sys.argv[4]
 files = json.loads((out / 'source-inventory.json').read_text())
 assert all(hashlib.sha256((root / p).read_bytes()).hexdigest() == h for p, h in files), 'Sources changed during build'
 outputs = {}
+host_outputs = {}
 for path in sorted((out / 'sets').rglob('_mojolearn*.so')):
-    outputs['mojolearn/' + path.relative_to(out / 'sets').as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
+    member = 'mojolearn/' + path.relative_to(out / 'sets').as_posix()
+    # DEVIATION 2680: the CPU TRAINING binding is vendor-neutral and sits at
+    # <vendor>/<arch>/host/, BESIDE the tiers rather than inside one. It is not
+    # part of the per-tier GPU inventory that expected_bindings() counts, and
+    # folding it in there breaks `len(outputs) == expected_count` below and
+    # `len(proof['extensions']) == 45` in the audit. Counted separately.
+    if '/host/' in member:
+        host_outputs[member] = hashlib.sha256(path.read_bytes()).hexdigest()
+        continue
+    outputs[member] = hashlib.sha256(path.read_bytes()).hexdigest()
 commit = next(line.split('=', 1)[1] for line in (out / 'source-provenance.txt').read_text().splitlines() if line.startswith('source_commit='))
 byte_lm = os.environ.get('MOJOLEARN_PACKAGE_BYTE_LM', '0')
 assert byte_lm in ('0', '1'), 'Invalid byte-LM build flag'
@@ -114,9 +124,13 @@ expected_count = full_count if action == 'build' else len(expected_bindings(os.e
 byte_members = [n for n in outputs if n.endswith('/_mojolearn_byte_lm.so')]
 assert len(byte_members) == (1 if byte_lm == '1' and (action == 'build' or os.environ.get('MOJOLEARN_BUILD_TIERS') == 'identical') else 0), 'Incorrect byte-LM inventory'
 assert all('/identical/' in n for n in byte_members), 'Byte-LM is IDENTICAL only'
+host_members = sorted(host_outputs)
+assert all(n.endswith('/host/_mojolearn_byte_lm_host.so') for n in host_members), ('Unexpected host binding', host_members)
+assert len(host_members) == (1 if byte_lm == '1' and (action == 'build' or os.environ.get('MOJOLEARN_BUILD_TIERS') == 'identical') else 0), 'Incorrect CPU training binding inventory'
 record = dict(schema='mojolearn.linux.build-provenance.v1', source_commit=commit, action=action, build_exit=status,
               source_inventory=files, source_sha256=hashlib.sha256(json.dumps(files, separators=(',', ':')).encode()).hexdigest(),
-              extensions=outputs, complete=(status == 0 and action == 'build' and len(outputs) == full_count))
+              extensions=outputs, host_extension=host_outputs,
+              complete=(status == 0 and action == 'build' and len(outputs) == full_count))
 (out / 'build-provenance.json').write_text(json.dumps(record, indent=2) + '\n')
 assert status == 0, 'Build/staging failed; retained provenance is not admissible'
 assert len(outputs) == expected_count, 'Incomplete build outputs'
@@ -170,6 +184,7 @@ names = {'_mojolearn', '_mojolearn_gbdt', '_mojolearn_estimators', '_mojolearn_r
          '_mojolearn_gp', '_mojolearn_mamba', '_mojolearn_transformer'}
 sets = {}
 extension_hashes = {}
+host_extension_hashes = {}
 proof_path = pathlib.Path(provenance)
 proof = json.loads(proof_path.read_text())
 assert proof.get('schema') == 'mojolearn.linux.build-provenance.v1' and proof.get('complete') is True
@@ -207,6 +222,14 @@ with zipfile.ZipFile(wheel) as z:
                 assert p in proof['extensions'], ('Unproven extension', p)
                 assert hashlib.sha256(z.read(p)).hexdigest() == proof['extensions'][p], ('Built/wheel binary differs', p)
             sets.setdefault((vendor, arch, mode or 'fast'), set()).add(extension)
+        elif p == 'mojolearn/host/_mojolearn_byte_lm_host.so':
+            # DEVIATION 2680. The wheel carries ONE vendor-neutral copy of the
+            # CPU training binding; each architecture leg proves its own under
+            # <vendor>/<arch>/host/, so this is proven BY DIGEST, not by name.
+            digest = hashlib.sha256(z.read(p)).hexdigest()
+            host_extension_hashes[p.removeprefix('mojolearn/')] = digest
+            proven = proof.get('host_extension') or {}
+            assert len(proven) == 1 and digest in proven.values(), ('Unproven CPU training binding', p)
         elif p.endswith('.so') and '/_mojolearn' in p:
             raise AssertionError('Unexpected extension location: ' + p)
     vendors = {v for v, _, _ in sets}
@@ -224,6 +247,7 @@ print(json.dumps({'sha256': expected, 'wheel': str(wheel),
                   'build_provenance_sha256': hashlib.sha256(proof_path.read_bytes()).hexdigest(),
                   'source_sha256': proof['source_sha256'],
                   'extension_hashes': extension_hashes,
+                  'host_extension_hashes': host_extension_hashes,
                   'sets': {'/'.join(k): len(v) for k, v in sorted(sets.items())}}, indent=2))
 PYAUDIT
 fi
@@ -300,6 +324,25 @@ for name in sorted(all_bindings):
 record = {'package': str(installed), 'version': mojolearn.__version__,
           'vendor': mojolearn.vendor(), 'mode': mojolearn.numeric_mode(),
           'wheel_sha256': audit['sha256'], 'installed_bindings': readback}
+# DEVIATION 2680: the CPU TRAINING binding, under its own key. It cannot join
+# `readback` above, whose loop asserts read_vendor() == the GPU vendor of this
+# leg; this one reads back 'cpu' by design and is reached through its own path
+# helper rather than _backend.binding() for the same reason.
+if release_profile and mojolearn.numeric_mode() == 'identical':
+    from mojolearn import _byte_lm_host
+    host_path = pathlib.Path(_byte_lm_host.binary_path()).resolve()
+    assert host_path.is_relative_to(installed.parent), ('Noninstalled CPU training binding', host_path)
+    host_member = host_path.relative_to(installed.parent).as_posix()
+    host_digest = hashlib.sha256(host_path.read_bytes()).hexdigest()
+    assert audit.get('host_extension_hashes', {}).get(host_member) == host_digest, \
+        ('Installed CPU training binding differs from wheel', host_member)
+    host_module = _byte_lm_host._load()
+    assert int(host_module.byte_lm_host_numeric_mode()) == 1, 'CPU training binding is not IDENTICAL'
+    assert str(host_module.byte_lm_host_vendor()) == 'cpu', 'CPU training binding vendor read-back'
+    assert callable(getattr(host_module, 'byte_lm_host_train_step', None)), \
+        'CPU training binding has no train step; the wheel carries an inference-only build'
+    record['installed_host_binding'] = {'path': str(host_path), 'sha256': host_digest,
+                                        'numeric_mode': 1, 'vendor': 'cpu'}
 record.update(architecture)
 pathlib.Path(os.environ['MOJOLEARN_INSTALLED_RECORD']).write_text(json.dumps(record, indent=2) + '\n')
 print(json.dumps(record), flush=True)

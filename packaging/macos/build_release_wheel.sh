@@ -189,6 +189,10 @@ build_pairs() {
         for script in $BUILD_SCRIPTS; do printf '%s %s\n' "$mode" "$script"; done
         for script in $IDENTICAL_ONLY_SCRIPTS; do printf '%s %s\n' "$mode" "$script"; done
         if [ "$PACKAGE_BYTE_LM" = 1 ]; then printf '%s %s\n' "$mode" build_byte_lm.sh; fi
+        # The CPU training binding. Identical only, and built with no
+        # accelerator target, which is why it is named here rather than added
+        # to a tier list: it is not a tier member and not a vendor member.
+        if [ "$PACKAGE_BYTE_LM" = 1 ]; then printf '%s %s\n' "$mode" build_byte_lm_host.sh; fi
     done
     for mode in $MODES; do
         [ "$mode" = identical ] && continue
@@ -200,6 +204,21 @@ build_pairs | xargs -P "$BUILD_JOBS" -n 2 sh -c '
     logs=$1; mode=$2; script=$3; log="$logs/${mode}_${script%.sh}.log"
     # The byte LM build keeps its own gate on, as it always did here.
     skip=1; [ "$script" = build_byte_lm.sh ] && skip=
+    # The host build must never see an accelerator target: it has no device
+    # code, and MOJOLEARN_GPU_ARCHS reaching it is the one way it can be
+    # silently wrong. Its own output directory is unset for the same reason
+    # the byte LM build unsets it, so it lands in the package tree.
+    if [ "$script" = build_byte_lm_host.sh ]; then
+        if MOJOLEARN_NUMERIC_MODE=$mode MOJOLEARN_SKIP_BUILD_GATE=$skip \
+             env -u MOJOLEARN_GPU_ARCHS -u MOJOLEARN_BYTE_LM_HOST_OUTDIR \
+             bash "./bindings/$script" > "$log" 2>&1; then
+            { echo "== $script ($mode) OK"; cat "$log"; }
+        else
+            { echo "== $script ($mode) FAILED"; cat "$log"; }
+            exit 1
+        fi
+        exit 0
+    fi
     if MOJOLEARN_NUMERIC_MODE=$mode MOJOLEARN_SKIP_BUILD_GATE=$skip bash "./bindings/$script" > "$log" 2>&1; then
         { echo "== $script ($mode) OK"; cat "$log"; }
     else
@@ -231,6 +250,24 @@ case " $MODES " in *" identical "*)
     for n in $IDENTICAL_ONLY_NAMES; do ALL_SOS="$ALL_SOS $PKG/identical/$n.so"; done ;;
 esac
 if [ "$PACKAGE_BYTE_LM" = 1 ]; then
+    # The CPU training binding is gated for existence and staleness like every
+    # other extension, but it is asked a different question: it must report
+    # 'cpu', because a GPU vendor here would mean the CPU-only build saw an
+    # accelerator target, and that is the one way this binary loads while being
+    # wrong. It lives beside the tiers, in host/, which is where the runtime's
+    # own path helper looks rather than through _backend.binding().
+    ALL_SOS="$ALL_SOS $PKG/host/_mojolearn_byte_lm_host.so"
+    pixi run -e pkg python - "$PKG/host/_mojolearn_byte_lm_host.so" <<'PYHOST'
+import importlib.util, json, sys
+spec = importlib.util.spec_from_file_location('_mojolearn_byte_lm_host', sys.argv[1])
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+assert module.byte_lm_host_numeric_mode() == 1, 'CPU training binding must be IDENTICAL'
+assert module.byte_lm_host_vendor() == 'cpu', 'CPU training binding must report cpu'
+print(json.dumps(dict(extension='_mojolearn_byte_lm_host', native_vendor='cpu',
+    numeric_mode=1, supported_modes=['identical'],
+    unsupported_modes=['fast', 'deterministic'])))
+PYHOST
     ALL_SOS="$ALL_SOS $PKG/identical/_mojolearn_byte_lm.so"
     pixi run -e pkg python - "$PKG/identical/_mojolearn_byte_lm.so" <<'PYBYTE'
 import importlib.util, json, sys

@@ -26,14 +26,25 @@ class ReleaseInventory(unittest.TestCase):
         for vendor, arch in sorted(packer.RELEASE_061_SETS):
             files = {}
             for mode in packer.TIERS:
-                names = packer.EXT_NAMES + (('_mojolearn_byte_lm',) if mode == 'identical' else ())
+                # FROM THE PACKER'S OWN DEFINITION, never a second list. This
+                # read `EXT_NAMES + byte_lm`, which was right until DEVIATION
+                # 2490 moved every non-tree binding into identical and narrowed
+                # EXT_NAMES to the three tree lanes. The fixture then built 4
+                # identical-tier files where the packer required 17, and this
+                # file's first test had been failing on main ever since; the
+                # other three assert refusals, so they passed for the wrong
+                # reason and hid it.
+                names = packer.tier_names(mode, True)
                 for name in names:
                     rel = f'{vendor}/{arch}/' + ('' if mode == 'fast' else mode + '/') + name + '.so'
                     binary = root / rel
                     binary.parent.mkdir(parents=True, exist_ok=True)
                     binary.write_bytes(rel.encode())  # inert bytes; never loaded
                     files[rel] = binary
-            sets.append((vendor, arch, files, {}, {}))
+            # DEVIATION 2680: the sixth element is this leg's CPU TRAINING
+            # binding, None when the leg built none. These fixtures build no
+            # host binary, which is the absent case the packer must still pack.
+            sets.append((vendor, arch, files, {}, {}, None))
             proof = root / f'{vendor}-{arch}.json'
             proof.write_text(json.dumps(dict(
                 schema='mojolearn.linux.build-provenance.v1', complete=True,
@@ -51,9 +62,14 @@ class ReleaseInventory(unittest.TestCase):
             result = packer.release_inventory(sets, proofs, version, root)
             self.assertEqual(result['version'], version)
             self.assertEqual(result['assembly_profile'], packer.RELEASE_PROFILE)
-            # 16 common extensions x 3 modes x 3 architectures, plus
-            # one IDENTICAL-only language-model extension per architecture.
-            self.assertEqual(len(result['extensions']), 147)
+            # Three tree lanes in each of fast and deterministic, and all
+            # seventeen identical-tier names (the three trees, the thirteen
+            # identical-only bindings, and the byte LM), so 23 per architecture
+            # across three architectures. Counted from tier_names rather than
+            # written out, so the number cannot drift from the packer again.
+            per_arch = sum(len(packer.tier_names(mode, True)) for mode in packer.TIERS)
+            self.assertEqual(per_arch, 23)
+            self.assertEqual(len(result['extensions']), per_arch * 3)
             self.assertTrue(result['optional_native']['_mojolearn_byte_lm']['included'])
             self.assertEqual(result['optional_native']['_mojolearn_byte_lm']['unsupported_modes'],
                              ['fast', 'deterministic'])
@@ -91,7 +107,7 @@ class ReleaseInventory(unittest.TestCase):
             with self.subTest(misplaced=misplaced), tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp)
                 sets, proofs = self.fixture(root)
-                vendor, arch, files, _, _ = sets[0]
+                vendor, arch, files, _, _, _ = sets[0]
                 old = f'{vendor}/{arch}/identical/_mojolearn_byte_lm.so'
                 binary = files.pop(old)
                 if misplaced:

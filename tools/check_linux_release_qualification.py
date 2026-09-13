@@ -25,6 +25,11 @@ import verify_linux_surface_qualification as surface
 require = surface.require
 EXTENSION = re.compile(r'mojolearn/(cuda|hip)/(sm_[0-9]+a?|gfx[0-9a-f]+)/'
                        r'(?:(deterministic|identical)/)?(_mojolearn[^/]*)\.so')
+# DEVIATION 2680: the CPU TRAINING binding. One vendor-neutral copy per wheel,
+# beside the architecture trees rather than inside one, because it targets no
+# GPU and reads back vendor 'cpu'.
+HOST_NAME = '_mojolearn_byte_lm_host'
+HOST_MEMBER = 'mojolearn/host/' + HOST_NAME + '.so'
 MODE_READBACK = surface.BINDINGS - {'_mojolearn_estimators', '_mojolearn_rf',
                                  '_mojolearn_trees', '_mojolearn_solver', '_mojolearn_tsa'}
 # The three SLOTS a release wheel must fill. DEVIATION 2293: this stays the
@@ -80,8 +85,16 @@ def inventory_digest(inventory):
     return hashlib.sha256(json.dumps(inventory, separators=(',', ':')).encode()).hexdigest()
 
 
-def inspect_wheel(wheel, root, flat_python=False, byte_lm=False):
-    """Verify RECORD and every advertised architecture/mode on final bytes."""
+def inspect_wheel(wheel, root, flat_python=False, byte_lm=False, host_out=None):
+    """Verify RECORD and every advertised architecture/mode on final bytes.
+
+    `host_out`, when given, is filled with the vendor-neutral CPU TRAINING
+    binding's member and digest (DEVIATION 2680). It is an out parameter rather
+    than a third return value because six call sites unpack this as a pair, and
+    because the host binding must NOT enter `extensions`: release_audit compares
+    that dict wholesale against the packer's payload, which records the host
+    under `host_native` instead, outside the per-architecture map.
+    """
     extensions, sets = {}, {}
     require(re.fullmatch(r'.+-manylinux_[A-Za-z0-9_.]+_x86_64\.whl', wheel.name),
             'Final Linux wheel requires a repaired manylinux x86_64 tag')
@@ -117,6 +130,11 @@ def inspect_wheel(wheel, root, flat_python=False, byte_lm=False):
                 vendor, arch, mode, name = match.groups()
                 extensions[path.removeprefix('mojolearn/')] = digest
                 sets.setdefault((vendor, arch, mode or 'fast'), set()).add(name)
+            elif path == HOST_MEMBER:
+                # DEVIATION 2680: vendor-neutral, one copy for the whole wheel,
+                # so it belongs to no architecture and is recorded on its own.
+                if host_out is not None:
+                    host_out[path.removeprefix('mojolearn/')] = digest
             elif path.endswith('.so') and '/_mojolearn' in path:
                 raise ValueError('Unexpected wheel extension location: ' + path)
         require(declared == set(paths), 'RECORD does not cover the complete wheel')
@@ -215,7 +233,9 @@ def release_audit(wheel, source_root, proof_root, runtime_key):
     """File-only three-architecture preflight, also recomputed at final admission."""
     wheel, source_root, proof_root = map(Path, (wheel, source_root, proof_root))
     require(runtime_key in RELEASE_ARCHES_ACCEPTED, 'Unknown runtime architecture')
-    extensions, sets = inspect_wheel(wheel, source_root, flat_python=True, byte_lm=True)
+    host_extensions = {}
+    extensions, sets = inspect_wheel(wheel, source_root, flat_python=True, byte_lm=True,
+                                     host_out=host_extensions)
     version = surface.release_version(source_root)  # DEVIATION 2290: the source root's, never a literal
     carried = {'/'.join(k.split('/')[:2]) for k in sets}
     require(surface.arch_set_ok(carried),
@@ -236,6 +256,20 @@ def release_audit(wheel, source_root, proof_root, runtime_key):
         require(payload.get('optional_native', {}).get('_mojolearn_byte_lm') == dict(included=True,
                     supported_modes=['identical'], unsupported_modes=['fast', 'deterministic']),
                 'Release byte-LM must be included in IDENTICAL only')
+        # DEVIATION 2680: THE CPU TRAINING BINDING. A release wheel carries
+        # exactly one, vendor-neutral, and the payload's record of it must be
+        # the file actually in the archive. Without this the binding could be
+        # declared and absent, or present and unrecorded, and nothing downstream
+        # would notice: it is the one shipped binary no architecture map covers.
+        require(payload.get('optional_native', {}).get(HOST_NAME) == dict(included=True,
+                    supported_modes=['identical'], unsupported_modes=['fast', 'deterministic']),
+                'Release CPU training binding must be included in IDENTICAL only')
+        host_native = payload.get('host_native')
+        require(isinstance(host_native, dict) and host_native.get('archive_path') == HOST_MEMBER
+                and host_native.get('vendor') == 'cpu'
+                and host_native.get('supported_modes') == ['identical']
+                and host_native.get('sha256') == host_extensions.get(HOST_MEMBER.removeprefix('mojolearn/')),
+                'Release payload CPU training binding differs from the wheel')
         for field, select in [('python_sha256', lambda n: n.endswith('.py')),
                               ('runtime_sha256', lambda n: '/.libs/' in n)]:
             actual = {n: hashlib.sha256(archive.read(n)).hexdigest()
@@ -260,7 +294,8 @@ def release_audit(wheel, source_root, proof_root, runtime_key):
     return dict(sha256=digest_file(wheel), wheel=str(wheel.resolve()), advertised_vendors=['cuda', 'hip'],
                 assembly_profile=surface.RELEASE_PROFILE, qualification_vendor=vendor, runtime_architecture=arch,
                 source_sha256=source_sha, build_provenance_sha256=proof_hashes[runtime_key],
-                architecture_build_proofs=proof_hashes, extension_hashes=extensions, sets=sets)
+                architecture_build_proofs=proof_hashes, extension_hashes=extensions,
+                host_extension_hashes=host_extensions, sets=sets)
 
 
 def check_release061(wheel, qualification_root, source_root):

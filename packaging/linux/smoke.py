@@ -270,6 +270,34 @@ def main():
         if per[name] != a.vendor:
             failures.append(f"{name}: read-back = {per[name]!r}")
     report["vendor_per_binding"] = per
+    # THE CPU TRAINING BINDING (DEVIATION 2680). Reached through its own path
+    # helper and NEVER _backend.binding(), because that selector refuses a
+    # binary whose vendor read-back is not a GPU API and this one reads back
+    # 'cpu' by design. Nothing in the loop above would notice its absence, and
+    # an inference-only binding loads perfectly while having no train step --
+    # which is exactly what shipping the export without the entry produces.
+    if os.environ.get("MOJOLEARN_PACKAGE_BYTE_LM", "0") == "1" and mode == "identical":
+        try:
+            from mojolearn import _byte_lm_host
+            host_path = pathlib.Path(_byte_lm_host.binary_path()).resolve()
+            host_module = _byte_lm_host._load()
+            host = {"path": str(host_path),
+                    "numeric_mode": int(host_module.byte_lm_host_numeric_mode()),
+                    "vendor": str(host_module.byte_lm_host_vendor()),
+                    "train_step": callable(getattr(host_module, "byte_lm_host_train_step", None))}
+            report["host_binding"] = host
+            if host["numeric_mode"] != 1:
+                failures.append(f"_mojolearn_byte_lm_host: numeric mode read back "
+                                f"{host['numeric_mode']}, must be identical (1)")
+            if host["vendor"] != "cpu":
+                failures.append(f"_mojolearn_byte_lm_host: vendor read back "
+                                f"{host['vendor']!r}, must be 'cpu'")
+            if not host["train_step"]:
+                failures.append("_mojolearn_byte_lm_host: no byte_lm_host_train_step; "
+                                "the wheel carries an inference-only binding")
+        except Exception as exc:
+            report["host_binding"] = f"REFUSED {type(exc).__name__}: {exc}"[:200]
+            failures.append(f"_mojolearn_byte_lm_host: {report['host_binding']}")
     used = {}
     for name, ctor in PER_BINDING.items():
         must_refuse = name in IDENTICAL_ONLY_BINDINGS and mode != "identical"

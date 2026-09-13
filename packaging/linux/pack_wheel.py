@@ -170,7 +170,7 @@ def release_inventory(sets, proof_paths, version, source_root=REPO):
     `version` must be the version SOURCE_ROOT's _version.py declares
     (DEVIATION 2290); a literal never decides it.
     """
-    keys = [(v, a) for v, a, _, _, _ in sets]
+    keys = [(v, a) for v, a, _, _, _, _ in sets]
     keyset = set(keys)
     # DEVIATION 2293: normalise the Hopper slot before comparing, so sm_90 and
     # sm_90a are the same slot and neither can appear twice.
@@ -183,7 +183,21 @@ def release_inventory(sets, proof_paths, version, source_root=REPO):
     if len(proof_paths) != 3:
         raise SystemExit(RELEASE_PROFILE + ' requires three complete architecture build proofs')
     payload = {f'mojolearn/{rel}': sha(path).hex()
-               for _, _, files, _, _ in sets for rel, path in files.items()}
+               for _, _, files, _, _, _ in sets for rel, path in files.items()}
+    # The CPU training binding sits outside this map on purpose: every key here
+    # is mojolearn/<vendor>/<arch>/..., and a vendor-neutral file belongs to no
+    # architecture. It is recorded separately so the payload record still names
+    # every shipped binary, with the legs that produced it and its digest.
+    host_seen = {f'{v}/{a}': sha(p).hex() for v, a, _, _, _, p in sets if p is not None}
+    host_record = None
+    if host_seen:
+        host_record = dict(archive_path=f'mojolearn/host/{HOST_NAME}.so',
+                           sha256=sorted(set(host_seen.values()))[0],
+                           vendor='cpu', supported_modes=['identical'],
+                           unsupported_modes=['fast', 'deterministic'],
+                           built_by=sorted(host_seen),
+                           scope='CPU training and inference with no GPU; one '
+                                 'copy for every architecture in this wheel')
     proofs, inventories, commits = {}, [], set()
     for path in proof_paths:
         raw = pathlib.Path(path).read_bytes()
@@ -236,7 +250,12 @@ def release_inventory(sets, proof_paths, version, source_root=REPO):
                 optional_native={n: {
                     'included': True, 'supported_modes': ['identical'],
                     'unsupported_modes': ['fast', 'deterministic']}
-                    for n in ('_mojolearn_byte_lm',) + IDENTICAL_ONLY_NAMES},
+                    for n in ('_mojolearn_byte_lm',) + ((HOST_NAME,) if host_record else ())
+                             + IDENTICAL_ONLY_NAMES},
+                # Named even when absent, so the record says which wheels carry
+                # CPU training rather than leaving a reader to infer it from a
+                # missing key.
+                host_native=host_record,
                 qualification='Build and file provenance only; installed runtime and numerical checks required',
                 runtime_coverage={ '/'.join(k): 'PENDING_INSTALLED_ARTIFACT' for k in sorted(proofs)})
 
@@ -280,6 +299,14 @@ def metadata_text(proj, readme):
     return "\n".join(lines) + "\n\n" + readme
 
 
+#: The CPU training binding. Vendor-neutral and tier-neutral: one copy per
+#: wheel under `mojolearn/host/`, which is where the runtime's own path helper
+#: looks for it rather than through `_backend.binding()`. It is therefore not a
+#: member of any tier list and not a member of any vendor directory, and every
+#: check that assumes "a vendor binary inside a tier" exempts it by this name.
+HOST_NAME = "_mojolearn_byte_lm_host"
+
+
 def load_set(path, include_byte_lm=False):
     """Every (vendor, arch, files, libs, manifest) under one sets/<vendor>
     directory. One tuple per architecture subdirectory."""
@@ -301,30 +328,60 @@ def load_set(path, include_byte_lm=False):
     for adir in arch_dirs:
         arch = adir.name
         manifest = json.loads((adir / "manifest.json").read_text())
-        rb = (adir / "readback.txt").read_text().split()
+        # THE HOST ROWS ARE READ SEPARATELY, and by name. The CPU training
+        # binding has no device code and answers 'cpu', so folding it into the
+        # vendor and architecture comparisons below would either refuse a
+        # correct set or force those comparisons to accept 'cpu' from a GPU
+        # binary, which is the failure they exist to catch. Rows whose first
+        # field is `host` are pulled out here and checked on their own terms.
+        rb_lines = [ln.split() for ln in (adir / "readback.txt").read_text().splitlines()]
+        host_rows = [r for r in rb_lines if r and r[0] == "host"]
+        rb = [w for r in rb_lines if not (r and r[0] == "host") for w in r]
         said = {w for w in rb if w in ("cuda", "hip", "metal", "none", "NO-READBACK")}
         if said != {vendor}:
             raise SystemExit(f"pack_wheel: {adir}/readback.txt says {sorted(said)}, "
                              f"directory says {vendor}; refusing to pack a mislabeled set")
+        if any(len(r) != 3 or r[2] != "cpu" for r in host_rows):
+            raise SystemExit(
+                f"pack_wheel: {adir}/readback.txt host row is not 'cpu': {host_rows}. "
+                "A GPU vendor there means the CPU-only build saw an accelerator target.")
         # THE ARCHITECTURE IS VERIFIED THE SAME WAY THE VENDOR IS: read back
         # from the binaries on the box (build_sets.sh), never typed. A set
         # whose read-back disagrees with its directory name is refused, the
         # exact failure mode that shipped 0.3.0 as sm_90a-only.
-        ab = (adir / "arch_readback.txt").read_text().split()
+        ab_lines = [ln.split() for ln in (adir / "arch_readback.txt").read_text().splitlines()]
+        host_arch_rows = [r for r in ab_lines if r and r[0] == "host"]
+        ab = [w for r in ab_lines if not (r and r[0] == "host") for w in r]
         said_arch = {w for w in ab if ARCH_RE.match(w) or "," in w}
         if said_arch != {arch}:
             raise SystemExit(
                 f"pack_wheel: {adir}/arch_readback.txt says {sorted(said_arch)}, "
                 f"directory says {arch}; refusing to pack a mislabeled set")
+        if any(len(r) != 3 or r[2] != "NONE-BY-DESIGN" for r in host_arch_rows):
+            raise SystemExit(
+                f"pack_wheel: {adir}/arch_readback.txt host row names architectures: "
+                f"{host_arch_rows}. The CPU training binding must carry no device code.")
         if include_byte_lm:
             expected_rows = {(tier, name) for tier in TIERS
                              for name in tier_names(tier, True)}
             for witness, expected_value in (('readback.txt', vendor), ('arch_readback.txt', arch)):
-                rows = [line.split() for line in (adir / witness).read_text().splitlines()]
+                rows = [line.split() for line in (adir / witness).read_text().splitlines()
+                        if not line.startswith('host ')]
                 if (len(rows) != len(expected_rows) or any(len(row) != 3 for row in rows)
                         or {(row[0], row[1]) for row in rows} != expected_rows
                         or any(row[2] != expected_value for row in rows)):
                     raise SystemExit(f'pack_wheel: incomplete release native readback in {adir / witness}')
+        # OPTIONAL WHEN ABSENT, because a set built before this payload existed
+        # is still a valid set and a rebuild of an older commit must not be
+        # refused. Present means it is carried and checked; absent means the
+        # wheel has no CPU training binding and `main` says so once rather than
+        # shipping an export that cannot work.
+        host_so = adir / "host" / f"{HOST_NAME}.so"
+        host_payload = host_so if host_so.exists() else None
+        if host_rows and host_payload is None:
+            raise SystemExit(
+                f"pack_wheel: {adir}/readback.txt names a host binding but "
+                f"{host_so} is absent")
         files = {}
         for tier in TIERS:
             d = adir if tier == "fast" else adir / tier
@@ -343,7 +400,7 @@ def load_set(path, include_byte_lm=False):
         libs = {p.name: p for p in sorted((adir / ".libs").glob("*"))}
         if not libs:
             raise SystemExit(f"pack_wheel: {adir}/.libs is empty; stage_libs.py did not run")
-        out.append((vendor, arch, files, libs, manifest))
+        out.append((vendor, arch, files, libs, manifest, host_payload))
     return out
 
 
@@ -379,7 +436,7 @@ def main():
     readme = (REPO / "README.md").read_text()
 
     sets = [t for s in a.set for t in load_set(s, include_byte_lm=a.profile == RELEASE_PROFILE)]
-    keys = [(v, arch) for v, arch, _, _, _ in sets]
+    keys = [(v, arch) for v, arch, _, _, _, _ in sets]
     if len(set(keys)) != len(keys):
         raise SystemExit(f"pack_wheel: the same (vendor, arch) given twice: {keys}")
     if a.profile == 'generic' and a.build_proof:
@@ -394,7 +451,7 @@ def main():
     # themselves -- the MAX runtime does not vary by GPU architecture, so a
     # disagreement there is a build defect, refused rather than laid out.
     lib_sha = {k: {n: sha(p) for n, p in libs.items()}
-               for k, (_, _, _, libs, _) in zip(keys, sets)}
+               for k, (_, _, _, libs, _, _) in zip(keys, sets)}
     first = keys[0]
     shared = all(lib_sha[k] == lib_sha[first] for k in keys)
     if not shared:
@@ -412,7 +469,7 @@ def main():
         entries[f"mojolearn/{py.name}"] = py
     entries["mojolearn/ALPHA_API.md"] = PKG / "ALPHA_API.md"
     seen_vendor_libs = set()
-    for vendor, arch, files, libs, _ in sets:
+    for vendor, arch, files, libs, _, _ in sets:
         for rel, p in files.items():
             entries[f"mojolearn/{rel}"] = p
         if not shared and vendor not in seen_vendor_libs:
@@ -422,6 +479,28 @@ def main():
     if shared:
         for n, p in sets[0][3].items():
             entries[f"mojolearn/.libs/{n}"] = p
+
+    # ONE COPY, AND EVERY SET THAT CARRIES ONE MUST CARRY THE SAME BYTES. The
+    # CPU training binding is vendor-neutral, so each architecture leg builds
+    # its own and the wheel ships exactly one. Differing bytes across legs
+    # means they were not built from one source, which is the same defect the
+    # MAX runtime closure check above refuses, so it is refused here too rather
+    # than resolved by picking a winner. Absent everywhere is legal and says so
+    # once: a wheel without it has no CPU training and must not pretend to.
+    host_payloads = {(v, arch): host for v, arch, _, _, _, host in sets if host is not None}
+    if host_payloads:
+        digests = {k: sha(p).hex() for k, p in host_payloads.items()}
+        if len(set(digests.values())) != 1:
+            raise SystemExit(
+                "pack_wheel: the architecture legs disagree on the CPU training "
+                "binding; it is vendor-neutral, so one copy is wrong: "
+                + ", ".join(f"{v}/{a}={d[:12]}" for (v, a), d in sorted(digests.items())))
+        entries[f"mojolearn/host/{HOST_NAME}.so"] = next(iter(host_payloads.values()))
+        print(f"pack_wheel: CPU training binding carried once from "
+              f"{'/'.join(next(iter(host_payloads)))}, sha256 {next(iter(digests.values()))[:12]}")
+    else:
+        print("pack_wheel: NO CPU training binding in any set; this wheel ships "
+              "mojolearn.LanguageModelHostTrainer with nothing behind it")
 
     dist = f"mojolearn-{version}.dist-info"
     tag = f"py3-none-{a.plat}"
@@ -492,7 +571,7 @@ def main():
 
     size = whl.stat().st_size
     per_set = {}
-    for vendor, arch, files, libs, manifest in sets:
+    for vendor, arch, files, libs, manifest, _ in sets:
         per_set[f"{vendor}/{arch}"] = {
             "extensions_bytes": manifest["bytes_extensions"],
             "runtime_libs_bytes": manifest["bytes_staged_libs"],

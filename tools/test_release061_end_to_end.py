@@ -120,6 +120,10 @@ def fixture(root):
     source_sha = gate.inventory_digest(inventory)
     files = {'mojolearn/__init__.py': wrapper.read_bytes(), 'mojolearn/_version.py': version_file.read_bytes(),
              'mojolearn/.libs/libfixture.so': b'inert runtime'}
+    # DEVIATION 2680: the CPU TRAINING binding. ONE vendor-neutral copy for the
+    # whole wheel, outside every architecture tree, so it is excluded from the
+    # payload's `extensions` map below and recorded under `host_native` instead.
+    files[gate.HOST_MEMBER] = b'inert native ' + gate.HOST_MEMBER.encode()
     qualification_root = root / 'qualification'
     proof_root = qualification_root / 'build-proofs'
     proof_root.mkdir(parents=True)
@@ -140,11 +144,18 @@ def fixture(root):
     payload = dict(schema='mojolearn.linux-payload.v1', version=version,
         assembly_profile=gate.surface.RELEASE_PROFILE, release_profile='alpha-api', source_commit='a' * 40,
         source_inventory=inventory, sets=proof_sets,
-        extensions={n: hashlib.sha256(b).hexdigest() for n, b in files.items() if '/_mojolearn' in n},
+        extensions={n: hashlib.sha256(b).hexdigest() for n, b in files.items()
+                    if '/_mojolearn' in n and n != gate.HOST_MEMBER},
+        host_native=dict(archive_path=gate.HOST_MEMBER,
+                         sha256=hashlib.sha256(files[gate.HOST_MEMBER]).hexdigest(),
+                         vendor='cpu', supported_modes=['identical'],
+                         unsupported_modes=['fast', 'deterministic']),
         python_sha256={'mojolearn/__init__.py': gate.digest_file(wrapper),
                        'mojolearn/_version.py': gate.digest_file(version_file)},
         runtime_sha256={'mojolearn/.libs/libfixture.so': hashlib.sha256(b'inert runtime').hexdigest()},
-        optional_native={'_mojolearn_byte_lm': {'included': True, 'supported_modes': ['identical'], 'unsupported_modes': ['fast', 'deterministic']}})
+        optional_native={n: {'included': True, 'supported_modes': ['identical'],
+                             'unsupported_modes': ['fast', 'deterministic']}
+                         for n in ('_mojolearn_byte_lm', gate.HOST_NAME)})
     dist = 'mojolearn-' + version + '.dist-info/'
     files[dist + 'LINUX_PAYLOAD.json'] = json.dumps(payload).encode()
     files[dist + 'METADATA'] = ('Metadata-Version: 2.4\nName: mojolearn\nVersion: ' + version + '\n').encode()
@@ -179,11 +190,18 @@ def fixture(root):
                 bindings = {binding: dict(path=package + '/' + prefix + binding + '.so',
                     sha256=audit['extension_hashes'][prefix + binding + '.so'], mode_code=code)
                     for binding in gate.surface.expected_bindings(mode, True)}
+                # DEVIATION 2680: the CPU TRAINING binding, under its own key.
+                # It is NOT in installed_bindings, whose every row is asserted
+                # to read back this leg's GPU vendor; this one reads back 'cpu'.
+                host_member = gate.HOST_MEMBER.removeprefix('mojolearn/')
                 write_json(out / (name + '.installed.json'), dict(vendor=vendor, mode=mode,
                     wheel_sha256=audit['sha256'], package=package + '/__init__.py',
                     installed_bindings=bindings, device_architecture=arch,
                     selected_architecture=arch, architecture_probe='synthetic fixture witness',
-                    architecture_override_absent=True))
+                    architecture_override_absent=True,
+                    installed_host_binding=dict(path=package + '/' + host_member,
+                        sha256=audit['host_extension_hashes'][host_member],
+                        numeric_mode=1, vendor='cpu')))
                 (out / (name + '.log')).write_text('inert fixture; no numerical execution\n')
                 status.append(f'{surface}\t{mode}\t0\n')
                 if surface == 'byte-lm':
