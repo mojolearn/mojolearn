@@ -1314,6 +1314,16 @@ arima-card = "mojo run -I . arima/arima_main.mojo"
 # APPLE ONLY -- a second and third vendor through this surface is still
 # OPEN. The ordered ledger is in arima/README.md.
 check-arima-surface = "cd python && python3 -m mojolearn.tests.test_arima_surface"
+# EVERY gate-style python test, which until 2026-09-13 nothing ran. The line
+# above was the ONLY pixi task invoking any of the 13, and no CI workflow
+# invoked one. They define no test functions, so `test-python` (pytest)
+# collects nothing from them -- correct, and exactly why they were invisible
+# while test_samba_surface and test_transformer_hd128 sat RED for days after
+# Array lost `.view`/`.mean`. The script makes the gemm oracle card the linalg
+# gate requires (~15 s, no GPU), asks for the 4 shapes that gate otherwise
+# DEFERS, discovers the gate files rather than listing them, and exits
+# non-zero naming any that go RED.
+check-python-gates = "bash tools/check_python_gates.sh"
 # spectral: SOURCE ONLY, no gate and no sabotage has ever run. The five sabotage arms written
 # 2026-08-23 have NEVER BEEN COMPILED, so a syntax error in them would break this build.
 check-spectral = "mojo run -I . spectral/checks/spectral_check.mojo"
