@@ -3,7 +3,7 @@
 This file records release-level changes, not the development diary. Git history and archived evidence
 contain the detailed investigation record.
 
-## 0.8.5 (unreleased)
+## 0.8.5 (unreleased 2026-09-13)
 
 - `ExperimentalTwoLevelFeatureFreq` gave different predictions on the three GPU vendors, and
   occasionally two different answers on one machine, because its histogram accumulator was sized
@@ -12,6 +12,16 @@ contain the detailed investigation record.
   same bits on all nine hostile fixtures, proven with the old code selectable beside the fix on an
   M4, an H100 and an MI325X. No other estimator's bits move (the five other gradient boosting
   lanes are identical before and after on every vendor).
+- GEMM on AMD runs the gather staging body (`kpack_gs`, the AMD row of DEVIATION 2707): on an
+  MI300X the lean language model step reads 0.957 of the previous default and the GEMM sum 0.947,
+  every step witness equal and the card identical to the M4's, gated on a shipped build before the
+  merge. NVIDIA keeps the `kpack_hg` body that 0.8.4 shipped; Apple compiles the line it compiled
+  before.
+- The CPU-only forest inference binding (`bindings/_mojolearn_forest_host.mojo`: RandomForest,
+  ExtraTrees and the four GradientBoosting variants predict from a saved model on a machine with no
+  GPU, the same bits as the GPU that trained it on seven CPUs) is in the source tree and its gate
+  workflow, not in either wheel. The wheels carry the byte level language model's CPU training
+  binding as in 0.8.4 and no other host binding.
 
 ## 0.8.4 (published 2026-09-13)
 

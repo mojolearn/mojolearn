@@ -151,18 +151,17 @@ reference card, but one local run cannot independently establish a
 cross-vendor claim. See [verification](docs/VERIFY.md) and
 [conformance bundles](docs/CONFORMANCE.md).
 
-## Current priorities
+## Current priorities (2026-09-13)
 
-- Make FAST materially faster than IDENTICAL on representative NVIDIA work;
-  benchmark FAST, IDENTICAL, and one external comparator per method.
-- Treat Mamba 1/2/3 forward and backward as a dedicated lane with independent
-  calculus/oracle checks and same-commit vendor cards.
-- Build and qualify the 0.6.0 artifact with UMAP transform and CSR graph storage;
-  complete publication and fresh Linux installed-wheel checks.
-- Add build/source provenance to native artifacts so stale binaries cannot be
-  mistaken for current results.
-- Close pending NVIDIA and AMD legs for already-public APIs before adding more
-  breadth.
+- Cut 0.8.5 with the `ExperimentalTwoLevelFeatureFreq` fix (DEVIATION 2710) and the AMD GEMM
+  row, the HIP set built in the 22.04 ROCm container.
+- CPU training phase 1 (`docs/lanes/BRIEF_cpu_training_2026-09-13.md`): gemm-pinned first, then
+  kde, holtwinters, lasso and elasticnet, svc, agglomerative, et-clf, et-reg, iforest; a lane
+  passes only when the fourth column reads IDENTICAL on every cell.
+- Rerun the 46-lane three columns once to fill the byte level language model cells the GPU legs
+  skipped.
+- CPU inference for the classical lanes, cheapest first (ols and ridge), per the costing in
+  `docs/lanes/BRIEF_forest_host_inference_2026-09-13.md`.
 
 The project-level sequencing lives in [ROADMAP.md](ROADMAP.md). Update this
 page only from recorded evidence; do not turn planned or in-progress runs into
@@ -194,7 +193,10 @@ The later AMD allocation fix has its own successful source Python API rerun;
 see the [AMD source qualification record](bench/results/e1/2026-09-05_134041-mojolearn-e2-amd/README.md).
 That later binding evidence is separate from the original native certificate.
 
-## UMAP 0.6.0 release candidate
+## UMAP 0.6.0 release candidate (historical, 2026-09-05)
+
+0.6.0 was published on 2026-09-06 and the wheels since (0.7.0 through 0.8.4) supersede this
+candidate; the section stays as the record of what that candidate's evidence covered.
 
 The source candidate implements `fit`, `fit_transform` and `transform` with
 dense Euclidean input and two- or three-dimensional output. Public fitting
