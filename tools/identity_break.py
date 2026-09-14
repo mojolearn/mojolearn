@@ -1071,6 +1071,16 @@ def _(ml, X, yc, yr, Xh=None):
 # the lane derives it from the fixture bytes by a rule here, never from a
 # host BLAS or a host transcendental.
 
+def _three_class_centered(X):
+    """Targets in 0..2 from the two unperturbed columns split at their
+    MEDIANS, so every fixture carries all three classes; _three_class
+    splits at zero and the `negative` fixture then has one class, which
+    the multiclass losses refuse by name. The mlp lane keeps _three_class
+    so its recorded cells do not move."""
+    return ((X[:, 3] > np.median(X[:, 3])).astype(np.int32)
+            + (X[:, 4] > np.median(X[:, 4])).astype(np.int32)).astype(np.int32)
+
+
 def _pos(y):
     """A strictly positive regression target: |y| + 1, elementwise."""
     return (np.abs(y) + np.float32(1.0)).astype(np.float32)
@@ -1167,7 +1177,7 @@ def _(ml, X, yc, yr, Xh=None):
 @lane("gbdt-multiclass")
 def _(ml, X, yc, yr, Xh=None):
     """MultiClass with class weights on the three-class target."""
-    t = _three_class(X)
+    t = _three_class_centered(X)
     m = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="MultiClass",
                             class_weights=[1.0, 2.0, 0.5]).fit(X, t)
     return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X))),
@@ -1176,7 +1186,7 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("gbdt-onevsall")
 def _(ml, X, yc, yr, Xh=None):
-    m = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="MultiClassOneVsAll").fit(X, _three_class(X))
+    m = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="MultiClassOneVsAll").fit(X, _three_class_centered(X))
     return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X))),
                 m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
 
@@ -1465,10 +1475,16 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 def _kde_lane(kernel, metric):
+    # cosine distance is undefined at the origin and the estimator refuses
+    # an all-zero row by name (DEVIATION 553); `ties` has one in four
+    # columns, so the cosine lane shifts its rows by a constant, which
+    # moves every row off the origin and leaves the pathology (ties) intact
+    shift = np.float32(8.0) if metric == "cosine" else np.float32(0.0)
+
     def body(ml, X, yc, yr, Xh=None):
-        m = ml.KernelDensity(bandwidth=0.7, kernel=kernel, metric=metric).fit(X[:4096, :4])
-        return _fit(dict(scores=_h(m.score_samples(X[4096:4352, :4]))), m,
-                    lambda e: (e.score_samples(Xh[:256, :4]),))
+        m = ml.KernelDensity(bandwidth=0.7, kernel=kernel, metric=metric).fit(X[:4096, :4] + shift)
+        return _fit(dict(scores=_h(m.score_samples(X[4096:4352, :4] + shift))), m,
+                    lambda e: (e.score_samples(Xh[:256, :4] + shift),))
     body.__doc__ = f"KernelDensity kernel={kernel!r} metric={metric!r}: leaving the gaussian-euclidean pair leaves the fused kernel."
     return body
 
