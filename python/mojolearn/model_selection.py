@@ -133,8 +133,15 @@ def _default_folds(y, n_splits, classifier):
 def _folds(cv, estimator, X, y, groups):
     if cv is None or isinstance(cv, numbers.Integral):
         if groups is not None:
-            warnings.warn('groups is ignored by unshuffled default cross-validation',
-                          UserWarning, stacklevel=3)
+            # Refused, not warned and ignored (the claim-surface census,
+            # 2026-09-14): the default unshuffled folds never read groups,
+            # and a caller who passed them asked for grouped folds. Pass a
+            # splitter with `.split(X, y, groups)` to get them.
+            raise ValueError(
+                'mojolearn cross_val_score: groups is read only by a splitter '
+                'passed as cv; the default unshuffled folds would ignore it, '
+                'so it is refused (pass cv=<splitter with .split(X, y, groups)>)'
+            )
         return _default_folds(y, 5 if cv is None else cv, _classifier(estimator))
     if callable(getattr(cv, 'split', None)):
         return cv.split(X, y, groups)

@@ -68,7 +68,11 @@ disagreeing with itself and a DIVERGENT column is two vendors disagreeing.
             offer `save_checkpoint`/`from_checkpoint` instead; that pair
             feeds the same column (2026-09-13).
 
-THE LANES, 46 (2026-09-13), one per public estimator plus linalg and metrics.
+THE LANES, 118 (2026-09-14; 46 on 2026-09-13, pca-whiten the same night, and
+71 on 2026-09-14 from the claim-surface census). One per public estimator
+plus linalg and metrics, then one per public constructor VALUE that selects
+a different numeric path and no earlier lane pins (a kernel, an objective, a
+sampler, a solver, a metric, a reduction).
 
     trees      rf-clf rf-reg et-clf et-reg gbdt-symmetric gbdt-depthwise
                gbdt-lossguide gbdt-rmse gbdt-ordered-rmse gbdt-feature-freq
@@ -79,6 +83,27 @@ THE LANES, 46 (2026-09-13), one per public estimator plus linalg and metrics.
     neural     mlp byte-lm byte-lm-host-infer byte-lm-host-train mamba1
                mamba2 mamba3 transformer samba
     functions  gemm-pinned metrics
+    2026-09-14 (docs/lanes/BRIEF_claim_surface_census_2026-09-14.md)
+      trees    rf-clf-entropy-log2-noboot rf-clf-balanced-parallel rf-reg-poisson
+               rf-reg-gamma-ig et-clf-entropy-bestfirst et-reg-bootstrap-parallel
+               gbdt-multiclass gbdt-onevsall gbdt-parametric-losses
+               gbdt-lossguide-newtoncosine gbdt-pointwise-l2-bayesian-eval
+               gbdt-exact-mae gbdt-categorical-ctr gbdt-nan-modes gbdt-adapter-clf
+               gbdt-adapter-reg iforest-tuned (last, with iforest)
+      neural   mamba2-dtlimit transformer-window byte-lm-resident
+               byte-lm-host-infer-threaded (the SHIPPED default arm; the
+               2026-09-13 lane pins the reference arm) samba-untied-dropout-accum
+               optim-sgd optim-adam-clip cross-entropy-arms
+      classical kmeans-random kmeans-array kmeans-weighted dbscan-brute-l1
+               dbscan-weighted kde-<kernel>-<metric> x5 kde-weighted pca-full-whiten
+               ols-no-intercept ols-weighted ridge-no-intercept logistic-l1
+               logistic-elasticnet logistic-unpenalized-no-intercept
+               elasticnet-l2end-no-intercept svc-linear svr-linear knn-<metric> x5
+               knn-rbc knn-clf-distance knn-reg-distance radius-<metric> x3
+               standard-scaler-no-mean standard-scaler-no-std minmax-scaler-clip
+               spectral-precomputed holtwinters-multiplicative kpss arima-011
+               arima-seasonal-c gp-matern12 gp-matern32 gp-matern52-ard
+      functions gemm-transposed metrics-classification cross-val
 
 The 18 lanes added on 2026-09-13 (svr through samba above) are fed the SAME
 fixture bytes in the shape their estimator wants; the derivation rules are
@@ -715,17 +740,29 @@ def _coded(X):
     return np.ascontiguousarray(np.column_stack([c0, c1, X[:, :8]]).astype(np.float32))
 
 
-def _radius_for(index, queries):
+def _radius_for(index, queries, metric="euclidean"):
     """A radius scaled to the fixture, six tenths of the median distance
     from the query rows to the first index row, in fixed-order float64
     host arithmetic (elementwise, no BLAS), then rounded to float32. A
     fixed radius would return nothing on `ties` and everything on
-    `denormal`."""
+    `denormal`. The distance is the lane's own metric (euclidean, manhattan
+    or chebyshev; the Lp lane uses the euclidean radius, which admits at
+    least as many neighbors at p = 3), because an L1 ball of the euclidean
+    radius held no neighbor at all on `base` (2026-09-14)."""
     ref = index[0].astype(np.float64)
-    d2 = np.zeros(queries.shape[0], dtype=np.float64)
+    acc = np.zeros(queries.shape[0], dtype=np.float64)
     for j in range(index.shape[1]):
-        d2 = d2 + (queries[:, j].astype(np.float64) - ref[j]) ** 2
-    return float(np.float32(0.6 * np.median(np.sqrt(d2))))
+        diff = np.abs(queries[:, j].astype(np.float64) - ref[j])
+        if metric == "euclidean":
+            acc = acc + diff ** 2
+        elif metric == "manhattan":
+            acc = acc + diff
+        elif metric == "chebyshev":
+            acc = np.maximum(acc, diff)
+        else:
+            raise ValueError(metric)
+    d = np.sqrt(acc) if metric == "euclidean" else acc
+    return float(np.float32(0.6 * np.median(d)))
 
 
 def _ragged(result):
@@ -1024,6 +1061,710 @@ def _(ml, X, yc, yr, Xh=None):
                 m, lambda e: (np.asarray(e.forward(_ids(Xh, 2, 16))),))
 
 
+# ---------------------------------------------------------------- lanes (2026-09-14, the claim-surface census)
+# docs/lanes/BRIEF_claim_surface_census_2026-09-14.md: every public constructor
+# value that selects a DIFFERENT NUMERIC PATH (a kernel, an objective, a
+# sampler, a solver, a metric, a reduction) and that no lane above pins.
+# Each lane below bundles the values that share a fit so the cell count stays
+# near one per uncovered kernel. Sizes match the lanes above. Where a value
+# needs a target the fixture does not have (positive, three classes, a NaN),
+# the lane derives it from the fixture bytes by a rule here, never from a
+# host BLAS or a host transcendental.
+
+def _pos(y):
+    """A strictly positive regression target: |y| + 1, elementwise."""
+    return (np.abs(y) + np.float32(1.0)).astype(np.float32)
+
+
+def _with_nan(X):
+    """The fixture with NaN in columns 5, 6 and 7 of every eighth row, so a
+    quantizer's nan_mode has something to place. No fixture carries a NaN
+    (the other lanes would refuse it), so the GBDT nan lanes make their own."""
+    Xn = X.copy()
+    Xn[::8, 5:8] = np.float32(np.nan)
+    return Xn
+
+
+def _affinity(P):
+    """A dense affinity for the precomputed spectral lane, from fixed-order
+    float64 host arithmetic (elementwise, no BLAS, no transcendental):
+    1 / (1 + d2) where d2 is under the matrix median, else exactly zero
+    (COO conversion drops the zeros, as cuML's does)."""
+    Q = P.astype(np.float64)
+    d2 = np.zeros((Q.shape[0], Q.shape[0]), dtype=np.float64)
+    for j in range(Q.shape[1]):
+        col = Q[:, j]
+        d2 = d2 + (col[:, None] - col[None, :]) ** 2
+    t = float(np.median(d2))
+    A = np.where(d2 < t, 1.0 / (1.0 + d2), 0.0)
+    return np.ascontiguousarray(A.astype(np.float32))
+
+
+def _exact_prob(n, seed):
+    """A probability vector with no host fold: ranks (k+1)/S with S the
+    integer n(n+1)/2, permuted by the hashed stream."""
+    order = np.argsort(_hashed_uniform(n, 1, seed).reshape(-1), kind="stable")
+    ranks = (order.astype(np.float64) + 1.0) / float(n * (n + 1) // 2)
+    return ranks.astype(np.float32)
+
+
+# -- trees
+
+@lane("rf-clf-entropy-log2-noboot")
+def _(ml, X, yc, yr, Xh=None):
+    """Entropy splits, log2 features, no bootstrap, a level-order leaf cap."""
+    m = ml.RandomForestClassifier(n_estimators=16, max_depth=8, random_state=7, criterion="entropy",
+                                  max_features="log2", bootstrap=False, max_leaves=64).fit(X, yc)
+    return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X))),
+                m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
+
+
+@lane("rf-clf-balanced-parallel")
+def _(ml, X, yc, yr, Xh=None):
+    """class_weight selects the weighted fit entry; parallel_groves the
+    other predict kernel and a resident device model."""
+    m = ml.RandomForestClassifier(n_estimators=16, max_depth=8, random_state=7, class_weight="balanced",
+                                  inference_engine="parallel_groves").fit(X, yc)
+    return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X))),
+                m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
+
+
+@lane("rf-reg-poisson")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.RandomForestRegressor(n_estimators=16, max_depth=8, random_state=7, criterion="poisson",
+                                 max_features="sqrt", max_samples=0.6).fit(X, _pos(yr))
+    return _fit(dict(predict=_h(m.predict(X))), m, lambda e: (e.predict(Xh),))
+
+
+@lane("rf-reg-gamma-ig")
+def _(ml, X, yc, yr, Xh=None):
+    """Two fits, gamma and inverse gaussian, on a strictly positive target."""
+    y = _pos(yr)
+    g = ml.RandomForestRegressor(n_estimators=16, max_depth=8, random_state=7, criterion="gamma").fit(X, y)
+    i = ml.RandomForestRegressor(n_estimators=16, max_depth=8, random_state=7,
+                                 criterion="inverse_gaussian", max_features=None).fit(X, y)
+    return _fit(dict(gamma=_h(g.predict(X)), inverse_gaussian=_h(i.predict(X))),
+                g, lambda e: (e.predict(Xh),))
+
+
+@lane("et-clf-entropy-bestfirst")
+def _(ml, X, yc, yr, Xh=None):
+    """max_leaf_nodes selects the best-first frontier grower, a different
+    builder from the level-wise one every other forest lane runs."""
+    m = ml.ExtraTreesClassifier(n_estimators=16, random_state=7, criterion="entropy", max_leaf_nodes=32,
+                                max_features=4).fit(X, yc)
+    return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X))),
+                m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
+
+
+@lane("et-reg-bootstrap-parallel")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.ExtraTreesRegressor(n_estimators=16, max_depth=8, random_state=7, max_features="log2",
+                               bootstrap=True, max_samples=0.5, inference_engine="parallel_groves").fit(X, yr)
+    return _fit(dict(predict=_h(m.predict(X))), m, lambda e: (e.predict(Xh),))
+
+
+@lane("gbdt-multiclass")
+def _(ml, X, yc, yr, Xh=None):
+    """MultiClass with class weights on the three-class target."""
+    t = _three_class(X)
+    m = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="MultiClass",
+                            class_weights=[1.0, 2.0, 0.5]).fit(X, t)
+    return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X))),
+                m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
+
+
+@lane("gbdt-onevsall")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="MultiClassOneVsAll").fit(X, _three_class(X))
+    return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X))),
+                m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
+
+
+@lane("gbdt-parametric-losses")
+def _(ml, X, yc, yr, Xh=None):
+    """The ten losses no lane above fits, eight trees of depth four each:
+    four take a mandatory parameter; CrossEntropy takes a probability
+    target; the rest a positive target."""
+    y = _pos(yr)
+    fits = {
+        "Quantile": dict(), "MAE": dict(), "LogLinQuantile": dict(), "MAPE": dict(), "Poisson": dict(),
+        "Lq": dict(loss_q=3.0), "Expectile": dict(loss_alpha=0.3),
+        "Tweedie": dict(loss_variance_power=1.5), "Huber": dict(loss_delta=1.0),
+    }
+    parts, first = {}, None
+    for loss, kw in fits.items():
+        m = ml.GradientBoosting(n_estimators=8, max_depth=4, loss=loss, **kw).fit(X, y)
+        parts[loss] = _h(m.predict(X))
+        first = first or m
+    ce = ml.GradientBoosting(n_estimators=8, max_depth=4, loss="CrossEntropy").fit(X, yc.astype(np.float32))
+    parts["CrossEntropy"] = _h(ce.predict(X))
+    return _fit(parts, first, lambda e: (e.predict(Xh),))
+
+
+@lane("gbdt-lossguide-newtoncosine")
+def _(ml, X, yc, yr, Xh=None):
+    """NewtonCosine, the child-hessian and split-gain and leaf-count
+    thresholds, column subsampling, random strength, Bernoulli bootstrap,
+    gradient leaves with three iterations: one Lossguide fit."""
+    m = ml.GradientBoosting(n_estimators=20, max_leaves=32, grow_policy="Lossguide", loss="Logloss",
+                            score_function="NewtonCosine", min_child_hessian=1.0, min_split_gain=0.01,
+                            min_data_in_leaf=8, feature_fraction=0.5, random_strength=1.0,
+                            bootstrap_type="Bernoulli", subsample=0.7,
+                            leaf_estimation_method="Gradient", leaf_estimation_iterations=3).fit(X, yc)
+    return _fit(dict(predict=_h(m.predict(X))), m, lambda e: (e.predict(Xh),))
+
+
+@lane("gbdt-pointwise-l2-bayesian-eval")
+def _(ml, X, yc, yr, Xh=None):
+    """The pointwise searcher, L2 scores, Bayesian bootstrap with a
+    temperature, boost from average on Logloss, an eval set with
+    iteration-based early stopping and best-model truncation, and row
+    weights: one symmetric fit."""
+    w = _hw((X.shape[0],), "gbdt-eval:sample_weight", 0.5, 1.5)
+    ych = labels_for(Xh, HELDOUT_SEED)[0]
+    m = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="Logloss", score_function="L2",
+                            use_pointwise_searcher=True, bootstrap_type="Bayesian", bagging_temperature=0.5,
+                            boost_from_average=True, od_type="Iter", od_wait=5, use_best_model=True
+                            ).fit(X, yc, sample_weight=w, eval_set=(Xh, ych))
+    return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X))),
+                m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
+
+
+@lane("gbdt-exact-mae")
+def _(ml, X, yc, yr, Xh=None):
+    """The Exact (weighted quantile) leaf estimator and the Poisson bootstrap."""
+    m = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="MAE", leaf_estimation_method="Exact",
+                            bootstrap_type="Poisson", subsample=0.6).fit(X, yr)
+    return _fit(dict(predict=_h(m.predict(X))), m, lambda e: (e.predict(Xh),))
+
+
+@lane("gbdt-categorical-ctr")
+def _(ml, X, yc, yr, Xh=None):
+    """A CTR feature and a one-hot feature (disjoint: cat_features makes
+    its own one-hot decision) with two CTR permutations, on the coded
+    columns of _coded."""
+    m = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="Logloss", cat_features=[0],
+                            one_hot_features=[1], permutation_count=2,
+                            ctr_estimation_permutation_id=0).fit(_coded(X), yc)
+    return _fit(dict(predict=_h(m.predict(_coded(X)))), m, lambda e: (e.predict(_coded(Xh)),))
+
+
+@lane("gbdt-nan-modes")
+def _(ml, X, yc, yr, Xh=None):
+    """nan_mode Min and Max on a fixture that actually carries NaN
+    (_with_nan); on a NaN-free column the quantizer collapses both to
+    Forbidden, which is why no lane above could reach them."""
+    Xn = _with_nan(X)
+    lo = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="Logloss", nan_mode="Min").fit(Xn, yc)
+    hi = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="Logloss", nan_mode="Max").fit(Xn, yc)
+    return _fit(dict(min=_h(lo.predict(Xn)), max=_h(hi.predict(Xn))),
+                lo, lambda e: (e.predict(_with_nan(Xh)),))
+
+
+@lane("gbdt-adapter-clf")
+def _(ml, X, yc, yr, Xh=None):
+    """The sklearn-style classifier adapter, the only caller of the binary
+    probability and class entries. It refuses save, so no model column."""
+    m = ml.GradientBoostingClassifier(n_estimators=20, max_depth=6).fit(X, yc)
+    return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X)),
+                     decision=_h(m.decision_function(X[:512]))),
+                m, lambda e: (e.predict(Xh), e.predict_proba(Xh), e.decision_function(Xh[:512])))
+
+
+@lane("gbdt-adapter-reg")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.GradientBoostingRegressor(n_estimators=20, max_depth=6).fit(X, yr)
+    return _fit(dict(predict=_h(m.predict(X))), m, lambda e: (e.predict(Xh),))
+
+
+# -- neural
+
+@lane("mamba2-dtlimit")
+def _(ml, X, yc, yr, Xh=None):
+    """The active dt clamp (seam S9); at the default (0, inf) it cannot
+    move a bit, which is what the mamba2 lane measures."""
+    dm, di, nh = 32, 64, 1
+    cd, dip = di + 256, 2 * di + 256 + nh
+    w = _block_weights("mamba2", {
+        "block_norm.weight": (dm,), "in_proj.weight": (dip, dm), "conv1d.weight": (cd, 1, 4),
+        "conv1d.bias": (cd,), "dt_bias": (nh,), "A_log": (nh,), "D": (nh,), "norm.weight": (di,),
+        "out_proj.weight": (dm, di)},
+        ones=("block_norm.weight", "norm.weight"))
+    blk = ml.Mamba2Block(w, dt_limit=(0.01, 0.1))
+    parts = _block_fit(blk, _seq(X, 2, 16, dm), _seq(X, 2, 16, dm, skip=1024), {})
+    return _fit(parts, blk, lambda e: (np.asarray(e.forward(_seq(Xh, 2, 16, dm))),))
+
+
+@lane("transformer-window")
+def _(ml, X, yc, yr, Xh=None):
+    """Sliding-window attention: a different mask, a ring KV cache and a
+    shorter key span than the full causal block the transformer lane runs."""
+    dm, nh, nkv, hd, it = 32, 2, 1, 16, 64
+    w = _block_weights("transformer", {
+        "input_layernorm.weight": (dm,), "post_attention_layernorm.weight": (dm,),
+        "q_proj.weight": (nh * hd, dm), "k_proj.weight": (nkv * hd, dm), "v_proj.weight": (nkv * hd, dm),
+        "o_proj.weight": (dm, nh * hd), "gate_proj.weight": (it, dm), "up_proj.weight": (it, dm),
+        "down_proj.weight": (dm, it)},
+        ones=("input_layernorm.weight", "post_attention_layernorm.weight"))
+    blk = ml.TransformerBlock(w, n_heads=nh, n_kv_heads=nkv, window=8)
+    parts = _block_fit(blk, _seq(X, 2, 16, dm), _seq(X, 2, 16, dm, skip=1024), dict(max_tokens=32))
+    return _fit(parts, blk, lambda e: (np.asarray(e.forward(_seq(Xh, 2, 16, dm))),))
+
+
+@lane("byte-lm-resident")
+def _(ml, X, yc, yr, Xh=None):
+    """The device-owned session (resident=True, lean step results), the
+    path the byte-lm lane's docstring says is bit-equal to the stateless
+    one and measured on one H100 only."""
+    shape = ml.ByteLanguageModelConfig()
+    named, _ = _byte_lm_params(shape)
+    m = ml.SmallByteLanguageModelTrainer(named, data_schedule={"dataset": "identity_break", "order": "sequential"},
+                                         shape=shape, resident=True, step_result="lean")
+    ids = _ids(X, 3 * shape.batch, shape.length + 1)
+    losses = [np.float64(m.train_step(ids[2 * k:2 * k + 2])["loss"]) for k in range(3)]
+    grads = m.export_gradients()
+    return _fit(dict(loss=_h(np.asarray(losses)), params=_h(np.asarray(m.parameters_)),
+                     grads=_h(*[np.asarray(grads[k]) for k in sorted(grads)]),
+                     logits=_h(np.asarray(m.logits(ids[:2, :-1])))),
+                m, lambda e: (np.asarray(e.logits(_ids(Xh, shape.batch, shape.length))),))
+
+
+@lane("byte-lm-host-infer-threaded")
+def _(ml, X, yc, yr, Xh=None):
+    """LanguageModelInference on its SHIPPED DEFAULT arm, threaded=True, a
+    different host kernel (SIMD, a split fold) from the reference arm the
+    byte-lm-host-infer lane pins. Two threads, the smallest split, so the
+    fold's combine is exercised on every box the same way."""
+    shape = ml.ByteLanguageModelConfig()
+    _, flat = _byte_lm_params(shape)
+    m = ml.LanguageModelInference(flat, shape=shape, threaded=True, threads=2)
+    ids = _ids(X, shape.batch, shape.length + 1)
+    return _fit(dict(loss_bits=_h(np.uint32(m.loss_bits(ids))), logits=_h(np.asarray(m.logits(ids[:, :-1]))),
+                     next=_h(np.asarray(m.next_bytes(ids[:, :-1])))),
+                m, lambda e: (np.asarray(e.logits(_ids(Xh, shape.batch, shape.length))),))
+
+
+@lane("samba-untied-dropout-accum")
+def _(ml, X, yc, yr, Xh=None):
+    """Untied embeddings, dropout on, four accumulation microbatches, a
+    global-norm clip and a warmup-cosine schedule: the training knobs the
+    samba lane leaves at their defaults. Batches of 32 rows of 17, so each
+    step is T = 512 tokens, a split clause 9.2 admits at A = 4 (64 at
+    A = 4 is refused by name; the admitted (T, A) pairs come from
+    `training.accumulation_is_aligned`)."""
+    cfg = ml.SambaConfig(vocab=256, d_model=32, layers=("mamba3", "attention"), n_heads=2, intermediate=64,
+                         tie_embeddings=False, dropout=0.1)
+    m = ml.SambaStack(cfg, generator=ml.training.Generator(1), lr=1e-3, max_norm=1.0, accumulation_steps=4,
+                      lr_schedule=ml.training.WarmupCosineLR(1e-3, warmup_steps=2, total_steps=8, min_lr=1e-5))
+    ids = _ids(X, 96, 17)
+    losses = [np.float64(m.train_step(ids[32 * k:32 * k + 32, :-1], ids[32 * k:32 * k + 32, 1:])["loss"])
+              for k in range(3)]
+    params = m.parameters()
+    return _fit(dict(loss=_h(np.asarray(losses)), logits=_h(np.asarray(m.forward(ids[:2, :-1]))),
+                     params=_h(*[np.asarray(params[k]) for k in sorted(params)])),
+                m, lambda e: (np.asarray(e.forward(_ids(Xh, 2, 16))),))
+
+
+def _optim_tensors(lane):
+    """Three float32 parameter tensors and two gradient lists from the
+    hashed stream, for the bare optimizer lanes."""
+    shapes = ((16, 8), (16,), (3, 16))
+    params = [_hw(s, f"{lane}:p{k}", -0.5, 0.5) for k, s in enumerate(shapes)]
+    grads = [[_hw(s, f"{lane}:g{j}{k}", -1.0, 1.0) for k, s in enumerate(shapes)] for j in range(2)]
+    return params, grads
+
+
+@lane("optim-sgd")
+def _(ml, X, yc, yr, Xh=None):
+    """SGD with momentum, Nesterov, coupled weight decay, a clip on the
+    step and a constant schedule with warmup; and a second optimizer with
+    dampening. No lane above constructs SGD."""
+    T = ml.training
+    p1, g1 = _optim_tensors("sgd-nesterov")
+    o1 = T.SGD(p1, lr=1e-2, momentum=0.9, dampening=0.0, nesterov=True, weight_decay=0.01,
+               lr_schedule=T.ConstantLR(1e-2, warmup_steps=2))
+    n1 = [np.float64(o1.step(g, max_norm=1.0)) for g in g1]
+    p2, g2 = _optim_tensors("sgd-dampening")
+    o2 = T.SGD(p2, lr=1e-2, momentum=0.9, dampening=0.5, nesterov=False)
+    n2 = [np.float64(o2.step(g)) for g in g2]
+    return _fit(dict(nesterov=_h(*p1), nesterov_norms=_h(np.asarray(n1)),
+                     dampening=_h(*p2), dampening_norms=_h(np.asarray(n2))))
+
+
+@lane("optim-adam-clip")
+def _(ml, X, yc, yr, Xh=None):
+    """Adam (coupled decay) under a warmup-linear schedule, AdamW at zero
+    decay through the two-microbatch accumulated step, and a bare
+    clip_grad_norm_ whose pre-clip norm and scaled gradients are hashed."""
+    T = ml.training
+    p1, g1 = _optim_tensors("adam")
+    o1 = T.Adam(p1, lr=1e-3, weight_decay=0.01,
+                lr_schedule=T.WarmupLinearLR(1e-3, warmup_steps=2, total_steps=8, min_lr=0.0))
+    n1 = [np.float64(o1.step(g, max_norm=1.0)) for g in g1]
+    p2, g2 = _optim_tensors("adamw0")
+    o2 = T.AdamW(p2, lr=1e-3, weight_decay=0.0, accumulation_steps=2)
+    n2 = np.float64(o2.step_accumulated(g2, 256))     # T = 256 at A = 2 is a split clause 9.2 admits
+    p3, g3 = _optim_tensors("clip")
+    total = np.float64(T.clip_grad_norm_(g3[0], 1.0))
+    return _fit(dict(adam=_h(*p1), adam_norms=_h(np.asarray(n1)), adamw0=_h(*p2), adamw0_norm=_h(n2),
+                     clip_norm=_h(total), clipped=_h(*g3[0])))
+
+
+@lane("cross-entropy-arms")
+def _(ml, X, yc, yr, Xh=None):
+    """reduction='none', 'sum' with an explicit divisor, label smoothing
+    above zero (a different kernel by the loss contract), and an
+    ignore_index that masks rows. Logits from the hashed stream, targets
+    from the fixture bytes."""
+    T = ml.training
+    logits = _hw((64, 16), "ce:logits", -2.0, 2.0)
+    t = (_ids(X, 1, 64).reshape(64) % 16).astype(np.int32)
+    tm = t.copy(); tm[::4] = 0
+    none = T.cross_entropy(logits, t, reduction="none")
+    ssum = T.cross_entropy(logits, t, reduction="sum", num_items=17)
+    smooth, dsmooth = T.cross_entropy(logits, t, label_smoothing=0.1, return_grad=True)
+    masked, dmasked = T.cross_entropy(logits, tm, ignore_index=0, return_grad=True)
+    return _fit(dict(none=_h(np.asarray(none)), sum=_h(np.float64(ssum)),
+                     smooth=_h(np.float64(smooth)), dsmooth=_h(np.asarray(dsmooth)),
+                     masked=_h(np.float64(masked)), dmasked=_h(np.asarray(dmasked))))
+
+
+# -- classical
+
+@lane("kmeans-random")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.KMeans(n_clusters=8, init="random", n_init=3, random_state=3).fit(X)
+    return _fit(dict(centers=_h(m.cluster_centers_), labels=_h(m.labels_)), m, "n/a:no-predict")
+
+
+@lane("kmeans-array")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.KMeans(n_clusters=8, init="array", init_centroids=np.ascontiguousarray(X[:8]), random_state=3).fit(X)
+    return _fit(dict(centers=_h(m.cluster_centers_), labels=_h(m.labels_)), m, "n/a:no-predict")
+
+
+@lane("kmeans-weighted")
+def _(ml, X, yc, yr, Xh=None):
+    w = _hw((X.shape[0],), "kmeans:sample_weight", 0.5, 1.5)
+    m = ml.KMeans(n_clusters=8, random_state=3).fit(X, sample_weight=w)
+    return _fit(dict(centers=_h(m.cluster_centers_), labels=_h(m.labels_)), m, "n/a:no-predict")
+
+
+@lane("dbscan-brute-l1")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.DBSCAN(eps=0.9, min_samples=5, metric="manhattan", algorithm="brute").fit(X[:6000, :4])
+    return _fit(dict(labels=_h(m.labels_)), m, "n/a:transductive")
+
+
+@lane("dbscan-weighted")
+def _(ml, X, yc, yr, Xh=None):
+    w = _hw((6000,), "dbscan:sample_weight", 0.5, 1.5)
+    m = ml.DBSCAN(eps=0.9, min_samples=5).fit(X[:6000, :4], sample_weight=w)
+    return _fit(dict(labels=_h(m.labels_)), m, "n/a:transductive")
+
+
+def _kde_lane(kernel, metric):
+    def body(ml, X, yc, yr, Xh=None):
+        m = ml.KernelDensity(bandwidth=0.7, kernel=kernel, metric=metric).fit(X[:4096, :4])
+        return _fit(dict(scores=_h(m.score_samples(X[4096:4352, :4]))), m,
+                    lambda e: (e.score_samples(Xh[:256, :4]),))
+    body.__doc__ = f"KernelDensity kernel={kernel!r} metric={metric!r}: leaving the gaussian-euclidean pair leaves the fused kernel."
+    return body
+
+
+# five kernels crossed with five metrics, one pair per lane; every kernel
+# and every metric other than the kde lane's gaussian-euclidean appears once
+for _kernel, _metric in (("tophat", "sqeuclidean"), ("epanechnikov", "l1"), ("exponential", "chebyshev"),
+                         ("linear", "cosine"), ("cosine", "minkowski")):
+    lane(f"kde-{_kernel}-{_metric}")(_kde_lane(_kernel, _metric))
+
+
+@lane("kde-weighted")
+def _(ml, X, yc, yr, Xh=None):
+    w = _hw((4096,), "kde:sample_weight", 0.5, 1.5)
+    m = ml.KernelDensity(bandwidth=0.7).fit(X[:4096, :4], sample_weight=w)
+    return _fit(dict(scores=_h(m.score_samples(X[4096:4352, :4]))), m, lambda e: (e.score_samples(Xh[:256, :4]),))
+
+
+@lane("pca-full-whiten")
+def _(ml, X, yc, yr, Xh=None):
+    """The dense SVD fit (svd_solver='full'), a different algorithm from
+    the covariance eigensolve, with the whitened transform."""
+    m = ml.PCA(n_components=4, whiten=True, svd_solver="full").fit(X)
+    return _fit(dict(components=_h(m.components_), variance=_h(m.explained_variance_), transform=_h(m.transform(X[:256]))),
+                m, lambda e: (e.transform(Xh[:256]),))
+
+
+@lane("ols-no-intercept")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.LinearRegression(fit_intercept=False).fit(X, yr)
+    return _fit(dict(coef=_h(m.coef_), predict=_h(m.predict(X[:256]))), m, lambda e: (e.predict(Xh[:256]),))
+
+
+@lane("ols-weighted")
+def _(ml, X, yc, yr, Xh=None):
+    w = _hw((X.shape[0],), "ols:sample_weight", 0.5, 1.5)
+    m = ml.LinearRegression().fit(X, yr, sample_weight=w)
+    return _fit(dict(coef=_h(m.coef_), predict=_h(m.predict(X[:256]))), m, lambda e: (e.predict(Xh[:256]),))
+
+
+@lane("ridge-no-intercept")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.Ridge(alpha=1.0, fit_intercept=False).fit(X, yr)
+    return _fit(dict(coef=_h(m.coef_), predict=_h(m.predict(X[:256]))), m, lambda e: (e.predict(Xh[:256]),))
+
+
+@lane("logistic-l1")
+def _(ml, X, yc, yr, Xh=None):
+    """An L1 penalty selects OWL-QN, a different solver from L-BFGS."""
+    m = ml.LogisticRegression(penalty="l1", C=1.0, max_iter=50).fit(X, yc)
+    return _fit(dict(coef=_h(m.coef_), proba=_h(m.predict_proba(X[:256]))), m, lambda e: (e.predict_proba(Xh[:256]),))
+
+
+@lane("logistic-elasticnet")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.LogisticRegression(penalty="elasticnet", l1_ratio=0.5, max_iter=50).fit(X, yc)
+    return _fit(dict(coef=_h(m.coef_), proba=_h(m.predict_proba(X[:256]))), m, lambda e: (e.predict_proba(Xh[:256]),))
+
+
+@lane("logistic-unpenalized-no-intercept")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.LogisticRegression(penalty=None, fit_intercept=False, max_iter=50).fit(X, yc)
+    return _fit(dict(coef=_h(m.coef_), proba=_h(m.predict_proba(X[:256]))), m, lambda e: (e.predict_proba(Xh[:256]),))
+
+
+@lane("elasticnet-l2end-no-intercept")
+def _(ml, X, yc, yr, Xh=None):
+    """l1_ratio=0 is the end where the soft threshold never fires; no
+    intercept skips the pre and post processing passes."""
+    m = ml.ElasticNet(alpha=0.01, l1_ratio=0.0, fit_intercept=False, max_iter=200).fit(X, yr)
+    return _fit(dict(coef=_h(m.coef_), predict=_h(m.predict(X[:256]))), m, lambda e: (e.predict(Xh[:256]),))
+
+
+@lane("svc-linear")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.SVC(C=1.0, kernel="linear", max_iter=200).fit(X[:2000], yc[:2000])
+    return _fit(dict(decision=_h(m.decision_function(X[2000:2256])), predict=_h(m.predict(X[2000:2256]))),
+                m, lambda e: (e.decision_function(Xh[:256]), e.predict(Xh[:256])))
+
+
+@lane("svr-linear")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.SVR(C=1.0, kernel="linear", epsilon=0.1, max_iter=200).fit(X[:2000], yr[:2000])
+    return _fit(dict(predict=_h(m.predict(X[2000:2256]))), m, lambda e: (e.predict(Xh[:256]),))
+
+
+def _knn_lane(**kw):
+    def body(ml, X, yc, yr, Xh=None):
+        m = ml.NearestNeighbors(n_neighbors=8, **kw).fit(X[:4096])
+        d, i = m.kneighbors(X[4096:4160])
+        return _fit(dict(dist=_h(d), idx=_h(i)), m, lambda e: e.kneighbors(Xh[:64]))
+    body.__doc__ = f"NearestNeighbors {kw}: a different distance op, or (rbc) a different search entry."
+    return body
+
+
+for _name, _kw in (("sqeuclidean", dict(metric="sqeuclidean")), ("manhattan", dict(metric="manhattan")),
+                   ("chebyshev", dict(metric="chebyshev")), ("cosine", dict(metric="cosine")),
+                   ("minkowski-p3", dict(metric="minkowski", p=3)), ("rbc", dict(algorithm="rbc"))):
+    lane(f"knn-{_name}")(_knn_lane(**_kw))
+
+
+@lane("knn-clf-distance")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.KNeighborsClassifier(n_neighbors=8, weights="distance").fit(X[:4096], yc[:4096])
+    return _fit(dict(predict=_h(m.predict(X[4096:4160])), proba=_h(m.predict_proba(X[4096:4160]))),
+                m, lambda e: (e.predict(Xh[:64]), e.predict_proba(Xh[:64])))
+
+
+@lane("knn-reg-distance")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.KNeighborsRegressor(n_neighbors=8, weights="distance").fit(X[:4096], yr[:4096])
+    return _fit(dict(predict=_h(m.predict(X[4096:4160]))), m, lambda e: (e.predict(Xh[:64]),))
+
+
+def _radius_lane(**kw):
+    def body(ml, X, yc, yr, Xh=None):
+        index, q = X[:4096], X[4096:4160]
+        r = _radius_for(index, q, kw["metric"] if kw["metric"] in ("manhattan", "chebyshev") else "euclidean")
+        m = ml.RadiusNeighbors(radius=r, **kw).fit(index)
+        lens, dd, ii = _ragged(m.radius_neighbors(q, sort_results=True))
+        return _fit(dict(radius=_h(np.float32(r)), counts=_h(lens), dist=_h(dd), idx=_h(ii)),
+                    m, lambda e: _ragged(e.radius_neighbors(Xh[:64], sort_results=True)))
+    body.__doc__ = f"RadiusNeighbors {kw}: the ball-cover L1, Linf and Lp arms; the radius is _radius_for's, scaled to the fixture."
+    return body
+
+
+for _name, _kw in (("manhattan", dict(metric="manhattan")), ("chebyshev", dict(metric="chebyshev")),
+                   ("minkowski-p3", dict(metric="minkowski", p=3))):
+    lane(f"radius-{_name}")(_radius_lane(**_kw))
+
+
+@lane("standard-scaler-no-mean")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.StandardScaler(with_mean=False).fit(X)
+    t = m.transform(X[:256])
+    return _fit(dict(var=_h(m.var_), scale=_h(m.scale_), transform=_h(t), inverse=_h(m.inverse_transform(t))),
+                m, lambda e: (e.transform(Xh[:256]),))
+
+
+@lane("standard-scaler-no-std")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.StandardScaler(with_std=False).fit(X)
+    t = m.transform(X[:256])
+    return _fit(dict(mean=_h(m.mean_), transform=_h(t), inverse=_h(m.inverse_transform(t))),
+                m, lambda e: (e.transform(Xh[:256]),))
+
+
+@lane("minmax-scaler-clip")
+def _(ml, X, yc, yr, Xh=None):
+    """A non-default range and the clamp, which only clip=True runs; the
+    held-out rows reach outside the fitted range, so the clamp fires."""
+    m = ml.MinMaxScaler(feature_range=(-1.0, 1.0), clip=True).fit(X[:4096])
+    t = m.transform(X[4096:4352])
+    return _fit(dict(scale=_h(m.scale_), min=_h(m.min_), transform=_h(t), inverse=_h(m.inverse_transform(t))),
+                m, lambda e: (e.transform(Xh[:256]),))
+
+
+@lane("spectral-precomputed")
+def _(ml, X, yc, yr, Xh=None):
+    """The precomputed affinity entry, a different binding from the
+    nearest-neighbors graph; the affinity is _affinity's, host-derived in
+    fixed order so the input is the same bytes on every box."""
+    A = _affinity(X[:1000, :4])
+    m = ml.SpectralClustering(n_clusters=4, affinity="precomputed", random_state=3).fit(A)
+    return _fit(dict(affinity=_h(A), labels=_h(m.labels_)), m, "n/a:transductive")
+
+
+@lane("holtwinters-multiplicative")
+def _(ml, X, yc, yr, Xh=None):
+    """The multiplicative decomposition: divide where additive subtracts,
+    throughout the fit and the forecast."""
+    series = (np.cumsum(X[:512, 0]) + 50.0).astype(np.float32)
+    series = series - series.min() + 1.0
+    m = ml.ExponentialSmoothing(series, seasonal="multiplicative", seasonal_periods=12).fit()
+    return _fit(dict(forecast=_h(m.forecast(24))), m,
+                lambda e: _same_bytes("forecast(h)", e.forecast(FORECAST_HORIZON),
+                                      "forecast(h, index=0)", e.forecast(FORECAST_HORIZON, index=0)))
+
+
+@lane("kpss")
+def _(ml, X, yc, yr, Xh=None):
+    """kpss_test, which had no lane: the undifferenced series and a
+    seasonally differenced one with the statistic returned."""
+    series = np.ascontiguousarray(X[:512, :4])      # (n_obs, n_series), a series per column
+    flat = ml.kpss_test(series, d=0)
+    diffed, stat = ml.kpss_test(series, d=1, D=1, s=12, return_statistic=True)
+    return _fit(dict(flags=_h(np.asarray(flat)), diffed=_h(np.asarray(diffed)), stat=_h(np.asarray(stat))))
+
+
+@lane("arima-011")
+def _(ml, X, yc, yr, Xh=None):
+    """Differencing and a moving-average term, and no intercept (trend
+    None on a differenced series is k=0)."""
+    series = np.ascontiguousarray(X[:512, :4].T)
+    m = ml.ARIMA(order=(0, 1, 1)).fit(series)
+    return _fit(dict(ma=_h(m.ma_), sigma2=_h(m.sigma2_), forecast=_h(m.forecast(24))),
+                m, lambda e: _same_bytes("forecast(h)", e.forecast(FORECAST_HORIZON),
+                                         "predict(n_obs, n_obs + h)",
+                                         e.predict(e.n_obs_, e.n_obs_ + FORECAST_HORIZON)))
+
+
+@lane("arima-seasonal-c")
+def _(ml, X, yc, yr, Xh=None):
+    """A seasonal AR block (period 4, so rd = 5 stays inside the
+    implemented Kalman kernel; period 12 is refused by name at rd = 13)
+    and an explicit intercept."""
+    series = np.ascontiguousarray(X[:512, :4].T)
+    m = ml.ARIMA(order=(1, 0, 0), seasonal_order=(1, 0, 0, 4), trend="c").fit(series)
+    return _fit(dict(ar=_h(m.ar_), sar=_h(m.sar_), mu=_h(m.mu_), sigma2=_h(m.sigma2_), forecast=_h(m.forecast(24))),
+                m, lambda e: _same_bytes("forecast(h)", e.forecast(FORECAST_HORIZON),
+                                         "predict(n_obs, n_obs + h)",
+                                         e.predict(e.n_obs_, e.n_obs_ + FORECAST_HORIZON)))
+
+
+def _gp_lane(nu, length_scale):
+    def body(ml, X, yc, yr, Xh=None):
+        k = ml.ConstantKernel(1.0) * ml.Matern(length_scale, nu=nu) + ml.WhiteKernel(0.1)
+        m = ml.GaussianProcessRegressor(kernel=k).fit(X[:256, :4], yr[:256])
+        mean, std = m.predict(X[256:320, :4], return_std=True)
+        return _fit(dict(alpha=_h(m.alpha_), L=_h(m.L_), lml=_h(np.float64(m.log_marginal_likelihood_value_)),
+                         mean=_h(mean), std=_h(std)),
+                    m, lambda e: e.predict(Xh[:64, :4], return_std=True))
+    body.__doc__ = f"Matern nu={nu} length_scale={length_scale}: a kernel node kind the gp lane never launches; the vector length scale is the ARD divide loop."
+    return body
+
+
+for _name, _nu, _ls in (("matern12", 0.5, 1.0), ("matern32", 1.5, 1.0), ("matern52-ard", 2.5, [1.0, 2.0, 0.5, 4.0])):
+    lane(f"gp-{_name}")(_gp_lane(_nu, _ls))
+
+
+@lane("gemm-transposed")
+def _(ml, X, yc, yr, Xh=None):
+    """OP_NT and OP_TN, the two GEMM ops the gemm-pinned lane (OP_NN) does
+    not run."""
+    a = np.ascontiguousarray(X[:256]).astype(np.float32)               # 256 x d
+    b = np.ascontiguousarray(X[256:384]).astype(np.float32)            # 128 x d
+    nt = ml.linalg.matmul(a, b, transpose_b=True, identical=True)      # 256 x 128
+    at = np.ascontiguousarray(X[:256].T).astype(np.float32)            # d x 256
+    c = np.ascontiguousarray(X[384:384 + at.shape[0]]).astype(np.float32)   # d x d
+    tn = ml.linalg.matmul(at, c, transpose_a=True, identical=True)     # 256 x d
+    return _fit(dict(nt=_h(nt), tn=_h(tn)))
+
+
+@lane("metrics-classification")
+def _(ml, X, yc, yr, Xh=None):
+    """The nineteen metric functions the metrics lane does not call, and
+    the averaging, zero-division, normalize, base and beta arms. Scores are
+    a fixture column; an all-zero prediction makes the zero-division
+    substitute observable."""
+    mt = ml.metrics
+    n = 3000
+    yt = yc[:n]
+    s = np.ascontiguousarray(X[:n, 3]).astype(np.float32)
+    yp = (s > np.float32(0.0)).astype(np.int32)
+    zeros = np.zeros(n, dtype=np.int32)
+    lo, hi = float(s.min()), float(s.max())
+    prob = np.clip((s - np.float32(lo)) / np.float32(hi - lo), np.float32(1e-3), np.float32(1 - 1e-3)).astype(np.float32)
+    labels = np.asarray(ml.KMeans(n_clusters=4, random_state=3).fit(X[:n, :4]).labels_)
+    parts = {}
+    for avg in (None, "binary", "micro", "macro", "weighted"):
+        for fn in (mt.precision_score, mt.recall_score, mt.f1_score):
+            parts[f"{fn.__name__}:{avg}"] = _h(np.asarray(fn(yt, yp, average=avg), dtype=np.float64))
+    for zd in (0, 1):
+        parts[f"precision_zero_division:{zd}"] = _h(np.float64(mt.precision_score(yt, zeros, zero_division=zd)))
+    parts["log_loss:mean"] = _h(np.float64(mt.log_loss(yt, prob)))
+    parts["log_loss:sum"] = _h(np.float64(mt.log_loss(yt, prob, normalize=False)))
+    parts["entropy:nats"] = _h(np.float64(mt.entropy(labels)))
+    parts["entropy:base2"] = _h(np.float64(mt.entropy(labels, base=2)))
+    parts["v_measure:beta2"] = _h(np.float64(mt.v_measure_score(yt, labels, beta=2.0)))
+    parts["roc_auc"] = _h(np.float64(mt.roc_auc_score(yt, s)))
+    parts["confusion"] = _h(np.asarray(mt.confusion_matrix(yt, yp)))
+    parts["pr_curve"] = _h(*[np.asarray(a) for a in mt.precision_recall_curve(yt, s)])
+    parts["mse"] = _h(np.float64(mt.mean_squared_error(yr[:n], yr[:n] * np.float32(0.9))))
+    parts["mae"] = _h(np.float64(mt.mean_absolute_error(yr[:n], yr[:n] * np.float32(0.9))))
+    parts["rmse"] = _h(np.float64(mt.root_mean_squared_error(yr[:n], yr[:n] * np.float32(0.9))))
+    parts["rand"] = _h(np.float64(mt.rand_score(yt, labels)))
+    parts["mutual_info"] = _h(np.float64(mt.mutual_info_score(yt, labels)))
+    parts["homogeneity"] = _h(np.float64(mt.homogeneity_score(yt, labels)))
+    parts["completeness"] = _h(np.float64(mt.completeness_score(yt, labels)))
+    parts["kl"] = _h(np.float64(mt.kl_divergence(_exact_prob(64, "kl:P"), _exact_prob(64, "kl:Q"))))
+    parts["trustworthiness"] = _h(np.float64(mt.trustworthiness(X[:512, :4], X[:512, :2], n_neighbors=5)))
+    parts["silhouette_samples"] = _h(np.asarray(mt.silhouette_samples(X[:n, :4], labels)))
+    return _fit(parts)
+
+
+@lane("cross-val")
+def _(ml, X, yc, yr, Xh=None):
+    """cross_val_score, which had no lane: three unshuffled folds of the
+    sklearn-style boosting regressor (cross-validation clones through
+    get_params, which the classical estimators do not implement), scored
+    by the adapter's own score."""
+    scores = ml.model_selection.cross_val_score(ml.GradientBoostingRegressor(n_estimators=8, max_depth=4), X, yr, cv=3)
+    return _fit(dict(scores=_h(np.asarray(scores, dtype=np.float64))))
+
+
+
 # LAST ON PURPOSE (2026-08-29): on a RunPod RTX 4090 the isolation forest
 # binding hung at its first fit in every tier (a second DeviceContext beside
 # the caller's deadlocked at teardown on sm_89; fixed by DEVIATION 1944, the
@@ -1039,6 +1780,17 @@ def _(ml, X, yc, yr, Xh=None):
 @lane("iforest")
 def _(ml, X, yc, yr, Xh=None):
     m = ml.IsolationForest(n_estimators=16, random_state=5).fit(X)
+    return _fit(dict(scores=_h(m.score_samples(X)), predict=_h(m.predict(X[:512]))),
+                m, lambda e: (e.score_samples(Xh), e.predict(Xh[:512])))
+
+@lane("iforest-tuned")
+def _(ml, X, yc, yr, Xh=None):
+    """An integer subsample, a column fraction, the with-replacement draw,
+    a contamination percentile offset and an explicit depth cap: every
+    isolation-forest knob the iforest lane leaves at its default. After
+    iforest for the same reason it runs last."""
+    m = ml.IsolationForest(n_estimators=16, random_state=5, max_samples=512, max_features=0.5,
+                           bootstrap=True, contamination=0.1, max_depth=6).fit(X)
     return _fit(dict(scores=_h(m.score_samples(X)), predict=_h(m.predict(X[:512]))),
                 m, lambda e: (e.score_samples(Xh), e.predict(Xh[:512])))
 
@@ -1083,7 +1835,13 @@ def _probe_fit(fit, name):
     try:
         with tempfile.TemporaryDirectory(prefix="identity_break_") as tmp:
             path = os.path.join(tmp, f"{name}{suffix}")
-            getattr(fit.est, save)(path)
+            try:
+                getattr(fit.est, save)(path)
+            except NotImplementedError:
+                # the sklearn-style GBDT adapters carry save/load that refuse
+                # by name (archives are not implemented; pickle keeps the
+                # state), which is an absence, not a broken file
+                return infer, "n/a:save-not-implemented", None, None
             model = _hfile(path)
             back = getattr(type(fit.est), load)(path)
             reload = _h(*fit.probe(back))
@@ -1129,6 +1887,7 @@ def run(args):
     vendor = check_vendor_label(args.vendor if args.vendor is not None else default_vendor_label(ml))
     commit, commit_source = commit_witness()
     host = host_record(ml) if ml.vendor() == "cpu" else None
+    package = dict(version=getattr(ml, "__version__", "unknown"), package_dir=os.path.dirname(ml.__file__))
     print(f"# vendor={vendor} commit={commit} ({commit_source})"
           + (f" host.cpu_model={host['cpu_model']!r} host.column={host['column']} "
              f"host.families={sorted(host['families'])}" if host else ""))
@@ -1162,6 +1921,18 @@ def run(args):
                       skipped=sorted(skip))
         if host is not None:
             record["host"] = host
+        # every binding this process loaded, hashed, so the column is tied
+        # to the BYTES it ran and not only to a commit (2026-09-14); a
+        # column from an installed wheel and one from a source build of the
+        # same commit are different evidence, and the 0.8.5 release legs
+        # caught two packaging regressions a source column could not see
+        try:
+            from mojolearn._verify import binding_artifacts
+            package["bindings"] = [dict(module=b["module"], sha256=b["sha256"], size=b["size"])
+                                   for b in binding_artifacts()]
+        except Exception as exc:                        # never lose a column over provenance
+            package["bindings_error"] = f"{type(exc).__name__}: {exc}"[:200]
+        record["package"] = package
         with open(args.json, "w") as fh:
             json.dump(record, fh, indent=1)
 

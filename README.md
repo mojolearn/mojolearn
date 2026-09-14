@@ -516,7 +516,8 @@ that it fails when the relevant rule is broken. Contributors need one
 supported GPU; maintainers close cross-vendor certification columns.
 
 Current priorities are in [ROADMAP.md](ROADMAP.md). See also
-[verification](docs/VERIFY.md), [release](docs/PYPI_RELEASE.md),
+[verification](docs/VERIFY.md), [verifying the identity claims yourself, from
+outside, at three costs](docs/VERIFY_EXTERNALLY.md), [release](docs/PYPI_RELEASE.md),
 [engineering rules](ENGINEERING_RULES.md), [contributing](CONTRIBUTING.md),
 [governance](GOVERNANCE.md), and [notices](NOTICE).
 
