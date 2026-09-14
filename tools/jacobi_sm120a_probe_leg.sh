@@ -1,4 +1,7 @@
 #!/bin/sh
+# Since the 2026-09-14 flip, arm 1 (scalar accumulators) is the default and the
+# second AOT build below carries -D MOJOLEARN_2711_GRAM_STRIDED_DEAD=1, the OLD
+# arm 0; the output names ("arm1") are kept so the two 5090 records read alike.
 # tools/jacobi_sm120a_probe_leg.sh: the on-box body of the DEVIATION 2711 leg
 # (MOJOLEARN_GEMM_LEG_EXTRA for tools/gemm_remote_leg.sh nvidia --payload gemm).
 # Brief: docs/lanes/BRIEF_sm120a_jacobi_2026-09-14.md. Mac reference:
@@ -68,7 +71,7 @@ fi
 _t0=$(date +%s)
 pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-4}" \
     --target-accelerator "$MOJOLEARN_GPU_ARCHS" -D MOJOLEARN_NUMERIC_IDENTICAL=1 \
-    -D MOJOLEARN_2711_GRAM_STRIDED_SCALAR=1 -I . \
+    -D MOJOLEARN_2711_GRAM_STRIDED_DEAD=1 -I . \
     -o "$OUT/jacobi_probe_aot_arm1" decomposition/checks/jacobi_sm120a_probe.mojo > "$OUT/build_aot_arm1.log" 2>&1
 say "build_aot_arm1_exit=$? seconds=$(( $(date +%s) - _t0 ))"
 if [ -x "$OUT/jacobi_probe_aot_arm1" ]; then

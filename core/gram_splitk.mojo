@@ -202,11 +202,17 @@ comptime GRAM_TPB = lib_block_size_for[K_LIB_GRAM_SPLITK, TARGET_COLUMN]()
 #: the AOT compilation of arm 0 for that target. The four sm_120a refusals
 #: (pca, tsvd, ols, ridge on `odd`) are the Jacobi being handed that matrix.
 #:
-#: The default stays 0 until the 5090 leg holds arm 1 right on that target
-#: (docs/lanes/BRIEF_sm120a_jacobi_2026-09-14.md section 10). Build with
-#: `-D MOJOLEARN_2711_GRAM_STRIDED_SCALAR=1` to ship arm 1.
+#: 2026-09-14, second 5090 leg (bench/results/identity_break/2026-09-14_rtx5090-sm_120a/
+#: jacobi_probe.rtx5090-aot-arm1.txt): arm 1 built AOT for sm_120a gives 0
+#: asymmetric cells, every split-K chunk partial within 5.6e-5 of the
+#: float64 host partial, the Mac's Gram hash (643c4667f795927f) and 5-sweep
+#: Jacobi convergence on all three cases, where arm 0 is wrong in all 128
+#: chunks. Arm 1 is the default from that day; it computes the same products
+#: in the same k-ascending order with per-cell scalar accumulators, and the
+#: M4 holds it bit-equal to arm 0. Build with
+#: `-D MOJOLEARN_2711_GRAM_STRIDED_DEAD=1` to get arm 0 back for an A/B.
 comptime GRAM_STRIDED_ARM = (
-    1 if is_defined["MOJOLEARN_2711_GRAM_STRIDED_SCALAR"]() else 0
+    0 if is_defined["MOJOLEARN_2711_GRAM_STRIDED_DEAD"]() else 1
 )
 
 #: Rows of X staged in shared memory per barrier. 32 rows keeps the staging

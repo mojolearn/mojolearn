@@ -1,3 +1,8 @@
+# NOTE, 2026-09-14 later: the second 5090 leg confirmed arm 1 (0 asymmetric cells, the Mac's Gram
+# hash, 5-sweep convergence on every case; `bench/results/identity_break/2026-09-14_rtx5090-sm_120a/jacobi_probe.rtx5090-aot-arm1.txt`).
+# `core/gram_splitk.mojo` ships arm 1 since lane/2711-flip; `-D MOJOLEARN_2711_GRAM_STRIDED_DEAD=1`
+# restores arm 0 for an A/B. The define names below predate the flip.
+
 # BRIEF: the sm_120a Jacobi refusals (DEVIATION 2711), 2026-09-14
 
 Lane `lane/sm120a-jacobi`. Status: the 5090 leg of the probe RAN (section 9): the Jacobi is not the

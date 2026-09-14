@@ -39,3 +39,14 @@ four refusals are the Jacobi being handed that Gram; the sentence above calling 
 violation in the sweep is superseded. Brief `docs/lanes/BRIEF_sm120a_jacobi_2026-09-14.md`
 sections 9 and 10; the fix arm is `-D MOJOLEARN_2711_GRAM_STRIDED_SCALAR=1` in
 `core/gram_splitk.mojo`, its 5090 confirmation owed through `tools/jacobi_sm120a_probe_leg.sh`.
+
+## Second leg, arm 1 (2026-09-14, `2026-09-14_111431-nvidia-rtx5090-jacobi-probe-b`)
+
+`jacobi_probe.rtx5090-aot-arm0.txt`: the shipped arm at d0b132d0a, every one of the 128 split-K
+chunk partials wrong (worst 145.7 against the float64 host partial), 60 asymmetric cells in each
+17 x 17 matrix, ols not converging. `jacobi_probe.rtx5090-aot-arm1.txt`: the scalar arm, 0 bad
+chunks (worst 5.6e-5, float32 rounding), 0 asymmetric cells, the Mac's Gram hash
+643c4667f795927f, pca, tsvd and ols all converged in 5 sweeps. `jacobi_probe.rtx5090-jit.txt`:
+the JIT build of the shipped source, bit-identical to the Mac. The default is arm 1 from
+lane/2711-flip; the proof that no bit moves on the H100, the MI300X and the M4 is the 120-lane
+three-column record taken at that commit.
