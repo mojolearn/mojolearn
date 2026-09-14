@@ -317,10 +317,17 @@ jobs:
         timeout-minutes: 20
         run: |
           set -o pipefail
-          python3 tools/identity_break.py --lanes gemm-pinned,kde --fixtures base --repeats 1 \
+          # The smoke runs two lanes, so it judges only those two as covered:
+          # the checker fails any --covered lane with no cell, and the full
+          # COVERED_LANES list is the next step's. Both must be covered lanes.
+          SMOKE_LANES=gemm-pinned,kde
+          for lane in ${SMOKE_LANES//,/ }; do
+            case ",$COVERED_LANES," in *",$lane,"*) ;; *) echo "smoke lane $lane is not in COVERED_LANES" >&2; exit 1 ;; esac
+          done
+          python3 tools/identity_break.py --lanes "$SMOKE_LANES" --fixtures base --repeats 1 \
             --json "$GATE_OUT/cpu-smoke-${{ matrix.slot }}.json" 2>&1 | tee "$GATE_OUT/cpu_smoke.log"
           python3 tools/cpu_identity_gate_check.py column "$GATE_OUT/cpu-smoke-${{ matrix.slot }}.json" \
-            --covered "$COVERED_LANES" --commit "$MOJOLEARN_COMMIT" \
+            --covered "$SMOKE_LANES" --commit "$MOJOLEARN_COMMIT" \
             --binding "_mojolearn_byte_lm_host,_mojolearn_forest_host,$(echo $HOST_BINDINGS | tr ' ' ,)" 2>&1 | tee "$GATE_OUT/cpu_smoke_check.log"
 
       # THE FOURTH COLUMN, THE COVERED LANES. Every fixture, two repeats, then
