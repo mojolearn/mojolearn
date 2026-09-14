@@ -308,9 +308,18 @@ def host_record(ml):
 
 
 def _h(*arrays):
+    """sha256 over dtype, shape and bytes of each array. REFUSES an object
+    array: `np.asarray` of a dict, a list of unequal arrays or any Python
+    object makes dtype=object, whose bytes are ADDRESSES, and the cell then
+    reads MOVED on every box for no arithmetic reason (byte-lm-resident,
+    2026-09-14, nine fixtures on two GPUs). A lane must hand this the
+    arrays themselves."""
     m = hashlib.sha256()
     for a in arrays:
         a = np.ascontiguousarray(np.asarray(a))
+        if a.dtype == object or a.dtype.kind in "OUSV":
+            raise TypeError(f"identity_break._h: refusing dtype={a.dtype} (an object or text array "
+                            "hashes addresses or encodings, not numbers); pass the numeric arrays")
         m.update(str(a.dtype).encode())
         m.update(str(a.shape).encode())
         m.update(a.tobytes())
