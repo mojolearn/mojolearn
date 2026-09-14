@@ -102,6 +102,9 @@ def execute(request):
         if X.shape[1] > 128 or X.shape[0] < X.shape[1]:
             if not callable(getattr(binding, 'gram_outputs_parallel_available', None)) or binding.gram_outputs_parallel_available() != 1:
                 raise ImportError('rebuild estimators binding for Gram output partitions')
+        if getattr(state, 'svd_solver', None) == 'full':
+            if not callable(getattr(binding, 'qr_parallel_available', None)) or binding.qr_parallel_available() != 1:
+                raise ImportError('rebuild estimators binding for parallel QR panels')
         state.fit(X, y, **kwargs)
         return state
     if operation in ('gp_fit', 'gp_predict'):

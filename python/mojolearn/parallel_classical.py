@@ -97,8 +97,8 @@ def fit_gram_estimator(estimator, X, y=None, *, devices=(0,), sample_weight=None
     rows, columns = data.shape
     if columns < 1:
         raise ValueError('parallel Gram requires at least one feature')
-    if type(estimator) is PCA and estimator.svd_solver not in estimator._COV_SOLVERS:
-        raise ValueError('parallel PCA currently requires a covariance solver')
+    if type(estimator) is PCA and estimator.svd_solver in estimator._DENSE_SOLVERS and rows < columns:
+        raise ValueError('parallel full PCA currently requires the tall TSQR route')
     kwargs = {} if sample_weight is None else dict(sample_weight=sample_weight)
     pool = DevicePool(devices, cooperative=True)
     try:
