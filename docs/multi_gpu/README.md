@@ -7,7 +7,10 @@ The cloud gates passed on two RunPod RTX 4090s and two H100s using the same
 frozen source snapshot. Gradients and model states matched bit for bit for
 the tested configurations. Training data came from Cloudflare R2 and was
 verified against the dataset manifest. See the
-[cloud evidence](../../bench/results/multi_gpu/2026-09-14/README.md).
+[initial cloud evidence](../../bench/results/multi_gpu/2026-09-14/README.md).
+The later concurrent-byte, boosting and classical changes have separate
+[two-H100 evidence](../../bench/results/multi_gpu/2026-09-14/continued-h100/README.md);
+they have not received a new same-source cross-architecture qualification.
 
 ## Available paths
 
@@ -19,6 +22,12 @@ verified against the dataset manifest. See the
 | RandomForest classifier/regressor | Whole trees over full replicated data | Original global tree IDs, seed and quantiles; original prediction order |
 | ExtraTrees classifier/regressor | Whole trees over full replicated data | Original global tree IDs and full-data label quantization; original prediction order |
 | KMeans | Whole row tiles during distance/assignment | Original per-row feature/centroid arithmetic; original initialization, full-data updates and convergence |
+| GradientBoosting, greedy symmetric/depthwise/lossguide | Whole packed feature groups during histogram construction | Original row-reduction geometry and global scale; disjoint histogram-column copies |
+| ARIMA / ExponentialSmoothing | Independent series assigned to workers | Original per-series initialization, solver and likelihood arithmetic |
+| LinearRegression / Ridge / covariance PCA / TruncatedSVD | Original 128 Gram chunks at 1..128 features | Original chunk partials copied to global positions; unchanged final fold and root solver |
+| LogisticRegression | QN gradient feature columns | Original per-cell row reduction; unchanged root objective, line search and optimizer |
+| Lasso / ElasticNet | Whole FP32-v1 dot leaves during cyclic coordinate descent | Original balanced tree; unchanged coordinate and convergence order |
+| StandardScaler / MinMaxScaler | Independent feature columns, fit and transforms | Original row chunks and final per-column fold; output bytes copied into column order |
 
 The gates exercise particular configurations, not all parameter combinations.
 Samba fixtures include a Mamba layer without dropout and a mixed Mamba/attention
@@ -63,9 +72,12 @@ accumulation replay, not a single GEMM over a concatenated K-times-larger
 batch. Cross-vendor equality additionally requires the underlying model
 kernels to agree for the selected shapes and build arms.
 
-The byte-LM driver currently schedules gradient bodies serially because those
-bodies synchronize internally. It establishes resident replication, ordered
-transport and replay; it does **not** deliver an eight-GPU throughput speedup.
+The byte-LM driver schedules gradient bodies concurrently in waves, with one
+context and trainer owned by each task. It joins the entire wave before the
+root folds gradients in logical order. Two-H100 replay gates pass with this
+schedule; throughput and eight-device scaling have not been measured.
+Builds with process-global step-phase counters refuse concurrent devices
+because those counters are not thread-safe.
 It holds two additional flat FP32 gradient buffers on the root device.
 Device-to-device copies use `DeviceBuffer.enqueue_copy_to`; the source stream
 is synchronized before any destination reads. The implementation uses no
@@ -106,6 +118,47 @@ fit_forest(forest, X, y, devices=(0, 1), trees_per_shard=16)
 fit_kmeans(kmeans, X, devices=(0, 1), sample_weight=weights)
 ```
 
+Additional entries:
+
+```python
+from mojolearn.parallel_ensemble import fit_boosting
+from mojolearn.parallel_classical import (
+    fit_arima, fit_exponential_smoothing, fit_gram_estimator, fit_logistic,
+    fit_coordinate_descent,
+)
+from mojolearn.parallel_preprocessing import fit_scaler, transform_scaler
+
+fit_boosting(boosting, X, y, devices=(0, 1), sample_weight=weights)
+fit_arima(arima, series, devices=(0, 1), series_per_shard=2)
+fit_exponential_smoothing(holtwinters, devices=(0, 1), series_per_shard=2)
+fit_gram_estimator(ridge, X, y, devices=(0, 1))
+fit_logistic(logistic, X, labels, devices=(0, 1))
+fit_coordinate_descent(lasso, X, y, devices=(0, 1))
+fit_scaler(scaler, X, devices=(0, 1), columns_per_shard=16)
+scaled = transform_scaler(scaler, X, devices=(0, 1), columns_per_shard=16)
+```
+
+Boosting currently supports the greedy symmetric, depthwise and lossguide
+searchers, including the classifier/regressor aliases. It refuses the
+pointwise searcher and the separate OrderedRMSE/ExperimentalTwoLevelFeatureFreq
+classes. Histogram shards own compressed feature columns and local histogram
+columns, but the root still owns the full index and histogram. Per-level
+allocation and staging overhead may outweigh computation savings.
+
+ARIMA workers receive only their assigned series; scaler workers receive only
+their assigned columns. These partitions reduce the GPU memory required per
+worker. The host holds the complete data and result, and a single shard still
+must fit on one GPU. ARIMA prediction currently uses the existing single-GPU
+methods; scalers provide an explicit distributed transform entry. No run beyond
+one GPU's memory capacity has been qualified. These new paths have two-H100
+equality evidence, not new AMD/Apple or NVIDIA cross-architecture qualification.
+
+Gram, logistic and coordinate-descent paths retain full root data/solver state.
+The coordinate-descent partition applies to automatic dot scheduling; explicit
+native plan probes still execute the requested original plan. Dots of at most
+128 rows have one indivisible leaf and stay on the root. Per-call allocation
+and transport are not throughput-qualified.
+
 These return and update the supplied estimator only after the full fit
 succeeds. Forest shards use the complete dataset, never independent subsets
 whose models are averaged afterwards. Trees return in global ID order and
@@ -126,22 +179,24 @@ visibility or environment settings around concurrent fits.
 Here, rollout means completing implementation and cloud qualification, not a
 backward-compatibility or staged-release process. Alpha API changes are allowed.
 The [coverage inventory](COVERAGE.md) distinguishes estimator support from
-memory capacity; current drivers do not pool GPU memory.
+memory capacity. Neural state and several classical root paths still require
+one GPU to hold complete state. Independent-series and scaler-column workers
+receive only their partitions, but beyond-single-GPU capacity is not qualified.
 
 The user's requested order is neural training, forests/ExtraTrees, then
 boosting and classical estimators. The following remain unimplemented:
 
-- GradientBoosting/OrderedRMSE and individual tree builders: boosting rounds
+- OrderedRMSE, pointwise boosting and categorical two-level feature search: boosting rounds
   depend on preceding predictions, so the forest tree-range driver is invalid.
   A dedicated feature/histogram partition must preserve quantization, global
   scales, row order, split tie breaks, leaf estimates and categorical state.
-- LinearRegression, Ridge, LogisticRegression, Lasso/ElasticNet and SVM:
+- Wider/full-solver Gram paths and SVM:
   distribute the appropriate matrix or objective work without changing its
   reduction tree or solver trajectory.
-- PCA/SVD, neighbors/density, graph/manifold methods, mixture models,
-  IsolationForest, time series and other classical surfaces: each needs its
+- Neighbors/density, graph/manifold methods, mixture models,
+  IsolationForest and other classical surfaces: each needs its
   own partition and qualification. Some have little training work to split.
-- Byte-LM concurrent shard execution, resident staging reuse, larger models,
+- Resident staging reuse, larger models,
   eight physical GPUs, H100/5090 replay, AMD/Apple cross-vendor evidence,
   injected lost-device recovery, and throughput/cost measurements.
 
@@ -159,6 +214,10 @@ and a RunPod environment marker and should only be invoked on the pod:
 - `training/checks/ordered_gradient_check.mojo`: cancellation, zero and FTZ seams.
 - `tools/parallel_training_check.py --lane mlp|samba|forest`.
 - `tools/parallel_kmeans_check.py`: feature widths 7/8/32 and all three init modes.
+- `tools/parallel_boosting_check.py`: greedy tree policies, mixed packing widths,
+  weighted inputs, classification/regression and failed-fit publication.
+- `tools/parallel_arima_check.py`: independent-series fits, forecasts and rollback.
+- `tools/parallel_preprocessing_check.py`: column fits, transforms, inverse and refusal.
 - Existing `tools/byte_lm_session_check.py --run` for the refactored step.
 
 Every report's scope is limited to the hardware, inputs and configurations

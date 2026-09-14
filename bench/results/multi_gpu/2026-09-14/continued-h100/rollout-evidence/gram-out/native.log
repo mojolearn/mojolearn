@@ -1,0 +1,156 @@
+24804 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x511380000000, nodemask=1)
+/root/mojolearn/checks/gram_splitk_check.mojo:561:8: warning: doc string summary should end with a period '.', exclamation mark '!', question mark '?', or backtick '`', but this ends with ':'
+    """THE GATE DEVIATION 540 STANDS ON, and it runs on EVERY column,
+       ^
+Imported from /root/mojolearn/checks/gram_splitk_check.mojo:101:
+/root/mojolearn/core/column_stats.mojo:438:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            tile[ty * (TRANSPOSE_TILE + 1) + tx] = src.unsafe_load(
+            ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/checks/gram_splitk_check.mojo:101:
+/root/mojolearn/core/column_stats.mojo:447:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                r2 * n_rows + c2, tile[tx * (TRANSPOSE_TILE + 1) + ty]
+                                  ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/checks/gram_splitk_check.mojo:101:
+Imported from /root/mojolearn/core/column_stats.mojo:94:
+/root/mojolearn/core/pinned_reduce.mojo:125:8: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    red[tid] = value
+    ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/checks/gram_splitk_check.mojo:101:
+Imported from /root/mojolearn/core/column_stats.mojo:94:
+/root/mojolearn/core/pinned_reduce.mojo:130:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            v[j] = red[tid + j * P]
+                   ~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/checks/gram_splitk_check.mojo:101:
+Imported from /root/mojolearn/core/column_stats.mojo:94:
+/root/mojolearn/core/pinned_reduce.mojo:136:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        red[tid] = v[0]
+        ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/checks/gram_splitk_check.mojo:101:
+Imported from /root/mojolearn/core/column_stats.mojo:94:
+/root/mojolearn/core/pinned_reduce.mojo:140:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        w[t] = red[t]
+               ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/checks/gram_splitk_check.mojo:99:
+Imported from /root/mojolearn/core/gemm.mojo:29:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5298:14: warning: 'store' is deprecated, use 'unsafe_store' instead
+          as_.store[alignment=ALIGN](pgw * APAGE + ga[0] * ASTRIDE + ga[1] * RPT, pga)
+          ~~~^~~~~~
+              unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn/checks/gram_splitk_check.mojo:99:
+Imported from /root/mojolearn/core/gemm.mojo:29:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5299:14: warning: 'store' is deprecated, use 'unsafe_store' instead
+          bs_.store[alignment=ALIGN](pgw * BPAGE + gb[0] * BSTRIDE + gb[1] * CPT, pgb)
+          ~~~^~~~~~
+              unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn/checks/gram_splitk_check.mojo:99:
+Imported from /root/mojolearn/core/gemm.mojo:29:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5347:26: warning: 'load' is deprecated, use 'unsafe_load' instead
+            var ra1 = as_.load[width=RPT, alignment=ALIGN](abase)
+                      ~~~^~~~~
+                          unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/checks/gram_splitk_check.mojo:99:
+Imported from /root/mojolearn/core/gemm.mojo:29:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5348:26: warning: 'load' is deprecated, use 'unsafe_load' instead
+            var rb1 = bs_.load[width=CPT, alignment=ALIGN](bbase)
+                      ~~~^~~~~
+                          unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/checks/gram_splitk_check.mojo:99:
+Imported from /root/mojolearn/core/gemm.mojo:29:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5357:29: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var ra = as_.load[width=RPT, alignment=ALIGN](abase + c0 * RPT)
+                         ~~~^~~~~
+                             unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/checks/gram_splitk_check.mojo:99:
+Imported from /root/mojolearn/core/gemm.mojo:29:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5358:29: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var rb = bs_.load[width=CPT, alignment=ALIGN](bbase + c0 * CPT)
+                         ~~~^~~~~
+                             unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/checks/gram_splitk_check.mojo:99:
+Imported from /root/mojolearn/core/gemm.mojo:29:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5381:30: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var ra2 = as_.load[width=RPT, alignment=ALIGN](abase + cc * RPT)
+                          ~~~^~~~~
+                              unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/checks/gram_splitk_check.mojo:99:
+Imported from /root/mojolearn/core/gemm.mojo:29:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5382:30: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var rb2 = bs_.load[width=CPT, alignment=ALIGN](bbase + cc * CPT)
+                          ~~~^~~~~
+                              unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/checks/gram_splitk_check.mojo:115:
+/root/mojolearn/core/gram_splitk.mojo:656:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    tile[i] = ftz(
+                    ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/checks/gram_splitk_check.mojo:115:
+/root/mojolearn/core/gram_splitk.mojo:661:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    tile[i] = x.unsafe_load(t * m + i)
+                    ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/checks/gram_splitk_check.mojo:115:
+/root/mojolearn/core/gram_splitk.mojo:676:37: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        cv[b] = tile[base + bj0 + b]
+                                ~~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/checks/gram_splitk_check.mojo:115:
+/root/mojolearn/core/gram_splitk.mojo:678:38: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        var xi = tile[base + bi0 + a]
+                                 ~~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/checks/gram_splitk_check.mojo:115:
+/root/mojolearn/core/gram_splitk.mojo:695:30: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                var xj = tile[base + jm]
+                         ~~~~^~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/checks/gram_splitk_check.mojo:115:
+/root/mojolearn/core/gram_splitk.mojo:700:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            tile[base + Int(ii[c])], xj, acc[c]
+                            ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/checks/gram_splitk_check.mojo:115:
+/root/mojolearn/core/gram_splitk.mojo:718:37: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                                tile[base + ic], tile[base + jc], a_c
+                                ~~~~^~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/checks/gram_splitk_check.mojo:115:
+/root/mojolearn/core/gram_splitk.mojo:718:54: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                                tile[base + ic], tile[base + jc], a_c
+                                                 ~~~~^~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/checks/gram_splitk_check.mojo:115:
+/root/mojolearn/core/gram_splitk.mojo:734:37: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                                tile[base + Int(ii[c])],
+                                ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/checks/gram_splitk_check.mojo:115:
+/root/mojolearn/core/gram_splitk.mojo:735:37: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                                tile[base + Int(jj[c])],
+                                ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/checks/gram_splitk_check.mojo:115:
+Imported from /root/mojolearn/core/gram_splitk.mojo:171:
+/root/mojolearn/core/device_zero.mojo:98:16: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            p8 + n_vec * 16, Int32(tail),
+            ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+check_gram_splitk_oracle OK: split-K arm matches the Float64 oracle per cell and is bitwise symmetric at 10 shapes (m 1..128 covering all three CELLS widths and both staging-copy arms; k odd, prime, below/above the 128-chunk grid, and never a chunk multiple)
+check_gram_vendor_arm OK: transpose+matmul arm matches the Float64 oracle per cell at 33x33x257 within mag x 1e-05 (fp32 (pinned or split-K kernel); the fp32 budget; IDENTICAL, pinned kernel); bitwise symmetry asserted
+check_gram_tf32_bound_separates OK: operands rounded to 10 mantissa bits (8479 of 8481 moved) through the fp32 split-K kernel at 33x33x257 land worst mag-relative 6.793221760929424e-05 at cell (11, 17) from the exact oracle: REJECTED by the fp32 budget 1.3822140584440566e-05, ADMITTED by the TF32 bound 0.0010138221405844405 -- the two per-column tolerances of DEVIATION 540 separate a TF32-class product from an fp32 one on this box (the H100 leg measured 2.4e-5 on the real vendor arm at this shape)
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: check_gram_dispatch: 768x768x257 COMPLETED under IDENTICAL. It is past the split-K kernel's capacity, so it ran on linalg.matmul and returned a Gram product this mode promises is vendor-independent and is not.
+/root/mojolearn/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1

@@ -1,0 +1,39 @@
+{
+  "status": "PASS",
+  "checks": [
+    [
+      "additive",
+      1
+    ],
+    [
+      "additive",
+      2
+    ],
+    [
+      "additive",
+      3
+    ],
+    [
+      "multiplicative",
+      1
+    ],
+    [
+      "multiplicative",
+      2
+    ],
+    [
+      "multiplicative",
+      3
+    ]
+  ],
+  "hashes": [
+    "53bc53089ea298bc8fc505a9e0e7197277b447251dbeb134bdd58af5978e81a2",
+    "53bc53089ea298bc8fc505a9e0e7197277b447251dbeb134bdd58af5978e81a2",
+    "53bc53089ea298bc8fc505a9e0e7197277b447251dbeb134bdd58af5978e81a2",
+    "e363ec1774274bbf3f657fe62f0dd19bb8c3708f9bbc430bcfc3b920f2a443b7",
+    "e363ec1774274bbf3f657fe62f0dd19bb8c3708f9bbc430bcfc3b920f2a443b7",
+    "e363ec1774274bbf3f657fe62f0dd19bb8c3708f9bbc430bcfc3b920f2a443b7"
+  ],
+  "corpus_sha256": "2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8",
+  "scope": "Two GPUs; five independent series; additive/multiplicative; no large-memory or cross-vendor qualification"
+}

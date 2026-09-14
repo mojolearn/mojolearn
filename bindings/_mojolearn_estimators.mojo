@@ -625,6 +625,8 @@ def estimators_vendor_binding() raises -> PythonObject:
 def PyInit__mojolearn_estimators() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_estimators")
+        m.def_function[gram_parallel_available_binding]("gram_parallel_available")
+        m.def_function[glm_parallel_available_binding]("glm_parallel_available")
         m.def_function[estimators_vendor_binding]("estimators_vendor")
         m.def_function[estimators_numeric_mode_binding]("estimators_numeric_mode")
         m.def_function[dbscan_fit_binding]("dbscan_fit")
@@ -647,3 +649,11 @@ def PyInit__mojolearn_estimators() abi("C") -> PythonObject:
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_estimators: ", e))
+
+
+def gram_parallel_available_binding() raises -> PythonObject:
+    return PythonObject(1)
+
+
+def glm_parallel_available_binding() raises -> PythonObject:
+    return PythonObject(1)

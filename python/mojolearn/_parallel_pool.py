@@ -50,6 +50,10 @@ class DevicePool:
                         env[name] = ','.join(str(d) for d in group)
                 if self.cooperative:
                     env['MOJOLEARN_KMEANS_DEVICE_COUNT'] = str(len(group))
+                    env['MOJOLEARN_GBDT_DEVICE_COUNT'] = str(len(group))
+                    env['MOJOLEARN_GRAM_DEVICE_COUNT'] = str(len(group))
+                    env['MOJOLEARN_GLM_DEVICE_COUNT'] = str(len(group))
+                    env['MOJOLEARN_SOLVER_DEVICE_COUNT'] = str(len(group))
                 self._workers.append(subprocess.Popen(
                     [sys.executable, '-m', 'mojolearn._parallel_worker'], env=env,
                     stdin=subprocess.PIPE, stdout=subprocess.PIPE))

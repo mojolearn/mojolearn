@@ -54,6 +54,51 @@ def execute(request):
         X, weights = args
         model.fit(X, sample_weight=weights)
         return model
+    if operation == 'gbdt_fit':
+        model = state
+        binding = model._bind('_mojolearn_gbdt')
+        if (not callable(getattr(binding, 'gbdt_parallel_available', None))
+                or binding.gbdt_parallel_available() != 1):
+            raise ImportError('rebuild GBDT binding for feature-parallel training')
+        X, y, kwargs = args
+        model.fit(X, y, **kwargs)
+        return model
+    if operation == 'arima_fit':
+        from ._arima_impl import ARIMA
+        return ARIMA(**state).fit(*args)
+    if operation == 'holtwinters_fit':
+        from ._tsa_impl import ExponentialSmoothing
+        return ExponentialSmoothing(args[0], ts_num=args[0].shape[0], **state).fit()
+    if operation == 'gram_fit':
+        binding = state._bind('_mojolearn_estimators')
+        if (not callable(getattr(binding, 'gram_parallel_available', None))
+                or binding.gram_parallel_available() != 1):
+            raise ImportError('rebuild estimators binding for parallel Gram chunks')
+        X, y, kwargs = args
+        state.fit(X, y, **kwargs)
+        return state
+    if operation == 'solver_fit':
+        from ._backend import binding
+        native = binding('_mojolearn_solver')
+        if (not callable(getattr(native, 'solver_parallel_available', None))
+                or native.solver_parallel_available() != 1):
+            raise ImportError('rebuild solver binding for parallel dot leaves')
+        state.fit(*args)
+        return state
+    if operation == 'glm_fit':
+        binding = state._bind('_mojolearn_estimators')
+        if (not callable(getattr(binding, 'glm_parallel_available', None))
+                or binding.glm_parallel_available() != 1):
+            raise ImportError('rebuild estimators binding for parallel GLM gradients')
+        state.fit(*args)
+        return state
+    if operation == 'scaler_fit':
+        from .preprocessing import MinMaxScaler, StandardScaler
+        name, params = state
+        return {'MinMaxScaler': MinMaxScaler, 'StandardScaler': StandardScaler}[name](**params).fit(*args)
+    if operation == 'scaler_transform':
+        X, inverse = args
+        return state.inverse_transform(X) if inverse else state.transform(X)
     raise ValueError('unknown parallel worker operation: ' + operation)
 
 

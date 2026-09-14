@@ -1,0 +1,44 @@
+25093 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x53b200000000, nodemask=1)
+25272 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x53a500000000, nodemask=1)
+PASS LinearRegression 7 {'fit_intercept': False, 'numeric_mode': 'identical'}
+25453 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x72e000000000, nodemask=1)
+PASS LinearRegression 7 {'fit_intercept': True, 'numeric_mode': 'identical'}
+25634 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x701880000000, nodemask=1)
+PASS Ridge 7 {'alpha': 0.25, 'fit_intercept': True, 'numeric_mode': 'identical'}
+25815 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x33e700000000, nodemask=1)
+PASS PCA 7 {'n_components': 3, 'svd_solver': 'covariance_eigh', 'whiten': True, 'numeric_mode': 'identical'}
+25869 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x19cdc0000000, nodemask=2)
+PASS TruncatedSVD 7 {'n_components': 3, 'numeric_mode': 'identical'}
+25923 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x53e740000000, nodemask=1)
+PASS LinearRegression 16 {'fit_intercept': False, 'numeric_mode': 'identical'}
+26104 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x108d40000000, nodemask=1)
+26104 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x790380000000, nodemask=2)
+PASS LinearRegression 16 {'fit_intercept': True, 'numeric_mode': 'identical'}
+26285 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x794880000000, nodemask=2)
+PASS Ridge 16 {'alpha': 0.25, 'fit_intercept': True, 'numeric_mode': 'identical'}
+26466 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x328b40000000, nodemask=1)
+PASS PCA 16 {'n_components': 3, 'svd_solver': 'covariance_eigh', 'whiten': True, 'numeric_mode': 'identical'}
+26520 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x324100000000, nodemask=1)
+PASS TruncatedSVD 16 {'n_components': 3, 'numeric_mode': 'identical'}
+26574 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5392c0000000, nodemask=1)
+PASS LinearRegression 65 {'fit_intercept': False, 'numeric_mode': 'identical'}
+26755 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x334000000000, nodemask=1)
+PASS LinearRegression 65 {'fit_intercept': True, 'numeric_mode': 'identical'}
+26936 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x131500000000, nodemask=1)
+PASS Ridge 65 {'alpha': 0.25, 'fit_intercept': True, 'numeric_mode': 'identical'}
+27117 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x11d2c0000000, nodemask=1)
+PASS PCA 65 {'n_components': 3, 'svd_solver': 'covariance_eigh', 'whiten': True, 'numeric_mode': 'identical'}
+27171 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x70cb40000000, nodemask=1)
+PASS TruncatedSVD 65 {'n_components': 3, 'numeric_mode': 'identical'}
+27225 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x59a040000000, nodemask=2)
+PASS LinearRegression 128 {'fit_intercept': False, 'numeric_mode': 'identical'}
+27406 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x51ef80000000, nodemask=1)
+PASS LinearRegression 128 {'fit_intercept': True, 'numeric_mode': 'identical'}
+27587 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x507d00000000, nodemask=1)
+PASS Ridge 128 {'alpha': 0.25, 'fit_intercept': True, 'numeric_mode': 'identical'}
+25093 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3820c0000000, nodemask=2)
+27768 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x731a40000000, nodemask=1)
+PASS PCA 128 {'n_components': 3, 'svd_solver': 'covariance_eigh', 'whiten': True, 'numeric_mode': 'identical'}
+27822 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x596740000000, nodemask=2)
+27822 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x73a840000000, nodemask=1)
+PASS TruncatedSVD 128 {'n_components': 3, 'numeric_mode': 'identical'}

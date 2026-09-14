@@ -1,0 +1,54 @@
+9849 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x31bf00000000, nodemask=1)
+9995 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x58af00000000, nodemask=2)
+10030 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x73cc00000000, nodemask=1)
+10059 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5a6bc0000000, nodemask=2)
+10211 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x308c00000000, nodemask=1)
+PASS [513, 'SymmetricTree', 1, 'RMSE']
+10389 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x120000000000, nodemask=1)
+10403 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7b4b00000000, nodemask=2)
+10570 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x10b180000000, nodemask=1)
+PASS [513, 'SymmetricTree', 7, 'RMSE']
+10748 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1238c0000000, nodemask=1)
+10767 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3912c0000000, nodemask=2)
+10931 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x138240000000, nodemask=1)
+PASS [513, 'SymmetricTree', 31, 'RMSE']
+11109 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x53d440000000, nodemask=1)
+11155 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x38e900000000, nodemask=2)
+11304 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x32eec0000000, nodemask=1)
+PASS [513, 'SymmetricTree', 254, 'RMSE']
+11482 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5368c0000000, nodemask=1)
+11491 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7a0e00000000, nodemask=2)
+11663 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x307ac0000000, nodemask=1)
+PASS [513, 'Depthwise', 1, 'RMSE']
+11841 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1b6200000000, nodemask=2)
+11872 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x528040000000, nodemask=1)
+12022 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3857c0000000, nodemask=2)
+PASS [513, 'Depthwise', 7, 'RMSE']
+12200 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x195040000000, nodemask=2)
+12209 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x51e240000000, nodemask=1)
+12381 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x784440000000, nodemask=2)
+12381 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x307400000000, nodemask=1)
+PASS [513, 'Depthwise', 31, 'RMSE']
+12559 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x11fe80000000, nodemask=1)
+12579 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x19f900000000, nodemask=2)
+12740 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x582880000000, nodemask=2)
+PASS [513, 'Depthwise', 254, 'RMSE']
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/parallel_boosting_check.py", line 73, in <module>
+    main()
+    ~~~~^^
+  File "/root/mojolearn/tools/parallel_boosting_check.py", line 47, in main
+    serial = GradientBoosting(**options).fit(X, y, sample_weight=weights)
+             ~~~~~~~~~~~~~~~~^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_mode.py", line 81, in __init__
+    orig(self, *args, **kwargs)
+    ~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/ensemble.py", line 861, in __init__
+    random_strength = _validate_search_options(
+        random_strength, use_pointwise_searcher, grow_policy, score_function
+    )
+  File "/root/mojolearn/python/mojolearn/ensemble.py", line 332, in _validate_search_options
+    raise ValueError(
+    ...<3 lines>...
+    )
+ValueError: mojolearn: random_strength=0.1 does nothing under score_function='NewtonL2'; use Cosine or NewtonCosine, or random_strength=0.0

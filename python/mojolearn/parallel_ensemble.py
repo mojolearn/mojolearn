@@ -6,6 +6,30 @@ from ._buffer import as_f32_c, empty, addr, addr_ro
 from ._bufcheck import memcopy
 
 
+def fit_boosting(estimator, X, y, *, devices=(0,), sample_weight=None, eval_set=None):
+    """Partition packed feature groups during greedy-tree histogram construction.
+
+    Boosting rounds, row reductions, quantization scales, split selection and
+    leaf estimation retain their original global order. Only publish a full
+    successful fitted model. Root state still has to fit on the first GPU.
+    """
+    from .ensemble import GradientBoosting
+    if type(estimator) is not GradientBoosting:
+        raise TypeError('fit_boosting currently requires GradientBoosting or its classifier/regressor aliases')
+    if estimator.use_pointwise_searcher:
+        raise ValueError('pointwise searcher does not yet implement feature-parallel histograms')
+    if estimator.numeric_mode not in (None, 'identical'):
+        raise ValueError('parallel boosting requires IDENTICAL numeric mode')
+    pool = DevicePool(devices, cooperative=True)
+    try:
+        result = pool.map([('gbdt_fit', estimator,
+            (X, y, dict(sample_weight=sample_weight, eval_set=eval_set)))])[0]
+    finally:
+        pool.close()
+    estimator.__dict__ = result.__dict__.copy()
+    return estimator
+
+
 def fit_forest(estimator, X, y, *, devices=(0,), trees_per_shard=1):
     """Fit one RandomForest or ExtraTrees model across GPUs using global tree IDs.
 

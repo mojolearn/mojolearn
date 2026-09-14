@@ -1,0 +1,11 @@
+6605 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1be480000000, nodemask=2)
+6605 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x729d40000000, nodemask=1)
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/parallel_arima_check.py", line 56, in <module>
+    main()
+    ~~~~^^
+  File "/root/mojolearn/tools/parallel_arima_check.py", line 28, in main
+    parallel = fit_arima(ARIMA(**options), y, devices=(0, 1), series_per_shard=width)
+  File "/root/mojolearn/python/mojolearn/parallel_classical.py", line 15, in fit_arima
+    from ._buffer import empty, addr, addr_ro, memcopy
+ImportError: cannot import name 'memcopy' from 'mojolearn._buffer' (/root/mojolearn/python/mojolearn/_buffer.py)

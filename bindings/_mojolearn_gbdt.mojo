@@ -595,6 +595,7 @@ def gbdt_fit_ordered_rmse_binding(
 def PyInit__mojolearn_gbdt() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_gbdt")
+        m.def_function[gbdt_parallel_available_binding]("gbdt_parallel_available")
         m.def_function[gbdt_vendor_binding]("gbdt_vendor")
         m.def_function[gbdt_fit_binding]("gbdt_fit")
         m.def_function[gbdt_fit_ordered_rmse_binding]("gbdt_fit_ordered_rmse")
@@ -612,3 +613,7 @@ def PyInit__mojolearn_gbdt() abi("C") -> PythonObject:
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_gbdt module: ", e))
+
+
+def gbdt_parallel_available_binding() raises -> PythonObject:
+    return PythonObject(1)

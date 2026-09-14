@@ -1,0 +1,8 @@
+{
+  "status": "PASS",
+  "fields": [
+    "gradient_sha256",
+    "state_sha256"
+  ],
+  "scope": "Concurrent two-H100 byte LM waves match the earlier serial driver receipt; this is not a new same-source cross-vendor gate"
+}

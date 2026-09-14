@@ -8,6 +8,8 @@ No collective chooses the arithmetic order. Qualification is recorded separately
 """
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceContext, DeviceBuffer
+from max.algorithm import sync_parallelize
+from core.step_phase import STEP_PHASE_TIMERS
 from checks.numerics import ftz, identical_mul_add
 from training.byte_lm import (
     ByteTrainer, byte_gradient_device, byte_update_device,
@@ -82,6 +84,9 @@ struct ByteParallelTrainer(Movable, Writable):
             raise Error("byte LM parallel: already open")
         if shards < 1 or shards > 1024 or len(devices) < 1 or len(devices) > shards:
             raise Error("byte LM parallel: require 1 <= devices <= shards <= 1024")
+        comptime if STEP_PHASE_TIMERS:
+            if len(devices) > 1:
+                raise Error("byte LM parallel: process-global phase counters cannot profile concurrent devices")
         for i in range(len(devices)):
             if devices[i] < 0:
                 raise Error("byte LM parallel: negative device index")
@@ -142,28 +147,52 @@ struct ByteParallelTrainer(Movable, Writable):
             self.trainers[i].shadow_valid = False
             self.trainers[i].grad_step = -1
             self.trainers[i].healthy = False
-        var losses = List[Float32]()
+        var losses = List[Float32](length=self.logical_shards, fill=Float32(0))
         var n = self.trainers[0].config.n_total()
         try:
-            # The existing gradient body synchronizes internally. This initial
-            # correctness path schedules shards serially; no speedup claim.
-            # Assignment changes with device count, but the fold never does.
-            for shard in range(self.logical_shards):
-                var rank = shard % len(self.trainers)
-                losses.append(byte_gradient_device(self.contexts[rank], self.trainers[rank], shards[shard]))
-                _require_device_finite(self.contexts[rank], self.trainers[rank].scan,
-                    self.trainers[rank].buffers.grad, n, "shard gradients")
-                # Copy runs on the source stream. The source wait MUST finish
-                # before the root launches a kernel reading the destination.
-                self.trainers[rank].buffers.grad.enqueue_copy_to(self.incoming.value())
-                self.contexts[rank].synchronize()
-                if shard == 0:
-                    _copy_into(self.contexts[0], self.total.value(), self.incoming.value(), 0, 0, n)
+            # A wave owns one trainer/context per task. Lists cannot resize
+            # until the join. No task touches a different task's state, and
+            # every task has finished before reduction, reuse or rollback.
+            var width = len(self.trainers)
+            var start = 0
+            while start < self.logical_shards:
+                var active = min(width, self.logical_shards - start)
+                var failed = List[Int](length=active, fill=0)
+                var cp = rebind[MutPointer[DeviceContext, MutUntrackedOrigin]](self.contexts.unsafe_ptr())
+                var tp = rebind[MutPointer[ByteTrainer, MutUntrackedOrigin]](self.trainers.unsafe_ptr())
+                var sp = rebind[MutPointer[List[Int32], MutUntrackedOrigin]](shards.unsafe_ptr())
+                var lp = rebind[MutPointer[Float32, MutUntrackedOrigin]](losses.unsafe_ptr())
+                var fp = rebind[MutPointer[Int, MutUntrackedOrigin]](failed.unsafe_ptr())
+                var base = start
+
+                def _gradient_task(rank: Int) {imm cp, imm tp, imm sp, imm lp, imm fp, imm base, imm n}:
+                    try:
+                        lp[base + rank] = byte_gradient_device(cp[rank], tp[rank], sp[base + rank])
+                        _require_device_finite(cp[rank], tp[rank].scan,
+                            tp[rank].buffers.grad, n, "shard gradients")
+                    except:
+                        fp[rank] = 1
+
+                if active == 1:
+                    _gradient_task(0)
                 else:
-                    self.contexts[0].enqueue_function[_ordered_add_kernel](
-                        self.total.value().unsafe_ptr(), self.incoming.value().unsafe_ptr(), Int32(n),
-                        grid_dim=((n + 127) // 128, 1, 1), block_dim=(128, 1, 1))
-                self.contexts[0].synchronize()
+                    sync_parallelize(_gradient_task, active)
+                for rank in range(active):
+                    if failed[rank] != 0:
+                        raise Error("byte LM parallel: gradient shard " + String(start + rank) + " failed")
+                # Completion order never chooses arithmetic order. The root
+                # folds the wave in ascending logical shard order, unchanged.
+                for rank in range(active):
+                    self.trainers[rank].buffers.grad.enqueue_copy_to(self.incoming.value())
+                    self.contexts[rank].synchronize()
+                    if start + rank == 0:
+                        _copy_into(self.contexts[0], self.total.value(), self.incoming.value(), 0, 0, n)
+                    else:
+                        self.contexts[0].enqueue_function[_ordered_add_kernel](
+                            self.total.value().unsafe_ptr(), self.incoming.value().unsafe_ptr(), Int32(n),
+                            grid_dim=((n + 127) // 128, 1, 1), block_dim=(128, 1, 1))
+                    self.contexts[0].synchronize()
+                start += active
             # Complete every broadcast and scan BEFORE any replica updates.
             for i in range(len(self.trainers)):
                 self.total.value().enqueue_copy_to(self.trainers[i].buffers.grad)

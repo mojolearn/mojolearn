@@ -166,6 +166,9 @@ from checks.numerics import (
     ftz_simd,
     identical_mul_add,
 )
+from std.os import getenv
+from core.multi_gpu import peer_clone
+from core.device_zero import enqueue_fill
 from neighbors.impl.distance.detail.pairwise_distance_base import (
     TARGET_GPU_CORES,
     max_active_blocks_per_core,
@@ -941,6 +944,10 @@ def _splitk_launch(
     # owns which cell, never the order any cell is accumulated in, so it is
     # scheduling, not numerics.
     var cells = gram_splitk_cells_for(m)
+    var unused_mu = x
+    if _gram_parallel[False](ctx, partials, x, unused_mu, m, k, kc, n_chunks):
+        _enqueue_reduce(ctx, z, partials, mn, n_chunks)
+        return
     if cells == 4:
         _enqueue_partial[4](ctx, partials, x, m, k, kc, n_chunks)
     elif cells == 16:
@@ -967,6 +974,9 @@ def _splitk_launch_centered(
     var kc = _splitk_chunk_rows(k, n_chunks)
     var mn = m * m
     var cells = gram_splitk_cells_for(m)
+    if _gram_parallel[True](ctx, partials, x, mu, m, k, kc, n_chunks):
+        _enqueue_reduce(ctx, z, partials, mn, n_chunks)
+        return
     if cells == 4:
         _enqueue_partial_centered[4](
             ctx, partials, x, mu, m, k, kc, n_chunks
@@ -1105,3 +1115,93 @@ def gram_centered_splitk_into(
         # keeps its sync. Fences only -- IDENTICAL's bits do not move.
         return
     gram_centered_splitk(ctx, z, x, mu, m, k)
+
+
+@fieldwise_init
+struct GramShard(Movable):
+    var ctx: DeviceContext
+    var x: DeviceBuffer[DType.float32]
+    var mu: DeviceBuffer[DType.float32]
+    var partials: DeviceBuffer[DType.float32]
+    var first: Int
+    var chunks: Int
+    var rows: Int
+
+    def __deinit__(deinit self):
+        _ = self.x^
+        _ = self.mu^
+        _ = self.partials^
+        try:
+            self.ctx.synchronize()
+        except:
+            pass
+        _ = self.ctx^
+
+
+def _gram_shard_launch[CELLS: Int, centered: Bool](mut shard: GramShard, m: Int, kc: Int) raises:
+    comptime if centered:
+        _enqueue_partial_centered[CELLS](shard.ctx, shard.partials, shard.x, shard.mu,
+            m, shard.rows, kc, shard.chunks)
+    else:
+        _enqueue_partial[CELLS](shard.ctx, shard.partials, shard.x,
+            m, shard.rows, kc, shard.chunks)
+
+
+def _gram_parallel[centered: Bool](
+    ctx: DeviceContext, mut partials: DeviceBuffer[DType.float32],
+    mut x: DeviceBuffer[DType.float32], mut mu: DeviceBuffer[DType.float32],
+    m: Int, k: Int, kc: Int, n_chunks: Int,
+) raises -> Bool:
+    """Assign existing pinned K chunks to devices; do not invent new partials.
+
+    Each GPU receives whole original row chunks. The original kernel sees the
+    same row sequence, same chunk_rows and same register width. Only its source
+    address and output slot origin change. The caller still folds all 128
+    partials, including the original zero tail, in its original order.
+    """
+    var requested = String(getenv("MOJOLEARN_GRAM_DEVICE_COUNT"))
+    if requested == "" or requested == "1":
+        return False
+    var count = Int(requested)
+    if count < 1 or count > 64 or GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+        raise Error("parallel Gram requires IDENTICAL and 1..64 devices")
+    var live_chunks = min(n_chunks, (k + kc - 1) // kc)
+    var active = min(count, live_chunks)
+    if active < 1:
+        raise Error("parallel Gram requires nonempty rows")
+    ctx.synchronize()
+    enqueue_fill(ctx, partials, Float32(0))
+    ctx.synchronize()
+    var shards = List[GramShard]()
+    for rank in range(active):
+        var first = live_chunks * rank // active
+        var end = live_chunks * (rank + 1) // active
+        var begin_row = first * kc
+        var rows = min(k, end * kc) - begin_row
+        var device = DeviceContext(device_id=rank)
+        var view = x.create_sub_buffer[DType.float32](begin_row * m, rows * m)
+        var local_x = peer_clone(ctx, device, view)
+        var local_mu: DeviceBuffer[DType.float32]
+        comptime if centered:
+            local_mu = peer_clone(ctx, device, mu)
+        else:
+            local_mu = device.enqueue_create_buffer[DType.float32](1)
+        var out = device.enqueue_create_buffer[DType.float32]((end - first) * m * m)
+        device.synchronize()
+        shards.append(GramShard(device^, local_x^, local_mu^, out^, first, end - first, rows))
+    var cells = gram_splitk_cells_for(m)
+    for rank in range(active):
+        if cells == 4:
+            _gram_shard_launch[4, centered](shards[rank], m, kc)
+        elif cells == 16:
+            _gram_shard_launch[16, centered](shards[rank], m, kc)
+        else:
+            _gram_shard_launch[GRAM_MAX_CELLS_PER_THREAD, centered](shards[rank], m, kc)
+    for rank in range(active):
+        ref shard = shards[rank]
+        var destination = partials.create_sub_buffer[DType.float32](shard.first * m * m, shard.chunks * m * m)
+        shard.partials.enqueue_copy_to(destination)
+        shard.ctx.synchronize()
+    _ = shards^
+    ctx.synchronize()
+    return True

@@ -51,5 +51,6 @@ and benchmark outputs.
 
 Boosting, remaining classical estimators, distributed individual tree splits,
 AMD/Apple qualification, eight-device scaling, and throughput claims are not
-covered. Byte-LM gradient bodies currently execute serially across resident
-replicas. See [implementation scope](../../../../docs/multi_gpu/README.md).
+covered by this initial snapshot. Its byte-LM gradient bodies execute serially
+across resident replicas. The [continued two-H100 work](continued-h100/README.md)
+adds concurrent waves and several classical paths with separately scoped evidence. See [implementation scope](../../../../docs/multi_gpu/README.md).
