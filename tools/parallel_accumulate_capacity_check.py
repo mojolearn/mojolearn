@@ -17,6 +17,10 @@ def main():
     args = p.parse_args()
     if not os.environ.get('RUNPOD_POD_ID'):
         raise SystemExit('RunPod required; no local execution')
+    # Avoid host THP compaction dominating this GPU-capacity fixture on a
+    # fragmented cloud NUMA host. NumPy reads this at import; GPU arithmetic
+    # and allocation sizes are unchanged.
+    os.environ['NUMPY_MADVISE_HUGEPAGE'] = '0'
     import numpy as np
     from mojolearn._training_impl import _load
     binding = _load('identical')
@@ -75,7 +79,7 @@ def main():
         device,used = (int(value.strip()) for value in line.split(','))
         peaks[device] = max(peaks.get(device,0),used)
     assert peaks
-    result.update(sampled_peak_mib=peaks,elapsed_seconds=time.monotonic()-started,
+    result.update(numpy_madvise_hugepage=os.environ['NUMPY_MADVISE_HUGEPAGE'],sampled_peak_mib=peaks,elapsed_seconds=time.monotonic()-started,
         hardware=subprocess.check_output(['nvidia-smi','--query-gpu=name,memory.total,driver_version','--format=csv'],text=True))
     args.report.write_text(json.dumps(result,indent=2)+'\n')
     print(args.report.read_text(),flush=True)
