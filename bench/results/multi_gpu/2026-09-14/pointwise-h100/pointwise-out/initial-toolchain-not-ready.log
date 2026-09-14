@@ -1,0 +1,5 @@
+!! MOJOLEARN_GPU_ARCHS=sm_90a
+!! --target-accelerator is being passed. On Metal this flag empties
+!! the binary of kernels (measured 2026-08-21). READ THE EMBEDDED
+!! ARCHITECTURES BACK out of the .so before trusting this build.
+bindings/build.sh: 316: pixi: not found

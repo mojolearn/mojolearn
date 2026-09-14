@@ -31,9 +31,9 @@ and histogram paths have two-H100 evidence only.
 | SambaStack | Concurrent microbatch gradients, ordered update | Broader block/configuration coverage; memory partitioning |
 | RandomForestClassifier / RandomForestRegressor | Global tree-ID ranges over full data | Larger forests; data partitioning |
 | ExtraTreesClassifier / ExtraTreesRegressor | Global tree-ID ranges over full data | Larger forests; data partitioning |
-| GradientBoosting / classifier / regressor aliases | Greedy feature histograms; symmetric/depthwise/lossguide gates pass on two H100s | Pointwise searcher; root-state memory partitioning; cross-vendor qualification |
-| OrderedRMSE | None | Above plus permutation and ordered-fold state |
-| ExperimentalTwoLevelFeatureFreq | None | Categorical candidate generation, scores and both levels |
+| GradientBoosting / GradientBoostingClassifier / GradientBoostingRegressor | Greedy and pointwise feature groups; full histogram bytes and adapter contracts pass on two H100s | Broader configurations; root-state memory partitioning; cross-vendor qualification |
+| OrderedRMSE | Pointwise feature groups with original permutation/fold updates; trace/model gates pass on two H100s | Root-state pooling; broader configurations and cross-vendor qualification |
+| ExperimentalTwoLevelFeatureFreq | Both levels use greedy feature histograms after original categorical generation; model/prediction gates pass on two H100s | Candidate/root-state pooling; broader configurations and cross-vendor qualification |
 | KMeans | Parallel row-tile assignment | Resident staging; memory-bounded full-data updates |
 | LinearRegression / Ridge | Original 128 Gram chunks distributed at 1..128 features; two-H100 gates pass | Wide OLS; larger feature counts; root-state partitioning |
 | LogisticRegression | QN gradient feature columns; binary/multiclass two-H100 gates pass | Root-state partitioning; broader configurations and cross-vendor qualification |

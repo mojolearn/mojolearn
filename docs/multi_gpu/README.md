@@ -154,12 +154,11 @@ fit_scaler(scaler, X, devices=(0, 1), columns_per_shard=16)
 scaled = transform_scaler(scaler, X, devices=(0, 1), columns_per_shard=16)
 ```
 
-Boosting currently supports the greedy symmetric, depthwise and lossguide
-searchers, including the classifier/regressor aliases. It refuses the
-pointwise searcher and the separate OrderedRMSE/ExperimentalTwoLevelFeatureFreq
-classes. Histogram shards own compressed feature columns and local histogram
-columns, but the root still owns the full index and histogram. Per-level
-allocation and staging overhead may outweigh computation savings.
+Boosting supports greedy symmetric, depthwise and lossguide searchers and
+pointwise symmetric search, including classifier/regressor adapters. Separate
+drivers cover OrderedRMSE and ExperimentalTwoLevelFeatureFreq; see below.
+The root still owns the full index and histogram. Per-level allocation and
+staging overhead may outweigh computation savings.
 
 ARIMA workers receive only their assigned series; scaler workers receive only
 their assigned columns. These partitions reduce the GPU memory required per
@@ -224,16 +223,11 @@ receive only their partitions, but beyond-single-GPU capacity is not qualified.
 The user's requested order is neural training, forests/ExtraTrees, then
 boosting and classical estimators. The following remain unimplemented:
 
-- OrderedRMSE, pointwise boosting and categorical two-level feature search: boosting rounds
-  depend on preceding predictions, so the forest tree-range driver is invalid.
-  A dedicated feature/histogram partition must preserve quantization, global
-  scales, row order, split tie breaks, leaf estimates and categorical state.
 - Wider/full-solver Gram paths:
   distribute the appropriate matrix or objective work without changing its
   reduction tree or solver trajectory.
-- Neighbors/density, graph/manifold methods, mixture models
-  and other classical surfaces: each needs its
-  own partition and qualification. Some have little training work to split.
+- Broader neighbor/density/graph configurations, resident reference and graph
+  pooling, and native-only surfaces need additional partitions and qualification.
 - Resident staging reuse, larger models,
   eight physical GPUs, H100/5090 replay, AMD/Apple cross-vendor evidence,
   injected lost-device recovery, and throughput/cost measurements.
@@ -369,3 +363,44 @@ Fifteen two-H100 public cases pass complete fitted-state/output comparisons;
 six native cases compare every distance and selected index bit. Full root
 reference, graph and solver state remain. This establishes compute partitioning
 for these paths, not pooled graph capacity or new cross-vendor identity.
+
+
+### Pointwise and ordered boosting
+
+`fit_boosting` also supports `use_pointwise_searcher=True`, and accepts the
+public `GradientBoostingClassifier` and `GradientBoostingRegressor` adapters
+with their label/probability and evaluation-set contracts. Whole packed feature
+groups are assigned to devices (32 binary, eight half-byte, four one-byte
+features per group). Each group keeps the original complete document fold,
+prefix scan and sibling subtraction. The root gathers disjoint interleaved
+weight/target pairs before the original global split selection. No cross-shard
+histogram summation is introduced. A policy uses at most one device per group.
+The opt-in private-document-slots experiment is refused by this driver.
+
+```python
+from mojolearn.parallel_ensemble import (
+    fit_boosting, fit_ordered_rmse, fit_feature_freq,
+)
+fit_boosting(model, X, y, devices=(0, 1), sample_weight=weights)
+fit_ordered_rmse(ordered_model, X, y, permutation=order, devices=(0, 1))
+fit_feature_freq(feature_freq_model, X, y, devices=(0, 1))
+```
+
+`fit_ordered_rmse` retains the supplied permutation, growing-prefix
+approximations and ordered leaf updates. `fit_feature_freq` retains categorical
+candidate generation and both sequential level transitions; only its existing
+greedy histogram work is distributed. Every driver publishes fitted state only
+after successful completion.
+
+Two-H100 evidence covers nine pointwise fits with identical histogram dumps and
+trace records, six full/partial native histogram comparisons (including one-hot
+features), 16 OrderedRMSE fits and traces, four two-level categorical fits, and
+four adapter fits. Sixteen previous greedy fixtures retain their exact receipt
+hashes. The initial interleaved-pair gather defect and its failing traces are
+preserved alongside the corrected results in
+`bench/results/multi_gpu/2026-09-14/pointwise-h100/`.
+
+These paths retain full root data, histogram and model state; pointwise workers
+currently clone the full compressed index and histogram before gathering only
+owned bins. They do not establish pooled model capacity, performance scaling,
+or new cross-vendor identity. Wider configurations remain to be qualified.

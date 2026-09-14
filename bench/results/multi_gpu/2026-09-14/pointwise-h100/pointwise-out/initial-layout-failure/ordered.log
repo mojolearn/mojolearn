@@ -1,0 +1,10 @@
+1998 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7284c0000000, nodemask=1)
+2177 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x53b0c0000000, nodemask=1)
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/parallel_ordered_rmse_check.py", line 68, in <module>
+    main()
+    ~~~~^^
+  File "/root/mojolearn/tools/parallel_ordered_rmse_check.py", line 47, in main
+    assert records(trace_root / 'one.trace') == records(trace_root / 'many.trace')
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError
