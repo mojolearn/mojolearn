@@ -89,3 +89,54 @@ after `m2_buffer_update_kernel` for two runs and diff by element to name the ind
 read the two kernels for the write that a neighboring thread reads. If twenty repeats are
 stable, record the count and leave the deviation open with this brief as its ledger row.
 Owner: the peer session with the box.
+
+## 3. DEVIATION 2712 (2026-09-14, later): the DEFAULT mamba2 lane diverges on one MI300X, stable per process
+
+The clean 120-lane record at 65ae7612f (`bench/results/identity_break/2026-09-14_120-lanes/`)
+reads 1080 of 1080 stable on Apple M4, H100 and a Hot Aisle MI300X 8core VM, no MOVED
+anywhere, 1071 + 1476 cells identical on three vendors, EXCEPT the `mamba2` lane (default
+dt_limit): on all nine fixtures the MI300X column's `step` and `backward` parts differ from
+Apple and H100, which agree; `forward` and `prefill` agree on all three. The same lane read
+IDENTICAL x3 on a 13core MI300X in the 47-lane record and in both earlier 120-lane runs the
+same day, and the 8core column repeats within its run. So the AMD answer is STABLE PER
+PROCESS and DIFFERENT PER BOX (or per run); section 2's one moved cell was the first sight
+of it. Recorded in SUPPORT_MATRIX as DEVIATION 2712; the CPU gate keeps the 47-lane columns
+until it closes.
+
+What the two parts share. `backward` is `_prefill_backward`: it recomputes its own forward
+from a ZERO state and never reads the carried state (`python/mojolearn/_mamba_impl.py:830`),
+so the carried state is not the common factor. In the lane (`_block_fit`) the order is
+forward, prefill, step, backward on ONE block: `step` runs after two forwards, `backward`
+after three calls, on the same working stages. A kernel that reads a working row an earlier
+call wrote (or one nobody wrote) would give exactly this: the first forward clean, later
+calls contaminated by what the block's buffers hold, the same bytes every time in one
+process (the allocator repeats itself), different bytes on a box whose allocator or
+image hands over different pages. No runtime device-property geometry exists in `mamba/`
+(the only core-count constants in the tree are compile-time column constants in
+`core/gram_splitk.mojo`), so a per-box grid shape is not it.
+
+The probe, `tools/mamba2_step_probe.py`, separates the three readings. It runs the lane's
+exact inputs through FIVE call orders on fresh blocks (`lane`, `backward-only`,
+`step-only`, `backward-first`, `step-twice`), N repeats each in one process, saves every
+array of the first repeat with a hash per repeat, and diffs two runs element by element:
+
+- a part that differs between `lane` and `backward-only` (or `step-only`) in ONE process
+  is ORDER DEPENDENCE, a kernel reading rows an earlier call left;
+- a part that differs between two PROCESSES on one box in the same order is a PER-PROCESS
+  source, an unwritten buffer;
+- a part that differs between two BOXES only is a device-dependent path.
+
+On the Apple M4 (`bench/results/mamba2_probe/2026-09-14-apple-m4.npz`): 86 arrays, no
+in-process move, no order dependence, and a second process equal on all 86. Owed on the
+Hot Aisle MI300X and the DigitalOcean MI325X:
+
+```sh
+MOJOLEARN_NUMERIC_MODE=identical python3 tools/mamba2_step_probe.py run amd-<box>-1.npz --repeats 20
+MOJOLEARN_NUMERIC_MODE=identical python3 tools/mamba2_step_probe.py run amd-<box>-2.npz --repeats 20
+python3 tools/mamba2_step_probe.py diff amd-<box>-1.npz amd-<box>-2.npz
+python3 tools/mamba2_step_probe.py diff bench/results/mamba2_probe/2026-09-14-apple-m4.npz amd-<box>-1.npz
+```
+
+The `run` exit code is 1 on any in-process move or order dependence; the first DIFFER line
+of the Apple diff names the part and the first differing element, which is the address to
+read the kernel at.
