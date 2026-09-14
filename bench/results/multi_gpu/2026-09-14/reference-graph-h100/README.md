@@ -52,3 +52,6 @@ This receipt does not requalify those independent changes.
 Scope excludes new cross-vendor claims, speedup, eight-GPU runs, RBC/radius
 reference partitioning, distributed target tables, root graph/solver memory
 pooling, and neural model/optimizer memory pooling.
+
+All owed jobs completed and receipts were downloaded before pod termination.
+`termination.log` records DELETE HTTP 204 and subsequent GET HTTP 404.
