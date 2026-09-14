@@ -6,12 +6,20 @@ original accumulation entry with all microbatches in their original order.
 The caller receives output only after every owner succeeds.
 """
 from std.os import getenv
+from std.sys import is_defined
 from max.gpu.host import DeviceContext
 from max.algorithm import sync_parallelize
 from bindings.hostptr import copy_f32
 from core.step_phase import STEP_PHASE_TIMERS
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from training.samba_ops import samba_accumulate_host, samba_validate_accumulation, _refuse_nonfinite
+
+
+comptime ACCUMULATE_POOL_FAULT = is_defined["MOJOLEARN_ACCUMULATE_POOL_FAULT"]()
+
+
+def accumulate_pool_fault_available() -> Int:
+    return 1 if ACCUMULATE_POOL_FAULT else 0
 
 
 def parallel_accumulate_host(
@@ -51,6 +59,9 @@ def parallel_accumulate_host(
                 copy_f32(parts_ptr+microbatch*n+first,parts.unsafe_ptr()+microbatch*count,count)
             _ = samba_accumulate_host(cp[rank],rp+first,
                 rebind[MutPointer[Float32, MutUntrackedOrigin]](parts.unsafe_ptr()),count,a,t_tokens)
+            comptime if ACCUMULATE_POOL_FAULT:
+                if Int(getenv("MOJOLEARN_ACCUMULATE_FAIL_RANK", "-1")) == rank:
+                    raise Error("injected post-compute accumulation refusal")
             # Raw task pointers do not keep their owners alive.
             _ = parts^
         except:

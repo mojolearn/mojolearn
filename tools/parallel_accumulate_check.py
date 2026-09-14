@@ -11,6 +11,7 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--cloud', action='store_true', required=True)
     p.add_argument('--report', type=Path, required=True)
+    p.add_argument('--faults', action='store_true')
     args = p.parse_args()
     if not os.environ.get('RUNPOD_POD_ID'):
         raise SystemExit('RunPod required; no local execution')
@@ -91,8 +92,29 @@ def main():
         else:
             raise AssertionError('nonfinite last shard accepted')
         assert out.tobytes() == before
+    if args.faults:
+        assert binding.accumulate_pool_fault_available() == 1
+        for rank in (0,1):
+            out = np.full(257,-17,dtype='<f4')
+            before = out.tobytes()
+            os.environ['MOJOLEARN_ACCUMULATE_FAIL_RANK'] = str(rank)
+            try:
+                try:
+                    invoke(parts,out,2,257,4)
+                except Exception as error:
+                    assert 'output unchanged' in str(error)
+                else:
+                    raise AssertionError('post-compute fault failed to refuse')
+            finally:
+                os.environ.pop('MOJOLEARN_ACCUMULATE_FAIL_RANK',None)
+            assert out.tobytes() == before
+        left = np.empty(257,dtype='<f4')
+        right = left.copy()
+        invoke(parts,left,1,257,4)
+        invoke(parts,right,2,257,4)
+        assert left.tobytes() == right.tobytes()
     os.environ.pop('MOJOLEARN_OPTIMIZER_DEVICE_COUNT',None)
-    args.report.write_text(json.dumps(dict(status='PASS',checks=checks,refusals=refusals,
+    args.report.write_text(json.dumps(dict(status='PASS',native_faults=args.faults,checks=checks,refusals=refusals,
         aligned=aligned,refused_alignment=refused_alignment,nonfinite_refusals=3,
         scope='Two GPUs; disjoint gradient columns, original per-cell tree and atomic publication. No full-model capacity or throughput claim.'),indent=2)+'\n')
     print('PASS',len(checks),'exact cases and atomic refusals')
