@@ -11,8 +11,9 @@ the per-vendor GPU-box build and the byte compare of the host bindings across th
 Linux legs are OWED before this heading reads published.
 
 - Every host (CPU) binding the manifest declares ships in both wheels under `mojolearn/host/`,
-  namely the byte LM's, the forest's, the tokenizer's and the seven routed families (core,
-  linalg, estimators, tsa, solver, svm, trees), ten in all. 0.8.5 carried the byte LM's alone. The
+  namely the byte LM's, the forest's, the tokenizer's and the eleven routed families (core,
+  linalg, estimators, metrics, preprocessing, tsa, solver, svm, trees, rf, gp), fourteen in
+  all. 0.8.5 carried the byte LM's alone. The
   list is read from `python/mojolearn/host_surface.py` by the two wheel builders, the Linux
   packer, both smokes and the Linux admission; `packaging/check_ext_lists.py` (and its
   `--host` mode, which needs no built binary) fails any of them that carries a host list of
@@ -30,8 +31,8 @@ Linux legs are OWED before this heading reads published.
   docs/VERIFY.md.
 - New `python -m mojolearn identity`. It runs the identity_break lanes on the local box under
   the identical tier and diffs the column against the three training GPU columns shipped in
-  the wheel (the Apple M4, NVIDIA H100 and AMD MI300X columns of the record the manifest
-  names, `bench/results/identity_break/2026-09-14_47-lanes`, copied to
+  the wheel (the Apple M4, NVIDIA H100 and AMD MI325X columns of the record the manifest
+  names, `bench/results/identity_break/2026-09-14_136-lanes`, copied to
   `mojolearn/identity_columns/<record>/` with a commit witness), requiring IDENTICAL x4 on
   every train cell it ran and IDENTICAL x4 or N/A on the infer and model cells. On a CPU-only
   install only the lanes with a CPU training path run. `--check` resolves the harness, the

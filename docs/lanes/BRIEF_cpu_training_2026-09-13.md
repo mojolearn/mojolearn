@@ -1320,7 +1320,14 @@ leg; the host scorer for it is `oracle_path_lengths` / `oracle_scores`
 over an `OracleForest` rebuilt from the arrays, which this binding
 already runs.
 
-## Workstream E (2026-09-14): knn, knn-clf, knn-reg, pca, pca-whiten, tsvd, ols, ridge, dbscan, WRITTEN AND COMPILE-CHECKED, NOT MEASURED
+## Workstream E (2026-09-14): knn, knn-clf, knn-reg, pca, pca-whiten, tsvd, ols, ridge, dbscan, IDENTICAL x4, GATE GREEN
+
+STATUS (2026-09-14 evening): the seven-runner CPU identity gate ran green on
+this branch at 2b7f991b6 (run 34871479957), the commit merged to main: the
+four-column diff over the covered lanes read `summary: IDENTICAL=423` with
+`--require-columns 4`, and the sabotage host build read `summary: DIVERGENT=163,
+IDENTICAL=260` (not every fixture moves under the sabotage; dbscan, for one,
+diverges on six of nine in run 34884487749). The text below is the section as written before that run.
 
 Branch `lane/cpu-training-e`, off `origin/main` at 59ee1b98b. Nothing in this
 section is a bit result; the four-column diff has not run. What exists follows.
@@ -1402,7 +1409,13 @@ runs the same steps on seven runners), the commands are these.
 The three 2026-09-14 47-lane GPU columns already carry every one of these
 lanes, so no new GPU record is needed for the first diff.
 
-## Workstream E batch 2 (2026-09-14): kmeans, SIMULATED IDENTICAL x3 ON base, GATE OWED
+## Workstream E batch 2 (2026-09-14): kmeans, SIMULATED IDENTICAL x3 ON base, then IDENTICAL x4, GATE GREEN
+
+STATUS (2026-09-14 evening): the seven-runner CPU identity gate ran green on
+`lane/cpu-training-e2` (runs 34876788895 and 34878070708) and again with batch 3
+at ed6c06526 (run 34884487749, all nine fixtures IDENTICAL x4 per lane, the
+sabotage host build DIVERGENT on every lane of the batch). The text below is the
+section as written before those runs.
 
 Branch `lane/cpu-training-e2`, off `origin/main` at 2b7f991b6. The gate has
 not run; what is measured is one fixture on one box, stated as such.
@@ -1463,7 +1476,13 @@ not run; what is measured is one fixture on one box, stated as such.
 The measurement owed is the seven-runner CPU identity gate on the lane
 (`--require-columns 4 --lanes ... kmeans`), every fixture, two repeats.
 
-## Workstream E batch 2 (2026-09-14): metrics, SIMULATED IDENTICAL x3 ON base, GATE OWED
+## Workstream E batch 2 (2026-09-14): metrics, SIMULATED IDENTICAL x3 ON base, then IDENTICAL x4, GATE GREEN
+
+STATUS (2026-09-14 evening): the seven-runner CPU identity gate ran green on
+`lane/cpu-training-e2` (runs 34876788895 and 34878070708) and again with batch 3
+at ed6c06526 (run 34884487749, all nine fixtures IDENTICAL x4 per lane, the
+sabotage host build DIVERGENT on every lane of the batch). The text below is the
+section as written before those runs.
 
 - metrics. `metrics/host/metrics_oracle.mojo`, the five metrics of the lane
   and the four label metrics that share their integer kernels, restated
@@ -1497,7 +1516,13 @@ The measurement owed is the seven-runner CPU identity gate on the lane
 - The test module is `cd python && python3 -m mojolearn.tests.test_cpu_training_e2`
   (the kmeans checks and these in one file).
 
-## Workstream E batch 2 (2026-09-14): spectral, SIMULATED IDENTICAL x3 ON base, GATE OWED
+## Workstream E batch 2 (2026-09-14): spectral, SIMULATED IDENTICAL x3 ON base, then IDENTICAL x4, GATE GREEN
+
+STATUS (2026-09-14 evening): the seven-runner CPU identity gate ran green on
+`lane/cpu-training-e2` (runs 34876788895 and 34878070708) and again with batch 3
+at ed6c06526 (run 34884487749, all nine fixtures IDENTICAL x4 per lane, the
+sabotage host build DIVERGENT on every lane of the batch). The text below is the
+section as written before those runs.
 
 - spectral. The host oracle `spectral/checks/spectral_oracle.mojo`, the
   bit-for-bit reference the device Lanczos is gated against, MOVED to
@@ -1532,7 +1557,13 @@ The measurement owed is the seven-runner CPU identity gate on the lane
   all three columns on `base`.
 - The test module is `cd python && python3 -m mojolearn.tests.test_cpu_training_e2`.
 
-## Workstream E batch 2 (2026-09-14): standard-scaler, minmax-scaler, SIMULATED IDENTICAL x3 ON base, GATE OWED
+## Workstream E batch 2 (2026-09-14): standard-scaler, minmax-scaler, SIMULATED IDENTICAL x3 ON base, then IDENTICAL x4, GATE GREEN
+
+STATUS (2026-09-14 evening): the seven-runner CPU identity gate ran green on
+`lane/cpu-training-e2` (runs 34876788895 and 34878070708) and again with batch 3
+at ed6c06526 (run 34884487749, all nine fixtures IDENTICAL x4 per lane, the
+sabotage host build DIVERGENT on every lane of the batch). The text below is the
+section as written before those runs.
 
 - standard-scaler, minmax-scaler. `preprocessing/host/scaler_oracle.mojo`,
   the four kernels of `preprocessing/standard.mojo` and
@@ -1564,7 +1595,13 @@ The measurement owed is the seven-runner CPU identity gate on the lane
   that carries them.
 - The test module is `cd python && python3 -m mojolearn.tests.test_cpu_training_e2`.
 
-## Workstream E batch 2 (2026-09-14): logistic, SIMULATED IDENTICAL x3 ON base, GATE OWED
+## Workstream E batch 2 (2026-09-14): logistic, SIMULATED IDENTICAL x3 ON base, then IDENTICAL x4, GATE GREEN
+
+STATUS (2026-09-14 evening): the seven-runner CPU identity gate ran green on
+`lane/cpu-training-e2` (runs 34876788895 and 34878070708) and again with batch 3
+at ed6c06526 (run 34884487749, all nine fixtures IDENTICAL x4 per lane, the
+sabotage host build DIVERGENT on every lane of the batch). The text below is the
+section as written before those runs.
 
 - logistic. `glm/host/qn_oracle.mojo`, the L-BFGS arm of cuML's quasi-Newton
   solver with the binary logistic loss, restated from `glm/impl/qn/`
@@ -1596,7 +1633,17 @@ The measurement owed is the seven-runner CPU identity gate on the lane
   columns on `base`.
 - The test module is `cd python && python3 -m mojolearn.tests.test_cpu_training_e2`.
 
-## Workstream E batch 3 (2026-09-14): rf-clf, rf-reg, WRITTEN, NOT COMPILED, NOT MEASURED
+## Workstream E batch 3 (2026-09-14): rf-clf, rf-reg, IDENTICAL x4, GATE GREEN, MERGED
+
+STATUS (2026-09-14 evening): the first compile and the first four-column diff
+ran on the seven-runner CPU identity gate at ed6c06526, run 34884487749, green
+on all seven runners. On the x86 draw a runner, rf-clf and rf-reg read IDENTICAL
+x4 against the three 47-lane GPU columns on all nine fixtures, with the infer
+and model cells IDENTICAL x4 on all eighteen each, and the sabotage host build
+read DIVERGENT on all nine training cells and all eighteen infer and model
+cells of each lane (`diff_four_columns.txt` and `diff_four_columns_sab.txt` in
+the run's `cpu-identity-gate-x86-a` artifact). Merged to main in 0ff1262f1. The
+text below is the section as written before that run.
 
 Branch `lane/cpu-training-e3-trees`, off `origin/main` at 576c908d6. Nothing in
 this section is a bit result. The agent that wrote it ran no build, no
@@ -1662,7 +1709,16 @@ and rf-reg):
     MOJOLEARN_HOST_DIR=<sab> MOJOLEARN_HOST_ALLOW_SABOTAGE=1 python3 tools/identity_break.py --lanes rf-clf,rf-reg --json <cpu-sab>.json
     (the diff of <cpu-sab>.json against the three GPU columns must exit non-zero with DIVERGENT)
 
-## Workstream E, the gp host lane (2026-09-14): gp, gp-matern12, gp-matern32, gp-matern52-ard, WRITTEN, NOT COMPILED, NOT MEASURED
+## Workstream E, the gp host lane (2026-09-14): gp, gp-matern12, gp-matern32, gp-matern52-ard, IDENTICAL x4, GATE GREEN, MERGED
+
+STATUS (2026-09-14 evening): the first compile and the first four-column diff
+ran on the seven-runner CPU identity gate at bafab59ef, run 34895158657, green on
+all seven runners against the 136-lane GPU columns. On the x86 draw a runner each
+of the four lanes reads IDENTICAL x4 on all nine training and nine infer cells
+(model N/A), and the sabotage host build reads DIVERGENT on all nine training and
+nine infer cells of each (`diff_four_columns.txt` and `diff_four_columns_sab.txt`
+in the run's `cpu-identity-gate-x86-a` artifact). Merged to main in 907255478.
+The text below is the section as written before that run.
 
 Branch `lane/cpu-training-gp`, off `origin/fix/d-merge-regressions` at
 57465b6b3. Nothing in this section is a bit result. No build, simulation or
