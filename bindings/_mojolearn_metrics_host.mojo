@@ -31,15 +31,19 @@ THE SPECTRAL CLUSTERING ENTRY (the spectral lane, same batch):
 `params` list, over `spectral/host/spectral_oracle.mojo` (the host oracle
 the device arm is gated against, moved there from spectral/checks/, plus
 the k-NN graph, the symmetrize kernel and the k-means recluster restated
-on the host); `python/mojolearn/_spectral_impl.py` runs unchanged.
+on the host); `python/mojolearn/_spectral_impl.py` runs unchanged. The
+spectral-precomputed lane (2026-09-14) adds `spectral_fit_predict_graph`,
+the GPU binding's precomputed affinity entry under its name and eight-value
+`params` list, over `host_spectral_fit_predict_coo` (the same oracle, the
+graph given as COO triples); the dense affinity's COO scan it needs,
+`nonzero_f64_count` and `nonzero_f64_fill`, is in the core host binding.
 
 The GPU binding's OTHER entries (`rand_score`, `roc_auc_score`,
 `precision_recall_curve`, `log_loss`, `confusion_matrix`,
 `precision_recall_fscore`, the three regression errors, `kl_divergence`,
-`trustworthiness`, `spectral_fit_predict_graph`, the UMAP entries and
-`graph_parallel_available`) are deliberately ABSENT here, so every lane
-that reaches them keeps refusing BY NAME through `_HostBinding` until a
-lane lands them.
+`trustworthiness`, the UMAP entries and `graph_parallel_available`) are
+deliberately ABSENT here, so every lane that reaches them keeps refusing BY
+NAME through `_HostBinding` until a lane lands them.
 """
 from std.os import abort
 from std.python import Python, PythonObject
@@ -52,6 +56,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from bindings.hostptr import i32_ptr
 from spectral.host.spectral_oracle import (
     SPECTRAL_ORACLE_HOST_SABOTAGE,
+    host_spectral_fit_predict_coo,
     host_spectral_fit_predict_dataset,
 )
 from metrics.host.metrics_oracle import (
@@ -391,7 +396,7 @@ def silhouette_binding(
 
 
 # ===========================================================================
-# Group E: spectral clustering on a dataset.
+# Group E: spectral clustering on a dataset and on a precomputed graph.
 # ===========================================================================
 
 
@@ -459,6 +464,52 @@ def spectral_fit_predict_dataset_binding(
     return PythonObject(n_out)
 
 
+def spectral_fit_predict_graph_binding(
+    rows_addr: PythonObject,
+    cols_addr: PythonObject,
+    vals_addr: PythonObject,
+    labels_addr: PythonObject,
+    embedding_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`fit_predict` on a PRECOMPUTED connectivity graph on the host, given
+    as COO triples (cuML `affinity='precomputed'`), the GPU binding's
+    `spectral_fit_predict_graph` (`bindings/_mojolearn_metrics.mojo`). No
+    k-NN runs, so `n_neighbors` is carried and read by nobody on this path.
+    Writes `n_samples` int32 labels and the `n_samples x n_out` row-major
+    embedding; returns `n_out`. `params`: `0 n_samples, 1 nnz (length of
+    rows, cols and vals), 2 n_clusters, 3 n_components, 4 n_init, 5
+    n_neighbors (carried, unused), 6 eigen_tol (float), 7 seed`."""
+    _want(String("spectral_fit_predict_graph"), params, 8)
+    var n_samples = _index(params[0])
+    var nnz = _index(params[1])
+    var n_clusters = _index(params[2])
+    var n_components = _index(params[3])
+    var n_init = _index(params[4])
+    var n_neighbors = _index(params[5])
+    var eigen_tol = Float32(Float64(py=params[6]))
+    var seed = UInt64(_index(params[7]))
+    var rows = read_i32(_index(rows_addr), max(0, nnz))
+    var cols = read_i32(_index(cols_addr), max(0, nnz))
+    var vals = read_f32(_index(vals_addr), max(0, nnz))
+    var lp = i32_ptr(_index(labels_addr))
+    var ep = f32_ptr(_index(embedding_addr))
+    var labels = List[Int32]()
+    var embedding = List[Float32]()
+    var n_out = 0
+    with GILReleased(Python()):
+        n_out = host_spectral_fit_predict_coo(
+            rows, cols, vals, n_samples, n_clusters, n_components, n_init,
+            n_neighbors, eigen_tol, seed, labels, embedding,
+        )
+        _guard_spectral_outputs(labels, embedding, n_samples, n_components)
+        for i in range(n_samples):
+            lp.unsafe_store(i, labels[i])
+        for i in range(len(embedding)):
+            ep.unsafe_store(i, embedding[i])
+    return PythonObject(n_out)
+
+
 @export
 def PyInit__mojolearn_metrics_host() abi("C") -> PythonObject:
     try:
@@ -479,6 +530,7 @@ def PyInit__mojolearn_metrics_host() abi("C") -> PythonObject:
         module.def_function[r2_score_binding]("r2_score")
         module.def_function[silhouette_binding]("silhouette")
         module.def_function[spectral_fit_predict_dataset_binding]("spectral_fit_predict_dataset")
+        module.def_function[spectral_fit_predict_graph_binding]("spectral_fit_predict_graph")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_metrics_host: ", error))
