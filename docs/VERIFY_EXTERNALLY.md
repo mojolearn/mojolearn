@@ -74,6 +74,16 @@ MOJOLEARN_NUMERIC_MODE=identical python3 tools/identity_break.py --vendor <box-l
 python3 tools/identity_break.py --diff bench/results/identity_break/<record>/*.json mybox.json
 ```
 
+The record and the wheel must come from the same commit. The script checks
+the harness out at the record's commit so the lanes are the record's; a wheel
+built from an older commit can refuse a lane the newer harness calls, which
+reads REFUSED and fails the verdict. That is a real mismatch and the script
+has no switch to hide it; it warns when the record's commit is not the wheel's
+release tag. The two outsider runs on 2026-09-14 (`bench/results/verify_external/`)
+show exactly this against the 0.8.5 wheel: six radius cells refused. From 0.8.6
+the wheel ships the columns of a record taken at its own commit, so the recipe
+is one command with no skew.
+
 Reading a failure. `DIVERGENT` names a lane and fixture whose hash differs
 between boxes: that is a finding, keep the JSON and open an issue with it and
 `python -m mojolearn env`. `MOVED` means your box disagreed with itself across
