@@ -1274,7 +1274,15 @@ class RadiusNeighbors(NumericModeMixin):
         )
         cols = empty((nnz,), "<i4")
         dists = empty((nnz,), "<f4")
-        got = self._bind("_mojolearn").radius_neighbors_fill(
+        # NO NEIGHBOUR IN THE WHOLE CALL (2026-09-14 night, found by the
+        # batch part of tools/identity_break.py): a zero-length `cols` has no
+        # address, and the fill binding refused it with "null int32 buffer
+        # address", so a query row with no neighbour raised when asked ALONE
+        # and answered an empty row inside a larger batch (base fixture,
+        # held-out rows 1 and 7 of the radius lane). The counting pass has
+        # already written every indptr entry (all zero), so there is nothing
+        # to fill.
+        got = 0 if nnz == 0 else self._bind("_mojolearn").radius_neighbors_fill(
             addr_ro(idx, name="idx"), addr_ro(q, name="q"), addr(indptr, name="indptr"), addr(cols, name="cols"),
             addr(dists, name="dists"),
             # n_index, n_queries, n_features, radius, nnz_capacity,

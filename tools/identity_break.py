@@ -102,8 +102,14 @@ disagreeing with itself and a DIVERGENT column is two vendors disagreeing.
             The n/a reasons are transductive and no-predict as for infer, function
             (metrics, resampling, cross-validation), no-batch-axis
             (tokenizer), optimizer-step and training-step (the batch IS the
-            arithmetic of a step) and no-model (a trainer lane that returns
-            no estimator). Cost is bounded: at most 1 + 16 + 3 extra calls per
+            arithmetic of a step), no-model (a trainer lane that returns
+            no estimator) and batch-dependent-by-contract (UMAP.transform,
+            whose module says query batching may change results). A method
+            that refuses a batch of one BY NAME (the coordinate descent
+            predict, mirroring cuML's cdPredict) is held to that refusal and
+            its rows are asked in the smallest admitted batch instead
+            (`_BatchRows` min_batch). `summary (infer/model):` and
+            `summary (batch):` are separate lines of `--diff`. Cost is bounded: at most 1 + 16 + 3 extra calls per
             row call and 4 per length call, per cell per repeat; the
             declarations sit outside the lane bodies (`BATCH`), so no train,
             infer or model hash moves. IT TESTS the host call path's batch
@@ -120,12 +126,14 @@ disagreeing with itself and a DIVERGENT column is two vendors disagreeing.
             whole-batch answer (one ulp) and stamps `batch_sabotage: true`
             in the JSON.
 
-THE LANES, 151 (2026-09-14; 46 on 2026-09-13, pca-whiten the same night, 71
+THE LANES, 166 (2026-09-14; 46 on 2026-09-13, pca-whiten the same night, 71
 on 2026-09-14 from the claim-surface census, logistic-multiclass and
 tokenizer the same day when those two got their doors, 16 `par-*` lanes that
 evening for the ordered multi-GPU drivers run on ONE device, and 15 lanes for
 the doors workstream D opened: Cholesky, the kernel methods, the Gaussian
-mixture, HDBSCAN, resampling, the training primitives and the KMeans arms). One per public estimator
+mixture, HDBSCAN, resampling, the training primitives and the KMeans arms,
+then 15 more `par-*` lanes that night for the multi-GPU drivers the first 16
+missed). One per public estimator
 plus linalg and metrics, then one per public constructor VALUE that selects
 a different numeric path and no earlier lane pins (a kernel, an objective, a
 sampler, a solver, a metric, a reduction).
@@ -169,6 +177,12 @@ sampler, a solver, a metric, a reduction).
       par-forest par-forest-et par-boosting par-kmeans par-gram par-logistic
                par-cd par-svm par-gp par-dbscan par-scaler par-arima par-mlp
                par-samba par-byte-lm par-iforest (last, with iforest)
+    2026-09-14 night (the drivers no lane reached; devices=_par_devices())
+      par-queries-knn par-queries-radius par-queries-kde par-reference-knn
+               par-reference-knn-reg par-graph-agglomerative par-graph-spectral
+               par-graph-umap par-ordered-rmse par-feature-freq
+               par-boosting-pointwise par-holtwinters par-byte-lm-model-pool
+               par-byte-lm-offload par-samba-clip
 
 The 18 lanes added on 2026-09-13 (svr through samba above) are fed the SAME
 fixture bytes in the shape their estimator wants; the derivation rules are
@@ -2089,7 +2103,14 @@ def _(ml, X, yc, yr, Xh=None):
     std), the segmented sort (quantile), the paired two-column statistics
     (pearson, diff_means), the percentile and basic intervals and the
     standard error. Every distribution and every scalar is hashed; the
-    r_first slice equality is asserted, as the surface promises it."""
+    r_first slice equality is asserted, as the surface promises it.
+
+    The two SORTED statistics (quantile, trimmed_mean) take 1024
+    replicates, 1024 * 4096 = RESAMPLE_MAX_SORT_CELLS (1 << 22,
+    resample/checks/statistics.mojo), the largest run the sort path admits;
+    at 2048 the lane read REFUSED by name on the M4 on every fixture
+    (2026-09-14 night), and the limit is a comptime constant, so it
+    refused on every vendor and the lane had no cell anywhere."""
     rs = ml.resample
     x = np.ascontiguousarray(yr[:4096])
     two = np.ascontiguousarray(np.stack([yr[:4096], X[:4096, 3]], 1).astype(np.float32))
@@ -2100,7 +2121,8 @@ def _(ml, X, yc, yr, Xh=None):
                      ("trimmed", dict(data=x, statistic="trimmed_mean", q_or_prop=0.1, alternative="greater")),
                      ("pearson", dict(data=two, statistic="pearson")),
                      ("diff", dict(data=two, statistic="diff_means", method="basic"))):
-        b = rs.bootstrap(n_resamples=2048, random_state=3, **kw)
+        n_resamples = 1024 if kw["statistic"] in ("quantile", "trimmed_mean") else 2048
+        b = rs.bootstrap(n_resamples=n_resamples, random_state=3, **kw)
         parts[name] = _h(b.distribution, b.sorted_distribution,
                          np.asarray([b.point_estimate, b.standard_error, b.confidence_interval[0], b.confidence_interval[1]], dtype=np.float64),
                          np.asarray([b.order_low, b.order_high], dtype=np.int64))
@@ -2114,14 +2136,18 @@ def _(ml, X, yc, yr, Xh=None):
 @lane("permutation-test")
 def _(ml, X, yc, yr, Xh=None):
     """resample.permutation_test between the fixture's two label groups
-    of yr (the first 2048 rows of each), 2048 permutations, three
+    of yr (the first 512 rows of each), 2048 permutations, three
     alternatives: the pooled Philox permutation map, the between-group
-    fold and the conservative p-value (DEVIATION 1702)."""
+    fold and the conservative p-value (DEVIATION 1702). The pooled sample
+    is at most 1024 = PERM_MAX_POOLED (resample/checks/index_map.mojo, a
+    comptime limit, refused by name above it); with 2048 per group the
+    lane read REFUSED on the M4 on every fixture (2026-09-14 night) and so
+    on every vendor."""
     rs = ml.resample
-    a = np.ascontiguousarray(yr[:4096][yc[:4096] == 0][:2048])
-    b = np.ascontiguousarray(yr[:4096][yc[:4096] == 1][:2048])
+    a = np.ascontiguousarray(yr[:4096][yc[:4096] == 0][:512])
+    b = np.ascontiguousarray(yr[:4096][yc[:4096] == 1][:512])
     if a.size < 8 or b.size < 8:
-        a, b = np.ascontiguousarray(yr[:2048]), np.ascontiguousarray(yr[2048:4096])
+        a, b = np.ascontiguousarray(yr[:512]), np.ascontiguousarray(yr[512:1024])
     parts = {}
     for alt in ("two-sided", "less", "greater"):
         p = rs.permutation_test(a, b, statistic="diff_means", n_resamples=2048, random_state=3, alternative=alt)
@@ -2441,6 +2467,334 @@ def _(ml, X, yc, yr, Xh=None):
                      m=_h(np.asarray(state["m"]))))
 
 
+# ---------------------------------------------------------------- lanes (2026-09-14 night, the multi-GPU drivers the par-* lanes above missed)
+# A repo-wide grep of this file on main e22374acd found no lane for the query
+# drivers (parallel_neighbors.ParallelQueries,
+# parallel_neighbors_reference.ReferenceShardedNeighbors), the graph drivers
+# (parallel_graph.fit_graph, transform_umap), the ordered and two-level GBDT
+# drivers and the pointwise searcher under fit_boosting,
+# fit_exponential_smoothing, the layer-owned and host-offloaded byte-LM
+# trainers, or the pooled clipping path of ParallelNeuralTrainer (reached
+# only with a clip). Same rules as the lanes above: devices=_par_devices(),
+# the smallest sharding that splits the work, and `_same_bytes` against the
+# plain fit or the replica trainer wherever the driver's contract is
+# equality. The pooled neural gradient buffers and the resident isolation
+# forest model pool ride inside par-mlp, par-samba and par-iforest; those
+# lanes' code paths are the pooled ones since the drivers changed.
+
+#: query rows per ParallelQueries shard: 64 query rows are four shards
+PAR_QUERY_ROWS = 16
+
+
+def _pq(e, R, method, **kw):
+    """One ParallelQueries call on a fitted estimator, the pool opened and
+    closed around it."""
+    from mojolearn.parallel_neighbors import ParallelQueries
+    with ParallelQueries(e, devices=_par_devices(), rows_per_shard=PAR_QUERY_ROWS) as pq:
+        return pq.query(np.ascontiguousarray(R), method=method, **kw)
+
+
+@lane("par-queries-knn")
+def _(ml, X, yc, yr, Xh=None):
+    """ParallelQueries over the knn-clf lane's KNeighborsClassifier, 64 query
+    rows in shards of 16: kneighbors, predict and predict_proba, each held to
+    the plain call."""
+    from mojolearn.parallel_neighbors import ParallelQueries
+    m = ml.KNeighborsClassifier(n_neighbors=8).fit(X[:4096], yc[:4096])
+    q = np.ascontiguousarray(X[4096:4160])
+    with ParallelQueries(m, devices=_par_devices(), rows_per_shard=PAR_QUERY_ROWS) as pq:
+        d, i = pq.query(q, method="kneighbors")
+        pr = pq.query(q, method="predict")
+        pp = pq.query(q, method="predict_proba")
+    d0, i0 = m.kneighbors(q)
+    _same_bytes("ParallelQueries kneighbors distances", d, "plain distances", d0)
+    _same_bytes("ParallelQueries kneighbors indices", i, "plain indices", i0)
+    _same_bytes("ParallelQueries predict", pr, "plain predict", m.predict(q))
+    _same_bytes("ParallelQueries predict_proba", pp, "plain predict_proba", m.predict_proba(q))
+    return _fit(dict(dist=_h(d), idx=_h(i), predict=_h(pr), proba=_h(pp)),
+                m, lambda e: (_pq(e, Xh[:64], "predict"), _pq(e, Xh[:64], "predict_proba")))
+
+
+@lane("par-queries-radius")
+def _(ml, X, yc, yr, Xh=None):
+    """ParallelQueries over the radius lane's RadiusNeighbors, ragged rows
+    joined in input order, held to the plain call."""
+    index, q = X[:4096], np.ascontiguousarray(X[4096:4160])
+    r = _radius_for(index, q)
+    m = ml.RadiusNeighbors(radius=r).fit(index)
+    par = _ragged(_pq(m, q, "radius_neighbors", sort_results=True))
+    plain = _ragged(m.radius_neighbors(q, sort_results=True))
+    for k, name in enumerate(("counts", "distances", "indices")):
+        _same_bytes(f"ParallelQueries radius_neighbors {name}", par[k], f"plain {name}", plain[k])
+    lens, dd, ii = par
+    return _fit(dict(radius=_h(np.float32(r)), counts=_h(lens), dist=_h(dd), idx=_h(ii)),
+                m, lambda e: _ragged(_pq(e, Xh[:64], "radius_neighbors", sort_results=True)))
+
+
+@lane("par-queries-kde")
+def _(ml, X, yc, yr, Xh=None):
+    """ParallelQueries over the kde lane's KernelDensity, 256 query rows in
+    shards of 16, held to the plain score_samples."""
+    m = ml.KernelDensity(bandwidth=0.7).fit(X[:4096, :4])
+    q = np.ascontiguousarray(X[4096:4352, :4])
+    s = _pq(m, q, "score_samples")
+    _same_bytes("ParallelQueries score_samples", s, "plain score_samples", m.score_samples(q))
+    return _fit(dict(scores=_h(s)), m, lambda e: (_pq(e, Xh[:256, :4], "score_samples"),))
+
+
+#: reference rows per ReferenceShardedNeighbors shard: the 4096-row index is four shards
+PAR_REFERENCE_ROWS = 1024
+
+
+def _rsn(e):
+    from mojolearn.parallel_neighbors_reference import ReferenceShardedNeighbors
+    return ReferenceShardedNeighbors(e, devices=_par_devices(), reference_rows_per_shard=PAR_REFERENCE_ROWS,
+                                     query_rows_per_shard=PAR_QUERY_ROWS)
+
+
+@lane("par-reference-knn")
+def _(ml, X, yc, yr, Xh=None):
+    """ReferenceShardedNeighbors over the knn-clf lane's classifier: the
+    4096-row reference in four shards of 1024, 64 query rows in shards of
+    16, the merged distance-bit keys and the original vote half, held to the
+    plain kneighbors, predict and predict_proba."""
+    m = ml.KNeighborsClassifier(n_neighbors=8).fit(X[:4096], yc[:4096])
+    q = np.ascontiguousarray(X[4096:4160])
+    with _rsn(m) as rs:
+        d, i = rs.kneighbors(q)
+        pr, pp = rs.predict(q), rs.predict_proba(q)
+    d0, i0 = m.kneighbors(q)
+    _same_bytes("ReferenceShardedNeighbors distances", d, "plain distances", d0)
+    _same_bytes("ReferenceShardedNeighbors indices", i, "plain indices", i0)
+    _same_bytes("ReferenceShardedNeighbors predict", pr, "plain predict", m.predict(q))
+    _same_bytes("ReferenceShardedNeighbors predict_proba", pp, "plain predict_proba", m.predict_proba(q))
+
+    def probe(e):
+        with _rsn(e) as rs:
+            return rs.predict(Xh[:64]), rs.predict_proba(Xh[:64])
+    return _fit(dict(dist=_h(d), idx=_h(i), predict=_h(pr), proba=_h(pp)), m, probe)
+
+
+@lane("par-reference-knn-reg")
+def _(ml, X, yc, yr, Xh=None):
+    """ReferenceShardedNeighbors over the knn-reg lane's regressor, the
+    merged neighbors' regression vote, held to the plain predict."""
+    m = ml.KNeighborsRegressor(n_neighbors=8).fit(X[:4096], yr[:4096])
+    q = np.ascontiguousarray(X[4096:4160])
+    with _rsn(m) as rs:
+        pr = rs.predict(q)
+    _same_bytes("ReferenceShardedNeighbors predict", pr, "plain predict", m.predict(q))
+
+    def probe(e):
+        with _rsn(e) as rs:
+            return (rs.predict(Xh[:64]),)
+    return _fit(dict(predict=_h(pr)), m, probe)
+
+
+@lane("par-graph-agglomerative")
+def _(ml, X, yc, yr, Xh=None):
+    """fit_graph over the agglomerative lane's fit, held to the plain labels
+    and merge tree."""
+    from mojolearn.parallel_graph import fit_graph
+    A = np.ascontiguousarray(X[:2000, :4])
+    par = fit_graph(ml.AgglomerativeClustering(n_clusters=4), A, devices=_par_devices())
+    plain = ml.AgglomerativeClustering(n_clusters=4).fit(A)
+    _same_bytes("fit_graph labels_", par.labels_, "plain labels_", plain.labels_)
+    _same_bytes("fit_graph children_", par.children_, "plain children_", plain.children_)
+    return _fit(dict(labels=_h(par.labels_), children=_h(par.children_)), par, "n/a:transductive")
+
+
+@lane("par-graph-spectral")
+def _(ml, X, yc, yr, Xh=None):
+    """fit_graph over the spectral lane's fit (the eigensolver on the root,
+    the neighbor rows and the KMeans assignment distributed), held to the
+    plain labels and embedding."""
+    from mojolearn.parallel_graph import fit_graph
+    A = np.ascontiguousarray(X[:2000, :4])
+    par = fit_graph(ml.SpectralClustering(n_clusters=4, random_state=3), A, devices=_par_devices())
+    plain = ml.SpectralClustering(n_clusters=4, random_state=3).fit(A)
+    _same_bytes("fit_graph labels_", par.labels_, "plain labels_", plain.labels_)
+    _same_bytes("fit_graph embedding_", par.embedding_, "plain embedding_", plain.embedding_)
+    return _fit(dict(labels=_h(par.labels_), embedding=_h(par.embedding_)), par, "n/a:transductive")
+
+
+@lane("par-graph-umap")
+def _(ml, X, yc, yr, Xh=None):
+    """fit_graph and transform_umap over the umap lane's fit, held to the
+    plain embedding and the plain transform of 64 further rows."""
+    from mojolearn.parallel_graph import fit_graph, transform_umap
+    kw = dict(n_neighbors=8, n_components=2, n_epochs=8, random_state=3)
+    A = np.ascontiguousarray(X[:1024, :8])
+    par = fit_graph(ml.UMAP(**kw), A, devices=_par_devices())
+    plain = ml.UMAP(**kw).fit(A)
+    _same_bytes("fit_graph embedding_", par.embedding_, "plain embedding_", plain.embedding_)
+    q = np.ascontiguousarray(X[1024:1088, :8])
+    t = transform_umap(par, q, devices=_par_devices())
+    _same_bytes("transform_umap", t, "plain transform", plain.transform(q))
+    return _fit(dict(embedding=_h(par.embedding_), transform=_h(t)),
+                par, lambda e: (transform_umap(e, np.ascontiguousarray(Xh[:64, :8]), devices=_par_devices()),))
+
+
+@lane("par-ordered-rmse")
+def _(ml, X, yc, yr, Xh=None):
+    """fit_ordered_rmse on the gbdt-ordered-rmse lane's fit and permutation,
+    held to the plain fit."""
+    from mojolearn.parallel_ensemble import fit_ordered_rmse
+    perm = np.argsort(_hashed_uniform(X.shape[0], 1, "ordered-permutation").reshape(-1), kind="stable")
+    par = fit_ordered_rmse(ml.OrderedRMSE(n_estimators=20, max_depth=6), X, yr, permutation=perm,
+                           devices=_par_devices())
+    plain = ml.OrderedRMSE(n_estimators=20, max_depth=6).fit(X, yr, permutation=perm)
+    p = par.predict(X)
+    _same_bytes("fit_ordered_rmse predict", p, "plain predict", plain.predict(X))
+    return _fit(dict(predict=_h(p)), par, lambda e: (e.predict(Xh),))
+
+
+@lane("par-feature-freq")
+def _(ml, X, yc, yr, Xh=None):
+    """fit_feature_freq on the gbdt-feature-freq lane's fit, held to the plain fit."""
+    from mojolearn.parallel_ensemble import fit_feature_freq
+    Xc = _coded(X)
+    par = fit_feature_freq(ml.ExperimentalTwoLevelFeatureFreq(sources=[0, 1], random_state=7), Xc, yr,
+                           devices=_par_devices())
+    plain = ml.ExperimentalTwoLevelFeatureFreq(sources=[0, 1], random_state=7).fit(Xc, yr)
+    p = par.predict(Xc)
+    _same_bytes("fit_feature_freq predict", p, "plain predict", plain.predict(Xc))
+    return _fit(dict(predict=_h(p)), par, lambda e: (e.predict(_coded(Xh)),))
+
+
+@lane("par-boosting-pointwise")
+def _(ml, X, yc, yr, Xh=None):
+    """fit_boosting with use_pointwise_searcher=True (whole packed feature
+    groups per device, the root gathering the interleaved weight and target
+    pairs), held to the plain pointwise fit."""
+    from mojolearn.parallel_ensemble import fit_boosting
+    kw = dict(n_estimators=20, max_depth=6, loss="Logloss", use_pointwise_searcher=True)
+    par = fit_boosting(ml.GradientBoosting(**kw), X, yc, devices=_par_devices())
+    plain = ml.GradientBoosting(**kw).fit(X, yc)
+    _same_bytes("fit_boosting pointwise predict_proba", par.predict_proba(X[:2048]),
+                "plain predict_proba", plain.predict_proba(X[:2048]))
+    return _fit(dict(predict=_h(par.predict(X)), proba=_h(par.predict_proba(X))),
+                par, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
+
+
+def _hw_series(X):
+    """Four positive series of 512 observations, one per ROW (the
+    `(ts_num, n)` layout), from the fixture's first four columns by the
+    holtwinters lane's rule applied per series."""
+    S = np.cumsum(X[:512, :4], axis=0).T.astype(np.float32) + np.float32(50.0)
+    return np.ascontiguousarray((S - S.min(axis=1, keepdims=True) + np.float32(1.0)).astype(np.float32))
+
+
+@lane("par-holtwinters")
+def _(ml, X, yc, yr, Xh=None):
+    """fit_exponential_smoothing, four series in shards of two, held to the
+    plain four-series fit on every fitted array and the forecast."""
+    from mojolearn.parallel_classical import fit_exponential_smoothing
+    S = _hw_series(X)
+    kw = dict(seasonal="additive", seasonal_periods=12, ts_num=4)
+    par = fit_exponential_smoothing(ml.ExponentialSmoothing(S, **kw), devices=_par_devices(), series_per_shard=2)
+    plain = ml.ExponentialSmoothing(S, **kw).fit()
+    names = ("level_", "trend_", "season_", "sse_", "alpha_", "beta_", "gamma_", "n_iter_", "criterion_")
+    for name in names:
+        _same_bytes(f"fit_exponential_smoothing {name}", getattr(par, name), f"plain {name}", getattr(plain, name))
+    f = par.forecast(24)
+    _same_bytes("fit_exponential_smoothing forecast(24)", f, "plain forecast(24)", plain.forecast(24))
+    return _fit(dict(**{n.strip("_"): _h(getattr(par, n)) for n in names}, forecast=_h(f)),
+                par, lambda e: (e.forecast(FORECAST_HORIZON),))
+
+
+def _byte_lm_seed(ml):
+    shape = ml.ByteLanguageModelConfig()
+    named, _ = _byte_lm_params(shape)
+    seed = ml.SmallByteLanguageModelTrainer(named, data_schedule={"dataset": "identity_break", "order": "sequential"},
+                                            shape=shape)
+    return shape, seed.state_dict()
+
+
+def _same_state(name_a, a, name_b, b):
+    for key in ("parameters", "m", "v", "flags"):
+        _same_bytes(f"{name_a} {key}", np.asarray(a[key]), f"{name_b} {key}", np.asarray(b[key]))
+
+
+def _byte_lm_replay(trainer, reference, ids):
+    """Three steps of two logical shards on both trainers from the same
+    state, losses held equal step by step; returns (losses, state, grads)."""
+    losses = []
+    for step in range(3):
+        shards = [ids[4 * step: 4 * step + 2], ids[4 * step + 2: 4 * step + 4]]
+        a, b = trainer.train_step(shards), reference.train_step(shards)
+        _same_bytes(f"step {step} losses", np.asarray(a["losses"], dtype=np.float32),
+                    "replica trainer losses", np.asarray(b["losses"], dtype=np.float32))
+        losses.append([np.float64(v) for v in a["losses"]])
+    state, ref = trainer.state_dict(), reference.state_dict()
+    _same_state("trainer", state, "replica trainer", ref)
+    grads = trainer.export_gradients()
+    _same_bytes("export_gradients", grads, "replica trainer export_gradients", reference.export_gradients())
+    return losses, state, grads
+
+
+@lane("par-byte-lm-model-pool")
+def _(ml, X, yc, yr, Xh=None):
+    """PooledByteLanguageModelTrainer (decoder layers owned by devices, the
+    embedding and head on the first) from the byte-lm lane's starting
+    state, two logical shards, three steps, held to the replicated
+    ParallelByteLanguageModelTrainer (pool_optimizer=False) on the first
+    device: losses, parameters, moments, flags and gradients, the
+    comparison tools/byte_lm_model_pool_check.py makes."""
+    from mojolearn.model_pool_training import PooledByteLanguageModelTrainer
+    from mojolearn.parallel_training import ParallelByteLanguageModelTrainer
+    shape, state0 = _byte_lm_seed(ml)
+    ids = _ids(X, 6 * shape.batch, shape.length + 1)
+    with PooledByteLanguageModelTrainer(state0, devices=_par_devices(), logical_shards=2) as tr, \
+         ParallelByteLanguageModelTrainer(state0, devices=_par_devices()[:1], logical_shards=2,
+                                          pool_optimizer=False) as ref:
+        losses, state, grads = _byte_lm_replay(tr, ref, ids)
+    return _fit(dict(loss=_h(np.asarray(losses)), params=_h(np.asarray(state["parameters"])),
+                     m=_h(np.asarray(state["m"])), v=_h(np.asarray(state["v"])), grads=_h(np.asarray(grads))))
+
+
+@lane("par-byte-lm-offload")
+def _(ml, X, yc, yr, Xh=None):
+    """OffloadedByteLanguageModelTrainer, which admits exactly one device
+    (the first of _par_devices(), so a two-device column runs it on one),
+    held to the replicated ParallelByteLanguageModelTrainer the same way,
+    the comparison tools/byte_lm_offload_check.py makes."""
+    from mojolearn.offload_training import OffloadedByteLanguageModelTrainer
+    from mojolearn.parallel_training import ParallelByteLanguageModelTrainer
+    shape, state0 = _byte_lm_seed(ml)
+    ids = _ids(X, 6 * shape.batch, shape.length + 1)
+    with OffloadedByteLanguageModelTrainer(state0, devices=_par_devices()[:1], logical_shards=2) as tr, \
+         ParallelByteLanguageModelTrainer(state0, devices=_par_devices()[:1], logical_shards=2,
+                                          pool_optimizer=False) as ref:
+        losses, state, grads = _byte_lm_replay(tr, ref, ids)
+    return _fit(dict(loss=_h(np.asarray(losses)), params=_h(np.asarray(state["parameters"])),
+                     m=_h(np.asarray(state["m"])), v=_h(np.asarray(state["v"])), grads=_h(np.asarray(grads))))
+
+
+@lane("par-samba-clip")
+def _(ml, X, yc, yr, Xh=None):
+    """ParallelNeuralTrainer over the par-samba lane's stack with a global
+    norm clip (max_norm=0.5), the only way into the pooled clipping tensors
+    (whole tensors on owners, the cross-tensor norm on the first device);
+    two logical shards of (2, 17) windows, two steps."""
+    from mojolearn.parallel_training import ParallelNeuralTrainer
+    cfg = ml.SambaConfig(vocab=256, d_model=32, layers=("mamba3", "attention"), n_heads=2, intermediate=64)
+    m = ml.SambaStack(cfg, generator=ml.training.Generator(1), lr=1e-3, max_norm=0.5)
+    ids = _ids(X, 8, 17)
+    with ParallelNeuralTrainer(m, devices=_par_devices(), logical_shards=2) as tr:
+        losses = []
+        for step in range(2):
+            res = tr.train_step([(ids[4 * step + 2 * k: 4 * step + 2 * k + 2, :-1], ids[4 * step + 2 * k: 4 * step + 2 * k + 2, 1:])
+                                 for k in range(2)])
+            losses.append([np.float64(v) for v in res["losses"]])
+        grads = tr.export_gradients()
+    params = m.parameters()
+    return _fit(dict(loss=_h(np.asarray(losses)), logits=_h(np.asarray(m.forward(ids[:2, :-1]))),
+                     grads=_h(*[np.asarray(g) for g in grads]),
+                     params=_h(*[np.asarray(params[k]) for k in sorted(params)])),
+                m, lambda e: (np.asarray(e.forward(_ids(Xh, 2, 16))),))
+
+
 
 # LAST ON PURPOSE (2026-08-29): on a RunPod RTX 4090 the isolation forest
 # binding hung at its first fit in every tier (a second DeviceContext beside
@@ -2519,10 +2873,26 @@ class _BatchRows:
     """One row-wise inference call. `R` is the held-out input whose axis 0
     is the batch; `fn(R[a:b])` returns a tuple of outputs whose axis 0 (or
     _PerRow index) is the same rows. The harness evaluates the whole batch,
-    each of the first `BATCH_ALONE` rows alone, and the split 1, 7, rest."""
+    each of the first `BATCH_ALONE` rows alone, and the split 1, 7, rest.
 
-    def __init__(self, label, R, fn):
+    `min_batch` and `refusal` declare a method that REFUSES a smaller batch
+    BY NAME. The coordinate descent predict mirrors cuML's `cdPredict`
+    (`cd.cuh:341`, `ASSERT(n_rows > 1, "Parameter n_rows: number of rows
+    cannot be less than two")`, restated in solver/impl/cd.mojo::cd_predict
+    and bindings/_mojolearn_solver_host.mojo), so a row cannot be asked
+    alone; until 2026-09-14 evening the part asked anyway and lasso and
+    elasticnet read REFUSED on every fixture. With min_batch = m the harness
+    first holds the call to its refusal (a batch of m - 1 must raise with
+    `refusal` in the message, or the part reads REFUSED saying the refusal
+    was lifted), then asks each of the first `BATCH_ALONE` rows inside the
+    smallest admitted window, m rows starting at it, and splits into chunks
+    of at least m rows. min_batch = 1 is the protocol above, byte for byte."""
+
+    def __init__(self, label, R, fn, min_batch=1, refusal=None):
         self.label, self.R, self.fn = label, np.ascontiguousarray(R), fn
+        if min_batch < 1 or (min_batch > 1 and not refusal):
+            raise ValueError(f"{label}: min_batch {min_batch} needs the refusal sentence it mirrors")
+        self.min_batch, self.refusal = int(min_batch), refusal
 
 
 class _BatchPrefix:
@@ -2598,17 +2968,45 @@ def _sabotage_rows(rows):
                 return
 
 
+def _split_bounds(n, min_batch=1):
+    """[0, 1, 8, n] for min_batch 1 (the protocol since the part began);
+    every chunk at least min_batch rows otherwise ([0, 2, 8, n] at 2)."""
+    bounds = [0]
+    for b in BATCH_SPLIT:
+        b = max(b, bounds[-1] + min_batch)
+        if b <= n - min_batch:
+            bounds.append(b)
+    return bounds + [n]
+
+
 def _eval_batch_rows(call, alone, sabotage, digest):
-    n = call.R.shape[0]
+    n, mb = call.R.shape[0], call.min_batch
+    if n < mb:
+        raise ValueError(f"{call.label}: {n} rows is below the declared min_batch {mb}")
+    if mb > 1:
+        # the declared refusal is part of the claim: a smaller batch must
+        # still refuse with the mirrored sentence
+        try:
+            call.fn(np.ascontiguousarray(call.R[:mb - 1]))
+        except Exception as exc:
+            if call.refusal not in str(exc):
+                raise RuntimeError(f"{call.label}: a batch of {mb - 1} raised something other than the declared "
+                                   f"refusal {call.refusal!r}: {type(exc).__name__}: {exc}") from None
+        else:
+            raise RuntimeError(f"{call.label}: a batch of {mb - 1} no longer refuses ({call.refusal!r} was "
+                               f"declared); the refusal was lifted, so drop min_batch and ask rows alone")
     whole = _as_rows(call.fn(np.ascontiguousarray(call.R)), n, f"{call.label} whole")
     if sabotage:
         _sabotage_rows(whole)
     for i in range(min(alone, n)):
-        one = _as_rows(call.fn(np.ascontiguousarray(call.R[i:i + 1])), 1, f"{call.label} row {i} alone")
-        m = _row_mismatch(whole[i], one[0], "alone")
+        a = min(i, n - mb)
+        one = _as_rows(call.fn(np.ascontiguousarray(call.R[a:a + mb])), mb,
+                       f"{call.label} row {i} alone" if mb == 1 else f"{call.label} rows [{a},{a + mb})")
+        where = "alone" if mb == 1 else f"in a batch of {mb}"
+        m = _row_mismatch(whole[i], one[i - a], where)
         if m:
-            return f"BATCH_MOVED:{call.label}:row {i} of {n} alone:{m}"
-    bounds = [0] + [b for b in BATCH_SPLIT if b < n] + [n]
+            return f"BATCH_MOVED:{call.label}:row {i} of {n} {where}:{m}"
+    bounds = _split_bounds(n, mb)
     got = []
     for a, b in zip(bounds, bounds[1:]):
         got.extend(_as_rows(call.fn(np.ascontiguousarray(call.R[a:b])), b - a, f"{call.label} chunk [{a},{b})"))
@@ -2617,7 +3015,7 @@ def _eval_batch_rows(call, alone, sabotage, digest):
         m = _row_mismatch(whole[i], got[i], split_name)
         if m:
             return f"BATCH_MOVED:{call.label}:row {i} of {n} in {split_name}:{m}"
-    digest.update(f"rows:{call.label}:{n}".encode())
+    digest.update((f"rows:{call.label}:{n}" + (f":min_batch={mb}" if mb > 1 else "")).encode())
     for r in whole:
         for dt, shape, b in r:
             digest.update(f"{dt}{shape}".encode())
@@ -2688,6 +3086,10 @@ def _probe_batch(fit, name, ml, Xh, alone, sabotage):
         return digest.hexdigest()[:16], None
     except Exception as exc:
         return None, f"batch: {type(exc).__name__}: {exc}"
+    finally:
+        # drivers a declaration opened for the part (the query drivers)
+        while _BATCH_CLOSE:
+            _BATCH_CLOSE.pop()()
 
 
 def _batch_column_verdict(values):
@@ -2708,10 +3110,10 @@ def _batch_column_verdict(values):
 # shift) is derived ONCE from the whole held-out slice, because a median or a
 # stride recomputed on a chunk would hand the chunk different bytes.
 
-def _rows_calls(*methods, sl=slice(None), prep=None):
+def _rows_calls(*methods, sl=slice(None), prep=None, min_batch=1, refusal=None):
     def spec(ml, e, Xh):
         R = Xh[sl] if prep is None else prep(Xh)[sl]
-        return [_BatchRows(m, R, (lambda m: lambda r: (getattr(e, m)(r),))(m)) for m in methods]
+        return [_BatchRows(m, R, (lambda m: lambda r: (getattr(e, m)(r),))(m), min_batch, refusal) for m in methods]
     return spec
 
 
@@ -2771,9 +3173,13 @@ _batch_decl(_batch_radius, "radius", "radius-manhattan", "radius-chebyshev", "ra
 _batch_decl(_rows_calls("transform", sl=slice(0, 256)), "pca", "pca-whiten", "pca-full-whiten", "tsvd",
             "standard-scaler", "minmax-scaler", "standard-scaler-no-mean", "standard-scaler-no-std",
             "minmax-scaler-clip", "par-scaler", "rbf-sampler")
-_batch_decl(_rows_calls("predict", sl=slice(0, 256)), "ols", "ridge", "lasso", "elasticnet", "ols-no-intercept",
-            "ols-weighted", "ridge-no-intercept", "elasticnet-l2end-no-intercept", "par-gram", "par-cd",
-            "svr", "svr-linear")
+_batch_decl(_rows_calls("predict", sl=slice(0, 256)), "ols", "ridge", "ols-no-intercept",
+            "ols-weighted", "ridge-no-intercept", "par-gram", "svr", "svr-linear")
+# The coordinate descent predict refuses one row BY NAME, mirroring cuML's
+# cdPredict (cd.cuh:341); see _BatchRows. Its rows are asked in windows of two.
+CD_PREDICT_REFUSAL = "Parameter n_rows: number of rows cannot be less than two"
+_batch_decl(_rows_calls("predict", sl=slice(0, 256), min_batch=2, refusal=CD_PREDICT_REFUSAL),
+            "lasso", "elasticnet", "elasticnet-l2end-no-intercept", "par-cd")
 _batch_decl(_rows_calls("predict_proba", sl=slice(0, 256)), "logistic", "logistic-l1", "logistic-elasticnet",
             "logistic-unpenalized-no-intercept", "par-logistic")
 _batch_decl(_rows_calls("predict_proba", "predict", sl=slice(0, 256)), "logistic-multiclass")
@@ -2793,7 +3199,15 @@ def _batch_gp(ml, e, Xh):
 
 
 _batch_decl(_batch_gp, "gp", "gp-matern12", "gp-matern32", "gp-matern52-ard", "par-gp")
-_batch_decl(_rows_calls("transform", sl=(slice(0, 64), slice(0, 8))), "umap")
+# UMAP.transform is batch-dependent BY ITS OWN CONTRACT: umap/transform.mojo's
+# module docstring says "Query batching may change results (global sigma
+# floor, edge weighting and RNG ordinals)", and the part measured it on the
+# M4 (base fixture, 2026-09-14 night: held-out row 0 alone 0xbfb692af against
+# 0xbf99e1c6 in the batch of 64). A BATCH_MOVED there is the documented
+# algorithm, not a defect, so the part records the reason instead of failing
+# every IDENTICAL run; the infer column still hashes the whole-batch transform.
+_batch_decl("n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results)",
+            "umap", "par-graph-umap")
 _batch_decl(_rows_calls("predict", sl=(slice(0, 64), slice(0, 4))), "kernel-ridge")
 _batch_decl(_rows_calls("transform", sl=(slice(0, 64), slice(0, 4))), "nystroem")
 _batch_decl(_rows_calls("score_samples", "predict", "predict_proba", sl=(slice(0, 64), slice(0, 4))), "gmm")
@@ -2937,7 +3351,64 @@ def _batch_samba(ml, e, Xh):
                          axis=1)]
 
 
-_batch_decl(_batch_samba, "samba", "samba-untied-dropout-accum", "par-samba")
+_batch_decl(_batch_samba, "samba", "samba-untied-dropout-accum", "par-samba", "par-samba-clip")
+
+# The 2026-09-14 night par-* lanes. The query drivers ARE inference, so their
+# batch part goes through the driver: one driver is opened per part and
+# reused by every alone, split and whole call (a pool per call would start
+# twenty worker processes per call), then closed by _probe_batch.
+_BATCH_CLOSE = []
+
+
+def _batch_pq(*methods, sl, ragged=False, **kw):
+    def spec(ml, e, Xh):
+        from mojolearn.parallel_neighbors import ParallelQueries
+        pq = ParallelQueries(e, devices=_par_devices(), rows_per_shard=PAR_QUERY_ROWS)
+        _BATCH_CLOSE.append(pq.close)
+        R = Xh[sl]
+        calls = []
+        for meth in methods:
+            if ragged:
+                def fn(r, meth=meth):
+                    dists, idx = pq.query(r, method=meth, **kw)
+                    n = len(idx)
+                    return (_PerRow(np.asarray(dists[i], dtype=np.float32).reshape(-1) for i in range(n)),
+                            _PerRow(np.asarray(idx[i]).reshape(-1).astype(np.int64) for i in range(n)))
+            else:
+                def fn(r, meth=meth):
+                    out = pq.query(r, method=meth, **kw)
+                    return tuple(out) if isinstance(out, tuple) else (out,)
+            calls.append(_BatchRows(f"ParallelQueries {meth}", R, fn))
+        return calls
+    return spec
+
+
+def _batch_rsn(*methods):
+    def spec(ml, e, Xh):
+        rs = _rsn(e)
+        _BATCH_CLOSE.append(rs.close)
+        calls = []
+        for meth in methods:
+            def fn(r, meth=meth):
+                out = getattr(rs, meth)(r)
+                return tuple(out) if isinstance(out, tuple) else (out,)
+            calls.append(_BatchRows(f"ReferenceShardedNeighbors {meth}", Xh[:64], fn))
+        return calls
+    return spec
+
+
+_batch_decl(_batch_pq("kneighbors", "predict", "predict_proba", sl=slice(0, 64)), "par-queries-knn")
+_batch_decl(_batch_pq("radius_neighbors", sl=slice(0, 64), ragged=True, sort_results=True), "par-queries-radius")
+_batch_decl(_batch_pq("score_samples", sl=(slice(0, 256), slice(0, 4))), "par-queries-kde")
+_batch_decl(_batch_rsn("kneighbors", "predict", "predict_proba"), "par-reference-knn")
+_batch_decl(_batch_rsn("predict"), "par-reference-knn-reg")
+_batch_decl("n/a:transductive", "par-graph-agglomerative", "par-graph-spectral")
+_batch_decl(_rows_calls("predict"), "par-ordered-rmse")
+_batch_decl(_rows_calls("predict", prep=_coded), "par-feature-freq")
+_batch_decl(_rows_calls("predict", "predict_proba"), "par-boosting-pointwise")
+_batch_decl(lambda ml, e, Xh: [_BatchPrefix("forecast", FORECAST_HORIZON, lambda h: (e.forecast(h),), axis=0)],
+            "par-holtwinters")
+_batch_decl("n/a:no-model", "par-byte-lm-model-pool", "par-byte-lm-offload")
 
 
 # ---------------------------------------------------------------- run / diff
@@ -3401,17 +3872,25 @@ def diff(paths, require_columns=0, require_lanes=None):
     # (whole batch vs rows alone, a split and prefixes), cell by cell,
     # printed where at least one column carries the key. Cells no column
     # carries are counted as not compared, never as divergent.
-    rows, uncarried, counts2 = [], 0, {}
+    # Two summary lines, `summary (infer/model):` exactly as it read before
+    # the batch part (the CPU gate greps it) and `summary (batch):` beside it;
+    # until 2026-09-14 evening the batch branch merged the two into one
+    # `summary (infer/model/batch):` line, which no committed gate grep matches.
+    rows = []
+    uncarried = {"infer/model": 0, "batch": 0}
+    counts2 = {"infer/model": {}, "batch": {}}
     for k in keys:
         for col in ("infer", "model", "batch"):
+            group = "batch" if col == "batch" else "infer/model"
             carried = any(f"{col}_verdict" in (j["cells"].get(k) or {}) for _, j in cols)
             if not carried:
-                uncarried += 1
+                uncarried[group] += 1
                 continue
             verdict, shown = _diff_column(cols, k, col)
             if verdict in ("MOVED", "DIVERGENT", "RELOAD-MOVED", "BATCH_MOVED"):
                 bad += 1
-            counts2[verdict.split(" ")[0]] = counts2.get(verdict.split(" ")[0], 0) + 1
+            c2 = counts2[group]
+            c2[verdict.split(" ")[0]] = c2.get(verdict.split(" ")[0], 0) + 1
             require(k, col, verdict)
             rows.append((k, col, verdict, shown))
     print()
@@ -3421,11 +3900,13 @@ def diff(paths, require_columns=0, require_lanes=None):
         for k, col, verdict, shown in rows:
             print(f"| {k:<28} | {col:<6} | {verdict:<12} | " + " | ".join(f"{s:<16}" for s in shown) + " |")
         print()
-    if uncarried:
-        counts2["NOT-COMPARED"] = counts2.get("NOT-COMPARED", 0) + uncarried
-        print(f"infer/model/batch: {uncarried} column cells not compared (no JSON here carries them; "
-              f"they predate the columns)")
-    print("summary (infer/model/batch): " + ", ".join(f"{k}={v}" for k, v in sorted(counts2.items())))
+    for group in ("infer/model", "batch"):
+        c2 = counts2[group]
+        if uncarried[group]:
+            c2["NOT-COMPARED"] = c2.get("NOT-COMPARED", 0) + uncarried[group]
+            print(f"{group}: {uncarried[group]} column cells not compared (no JSON here carries them; "
+                  f"they predate the {'batch part' if group == 'batch' else 'columns'})")
+        print(f"summary ({group}): " + ", ".join(f"{k}={v}" for k, v in sorted(c2.items())))
     if require_columns:
         if require_columns > len(cols):
             bad += 1
