@@ -69,8 +69,10 @@ def main():
             for device in (0, 1):
                 assert 0 < sum(row['count'] for row in ownership if row['device'] == device) < shape.n_total
             same(initial, pool.state_dict())
+            loss_history = []
             for step in range(3):
                 a = pool.train_step(batches(step))
+                loss_history.extend(a['losses'])
                 b = replicas.train_step(batches(step))
                 c = replay.train_step(batches(step))
                 assert np.asarray(a['losses'], '<f4').tobytes() == np.asarray(b['losses'], '<f4').tobytes() == np.asarray(c['losses'], '<f4').tobytes()
@@ -128,7 +130,8 @@ def main():
             checkpoint = pool.checkpoint()
             with Pooled.from_checkpoint(checkpoint, devices=(1,0)) as resumed, \
                  Parallel.from_checkpoint(checkpoint, devices=(1,)) as migrated:
-                pool.train_step(batches(3))
+                final_step = pool.train_step(batches(3))
+                loss_history.extend(final_step['losses'])
                 resumed.train_step(batches(3))
                 replay.train_step(batches(3))
                 migrated.train_step(batches(3))
@@ -138,9 +141,11 @@ def main():
             state = pool.state_dict()
             checks.append(dict(layers=layers, logical_shards=args.logical_shards, parameters=shape.n_total, ownership=ownership,
                 state_sha256=hashlib.sha256(b''.join(state[k].tobytes() for k in ('parameters','m','v','flags'))).hexdigest(),
+                gradient_sha256=hashlib.sha256(pool.export_gradients().tobytes()).hexdigest(),
+                loss_sha256=hashlib.sha256(np.asarray(loss_history, '<f4').tobytes()).hexdigest(),
                 native_faults=args.faults))
     args.report.write_text(json.dumps(dict(status='PASS', checks=checks,
-        scope='Two RTX 5090 GPUs: layer-owned model and optimizer state, ordered replay, portable checkpoints and recovery. No throughput or beyond-one-GPU capacity claim.'), indent=2) + '\n')
+        scope='Two GPUs: layer-owned model and optimizer state, ordered replay, portable checkpoints and recovery. No throughput or beyond-one-GPU capacity claim.'), indent=2) + '\n')
     print(args.report.read_text())
 
 
