@@ -184,7 +184,7 @@ sampler, a solver, a metric, a reduction).
                par-boosting-pointwise par-holtwinters par-byte-lm-model-pool
                par-byte-lm-offload par-samba-clip
     2026-09-14 night (drivers added by the multigpu lane; devices=_par_devices())
-      par-forest-pool par-gmm
+      par-forest-pool par-gmm par-resample
 
 The 18 lanes added on 2026-09-13 (svr through samba above) are fed the SAME
 fixture bytes in the shape their estimator wants; the derivation rules are
@@ -2886,6 +2886,40 @@ def _(ml, X, yc, yr, Xh=None):
                                 predict_gaussian_mixture(e, Xh[:64, :4], devices=_par_devices(), method="predict")))
 
 
+@lane("par-resample")
+def _(ml, X, yc, yr, Xh=None):
+    """parallel_classical.bootstrap, permutation_test and
+    monte_carlo_integrate (global replicate, permutation and 256-sample
+    chunk ranges on _par_devices()) on the bootstrap, permutation-test and
+    monte-carlo lanes' inputs, each held to the one-device public function."""
+    from mojolearn import parallel_classical as pc
+    rs = ml.resample
+    dev = _par_devices()
+    x = np.ascontiguousarray(yr[:4096])
+    parts = {}
+    for name, kw in (("mean", dict(statistic="mean", n_resamples=2048)),
+                     ("quantile", dict(statistic="quantile", q_or_prop=0.25, n_resamples=1024, alternative="less"))):
+        b = pc.bootstrap(x, devices=dev, random_state=3, **kw)
+        plain = rs.bootstrap(x, random_state=3, **kw)
+        _same_bytes("parallel bootstrap distribution", b.distribution, "bootstrap distribution", plain.distribution)
+        parts["bootstrap-" + name] = _h(b.distribution, b.sorted_distribution,
+                                        np.asarray([b.point_estimate, b.standard_error, b.confidence_interval[0],
+                                                    b.confidence_interval[1]], dtype=np.float64))
+    a = np.ascontiguousarray(yr[:512])
+    c = np.ascontiguousarray(yr[512:1024])
+    p = pc.permutation_test(a, c, devices=dev, statistic="diff_means", n_resamples=2048, random_state=3)
+    plain = rs.permutation_test(a, c, statistic="diff_means", n_resamples=2048, random_state=3)
+    _same_bytes("parallel permutation null", p.null_distribution, "permutation null", plain.null_distribution)
+    parts["permutation"] = _h(p.null_distribution, np.asarray([p.statistic, p.pvalue], dtype=np.float64),
+                              np.asarray([p.count_less, p.count_greater], dtype=np.int64))
+    lo, hi = [0.0, 0.0], [1.0, 2.0]
+    r = pc.monte_carlo_integrate("product", lo, hi, 65536 + 300, devices=dev, random_state=1)
+    plain = rs.monte_carlo_integrate("product", lo, hi, 65536 + 300, random_state=1)
+    _same_bytes("parallel monte carlo", np.asarray([r.integral, r.mean]), "monte carlo", np.asarray([plain.integral, plain.mean]))
+    parts["monte-carlo"] = _h(np.asarray([r.integral, r.mean, r.volume, r.closed_form], dtype=np.float64))
+    return _fit(parts)
+
+
 # ---------------------------------------------------------------- the batch part (2026-09-14)
 # See the `batch` part in the module docstring. A declaration per lane, kept
 # OUT of the lane bodies so no train, infer or model hash can move because
@@ -3458,6 +3492,7 @@ _batch_decl(lambda ml, e, Xh: [_BatchPrefix("forecast", FORECAST_HORIZON, lambda
 _batch_decl("n/a:no-model", "par-byte-lm-model-pool", "par-byte-lm-offload")
 _batch_decl(_rows_calls("predict", "predict_proba"), "par-forest-pool")
 _batch_decl(_rows_calls("score_samples", "predict", sl=(slice(0, 64), slice(0, 4))), "par-gmm")
+_batch_decl("n/a:function", "par-resample")
 
 
 # ---------------------------------------------------------------- run / diff
