@@ -87,7 +87,7 @@ from checks.numerics import (
 
 
 #: The gate's negative control, the phase 1 host bindings' define
-#: (`gemm/checks/gemm_oracle.mojo:90`, `kde/checks/kde_oracle.mojo:86`), so
+#: (`gemm/host/gemm_oracle.mojo:90`, `kde/host/kde_oracle.mojo:86`), so
 #: one -D MOJOLEARN_HOST_SABOTAGE=1 build sabotages every host arithmetic in
 #: `_mojolearn_estimators_host`. A build with it walks every dot product's
 #: k loop DESCENDING, which is wrong on purpose (a serial float32 fold in
