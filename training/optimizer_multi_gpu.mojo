@@ -127,6 +127,7 @@ def parallel_optimizer_step_host(
                 rebind[MutPointer[Float32, MutUntrackedOrigin]](unused.unsafe_ptr()),
                 len(sp[rank].flags),kind,t,nesterov,lr,beta1,beta2,eps,
                 weight_decay,momentum,dampening,Float32(0))
+            _ = unused^
         except:
             fp[rank] = 1
     sync_parallelize(_update,devices)
@@ -143,6 +144,9 @@ def parallel_optimizer_step_host(
             if flags_out[j] != -1 and flags_out[j] != flag:
                 raise Error("parallel optimizer: inconsistent tensor momentum flag")
             flags_out[j] = flag
+    # Untracked task pointers do not retain their owners. Keep contexts alive
+    # through every join and all completed device-to-host copies.
+    _ = contexts^
     copy_f32(p.unsafe_ptr(),param_ptr,n)
     copy_f32(m.unsafe_ptr(),m_ptr,n)
     copy_f32(v.unsafe_ptr(),v_ptr,n)

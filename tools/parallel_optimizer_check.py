@@ -36,6 +36,7 @@ def main():
         return [p, g, m, v, offsets, flags, np.zeros(3, dtype='<f4')]
 
     def invoke(state, count, params):
+        print('INVOKE', count, params[2], flush=True)
         os.environ['MOJOLEARN_OPTIMIZER_DEVICE_COUNT'] = str(count)
         return binding.optimizer_step(*(int(a.ctypes.data) for a in state), params)
 
@@ -44,6 +45,7 @@ def main():
                 (0, 0., 0., 0), (0, .9, .2, 0), (0, .9, 0., 1),
                 (1, 0., 0., 0), (2, 0., 0., 0)):
             for clip in (0., .01, 100.):
+                print('CASE', sizes, kind, momentum, dampening, nesterov, clip, flush=True)
                 left = initial(sizes)
                 right = [a.copy() for a in left]
                 for step in (1, 2, 7):
@@ -61,6 +63,7 @@ def main():
     refusals = []
     params = [4, 2, 1, 0, .003, .8, .95, 1e-8, .07, 0., 0., .01]
     for slot in range(4):
+        print('REFUSE nonfinite', slot, flush=True)
         state = initial([3, 11, 7, 80])
         state[slot].view('<u4')[-1] = 0x7fc12345
         before = [a.tobytes() for a in state]
@@ -73,6 +76,7 @@ def main():
         assert [a.tobytes() for a in state] == before
         refusals.append('nonfinite_' + str(slot))
     for count in (0, 65, 3):
+        print('REFUSE device count', count, flush=True)
         state = initial([3, 11, 7, 80])
         before = [a.tobytes() for a in state]
         try:
