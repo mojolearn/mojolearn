@@ -2,27 +2,33 @@
 """CPU inference for saved LinearRegression, Ridge, TruncatedSVD,
 LogisticRegression and PCA models (the classical host inference lane,
 2026-09-13; brief docs/lanes/BRIEF_forest_host_inference_2026-09-13.md,
-"Classical lanes").
+"Classical lanes") and, since the knn host inference lane (2026-09-14),
+NearestNeighbors, KNeighborsClassifier and KNeighborsRegressor.
 
 `host_model(path)` loads a file written by one of those classes' `save` and
 returns an instance of a HOST SUBCLASS of the same class: the same Python
-`predict`, `predict_proba`, `decision_function` or `transform` as the GPU
-class, character for character, with ONE difference, `_bind` answers the
-CPU binding `mojolearn/host/_mojolearn_estimators_host.so` instead of the
-GPU set. That binding exports the GPU binding's names under the GPU
-binding's address contracts (`bindings/_mojolearn_estimators_host.mojo`),
-and its arithmetic is `core/classical_host_predict.mojo`, the restatement
-of the pinned gemm/gemv kernel, the intercept and bias epilogues, the
-centering kernel and the host sigmoid.
+`predict`, `predict_proba`, `decision_function`, `transform` or
+`kneighbors` as the GPU class, character for character, with ONE
+difference, `_bind` answers the CPU binding of the class's family
+(`mojolearn/host/_mojolearn_estimators_host.so` for the five classical
+estimators, `mojolearn/host/_mojolearn_core_host.so` for the three k-NN
+classes) instead of the GPU set. Each binding exports the GPU binding's
+names under the GPU binding's address contracts
+(`bindings/_mojolearn_estimators_host.mojo`,
+`bindings/_mojolearn_core_host.mojo`), and their arithmetic is
+`core/classical_host_predict.mojo` (the pinned gemm/gemv kernel, the
+intercept and bias epilogues, the centering kernel and the host sigmoid)
+and `core/knn_host_predict.mojo` (the pinned distance tile, the halving
+tree row norm, the composite-key selection, the vote and the mean).
 
 On a CPU-only install none of this is needed: `_backend._HOST_MODULES`
-routes `_mojolearn_estimators` to the host binding and the plain classes'
-`load` and `predict` run through it. These subclasses exist so that a box
-WITH a GPU (the Mac that records the GPU answer) can run the host path in
-the same process, which is how tools/classical_host_gate.py compares the
-two bit for bit. The binding is loaded through `_backend.load_host_module`,
-which honors MOJOLEARN_HOST_DIR (the gate's sabotage set) and refuses a
-sabotage build unless MOJOLEARN_HOST_ALLOW_SABOTAGE=1.
+routes each family to its host binding and the plain classes' `load` and
+`predict` run through it. These subclasses exist so that a box WITH a GPU
+(the Mac that records the GPU answer) can run the host path in the same
+process, which is how tools/classical_host_gate.py compares the two bit
+for bit. The binding is loaded through `_backend.load_host_module`, which
+honors MOJOLEARN_HOST_DIR (the gate's sabotage set) and refuses a sabotage
+build unless MOJOLEARN_HOST_ALLOW_SABOTAGE=1.
 
 This module holds no arithmetic. What it promises is what the gate
 measured; the brief records on which CPUs that has passed.
@@ -35,26 +41,40 @@ from .linear_model import (
     LinearRegression, LogisticRegression, Ridge, _LINEAR_FORMAT,
     _LOGISTIC_FORMAT,
 )
+from .neighbors import (
+    KNeighborsClassifier, KNeighborsRegressor, NearestNeighbors, _KNN_FORMAT,
+)
 
 _HOST_BASENAME = "_mojolearn_estimators_host"
+#: GPU family -> the host binding a host subclass of that family binds.
+_HOST_BASENAMES = {
+    "_mojolearn_estimators": _HOST_BASENAME,
+    "_mojolearn": "_mojolearn_core_host",
+}
 
 
 def binary_path():
-    """The binary `host_model` loads, or would load."""
+    """The binary `host_model` loads for the five classical estimators, or
+    would load."""
     return _backend.host_module_path(_HOST_BASENAME)
 
 
+def binary_paths():
+    """Every binary `host_model` may load, by GPU family."""
+    return {family: _backend.host_module_path(b) for family, b in _HOST_BASENAMES.items()}
+
+
 class _HostBound:
-    """`_bind` answers the CPU binding for `_mojolearn_estimators` and
-    refuses every other family by name, so a host subclass can never reach
-    a GPU binding by accident."""
+    """`_bind` answers the CPU binding of the class's own family
+    (`_BINDING`) and refuses every other family by name, so a host subclass
+    can never reach a GPU binding by accident."""
 
     def _bind(self, name=None):
         name = name or self._BINDING
-        if name != "_mojolearn_estimators":
+        if name != self._BINDING or name not in _HOST_BASENAMES:
             raise ImportError(
                 f"mojolearn: the host {type(self).__name__} serves "
-                f"_mojolearn_estimators only, not {name}"
+                f"{self._BINDING} only, not {name}"
             )
         mode = getattr(self, "numeric_mode", None)
         if mode is not None and mode != "identical":
@@ -62,7 +82,11 @@ class _HostBound:
                 f"mojolearn: {type(self).__name__} runs IDENTICAL only on the "
                 f"host; this model was saved {mode!r}"
             )
-        return _backend.load_host_module(_HOST_BASENAME)
+        return _backend.load_host_module(_HOST_BASENAMES[name])
+
+    def _host_refusals(self):
+        """Raised by `host_model` after `load`, for a saved parameter the
+        host binding has no entry for; a subclass overrides."""
 
     def vendor_used(self):
         return "cpu"
@@ -109,6 +133,33 @@ class HostPCA(_HostBound, PCA):
         )
 
 
+class _HostKNN(_HostBound):
+    """The three k-NN host classes' shared refusal: the random ball cover
+    arm has no host entry (`rbc_knn_search` is absent from the core host
+    binding and would refuse by name at the first query; this names it at
+    load instead)."""
+
+    def _host_refusals(self):
+        if self.algorithm == "rbc":
+            raise ImportError(
+                "mojolearn: no CPU implementation of _mojolearn.rbc_knn_search "
+                f"yet; the host {type(self).__name__} runs the brute arm only "
+                "(docs/lanes/BRIEF_forest_host_inference_2026-09-13.md)"
+            )
+
+
+class HostNearestNeighbors(_HostKNN, NearestNeighbors):
+    _HOST_ARRAYS = ("_index",)
+
+
+class HostKNeighborsClassifier(_HostKNN, KNeighborsClassifier):
+    _HOST_ARRAYS = ("_index", "_y_cols")
+
+
+class HostKNeighborsRegressor(_HostKNN, KNeighborsRegressor):
+    _HOST_ARRAYS = ("_index", "_y_cols")
+
+
 #: format tag -> (estimator name, host class). A file whose `estimator`
 #: member names another class is refused by that class's own `load`.
 _FORMATS = {
@@ -116,6 +167,11 @@ _FORMATS = {
     _LOGISTIC_FORMAT: {"LogisticRegression": HostLogisticRegression},
     _TSVD_FORMAT: {"TruncatedSVD": HostTruncatedSVD},
     _PCA_FORMAT: {"PCA": HostPCA},
+    _KNN_FORMAT: {
+        "NearestNeighbors": HostNearestNeighbors,
+        "KNeighborsClassifier": HostKNeighborsClassifier,
+        "KNeighborsRegressor": HostKNeighborsRegressor,
+    },
 }
 CLASSICAL_FORMATS = tuple(_FORMATS)
 
@@ -133,5 +189,6 @@ def host_model(path):
             f"mojolearn: {path!r} was saved by {estimator}, which {fmt} does not hold"
         )
     model = cls.load(path)
+    model._host_refusals()
     model.estimator = estimator
     return model
