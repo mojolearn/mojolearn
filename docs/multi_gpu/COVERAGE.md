@@ -36,7 +36,7 @@ and histogram paths have two-H100 evidence only.
 | LinearRegression / Ridge | Original 128 Gram chunks distributed at 1..128 features; two-H100 gates pass | Wide OLS; larger feature counts; root-state partitioning |
 | LogisticRegression | QN gradient feature columns; binary/multiclass two-H100 gates pass | Root-state partitioning; broader configurations and cross-vendor qualification |
 | ElasticNet / Lasso | Original dot leaves across GPUs; cyclic fit and FP32 oracle gates pass on two H100s | Resident shard reuse; root-state partitioning and cross-vendor qualification |
-| SVC / SVR | None | Kernel tiles with global working-set and solver order |
+| SVC / SVR | Linear/RBF kernel rows during fit/prediction; two-H100 cell/full-fit gates pass | Root-state partitioning, broader configurations and cross-vendor qualification |
 | PCA / TruncatedSVD | Original Gram chunks at 1..128 features; covariance PCA and SVD gates pass | Other solver paths, larger widths and root-state partitioning |
 | NearestNeighbors / RadiusNeighbors | None | Query/reference tiles, stable global neighbor ordering |
 | KNeighborsClassifier / KNeighborsRegressor | None | Above plus original voting and weighting order |
@@ -46,7 +46,7 @@ and histogram paths have two-H100 evidence only.
 | SpectralClustering | None | Affinity tiles, eigensolver and downstream clustering |
 | UMAP | None | Neighbor graph and globally ordered optimizer/RNG updates |
 | IsolationForest | Global tree ranges during fit and score-time rebuild; two-H100 full-model and scoring gates pass | Full-data replication and assembled root model; broader configurations and cross-vendor qualification |
-| GaussianProcessRegressor | None | Kernel tiles, factorization, solves and optimizer trajectory |
+| GaussianProcessRegressor | Covariance/cross-covariance rows; two-H100 factor/dual/likelihood/mean/std gates pass | Root factorization/state partitioning; broader kernels/shapes and cross-vendor qualification |
 | ARIMA | Independent-series fit; two-H100 fit/forecast equality gates passed | Broader orders, large-memory and cross-vendor qualification; distributed prediction |
 | ExponentialSmoothing | Independent-series additive/multiplicative fit; two-H100 fit/forecast gates pass | Distributed prediction; broader configurations and capacity qualification |
 | StandardScaler / MinMaxScaler | Column-sharded fit/transform/inverse; two-H100 gates passed | Large-memory and cross-vendor qualification |

@@ -1,0 +1,16 @@
+2222 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5b8480000000, nodemask=2)
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/parallel_svm_check.py", line 71, in <module>
+    main()
+    ~~~~^^
+  File "/root/mojolearn/tools/parallel_svm_check.py", line 34, in main
+    one = cls(**params).fit(X, y)
+          ~~~^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_mode.py", line 81, in __init__
+    orig(self, *args, **kwargs)
+    ~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_svm_impl.py", line 414, in __init__
+    raise ValueError(
+    ...<3 lines>...
+    )
+ValueError: mojolearn SVC: cache_size is the prediction buffer here (DEVIATION 871) and must be a positive finite MiB, got 0.0

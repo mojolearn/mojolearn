@@ -1,0 +1,18 @@
+1432 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5b55c0000000, nodemask=2)
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/parallel_svm_check.py", line 71, in <module>
+    main()
+    ~~~~^^
+  File "/root/mojolearn/tools/parallel_svm_check.py", line 34, in main
+    one = cls(**params).fit(X, y)
+          ~~~^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_mode.py", line 81, in __init__
+    orig(self, *args, **kwargs)
+    ~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_svm_impl.py", line 360, in __init__
+    raise NotImplementedError(
+    ...<9 lines>...
+    )
+NotImplementedError: mojolearn SVC: gamma='scale' is refused (DEVIATION 870). It is 1 / (n_features * X.var()), a float32 reduction whose last bits are the host reduction's fold shape, and every bit of this fit is a function of gamma's bits. Compute it yourself and pass the number:
+    gamma = 1.0 / (X.shape[1] * float(np.asarray(X, np.float32).var()))
+'auto' (= 1 / n_features) is exact on every host and is this class's default; note cuML's default is 'scale'.

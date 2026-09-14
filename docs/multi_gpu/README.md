@@ -13,6 +13,8 @@ The later concurrent-byte, boosting and classical changes have separate
 they have not received a new same-source cross-architecture qualification.
 [Main integration and IsolationForest receipts](../../bench/results/multi_gpu/2026-09-14/integration-h100/README.md)
 record the merged Gram default and the subsequent whole-tree driver on two H100s.
+[SVM and GP receipts](../../bench/results/multi_gpu/2026-09-14/svm-gp-h100/README.md)
+qualify their subsequent kernel-row paths on two H100s.
 
 ## Available paths
 

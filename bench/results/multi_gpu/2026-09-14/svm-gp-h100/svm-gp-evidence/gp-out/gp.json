@@ -1,0 +1,67 @@
+{
+  "status": "PASS",
+  "checks": [
+    {
+      "rows": 5,
+      "kernel": "RBF([0.7, 1.0, 1.3])",
+      "sha256": "1f2f371853e53d1d812e755080571ff2a7f144415e9a4f7c4f9a4dae9608aa93"
+    },
+    {
+      "rows": 5,
+      "kernel": "WhiteKernel(0.2)",
+      "sha256": "05b3f437e71722d874c4e13cb991ddcafd80e7a56f0e9e0469cf89af3740e22e"
+    },
+    {
+      "rows": 5,
+      "kernel": "((ConstantKernel(0.8) * RBF([0.9])) + WhiteKernel(0.1))",
+      "sha256": "36e9f41a6d2f575deeba12f5a2759cd9c195c1649e99eab04d86ff9c1bd242cf"
+    },
+    {
+      "rows": 5,
+      "kernel": "(Matern([0.7, 1.0, 1.3], nu=0.5) + WhiteKernel(0.1))",
+      "sha256": "da9e3c367ead28819628b9ad8af13b7b1138fe3a10c64144a1992f6e6cf98457"
+    },
+    {
+      "rows": 5,
+      "kernel": "(Matern([0.7, 1.0, 1.3], nu=1.5) + WhiteKernel(0.1))",
+      "sha256": "eed0c9f26b7b4e434f19cb0bb8937a7bc4e88e08150ab3cbf29066e7d38c9bee"
+    },
+    {
+      "rows": 5,
+      "kernel": "(Matern([0.7, 1.0, 1.3], nu=2.5) + WhiteKernel(0.1))",
+      "sha256": "253d3d77df663384e4b575bd973f69aac1eb83c6fd1a8769011d63482e3b8550"
+    },
+    {
+      "rows": 33,
+      "kernel": "RBF([0.7, 1.0, 1.3])",
+      "sha256": "1e48a5c847c403f068ab578e05ed9d29da18725a7080dd7afdb7d7e38565d3f4"
+    },
+    {
+      "rows": 33,
+      "kernel": "WhiteKernel(0.2)",
+      "sha256": "60983e30057060be5837916837a8bb23f817469347ed4974c1300382579df00a"
+    },
+    {
+      "rows": 33,
+      "kernel": "((ConstantKernel(0.8) * RBF([0.9])) + WhiteKernel(0.1))",
+      "sha256": "5efce7eadd24a6b5516f997efe2a164c92d1385de91ae924521d3f24d0aa9d27"
+    },
+    {
+      "rows": 33,
+      "kernel": "(Matern([0.7, 1.0, 1.3], nu=0.5) + WhiteKernel(0.1))",
+      "sha256": "57a224015a35f4939cb42c9cb9759d10cfadca6f606794d409cb4b11fe61a7a5"
+    },
+    {
+      "rows": 33,
+      "kernel": "(Matern([0.7, 1.0, 1.3], nu=1.5) + WhiteKernel(0.1))",
+      "sha256": "d57a8042100a31fb7665c315974849fc21796f68a38dd05b5e29596ead6075c5"
+    },
+    {
+      "rows": 33,
+      "kernel": "(Matern([0.7, 1.0, 1.3], nu=2.5) + WhiteKernel(0.1))",
+      "sha256": "5537214a1273f2d6aba0bf2552d0c9de6dff2c6cf6fe812ae039b9cb3a109ce2"
+    }
+  ],
+  "corpus_sha256": "2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8",
+  "scope": "Two H100s; fixed kernels and alpha, covariance rows, original root Cholesky and variance; no pooled root memory"
+}

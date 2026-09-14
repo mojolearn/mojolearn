@@ -1,0 +1,111 @@
+{
+  "status": "PASS",
+  "checks": [
+    {
+      "features": 7,
+      "estimator": "SVC",
+      "params": {
+        "kernel": "linear",
+        "gamma": "auto",
+        "C": 0.7,
+        "max_iter": 5,
+        "cache_size": 1,
+        "numeric_mode": "identical"
+      },
+      "sha256": "c79675dd24e1a409f02a7cd89c7dc44ee9c45fb3d5b933428df4f8487bd7c9a2"
+    },
+    {
+      "features": 7,
+      "estimator": "SVC",
+      "params": {
+        "kernel": "rbf",
+        "gamma": "auto",
+        "C": 0.7,
+        "max_iter": 5,
+        "cache_size": 1,
+        "numeric_mode": "identical"
+      },
+      "sha256": "3df2735d9af001931b5aec8ebcd71f0e2c98e20ef4a273e321db7ee4a548757b"
+    },
+    {
+      "features": 7,
+      "estimator": "SVR",
+      "params": {
+        "kernel": "linear",
+        "gamma": "auto",
+        "C": 0.7,
+        "max_iter": 5,
+        "cache_size": 1,
+        "numeric_mode": "identical"
+      },
+      "sha256": "65959acba3eaa974bde9d63abeb65602772761158a82b272a43b2f11d1e0a4c9"
+    },
+    {
+      "features": 7,
+      "estimator": "SVR",
+      "params": {
+        "kernel": "rbf",
+        "gamma": "auto",
+        "C": 0.7,
+        "max_iter": 5,
+        "cache_size": 1,
+        "numeric_mode": "identical"
+      },
+      "sha256": "7523671781a2b6e8d65cc65ae01f7c0e397a045d5b480b2c501a4dce1df1ff52"
+    },
+    {
+      "features": 137,
+      "estimator": "SVC",
+      "params": {
+        "kernel": "linear",
+        "gamma": "auto",
+        "C": 0.7,
+        "max_iter": 5,
+        "cache_size": 1,
+        "numeric_mode": "identical"
+      },
+      "sha256": "7d518621192dcb324e579358d4e73cebc105a2bf9a110d2df03879572d09e0ca"
+    },
+    {
+      "features": 137,
+      "estimator": "SVC",
+      "params": {
+        "kernel": "rbf",
+        "gamma": "auto",
+        "C": 0.7,
+        "max_iter": 5,
+        "cache_size": 1,
+        "numeric_mode": "identical"
+      },
+      "sha256": "16054283cf9bdc924f1c2f912f1feb450882f4feec8c1baaa41a3ce21e8b6a48"
+    },
+    {
+      "features": 137,
+      "estimator": "SVR",
+      "params": {
+        "kernel": "linear",
+        "gamma": "auto",
+        "C": 0.7,
+        "max_iter": 5,
+        "cache_size": 1,
+        "numeric_mode": "identical"
+      },
+      "sha256": "8fc79608b24f5a442f08a77abaea3d21a4a49812e4c231d127e05dea86738d87"
+    },
+    {
+      "features": 137,
+      "estimator": "SVR",
+      "params": {
+        "kernel": "rbf",
+        "gamma": "auto",
+        "C": 0.7,
+        "max_iter": 5,
+        "cache_size": 1,
+        "numeric_mode": "identical"
+      },
+      "sha256": "3e169d436800f1b2a2a6910ccdc81c687512168e67880d580f326f3c6ec47368"
+    }
+  ],
+  "corpus_sha256": "2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8",
+  "scope": "Two H100s; binary SVC and epsilon SVR, linear/RBF, five iterations, kernel rows; full root state remains"
+}

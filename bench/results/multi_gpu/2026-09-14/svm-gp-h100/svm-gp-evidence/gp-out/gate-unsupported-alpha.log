@@ -1,0 +1,16 @@
+1970 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x507700000000, nodemask=1)
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/parallel_gp_check.py", line 73, in <module>
+    main()
+    ~~~~^^
+  File "/root/mojolearn/tools/parallel_gp_check.py", line 35, in main
+    one = GaussianProcessRegressor(**params).fit(X, y)
+  File "/root/mojolearn/python/mojolearn/_gp_impl.py", line 518, in fit
+    info = self._extension().gpr_fit(
+        # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_fit_binding.
+    ...<14 lines>...
+        [n_rows, n_cols, int(kinds.shape[0]), n_ls, self.alpha],
+    )
+Exception: gpr_fit_host: NUMERIC_IDENTICAL refuses the unpinned alpha 0x3e4ccccd. The ridge is part of profile mojolearn.identical.gp.fp32.v1, which CONTAINS mojolearn.identical.cholesky.fp32.v1, and alpha IS that profile's jitter passed through unchanged (DEVIATION 1751). There is no second jitter knob to turn. The two pinned values are 0x00000000 (no ridge) and 0x35800000 (2^-20).
+  If you are implementing a scikit-learn script, its default is alpha=1e-10 and on this column that value is a NO-OP: every kernel matrix here has a unit diagonal, the float32 gap above 1.0 is 2^-23 = 1.19e-7, and 1.0 + 1e-10 rounds to exactly 1.0. So the default ridge adds nothing at all in float32 and the factorization would refuse at a pivot with no ridge having been applied. DEVIATION 1752.
+  For a LARGER ridge than 2^-20, apply the pinned one more than once and record how many times; to change the value, that is a v2 of the Cholesky profile and not an argument. To explore ridges freely, build NUMERIC_FAST and drop the cross-vendor claim. DEVIATION 1637
