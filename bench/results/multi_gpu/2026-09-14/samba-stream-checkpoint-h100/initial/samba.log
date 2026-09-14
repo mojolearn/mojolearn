@@ -1,0 +1,31 @@
+9353 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x18f1c0000000, nodemask=2)
+9529 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3bfb80000000, nodemask=2)
+9530 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5830c0000000, nodemask=2)
+9629 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1b89c0000000, nodemask=2)
+9633 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x319ec0000000, nodemask=1)
+9680 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5b5f00000000, nodemask=2)
+9732 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5b1800000000, nodemask=2)
+9894 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x588c40000000, nodemask=2)
+9944 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5a4340000000, nodemask=2)
+9994 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x711ac0000000, nodemask=1)
+9994 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x193e00000000, nodemask=2)
+10044 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x339d40000000, nodemask=1)
+10044 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1a2800000000, nodemask=2)
+{
+  "status": "PASS",
+  "checks": [
+    "Samba_attention_dropout_K3_two_GPU_replay",
+    "Samba_checkpoint_device_migration"
+  ],
+  "hashes": [
+    "e43b8b7614f681bdf56e9f7ecb62ac79151fe6808469e329f08b950c6f4cb939",
+    "36847587f8ff90ff608d4be0445b63fe29bd289cbbb7202aec86e8c033ada834"
+  ],
+  "state_hashes": [
+    "b1b8bf00f00b6fb0612c2db6812db89ff6a1688787c1b019b14cb9504cc4070e",
+    "c590d37b9ff08d4936c16a7396ef0932d28373943d868cc2565cdc31f84a13e9"
+  ],
+  "corpus_sha256": "2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8",
+  "scope": "Two devices; no cross-vendor or speed claim"
+}
+

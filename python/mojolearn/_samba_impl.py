@@ -4,7 +4,7 @@
 TransformerBlock]* (each block carries its own pre-norm and residual) ->
 final RMSNorm -> tied or untied LM head -> cross-entropy, with a full
 backward, AdamW with clipping, a learning-rate schedule, clause 9.2 gradient
-accumulation, a position-keyed RNG and a JSON+hex+sha256 checkpoint.
+accumulation, a position-keyed RNG and streamed checksummed checkpoints.
 
 PRIVATE MODULE, AND IT HOLDS NO NUMERICS. Every arithmetic step is a call
 into `_mojolearn_training` (embedding, RMSNorm, head GEMM, accumulate, RNG,

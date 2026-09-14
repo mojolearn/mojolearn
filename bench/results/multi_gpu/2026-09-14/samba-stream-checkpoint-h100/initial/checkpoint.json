@@ -1,0 +1,20 @@
+{
+  "status": "PASS",
+  "small_checkpoint_sha256": "8faf82915c716d8c032fa2a22caecbfd3ea7564ea11ae0151ead05f62751b315",
+  "large_checkpoint_sha256": "c3d724f8be45d288b1797bc276340ba5b4b7c80655b93a7fdf318c110768bd33",
+  "large_checkpoint_bytes": 415293679,
+  "large_parameters": 34607616,
+  "refused": [
+    "header_digest",
+    "parameter",
+    "last_array",
+    "truncated",
+    "trailing",
+    "header_bound",
+    "registry"
+  ],
+  "atomic_publication": true,
+  "legacy_roundtrip": true,
+  "continuation_steps": 3,
+  "scope": "Actual trained Samba public checkpoint replay; >256MiB host archive roundtrip with admitted Samba registry. No large-model GPU capacity claim."
+}

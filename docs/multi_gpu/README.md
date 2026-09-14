@@ -173,12 +173,13 @@ methods; scalers provide an explicit distributed transform entry. No run beyond
 one GPU's memory capacity has been qualified. These new paths have two-H100
 equality evidence, not new AMD/Apple or NVIDIA cross-architecture qualification.
 
-IsolationForest builds tree ranges concurrently, then copies node buffers into
-global tree order. Every worker receives the full training data; build scratch
-is partitioned, and the complete forest is assembled on the root. Its existing
+IsolationForest builds tree ranges concurrently and retains each owner's node
+buffers. Scoring carries the per-row FP32 accumulator through owners in global
+tree order, then divides once by the global tree count. Every worker receives
+the full training data; build scratch and model buffers are partitioned. Its existing
 Python estimator rebuilds trees on each scoring call, so use the explicit
 `score_isolation_forest` entry to distribute that rebuild too. Scoring itself
-keeps the original root reduction and contamination threshold. Diagnostic
+keeps the original addition order and contamination threshold. Diagnostic
 trace capture is refused by the distributed path.
 
 SVC/SVR distribute output rows of their linear/RBF kernel matrices, including
@@ -669,7 +670,7 @@ succeed. One tensor and its original workspace must fit its owner, and the
 complete gradient remains in host RAM. Samba already stages each block's
 forward/backward GPU work; these allocation changes do not qualify arbitrary
 model sizes. Full host replicas/IPC, the signed-int32 registry limit, individual
-block and activation sizes, and large-checkpoint support remain capacity
+block and activation sizes, and host checkpoint restore memory remain capacity
 constraints requiring separate gates.
 
 Two-H100 production and post-scale fault builds pass all 45 exact clipping
@@ -677,3 +678,40 @@ fixtures, optimizer/accumulation checks and MLP/Samba replay checks. Caller
 canaries survive either owner's injected failure and recovery is exact.
 `bench/results/multi_gpu/2026-09-14/neural-clip-pool-h100/` retains the initial
 lifetime failure, corrected source, full receipts and comparison logs.
+
+### Streamed Samba checkpoints
+
+`SambaStack.save_checkpoint` writes parameters, optimizer moments and flags as
+checksummed little-endian arrays in bounded chunks. Its canonical metadata
+header is limited to 1 MiB; the archive has no 256 MiB total-size limit. Saving
+borrows the model's array storage and atomically replaces the destination after
+all writes succeed. The caller must exclusively own the stack during saving.
+Loading validates registry, lengths and checksums before constructing a model,
+and uses the saved numeric mode unless explicitly overridden. Legacy JSON
+checkpoints remain readable through their existing bounded reader.
+
+This addresses checkpoint storage, not GPU model capacity. Full host arrays
+are still required on restore, and the current signed-int32 parameter registry
+limit remains. Public trained-model continuation and a 415 MB host archive
+roundtrip are checked separately from large-model GPU training.
+
+### Resident IsolationForest models
+
+The two-H100 gate verifies all eight model buffers against the original
+single-device forest, with canonical tree offsets rebased only for comparison.
+The root retains one-cell placeholders, including after refitting a previously
+single-device model. Exact path lengths and scores pass, and a planted leaf
+witness detects the rounding change that independently summed owner totals
+would introduce. Eight public forest configurations and eight shared-binding
+SVC/SVR configurations retain their previous complete JSON receipts.
+
+Training/query data are still replicated. Per-owner tree scratch/model sizes
+and the original global int32 node-count admission remain limits. This
+qualifies model ownership and arithmetic for the recorded fixtures, with no
+beyond-single-device capacity or throughput claim. Evidence is in
+`bench/results/multi_gpu/2026-09-14/iforest-model-pool-h100/`.
+
+The final Samba checkpoint gate passes trained-model continuation, seven
+corruption refusals before model construction, failed-publication atomicity,
+legacy loading and a 415,293,679-byte archive roundtrip. Full evidence is in
+`bench/results/multi_gpu/2026-09-14/samba-stream-checkpoint-h100/`.

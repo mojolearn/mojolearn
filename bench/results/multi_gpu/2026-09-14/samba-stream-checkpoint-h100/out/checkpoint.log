@@ -1,0 +1,3 @@
+22927 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1b7880000000, nodemask=2)
+22927 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x10e5c0000000, nodemask=1)
+PASS Samba checkpoint replay, integrity and 415293679 byte archive
