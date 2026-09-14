@@ -42,10 +42,13 @@ below repeats its params list), `estimators_numeric_mode` and
 the Float32 Jacobi at the device's settings, the sign flip and the Float64
 tail, each restated from its kernel) and `glm/host/glm_oracle.mojo` (the
 equilibrated pseudo-inverse of `lstsq_eig` and the `svd_eig` plus
-`ridge_solve` pair). Every other function of the GPU binding (dbscan_fit,
-pca_fit_full, inverse_transform, qn_fit, ...) is deliberately absent, so
-those surfaces refuse BY NAME through `_HostBinding` and never hash
-something else.
+`ridge_solve` pair), and `dbscan_fit` over `dbscan/host/dbscan_oracle.mojo`
+(the ball cover index and query replayed, the brute arm, the label
+propagation and the relabel; `sample_weight` and an explicit
+`max_mbytes_per_batch` refused by name). Every other function of the GPU
+binding (pca_fit_full, inverse_transform, qn_fit, ...) is deliberately
+absent, so those surfaces refuse BY NAME through `_HostBinding` and never
+hash something else.
 """
 from std.math import isfinite
 from std.os import abort
@@ -53,7 +56,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
-from bindings.hostptr import f32_ptr, f64_ptr, read_f32
+from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,
@@ -71,6 +74,10 @@ from core.classical_host_predict import (
     host_qn_sigmoid,
     host_qn_softmax,
     host_tsvd_transform,
+)
+from dbscan.host.dbscan_oracle import (
+    DBSCAN_ORACLE_HOST_SABOTAGE,
+    host_dbscan_fit,
 )
 from decomposition.host.pca_oracle import (
     PCA_ORACLE_HOST_SABOTAGE,
@@ -124,13 +131,15 @@ def estimators_host_column_binding() raises -> PythonObject:
 
 def estimators_host_sabotage_binding() raises -> PythonObject:
     """Whether this binary sums every logsumexp row, walks every dot
-    product descending and folds the split-K Gram's chunks descending on
-    purpose (-D MOJOLEARN_HOST_SABOTAGE=1, the gate's negative control; one
-    define, every arithmetic this binding carries)."""
+    product descending, folds the split-K Gram's chunks descending and
+    asks one neighbor more of a DBSCAN core point on purpose
+    (-D MOJOLEARN_HOST_SABOTAGE=1, the gate's negative control; one define,
+    every arithmetic this binding carries)."""
     return PythonObject(
         KDE_ORACLE_HOST_SABOTAGE
         or CLASSICAL_HOST_SABOTAGE
         or PCA_ORACLE_HOST_SABOTAGE
+        or DBSCAN_ORACLE_HOST_SABOTAGE
     )
 
 
@@ -354,6 +363,68 @@ def ridge_fit_binding(
         for i in range(nf):
             wp[i] = w[i]
     return PythonObject(0)
+
+
+def dbscan_fit_binding(
+    x_addr: PythonObject,
+    labels_addr: PythonObject,
+    weight_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`DBSCAN.fit` on the host by `host_dbscan_fit`: the GPU binding's
+    contract (params `n_rows, n_features, eps, min_samples, budget_mb,
+    max_iter, eps_nn_method, metric`; `weight_addr` 0 for no weights),
+    `n_rows` int32 labels written, the propagation pass count returned
+    (the one-thread schedule's; no column hashes it). `weight_addr != 0`
+    and `budget_mb != 0` are refused BY NAME: the weighted core fold and
+    the device-sized batch have no host restatement yet."""
+    if len(params) != 8:
+        raise Error(
+            "dbscan_fit: params must contain 8 values, got "
+            + String(len(params))
+        )
+    var x_address = _index(x_addr)
+    var lp = i32_ptr(_index(labels_addr))
+    var wa = _index(weight_addr)
+    var nr = _index(params[0])
+    var nf = _index(params[1])
+    var eps = Float64(py=params[2])
+    var min_samples = _index(params[3])
+    var budget = _index(params[4])
+    var max_iter = _index(params[5])
+    var eps_nn_method = _index(params[6])
+    var metric = _index(params[7])
+    if wa != 0:
+        raise Error(
+            "mojolearn: no CPU implementation of DBSCAN.fit with sample_weight"
+            " yet; the weighted core test is a pinned float fold over the"
+            " neighbor list in the device's write order and is owed with a"
+            " GPU record that carries the dbscan-weighted lane"
+            " (docs/lanes/BRIEF_cpu_training_2026-09-13.md)"
+        )
+    if budget != 0:
+        raise Error(
+            "mojolearn: no CPU implementation of DBSCAN.fit with"
+            " max_mbytes_per_batch yet; the host runs one batch of every row"
+            " and does not size a device it does not have"
+        )
+    var passes = 0
+    with GILReleased(Python()):
+        if nr < 1 or nf < 1:
+            raise Error(
+                "dbscan_fit needs n_samples and n_features >= 1: got "
+                + String(nr)
+                + ", "
+                + String(nf)
+            )
+        var x = read_f32(x_address, nr * nf)
+        var fit = host_dbscan_fit(
+            x, nr, nf, eps, min_samples, max_iter, eps_nn_method, metric
+        )
+        for i in range(nr):
+            lp[i] = fit.labels[i]
+        passes = fit.passes
+    return PythonObject(passes)
 
 
 # The classical inference entries (the classical host inference lane,
@@ -669,6 +740,7 @@ def PyInit__mojolearn_estimators_host() abi("C") -> PythonObject:
         module.def_function[tsvd_fit_binding]("tsvd_fit")
         module.def_function[ols_fit_binding]("ols_fit")
         module.def_function[ridge_fit_binding]("ridge_fit")
+        module.def_function[dbscan_fit_binding]("dbscan_fit")
         module.def_function[ols_predict_binding]("ols_predict")
         module.def_function[tsvd_transform_binding]("tsvd_transform")
         module.def_function[pca_transform_binding]("pca_transform")

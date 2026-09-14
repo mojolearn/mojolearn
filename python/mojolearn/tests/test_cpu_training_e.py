@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Workstream E, CPU training for the knn, pca, pca-whiten, tsvd, ols and
-ridge lanes (lane/cpu-training-e, 2026-09-14), checked from SOURCE so it
+"""Workstream E, CPU training for the knn, pca, pca-whiten, tsvd, ols,
+ridge and dbscan lanes (lane/cpu-training-e, 2026-09-14), checked from SOURCE so it
 runs on a box with nothing built, plus one runtime check that runs only
 where the estimators host binding is built and the package took the
 CPU-only path.
@@ -9,12 +9,13 @@ CPU-only path.
 What the source checks hold: the manifest lists the six lanes as training
 lanes of the families that serve them and names them for the docs; the
 estimators host binding registers `pca_fit`, `tsvd_fit`, `ols_fit` and
-`ridge_fit` under the GPU binding's names; the two host oracles import no
+`ridge_fit` under the GPU binding's names; the three host oracles import no
 GPU module (a host restatement that imports `max.gpu` or `std.gpu` is not
 host only); the sabotage define reaches the PCA oracle, whose reduce is
-the arm that moves every PCA, tSVD, OLS and ridge bit; the CPU identity
-gate workflow triggers on both oracle files; the README's "no CPU path"
-span no longer names k-NN training.
+the arm that moves every PCA, tSVD, OLS and ridge bit, and the DBSCAN
+oracle's core test; the CPU identity gate workflow triggers on the three
+oracle files; the README's "no CPU path" span no longer names k-NN
+training or DBSCAN.
 
 The runtime check (skipped, and SAID to be skipped, when the binding is
 absent or a GPU set loaded): the four entries run through the host
@@ -33,9 +34,10 @@ from mojolearn import _backend, host_surface
 
 ROOT = Path(__file__).resolve().parents[3]
 
-LANES_E = ("knn", "knn-clf", "knn-reg", "pca", "pca-whiten", "tsvd", "ols", "ridge")
-FITS_E = ("pca_fit", "tsvd_fit", "ols_fit", "ridge_fit")
-ORACLES_E = ("decomposition/host/pca_oracle.mojo", "glm/host/glm_oracle.mojo")
+LANES_E = ("knn", "knn-clf", "knn-reg", "pca", "pca-whiten", "tsvd", "ols", "ridge", "dbscan")
+FITS_E = ("pca_fit", "tsvd_fit", "ols_fit", "ridge_fit", "dbscan_fit")
+ORACLES_E = ("decomposition/host/pca_oracle.mojo", "glm/host/glm_oracle.mojo",
+             "dbscan/host/dbscan_oracle.mojo")
 GPU_IMPORTS = re.compile(r"^\s*from\s+(max\.gpu|std\.gpu)", re.M)
 
 
@@ -52,7 +54,7 @@ def test_manifest_covers_the_six_lanes():
     for lane in ("knn", "knn-clf", "knn-reg"):
         assert lane in core["training_lanes"] and lane in core["inference_lanes"]
     est = host_surface.family("estimators")
-    for lane in ("pca", "pca-whiten", "tsvd", "ols", "ridge"):
+    for lane in ("pca", "pca-whiten", "tsvd", "ols", "ridge", "dbscan"):
         assert lane in est["training_lanes"], f"{lane} is not an estimators training lane"
     for rel in ORACLES_E:
         assert rel in est["host_modules"], f"{rel} is not an estimators host module"
@@ -65,7 +67,7 @@ def test_binding_registers_the_four_fits():
     for name in FITS_E:
         assert f'("{name}")' in src, f"the estimators host binding does not register {name}"
         assert name in exports, f"the manifest does not list {name}"
-    for absent in ("pca_fit_full", "qn_fit", "dbscan_fit", "inverse_transform"):
+    for absent in ("pca_fit_full", "qn_fit", "inverse_transform"):
         assert f'("{absent}")' not in src, f"{absent} must stay absent so it refuses by name"
 
 
@@ -85,6 +87,10 @@ def test_sabotage_define_moves_the_gram_reduce():
     assert "GRAM_SPLITK_CHUNKS - 1 - cc" in text, "the sabotage arm does not walk the chunks descending"
     binding = _read(host_surface.binding_source("estimators"))
     assert "PCA_ORACLE_HOST_SABOTAGE" in binding, "the binding does not read the PCA oracle's define back"
+    dbscan = _read("dbscan/host/dbscan_oracle.mojo")
+    assert "comptime if DBSCAN_ORACLE_HOST_SABOTAGE:" in dbscan
+    assert "min_pts = min_samples + 1" in dbscan, "the DBSCAN sabotage arm does not shift the core test"
+    assert "DBSCAN_ORACLE_HOST_SABOTAGE" in binding
 
 
 def test_workflow_triggers_on_the_oracles():
@@ -96,6 +102,7 @@ def test_workflow_triggers_on_the_oracles():
 def test_readme_no_longer_says_knn_training_has_no_cpu_path():
     sentence = host_surface.no_cpu_path_sentence()
     assert "k-NN" not in sentence, sentence
+    assert "DBSCAN" not in sentence, sentence
     assert "logistic regression training" in sentence, sentence
     for rel in ("README.md", "SUPPORT_MATRIX.md"):
         text = _read(rel)
@@ -141,8 +148,12 @@ def test_host_fits_run_and_repeat_on_a_cpu_only_install():
         m.ols_fit(addr(x), addr(y), addr(w), [n, d])
         r = np.empty(d, np.float32)
         m.ridge_fit(addr(x), addr(y), addr(r), [n, d, 0.5])
+        labels = np.empty(n, np.int32)
+        passes = int(m.dbscan_fit(addr(x), addr(labels), 0, [n, d, 0.9, 5, 0, 0, 1, 0]))
+        assert passes >= 1 and labels.min() >= -1
         return comp.tobytes() + mu.tobytes() + ev.tobytes() + ratio.tobytes() + sv.tobytes() + \
-            repr(noise).encode() + tcomp.tobytes() + tsv.tobytes() + w.tobytes() + r.tobytes()
+            repr(noise).encode() + tcomp.tobytes() + tsv.tobytes() + w.tobytes() + r.tobytes() + \
+            labels.tobytes()
 
     first, second = run(), run()
     assert first == second, "a host fit returned different bytes on two runs"

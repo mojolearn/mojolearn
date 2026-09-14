@@ -131,6 +131,7 @@ TRAINING_LANE_NAMES = {
     "tsvd": "truncated SVD",
     "ols": "linear regression",
     "ridge": "ridge",
+    "dbscan": "DBSCAN",
 }
 
 #: The lanes with NO CPU path of any kind, as the README states them. A
@@ -138,7 +139,6 @@ TRAINING_LANE_NAMES = {
 #: README until the marked span is rewritten.
 NO_CPU_PATH = (
     "k-means",
-    "DBSCAN",
     "spectral clustering",
     "UMAP",
     "the Gaussian process",
@@ -290,23 +290,24 @@ FAMILIES = (
         routes="_mojolearn_estimators",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("kde", "pca", "pca-whiten", "tsvd", "ols", "ridge"),
+        training_lanes=("kde", "pca", "pca-whiten", "tsvd", "ols", "ridge", "dbscan"),
         inference_lanes=("ols", "ridge", "tsvd", "logistic", "logistic-multiclass", "pca", "pca-whiten", "kde"),
         forest_kinds=(),
         classes=(
             "LinearRegression", "Ridge", "TruncatedSVD", "LogisticRegression",
-            "PCA", "KernelDensity",
+            "PCA", "KernelDensity", "DBSCAN",
         ),
         display="linear regression, ridge, truncated SVD, logistic regression, PCA with and without whitening and kernel density",
         host_modules=(
             "kde/host/kde_oracle.mojo", "core/classical_host_predict.mojo",
             "decomposition/host/pca_oracle.mojo", "glm/host/glm_oracle.mojo",
+            "dbscan/host/dbscan_oracle.mojo",
         ),
         exports=(
             "estimators_host_numeric_mode", "estimators_host_vendor",
             "estimators_host_column", "estimators_host_sabotage",
             "estimators_vendor", "estimators_numeric_mode", "kde_score_samples",
-            "pca_fit", "tsvd_fit", "ols_fit", "ridge_fit",
+            "pca_fit", "tsvd_fit", "ols_fit", "ridge_fit", "dbscan_fit",
             "ols_predict", "tsvd_transform", "pca_transform",
             "pca_whiten_transform", "pca_whiten_inverse_transform",
             "qn_decision_function", "qn_sigmoid", "qn_softmax",

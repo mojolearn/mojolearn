@@ -903,8 +903,9 @@ def host_families_built():
 #:     core/classical_host_predict.mojo, and (workstream E, 2026-09-14) the
 #:     training entries pca_fit and tsvd_fit over
 #:     decomposition/host/pca_oracle.mojo and ols_fit and ridge_fit over
-#:     glm/host/glm_oracle.mojo; dbscan_fit, pca_fit_full,
-#:     inverse_transform, qn_fit are absent.
+#:     glm/host/glm_oracle.mojo and dbscan_fit over
+#:     dbscan/host/dbscan_oracle.mojo; pca_fit_full, inverse_transform,
+#:     qn_fit are absent.
 #:   _mojolearn_tsa -> _mojolearn_tsa_host: holtwinters_fit and
 #:     holtwinters_forecast over holtwinters/host/hw_oracle.mojo; kpss_test
 #:     and select_d (ARIMA's) are absent.
