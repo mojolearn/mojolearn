@@ -222,3 +222,30 @@ The fix that cannot be argued with: allocate every Mamba-2 device buffer through
 buffer with 0x7fc00000 instead of 0) under which the identity lane must read the canonical
 hashes cold on every vendor; a lane that still reads NaN under poison names the remaining read.
 Owner: the peer session (Mojo, three vendors); the harness side is done.
+
+### 3.3 THE CAUSE (2026-09-14 evening, found by the peer session's poison-and-band gate): one over-read in the Mamba-2 forward
+
+`m2_ydiag_kernel` (`mamba/impl/modules/ssd_minimal.mojo`, seams S13 and S14, Y_diag = M . X_d)
+loops `jj` over the chunk width Q = 256 and loads the X_d row `c * Q + jj` for EVERY jj, rows at or
+past T included (X_d is [B, T, H, P]; T = 16 in the lanes, 1 in the step), so it reads past the end
+of the allocation. The mask value there is the structural +0.0, and 0 x finite garbage is 0: that
+is why every CUDA and HIP run and every cold Metal run carried the same bits for weeks. 0 x NaN is
+NaN: Metal in a warm process (DEVIATION 2712; the step reads farthest past its end since its T is
+1, which is why step and backward went first). And the row past the last allocation is an unmapped
+page on the DigitalOcean MI325X: DEVIATION 2713, at the first forward launch. The block check under
+poison named it: `ydiag.out` MOVED 256 of 256 cells, first cell 0, a 0x7fc00000, with seg.L, cb.G,
+xd.out and dacs.out OK before it and everything after it NaN.
+
+Fix: read X_d only when `c * Q + jj < t_work`, +0.0 otherwise, which is the bits every record
+carries. With the fix, poison plus band, cold on the M4: 36 of 36 Mamba training rows and 36
+inference rows IDENTICAL x4 against the 2711flip record's three columns (mamba1, mamba2,
+mamba2-dtlimit, mamba3; nothing else moved under the band). Owed as of this line: the three
+sabotage modes, the H100 and MI300X legs of the gate, the poison build on the MI325X (2713 should
+now launch), then the three-column rerun that becomes the CPU gate's columns.
+
+What closed it, in order, each a check that could have failed: the per-column hashes against
+earlier records (which column moved), the harness's per-fit dump in the warm process (which
+arrays, and that they were NaN, not garbage), the bisection (not a lane, the allocation history),
+the three-fill split with a guard band under a poison define (an over-read, not an unfilled
+buffer), and the block check under poison (the stage). Two sessions, one afternoon, four AMD legs
+spent on the wrong vendor before the first of those.
