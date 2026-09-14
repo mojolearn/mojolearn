@@ -51,14 +51,13 @@ def _read(rel):
 
 def test_manifest_covers_both_lanes():
     fam = host_surface.family("gbdt")
-    assert fam["training_lanes"] == ("gbdt-symmetric", "gbdt-depthwise", "gbdt-lossguide")
+    assert fam["training_lanes"] == ("gbdt-symmetric", "gbdt-rmse", "gbdt-depthwise", "gbdt-lossguide")
     for rel in (DRIVER, LOSSGUIDE):
         assert rel in fam["host_modules"] and (ROOT / rel).is_file(), rel
     covered = host_surface.covered_lanes()
     assert "gbdt-depthwise" in covered and "gbdt-lossguide" in covered
-    assert "gbdt-rmse" not in covered
     sentence = host_surface.no_cpu_path_sentence()
-    assert "other than symmetric, depthwise and lossguide trees" in sentence, sentence
+    assert "depthwise and lossguide trees with the Logloss loss" in sentence, sentence
 
 
 def test_oracles_import_no_gpu_module():
