@@ -35,7 +35,7 @@ from std.python.bindings import PythonModuleBuilder
 from forest_inference_binding import (
     forest_prepare_gpu_binding, forest_predict_resident_gpu_binding, forest_release_gpu_binding,
     forest_vector_groves_binding, forest_predict_resident_into_gpu_binding,
-    forest_resident_layout_binding,
+    forest_resident_layout_binding, forest_pool_available, forest_pool_fault_available,
 )
 from core.forest_inference import forest_predict_gpu
 from checks.vendor import COMPILED_VENDOR
@@ -650,6 +650,8 @@ def PyInit__mojolearn_trees() abi("C") -> PythonObject:
         m.def_function[et_predict_binding]("et_predict")
         m.def_function[et_predict_gpu_parallel_binding]("et_predict_gpu_parallel")
         m.def_function[forest_resident_layout_binding]("forest_resident_layout")
+        m.def_function[forest_pool_available]("forest_pool_available")
+        m.def_function[forest_pool_fault_available]("forest_pool_fault_available")
         m.def_function[et_forest_export_binding]("forest_export")
         m.def_function[et_forest_export_legacy_binding]("forest_export_legacy")
         m.def_function[et_forest_export_release_binding]("forest_export_release")
