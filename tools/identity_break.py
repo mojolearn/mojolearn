@@ -1902,12 +1902,25 @@ def _(ml, X, yc, yr, Xh=None):
 # split into K logical shards or tree ranges reduces, in a fixed order, to
 # the bits of the same fit on one device, and that the physical GPU count
 # never selects the reduction order. So every driver has a lane here that
-# runs with devices=(0,) and the smallest sharding that exercises the split,
+# runs with devices=_par_devices() and the smallest sharding that exercises the split,
 # on every vendor including this Mac; where the driver's contract is
 # equality to the plain fit, the lane holds the two to the same bytes and
 # reads REFUSED with the pair named if they differ. A two-device run on the
 # same commit must then hash equal to these cells, which is the claim the
 # drivers' own two-H100 gates make and no three-vendor record has held yet.
+
+def _par_devices():
+    """The device tuple the par-* lanes hand the drivers: MOJOLEARN_PAR_DEVICES,
+    comma-separated device indices, default "0". A two-device column names
+    itself through the `package.par_devices` field the run records, and must
+    hash equal, cell for cell, to the one-device column of the same commit;
+    that equality is the drivers' whole claim."""
+    raw = os.environ.get("MOJOLEARN_PAR_DEVICES", "0").strip() or "0"
+    devs = tuple(int(x) for x in raw.split(",") if x.strip() != "")
+    if not devs or len(set(devs)) != len(devs) or any(d < 0 for d in devs):
+        raise SystemExit(f"REFUSING: MOJOLEARN_PAR_DEVICES={raw!r} is not a list of distinct nonnegative device indices")
+    return devs
+
 
 @lane("par-forest")
 def _(ml, X, yc, yr, Xh=None):
@@ -1915,7 +1928,7 @@ def _(ml, X, yc, yr, Xh=None):
     RandomForestClassifier fit of the rf-clf lane."""
     from mojolearn.parallel_ensemble import fit_forest
     kw = dict(n_estimators=16, max_depth=8, random_state=7)
-    par = fit_forest(ml.RandomForestClassifier(**kw), X, yc, devices=(0,), trees_per_shard=4)
+    par = fit_forest(ml.RandomForestClassifier(**kw), X, yc, devices=_par_devices(), trees_per_shard=4)
     plain = ml.RandomForestClassifier(**kw).fit(X, yc)
     _same_bytes("fit_forest predict_proba", par.predict_proba(X[:2048]), "plain predict_proba", plain.predict_proba(X[:2048]))
     return _fit(dict(predict=_h(par.predict(X)), proba=_h(par.predict_proba(X))),
@@ -1926,7 +1939,7 @@ def _(ml, X, yc, yr, Xh=None):
 def _(ml, X, yc, yr, Xh=None):
     from mojolearn.parallel_ensemble import fit_forest
     kw = dict(n_estimators=16, max_depth=8, random_state=7)
-    par = fit_forest(ml.ExtraTreesRegressor(**kw), X, yr, devices=(0,), trees_per_shard=4)
+    par = fit_forest(ml.ExtraTreesRegressor(**kw), X, yr, devices=_par_devices(), trees_per_shard=4)
     plain = ml.ExtraTreesRegressor(**kw).fit(X, yr)
     _same_bytes("fit_forest predict", par.predict(X[:2048]), "plain predict", plain.predict(X[:2048]))
     return _fit(dict(predict=_h(par.predict(X))), par, lambda e: (e.predict(Xh),))
@@ -1938,7 +1951,7 @@ def _(ml, X, yc, yr, Xh=None):
     partitioned, held to the plain fit."""
     from mojolearn.parallel_ensemble import fit_boosting
     kw = dict(n_estimators=20, max_depth=6, loss="Logloss")
-    par = fit_boosting(ml.GradientBoosting(**kw), X, yc, devices=(0,))
+    par = fit_boosting(ml.GradientBoosting(**kw), X, yc, devices=_par_devices())
     plain = ml.GradientBoosting(**kw).fit(X, yc)
     _same_bytes("fit_boosting predict", par.predict(X[:2048]), "plain predict", plain.predict(X[:2048]))
     return _fit(dict(predict=_h(par.predict(X)), proba=_h(par.predict_proba(X))),
@@ -1948,7 +1961,7 @@ def _(ml, X, yc, yr, Xh=None):
 @lane("par-kmeans")
 def _(ml, X, yc, yr, Xh=None):
     from mojolearn.parallel_classical import fit_kmeans
-    par = fit_kmeans(ml.KMeans(n_clusters=8, random_state=3), X, devices=(0,))
+    par = fit_kmeans(ml.KMeans(n_clusters=8, random_state=3), X, devices=_par_devices())
     plain = ml.KMeans(n_clusters=8, random_state=3).fit(X)
     _same_bytes("fit_kmeans centers", par.cluster_centers_, "plain centers", plain.cluster_centers_)
     return _fit(dict(centers=_h(par.cluster_centers_), labels=_h(par.labels_)), par, "n/a:no-predict")
@@ -1958,7 +1971,7 @@ def _(ml, X, yc, yr, Xh=None):
 def _(ml, X, yc, yr, Xh=None):
     """fit_gram_estimator on Ridge: the 128 pinned Gram chunks distributed."""
     from mojolearn.parallel_classical import fit_gram_estimator
-    par = fit_gram_estimator(ml.Ridge(alpha=1.0), X, yr, devices=(0,))
+    par = fit_gram_estimator(ml.Ridge(alpha=1.0), X, yr, devices=_par_devices())
     plain = ml.Ridge(alpha=1.0).fit(X, yr)
     _same_bytes("fit_gram_estimator coef", par.coef_, "plain coef", plain.coef_)
     return _fit(dict(coef=_h(par.coef_), predict=_h(par.predict(X[:256]))), par, lambda e: (e.predict(Xh[:256]),))
@@ -1967,7 +1980,7 @@ def _(ml, X, yc, yr, Xh=None):
 @lane("par-logistic")
 def _(ml, X, yc, yr, Xh=None):
     from mojolearn.parallel_classical import fit_logistic
-    par = fit_logistic(ml.LogisticRegression(max_iter=50), X, yc, devices=(0,))
+    par = fit_logistic(ml.LogisticRegression(max_iter=50), X, yc, devices=_par_devices())
     plain = ml.LogisticRegression(max_iter=50).fit(X, yc)
     _same_bytes("fit_logistic coef", par.coef_, "plain coef", plain.coef_)
     return _fit(dict(coef=_h(par.coef_), proba=_h(par.predict_proba(X[:256]))), par, lambda e: (e.predict_proba(Xh[:256]),))
@@ -1976,7 +1989,7 @@ def _(ml, X, yc, yr, Xh=None):
 @lane("par-cd")
 def _(ml, X, yc, yr, Xh=None):
     from mojolearn.parallel_classical import fit_coordinate_descent
-    par = fit_coordinate_descent(ml.Lasso(alpha=0.01, max_iter=200), X, yr, devices=(0,))
+    par = fit_coordinate_descent(ml.Lasso(alpha=0.01, max_iter=200), X, yr, devices=_par_devices())
     plain = ml.Lasso(alpha=0.01, max_iter=200).fit(X, yr)
     _same_bytes("fit_coordinate_descent coef", par.coef_, "plain coef", plain.coef_)
     return _fit(dict(coef=_h(par.coef_), predict=_h(par.predict(X[:256]))), par, lambda e: (e.predict(Xh[:256]),))
@@ -1986,11 +1999,11 @@ def _(ml, X, yc, yr, Xh=None):
 def _(ml, X, yc, yr, Xh=None):
     from mojolearn.parallel_classical import fit_svm, predict_svm
     kw = dict(C=1.0, kernel="rbf", max_iter=200)
-    par = fit_svm(ml.SVC(**kw), X[:2000], yc[:2000], devices=(0,))
+    par = fit_svm(ml.SVC(**kw), X[:2000], yc[:2000], devices=_par_devices())
     plain = ml.SVC(**kw).fit(X[:2000], yc[:2000])
-    dec = predict_svm(par, X[2000:2256], devices=(0,), method="decision_function")
+    dec = predict_svm(par, X[2000:2256], devices=_par_devices(), method="decision_function")
     _same_bytes("predict_svm decision", dec, "plain decision", plain.decision_function(X[2000:2256]))
-    return _fit(dict(decision=_h(dec), predict=_h(predict_svm(par, X[2000:2256], devices=(0,), method="predict"))),
+    return _fit(dict(decision=_h(dec), predict=_h(predict_svm(par, X[2000:2256], devices=_par_devices(), method="predict"))),
                 par, lambda e: (e.decision_function(Xh[:256]), e.predict(Xh[:256])))
 
 
@@ -1998,9 +2011,9 @@ def _(ml, X, yc, yr, Xh=None):
 def _(ml, X, yc, yr, Xh=None):
     from mojolearn.parallel_classical import fit_gaussian_process, predict_gaussian_process
     k = ml.ConstantKernel(1.0) * ml.RBF(1.0) + ml.WhiteKernel(0.1)
-    par = fit_gaussian_process(ml.GaussianProcessRegressor(kernel=k), X[:256, :4], yr[:256], devices=(0,))
+    par = fit_gaussian_process(ml.GaussianProcessRegressor(kernel=k), X[:256, :4], yr[:256], devices=_par_devices())
     plain = ml.GaussianProcessRegressor(kernel=k).fit(X[:256, :4], yr[:256])
-    mean, std = predict_gaussian_process(par, X[256:320, :4], devices=(0,), return_std=True)
+    mean, std = predict_gaussian_process(par, X[256:320, :4], devices=_par_devices(), return_std=True)
     pm, ps = plain.predict(X[256:320, :4], return_std=True)
     _same_bytes("predict_gaussian_process mean", mean, "plain mean", pm)
     return _fit(dict(alpha=_h(par.alpha_), L=_h(par.L_), mean=_h(mean), std=_h(std)),
@@ -2010,7 +2023,7 @@ def _(ml, X, yc, yr, Xh=None):
 @lane("par-dbscan")
 def _(ml, X, yc, yr, Xh=None):
     from mojolearn.parallel_classical import fit_dbscan
-    par = fit_dbscan(ml.DBSCAN(eps=0.9, min_samples=5), X[:6000, :4], devices=(0,))
+    par = fit_dbscan(ml.DBSCAN(eps=0.9, min_samples=5), X[:6000, :4], devices=_par_devices())
     plain = ml.DBSCAN(eps=0.9, min_samples=5).fit(X[:6000, :4])
     _same_bytes("fit_dbscan labels", par.labels_, "plain labels", plain.labels_)
     return _fit(dict(labels=_h(par.labels_)), par, "n/a:transductive")
@@ -2021,12 +2034,12 @@ def _(ml, X, yc, yr, Xh=None):
     """fit_scaler and transform_scaler with four columns per shard, so the
     16-column fixture is four shards, held to the plain scaler."""
     from mojolearn.parallel_preprocessing import fit_scaler, transform_scaler
-    par = fit_scaler(ml.StandardScaler(), X, devices=(0,), columns_per_shard=4)
+    par = fit_scaler(ml.StandardScaler(), X, devices=_par_devices(), columns_per_shard=4)
     plain = ml.StandardScaler().fit(X)
-    t = transform_scaler(par, X[:256], devices=(0,), columns_per_shard=4)
+    t = transform_scaler(par, X[:256], devices=_par_devices(), columns_per_shard=4)
     _same_bytes("transform_scaler", t, "plain transform", plain.transform(X[:256]))
     return _fit(dict(mean=_h(par.mean_), var=_h(par.var_), transform=_h(t),
-                     inverse=_h(transform_scaler(par, t, devices=(0,), columns_per_shard=4, inverse=True))),
+                     inverse=_h(transform_scaler(par, t, devices=_par_devices(), columns_per_shard=4, inverse=True))),
                 par, lambda e: (e.transform(Xh[:256]),))
 
 
@@ -2035,7 +2048,7 @@ def _(ml, X, yc, yr, Xh=None):
     """fit_arima with two series per shard over the arima lane's four series."""
     from mojolearn.parallel_classical import fit_arima
     series = np.ascontiguousarray(X[:512, :4].T)
-    par = fit_arima(ml.ARIMA(order=(1, 0, 0)), series, devices=(0,), series_per_shard=2)
+    par = fit_arima(ml.ARIMA(order=(1, 0, 0)), series, devices=_par_devices(), series_per_shard=2)
     plain = ml.ARIMA(order=(1, 0, 0)).fit(series)
     _same_bytes("fit_arima ar", par.ar_, "plain ar", plain.ar_)
     return _fit(dict(ar=_h(par.ar_), mu=_h(par.mu_), sigma2=_h(par.sigma2_), forecast=_h(par.forecast(24))),
@@ -2055,7 +2068,7 @@ def _(ml, X, yc, yr, Xh=None):
     m = ml.SmallMLPTrainer(*w, data_schedule={"dataset": "identity_break", "order": "sequential"})
     Xm = np.ascontiguousarray(X[:576, :8])
     t = _three_class(X[:576])
-    with ParallelNeuralTrainer(m, devices=(0,), logical_shards=3) as tr:
+    with ParallelNeuralTrainer(m, devices=_par_devices(), logical_shards=3) as tr:
         for step in range(3):
             base = 192 * step
             tr.train_step([(Xm[base + 64 * k: base + 64 * (k + 1)], t[base + 64 * k: base + 64 * (k + 1)]) for k in range(3)])
@@ -2074,7 +2087,7 @@ def _(ml, X, yc, yr, Xh=None):
     cfg = ml.SambaConfig(vocab=256, d_model=32, layers=("mamba3", "attention"), n_heads=2, intermediate=64)
     m = ml.SambaStack(cfg, generator=ml.training.Generator(1), lr=1e-3)
     ids = _ids(X, 8, 17)
-    with ParallelNeuralTrainer(m, devices=(0,), logical_shards=2) as tr:
+    with ParallelNeuralTrainer(m, devices=_par_devices(), logical_shards=2) as tr:
         for step in range(2):
             tr.train_step([(ids[4 * step + 2 * k: 4 * step + 2 * k + 2, :-1], ids[4 * step + 2 * k: 4 * step + 2 * k + 2, 1:])
                            for k in range(2)])
@@ -2096,7 +2109,7 @@ def _(ml, X, yc, yr, Xh=None):
                                             shape=shape)
     ids = _ids(X, 6 * shape.batch, shape.length + 1)
     losses = []
-    with ParallelByteLanguageModelTrainer(seed.state_dict(), devices=(0,), logical_shards=2) as tr:
+    with ParallelByteLanguageModelTrainer(seed.state_dict(), devices=_par_devices(), logical_shards=2) as tr:
         for step in range(3):
             res = tr.train_step([ids[4 * step: 4 * step + 2], ids[4 * step + 2: 4 * step + 4]])
             losses.append([np.float64(v) for v in res["losses"]])      # a dict: losses, completed_steps
@@ -2141,9 +2154,9 @@ def _(ml, X, yc, yr, Xh=None):
     configuration, tree ranges on one device, held to the plain fit; after
     iforest-tuned for the reason iforest runs last."""
     from mojolearn.parallel_ensemble import fit_isolation_forest, score_isolation_forest
-    par = fit_isolation_forest(ml.IsolationForest(n_estimators=16, random_state=5), X, devices=(0,))
+    par = fit_isolation_forest(ml.IsolationForest(n_estimators=16, random_state=5), X, devices=_par_devices())
     plain = ml.IsolationForest(n_estimators=16, random_state=5).fit(X)
-    scores = score_isolation_forest(par, X, devices=(0,), method="score_samples")
+    scores = score_isolation_forest(par, X, devices=_par_devices(), method="score_samples")
     _same_bytes("score_isolation_forest", scores, "plain score_samples", plain.score_samples(X))
     return _fit(dict(scores=_h(scores), predict=_h(par.predict(X[:512]))),
                 par, lambda e: (e.score_samples(Xh), e.predict(Xh[:512])))
@@ -2242,7 +2255,8 @@ def run(args):
     commit, commit_source = commit_witness()
     host = host_record(ml) if ml.vendor() == "cpu" else None
     package = dict(version=getattr(ml, "__version__", "unknown"), package_dir=os.path.dirname(ml.__file__),
-                   numpy=np.__version__, python=platform.python_version())
+                   numpy=np.__version__, python=platform.python_version(),
+                   par_devices=",".join(str(d) for d in _par_devices()))
     print(f"# vendor={vendor} commit={commit} ({commit_source})"
           + (f" host.cpu_model={host['cpu_model']!r} host.column={host['column']} "
              f"host.families={sorted(host['families'])}" if host else ""))
