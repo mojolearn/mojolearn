@@ -1,0 +1,204 @@
+{
+  "status": "PASS",
+  "native_faults": false,
+  "checks": [
+    {
+      "n": 1,
+      "steps": 1,
+      "sha256": "6d58692645c9d1cfaf13541cbd258f86193ef63c2f1d38f6bbca9617372d7bd6"
+    },
+    {
+      "n": 1,
+      "steps": 2,
+      "sha256": "0b1b68e99646e1f538879a53b5510112bcf60f9e2260e4eb68d09ae13a93e996"
+    },
+    {
+      "n": 1,
+      "steps": 4,
+      "sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119"
+    },
+    {
+      "n": 1,
+      "steps": 8,
+      "sha256": "af1ef0ee38399a9d7ad174e8bcfc01e10516f6bc5faeda6037188095fe10e8d1"
+    },
+    {
+      "n": 1,
+      "steps": 16,
+      "sha256": "7c00b04028786fb2bc07aa0b5209a801a5bfbc95edc5c456b62a58d216f5473e"
+    },
+    {
+      "n": 3,
+      "steps": 1,
+      "sha256": "8fe1068f5bed5b0bec547e4b8914a2d4e2386cc0651bf2a462bf591bc6bf35ee"
+    },
+    {
+      "n": 3,
+      "steps": 2,
+      "sha256": "8e03063468bb594e0f66178b95e84a4b2cdf1d452222651a8b8c330559197163"
+    },
+    {
+      "n": 3,
+      "steps": 4,
+      "sha256": "9bf1cac70adb34875da0b12586aaaa0ff8790dd5c6cdd13d21831d4bd30a5f03"
+    },
+    {
+      "n": 3,
+      "steps": 8,
+      "sha256": "c484ab71c115ea8e93b758dd0e1351566c8be01aa2bc08b0141e18fbf9c20454"
+    },
+    {
+      "n": 3,
+      "steps": 16,
+      "sha256": "c09f428d4526baf69c48b11d4cd655dfcb8661129af5f04de9a9494fd377fbcc"
+    },
+    {
+      "n": 127,
+      "steps": 1,
+      "sha256": "3c29c692a6a4a67b9f30b5922f7d9f2679651e74388a89894bee66806f7f9776"
+    },
+    {
+      "n": 127,
+      "steps": 2,
+      "sha256": "a57683cc1e07d9384d03bd763bda44ff16a5b6106d609a99d39ba224d6a4413b"
+    },
+    {
+      "n": 127,
+      "steps": 4,
+      "sha256": "23dea436c5f5d3c75b3f8d60ce869ab78d5b30dece6baa94765e23b2969f70c1"
+    },
+    {
+      "n": 127,
+      "steps": 8,
+      "sha256": "c65e0f1340fb36752c8878691522cd22b48777b2507c44716f1bbb956612981d"
+    },
+    {
+      "n": 127,
+      "steps": 16,
+      "sha256": "a816819548eb22eb0a85a09066d7cd291f569e6631749c0d818e777f67e59033"
+    },
+    {
+      "n": 257,
+      "steps": 1,
+      "sha256": "a6e7ad2f0f101a284da7a8f3f00a0697e4749339117e415202d3fea94abccc38"
+    },
+    {
+      "n": 257,
+      "steps": 2,
+      "sha256": "0b2b7cd960034b3d29d1bd91b191a8148454ccba73e52b5c9d6af40fb8a1caf1"
+    },
+    {
+      "n": 257,
+      "steps": 4,
+      "sha256": "69d6b957fcf0e7d8feae821dacce78fa278f05e23506e601f8ea9855197f32fc"
+    },
+    {
+      "n": 257,
+      "steps": 8,
+      "sha256": "1651277b5d3f394f19fc9f4a117922d5e8f1bd875e4869b11a2a1c653ff3962b"
+    },
+    {
+      "n": 257,
+      "steps": 16,
+      "sha256": "9a0034cfb1f166babf7ffacbd6ed8fb386dd5d4aad723d80aec3814cb48d5880"
+    },
+    {
+      "n": 1025,
+      "steps": 1,
+      "sha256": "ca912e383d273d4f946fbe748944202856037832c0a137e16de1e5dc5198d8b7"
+    },
+    {
+      "n": 1025,
+      "steps": 2,
+      "sha256": "70bb5e58f065309c499ddb4515780cc03b26b86b0c1a7bd00d368c330a63436a"
+    },
+    {
+      "n": 1025,
+      "steps": 4,
+      "sha256": "6e7124a161bdc73a6cf066eaf7b4c5e8ec33c2435b56ed9fa7c8d34f5acb8bfb"
+    },
+    {
+      "n": 1025,
+      "steps": 8,
+      "sha256": "efd2faad8ab6763130a90358fa57116ef6a8f24143dc79349415b80bed49fd1c"
+    },
+    {
+      "n": 1025,
+      "steps": 16,
+      "sha256": "a228ff338b2a75cba65114d889dc378cc93347cd6affdbff2481c688812247c0"
+    },
+    {
+      "n": 65537,
+      "steps": 1,
+      "sha256": "5be13bb7fcdfb56bd3a695fe010acc2353daef0ea2a6de99e685ab9ea2db4abc"
+    },
+    {
+      "n": 65537,
+      "steps": 2,
+      "sha256": "90db28e9cd212c8f322dfe53800dddf2acd26488afe7e5cbe73307b81091fafa"
+    },
+    {
+      "n": 65537,
+      "steps": 4,
+      "sha256": "c09a7b2ba1b77e09c58462f72f0f1e74dd6febe2dacec4dc5a755ca23abc4e97"
+    },
+    {
+      "n": 65537,
+      "steps": 8,
+      "sha256": "353090e701fce40d7629cdb473a810f6e5bf7a093f4c676a82953f9798356ebd"
+    },
+    {
+      "n": 65537,
+      "steps": 16,
+      "sha256": "960d234b114fc79aaf39ff48b68185c7fee557849ae0bce5ca6f6ae48664036c"
+    }
+  ],
+  "refusals": [
+    [
+      0,
+      257,
+      4,
+      -1
+    ],
+    [
+      65,
+      257,
+      4,
+      -1
+    ],
+    [
+      3,
+      257,
+      4,
+      -1
+    ],
+    [
+      2,
+      0,
+      4,
+      -1
+    ],
+    [
+      2,
+      257,
+      0,
+      -1
+    ],
+    [
+      2,
+      257,
+      3,
+      -1
+    ],
+    [
+      2,
+      257,
+      4,
+      0
+    ]
+  ],
+  "aligned": 3,
+  "refused_alignment": 3,
+  "nonfinite_refusals": 3,
+  "scope": "Two GPUs; disjoint gradient columns, original per-cell tree and atomic publication. No full-model capacity or throughput claim."
+}

@@ -309,6 +309,25 @@ def main():
         except Exception as exc:
             report["host_binding"] = f"REFUSED {type(exc).__name__}: {exc}"[:200]
             failures.append(f"_mojolearn_byte_lm_host: {report['host_binding']}")
+        # EVERY HOST BINDING THE MANIFEST SHIPS (the packaging lane,
+        # 2026-09-14), through the package's own host loader, which refuses a
+        # binding that does not read back vendor cpu, IDENTICAL and the CPU
+        # kernel-matrix column. The list is the manifest's, never a copy here:
+        # a family added to host_surface.py is looked for on the next smoke
+        # without an edit to this file, and one missing from the wheel fails.
+        from mojolearn import _backend, host_surface
+        hosts = {}
+        for name in host_surface.wheel_bindings():
+            prefix = name[len("_mojolearn_"):]
+            try:
+                module = _backend.load_host_module(name)
+                hosts[name] = {"vendor": str(getattr(module, prefix + "_vendor")()),
+                               "numeric_mode": int(getattr(module, prefix + "_numeric_mode")()),
+                               "column": str(getattr(module, prefix + "_column")())}
+            except Exception as exc:
+                hosts[name] = f"REFUSED {type(exc).__name__}: {exc}"[:200]
+                failures.append(f"{name}: {hosts[name]}")
+        report["host_bindings"] = hosts
     used = {}
     for name, ctor in PER_BINDING.items():
         must_refuse = name in IDENTICAL_ONLY_BINDINGS and mode != "identical"

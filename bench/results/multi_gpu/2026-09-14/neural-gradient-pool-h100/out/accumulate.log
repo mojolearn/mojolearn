@@ -1,0 +1,9 @@
+1079 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x597700000000, nodemask=2)
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/parallel_accumulate_check.py", line 102, in <module>
+    main()
+    ~~~~^^
+  File "/root/mojolearn/tools/parallel_accumulate_check.py", line 44, in main
+    assert right[0] == 0, 'tree was replaced by a sequential fold'
+           ^^^^^^^^^^^^^
+AssertionError: tree was replaced by a sequential fold

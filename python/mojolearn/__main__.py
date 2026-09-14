@@ -17,6 +17,11 @@
                                          bundle an external implementation
                                          can check itself against
                                          (docs/CONFORMANCE.md)
+    python -m mojolearn identity         run the identity_break lanes on
+                                         this box and diff them against the
+                                         three GPU columns shipped in the
+                                         wheel; --check resolves the files
+                                         and runs nothing (_identity.py)
 
 The logic is in `_verify.py`; this file is argument parsing and nothing else,
 so a new subcommand is a parser entry and a function rather than a rewrite.
@@ -49,6 +54,7 @@ import argparse
 import sys
 
 from . import _conformance
+from . import _identity
 from . import _verify
 
 
@@ -222,6 +228,46 @@ def build_parser():
 
     # `python -m mojolearn conformance` bare: help, exit 2, same reasoning
     # as the top level -- no default subcommand.
+    d = sub.add_parser(
+        "identity",
+        help="run the identity_break lanes on this box and diff them "
+             "against the three GPU columns shipped in this install",
+        description=(
+            "Runs tools/identity_break.py (the wheel's copy, or the "
+            "checkout's) on this box under the identical tier, then diffs "
+            "the column it wrote against the three training GPU columns the "
+            "manifest names (Apple M4, NVIDIA H100, AMD MI300X at the "
+            "recorded commit), requiring IDENTICAL x4 on every cell this box "
+            "ran. On a CPU-only install only the lanes with a CPU training "
+            "path run. Needs numpy. The whole record takes minutes to an "
+            "hour depending on the box; --fixtures base --repeats 1 is the "
+            "quick pass and is judged cell by cell rather than through "
+            "--require-columns."),
+        formatter_class=argparse.RawDescriptionHelpFormatter)
+    d.add_argument("--check", action="store_true",
+                   help="resolve the harness, the columns and the commit "
+                        "witness and run nothing (exit 0 ready, 5 missing)")
+    d.add_argument("--lanes", default="",
+                   help="comma separated subset of the record's lanes "
+                        "(default: every lane this box can run)")
+    d.add_argument("--fixtures", default="",
+                   help="comma separated subset of the record's fixtures "
+                        "(default: all nine)")
+    d.add_argument("--repeats", type=int, default=2,
+                   help="fits per cell, to separate a mover on this box from "
+                        "a divergence between boxes (default %(default)s)")
+    d.add_argument("--vendor", default=None,
+                   help="the box label written into the local column "
+                        "(default: the harness's own, cpu-<model> or the "
+                        "machine architecture)")
+    d.add_argument("--keep", metavar="PATH", default=None,
+                   help="write the local column here instead of a temporary "
+                        "directory (it is always kept)")
+    d.add_argument("--json", action="store_true",
+                   help="emit one JSON object as the verdict instead of the "
+                        "human line (the harness's own output still streams)")
+    d.set_defaults(func=_identity.cmd_identity)
+
     c.set_defaults(func=lambda _args: (c.print_help(),
                                        _verify.EXIT_USAGE)[1])
 

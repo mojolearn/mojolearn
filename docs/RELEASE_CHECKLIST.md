@@ -36,6 +36,7 @@ pixi run check-docs-facts   # fails if a pin, a badge or a prose default drifted
 
 ```sh
 python3 packaging/check_ext_lists.py   # every pack/build/smoke list agrees with _backend
+python3 packaging/check_ext_lists.py --host   # the host list is read from the manifest everywhere
 ```
 
 ```sh
@@ -53,6 +54,16 @@ The wheel's contents are one rule: the three tree bindings in every tier,
 every other binding in `identical/` alone (DEVIATION 2490). The checker holds
 the pack and build lists to `_backend._TIERED` and `_MODULES`; a binding that
 drifted back into three tiers, or out of the wheel, goes red here.
+
+Since 0.8.6 the wheel also carries every host binding
+`python/mojolearn/host_surface.py` declares (ten, under `mojolearn/host/`),
+`mojolearn/reference_cards/`, a copy of `tools/identity_trace_diff.py` and
+`tools/identity_break.py`, and the three training GPU columns the manifest
+names under `mojolearn/identity_columns/<record>/` with a COMMIT witness. The
+host list lives in the manifest alone; `--host` above fails any builder,
+packer, smoke or admission file that spells one of its own. The columns the
+wheel ships are `TRAINING_GPU_COLUMNS` in the manifest, so a new record is a
+manifest edit, never a packaging edit.
 
 `_version.py` is the source of truth and the checker holds `pyproject.toml`,
 `CITATION.cff` and the newest published CHANGELOG heading to it, so a
@@ -77,6 +88,29 @@ Launch each with `nohup ... &` from a shell that outlives it. Proofs land at
 `bench/results/releases/<release>/hip-gfx942/release-build/` and
 `bench/results/e1g/<stamp>-nvidia-mamba/remote/release-build/`; each
 `build/build-provenance.json` names its commit and architecture.
+
+## 2b. The host bindings, per vendor (the check the CPU gates cannot make)
+
+The host bindings are vendor-neutral and built ON EACH LEG, pinned to
+`MOJOLEARN_TARGET_COLUMN=cpu` with no accelerator target. The 0.8.5 freeze
+caught two regressions here that no CPU-only workflow can see, a host build
+that took the leg's GPU column and refused, and a detected-column read-back
+that folded the build box's GPU name into a vendor-neutral binary so the
+NVIDIA and AMD copies differed by 43 bytes. On every leg, before packing:
+
+```sh
+# every host binding the manifest ships is in the set, read back as cpu, with no device code
+python3 python/mojolearn/host_surface.py --wheel-bindings
+grep '^host ' <leg>/build/sets/<vendor>/<arch>/readback.txt        # one row per binding, third field cpu
+grep '^host ' <leg>/build/sets/<vendor>/<arch>/arch_readback.txt   # one row per binding, NONE-BY-DESIGN
+grep '"tier": "host"' <leg>/build/sets/<vendor>/<arch>/manifest.json   # staged with a RUNPATH, in the closure
+# the byte compare across the three legs: one digest per binding, the same on sm_89, sm_90a and gfx942
+sha256sum <sm89>/build/sets/cuda/sm_89/host/*.so <sm90a>/build/sets/cuda/sm_90a/host/*.so <hip>/build/sets/hip/gfx942/host/*.so | sort
+```
+
+`pack_wheel.py` (step 3) refuses the wheel when any binding's digests
+differ across legs, and requires every manifest binding in every set; the
+lines above say WHICH leg is wrong before the packer says that one is.
 
 ## 3. Pack, audit, strip (on the Mac, docker, about 10 minutes)
 
@@ -106,6 +140,23 @@ MOJOLEARN_RUNPOD_KEY_FILE=~/.mojolearn_runpod_key MOJOLEARN_NVIDIA_CAMPAIGN=7 MO
 ```
 
 A failing job is a failing release: fix forward, back to step 2.
+
+Each qualification's `*.installed.json` now carries `installed_host_bindings`
+(one row per manifest binding, read back through the package's own host
+loader, digest equal to the wheel member); `verify_linux_surface_qualification.py`
+refuses a record that lacks one. On each vendor's box, from the installed
+wheel, the identity command must also pass against the shipped columns:
+
+```sh
+python -m venv /tmp/q && /tmp/q/bin/pip install <dist>/final/<wheel> numpy
+cd /tmp && MOJOLEARN_NUMERIC_MODE=identical /tmp/q/bin/python -m mojolearn identity --check   # exit 0: harness, 3 columns, witness
+cd /tmp && MOJOLEARN_NUMERIC_MODE=identical /tmp/q/bin/python -m mojolearn identity --keep /tmp/q/local.json   # exit 0: IDENTICAL x4 on every cell
+```
+
+The second command runs the whole record (47 lanes, 9 fixtures, 2 fits per
+cell); keep `local.json` with the leg. On the release Mac the same two
+commands run from the venv `verify_wheel.sh` leaves, and `verify_wheel.sh`
+itself already loads every host binding and runs `identity --check`.
 
 ## 5. Publish Linux (one command)
 

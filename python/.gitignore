@@ -41,10 +41,15 @@ mojolearn/_mojolearn_mamba.so
 # untracked in `git status` where a careless add would have committed a
 # 12 MB Mach-O. Added the day the binding first compiled.
 mojolearn/_mojolearn_transformer.so
-# Build output copied in by packaging/macos/build_release_wheel.sh so that
-# `python -m mojolearn verify` has a comparator inside the wheel. The single
-# source stays tools/identity_trace_diff.py in git.
+# Build outputs copied in by packaging/macos/build_release_wheel.sh so that
+# `python -m mojolearn verify` has a comparator inside the wheel and
+# `python -m mojolearn identity` has the harness, the three training GPU
+# columns and the commit witness. The single sources stay in git:
+# tools/identity_trace_diff.py, tools/identity_break.py and the columns
+# python/mojolearn/host_surface.py names under bench/results/identity_break/.
 mojolearn/_identity_trace_diff.py
+mojolearn/_identity_break.py
+mojolearn/identity_columns/
 mojolearn/identical/
 mojolearn/.dylibs/
 dist/

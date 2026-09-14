@@ -70,6 +70,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.vendor import COMPILED_VENDOR
 from max.gpu.host import DeviceContext
 
+from training.accumulate_multi_gpu import parallel_accumulate_host, accumulate_pool_fault_available
 from training.optimizer_multi_gpu import parallel_optimizer_step_host
 from training.estimator import (
     identical_ce_loss_host,
@@ -127,6 +128,14 @@ def training_vendor_binding() raises -> PythonObject:
     import when this disagrees with the vendor directory the set was loaded
     from."""
     return PythonObject(String(COMPILED_VENDOR))
+
+
+def accumulate_pool_fault_available_binding() raises -> PythonObject:
+    return PythonObject(accumulate_pool_fault_available())
+
+
+def accumulate_parallel_available_binding() raises -> PythonObject:
+    return PythonObject(1)
 
 
 def optimizer_parallel_available_binding() raises -> PythonObject:
@@ -598,7 +607,7 @@ def accumulate_binding(
     var count = 0
     with GILReleased(Python()):
         var ctx = DeviceContext()
-        count = samba_accumulate_host(
+        count = parallel_accumulate_host(
             ctx, _f32_ptr(a[0]), _f32_ptr(a[1]), n, steps, t_tokens,
         )
     return PythonObject(count)
@@ -664,6 +673,8 @@ def PyInit__mojolearn_training() abi("C") -> PythonObject:
         var m = PythonModuleBuilder("_mojolearn_training")
         m.def_function[training_vendor_binding]("training_vendor")
         m.def_function[training_numeric_mode_binding]("training_numeric_mode")
+        m.def_function[accumulate_pool_fault_available_binding]("accumulate_pool_fault_available")
+        m.def_function[accumulate_parallel_available_binding]("accumulate_parallel_available")
         m.def_function[optimizer_parallel_available_binding]("optimizer_parallel_available")
         m.def_function[optimizer_step_binding]("optimizer_step")
         m.def_function[clip_grad_norm_binding]("clip_grad_norm")
