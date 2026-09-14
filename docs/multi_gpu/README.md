@@ -715,3 +715,14 @@ The final Samba checkpoint gate passes trained-model continuation, seven
 corruption refusals before model construction, failed-publication atomicity,
 legacy loading and a 415,293,679-byte archive roundtrip. Full evidence is in
 `bench/results/multi_gpu/2026-09-14/samba-stream-checkpoint-h100/`.
+
+### HDBSCAN
+
+`mojolearn.parallel_classical.fit_hdbscan(model, X, devices=(0, 1))` runs the
+estimator in a cooperative worker whose core-distance k-NN and dense distance
+matrix use the existing neighbors and hierarchy row drivers; the mutual
+reachability cells, MST, condensed hierarchy and selection stay on the root.
+Design: [hdbscan.md](hdbscan.md). Receipts on two H100s and two MI300X
+(`hdbscan-h100/`, `hdbscan-mi300x/`) compare every trace record against one
+device, fail against a distance-row sabotage build, and are equal across the
+two vendors.

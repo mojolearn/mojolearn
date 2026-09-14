@@ -76,7 +76,7 @@ implementations still require their own AMD/Apple qualification.
 | ARIMA | Independent-series fit; two-H100 fit/forecast equality gates passed | Broader orders, large-memory and cross-vendor qualification; distributed prediction |
 | ExponentialSmoothing | Independent-series additive/multiplicative fit; two-H100 fit/forecast gates pass | Distributed prediction; broader configurations and capacity qualification |
 | StandardScaler / MinMaxScaler | Column-sharded fit/transform/inverse; two-H100 gates passed | Large-memory and cross-vendor qualification |
-| HDBSCAN | No complete parallel driver; linkage subcalls contain existing neighbor/distance seams | Complete fit dispatch and qualification; dense graph, MST and hierarchy pooling |
+| HDBSCAN | fit_hdbscan: core-distance k-NN query rows and dense pairwise distance rows through the neighbors and hierarchy row drivers; mutual reachability, MST, condensed tree and selection on the root; traces and attributes equal one device on two H100s and two MI300X with equal receipts across vendors | MST, hierarchy and m x m graph pooling; sparse graph arm (not implemented in the lane); capacity |
 | KernelRidge / Nystroem | No complete parallel driver; non-Laplacian kernel construction shares SVM's internal seam | Fit/transform dispatch, RNG/basis and full-state gates; kernel matrix, factorization and eigensolver pooling |
 | RBFSampler | No parallel driver or native feature partition | Global random-feature identities, distributed transform, state pooling and qualification |
 | GaussianMixture | No distributed EM driver; KMeans initialization has an internal assignment seam | EM reduction-order design, covariance/init variants, state pooling and qualification |
