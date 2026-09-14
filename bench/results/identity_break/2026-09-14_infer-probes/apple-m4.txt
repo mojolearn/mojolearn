@@ -1,0 +1,18 @@
+# vendor=apple-m4 commit=3cd3afd1c246263d1a618edac473f7a4f5986ea1 (MOJOLEARN_COMMIT)
+# identity_break  mode=identical  2026-09-14 06:04:27  macOS-26.5.2-arm64-arm-64bit-Mach-O
+# per lane: the train row, then an `infer` row (held-out rows) and a `model` row (saved bytes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+| kmeans                 | 5aa44cc11034dec9 | 3de3e103006de69c | 0a570e84b0002723 | 6f0529fcb3d60536 | 993fe5caff144b0c | 993fe5caff144b0c | 2ae942d45a51757a | 43d8a3d3859f4143 | d4cc38e75f8e2d75 |
+| holtwinters            | 9781c2061a287937 | b2a5df45db1395b0 | 66f688c307cabc3b | 560cdc45a69cc987 | db35c88da059e9e1 | db35c88da059e9e1 | 9781c2061a287937 | 8fb4dd76d8080a46 | 8fa4116875bdf59c |
+| holtwinters infer      | f930b5ed0ef2c318 | a48df2766423502f | bfa4a149ae74602c | 5df1cfaa8f4b4e78 | 5e7dba822d698dd4 | 5e7dba822d698dd4 | f930b5ed0ef2c318 | baeea8494596eeb9 | c03b71a1af7f0d5c |
+| arima                  | 377790cb117abb61 | 990e96a6d7fd2874 | d4ed8b9405da9691 | 440f5eba6a3ddede | 7dbefd70378dfac6 | 7dbefd70378dfac6 | 377790cb117abb61 | 20bf64323fc5fa12 | 29f18fa209679839 |
+| arima infer            | 9f76be0396a666ca | e699bca0934688f0 | 06461dad67cfb784 | 956bebc3f45a1c69 | aab930a9e876ec1e | aab930a9e876ec1e | 9f76be0396a666ca | 4aa662dbcc728e65 | 4e0defb4e0feb99f |
+| iforest                | 8703d4a008ffd13d | 5043855ee14799da | 72260557474879ae | 8703d4a008ffd13d | 54ea9b5c8c3fc38b | 54ea9b5c8c3fc38b | b879bcf3dcf99f38 | 9b849a13c8d35adb | a5b7676e39778af5 |
+| iforest infer          | c4247bb3a6c4675e | 288c5e41c62cddea | e4d04598e6d55395 | a8612e7e09b4983b | f3dcde6748050803 | f3dcde6748050803 | db8a00a8aa424f7c | 7b104f74d47a6e15 | 99572e40ada83cdf |
+
+cells=36 stable=36 moved=0 refused=0
+infer: stable=27 n/a=9
+model: n/a=36
+n/a: arima model n/a:no-save, holtwinters model n/a:no-save, iforest model n/a:no-save, kmeans infer n/a:no-predict, kmeans model n/a:no-save
+wrote bench/results/identity_break/2026-09-14_infer-probes/apple-m4.json
