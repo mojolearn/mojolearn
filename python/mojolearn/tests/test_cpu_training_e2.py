@@ -37,7 +37,8 @@ ORACLE = "cluster/host/kmeans_oracle.mojo"
 METRICS_ORACLE = "metrics/host/metrics_oracle.mojo"
 METRICS_EXPORTS = ("accuracy_score", "adjusted_rand_score", "entropy", "mutual_info_score",
                    "homogeneity_score", "completeness_score", "v_measure_score", "r2_score",
-                   "silhouette")
+                   "silhouette", "spectral_fit_predict_dataset")
+SPECTRAL_ORACLE = "spectral/host/spectral_oracle.mojo"
 GPU_IMPORTS = re.compile(r"^\s*from\s+(max\.gpu|std\.gpu)", re.M)
 
 
@@ -104,7 +105,7 @@ def test_manifest_covers_metrics():
     assert "metrics" in host_surface.covered_lanes(), "metrics is not a covered training lane"
     fam = host_surface.family("metrics")
     assert fam["routes"] == "_mojolearn_metrics"
-    assert fam["training_lanes"] == ("metrics",)
+    assert fam["training_lanes"] == ("metrics", "spectral")
     assert METRICS_ORACLE in fam["host_modules"]
     assert (ROOT / METRICS_ORACLE).is_file()
     assert (ROOT / "bindings/build_metrics_host.sh").is_file()
@@ -118,7 +119,7 @@ def test_metrics_binding_registers_the_lane_entries():
     for name in METRICS_EXPORTS + ("metrics_vendor", "metrics_numeric_mode"):
         assert f'("{name}")' in src, f"the metrics host binding does not register {name}"
         assert name in exports, f"the manifest does not list {name} for metrics"
-    for absent in ("rand_score", "trustworthiness", "spectral_fit_predict_dataset", "umap_fit_transform",
+    for absent in ("rand_score", "trustworthiness", "spectral_fit_predict_graph", "umap_fit_transform",
                    "kl_divergence", "log_loss", "confusion_matrix"):
         assert f'("{absent}")' not in src, f"{absent} must stay absent so it refuses by name"
 
@@ -134,6 +135,45 @@ def test_metrics_oracle_imports_no_gpu_and_carries_the_sabotage_arm():
     assert "comptime if METRICS_ORACLE_HOST_SABOTAGE:" in text
     assert "values[(i + 1) % n]" in text, "the sabotage arm does not shift the chunk boundaries"
     assert "METRICS_ORACLE_HOST_SABOTAGE" in _read(host_surface.binding_source("metrics"))
+
+
+def test_manifest_covers_spectral_and_the_oracle_moved():
+    assert "spectral" in host_surface.covered_lanes(), "spectral is not a covered training lane"
+    fam = host_surface.family("metrics")
+    assert "spectral" in fam["training_lanes"] and "SpectralClustering" in fam["classes"]
+    assert SPECTRAL_ORACLE in fam["host_modules"]
+    assert "spectral clustering" not in host_surface.no_cpu_path_sentence()
+    text = _read(SPECTRAL_ORACLE)
+    assert not GPU_IMPORTS.search(text), f"{SPECTRAL_ORACLE} imports a GPU module"
+    assert not re.search(r"^\s*from .*import.*DeviceContext", text, re.M)
+    assert "from gemm.host.gemm_oracle import contract_leaf_size" in text
+    assert "def oracle_embedding[" in text and "def host_spectral_fit_predict_dataset(" in text
+    assert "def host_coo_symmetrize(" in text
+    checks = _read("spectral/checks/spectral_oracle.mojo")
+    assert "from spectral.host.spectral_oracle import (" in checks, "the checks file must re-export the host oracle"
+    assert "def dense_laplacian_eigenvalues_f64(" in checks
+    assert "comptime if SPECTRAL_ORACLE_HOST_SABOTAGE:" in text and "seed + UInt64(1)" in text
+    assert "SPECTRAL_ORACLE_HOST_SABOTAGE" in _read(host_surface.binding_source("metrics"))
+    workflow = _read(".github/workflows/cpu-identity-gate.yml")
+    assert f'- "{SPECTRAL_ORACLE}"' in workflow
+
+
+def test_spectral_runs_on_the_host_when_built():
+    if _backend._CPU_ONLY is None:
+        print("SKIP: a GPU set loaded; the host route is not taken here")
+        return
+    if "_mojolearn_metrics_host" not in _backend.host_families_built():
+        print("SKIP: the metrics host binding is not built")
+        return
+    import numpy as np
+    rng = np.random.default_rng(2)
+    x = np.concatenate([rng.standard_normal((60, 3)) + 6.0, rng.standard_normal((60, 3)) - 6.0]).astype(np.float32)
+    got = [np.asarray(mojolearn.SpectralClustering(n_clusters=2, n_neighbors=8, random_state=5).fit(x).labels_)
+           for _ in range(2)]
+    assert got[0].tobytes() == got[1].tobytes(), "two host fits returned different labels"
+    assert set(got[0].tolist()) <= {0, 1} and got[0].shape == (120,)
+    assert (got[0][:60] == got[0][0]).all() and (got[0][60:] == got[0][60]).all() and got[0][0] != got[0][60], \
+        "two separated blobs were not split into the two clusters"
 
 
 def test_metrics_run_on_the_host_when_built():

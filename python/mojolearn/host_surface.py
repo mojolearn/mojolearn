@@ -142,13 +142,17 @@ TRAINING_LANE_NAMES = {
     # the metrics family's own host binding; the lane also fits a KMeans,
     # served by the core family above.
     "metrics": "the metrics",
+    # The spectral lane, same batch: the spectral host oracle moved to
+    # spectral/host/spectral_oracle.mojo with the k-NN graph, the symmetrize
+    # kernel and the k-means recluster restated, exported as
+    # spectral_fit_predict_dataset from the metrics host binding.
+    "spectral": "spectral clustering",
 }
 
 #: The lanes with NO CPU path of any kind, as the README states them. A
 #: lane leaves this list the day its host lane merges; docs_facts fails the
 #: README until the marked span is rewritten.
 NO_CPU_PATH = (
-    "spectral clustering",
     "UMAP",
     "the Gaussian process",
     "ARIMA",
@@ -340,24 +344,31 @@ FAMILIES = (
         routes="_mojolearn_metrics",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("metrics",),
+        training_lanes=("metrics", "spectral"),
         inference_lanes=(),
         forest_kinds=(),
         classes=(
+            "SpectralClustering",
             "metrics.accuracy_score", "metrics.adjusted_rand_score",
             "metrics.entropy", "metrics.mutual_info_score",
             "metrics.homogeneity_score", "metrics.completeness_score",
             "metrics.v_measure_score", "metrics.r2_score",
             "metrics.silhouette_score", "metrics.silhouette_samples",
         ),
-        display="the label, r2 and silhouette metrics",
-        host_modules=("metrics/host/metrics_oracle.mojo",),
+        display="the label, r2 and silhouette metrics and spectral clustering",
+        host_modules=(
+            "metrics/host/metrics_oracle.mojo",
+            "spectral/host/spectral_oracle.mojo",
+            "cluster/host/kmeans_oracle.mojo",
+            "core/knn_host_predict.mojo",
+        ),
         exports=(
             "metrics_host_numeric_mode", "metrics_host_vendor",
             "metrics_host_column", "metrics_host_sabotage", "metrics_vendor",
             "metrics_numeric_mode", "accuracy_score", "adjusted_rand_score",
             "entropy", "mutual_info_score", "homogeneity_score",
             "completeness_score", "v_measure_score", "r2_score", "silhouette",
+            "spectral_fit_predict_dataset",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=False,
