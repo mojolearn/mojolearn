@@ -13,6 +13,7 @@ def main():
     parser.add_argument('--corpus', type=Path, required=True)
     parser.add_argument('--report', type=Path, required=True)
     parser.add_argument('--faults', action='store_true')
+    parser.add_argument('--logical-shards', type=int, choices=(2, 3, 5, 8), default=3)
     args = parser.parse_args()
     if not os.environ.get('RUNPOD_POD_ID'):
         raise SystemExit('RunPod required; no local execution')
@@ -47,23 +48,27 @@ def main():
 
         def batches(step):
             result = []
-            for shard in range(3):
-                start = (step * 3 + shard) * 16
+            for shard in range(args.logical_shards):
+                start = (step * args.logical_shards + shard) * 16
                 result.append(np.frombuffer(corpus[start:start+16], dtype=np.uint8)
                               .astype('<i4').reshape(2, 8))
             return result
 
-        with Parallel(initial, devices=(0, 1), logical_shards=3, pool_optimizer=True) as pool, \
-             Parallel(initial, devices=(0, 1), logical_shards=3, pool_optimizer=False) as replicas, \
-             Parallel(initial, devices=(1,), logical_shards=3, pool_optimizer=False) as replay:
+        with Parallel(initial, devices=(0, 1), logical_shards=args.logical_shards, pool_optimizer=True) as pool, \
+             Parallel(initial, devices=(0, 1), logical_shards=args.logical_shards, pool_optimizer=False) as replicas, \
+             Parallel(initial, devices=(1,), logical_shards=args.logical_shards, pool_optimizer=False) as replay:
             ownership = pool.optimizer_ownership()
             for rank, row in enumerate(ownership):
                 first = shape.n_total * rank // 2
                 count = shape.n_total * (rank + 1) // 2 - first
                 assert row == dict(device=rank, first=first, count=count,
-                                   moment_bytes=8*count, rollback_bytes=12*count)
+                                   moment_bytes=8*count, rollback_bytes=12*count, reduction_bytes=8*count)
             assert sum(x['moment_bytes'] + x['rollback_bytes'] for x in ownership) == 20*shape.n_total
             assert sum(x['moment_bytes'] + x['rollback_bytes'] for x in replicas.optimizer_ownership()) == 40*shape.n_total
+            assert sum(x['reduction_bytes'] for x in ownership) == 8*shape.n_total
+            replicated = replicas.optimizer_ownership()
+            assert replicated[0]['reduction_bytes'] == 8*shape.n_total
+            assert replicated[1]['reduction_bytes'] == 0
             same(initial, pool.state_dict(rank=1))
             for step in range(3):
                 a = pool.train_step(batches(step))
@@ -132,11 +137,11 @@ def main():
                 same(pool.state_dict(), resumed.state_dict())
                 same(pool.state_dict(), replay.state_dict())
             state = pool.state_dict()
-            checks.append(dict(layers=layers, parameters=shape.n_total, ownership=ownership,
+            checks.append(dict(layers=layers, logical_shards=args.logical_shards, parameters=shape.n_total, ownership=ownership,
                 state_sha256=hashlib.sha256(b''.join(state[k].tobytes() for k in ('parameters','m','v','flags'))).hexdigest(),
                 native_faults=args.faults))
     args.report.write_text(json.dumps(dict(status='PASS', checks=checks,
-        scope='Two H100s: optimizer moment/rollback pooling, replay, exports and recovery. Model weights and activations remain replicated.'), indent=2) + '\n')
+        scope='Two GPUs: optimizer moment/rollback and gradient-reduction pooling, replay, exports and recovery. Model weights and activations remain replicated.'), indent=2) + '\n')
     print(args.report.read_text())
 
 

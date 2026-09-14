@@ -1323,6 +1323,10 @@ def byte_lm_pool_fault_available_binding() raises -> PythonObject:
     return PythonObject(pool_fault_available())
 
 
+def byte_lm_parallel_reduction_pool_available_binding() raises -> PythonObject:
+    return PythonObject(1)
+
+
 def byte_lm_parallel_ownership_binding(session: PythonObject) raises -> PythonObject:
     var owner = session.downcast_value_ptr[ByteParallelTrainer]()
     owner[].require_open()
@@ -1334,6 +1338,12 @@ def byte_lm_parallel_ownership_binding(session: PythonObject) raises -> PythonOb
         row.append(PythonObject(b.optimizer_count))
         row.append(PythonObject(4*(len(b.m_state)+len(b.v_state))))
         row.append(PythonObject(4*(len(b.shadow_p)+len(b.shadow_m)+len(b.shadow_v))))
+        var reduction_bytes = 0
+        if owner[].pool_optimizer:
+            reduction_bytes = 4*(len(owner[].pool_totals[i])+len(owner[].pool_incoming[i]))
+        elif i == 0:
+            reduction_bytes = 4*(len(owner[].total.value())+len(owner[].incoming.value()))
+        row.append(PythonObject(reduction_bytes))
         out.append(row)
     return out
 
@@ -1382,6 +1392,7 @@ def PyInit__mojolearn_byte_lm() abi("C") -> PythonObject:
         module.def_function[byte_lm_parallel_open_binding[False]]("byte_lm_parallel_open")
         module.def_function[byte_lm_parallel_open_binding[True]]("byte_lm_parallel_open_pooled")
         module.def_function[byte_lm_pool_fault_available_binding]("byte_lm_pool_fault_available")
+        module.def_function[byte_lm_parallel_reduction_pool_available_binding]("byte_lm_parallel_reduction_pool_available")
         module.def_function[byte_lm_parallel_ownership_binding]("byte_lm_parallel_ownership")
         module.def_function[byte_lm_parallel_step_binding]("byte_lm_parallel_step")
         module.def_function[byte_lm_parallel_export_binding]("byte_lm_parallel_export")

@@ -37,6 +37,8 @@ struct ByteParallelTrainer(Movable, Writable):
     var trainers: List[ByteTrainer]
     var total: Optional[DeviceBuffer[DType.float32]]
     var incoming: Optional[DeviceBuffer[DType.float32]]
+    var pool_totals: List[DeviceBuffer[DType.float32]]
+    var pool_incoming: List[DeviceBuffer[DType.float32]]
     var pool_optimizer: Bool
     var logical_shards: Int
     var busy: Bool
@@ -47,6 +49,8 @@ struct ByteParallelTrainer(Movable, Writable):
         self.trainers = List[ByteTrainer]()
         self.total = Optional[DeviceBuffer[DType.float32]]()
         self.incoming = Optional[DeviceBuffer[DType.float32]]()
+        self.pool_totals = List[DeviceBuffer[DType.float32]]()
+        self.pool_incoming = List[DeviceBuffer[DType.float32]]()
         self.pool_optimizer = False
         self.logical_shards = 0
         self.busy = False
@@ -63,6 +67,8 @@ struct ByteParallelTrainer(Movable, Writable):
         _ = self.trainers^
         _ = self.total^
         _ = self.incoming^
+        _ = self.pool_totals^
+        _ = self.pool_incoming^
         for i in range(len(self.contexts)):
             try:
                 self.contexts[i].synchronize()
@@ -77,6 +83,8 @@ struct ByteParallelTrainer(Movable, Writable):
         self.trainers = List[ByteTrainer]()
         self.total = None
         self.incoming = None
+        self.pool_totals = List[DeviceBuffer[DType.float32]]()
+        self.pool_incoming = List[DeviceBuffer[DType.float32]]()
         for i in range(len(self.contexts)):
             self.contexts[i].synchronize()
         self.contexts = List[DeviceContext]()
@@ -113,9 +121,16 @@ struct ByteParallelTrainer(Movable, Writable):
                     flags, completed, opt, shape,
                     shape.n_total()*i//len(devices) if pool_optimizer else 0,
                     shape.n_total()*(i+1)//len(devices)-shape.n_total()*i//len(devices) if pool_optimizer else -1))
-            self.total = self.contexts[0].enqueue_create_buffer[DType.float32](shape.n_total())
-            self.incoming = self.contexts[0].enqueue_create_buffer[DType.float32](shape.n_total())
-            self.contexts[0].synchronize()
+            if pool_optimizer:
+                for i in range(len(devices)):
+                    var owned = self.trainers[i].buffers.optimizer_count
+                    self.pool_totals.append(self.contexts[i].enqueue_create_buffer[DType.float32](owned))
+                    self.pool_incoming.append(self.contexts[i].enqueue_create_buffer[DType.float32](owned))
+                    self.contexts[i].synchronize()
+            else:
+                self.total = self.contexts[0].enqueue_create_buffer[DType.float32](shape.n_total())
+                self.incoming = self.contexts[0].enqueue_create_buffer[DType.float32](shape.n_total())
+                self.contexts[0].synchronize()
         except error:
             self.close()
             raise error
@@ -218,23 +233,48 @@ struct ByteParallelTrainer(Movable, Writable):
                 for rank in range(active):
                     if failed[rank] != 0:
                         raise Error("byte LM parallel: gradient shard " + String(start + rank) + " failed")
-                # Completion order never chooses arithmetic order. The root
-                # folds the wave in ascending logical shard order, unchanged.
+                # Every parameter keeps the same logical left fold. Owners
+                # reduce disjoint ranges, so no cross-owner sum exists.
                 for rank in range(active):
-                    self.trainers[rank].buffers.grad.enqueue_copy_to(self.incoming.value())
-                    self.contexts[rank].synchronize()
-                    if start + rank == 0:
-                        _copy_into(self.contexts[0], self.total.value(), self.incoming.value(), 0, 0, n)
+                    if self.pool_optimizer:
+                        for owner in range(width):
+                            var first = self.trainers[owner].buffers.optimizer_first
+                            var owned = self.trainers[owner].buffers.optimizer_count
+                            var part = self.trainers[rank].buffers.grad.create_sub_buffer[DType.float32](first,owned)
+                            part.enqueue_copy_to(self.pool_incoming[owner])
+                            self.contexts[rank].synchronize()
+                            if start + rank == 0:
+                                _copy_into(self.contexts[owner],self.pool_totals[owner],self.pool_incoming[owner],0,0,owned)
+                            else:
+                                self.contexts[owner].enqueue_function[_ordered_add_kernel](
+                                    self.pool_totals[owner].unsafe_ptr(),self.pool_incoming[owner].unsafe_ptr(),Int32(owned),
+                                    grid_dim=((owned+127)//128,1,1),block_dim=(128,1,1))
+                            self.contexts[owner].synchronize()
                     else:
-                        self.contexts[0].enqueue_function[_ordered_add_kernel](
-                            self.total.value().unsafe_ptr(), self.incoming.value().unsafe_ptr(), Int32(n),
-                            grid_dim=((n + 127) // 128, 1, 1), block_dim=(128, 1, 1))
-                    self.contexts[0].synchronize()
+                        self.trainers[rank].buffers.grad.enqueue_copy_to(self.incoming.value())
+                        self.contexts[rank].synchronize()
+                        if start + rank == 0:
+                            _copy_into(self.contexts[0], self.total.value(), self.incoming.value(), 0, 0, n)
+                        else:
+                            self.contexts[0].enqueue_function[_ordered_add_kernel](
+                                self.total.value().unsafe_ptr(), self.incoming.value().unsafe_ptr(), Int32(n),
+                                grid_dim=((n + 127) // 128, 1, 1), block_dim=(128, 1, 1))
+                        self.contexts[0].synchronize()
                 start += active
-            # Complete every broadcast and scan BEFORE any replica updates.
+            # Assemble each committed full-gradient replica from disjoint
+            # owner ranges. Complete ALL copies/scans before any update.
             for i in range(len(self.trainers)):
-                self.total.value().enqueue_copy_to(self.trainers[i].buffers.grad)
-                self.contexts[0].synchronize()
+                if self.pool_optimizer:
+                    for owner in range(width):
+                        var first = self.trainers[owner].buffers.optimizer_first
+                        var owned = self.trainers[owner].buffers.optimizer_count
+                        var target = self.trainers[i].buffers.grad.create_sub_buffer[DType.float32](first,owned)
+                        self.pool_totals[owner].enqueue_copy_to(target)
+                        self.contexts[owner].synchronize()
+                    self.contexts[i].synchronize()
+                else:
+                    self.total.value().enqueue_copy_to(self.trainers[i].buffers.grad)
+                    self.contexts[0].synchronize()
                 if self.pool_optimizer:
                     pool_maybe_fault(self.contexts[i], self.trainers[i].buffers.grad, "grad_nonfinite", 0, _FAULT_NAN, self.trainers[i].buffers.optimizer_first)
                 _require_device_finite(self.contexts[i], self.trainers[i].scan,

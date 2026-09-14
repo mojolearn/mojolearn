@@ -65,6 +65,10 @@ class ParallelByteLanguageModelTrainer:
         opener = getattr(binding, open_name, None)
         if not callable(opener):
             raise ImportError('rebuild bindings/build_byte_lm.sh for optimizer pooling')
+        if not callable(getattr(binding, 'byte_lm_parallel_reduction_pool_available', None)):
+            raise ImportError('rebuild bindings/build_byte_lm.sh for distributed reduction buffers')
+        if binding.byte_lm_parallel_reduction_pool_available() != 1:
+            raise RuntimeError('binding refused distributed reduction availability')
         cfg = seed['config']
         params = [0, self.step_, cfg['kind'], cfg['lr'], cfg['beta1'], cfg['beta2'],
                   cfg['eps'], cfg['weight_decay'], cfg['momentum'], cfg['dampening'],
@@ -142,12 +146,13 @@ class ParallelByteLanguageModelTrainer:
             return out
 
     def optimizer_ownership(self):
-        """Actual native ranges and resident moment/rollback bytes per device."""
+        """Actual native ownership and moment/rollback/reduction bytes per device."""
         with self._lock:
             self._open()
             rows = self._binding.byte_lm_parallel_ownership(self._session)
             return tuple(dict(device=device, first=int(row[0]), count=int(row[1]),
-                              moment_bytes=int(row[2]), rollback_bytes=int(row[3]))
+                              moment_bytes=int(row[2]), rollback_bytes=int(row[3]),
+                              reduction_bytes=int(row[4]))
                          for device, row in zip(self.devices, rows))
 
     def checkpoint(self):
