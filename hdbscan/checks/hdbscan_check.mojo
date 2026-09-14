@@ -138,7 +138,7 @@ from hdbscan.impl.detail.select import (
     SELECT_TPB,
     cluster_epsilon_search,
 )
-from hdbscan.impl.detail.stabilities import STAB_TPB
+from hdbscan.impl.detail.stabilities import STAB_TPB, stability_order_key
 from hdbscan.impl.runner import (
     GRAPH_BUILD_BRUTE_FORCE_KNN,
     GRAPH_BUILD_NN_DESCENT,
@@ -146,7 +146,7 @@ from hdbscan.impl.runner import (
     HDBSCANParams,
     fit_hdbscan,
 )
-from hierarchy.checks.edge_order import LINK_SAB_NONE
+from hierarchy.checks.edge_order import LINK_SAB_NONE, weight_order_key
 from hierarchy.checks.linkage_oracle import partitions_agree
 from hierarchy.impl.cluster.detail.connectivities import (
     DISTANCE_L1,
@@ -1013,6 +1013,68 @@ def check_stabilities_vs_oracle() raises:
                 + String(len(got)) + " stabilities differ (the lambdas"
                 " they sum are vendor distances)"
             )
+
+
+def check_stability_key_is_edge_order() raises:
+    """`stability_order_key`, the device spelling the cluster stability
+    kernel carries since the gfx942 compiler crash of 2026-09-14, maps every
+    float to the SAME key as `hierarchy/checks/edge_order.mojo::
+    weight_order_key`, the host spelling DEVIATION 1604 names as the MST's
+    order. A host sweep: every exponent, four mantissas, both signs, plus
+    both infinities, `FLOAT32_MAX`, both zeros and three NaN payloads. The
+    two functions are separate source so this gate is what keeps them one
+    map; delete either clause of the copy and it fails by pattern.
+    """
+    var n_checked = 0
+    for e in range(256):
+        for m_i in range(4):
+            var mant = UInt32(0)
+            if m_i == 1:
+                mant = UInt32(1)
+            elif m_i == 2:
+                mant = UInt32(0x400000)
+            elif m_i == 3:
+                mant = UInt32(0x7FFFFF)
+            for sgn in range(2):
+                var bits = (UInt32(sgn) << 31) | (UInt32(e) << 23) | mant
+                var x = bitcast[DType.float32](bits)
+                var want = weight_order_key(x)
+                var got = stability_order_key(x)
+                if got != want:
+                    raise Error(
+                        "check_stability_key_is_edge_order FAILED at bits "
+                        + _hex32(x) + ": stability_order_key "
+                        + String(got) + " weight_order_key " + String(want)
+                    )
+                n_checked += 1
+    var extras = List[UInt32]()
+    extras.append(UInt32(0x7F800000))
+    extras.append(UInt32(0xFF800000))
+    extras.append(UInt32(0x7F7FFFFF))
+    extras.append(UInt32(0x00000000))
+    extras.append(UInt32(0x80000000))
+    extras.append(UInt32(0x7FC00000))
+    extras.append(UInt32(0xFFC00000))
+    extras.append(UInt32(0x7F800001))
+    for i in range(len(extras)):
+        var x = bitcast[DType.float32](extras[i])
+        if stability_order_key(x) != weight_order_key(x):
+            raise Error(
+                "check_stability_key_is_edge_order FAILED at bits "
+                + _hex32(x)
+            )
+        n_checked += 1
+    # The order the kernel relies on: -0.0 strictly below +0.0, NaN one key.
+    if not (
+        stability_order_key(Float32(-0.0)) < stability_order_key(Float32(0.0))
+    ):
+        raise Error("check_stability_key_is_edge_order FAILED: -0.0 !< +0.0")
+    print(
+        "check_stability_key_is_edge_order OK: the device order key equals"
+        " weight_order_key on " + String(n_checked) + " patterns (every"
+        " exponent x 4 mantissas x 2 signs, both infinities, FLT_MAX, both"
+        " zeros, three NaN payloads)"
+    )
 
 
 # ======================================================================
@@ -1946,6 +2008,7 @@ def main() raises:
     check_mutual_reachability_ties()
     check_condensed_tree_vs_oracle()
     check_stabilities_vs_oracle()
+    check_stability_key_is_edge_order()
     check_labels_vs_oracle()
     check_permutation_invariance()
     check_launch_invariance()

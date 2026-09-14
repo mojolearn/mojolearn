@@ -101,6 +101,7 @@ teeth.
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
+from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from hdbscan.checks.hdbscan_sabotage import (
@@ -109,7 +110,7 @@ from hdbscan.checks.hdbscan_sabotage import (
 )
 from hdbscan.impl.condensed_hierarchy import CondensedHierarchy
 from hdbscan.impl.detail.utils import utils_parent_csr
-from hierarchy.checks.edge_order import weight_order_key
+from hierarchy.checks.edge_order import WEIGHT_KEY_NAN, weight_order_key
 from hierarchy.impl.cluster.detail.connectivities import FLOAT32_MAX
 from checks.numerics import ftz, identical_div, identical_mul, identical_mul_add
 
@@ -151,6 +152,37 @@ def births_init_kernel(
         births.unsafe_store(child - Int(n_leaves_in), lambdas.unsafe_load(idx))
 
 
+@always_inline
+def stability_order_key(w: Float32) -> Int32:
+    """`hierarchy/checks/edge_order.mojo::weight_order_key`, THE SAME MAP,
+    spelled for the device.
+
+    THE gfx942 COMPILER CRASH (2026-09-14, Hot Aisle MI300X, ROCm 6.4.1,
+    `bindings/build_hdbscan.sh`): `mojo build --target-accelerator gfx942`
+    died with exit 139 in "AMDGPU DAG->DAG Pattern Instruction Selection" on
+    `hdbscan_impl_detail_stabiliti...`, this file's cluster kernel, with no
+    "Cannot select" line, while the same binding compiles for Apple. The
+    cluster kernel was the ONLY device code in the tree that called
+    `weight_order_key` (every other caller is host code), and its spelling,
+    `rebind[UInt32](w.to_bits())`, had never been through the AMD backend.
+    This copy is the same three integer operations on the same bits, written
+    over `bitcast[DType.uint32]` and `bitcast[DType.int32]`, the spelling
+    `checks/numerics.mojo::ftz` runs on all three vendors. Every input maps
+    to the same key as the original: `check_stability_key_is_edge_order` in
+    `hdbscan/checks/hdbscan_check.mojo` sweeps both over every exponent, both
+    zeros, both infinities and a NaN on the host, so the two cannot drift.
+    """
+    if w != w:
+        return WEIGHT_KEY_NAN
+    var b = bitcast[DType.uint32](w)
+    var k: UInt32
+    if (b & UInt32(0x80000000)) != UInt32(0):
+        k = ~b
+    else:
+        k = b | UInt32(0x80000000)
+    return bitcast[DType.int32](k ^ UInt32(0x80000000))
+
+
 def cluster_stability_kernel(
     stabilities: MutPointer[Float32, MutAnyOrigin],
     births: MutPointer[Float32, MutAnyOrigin],
@@ -174,49 +206,62 @@ def cluster_stability_kernel(
     ITS OWN cluster's cells, so no barrier and no second launch is needed
     -- and because splitting them would put `births` in device memory
     between two kernels for no reason a reader could act on.
+
+    RESTRUCTURED FOR THE gfx942 COMPILER CRASH (see `stability_order_key`).
+    The arithmetic and its order are unchanged; four spellings are not:
+      1. the order key is `stability_order_key`, above;
+      2. the running minimum carries its KEY beside its value, so the
+         constant `FLOAT32_MAX` is keyed once rather than on every
+         iteration;
+      3. the edge size reaches the fma through `Int32.cast[float32]`
+         instead of `Float32(Int(...))`, which widened to a 64-bit integer
+         first; an integer below 2^31 rounds to the same float32 from
+         either width;
+      4. the ascending fold and the descending sabotage arm share ONE loop
+         whose index direction is chosen before it, instead of two loops
+         with duplicated bodies. Each arm still visits its edges in the
+         same order and folds them through the same `ftz`/fma pair.
+    No bit of the Apple result moved (the surface test and
+    `check_stabilities_vs_oracle` were run on the M4 after the change); the
+    AMD build is the thing this change exists for and is owed on a box.
     """
     var c = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if c >= Int(n_clusters_in):
         return
     var lo = Int(indptr.unsafe_load(c))
     var hi = Int(indptr.unsafe_load(c + 1))
+    var n_seg = hi - lo
 
     # `:109-114` the segmented Min, DEVIATION 1604. FLT_MAX is CUB's Min
     # identity and therefore the empty-segment answer.
     var seg_min = FLOAT32_MAX
-    for i in range(lo, hi):
-        var lam = lambdas.unsafe_load(i)
-        if weight_order_key(lam) < weight_order_key(seg_min):
+    var seg_key = stability_order_key(seg_min)
+    for t in range(n_seg):
+        var lam = lambdas.unsafe_load(lo + t)
+        var lam_key = stability_order_key(lam)
+        if lam_key < seg_key:
             seg_min = lam
+            seg_key = lam_key
 
     # `:117-126` their transform runs over indices 1 .. n_clusters-1, so
     # cluster 0 (the root) keeps the 0.0 the fill gave it.
     var birth = births.unsafe_load(c)
     if c > 0:
-        if weight_order_key(seg_min) < weight_order_key(birth):
+        if seg_key < stability_order_key(birth):
             birth = seg_min
         births.unsafe_store(c, birth)
 
     # `:131-136` the stability sum, DEVIATION 1603. Ascending through the
     # segment; the descending arm is the sabotage.
+    var descending = sabotage == HDB_SAB_STABILITY_DESCENDING
     var acc = Float32(0.0)
-    if sabotage == HDB_SAB_STABILITY_DESCENDING:
-        for t in range(hi - lo):
-            var i = hi - 1 - t
-            var term = ftz(lambdas.unsafe_load(i) - birth)
-            acc = ftz(
-                identical_mul_add(
-                    term, Float32(Int(sizes.unsafe_load(i))), acc
-                )
-            )
-    else:
-        for i in range(lo, hi):
-            var term = ftz(lambdas.unsafe_load(i) - birth)
-            acc = ftz(
-                identical_mul_add(
-                    term, Float32(Int(sizes.unsafe_load(i))), acc
-                )
-            )
+    for t in range(n_seg):
+        var i = lo + t
+        if descending:
+            i = hi - 1 - t
+        var term = ftz(lambdas.unsafe_load(i) - birth)
+        var size_f = sizes.unsafe_load(i).cast[DType.float32]()
+        acc = ftz(identical_mul_add(term, size_f, acc))
     stabilities.unsafe_store(c, acc)
 
 
