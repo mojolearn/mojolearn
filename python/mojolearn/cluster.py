@@ -20,6 +20,22 @@ _INIT_NAMES = {
     "array": INIT_ARRAY,
 }
 
+#: cuVS's `DistanceType` members the kernel knows, by cuVS's own names
+#: (lowercased) and by the scikit-learn spellings a caller expects.
+#: `L2Expanded` is squared Euclidean, cuVS's default and the only metric
+#: every recorded cell was measured at. `CosineExpanded` is REFUSED BY NAME
+#: on the Mojo host (`cluster/impl/kmeans_params.mojo::validate`, ours, not
+#: cuVS's) because only the fused L2 arm is implemented there; the name is
+#: routed so the refusal is reachable and the claim is honest, not so a
+#: cosine fit runs.
+_METRIC_NAMES = {
+    "euclidean": METRIC_L2_EXPANDED,
+    "l2_expanded": METRIC_L2_EXPANDED,
+    "l2_sqrt_expanded": METRIC_L2_SQRT_EXPANDED,
+    "cosine": METRIC_COSINE_EXPANDED,
+    "cosine_expanded": METRIC_COSINE_EXPANDED,
+}
+
 
 class KMeans(NumericModeMixin):
     """k-means, mirroring cuVS's `kmeans::fit_predict`.
@@ -51,6 +67,23 @@ class KMeans(NumericModeMixin):
     tol : float, default 1e-4
     random_state : int, default 0
         cuVS's `seed`.
+    metric : {'euclidean', 'l2_expanded', 'l2_sqrt_expanded', 'cosine',
+              'cosine_expanded'}, default 'euclidean'
+        cuVS's `DistanceType`. 'euclidean' and 'l2_expanded' are
+        `L2Expanded` (squared distances in `inertia_`, the default every
+        recorded cell was measured at); 'l2_sqrt_expanded' takes the root
+        (`metric_is_sqrt`, a different `inertia_` and a different
+        `sum_scale_`). 'cosine' and 'cosine_expanded' are routed and
+        REFUSED BY NAME on the Mojo host (`kmeans_params.mojo::validate`):
+        the kernel has code for the cosine norm rule and no fused
+        assignment arm for it, so the refusal is ours, not cuVS's. Routed
+        2026-09-14 (workstream D).
+    oversampling_factor : float, default 2.0
+        cuVS's, and an ALGORITHM SWITCH rather than a knob: `0.0` selects
+        the classic sequential k-means++ seeding, anything positive the
+        scalable k-means|| seeding (`detail/kmeans.cuh:910-915`). Negative
+        is refused by name on the Mojo host. Only read under
+        `init='k-means++'`.
 
     Attributes
     ----------
@@ -94,6 +127,8 @@ class KMeans(NumericModeMixin):
         tol=1e-4,
         random_state=0,
         init_centroids=None,
+        metric="euclidean",
+        oversampling_factor=2.0,
     ):
         self.n_clusters = n_clusters
         self.init = init
@@ -102,6 +137,8 @@ class KMeans(NumericModeMixin):
         self.tol = tol
         self.random_state = random_state
         self.init_centroids = init_centroids
+        self.metric = metric
+        self.oversampling_factor = oversampling_factor
 
     def fit(self, X, y=None, sample_weight=None):
         """Fit, and set `labels_` from a pass against the final centroids."""
@@ -114,6 +151,23 @@ class KMeans(NumericModeMixin):
             init_code = _INIT_NAMES[self.init]
         else:
             init_code = int(self.init)
+        if isinstance(self.metric, str):
+            if self.metric not in _METRIC_NAMES:
+                raise ValueError(
+                    f"mojolearn: metric must be one of "
+                    f"{sorted(_METRIC_NAMES)}, got {self.metric!r}"
+                )
+            metric_code = _METRIC_NAMES[self.metric]
+        else:
+            metric_code = int(self.metric)
+        if isinstance(self.oversampling_factor, bool) or not isinstance(
+            self.oversampling_factor, (int, float)
+        ):
+            raise TypeError(
+                "mojolearn: oversampling_factor must be a float, got "
+                f"{type(self.oversampling_factor).__name__}"
+            )
+        oversampling = float(self.oversampling_factor)
 
         x, _ = as_f32_c(X, ndim=2, name="X")
         n, d = x.shape
@@ -171,11 +225,11 @@ class KMeans(NumericModeMixin):
             addr_ro(w, name="sample_weight"),
             # ORDER MATCHES bindings/_mojolearn.mojo::kmeans_fit_binding.
             # n_samples, n_features, n_clusters, n_weights, max_iter,
-            # tol, seed, n_init, init, metric
+            # tol, seed, n_init, init, metric, oversampling_factor
             [
                 n, d, self.n_clusters, n_weights, self.max_iter,
                 float(self.tol), int(self.random_state), self.n_init,
-                init_code, METRIC_L2_EXPANDED,
+                init_code, metric_code, oversampling,
             ],
         )
 

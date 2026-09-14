@@ -162,6 +162,25 @@ from ._tsa_impl import ExponentialSmoothing, kpss_test, select_d
 from . import tokenizer
 from .tokenizer import GPT2Tokenizer
 
+# Workstream D, 2026-09-14: the door-less families of the claim-surface
+# census (docs/lanes/BRIEF_claim_surface_census_2026-09-14.md section 4)
+# given a binding and a class. `Cholesky` binds `_mojolearn_gp` (the GP
+# build already links cholesky/); the other four have their own bindings,
+# resolved on FIRST USE like every other, so an unbuilt one leaves the
+# package importable and raises BY NAME with the build command when
+# touched. Compile-checked on one Apple M4; no box has run them through
+# the Python door, and their identity_break lanes and three columns are
+# owed (docs/lanes/LANE_BODY_*.py). IVF and the embedding lane stay out:
+# IVF is prepared in `_ivf_impl.py` and waits on NVIDIA and AMD evidence.
+from ._cholesky_impl import Cholesky
+from . import kernel_methods
+from .kernel_methods import KernelRidge, Nystroem, RBFSampler
+from . import mixture
+from .mixture import GaussianMixture
+from . import hdbscan
+from .hdbscan import HDBSCAN
+from . import resample
+
 # `GaussianProcessRegressor` JOINED 2026-09-01, the last name ever held in
 # `_NOT_YET` below and the only one held for a reason other than a missing
 # surface. The blocker -- an IDENTICAL card believed to diverge Apple
@@ -263,6 +282,16 @@ __all__ = [
     "SambaStack",
     "ARIMA",
     "AgglomerativeClustering",
+    "Cholesky",
+    "KernelRidge",
+    "Nystroem",
+    "RBFSampler",
+    "GaussianMixture",
+    "HDBSCAN",
+    "kernel_methods",
+    "mixture",
+    "hdbscan",
+    "resample",
     "ConstantKernel",
     "DBSCAN",
     "GaussianProcessRegressor",
@@ -371,12 +400,6 @@ _NOT_YET = {
     # claim-surface census, docs/lanes/BRIEF_claim_surface_census_2026-09-14.md
     # section 4). Each stops at its last gated stage; the door is a binding,
     # a class here, an identity_break lane and three vendor columns.
-    "HDBSCAN": "hdbscan/checks/hdbscan_check.mojo (oracle and sabotage gated, no binding, no vendor card)",
-    "GaussianMixture": "mixture/checks/gmm_check.mojo (E-step, M-step and sabotage gated, no binding; ledger rows 86-91 reserved)",
-    "KernelRidge": "kernel_methods/checks/km_check.mojo (kernel matrix and random features gated, no binding; ledger rows 78-85 reserved)",
-    "RandomFourierFeatures": "kernel_methods/checks/km_check.mojo (the random-features half of the same lane)",
-    "Bootstrap": "resample/checks/resample_check.mojo (index map, intervals and statistics gated, no binding)",
-    "cholesky": "cholesky/checks/cholesky_check.mojo (potrf, trsm, logdet and solve gated; reached only inside the GP build, bindings/build_gp.sh)",
     "IVFIndex": "ivf/checks/ivf_check.mojo (layout sabotage and large-k gates; Apple evidence only, no NVIDIA or AMD leg)",
     "Embedding": "embedding/checks/embedding_check.mojo (Apple and AMD card, no NVIDIA leg, no sabotage arm ever built)",
 }

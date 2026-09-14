@@ -16,6 +16,10 @@ from ._linalg_impl import (
     profile,
     require_identical,
 )
+# `Cholesky` (workstream D, 2026-09-14) binds `_mojolearn_gp`, not
+# `_mojolearn_linalg`: the GP build already links every Cholesky kernel
+# and a second copy would be a second binary of the same arithmetic.
+from ._cholesky_impl import Cholesky
 
 __all__ = ['matmul', 'numeric_mode', 'profile', 'require_identical',
-           'PROFILE', 'PROFILE_FAMILY', 'PROFILE_VERSION']
+           'PROFILE', 'PROFILE_FAMILY', 'PROFILE_VERSION', 'Cholesky']

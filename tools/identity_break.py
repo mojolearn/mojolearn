@@ -68,10 +68,12 @@ disagreeing with itself and a DIVERGENT column is two vendors disagreeing.
             offer `save_checkpoint`/`from_checkpoint` instead; that pair
             feeds the same column (2026-09-13).
 
-THE LANES, 136 (2026-09-14; 46 on 2026-09-13, pca-whiten the same night, 71
+THE LANES, 151 (2026-09-14; 46 on 2026-09-13, pca-whiten the same night, 71
 on 2026-09-14 from the claim-surface census, logistic-multiclass and
-tokenizer the same day when those two got their doors, and 16 `par-*` lanes
-that evening for the ordered multi-GPU drivers run on ONE device). One per public estimator
+tokenizer the same day when those two got their doors, 16 `par-*` lanes that
+evening for the ordered multi-GPU drivers run on ONE device, and 15 lanes for
+the doors workstream D opened: Cholesky, the kernel methods, the Gaussian
+mixture, HDBSCAN, resampling, the training primitives and the KMeans arms). One per public estimator
 plus linalg and metrics, then one per public constructor VALUE that selects
 a different numeric path and no earlier lane pins (a kernel, an objective, a
 sampler, a solver, a metric, a reduction).
@@ -106,6 +108,11 @@ sampler, a solver, a metric, a reduction).
                spectral-precomputed holtwinters-multiplicative kpss arima-011
                arima-seasonal-c gp-matern12 gp-matern32 gp-matern52-ard
       functions gemm-transposed metrics-classification tokenizer cross-val
+    2026-09-14 evening, workstream D (docs/lanes/LANE_BODY_*.py)
+      cholesky kernel-ridge nystroem rbf-sampler gmm gmm-random-init hdbscan
+               hdbscan-leaf bootstrap permutation-test monte-carlo
+               training-primitives kmeans-sqrt kmeans-classic-pp
+               kmeans-cosine (the refusal sentence is its cell)
     2026-09-14 evening (docs/multi_gpu/README.md, run with devices=(0,))
       par-forest par-forest-et par-boosting par-kmeans par-gram par-logistic
                par-cd par-svm par-gp par-dbscan par-scaler par-arima par-mlp
@@ -1895,6 +1902,267 @@ def _(ml, X, yc, yr, Xh=None):
     scores = ml.model_selection.cross_val_score(ml.GradientBoostingRegressor(n_estimators=8, max_depth=4), X, yr, cv=3)
     return _fit(dict(scores=_h(np.asarray(scores, dtype=np.float64))))
 
+
+
+# ---------------------------------------------------------------- lanes (2026-09-14 evening, workstream D, the doors)
+# The eight families that had oracles and no door (the claim-surface census,
+# section 4) plus the six training primitives and the KMeans arms, given
+# bindings and classes on lane/expose-d; the lane bodies were written there
+# as docs/lanes/LANE_BODY_<family>.py and merged here by the harness's owner
+# without changing their arithmetic. Every derived input follows the
+# fixed-order host rule (`_affinity`, `_hw`, `_ids`, `_seq`).
+
+def _cauchy_spd(P):
+    Q = P.astype(np.float64)
+    d2 = np.zeros((Q.shape[0], Q.shape[0]), dtype=np.float64)
+    for j in range(Q.shape[1]):
+        c = Q[:, j]
+        d2 += (c[:, None] - c[None, :]) ** 2
+    A = 1.0 / (1.0 + d2)
+    A[np.arange(Q.shape[0]), np.arange(Q.shape[0])] += 1.0
+    return np.ascontiguousarray(A.astype(np.float32))
+
+
+@lane("cholesky")
+def _(ml, X, yc, yr, Xh=None):
+    """Cholesky (python/mojolearn/_cholesky_impl.py) through _mojolearn_gp:
+    potrf, logdet and potrs on a 256 x 256 Cauchy-kernel SPD matrix at the
+    profile's pinned ridge. The GP lane already covers the same kernels
+    behind a kernel matrix; this lane covers the door and the bare solve."""
+    A = _cauchy_spd(X[:256, :4])
+    c = ml.Cholesky().fit(A)
+    assert c.info_ == 0, "cholesky lane: the Cauchy matrix did not factor (info=%d)" % c.info_
+    B = np.ascontiguousarray(np.stack([yr[:256], yr[256:512]], 1).astype(np.float32))
+    return _fit(dict(L=_h(c.L_), logdet=_h(np.float64(c.logdet_)), info=_h(np.int64(c.info_)),
+                     nb=_h(np.int64(c.nb_)), jitter=_h(np.float32(c.jitter_)), solve=_h(c.solve(B))),
+                c, lambda e: (e.solve(np.ascontiguousarray(Xh[:256, :2])),))
+
+
+@lane("kernel-ridge")
+def _(ml, X, yc, yr, Xh=None):
+    """KernelRidge (python/mojolearn/kernel_methods.py) at the rbf kernel:
+    the kernel matrix, the ridge, potrf and potrs, and the identical GEMM
+    at OP_NN in predict. Train hashes dual_coef_ and the predictions on
+    the training rows; infer predicts 64 held-out rows; the model column
+    is n/a:no-save."""
+    m = ml.KernelRidge(alpha=0.1, kernel="rbf", gamma=0.5).fit(X[:256, :4], yr[:256])
+    return _fit(dict(dual=_h(m.dual_coef_), info=_h(np.int64(m.info_)), predict=_h(m.predict(X[256:320, :4]))),
+                m, lambda e: (e.predict(Xh[:64, :4]),))
+
+
+@lane("nystroem")
+def _(ml, X, yc, yr, Xh=None):
+    """Nystroem at the rbf kernel with 32 components of 256 rows: the
+    device permutation (km_basis_indices), the basis kernel, the Jacobi
+    eigensolver with its sweep count, the sign flip, the clip and the
+    transposed normalization (DEVIATION 1674). Train hashes every model
+    array the estimator carries; infer transforms 64 held-out rows."""
+    m = ml.Nystroem(kernel="rbf", gamma=0.5, n_components=32, random_state=7).fit(X[:256, :4])
+    return _fit(dict(components=_h(m.components_), indices=_h(m.component_indices_), normalization=_h(m.normalization_),
+                     eigenvalues=_h(m.eigenvalues_), eigenvectors=_h(m.eigenvectors_), sweeps=_h(np.int64(m.sweeps_)),
+                     transform=_h(m.transform(X[256:320, :4]))),
+                m, lambda e: (e.transform(Xh[:64, :4]),))
+
+
+@lane("rbf-sampler")
+def _(ml, X, yc, yr, Xh=None):
+    """RBFSampler with 64 random Fourier features over the 16 fixture
+    columns: the Philox draws (weights and offsets), sigma and scale, and
+    the identical GEMM at OP_NN plus cos in transform. The fit reads only
+    n_features, so the train column's draws are the same on every fixture
+    and only the transform moves with the data."""
+    m = ml.RBFSampler(gamma=0.5, n_components=64, random_state=1).fit(X)
+    return _fit(dict(weights=_h(m.random_weights_), offset=_h(m.random_offset_),
+                     sigma=_h(np.float32(m.sigma_)), scale=_h(np.float32(m.scale_)), transform=_h(m.transform(X[:256]))),
+                m, lambda e: (e.transform(Xh[:256]),))
+
+
+@lane("gmm")
+def _(ml, X, yc, yr, Xh=None):
+    """GaussianMixture (python/mojolearn/mixture.py), full covariance,
+    four components, init through the identity-certified k-means. Train
+    hashes every model array plus n_iter_, converged_ and lower_bound_
+    (the estimator's header: part of the card); infer scores and labels
+    64 held-out rows; the model column is n/a:no-save."""
+    m = ml.GaussianMixture(n_components=4, max_iter=30, random_state=3).fit(X[:6000, :4])
+    return _fit(dict(weights=_h(m.weights_), means=_h(m.means_), covariances=_h(m.covariances_),
+                     precisions=_h(m.precisions_cholesky_), logdet=_h(m.log_det_chol_),
+                     n_iter=_h(np.int64(m.n_iter_)), converged=_h(np.int64(int(m.converged_))),
+                     lower_bound=_h(np.float32(m.lower_bound_)),
+                     labels=_h(m.predict(X[:6000, :4])), proba=_h(m.predict_proba(X[:256, :4]))),
+                m, lambda e: (e.score_samples(Xh[:64, :4]), e.predict(Xh[:64, :4]), e.predict_proba(Xh[:64, :4])))
+
+
+@lane("gmm-random-init")
+def _(ml, X, yc, yr, Xh=None):
+    """The same fit under init_params='random' (position-mapped Philox
+    responsibilities, DEVIATION 1733), the other implemented init."""
+    m = ml.GaussianMixture(n_components=4, max_iter=30, random_state=3, init_params="random").fit(X[:6000, :4])
+    return _fit(dict(weights=_h(m.weights_), means=_h(m.means_), covariances=_h(m.covariances_),
+                     n_iter=_h(np.int64(m.n_iter_)), lower_bound=_h(np.float32(m.lower_bound_)),
+                     labels=_h(m.predict(X[:6000, :4]))),
+                m, lambda e: (e.score_samples(Xh[:64, :4]),))
+
+
+@lane("hdbscan")
+def _(ml, X, yc, yr, Xh=None):
+    """HDBSCAN (python/mojolearn/hdbscan.py), cuML's runner path at its
+    defaults with excess-of-mass selection: the core distances, the
+    Boruvka MST, single linkage, the condensed tree and the labels.
+    Train hashes the labels, the core distances and the four integers the
+    fit reports (cluster, outlier, Boruvka round and condensed cluster
+    counts); the integer stages are where a divergence first shows."""
+    m = ml.HDBSCAN(min_cluster_size=5).fit(X[:6000, :4])
+    return _fit(dict(labels=_h(m.labels_), core=_h(m.core_distances_),
+                     counts=_h(np.asarray([m.n_clusters_, m.n_outliers_, m.n_boruvka_rounds_, m.n_condensed_clusters_], dtype=np.int64))),
+                m, "n/a:transductive")
+
+
+@lane("hdbscan-leaf")
+def _(ml, X, yc, yr, Xh=None):
+    """The same fit under cluster_selection_method='leaf' with
+    min_samples below min_cluster_size and allow_single_cluster, the
+    other selection arm and the two knobs that change which condensed
+    clusters become labels."""
+    m = ml.HDBSCAN(min_cluster_size=8, min_samples=3, cluster_selection_method="leaf", allow_single_cluster=True).fit(X[:6000, :4])
+    return _fit(dict(labels=_h(m.labels_), core=_h(m.core_distances_),
+                     counts=_h(np.asarray([m.n_clusters_, m.n_outliers_, m.n_boruvka_rounds_, m.n_condensed_clusters_], dtype=np.int64))),
+                m, "n/a:transductive")
+
+
+@lane("bootstrap")
+def _(ml, X, yc, yr, Xh=None):
+    """resample.bootstrap over the first 4096 values of yr, 2048
+    replicates: the Philox index map, the per-replicate folds (mean,
+    std), the segmented sort (quantile), the paired two-column statistics
+    (pearson, diff_means), the percentile and basic intervals and the
+    standard error. Every distribution and every scalar is hashed; the
+    r_first slice equality is asserted, as the surface promises it."""
+    rs = ml.resample
+    x = np.ascontiguousarray(yr[:4096])
+    two = np.ascontiguousarray(np.stack([yr[:4096], X[:4096, 3]], 1).astype(np.float32))
+    parts = {}
+    for name, kw in (("mean", dict(data=x, statistic="mean")),
+                     ("std", dict(data=x, statistic="std", method="basic")),
+                     ("quantile", dict(data=x, statistic="quantile", q_or_prop=0.25, alternative="less")),
+                     ("trimmed", dict(data=x, statistic="trimmed_mean", q_or_prop=0.1, alternative="greater")),
+                     ("pearson", dict(data=two, statistic="pearson")),
+                     ("diff", dict(data=two, statistic="diff_means", method="basic"))):
+        b = rs.bootstrap(n_resamples=2048, random_state=3, **kw)
+        parts[name] = _h(b.distribution, b.sorted_distribution,
+                         np.asarray([b.point_estimate, b.standard_error, b.confidence_interval[0], b.confidence_interval[1]], dtype=np.float64),
+                         np.asarray([b.order_low, b.order_high], dtype=np.int64))
+    whole = np.asarray(rs.bootstrap(x, n_resamples=1024, random_state=3).distribution)
+    part = np.asarray(rs.bootstrap(x, n_resamples=512, random_state=3, r_first=256).distribution)
+    assert np.array_equal(whole[256:768].view(np.uint32), part.view(np.uint32)), "bootstrap lane: r_first slice is not bit-identical"
+    parts["r_first"] = _h(part)
+    return _fit(parts)
+
+
+@lane("permutation-test")
+def _(ml, X, yc, yr, Xh=None):
+    """resample.permutation_test between the fixture's two label groups
+    of yr (the first 2048 rows of each), 2048 permutations, three
+    alternatives: the pooled Philox permutation map, the between-group
+    fold and the conservative p-value (DEVIATION 1702)."""
+    rs = ml.resample
+    a = np.ascontiguousarray(yr[:4096][yc[:4096] == 0][:2048])
+    b = np.ascontiguousarray(yr[:4096][yc[:4096] == 1][:2048])
+    if a.size < 8 or b.size < 8:
+        a, b = np.ascontiguousarray(yr[:2048]), np.ascontiguousarray(yr[2048:4096])
+    parts = {}
+    for alt in ("two-sided", "less", "greater"):
+        p = rs.permutation_test(a, b, statistic="diff_means", n_resamples=2048, random_state=3, alternative=alt)
+        parts[alt] = _h(p.null_distribution, np.asarray([p.statistic, p.pvalue], dtype=np.float64),
+                        np.asarray([p.count_less, p.count_greater], dtype=np.int64))
+    return _fit(parts)
+
+
+@lane("monte-carlo")
+def _(ml, X, yc, yr, Xh=None):
+    """resample.monte_carlo_integrate, the three compiled integrands over
+    a box whose corners come from the fixture's first two column minima
+    and maxima (host min and max, exact), 65536 draws: the position-mapped
+    Philox points and the chunked pinned fold. The closed forms are
+    hashed beside the estimates."""
+    rs = ml.resample
+    lo = [float(np.min(X[:, 0])), float(np.min(X[:, 1]))]
+    hi = [float(np.max(X[:, 0])), float(np.max(X[:, 1]))]
+    if not (hi[0] > lo[0] and hi[1] > lo[1]):
+        lo, hi = [0.0, 0.0], [1.0, 2.0]
+    parts = {}
+    for f in ("const", "sum", "product"):
+        r = rs.monte_carlo_integrate(f, lo, hi, 65536, random_state=1)
+        parts[f] = _h(np.asarray([r.integral, r.mean, r.volume, r.closed_form], dtype=np.float64))
+    return _fit(parts)
+
+
+@lane("training-primitives")
+def _(ml, X, yc, yr, Xh=None):
+    """embedding_forward/backward (the gather and the run-sorted fold),
+    rms_norm_forward/backward, linear_forward/backward (the identical
+    GEMM at OP_NT and the two backward products). Every output hashed;
+    the probe runs the three forwards on a held-out slab."""
+    T = ml.training
+    V, D, N, K = 64, 32, 64, 16
+    w_emb = _hw((V, D), "prim:emb", -0.25, 0.25)
+    ids = (_ids(X, 1, N).reshape(N) % V).astype(np.int32)
+    x = np.ascontiguousarray(_seq(X, 1, N, D).reshape(N, D))
+    g = np.ascontiguousarray(np.abs(_hw((D,), "prim:rms", 0.5, 1.5)))
+    w_lin = _hw((K, D), "prim:lin", -0.25, 0.25)
+    dy = _hw((N, D), "prim:dy", -1.0, 1.0)
+    dc = _hw((N, K), "prim:dc", -1.0, 1.0)
+    emb = T.embedding_forward(w_emb, ids)
+    demb = T.embedding_backward(dy, ids, V)
+    rms = T.rms_norm_forward(x, g, 1e-5)
+    dx, dg = T.rms_norm_backward(dy, x, g, 1e-5)
+    lin = T.linear_forward(x, w_lin)
+    da, dw = T.linear_backward(dc, x, w_lin)
+    parts = dict(emb=_h(np.asarray(emb)), demb=_h(np.asarray(demb)), rms=_h(np.asarray(rms)),
+                 drms=_h(np.asarray(dx), np.asarray(dg)), lin=_h(np.asarray(lin)), dlin=_h(np.asarray(da), np.asarray(dw)))
+    xh = np.ascontiguousarray(_seq(Xh, 1, N, D).reshape(N, D))
+    idh = (_ids(Xh, 1, N).reshape(N) % V).astype(np.int32)
+    return _fit(parts, T, lambda e: (np.asarray(e.embedding_forward(w_emb, idh)), np.asarray(e.rms_norm_forward(xh, g, 1e-5)),
+                                     np.asarray(e.linear_forward(xh, w_lin))))
+
+
+@lane("kmeans-sqrt")
+def _(ml, X, yc, yr, Xh=None):
+    """metric='l2_sqrt_expanded': cuVS's L2SqrtExpanded, the root taken in
+    the assignment norms and the inertia (`metric_is_sqrt`); a different
+    inertia_ and a different sum_scale_ from the squared arm."""
+    m = ml.KMeans(n_clusters=8, random_state=3, metric="l2_sqrt_expanded").fit(X)
+    return _fit(dict(centers=_h(m.cluster_centers_), labels=_h(m.labels_),
+                     inertia=_h(np.float64(m.inertia_)), scales=_h(np.asarray([m.sum_scale_, m.weight_scale_], dtype=np.float64))),
+                m, "n/a:no-predict")
+
+
+@lane("kmeans-classic-pp")
+def _(ml, X, yc, yr, Xh=None):
+    """oversampling_factor=0.0: the classic sequential k-means++ seeding
+    (detail/kmeans.cuh:910-915's `== 0` arm), a different algorithm from
+    the scalable k-means|| the default selects."""
+    m = ml.KMeans(n_clusters=8, random_state=3, oversampling_factor=0.0).fit(X)
+    return _fit(dict(centers=_h(m.cluster_centers_), labels=_h(m.labels_), inertia=_h(np.float64(m.inertia_))),
+                m, "n/a:no-predict")
+
+
+@lane("kmeans-cosine")
+def _(ml, X, yc, yr, Xh=None):
+    """metric='cosine' is routed and REFUSED BY NAME on the Mojo host
+    (cluster/impl/kmeans_params.mojo::validate): the expected cell is the
+    refusal sentence on every column, never a hash. A column that hashes
+    here means the refusal was lifted without a fused cosine arm."""
+    try:
+        m = ml.KMeans(n_clusters=8, random_state=3, metric="cosine").fit(X)
+    except Exception as exc:
+        # the expected outcome: the cell is the hash of the refusal sentence
+        # (harness owner, 2026-09-14), so a record carries it STABLE and a
+        # lifted refusal reads DIVERGENT against it instead of vanishing
+        # into a permanent REFUSED count
+        text = f"{type(exc).__name__}: {exc}"
+        return _fit(dict(refusal=_h(np.frombuffer(text.encode(), dtype=np.uint8))))
+    return _fit(dict(centers=_h(m.cluster_centers_)), m, "n/a:no-predict")
 
 
 # ---------------------------------------------------------------- lanes (2026-09-14 evening, the multi-GPU drivers on ONE device)

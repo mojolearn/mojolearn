@@ -314,14 +314,16 @@ struct KmNystroemReference(Movable):
     error from a product error."""
 
     var eigenvalues: List[Float64]
-    """DESCENDING, clipped, in the pinned order."""
+    """The singular values `|lambda|`, DESCENDING, clipped, in the pinned
+    order."""
 
     var eigenvectors: List[Float64]
     """`q x q` row-major, eigenvector `c` in COLUMN `c`, sign-flipped by the
     same rule the device applies, permuted into the pinned order."""
 
     var normalization: List[Float64]
-    """`Q diag(s^{-1/2}) Q^T`, `q x q` row-major."""
+    """`Q diag(s^{-1/2}) V` with `V = diag(sign(lambda)) Q^T`, `q x q`
+    row-major."""
 
 
 def km_sign_flip_rule_f64(mut v: List[Float64], q: Int):
@@ -363,7 +365,8 @@ def km_sign_flip_rule_f64(mut v: List[Float64], q: Int):
 
 
 def km_eigen_order(values: List[Float64], q: Int) -> List[Int]:
-    """The PINNED order: eigenvalue DESCENDING, index ASCENDING on a tie.
+    """The PINNED order: value DESCENDING, index ASCENDING on a tie. The
+    caller passes the singular values `|lambda|`.
 
     DEVIATION 1669. This is `raft::matrix::colReverse` (`tsvd.cuh:122`)
     generalized from a reverse to a sort, which is what a Jacobi needs and a
@@ -412,13 +415,15 @@ def km_nystroem_reference_f64(
     k_basis: List[Float32], q: Int
 ) raises -> KmNystroemReference:
     """The float64 Nystroem normalization: `U / sqrt(S) @ V` for a symmetric
-    PSD basis kernel, which is `Q diag(S^{-1/2}) Q^T`.
+    basis kernel, which is `Q diag(|lambda|^{-1/2}) diag(sign(lambda)) Q^T`.
 
     sklearn computes `U, S, V = xp.linalg.svd(basis_kernel)` and then
-    `normalization_ = U / xp.sqrt(S) @ V`. For a SYMMETRIC POSITIVE
-    SEMI-DEFINITE matrix the SVD and the eigendecomposition coincide with
-    `U = Q` and `V = Q^T`, so this is the same matrix; DEVIATION 1667
-    records the substitution and its argument.
+    `normalization_ = U / xp.sqrt(S) @ V`. For a SYMMETRIC matrix the SVD is
+    `U = Q`, `S = |lambda|`, `V = diag(sign(lambda)) Q^T`; DEVIATION 1667
+    records the substitution and its argument. The sign matters because the
+    kernel handed in is the device's float32 basis kernel, which on a rank
+    deficient basis has numerically negative eigenvalues (corrected
+    2026-09-14 together with `estimator.mojo::_singular_value_f32`).
 
     `jacobi_eigh` is `decomposition/checks/jacobi_eigh.mojo`'s, IMPORTED,
     at its own tighter host tolerance (`1e-12` over 60 sweeps) rather than
@@ -441,26 +446,31 @@ def km_nystroem_reference_f64(
     km_sign_flip_rule_f64(vecs, q)
 
     var raw = List[Float64]()
+    var mags = List[Float64]()
     for c in range(q):
         raw.append(a[c * q + c])
-    var order = km_eigen_order(raw, q)
+        mags.append(-a[c * q + c] if a[c * q + c] < 0.0 else a[c * q + c])
+    var order = km_eigen_order(mags, q)
 
     var values = List[Float64]()
     var vectors = List[Float64]()
+    var signs = List[Float64]()
     for _ in range(q * q):
         vectors.append(0.0)
     for c in range(q):
         var src = order[c]
-        var s = raw[src]
+        var s = mags[src]
         if s < KM_EIGEN_CLIP_F64:
             s = KM_EIGEN_CLIP_F64
         values.append(s)
+        signs.append(-1.0 if raw[src] < 0.0 else 1.0)
         for f in range(q):
             vectors[f * q + c] = vecs[f * q + src]
 
-    # `normalization[i][j] = sum_k Q[i][k] * s_k^{-1/2} * Q[j][k]`, summed in
-    # the pinned descending order. Spelled as `(Q * w) . Q^T` to match the
-    # device, which forms `Z = Q diag(w)` elementwise and then one GEMM.
+    # `normalization[i][j] = sum_k Q[i][k] * s_k^{-1/2} * sign_k * Q[j][k]`,
+    # summed in the pinned descending order. Spelled as `(Q * w) . V` to
+    # match the device, which forms `Z = Q diag(w)` elementwise and then one
+    # GEMM against the column-signed `Q`.
     var w = List[Float64]()
     for c in range(q):
         w.append(1.0 / _sqrt64(values[c]))
@@ -469,7 +479,9 @@ def km_nystroem_reference_f64(
         for j in range(q):
             var acc = 0.0
             for c in range(q):
-                acc = acc + (vectors[i * q + c] * w[c]) * vectors[j * q + c]
+                acc = acc + (vectors[i * q + c] * w[c]) * (
+                    signs[c] * vectors[j * q + c]
+                )
             norm.append(acc)
 
     return KmNystroemReference(values^, vectors^, norm^)
