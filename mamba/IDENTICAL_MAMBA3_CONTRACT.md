@@ -185,7 +185,12 @@ anchor); this contract scopes arithmetic only.
 **Invariance clause.** Bit-identity under this profile is invariant to
 batch size, launch geometry, padding, autotune/execution config and
 vendor. It is NOT invariant to CHUNK_SIZE, rope_fraction, A_floor, or any
-constant above — each changes the bits and makes a v2.
+constant above — each changes the bits and makes a v2. The batch half is
+gate (c) of `mamba/checks/mamba3_check.mojo` (B in {1, 2, 3}), GATE C PASS
+in `bench/results/e1/2026-09-03_072159-mojolearn-e2-amd` and
+`2026-09-03_073012-mojolearn-e2-nv`; through the public `Mamba3Block.forward`
+it is the `batch` part of `tools/identity_break.py` (since 4230ab5b0), first
+record owed.
 
 **Padding is part of the arithmetic's shape**, as mamba2 section 3: the
 last chunk is padded to Q with `+0.0` q/k/v/dt/angle rows; a padded
