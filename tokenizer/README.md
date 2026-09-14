@@ -105,10 +105,20 @@ ids on exactly these inputs. A gate that only compared ids would have called
 both of them correct. Anyone extending the pattern (a second encoding, say)
 should assume the same of any new case they add.
 
+## The Python door (2026-09-14)
+
+`mojolearn.GPT2Tokenizer` (`python/mojolearn/tokenizer.py`) reaches
+`encoding.mojo` through the host binding
+`bindings/_mojolearn_tokenizer_host.mojo`, built from source with
+`bindings/build_tokenizer_host.sh` (a shim over
+`bindings/build_host_family.sh`; no wheel carries it or the two tables yet).
+`python/mojolearn/tests/test_tokenizer_surface.py` holds that door to the
+same 43 cases plus every refusal by name, and a build with
+`-D MOJOLEARN_TOKENIZER_HOST_SABOTAGE=1` (ids written in reverse) must fail
+it. The lane brief is `docs/lanes/BRIEF_expose_tokenizer_2026-09-14.md`.
+
 ## Hand-off
 
-* No Python surface and no `bindings/` entry point: `encoding.mojo` is
-  Mojo-only, and nothing in `python/mojolearn/` reaches it.
 * Adding an encoding means a new rank table AND a new hand-rolled pattern
   function beside `pretoken_end`, plus its own recorded fixture.
   `impl/ranks.mojo` and `impl/bpe.mojo` are already encoding-agnostic.

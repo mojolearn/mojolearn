@@ -159,6 +159,8 @@ from ._gbdt_host import HostGBDT
 from ._svm_impl import SVC, SVR
 from ._arima_impl import ARIMA
 from ._tsa_impl import ExponentialSmoothing, kpss_test, select_d
+from . import tokenizer
+from .tokenizer import GPT2Tokenizer
 
 # `GaussianProcessRegressor` JOINED 2026-09-01, the last name ever held in
 # `_NOT_YET` below and the only one held for a reason other than a missing
@@ -277,6 +279,7 @@ __all__ = [
     "GradientBoostingRegressor",
     "OrderedRMSE",
     "ExponentialSmoothing",
+    "GPT2Tokenizer",
     "IsolationForest",
     "KMeans",
     "KNeighborsClassifier",
@@ -322,6 +325,7 @@ __all__ = [
     "metrics",
     "neural_network",
     "language_model",
+    "tokenizer",
     "transformer",
     "training",
     "umap",
@@ -375,7 +379,6 @@ _NOT_YET = {
     "cholesky": "cholesky/checks/cholesky_check.mojo (potrf, trsm, logdet and solve gated; reached only inside the GP build, bindings/build_gp.sh)",
     "IVFIndex": "ivf/checks/ivf_check.mojo (layout sabotage and large-k gates; Apple evidence only, no NVIDIA or AMD leg)",
     "Embedding": "embedding/checks/embedding_check.mojo (Apple and AMD card, no NVIDIA leg, no sabotage arm ever built)",
-    "Tokenizer": "tokenizer/checks/tokenizer_check.mojo (43 of 43 tiktoken id sequences exact; no float arithmetic, so no identity arm)",
     "MultinomialLogisticRegression": "glm/impl/qn/glm_softmax.mojo (implemented and dispatched; glm/estimator.mojo hardcodes the binary loss and glm/checks/multinomial_check.mojo has no invoker)",
 }
 

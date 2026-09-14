@@ -20,6 +20,7 @@ or `"deterministic"` to those components, or importing under
 | Optimizers and losses | `mojolearn.training` | `_mojolearn_training` | SGD, Adam, AdamW, L2 gradient clipping, class-index cross entropy with optional logits gradient |
 | Small MLP training | `mojolearn.neural_network.SmallMLPTrainer` | `_mojolearn_linalg`, `_mojolearn_training` | Fixed 8→16→3 FP32 ReLU, mean cross entropy and AdamW; batch 1–256 |
 | Small byte-LM training | `mojolearn.language_model.SmallByteLanguageModelTrainer` | `_mojolearn_byte_lm` | Fixed two-block FP32 next-byte model, full gradients and AdamW; CUDA/HIP IDENTICAL only |
+| GPT-2 tokenizer | `mojolearn.tokenizer.GPT2Tokenizer` or `mojolearn.GPT2Tokenizer` | `_mojolearn_tokenizer_host` (a CPU binding under `mojolearn/host/`, built from source with `bindings/build_tokenizer_host.sh`; the same binary on every box, there is no GPU path) | `encode`/`encode_bytes` and `decode`/`decode_bytes` for tiktoken 0.14.0's `gpt2` encoding, ids in [0, 50257), `<|endoftext|>` = 50256 only with `allow_endoftext=True`; held to 43 recorded cases id for id. No other encoding, no batch entry, no wheel yet |
 
 The existing classical estimators and metrics remain exported from `mojolearn`.
 All optimizer classes, both small trainers, `cross_entropy` and

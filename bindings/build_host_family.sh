@@ -23,7 +23,8 @@
 #                                   (the gate's negative control for the routed
 #                                   set; the byte LM's is
 #                                   MOJOLEARN_BYTE_LM_HOST_SABOTAGE, the forest's
-#                                   MOJOLEARN_FOREST_HOST_SABOTAGE; the manifest
+#                                   MOJOLEARN_FOREST_HOST_SABOTAGE, the tokenizer's
+#                                   MOJOLEARN_TOKENIZER_HOST_SABOTAGE; the manifest
 #                                   names each family's)
 #   MOJOLEARN_LINUX_CPU             Linux x86-64 --target-cpu, default x86-64-v3
 #   MOJOLEARN_<FAMILY>_HOST_OUTDIR  output directory for this family, else
@@ -43,7 +44,7 @@
 set -eu
 family=${1:-}
 case "$family" in
-    ''|*[!a-z_]*) echo 'build_host_family: usage: build_host_family.sh <family>, lowercase letters and underscores (byte_lm, forest, core, linalg, estimators, tsa, solver, svm, trees)' >&2; exit 2 ;;
+    ''|*[!a-z_]*) echo 'build_host_family: usage: build_host_family.sh <family>, lowercase letters and underscores (byte_lm, forest, tokenizer, core, linalg, estimators, tsa, solver, svm, trees)' >&2; exit 2 ;;
 esac
 FAMILY=$(printf '%s' "$family" | tr 'a-z' 'A-Z')
 case "$family" in
