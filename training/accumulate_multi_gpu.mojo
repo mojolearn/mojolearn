@@ -59,11 +59,11 @@ def parallel_accumulate_host(
                 copy_f32(parts_ptr+microbatch*n+first,parts.unsafe_ptr()+microbatch*count,count)
             _ = samba_accumulate_host(cp[rank],rp+first,
                 rebind[MutPointer[Float32, MutUntrackedOrigin]](parts.unsafe_ptr()),count,a,t_tokens)
+            # Raw task pointers do not keep their owners alive.
+            _ = parts^
             comptime if ACCUMULATE_POOL_FAULT:
                 if Int(getenv("MOJOLEARN_ACCUMULATE_FAIL_RANK", "-1")) == rank:
                     raise Error("injected post-compute accumulation refusal")
-            # Raw task pointers do not keep their owners alive.
-            _ = parts^
         except:
             fp[rank] = 1
     sync_parallelize(_reduce,devices)
