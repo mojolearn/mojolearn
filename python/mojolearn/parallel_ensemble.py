@@ -7,7 +7,7 @@ from ._bufcheck import memcopy
 
 
 def fit_boosting(estimator, X, y, *, devices=(0,), sample_weight=None, eval_set=None):
-    """Partition packed feature groups during greedy-tree histogram construction.
+    """Partition packed feature groups during greedy or pointwise histograms.
 
     Boosting rounds, row reductions, quantization scales, split selection and
     leaf estimation retain their original global order. Only publish a full
@@ -16,8 +16,6 @@ def fit_boosting(estimator, X, y, *, devices=(0,), sample_weight=None, eval_set=
     from .ensemble import GradientBoosting
     if type(estimator) is not GradientBoosting:
         raise TypeError('fit_boosting currently requires GradientBoosting or its classifier/regressor aliases')
-    if estimator.use_pointwise_searcher:
-        raise ValueError('pointwise searcher does not yet implement feature-parallel histograms')
     if estimator.numeric_mode not in (None, 'identical'):
         raise ValueError('parallel boosting requires IDENTICAL numeric mode')
     pool = DevicePool(devices, cooperative=True)

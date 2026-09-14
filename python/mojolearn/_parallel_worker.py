@@ -77,6 +77,9 @@ def execute(request):
         if (not callable(getattr(binding, 'gbdt_parallel_available', None))
                 or binding.gbdt_parallel_available() != 1):
             raise ImportError('rebuild GBDT binding for feature-parallel training')
+        if getattr(model, 'use_pointwise_searcher', False):
+            if not callable(getattr(binding, 'pointwise_parallel_available', None)) or binding.pointwise_parallel_available() != 1:
+                raise ImportError('rebuild GBDT binding for parallel pointwise histograms')
         X, y, kwargs = args
         model.fit(X, y, **kwargs)
         return model
