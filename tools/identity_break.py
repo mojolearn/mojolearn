@@ -183,6 +183,8 @@ sampler, a solver, a metric, a reduction).
                par-graph-umap par-ordered-rmse par-feature-freq
                par-boosting-pointwise par-holtwinters par-byte-lm-model-pool
                par-byte-lm-offload par-samba-clip
+    2026-09-14 night (drivers added by the multigpu lane; devices=_par_devices())
+      par-forest-pool par-gmm
 
 The 18 lanes added on 2026-09-13 (svr through samba above) are fed the SAME
 fixture bytes in the shape their estimator wants; the derivation rules are
@@ -2839,6 +2841,51 @@ def _(ml, X, yc, yr, Xh=None):
                 par, lambda e: (e.score_samples(Xh), e.predict(Xh[:512])))
 
 
+# ---------------------------------------------------------------- lanes (2026-09-14 night, drivers added by the multigpu lane)
+# ParallelForestPredictor (resident RF/ET groves, 32 fixed logical groves) and
+# fit_gaussian_mixture / predict_gaussian_mixture (row-sharded E-steps). Same
+# rules as the par-* lanes above: devices=_par_devices() and `_same_bytes`
+# against the one-device public path the driver promises to equal.
+
+@lane("par-forest-pool")
+def _(ml, X, yc, yr, Xh=None):
+    """ParallelForestPredictor over a 40-tree RandomForestClassifier with
+    inference_engine='parallel_groves' (40 trees put two trees in groves 0..7,
+    so the within-grove order is reached), held to the estimator's own
+    parallel_groves predictions."""
+    from mojolearn.parallel_ensemble import ParallelForestPredictor
+    m = ml.RandomForestClassifier(n_estimators=40, max_depth=8, random_state=7,
+                                  inference_engine="parallel_groves").fit(X, yc)
+
+    def pooled(e, R):
+        # A reloaded model is asked the same way; its engine is set, not assumed.
+        e.inference_engine = "parallel_groves"
+        with ParallelForestPredictor(e, devices=_par_devices()) as pool:
+            return pool.predict(R), pool.predict_proba(R)
+
+    pred, proba = pooled(m, X)
+    _same_bytes("ParallelForestPredictor predict_proba", proba, "parallel_groves predict_proba", m.predict_proba(X))
+    return _fit(dict(predict=_h(pred), proba=_h(proba)), m, lambda e: pooled(e, Xh))
+
+
+@lane("par-gmm")
+def _(ml, X, yc, yr, Xh=None):
+    """fit_gaussian_mixture and predict_gaussian_mixture on the gmm lane's
+    configuration, held to the plain fit's covariances and labels."""
+    from mojolearn.parallel_classical import fit_gaussian_mixture, predict_gaussian_mixture
+    kw = dict(n_components=4, max_iter=30, random_state=3)
+    par = fit_gaussian_mixture(ml.GaussianMixture(**kw), X[:6000, :4], devices=_par_devices())
+    plain = ml.GaussianMixture(**kw).fit(X[:6000, :4])
+    _same_bytes("fit_gaussian_mixture covariances_", par.covariances_, "plain covariances_", plain.covariances_)
+    labels = predict_gaussian_mixture(par, X[:6000, :4], devices=_par_devices(), method="predict")
+    _same_bytes("predict_gaussian_mixture", labels, "plain predict", plain.predict(X[:6000, :4]))
+    return _fit(dict(weights=_h(par.weights_), means=_h(par.means_), covariances=_h(par.covariances_),
+                     precisions=_h(par.precisions_cholesky_), n_iter=_h(np.int64(par.n_iter_)),
+                     lower_bound=_h(np.float32(par.lower_bound_)), labels=_h(labels)),
+                par, lambda e: (predict_gaussian_mixture(e, Xh[:64, :4], devices=_par_devices(), method="score_samples"),
+                                predict_gaussian_mixture(e, Xh[:64, :4], devices=_par_devices(), method="predict")))
+
+
 # ---------------------------------------------------------------- the batch part (2026-09-14)
 # See the `batch` part in the module docstring. A declaration per lane, kept
 # OUT of the lane bodies so no train, infer or model hash can move because
@@ -3409,6 +3456,8 @@ _batch_decl(_rows_calls("predict", "predict_proba"), "par-boosting-pointwise")
 _batch_decl(lambda ml, e, Xh: [_BatchPrefix("forecast", FORECAST_HORIZON, lambda h: (e.forecast(h),), axis=0)],
             "par-holtwinters")
 _batch_decl("n/a:no-model", "par-byte-lm-model-pool", "par-byte-lm-offload")
+_batch_decl(_rows_calls("predict", "predict_proba"), "par-forest-pool")
+_batch_decl(_rows_calls("score_samples", "predict", sl=(slice(0, 64), slice(0, 4))), "par-gmm")
 
 
 # ---------------------------------------------------------------- run / diff
