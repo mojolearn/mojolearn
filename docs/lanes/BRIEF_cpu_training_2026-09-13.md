@@ -1809,3 +1809,45 @@ gbdt-symmetric):
     MOJOLEARN_HOST_OUTDIR=<sab> MOJOLEARN_BUILD_EXTRA_DEFINES="-D MOJOLEARN_HOST_SABOTAGE=1" sh bindings/build_gbdt_host.sh
     MOJOLEARN_HOST_DIR=<sab> MOJOLEARN_HOST_ALLOW_SABOTAGE=1 python3 tools/identity_break.py --lanes gbdt-symmetric --json <cpu-sab>.json
     (the diff of <cpu-sab>.json against the three GPU columns must exit non-zero with DIVERGENT)
+
+## Workstream E batch 3 (2026-09-14): gbdt-rmse, WRITTEN, NOT COMPILED, NOT MEASURED
+
+Branch `lane/cpu-training-e3-gbdt-rmse`, off `lane/cpu-training-e3-gbdt-fix`
+at 9e3a04d70. Nothing in this section is a bit result; no build, simulation
+or test ran on the Mac.
+
+- `gbdt/host/gbdt_oracle_rmse.mojo`, the RMSE arm. It imports the symmetric
+  oracle's restatements (grid, binarize, both histogram families, the pinned
+  partition stats, the Cosine score, the lane folds, the scale, the model
+  text) and restates what RMSE adds: the unset `boost_from_average` resolving
+  True, the Float32-narrowed target average as the cursor seed and the bias,
+  `pointwise_target_kernel[OBJECTIVE_RMSE]`'s search pass, and the tail of
+  `run_tree_layout_traced` under `apply_to_cursor` (the final partition
+  stats, `compute_leaf_values_kernel`, the fused cursor update), because
+  DEVIATION 64 skips the walker for RMSE at one Newton iteration and one
+  permutation. The level loop is a TWIN of `gbdt_host_fit`'s, named in both.
+- The binding routes `loss="RMSE"` there. Lifted for RMSE only: the loss
+  refusal and `boost_from_average=True`. New refusal: any
+  `leaf_estimation_iterations` other than 1 under RMSE. Everything else the
+  symmetric section lists stays refused.
+- Sabotage: the same `-D MOJOLEARN_HOST_SABOTAGE=1` adds 1.0 to the RMSE
+  leaf regularizer (the walker's arm never runs on this lane).
+- Test module: `cd python && python3 -m mojolearn.tests.test_cpu_training_e3_gbdt_rmse`.
+
+RISKS, ranked. (1) The level loop shares every risk the symmetric section
+ranks (half-byte add order on `ties`, the one-byte cell rule). (2) Host
+contraction of `(t - p) * (t - p)` or `g / (w + l2 + 1e-20)` into a
+neighboring add. (3) The rolled back tail: a tree that stops early reads the
+merged partitions over the stats reordered by every discarded level; a slip
+there moves only fixtures whose trees stop before depth 6. (4) The bias
+record's decimal half is `String(Float64)`, the same formatter as the device
+binding's host code.
+
+To measure (the 2026-09-14 47-lane GPU columns carry gbdt-rmse):
+
+    MOJOLEARN_HOST_OUTDIR=<dir> sh bindings/build_gbdt_host.sh
+    MOJOLEARN_HOST_DIR=<dir> python3 tools/identity_break.py --lanes gbdt-rmse --json <cpu>.json
+    python3 tools/identity_break.py --diff <apple> <nvidia> <amd> <cpu>.json --require-columns 4 --lanes gbdt-rmse
+    MOJOLEARN_HOST_OUTDIR=<sab> MOJOLEARN_BUILD_EXTRA_DEFINES="-D MOJOLEARN_HOST_SABOTAGE=1" sh bindings/build_gbdt_host.sh
+    MOJOLEARN_HOST_DIR=<sab> MOJOLEARN_HOST_ALLOW_SABOTAGE=1 python3 tools/identity_break.py --lanes gbdt-rmse --json <cpu-sab>.json
+    (the diff of <cpu-sab>.json against the three GPU columns must exit non-zero with DIVERGENT)

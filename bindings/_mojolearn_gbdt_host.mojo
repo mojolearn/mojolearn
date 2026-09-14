@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CPU binding for the `_mojolearn_gbdt` family, GradientBoosting on the
-gbdt-symmetric lane (workstream E batch 3, 2026-09-14; brief
+gbdt-symmetric and gbdt-rmse lanes (workstream E batch 3, 2026-09-14; brief
 docs/lanes/BRIEF_cpu_training_2026-09-13.md sections 1.1 gbdt and the batch
-3 section).
+3 sections). `loss="RMSE"` fits through
+`gbdt/host/gbdt_oracle_rmse.mojo::gbdt_rmse_host_fit`.
 
 HOST ONLY. No DeviceContext, no kernel launch, no GPU. The fit is
 `gbdt/host/gbdt_oracle.mojo::gbdt_host_fit`, the device trainer
@@ -37,7 +38,9 @@ reads REFUSED on a CPU-only install, as it did before this binding existed.
 
 The sabotage arm (`gbdt_host_sabotage`) is
 `gbdt/host/gbdt_oracle.mojo::GBDT_ORACLE_HOST_SABOTAGE`: the Newton walker's
-Hessian regularizer is one larger, so every leaf of every tree moves.
+Hessian regularizer is one larger, so every leaf of every tree moves; on
+the RMSE arm, which runs no walker, the searcher's leaf regularizer
+(`gbdt/host/gbdt_oracle_rmse.mojo::_rmse_leaf_value`) is one larger.
 """
 from std.math import isfinite
 from std.memory import bitcast
@@ -65,6 +68,10 @@ from gbdt.host.gbdt_oracle import (
     GbdtHostParams,
     gbdt_host_fit,
     gbdt_host_model_text,
+)
+from gbdt.host.gbdt_oracle_rmse import (
+    gbdt_rmse_host_fit,
+    gbdt_rmse_host_model_text,
 )
 from gbdt.options.data_processing_options import nan_mode_from_name
 
@@ -109,8 +116,9 @@ def gbdt_host_column_binding() raises -> PythonObject:
 
 def gbdt_host_sabotage_binding() raises -> PythonObject:
     """Whether this binary adds 1.0 to the Newton walker's Hessian
-    regularizer on purpose (-D MOJOLEARN_HOST_SABOTAGE=1, the gate's
-    negative control; `gbdt/host/gbdt_oracle.mojo::GBDT_ORACLE_HOST_SABOTAGE`)."""
+    regularizer and to the RMSE arm's leaf regularizer on purpose
+    (-D MOJOLEARN_HOST_SABOTAGE=1, the gate's negative control;
+    `gbdt/host/gbdt_oracle.mojo::GBDT_ORACLE_HOST_SABOTAGE`)."""
     return PythonObject(GBDT_ORACLE_HOST_SABOTAGE)
 
 
@@ -133,10 +141,10 @@ def _refuse(what: String) raises:
     cover reads REFUSED and never a hash."""
     raise Error(
         "no CPU implementation of _mojolearn_gbdt.gbdt_fit for " + what
-        + "; the gbdt host binding trains the gbdt-symmetric lane only"
-        " (SymmetricTree, Logloss, Cosine, Newton leaves, no bootstrap,"
-        " weights, categoricals, eval set or NaN), see"
-        " gbdt/host/gbdt_oracle.mojo"
+        + "; the gbdt host binding trains the gbdt-symmetric and gbdt-rmse"
+        " lanes only (SymmetricTree, Logloss or RMSE, Cosine, Newton leaves,"
+        " no bootstrap, weights, categoricals, eval set or NaN), see"
+        " gbdt/host/gbdt_oracle.mojo and gbdt/host/gbdt_oracle_rmse.mojo"
     )
 
 
@@ -254,8 +262,15 @@ def gbdt_fit_binding(
         )
 
     # ---- what the host fit does not restate, refused by name ----
-    if loss != String("Logloss"):
+    var is_rmse = loss == String("RMSE")
+    if loss != String("Logloss") and not is_rmse:
         _refuse("loss='" + loss + "'")
+    if is_rmse and leaf_iterations >= 0 and leaf_iterations != 1:
+        _refuse(
+            "leaf_estimation_iterations=" + String(leaf_iterations)
+            + " under loss='RMSE' (only 1, the searcher's own leaves of"
+            " DEVIATION 64; the RMSE Newton walker is not restated)"
+        )
     if grow_code != 0:
         _refuse("grow_policy code " + String(grow_code) + " (Depthwise or Lossguide)")
     if use_pointwise:
@@ -278,7 +293,7 @@ def gbdt_fit_binding(
         _refuse("the overfitting detector (od_type, od_pvalue, od_wait)")
     if random_strength != Float32(0.0):
         _refuse("random_strength=" + String(random_strength))
-    if boost_from_average == 1:
+    if boost_from_average == 1 and not is_rmse:
         _refuse("boost_from_average=True")
     if feature_fraction != 1.0:
         _refuse("feature_fraction=" + String(feature_fraction))
@@ -361,6 +376,8 @@ def gbdt_fit_binding(
     var nan_mode = nan_mode_from_name(nan_mode_name)
 
     var iterations = GBDT_LOGLOSS_NEWTON_ITERATIONS
+    if is_rmse:
+        iterations = 1
     if leaf_iterations >= 0:
         iterations = leaf_iterations
     var border = GBDT_HOST_DEFAULT_BORDER
@@ -388,11 +405,22 @@ def gbdt_fit_binding(
                 break
         if not has_nan:
             var y = read_f32(y_address, n_rows)
-            var model = gbdt_host_fit(x, y, n_rows, n_features, p)
-            text = gbdt_host_model_text(model)
-            losses = model.losses.copy()
-            best_iteration = model.best_iteration
-            stopped_early = model.stopped_early
+            if is_rmse:
+                # `AdjustBoostFromAverageDefaultValue` (`gbdt/train.mojo:
+                # 1597-1600`): unset is True for RMSE
+                var fit = gbdt_rmse_host_fit(
+                    x, y, n_rows, n_features, p, boost_from_average != 0
+                )
+                text = gbdt_rmse_host_model_text(fit)
+                losses = fit.model.losses.copy()
+                best_iteration = fit.model.best_iteration
+                stopped_early = fit.model.stopped_early
+            else:
+                var model = gbdt_host_fit(x, y, n_rows, n_features, p)
+                text = gbdt_host_model_text(model)
+                losses = model.losses.copy()
+                best_iteration = model.best_iteration
+                stopped_early = model.stopped_early
     if has_nan:
         _refuse("an X carrying NaN (the nan_mode Min and Max arms)")
 

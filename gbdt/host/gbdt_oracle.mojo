@@ -1374,7 +1374,8 @@ def gbdt_host_fit(
         var mags = _deterministic_sum_lanes(mag_part, 2, mse_blocks)
         var fixed_scale = _choose_scale_from_magnitudes(mags[0], mags[1], n_rows)
 
-        # ---- `run_tree_layout_traced`, every level ----
+        # ---- `run_tree_layout_traced`, every level (TWIN: the loop in
+        # `gbdt_oracle_rmse.mojo::gbdt_rmse_host_fit`; edit both) ----
         var row_index = List[Int](length=n_rows, fill=0)
         for r in range(n_rows):
             row_index[r] = r
