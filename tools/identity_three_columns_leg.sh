@@ -24,7 +24,15 @@ run() {
 }
 say "started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 say "vendor=${MOJOLEARN_TARGET_COLUMN:-unset} archs=${MOJOLEARN_GPU_ARCHS:-unset}"
-say "commit=$(cat /root/mojolearn/COMMIT 2>/dev/null || git -C /root/mojolearn rev-parse HEAD 2>/dev/null || echo unknown)"
+# identity_break REQUIRES a commit witness since 2026-09-13 (a JSON with an
+# empty commit is not written; both 2026-09-14 00:39 legs refused here). The
+# runners ship a git archive with no .git and pass no environment, so the
+# commit reaches the box either as MOJOLEARN_COMMIT (Hot Aisle:
+# MOJOLEARN_HOTAISLE_EXTRA_ENV="MOJOLEARN_COMMIT=<sha>") or baked into a
+# wrapper body that writes /root/mojolearn/commit.txt before exec'ing this
+# file (RunPod). Either lands in commit.txt, which the tool reads.
+if [ -n "${MOJOLEARN_COMMIT:-}" ] && [ ! -s /root/mojolearn/commit.txt ]; then echo "$MOJOLEARN_COMMIT" > /root/mojolearn/commit.txt; fi
+say "commit=$(cat /root/mojolearn/commit.txt /root/mojolearn/COMMIT 2>/dev/null | head -1 || git -C /root/mojolearn rev-parse HEAD 2>/dev/null || echo unknown)"
 (nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null; rocminfo 2>/dev/null | grep -m1 -oE "gfx[0-9a-z]+") > "$OUT/logs/device.txt" 2>&1
 say "device=$(tr '\n' ' ' < "$OUT/logs/device.txt")"
 # The RunPod runner passes no environment to the body, and bindings/build_byte_lm.sh
@@ -45,8 +53,15 @@ BUILD_ENV="env MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_SKIP_BUILD_GATE=1 MOJO
 built=0; failed=""
 for s in bindings/build*.sh; do
     n=$(basename "$s" .sh)
-    # build_byte_lm_host takes no MOJOLEARN_GPU_ARCHS (a CPU build); the two byte-lm-host lanes need it.
-    if [ "$n" = build_byte_lm_host ]; then run "$n" env MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_SKIP_BUILD_GATE=1 MOJOLEARN_COMPILE_JOBS=${MOJOLEARN_COMPILE_JOBS:-8} sh "$s" && built=$((built + 1)) || failed="$failed $n"; continue; fi
+    # Every build_*_host.sh is a CPU build: it refuses MOJOLEARN_GPU_ARCHS and any
+    # MOJOLEARN_TARGET_COLUMN but cpu by name (both 2026-09-14 00:39 legs lost
+    # all host bindings to those refusals). The two byte-lm-host lanes need the
+    # byte LM one; the phase 1 host set is inert on a GPU box (routing is
+    # CPU-only) but builds the same way. Mirrors packaging/linux/build_sets.sh.
+    case "$n" in build_*_host)
+        if run "$n" env -u MOJOLEARN_GPU_ARCHS MOJOLEARN_TARGET_COLUMN=cpu MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_SKIP_BUILD_GATE=1 MOJOLEARN_COMPILE_JOBS=${MOJOLEARN_COMPILE_JOBS:-8} sh "$s"; then built=$((built + 1)); else failed="$failed $n"; fi
+        continue ;;
+    esac
     if run "$n" $BUILD_ENV sh "$s"; then built=$((built + 1)); else failed="$failed $n"; fi
 done
 say "bindings_built=$built failed=${failed:-none}"
