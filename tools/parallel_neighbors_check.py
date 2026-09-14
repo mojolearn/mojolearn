@@ -51,6 +51,15 @@ def main():
             else:
                 raise AssertionError('invalid feature count accepted')
             assert driver.last_shards_ == diagnostics
+            if method == 'kneighbors':
+                try:
+                    driver.query(Q, method=method, n_neighbors=model.n_samples_fit_ + 1)
+                except RuntimeError:
+                    pass
+                else:
+                    raise AssertionError('worker accepted too many neighbors')
+                assert driver.last_shards_ == diagnostics
+                equal(expected, driver.query(Q, method=method, **kwargs), digest)
         assert original == {k: getattr(model, k) for k in original}
         case = dict(estimator=type(model).__name__, method=method,
                     metric=model.metric, features=model.n_features_in_, kwargs=kwargs,
