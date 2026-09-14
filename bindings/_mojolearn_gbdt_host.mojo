@@ -1,12 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CPU binding for the `_mojolearn_gbdt` family, GradientBoosting on the
-gbdt-symmetric lane (workstream E batch 3, 2026-09-14; brief
-docs/lanes/BRIEF_cpu_training_2026-09-13.md sections 1.1 gbdt and the batch
-3 section).
+gbdt-symmetric, gbdt-depthwise and gbdt-lossguide lanes (workstream E batch
+3, 2026-09-14; brief docs/lanes/BRIEF_cpu_training_2026-09-13.md sections
+1.1 gbdt and the batch 3 section).
 
 HOST ONLY. No DeviceContext, no kernel launch, no GPU. The fit is
-`gbdt/host/gbdt_oracle.mojo::gbdt_host_fit`, the device trainer
+`gbdt/host/gbdt_oracle.mojo::gbdt_host_fit` for SymmetricTree and
+`gbdt/host/gbdt_oracle_depthwise.mojo::gbdt_host_fit_non_symmetric` for
+Depthwise and Lossguide (the `ntree` / `node` model shape), the device trainer
 (`gbdt/train.mojo::train`, `gbdt/methods/doc_parallel_boosting.mojo::
 fit_with_test`, the greedy symmetric searcher and the Newton leaf estimator)
 restated on the host, so the model text is meant to be the GPU columns'
@@ -65,6 +67,13 @@ from gbdt.host.gbdt_oracle import (
     GbdtHostParams,
     gbdt_host_fit,
     gbdt_host_model_text,
+)
+from gbdt.host.gbdt_oracle_depthwise import (
+    GBDT_HOST_GROW_LOSSGUIDE,
+    GBDT_HOST_SCORE_NEWTON_L2,
+    GbdtHostTreeParams,
+    gbdt_host_fit_non_symmetric,
+    gbdt_host_ns_model_text,
 )
 from gbdt.options.data_processing_options import nan_mode_from_name
 
@@ -133,10 +142,12 @@ def _refuse(what: String) raises:
     cover reads REFUSED and never a hash."""
     raise Error(
         "no CPU implementation of _mojolearn_gbdt.gbdt_fit for " + what
-        + "; the gbdt host binding trains the gbdt-symmetric lane only"
-        " (SymmetricTree, Logloss, Cosine, Newton leaves, no bootstrap,"
-        " weights, categoricals, eval set or NaN), see"
-        " gbdt/host/gbdt_oracle.mojo"
+        + "; the gbdt host binding trains the gbdt-symmetric,"
+        " gbdt-depthwise and gbdt-lossguide lanes only (Logloss, Newton"
+        " leaves, SymmetricTree or Depthwise with Cosine, Lossguide with"
+        " NewtonL2, no bootstrap, weights, categoricals, eval set or NaN),"
+        " see gbdt/host/gbdt_oracle.mojo and"
+        " gbdt/host/gbdt_oracle_depthwise.mojo"
     )
 
 
@@ -256,12 +267,22 @@ def gbdt_fit_binding(
     # ---- what the host fit does not restate, refused by name ----
     if loss != String("Logloss"):
         _refuse("loss='" + loss + "'")
-    if grow_code != 0:
-        _refuse("grow_policy code " + String(grow_code) + " (Depthwise or Lossguide)")
     if use_pointwise:
         _refuse("use_pointwise_searcher=True")
-    if score_function != GBDT_HOST_SCORE_COSINE:
+    # the score function each covered lane runs: Cosine under SymmetricTree
+    # and Depthwise, NewtonL2 under Lossguide (the policy defaults)
+    if grow_code == GBDT_HOST_GROW_LOSSGUIDE:
+        if score_function != GBDT_HOST_SCORE_NEWTON_L2:
+            _refuse("score_function code " + String(score_function) + " under Lossguide (only NewtonL2)")
+    elif score_function != GBDT_HOST_SCORE_COSINE:
         _refuse("score_function code " + String(score_function) + " (only Cosine)")
+    if grow_code != 0:
+        if min_split_gain >= 0:
+            _refuse("min_split_gain=" + String(min_split_gain))
+        if min_child_hessian >= 0:
+            _refuse("min_child_hessian=" + String(min_child_hessian))
+        if min_data_in_leaf != 1:
+            _refuse("min_data_in_leaf=" + String(min_data_in_leaf) + " under Depthwise or Lossguide")
     if leaf_method != -1 and leaf_method != GBDT_HOST_LEAF_NEWTON:
         _refuse("leaf_estimation_method code " + String(leaf_method) + " (only Newton)")
     if bootstrap_type != String("") and bootstrap_type != String("No"):
@@ -314,13 +335,30 @@ def gbdt_fit_binding(
             " here rather than accepted and ignored. It is live under"
             " Depthwise and Lossguide."
         )
-    if max_leaves >= 0 and max_leaves != (1 << max_depth):
-        raise Error(
-            "max_leaves option works only with lossguide tree growing"
-            " (catboost_options.cpp:998): under grow_policy="
-            + String("SymmetricTree") + " CatBoost pins it to 1 << depth == "
-            + String(1 << max_depth) + ", got " + String(max_leaves)
-        )
+    # `fit_with_test`'s `ns_max_leaves` (`doc_parallel_boosting.mojo:
+    # 1093-1113`) and `train`'s cap (`gbdt/train.mojo:968-983`)
+    var ns_max_leaves = 1 << max_depth
+    if grow_code != GBDT_HOST_GROW_LOSSGUIDE:
+        if max_leaves >= 0 and max_leaves != (1 << max_depth):
+            raise Error(
+                "max_leaves option works only with lossguide tree growing"
+                " (catboost_options.cpp:998): under grow_policy="
+                + String("SymmetricTree" if grow_code == 0 else "Depthwise")
+                + " CatBoost pins it to 1 << depth == "
+                + String(1 << max_depth) + ", got " + String(max_leaves)
+            )
+    else:
+        ns_max_leaves = max_leaves if max_leaves >= 0 else 31
+        if ns_max_leaves > 65536:
+            raise Error(
+                "Maximum leaves count for Lossguide grow policy is 65536, got "
+                + String(ns_max_leaves)
+            )
+        if ns_max_leaves < 2:
+            raise Error(
+                "max_leaves must be at least 2 under Lossguide, got "
+                + String(ns_max_leaves)
+            )
     var perm_count = permutation_count
     if perm_count == -1:
         perm_count = 4
@@ -388,11 +426,21 @@ def gbdt_fit_binding(
                 break
         if not has_nan:
             var y = read_f32(y_address, n_rows)
-            var model = gbdt_host_fit(x, y, n_rows, n_features, p)
-            text = gbdt_host_model_text(model)
-            losses = model.losses.copy()
-            best_iteration = model.best_iteration
-            stopped_early = model.stopped_early
+            if grow_code == 0:
+                var model = gbdt_host_fit(x, y, n_rows, n_features, p)
+                text = gbdt_host_model_text(model)
+                losses = model.losses.copy()
+                best_iteration = model.best_iteration
+                stopped_early = model.stopped_early
+            else:
+                # Depthwise and Lossguide: gbdt/host/gbdt_oracle_depthwise.mojo
+                var tp = GbdtHostTreeParams(
+                    p, grow_code, ns_max_leaves, Float64(min_data_in_leaf),
+                    score_function,
+                )
+                var ns_model = gbdt_host_fit_non_symmetric(x, y, n_rows, n_features, tp)
+                text = gbdt_host_ns_model_text(ns_model)
+                losses = ns_model.losses.copy()
     if has_nan:
         _refuse("an X carrying NaN (the nan_mode Min and Max arms)")
 
@@ -431,6 +479,12 @@ struct _HostModelArrays(Movable):
     var leaves: List[Float32]
     var dim: Int
     var bias: Float64
+    # the NON-SYMMETRIC shape (`ntree` / `node`, `model_text.mojo:535-600`):
+    # `split_*` then hold one record per pre-order node, these the node's
+    # LEAF-COUNT subtrees, and `tree_offsets` the prefix scan of node counts
+    var node_left: List[Int32]
+    var node_right: List[Int32]
+    var non_symmetric: Bool
 
 
 def _fields(line: String) raises -> List[String]:
@@ -486,14 +540,22 @@ def _parse_model(text: String) raises -> _HostModelArrays:
         List[Int32](), List[Int32](), List[Int32](), List[Int32](),
         List[Float32](), List[Int32](), List[Int32](), List[Int32](),
         List[Int32](), List[Int32](), List[Float32](), -1, Float64(0.0),
+        List[Int32](), List[Int32](), False,
     )
     arrays.border_offsets.append(Int32(0))
     arrays.tree_offsets.append(Int32(0))
     arrays.leaf_offsets.append(Int32(0))
-    var cur_depth = 0
     var cur_splits = 0
     var cur_leaves = 0
+    var cur_weights = 0
     var cur_dim = 1
+    # per tree, what completes it: `depth` splits and `(1 << depth) * dim`
+    # leaves (`tree`), or `nodes` nodes, `(nodes + 1) * dim` leaves and, with
+    # `weights 1`, `nodes + 1` weights (`ntree`)
+    var want_splits = 0
+    var want_leaves = 0
+    var want_weights = 0
+    var shape_kind = 0  # 1 oblivious, 2 non-symmetric; one file, one shape
     for raw in text.split("\n"):
         var line = String(raw)
         if line.byte_length() == 0 or line.startswith("#"):
@@ -559,42 +621,65 @@ def _parse_model(text: String) raises -> _HostModelArrays:
             arrays.nan_treatment.append(treat)
             arrays.border_offsets.append(Int32(len(arrays.borders)))
             features_seen += 1
-        elif kind == String("tree"):
-            _need(t, 8, "tree")
+        elif kind == String("tree") or kind == String("ntree"):
+            _need(t, 8, kind)
             if features_seen != n_features or Int(t[1]) != trees_seen:
-                raise Error("a `tree` record out of order")
+                raise Error("a `" + kind + "` record out of order")
             if trees_seen > 0 and (
-                cur_splits != cur_depth or cur_leaves != (1 << cur_depth) * cur_dim
+                cur_splits != want_splits or cur_leaves != want_leaves
+                or cur_weights != want_weights
             ):
                 raise Error("tree " + String(trees_seen - 1) + " is incomplete")
-            cur_depth = Int(t[3])
+            var this_kind = 1 if kind == String("tree") else 2
+            if shape_kind != 0 and shape_kind != this_kind:
+                raise Error("a model text mixing oblivious and non-symmetric trees")
+            shape_kind = this_kind
+            arrays.non_symmetric = this_kind == 2
+            var size = Int(t[3])
             cur_dim = Int(t[5])
-            if Int(t[7]) != 0:
-                _refuse_predict("a tree carrying leaf weights")
-            if cur_depth < 0 or cur_depth > 31 or cur_dim < 1:
-                raise Error("tree depth or dim is not sane")
+            var n_values: Int
+            if this_kind == 1:
+                if Int(t[7]) != 0:
+                    _refuse_predict("a tree carrying leaf weights")
+                if size < 0 or size > 31 or cur_dim < 1:
+                    raise Error("tree depth or dim is not sane")
+                n_values = (1 << size) * cur_dim
+                want_weights = 0
+            else:
+                if t[2] != String("nodes") or t[4] != String("dim") or t[6] != String("weights"):
+                    raise Error("an `ntree` record has 8 fields")
+                if size < 0 or cur_dim < 1:
+                    raise Error("non-symmetric node count or dim is not sane")
+                n_values = (size + 1) * cur_dim
+                want_weights = (size + 1) if Int(t[7]) != 0 else 0
             if arrays.dim == -1:
                 arrays.dim = cur_dim
             elif arrays.dim != cur_dim:
                 raise Error("tree " + t[1] + " has a different dim")
+            want_splits = size
+            want_leaves = n_values
             cur_splits = 0
             cur_leaves = 0
+            cur_weights = 0
             trees_seen += 1
             arrays.tree_offsets.append(
-                arrays.tree_offsets[len(arrays.tree_offsets) - 1] + Int32(cur_depth)
+                arrays.tree_offsets[len(arrays.tree_offsets) - 1] + Int32(size)
             )
             arrays.leaf_offsets.append(
-                arrays.leaf_offsets[len(arrays.leaf_offsets) - 1]
-                + Int32((1 << cur_depth) * cur_dim)
+                arrays.leaf_offsets[len(arrays.leaf_offsets) - 1] + Int32(n_values)
             )
-        elif kind == String("split"):
-            _need(t, 5, "split")
-            if Int(t[1]) != trees_seen - 1 or Int(t[2]) != cur_splits:
-                raise Error("a `split` record out of order")
+        elif kind == String("split") or kind == String("node"):
+            var base = 5 if kind == String("split") else 7
+            _need(t, base, kind)
+            if (shape_kind == 1) != (kind == String("split")) or Int(t[1]) != trees_seen - 1 or Int(t[2]) != cur_splits:
+                raise Error("a `" + kind + "` record out of order")
             arrays.split_feature.append(Int32(Int(t[3])))
             arrays.split_bin.append(Int32(Int(t[4])))
-            var take_bin = len(t) >= 7 and t[5] == String("split_type") and t[6] == String("take_bin")
+            var take_bin = len(t) >= base + 2 and t[base] == String("split_type") and t[base + 1] == String("take_bin")
             arrays.split_take_bin.append(Int32(1) if take_bin else Int32(0))
+            if kind == String("node"):
+                arrays.node_left.append(Int32(Int(t[5])))
+                arrays.node_right.append(Int32(Int(t[6])))
             cur_splits += 1
         elif kind == String("leaf"):
             _need(t, 4, "leaf")
@@ -602,11 +687,18 @@ def _parse_model(text: String) raises -> _HostModelArrays:
                 raise Error("a `leaf` record out of order")
             arrays.leaves.append(bitcast[DType.float32](UInt32(_token_bits(t[3], 8))))
             cur_leaves += 1
+        elif kind == String("weight"):
+            # a non-symmetric tree's leaf weights (64-bit tokens): counted
+            # for completeness, not read by the walk
+            _need(t, 4, "weight")
+            if shape_kind != 2 or Int(t[1]) != trees_seen - 1 or Int(t[2]) != cur_weights:
+                raise Error("a `weight` record out of order")
+            _ = _token_bits(t[3], 16)
+            cur_weights += 1
         elif kind == String("loss"):
             losses_seen += 1
         elif (
-            kind == String("ntree") or kind == String("node")
-            or kind == String("weight") or kind == String("ctr_columns")
+            kind == String("ctr_columns")
             or kind == String("ctr_table") or kind == String("ctr_entry")
             or kind == String("tensor_ctr_registry")
         ):
@@ -618,7 +710,8 @@ def _parse_model(text: String) raises -> _HostModelArrays:
     if losses_seen != n_losses:
         raise Error("the model text declares " + String(n_losses) + " losses")
     if trees_seen > 0 and (
-        cur_splits != cur_depth or cur_leaves != (1 << cur_depth) * cur_dim
+        cur_splits != want_splits or cur_leaves != want_leaves
+        or cur_weights != want_weights
     ):
         raise Error("tree " + String(trees_seen - 1) + " is incomplete")
     if arrays.dim == -1:
@@ -629,7 +722,7 @@ def _parse_model(text: String) raises -> _HostModelArrays:
 def _refuse_predict(what: String) raises:
     raise Error(
         "no CPU implementation of _mojolearn_gbdt.gbdt_predict for " + what
-        + "; the gbdt host binding reads oblivious float-only models (HostGBDT"
+        + "; the gbdt host binding reads float-only models (HostGBDT"
         " in python/mojolearn/_gbdt_host.py serves the rest)"
     )
 
@@ -668,8 +761,12 @@ def gbdt_predict_binding(
     with GILReleased(Python()):
         var x = read_f32(x_address, n_rows * n_features)
         var out = List[Float32](length=n_rows, fill=Float32(0.0))
-        var node_left = List[Int32](length=1, fill=Int32(0))
-        var node_right = List[Int32](length=1, fill=Int32(0))
+        var node_left = m.node_left.copy()
+        var node_right = m.node_right.copy()
+        if len(node_left) == 0:
+            node_left.append(Int32(0))
+            node_right.append(Int32(0))
+        var non_symmetric = m.non_symmetric
         var split_feature = m.split_feature.copy()
         var split_bin = m.split_bin.copy()
         var split_take_bin = m.split_take_bin.copy()
@@ -698,7 +795,7 @@ def gbdt_predict_binding(
             rebind[MutPointer[Int32, MutUntrackedOrigin]](node_right.unsafe_ptr()),
             rebind[MutPointer[Int32, MutUntrackedOrigin]](m.leaf_offsets.unsafe_ptr()),
             rebind[MutPointer[Float32, MutUntrackedOrigin]](leaves.unsafe_ptr()),
-            n_trees, 1, False, len(m.split_feature), len(m.leaves), m.bias,
+            n_trees, 1, non_symmetric, len(m.split_feature), len(m.leaves), m.bias,
             out,
         )
         # KEEP-ALIVE. Every pointer above is an untracked `unsafe_ptr()`, which

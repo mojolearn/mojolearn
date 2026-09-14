@@ -93,6 +93,8 @@ on:
       - "glm/host/qn_oracle.mojo"
       - "ensemble/host/rf_oracle.mojo"
       - "gbdt/host/gbdt_oracle.mojo"
+      - "gbdt/host/gbdt_oracle_depthwise.mojo"
+      - "gbdt/host/gbdt_oracle_lossguide.mojo"
       - "spectral/checks/symmetric_eig_host.mojo"
       - "core/knn_host_predict.mojo"
       - "cluster/host/kmeans_oracle.mojo"
