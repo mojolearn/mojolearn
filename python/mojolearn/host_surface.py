@@ -38,7 +38,11 @@ gate's negative control passes, the identity_break lanes it covers for
 TRAINING (the CPU column must read STABLE and IDENTICAL x4 on them), the
 lanes and public classes it serves for INFERENCE from a saved model, the
 Mojo host modules that ship inside it, the function names it exports, and
-whether it ships in a wheel.
+whether it ships in a wheel (every family does since 0.8.6, the packaging
+lane of 2026-09-14; the two wheel builders and the packer read
+`--wheel-families` and `--wheel-bindings` below instead of naming the byte
+LM's binding by hand, and packaging/check_ext_lists.py fails when any of
+them carries a host list of its own).
 
 This file imports nothing from the package on purpose. It runs by path
 before the package can import (the gate runner has no binding built yet):
@@ -47,6 +51,8 @@ before the package can import (the gate runner has no binding built yet):
     python3 python/mojolearn/host_surface.py --routed-families
     python3 python/mojolearn/host_surface.py --bindings --sep ,
     python3 python/mojolearn/host_surface.py --classical-recorded
+    python3 python/mojolearn/host_surface.py --wheel-families
+    python3 python/mojolearn/host_surface.py --wheel-bindings
     python3 python/mojolearn/host_surface.py --markdown
     python3 python/mojolearn/host_surface.py --json
 
@@ -195,7 +201,7 @@ FAMILIES = (
             "argmax_rows_f32", "argmax_rows_f64", "gather_i64", "gather_f64",
         ),
         gate="tools/forest_host_gate.py (.github/workflows/forest-host-gate.yml)",
-        ships_in_wheel=False,
+        ships_in_wheel=True,
     ),
     dict(
         # The expose-tokenizer lane, 2026-09-14. Not a CPU twin of a GPU
@@ -224,7 +230,7 @@ FAMILIES = (
             "gpt2_n_vocab", "gpt2_max_token_bytes", "gpt2_encode", "gpt2_decode",
         ),
         gate="pixi run check-tokenizer and python/mojolearn/tests/test_tokenizer_surface.py",
-        ships_in_wheel=False,
+        ships_in_wheel=True,
     ),
     dict(
         family="core",
@@ -247,7 +253,7 @@ FAMILIES = (
             "argmax_rows_f64",
         ),
         gate="tools/classical_host_gate.py (cpu-identity-gate.yml)",
-        ships_in_wheel=False,
+        ships_in_wheel=True,
     ),
     dict(
         family="linalg",
@@ -267,7 +273,7 @@ FAMILIES = (
             "linalg_profile_version", "gemm",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
-        ships_in_wheel=False,
+        ships_in_wheel=True,
     ),
     dict(
         family="estimators",
@@ -293,7 +299,7 @@ FAMILIES = (
             "qn_decision_function", "qn_sigmoid", "qn_softmax",
         ),
         gate="tools/identity_break.py and tools/classical_host_gate.py (cpu-identity-gate.yml)",
-        ships_in_wheel=False,
+        ships_in_wheel=True,
     ),
     dict(
         family="tsa",
@@ -313,7 +319,7 @@ FAMILIES = (
             "holtwinters_forecast",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
-        ships_in_wheel=False,
+        ships_in_wheel=True,
     ),
     dict(
         family="solver",
@@ -336,7 +342,7 @@ FAMILIES = (
             "linkage_fit",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
-        ships_in_wheel=False,
+        ships_in_wheel=True,
     ),
     dict(
         family="svm",
@@ -360,7 +366,7 @@ FAMILIES = (
             "svc_predict", "iforest_run",
         ),
         gate="tools/identity_break.py and tools/classical_host_gate.py (cpu-identity-gate.yml)",
-        ships_in_wheel=False,
+        ships_in_wheel=True,
     ),
     dict(
         family="trees",
@@ -388,7 +394,7 @@ FAMILIES = (
             "et_predict",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
-        ships_in_wheel=False,
+        ships_in_wheel=True,
     ),
 )
 
@@ -408,6 +414,32 @@ def family(name):
 def bindings():
     """Every host binding basename, in the same order."""
     return [f["binding"] for f in FAMILIES]
+
+
+def wheel_families():
+    """The families whose host binding ships in both wheels, in build
+    order: what packaging/linux/build_sets.sh and
+    packaging/macos/build_release_wheel.sh build through the shims, and what
+    packaging/linux/pack_wheel.py requires under mojolearn/host/."""
+    return [f["family"] for f in FAMILIES if f["ships_in_wheel"]]
+
+
+def wheel_bindings():
+    """The basenames of `wheel_families()`, in the same order."""
+    return [f["binding"] for f in FAMILIES if f["ships_in_wheel"]]
+
+
+def training_gpu_column_record():
+    """The one record directory the training GPU columns live in, by its
+    last path component (`2026-09-14_47-lanes`). The wheels carry the three
+    columns under mojolearn/identity_columns/<record>/ so `python -m
+    mojolearn identity` can name the record it diffed against; a manifest
+    naming columns from two records is refused here, because one diff has
+    one record."""
+    dirs = sorted({c.rsplit("/", 1)[0] for c in TRAINING_GPU_COLUMNS})
+    if len(dirs) != 1:
+        raise ValueError(f"TRAINING_GPU_COLUMNS spans {len(dirs)} record directories: {dirs}")
+    return dirs[0].rsplit("/", 1)[1]
 
 
 def binding_source(name):
@@ -533,6 +565,9 @@ def as_dict():
         classical_recorded=list(CLASSICAL_RECORDED),
         classical_gpu_columns=list(CLASSICAL_GPU_COLUMNS),
         training_gpu_columns=list(TRAINING_GPU_COLUMNS),
+        training_gpu_column_record=training_gpu_column_record(),
+        wheel_families=wheel_families(),
+        wheel_bindings=wheel_bindings(),
         forest_recorded_root=FOREST_RECORDED_ROOT,
         no_cpu_path=list(NO_CPU_PATH),
     )
@@ -548,6 +583,9 @@ def main(argv=None):
     g.add_argument("--covered-lanes", action="store_true", help="identity_break lanes with a CPU training path (comma separated)")
     g.add_argument("--inference-lanes", action="store_true", help="classical gate lanes served from a saved model (comma separated)")
     g.add_argument("--forest-kinds", action="store_true", help="forest gate kinds (comma separated)")
+    g.add_argument("--wheel-families", action="store_true", help="families whose host binding ships in the wheels")
+    g.add_argument("--wheel-bindings", action="store_true", help="the wheel families' basenames")
+    g.add_argument("--training-gpu-column-record", action="store_true", help="the record directory name of the training GPU columns")
     g.add_argument("--classical-recorded", action="store_true", help="classical gate recording directories")
     g.add_argument("--classical-gpu-columns", action="store_true", help="the GPU columns the classical gate compares against")
     g.add_argument("--training-gpu-columns", action="store_true", help="the GPU columns the training gate diffs against")
@@ -571,6 +609,12 @@ def main(argv=None):
         items = bindings()
     elif args.routed_bindings:
         items = routed_bindings()
+    elif args.wheel_families:
+        items = wheel_families()
+    elif args.wheel_bindings:
+        items = wheel_bindings()
+    elif args.training_gpu_column_record:
+        items = [training_gpu_column_record()]
     elif args.covered_lanes:
         items = covered_lanes()
     elif args.inference_lanes:

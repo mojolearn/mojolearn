@@ -2,6 +2,7 @@
 """Read-only admission of installed Linux surface evidence; never invokes a GPU."""
 import argparse
 import hashlib
+import importlib.util
 import json
 from pathlib import Path
 import re
@@ -25,6 +26,29 @@ FIXTURES = {
 
 
 BYTE_LM_PROFILE = 'mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1'
+
+# THE HOST (CPU) BINDINGS A WHEEL CARRIES, read from the one declaration of
+# the CPU surface (python/mojolearn/host_surface.py, the packaging lane
+# 2026-09-14) BY PATH: that file imports nothing from the package, so this
+# module stays the read-only admission side and never imports mojolearn. It
+# is read from THIS checkout, beside the BINDINGS constant above, never from
+# a fixture root. Until 0.8.5 the byte LM's was the only host binding and it
+# was spelled by name in seven files.
+_HOST_SURFACE = Path(__file__).resolve().parent.parent / 'python/mojolearn/host_surface.py'
+
+
+def wheel_host_bindings():
+    """The basenames of every host binding the wheels carry, in manifest
+    order (`_mojolearn_byte_lm_host`, `_mojolearn_forest_host`, ...)."""
+    spec = importlib.util.spec_from_file_location('mojolearn_host_surface_admission', _HOST_SURFACE)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return tuple(module.wheel_bindings())
+
+
+def wheel_host_members():
+    """The same, as wheel member paths under mojolearn/host/."""
+    return tuple('mojolearn/host/' + name + '.so' for name in wheel_host_bindings())
 BYTE_FILES = {'byte-lm-identical.json', 'byte-lm-before.json', 'byte-lm-after.json', 'byte-lm-restored.json'}
 # DEVIATION 2290. The combined three-architecture Linux profile is named for its
 # shape, `release-linux3` (CUDA sm_89, CUDA sm_90, HIP gfx942), not for a version.
@@ -135,6 +159,26 @@ def check_byte_lm_host(installed, audit):
     member = 'host/' + '_mojolearn_byte_lm_host.so'
     require(host.get('sha256') == audit.get('host_extension_hashes', {}).get(member),
             'Installed CPU training binding differs from the wheel')
+
+
+def check_host_bindings(installed, audit):
+    """EVERY host binding of an installed release wheel (the packaging lane,
+    2026-09-14): the installed record must carry one row per binding the
+    manifest says a wheel ships, each read back as vendor cpu, IDENTICAL and
+    the CPU kernel-matrix column, and each with the digest of the member in
+    the audited wheel. A wheel that declared ten host families and installed
+    nine would pass check_byte_lm_host and fail here."""
+    rows = installed.get('installed_host_bindings')
+    require(isinstance(rows, dict), 'Installed record carries no host binding inventory')
+    hashes = audit.get('host_extension_hashes', {})
+    for name in wheel_host_bindings():
+        row = rows.get(name)
+        require(isinstance(row, dict), 'Installed record lacks the host binding ' + name)
+        require(row.get('vendor') == 'cpu' and row.get('numeric_mode') == 1 and row.get('column') == 'cpu',
+                'Installed host binding read-back differs: ' + name)
+        require(row.get('sha256') == hashes.get('host/' + name + '.so'),
+                'Installed host binding differs from the wheel: ' + name)
+    require(set(rows) == set(wheel_host_bindings()), 'Installed host binding inventory differs from the manifest')
 
 
 def check_byte_lm(out, installed):
@@ -319,6 +363,7 @@ def verify(root, out):
         if surface == 'byte-lm':
             check_byte_lm(out, record)
             check_byte_lm_host(record, audit)
+            check_host_bindings(record, audit)
         records[name] = sha(out / (name + '.installed.json'))
     return {'schema': 'mojolearn.linux.installed-surfaces.v1', 'status': 'PASSED',
             'vendor': audit['qualification_vendor'], 'wheel_sha256': audit['sha256'],

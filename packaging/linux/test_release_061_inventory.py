@@ -41,10 +41,19 @@ class ReleaseInventory(unittest.TestCase):
                     binary.parent.mkdir(parents=True, exist_ok=True)
                     binary.write_bytes(rel.encode())  # inert bytes; never loaded
                     files[rel] = binary
-            # DEVIATION 2680: the sixth element is this leg's CPU TRAINING
-            # binding, None when the leg built none. These fixtures build no
-            # host binary, which is the absent case the packer must still pack.
-            sets.append((vendor, arch, files, {}, {}, None))
+            # DEVIATION 2680: the sixth element is this leg's host bindings,
+            # basename -> path ({} or None when the leg built none). The
+            # release profile requires every binding the manifest ships
+            # (since 0.8.6), so these fixtures build one inert file per
+            # manifest name, the same bytes on every leg; the absent case is
+            # the generic profile's and is not what release_inventory packs.
+            hosts = {}
+            for name in packer.HOST_NAMES:
+                binary = root / f'{vendor}/{arch}/host/{name}.so'
+                binary.parent.mkdir(parents=True, exist_ok=True)
+                binary.write_bytes(f'inert host {name}'.encode())
+                hosts[name] = binary
+            sets.append((vendor, arch, files, {}, {}, hosts))
             proof = root / f'{vendor}-{arch}.json'
             proof.write_text(json.dumps(dict(
                 schema='mojolearn.linux.build-provenance.v1', complete=True,

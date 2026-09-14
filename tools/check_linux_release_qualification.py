@@ -28,7 +28,14 @@ EXTENSION = re.compile(r'mojolearn/(cuda|hip)/(sm_[0-9]+a?|gfx[0-9a-f]+)/'
 # DEVIATION 2680: the CPU TRAINING binding. One vendor-neutral copy per wheel,
 # beside the architecture trees rather than inside one, because it targets no
 # GPU and reads back vendor 'cpu'.
-HOST_NAME = '_mojolearn_byte_lm_host'
+# EVERY host binding a wheel carries (the packaging lane, 2026-09-14), read
+# from the manifest through the admission module, never spelled here
+# (packaging/check_ext_lists.py refuses a literal host list in this file).
+# HOST_NAME and HOST_MEMBER are the byte LM's, the first family, kept for the
+# readers and tests that still say byte LM.
+HOST_NAMES = surface.wheel_host_bindings()
+HOST_MEMBERS = surface.wheel_host_members()
+HOST_NAME = next(n for n in HOST_NAMES if n.endswith('_byte_lm_host'))
 HOST_MEMBER = 'mojolearn/host/' + HOST_NAME + '.so'
 MODE_READBACK = surface.BINDINGS - {'_mojolearn_estimators', '_mojolearn_rf',
                                  '_mojolearn_trees', '_mojolearn_solver', '_mojolearn_tsa'}
@@ -130,7 +137,7 @@ def inspect_wheel(wheel, root, flat_python=False, byte_lm=False, host_out=None):
                 vendor, arch, mode, name = match.groups()
                 extensions[path.removeprefix('mojolearn/')] = digest
                 sets.setdefault((vendor, arch, mode or 'fast'), set()).add(name)
-            elif path == HOST_MEMBER:
+            elif path in HOST_MEMBERS:
                 # DEVIATION 2680: vendor-neutral, one copy for the whole wheel,
                 # so it belongs to no architecture and is recorded on its own.
                 if host_out is not None:
@@ -256,20 +263,29 @@ def release_audit(wheel, source_root, proof_root, runtime_key):
         require(payload.get('optional_native', {}).get('_mojolearn_byte_lm') == dict(included=True,
                     supported_modes=['identical'], unsupported_modes=['fast', 'deterministic']),
                 'Release byte-LM must be included in IDENTICAL only')
-        # DEVIATION 2680: THE CPU TRAINING BINDING. A release wheel carries
-        # exactly one, vendor-neutral, and the payload's record of it must be
-        # the file actually in the archive. Without this the binding could be
-        # declared and absent, or present and unrecorded, and nothing downstream
-        # would notice: it is the one shipped binary no architecture map covers.
-        require(payload.get('optional_native', {}).get(HOST_NAME) == dict(included=True,
-                    supported_modes=['identical'], unsupported_modes=['fast', 'deterministic']),
-                'Release CPU training binding must be included in IDENTICAL only')
+        # DEVIATION 2680: THE HOST BINDINGS. A release wheel carries exactly
+        # one copy of each, vendor-neutral, and the payload's record of each
+        # must be the file actually in the archive. Without this a binding
+        # could be declared and absent, or present and unrecorded, and nothing
+        # downstream would notice: they are the shipped binaries no
+        # architecture map covers. Since 0.8.6 `host_native` is keyed by
+        # basename and covers every family the manifest ships.
         host_native = payload.get('host_native')
-        require(isinstance(host_native, dict) and host_native.get('archive_path') == HOST_MEMBER
-                and host_native.get('vendor') == 'cpu'
-                and host_native.get('supported_modes') == ['identical']
-                and host_native.get('sha256') == host_extensions.get(HOST_MEMBER.removeprefix('mojolearn/')),
-                'Release payload CPU training binding differs from the wheel')
+        require(isinstance(host_native, dict) and set(host_native) == set(HOST_NAMES),
+                'Release payload host binding inventory differs from the manifest')
+        for name in HOST_NAMES:
+            member = 'mojolearn/host/' + name + '.so'
+            require(payload.get('optional_native', {}).get(name) == dict(included=True,
+                        supported_modes=['identical'], unsupported_modes=['fast', 'deterministic']),
+                    'Release host binding must be included in IDENTICAL only: ' + name)
+            record = host_native[name]
+            require(isinstance(record, dict) and record.get('archive_path') == member
+                    and record.get('vendor') == 'cpu'
+                    and record.get('supported_modes') == ['identical']
+                    and record.get('sha256') == host_extensions.get(member.removeprefix('mojolearn/')),
+                    'Release payload host binding differs from the wheel: ' + name)
+        require(set(host_extensions) == {m.removeprefix('mojolearn/') for m in HOST_MEMBERS},
+                'Release wheel host binding inventory differs from the manifest')
         for field, select in [('python_sha256', lambda n: n.endswith('.py')),
                               ('runtime_sha256', lambda n: '/.libs/' in n)]:
             actual = {n: hashlib.sha256(archive.read(n)).hexdigest()

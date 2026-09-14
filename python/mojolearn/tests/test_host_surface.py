@@ -191,6 +191,35 @@ def test_workflow_reads_the_manifest_not_literals():
         assert directory in text, f"the sparse checkout does not bring down {directory}"
 
 
+def test_every_host_binding_ships_and_packaging_reads_the_manifest():
+    """The packaging lane, 2026-09-14: every family the manifest declares
+    ships in both wheels, so the routed set and the three bindings loaded
+    by path are all in `wheel_bindings()`; the two wheel builders, the
+    packer, the smokes and the Linux admission read that list from the
+    manifest by the tokens packaging/check_ext_lists.py --host holds them
+    to, and none carries a host name list of its own."""
+    from mojolearn import _backend
+    shipped = set(host_surface.wheel_bindings())
+    assert set(_backend._HOST_MODULES.values()) <= shipped
+    assert {"_mojolearn_byte_lm_host", "_mojolearn_forest_host", "_mojolearn_tokenizer_host"} <= shipped
+    assert host_surface.wheel_families() == host_surface.families()
+    assert host_surface.training_gpu_column_record() == host_surface.TRAINING_GPU_COLUMNS[0].rsplit("/", 2)[1]
+    for rel, token in (
+        ("packaging/linux/pack_wheel.py", "wheel_host_bindings()"),
+        ("packaging/linux/build_sets.sh", "host_surface.py --wheel-families"),
+        ("packaging/macos/build_release_wheel.sh", "host_surface.py --wheel-families"),
+        ("packaging/linux/smoke.py", "host_surface.wheel_bindings()"),
+        ("packaging/macos/verify_wheel.sh", "host_surface.wheel_bindings()"),
+        ("tools/linux_surface_qualification.sh", "wheel_host_bindings()"),
+        ("tools/check_linux_release_qualification.py", "wheel_host_bindings()"),
+    ):
+        text = _read(rel)
+        assert token in text, f"{rel} does not read the host list from the manifest by {token!r}"
+        assert not re.search(r"^\s*HOST_NAMES?\s*=\s*[\"'(]\s*\"?_mojolearn_[a-z_]+_host", text, re.M), (
+            f"{rel} carries a host name list of its own"
+        )
+
+
 def test_command_line_agrees_with_the_api(capsys):
     assert host_surface.main(["--covered-lanes"]) == 0
     assert capsys.readouterr().out.strip() == ",".join(host_surface.covered_lanes())

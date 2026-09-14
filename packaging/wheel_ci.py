@@ -94,6 +94,15 @@ def inventory(argv):
     # user needs to diagnose.
     roots = ["__init__", "__main__"]
     queue = [r for r in roots if r in present]
+    # BUILD-TIME COPIES REACHED THROUGH importlib, NOT A STATIC IMPORT (the
+    # packaging lane, 2026-09-14). `_verify.load_differ` imports
+    # `mojolearn._identity_trace_diff` and `_identity.load_harness` imports
+    # `mojolearn._identity_break` by name at run time, because each is a copy
+    # of a tools/ file made by the wheel build and is absent from a checkout
+    # (python/.gitignore). ast cannot see those edges, so they are declared
+    # here, keyed by the importer, and only count when the importer itself is
+    # reached; an unrelated copy left in the package still fails as an orphan.
+    dynamic = {"_verify": ["_identity_trace_diff"], "_identity": ["_identity_break"]}
     # A standalone top-level module may pull package modules in too.
     for f in extra_roots:
         queue.extend(_intra_package_imports(f, pkg))
@@ -106,6 +115,7 @@ def inventory(argv):
         reached.add(name)
         if name in present:
             queue.extend(_intra_package_imports(present[name], pkg))
+            queue.extend(dynamic.get(name, []))
 
     orphans = sorted(set(present) - reached)
     if orphans:

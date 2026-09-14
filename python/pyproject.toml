@@ -214,9 +214,22 @@ mojolearn = [
     "CITATION.cff",
     "ALPHA_API.md",
     "*.so", "identical/*.so", "deterministic/*.so", ".dylibs/*.dylib",
-    # DEVIATION 2610: the CPU inference binding, loaded by path, never by
-    # the GPU vendor selector.
+    # DEVIATION 2610: the host (CPU) bindings, loaded by path or through
+    # _backend.load_host_module, never by the GPU vendor selector. Every
+    # family python/mojolearn/host_surface.py declares ships since 0.8.6;
+    # build_release_wheel.sh builds and reads back each one.
     "host/*.so",
+    # THE IDENTITY PAYLOAD (the packaging lane, 2026-09-14). The reference
+    # card directory `python -m mojolearn verify` compares against (tracked;
+    # the placeholder is deliberate and refused by token, docs/VERIFY.md),
+    # and the three training GPU columns plus the commit witness that
+    # `python -m mojolearn identity` diffs a local run against, copied in
+    # by build_release_wheel.sh from the paths the manifest names. The two
+    # tool copies beside them (`_identity_trace_diff.py`,
+    # `_identity_break.py`) are modules and ship through `packages`.
+    "reference_cards/*",
+    "identity_columns/*/*.json",
+    "identity_columns/COMMIT",
     "cuda/*.so", "cuda/identical/*.so", "cuda/deterministic/*.so", "cuda/.libs/*",
     "cuda/sm_*/*.so", "cuda/sm_*/identical/*.so", "cuda/sm_*/deterministic/*.so", "cuda/sm_*/.libs/*",
     "hip/*.so", "hip/identical/*.so", "hip/deterministic/*.so", "hip/.libs/*",

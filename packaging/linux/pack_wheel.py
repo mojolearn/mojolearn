@@ -45,9 +45,12 @@ it saved, are printed and written into SIZES.json beside the wheel.
 
 WHAT IS IN THE WHEEL, and why it matches the macOS one file for file except
 for the binaries: `mojolearn_diagnostics.py`, every `.py` directly under
-`python/mojolearn/` (no subpackage, no tests, no reference cards -- the
-0.1.0 macOS wheel's listing is the reference, and it carries none of
-those), `mojolearn-<v>.dist-info/{METADATA,WHEEL,RECORD,entry_points.txt,
+`python/mojolearn/` (no subpackage, no tests), the identity payload the
+macOS build copies in (since 0.8.6: `mojolearn/_identity_trace_diff.py`,
+`mojolearn/_identity_break.py`, `mojolearn/reference_cards/`,
+`mojolearn/identity_columns/<record>/` and its COMMIT witness), one copy of
+every host binding under `mojolearn/host/`,
+`mojolearn-<v>.dist-info/{METADATA,WHEEL,RECORD,entry_points.txt,
 top_level.txt,licenses/LICENSE,licenses/NOTICE}`. METADATA is generated
 from pyproject.toml with the same field order setuptools 84 wrote for
 0.1.0, and `--check-against <macos wheel>` diffs the two METADATA bodies so
@@ -159,7 +162,9 @@ RELEASE_HOPPER_ALTS = {("cuda", "sm_90"), ("cuda", "sm_90a")}
 # 'release-0.6.1'; the version was never published under that number.
 sys.path.append(str(REPO / "tools"))
 from verify_linux_surface_qualification import (  # noqa: E402
-    RELEASE_PROFILE, RELEASE_PROFILES, release_version)
+    RELEASE_PROFILE, RELEASE_PROFILES, release_version, wheel_host_bindings)
+sys.path.insert(0, str(PY_DIR))
+from mojolearn import host_surface  # noqa: E402  (imports nothing from the package)
 
 
 def release_inventory(sets, proof_paths, version, source_root=REPO):
@@ -188,16 +193,23 @@ def release_inventory(sets, proof_paths, version, source_root=REPO):
     # is mojolearn/<vendor>/<arch>/..., and a vendor-neutral file belongs to no
     # architecture. It is recorded separately so the payload record still names
     # every shipped binary, with the legs that produced it and its digest.
-    host_seen = {f'{v}/{a}': sha(p).hex() for v, a, _, _, _, p in sets if p is not None}
-    host_record = None
-    if host_seen:
-        host_record = dict(archive_path=f'mojolearn/host/{HOST_NAME}.so',
-                           sha256=sorted(set(host_seen.values()))[0],
-                           vendor='cpu', supported_modes=['identical'],
-                           unsupported_modes=['fast', 'deterministic'],
-                           built_by=sorted(host_seen),
-                           scope='CPU training and inference with no GPU; one '
-                                 'copy for every architecture in this wheel')
+    # Keyed by basename since 0.8.6: every host family the manifest ships,
+    # each with the legs that built it and one digest (the byte compare in
+    # main() has already refused legs that disagree).
+    host_record = {}
+    for name in HOST_NAMES:
+        seen = {f'{v}/{a}': sha(hosts[name]).hex() for v, a, _, _, _, hosts in sets if name in (hosts or {})}
+        if seen:
+            host_record[name] = dict(archive_path=f'mojolearn/host/{name}.so',
+                                     sha256=sorted(set(seen.values()))[0],
+                                     vendor='cpu', supported_modes=['identical'],
+                                     unsupported_modes=['fast', 'deterministic'],
+                                     built_by=sorted(seen),
+                                     scope='CPU training and inference with no GPU; one '
+                                           'copy for every architecture in this wheel')
+    if set(host_record) != set(HOST_NAMES):
+        raise SystemExit(RELEASE_PROFILE + ' requires every host binding the manifest ships; missing: '
+                         + ', '.join(sorted(set(HOST_NAMES) - set(host_record))))
     proofs, inventories, commits = {}, [], set()
     for path in proof_paths:
         raw = pathlib.Path(path).read_bytes()
@@ -250,11 +262,10 @@ def release_inventory(sets, proof_paths, version, source_root=REPO):
                 optional_native={n: {
                     'included': True, 'supported_modes': ['identical'],
                     'unsupported_modes': ['fast', 'deterministic']}
-                    for n in ('_mojolearn_byte_lm',) + ((HOST_NAME,) if host_record else ())
-                             + IDENTICAL_ONLY_NAMES},
-                # Named even when absent, so the record says which wheels carry
-                # CPU training rather than leaving a reader to infer it from a
-                # missing key.
+                    for n in ('_mojolearn_byte_lm',) + tuple(host_record) + IDENTICAL_ONLY_NAMES},
+                # One record per host binding, keyed by basename, so the
+                # payload says which host families this wheel carries rather
+                # than leaving a reader to infer it from the archive.
                 host_native=host_record,
                 qualification='Build and file provenance only; installed runtime and numerical checks required',
                 runtime_coverage={ '/'.join(k): 'PENDING_INSTALLED_ARTIFACT' for k in sorted(proofs)})
@@ -299,12 +310,16 @@ def metadata_text(proj, readme):
     return "\n".join(lines) + "\n\n" + readme
 
 
-#: The CPU training binding. Vendor-neutral and tier-neutral: one copy per
-#: wheel under `mojolearn/host/`, which is where the runtime's own path helper
-#: looks for it rather than through `_backend.binding()`. It is therefore not a
-#: member of any tier list and not a member of any vendor directory, and every
-#: check that assumes "a vendor binary inside a tier" exempts it by this name.
-HOST_NAME = "_mojolearn_byte_lm_host"
+#: The host (CPU) bindings. Vendor-neutral and tier-neutral: one copy of each
+#: per wheel under `mojolearn/host/`, which is where the runtime looks for
+#: them (by path, or through `_backend.load_host_module`) rather than through
+#: `_backend.binding()`. They are therefore not members of any tier list and
+#: not members of any vendor directory, and every check that assumes "a
+#: vendor binary inside a tier" exempts them by these names. WHICH names is
+#: READ from python/mojolearn/host_surface.py (every family the manifest
+#: declares since 0.8.6, the packaging lane of 2026-09-14); until 0.8.5 the
+#: byte LM's was the only one and this file spelled it by hand.
+HOST_NAMES = wheel_host_bindings()
 
 
 def load_set(path, include_byte_lm=False):
@@ -345,6 +360,15 @@ def load_set(path, include_byte_lm=False):
             raise SystemExit(
                 f"pack_wheel: {adir}/readback.txt host row is not 'cpu': {host_rows}. "
                 "A GPU vendor there means the CPU-only build saw an accelerator target.")
+        host_named = [r[1] for r in host_rows]
+        if any(n not in HOST_NAMES for n in host_named) or len(set(host_named)) != len(host_named):
+            raise SystemExit(
+                f"pack_wheel: {adir}/readback.txt names host bindings the manifest does not ship, "
+                f"or one twice: {host_named}; the manifest ships {list(HOST_NAMES)}")
+        if include_byte_lm and set(host_named) != set(HOST_NAMES):
+            raise SystemExit(
+                f"pack_wheel: {adir}/readback.txt names {sorted(host_named)}; the release profile "
+                f"requires every host binding the manifest ships: {list(HOST_NAMES)}")
         # THE ARCHITECTURE IS VERIFIED THE SAME WAY THE VENDOR IS: read back
         # from the binaries on the box (build_sets.sh), never typed. A set
         # whose read-back disagrees with its directory name is refused, the
@@ -360,7 +384,10 @@ def load_set(path, include_byte_lm=False):
         if any(len(r) != 3 or r[2] != "NONE-BY-DESIGN" for r in host_arch_rows):
             raise SystemExit(
                 f"pack_wheel: {adir}/arch_readback.txt host row names architectures: "
-                f"{host_arch_rows}. The CPU training binding must carry no device code.")
+                f"{host_arch_rows}. A host binding must carry no device code.")
+        if sorted(r[1] for r in host_arch_rows) != sorted(host_named):
+            raise SystemExit(
+                f"pack_wheel: {adir}/arch_readback.txt and readback.txt name different host bindings")
         if include_byte_lm:
             expected_rows = {(tier, name) for tier in TIERS
                              for name in tier_names(tier, True)}
@@ -371,17 +398,25 @@ def load_set(path, include_byte_lm=False):
                         or {(row[0], row[1]) for row in rows} != expected_rows
                         or any(row[2] != expected_value for row in rows)):
                     raise SystemExit(f'pack_wheel: incomplete release native readback in {adir / witness}')
-        # OPTIONAL WHEN ABSENT, because a set built before this payload existed
-        # is still a valid set and a rebuild of an older commit must not be
-        # refused. Present means it is carried and checked; absent means the
-        # wheel has no CPU training binding and `main` says so once rather than
-        # shipping an export that cannot work.
-        host_so = adir / "host" / f"{HOST_NAME}.so"
-        host_payload = host_so if host_so.exists() else None
-        if host_rows and host_payload is None:
+        # OPTIONAL WHEN ABSENT (generic profile only), because a set built
+        # before this payload existed is still a valid set and a rebuild of an
+        # older commit must not be refused. A named binding must be on disk;
+        # a file on disk that no row names is refused, because an unread
+        # binary is one whose vendor and column nobody checked. `host_payload`
+        # is a dict basename -> path, empty when the set carries none, and
+        # `main` says so once rather than shipping an export that cannot work.
+        host_payload = {}
+        for name in host_named:
+            host_so = adir / "host" / f"{name}.so"
+            if not host_so.exists():
+                raise SystemExit(
+                    f"pack_wheel: {adir}/readback.txt names {name} but {host_so} is absent")
+            host_payload[name] = host_so
+        on_disk = {p.name[:-3] for p in (adir / "host").glob("_mojolearn_*_host.so")} if (adir / "host").is_dir() else set()
+        if on_disk - set(host_named):
             raise SystemExit(
-                f"pack_wheel: {adir}/readback.txt names a host binding but "
-                f"{host_so} is absent")
+                f"pack_wheel: {adir}/host/ holds bindings readback.txt never read back: "
+                f"{sorted(on_disk - set(host_named))}")
         files = {}
         for tier in TIERS:
             d = adir if tier == "fast" else adir / tier
@@ -480,27 +515,68 @@ def main():
         for n, p in sets[0][3].items():
             entries[f"mojolearn/.libs/{n}"] = p
 
-    # ONE COPY, AND EVERY SET THAT CARRIES ONE MUST CARRY THE SAME BYTES. The
-    # CPU training binding is vendor-neutral, so each architecture leg builds
+    # ONE COPY OF EACH, AND EVERY SET THAT CARRIES ONE MUST CARRY THE SAME
+    # BYTES. A host binding is vendor-neutral, so each architecture leg builds
     # its own and the wheel ships exactly one. Differing bytes across legs
-    # means they were not built from one source, which is the same defect the
-    # MAX runtime closure check above refuses, so it is refused here too rather
-    # than resolved by picking a winner. Absent everywhere is legal and says so
-    # once: a wheel without it has no CPU training and must not pretend to.
-    host_payloads = {(v, arch): host for v, arch, _, _, _, host in sets if host is not None}
-    if host_payloads:
+    # means they were not built from one source (the 0.8.5 freeze caught the
+    # byte LM's copies differing by 43 bytes because a detected-column
+    # read-back folded the build box's GPU name into a vendor-neutral binary),
+    # which is the same defect the MAX runtime closure check above refuses, so
+    # it is refused here too rather than resolved by picking a winner. Absent
+    # everywhere is legal for the generic profile and says so once: a wheel
+    # without a binding has no CPU path for that family and must not pretend
+    # to. The release profile requires every binding the manifest ships, in
+    # every set (load_set refused a short readback.txt already).
+    carried = 0
+    for name in HOST_NAMES:
+        host_payloads = {(v, arch): hosts[name] for v, arch, _, _, _, hosts in sets if name in (hosts or {})}
+        if not host_payloads:
+            print(f"pack_wheel: NO {name} in any set; this wheel has no CPU path for that family")
+            continue
         digests = {k: sha(p).hex() for k, p in host_payloads.items()}
         if len(set(digests.values())) != 1:
             raise SystemExit(
-                "pack_wheel: the architecture legs disagree on the CPU training "
-                "binding; it is vendor-neutral, so one copy is wrong: "
+                f"pack_wheel: the architecture legs disagree on {name}; it is "
+                "vendor-neutral, so one copy is wrong: "
                 + ", ".join(f"{v}/{a}={d[:12]}" for (v, a), d in sorted(digests.items())))
-        entries[f"mojolearn/host/{HOST_NAME}.so"] = next(iter(host_payloads.values()))
-        print(f"pack_wheel: CPU training binding carried once from "
-              f"{'/'.join(next(iter(host_payloads)))}, sha256 {next(iter(digests.values()))[:12]}")
+        if len(host_payloads) != len(sets):
+            raise SystemExit(
+                f"pack_wheel: {name} is carried by {len(host_payloads)} of {len(sets)} sets; "
+                "every leg builds every host binding or none does")
+        entries[f"mojolearn/host/{name}.so"] = next(iter(host_payloads.values()))
+        carried += 1
+        print(f"pack_wheel: {name} carried once from "
+              f"{'/'.join(next(iter(host_payloads)))}, sha256 {next(iter(digests.values()))[:12]}, "
+              f"byte-identical across {len(host_payloads)} legs")
+    print(f"pack_wheel: {carried} of {len(HOST_NAMES)} host bindings carried")
+
+    # THE IDENTITY PAYLOAD (the packaging lane, 2026-09-14; docs/VERIFY.md),
+    # the same files packaging/macos/build_release_wheel.sh copies into the
+    # package tree: the one card comparator and the reference card directory
+    # for `python -m mojolearn verify`, and tools/identity_break.py, the three
+    # training GPU columns the manifest names and a commit witness for
+    # `python -m mojolearn identity`. Read straight from their single sources
+    # in this checkout; the wheel has no second implementation of anything.
+    entries["mojolearn/_identity_trace_diff.py"] = REPO / "tools" / "identity_trace_diff.py"
+    entries["mojolearn/_identity_break.py"] = REPO / "tools" / "identity_break.py"
+    for card in sorted((PKG / "reference_cards").iterdir()):
+        if card.is_file():
+            entries[f"mojolearn/reference_cards/{card.name}"] = card
+    record_dir = host_surface.training_gpu_column_record()
+    for col in host_surface.TRAINING_GPU_COLUMNS:
+        src = REPO / col
+        if not src.is_file():
+            raise SystemExit(f"pack_wheel: the manifest names {col}, which is not in this checkout")
+        entries[f"mojolearn/identity_columns/{record_dir}/{src.name}"] = src
+    if inventory is not None:
+        witness = inventory["source_commit"]
     else:
-        print("pack_wheel: NO CPU training binding in any set; this wheel ships "
-              "mojolearn.LanguageModelHostTrainer with nothing behind it")
+        import subprocess
+        witness = subprocess.run(["git", "-C", str(REPO), "rev-parse", "HEAD"],
+                                 capture_output=True, text=True, timeout=10).stdout.strip()
+    if not re.fullmatch("[0-9a-f]{40}", witness or ""):
+        raise SystemExit("pack_wheel: no commit witness for the identity columns "
+                         "(no release proof and no git checkout)")
 
     dist = f"mojolearn-{version}.dist-info"
     tag = f"py3-none-{a.plat}"
@@ -537,6 +613,7 @@ def main():
     # `[project.urls]` DOI and Citation entries need no help here, because
     # METADATA is generated from `proj` a few lines above.
     generated["mojolearn/CITATION.cff"] = (REPO / "CITATION.cff").read_bytes()
+    generated["mojolearn/identity_columns/COMMIT"] = (witness + "\n").encode()
 
     if a.check_against:
         with zipfile.ZipFile(a.check_against) as z:
