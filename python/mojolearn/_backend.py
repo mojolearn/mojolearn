@@ -904,9 +904,11 @@ def host_families_built():
 #:     core/classical_host_predict.mojo, and (workstream E, 2026-09-14) the
 #:     training entries pca_fit and tsvd_fit over
 #:     decomposition/host/pca_oracle.mojo and ols_fit and ridge_fit over
-#:     glm/host/glm_oracle.mojo and dbscan_fit over
-#:     dbscan/host/dbscan_oracle.mojo; pca_fit_full, inverse_transform,
-#:     qn_fit are absent.
+#:     glm/host/glm_oracle.mojo, dbscan_fit over
+#:     dbscan/host/dbscan_oracle.mojo and (batch 2) qn_fit over
+#:     glm/host/qn_oracle.mojo (the L-BFGS arm; softmax, l1 and
+#:     sample_weight refuse by name); pca_fit_full and inverse_transform
+#:     are absent.
 #:   _mojolearn_metrics -> _mojolearn_metrics_host (workstream E batch 2,
 #:     2026-09-14): accuracy_score, adjusted_rand_score, entropy,
 #:     mutual_info_score, homogeneity_score, completeness_score,

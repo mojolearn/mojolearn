@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Workstream E batch 2, CPU training for the kmeans and metrics lanes
-(lane/cpu-training-e2, 2026-09-14), checked from SOURCE so it runs on a box
-with nothing built, plus runtime checks that run only where the core and
-metrics host bindings are built and the package took the CPU-only path.
+"""Workstream E batch 2, CPU training for the kmeans, metrics, spectral,
+standard-scaler, minmax-scaler and logistic lanes (lane/cpu-training-e2,
+2026-09-14), checked from SOURCE so it runs on a box with nothing built,
+plus runtime checks that run only where the host bindings are built and
+the package took the CPU-only path.
 
 What the source checks hold: the manifest lists kmeans as a core training
 lane and names it for the docs, and no longer names k-means as a lane with
@@ -40,6 +41,7 @@ METRICS_EXPORTS = ("accuracy_score", "adjusted_rand_score", "entropy", "mutual_i
                    "silhouette", "spectral_fit_predict_dataset")
 SPECTRAL_ORACLE = "spectral/host/spectral_oracle.mojo"
 SCALER_ORACLE = "preprocessing/host/scaler_oracle.mojo"
+QN_ORACLE = "glm/host/qn_oracle.mojo"
 GPU_IMPORTS = re.compile(r"^\s*from\s+(max\.gpu|std\.gpu)", re.M)
 
 
@@ -224,6 +226,53 @@ def test_scalers_run_on_the_host_when_built():
     assert u[:, :4].min() >= 0.0 and u[:, :4].max() <= 1.0
     again = np.asarray(mojolearn.MinMaxScaler().fit(x).transform(x[:64]))
     assert again.tobytes() == u.tobytes(), "two host fits returned different bytes"
+
+
+def test_manifest_covers_logistic():
+    assert "logistic" in host_surface.covered_lanes(), "logistic is not a covered training lane"
+    fam = host_surface.family("estimators")
+    assert "logistic" in fam["training_lanes"] and "logistic" in fam["inference_lanes"]
+    assert QN_ORACLE in fam["host_modules"] and (ROOT / QN_ORACLE).is_file()
+    assert "qn_fit" in fam["exports"]
+    assert "logistic regression training" not in host_surface.no_cpu_path_sentence()
+    src = _read(host_surface.binding_source("estimators"))
+    assert '("qn_fit")' in src
+    text = _read(QN_ORACLE)
+    assert not GPU_IMPORTS.search(text), f"{QN_ORACLE} imports a GPU module"
+    assert not re.search(r"^\s*from .*import.*DeviceContext", text, re.M)
+    assert "from checks.numerics import" in text
+    assert "from glm.host.glm_oracle import host_xty" in text
+    assert "from decomposition.host.pca_oracle import STATS_TPB, host_halving_sum" in text
+    for refused in ("QN_LOSS_SOFTMAX", "OWL-QN", "sample_weight is NOT IMPLEMENTED"):
+        assert refused in text, f"{refused} is not refused by name"
+    assert "comptime if QN_ORACLE_HOST_SABOTAGE:" in text
+    assert "QN_ORACLE_HOST_SABOTAGE" in src
+    assert f'- "{QN_ORACLE}"' in _read(".github/workflows/cpu-identity-gate.yml")
+
+
+def test_logistic_runs_on_the_host_when_built():
+    if _backend._CPU_ONLY is None:
+        print("SKIP: a GPU set loaded; the host route is not taken here")
+        return
+    if "_mojolearn_estimators_host" not in _backend.host_families_built():
+        print("SKIP: the estimators host binding is not built")
+        return
+    import numpy as np
+    rng = np.random.default_rng(4)
+    x = rng.standard_normal((400, 3)).astype(np.float32)
+    y = (x[:, 0] + 0.5 * x[:, 1] > 0).astype(np.int32)
+    fits = [mojolearn.LogisticRegression(max_iter=30).fit(x, y) for _ in range(2)]
+    a, b = (np.asarray(f.coef_) for f in fits)
+    assert a.tobytes() == b.tobytes(), "two host fits returned different coefficients"
+    assert fits[0].retcode_ in (0, 3) and int(np.asarray(fits[0].n_iter_)[0]) >= 1
+    pred = np.asarray(fits[0].predict(x))
+    assert (pred == y).mean() > 0.9, "the host fit does not separate a separable draw"
+    try:
+        mojolearn.LogisticRegression(penalty="l1", C=1.0).fit(x, y)
+    except Exception as exc:  # noqa: BLE001
+        assert "OWL-QN" in str(exc), str(exc)
+    else:
+        raise AssertionError("an l1 penalty must refuse by name on the host")
 
 
 def test_metrics_run_on_the_host_when_built():

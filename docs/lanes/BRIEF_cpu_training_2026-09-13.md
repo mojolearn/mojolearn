@@ -1563,3 +1563,35 @@ The measurement owed is the seven-runner CPU identity gate on the lane
   `minmax-scaler-clip` twins share the entries but wait for a GPU record
   that carries them.
 - The test module is `cd python && python3 -m mojolearn.tests.test_cpu_training_e2`.
+
+## Workstream E batch 2 (2026-09-14): logistic, SIMULATED IDENTICAL x3 ON base, GATE OWED
+
+- logistic. `glm/host/qn_oracle.mojo`, the L-BFGS arm of cuML's quasi-Newton
+  solver with the binary logistic loss, restated from `glm/impl/qn/`
+  kernel for kernel and host scalar for host scalar: DEVIATION 547's
+  one-block STATS_TPB folds (`dot`, `squaredNorm`, `nrmMax`, `nrm2` with the
+  host Float32 sqrt), `ax` and `axpy` through `identical_mul_add`,
+  `logistic_lz` and `logistic_dlz` through `identical_exp` and
+  `identical_log`, `linear_fwd` as the pinned gemv cell plus the unflushed
+  bias, `get_loss_and_dz` with `sum_terms`, `linear_bwd` as `host_xty`, the
+  cuBLAS epilogue and the bias mean, Tikhonov's `reg_grad` and
+  `ftz(loss + reg)` on the host, `LBFGSParam.from_params`, the convergence
+  test with its ten-deep history, the two-loop recursion, the Armijo
+  backtracking with its fused test, `update_and_check` and `min_lbfgs` in
+  their order, `qn_fit`'s penalty division by n and the zero start. The
+  softmax loss, an l1 or elasticnet penalty (OWL-QN) and `sample_weight`
+  are refused by name, so the logistic-multiclass, logistic-l1 and
+  logistic-elasticnet lanes read REFUSED and never a hash of something
+  else. Exported as `qn_fit` from the estimators host binding under the
+  GPU binding's name and 13-or-14-field params list.
+- On the M4's CPU-only path the lane reads IDENTICAL against the Apple,
+  NVIDIA and AMD 47-lane columns on `base`, one fixture, one repeat, at
+  the first build (`coef` and `proba`, the infer cell alike). The gate has
+  not run.
+- The sabotage arm is the estimators family's `-D MOJOLEARN_HOST_SABOTAGE=1`,
+  reaching this file through the pinned cell (every forward product's
+  feature chain descending) and through `host_dot`'s own arm (every lane's
+  chain of the solver's dots descending); on the M4 the sabotage set read
+  DIVERGENT on `coef` and `proba` and on the infer cell against all three
+  columns on `base`.
+- The test module is `cd python && python3 -m mojolearn.tests.test_cpu_training_e2`.
