@@ -5,8 +5,43 @@ import sys
 import traceback
 
 
+_forest_snapshot = None
+
+
 def execute(request):
+    global _forest_snapshot
     operation, state, args = request
+    if operation == 'forest_prepare':
+        from .parallel_ensemble import _admit_forest_predictor
+        _admit_forest_predictor(state)
+        if _forest_snapshot is not None:
+            raise RuntimeError('forest worker already owns a prepared snapshot')
+        binding = state._bind()
+        capability = getattr(binding, 'forest_pool_available', None)
+        if not callable(capability) or capability() != 1:
+            raise ImportError('rebuild RF/ET binding for pooled forest inference')
+        state._prepare_resident_forest(binding)
+        _forest_snapshot = state
+        return dict(n_features=int(state.n_features_in_), outputs=int(state._num_outputs),
+                    trees=int(state._n_trees), classes=getattr(state, 'classes_', None))
+    if operation == 'forest_predict':
+        if _forest_snapshot is None:
+            raise RuntimeError('forest worker has no prepared snapshot')
+        method, X = args
+        if method not in ('predict', 'predict_proba'):
+            raise ValueError('unsupported pooled forest prediction method')
+        function = getattr(_forest_snapshot, method, None)
+        if not callable(function):
+            raise ValueError('prepared forest does not support ' + method)
+        return function(X)
+    if operation == 'forest_release':
+        model, _forest_snapshot = _forest_snapshot, None
+        if model is not None:
+            resident = getattr(model, '_resident_forest', None)
+            if resident is not None:
+                resident._finalizer()
+                model._resident_forest = None
+        return True
     if operation in ('mlp_update', 'samba_update'):
         import os
         if int(os.environ.get('MOJOLEARN_OPTIMIZER_DEVICE_COUNT', '1')) > 1:
@@ -208,12 +243,19 @@ def main():
             request = pickle.load(sys.stdin.buffer)
         except EOFError:
             break
+        response = None
         try:
-            response = (True, execute(request))
-        except Exception:
-            response = (False, traceback.format_exc())
-        pickle.dump(response, channel, protocol=5)
-        channel.flush()
+            try:
+                response = (True, execute(request))
+            except Exception:
+                response = (False, traceback.format_exc())
+            pickle.dump(response, channel, protocol=5)
+            channel.flush()
+        finally:
+            # Persistent state belongs only to explicit operation caches.
+            # Idle workers must not retain complete neural RPC snapshots.
+            request = None
+            response = None
 
 
 if __name__ == '__main__':
