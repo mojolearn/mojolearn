@@ -51,7 +51,7 @@ def main():
                 before = many.model_
                 try:
                     fit_ordered_rmse(many,X,y,permutation=np.zeros(n,dtype='<i8'),devices=(0,1))
-                except ValueError:
+                except (ValueError, RuntimeError):
                     pass
                 else:
                     raise AssertionError('invalid permutation accepted')

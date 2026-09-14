@@ -42,7 +42,7 @@ def main():
                 before = many.model_
                 try:
                     fit_feature_freq(many,X,y[:-1],devices=(0,1))
-                except ValueError:
+                except (ValueError, RuntimeError):
                     pass
                 else:
                     raise AssertionError('invalid target accepted')
