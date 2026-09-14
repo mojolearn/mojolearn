@@ -117,6 +117,26 @@ three-column rerun reads IDENTICAL x3 on every cell of every lane, this one incl
 (`bench/results/identity_break/2026-09-14_46-lanes/README.md`, 414 train and 459 infer and
 model cells on an Apple M4, an NVIDIA H100 and an AMD MI300X, no one-column cell).
 
+**Mamba-2 step on AMD, 2026-09-14, DEVIATION 2712, open.** In the 120-lane record at 65ae7612f
+(`bench/results/identity_break/2026-09-14_120-lanes/README.md`) the MI300X column's `mamba2` cells
+differ from the Apple M4 and H100 columns on all nine fixtures in the `step` and `backward` parts
+only (forward and prefill agree), while the same lane read identical on three vendors in three
+earlier records the same day and every column repeats within its own run. A run-to-run race on the
+AMD step path; the dt_limit variant showed the same shape once. Every other lane, 1071 training and
+1476 inference and model cells, is identical on the three vendors in that record.
+
+**RTX 5090 (sm_120a), 2026-09-14, DEVIATION 2711, found and FIXED the same day.** The first leg on
+a Blackwell consumer part refused four cells (pca, tsvd, ols, ridge on the 17-column `odd`
+fixture): an sm_120a ahead-of-time pass miscompiled the strided-singles arm of the 17-wide split-K
+Gram, so the Jacobi was handed an asymmetric matrix (a JIT build of the same source on the same GPU
+was already right, and the wrong cells repeated bit for bit). `core/gram_splitk.mojo` ships the
+scalar strided arm from 83380ca6d, the same products in the same order with per-cell scalar
+accumulators; `-D MOJOLEARN_2711_GRAM_STRIDED_DEAD=1` restores the old arm for an A/B. Proof: the
+120-lane record `bench/results/identity_break/2026-09-14_120-lanes-2711flip/README.md`, where the
+Apple M4, the H100, the MI300X and the RTX 5090 read IDENTICAL on 1071 training and 1476 inference
+and model cells, the four cells included, and the H100 and MI300X columns are identical to their
+columns before the flip on every shared cell.
+
 | Surface | Public availability | Strongest retained identity evidence | Important open work |
 |---|---|---|---|
 | Gradient boosting | Beta | Three-vendor cards for recorded configurations | Numeric single-permutation ordered RMSE passes AMD/NVIDIA at `6dd44ac5`, with 130 bitwise-matching records. Broader categorical/CTR coverage and external parity remain. |
