@@ -362,7 +362,8 @@ byte LM's. Each also builds from source through
 | svm | `_mojolearn_svm_host.so` | `_mojolearn_svm` | svc, iforest | SVC, IsolationForest (svc) | tools/identity_break.py and tools/classical_host_gate.py (cpu-identity-gate.yml) | yes |
 | trees | `_mojolearn_trees_host.so` | `_mojolearn_trees` | et-clf, et-reg | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
 | rf | `_mojolearn_rf_host.so` | `_mojolearn_rf` | rf-clf, rf-reg | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
-| gp | `_mojolearn_gp_host.so` | `_mojolearn_gp` | gp, gp-matern12, gp-matern32, gp-matern52-ard | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |<!--/fact-->
+| gp | `_mojolearn_gp_host.so` | `_mojolearn_gp` | gp, gp-matern12, gp-matern32, gp-matern52-ard | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
+| arima | `_mojolearn_arima_host.so` | `_mojolearn_arima` | arima, arima-011, arima-seasonal-c | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |<!--/fact-->
 
 ## The import question, measured
 
