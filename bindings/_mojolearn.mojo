@@ -1542,6 +1542,11 @@ def argmax_rows_f64_binding(
 
 
 
+def kmeans_parallel_available_binding() raises -> PythonObject:
+    """Version of the whole-row-tile multi-GPU assignment contract."""
+    return PythonObject(1)
+
+
 @export
 def PyInit__mojolearn() abi("C") -> PythonObject:
     try:
@@ -1584,6 +1589,7 @@ def PyInit__mojolearn() abi("C") -> PythonObject:
         m.def_function[gather_f64_binding]("gather_f64")
         m.def_function[argmax_rows_f32_binding]("argmax_rows_f32")
         m.def_function[argmax_rows_f64_binding]("argmax_rows_f64")
+        m.def_function[kmeans_parallel_available_binding]("kmeans_parallel_available")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn module: ", e))

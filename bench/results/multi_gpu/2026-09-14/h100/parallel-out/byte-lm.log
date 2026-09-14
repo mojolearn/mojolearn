@@ -1,0 +1,21 @@
+1516 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x522d80000000, nodemask=1)
+1516 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3b68c0000000, nodemask=2)
+{
+  "status": "PASS",
+  "checks": [
+    "K1_matches_existing_step",
+    "all_replica_post_update_rollback",
+    "K3_two_GPU_matches_one_GPU",
+    "replicas_match",
+    "invalid_shard_atomic",
+    "checkpoint_resume_on_other_device"
+  ],
+  "gradient_sha256": [
+    "338481e350ef0755c0e6f647502b262bbce6fcd4c2e892b3510e3e228b3a8106",
+    "8113ef673b8d891ecbffc0462ab855eabf8200cc555d56f704b2f604f3850304",
+    "aaea11e3a6f3b4433590d1f2353ff1b75377bd2b2f9ffe2f37b9edb1d4893419"
+  ],
+  "corpus_sha256": "2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8",
+  "scope": "Two devices, one shape. No cross-vendor or throughput claim."
+}
+

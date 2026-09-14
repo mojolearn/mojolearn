@@ -1,0 +1,17 @@
+{
+  "status": "PASS",
+  "checks": [
+    "MLP_K3_two_GPU_replay",
+    "MLP_failure_atomic",
+    "MLP_K1_existing_step",
+    "MLP_checkpoint_device_migration"
+  ],
+  "hashes": [
+    "24a8d6683a567e33f3bbfb6708e4ae747f06fee446ec0064868fa776f61956e2",
+    "4f40fed8cd6dddad9fb24145f29e58524455b07740de18789e92131982af67aa",
+    "a5174e9f6c9b877121dfae5abeb9f09f1f17e603470152063e593dbef4496423"
+  ],
+  "corpus_sha256": "2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8",
+  "scope": "Two devices; no cross-vendor or speed claim"
+}
+

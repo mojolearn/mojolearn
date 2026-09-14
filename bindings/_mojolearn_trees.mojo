@@ -311,6 +311,7 @@ def _et_classifier_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
     x_addr: PythonObject,
     y_addr: PythonObject,
     params: PythonObject,
+    tree_start: Int = 0,
 ) raises -> PythonObject:
     """Fit `ExtraTreesClassifier`. `x` is COLUMN-major float32
     (n_rows * n_features), `y` is float32 class CODES in [0, n_classes).
@@ -353,7 +354,7 @@ def _et_classifier_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
         var ctx = DeviceContext()
         result = fit_extra_trees_classifier_device(
             ctx, x, y, Int32(n_rows), Int32(n_features), Int32(n_classes),
-            config, x_addr=x_pointer, x_row_major=ROWMAJOR,
+            config, x_addr=x_pointer, x_row_major=ROWMAJOR, tree_start=tree_start,
         )
     times.stop_host("boundary_device_fit_and_context", stamp)
     stamp = times.start()
@@ -389,6 +390,7 @@ def _et_regressor_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
     x_addr: PythonObject,
     y_addr: PythonObject,
     params: PythonObject,
+    tree_start: Int = 0,
 ) raises -> PythonObject:
     """Fit `ExtraTreesRegressor`. Same contract; slot 2 MUST be 0."""
     if len(params) != N_FIT_PARAMS:
@@ -430,7 +432,7 @@ def _et_regressor_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
         var ctx = DeviceContext()
         result = fit_extra_trees_regressor_device(
             ctx, x, y, Int32(n_rows), Int32(n_features), config,
-            x_addr=x_pointer, x_row_major=ROWMAJOR,
+            x_addr=x_pointer, x_row_major=ROWMAJOR, tree_start=tree_start,
         )
     times.stop_host("boundary_device_fit_and_context", stamp)
     stamp = times.start()
@@ -619,6 +621,16 @@ def trees_shared_counts_mask_binding() raises -> PythonObject:
     return PythonObject(shared_class_counts_mask())
 
 
+def et_classifier_fit_shard_binding(x_addr: PythonObject, y_addr: PythonObject,
+    params: PythonObject, tree_start: PythonObject) raises -> PythonObject:
+    return _et_classifier_fit(x_addr, y_addr, params, Int(py=tree_start))
+
+
+def et_regressor_fit_shard_binding(x_addr: PythonObject, y_addr: PythonObject,
+    params: PythonObject, tree_start: PythonObject) raises -> PythonObject:
+    return _et_regressor_fit(x_addr, y_addr, params, Int(py=tree_start))
+
+
 @export
 def PyInit__mojolearn_trees() abi("C") -> PythonObject:
     try:
@@ -647,6 +659,8 @@ def PyInit__mojolearn_trees() abi("C") -> PythonObject:
         m.def_function[forest_vector_groves_binding]("forest_vector_groves")
         m.def_function[forest_predict_resident_into_gpu_binding[False]]("forest_predict_resident_into_gpu")
         m.def_function[forest_predict_resident_into_gpu_binding[False, True]]("forest_predict_resident_reuse_gpu")
+        m.def_function[et_classifier_fit_shard_binding]("et_classifier_fit_shard")
+        m.def_function[et_regressor_fit_shard_binding]("et_regressor_fit_shard")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_trees: ", e))

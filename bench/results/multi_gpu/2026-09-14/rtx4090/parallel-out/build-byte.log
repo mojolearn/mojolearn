@@ -1,0 +1,52 @@
+/root/mojolearn/bindings/_mojolearn_byte_lm.mojo:1235:30: error: no matching function in initialization
+        device_ids.append(Int(devices[i]))
+                          ~~~^~~~~~~~~~~~
+oss/modular/mojo/stdlib/std/builtin/simd.mojo:636:1: note: candidate not viable: unexpected argument
+def __init__() -> Self    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/builtin/simd.mojo:650:1: note: candidate not viable: value passed to 'value' cannot be converted from 'PythonObject' to 'T', argument type 'PythonObject' does not conform to trait 'Intable'
+def __init__[T: Intable, target_dtype: DType = DType.int](value: T) -> Scalar[target_dtype]    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/builtin/simd.mojo:679:1: note: candidate not viable: value passed to 'value' cannot be converted from 'PythonObject' to 'T', argument type 'PythonObject' does not conform to trait 'IntableRaising'
+def __init__[T: IntableRaising](out self: Int, value: T)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/builtin/simd.mojo:694:1: note: candidate not viable: value passed to 'value' cannot be converted from 'PythonObject' to 'Scalar[other_dtype]', it depends on an unresolved parameter 'other_dtype'
+def __init__[other_dtype: DType, //](value: SIMD[other_dtype, length], /) -> Self    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/builtin/simd.mojo:746:1: note: candidate not viable: value passed to 'value' cannot be converted from 'PythonObject' to 'SIMDLength'
+def __init__(value: SIMDLength, /) -> Self    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/builtin/simd.mojo:767:1: note: candidate not viable: missing required argument: 'from_int'
+def __init__(*, from_int: Int) -> Self    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/builtin/simd.mojo:772:1: note: candidate not viable: value passed to 'value' cannot be converted from 'PythonObject' to 'T', argument type 'PythonObject' does not conform to trait 'Floatable'
+def __init__[T: Floatable, //](value: T, /) -> Float64    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/builtin/simd.mojo:784:1: note: candidate not viable: value passed to 'value' cannot be converted from 'PythonObject' to 'T', argument type 'PythonObject' does not conform to trait 'FloatableRaising'
+def __init__[T: FloatableRaising, //](out self: Float64, value: T, /)    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/builtin/simd.mojo:802:1: note: candidate not viable: value passed to 'value' cannot be converted from 'PythonObject' to 'IntLiteral[value.value]', it depends on an unresolved parameter 'value.value'
+def __init__(value: IntLiteral, /) -> Self    # note - synthetic signature
+^
+oss/modular/mojo/stdlib/std/builtin/simd.mojo:821:1: note: candidate not viable: value passed to 'value' cannot be converted from 'PythonObject' to 'Bool' (10 more notes omitted.)
+def __init__(value: Bool, /) -> SIMD[DType.bool, length]    # note - synthetic signature
+^
+/root/mojolearn/bindings/_mojolearn_byte_lm.mojo:1345:15: error: invalid call to 'def_function': failed to infer parameter 'func_type'
+        module.def_function[byte_lm_parallel_open_binding]("byte_lm_parallel_open")
+        ~~~~~~^~~~~~~~~~~~~
+oss/modular/mojo/stdlib/std/python/bindings.mojo:454:1: note: function declared here
+def def_function[func_type: TrivialRegisterPassable, //, func: PyObjectFunction[func_type, has_kwargs=func.has_kwargs]](mut self, func_name: StringSpan[ImmStaticOrigin], docstring: StringSpan[ImmStaticOrigin] = StringSpan(""))    # note - synthetic signature
+^
+/root/mojolearn/bindings/_mojolearn_byte_lm.mojo:1346:15: error: invalid call to 'def_function': failed to infer parameter 'func_type'
+        module.def_function[byte_lm_parallel_step_binding]("byte_lm_parallel_step")
+        ~~~~~~^~~~~~~~~~~~~
+oss/modular/mojo/stdlib/std/python/bindings.mojo:454:1: note: function declared here
+def def_function[func_type: TrivialRegisterPassable, //, func: PyObjectFunction[func_type, has_kwargs=func.has_kwargs]](mut self, func_name: StringSpan[ImmStaticOrigin], docstring: StringSpan[ImmStaticOrigin] = StringSpan(""))    # note - synthetic signature
+^
+/root/mojolearn/bindings/_mojolearn_byte_lm.mojo:1347:15: error: invalid call to 'def_function': failed to infer parameter 'func_type'
+        module.def_function[byte_lm_parallel_export_binding]("byte_lm_parallel_export")
+        ~~~~~~^~~~~~~~~~~~~
+oss/modular/mojo/stdlib/std/python/bindings.mojo:454:1: note: function declared here
+def def_function[func_type: TrivialRegisterPassable, //, func: PyObjectFunction[func_type, has_kwargs=func.has_kwargs]](mut self, func_name: StringSpan[ImmStaticOrigin], docstring: StringSpan[ImmStaticOrigin] = StringSpan(""))    # note - synthetic signature
+^
+/root/mojolearn/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module

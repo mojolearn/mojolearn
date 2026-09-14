@@ -88,10 +88,13 @@ cmd_up() {
     STAMP=$(date +%Y%m%d_%H%M%S)
     NAME="mojolearn-attn-$STAMP"
     REQ=$(mktemp "${TMPDIR:-/tmp}/attn-pod-req.XXXXXX")
-    python3 - "$REQ" "$NAME" "$IMAGE" "$GPU" <<'PY'
+    python3 - "$REQ" "$NAME" "$IMAGE" "$GPU" "${MOJOLEARN_ATTN_POD_GPU_COUNT:-1}" <<'PY'
 import json, sys
-out, name, image, gpu = sys.argv[1:]
-req = {"name": name, "imageName": image, "gpuTypeIds": [gpu], "gpuCount": 1,
+out, name, image, gpu, gpu_count = sys.argv[1:]
+gpu_count = int(gpu_count)
+if not 1 <= gpu_count <= 8:
+    raise SystemExit("GPU count must be between 1 and 8")
+req = {"name": name, "imageName": image, "gpuTypeIds": [gpu], "gpuCount": gpu_count,
        "cloudType": "SECURE", "containerDiskInGb": 60, "volumeInGb": 0,
        "ports": ["22/tcp"], "supportPublicIp": True, "interruptible": False,
        "allowedCudaVersions": ["13.0"]}

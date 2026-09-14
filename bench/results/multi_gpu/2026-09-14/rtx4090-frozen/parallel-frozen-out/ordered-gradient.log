@@ -1,0 +1,16 @@
+Imported from /root/mojolearn-frozen/training/checks/ordered_gradient_check.mojo:5:
+/root/mojolearn-frozen/training/byte_lm_parallel.mojo:27:14: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        total[i] = ftz(identical_mul_add(Float32(1), ftz(total[i]), ftz(shard[i])))
+        ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-frozen/training/checks/ordered_gradient_check.mojo:5:
+/root/mojolearn-frozen/training/byte_lm_parallel.mojo:27:63: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        total[i] = ftz(identical_mul_add(Float32(1), ftz(total[i]), ftz(shard[i])))
+                                                         ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-frozen/training/checks/ordered_gradient_check.mojo:5:
+/root/mojolearn-frozen/training/byte_lm_parallel.mojo:27:78: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        total[i] = ftz(identical_mul_add(Float32(1), ftz(total[i]), ftz(shard[i])))
+                                                                        ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+PASS ordered gradient cancellation, signed zero and subnormal seams

@@ -1,0 +1,24 @@
+1992 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5252c0000000, nodemask=1)
+2169 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x73a080000000, nodemask=1)
+2170 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x303c40000000, nodemask=1)
+2271 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x70c000000000, nodemask=1)
+2321 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x30c400000000, nodemask=1)
+2371 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x132200000000, nodemask=1)
+2421 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x139d00000000, nodemask=1)
+{
+  "status": "PASS",
+  "checks": [
+    "MLP_K3_two_GPU_replay",
+    "MLP_failure_atomic",
+    "MLP_K1_existing_step",
+    "MLP_checkpoint_device_migration"
+  ],
+  "hashes": [
+    "24a8d6683a567e33f3bbfb6708e4ae747f06fee446ec0064868fa776f61956e2",
+    "4f40fed8cd6dddad9fb24145f29e58524455b07740de18789e92131982af67aa",
+    "a5174e9f6c9b877121dfae5abeb9f09f1f17e603470152063e593dbef4496423"
+  ],
+  "corpus_sha256": "2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8",
+  "scope": "Two devices; no cross-vendor or speed claim"
+}
+

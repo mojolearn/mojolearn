@@ -1,0 +1,25 @@
+1749 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x705180000000, nodemask=1)
+{
+  "passed": true,
+  "checks": [
+    "G1: evaluate on the resident state exports equal before and after",
+    "G3: export and ids mutation cannot reach the device; mutated import refused, session untouched",
+    "G1: eight lean steps equal the stateless arm with exports after every step",
+    "G1: a resident run without intermediate exports ends in the same state",
+    "G2: load_state_dict and from_checkpoint_bytes continuations equal the arm through step 8",
+    "G4 python_post: rolled back on the device, session kept, next step equals the arm",
+    "G4 native faults SKIPPED: binding built without MOJOLEARN_BYTE_LM_FAULT_INJECT",
+    "shape-changing restore and evaluation",
+    "optimizer admission distinguishes signed zero; nothing written, session kept"
+  ],
+  "witnesses_fixture_a": {
+    "parameters": "3ca49f1c4adf531d8af427f6825f5c74a94973f3c5e6f20c8e03df7b93e351f4",
+    "m": "233ee7dd919e0b8efafdd70d724de074a720ac549a106c82f2e7af5d892d8f74",
+    "v": "69c0194293c84e5f97da29980ed4dd3fad56867df8c72020cde894c3c925c44e",
+    "loss_bits_step8": "4a85c740",
+    "gradient_step8": "f7f49b020b3a6a098076d6aa7f812ab677fac61a66acce95cb4d4ef86cb5ab51"
+  },
+  "fault_inject_build": false,
+  "keep_context": false,
+  "qualification": "local lifecycle and exact regression at fixture A; not timing"
+}

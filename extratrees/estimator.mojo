@@ -606,6 +606,7 @@ def fit_extra_trees_classifier_device(
     config: ExtraTreesConfig,
     x_addr: Int = 0,
     x_row_major: Bool = False,  # DEVIATION 2637: a borrowed ROW-major X
+    tree_start: Int = 0,
 ) raises -> FitResult:
     """`ExtraTreesClassifier.fit` with the split search on the GPU.
 
@@ -645,7 +646,7 @@ def fit_extra_trees_classifier_device(
         plan.bootstrap,
         plan.n_sampled_rows,
         x_addr=x_addr,
-        x_row_major=x_row_major,
+        x_row_major=x_row_major, tree_start=tree_start,
     )
     var bound = depth_cap_bound(forest, plan)
     return FitResult(forest^, plan, bound)
@@ -723,6 +724,7 @@ def fit_extra_trees_regressor_device(
     config: ExtraTreesConfig,
     x_addr: Int = 0,
     x_row_major: Bool = False,  # DEVIATION 2637: a borrowed ROW-major X
+    tree_start: Int = 0,
 ) raises -> FitResult:
     """`ExtraTreesRegressor.fit` with the split search on the GPU.
 
@@ -773,7 +775,7 @@ def fit_extra_trees_regressor_device(
         plan.bootstrap,
         plan.n_sampled_rows,
         x_addr=x_addr,
-        x_row_major=x_row_major,
+        x_row_major=x_row_major, tree_start=tree_start,
     )
     var bound = depth_cap_bound(forest, plan)
     return FitResult(forest^, plan, bound)

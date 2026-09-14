@@ -1,0 +1,33 @@
+6023 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x798400000000, nodemask=2)
+6023 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x122b00000000, nodemask=1)
+6199 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5bc0c0000000, nodemask=2)
+6200 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x718b80000000, nodemask=1)
+6199 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x717200000000, nodemask=1)
+6200 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1a27c0000000, nodemask=2)
+6299 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x70a980000000, nodemask=1)
+6300 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x127dc0000000, nodemask=1)
+6399 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x119040000000, nodemask=1)
+6400 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x13c840000000, nodemask=1)
+6400 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x192ac0000000, nodemask=2)
+6499 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x125b80000000, nodemask=1)
+6500 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x703800000000, nodemask=1)
+6500 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x184780000000, nodemask=2)
+{
+  "status": "PASS",
+  "checks": [
+    "RandomForestClassifier_two_GPU_equals_serial",
+    "RandomForestRegressor_two_GPU_equals_serial",
+    "ExtraTreesClassifier_two_GPU_equals_serial",
+    "ExtraTreesRegressor_two_GPU_equals_serial"
+  ],
+  "hashes": [
+    "01fe6e696955b85b5cd163392c408d353813249c043db805c1a758792a7a1d16",
+    "a12f8b7de18cd32d9613497dcd70023bdf6961de1095ff79f9551369fc759f17",
+    "7a3451dedef526a5a4de42bab38cdeb8779c333106b0394fafa4395398335906",
+    "c5d4965966585af62f3c2c8b82466f99e3f8eea3952cd28bb0fd666e4c5f5cf7"
+  ],
+  "state_hashes": [],
+  "corpus_sha256": "2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8",
+  "scope": "Two devices; no cross-vendor or speed claim"
+}
+

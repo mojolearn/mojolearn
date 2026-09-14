@@ -1,0 +1,80 @@
+# SPDX-License-Identifier: Apache-2.0
+"""Private local-child RPC. Input is trusted parent process data, never a network."""
+import pickle
+import sys
+import traceback
+
+
+def execute(request):
+    operation, state, args = request
+    if operation in ('mlp_gradient', 'mlp_update'):
+        from ._mlp_impl import SmallMLPTrainer, _validate_state
+        weights, _, config, schedule = _validate_state(state)
+        model = SmallMLPTrainer(*weights, data_schedule=schedule)
+        model.load_state_dict(state)
+        if operation == 'mlp_gradient':
+            return model.loss_and_grads(*args)
+        from .parallel_training import ordered_sum_gradients
+        gradients = ordered_sum_gradients(args)
+        retained = [g.copy() for g in gradients]
+        step = model.apply_gradients(gradients)
+        return model.state_dict(), retained, step
+    if operation in ('samba_gradient', 'samba_update'):
+        from ._samba_impl import SambaStack, SambaConfig
+        from ._training_impl import Generator
+        model = SambaStack(SambaConfig.from_dict(state['config']),
+                           generator=Generator(0, 'identical'), numeric_mode='identical')
+        model.load_state_dict(state)
+        if operation == 'samba_gradient':
+            inputs, targets, stream, offset = args
+            return model.loss_and_grads(inputs, targets, dropout_stream=stream, token_offset=offset)
+        from .parallel_training import ordered_sum_gradients
+        gradients = ordered_sum_gradients(args)
+        retained = [g.copy() for g in gradients]
+        model.optimizer.step(gradients, max_norm=model.max_norm)
+        return model.state_dict(), retained, model.optimizer.t
+    if operation == 'forest_fit':
+        from .randomforest import RandomForestClassifier, RandomForestRegressor
+        from .extratrees import ExtraTreesClassifier, ExtraTreesRegressor
+        name, params = state
+        model = {'RandomForestClassifier': RandomForestClassifier,
+                 'RandomForestRegressor': RandomForestRegressor,
+                 'ExtraTreesClassifier': ExtraTreesClassifier,
+                 'ExtraTreesRegressor': ExtraTreesRegressor}[name](**params)
+        X, y, start = args
+        model._fit_with_tree_start(X, y, start)
+        return model
+    if operation == 'kmeans_fit':
+        from .cluster import KMeans
+        model = KMeans(**state)
+        binding = model._bind('_mojolearn')
+        if (not callable(getattr(binding, 'kmeans_parallel_available', None))
+                or binding.kmeans_parallel_available() != 1):
+            raise ImportError('rebuild base binding for cooperative KMeans')
+        X, weights = args
+        model.fit(X, sample_weight=weights)
+        return model
+    raise ValueError('unknown parallel worker operation: ' + operation)
+
+
+def main():
+    # Native diagnostics may print to stdout. Reserve a duplicate fd for RPC
+    # and redirect ordinary stdout (including native printf) to stderr.
+    import os
+    channel = os.fdopen(os.dup(sys.stdout.fileno()), 'wb')
+    os.dup2(sys.stderr.fileno(), sys.stdout.fileno())
+    while True:
+        try:
+            request = pickle.load(sys.stdin.buffer)
+        except EOFError:
+            break
+        try:
+            response = (True, execute(request))
+        except Exception:
+            response = (False, traceback.format_exc())
+        pickle.dump(response, channel, protocol=5)
+        channel.flush()
+
+
+if __name__ == '__main__':
+    main()

@@ -1,0 +1,36 @@
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/parallel_training_check.py", line 115, in <module>
+    main()
+    ~~~~^^
+  File "/root/mojolearn/tools/parallel_training_check.py", line 85, in main
+    parallel = fit_forest(cls(**params), X, y, devices=(0, 1), trees_per_shard=2)
+  File "/root/mojolearn/python/mojolearn/parallel_ensemble.py", line 42, in fit_forest
+    parts = pool.map(requests)
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 68, in map
+    raise error
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 63, in map
+    result.append(future.result())
+                  ~~~~~~~~~~~~~^^
+  File "/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/_base.py", line 454, in result
+    return self.__get_result()
+           ~~~~~~~~~~~~~~~~~^^
+  File "/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/_base.py", line 396, in __get_result
+    raise self._exception
+  File "/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/thread.py", line 86, in run
+    result = ctx.run(self.task)
+  File "/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/thread.py", line 73, in run
+    return fn(*args, **kwargs)
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 48, in _call
+    raise RuntimeError('GPU worker failed:\n' + value)
+RuntimeError: GPU worker failed:
+Traceback (most recent call last):
+  File "/root/mojolearn/python/mojolearn/_parallel_worker.py", line 50, in main
+    response = (True, execute(request))
+                      ~~~~~~~^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_parallel_worker.py", line 33, in execute
+    model._fit_with_tree_start(X, y, start)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/randomforest.py", line 672, in _fit_with_tree_start
+    raise ImportError('rebuild RF binding for global tree-ID shards')
+ImportError: rebuild RF binding for global tree-ID shards
+

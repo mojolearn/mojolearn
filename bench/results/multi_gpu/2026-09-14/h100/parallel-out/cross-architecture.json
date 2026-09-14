@@ -1,0 +1,18 @@
+{
+  "status": "PASS",
+  "checks": [
+    "byte-lm:gradient_sha256",
+    "byte-lm:state_sha256",
+    "mlp:hashes",
+    "mlp:state_hashes",
+    "forest:hashes",
+    "samba:hashes",
+    "samba:state_hashes",
+    "samba-attention:hashes",
+    "samba-attention:state_hashes",
+    "kmeans:hashes",
+    "source_manifest"
+  ],
+  "failures": [],
+  "scope": "Two RTX 4090s versus two H100s; tested fixtures only. Not AMD/Apple qualification."
+}

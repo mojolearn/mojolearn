@@ -50,6 +50,7 @@ from training.byte_lm import (
     byte_validate_state, byte_validate_optimizer,
     byte_validate_tokens, byte_lm_fault_inject_available,
 )
+from training.byte_lm_parallel import ByteParallelTrainer
 from training.byte_lm_logits import (
     BYTE_LOGITS_MAX_BATCH,
     BYTE_LOGITS_MAX_CELLS,
@@ -1205,6 +1206,111 @@ def byte_lm_session_logits_binding(session: PythonObject, addresses: PythonObjec
     return PythonObject(cells_out)
 
 
+def byte_lm_parallel_create_binding() raises -> PythonObject:
+    return PythonObject(alloc=ByteParallelTrainer())
+
+
+def byte_lm_parallel_close_binding(session: PythonObject) raises -> PythonObject:
+    var owner = session.downcast_value_ptr[ByteParallelTrainer]()
+    owner[].close()
+    return PythonObject(0)
+
+
+def byte_lm_parallel_open_binding(session: PythonObject, addresses: PythonObject,
+    params: PythonObject, shape: PythonObject, devices: PythonObject, shard_count: PythonObject) raises -> PythonObject:
+    _require_binding_profile()
+    var cfg_shape = _byte_config(shape)
+    var completed = _params_completed(params)
+    var cfg = _params_optimizer(params)
+    var addr = _read_addresses(addresses, 4)
+    var cells: List[Int] = [cfg_shape.n_total(), cfg_shape.n_total(), cfg_shape.n_total(), cfg_shape.n_tensors()]
+    _validate_slot_table(addr, cells, 4)
+    var p = _read_f32(addr[0], cells[0])
+    var m = _read_f32(addr[1], cells[1])
+    var v = _read_f32(addr[2], cells[2])
+    var flags = _read_flags(addr[3], cells[3])
+    byte_validate_state(p, m, v, flags, completed, cfg_shape)
+    var device_ids = List[Int]()
+    for i in range(Int(py=devices.__len__())):
+        device_ids.append(Int(py=devices[i]))
+    var owner = session.downcast_value_ptr[ByteParallelTrainer]()
+    # Retain the GIL: it is also the native object's exclusion lock.
+    owner[].open(device_ids, Int(py=shard_count), p, m, v, flags, completed, cfg, cfg_shape)
+    return PythonObject(completed)
+
+
+def byte_lm_parallel_step_binding(session: PythonObject, addresses: PythonObject,
+    completed_arg: PythonObject) raises -> PythonObject:
+    var completed = Int(py=completed_arg)
+    _require_binding_profile()
+    var owner = session.downcast_value_ptr[ByteParallelTrainer]()
+    owner[].require_open()
+    if completed != owner[].trainers[0].completed_steps:
+        raise Error("byte LM parallel: completed-step mismatch")
+    var count = owner[].logical_shards
+    var addr = _read_addresses(addresses, count)
+    var shape = owner[].trainers[0].config.copy()
+    var n_ids = shape.batch * (shape.length + 1)
+    var cells = List[Int]()
+    for i in range(count):
+        cells.append(n_ids)
+    _validate_slot_table(addr, cells, count)
+    var shards = List[List[Int32]]()
+    for i in range(count):
+        shards.append(_read_ids(addr[i], n_ids))
+    var losses = owner[].step(shards)
+    var out = Python.list()
+    try:
+        for i in range(len(losses)):
+            out.append(PythonObject(losses[i]))
+    except error:
+        owner[].rollback()
+        raise error
+    return out
+
+
+def byte_lm_parallel_export_binding(session: PythonObject, addresses: PythonObject,
+    rank_arg: PythonObject, gradients_arg: PythonObject) raises -> PythonObject:
+    var rank = Int(py=rank_arg)
+    var gradients = Bool(gradients_arg)
+    _require_binding_profile()
+    var owner = session.downcast_value_ptr[ByteParallelTrainer]()
+    owner[].require_open()
+    if rank < 0 or rank >= len(owner[].trainers):
+        raise Error("byte LM parallel: invalid replica index")
+    ref tr = owner[].trainers[rank]
+    ref ctx = owner[].contexts[rank]
+    var n = tr.config.n_total()
+    var count = 1 if gradients else 4
+    var addr = _read_addresses(addresses, count)
+    var cells = List[Int]()
+    for i in range(count):
+        cells.append(tr.config.n_tensors() if i == 3 else n)
+    _validate_slot_table(addr, cells, 0)
+    tr.validate_device_state(ctx, tr.completed_steps)
+    if gradients:
+        if tr.grad_step != tr.completed_steps:
+            raise Error("byte LM parallel: no committed gradient")
+        var g = download_f32(ctx, tr.buffers.grad, n)
+        copy_f32(g.unsafe_ptr(), f32_ptr(addr[0]), n)
+    else:
+        var p = download_f32(ctx, tr.buffers.param, n)
+        var m = download_f32(ctx, tr.buffers.m_state, n)
+        var v = download_f32(ctx, tr.buffers.v_state, n)
+        copy_f32(p.unsafe_ptr(), f32_ptr(addr[0]), n)
+        copy_f32(m.unsafe_ptr(), f32_ptr(addr[1]), n)
+        copy_f32(v.unsafe_ptr(), f32_ptr(addr[2]), n)
+        _write_flags(addr[3], tr.buffers.buf_initialized)
+    return PythonObject(tr.completed_steps)
+
+
+def byte_lm_parallel_rollback_binding(session: PythonObject) raises -> PythonObject:
+    var owner = session.downcast_value_ptr[ByteParallelTrainer]()
+    owner[].require_open()
+    owner[].rollback()
+    return PythonObject(owner[].trainers[0].completed_steps)
+
+
 @export
 def PyInit__mojolearn_byte_lm() abi("C") -> PythonObject:
     try:
@@ -1236,6 +1342,13 @@ def PyInit__mojolearn_byte_lm() abi("C") -> PythonObject:
         module.def_function[byte_lm_attention_arm_binding]("byte_lm_attention_arm")
         # DEVIATION 2648: the step glue arm read-back (arm, trial).
         module.def_function[byte_lm_step_glue_arm_binding]("byte_lm_step_glue_arm")
+        _ = module.add_type[ByteParallelTrainer]("_ByteParallelTrainer")
+        module.def_function[byte_lm_parallel_create_binding]("byte_lm_parallel_create")
+        module.def_function[byte_lm_parallel_close_binding]("byte_lm_parallel_close")
+        module.def_function[byte_lm_parallel_open_binding]("byte_lm_parallel_open")
+        module.def_function[byte_lm_parallel_step_binding]("byte_lm_parallel_step")
+        module.def_function[byte_lm_parallel_export_binding]("byte_lm_parallel_export")
+        module.def_function[byte_lm_parallel_rollback_binding]("byte_lm_parallel_rollback")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_byte_lm: ", error))

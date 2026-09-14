@@ -335,6 +335,7 @@ def _rf_classifier_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
     params: PythonObject,
     criterion: PythonObject,
     weights_addr: Int = 0,
+    tree_start: Int = 0,
 ) raises -> PythonObject:
     """Fit the cuML-implementation RandomForest classifier. `x` is COLUMN-major
     float32 (n_rows * n_cols, the layout `fit_forest`'s default expects);
@@ -431,12 +432,12 @@ def _rf_classifier_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
             var scales = BinScales(Float32(1), Float32(scale))
             forest = fit_forest[WeightedClsObj](
                 ctx, dx, dy, dsw, n_rows, n_cols, n_classes, rf_params,
-                scales, sample_weight_host=weights, host_x_addr=host_x,
+                scales, sample_weight_host=weights, host_x_addr=host_x, tree_start=tree_start,
             )
         else:
             forest = fit_forest[ClsObj](
                 ctx, dx, dy, dsw, n_rows, n_cols, n_classes, rf_params,
-                sample_weight_host=weights, host_x_addr=host_x,
+                sample_weight_host=weights, host_x_addr=host_x, tree_start=tree_start,
             )
         t_s = bt.start()
         ctx.synchronize()
@@ -524,6 +525,7 @@ def _rf_regressor_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
     y_addr: PythonObject,
     params: PythonObject,
     criterion: PythonObject,
+    tree_start: Int = 0,
 ) raises -> PythonObject:
     """Fit the cuML-implementation RandomForest regressor. Same contract; slot 2
     MUST be 0 and `y` is float32. `criterion` is MSE (2), POISSON (4),
@@ -600,7 +602,7 @@ def _rf_regressor_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
         # `rf_regressor_fit`'s cuML counterpart passes.
         forest = fit_forest[RegObj](
             ctx, dx, dy, dsw, n_rows, n_cols, 1, rf_params, scales,
-            host_x_addr=host_x,
+            host_x_addr=host_x, tree_start=tree_start,
         )
         t_s = bt.start()
         ctx.synchronize()
@@ -924,6 +926,18 @@ def rf_vendor_binding() raises -> PythonObject:
     return PythonObject(String(COMPILED_VENDOR))
 
 
+def rf_classifier_fit_shard_binding(x_addr: PythonObject, y_addr: PythonObject,
+    params: PythonObject, criterion: PythonObject, tree_start: PythonObject,
+    weights_addr: PythonObject) raises -> PythonObject:
+    return _rf_classifier_fit(x_addr, y_addr, params, criterion,
+                             Int(py=weights_addr), Int(py=tree_start))
+
+
+def rf_regressor_fit_shard_binding(x_addr: PythonObject, y_addr: PythonObject,
+    params: PythonObject, criterion: PythonObject, tree_start: PythonObject) raises -> PythonObject:
+    return _rf_regressor_fit(x_addr, y_addr, params, criterion, Int(py=tree_start))
+
+
 @export
 def PyInit__mojolearn_rf() abi("C") -> PythonObject:
     try:
@@ -954,6 +968,8 @@ def PyInit__mojolearn_rf() abi("C") -> PythonObject:
         m.def_function[forest_vector_groves_binding]("forest_vector_groves")
         m.def_function[forest_predict_resident_into_gpu_binding[True]]("forest_predict_resident_into_gpu")
         m.def_function[forest_predict_resident_into_gpu_binding[True, True]]("forest_predict_resident_reuse_gpu")
+        m.def_function[rf_classifier_fit_shard_binding]("rf_classifier_fit_shard")
+        m.def_function[rf_regressor_fit_shard_binding]("rf_regressor_fit_shard")
         return m.finalize()
     except e:
         abort(String("failed to initialize _mojolearn_rf: ") + String(e))
