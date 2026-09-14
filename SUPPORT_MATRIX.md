@@ -153,8 +153,8 @@ cross-vendor claim. See [verification](docs/VERIFY.md) and
 
 ## Current priorities (2026-09-13)
 
-- Cut 0.8.5 with the `ExperimentalTwoLevelFeatureFreq` fix (DEVIATION 2710) and the AMD GEMM
-  row, the HIP set built in the 22.04 ROCm container.
+- 0.8.5 is published (2026-09-14) with the `ExperimentalTwoLevelFeatureFreq` fix (DEVIATION 2710)
+  and the AMD GEMM row; the next release carries whatever the lanes below merge.
 - CPU training phase 1 (`docs/lanes/BRIEF_cpu_training_2026-09-13.md`): gemm-pinned first, then
   kde, holtwinters, lasso and elasticnet, svc, agglomerative, et-clf, et-reg, iforest; a lane
   passes only when the fourth column reads IDENTICAL on every cell.
