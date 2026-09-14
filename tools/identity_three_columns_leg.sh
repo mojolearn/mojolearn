@@ -53,6 +53,8 @@ BUILD_ENV="env MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_SKIP_BUILD_GATE=1 MOJO
 built=0; failed=""
 for s in bindings/build*.sh; do
     n=$(basename "$s" .sh)
+    # bindings/build_host_family.sh is the parameterized builder the shims exec; not a build by itself.
+    [ "$n" = build_host_family ] && continue
     # Every build_*_host.sh is a CPU build: it refuses MOJOLEARN_GPU_ARCHS and any
     # MOJOLEARN_TARGET_COLUMN but cpu by name (both 2026-09-14 00:39 legs lost
     # all host bindings to those refusals). The two byte-lm-host lanes need the
