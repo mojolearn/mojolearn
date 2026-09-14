@@ -154,8 +154,16 @@ def test_forest_kinds_are_the_forest_gate_kinds():
 
 def test_recordings_and_columns_exist():
     for rel in (host_surface.CLASSICAL_RECORDED + host_surface.CLASSICAL_GPU_COLUMNS
-                + host_surface.TRAINING_GPU_COLUMNS + (host_surface.FOREST_RECORDED_ROOT,)):
+                + (host_surface.FOREST_RECORDED_ROOT,)):
         assert (ROOT / rel).exists(), f"the manifest names {rel}, which is not in the tree"
+
+
+def test_training_gpu_columns_exist():
+    """The record must not lag the surface: the training gate diffs the CPU
+    column against these three files with --require-columns 4, and a column
+    that is not in the tree is a gate that cannot run, not a pass."""
+    missing = [rel for rel in host_surface.TRAINING_GPU_COLUMNS if not (ROOT / rel).exists()]
+    assert missing == [], f"the manifest names training GPU columns not in the tree: {missing}"
 
 
 def test_backend_routes_the_manifest():
@@ -171,9 +179,16 @@ def test_workflow_reads_the_manifest_not_literals():
         assert not re.search(rf'^\s+{var}: "', text, re.M), (
             f"the workflow carries a literal {var}; it must read the manifest"
         )
+    assert not re.search(r"^\s+GPU_COLUMNS: >-", text, re.M), (
+        "the workflow carries a literal GPU_COLUMNS block; it must read the manifest"
+    )
     assert "python/mojolearn/host_surface.py" in text
-    for flag in ("--covered-lanes", "--routed-families", "--routed-bindings", "--classical-recorded"):
+    for flag in ("--covered-lanes", "--routed-families", "--routed-bindings",
+                 "--classical-recorded", "--classical-gpu-columns", "--training-gpu-columns"):
         assert flag in text, f"the workflow does not read {flag} from the manifest"
+    for rel in host_surface.TRAINING_GPU_COLUMNS + host_surface.CLASSICAL_GPU_COLUMNS:
+        directory = "/" + rel.rsplit("/", 1)[0] + "/"
+        assert directory in text, f"the sparse checkout does not bring down {directory}"
 
 
 def test_command_line_agrees_with_the_api(capsys):

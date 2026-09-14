@@ -81,7 +81,8 @@ gate named the tensor, `block0.w_q` element 0, with both bit patterns.
   point. It should be justified by a workload that 37 ms a step makes painful,
   not by the limit's existence.
 - Nothing about other algorithm families. Trees and the classical models have
-  no backward pass and remain GPU-only.
+  no backward pass; the CPU paths they do have are the host bindings in the
+  table under "Where this sits in the CPU surface" below, not this trainer.
 - `LanguageModelHostTrainer` is exported from `mojolearn/__init__.py` as of
   `31af2404`. What it promises is this profile and this shape, and a binding
   built before the training entry existed is refused at construction by name.

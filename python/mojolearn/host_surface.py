@@ -64,11 +64,18 @@ SOURCE = "python/mojolearn/host_surface.py"
 BUILDER = "bindings/build_host_family.sh"
 
 #: The GPU columns the TRAINING gate diffs the CPU column against
-#: (cpu-identity-gate.yml, --require-columns 4 on the covered lanes).
+#: (cpu-identity-gate.yml, --require-columns 4 on the covered lanes). The
+#: record must not lag the surface: the 2026-09-13 three-column record
+#: predates the kde and svc model cells and the holtwinters infer cells the
+#: CPU column now carries, so gate run 34832840859 at 7bf4f4cc9 failed on
+#: all seven runners with "require-columns 4 ... 27 short". The 47-lane
+#: record taken at 7bf4f4cc9 (pca-whiten included) is the one this surface
+#: is diffed against; the manifest step of the workflow fails, before any
+#: build, when a column named here is not in the checkout.
 TRAINING_GPU_COLUMNS = (
-    "bench/results/identity_break/2026-09-13_three-columns/apple-m4.json",
-    "bench/results/identity_break/2026-09-13_three-columns/nvidia-h100-sm_90a.json",
-    "bench/results/identity_break/2026-09-13_three-columns/amd-mi325x-gfx942.json",
+    "bench/results/identity_break/2026-09-14_47-lanes/apple-m4.json",
+    "bench/results/identity_break/2026-09-14_47-lanes/nvidia-h100-sm_90a.json",
+    "bench/results/identity_break/2026-09-14_47-lanes/amd-mi300x-gfx942.json",
 )
 
 #: The GPU columns the classical INFERENCE gate compares each host identity
