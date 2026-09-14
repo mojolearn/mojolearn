@@ -69,6 +69,9 @@ on:
       - "packaging/**"
       - "python/**"
       - "CITATION.cff"
+      - "CHANGELOG.md"
+      - "tools/citation_metadata.py"
+      - "tools/docs_facts.py"
       - ".github/workflows/wheel-ci.yml"
       # The packaging tests live in tools/ but gate packaging/, so an edit to
       # a test must trigger the job that runs it. packaging/** already covers
@@ -112,7 +115,10 @@ jobs:
       # STATIC GATES. These read the tree, not a binary, so they are the
       # only gates in this repository that run on every push.
       # ------------------------------------------------------------------
-      - name: Version agreement across all three places
+      - name: Citation metadata regression tests
+        run: python3 -m unittest discover -s tools -p test_citation_metadata.py
+
+      - name: Version and citation date agreement
         run: python3 packaging/wheel_ci.py versions .
 
       - name: Every build script pins both CPU baselines

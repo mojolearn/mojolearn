@@ -26,11 +26,17 @@ path are OWED from the next release; record them here when it ships.
 
 ## 1. Freeze
 
+`CITATION.cff` version and release date are generated; do not update them by hand.
+The date comes from the matching `published YYYY-MM-DD` changelog heading,
+not the build clock. An `unreleased YYYY-MM-DD` entry omits the citation date.
+If publication moves to another day, update the changelog and regenerate before
+freezing the release artifacts. CI rejects stale citation metadata.
+
 Bump `python/mojolearn/_version.py` and `python/pyproject.toml`, add the
-CHANGELOG entry, then
+CHANGELOG entry with the publication date in UTC, then
 
 ```sh
-pixi run write-docs-facts   # rewrites the marked spans in README.md
+pixi run write-docs-facts   # generates CITATION version/date and marked doc spans
 pixi run check-docs-facts   # fails if a pin, a badge or a prose default drifted
 ```
 

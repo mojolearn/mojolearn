@@ -2,7 +2,7 @@
 """Facts the docs state that the tree already knows. Check them, or rewrite them.
 
     python3 tools/docs_facts.py --check     # fail if a doc disagrees with the tree
-    python3 tools/docs_facts.py --write     # rewrite marked spans from the tree
+    python3 tools/docs_facts.py --write     # generate citation metadata and marked spans
     python3 tools/docs_facts.py --print     # dump what the tree says
 
 WHY. `tools/check_docs_reference_reality.py` exists because six statements in
@@ -48,6 +48,8 @@ GitHub and PyPI included.
   1. The four places that carry the version agree: `_version.py`,
      `python/pyproject.toml`, `CITATION.cff`, and the newest published
      CHANGELOG heading. `_version.py` is the one that wins; it says so itself.
+     CITATION.cff date-released is generated from that version's published
+     CHANGELOG date, and omitted for an unreleased entry.
   2. Every marked span in a doc matches the fact it names.
   3. Every `mojolearn==<version>` pin in a tracked doc is the current version.
      These are unmarked on purpose, because an install command should be
@@ -59,6 +61,7 @@ It does not read prose for meaning. A claim about what a measurement showed
 still needs a person, and a checker that guesses produces false alarms.
 """
 import importlib.util
+import citation_metadata
 import pathlib
 import re
 import sys
@@ -168,6 +171,8 @@ def _mode_claims(text, default_mode):
 
 
 def check():
+    if citation_metadata.sync(ROOT):
+        return 1
     f = facts()
     problems = list(_sources_agree(f))
 
@@ -218,6 +223,8 @@ def check():
 
 
 def write():
+    if citation_metadata.sync(ROOT, write=True):
+        return 1
     f = facts()
     changed = 0
     for rel in DOCS:

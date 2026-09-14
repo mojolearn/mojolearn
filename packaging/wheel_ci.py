@@ -45,6 +45,7 @@ import ast
 import pathlib
 import re
 import sys
+import subprocess
 
 
 # --------------------------------------------------------------------------
@@ -193,6 +194,9 @@ def versions(argv):
             print(f"    {v:<12} {k}", file=sys.stderr)
         print("  A wrong CITATION.cff version is minted permanently into a DOI.",
               file=sys.stderr)
+        return 1
+    if subprocess.call([sys.executable, str(root / "tools/citation_metadata.py"),
+                        "--root", str(root)]):
         return 1
     print(f"  versions: {next(iter(found.values()))} in all three places")
     return 0

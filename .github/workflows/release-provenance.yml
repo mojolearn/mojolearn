@@ -147,8 +147,9 @@ jobs:
       # filename and `__version__` differ. If HEAD is already tagged, the tag
       # must be that version; tagging after publishing is also allowed, which
       # is why an untagged HEAD is not an error here.
-      - name: Version agreement
+      - name: Version and citation date agreement
         run: |
+          python3 packaging/wheel_ci.py versions .
           v_toml=$(sed -n 's/^version = "\(.*\)"$/\1/p' python/pyproject.toml | head -1)
           v_py=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' python/mojolearn/_version.py | head -1)
           echo "pyproject.toml: $v_toml"
