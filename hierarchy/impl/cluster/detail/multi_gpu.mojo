@@ -2,6 +2,7 @@
 """Pinned pairwise rows; root diagonal policy and Boruvka order stay intact."""
 from max.gpu.host import DeviceContext, DeviceBuffer
 from std.os import getenv
+from std.sys.compile import is_defined
 from core.multi_gpu import peer_clone
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from neighbors.checks.pinned_distance_tile import pinned_distance_tile_kernel
@@ -34,8 +35,13 @@ def pairwise_rows(ctx: DeviceContext, mut x: DeviceBuffer[DType.float32],
         var first = m * rank // count
         var rows = m * (rank + 1) // count - first
         devices.append(DeviceContext(device_id=rank))
-        var qv = x.create_sub_buffer[DType.float32](first*d, rows*d)
-        var nv = norms.create_sub_buffer[DType.float32](first, rows)
+        var source = first
+        comptime if is_defined["MOJOLEARN_HIERARCHY_PARALLEL_SABOTAGE"]():
+            # Check-only reach witness: later owners read their query rows one row early.
+            if rank > 0:
+                source = first - 1
+        var qv = x.create_sub_buffer[DType.float32](source*d, rows*d)
+        var nv = norms.create_sub_buffer[DType.float32](source, rows)
         queries.append(peer_clone(ctx, devices[rank], qv))
         references.append(peer_clone(ctx, devices[rank], x))
         qnorms.append(peer_clone(ctx, devices[rank], nv))

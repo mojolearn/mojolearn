@@ -790,3 +790,14 @@ assembles them in order and runs the original sort, interval, standard error,
 p-value and partial fold. Design: [resample.md](resample.md). Two-H100 and
 two-MI300X receipts pass 66 native cases, sabotage builds that fail in each
 family, and 36 public configurations whose reports are equal across vendors.
+
+### HDBSCAN
+
+`mojolearn.parallel_classical.fit_hdbscan(model, X, devices=(0, 1))` runs the
+estimator in a cooperative worker whose core-distance k-NN and dense distance
+matrix use the existing neighbors and hierarchy row drivers; the mutual
+reachability cells, MST, condensed hierarchy and selection stay on the root.
+Design: [hdbscan.md](hdbscan.md). Receipts on two H100s and two MI300X
+(`hdbscan-h100/`, `hdbscan-mi300x/`) compare every trace record against one
+device, fail against a distance-row sabotage build, and are equal across the
+two vendors.
