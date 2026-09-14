@@ -762,5 +762,7 @@ resident lifecycle checks and 16 public configurations per layout. Complete
 packed/separate prediction receipts agree, and neural worker replay receipts
 remain unchanged. See
 `bench/results/multi_gpu/2026-09-14/forest-grove-pool-h100/` for source, failures
-and full results. Cross-vendor and beyond-one-device capacity checks remain
-separate requirements.
+and full results. The same native, lifecycle and public gates pass on two
+MI300X (`bench/results/multi_gpu/2026-09-14/forest-grove-pool-mi300x/`), and
+that run's public report equals the two-H100 report in every output digest.
+Beyond-one-device capacity remains a separate requirement.
