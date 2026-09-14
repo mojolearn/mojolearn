@@ -85,8 +85,41 @@ descending, `glm/impl/qn/glm_softmax.mojo::SOFTMAX_SABOTAGE`):
   carry the class count through `classes` (no format bump; a 0.8.4 reader
   refuses a C > 2 file by its class count).
 - Binary path: the 13-field and 3-field calls compile and run the lines
-  they always did; `tools/identity_break.py --lanes logistic --vendor
-  apple-m4` before and after (section 5).
+  they always did. `tools/identity_break.py --lanes logistic --vendor
+  apple-m4` before the rebuild (the binding copied from the main checkout)
+  and after it (the rebuilt identical binding with the patched Python):
+  the same three rows on all nine fixtures, `cells=9 stable=9 moved=0`
+  both times:
+
+      | logistic       | 5b1e42c308451935 | aa9b1fa93dc2ad08 | ec4fd3f1b3f90393 | 4e980d6d6bb17dd2 | 6b67b6ba386c99c1 | 6b67b6ba386c99c1 | 8b3071b0cd8446b2 | 3c0d0924516a37e8 | b50b9cbe101d71d8 |
+      | logistic infer | 103f76e4a2b23c03 | 31ae5dc087daddea | dfe219d0b67a77ca | 0b4e034053a507a6 | 2092f79961286d8a | 2092f79961286d8a | df012d0cb1286818 | 7540ab14779d65c6 | 00fff477b42c65a0 |
+      | logistic model | 1b51b4eabdcf59e2 | eff4803be10700c8 | ee3cb3e174ae7c73 | 576c92b63ada584d | 0f11207a162b3b64 | 0f11207a162b3b64 | 4b387ce327c969d6 | 1be05ca406afb6a5 | 61cb0a45d1792d44 |
+
+- `python -m mojolearn.tests.test_logistic_multiclass_surface`: GREEN on
+  metal, six arms.
+
+## 3b. The host twin (step 4)
+
+- `core/classical_host_predict.mojo`: `host_qn_decision_multi` restates
+  `linear_fwd`'s C > 1 arm (the transpose copy, the pinned gemm cell over
+  `n_rows * C` cells, the per-class bias add through `ftz`);
+  `host_qn_softmax` restates `qn_softmax_host` statement for statement.
+- `bindings/_mojolearn_estimators_host.mojo`: the 4-field
+  `qn_decision_function` and `qn_softmax`, the GPU binding's contracts;
+  `TARGET_COLUMN == COLUMN_CPU` asserted as before, no DETECTED_COLUMN.
+- `python/mojolearn/_classical_host.py::HostLogisticRegression` refuses a
+  host build without `qn_softmax` by name at load for a C > 2 model.
+- `tools/classical_host_gate.py`: lane `logistic-multiclass` (probe
+  `(predict_proba, predict)`, extras `predict` and `decision_function`),
+  with the fit body in `LOCAL_FITS` until `identity_break.py` carries it.
+
+Evidence, `bench/results/classical_host/2026-09-14-apple-m4-multiclass/`:
+record on the Metal path over the nine fixtures (reloads byte-equal);
+check through the CPU binding, verdict IDENTICAL, 9 fixtures, every
+surface EQUAL; check against a `-D MOJOLEARN_HOST_SABOTAGE=1` build,
+verdict EXPECTED MISMATCH SEEN, `decision_function`, `predict_proba` and
+the identity hash DIFFER on all 9, `predict` EQUAL on all 9 (a last-bit
+logit change moves no argmax on these rows).
 
 ## 4. Owed: the NVIDIA and AMD gate runs
 

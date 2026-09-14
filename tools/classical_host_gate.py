@@ -85,13 +85,40 @@ LANES = {
                 lambda e, X: (e.predict(X[:64]), e.predict_proba(X[:64])),
                 {'predict_proba': lambda e, X: e.predict_proba(X[:64])}),
     'knn-reg': ('KNeighborsRegressor', lambda e, X: (e.predict(X[:64]),), {}),
+    # lane/logistic-multiclass (2026-09-14): three classes through the
+    # softmax loss; the probe is the pair (predict_proba, predict), the
+    # order of the identity_break lane body in
+    # docs/lanes/BRIEF_logistic_multiclass_2026-09-14.md section 5.
+    'logistic-multiclass': ('LogisticRegression',
+                            lambda e, X: (e.predict_proba(X), e.predict(X)),
+                            {'predict': lambda e, X: e.predict(X),
+                             'decision_function': lambda e, X: e.decision_function(X)}),
 }
 PROBE_NAMES = {'ols': 'predict', 'ridge': 'predict', 'tsvd': 'transform',
                'logistic': 'predict_proba', 'pca': 'transform',
                'kde': 'score_samples', 'svc': 'decision_function',
                'pca-whiten': 'transform',
                'knn': 'kneighbors_distances', 'knn-clf': 'predict',
-               'knn-reg': 'predict'}
+               'knn-reg': 'predict', 'logistic-multiclass': 'predict_proba'}
+
+
+def _fit_logistic_multiclass(ml, X, yc, yr, Xh=None):
+    """The `logistic-multiclass` lane body, word for word the one handed to
+    tools/identity_break.py's owner (the brief, section 5), carried here
+    until that file has it; `do_record` uses it when `ib.LANES` lacks the
+    lane. Three classes from the fixture's own labels: the binary rule plus
+    one for rows whose column 5 is above its median (a column no fixture
+    perturbs; the median split keeps all three classes on every fixture)."""
+    import numpy as np
+    ib = identity_tool()
+    y3 = (yc + (X[:, 5] > np.median(X[:, 5]))).astype(np.int32)
+    m = ml.LogisticRegression(max_iter=50).fit(X, y3)
+    return ib._fit(dict(coef=ib._h(m.coef_), proba=ib._h(m.predict_proba(X[:256]))), m,
+                   lambda e: (e.predict_proba(Xh[:256]), e.predict(Xh[:256])))
+
+
+#: lane -> fit, for a lane the gate knows before identity_break does.
+LOCAL_FITS = {'logistic-multiclass': _fit_logistic_multiclass}
 
 
 def identity_tool():
@@ -159,7 +186,7 @@ def do_record(args):
             directory.mkdir(parents=True, exist_ok=True)
             X, yc, yr = ib.fixture(kind)
             Xh_full = ib.heldout(kind)
-            fit = ib.LANES[lane](mojolearn, X, yc, yr, Xh_full)
+            fit = (ib.LANES[lane] if lane in ib.LANES else LOCAL_FITS[lane])(mojolearn, X, yc, yr, Xh_full)
             model = fit.est
             if type(model).__name__ != estimator:
                 print(f'gate: lane {lane} fitted {type(model).__name__}, not {estimator}', file=sys.stderr)

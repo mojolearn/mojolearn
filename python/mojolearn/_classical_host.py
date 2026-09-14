@@ -119,6 +119,20 @@ class HostRidge(_HostBound, Ridge):
 class HostLogisticRegression(_HostBound, LogisticRegression):
     _HOST_ARRAYS = ("_w",)
 
+    def _host_refusals(self):
+        """A model with more than two classes needs the softmax link
+        (`qn_softmax`, lane/logistic-multiclass, 2026-09-14); a host build
+        without it is refused by name at load, not at the first predict."""
+        if len(self.classes_) > 2:
+            binding = self._bind("_mojolearn_estimators")
+            if not callable(getattr(binding, "qn_softmax", None)):
+                raise ImportError(
+                    "mojolearn: this build of _mojolearn_estimators_host does "
+                    "not export qn_softmax, so a LogisticRegression with "
+                    f"{len(self.classes_)} classes cannot predict on the host; "
+                    "rebuild it with bindings/build_estimators_host.sh"
+                )
+
 
 class HostTruncatedSVD(_HostBound, TruncatedSVD):
     _HOST_ARRAYS = ("components_", "singular_values_")
