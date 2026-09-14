@@ -184,7 +184,7 @@ sampler, a solver, a metric, a reduction).
                par-boosting-pointwise par-holtwinters par-byte-lm-model-pool
                par-byte-lm-offload par-samba-clip
     2026-09-14 night (drivers added by the multigpu lane; devices=_par_devices())
-      par-forest-pool par-gmm par-resample
+      par-forest-pool par-gmm par-resample par-hdbscan
 
 The 18 lanes added on 2026-09-13 (svr through samba above) are fed the SAME
 fixture bytes in the shape their estimator wants; the derivation rules are
@@ -2920,6 +2920,22 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(parts)
 
 
+@lane("par-hdbscan")
+def _(ml, X, yc, yr, Xh=None):
+    """fit_hdbscan on the hdbscan lane's configuration (the neighbors and
+    hierarchy row drivers under _par_devices()), held to the plain fit's
+    labels and core distances."""
+    from mojolearn.parallel_classical import fit_hdbscan
+    par = fit_hdbscan(ml.HDBSCAN(min_cluster_size=5), X[:6000, :4], devices=_par_devices())
+    plain = ml.HDBSCAN(min_cluster_size=5).fit(X[:6000, :4])
+    _same_bytes("fit_hdbscan labels_", par.labels_, "plain labels_", plain.labels_)
+    _same_bytes("fit_hdbscan core_distances_", par.core_distances_, "plain core_distances_", plain.core_distances_)
+    return _fit(dict(labels=_h(par.labels_), core=_h(par.core_distances_),
+                     counts=_h(np.asarray([par.n_clusters_, par.n_outliers_, par.n_boruvka_rounds_,
+                                           par.n_condensed_clusters_], dtype=np.int64))),
+                par, "n/a:transductive")
+
+
 # ---------------------------------------------------------------- the batch part (2026-09-14)
 # See the `batch` part in the module docstring. A declaration per lane, kept
 # OUT of the lane bodies so no train, infer or model hash can move because
@@ -3493,6 +3509,7 @@ _batch_decl("n/a:no-model", "par-byte-lm-model-pool", "par-byte-lm-offload")
 _batch_decl(_rows_calls("predict", "predict_proba"), "par-forest-pool")
 _batch_decl(_rows_calls("score_samples", "predict", sl=(slice(0, 64), slice(0, 4))), "par-gmm")
 _batch_decl("n/a:function", "par-resample")
+_batch_decl("n/a:transductive", "par-hdbscan")
 
 
 # ---------------------------------------------------------------- run / diff
