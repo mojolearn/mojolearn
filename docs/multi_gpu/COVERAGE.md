@@ -8,8 +8,8 @@ distributed fit of one estimator.
 
 ## Compute and memory are separate requirements
 
-The byte-LM driver pools AdamW moments and rollback copies in disjoint device
-ranges; parameters, gradients and activations remain replicated. SmallMLP
+The byte-LM driver pools AdamW moments, rollback copies and gradient-reduction
+scratch in disjoint device ranges; parameters, gradients and activations remain replicated. SmallMLP
 and Samba use host-staged disjoint optimizer ranges after the original global
 clip. Their gradient computations still require a complete model per worker.
 Forests replicate training data; KMeans retains full-data work on the root.
@@ -29,7 +29,7 @@ and histogram paths have two-H100 evidence only.
 
 | Surface | Current multi-GPU coverage | Remaining numerical work |
 | --- | --- | --- |
-| SmallByteLanguageModelTrainer / LanguageModelTrainer | Concurrent microbatch waves, ordered replay and pooled AdamW moments/rollback copies | Weight/activation partitioning; larger capacity and cross-vendor qualification |
+| SmallByteLanguageModelTrainer / LanguageModelTrainer | Concurrent microbatch waves, ordered replay and pooled AdamW moments, rollback copies and reduction scratch | Weight/activation partitioning; larger capacity and cross-vendor qualification |
 | SmallMLPTrainer | Concurrent microbatch gradients, ordered sum and host-staged optimizer ranges | Larger shapes; resident state and model/activation pooling |
 | SambaStack | Concurrent microbatch gradients, ordered sum, original global clipping and host-staged optimizer ranges | Broader configurations; resident state and model/activation pooling |
 | RandomForestClassifier / RandomForestRegressor | Global tree-ID ranges over full data | Larger forests; data partitioning |

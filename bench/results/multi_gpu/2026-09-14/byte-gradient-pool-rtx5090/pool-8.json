@@ -1,0 +1,56 @@
+{
+  "status": "PASS",
+  "checks": [
+    {
+      "layers": 1,
+      "logical_shards": 8,
+      "parameters": 10144,
+      "ownership": [
+        {
+          "device": 0,
+          "first": 0,
+          "count": 5072,
+          "moment_bytes": 40576,
+          "rollback_bytes": 60864,
+          "reduction_bytes": 40576
+        },
+        {
+          "device": 1,
+          "first": 5072,
+          "count": 5072,
+          "moment_bytes": 40576,
+          "rollback_bytes": 60864,
+          "reduction_bytes": 40576
+        }
+      ],
+      "state_sha256": "9b2199d070a0eba962b1c38cac4e3714190b4f2562ee04c459c38c9a599cdeb4",
+      "native_faults": false
+    },
+    {
+      "layers": 3,
+      "logical_shards": 8,
+      "parameters": 25680,
+      "ownership": [
+        {
+          "device": 0,
+          "first": 0,
+          "count": 12840,
+          "moment_bytes": 102720,
+          "rollback_bytes": 154080,
+          "reduction_bytes": 102720
+        },
+        {
+          "device": 1,
+          "first": 12840,
+          "count": 12840,
+          "moment_bytes": 102720,
+          "rollback_bytes": 154080,
+          "reduction_bytes": 102720
+        }
+      ],
+      "state_sha256": "906b3850b802d03f119b5797c0a0f1f0c2b10032086a000aa626683f4e1e9f5b",
+      "native_faults": false
+    }
+  ],
+  "scope": "Two GPUs: optimizer moment/rollback and gradient-reduction pooling, replay, exports and recovery. Model weights and activations remain replicated."
+}

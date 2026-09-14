@@ -451,8 +451,8 @@ unchanged. All ranges are snapshotted before any update. Each owner runs the
 original elementwise AdamW kernel, then broadcasts its updated parameter slice.
 On failure the group restores every owned range before rebuilding replicas.
 
-`optimizer_ownership()` reports actual native ranges and allocated moment and
-rollback bytes. Across K devices these buffers total 20 bytes per parameter,
+`optimizer_ownership()` reports actual native ranges and allocated moment,
+rollback and gradient-reduction bytes. Across K devices these buffers total 20 bytes per parameter,
 compared with 20*K for complete optimizer replicas. Parameters, full gradients,
 model weight copies and activations remain replicated; this is optimizer-state
 pooling, not full pooled model capacity. `pool_optimizer=False` retains the
@@ -485,3 +485,19 @@ retains the original entry. `tools/parallel_optimizer_check.py` compares all
 state, clipped gradients and norm/coefficients for SGD (including dampening
 and Nesterov), Adam and AdamW; `tools/parallel_training_check.py` exercises
 full MLP and Samba training, including clipping and attention/dropout.
+
+
+### Distributed byte-LM gradient-sum scratch
+
+The pooled byte-LM path also owns its two gradient-reduction scratch buffers
+in the same parameter ranges as optimizer state. Each range copies logical
+gradient zero and left-folds the remaining logical gradients with the original
+FP32 add kernel. Different ranges never participate in a floating-point sum
+with each other. Disjoint completed ranges are copied into each replica's
+full gradient before the original scan and pooled optimizer update.
+
+Reduction scratch totals eight bytes per parameter across the group, divided
+among owners instead of concentrated on the first GPU. On two GPUs this
+halves the first GPU's reduction-scratch allocation. Model parameters, full
+gradient replicas and activations still require further memory partitioning.
+The replicated optimizer comparison path retains its original root reduction.
