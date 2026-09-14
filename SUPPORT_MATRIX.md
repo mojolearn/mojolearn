@@ -126,13 +126,21 @@ Aisle MI300X (22.04 ROCm container) and matches the Apple M4 bit for bit in a fr
 this is a kernel of the Mamba-2 path reading past an allocation that the MI300X's allocator
 happens to back, or the 24.04 image's driver; it is not the 2712 race and is diagnosed apart.
 
-**Mamba-2 step on AMD, 2026-09-14, DEVIATION 2712, open.** In the 120-lane record at 65ae7612f
-(`bench/results/identity_break/2026-09-14_120-lanes/README.md`) the MI300X column's `mamba2` cells
-differ from the Apple M4 and H100 columns on all nine fixtures in the `step` and `backward` parts
-only (forward and prefill agree), while the same lane read identical on three vendors in three
-earlier records the same day and every column repeats within its own run. A run-to-run race on the
-AMD step path; the dt_limit variant showed the same shape once. Every other lane, 1071 training and
-1476 inference and model cells, is identical on the three vendors in that record.
+**Mamba-2 in a warm process on the Apple M4, 2026-09-14, DEVIATION 2712, open (first attributed to AMD, corrected the same day).** In the 120-lane record at 65ae7612f
+(`bench/results/identity_break/2026-09-14_120-lanes/README.md`) the APPLE M4 column's `mamba2` cells
+differ from the H100 and MI300X columns on all nine fixtures in the `step` and `backward` parts only
+(forward and prefill agree); the H100 and MI300X carry the value every earlier record carries on all
+three vendors (base cell 5b05a3ecbd70248e). Reproduced on the M4 with the harness's per-fit dump:
+after the 42 lanes that precede mamba2 in one process, the step output and every backward gradient
+are the canonical quiet NaN (0x7fc00000) in every element while the inputs, both forwards and the
+carried state after prefill and after step equal a cold run; neither half of the 42 lanes alone
+reproduces it, so it depends on the process's allocation history, not on one lane. Source: the
+Mamba-2 SSD backward allocates 40 device buffers with no fill (`mamba/impl/ops/mamba2_ssd_backward.mojo`,
+one documented as written only for the real rows and merged over its full extent at `:562`), and
+`mamba/impl/modules/mamba2_backward.mojo` 20 more; the step's read is not yet located. A read of
+device memory nothing wrote, invisible where the allocator hands back zeros. Diagnosis and probe in
+`docs/lanes/BRIEF_resident_and_dtlimit_moved_2026-09-14.md` section 3.2. Every other lane, 1071
+training and 1476 inference and model cells, is identical on the three vendors in that record.
 
 **RTX 5090 (sm_120a), 2026-09-14, DEVIATION 2711, found and FIXED the same day.** The first leg on
 a Blackwell consumer part refused four cells (pca, tsvd, ols, ridge on the 17-column `odd`
