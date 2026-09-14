@@ -26,7 +26,7 @@ from gemm.checks.gemm_identical import (
 )
 from gemm.checks.gemm_oracle import OP_NN
 from mamba.checks.mamba2_fixture import M2_D_STATE, M2_HEADDIM
-from mamba.impl.modeling.modeling_mamba import pinned_mul
+from mamba.impl.modeling.modeling_mamba import mamba_scratch, pinned_mul
 
 
 comptime M2_SSD_BWD_TPB = 128
@@ -60,22 +60,24 @@ struct Mamba2SSDBackwardState(Movable):
         var boundary_cells = b * nh * M2_HEADDIM * M2_D_STATE
         if boundary_cells < 1:
             boundary_cells = 1
-        self.direct_d_pass = ctx.enqueue_create_buffer[DType.float32](state_cells)
+        self.direct_d_pass = mamba_scratch(ctx, state_cells)
         # T is not known to this state constructor; these are sized by the
-        # enclosing chunk extent and the launcher writes only real T rows.
-        self.d_c_yoff = ctx.enqueue_create_buffer[DType.float32](
+        # enclosing chunk extent. The poison gate (DEVIATION 2712) ran with
+        # these unfilled under NaN and carried the canonical hashes: every
+        # row a kernel reads is written first, so scratch like the rest.
+        self.d_c_yoff = mamba_scratch(ctx,
             b * nc * 256 * M2_D_STATE
         )
-        self.d_dacs_yoff = ctx.enqueue_create_buffer[DType.float32](
+        self.d_dacs_yoff = mamba_scratch(ctx,
             b * nh * nc * 256
         )
-        self.d_pass = ctx.enqueue_create_buffer[DType.float32](state_cells)
-        self.d_cstate = ctx.enqueue_create_buffer[DType.float32](state_cells)
-        self.d_scale_product = ctx.enqueue_create_buffer[DType.float32](
+        self.d_pass = mamba_scratch(ctx, state_cells)
+        self.d_cstate = mamba_scratch(ctx, state_cells)
+        self.d_scale_product = mamba_scratch(ctx,
             state_cells
         )
-        self.d_initial = ctx.enqueue_create_buffer[DType.float32](boundary_cells)
-        self.d_decay_cstate = ctx.enqueue_create_buffer[DType.float32](
+        self.d_initial = mamba_scratch(ctx, boundary_cells)
+        self.d_decay_cstate = mamba_scratch(ctx,
             b * nh * nc * 256
         )
 
@@ -376,17 +378,17 @@ struct Mamba2SSDScaleReduction(Movable):
         if rows < 1:
             rows = 1
         var pn = M2_HEADDIM * M2_D_STATE
-        self.d_scale = ctx.enqueue_create_buffer[DType.float32](rows)
-        self.ones_pn = ctx.enqueue_create_buffer[DType.float32](pn)
+        self.d_scale = mamba_scratch(ctx, rows)
+        self.ones_pn = mamba_scratch(ctx, pn)
         self.ones_pn.enqueue_fill(Float32(1.0))
         var ws = identical_gemm_workspace_max_floats(rows, 1, pn)
-        self.workspace = ctx.enqueue_create_buffer[DType.float32](ws)
-        self.d_dacs_state = ctx.enqueue_create_buffer[DType.float32](
+        self.workspace = mamba_scratch(ctx, ws)
+        self.d_dacs_state = mamba_scratch(ctx,
             rows * qv
         )
         self.d_dacs_state.enqueue_fill(Float32(0.0))
-        self.d_dacs_total = ctx.enqueue_create_buffer[DType.float32](rows * qv)
-        self.d_dacs_decay = ctx.enqueue_create_buffer[DType.float32](rows * qv)
+        self.d_dacs_total = mamba_scratch(ctx, rows * qv)
+        self.d_dacs_decay = mamba_scratch(ctx, rows * qv)
 
 
 def mamba2_decay_to_dacs_kernel(
@@ -439,37 +441,37 @@ struct Mamba2SSDDiscretizeBackward(Movable):
     var d_da_total: DeviceBuffer[DType.float32]  # S11 + segment
 
     def __init__(out self, ctx: DeviceContext, b: Int, t: Int, nh: Int) raises:
-        self.d_da = ctx.enqueue_create_buffer[DType.float32](b * t * nh)
-        self.d_a = ctx.enqueue_create_buffer[DType.float32](nh)
-        self.d_a_log = ctx.enqueue_create_buffer[DType.float32](nh)
-        self.d_dt = ctx.enqueue_create_buffer[DType.float32](b * t * nh)
-        self.d_dtraw = ctx.enqueue_create_buffer[DType.float32](b * t * nh)
-        self.d_dt_bias = ctx.enqueue_create_buffer[DType.float32](nh)
-        self.d_xd_ydiag = ctx.enqueue_create_buffer[DType.float32](
+        self.d_da = mamba_scratch(ctx, b * t * nh)
+        self.d_a = mamba_scratch(ctx, nh)
+        self.d_a_log = mamba_scratch(ctx, nh)
+        self.d_dt = mamba_scratch(ctx, b * t * nh)
+        self.d_dtraw = mamba_scratch(ctx, b * t * nh)
+        self.d_dt_bias = mamba_scratch(ctx, nh)
+        self.d_xd_ydiag = mamba_scratch(ctx,
             b * t * nh * M2_HEADDIM
         )
-        self.d_x_from_xd = ctx.enqueue_create_buffer[DType.float32](
+        self.d_x_from_xd = mamba_scratch(ctx,
             b * t * nh * M2_HEADDIM
         )
-        self.d_dt_from_xd = ctx.enqueue_create_buffer[DType.float32](b * t * nh)
-        self.d_dt_merged = ctx.enqueue_create_buffer[DType.float32](b * t * nh)
+        self.d_dt_from_xd = mamba_scratch(ctx, b * t * nh)
+        self.d_dt_merged = mamba_scratch(ctx, b * t * nh)
         var nc = (t + 255) // 256
-        self.d_cb_ydiag = ctx.enqueue_create_buffer[DType.float32](
+        self.d_cb_ydiag = mamba_scratch(ctx,
             b * nc * 256 * 256
         )
-        self.d_seg_ydiag = ctx.enqueue_create_buffer[DType.float32](
+        self.d_seg_ydiag = mamba_scratch(ctx,
             b * nc * nh * 256 * 256
         )
-        self.d_b_cb = ctx.enqueue_create_buffer[DType.float32](b * t * M2_D_STATE)
-        self.d_c_cb = ctx.enqueue_create_buffer[DType.float32](b * t * M2_D_STATE)
-        self.d_xd_cstate = ctx.enqueue_create_buffer[DType.float32](b*t*nh*M2_HEADDIM)
-        self.d_xd_total = ctx.enqueue_create_buffer[DType.float32](b*t*nh*M2_HEADDIM)
-        self.d_b_cstate = ctx.enqueue_create_buffer[DType.float32](b*t*M2_D_STATE)
-        self.d_b_total = ctx.enqueue_create_buffer[DType.float32](b*t*M2_D_STATE)
-        self.d_c_total = ctx.enqueue_create_buffer[DType.float32](b*t*M2_D_STATE)
-        self.d_x_total = ctx.enqueue_create_buffer[DType.float32](b*t*nh*M2_HEADDIM)
-        self.d_da_seg = ctx.enqueue_create_buffer[DType.float32](b * t * nh)
-        self.d_da_total = ctx.enqueue_create_buffer[DType.float32](b * t * nh)
+        self.d_b_cb = mamba_scratch(ctx, b * t * M2_D_STATE)
+        self.d_c_cb = mamba_scratch(ctx, b * t * M2_D_STATE)
+        self.d_xd_cstate = mamba_scratch(ctx, b*t*nh*M2_HEADDIM)
+        self.d_xd_total = mamba_scratch(ctx, b*t*nh*M2_HEADDIM)
+        self.d_b_cstate = mamba_scratch(ctx, b*t*M2_D_STATE)
+        self.d_b_total = mamba_scratch(ctx, b*t*M2_D_STATE)
+        self.d_c_total = mamba_scratch(ctx, b*t*M2_D_STATE)
+        self.d_x_total = mamba_scratch(ctx, b*t*nh*M2_HEADDIM)
+        self.d_da_seg = mamba_scratch(ctx, b * t * nh)
+        self.d_da_total = mamba_scratch(ctx, b * t * nh)
 
 
 struct Mamba2ConvBackward(Movable):
@@ -479,10 +481,10 @@ struct Mamba2ConvBackward(Movable):
     var d_b: DeviceBuffer[DType.float32]
 
     def __init__(out self, ctx: DeviceContext, b: Int, l: Int, cd: Int) raises:
-        self.d_conv = ctx.enqueue_create_buffer[DType.float32](b*l*cd)
-        self.d_in_xbc = ctx.enqueue_create_buffer[DType.float32](b*l*cd)
-        self.d_w = ctx.enqueue_create_buffer[DType.float32](cd*4)
-        self.d_b = ctx.enqueue_create_buffer[DType.float32](cd)
+        self.d_conv = mamba_scratch(ctx, b*l*cd)
+        self.d_in_xbc = mamba_scratch(ctx, b*l*cd)
+        self.d_w = mamba_scratch(ctx, cd*4)
+        self.d_b = mamba_scratch(ctx, cd)
 
 
 def mamba2_conv_backward_kernel(

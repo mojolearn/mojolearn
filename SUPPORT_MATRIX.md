@@ -117,30 +117,30 @@ three-column rerun reads IDENTICAL x3 on every cell of every lane, this one incl
 (`bench/results/identity_break/2026-09-14_46-lanes/README.md`, 414 train and 459 infer and
 model cells on an Apple M4, an NVIDIA H100 and an AMD MI300X, no one-column cell).
 
-**Mamba-2 on the DigitalOcean MI325X image, 2026-09-14, DEVIATION 2713, open.** On a DigitalOcean
-MI325X droplet (Ubuntu 24.04 ROCm image) every mamba2 launch aborts the process with "Memory access
-fault by GPU node-1 ... Reason: Unknown": the 120-lane identity run died there right after the
-mamba1 lane, and both runs of `tools/mamba2_step_probe.py` died at their first launch
-(`bench/results/mamba2_probe/README.md`). The same commit runs the lane to completion on the Hot
-Aisle MI300X (22.04 ROCm container) and matches the Apple M4 bit for bit in a fresh process, so
-this is a kernel of the Mamba-2 path reading past an allocation that the MI300X's allocator
-happens to back, or the 24.04 image's driver; it is not the 2712 race and is diagnosed apart.
-
-**Mamba-2 in a warm process on the Apple M4, 2026-09-14, DEVIATION 2712, open (first attributed to AMD, corrected the same day).** In the 120-lane record at 65ae7612f
-(`bench/results/identity_break/2026-09-14_120-lanes/README.md`) the APPLE M4 column's `mamba2` cells
-differ from the H100 and MI300X columns on all nine fixtures in the `step` and `backward` parts only
-(forward and prefill agree); the H100 and MI300X carry the value every earlier record carries on all
-three vendors (base cell 5b05a3ecbd70248e). Reproduced on the M4 with the harness's per-fit dump:
-after the 42 lanes that precede mamba2 in one process, the step output and every backward gradient
-are the canonical quiet NaN (0x7fc00000) in every element while the inputs, both forwards and the
-carried state after prefill and after step equal a cold run; neither half of the 42 lanes alone
-reproduces it, so it depends on the process's allocation history, not on one lane. Source: the
-Mamba-2 SSD backward allocates 40 device buffers with no fill (`mamba/impl/ops/mamba2_ssd_backward.mojo`,
-one documented as written only for the real rows and merged over its full extent at `:562`), and
-`mamba/impl/modules/mamba2_backward.mojo` 20 more; the step's read is not yet located. A read of
-device memory nothing wrote, invisible where the allocator hands back zeros. Diagnosis and probe in
-`docs/lanes/BRIEF_resident_and_dtlimit_moved_2026-09-14.md` section 3.2. Every other lane, 1071
-training and 1476 inference and model cells, is identical on the three vendors in that record.
+**Mamba-2 read past the end of X_d, 2026-09-14, DEVIATIONS 2712 and 2713, CLOSED together, one cause.**
+`m2_ydiag_kernel` (`mamba/impl/modules/ssd_minimal.mojo`, S13 and S14, Y_diag = M . X_d) looped over
+the chunk width Q = 256 and loaded the X_d row c * Q + jj for every jj, including rows at or past
+T (X_d is [B, T, H, P]; T is 16 in the identity lanes and 1 in the step), a read past the end of the
+allocation. The multiplier there is the structural +0.0, so 0 x finite garbage is 0 and every CUDA
+and HIP run and every cold Metal run carried the same bits; 0 x NaN is NaN, which is what Metal
+handed back in a warm process (DEVIATION 2712: the Apple M4 column of the 120-lane record at
+65ae7612f, `step` and `backward` NaN on all nine mamba2 fixtures, first misattributed to AMD and
+corrected the same day; the step reads farthest past since its T is 1); and the row past the last
+allocation is an unmapped page on the DigitalOcean MI325X 24.04 image (DEVIATION 2713: "Memory
+access fault by GPU node-1" at the first forward launch, where the Hot Aisle MI300X allocator
+happened to back the page). Named by a poison-and-band build: every Mamba device allocation filled
+with the canonical quiet NaN where nothing writes and given a 4096-element NaN band past its logical
+length (`-D MOJOLEARN_MAMBA_POISON=1`), under which the block check reported `ydiag.out` MOVED 256
+of 256 with every input stage OK. Fixed by reading X_d only below T (+0.0 past it, the bits every
+record carries); the sixty Mamba-2 backward buffers that were allocated with no fill are filled
+(`mamba_scratch`, zero in production). The gate that catches the next read of this class is
+`pixi run check-mamba-poison` (`tools/mamba_poison_gate.sh`): the poison binding built into a copy of
+the package, mamba1, mamba2, mamba2-dtlimit and mamba3 cold, all 36 training rows required IDENTICAL
+against the three vendor columns of `2026-09-14_120-lanes-2711flip`, with three sabotages (the fix
+removed, a planted over-read with the band, the same without it as the control). On the Apple M4:
+36 of 36 with the fix, the fix-removed and planted-over-read sabotages fail, the control passes.
+Owed: the gate on the H100 and the MI300X, the poison build on the MI325X image, and the 120-lane
+three-column rerun that becomes the CPU gate's GPU columns (brief section 3.3).
 
 **RTX 5090 (sm_120a), 2026-09-14, DEVIATION 2711, found and FIXED the same day.** The first leg on
 a Blackwell consumer part refused four cells (pca, tsvd, ols, ridge on the 17-column `odd`

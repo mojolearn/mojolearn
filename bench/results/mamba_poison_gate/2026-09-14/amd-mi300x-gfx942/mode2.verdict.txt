@@ -1,0 +1,4 @@
+poison gate: defines [-D MOJOLEARN_MAMBA_POISON=1 -D MOJOLEARN_MAMBA_POISON_OVERREAD=1] set python/mojolearn/identical record bench/results/identity_break/2026-09-14_120-lanes-2711flip copy /tmp/mojolearn-poison.ApXjdC/python
+cells=36 stable=18 moved=0 refused=18
+poison column: 18 of 36 Mamba training rows IDENTICAL x4
+check-mamba-poison SABOTAGE 2: the gate FAILED as required (54 Mamba rows not identical, 18 of 36 identical)

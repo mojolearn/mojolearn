@@ -98,12 +98,13 @@ from mamba.impl.modules.ssd_minimal import (
     ssd_sabotage_name,
 )
 from mamba.impl.modeling.modeling_mamba import (
-    _refuse_nonfinite_named,
     mamba_a_from_a_log_kernel,
     mamba_download,
+    MAMBA_POISON_OVERREAD,
     mamba_rms_norm,
     mamba_upload,
     mamba_zeros,
+    _refuse_nonfinite_named,
     residual_add_kernel,
 )
 
@@ -467,9 +468,14 @@ def m2_assemble_xbc_kernel(
     if t < q0:
         xbc_work.unsafe_store(cell, buf_xbc.unsafe_load((bb * q_cap + t) * cd + d))
     else:
-        xbc_work.unsafe_store(
-            cell, silu_out.unsafe_load((bb * l + (t - q0)) * cd + d)
-        )
+        var v = silu_out.unsafe_load((bb * l + (t - q0)) * cd + d)
+        comptime if MAMBA_POISON_OVERREAD:
+            # the band's sabotage: read the first element PAST silu_out's
+            # logical end ([B, L, cd]); NaN only if the guard band is there
+            var probe = silu_out.unsafe_load(b * l * cd + (d % 16))
+            if probe != probe:
+                v = probe
+        xbc_work.unsafe_store(cell, v)
 
 
 def m2_assemble_dtraw_kernel(

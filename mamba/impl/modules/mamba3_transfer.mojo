@@ -8,6 +8,8 @@ from std.memory import memcpy
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from mamba.impl.modeling.modeling_mamba import (
+    mamba_copy_in,
+    mamba_device_alloc,
     mamba_upload, mamba_download,
 )
 
@@ -20,14 +22,14 @@ def m3_upload(ctx: DeviceContext, values: List[Float32]) raises -> DeviceBuffer[
     else:
         var n = len(values)
         var n_buf = max(n, 1)
-        var dev = ctx.enqueue_create_buffer[DType.float32](n_buf)
+        var dev = mamba_device_alloc(ctx, n_buf)
         var host = ctx.enqueue_create_host_buffer[DType.float32](n_buf)
         ctx.synchronize()
         if n > 0:
             memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
         else:
             host.unsafe_ptr().unsafe_store(0, Float32(0.0))
-        ctx.enqueue_copy(dst_buf=dev, src_ptr=host.unsafe_ptr())
+        mamba_copy_in(ctx, dev, host.unsafe_ptr(), n_buf)
         ctx.synchronize()
         _ = host^
         return dev^
