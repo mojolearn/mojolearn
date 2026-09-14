@@ -144,21 +144,30 @@ def main() raises:
         raise Error("RunPod required; no local execution")
     var count = Int(String(getenv("MOJOLEARN_RESAMPLE_CHECK_DEVICES", "2")))
     var root = String(getenv("MOJOLEARN_RESAMPLE_CHECK_DIR", "/tmp"))
+    # MOJOLEARN_RESAMPLE_CHECK_ONLY=boot|perm|mc runs one family, so the
+    # sabotage build can be shown failing in each partition on its own.
+    var only = String(getenv("MOJOLEARN_RESAMPLE_CHECK_ONLY", ""))
     var stats: List[Int] = [STAT_MEAN, STAT_STD, STAT_QUANTILE, STAT_PEARSON, STAT_DIFF_MEANS, STAT_TRIMMED_MEAN]
     var reps: List[Int] = [2, 7, 1000, 4099]
     for s in stats:
+        if only != "" and only != "boot":
+            break
         for r in reps:
             boot_case(root, count, 53, 2, s, METHOD_PERCENTILE, ALT_TWO_SIDED, r, 0)
         boot_case(root, count, 53, 2, s, METHOD_BASIC, ALT_LESS, 513, 5)
         boot_case(root, count, 8, 2, s, METHOD_PERCENTILE, ALT_GREATER, 3, 5)
     var pstats: List[Int] = [STAT_DIFF_MEANS, STAT_MEAN, STAT_STD]
     for s in pstats:
+        if only != "" and only != "perm":
+            break
         perm_case(root, count, 40, 33, s, ALT_TWO_SIDED, 2, 0)
         perm_case(root, count, 40, 33, s, ALT_LESS, 999, 0)
         perm_case(root, count, 9, 12, s, ALT_GREATER, 4097, 5)
     var fs: List[Int] = [MC_F_CONST, MC_F_SUM, MC_F_PRODUCT]
     var ns: List[Int] = [1, 255, 256, 257, 1000, 100003]
     for f in fs:
+        if only != "" and only != "mc":
+            break
         for n in ns:
             mc_case(root, count, f, n, 0)
         mc_case(root, count, f, 70001, 3)
