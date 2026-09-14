@@ -890,3 +890,227 @@ files' own claims plus their gate files' existence, read at `0dcc1204e`; the
 GPU-import census is a printed grep; the hours are estimates against the
 byte LM and forest host lanes' actual cost. The certified table for the CPU
 column is empty until a workflow report is read.
+
+## Phase 1 results
+
+Branch `lane/cpu-training-phase1`, off `main` at `e32ddfaf3`, 2026-09-13.
+Every lane below was run on this Mac (Apple M4, host build `--target-cpu
+apple-m1`, Mojo 1.0.0) through a CPU-only package view (`python/mojolearn`
+without `identical/`, `fast/`, `deterministic/` and the tests, `host/`
+holding the phase 1 bindings, so `mojolearn.vendor()` is `cpu` and
+`--vendor cpu-apple-m4-host`), then diffed with `tools/identity_break.py
+--diff` against the three committed GPU columns
+`bench/results/identity_break/2026-09-13_46-lanes/{apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942}.json`
+with `--require-columns 4 --lanes <lane>`. The whole-column summary line
+carries the 46-lane column's own `DIVERGENT=8` (gbdt-feature-freq) and
+`ONE-COLUMN=18` (the two byte LM CPU lanes the GPU legs did not build); the
+lane's verdict is its nine rows and the `require-columns` line. Each lane's
+sabotage arm is the same binding built with `-D MOJOLEARN_HOST_SABOTAGE=1`,
+loaded through `MOJOLEARN_HOST_DIR` with `MOJOLEARN_HOST_ALLOW_SABOTAGE=1`.
+The seven-runner gate (`.github/workflows/cpu-identity-gate.yml`,
+`COVERED_LANES`) has not run on this branch; the certified table is still
+empty until a workflow report is read.
+
+### gemm-pinned, IDENTICAL x4
+
+Binding `bindings/_mojolearn_linalg_host.mojo` (`bindings/build_linalg_host.sh`),
+routed by `_backend._HOST_MODULES["_mojolearn_linalg"]`, exporting `gemm`,
+`linalg_numeric_mode`, `linalg_vendor` (answering `cpu`),
+`linalg_profile_version` under the GPU binding's address contract, over
+`gemm/checks/gemm_oracle.mojo::gemm_oracle`. `python/mojolearn/_linalg_impl.py`
+is unchanged.
+
+| fixture | hash (all four columns) |
+|---|---|
+| base | 931036cbc84c1ce0 |
+| ties | 8ddd60b67526c1b1 |
+| hashed | 06057c0eeb212963 |
+| wide | 01701582fa724ce4 |
+| denormal | 026720f450eda8a3 |
+| denormal_ftz | 026720f450eda8a3 |
+| dupes | 4d5d6e4a621ef9af |
+| odd | d5a7a31e551215d9 |
+| negative | 1ef67a1833b19819 |
+
+`require-columns 4 over ['gemm-pinned']: OK`; the nine rows read
+`IDENTICAL x4`. Infer and model are `n/a:function` and `n/a:no-save`, as on
+the GPU columns. Sabotage (`GEMM_ORACLE_HOST_SABOTAGE`, every leaf walked
+descending): 8 of 9 cells `DIVERGENT` with `parts differ: small,wide`
+(base 260c0a74b97fa901 against 931036cbc84c1ce0); `ties` stays
+`IDENTICAL x4` because an integer grid sums exactly in any order, which is
+why the gate requires `DIVERGENT` in the summary and not on every cell.
+
+### kde, IDENTICAL x4
+
+Binding `bindings/_mojolearn_estimators_host.mojo` (`bindings/build_estimators_host.sh`),
+routed by `_backend._HOST_MODULES["_mojolearn_estimators"]`, exporting
+`kde_score_samples`, `estimators_numeric_mode`, `estimators_vendor` under
+the GPU binding's address contract, over
+`kde/checks/kde_oracle.mojo::oracle_score_samples`, with the GPU entry's
+validation in the GPU entry's order (`kernel_from_name`, `metric_from_name`,
+`kde_fit_validate`, `kde_validate_data_ptr`, all host code in
+`kde/impl/neighbors/kernel_density.mojo`). `python/mojolearn/density.py` is
+unchanged. Every other `_mojolearn_estimators` function (dbscan, pca, tsvd,
+ols, ridge, logistic) is absent from the host binding and refuses by name.
+Risk 1 of section 5, answered for this family: `kde_oracle.mojo` imports
+`kde/impl/neighbors/kernel_density.mojo`, `kde/impl/distance/distance_ops.mojo`
+and `core/row_norms.mojo`, each of which defines kernels and imports
+`std.gpu`, and the host-only build (`--target-cpu apple-m1`, no accelerator
+target) compiled them in about a minute.
+
+| fixture | train (all four columns) | infer (all four columns) |
+|---|---|---|
+| base | e0d6e3d0623d6112 | 1a2c3054b661b72a |
+| ties | 0a800c7b3cca66e4 | 63b4da91ce458ab7 |
+| hashed | dc279c30b7c5d070 | f0d1cae79c88ca8a |
+| wide | 36c3cbb2ef71f768 | 39622885a3c508a9 |
+| denormal | 2128392fe1eb228a | 21caf753bc5b6352 |
+| denormal_ftz | 2128392fe1eb228a | 21caf753bc5b6352 |
+| dupes | e0d6e3d0623d6112 | 1a2c3054b661b72a |
+| odd | 8a2b6beee09a98f3 | e49f797e443af916 |
+| negative | 84ca35b6a157c265 | 30a64b99c13a89c4 |
+
+`require-columns 4 over ['kde']: OK`; the nine train rows and the nine
+infer rows read `IDENTICAL x4`; model is `n/a:no-save`. Sabotage
+(`KDE_ORACLE_HOST_SABOTAGE`, every logsumexp row summed descending): 9 of 9
+train cells and 9 of 9 infer cells `DIVERGENT`, `parts differ: scores`
+(base a58ce84d395f4d1e against e0d6e3d0623d6112).
+
+### holtwinters, IDENTICAL x4
+
+Binding `bindings/_mojolearn_tsa_host.mojo` (`bindings/build_tsa_host.sh`),
+routed by `_backend._HOST_MODULES["_mojolearn_tsa"]`, exporting
+`holtwinters_fit`, `holtwinters_forecast`, `tsa_vendor` under the GPU
+binding's address contract and packed layouts, over
+`holtwinters/checks/hw_oracle.mojo::oracle_fit[DType.float32]` and
+`oracle_forecast`, with the GPU entry's validation in its order
+(`holtwinters_fit_ptr`'s extent guards, `seasonal_from_name`,
+`holtwinters_validate_params`, `holtwinters_validate_data`).
+`python/mojolearn/_tsa_impl.py` is unchanged. `kpss_test` and `select_d`
+are absent and refuse by name. `hw_oracle.mojo` imports `runner.mojo`,
+`hw_decompose.mojo` and `hw_optim.mojo`, each with kernels and `std.gpu`;
+the host-only build compiled them (risk 1, answered for this family too).
+The attributes the CPU column certifies are the ones the train column
+hashes, the forecast; `n_iter_` and `criterion_` are written from the
+oracle's `niter` and `criterion`, which `hw_check::_compare_fit` holds
+bitwise to the device's, but no identity_break cell hashes them.
+
+| fixture | forecast hash (all four columns) |
+|---|---|
+| base | 9781c2061a287937 |
+| ties | b2a5df45db1395b0 |
+| hashed | 66f688c307cabc3b |
+| wide | 560cdc45a69cc987 |
+| denormal | db35c88da059e9e1 |
+| denormal_ftz | db35c88da059e9e1 |
+| dupes | 9781c2061a287937 |
+| odd | 8fb4dd76d8080a46 |
+| negative | 8fa4116875bdf59c |
+
+`require-columns 4 over ['holtwinters']: OK`; the nine rows read
+`IDENTICAL x4`; infer is `n/a:forecast`, model `n/a:no-save`. Sabotage
+(`HW_ORACLE_HOST_SABOTAGE`, the SSE fused multiply-add split into two
+roundings): 6 of 9 cells `DIVERGENT`, `parts differ: forecast` (base
+3bf92be9d53726e1 against 9781c2061a287937); `denormal`, `denormal_ftz` and
+`wide` stay `IDENTICAL x4`, because the lane's series (a cumulative sum of
+column 0 plus 50) is nearly constant on those fixtures and BFGS ends at the
+same parameters under both spellings of the loss. The gate requires
+`DIVERGENT` in the summary, which holds; a fixture the arm cannot move is
+recorded, not hidden.
+
+### lasso and elasticnet, IDENTICAL x4
+
+Binding `bindings/_mojolearn_solver_host.mojo` (`bindings/build_solver_host.sh`),
+routed by `_backend._HOST_MODULES["_mojolearn_solver"]`, exporting `cd_fit`,
+`cd_predict`, `solver_vendor` under the GPU binding's address contract
+(column-major design, the nine-value and three-value params lists). The
+fit is `solver/checks/cd_oracle.mojo::cd_oracle_fit` at `profile=True`
+(every reduction a `gemm_oracle_cell`); the predict restates
+`linearRegH`'s IDENTICAL arm, `gemm_oracle(x, coef, OP_TN, n_rows, 1,
+n_cols)` then `ftz(v + intercept)`, because `solver/impl/functions/linear_reg.mojo`
+defines the kernels beside it. The guards are `cd_fit_host`'s then
+`cd_fit_traced`'s, in their order and words (`sample_weight` and `shuffle`
+refused by name as on the device). `python/mojolearn/_solver_impl.py` is
+unchanged. `linkage_fit` is absent until the agglomerative lane.
+`cd_oracle.mojo` imports `solver/checks/profile_dot.mojo`, which imports
+`max.gpu.host` and `gemm/checks/gemm_identical.mojo` (the kernels); the
+host-only build compiled it (the risk named in section 1.1 for this lane,
+answered).
+
+A FINDING ON THE WAY. The first run REFUSED every cell at
+`_mojolearn.transpose_f32`: `python/mojolearn/_buffer.py::_native` resolves
+the input converters (`transpose_f32`, `cast_colmajor_f64_to_f32`,
+`cast_f64_to_f32`, `all_finite_*`) from the BASE binding, and `cdFit`'s
+Fortran-order design goes through `transpose_f32`, which no host binding
+carried (`_host_native` covers only the byte LM and forest host sets, none
+of which has the transpose). Section 3.2's "the Python estimator classes
+need no change" holds, but the base binding's host helpers are a
+dependency of every lane whose Python layer converts an array, not of
+kmeans and knn alone. `bindings/_mojolearn_core_host.mojo`
+(`bindings/build_core_host.sh`, routed by `_HOST_MODULES["_mojolearn"]`)
+carries the eleven helpers under the base binding's names (the transpose
+pair MIRRORS `_tiled_transpose_to_f32` element for element; the rest are
+`bindings/host_helpers.mojo`), and nothing else, so kmeans and knn keep
+refusing by name. It moves bytes and folds nothing, so it has no sabotage
+arm; `core_host_sabotage()` reports the define so a sabotage set loads as
+one set.
+
+| fixture | lasso train | lasso infer | elasticnet train | elasticnet infer |
+|---|---|---|---|---|
+| base | 2fa3301e45a46091 | 7334b38e7b651e27 | 2cf742083831ee9d | 483bce4b8cc1a137 |
+| ties | 1e207f82f555270b | ff61f45db38db46d | 118eac19578010ab | a767a79709358382 |
+| hashed | 0446105edc307f9c | 482da47ba9b49877 | 00b6923d62a41c0a | db0926772dbaaff4 |
+| wide | d0df889b0ede05a7 | 1f85238c927b088e | ef8800eaf0ca4f87 | e37614bc5b2ef0af |
+| denormal | 5374b434a96382d6 | b92e9bfda9b725b4 | 3add60ff69fd788c | 0047832ca8c561a3 |
+| denormal_ftz | 5374b434a96382d6 | b92e9bfda9b725b4 | 3add60ff69fd788c | 0047832ca8c561a3 |
+| dupes | beafb1d480c34cf4 | 727d68f61ef51bfb | 97d4c8c235d38bfe | fc18f039274052f1 |
+| odd | 5593579edd6113d6 | 1c17e2eb1ef6a2e2 | 1a518e703b7dd1d9 | 75a88217f1114867 |
+| negative | c332c713694ff28d | 0167126d36a4243d | 7624315e7deffe10 | a21e833e3e925b89 |
+
+`require-columns 4 over ['lasso']: OK` and `require-columns 4 over
+['elasticnet']: OK`; all 36 rows (nine train and nine infer per lane) read
+`IDENTICAL x4`; model is `n/a:no-save`. Sabotage (the GEMM oracle's
+descending leaf, reached through every `gemm_oracle_cell` reduction of the
+CD oracle): 9 of 9 train and 9 of 9 infer cells `DIVERGENT` on each lane,
+`parts differ: coef,predict` (lasso base 61a6ae20cfafca49 against
+2fa3301e45a46091; elasticnet base 3bde50d4452e548a against
+2cf742083831ee9d).
+
+### svc, IDENTICAL x4
+
+Binding `bindings/_mojolearn_svm_host.mojo` (`bindings/build_svm_host.sh`),
+routed by `_backend._HOST_MODULES["_mojolearn_svm"]`, exporting `svc_fit`,
+`svc_predict`, `svm_vendor`, `svm_numeric_mode` under the GPU binding's
+address contract (worst-case sized outputs, the five float64 info slots),
+over `svm/checks/smo_oracle.mojo::smo_oracle_fit[DType.float32]` and
+`smo_oracle_decision`, with the GPU entry's guards in its order
+(`svc_fit_host_borrowed`, `svc_fit_borrowed`, `_svc_label_model`), the
+one-vs-rest targets by `ovr_labels_kernel`'s rule, the support matrix by
+`CollectSupportVectorMatrix`'s gather, and `applyPrediction`'s epilogue
+`label0 if val < 0 else label1`. `python/mojolearn/_svm_impl.py` is
+unchanged. `svr_fit`, `svr_predict` and `iforest_run` are absent and refuse
+by name. `smo_oracle.mojo` imports `svm/impl/smosolver.mojo` (kernels,
+`std.gpu`) for `fold_order_for` and `hash_f32_list`; the host-only build
+compiled it. The lane's `max_iter=200` fixture converges the same way on
+all four columns (the risk named in section 1.1). `n_iter_` is the oracle's
+inner iteration count, held to the device per outer iteration by
+`svc_check` but hashed by no cell.
+
+| fixture | train (decision, predict) | infer |
+|---|---|---|
+| base | dec306e940b8a444 | 4aee3fcc51c4761e |
+| ties | 2093351e33d072ed | e400ffe98db4b786 |
+| hashed | 274bf9087fb0750e | 94cb46a9aa6a811c |
+| wide | 550d1845e417ca18 | ee2e31ef0e3bbfcb |
+| denormal | 549c0b5c319d84cf | ebc593040592ca1e |
+| denormal_ftz | 549c0b5c319d84cf | ebc593040592ca1e |
+| dupes | b2f0d9a49c9f241c | 6e5c253fa1d7ea5b |
+| odd | 61b1676a7e40c914 | acd970db5a3ae605 |
+| negative | 667155f7eda847aa | 685bebcb29a0cf8c |
+
+`require-columns 4 over ['svc']: OK`; the nine train rows and the nine
+infer rows read `IDENTICAL x4`; model is `n/a:no-save`. Sabotage
+(`SMO_ORACLE_HOST_SABOTAGE`, the SMO oracle's GEMM leaf walked descending):
+8 of 9 train cells `DIVERGENT` (`parts differ: decision`, and on `wide`
+the predicted labels too) and 8 of 9 infer cells; `ties` stays
+`IDENTICAL x4`, the integer grid summing exactly in any order.

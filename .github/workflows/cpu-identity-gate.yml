@@ -20,11 +20,13 @@
 # implementation and STABLE for every lane in COVERED_LANES.
 #
 # COVERED_LANES is the list of identity_break lanes that have a CPU
-# implementation. IT IS EMPTY TODAY: phase 0 is the pattern, and phase 1 of
-# the brief adds lanes here as each host fit lands (gemm-pinned first). While
-# it is empty the "covered" steps say so and run nothing; they are not a
-# pass, they are a statement. The smoke step runs regardless and FAILS if the
-# run produces no cell, a cell that is not the refusal by name, a vendor label
+# implementation, and HOST_FAMILIES the phase 1 host bindings that serve them
+# (bindings/build_<family>_host.sh, routed by _backend._HOST_MODULES). Phase
+# 1 of the brief adds a lane and its family here as each host fit lands
+# (gemm-pinned over the linalg host binding first, 2026-09-13). Were the list
+# empty the "covered" steps would say so and run nothing; that is not a pass,
+# it is a statement. The smoke step runs regardless and FAILS if the run
+# produces no cell, a cell that is not the refusal by name, a vendor label
 # that is not derived, or an empty commit.
 #
 # A green job enters the brief's certified table only after its uploaded
@@ -46,8 +48,16 @@ on:
       - "checks/numerics.mojo"
       - "bindings/_mojolearn_byte_lm_host.mojo"
       - "bindings/_mojolearn_forest_host.mojo"
+      - "bindings/_mojolearn_*_host.mojo"
       - "bindings/build_byte_lm_host.sh"
       - "bindings/build_forest_host.sh"
+      - "bindings/build_*_host.sh"
+      - "gemm/checks/gemm_oracle.mojo"
+      - "kde/checks/kde_oracle.mojo"
+      - "holtwinters/checks/hw_oracle.mojo"
+      - "solver/checks/cd_oracle.mojo"
+      - "solver/checks/profile_dot.mojo"
+      - "svm/checks/smo_oracle.mojo"
       - "bindings/host_helpers.mojo"
       - "bindings/hostptr.mojo"
       - "core/forest_host_predict.mojo"
@@ -70,10 +80,17 @@ permissions: {}
 
 env:
   # The identity_break lanes with a CPU implementation, comma separated, no
-  # spaces. Empty until phase 1 lands its first lane. A lane listed here must
-  # read STABLE on every fixture and IDENTICAL x4 against the three GPU
-  # columns; a lane not listed must read REFUSED by name.
-  COVERED_LANES: ""
+  # spaces. A lane listed here must read STABLE on every fixture and
+  # IDENTICAL x4 against the three GPU columns; a lane not listed must read
+  # REFUSED by name.
+  COVERED_LANES: "gemm-pinned,kde,holtwinters,lasso,elasticnet,svc"
+  # The phase 1 host binding families, space separated: each is built by
+  # bindings/build_<family>_host.sh into MOJOLEARN_<FAMILY>_HOST_OUTDIR (the
+  # production set under python/mojolearn/host/, then the sabotage set under
+  # runner.temp), read back as the CPU column, and named in host.families.
+  HOST_FAMILIES: "core linalg estimators tsa solver svm"
+  # The same list as the read-back's --binding arguments.
+  HOST_BINDINGS: "_mojolearn_core_host _mojolearn_linalg_host _mojolearn_estimators_host _mojolearn_tsa_host _mojolearn_solver_host _mojolearn_svm_host"
   # The three committed GPU columns the CPU column is diffed against.
   GPU_COLUMNS: >-
     bench/results/identity_break/2026-09-13_three-columns/apple-m4.json
@@ -194,6 +211,15 @@ jobs:
           set -o pipefail
           MOJOLEARN_BUILD_JOBS=2 sh bindings/build_forest_host.sh 2>&1 | tee "$GATE_OUT/build_forest_host.log"
 
+      # The phase 1 host set, one binding per family in HOST_FAMILIES, each
+      # exporting the GPU binding's names for the fits it covers.
+      - name: Build the phase 1 host bindings (CPU column)
+        run: |
+          set -o pipefail
+          for family in $HOST_FAMILIES; do
+            MOJOLEARN_BUILD_JOBS=2 sh "bindings/build_${family}_host.sh" 2>&1 | tee "$GATE_OUT/build_${family}_host.log"
+          done
+
       # The package must take the CPU-only path on this runner, and each host
       # binding must read back as the CPU column. A binding that compiled as
       # another column does not exist (its comptime assert refuses), so this
@@ -201,8 +227,10 @@ jobs:
       - name: Host bindings read back the CPU column
         run: |
           set -o pipefail
+          bindings=""
+          for b in $HOST_BINDINGS; do bindings="$bindings --binding $b"; done
           python3 tools/cpu_identity_gate_check.py readback \
-            --binding _mojolearn_byte_lm_host --binding _mojolearn_forest_host 2>&1 \
+            --binding _mojolearn_byte_lm_host --binding _mojolearn_forest_host $bindings 2>&1 \
             | tee "$GATE_OUT/readback.log"
 
       # The fixture directories split by what expected.json says. Only
@@ -293,7 +321,7 @@ jobs:
             --json "$GATE_OUT/cpu-smoke-${{ matrix.slot }}.json" 2>&1 | tee "$GATE_OUT/cpu_smoke.log"
           python3 tools/cpu_identity_gate_check.py column "$GATE_OUT/cpu-smoke-${{ matrix.slot }}.json" \
             --covered "$COVERED_LANES" --commit "$MOJOLEARN_COMMIT" \
-            --binding _mojolearn_byte_lm_host,_mojolearn_forest_host 2>&1 | tee "$GATE_OUT/cpu_smoke_check.log"
+            --binding "_mojolearn_byte_lm_host,_mojolearn_forest_host,$(echo $HOST_BINDINGS | tr ' ' ,)" 2>&1 | tee "$GATE_OUT/cpu_smoke_check.log"
 
       # THE FOURTH COLUMN, THE COVERED LANES. Every fixture, two repeats, then
       # the four-way diff with --require-columns 4 on exactly those lanes.
@@ -312,26 +340,35 @@ jobs:
             --json "$GATE_OUT/cpu-${{ matrix.slot }}.json" 2>&1 | tee "$GATE_OUT/cpu_column.log"
           python3 tools/cpu_identity_gate_check.py column "$GATE_OUT/cpu-${{ matrix.slot }}.json" \
             --covered "$COVERED_LANES" --commit "$MOJOLEARN_COMMIT" \
-            --binding _mojolearn_byte_lm_host,_mojolearn_forest_host 2>&1 | tee "$GATE_OUT/cpu_column_check.log"
+            --binding "_mojolearn_byte_lm_host,_mojolearn_forest_host,$(echo $HOST_BINDINGS | tr ' ' ,)" 2>&1 | tee "$GATE_OUT/cpu_column_check.log"
           python3 tools/identity_break.py --diff $GPU_COLUMNS "$GATE_OUT/cpu-${{ matrix.slot }}.json" \
             --require-columns 4 --lanes "$COVERED_LANES" 2>&1 | tee "$GATE_OUT/diff_four_columns.txt"
 
       # The covered lanes' negative control (brief section 3.4). A gate that
       # cannot fail proves nothing, so the whole host set is built again with
       # -D MOJOLEARN_HOST_SABOTAGE=1 into its own directory (honored in
-      # gemm_oracle by reversing the leaf fold, and in the ET and iforest RNGs
-      # by one extra draw, both landing with phase 1's first lanes), loaded
-      # through MOJOLEARN_HOST_DIR with MOJOLEARN_HOST_ALLOW_SABOTAGE=1, run on
-      # the covered lanes, and the four-way diff must exit non-zero with
+      # gemm_oracle by walking every leaf DESCENDING, which reaches every
+      # lane whose host oracle folds through gemm_oracle_cell, and in
+      # kde_oracle by summing every logsumexp row descending, in hw_oracle
+      # by splitting the SSE fused multiply-add, in smo_oracle by walking
+      # its GEMM leaf descending; each further phase 1 binding names the
+      # fold its arm moves), loaded through
+      # MOJOLEARN_HOST_DIR with MOJOLEARN_HOST_ALLOW_SABOTAGE=1, run on the
+      # covered lanes, and the four-way diff must exit non-zero with
       # DIVERGENT on them. Every covered cell must still be STABLE (a wrong
-      # answer, not a refusal). Empty COVERED_LANES skips it with the same
-      # statement as above.
+      # answer, not a refusal). A fixture on which the moved fold is exact
+      # (gemm-pinned/ties, an integer grid) stays IDENTICAL; the requirement
+      # is DIVERGENT in the summary, not on every cell. Empty COVERED_LANES
+      # skips it with the same statement as above.
       - name: The CPU column, covered lanes must diverge under MOJOLEARN_HOST_SABOTAGE
         if: always()
         timeout-minutes: 50
         env:
           MOJOLEARN_BYTE_LM_HOST_OUTDIR: ${{ runner.temp }}/host-sab
           MOJOLEARN_FOREST_HOST_OUTDIR: ${{ runner.temp }}/host-sab
+          # The phase 1 build scripts read MOJOLEARN_HOST_OUTDIR when their
+          # own MOJOLEARN_<FAMILY>_HOST_OUTDIR is unset.
+          MOJOLEARN_HOST_OUTDIR: ${{ runner.temp }}/host-sab
           MOJOLEARN_BUILD_EXTRA_DEFINES: "-D MOJOLEARN_HOST_SABOTAGE=1"
         run: |
           set -o pipefail
@@ -341,6 +378,9 @@ jobs:
           fi
           MOJOLEARN_BUILD_JOBS=2 sh bindings/build_byte_lm_host.sh 2>&1 | tee "$GATE_OUT/build_byte_lm_host_sab.log"
           MOJOLEARN_BUILD_JOBS=2 sh bindings/build_forest_host.sh 2>&1 | tee "$GATE_OUT/build_forest_host_sab.log"
+          for family in $HOST_FAMILIES; do
+            MOJOLEARN_BUILD_JOBS=2 sh "bindings/build_${family}_host.sh" 2>&1 | tee "$GATE_OUT/build_${family}_host_sab.log"
+          done
           export MOJOLEARN_HOST_DIR="${{ runner.temp }}/host-sab" MOJOLEARN_HOST_ALLOW_SABOTAGE=1
           python3 tools/identity_break.py --lanes "$COVERED_LANES" \
             --json "$GATE_OUT/cpu-sab-${{ matrix.slot }}.json" 2>&1 | tee "$GATE_OUT/cpu_sabotage.log"

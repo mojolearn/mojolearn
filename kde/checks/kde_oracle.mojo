@@ -42,6 +42,7 @@ comparison is a REPORT.
 
 from std.math import cos, exp, lgamma, log, pi, sqrt
 from std.memory import bitcast
+from std.sys.compile import is_defined
 
 from core.row_norms import NORM_TPB
 from kde.impl.distance.distance_ops import (
@@ -73,6 +74,16 @@ from checks.numerics import (
     identical_sqrt,
 )
 
+
+#: THE NEGATIVE CONTROL OF THE CPU IDENTITY GATE (the CPU training lane,
+#: 2026-09-13, brief section 3.4). `-D MOJOLEARN_HOST_SABOTAGE=1` makes
+#: `oracle_logsumexp_row` sum the shifted exponentials DESCENDING instead of
+#: ascending, so the estimators host binding built with it computes a
+#: different fold and the kde lane must read DIVERGENT against the GPU
+#: columns. Passed by the host build scripts only; a host binding that
+#: carries it says so through `<prefix>_sabotage()` and is refused outside
+#: the gate (`python/mojolearn/_backend.py::load_host_module`).
+comptime KDE_ORACLE_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
 comptime ORACLE_FLOAT32_MIN_BITS: UInt32 = 0xFF7FFFFF
 comptime ORACLE_LOG_FLOOR = Float32(1e-30)
@@ -235,8 +246,15 @@ def oracle_logsumexp_row(
     if max_exp == bitcast[DType.float32](UInt32(0xFF800000)):
         return (max_exp, max_exp)
     var s = Float32(0.0)
-    for j in range(n_train):
-        s = ftz(s + ftz(identical_exp(ftz(logk[base + j] - max_exp))))
+    comptime if KDE_ORACLE_HOST_SABOTAGE:
+        # THE SABOTAGE ARM: the same row, summed DESCENDING. Wrong on
+        # purpose; see KDE_ORACLE_HOST_SABOTAGE.
+        for jj in range(n_train):
+            var j = n_train - 1 - jj
+            s = ftz(s + ftz(identical_exp(ftz(logk[base + j] - max_exp))))
+    else:
+        for j in range(n_train):
+            s = ftz(s + ftz(identical_exp(ftz(logk[base + j] - max_exp))))
     return (max_exp, ftz(identical_log(s) + max_exp))
 
 

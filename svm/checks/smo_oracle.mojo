@@ -60,6 +60,7 @@ opening either implementation.
 from std.builtin.sort import sort
 from std.math import exp, fma, inf, isnan
 from std.memory import bitcast
+from std.sys.compile import is_defined
 
 from gemm.checks.gemm_oracle import (
     contract_leaf_size,
@@ -78,6 +79,17 @@ from svm.impl.svm_parameter import (
     SvmParameter,
 )
 
+
+#: THE NEGATIVE CONTROL OF THE CPU IDENTITY GATE (the CPU training lane,
+#: 2026-09-13, brief section 3.4). `-D MOJOLEARN_HOST_SABOTAGE=1` makes the
+#: Float32 `_dot` walk every GEMM leaf DESCENDING instead of ascending (the
+#: same fold gemm_oracle's own arm moves; this file spells the leaf loop
+#: itself because it is dtype-generic), so the svm host binding built with
+#: it solves a different problem and the svc lane must read DIVERGENT
+#: against the GPU columns. Passed by the host build scripts only; a host
+#: binding that carries it says so through `<prefix>_sabotage()` and is
+#: refused outside the gate (`python/mojolearn/_backend.py::load_host_module`).
+comptime SMO_ORACLE_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
 comptime ORACLE_WS_SIZE = 1024
 comptime ORACLE_MAX_INNER = 10000
@@ -184,10 +196,21 @@ def _dot[dt: DType](
         var partials = List[Float32]()
         for t in range(pcount):
             var acc = Scalar[dt](0)
-            for c in range(leaf_begin(t, leaf), leaf_end(t, leaf, k)):
-                acc = _flush[dt](
-                    _mad[dt](_flush[dt](xa[ia * k + c]), _flush[dt](xb[ib * k + c]), acc)
-                )
+            comptime if SMO_ORACLE_HOST_SABOTAGE:
+                # THE SABOTAGE ARM: the same leaf, walked DESCENDING. Wrong
+                # on purpose; see SMO_ORACLE_HOST_SABOTAGE.
+                var lo = leaf_begin(t, leaf)
+                var hi = leaf_end(t, leaf, k)
+                for q in range(hi - lo):
+                    var c = hi - 1 - q
+                    acc = _flush[dt](
+                        _mad[dt](_flush[dt](xa[ia * k + c]), _flush[dt](xb[ib * k + c]), acc)
+                    )
+            else:
+                for c in range(leaf_begin(t, leaf), leaf_end(t, leaf, k)):
+                    acc = _flush[dt](
+                        _mad[dt](_flush[dt](xa[ia * k + c]), _flush[dt](xb[ib * k + c]), acc)
+                    )
             partials.append(rebind[Float32](_flush[dt](acc)))
         return rebind[Scalar[dt]](fold_balanced_tree(partials))
     else:
