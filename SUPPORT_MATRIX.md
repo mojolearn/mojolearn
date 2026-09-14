@@ -117,6 +117,15 @@ three-column rerun reads IDENTICAL x3 on every cell of every lane, this one incl
 (`bench/results/identity_break/2026-09-14_46-lanes/README.md`, 414 train and 459 infer and
 model cells on an Apple M4, an NVIDIA H100 and an AMD MI300X, no one-column cell).
 
+**Mamba-2 on the DigitalOcean MI325X image, 2026-09-14, DEVIATION 2713, open.** On a DigitalOcean
+MI325X droplet (Ubuntu 24.04 ROCm image) every mamba2 launch aborts the process with "Memory access
+fault by GPU node-1 ... Reason: Unknown": the 120-lane identity run died there right after the
+mamba1 lane, and both runs of `tools/mamba2_step_probe.py` died at their first launch
+(`bench/results/mamba2_probe/README.md`). The same commit runs the lane to completion on the Hot
+Aisle MI300X (22.04 ROCm container) and matches the Apple M4 bit for bit in a fresh process, so
+this is a kernel of the Mamba-2 path reading past an allocation that the MI300X's allocator
+happens to back, or the 24.04 image's driver; it is not the 2712 race and is diagnosed apart.
+
 **Mamba-2 step on AMD, 2026-09-14, DEVIATION 2712, open.** In the 120-lane record at 65ae7612f
 (`bench/results/identity_break/2026-09-14_120-lanes/README.md`) the MI300X column's `mamba2` cells
 differ from the Apple M4 and H100 columns on all nine fixtures in the `step` and `backward` parts
