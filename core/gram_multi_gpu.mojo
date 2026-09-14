@@ -5,6 +5,7 @@ from std.gpu import block_idx, block_dim, thread_idx
 from max.gpu.host import DeviceContext, DeviceBuffer
 from max.algorithm import sync_parallelize
 from core.multi_gpu import peer_clone, copy_columns_kernel
+from core.step_phase import STEP_PHASE_TIMERS
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul_add
 from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
 from gemm.checks.gemm_oracle import OP_TN
@@ -16,8 +17,8 @@ def pinned_gemm_nt_gram_kernel(
     m_in: Int32,
     n_in: Int32,
     k_in: Int32,
-    first_in: Int32 = 0,
-    count_in: Int32 = 0,
+    first_in: Int32,
+    count_in: Int32,
 ):
     """`z[m x n] = x[m x k] ."""
     var m = Int(m_in)
@@ -73,6 +74,8 @@ def parallel_gram_outputs[tn: Bool](ctx: DeviceContext,
         return False
     if count < 1 or count > 64 or GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         raise Error("parallel Gram outputs require IDENTICAL and 1..64 devices")
+    comptime if STEP_PHASE_TIMERS:
+        raise Error("parallel Gram cannot use process-global GEMM phase counters")
     count = min(count,m)
     ctx.synchronize()
     var shards = List[GramOutputShard]()
