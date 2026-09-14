@@ -104,7 +104,7 @@ def main():
         if d == 3:
             for kernel in ('gaussian', 'tophat', 'epanechnikov', 'exponential', 'linear', 'cosine'):
                 for weighted in (False, True):
-                    weights = np.arange(41, dtype='<f4') if weighted else None
+                    weights = np.arange(1, 42, dtype='<f4') if weighted else None
                     model = KernelDensity(kernel=kernel, bandwidth=0.5,
                                           numeric_mode='identical').fit(X, sample_weight=weights)
                     check(model, Q, 'score_samples')
