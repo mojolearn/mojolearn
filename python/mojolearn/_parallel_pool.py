@@ -58,6 +58,8 @@ class DevicePool:
                     env['MOJOLEARN_SVM_DEVICE_COUNT'] = str(len(group))
                     env['MOJOLEARN_GP_DEVICE_COUNT'] = str(len(group))
                     env['MOJOLEARN_DBSCAN_DEVICE_COUNT'] = str(len(group))
+                    env['MOJOLEARN_NEIGHBORS_DEVICE_COUNT'] = str(len(group))
+                    env['MOJOLEARN_HIERARCHY_DEVICE_COUNT'] = str(len(group))
                 self._workers.append(subprocess.Popen(
                     [sys.executable, '-m', 'mojolearn._parallel_worker'], env=env,
                     stdin=subprocess.PIPE, stdout=subprocess.PIPE))

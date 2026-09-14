@@ -834,6 +834,7 @@ def metrics_vendor_binding() raises -> PythonObject:
 def PyInit__mojolearn_metrics() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_metrics")
+        m.def_function[graph_parallel_available_binding]("graph_parallel_available")
         m.def_function[metrics_vendor_binding]("metrics_vendor")
         m.def_function[umap_fit_transform_binding]("umap_fit_transform")
         m.def_function[umap_transform_binding]("umap_transform")
@@ -868,3 +869,7 @@ def PyInit__mojolearn_metrics() abi("C") -> PythonObject:
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_metrics: ", e))
+
+
+def graph_parallel_available_binding() raises -> PythonObject:
+    return PythonObject(1)

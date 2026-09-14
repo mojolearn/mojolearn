@@ -117,6 +117,7 @@ ORDER of the set, which is a different property from WHICH set.
 """
 
 from core.identity_trace import IdentityTrace
+from neighbors.impl.multi_gpu import knn_device_count, parallel_knn_rows
 from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -486,6 +487,7 @@ def _knn_search_traced_retaining(
                 " undefined at the origin (DEVIATION 553)"
             )
 
+    var devices = knn_device_count(n_queries, knn_method)
     var query_tile = plan_query_tile(n_index, n_queries, requested_query_tile)
 
     # `scaling_main.mojo`'s sizing. `buf_len` must clear `k` or the fallback
@@ -570,32 +572,37 @@ def _knn_search_traced_retaining(
             trace.record_device(ctx, "knn.index_norm", index_norm, n_index)
             trace.record_device(ctx, "knn.query_norm", query_norm, n_queries)
 
-    brute_force_knn_impl(
-        ctx,
-        queries,
-        query_norm,
-        index,
-        index_norm,
-        dist_tile,
-        buf_val,
-        buf_idx,
-        out_dist,
-        out_idx,
-        out_i32,
-        n_queries,
-        n_index,
-        n_features,
-        k,
-        query_tile,
-        buf_len,
-        return_sqrt,
-        False,
-        True,
-        True,
-        knn_method,
-        mtr,
-        metric_arg,
-    )
+    if devices > 1:
+        query_tile = parallel_knn_rows(ctx, queries, query_norm, index, index_norm,
+            out_dist, out_idx, n_queries, n_index, n_features, k, query_tile, buf_len,
+            return_sqrt, knn_method, mtr, metric_arg, devices)
+    else:
+        brute_force_knn_impl(
+            ctx,
+            queries,
+            query_norm,
+            index,
+            index_norm,
+            dist_tile,
+            buf_val,
+            buf_idx,
+            out_dist,
+            out_idx,
+            out_i32,
+            n_queries,
+            n_index,
+            n_features,
+            k,
+            query_tile,
+            buf_len,
+            return_sqrt,
+            False,
+            True,
+            True,
+            knn_method,
+            mtr,
+            metric_arg,
+        )
     ctx.synchronize()
 
     # Device -> pinned host buffer -> the caller's memory. The second hop is
