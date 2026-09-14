@@ -8,14 +8,21 @@ distributed fit of one estimator.
 
 ## Compute and memory are separate requirements
 
-The byte-LM driver pools AdamW moments, rollback copies and gradient-reduction
-scratch in disjoint device ranges; parameters, gradients and activations remain replicated. SmallMLP
+The byte-LM replica driver pools AdamW moments, rollback copies and gradient-reduction
+scratch in disjoint device ranges. A separate `PooledByteLanguageModelTrainer`
+partitions decoder layers, parameters, moments, gradients and rollback storage,
+with embedding/head on the first GPU. Its 958,746,624-parameter fixture completes
+a step on two RTX 5090s while both the existing trainer and the same new
+driver run out of memory on one. Nine new same-source H100/5090 groups match
+complete state, gradient and loss hashes.
+Each individual layer and embedding/head must still fit an owner, and portable
+state construction/export requires full host arrays. SmallMLP
 and Samba use host-staged disjoint optimizer ranges after the original global
 clip. Their gradient computations still require a complete model per worker.
 Forests replicate training data; KMeans retains full-data work on the root.
 These remaining allocations limit capacity. A model or dataset that exceeds one GPU's
 memory needs additional partitioning and a memory-bounded replay mechanism.
-Neural model capacity and performance scaling have not been qualified. A separate
+Other neural model capacities and performance scaling remain unqualified. A separate
 reference-sharded KNN path has passed a 96 GiB host-staged index gate on two
 80 GB H100s; it does not keep the full index resident in pooled VRAM. ARIMA now
 partitions independent series during fit, and scalers partition feature columns
@@ -33,7 +40,7 @@ H100-only evidence, and new AMD/Apple multi-device qualification remains owed.
 
 | Surface | Current multi-GPU coverage | Remaining numerical work |
 | --- | --- | --- |
-| SmallByteLanguageModelTrainer / LanguageModelTrainer | Concurrent microbatch waves, ordered replay and pooled AdamW moments, rollback copies and reduction scratch | Weight/activation partitioning; larger capacity and cross-vendor qualification |
+| SmallByteLanguageModelTrainer / LanguageModelTrainer | Replica training with pooled optimizer/reduction buffers; separate layer-owned model trainer with RTX 5090 capacity and H100/5090 ordered-replay gates | Broader shapes; memory-bounded single-GPU replay when the model exceeds VRAM; AMD/Apple qualification |
 | SmallMLPTrainer | Concurrent microbatch gradients, ordered sum and host-staged optimizer ranges | Larger shapes; resident state and model/activation pooling |
 | SambaStack | Concurrent microbatch gradients, ordered sum, original global clipping and host-staged optimizer ranges | Broader configurations; resident state and model/activation pooling |
 | RandomForestClassifier / RandomForestRegressor | Global tree-ID ranges over full data | Larger forests; data partitioning |

@@ -29,3 +29,7 @@ receipt covers the prior root-scratch implementation; matching its retained
 outputs is replay evidence, not a new same-source H100/AMD/Apple qualification
 of this changed driver. No throughput or beyond-single-GPU model claim.
 The pod remains leased for the next model-memory pooling work.
+
+Final lifecycle: the shared RTX pod completed the later model-pooling jobs
+and was terminated. See `../byte-model-pool-rtx5090/termination.log` for
+DELETE/GET verification. The earlier statement that it remains leased is superseded.

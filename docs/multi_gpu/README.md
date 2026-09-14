@@ -20,8 +20,9 @@ qualify their subsequent kernel-row paths on two H100s.
 
 | Surface | Partition | Numerical contract |
 | --- | --- | --- |
+| Pooled byte language model | Decoder layers and their model/optimizer state; embedding/head on the first device | Original layer kernels, ordered logical gradient sums and atomic owned AdamW updates |
 | Byte language model | Logical microbatches across resident device replicas | Copy gradient 0; left-fold gradients 1..K-1; disjoint AdamW updates and parameter broadcast |
-| SmallMLPTrainer | Frozen microbatch snapshots on concurrent GPU workers | Same ordered sum; one update on the first selected GPU |
+| SmallMLPTrainer | Frozen microbatch snapshots on concurrent GPU workers | Same ordered sum; original global clipping and disjoint host-staged optimizer updates |
 | SambaStack (Mamba/attention blocks) | Frozen microbatch snapshots on concurrent GPU workers | Same ordered sum; explicit logical dropout stream/offsets |
 | RandomForest classifier/regressor | Whole trees over full replicated data | Original global tree IDs, seed and quantiles; original prediction order |
 | ExtraTrees classifier/regressor | Whole trees over full replicated data | Original global tree IDs and full-data label quantization; original prediction order |
@@ -216,8 +217,9 @@ visibility or environment settings around concurrent fits.
 Here, rollout means completing implementation and cloud qualification, not a
 backward-compatibility or staged-release process. Alpha API changes are allowed.
 The [coverage inventory](COVERAGE.md) distinguishes estimator support from
-memory capacity. Neural state and several classical root paths still require
-one GPU to hold complete state. Independent-series and scaler-column workers
+memory capacity. MLP/Samba retain complete host model replicas; their GPU operations and
+several classical root paths still impose individual-device memory limits. Byte-LM layer pooling removes that model-wide
+GPU requirement; an individual layer and embedding/head must fit their owners. Independent-series and scaler-column workers
 receive only their partitions, but beyond-single-GPU capacity is not qualified.
 
 The user's requested order is neural training, forests/ExtraTrees, then
@@ -227,8 +229,8 @@ boosting and classical estimators. The following remain unimplemented:
   partitions and qualification; the root eigensolver state still requires one GPU.
 - Broader neighbor/density/graph configurations, resident reference and graph
   pooling, and native-only surfaces need additional partitions and qualification.
-- Resident staging reuse, larger models,
-  eight physical GPUs, H100/5090 replay, AMD/Apple cross-vendor evidence,
+- Full MLP/Samba model partitioning, resident staging reuse, additional model shapes,
+  eight physical GPUs, AMD/Apple cross-vendor evidence,
   injected lost-device recovery, and throughput/cost measurements.
 
 Unsupported estimators are not silently routed through independent subset
@@ -452,7 +454,8 @@ original elementwise AdamW kernel, then broadcasts its updated parameter slice.
 On failure the group restores every owned range before rebuilding replicas.
 
 `optimizer_ownership()` reports actual native ranges and allocated moment,
-rollback and gradient-reduction bytes. Across K devices these buffers total 20 bytes per parameter,
+rollback and gradient-reduction bytes. Across K devices moments and rollback
+total 20 bytes per parameter (reduction scratch adds eight),
 compared with 20*K for complete optimizer replicas. Parameters, full gradients,
 model weight copies and activations remain replicated; this is optimizer-state
 pooling, not full pooled model capacity. `pool_optimizer=False` retains the
@@ -477,7 +480,7 @@ moment range during that phase. The full-gradient clipping allocation is freed
 before those updates. Full host arrays stage all results, and caller state is
 published only after every worker succeeds. This is not persistent optimizer
 residency or pooled model weights/activations. SmallMLP and Samba gradient
-workers still need a complete model.
+workers still need a complete host model.
 
 The native entry selects this path with `MOJOLEARN_OPTIMIZER_DEVICE_COUNT`;
 cooperative workers set it to their selected device count, and one device
@@ -520,3 +523,44 @@ The frozen-source record precedes the distributed gradient-scratch change.
 That change separately passes RTX 5090 ownership, 2/3/5/8-logical-shard replay
 and recovery gates, retaining the earlier output hashes; its evidence is in
 `bench/results/multi_gpu/2026-09-14/byte-gradient-pool-rtx5090/`.
+
+
+### Layer-owned byte-LM model training
+
+`mojolearn.model_pool_training.PooledByteLanguageModelTrainer` places decoder
+layers on separate GPUs. Canonical parameters, AdamW moments, gradients and
+rollback state are partitioned; no GPU owns a complete model replica. Layer
+kernel weight copies and saved forward/backward stages stay with their owner.
+The first selected device owns the embedding and language-model head.
+
+```python
+from mojolearn.model_pool_training import PooledByteLanguageModelTrainer
+
+with PooledByteLanguageModelTrainer(state, devices=(0, 1), logical_shards=3) as trainer:
+    result = trainer.train_step([microbatch0, microbatch1, microbatch2])
+    checkpoint = trainer.checkpoint()
+    ownership = trainer.model_ownership()
+```
+
+The initial schedule visits layers sequentially and copies activations and
+cotangents across owners. Each existing kernel retains its microbatch shape;
+logical gradients use the original fixed-order FP32 sum. This is capacity
+pooling, with no throughput claim. A layer and the embedding/head must each
+fit their owner. The current admission permits up to one more GPU than decoder layers
+(the extra owner holds embedding/head), with at most 64 GPUs. Logical microbatch count is
+independent of GPU count, so two GPUs can jointly train one microbatch.
+
+All owners snapshot before any update; a failed update restores every chunk.
+The canonical checkpoint retains `mojolearn.parallel-byte-lm.v1` and can move
+between this trainer and `ParallelByteLanguageModelTrainer` without changing
+the logical shard order. `model_ownership()` reports actual canonical buffer
+allocations, excluding kernel weight copies, activations and workspaces.
+
+Qualification and capacity receipts live in
+`bench/results/multi_gpu/2026-09-14/byte-model-pool-rtx5090/`. The new model
+path has its own same-source H100/RTX 5090 comparison: nine complete
+state/gradient/loss receipt groups match. Its 958,746,624-parameter capacity
+fixture completes a step on two RTX 5090s while the same driver runs out of
+memory on one; resident use is 21766/21732 MiB. These are NVIDIA architecture
+checks, with no AMD/Apple qualification or throughput claim. This does not extend model pooling to MLP/Samba
+or eliminate the remaining root allocations in classical/tree estimators.

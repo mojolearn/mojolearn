@@ -22,3 +22,7 @@ This receipt qualifies the internal layer component on RTX 5090. It does not
 yet qualify a complete model-pooling trainer, beyond-one-GPU capacity,
 throughput, or cross-vendor identity. The embedding/head and atomic optimizer
 integration are separate work. The pod remains leased for that work.
+
+Final lifecycle: the shared RTX pod completed the later model-pooling jobs
+and was terminated. See `../byte-model-pool-rtx5090/termination.log` for
+DELETE/GET verification. The earlier statement that it remains leased is superseded.

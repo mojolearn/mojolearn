@@ -1,0 +1,107 @@
+32875 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x13b2c0000000, nodemask=1)
+{
+  "status": "PASS",
+  "checks": [
+    {
+      "layers": 2,
+      "logical_shards": 3,
+      "parameters": 12096,
+      "ownership": [
+        {
+          "device": 0,
+          "first": 0,
+          "count": 4096,
+          "parameter_bytes": 16384,
+          "moment_bytes": 32768,
+          "rollback_bytes": 49152,
+          "gradient_bytes": 16384
+        },
+        {
+          "device": 0,
+          "first": 4096,
+          "count": 1952,
+          "parameter_bytes": 7808,
+          "moment_bytes": 15616,
+          "rollback_bytes": 23424,
+          "gradient_bytes": 7808
+        },
+        {
+          "device": 1,
+          "first": 6048,
+          "count": 1952,
+          "parameter_bytes": 7808,
+          "moment_bytes": 15616,
+          "rollback_bytes": 23424,
+          "gradient_bytes": 7808
+        },
+        {
+          "device": 0,
+          "first": 8000,
+          "count": 4096,
+          "parameter_bytes": 16384,
+          "moment_bytes": 32768,
+          "rollback_bytes": 49152,
+          "gradient_bytes": 16384
+        }
+      ],
+      "state_sha256": "85b042c50a62a476938bfb26e530a62f5312565e266c57592b07117ef904bd23",
+      "native_faults": true
+    },
+    {
+      "layers": 3,
+      "logical_shards": 3,
+      "parameters": 25680,
+      "ownership": [
+        {
+          "device": 0,
+          "first": 0,
+          "count": 6144,
+          "parameter_bytes": 24576,
+          "moment_bytes": 49152,
+          "rollback_bytes": 73728,
+          "gradient_bytes": 24576
+        },
+        {
+          "device": 0,
+          "first": 6144,
+          "count": 4464,
+          "parameter_bytes": 17856,
+          "moment_bytes": 35712,
+          "rollback_bytes": 53568,
+          "gradient_bytes": 17856
+        },
+        {
+          "device": 0,
+          "first": 10608,
+          "count": 4464,
+          "parameter_bytes": 17856,
+          "moment_bytes": 35712,
+          "rollback_bytes": 53568,
+          "gradient_bytes": 17856
+        },
+        {
+          "device": 1,
+          "first": 15072,
+          "count": 4464,
+          "parameter_bytes": 17856,
+          "moment_bytes": 35712,
+          "rollback_bytes": 53568,
+          "gradient_bytes": 17856
+        },
+        {
+          "device": 0,
+          "first": 19536,
+          "count": 6144,
+          "parameter_bytes": 24576,
+          "moment_bytes": 49152,
+          "rollback_bytes": 73728,
+          "gradient_bytes": 24576
+        }
+      ],
+      "state_sha256": "6052fda589ee57803c4d40a6667cd33b07a16da2900c49da0cabbb7cfb4f51b7",
+      "native_faults": true
+    }
+  ],
+  "scope": "Two RTX 5090 GPUs: layer-owned model and optimizer state, ordered replay, portable checkpoints and recovery. No throughput or beyond-one-GPU capacity claim."
+}
+

@@ -31,3 +31,7 @@ Build scripts, binary hashes, compiler/gate logs and source/corpus identities
 are retained. This is a two-NVIDIA-architecture result for these fixtures,
 not AMD/Apple qualification, a speedup result, or full pooled-model capacity.
 The pod remains leased for the separate gradient-scratch pooling batch.
+
+Final lifecycle: the shared RTX pod completed the later model-pooling jobs
+and was terminated. See `../byte-model-pool-rtx5090/termination.log` for
+DELETE/GET verification. The earlier statement that it remains leased is superseded.
