@@ -3,7 +3,8 @@
 The 118-lane three-column run at 71faae781 (`bench/results/identity_break/2026-09-14_118-lanes/`)
 carried two MOVED lanes among the 71 the claim-surface census added. MOVED is one box
 disagreeing with itself across two fits in one process, a determinism finding before it is
-a cross-vendor one. One was the lane's own hashing, fixed here; one is open on the MI300X.
+a cross-vendor one. One was the lane's own hashing, fixed here; the other, on the MI300X, was open
+until the 136-lane record (section 2).
 
 ## 1. byte-lm-resident, MOVED on all nine fixtures on the H100 and the MI300X: the LANE, fixed
 
@@ -32,7 +33,20 @@ it; an object array is silent nondeterminism. A guard that refuses `dtype=object
 is the right fix for the tool and is not made here (the harness is measuring right now on
 three boxes); make it in the next harness change and rerun the three columns.
 
-## 2. mamba2-dtlimit, `step` part MOVED once on the MI300X (base, one of nine fixtures): OPEN
+## 2. mamba2-dtlimit, `step` part MOVED once on the MI300X (base, one of nine fixtures): CLOSED, not reproduced after the 2712/2713 fix
+
+CLOSED (2026-09-14 evening). The 136-lane record at 4048e1b51, the commit carrying the
+m2_ydiag_kernel over-read fix of section 3.3, reads `mamba2-dtlimit` STABLE on all nine
+fixtures of the Hot Aisle MI300X column (two fits per cell, `step` part equal in both, base
+`step` 1a8d61928f80731b) and IDENTICAL x3 against apple-m4 and nvidia-h100-sm_90a on all
+nine (`bench/results/identity_break/2026-09-14_136-lanes/diff.apple-h100-mi300x-incomplete.txt`,
+base b9e7928a2a4d30cf on every column); the MI325X column reads the same nine IDENTICAL x3
+(`diff.three-columns.txt`). DEVIATION 2712 was an Apple over-read, not an AMD race, and is
+fixed. The over-read is the one mechanism found that touches this part: the step reads
+farthest past X_d's end because its T is 1, and a read of unowned memory is free to change
+between two fits. That it caused this one MOVED cell is consistent with the record, not
+shown by it; no MOVED `step` has been seen on any column since the fix. The paragraphs below
+are the ledger as written while the lane was open.
 
 `mamba2-dtlimit/base` on gfx942: train hashes 165b502a1c95f280 vs 669a2db9147247f7, the
 moved part is `step` only (the one-token decode after the prefill into a state); forward,
