@@ -1,0 +1,4 @@
+poison gate: defines [-D MOJOLEARN_MAMBA_POISON=1] set python/mojolearn/identical record bench/results/identity_break/2026-09-14_120-lanes-2711flip copy /tmp/mojolearn-poison.Ahsb3B/python
+cells=36 stable=36 moved=0 refused=0
+poison column: 36 of 36 Mamba training rows IDENTICAL x4
+check-mamba-poison PASSED: mamba1,mamba2,mamba2-dtlimit,mamba3 cold on the poison build equal the three committed columns of bench/results/identity_break/2026-09-14_120-lanes-2711flip

@@ -2538,15 +2538,20 @@ leg_preflight() {
 # text as shell code. Plain ROCm images need their own SSH entrypoint;
 # RunPod templates retain their existing startup command.
 leg_write_create_request() {
+    # MOJOLEARN_GEMM_LEG_GPU_COUNT (default 1): GPUs on the pod. 2 is the
+    # two-device leg of the multi-GPU drivers (2026-09-14, par-* lanes with
+    # MOJOLEARN_PAR_DEVICES=0,1); anything but 1 or 2 is refused so a typo
+    # cannot rent eight.
+    case "${MOJOLEARN_GEMM_LEG_GPU_COUNT:-1}" in 1|2) ;; *) leg_die "MOJOLEARN_GEMM_LEG_GPU_COUNT must be 1 or 2 (got '${MOJOLEARN_GEMM_LEG_GPU_COUNT}')" ;; esac
     python3 - "$1" "$POD_NAME" "$IMAGE" "$GPU_ID" "$CUDA_VERSIONS" \
-        "$VENDOR" "$REPO/tools/runpod_ssh_bootstrap.sh" <<'PY_CREATE_REQUEST'
+        "$VENDOR" "$REPO/tools/runpod_ssh_bootstrap.sh" "${MOJOLEARN_GEMM_LEG_GPU_COUNT:-1}" <<'PY_CREATE_REQUEST'
 import json
 from pathlib import Path
 import sys
 
-output, name, image, gpu, cuda, vendor, bootstrap = sys.argv[1:]
+output, name, image, gpu, cuda, vendor, bootstrap, gpu_count = sys.argv[1:]
 request = {
-    "name": name, "imageName": image, "gpuTypeIds": [gpu], "gpuCount": 1,
+    "name": name, "imageName": image, "gpuTypeIds": [gpu], "gpuCount": int(gpu_count),
     "cloudType": "SECURE", "containerDiskInGb": 60, "volumeInGb": 0,
     "ports": ["22/tcp"], "supportPublicIp": True, "interruptible": False,
 }
@@ -5617,6 +5622,7 @@ COMMIT_LINE=$(git log -1 --format='%h parent %p' "$COMMIT" -- 2>/dev/null || ech
     if [ -n "$SOURCE_REF" ]; then echo "source_ref=$SOURCE_REF"; fi
     echo "vendor=$VENDOR"
     echo "gpu_requested=$GPU_ID"
+    echo "gpu_count=${MOJOLEARN_GEMM_LEG_GPU_COUNT:-1}"
     echo "image=$IMAGE"
     echo "minutes=$MINUTES"
     echo "mode=$MODE"
@@ -6058,6 +6064,7 @@ fi
     echo "knn_layout_only=$KNN_LAYOUT_ONLY"
     echo "pod=$POD_ID"
     echo "gpu_requested=$GPU_ID"
+    echo "gpu_count=${MOJOLEARN_GEMM_LEG_GPU_COUNT:-1}"
     echo "red=$RED"
     echo "uplink_fault=$UPLINK_FAULT"
     if [ "$PAYLOAD" = "phase8" ]; then
