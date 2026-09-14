@@ -95,6 +95,7 @@ from core.identity_trace import IdentityTrace, first_divergence
 from glm.impl.qn.glm_base import GLMDims, GLMWithData
 from glm.impl.qn.glm_softmax import (
     SOFTMAX_MAX_SEED,
+    SOFTMAX_SABOTAGE,
     softmax_loss_dz_kernel,
     softmax_row_max,
 )
@@ -1418,7 +1419,11 @@ def check_softmax_card_is_emitted() raises:
 
 
 def main() raises:
-    print("== glm/checks/multinomial_check.mojo [" + _mode_name() + "] ==")
+    print(
+        "== glm/checks/multinomial_check.mojo [" + _mode_name() + "]"
+        + (" SABOTAGE=descending-lse-fold (MOJOLEARN_SOFTMAX_SABOTAGE, must FAIL)" if SOFTMAX_SABOTAGE else " sabotage=off")
+        + " =="
+    )
     check_softmax_fd_gradient()
     check_softmax_planted()
     check_softmax_is_a_minimizer()
