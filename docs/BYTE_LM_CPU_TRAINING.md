@@ -353,6 +353,7 @@ per family.
 | linalg | `_mojolearn_linalg_host.so` | `_mojolearn_linalg` | gemm-pinned | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_linalg_host.sh` |
 | estimators | `_mojolearn_estimators_host.so` | `_mojolearn_estimators` | kde, pca, pca-whiten, tsvd, ols, ridge, dbscan | LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, KernelDensity, DBSCAN (ols, ridge, tsvd, logistic, logistic-multiclass, pca, pca-whiten, kde) | tools/identity_break.py and tools/classical_host_gate.py (cpu-identity-gate.yml) | no, `bindings/build_estimators_host.sh` |
 | metrics | `_mojolearn_metrics_host.so` | `_mojolearn_metrics` | metrics, spectral | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_metrics_host.sh` |
+| preprocessing | `_mojolearn_preprocessing_host.so` | `_mojolearn_preprocessing` | standard-scaler, minmax-scaler | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_preprocessing_host.sh` |
 | tsa | `_mojolearn_tsa_host.so` | `_mojolearn_tsa` | holtwinters | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_tsa_host.sh` |
 | solver | `_mojolearn_solver_host.so` | `_mojolearn_solver` | lasso, elasticnet, agglomerative | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_solver_host.sh` |
 | svm | `_mojolearn_svm_host.so` | `_mojolearn_svm` | svc, iforest | SVC, IsolationForest (svc) | tools/identity_break.py and tools/classical_host_gate.py (cpu-identity-gate.yml) | no, `bindings/build_svm_host.sh` |

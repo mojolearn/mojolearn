@@ -916,6 +916,10 @@ def host_families_built():
 #:     rand_score, the ranking and classification metrics, the regression
 #:     errors, kl_divergence, trustworthiness, spectral_fit_predict_graph
 #:     and the UMAP entries are absent.
+#:   _mojolearn_preprocessing -> _mojolearn_preprocessing_host (workstream
+#:     E batch 2, 2026-09-14): standard_fit, standard_transform, minmax_fit
+#:     and minmax_transform over preprocessing/host/scaler_oracle.mojo, the
+#:     whole GPU binding's surface.
 #:   _mojolearn_tsa -> _mojolearn_tsa_host: holtwinters_fit and
 #:     holtwinters_forecast over holtwinters/host/hw_oracle.mojo; kpss_test
 #:     and select_d (ARIMA's) are absent.

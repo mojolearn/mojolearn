@@ -89,6 +89,7 @@ on:
       - "cluster/host/kmeans_oracle.mojo"
       - "metrics/host/metrics_oracle.mojo"
       - "spectral/host/spectral_oracle.mojo"
+      - "preprocessing/host/scaler_oracle.mojo"
       - "spectral/checks/symmetric_eig_host.mojo"
       - "core/knn_host_predict.mojo"
       - "cluster/host/kmeans_oracle.mojo"
@@ -458,8 +459,10 @@ jobs:
       # in xorwow by one extra step before every split fraction (every
       # isolation tree, in kmeans_oracle by one extra unit in every
       # quantized centroid-sum cell, in metrics_oracle by shifting every
-      # slab tree's chunk boundaries by one value, and in spectral_oracle by
-      # seeding the recluster one draw off); each further phase 1
+      # slab tree's chunk boundaries by one value, in spectral_oracle by
+      # seeding the recluster one draw off, and in scaler_oracle by the same
+      # shifted tree plus the min-max offset's subtraction as an addition);
+      # each further phase 1
       # binding names the fold its arm moves), loaded through
       # MOJOLEARN_HOST_DIR with MOJOLEARN_HOST_ALLOW_SABOTAGE=1, run on the
       # covered lanes, and the four-way diff must exit non-zero with
