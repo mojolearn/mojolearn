@@ -138,7 +138,11 @@ from hdbscan.impl.detail.select import (
     SELECT_TPB,
     cluster_epsilon_search,
 )
-from hdbscan.impl.detail.stabilities import STAB_TPB, stability_order_key
+from hdbscan.impl.detail.stabilities import (
+    STAB_TPB,
+    stability_order_key,
+    stability_order_unkey_bits,
+)
 from hdbscan.impl.runner import (
     GRAPH_BUILD_BRUTE_FORCE_KNN,
     GRAPH_BUILD_NN_DESCENT,
@@ -1024,6 +1028,12 @@ def check_stability_key_is_edge_order() raises:
     both infinities, `FLOAT32_MAX`, both zeros and three NaN payloads. The
     two functions are separate source so this gate is what keeps them one
     map; delete either clause of the copy and it fails by pattern.
+
+    Since the kernel carries its running minimum as a KEY and turns it back
+    into bits once (the gfx942 banner in `stabilities.mojo`), the same sweep
+    also asserts `stability_order_unkey_bits(key)` returns the original bits
+    on every non-NaN pattern: that round trip is what makes the key-only
+    minimum the same bits as the old `seg_min = lam`.
     """
     var n_checked = 0
     for e in range(256):
@@ -1045,6 +1055,17 @@ def check_stability_key_is_edge_order() raises:
                         "check_stability_key_is_edge_order FAILED at bits "
                         + _hex32(x) + ": stability_order_key "
                         + String(got) + " weight_order_key " + String(want)
+                    )
+                var is_nan = e == 255 and mant != UInt32(0)
+                if not is_nan and stability_order_unkey_bits(got) != bits:
+                    raise Error(
+                        "check_stability_key_is_edge_order FAILED: the unkey"
+                        " round trip at bits " + _hex32(x) + " returned "
+                        + _hex32(
+                            bitcast[DType.float32](
+                                stability_order_unkey_bits(got)
+                            )
+                        )
                     )
                 n_checked += 1
     var extras = List[UInt32]()
@@ -1073,7 +1094,8 @@ def check_stability_key_is_edge_order() raises:
         "check_stability_key_is_edge_order OK: the device order key equals"
         " weight_order_key on " + String(n_checked) + " patterns (every"
         " exponent x 4 mantissas x 2 signs, both infinities, FLT_MAX, both"
-        " zeros, three NaN payloads)"
+        " zeros, three NaN payloads), and unkey returns the bits on every"
+        " non-NaN one"
     )
 
 
