@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Classical host inference gate (the classical host inference lane,
 2026-09-13): LinearRegression, Ridge, TruncatedSVD, LogisticRegression and
-PCA predicted on a CPU from a model fitted on a GPU, compared bit for bit.
+PCA predicted on a CPU from a model fitted on a GPU, compared bit for bit;
+since the kde svc host lane (2026-09-14) also KernelDensity, SVC and the
+whitened PCA (`pca-whiten`, an identity_break lane of its own).
 
 Two halves over tools/identity_break.py's own nine fixtures, so the
 held-out rows here ARE the rows behind the `infer` column of the committed
@@ -62,9 +64,20 @@ LANES = {
                  {'predict': lambda e, X: e.predict(X),
                   'decision_function': lambda e, X: e.decision_function(X)}),
     'pca': ('PCA', lambda e, X: (e.transform(X),), {}),
+    # The kde svc host lane (2026-09-14). kde's identity_break lane fits and
+    # probes the first four columns; svc's probe is the pair (decision,
+    # predict), the labels hashed as an extra too; pca-whiten adds the
+    # whitened inverse as an extra, the second half of the host pair.
+    'kde': ('KernelDensity', lambda e, X: (e.score_samples(X[:, :4]),), {}),
+    'svc': ('SVC', lambda e, X: (e.decision_function(X), e.predict(X)),
+            {'predict': lambda e, X: e.predict(X)}),
+    'pca-whiten': ('PCA', lambda e, X: (e.transform(X),),
+                   {'inverse_transform': lambda e, X: e.inverse_transform(e.transform(X))}),
 }
 PROBE_NAMES = {'ols': 'predict', 'ridge': 'predict', 'tsvd': 'transform',
-               'logistic': 'predict_proba', 'pca': 'transform'}
+               'logistic': 'predict_proba', 'pca': 'transform',
+               'kde': 'score_samples', 'svc': 'decision_function',
+               'pca-whiten': 'transform'}
 
 
 def identity_tool():
@@ -189,7 +202,7 @@ def do_check(args):
     try:
         ib = identity_tool()
         import mojolearn
-        from mojolearn._classical_host import binary_path, host_model
+        from mojolearn._classical_host import binary_paths, host_model
     except Exception as exc:
         print(f'gate: import failed: {type(exc).__name__}: {exc}', file=sys.stderr)
         return 2
@@ -281,7 +294,7 @@ def do_check(args):
         verdict = 'IDENTICAL' if verdict_ok else 'MISMATCH'
         code = 0 if verdict_ok else 1
     report = dict(verdict=verdict, expect_mismatch=bool(args.expect_mismatch), exit=code,
-                  binary=binary_path(), vendor=mojolearn.vendor(), host=host_info(),
+                  binary=binary_paths(), vendor=mojolearn.vendor(), host=host_info(),
                   gpu_columns=[label for label, _ in columns], commit=git_commit(),
                   checked_at=time.strftime('%Y-%m-%dT%H:%M:%S%z'), fixtures=results)
     if args.report:

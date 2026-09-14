@@ -1,0 +1,20 @@
+# vendor=arm64 commit=6796ceff932391adeaea8d788a6c5230ddfacf53 (git rev-parse HEAD)
+# identity_break  mode=identical  2026-09-14 05:52:21  macOS-26.5.2-arm64-arm-64bit-Mach-O
+# per lane: the train row, then an `infer` row (held-out rows) and a `model` row (saved bytes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+| pca-whiten             | a6f7b7e7740ab870 | 800aa9562d74205a | bd54e912967247a3 | ecc05204c013c1dc | 00315760b27195a0 | 00315760b27195a0 | fdeed1b8a376df1c | fa3b5c3d4156b2f5 | 031422ed11e3113c |
+| pca-whiten infer       | 709a8b5fd739ea88 | 93df8c7780a1dc30 | 8130d3129e938e81 | d8d2dfc5b9e536e9 | 84eb842a6f5bc6ed | 84eb842a6f5bc6ed | cb67bba34aa48975 | 0cb03f6ee0148b33 | 82643cf68620a701 |
+| pca-whiten model       | 3cb41b8be892ff28 | 63bb89eef2aad3aa | 05ec6c95b9cc7292 | 777bd45f4ac455d6 | 2feb67b35a90e40b | 2feb67b35a90e40b | 6e2deea86bf88523 | c27de6c5434851e9 | acc4c0d90292d693 |
+| svc                    | dec306e940b8a444 | 2093351e33d072ed | 274bf9087fb0750e | 550d1845e417ca18 | 549c0b5c319d84cf | 549c0b5c319d84cf | b2f0d9a49c9f241c | 61b1676a7e40c914 | 667155f7eda847aa |
+| svc infer              | 4aee3fcc51c4761e | e400ffe98db4b786 | 94cb46a9aa6a811c | ee2e31ef0e3bbfcb | ebc593040592ca1e | ebc593040592ca1e | 6e5c253fa1d7ea5b | acd970db5a3ae605 | 685bebcb29a0cf8c |
+| svc model              | d357dc9836994075 | a934b5c5cbd2fb59 | c1eb413ecf366aab | 19e15b0ab3ceac90 | 29bbbd98ccefdde2 | 55604dc15ce7c411 | 39bb289a465d4e42 | 1cf6ac54635490ef | ebadbb39c9f25a8d |
+Context leak detected, CoreAnalytics returned false
+| kde                    | e0d6e3d0623d6112 | 0a800c7b3cca66e4 | dc279c30b7c5d070 | 36c3cbb2ef71f768 | 2128392fe1eb228a | 2128392fe1eb228a | e0d6e3d0623d6112 | 8a2b6beee09a98f3 | 84ca35b6a157c265 |
+| kde infer              | 1a2c3054b661b72a | 63b4da91ce458ab7 | f0d1cae79c88ca8a | 39622885a3c508a9 | 21caf753bc5b6352 | 21caf753bc5b6352 | 1a2c3054b661b72a | e49f797e443af916 | 30a64b99c13a89c4 |
+| kde model              | cd5469f3b8854867 | c6b86284b81d2eea | 9d8fc4cff3c9ae8e | 4d511b1377a350b9 | ddc0470537b3c6d1 | 6e413286a1f8aebb | cd5469f3b8854867 | eaf7436bbd4ff68f | 14b5ed33ef52d808 |
+
+cells=27 stable=27 moved=0 refused=0
+infer: stable=27
+model: stable=27
+wrote bench/results/classical_host/2026-09-14-apple-m4-kde-svc/identity_break_apple-m4_three-lanes.json

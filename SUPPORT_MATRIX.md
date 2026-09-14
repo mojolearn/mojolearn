@@ -163,8 +163,11 @@ cross-vendor claim. See [verification](docs/VERIFY.md) and
   passes only when the fourth column reads IDENTICAL on every cell.
 - Rerun the 46-lane three columns once to fill the byte level language model cells the GPU legs
   skipped.
-- CPU inference for the classical lanes, cheapest first (ols and ridge), per the costing in
-  `docs/lanes/BRIEF_forest_host_inference_2026-09-13.md`.
+- CPU inference for the classical lanes, per the costing in
+  `docs/lanes/BRIEF_forest_host_inference_2026-09-13.md`: ols, ridge, tsvd, logistic and pca
+  merged 2026-09-13 (three-vendor recordings 2026-09-14); kde, svc and the whitened pca on
+  lane/kde-svc-host-inference (Apple M4 measured, NVIDIA and AMD recordings owed); knn in
+  flight; iforest not started.
 
 The project-level sequencing lives in [ROADMAP.md](ROADMAP.md). Update this
 page only from recorded evidence; do not turn planned or in-progress runs into

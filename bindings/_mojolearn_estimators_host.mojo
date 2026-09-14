@@ -28,15 +28,17 @@ THE EXPORTED NAMES ARE THE GPU BINDING'S NAMES for what this covers, so
 "_mojolearn_estimators_host"`): `kde_score_samples` with the SAME address
 contract (train, query, weights, out, the five-value params list, kernel,
 metric; mirrored word for word in `density.py`), `ols_predict`,
-`tsvd_transform`, `qn_decision_function`, `qn_sigmoid` and `pca_transform`
-with the SAME address contracts as `bindings/_mojolearn_estimators.mojo`
-(each docstring below repeats its params list), `estimators_numeric_mode`
-and `estimators_vendor` (answering "cpu"). Every other function of the GPU
-binding (dbscan_fit, pca_fit, pca_fit_full, pca_whiten_transform,
-tsvd_fit, inverse_transform, ols_fit, ridge_fit, qn_fit, ...) is
-deliberately absent, so those surfaces refuse BY NAME through
-`_HostBinding` and never hash something else.
+`tsvd_transform`, `qn_decision_function`, `qn_sigmoid`, `pca_transform`
+and, since the kde svc host lane (2026-09-14), the whitened pair
+`pca_whiten_transform` and `pca_whiten_inverse_transform`, with the SAME
+address contracts as `bindings/_mojolearn_estimators.mojo` (each docstring
+below repeats its params list), `estimators_numeric_mode` and
+`estimators_vendor` (answering "cpu"). Every other function of the GPU
+binding (dbscan_fit, pca_fit, pca_fit_full, tsvd_fit, inverse_transform,
+ols_fit, ridge_fit, qn_fit, ...) is deliberately absent, so those surfaces
+refuse BY NAME through `_HostBinding` and never hash something else.
 """
+from std.math import isfinite
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -53,6 +55,8 @@ from core.classical_host_predict import (
     CLASSICAL_HOST_SABOTAGE,
     host_ols_predict,
     host_pca_transform,
+    host_pca_whiten_inverse_transform,
+    host_pca_whiten_transform,
     host_qn_decision,
     host_qn_sigmoid,
     host_tsvd_transform,
@@ -264,9 +268,8 @@ def pca_transform_binding(
 ) raises -> PythonObject:
     """`PCA.transform` (whiten=False) on the host: center by `mean_`, then
     `out = (X - mean) . components^T` by `host_pca_transform`. params:
-    n_rows, n_features, n_components. Returns 0. The whitened pair
-    (`pca_whiten_transform`, `pca_whiten_inverse_transform`) is absent and
-    refuses by name."""
+    n_rows, n_features, n_components. Returns 0. The whitened pair is
+    `pca_whiten_transform` and `pca_whiten_inverse_transform` below."""
     if len(params) != 3:
         raise Error("pca_transform: params must contain 3 values")
     var x_address = _index(x_addr)
@@ -287,6 +290,117 @@ def pca_transform_binding(
         for i in range(nr * nc):
             op[i] = out[i]
     return PythonObject(0)
+
+
+def _whiten_finite(values: List[Float32], what: String) raises:
+    """`_pca_whiten_finite` of the GPU binding, over the copy this side
+    reads, with the GPU binding's sentence."""
+    for i in range(len(values)):
+        if not isfinite(values[i]):
+            raise Error("PCA whitening requires finite inputs and outputs")
+
+
+def _pca_whiten_apply(
+    input_addr: PythonObject,
+    mean_addr: PythonObject,
+    components_addr: PythonObject,
+    singular_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+    inverse: Bool,
+) raises -> PythonObject:
+    """`bindings/_mojolearn_estimators.mojo::_pca_whiten_apply` without the
+    DeviceContext: the same params check, the same dimension refusals in the
+    same words, the same overlap refusal, the same finiteness and sign
+    refusals BEFORE anything is computed, the same finiteness refusal of the
+    output after, and the arithmetic by `host_pca_whiten_transform` or
+    `host_pca_whiten_inverse_transform`. params: n_rows, n_features,
+    n_components, n_fit_rows (the FIT's row count, DEVIATION 580)."""
+    if len(params) != 4:
+        raise Error("PCA whitening params require rows, features, components, fit_rows")
+    var nr = _index(params[0])
+    var nf = _index(params[1])
+    var nc = _index(params[2])
+    var nfit = _index(params[3])
+    if nr < 1 or nf < 2 or nc < 1 or nc > nf or nfit < 2:
+        raise Error("PCA whitening requires positive rows/components, features>=2 and fit_rows>=2")
+    if nr > 2147483647 or nf > 2147483647 or nc > 2147483647 or nfit > 2147483647:
+        raise Error("PCA whitening dimensions exceed Int32")
+    if nr > 2147483647 // nf or nc > 2147483647 // nf:
+        raise Error("PCA whitening matrix cell count exceeds Int32")
+    var input_count = nr * (nc if inverse else nf)
+    var output_count = nr * (nf if inverse else nc)
+    var xa = _index(input_addr)
+    var ma = _index(mean_addr)
+    var ca = _index(components_addr)
+    var sa = _index(singular_addr)
+    var oa = _index(out_addr)
+    var starts = List[Int]()
+    starts.append(xa)
+    starts.append(ma)
+    starts.append(ca)
+    starts.append(sa)
+    var counts = List[Int]()
+    counts.append(input_count)
+    counts.append(nf)
+    counts.append(nc * nf)
+    counts.append(nc)
+    for i in range(4):
+        if starts[i] <= 0 or starts[i] % 4 != 0:
+            raise Error("PCA whitening requires positive aligned FP32 pointers")
+    if oa <= 0 or oa % 4 != 0:
+        raise Error("PCA whitening requires positive aligned FP32 pointers")
+    for i in range(4):
+        if oa < starts[i] + counts[i] * 4 and starts[i] < oa + output_count * 4:
+            raise Error("PCA whitening output must not overlap any input")
+    var op = f32_ptr(oa)
+    with GILReleased(Python()):
+        var x = read_f32(xa, input_count)
+        var mu = read_f32(ma, nf)
+        var components = read_f32(ca, nc * nf)
+        var singular = read_f32(sa, nc)
+        _whiten_finite(x, "input")
+        _whiten_finite(mu, "mean")
+        _whiten_finite(components, "components")
+        _whiten_finite(singular, "singular")
+        for i in range(nc):
+            if singular[i] < Float32(0):
+                raise Error("PCA whitening singular values must be nonnegative")
+        var out = (
+            host_pca_whiten_inverse_transform(
+                x, components, singular, mu, nr, nf, nc, nfit
+            ) if inverse else host_pca_whiten_transform(
+                x, mu, components, singular, nr, nf, nc, nfit
+            )
+        )
+        _whiten_finite(out, "output")
+        for i in range(output_count):
+            op[i] = out[i]
+    return PythonObject(0)
+
+
+def pca_whiten_transform_binding(
+    x_addr: PythonObject, mean_addr: PythonObject,
+    components_addr: PythonObject, singular_addr: PythonObject,
+    out_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """`PCA.transform` (whiten=True) on the host, the GPU binding's arity
+    and argument order (x, mean, components, singular_values, out, params).
+    Returns 0."""
+    return _pca_whiten_apply(
+        x_addr, mean_addr, components_addr, singular_addr, out_addr, params, False)
+
+
+def pca_whiten_inverse_transform_binding(
+    scores_addr: PythonObject, components_addr: PythonObject,
+    singular_addr: PythonObject, mean_addr: PythonObject,
+    out_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """`PCA.inverse_transform` (whiten=True) on the host, the GPU binding's
+    arity and argument order (scores, components, singular_values, mean, out,
+    params). Returns 0."""
+    return _pca_whiten_apply(
+        scores_addr, mean_addr, components_addr, singular_addr, out_addr, params, True)
 
 
 def qn_decision_function_binding(
@@ -353,6 +467,8 @@ def PyInit__mojolearn_estimators_host() abi("C") -> PythonObject:
         module.def_function[ols_predict_binding]("ols_predict")
         module.def_function[tsvd_transform_binding]("tsvd_transform")
         module.def_function[pca_transform_binding]("pca_transform")
+        module.def_function[pca_whiten_transform_binding]("pca_whiten_transform")
+        module.def_function[pca_whiten_inverse_transform_binding]("pca_whiten_inverse_transform")
         module.def_function[qn_decision_function_binding]("qn_decision_function")
         module.def_function[qn_sigmoid_binding]("qn_sigmoid")
         return module.finalize()
