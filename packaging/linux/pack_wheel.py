@@ -110,6 +110,9 @@ IDENTICAL_ONLY_NAMES = (
     "_mojolearn_solver", "_mojolearn_metrics", "_mojolearn_preprocessing",
     "_mojolearn_tsa", "_mojolearn_linalg", "_mojolearn_arima", "_mojolearn_gp",
     "_mojolearn_training", "_mojolearn_mamba", "_mojolearn_transformer",
+    # Workstream D, 2026-09-14: the four door-less families given a binding.
+    "_mojolearn_kernel_methods", "_mojolearn_mixture", "_mojolearn_hdbscan",
+    "_mojolearn_resample",
 )
 TIERS = ("fast", "deterministic", "identical")
 

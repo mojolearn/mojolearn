@@ -138,7 +138,11 @@ from hdbscan.impl.detail.select import (
     SELECT_TPB,
     cluster_epsilon_search,
 )
-from hdbscan.impl.detail.stabilities import STAB_TPB
+from hdbscan.impl.detail.stabilities import (
+    STAB_TPB,
+    stability_order_key,
+    stability_order_unkey_bits,
+)
 from hdbscan.impl.runner import (
     GRAPH_BUILD_BRUTE_FORCE_KNN,
     GRAPH_BUILD_NN_DESCENT,
@@ -146,7 +150,7 @@ from hdbscan.impl.runner import (
     HDBSCANParams,
     fit_hdbscan,
 )
-from hierarchy.checks.edge_order import LINK_SAB_NONE
+from hierarchy.checks.edge_order import LINK_SAB_NONE, weight_order_key
 from hierarchy.checks.linkage_oracle import partitions_agree
 from hierarchy.impl.cluster.detail.connectivities import (
     DISTANCE_L1,
@@ -1015,6 +1019,86 @@ def check_stabilities_vs_oracle() raises:
             )
 
 
+def check_stability_key_is_edge_order() raises:
+    """`stability_order_key`, the device spelling the cluster stability
+    kernel carries since the gfx942 compiler crash of 2026-09-14, maps every
+    float to the SAME key as `hierarchy/checks/edge_order.mojo::
+    weight_order_key`, the host spelling DEVIATION 1604 names as the MST's
+    order. A host sweep: every exponent, four mantissas, both signs, plus
+    both infinities, `FLOAT32_MAX`, both zeros and three NaN payloads. The
+    two functions are separate source so this gate is what keeps them one
+    map; delete either clause of the copy and it fails by pattern.
+
+    Since the kernel carries its running minimum as a KEY and turns it back
+    into bits once (the gfx942 banner in `stabilities.mojo`), the same sweep
+    also asserts `stability_order_unkey_bits(key)` returns the original bits
+    on every non-NaN pattern: that round trip is what makes the key-only
+    minimum the same bits as the old `seg_min = lam`.
+    """
+    var n_checked = 0
+    for e in range(256):
+        for m_i in range(4):
+            var mant = UInt32(0)
+            if m_i == 1:
+                mant = UInt32(1)
+            elif m_i == 2:
+                mant = UInt32(0x400000)
+            elif m_i == 3:
+                mant = UInt32(0x7FFFFF)
+            for sgn in range(2):
+                var bits = (UInt32(sgn) << 31) | (UInt32(e) << 23) | mant
+                var x = bitcast[DType.float32](bits)
+                var want = weight_order_key(x)
+                var got = stability_order_key(x)
+                if got != want:
+                    raise Error(
+                        "check_stability_key_is_edge_order FAILED at bits "
+                        + _hex32(x) + ": stability_order_key "
+                        + String(got) + " weight_order_key " + String(want)
+                    )
+                var is_nan = e == 255 and mant != UInt32(0)
+                if not is_nan and stability_order_unkey_bits(got) != bits:
+                    raise Error(
+                        "check_stability_key_is_edge_order FAILED: the unkey"
+                        " round trip at bits " + _hex32(x) + " returned "
+                        + _hex32(
+                            bitcast[DType.float32](
+                                stability_order_unkey_bits(got)
+                            )
+                        )
+                    )
+                n_checked += 1
+    var extras = List[UInt32]()
+    extras.append(UInt32(0x7F800000))
+    extras.append(UInt32(0xFF800000))
+    extras.append(UInt32(0x7F7FFFFF))
+    extras.append(UInt32(0x00000000))
+    extras.append(UInt32(0x80000000))
+    extras.append(UInt32(0x7FC00000))
+    extras.append(UInt32(0xFFC00000))
+    extras.append(UInt32(0x7F800001))
+    for i in range(len(extras)):
+        var x = bitcast[DType.float32](extras[i])
+        if stability_order_key(x) != weight_order_key(x):
+            raise Error(
+                "check_stability_key_is_edge_order FAILED at bits "
+                + _hex32(x)
+            )
+        n_checked += 1
+    # The order the kernel relies on: -0.0 strictly below +0.0, NaN one key.
+    if not (
+        stability_order_key(Float32(-0.0)) < stability_order_key(Float32(0.0))
+    ):
+        raise Error("check_stability_key_is_edge_order FAILED: -0.0 !< +0.0")
+    print(
+        "check_stability_key_is_edge_order OK: the device order key equals"
+        " weight_order_key on " + String(n_checked) + " patterns (every"
+        " exponent x 4 mantissas x 2 signs, both infinities, FLT_MAX, both"
+        " zeros, three NaN payloads), and unkey returns the bits on every"
+        " non-NaN one"
+    )
+
+
 # ======================================================================
 # 6. LABELS AND OUTLIERS
 # ======================================================================
@@ -1414,11 +1498,22 @@ def check_card_is_emitted() raises:
         stab_tpb=64, select_tpb=64,
     )
     var diff = first_divergence(pa, pb)
-    if diff != "":
-        raise Error(
-            "check_card_is_emitted [" + _mode_name() + "]: two cards from"
-            " two launch shapes disagree at " + diff
-        )
+    # Launch-shape equality of the card is the IDENTICAL contract only, as
+    # in resample_check.mojo. FAST promises no bits: on the MI300X (gfx942)
+    # at e95fce13b the FAST card moved at knn.out_dist between tile 256 and
+    # 64 while the IDENTICAL card held, so FAST reports instead of raising.
+    comptime if IDENTICAL_BUILD:
+        if diff != "":
+            raise Error(
+                "check_card_is_emitted [IDENTICAL]: two cards from"
+                " two launch shapes disagree at " + diff
+            )
+    else:
+        if diff != "":
+            print(
+                "check_card_is_emitted REPORT [FAST]: two launch shapes,"
+                " first divergence " + diff
+            )
     if ta.seq < 20:
         raise Error(
             "check_card_is_emitted [" + _mode_name() + "]: the card holds"
@@ -1430,8 +1525,9 @@ def check_card_is_emitted() raises:
     print(
         "check_card_is_emitted OK [" + _mode_name() + "]: "
         + String(ta.seq) + " stages recorded, and two cards taken at two"
-        " launch shapes are record-for-record identical (" + pa + ", "
-        + pb + ")"
+        " launch shapes are "
+        + ("record-for-record identical" if diff == "" else "not identical (FAST, reported above)")
+        + " (" + pa + ", " + pb + ")"
     )
 
 
@@ -1946,6 +2042,7 @@ def main() raises:
     check_mutual_reachability_ties()
     check_condensed_tree_vs_oracle()
     check_stabilities_vs_oracle()
+    check_stability_key_is_edge_order()
     check_labels_vs_oracle()
     check_permutation_invariance()
     check_launch_invariance()

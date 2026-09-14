@@ -2801,8 +2801,8 @@ def check_km_sabotages() raises:
         print(
             "  REPORT     NO_EIGEN_CLIP: INERT on all "
             + String(clip_inert)
-            + " fixtures, which means no eigenvalue of any basis kernel fell"
-            " below sklearn's 1e-12. RECORDED, not claimed: the clip is"
+            + " fixtures, which means no singular value |lambda| of any basis"
+            " kernel fell below sklearn's 1e-12. RECORDED, not claimed: the clip is"
             " theirs (DEVIATION 1670) and it is a guard against a"
             " rank-deficient basis, so an inert result here is a statement"
             " about the fixtures rather than about the clip. **THIS IS A"

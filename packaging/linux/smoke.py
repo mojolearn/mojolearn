@@ -103,6 +103,12 @@ PER_BINDING = {
     "_mojolearn_trees": lambda ml: ml.ExtraTreesRegressor(n_estimators=1),
     "_mojolearn_svm": lambda ml: ml.SVC(),
     "_mojolearn_gp": lambda ml: ml.GaussianProcessRegressor(),
+    # Workstream D, 2026-09-14. `KernelRidge`, `GaussianMixture` and
+    # `HDBSCAN` take trivial constructors; the resample binding exports
+    # functions, so it is read through `_backend.binding` like solver's.
+    "_mojolearn_kernel_methods": lambda ml: ml.KernelRidge(),
+    "_mojolearn_mixture": lambda ml: ml.GaussianMixture(),
+    "_mojolearn_hdbscan": lambda ml: ml.HDBSCAN(),
 }
 # THIS LIST SHIPPED SHORT, THE SAME WAY pack_wheel.py's DID.
 #
@@ -126,6 +132,9 @@ ALL_BINDINGS = (
     "_mojolearn_metrics", "_mojolearn_preprocessing", "_mojolearn_tsa", "_mojolearn_linalg",
     "_mojolearn_arima", "_mojolearn_training", "_mojolearn_gp",
     "_mojolearn_mamba", "_mojolearn_transformer",
+    # Workstream D, 2026-09-14: the four door-less families given a binding.
+    "_mojolearn_kernel_methods", "_mojolearn_mixture", "_mojolearn_hdbscan",
+    "_mojolearn_resample",
 )
 
 #: EVERY BINDING BUT THE THREE TREE LANES BUILDS IDENTICAL ONLY (DEVIATION
@@ -147,6 +156,8 @@ IDENTICAL_ONLY_BINDINGS = frozenset({
     "_mojolearn_tsa", "_mojolearn_linalg", "_mojolearn_arima", "_mojolearn_gp",
     "_mojolearn_training", "_mojolearn_mamba", "_mojolearn_transformer",
     "_mojolearn_byte_lm",
+    "_mojolearn_kernel_methods", "_mojolearn_mixture", "_mojolearn_hdbscan",
+    "_mojolearn_resample",
 })
 
 

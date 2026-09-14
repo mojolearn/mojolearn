@@ -76,10 +76,12 @@ THE ARMS, and what each is a plausible way to get wrong
                             eigenvalue, which is why the sweep is required
                             and why `FIX_KM_ORTHO` plants four-way ties.
 `KMSAB_NO_EIGEN_CLIP`       DRIVER. sklearn's `clip(S, 1e-12, None)` is
-                            dropped, so a zero or negative eigenvalue -- which
-                            a float32 Jacobi produces on a rank-deficient
-                            Gram -- becomes an infinity or a NaN in
-                            `s^{-1/2}`.
+                            dropped, so a singular value `|lambda|` below
+                            1e-12 (an exact zero, which a float32 Jacobi can
+                            leave on a rank-deficient Gram) becomes an
+                            infinity in `s^{-1/2}`. Since 2026-09-14 the clip
+                            reads `|lambda|`, so a negative eigenvalue alone
+                            no longer reaches it.
 `KMSAB_BASIS_FROM_LAUNCH`   DRIVER. The basis rows are a LAUNCH-STRIDED slice
                             `[0, stride, 2*stride, ...]` instead of the
                             position-mapped rank prefix, so the fit depends
