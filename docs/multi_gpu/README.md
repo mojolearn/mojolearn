@@ -29,7 +29,7 @@ qualify their subsequent kernel-row paths on two H100s.
 | KMeans | Whole row tiles during distance/assignment | Original per-row feature/centroid arithmetic; original initialization, full-data updates and convergence |
 | GradientBoosting, greedy symmetric/depthwise/lossguide | Whole packed feature groups during histogram construction | Original row-reduction geometry and global scale; disjoint histogram-column copies |
 | ARIMA / ExponentialSmoothing | Independent series assigned to workers | Original per-series initialization, solver and likelihood arithmetic |
-| LinearRegression / Ridge / covariance PCA / TruncatedSVD | Original 128 Gram chunks at 1..128 features | Original chunk partials copied to global positions; unchanged final fold and root solver |
+| LinearRegression / Ridge / covariance PCA / TruncatedSVD | Original Gram chunks; wider v1 output rows; minimum-norm OLS row Gram | Original contraction, final fold and root solver order |
 | LogisticRegression | QN gradient feature columns | Original per-cell row reduction; unchanged root objective, line search and optimizer |
 | Lasso / ElasticNet | Whole FP32-v1 dot leaves during cyclic coordinate descent | Original balanced tree; unchanged coordinate and convergence order |
 | SVC / SVR | Linear/RBF kernel output rows during fit and prediction | Original per-cell FP32-v1 dot and RBF epilogue; original root working-set and update order |
@@ -223,9 +223,8 @@ receive only their partitions, but beyond-single-GPU capacity is not qualified.
 The user's requested order is neural training, forests/ExtraTrees, then
 boosting and classical estimators. The following remain unimplemented:
 
-- Wider/full-solver Gram paths:
-  distribute the appropriate matrix or objective work without changing its
-  reduction tree or solver trajectory.
+- Full-PCA solver paths and larger Gram configurations need further
+  partitions and qualification; the root eigensolver state still requires one GPU.
 - Broader neighbor/density/graph configurations, resident reference and graph
   pooling, and native-only surfaces need additional partitions and qualification.
 - Resident staging reuse, larger models,
@@ -404,3 +403,25 @@ These paths retain full root data, histogram and model state; pointwise workers
 currently clone the full compressed index and histogram before gathering only
 owned bins. They do not establish pooled model capacity, performance scaling,
 or new cross-vendor identity. Wider configurations remain to be qualified.
+
+
+### Wider Gram matrices and minimum-norm OLS
+
+`fit_gram_estimator` now also admits more than 128 features and wide
+`LinearRegression` (more columns than rows). Existing 1..128-feature Gram
+chunks keep their previous schedule. Wider column Gram matrices partition
+output rows on the existing FP32-v1 contraction profile; each row retains all
+contraction terms. Wide OLS instead partitions its original sequential row-Gram
+kernel, then runs the existing minimum-norm eigensolver and updates unchanged.
+No cross-device floating-point sum is introduced. Requests beyond the new
+driver's signed 32-bit copy/output indexing are refused before staging.
+
+Two-H100 qualification passes 21 raw-matrix comparisons (including 513-feature
+outputs), indexing-limit refusals, 18 full-model cases through 257 features,
+and all 20 previous Gram cases with exactly unchanged receipt hashes. The
+full-model cases cover OLS with/without intercept, weighted tall OLS, Ridge,
+whitened covariance PCA and TruncatedSVD. Receipts and exact source archives:
+`bench/results/multi_gpu/2026-09-14/gram-outputs-h100/`.
+
+Full root data, eigensolver matrices and model state remain. This is compute
+partitioning, not pooled model/state capacity or new cross-vendor qualification.

@@ -1,0 +1,161 @@
+{
+  "status": "PASS",
+  "checks": [
+    [
+      "LinearRegression",
+      129,
+      {
+        "fit_intercept": false,
+        "numeric_mode": "identical"
+      }
+    ],
+    [
+      "LinearRegression",
+      129,
+      {
+        "fit_intercept": true,
+        "numeric_mode": "identical"
+      }
+    ],
+    [
+      "Ridge",
+      129,
+      {
+        "alpha": 0.25,
+        "fit_intercept": true,
+        "numeric_mode": "identical"
+      }
+    ],
+    [
+      "PCA",
+      129,
+      {
+        "n_components": 3,
+        "svd_solver": "covariance_eigh",
+        "whiten": true,
+        "numeric_mode": "identical"
+      }
+    ],
+    [
+      "TruncatedSVD",
+      129,
+      {
+        "n_components": 3,
+        "numeric_mode": "identical"
+      }
+    ],
+    [
+      "LinearRegression",
+      257,
+      {
+        "fit_intercept": false,
+        "numeric_mode": "identical"
+      }
+    ],
+    [
+      "LinearRegression",
+      257,
+      {
+        "fit_intercept": true,
+        "numeric_mode": "identical"
+      }
+    ],
+    [
+      "Ridge",
+      257,
+      {
+        "alpha": 0.25,
+        "fit_intercept": true,
+        "numeric_mode": "identical"
+      }
+    ],
+    [
+      "PCA",
+      257,
+      {
+        "n_components": 3,
+        "svd_solver": "covariance_eigh",
+        "whiten": true,
+        "numeric_mode": "identical"
+      }
+    ],
+    [
+      "TruncatedSVD",
+      257,
+      {
+        "n_components": 3,
+        "numeric_mode": "identical"
+      }
+    ],
+    [
+      "wide-OLS",
+      3,
+      7,
+      false
+    ],
+    [
+      "wide-OLS",
+      3,
+      7,
+      true
+    ],
+    [
+      "wide-OLS",
+      17,
+      65,
+      false
+    ],
+    [
+      "wide-OLS",
+      17,
+      65,
+      true
+    ],
+    [
+      "wide-OLS",
+      17,
+      129,
+      false
+    ],
+    [
+      "wide-OLS",
+      17,
+      129,
+      true
+    ],
+    [
+      "wide-OLS",
+      33,
+      257,
+      false
+    ],
+    [
+      "wide-OLS",
+      33,
+      257,
+      true
+    ]
+  ],
+  "hashes": [
+    "9e0fa0b56e1970e02be71e145982665385c7ea96b751e73a564dc7364602b062",
+    "4d25b66e997ea5dfeb2ca9f29d3cca2d988ddb8bbca8c3eef3295ef6a0f7b52a",
+    "d1708b141d30510ff9c941d26a17a1bc1c97850f0ceec07b22fb59851f33ccfc",
+    "da892fc4513c08a46b9652334a6dece4db4af42ad315c506abd5a7cd82df1f89",
+    "8ab47464fe4764dd9c47097283107d07fa879aa09433919b8fb29a9b92ab4e16",
+    "b1af28ea433b793971555f1eb3378fcd3a70bacad949eb99fb4705bc507ed3a7",
+    "8825679d188538b9f913a5651c53909ad03f9f1ac606c9b0f587c45968081f17",
+    "87f4e6b0a2598ca138694835e6e03f385c52da7c14b158d4fc7e679203e7d9a5",
+    "37b7526d80d92bbd9585d2fd6650e48cf0e105b07c633b272da8cb5e42212f7e",
+    "2685c3bc04d4cb1783795408a1d0a883a03927607e457a717a27a2215f84c09c",
+    "ab63c3c37119fee230fb56f7e97df24ecea2fedd4e17d5dfd1d1af3eca97ba0e",
+    "06c3dc981a4a1a994fb9fb1eaaeaeb269491700d9c5b89fb61a8de9a284ad2ca",
+    "552a78c963acc41826b7a8305ab56dfc43dbf4c402d8299af287bb15129d53ad",
+    "c060b0ae4371540da1968aef18b4a5765b081aa9b0aeb6dbb3d78073b292c0a4",
+    "62cdbd96beed9427f090ec3af9007a5872beb84b0a4033c443db64de0c25c315",
+    "e39b912a8d1c02388fd70dd54e900f1ae9fb61990b530a74d6429b19ea98eb15",
+    "224581c7cbe42bc2e3fbc7815d2aa1cd787f44cb01b6034b6155bff8f02fa804",
+    "8c628fcdc560615cc4958d76a4f1265d99d711c9095ae341f4406506aec4b3c7"
+  ],
+  "corpus_sha256": "2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8",
+  "scope": "Two H100s; original v1 Gram output rows; 129/257 columns; no pooled root-memory or cross-vendor claim"
+}
