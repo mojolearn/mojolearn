@@ -1,0 +1,59 @@
+30571 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x712140000000, nodemask=1)
+30571 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x797340000000, nodemask=2)
+{
+  "status": "PASS",
+  "checks": [
+    {
+      "layers": 1,
+      "logical_shards": 3,
+      "parameters": 10144,
+      "ownership": [
+        {
+          "device": 0,
+          "first": 0,
+          "count": 5072,
+          "moment_bytes": 40576,
+          "rollback_bytes": 60864,
+          "reduction_bytes": 40576
+        },
+        {
+          "device": 1,
+          "first": 5072,
+          "count": 5072,
+          "moment_bytes": 40576,
+          "rollback_bytes": 60864,
+          "reduction_bytes": 40576
+        }
+      ],
+      "state_sha256": "60daa2a355037c1b8790e97493f21b8da0abef50bc3a7f5456470bfb84da2dde",
+      "native_faults": true
+    },
+    {
+      "layers": 3,
+      "logical_shards": 3,
+      "parameters": 25680,
+      "ownership": [
+        {
+          "device": 0,
+          "first": 0,
+          "count": 12840,
+          "moment_bytes": 102720,
+          "rollback_bytes": 154080,
+          "reduction_bytes": 102720
+        },
+        {
+          "device": 1,
+          "first": 12840,
+          "count": 12840,
+          "moment_bytes": 102720,
+          "rollback_bytes": 154080,
+          "reduction_bytes": 102720
+        }
+      ],
+      "state_sha256": "6052fda589ee57803c4d40a6667cd33b07a16da2900c49da0cabbb7cfb4f51b7",
+      "native_faults": true
+    }
+  ],
+  "scope": "Two GPUs: optimizer moment/rollback and gradient-reduction pooling, replay, exports and recovery. Model weights and activations remain replicated."
+}
+

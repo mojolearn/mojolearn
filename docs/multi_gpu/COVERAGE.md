@@ -8,11 +8,24 @@ distributed fit of one estimator.
 
 ## Compute and memory are separate requirements
 
-The implemented neural drivers replicate parameters and optimizer state.
+The byte-LM replica driver pools AdamW moments, rollback copies and gradient-reduction
+scratch in disjoint device ranges. A separate `PooledByteLanguageModelTrainer`
+partitions decoder layers, parameters, moments, gradients and rollback storage,
+with embedding/head on the first GPU. Its 958,746,624-parameter fixture completes
+a step on two RTX 5090s while both the existing trainer and the same new
+driver run out of memory on one. Nine new same-source H100/5090 groups match
+complete state, gradient and loss hashes.
+Each individual layer and embedding/head must still fit an owner, and portable
+state construction/export requires full host arrays. SmallMLP
+and Samba use host-staged disjoint optimizer ranges after the original global
+clip. Their gradient computations still require a complete model per worker.
 Forests replicate training data; KMeans retains full-data work on the root.
-These paths do not pool GPU memory. A model or dataset that exceeds one GPU's
-memory needs additional partitioning and a memory-bounded replay mechanism.
-Neural model capacity and performance scaling have not been qualified. A separate
+These remaining allocations limit capacity. The new byte-LM offload driver
+matches two updates of the 958.7M-parameter pooled model on one H100, with
+2621 MiB observed on its selected GPU and full state on the host. Actual RTX5090
+offload execution is still owed because RunPod had no stock. Other model/data paths
+still need additional partitions or replay mechanisms.
+Other neural model capacities and performance scaling remain unqualified. A separate
 reference-sharded KNN path has passed a 96 GiB host-staged index gate on two
 80 GB H100s; it does not keep the full index resident in pooled VRAM. ARIMA now
 partitions independent series during fit, and scalers partition feature columns
@@ -21,25 +34,34 @@ during fit and transform; those workers receive only their assigned data.
 ## Public estimator inventory
 
 Status refers to the implementation, not every configuration of the class.
-Initial fixtures cover two RTX 4090s and two H100s. The continued classical
-and histogram paths have two-H100 evidence only.
+Initial fixtures cover two RTX 4090s and two H100s. A frozen-source replay on
+two RTX 5090s matches all 16 H100 receipt groups for pooled neural optimizers,
+MLP/Samba, boosting, wider Gram and tall full PCA. Pointwise histogram dump
+bytes and OrderedRMSE trace records also match across those architectures.
+Those receipts cover NVIDIA architectures. A separate earlier-source
+[136-lane identity record](../../bench/results/identity_break/2026-09-14_136-lanes/README.md)
+now covers sixteen parallel-driver lanes on two MI300X GPUs and two H100s,
+matching their single-device AMD and Apple replay columns. Its 144 training
+cells establish cross-vendor equality for those fixtures, not every later
+pooling change or parameter combination. The new layer-pool and offload
+implementations still require their own AMD/Apple qualification.
 
 | Surface | Current multi-GPU coverage | Remaining numerical work |
 | --- | --- | --- |
-| SmallByteLanguageModelTrainer / LanguageModelTrainer | Concurrent microbatch waves with ordered replay and resident replicas | Memory partitioning and capacity qualification |
-| SmallMLPTrainer | Concurrent microbatch gradients, ordered update | Larger shapes; memory partitioning |
-| SambaStack | Concurrent microbatch gradients, ordered update | Broader block/configuration coverage; memory partitioning |
+| SmallByteLanguageModelTrainer / LanguageModelTrainer | Replica training with pooled optimizer/reduction buffers; separate layer-owned model trainer with RTX 5090 capacity and H100/5090 ordered-replay gates; host-offloaded single-GPU replay | Broader shapes; RTX5090 and AMD/Apple qualification of host-offloaded replay; eight-device qualification |
+| SmallMLPTrainer | Fixed 8→16→3 model (195 parameters), concurrent microbatch gradients, ordered sum and host-staged optimizer ranges | Broader admitted batch/optimizer fixtures and scheduling qualification; larger model architectures are not part of this estimator |
+| SambaStack | Concurrent microbatch gradients, ordered sum, original global clipping and host-staged optimizer ranges | Broader configurations; resident state and model/activation pooling |
 | RandomForestClassifier / RandomForestRegressor | Global tree-ID ranges over full data | Larger forests; data partitioning |
 | ExtraTreesClassifier / ExtraTreesRegressor | Global tree-ID ranges over full data | Larger forests; data partitioning |
-| GradientBoosting / classifier / regressor aliases | Greedy feature histograms; symmetric/depthwise/lossguide gates pass on two H100s | Pointwise searcher; root-state memory partitioning; cross-vendor qualification |
-| OrderedRMSE | None | Above plus permutation and ordered-fold state |
-| ExperimentalTwoLevelFeatureFreq | None | Categorical candidate generation, scores and both levels |
+| GradientBoosting / GradientBoostingClassifier / GradientBoostingRegressor | Greedy and pointwise feature groups; full histogram bytes and adapter contracts pass on two H100s | Broader configurations; root-state memory partitioning; cross-vendor qualification |
+| OrderedRMSE | Pointwise feature groups with original permutation/fold updates; trace/model gates pass on two H100s | Root-state pooling; broader configurations and cross-vendor qualification |
+| ExperimentalTwoLevelFeatureFreq | Both levels use greedy feature histograms after original categorical generation; model/prediction gates pass on two H100s | Candidate/root-state pooling; broader configurations and cross-vendor qualification |
 | KMeans | Parallel row-tile assignment | Resident staging; memory-bounded full-data updates |
-| LinearRegression / Ridge | Original 128 Gram chunks distributed at 1..128 features; two-H100 gates pass | Wide OLS; larger feature counts; root-state partitioning |
+| LinearRegression / Ridge | Original Gram chunks plus wider v1 output rows and minimum-norm OLS; two-H100 state/output gates pass | Larger shapes; root-state pooling; cross-vendor qualification |
 | LogisticRegression | QN gradient feature columns; binary/multiclass two-H100 gates pass | Root-state partitioning; broader configurations and cross-vendor qualification |
 | ElasticNet / Lasso | Original dot leaves across GPUs; cyclic fit and FP32 oracle gates pass on two H100s | Resident shard reuse; root-state partitioning and cross-vendor qualification |
 | SVC / SVR | Linear/RBF kernel rows during fit/prediction; two-H100 cell/full-fit gates pass | Root-state partitioning, broader configurations and cross-vendor qualification |
-| PCA / TruncatedSVD | Original Gram chunks at 1..128 features; covariance PCA and SVD gates pass | Other solver paths, larger widths and root-state partitioning |
+| PCA / TruncatedSVD | Original Gram chunks and wider v1 output rows; covariance PCA/SVD through 257 features and tall full-PCA TSQR panels pass on two H100s | Wide full-PCA transpose QR; larger shapes, root-state pooling and cross-vendor qualification |
 | NearestNeighbors / RadiusNeighbors | Whole-query brute/RBC and radius; brute KNN reference shards with a 96 GiB host-staged index gate on two H100s | Resident index pooling; RBC/radius reference partitioning; larger shapes/metrics and cross-vendor qualification |
 | KNeighborsClassifier / KNeighborsRegressor | Query and brute reference shards with original voting/weighting; single/multi-target two-H100 gates pass | Resident index/target pooling; broader configurations and cross-vendor qualification |
 | DBSCAN | Brute L2/L1 and RBC neighborhood rows; two-H100 adjacency/CSR, core-stage and full-fit gates pass | Root graph/index partitioning; larger shapes and cross-vendor qualification |

@@ -83,7 +83,7 @@ if ! gh release view "$TAG" >/dev/null 2>&1; then
   [ -n "$TAR" ] && NOTES="$NOTES linux-qualification.tar.gz is the install-and-test record on each architecture." \
                 || NOTES="$NOTES Installed per-architecture qualification was not run for this release."
   # shellcheck disable=SC2086
-  gh release create "$TAG" --prerelease --target "$HEAD_SHA" --title "mojolearn $VERSION Linux" --notes "$NOTES" \
+  gh release create "$TAG" --latest --target "$HEAD_SHA" --title "mojolearn $VERSION Linux" --notes "$NOTES" \
     "$ART/$(basename "$WHL")" "$ART/alpha-manifest.json" ${TAR:+"$TAR"}
 fi
 

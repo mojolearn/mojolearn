@@ -9,7 +9,11 @@ to predict/transform, and every refusal by name. The arithmetic is gated by
     cd python && python3 -m mojolearn.tests.test_kernel_methods_surface
 
 Exit 2 naming `bindings/build_kernel_methods.sh` when unbuilt. Written on
-one Apple M4 with no built binary in the worktree; the first run is owed.
+one Apple M4 with no built binary in the worktree. First run: Hot Aisle
+MI300X gfx942 at 2b2f568b0, 2026-09-14, RED on two checks, the square
+Nystroem Gram (a code defect, corrected in `kernel_methods/estimator.mojo::
+_singular_value_f32`) and RBFSampler n_components=0 (now refused by name
+in the Python class).
 """
 import sys
 
@@ -59,7 +63,7 @@ def arm_nystroem(rep):
     rep.check("NYS", np.asarray(ny.components_).shape == (32, 3) and np.asarray(ny.component_indices_).shape == (32,), "components_ and component_indices_ shaped")
     rep.check("NYS", sorted(np.asarray(ny.component_indices_).tolist()) == list(range(32)), "with n_components == n the indices are a permutation of the rows")
     ev = np.asarray(ny.eigenvalues_)
-    rep.check("NYS", np.all(np.diff(ev) <= 0) and np.all(ev >= 1e-12), "eigenvalues_ descending and clipped at 1e-12 (DEVIATION 1670)")
+    rep.check("NYS", np.all(np.diff(ev) <= 0) and np.all(ev >= 1e-12), "eigenvalues_ (singular values) descending and clipped at 1e-12 (DEVIATION 1670)")
     rep.check("NYS", ny.sweeps_ >= 1, "sweeps_ is carried", ny.sweeps_)
     phi = np.asarray(ny.transform(x))
     k_exact = x.astype(np.float64) @ x.astype(np.float64).T
@@ -111,7 +115,7 @@ def arm_refusals(rep):
     rep.raises("REFUSE", Exception, "", "Nystroem n_components > n, refused on the Mojo host", km.Nystroem(kernel="linear", n_components=17).fit, x)
     rep.raises("REFUSE", ValueError, "scale", "RBFSampler gamma='scale' by name", km.RBFSampler(gamma="scale").fit, x)
     rep.raises("REFUSE", Exception, "gamma", "RBFSampler gamma=0, refused on the Mojo host by name", km.RBFSampler(gamma=0.0, n_components=4).fit, x)
-    rep.raises("REFUSE", Exception, "n_components", "RBFSampler n_components=0, refused on the Mojo host by name", km.RBFSampler(gamma=0.5, n_components=0).fit, x)
+    rep.raises("REFUSE", ValueError, "n_components", "RBFSampler n_components=0, refused by name before any buffer is made", km.RBFSampler(gamma=0.5, n_components=0).fit, x)
     rep.raises("REFUSE", TypeError, "degree", "a float degree", km.KernelRidge(kernel="poly", gamma=0.5, degree=2.5).fit, x, y)
 
 

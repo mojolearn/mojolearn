@@ -1,0 +1,21 @@
+33397 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x32c240000000, nodemask=1)
+capacity fixture one 958746624
+33397 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x32c280000000, nodemask=1)
+33397 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x32c364a00000, nodemask=1)
+33397 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x32c449400000, nodemask=1)
+##(##(cuda[0]:0x5e19b5e53d10)##: memory_manager(chunk_size: 30333206528 ; max_cache_size: 30333206528 ; free_list: 0x5e19b73e9aa0)
+cuda[0])##: oom log ===== begin =====
+##(cuda[0])##: oom log request=9MB reason="device driver memAlloc failed: CUDA call failed: CUDA_ERROR_OUT_OF_MEMORY (out of memory)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode."
+##(cuda[0])##: oom log mm max_cache=28.25GB cache_used=0B free=113GB free_blocks=1 chunk_size=28.25GB chunks=1
+##(cuda[0])##: oom log freelist=[freeList]@0x5e19b73e9b30 primary=0
+##(cuda[0])##: oom log   bucket=0 empty
+##(cuda[0])##: oom log   bucket=1 empty
+##(cuda[0])##: oom log freelist=[mm:root]@0x5e19b73e9aa0 primary=0
+##(cuda[0])##: oom log   bucket=0 count=1 total=113GB smallest=113GB largest=113GB
+##(cuda[0])##: oom log   bucket=0 hist 2^36=1
+##(cuda[0])##: oom log   bucket=0 top1=113GB
+##(cuda[0])##: oom log   bucket=1 empty
+##(cuda[0])##: oom log chunk=0 base=0x402000000 size=113GB in_use_blocks=0 in_use=0B free_blocks=1 free=113GB largest_free=113GB
+##(cuda[0])##: oom log ===== end =====
+{"mode": "one", "parameters": 958746624, "hardware": "name, memory.total [MiB], memory.used [MiB]\nNVIDIA GeForce RTX 5090, 32607 MiB, 2 MiB\nNVIDIA GeForce RTX 5090, 32607 MiB, 2 MiB\n", "shape": [1, 1, 1536, 24, 6, 64, 6144, 28, 256], "tokens": [[60, 109]], "status": "REFUSED", "error": "At max/mojo/max/gpu/host/device_context.mojo:4073:35: CUDA call failed: CUDA_ERROR_OUT_OF_MEMORY (out of memory)\nTo get more accurate error information, set MODULAR_DEBUG=device-sync-mode.", "elapsed_seconds": 76.98432353697717}

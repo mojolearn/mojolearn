@@ -158,12 +158,15 @@ from std.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 
 from checks.numerics import (
+    GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL,
     ftz,
     identical_div,
     identical_mul_add,
     identical_sqrt,
 )
 from core.pinned_reduce import halving_block_sum
+from core.multi_gpu import peer_clone
+from std.os import getenv
 
 
 #: THE WIDTH OF THE FOLD. See DEVIATION 587 in the banner: this is a numeric
@@ -471,16 +474,17 @@ def qr_factor(
         )
         ctx.synchronize()
         return 1
-    ctx.enqueue_function[qr_panel_kernel](
-        a.unsafe_ptr(),
-        r_scratch.unsafe_ptr(),
-        Int32(n_rows),
-        Int32(n_cols),
-        Int32(n_cols),
-        Int32(ns),
-        grid_dim=(ns, 1, 1),
-        block_dim=(QR_TPB, 1, 1),
-    )
+    if not qr_parallel_panels(ctx,a,r_scratch,n_rows,n_cols,ns):
+        ctx.enqueue_function[qr_panel_kernel](
+            a.unsafe_ptr(),
+            r_scratch.unsafe_ptr(),
+            Int32(n_rows),
+            Int32(n_cols),
+            Int32(n_cols),
+            Int32(ns),
+            grid_dim=(ns, 1, 1),
+            block_dim=(QR_TPB, 1, 1),
+        )
     # The `ns` tiles are contiguous `n x n` row-major blocks, so the stack
     # of them IS an `(ns * n) x n` row-major matrix with leading dimension
     # `n`. No copy and no transpose: TSQR's second pass is the SAME kernel
@@ -497,3 +501,59 @@ def qr_factor(
     )
     ctx.synchronize()
     return ns
+
+
+def qr_parallel_panels(ctx: DeviceContext, mut a: DeviceBuffer[DType.float32],
+    mut r_scratch: DeviceBuffer[DType.float32], m: Int,n: Int,ns: Int,
+) raises -> Bool:
+    """Original shape-defined TSQR panels; no change to the root R-stack fold.
+
+    Every panel keeps exactly its original row interval and QR_TPB lanes.
+    Both its destroyed input and R tile return to their original addresses.
+    Only row-panel memory is held on workers; the full root matrix remains.
+    """
+    var count = Int(getenv("MOJOLEARN_QR_DEVICE_COUNT","1"))
+    if count == 1:
+        return False
+    if count < 1 or count > 64 or GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+        raise Error("parallel QR requires IDENTICAL and 1..64 devices")
+    count = min(count,ns)
+    ctx.synchronize()
+    var devices = List[DeviceContext]()
+    for rank in range(count):
+        devices.append(DeviceContext(device_id=rank))
+    var panels = List[DeviceBuffer[DType.float32]]()
+    var outputs = List[DeviceBuffer[DType.float32]]()
+    for panel in range(ns):
+        var rank = panel%count
+        var first = panel*m//ns
+        var rows = (panel+1)*m//ns-first
+        var view = a.create_sub_buffer[DType.float32](first*n,rows*n)
+        panels.append(peer_clone(ctx,devices[rank],view))
+        outputs.append(devices[rank].enqueue_create_buffer[DType.float32](n*n))
+    for rank in range(count):
+        devices[rank].synchronize()
+    for panel in range(ns):
+        var rank = panel%count
+        var first = panel*m//ns
+        var rows = (panel+1)*m//ns-first
+        devices[rank].enqueue_function[qr_panel_kernel](panels[panel].unsafe_ptr(),outputs[panel].unsafe_ptr(),
+            Int32(rows),Int32(n),Int32(n),Int32(1),
+            grid_dim=(1,1,1),block_dim=(QR_TPB,1,1))
+    for panel in range(ns):
+        var rank = panel%count
+        devices[rank].synchronize()
+        var first = panel*m//ns
+        var rows = (panel+1)*m//ns-first
+        var av = a.create_sub_buffer[DType.float32](first*n,rows*n)
+        var rv = r_scratch.create_sub_buffer[DType.float32](panel*n*n,n*n)
+        panels[panel].enqueue_copy_to(av)
+        outputs[panel].enqueue_copy_to(rv)
+        devices[rank].synchronize()
+    _ = outputs^
+    _ = panels^
+    for rank in range(count):
+        devices[rank].synchronize()
+    _ = devices^
+    ctx.synchronize()
+    return True

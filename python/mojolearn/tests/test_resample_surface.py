@@ -9,7 +9,8 @@ batch-invariance handle, every refusal by name). The arithmetic is gated by
     cd python && python3 -m mojolearn.tests.test_resample_surface
 
 Exit 2 naming `bindings/build_resample.sh` when unbuilt. Written on one
-Apple M4 with no built binary in the worktree; the first run is owed.
+Apple M4 with no built binary in the worktree. First run: Hot Aisle MI300X
+gfx942 at 2b2f568b0, 2026-09-14, GREEN with 34 checks.
 """
 import sys
 

@@ -387,8 +387,10 @@ class _RandomForestBase(ForestProtocol, NumericModeMixin):
     ):
         if device != "gpu":
             raise ValueError(
-                f"device must be 'gpu', got {device!r}: ensemble/ has no"
-                " host transcription of the forest builder"
+                f"device must be 'gpu', got {device!r}: the fit runs on the"
+                " GPU binding, or, on a CPU-only install with the rf host"
+                " binding built, on its host restatement"
+                " (ensemble/host/rf_oracle.mojo) under the same device='gpu'"
             )
         if max_leaf_nodes is not None:
             _refuse("max_leaf_nodes", _MAX_LEAF_NODES_WHY)

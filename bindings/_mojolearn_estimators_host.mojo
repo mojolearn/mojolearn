@@ -45,10 +45,13 @@ equilibrated pseudo-inverse of `lstsq_eig` and the `svd_eig` plus
 `ridge_solve` pair), and `dbscan_fit` over `dbscan/host/dbscan_oracle.mojo`
 (the ball cover index and query replayed, the brute arm, the label
 propagation and the relabel; `sample_weight` and an explicit
-`max_mbytes_per_batch` refused by name). Every other function of the GPU
-binding (pca_fit_full, inverse_transform, qn_fit, ...) is deliberately
-absent, so those surfaces refuse BY NAME through `_HostBinding` and never
-hash something else.
+`max_mbytes_per_batch` refused by name), and (batch 2, lane/cpu-training-e2)
+`qn_fit` over `glm/host/qn_oracle.mojo` (the L-BFGS arm of cuML's
+quasi-Newton solver with the binary logistic loss; the softmax loss, an l1
+or elasticnet penalty and `sample_weight` refused by name). Every other
+function of the GPU binding (pca_fit_full, inverse_transform, ...) is
+deliberately absent, so those surfaces refuse BY NAME through
+`_HostBinding` and never hash something else.
 """
 from std.math import isfinite
 from std.os import abort
@@ -86,6 +89,7 @@ from decomposition.host.pca_oracle import (
     host_tsvd_fit,
 )
 from glm.host.glm_oracle import host_ols_fit, host_ridge_fit
+from glm.host.qn_oracle import QN_ORACLE_HOST_SABOTAGE, host_qn_fit
 from kde.host.kde_oracle import KDE_ORACLE_HOST_SABOTAGE, oracle_score_samples
 from kde.impl.neighbors.kernel_density import (
     kde_fit_validate,
@@ -140,6 +144,7 @@ def estimators_host_sabotage_binding() raises -> PythonObject:
         or CLASSICAL_HOST_SABOTAGE
         or PCA_ORACLE_HOST_SABOTAGE
         or DBSCAN_ORACLE_HOST_SABOTAGE
+        or QN_ORACLE_HOST_SABOTAGE
     )
 
 
@@ -228,8 +233,9 @@ def kde_score_samples_binding(
 # THE TRAINING ENTRIES (workstream E, lane/cpu-training-e, 2026-09-14): the
 # GPU binding's `pca_fit`, `tsvd_fit`, `ols_fit` and `ridge_fit`, same
 # names, same arity, same params lists, over decomposition/host/pca_oracle.mojo
-# and glm/host/glm_oracle.mojo. `pca_fit_full` (the R-SVD arm), `qn_fit`,
-# `dbscan_fit` and `inverse_transform` stay absent and refuse BY NAME.
+# and glm/host/glm_oracle.mojo; batch 2 adds `qn_fit` over
+# glm/host/qn_oracle.mojo. `pca_fit_full` (the R-SVD arm) and
+# `inverse_transform` stay absent and refuse BY NAME.
 # ===========================================================================
 
 
@@ -363,6 +369,61 @@ def ridge_fit_binding(
         for i in range(nf):
             wp[i] = w[i]
     return PythonObject(0)
+
+
+def qn_fit_binding(
+    x_addr: PythonObject,
+    y_addr: PythonObject,
+    coef_addr: PythonObject,
+    info_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`qnFit` on the host by `host_qn_fit` (the L-BFGS arm, the binary
+    logistic loss). params: n_rows, n_features, n_classes, penalty_l1,
+    penalty_l2, grad_tol, change_tol, max_iter, linesearch_max_iter,
+    lbfgs_memory, fit_intercept, penalty_normalized, has_sample_weight,
+    and an OPTIONAL 14th, the loss id (QN_LOSS_LOGISTIC, the value a
+    13-field call gets). `coef_addr` holds `n_features + fit_intercept`
+    floats, written; `info_addr[0]` receives the objective, `[1]` the
+    OPT_RETCODE; returns num_iters. The softmax loss, an l1 penalty and
+    `sample_weight` are refused BY NAME before any address is read."""
+    if len(params) != 13 and len(params) != 14:
+        raise Error("qn_fit: params must carry the 13 qn_params fields, plus an optional 14th, the loss id")
+    var x_address = _index(x_addr)
+    var y_address = _index(y_addr)
+    var wp = f32_ptr(_index(coef_addr))
+    var ip = f32_ptr(_index(info_addr))
+    var nr = _index(params[0])
+    var nf = _index(params[1])
+    var nc = _index(params[2])
+    var l1 = Float64(py=params[3])
+    var l2 = Float64(py=params[4])
+    var grad_tol = Float64(py=params[5])
+    var change_tol = Float64(py=params[6])
+    var max_iter = _index(params[7])
+    var ls_max = _index(params[8])
+    var mem = _index(params[9])
+    var fit_intercept = _index(params[10]) != 0
+    var normalized = _index(params[11]) != 0
+    var has_sw = _index(params[12]) != 0
+    var loss = _index(params[13]) if len(params) == 14 else 0
+    var iters = 0
+    with GILReleased(Python()):
+        _positive(nr, "n_rows")
+        _positive(nf, "n_features")
+        var x = read_f32(x_address, nr * nf)
+        var y = read_f32(y_address, nr)
+        var coef = List[Float32]()
+        var r = host_qn_fit(
+            x, y, nr, nf, nc, l1, l2, grad_tol, change_tol, max_iter, ls_max,
+            mem, fit_intercept, normalized, has_sw, loss, coef,
+        )
+        for i in range(len(coef)):
+            wp[i] = coef[i]
+        ip[0] = r.fx
+        ip[1] = Float32(r.retcode)
+        iters = r.n_iter
+    return PythonObject(iters)
 
 
 def dbscan_fit_binding(
@@ -741,6 +802,7 @@ def PyInit__mojolearn_estimators_host() abi("C") -> PythonObject:
         module.def_function[ols_fit_binding]("ols_fit")
         module.def_function[ridge_fit_binding]("ridge_fit")
         module.def_function[dbscan_fit_binding]("dbscan_fit")
+        module.def_function[qn_fit_binding]("qn_fit")
         module.def_function[ols_predict_binding]("ols_predict")
         module.def_function[tsvd_transform_binding]("tsvd_transform")
         module.def_function[pca_transform_binding]("pca_transform")

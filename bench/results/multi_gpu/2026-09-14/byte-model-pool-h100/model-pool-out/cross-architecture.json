@@ -1,0 +1,69 @@
+{
+  "status": "PASS",
+  "checks": [
+    {
+      "layers": 1,
+      "logical_shards": 1,
+      "state_sha256": "646b28df38c2636a8d57958ddb9b6fe4e90b3aca3433e844f531ecb632362c6a",
+      "gradient_sha256": "a6bc797e3f0c7d25beef59054f6fe1f9807b91d77022043c612fd21c2280eed6",
+      "loss_sha256": "c56c35ddfabcafabf384338ec358955365875b8ae871bf279c63caff104b63b2"
+    },
+    {
+      "layers": 2,
+      "logical_shards": 1,
+      "state_sha256": "3aabb33bad5787a2c3e3fc88121fd4c6334e57be19da7644c4cae82f4d281fdb",
+      "gradient_sha256": "fd9172c1580aa81292dd00cc979b6e377b73599ad3501a4b456760f66df92aaa",
+      "loss_sha256": "6d608583bf01b047863383849c827f0a6832b7f40cabe78fe1f210ac95c959a1"
+    },
+    {
+      "layers": 3,
+      "logical_shards": 1,
+      "state_sha256": "b27ecfb67564100a55b39d84855a26d0b5777a270586dba2287ce04a0b396ed2",
+      "gradient_sha256": "e39072a2fe949efa07367bfc1d47e85ed464bf1c9ed1820db7d9bdd55efa984f",
+      "loss_sha256": "100b4c7dd20dbcc043799ed86905e5ea09f46c597f44d1a2830e60e6078b6fa4"
+    },
+    {
+      "layers": 1,
+      "logical_shards": 3,
+      "state_sha256": "60daa2a355037c1b8790e97493f21b8da0abef50bc3a7f5456470bfb84da2dde",
+      "gradient_sha256": "25a804f84d9d6cc9a9fb98f3b3375b23f6bc055a556d124260d90b523be3ae6c",
+      "loss_sha256": "9bf0a49ad76c663e490d429f105ff6bc57d7360228532772f571900646f02df7"
+    },
+    {
+      "layers": 2,
+      "logical_shards": 3,
+      "state_sha256": "85b042c50a62a476938bfb26e530a62f5312565e266c57592b07117ef904bd23",
+      "gradient_sha256": "fd213ff5dd1945bbde4e8451374eca1830f332a15fc6f6b68ac67e47ec7ae4d9",
+      "loss_sha256": "435bb5b737bc2bea810401346167e6de5b9b9dd5d46582263c3939cea5e6b8fe"
+    },
+    {
+      "layers": 3,
+      "logical_shards": 3,
+      "state_sha256": "6052fda589ee57803c4d40a6667cd33b07a16da2900c49da0cabbb7cfb4f51b7",
+      "gradient_sha256": "f55cb914214e1b185108e228594ee56a9fbf1491fec2105668338c0ba6de86bf",
+      "loss_sha256": "4ceaad09a9895d4844df3ba08dbbf32287311bde5caca337fcad858996b62a56"
+    },
+    {
+      "layers": 1,
+      "logical_shards": 5,
+      "state_sha256": "4fcb4ee90927020fa90cbbc67caf9e10aab17c7bb2cec2c76678847e3d5b857a",
+      "gradient_sha256": "a49739d290b9f45b132f2aac0aa5ce2af3c39d298dba1f99387882073140a980",
+      "loss_sha256": "a5d28724a2db9f52edd83348510edc60a685475fefa39e0071aa9ad6b2112972"
+    },
+    {
+      "layers": 2,
+      "logical_shards": 5,
+      "state_sha256": "09c3f9ea02011b1f75a9a46b9d6bc4ba18eb299356829675c19f38cb70200a39",
+      "gradient_sha256": "f66bd787ca70f8739895c4206d2dbf906dce3020607a2c7c0520a1e46fce1ff7",
+      "loss_sha256": "6568425388b363f9191e23fa2f996b193eece075732124f6f887c2d2107922ce"
+    },
+    {
+      "layers": 3,
+      "logical_shards": 5,
+      "state_sha256": "34ec414aeadd68bae64abeb085775426289a082558e72f048b74f1167a0f6cf4",
+      "gradient_sha256": "4b849baa1d4746205470789371088a48acdbf3004d4e7f72332a5c0506c3af8c",
+      "loss_sha256": "0c4ece72101cde4fef6c06fa09aeedacc1f6f237936d5fd18f8ebefd229cf4c6"
+    }
+  ],
+  "scope": "Exact complete receipts: two H100s and two RTX 5090s, nine layer-owned byte-LM configurations. Both are NVIDIA architectures."
+}

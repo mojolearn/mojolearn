@@ -83,7 +83,7 @@ def fit_exponential_smoothing(estimator, *, devices=(0,), series_per_shard=1):
 def fit_gram_estimator(estimator, X, y=None, *, devices=(0,), sample_weight=None):
     """Distribute the existing pinned Gram chunks for OLS, Ridge, PCA and SVD.
 
-    This entry admits the Gram/eigendecomposition paths at 1..128 features.
+    This entry admits the original Gram/eigendecomposition and wide OLS paths.
     The root still owns preprocessing and solver state; this is computation
     partitioning, not a fit beyond one GPU's memory capacity.
     """
@@ -95,12 +95,10 @@ def fit_gram_estimator(estimator, X, y=None, *, devices=(0,), sample_weight=None
         raise ValueError('parallel Gram estimators require IDENTICAL numeric mode')
     data, _ = as_f32_c(X, ndim=2, name='X')
     rows, columns = data.shape
-    if not 1 <= columns <= 128:
-        raise ValueError('parallel Gram currently requires 1..128 features')
-    if type(estimator) is LinearRegression and rows < columns:
-        raise ValueError('the wide minimum-norm OLS path is not yet distributed')
-    if type(estimator) is PCA and estimator.svd_solver not in estimator._COV_SOLVERS:
-        raise ValueError('parallel PCA currently requires a covariance solver')
+    if columns < 1:
+        raise ValueError('parallel Gram requires at least one feature')
+    if type(estimator) is PCA and estimator.svd_solver in estimator._DENSE_SOLVERS and rows < columns:
+        raise ValueError('parallel full PCA currently requires the tall TSQR route')
     kwargs = {} if sample_weight is None else dict(sample_weight=sample_weight)
     pool = DevicePool(devices, cooperative=True)
     try:

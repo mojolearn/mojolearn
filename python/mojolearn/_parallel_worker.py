@@ -7,6 +7,15 @@ import traceback
 
 def execute(request):
     operation, state, args = request
+    if operation in ('mlp_update', 'samba_update'):
+        import os
+        if int(os.environ.get('MOJOLEARN_OPTIMIZER_DEVICE_COUNT', '1')) > 1:
+            from ._training_impl import _load
+            binding = _load('identical')
+            if not callable(getattr(binding, 'optimizer_parallel_available', None)):
+                raise ImportError('rebuild training binding for pooled optimizer updates')
+            if binding.optimizer_parallel_available() != 1:
+                raise RuntimeError('training binding refused parallel optimizer availability')
     if operation in ('mlp_gradient', 'mlp_update'):
         from ._mlp_impl import SmallMLPTrainer, _validate_state
         weights, _, config, schedule = _validate_state(state)
@@ -71,12 +80,19 @@ def execute(request):
         X, weights = args
         state.fit(X, sample_weight=weights)
         return state
-    if operation == 'gbdt_fit':
+    if operation in ('gbdt_fit', 'ordered_rmse_fit'):
         model = state
-        binding = model._bind('_mojolearn_gbdt')
+        if callable(getattr(model, '_bind', None)):
+            binding = model._bind('_mojolearn_gbdt')
+        else:
+            from . import _backend
+            binding = _backend.binding('_mojolearn_gbdt', 'identical')
         if (not callable(getattr(binding, 'gbdt_parallel_available', None))
                 or binding.gbdt_parallel_available() != 1):
             raise ImportError('rebuild GBDT binding for feature-parallel training')
+        if operation == 'ordered_rmse_fit' or getattr(model, 'use_pointwise_searcher', False):
+            if not callable(getattr(binding, 'pointwise_parallel_available', None)) or binding.pointwise_parallel_available() != 1:
+                raise ImportError('rebuild GBDT binding for parallel pointwise histograms')
         X, y, kwargs = args
         model.fit(X, y, **kwargs)
         return model
@@ -92,6 +108,12 @@ def execute(request):
                 or binding.gram_parallel_available() != 1):
             raise ImportError('rebuild estimators binding for parallel Gram chunks')
         X, y, kwargs = args
+        if X.shape[1] > 128 or X.shape[0] < X.shape[1]:
+            if not callable(getattr(binding, 'gram_outputs_parallel_available', None)) or binding.gram_outputs_parallel_available() != 1:
+                raise ImportError('rebuild estimators binding for Gram output partitions')
+        if getattr(state, 'svd_solver', None) == 'full':
+            if not callable(getattr(binding, 'qr_parallel_available', None)) or binding.qr_parallel_available() != 1:
+                raise ImportError('rebuild estimators binding for parallel QR panels')
         state.fit(X, y, **kwargs)
         return state
     if operation in ('gp_fit', 'gp_predict'):

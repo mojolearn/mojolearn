@@ -1,0 +1,103 @@
+{
+  "status": "PASS",
+  "checks": [
+    {
+      "rows": 65,
+      "border": 1,
+      "reverse": false,
+      "sha256": "0914e567b883d9a26b2dc62253d40bea245b65c2dd01075d60b5034395192665"
+    },
+    {
+      "rows": 65,
+      "border": 1,
+      "reverse": true,
+      "sha256": "36f7eee4c56e9c300b29e7c4f105631690662e42951eae7da41fac8acda19bb9"
+    },
+    {
+      "rows": 65,
+      "border": 7,
+      "reverse": false,
+      "sha256": "1c0fa2347db2655ff684303d4ad14fb2e6fec8554c5c67c7c54c3ac6f02bdc16"
+    },
+    {
+      "rows": 65,
+      "border": 7,
+      "reverse": true,
+      "sha256": "1c0fa2347db2655ff684303d4ad14fb2e6fec8554c5c67c7c54c3ac6f02bdc16"
+    },
+    {
+      "rows": 65,
+      "border": 31,
+      "reverse": false,
+      "sha256": "7f690561fc4fd4d38e9bed949436a93412f7f637036bd8ab21daa9501b931457"
+    },
+    {
+      "rows": 65,
+      "border": 31,
+      "reverse": true,
+      "sha256": "adbb2e694f1f8cbbb1366c8de230e3139b0678660f2a07f3543be0c78d06b408"
+    },
+    {
+      "rows": 65,
+      "border": 254,
+      "reverse": false,
+      "sha256": "2a27d72a509bdb8f97fc244c1ba2c9a3d7f0c55e27ed56e55860e9a6d1fcde48"
+    },
+    {
+      "rows": 65,
+      "border": 254,
+      "reverse": true,
+      "sha256": "429e532ea37969146a6b75c5aa6b76d19bbc0fc19177c9f554386482bcff9fd3"
+    },
+    {
+      "rows": 513,
+      "border": 1,
+      "reverse": false,
+      "sha256": "d11d8f575fe77fa3cc5d30a598de1c8c400bc7228672684dd06ec5bc389e6311"
+    },
+    {
+      "rows": 513,
+      "border": 1,
+      "reverse": true,
+      "sha256": "d11d8f575fe77fa3cc5d30a598de1c8c400bc7228672684dd06ec5bc389e6311"
+    },
+    {
+      "rows": 513,
+      "border": 7,
+      "reverse": false,
+      "sha256": "a30bc9b4b67a1b119bf28d63ecfbc41a579dc85e65aab7fd318227774c884f61"
+    },
+    {
+      "rows": 513,
+      "border": 7,
+      "reverse": true,
+      "sha256": "57a364cad4e69d6bfd61d7bd362a2715acf0f26c77a29f2e130db07de2faac32"
+    },
+    {
+      "rows": 513,
+      "border": 31,
+      "reverse": false,
+      "sha256": "abda3b4ed63559a84b1144df10729caedd5524d258ee4dcdd46414829e9f6ca7"
+    },
+    {
+      "rows": 513,
+      "border": 31,
+      "reverse": true,
+      "sha256": "fc3eb80b30f89397ffce0992e1ed2745a24fff489e98a6310be265683f9de18e"
+    },
+    {
+      "rows": 513,
+      "border": 254,
+      "reverse": false,
+      "sha256": "1c09544475ee286dc590de26ae3c8f57a15b24eba28daab8b5af584a9c390bad"
+    },
+    {
+      "rows": 513,
+      "border": 254,
+      "reverse": true,
+      "sha256": "1c09544475ee286dc590de26ae3c8f57a15b24eba28daab8b5af584a9c390bad"
+    }
+  ],
+  "corpus_sha256": "2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8",
+  "scope": "Two H100s; original ordered permutation/fold state with feature-group histograms; no pooled state claim"
+}

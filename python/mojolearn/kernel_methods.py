@@ -254,7 +254,10 @@ class Nystroem(_KernelMethodBase):
         NOT bitwise symmetric (DEVIATION 1674); transform uses its
         transpose, scikit-learn's arm.
     eigenvalues_ : Array (n_components,) float32
-        Descending, clipped at 1e-12 (DEVIATION 1670).
+        The singular values of the basis kernel, `|lambda|` of its
+        eigenvalues, descending, clipped at 1e-12 (DEVIATION 1670). A
+        numerically negative eigenvalue keeps its sign in the right factor
+        of `normalization_`, as scikit-learn's SVD does.
     eigenvectors_ : Array (n_components, n_components) float32
     sweeps_ : int
         Jacobi sweeps the device eigensolver ran. Part of the model.
@@ -352,6 +355,7 @@ class RBFSampler(_KernelMethodBase):
         variance over the data, a fold in front of every draw
         (`kernel_methods/NOT_IMPLEMENTED.tsv`).
     n_components : int, default 100
+        Refused by name when not positive, before any buffer is made.
     random_state : int, default 0
 
     Attributes
@@ -385,6 +389,12 @@ class RBFSampler(_KernelMethodBase):
         if isinstance(self.n_components, bool) or not isinstance(self.n_components, int):
             raise TypeError(f"mojolearn {self._WHERE}: n_components must be an int")
         q = int(self.n_components)
+        if q < 1:
+            # BY NAME, BEFORE ANY BUFFER. The first MI300X run of this surface
+            # (2026-09-14) saw n_components=0 refused as "null float32 buffer
+            # address": the zero-length weights buffer reached the binding's
+            # address check before anything had said which argument was wrong.
+            raise ValueError(f"mojolearn {self._WHERE}: n_components must be positive, got {q}")
         seed = int(self.random_state)
         weights = empty((d * q,), "<f4")
         offset = empty((q,), "<f4")

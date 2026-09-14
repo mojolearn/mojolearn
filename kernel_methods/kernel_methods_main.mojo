@@ -33,11 +33,12 @@ sequence a divergence would first show up in:
       nys.basis_indices       the sampled row ids, Int32, in RANK order
       nys.basis_kernel        K(basis, basis)
       nys.eigenvectors_flipped   after jacobi_eigh_kernel + sign_flip_kernel
-      nys.eigenvalues         DESCENDING and clipped
+      nys.eigenvalues         the singular values |lambda|, DESCENDING and clipped
       nys.sqrt_eigenvalues
+      nys.v_signs             sign(lambda) per ordered component, Int32 +1 or -1
       nys.eigenvectors        permuted into the eigenvalue order
       nys.scaled              Q / sqrt(s), column by column
-      nys.normalization       (Q / sqrt(s)) . Q^T
+      nys.normalization       (Q / sqrt(s)) . V, V = diag(v_signs) Q^T
       nys.cross_kernel        K(X_new, basis)
       nys.embedding           cross_kernel . normalization^T
 
@@ -75,8 +76,8 @@ sequence a divergence would first show up in:
   `jacobi_eigh_device.mojo` rather than a caveat of ours.
 - `nys.eigenvalues` moving with `nys.eigenvectors_flipped` identical is the
   ORDER or the CLIP, and nothing else.
-- `nys.normalization` moving with `nys.scaled` identical is the `OP_NT`
-  product.
+- `nys.normalization` moving with `nys.scaled` and `nys.v_signs` identical
+  is the `OP_NT` product.
 - `nys.embedding` moving with both identical is the transpose (DEVIATION
   1674).
 - `rf.weights` moving is the DRAW: the position map, the Box-Muller

@@ -1,0 +1,72 @@
+{
+  "status": "PASS",
+  "checks": [
+    [
+      513,
+      "SymmetricTree",
+      1,
+      "RMSE"
+    ],
+    [
+      513,
+      "SymmetricTree",
+      7,
+      "RMSE"
+    ],
+    [
+      513,
+      "SymmetricTree",
+      31,
+      "RMSE"
+    ],
+    [
+      513,
+      "SymmetricTree",
+      63,
+      "RMSE"
+    ],
+    [
+      513,
+      "SymmetricTree",
+      127,
+      "RMSE"
+    ],
+    [
+      513,
+      "SymmetricTree",
+      254,
+      "RMSE"
+    ],
+    [
+      8193,
+      "SymmetricTree",
+      1,
+      "RMSE"
+    ],
+    [
+      8193,
+      "SymmetricTree",
+      7,
+      "RMSE"
+    ],
+    [
+      513,
+      "SymmetricTree",
+      31,
+      "Logloss"
+    ]
+  ],
+  "hashes": [
+    "89b55e9394302438a164fa6f590ec423ac160bd6b88b3dc1cafdc08bb3e22e6a",
+    "3f2e7a09ef5ec9053d7447c4a17d94d0762af61b58e9d109773d22b741e9ca0d",
+    "2a3db1120cde48e9130eebc80c181c9ea08fcccc0b9528c416a731209e71ace6",
+    "613a10a4c512a39a4aac9bac26bac56e4dbd18bbc849a3bc06cc6f9edf7cba4c",
+    "613a10a4c512a39a4aac9bac26bac56e4dbd18bbc849a3bc06cc6f9edf7cba4c",
+    "613a10a4c512a39a4aac9bac26bac56e4dbd18bbc849a3bc06cc6f9edf7cba4c",
+    "7450ae081cfe27cd6e2e25743b1ca410cc446bce0b533dfe237978a8a7207a19",
+    "be8781ebcf381815f999abd2e0aa191515c081ad2c9dec2cc8ac047fbd384f2e",
+    "fdfff14b8b7036adfc07f253237ed50f2700b6d99193be2e255e5302a5b89cc3"
+  ],
+  "corpus_sha256": "2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8",
+  "scope": "Two devices; pointwise packed feature groups, original row reductions; no pooled root-state capacity claim"
+}

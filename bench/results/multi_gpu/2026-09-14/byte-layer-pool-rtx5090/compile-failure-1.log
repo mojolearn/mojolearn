@@ -1,0 +1,24 @@
+31049 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x118380000000, nodemask=1)
+/root/gradient-pool/training/checks/byte_lm_layer_pool_check.mojo:39:72: error: no matching function in initialization
+    var reference = ByteTrainer(ctx,p,zero,zero,flags,0,OptimizerConfig(kind=OPT_ADAMW),shape)
+                                                        ~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~
+Imported from /root/gradient-pool/training/checks/byte_lm_layer_pool_check.mojo:11:
+/root/gradient-pool/training/checks/optimizer_oracle.mojo:104:1: note: candidate not viable: missing required argument: 'move'
+def __init__(out self, *, deinit move: Self)    # note - generated function
+^
+Imported from /root/gradient-pool/training/checks/byte_lm_layer_pool_check.mojo:11:
+/root/gradient-pool/training/checks/optimizer_oracle.mojo:104:1: note: candidate not viable: missing required argument: 'copy'
+def __init__(out self, *, copy: Self)    # note - generated function
+^
+Imported from /root/gradient-pool/training/checks/byte_lm_layer_pool_check.mojo:11:
+/root/gradient-pool/training/checks/optimizer_oracle.mojo:104:1: note: candidate not viable: missing required argument: 'lr'
+def __init__(out self, kind: Int, lr: Float32, beta1: Float32, beta2: Float32, eps: Float32, weight_decay: Float32, momentum: Float32, dampening: Float32, nesterov: Bool, max_norm: Float32)    # note - generated function
+^
+/root/gradient-pool/training/checks/byte_lm_layer_pool_check.mojo:54:31: error: value of type 'LlamaDeviceWeights' cannot be implicitly copied, it does not conform to 'ImplicitlyCopyable'
+        var w = pool.layers[i].weights
+                ~~~~~~~~~~~~~~^~~~~~~~
+/root/gradient-pool/training/checks/byte_lm_layer_pool_check.mojo:54:31: note: consider transferring the value with '^'
+        var w = pool.layers[i].weights
+                              ^
+                                      ^
+/root/gradient-pool/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module

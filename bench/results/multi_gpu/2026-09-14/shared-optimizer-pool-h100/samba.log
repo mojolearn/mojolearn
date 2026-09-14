@@ -1,0 +1,38 @@
+44858 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x12e980000000, nodemask=1)
+44858 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3895c0000000, nodemask=2)
+45038 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7932c0000000, nodemask=2)
+45037 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x795280000000, nodemask=2)
+45037 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3375c0000000, nodemask=1)
+45143 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x18a040000000, nodemask=2)
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/parallel_training_check.py", line 150, in <module>
+    main()
+    ~~~~^^
+  File "/root/mojolearn/tools/parallel_training_check.py", line 128, in main
+    equal(multi.train_step(shards), replay.train_step(shards))
+          ~~~~~~~~~~~~~~~~^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/parallel_training.py", line 272, in train_step
+    updated, retained, step = self._update_pool.map([(
+                              ~~~~~~~~~~~~~~~~~~~~~^^^
+        self._operation.replace('_gradient', '_update'), update_state,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        [part[1] for part in results])])[0]
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 98, in map
+    raise error
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 93, in map
+    result.append(future.result())
+                  ~~~~~~~~~~~~~^^
+  File "/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/_base.py", line 454, in result
+    return self.__get_result()
+           ~~~~~~~~~~~~~~~~~^^
+  File "/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/_base.py", line 396, in __get_result
+    raise self._exception
+  File "/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/thread.py", line 86, in run
+    result = ctx.run(self.task)
+  File "/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/thread.py", line 73, in run
+    return fn(*args, **kwargs)
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 76, in _call
+    ok, value = pickle.load(worker.stdout)
+                ~~~~~~~~~~~^^^^^^^^^^^^^^^
+EOFError: Ran out of input

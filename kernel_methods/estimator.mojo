@@ -489,11 +489,13 @@ struct NystroemModel(Movable):
 
     var normalization: List[Float32]
     """`normalization_`, `n_components x n_components` row-major,
-    `Q diag(s^{-1/2}) Q^T`. **NOT bitwise symmetric** -- see DEVIATION 1674
-    and `nystroem_transform_host`."""
+    `Q diag(s^{-1/2}) V` with `V = diag(sign(lambda)) Q^T`, which is
+    `Q diag(s^{-1/2}) Q^T` when no eigenvalue is negative. **NOT bitwise
+    symmetric** -- see DEVIATION 1674 and `nystroem_transform_host`."""
 
     var eigenvalues: List[Float32]
-    """DESCENDING, clipped. Theirs discards these; see this file's header,
+    """The SINGULAR VALUES `|lambda|`, DESCENDING, clipped at 1e-12
+    (`_singular_value_f32`). Theirs discards these; see this file's header,
     point 3."""
 
     var eigenvectors: List[Float32]
@@ -545,9 +547,13 @@ def nystroem_fit_host(
         self.component_indices_ = basis_inds
 
     DEVIATION 1667 records the SVD-to-eigendecomposition substitution and its
-    argument: for a symmetric positive semi-definite basis kernel the two
-    coincide with `U = Q` and `V = Q^T`, `decomposition/`'s Jacobi is the
-    only symmetric eigensolver in this tree, and cuSOLVER's `gesvd` is closed.
+    argument: `decomposition/`'s Jacobi is the only symmetric eigensolver in
+    this tree, and cuSOLVER's `gesvd` is closed. For a SYMMETRIC basis kernel
+    the SVD is `U = Q`, `S = |lambda|`, `V = diag(sign(lambda)) Q^T`, which
+    is `U = Q` and `V = Q^T` only when no eigenvalue is negative; a float32
+    Jacobi on a rank deficient kernel returns negative ones, so the magnitude
+    and the sign are both carried (`_singular_value_f32`, corrected
+    2026-09-14).
 
     DEVIATION 1668: the eigenvector SIGN convention is
     `decomposition/impl/linalg/detail/pca.mojo::sign_flip_kernel`, RAFT's
@@ -652,28 +658,47 @@ def nystroem_fit_host(
     var vecs = _download(ctx, dvec, q * q)
 
     # --- the order and the clip, on the host (DEVIATIONS 1669, 1670, 1688) ---
+    # THE SVD'S S, NOT THE EIGENVALUE. See `_singular_value_f32`: sklearn's
+    # `S` is `|lambda|` with the sign carried by `V`, so the order, the clip
+    # and the square root all read the MAGNITUDE, and a numerically negative
+    # eigenvalue negates its column of the right operand below.
     var values_raw = List[Float32]()
+    var mags = List[Float32]()
     for c in range(q):
         values_raw.append(raw[c * q + c])
-    var order = _eigen_order_f32(values_raw, q, sabotage)
+        mags.append(_singular_value_f32(raw[c * q + c]))
+    var order = _eigen_order_f32(mags, q, sabotage)
 
     var clip = _eigen_clip_f32()
     var values = List[Float32]()
     var sqrt_s = List[Float32]()
+    var v_signs = List[Int32]()
+    var any_negative = False
     var vecs_ord = List[Float32]()
+    var vt_ord = List[Float32]()
     for _ in range(q * q):
         vecs_ord.append(Float32(0.0))
+        vt_ord.append(Float32(0.0))
     for c in range(q):
         var src = order[c]
-        var s = values_raw[src]
+        var s = mags[src]
         if sabotage != KMSAB_NO_EIGEN_CLIP and s < clip:
             s = clip
         values.append(s)
         sqrt_s.append(ftz(identical_sqrt(s)))
+        var negative = values_raw[src] < Float32(0.0)
+        if negative:
+            any_negative = True
+            v_signs.append(Int32(-1))
+        else:
+            v_signs.append(Int32(1))
         for f in range(q):
-            vecs_ord[f * q + c] = vecs[f * q + src]
+            var e = vecs[f * q + src]
+            vecs_ord[f * q + c] = e
+            vt_ord[f * q + c] = -e if negative else e
     trace.record_list_f32("nys.eigenvalues", values)
     trace.record_list_f32("nys.sqrt_eigenvalues", sqrt_s)
+    trace.record_list_i32("nys.v_signs", v_signs)
     trace.record_list_f32("nys.eigenvectors", vecs_ord)
 
     # --- `U / sqrt(S) @ V`, on the device ---
@@ -695,12 +720,24 @@ def nystroem_fit_host(
     )
     ctx.synchronize()
     trace.record_device(ctx, "nys.scaled", dz, q * q)
-    # `Z . Q^T`: cell `(i, j)` is `sum_k Z[i][k] Q[j][k]`, and `Q` is stored
-    # with eigenvector `k` in COLUMN `k`, so this is `OP_NT` with `Q` as the
-    # right operand. Reuse the same uploaded Q read by the scaling kernel;
-    # its output Z is a separate buffer (DEVIATION 2487).
-    identical_gemm_into(ctx, dnorm, dz, dq0, gws, q, q, q, OP_NT)
-    ctx.synchronize()
+    # `Z . V`: cell `(i, j)` is `sum_k Z[i][k] V[k][j]`, and `V` is `Q^T`
+    # with row `k` negated where `lambda_k < 0` (`_singular_value_f32`).
+    # `Q` is stored with eigenvector `k` in COLUMN `k`, so this is `OP_NT`
+    # with the column-signed `Q` as the right operand. When no eigenvalue is
+    # negative that operand IS `Q`, so the same uploaded Q read by the
+    # scaling kernel is reused and its output Z is a separate buffer
+    # (DEVIATION 2487); only a basis kernel with a negative eigenvalue
+    # stages the signed copy. Negation is exact, so each product term is
+    # the unsigned term with its sign flipped and the fold order is the
+    # same.
+    if any_negative:
+        var dvt = _upload(ctx, vt_ord)
+        identical_gemm_into(ctx, dnorm, dz, dvt, gws, q, q, q, OP_NT)
+        ctx.synchronize()
+        _ = dvt^
+    else:
+        identical_gemm_into(ctx, dnorm, dz, dq0, gws, q, q, q, OP_NT)
+        ctx.synchronize()
     trace.record_device(ctx, "nys.normalization", dnorm, q * q)
 
     var norm = _download(ctx, dnorm, q * q)
@@ -732,19 +769,54 @@ def _eigen_clip_f32() -> Float32:
 
     DEVIATION 1670. Copied BY VALUE from their line rather than chosen: a
     clip is a numerical policy, and a policy nobody wrote down is the thing
-    `cholesky/`'s DEVIATION 1637 exists to forbid. A NEGATIVE eigenvalue --
-    which a float32 Jacobi produces on a numerically singular Gram matrix --
-    is CLIPPED rather than refused, exactly as theirs does, because the
-    Nystroem embedding of a rank-deficient basis is a legitimate thing to
-    ask for and clipping is how they answer it.
+    `cholesky/`'s DEVIATION 1637 exists to forbid. The clip reads the
+    SINGULAR VALUE `|lambda|` (`_singular_value_f32`), never the signed
+    eigenvalue: their `S` comes out of an SVD and is never negative.
     """
     return Float32(1e-12)
+
+
+def _singular_value_f32(lam: Float32) -> Float32:
+    """`|lambda|` by bits: the singular value sklearn's `svd` returns for the
+    eigenvalue `lambda` of a SYMMETRIC basis kernel.
+
+    CORRECTED 2026-09-14, found by the first MI300X run of
+    `test_kernel_methods_surface` ("NYS with every row a component, phi
+    phi^T reproduces the linear kernel at 1e-2 -- 2.851021765361576"). The
+    SVD of a symmetric `A = Q diag(lambda) Q^T` is `U = Q`,
+    `S = |lambda|`, `V = diag(sign(lambda)) Q^T`. DEVIATION 1667's
+    substitution was written for a positive semi-definite kernel, where the
+    two are the same matrices, but a float32 Jacobi on a RANK DEFICIENT
+    basis kernel (the surface test's linear kernel of 32 rows in 3
+    features has 29 zero eigenvalues) returns numerically negative
+    eigenvalues of order `eps32 * ||K||`. The earlier spelling clipped each
+    of those to `1e-12` and so divided by `sqrt(1e-12)`: the embedding's
+    Gram gains `lambda^2 / 1e-12` per such component, order one for a
+    `lambda` near `-1e-6`, which is the 2.85 the run read. sklearn instead
+    divides by `sqrt(|lambda|)` and carries the sign in `V`, so the same
+    component adds `|lambda|` to the Gram. Ours now does what theirs does:
+    the order, the clip and the square root read this magnitude, and the
+    right operand of the normalization product carries the sign.
+
+    ON EVERY KERNEL WITH NO NEGATIVE EIGENVALUE NO BIT MOVES: `|lambda|` is
+    `lambda` (a `-0.0` compares equal to `+0.0` in the order and is clipped
+    either way), the order is the same permutation and the right operand is
+    `Q` itself. The sign test is `lambda < 0`, so `-0.0` keeps `V = Q^T`.
+    """
+    from std.memory import bitcast
+
+    return bitcast[DType.float32](
+        bitcast[DType.uint32](lam) & UInt32(0x7FFFFFFF)
+    )
 
 
 def _eigen_order_f32(
     values: List[Float32], q: Int, sabotage: Int
 ) -> List[Int]:
-    """The PINNED order: eigenvalue DESCENDING, index ASCENDING on a tie.
+    """The PINNED order: singular value `|lambda|` DESCENDING, index
+    ASCENDING on a tie (the caller passes `_singular_value_f32` of each
+    eigenvalue; on a kernel with no negative eigenvalue that is the
+    eigenvalue itself).
 
     DEVIATION 1669, and `km_oracle.mojo::km_eigen_order` is the float64
     mirror of exactly this loop. It is a SUMMATION ORDER, not a presentation

@@ -1,0 +1,68 @@
+17532 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5146c0000000, nodemask=1)
+17669 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7897c0000000, nodemask=2)
+17700 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x32e300000000, nodemask=1)
+17735 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3bdd40000000, nodemask=2)
+17872 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x584240000000, nodemask=2)
+17872 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x31afc0000000, nodemask=1)
+PASS [513, 'SymmetricTree', 1, 'RMSE']
+18038 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x190ec0000000, nodemask=2)
+18038 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1349c0000000, nodemask=1)
+18209 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3bf680000000, nodemask=2)
+PASS [513, 'SymmetricTree', 7, 'RMSE']
+18375 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5b2580000000, nodemask=2)
+18375 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x305640000000, nodemask=1)
+18547 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3a4840000000, nodemask=2)
+PASS [513, 'SymmetricTree', 31, 'RMSE']
+18713 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x78e600000000, nodemask=2)
+18719 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x71e5c0000000, nodemask=1)
+18885 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3aeac0000000, nodemask=2)
+PASS [513, 'SymmetricTree', 254, 'RMSE']
+19051 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x581740000000, nodemask=2)
+19082 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x708740000000, nodemask=1)
+19222 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3871c0000000, nodemask=2)
+PASS [513, 'Depthwise', 1, 'RMSE']
+19388 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7b66c0000000, nodemask=2)
+19418 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x51e8c0000000, nodemask=1)
+19560 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x187840000000, nodemask=2)
+PASS [513, 'Depthwise', 7, 'RMSE']
+19726 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x33a540000000, nodemask=1)
+19732 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5a5780000000, nodemask=2)
+19897 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x734700000000, nodemask=1)
+PASS [513, 'Depthwise', 31, 'RMSE']
+20063 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x51c7c0000000, nodemask=1)
+20070 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7ab480000000, nodemask=2)
+20235 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x714700000000, nodemask=1)
+20235 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3b9440000000, nodemask=2)
+PASS [513, 'Depthwise', 254, 'RMSE']
+20401 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5b2280000000, nodemask=2)
+20435 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x100dc0000000, nodemask=1)
+20573 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x387600000000, nodemask=2)
+PASS [513, 'Lossguide', 1, 'RMSE']
+20739 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x18c140000000, nodemask=2)
+20769 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x73d740000000, nodemask=1)
+20910 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x396900000000, nodemask=2)
+PASS [513, 'Lossguide', 7, 'RMSE']
+21076 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3b2140000000, nodemask=2)
+21082 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x332800000000, nodemask=1)
+21248 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x19d9c0000000, nodemask=2)
+PASS [513, 'Lossguide', 31, 'RMSE']
+21414 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x78ed00000000, nodemask=2)
+21426 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x315c40000000, nodemask=1)
+21586 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x32c700000000, nodemask=1)
+PASS [513, 'Lossguide', 254, 'RMSE']
+21752 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x527dc0000000, nodemask=1)
+21785 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1ae840000000, nodemask=2)
+21923 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x725040000000, nodemask=1)
+PASS [8193, 'SymmetricTree', 1, 'RMSE']
+22089 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x320280000000, nodemask=1)
+22095 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7b4340000000, nodemask=2)
+22261 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7398c0000000, nodemask=1)
+PASS [8193, 'SymmetricTree', 7, 'RMSE']
+22427 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x72cac0000000, nodemask=1)
+22437 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1b24c0000000, nodemask=2)
+22598 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x51cc80000000, nodemask=1)
+PASS [513, 'SymmetricTree', 31, 'Logloss']
+22765 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x38e780000000, nodemask=2)
+22777 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x71bdc0000000, nodemask=1)
+22936 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3a6380000000, nodemask=2)
+PASS [513, 'SymmetricTree', 31, 'MultiClass']

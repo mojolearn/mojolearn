@@ -1,0 +1,7 @@
+{
+  "status": "IDENTICAL",
+  "scope": "H100 vs RTX 5090: complete raw histogram dumps and pointwise/OrderedRMSE trace records",
+  "histogram_files": 378,
+  "histogram_bytes": 2300256,
+  "trace_files": 50
+}

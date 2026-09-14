@@ -1,0 +1,305 @@
+{
+  "mode": "pooled",
+  "parameters": 958746624,
+  "hardware": "name, memory.total [MiB], memory.used [MiB]\nNVIDIA GeForce RTX 5090, 32607 MiB, 2 MiB\nNVIDIA GeForce RTX 5090, 32607 MiB, 2 MiB\n",
+  "shape": [
+    1,
+    1,
+    1536,
+    24,
+    6,
+    64,
+    6144,
+    28,
+    256
+  ],
+  "tokens": [
+    [
+      60,
+      109
+    ]
+  ],
+  "status": "PASS",
+  "step": {
+    "losses": [
+      5.545177459716797
+    ],
+    "completed_steps": 1,
+    "logical_shards": 1,
+    "reduction": "ordered_sum"
+  },
+  "elapsed_seconds": 86.60332571715117,
+  "ownership": [
+    {
+      "device": 0,
+      "first": 0,
+      "count": 393216,
+      "parameter_bytes": 1572864,
+      "moment_bytes": 3145728,
+      "rollback_bytes": 4718592,
+      "gradient_bytes": 1572864
+    },
+    {
+      "device": 0,
+      "first": 393216,
+      "count": 34212864,
+      "parameter_bytes": 136851456,
+      "moment_bytes": 273702912,
+      "rollback_bytes": 410554368,
+      "gradient_bytes": 136851456
+    },
+    {
+      "device": 0,
+      "first": 34606080,
+      "count": 34212864,
+      "parameter_bytes": 136851456,
+      "moment_bytes": 273702912,
+      "rollback_bytes": 410554368,
+      "gradient_bytes": 136851456
+    },
+    {
+      "device": 0,
+      "first": 68818944,
+      "count": 34212864,
+      "parameter_bytes": 136851456,
+      "moment_bytes": 273702912,
+      "rollback_bytes": 410554368,
+      "gradient_bytes": 136851456
+    },
+    {
+      "device": 0,
+      "first": 103031808,
+      "count": 34212864,
+      "parameter_bytes": 136851456,
+      "moment_bytes": 273702912,
+      "rollback_bytes": 410554368,
+      "gradient_bytes": 136851456
+    },
+    {
+      "device": 0,
+      "first": 137244672,
+      "count": 34212864,
+      "parameter_bytes": 136851456,
+      "moment_bytes": 273702912,
+      "rollback_bytes": 410554368,
+      "gradient_bytes": 136851456
+    },
+    {
+      "device": 0,
+      "first": 171457536,
+      "count": 34212864,
+      "parameter_bytes": 136851456,
+      "moment_bytes": 273702912,
+      "rollback_bytes": 410554368,
+      "gradient_bytes": 136851456
+    },
+    {
+      "device": 0,
+      "first": 205670400,
+      "count": 34212864,
+      "parameter_bytes": 136851456,
+      "moment_bytes": 273702912,
+      "rollback_bytes": 410554368,
+      "gradient_bytes": 136851456
+    },
+    {
+      "device": 0,
+      "first": 239883264,
+      "count": 34212864,
+      "parameter_bytes": 136851456,
+      "moment_bytes": 273702912,
+      "rollback_bytes": 410554368,
+      "gradient_bytes": 136851456
+    },
+    {
+      "device": 0,
+      "first": 274096128,
+      "count": 34212864,
+      "parameter_bytes": 136851456,
+      "moment_bytes": 273702912,
+      "rollback_bytes": 410554368,
+      "gradient_bytes": 136851456
+    },
+    {
+      "device": 0,
+      "first": 308308992,
+      "count": 34212864,
+      "parameter_bytes": 136851456,
+      "moment_bytes": 273702912,
+      "rollback_bytes": 410554368,
+      "gradient_bytes": 136851456
+    },
+    {
+      "device": 0,
+      "first": 342521856,
+      "count": 34212864,
+      "parameter_bytes": 136851456,
+      "moment_bytes": 273702912,
+      "rollback_bytes": 410554368,
+      "gradient_bytes": 136851456
+    },
+    {
+      "device": 0,
+      "first": 376734720,
+      "count": 34212864,
+      "parameter_bytes": 136851456,
+      "moment_bytes": 273702912,
+      "rollback_bytes": 410554368,
+      "gradient_bytes": 136851456
+    },
+    {
+      "device": 0,
+      "first": 410947584,
+      "count": 34212864,
+      "parameter_bytes": 136851456,
+      "moment_bytes": 273702912,
+      "rollback_bytes": 410554368,
+      "gradient_bytes": 136851456
+    },
+    {
+      "device": 0,
+      "first": 445160448,
+      "count": 34212864,
+      "parameter_bytes": 136851456,
+      "moment_bytes": 273702912,
+      "rollback_bytes": 410554368,
+      "gradient_bytes": 136851456
+    },
+    {
+      "device": 1,
+      "first": 479373312,
+      "count": 34212864,
+      "parameter_bytes": 136851456,
+      "moment_bytes": 273702912,
+      "rollback_bytes": 410554368,
+      "gradient_bytes": 136851456
+    },
+    {
+      "device": 1,
+      "first": 513586176,
+      "count": 34212864,
+      "parameter_bytes": 136851456,
+      "moment_bytes": 273702912,
+      "rollback_bytes": 410554368,
+      "gradient_bytes": 136851456
+    },
+    {
+      "device": 1,
+      "first": 547799040,
+      "count": 34212864,
+      "parameter_bytes": 136851456,
+      "moment_bytes": 273702912,
+      "rollback_bytes": 410554368,
+      "gradient_bytes": 136851456
+    },
+    {
+      "device": 1,
+      "first": 582011904,
+      "count": 34212864,
+      "parameter_bytes": 136851456,
+      "moment_bytes": 273702912,
+      "rollback_bytes": 410554368,
+      "gradient_bytes": 136851456
+    },
+    {
+      "device": 1,
+      "first": 616224768,
+      "count": 34212864,
+      "parameter_bytes": 136851456,
+      "moment_bytes": 273702912,
+      "rollback_bytes": 410554368,
+      "gradient_bytes": 136851456
+    },
+    {
+      "device": 1,
+      "first": 650437632,
+      "count": 34212864,
+      "parameter_bytes": 136851456,
+      "moment_bytes": 273702912,
+      "rollback_bytes": 410554368,
+      "gradient_bytes": 136851456
+    },
+    {
+      "device": 1,
+      "first": 684650496,
+      "count": 34212864,
+      "parameter_bytes": 136851456,
+      "moment_bytes": 273702912,
+      "rollback_bytes": 410554368,
+      "gradient_bytes": 136851456
+    },
+    {
+      "device": 1,
+      "first": 718863360,
+      "count": 34212864,
+      "parameter_bytes": 136851456,
+      "moment_bytes": 273702912,
+      "rollback_bytes": 410554368,
+      "gradient_bytes": 136851456
+    },
+    {
+      "device": 1,
+      "first": 753076224,
+      "count": 34212864,
+      "parameter_bytes": 136851456,
+      "moment_bytes": 273702912,
+      "rollback_bytes": 410554368,
+      "gradient_bytes": 136851456
+    },
+    {
+      "device": 1,
+      "first": 787289088,
+      "count": 34212864,
+      "parameter_bytes": 136851456,
+      "moment_bytes": 273702912,
+      "rollback_bytes": 410554368,
+      "gradient_bytes": 136851456
+    },
+    {
+      "device": 1,
+      "first": 821501952,
+      "count": 34212864,
+      "parameter_bytes": 136851456,
+      "moment_bytes": 273702912,
+      "rollback_bytes": 410554368,
+      "gradient_bytes": 136851456
+    },
+    {
+      "device": 1,
+      "first": 855714816,
+      "count": 34212864,
+      "parameter_bytes": 136851456,
+      "moment_bytes": 273702912,
+      "rollback_bytes": 410554368,
+      "gradient_bytes": 136851456
+    },
+    {
+      "device": 1,
+      "first": 889927680,
+      "count": 34212864,
+      "parameter_bytes": 136851456,
+      "moment_bytes": 273702912,
+      "rollback_bytes": 410554368,
+      "gradient_bytes": 136851456
+    },
+    {
+      "device": 1,
+      "first": 924140544,
+      "count": 34212864,
+      "parameter_bytes": 136851456,
+      "moment_bytes": 273702912,
+      "rollback_bytes": 410554368,
+      "gradient_bytes": 136851456
+    },
+    {
+      "device": 0,
+      "first": 958353408,
+      "count": 393216,
+      "parameter_bytes": 1572864,
+      "moment_bytes": 3145728,
+      "rollback_bytes": 4718592,
+      "gradient_bytes": 1572864
+    }
+  ],
+  "resident_memory": "name, memory.total [MiB], memory.used [MiB]\nNVIDIA GeForce RTX 5090, 32607 MiB, 21766 MiB\nNVIDIA GeForce RTX 5090, 32607 MiB, 21732 MiB\n"
+}

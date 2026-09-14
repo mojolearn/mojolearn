@@ -1,0 +1,55 @@
+{
+  "status": "PASS",
+  "checks": [
+    {
+      "rows": 17,
+      "features": 7,
+      "whiten": false,
+      "sha256": "0b43eb1c2e9e8c1d42f777ce7ba34920417f4bb0156b601b7e600bf577afcd45"
+    },
+    {
+      "rows": 17,
+      "features": 7,
+      "whiten": true,
+      "sha256": "0b43eb1c2e9e8c1d42f777ce7ba34920417f4bb0156b601b7e600bf577afcd45"
+    },
+    {
+      "rows": 259,
+      "features": 7,
+      "whiten": false,
+      "sha256": "e7a73e62579b971be6fac05a3e59ee336259a48c17864b671fb47ac64c234d3d"
+    },
+    {
+      "rows": 259,
+      "features": 7,
+      "whiten": true,
+      "sha256": "e7a73e62579b971be6fac05a3e59ee336259a48c17864b671fb47ac64c234d3d"
+    },
+    {
+      "rows": 259,
+      "features": 17,
+      "whiten": false,
+      "sha256": "4a1e6711a64184c1a70adc5dffb057cebef08f1eccb2a12b0bfc45eb32b1a20c"
+    },
+    {
+      "rows": 259,
+      "features": 17,
+      "whiten": true,
+      "sha256": "4a1e6711a64184c1a70adc5dffb057cebef08f1eccb2a12b0bfc45eb32b1a20c"
+    },
+    {
+      "rows": 1025,
+      "features": 65,
+      "whiten": false,
+      "sha256": "4fe222814e566f0ef0233293e0b8a0cab2ab7e92de32b82a3e4d672beef92266"
+    },
+    {
+      "rows": 1025,
+      "features": 65,
+      "whiten": true,
+      "sha256": "4fe222814e566f0ef0233293e0b8a0cab2ab7e92de32b82a3e4d672beef92266"
+    }
+  ],
+  "corpus_sha256": "2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8",
+  "scope": "Two H100s; original tall TSQR panels and final R fold; single-panel cases remain on root; no pooled root capacity"
+}

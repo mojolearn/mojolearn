@@ -76,6 +76,7 @@ from gbdt.methods.kernel.pointwise_split_resolve import (
 from gbdt.methods.pointwise_kernels import FoldsHistogram, compute_hist2
 from gbdt.methods.pointwise_optimization_subsets import TOptimizationSubsets
 from gbdt.data.permutation import TRandom
+from gbdt.methods.pointwise_multi_gpu import pointwise_device_count, pointwise_feature_shards
 
 
 def folds_histogram_for(folds: List[UInt32]) raises -> FoldsHistogram:
@@ -354,6 +355,17 @@ struct PolicyScoreHelper(Movable):
         which is `ComputeHistogramsHelper.Compute` and nothing else."""
         var plan = self.hist_helper.plan(Int(subsets.current_depth))
         if self.feature_count == 0:
+            return
+        var devices = pointwise_device_count()
+        if devices > 1:
+            pointwise_feature_shards(ctx, self.policy, self.d_offset,
+                self.d_first_fold, self.d_folds, self.d_one_hot, cindex,
+                subsets.gathered_target, subsets.gathered_weight, docs,
+                subsets.partitions, self.d_hist, self.feature_count,
+                self.bin_feature_count, n_rows, plan.part_count, self.fold_count,
+                plan.build_from_scratch, self.folds_hist.copy(), sm_count,
+                fixed_scale, devices)
+            self.hist_helper.clear_from_scratch()
             return
         # TWO SEPARATE BUFFERS, and that is not a convenience: the kernels
         # take `target` and `weight` on independent origins, and Mojo

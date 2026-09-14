@@ -1,0 +1,39 @@
+5190 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5bdd00000000, nodemask=2)
+Imported from /root/mojolearn/training/checks/pointwise_parallel_check.mojo:10:
+/root/mojolearn/gbdt/methods/pointwise_multi_gpu.mojo:88:44: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var bin_first = Int(hf.unsafe_ptr()[begin])
+                            ~~~~~~~~~~~~~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/pointwise_parallel_check.mojo:10:
+/root/mojolearn/gbdt/methods/pointwise_multi_gpu.mojo:89:42: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var bin_end = Int(hf.unsafe_ptr()[end-1])+Int(hn.unsafe_ptr()[end-1])
+                          ~~~~~~~~~~~~~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/pointwise_parallel_check.mojo:10:
+/root/mojolearn/gbdt/methods/pointwise_multi_gpu.mojo:89:70: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var bin_end = Int(hf.unsafe_ptr()[end-1])+Int(hn.unsafe_ptr()[end-1])
+                                                      ~~~~~~~~~~~~~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/pointwise_parallel_check.mojo:10:
+/root/mojolearn/gbdt/methods/pointwise_multi_gpu.mojo:116:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ref s = sp[rank]
+                    ~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/pointwise_parallel_check.mojo:10:
+/root/mojolearn/gbdt/methods/pointwise_multi_gpu.mojo:124:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            fp[rank] = 1
+            ~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/pointwise_parallel_check.mojo:6:
+Imported from /root/mojolearn/checks/pointwise_identical_multiplier_check.mojo:49:
+Imported from /root/mojolearn/gbdt/methods/pointwise_kernels.mojo:183:
+/root/mojolearn/core/device_zero.mojo:98:16: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            p8 + n_vec * 16, Int32(tail),
+            ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+PASS full and partial pointwise histogram bits one-byte 0 9270
+PASS full and partial pointwise histogram bits one-byte 1 9270
+PASS full and partial pointwise histogram bits half-byte 0 1404
+PASS full and partial pointwise histogram bits half-byte 1 1404
+PASS full and partial pointwise histogram bits binary 0 384
+PASS full and partial pointwise histogram bits binary 1 384

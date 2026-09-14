@@ -15,7 +15,9 @@ ROOT = Path(__file__).resolve().parents[1]
 #: tests are what keeps a later edit from quietly putting a lane back into
 #: all three.
 EVERY_TIER = 3
-IDENTICAL_ONLY = 13
+# 13 until workstream D (2026-09-14) added kernel_methods, mixture, hdbscan
+# and resample, all identical only.
+IDENTICAL_ONLY = 17
 
 #: The CPU training binding (DEVIATION 2680, 2026-09-12). It builds in the
 #: identical tier only, and it is named in tier_SCRIPTS but deliberately NOT in

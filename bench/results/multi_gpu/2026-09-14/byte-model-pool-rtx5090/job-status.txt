@@ -1,0 +1,14 @@
+replay-neural 0
+replay-classical 0
+replay-compare 0
+gradient-pool 0
+layer-pool 1
+layer-pool-2 0
+model-pool 1
+model-pool-2 0
+model-pool-public 0
+model-capacity 1
+model-capacity-2 0
+model-pool-v2 0
+model-capacity-same-driver 0
+model-final-receipts 0
