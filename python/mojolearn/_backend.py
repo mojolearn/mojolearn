@@ -993,6 +993,14 @@ def host_families_built():
 #:     the ordered and FeatureFreq fits and the adapters' binary transforms
 #:     are absent. Its own family for the reason the rf family is: the
 #:     forest host binding exports other names under another contract.
+#:   _mojolearn_arima -> _mojolearn_arima_host (arima, arima-011,
+#:     arima-seasonal-c; workstream E, 2026-09-14): arima_fit,
+#:     arima_predict and arima_forecast over arima/host/arima_oracle.mojo
+#:     (estimate_x0, the Jones transform, the batched L-BFGS over the
+#:     finite-difference Kalman likelihood, the undifferenced forecast), the
+#:     GPU binding's whole surface; p, q or P above 1, any Q, d + D of 2,
+#:     p + q + k of 0 and an in-sample prediction (start < n_obs) refuse by
+#:     name.
 _HOST_MODULES = host_surface.routed_modules()
 
 #: The env switch the CPU identity gate sets to load a host binding built

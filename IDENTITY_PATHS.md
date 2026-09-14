@@ -331,6 +331,39 @@ named fix.
 Running E1 before 1 would produce a failure that teaches nothing: we already
 know what it would find.
 
+## Batch invariance through the public surface (2026-09-14)
+
+A row's answer must not depend on which other rows share its call. The
+serving world loses temperature-zero reproducibility partly this way, since
+batch size changes the arithmetic of a vendor kernel (Thinking Machines,
+"Defeating Nondeterminism in LLM Inference", September 2025), and the
+contracts here say batch and length are launch shape. The Mojo gates hold
+that at the kernel and block level (`core/gemm_identity_check.mojo`,
+`gemm/checks/gemm_device_check.mojo` gate 3, the Mamba and transformer
+clause (c) gates, `checks/batch_invariance_check.mojo`, and per family the
+alone versus in-batch arms of gmm, kde, iforest, km, gp, ivf, holtwinters
+and resample). Since 4230ab5b0 `tools/identity_break.py` carries a `batch`
+part in every cell, so the three-column records can carry it too.
+
+It asks each lane's fitted model its held-out input through the lane's own
+public methods three ways, the whole batch in one call, each of the first
+16 rows alone, and chunks of 1, 7 and the rest, and it asks the causal
+sequence models (byte LM, Mamba 1/2/3, transformer, Samba) the prefix
+lengths 1, 7 and L-1 against L, and the forecasters the horizons 1, 7 and
+H-1 against H. It is one hash when every answer is the same bytes and
+`BATCH_MOVED` naming the call, the row and both values in hex when one is
+not, a failure under IDENTICAL and a recorded verdict under FAST and
+DETERMINISTIC. `MOJOLEARN_IDENTITY_BATCH_SABOTAGE=1` flips one low bit of
+every whole-batch answer and must turn every hashed cell `BATCH_MOVED`.
+
+What it tests is the host call path's batch splitting through the bindings,
+on one box. What it does not test is serving-scale B, padding or ragged
+batches (no sequence API takes them), the backward pass, or a transductive
+fit; a cross-vendor statement comes only from `--diff` over records. As of
+this section one Apple M4 smoke on `base` for each of standard-scaler and
+transformer read STABLE and the sabotage read `BATCH_MOVED`; the first
+three-column record is owed.
+
 ### The neural-block primitives section (2026-08-23)
 
 Written by the numerics-NN lane for the Mamba-1 identity block
