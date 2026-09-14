@@ -162,6 +162,25 @@ from ._tsa_impl import ExponentialSmoothing, kpss_test, select_d
 from . import tokenizer
 from .tokenizer import GPT2Tokenizer
 
+# Workstream D, 2026-09-14: the door-less families of the claim-surface
+# census (docs/lanes/BRIEF_claim_surface_census_2026-09-14.md section 4)
+# given a binding and a class. `Cholesky` binds `_mojolearn_gp` (the GP
+# build already links cholesky/); the other four have their own bindings,
+# resolved on FIRST USE like every other, so an unbuilt one leaves the
+# package importable and raises BY NAME with the build command when
+# touched. Compile-checked on one Apple M4; no box has run them through
+# the Python door, and their identity_break lanes and three columns are
+# owed (docs/lanes/LANE_BODY_*.py). IVF and the embedding lane stay out:
+# IVF is prepared in `_ivf_impl.py` and waits on NVIDIA and AMD evidence.
+from ._cholesky_impl import Cholesky
+from . import kernel_methods
+from .kernel_methods import KernelRidge, Nystroem, RBFSampler
+from . import mixture
+from .mixture import GaussianMixture
+from . import hdbscan
+from .hdbscan import HDBSCAN
+from . import resample
+
 # `GaussianProcessRegressor` JOINED 2026-09-01, the last name ever held in
 # `_NOT_YET` below and the only one held for a reason other than a missing
 # surface. The blocker -- an IDENTICAL card believed to diverge Apple
@@ -263,6 +282,16 @@ __all__ = [
     "SambaStack",
     "ARIMA",
     "AgglomerativeClustering",
+    "Cholesky",
+    "KernelRidge",
+    "Nystroem",
+    "RBFSampler",
+    "GaussianMixture",
+    "HDBSCAN",
+    "kernel_methods",
+    "mixture",
+    "hdbscan",
+    "resample",
     "ConstantKernel",
     "DBSCAN",
     "GaussianProcessRegressor",
