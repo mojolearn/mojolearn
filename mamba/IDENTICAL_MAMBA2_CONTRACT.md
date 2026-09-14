@@ -334,7 +334,13 @@ Nothing above earns a cross-vendor sentence; only the E-series leg does.
   vendor, and is NOT invariant to CHUNK_SIZE. Q = 256 is a profile constant
   with exactly the standing of gemm v1's `K_LEAF_MIN`/`MAX_LEAVES`: changing
   it changes the output bits and is a v2, never a tuning knob. The
-  CHUNK_SIZE_128 sabotage is its falsifier.
+  CHUNK_SIZE_128 sabotage is its falsifier. The batch half is gate (c) of
+  `mamba/checks/mamba2_check.mojo` (B in {1, 2, 3}), GATE C PASS in
+  `bench/results/e1/2026-09-02_161141-mojolearn-e2-amd` and
+  `2026-09-02_162851-mojolearn-e2-nv`; through the public
+  `Mamba2Block.forward` it is the `batch` part of `tools/identity_break.py`
+  (since 4230ab5b0, rows alone, a split and prefix lengths), first record
+  owed. Padding invariance through the public surface is not asked there.
 - **DEVIATION 784 — intra-chunk contractions route through gemm.fp32.v1.**
   Upstream's `tl.dot`/einsum/cuBLAS become the pinned GEMM's cells: S4's
   in_proj (`OP_NT`, k = d_model) and out_proj (`OP_NT`, k = d_inner); S12's

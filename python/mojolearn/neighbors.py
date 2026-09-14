@@ -235,6 +235,29 @@ def _resolve_weights(cls_name, weights):
     return _WEIGHTS_TABLE[weights]
 
 
+def _refuse_inert_p(cls_name, metric, p):
+    """A `p` the resolved op never reads is refused by name.
+
+    Only metric='minkowski'/'lp' reads `p`; cuML passes `self.p` for every
+    metric (`nearest_neighbors.pyx:852-854`) and every other op discards it.
+    Accepting `metric='euclidean', p=3` and running Euclidean is a knob that
+    changes nothing, so any value but the constructor default (2) under
+    another metric raises (the claim-surface census, 2026-09-14; the same
+    rule as GradientBoosting's `bagging_temperature` and `subsample`).
+    """
+    try:
+        is_default = not isinstance(p, bool) and float(p) == 2.0
+    except (TypeError, ValueError):
+        is_default = False
+    if not is_default:
+        raise ValueError(
+            f"mojolearn {cls_name}: p is read only by metric='minkowski' "
+            f"(or 'lp'); metric={metric!r} never reads it, so p={p!r} would "
+            "change nothing. Leave p at its default (2) or ask for "
+            "metric='minkowski'."
+        )
+
+
 def _resolve_metric(cls_name, metric, p):
     """`(metric_value, metric_arg)` for the Mojo boundary.
 
@@ -269,6 +292,8 @@ def _resolve_metric(cls_name, metric, p):
             + ", ".join(sorted(_METRIC_TABLE))
         )
 
+    if value != _DIST_LP_UNEXPANDED:
+        _refuse_inert_p(cls_name, metric, p)
     arg = 2.0
     if value == _DIST_LP_UNEXPANDED:
         arg = float(p)
@@ -369,6 +394,8 @@ def _resolve_rbc_metric(cls_name, metric, p):
             "ball cover admits: " + ", ".join(sorted(_RBC_METRIC_TABLE))
         )
     value = _RBC_METRIC_TABLE[key]
+    if value != _DIST_LP_UNEXPANDED:
+        _refuse_inert_p(cls_name, metric, p)
     arg = 2.0
     if value == _DIST_LP_UNEXPANDED:
         arg = float(p)
@@ -436,11 +463,12 @@ class NearestNeighbors(NumericModeMixin):
                                 positive normal value. Refused at p <= 0,
                                 p = inf, NaN and subnormal p (DEVIATION
                                 552 -- 1/p and the vendor flush policy).
-                                Read ONLY by metric='minkowski'/'lp',
-                                which is cuML's rule too
+                                Read ONLY by metric='minkowski'/'lp'
                                 (nearest_neighbors.pyx:852-854 passes
                                 self.p for every metric and every non-Lp
-                                op discards it).
+                                op discards it). Under any other metric a
+                                p other than the default 2 is REFUSED by
+                                name rather than accepted and ignored.
         algorithm     honored   'brute' / 'auto' (exact brute force, the
                                 default) and 'rbc' (exact k-NN over a
                                 random ball cover, an INDEX -- added
@@ -1274,7 +1302,15 @@ class RadiusNeighbors(NumericModeMixin):
         )
         cols = empty((nnz,), "<i4")
         dists = empty((nnz,), "<f4")
-        got = self._bind("_mojolearn").radius_neighbors_fill(
+        # NO NEIGHBOUR IN THE WHOLE CALL (2026-09-14 night, found by the
+        # batch part of tools/identity_break.py): a zero-length `cols` has no
+        # address, and the fill binding refused it with "null int32 buffer
+        # address", so a query row with no neighbour raised when asked ALONE
+        # and answered an empty row inside a larger batch (base fixture,
+        # held-out rows 1 and 7 of the radius lane). The counting pass has
+        # already written every indptr entry (all zero), so there is nothing
+        # to fill.
+        got = 0 if nnz == 0 else self._bind("_mojolearn").radius_neighbors_fill(
             addr_ro(idx, name="idx"), addr_ro(q, name="q"), addr(indptr, name="indptr"), addr(cols, name="cols"),
             addr(dists, name="dists"),
             # n_index, n_queries, n_features, radius, nnz_capacity,

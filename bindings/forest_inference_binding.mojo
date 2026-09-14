@@ -10,6 +10,14 @@ from core.forest_inference import vector_groves_for
 from core.forest_inference_model import resident_prepare, resident_predict, resident_release, resident_predict_into
 
 
+def forest_pool_available() raises -> PythonObject:
+    return PythonObject(1)
+
+
+def forest_pool_fault_available() raises -> PythonObject:
+    return PythonObject(1 if is_defined["MOJOLEARN_FOREST_POOL_FAULT"]() else 0)
+
+
 def _i32_ptr(address: Int) raises -> MutPointer[Int32, MutUntrackedOrigin]:
     if address == 0:
         raise Error("null resident forest Int32 pointer")

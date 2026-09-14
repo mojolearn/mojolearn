@@ -11,8 +11,8 @@ the per-vendor GPU-box build and the byte compare of the host bindings across th
 Linux legs are OWED before this heading reads published.
 
 - Every host (CPU) binding the manifest declares ships in both wheels under `mojolearn/host/`,
-  namely the byte LM's, the forest's, the tokenizer's and the eleven routed families (core,
-  linalg, estimators, metrics, preprocessing, tsa, solver, svm, trees, rf, gp), fourteen in
+  namely the byte LM's, the forest's, the tokenizer's and the twelve routed families (core,
+  linalg, estimators, metrics, preprocessing, tsa, solver, svm, trees, rf, gp, arima), fifteen in
   all. 0.8.5 carried the byte LM's alone. The
   list is read from `python/mojolearn/host_surface.py` by the two wheel builders, the Linux
   packer, both smokes and the Linux admission; `packaging/check_ext_lists.py` (and its

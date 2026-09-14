@@ -1,0 +1,14 @@
+started=2026-09-14T21:59:37Z commit=dc0a6ab3c2e8458189137effee60b71ff763197b
+vendor=nvidia arch=sm_90a gpus=2 nproc=224
+pixi-warm exit=0 seconds=1
+build-mixture exit=0 seconds=40
+build-base exit=0 seconds=47
+native exit=0 seconds=41
+native-sabotage exit=1 seconds=36
+public exit=0 seconds=57
+check-mixture exit=0 seconds=44
+native: 24 PASS lines; last: PASS gmm parallel gate
+native-sabotage (must FAIL): 0 PASS lines; /root/mojolearn/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1|
+public: PASS 9 GaussianMixture configurations and 7 refusals
+check-mixture: 11 pass-like lines; tail: check_gmm_sabotages OK [IDENTICAL]: all 13 arms driven at RUN TIME through the sabotage argument, no source edited and no rebuild|== mixture/checks/gmm_check.mojo [IDENTICAL] ALL PASSED ==|
+finished=2026-09-14T22:03:23Z

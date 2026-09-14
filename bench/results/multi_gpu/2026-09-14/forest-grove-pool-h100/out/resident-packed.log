@@ -1,0 +1,61 @@
+26624 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5a1dc0000000, nodemask=2)
+Imported from /root/mojolearn/checks/forest_inference_model.mojo:9:
+Imported from /root/mojolearn/core/forest_inference_model.mojo:17:
+/root/mojolearn/core/forest_inference_pool.mojo:321:54: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                staged[first + i] = host.unsafe_ptr()[i]
+                                    ~~~~~~~~~~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/checks/forest_inference_model.mojo:9:
+Imported from /root/mojolearn/core/forest_inference_model.mojo:17:
+/root/mojolearn/core/forest_inference_pool.mojo:327:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            output[i] = staged[i]
+            ~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/checks/forest_inference_model.mojo:9:
+Imported from /root/mojolearn/core/forest_inference_model.mojo:17:
+/root/mojolearn/core/forest_inference_pool.mojo:204:44: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            result.append(host.unsafe_ptr()[i])
+                          ~~~~~~~~~~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/checks/forest_inference_model.mojo:8:
+/root/mojolearn/core/forest_inference.mojo:171:5: warning: '@parameter for' is deprecated; use 'comptime for'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/checks/forest_inference_model.mojo:8:
+/root/mojolearn/core/forest_inference.mojo:178:13: warning: '@parameter for' is deprecated; use 'comptime for'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /root/mojolearn/checks/forest_inference_model.mojo:8:
+/root/mojolearn/core/forest_inference.mojo:184:5: warning: '@parameter for' is deprecated; use 'comptime for'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/checks/forest_inference_model.mojo:8:
+/root/mojolearn/core/forest_inference.mojo:191:13: warning: '@parameter for' is deprecated; use 'comptime for'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /root/mojolearn/checks/forest_inference_model.mojo:8:
+/root/mojolearn/core/forest_inference.mojo:197:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+RESIDENT_LAYOUT_PACKED True
+LAYOUT_PASS RF_INPUT True outputs 1
+LAYOUT_PASS RF_INPUT False outputs 1
+LAYOUT_PASS RF_INPUT True outputs 2
+LAYOUT_PASS RF_INPUT False outputs 2
+LAYOUT_PASS RF_INPUT True outputs 3
+LAYOUT_PASS RF_INPUT False outputs 3
+LAYOUT_PASS RF_INPUT True outputs 5
+LAYOUT_PASS RF_INPUT False outputs 5
+LAYOUT_PASS RF_INPUT True outputs 8
+LAYOUT_PASS RF_INPUT False outputs 8
+LAYOUT_PASS RF_INPUT True outputs 9
+LAYOUT_PASS RF_INPUT False outputs 9
+WORKSPACE_PASS RF_INPUT True cached/uncached resize/reuse/empty/changed-input/close
+WORKSPACE_PASS RF_INPUT False cached/uncached resize/reuse/empty/changed-input/close
+RESIDENT_MODE 1 VENDOR cuda
+RESIDENT_FOREST_PASS repeated borrowed/List/transient/stump, release/stale/newID, dimensions/finite input+output/graph, destruction
