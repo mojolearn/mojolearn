@@ -404,7 +404,10 @@ class TransformerBlock(NumericModeMixin):
         B, L, max_tokens  honored  launch shape, not arithmetic;
                                     absolute positions must stay under
                                     8192 (DEVIATION 812, refused by
-                                    name in Mojo)
+                                    name in Mojo); B and L through
+                                    this class are asked by the batch
+                                    part of tools/identity_break.py
+                                    since 4230ab5b0, first record owed
         rms eps           FIXED    1e-6 (bits 0x358637BD); rope theta
           rope theta               10000.0 (0x461C4000); rope type
                                     "default" only -- frozen profile

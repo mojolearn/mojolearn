@@ -1779,3 +1779,201 @@ To measure (the 136-lane GPU columns carry all four lanes):
     MOJOLEARN_HOST_OUTDIR=<sab> MOJOLEARN_BUILD_EXTRA_DEFINES="-D MOJOLEARN_HOST_SABOTAGE=1" sh bindings/build_gp_host.sh
     MOJOLEARN_HOST_DIR=<sab> MOJOLEARN_HOST_ALLOW_SABOTAGE=1 python3 tools/identity_break.py --lanes gp,gp-matern12,gp-matern32,gp-matern52-ard --json <cpu-sab>.json
     (the diff of <cpu-sab>.json against the three GPU columns must exit non-zero with DIVERGENT)
+
+## Workstream E batch 3 (2026-09-14): gbdt-symmetric, WRITTEN, NOT COMPILED, NOT MEASURED
+
+Branch `lane/cpu-training-e3-gbdt`, off `lane/cpu-training-e3-trees` at
+ed6c06526. Nothing in this section is a bit result. The agent that wrote it
+ran no build, no simulation and no test on the Mac; the first compile and the
+first four-column diff are owed to the seven-runner gate and the commands
+below.
+
+- Why gbdt-symmetric and not gbdt-rmse. The lane bodies in
+  tools/identity_break.py fit gbdt-symmetric, gbdt-depthwise and
+  gbdt-lossguide with `loss="Logloss"` and gbdt-rmse with `loss="RMSE"`.
+  Depthwise and Lossguide run the leaf estimator on EVERY tree
+  (`doc_parallel_boosting.mojo:1832-1890`) with Logloss's default Newton
+  walker at ten iterations, so the target kernel, the oracle and the walker
+  this lane restates are the ones those two lanes need, and the symmetric
+  searcher is the one gbdt-rmse needs. gbdt-rmse shares the searcher alone:
+  its leaves are the searcher's own (DEVIATION 64) and its cursor starts at
+  `boost_from_average`'s constant, two stages no other lane of the four
+  reaches.
+- `gbdt/host/gbdt_oracle.mojo`, the host restatement the census found missing
+  (section 1.1 gbdt, verdict NONE). It imports the host code the device fit
+  itself runs on the host (the GreedyLogSum border search and NaN mode, the
+  compressed-index layout and policy blocks, `TRandom`) and restates every
+  kernel: the Logloss search pass with its halving-tree partials and the
+  deterministic lane fold, `choose_scale_kernel`, the binarize, the one-byte
+  histograms as Int32 sums of the dithered quantizer, the half-byte
+  histograms thread for thread (the 512-float replicas, the peel, the striped
+  loop, both reduce stages, the block-partial flush), the scan and the
+  sibling subtraction, the pinned 32-chunk partition stats, the Cosine score
+  and the level winner, the stable split, the parent copy, the partition
+  update with its plan, every level including the ones the host gate
+  discards, the rollback, the Newton walker over the gathered order with
+  AnyImprovement, the fused cursor update, the rescale, the learn losses and
+  the model text. Each stage names its device file and line in the module
+  docstring.
+- A family of its own, `gbdt`: `bindings/_mojolearn_gbdt_host.mojo` (shim
+  `bindings/build_gbdt_host.sh`) routes `_mojolearn_gbdt` on a CPU-only install
+  with `gbdt_fit`, `gbdt_predict`, `gbdt_model_dim`, `gbdt_sigmoid`,
+  `gbdt_vendor` and `gbdt_numeric_mode`, so `python/mojolearn/ensemble.py`
+  runs unchanged. `gbdt_predict` parses the oblivious float-only model text and
+  predicts through `core/gbdt_host_predict.mojo`. Refused BY NAME inside
+  `gbdt_fit`, each with "no CPU implementation of": every loss but Logloss,
+  Depthwise and Lossguide, the pointwise searcher, every score function but
+  Cosine, every leaf method but Newton, bootstrap, sample_weight,
+  class_weights, cat_features and one_hot_features, eval_set and the detector,
+  random_strength, boost_from_average=True, feature_fraction below 1,
+  border_count outside 1 to 255, max_depth above 16, an X carrying NaN (so
+  gbdt-nan-modes stays refused), and a feature with exactly one border (the
+  binary histogram policy). Absent from the binding and so refused by name:
+  `gbdt_predict_multi`, the ordered and FeatureFreq fits and the adapters'
+  binary transforms.
+- The sabotage arm is the routed set's `-D MOJOLEARN_HOST_SABOTAGE=1`: the
+  Newton walker's Hessian regularizer is one larger, so every leaf moves.
+- `python/mojolearn/tests/test_byte_lm_host.py` used `_mojolearn_gbdt` as the
+  family with no host binding; it uses `_mojolearn_arima` now.
+- The test module is `cd python && python3 -m mojolearn.tests.test_cpu_training_e3_gbdt`.
+
+RISKS FOR BIT IDENTITY NOT RESOLVABLE BY READING, ranked. (1) The half-byte
+restatement (`ties` only): its float add order is derived from the barrier
+argument, and a slip in the peel bounds, the striped base or the reduce
+stages moves that fixture alone. (2) Host contraction: the walker's
+`Float64(p) + step * Float64(d)`, the border midpoint and the Cosine
+`sum / (weight + lam)` are written as the device and its host code write
+them, and a host build that contracts a product into an add the GPU
+binding's host build does not would move leaves on every fixture. (3) The
+one-byte cell rule (`bin < folds` over the 5, 6, 7 and 8 bit slot maps)
+restated from the width files rather than executed. (4) The walker's
+AnyImprovement acceptance compares Float32 folds of block partials; a
+one-ULP difference in a partial changes the number of accepted rounds and
+then every later tree. (5) `std.math.log` in the border DP and `log2` in the
+subsample predicate are host libm calls on both paths; the GPU columns agree
+across macOS and Linux hosts, which is evidence, not proof, for the seven
+runners. `MOJOLEARN_IDENTITY_TRACE` against the Apple GPU binding
+(`borders.*`, `treeNNN.depthDD.hist`, `.pstats`, `.winners.*`,
+`.perm0.leaves.estimated`) names the first stage that moves.
+
+To measure (the three 2026-09-14 47-lane GPU columns already carry
+gbdt-symmetric):
+
+    MOJOLEARN_HOST_OUTDIR=<dir> sh bindings/build_gbdt_host.sh
+    MOJOLEARN_HOST_DIR=<dir> python3 tools/identity_break.py --lanes gbdt-symmetric --json <cpu>.json
+    python3 tools/identity_break.py --diff <apple> <nvidia> <amd> <cpu>.json --require-columns 4 --lanes gbdt-symmetric
+    MOJOLEARN_HOST_OUTDIR=<sab> MOJOLEARN_BUILD_EXTRA_DEFINES="-D MOJOLEARN_HOST_SABOTAGE=1" sh bindings/build_gbdt_host.sh
+    MOJOLEARN_HOST_DIR=<sab> MOJOLEARN_HOST_ALLOW_SABOTAGE=1 python3 tools/identity_break.py --lanes gbdt-symmetric --json <cpu-sab>.json
+    (the diff of <cpu-sab>.json against the three GPU columns must exit non-zero with DIVERGENT)
+
+## Workstream E batch 3 (2026-09-14): gbdt-rmse, WRITTEN, NOT COMPILED, NOT MEASURED
+
+Branch `lane/cpu-training-e3-gbdt-rmse`, off `lane/cpu-training-e3-gbdt-fix`
+at 9e3a04d70. Nothing in this section is a bit result; no build, simulation
+or test ran on the Mac.
+
+- `gbdt/host/gbdt_oracle_rmse.mojo`, the RMSE arm. It imports the symmetric
+  oracle's restatements (grid, binarize, both histogram families, the pinned
+  partition stats, the Cosine score, the lane folds, the scale, the model
+  text) and restates what RMSE adds: the unset `boost_from_average` resolving
+  True, the Float32-narrowed target average as the cursor seed and the bias,
+  `pointwise_target_kernel[OBJECTIVE_RMSE]`'s search pass, and the tail of
+  `run_tree_layout_traced` under `apply_to_cursor` (the final partition
+  stats, `compute_leaf_values_kernel`, the fused cursor update), because
+  DEVIATION 64 skips the walker for RMSE at one Newton iteration and one
+  permutation. The level loop is a TWIN of `gbdt_host_fit`'s, named in both.
+- The binding routes `loss="RMSE"` there. Lifted for RMSE only: the loss
+  refusal and `boost_from_average=True`. New refusal: any
+  `leaf_estimation_iterations` other than 1 under RMSE. Everything else the
+  symmetric section lists stays refused.
+- Sabotage: the same `-D MOJOLEARN_HOST_SABOTAGE=1` adds 1.0 to the RMSE
+  leaf regularizer (the walker's arm never runs on this lane).
+- Test module: `cd python && python3 -m mojolearn.tests.test_cpu_training_e3_gbdt_rmse`.
+
+RISKS, ranked. (1) The level loop shares every risk the symmetric section
+ranks (half-byte add order on `ties`, the one-byte cell rule). (2) Host
+contraction of `(t - p) * (t - p)` or `g / (w + l2 + 1e-20)` into a
+neighboring add. (3) The rolled back tail: a tree that stops early reads the
+merged partitions over the stats reordered by every discarded level; a slip
+there moves only fixtures whose trees stop before depth 6. (4) The bias
+record's decimal half is `String(Float64)`, the same formatter as the device
+binding's host code.
+
+To measure (the 2026-09-14 47-lane GPU columns carry gbdt-rmse):
+
+    MOJOLEARN_HOST_OUTDIR=<dir> sh bindings/build_gbdt_host.sh
+    MOJOLEARN_HOST_DIR=<dir> python3 tools/identity_break.py --lanes gbdt-rmse --json <cpu>.json
+    python3 tools/identity_break.py --diff <apple> <nvidia> <amd> <cpu>.json --require-columns 4 --lanes gbdt-rmse
+    MOJOLEARN_HOST_OUTDIR=<sab> MOJOLEARN_BUILD_EXTRA_DEFINES="-D MOJOLEARN_HOST_SABOTAGE=1" sh bindings/build_gbdt_host.sh
+    MOJOLEARN_HOST_DIR=<sab> MOJOLEARN_HOST_ALLOW_SABOTAGE=1 python3 tools/identity_break.py --lanes gbdt-rmse --json <cpu-sab>.json
+    (the diff of <cpu-sab>.json against the three GPU columns must exit non-zero with DIVERGENT)
+
+## Workstream E (2026-09-14): arima, arima-011, arima-seasonal-c, IDENTICAL x4 ON SEVEN CPU RUNNERS
+
+Branch `lane/cpu-training-arima`, off `origin/fix/d-merge-regressions` at
+57465b6b3. The agent that wrote it ran no build, no simulation and no test
+on the Mac. RESULT: the first compile and the first four-column diff were
+the seven-runner CPU identity gate on that commit, run 34895909493: all 27
+training cells and all 27 infer cells of the three lanes read IDENTICAL x4
+(apple-m4, nvidia-h100 sm_90a, amd gfx942 and the runner's CPU column) on
+every one of the seven runners, and the sabotage build moved 26 of the 27
+training cells (arima-011/wide kept its hash, dcaecce707040ce1, under the
+doubled step; the wide fixture scales its first columns toward 1e-4, and why
+the step does not reach that cell was not investigated; the other two lanes'
+wide cells moved). `lane/cpu-training-arima-b` merges it with origin/main at
+e22374acd, ships the family in the wheels like every other routed family, and
+repeats both arms on the Apple M4's CPU-only path on one core: 27 of 27
+training and infer cells IDENTICAL x4 against the 136-lane columns, and the
+sabotage build DIVERGENT on the same 26 training and 26 infer cells.
+
+- arima, arima-011, arima-seasonal-c. `arima/host/arima_oracle.mojo`, a
+  second spelling of the device lane importing only the `checks/numerics.mojo`
+  seams (the census row pointed at `arima/checks/kalman_oracle.mojo` and
+  `fit_oracle.mojo`; both share `param_to_poly` and the matrix host replays
+  with the device files, so neither is imported). It mirrors, in
+  `arima_fit_ptr_host`'s order: the non-finite refusal; `estimate_x0`
+  (`prepare_data`, `start_params`, `arma_least_squares` with its degenerate
+  arm and its kernel over DEVIATION 678's Householder QR, `test_invparams`'
+  one-rounding association); the inverse Jones transform with DEVIATION
+  675's `two_atanh` and the sigma2 floor; `batched_min_lbfgs` with the shared
+  line search and the rules of `arima/impl/lbfgs_host.mojo`; `eval_batch`
+  over `batched_loglike_grad` (DEVIATION 687's step 2^-10, the perturbation,
+  the reset by copy); every filter pass through the forward Jones transform
+  and `batched_kalman_filter` (the matrices kernel, the initial state with
+  the Kronecker LU and the r == 1 intercept nudge, the loop kernel, both
+  refusals by name); the forward transform, `pack` and `_loglike_at`; and the
+  forecast (`predict` at `start == n_obs`, `finalize_forecast`'s one
+  difference, `copy_forecast_kernel`).
+- Refused by name: p, q or P above 1, any Q, d + D of 2, p + q + k of 0, and
+  an in-sample prediction (`start < n_obs`). The GPU's own refusals (method,
+  exog, the order bounds) keep the GPU's sentences through the device's
+  `validate_order`. par-arima is not declared.
+- A family of its own, `arima`: `bindings/_mojolearn_arima_host.mojo` (shim
+  `bindings/build_arima_host.sh`) routes `_mojolearn_arima` with the GPU
+  binding's `arima_fit`, `arima_predict` and `arima_forecast`, so
+  `python/mojolearn/_arima_impl.py` runs unchanged.
+- The sabotage arm is `-D MOJOLEARN_HOST_SABOTAGE=1`: the finite-difference
+  step doubles, so every gradient and every fitted model moves.
+- The test module is `cd python && python3 -m mojolearn.tests.test_cpu_training_arima`.
+
+RISKS FOR BIT IDENTITY NOT RESOLVABLE BY READING. (1) The optimizer is
+already host code on the GPU path, so its branch sequence rests on the
+Kalman log-likelihood bits alone; one ulp in any filter pass can change an
+iteration count and every later cell. (2) Host contraction of a product the
+device stores through `ftz` before an add (Jones `sign * (a * x)`, the
+Kronecker cells, `RQ` and `RQR`). (3) Builtin `max` and `min` in the Jones
+clamp and the sigma2 floor compiled differently for the host than for the
+three GPUs on a signed zero. (4) The binding validates through
+`arima/impl/tsa/arima_common.mojo`, a module that also defines kernels; the
+tsa host binding's import of `holtwinters/impl/runner.mojo` says a CPU build
+tolerates that, which is an inference, not a build.
+
+To measure (the 2026-09-14 136-lane GPU columns carry the three lanes,
+IDENTICAL x3 on every fixture):
+
+    MOJOLEARN_HOST_OUTDIR=<dir> sh bindings/build_arima_host.sh
+    MOJOLEARN_HOST_DIR=<dir> python3 tools/identity_break.py --lanes arima,arima-011,arima-seasonal-c --json <cpu>.json
+    python3 tools/identity_break.py --diff <apple> <nvidia> <amd> <cpu>.json --require-columns 4 --lanes arima,arima-011,arima-seasonal-c
+    MOJOLEARN_HOST_OUTDIR=<sab> MOJOLEARN_BUILD_EXTRA_DEFINES="-D MOJOLEARN_HOST_SABOTAGE=1" sh bindings/build_arima_host.sh
+    MOJOLEARN_HOST_DIR=<sab> MOJOLEARN_HOST_ALLOW_SABOTAGE=1 python3 tools/identity_break.py --lanes arima,arima-011,arima-seasonal-c --json <cpu-sab>.json
+    (the diff of <cpu-sab>.json against the three GPU columns must exit non-zero with DIVERGENT)

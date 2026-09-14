@@ -177,6 +177,21 @@ class ForestProtocol:
             return self._prediction_function(sequential_name)(
                 *(_addr_ro(a) for a in arrays), _addr_ro(X),
                 _addr(out), [int(rows), *dimensions])
+        resident = self._prepare_resident_forest(native)
+        return self._resident_prediction_function(native)(
+            resident.handle, _addr_ro(X), _addr(out),
+            [int(rows), int(features), dimensions[2]])
+
+    def _prepare_resident_forest(self, native=None):
+        """Prepare the existing immutable parallel-groves snapshot without a query."""
+        if self._prediction_engine() != "parallel_groves":
+            raise ValueError("resident forest preparation requires parallel_groves")
+        if not hasattr(self, "_offsets"):
+            raise RuntimeError("this estimator is not fitted yet")
+        if native is None:
+            native = self._bind()
+        dimensions = (int(self.n_features_in_), int(self._n_trees), int(self._num_outputs))
+        arrays = tuple(getattr(self, name) for name in _FOREST_ARRAYS)
         required = ("forest_prepare_gpu", "forest_predict_resident_reuse_gpu", "forest_release_gpu")
         if any(not callable(getattr(native, name, None)) for name in required):
             raise RuntimeError("rebuild the forest binding for resident parallel_groves inference")
@@ -202,9 +217,7 @@ class ForestProtocol:
             for name, a in zip(_FOREST_ARRAYS, frozen):
                 setattr(self, name, a)
             self._resident_forest = resident
-        return self._resident_prediction_function(native)(
-            resident.handle, _addr_ro(X), _addr(out),
-            [int(rows), int(features), dimensions[2]])
+        return resident
 
     def __getstate__(self):
         state = self.__dict__.copy()
