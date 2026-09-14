@@ -625,6 +625,7 @@ def estimators_vendor_binding() raises -> PythonObject:
 def PyInit__mojolearn_estimators() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_estimators")
+        m.def_function[dbscan_parallel_available_binding]("dbscan_parallel_available")
         m.def_function[gram_parallel_available_binding]("gram_parallel_available")
         m.def_function[glm_parallel_available_binding]("glm_parallel_available")
         m.def_function[estimators_vendor_binding]("estimators_vendor")
@@ -656,4 +657,8 @@ def gram_parallel_available_binding() raises -> PythonObject:
 
 
 def glm_parallel_available_binding() raises -> PythonObject:
+    return PythonObject(1)
+
+
+def dbscan_parallel_available_binding() raises -> PythonObject:
     return PythonObject(1)

@@ -54,6 +54,14 @@ def execute(request):
         X, weights = args
         model.fit(X, sample_weight=weights)
         return model
+    if operation == 'dbscan_fit':
+        binding = state._bind('_mojolearn_estimators')
+        if (not callable(getattr(binding, 'dbscan_parallel_available', None))
+                or binding.dbscan_parallel_available() != 1):
+            raise ImportError('rebuild estimators binding for parallel DBSCAN neighborhoods')
+        X, weights = args
+        state.fit(X, sample_weight=weights)
+        return state
     if operation == 'gbdt_fit':
         model = state
         binding = model._bind('_mojolearn_gbdt')

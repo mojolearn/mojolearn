@@ -112,7 +112,6 @@ from dbscan.impl.corepoints.compute import (
 )
 from dbscan.impl.mergelabels.runner import merge_labels_run
 from dbscan.impl.vertexdeg.algo import (
-    vertex_deg_dispatch,
     weighted_vertex_deg_csr,
     weighted_vertex_deg_dense,
 )
@@ -127,10 +126,11 @@ from dbscan.impl.sparse.detail.csr import (
 )
 from neighbors.impl.ball_cover.ball_cover import (
     rbc_build_index,
-    rbc_eps_nn_query_count,
-    rbc_eps_nn_query_fill,
-    rbc_eps_nn_query_max_k,
     rbc_n_landmarks,
+)
+from dbscan.impl.multi_gpu import (
+    vertex_deg_dispatch, rbc_eps_nn_query_count,
+    rbc_eps_nn_query_fill, rbc_eps_nn_query_max_k,
 )
 from neighbors.impl.ball_cover.scan import (
     RBC_SCAN_TPB,

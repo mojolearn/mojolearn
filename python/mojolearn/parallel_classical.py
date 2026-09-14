@@ -276,3 +276,24 @@ def predict_gaussian_process(estimator, X, *, devices=(0,), return_std=False):
     if return_std:
         estimator.clamped_, estimator.n_clamped_ = diagnostic
     return result
+
+
+def fit_dbscan(estimator, X, *, devices=(0,), sample_weight=None):
+    """Distribute neighborhood rows; retain root core-point and label merges.
+
+    Brute L2/L1 and RBC L2 use their original distance/order contracts.
+    Full reference data, the current batch graph and label state still need
+    to fit on the root GPU. This does not pool the reference index.
+    """
+    from .density import DBSCAN
+    if type(estimator) is not DBSCAN:
+        raise TypeError('fit_dbscan requires mojolearn.DBSCAN')
+    if estimator.numeric_mode not in (None, 'identical'):
+        raise ValueError('parallel DBSCAN requires IDENTICAL numeric mode')
+    pool = DevicePool(devices, cooperative=True)
+    try:
+        result = pool.map([('dbscan_fit', estimator, (X, sample_weight))])[0]
+    finally:
+        pool.close()
+    estimator.__dict__ = result.__dict__.copy()
+    return estimator
