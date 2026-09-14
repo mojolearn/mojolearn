@@ -123,6 +123,11 @@ visibility or environment settings around concurrent fits.
 
 ## Remaining rollout
 
+Here, rollout means completing implementation and cloud qualification, not a
+backward-compatibility or staged-release process. Alpha API changes are allowed.
+The [coverage inventory](COVERAGE.md) distinguishes estimator support from
+memory capacity; current drivers do not pool GPU memory.
+
 The user's requested order is neural training, forests/ExtraTrees, then
 boosting and classical estimators. The following remain unimplemented:
 
