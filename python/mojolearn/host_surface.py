@@ -70,13 +70,19 @@ BUILDER = "bindings/build_host_family.sh"
 #: predates the kde and svc model cells and the holtwinters infer cells the
 #: CPU column now carries, so gate run 34832840859 at 7bf4f4cc9 failed on
 #: all seven runners with "require-columns 4 ... 27 short". The 47-lane
-#: record taken at 7bf4f4cc9 (pca-whiten included) is the one this surface
-#: is diffed against; the manifest step of the workflow fails, before any
-#: build, when a column named here is not in the checkout.
+#: record taken at 7bf4f4cc9 (pca-whiten included) was the one this surface
+#: was diffed against until 2026-09-14 afternoon; the 136-lane record at
+#: 4048e1b51 (the 2712/2713 fix, the sixteen one-device par-* lanes) is the
+#: one now; the manifest step of the workflow fails, before any build, when a
+#: column named here is not in the checkout. Its AMD column is the MI325X one
+#: (DigitalOcean, gfx942): the MI300X column of the same record is incomplete
+#: (the 60-minute Hot Aisle cap cut it before iforest, iforest-tuned and five
+#: par-* lanes), and iforest is a covered lane, so require-columns 4 could not
+#: hold against it.
 TRAINING_GPU_COLUMNS = (
-    "bench/results/identity_break/2026-09-14_47-lanes/apple-m4.json",
-    "bench/results/identity_break/2026-09-14_47-lanes/nvidia-h100-sm_90a.json",
-    "bench/results/identity_break/2026-09-14_47-lanes/amd-mi300x-gfx942.json",
+    "bench/results/identity_break/2026-09-14_136-lanes/apple-m4.json",
+    "bench/results/identity_break/2026-09-14_136-lanes/nvidia-h100-sm_90a.json",
+    "bench/results/identity_break/2026-09-14_136-lanes/amd-mi325x-gfx942.json",
 )
 
 #: The GPU columns the classical INFERENCE gate compares each host identity
