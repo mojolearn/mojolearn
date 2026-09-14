@@ -443,8 +443,15 @@ def _cho_solve_columns(
         var device = DeviceContext(device_id=rank)
         var packed = chol_gather_columns(ctx, b, n, nrhs, source, width)
         var sb = peer_clone(ctx, device, packed)
-        _ = packed^
         var sl = peer_clone(ctx, device, l)
+        # Both ends drain before the gathered source is released: a
+        # cross-device copy is not known to be complete when only its source
+        # stream has drained (the MI300X leg of 2026-09-14 23:05Z diverged in
+        # the forward stage at n=513, two right-hand sides, with the source
+        # released first).
+        device.synchronize()
+        ctx.synchronize()
+        _ = packed^
         shards.append(CholSolveShard(device^, sl^, sb^, first, width))
     var quiet = IdentityTrace.disabled()
     for stage in range(2):
@@ -461,6 +468,7 @@ def _cho_solve_columns(
             ctx.synchronize()
             s.b.enqueue_copy_to(staged)
             s.ctx.synchronize()
+            ctx.synchronize()
             chol_scatter_columns(ctx, b, staged, n, nrhs, s.first, s.width)
             _ = staged^
         if stage == 0:
