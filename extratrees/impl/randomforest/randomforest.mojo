@@ -87,11 +87,13 @@ from extratrees.impl.decisiontree.flatnode import (
     predict_one_accumulate,
 )
 from extratrees.impl.decisiontree.batched_levelalgo.builder import (
+    DEVICE_MAX_ACC,
     train_classification,
     train_classification_device,
     train_forest_classification_device,
     train_forest_regression_device,
     train_regression,
+    train_tree_exact,
     upload_dataset,
 )
 from extratrees.impl.decisiontree.batched_levelalgo.dataset import Dataset
@@ -458,6 +460,83 @@ def fit_regression(
             train_regression(dataset, params, Int32(tree_id), seed)
         )
         _ = row_ids.unsafe_ptr()
+    forest.n_trees = n_trees
+    return forest^
+
+
+def fit_forest_exact(
+    x_col_major: List[Float32],
+    labels: List[Float32],
+    labels_q: List[Int32],
+    n_rows: Int32,
+    n_cols: Int32,
+    num_outputs: Int32,
+    params: DecisionTreeParams,
+    n_trees: Int32,
+    seed: UInt64,
+    is_classification: Bool,
+    inv_scale: Float32,
+    bootstrap: Bool = BOOTSTRAP_DEFAULT,
+    n_sampled_rows: Int32 = 0,
+) raises -> Forest:
+    """The forest loop of `fit_classification` / `fit_regression` over
+    `train_tree_exact`, the HOST RESTATEMENT OF THE DEVICE TRAINER (the CPU
+    training lane, 2026-09-14; the block comment above `train_tree_exact`
+    in `builder.mojo`). `labels_q` is the device's label plane: the class
+    ids `class_ids_for` derives for a classifier (`num_outputs = n_classes`,
+    `inv_scale = 1`), `quantize_labels`'s fixed point for a regressor
+    (`num_outputs = 1`, `inv_scale = Float32(1 / scale)`). `labels` is the
+    float plane the `Dataset` carries beside it; the exact search never
+    reads it. The device's own refusal on the class count
+    (`train_forest_classification_device`, DEVIATION 172) is restated so a
+    fit the device refuses is refused here in the same words."""
+    error_checking(n_rows, n_cols, n_trees)
+    validity_check(params)
+    if num_outputs < 1:
+        raise Error("num_outputs must be >= 1; got " + String(num_outputs))
+    if is_classification and Int(num_outputs) > DEVICE_MAX_ACC:
+        raise Error(
+            "the device score kernel is built for at most "
+            + String(DEVICE_MAX_ACC)
+            + " classes; got "
+            + String(num_outputs)
+            + " (DEVIATION 172: shared sizing is comptime here)"
+        )
+    if len(labels_q) != Int(n_rows) or len(labels) != Int(n_rows):
+        raise Error(
+            "fit_forest_exact: labels and labels_q must both be n_rows long"
+        )
+    var n_sampled = resolve_n_sampled_rows(n_rows, bootstrap, n_sampled_rows)
+    var forest = Forest(num_outputs)
+    var labels_q_p = labels_q.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin]()
+    for tree_id in range(Int(n_trees)):
+        var row_ids = row_sample_for(
+            n_rows, bootstrap, n_sampled, seed, Int32(tree_id)
+        )
+        var dataset = Dataset(
+            rebind[MutPointer[Float32, MutUntrackedOrigin]](
+                x_col_major.unsafe_ptr()
+            ),
+            rebind[MutPointer[Float32, MutUntrackedOrigin]](
+                labels.unsafe_ptr()
+            ),
+            n_rows,
+            n_cols,
+            n_sampled,
+            n_cols,
+            rebind[MutPointer[Int32, MutUntrackedOrigin]](
+                row_ids.unsafe_ptr()
+            ),
+            num_outputs,
+        )
+        forest.trees.append(
+            train_tree_exact(
+                dataset, labels_q_p, params, Int32(tree_id), seed,
+                is_classification, Int(num_outputs), inv_scale,
+            )
+        )
+        _ = row_ids.unsafe_ptr()
+    _ = labels_q.unsafe_ptr()
     forest.n_trees = n_trees
     return forest^
 

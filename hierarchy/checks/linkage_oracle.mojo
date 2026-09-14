@@ -50,7 +50,21 @@ exists to separate one thing:
 """
 
 from std.math import fma, sqrt
+from std.sys.compile import is_defined
 from max.gpu.host import DeviceContext, HostBuffer
+
+comptime LINKAGE_ORACLE_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
+"""The CPU identity gate's negative control for the agglomerative lane (the
+CPU training lane, brief docs/lanes/BRIEF_cpu_training_2026-09-13.md section
+3.4; 2026-09-14). `-D MOJOLEARN_HOST_SABOTAGE=1` makes `host_kruskal` walk
+the sorted edge keys DESCENDING, so the host binding built that way returns
+the MAXIMUM spanning tree's dendrogram and labels and diverges from the GPU
+columns on every fixture. An arithmetic sabotage (a reversed distance fold)
+would move distances by an ulp and leave the labels alone on most fixtures,
+which is why the arm is on the order the identity rests on. Never passed by
+a shipping build; `bindings/build_host_family.sh` forwards it only from
+MOJOLEARN_BUILD_EXTRA_DEFINES, and `_backend.load_host_module` refuses a
+binding whose `<prefix>_sabotage()` reads true unless the gate says so."""
 
 from core.row_norms import NORM_TPB
 from hierarchy.checks.edge_order import (
@@ -353,7 +367,13 @@ def host_kruskal(
     var lo = List[Int32](capacity=m - 1)
     var hi = List[Int32](capacity=m - 1)
     var w = List[Float32](capacity=m - 1)
-    for t in range(n_pairs):
+    for step in range(n_pairs):
+        var t = step
+        comptime if LINKAGE_ORACLE_HOST_SABOTAGE:
+            # THE SABOTAGE ARM: the sorted keys walked DESCENDING, so this
+            # is the MAXIMUM spanning tree. Wrong on purpose; see
+            # LINKAGE_ORACLE_HOST_SABOTAGE.
+            t = n_pairs - 1 - step
         var u = Int(unpack_edge_lo(keys[t]))
         var v = Int(unpack_edge_hi(keys[t]))
         var ru = uf.find(u)

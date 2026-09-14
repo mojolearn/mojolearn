@@ -25,15 +25,32 @@ a CPU-only install through `_backend._HOST_MODULES` (`"_mojolearn_solver":
 "_mojolearn_solver_host"`): `cd_fit` and `cd_predict` with the SAME address
 contract (`x` COLUMN-MAJOR `n_rows x n_cols`; the nine-value and
 three-value params lists mirrored word for word in `_solver_impl.py`), and
-`solver_vendor` answering "cpu". `linkage_fit` (agglomerative) is absent
-until its lane lands and refuses BY NAME through `_HostBinding`.
+`solver_vendor` answering "cpu".
+
+`linkage_fit` (agglomerative, 2026-09-14; brief section 1.1 agglomerative)
+is `hierarchy/checks/linkage_oracle.mojo`'s whole fit under the GPU
+binding's address contract: `host_pinned_distance_matrix` (the IDENTICAL
+tile's arithmetic, `core/row_norms` fold then the `-2 dot + (n_i + n_j)`
+epilogue through `identical_mul_add` / `ftz` / `identical_sqrt`),
+`host_kruskal` (Kruskal under the SAME total order `(weight_order_key, lo,
+hi)` the device's Boruvka uses; the MST is unique under a total order, so
+the edge set is the device's), `host_dendrogram` (the `children` rows over
+a union-find) and `host_extract_flattened_clusters` (cuVS's cut, serial).
+The guards are the device path's in the device path's order and words
+(`linkage_fit_host`, `cuvs single_linkage`, `get_distance_graph`,
+`pairwise_distances`). ONE ATTRIBUTE IS DEVICE-ONLY: `info[0]`, the
+Boruvka round count `n_boruvka_rounds_`, is a pass count of an algorithm
+the host does not run, so this binding writes -1 there; no identity_break
+cell hashes it (the train column is `labels_`), and `_hierarchy_impl.py`
+publishes what it reads. `info[1]`, `n_connected_components`, is 1, the
+literal `single_linkage.mojo` returns on the pairwise arm.
 """
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
-from bindings.hostptr import f32_ptr, read_f32
+from bindings.hostptr import f32_ptr, i32_ptr, read_f32
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,
@@ -44,6 +61,17 @@ from gemm.checks.gemm_oracle import (
     GEMM_ORACLE_HOST_SABOTAGE,
     OP_TN,
     gemm_oracle,
+)
+from hierarchy.checks.linkage_oracle import (
+    host_dendrogram,
+    host_extract_flattened_clusters,
+    host_kruskal,
+    host_pinned_distance_matrix,
+)
+from hierarchy.impl.cluster.detail.connectivities import (
+    DISTANCE_L2_EXPANDED,
+    DISTANCE_L2_SQRT_EXPANDED,
+    PAIRWISE_MAX_ROWS,
 )
 from solver.checks.cd_oracle import cd_oracle_fit
 
@@ -259,6 +287,115 @@ def cd_predict_binding(
     return PythonObject(0)
 
 
+def linkage_fit_binding(
+    x_addr: PythonObject,
+    children_addr: PythonObject,
+    labels_addr: PythonObject,
+    info_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """Single-linkage agglomerative clustering on the host, the GPU
+    binding's contract (`bindings/_mojolearn_solver.mojo::linkage_fit_binding`):
+    writes `(n_rows - 1) * 2` int32 to `children_addr`, `n_rows` int32 to
+    `labels_addr`, two int32 to `info_addr` (`[0]` the Boruvka round count,
+    -1 HERE because the host runs Kruskal, see the module docstring; `[1]`
+    `n_connected_components`, 1), and returns `info[0]`.
+
+    `x_addr` is ROW-MAJOR `n_rows x n_cols` float32. `params` is, in this
+    exact order (mirrored in `python/mojolearn/_hierarchy_impl.py`):
+
+        0  n_rows
+        1  n_cols
+        2  n_clusters
+        3  metric    (1 = L2SqrtExpanded, 0 = L2Expanded; every other code
+                      is REFUSED BY NAME as on the device)
+        4  use_knn   (0/1; 1 is REFUSED BY NAME as on the device)
+    """
+    if len(params) != 5:
+        raise Error(
+            "linkage_fit: params must contain 5 values, got "
+            + String(len(params))
+        )
+    var x_address = _index(x_addr)
+    var chp = i32_ptr(_index(children_addr))
+    var lp = i32_ptr(_index(labels_addr))
+    var ip = i32_ptr(_index(info_addr))
+    var n_rows = _index(params[0])
+    var n_cols = _index(params[1])
+    var n_clusters = _index(params[2])
+    var metric = _index(params[3])
+    var use_knn = _index(params[4]) != 0
+    with GILReleased(Python()):
+        # `linkage_fit_host`'s guards, then `cuvs_single_linkage`'s, then
+        # `get_distance_graph`'s, then `pairwise_distances`'s, in the order
+        # the device path reaches them and in their words.
+        if n_rows < 2:
+            raise Error(
+                "linkage_fit_host needs n_rows >= 2, got " + String(n_rows)
+            )
+        if n_cols < 1:
+            raise Error(
+                "linkage_fit_host needs n_cols >= 1, got " + String(n_cols)
+            )
+        if n_clusters > n_rows:
+            raise Error(
+                "hierarchy.single_linkage: n_clusters must be less than or equal"
+                " to the number of data points (n_clusters=" + String(n_clusters)
+                + ", n_rows=" + String(n_rows) + ")"
+            )
+        if n_clusters < 1:
+            raise Error(
+                "hierarchy.single_linkage: n_clusters=" + String(n_clusters)
+                + " < 1 refused by name (their extract_flattened_clusters would"
+                " index children at a negative offset)"
+            )
+        if use_knn:
+            raise Error(
+                "hierarchy.get_distance_graph: Linkage::KNN_GRAPH (connectivity="
+                "'knn', c=15) refused by name: the knn-graph"
+                " connectivity (connectivities.cuh:60-108, knn_graph.cuh) and"
+                " the cross-component connection it needs (mst.cuh:75-123,"
+                " cross_component_nn.cuh) are rung 2 and not implemented;"
+                " use connectivity='pairwise'"
+            )
+        if n_rows > PAIRWISE_MAX_ROWS:
+            raise Error(
+                "hierarchy.pairwise_distances: n_rows=" + String(n_rows)
+                + " > " + String(PAIRWISE_MAX_ROWS)
+                + "; their `int nnz = m * m` (connectivities.cuh:145) overflows"
+                " and the dense connectivity matrix is refused by name"
+            )
+        if metric != DISTANCE_L2_SQRT_EXPANDED and metric != DISTANCE_L2_EXPANDED:
+            raise Error(
+                "hierarchy.pairwise_distances: metric=" + String(metric)
+                + " refused by name; only L2SqrtExpanded (1, cuML's 'euclidean'/"
+                "'l2') and L2Expanded (0) are implemented (pairwise_distance_kmeans"
+                " raises on every other metric too, kmeans_common.cuh:320)"
+            )
+        var x = read_f32(x_address, n_rows * n_cols)
+        # THE FIT: the oracle's four stages, in the oracle's order.
+        var dists = host_pinned_distance_matrix(
+            x, n_rows, n_cols, metric == DISTANCE_L2_SQRT_EXPANDED
+        )
+        var mst = host_kruskal(dists, n_rows)
+        if len(mst[0]) != n_rows - 1:
+            raise Error(
+                "linkage_fit: the host MST has " + String(len(mst[0]))
+                + " edges, not n_rows - 1; nothing written"
+            )
+        var children = host_dendrogram(mst[0], mst[1], n_rows)
+        var labels = host_extract_flattened_clusters(children, n_clusters, n_rows)
+        if len(children) != (n_rows - 1) * 2 or len(labels) != n_rows:
+            raise Error("linkage_fit: the host dendrogram or labels have an unexpected length; nothing written")
+        for i in range((n_rows - 1) * 2):
+            chp[i] = children[i]
+        for i in range(n_rows):
+            lp[i] = labels[i]
+        ip[0] = Int32(-1)
+        ip[1] = Int32(1)
+    return PythonObject(-1)
+
+
 @export
 def PyInit__mojolearn_solver_host() abi("C") -> PythonObject:
     try:
@@ -270,6 +407,7 @@ def PyInit__mojolearn_solver_host() abi("C") -> PythonObject:
         module.def_function[solver_vendor_binding]("solver_vendor")
         module.def_function[cd_fit_binding]("cd_fit")
         module.def_function[cd_predict_binding]("cd_predict")
+        module.def_function[linkage_fit_binding]("linkage_fit")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_solver_host: ", error))

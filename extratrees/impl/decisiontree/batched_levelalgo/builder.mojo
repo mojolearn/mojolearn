@@ -62,6 +62,7 @@ from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels_impl
     SEARCH_ROWS_PER_THREAD,
     build_workload_info,
     float_gain_key,
+    node_feature_score_host,
     leaf_kernel,
     node_split_kernel,
     node_feature_range_kernel,
@@ -87,10 +88,14 @@ from extratrees.impl.decisiontree.batched_levelalgo.kernels.partition_multiblock
     partition_writeback_kernel,
 )
 from extratrees.impl.decisiontree.batched_levelalgo.split import (
+    ExactKey,
+    SPLIT_SAB_NONE,
+    SplitExact,
     split_reduce_kernel,
     split_tie_count_kernel,
     split_tie_salt_for,
 )
+from extratrees.checks.pcg_rng import key_for
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.gpu import WARP_SIZE, block_dim, block_idx, grid_dim, thread_idx
 from std.math import ceildiv, fma
@@ -1324,6 +1329,299 @@ def train_regression(
 
     var tree = queue.get_tree()
     set_leaf_predictions_regression(dataset, tree, queue.node_instances)
+    return tree^
+
+
+# ==========================================================================
+# THE HOST RESTATEMENT OF THE DEVICE TRAINER (the CPU training lane, phase
+# 1, et-clf and et-reg, 2026-09-14; brief
+# docs/lanes/BRIEF_cpu_training_2026-09-13.md section 1.1 et-clf, et-reg).
+#
+# `train_classification` and `train_regression` above are sklearn's
+# splitter on the host: `node_split_random_gini` orders candidates by the
+# exact Gini rational and is held bit for bit to the device
+# (`device_forest_check`), but `node_split_random_mse` orders by sklearn's
+# FLOAT64 proxy (DEVIATION 153) where the device orders by cuML's MSE gain
+# as an exact `Int64` rational over QUANTIZED labels (DEVIATION 189,
+# `regression_key`: `(|S_L n_R - S_R n_L| >> j)^2 / (n_L n_R)`). The two
+# orderings agree in exact arithmetic (the proxy is the gain plus a
+# per-node constant) but not bit for bit: the device's node-uniform shift
+# `j` (14 bits at 20,000 rows) turns near-ties into exact ties resolved by
+# DEVIATION 463's keyed rank, and the float64 proxy separates them. A host
+# fit that must reproduce the GPU columns' bytes on any input therefore
+# restates the DEVICE's search, not sklearn's, and this block does so for
+# both objectives from the device's own host oracles: per (node, feature)
+# `node_feature_score_host` (the score kernel's sequential oracle,
+# `builder_kernels_impl.mojo`; `regression_score_check` and
+# `score_kernel_check` hold the kernels to it cell for cell), then the
+# candidate exactly as `score_to_candidate_kernel` forms it (the metric
+# from `gain_per_split` / `entropy_gain_per_split`, the key the oracle's
+# rational or `float_gain_key` for entropy), then `SplitExact.update` in
+# slot order (the reduction `split_reduce_kernel` runs; the order is total
+# so the walk order is immaterial), then the readback's `MIN_FINITE` fix,
+# `split_not_valid`, `partition_samples` and `NodeQueue.push` as the device
+# loop applies them, DEVIATION 205's rescue keyed exactly as the device
+# keys it, and the leaf pass as `leaf_kernel` computes it
+# (`leaf_values_host`'s arithmetic over the quantized labels with the
+# device's `inv_scale`). The tree structure the device returns and the
+# leaf VALUES the device returns are both reproduced; the regressor's
+# leaves are means of quantized labels, which the older
+# `fit_extra_trees_regressor_reference` cannot give.
+#
+# What is refused here BY NAME rather than restated: best-first growth
+# (`max_leaf_nodes`, DEVIATION 466), because its device driver has no host
+# restatement on the exact key yet. The CPU column's ET lanes fit at the
+# default (depth-wise), and a host binding asked for best-first refuses.
+# ==========================================================================
+
+
+def _exact_candidate(
+    dataset: Dataset,
+    labels_q: MutPointer[Int32, MutAnyOrigin],
+    item: NodeWorkItem,
+    col: Int32,
+    n_acc: Int,
+    is_classification: Bool,
+    criterion: Int32,
+    min_samples_leaf: Int32,
+    seed: UInt64,
+    tree_id: Int32,
+) -> SplitExact:
+    """One (node, feature) cell as the device's reduction receives it:
+    `node_feature_score_host` then `score_to_candidate_kernel`'s policy (a
+    cell whose status is not SCORED is the default `Split` with the absent
+    key; a scored cell carries cuML's float gain as the metric and the
+    exact rational as the key, entropy's key being the sign-magnitude map
+    of its float gain over `den = 1`, DEVIATION 459)."""
+    var extent = node_feature_min_max(dataset, item, col)
+    var key = key_for(
+        seed, UInt32(Int(tree_id)), UInt32(Int(item.idx)), UInt32(Int(col))
+    )
+    var cell = node_feature_score_host(
+        dataset.data.unsafe_origin_cast[MutAnyOrigin](),
+        dataset.row_ids.unsafe_origin_cast[MutAnyOrigin](),
+        labels_q,
+        Int(dataset.m),
+        Int(item.instances.begin),
+        Int(item.instances.count),
+        Int(col),
+        extent,
+        key,
+        n_acc,
+        is_classification,
+        Int(min_samples_leaf),
+        True,
+    )
+    if cell.status != SCORE_STATUS_SCORED:
+        return SplitExact()
+    var acc_left = cell.acc_left.copy()
+    var acc_total = cell.acc_total.copy()
+    var left_p = acc_left.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin]()
+    var total_p = acc_total.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin]()
+    var metric: Float32
+    var num: Int64
+    var den: Int64
+    if is_classification and criterion == CRITERION_ENTROPY:
+        metric = entropy_gain_per_split(
+            left_p, total_p, 0, n_acc, cell.n_total, cell.n_left, min_samples_leaf
+        )
+        num = float_gain_key(metric)
+        den = Int64(1)
+    else:
+        metric = gain_per_split(
+            left_p, total_p, 0, n_acc, cell.n_total, cell.n_left, min_samples_leaf
+        )
+        num = cell.gini_num
+        den = cell.gini_den
+    _ = acc_left^
+    _ = acc_total^
+    return SplitExact(
+        Split(cell.threshold, col, metric, cell.n_left), ExactKey(num, den, 1)
+    )
+
+
+def _exact_node_split(
+    dataset: Dataset,
+    labels_q: MutPointer[Int32, MutAnyOrigin],
+    item: NodeWorkItem,
+    colids: List[Int32],
+    n_acc: Int,
+    is_classification: Bool,
+    criterion: Int32,
+    min_samples_leaf: Int32,
+    seed: UInt64,
+    tree_id: Int32,
+) -> Split:
+    """The device's per-node winner: the candidates of `colids` reduced by
+    `SplitExact.update` under `split_tie_salt_for(tree, node)`, then the
+    readback's fix (`search_batch*`: an invalid key or a negative column
+    reads `MIN_FINITE`, so `split_not_valid` rejects it)."""
+    var tie_salt = split_tie_salt_for(UInt32(Int(tree_id)), UInt32(Int(item.idx)))
+    var acc = SplitExact()
+    for ci in range(len(colids)):
+        var cand = _exact_candidate(
+            dataset, labels_q, item, colids[ci], n_acc, is_classification,
+            criterion, min_samples_leaf, seed, tree_id,
+        )
+        _ = acc.update(cand, SPLIT_SAB_NONE, tie_salt)
+    var out = acc.split
+    if acc.key.valid == 0 or out.colid < 0:
+        out.best_metric_val = Float32.MIN_FINITE
+    return out
+
+
+def _exact_all_constant(
+    dataset: Dataset, item: NodeWorkItem, colids: List[Int32]
+) -> Bool:
+    """`node_nonconstant_flag_kernel`'s per-node answer: no sampled column
+    varied on this node's rows."""
+    for ci in range(len(colids)):
+        var extent = node_feature_min_max(dataset, item, colids[ci])
+        if not node_feature_is_constant(extent, item.instances.count):
+            return False
+    return True
+
+
+def set_leaf_predictions_exact(
+    dataset: Dataset,
+    labels_q: MutPointer[Int32, MutAnyOrigin],
+    mut tree: TreeMetaDataNode[DType.float32],
+    node_instances: List[InstanceRange],
+    inv_scale: Float32,
+    is_classification: Bool,
+) raises:
+    """`leaf_kernel`'s arithmetic on the host, per leaf (`leaf_values_host`
+    is the same pass over pointers): integer class counts or the integer
+    sum of the quantized labels, then `Float32(count_c) / Float32(total)`
+    for a classifier and `ftz(Float32(sum) / Float32(seen) * inv_scale)`
+    for a regressor. An internal node's slot keeps the zeros
+    (`builder.cuh:582`'s memset, DEVIATION 471's zero_fill)."""
+    var n_nodes = tree.num_nodes()
+    if len(node_instances) != n_nodes:
+        raise Error(
+            "set_leaf_predictions_exact: "
+            + String(n_nodes)
+            + " nodes but "
+            + String(len(node_instances))
+            + " instance ranges"
+        )
+    var k = Int(tree.num_outputs)
+    tree.vector_leaf = List[Float32](length=n_nodes * k, fill=Float32(0.0))
+    for node_id in range(n_nodes):
+        if not tree.sparsetree[node_id].IsLeaf():
+            continue
+        var rng = node_instances[node_id]
+        var acc = List[Int32](length=k, fill=Int32(0))
+        var seen = Int32(0)
+        for i in range(Int(rng.begin), Int(rng.begin) + Int(rng.count)):
+            var row = Int(dataset.row_ids[unsafe_offset=i])
+            var lab = Int(labels_q[unsafe_offset=row])
+            if is_classification:
+                if lab >= 0 and lab < k:
+                    acc[lab] += Int32(1)
+            else:
+                acc[0] += Int32(lab)
+            seen += 1
+        var base = node_id * k
+        if is_classification:
+            var total = Int32(0)
+            for c in range(k):
+                total += acc[c]
+            for c in range(k):
+                tree.vector_leaf[base + c] = Float32(Int(acc[c])) / Float32(
+                    Int(total)
+                )
+        else:
+            for c in range(k):
+                tree.vector_leaf[base + c] = ftz(
+                    Float32(Int(acc[c])) / Float32(Int(seen)) * inv_scale
+                )
+
+
+def train_tree_exact(
+    dataset: Dataset,
+    labels_q: MutPointer[Int32, MutAnyOrigin],
+    params: DecisionTreeParams,
+    tree_id: Int32,
+    seed: UInt64,
+    is_classification: Bool,
+    n_acc: Int,
+    inv_scale: Float32,
+) raises -> TreeMetaDataNode[DType.float32]:
+    """One tree grown as the device grows it, on the host: the block comment
+    above. `labels_q` is the device's label plane (class ids for a
+    classifier, `quantize_labels`'s fixed point for a regressor; `n_acc`
+    is the class count or 1; `inv_scale` is `Float32(1 / scale)` or 1)."""
+    validity_check(params)
+    if params.max_leaf_nodes != -1:
+        raise Error(
+            "train_tree_exact: max_leaf_nodes (best-first growth, DEVIATION"
+            " 466) is REFUSED BY NAME on the host restatement of the device"
+            " trainer; only depth-wise growth is restated"
+        )
+    if Int(dataset.num_outputs) != n_acc:
+        raise Error(
+            "train_tree_exact: dataset.num_outputs is "
+            + String(dataset.num_outputs)
+            + " but n_acc is "
+            + String(n_acc)
+        )
+    var k = n_sampled_cols_for(params, dataset.n)
+    var queue = NodeQueue[DType.float32](
+        params, dataset.n_sampled_rows, Int32(n_acc), tree_id
+    )
+    while queue.has_work():
+        var work_items = queue.pop()
+        var colids = List[Int32](
+            length=len(work_items) * Int(k), fill=Int32(0)
+        )
+        _ = sample_features(
+            colids, work_items, tree_id, seed, Int(dataset.n), Int(k)
+        )
+        var splits = List[Split]()
+        for i in range(len(work_items)):
+            var item = work_items[i]
+            var my_colids = List[Int32]()
+            for c in range(Int(k)):
+                my_colids.append(colids[i * Int(k) + c])
+            var split = _exact_node_split(
+                dataset, labels_q, item, my_colids, n_acc, is_classification,
+                params.split_criterion, params.min_samples_leaf, seed, tree_id,
+            )
+            # DEVIATION 205 as the device loop keys it: every sampled column
+            # constant on a non-empty node, then one non-constant column
+            # picked by `rescue_pick` over the ascending list and searched
+            # alone.
+            if (
+                item.instances.count > 0
+                and _exact_all_constant(dataset, item, my_colids)
+            ):
+                var nonconst = rescue_columns(dataset, item)
+                if len(nonconst) > 0:
+                    var u = rescue_pick(
+                        rescue_key(seed, tree_id, UInt32(Int(item.idx))),
+                        len(nonconst),
+                    )
+                    var one = List[Int32]()
+                    one.append(nonconst[u])
+                    split = _exact_node_split(
+                        dataset, labels_q, item, one, n_acc, is_classification,
+                        params.split_criterion, params.min_samples_leaf, seed,
+                        tree_id,
+                    )
+            splits.append(split)
+            if not split_not_valid(
+                split,
+                params.min_impurity_decrease,
+                params.min_samples_leaf,
+                item.instances.count,
+            ):
+                partition_samples(dataset, split, item)
+        queue.push(work_items, splits)
+    var tree = queue.get_tree()
+    set_leaf_predictions_exact(
+        dataset, labels_q, tree, queue.node_instances, inv_scale, is_classification
+    )
     return tree^
 
 

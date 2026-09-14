@@ -26,9 +26,11 @@ through `_backend._HOST_MODULES` (`"_mojolearn_svm": "_mojolearn_svm_host"`):
 `svc_fit` and `svc_predict` with the SAME address contract and worst-case
 sized outputs (the eight-value and ten-value params lists and the five
 float64 info slots, mirrored word for word in `_svm_impl.py`), `svm_vendor`
-answering "cpu" and `svm_numeric_mode`. `svr_fit`, `svr_predict` and
-`iforest_run` are deliberately absent and refuse BY NAME through
-`_HostBinding` until their lanes land.
+answering "cpu" and `svm_numeric_mode`; and, since the iforest lane
+(2026-09-14), `iforest_run` under the GPU binding's 16-slot contract over
+`isolation_forest/checks/if_oracle.mojo` (the docstring of
+`iforest_run_binding` below). `svr_fit` and `svr_predict` are deliberately
+absent and refuse BY NAME through `_HostBinding` until their lane lands.
 
 What the CPU column certifies is what the lane hashes, the decision
 function and the predicted labels on the training rows and on held-out
@@ -48,7 +50,27 @@ from checks.kernel_matrix import (
     TARGET_COLUMN,
     column_name,
 )
-from checks.numerics import GLOBAL_NUMERIC_MODE
+from checks.numerics import GLOBAL_NUMERIC_MODE, ftz
+from isolation_forest.checks.if_oracle import (
+    OracleForest,
+    oracle_fit,
+    oracle_path_lengths,
+    oracle_scores,
+)
+from isolation_forest.estimator import (
+    IF_WANT_DECISION_FUNCTION,
+    IF_WANT_PREDICT,
+    IF_WANT_SCORE_SAMPLES,
+    percentile_linear,
+)
+from isolation_forest.impl.isolation_forest import (
+    IF_params,
+    check_finite_by_name,
+)
+from isolation_forest.impl.rng.xorwow import (
+    XORWOW_HOST_SABOTAGE,
+    build_xorwow_tables,
+)
 from svm.checks.smo_oracle import (
     SMO_ORACLE_HOST_SABOTAGE,
     OracleResult,
@@ -104,9 +126,10 @@ def svm_host_column_binding() raises -> PythonObject:
 
 def svm_host_sabotage_binding() raises -> PythonObject:
     """Whether this binary walks every GEMM leaf of the SMO oracle
-    descending on purpose (-D MOJOLEARN_HOST_SABOTAGE=1, the gate's
-    negative control)."""
-    return PythonObject(SMO_ORACLE_HOST_SABOTAGE)
+    descending on purpose, and advances the isolation forest's XORWOW one
+    extra step per split fraction (-D MOJOLEARN_HOST_SABOTAGE=1, the gate's
+    negative control; one define, both arms)."""
+    return PythonObject(SMO_ORACLE_HOST_SABOTAGE or XORWOW_HOST_SABOTAGE)
 
 
 # The GPU binding's names, same contract.
@@ -349,6 +372,209 @@ def svc_predict_binding(
     return PythonObject(n_rows)
 
 
+def _iforest_host_scores(
+    forest: OracleForest, x: List[Float32], n_rows: Int, n_cols: Int
+) raises -> List[Float32]:
+    """`_score_samples_device`'s guards in its words, then the oracle's
+    path lengths and PAPER scores (1 = anomaly, 0.5 = normal; the Python
+    layer's negation is the caller's)."""
+    if n_rows <= 0:
+        raise Error("Invalid n_rows " + String(n_rows))
+    if n_cols != forest.n_features:
+        raise Error(
+            "X_query has "
+            + String(n_cols)
+            + " features, the model was fitted with "
+            + String(forest.n_features)
+        )
+    check_finite_by_name("X_query", x, n_rows, n_cols)
+    var pl = oracle_path_lengths(forest, x, n_rows, n_cols)
+    return oracle_scores(forest, pl)
+
+
+def iforest_run_binding(
+    train_addr: PythonObject,
+    query_addr: PythonObject,
+    out_f32_addr: PythonObject,
+    out_i32_addr: PythonObject,
+    info_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`IsolationForest.fit` plus ONE of `score_samples`,
+    `decision_function` or `predict`, in one call, on the host: the GPU
+    binding's contract (`bindings/_mojolearn_svm.mojo::iforest_run_binding`,
+    the 16-slot params list, `want` selecting the output buffer, the three
+    float64 info slots), DEVIATION 874's fit-on-every-call kept so the
+    identity surface is the GPU's.
+
+    THE FIT AND SCORE ARE `isolation_forest/checks/if_oracle.mojo`'s
+    (`oracle_fit`, `oracle_path_lengths`, `oracle_scores`), the second
+    transcription of cuML's builder and scorer that `if_check` holds the
+    kernels to, over the same XORWOW stream (`build_xorwow_tables`,
+    DEVIATION 683, rebuilt on the host per call). The parameter resolution
+    is `IsolationForestEstimator.fit`'s (`isolation_forest/estimator.mojo`,
+    max_features, contamination, max_samples, the seed range) in its order
+    and words, the guards `iforest_run_host`'s and `IsolationForest.
+    error_checking`'s, the finite scan `check_finite_by_name`'s. The
+    epilogues are the estimator's: `score_samples = -paper`,
+    `decision_function = score_samples - Float32(offset_)`, `predict =
+    -(paper > Float32(-offset_) ? 1 : -1)`, `offset_` the contamination
+    quantile through `percentile_linear` over the training scores or -0.5.
+    """
+    if len(params) != 16:
+        raise Error(
+            "iforest_run: params must contain 16 values, got " + String(len(params))
+        )
+    var train_address = _index(train_addr)
+    var query_address = _index(query_addr)
+    var ip = f64_ptr(_index(info_addr))
+    var n_train = _index(params[0])
+    var n_features = _index(params[1])
+    var n_query = _index(params[2])
+    var n_estimators = _index(params[3])
+    var max_samples_mode = _index(params[4])
+    var max_samples_int = _index(params[5])
+    var max_samples_frac = Float64(py=params[6])
+    var max_depth = _index(params[7])
+    var max_features_mode = _index(params[8])
+    var max_features_int = _index(params[9])
+    var max_features_frac = Float64(py=params[10])
+    var bootstrap = _index(params[11]) != 0
+    var random_state = _index(params[12])
+    var contamination_auto = _index(params[13]) != 0
+    var contamination = Float64(py=params[14])
+    var want = _index(params[15])
+    if n_train <= 0 or n_features <= 0 or n_query <= 0:
+        raise Error("iforest_run: n_train, n_features and n_query must all be positive")
+    var out_f32_address = 0
+    var out_i32_address = 0
+    if want == IF_WANT_PREDICT:
+        out_i32_address = _index(out_i32_addr)
+    else:
+        out_f32_address = _index(out_f32_addr)
+    var values = List[Float32]()
+    var labels = List[Int32]()
+    var offset_ = Float64(-0.5)
+    var max_samples_ = 0
+    with GILReleased(Python()):
+        # `iforest_run_host`'s remaining guard.
+        if want < IF_WANT_SCORE_SAMPLES or want > IF_WANT_PREDICT:
+            raise Error(
+                "iforest_run_host: want=" + String(want) + " is not one of 0"
+                " (score_samples), 1 (decision_function), 2 (predict)"
+            )
+        var train = read_f32(train_address, n_train * n_features)
+        var query = read_f32(query_address, n_query * n_features)
+        # THE DEVICE STAGES EVERY INPUT CELL THROUGH `ftz` AT UPLOAD
+        # (`_upload_f32`, `_upload_rowmajor_as_colmajor` in
+        # `isolation_forest/impl/isolation_forest.mojo`; DEVIATION 1942 row),
+        # for the training matrix and for every query, so a denormal input
+        # is a signed zero to every kernel. The oracle reads its lists raw,
+        # so the flush is applied here, once, at the same boundary. MEASURED
+        # 2026-09-14: without it the CPU column's iforest/denormal train and
+        # infer cells diverged from all three GPU columns on `scores` (the
+        # GPU columns' denormal and denormal_ftz hashes are equal), the other
+        # eight fixtures identical.
+        for i in range(n_train * n_features):
+            train[i] = ftz(train[i])
+        for i in range(n_query * n_features):
+            query[i] = ftz(query[i])
+        # `IsolationForestEstimator.fit` (`:616-712`), in its order.
+        var actual_max_features: Int
+        if max_features_mode == 1:
+            if max_features_int < 1 or max_features_int > n_features:
+                raise Error(
+                    "max_features must be an int in [1, n_features] or a float in (0.0, 1.0]."
+                )
+            actual_max_features = max_features_int
+        else:
+            if max_features_frac <= 0.0 or max_features_frac > 1.0:
+                raise Error(
+                    "max_features must be an int in [1, n_features] or a float in (0.0, 1.0]."
+                )
+            actual_max_features = Int(max_features_frac * Float64(n_features))
+            if actual_max_features < 1:
+                actual_max_features = 1
+        var use_quantile = False
+        if not contamination_auto:
+            if contamination <= 0.0 or contamination > 0.5:
+                raise Error(
+                    "contamination must be 'auto' or a float in the range (0.0, 0.5]."
+                )
+            use_quantile = True
+        var actual_max_samples: Int
+        if max_samples_mode == 0:
+            actual_max_samples = 256 if n_train > 256 else n_train
+        elif max_samples_mode == 1:
+            if max_samples_int <= 0:
+                raise Error("max_samples must be a positive integer.")
+            actual_max_samples = max_samples_int if max_samples_int < n_train else n_train
+        else:
+            if max_samples_frac <= 0.0 or max_samples_frac > 1.0:
+                raise Error("float max_samples must be in (0.0, 1.0].")
+            actual_max_samples = Int(max_samples_frac * Float64(n_train))
+            if actual_max_samples < 1:
+                raise Error(
+                    "max_samples resolves to 0 samples; increase max_samples or the number of rows."
+                )
+        max_samples_ = actual_max_samples
+        if random_state < 0 or random_state >= 4294967296:
+            raise Error(
+                "Expected `0 <= random_state <= 2**32 - 1`, got " + String(random_state)
+            )
+        var if_params = IF_params.default()
+        if_params.n_estimators = n_estimators
+        if_params.max_samples = actual_max_samples
+        if_params.max_depth = max_depth if max_depth > 0 else -1
+        if_params.max_features = actual_max_features
+        if_params.bootstrap = bootstrap
+        if_params.seed = UInt64(random_state)
+        # `IsolationForest.error_checking` (`:538-549`), then DEVIATION 680's
+        # finite scan (the borrowed path's threaded scan raises the same
+        # words), then the fit.
+        if if_params.n_estimators <= 0:
+            raise Error(
+                "n_estimators must be > 0, got " + String(if_params.n_estimators)
+            )
+        check_finite_by_name("X", train, n_train, n_features)
+        var tables = build_xorwow_tables()
+        var forest = oracle_fit(train, n_train, n_features, if_params, tables)
+        if use_quantile:
+            var paper_train = _iforest_host_scores(forest, train, n_train, n_features)
+            var training_scores = List[Float32](capacity=n_train)
+            for i in range(n_train):
+                training_scores.append(-paper_train[i])
+            offset_ = percentile_linear(training_scores, 100.0 * contamination)
+        else:
+            offset_ = -0.5
+        var paper = _iforest_host_scores(forest, query, n_query, n_features)
+        if want == IF_WANT_PREDICT:
+            var threshold = Float32(-offset_)
+            for i in range(n_query):
+                var raw = Int32(1) if paper[i] > threshold else Int32(-1)
+                labels.append(-raw)
+        elif want == IF_WANT_DECISION_FUNCTION:
+            var off = Float32(offset_)
+            for i in range(n_query):
+                values.append((-paper[i]) - off)
+        else:
+            for i in range(n_query):
+                values.append(-paper[i])
+        _ = tables^
+    if want == IF_WANT_PREDICT:
+        var oi = i32_ptr(out_i32_address)
+        for i in range(n_query):
+            oi[i] = labels[i]
+    else:
+        var of = f32_ptr(out_f32_address)
+        for i in range(n_query):
+            of[i] = values[i]
+    ip[0] = offset_
+    ip[1] = Float64(max_samples_)
+    ip[2] = Float64(n_features)
+    return PythonObject(n_query)
+
+
 @export
 def PyInit__mojolearn_svm_host() abi("C") -> PythonObject:
     try:
@@ -361,6 +587,7 @@ def PyInit__mojolearn_svm_host() abi("C") -> PythonObject:
         module.def_function[svm_numeric_mode_binding]("svm_numeric_mode")
         module.def_function[svc_fit_binding]("svc_fit")
         module.def_function[svc_predict_binding]("svc_predict")
+        module.def_function[iforest_run_binding]("iforest_run")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_svm_host: ", error))
