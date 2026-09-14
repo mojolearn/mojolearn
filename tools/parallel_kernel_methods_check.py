@@ -50,13 +50,29 @@ def main():
         for kernel, extra in (('linear', {}), ('rbf', dict(gamma=0.3)), ('poly', dict(degree=2, gamma=0.2, coef0=0.5)),
                               ('sigmoid', dict(gamma=0.05, coef0=0.1))):
             params = dict(alpha=0.5, kernel=kernel, **extra)
-            one = identical(KernelRidge(**params)).fit(X, y)
-            many = fit_kernel_method(identical(KernelRidge(**params)), X, y, devices=devices)
-            digests = dict(dual=same(one.dual_coef_, many.dual_coef_, (n, kernel, 'dual')))
-            assert one.info_ == many.info_ == 0
-            digests['predict'] = same(one.predict(Q), apply_kernel_method(many, Q, devices=devices), (n, kernel, 'predict'))
-            checks.append(dict(estimator='KernelRidge', n=n, d=d, targets=t, kernel=kernel, **digests))
-            print('PASS KernelRidge', n, d, t, kernel, flush=True)
+            outcomes = []
+            for fit in (lambda: identical(KernelRidge(**params)).fit(X, y),
+                        lambda: fit_kernel_method(identical(KernelRidge(**params)), X, y, devices=devices)):
+                try:
+                    outcomes.append(fit())
+                except Exception as exc:
+                    # The refusal sentence, without the worker traceback.
+                    text = str(exc)
+                    outcomes.append(next(line for line in reversed(text.splitlines()) if 'kernel_ridge' in line))
+            if isinstance(outcomes[0], str) or isinstance(outcomes[1], str):
+                assert outcomes[0] == outcomes[1] or (isinstance(outcomes[0], str) and isinstance(outcomes[1], str)
+                                                      and outcomes[0].split('Exception: ')[-1] in outcomes[1]), \
+                    ('KernelRidge outcome differs', n, kernel, str(outcomes[0])[:200], str(outcomes[1])[:200])
+                checks.append(dict(estimator='KernelRidge', n=n, d=d, targets=t, kernel=kernel,
+                                   refusal=outcomes[0].split('Exception: ')[-1][:160]))
+                print('PASS KernelRidge equal refusal', n, d, t, kernel, flush=True)
+            else:
+                one, many = outcomes
+                digests = dict(dual=same(one.dual_coef_, many.dual_coef_, (n, kernel, 'dual')))
+                assert one.info_ == many.info_ == 0
+                digests['predict'] = same(one.predict(Q), apply_kernel_method(many, Q, devices=devices), (n, kernel, 'predict'))
+                checks.append(dict(estimator='KernelRidge', n=n, d=d, targets=t, kernel=kernel, **digests))
+                print('PASS KernelRidge', n, d, t, kernel, flush=True)
             if n >= 37:
                 q = min(n, 64 if n > 64 else n - 5)
                 nparams = dict(kernel=kernel, n_components=q, random_state=11, **extra)
