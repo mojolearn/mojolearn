@@ -32,7 +32,8 @@ def original_totals[RF_INPUT: Bool](
     destination[index] = total
 
 
-def run_case[RF_INPUT: Bool](ctx: DeviceContext, trees: Int, outputs: Int) raises:
+def run_case[RF_INPUT: Bool](ctx: DeviceContext, trees: Int, outputs: Int,
+    witness: Bool = False) raises:
     var offsets = List[Int32]()
     var columns = List[Int32]()
     var thresholds = List[Float32]()
@@ -59,6 +60,14 @@ def run_case[RF_INPUT: Bool](ctx: DeviceContext, trees: Int, outputs: Int) raise
                     value = Float32(-67108864.0)
                 elif c % 3 == 0:
                     value = bitcast[DType.float32](UInt32(1 if node == 1 else 0x80000001))
+                if witness and tree % 32 == 0:
+                    # All four visits belong to the SAME logical grove.
+                    # Serial gives 1, balanced/reversed folding gives 0.
+                    value = Float32(1.0)
+                    if tree == 0:
+                        value = Float32(67108864.0)
+                    elif tree == 64:
+                        value = Float32(-67108864.0)
                 leaves.append(value)
     var x = List[Float32]()
     for row in range(129):
@@ -113,6 +122,10 @@ def run_case[RF_INPUT: Bool](ctx: DeviceContext, trees: Int, outputs: Int) raise
     ctx.synchronize()
     var expected = download_f32(ctx, dt, 5 * outputs * 32)
     var actual = many.pool.value().collect[RF_INPUT](x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), 5)
+    if witness:
+        for item in range(5 * outputs):
+            if bitcast[DType.uint32](actual[item * 32]) != bitcast[DType.uint32](Float32(1.0)):
+                raise Error("grove zero did not preserve serial cancellation witness")
     for i in range(len(expected)):
         if bitcast[DType.uint32](expected[i]) != bitcast[DType.uint32](actual[i]):
             raise Error("individual grove bits differ " + String(i))
@@ -147,13 +160,21 @@ def run_case[RF_INPUT: Bool](ctx: DeviceContext, trees: Int, outputs: Int) raise
                 raise Error("failed owner recovery differs")
     one.close()
     many.close()
-    print("PASS forest pool", RF_INPUT, trees, outputs)
+    if witness:
+        print("PASS forest pool serial-order witness", RF_INPUT, trees, outputs)
+    else:
+        print("PASS forest pool", RF_INPUT, trees, outputs)
 
 
 def main() raises:
     if String(getenv("RUNPOD_POD_ID")) == "":
         raise Error("RunPod required; no local execution")
     var ctx = DeviceContext()
+    if String(getenv("MOJOLEARN_FOREST_ORDER_ONLY", "0")) == "1":
+        run_case[True](ctx, 97, 3, True)
+        run_case[False](ctx, 97, 3, True)
+        ctx.synchronize()
+        return
     var counts: List[Int] = [1, 3, 31, 32, 33, 65, 97]
     var outputs: List[Int] = [1, 2, 3, 8, 9]
     for n in counts:
@@ -165,4 +186,6 @@ def main() raises:
     run_case[False](ctx, 3, 129)
     run_case[True](ctx, 3, 4097)
     run_case[False](ctx, 3, 4097)
+    run_case[True](ctx, 97, 3, True)
+    run_case[False](ctx, 97, 3, True)
     ctx.synchronize()
