@@ -1,0 +1,186 @@
+1363 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3b2540000000, nodemask=2)
+1545 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x19e800000000, nodemask=2)
+1544 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5a5b40000000, nodemask=2)
+1651 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7ba8c0000000, nodemask=2)
+1650 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x121a00000000, nodemask=1)
+PASS {'estimator': 'NearestNeighbors', 'method': 'kneighbors', 'metric': 'euclidean', 'features': 3, 'kwargs': {}, 'weights': None, 'kernel': None, 'algorithm': 'brute', 'multioutput': None, 'sha256': '3d4e080c6d7f055d252cca81b8171c87bab136b44e4fef9f4f38ce0941f1c5b5'}
+1769 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x58ba80000000, nodemask=2)
+1770 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5b2e80000000, nodemask=2)
+1769 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x51ee80000000, nodemask=1)
+1876 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x183840000000, nodemask=2)
+1875 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x51b6c0000000, nodemask=1)
+PASS {'estimator': 'NearestNeighbors', 'method': 'kneighbors', 'metric': 'euclidean', 'features': 3, 'kwargs': {'n_neighbors': 1, 'return_distance': False}, 'weights': None, 'kernel': None, 'algorithm': 'brute', 'multioutput': None, 'sha256': '6fe98ad04a69dacd711d6436aebca898fef01cfe728ba9b3b551d0dc80904d35'}
+1981 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5b97c0000000, nodemask=2)
+1982 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3a1b00000000, nodemask=2)
+1982 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x330500000000, nodemask=1)
+2088 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x594a80000000, nodemask=2)
+2087 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x583000000000, nodemask=2)
+2088 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x533a00000000, nodemask=1)
+PASS {'estimator': 'NearestNeighbors', 'method': 'kneighbors', 'metric': 'manhattan', 'features': 3, 'kwargs': {}, 'weights': None, 'kernel': None, 'algorithm': 'brute', 'multioutput': None, 'sha256': '421a1e74d39cea842e1c9fc292cd1e75a83b691040235e4366fbe8eba44066f0'}
+2193 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x107000000000, nodemask=1)
+2194 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3bedc0000000, nodemask=2)
+2193 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x78cf80000000, nodemask=2)
+2299 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x59a000000000, nodemask=2)
+2300 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x78d140000000, nodemask=2)
+PASS {'estimator': 'NearestNeighbors', 'method': 'kneighbors', 'metric': 'manhattan', 'features': 3, 'kwargs': {'n_neighbors': 1, 'return_distance': False}, 'weights': None, 'kernel': None, 'algorithm': 'brute', 'multioutput': None, 'sha256': '6fe98ad04a69dacd711d6436aebca898fef01cfe728ba9b3b551d0dc80904d35'}
+2405 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x38d600000000, nodemask=2)
+2406 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x121580000000, nodemask=1)
+2511 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x79d480000000, nodemask=2)
+2512 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x123480000000, nodemask=1)
+2512 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x585a00000000, nodemask=2)
+PASS {'estimator': 'NearestNeighbors', 'method': 'kneighbors', 'metric': 'chebyshev', 'features': 3, 'kwargs': {}, 'weights': None, 'kernel': None, 'algorithm': 'brute', 'multioutput': None, 'sha256': '443ceccf150c376e6d0a90c720b8b4d5e601509398b9e0dfecbfdf091052b25b'}
+2617 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x50b5c0000000, nodemask=1)
+2618 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x52c0c0000000, nodemask=1)
+2617 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x784f00000000, nodemask=2)
+2724 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3a4640000000, nodemask=2)
+2723 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x118fc0000000, nodemask=1)
+PASS {'estimator': 'NearestNeighbors', 'method': 'kneighbors', 'metric': 'chebyshev', 'features': 3, 'kwargs': {'n_neighbors': 1, 'return_distance': False}, 'weights': None, 'kernel': None, 'algorithm': 'brute', 'multioutput': None, 'sha256': '6fe98ad04a69dacd711d6436aebca898fef01cfe728ba9b3b551d0dc80904d35'}
+2829 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x52d4c0000000, nodemask=1)
+2830 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x123bc0000000, nodemask=1)
+2829 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3b00c0000000, nodemask=2)
+2830 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5adb40000000, nodemask=2)
+2935 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3ad1c0000000, nodemask=2)
+2936 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x39d7c0000000, nodemask=2)
+2935 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x535cc0000000, nodemask=1)
+PASS {'estimator': 'NearestNeighbors', 'method': 'kneighbors', 'metric': 'cosine', 'features': 3, 'kwargs': {}, 'weights': None, 'kernel': None, 'algorithm': 'brute', 'multioutput': None, 'sha256': 'b6c363eee4bae840c6f6868eef8f1a4945879de4e99d8de257ee77bb2755b373'}
+3041 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x714e80000000, nodemask=1)
+3042 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x11ad40000000, nodemask=1)
+3041 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3a5d00000000, nodemask=2)
+3042 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1878c0000000, nodemask=2)
+3148 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3256c0000000, nodemask=1)
+3147 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5add00000000, nodemask=2)
+PASS {'estimator': 'NearestNeighbors', 'method': 'kneighbors', 'metric': 'cosine', 'features': 3, 'kwargs': {'n_neighbors': 1, 'return_distance': False}, 'weights': None, 'kernel': None, 'algorithm': 'brute', 'multioutput': None, 'sha256': '6fe98ad04a69dacd711d6436aebca898fef01cfe728ba9b3b551d0dc80904d35'}
+1363 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x105340000000, nodemask=1)
+3253 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1b7d40000000, nodemask=2)
+3254 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5a3480000000, nodemask=2)
+3359 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x39cc80000000, nodemask=2)
+3360 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x122980000000, nodemask=1)
+3360 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1aa580000000, nodemask=2)
+3359 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x13f240000000, nodemask=1)
+PASS {'estimator': 'NearestNeighbors', 'method': 'kneighbors', 'metric': 'euclidean', 'features': 3, 'kwargs': {}, 'weights': None, 'kernel': None, 'algorithm': 'rbc', 'multioutput': None, 'sha256': '8f9b0255d274446355192a694b292f5cf10f08e2297c404582087b51ad82dc15'}
+3466 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x195a00000000, nodemask=2)
+3465 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x183a00000000, nodemask=2)
+PASS {'estimator': 'RadiusNeighbors', 'method': 'radius_neighbors', 'metric': 'euclidean', 'features': 3, 'kwargs': {'sort_results': True}, 'weights': None, 'kernel': None, 'algorithm': 'auto', 'multioutput': None, 'sha256': 'd60f7b6f0e4d7a3d6de1ab99897f160375f4fa0df6d8d162375e16cf274a658d'}
+3574 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x305c00000000, nodemask=1)
+3573 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x517940000000, nodemask=1)
+3574 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3b6700000000, nodemask=2)
+3573 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x39c5c0000000, nodemask=2)
+PASS {'estimator': 'RadiusNeighbors', 'method': 'radius_neighbors', 'metric': 'euclidean', 'features': 3, 'kwargs': {'return_distance': False}, 'weights': None, 'kernel': None, 'algorithm': 'auto', 'multioutput': None, 'sha256': 'b14e98e1cab2695c3d9d4cad0c5434ef2b2e25468255ecc4e1b055d5dcbd052c'}
+3693 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x38bac0000000, nodemask=2)
+3692 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x123ec0000000, nodemask=1)
+3693 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x12f700000000, nodemask=1)
+3692 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5aa240000000, nodemask=2)
+PASS {'estimator': 'RadiusNeighbors', 'method': 'radius_neighbors', 'metric': 'euclidean', 'features': 3, 'kwargs': {}, 'weights': None, 'kernel': None, 'algorithm': 'auto', 'multioutput': None, 'sha256': 'a39dd0daf662e8056ada102c1defec455bf9f72fe4c44632bba724f0c8f24ff6'}
+3798 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x519540000000, nodemask=1)
+3799 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1be640000000, nodemask=2)
+3798 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x192c40000000, nodemask=2)
+3799 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x512940000000, nodemask=1)
+3905 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x199580000000, nodemask=2)
+3904 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x73c2c0000000, nodemask=1)
+3905 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x132140000000, nodemask=1)
+3904 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7b0340000000, nodemask=2)
+PASS {'estimator': 'NearestNeighbors', 'method': 'kneighbors', 'metric': 'manhattan', 'features': 3, 'kwargs': {}, 'weights': None, 'kernel': None, 'algorithm': 'rbc', 'multioutput': None, 'sha256': '421a1e74d39cea842e1c9fc292cd1e75a83b691040235e4366fbe8eba44066f0'}
+4011 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3a8340000000, nodemask=2)
+4010 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x38c8c0000000, nodemask=2)
+PASS {'estimator': 'RadiusNeighbors', 'method': 'radius_neighbors', 'metric': 'manhattan', 'features': 3, 'kwargs': {'sort_results': True}, 'weights': None, 'kernel': None, 'algorithm': 'auto', 'multioutput': None, 'sha256': '51ab3075306f0820a877610e5c017f655e059d92edb8dea507526bd2f18a7578'}
+4116 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7bc780000000, nodemask=2)
+4117 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7aefc0000000, nodemask=2)
+PASS {'estimator': 'RadiusNeighbors', 'method': 'radius_neighbors', 'metric': 'manhattan', 'features': 3, 'kwargs': {'return_distance': False}, 'weights': None, 'kernel': None, 'algorithm': 'auto', 'multioutput': None, 'sha256': 'e9d8e9641abf7a91cb67efef15ea90782273489d82fc6d831c9020e8965744cb'}
+4222 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7ae900000000, nodemask=2)
+4223 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x783280000000, nodemask=2)
+PASS {'estimator': 'RadiusNeighbors', 'method': 'radius_neighbors', 'metric': 'manhattan', 'features': 3, 'kwargs': {}, 'weights': None, 'kernel': None, 'algorithm': 'auto', 'multioutput': None, 'sha256': '40ec73fd4c3892416fa73dd75db3364d7a0c09e524c8c99e84c9137aa2a694e9'}
+4328 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3ad840000000, nodemask=2)
+4329 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5a9880000000, nodemask=2)
+4435 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x310800000000, nodemask=1)
+4434 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x58fe80000000, nodemask=2)
+4435 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x587400000000, nodemask=2)
+PASS {'estimator': 'NearestNeighbors', 'method': 'kneighbors', 'metric': 'chebyshev', 'features': 3, 'kwargs': {}, 'weights': None, 'kernel': None, 'algorithm': 'rbc', 'multioutput': None, 'sha256': '443ceccf150c376e6d0a90c720b8b4d5e601509398b9e0dfecbfdf091052b25b'}
+4540 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x386500000000, nodemask=2)
+4541 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5a5fc0000000, nodemask=2)
+PASS {'estimator': 'RadiusNeighbors', 'method': 'radius_neighbors', 'metric': 'chebyshev', 'features': 3, 'kwargs': {'sort_results': True}, 'weights': None, 'kernel': None, 'algorithm': 'auto', 'multioutput': None, 'sha256': 'e154f9b6488a61913abd02fd54b915bd1de622bccc1a12ad4b18707263088805'}
+4646 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x389dc0000000, nodemask=2)
+4647 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3ae1c0000000, nodemask=2)
+PASS {'estimator': 'RadiusNeighbors', 'method': 'radius_neighbors', 'metric': 'chebyshev', 'features': 3, 'kwargs': {'return_distance': False}, 'weights': None, 'kernel': None, 'algorithm': 'auto', 'multioutput': None, 'sha256': 'c229e34969a3ec93502cfd926470c271e2855912963d2fa7653b4cf4af3f496c'}
+4753 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x139bc0000000, nodemask=1)
+4752 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x33b6c0000000, nodemask=1)
+PASS {'estimator': 'RadiusNeighbors', 'method': 'radius_neighbors', 'metric': 'chebyshev', 'features': 3, 'kwargs': {}, 'weights': None, 'kernel': None, 'algorithm': 'auto', 'multioutput': None, 'sha256': '92a7bc164ac7d2fc733db28f86f8e1beb2b3fa0716ebafa56781ea1140bf4b13'}
+4858 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x71b100000000, nodemask=1)
+4859 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3a37c0000000, nodemask=2)
+4859 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x11c940000000, nodemask=1)
+4858 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5b7840000000, nodemask=2)
+PASS {'estimator': 'KNeighborsClassifier', 'method': 'predict', 'metric': 'euclidean', 'features': 3, 'kwargs': {}, 'weights': 'uniform', 'kernel': None, 'algorithm': 'brute', 'multioutput': False, 'sha256': '56ed243df0dee6774017d69c2b1047210ce052e84ffb8c535047a628605430ba'}
+4965 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7a1480000000, nodemask=2)
+4964 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x52d940000000, nodemask=1)
+4965 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x307640000000, nodemask=1)
+PASS {'estimator': 'KNeighborsClassifier', 'method': 'predict_proba', 'metric': 'euclidean', 'features': 3, 'kwargs': {}, 'weights': 'uniform', 'kernel': None, 'algorithm': 'brute', 'multioutput': False, 'sha256': '46aeb3c21239400298c5eade6a836ca1259391a6aa00117091266d1134105aff'}
+5070 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3041c0000000, nodemask=1)
+5071 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x39aa00000000, nodemask=2)
+5070 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7b66c0000000, nodemask=2)
+PASS {'estimator': 'KNeighborsClassifier', 'method': 'predict', 'metric': 'euclidean', 'features': 3, 'kwargs': {}, 'weights': 'uniform', 'kernel': None, 'algorithm': 'brute', 'multioutput': True, 'sha256': '8e716d504afe0d73afdf272b2bdfaca48b4faa71ee0c85c8cdb5da2d26b5aa66'}
+5177 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7bb9c0000000, nodemask=2)
+5176 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x303c40000000, nodemask=1)
+5176 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1adf40000000, nodemask=2)
+PASS {'estimator': 'KNeighborsClassifier', 'method': 'predict_proba', 'metric': 'euclidean', 'features': 3, 'kwargs': {}, 'weights': 'uniform', 'kernel': None, 'algorithm': 'brute', 'multioutput': True, 'sha256': '694f25709c9baa19cb2bedc37385f7eca23bbcac9c32c0ab19d03440c0c6ca2d'}
+5282 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1387c0000000, nodemask=1)
+5283 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x100e40000000, nodemask=1)
+5283 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x78cb40000000, nodemask=2)
+5282 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5841c0000000, nodemask=2)
+PASS {'estimator': 'KNeighborsClassifier', 'method': 'predict', 'metric': 'euclidean', 'features': 3, 'kwargs': {}, 'weights': 'distance', 'kernel': None, 'algorithm': 'brute', 'multioutput': False, 'sha256': 'bbba501bac6fe63b80e13b9990859df45ce3711e60294fb3d606732b2c654155'}
+5389 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3213c0000000, nodemask=1)
+5388 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x727500000000, nodemask=1)
+5389 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3bc7c0000000, nodemask=2)
+5388 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x394840000000, nodemask=2)
+PASS {'estimator': 'KNeighborsClassifier', 'method': 'predict_proba', 'metric': 'euclidean', 'features': 3, 'kwargs': {}, 'weights': 'distance', 'kernel': None, 'algorithm': 'brute', 'multioutput': False, 'sha256': 'a0ade17c7f24a2d7f9d96e5fb7c5b0327d5ebdf0db0133ea94dc2e65eb6ad01a'}
+5495 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x52e2c0000000, nodemask=1)
+5494 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x51da00000000, nodemask=1)
+5495 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x383940000000, nodemask=2)
+5494 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1968c0000000, nodemask=2)
+PASS {'estimator': 'KNeighborsClassifier', 'method': 'predict', 'metric': 'euclidean', 'features': 3, 'kwargs': {}, 'weights': 'distance', 'kernel': None, 'algorithm': 'brute', 'multioutput': True, 'sha256': '28f414edc94b1ad4c1de30bf0a053f5d7e04c7a38ac1a2ca5af713417aba1302'}
+5600 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x327d40000000, nodemask=1)
+5601 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x53bf40000000, nodemask=1)
+5600 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5b1600000000, nodemask=2)
+5601 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1abbc0000000, nodemask=2)
+PASS {'estimator': 'KNeighborsClassifier', 'method': 'predict_proba', 'metric': 'euclidean', 'features': 3, 'kwargs': {}, 'weights': 'distance', 'kernel': None, 'algorithm': 'brute', 'multioutput': True, 'sha256': '11476ff6316b32021338b6e774a18f66a5180755bd1b5fe8146e41193fab45bb'}
+5706 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x70a0c0000000, nodemask=1)
+5707 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x11ef80000000, nodemask=1)
+5706 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x79c900000000, nodemask=2)
+5707 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7862c0000000, nodemask=2)
+PASS {'estimator': 'KNeighborsRegressor', 'method': 'predict', 'metric': 'euclidean', 'features': 3, 'kwargs': {}, 'weights': 'uniform', 'kernel': None, 'algorithm': 'brute', 'multioutput': False, 'sha256': '10d2ffa022eed8e2df731be025ab264ba840b15113f4465ce6830fa5de63341a'}
+5812 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x73f400000000, nodemask=1)
+5813 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5894c0000000, nodemask=2)
+5813 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x50e5c0000000, nodemask=1)
+5812 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x19ca00000000, nodemask=2)
+PASS {'estimator': 'KNeighborsRegressor', 'method': 'predict', 'metric': 'euclidean', 'features': 3, 'kwargs': {}, 'weights': 'uniform', 'kernel': None, 'algorithm': 'brute', 'multioutput': True, 'sha256': '8f7d555fdd811177793adf80e97b859acb8df732e899ca54d6517b229acea0d7'}
+5918 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x521c80000000, nodemask=1)
+5919 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5166c0000000, nodemask=1)
+PASS {'estimator': 'KNeighborsRegressor', 'method': 'predict', 'metric': 'euclidean', 'features': 3, 'kwargs': {}, 'weights': 'distance', 'kernel': None, 'algorithm': 'brute', 'multioutput': False, 'sha256': 'd66846869228499feb76c72a3a8cae8b0f242a999f5471a618273bb3a2626a50'}
+6024 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x737000000000, nodemask=1)
+6025 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3265c0000000, nodemask=1)
+6025 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x390480000000, nodemask=2)
+6024 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3a8fc0000000, nodemask=2)
+PASS {'estimator': 'KNeighborsRegressor', 'method': 'predict', 'metric': 'euclidean', 'features': 3, 'kwargs': {}, 'weights': 'distance', 'kernel': None, 'algorithm': 'brute', 'multioutput': True, 'sha256': '03fab5d549f6f2a6cc47cc7abc6f2d259d52e73d9daa5c47fe3c06e036a40467'}
+6131 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x584100000000, nodemask=2)
+6130 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x51e440000000, nodemask=1)
+6130 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x58b340000000, nodemask=2)
+6131 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x724000000000, nodemask=1)
+PASS {'estimator': 'KernelDensity', 'method': 'score_samples', 'metric': 'euclidean', 'features': 3, 'kwargs': {}, 'weights': None, 'kernel': 'gaussian', 'algorithm': 'auto', 'multioutput': None, 'sha256': '8dc19ae1290f8606e27fb3c405198668cecaee073f52d8e8a0351961c2292dc7'}
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/parallel_neighbors_check.py", line 117, in <module>
+    main()
+    ~~~~^^
+  File "/root/mojolearn/tools/parallel_neighbors_check.py", line 110, in main
+    check(model, Q, 'score_samples')
+    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/parallel_neighbors_check.py", line 37, in check
+    expected = getattr(model, method)(Q, **kwargs)
+  File "/root/mojolearn/python/mojolearn/density.py", line 476, in score_samples
+    self._bind("_mojolearn_estimators").kde_score_samples(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        addr_ro(self._x, name="_x"),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<12 lines>...
+        self.metric,
+        ^^^^^^^^^^^^
+    )
+    ^
+Exception: sample_weight must have positive values

@@ -1,0 +1,811 @@
+{
+  "status": "PASS",
+  "checks": [
+    {
+      "estimator": "NearestNeighbors",
+      "method": "kneighbors",
+      "metric": "euclidean",
+      "features": 3,
+      "kwargs": {},
+      "weights": null,
+      "kernel": null,
+      "algorithm": "brute",
+      "multioutput": null,
+      "sha256": "3d4e080c6d7f055d252cca81b8171c87bab136b44e4fef9f4f38ce0941f1c5b5"
+    },
+    {
+      "estimator": "NearestNeighbors",
+      "method": "kneighbors",
+      "metric": "euclidean",
+      "features": 3,
+      "kwargs": {
+        "n_neighbors": 1,
+        "return_distance": false
+      },
+      "weights": null,
+      "kernel": null,
+      "algorithm": "brute",
+      "multioutput": null,
+      "sha256": "6fe98ad04a69dacd711d6436aebca898fef01cfe728ba9b3b551d0dc80904d35"
+    },
+    {
+      "estimator": "NearestNeighbors",
+      "method": "kneighbors",
+      "metric": "manhattan",
+      "features": 3,
+      "kwargs": {},
+      "weights": null,
+      "kernel": null,
+      "algorithm": "brute",
+      "multioutput": null,
+      "sha256": "421a1e74d39cea842e1c9fc292cd1e75a83b691040235e4366fbe8eba44066f0"
+    },
+    {
+      "estimator": "NearestNeighbors",
+      "method": "kneighbors",
+      "metric": "manhattan",
+      "features": 3,
+      "kwargs": {
+        "n_neighbors": 1,
+        "return_distance": false
+      },
+      "weights": null,
+      "kernel": null,
+      "algorithm": "brute",
+      "multioutput": null,
+      "sha256": "6fe98ad04a69dacd711d6436aebca898fef01cfe728ba9b3b551d0dc80904d35"
+    },
+    {
+      "estimator": "NearestNeighbors",
+      "method": "kneighbors",
+      "metric": "chebyshev",
+      "features": 3,
+      "kwargs": {},
+      "weights": null,
+      "kernel": null,
+      "algorithm": "brute",
+      "multioutput": null,
+      "sha256": "443ceccf150c376e6d0a90c720b8b4d5e601509398b9e0dfecbfdf091052b25b"
+    },
+    {
+      "estimator": "NearestNeighbors",
+      "method": "kneighbors",
+      "metric": "chebyshev",
+      "features": 3,
+      "kwargs": {
+        "n_neighbors": 1,
+        "return_distance": false
+      },
+      "weights": null,
+      "kernel": null,
+      "algorithm": "brute",
+      "multioutput": null,
+      "sha256": "6fe98ad04a69dacd711d6436aebca898fef01cfe728ba9b3b551d0dc80904d35"
+    },
+    {
+      "estimator": "NearestNeighbors",
+      "method": "kneighbors",
+      "metric": "cosine",
+      "features": 3,
+      "kwargs": {},
+      "weights": null,
+      "kernel": null,
+      "algorithm": "brute",
+      "multioutput": null,
+      "sha256": "b6c363eee4bae840c6f6868eef8f1a4945879de4e99d8de257ee77bb2755b373"
+    },
+    {
+      "estimator": "NearestNeighbors",
+      "method": "kneighbors",
+      "metric": "cosine",
+      "features": 3,
+      "kwargs": {
+        "n_neighbors": 1,
+        "return_distance": false
+      },
+      "weights": null,
+      "kernel": null,
+      "algorithm": "brute",
+      "multioutput": null,
+      "sha256": "6fe98ad04a69dacd711d6436aebca898fef01cfe728ba9b3b551d0dc80904d35"
+    },
+    {
+      "estimator": "NearestNeighbors",
+      "method": "kneighbors",
+      "metric": "euclidean",
+      "features": 3,
+      "kwargs": {},
+      "weights": null,
+      "kernel": null,
+      "algorithm": "rbc",
+      "multioutput": null,
+      "sha256": "8f9b0255d274446355192a694b292f5cf10f08e2297c404582087b51ad82dc15"
+    },
+    {
+      "estimator": "RadiusNeighbors",
+      "method": "radius_neighbors",
+      "metric": "euclidean",
+      "features": 3,
+      "kwargs": {
+        "sort_results": true
+      },
+      "weights": null,
+      "kernel": null,
+      "algorithm": "auto",
+      "multioutput": null,
+      "sha256": "d60f7b6f0e4d7a3d6de1ab99897f160375f4fa0df6d8d162375e16cf274a658d"
+    },
+    {
+      "estimator": "RadiusNeighbors",
+      "method": "radius_neighbors",
+      "metric": "euclidean",
+      "features": 3,
+      "kwargs": {
+        "return_distance": false
+      },
+      "weights": null,
+      "kernel": null,
+      "algorithm": "auto",
+      "multioutput": null,
+      "sha256": "b14e98e1cab2695c3d9d4cad0c5434ef2b2e25468255ecc4e1b055d5dcbd052c"
+    },
+    {
+      "estimator": "RadiusNeighbors",
+      "method": "radius_neighbors",
+      "metric": "euclidean",
+      "features": 3,
+      "kwargs": {},
+      "weights": null,
+      "kernel": null,
+      "algorithm": "auto",
+      "multioutput": null,
+      "sha256": "a39dd0daf662e8056ada102c1defec455bf9f72fe4c44632bba724f0c8f24ff6"
+    },
+    {
+      "estimator": "NearestNeighbors",
+      "method": "kneighbors",
+      "metric": "manhattan",
+      "features": 3,
+      "kwargs": {},
+      "weights": null,
+      "kernel": null,
+      "algorithm": "rbc",
+      "multioutput": null,
+      "sha256": "421a1e74d39cea842e1c9fc292cd1e75a83b691040235e4366fbe8eba44066f0"
+    },
+    {
+      "estimator": "RadiusNeighbors",
+      "method": "radius_neighbors",
+      "metric": "manhattan",
+      "features": 3,
+      "kwargs": {
+        "sort_results": true
+      },
+      "weights": null,
+      "kernel": null,
+      "algorithm": "auto",
+      "multioutput": null,
+      "sha256": "51ab3075306f0820a877610e5c017f655e059d92edb8dea507526bd2f18a7578"
+    },
+    {
+      "estimator": "RadiusNeighbors",
+      "method": "radius_neighbors",
+      "metric": "manhattan",
+      "features": 3,
+      "kwargs": {
+        "return_distance": false
+      },
+      "weights": null,
+      "kernel": null,
+      "algorithm": "auto",
+      "multioutput": null,
+      "sha256": "e9d8e9641abf7a91cb67efef15ea90782273489d82fc6d831c9020e8965744cb"
+    },
+    {
+      "estimator": "RadiusNeighbors",
+      "method": "radius_neighbors",
+      "metric": "manhattan",
+      "features": 3,
+      "kwargs": {},
+      "weights": null,
+      "kernel": null,
+      "algorithm": "auto",
+      "multioutput": null,
+      "sha256": "40ec73fd4c3892416fa73dd75db3364d7a0c09e524c8c99e84c9137aa2a694e9"
+    },
+    {
+      "estimator": "NearestNeighbors",
+      "method": "kneighbors",
+      "metric": "chebyshev",
+      "features": 3,
+      "kwargs": {},
+      "weights": null,
+      "kernel": null,
+      "algorithm": "rbc",
+      "multioutput": null,
+      "sha256": "443ceccf150c376e6d0a90c720b8b4d5e601509398b9e0dfecbfdf091052b25b"
+    },
+    {
+      "estimator": "RadiusNeighbors",
+      "method": "radius_neighbors",
+      "metric": "chebyshev",
+      "features": 3,
+      "kwargs": {
+        "sort_results": true
+      },
+      "weights": null,
+      "kernel": null,
+      "algorithm": "auto",
+      "multioutput": null,
+      "sha256": "e154f9b6488a61913abd02fd54b915bd1de622bccc1a12ad4b18707263088805"
+    },
+    {
+      "estimator": "RadiusNeighbors",
+      "method": "radius_neighbors",
+      "metric": "chebyshev",
+      "features": 3,
+      "kwargs": {
+        "return_distance": false
+      },
+      "weights": null,
+      "kernel": null,
+      "algorithm": "auto",
+      "multioutput": null,
+      "sha256": "c229e34969a3ec93502cfd926470c271e2855912963d2fa7653b4cf4af3f496c"
+    },
+    {
+      "estimator": "RadiusNeighbors",
+      "method": "radius_neighbors",
+      "metric": "chebyshev",
+      "features": 3,
+      "kwargs": {},
+      "weights": null,
+      "kernel": null,
+      "algorithm": "auto",
+      "multioutput": null,
+      "sha256": "92a7bc164ac7d2fc733db28f86f8e1beb2b3fa0716ebafa56781ea1140bf4b13"
+    },
+    {
+      "estimator": "KNeighborsClassifier",
+      "method": "predict",
+      "metric": "euclidean",
+      "features": 3,
+      "kwargs": {},
+      "weights": "uniform",
+      "kernel": null,
+      "algorithm": "brute",
+      "multioutput": false,
+      "sha256": "56ed243df0dee6774017d69c2b1047210ce052e84ffb8c535047a628605430ba"
+    },
+    {
+      "estimator": "KNeighborsClassifier",
+      "method": "predict_proba",
+      "metric": "euclidean",
+      "features": 3,
+      "kwargs": {},
+      "weights": "uniform",
+      "kernel": null,
+      "algorithm": "brute",
+      "multioutput": false,
+      "sha256": "46aeb3c21239400298c5eade6a836ca1259391a6aa00117091266d1134105aff"
+    },
+    {
+      "estimator": "KNeighborsClassifier",
+      "method": "predict",
+      "metric": "euclidean",
+      "features": 3,
+      "kwargs": {},
+      "weights": "uniform",
+      "kernel": null,
+      "algorithm": "brute",
+      "multioutput": true,
+      "sha256": "8e716d504afe0d73afdf272b2bdfaca48b4faa71ee0c85c8cdb5da2d26b5aa66"
+    },
+    {
+      "estimator": "KNeighborsClassifier",
+      "method": "predict_proba",
+      "metric": "euclidean",
+      "features": 3,
+      "kwargs": {},
+      "weights": "uniform",
+      "kernel": null,
+      "algorithm": "brute",
+      "multioutput": true,
+      "sha256": "694f25709c9baa19cb2bedc37385f7eca23bbcac9c32c0ab19d03440c0c6ca2d"
+    },
+    {
+      "estimator": "KNeighborsClassifier",
+      "method": "predict",
+      "metric": "euclidean",
+      "features": 3,
+      "kwargs": {},
+      "weights": "distance",
+      "kernel": null,
+      "algorithm": "brute",
+      "multioutput": false,
+      "sha256": "bbba501bac6fe63b80e13b9990859df45ce3711e60294fb3d606732b2c654155"
+    },
+    {
+      "estimator": "KNeighborsClassifier",
+      "method": "predict_proba",
+      "metric": "euclidean",
+      "features": 3,
+      "kwargs": {},
+      "weights": "distance",
+      "kernel": null,
+      "algorithm": "brute",
+      "multioutput": false,
+      "sha256": "a0ade17c7f24a2d7f9d96e5fb7c5b0327d5ebdf0db0133ea94dc2e65eb6ad01a"
+    },
+    {
+      "estimator": "KNeighborsClassifier",
+      "method": "predict",
+      "metric": "euclidean",
+      "features": 3,
+      "kwargs": {},
+      "weights": "distance",
+      "kernel": null,
+      "algorithm": "brute",
+      "multioutput": true,
+      "sha256": "28f414edc94b1ad4c1de30bf0a053f5d7e04c7a38ac1a2ca5af713417aba1302"
+    },
+    {
+      "estimator": "KNeighborsClassifier",
+      "method": "predict_proba",
+      "metric": "euclidean",
+      "features": 3,
+      "kwargs": {},
+      "weights": "distance",
+      "kernel": null,
+      "algorithm": "brute",
+      "multioutput": true,
+      "sha256": "11476ff6316b32021338b6e774a18f66a5180755bd1b5fe8146e41193fab45bb"
+    },
+    {
+      "estimator": "KNeighborsRegressor",
+      "method": "predict",
+      "metric": "euclidean",
+      "features": 3,
+      "kwargs": {},
+      "weights": "uniform",
+      "kernel": null,
+      "algorithm": "brute",
+      "multioutput": false,
+      "sha256": "10d2ffa022eed8e2df731be025ab264ba840b15113f4465ce6830fa5de63341a"
+    },
+    {
+      "estimator": "KNeighborsRegressor",
+      "method": "predict",
+      "metric": "euclidean",
+      "features": 3,
+      "kwargs": {},
+      "weights": "uniform",
+      "kernel": null,
+      "algorithm": "brute",
+      "multioutput": true,
+      "sha256": "8f7d555fdd811177793adf80e97b859acb8df732e899ca54d6517b229acea0d7"
+    },
+    {
+      "estimator": "KNeighborsRegressor",
+      "method": "predict",
+      "metric": "euclidean",
+      "features": 3,
+      "kwargs": {},
+      "weights": "distance",
+      "kernel": null,
+      "algorithm": "brute",
+      "multioutput": false,
+      "sha256": "d66846869228499feb76c72a3a8cae8b0f242a999f5471a618273bb3a2626a50"
+    },
+    {
+      "estimator": "KNeighborsRegressor",
+      "method": "predict",
+      "metric": "euclidean",
+      "features": 3,
+      "kwargs": {},
+      "weights": "distance",
+      "kernel": null,
+      "algorithm": "brute",
+      "multioutput": true,
+      "sha256": "03fab5d549f6f2a6cc47cc7abc6f2d259d52e73d9daa5c47fe3c06e036a40467"
+    },
+    {
+      "estimator": "KernelDensity",
+      "method": "score_samples",
+      "metric": "euclidean",
+      "features": 3,
+      "kwargs": {},
+      "weights": null,
+      "kernel": "gaussian",
+      "algorithm": "auto",
+      "multioutput": null,
+      "sha256": "8dc19ae1290f8606e27fb3c405198668cecaee073f52d8e8a0351961c2292dc7"
+    },
+    {
+      "estimator": "KernelDensity",
+      "method": "score_samples",
+      "metric": "euclidean",
+      "features": 3,
+      "kwargs": {},
+      "weights": null,
+      "kernel": "gaussian",
+      "algorithm": "auto",
+      "multioutput": null,
+      "sha256": "43a57b8b100e72d8533ffc3a26d6c7e05f931984152a9737d9d185126b57fac9"
+    },
+    {
+      "estimator": "KernelDensity",
+      "method": "score_samples",
+      "metric": "euclidean",
+      "features": 3,
+      "kwargs": {},
+      "weights": null,
+      "kernel": "tophat",
+      "algorithm": "auto",
+      "multioutput": null,
+      "sha256": "d304c1b1ab4274730ff7ab923f78e60b414c26455b2a3c09434bf7437c86b413"
+    },
+    {
+      "estimator": "KernelDensity",
+      "method": "score_samples",
+      "metric": "euclidean",
+      "features": 3,
+      "kwargs": {},
+      "weights": null,
+      "kernel": "tophat",
+      "algorithm": "auto",
+      "multioutput": null,
+      "sha256": "e8828a3f45aa6374a6433b0dfff5cc1ff9d85f99b347eb1b5b0535f30d8e5404"
+    },
+    {
+      "estimator": "KernelDensity",
+      "method": "score_samples",
+      "metric": "euclidean",
+      "features": 3,
+      "kwargs": {},
+      "weights": null,
+      "kernel": "epanechnikov",
+      "algorithm": "auto",
+      "multioutput": null,
+      "sha256": "a28238f4282c0c5d7108b2be3e8fc82fb167262665b061715778830a2314438e"
+    },
+    {
+      "estimator": "KernelDensity",
+      "method": "score_samples",
+      "metric": "euclidean",
+      "features": 3,
+      "kwargs": {},
+      "weights": null,
+      "kernel": "epanechnikov",
+      "algorithm": "auto",
+      "multioutput": null,
+      "sha256": "2b036c299c4a2e7fb93abd2a08a54f96b8b1af3a7f495c9dc28d68be3701a23c"
+    },
+    {
+      "estimator": "KernelDensity",
+      "method": "score_samples",
+      "metric": "euclidean",
+      "features": 3,
+      "kwargs": {},
+      "weights": null,
+      "kernel": "exponential",
+      "algorithm": "auto",
+      "multioutput": null,
+      "sha256": "944c7a1c1f0fe726bbddac06933e96b99398c08b14fbe80d25e6a97e9508e74d"
+    },
+    {
+      "estimator": "KernelDensity",
+      "method": "score_samples",
+      "metric": "euclidean",
+      "features": 3,
+      "kwargs": {},
+      "weights": null,
+      "kernel": "exponential",
+      "algorithm": "auto",
+      "multioutput": null,
+      "sha256": "425c5219234921dc8e215f7e62e3b350df8ba551d5c8d2f985c45319ea718c3a"
+    },
+    {
+      "estimator": "KernelDensity",
+      "method": "score_samples",
+      "metric": "euclidean",
+      "features": 3,
+      "kwargs": {},
+      "weights": null,
+      "kernel": "linear",
+      "algorithm": "auto",
+      "multioutput": null,
+      "sha256": "ab4c562ae46489dd7af0e8dc783392e2249b03ea303f71d5e8e621e1d9f3007a"
+    },
+    {
+      "estimator": "KernelDensity",
+      "method": "score_samples",
+      "metric": "euclidean",
+      "features": 3,
+      "kwargs": {},
+      "weights": null,
+      "kernel": "linear",
+      "algorithm": "auto",
+      "multioutput": null,
+      "sha256": "ee3576687179ee491af81cdd4b6225e9bae94aa2aa493efc506bd93c1654f975"
+    },
+    {
+      "estimator": "KernelDensity",
+      "method": "score_samples",
+      "metric": "euclidean",
+      "features": 3,
+      "kwargs": {},
+      "weights": null,
+      "kernel": "cosine",
+      "algorithm": "auto",
+      "multioutput": null,
+      "sha256": "e19eaabb6d8b22b41dde63d8fcef35fb61b6ea6bd34e418ee3ab1b45802447aa"
+    },
+    {
+      "estimator": "KernelDensity",
+      "method": "score_samples",
+      "metric": "euclidean",
+      "features": 3,
+      "kwargs": {},
+      "weights": null,
+      "kernel": "cosine",
+      "algorithm": "auto",
+      "multioutput": null,
+      "sha256": "7322fe5c6e8f50ff2e8b23dc6052f9f286928ea3d814ec0a3f48e8176056034c"
+    },
+    {
+      "estimator": "NearestNeighbors",
+      "method": "kneighbors",
+      "metric": "euclidean",
+      "features": 129,
+      "kwargs": {},
+      "weights": null,
+      "kernel": null,
+      "algorithm": "brute",
+      "multioutput": null,
+      "sha256": "64d96b7b803083f88614cd5e09c1c5373b1eac1d7b40495741dc03a5e1025e4f"
+    },
+    {
+      "estimator": "NearestNeighbors",
+      "method": "kneighbors",
+      "metric": "euclidean",
+      "features": 129,
+      "kwargs": {
+        "n_neighbors": 1,
+        "return_distance": false
+      },
+      "weights": null,
+      "kernel": null,
+      "algorithm": "brute",
+      "multioutput": null,
+      "sha256": "b3cbead61d27f10bb1acff6608ac9f2285797c02962a08ebc3000e9309b285b9"
+    },
+    {
+      "estimator": "NearestNeighbors",
+      "method": "kneighbors",
+      "metric": "manhattan",
+      "features": 129,
+      "kwargs": {},
+      "weights": null,
+      "kernel": null,
+      "algorithm": "brute",
+      "multioutput": null,
+      "sha256": "a4978a6d1e5ce61b231e722132ffbfb83150454e355fd243c5901f04671851bb"
+    },
+    {
+      "estimator": "NearestNeighbors",
+      "method": "kneighbors",
+      "metric": "manhattan",
+      "features": 129,
+      "kwargs": {
+        "n_neighbors": 1,
+        "return_distance": false
+      },
+      "weights": null,
+      "kernel": null,
+      "algorithm": "brute",
+      "multioutput": null,
+      "sha256": "b3cbead61d27f10bb1acff6608ac9f2285797c02962a08ebc3000e9309b285b9"
+    },
+    {
+      "estimator": "NearestNeighbors",
+      "method": "kneighbors",
+      "metric": "chebyshev",
+      "features": 129,
+      "kwargs": {},
+      "weights": null,
+      "kernel": null,
+      "algorithm": "brute",
+      "multioutput": null,
+      "sha256": "efba651a3e4a81511f09f3f1a15b1afb4b03075953d60f020260a2bbe1c774c4"
+    },
+    {
+      "estimator": "NearestNeighbors",
+      "method": "kneighbors",
+      "metric": "chebyshev",
+      "features": 129,
+      "kwargs": {
+        "n_neighbors": 1,
+        "return_distance": false
+      },
+      "weights": null,
+      "kernel": null,
+      "algorithm": "brute",
+      "multioutput": null,
+      "sha256": "dde6e4baaa0dcbd7cc7f148312581c8407a3cdc3ed1ed76655daa4a3da131d3e"
+    },
+    {
+      "estimator": "NearestNeighbors",
+      "method": "kneighbors",
+      "metric": "cosine",
+      "features": 129,
+      "kwargs": {},
+      "weights": null,
+      "kernel": null,
+      "algorithm": "brute",
+      "multioutput": null,
+      "sha256": "630616bd08f82ba62085c8c35e6196bd9c75074b0d7e594cd28f59befb57d049"
+    },
+    {
+      "estimator": "NearestNeighbors",
+      "method": "kneighbors",
+      "metric": "cosine",
+      "features": 129,
+      "kwargs": {
+        "n_neighbors": 1,
+        "return_distance": false
+      },
+      "weights": null,
+      "kernel": null,
+      "algorithm": "brute",
+      "multioutput": null,
+      "sha256": "b9d8c61cc323dc7d655091090cc678415ee9e5fdbd7cd078137748c85c17a6a3"
+    },
+    {
+      "estimator": "KNeighborsClassifier",
+      "method": "predict",
+      "metric": "euclidean",
+      "features": 129,
+      "kwargs": {},
+      "weights": "uniform",
+      "kernel": null,
+      "algorithm": "brute",
+      "multioutput": false,
+      "sha256": "234c52da7b4ab76e48b48ca15258e050fd15109a8b16717e180c32f7714bc7af"
+    },
+    {
+      "estimator": "KNeighborsClassifier",
+      "method": "predict_proba",
+      "metric": "euclidean",
+      "features": 129,
+      "kwargs": {},
+      "weights": "uniform",
+      "kernel": null,
+      "algorithm": "brute",
+      "multioutput": false,
+      "sha256": "fb33436ebd9259e9490f3925d8245d0725664101f53db2663ad6c9d3c6501401"
+    },
+    {
+      "estimator": "KNeighborsClassifier",
+      "method": "predict",
+      "metric": "euclidean",
+      "features": 129,
+      "kwargs": {},
+      "weights": "uniform",
+      "kernel": null,
+      "algorithm": "brute",
+      "multioutput": true,
+      "sha256": "edc04124739164a5cc17da3ec0a6707ff34c214e26f99b447cf6c7afd16121da"
+    },
+    {
+      "estimator": "KNeighborsClassifier",
+      "method": "predict_proba",
+      "metric": "euclidean",
+      "features": 129,
+      "kwargs": {},
+      "weights": "uniform",
+      "kernel": null,
+      "algorithm": "brute",
+      "multioutput": true,
+      "sha256": "7fb953c91d6f21e6e054bd0d0267114e27b165d8d664be3436de900beff75686"
+    },
+    {
+      "estimator": "KNeighborsClassifier",
+      "method": "predict",
+      "metric": "euclidean",
+      "features": 129,
+      "kwargs": {},
+      "weights": "distance",
+      "kernel": null,
+      "algorithm": "brute",
+      "multioutput": false,
+      "sha256": "a4a0329a67ef1df2ff1bd7fc1e8caaa535676c15ecfb97df177598e9cc8f8f77"
+    },
+    {
+      "estimator": "KNeighborsClassifier",
+      "method": "predict_proba",
+      "metric": "euclidean",
+      "features": 129,
+      "kwargs": {},
+      "weights": "distance",
+      "kernel": null,
+      "algorithm": "brute",
+      "multioutput": false,
+      "sha256": "f4886a3a88992e0e5f275ce2cdc84f7e164afc9af4d1e26166215cbd658a10a8"
+    },
+    {
+      "estimator": "KNeighborsClassifier",
+      "method": "predict",
+      "metric": "euclidean",
+      "features": 129,
+      "kwargs": {},
+      "weights": "distance",
+      "kernel": null,
+      "algorithm": "brute",
+      "multioutput": true,
+      "sha256": "40fabf553546c4c0b9c159e94f12965dd657f43fe9b7b9e7d0b9d685c83596e9"
+    },
+    {
+      "estimator": "KNeighborsClassifier",
+      "method": "predict_proba",
+      "metric": "euclidean",
+      "features": 129,
+      "kwargs": {},
+      "weights": "distance",
+      "kernel": null,
+      "algorithm": "brute",
+      "multioutput": true,
+      "sha256": "1042410bc6ba72e643d42c26b191e2b4045eb4cc7e3c71145c7ad5d0ff34d6bd"
+    },
+    {
+      "estimator": "KNeighborsRegressor",
+      "method": "predict",
+      "metric": "euclidean",
+      "features": 129,
+      "kwargs": {},
+      "weights": "uniform",
+      "kernel": null,
+      "algorithm": "brute",
+      "multioutput": false,
+      "sha256": "c73ae714fabf4c47e1216e8aeab626a9a0ead7d679287a4cafc9dcf4e25572be"
+    },
+    {
+      "estimator": "KNeighborsRegressor",
+      "method": "predict",
+      "metric": "euclidean",
+      "features": 129,
+      "kwargs": {},
+      "weights": "uniform",
+      "kernel": null,
+      "algorithm": "brute",
+      "multioutput": true,
+      "sha256": "b723c6118d8ea8abc683c02e400359f8a3e24c861670d10fcd3a320d5a0683b5"
+    },
+    {
+      "estimator": "KNeighborsRegressor",
+      "method": "predict",
+      "metric": "euclidean",
+      "features": 129,
+      "kwargs": {},
+      "weights": "distance",
+      "kernel": null,
+      "algorithm": "brute",
+      "multioutput": false,
+      "sha256": "de4ad3e092b0c88db82c82fc120468d19c53837fb42ad05d57d9df925d5ce4aa"
+    },
+    {
+      "estimator": "KNeighborsRegressor",
+      "method": "predict",
+      "metric": "euclidean",
+      "features": 129,
+      "kwargs": {},
+      "weights": "distance",
+      "kernel": null,
+      "algorithm": "brute",
+      "multioutput": true,
+      "sha256": "7e67da3dbfb6b52d8fc2ac8f0aa2d8d90f5e7d19ceea86309a3ee63a0a4c2e2b"
+    }
+  ],
+  "corpus_sha256": "2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8",
+  "scope": "Two H100s; whole query rows, full replicated reference index; no pooled-index or cross-vendor claim"
+}
