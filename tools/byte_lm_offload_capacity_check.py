@@ -6,7 +6,6 @@ import json
 import os
 from pathlib import Path
 import subprocess
-import threading
 import time
 
 
@@ -38,22 +37,12 @@ def main():
     trainer = (Pooled(state, devices=(0,1), logical_shards=args.logical_shards)
                if args.mode == 'pooled' else Offloaded(state, devices=(0,), logical_shards=args.logical_shards))
     del state
-    peak = []
-    samples = []
-    stopped = threading.Event()
-
-    def monitor():
-        while not stopped.is_set():
-            try:
-                values = [int(v.strip()) for v in subprocess.check_output([
-                    'nvidia-smi', '--query-gpu=memory.used', '--format=csv,noheader,nounits'], text=True).splitlines()]
-                samples.append(values)
-            except (subprocess.SubprocessError, ValueError):
-                pass
-            stopped.wait(.2)
-
-    watcher = threading.Thread(target=monitor, daemon=True)
-    watcher.start()
+    # A separate process samples during native calls, which retain Python's GIL.
+    memory_log = args.report.with_suffix('.memory.csv')
+    memory_output = memory_log.open('w')
+    watcher = subprocess.Popen(['nvidia-smi', '--query-gpu=index,memory.used',
+                                '--format=csv,noheader,nounits', '--loop-ms=200'],
+                               stdout=memory_output, stderr=subprocess.DEVNULL)
     receipts = []
     started = time.monotonic()
     try:
@@ -73,18 +62,25 @@ def main():
             receipts.append(dict(step=result, hashes=hashes))
             print('completed', step+1, hashes, flush=True)
     finally:
-        stopped.set()
-        watcher.join()
+        watcher.terminate()
+        watcher.wait(timeout=10)
+        memory_output.close()
         trainer.close()
-    if not samples:
+    peaks = {}
+    sample_count = 0
+    for line in memory_log.read_text().splitlines():
+        device, used = (int(value.strip()) for value in line.split(','))
+        peaks[device] = max(peaks.get(device, 0), used)
+        sample_count += 1
+    if not peaks or 0 not in peaks:
         raise AssertionError('no device-memory samples captured')
-    peak = [max(row[i] for row in samples) for i in range(len(samples[0]))]
+    peak = [peaks[index] for index in sorted(peaks)]
     if args.mode == 'offloaded' and peak[0] >= 32*1024:
         raise AssertionError('offloaded replay exceeded 32 GiB device memory')
     args.report.write_text(json.dumps(dict(status='PASS', mode=args.mode,
         parameters=shape.n_total, shape=list(shape.native_shape), logical_shards=args.logical_shards,
         corpus_sha256=hashlib.sha256(corpus).hexdigest(), receipts=receipts,
-        sampled_peak_mib=peak, samples=len(samples), elapsed_seconds=time.monotonic()-started,
+        sampled_peak_mib=peak, samples=sample_count, elapsed_seconds=time.monotonic()-started,
         hardware=subprocess.check_output(['nvidia-smi','--query-gpu=name,memory.total,driver_version','--format=csv'],text=True),
         scope='Capacity/identity fixture with uniform initialization; no learning-quality or throughput claim.'), indent=2)+'\n')
     print(args.report.read_text(), flush=True)
