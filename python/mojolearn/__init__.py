@@ -181,7 +181,7 @@ from . import hdbscan
 from .hdbscan import HDBSCAN
 from . import resample
 
-# `GaussianProcessRegressor` JOINED 2026-09-01, the last name ever held in
+# `GaussianProcessRegressor` JOINED 2026-09-01, the last name deleted from
 # `_NOT_YET` below and the only one held for a reason other than a missing
 # surface. The blocker -- an IDENTICAL card believed to diverge Apple
 # against AMD -- was WITHDRAWN at `9835094e` (the divergent lines were a
@@ -374,7 +374,10 @@ __all__ = [
 # interesting and short. Each value names the thing that EXISTS and where it
 # stops.
 #
-# IT IS EMPTY, AND THAT IS THE POINT. Four entries have been deleted from it
+# It holds two entries today, IVFIndex and Embedding, added by the
+# claim-surface census on 2026-09-14 (both finished underneath with no
+# Python door; their reasons are the values below). Before them it was EMPTY,
+# and that was the point. Four entries have been deleted from it
 # and none was ever reworded: `KNeighborsClassifier` / `KNeighborsRegressor`
 # on 2026-08-23, `SVR` on 2026-09-01, `ARIMA` the same day, and
 # `GaussianProcessRegressor` the same day again. The first three said the
