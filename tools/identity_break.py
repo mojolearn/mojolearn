@@ -1341,9 +1341,30 @@ def _(ml, X, yc, yr, Xh=None):
                                          shape=shape, resident=True, step_result="lean")
     ids = _ids(X, 3 * shape.batch, shape.length + 1)
     losses = [np.float64(m.train_step(ids[2 * k:2 * k + 2])["loss"]) for k in range(3)]
+    # The exported gradient of the last step, flat and per tensor. Hash the
+    # ARRAYS: `export_gradients()` returns a dict holding a nested dict, and
+    # `np.asarray` of a dict is a zero-dimensional object array whose bytes
+    # are the dict's address, which read MOVED on every fixture on the H100
+    # and the MI300X on 2026-09-14 (the 118-lane record) and on this Mac,
+    # with loss, params and logits equal to the byte-lm lane bit for bit.
+    # That was this lane's hashing, not the session (fixed the same day).
     grads = m.export_gradients()
+    flat = np.asarray(grads["flat_gradients"])
+    named = {k: np.asarray(v) for k, v in grads["gradients"].items()}
+    # Gate G1 of the device-owned step design (RUN OWED on the H100 since
+    # 2026-09-11, docs/lanes/DESIGN_lm_device_owned_step_2026-09-11.md):
+    # the resident export equals the stateless path's returned gradient for
+    # the same three steps; a byte between them reads REFUSED with the pair
+    # named, never a quiet hash.
+    s = ml.SmallByteLanguageModelTrainer(_byte_lm_params(shape)[0],
+                                         data_schedule={"dataset": "identity_break", "order": "sequential"},
+                                         shape=shape)
+    for k in range(3):
+        stateless = s.train_step(ids[2 * k:2 * k + 2])
+    _same_bytes("resident export_gradients()['flat_gradients']", flat,
+                "stateless train_step()['flat_gradients']", np.asarray(stateless["flat_gradients"]))
     return _fit(dict(loss=_h(np.asarray(losses)), params=_h(np.asarray(m.parameters_)),
-                     grads=_h(*[np.asarray(grads[k]) for k in sorted(grads)]),
+                     grads=_h(flat, *[named[k] for k in sorted(named)]),
                      logits=_h(np.asarray(m.logits(ids[:2, :-1])))),
                 m, lambda e: (np.asarray(e.logits(_ids(Xh, shape.batch, shape.length))),))
 
