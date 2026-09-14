@@ -126,14 +126,15 @@ def pointwise_feature_shards(ctx: DeviceContext, policy: Int,
     for rank in range(count):
         if failed[rank] != 0:
             raise Error("pointwise feature shard failed: " + String(rank))
-    # Copy only owned bins, including untouched parent planes needed next depth.
+    # Each bin is an interleaved (weight, target) pair, not two bin planes.
+    # Copy only owned pairs, including untouched parents needed next depth.
     # No cross-shard floating-point reduction is introduced.
     for rank in range(count):
         ref s = shards[rank]
-        for plane in range(len(hist)//bins):
-            var start = plane*bins+s.bin_first
-            var source = s.hist.create_sub_buffer[DType.float32](start,s.bin_count)
-            var dest = hist.create_sub_buffer[DType.float32](start,s.bin_count)
+        for plane in range(len(hist)//(2*bins)):
+            var start = 2*(plane*bins+s.bin_first)
+            var source = s.hist.create_sub_buffer[DType.float32](start,2*s.bin_count)
+            var dest = hist.create_sub_buffer[DType.float32](start,2*s.bin_count)
             source.enqueue_copy_to(dest)
             s.ctx.synchronize()
     _ = shards^
