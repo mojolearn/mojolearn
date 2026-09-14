@@ -410,6 +410,40 @@ def cho_solve(
     trsm_upper(ctx, l, b, n, nrhs, trace, "chol.solve.back", tpb, sabotage)
 
 
+def _transport_diag(
+    ctx: DeviceContext,
+    device: DeviceContext,
+    mut source: DeviceBuffer[DType.float32],
+    mut target: DeviceBuffer[DType.float32],
+    rank: Int,
+    what: String,
+) raises:
+    """Check-only (MOJOLEARN_CHOLESKY_TRANSPORT_DIAG): download a root buffer
+    and its owner copy and print how many cells differ."""
+    var n = len(source)
+    var hs = ctx.enqueue_create_host_buffer[DType.float32](n)
+    var ht = device.enqueue_create_host_buffer[DType.float32](n)
+    ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=source)
+    device.enqueue_copy(dst_ptr=ht.unsafe_ptr(), src_buf=target)
+    ctx.synchronize()
+    device.synchronize()
+    var bad = 0
+    var first = -1
+    var zeros = 0
+    for i in range(n):
+        var a = hs.unsafe_ptr()[i]
+        var b = ht.unsafe_ptr()[i]
+        if b == Float32(0.0):
+            zeros += 1
+        if a != b:
+            bad += 1
+            if first < 0:
+                first = i
+    print("TRANSPORT rank", rank, what, "cells", n, "differing", bad, "first", first, "target zeros", zeros)
+    _ = hs^
+    _ = ht^
+
+
 def _cho_solve_columns(
     ctx: DeviceContext,
     mut l: DeviceBuffer[DType.float32],
@@ -451,6 +485,9 @@ def _cho_solve_columns(
         # released first).
         device.synchronize()
         ctx.synchronize()
+        comptime if is_defined["MOJOLEARN_CHOLESKY_TRANSPORT_DIAG"]():
+            _transport_diag(ctx, device, packed, sb, rank, "columns")
+            _transport_diag(ctx, device, l, sl, rank, "factor")
         _ = packed^
         shards.append(CholSolveShard(device^, sl^, sb^, first, width))
     var quiet = IdentityTrace.disabled()
