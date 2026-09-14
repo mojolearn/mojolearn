@@ -1,0 +1,52 @@
+{
+  "status": "PASS",
+  "logical_reference_bytes": 2147483648,
+  "shape": [
+    2097152,
+    256
+  ],
+  "max_reference_shard_bytes": 1073741824,
+  "devices": [
+    0,
+    1
+  ],
+  "shards": [
+    {
+      "query_start": 0,
+      "query_end": 1,
+      "reference_start": 0,
+      "reference_end": 1048576,
+      "reference_bytes": 1073741824,
+      "device": 0
+    },
+    {
+      "query_start": 0,
+      "query_end": 1,
+      "reference_start": 1048576,
+      "reference_end": 2097152,
+      "reference_bytes": 1073741824,
+      "device": 1
+    }
+  ],
+  "individual_gpu_bytes": [
+    85520809984,
+    85520809984
+  ],
+  "gpu_info": "NVIDIA H100 80GB HBM3, 81559\nNVIDIA H100 80GB HBM3, 81559\n",
+  "seconds": 7.930111093446612,
+  "parent_peak_rss_kib": 7914488,
+  "indices": [
+    [
+      2097151,
+      7,
+      71,
+      135,
+      199
+    ]
+  ],
+  "distance_bytes": "00000000b204a541b204a541b204a541b204a541",
+  "output_sha256": "17d4d9971ea11d787fb573e74586333f9155879ae4f52648e04a2a4a5f3cb262",
+  "corpus_sha256": "2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8",
+  "construction": "64 corpus-derived rows repeated, final row zero, zero query, k=5; exact 257-row GPU oracle",
+  "scope": "Host-staged reference partitions; logical index exceeds one GPU for 96 GiB run. Not an all-resident VRAM pool or speedup measurement."
+}

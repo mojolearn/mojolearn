@@ -1,0 +1,104 @@
+{
+  "status": "PASS",
+  "checks": [
+    {
+      "estimator": "AgglomerativeClustering",
+      "rows": 17,
+      "clusters": 1,
+      "sha256": "923717849488dc6bfcbc0ef6cd43fdfd2168d548e4476772831e351846d40a4b"
+    },
+    {
+      "estimator": "AgglomerativeClustering",
+      "rows": 17,
+      "clusters": 3,
+      "sha256": "71098906d54edaa8b034efb00b4b9b76185ed5382c68317948e335d4e0bd8b65"
+    },
+    {
+      "estimator": "AgglomerativeClustering",
+      "rows": 17,
+      "clusters": 17,
+      "sha256": "ea5b14a9be7a85a657b5b6352a5c9bfdb97b3a7f8a920a90e9792423a97450b2"
+    },
+    {
+      "estimator": "AgglomerativeClustering",
+      "rows": 65,
+      "clusters": 1,
+      "sha256": "476b0286690fc7cd8d51db55a225de1ea0778e9ec1706321242c41eb252d8a6e"
+    },
+    {
+      "estimator": "AgglomerativeClustering",
+      "rows": 65,
+      "clusters": 3,
+      "sha256": "4eacedda78c372b2ab08d464628a7c4fd8f6586a3fed2306196f2d170b33122d"
+    },
+    {
+      "estimator": "AgglomerativeClustering",
+      "rows": 65,
+      "clusters": 65,
+      "sha256": "57482f37381b59f7e0860815bf267188ff7a59afdd3fe8c25fcb375bfeccf248"
+    },
+    {
+      "estimator": "SpectralClustering",
+      "rows": 33,
+      "components": 2,
+      "sha256": "97caefb795ca6dd2f88c7dbf35b86d28bcf79b14c8f3310599f42345b5c6aefa"
+    },
+    {
+      "estimator": "SpectralClustering",
+      "rows": 33,
+      "components": 3,
+      "sha256": "1fa2a121a367727baea4f5e51d7dd0b465373e2194f061b28a0ae8bfd5727495"
+    },
+    {
+      "estimator": "UMAP",
+      "rows": 33,
+      "components": 2,
+      "negatives": 0,
+      "sha256": "267ba86604540d06daa00faf4a789751c421644dbbe1b1a53f4f3a702f19c1d3",
+      "transform_sha256": "f960ba15ac534a2078ef666aa158fa3eff6f85625ece331d641da678b3b9f118"
+    },
+    {
+      "estimator": "UMAP",
+      "rows": 33,
+      "components": 3,
+      "negatives": 3,
+      "sha256": "9876aeda8680eb7a7fd2eeeec0f987dadaa6c2a7a3c109863459d23f1601c9e8",
+      "transform_sha256": "e49dd3b33491566a5cc93463be4a2d2f541faf66edf7a9bda9c1ceda2ecee664"
+    },
+    {
+      "estimator": "SpectralClustering",
+      "rows": 65,
+      "components": 2,
+      "sha256": "5064adb74a317b3b64ba7dffa25540b0448d6aba3cb53564c438ea873eefa952"
+    },
+    {
+      "estimator": "SpectralClustering",
+      "rows": 65,
+      "components": 3,
+      "sha256": "4bf64e2019ab76a86fa075eb5bc1a4cfc343c4691185480c3446e1472e54731b"
+    },
+    {
+      "estimator": "UMAP",
+      "rows": 65,
+      "components": 2,
+      "negatives": 0,
+      "sha256": "f4643dbcbf8dac0357d18d3c6e522ed4982005432e4fac31af6f1d70cbe4c8c7",
+      "transform_sha256": "da2ba3267139ee1c8ac433d89bb6fde8291279f485de8ce70b021f460ce7fd29"
+    },
+    {
+      "estimator": "UMAP",
+      "rows": 65,
+      "components": 3,
+      "negatives": 3,
+      "sha256": "92836d73b9148b671f74dd6b60923b30988dcdc5fb4a018dd6937d787854f803",
+      "transform_sha256": "158d890ee311474a77cebf74862eb2b0fe13e869f74f3b824dfed52b4fcfe313"
+    },
+    {
+      "estimator": "SpectralClustering-precomputed",
+      "rows": 257,
+      "sha256": "f8a9b641d108b73b5abc61ba239123af15af7a4d8ff8ce160af1ee392e39d95d"
+    }
+  ],
+  "corpus_sha256": "2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8",
+  "scope": "Two H100s; native distance/neighbor rows and original root graph/eigensolver/optimizer order; full root state remains"
+}
