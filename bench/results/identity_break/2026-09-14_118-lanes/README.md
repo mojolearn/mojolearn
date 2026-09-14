@@ -18,11 +18,12 @@ between the H100 and the MI300X on every fixture and column.
 
 Open, found by this run:
 
-- `byte-lm-resident` MOVED on all nine fixtures on BOTH boxes: two fits in one process on the
-  same GPU give two hashes (H100 base 3c1786e68ccab363 then 4e6997c7613e21e6; MI300X base
-  17549b4ec4e1c8a7 then 8944bae902b35aad). Nondeterminism inside one box on the path the resident
-  byte-LM step selects. Diagnosis: docs/lanes/BRIEF_byte_lm_resident_moved_2026-09-14.md (the
-  claim-surface session, source side), then an H100 probe leg.
+- `byte-lm-resident` MOVED on all nine fixtures on BOTH boxes: NOT a deviation, lane hashing,
+  fixed on main at 43f153247. Per part only `grads` moved; loss, params and logits were equal
+  between the two fits and equal to the stateless byte-lm lane bit for bit on both GPUs. The lane
+  hashed `np.asarray` of a nested gradient dict, a 0-d object array whose bytes are the dict's
+  address. The fixed lane hashes the flat gradients and holds the resident export to the
+  stateless step's gradient; its cells come from the next run.
 - `mamba2-dtlimit` DIVERGENT between the two vendors on 8 of 9 fixtures (parts forward, prefill,
   step, backward) and MOVED once on the MI300X (`base`: 165b502a1c95f280 then 669a2db9147247f7,
   the second value being the H100's). One moved cell in nine on one vendor reads as a race on the

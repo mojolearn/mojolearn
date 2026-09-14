@@ -1,0 +1,600 @@
+{
+  "binaries": {
+    "_mojolearn": "/Users/andrewhendel/CascadeProjects/mojolearn/python/mojolearn/host/_mojolearn_core_host.so",
+    "_mojolearn_estimators": "/Users/andrewhendel/CascadeProjects/mojolearn/python/mojolearn/host/_mojolearn_estimators_host.so",
+    "_mojolearn_svm": "/Users/andrewhendel/CascadeProjects/mojolearn/python/mojolearn/host/_mojolearn_svm_host.so"
+  },
+  "binary": "/Users/andrewhendel/CascadeProjects/mojolearn/python/mojolearn/host/_mojolearn_estimators_host.so",
+  "checked_at": "2026-09-14T07:56:02-0400",
+  "commit": "7800195e5905c850b7c4805a9544e5aae03caba1",
+  "exit": 0,
+  "expect_mismatch": false,
+  "fixtures": [
+    {
+      "cases": [
+        {
+          "case": "decision_function",
+          "equal": true,
+          "got": "d323a1b6128a5333813612516ee5b569f0212166bfb0b587394ef1256d827a76",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256,
+            3
+          ],
+          "want": "d323a1b6128a5333813612516ee5b569f0212166bfb0b587394ef1256d827a76",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256,
+            3
+          ]
+        },
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "624fd5f9c2ba36da60631e6bff2e88d9c95b8d5646dce25d4fad22e6d0d75b9d",
+          "got_dtype": "<i8",
+          "got_shape": [
+            256
+          ],
+          "want": "624fd5f9c2ba36da60631e6bff2e88d9c95b8d5646dce25d4fad22e6d0d75b9d",
+          "want_dtype": "<i8",
+          "want_shape": [
+            256
+          ]
+        },
+        {
+          "case": "predict_proba",
+          "equal": true,
+          "got": "14b42db998533557e1b3eb34d4c698393f5121929bfc40520d63b185554bcd88",
+          "got_dtype": "<f8",
+          "got_shape": [
+            256,
+            3
+          ],
+          "want": "14b42db998533557e1b3eb34d4c698393f5121929bfc40520d63b185554bcd88",
+          "want_dtype": "<f8",
+          "want_shape": [
+            256,
+            3
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "LogisticRegression",
+      "identity_hash": {
+        "equal": true,
+        "got": "9603308580e1a294",
+        "want": "9603308580e1a294"
+      },
+      "kind": "base",
+      "lane": "logistic-multiclass",
+      "model_sha256": "b4b216d91d0e4ba787127ca1213999d8bdac0e7e499e7d356a1360c9c89b5a2b",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "hip",
+      "seconds": 0.002312
+    },
+    {
+      "cases": [
+        {
+          "case": "decision_function",
+          "equal": true,
+          "got": "dca30f29e516cdc3cc6ee804649830ab81543debd69944089da53d80d50ea1cd",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256,
+            3
+          ],
+          "want": "dca30f29e516cdc3cc6ee804649830ab81543debd69944089da53d80d50ea1cd",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256,
+            3
+          ]
+        },
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "f47c61481d3dd5fa5166bf9eaa141de2fedf970465f41344970333cd3c2ee825",
+          "got_dtype": "<i8",
+          "got_shape": [
+            256
+          ],
+          "want": "f47c61481d3dd5fa5166bf9eaa141de2fedf970465f41344970333cd3c2ee825",
+          "want_dtype": "<i8",
+          "want_shape": [
+            256
+          ]
+        },
+        {
+          "case": "predict_proba",
+          "equal": true,
+          "got": "9dd98df48e9e8fd24343249d3030cd24b43d2e55a8603e01623e11cc202299c3",
+          "got_dtype": "<f8",
+          "got_shape": [
+            256,
+            3
+          ],
+          "want": "9dd98df48e9e8fd24343249d3030cd24b43d2e55a8603e01623e11cc202299c3",
+          "want_dtype": "<f8",
+          "want_shape": [
+            256,
+            3
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "LogisticRegression",
+      "identity_hash": {
+        "equal": true,
+        "got": "5a55ffdebeec9e6f",
+        "want": "5a55ffdebeec9e6f"
+      },
+      "kind": "denormal",
+      "lane": "logistic-multiclass",
+      "model_sha256": "d218014d1003ca6fd41eab956d0ee381608969bc67a480a6d3f017422ca17ed3",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "hip",
+      "seconds": 0.000676
+    },
+    {
+      "cases": [
+        {
+          "case": "decision_function",
+          "equal": true,
+          "got": "dca30f29e516cdc3cc6ee804649830ab81543debd69944089da53d80d50ea1cd",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256,
+            3
+          ],
+          "want": "dca30f29e516cdc3cc6ee804649830ab81543debd69944089da53d80d50ea1cd",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256,
+            3
+          ]
+        },
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "f47c61481d3dd5fa5166bf9eaa141de2fedf970465f41344970333cd3c2ee825",
+          "got_dtype": "<i8",
+          "got_shape": [
+            256
+          ],
+          "want": "f47c61481d3dd5fa5166bf9eaa141de2fedf970465f41344970333cd3c2ee825",
+          "want_dtype": "<i8",
+          "want_shape": [
+            256
+          ]
+        },
+        {
+          "case": "predict_proba",
+          "equal": true,
+          "got": "9dd98df48e9e8fd24343249d3030cd24b43d2e55a8603e01623e11cc202299c3",
+          "got_dtype": "<f8",
+          "got_shape": [
+            256,
+            3
+          ],
+          "want": "9dd98df48e9e8fd24343249d3030cd24b43d2e55a8603e01623e11cc202299c3",
+          "want_dtype": "<f8",
+          "want_shape": [
+            256,
+            3
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "LogisticRegression",
+      "identity_hash": {
+        "equal": true,
+        "got": "5a55ffdebeec9e6f",
+        "want": "5a55ffdebeec9e6f"
+      },
+      "kind": "denormal_ftz",
+      "lane": "logistic-multiclass",
+      "model_sha256": "d218014d1003ca6fd41eab956d0ee381608969bc67a480a6d3f017422ca17ed3",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "hip",
+      "seconds": 0.00064
+    },
+    {
+      "cases": [
+        {
+          "case": "decision_function",
+          "equal": true,
+          "got": "da961e70e4cf5a5a9ef5f6213101cb91dad0f6b69b878e9fccbb4b6c54aa3f0b",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256,
+            3
+          ],
+          "want": "da961e70e4cf5a5a9ef5f6213101cb91dad0f6b69b878e9fccbb4b6c54aa3f0b",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256,
+            3
+          ]
+        },
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "8118b73c3d2754ccd4e44207b7c338aab395748614d40d5ecae8d2140eb63d5d",
+          "got_dtype": "<i8",
+          "got_shape": [
+            256
+          ],
+          "want": "8118b73c3d2754ccd4e44207b7c338aab395748614d40d5ecae8d2140eb63d5d",
+          "want_dtype": "<i8",
+          "want_shape": [
+            256
+          ]
+        },
+        {
+          "case": "predict_proba",
+          "equal": true,
+          "got": "e802be6adfb81620c347642e2292a0ea1c2f9fc589df449074b5ce80d52c576c",
+          "got_dtype": "<f8",
+          "got_shape": [
+            256,
+            3
+          ],
+          "want": "e802be6adfb81620c347642e2292a0ea1c2f9fc589df449074b5ce80d52c576c",
+          "want_dtype": "<f8",
+          "want_shape": [
+            256,
+            3
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "LogisticRegression",
+      "identity_hash": {
+        "equal": true,
+        "got": "1a7502a44255504c",
+        "want": "1a7502a44255504c"
+      },
+      "kind": "dupes",
+      "lane": "logistic-multiclass",
+      "model_sha256": "eba7445d0f4ff6057ea8dfcb27ddf6dc988e986ab4c385a8cf66e7890af3f7fb",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "hip",
+      "seconds": 0.000565
+    },
+    {
+      "cases": [
+        {
+          "case": "decision_function",
+          "equal": true,
+          "got": "cf927efa516009dd80c5cb60654d873a9e5ff5f3a17e1bebcc6c75706bea8dd6",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256,
+            3
+          ],
+          "want": "cf927efa516009dd80c5cb60654d873a9e5ff5f3a17e1bebcc6c75706bea8dd6",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256,
+            3
+          ]
+        },
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "898eb3e78303b0816474aea23fd2c2499221cf74275ffaf58e67b45154f81671",
+          "got_dtype": "<i8",
+          "got_shape": [
+            256
+          ],
+          "want": "898eb3e78303b0816474aea23fd2c2499221cf74275ffaf58e67b45154f81671",
+          "want_dtype": "<i8",
+          "want_shape": [
+            256
+          ]
+        },
+        {
+          "case": "predict_proba",
+          "equal": true,
+          "got": "8fbe4f8fa60d3933afe63e08b8b80c699b7de7d9e9f9e2e30e83a45f59e4b6e5",
+          "got_dtype": "<f8",
+          "got_shape": [
+            256,
+            3
+          ],
+          "want": "8fbe4f8fa60d3933afe63e08b8b80c699b7de7d9e9f9e2e30e83a45f59e4b6e5",
+          "want_dtype": "<f8",
+          "want_shape": [
+            256,
+            3
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "LogisticRegression",
+      "identity_hash": {
+        "equal": true,
+        "got": "2f2abf53a96c07f3",
+        "want": "2f2abf53a96c07f3"
+      },
+      "kind": "hashed",
+      "lane": "logistic-multiclass",
+      "model_sha256": "2673362e9e8716e4bb4c08dd3a681b1a140ffb5402751730901f15aa9302b449",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "hip",
+      "seconds": 0.000714
+    },
+    {
+      "cases": [
+        {
+          "case": "decision_function",
+          "equal": true,
+          "got": "e7ca74d5fa45c3ecb2a22169c68c4809f10cee564c6a41f7f6bb1eaf8c25dddc",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256,
+            3
+          ],
+          "want": "e7ca74d5fa45c3ecb2a22169c68c4809f10cee564c6a41f7f6bb1eaf8c25dddc",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256,
+            3
+          ]
+        },
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "1b36f8836a4f669b023c992894c5bf770aae05260ba1dafadafbd96b02d3dbfb",
+          "got_dtype": "<i8",
+          "got_shape": [
+            256
+          ],
+          "want": "1b36f8836a4f669b023c992894c5bf770aae05260ba1dafadafbd96b02d3dbfb",
+          "want_dtype": "<i8",
+          "want_shape": [
+            256
+          ]
+        },
+        {
+          "case": "predict_proba",
+          "equal": true,
+          "got": "d85dba4776d3dc16f06a0728a32ec11ea9b63734c52a4544506520f13256b873",
+          "got_dtype": "<f8",
+          "got_shape": [
+            256,
+            3
+          ],
+          "want": "d85dba4776d3dc16f06a0728a32ec11ea9b63734c52a4544506520f13256b873",
+          "want_dtype": "<f8",
+          "want_shape": [
+            256,
+            3
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "LogisticRegression",
+      "identity_hash": {
+        "equal": true,
+        "got": "776efb8677ed42eb",
+        "want": "776efb8677ed42eb"
+      },
+      "kind": "negative",
+      "lane": "logistic-multiclass",
+      "model_sha256": "534c14d079eed480e4f4cae62967509ca9bd3354de5c4288869388ba1c433f23",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "hip",
+      "seconds": 0.000642
+    },
+    {
+      "cases": [
+        {
+          "case": "decision_function",
+          "equal": true,
+          "got": "8395ddf4a8fa6a84f96d3eb113498d396a62dca8a1c68066d43e80fe098e43c0",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256,
+            3
+          ],
+          "want": "8395ddf4a8fa6a84f96d3eb113498d396a62dca8a1c68066d43e80fe098e43c0",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256,
+            3
+          ]
+        },
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "1b540c80185a8785716a6c7ce55f435449550c29f7a239fd48e79076b10d80f6",
+          "got_dtype": "<i8",
+          "got_shape": [
+            256
+          ],
+          "want": "1b540c80185a8785716a6c7ce55f435449550c29f7a239fd48e79076b10d80f6",
+          "want_dtype": "<i8",
+          "want_shape": [
+            256
+          ]
+        },
+        {
+          "case": "predict_proba",
+          "equal": true,
+          "got": "5672528accd78a580abe4cbd29c258adc4a463a004a973581eeec50c83557d83",
+          "got_dtype": "<f8",
+          "got_shape": [
+            256,
+            3
+          ],
+          "want": "5672528accd78a580abe4cbd29c258adc4a463a004a973581eeec50c83557d83",
+          "want_dtype": "<f8",
+          "want_shape": [
+            256,
+            3
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "LogisticRegression",
+      "identity_hash": {
+        "equal": true,
+        "got": "335e25d487fe0eb0",
+        "want": "335e25d487fe0eb0"
+      },
+      "kind": "odd",
+      "lane": "logistic-multiclass",
+      "model_sha256": "f719d5ae4760729e5d434ccbf2c248b559eebe46cb088d0c7a3304338fa0d99b",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "hip",
+      "seconds": 0.000649
+    },
+    {
+      "cases": [
+        {
+          "case": "decision_function",
+          "equal": true,
+          "got": "065d463ae832b67ff5c392e3017fcb64d1fbdb089894f3e6f6a96e46ae4d6500",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256,
+            3
+          ],
+          "want": "065d463ae832b67ff5c392e3017fcb64d1fbdb089894f3e6f6a96e46ae4d6500",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256,
+            3
+          ]
+        },
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "96589cd9f9fbcd3c30614fc05a3cda8200b0918bfc17244bbdc1d32f23b46e38",
+          "got_dtype": "<i8",
+          "got_shape": [
+            256
+          ],
+          "want": "96589cd9f9fbcd3c30614fc05a3cda8200b0918bfc17244bbdc1d32f23b46e38",
+          "want_dtype": "<i8",
+          "want_shape": [
+            256
+          ]
+        },
+        {
+          "case": "predict_proba",
+          "equal": true,
+          "got": "d2f6326c66e85bc272acae7cc403528ab1c3038d046b9a8dee1e65ceb3b6ea72",
+          "got_dtype": "<f8",
+          "got_shape": [
+            256,
+            3
+          ],
+          "want": "d2f6326c66e85bc272acae7cc403528ab1c3038d046b9a8dee1e65ceb3b6ea72",
+          "want_dtype": "<f8",
+          "want_shape": [
+            256,
+            3
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "LogisticRegression",
+      "identity_hash": {
+        "equal": true,
+        "got": "ec57465dcbb52769",
+        "want": "ec57465dcbb52769"
+      },
+      "kind": "ties",
+      "lane": "logistic-multiclass",
+      "model_sha256": "61105df92f03899bd4410dd60c4614e10b928b7adc142bd81bc4ccac925cb5f9",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "hip",
+      "seconds": 0.000611
+    },
+    {
+      "cases": [
+        {
+          "case": "decision_function",
+          "equal": true,
+          "got": "97c141c2711e3fae9ff73497d02ecc3482b9b21dc4b4a562fca9d55f36668dad",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256,
+            3
+          ],
+          "want": "97c141c2711e3fae9ff73497d02ecc3482b9b21dc4b4a562fca9d55f36668dad",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256,
+            3
+          ]
+        },
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "870ccc588f6c1110f6e0af6f31029749ac5e367e2db9e63d10715d8a2d572d0e",
+          "got_dtype": "<i8",
+          "got_shape": [
+            256
+          ],
+          "want": "870ccc588f6c1110f6e0af6f31029749ac5e367e2db9e63d10715d8a2d572d0e",
+          "want_dtype": "<i8",
+          "want_shape": [
+            256
+          ]
+        },
+        {
+          "case": "predict_proba",
+          "equal": true,
+          "got": "a7a6d5cdb42a4c3685794c6aa43bf2f399d5c8eb83dbb5ca1fbe31ee551cf47c",
+          "got_dtype": "<f8",
+          "got_shape": [
+            256,
+            3
+          ],
+          "want": "a7a6d5cdb42a4c3685794c6aa43bf2f399d5c8eb83dbb5ca1fbe31ee551cf47c",
+          "want_dtype": "<f8",
+          "want_shape": [
+            256,
+            3
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "LogisticRegression",
+      "identity_hash": {
+        "equal": true,
+        "got": "c425664f9a79cdfc",
+        "want": "c425664f9a79cdfc"
+      },
+      "kind": "wide",
+      "lane": "logistic-multiclass",
+      "model_sha256": "c9e4f0408b970bd524bef0fb8fa20f7520d557d7fb057b6dd9a8cfde012dd73a",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "hip",
+      "seconds": 0.000566
+    }
+  ],
+  "gpu_columns": [],
+  "host": {
+    "cpu": "Apple M4",
+    "machine": "arm64",
+    "python": "3.13.15",
+    "release": "25.5.0",
+    "system": "Darwin"
+  },
+  "vendor": "metal",
+  "verdict": "IDENTICAL"
+}
