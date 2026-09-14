@@ -29,3 +29,8 @@ scripts/exit codes and compiler logs are included.
 No local builds or tests. No new cross-vendor, speedup, pooled root-state or
 large-memory claim. Full root data/eigensolver state remain. The pod stays
 leased for the following QR/full-PCA batch.
+
+Final lifecycle: all owed jobs completed and evidence was downloaded before
+RunPod `rbtojh7e0esekh` was deleted on 2026-09-14 at 18:11 UTC; GET returned
+404. See `../pooled-source-freeze/h100-termination.log`. The exact final source
+tree was frozen for subsequent RTX 5090 qualification.

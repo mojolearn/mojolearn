@@ -33,3 +33,8 @@ bit on both ranks is restored, and failed gradients remain uncommitted.
 This qualifies optimizer moments/rollback pooling for these byte-LM shapes,
 not full model capacity, cross-vendor identity, speedup, or lost-device recovery.
 The pod remains leased for the shared neural optimizer pooling batch.
+
+Final lifecycle: all owed jobs completed and evidence was downloaded before
+RunPod `rbtojh7e0esekh` was deleted on 2026-09-14 at 18:11 UTC; GET returned
+404. See `../pooled-source-freeze/h100-termination.log`. The exact final source
+tree was frozen for subsequent RTX 5090 qualification.

@@ -19,3 +19,8 @@ No local tests/builds. This qualifies same-hardware compute partitioning, not
 new cross-vendor identity, speedup or pooled root/model capacity. The one-panel
 path remains unchanged; wide full PCA's transpose-QR route remains single-device.
 The pod remains leased for the next neural optimizer-pooling implementation.
+
+Final lifecycle: all owed jobs completed and evidence was downloaded before
+RunPod `rbtojh7e0esekh` was deleted on 2026-09-14 at 18:11 UTC; GET returned
+404. See `../pooled-source-freeze/h100-termination.log`. The exact final source
+tree was frozen for subsequent RTX 5090 qualification.

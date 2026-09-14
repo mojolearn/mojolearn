@@ -46,3 +46,8 @@ Scope: two H100s only. Root data, categorical state, histograms and models
 remain; pointwise workers currently clone complete index/histogram buffers and
 gather only owned bins. No resident pooled-state capacity, speedup, eight-GPU
 or new cross-vendor claim. The pod remains leased for the next Gram batch.
+
+Final lifecycle: all owed jobs completed and evidence was downloaded before
+RunPod `rbtojh7e0esekh` was deleted on 2026-09-14 at 18:11 UTC; GET returned
+404. See `../pooled-source-freeze/h100-termination.log`. The exact final source
+tree was frozen for subsequent RTX 5090 qualification.

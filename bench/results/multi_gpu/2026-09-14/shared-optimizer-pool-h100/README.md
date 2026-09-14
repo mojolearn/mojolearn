@@ -37,3 +37,8 @@ staged in host memory between calls. Global clipping still stages a complete
 gradient on the first GPU, and gradient workers still need full model weights.
 This is not persistent residency, full pooled model capacity, new cross-vendor
 qualification, or a speedup claim. No local builds or tests ran.
+
+Final lifecycle: all owed jobs completed and evidence was downloaded before
+RunPod `rbtojh7e0esekh` was deleted on 2026-09-14 at 18:11 UTC; GET returned
+404. See `../pooled-source-freeze/h100-termination.log`. The exact final source
+tree was frozen for subsequent RTX 5090 qualification.
