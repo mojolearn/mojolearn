@@ -1531,3 +1531,35 @@ The measurement owed is the seven-runner CPU identity gate on the lane
   binding); on the M4 the sabotage set read DIVERGENT on `labels` against
   all three columns on `base`.
 - The test module is `cd python && python3 -m mojolearn.tests.test_cpu_training_e2`.
+
+## Workstream E batch 2 (2026-09-14): standard-scaler, minmax-scaler, SIMULATED IDENTICAL x3 ON base, GATE OWED
+
+- standard-scaler, minmax-scaler. `preprocessing/host/scaler_oracle.mojo`,
+  the four kernels of `preprocessing/standard.mojo` and
+  `preprocessing/minmax.mojo` restated: DEVIATION 653's slab tree per
+  256-row chunk of a column with the chunk totals folded ascending, the
+  mean pass with its constant-column count and marker, the variance pass
+  (`identical_mul` of the flushed residual, `identical_div` by n,
+  `portable_sqrtf`), the per-element transforms in their branch order, the
+  min-max extrema as a selection over `ordered_key`'s total order, the
+  `10 eps` denominator rule, `scale` and `offset` through `identical_div`
+  and `identical_mul`, the clip. A new host family, `preprocessing`:
+  `bindings/_mojolearn_preprocessing_host.mojo` exports the GPU binding's
+  whole surface (four entries and the two read-backs) with its params
+  lists, `bindings/build_preprocessing_host.sh` is the shim, and the
+  manifest routes `_mojolearn_preprocessing` to it, so
+  `python/mojolearn/preprocessing.py` runs unchanged.
+- On the M4's CPU-only path both lanes read IDENTICAL against the Apple,
+  NVIDIA and AMD 47-lane columns on `base`, one fixture, one repeat, at
+  the first build, the train parts and the infer cell alike. The gate has
+  not run.
+- The sabotage arm is the family's `-D MOJOLEARN_HOST_SABOTAGE=1`, under
+  which the slab tree's chunk boundaries shift by one value and the
+  min-max offset's subtraction becomes an addition; on the M4 the sabotage
+  set read DIVERGENT on every standard-scaler part and on `min`,
+  `transform` and `inverse` of the min-max scaler, the infer cells
+  included, against all three columns on `base`.
+- The `standard-scaler-no-mean`, `standard-scaler-no-std` and
+  `minmax-scaler-clip` twins share the entries but wait for a GPU record
+  that carries them.
+- The test module is `cd python && python3 -m mojolearn.tests.test_cpu_training_e2`.

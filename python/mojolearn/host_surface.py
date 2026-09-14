@@ -147,6 +147,10 @@ TRAINING_LANE_NAMES = {
     # kernel and the k-means recluster restated, exported as
     # spectral_fit_predict_dataset from the metrics host binding.
     "spectral": "spectral clustering",
+    # The two scaler lanes, same batch: preprocessing/host/scaler_oracle.mojo
+    # through the preprocessing family's own host binding.
+    "standard-scaler": "the standard scaler",
+    "minmax-scaler": "the min-max scaler",
 }
 
 #: The lanes with NO CPU path of any kind, as the README states them. A
@@ -369,6 +373,30 @@ FAMILIES = (
             "entropy", "mutual_info_score", "homogeneity_score",
             "completeness_score", "v_measure_score", "r2_score", "silhouette",
             "spectral_fit_predict_dataset",
+        ),
+        gate="tools/identity_break.py (cpu-identity-gate.yml)",
+        ships_in_wheel=False,
+    ),
+    dict(
+        # Workstream E batch 2 (lane/cpu-training-e2, 2026-09-14): the
+        # preprocessing family's host binding, the whole GPU binding's
+        # surface (four entries) restated.
+        family="preprocessing",
+        binding="_mojolearn_preprocessing_host",
+        routes="_mojolearn_preprocessing",
+        loaded_by="_backend._HOST_MODULES",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=("standard-scaler", "minmax-scaler"),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=("StandardScaler", "MinMaxScaler"),
+        display="the standard and min-max scalers",
+        host_modules=("preprocessing/host/scaler_oracle.mojo",),
+        exports=(
+            "preprocessing_host_numeric_mode", "preprocessing_host_vendor",
+            "preprocessing_host_column", "preprocessing_host_sabotage",
+            "preprocessing_numeric_mode", "preprocessing_vendor",
+            "standard_fit", "standard_transform", "minmax_fit", "minmax_transform",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=False,

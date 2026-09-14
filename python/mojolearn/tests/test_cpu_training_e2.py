@@ -39,6 +39,7 @@ METRICS_EXPORTS = ("accuracy_score", "adjusted_rand_score", "entropy", "mutual_i
                    "homogeneity_score", "completeness_score", "v_measure_score", "r2_score",
                    "silhouette", "spectral_fit_predict_dataset")
 SPECTRAL_ORACLE = "spectral/host/spectral_oracle.mojo"
+SCALER_ORACLE = "preprocessing/host/scaler_oracle.mojo"
 GPU_IMPORTS = re.compile(r"^\s*from\s+(max\.gpu|std\.gpu)", re.M)
 
 
@@ -174,6 +175,55 @@ def test_spectral_runs_on_the_host_when_built():
     assert set(got[0].tolist()) <= {0, 1} and got[0].shape == (120,)
     assert (got[0][:60] == got[0][0]).all() and (got[0][60:] == got[0][60]).all() and got[0][0] != got[0][60], \
         "two separated blobs were not split into the two clusters"
+
+
+def test_manifest_covers_the_scalers():
+    for lane in ("standard-scaler", "minmax-scaler"):
+        assert lane in host_surface.covered_lanes(), f"{lane} is not a covered training lane"
+    fam = host_surface.family("preprocessing")
+    assert fam["routes"] == "_mojolearn_preprocessing"
+    assert fam["training_lanes"] == ("standard-scaler", "minmax-scaler")
+    assert SCALER_ORACLE in fam["host_modules"] and (ROOT / SCALER_ORACLE).is_file()
+    assert (ROOT / "bindings/build_preprocessing_host.sh").is_file()
+    assert "_mojolearn_preprocessing" in host_surface.routed_modules()
+    src = _read(host_surface.binding_source("preprocessing"))
+    for name in ("standard_fit", "standard_transform", "minmax_fit", "minmax_transform",
+                 "preprocessing_numeric_mode", "preprocessing_vendor"):
+        assert f'("{name}")' in src and name in fam["exports"], name
+    text = _read(SCALER_ORACLE)
+    assert not GPU_IMPORTS.search(text), f"{SCALER_ORACLE} imports a GPU module"
+    assert "from checks.numerics import" in text and "comptime PINNED_SUM_W = 256" in text
+    assert "comptime if SCALER_ORACLE_HOST_SABOTAGE:" in text
+    assert "values[(i + 1) % n]" in text and "ftz(lower) + ftz(identical_mul(" in text
+    assert "SCALER_ORACLE_HOST_SABOTAGE" in src
+    assert f'- "{SCALER_ORACLE}"' in _read(".github/workflows/cpu-identity-gate.yml")
+
+
+def test_scalers_run_on_the_host_when_built():
+    if _backend._CPU_ONLY is None:
+        print("SKIP: a GPU set loaded; the host route is not taken here")
+        return
+    if "_mojolearn_preprocessing_host" not in _backend.host_families_built():
+        print("SKIP: the preprocessing host binding is not built")
+        return
+    import numpy as np
+    module = _backend.load_host_module("_mojolearn_preprocessing_host")
+    assert not bool(module.preprocessing_host_sabotage()), "a sabotage build loaded outside the gate"
+    rng = np.random.default_rng(3)
+    x = rng.standard_normal((700, 5)).astype(np.float32)
+    x[:, 4] = np.float32(2.5)
+    s = mojolearn.StandardScaler().fit(x)
+    t = np.asarray(s.transform(x[:64]))
+    back = np.asarray(s.inverse_transform(t))
+    assert np.asarray(s.var_)[4] == 0.0 and np.asarray(s.scale_)[4] == 1.0 and np.asarray(s.mean_)[4] == np.float32(2.5)
+    assert np.abs(np.asarray(s.mean_)[:4] - x[:, :4].mean(0)).max() < 1e-4
+    assert np.abs(back - x[:64]).max() < 1e-4
+    m = mojolearn.MinMaxScaler().fit(x)
+    u = np.asarray(m.transform(x[:64]))
+    assert np.asarray(m.data_min_).tolist() == x.min(0).tolist() and np.asarray(m.data_max_).tolist() == x.max(0).tolist()
+    assert u[:, :4].min() >= 0.0 and u[:, :4].max() <= 1.0
+    again = np.asarray(mojolearn.MinMaxScaler().fit(x).transform(x[:64]))
+    assert again.tobytes() == u.tobytes(), "two host fits returned different bytes"
 
 
 def test_metrics_run_on_the_host_when_built():
