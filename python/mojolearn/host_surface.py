@@ -133,8 +133,8 @@ TRAINING_LANE_NAMES = {
     # stores the index and their train cell is the host search the knn host
     # inference lane already serves; pca, pca-whiten, tsvd, ols and ridge
     # train through decomposition/host/pca_oracle.mojo and
-    # glm/host/glm_oracle.mojo. Each is a prediction until the four-column
-    # diff reads IDENTICAL on every cell.
+    # glm/host/glm_oracle.mojo. The seven-runner gate read the four-column
+    # diff IDENTICAL on every covered cell at 2b7f991b6 (run 34871479957).
     "knn": "nearest neighbors",
     "knn-clf": "the k-NN classifier",
     "knn-reg": "the k-NN regressor",
@@ -146,8 +146,8 @@ TRAINING_LANE_NAMES = {
     "dbscan": "DBSCAN",
     # Workstream E batch 2 (lane/cpu-training-e2, 2026-09-14): k-means trains
     # through cluster/host/kmeans_oracle.mojo, exported as kmeans_fit from
-    # the core host binding. Simulated IDENTICAL x3 on the base fixture on
-    # the M4's CPU path; the seven-runner gate result is owed.
+    # the core host binding. The seven-runner gate read all nine fixtures
+    # IDENTICAL x4 (run 34884487749).
     "kmeans": "k-means",
     # Workstream E batch 2: the five metrics of the lane (accuracy, ARI,
     # v-measure, r2, silhouette) through metrics/host/metrics_oracle.mojo,
@@ -170,7 +170,9 @@ TRAINING_LANE_NAMES = {
     # Workstream E batch 3 (2026-09-14): the random forests train through
     # ensemble/host/rf_oracle.mojo, the device trainer restated on the host,
     # exported under the GPU binding's names from the rf family's own host
-    # binding. A prediction until the four-column diff reads IDENTICAL.
+    # binding. Gate run 34884487749 at ed6c06526: all nine fixtures
+    # IDENTICAL x4 (train, infer and model), the sabotage build DIVERGENT on
+    # every one.
     "rf-clf": "the random forest classifier",
     "rf-reg": "the random forest regressor",
     # CPU training batch 2 declared (lane/cpu-training-batch2-declare,
@@ -200,8 +202,9 @@ TRAINING_LANE_NAMES = {
     # cholesky/host/chol_oracle.mojo and gemm_oracle, exported under the GPU
     # binding's names from the gp family's own host binding. There is no
     # optimizer on any column (DEVIATION 1761), so the fit is the kernel
-    # matrix, the ridge, the factorization, the solve and three scalars. A
-    # prediction until the four-column diff reads IDENTICAL.
+    # matrix, the ridge, the factorization, the solve and three scalars.
+    # Gate run 34895158657 at bafab59ef: all nine training and infer cells of
+    # each lane IDENTICAL x4, the sabotage build DIVERGENT on every one.
     "gp": "the Gaussian process with an RBF kernel",
     "gp-matern12": "the Gaussian process with a Matern kernel at nu 0.5",
     "gp-matern32": "the Gaussian process with a Matern kernel at nu 1.5",
@@ -210,25 +213,28 @@ TRAINING_LANE_NAMES = {
     # symmetric tree with the Logloss loss trains through
     # gbdt/host/gbdt_oracle.mojo, the device trainer restated on the host,
     # exported under the GPU binding's names from the gbdt family's own host
-    # binding. The other GBDT lanes refuse by name. A prediction until the
-    # four-column diff reads IDENTICAL.
+    # binding. The other GBDT lanes refuse by name. Gate run 34900811380 at
+    # e767b829b read the four GBDT lanes' 108 train, infer and model cells
+    # IDENTICAL x4 and the sabotage build DIVERGENT on all 108.
     "gbdt-symmetric": "gradient boosting on symmetric trees with the Logloss loss",
     # Workstream E batch 3 (2026-09-14): the same tree with the RMSE loss
     # trains through gbdt/host/gbdt_oracle_rmse.mojo (the seeded cursor and
-    # the searcher's own leaves, DEVIATION 64) from the same binding. A
-    # prediction until the four-column diff reads IDENTICAL.
+    # the searcher's own leaves, DEVIATION 64) from the same binding. Gate
+    # run 34900811380, as above.
     "gbdt-rmse": "gradient boosting on symmetric trees with the RMSE loss",
     # Same batch: the Depthwise and Lossguide policies with the Logloss loss
     # train through gbdt/host/gbdt_oracle_depthwise.mojo (the non-symmetric
     # driver) and gbdt/host/gbdt_oracle_lossguide.mojo, in the same binding.
-    # A prediction until the four-column diff reads IDENTICAL.
+    # Gate run 34900811380, as above.
     "gbdt-depthwise": "gradient boosting on depthwise trees with the Logloss loss",
     "gbdt-lossguide": "gradient boosting on lossguide trees with the Logloss loss",
     # Workstream E (lane/cpu-training-arima, 2026-09-14): batched ARIMA
     # trains and forecasts through arima/host/arima_oracle.mojo, the device
     # lane restated on the host, exported under the GPU binding's names from
-    # the arima family's own host binding. par-arima is not declared. A
-    # prediction until the four-column diff reads IDENTICAL.
+    # the arima family's own host binding. par-arima is not declared. Gate
+    # run 34895909493 at 422a1b9e5: all 27 training and 27 infer cells
+    # IDENTICAL x4; under the sabotage build 26 of 27 of each DIVERGENT
+    # (arima-011/wide keeps its hash).
     "arima": "ARIMA",
     "arima-011": "differenced ARIMA",
     "arima-seasonal-c": "seasonal ARIMA",

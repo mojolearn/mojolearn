@@ -9,7 +9,7 @@ NO REFERENCE FILE. It runs the device spelling
 (`embedding/checks/embedding_oracle.mojo`) and compares every recorded
 stage BY BITS.
 
-**RAN ON TWO COLUMNS.** Apple and AMD both produced `embedding.identical.card` at md5 `c7f824c35336bef2a3d0f672a172ef29`, clause (a) passing on 6,887 cells. What is still true is that NO SABOTAGE ARM WAS EVER BUILT for this lane and there is no NVIDIA leg, so the gate has never been shown capable of failing. Written
+**RAN ON THREE COLUMNS, SABOTAGE ARMS RUN (2026-09-14).** Apple and AMD produced `embedding.identical.card` at md5 `c7f824c35336bef2a3d0f672a172ef29` on 2026-08-28, clause (a) passing on 6,887 cells, and the Apple M4, an NVIDIA H100 and an AMD MI300X produced the same md5 at 171752af4. `tools/embedding_sabotage_arm.sh` built the sixteen arms on all three: ten BIT under clause (g) on every column and NO_FLUSH_ACC an eleventh on NVIDIA and AMD; EMPTY_ROW_NEG_ZERO and SORT_TIE_REVERSED move their predicted-inert controls, PAD_ROW_NEG_ZERO moves emb.dw_seed before emb.dw, ACCUM_BY_ADD's clause (e) by-add control is dead on f_split, and NO_FLUSH_ACC is inert on Apple as contract 9.3 predicts but raises; GATHER_CLAMP_OOR has no runnable witness (`bench/results/ivf_embed_km_legs_2026-09-14/README.md`). The historical paragraph below is kept as written. Written
 2026-08-25, DEVIATIONS 1500 through 1524. No `mojo` process has read it, no
 device has run it, no bit produced by it has been observed. Every sentence
 below that says a clause "passes", a sabotage "bites", or a stage "moves" is
@@ -2898,9 +2898,9 @@ def main() raises:
         " mojolearn.identical.embedding.fp32.v1"
     )
     print(
-        "=== embedding_check: clause (a) ran on Apple and AMD, cards md5"
-        " c7f824c3, 6887 cells. NO SABOTAGE ARM EXISTS, so this gate has"
-        " never been shown capable of failing. Read the header."
+        "=== embedding_check: clause (a) card md5 c7f824c3, 6887 cells, on"
+        " Apple, NVIDIA and AMD; sabotage arms run on all three, eleven of"
+        " sixteen bite on NVIDIA and AMD, ten on Apple. Read the header."
     )
     print(
         "mode "
