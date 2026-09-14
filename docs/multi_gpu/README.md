@@ -715,3 +715,16 @@ The final Samba checkpoint gate passes trained-model continuation, seven
 corruption refusals before model construction, failed-publication atomicity,
 legacy loading and a 415,293,679-byte archive roundtrip. Full evidence is in
 `bench/results/multi_gpu/2026-09-14/samba-stream-checkpoint-h100/`.
+
+### GaussianMixture E-step rows
+
+`mojolearn.parallel_classical.fit_gaussian_mixture(model, X, devices=(0, 1))`
+and `predict_gaussian_mixture(model, X, devices=(0, 1), method=...)` run the
+estimator in a cooperative worker where every E-step moves whole sample rows
+to owners and gathers their per-row outputs as bytes; the mean log likelihood,
+M-step, precision Cholesky and convergence test stay on the root. Design:
+[gaussian_mixture.md](gaussian_mixture.md). Two-H100 and two-MI300X receipts
+(`bench/results/multi_gpu/2026-09-14/gmm-rows-h100/` and `gmm-rows-mi300x/`)
+pass the native E-step and sixteen-fit trace gate, a sabotage build that fails,
+and nine public configurations; the two vendors' public reports and all 32
+trace files are equal. No capacity or speed claim.

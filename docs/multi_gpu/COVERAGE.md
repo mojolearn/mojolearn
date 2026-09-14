@@ -79,7 +79,7 @@ implementations still require their own AMD/Apple qualification.
 | HDBSCAN | No complete parallel driver; linkage subcalls contain existing neighbor/distance seams | Complete fit dispatch and qualification; dense graph, MST and hierarchy pooling |
 | KernelRidge / Nystroem | No complete parallel driver; non-Laplacian kernel construction shares SVM's internal seam | Fit/transform dispatch, RNG/basis and full-state gates; kernel matrix, factorization and eigensolver pooling |
 | RBFSampler | No parallel driver or native feature partition | Global random-feature identities, distributed transform, state pooling and qualification |
-| GaussianMixture | No distributed EM driver; KMeans initialization has an internal assignment seam | EM reduction-order design, covariance/init variants, state pooling and qualification |
+| GaussianMixture | Row-sharded E-steps (fit, score_samples, predict_proba, predict) with the root M-step, Cholesky and convergence test; KMeans init through its row-tile driver; full covariance with kmeans and random init (the only exposed type; the others are refused by name); traces, state and outputs equal one device on two H100s and two MI300X, and the two vendors' receipts and trace files are equal | M-step statistics and responsibilities on the root; capacity and throughput unqualified |
 | Cholesky | Public factor/solve surface has no parallel driver | Factorization/solve design, matrix pooling and operation-level qualification |
 
 The newer binding availability flags do not establish complete estimator
