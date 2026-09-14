@@ -15,7 +15,7 @@ def original_totals[RF_INPUT: Bool](
     offsets: MutPointer[Int32, MutAnyOrigin], columns: MutPointer[Int32, MutAnyOrigin],
     thresholds: MutPointer[Float32, MutAnyOrigin], left: MutPointer[Int32, MutAnyOrigin],
     leaves: MutPointer[Float32, MutAnyOrigin], x: MutPointer[Float32, MutAnyOrigin],
-    out: MutPointer[Float32, MutAnyOrigin], rows: Int32, outputs: Int32, trees: Int32,
+    destination: MutPointer[Float32, MutAnyOrigin], rows: Int32, outputs: Int32, trees: Int32,
 ):
     # Independent original global-index traversal; does not read the pool's
     # owner assignments, local offsets, per-grove starts or local counts.
@@ -29,7 +29,7 @@ def original_totals[RF_INPUT: Bool](
         var node = reached_leaf[RF_INPUT](offsets, columns, thresholds, left,
             x, tree, item // Int(outputs), 2)
         total = forest_add(total, leaves[node * Int(outputs) + item % Int(outputs)])
-    out[index] = total
+    destination[index] = total
 
 
 def run_case[RF_INPUT: Bool](ctx: DeviceContext, trees: Int, outputs: Int) raises:

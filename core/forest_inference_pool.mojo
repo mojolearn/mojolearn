@@ -146,11 +146,20 @@ struct ForestGroveOwner(Movable):
             _ = len(thresholds)
             _ = len(left)
             _ = len(leaves)
-            _ = packed_nodes^
-            _ = compact_leaves^
         except e:
             self.ctx.value().synchronize()
+            _ = len(offsets)
+            _ = len(starts)
+            _ = len(counts)
+            _ = len(columns)
+            _ = len(thresholds)
+            _ = len(left)
+            _ = len(leaves)
+            _ = packed_nodes^
+            _ = compact_leaves^
             raise e
+        _ = packed_nodes^
+        _ = compact_leaves^
 
     def __deinit__(deinit self):
         _ = self.counts^
@@ -186,6 +195,9 @@ struct ForestGroveOwner(Movable):
             ctx.synchronize()
         except e:
             ctx.synchronize()
+            _ = dx^
+            _ = dt^
+            _ = host^
             raise e
         var result = List[Float32](capacity=items * 32)
         for i in range(items * 32):
@@ -297,10 +309,14 @@ struct PooledForest(Movable):
                     grid_dim=(items + 3) // 4, block_dim=128)
                 ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=dout)
                 ctx.synchronize()
-                _ = totals^
             except e:
                 ctx.synchronize()
+                _ = totals^
+                _ = dt^
+                _ = dout^
+                _ = host^
                 raise e
+            _ = totals^
             for i in range(items):
                 staged[first + i] = host.unsafe_ptr()[i]
             _ = dt^
