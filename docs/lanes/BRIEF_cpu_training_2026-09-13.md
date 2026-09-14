@@ -1319,3 +1319,85 @@ export, and the GPU bindings are not rebuilt on this Mac. The export
 leg; the host scorer for it is `oracle_path_lengths` / `oracle_scores`
 over an `OracleForest` rebuilt from the arrays, which this binding
 already runs.
+
+## Workstream E (2026-09-14): knn, knn-clf, knn-reg, pca, pca-whiten, tsvd, ols, ridge, dbscan, WRITTEN AND COMPILE-CHECKED, NOT MEASURED
+
+Branch `lane/cpu-training-e`, off `origin/main` at 59ee1b98b. Nothing in this
+section is a bit result; the four-column diff has not run. What exists follows.
+
+- knn, knn-clf, knn-reg. The fit stores the index (`neighbors.py:578`) and
+  the train cell is `kneighbors`, `predict` and `predict_proba` on training
+  rows, the same host search, vote and mean the knn host inference lane
+  serves through `_mojolearn_core_host` (`core/knn_host_predict.mojo`). No
+  code was added; the three lanes are declared as the core family's
+  training lanes in `python/mojolearn/host_surface.py`, so the CPU identity
+  gate runs them and demands IDENTICAL x4. The `knn-clf-distance` and
+  `knn-reg-distance` twins wait for a GPU record that carries them (the
+  2026-09-14 47-lane record does not).
+- pca, pca-whiten, tsvd. `decomposition/host/pca_oracle.mojo`, the fit
+  restated from its kernels, namely `column_mean_kernel` (STATS_TPB lane partials,
+  the halving tree), the split-K Gram (128 pinned chunks, the fused centered
+  read, the serial chunk fold), `scale_in_place_kernel`, a Float32 Jacobi at
+  the device's 15 sweeps and 1e-7 with the JACOBI_TPB lane folds and the
+  DEVIATION 2671 merged phase, `sign_flip_kernel`, the Float64 tail. Past
+  128 columns the Gram is `gemm_oracle` at OP_TN, unmeasured on any
+  fixture. Exported as `pca_fit` and `tsvd_fit` from
+  `bindings/_mojolearn_estimators_host.mojo`; `pca_fit_full` stays absent.
+- ols, ridge. `glm/host/glm_oracle.mojo` carries `lstsq_eig` (the Gram and Jacobi
+  above, `xty_kernel`, the DEVIATION 2620 equilibration and 2621 cutoff,
+  `divide_columns_by_nonzero_kernel`, the pinned `gemm_nt` and `gemv_n`
+  cells of `core/classical_host_predict.mojo`) and `svd_eig` plus
+  `ridge_solve` with every elementwise kernel of `glm/impl/matrix/math.mojo`
+  restated. `n_cols > n_rows` (`lstsq_min_norm`) is refused by name.
+  Exported as `ols_fit` and `ridge_fit`.
+- dbscan. `dbscan/host/dbscan_oracle.mojo`, the oracle the census said did
+  not exist, written as a second spelling of the device path. The ball cover
+  index (`rbc_n_landmarks`, `_floyd_sample` at seed 12345, the strict-`<`
+  nearest landmark rooted by `identical_sqrt`, the member lists ranked by
+  distance then index, the last member's distance as the radius) and the
+  eps query (`block_rbc_kernel_eps_csr_pass`, the landmark test against
+  `(eps + radius)^2`, the member scan in RBC_LANES chunks from the ragged
+  tail backward with its `cur_r_dist - min_warp_dist > eps` exit) are
+  replayed with `eps_dist_sq`'s fold; the brute arm keeps
+  `eps_unexp_neigh_kernel`'s fold (the query value unflushed). Then
+  `weak_cc` as the one-thread schedule in row order (the same fixed point;
+  the pass count `n_iter_` is that schedule's and no column hashes it) and
+  `make_monotonic` plus the scikit-learn relabel. One batch of every row.
+  `sample_weight` and an explicit `max_mbytes_per_batch` are refused by
+  name. Exported as `dbscan_fit`. The `dbscan-brute-l1` and
+  `dbscan-weighted` twins wait for a GPU record that carries them.
+- The sabotage arm is the estimators family's `-D MOJOLEARN_HOST_SABOTAGE=1`,
+  under which the DBSCAN core test asks one neighbor more and the Gram reduce walks its chunks descending. On the Apple M4, production
+  and sabotage builds of the binding compiled and, on a 3000 x 6 draw, the
+  sabotage build moved every PCA, tSVD, OLS and ridge output (the mean is
+  inert by construction, it has no Gram); production runs twice gave the
+  same bytes and agreed with numpy at 1e-6 relative. That is a plumbing
+  check, not identity.
+- The seven-runner gate (run 34869406147) refused ols and ridge on every
+  runner at `_mojolearn.column_mean_f64`, the centering helper
+  `linear_model.py` reaches through `_buffer._native` before the estimators
+  host binding is called; on a CPU-only install that resolves to the core
+  host binding, which did not carry it. `column_mean_f64`,
+  `center_columns_f32` and `scale_rows_f32` now live in
+  `bindings/host_helpers.mojo` (the base binding's definitions on the
+  calling thread, the same chains in the same order) and are exported by
+  `_mojolearn_core_host`. The Mac reproduced the refusal first (the same
+  ImportError, by name, with the CPU-only path forced through
+  `MOJOLEARN_HOST_DIR` on a worktree with no GPU set) and, with the fix,
+  all nine lane bodies on the `base` fixture read IDENTICAL against the
+  three 47-lane GPU columns (train parts and infer hash, one fixture, one
+  repeat; a witness, not the gate).
+- The test module is `cd python && python3 -m mojolearn.tests.test_cpu_training_e`.
+
+To measure, on each GPU box and on a CPU-only box (the CPU identity gate
+runs the same steps on seven runners), the commands are these.
+
+    python3 tools/identity_break.py --lanes knn,knn-clf,knn-reg,pca,pca-whiten,tsvd,ols,ridge,dbscan --json <box>.json
+    python3 tools/identity_break.py --diff <apple.json> <nvidia.json> <amd.json> <cpu.json> \
+        --require-columns 4 --lanes knn,knn-clf,knn-reg,pca,pca-whiten,tsvd,ols,ridge,dbscan
+    MOJOLEARN_HOST_OUTDIR=<sab> MOJOLEARN_BUILD_EXTRA_DEFINES="-D MOJOLEARN_HOST_SABOTAGE=1" sh bindings/build_estimators_host.sh
+    MOJOLEARN_HOST_DIR=<sab> MOJOLEARN_HOST_ALLOW_SABOTAGE=1 python3 tools/identity_break.py --lanes pca,pca-whiten,tsvd,ols,ridge,dbscan --json <cpu-sab>.json
+    (the diff of <cpu-sab>.json against the three GPU columns must exit non-zero with DIVERGENT)
+
+The three 2026-09-14 47-lane GPU columns already carry every one of these
+lanes, so no new GPU record is needed for the first diff.
