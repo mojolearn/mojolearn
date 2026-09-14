@@ -501,3 +501,22 @@ among owners instead of concentrated on the first GPU. On two GPUs this
 halves the first GPU's reduction-scratch allocation. Model parameters, full
 gradient replicas and activations still require further memory partitioning.
 The replicated optimizer comparison path retains its original root reduction.
+
+
+### H100 / RTX 5090 replay evidence
+
+A build from the exact frozen H100 source tree passes all 16 corresponding
+receipt groups on two RTX 5090s: pooled neural optimizers, byte-LM replay,
+MLP/Samba (including clipping and attention/dropout), boosting, wider Gram
+and tall full PCA. Complete structured receipts match, excluding only prose
+scope; raw pointwise histogram dump bytes and pointwise/OrderedRMSE trace
+records are also compared directly. Evidence and exact source identities:
+`bench/results/multi_gpu/2026-09-14/rtx5090-pooled-replay/`.
+
+Both GPU types are NVIDIA. These fixtures establish neither new AMD/Apple
+qualification nor throughput scaling or full pooled-model capacity.
+
+The frozen-source record precedes the distributed gradient-scratch change.
+That change separately passes RTX 5090 ownership, 2/3/5/8-logical-shard replay
+and recovery gates, retaining the earlier output hashes; its evidence is in
+`bench/results/multi_gpu/2026-09-14/byte-gradient-pool-rtx5090/`.

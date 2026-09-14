@@ -1,0 +1,16 @@
+14398 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x10c340000000, nodemask=1)
+14566 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x107b00000000, nodemask=1)
+14738 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x121140000000, nodemask=1)
+PASS two-level FeatureFreq 65 7 False
+14904 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x301a40000000, nodemask=1)
+14904 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x18b040000000, nodemask=2)
+15075 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1208c0000000, nodemask=1)
+15075 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1a2240000000, nodemask=2)
+PASS two-level FeatureFreq 65 7 True
+15242 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x731940000000, nodemask=1)
+15413 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3007c0000000, nodemask=1)
+PASS two-level FeatureFreq 513 7 False
+15579 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x73da40000000, nodemask=1)
+15579 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x787f40000000, nodemask=2)
+15751 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x33e100000000, nodemask=1)
+PASS two-level FeatureFreq 513 7 True

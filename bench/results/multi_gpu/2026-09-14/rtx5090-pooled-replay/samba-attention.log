@@ -1,0 +1,32 @@
+3174 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x531dc0000000, nodemask=1)
+3174 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5bc680000000, nodemask=2)
+3342 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x327340000000, nodemask=1)
+3343 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x301b80000000, nodemask=1)
+3342 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x593380000000, nodemask=2)
+3426 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x536f80000000, nodemask=1)
+3431 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x18f940000000, nodemask=2)
+3471 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3bfdc0000000, nodemask=2)
+3513 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1833c0000000, nodemask=2)
+3557 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7b0b00000000, nodemask=2)
+3599 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1b6100000000, nodemask=2)
+3599 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x704bc0000000, nodemask=1)
+3642 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7ab400000000, nodemask=2)
+3684 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x182800000000, nodemask=2)
+{
+  "status": "PASS",
+  "checks": [
+    "Samba_attention_dropout_K3_two_GPU_replay",
+    "Samba_checkpoint_device_migration"
+  ],
+  "hashes": [
+    "e43b8b7614f681bdf56e9f7ecb62ac79151fe6808469e329f08b950c6f4cb939",
+    "0cf693300747aff6c54b2541e5e1f8b1e39c7e71ab974d6a4449fc127e5b3c82"
+  ],
+  "state_hashes": [
+    "b7c08e4aa6517d7946b4451215abc737e4d3aa78bb3bd1918741e9047f1fbcfc",
+    "5caea1bd7fa45c493fe540ee2b1a142626d489e1c3aacc4324c378527827ceef"
+  ],
+  "corpus_sha256": "2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8",
+  "scope": "Two devices; no cross-vendor or speed claim"
+}
+
