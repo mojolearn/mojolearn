@@ -84,6 +84,15 @@ def main():
             equal(model.kneighbors(Q), replay.kneighbors(Q), digest)
             checks.append(dict(estimator='one-device-replay', features=d, sha256=digest.hexdigest()))
             print('PASS reference one-device replay', d, flush=True)
+    # Overflow produces NaN distances: native membership uses radix bits,
+    # while its subsequent host insertion sort compares floats. Gate both.
+    X = np.full((41, 3), np.float32(1e20), dtype='<f4')
+    model = NearestNeighbors(n_neighbors=13, numeric_mode='identical').fit(X)
+    with ReferenceShardedNeighbors(model, devices=(0, 1), reference_rows_per_shard=7) as pool:
+        digest = hashlib.sha256()
+        equal(model.kneighbors(X[:1]), pool.kneighbors(X[:1]), digest)
+        checks.append(dict(estimator='overflow-distance-order', sha256=digest.hexdigest()))
+        print('PASS reference overflow-distance order', flush=True)
     args.report.write_text(json.dumps(dict(status='PASS', checks=checks,
         corpus_sha256=hashlib.sha256(corpus).hexdigest(),
         scope='Two H100s; reference shards capped at seven rows; original bit-key merge and vote halves; no beyond-80GiB measurement'), indent=2)+'\n')

@@ -40,6 +40,21 @@ def _merge(parts, ranges, n_queries, k):
         chosen = heapq.nsmallest(k, candidates)
         if len(chosen) != k:
             raise RuntimeError('reference shards returned too few neighbors')
+        # The native selector ranks composite keys, then estimator.mojo applies
+        # this host insertion sort. Its float comparisons intentionally differ
+        # from radix ordering for signed zero and NaNs. Preserve both stages.
+        for a in range(1, k):
+            token = chosen[a]
+            dv = struct.unpack_from('<f', values[token[1]], token[2])[0]
+            b = a - 1
+            while b >= 0:
+                previous = chosen[b]
+                dbits = struct.unpack_from('<f', values[previous[1]], previous[2])[0]
+                if dbits < dv or (dbits == dv and previous[3] <= token[3]):
+                    break
+                chosen[b+1] = previous
+                b -= 1
+            chosen[b+1] = token
         for j, (_, rank, offset, index) in enumerate(chosen):
             # Float bits travel unchanged from the winning GPU slot.
             memcopy(db + (row * k + j) * 4,
