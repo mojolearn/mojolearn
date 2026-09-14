@@ -93,3 +93,43 @@ def fit_forest(estimator, X, y, *, devices=(0,), trees_per_shard=1):
     result._resident_forest = None
     estimator.__dict__ = result.__dict__.copy()
     return estimator
+
+
+def fit_isolation_forest(estimator, X, *, devices=(0,), sample_weight=None):
+    """Build tree ranges with original global seeds; retain full-data scoring.
+
+    Each GPU receives the full training matrix. Tree scratch is partitioned,
+    but the assembled model still lives on the root. Use score_isolation_forest
+    for distributed rebuilding during prediction (the current estimator refits
+    its forest on every score call).
+    """
+    from ._iforest_impl import IsolationForest
+    if type(estimator) is not IsolationForest:
+        raise TypeError('requires mojolearn.IsolationForest')
+    if estimator.numeric_mode not in (None, 'identical'):
+        raise ValueError('parallel IsolationForest requires IDENTICAL')
+    if sample_weight is not None:
+        raise NotImplementedError('IsolationForest does not support sample_weight')
+    pool = DevicePool(devices, cooperative=True)
+    try:
+        result = pool.map([('iforest_fit', estimator, (X,))])[0]
+    finally:
+        pool.close()
+    estimator.__dict__ = result.__dict__.copy()
+    return estimator
+
+
+def score_isolation_forest(estimator, X, *, devices=(0,), method='score_samples'):
+    """Rebuild trees concurrently and use the original ordered score/threshold."""
+    from ._iforest_impl import IsolationForest
+    if type(estimator) is not IsolationForest:
+        raise TypeError('requires mojolearn.IsolationForest')
+    if estimator.numeric_mode not in (None, 'identical'):
+        raise ValueError('parallel IsolationForest requires IDENTICAL')
+    if method not in ('score_samples', 'decision_function', 'predict'):
+        raise ValueError('method must be score_samples, decision_function or predict')
+    pool = DevicePool(devices, cooperative=True)
+    try:
+        return pool.map([('iforest_score', estimator, (X, method))])[0]
+    finally:
+        pool.close()

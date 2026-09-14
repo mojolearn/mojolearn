@@ -622,6 +622,7 @@ def build_isolation_trees_global_kernel(
     stack: MutPointer[Int32, MutAnyOrigin],
     xorwow_sequence_table: MutPointer[UInt32, MutAnyOrigin],
     xorwow_offset_table: MutPointer[UInt32, MutAnyOrigin],
+    global_tree_start: Int32 = 0,
 ):
     """`build_isolation_trees_global_kernel<T>` (`:245-340`): `tree_id =
     blockIdx.x`; `curand_init(seed, tree_id, 0)`; thread 0 samples rows
@@ -650,7 +651,7 @@ def build_isolation_trees_global_kernel(
     var rng_state = curandStateXORWOW.zero()
     curand_init(
         seed,
-        UInt64(tree_id),
+        UInt64(tree_id + Int(global_tree_start)),
         UInt64(0),
         rng_state,
         xorwow_sequence_table,

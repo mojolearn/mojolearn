@@ -96,6 +96,9 @@ from checks.numerics import (
     identical_pow,
 )
 from ensemble.host_layout import colmajor_ftz_from_rowmajor_f32
+from std.os import getenv
+from max.algorithm import sync_parallelize
+from metrics.checks.device_io import upload_i32
 
 
 # ---------------------------------------------------------------------------
@@ -558,6 +561,8 @@ struct IsolationForest(Movable):
         mut trace: IdentityTrace,
         knobs: IFLaunchKnobs = IFLaunchKnobs.default(),
         src_addr: Int = 0,
+        global_tree_start: Int = 0,
+        distribute: Bool = True,
     ) raises:
         """`IsolationForest::fit` (`:70-140`): resolve `n_sampled_rows`,
         `max_depth`, `n_sampled_features`, `c_normalization`,
@@ -617,6 +622,18 @@ struct IsolationForest(Movable):
         model.global_feature_indices = _poisoned_i32(
             ctx, n_trees * n_sampled_features, pad, poison
         )
+
+        if distribute:
+            var setting = String(getenv("MOJOLEARN_IFOREST_DEVICE_COUNT"))
+            if setting != "" and setting != "1":
+                var count = Int(setting)
+                if count < 1 or count > 64:
+                    raise Error("parallel IsolationForest requires 1..64 devices")
+                if trace.enabled:
+                    raise Error("parallel IsolationForest does not export diagnostic traces")
+                _fit_tree_shards(ctx, input_colmajor, src_addr, n_rows, n_cols,
+                                 self.params, model, knobs, count)
+                return
 
         # build_isolation_forest_global (isolation_tree_builder.cuh:377-420)
         var data: DeviceBuffer[DType.float32]
@@ -684,6 +701,7 @@ struct IsolationForest(Movable):
             stack.unsafe_ptr(),
             tables.sequence.unsafe_ptr(),
             tables.offset.unsafe_ptr(),
+            Int32(global_tree_start),
             grid_dim=(n_trees, 1, 1),
             block_dim=(knobs.build_tpb, 1, 1),
         )
@@ -982,3 +1000,108 @@ def predict(
     _ = scores^
     _ = preds^
     return out^
+
+
+@fieldwise_init
+struct IFTreeShard(Movable):
+    var ctx: DeviceContext
+    var model: IsolationForestModel
+    var params: IF_params
+    var first: Int
+
+    def __deinit__(deinit self):
+        _ = self.model^
+        try:
+            self.ctx.synchronize()
+        except:
+            pass
+        _ = self.ctx^
+
+
+def _copy_tree_part[dt: DType](ctx: DeviceContext,
+    mut source: DeviceBuffer[dt], mut destination: DeviceBuffer[dt],
+    first: Int, size: Int,
+) raises:
+    var a = source.create_sub_buffer[dt](0, size)
+    var b = destination.create_sub_buffer[dt](first, size)
+    a.enqueue_copy_to(b)
+    ctx.synchronize()
+
+
+def _fit_tree_shards(ctx: DeviceContext, input_colmajor: List[Float32],
+    src_addr: Int, rows: Int, columns: Int, params: IF_params,
+    mut model: IsolationForestModel, knobs: IFLaunchKnobs, count: Int,
+) raises:
+    """Build whole trees concurrently; gather bytes, never averaged models.
+
+    Every worker retains full training data. The assembled model still fits
+    on the root; only tree-build scratch is partitioned. Diagnostic trace
+    mode stays on the original path and is refused by the parallel entry.
+    """
+    if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+        raise Error("parallel IsolationForest requires IDENTICAL")
+    var active = min(count, params.n_estimators)
+    ctx.synchronize()
+    var shards = List[IFTreeShard]()
+    for rank in range(active):
+        var first = params.n_estimators * rank // active
+        var width = params.n_estimators * (rank + 1) // active - first
+        var device = DeviceContext(device_id=rank)
+        var local = IsolationForestModel(device)
+        var config = params.copy()
+        config.n_estimators = width
+        shards.append(IFTreeShard(device^, local^, config, first))
+    var failures = List[Int](length=active, fill=0)
+    var sp = rebind[MutPointer[IFTreeShard, MutUntrackedOrigin]](shards.unsafe_ptr())
+    var fp = rebind[MutPointer[Int, MutUntrackedOrigin]](failures.unsafe_ptr())
+    # Keep the immutable host input alive until all tasks join. The native
+    # binding normally lends a row-major pointer instead of this list.
+    var xp = rebind[MutPointer[Float32, MutUntrackedOrigin]](input_colmajor.unsafe_ptr())
+    var size = len(input_colmajor)
+    def task(rank: Int) {imm sp, imm fp, imm xp, imm size, imm src_addr, imm rows, imm columns, imm knobs}:
+        try:
+            ref shard = sp[rank]
+            var data = List[Float32]()
+            if src_addr == 0:
+                for i in range(size):
+                    data.append(xp[i])
+            var forest = IsolationForest(shard.params)
+            var trace = IdentityTrace.disabled()
+            forest.fit(shard.ctx, data, rows, columns, shard.model, trace,
+                       knobs, src_addr, shard.first, False)
+        except:
+            fp[rank] = 1
+    if active == 1:
+        task(0)
+    else:
+        sync_parallelize(task, active)
+    for rank in range(active):
+        if failures[rank] != 0:
+            raise Error("IsolationForest tree shard failed: " + String(rank))
+    model.tree_n_nodes_host = List[Int32]()
+    model.tree_max_depth_host = List[Int32]()
+    var offsets = List[Int32]()
+    for rank in range(active):
+        ref shard = shards[rank]
+        var width = shard.params.n_estimators
+        var nodes = width * model.max_nodes_per_tree
+        var first_node = shard.first * model.max_nodes_per_tree
+        _copy_tree_part(shard.ctx, shard.model.node_feature, model.node_feature, first_node, nodes)
+        _copy_tree_part(shard.ctx, shard.model.node_threshold, model.node_threshold, first_node, nodes)
+        _copy_tree_part(shard.ctx, shard.model.node_left, model.node_left, first_node, nodes)
+        _copy_tree_part(shard.ctx, shard.model.node_right, model.node_right, first_node, nodes)
+        _copy_tree_part(shard.ctx, shard.model.global_feature_indices, model.global_feature_indices,
+                        shard.first * model.n_features_per_tree, width * model.n_features_per_tree)
+        _copy_tree_part(shard.ctx, shard.model.global_tree_n_nodes, model.global_tree_n_nodes, shard.first, width)
+        _copy_tree_part(shard.ctx, shard.model.global_tree_max_depth, model.global_tree_max_depth, shard.first, width)
+        for tree in range(width):
+            model.tree_n_nodes_host.append(shard.model.tree_n_nodes_host[tree])
+            model.tree_max_depth_host.append(shard.model.tree_max_depth_host[tree])
+            offsets.append(Int32((shard.first + tree) * model.max_nodes_per_tree))
+    # Child indices are local to a tree; only the tree's base offset changes.
+    var uploaded = upload_i32(ctx, offsets)
+    _copy_tree_part(ctx, uploaded, model.global_tree_offsets, 0, len(offsets))
+    _ = uploaded^
+    _ = shards^
+    ctx.synchronize()
+    model.fitted = True

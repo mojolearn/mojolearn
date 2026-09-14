@@ -77,6 +77,19 @@ def execute(request):
         X, y, kwargs = args
         state.fit(X, y, **kwargs)
         return state
+    if operation in ('iforest_fit', 'iforest_score'):
+        from ._svm_impl import _extension
+        native = _extension('identical')
+        if (not callable(getattr(native, 'iforest_parallel_available', None))
+                or native.iforest_parallel_available() != 1):
+            raise ImportError('rebuild SVM binding for parallel IsolationForest')
+        if operation == 'iforest_fit':
+            state.fit(*args)
+            return state
+        X, method = args
+        if method not in ('score_samples', 'decision_function', 'predict'):
+            raise ValueError('invalid IsolationForest score operation')
+        return getattr(state, method)(X)
     if operation == 'solver_fit':
         from ._backend import binding
         native = binding('_mojolearn_solver')
