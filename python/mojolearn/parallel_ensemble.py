@@ -152,3 +152,24 @@ def fit_ordered_rmse(estimator, X, y, *, permutation, devices=(0,), sample_weigh
         pool.close()
     estimator.__dict__ = result.__dict__.copy()
     return estimator
+
+
+def fit_feature_freq(estimator, X, y, *, devices=(0,), sample_weight=None):
+    """Distribute both levels' greedy histograms after original CTR generation.
+
+    Candidate generation, source IDs, level transitions and leaf estimates
+    retain their original order. Root candidate/data/model state is replicated.
+    """
+    from .ensemble import ExperimentalTwoLevelFeatureFreq
+    if type(estimator) is not ExperimentalTwoLevelFeatureFreq:
+        raise TypeError('requires mojolearn.ExperimentalTwoLevelFeatureFreq')
+    if estimator.numeric_mode not in (None, 'identical'):
+        raise ValueError('parallel FeatureFreq requires IDENTICAL numeric mode')
+    pool = DevicePool(devices, cooperative=True)
+    try:
+        result = pool.map([('gbdt_fit', estimator,
+            (X, y, dict(sample_weight=sample_weight)))])[0]
+    finally:
+        pool.close()
+    estimator.__dict__ = result.__dict__.copy()
+    return estimator
