@@ -359,7 +359,7 @@ per family.
 | svm | `_mojolearn_svm_host.so` | `_mojolearn_svm` | svc, iforest | SVC, IsolationForest (svc) | tools/identity_break.py and tools/classical_host_gate.py (cpu-identity-gate.yml) | no, `bindings/build_svm_host.sh` |
 | trees | `_mojolearn_trees_host.so` | `_mojolearn_trees` | et-clf, et-reg | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_trees_host.sh` |
 | rf | `_mojolearn_rf_host.so` | `_mojolearn_rf` | rf-clf, rf-reg | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_rf_host.sh` |
-| gbdt | `_mojolearn_gbdt_host.so` | `_mojolearn_gbdt` | gbdt-symmetric | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_gbdt_host.sh` |<!--/fact-->
+| gbdt | `_mojolearn_gbdt_host.so` | `_mojolearn_gbdt` | gbdt-symmetric, gbdt-rmse | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_gbdt_host.sh` |<!--/fact-->
 
 ## The import question, measured
 

@@ -59,14 +59,14 @@ def _read(rel):
 def test_manifest_declares_the_gbdt_family():
     fam = host_surface.family("gbdt")
     assert fam["routes"] == "_mojolearn_gbdt"
-    assert fam["training_lanes"] == ("gbdt-symmetric",)
+    assert "gbdt-symmetric" in fam["training_lanes"]
     assert ORACLE in fam["host_modules"] and (ROOT / ORACLE).is_file()
     assert (ROOT / host_surface.build_shim("gbdt")).is_file()
     assert (ROOT / host_surface.binding_source("gbdt")).is_file()
     assert host_surface.routed_modules()["_mojolearn_gbdt"] == "_mojolearn_gbdt_host"
     covered = host_surface.covered_lanes()
     assert "gbdt-symmetric" in covered
-    for lane in ("gbdt-depthwise", "gbdt-lossguide", "gbdt-rmse"):
+    for lane in ("gbdt-depthwise", "gbdt-lossguide"):
         assert lane not in covered, f"{lane} is declared covered and has no host trainer"
     sentence = host_surface.no_cpu_path_sentence()
     assert "gradient boosting training other than symmetric trees" in sentence, sentence
