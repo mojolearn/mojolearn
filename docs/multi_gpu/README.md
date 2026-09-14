@@ -588,7 +588,8 @@ with OffloadedByteLanguageModelTrainer.from_checkpoint(
 
 Exactly one physical device is required. Logical microbatch count, order,
 shape, optimizer configuration and corpus bytes must agree with the pooled
-run. Each decoder layer plus the embedding/head must fit the GPU, and host
+run. One decoder layer with its training buffers, or one optimizer chunk, plus
+the embedding/head must fit the GPU, and host
 memory must hold the full state, gradient sums, saved inputs and transaction
 copies. This is a capacity/replay path with extra transfers and recomputation;
 no throughput claim is made. It does not offload a single oversized layer.
@@ -609,3 +610,13 @@ The earlier parallel-driver baseline also has a separate
 sixteen parallel lanes on two MI300X GPUs and two H100s match single-device
 AMD/Apple replay for 144 training cells. That frozen record predates the new
 layer-pooling/offload implementations and does not qualify their added paths.
+
+The new offload path passes twelve H100 shape/logical-count groups, including
+eight logical shards, plus native and injected-failure checks. Its
+958,746,624-parameter fixture matches two-GPU pooled P/M/V, flags, gradients
+and losses for two consecutive updates of three logical microbatches each.
+Observed GPU-memory samples peak at 2621 MiB on the offload device versus
+21551 MiB per pooled H100. Full state resides in host RAM. RunPod had no
+RTX5090 stock for this leg, so actual RTX5090 and AMD/Apple offload execution
+remain unqualified. These measurements establish capacity and exact replay
+for the recorded fixtures, with no throughput or all-estimator pooling claim.

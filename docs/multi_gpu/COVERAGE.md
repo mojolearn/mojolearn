@@ -20,8 +20,11 @@ state construction/export requires full host arrays. SmallMLP
 and Samba use host-staged disjoint optimizer ranges after the original global
 clip. Their gradient computations still require a complete model per worker.
 Forests replicate training data; KMeans retains full-data work on the root.
-These remaining allocations limit capacity. A model or dataset that exceeds one GPU's
-memory needs additional partitioning and a memory-bounded replay mechanism.
+These remaining allocations limit capacity. The new byte-LM offload driver
+matches two updates of the 958.7M-parameter pooled model on one H100, with
+2621 MiB observed on its selected GPU and full state on the host. Actual RTX5090
+offload execution is still owed because RunPod had no stock. Other model/data paths
+still need additional partitions or replay mechanisms.
 Other neural model capacities and performance scaling remain unqualified. A separate
 reference-sharded KNN path has passed a 96 GiB host-staged index gate on two
 80 GB H100s; it does not keep the full index resident in pooled VRAM. ARIMA now

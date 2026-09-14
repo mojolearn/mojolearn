@@ -1,0 +1,3 @@
+[15:39:47 attn-pod] creating mojolearn-attn-20260914_153947 (NVIDIA GeForce RTX 5090, runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04). THE BILL STARTS HERE.
+{"error":"create pod: There are no instances currently available","status":500}
+create failed (HTTP 500). CHECK https://console.runpod.io/pods for a pod named mojolearn-attn-20260914_153947.

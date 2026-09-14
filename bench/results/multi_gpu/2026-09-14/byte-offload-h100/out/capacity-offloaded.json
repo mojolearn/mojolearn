@@ -1,0 +1,68 @@
+{
+  "status": "PASS",
+  "mode": "offloaded",
+  "parameters": 958746624,
+  "shape": [
+    1,
+    1,
+    1536,
+    24,
+    6,
+    64,
+    6144,
+    28,
+    256
+  ],
+  "logical_shards": 3,
+  "corpus_sha256": "2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8",
+  "receipts": [
+    {
+      "step": {
+        "losses": [
+          5.545177459716797,
+          5.545177459716797,
+          5.545177459716797
+        ],
+        "completed_steps": 1,
+        "logical_shards": 3,
+        "reduction": "ordered_sum"
+      },
+      "hashes": {
+        "parameters": "a7c4dcda59acb5c1045ab779ae76c6cea7a7fca1835307edca161203b141e382",
+        "m": "2dba074ec869a58887e76c70fbfd0ac386c43948b5d629e95e98ed5a18e6642e",
+        "v": "8fa679dae0406ce928185fb0239f40c4deaa811f0e2c547db0aee9ae2eb5e6bb",
+        "flags": "5817bc65840cf706e658b883fc8a08c91551deb915ac9f5844e0cf807cf0b705",
+        "gradient": "f6c732a9507e581cf7d1b907262d99739153ced64cc39568176da6633d46c675",
+        "losses": "613e68d9e1a06f064b9bfc22b1a8b8e230d005de7cd3a39eaa4fc571d2c7560b"
+      }
+    },
+    {
+      "step": {
+        "losses": [
+          23.617816925048828,
+          23.617816925048828,
+          23.617816925048828
+        ],
+        "completed_steps": 2,
+        "logical_shards": 3,
+        "reduction": "ordered_sum"
+      },
+      "hashes": {
+        "parameters": "aacd03b4d39d03165ffcd2a9904b719f16cd20942ec106320ef5847789d13fda",
+        "m": "d94824d9274f5eeb9f4fc89d4c40617855c250f94554542c84ea5fb2c7a861e6",
+        "v": "1f87d0bb213c6d50c41350e994b83f89480b034a90d85543327aa5dbebb6a141",
+        "flags": "5817bc65840cf706e658b883fc8a08c91551deb915ac9f5844e0cf807cf0b705",
+        "gradient": "48eb08b96cdd0ada62d750ab784dffc84c2275f7c6d463e4e0c328b28a8ae101",
+        "losses": "94b78e9b26c98ff61a2be9287886918aaecb702a778b077381483610c10cf084"
+      }
+    }
+  ],
+  "sampled_peak_mib": [
+    2621,
+    531
+  ],
+  "samples": 3494,
+  "elapsed_seconds": 351.40778761170805,
+  "hardware": "name, memory.total [MiB], driver_version\nNVIDIA H100 80GB HBM3, 81559 MiB, 580.126.09\nNVIDIA H100 80GB HBM3, 81559 MiB, 580.126.09\n",
+  "scope": "Capacity/identity fixture with uniform initialization; no learning-quality or throughput claim."
+}

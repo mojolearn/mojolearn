@@ -1,0 +1,36 @@
+2772 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3af9c0000000, nodemask=10)
+2772 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x108480000000, nodemask=5)
+{
+  "status": "PASS",
+  "checks": [
+    {
+      "layers": 1,
+      "logical_shards": 8,
+      "parameters": 10144,
+      "state_sha256": "9b2199d070a0eba962b1c38cac4e3714190b4f2562ee04c459c38c9a599cdeb4",
+      "gradient_sha256": "4cc6c1bf201057fd1cae295e4353971e56f39315636eb521b2cdb679d5237870",
+      "loss_sha256": "4fc6acfb4701b1672b7651eb7e363d0613418f96368006c4ac41058785e98c64",
+      "native_faults": false
+    },
+    {
+      "layers": 2,
+      "logical_shards": 8,
+      "parameters": 12096,
+      "state_sha256": "5d3b600801a30147298091176a4b9364916a2f528d779ea15019c874b818ce28",
+      "gradient_sha256": "d181110a38d2be6b4ff8df07f21b0602c20a36e7dd965c4b0a109cda9de5ba6e",
+      "loss_sha256": "cd9c8d9e9c0ce85c36896615f5ac3fc87355a6c0b7f95cef88c77e913f655703",
+      "native_faults": false
+    },
+    {
+      "layers": 3,
+      "logical_shards": 8,
+      "parameters": 25680,
+      "state_sha256": "906b3850b802d03f119b5797c0a0f1f0c2b10032086a000aa626683f4e1e9f5b",
+      "gradient_sha256": "e4f246c63840e7727d750be3601c61b67b2b753a4981fdc294cdcdc9bc5718c4",
+      "loss_sha256": "79035ef5de648cb4a12dd5b366b6ce0925e995630c915b6ec69a6bd6360972b6",
+      "native_faults": false
+    }
+  ],
+  "scope": "One-GPU host-offloaded replay exactly matches two-GPU model pooling and original ordered replay; checkpoint and failure recovery. No throughput claim."
+}
+

@@ -1,0 +1,18 @@
+{
+  "status": "PASS",
+  "small_receipt_groups": 9,
+  "fault_receipt_groups": 3,
+  "capacity_parameters": 958746624,
+  "capacity_steps": 2,
+  "logical_shards": 3,
+  "pooled_sampled_peak_mib": [
+    21551,
+    21551
+  ],
+  "offloaded_sampled_peak_mib": [
+    2621,
+    531
+  ],
+  "original_byte_receipt_unchanged": true,
+  "scope": "H100 offload versus H100 two-GPU pool and earlier RTX5090 pooled small-model receipts. Offload itself has not run on RTX5090 or AMD/Apple."
+}
