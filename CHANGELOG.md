@@ -3,6 +3,40 @@
 This file records release-level changes, not the development diary. Git history and archived evidence
 contain the detailed investigation record.
 
+## 0.8.6 (unreleased 2026-09-14)
+
+Packaging release. Nothing in a kernel moves; what changes is what the two wheels carry and
+what a user can check from a pip install. The freeze checks of docs/RELEASE_CHECKLIST.md,
+the per-vendor GPU-box build and the byte compare of the host bindings across the three
+Linux legs are OWED before this heading reads published.
+
+- Every host (CPU) binding the manifest declares ships in both wheels under `mojolearn/host/`,
+  namely the byte LM's, the forest's, the tokenizer's and the seven routed families (core,
+  linalg, estimators, tsa, solver, svm, trees), ten in all. 0.8.5 carried the byte LM's alone. The
+  list is read from `python/mojolearn/host_surface.py` by the two wheel builders, the Linux
+  packer, both smokes and the Linux admission; `packaging/check_ext_lists.py` (and its
+  `--host` mode, which needs no built binary) fails any of them that carries a host list of
+  its own. Each binding builds pinned to the CPU kernel-matrix column with no accelerator
+  target, reads back as vendor cpu, IDENTICAL and column cpu, and the packer refuses the wheel
+  when any leg's copy of any binding differs by a byte from another leg's.
+- The Linux copies of the host bindings now get a RUNPATH toward the staged MAX runtime and
+  join the closure check (`packaging/linux/stage_libs.py` reached only the tier directories;
+  the 0.8.5 Linux wheel's byte LM host binding shipped with whatever RUNPATH the build box
+  left in it, and no Linux qualification of that release loaded it).
+- `python -m mojolearn verify` works from a pip install because the wheel carries
+  `mojolearn/reference_cards/` and a copy of `tools/identity_trace_diff.py`. The reference
+  card is still the deliberate placeholder, so `verify` exits 5 and says so rather than
+  failing to find its comparator; producing the card is the two-box procedure in
+  docs/VERIFY.md.
+- New `python -m mojolearn identity`. It runs the identity_break lanes on the local box under
+  the identical tier and diffs the column against the three training GPU columns shipped in
+  the wheel (the Apple M4, NVIDIA H100 and AMD MI300X columns of the record the manifest
+  names, `bench/results/identity_break/2026-09-14_47-lanes`, copied to
+  `mojolearn/identity_columns/<record>/` with a commit witness), requiring IDENTICAL x4 on
+  every train cell it ran and IDENTICAL x4 or N/A on the infer and model cells. On a CPU-only
+  install only the lanes with a CPU training path run. `--check` resolves the harness, the
+  columns and the witness and runs nothing. Exit codes follow `verify`. Needs numpy.
+
 ## 0.8.5 (published 2026-09-14)
 
 Linux x86-64 wheel (CUDA sm_89, CUDA sm_90a, HIP gfx942) and macOS arm64 wheel, both from
