@@ -203,9 +203,9 @@ def ordered_sum_gradients(parts):
 class ParallelNeuralTrainer:
     """Ordered multi-GPU gradients for SmallMLPTrainer and SambaStack.
 
-    Workers evaluate frozen snapshots concurrently. Gradient columns and
-    optimizer ranges are distributed across the selected GPUs; the first GPU
-    retains the original complete-registry clipping operation. All owners join
+    Workers evaluate frozen snapshots concurrently. Gradient columns, whole
+    clipping tensors and optimizer ranges are distributed across the selected
+    GPUs; the first GPU computes the original small cross-tensor norm. All owners join
     before publishing the owner state. Host transport
     preserves bytes. This trades
     transport cost for reuse of the existing public kernels and optimizer.
@@ -273,8 +273,8 @@ class ParallelNeuralTrainer:
                 update_state = snapshot
                 if self._operation == 'samba_gradient':
                     update_state = dict(snapshot, rng=self.model.generator.state_dict())
-                # The cooperative worker partitions gradient columns and updates;
-                # the original complete-registry clip stays on its first GPU.
+                # The cooperative worker owns gradient columns, whole clipping
+                # tensors and update ranges, retaining the original norm tree.
                 updated, retained, step = self._update_pool.map([(
                     self._operation.replace('_gradient', '_update'), update_state,
                     [part[1] for part in results])])[0]

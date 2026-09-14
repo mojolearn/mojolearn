@@ -1,0 +1,33 @@
+7311 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x382f80000000, nodemask=2)
+7311 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x524700000000, nodemask=1)
+7488 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x705600000000, nodemask=1)
+7487 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x70c900000000, nodemask=1)
+7587 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x315480000000, nodemask=1)
+7638 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x106380000000, nodemask=1)
+7638 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x78e3c0000000, nodemask=2)
+7688 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x537dc0000000, nodemask=1)
+7738 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x12c7c0000000, nodemask=1)
+7738 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1a5800000000, nodemask=2)
+7788 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1bdd00000000, nodemask=2)
+7788 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x70aec0000000, nodemask=1)
+7838 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x50d6c0000000, nodemask=1)
+7838 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x797cc0000000, nodemask=2)
+7888 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x301c00000000, nodemask=1)
+{
+  "status": "PASS",
+  "checks": [
+    "Samba_K3_two_GPU_replay",
+    "Samba_checkpoint_device_migration"
+  ],
+  "hashes": [
+    "f4825b3f87f5c316b74d9923c37ff1550591288d161ecc197622f54731a7fdd3",
+    "2dd859e954ac49017b766051825da7f7cbc3d5b80b3c71a9e4a5e5a72bdacdaa"
+  ],
+  "state_hashes": [
+    "0fc82653852c7be9886fccbb937465bf15e2dd41323de9ab2549b5c7682fddad",
+    "a05a6ab92a4cbf7a121b16392f74760f28e9222b951c35dbb8fcd6e6f0d290a9"
+  ],
+  "corpus_sha256": "2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8",
+  "scope": "Two devices; no cross-vendor or speed claim"
+}
+

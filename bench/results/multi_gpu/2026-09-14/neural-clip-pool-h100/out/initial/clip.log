@@ -1,0 +1,12 @@
+5368 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x19eec0000000, nodemask=2)
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/parallel_clip_check.py", line 104, in <module>
+    main()
+    ~~~~^^
+  File "/root/mojolearn/tools/parallel_clip_check.py", line 45, in main
+    assert invoke(right,offsets,b,2,maximum) == len(right)
+           ~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/parallel_clip_check.py", line 27, in invoke
+    return binding.clip_grad_norm(g.ctypes.data,offsets.ctypes.data,info.ctypes.data,[len(offsets)-1,maximum])
+           ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Exception: optimizer: NaN in clip.total_norm at flat index 0 REFUSED (row 39: NaN payloads are vendor-shaped; no stage may record one)

@@ -107,8 +107,9 @@ with ParallelNeuralTrainer.from_checkpoint(checkpoint, devices=(0,)) as replay:
 
 The supplied model is exclusively owned while wrapped. Workers receive a
 frozen snapshot and compute gradients concurrently. A cooperative worker
-partitions gradient columns and optimizer ranges across the selected GPUs,
-retains the original complete-registry clipping operation on the first GPU,
+partitions gradient columns, whole clipping tensors and optimizer ranges across
+the selected GPUs. The original cross-tensor norm uses only the small scalar
+registry on the first GPU. The worker
 and publishes the owner state after every owner succeeds. Parameters, moments and RNG state are restored on a failed step.
 Samba requires `accumulation_steps=1` because `logical_shards` owns the new
 accumulation contract. Every logical shard has its own loss normalization;
@@ -472,14 +473,15 @@ their global clipping and per-tensor optimizer contracts.
 ### Shared neural optimizer pooling
 
 `ParallelNeuralTrainer` uses a cooperative update worker across its selected
-devices. The first selected GPU retains the original ordered gradient sum and,
-when enabled, the original complete-registry global-norm clip. Disjoint
+devices. Gradient columns retain the original ordered sum. When clipping is
+enabled, whole tensors live on assigned GPUs while the first GPU computes the
+original cross-tensor norm from their canonical scalar results. Disjoint
 parameter/moment ranges then use the existing SGD, Adam or AdamW step with
 clipping disabled because it has already run. SGD ranges retain each original
 tensor's momentum flag, including when a tensor spans multiple devices.
 
 The update is host staged: each GPU allocates only its parameter, gradient and
-moment range during that phase. The full-gradient clipping allocation is freed
+moment range during that phase. The distributed clipping allocations are freed
 before those updates. Full host arrays stage all results, and caller state is
 published only after every worker succeeds. This is not persistent optimizer
 residency or pooled model weights/activations. SmallMLP and Samba gradient
@@ -639,8 +641,8 @@ The result stays in host staging until all GPU owners join successfully.
 Native admission scans the complete input before starting workers, and a
 failed worker cannot publish another worker's completed columns. Each GPU
 allocates only its local stacked inputs and reduction scratch; the host still
-holds full input/output arrays. The original global norm clip remains on the
-first device. This is another pooled allocation in the neural training path,
+holds full input/output arrays. Whole-tensor global-norm clipping is also
+distributed as described below. This is another pooled allocation in the neural training path,
 not a complete resident Samba model or a throughput claim.
 
 The two-H100 cloud gate passes 30 exact accumulation cases, post-compute
@@ -651,3 +653,27 @@ bitwise with 69393 MiB sampled peak per GPU. This establishes gradient-buffer
 component capacity, not a 1.5B-parameter training run. Full evidence and failed
 attempts are in
 `bench/results/multi_gpu/2026-09-14/neural-gradient-pool-h100/`.
+
+### Pooled neural clipping tensors
+
+Global-norm clipping assigns complete registry tensors to GPU owners, keeping
+ each tensor's original sum-of-squares contraction length and reduction tree.
+The first GPU receives only the canonical per-tensor scalar vector and runs
+the existing square-root, cross-tensor dot, square-root and coefficient code.
+Every owner scales with the original kernel. This avoids a complete flat
+gradient allocation on the first GPU during clipping. Norm computation is
+currently sequential across owners; no throughput gain is claimed.
+
+Host staging publishes gradients and norm/coefficient only after all owners
+succeed. One tensor and its original workspace must fit its owner, and the
+complete gradient remains in host RAM. Samba already stages each block's
+forward/backward GPU work; these allocation changes do not qualify arbitrary
+model sizes. Full host replicas/IPC, the signed-int32 registry limit, individual
+block and activation sizes, and large-checkpoint support remain capacity
+constraints requiring separate gates.
+
+Two-H100 production and post-scale fault builds pass all 45 exact clipping
+fixtures, optimizer/accumulation checks and MLP/Samba replay checks. Caller
+canaries survive either owner's injected failure and recovery is exact.
+`bench/results/multi_gpu/2026-09-14/neural-clip-pool-h100/` retains the initial
+lifetime failure, corrected source, full receipts and comparison logs.

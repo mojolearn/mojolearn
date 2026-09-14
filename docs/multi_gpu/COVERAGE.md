@@ -17,8 +17,10 @@ driver run out of memory on one. Nine new same-source H100/5090 groups match
 complete state, gradient and loss hashes.
 Each individual layer and embedding/head must still fit an owner, and portable
 state construction/export requires full host arrays. SmallMLP
-and Samba use host-staged disjoint optimizer ranges after the original global
-clip. Their gradient computations still require a complete model per worker.
+and Samba use host-staged disjoint gradient columns and optimizer ranges.
+Clipping places whole tensors on owners and retains the original small
+cross-tensor norm on the first GPU. Their gradient computations still require
+a complete host model per worker; Samba stages GPU work one block at a time.
 Forests replicate training data; KMeans retains full-data work on the root.
 These remaining allocations limit capacity. The new byte-LM offload driver
 matches two updates of the 958.7M-parameter pooled model on one H100, with
@@ -50,7 +52,7 @@ implementations still require their own AMD/Apple qualification.
 | --- | --- | --- |
 | SmallByteLanguageModelTrainer / LanguageModelTrainer | Replica training with pooled optimizer/reduction buffers; separate layer-owned model trainer with RTX 5090 capacity and H100/5090 ordered-replay gates; host-offloaded single-GPU replay | Broader shapes; RTX5090 and AMD/Apple qualification of host-offloaded replay; eight-device qualification |
 | SmallMLPTrainer | Fixed 8→16→3 model (195 parameters), concurrent microbatch gradients, ordered sum and host-staged optimizer ranges | Broader admitted batch/optimizer fixtures and scheduling qualification; larger model architectures are not part of this estimator |
-| SambaStack | Concurrent microbatch gradients, ordered sum, original global clipping and host-staged optimizer ranges | Broader configurations; resident state and model/activation pooling |
+| SambaStack | Concurrent microbatch gradients, pooled gradient columns, whole clipping tensors and optimizer ranges; original norm and ordered sum | End-to-end large-model capacity qualification; host/IPC memory, int32 registry limit, individual block/tensor/activation capacity and checkpoint size |
 | RandomForestClassifier / RandomForestRegressor | Global tree-ID ranges over full data | Larger forests; data partitioning |
 | ExtraTreesClassifier / ExtraTreesRegressor | Global tree-ID ranges over full data | Larger forests; data partitioning |
 | GradientBoosting / GradientBoostingClassifier / GradientBoostingRegressor | Greedy and pointwise feature groups; full histogram bytes and adapter contracts pass on two H100s | Broader configurations; root-state memory partitioning; cross-vendor qualification |
