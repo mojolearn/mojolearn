@@ -43,8 +43,8 @@ runs, nine fixtures, two repeats).
 What `step` runs: `mamba2_step` is `mamba2_block_forward` at l = 1 with the state carried
 (`mamba/impl/modules/mamba2.mojo:1258`, DEVIATION 786, "no arithmetic of its own"). The
 l = 1 path launches two kernels the prefill does not: `m2_step_upstream_kernel`
-(`mamba2.mojo` ~:1028) and `m2_buffer_update_kernel` (~:1134), which update the SSM
-state and the conv window IN PLACE. No barrier, block reduction or warp primitive appears
+(`mamba/impl/modules/mamba2.mojo:684`, launched at ~:1027) and `m2_buffer_update_kernel`
+(`:556`, launched at ~:1133), which update the SSM state and the conv window IN PLACE. No barrier, block reduction or warp primitive appears
 in the block forward, so the candidate is not a 64-lane fold; it is a read-modify-write
 on the carried state where one thread reads an element another thread has already
 written in the same launch, or two launches on the state that the profile assumes are
@@ -52,6 +52,19 @@ ordered. An active dt clamp does not change the code path (contract S9: the clam
 present at the default too), so the dt_limit value is not the cause; it changes the dt
 values, which changes which state elements are touched first. One cell in eighteen on
 AMD and none on NVIDIA is the shape of a launch-order race, not a fold.
+
+Read after writing the paragraph above: both kernels are one thread per element with
+disjoint writes (`m2_buffer_update_kernel` copies one window element per thread from the
+working buffers, `m2_step_upstream_kernel` owns one (b, h, p) row of the state per thread),
+so by inspection neither races with itself. Two things the reading did turn up. The step
+does NOT clamp dt (`mamba2.mojo:709`, "NO clamp in their step (:313)", upstream fidelity),
+so with an active dt_limit the prefill's state is built from clamped dt and the decode
+from unclamped dt; that is a property of the profile, not a race, but it is why this lane
+and not `mamba2` sees whatever moves. And the remaining suspects are the l = 1 conv-window
+read (`m2_conv_window_kernel`, launched at ~:943) and the synchronization between the last
+kernel of the step and the download of `y_step` on HIP, where a copy issued before the
+last launch retires would read a partially written output once in a while; one cell in
+eighteen on one vendor is that shape too.
 
 Probe, for the box that showed it (MI300X): run the `mamba2-dtlimit` and `mamba2` lanes
 on `base` with `--repeats 20`; if `step` moves again, dump `state.h` and the conv window
