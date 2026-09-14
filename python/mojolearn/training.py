@@ -30,13 +30,36 @@ from ._training_impl import (
     accumulation_is_aligned,
     clip_grad_norm_,
     cross_entropy,
+    embedding_backward,
+    embedding_forward,
+    linear_backward,
+    linear_forward,
     numeric_mode_used,
+    rms_norm_backward,
+    rms_norm_forward,
     vendor_used,
 )
 from ._samba_impl import SambaConfig, SambaStack
+
+# THE SIX TRAINING PRIMITIVES (workstream D, 2026-09-14). `embedding_forward`
+# and `embedding_backward` (the gather and the run-sorted ascending fold,
+# `embedding/checks/embedding_identical.mojo`), `rms_norm_forward` and
+# `rms_norm_backward`, `linear_forward` and `linear_backward` (torch's
+# Linear without bias through the certified GEMM at OP_NT, the clause 9.2
+# contraction for the weight gradient). They were exported by the shipped
+# training binding and implemented in `_training_impl.py` since the
+# transformer training lane and were omitted from this module and from
+# `__all__`, so no public path reached them (the claim-surface census,
+# docs/lanes/BRIEF_claim_surface_census_2026-09-14.md section 4). The
+# functions themselves are unchanged; this module now names them. The
+# same rule as the rest of this file: bounded primitives over explicit
+# float32 buffers, not an autograd framework.
 
 __all__ = ['SGD', 'Adam', 'AdamW', 'clip_grad_norm_', 'cross_entropy',
            'numeric_mode_used', 'vendor_used', 'ConstantLR',
            'WarmupLinearLR', 'WarmupCosineLR', 'Generator',
            'accumulate_grads', 'accumulation_is_aligned', 'SambaConfig',
-           'SambaStack']
+           'SambaStack',
+           'embedding_forward', 'embedding_backward',
+           'rms_norm_forward', 'rms_norm_backward',
+           'linear_forward', 'linear_backward']

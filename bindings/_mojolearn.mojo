@@ -381,6 +381,12 @@ def kmeans_fit_binding(
         7  n_init
         8  init
         9  metric
+       10  oversampling_factor   (float; OPTIONAL, cuVS's 2.0 when the list
+                                  holds ten values. 0.0 selects the classic
+                                  sequential k-means++ seeding, anything
+                                  positive the scalable k-means|| one;
+                                  routed from python/mojolearn/cluster.py
+                                  since 2026-09-14, workstream D)
 
     All four returns are given because a wrong answer here comes from the two
     scales, and a caller reproducing a result needs them. `inertia` is the
@@ -390,9 +396,9 @@ def kmeans_fit_binding(
     cost. This docstring used to say "0.0 when it was NEVER COMPUTED",
     which was false (corrected 2026-08-23).
     """
-    if len(params) != 10:
+    if len(params) != 10 and len(params) != 11:
         raise Error(
-            "kmeans_fit: params must hold 10 values, got "
+            "kmeans_fit: params must hold 10 or 11 values, got "
             + String(len(params))
         )
     var xp = _f32_ptr(Int(py=x_addr))
@@ -413,6 +419,9 @@ def kmeans_fit_binding(
     var ninit = Int(py=params[7])
     var ii = Int(py=params[8])
     var mm = Int(py=params[9])
+    var ovs = Float64(2.0)
+    if len(params) == 11:
+        ovs = Float64(py=params[10])
 
     var inertia = Float64(0.0)
     var n_iter = 0
@@ -421,7 +430,8 @@ def kmeans_fit_binding(
     with GILReleased(Python()):
         var ctx = DeviceContext()
         var r = kmeans_fit(
-            ctx, xp, ns, nf, nc, cp, lp, wp, nw, mi, tl, sd, ninit, ii, mm
+            ctx, xp, ns, nf, nc, cp, lp, wp, nw, mi, tl, sd, ninit, ii, mm,
+            0.0, ovs,
         )
         inertia = r.inertia
         n_iter = r.n_iter
