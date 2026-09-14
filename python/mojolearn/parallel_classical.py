@@ -343,3 +343,40 @@ def predict_gaussian_mixture(estimator, X, *, devices=(0,), method='predict'):
         return pool.map([('gmm_predict', estimator, (method, X))])[0]
     finally:
         pool.close()
+
+
+def _resample_parallel(name, devices, kwargs):
+    if kwargs.get('numeric_mode') not in (None, 'identical'):
+        raise ValueError('parallel resampling requires IDENTICAL numeric mode')
+    kwargs = {k: v for k, v in kwargs.items() if k != 'numeric_mode'}
+    pool = DevicePool(devices, cooperative=True)
+    try:
+        return pool.map([('resample', None, (name, kwargs))])[0]
+    finally:
+        pool.close()
+
+
+def bootstrap(data, *, devices=(0,), **kwargs):
+    """`mojolearn.resample.bootstrap` with global replicate ranges on the GPUs.
+
+    Replicate r is a pure function of (seed, r, data) (the r_first handle), so
+    owners compute contiguous ranges of global replicate IDs and the root
+    assembles the distribution in order, then sorts it and computes the point
+    estimate, interval and standard error exactly as one device does.
+    """
+    return _resample_parallel('bootstrap', devices, dict(kwargs, data=data))
+
+
+def permutation_test(x, y, *, devices=(0,), **kwargs):
+    """`mojolearn.resample.permutation_test` with global permutation ranges."""
+    return _resample_parallel('permutation_test', devices, dict(kwargs, x=x, y=y))
+
+
+def monte_carlo_integrate(integrand, lower, upper, n_samples, *, devices=(0,), **kwargs):
+    """`mojolearn.resample.monte_carlo_integrate` with whole sample chunks.
+
+    Owners draw global sample IDs from aligned PINNED_SUM_W chunks; the root
+    folds the chunk partials in order and forms the integral as one device does.
+    """
+    return _resample_parallel('monte_carlo_integrate', devices,
+                              dict(kwargs, integrand=integrand, lower=lower, upper=upper, n_samples=n_samples))

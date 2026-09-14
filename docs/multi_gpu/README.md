@@ -779,3 +779,14 @@ M-step, precision Cholesky and convergence test stay on the root. Design:
 pass the native E-step and sixteen-fit trace gate, a sabotage build that fails,
 and nine public configurations; the two vendors' public reports and all 32
 trace files are equal. No capacity or speed claim.
+
+### Resampling by global IDs
+
+`mojolearn.parallel_classical.bootstrap`, `permutation_test` and
+`monte_carlo_integrate` take the public resample arguments plus `devices`.
+Owners compute contiguous global replicate or permutation ranges (the
+`r_first` handle) or whole 256-sample chunk ranges (`i_first`); the root
+assembles them in order and runs the original sort, interval, standard error,
+p-value and partial fold. Design: [resample.md](resample.md). Two-H100 and
+two-MI300X receipts pass 66 native cases, sabotage builds that fail in each
+family, and 36 public configurations whose reports are equal across vendors.

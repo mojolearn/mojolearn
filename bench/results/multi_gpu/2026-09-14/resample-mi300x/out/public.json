@@ -1,0 +1,311 @@
+{
+  "status": "PASS",
+  "devices": [
+    0,
+    1
+  ],
+  "checks": [
+    {
+      "op": "bootstrap",
+      "statistic": "mean",
+      "n_resamples": 2,
+      "method": "percentile",
+      "alternative": "two-sided",
+      "r_first": 0,
+      "sha256": "4e466e7186d0424c2716fc7eba1ae6554221c18bb73c6f31e84c94d5f1d446ae"
+    },
+    {
+      "op": "bootstrap",
+      "statistic": "mean",
+      "n_resamples": 999,
+      "method": "basic",
+      "alternative": "less",
+      "r_first": 0,
+      "sha256": "63e609b89d70a8ad863c355cfee2888228ff43868adefbc2069fe07ebbd26f1d"
+    },
+    {
+      "op": "bootstrap",
+      "statistic": "mean",
+      "n_resamples": 4099,
+      "method": "percentile",
+      "alternative": "greater",
+      "r_first": 17,
+      "sha256": "53806c69f4e925ccdfa495b1fb1acce73e03971d1e07595437fc978e0ce68a55"
+    },
+    {
+      "op": "bootstrap",
+      "statistic": "std",
+      "n_resamples": 2,
+      "method": "percentile",
+      "alternative": "two-sided",
+      "r_first": 0,
+      "sha256": "b3d589719db2fa6b70e8ae4d0fa41f9c1e3408bdf501019409c7cfb970effb30"
+    },
+    {
+      "op": "bootstrap",
+      "statistic": "std",
+      "n_resamples": 999,
+      "method": "basic",
+      "alternative": "less",
+      "r_first": 0,
+      "sha256": "0c343ce6bddc407601bcdba615683c244dec77442773301865f389339096a355"
+    },
+    {
+      "op": "bootstrap",
+      "statistic": "std",
+      "n_resamples": 4099,
+      "method": "percentile",
+      "alternative": "greater",
+      "r_first": 17,
+      "sha256": "f7a809be19bfb7385f10a5dd1045979f611d7d023e719cd1a59de89f7eab92e1"
+    },
+    {
+      "op": "bootstrap",
+      "statistic": "quantile",
+      "n_resamples": 2,
+      "method": "percentile",
+      "alternative": "two-sided",
+      "r_first": 0,
+      "sha256": "051e54d6e05643a819384c989b5014bb5c79e67be747894b757ba52b7dcf3a0d"
+    },
+    {
+      "op": "bootstrap",
+      "statistic": "quantile",
+      "n_resamples": 999,
+      "method": "basic",
+      "alternative": "less",
+      "r_first": 0,
+      "sha256": "0eb70645c7e5f73e07eebeb98870f01f9b15d0e508f26d45fbc31086909abef2"
+    },
+    {
+      "op": "bootstrap",
+      "statistic": "quantile",
+      "n_resamples": 4099,
+      "method": "percentile",
+      "alternative": "greater",
+      "r_first": 17,
+      "sha256": "ed17717098526ab97c58c71a9cc4d491234c37c8f9f6f4bb2afe4d799fafa397"
+    },
+    {
+      "op": "bootstrap",
+      "statistic": "pearson",
+      "n_resamples": 2,
+      "method": "percentile",
+      "alternative": "two-sided",
+      "r_first": 0,
+      "sha256": "7d750956518d644113e6cc3d12915a29f324076f0203f15027a1b904c1f518f5"
+    },
+    {
+      "op": "bootstrap",
+      "statistic": "pearson",
+      "n_resamples": 999,
+      "method": "basic",
+      "alternative": "less",
+      "r_first": 0,
+      "sha256": "b85e8332063c6da22bd0d00330a6c6494318629efd78ae7d1a58890d0eba54a7"
+    },
+    {
+      "op": "bootstrap",
+      "statistic": "pearson",
+      "n_resamples": 4099,
+      "method": "percentile",
+      "alternative": "greater",
+      "r_first": 17,
+      "sha256": "bcab5fe71a667a4fdc6496c86d5f0e2196558b29ef6a9386751ca2badb011556"
+    },
+    {
+      "op": "bootstrap",
+      "statistic": "diff_means",
+      "n_resamples": 2,
+      "method": "percentile",
+      "alternative": "two-sided",
+      "r_first": 0,
+      "sha256": "8fd8e8072ca5769f08ae692c1c68ecee25e78c0b25fdfb9f7911afd31c4f5033"
+    },
+    {
+      "op": "bootstrap",
+      "statistic": "diff_means",
+      "n_resamples": 999,
+      "method": "basic",
+      "alternative": "less",
+      "r_first": 0,
+      "sha256": "5e61787048c09c757b086d2b67f5d5168eafd4590bbe485d8a8a51b69cd1d6ba"
+    },
+    {
+      "op": "bootstrap",
+      "statistic": "diff_means",
+      "n_resamples": 4099,
+      "method": "percentile",
+      "alternative": "greater",
+      "r_first": 17,
+      "sha256": "7e8637c0a00d41cc93d23672c96f40d549426a4b603917f8805c52b3c3629856"
+    },
+    {
+      "op": "bootstrap",
+      "statistic": "trimmed_mean",
+      "n_resamples": 2,
+      "method": "percentile",
+      "alternative": "two-sided",
+      "r_first": 0,
+      "sha256": "9a3ae803f9567847631e662317684648ff2007e60e726731b9e714a19e77db32"
+    },
+    {
+      "op": "bootstrap",
+      "statistic": "trimmed_mean",
+      "n_resamples": 999,
+      "method": "basic",
+      "alternative": "less",
+      "r_first": 0,
+      "sha256": "901fc8f1296f6410d55c28992ff1db81bbeb8878ee02b6d2f85ce5e8b9d45c00"
+    },
+    {
+      "op": "bootstrap",
+      "statistic": "trimmed_mean",
+      "n_resamples": 4099,
+      "method": "percentile",
+      "alternative": "greater",
+      "r_first": 17,
+      "sha256": "788c43457022e737bbed5d302358fea234577c85a5bcd4e984a365697eab27fa"
+    },
+    {
+      "op": "permutation_test",
+      "statistic": "diff_means",
+      "n_resamples": 3,
+      "alternative": "two-sided",
+      "r_first": 0,
+      "sha256": "09c3df003b9561a241ec8b72d983dd9dfa653196477cc0267b42860d8ee0cc3a"
+    },
+    {
+      "op": "permutation_test",
+      "statistic": "diff_means",
+      "n_resamples": 2501,
+      "alternative": "greater",
+      "r_first": 9,
+      "sha256": "c18d32171edee62b7145ed90d96f62131b20c0456aa758498ceb267b417abd86"
+    },
+    {
+      "op": "permutation_test",
+      "statistic": "mean",
+      "n_resamples": 3,
+      "alternative": "two-sided",
+      "r_first": 0,
+      "sha256": "bb7fb882a348264000a6fe8caeef47371d6376c9587c2fb26fc0ab8f2cd4a477"
+    },
+    {
+      "op": "permutation_test",
+      "statistic": "mean",
+      "n_resamples": 2501,
+      "alternative": "greater",
+      "r_first": 9,
+      "sha256": "7e9ff43374137b5f0b4b0231b221b0b118c568a836b7572badba026b985efdc2"
+    },
+    {
+      "op": "permutation_test",
+      "statistic": "std",
+      "n_resamples": 3,
+      "alternative": "two-sided",
+      "r_first": 0,
+      "sha256": "49914f22ac731ceef8566902210e24340d25b7a5566a5202ec1d05ed83382ebd"
+    },
+    {
+      "op": "permutation_test",
+      "statistic": "std",
+      "n_resamples": 2501,
+      "alternative": "greater",
+      "r_first": 9,
+      "sha256": "dcd8c3a62b8201935e0942e4574a1cb8d9cd7c6809772eed4256ac2d6a2a12f2"
+    },
+    {
+      "op": "monte_carlo_integrate",
+      "integrand": "const",
+      "n_samples": 1,
+      "i_first": 0,
+      "sha256": "dca3e26f6ff6ca42c56c6558a3fb49699498140190e9bee17b63f22cc4d05a0d"
+    },
+    {
+      "op": "monte_carlo_integrate",
+      "integrand": "const",
+      "n_samples": 257,
+      "i_first": 0,
+      "sha256": "dca3e26f6ff6ca42c56c6558a3fb49699498140190e9bee17b63f22cc4d05a0d"
+    },
+    {
+      "op": "monte_carlo_integrate",
+      "integrand": "const",
+      "n_samples": 65536,
+      "i_first": 0,
+      "sha256": "dca3e26f6ff6ca42c56c6558a3fb49699498140190e9bee17b63f22cc4d05a0d"
+    },
+    {
+      "op": "monte_carlo_integrate",
+      "integrand": "const",
+      "n_samples": 123457,
+      "i_first": 11,
+      "sha256": "dca3e26f6ff6ca42c56c6558a3fb49699498140190e9bee17b63f22cc4d05a0d"
+    },
+    {
+      "op": "monte_carlo_integrate",
+      "integrand": "sum",
+      "n_samples": 1,
+      "i_first": 0,
+      "sha256": "cf2c4865328d6eab062a06ac9bbc3d5eeccaa6be870fdca9fb8bd5f9d6b7dddb"
+    },
+    {
+      "op": "monte_carlo_integrate",
+      "integrand": "sum",
+      "n_samples": 257,
+      "i_first": 0,
+      "sha256": "6fff7dcbab2d9c8e3c6e826915cfd19300fe3d80ab5e8264b84fb1ed4a13a337"
+    },
+    {
+      "op": "monte_carlo_integrate",
+      "integrand": "sum",
+      "n_samples": 65536,
+      "i_first": 0,
+      "sha256": "6802e54ae49097625697af322e2de436d24c93c096ad0fa7ff1bdfad95d50c3a"
+    },
+    {
+      "op": "monte_carlo_integrate",
+      "integrand": "sum",
+      "n_samples": 123457,
+      "i_first": 11,
+      "sha256": "f781ae91dda83497a18dfc4e5c6cd946db52c84fc7fca2572bbf5c86cffdbb64"
+    },
+    {
+      "op": "monte_carlo_integrate",
+      "integrand": "product",
+      "n_samples": 1,
+      "i_first": 0,
+      "sha256": "19a5215ef9fd5ce429d03e62f7571bbdf7bb0532f5f197eb0df1d7e600717a73"
+    },
+    {
+      "op": "monte_carlo_integrate",
+      "integrand": "product",
+      "n_samples": 257,
+      "i_first": 0,
+      "sha256": "edc4c86fdb3afdec48252782c865e819769294c2d9db4b0c7d8d78cad4615a06"
+    },
+    {
+      "op": "monte_carlo_integrate",
+      "integrand": "product",
+      "n_samples": 65536,
+      "i_first": 0,
+      "sha256": "970c97f8b9e46716486a5316cecab84d2ed73359bcd77d732b89bca950f7f4ea"
+    },
+    {
+      "op": "monte_carlo_integrate",
+      "integrand": "product",
+      "n_samples": 123457,
+      "i_first": 11,
+      "sha256": "f77d38985caa4a373f5c4930849309a10e9efda51bc3381d5e69f14cfacb26de"
+    }
+  ],
+  "refusals": [
+    "bca",
+    "fast_mode",
+    "negative_r_first",
+    "bad_integrand",
+    "duplicate_devices"
+  ],
+  "scope": "bootstrap/permutation replicate ranges and Monte Carlo sample chunks with global IDs across devices versus one device; root sort, interval, p-value and fold; no speed claim"
+}

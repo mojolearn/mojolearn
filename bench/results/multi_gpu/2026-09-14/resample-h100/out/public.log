@@ -1,0 +1,86 @@
+2239 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x391600000000, nodemask=2)
+2239 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x100dc0000000, nodemask=1)
+2418 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7a9580000000, nodemask=2)
+PASS bootstrap mean 2 percentile two-sided 0
+2599 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x707f80000000, nodemask=1)
+PASS bootstrap mean 999 basic less 0
+2780 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x311a80000000, nodemask=1)
+2780 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1807c0000000, nodemask=2)
+PASS bootstrap mean 4099 percentile greater 17
+2961 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x583440000000, nodemask=2)
+PASS bootstrap std 2 percentile two-sided 0
+3142 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x782940000000, nodemask=2)
+PASS bootstrap std 999 basic less 0
+3323 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3a2200000000, nodemask=2)
+PASS bootstrap std 4099 percentile greater 17
+3516 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7addc0000000, nodemask=2)
+PASS bootstrap quantile 2 percentile two-sided 0
+3697 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x18ce00000000, nodemask=2)
+PASS bootstrap quantile 999 basic less 0
+3878 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x787480000000, nodemask=2)
+PASS bootstrap quantile 4099 percentile greater 17
+4059 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x724580000000, nodemask=1)
+PASS bootstrap pearson 2 percentile two-sided 0
+4240 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x79e400000000, nodemask=2)
+PASS bootstrap pearson 999 basic less 0
+4421 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x339e80000000, nodemask=1)
+4421 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3bc400000000, nodemask=2)
+PASS bootstrap pearson 4099 percentile greater 17
+4602 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x30f740000000, nodemask=1)
+PASS bootstrap diff_means 2 percentile two-sided 0
+4783 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x504280000000, nodemask=1)
+PASS bootstrap diff_means 999 basic less 0
+4964 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7306c0000000, nodemask=1)
+PASS bootstrap diff_means 4099 percentile greater 17
+5145 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x72e880000000, nodemask=1)
+PASS bootstrap trimmed_mean 2 percentile two-sided 0
+5338 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x10a1c0000000, nodemask=1)
+PASS bootstrap trimmed_mean 999 basic less 0
+5519 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3a3180000000, nodemask=2)
+PASS bootstrap trimmed_mean 4099 percentile greater 17
+5700 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x50a500000000, nodemask=1)
+PASS permutation_test diff_means 3 two-sided 0
+5881 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x137200000000, nodemask=1)
+5881 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x39d9c0000000, nodemask=2)
+PASS permutation_test diff_means 2501 greater 9
+6062 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x101b00000000, nodemask=1)
+PASS permutation_test mean 3 two-sided 0
+6243 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x10e540000000, nodemask=1)
+PASS permutation_test mean 2501 greater 9
+6424 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x12f900000000, nodemask=1)
+PASS permutation_test std 3 two-sided 0
+6605 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1237c0000000, nodemask=1)
+PASS permutation_test std 2501 greater 9
+6786 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x70ea40000000, nodemask=1)
+6786 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x591340000000, nodemask=2)
+PASS monte_carlo_integrate const 1 0
+6839 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7378c0000000, nodemask=1)
+6839 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5bf800000000, nodemask=2)
+PASS monte_carlo_integrate const 257 0
+6893 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x734d80000000, nodemask=1)
+PASS monte_carlo_integrate const 65536 0
+6959 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x389040000000, nodemask=2)
+PASS monte_carlo_integrate const 123457 11
+7013 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x331d00000000, nodemask=1)
+PASS monte_carlo_integrate sum 1 0
+7066 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x519cc0000000, nodemask=1)
+PASS monte_carlo_integrate sum 257 0
+7120 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x59cc40000000, nodemask=2)
+PASS monte_carlo_integrate sum 65536 0
+7174 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3067c0000000, nodemask=1)
+7174 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x58d3c0000000, nodemask=2)
+PASS monte_carlo_integrate sum 123457 11
+7228 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7b3e40000000, nodemask=2)
+PASS monte_carlo_integrate product 1 0
+7281 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x59da40000000, nodemask=2)
+7281 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x337f40000000, nodemask=1)
+PASS monte_carlo_integrate product 257 0
+7335 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x532b80000000, nodemask=1)
+7335 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5a97c0000000, nodemask=2)
+PASS monte_carlo_integrate product 65536 0
+7389 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x72fd00000000, nodemask=1)
+PASS monte_carlo_integrate product 123457 11
+7443 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1b0180000000, nodemask=2)
+7621 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3aac80000000, nodemask=2)
+7799 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3b26c0000000, nodemask=2)
+PASS 36 resample configurations and 5 refusals
