@@ -165,6 +165,16 @@ def execute(request):
         if method not in ('score_samples', 'predict_proba', 'predict'):
             raise ValueError('invalid GaussianMixture prediction operation')
         return getattr(state, method)(X)
+    if operation == 'resample':
+        from . import resample
+        native = resample._extension('identical')
+        if (not callable(getattr(native, 'resample_ranges_parallel_available', None))
+                or native.resample_ranges_parallel_available() != 1):
+            raise ImportError('rebuild resample binding for distributed replicate ranges')
+        name, kwargs = args
+        if name not in ('bootstrap', 'permutation_test', 'monte_carlo_integrate'):
+            raise ValueError('invalid resample operation')
+        return getattr(resample, name)(numeric_mode='identical', **kwargs)
     if operation in ('gp_fit', 'gp_predict'):
         native = state._extension()
         if (not callable(getattr(native, 'gp_parallel_available', None))

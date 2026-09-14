@@ -85,10 +85,12 @@ implementations still require their own AMD/Apple qualification.
 The newer binding availability flags do not establish complete estimator
 dispatch or qualification. Prepared IVFFlat remains unexposed and disabled in
 the backend; track its future distributed build/search and index storage
-separately. Public `resample` bootstrap, permutation tests and Monte Carlo
-integration also lack distributed drivers and require global sample IDs and
-canonical final statistics. These additions expand the remaining work beyond
-the earlier estimator inventory.
+separately. Public `resample` bootstrap, permutation tests and Monte Carlo integration
+now have distributed entries in `parallel_classical` that move whole global
+replicate, permutation and 256-sample chunk ranges and keep the sort,
+interval, p-value and fold on the root; their one-device equality passes on
+two H100s and two MI300X with equal receipts across the two vendors
+(`bench/results/multi_gpu/2026-09-14/resample-h100/`, `resample-mi300x/`).
 
 Mamba1/2/3Block and TransformerBlock are forward/backward primitives, not
 standalone fit drivers. Training-stack coverage must not be read as distributed

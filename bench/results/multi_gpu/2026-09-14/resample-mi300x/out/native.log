@@ -1,0 +1,104 @@
+5205 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x308780000000, nodemask=1)
+Imported from /root/mojolearn/training/checks/resample_parallel_check.mojo:14:
+/root/mojolearn/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/training/checks/resample_parallel_check.mojo:14:
+/root/mojolearn/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/training/checks/resample_parallel_check.mojo:14:
+/root/mojolearn/core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/training/checks/resample_parallel_check.mojo:14:
+/root/mojolearn/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/training/checks/resample_parallel_check.mojo:14:
+/root/mojolearn/core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+/root/mojolearn/training/checks/resample_parallel_check.mojo:118:27: warning: assignment to 'mean' was never used; assign to '_' instead?
+        var mean = Float32(0.0)
+                          ^
+/root/mojolearn/training/checks/resample_parallel_check.mojo:117:31: warning: assignment to 'integral' was never used; assign to '_' instead?
+        var integral = Float32(0.0)
+                              ^
+PASS resample bootstrap 53 2 0 0 0 2 0 2
+PASS resample bootstrap 53 2 0 0 0 7 0 2
+PASS resample bootstrap 53 2 0 0 0 1000 0 2
+PASS resample bootstrap 53 2 0 0 0 4099 0 2
+PASS resample bootstrap 53 2 0 1 1 513 5 2
+PASS resample bootstrap 8 2 0 0 2 3 5 2
+PASS resample bootstrap 53 2 1 0 0 2 0 2
+PASS resample bootstrap 53 2 1 0 0 7 0 2
+PASS resample bootstrap 53 2 1 0 0 1000 0 2
+PASS resample bootstrap 53 2 1 0 0 4099 0 2
+PASS resample bootstrap 53 2 1 1 1 513 5 2
+PASS resample bootstrap 8 2 1 0 2 3 5 2
+PASS resample bootstrap 53 2 2 0 0 2 0 2
+PASS resample bootstrap 53 2 2 0 0 7 0 2
+PASS resample bootstrap 53 2 2 0 0 1000 0 2
+PASS resample bootstrap 53 2 2 0 0 4099 0 2
+PASS resample bootstrap 53 2 2 1 1 513 5 2
+PASS resample bootstrap 8 2 2 0 2 3 5 2
+PASS resample bootstrap 53 2 3 0 0 2 0 2
+PASS resample bootstrap 53 2 3 0 0 7 0 2
+PASS resample bootstrap 53 2 3 0 0 1000 0 2
+PASS resample bootstrap 53 2 3 0 0 4099 0 2
+PASS resample bootstrap 53 2 3 1 1 513 5 2
+PASS resample bootstrap 8 2 3 0 2 3 5 2
+PASS resample bootstrap 53 2 4 0 0 2 0 2
+PASS resample bootstrap 53 2 4 0 0 7 0 2
+PASS resample bootstrap 53 2 4 0 0 1000 0 2
+PASS resample bootstrap 53 2 4 0 0 4099 0 2
+PASS resample bootstrap 53 2 4 1 1 513 5 2
+PASS resample bootstrap 8 2 4 0 2 3 5 2
+PASS resample bootstrap 53 2 5 0 0 2 0 2
+PASS resample bootstrap 53 2 5 0 0 7 0 2
+PASS resample bootstrap 53 2 5 0 0 1000 0 2
+PASS resample bootstrap 53 2 5 0 0 4099 0 2
+PASS resample bootstrap 53 2 5 1 1 513 5 2
+PASS resample bootstrap 8 2 5 0 2 3 5 2
+PASS resample permutation 40 33 4 0 2 0 2
+PASS resample permutation 40 33 4 1 999 0 2
+PASS resample permutation 9 12 4 2 4097 5 2
+PASS resample permutation 40 33 0 0 2 0 2
+PASS resample permutation 40 33 0 1 999 0 2
+PASS resample permutation 9 12 0 2 4097 5 2
+PASS resample permutation 40 33 1 0 2 0 2
+PASS resample permutation 40 33 1 1 999 0 2
+PASS resample permutation 9 12 1 2 4097 5 2
+PASS resample monte_carlo 0 1 0 2
+PASS resample monte_carlo 0 255 0 2
+PASS resample monte_carlo 0 256 0 2
+PASS resample monte_carlo 0 257 0 2
+PASS resample monte_carlo 0 1000 0 2
+PASS resample monte_carlo 0 100003 0 2
+PASS resample monte_carlo 0 70001 3 2
+PASS resample monte_carlo 1 1 0 2
+PASS resample monte_carlo 1 255 0 2
+PASS resample monte_carlo 1 256 0 2
+PASS resample monte_carlo 1 257 0 2
+PASS resample monte_carlo 1 1000 0 2
+PASS resample monte_carlo 1 100003 0 2
+PASS resample monte_carlo 1 70001 3 2
+PASS resample monte_carlo 2 1 0 2
+PASS resample monte_carlo 2 255 0 2
+PASS resample monte_carlo 2 256 0 2
+PASS resample monte_carlo 2 257 0 2
+PASS resample monte_carlo 2 1000 0 2
+PASS resample monte_carlo 2 100003 0 2
+PASS resample monte_carlo 2 70001 3 2
+PASS resample parallel gate
