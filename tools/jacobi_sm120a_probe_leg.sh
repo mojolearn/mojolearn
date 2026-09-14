@@ -62,16 +62,30 @@ if [ -x "$OUT/jacobi_probe_aot" ]; then
     say "probe_aot_exit=$?"
 fi
 
+# 3a'. AOT again with DEVIATION 2711's define, so `compute_covariance` and
+# `gemm_tn` themselves (the pca, tsvd and ols cases) run through arm 1 on
+# this target, not only the STAGE lines' by-name launch.
+_t0=$(date +%s)
+pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-4}" \
+    --target-accelerator "$MOJOLEARN_GPU_ARCHS" -D MOJOLEARN_NUMERIC_IDENTICAL=1 \
+    -D MOJOLEARN_2711_GRAM_STRIDED_SCALAR=1 -I . \
+    -o "$OUT/jacobi_probe_aot_arm1" decomposition/checks/jacobi_sm120a_probe.mojo > "$OUT/build_aot_arm1.log" 2>&1
+say "build_aot_arm1_exit=$? seconds=$(( $(date +%s) - _t0 ))"
+if [ -x "$OUT/jacobi_probe_aot_arm1" ]; then
+    "$OUT/jacobi_probe_aot_arm1" "$OUT/odd_x.f32" > "$OUT/probe_aot_arm1.txt" 2> "$OUT/probe_aot_arm1.err"
+    say "probe_aot_arm1_exit=$?"
+fi
+
 # 3b. JIT, the box's own device target (what `mojo run` picks).
 pixi run mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . \
     decomposition/checks/jacobi_sm120a_probe.mojo "$OUT/odd_x.f32" > "$OUT/probe_jit.txt" 2> "$OUT/probe_jit.err"
 say "probe_jit_exit=$?"
 
 # 4. The one-screen summary the orchestrator reads first.
-for f in probe_aot probe_jit; do
+for f in probe_aot probe_aot_arm1 probe_jit; do
     [ -f "$OUT/$f.txt" ] || continue
     say "== $f"
-    grep -E "^PROBE_DEVICE|^MATRIX|^PROBE case=[^ ]+ n=|^PROBE_DONE" "$OUT/$f.txt" >> "$G"
+    grep -E "^PROBE_DEVICE|^MATRIX|^STAGE|^PROBE case=[^ ]+ n=|^PROBE_DONE" "$OUT/$f.txt" >> "$G"
     grep -E "^PROBE case=.* sweep=" "$OUT/$f.txt" | awk '{print $2, $3, $5, $6}' >> "$G"
     grep -i -E "error|abort|fault" "$OUT/$f.err" | head -5 >> "$G"
 done
