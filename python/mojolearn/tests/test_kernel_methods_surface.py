@@ -59,7 +59,7 @@ def arm_nystroem(rep):
     rep.check("NYS", np.asarray(ny.components_).shape == (32, 3) and np.asarray(ny.component_indices_).shape == (32,), "components_ and component_indices_ shaped")
     rep.check("NYS", sorted(np.asarray(ny.component_indices_).tolist()) == list(range(32)), "with n_components == n the indices are a permutation of the rows")
     ev = np.asarray(ny.eigenvalues_)
-    rep.check("NYS", np.all(np.diff(ev) <= 0) and np.all(ev >= 1e-12), "eigenvalues_ descending and clipped at 1e-12 (DEVIATION 1670)")
+    rep.check("NYS", np.all(np.diff(ev) <= 0) and np.all(ev >= 1e-12), "eigenvalues_ (singular values) descending and clipped at 1e-12 (DEVIATION 1670)")
     rep.check("NYS", ny.sweeps_ >= 1, "sweeps_ is carried", ny.sweeps_)
     phi = np.asarray(ny.transform(x))
     k_exact = x.astype(np.float64) @ x.astype(np.float64).T

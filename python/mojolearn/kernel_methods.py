@@ -254,7 +254,10 @@ class Nystroem(_KernelMethodBase):
         NOT bitwise symmetric (DEVIATION 1674); transform uses its
         transpose, scikit-learn's arm.
     eigenvalues_ : Array (n_components,) float32
-        Descending, clipped at 1e-12 (DEVIATION 1670).
+        The singular values of the basis kernel, `|lambda|` of its
+        eigenvalues, descending, clipped at 1e-12 (DEVIATION 1670). A
+        numerically negative eigenvalue keeps its sign in the right factor
+        of `normalization_`, as scikit-learn's SVD does.
     eigenvectors_ : Array (n_components, n_components) float32
     sweeps_ : int
         Jacobi sweeps the device eigensolver ran. Part of the model.

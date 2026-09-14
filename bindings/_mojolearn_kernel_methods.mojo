@@ -286,7 +286,7 @@ def nystroem_fit_binding(
         2  indices_out        q int32, WRITTEN (row ids, in rank order)
         3  normalization_out  q * q float32, WRITTEN (NOT bitwise
                                symmetric, DEVIATION 1674)
-        4  eigenvalues_out    q float32, WRITTEN (descending, clipped)
+        4  eigenvalues_out    q float32, WRITTEN (singular values |lambda|, descending, clipped)
         5  eigenvectors_out   q * q float32, WRITTEN
         6  scalars_out        1 float64, WRITTEN: sweeps
 
