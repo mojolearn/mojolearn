@@ -58,6 +58,14 @@ on:
       - "solver/checks/cd_oracle.mojo"
       - "solver/checks/profile_dot.mojo"
       - "svm/checks/smo_oracle.mojo"
+      - "hierarchy/checks/linkage_oracle.mojo"
+      - "isolation_forest/checks/if_oracle.mojo"
+      - "isolation_forest/impl/rng/xorwow.mojo"
+      - "extratrees/checks/pcg_rng.mojo"
+      - "extratrees/estimator.mojo"
+      - "extratrees/impl/randomforest/randomforest.mojo"
+      - "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo"
+      - "python/mojolearn/_labels.py"
       - "bindings/host_helpers.mojo"
       - "bindings/hostptr.mojo"
       - "core/forest_host_predict.mojo"
@@ -92,16 +100,24 @@ env:
   # `--require-columns 4` cannot hold on it. Their gate is
   # tools/classical_host_gate.py over bench/results/classical_host/, the
   # same shape as the forest host gate.
-  COVERED_LANES: "gemm-pinned,kde,holtwinters,lasso,elasticnet,svc"
+  # agglomerative, et-clf, et-reg and iforest joined 2026-09-14 (phase 1b:
+  # the solver host binding's linkage_fit over the linkage oracle, the
+  # trees host binding over the device trainer restated on the host, the
+  # svm host binding's iforest_run over the isolation forest oracle); the
+  # ET model cells are the first model column a CPU column carries, and
+  # their RELOAD check runs through the trees host binding's et_predict.
+  COVERED_LANES: "gemm-pinned,kde,holtwinters,lasso,elasticnet,svc,agglomerative,et-clf,et-reg,iforest"
   # The phase 1 host binding families, space separated: each is built by
-  # bindings/build_<family>_host.sh into MOJOLEARN_<FAMILY>_HOST_OUTDIR (the
-  # production set under python/mojolearn/host/, then the sabotage set under
-  # runner.temp), read back as the CPU column, and named in host.families.
-  HOST_FAMILIES: "core linalg estimators tsa solver svm"
+  # bindings/build_<family>_host.sh (a two-line wrapper naming its family
+  # to bindings/build_host_family.sh since 2026-09-14) into
+  # MOJOLEARN_<FAMILY>_HOST_OUTDIR (the production set under
+  # python/mojolearn/host/, then the sabotage set under runner.temp), read
+  # back as the CPU column, and named in host.families.
+  HOST_FAMILIES: "core linalg estimators tsa solver svm trees"
   # The classical host gate recordings (one directory per GPU box).
   CLASSICAL_RECORDED: "bench/results/classical_host/2026-09-13-apple-m4 bench/results/classical_host/2026-09-14-nvidia-h100 bench/results/classical_host/2026-09-14-amd-mi300x"
   # The same list as the read-back's --binding arguments.
-  HOST_BINDINGS: "_mojolearn_core_host _mojolearn_linalg_host _mojolearn_estimators_host _mojolearn_tsa_host _mojolearn_solver_host _mojolearn_svm_host"
+  HOST_BINDINGS: "_mojolearn_core_host _mojolearn_linalg_host _mojolearn_estimators_host _mojolearn_tsa_host _mojolearn_solver_host _mojolearn_svm_host _mojolearn_trees_host"
   # The three committed GPU columns the CPU column is diffed against.
   GPU_COLUMNS: >-
     bench/results/identity_break/2026-09-13_three-columns/apple-m4.json
@@ -386,8 +402,12 @@ jobs:
       # lane whose host oracle folds through gemm_oracle_cell, and in
       # kde_oracle by summing every logsumexp row descending, in hw_oracle
       # by splitting the SSE fused multiply-add, in smo_oracle by walking
-      # its GEMM leaf descending; each further phase 1 binding names the
-      # fold its arm moves), loaded through
+      # its GEMM leaf descending, in linkage_oracle by walking the sorted
+      # edge keys descending (the maximum spanning tree), in pcg_rng by one
+      # extra draw on every keyed stream (every ExtraTrees threshold), and
+      # in xorwow by one extra step before every split fraction (every
+      # isolation tree); each further phase 1 binding names the fold its
+      # arm moves), loaded through
       # MOJOLEARN_HOST_DIR with MOJOLEARN_HOST_ALLOW_SABOTAGE=1, run on the
       # covered lanes, and the four-way diff must exit non-zero with
       # DIVERGENT on them. Every covered cell must still be STABLE (a wrong

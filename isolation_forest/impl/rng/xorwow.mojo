@@ -98,6 +98,8 @@ forest is built.
 ===================================================
 """
 
+from std.sys.compile import is_defined
+
 comptime XORWOW_N = 5
 """Words of xorwow state (`curandStateXORWOW::v[5]`)."""
 comptime XORWOW_MATRIX_WORDS = XORWOW_N * XORWOW_N * 32
@@ -108,6 +110,16 @@ comptime PRECALC_BLOCK_MASK = (1 << PRECALC_BLOCK_SIZE) - 1
 comptime XORWOW_SEQUENCE_SPACING = 67
 comptime XORWOW_TABLE_WORDS = PRECALC_NUM_MATRICES * XORWOW_MATRIX_WORDS
 """25,600 words per table."""
+
+comptime XORWOW_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
+"""The CPU identity gate's negative control (the CPU training lane, brief
+docs/lanes/BRIEF_cpu_training_2026-09-13.md section 3.4; the iforest lane,
+2026-09-14). `-D MOJOLEARN_HOST_SABOTAGE=1` makes `curand_uniform` advance
+the state ONE extra step before the draw it returns, so every split
+fraction of every isolation tree moves and a host binding built that way
+diverges from the GPU columns on the iforest lane. Never passed by a
+shipping build; `bindings/build_host_family.sh` forwards it only from
+MOJOLEARN_BUILD_EXTRA_DEFINES."""
 
 comptime CURAND_2POW32_INV = Float32(2.3283064e-10)
 """`curand_globals.h:56`. Rounds to exactly 2^-32 in float32 (the
@@ -291,6 +303,10 @@ def _curand_uniform(x: UInt32) -> Float32:
 
 def curand_uniform(mut state: curandStateXORWOW) -> Float32:
     """`curand_uniform(curandStateXORWOW_t*)` (`curand_uniform.h:108-111`)."""
+    comptime if XORWOW_HOST_SABOTAGE:
+        # THE SABOTAGE ARM: one extra step, so the fraction below is the
+        # stream's next value. Wrong on purpose; see XORWOW_HOST_SABOTAGE.
+        _ = curand(state)
     return _curand_uniform(curand(state))
 
 

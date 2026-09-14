@@ -253,7 +253,12 @@ CPU path, [fixtures](bench/results/classical_host/)); and lasso, elasticnet,
 kernel density and SVC through the training bindings next. Training on a CPU:
 pinned GEMM, kernel density, Holt-Winters, lasso, elasticnet and SVC, every
 cell of those lanes in the 46-lane harness identical to the three GPU columns
-on seven CPUs ([gate](.github/workflows/cpu-identity-gate.yml)). The byte LM
+on seven CPUs ([gate](.github/workflows/cpu-identity-gate.yml)); and, since
+2026-09-14, agglomerative clustering, Extra Trees (classifier and regressor,
+the saved model bytes included) and the isolation forest, identical to the
+three GPU columns on the Apple M4 host path with the seven-runner run of
+the same gate pending
+([columns](bench/results/identity_break/2026-09-14_cpu-phase1b/README.md)). The byte LM
 has two CPU surfaces of its own. `LanguageModelInference` runs the forward
 pass; see [docs/BYTE_LM_CPU_INFERENCE.md](docs/BYTE_LM_CPU_INFERENCE.md) for
 the CPUs it is certified on. `LanguageModelHostTrainer` runs one training
@@ -265,9 +270,9 @@ also states what it does not claim. Both are one model profile at one batch
 shape, and identity is claimed per shape because the weight gradients contract
 over the token count. Of all these, only the byte LM host binding ships in the
 wheels; the others build from source with `bindings/build_*_host.sh`. Every
-lane not named here has no CPU path at all: k-means, k-NN, DBSCAN, isolation
-forest, agglomerative and spectral clustering, UMAP, the Gaussian process,
-ARIMA, the neural blocks, and training for the forests and gradient boosting.
+lane not named here has no CPU path at all: k-means, k-NN, DBSCAN, spectral
+clustering, UMAP, the Gaussian process, ARIMA, the neural blocks, and
+training for the random forests and gradient boosting.
 Run the diagnostic command before depending on a new machine:
 
 ```sh

@@ -342,7 +342,14 @@ struct SplitKey(Copyable, Movable):
 
     def generator(self, offset: UInt64 = 0) -> PCGenerator:
         """`PCGenerator(seed, subsequence, 0)`, cuML builder_kernels.cuh:172."""
-        return PCGenerator(self.seed, self.subsequence, offset)
+        var gen = PCGenerator(self.seed, self.subsequence, offset)
+        comptime if PCG_HOST_SABOTAGE:
+            # THE SABOTAGE ARM: one extra draw on every keyed stream, so
+            # every threshold (`draw_threshold_device`, `uniform_threshold`)
+            # and every rescue pick is the stream's SECOND value. Wrong on
+            # purpose; see PCG_HOST_SABOTAGE.
+            _ = gen.next_u32()
+        return gen^
 
 
 comptime THRESHOLD_KEY_SALT: UInt32 = 0xA24BAED4
@@ -350,6 +357,23 @@ comptime THRESHOLD_KEY_SALT: UInt32 = 0xA24BAED4
 excess sampler's. Fresh constant, used nowhere else in the tree (grep); its
 value is arbitrary and pinned only by `tools/rng_oracle/pcg_reference.txt`."""
 
+
+comptime PCG_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
+"""The CPU identity gate's negative control (the CPU training lane, brief
+docs/lanes/BRIEF_cpu_training_2026-09-13.md section 3.4; the ET lanes,
+2026-09-14). `-D MOJOLEARN_HOST_SABOTAGE=1` makes `SplitKey.generator()`
+burn ONE extra draw on every keyed stream before its first real one, so
+every split threshold (the device-draw restatement `draw_threshold_device`
+and the host splitter's `uniform_threshold` alike) and every rescue pick
+moves, every ExtraTrees forest fit through a host binding built that way
+differs from the GPU columns, and `.github/workflows/cpu-identity-gate.yml`
+can require DIVERGENT on et-clf and et-reg. (The first placement, inside
+`uniform_threshold`, was measured INERT on the CPU column: the restated
+device search draws through `draw_threshold_device`, which never calls it.)
+Never passed by a shipping build;
+`bindings/build_host_family.sh` forwards it only from
+MOJOLEARN_BUILD_EXTRA_DEFINES, and `_backend.load_host_module` refuses a
+binding whose `<prefix>_sabotage()` reads true unless the gate says so."""
 
 comptime KEY_FOR_UNSALTED = is_defined["MOJOLEARN_ET_KEY_UNSALTED"]()
 """A/B arm for DEVIATION 465: build with `-D MOJOLEARN_ET_KEY_UNSALTED=1` to

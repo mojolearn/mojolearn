@@ -300,6 +300,9 @@ class AgglomerativeClustering:
         self.children_ = children
         self.n_clusters_ = k
         self.n_leaves_ = n_rows
+        # -1 on a CPU-only install (the CPU training lane, 2026-09-14): the
+        # host binding runs Kruskal under the device's total order, so there
+        # is no Boruvka pass to count; labels_ and children_ are the same.
         self.n_boruvka_rounds_ = int(info[0])
         self.n_connected_components_ = int(info[1])
         self.n_features_in_ = n_cols

@@ -1114,3 +1114,208 @@ infer rows read `IDENTICAL x4`; model is `n/a:no-save`. Sabotage
 8 of 9 train cells `DIVERGENT` (`parts differ: decision`, and on `wide`
 the predicted labels too) and 8 of 9 infer cells; `ties` stays
 `IDENTICAL x4`, the integer grid summing exactly in any order.
+
+## Phase 1b results (2026-09-14): agglomerative, et-clf, et-reg, iforest
+
+Branch `lane/cpu-training-phase1b`, off `main` at `6796ceff9`. The four
+lanes of the phase 1 table above that the 2026-09-13 merge left open, run
+on this Mac exactly as the phase 1 lanes were (Apple M4, host build
+`--target-cpu apple-m1`, Mojo 1.0.0, the CPU-only package path with the
+host bindings under `python/mojolearn/host/`, `--vendor cpu-apple-m4`),
+diffed against the three 2026-09-14 GPU columns
+`bench/results/identity_break/2026-09-14_46-lanes/{apple-m4,nvidia-h100-sm_90a,amd-mi300x-gfx942}.json`
+with `--require-columns 4 --lanes <lane>`. The JSONs, the diffs and the
+sabotage runs are under `bench/results/identity_break/2026-09-14_cpu-phase1b/`
+(its README is the index). The whole-column summary line reads
+`IDENTICAL=414` for every lane below; the lane's verdict is its rows and
+the `require-columns` line. The seven-runner gate has not run on this
+branch yet; the certified table waits for its reports.
+
+Two pattern changes landed with these lanes. The six per-family build
+scripts were folded into `bindings/build_host_family.sh` (one script, the
+family as its argument; each `bindings/build_<family>_host.sh` is a
+two-line wrapper naming its family, so the workflow, the GPU legs and a
+developer call what they always called; the estimators wrapper was left as
+the copy it was because another lane is editing that family), and the
+sabotage define now reaches every phase 1 lane: `hierarchy/checks/linkage_oracle.mojo`
+(`host_kruskal` walks the sorted keys descending, the maximum spanning
+tree), `extratrees/checks/pcg_rng.mojo` (`SplitKey.generator` burns one
+draw on every keyed stream) and `isolation_forest/impl/rng/xorwow.mojo`
+(`curand_uniform` advances one extra step). Section 3.4 above described
+the last two as already honored; on 2026-09-13 neither file carried the
+define (a `git grep MOJOLEARN_HOST_SABOTAGE` found it in `gemm_oracle`,
+`kde_oracle`, `hw_oracle` and `smo_oracle` only), so that sentence was a
+plan, not a fact, until this lane.
+
+### agglomerative, IDENTICAL x4
+
+`linkage_fit` in `bindings/_mojolearn_solver_host.mojo` over
+`hierarchy/checks/linkage_oracle.mojo`: `host_pinned_distance_matrix`
+(the IDENTICAL tile's arithmetic), `host_kruskal` (Kruskal under the
+device's total order, so the MST is the device's Boruvka MST), `host_dendrogram`,
+`host_extract_flattened_clusters`, with the device path's guards in its
+order and words. `python/mojolearn/_hierarchy_impl.py` is unchanged
+except a comment: `n_boruvka_rounds_` reads -1 on a CPU-only install,
+because the host runs Kruskal and there is no Boruvka pass to count (the
+risk named in section 1.1 (e), resolved by reporting it as device-only;
+no cell hashes it). `n_connected_components_` is 1, the pairwise arm's
+literal.
+
+| fixture | labels hash (all four columns) |
+|---|---|
+| base | ad11b976bfbfc20b |
+| ties | 7dea8a094150b8a9 |
+| hashed | 196c79a60c16166c |
+| wide | 24b2baa4533fb568 |
+| denormal | b05982504c7e8646 |
+| denormal_ftz | b05982504c7e8646 |
+| dupes | ad11b976bfbfc20b |
+| odd | c747a33eff11bbe1 |
+| negative | 795f9975eb5ed985 |
+
+`require-columns 4 over ['agglomerative']: OK`; infer is
+`n/a:transductive`, model `n/a:no-save`, as on the GPU columns. Sabotage
+(`LINKAGE_ORACLE_HOST_SABOTAGE`): 9 of 9 `DIVERGENT`, `parts differ:
+labels` (base 4302f3be04ed038b against ad11b976bfbfc20b). The arm is on
+the ORDER, not on a fold: a reversed distance fold moves distances by an
+ulp and leaves a 4-cluster cut alone on most fixtures, which is not a
+control that can fail. 24 s for the lane on this Mac.
+
+### et-clf and et-reg, IDENTICAL x4, model column included
+
+`bindings/_mojolearn_trees_host.mojo` (`bindings/build_trees_host.sh`),
+routed by `_backend._HOST_MODULES["_mojolearn_trees"]`, exporting the
+eight `et_*_fit` entries (plain, `_export`, `_rowmajor`,
+`_rowmajor_export`; the 22-slot params list of the GPU binding, slot 20
+accepted at 1, the one refusal the host binding drops), `forest_export`,
+`forest_export_legacy`, `forest_export_release`, `et_predict` (over
+`core/forest_host_predict.mojo`, the forest host binding's walk, so the
+model column's RELOAD check on a CPU-only install predicts through the
+CPU inference path), `trees_vendor`, `trees_numeric_mode`.
+`python/mojolearn/extratrees.py` and `_forest_protocol.py` are unchanged.
+
+THE FIT IS NOT THE EXISTING REFERENCE. Section 1.1 named
+`fit_extra_trees_classifier_reference` and `fit_extra_trees_regressor_reference`
+as the host routines, and the regressor's leaf restatement as the risk.
+Reading the two searches side by side showed a second gap: the host
+regressor `node_split_random_mse` orders candidates by sklearn's Float64
+proxy (DEVIATION 153) where the device orders by cuML's exact `Int64` MSE
+key over the QUANTIZED labels (DEVIATION 189, `regression_key`, with a
+node-uniform right shift of 14 bits at 20,000 rows). The two orderings
+agree in exact arithmetic and can disagree bit for bit on a near-tie the
+shift turns into an exact tie (then resolved by DEVIATION 463's keyed
+rank), so structure identity between that reference and the device is a
+measured fact on the check's fixtures, not a property of the code. The
+CPU column therefore runs a HOST RESTATEMENT OF THE DEVICE SEARCH,
+`train_tree_exact` (`extratrees/impl/decisiontree/batched_levelalgo/builder.mojo`,
+with `fit_forest_exact` in `randomforest.mojo` and
+`fit_extra_trees_classifier_host_exact` / `fit_extra_trees_regressor_host_exact`
+in `estimator.mojo`): per (node, feature) `node_feature_score_host`, the
+score kernel's own sequential oracle; the candidate as
+`score_to_candidate_kernel` forms it; `SplitExact.update` in slot order;
+the readback's `MIN_FINITE` fix; `split_not_valid`, `partition_samples`,
+`NodeQueue.push`; DEVIATION 205's rescue keyed as the device keys it; and
+the leaf pass as `leaf_kernel` computes it over the device's label plane
+(class ids, or `quantize_labels`'s fixed point with `Float32(1 / scale)`).
+Both objectives go through it. Best-first growth (`max_leaf_nodes`) is
+refused by name on that path. The docstring of
+`fit_extra_trees_regressor_device` at `extratrees/estimator.mojo`, which
+said the split decision "is made on integer sums on both sides", now says
+what each side orders by; `extratrees/checks/device_regression_check.mojo:11-15`
+says the same thing and is a check file, reported here rather than
+edited.
+
+A FINDING ON THE WAY. The first et-clf run REFUSED every cell at
+`_mojolearn.encode_labels_i32`: `_labels.encode_labels` resolves its
+native encoder from the base binding, and `bindings/_mojolearn_core_host.mojo`
+carries the converters, the finiteness scans, the gathers and the
+argmaxes but not `encode_labels_*`. That file is under another lane's
+edit, so `_labels._encode_labels_native` now takes the Python routine on
+a CPU-only install when the native encoder is missing (the routine is the
+encoder's definition and `tests/test_labels_native.py` holds the native
+copy equal to it; a GPU install still fails loudly). Adding the encoders
+to the core host binding is the cleaner close and is owed to that file's
+owner.
+
+| fixture | et-clf train | et-clf model | et-reg train | et-reg model |
+|---|---|---|---|---|
+| base | c586b27a3b049614 | 58a53490a62fba59 | 754d8c127ecfc04d | 1c0c6b20cc9be5bd |
+| ties | 604f59c7a4203eeb | e63de8292d8384e4 | e7072e1c8fe0083c | 0ae34e3bcc2b7391 |
+| hashed | eb7aaadcd0843a6d | 94580dd625aaa11a | 4e0a0d9a4670ed5f | 029c99465d40dd66 |
+| wide | ee8b318d6bf698b2 | f792edfcd53b6aff | b745e53515f59cac | 6da81ae280958f67 |
+| denormal | b40377fb35e52909 | 5d348c7133844b3e | 19a23f6fea44befd | 8704471f45cc32d6 |
+| denormal_ftz | b40377fb35e52909 | 5d348c7133844b3e | 19a23f6fea44befd | 8704471f45cc32d6 |
+| dupes | a24dcc8a93f699ff | ff82d3ce7bd5651f | 9a63fea590f79a67 | d99a54bf0717266d |
+| odd | 1da918353bb9f10e | ed0c7e9a34735dbd | c9fe7c90673c2661 | d631aaa061d3f2e4 |
+| negative | e1409786c462d97b | 974e58a34d03e07b | 3fd3dff94cc79fc2 | 34d9143f7fc1fec7 |
+
+`require-columns 4 over ['et-clf', 'et-reg']: OK`; all 54 rows (nine
+train, nine infer and nine model per lane; the infer hashes are in
+`diff.et.txt`, base et-clf b728e73e5f84514c, et-reg f67822ca39ef408b)
+read `IDENTICAL x4`; the model column is the saved bytes, so the five
+model arrays a CPU fits are byte for byte the three GPUs'. Sabotage
+(`PCG_HOST_SABOTAGE`): 18 of 18 train, infer and model cells `DIVERGENT`
+(et-clf base d630c867d817d8fd, et-reg base ea112e2954936a35). The first
+placement of that hook, inside `uniform_threshold`, was measured INERT on
+this path (the restated search draws through `draw_threshold_device`,
+which never calls it; `cpu-apple-m4.sabotage.agglomerative-et.json` is
+that run, kept), and the hook moved to `SplitKey.generator`, which every
+keyed draw goes through. The ET lanes take 15 s together on this Mac
+(the "time first" item of section 3.4: the restated search at 16 trees,
+depth 8, 20,000 by 16 is well under a second per fit).
+
+### iforest, IDENTICAL x4
+
+`iforest_run` in `bindings/_mojolearn_svm_host.mojo` over
+`isolation_forest/checks/if_oracle.mojo::oracle_fit`, `oracle_path_lengths`
+and `oracle_scores` (the XORWOW tables rebuilt on the host per call,
+DEVIATION 683), the parameter resolution of `IsolationForestEstimator.fit`
+and the estimator's epilogues (`-paper`, `- Float32(offset_)`,
+`-(paper > Float32(-offset_) ? 1 : -1)`, the contamination quantile
+through `percentile_linear`), under the GPU binding's 16-slot contract
+with DEVIATION 874's fit-on-every-call kept, so the identity surface is
+the GPU's and `python/mojolearn/_iforest_impl.py` is unchanged. The
+contamination-quantile arm is restated but no identity_break lane runs it
+(the lane fits at `contamination='auto'`); it is a non-default path in
+rule 8's sense until a lane covers it.
+
+A FINDING ON THE WAY. The first run diverged on `denormal` alone (train
+`scores` 045af056aca03f84 against 54ea9b5c8c3fc38b, infer likewise), with
+`denormal_ftz` identical: the device stages every input cell through
+`ftz` at upload (`_upload_f32`, `_upload_rowmajor_as_colmajor`) for the
+training matrix and for every query, and the oracle reads its lists raw.
+The binding now flushes both matrices at read, once, at the same
+boundary; nothing else moved.
+
+| fixture | train (scores, predict) | infer (all four columns) |
+|---|---|---|
+| base | 8703d4a008ffd13d | c4247bb3a6c4675e |
+| ties | 5043855ee14799da | see `diff.iforest.txt` |
+| hashed | 72260557474879ae | see `diff.iforest.txt` |
+| wide | 8703d4a008ffd13d | see `diff.iforest.txt` |
+| denormal | 54ea9b5c8c3fc38b | f3dcde6748050803 |
+| denormal_ftz | 54ea9b5c8c3fc38b | f3dcde6748050803 |
+| dupes | b879bcf3dcf99f38 | see `diff.iforest.txt` |
+| odd | 9b849a13c8d35adb | see `diff.iforest.txt` |
+| negative | a5b7676e39778af5 | see `diff.iforest.txt` |
+
+`require-columns 4 over ['iforest']: OK`; the nine train rows and the nine
+infer rows read `IDENTICAL x4`; model is `n/a:no-save` on all four.
+Sabotage (`XORWOW_HOST_SABOTAGE`): 9 of 9 train and infer cells
+`DIVERGENT`, `parts differ: scores,predict` (base 9d499389c350b685). 8 s
+for the lane on this Mac.
+
+STILL OWED FOR IFOREST: the GPU-side model export. The forest host
+inference brief (`docs/lanes/BRIEF_forest_host_inference_2026-09-13.md`,
+its iforest entry and rank 9) says no fitted model exists to save and a
+GPU-side export comes first; that is still true. A `save` on the Python
+class would turn the model cell from `n/a:no-save` into a hash on the CPU
+column while the three GPU columns still read `n/a`, so `--require-columns 4`
+would fail on the model cell until the GPU columns are rerun with the same
+export, and the GPU bindings are not rebuilt on this Mac. The export
+(the four node arrays, the tree offsets, `c_normalization`, `offset_`,
+`max_samples_`, materialized once after the device fit) and a host
+`score_samples` / `predict` over the saved arrays are one lane with a GPU
+leg; the host scorer for it is `oracle_path_lengths` / `oracle_scores`
+over an `OracleForest` rebuilt from the arrays, which this binding
+already runs.

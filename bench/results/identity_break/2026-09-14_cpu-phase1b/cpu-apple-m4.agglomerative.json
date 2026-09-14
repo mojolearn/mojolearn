@@ -1,0 +1,340 @@
+{
+ "mode": "identical",
+ "repeats": 2,
+ "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+ "vendor": "cpu-apple-m4",
+ "commit": "6796ceff932391adeaea8d788a6c5230ddfacf53",
+ "commit_source": "MOJOLEARN_COMMIT",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  },
+  "ties": {
+   "X": "186fe2109fc34ad5",
+   "y_clf": "f33cf521f758ae3c",
+   "y_reg": "047d4652a4d56bc3"
+  },
+  "hashed": {
+   "X": "c93497b26fe65cda",
+   "y_clf": "d104ead2f62bdd03",
+   "y_reg": "ce4959d8070bb069"
+  },
+  "wide": {
+   "X": "35f6a8481e649eb8",
+   "y_clf": "276ebacc29267948",
+   "y_reg": "611fc5dd6367bef5"
+  },
+  "denormal": {
+   "X": "752323c375a1cbf5",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "denormal_ftz": {
+   "X": "34c156b0d0e8a891",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "dupes": {
+   "X": "9d9d9db7c7785a14",
+   "y_clf": "d390ee2944b13e1d",
+   "y_reg": "135ce10f2a0817fe"
+  },
+  "odd": {
+   "X": "93d9611a09107bb9",
+   "y_clf": "273a388a705a4f40",
+   "y_reg": "25f3d126c81ca0ec"
+  },
+  "negative": {
+   "X": "08106ffff3256313",
+   "y_clf": "294ce4d7dadaf0bb",
+   "y_reg": "ce1914d5f78f5707"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  },
+  "ties": {
+   "X": "d1ba686494256660"
+  },
+  "hashed": {
+   "X": "9dc786ade4574aff"
+  },
+  "wide": {
+   "X": "d52a1af18a3c2f1c"
+  },
+  "denormal": {
+   "X": "5061056b118d07d0"
+  },
+  "denormal_ftz": {
+   "X": "a8c3d1a560b5cabb"
+  },
+  "dupes": {
+   "X": "e4b16c115962dfcd"
+  },
+  "odd": {
+   "X": "32ea0bbed60b8e6c"
+  },
+  "negative": {
+   "X": "45b539a3f66ce25d"
+  }
+ },
+ "cells": {
+  "agglomerative/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "ad11b976bfbfc20b",
+    "ad11b976bfbfc20b"
+   ],
+   "parts": [
+    {
+     "labels": "02ca572ae936a2fa"
+    },
+    {
+     "labels": "02ca572ae936a2fa"
+    }
+   ],
+   "infer": [
+    "n/a:transductive",
+    "n/a:transductive"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A"
+  },
+  "agglomerative/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "7dea8a094150b8a9",
+    "7dea8a094150b8a9"
+   ],
+   "parts": [
+    {
+     "labels": "8033ec9dd0710431"
+    },
+    {
+     "labels": "8033ec9dd0710431"
+    }
+   ],
+   "infer": [
+    "n/a:transductive",
+    "n/a:transductive"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A"
+  },
+  "agglomerative/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "196c79a60c16166c",
+    "196c79a60c16166c"
+   ],
+   "parts": [
+    {
+     "labels": "aaece24b8cbb8e59"
+    },
+    {
+     "labels": "aaece24b8cbb8e59"
+    }
+   ],
+   "infer": [
+    "n/a:transductive",
+    "n/a:transductive"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A"
+  },
+  "agglomerative/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "24b2baa4533fb568",
+    "24b2baa4533fb568"
+   ],
+   "parts": [
+    {
+     "labels": "a8045fdbd2a5e09e"
+    },
+    {
+     "labels": "a8045fdbd2a5e09e"
+    }
+   ],
+   "infer": [
+    "n/a:transductive",
+    "n/a:transductive"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A"
+  },
+  "agglomerative/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "b05982504c7e8646",
+    "b05982504c7e8646"
+   ],
+   "parts": [
+    {
+     "labels": "04ec0c85878ee8d2"
+    },
+    {
+     "labels": "04ec0c85878ee8d2"
+    }
+   ],
+   "infer": [
+    "n/a:transductive",
+    "n/a:transductive"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A"
+  },
+  "agglomerative/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "b05982504c7e8646",
+    "b05982504c7e8646"
+   ],
+   "parts": [
+    {
+     "labels": "04ec0c85878ee8d2"
+    },
+    {
+     "labels": "04ec0c85878ee8d2"
+    }
+   ],
+   "infer": [
+    "n/a:transductive",
+    "n/a:transductive"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A"
+  },
+  "agglomerative/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "ad11b976bfbfc20b",
+    "ad11b976bfbfc20b"
+   ],
+   "parts": [
+    {
+     "labels": "02ca572ae936a2fa"
+    },
+    {
+     "labels": "02ca572ae936a2fa"
+    }
+   ],
+   "infer": [
+    "n/a:transductive",
+    "n/a:transductive"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A"
+  },
+  "agglomerative/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c747a33eff11bbe1",
+    "c747a33eff11bbe1"
+   ],
+   "parts": [
+    {
+     "labels": "76a7293606971988"
+    },
+    {
+     "labels": "76a7293606971988"
+    }
+   ],
+   "infer": [
+    "n/a:transductive",
+    "n/a:transductive"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A"
+  },
+  "agglomerative/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "795f9975eb5ed985",
+    "795f9975eb5ed985"
+   ],
+   "parts": [
+    {
+     "labels": "e11ebe209aaca7a0"
+    },
+    {
+     "labels": "e11ebe209aaca7a0"
+    }
+   ],
+   "infer": [
+    "n/a:transductive",
+    "n/a:transductive"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A"
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "host": {
+  "cpu_model": "Apple M4",
+  "arch": "arm64",
+  "target_cpu": "apple-m1",
+  "mojo_version": "Mojo 1.0.0 (ed45d567)",
+  "python": "3.13.15",
+  "column": "cpu",
+  "routed": {
+   "_mojolearn": "_mojolearn_core_host",
+   "_mojolearn_linalg": "_mojolearn_linalg_host",
+   "_mojolearn_estimators": "_mojolearn_estimators_host",
+   "_mojolearn_tsa": "_mojolearn_tsa_host",
+   "_mojolearn_solver": "_mojolearn_solver_host",
+   "_mojolearn_svm": "_mojolearn_svm_host"
+  },
+  "families": {
+   "_mojolearn_core_host": {
+    "column": "cpu",
+    "sabotage": false
+   },
+   "_mojolearn_solver_host": {
+    "column": "cpu",
+    "sabotage": false
+   }
+  }
+ }
+}

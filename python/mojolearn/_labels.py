@@ -197,7 +197,22 @@ def _encode_labels_native(y):
     if arr.size != max(arr.shape):
         return None
     key, fmt, py = spec
-    fn = _native(key)
+    try:
+        fn = _native(key)
+    except ImportError:
+        # A CPU-ONLY INSTALL whose base host binding does not carry the
+        # native encoder (the CPU training lane, et-clf, 2026-09-14:
+        # bindings/_mojolearn_core_host.mojo exports the converters, the
+        # finiteness scans, the gathers and the argmaxes, not encode_labels_*).
+        # The Python routine below is the encoder's DEFINITION and the
+        # native arm its fast copy (`tests/test_labels_native.py` holds them
+        # equal), so falling back changes no byte. A GPU install never takes
+        # this arm: `_native` raises there only for a binary older than the
+        # Python beside it, which must stay loud.
+        from . import _backend
+        if _backend._CPU_ONLY is None:
+            raise
+        return None
     codes_store = _output_store("i", arr.size)
     classes_store = _output_store(fmt, _NATIVE_ENCODE_MAX_CLASSES)
     try:

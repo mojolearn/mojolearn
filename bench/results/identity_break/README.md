@@ -48,16 +48,20 @@ carries
 | `host.routed` | the `_HOST_MODULES` table the run resolved through |
 
 The workflow's `COVERED_LANES` is the list of lanes with a CPU
-implementation; it is EMPTY until phase 1 of
-`docs/lanes/BRIEF_cpu_training_2026-09-13.md` lands the first (gemm-pinned).
-A covered lane must read STABLE on every fixture and `IDENTICAL x4` against
-the three GPU columns (`--diff ... --require-columns 4 --lanes <covered>`),
-because `IDENTICAL x3` on a lane the CPU column should cover is the CPU
-binding refusing, not a pass.
+implementation: gemm-pinned, kde, holtwinters, lasso, elasticnet and svc
+(phase 1 of `docs/lanes/BRIEF_cpu_training_2026-09-13.md`, 2026-09-13) and
+agglomerative, et-clf, et-reg and iforest (phase 1b, 2026-09-14). A covered
+lane must read STABLE on every fixture and `IDENTICAL x4` against the three
+GPU columns (`--diff ... --require-columns 4 --lanes <covered>`), because
+`IDENTICAL x3` on a lane the CPU column should cover is the CPU binding
+refusing, not a pass.
 
 A CPU column enters the brief's certified table only after its uploaded
-JSON is read and its `host.cpu_model` names the CPU. Nothing in this
-directory is a CPU column yet.
+JSON is read and its `host.cpu_model` names the CPU. The CPU columns in
+this directory are the Apple M4's, run on the development Mac through the
+host path (`2026-09-14_cpu-phase1b/`, its README names the runs, the
+diffs and the sabotage arms); the seven-runner columns are workflow
+artifacts, read per run, and none is committed here.
 
 ## Provenance rules for every column since 2026-09-13
 

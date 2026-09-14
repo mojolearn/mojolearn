@@ -915,16 +915,31 @@ _HOST_MODULES = {
     "_mojolearn_tsa": "_mojolearn_tsa_host",
     # lasso, elasticnet (phase 1, 2026-09-13): bindings/_mojolearn_solver_host.mojo
     # over solver/checks/cd_oracle.mojo::cd_oracle_fit and gemm_oracle for
-    # the predict; exports cd_fit, cd_predict, solver_vendor. linkage_fit
-    # is absent until the agglomerative lane lands and refuses by name.
+    # the predict; exports cd_fit, cd_predict, solver_vendor. agglomerative
+    # (phase 1b, 2026-09-14) adds linkage_fit over
+    # hierarchy/checks/linkage_oracle.mojo (the pinned distances, Kruskal
+    # under the device's total order, the dendrogram and the cut).
     "_mojolearn_solver": "_mojolearn_solver_host",
     # svc (phase 1, 2026-09-13): bindings/_mojolearn_svm_host.mojo over
     # svm/checks/smo_oracle.mojo::smo_oracle_fit and smo_oracle_decision;
     # exports svc_fit, svc_predict, svm_vendor, svm_numeric_mode; a saved
     # GPU-fitted SVC predicts through svc_predict here (the kde svc host
-    # lane, 2026-09-14). svr_fit, svr_predict and iforest_run are absent and
-    # refuse by name until their lanes land.
+    # lane, 2026-09-14). iforest (phase 1b, 2026-09-14) adds iforest_run
+    # over isolation_forest/checks/if_oracle.mojo (the fit-on-every-call
+    # surface kept, DEVIATION 874). svr_fit and svr_predict are absent and
+    # refuse by name until their lane lands.
     "_mojolearn_svm": "_mojolearn_svm_host",
+    # et-clf, et-reg (phase 1, 2026-09-14): bindings/_mojolearn_trees_host.mojo
+    # over extratrees/estimator.mojo::fit_extra_trees_classifier_host_exact
+    # and fit_extra_trees_regressor_host_exact (the device trainer restated
+    # on the host, exact keys and quantized leaves) and
+    # core/forest_host_predict.mojo for the predict; exports the eight
+    # et_*_fit entries, forest_export, forest_export_legacy,
+    # forest_export_release, et_predict, trees_vendor, trees_numeric_mode.
+    # et_predict_gpu_parallel and the resident forest_* entries are absent
+    # and refuse by name (inference_engine='parallel_groves' is a GPU
+    # engine).
+    "_mojolearn_trees": "_mojolearn_trees_host",
 }
 
 #: The env switch the CPU identity gate sets to load a host binding built
