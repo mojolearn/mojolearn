@@ -44,7 +44,7 @@
 set -eu
 family=${1:-}
 case "$family" in
-    ''|*[!a-z_]*) echo 'build_host_family: usage: build_host_family.sh <family>, lowercase letters and underscores (byte_lm, forest, tokenizer, core, linalg, estimators, metrics, preprocessing, tsa, solver, svm, trees, rf)' >&2; exit 2 ;;
+    ''|*[!a-z_]*) echo 'build_host_family: usage: build_host_family.sh <family>, lowercase letters and underscores (byte_lm, forest, tokenizer, core, linalg, estimators, metrics, preprocessing, tsa, solver, svm, trees, rf, gbdt)' >&2; exit 2 ;;
 esac
 FAMILY=$(printf '%s' "$family" | tr 'a-z' 'A-Z')
 case "$family" in
