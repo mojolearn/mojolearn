@@ -448,6 +448,9 @@ class ExtraTreesClassifier(_ExtraTreesBase):
         )
 
     def fit(self, X, y):
+        return self._fit_with_tree_start(X, y)
+
+    def _fit_with_tree_start(self, X, y, tree_start=None):
         self._refresh_config()
         self._capture_fit_mode()
         # DEVIATION 2340: `classes_` is a Python list of the caller's
@@ -456,6 +459,13 @@ class ExtraTreesClassifier(_ExtraTreesBase):
         # label-encoding loop). The codes cross as float32, as before.
         self.classes_, codes = encode_labels(y)  # DEVIATION 2500, int32 codes
         self.n_classes_ = int(len(self.classes_))
+        if tree_start is not None:
+            binding = self._bind('_mojolearn_trees')
+            if not callable(getattr(binding, 'et_classifier_fit_shard', None)):
+                raise ImportError('rebuild ExtraTrees binding for global tree-ID shards')
+            def fit_fn(x, y, params):
+                return binding.et_classifier_fit_shard(x, y, params, tree_start)
+            return self._fit_arrays(X, codes.astype('<f4'), self.n_classes_, fit_fn)
         return self._fit_arrays(
             X,
             codes.astype("<f4"),
@@ -546,9 +556,19 @@ class ExtraTreesRegressor(_ExtraTreesBase):
             self._cfg["max_features"] = None
 
     def fit(self, X, y):
+        return self._fit_with_tree_start(X, y)
+
+    def _fit_with_tree_start(self, X, y, tree_start=None):
         self._refresh_config()
         self._capture_fit_mode()
         ya, _ = as_f32_c(y, ndim=1, name="y")
+        if tree_start is not None:
+            binding = self._bind('_mojolearn_trees')
+            if not callable(getattr(binding, 'et_regressor_fit_shard', None)):
+                raise ImportError('rebuild ExtraTrees binding for global tree-ID shards')
+            def fit_fn(x, y, params):
+                return binding.et_regressor_fit_shard(x, y, params, tree_start)
+            return self._fit_arrays(X, ya, 0, fit_fn)
         return self._fit_arrays(
             X,
             ya,

@@ -1,0 +1,53 @@
+{
+  "status": "PASS",
+  "checks": [
+    [
+      7,
+      "array"
+    ],
+    [
+      7,
+      "random"
+    ],
+    [
+      7,
+      "k-means++"
+    ],
+    [
+      8,
+      "array"
+    ],
+    [
+      8,
+      "random"
+    ],
+    [
+      8,
+      "k-means++"
+    ],
+    [
+      32,
+      "array"
+    ],
+    [
+      32,
+      "random"
+    ],
+    [
+      32,
+      "k-means++"
+    ]
+  ],
+  "hashes": [
+    "279c86fcdf48e36405f13aa0a5210afac6fff728f1e072794ab3b40d5467689f",
+    "3635c9824ec4eb2231d7e779ebf30e83c73ecb92d6ba21122cb8e3a696aedba1",
+    "3e6291343729e61803e84ca4aa805b7bd74e4e5113b4b91399dc84efee35e5f9",
+    "9dfd856fbcf3228837eac6b7b0186fb4c7422f663a39d4c793e0a812f60e7a61",
+    "acfc27daf258abee67989bce5d9c580f4a762907e11d32bb12a442c025900b39",
+    "a81563c8d08c3d058e2a5d771c8650356206a9742302f0ad9ade583e2e96da0a",
+    "a73f033f5f8ce4f39f9542871054d9a56115d1b6a18667fcb72677e10833e24b",
+    "e7439145011f58469602a805b1a588a0bcc5f9e3ac6a2d67519a2c4e59cb1a0c",
+    "53f353f97469640f30c0258608ea6b2f76a87c8372467dc16ab778e1881c8c63"
+  ],
+  "scope": "Two devices; whole-row assignment tiles, serial update order"
+}

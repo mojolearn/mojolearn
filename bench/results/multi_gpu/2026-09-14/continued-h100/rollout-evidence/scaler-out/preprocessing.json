@@ -1,0 +1,193 @@
+{
+  "status": "PASS",
+  "checks": [
+    [
+      "StandardScaler",
+      {
+        "with_mean": false,
+        "with_std": false,
+        "numeric_mode": "identical"
+      },
+      7
+    ],
+    [
+      "StandardScaler",
+      {
+        "with_mean": false,
+        "with_std": false,
+        "numeric_mode": "identical"
+      },
+      16
+    ],
+    [
+      "StandardScaler",
+      {
+        "with_mean": false,
+        "with_std": true,
+        "numeric_mode": "identical"
+      },
+      7
+    ],
+    [
+      "StandardScaler",
+      {
+        "with_mean": false,
+        "with_std": true,
+        "numeric_mode": "identical"
+      },
+      16
+    ],
+    [
+      "StandardScaler",
+      {
+        "with_mean": true,
+        "with_std": false,
+        "numeric_mode": "identical"
+      },
+      7
+    ],
+    [
+      "StandardScaler",
+      {
+        "with_mean": true,
+        "with_std": false,
+        "numeric_mode": "identical"
+      },
+      16
+    ],
+    [
+      "StandardScaler",
+      {
+        "with_mean": true,
+        "with_std": true,
+        "numeric_mode": "identical"
+      },
+      7
+    ],
+    [
+      "StandardScaler",
+      {
+        "with_mean": true,
+        "with_std": true,
+        "numeric_mode": "identical"
+      },
+      16
+    ],
+    [
+      "MinMaxScaler",
+      {
+        "feature_range": [
+          0,
+          1
+        ],
+        "clip": false,
+        "numeric_mode": "identical"
+      },
+      7
+    ],
+    [
+      "MinMaxScaler",
+      {
+        "feature_range": [
+          0,
+          1
+        ],
+        "clip": false,
+        "numeric_mode": "identical"
+      },
+      16
+    ],
+    [
+      "MinMaxScaler",
+      {
+        "feature_range": [
+          0,
+          1
+        ],
+        "clip": true,
+        "numeric_mode": "identical"
+      },
+      7
+    ],
+    [
+      "MinMaxScaler",
+      {
+        "feature_range": [
+          0,
+          1
+        ],
+        "clip": true,
+        "numeric_mode": "identical"
+      },
+      16
+    ],
+    [
+      "MinMaxScaler",
+      {
+        "feature_range": [
+          -2,
+          3
+        ],
+        "clip": false,
+        "numeric_mode": "identical"
+      },
+      7
+    ],
+    [
+      "MinMaxScaler",
+      {
+        "feature_range": [
+          -2,
+          3
+        ],
+        "clip": false,
+        "numeric_mode": "identical"
+      },
+      16
+    ],
+    [
+      "MinMaxScaler",
+      {
+        "feature_range": [
+          -2,
+          3
+        ],
+        "clip": true,
+        "numeric_mode": "identical"
+      },
+      7
+    ],
+    [
+      "MinMaxScaler",
+      {
+        "feature_range": [
+          -2,
+          3
+        ],
+        "clip": true,
+        "numeric_mode": "identical"
+      },
+      16
+    ]
+  ],
+  "hashes": [
+    "a701ef3d10cfeb43ef5f1493741af1b3ac9726b0ff8bf59790e3815dee8cb89c",
+    "a701ef3d10cfeb43ef5f1493741af1b3ac9726b0ff8bf59790e3815dee8cb89c",
+    "c596cab8959075393f1ee500c58968ab3f188f3e7d91dc8b9f8acd51fbc9ef1a",
+    "c596cab8959075393f1ee500c58968ab3f188f3e7d91dc8b9f8acd51fbc9ef1a",
+    "0d6e4e481e121b783fe03b2513f92d8fd66ae72f370ba9b833de1dc931aee5ee",
+    "0d6e4e481e121b783fe03b2513f92d8fd66ae72f370ba9b833de1dc931aee5ee",
+    "ae19166912bd8beb78a027ec4e17de08c5ddcc1fdf123d43ccbfe0c20165ed89",
+    "ae19166912bd8beb78a027ec4e17de08c5ddcc1fdf123d43ccbfe0c20165ed89",
+    "2797bd88e5de6e874dc8a881903c9c8d760ee88088c835312eee06cacee12657",
+    "2797bd88e5de6e874dc8a881903c9c8d760ee88088c835312eee06cacee12657",
+    "2797bd88e5de6e874dc8a881903c9c8d760ee88088c835312eee06cacee12657",
+    "2797bd88e5de6e874dc8a881903c9c8d760ee88088c835312eee06cacee12657",
+    "a462c5a950a54d84790d80c37e29eab569fd90ffc60babfc552292333119b24f",
+    "a462c5a950a54d84790d80c37e29eab569fd90ffc60babfc552292333119b24f",
+    "553f8c1bfff739af5d6577c82d48bebe8c39df6d80dec24ffe8065191dab3807",
+    "553f8c1bfff739af5d6577c82d48bebe8c39df6d80dec24ffe8065191dab3807"
+  ],
+  "corpus_sha256": "2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8",
+  "scope": "Two GPUs; column-sharded statistics and transforms; no large-memory/cross-vendor qualification"
+}

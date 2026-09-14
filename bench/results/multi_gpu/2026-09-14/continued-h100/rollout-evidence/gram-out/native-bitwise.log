@@ -1,0 +1,97 @@
+24977 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3152c0000000, nodemask=1)
+Imported from /root/mojolearn/training/checks/gram_parallel_check.mojo:6:
+Imported from /root/mojolearn/core/gram_splitk.mojo:171:
+/root/mojolearn/core/device_zero.mojo:98:16: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            p8 + n_vec * 16, Int32(tail),
+            ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn/training/checks/gram_parallel_check.mojo:6:
+/root/mojolearn/core/gram_splitk.mojo:656:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    tile[i] = ftz(
+                    ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/gram_parallel_check.mojo:6:
+/root/mojolearn/core/gram_splitk.mojo:661:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    tile[i] = x.unsafe_load(t * m + i)
+                    ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/gram_parallel_check.mojo:6:
+/root/mojolearn/core/gram_splitk.mojo:676:37: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        cv[b] = tile[base + bj0 + b]
+                                ~~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/gram_parallel_check.mojo:6:
+/root/mojolearn/core/gram_splitk.mojo:678:38: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        var xi = tile[base + bi0 + a]
+                                 ~~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/gram_parallel_check.mojo:6:
+/root/mojolearn/core/gram_splitk.mojo:695:30: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                var xj = tile[base + jm]
+                         ~~~~^~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/gram_parallel_check.mojo:6:
+/root/mojolearn/core/gram_splitk.mojo:700:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            tile[base + Int(ii[c])], xj, acc[c]
+                            ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/gram_parallel_check.mojo:6:
+/root/mojolearn/core/gram_splitk.mojo:718:37: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                                tile[base + ic], tile[base + jc], a_c
+                                ~~~~^~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/gram_parallel_check.mojo:6:
+/root/mojolearn/core/gram_splitk.mojo:718:54: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                                tile[base + ic], tile[base + jc], a_c
+                                                 ~~~~^~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/gram_parallel_check.mojo:6:
+/root/mojolearn/core/gram_splitk.mojo:734:37: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                                tile[base + Int(ii[c])],
+                                ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/gram_parallel_check.mojo:6:
+/root/mojolearn/core/gram_splitk.mojo:735:37: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                                tile[base + Int(jj[c])],
+                                ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+PASS Gram partials and output 7 1 0
+PASS Gram partials and output 7 1 1
+PASS Gram partials and output 7 127 0
+PASS Gram partials and output 7 127 1
+PASS Gram partials and output 7 259 0
+PASS Gram partials and output 7 259 1
+PASS Gram partials and output 7 1031 0
+PASS Gram partials and output 7 1031 1
+PASS Gram partials and output 16 1 0
+PASS Gram partials and output 16 1 1
+PASS Gram partials and output 16 127 0
+PASS Gram partials and output 16 127 1
+PASS Gram partials and output 16 259 0
+PASS Gram partials and output 16 259 1
+PASS Gram partials and output 16 1031 0
+PASS Gram partials and output 16 1031 1
+PASS Gram partials and output 33 1 0
+PASS Gram partials and output 33 1 1
+PASS Gram partials and output 33 127 0
+PASS Gram partials and output 33 127 1
+PASS Gram partials and output 33 259 0
+PASS Gram partials and output 33 259 1
+PASS Gram partials and output 33 1031 0
+PASS Gram partials and output 33 1031 1
+PASS Gram partials and output 65 1 0
+PASS Gram partials and output 65 1 1
+PASS Gram partials and output 65 127 0
+PASS Gram partials and output 65 127 1
+PASS Gram partials and output 65 259 0
+PASS Gram partials and output 65 259 1
+PASS Gram partials and output 65 1031 0
+PASS Gram partials and output 65 1031 1
+PASS Gram partials and output 128 1 0
+PASS Gram partials and output 128 1 1
+PASS Gram partials and output 128 127 0
+PASS Gram partials and output 128 127 1
+PASS Gram partials and output 128 259 0
+PASS Gram partials and output 128 259 1
+PASS Gram partials and output 128 1031 0
+PASS Gram partials and output 128 1031 1

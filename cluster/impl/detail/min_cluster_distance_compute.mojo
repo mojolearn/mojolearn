@@ -50,6 +50,7 @@ what must fit the index type.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
+from cluster.multi_gpu import assignment_device_count, assignment_parallel
 
 from core.gemm import gemm_nt
 from core.row_norms import NORM_TPB, row_norm_kernel
@@ -138,6 +139,12 @@ def _launch_fused[
     call feeds the occupancy query -- theirs passes the double-buffered
     `P::SmemSize` because that is what their kernel allocates.
     """
+    var device_count = assignment_device_count()
+    if device_count > 1:
+        assignment_parallel[veclen, kblk, tr, tc](ctx, out_key, out_value,
+            x, centroids, x_norm, centroid_norm, n_samples, n_clusters,
+            n_features, is_sqrt, device_count)
+        return
     comptime nthreads = tr * tc
     comptime mblk = 4 * tr
     comptime nblk = 4 * tc

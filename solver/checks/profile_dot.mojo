@@ -41,6 +41,7 @@ and the implemented `coalescedSumMediumKernel` for the norms and means.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
+from solver.multi_gpu import profile_dot_parallel
 
 from gemm.checks.gemm_identical import (
     identical_gemm_with_plan,
@@ -86,6 +87,8 @@ def profile_dot_into(
     which by contract cannot move a bit and which the launch-invariance
     gate exercises. `ws` must hold `profile_dot_workspace_floats(k)`.
     """
+    if plan < 0 and profile_dot_parallel(ctx, c, a, b, ws, k):
+        return
     var p = plan
     if p < 0:
         p = choose_gemm_plan(1, 1, k)

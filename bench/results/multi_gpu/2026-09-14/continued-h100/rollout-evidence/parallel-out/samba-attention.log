@@ -1,0 +1,24 @@
+4642 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x327680000000, nodemask=1)
+4830 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x51c700000000, nodemask=1)
+4831 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x51c900000000, nodemask=1)
+4941 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x738ac0000000, nodemask=1)
+4994 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x318100000000, nodemask=1)
+5047 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x31ea40000000, nodemask=1)
+{
+  "status": "PASS",
+  "checks": [
+    "Samba_attention_dropout_K3_two_GPU_replay",
+    "Samba_checkpoint_device_migration"
+  ],
+  "hashes": [
+    "e43b8b7614f681bdf56e9f7ecb62ac79151fe6808469e329f08b950c6f4cb939",
+    "0cf693300747aff6c54b2541e5e1f8b1e39c7e71ab974d6a4449fc127e5b3c82"
+  ],
+  "state_hashes": [
+    "b7c08e4aa6517d7946b4451215abc737e4d3aa78bb3bd1918741e9047f1fbcfc",
+    "5caea1bd7fa45c493fe540ee2b1a142626d489e1c3aacc4324c378527827ceef"
+  ],
+  "corpus_sha256": "2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8",
+  "scope": "Two devices; no cross-vendor or speed claim"
+}
+

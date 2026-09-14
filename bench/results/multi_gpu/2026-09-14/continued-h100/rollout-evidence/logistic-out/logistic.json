@@ -1,0 +1,203 @@
+{
+  "status": "PASS",
+  "checks": [
+    [
+      7,
+      2,
+      {
+        "penalty": "l1",
+        "fit_intercept": true,
+        "max_iter": 5,
+        "linesearch_max_iter": 10,
+        "numeric_mode": "identical"
+      }
+    ],
+    [
+      7,
+      2,
+      {
+        "penalty": "l2",
+        "fit_intercept": true,
+        "max_iter": 5,
+        "linesearch_max_iter": 10,
+        "numeric_mode": "identical"
+      }
+    ],
+    [
+      7,
+      2,
+      {
+        "penalty": "elasticnet",
+        "fit_intercept": true,
+        "max_iter": 5,
+        "linesearch_max_iter": 10,
+        "numeric_mode": "identical",
+        "l1_ratio": 0.4
+      }
+    ],
+    [
+      7,
+      2,
+      {
+        "penalty": null,
+        "fit_intercept": false,
+        "max_iter": 5,
+        "linesearch_max_iter": 10,
+        "numeric_mode": "identical"
+      }
+    ],
+    [
+      7,
+      3,
+      {
+        "penalty": "l2",
+        "fit_intercept": true,
+        "max_iter": 5,
+        "linesearch_max_iter": 10,
+        "numeric_mode": "identical"
+      }
+    ],
+    [
+      7,
+      3,
+      {
+        "penalty": null,
+        "fit_intercept": false,
+        "max_iter": 5,
+        "linesearch_max_iter": 10,
+        "numeric_mode": "identical"
+      }
+    ],
+    [
+      7,
+      5,
+      {
+        "penalty": "l2",
+        "fit_intercept": true,
+        "max_iter": 5,
+        "linesearch_max_iter": 10,
+        "numeric_mode": "identical"
+      }
+    ],
+    [
+      7,
+      5,
+      {
+        "penalty": null,
+        "fit_intercept": false,
+        "max_iter": 5,
+        "linesearch_max_iter": 10,
+        "numeric_mode": "identical"
+      }
+    ],
+    [
+      137,
+      2,
+      {
+        "penalty": "l1",
+        "fit_intercept": true,
+        "max_iter": 5,
+        "linesearch_max_iter": 10,
+        "numeric_mode": "identical"
+      }
+    ],
+    [
+      137,
+      2,
+      {
+        "penalty": "l2",
+        "fit_intercept": true,
+        "max_iter": 5,
+        "linesearch_max_iter": 10,
+        "numeric_mode": "identical"
+      }
+    ],
+    [
+      137,
+      2,
+      {
+        "penalty": "elasticnet",
+        "fit_intercept": true,
+        "max_iter": 5,
+        "linesearch_max_iter": 10,
+        "numeric_mode": "identical",
+        "l1_ratio": 0.4
+      }
+    ],
+    [
+      137,
+      2,
+      {
+        "penalty": null,
+        "fit_intercept": false,
+        "max_iter": 5,
+        "linesearch_max_iter": 10,
+        "numeric_mode": "identical"
+      }
+    ],
+    [
+      137,
+      3,
+      {
+        "penalty": "l2",
+        "fit_intercept": true,
+        "max_iter": 5,
+        "linesearch_max_iter": 10,
+        "numeric_mode": "identical"
+      }
+    ],
+    [
+      137,
+      3,
+      {
+        "penalty": null,
+        "fit_intercept": false,
+        "max_iter": 5,
+        "linesearch_max_iter": 10,
+        "numeric_mode": "identical"
+      }
+    ],
+    [
+      137,
+      5,
+      {
+        "penalty": "l2",
+        "fit_intercept": true,
+        "max_iter": 5,
+        "linesearch_max_iter": 10,
+        "numeric_mode": "identical"
+      }
+    ],
+    [
+      137,
+      5,
+      {
+        "penalty": null,
+        "fit_intercept": false,
+        "max_iter": 5,
+        "linesearch_max_iter": 10,
+        "numeric_mode": "identical"
+      }
+    ]
+  ],
+  "hashes": [
+    "616421694a7a09b1d8a67ebc356898afb76249257689efa7fe58066b21b52a20",
+    "a359d28fcc259e1083a20db6f887102ffe717c19a472ceb19b4c91ee1c27d488",
+    "cd9628a798acd30e0bcbb9457a57804292624b8fb79b83b913f40ab6345b8fa2",
+    "b5ea32b07b1f82a20b095ee355f45c4510bedc17dc51d0fb2cba553b7a95c7da",
+    "9fecaf52319bb1c7fea635931b4f824533cec7eea20697ee4c31b3a8d6a28885",
+    "c5e22beaf81531fcc78073764251086df0cd385d31f1fa42ae3892574701a1f7",
+    "72be1401ebcac41abb0c7bf26e328a27ba0fdf71d9d46062cfa1089dbca186ce",
+    "2e5c13594c036ff789d1093d72a41ca2e6eda535dece9078807086305e028f7e",
+    "abcb58f2919e0c812dba40017112159607530ca24d4dc9ab15135e1e67e43fbd",
+    "30416e141ecac760e59d2e31f504a877dd638fb273f3a619dd0b3c215337071f",
+    "75cbaeadb3cea4bfdc0b19474e242ad2daac37862939f55e6c79cacc786b2f86",
+    "6cfd8b0d088cdadfec43fcbdd6fcb5330a204da4e5a1039ba4c87c7357b774da",
+    "1af39f53199c671d86b6ed39e01d8c2bbf2386c581329eaabbc26815d9fb335b",
+    "43e4dab04781c93314d269e90877a2de381509901fe5af8cd4588e64bc41be39",
+    "2758b61164d62eb4d6e4e7b1d113261055635e1597f0fe7603c0a1cb6583834b",
+    "30ba0cb89d0e0fac3c3c2b1d2b0ffe310148be18eb99c5dabac574c36a549bc4"
+  ],
+  "corpus_sha256": "2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8",
+  "scope": "Two H100s; binary/multinomial QN; admitted penalties; five iterations; no root-memory pooling or cross-vendor claim"
+}

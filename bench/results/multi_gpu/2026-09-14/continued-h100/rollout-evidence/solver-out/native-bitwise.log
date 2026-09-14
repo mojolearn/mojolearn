@@ -1,0 +1,15 @@
+40574 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x78c600000000, nodemask=2)
+PASS dot oracle and plans 1 1
+PASS dot oracle and plans 1 2
+PASS dot oracle and plans 127 1
+PASS dot oracle and plans 127 2
+PASS dot oracle and plans 128 1
+PASS dot oracle and plans 128 2
+PASS dot oracle and plans 129 1
+PASS dot oracle and plans 129 2
+PASS dot oracle and plans 257 1
+PASS dot oracle and plans 257 2
+PASS dot oracle and plans 1031 1
+PASS dot oracle and plans 1031 2
+PASS dot oracle and plans 131073 1
+PASS dot oracle and plans 131073 2

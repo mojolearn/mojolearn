@@ -219,11 +219,16 @@ def solver_vendor_binding() raises -> PythonObject:
     return PythonObject(String(COMPILED_VENDOR))
 
 
+def solver_parallel_available() raises -> PythonObject:
+    return PythonObject(1)
+
+
 @export
 def PyInit__mojolearn_solver() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_solver")
         m.def_function[solver_vendor_binding]("solver_vendor")
+        m.def_function[solver_parallel_available]("solver_parallel_available")
         m.def_function[cd_fit_binding]("cd_fit")
         m.def_function[cd_predict_binding]("cd_predict")
         m.def_function[linkage_fit_binding]("linkage_fit")

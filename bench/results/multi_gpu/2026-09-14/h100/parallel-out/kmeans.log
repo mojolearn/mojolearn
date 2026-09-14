@@ -1,0 +1,53 @@
+4123 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x338700000000, nodemask=1)
+4299 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x108b00000000, nodemask=1)
+4477 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x33cec0000000, nodemask=1)
+4528 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x705240000000, nodemask=1)
+4579 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5a2e00000000, nodemask=2)
+4757 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x520c80000000, nodemask=1)
+4808 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x333480000000, nodemask=1)
+4859 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x32c480000000, nodemask=1)
+5037 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3194c0000000, nodemask=1)
+5088 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x13b8c0000000, nodemask=1)
+{
+  "status": "PASS",
+  "checks": [
+    [
+      7,
+      "array"
+    ],
+    [
+      7,
+      "random"
+    ],
+    [
+      7,
+      "k-means++"
+    ],
+    [
+      8,
+      "array"
+    ],
+    [
+      8,
+      "random"
+    ],
+    [
+      8,
+      "k-means++"
+    ],
+    [
+      32,
+      "array"
+    ],
+    [
+      32,
+      "random"
+    ],
+    [
+      32,
+      "k-means++"
+    ]
+  ],
+  "scope": "Two devices; whole-row assignment tiles, serial update order"
+}
+

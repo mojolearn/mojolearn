@@ -1,0 +1,14 @@
+{
+  "status": "PASS",
+  "checks": [
+    "Samba_K3_two_GPU_replay",
+    "Samba_checkpoint_device_migration"
+  ],
+  "hashes": [
+    "f4825b3f87f5c316b74d9923c37ff1550591288d161ecc197622f54731a7fdd3",
+    "7fac927790d41b36905744cb13e5e2ce227f840d39008bf74c97c67a2d7b2f64"
+  ],
+  "corpus_sha256": "2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8",
+  "scope": "Two devices; no cross-vendor or speed claim"
+}
+

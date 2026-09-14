@@ -1,0 +1,3 @@
+[07:58:38 attn-pod] terminating ucig2qpo3qp7mt
+[07:58:39 attn-pod] DELETE -> HTTP 204
+[07:58:44 attn-pod] VERIFIED GONE (GET -> HTTP 404)

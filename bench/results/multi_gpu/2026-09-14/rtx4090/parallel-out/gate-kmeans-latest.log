@@ -1,0 +1,43 @@
+{
+  "status": "PASS",
+  "checks": [
+    [
+      7,
+      "array"
+    ],
+    [
+      7,
+      "random"
+    ],
+    [
+      7,
+      "k-means++"
+    ],
+    [
+      8,
+      "array"
+    ],
+    [
+      8,
+      "random"
+    ],
+    [
+      8,
+      "k-means++"
+    ],
+    [
+      32,
+      "array"
+    ],
+    [
+      32,
+      "random"
+    ],
+    [
+      32,
+      "k-means++"
+    ]
+  ],
+  "scope": "Two devices; whole-row assignment tiles, serial update order"
+}
+

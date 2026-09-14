@@ -910,13 +910,15 @@ def _byte_forward_loss(ctx: DeviceContext, mut tr: ByteTrainer,
 
 def _byte_step_device(ctx: DeviceContext, mut tr: ByteTrainer,
                       ids: List[Int32]) raises -> Float32:
-    """THE ONE STEP BODY (DEVIATION 2514 step 4): forward, CE, backward,
-    pack, the device gradient scan, the shadow copy, the optimizer and the
-    device `validate_after`. Both `byte_train_step` (mirrors around it) and
-    `byte_train_step_resident` (nothing around it) run exactly this. Sets
-    `completed_steps` and `grad_step` only after the post-update scans pass;
-    sets `shadow_valid` at the shadow point so a caller can tell whether a
-    raise happened before or after the in-place update. Returns the loss."""
+    """Single-device composition; the numerical operation order is unchanged."""
+    var loss = byte_gradient_device(ctx, tr, ids)
+    byte_update_device(ctx, tr)
+    return loss
+
+
+def byte_gradient_device(ctx: DeviceContext, mut tr: ByteTrainer,
+                         ids: List[Int32]) raises -> Float32:
+    """Internal gradient half. Caller owns admission and transaction recovery."""
     var config = tr.config.copy()
     var M = config.batch * config.length
     var emb = EmbConfig.llama(config.vocab_size, config.d_model)
@@ -995,6 +997,15 @@ def _byte_step_device(ctx: DeviceContext, mut tr: ByteTrainer,
     # Device-to-device: every gradient byte copied once into `grad`.
     timing_tick(ctx, ton, tk, "step.pack_grads")
     timing_bytes(ton, "step.pack_grads_bytes", config.n_total() * 4)
+    _ = trace
+    return loss
+
+
+def byte_update_device(ctx: DeviceContext, mut tr: ByteTrainer) raises:
+    """Internal update half, including gradient scan, shadow and validation."""
+    var config = tr.config.copy()
+    var ton = timing_on()
+    var tk = Int(perf_counter_ns())
     var n = config.n_total()
     _maybe_fault(ctx, tr.buffers.grad, "grad_nonfinite", 0, _FAULT_NAN)
     # The pre-update gradient scan, on the device (was `_require_finite`
@@ -1055,9 +1066,6 @@ def _byte_step_device(ctx: DeviceContext, mut tr: ByteTrainer,
     timing_bytes(ton, "step.validate_after_scan_bytes", 4 * n * 4)
     tr.completed_steps = next_step
     tr.grad_step = next_step
-    # Explicit last uses retain all async operands through completion.
-    _ = trace
-    return loss
 
 
 def byte_glue_update_launch(

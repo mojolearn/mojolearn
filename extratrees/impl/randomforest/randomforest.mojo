@@ -340,6 +340,7 @@ def fit_classification_device(
     n_sampled_rows: Int32 = 0,
     x_addr: Int = 0,
     x_row_major: Bool = False,  # DEVIATION 2637, see `upload_dataset`
+    tree_start: Int = 0,
 ) raises -> Forest:
     """`randomforest.cuh:155-195` again, with the split search on the GPU.
 
@@ -362,6 +363,8 @@ def fit_classification_device(
     holds it to one-tree device builds, so neither move can have changed a
     tree.
     """
+    if tree_start < 0 or tree_start + Int(n_trees) > 2147483647:
+        raise Error("invalid global tree range")
     error_checking(n_rows, n_cols, n_trees)
     validity_check(params)
     if n_classes < 1:
@@ -409,7 +412,7 @@ def fit_classification_device(
     # pinned the old fact now gates the slots (FOREST_SAB_SHARED_ROW_BASE).
     var tree_ids = List[Int32]()
     for tree_id in range(Int(n_trees)):
-        tree_ids.append(Int32(tree_id))
+        tree_ids.append(Int32(tree_start + tree_id))
     var forest = Forest(n_classes)
     forest.trees = train_forest_classification_device(
         ctx, device_dataset, params, tree_ids, seed,
@@ -555,6 +558,7 @@ def fit_regression_device(
     n_sampled_rows: Int32 = 0,
     x_addr: Int = 0,
     x_row_major: Bool = False,  # DEVIATION 2637, see `upload_dataset`
+    tree_start: Int = 0,
 ) raises -> Forest:
     """A regression forest with its split search on the GPU.
 
@@ -569,6 +573,8 @@ def fit_regression_device(
     `labels_q` is already quantized (DEVIATION 135); `scale` puts the leaf
     values back in the label's units.
     """
+    if tree_start < 0 or tree_start + Int(n_trees) > 2147483647:
+        raise Error("invalid global tree range")
     error_checking(n_rows, n_cols, n_trees)
     validity_check(params)
     var dataset = upload_dataset(
@@ -582,7 +588,7 @@ def fit_regression_device(
     # per-group workspace lives inside it now (deviation 202, further).
     var tree_ids = List[Int32]()
     for tree_id in range(Int(n_trees)):
-        tree_ids.append(Int32(tree_id))
+        tree_ids.append(Int32(tree_start + tree_id))
     var forest = Forest(1)
     forest.trees = train_forest_regression_device(
         ctx, dataset, scale, params, tree_ids, seed,

@@ -2312,6 +2312,7 @@ def fit_forest[
     row_major: Bool = False,
     oob_score: Bool = False,
     host_x_addr: Int = 0,
+    tree_start: Int = 0,
 ) raises -> RandomForestMetaData[O.DataT, O.LabelT] where (
     O.DataT == DType.float32
 ):
@@ -2359,6 +2360,12 @@ def fit_forest[
     already-hashed seed down would double-hash and produce a different
     forest.
     """
+    # A shard retains GLOBAL tree IDs for row and feature RNG. Quantiles
+    # still use the complete data and original forest seed on each device.
+    if tree_start < 0 or tree_start + Int(rf_params.n_trees) > 2147483647:
+        raise Error("invalid global tree range")
+    if tree_start != 0 and oob_score:
+        raise Error("OOB scoring requires the complete forest")
     if n_rows <= 0:
         raise Error("Invalid n_rows " + String(n_rows))
     if n_cols <= 0:
@@ -2653,7 +2660,7 @@ def fit_forest[
             break
         while next_tree < n_trees:
             t_stage = instr.times.start()
-            sampler.sample(ctx, Int32(next_tree), k)
+            sampler.sample(ctx, Int32(tree_start + next_tree), k)
             instr.times.stop(ctx, "row_sampling", t_stage)
             # DEVIATION 401 -- the tree's sampled rows, the first per-tree
             # divergence point (a pure hash of (seed, tree_id), so K-free).
@@ -2665,7 +2672,7 @@ def fit_forest[
                     sampler.n_selected,
                 )
             t_host = instr.times.start()
-            builders[k].reset_for_tree(Int32(next_tree), sampler.n_selected)
+            builders[k].reset_for_tree(Int32(tree_start + next_tree), sampler.n_selected)
             var dataset = DatasetView[O.DataT, O.LabelT](
                 rebind[MutPointer[Scalar[O.DataT], MutUntrackedOrigin]](
                     x.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
@@ -2753,7 +2760,7 @@ def fit_forest[
                     active -= 1
                     break
                 t_stage = instr.times.start()
-                sampler.sample(ctx, Int32(next_tree), k)
+                sampler.sample(ctx, Int32(tree_start + next_tree), k)
                 instr.times.stop(ctx, "row_sampling", t_stage)
                 # DEVIATION 401 -- same checkpoint as the prime loop's.
                 if instr.trace.enabled:
@@ -2765,7 +2772,7 @@ def fit_forest[
                     )
                 t_host = instr.times.start()
                 builders[k].reset_for_tree(
-                    Int32(next_tree), sampler.n_selected
+                    Int32(tree_start + next_tree), sampler.n_selected
                 )
                 var dataset = DatasetView[O.DataT, O.LabelT](
                     rebind[MutPointer[Scalar[O.DataT], MutUntrackedOrigin]](

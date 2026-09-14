@@ -1,0 +1,139 @@
+{
+  "status": "PASS",
+  "checks": [
+    {
+      "rows": 127,
+      "estimator": "Lasso",
+      "params": {
+        "alpha": 0.01,
+        "fit_intercept": false,
+        "max_iter": 5,
+        "tol": 0
+      },
+      "sha256": "0105d4633f0802b807bcae86d4d8a190b0c693db38fea186d897973daa15c93e"
+    },
+    {
+      "rows": 127,
+      "estimator": "Lasso",
+      "params": {
+        "alpha": 0.01,
+        "fit_intercept": true,
+        "max_iter": 5,
+        "tol": 0
+      },
+      "sha256": "3bd221c1e029ac3eb364687b374d2412aa8d9d2627ef08695595431764bfd537"
+    },
+    {
+      "rows": 127,
+      "estimator": "ElasticNet",
+      "params": {
+        "alpha": 0.01,
+        "fit_intercept": false,
+        "max_iter": 5,
+        "tol": 0
+      },
+      "sha256": "dabe05d6f6403fba47a272920023dfaaaa9abadc6e2235dee78fef6f621074b9"
+    },
+    {
+      "rows": 127,
+      "estimator": "ElasticNet",
+      "params": {
+        "alpha": 0.01,
+        "fit_intercept": true,
+        "max_iter": 5,
+        "tol": 0
+      },
+      "sha256": "3bd221c1e029ac3eb364687b374d2412aa8d9d2627ef08695595431764bfd537"
+    },
+    {
+      "rows": 257,
+      "estimator": "Lasso",
+      "params": {
+        "alpha": 0.01,
+        "fit_intercept": false,
+        "max_iter": 5,
+        "tol": 0
+      },
+      "sha256": "5911db9b628a1e3a4f51c817e78e07a59e9a02b326a64637684e7ce5ae8e09bb"
+    },
+    {
+      "rows": 257,
+      "estimator": "Lasso",
+      "params": {
+        "alpha": 0.01,
+        "fit_intercept": true,
+        "max_iter": 5,
+        "tol": 0
+      },
+      "sha256": "021e360296437235d777b9a0dd9af16cf7579e03878a9c4ab88f837ac2adc3ee"
+    },
+    {
+      "rows": 257,
+      "estimator": "ElasticNet",
+      "params": {
+        "alpha": 0.01,
+        "fit_intercept": false,
+        "max_iter": 5,
+        "tol": 0
+      },
+      "sha256": "f825b831a3f858adcf293c3b355a92a24df69539480a6c868b4ab57449b504d9"
+    },
+    {
+      "rows": 257,
+      "estimator": "ElasticNet",
+      "params": {
+        "alpha": 0.01,
+        "fit_intercept": true,
+        "max_iter": 5,
+        "tol": 0
+      },
+      "sha256": "021e360296437235d777b9a0dd9af16cf7579e03878a9c4ab88f837ac2adc3ee"
+    },
+    {
+      "rows": 1031,
+      "estimator": "Lasso",
+      "params": {
+        "alpha": 0.01,
+        "fit_intercept": false,
+        "max_iter": 5,
+        "tol": 0
+      },
+      "sha256": "cb2f9dd056eddbef4cf127c923cb3eabcd11e93bcd9a51f81477b9fca85ec2a4"
+    },
+    {
+      "rows": 1031,
+      "estimator": "Lasso",
+      "params": {
+        "alpha": 0.01,
+        "fit_intercept": true,
+        "max_iter": 5,
+        "tol": 0
+      },
+      "sha256": "24315316e281c5413f81bc0f08df3bb1778b985211310ac03b7ef37c19b3cb19"
+    },
+    {
+      "rows": 1031,
+      "estimator": "ElasticNet",
+      "params": {
+        "alpha": 0.01,
+        "fit_intercept": false,
+        "max_iter": 5,
+        "tol": 0
+      },
+      "sha256": "164087f02e64e524dfa9185a862932e1801014d9f6c588c3494700528d89ec09"
+    },
+    {
+      "rows": 1031,
+      "estimator": "ElasticNet",
+      "params": {
+        "alpha": 0.01,
+        "fit_intercept": true,
+        "max_iter": 5,
+        "tol": 0
+      },
+      "sha256": "24315316e281c5413f81bc0f08df3bb1778b985211310ac03b7ef37c19b3cb19"
+    }
+  ],
+  "corpus_sha256": "2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8",
+  "scope": "Two H100s; cyclic coordinate descent, five iterations, one/odd dot leaves; root state is not pooled"
+}

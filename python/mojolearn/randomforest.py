@@ -643,6 +643,9 @@ class RandomForestClassifier(_RandomForestBase):
         self.criterion = criterion
 
     def fit(self, X, y):
+        return self._fit_with_tree_start(X, y)
+
+    def _fit_with_tree_start(self, X, y, tree_start=None):
         self._refresh_config()
         self._capture_fit_mode()
         # DEVIATION 2500: one native pass for a numeric buffer, the Python
@@ -664,6 +667,13 @@ class RandomForestClassifier(_RandomForestBase):
                 raise RuntimeError("rebuild the RF binding for class_weight support")
             def fit_fn(x_addr, y_addr, params, criterion):
                 return weighted_fit(x_addr, y_addr, params, criterion, addr_ro(weights, name="weights"))
+        if tree_start is not None:
+            if not callable(getattr(binding, 'rf_classifier_fit_shard', None)):
+                raise ImportError('rebuild RF binding for global tree-ID shards')
+            def fit_fn(x_addr, y_addr, params, criterion):
+                return binding.rf_classifier_fit_shard(x_addr, y_addr, params, criterion,
+                    tree_start, 0 if weights is None else addr_ro(weights, name='weights'))
+            rowmajor_fn = None
         return self._fit_arrays(X, y32, self.n_classes_, fit_fn, rowmajor_fn)
 
     def predict_proba(self, X):
@@ -757,6 +767,9 @@ class RandomForestRegressor(_RandomForestBase):
         self.criterion = criterion
 
     def fit(self, X, y):
+        return self._fit_with_tree_start(X, y)
+
+    def _fit_with_tree_start(self, X, y, tree_start=None):
         self._refresh_config()
         self._capture_fit_mode()
         y32, _ = as_f32_c(y, ndim=1, name="y")
@@ -787,6 +800,12 @@ class RandomForestRegressor(_RandomForestBase):
                     " a stump silently"
                 )
         binding = self._bind("_mojolearn_rf")
+        if tree_start is not None:
+            if not callable(getattr(binding, 'rf_regressor_fit_shard', None)):
+                raise ImportError('rebuild RF binding for global tree-ID shards')
+            def fit_fn(x_addr, y_addr, params, criterion):
+                return binding.rf_regressor_fit_shard(x_addr, y_addr, params, criterion, tree_start)
+            return self._fit_arrays(X, y32, 0, fit_fn)
         return self._fit_arrays(X, y32, 0, _forest_fit_function(binding, "rf_regressor_fit"),
                                 _rowmajor_fit_function(binding, "rf_regressor_fit"))
 

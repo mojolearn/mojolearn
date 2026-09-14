@@ -68,6 +68,7 @@ from glm.impl.qn.glm_linear import (
     squared_loss_dz_kernel,
 )
 from glm.impl.qn.glm_logistic import logistic_loss_dz_kernel
+from glm.impl.qn.multi_gpu import gradient_columns
 from glm.impl.qn.glm_regularizer import tikhonov_reg_grad_kernel
 from glm.impl.qn.glm_softmax import (
     add_bias_multi_kernel,
@@ -263,14 +264,16 @@ def linear_bwd(
     var d = dims.D
     # `alpha = 1.0 / X.m`: a double narrowed to T. `beta = setZero ? 0 : 1`.
     var alpha = Float32(1.0 / Float64(n_rows))
+    var distributed = gradient_columns(ctx, xtdz, x, dz, n_rows, d, dims.C)
     # AUDIT (i): unreached at C == 1; the C == 1 body below is certified.
     if dims.C > 1:
         var cd = dims.C * d
-        ctx.enqueue_function[xtdz_multi_kernel](
-            xtdz.unsafe_ptr(), x.unsafe_ptr(), dz.unsafe_ptr(),
-            Int32(n_rows), Int32(d), Int32(dims.C),
-            grid_dim=(cd, 1, 1), block_dim=(STATS_TPB, 1, 1),
-        )
+        if not distributed:
+            ctx.enqueue_function[xtdz_multi_kernel](
+                xtdz.unsafe_ptr(), x.unsafe_ptr(), dz.unsafe_ptr(),
+                Int32(n_rows), Int32(d), Int32(dims.C),
+                grid_dim=(cd, 1, 1), block_dim=(STATS_TPB, 1, 1),
+            )
         ctx.enqueue_function[gemm_epilogue_kernel](
             g.unsafe_ptr(), xtdz.unsafe_ptr(), Int32(cd), alpha,
             Int32(0) if set_zero else Int32(1),
@@ -284,11 +287,12 @@ def linear_bwd(
                 grid_dim=(dims.C, 1, 1), block_dim=(STATS_TPB, 1, 1),
             )
         return
-    ctx.enqueue_function[xty_kernel](
-        xtdz.unsafe_ptr(), x.unsafe_ptr(), dz.unsafe_ptr(),
-        Int32(n_rows), Int32(d),
-        grid_dim=(d, 1, 1), block_dim=(STATS_TPB, 1, 1),
-    )
+    if not distributed:
+        ctx.enqueue_function[xty_kernel](
+            xtdz.unsafe_ptr(), x.unsafe_ptr(), dz.unsafe_ptr(),
+            Int32(n_rows), Int32(d),
+            grid_dim=(d, 1, 1), block_dim=(STATS_TPB, 1, 1),
+        )
     ctx.enqueue_function[gemm_epilogue_kernel](
         g.unsafe_ptr(), xtdz.unsafe_ptr(), Int32(d), alpha,
         Int32(0) if set_zero else Int32(1),

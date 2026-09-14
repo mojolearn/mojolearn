@@ -1,0 +1,18 @@
+{
+  "status": "PASS",
+  "checks": [
+    "RandomForestClassifier_two_GPU_equals_serial",
+    "RandomForestRegressor_two_GPU_equals_serial",
+    "ExtraTreesClassifier_two_GPU_equals_serial",
+    "ExtraTreesRegressor_two_GPU_equals_serial"
+  ],
+  "hashes": [
+    "fd783a81df7360c57ca2140da046e3b9282d8133f47409f79e6473fc0456ea93",
+    "5e8d472702f7d9f0f5e8f5c76075dee75892e284a1abd923e9b63d0d5065fe1e",
+    "f190ef5df7f4836bbd47f52f2b8f1bc2d8ba3f39968ae4ea1636701d6e89537d",
+    "6e2b4adca221ea769b90baa2574eb0e011d2ae3acb0168f3e0e72e0adc8f7b4c"
+  ],
+  "corpus_sha256": "2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8",
+  "scope": "Two RTX 4090 devices; no cross-vendor or speed claim"
+}
+

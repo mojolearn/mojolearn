@@ -1,0 +1,3 @@
+[11:04:16 attn-pod] terminating kpqg64gsa9lib0
+[11:04:17 attn-pod] DELETE -> HTTP 204
+[11:04:23 attn-pod] VERIFIED GONE (GET -> HTTP 404)

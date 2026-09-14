@@ -364,6 +364,58 @@ class SmallMLPTrainer:
             _require_mode()
             return result
 
+    def _gradient(self, x, y, weights, binding, return_input_grad=False):
+        activation, logits = self._forward(x, weights, binding)
+        loss, dlogits = _training_impl.cross_entropy(
+            logits, y, reduction='mean', return_grad=True, numeric_mode='identical')
+        if not math.isfinite(loss):
+            raise RuntimeError('SmallMLPTrainer loss is not finite')
+        dlogits = _array(dlogits, (len(x), 3), 'logit gradient')
+        dw2 = self._matmul(dlogits, activation, transpose_a=True)
+        db2 = self._sum(binding, dlogits)
+        incoming = self._matmul(dlogits, weights[2])
+        dhidden = empty(activation.shape, '<f4')
+        written = binding.mlp_relu_backward(
+            addr_ro(activation, name='activation'), addr_ro(incoming, name='incoming'),
+            addr(dhidden, name='dhidden'), list(activation.shape))
+        if written != dhidden.size or not all_finite(dhidden):
+            raise RuntimeError('SmallMLPTrainer ReLU gradient returned an invalid result')
+        dw1 = self._matmul(dhidden, x, transpose_a=True)
+        db1 = self._sum(binding, dhidden)
+        grads = [_array(value, shape, name + ' gradient') for value, shape, name in
+                 zip((dw1, db1, dw2, db2), _SHAPES, _NAMES)]
+        input_grad = self._matmul(dhidden, weights[0]) if return_input_grad else None
+        if input_grad is not None and input_grad.shape != x.shape:
+            raise RuntimeError('SmallMLPTrainer input gradient shape mismatch')
+        return loss, logits, grads, input_grad
+
+    def loss_and_grads(self, X, targets):
+        """Compute a mean-CE microbatch gradient without advancing the optimizer."""
+        with self._lock:
+            x = _batch(X)
+            y = _targets(targets, len(x))
+            loss, _, grads, _ = self._gradient(x, y, self._opt.params, self._binding())
+            return loss, grads
+
+    def apply_gradients(self, gradients):
+        """Apply one already-reduced gradient transactionally in registry order."""
+        with self._lock:
+            gradients = list(gradients)
+            if len(gradients) != len(_NAMES):
+                raise ValueError('SmallMLPTrainer requires exactly four gradients')
+            grads = [_array(g, shape, name + ' gradient')
+                     for g, shape, name in zip(gradients, _SHAPES, _NAMES)]
+            weights, moments, config, schedule = _validate_state(self.state_dict())
+            if moments['step'] == _MAX_STEP:
+                raise ValueError('SmallMLPTrainer step counter is exhausted')
+            working = _optimizer(weights, config, moments)
+            working.step(grads)
+            _validate_state(_state(weights, working, config, schedule))
+            if working.t != moments['step'] + 1:
+                raise RuntimeError('SmallMLPTrainer optimizer did not advance exactly one step')
+            self._opt = working
+            return int(working.t)
+
     def train_step(self, X, targets, *, return_input_grad=False):
         with self._lock:
             x = _batch(X)
@@ -375,28 +427,7 @@ class SmallMLPTrainer:
                 raise ValueError('SmallMLPTrainer step counter is exhausted')
             binding = self._binding()
             working = _optimizer(weights, config, moments)
-            activation, logits = self._forward(x, weights, binding)
-            loss, dlogits = _training_impl.cross_entropy(
-                logits, y, reduction='mean', return_grad=True, numeric_mode='identical')
-            if not math.isfinite(loss):
-                raise RuntimeError('SmallMLPTrainer loss is not finite')
-            dlogits = _array(dlogits, (len(x), 3), 'logit gradient')
-            dw2 = self._matmul(dlogits, activation, transpose_a=True)
-            db2 = self._sum(binding, dlogits)
-            incoming = self._matmul(dlogits, weights[2])
-            dhidden = empty(activation.shape, '<f4')
-            written = binding.mlp_relu_backward(
-                addr_ro(activation, name='activation'), addr_ro(incoming, name='incoming'),
-                addr(dhidden, name='dhidden'), list(activation.shape))
-            if written != dhidden.size or not all_finite(dhidden):
-                raise RuntimeError('SmallMLPTrainer ReLU gradient returned an invalid result')
-            dw1 = self._matmul(dhidden, x, transpose_a=True)
-            db1 = self._sum(binding, dhidden)
-            grads = [_array(value, shape, name + ' gradient') for value, shape, name in
-                     zip((dw1, db1, dw2, db2), _SHAPES, _NAMES)]
-            input_grad = self._matmul(dhidden, weights[0]) if return_input_grad else None
-            if input_grad is not None and input_grad.shape != x.shape:
-                raise RuntimeError('SmallMLPTrainer input gradient shape mismatch')
+            loss, logits, grads, input_grad = self._gradient(x, y, weights, binding, return_input_grad)
             working.step(grads)
             # Validation and all potentially allocating result construction
             # precede the single live optimizer-pointer publication.

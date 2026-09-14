@@ -1,0 +1,10 @@
+{
+  "status": "PASS",
+  "checks": [
+    "Samba_K3_two_GPU_replay"
+  ],
+  "hashes": [],
+  "corpus_sha256": "2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8",
+  "scope": "Two RTX 4090 devices; no cross-vendor or speed claim"
+}
+
