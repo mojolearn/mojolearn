@@ -81,7 +81,11 @@ THE ARMS, and what each is a plausible way to get wrong
                             leave on a rank-deficient Gram) becomes an
                             infinity in `s^{-1/2}`. Since 2026-09-14 the clip
                             reads `|lambda|`, so a negative eigenvalue alone
-                            no longer reaches it.
+                            no longer reaches it, and none of the five
+                            fixtures does (M4 FAST, 834ba18dc). Driven on
+                            `km_fixture.mojo::km_zero_row_x`, a basis row of
+                            `+0.0` under the linear kernel, whose eigenvalue
+                            is exactly zero on every vendor.
 `KMSAB_BASIS_FROM_LAUNCH`   DRIVER. The basis rows are a LAUNCH-STRIDED slice
                             `[0, stride, 2*stride, ...]` instead of the
                             position-mapped rank prefix, so the fit depends

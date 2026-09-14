@@ -950,8 +950,8 @@ def _(ml, X, yc, yr, Xh=None):
 @lane("arima")
 def _(ml, X, yc, yr, Xh=None):
     """Four series of 512 observations, the first four columns of the
-    fixture, transposed. ARIMA's docstring says the three-vendor card
-    covers the filter and the fit is one vendor. Like holtwinters there
+    fixture, transposed. The fit through this lane is IDENTICAL x3 since the
+    136-lane record. Like holtwinters there
     are no new rows to feed: the held-out axis is the horizon. The train
     column keeps forecast(24); the infer column (2026-09-14) asks for
     FORECAST_HORIZON steps through both public out-of-sample entries,
@@ -969,8 +969,8 @@ def _(ml, X, yc, yr, Xh=None):
 @lane("gp")
 def _(ml, X, yc, yr, Xh=None):
     """The dense Cholesky is n^2 memory, so 256 rows of four columns, with
-    a white-noise term so duplicate rows (`ties`) still factor. The GP's
-    docstring says Apple and AMD IDENTICAL card, no NVIDIA card."""
+    a white-noise term so duplicate rows (`ties`) still factor. Three
+    columns since the 136-lane record (IDENTICAL x3 on every cell)."""
     k = ml.ConstantKernel(1.0) * ml.RBF(1.0) + ml.WhiteKernel(0.1)
     m = ml.GaussianProcessRegressor(kernel=k).fit(X[:256, :4], yr[:256])
     mean, std = m.predict(X[256:320, :4], return_std=True)

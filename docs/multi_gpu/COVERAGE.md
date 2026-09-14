@@ -52,7 +52,7 @@ implementations still require their own AMD/Apple qualification.
 | --- | --- | --- |
 | SmallByteLanguageModelTrainer / LanguageModelTrainer | Replica training with pooled optimizer/reduction buffers; separate layer-owned model trainer with RTX 5090 capacity and H100/5090 ordered-replay gates; host-offloaded single-GPU replay | Broader shapes; RTX5090 and AMD/Apple qualification of host-offloaded replay; eight-device qualification |
 | SmallMLPTrainer | Fixed 8→16→3 model (195 parameters), concurrent microbatch gradients, ordered sum and host-staged optimizer ranges | Broader admitted batch/optimizer fixtures and scheduling qualification; larger model architectures are not part of this estimator |
-| SambaStack | Concurrent microbatch gradients, pooled gradient columns, whole clipping tensors and optimizer ranges; original norm and ordered sum | End-to-end large-model capacity qualification; host/IPC memory, int32 registry limit, individual block/tensor/activation capacity and checkpoint size |
+| SambaStack | Concurrent microbatch gradients, pooled gradient columns, whole clipping tensors and optimizer ranges; original norm and ordered sum; streamed host checkpoints | End-to-end large-model capacity qualification; host/IPC memory, int32 registry limit, individual block/tensor/activation capacity |
 | RandomForestClassifier / RandomForestRegressor | Global tree-ID ranges over full data | Larger forests; data partitioning |
 | ExtraTreesClassifier / ExtraTreesRegressor | Global tree-ID ranges over full data | Larger forests; data partitioning |
 | GradientBoosting / GradientBoostingClassifier / GradientBoostingRegressor | Greedy and pointwise feature groups; full histogram bytes and adapter contracts pass on two H100s | Broader configurations; root-state memory partitioning; cross-vendor qualification |
@@ -71,11 +71,24 @@ implementations still require their own AMD/Apple qualification.
 | AgglomerativeClustering | Native pairwise rows; full children/labels and raw-bit two-H100 gates pass | Root graph/state pooling; broader shapes and cross-vendor qualification |
 | SpectralClustering | Native KNN rows and KMeans assignments; embedding/label two-H100 gates pass | Root affinity/eigensolver pooling; broader configurations and cross-vendor qualification |
 | UMAP | Fit/transform native KNN rows; complete embedding/transform two-H100 gates pass | Root graph/optimizer pooling; broader configurations and cross-vendor qualification |
-| IsolationForest | Global tree ranges during fit and score-time rebuild; two-H100 full-model and scoring gates pass | Full-data replication and assembled root model; broader configurations and cross-vendor qualification |
+| IsolationForest | Resident tree owners during fit and score-time rebuild; canonical per-row carry across owners; two-H100 model-buffer/path/score gates pass | Full-data replication, per-owner scratch/model limits and global int32 node admission; beyond-single-device capacity and cross-vendor qualification |
 | GaussianProcessRegressor | Covariance/cross-covariance rows; two-H100 factor/dual/likelihood/mean/std gates pass | Root factorization/state partitioning; broader kernels/shapes and cross-vendor qualification |
 | ARIMA | Independent-series fit; two-H100 fit/forecast equality gates passed | Broader orders, large-memory and cross-vendor qualification; distributed prediction |
 | ExponentialSmoothing | Independent-series additive/multiplicative fit; two-H100 fit/forecast gates pass | Distributed prediction; broader configurations and capacity qualification |
 | StandardScaler / MinMaxScaler | Column-sharded fit/transform/inverse; two-H100 gates passed | Large-memory and cross-vendor qualification |
+| HDBSCAN | No complete parallel driver; linkage subcalls contain existing neighbor/distance seams | Complete fit dispatch and qualification; dense graph, MST and hierarchy pooling |
+| KernelRidge / Nystroem | No complete parallel driver; non-Laplacian kernel construction shares SVM's internal seam | Fit/transform dispatch, RNG/basis and full-state gates; kernel matrix, factorization and eigensolver pooling |
+| RBFSampler | No parallel driver or native feature partition | Global random-feature identities, distributed transform, state pooling and qualification |
+| GaussianMixture | No distributed EM driver; KMeans initialization has an internal assignment seam | EM reduction-order design, covariance/init variants, state pooling and qualification |
+| Cholesky | Public factor/solve surface has no parallel driver | Factorization/solve design, matrix pooling and operation-level qualification |
+
+The newer binding availability flags do not establish complete estimator
+dispatch or qualification. Prepared IVFFlat remains unexposed and disabled in
+the backend; track its future distributed build/search and index storage
+separately. Public `resample` bootstrap, permutation tests and Monte Carlo
+integration also lack distributed drivers and require global sample IDs and
+canonical final statistics. These additions expand the remaining work beyond
+the earlier estimator inventory.
 
 Mamba1/2/3Block and TransformerBlock are forward/backward primitives, not
 standalone fit drivers. Training-stack coverage must not be read as distributed

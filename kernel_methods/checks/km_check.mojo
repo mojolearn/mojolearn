@@ -150,6 +150,8 @@ from kernel_methods.checks.km_fixture import (
     KM_ORTHO_BLOCK,
     KM_ORTHO_D,
     KM_ORTHO_N,
+    KM_ZERO_ROW_D,
+    KM_ZERO_ROW_N,
     km_fixture_d,
     km_fixture_is_exact,
     km_fixture_n,
@@ -161,6 +163,8 @@ from kernel_methods.checks.km_fixture import (
     km_ortho_gram_diag,
     km_ortho_w,
     km_same_bits,
+    km_zero_row_x,
+    km_zero_row_y,
 )
 from kernel_methods.checks.km_oracle import (
     km_add_ridge_f32,
@@ -784,37 +788,37 @@ def check_ortho_fixture_is_exact() raises:
                         " docstring must be redone if the shape constants moved"
                     )
 
-        # (c) y == X w exactly, through an independent host product.
-        for i in range(n):
-            var acc = Float32(0.0)
-            for c in range(d):
-                acc = acc + x[i * d + c] * w[c]
-            if not km_same_bits(acc, y[i]):
-                raise Error(
-                    "check_ortho_fixture_is_exact FAILED: y["
-                    + String(i)
-                    + "] is "
-                    + km_hex32(y[i])
-                    + " but X w is "
-                    + km_hex32(acc)
-                )
+    # (c) y == X w exactly, through an independent host product.
+    for i in range(n):
+        var acc = Float32(0.0)
+        for c in range(d):
+            acc = acc + x[i * d + c] * w[c]
+        if not km_same_bits(acc, y[i]):
+            raise Error(
+                "check_ortho_fixture_is_exact FAILED: y["
+                + String(i)
+                + "] is "
+                + km_hex32(y[i])
+                + " but X w is "
+                + km_hex32(acc)
+            )
 
-        print(
-            "check_ortho_fixture_is_exact OK"
-            + _tag()
-            + ": "
-            + String(n)
-            + " rows with disjoint "
-            + String(KM_ORTHO_BLOCK)
-            + "-wide supports, a diagonal linear Gram with entries 4^(a+1) in"
-            " {4, 16} (four-way ties in each), and y = X w reproduced bit for bit"
-            " by an independent host product"
-        )
+    print(
+        "check_ortho_fixture_is_exact OK"
+        + _tag()
+        + ": "
+        + String(n)
+        + " rows with disjoint "
+        + String(KM_ORTHO_BLOCK)
+        + "-wide supports, a diagonal linear Gram with entries 4^(a+1) in"
+        " {4, 16} (four-way ties in each), and y = X w reproduced bit for bit"
+        " by an independent host product"
+    )
 
 
-    # ===========================================================================
-    # 4. THE HEADLINE
-    # ===========================================================================
+# ===========================================================================
+# 4. THE HEADLINE
+# ===========================================================================
 
 
 def check_nystroem_full_equals_exact_kernel() raises:
@@ -975,12 +979,14 @@ def check_nystroem_full_equals_exact_kernel() raises:
         _ = a1^
         _ = a2^
 
-        # DEVIATION 1946: the context dies LAST, after every value built on it.
-        # Mojo frees at LAST USE, so without this the buffer releases above run
-        # against a context that is already gone. On sm_89 the next GPU call in
-        # the process then never returns (GPU idle, host threads in futex wait);
-        # Apple and AMD do not show it, which is how it stayed latent here.
-        _ = ctx^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    # Mojo frees at LAST USE, so without this the buffer releases above run
+    # against a context that is already gone. On sm_89 the next GPU call in
+    # the process then never returns (GPU idle, host threads in futex wait);
+    # Apple and AMD do not show it, which is how it stayed latent here. AFTER
+    # the (c) loop, not inside its body, which runs once per fixture: a
+    # context that ends once ends after the last value built on it.
+    _ = ctx^
 
     print(
         "check_nystroem_full_equals_exact_kernel OK"
@@ -2546,6 +2552,22 @@ def check_card_is_emitted() raises:
 # ===========================================================================
 
 
+#: The Nystroem seed the signature fits with. NAMED, and not a literal inside
+#: `_fit_signature_of`, because the `NO_EIGEN_CLIP` driver derives which row
+#: of `km_zero_row_x` to zero from the basis this seed draws; a literal edited
+#: in one place would silently take that row out of the basis.
+comptime _SIG_NYS_SEED = 11
+
+
+def _sig_components(n: Int) -> Int:
+    """The signature's `n_components`: half the rows, at least two. Shared
+    with the `NO_EIGEN_CLIP` driver for the same reason as `_SIG_NYS_SEED`."""
+    var q = n // 2
+    if q < 2:
+        q = 2
+    return q
+
+
 def _fit_signature(fix: Int, kern: Int, sab: Int) raises -> List[Float32]:
     """One number stream that every arm can move: the kernel matrix, the dual
     coefficients, the Nystroem normalization and embedding, and the feature
@@ -2555,15 +2577,23 @@ def _fit_signature(fix: Int, kern: Int, sab: Int) raises -> List[Float32]:
     one loop and so an arm that moves ANY stage is counted as having moved.
     Which stage moved is the card's job, not this one's.
     """
-    var trace = IdentityTrace.disabled()
-    var n = km_fixture_n(fix)
-    var d = km_fixture_d(fix)
     var x = km_fixture_x(fix, 0)
     var y = km_fixture_y(fix, 2, 0)
+    return _fit_signature_of(
+        x, y, km_fixture_n(fix), km_fixture_d(fix), kern, sab
+    )
+
+
+def _fit_signature_of(
+    x: List[Float32], y: List[Float32], n: Int, d: Int, kern: Int, sab: Int
+) raises -> List[Float32]:
+    """`_fit_signature`'s body on a data set that is not a fixture id, which
+    is how `km_zero_row_x` reaches it. `y` is `n x 2`. The same calls with
+    the same arguments in the same order as before the split, so no stream
+    any other arm compares can move."""
+    var trace = IdentityTrace.disabled()
     var kp = _kernel_at(kern)
-    var q = n // 2
-    if q < 2:
-        q = 2
+    var q = _sig_components(n)
 
     var out = List[Float32]()
 
@@ -2581,7 +2611,7 @@ def _fit_signature(fix: Int, kern: Int, sab: Int) raises -> List[Float32]:
     _ = m^
 
     var nm = nystroem_fit_host(
-        x, n, d, kp, q, UInt64(11), trace, KM_TPB, KM_TPB, sab
+        x, n, d, kp, q, UInt64(_SIG_NYS_SEED), trace, KM_TPB, KM_TPB, sab
     )
     for i in range(len(nm.normalization)):
         out.append(nm.normalization[i])
@@ -2610,6 +2640,158 @@ def _fit_signature(fix: Int, kern: Int, sab: Int) raises -> List[Float32]:
     _ = ctx^
 
     return out^
+
+
+def _finite32(v: Float32) -> Bool:
+    """NaN and both infinities fail `v - v == 0`."""
+    return (v - v) == Float32(0.0)
+
+
+def _clip_moves_on_zero_row() raises -> String:
+    """`KMSAB_NO_EIGEN_CLIP` on `km_zero_row_x`, with the property that makes
+    the arm reachable DERIVED and ASSERTED rather than assumed.
+
+    WHY THIS DATA SET AND NOT THE FIVE. Since 2026-09-14 (34e188607) the
+    order, the clip and the square root read `|lambda|`. Before, a float32
+    Jacobi returned about half of a rank deficient kernel's zero eigenvalues
+    slightly NEGATIVE and the clip fired on those; now their magnitude, about
+    `eps32 * ||K||`, is above `1e-12`, and the M4 FAST run at 834ba18dc read
+    the arm INERT on all five fixtures. A basis row of exact `+0.0` under the
+    LINEAR kernel gives an eigenvalue that is `+-0.0` exactly on every vendor
+    in every mode (`km_zero_row_x` has the argument), so the clip must fire.
+
+    Four assertions, each a way the arm could be inert for a reason other
+    than a missing clip:
+
+      (a) the zeroed row IS in the fitted basis: it is derived from the
+          basis `_SIG_NYS_SEED` draws, then read back from the fit
+      (b) REACH: the production fit's smallest singular value is exactly the
+          clip, and the sabotaged fit's is strictly below it
+      (c) the production answer is FINITE everywhere in the signature, and
+          the embedding feature of the zero basis row is zero for every input
+          row, which is what sklearn's SVD gives
+      (d) the signature MOVES
+    """
+    var trace = IdentityTrace.disabled()
+    var n = KM_ZERO_ROW_N
+    var d = KM_ZERO_ROW_D
+    var q = _sig_components(n)
+    var drawn = km_basis_indices(UInt64(_SIG_NYS_SEED), n, q)
+    var zero_row = Int(drawn[0])
+    var x = km_zero_row_x(zero_row, 0)
+    var y = km_zero_row_y(2, 0)
+    var kp = _kernel_at(KM_KERNEL_LINEAR)
+    # sklearn's `clip(S, 1e-12, None)`, narrowed the way `_eigen_clip_f32`
+    # narrows it. A literal here so this check does not borrow the value it
+    # is checking.
+    var clip = Float32(1e-12)
+
+    var base = nystroem_fit_host(
+        x, n, d, kp, q, UInt64(_SIG_NYS_SEED), trace, KM_TPB, KM_TPB,
+        KMSAB_NONE,
+    )
+    var run = nystroem_fit_host(
+        x, n, d, kp, q, UInt64(_SIG_NYS_SEED), trace, KM_TPB, KM_TPB,
+        KMSAB_NO_EIGEN_CLIP,
+    )
+
+    # (a)
+    var pos = -1
+    for c in range(q):
+        if Int(base.component_indices[c]) == zero_row:
+            pos = c
+    if pos < 0:
+        raise Error(
+            "check_km_sabotages FAILED: km_zero_row_x zeroed row "
+            + String(zero_row)
+            + " but the Nystroem fit's basis does not contain it, so its"
+            " basis kernel has no exact zero eigenvalue and NO_EIGEN_CLIP"
+            " has nothing to reach. km_basis_indices and the fit disagree"
+            " about the basis, or _fit_signature_of stopped using"
+            " _SIG_NYS_SEED"
+        )
+
+    # (b)
+    var smallest = base.eigenvalues[q - 1]
+    var raw_smallest = run.eigenvalues[q - 1]
+    if not km_same_bits(smallest, clip):
+        raise Error(
+            "check_km_sabotages FAILED: on km_zero_row_x the production"
+            " fit's smallest singular value is "
+            + km_hex32(smallest)
+            + ", not the clip "
+            + km_hex32(clip)
+            + ". A basis row of +0.0 under the linear kernel must leave an"
+            " exact zero eigenvalue (km_zero_row_x's argument), so either the"
+            " Jacobi rotated that row or the clip did not fire"
+        )
+    if not (raw_smallest < clip):
+        raise Error(
+            "check_km_sabotages FAILED: on km_zero_row_x the NO_EIGEN_CLIP"
+            " fit's smallest singular value is "
+            + km_hex32(raw_smallest)
+            + ", not below 1e-12, so the arm does not reach a value the clip"
+            " would change"
+        )
+
+    # (c)
+    var emb = nystroem_transform_host(base, x, n, trace, KM_TPB, KMSAB_NONE)
+    for r in range(n):
+        if emb[r * q + pos] != Float32(0.0):
+            raise Error(
+                "check_km_sabotages FAILED: on km_zero_row_x the production"
+                " embedding of row "
+                + String(r)
+                + " at the zero basis row's feature is "
+                + km_hex32(emb[r * q + pos])
+                + "; it is K(x, 0) * 1e6 and must be zero"
+            )
+    _ = base^
+    _ = run^
+
+    var base_sig = _fit_signature_of(x, y, n, d, KM_KERNEL_LINEAR, KMSAB_NONE)
+    var run_sig = _fit_signature_of(
+        x, y, n, d, KM_KERNEL_LINEAR, KMSAB_NO_EIGEN_CLIP
+    )
+    for i in range(len(base_sig)):
+        if not _finite32(base_sig[i]):
+            raise Error(
+                "check_km_sabotages FAILED: on km_zero_row_x the PRODUCTION"
+                " signature holds a non-finite value "
+                + km_hex32(base_sig[i])
+                + " at position "
+                + String(i)
+                + ". The clip exists so a zero singular value divides by"
+                " sqrt(1e-12); a non-finite answer here is a defect in the"
+                " fit, not in the arm"
+            )
+
+    # (d)
+    var moved = len(base_sig) != len(run_sig)
+    if not moved:
+        for i in range(len(base_sig)):
+            if not km_same_bits(base_sig[i], run_sig[i]):
+                moved = True
+                break
+    if not moved:
+        raise Error(
+            "check_km_sabotages FAILED: NO_EIGEN_CLIP moved NO bit on"
+            " km_zero_row_x although the production fit clipped its smallest"
+            " singular value from below 1e-12. The clipped value reaches"
+            " nys.sqrt_eigenvalues, the divide and the normalization, so a"
+            " signature that does not move means the signature stopped"
+            " reading them"
+        )
+    return (
+        String("zero row ")
+        + String(zero_row)
+        + " at basis position "
+        + String(pos)
+        + ", smallest singular value "
+        + km_hex32(raw_smallest)
+        + " clipped to "
+        + km_hex32(smallest)
+    )
 
 
 def _stream_draw_moves() raises -> Bool:
@@ -2779,12 +2961,15 @@ def check_km_sabotages() raises:
     )
     n_moved += 1
 
-    # --- NO_EIGEN_CLIP: needs a fixture whose Gram is rank deficient, which
-    # is what FIX_KM_DUP is for. Swept anyway, because whether a float32
-    # Jacobi produces an eigenvalue BELOW 1e-12 on a given fixture is not
-    # something to assume.
-    var clip_moved = -1
+    # --- NO_EIGEN_CLIP: MUST FAIL, asserted on `km_zero_row_x`. The five
+    # fixtures are still swept first and their count printed, because whether
+    # a float32 Jacobi leaves a singular value BELOW 1e-12 on them is not
+    # something to assume; since the clip reads `|lambda|` (34e188607) the
+    # M4 FAST run read all five INERT, FIX_KM_DUP included. The planted zero
+    # basis row is the data set whose property is derived, and
+    # `_clip_moves_on_zero_row` raises unless the arm reaches and moves.
     var clip_inert = 0
+    var clip_swept_moved = String("none")
     for fix in _all_fixtures():
         var base = _fit_signature(fix, KM_KERNEL_LINEAR, KMSAB_NONE)
         var run = _fit_signature(fix, KM_KERNEL_LINEAR, KMSAB_NO_EIGEN_CLIP)
@@ -2794,30 +2979,20 @@ def check_km_sabotages() raises:
                 moved = True
                 break
         if moved:
-            clip_moved = fix
+            clip_swept_moved = km_fixture_name(fix)
             break
         clip_inert += 1
-    if clip_moved < 0:
-        print(
-            "  REPORT     NO_EIGEN_CLIP: INERT on all "
-            + String(clip_inert)
-            + " fixtures, which means no singular value |lambda| of any basis"
-            " kernel fell below sklearn's 1e-12. RECORDED, not claimed: the clip is"
-            " theirs (DEVIATION 1670) and it is a guard against a"
-            " rank-deficient basis, so an inert result here is a statement"
-            " about the fixtures rather than about the clip. **THIS IS A"
-            " COVERAGE GAP AND IT IS OWED A FIXTURE WHOSE BASIS KERNEL IS"
-            " ACTUALLY SINGULAR AT THE SAMPLED ROWS.**"
-        )
-    else:
-        print(
-            "  MUST FAIL  NO_EIGEN_CLIP on "
-            + km_fixture_name(clip_moved)
-            + ": bits moved ("
-            + String(clip_inert)
-            + " earlier fixtures INERT to it)"
-        )
-        n_moved += 1
+    var clip_detail = _clip_moves_on_zero_row()
+    n_moved += 1
+    print(
+        "  MUST FAIL  NO_EIGEN_CLIP (linear) on ZERO_ROW: bits moved ("
+        + clip_detail
+        + "; the five fixtures: "
+        + String(clip_inert)
+        + " INERT before a move, first moved on "
+        + clip_swept_moved
+        + ")"
+    )
 
     # --- RF_STREAM_DRAW: driven at TWO widths, which is the only way its
     # real property is visible.

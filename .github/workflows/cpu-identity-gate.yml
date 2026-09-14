@@ -6,8 +6,8 @@
 # bench/results/identity_break/2026-09-13_three-columns/.
 #
 # What it proves on each runner, and nothing more. Every host binding the
-# manifest declares (python/mojolearn/host_surface.py; ten families as of
-# 2026-09-14 with the tokenizer's, each through bindings/build_<family>_host.sh) builds
+# manifest declares (python/mojolearn/host_surface.py lists the families, a
+# count written here went stale twice on 2026-09-14; each builds through bindings/build_<family>_host.sh)
 # ON THAT RUNNER with no accelerator target as the kernel matrix's CPU column
 # (checks/kernel_matrix.mojo COLUMN_CPU; each binding asserts it at build time
 # and reads it back). The checkout's package takes the CPU-only path

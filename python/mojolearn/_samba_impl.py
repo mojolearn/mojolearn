@@ -4,7 +4,7 @@
 TransformerBlock]* (each block carries its own pre-norm and residual) ->
 final RMSNorm -> tied or untied LM head -> cross-entropy, with a full
 backward, AdamW with clipping, a learning-rate schedule, clause 9.2 gradient
-accumulation, a position-keyed RNG and a JSON+hex+sha256 checkpoint.
+accumulation, a position-keyed RNG and streamed checksummed checkpoints.
 
 PRIVATE MODULE, AND IT HOLDS NO NUMERICS. Every arithmetic step is a call
 into `_mojolearn_training` (embedding, RMSNorm, head GEMM, accumulate, RNG,
@@ -27,9 +27,7 @@ from . import _buffer as _buffers, _bufcheck as _checks
 from ._array import Array as _Array
 import hashlib
 import json
-import os
 from pathlib import Path
-import tempfile
 
 import math
 from ._training_impl import _round_f32
@@ -424,7 +422,7 @@ class SambaStack(object):
         return dict(self.last_)
 
     # -- state ----------------------------------------------------------------
-    def state_dict(self):
+    def state_dict(self, *, _copy_arrays=True):
         o = self.optimizer
         sched = None if o.lr_schedule is None else o.lr_schedule.config()
         return {
@@ -436,9 +434,11 @@ class SambaStack(object):
                           "offset": self.offsets[j],
                           "size": self.offsets[j + 1] - self.offsets[j]}
                          for j, n in enumerate(self.names)],
-            "parameters": self.flat.copy(),
-            "exp_avg": o.exp_avg.copy(), "exp_avg_sq": o.exp_avg_sq.copy(),
-            "buf_initialized": o.buf_initialized.copy(), "t": int(o.t),
+            "parameters": self.flat.copy() if _copy_arrays else self.flat,
+            "exp_avg": o.exp_avg.copy() if _copy_arrays else o.exp_avg,
+            "exp_avg_sq": o.exp_avg_sq.copy() if _copy_arrays else o.exp_avg_sq,
+            "buf_initialized": (o.buf_initialized.copy() if _copy_arrays
+                                else o.buf_initialized), "t": int(o.t),
             "optimizer": {"kind": "adamw", "lr": o.lr, "beta1": o.betas[0],
                           "beta2": o.betas[1], "eps": o.eps,
                           "weight_decay": o.weight_decay,
@@ -477,41 +477,49 @@ class SambaStack(object):
         self.generator.load_state_dict(state["rng"])
         return self
 
-    # -- checkpoint (the byte-LM's JSON+hex+sha256 envelope, generalized) ---
+    # -- checkpoint (streamed arrays; legacy JSON remains readable) --------
     _ARRAYS = (("parameters", "<f4"), ("exp_avg", "<f4"),
                ("exp_avg_sq", "<f4"), ("buf_initialized", "<i4"))
 
     def save_checkpoint(self, path):
-        """Canonical JSON with the four state arrays as little-endian hex,
-        a sha256 over the canonical payload, written atomically."""
-        payload = self.state_dict()
-        for key, dtype in self._ARRAYS:
-            v = payload[key]
-            payload[key] = {"dtype": dtype, "shape": list(v.shape),
-                            "hex": _checks.le_bytes(v, 'i' if dtype == '<i4' else 'f').hex()}
-        envelope = {"schema": _CHECKPOINT_SCHEMA, "payload": payload,
-                    "payload_sha256": hashlib.sha256(_canonical(payload)).hexdigest()}
-        encoded = _canonical(envelope) + b"\n"
-        if len(encoded) > _CHECKPOINT_LIMIT:
-            raise ValueError("mojolearn.SambaStack: checkpoint exceeds the size limit")
-        path = Path(path)
-        tmp = None
-        try:
-            with tempfile.NamedTemporaryFile(dir=path.parent, prefix="." + path.name + ".",
-                                             delete=False) as stream:
-                tmp = stream.name
-                stream.write(encoded)
-                stream.flush()
-                os.fsync(stream.fileno())
-            os.replace(tmp, path)
-            tmp = None
-        finally:
-            if tmp is not None:
-                os.unlink(tmp)
-        return hashlib.sha256(encoded).hexdigest()
+        """Atomically stream checksummed state arrays without a total size cap.
+
+        Saving borrows parameter and optimizer storage; callers must not train
+        or mutate this stack concurrently with saving.
+        """
+        from ._samba_checkpoint import save
+        return save(path, self.state_dict(_copy_arrays=False))
 
     @classmethod
     def from_checkpoint(cls, path, numeric_mode=None):
+        from ._samba_checkpoint import MAGIC, load
+        with Path(path).open("rb") as stream:
+            streamed = stream.read(len(MAGIC)) == MAGIC
+        if streamed:
+            payload = load(path)
+        else:
+            payload = cls._read_legacy_checkpoint(path)
+        if numeric_mode is None:
+            numeric_mode = payload["numeric_mode"]
+        config = SambaConfig.from_dict(payload["config"])
+        oc = payload["optimizer"]
+        sched = (None if payload["schedule"] is None
+                 else T._Schedule.from_config(payload["schedule"]))
+        weights = {}
+        flat = _checks.flat_view(payload["parameters"], 'f')
+        for entry in payload["registry"]:
+            weights[entry["name"]] = _Array.from_buffer(flat[
+                entry["offset"]:entry["offset"] + entry["size"]]).reshape(entry["shape"])
+        stack = cls(config, weights=weights, lr=oc["lr"],
+                    betas=(oc["beta1"], oc["beta2"]), eps=oc["eps"],
+                    weight_decay=oc["weight_decay"], lr_schedule=sched,
+                    max_norm=oc["max_norm"],
+                    accumulation_steps=oc["accumulation_steps"],
+                    numeric_mode=numeric_mode)
+        return stack.load_state_dict(payload)
+
+    @classmethod
+    def _read_legacy_checkpoint(cls, path):
         with Path(path).open("rb") as stream:
             encoded = stream.read(_CHECKPOINT_LIMIT + 1)
         if len(encoded) > _CHECKPOINT_LIMIT:
@@ -530,18 +538,4 @@ class SambaStack(object):
                 raise ValueError("mojolearn.SambaStack: checkpoint tensor dtype mismatch")
             raw = bytes.fromhex(d["hex"])
             payload[key] = _buffers.frombytes(raw, dtype, d["shape"])
-        config = SambaConfig.from_dict(payload["config"])
-        oc = payload["optimizer"]
-        sched = (None if payload["schedule"] is None
-                 else T._Schedule.from_config(payload["schedule"]))
-        weights = {}
-        for entry in payload["registry"]:
-            weights[entry["name"]] = payload["parameters"][
-                entry["offset"]:entry["offset"] + entry["size"]].reshape(entry["shape"])
-        stack = cls(config, weights=weights, lr=oc["lr"],
-                    betas=(oc["beta1"], oc["beta2"]), eps=oc["eps"],
-                    weight_decay=oc["weight_decay"], lr_schedule=sched,
-                    max_norm=oc["max_norm"],
-                    accumulation_steps=oc["accumulation_steps"],
-                    numeric_mode=numeric_mode)
-        return stack.load_state_dict(payload)
+        return payload

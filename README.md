@@ -251,7 +251,7 @@ estimators: Apple M4, NVIDIA H100 and AMD MI300X recordings of the first
 five, 45 fixtures each, and Apple M4 recordings of kernel density, SVC,
 whitened PCA and the three k-NN classes, 54 fixtures each, reproduced on
 the CPU path, [fixtures](bench/results/classical_host/)). Training on a CPU:
-<!--fact:host_training_lanes-->pinned GEMM, kernel density, Holt-Winters, lasso, elasticnet, SVC, agglomerative clustering, the Extra Trees classifier, the Extra Trees regressor, the isolation forest, nearest neighbors, the k-NN classifier, the k-NN regressor, PCA, whitened PCA, truncated SVD, linear regression, ridge, DBSCAN, k-means, the metrics, spectral clustering, the standard scaler, the min-max scaler, logistic regression, the random forest classifier and the random forest regressor<!--/fact-->,
+<!--fact:host_training_lanes-->pinned GEMM, kernel density, Holt-Winters, lasso, elasticnet, SVC, agglomerative clustering, the Extra Trees classifier, the Extra Trees regressor, the isolation forest, nearest neighbors, the k-NN classifier, the k-NN regressor, PCA, whitened PCA, truncated SVD, linear regression, ridge, DBSCAN, k-means, the metrics, spectral clustering, the standard scaler, the min-max scaler, logistic regression, the random forest classifier, the random forest regressor, k-means with a random start, k-means from given centroids, weighted k-means, the standard scaler without centering, the standard scaler without scaling, the clipped min-max scaler and spectral clustering on a precomputed affinity<!--/fact-->,
 the first six identical to the three GPU columns on seven CPUs
 ([gate](.github/workflows/cpu-identity-gate.yml)) and, since 2026-09-14,
 agglomerative clustering, Extra Trees (classifier and regressor, the saved

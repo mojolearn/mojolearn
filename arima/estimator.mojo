@@ -78,9 +78,11 @@ CROSS-VENDOR STATUS. The lane behind this surface is bit-identical on three
 vendors at `221aa141`, 139 card records (`arima/arima_main.mojo`'s header
 carries the evidence). THAT CARD IS THE KALMAN FILTER AND ITS STAGES, NOT
 THIS FILE. The fit landed after it and the card was re-emitted byte
-identical, which says the fit moved no stage the card records; it does not
-say `arima_fit_ptr_host` has been run on a second vendor, because it has
-not. A three-vendor run THROUGH this door is OWED.
+identical, which says the fit moved no stage the card records. The run
+THROUGH this door came later: the identity harness's 136-lane record at
+4048e1b51 reads IDENTICAL x3 on every training and infer cell of the arima,
+arima-011 and arima-seasonal-c lanes across the Apple M4, an H100 and an
+MI325X (bench/results/identity_break/2026-09-14_136-lanes/).
 """
 
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.

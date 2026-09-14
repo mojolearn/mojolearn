@@ -38,7 +38,7 @@ ORACLE = "cluster/host/kmeans_oracle.mojo"
 METRICS_ORACLE = "metrics/host/metrics_oracle.mojo"
 METRICS_EXPORTS = ("accuracy_score", "adjusted_rand_score", "entropy", "mutual_info_score",
                    "homogeneity_score", "completeness_score", "v_measure_score", "r2_score",
-                   "silhouette", "spectral_fit_predict_dataset")
+                   "silhouette", "spectral_fit_predict_dataset", "spectral_fit_predict_graph")
 SPECTRAL_ORACLE = "spectral/host/spectral_oracle.mojo"
 SCALER_ORACLE = "preprocessing/host/scaler_oracle.mojo"
 QN_ORACLE = "glm/host/qn_oracle.mojo"
@@ -108,7 +108,8 @@ def test_manifest_covers_metrics():
     assert "metrics" in host_surface.covered_lanes(), "metrics is not a covered training lane"
     fam = host_surface.family("metrics")
     assert fam["routes"] == "_mojolearn_metrics"
-    assert fam["training_lanes"] == ("metrics", "spectral")
+    # spectral-precomputed joined the family on lane/cpu-training-batch2-declare.
+    assert fam["training_lanes"] == ("metrics", "spectral", "spectral-precomputed")
     assert METRICS_ORACLE in fam["host_modules"]
     assert (ROOT / METRICS_ORACLE).is_file()
     assert (ROOT / "bindings/build_metrics_host.sh").is_file()
@@ -122,7 +123,7 @@ def test_metrics_binding_registers_the_lane_entries():
     for name in METRICS_EXPORTS + ("metrics_vendor", "metrics_numeric_mode"):
         assert f'("{name}")' in src, f"the metrics host binding does not register {name}"
         assert name in exports, f"the manifest does not list {name} for metrics"
-    for absent in ("rand_score", "trustworthiness", "spectral_fit_predict_graph", "umap_fit_transform",
+    for absent in ("rand_score", "trustworthiness", "umap_fit_transform",
                    "kl_divergence", "log_loss", "confusion_matrix"):
         assert f'("{absent}")' not in src, f"{absent} must stay absent so it refuses by name"
 
@@ -184,7 +185,9 @@ def test_manifest_covers_the_scalers():
         assert lane in host_surface.covered_lanes(), f"{lane} is not a covered training lane"
     fam = host_surface.family("preprocessing")
     assert fam["routes"] == "_mojolearn_preprocessing"
-    assert fam["training_lanes"] == ("standard-scaler", "minmax-scaler")
+    # The three parameter lanes joined on lane/cpu-training-batch2-declare.
+    assert fam["training_lanes"] == ("standard-scaler", "minmax-scaler", "standard-scaler-no-mean",
+                                     "standard-scaler-no-std", "minmax-scaler-clip")
     assert SCALER_ORACLE in fam["host_modules"] and (ROOT / SCALER_ORACLE).is_file()
     assert (ROOT / "bindings/build_preprocessing_host.sh").is_file()
     assert "_mojolearn_preprocessing" in host_surface.routed_modules()
