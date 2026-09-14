@@ -715,3 +715,32 @@ The final Samba checkpoint gate passes trained-model continuation, seven
 corruption refusals before model construction, failed-publication atomicity,
 legacy loading and a 415,293,679-byte archive roundtrip. Full evidence is in
 `bench/results/multi_gpu/2026-09-14/samba-stream-checkpoint-h100/`.
+
+### Pooled RandomForest and ExtraTrees GPU prediction
+
+`ParallelForestPredictor` owns a frozen fitted forest in a cooperative worker.
+It supports all four RandomForest/ExtraTrees classifier/regressor estimators
+with `numeric_mode="identical"` and `inference_engine="parallel_groves"`.
+The original estimator's methods retain label decoding and output precision.
+Close the driver to release its native snapshot and worker.
+
+```python
+from mojolearn.parallel_ensemble import ParallelForestPredictor
+
+with ParallelForestPredictor(fitted_forest, devices=(0, 1)) as predictor:
+    prediction = predictor.predict(X)
+    # Classifiers additionally expose predictor.predict_proba(X).
+```
+
+Model ownership follows the existing 32 logical groves. Grove g contains trees
+g, g+32, g+64 and so on. Each grove retains its tree order; the 32 unaveraged
+totals use the original fixed 16/8/4/2/1 fold and one global-tree-count division.
+Physical device count does not select the reduction tree. This preserves the
+single-GPU `parallel_groves` contract; that contract already differs from the
+legacy sequential predictor's association. The default sequential predictor
+traverses the forest on the host.
+
+Full host model storage and replicated query tiles remain. Every complete
+grove must fit its owner, and existing integer limits still apply. Pooling
+model buffers for prediction does not partition training data. Owners are
+currently evaluated sequentially; no throughput improvement is claimed.
