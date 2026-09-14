@@ -70,7 +70,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.vendor import COMPILED_VENDOR
 from max.gpu.host import DeviceContext
 
-from training.clip_multi_gpu import parallel_clip_grad_norm_host
+from training.clip_multi_gpu import parallel_clip_grad_norm_host, clip_pool_fault_available
 from training.accumulate_multi_gpu import parallel_accumulate_host, accumulate_pool_fault_available
 from training.optimizer_multi_gpu import parallel_optimizer_step_host
 from training.estimator import (
@@ -129,6 +129,10 @@ def training_vendor_binding() raises -> PythonObject:
     import when this disagrees with the vendor directory the set was loaded
     from."""
     return PythonObject(String(COMPILED_VENDOR))
+
+
+def clip_pool_fault_available_binding() raises -> PythonObject:
+    return PythonObject(clip_pool_fault_available())
 
 
 def clip_parallel_available_binding() raises -> PythonObject:
@@ -678,6 +682,7 @@ def PyInit__mojolearn_training() abi("C") -> PythonObject:
         var m = PythonModuleBuilder("_mojolearn_training")
         m.def_function[training_vendor_binding]("training_vendor")
         m.def_function[training_numeric_mode_binding]("training_numeric_mode")
+        m.def_function[clip_pool_fault_available_binding]("clip_pool_fault_available")
         m.def_function[clip_parallel_available_binding]("clip_parallel_available")
         m.def_function[accumulate_pool_fault_available_binding]("accumulate_pool_fault_available")
         m.def_function[accumulate_parallel_available_binding]("accumulate_parallel_available")

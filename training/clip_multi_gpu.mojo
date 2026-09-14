@@ -7,6 +7,7 @@ cross-tensor norm. Scaling uses the resulting original coefficient on every
 owner, with full host staging before publication. One tensor must fit an owner.
 """
 from std.os import getenv
+from std.sys import is_defined
 from max.gpu.host import DeviceContext, DeviceBuffer
 from bindings.hostptr import copy_f32
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -23,6 +24,13 @@ from training.checks.optimizer import (
 from training.checks.optimizer_oracle import refuse_nonfinite_scalar
 from gemm.checks.gemm_identical import identical_gemm_into
 from gemm.checks.gemm_oracle import OP_NT
+
+
+comptime CLIP_POOL_FAULT = is_defined["MOJOLEARN_CLIP_POOL_FAULT"]()
+
+
+def clip_pool_fault_available() -> Int:
+    return 1 if CLIP_POOL_FAULT else 0
 
 
 struct OwnedClipTensor(Movable):
@@ -103,6 +111,9 @@ def parallel_clip_grad_norm_host(
         owner_ctx.enqueue_function[clip_scale_kernel](tensor.gradient.unsafe_ptr(),Int32(n),coef,
             grid_dim=(_grid_for(n),1,1),block_dim=(OPT_TPB,1,1))
         owner_ctx.synchronize()
+        comptime if CLIP_POOL_FAULT:
+            if Int(getenv("MOJOLEARN_CLIP_FAIL_OWNER","-1")) == tensor.owner:
+                raise Error("parallel clip: injected post-scale owner failure; output unchanged")
         owner_ctx.enqueue_copy(dst_ptr=result.unsafe_ptr()+tensor.first,src_buf=tensor.gradient)
         owner_ctx.synchronize()
     _ = tensors^
