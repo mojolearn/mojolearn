@@ -22,3 +22,5 @@ MI300X and a DigitalOcean MI325X, `--repeats 20`, twice per box in two
 processes) are owed; keep their `.npz` OUTSIDE the tree too (a leg archive or
 the R2 store) and record here only each run's box, commit, repeats, in-process
 moved count, order-dependent parts, and the first DIFFER line of its Apple diff.
+| amd-mi300x-hotaisle (Hot Aisle MI300X 8core VM enc1-gpuvm024, 22.04 ROCm container) | cdcaf7890 | 20 x 2 processes | 0 | none | Apple diff: equal=86 differ=0 of 86 (against an Apple reference regenerated at ad5ac66c2, and the two AMD processes equal=86); the race did NOT reproduce in a fresh process, where the 120-lane run at 65ae7612f had mamba2's step and backward differ on this VM type after about 100 lanes in one process; leg `bench/results/e1g/2026-09-14_140021-amd-mi300x-hotaisle-mamba2-probe` |
+| amd-mi325x-do (DigitalOcean MI325X, 24.04 ROCm image) | cdcaf7890 | 20 x 2 attempted | n/a | n/a | both `run`s abort at the first launch: "Memory access fault by GPU node-1 ... Reason: Unknown", exit 134, no npz; the same fault killed the 120-lane run there right after mamba1; leg `bench/results/e1g/2026-09-14_134957-amd-mi325x-do-mamba2-probe` |
