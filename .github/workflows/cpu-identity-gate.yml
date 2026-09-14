@@ -85,6 +85,7 @@ on:
       - "core/classical_host_predict.mojo"
       - "decomposition/host/pca_oracle.mojo"
       - "glm/host/glm_oracle.mojo"
+      - "dbscan/host/dbscan_oracle.mojo"
       - "bench/results/classical_host/**"
       - "tools/cpu_identity_gate_check.py"
       - "bench/results/identity_break/2026-09-13_three-columns/**"
@@ -112,7 +113,8 @@ env:
   #                       CLASSICAL_RECORDED, the same shape as the forest
   #                       host gate. Since workstream E (2026-09-14) the knn,
   #                       pca, pca-whiten, tsvd, ols and ridge lanes train on
-  #                       the host too and sit in both lists.
+  #                       the host too and sit in both lists, and dbscan
+  #                       trains on the host.
   #   HOST_FAMILIES       the routed (phase 1) families, space separated; each
   #                       is built by bindings/build_<family>_host.sh (a shim
   #                       over bindings/build_host_family.sh) into

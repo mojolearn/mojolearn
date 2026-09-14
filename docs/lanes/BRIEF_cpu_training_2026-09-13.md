@@ -1320,7 +1320,7 @@ leg; the host scorer for it is `oracle_path_lengths` / `oracle_scores`
 over an `OracleForest` rebuilt from the arrays, which this binding
 already runs.
 
-## Workstream E (2026-09-14): knn, knn-clf, knn-reg, pca, pca-whiten, tsvd, ols, ridge, WRITTEN AND COMPILE-CHECKED, NOT MEASURED
+## Workstream E (2026-09-14): knn, knn-clf, knn-reg, pca, pca-whiten, tsvd, ols, ridge, dbscan, WRITTEN AND COMPILE-CHECKED, NOT MEASURED
 
 Branch `lane/cpu-training-e`, off `origin/main` at 59ee1b98b. Nothing in this
 section is a bit result; the four-column diff has not run. What exists follows.
@@ -1350,8 +1350,24 @@ section is a bit result; the four-column diff has not run. What exists follows.
   `ridge_solve` with every elementwise kernel of `glm/impl/matrix/math.mojo`
   restated. `n_cols > n_rows` (`lstsq_min_norm`) is refused by name.
   Exported as `ols_fit` and `ridge_fit`.
+- dbscan. `dbscan/host/dbscan_oracle.mojo`, the oracle the census said did
+  not exist, written as a second spelling of the device path. The ball cover
+  index (`rbc_n_landmarks`, `_floyd_sample` at seed 12345, the strict-`<`
+  nearest landmark rooted by `identical_sqrt`, the member lists ranked by
+  distance then index, the last member's distance as the radius) and the
+  eps query (`block_rbc_kernel_eps_csr_pass`, the landmark test against
+  `(eps + radius)^2`, the member scan in RBC_LANES chunks from the ragged
+  tail backward with its `cur_r_dist - min_warp_dist > eps` exit) are
+  replayed with `eps_dist_sq`'s fold; the brute arm keeps
+  `eps_unexp_neigh_kernel`'s fold (the query value unflushed). Then
+  `weak_cc` as the one-thread schedule in row order (the same fixed point;
+  the pass count `n_iter_` is that schedule's and no column hashes it) and
+  `make_monotonic` plus the scikit-learn relabel. One batch of every row.
+  `sample_weight` and an explicit `max_mbytes_per_batch` are refused by
+  name. Exported as `dbscan_fit`. The `dbscan-brute-l1` and
+  `dbscan-weighted` twins wait for a GPU record that carries them.
 - The sabotage arm is the estimators family's `-D MOJOLEARN_HOST_SABOTAGE=1`,
-  under which the Gram reduce walks its chunks descending. On the Apple M4, production
+  under which the DBSCAN core test asks one neighbor more and the Gram reduce walks its chunks descending. On the Apple M4, production
   and sabotage builds of the binding compiled and, on a 3000 x 6 draw, the
   sabotage build moved every PCA, tSVD, OLS and ridge output (the mean is
   inert by construction, it has no Gram); production runs twice gave the
@@ -1362,11 +1378,11 @@ section is a bit result; the four-column diff has not run. What exists follows.
 To measure, on each GPU box and on a CPU-only box (the CPU identity gate
 runs the same steps on seven runners), the commands are these.
 
-    python3 tools/identity_break.py --lanes knn,knn-clf,knn-reg,pca,pca-whiten,tsvd,ols,ridge --json <box>.json
+    python3 tools/identity_break.py --lanes knn,knn-clf,knn-reg,pca,pca-whiten,tsvd,ols,ridge,dbscan --json <box>.json
     python3 tools/identity_break.py --diff <apple.json> <nvidia.json> <amd.json> <cpu.json> \
-        --require-columns 4 --lanes knn,knn-clf,knn-reg,pca,pca-whiten,tsvd,ols,ridge
+        --require-columns 4 --lanes knn,knn-clf,knn-reg,pca,pca-whiten,tsvd,ols,ridge,dbscan
     MOJOLEARN_HOST_OUTDIR=<sab> MOJOLEARN_BUILD_EXTRA_DEFINES="-D MOJOLEARN_HOST_SABOTAGE=1" sh bindings/build_estimators_host.sh
-    MOJOLEARN_HOST_DIR=<sab> MOJOLEARN_HOST_ALLOW_SABOTAGE=1 python3 tools/identity_break.py --lanes pca,pca-whiten,tsvd,ols,ridge --json <cpu-sab>.json
+    MOJOLEARN_HOST_DIR=<sab> MOJOLEARN_HOST_ALLOW_SABOTAGE=1 python3 tools/identity_break.py --lanes pca,pca-whiten,tsvd,ols,ridge,dbscan --json <cpu-sab>.json
     (the diff of <cpu-sab>.json against the three GPU columns must exit non-zero with DIVERGENT)
 
 The three 2026-09-14 47-lane GPU columns already carry every one of these
