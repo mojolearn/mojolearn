@@ -1,0 +1,8 @@
+{
+  "estimator": "KNeighborsRegressor",
+  "heldout_seed": 1,
+  "kind": "dupes",
+  "lane": "knn-reg",
+  "probe_rows": 256,
+  "x_sha256": "e31c19919dd0d22a22c740be1b69d4029a2203b50921ee428a485970456fcfa7"
+}

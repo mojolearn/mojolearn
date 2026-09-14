@@ -228,8 +228,10 @@ def host_model(path):
     `HostForest` for a forest archive, a `HostGBDT` (`_gbdt_host.py`) for a
     `GradientBoosting.save` archive, a host subclass of LinearRegression,
     Ridge, TruncatedSVD, LogisticRegression or PCA (`_classical_host.py`,
-    the classical host inference lane, 2026-09-13) for one of their
-    archives. Any other format is refused with the tag it carries."""
+    the classical host inference lane, 2026-09-13) or of NearestNeighbors,
+    KNeighborsClassifier or KNeighborsRegressor (the knn host inference
+    lane, 2026-09-14) for one of their archives. Any other format is
+    refused with the tag it carries."""
     from ._classical_host import CLASSICAL_FORMATS
     from ._classical_host import host_model as classical_host_model
     from ._gbdt_host import GBDT_FORMAT, HostGBDT

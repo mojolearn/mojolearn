@@ -502,14 +502,18 @@ census was `grep -n -E "^from |^import "` on each file named.
 
 ### Three facts that apply to every classical lane
 
-**No classical estimator has a save or load** (as of 2026-09-13 morning;
-CORRECTED 2026-09-14: ols, ridge, tsvd, logistic and pca have had `save`
-and `load` since 6c712fe76, kde and svc since the kde svc host lane below).
-The grep
+**No classical estimator had a save or load when this was written
+(2026-09-13 morning).** SUPERSEDED for ten of them: the classical lane
+(2026-09-13 evening) gave LinearRegression, Ridge, TruncatedSVD,
+LogisticRegression and PCA a `save`/`load`, the kde svc host lane
+(2026-09-14) KernelDensity and SVC, and the knn lane (2026-09-14)
+NearestNeighbors, KNeighborsClassifier and KNeighborsRegressor
+(`mojolearn-knn-1`, `python/mojolearn/neighbors.py`); the grep below now
+returns those. It still returns nothing for `_iforest_impl.py`. The grep
 `grep -n -E "def save|def load|write_npz|read_npz|__getstate__|__setstate__|__reduce__|pickle"`
 over `python/mojolearn/neighbors.py`, `decomposition.py`, `linear_model.py`,
 `_solver_impl.py`, `_svm_impl.py`, `density.py` and `_iforest_impl.py`
-returns nothing. The only `save`/`load` pairs in the package are the tree
+returned nothing. The only `save`/`load` pairs in the package are the tree
 families (`ensemble.py:1515/1581`, `extratrees.py:303/346`,
 `randomforest.py:510/550`). The codec exists (`_serialize.write_npz`,
 `python/mojolearn/_serialize.py:267`, and `read_npz`, `:282`) and is what
@@ -828,10 +832,13 @@ What this is and is not. The three-vendor comparison is on the
 against JSONs recorded with models FITTED on those GPUs; the byte-level
 sha256 comparison of every surface is against a Metal recording only. The
 host binding was built and checked on ONE CPU (Apple M4); the seven-runner
-CPU gate does not run this gate yet. OWED: a `record` on an NVIDIA box and
-an AMD box into `bench/results/classical_host/2026-09-13-<vendor>/` (the
-model files fitted there), checked on a CPU box, and a workflow step that
-runs `check` on the seven runners.
+CPU gate does not run this gate yet. OWED when this was written: a
+`record` on an NVIDIA box and an AMD box, checked on a CPU box, and a
+workflow step that runs `check` on the seven runners. The first two were
+DONE 2026-09-14 (6796ceff9): `bench/results/classical_host/2026-09-14-nvidia-h100/`
+and `2026-09-14-amd-mi300x/`, recorded at 5e7acf79 and each checked on the
+Mac's CPU path IDENTICAL against the three 2026-09-14 GPU columns, 45
+fixtures each. The workflow step is still owed.
 
 ## kde, svc and the whitened PCA on the host (2026-09-14, branch `lane/kde-svc-host-inference`)
 
@@ -909,3 +916,91 @@ tools/classical_host_gate.py record bench/results/classical_host/2026-09-14-<ven
 --gpu-column <the three 46-lane JSONs> --report ...`; and
 `tools/identity_break.py --lanes pca-whiten` on the three GPUs so the lane
 has committed columns.
+
+## k-NN host inference, lane 8 (2026-09-14, branch `lane/knn-host-inference`)
+
+The three k-nearest-neighbor lanes of `tools/identity_break.py` (knn,
+knn-clf, knn-reg) predict on a CPU from a saved model, through the same
+host pattern as the classical lane. What landed:
+
+- `core/knn_host_predict.mojo`: the GPU-free restatement. Under IDENTICAL
+  the GPU search is `knn_search_traced` with AUTO pinned to the TILED arm
+  on every column (DEVIATION 509), and every distance spelling and every
+  selector of that arm is written to one contract, which the file states
+  once and names by file and line: `host_row_norm` MIRRORS
+  `row_norm_kernel` (`core/row_norms.mojo:66-113`, NORM_TPB = 128 strided
+  partials of `ftz(identical_mul_add(v, v, acc))`, then
+  `pinned_block_sum`'s halving tree `red[t] = red[t] + red[t + step]`,
+  `core/pinned_reduce.mojo:95-125`, then `ftz`); `host_l2_expanded_cell`
+  MIRRORS `pinned_distance_tile_kernel` (`neighbors/checks/
+  pinned_distance_tile.mojo:66-107`: the ascending feature chain, the
+  `-2 acc + (qn + yn)` fma epilogue, the clamp at zero, `identical_sqrt`
+  when the metric roots); `host_composite_key` MIRRORS `composite_key`
+  over `twiddle_in` (`select_radix_identical.mojo:102-119`,
+  `select_radix.mojo:155-170`); `host_select_k` returns the k smallest
+  keys (what the small-k selector, the radix rank pass and the partial
+  merge all return) and then runs the estimator's own insertion sort by
+  `(distance, index)` (`neighbors/estimator.mojo:664-682`);
+  `host_unique_labels`, `host_monotonic`, `host_class_probs`,
+  `host_class_vote` and `host_regress_avg` MIRROR `getUniquelabels`,
+  `make_monotonic` plus the subtract-one, `class_probs_kernel`,
+  `class_vote_kernel` and `regress_avg_kernel`
+  (`neighbors/impl/label/classlabels.mojo`, `neighbors/impl/selection/
+  knn.mojo`); `host_distance_weights` and the two weighted kernels are
+  `distance_weights.mojo`'s, relocated. The host computes the L2 expanded
+  pair (euclidean/l2, sqeuclidean) and both weightings; cosine, L1, Linf,
+  L2 unexpanded, Lp and the ball cover arm refuse BY NAME.
+- `bindings/_mojolearn_core_host.mojo` exports `knn_search`, `knn_classify`
+  and `knn_regress` under the GPU binding's names, `params` lists and
+  `dist_params` triple, so `neighbors.py` runs unchanged; the returned
+  "query tile" is 1. `kmeans_fit`, `rbc_knn_search` and
+  `radius_neighbors_*` stay absent.
+- `save`/`load` on NearestNeighbors, KNeighborsClassifier and
+  KNeighborsRegressor (`mojolearn-knn-1`: `index` `<f4`, `meta` `<i8`
+  [n_features_in_, n_samples_fit_, n_neighbors, query_tile, outputs_2d,
+  n_outputs], `p` `<f8`, `metric`, `algorithm`, `weights` as text; the
+  classifier adds `y_cols` `<i4` (n_outputs, n_samples_fit_), `classes`
+  and `class_counts` `<i8`; the regressor `y_cols` `<f4`). `load` rebuilds
+  `classes_` from the label columns exactly as `fit` does and refuses a
+  file whose `classes` member disagrees.
+- `python/mojolearn/_classical_host.py`: `HostNearestNeighbors`,
+  `HostKNeighborsClassifier`, `HostKNeighborsRegressor`, whose `_bind`
+  answers `_mojolearn_core_host` (the `_HostBound` base now binds the
+  class's own family); `algorithm='rbc'` is refused at load by name.
+- `tools/classical_host_gate.py` LANES gains knn (identity probe
+  `kneighbors(Xh[:64])`, surfaces `kneighbors_distances` and
+  `kneighbors_indices`), knn-clf (`predict`, `predict_proba`) and knn-reg
+  (`predict`).
+
+Measured on this Mac (Apple M4, Metal record, host check, 27 fixtures =
+3 lanes x 9), `bench/results/classical_host/2026-09-14-apple-m4-knn/`:
+
+| check | verdict | evidence |
+| --- | --- | --- |
+| host vs the Metal recording, every surface (distances, indices, predict, predict_proba: sha256 + dtype + shape) | IDENTICAL, 27/27, 45 surface cases EQUAL, 0 DIFFER | `check_apple-m4_host.json` |
+| host `identity_hash` vs the 2026-09-14_46-lanes `infer` cells of apple-m4, nvidia-h100-sm_90a AND amd-mi300x-gfx942 | EQUAL on all 81 (27 x 3), 0 ABSENT | same file, `columns` |
+| GPU-path reload (`type(est).load` then the same probe) | equal on every fixture, or `record` would have exited 1 | each `expected.json`, `reload_equal` |
+| sabotage set (`-D MOJOLEARN_HOST_SABOTAGE=1`: every distance chain descending, the selection key's tie toward the HIGHER index, the vote's tie to the LAST class, the mean's slots descending; `--expect-mismatch`) | EXPECTED MISMATCH SEEN: 136 DIFFER, 17 EQUAL. Every EQUAL cell is one the sabotage cannot reach: `ties` distances (integer-grid dot products are exact in any order, and on that fixture the INDICES differ, the reversed tie order caught), the indices of the eight fixtures with no tie at the k-th boundary, and `predict_proba` on those eight (a uniform tally is order-invariant). knn-clf `predict` differs on all nine, knn-reg `predict` on all nine | `check_apple-m4_sabotage.json` |
+| the sabotage set without MOJOLEARN_HOST_ALLOW_SABOTAGE=1 | refused by name, exit 2 | `load_host_module` |
+
+Example cells: knn/base infer `da53642fe53493ad`, knn-clf/base
+`8381d6badb2ee31b`, knn-reg/base `12b3c8b2763ae645`, each the value the
+three GPU columns already carried.
+
+What this is and is not. The three-vendor comparison is on the
+`identity_hash` against JSONs recorded with models FITTED on those GPUs;
+the byte-level comparison of every surface is against a Metal recording
+only. What the nine fixtures exercise is euclidean, uniform weights, one
+output, k = 8 over a 4096-row index; the sqeuclidean metric, the
+`weights='distance'` arm and multi-output `y` are restated from the same
+kernels but NOT measured by this gate. The host binding was built and
+checked on ONE CPU (Apple M4). OWED: a `record` on an NVIDIA box and an AMD
+box, the classical lane's leg body with the lanes changed:
+
+    MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH=/root/mojolearn/python \
+      pixi run python tools/classical_host_gate.py record \
+      "$OUT/2026-09-14-$LABEL" --lanes knn,knn-clf,knn-reg
+
+then, on the Mac, `check` of each directory against the three
+2026-09-14_46-lanes columns into
+`bench/results/classical_host/2026-09-14-<vendor>-knn/`.

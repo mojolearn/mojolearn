@@ -161,13 +161,13 @@ cross-vendor claim. See [verification](docs/VERIFY.md) and
 - CPU training phase 1 (`docs/lanes/BRIEF_cpu_training_2026-09-13.md`): gemm-pinned first, then
   kde, holtwinters, lasso and elasticnet, svc, agglomerative, et-clf, et-reg, iforest; a lane
   passes only when the fourth column reads IDENTICAL on every cell.
-- Rerun the 46-lane three columns once to fill the byte level language model cells the GPU legs
-  skipped.
+- DONE 2026-09-14: the 46-lane three columns rerun with every byte level language model cell
+  filled (`bench/results/identity_break/2026-09-14_46-lanes/`).
 - CPU inference for the classical lanes, per the costing in
   `docs/lanes/BRIEF_forest_host_inference_2026-09-13.md`: ols, ridge, tsvd, logistic and pca
-  merged 2026-09-13 (three-vendor recordings 2026-09-14); kde, svc and the whitened pca on
-  lane/kde-svc-host-inference (Apple M4 measured, NVIDIA and AMD recordings owed); knn in
-  flight; iforest not started.
+  merged 2026-09-13 with three-vendor recordings 2026-09-14; kde, svc, the whitened pca and
+  knn, knn-clf, knn-reg merged 2026-09-14 (Apple M4 measured, NVIDIA and AMD recordings owed);
+  iforest not started.
 
 The project-level sequencing lives in [ROADMAP.md](ROADMAP.md). Update this
 page only from recorded evidence; do not turn planned or in-progress runs into

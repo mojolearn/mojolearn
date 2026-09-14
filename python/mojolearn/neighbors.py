@@ -11,14 +11,116 @@ regressor built on it.
 
 import math
 
-from . import _mojolearn
+from . import _mojolearn, _serialize
 from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, as_i64_c, empty
 from ._labels import sorted_classes
 from ._mode import NumericModeMixin
-from .linear_model import _dtype_name, _is_integer_labels, _shape_of
+from .linear_model import (
+    _check_saved_by, _dtype_name, _is_integer_labels, _restore_mode,
+    _saved_mode, _shape_of,
+)
 
 _DEFAULT_QUERY_TILE = 0  # Ask the compiled planner for its measured default.
+
+#: The model file format (the knn host inference lane, 2026-09-14). `save`
+#: writes exactly what `kneighbors` / `predict` read, raw bytes and exact
+#: dtypes, through `_serialize.write_npz`, so equal models give equal file
+#: hashes on every machine; `load` refuses a cast (`_serialize.exact`). The
+#: index is the fitted `<f4` `(n_samples_fit_, n_features_in_)` block, the
+#: classifier's labels the `<i4` `(n_outputs, n_samples_fit_)` column block
+#: the binding takes (policy 6), the regressor's the same in `<f4`; `p`
+#: travels as `<f8` and the three names (`metric`, `algorithm`, `weights`)
+#: as text. `mojolearn.host_model(path)` predicts from the file on a CPU
+#: with no GPU through `bindings/_mojolearn_core_host.mojo`.
+_KNN_FORMAT = "mojolearn-knn-1"
+_KNN_META_FIELDS = 6  # n_features_in_, n_samples_fit_, n_neighbors, query_tile, outputs_2d, n_outputs
+
+
+def _knn_arrays(est):
+    """The members every k-NN `save` writes; the subclasses add theirs."""
+    if est._index is None:
+        raise RuntimeError("this estimator is not fitted yet")
+    weights = getattr(est, "weights", "uniform")
+    weights = "uniform" if weights is None else weights
+    if not isinstance(weights, str):
+        # `fit` refuses a callable by name before the index is held, so
+        # this is unreachable on a fitted estimator; a file never carries
+        # a function.
+        raise ValueError(
+            f"mojolearn {type(est).__name__}: weights={weights!r} cannot be saved"
+        )
+    y_cols = getattr(est, "_y_cols", None)
+    n_out = 1 if y_cols is None else int(y_cols.shape[0])
+    return {
+        "format": _KNN_FORMAT,
+        "estimator": type(est).__name__,
+        "numeric_mode": _saved_mode(est),
+        "metric": str(est.metric),
+        "algorithm": str(est.algorithm),
+        "weights": weights,
+        "p": Array.from_list([float(est.p)], "<f8"),
+        "index": est._index,
+        "meta": Array.from_list(
+            [int(est.n_features_in_), int(est.n_samples_fit_),
+             int(est.n_neighbors), int(est.query_tile),
+             1 if getattr(est, "outputs_2d_", False) else 0, n_out],
+            "<i8",
+        ),
+    }
+
+
+def _load_knn(cls, path):
+    """The index and the parameters every k-NN `load` reads. Returns the
+    estimator (fitted as far as `NearestNeighbors.fit` fits it), the
+    decoded members, and `(outputs_2d, n_outputs)` for the subclasses."""
+    arrays = _serialize.read_npz(path, _KNN_FORMAT)
+    _check_saved_by(arrays, path, cls)
+    meta = _serialize.exact(arrays, "meta", "<i8")
+    if meta.size != _KNN_META_FIELDS:
+        raise ValueError(
+            f"mojolearn: {path!r} meta holds {meta.size} fields, "
+            f"{_KNN_META_FIELDS} are needed"
+        )
+    nf, ns, k, qt, o2d, n_out = (int(meta[i]) for i in range(_KNN_META_FIELDS))
+    p = _serialize.exact(arrays, "p", "<f8")
+    if p.size != 1:
+        raise ValueError(f"mojolearn: {path!r} p holds {p.size} values, 1 is needed")
+    kwargs = dict(
+        n_neighbors=k, query_tile=qt,
+        metric=_serialize.scalar_str(arrays, "metric"),
+        algorithm=_serialize.scalar_str(arrays, "algorithm"),
+        p=float(p[0]),
+    )
+    if cls._HAS_WEIGHTS:
+        kwargs["weights"] = _serialize.scalar_str(arrays, "weights")
+    obj = cls(**kwargs)
+    _restore_mode(obj, arrays)
+    # The refusals `fit` raises, raised here too, so a file naming a
+    # metric or an algorithm this class refuses is refused by name at load.
+    obj._check_refusals()
+    index = _serialize.exact(arrays, "index", "<f4")
+    if index.ndim != 2 or index.shape[0] != ns or index.shape[1] != nf:
+        raise ValueError(
+            f"mojolearn: {path!r} index has shape {tuple(index.shape)}, meta says ({ns}, {nf})"
+        )
+    if ns < 1 or nf < 1:
+        raise ValueError(f"mojolearn: {path!r} holds an empty index")
+    obj._index = index
+    obj.n_samples_fit_ = ns
+    obj.n_features_in_ = nf
+    obj.used_query_tile_ = None
+    return obj, arrays, (bool(o2d), n_out)
+
+
+def _load_y_cols(arrays, path, dtype, ns, n_out):
+    y_cols = _serialize.exact(arrays, "y_cols", dtype)
+    if y_cols.ndim != 2 or y_cols.shape[0] != n_out or y_cols.shape[1] != ns:
+        raise ValueError(
+            f"mojolearn: {path!r} y_cols has shape {tuple(y_cols.shape)}, "
+            f"meta says ({n_out}, {ns})"
+        )
+    return y_cols
 
 #: cuVS `DistanceType` values (`cuvs/distance/distance.h:22-69`), mirrored
 #: from `neighbors/impl/distance/detail/distance_ops.mojo`. The value gaps
@@ -372,6 +474,8 @@ class NearestNeighbors(NumericModeMixin):
 
     #: This family's binding, for `NumericModeMixin._bind`.
     _BINDING = "_mojolearn"
+    #: Whether `load` hands the file's `weights` to the constructor.
+    _HAS_WEIGHTS = False
 
     def __init__(
         self,
@@ -389,6 +493,20 @@ class NearestNeighbors(NumericModeMixin):
         self.p = p
         self._index = None
         self.used_query_tile_ = None
+
+    def save(self, path):
+        """Write the fitted index to `path` as an npz: the `<f4` index as
+        fitted, `n_neighbors`, `query_tile`, `metric`, `p` and `algorithm`
+        (the knn host inference lane, 2026-09-14). What `kneighbors` reads
+        and nothing else; `mojolearn.host_model(path)` searches it on a CPU
+        with no GPU (brute arm, euclidean and sqeuclidean)."""
+        return _serialize.write_npz(path, _knn_arrays(self))
+
+    @classmethod
+    def load(cls, path):
+        """Load a model saved by `save`. The result answers `kneighbors`."""
+        obj, _, _ = _load_knn(cls, path)
+        return obj
 
     #: Subclasses override; the base class never weights.
     _weights_value = _WEIGHTS_UNIFORM
@@ -643,6 +761,8 @@ class KNeighborsClassifier(NearestNeighbors):
         self.weights = weights
         self._y_cols = None
 
+    _HAS_WEIGHTS = True
+
     @property
     def _weights_value(self):
         """`weights` as the value `bindings/_mojolearn.mojo::_dist_triple`
@@ -653,6 +773,52 @@ class KNeighborsClassifier(NearestNeighbors):
     def _check_refusals(self):
         super()._check_refusals()
         _resolve_weights(type(self).__name__, self.weights)
+
+    def save(self, path):
+        """Write the fitted model to `path` as an npz: the index and
+        parameters `NearestNeighbors.save` writes, `weights`, the `<i4`
+        label columns the binding takes (`_y_cols`, policy 6), `classes`
+        (`<i8`, every output's sorted classes concatenated) and
+        `class_counts` (`<i8`, one per output) (the knn host inference lane,
+        2026-09-14). `mojolearn.host_model(path)` predicts from it on a CPU
+        with no GPU."""
+        if self._y_cols is None:
+            raise RuntimeError("this estimator is not fitted yet")
+        arrays = _knn_arrays(self)
+        arrays["y_cols"] = self._y_cols
+        arrays["classes"] = Array.from_list(
+            [int(c) for cl in self._classes_list for c in cl], "<i8"
+        )
+        arrays["class_counts"] = Array.from_list(
+            [len(cl) for cl in self._classes_list], "<i8"
+        )
+        return _serialize.write_npz(path, arrays)
+
+    @classmethod
+    def load(cls, path):
+        """Load a model saved by `save`. The result predicts. `classes_` is
+        rebuilt from the label columns exactly as `fit` builds it and must
+        equal the file's `classes` member, or the file is refused."""
+        obj, arrays, (o2d, n_out) = _load_knn(cls, path)
+        y_cols = _load_y_cols(arrays, path, "<i4", obj.n_samples_fit_, n_out)
+        classes = _serialize.exact(arrays, "classes", "<i8").tolist()
+        counts = _serialize.exact(arrays, "class_counts", "<i8").tolist()
+        if len(counts) != n_out or sum(counts) != len(classes):
+            raise ValueError(f"mojolearn: {path!r} classes and class_counts disagree with n_outputs")
+        rebuilt = [sorted_classes(y_cols[i].tolist())[0] for i in range(n_out)]
+        off = 0
+        for i, count in enumerate(counts):
+            saved = [int(c) for c in classes[off:off + count]]
+            off += count
+            if saved != rebuilt[i]:
+                raise ValueError(
+                    f"mojolearn: {path!r} classes for output {i} are not the sorted "
+                    "unique labels of its y_cols column"
+                )
+        obj._y_cols = y_cols
+        obj._classes_list = rebuilt
+        obj.outputs_2d_ = o2d
+        return obj
 
     def fit(self, X, y):
         """Store the index and the labels. `y` is int, 1-D or 2-D."""
@@ -826,6 +992,8 @@ class KNeighborsRegressor(NearestNeighbors):
         self.weights = weights
         self._y_cols = None
 
+    _HAS_WEIGHTS = True
+
     @property
     def _weights_value(self):
         """`weights` as the value `bindings/_mojolearn.mojo::_dist_triple`
@@ -836,6 +1004,26 @@ class KNeighborsRegressor(NearestNeighbors):
     def _check_refusals(self):
         super()._check_refusals()
         _resolve_weights(type(self).__name__, self.weights)
+
+    def save(self, path):
+        """Write the fitted model to `path` as an npz: the index and
+        parameters `NearestNeighbors.save` writes, `weights` and the `<f4`
+        target columns the binding takes (`_y_cols`, policy 6) (the knn host
+        inference lane, 2026-09-14). `mojolearn.host_model(path)` predicts
+        from it on a CPU with no GPU."""
+        if self._y_cols is None:
+            raise RuntimeError("this estimator is not fitted yet")
+        arrays = _knn_arrays(self)
+        arrays["y_cols"] = self._y_cols
+        return _serialize.write_npz(path, arrays)
+
+    @classmethod
+    def load(cls, path):
+        """Load a model saved by `save`. The result predicts."""
+        obj, arrays, (o2d, n_out) = _load_knn(cls, path)
+        obj._y_cols = _load_y_cols(arrays, path, "<f4", obj.n_samples_fit_, n_out)
+        obj.outputs_2d_ = o2d
+        return obj
 
     def fit(self, X, y):
         """Store the index and the targets. `y` is float, 1-D or 2-D."""

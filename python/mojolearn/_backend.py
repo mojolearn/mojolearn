@@ -881,8 +881,13 @@ _HOST_MODULES = {
     # bindings/_mojolearn_core_host.mojo carries transpose_f32,
     # cast_colmajor_f64_to_f32, cast_f64_to_f32, all_finite_*, gather_*,
     # argmax_rows_* under the base binding's names, so _buffer._native and
-    # _labels resolve on a CPU-only install; the estimator entries (kmeans,
-    # knn, rbc, radius) are absent and refuse by name.
+    # _labels resolve on a CPU-only install. The knn host inference lane
+    # (2026-09-14) adds the INFERENCE entries knn_search, knn_classify and
+    # knn_regress over core/knn_host_predict.mojo (the L2 expanded pair,
+    # both weightings), so a saved NearestNeighbors, KNeighborsClassifier
+    # or KNeighborsRegressor predicts here; the other estimator entries
+    # (kmeans_fit, rbc_knn_search, radius_neighbors_*) are absent and
+    # refuse by name.
     "_mojolearn": "_mojolearn_core_host",
     # gemm-pinned (phase 1, 2026-09-13): bindings/_mojolearn_linalg_host.mojo
     # over gemm/checks/gemm_oracle.mojo::gemm_oracle, the profile's
