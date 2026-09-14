@@ -26,11 +26,7 @@ from gemm.checks.gemm_identical import (
 )
 from gemm.checks.gemm_oracle import OP_NN
 from mamba.checks.mamba2_fixture import M2_D_STATE, M2_HEADDIM
-from mamba.impl.modeling.modeling_mamba import (
-    mamba_partial,
-    mamba_scratch,
-    pinned_mul,
-)
+from mamba.impl.modeling.modeling_mamba import mamba_scratch, pinned_mul
 
 
 comptime M2_SSD_BWD_TPB = 128
@@ -66,13 +62,13 @@ struct Mamba2SSDBackwardState(Movable):
             boundary_cells = 1
         self.direct_d_pass = mamba_scratch(ctx, state_cells)
         # T is not known to this state constructor; these are sized by the
-        # enclosing chunk extent and the launcher writes only real T rows,
-        # while mamba2_postconv_merge_kernel sums the full extent: the rows
-        # nobody writes must be zero (mamba_partial, DEVIATION 2712).
-        self.d_c_yoff = mamba_partial(ctx,
+        # enclosing chunk extent. The poison gate (DEVIATION 2712) ran with
+        # these unfilled under NaN and carried the canonical hashes: every
+        # row a kernel reads is written first, so scratch like the rest.
+        self.d_c_yoff = mamba_scratch(ctx,
             b * nc * 256 * M2_D_STATE
         )
-        self.d_dacs_yoff = mamba_partial(ctx,
+        self.d_dacs_yoff = mamba_scratch(ctx,
             b * nh * nc * 256
         )
         self.d_pass = mamba_scratch(ctx, state_cells)

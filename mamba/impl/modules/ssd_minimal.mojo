@@ -91,6 +91,7 @@ def pinned_mul(a: Float32, b: Float32) -> Float32:
 # Sabotage arms (see header).
 # ===========================================================================
 
+comptime SAB_2712_UNBOUNDED = is_defined["MOJOLEARN_MAMBA_2712_UNBOUNDED"]()
 comptime SAB_SEGSUM_DESCENDING = is_defined[
     "MOJOLEARN_MAMBA2_SABOTAGE_SEGSUM_DESCENDING"
 ]()
@@ -480,7 +481,9 @@ def m2_ydiag_kernel(
         # allocation is an unmapped page on the MI325X (the launch fault).
         # A row past T contributes +0.0 x +0.0, the bits the record carries.
         var xv = Float32(0.0)
-        if c * qv + jj < t_work:
+        # -D MOJOLEARN_MAMBA_2712_UNBOUNDED=1 restores the unbounded read: the
+        # poison gate's sabotage 1, which must fail (the band is NaN there).
+        if c * qv + jj < t_work or SAB_2712_UNBOUNDED:
             xv = ftz(
                 xd.unsafe_load(
                     (((bb * t_work) + (c * qv + jj)) * nh + hh) * M2_HEADDIM + p

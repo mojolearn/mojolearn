@@ -9,11 +9,9 @@
 #
 #   pixi run check-mamba-poison                 the gate (must pass)
 #   MOJOLEARN_MAMBA_POISON_SABOTAGE=1 pixi run check-mamba-poison
-#                                               the sabotage: d_c_yoff and
-#                                               d_dacs_yoff lose their zero
-#                                               fill, so poison reaches the
-#                                               rows the merge kernel sums;
-#                                               the gate must FAIL
+#                                               the fix removed (the X_d read
+#                                               past T restored): the gate
+#                                               must FAIL. Modes 2 and 3 below.
 #
 # The poison binding is built into a COPY of python/mojolearn (every other
 # binding hard-linked, the Mamba one replaced), never over the binding a
@@ -34,14 +32,15 @@ RECORD="${MOJOLEARN_POISON_RECORD:-bench/results/identity_break/2026-09-14_120-l
 COLUMNS="$RECORD/apple-m4.json $RECORD/nvidia-h100-sm_90a.json $RECORD/amd-mi300x-gfx942.json"
 for c in $COLUMNS; do [ -f "$c" ] || { echo "no record column at $c" >&2; exit 2; }; done
 # MOJOLEARN_MAMBA_POISON_SABOTAGE
-#   1  d_c_yoff and d_dacs_yoff lose their zero fill: the gate must FAIL
+#   1  the fix removed: m2_ydiag_kernel reads X_d rows past T again
+#      (-D MOJOLEARN_MAMBA_2712_UNBOUNDED=1): the gate must FAIL
 #   2  a planted read past silu_out's end, band present: the gate must FAIL
 #   3  the same planted read with the band removed (MOJOLEARN_MAMBA_POISON_NOBAND):
 #      the gate must PASS, the control that the band is what catches an over-read
 SABOTAGE="${MOJOLEARN_MAMBA_POISON_SABOTAGE:-0}"
 case "$SABOTAGE" in 0|1|2|3) ;; *) echo "MOJOLEARN_MAMBA_POISON_SABOTAGE must be 0, 1, 2 or 3" >&2; exit 2 ;; esac
 DEFINES="-D MOJOLEARN_MAMBA_POISON=1"
-[ "$SABOTAGE" = 1 ] && DEFINES="$DEFINES -D MOJOLEARN_MAMBA_POISON_SABOTAGE=1"
+[ "$SABOTAGE" = 1 ] && DEFINES="$DEFINES -D MOJOLEARN_MAMBA_2712_UNBOUNDED=1"
 [ "$SABOTAGE" = 2 ] && DEFINES="$DEFINES -D MOJOLEARN_MAMBA_POISON_OVERREAD=1"
 [ "$SABOTAGE" = 3 ] && DEFINES="$DEFINES -D MOJOLEARN_MAMBA_POISON_OVERREAD=1 -D MOJOLEARN_MAMBA_POISON_NOBAND=1"
 MAMBA_SO=$(find python/mojolearn -name _mojolearn_mamba.so | head -1)

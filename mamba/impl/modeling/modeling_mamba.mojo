@@ -502,12 +502,12 @@ def mamba_zeros(
 #                  one: `pixi run check-mamba-poison` runs the Mamba lanes
 #                  cold on the poison build and requires their canonical
 #                  hashes. That gate is how the remaining reads are found.
-#   mamba_partial  a buffer the launcher writes only part of and a later
-#                  kernel reads in full (d_c_yoff, d_dacs_yoff: sized by
-#                  the chunk extent, written for real T rows only). Zero
-#                  always; under `-D MOJOLEARN_MAMBA_POISON_SABOTAGE=1` it
-#                  becomes scratch, which is the gate's sabotage: poison
-#                  then reaches the summed rows and the mamba2 hash moves.
+# (d_c_yoff and d_dacs_yoff, whose constructor comment said the launcher
+# writes only real T rows while the merge kernel sums the chunk extent, were
+# given a zero fill first; the poison run with that fill removed carried the
+# canonical hashes, so no unwritten row of theirs is read and they are
+# scratch like the rest. The gate's sabotage 1 is the fix itself removed,
+# `-D MOJOLEARN_MAMBA_2712_UNBOUNDED=1`, the unbounded X_d read.)
 #
 # THE GUARD BAND. A fill inside a buffer cannot see a read PAST it, and the
 # step's read (the l = 1 resumption, whose every input is zeroed or
@@ -523,7 +523,6 @@ def mamba_zeros(
 # -D MOJOLEARN_MAMBA_POISON_NOBAND=1 it must pass, which is the proof that
 # the band, not the fill, is what catches a read past the end.
 comptime MAMBA_POISON = is_defined["MOJOLEARN_MAMBA_POISON"]()
-comptime MAMBA_POISON_SABOTAGE = is_defined["MOJOLEARN_MAMBA_POISON_SABOTAGE"]()
 comptime MAMBA_POISON_OVERREAD = is_defined["MOJOLEARN_MAMBA_POISON_OVERREAD"]()
 comptime MAMBA_POISON_BITS = UInt32(0x7FC00000)
 comptime MAMBA_GUARD = (
@@ -571,15 +570,6 @@ def mamba_scratch(
         dev.enqueue_fill(Float32(0.0))
     ctx.synchronize()
     return dev^
-
-
-def mamba_partial(
-    ctx: DeviceContext, n: Int
-) raises -> DeviceBuffer[DType.float32]:
-    comptime if MAMBA_POISON_SABOTAGE:
-        return mamba_scratch(ctx, n)
-    else:
-        return mamba_zeros(ctx, n)
 
 
 struct MambaDeviceWeights(Movable):
