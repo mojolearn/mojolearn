@@ -33,7 +33,7 @@ def main():
             if n > 1:
                 parts.view('<u4')[0,1] = 1
             if steps == 4:
-                parts[:,0] = [2**24, 1, -2**24, 1]
+                parts[:,0] = [2**26, 1, -2**26, 1]
             before = parts.tobytes()
             left = np.full(n, -17, dtype='<f4')
             right = left.copy()

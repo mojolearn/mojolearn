@@ -26,7 +26,7 @@ def main():
     # boundaries. The arithmetic oracle is the original GPU tree on one period.
     rng = np.random.default_rng(351904)
     pattern = rng.normal(0,.1,(steps,period)).astype('<f4')
-    pattern[:4,0] = [2**24,1,-2**24,1]
+    pattern[:4,0] = [2**26,1,-2**26,1]
     expected = np.empty(period,dtype='<f4')
     os.environ['MOJOLEARN_OPTIMIZER_DEVICE_COUNT'] = '1'
     binding.accumulate([expected.ctypes.data,pattern.ctypes.data],[period,steps,-1])
