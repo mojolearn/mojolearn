@@ -787,9 +787,18 @@ def _ragged(result):
     every distance and every index in row order (sorted within a row by
     the estimator, `sort_results=True`)."""
     dists, idx = result
-    lens = np.asarray([np.asarray(a).size for a in idx], dtype=np.int64)
-    dd = np.concatenate([np.asarray(a, dtype=np.float32).reshape(-1) for a in dists])
-    ii = np.concatenate([np.asarray(a).reshape(-1).astype(np.int64) for a in idx])
+    # Rows are read by index and length, the ragged container's documented
+    # contract (`radius_neighbors`: "[i] and len() read the same;
+    # np.asarray(container) does not"), never by iterating or converting
+    # the container: an outsider's numpy 2.4.4 with the 0.8.5 wheel raised
+    # "setting an array element with a sequence" on six fixtures under the
+    # iterating spelling (2026-09-14, bench/results/verify_external/).
+    n = len(idx)
+    rows_i = [np.asarray(idx[i]).reshape(-1).astype(np.int64) for i in range(n)]
+    rows_d = [np.asarray(dists[i], dtype=np.float32).reshape(-1) for i in range(n)]
+    lens = np.asarray([r.size for r in rows_i], dtype=np.int64)
+    dd = np.concatenate(rows_d) if rows_d else np.zeros(0, dtype=np.float32)
+    ii = np.concatenate(rows_i) if rows_i else np.zeros(0, dtype=np.int64)
     return lens, dd, ii
 
 
@@ -2005,7 +2014,8 @@ def run(args):
     vendor = check_vendor_label(args.vendor if args.vendor is not None else default_vendor_label(ml))
     commit, commit_source = commit_witness()
     host = host_record(ml) if ml.vendor() == "cpu" else None
-    package = dict(version=getattr(ml, "__version__", "unknown"), package_dir=os.path.dirname(ml.__file__))
+    package = dict(version=getattr(ml, "__version__", "unknown"), package_dir=os.path.dirname(ml.__file__),
+                   numpy=np.__version__, python=platform.python_version())
     print(f"# vendor={vendor} commit={commit} ({commit_source})"
           + (f" host.cpu_model={host['cpu_model']!r} host.column={host['column']} "
              f"host.families={sorted(host['families'])}" if host else ""))
