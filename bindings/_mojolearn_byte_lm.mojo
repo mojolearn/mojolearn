@@ -1409,14 +1409,14 @@ def byte_lm_model_pool_step_binding(session: PythonObject, addresses: PythonObje
     for i in range(count):
         shards.append(_read_ids(addr[i], n_ids))
     var losses = owner[].step(shards)
-    var out = Python.list()
     try:
+        var out = Python.list()
         for i in range(len(losses)):
             out.append(PythonObject(losses[i]))
+        return out
     except error:
         owner[].rollback()
         raise error
-    return out
 
 
 def byte_lm_model_pool_export_binding(session: PythonObject, addresses: PythonObject,

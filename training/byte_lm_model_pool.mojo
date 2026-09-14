@@ -174,7 +174,7 @@ struct ByteModelPool(Movable, Writable):
         self.flags = flags.copy()
         self.completed = completed
         self.logical_shards = shards
-        self.layers.open(devices,p,shape)
+        self.layers.open(devices,p,shape,reserve_head_device=True)
         self.head_context = DeviceContext(device_id=devices[0])
         self.head = BytePooledHead(self.head_context.value(),shape)
         var o = shape.offsets()
@@ -218,7 +218,7 @@ struct ByteModelPool(Movable, Writable):
         var config = self.config.copy()
         var M = config.batch*config.length
         # The contexts stay owned by layers throughout both graph calls.
-        # Use a separate head context on the same device to avoid borrowing
+        # A persistent separate head context on the same device avoids borrowing
         # the layer pool itself across its mutating forward/backward methods.
         ref ctx = self.head_context.value()
         ref h = self.head.value()

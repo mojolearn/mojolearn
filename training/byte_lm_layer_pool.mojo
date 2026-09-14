@@ -107,7 +107,8 @@ struct ByteLayerPool(Movable):
                 pass
         _ = self.contexts^
 
-    def open(mut self, devices: List[Int], p: List[Float32], shape: ByteConfig) raises:
+    def open(mut self, devices: List[Int], p: List[Float32], shape: ByteConfig,
+             reserve_head_device: Bool = False) raises:
         if len(self.contexts) != 0:
             raise Error("byte layer pool: already open")
         _require_profile()
@@ -115,8 +116,8 @@ struct ByteLayerPool(Movable):
         if len(p) != shape.n_total():
             raise Error("byte layer pool: canonical parameter length required")
         _require_finite(p, "parameters")
-        if len(devices) < 1 or len(devices) > min(64,shape.n_layers):
-            raise Error("byte layer pool: require 1 <= devices <= min(64,layers)")
+        if len(devices) < 1 or len(devices) > min(64,shape.n_layers+Int(reserve_head_device)):
+            raise Error("byte layer pool: too many devices for the layer/head owners")
         for i in range(len(devices)):
             if devices[i] < 0:
                 raise Error("byte layer pool: negative device index")
@@ -129,7 +130,7 @@ struct ByteLayerPool(Movable):
             self.ropes.append(LlamaRopeTable(self.contexts[i], byte_dims(shape), Float32(10000), shape.length))
             self.caches.append(LlamaKVCache(self.contexts[i], shape.batch, byte_dims(shape), shape.length))
         for layer in range(shape.n_layers):
-            var owner = layer * len(devices) // shape.n_layers
+            var owner = (layer+Int(reserve_head_device)) * len(devices) // (shape.n_layers+Int(reserve_head_device))
             self.layers.append(ByteOwnedLayer(self.contexts[owner], owner, layer, p, shape))
         self.usable = True
 

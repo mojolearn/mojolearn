@@ -30,7 +30,7 @@ def main():
         assert a['completed_steps'] == b['completed_steps']
         assert a['next_batch_index'] == b['next_batch_index']
 
-    for layers, dm, heads, hidden in ((2, 16, 2, 24), (3, 24, 3, 40)):
+    for layers, dm, heads, hidden in ((1, 16, 2, 24), (2, 16, 2, 24), (3, 24, 3, 40)):
         shape = Shape(batch=2, length=7, d_model=dm, n_heads=heads, n_kv=1,
                       head_dim=8, intermediate=hidden, n_layers=layers, vocab_size=256)
         rng = np.random.default_rng(86352 + layers)

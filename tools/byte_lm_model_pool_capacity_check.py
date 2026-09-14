@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Cloud-only measured one-device refusal versus pooled model capacity."""
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -28,7 +29,8 @@ def main():
     for row in Trainer.parameter_registry(shape):
         if 'norm' in row['name']:
             parameters[row['offset']:row['offset'] + row['size']] = np.float32(1)
-    seed = Trainer(parameters, shape=shape)
+    seed = Trainer(parameters, shape=shape, data_schedule={
+        "corpus_sha256": hashlib.sha256(args.corpus.read_bytes()).hexdigest()})
     state = seed.state_dict()
     del parameters, seed
     with args.corpus.open('rb') as source:

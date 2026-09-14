@@ -37,8 +37,8 @@ class PooledByteLanguageModelTrainer(ParallelByteLanguageModelTrainer):
             raise ValueError('devices must be distinct nonnegative integer indices')
         self._state = _validate_state(state)
         self._shape = state_shape(self._state)
-        if not 1 <= len(devices) <= min(64, self._shape.n_layers):
-            raise ValueError('require 1 <= device count <= min(64, n_layers)')
+        if not 1 <= len(devices) <= min(64, self._shape.n_layers + 1):
+            raise ValueError('require 1 <= device count <= min(64, n_layers + 1)')
         self.devices = devices
         self.logical_shards = logical_shards
         self._session = None

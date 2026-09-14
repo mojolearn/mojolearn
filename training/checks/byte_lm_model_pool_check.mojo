@@ -88,6 +88,7 @@ def check(shape: ByteConfig, devices: List[Int], logical: Int) raises:
 def main() raises:
     if String(getenv("RUNPOD_POD_ID")) == "":
         raise Error("cloud host required")
+    check(ByteConfig(batch=2,length=7,d_model=16,n_heads=2,n_kv=1,head_dim=8,intermediate=24,n_layers=1),[0,1],1)
     check(ByteConfig(batch=2,length=7,d_model=16,n_heads=2,n_kv=1,head_dim=8,intermediate=24,n_layers=2),[0],3)
     check(ByteConfig(batch=2,length=7,d_model=16,n_heads=2,n_kv=1,head_dim=8,intermediate=24,n_layers=2),[0,1],3)
     check(ByteConfig(batch=2,length=7,d_model=24,n_heads=3,n_kv=1,head_dim=8,intermediate=40,n_layers=3),[1,0],5)
