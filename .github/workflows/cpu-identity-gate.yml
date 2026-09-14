@@ -97,6 +97,8 @@ on:
       - "ensemble/host/rf_oracle.mojo"
       - "gaussian_process/host/gpr_oracle.mojo"
       - "cholesky/host/chol_oracle.mojo"
+      - "arima/host/arima_oracle.mojo"
+      - "arima/impl/tsa/arima_common.mojo"
       - "spectral/checks/symmetric_eig_host.mojo"
       - "core/knn_host_predict.mojo"
       - "cluster/host/kmeans_oracle.mojo"
@@ -477,8 +479,9 @@ jobs:
       # shifted tree plus the min-max offset's subtraction as an addition,
       # in qn_oracle by walking the solver's dot chains descending, in
       # rf_oracle by drawing every bootstrap row from the next Philox
-      # subsequence, and in gpr_oracle by walking the scaled distance's
-      # feature axis descending);
+      # subsequence, in gpr_oracle by walking the scaled distance's
+      # feature axis descending, and in arima_oracle by doubling the
+      # finite-difference step);
       # each further phase 1
       # binding names the fold its arm moves), loaded through
       # MOJOLEARN_HOST_DIR with MOJOLEARN_HOST_ALLOW_SABOTAGE=1, run on the

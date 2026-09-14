@@ -1779,3 +1779,73 @@ To measure (the 136-lane GPU columns carry all four lanes):
     MOJOLEARN_HOST_OUTDIR=<sab> MOJOLEARN_BUILD_EXTRA_DEFINES="-D MOJOLEARN_HOST_SABOTAGE=1" sh bindings/build_gp_host.sh
     MOJOLEARN_HOST_DIR=<sab> MOJOLEARN_HOST_ALLOW_SABOTAGE=1 python3 tools/identity_break.py --lanes gp,gp-matern12,gp-matern32,gp-matern52-ard --json <cpu-sab>.json
     (the diff of <cpu-sab>.json against the three GPU columns must exit non-zero with DIVERGENT)
+
+## Workstream E (2026-09-14): arima, arima-011, arima-seasonal-c, IDENTICAL x4 ON SEVEN CPU RUNNERS
+
+Branch `lane/cpu-training-arima`, off `origin/fix/d-merge-regressions` at
+57465b6b3. The agent that wrote it ran no build, no simulation and no test
+on the Mac. RESULT: the first compile and the first four-column diff were
+the seven-runner CPU identity gate on that commit, run 34895909493: all 27
+training cells and all 27 infer cells of the three lanes read IDENTICAL x4
+(apple-m4, nvidia-h100 sm_90a, amd gfx942 and the runner's CPU column) on
+every one of the seven runners, and the sabotage build moved 26 of the 27
+training cells (arima-011/wide kept its hash, dcaecce707040ce1, under the
+doubled step; the wide fixture scales its first columns toward 1e-4, and why
+the step does not reach that cell was not investigated; the other two lanes'
+wide cells moved). `lane/cpu-training-arima-b` merges it with origin/main at
+e22374acd, ships the family in the wheels like every other routed family, and
+repeats both arms on the Apple M4's CPU-only path on one core: 27 of 27
+training and infer cells IDENTICAL x4 against the 136-lane columns, and the
+sabotage build DIVERGENT on the same 26 training and 26 infer cells.
+
+- arima, arima-011, arima-seasonal-c. `arima/host/arima_oracle.mojo`, a
+  second spelling of the device lane importing only the `checks/numerics.mojo`
+  seams (the census row pointed at `arima/checks/kalman_oracle.mojo` and
+  `fit_oracle.mojo`; both share `param_to_poly` and the matrix host replays
+  with the device files, so neither is imported). It mirrors, in
+  `arima_fit_ptr_host`'s order: the non-finite refusal; `estimate_x0`
+  (`prepare_data`, `start_params`, `arma_least_squares` with its degenerate
+  arm and its kernel over DEVIATION 678's Householder QR, `test_invparams`'
+  one-rounding association); the inverse Jones transform with DEVIATION
+  675's `two_atanh` and the sigma2 floor; `batched_min_lbfgs` with the shared
+  line search and the rules of `arima/impl/lbfgs_host.mojo`; `eval_batch`
+  over `batched_loglike_grad` (DEVIATION 687's step 2^-10, the perturbation,
+  the reset by copy); every filter pass through the forward Jones transform
+  and `batched_kalman_filter` (the matrices kernel, the initial state with
+  the Kronecker LU and the r == 1 intercept nudge, the loop kernel, both
+  refusals by name); the forward transform, `pack` and `_loglike_at`; and the
+  forecast (`predict` at `start == n_obs`, `finalize_forecast`'s one
+  difference, `copy_forecast_kernel`).
+- Refused by name: p, q or P above 1, any Q, d + D of 2, p + q + k of 0, and
+  an in-sample prediction (`start < n_obs`). The GPU's own refusals (method,
+  exog, the order bounds) keep the GPU's sentences through the device's
+  `validate_order`. par-arima is not declared.
+- A family of its own, `arima`: `bindings/_mojolearn_arima_host.mojo` (shim
+  `bindings/build_arima_host.sh`) routes `_mojolearn_arima` with the GPU
+  binding's `arima_fit`, `arima_predict` and `arima_forecast`, so
+  `python/mojolearn/_arima_impl.py` runs unchanged.
+- The sabotage arm is `-D MOJOLEARN_HOST_SABOTAGE=1`: the finite-difference
+  step doubles, so every gradient and every fitted model moves.
+- The test module is `cd python && python3 -m mojolearn.tests.test_cpu_training_arima`.
+
+RISKS FOR BIT IDENTITY NOT RESOLVABLE BY READING. (1) The optimizer is
+already host code on the GPU path, so its branch sequence rests on the
+Kalman log-likelihood bits alone; one ulp in any filter pass can change an
+iteration count and every later cell. (2) Host contraction of a product the
+device stores through `ftz` before an add (Jones `sign * (a * x)`, the
+Kronecker cells, `RQ` and `RQR`). (3) Builtin `max` and `min` in the Jones
+clamp and the sigma2 floor compiled differently for the host than for the
+three GPUs on a signed zero. (4) The binding validates through
+`arima/impl/tsa/arima_common.mojo`, a module that also defines kernels; the
+tsa host binding's import of `holtwinters/impl/runner.mojo` says a CPU build
+tolerates that, which is an inference, not a build.
+
+To measure (the 2026-09-14 136-lane GPU columns carry the three lanes,
+IDENTICAL x3 on every fixture):
+
+    MOJOLEARN_HOST_OUTDIR=<dir> sh bindings/build_arima_host.sh
+    MOJOLEARN_HOST_DIR=<dir> python3 tools/identity_break.py --lanes arima,arima-011,arima-seasonal-c --json <cpu>.json
+    python3 tools/identity_break.py --diff <apple> <nvidia> <amd> <cpu>.json --require-columns 4 --lanes arima,arima-011,arima-seasonal-c
+    MOJOLEARN_HOST_OUTDIR=<sab> MOJOLEARN_BUILD_EXTRA_DEFINES="-D MOJOLEARN_HOST_SABOTAGE=1" sh bindings/build_arima_host.sh
+    MOJOLEARN_HOST_DIR=<sab> MOJOLEARN_HOST_ALLOW_SABOTAGE=1 python3 tools/identity_break.py --lanes arima,arima-011,arima-seasonal-c --json <cpu-sab>.json
+    (the diff of <cpu-sab>.json against the three GPU columns must exit non-zero with DIVERGENT)

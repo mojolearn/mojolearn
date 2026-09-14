@@ -34,7 +34,7 @@ from mojolearn import host_surface
 ROOT = Path(__file__).resolve().parents[3]
 BINDINGS = ROOT / "bindings"
 
-DEF_FUNCTION = re.compile(r'module\.def_function\[[A-Za-z0-9_]+\]\("([A-Za-z0-9_]+)"\)')
+DEF_FUNCTION = re.compile(r'(?:module|m)\.def_function\[[A-Za-z0-9_]+\]\("([A-Za-z0-9_]+)"\)')
 
 
 def _read(rel):
