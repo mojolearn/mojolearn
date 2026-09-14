@@ -12,6 +12,7 @@ from max.algorithm import sync_parallelize
 from bindings.hostptr import copy_f32
 from core.step_phase import STEP_PHASE_TIMERS
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from training.clip_multi_gpu import parallel_clip_grad_norm_host
 from training.estimator import (
     identical_optimizer_step_host, identical_clip_grad_norm_host,
     _offsets_from_ptr, _refuse_hyperparameters,
@@ -82,9 +83,9 @@ def parallel_optimizer_step_host(
     copy_f32(v_ptr,v.unsafe_ptr(),n)
     var info = List[Float32](length=3,fill=Float32(0))
     if max_norm > Float32(0):
-        # Original complete registry, tensor norms and global norm tree.
-        # This staging allocation is freed before update shards allocate.
-        _ = identical_clip_grad_norm_host(ctx,
+        # Whole tensors have owners; the original global norm uses their
+        # canonical sumsq vector. Clipping storage is freed before updates.
+        _ = parallel_clip_grad_norm_host(ctx,
             rebind[MutPointer[Float32, MutUntrackedOrigin]](g.unsafe_ptr()),
             offsets_ptr,
             rebind[MutPointer[Float32, MutUntrackedOrigin]](info.unsafe_ptr()+1),

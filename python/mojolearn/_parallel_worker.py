@@ -12,7 +12,7 @@ def execute(request):
         if int(os.environ.get('MOJOLEARN_OPTIMIZER_DEVICE_COUNT', '1')) > 1:
             from ._training_impl import _load
             binding = _load('identical')
-            for name in ('optimizer_parallel_available', 'accumulate_parallel_available'):
+            for name in ('optimizer_parallel_available', 'accumulate_parallel_available', 'clip_parallel_available'):
                 function = getattr(binding, name, None)
                 if not callable(function):
                     raise ImportError('rebuild training binding for pooled neural gradients and updates')

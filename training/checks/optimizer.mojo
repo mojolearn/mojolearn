@@ -972,6 +972,81 @@ def sab_combine_kernel(
     dst.unsafe_store(Int(idx_in), ftz(acc))
 
 
+def identical_clip_coefficient(
+    ctx: DeviceContext,
+    mut sumsq: DeviceBuffer[DType.float32],
+    mut norms: DeviceBuffer[DType.float32],
+    mut total_cell: DeviceBuffer[DType.float32],
+    mut out2: DeviceBuffer[DType.float32],
+    mut ws: DeviceBuffer[DType.float32],
+    j_count: Int,
+    max_norm: Float32,
+) raises -> Float32:
+    """Original cross-tensor norm and coefficient, after tensor sumsq values."""
+    # C3, then C4. Under the flat-norm sabotage the per-tensor sqrt is
+    # skipped entirely and the sumsq values are summed directly, which is
+    # `sqrt(sum_j sumsq_j)` -- the one-level form the reference does not
+    # use. Contract 3.1. INERT at J == 1.
+    comptime if SAB_CLIP_FLAT_NORM:
+        step_count_launch()
+        ctx.enqueue_function[sab_combine_kernel](
+            total_cell.unsafe_ptr(),
+            sumsq.unsafe_ptr(),
+            Int32(0),
+            Int32(j_count),
+            grid_dim=(1, 1, 1),
+            block_dim=(1, 1, 1),
+        )
+        step_count_sync()
+        ctx.synchronize()
+    else:
+        step_count_launch()
+        ctx.enqueue_function[sqrt_vec_kernel](
+            norms.unsafe_ptr(),
+            sumsq.unsafe_ptr(),
+            Int32(j_count),
+            grid_dim=(_grid_for(j_count), 1, 1),
+            block_dim=(OPT_TPB, 1, 1),
+        )
+        step_count_sync()
+        ctx.synchronize()
+        var na = norms.create_sub_buffer[DType.float32](0, j_count)
+        var nb = norms.create_sub_buffer[DType.float32](0, j_count)
+        var tv = total_cell.create_sub_buffer[DType.float32](0, 1)
+        identical_gemm_into(ctx, tv, na, nb, ws, 1, 1, j_count, OP_NT)
+        step_count_sync()
+        ctx.synchronize()
+        _ = na
+        _ = nb
+        _ = tv
+
+    step_count_launch()
+    ctx.enqueue_function[clip_finish_kernel](
+        out2.unsafe_ptr(),
+        total_cell.unsafe_ptr(),
+        max_norm,
+        grid_dim=(1, 1, 1),
+        block_dim=(1, 1, 1),
+    )
+    step_count_sync()
+    ctx.synchronize()
+
+    step_count_host_alloc()
+    var h = ctx.enqueue_create_host_buffer[DType.float32](2)
+    step_count_d2h()
+    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=out2)
+    step_count_sync()
+    ctx.synchronize()
+    var total_norm = h.unsafe_ptr().unsafe_load(0)
+    var coef = h.unsafe_ptr().unsafe_load(1)
+    _ = h^
+
+    # Contract 8a, on the one scalar this path can afford to inspect.
+    refuse_nonfinite_scalar(String("clip.total_norm"), total_norm)
+
+    return coef
+
+
 def identical_clip_grad_norm(
     ctx: DeviceContext,
     mut grad: DeviceBuffer[DType.float32],
@@ -1099,66 +1174,8 @@ def identical_clip_grad_norm(
             _ = gb
             _ = cv
 
-    # C3, then C4. Under the flat-norm sabotage the per-tensor sqrt is
-    # skipped entirely and the sumsq values are summed directly, which is
-    # `sqrt(sum_j sumsq_j)` -- the one-level form the reference does not
-    # use. Contract 3.1. INERT at J == 1.
-    comptime if SAB_CLIP_FLAT_NORM:
-        step_count_launch()
-        ctx.enqueue_function[sab_combine_kernel](
-            total_cell.unsafe_ptr(),
-            sumsq.unsafe_ptr(),
-            Int32(0),
-            Int32(j_count),
-            grid_dim=(1, 1, 1),
-            block_dim=(1, 1, 1),
-        )
-        step_count_sync()
-        ctx.synchronize()
-    else:
-        step_count_launch()
-        ctx.enqueue_function[sqrt_vec_kernel](
-            norms.unsafe_ptr(),
-            sumsq.unsafe_ptr(),
-            Int32(j_count),
-            grid_dim=(_grid_for(j_count), 1, 1),
-            block_dim=(OPT_TPB, 1, 1),
-        )
-        step_count_sync()
-        ctx.synchronize()
-        var na = norms.create_sub_buffer[DType.float32](0, j_count)
-        var nb = norms.create_sub_buffer[DType.float32](0, j_count)
-        var tv = total_cell.create_sub_buffer[DType.float32](0, 1)
-        identical_gemm_into(ctx, tv, na, nb, ws, 1, 1, j_count, OP_NT)
-        step_count_sync()
-        ctx.synchronize()
-        _ = na
-        _ = nb
-        _ = tv
-
-    step_count_launch()
-    ctx.enqueue_function[clip_finish_kernel](
-        out2.unsafe_ptr(),
-        total_cell.unsafe_ptr(),
-        max_norm,
-        grid_dim=(1, 1, 1),
-        block_dim=(1, 1, 1),
-    )
-    step_count_sync()
-    ctx.synchronize()
-
-    step_count_host_alloc()
-    var h = ctx.enqueue_create_host_buffer[DType.float32](2)
-    step_count_d2h()
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=out2)
-    step_count_sync()
-    ctx.synchronize()
-    var total_norm = h.unsafe_ptr().unsafe_load(0)
-    var coef = h.unsafe_ptr().unsafe_load(1)
-    _ = h^
-
-    # Contract 8a, on the one scalar this path can afford to inspect.
-    refuse_nonfinite_scalar(String("clip.total_norm"), total_norm)
+    var coef = identical_clip_coefficient(ctx, sumsq, norms, total_cell, out2,
+                                           ws, j_count, max_norm)
 
     step_count_launch()
     ctx.enqueue_function[clip_scale_kernel](
