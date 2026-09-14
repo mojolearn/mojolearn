@@ -32,7 +32,8 @@ else READS it:
 
 Per host family the manifest declares: the binding basename under
 mojolearn/host/, the build shim, the GPU family it routes on a CPU-only
-install (None for the two bindings loaded by path), the sabotage define its
+install (None for the three bindings loaded by path, the byte LM's, the
+forest's and the tokenizer's, which has no GPU binding at all), the sabotage define its
 gate's negative control passes, the identity_break lanes it covers for
 TRAINING (the CPU column must read STABLE and IDENTICAL x4 on them), the
 lanes and public classes it serves for INFERENCE from a saved model, the
@@ -194,6 +195,35 @@ FAMILIES = (
             "argmax_rows_f32", "argmax_rows_f64", "gather_i64", "gather_f64",
         ),
         gate="tools/forest_host_gate.py (.github/workflows/forest-host-gate.yml)",
+        ships_in_wheel=False,
+    ),
+    dict(
+        # The expose-tokenizer lane, 2026-09-14. Not a CPU twin of a GPU
+        # entry: `tokenizer/` is host integers and tables with no GPU
+        # binding, so this binding IS the family's only door, loaded by path
+        # like the byte LM's and the forest's, and the same binary serves a
+        # GPU box and a CPU-only install.
+        family="tokenizer",
+        binding="_mojolearn_tokenizer_host",
+        routes=None,
+        loaded_by="python/mojolearn/tokenizer.py",
+        sabotage_define="MOJOLEARN_TOKENIZER_HOST_SABOTAGE",
+        training_lanes=(),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=("GPT2Tokenizer",),
+        display="the GPT-2 byte-level BPE tokenizer",
+        host_modules=(
+            "tokenizer/encoding.mojo", "tokenizer/impl/bpe.mojo",
+            "tokenizer/impl/pretokenize.mojo", "tokenizer/impl/ranks.mojo",
+            "tokenizer/impl/unicode_class.mojo", "tokenizer/impl/byte_unicode.mojo",
+        ),
+        exports=(
+            "tokenizer_host_numeric_mode", "tokenizer_host_vendor",
+            "tokenizer_host_column", "tokenizer_host_sabotage", "gpt2_load",
+            "gpt2_n_vocab", "gpt2_max_token_bytes", "gpt2_encode", "gpt2_decode",
+        ),
+        gate="pixi run check-tokenizer and python/mojolearn/tests/test_tokenizer_surface.py",
         ships_in_wheel=False,
     ),
     dict(
@@ -392,8 +422,8 @@ def build_shim(name):
 
 def routed_modules():
     """`_MODULES` name -> host binding basename: the table `_backend` routes a
-    CPU-only install through. The two bindings loaded by path (byte_lm,
-    forest) are deliberately absent."""
+    CPU-only install through. The three bindings loaded by path (byte_lm,
+    forest, tokenizer) are deliberately absent."""
     return {f["routes"]: f["binding"] for f in FAMILIES if f["routes"]}
 
 
@@ -477,7 +507,10 @@ def markdown_table():
             predicts = ", ".join(f["classes"]) + " (" + ", ".join(f["forest_kinds"]) + ")"
         elif f["inference_lanes"]:
             predicts = ", ".join(f["classes"]) + " (" + ", ".join(f["inference_lanes"]) + ")"
-        elif f["family"] == "byte_lm":
+        elif f["routes"] is None and f["classes"]:
+            # A surface of its own, loaded by path (the byte LM's two
+            # classes; the tokenizer's encode and decode, which fit no
+            # "saved model" wording but are what the binding serves).
             predicts = ", ".join(f["classes"])
         else:
             predicts = "no"

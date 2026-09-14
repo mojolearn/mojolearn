@@ -872,15 +872,18 @@ def host_families_built():
 #: 2026-09-14): one file declares every host family, what it routes, which
 #: lanes it covers for training and serves for inference, and what it
 #: exports; `tests/test_host_surface.py` holds the bindings to it. Every
-#: family not routed there refuses BY NAME on a CPU-only install. The two
-#: bindings loaded by path, `_mojolearn_byte_lm_host` and
-#: `_mojolearn_forest_host`, export their own names (`byte_lm_host_*`,
-#: `forest_host_*`) for surfaces of their own (LanguageModelInference,
-#: LanguageModelHostTrainer, HostForest, HostGBDT), are loaded in
-#: `_byte_lm_host.py`, `_forest_host.py` and `_gbdt_host.py`, and are
+#: family not routed there refuses BY NAME on a CPU-only install. The three
+#: bindings loaded by path, `_mojolearn_byte_lm_host`,
+#: `_mojolearn_forest_host` and `_mojolearn_tokenizer_host`, export their
+#: own names (`byte_lm_host_*`, `forest_host_*`, `tokenizer_host_*` and
+#: `gpt2_*`) for surfaces of their own (LanguageModelInference,
+#: LanguageModelHostTrainer, HostForest, HostGBDT, GPT2Tokenizer), are
+#: loaded in `_byte_lm_host.py`, `_forest_host.py`, `_gbdt_host.py` and
+#: `tokenizer.py` (the last through `load_host_module` below), and are
 #: deliberately NOT routed: mapping `_mojolearn_rf` to the forest host
 #: binding would route RandomForestClassifier.predict to an entry with a
-#: different address contract under the GPU entry's name.
+#: different address contract under the GPU entry's name, and the
+#: tokenizer has no GPU binding to route from at all.
 #:
 #: What each routed binding carries, and what it leaves absent so the
 #: refusal stays by name:

@@ -348,6 +348,7 @@ per family.
 |---|---|---|---|---|---|---|
 | byte_lm | `_mojolearn_byte_lm_host.so` | loaded by path | no | LanguageModelInference, LanguageModelHostTrainer | .github/workflows/byte-lm-cpu-gate.yml | yes |
 | forest | `_mojolearn_forest_host.so` | loaded by path | no | RandomForestClassifier, RandomForestRegressor, ExtraTreesClassifier, ExtraTreesRegressor, GradientBoosting (rf_classifier, rf_regressor, et_classifier, et_regressor, gbdt_symmetric, gbdt_depthwise, gbdt_lossguide, gbdt_rmse) | tools/forest_host_gate.py (.github/workflows/forest-host-gate.yml) | no, `bindings/build_forest_host.sh` |
+| tokenizer | `_mojolearn_tokenizer_host.so` | loaded by path | no | GPT2Tokenizer | pixi run check-tokenizer and python/mojolearn/tests/test_tokenizer_surface.py | no, `bindings/build_tokenizer_host.sh` |
 | core | `_mojolearn_core_host.so` | `_mojolearn` | no | NearestNeighbors, KNeighborsClassifier, KNeighborsRegressor (knn, knn-clf, knn-reg) | tools/classical_host_gate.py (cpu-identity-gate.yml) | no, `bindings/build_core_host.sh` |
 | linalg | `_mojolearn_linalg_host.so` | `_mojolearn_linalg` | gemm-pinned | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_linalg_host.sh` |
 | estimators | `_mojolearn_estimators_host.so` | `_mojolearn_estimators` | kde | LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, KernelDensity (ols, ridge, tsvd, logistic, logistic-multiclass, pca, pca-whiten, kde) | tools/identity_break.py and tools/classical_host_gate.py (cpu-identity-gate.yml) | no, `bindings/build_estimators_host.sh` |

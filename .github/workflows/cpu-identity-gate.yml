@@ -6,8 +6,8 @@
 # bench/results/identity_break/2026-09-13_three-columns/.
 #
 # What it proves on each runner, and nothing more. Every host binding the
-# manifest declares (python/mojolearn/host_surface.py; nine families as of
-# 2026-09-14, each through bindings/build_<family>_host.sh) builds
+# manifest declares (python/mojolearn/host_surface.py; ten families as of
+# 2026-09-14 with the tokenizer's, each through bindings/build_<family>_host.sh) builds
 # ON THAT RUNNER with no accelerator target as the kernel matrix's CPU column
 # (checks/kernel_matrix.mojo COLUMN_CPU; each binding asserts it at build time
 # and reads it back). The checkout's package takes the CPU-only path
@@ -117,7 +117,7 @@ env:
   #                       column, and named in host.families.
   #   HOST_BINDINGS       the routed families' basenames, space separated.
   #   ALL_HOST_BINDINGS   every host binding basename, comma separated (the
-  #                       byte LM and forest bindings included), the
+  #                       byte LM, forest and tokenizer bindings included), the
   #                       read-back and column checks' --binding list.
   #   CLASSICAL_RECORDED  the classical host gate recordings, space separated.
   #   CLASSICAL_GPU_COLUMNS
@@ -271,6 +271,15 @@ jobs:
         run: |
           set -o pipefail
           MOJOLEARN_BUILD_JOBS=2 sh bindings/build_forest_host.sh 2>&1 | tee "$GATE_OUT/build_forest_host.log"
+
+      # The third binding loaded by path (the expose-tokenizer lane,
+      # 2026-09-14): the read-back step below takes every binding the
+      # manifest declares, so a declared family this workflow does not
+      # build fails there on the first runner.
+      - name: Build the tokenizer host binding (CPU column)
+        run: |
+          set -o pipefail
+          MOJOLEARN_BUILD_JOBS=2 sh bindings/build_tokenizer_host.sh 2>&1 | tee "$GATE_OUT/build_tokenizer_host.log"
 
       # The phase 1 host set, one binding per family in HOST_FAMILIES, each
       # exporting the GPU binding's names for the fits it covers.
