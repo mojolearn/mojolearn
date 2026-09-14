@@ -230,15 +230,20 @@ def cmd_run(args):
 
 def cmd_diff(args):
     a, b = np.load(args.a), np.load(args.b)
-    ia = dict(s.split("=", 1) for s in a["__info"].tolist())
-    ib_ = dict(s.split("=", 1) for s in b["__info"].tolist())
-    for k in ("vendor", "gpu_arch", "device", "host", "cpu_count", "commit", "dt_limit", "fixture", "orders", "warm"):
+    ia = dict(s.split("=", 1) for s in a["__info"].tolist()) if "__info" in a.files else {}
+    ib_ = dict(s.split("=", 1) for s in b["__info"].tolist()) if "__info" in b.files else {}
+    # a harness dump (MOJOLEARN_IDENTITY_DUMP_DIR) carries only the `lane` order
+    # and its inputs; the diff runs over the keys both files have and names
+    # the ones only one side has
+    only_a = sorted(k for k in a.files if not k.startswith("__") and k not in b.files)
+    only_b = sorted(k for k in b.files if not k.startswith("__") and k not in a.files)
+    if only_a or only_b:
+        print(f"# keys only in A: {len(only_a)}; only in B: {len(only_b)} (compared: the common keys)")
+    for k in ("vendor", "gpu_arch", "device", "host", "cpu_count", "commit", "dt_limit", "fixture", "orders", "warm", "tag", "source"):
         print(f"# {k}: {ia.get(k, '?')}  |  {ib_.get(k, '?')}")
-    keys = sorted(k for k in a.files if not k.startswith("__"))
+    keys = sorted(k for k in a.files if not k.startswith("__") and k in b.files)
     same, differ = 0, []
     for k in keys:
-        if k not in b.files:
-            differ.append((k, "missing in B")); continue
         va, vb = a[k], b[k]
         if va.shape != vb.shape or va.dtype != vb.dtype:
             differ.append((k, f"shape/dtype {va.shape}{va.dtype} vs {vb.shape}{vb.dtype}")); continue

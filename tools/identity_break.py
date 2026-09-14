@@ -817,6 +817,26 @@ def _block_weights(lane, shapes, ones=()):
             for name, shp in shapes.items()}
 
 
+#: DEVIATION 2712 instrumentation: `run()` sets this to "<lane>/<fixture>/<repeat>"
+#: before every fit; with MOJOLEARN_IDENTITY_DUMP_DIR set, `_block_fit` saves
+#: every array it hashes (and its inputs, and the carried state) as
+#: <dir>/<lane>-<fixture>-<repeat>.npz under the keys tools/mamba2_step_probe.py
+#: writes for its `lane` order, so `mamba2_step_probe.py diff` compares a
+#: harness fit against a probe run or against the same fit on another box
+#: element by element. Off (unset), nothing here runs.
+_DUMP_TAG = ""
+
+
+def _dump(arrays):
+    d = os.environ.get("MOJOLEARN_IDENTITY_DUMP_DIR", "")
+    if not d or not _DUMP_TAG:
+        return
+    os.makedirs(d, exist_ok=True)
+    path = os.path.join(d, _DUMP_TAG.replace("/", "-") + ".npz")
+    np.savez_compressed(path, **{"lane__" + k: np.ascontiguousarray(np.asarray(v)) for k, v in arrays.items()},
+                        __info=np.asarray([f"tag={_DUMP_TAG}", "source=identity_break._block_fit"]))
+
+
 def _block_fit(blk, x, g, state_kw):
     """The train column shared by the four sequence blocks. A stateless
     prefill, the same prefill into a fresh state followed by one decode
@@ -825,10 +845,19 @@ def _block_fit(blk, x, g, state_kw):
     y = np.asarray(blk.forward(x))
     st = blk.allocate_state(x.shape[0], **state_kw)
     y_state = np.asarray(blk.forward(x, st))
+    state_after_prefill = {k: np.asarray(getattr(st, k)).copy() for k in ("h", "conv_window", "buffer_xbc", "buffer_dtraw")
+                           if hasattr(st, k)}
     y_step = np.asarray(blk.step(np.ascontiguousarray(x[:, :1, :]), st))
+    state_after_step = {k: np.asarray(getattr(st, k)).copy() for k in ("h", "conv_window", "buffer_xbc", "buffer_dtraw")
+                        if hasattr(st, k)}
     grads = blk.backward(x, g)
-    return dict(forward=_h(y), prefill=_h(y_state), step=_h(y_step),
-                backward=_h(*[np.asarray(grads[k]) for k in sorted(grads)]))
+    parts = dict(forward=_h(y), prefill=_h(y_state), step=_h(y_step),
+                 backward=_h(*[np.asarray(grads[k]) for k in sorted(grads)]))
+    _dump(dict(x=x, g=g, forward=y, prefill=y_state, step=y_step,
+               **{f"state_after_prefill.{k}": v for k, v in state_after_prefill.items()},
+               **{f"state_after_step.{k}": v for k, v in state_after_step.items()},
+               **{f"backward.{k}": np.asarray(grads[k]) for k in sorted(grads)}))
+    return parts
 
 
 # ---------------------------------------------------------------- lanes (2026-09-13)
@@ -2039,10 +2068,12 @@ def run(args):
             X, yc, yr = data[f]
             hs, parts, err = [], [], None
             infers, models, reloads, errs2 = [], [], [], []
-            for _ in range(args.repeats):
+            for repeat in range(args.repeats):
                 try:
                     # each fit gets its own held-out bytes, so a lane cannot
                     # hand the next fit rows it wrote to
+                    global _DUMP_TAG
+                    _DUMP_TAG = f"{name}/{f}/{repeat}"
                     p = LANES[name](ml, X, yc, yr, held[f].copy())
                     parts.append(dict(p))
                     hs.append(_h(np.frombuffer("|".join(f"{k}={v}" for k, v in sorted(p.items())).encode(), dtype=np.uint8)))
