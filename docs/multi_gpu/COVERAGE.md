@@ -12,7 +12,9 @@ The implemented neural drivers replicate parameters and optimizer state.
 Forests replicate training data; KMeans retains full-data work on the root.
 These paths do not pool GPU memory. A model or dataset that exceeds one GPU's
 memory needs additional partitioning and a memory-bounded replay mechanism.
-Neither that capacity nor performance scaling has been qualified. ARIMA now
+Neural model capacity and performance scaling have not been qualified. A separate
+reference-sharded KNN path has passed a 96 GiB host-staged index gate on two
+80 GB H100s; it does not keep the full index resident in pooled VRAM. ARIMA now
 partitions independent series during fit, and scalers partition feature columns
 during fit and transform; those workers receive only their assigned data.
 
@@ -38,13 +40,13 @@ and histogram paths have two-H100 evidence only.
 | ElasticNet / Lasso | Original dot leaves across GPUs; cyclic fit and FP32 oracle gates pass on two H100s | Resident shard reuse; root-state partitioning and cross-vendor qualification |
 | SVC / SVR | Linear/RBF kernel rows during fit/prediction; two-H100 cell/full-fit gates pass | Root-state partitioning, broader configurations and cross-vendor qualification |
 | PCA / TruncatedSVD | Original Gram chunks at 1..128 features; covariance PCA and SVD gates pass | Other solver paths, larger widths and root-state partitioning |
-| NearestNeighbors / RadiusNeighbors | Whole-query shards; brute/RBC KNN and ragged radius gates pass on two H100s | Pooled reference index; larger shapes/metrics and cross-vendor qualification |
-| KNeighborsClassifier / KNeighborsRegressor | Whole-query shards with original voting/weighting; single/multi-target two-H100 gates pass | Pooled reference index; broader configurations and cross-vendor qualification |
+| NearestNeighbors / RadiusNeighbors | Whole-query brute/RBC and radius; brute KNN reference shards with a 96 GiB host-staged index gate on two H100s | Resident index pooling; RBC/radius reference partitioning; larger shapes/metrics and cross-vendor qualification |
+| KNeighborsClassifier / KNeighborsRegressor | Query and brute reference shards with original voting/weighting; single/multi-target two-H100 gates pass | Resident index/target pooling; broader configurations and cross-vendor qualification |
 | DBSCAN | Brute L2/L1 and RBC neighborhood rows; two-H100 adjacency/CSR, core-stage and full-fit gates pass | Root graph/index partitioning; larger shapes and cross-vendor qualification |
 | KernelDensity | Whole-query shards; six kernels with/without positive weights pass on two H100s | Pooled reference index; broader metrics/shapes and cross-vendor qualification |
-| AgglomerativeClustering | None | Distance tiles and global merge/tie order |
-| SpectralClustering | None | Affinity tiles, eigensolver and downstream clustering |
-| UMAP | None | Neighbor graph and globally ordered optimizer/RNG updates |
+| AgglomerativeClustering | Native pairwise rows; full children/labels and raw-bit two-H100 gates pass | Root graph/state pooling; broader shapes and cross-vendor qualification |
+| SpectralClustering | Native KNN rows and KMeans assignments; embedding/label two-H100 gates pass | Root affinity/eigensolver pooling; broader configurations and cross-vendor qualification |
+| UMAP | Fit/transform native KNN rows; complete embedding/transform two-H100 gates pass | Root graph/optimizer pooling; broader configurations and cross-vendor qualification |
 | IsolationForest | Global tree ranges during fit and score-time rebuild; two-H100 full-model and scoring gates pass | Full-data replication and assembled root model; broader configurations and cross-vendor qualification |
 | GaussianProcessRegressor | Covariance/cross-covariance rows; two-H100 factor/dual/likelihood/mean/std gates pass | Root factorization/state partitioning; broader kernels/shapes and cross-vendor qualification |
 | ARIMA | Independent-series fit; two-H100 fit/forecast equality gates passed | Broader orders, large-memory and cross-vendor qualification; distributed prediction |

@@ -1,0 +1,6 @@
+39622 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x501ac0000000, nodemask=1)
+Allocate logical reference bytes 2147483648 shard bytes 1073741824
+Reference initialized; begin GPU query
+39803 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x308800000000, nodemask=1)
+39804 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3141c0000000, nodemask=1)
+PASS reference capacity 2147483648 17d4d9971ea11d787fb573e74586333f9155879ae4f52648e04a2a4a5f3cb262

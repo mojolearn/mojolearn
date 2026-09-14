@@ -227,6 +227,7 @@ def solver_parallel_available() raises -> PythonObject:
 def PyInit__mojolearn_solver() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_solver")
+        m.def_function[hierarchy_parallel_available_binding]("hierarchy_parallel_available")
         m.def_function[solver_vendor_binding]("solver_vendor")
         m.def_function[solver_parallel_available]("solver_parallel_available")
         m.def_function[cd_fit_binding]("cd_fit")
@@ -235,3 +236,7 @@ def PyInit__mojolearn_solver() abi("C") -> PythonObject:
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_solver: ", e))
+
+
+def hierarchy_parallel_available_binding() raises -> PythonObject:
+    return PythonObject(1)

@@ -98,6 +98,8 @@ from cluster.estimator import kmeans_fit
 from neighbors.impl.detail.knn_brute_force import KNN_METHOD_AUTO
 from neighbors.estimator import (
     knn_classifier_predict,
+    knn_classifier_from_neighbors,
+    knn_regressor_from_neighbors,
     knn_regressor_predict,
     knn_search,
     radius_neighbors_count,
@@ -1564,6 +1566,8 @@ def PyInit__mojolearn() abi("C") -> PythonObject:
         m.def_function[mojolearn_vendor_binding]("mojolearn_vendor")
         m.def_function[mojolearn_numeric_mode_binding]("mojolearn_numeric_mode")
         m.def_function[knn_search_binding]("knn_search")
+        m.def_function[knn_classify_neighbors_binding]("knn_classify_neighbors")
+        m.def_function[knn_regress_neighbors_binding]("knn_regress_neighbors")
         m.def_function[knn_classify_binding]("knn_classify")
         m.def_function[knn_regress_binding]("knn_regress")
         m.def_function[kmeans_fit_binding]("kmeans_fit")
@@ -1603,3 +1607,85 @@ def PyInit__mojolearn() abi("C") -> PythonObject:
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn module: ", e))
+
+
+def knn_classify_neighbors_binding(
+    dist_addr: PythonObject,
+    idx_addr: PythonObject,
+    y_addr: PythonObject,
+    out_labels_addr: PythonObject,
+    out_proba_addr: PythonObject,
+    out_uniq_addr: PythonObject,
+    params: PythonObject,
+    dist_params: PythonObject,
+) raises -> PythonObject:
+    """Vote on globally merged neighbors. Original parameter layout; feature
+    count and query tile slots are unused. Inputs: float32 distances and
+    uint32 global indices, both n_queries x k. Returns zero on success."""
+    if len(params) < 7:
+        raise Error(
+            "knn_classify: params must hold at least 7 values, got "
+            + String(len(params))
+        )
+    var ni = Int(py=params[0])
+    var nq = Int(py=params[1])
+    var kk = Int(py=params[3])
+    var no = Int(py=params[5])
+    var want_proba = Int(py=params[6]) != 0
+    if len(params) != 7 + no:
+        raise Error(
+            "knn_classify: params must hold 7 + n_outputs ("
+            + String(7 + no)
+            + ") values, got "
+            + String(len(params))
+        )
+    var n_classes = List[Int]()
+    for i in range(no):
+        n_classes.append(Int(py=params[7 + i]))
+    var dp = _f32_ptr(Int(py=dist_addr))
+    var xp = _u32_ptr(Int(py=idx_addr))
+    var yp = _i32_ptr(Int(py=y_addr))
+    var lp = _i32_ptr(Int(py=out_labels_addr))
+    var pp = _f32_ptr(Int(py=out_proba_addr))
+    var up = _i32_ptr(Int(py=out_uniq_addr))
+    var dt = _dist_triple(dist_params)
+
+    with GILReleased(Python()):
+        var ctx = DeviceContext()
+        knn_classifier_from_neighbors(
+            ctx, dp, xp, ni, nq, kk, yp, no, n_classes, lp, pp, up,
+            want_proba, dt[2],
+        )
+    return PythonObject(0)
+
+
+def knn_regress_neighbors_binding(
+    dist_addr: PythonObject,
+    idx_addr: PythonObject,
+    y_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+    dist_params: PythonObject,
+) raises -> PythonObject:
+    """Regress on globally merged neighbors. Original parameter layout;
+    feature count and query tile slots are unused. Inputs: float32 distances
+    and uint32 global indices, both n_queries x k. Returns zero on success."""
+    if len(params) != 6:
+        raise Error(
+            "knn_regress: params must hold 6 values, got "
+            + String(len(params))
+        )
+    var dp = _f32_ptr(Int(py=dist_addr))
+    var xp = _u32_ptr(Int(py=idx_addr))
+    var yp = _f32_ptr(Int(py=y_addr))
+    var op = _f32_ptr(Int(py=out_addr))
+    var ni = Int(py=params[0])
+    var nq = Int(py=params[1])
+    var kk = Int(py=params[3])
+    var no = Int(py=params[5])
+    var dt = _dist_triple(dist_params)
+
+    with GILReleased(Python()):
+        var ctx = DeviceContext()
+        knn_regressor_from_neighbors(ctx, dp, xp, ni, nq, kk, yp, no, op, dt[2])
+    return PythonObject(0)

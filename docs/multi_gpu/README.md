@@ -327,3 +327,45 @@ The complete reference data/index, batch graph and label state remain on the
 root. Per-call contexts also replicate the reference index. This is distributed
 neighborhood computation; it establishes neither pooled-index capacity nor a
 speedup or new cross-vendor qualification.
+
+### Reference-sharded nearest neighbors
+
+`ReferenceShardedNeighbors` in `mojolearn.parallel_neighbors_reference` accepts
+fitted brute/auto `NearestNeighbors`, `KNeighborsClassifier`, and
+`KNeighborsRegressor` in IDENTICAL mode:
+
+```python
+from mojolearn.parallel_neighbors_reference import ReferenceShardedNeighbors
+with ReferenceShardedNeighbors(model, devices=(0, 1),
+                               reference_rows_per_shard=1_000_000) as queries:
+    distances, indices = queries.kneighbors(X_query)
+```
+
+Each worker receives only its reference shard and query rows. The driver stages
+one device wave at a time, merges native distance-bit/global-index keys, and
+repeats the native host ordering without recomputing distances. Predictions use
+the original vote half. `predict` and `predict_proba` are admitted as appropriate.
+The fitted host reference and complete target table remain; this is a streamed
+capacity path, not an all-resident VRAM pool. RBC and radius are outside it.
+
+Two-H100 checks passed 57 cases and a 96 GiB logical index, using sixteen 6 GiB
+shards and an exact GPU oracle whose nearest reference is the final global row.
+The original 64 whole-query receipts retain their exact hashes. The 96 GiB run
+predates the final signed-zero/NaN host-order correction; the final 57-case and
+2 GiB checks cover that correction. Exact sources, binaries and logs are in
+`bench/results/multi_gpu/2026-09-14/reference-graph-h100/`.
+
+### Hierarchy, spectral clustering and UMAP
+
+`mojolearn.parallel_graph.fit_graph(model, X, devices=(0, 1))` supports
+`AgglomerativeClustering`, `SpectralClustering`, and `UMAP` in IDENTICAL mode.
+It distributes native distance/neighbor rows while retaining original norm
+bytes and global graph, merge, eigensolver and optimizer order. Spectral's
+KMeans assignments use the existing row driver. `transform_umap(model, X,
+devices=(0, 1))` distributes the transform's neighbor search while preserving
+the complete transform's optimizer/RNG order. Fit publication is atomic.
+
+Fifteen two-H100 public cases pass complete fitted-state/output comparisons;
+six native cases compare every distance and selected index bit. Full root
+reference, graph and solver state remain. This establishes compute partitioning
+for these paths, not pooled graph capacity or new cross-vendor identity.

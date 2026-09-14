@@ -54,6 +54,15 @@ def execute(request):
         X, weights = args
         model.fit(X, sample_weight=weights)
         return model
+    if operation in ('graph_fit', 'umap_transform'):
+        from .parallel_graph import _binding
+        native, capability = _binding(state)
+        if not callable(getattr(native, capability, None)) or getattr(native, capability)() != 1:
+            raise ImportError('rebuild graph binding for native multi-GPU rows')
+        if operation == 'umap_transform':
+            return state.transform(*args)
+        state.fit(*args)
+        return state
     if operation == 'dbscan_fit':
         binding = state._bind('_mojolearn_estimators')
         if (not callable(getattr(binding, 'dbscan_parallel_available', None))
@@ -137,6 +146,13 @@ def execute(request):
             raise ImportError('rebuild estimators binding for parallel GLM gradients')
         state.fit(*args)
         return state
+    if operation == 'neighbor_reference':
+        from .neighbors import NearestNeighbors
+        index, query, k = args
+        return NearestNeighbors(**state).fit(index).kneighbors(query, n_neighbors=k)
+    if operation == 'neighbor_vote':
+        from .parallel_neighbors_reference import _vote
+        return _vote(state, *args)
     if operation == 'neighbor_query':
         from .parallel_neighbors import _methods
         X, method, kwargs = args

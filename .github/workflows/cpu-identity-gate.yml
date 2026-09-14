@@ -83,6 +83,9 @@ on:
       - "tools/classical_host_gate.py"
       - "python/mojolearn/_classical_host.py"
       - "core/classical_host_predict.mojo"
+      - "decomposition/host/pca_oracle.mojo"
+      - "glm/host/glm_oracle.mojo"
+      - "dbscan/host/dbscan_oracle.mojo"
       - "bench/results/classical_host/**"
       - "tools/cpu_identity_gate_check.py"
       - "bench/results/identity_break/2026-09-13_three-columns/**"
@@ -102,14 +105,16 @@ env:
   #                       comma separated. A lane listed must read STABLE on
   #                       every fixture and IDENTICAL x4 against the three
   #                       GPU columns; a lane not listed must read REFUSED by
-  #                       name. The INFERENCE-ONLY lanes (ols, ridge, tsvd,
-  #                       logistic, pca, pca-whiten, knn, knn-clf, knn-reg)
-  #                       are deliberately not there: their train cell
-  #                       refuses by name on the CPU column, so
-  #                       `--require-columns 4` cannot hold on it. Their gate
-  #                       is tools/classical_host_gate.py over
+  #                       name. The INFERENCE-ONLY lanes (logistic,
+  #                       logistic-multiclass) are deliberately not there:
+  #                       their train cell refuses by name on the CPU column,
+  #                       so `--require-columns 4` cannot hold on it. Their
+  #                       gate is tools/classical_host_gate.py over
   #                       CLASSICAL_RECORDED, the same shape as the forest
-  #                       host gate.
+  #                       host gate. Since workstream E (2026-09-14) the knn,
+  #                       pca, pca-whiten, tsvd, ols and ridge lanes train on
+  #                       the host too and sit in both lists, and dbscan
+  #                       trains on the host.
   #   HOST_FAMILIES       the routed (phase 1) families, space separated; each
   #                       is built by bindings/build_<family>_host.sh (a shim
   #                       over bindings/build_host_family.sh) into

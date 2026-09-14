@@ -1,0 +1,136 @@
+36399 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x525fc0000000, nodemask=1)
+36578 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x11c280000000, nodemask=1)
+36579 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1a74c0000000, nodemask=2)
+PASS reference KNN 3 euclidean 1
+PASS reference KNN 3 euclidean 13
+PASS reference KNN 3 euclidean 41
+36685 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x58d340000000, nodemask=2)
+36684 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x523380000000, nodemask=1)
+36684 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x38a300000000, nodemask=2)
+PASS reference KNN 3 sqeuclidean 1
+PASS reference KNN 3 sqeuclidean 13
+PASS reference KNN 3 sqeuclidean 41
+36790 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x109580000000, nodemask=1)
+36791 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x193040000000, nodemask=2)
+36790 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3a6940000000, nodemask=2)
+PASS reference KNN 3 manhattan 1
+PASS reference KNN 3 manhattan 13
+PASS reference KNN 3 manhattan 41
+36896 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x194700000000, nodemask=2)
+36897 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x18edc0000000, nodemask=2)
+PASS reference KNN 3 chebyshev 1
+PASS reference KNN 3 chebyshev 13
+PASS reference KNN 3 chebyshev 41
+37002 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x53b6c0000000, nodemask=1)
+37003 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1a75c0000000, nodemask=2)
+37002 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x799780000000, nodemask=2)
+PASS reference KNN 3 cosine 1
+PASS reference KNN 3 cosine 13
+PASS reference KNN 3 cosine 41
+37108 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x50d380000000, nodemask=1)
+37109 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x33d3c0000000, nodemask=1)
+37108 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x19c240000000, nodemask=2)
+PASS reference vote KNeighborsClassifier 3 uniform False predict
+PASS reference vote KNeighborsClassifier 3 uniform False predict_proba
+37216 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x59aec0000000, nodemask=2)
+37217 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1bb280000000, nodemask=2)
+37217 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x319d40000000, nodemask=1)
+37216 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x100300000000, nodemask=1)
+PASS reference vote KNeighborsClassifier 3 uniform True predict
+36399 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5bca80000000, nodemask=2)
+PASS reference vote KNeighborsClassifier 3 uniform True predict_proba
+37332 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3a2980000000, nodemask=2)
+37331 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x190580000000, nodemask=2)
+PASS reference vote KNeighborsClassifier 3 distance False predict
+PASS reference vote KNeighborsClassifier 3 distance False predict_proba
+37443 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7bc680000000, nodemask=2)
+37444 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5b92c0000000, nodemask=2)
+PASS reference vote KNeighborsClassifier 3 distance True predict
+PASS reference vote KNeighborsClassifier 3 distance True predict_proba
+37549 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3a1f00000000, nodemask=2)
+37550 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x53a600000000, nodemask=1)
+PASS reference vote KNeighborsRegressor 3 uniform False predict
+37656 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x196580000000, nodemask=2)
+37655 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7802c0000000, nodemask=2)
+PASS reference vote KNeighborsRegressor 3 uniform True predict
+37761 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3b17c0000000, nodemask=2)
+37762 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x189c80000000, nodemask=2)
+PASS reference vote KNeighborsRegressor 3 distance False predict
+37867 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x102700000000, nodemask=1)
+37868 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x10f500000000, nodemask=1)
+37867 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7b8100000000, nodemask=2)
+37868 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3b2900000000, nodemask=2)
+PASS reference vote KNeighborsRegressor 3 distance True predict
+37973 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x183ac0000000, nodemask=2)
+PASS reference one-device replay 3
+38026 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x18b180000000, nodemask=2)
+38027 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3a3040000000, nodemask=2)
+PASS reference KNN 129 euclidean 1
+PASS reference KNN 129 euclidean 13
+PASS reference KNN 129 euclidean 41
+38132 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x381780000000, nodemask=2)
+38133 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3322c0000000, nodemask=1)
+38133 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x192980000000, nodemask=2)
+PASS reference KNN 129 sqeuclidean 1
+PASS reference KNN 129 sqeuclidean 13
+PASS reference KNN 129 sqeuclidean 41
+38239 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1bc080000000, nodemask=2)
+38238 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x701180000000, nodemask=1)
+PASS reference KNN 129 manhattan 1
+PASS reference KNN 129 manhattan 13
+PASS reference KNN 129 manhattan 41
+38345 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5b11c0000000, nodemask=2)
+38344 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x192d00000000, nodemask=2)
+PASS reference KNN 129 chebyshev 1
+PASS reference KNN 129 chebyshev 13
+PASS reference KNN 129 chebyshev 41
+38450 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x38a340000000, nodemask=2)
+38451 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x10f400000000, nodemask=1)
+PASS reference KNN 129 cosine 1
+PASS reference KNN 129 cosine 13
+PASS reference KNN 129 cosine 41
+38556 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x137a80000000, nodemask=1)
+38557 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x12ae00000000, nodemask=1)
+38556 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x789400000000, nodemask=2)
+38557 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7bf040000000, nodemask=2)
+PASS reference vote KNeighborsClassifier 129 uniform False predict
+PASS reference vote KNeighborsClassifier 129 uniform False predict_proba
+38662 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x72e580000000, nodemask=1)
+38663 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1058c0000000, nodemask=1)
+38662 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x39b440000000, nodemask=2)
+38663 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7a7780000000, nodemask=2)
+PASS reference vote KNeighborsClassifier 129 uniform True predict
+PASS reference vote KNeighborsClassifier 129 uniform True predict_proba
+38769 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x702280000000, nodemask=1)
+38768 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x501400000000, nodemask=1)
+38769 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5a24c0000000, nodemask=2)
+38768 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x59aec0000000, nodemask=2)
+PASS reference vote KNeighborsClassifier 129 distance False predict
+PASS reference vote KNeighborsClassifier 129 distance False predict_proba
+38875 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1acbc0000000, nodemask=2)
+38874 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7264c0000000, nodemask=1)
+38874 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x184700000000, nodemask=2)
+PASS reference vote KNeighborsClassifier 129 distance True predict
+PASS reference vote KNeighborsClassifier 129 distance True predict_proba
+38981 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x51ce40000000, nodemask=1)
+38980 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x799f80000000, nodemask=2)
+38980 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x539340000000, nodemask=1)
+PASS reference vote KNeighborsRegressor 129 uniform False predict
+39086 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1a4840000000, nodemask=2)
+39087 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x534b40000000, nodemask=1)
+39086 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x71b980000000, nodemask=1)
+PASS reference vote KNeighborsRegressor 129 uniform True predict
+39192 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x338a40000000, nodemask=1)
+39193 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7b36c0000000, nodemask=2)
+39192 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3a6280000000, nodemask=2)
+PASS reference vote KNeighborsRegressor 129 distance False predict
+39298 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7a0cc0000000, nodemask=2)
+39299 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3a7440000000, nodemask=2)
+39299 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x107f00000000, nodemask=1)
+39298 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x718e40000000, nodemask=1)
+PASS reference vote KNeighborsRegressor 129 distance True predict
+39404 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x18e200000000, nodemask=2)
+PASS reference one-device replay 129
+39458 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x196b80000000, nodemask=2)
+39457 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x38cfc0000000, nodemask=2)
+PASS reference overflow-distance order

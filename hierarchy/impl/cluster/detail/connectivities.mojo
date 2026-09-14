@@ -63,6 +63,7 @@ from hierarchy.checks.edge_order import (
 from hierarchy.checks.nan_guard import refuse_nan_distances
 from hierarchy.checks.sabotage_tile import sabotage_distance_tile_kernel
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from hierarchy.impl.cluster.detail.multi_gpu import hierarchy_device_count, pairwise_rows
 from neighbors.checks.pinned_distance_tile import (
     PINNED_TILE_TPB,
     pinned_distance_tile_kernel,
@@ -159,6 +160,7 @@ def pairwise_distances(
             "'l2') and L2Expanded (0) are implemented (pairwise_distance_kmeans"
             " raises on every other metric too, kmeans_common.cuh:320)"
         )
+    var devices = hierarchy_device_count(m, sabotage)
     var nnz = m * m
 
     # `:147-148`
@@ -214,19 +216,22 @@ def pairwise_distances(
         )
     else:
         comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-            ctx.enqueue_function[pinned_distance_tile_kernel](
-                data.unsafe_ptr(),
-                x.unsafe_ptr(),
-                x_view.unsafe_ptr(),
-                norms.unsafe_ptr(),
-                norms_view.unsafe_ptr(),
-                Int32(m),
-                Int32(m),
-                Int32(n),
-                is_sqrt,
-                grid_dim=((cells + tile_tpb - 1) // tile_tpb, 1, 1),
-                block_dim=(tile_tpb, 1, 1),
-            )
+            if devices > 1:
+                pairwise_rows(ctx, x, norms, data, m, n, is_sqrt, tile_tpb, devices)
+            else:
+                ctx.enqueue_function[pinned_distance_tile_kernel](
+                    data.unsafe_ptr(),
+                    x.unsafe_ptr(),
+                    x_view.unsafe_ptr(),
+                    norms.unsafe_ptr(),
+                    norms_view.unsafe_ptr(),
+                    Int32(m),
+                    Int32(m),
+                    Int32(n),
+                    is_sqrt,
+                    grid_dim=((cells + tile_tpb - 1) // tile_tpb, 1, 1),
+                    block_dim=(tile_tpb, 1, 1),
+                )
         else:
             gemm_nt(ctx, data, x, x_view, m, m, n)
             ctx.enqueue_function[expand_distances_kernel](
