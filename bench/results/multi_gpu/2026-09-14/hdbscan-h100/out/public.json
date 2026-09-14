@@ -1,0 +1,75 @@
+{
+  "status": "PASS",
+  "devices": [
+    0,
+    1
+  ],
+  "checks": [
+    {
+      "n": 5,
+      "d": 2,
+      "params": {
+        "min_cluster_size": 2,
+        "min_samples": 2
+      },
+      "trace_records": 24,
+      "trace_sha256": "eb68808031be757f24bdf2d8cec57c544d484cdace90b5d54ba62091b0b6fc77",
+      "n_clusters": 0,
+      "sha256": "4754c1d8a04c184cd15436876dba6871cd1f23b15a4fff782da6aa665d349387"
+    },
+    {
+      "n": 37,
+      "d": 3,
+      "params": {
+        "min_cluster_size": 4
+      },
+      "trace_records": 24,
+      "trace_sha256": "570a237d1f6703076ba8015d600b66fed8f147dda216e044b14214dad217e6a1",
+      "n_clusters": 3,
+      "sha256": "d3ef67d9e8d0c35ba54914c51165719cb6d3d9161b87c35e9a340d0c8b8352c7"
+    },
+    {
+      "n": 200,
+      "d": 2,
+      "params": {
+        "min_cluster_size": 8,
+        "min_samples": 3
+      },
+      "trace_records": 24,
+      "trace_sha256": "cd03e1354a841a50789ec190f94cc5c0921febef8f1d6151a0db002ab5df0043",
+      "n_clusters": 3,
+      "sha256": "c8eb6854b7e70dcf01848fcaaa3213ebdc9e3e0ef5e598c0bfa97b170c3ec2cb"
+    },
+    {
+      "n": 515,
+      "d": 5,
+      "params": {
+        "min_cluster_size": 10,
+        "cluster_selection_method": "leaf"
+      },
+      "trace_records": 24,
+      "trace_sha256": "f1116e44d8934f385536ed23a09f2b1a4d6755f37d98b1eb3b9d6141b7b9283e",
+      "n_clusters": 4,
+      "sha256": "280579567a4357d4da561bf9b92458b8b722745b6391e833341bc24ad733772b"
+    },
+    {
+      "n": 1024,
+      "d": 4,
+      "params": {
+        "min_cluster_size": 15,
+        "alpha": 1.5,
+        "allow_single_cluster": true
+      },
+      "trace_records": 24,
+      "trace_sha256": "451bb041b7854147ef9a01ec1dd87aca5de7281e3afd668f7e24ceb1c61adfa8",
+      "n_clusters": 4,
+      "sha256": "bd70f708e284986e7fa133d9fb0454933b4dfac48b82dac270d00f23cb03d186"
+    }
+  ],
+  "refusals": [
+    "wrong_type",
+    "nonidentical",
+    "min_samples_exceeds_rows"
+  ],
+  "scope": "HDBSCAN dense graph: k-NN query rows and pairwise distance rows across devices versus one device; root mutual reachability, MST, hierarchy and selection; no speed claim"
+}
