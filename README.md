@@ -251,7 +251,7 @@ estimators: Apple M4, NVIDIA H100 and AMD MI300X recordings of the first
 five, 45 fixtures each, and Apple M4 recordings of kernel density, SVC,
 whitened PCA and the three k-NN classes, 54 fixtures each, reproduced on
 the CPU path, [fixtures](bench/results/classical_host/)). Training on a CPU:
-<!--fact:host_training_lanes-->pinned GEMM, kernel density, Holt-Winters, lasso, elasticnet, SVC, agglomerative clustering, the Extra Trees classifier, the Extra Trees regressor, the isolation forest, nearest neighbors, the k-NN classifier, the k-NN regressor, PCA, whitened PCA, truncated SVD, linear regression, ridge, DBSCAN, k-means, the metrics, spectral clustering, the standard scaler and the min-max scaler<!--/fact-->,
+<!--fact:host_training_lanes-->pinned GEMM, kernel density, Holt-Winters, lasso, elasticnet, SVC, agglomerative clustering, the Extra Trees classifier, the Extra Trees regressor, the isolation forest, nearest neighbors, the k-NN classifier, the k-NN regressor, PCA, whitened PCA, truncated SVD, linear regression, ridge, DBSCAN, k-means, the metrics, spectral clustering, the standard scaler, the min-max scaler and logistic regression<!--/fact-->,
 the first six identical to the three GPU columns on seven CPUs
 ([gate](.github/workflows/cpu-identity-gate.yml)) and, since 2026-09-14,
 agglomerative clustering, Extra Trees (classifier and regressor, the saved
@@ -274,7 +274,7 @@ shape, and identity is claimed per shape because the weight gradients contract
 over the token count. Of all these, only the byte LM host binding ships in the
 wheels; the others build from source with `bindings/build_*_host.sh` (each a
 shim over `bindings/build_host_family.sh <family>`). Every lane not named here has
-no CPU path at all: <!--fact:no_cpu_path-->UMAP, the Gaussian process, ARIMA, the neural blocks, logistic regression training and training for the random forests and gradient boosting<!--/fact-->.
+no CPU path at all: <!--fact:no_cpu_path-->UMAP, the Gaussian process, ARIMA, the neural blocks and training for the random forests and gradient boosting<!--/fact-->.
 Run the diagnostic command before depending on a new machine:
 
 ```sh

@@ -151,6 +151,10 @@ TRAINING_LANE_NAMES = {
     # through the preprocessing family's own host binding.
     "standard-scaler": "the standard scaler",
     "minmax-scaler": "the min-max scaler",
+    # The logistic lane, same batch: glm/host/qn_oracle.mojo, the L-BFGS
+    # arm of the quasi-Newton solver, exported as qn_fit from the
+    # estimators host binding.
+    "logistic": "logistic regression",
 }
 
 #: The lanes with NO CPU path of any kind, as the README states them. A
@@ -161,7 +165,6 @@ NO_CPU_PATH = (
     "the Gaussian process",
     "ARIMA",
     "the neural blocks",
-    "logistic regression training",
     "training for the random forests and gradient boosting",
 )
 
@@ -311,7 +314,7 @@ FAMILIES = (
         routes="_mojolearn_estimators",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("kde", "pca", "pca-whiten", "tsvd", "ols", "ridge", "dbscan"),
+        training_lanes=("kde", "pca", "pca-whiten", "tsvd", "ols", "ridge", "dbscan", "logistic"),
         inference_lanes=("ols", "ridge", "tsvd", "logistic", "logistic-multiclass", "pca", "pca-whiten", "kde"),
         forest_kinds=(),
         classes=(
@@ -322,13 +325,13 @@ FAMILIES = (
         host_modules=(
             "kde/host/kde_oracle.mojo", "core/classical_host_predict.mojo",
             "decomposition/host/pca_oracle.mojo", "glm/host/glm_oracle.mojo",
-            "dbscan/host/dbscan_oracle.mojo",
+            "dbscan/host/dbscan_oracle.mojo", "glm/host/qn_oracle.mojo",
         ),
         exports=(
             "estimators_host_numeric_mode", "estimators_host_vendor",
             "estimators_host_column", "estimators_host_sabotage",
             "estimators_vendor", "estimators_numeric_mode", "kde_score_samples",
-            "pca_fit", "tsvd_fit", "ols_fit", "ridge_fit", "dbscan_fit",
+            "pca_fit", "tsvd_fit", "ols_fit", "ridge_fit", "dbscan_fit", "qn_fit",
             "ols_predict", "tsvd_transform", "pca_transform",
             "pca_whiten_transform", "pca_whiten_inverse_transform",
             "qn_decision_function", "qn_sigmoid", "qn_softmax",
