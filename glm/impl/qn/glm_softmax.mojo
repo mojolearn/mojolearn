@@ -83,6 +83,7 @@ launches are untouched.
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
+from std.sys.compile import is_defined
 
 from core.column_stats import STATS_TPB
 from core.pinned_reduce import pinned_block_sum
@@ -96,6 +97,18 @@ from checks.numerics import (
 
 #: Their seed for the per-row max (`T etaMax = -1e9`), exactly representable.
 comptime SOFTMAX_MAX_SEED = Float32(-1e9)
+
+#: The gate's negative control (2026-09-14, the pattern of
+#: MOJOLEARN_HOST_SABOTAGE in `core/classical_host_predict.mojo:96`): a build
+#: with -D MOJOLEARN_SOFTMAX_SABOTAGE=1 walks phase 2's log-sum-exp fold
+#: DESCENDING through the classes, which is wrong on purpose (the check's
+#: host replay sums ascending, and a three-term float32 sum in the other
+#: order is a different bit pattern on most rows, sabotage (c) of the
+#: 2026-08-23 table), so `check_softmax_device_equals_host [IDENTICAL]` must
+#: FAIL on loss and dZ cells. No build script defines it; the default build
+#: compiles the ascending loop it always did. Read back by the check's
+#: header line.
+comptime SOFTMAX_SABOTAGE = is_defined["MOJOLEARN_SOFTMAX_SABOTAGE"]()
 
 
 @always_inline
@@ -142,9 +155,17 @@ def softmax_loss_dz_kernel(
             eta_y = z.unsafe_load(c + C * i)
     # Phase 2: lse = etaMax + log(sum exp(eta - etaMax)), serial ascending.
     var s = Float32(0.0)
-    for c in range(C):
-        var e = ftz(identical_exp(ftz(z.unsafe_load(c + C * i) - eta_max)))
-        s = ftz(s + e)
+    comptime if SOFTMAX_SABOTAGE:
+        # THE SABOTAGE ARM: the same fold, walked DESCENDING. Wrong on
+        # purpose; see SOFTMAX_SABOTAGE.
+        for q in range(C):
+            var cd = C - 1 - q
+            var ed = ftz(identical_exp(ftz(z.unsafe_load(cd + C * i) - eta_max)))
+            s = ftz(s + ed)
+    else:
+        for c in range(C):
+            var e = ftz(identical_exp(ftz(z.unsafe_load(c + C * i) - eta_max)))
+            s = ftz(s + e)
     var lse = ftz(eta_max + ftz(identical_log(s)))
     # Phase 3: dZ = exp(eta - lse) - (c == label).
     for c in range(C):

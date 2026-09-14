@@ -96,6 +96,7 @@ CLASSICAL_RECORDED = (
     "bench/results/classical_host/2026-09-14-apple-m4-knn",
     "bench/results/classical_host/2026-09-14-nvidia-h100-b",
     "bench/results/classical_host/2026-09-14-amd-mi300x-b",
+    "bench/results/classical_host/2026-09-14-apple-m4-multiclass",
 )
 
 #: The forest inference recordings: every directory under this root whose
@@ -245,7 +246,7 @@ FAMILIES = (
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=("kde",),
-        inference_lanes=("ols", "ridge", "tsvd", "logistic", "pca", "pca-whiten", "kde"),
+        inference_lanes=("ols", "ridge", "tsvd", "logistic", "logistic-multiclass", "pca", "pca-whiten", "kde"),
         forest_kinds=(),
         classes=(
             "LinearRegression", "Ridge", "TruncatedSVD", "LogisticRegression",
@@ -259,7 +260,7 @@ FAMILIES = (
             "estimators_vendor", "estimators_numeric_mode", "kde_score_samples",
             "ols_predict", "tsvd_transform", "pca_transform",
             "pca_whiten_transform", "pca_whiten_inverse_transform",
-            "qn_decision_function", "qn_sigmoid",
+            "qn_decision_function", "qn_sigmoid", "qn_softmax",
         ),
         gate="tools/identity_break.py and tools/classical_host_gate.py (cpu-identity-gate.yml)",
         ships_in_wheel=False,

@@ -39,6 +39,19 @@ kernel it mirrors and keeps its statements in its order:
   `host_qn_sigmoid`        `qn_sigmoid_host`, `glm/estimator.mojo:384-410`,
                            which already runs on the host and is relocated
                            here because its file imports `std.gpu`.
+  `host_qn_decision_multi` `linear_fwd` at C > 1 (lane/logistic-multiclass,
+                           2026-09-14), `glm/impl/qn/glm_base.mojo`:
+                           `transpose_w_kernel` (a copy, `w_rm[c*D + j] =
+                           w[c + C*j]`), `gemm_nt(z, x, w_rm, n, C, D)` (the
+                           pinned cell, row-major `z[i*C + c]`), then
+                           `add_bias_multi_kernel` when fit_intercept:
+                           `z[cell] = ftz(z[cell] + w[C*D + c])`, `c = cell
+                           % C`, the bias read NOT flushed.
+  `host_qn_softmax`        `qn_softmax_host`, `glm/estimator.mojo`, the
+                           multinomial predict_proba link in Float64 on the
+                           host: first maximum under a strict `>`, serial
+                           ascending sum of `identical_exp64(z - m)`, one
+                           division per cell.
   `host_pca_transform`     `pca_transform`, `decomposition/impl/linalg/detail/
                            pca.mojo:319-355`: `shift_columns_kernel` with
                            sign -1.0 (`core/column_stats.mojo:153-204`), then
@@ -185,6 +198,60 @@ def host_qn_sigmoid(
         var p = 1.0 / (1.0 + identical_exp64(-z))
         out[2 * i] = 1.0 - p
         out[2 * i + 1] = p
+    return out^
+
+
+def host_qn_decision_multi(
+    x: List[Float32], w: List[Float32], n_rows: Int, n_features: Int,
+    n_classes: Int, fit_intercept: Bool,
+) -> List[Float32]:
+    """`qn_decision_function_host` at the softmax shape (`n_classes > 2`,
+    lane/logistic-multiclass, 2026-09-14): `linear_fwd`'s C > 1 arm
+    (`glm/impl/qn/glm_base.mojo`). `transpose_w_kernel` copies the
+    column-major weight block to row-major `w_rm[c*D + j] = w[c + C*j]`
+    (no arithmetic); `gemm_nt(z, x, w_rm, n_rows, C, D)` is the pinned
+    cell over `n_rows * C` cells, `z[i*C + c]`; `add_bias_multi_kernel`,
+    when `fit_intercept`, stores `ftz(z[cell] + b)` with `b = w[C*D + c]`
+    read as it is, `c = cell % C`."""
+    var d = n_features
+    var w_rm = List[Float32](length=n_classes * d, fill=Float32(0.0))
+    for cell in range(n_classes * d):
+        var c = cell // d
+        var j = cell % d
+        w_rm[cell] = w[c + n_classes * j]
+    var z = host_gemm_nt(x, w_rm, n_rows, n_classes, d)
+    if fit_intercept:
+        for cell in range(n_classes * n_rows):
+            var c = cell % n_classes
+            var b = w[n_classes * d + c]
+            z[cell] = ftz(z[cell] + b)
+    return z^
+
+
+def host_qn_softmax(
+    scores: List[Float32], n_rows: Int, n_classes: Int,
+) -> List[Float64]:
+    """`qn_softmax_host` (`glm/estimator.mojo`, lane/logistic-multiclass,
+    2026-09-14) statement for statement: per row of the `(n_rows, C)`
+    float32 scores, `m` the first maximum under a strict `>` from the
+    first entry, `s` the serial ascending sum of `identical_exp64(z - m)`,
+    `p_c = identical_exp64(z_c - m) / s`; `(n_rows, C)` float64
+    row-major."""
+    var out = List[Float64](length=n_rows * n_classes, fill=Float64(0.0))
+    for i in range(n_rows):
+        var base = i * n_classes
+        var m = Float64(scores[base])
+        for c in range(1, n_classes):
+            var v = Float64(scores[base + c])
+            if v > m:
+                m = v
+        var s = 0.0
+        for c in range(n_classes):
+            var z = Float64(scores[base + c])
+            s = s + identical_exp64(z - m)
+        for c in range(n_classes):
+            var z = Float64(scores[base + c])
+            out[base + c] = identical_exp64(z - m) / s
     return out^
 
 

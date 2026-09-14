@@ -28,8 +28,10 @@ THE EXPORTED NAMES ARE THE GPU BINDING'S NAMES for what this covers, so
 "_mojolearn_estimators_host"`): `kde_score_samples` with the SAME address
 contract (train, query, weights, out, the five-value params list, kernel,
 metric; mirrored word for word in `density.py`), `ols_predict`,
-`tsvd_transform`, `qn_decision_function`, `qn_sigmoid`, `pca_transform`
-and, since the kde svc host lane (2026-09-14), the whitened pair
+`tsvd_transform`, `qn_decision_function`, `qn_sigmoid`, `pca_transform`,
+since lane/logistic-multiclass (2026-09-14) `qn_softmax` and the 4-field
+`qn_decision_function` (the softmax shape of LogisticRegression with more
+than two classes), and, since the kde svc host lane (2026-09-14), the whitened pair
 `pca_whiten_transform` and `pca_whiten_inverse_transform`, with the SAME
 address contracts as `bindings/_mojolearn_estimators.mojo` (each docstring
 below repeats its params list), `estimators_numeric_mode` and
@@ -58,7 +60,9 @@ from core.classical_host_predict import (
     host_pca_whiten_inverse_transform,
     host_pca_whiten_transform,
     host_qn_decision,
+    host_qn_decision_multi,
     host_qn_sigmoid,
+    host_qn_softmax,
     host_tsvd_transform,
 )
 from kde.host.kde_oracle import KDE_ORACLE_HOST_SABOTAGE, oracle_score_samples
@@ -412,22 +416,59 @@ def qn_decision_function_binding(
     """`LogisticRegression.decision_function` on the host: `scores = X w + b`
     by `host_qn_decision`, `w` the fitted `_w` of `n_features +
     fit_intercept` entries, the bias its LAST entry. params: n_rows,
-    n_features, fit_intercept (0/1). Returns 0."""
-    if len(params) != 3:
-        raise Error("qn_decision_function: params must contain n_rows, n_features, fit_intercept")
+    n_features, fit_intercept (0/1) and, since lane/logistic-multiclass
+    (2026-09-14), an OPTIONAL 4th, n_classes, the GPU binding's contract:
+    absent or below 3 is the binary shape; `n_classes > 2` the softmax
+    shape by `host_qn_decision_multi`, `w` the column-major `C x dims`
+    block and out `n_rows * n_classes` floats row-major. Returns 0."""
+    if len(params) != 3 and len(params) != 4:
+        raise Error("qn_decision_function: params must contain n_rows, n_features, fit_intercept and an optional n_classes")
     var x_address = _index(x_addr)
     var w_address = _index(coef_addr)
     var op = f32_ptr(_index(out_addr))
     var nr = _index(params[0])
     var nf = _index(params[1])
     var fi = _index(params[2]) != 0
+    var nc = _index(params[3]) if len(params) == 4 else 1
     with GILReleased(Python()):
         _positive(nr, "n_rows")
         _positive(nf, "n_features")
         var x = read_f32(x_address, nr * nf)
-        var w = read_f32(w_address, nf + (1 if fi else 0))
-        var out = host_qn_decision(x, w, nr, nf, fi)
-        for i in range(nr):
+        if nc > 2:
+            var wm = read_f32(w_address, (nf + (1 if fi else 0)) * nc)
+            var outm = host_qn_decision_multi(x, wm, nr, nf, nc, fi)
+            for i in range(nr * nc):
+                op[i] = outm[i]
+        else:
+            var w = read_f32(w_address, nf + (1 if fi else 0))
+            var out = host_qn_decision(x, w, nr, nf, fi)
+            for i in range(nr):
+                op[i] = out[i]
+    return PythonObject(0)
+
+
+def qn_softmax_binding(
+    scores_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """The multinomial `predict_proba` link (lane/logistic-multiclass,
+    2026-09-14) by `host_qn_softmax`, the GPU binding's contract: scores
+    float32 `(n_rows, n_classes)` row-major, out float64 `(n_rows,
+    n_classes)`. params: n_rows, n_classes. Returns 0."""
+    if len(params) != 2:
+        raise Error("qn_softmax: params must contain n_rows, n_classes")
+    var s_address = _index(scores_addr)
+    var op = f64_ptr(_index(out_addr))
+    var nr = _index(params[0])
+    var nc = _index(params[1])
+    if nc < 3:
+        raise Error("qn_softmax: n_classes must be at least 3; the binary link is qn_sigmoid")
+    with GILReleased(Python()):
+        _positive(nr, "n_rows")
+        var scores = read_f32(s_address, nr * nc)
+        var out = host_qn_softmax(scores, nr, nc)
+        for i in range(nr * nc):
             op[i] = out[i]
     return PythonObject(0)
 
@@ -471,6 +512,7 @@ def PyInit__mojolearn_estimators_host() abi("C") -> PythonObject:
         module.def_function[pca_whiten_inverse_transform_binding]("pca_whiten_inverse_transform")
         module.def_function[qn_decision_function_binding]("qn_decision_function")
         module.def_function[qn_sigmoid_binding]("qn_sigmoid")
+        module.def_function[qn_softmax_binding]("qn_softmax")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_estimators_host: ", error))

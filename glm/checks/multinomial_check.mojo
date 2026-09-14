@@ -23,9 +23,10 @@ DEVIATIONS 705-706 (the implementation, `glm/impl/qn/glm_softmax.mojo`) and
                                         rule), objective below 8 perturbed
                                         points -- no scikit-learn needed
     check_softmax_refuses_by_name       softmax with 2 classes, logistic
-                                        with 3, a too-small `w0`, l1,
+                                        with 3, a too-small `w0`,
                                         sample_weight: each RAISES naming
-                                        the thing
+                                        the thing; l1 does NOT raise
+                                        (OWL-QN, DEVIATION 552)
     check_softmax_device_equals_host    ONE objective evaluation (loss,
                                         every gradient entry, every dZ
                                         cell) and the decision function at a
@@ -94,6 +95,7 @@ from core.identity_trace import IdentityTrace, first_divergence
 from glm.impl.qn.glm_base import GLMDims, GLMWithData
 from glm.impl.qn.glm_softmax import (
     SOFTMAX_MAX_SEED,
+    SOFTMAX_SABOTAGE,
     softmax_loss_dz_kernel,
     softmax_row_max,
 )
@@ -513,17 +515,24 @@ def check_softmax_refuses_by_name() raises:
     var m3 = _fit_raises(ctx, _params(1.0, True, True), 3, False, 5)
     if m3.find("QN_LOSS_SOFTMAX needs w0 of n_param") < 0:
         raise Error("a too-small w0 did not raise by name; got: " + m3)
+    # l1 USED TO RAISE HERE and must not any more (DEVIATION 552, 2026-09-01):
+    # `l1 != 0` selects OWL-QN (`qn_solvers.cuh:420`) and `min_owlqn` is
+    # implemented; `glm/checks/logistic_check.mojo` inverted its arm that
+    # day, this file had no invoker and kept the refusal until 2026-09-14
+    # (the first `pixi run check-glm-multinomial` was RED here). Kept,
+    # inverted, so a regression to the refusal is caught.
     var p4 = _params(1.0, True, True)
     p4.penalty_l1 = 0.5
     var m4 = _fit_raises(ctx, p4, 3, False)
-    if m4.find("min_owlqn") < 0:
-        raise Error("l1 did not raise by name; got: " + m4)
+    if m4 != "":
+        raise Error("an l1 penalty RAISED, and min_owlqn is implemented; got: " + m4)
     var m5 = _fit_raises(ctx, _params(1.0, True, True), 3, True)
     if m5.find("sample_weight is NOT IMPLEMENTED") < 0:
         raise Error("sample_weight did not raise by name; got: " + m5)
     print(
         "check_softmax_refuses_by_name OK: softmax with C=2, logistic with C=3,"
-        " a too-small w0, l1 (OWL-QN) and sample_weight each RAISE by name"
+        " a too-small w0 and sample_weight each RAISE by name; an l1 penalty"
+        " does NOT (it takes the implemented OWL-QN arm)"
     )
 
 
@@ -1410,7 +1419,11 @@ def check_softmax_card_is_emitted() raises:
 
 
 def main() raises:
-    print("== glm/checks/multinomial_check.mojo [" + _mode_name() + "] ==")
+    print(
+        "== glm/checks/multinomial_check.mojo [" + _mode_name() + "]"
+        + (" SABOTAGE=descending-lse-fold (MOJOLEARN_SOFTMAX_SABOTAGE, must FAIL)" if SOFTMAX_SABOTAGE else " sabotage=off")
+        + " =="
+    )
     check_softmax_fd_gradient()
     check_softmax_planted()
     check_softmax_is_a_minimizer()
