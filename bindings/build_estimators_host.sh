@@ -1,6 +1,8 @@
 #!/bin/sh
-# CPU-only build of the estimators binding, KDE today (the CPU training lane, phase 1,
-# 2026-09-13), bindings/build_forest_host.sh flag for flag.
+# CPU-only build of the estimators binding: KDE (the CPU training lane, phase 1,
+# 2026-09-13) plus the classical inference entries (ols_predict, tsvd_transform,
+# qn_decision_function, qn_sigmoid, pca_transform; the classical host inference
+# lane the same day), bindings/build_forest_host.sh flag for flag.
 # No accelerator target. On the Mac, invoke through tools/macos_serial_guard.py.
 # IDENTICAL only. MOJOLEARN_BUILD_EXTRA_DEFINES carries trial defines, e.g.
 # -D MOJOLEARN_HOST_SABOTAGE=1 for the gate's negative control.

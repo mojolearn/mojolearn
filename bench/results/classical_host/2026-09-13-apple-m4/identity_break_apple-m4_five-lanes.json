@@ -1,0 +1,1502 @@
+{
+ "mode": "identical",
+ "repeats": 2,
+ "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+ "vendor": "apple-m4",
+ "commit": "7c534e71347103cb236b38deeba4988b5cbe3f19",
+ "commit_source": "git rev-parse HEAD",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  },
+  "ties": {
+   "X": "186fe2109fc34ad5",
+   "y_clf": "f33cf521f758ae3c",
+   "y_reg": "047d4652a4d56bc3"
+  },
+  "hashed": {
+   "X": "c93497b26fe65cda",
+   "y_clf": "d104ead2f62bdd03",
+   "y_reg": "ce4959d8070bb069"
+  },
+  "wide": {
+   "X": "35f6a8481e649eb8",
+   "y_clf": "276ebacc29267948",
+   "y_reg": "611fc5dd6367bef5"
+  },
+  "denormal": {
+   "X": "752323c375a1cbf5",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "denormal_ftz": {
+   "X": "34c156b0d0e8a891",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "dupes": {
+   "X": "9d9d9db7c7785a14",
+   "y_clf": "d390ee2944b13e1d",
+   "y_reg": "135ce10f2a0817fe"
+  },
+  "odd": {
+   "X": "93d9611a09107bb9",
+   "y_clf": "273a388a705a4f40",
+   "y_reg": "25f3d126c81ca0ec"
+  },
+  "negative": {
+   "X": "08106ffff3256313",
+   "y_clf": "294ce4d7dadaf0bb",
+   "y_reg": "ce1914d5f78f5707"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  },
+  "ties": {
+   "X": "d1ba686494256660"
+  },
+  "hashed": {
+   "X": "9dc786ade4574aff"
+  },
+  "wide": {
+   "X": "d52a1af18a3c2f1c"
+  },
+  "denormal": {
+   "X": "5061056b118d07d0"
+  },
+  "denormal_ftz": {
+   "X": "a8c3d1a560b5cabb"
+  },
+  "dupes": {
+   "X": "e4b16c115962dfcd"
+  },
+  "odd": {
+   "X": "32ea0bbed60b8e6c"
+  },
+  "negative": {
+   "X": "45b539a3f66ce25d"
+  }
+ },
+ "cells": {
+  "pca/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "426e098860cb885e",
+    "426e098860cb885e"
+   ],
+   "parts": [
+    {
+     "components": "a9e323aa9a2eb0a7",
+     "variance": "379a299c3f468464",
+     "transform": "3b500d79660e0a98"
+    },
+    {
+     "components": "a9e323aa9a2eb0a7",
+     "variance": "379a299c3f468464",
+     "transform": "3b500d79660e0a98"
+    }
+   ],
+   "infer": [
+    "5ec98c317c9314a6",
+    "5ec98c317c9314a6"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "b41a408ef6ffb8c9",
+    "b41a408ef6ffb8c9"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "5ec98c317c9314a6",
+    "5ec98c317c9314a6"
+   ]
+  },
+  "pca/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2cc3098a82f5e29c",
+    "2cc3098a82f5e29c"
+   ],
+   "parts": [
+    {
+     "components": "780ea09250da5475",
+     "variance": "e0acc1c72a799453",
+     "transform": "fceb5c46b092809c"
+    },
+    {
+     "components": "780ea09250da5475",
+     "variance": "e0acc1c72a799453",
+     "transform": "fceb5c46b092809c"
+    }
+   ],
+   "infer": [
+    "470065a905e144bf",
+    "470065a905e144bf"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "e3f6772a15daedcd",
+    "e3f6772a15daedcd"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "470065a905e144bf",
+    "470065a905e144bf"
+   ]
+  },
+  "pca/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "9c43c580f84b913e",
+    "9c43c580f84b913e"
+   ],
+   "parts": [
+    {
+     "components": "5606085c1bc089de",
+     "variance": "e51e45ff460fb5d7",
+     "transform": "2cbddbdc21e93198"
+    },
+    {
+     "components": "5606085c1bc089de",
+     "variance": "e51e45ff460fb5d7",
+     "transform": "2cbddbdc21e93198"
+    }
+   ],
+   "infer": [
+    "da7f8a40931a091a",
+    "da7f8a40931a091a"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "a9bcbe53314d1a00",
+    "a9bcbe53314d1a00"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "da7f8a40931a091a",
+    "da7f8a40931a091a"
+   ]
+  },
+  "pca/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "ee30334357c2fe6e",
+    "ee30334357c2fe6e"
+   ],
+   "parts": [
+    {
+     "components": "9e5c3a764d281bbb",
+     "variance": "0c1a7c8b9667379a",
+     "transform": "e17795dcf9a2b79e"
+    },
+    {
+     "components": "9e5c3a764d281bbb",
+     "variance": "0c1a7c8b9667379a",
+     "transform": "e17795dcf9a2b79e"
+    }
+   ],
+   "infer": [
+    "abbcfa36cfc4cc81",
+    "abbcfa36cfc4cc81"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "dec2221e136875c8",
+    "dec2221e136875c8"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "abbcfa36cfc4cc81",
+    "abbcfa36cfc4cc81"
+   ]
+  },
+  "pca/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "632dd2d41a856846",
+    "632dd2d41a856846"
+   ],
+   "parts": [
+    {
+     "components": "6a9fd4df0fff64f0",
+     "variance": "96fe2ad0b6d49a84",
+     "transform": "0bc17a54e1d2b6d2"
+    },
+    {
+     "components": "6a9fd4df0fff64f0",
+     "variance": "96fe2ad0b6d49a84",
+     "transform": "0bc17a54e1d2b6d2"
+    }
+   ],
+   "infer": [
+    "d28a4176d38a79ad",
+    "d28a4176d38a79ad"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "85752b8d4fc03a22",
+    "85752b8d4fc03a22"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "d28a4176d38a79ad",
+    "d28a4176d38a79ad"
+   ]
+  },
+  "pca/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "632dd2d41a856846",
+    "632dd2d41a856846"
+   ],
+   "parts": [
+    {
+     "components": "6a9fd4df0fff64f0",
+     "variance": "96fe2ad0b6d49a84",
+     "transform": "0bc17a54e1d2b6d2"
+    },
+    {
+     "components": "6a9fd4df0fff64f0",
+     "variance": "96fe2ad0b6d49a84",
+     "transform": "0bc17a54e1d2b6d2"
+    }
+   ],
+   "infer": [
+    "d28a4176d38a79ad",
+    "d28a4176d38a79ad"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "85752b8d4fc03a22",
+    "85752b8d4fc03a22"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "d28a4176d38a79ad",
+    "d28a4176d38a79ad"
+   ]
+  },
+  "pca/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "f0d80567379e28e4",
+    "f0d80567379e28e4"
+   ],
+   "parts": [
+    {
+     "components": "8835e94f890ce1ed",
+     "variance": "0567e302fe25cf36",
+     "transform": "c982d6b232c80975"
+    },
+    {
+     "components": "8835e94f890ce1ed",
+     "variance": "0567e302fe25cf36",
+     "transform": "c982d6b232c80975"
+    }
+   ],
+   "infer": [
+    "25b7f77104e4b5b3",
+    "25b7f77104e4b5b3"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "9c5913e3831259e4",
+    "9c5913e3831259e4"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "25b7f77104e4b5b3",
+    "25b7f77104e4b5b3"
+   ]
+  },
+  "pca/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2bde4e929e103470",
+    "2bde4e929e103470"
+   ],
+   "parts": [
+    {
+     "components": "662e4246f5080935",
+     "variance": "c98e02fcd10b08b4",
+     "transform": "f574124d5866457b"
+    },
+    {
+     "components": "662e4246f5080935",
+     "variance": "c98e02fcd10b08b4",
+     "transform": "f574124d5866457b"
+    }
+   ],
+   "infer": [
+    "9f765336b6cbcc11",
+    "9f765336b6cbcc11"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "87d34e709375c9b5",
+    "87d34e709375c9b5"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "9f765336b6cbcc11",
+    "9f765336b6cbcc11"
+   ]
+  },
+  "pca/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c4903e2bddacb305",
+    "c4903e2bddacb305"
+   ],
+   "parts": [
+    {
+     "components": "8bdee8f517c7089c",
+     "variance": "ada49499ee51d311",
+     "transform": "9a9228e5e9a36532"
+    },
+    {
+     "components": "8bdee8f517c7089c",
+     "variance": "ada49499ee51d311",
+     "transform": "9a9228e5e9a36532"
+    }
+   ],
+   "infer": [
+    "bed836c726c23255",
+    "bed836c726c23255"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "2a61ff40547fab89",
+    "2a61ff40547fab89"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "bed836c726c23255",
+    "bed836c726c23255"
+   ]
+  },
+  "tsvd/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "8e8d20af1d08720c",
+    "8e8d20af1d08720c"
+   ],
+   "parts": [
+    {
+     "components": "eb98ef49f9c747f0",
+     "transform": "c4d62043783b968b"
+    },
+    {
+     "components": "eb98ef49f9c747f0",
+     "transform": "c4d62043783b968b"
+    }
+   ],
+   "infer": [
+    "36793a22ecfc11d9",
+    "36793a22ecfc11d9"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "dad8484c8148cc3a",
+    "dad8484c8148cc3a"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "36793a22ecfc11d9",
+    "36793a22ecfc11d9"
+   ]
+  },
+  "tsvd/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "86d6e87cfc1f48c0",
+    "86d6e87cfc1f48c0"
+   ],
+   "parts": [
+    {
+     "components": "235c256fdd12cb30",
+     "transform": "58e1a5b960aac1b1"
+    },
+    {
+     "components": "235c256fdd12cb30",
+     "transform": "58e1a5b960aac1b1"
+    }
+   ],
+   "infer": [
+    "441e224141ca3ef4",
+    "441e224141ca3ef4"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "5aa8d4139303b4c2",
+    "5aa8d4139303b4c2"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "441e224141ca3ef4",
+    "441e224141ca3ef4"
+   ]
+  },
+  "tsvd/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "7eeaca88b0e6a8de",
+    "7eeaca88b0e6a8de"
+   ],
+   "parts": [
+    {
+     "components": "d7c0c621a57f27fc",
+     "transform": "f60d6313c0a62347"
+    },
+    {
+     "components": "d7c0c621a57f27fc",
+     "transform": "f60d6313c0a62347"
+    }
+   ],
+   "infer": [
+    "a253da0a489ff1d7",
+    "a253da0a489ff1d7"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "9b2cd491dca9241a",
+    "9b2cd491dca9241a"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "a253da0a489ff1d7",
+    "a253da0a489ff1d7"
+   ]
+  },
+  "tsvd/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "975f2a167b1ac6d5",
+    "975f2a167b1ac6d5"
+   ],
+   "parts": [
+    {
+     "components": "5743e70e62911e45",
+     "transform": "6a1c2176ee97ffed"
+    },
+    {
+     "components": "5743e70e62911e45",
+     "transform": "6a1c2176ee97ffed"
+    }
+   ],
+   "infer": [
+    "cef9d6af2957dea2",
+    "cef9d6af2957dea2"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "d1350f18d6205fbb",
+    "d1350f18d6205fbb"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "cef9d6af2957dea2",
+    "cef9d6af2957dea2"
+   ]
+  },
+  "tsvd/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "36d9e3d5aaadcd92",
+    "36d9e3d5aaadcd92"
+   ],
+   "parts": [
+    {
+     "components": "af3e89cb444b5350",
+     "transform": "3cedcd80ea65d0c4"
+    },
+    {
+     "components": "af3e89cb444b5350",
+     "transform": "3cedcd80ea65d0c4"
+    }
+   ],
+   "infer": [
+    "fc4af18e4659ab46",
+    "fc4af18e4659ab46"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "3ddbcba0a9ba339d",
+    "3ddbcba0a9ba339d"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "fc4af18e4659ab46",
+    "fc4af18e4659ab46"
+   ]
+  },
+  "tsvd/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "36d9e3d5aaadcd92",
+    "36d9e3d5aaadcd92"
+   ],
+   "parts": [
+    {
+     "components": "af3e89cb444b5350",
+     "transform": "3cedcd80ea65d0c4"
+    },
+    {
+     "components": "af3e89cb444b5350",
+     "transform": "3cedcd80ea65d0c4"
+    }
+   ],
+   "infer": [
+    "fc4af18e4659ab46",
+    "fc4af18e4659ab46"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "3ddbcba0a9ba339d",
+    "3ddbcba0a9ba339d"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "fc4af18e4659ab46",
+    "fc4af18e4659ab46"
+   ]
+  },
+  "tsvd/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "9a24cf55eff6013c",
+    "9a24cf55eff6013c"
+   ],
+   "parts": [
+    {
+     "components": "286cf7760ef0db41",
+     "transform": "82de95d4215becc9"
+    },
+    {
+     "components": "286cf7760ef0db41",
+     "transform": "82de95d4215becc9"
+    }
+   ],
+   "infer": [
+    "b20d1e18ded5c227",
+    "b20d1e18ded5c227"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "0ccf336c88307c6c",
+    "0ccf336c88307c6c"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "b20d1e18ded5c227",
+    "b20d1e18ded5c227"
+   ]
+  },
+  "tsvd/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "452fd865062565da",
+    "452fd865062565da"
+   ],
+   "parts": [
+    {
+     "components": "85fd229ada3f2549",
+     "transform": "debd3c4119fcd309"
+    },
+    {
+     "components": "85fd229ada3f2549",
+     "transform": "debd3c4119fcd309"
+    }
+   ],
+   "infer": [
+    "4ca5ee061209a589",
+    "4ca5ee061209a589"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "efe0b4a3e0f314b8",
+    "efe0b4a3e0f314b8"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "4ca5ee061209a589",
+    "4ca5ee061209a589"
+   ]
+  },
+  "tsvd/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "22e0958cc1ded92d",
+    "22e0958cc1ded92d"
+   ],
+   "parts": [
+    {
+     "components": "5fbc435a8b9f5e2b",
+     "transform": "f2c4fd7e25471a87"
+    },
+    {
+     "components": "5fbc435a8b9f5e2b",
+     "transform": "f2c4fd7e25471a87"
+    }
+   ],
+   "infer": [
+    "47e1b7225f50fa55",
+    "47e1b7225f50fa55"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "27c536a4f0a5c619",
+    "27c536a4f0a5c619"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "47e1b7225f50fa55",
+    "47e1b7225f50fa55"
+   ]
+  },
+  "ols/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "3d1d7c30b12d9872",
+    "3d1d7c30b12d9872"
+   ],
+   "parts": [
+    {
+     "coef": "061d459357a7ce70",
+     "predict": "6fd7da5b24d56b62"
+    },
+    {
+     "coef": "061d459357a7ce70",
+     "predict": "6fd7da5b24d56b62"
+    }
+   ],
+   "infer": [
+    "2546a13c03838433",
+    "2546a13c03838433"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "a84289377ea9180f",
+    "a84289377ea9180f"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "2546a13c03838433",
+    "2546a13c03838433"
+   ]
+  },
+  "ols/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c73c0c1158ebcb9e",
+    "c73c0c1158ebcb9e"
+   ],
+   "parts": [
+    {
+     "coef": "2e11483a11ff34fd",
+     "predict": "997a62813a03e8d2"
+    },
+    {
+     "coef": "2e11483a11ff34fd",
+     "predict": "997a62813a03e8d2"
+    }
+   ],
+   "infer": [
+    "55f61f34cae7e5ff",
+    "55f61f34cae7e5ff"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "b25d3a2214bc6196",
+    "b25d3a2214bc6196"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "55f61f34cae7e5ff",
+    "55f61f34cae7e5ff"
+   ]
+  },
+  "ols/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "7a4cc4b643207e04",
+    "7a4cc4b643207e04"
+   ],
+   "parts": [
+    {
+     "coef": "bacc7306d47a1317",
+     "predict": "85209618201f2a66"
+    },
+    {
+     "coef": "bacc7306d47a1317",
+     "predict": "85209618201f2a66"
+    }
+   ],
+   "infer": [
+    "73b6c23acb537f4f",
+    "73b6c23acb537f4f"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "5de64f00889bfe52",
+    "5de64f00889bfe52"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "73b6c23acb537f4f",
+    "73b6c23acb537f4f"
+   ]
+  },
+  "ols/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "880f803e2a9840cf",
+    "880f803e2a9840cf"
+   ],
+   "parts": [
+    {
+     "coef": "bd1d9d78e6cd4d34",
+     "predict": "d5a0314ebba2a281"
+    },
+    {
+     "coef": "bd1d9d78e6cd4d34",
+     "predict": "d5a0314ebba2a281"
+    }
+   ],
+   "infer": [
+    "c40c1d99f114c282",
+    "c40c1d99f114c282"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "926f863307451ea0",
+    "926f863307451ea0"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "c40c1d99f114c282",
+    "c40c1d99f114c282"
+   ]
+  },
+  "ols/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "f0e2e46f2203e17d",
+    "f0e2e46f2203e17d"
+   ],
+   "parts": [
+    {
+     "coef": "c080564f7238c248",
+     "predict": "3bcbd9005cb43525"
+    },
+    {
+     "coef": "c080564f7238c248",
+     "predict": "3bcbd9005cb43525"
+    }
+   ],
+   "infer": [
+    "050118359943fcd8",
+    "050118359943fcd8"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "1c22cb64d07612e4",
+    "1c22cb64d07612e4"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "050118359943fcd8",
+    "050118359943fcd8"
+   ]
+  },
+  "ols/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "f0e2e46f2203e17d",
+    "f0e2e46f2203e17d"
+   ],
+   "parts": [
+    {
+     "coef": "c080564f7238c248",
+     "predict": "3bcbd9005cb43525"
+    },
+    {
+     "coef": "c080564f7238c248",
+     "predict": "3bcbd9005cb43525"
+    }
+   ],
+   "infer": [
+    "050118359943fcd8",
+    "050118359943fcd8"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "1c22cb64d07612e4",
+    "1c22cb64d07612e4"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "050118359943fcd8",
+    "050118359943fcd8"
+   ]
+  },
+  "ols/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "5d93af9edf61d3e7",
+    "5d93af9edf61d3e7"
+   ],
+   "parts": [
+    {
+     "coef": "07a04c2e7eaf42ff",
+     "predict": "8a25956290eb5082"
+    },
+    {
+     "coef": "07a04c2e7eaf42ff",
+     "predict": "8a25956290eb5082"
+    }
+   ],
+   "infer": [
+    "09ac924358918527",
+    "09ac924358918527"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "ef68b4364cd0fa2d",
+    "ef68b4364cd0fa2d"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "09ac924358918527",
+    "09ac924358918527"
+   ]
+  },
+  "ols/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "bfb2368a5a4871ba",
+    "bfb2368a5a4871ba"
+   ],
+   "parts": [
+    {
+     "coef": "0aeb560e2a489982",
+     "predict": "a488a8d75b4ab93f"
+    },
+    {
+     "coef": "0aeb560e2a489982",
+     "predict": "a488a8d75b4ab93f"
+    }
+   ],
+   "infer": [
+    "60eb6ff64dfbea28",
+    "60eb6ff64dfbea28"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "fcd41cbad6561bbb",
+    "fcd41cbad6561bbb"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "60eb6ff64dfbea28",
+    "60eb6ff64dfbea28"
+   ]
+  },
+  "ols/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "737566e6c5e95e7d",
+    "737566e6c5e95e7d"
+   ],
+   "parts": [
+    {
+     "coef": "ccad825a0b0cfd1e",
+     "predict": "79f836ba5edf5ba1"
+    },
+    {
+     "coef": "ccad825a0b0cfd1e",
+     "predict": "79f836ba5edf5ba1"
+    }
+   ],
+   "infer": [
+    "ddf1f9ebb606db70",
+    "ddf1f9ebb606db70"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "f534c0184e2b735f",
+    "f534c0184e2b735f"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "ddf1f9ebb606db70",
+    "ddf1f9ebb606db70"
+   ]
+  },
+  "ridge/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a91478be750dc756",
+    "a91478be750dc756"
+   ],
+   "parts": [
+    {
+     "coef": "9598abbd8c68bc92",
+     "predict": "324e400c65e911ba"
+    },
+    {
+     "coef": "9598abbd8c68bc92",
+     "predict": "324e400c65e911ba"
+    }
+   ],
+   "infer": [
+    "a5a404bb201b0eeb",
+    "a5a404bb201b0eeb"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "efada80fdc2d4259",
+    "efada80fdc2d4259"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "a5a404bb201b0eeb",
+    "a5a404bb201b0eeb"
+   ]
+  },
+  "ridge/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "42410e35cdae30cb",
+    "42410e35cdae30cb"
+   ],
+   "parts": [
+    {
+     "coef": "a19bac8b9a5b3c46",
+     "predict": "9dab21cbd6324b72"
+    },
+    {
+     "coef": "a19bac8b9a5b3c46",
+     "predict": "9dab21cbd6324b72"
+    }
+   ],
+   "infer": [
+    "d23a652e5f82906f",
+    "d23a652e5f82906f"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "824a2e3b44b31af4",
+    "824a2e3b44b31af4"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "d23a652e5f82906f",
+    "d23a652e5f82906f"
+   ]
+  },
+  "ridge/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "fb5037b3d70d60ee",
+    "fb5037b3d70d60ee"
+   ],
+   "parts": [
+    {
+     "coef": "406eaf09856761d4",
+     "predict": "18744c9d1aa910c5"
+    },
+    {
+     "coef": "406eaf09856761d4",
+     "predict": "18744c9d1aa910c5"
+    }
+   ],
+   "infer": [
+    "1f692bf67099df47",
+    "1f692bf67099df47"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "05a9504a256753f0",
+    "05a9504a256753f0"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "1f692bf67099df47",
+    "1f692bf67099df47"
+   ]
+  },
+  "ridge/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "7215c2605901cdc6",
+    "7215c2605901cdc6"
+   ],
+   "parts": [
+    {
+     "coef": "5bb731794586bfd9",
+     "predict": "dbc7e039d9eff79f"
+    },
+    {
+     "coef": "5bb731794586bfd9",
+     "predict": "dbc7e039d9eff79f"
+    }
+   ],
+   "infer": [
+    "cc8d5d1192f32b52",
+    "cc8d5d1192f32b52"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "2869ff3b7b3a7558",
+    "2869ff3b7b3a7558"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "cc8d5d1192f32b52",
+    "cc8d5d1192f32b52"
+   ]
+  },
+  "ridge/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2eed6e454ed965da",
+    "2eed6e454ed965da"
+   ],
+   "parts": [
+    {
+     "coef": "84ce503281a019c0",
+     "predict": "715ed8c5fffac97e"
+    },
+    {
+     "coef": "84ce503281a019c0",
+     "predict": "715ed8c5fffac97e"
+    }
+   ],
+   "infer": [
+    "4233d399ae41d2e6",
+    "4233d399ae41d2e6"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "80113efe9b48cc79",
+    "80113efe9b48cc79"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "4233d399ae41d2e6",
+    "4233d399ae41d2e6"
+   ]
+  },
+  "ridge/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2eed6e454ed965da",
+    "2eed6e454ed965da"
+   ],
+   "parts": [
+    {
+     "coef": "84ce503281a019c0",
+     "predict": "715ed8c5fffac97e"
+    },
+    {
+     "coef": "84ce503281a019c0",
+     "predict": "715ed8c5fffac97e"
+    }
+   ],
+   "infer": [
+    "4233d399ae41d2e6",
+    "4233d399ae41d2e6"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "80113efe9b48cc79",
+    "80113efe9b48cc79"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "4233d399ae41d2e6",
+    "4233d399ae41d2e6"
+   ]
+  },
+  "ridge/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c69b8fef7932da21",
+    "c69b8fef7932da21"
+   ],
+   "parts": [
+    {
+     "coef": "0b47933597f00d3e",
+     "predict": "2d23fbad59fd4b1f"
+    },
+    {
+     "coef": "0b47933597f00d3e",
+     "predict": "2d23fbad59fd4b1f"
+    }
+   ],
+   "infer": [
+    "3e10053ac0b9fbd4",
+    "3e10053ac0b9fbd4"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "11e592057872c1e0",
+    "11e592057872c1e0"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "3e10053ac0b9fbd4",
+    "3e10053ac0b9fbd4"
+   ]
+  },
+  "ridge/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "bdaf14e02a8f07ec",
+    "bdaf14e02a8f07ec"
+   ],
+   "parts": [
+    {
+     "coef": "8bd87a390226279d",
+     "predict": "2ccc797a064bfdcd"
+    },
+    {
+     "coef": "8bd87a390226279d",
+     "predict": "2ccc797a064bfdcd"
+    }
+   ],
+   "infer": [
+    "83420de0d62b5c95",
+    "83420de0d62b5c95"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "3f77c9c16c29bd84",
+    "3f77c9c16c29bd84"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "83420de0d62b5c95",
+    "83420de0d62b5c95"
+   ]
+  },
+  "ridge/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "473e3ff40fc67b0e",
+    "473e3ff40fc67b0e"
+   ],
+   "parts": [
+    {
+     "coef": "457e3d6aaa7bfbad",
+     "predict": "c46d0f005859c5e4"
+    },
+    {
+     "coef": "457e3d6aaa7bfbad",
+     "predict": "c46d0f005859c5e4"
+    }
+   ],
+   "infer": [
+    "174ab0d4049ee591",
+    "174ab0d4049ee591"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "ad885ca7374525bd",
+    "ad885ca7374525bd"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "174ab0d4049ee591",
+    "174ab0d4049ee591"
+   ]
+  },
+  "logistic/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "5b1e42c308451935",
+    "5b1e42c308451935"
+   ],
+   "parts": [
+    {
+     "coef": "7798118c2261b8f3",
+     "proba": "6f8ceceea101b075"
+    },
+    {
+     "coef": "7798118c2261b8f3",
+     "proba": "6f8ceceea101b075"
+    }
+   ],
+   "infer": [
+    "103f76e4a2b23c03",
+    "103f76e4a2b23c03"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "1b51b4eabdcf59e2",
+    "1b51b4eabdcf59e2"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "103f76e4a2b23c03",
+    "103f76e4a2b23c03"
+   ]
+  },
+  "logistic/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "aa9b1fa93dc2ad08",
+    "aa9b1fa93dc2ad08"
+   ],
+   "parts": [
+    {
+     "coef": "8a1f325bc0556830",
+     "proba": "3aa51f292148f0a8"
+    },
+    {
+     "coef": "8a1f325bc0556830",
+     "proba": "3aa51f292148f0a8"
+    }
+   ],
+   "infer": [
+    "31ae5dc087daddea",
+    "31ae5dc087daddea"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "eff4803be10700c8",
+    "eff4803be10700c8"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "31ae5dc087daddea",
+    "31ae5dc087daddea"
+   ]
+  },
+  "logistic/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "ec4fd3f1b3f90393",
+    "ec4fd3f1b3f90393"
+   ],
+   "parts": [
+    {
+     "coef": "1754b3facc6b465c",
+     "proba": "7b4ba7c7f54a067f"
+    },
+    {
+     "coef": "1754b3facc6b465c",
+     "proba": "7b4ba7c7f54a067f"
+    }
+   ],
+   "infer": [
+    "dfe219d0b67a77ca",
+    "dfe219d0b67a77ca"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "ee3cb3e174ae7c73",
+    "ee3cb3e174ae7c73"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "dfe219d0b67a77ca",
+    "dfe219d0b67a77ca"
+   ]
+  },
+  "logistic/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "4e980d6d6bb17dd2",
+    "4e980d6d6bb17dd2"
+   ],
+   "parts": [
+    {
+     "coef": "beecb4605acca2bd",
+     "proba": "417ed25b05513872"
+    },
+    {
+     "coef": "beecb4605acca2bd",
+     "proba": "417ed25b05513872"
+    }
+   ],
+   "infer": [
+    "0b4e034053a507a6",
+    "0b4e034053a507a6"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "576c92b63ada584d",
+    "576c92b63ada584d"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "0b4e034053a507a6",
+    "0b4e034053a507a6"
+   ]
+  },
+  "logistic/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "6b67b6ba386c99c1",
+    "6b67b6ba386c99c1"
+   ],
+   "parts": [
+    {
+     "coef": "0aa46dd431ec3a0e",
+     "proba": "f9de95096d69e131"
+    },
+    {
+     "coef": "0aa46dd431ec3a0e",
+     "proba": "f9de95096d69e131"
+    }
+   ],
+   "infer": [
+    "2092f79961286d8a",
+    "2092f79961286d8a"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "0f11207a162b3b64",
+    "0f11207a162b3b64"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "2092f79961286d8a",
+    "2092f79961286d8a"
+   ]
+  },
+  "logistic/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "6b67b6ba386c99c1",
+    "6b67b6ba386c99c1"
+   ],
+   "parts": [
+    {
+     "coef": "0aa46dd431ec3a0e",
+     "proba": "f9de95096d69e131"
+    },
+    {
+     "coef": "0aa46dd431ec3a0e",
+     "proba": "f9de95096d69e131"
+    }
+   ],
+   "infer": [
+    "2092f79961286d8a",
+    "2092f79961286d8a"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "0f11207a162b3b64",
+    "0f11207a162b3b64"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "2092f79961286d8a",
+    "2092f79961286d8a"
+   ]
+  },
+  "logistic/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "8b3071b0cd8446b2",
+    "8b3071b0cd8446b2"
+   ],
+   "parts": [
+    {
+     "coef": "9979d8ee64f77f9e",
+     "proba": "da319d9a1991c16e"
+    },
+    {
+     "coef": "9979d8ee64f77f9e",
+     "proba": "da319d9a1991c16e"
+    }
+   ],
+   "infer": [
+    "df012d0cb1286818",
+    "df012d0cb1286818"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "4b387ce327c969d6",
+    "4b387ce327c969d6"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "df012d0cb1286818",
+    "df012d0cb1286818"
+   ]
+  },
+  "logistic/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "3c0d0924516a37e8",
+    "3c0d0924516a37e8"
+   ],
+   "parts": [
+    {
+     "coef": "596749c25ea90250",
+     "proba": "a25d13ee8fe62324"
+    },
+    {
+     "coef": "596749c25ea90250",
+     "proba": "a25d13ee8fe62324"
+    }
+   ],
+   "infer": [
+    "7540ab14779d65c6",
+    "7540ab14779d65c6"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "1be05ca406afb6a5",
+    "1be05ca406afb6a5"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "7540ab14779d65c6",
+    "7540ab14779d65c6"
+   ]
+  },
+  "logistic/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "b50b9cbe101d71d8",
+    "b50b9cbe101d71d8"
+   ],
+   "parts": [
+    {
+     "coef": "fe0f81bce12ae9f5",
+     "proba": "6a45464497c08d37"
+    },
+    {
+     "coef": "fe0f81bce12ae9f5",
+     "proba": "6a45464497c08d37"
+    }
+   ],
+   "infer": [
+    "00fff477b42c65a0",
+    "00fff477b42c65a0"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "61cb0a45d1792d44",
+    "61cb0a45d1792d44"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "00fff477b42c65a0",
+    "00fff477b42c65a0"
+   ]
+  }
+ },
+ "complete": true,
+ "skipped": []
+}

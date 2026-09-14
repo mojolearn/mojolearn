@@ -1,0 +1,33 @@
+{
+  "commit": "7c534e71347103cb236b38deeba4988b5cbe3f19",
+  "estimator": "TruncatedSVD",
+  "gpu_arch": null,
+  "host": {
+    "cpu": "Apple M4",
+    "machine": "arm64",
+    "python": "3.14.6",
+    "release": "25.5.0",
+    "system": "Darwin"
+  },
+  "kind": "hashed",
+  "lane": "tsvd",
+  "model_sha256": "9b2cd491dca9241a1443ff796d65638a649748511a6d2dd7647ab557351b34df",
+  "numeric_mode": "identical",
+  "predictions": {
+    "identity_hash": "a253da0a489ff1d7",
+    "seconds": 0.001356,
+    "transform": {
+      "dtype": "<f4",
+      "sha256": "f1f81619e8801a044367a20c5c8ae6c2a2f02229c1ae5e4d87c640f06e4f5bef",
+      "shape": [
+        256,
+        4
+      ]
+    }
+  },
+  "recorded_at": "2026-09-13T21:01:55-0400",
+  "reload_equal": true,
+  "status": "RECORDED",
+  "vendor": "metal",
+  "x_sha256": "610f791343247286a120f012f4d03fb2d0bbc4500feb992df2fb844a344e4986"
+}

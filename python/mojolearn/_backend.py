@@ -891,9 +891,14 @@ _HOST_MODULES = {
     "_mojolearn_linalg": "_mojolearn_linalg_host",
     # kde (phase 1, 2026-09-13): bindings/_mojolearn_estimators_host.mojo
     # over kde/checks/kde_oracle.mojo::oracle_score_samples; exports
-    # kde_score_samples, estimators_numeric_mode, estimators_vendor. Every
-    # other _mojolearn_estimators function (dbscan_fit, pca_fit, tsvd_fit,
-    # ols_fit, ridge_fit, qn_fit, ...) is absent and refuses by name.
+    # kde_score_samples, estimators_numeric_mode, estimators_vendor. The
+    # classical host inference lane (2026-09-13) adds the INFERENCE entries
+    # ols_predict, tsvd_transform, qn_decision_function, qn_sigmoid and
+    # pca_transform over core/classical_host_predict.mojo, so a saved
+    # LinearRegression, Ridge, TruncatedSVD, LogisticRegression or PCA
+    # predicts here. Every other _mojolearn_estimators function (dbscan_fit,
+    # pca_fit, pca_whiten_transform, tsvd_fit, inverse_transform, ols_fit,
+    # ridge_fit, qn_fit, ...) is absent and refuses by name.
     "_mojolearn_estimators": "_mojolearn_estimators_host",
     # holtwinters (phase 1, 2026-09-13): bindings/_mojolearn_tsa_host.mojo
     # over holtwinters/checks/hw_oracle.mojo::oracle_fit[float32] and
@@ -1004,8 +1009,11 @@ def _no_cpu_implementation(name, item, reason, basename=None):
         "forward pass on the CPU), LanguageModelHostTrainer (one byte LM "
         "training step on the CPU: forward, backward and the AdamW update), "
         "HostForest and HostGBDT (predict and predict_proba of a saved forest "
-        "or GradientBoosting model on the CPU), each only when its own host "
-        "binding under mojolearn/host/ is built. "
+        "or GradientBoosting model on the CPU), and the saved-model inference "
+        "of LinearRegression, Ridge, TruncatedSVD, LogisticRegression and PCA "
+        "(mojolearn.host_model, or the classes themselves on a CPU-only "
+        "install), each only when its own host binding under mojolearn/host/ "
+        "is built. "
         "Why no GPU set loaded:\n" + reason
     )
 

@@ -2,10 +2,53 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """GPU dimensionality reduction."""
 
-from . import _mojolearn_estimators
+from . import _backend, _mojolearn_estimators, _serialize
 from ._array import Array
 from ._buffer import addr, addr_ro, all_finite, as_f32_c, empty
 from ._mode import NumericModeMixin
+
+#: The model file formats (the classical host inference lane, 2026-09-13).
+#: `save` writes the fitted arrays as fitted, raw bytes and exact dtypes,
+#: through `_serialize.write_npz`; `load` refuses a cast. What `transform`
+#: reads plus the fitted spectrum a user reads back.
+_PCA_FORMAT = "mojolearn-pca-1"
+_TSVD_FORMAT = "mojolearn-tsvd-1"
+
+
+def _saved_mode(est):
+    """The tier `transform` would run on now, persisted as GradientBoosting
+    persists it, so a loaded model never silently changes tier."""
+    mode = getattr(est, "numeric_mode", None) or _backend.default_mode()
+    if not isinstance(mode, str) or mode.strip().lower() not in (
+        "fast", "deterministic", "identical"
+    ):
+        raise ValueError(f"mojolearn: cannot save invalid numeric_mode {mode!r}")
+    return mode.strip().lower()
+
+
+def _restore_mode(obj, arrays):
+    mode = _serialize.scalar_str(arrays, "numeric_mode")
+    if mode not in ("fast", "deterministic", "identical"):
+        raise ValueError(f"mojolearn: invalid saved numeric_mode {mode!r}")
+    obj.numeric_mode = mode
+
+
+def _check_saved_by(arrays, path, cls):
+    """The file's `estimator` must be `cls` or a base of it, so the host
+    subclasses of `_classical_host.py` load the plain class's file."""
+    saved_as = _serialize.scalar_str(arrays, "estimator")
+    if saved_as not in (c.__name__ for c in cls.__mro__):
+        raise ValueError(
+            f"mojolearn: {path!r} was saved by {saved_as}, not {cls.__name__}"
+        )
+
+
+def _check_components(path, components, nc, nf):
+    if components.ndim != 2 or tuple(components.shape) != (nc, nf):
+        raise ValueError(
+            f"mojolearn: {path!r} components shape {tuple(components.shape)} is "
+            f"not ({nc}, {nf})"
+        )
 
 
 def _as_array_view(value):
@@ -370,6 +413,70 @@ class PCA(NumericModeMixin):
         )
         return out
 
+    def save(self, path):
+        """Write the fitted model to `path` as an npz: `components_`,
+        `mean_`, `singular_values_`, `explained_variance_` and
+        `explained_variance_ratio_` as fitted (float32), `noise_variance_`
+        as float64, `meta` `<i8` [n_components_, n_features_in_,
+        n_samples_, whiten] and `svd_solver` (the classical host inference
+        lane, 2026-09-13). `mojolearn.host_model(path)` transforms from it
+        on a CPU with no GPU when `whiten` is False; the whitened transform
+        has no host entry and refuses by name."""
+        if not hasattr(self, "components_"):
+            raise RuntimeError("this estimator is not fitted yet")
+        arrays = {
+            "format": _PCA_FORMAT,
+            "estimator": type(self).__name__,
+            "numeric_mode": _saved_mode(self),
+            "svd_solver": str(self.svd_solver),
+            "components": self.components_,
+            "mean": self.mean_,
+            "singular_values": self.singular_values_,
+            "explained_variance": self.explained_variance_,
+            "explained_variance_ratio": self.explained_variance_ratio_,
+            "noise_variance": Array.from_list([float(self.noise_variance_)], "<f8"),
+            "meta": Array.from_list(
+                [int(self.n_components_), int(self.n_features_in_),
+                 int(self.n_samples_), 1 if self.whiten else 0],
+                "<i8",
+            ),
+        }
+        return _serialize.write_npz(path, arrays)
+
+    @classmethod
+    def load(cls, path):
+        """Load a model saved by `save`. The result transforms; it does not
+        refit."""
+        arrays = _serialize.read_npz(path, _PCA_FORMAT)
+        _check_saved_by(arrays, path, cls)
+        meta = _serialize.exact(arrays, "meta", "<i8")
+        if meta.size != 4:
+            raise ValueError(f"mojolearn: {path!r} meta holds {meta.size} fields, 4 are needed")
+        nc, nf = int(meta[0]), int(meta[1])
+        obj = cls(n_components=nc, whiten=bool(int(meta[3])),
+                  svd_solver=_serialize.scalar_str(arrays, "svd_solver"))
+        _restore_mode(obj, arrays)
+        obj.components_ = _serialize.exact(arrays, "components", "<f4")
+        _check_components(path, obj.components_, nc, nf)
+        obj.mean_ = _serialize.exact(arrays, "mean", "<f4")
+        obj.singular_values_ = _serialize.exact(arrays, "singular_values", "<f4")
+        obj.explained_variance_ = _serialize.exact(arrays, "explained_variance", "<f4")
+        obj.explained_variance_ratio_ = _serialize.exact(arrays, "explained_variance_ratio", "<f4")
+        for name in ("mean_",):
+            if getattr(obj, name).size != nf:
+                raise ValueError(f"mojolearn: {path!r} {name} does not match n_features_in_")
+        for name in ("singular_values_", "explained_variance_", "explained_variance_ratio_"):
+            if getattr(obj, name).size != nc:
+                raise ValueError(f"mojolearn: {path!r} {name} does not match n_components_")
+        noise = _serialize.exact(arrays, "noise_variance", "<f8")
+        if noise.size != 1:
+            raise ValueError(f"mojolearn: {path!r} noise_variance must hold one value")
+        obj.noise_variance_ = float(noise[0])
+        obj.n_components_ = nc
+        obj.n_features_in_ = nf
+        obj.n_samples_ = int(meta[2])
+        return obj
+
 
 class TruncatedSVD(NumericModeMixin):
     """Uncentered truncated SVD on the GPU, mirroring cuML's `tsvdFit`
@@ -483,3 +590,45 @@ class TruncatedSVD(NumericModeMixin):
             addr(out, name="out"), [z.shape[0], self.n_features_in_, self.n_components_, 0],
         )
         return out
+
+    def save(self, path):
+        """Write the fitted model to `path` as an npz: `components_` and
+        `singular_values_` as fitted (float32), `meta` `<i8` [n_components_,
+        n_features_in_] and `algorithm` (the classical host inference lane,
+        2026-09-13). `mojolearn.host_model(path)` transforms from it on a
+        CPU with no GPU."""
+        if not hasattr(self, "components_"):
+            raise RuntimeError("this estimator is not fitted yet")
+        arrays = {
+            "format": _TSVD_FORMAT,
+            "estimator": type(self).__name__,
+            "numeric_mode": _saved_mode(self),
+            "algorithm": str(self.algorithm),
+            "components": self.components_,
+            "singular_values": self.singular_values_,
+            "meta": Array.from_list(
+                [int(self.n_components_), int(self.n_features_in_)], "<i8"
+            ),
+        }
+        return _serialize.write_npz(path, arrays)
+
+    @classmethod
+    def load(cls, path):
+        """Load a model saved by `save`. The result transforms; it does not
+        refit."""
+        arrays = _serialize.read_npz(path, _TSVD_FORMAT)
+        _check_saved_by(arrays, path, cls)
+        meta = _serialize.exact(arrays, "meta", "<i8")
+        if meta.size != 2:
+            raise ValueError(f"mojolearn: {path!r} meta holds {meta.size} fields, 2 are needed")
+        nc, nf = int(meta[0]), int(meta[1])
+        obj = cls(n_components=nc, algorithm=_serialize.scalar_str(arrays, "algorithm"))
+        _restore_mode(obj, arrays)
+        obj.components_ = _serialize.exact(arrays, "components", "<f4")
+        _check_components(path, obj.components_, nc, nf)
+        obj.singular_values_ = _serialize.exact(arrays, "singular_values", "<f4")
+        if obj.singular_values_.size != nc:
+            raise ValueError(f"mojolearn: {path!r} singular_values does not match n_components_")
+        obj.n_components_ = nc
+        obj.n_features_in_ = nf
+        return obj

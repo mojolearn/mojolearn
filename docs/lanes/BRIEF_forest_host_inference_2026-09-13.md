@@ -579,9 +579,17 @@ staged COLUMN-major (`_solver_impl.py:363`, `_as_fortran` at `:290`).
 `bindings/_mojolearn_solver.mojo:118`, then `cd_predict_host`
 (`solver/estimator.mojo:166`), then `cd_predict` (`solver/impl/cd.mojo:544`,
 imports `max.gpu.host` at `:106`, `std.gpu` at `:107`, and `gemv_n` at
-`:110`). The same pinned gemv over a column-major X plus the intercept;
-read `cd_predict` for the exact add. (d) None. Estimate 3 to 4 hours once
-the ols entry exists (the gemv restatement is shared), 5 to 6 alone.
+`:110`), then `linear_reg_h` (`solver/impl/functions/linear_reg.mojo:51`).
+CORRECTED 2026-09-13 evening: the sentence that stood here, "the same
+pinned gemv over a column-major X plus the intercept", was FALSE. Under
+IDENTICAL `linear_reg_h` calls `identical_gemm(ctx, pred, x, coef, n_rows,
+1, n_cols, OP_TN)`, the `mojolearn.identical.gemm.fp32.v1` profile whose
+GPU-free definition is `gemm_oracle`; `gemv_n` is its FAST arm only. The
+phase 1 host binding (`bindings/_mojolearn_solver_host.mojo::cd_predict`,
+1b319230) already restates exactly that, `gemm_oracle` at OP_TN then
+`ftz(v + intercept)`, and the seven-runner CPU gate (run 34793118831)
+reads its infer cells IDENTICAL x4, so this lane was DONE by phase 1 and
+the classical host inference lane skipped it. (d) None.
 
 **logistic (`LogisticRegression.predict_proba`).**
 (a) No save/load. (b) `_w` `<f4` `(n_features + fit_intercept,)`
@@ -753,3 +761,68 @@ are about 20 hours plus the save/load each needs; they would take every
 above is for reproducing the GPU bits and measuring it through
 `tools/forest_host_gate.py`; a host entry that computes the right answer
 in a different order is not what any of these hours buy.
+
+## Classical host inference, lanes 1, 2, 4 and 5 (2026-09-13 evening, branch `lane/classical-host-inference`)
+
+Lane 3 (lasso, elasticnet) was already done by phase 1 (see the corrected
+paragraph above) and was skipped. The other four landed as one host binding
+extension, one restatement module, one gate and one loader:
+
+- `core/classical_host_predict.mojo`: `host_pinned_cell` MIRRORS
+  `pinned_gemm_nt_kernel` (`core/gemm.mojo:33-62`; `pinned_gemv_n_kernel`,
+  `:93-113`, is the same fold over one row, and `gemm_nt` routes `n == 1`
+  there), and on top of it `host_ols_predict` (`ols_predict_host` plus the
+  `_add_scalar_kernel` epilogue, `glm/estimator.mojo:53-74, 192-231`),
+  `host_qn_decision` (`linear_fwd` at C == 1 plus `add_bias_kernel`,
+  `glm/impl/qn/glm_base.mojo:121-134, 198-244`; the bias read is NOT
+  flushed, only the sum), `host_qn_sigmoid` (`qn_sigmoid_host`,
+  `glm/estimator.mojo:384-410`, relocated), `host_pca_transform`
+  (`shift_columns_kernel` at sign -1.0, `core/column_stats.mojo:153-204`,
+  then the gemm) and `host_tsvd_transform` (one gemm). Sabotage define
+  MOJOLEARN_HOST_SABOTAGE, the phase 1 spelling: every k loop walked
+  descending.
+- `bindings/_mojolearn_estimators_host.mojo` exports `ols_predict`,
+  `tsvd_transform`, `pca_transform`, `qn_decision_function`, `qn_sigmoid`
+  under the GPU binding's names and params lists; the whiten pair, every
+  fit and `inverse_transform` stay absent and refuse by name.
+- `save`/`load` on LinearRegression and Ridge (`mojolearn-linear-1`:
+  `coef` `<f4`, `intercept` `<f8`, `meta` [n_features_in_, fit_intercept],
+  Ridge adds `alpha` `<f8`), LogisticRegression (`mojolearn-logistic-1`:
+  `w` `<f4`, `classes`, `meta`), TruncatedSVD (`mojolearn-tsvd-1`) and PCA
+  (`mojolearn-pca-1`, whiten flag stored; the host transform refuses a
+  whitened model by name). `_serialize.write_npz`, exact dtypes, no cast on
+  load; `numeric_mode` persisted as GradientBoosting persists it.
+- `python/mojolearn/_classical_host.py`: `host_model(path)` returns a HOST
+  SUBCLASS of the saved class whose `_bind` answers the CPU binding, so the
+  Python predict is the GPU class's own code and only the binding differs;
+  `mojolearn.host_model` dispatches the four formats there.
+- `tools/classical_host_gate.py`, over `tools/identity_break.py`'s own nine
+  fixtures and held-out rows, so its `identity_hash` IS the identity
+  tool's `infer` cell and one Mac run is judged against every committed
+  GPU column (`--gpu-column`).
+
+Measured on this Mac (Apple M4, Metal record, host check, 45 fixtures =
+5 lanes x 9), `bench/results/classical_host/2026-09-13-apple-m4/`:
+
+| check | verdict | evidence |
+| --- | --- | --- |
+| host vs the Metal recording, every surface (predict, predict_proba, decision_function, transform: sha256 + dtype + shape) | IDENTICAL, 45/45, 243 EQUAL lines, 0 DIFFER | `check_apple-m4_host.json` |
+| host `identity_hash` vs the 2026-09-13_46-lanes `infer` cells of apple-m4, nvidia-h100-sm_90a AND amd-mi325x-gfx942 | EQUAL on all 135 (45 x 3) | same file, `columns` |
+| sabotage set (`-D MOJOLEARN_HOST_SABOTAGE=1`, `--expect-mismatch`) | EXPECTED MISMATCH SEEN: 234 DIFFER; the only 9 EQUAL cells are logistic `predict` labels, whose sign survives the reordered fold while every proba, score and transform cell differs | `check_apple-m4_sabotage.json` |
+| GPU-path reload (`type(est).load` then the same probe) | equal on every fixture, or `record` would have exited 1 | each `expected.json`, `reload_equal` |
+| `tools/identity_break.py` over the five lanes with the new `model` column | 45 cells, train/infer/model stable=45, RELOAD-MOVED 0 | `identity_break_apple-m4_five-lanes.{json,txt}` |
+
+Example cells: ols/base infer `2546a13c03838433`, ridge/base
+`a5a404bb201b0eeb`, tsvd/base `36793a22ecfc11d9`, logistic/base
+`103f76e4a2b23c03`, pca/base `5ec98c317c9314a6`, each the value the three
+GPU columns already carried.
+
+What this is and is not. The three-vendor comparison is on the
+`identity_hash` (the identity tool's 16-hex digest of the probe output)
+against JSONs recorded with models FITTED on those GPUs; the byte-level
+sha256 comparison of every surface is against a Metal recording only. The
+host binding was built and checked on ONE CPU (Apple M4); the seven-runner
+CPU gate does not run this gate yet. OWED: a `record` on an NVIDIA box and
+an AMD box into `bench/results/classical_host/2026-09-13-<vendor>/` (the
+model files fitted there), checked on a CPU box, and a workflow step that
+runs `check` on the seven runners.

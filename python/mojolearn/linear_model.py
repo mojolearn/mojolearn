@@ -19,13 +19,93 @@ arithmetic otherwise (DEVIATION 2450).
 import array
 import math
 
-from . import _mojolearn_estimators
+from . import _backend, _mojolearn_estimators, _serialize
 from ._array import Array
 from ._buffer import (
     addr, addr_ro, all_finite, as_f32_c, as_f64_c, empty, view, zeros,
 )
-from ._labels import decode_labels, flatten_labels, sorted_classes
+from ._labels import (
+    classes_from_member, classes_member, decode_labels, flatten_labels,
+    sorted_classes,
+)
 from ._mode import NumericModeMixin
+
+#: The model file formats (the classical host inference lane, 2026-09-13).
+#: `save` writes exactly what `predict` reads, raw bytes and exact dtypes,
+#: through `_serialize.write_npz`, so equal models give equal file hashes
+#: on every machine; `load` refuses a cast (`_serialize.exact`). The
+#: intercept travels as `<f8` because it is a Python float computed with
+#: `math.fsum` at fit time and `predict` hands `float(self.intercept_)` to
+#: the binding, so the file carries the exact value predict uses.
+_LINEAR_FORMAT = "mojolearn-linear-1"
+_LOGISTIC_FORMAT = "mojolearn-logistic-1"
+
+
+def _saved_mode(est):
+    """The tier `predict` would run on now, persisted as GradientBoosting
+    persists it, so a loaded model never silently changes tier."""
+    mode = getattr(est, "numeric_mode", None) or _backend.default_mode()
+    if not isinstance(mode, str) or mode.strip().lower() not in (
+        "fast", "deterministic", "identical"
+    ):
+        raise ValueError(f"mojolearn: cannot save invalid numeric_mode {mode!r}")
+    return mode.strip().lower()
+
+
+def _restore_mode(obj, arrays):
+    mode = _serialize.scalar_str(arrays, "numeric_mode")
+    if mode not in ("fast", "deterministic", "identical"):
+        raise ValueError(f"mojolearn: invalid saved numeric_mode {mode!r}")
+    obj.numeric_mode = mode
+
+
+def _check_saved_by(arrays, path, cls):
+    """The file's `estimator` must be `cls` or a base of it, so the host
+    subclasses of `_classical_host.py` load the plain class's file."""
+    saved_as = _serialize.scalar_str(arrays, "estimator")
+    if saved_as not in (c.__name__ for c in cls.__mro__):
+        raise ValueError(
+            f"mojolearn: {path!r} was saved by {saved_as}, not {cls.__name__}"
+        )
+
+
+def _save_linear(est, path, extra=None):
+    """`LinearRegression.save` and `Ridge.save`: `coef_` `<f4`, the
+    intercept `<f8`, `meta` `<i8` [n_features_in_, fit_intercept]."""
+    if not hasattr(est, "coef_"):
+        raise RuntimeError("this estimator is not fitted yet")
+    arrays = {
+        "format": _LINEAR_FORMAT,
+        "estimator": type(est).__name__,
+        "numeric_mode": _saved_mode(est),
+        "coef": est.coef_,
+        "intercept": Array.from_list([float(est.intercept_)], "<f8"),
+        "meta": Array.from_list(
+            [int(est.n_features_in_), 1 if est.fit_intercept else 0], "<i8"
+        ),
+    }
+    if extra:
+        arrays.update(extra)
+    return _serialize.write_npz(path, arrays)
+
+
+def _load_linear(cls, path, **kwargs):
+    arrays = _serialize.read_npz(path, _LINEAR_FORMAT)
+    _check_saved_by(arrays, path, cls)
+    meta = _serialize.exact(arrays, "meta", "<i8")
+    if meta.size != 2:
+        raise ValueError(f"mojolearn: {path!r} meta holds {meta.size} fields, 2 are needed")
+    obj = cls(fit_intercept=bool(int(meta[1])), **kwargs)
+    _restore_mode(obj, arrays)
+    obj.coef_ = _serialize.exact(arrays, "coef", "<f4")
+    obj.n_features_in_ = int(meta[0])
+    if obj.coef_.ndim != 1 or obj.coef_.size != obj.n_features_in_:
+        raise ValueError(f"mojolearn: {path!r} coef does not match n_features_in_")
+    intercept = _serialize.exact(arrays, "intercept", "<f8")
+    if intercept.size != 1:
+        raise ValueError(f"mojolearn: {path!r} intercept must hold one value")
+    obj.intercept_ = float(intercept[0])
+    return obj, arrays
 
 
 # ---------------------------------------------------------------------------
@@ -575,6 +655,21 @@ class LinearRegression(NumericModeMixin):
         """R^2, a sequential float64 host reduction (DEVIATION 2365)."""
         return _r2_host(self.predict(X), y)
 
+    def save(self, path):
+        """Write the fitted model to `path` as an npz: `coef_` as fitted,
+        the intercept as float64, the feature count and `fit_intercept`.
+        What `predict` reads and nothing else (the classical host inference
+        lane, 2026-09-13); `mojolearn.host_model(path)` predicts from it on
+        a CPU with no GPU."""
+        return _save_linear(self, path)
+
+    @classmethod
+    def load(cls, path):
+        """Load a model saved by `save`. The result predicts; it does not
+        refit and carries no training-time means."""
+        obj, _ = _load_linear(cls, path)
+        return obj
+
 
 class Ridge(NumericModeMixin):
     """l2-regularized least squares on the GPU, cuML's `solver='eig'` arm.
@@ -710,6 +805,25 @@ class Ridge(NumericModeMixin):
     def score(self, X, y):
         """R^2, a sequential float64 host reduction (DEVIATION 2365)."""
         return _r2_host(self.predict(X), y)
+
+    def save(self, path):
+        """As `LinearRegression.save`, plus `alpha` as float64; the two
+        classes share one file format because they share one predict."""
+        return _save_linear(
+            self, path, {"alpha": Array.from_list([float(self.alpha)], "<f8")}
+        )
+
+    @classmethod
+    def load(cls, path):
+        """Load a model saved by `save`. The result predicts; it does not
+        refit. `solver_` is the eig arm, the only one `fit` runs."""
+        arrays = _serialize.read_npz(path, _LINEAR_FORMAT)
+        alpha = _serialize.exact(arrays, "alpha", "<f8")
+        if alpha.size != 1:
+            raise ValueError(f"mojolearn: {path!r} alpha must hold one value")
+        obj, _ = _load_linear(cls, path, alpha=float(alpha[0]))
+        obj.solver_ = "eig"
+        return obj
 
 
 # cuML's `qn_params.loss` ids (cuml/linear_model/qn.h); the Python door maps
@@ -983,3 +1097,48 @@ class LogisticRegression(NumericModeMixin):
         """Accuracy: the fraction of rows where `predict(X) == y`, a Python
         count over O(rows) labels (DEVIATION 2365, a host reduction)."""
         return _accuracy_host(self.predict(X), y)
+
+    def save(self, path):
+        """Write the fitted model to `path` as an npz: `_w` as fitted (the
+        `n_features + fit_intercept` float32 vector inference reads; `coef_`
+        and `intercept_` are its copies and are rebuilt by `load`),
+        `classes_` as `_labels.classes_member`, the feature count and
+        `fit_intercept` (the classical host inference lane, 2026-09-13)."""
+        if not hasattr(self, "_w"):
+            raise RuntimeError("this estimator is not fitted yet")
+        arrays = {
+            "format": _LOGISTIC_FORMAT,
+            "estimator": type(self).__name__,
+            "numeric_mode": _saved_mode(self),
+            "w": self._w,
+            "classes": classes_member(self.classes_),
+            "meta": Array.from_list(
+                [int(self.n_features_in_), 1 if self.fit_intercept else 0], "<i8"
+            ),
+        }
+        return _serialize.write_npz(path, arrays)
+
+    @classmethod
+    def load(cls, path):
+        """Load a model saved by `save`. The result predicts; it does not
+        refit and carries no `n_iter_`, `objective_` or `retcode_`."""
+        arrays = _serialize.read_npz(path, _LOGISTIC_FORMAT)
+        _check_saved_by(arrays, path, cls)
+        meta = _serialize.exact(arrays, "meta", "<i8")
+        if meta.size != 2:
+            raise ValueError(f"mojolearn: {path!r} meta holds {meta.size} fields, 2 are needed")
+        obj = cls(fit_intercept=bool(int(meta[1])))
+        _restore_mode(obj, arrays)
+        cols = int(meta[0])
+        w = _serialize.exact(arrays, "w", "<f4")
+        if w.ndim != 1 or w.size != cols + (1 if obj.fit_intercept else 0):
+            raise ValueError(f"mojolearn: {path!r} w does not match n_features_in_ and fit_intercept")
+        obj._w = w
+        obj.coef_ = w[:cols].reshape((1, cols))
+        obj.intercept_ = (w[cols:cols + 1] if obj.fit_intercept
+                          else zeros((1,), "<f4"))
+        obj.classes_ = classes_from_member(arrays["classes"])
+        if len(obj.classes_) != 2:
+            raise ValueError(f"mojolearn: {path!r} must carry exactly two classes")
+        obj.n_features_in_ = cols
+        return obj

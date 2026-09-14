@@ -1,10 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""CPU binding for the `_mojolearn_estimators` family, KernelDensity today
-(the CPU training lane, phase 1, 2026-09-13; brief
-docs/lanes/BRIEF_cpu_training_2026-09-13.md sections 1.1 kde and 3.2).
+"""CPU binding for the `_mojolearn_estimators` family: KernelDensity (the
+CPU training lane, phase 1, 2026-09-13; brief
+docs/lanes/BRIEF_cpu_training_2026-09-13.md sections 1.1 kde and 3.2) and,
+since the classical host inference lane the same day, the INFERENCE entries
+of LinearRegression, Ridge, TruncatedSVD, LogisticRegression and PCA
+(docs/lanes/BRIEF_forest_host_inference_2026-09-13.md, "Classical lanes").
 
-HOST ONLY. No DeviceContext, no kernel launch, no GPU. The arithmetic is
+HOST ONLY. No DeviceContext, no kernel launch, no GPU. The KDE arithmetic is
 `kde/checks/kde_oracle.mojo::oracle_score_samples`, the float32 serial
 replay the device arm is gated against bit for bit under IDENTICAL ("every
 formula spelled here a SECOND time rather than imported from `kde/impl/`").
@@ -12,31 +15,48 @@ The validation is the GPU entry's, in the GPU entry's order
 (`kde/estimator.mojo::kde_score_samples_host_ptr`: kernel and metric names,
 `kde_fit_validate`, `n_query`, train data, query data), through the same
 host-only functions of `kde/impl/neighbors/kernel_density.mojo`, so a bad
-call raises the same error and nothing is written on a refusal.
+call raises the same error and nothing is written on a refusal. The
+classical inference arithmetic is `core/classical_host_predict.mojo`, the
+statement-for-statement restatement of the pinned gemm/gemv kernel, the
+intercept and bias epilogues, the centering kernel and the host sigmoid;
+that file's header names every original by file and line.
 
-THE EXPORTED NAMES ARE THE GPU BINDING'S NAMES for the fit this covers, so
-`python/mojolearn/density.py::KernelDensity` runs unchanged on a CPU-only
-install through `_backend._HOST_MODULES` (`"_mojolearn_estimators":
+THE EXPORTED NAMES ARE THE GPU BINDING'S NAMES for what this covers, so
+`python/mojolearn/density.py::KernelDensity`, `linear_model.py` and
+`decomposition.py` run unchanged on a CPU-only install through
+`_backend._HOST_MODULES` (`"_mojolearn_estimators":
 "_mojolearn_estimators_host"`): `kde_score_samples` with the SAME address
 contract (train, query, weights, out, the five-value params list, kernel,
-metric; mirrored word for word in `density.py`), `estimators_numeric_mode`
-and `estimators_vendor` (answering "cpu"). Every other function of
-`bindings/_mojolearn_estimators.mojo` (dbscan_fit, pca_fit, tsvd_fit,
-ols_fit, ridge_fit, qn_fit, ...) is deliberately absent, so those lanes
-refuse BY NAME through `_HostBinding` and never hash something else.
+metric; mirrored word for word in `density.py`), `ols_predict`,
+`tsvd_transform`, `qn_decision_function`, `qn_sigmoid` and `pca_transform`
+with the SAME address contracts as `bindings/_mojolearn_estimators.mojo`
+(each docstring below repeats its params list), `estimators_numeric_mode`
+and `estimators_vendor` (answering "cpu"). Every other function of the GPU
+binding (dbscan_fit, pca_fit, pca_fit_full, pca_whiten_transform,
+tsvd_fit, inverse_transform, ols_fit, ridge_fit, qn_fit, ...) is
+deliberately absent, so those surfaces refuse BY NAME through
+`_HostBinding` and never hash something else.
 """
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
-from bindings.hostptr import f32_ptr, read_f32
+from bindings.hostptr import f32_ptr, f64_ptr, read_f32
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,
     column_name,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE
+from core.classical_host_predict import (
+    CLASSICAL_HOST_SABOTAGE,
+    host_ols_predict,
+    host_pca_transform,
+    host_qn_decision,
+    host_qn_sigmoid,
+    host_tsvd_transform,
+)
 from kde.checks.kde_oracle import KDE_ORACLE_HOST_SABOTAGE, oracle_score_samples
 from kde.impl.neighbors.kernel_density import (
     kde_fit_validate,
@@ -81,9 +101,10 @@ def estimators_host_column_binding() raises -> PythonObject:
 
 
 def estimators_host_sabotage_binding() raises -> PythonObject:
-    """Whether this binary sums every logsumexp row descending on purpose
-    (-D MOJOLEARN_HOST_SABOTAGE=1, the gate's negative control)."""
-    return PythonObject(KDE_ORACLE_HOST_SABOTAGE)
+    """Whether this binary sums every logsumexp row and walks every dot
+    product descending on purpose (-D MOJOLEARN_HOST_SABOTAGE=1, the gate's
+    negative control; one define, both arithmetics)."""
+    return PythonObject(KDE_ORACLE_HOST_SABOTAGE or CLASSICAL_HOST_SABOTAGE)
 
 
 # The GPU binding's names, same contract.
@@ -167,6 +188,157 @@ def kde_score_samples_binding(
     return PythonObject(n_query)
 
 
+# The classical inference entries (the classical host inference lane,
+# 2026-09-13). Each keeps the GPU binding's name, arity and params list.
+
+
+def _positive(value: Int, what: String) raises:
+    if value < 1:
+        raise Error("estimators host: " + what + " must be at least 1, got " + String(value))
+
+
+def ols_predict_binding(
+    x_addr: PythonObject,
+    coef_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`LinearRegression.predict` and `Ridge.predict` on the host:
+    `out[n_rows] = X[n_rows x n_features] . coef + intercept` by
+    `host_ols_predict`. params, as in the GPU binding: n_rows, n_features,
+    intercept (a float; `Float32(Float64(...))` as there). Returns 0."""
+    if len(params) != 3:
+        raise Error("ols_predict: params must contain n_rows, n_features, intercept")
+    var x_address = _index(x_addr)
+    var coef_address = _index(coef_addr)
+    var op = f32_ptr(_index(out_addr))
+    var nr = _index(params[0])
+    var nf = _index(params[1])
+    var intercept = Float32(Float64(py=params[2]))
+    with GILReleased(Python()):
+        _positive(nr, "n_rows")
+        _positive(nf, "n_features")
+        var x = read_f32(x_address, nr * nf)
+        var coef = read_f32(coef_address, nf)
+        var out = host_ols_predict(x, coef, nr, nf, intercept)
+        for i in range(nr):
+            op[i] = out[i]
+    return PythonObject(0)
+
+
+def tsvd_transform_binding(
+    x_addr: PythonObject,
+    components_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`TruncatedSVD.transform` on the host: `out[n_rows x n_components] =
+    X . components^T` by `host_tsvd_transform`. params: n_rows, n_features,
+    n_components. Returns 0."""
+    if len(params) != 3:
+        raise Error("tsvd_transform: params must contain 3 values")
+    var x_address = _index(x_addr)
+    var c_address = _index(components_addr)
+    var op = f32_ptr(_index(out_addr))
+    var nr = _index(params[0])
+    var nf = _index(params[1])
+    var nc = _index(params[2])
+    with GILReleased(Python()):
+        _positive(nr, "n_rows")
+        _positive(nf, "n_features")
+        _positive(nc, "n_components")
+        var x = read_f32(x_address, nr * nf)
+        var components = read_f32(c_address, nc * nf)
+        var out = host_tsvd_transform(x, components, nr, nf, nc)
+        for i in range(nr * nc):
+            op[i] = out[i]
+    return PythonObject(0)
+
+
+def pca_transform_binding(
+    x_addr: PythonObject,
+    mean_addr: PythonObject,
+    components_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`PCA.transform` (whiten=False) on the host: center by `mean_`, then
+    `out = (X - mean) . components^T` by `host_pca_transform`. params:
+    n_rows, n_features, n_components. Returns 0. The whitened pair
+    (`pca_whiten_transform`, `pca_whiten_inverse_transform`) is absent and
+    refuses by name."""
+    if len(params) != 3:
+        raise Error("pca_transform: params must contain 3 values")
+    var x_address = _index(x_addr)
+    var m_address = _index(mean_addr)
+    var c_address = _index(components_addr)
+    var op = f32_ptr(_index(out_addr))
+    var nr = _index(params[0])
+    var nf = _index(params[1])
+    var nc = _index(params[2])
+    with GILReleased(Python()):
+        _positive(nr, "n_rows")
+        _positive(nf, "n_features")
+        _positive(nc, "n_components")
+        var x = read_f32(x_address, nr * nf)
+        var mu = read_f32(m_address, nf)
+        var components = read_f32(c_address, nc * nf)
+        var out = host_pca_transform(x, mu, components, nr, nf, nc)
+        for i in range(nr * nc):
+            op[i] = out[i]
+    return PythonObject(0)
+
+
+def qn_decision_function_binding(
+    x_addr: PythonObject,
+    coef_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`LogisticRegression.decision_function` on the host: `scores = X w + b`
+    by `host_qn_decision`, `w` the fitted `_w` of `n_features +
+    fit_intercept` entries, the bias its LAST entry. params: n_rows,
+    n_features, fit_intercept (0/1). Returns 0."""
+    if len(params) != 3:
+        raise Error("qn_decision_function: params must contain n_rows, n_features, fit_intercept")
+    var x_address = _index(x_addr)
+    var w_address = _index(coef_addr)
+    var op = f32_ptr(_index(out_addr))
+    var nr = _index(params[0])
+    var nf = _index(params[1])
+    var fi = _index(params[2]) != 0
+    with GILReleased(Python()):
+        _positive(nr, "n_rows")
+        _positive(nf, "n_features")
+        var x = read_f32(x_address, nr * nf)
+        var w = read_f32(w_address, nf + (1 if fi else 0))
+        var out = host_qn_decision(x, w, nr, nf, fi)
+        for i in range(nr):
+            op[i] = out[i]
+    return PythonObject(0)
+
+
+def qn_sigmoid_binding(
+    scores_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """The binary `predict_proba` link (DEVIATION 549) by `host_qn_sigmoid`:
+    out is float64 `(n_rows, 2)`, `[1 - p, p]`. params: n_rows. Returns 0."""
+    if len(params) != 1:
+        raise Error("qn_sigmoid: params must contain n_rows")
+    var s_address = _index(scores_addr)
+    var op = f64_ptr(_index(out_addr))
+    var nr = _index(params[0])
+    with GILReleased(Python()):
+        _positive(nr, "n_rows")
+        var scores = read_f32(s_address, nr)
+        var out = host_qn_sigmoid(scores, nr)
+        for i in range(2 * nr):
+            op[i] = out[i]
+    return PythonObject(0)
+
+
 @export
 def PyInit__mojolearn_estimators_host() abi("C") -> PythonObject:
     try:
@@ -178,6 +350,11 @@ def PyInit__mojolearn_estimators_host() abi("C") -> PythonObject:
         module.def_function[estimators_vendor_binding]("estimators_vendor")
         module.def_function[estimators_numeric_mode_binding]("estimators_numeric_mode")
         module.def_function[kde_score_samples_binding]("kde_score_samples")
+        module.def_function[ols_predict_binding]("ols_predict")
+        module.def_function[tsvd_transform_binding]("tsvd_transform")
+        module.def_function[pca_transform_binding]("pca_transform")
+        module.def_function[qn_decision_function_binding]("qn_decision_function")
+        module.def_function[qn_sigmoid_binding]("qn_sigmoid")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_estimators_host: ", error))

@@ -6,6 +6,7 @@ wiring, refusals and the CPU-only selector, never arithmetic. The arithmetic
 is qualified by tools/byte_lm_host_gate.py against retained GPU captures.
 """
 import struct
+import os
 import sys
 import types
 
@@ -182,7 +183,13 @@ def test_cpu_only_selector_stubs_raise_by_name(monkeypatch):
         with pytest.raises(ImportError, match='NO GPU binary set') as info:
             stub.gbdt_fit
         assert 'NO SUPPORTED GPU FOUND (test)' in str(info.value)
-        assert set(_backend._MISSING) == set(_backend._MODULES)
+        # A family whose host binding is BUILT on this box is routed to it, not
+        # stubbed (phase 1 routing); the classical host lane's estimators
+        # binding was the first to sit beside this test on a developer Mac.
+        routed = {name for name, basename in _backend._HOST_MODULES.items()
+                  if os.path.exists(_backend.host_module_path(basename))}
+        assert set(_backend._MISSING) == set(_backend._MODULES) - routed
+        assert '_mojolearn_gbdt' in _backend._MISSING
     finally:
         for key in [k for k in sys.modules if k.startswith('fakepkg.')]:
             del sys.modules[key]
