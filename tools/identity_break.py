@@ -246,7 +246,7 @@ def host_record(ml):
     the accelerator predicates detected, its sabotage flag). A binding that
     refuses to load records the refusal, so a REFUSED cell is attributable
     to an unbuilt or refused family rather than a bug."""
-    from mojolearn import _backend
+    from mojolearn import _backend, host_surface
     families = {}
     for basename in _backend.host_families_built():
         prefix = basename[len("_mojolearn_"):]
@@ -270,6 +270,13 @@ def host_record(ml):
         python=platform.python_version(),
         column=(columns[0] if len(columns) == 1 else ("none-built" if not columns else "MIXED:" + ",".join(columns))),
         routed=dict(_backend._HOST_MODULES),
+        # The manifest the routing table and the gate lists are read from
+        # (the host surface manifest lane, 2026-09-14), and every binding it
+        # declares, so a family that is declared but absent from `families`
+        # reads as NOT BUILT on this box rather than as a bug.
+        surface=host_surface.SOURCE,
+        declared=host_surface.bindings(),
+        covered_lanes=host_surface.covered_lanes(),
         families=families,
     )
 

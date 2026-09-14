@@ -48,7 +48,7 @@ its own name, contract and certificate, and none may change the arithmetic
 inside this one, so there may never be a flag inside v1 that switches the
 accumulator.
 
-The code form of every clause below is `gemm/checks/gemm_oracle.mojo`. Each
+The code form of every clause below is `gemm/host/gemm_oracle.mojo`. Each
 clause names the function that implements it and each function's docstring
 names its clause.
 
@@ -754,11 +754,11 @@ rounding.
 
 | clause | function | file |
 |---|---|---|
-| 1 | `Float32` throughout; no other accumulator type appears | `gemm/checks/gemm_oracle.mojo` |
+| 1 | `Float32` throughout; no other accumulator type appears | `gemm/host/gemm_oracle.mojo` |
 | 3 | `_a_at`, `_b_at`, `OP_NN/OP_NT/OP_TN` | same |
 | 4 | `identical_mul_add` | `checks/numerics.mojo` |
 | 5 | `ftz` | `checks/numerics.mojo` |
-| 6 | `contract_leaf_size`, `leaf_count`, `leaf_begin`, `leaf_end` | `gemm/checks/gemm_oracle.mojo` |
+| 6 | `contract_leaf_size`, `leaf_count`, `leaf_begin`, `leaf_end` | `gemm/host/gemm_oracle.mojo` |
 | 7.1 | `oracle_leaf_partial` | same |
 | 7.2, 7.3, 9.2 | `fold_balanced_tree` | same |
 | 7.2.2 | `fold_level_width`, `fold_level_count`, `fold_level_base`, `fold_node_addr`, `fold_node_total`, `fold_node_is_carry` | same |

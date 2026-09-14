@@ -8,7 +8,7 @@ of LinearRegression, Ridge, TruncatedSVD, LogisticRegression and PCA
 (docs/lanes/BRIEF_forest_host_inference_2026-09-13.md, "Classical lanes").
 
 HOST ONLY. No DeviceContext, no kernel launch, no GPU. The KDE arithmetic is
-`kde/checks/kde_oracle.mojo::oracle_score_samples`, the float32 serial
+`kde/host/kde_oracle.mojo::oracle_score_samples`, the float32 serial
 replay the device arm is gated against bit for bit under IDENTICAL ("every
 formula spelled here a SECOND time rather than imported from `kde/impl/`").
 The validation is the GPU entry's, in the GPU entry's order
@@ -61,7 +61,7 @@ from core.classical_host_predict import (
     host_qn_sigmoid,
     host_tsvd_transform,
 )
-from kde.checks.kde_oracle import KDE_ORACLE_HOST_SABOTAGE, oracle_score_samples
+from kde.host.kde_oracle import KDE_ORACLE_HOST_SABOTAGE, oracle_score_samples
 from kde.impl.neighbors.kernel_density import (
     kde_fit_validate,
     kde_validate_data_ptr,

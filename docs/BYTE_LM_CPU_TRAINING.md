@@ -81,7 +81,8 @@ gate named the tensor, `block0.w_q` element 0, with both bit patterns.
   point. It should be justified by a workload that 37 ms a step makes painful,
   not by the limit's existence.
 - Nothing about other algorithm families. Trees and the classical models have
-  no backward pass and remain GPU-only.
+  no backward pass; the CPU paths they do have are the host bindings in the
+  table under "Where this sits in the CPU surface" below, not this trainer.
 - `LanguageModelHostTrainer` is exported from `mojolearn/__init__.py` as of
   `31af2404`. What it promises is this profile and this shape, and a binding
   built before the training entry existed is refused at construction by name.
@@ -332,6 +333,28 @@ push. An earlier revision of this paragraph still said nine of 128 and was
 stale. Widening what is left is measurement, not construction, and the second
 shape is the case in point. Its schedule and its `--shape` plumbing are
 committed, and its capture has not been taken, so nothing here counts it.
+
+## Where this sits in the CPU surface
+
+The byte LM host binding is one of the host families the package builds
+for a CPU. The whole surface is declared once, in
+`python/mojolearn/host_surface.py`, and this table is generated from it by
+`tools/docs_facts.py --write` (`pixi run check-docs-facts` fails when they
+disagree). The byte LM's is the only host binding a wheel carries; the
+others build from source through `bindings/build_host_family.sh`, one shim
+per family.
+
+<!--fact:host_surface_table-->| family | binding under `mojolearn/host/` | routes (CPU-only install) | trains on a CPU (identity_break lanes) | predicts on a CPU from a saved model | gate | in a wheel |
+|---|---|---|---|---|---|---|
+| byte_lm | `_mojolearn_byte_lm_host.so` | loaded by path | no | LanguageModelInference, LanguageModelHostTrainer | .github/workflows/byte-lm-cpu-gate.yml | yes |
+| forest | `_mojolearn_forest_host.so` | loaded by path | no | RandomForestClassifier, RandomForestRegressor, ExtraTreesClassifier, ExtraTreesRegressor, GradientBoosting (rf_classifier, rf_regressor, et_classifier, et_regressor, gbdt_symmetric, gbdt_depthwise, gbdt_lossguide, gbdt_rmse) | tools/forest_host_gate.py (.github/workflows/forest-host-gate.yml) | no, `bindings/build_forest_host.sh` |
+| core | `_mojolearn_core_host.so` | `_mojolearn` | no | NearestNeighbors, KNeighborsClassifier, KNeighborsRegressor (knn, knn-clf, knn-reg) | tools/classical_host_gate.py (cpu-identity-gate.yml) | no, `bindings/build_core_host.sh` |
+| linalg | `_mojolearn_linalg_host.so` | `_mojolearn_linalg` | gemm-pinned | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_linalg_host.sh` |
+| estimators | `_mojolearn_estimators_host.so` | `_mojolearn_estimators` | kde | LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, KernelDensity (ols, ridge, tsvd, logistic, pca, pca-whiten, kde) | tools/identity_break.py and tools/classical_host_gate.py (cpu-identity-gate.yml) | no, `bindings/build_estimators_host.sh` |
+| tsa | `_mojolearn_tsa_host.so` | `_mojolearn_tsa` | holtwinters | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_tsa_host.sh` |
+| solver | `_mojolearn_solver_host.so` | `_mojolearn_solver` | lasso, elasticnet, agglomerative | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_solver_host.sh` |
+| svm | `_mojolearn_svm_host.so` | `_mojolearn_svm` | svc, iforest | SVC, IsolationForest (svc) | tools/identity_break.py and tools/classical_host_gate.py (cpu-identity-gate.yml) | no, `bindings/build_svm_host.sh` |
+| trees | `_mojolearn_trees_host.so` | `_mojolearn_trees` | et-clf, et-reg | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_trees_host.sh` |<!--/fact-->
 
 ## The import question, measured
 

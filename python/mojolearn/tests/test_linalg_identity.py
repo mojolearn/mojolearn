@@ -10,7 +10,7 @@ WHAT THIS CLOSES
 `gemm/host_entry.mojo`, `bindings/_mojolearn_linalg.mojo` and
 `python/mojolearn/_linalg_impl.py` put the profile's product in reach of a
 Python caller. Nothing in that path compared its output against
-`gemm/checks/gemm_oracle.mojo::gemm_oracle`.
+`gemm/host/gemm_oracle.mojo::gemm_oracle`.
 
 The build-time smoke test in `bindings/build_linalg.sh` proves the kernels
 launch, that all five execution plans dispatch, that the three orientations
@@ -1009,7 +1009,7 @@ def arm_card(rep):
             "    MOJOLEARN_GEMM_CARD=/tmp/gemm_oracle.card ...\n"
             "\n"
             "That runs bench/gemm_card_main.mojo's ORACLE arm, which is\n"
-            "gemm/checks/gemm_oracle.mojo::gemm_oracle, the NORMATIVE v1\n"
+            "gemm/host/gemm_oracle.mojo::gemm_oracle, the NORMATIVE v1\n"
             "answer. It takes about a minute and needs no GPU.\n"
             "\n"
             "This is a FAILURE and not a skip. A silently skipped identity\n"

@@ -61,7 +61,7 @@ from checks.numerics import (
     identical_rsqrt,
     identical_silu,
 )
-from gemm.checks.gemm_oracle import contract_leaf_size, leaf_count
+from gemm.host.gemm_oracle import contract_leaf_size, leaf_count
 from training.checks.loss_oracle import (
     REDUCTION_MEAN,
     CeConfig,

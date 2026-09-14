@@ -5,8 +5,9 @@
 # tools/identity_break.py, a CPU beside the three committed GPU columns under
 # bench/results/identity_break/2026-09-13_three-columns/.
 #
-# What it proves on each runner, and nothing more. The two host bindings that
-# exist (bindings/build_byte_lm_host.sh, bindings/build_forest_host.sh) build
+# What it proves on each runner, and nothing more. Every host binding the
+# manifest declares (python/mojolearn/host_surface.py; nine families as of
+# 2026-09-14, each through bindings/build_<family>_host.sh) builds
 # ON THAT RUNNER with no accelerator target as the kernel matrix's CPU column
 # (checks/kernel_matrix.mojo COLUMN_CPU; each binding asserts it at build time
 # and reads it back). The checkout's package takes the CPU-only path
@@ -21,11 +22,11 @@
 #
 # COVERED_LANES is the list of identity_break lanes that have a CPU
 # implementation, and HOST_FAMILIES the phase 1 host bindings that serve them
-# (bindings/build_<family>_host.sh, routed by _backend._HOST_MODULES). Phase
-# 1 of the brief adds a lane and its family here as each host fit lands
-# (gemm-pinned over the linalg host binding first, 2026-09-13). Were the list
-# empty the "covered" steps would say so and run nothing; that is not a pass,
-# it is a statement. The smoke step runs regardless and FAILS if the run
+# (bindings/build_<family>_host.sh, routed by _backend._HOST_MODULES). Both
+# are READ FROM python/mojolearn/host_surface.py (the host surface manifest
+# lane, 2026-09-14); a host lane adds its family and lanes there and this
+# file follows. Were the list empty the "covered" steps would say so and run
+# nothing; that is not a pass, it is a statement. The smoke step runs regardless and FAILS if the run
 # produces no cell, a cell that is not the refusal by name, a vendor label
 # that is not derived, or an empty commit.
 #
@@ -49,15 +50,19 @@ on:
       - "bindings/_mojolearn_byte_lm_host.mojo"
       - "bindings/_mojolearn_forest_host.mojo"
       - "bindings/_mojolearn_*_host.mojo"
-      - "bindings/build_byte_lm_host.sh"
-      - "bindings/build_forest_host.sh"
+      - "bindings/build_host_family.sh"
       - "bindings/build_*_host.sh"
-      - "gemm/checks/gemm_oracle.mojo"
-      - "kde/checks/kde_oracle.mojo"
-      - "holtwinters/checks/hw_oracle.mojo"
-      - "solver/checks/cd_oracle.mojo"
+      - "python/mojolearn/host_surface.py"
+      - "gemm/host/gemm_oracle.mojo"
+      - "kde/host/kde_oracle.mojo"
+      - "holtwinters/host/hw_oracle.mojo"
+      - "solver/host/cd_oracle.mojo"
       - "solver/checks/profile_dot.mojo"
-      - "svm/checks/smo_oracle.mojo"
+      - "svm/host/smo_oracle.mojo"
+      - "bindings/host_helpers.mojo"
+      - "bindings/hostptr.mojo"
+      - "core/forest_host_predict.mojo"
+      - "core/gbdt_host_predict.mojo"
       - "hierarchy/checks/linkage_oracle.mojo"
       - "isolation_forest/checks/if_oracle.mojo"
       - "isolation_forest/impl/rng/xorwow.mojo"
@@ -66,10 +71,6 @@ on:
       - "extratrees/impl/randomforest/randomforest.mojo"
       - "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo"
       - "python/mojolearn/_labels.py"
-      - "bindings/host_helpers.mojo"
-      - "bindings/hostptr.mojo"
-      - "core/forest_host_predict.mojo"
-      - "core/gbdt_host_predict.mojo"
       - "training/byte_lm_host.mojo"
       - "training/byte_lm_host_backward.mojo"
       - "python/mojolearn/_backend.py"
@@ -85,44 +86,51 @@ on:
       - "bench/results/classical_host/**"
       - "tools/cpu_identity_gate_check.py"
       - "bench/results/identity_break/2026-09-13_three-columns/**"
+      - "bench/results/identity_break/2026-09-14_46-lanes/**"
+      - "bench/results/identity_break/2026-09-14_47-lanes/**"
       - "bench/results/forest_host/**"
       - ".github/workflows/cpu-identity-gate.yml"
 
 permissions: {}
 
 env:
-  # The identity_break lanes with a CPU implementation, comma separated, no
-  # spaces. A lane listed here must read STABLE on every fixture and
-  # IDENTICAL x4 against the three GPU columns; a lane not listed must read
-  # REFUSED by name. The INFERENCE-ONLY lanes (ols, ridge, tsvd, logistic,
-  # pca; the classical host inference lane, 2026-09-13) are deliberately
-  # NOT here: their train cell refuses by name on the CPU column, so
-  # `--require-columns 4` cannot hold on it. Their gate is
-  # tools/classical_host_gate.py over bench/results/classical_host/, the
-  # same shape as the forest host gate.
-  # agglomerative, et-clf, et-reg and iforest joined 2026-09-14 (phase 1b:
-  # the solver host binding's linkage_fit over the linkage oracle, the
-  # trees host binding over the device trainer restated on the host, the
-  # svm host binding's iforest_run over the isolation forest oracle); the
-  # ET model cells are the first model column a CPU column carries, and
-  # their RELOAD check runs through the trees host binding's et_predict.
-  COVERED_LANES: "gemm-pinned,kde,holtwinters,lasso,elasticnet,svc,agglomerative,et-clf,et-reg,iforest"
-  # The phase 1 host binding families, space separated: each is built by
-  # bindings/build_<family>_host.sh (a two-line wrapper naming its family
-  # to bindings/build_host_family.sh since 2026-09-14) into
-  # MOJOLEARN_<FAMILY>_HOST_OUTDIR (the production set under
-  # python/mojolearn/host/, then the sabotage set under runner.temp), read
-  # back as the CPU column, and named in host.families.
-  HOST_FAMILIES: "core linalg estimators tsa solver svm trees"
-  # The classical host gate recordings (one directory per GPU box).
-  CLASSICAL_RECORDED: "bench/results/classical_host/2026-09-13-apple-m4 bench/results/classical_host/2026-09-14-nvidia-h100 bench/results/classical_host/2026-09-14-amd-mi300x"
-  # The same list as the read-back's --binding arguments.
-  HOST_BINDINGS: "_mojolearn_core_host _mojolearn_linalg_host _mojolearn_estimators_host _mojolearn_tsa_host _mojolearn_solver_host _mojolearn_svm_host _mojolearn_trees_host"
-  # The three committed GPU columns the CPU column is diffed against.
-  GPU_COLUMNS: >-
-    bench/results/identity_break/2026-09-13_three-columns/apple-m4.json
-    bench/results/identity_break/2026-09-13_three-columns/nvidia-h100-sm_90a.json
-    bench/results/identity_break/2026-09-13_three-columns/amd-mi325x-gfx942.json
+  # THE LISTS THIS GATE RUNS ON ARE NOT WRITTEN HERE. Since the host surface
+  # manifest lane (2026-09-14) they come from python/mojolearn/host_surface.py,
+  # the one declaration of the CPU surface, in the "CPU surface manifest"
+  # step below, which writes to GITHUB_ENV:
+  #   COVERED_LANES       the identity_break lanes with a CPU TRAINING path,
+  #                       comma separated. A lane listed must read STABLE on
+  #                       every fixture and IDENTICAL x4 against the three
+  #                       GPU columns; a lane not listed must read REFUSED by
+  #                       name. The INFERENCE-ONLY lanes (ols, ridge, tsvd,
+  #                       logistic, pca, pca-whiten, knn, knn-clf, knn-reg)
+  #                       are deliberately not there: their train cell
+  #                       refuses by name on the CPU column, so
+  #                       `--require-columns 4` cannot hold on it. Their gate
+  #                       is tools/classical_host_gate.py over
+  #                       CLASSICAL_RECORDED, the same shape as the forest
+  #                       host gate.
+  #   HOST_FAMILIES       the routed (phase 1) families, space separated; each
+  #                       is built by bindings/build_<family>_host.sh (a shim
+  #                       over bindings/build_host_family.sh) into
+  #                       MOJOLEARN_<FAMILY>_HOST_OUTDIR, read back as the CPU
+  #                       column, and named in host.families.
+  #   HOST_BINDINGS       the routed families' basenames, space separated.
+  #   ALL_HOST_BINDINGS   every host binding basename, comma separated (the
+  #                       byte LM and forest bindings included), the
+  #                       read-back and column checks' --binding list.
+  #   CLASSICAL_RECORDED  the classical host gate recordings, space separated.
+  #   CLASSICAL_GPU_COLUMNS
+  #                       the three 46-lane GPU columns the classical gate
+  #                       compares each host identity hash against.
+  #   GPU_COLUMNS         the three committed GPU columns the CPU TRAINING
+  #                       column is diffed against (--require-columns 4). The
+  #                       record must not lag the surface: run 34832840859 at
+  #                       7bf4f4cc9 failed "27 short" because the 2026-09-13
+  #                       record predates the kde and svc model cells and the
+  #                       holtwinters infer cells; the manifest names the
+  #                       2026-09-14 47-lane record taken at that commit.
+  MOJOLEARN_HOST_SURFACE: python/mojolearn/host_surface.py
 
 jobs:
   gate:
@@ -184,6 +192,7 @@ jobs:
             !/bench/results/identity_break/*
             /bench/results/identity_break/2026-09-13_three-columns/
             /bench/results/identity_break/2026-09-14_46-lanes/
+            /bench/results/identity_break/2026-09-14_47-lanes/
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
@@ -223,6 +232,29 @@ jobs:
           python3 -m pip install --quiet numpy
           ls bench/results/forest_host/ bench/results/identity_break/2026-09-13_three-columns/
 
+      # ONE STEP reads every list from the manifest. It runs the file by path
+      # because the package cannot import yet (no binding is built on this
+      # runner); `python3 -m mojolearn.host_surface` says the same thing
+      # where it can. A manifest that names a recording directory that is
+      # not checked out fails here, before a build is spent.
+      - name: CPU surface manifest
+        run: |
+          set -o pipefail
+          manifest=$MOJOLEARN_HOST_SURFACE
+          {
+            echo "COVERED_LANES=$(python3 $manifest --covered-lanes)"
+            echo "HOST_FAMILIES=$(python3 $manifest --routed-families)"
+            echo "HOST_BINDINGS=$(python3 $manifest --routed-bindings)"
+            echo "ALL_HOST_BINDINGS=$(python3 $manifest --bindings --sep ,)"
+            echo "CLASSICAL_RECORDED=$(python3 $manifest --classical-recorded)"
+            echo "CLASSICAL_GPU_COLUMNS=$(python3 $manifest --classical-gpu-columns)"
+            echo "GPU_COLUMNS=$(python3 $manifest --training-gpu-columns)"
+          } | tee -a "$GITHUB_ENV" | tee "$GATE_OUT/manifest.txt"
+          python3 $manifest --json > "$GATE_OUT/host_surface.json"
+          for d in $(python3 $manifest --classical-recorded) $(python3 $manifest --classical-gpu-columns) $(python3 $manifest --training-gpu-columns); do
+            [ -e "$d" ] || { echo "manifest names $d, which is not in this checkout: the record lags the surface" >&2; exit 1; }
+          done
+
       - uses: prefix-dev/setup-pixi@v0.10.1
         with:
           run-install: true
@@ -257,9 +289,8 @@ jobs:
         run: |
           set -o pipefail
           bindings=""
-          for b in $HOST_BINDINGS; do bindings="$bindings --binding $b"; done
-          python3 tools/cpu_identity_gate_check.py readback \
-            --binding _mojolearn_byte_lm_host --binding _mojolearn_forest_host $bindings 2>&1 \
+          for b in ${ALL_HOST_BINDINGS//,/ }; do bindings="$bindings --binding $b"; done
+          python3 tools/cpu_identity_gate_check.py readback $bindings 2>&1 \
             | tee "$GATE_OUT/readback.log"
 
       # The fixture directories split by what expected.json says. Only
@@ -316,10 +347,9 @@ jobs:
         if: always()
         run: |
           set -o pipefail
-          python3 tools/classical_host_gate.py check $CLASSICAL_RECORDED \
-            --gpu-column bench/results/identity_break/2026-09-14_46-lanes/apple-m4.json \
-            --gpu-column bench/results/identity_break/2026-09-14_46-lanes/nvidia-h100-sm_90a.json \
-            --gpu-column bench/results/identity_break/2026-09-14_46-lanes/amd-mi300x-gfx942.json \
+          columns=""
+          for c in $CLASSICAL_GPU_COLUMNS; do columns="$columns --gpu-column $c"; done
+          python3 tools/classical_host_gate.py check $CLASSICAL_RECORDED $columns \
             --report "$GATE_OUT/classical_gate_prod.json" 2>&1 | tee "$GATE_OUT/classical_gate_prod.log"
 
       # The tool loads on this CPU and the three committed GPU columns still
@@ -372,7 +402,7 @@ jobs:
             --json "$GATE_OUT/cpu-smoke-${{ matrix.slot }}.json" 2>&1 | tee "$GATE_OUT/cpu_smoke.log"
           python3 tools/cpu_identity_gate_check.py column "$GATE_OUT/cpu-smoke-${{ matrix.slot }}.json" \
             --covered "$SMOKE_LANES" --commit "$MOJOLEARN_COMMIT" \
-            --binding "_mojolearn_byte_lm_host,_mojolearn_forest_host,$(echo $HOST_BINDINGS | tr ' ' ,)" 2>&1 | tee "$GATE_OUT/cpu_smoke_check.log"
+            --binding "$ALL_HOST_BINDINGS" 2>&1 | tee "$GATE_OUT/cpu_smoke_check.log"
 
       # THE FOURTH COLUMN, THE COVERED LANES. Every fixture, two repeats, then
       # the four-way diff with --require-columns 4 on exactly those lanes.
@@ -391,7 +421,7 @@ jobs:
             --json "$GATE_OUT/cpu-${{ matrix.slot }}.json" 2>&1 | tee "$GATE_OUT/cpu_column.log"
           python3 tools/cpu_identity_gate_check.py column "$GATE_OUT/cpu-${{ matrix.slot }}.json" \
             --covered "$COVERED_LANES" --commit "$MOJOLEARN_COMMIT" \
-            --binding "_mojolearn_byte_lm_host,_mojolearn_forest_host,$(echo $HOST_BINDINGS | tr ' ' ,)" 2>&1 | tee "$GATE_OUT/cpu_column_check.log"
+            --binding "$ALL_HOST_BINDINGS" 2>&1 | tee "$GATE_OUT/cpu_column_check.log"
           python3 tools/identity_break.py --diff $GPU_COLUMNS "$GATE_OUT/cpu-${{ matrix.slot }}.json" \
             --require-columns 4 --lanes "$COVERED_LANES" 2>&1 | tee "$GATE_OUT/diff_four_columns.txt"
 

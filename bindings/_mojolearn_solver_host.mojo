@@ -6,7 +6,7 @@ docs/lanes/BRIEF_cpu_training_2026-09-13.md sections 1.1 lasso, elasticnet
 and 3.2).
 
 HOST ONLY. No DeviceContext, no kernel launch, no GPU. The fit is
-`solver/checks/cd_oracle.mojo::cd_oracle_fit` at `profile=True`, "cdFit on
+`solver/host/cd_oracle.mojo::cd_oracle_fit` at `profile=True`, "cdFit on
 the host, stage for stage", the arm `check_cd_device_equals_oracle` holds
 the device to bit for bit under IDENTICAL; every row-length reduction in
 it is `gemm_oracle_cell` at the contract's leaf size. The predict is
@@ -57,7 +57,7 @@ from checks.kernel_matrix import (
     column_name,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, ftz
-from gemm.checks.gemm_oracle import (
+from gemm.host.gemm_oracle import (
     GEMM_ORACLE_HOST_SABOTAGE,
     OP_TN,
     gemm_oracle,
@@ -73,7 +73,7 @@ from hierarchy.impl.cluster.detail.connectivities import (
     DISTANCE_L2_SQRT_EXPANDED,
     PAIRWISE_MAX_ROWS,
 )
-from solver.checks.cd_oracle import cd_oracle_fit
+from solver.host.cd_oracle import cd_oracle_fit
 
 
 def _index(value: PythonObject) raises -> Int:
@@ -114,7 +114,7 @@ def solver_host_sabotage_binding() raises -> PythonObject:
     """Whether this binary walks every GEMM leaf descending on purpose
     (-D MOJOLEARN_HOST_SABOTAGE=1, the gate's negative control; every
     reduction of the CD oracle is a gemm_oracle_cell, so the arm reaches
-    this family through gemm/checks/gemm_oracle.mojo)."""
+    this family through gemm/host/gemm_oracle.mojo)."""
     return PythonObject(GEMM_ORACLE_HOST_SABOTAGE)
 
 
