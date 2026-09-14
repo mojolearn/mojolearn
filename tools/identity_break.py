@@ -898,8 +898,8 @@ def _(ml, X, yc, yr, Xh=None):
 @lane("arima")
 def _(ml, X, yc, yr, Xh=None):
     """Four series of 512 observations, the first four columns of the
-    fixture, transposed. ARIMA's docstring says the three-vendor card
-    covers the filter and the fit is one vendor. Like holtwinters there
+    fixture, transposed. The fit through this lane is IDENTICAL x3 since the
+    136-lane record. Like holtwinters there
     are no new rows to feed: the held-out axis is the horizon. The train
     column keeps forecast(24); the infer column (2026-09-14) asks for
     FORECAST_HORIZON steps through both public out-of-sample entries,

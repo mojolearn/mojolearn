@@ -60,14 +60,18 @@ and NVIDIA and AMD MI325X (`bench/results/e1/CERT_2026-08-31.md`). That card
 is `arima/arima_main.mojo`, which is the Kalman filter, the Jones transform
 and their stages. THE FIT IS NOT IN IT. The fit landed after that leg and
 the card was re-emitted BYTE IDENTICAL, which says the fit moved no stage
-the card records; it does not say `fit` has ever run on a second vendor,
-because it has not. `fit`'s own gates are 16 of 16 on ONE Apple M4 in both
+the card records. `fit`'s own gates are 16 of 16 on ONE Apple M4 in both
 tiers, and THIS class's own gate,
 `python/mojolearn/tests/test_arima_surface.py`, printed green on that same
 one box on 2026-09-02, 88 checks and 0 failed in each of its two tier
-processes. That is still ONE VENDOR. A three-vendor run THROUGH THIS
-SURFACE is OWED and nothing here may be described as certified across
-vendors until it exists.
+processes. The three-vendor run THROUGH THIS SURFACE came later: the
+identity harness fits and forecasts through this class, and its 136-lane
+record at 4048e1b51
+(bench/results/identity_break/2026-09-14_136-lanes/diff.three-columns.txt)
+reads IDENTICAL x3 on all 27 training cells of the arima, arima-011 and
+arima-seasonal-c lanes and on their infer cells, across the Apple M4, an
+NVIDIA H100 and an AMD MI325X. That covers those three orders and the
+harness fixtures, not every order this class accepts.
 
 That property, where it exists at all, belongs to
 `MOJOLEARN_NUMERIC_MODE=identical`, which is the default. The FAST build,
