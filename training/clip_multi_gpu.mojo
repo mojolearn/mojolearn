@@ -97,6 +97,9 @@ def parallel_clip_grad_norm_host(
         sums.append(tensors[j].sumsq)
         counts[owner] += n
     var sumsq = _upload_f32(ctx,rebind[MutPointer[Float32, MutUntrackedOrigin]](sums.unsafe_ptr()),n_tensors)
+    # The untracked pointer does not retain its List through the async copy.
+    ctx.synchronize()
+    _ = sums^
     var norms = _zeros(ctx,n_tensors)
     var total_cell = _zeros(ctx,1)
     var out2 = _zeros(ctx,2)
@@ -124,5 +127,7 @@ def parallel_clip_grad_norm_host(
     _ = out2^
     _ = ws^
     copy_f32(result.unsafe_ptr(),grad_ptr,len(result))
+    _ = result^
     copy_f32(info.unsafe_ptr(),info_ptr,2)
+    _ = info^
     return offsets[n_tensors]
