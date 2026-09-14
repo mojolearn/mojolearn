@@ -171,7 +171,9 @@ from .tokenizer import GPT2Tokenizer
 # touched. Compile-checked on one Apple M4; no box has run them through
 # the Python door, and their identity_break lanes and three columns are
 # owed (docs/lanes/LANE_BODY_*.py). IVF and the embedding lane stay out:
-# IVF is prepared in `_ivf_impl.py` and waits on NVIDIA and AMD evidence.
+# IVF is prepared in `_ivf_impl.py`; its check now has Apple, NVIDIA and AMD
+# runs with one IDENTICAL card (bench/results/ivf_embed_km_legs_2026-09-14/),
+# and exposing it is a shipping decision not taken in that round.
 from ._cholesky_impl import Cholesky
 from . import kernel_methods
 from .kernel_methods import KernelRidge, Nystroem, RBFSampler
@@ -403,8 +405,8 @@ _NOT_YET = {
     # claim-surface census, docs/lanes/BRIEF_claim_surface_census_2026-09-14.md
     # section 4). Each stops at its last gated stage; the door is a binding,
     # a class here, an identity_break lane and three vendor columns.
-    "IVFIndex": "ivf/checks/ivf_check.mojo (layout sabotage and large-k gates; Apple evidence only, no NVIDIA or AMD leg)",
-    "Embedding": "embedding/checks/embedding_check.mojo (Apple and AMD card, no NVIDIA leg, no sabotage arm ever built)",
+    "IVFIndex": "ivf/checks/ivf_check.mojo (layout sabotage and large-k gates; ALL OK with one IDENTICAL card on Apple M4, NVIDIA H100 and AMD MI300X at 171752af4; no binding, class door or identity_break lane)",
+    "Embedding": "embedding/checks/embedding_check.mojo (clause (a) card byte-identical on Apple M4, NVIDIA H100 and AMD MI300X; sabotage arms run on all three, eleven of sixteen shown to bite on NVIDIA and AMD and ten on Apple, bench/results/ivf_embed_km_legs_2026-09-14/README.md)",
 }
 
 

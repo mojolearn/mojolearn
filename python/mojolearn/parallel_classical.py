@@ -380,3 +380,27 @@ def monte_carlo_integrate(integrand, lower, upper, n_samples, *, devices=(0,), *
     """
     return _resample_parallel('monte_carlo_integrate', devices,
                               dict(kwargs, integrand=integrand, lower=lower, upper=upper, n_samples=n_samples))
+
+
+def fit_hdbscan(estimator, X, *, devices=(0,)):
+    """HDBSCAN with distributed core-distance k-NN rows and dense distance rows.
+
+    The k-NN query rows use the neighbors row driver and the m x m pairwise
+    distance matrix uses the hierarchy row driver, each with its original
+    per-row arithmetic and byte gather. The mutual reachability cells, the
+    Boruvka MST, the dendrogram, the condensed hierarchy and cluster selection
+    stay on the root in their original order.
+    """
+    from .hdbscan import HDBSCAN
+    if type(estimator) is not HDBSCAN:
+        raise TypeError('fit_hdbscan requires mojolearn.HDBSCAN')
+    if getattr(estimator, 'numeric_mode', None) not in (None, 'identical'):
+        raise ValueError('parallel HDBSCAN requires IDENTICAL numeric mode')
+    X, _ = as_f32_c(X, ndim=2, name='X')
+    pool = DevicePool(devices, cooperative=True)
+    try:
+        result = pool.map([('hdbscan_fit', estimator, (X,))])[0]
+    finally:
+        pool.close()
+    estimator.__dict__ = result.__dict__.copy()
+    return estimator
