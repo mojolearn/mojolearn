@@ -74,7 +74,6 @@ from mixture.checks.estep import (
     GMM_ELEM_TPB,
     GMM_PROFILE,
     GMM_ROW_TPB,
-    gmm_e_step,
     gmm_estep_gemm_workspace_floats,
     gmm_estep_scratch_floats,
     gmm_convergence_change,
@@ -84,6 +83,7 @@ from mixture.checks.estep import (
     gmm_neg_inf,
     gmm_predict_labels,
 )
+from mixture.multi_gpu import gmm_e_step_dispatch
 from mixture.checks.gmm_sabotage import (
     GMM_SAB_NONE,
     GMM_SAB_TOL_ULP,
@@ -821,7 +821,7 @@ def gaussian_mixture_fit(
         var tag = gmm_iter_prefix(card_prefix, it)
         var prev = lower_bound
 
-        gmm_e_step(
+        gmm_e_step_dispatch(
             ctx, dx, means, prec, linv, log_det_chol, log_weights,
             escratch, gws, mahal, wlp, rowmax, lse, logresp, meanll,
             n, d, ncomp, trace, tag, elem_tpb, row_tpb, sabotage,
@@ -1032,7 +1032,7 @@ def gaussian_mixture_score_samples(
     )
     ctx.synchronize()
 
-    gmm_e_step(
+    gmm_e_step_dispatch(
         ctx, dx, dmeans, dprec, dprec, dlogdet, dlw, escratch, gws,
         mahal, wlp, rowmax, lse, logresp, meanll, n_samples, d, ncomp,
         trace, card_prefix, elem_tpb, row_tpb, GMM_SAB_NONE,
@@ -1115,7 +1115,7 @@ def gaussian_mixture_predict_proba(
     )
     ctx.synchronize()
 
-    gmm_e_step(
+    gmm_e_step_dispatch(
         ctx, dx, dmeans, dprec, dprec, dlogdet, dlw, escratch, gws,
         mahal, wlp, rowmax, lse, logresp, meanll, n_samples, d, ncomp,
         trace, card_prefix, elem_tpb, row_tpb, GMM_SAB_NONE,
@@ -1214,7 +1214,7 @@ def gaussian_mixture_predict(
     )
     ctx.synchronize()
 
-    gmm_e_step(
+    gmm_e_step_dispatch(
         ctx, dx, dmeans, dprec, dprec, dlogdet, dlw, escratch, gws,
         mahal, wlp, rowmax, lse, logresp, meanll, n_samples, d, ncomp,
         trace, card_prefix, elem_tpb, row_tpb, GMM_SAB_NONE,

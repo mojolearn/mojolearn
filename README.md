@@ -251,7 +251,7 @@ estimators: Apple M4, NVIDIA H100 and AMD MI300X recordings of the first
 five, 45 fixtures each, and Apple M4 recordings of kernel density, SVC,
 whitened PCA and the three k-NN classes, 54 fixtures each, reproduced on
 the CPU path, [fixtures](bench/results/classical_host/)). Training on a CPU:
-<!--fact:host_training_lanes-->pinned GEMM, kernel density, Holt-Winters, lasso, elasticnet, SVC, agglomerative clustering, the Extra Trees classifier, the Extra Trees regressor, the isolation forest, nearest neighbors, the k-NN classifier, the k-NN regressor, PCA, whitened PCA, truncated SVD, linear regression, ridge, DBSCAN, k-means, the metrics, spectral clustering, the standard scaler, the min-max scaler, logistic regression, the random forest classifier, the random forest regressor, k-means with a random start, k-means from given centroids, weighted k-means, the standard scaler without centering, the standard scaler without scaling, the clipped min-max scaler, spectral clustering on a precomputed affinity, the Gaussian process with an RBF kernel, the Gaussian process with a Matern kernel at nu 0.5, the Gaussian process with a Matern kernel at nu 1.5, the Gaussian process with an ARD Matern kernel at nu 2.5, ARIMA, differenced ARIMA and seasonal ARIMA<!--/fact-->,
+<!--fact:host_training_lanes-->pinned GEMM, kernel density, Holt-Winters, lasso, elasticnet, SVC, agglomerative clustering, the Extra Trees classifier, the Extra Trees regressor, the isolation forest, nearest neighbors, the k-NN classifier, the k-NN regressor, PCA, whitened PCA, truncated SVD, linear regression, ridge, DBSCAN, k-means, the metrics, spectral clustering, the standard scaler, the min-max scaler, logistic regression, the random forest classifier, the random forest regressor, k-means with a random start, k-means from given centroids, weighted k-means, the standard scaler without centering, the standard scaler without scaling, the clipped min-max scaler, spectral clustering on a precomputed affinity, the Gaussian process with an RBF kernel, the Gaussian process with a Matern kernel at nu 0.5, the Gaussian process with a Matern kernel at nu 1.5, the Gaussian process with an ARD Matern kernel at nu 2.5, gradient boosting on symmetric trees with the Logloss loss, gradient boosting on symmetric trees with the RMSE loss, gradient boosting on depthwise trees with the Logloss loss, gradient boosting on lossguide trees with the Logloss loss, ARIMA, differenced ARIMA and seasonal ARIMA<!--/fact-->,
 the first six identical to the three GPU columns on seven CPUs
 ([gate](.github/workflows/cpu-identity-gate.yml)) and, since 2026-09-14,
 agglomerative clustering, Extra Trees (classifier and regressor, the saved
@@ -275,7 +275,7 @@ over the token count. From 0.8.6 every one of these host bindings ships in both
 wheels (0.8.5 and earlier carry only the byte LM's); each also builds from
 source with `bindings/build_*_host.sh` (a shim over
 `bindings/build_host_family.sh <family>`). Every lane not named here has
-no CPU path at all: <!--fact:no_cpu_path-->UMAP, the neural blocks and gradient boosting training<!--/fact-->.
+no CPU path at all: <!--fact:no_cpu_path-->UMAP, the neural blocks and gradient boosting training other than symmetric trees with the Logloss or RMSE loss and depthwise and lossguide trees with the Logloss loss<!--/fact-->.
 Run the diagnostic command before depending on a new machine:
 
 ```sh

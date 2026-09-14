@@ -2,8 +2,10 @@
 # docs/lanes/BRIEF_cpu_training_2026-09-13.md section 3.4) on GitHub's free
 # standard runners: ARM64 Linux (Azure Cobalt 100), x86-64 Linux and Apple M1
 # macOS, the byte LM CPU gate's matrix. This is the FOURTH COLUMN of
-# tools/identity_break.py, a CPU beside the three committed GPU columns under
-# bench/results/identity_break/2026-09-13_three-columns/.
+# tools/identity_break.py, a CPU beside the three committed GPU columns
+# python/mojolearn/host_surface.py names as TRAINING_GPU_COLUMNS (the record
+# directory the GPU_COLUMNS step reads; 2026-09-13_three-columns was the
+# first, it is not the one diffed now).
 #
 # What it proves on each runner, and nothing more. Every host binding the
 # manifest declares (python/mojolearn/host_surface.py lists the families, a
@@ -14,7 +16,8 @@
 # (vendor() is cpu). The forest host binding reproduces every RECORDED
 # forest and GBDT prediction (tools/forest_host_gate.py check) and a sabotage
 # build of it is caught. tools/identity_break.py loads on the CPU, diffs the
-# three committed GPU columns to IDENTICAL x3 on all 252 cells, and, run on
+# three committed GPU columns to IDENTICAL x3 on every train cell (the count
+# the diff step greps), and, run on
 # this runner, writes a CPU column whose provenance is derived (vendor
 # cpu-<cpu model slug>, commit = the workflow's SHA, host.column cpu) and
 # whose cells read REFUSED BY NAME for every lane without a CPU
@@ -94,6 +97,10 @@ on:
       - "ensemble/host/rf_oracle.mojo"
       - "gaussian_process/host/gpr_oracle.mojo"
       - "cholesky/host/chol_oracle.mojo"
+      - "gbdt/host/gbdt_oracle.mojo"
+      - "gbdt/host/gbdt_oracle_rmse.mojo"
+      - "gbdt/host/gbdt_oracle_depthwise.mojo"
+      - "gbdt/host/gbdt_oracle_lossguide.mojo"
       - "arima/host/arima_oracle.mojo"
       - "arima/impl/tsa/arima_common.mojo"
       - "spectral/checks/symmetric_eig_host.mojo"
@@ -477,8 +484,10 @@ jobs:
       # in qn_oracle by walking the solver's dot chains descending, in
       # rf_oracle by drawing every bootstrap row from the next Philox
       # subsequence, in gpr_oracle by walking the scaled distance's
-      # feature axis descending, and in arima_oracle by doubling the
-      # finite-difference step);
+      # feature axis descending, in gbdt_oracle by adding 1.0 to the
+      # Newton leaf walker's Hessian regularizer, in gbdt_oracle_rmse by
+      # adding 1.0 to the searcher's leaf regularizer, and in arima_oracle by
+      # doubling the finite-difference step);
       # each further phase 1
       # binding names the fold its arm moves), loaded through
       # MOJOLEARN_HOST_DIR with MOJOLEARN_HOST_ALLOW_SABOTAGE=1, run on the

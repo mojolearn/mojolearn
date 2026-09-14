@@ -191,7 +191,12 @@ same values are reindexed by the corpus gate, not recomputed.
 COMPOSITION invariance, a row's bits identical whether its sequence shares
 the launch with 0, 1 or 2 others (the clause vLLM's batch-invariant mode
 cannot give Mamba, `supports_batch_invariance()` is False for its Mamba
-backends); (d) decode == prefill bitwise at every position; (e) the row-39
+backends; clause (c) is opt-in, `MOJOLEARN_MAMBA_CHECK_CLAUSE_C=1`, and as of
+2026-09-14 the committed logs under `bench/results` carry its SKIPPED line
+60 times and its PASS line never, so the gate exists and its record is
+owed; the public `Mamba1Block.forward` is asked the same question
+by the `batch` part of `tools/identity_break.py` since 4230ab5b0, first
+record owed); (d) decode == prefill bitwise at every position; (e) the row-39
 audit of section 6; (f) every clause above falsifiable by a named sabotage
 that fails a gate. `mamba/checks/mamba_check.mojo` is the gate file;
 FAST-mode arms of (a) are RECORDED, not asserted, where they are

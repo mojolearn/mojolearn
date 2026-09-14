@@ -1,0 +1,54 @@
+29902 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1b68c0000000, nodemask=2)
+/root/mojolearn/training/checks/forest_pool_check.mojo:31:41: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        total = forest_add(total, leaves[node * Int(outputs) + item % Int(outputs)])
+                                  ~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/training/checks/forest_pool_check.mojo:32:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    destination[index] = total
+    ~~~~~~~~~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/forest_pool_check.mojo:10:
+Imported from /root/mojolearn/core/forest_inference_model.mojo:17:
+/root/mojolearn/core/forest_inference_pool.mojo:321:54: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                staged[first + i] = host.unsafe_ptr()[i]
+                                    ~~~~~~~~~~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/forest_pool_check.mojo:10:
+Imported from /root/mojolearn/core/forest_inference_model.mojo:17:
+/root/mojolearn/core/forest_inference_pool.mojo:327:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            output[i] = staged[i]
+            ~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/forest_pool_check.mojo:10:
+Imported from /root/mojolearn/core/forest_inference_model.mojo:17:
+/root/mojolearn/core/forest_inference_pool.mojo:204:44: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            result.append(host.unsafe_ptr()[i])
+                          ~~~~~~~~~~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/forest_pool_check.mojo:9:
+/root/mojolearn/core/forest_inference.mojo:171:5: warning: '@parameter for' is deprecated; use 'comptime for'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/training/checks/forest_pool_check.mojo:9:
+/root/mojolearn/core/forest_inference.mojo:178:13: warning: '@parameter for' is deprecated; use 'comptime for'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /root/mojolearn/training/checks/forest_pool_check.mojo:9:
+/root/mojolearn/core/forest_inference.mojo:184:5: warning: '@parameter for' is deprecated; use 'comptime for'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/training/checks/forest_pool_check.mojo:9:
+/root/mojolearn/core/forest_inference.mojo:191:13: warning: '@parameter for' is deprecated; use 'comptime for'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /root/mojolearn/training/checks/forest_pool_check.mojo:9:
+/root/mojolearn/core/forest_inference.mojo:197:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+PASS forest pool serial-order witness True 97 3
+PASS forest pool serial-order witness False 97 3
