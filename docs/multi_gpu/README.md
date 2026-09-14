@@ -300,4 +300,8 @@ only after a successful call. The fitted estimator's diagnostics are untouched.
 The full reference index is replicated; this is query-work partitioning, not
 pooled index memory. Density `score` is deliberately outside this API; the
 original host summation can consume the complete ordered `score_samples` output.
-Cloud qualification for this batch is pending.
+The two-H100 cloud gate passed 64 cases, including duplicate references, ragged
+radius results, self edges, weighted/multi-target predictions, all six density
+kernels, failed worker waves and restart. Receipts are in
+`bench/results/multi_gpu/2026-09-14/neighbors-h100/`. This is not new
+cross-vendor or pooled-index capacity qualification.

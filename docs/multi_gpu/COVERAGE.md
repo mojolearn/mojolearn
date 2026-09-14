@@ -38,10 +38,10 @@ and histogram paths have two-H100 evidence only.
 | ElasticNet / Lasso | Original dot leaves across GPUs; cyclic fit and FP32 oracle gates pass on two H100s | Resident shard reuse; root-state partitioning and cross-vendor qualification |
 | SVC / SVR | Linear/RBF kernel rows during fit/prediction; two-H100 cell/full-fit gates pass | Root-state partitioning, broader configurations and cross-vendor qualification |
 | PCA / TruncatedSVD | Original Gram chunks at 1..128 features; covariance PCA and SVD gates pass | Other solver paths, larger widths and root-state partitioning |
-| NearestNeighbors / RadiusNeighbors | None | Query/reference tiles, stable global neighbor ordering |
-| KNeighborsClassifier / KNeighborsRegressor | None | Above plus original voting and weighting order |
+| NearestNeighbors / RadiusNeighbors | Whole-query shards; brute/RBC KNN and ragged radius gates pass on two H100s | Pooled reference index; larger shapes/metrics and cross-vendor qualification |
+| KNeighborsClassifier / KNeighborsRegressor | Whole-query shards with original voting/weighting; single/multi-target two-H100 gates pass | Pooled reference index; broader configurations and cross-vendor qualification |
 | DBSCAN | None | Distance tiles and global connectivity/label semantics |
-| KernelDensity | None | Query tiles with original reference-row reduction |
+| KernelDensity | Whole-query shards; six kernels with/without positive weights pass on two H100s | Pooled reference index; broader metrics/shapes and cross-vendor qualification |
 | AgglomerativeClustering | None | Distance tiles and global merge/tie order |
 | SpectralClustering | None | Affinity tiles, eigensolver and downstream clustering |
 | UMAP | None | Neighbor graph and globally ordered optimizer/RNG updates |
