@@ -129,6 +129,16 @@ def execute(request):
             raise ImportError('rebuild estimators binding for parallel GLM gradients')
         state.fit(*args)
         return state
+    if operation == 'neighbor_query':
+        from .parallel_neighbors import _methods
+        X, method, kwargs = args
+        if method not in _methods(state):
+            raise ValueError('invalid neighbors/density query operation')
+        result = getattr(state, method)(X, **kwargs)
+        diagnostics = {name: getattr(state, name) for name in
+                       ('used_query_tile_', 'n_candidate_distances_')
+                       if hasattr(state, name)}
+        return result, diagnostics
     if operation == 'scaler_fit':
         from .preprocessing import MinMaxScaler, StandardScaler
         name, params = state

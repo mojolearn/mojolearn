@@ -272,3 +272,32 @@ and a RunPod environment marker and should only be invoked on the pod:
 
 Every report's scope is limited to the hardware, inputs and configurations
 actually executed. A passing same-vendor replay gate is not a three-vendor card.
+
+### Neighbors and density queries
+
+`ParallelQueries` in `mojolearn.parallel_neighbors` accepts fitted
+`NearestNeighbors`, `RadiusNeighbors`, `KNeighborsClassifier`,
+`KNeighborsRegressor`, and `KernelDensity` instances in IDENTICAL mode.
+These estimators store reference data during fit; GPU work occurs at query time.
+
+```python
+from mojolearn.parallel_neighbors import ParallelQueries
+with ParallelQueries(model, devices=(0, 1), rows_per_shard=128) as queries:
+    result = queries.query(X_query, method="kneighbors")
+```
+
+Admitted methods are `kneighbors`, `radius_neighbors`, `predict`,
+`predict_proba`, or `score_samples`, as appropriate to the estimator. Query
+keywords pass to the original method. Radius queries with `X=None` retain self
+edges. Whole query rows retain the original complete reference traversal,
+selection, voting and density reduction; results are joined by copying bytes
+in input order. Ragged radius lists and multi-target probabilities retain their
+original structure. Workers persist until `close()` or context exit. Calls on
+one driver must be serialized. Each call sends the current fitted estimator.
+
+`last_shards_` records actual row ranges, devices and native query diagnostics
+only after a successful call. The fitted estimator's diagnostics are untouched.
+The full reference index is replicated; this is query-work partitioning, not
+pooled index memory. Density `score` is deliberately outside this API; the
+original host summation can consume the complete ordered `score_samples` output.
+Cloud qualification for this batch is pending.
