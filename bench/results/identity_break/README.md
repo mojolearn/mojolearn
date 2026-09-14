@@ -6,6 +6,28 @@ the shipped default are under `2026-09-13_three-columns/` (its README names
 the boxes and the commits). The older files at this level predate the infer
 and model columns and diff on the train column only.
 
+## The infer column on the lanes that have no held-out rows (2026-09-14)
+
+The newest three-vendor record is `2026-09-14_46-lanes/` (414 train and 459
+infer/model cells IDENTICAL). Nine of its 46 lanes record `n/a:<reason>` in
+the infer column, and each reason was checked against the public class on
+2026-09-14:
+
+| lane | infer | why, verified in the class |
+|---|---|---|
+| kmeans | `n/a:no-predict` | `cluster.py::KMeans` has `fit` and `fit_predict` only, no `predict` or `transform` |
+| dbscan, agglomerative | `n/a:transductive` | `fit` and `fit_predict` only; the labels belong to the fitted rows |
+| spectral | `n/a:transductive` | `SpectralClustering.predict` raises `NotImplementedError` by design |
+| gemm-pinned, metrics | `n/a:function` | not estimators |
+| holtwinters, arima | a hash since 2026-09-14 | `forecast(h)` (and ARIMA's `predict(n_obs, n_obs + h)`) IS the out-of-sample output; the held-out axis is time, `FORECAST_HORIZON` = 512 steps, the fitted length; the train column keeps its 24 steps |
+| iforest | a hash since 2026-09-13 | `score_samples` and `predict` on the held-out rows; IDENTICAL x3 in `2026-09-14_46-lanes/`; no save/load, so `model` is `n/a:no-save` |
+
+A JSON recorded before the forecast probes carries `n/a:forecast` on those
+18 cells and reads ONE-COLUMN, never DIVERGENT, against a newer one. The
+Apple column of the two probes is under `2026-09-14_infer-probes/`; the
+NVIDIA and AMD columns are owed (the leg commands are in that directory's
+README).
+
 ## The fourth column, a CPU (the CPU training lane, 2026-09-13)
 
 `.github/workflows/cpu-identity-gate.yml` runs the tool on the seven free
