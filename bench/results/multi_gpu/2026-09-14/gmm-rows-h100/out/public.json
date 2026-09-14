@@ -1,0 +1,167 @@
+{
+  "status": "PASS",
+  "devices": [
+    0,
+    1
+  ],
+  "checks": [
+    {
+      "n": 37,
+      "d": 1,
+      "k": 2,
+      "init": "kmeans",
+      "max_iter": 100,
+      "tol": 0.001,
+      "n_iter": 4,
+      "converged": true,
+      "model_sha256": "84e0d34decbb015026ebc2dab618d809111cec1b589bfe622ab394b9ac5bd12f",
+      "outputs": {
+        "score_samples": "a51c4417d661bdaa2f5c1f16cad79702744b1836fedf2fa46cf80ed41967bd90",
+        "predict_proba": "51fc38b884aa0adee552b68fbd4ed1a7db8264479b183da7f60d318523009768",
+        "predict": "67d1d41ea701d009dde26b5e3a8218dee2ea45ea4ac75aadd4328d8ae5aa4903"
+      }
+    },
+    {
+      "n": 37,
+      "d": 1,
+      "k": 2,
+      "init": "random",
+      "max_iter": 100,
+      "tol": 0.001,
+      "n_iter": 2,
+      "converged": true,
+      "model_sha256": "0fc1c584159b8327363afef3e81b64949a9e36b32d8fa8997aa1c25e51dfb4b1",
+      "outputs": {
+        "score_samples": "fcb981ee0fb264678b90d33ebcdeb713274521623348260aaa9e2615f72d8638",
+        "predict_proba": "e0d897b2b5cc315ee8a445541341a86e20150c590b63aee6d0d7b0441c850a9b",
+        "predict": "d4817aa5497628e7c77e6b606107042bbba3130888c5f47a375e6179be789fbb"
+      }
+    },
+    {
+      "n": 129,
+      "d": 3,
+      "k": 1,
+      "init": "kmeans",
+      "max_iter": 100,
+      "tol": 0.001,
+      "n_iter": 2,
+      "converged": true,
+      "model_sha256": "541dc0c03fb307da65c61991ccc119a2d22d9644cda4d983cd7416b22d9239c3",
+      "outputs": {
+        "score_samples": "4c112bbd411adad892ef8d2fdd2e2defca09ac032f878b523f56c211cab60729",
+        "predict_proba": "60926ad10cec488ff7a7a2d4489f6945c39f70b6ccfdecb0ba0a7416376c2b3a",
+        "predict": "86d2cf5b090f43ee54d8f7c1dcf746a853951191457ff6dac96269a9d24860b9"
+      }
+    },
+    {
+      "n": 257,
+      "d": 3,
+      "k": 3,
+      "init": "random",
+      "max_iter": 5,
+      "tol": 0.001,
+      "n_iter": 2,
+      "converged": true,
+      "model_sha256": "b601b80e742bf9a6a583b7512dafa3da0b2e28ac056fbfc840fdefd5c073db00",
+      "outputs": {
+        "score_samples": "07e7d51e47d76dc1c3948bafcdebf99ef18f61a792b9e5b94e93ad11541876c3",
+        "predict_proba": "02b0020d11e9c751a52e9ff1277dd5349188468f581d7610357fea862617531e",
+        "predict": "fbd8c9a09228222a98294ddf9522a58e04170b345615fd30e9a703ca87993ad9"
+      }
+    },
+    {
+      "n": 600,
+      "d": 4,
+      "k": 4,
+      "init": "kmeans",
+      "max_iter": 100,
+      "tol": 0.0001,
+      "n_iter": 3,
+      "converged": true,
+      "model_sha256": "90b342cf575c04699f8ddd1541571d2ea00b4e3cfd7b1c610e1c47988fa63edc",
+      "outputs": {
+        "score_samples": "bf563ca6d895fb5df85f8d06802d831f2de2b5940e58ce581de2dc1fc87fe4ca",
+        "predict_proba": "dff17ac3eee4a47013db718ab9b2b866dbc96d31de216718b3e82945d8a4419c",
+        "predict": "38c3d1cbab2c0153d5707b3aefc5a55f17bed400be971bf7ea73cbbeda170088"
+      }
+    },
+    {
+      "n": 600,
+      "d": 4,
+      "k": 4,
+      "init": "random",
+      "max_iter": 100,
+      "tol": 0.0001,
+      "n_iter": 24,
+      "converged": true,
+      "model_sha256": "3eaac32a12321c637b762bb909e84278c824498c0fdf08b376078a71ea77c33a",
+      "outputs": {
+        "score_samples": "a01b6d913458d45857ad8c29e4c407ec285d3d207742153503b7f4d2b3d082d8",
+        "predict_proba": "8e8f89115d6243a5870080032127e4eedef2ecf8a80a69721ac67e25ea185b29",
+        "predict": "1ad479df9d83c5fea6042fe34e1d8b701ba50cc0a197c43e8fefbd15ca64bdf3"
+      }
+    },
+    {
+      "n": 2003,
+      "d": 6,
+      "k": 4,
+      "init": "kmeans",
+      "max_iter": 100,
+      "tol": 0.001,
+      "n_iter": 2,
+      "converged": true,
+      "model_sha256": "3fcab6085219365a5b185dd38c82c80e84aa7aa24d48cc52d8210c4192e5982d",
+      "outputs": {
+        "score_samples": "eb8235caf1ac5ac91a1c2532a27cd0f15f4afdca47f2829fc5d4dd1e60e516a0",
+        "predict_proba": "474259f24c7d57d2efe394488d30d118f44b7495e00f564fa89285baab17bde7",
+        "predict": "345db4d0fb46fc0efc39ad5944f2da0c090fdc0705e597bdcc3160a41a3820b7"
+      }
+    },
+    {
+      "n": 1001,
+      "d": 8,
+      "k": 5,
+      "init": "random",
+      "max_iter": 0,
+      "tol": 0.001,
+      "n_iter": 0,
+      "converged": false,
+      "model_sha256": "2141976594cc9fa77611d7e204b18f559dc48e0297e017b88ac8b997144cf9ad",
+      "outputs": {
+        "score_samples": "45b2136cc12efe7ddc0262d235983ad4548a059e7c721da552d47818988bfe9c",
+        "predict_proba": "5d6a3d0e9c475c62d462907b873b56b7b0905c61b84a3e9d770144b638fef119",
+        "predict": "86d0802eb1710b841aa15d4ba33751a575afd87be37aeba2e7203257d6050986"
+      }
+    },
+    {
+      "n": 4097,
+      "d": 2,
+      "k": 3,
+      "init": "kmeans",
+      "max_iter": 50,
+      "tol": 0.0,
+      "n_iter": 50,
+      "converged": false,
+      "model_sha256": "22f265a57cf3872515ea862a67158c37cb1beb22051cd2887944f9cc427c3560",
+      "outputs": {
+        "score_samples": "116a263a8d0097c3aaf6251011312fe432a274005b1046780b3b1d068a8d223b",
+        "predict_proba": "7f0fd14f328d93743807a44dfc6080493fce8701891fc46547e5730637186f90",
+        "predict": "dd930e44bae6dd401eae06276041c1e75f388ecef44f100ce540ca448e580107"
+      }
+    }
+  ],
+  "collapse": {
+    "one": "oth halves by cholesky/checks/potrf.mojo's DEVIATION 1634, so this refusal is identical on every vendor -- and a silent reset would turn a decision that is identical into a value that is not, which is the worst outcome this lane can produce",
+    "many": "oth halves by cholesky/checks/potrf.mojo's DEVIATION 1634, so this refusal is identical on every vendor -- and a silent reset would turn a decision that is identical into a value that is not, which is the worst outcome this lane can produce"
+  },
+  "refusals": [
+    "collapse_same_outcome",
+    "wrong_type",
+    "nonidentical",
+    "covariance_type_diag",
+    "unfitted_predict",
+    "bad_method",
+    "duplicate_devices"
+  ],
+  "scope": "GaussianMixture full covariance, kmeans/random init; row-sharded E-steps versus one device; root M-step, Cholesky and convergence test; no pooled root memory or speed claim"
+}
