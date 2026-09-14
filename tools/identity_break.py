@@ -917,8 +917,8 @@ def _(ml, X, yc, yr, Xh=None):
 @lane("gp")
 def _(ml, X, yc, yr, Xh=None):
     """The dense Cholesky is n^2 memory, so 256 rows of four columns, with
-    a white-noise term so duplicate rows (`ties`) still factor. The GP's
-    docstring says Apple and AMD IDENTICAL card, no NVIDIA card."""
+    a white-noise term so duplicate rows (`ties`) still factor. Three
+    columns since the 136-lane record (IDENTICAL x3 on every cell)."""
     k = ml.ConstantKernel(1.0) * ml.RBF(1.0) + ml.WhiteKernel(0.1)
     m = ml.GaussianProcessRegressor(kernel=k).fit(X[:256, :4], yr[:256])
     mean, std = m.predict(X[256:320, :4], return_std=True)
