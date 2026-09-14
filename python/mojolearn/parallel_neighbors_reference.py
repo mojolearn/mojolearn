@@ -145,7 +145,14 @@ class ReferenceShardedNeighbors:
             raise ValueError('n_neighbors must be an integer in [1, reference rows]')
         if n > 0x7fffffff:
             raise ValueError('reference row count exceeds the native signed-int32 shape contract')
-        width = self.reference_rows_per_shard or (n + len(self._pool.devices) - 1) // len(self._pool.devices)
+        cell_limit = 0x7fffffff // model.n_features_in_
+        if cell_limit < 1:
+            raise ValueError('feature count exceeds the native signed-int32 shape contract')
+        width = self.reference_rows_per_shard
+        if width is None:
+            width = min(cell_limit, (n + len(self._pool.devices) - 1) // len(self._pool.devices))
+        if min(width, n) > cell_limit:
+            raise ValueError('reference shard exceeds the native signed-int32 cell-count contract')
         ranges = [(i, min(n, i + width)) for i in range(0, n, width)]
         params = dict(n_neighbors=k, query_tile=model.query_tile, metric=model.metric,
                       algorithm='brute', p=model.p, numeric_mode='identical')
@@ -158,9 +165,13 @@ class ReferenceShardedNeighbors:
         for first in range(0, data.shape[0], self.query_rows_per_shard):
             end = min(data.shape[0], first + self.query_rows_per_shard)
             query = data[first:end]
-            parts = self._pool.map([
-                ('neighbor_reference', params, (model._index[start:stop], query, min(k, stop-start)))
-                for start, stop in ranges])
+            parts = []
+            # Materialize only one device wave of reference slices on the host.
+            # Retain just its small candidate output before staging the next.
+            for wave in range(0, len(ranges), len(self._pool.devices)):
+                parts.extend(self._pool.map([
+                    ('neighbor_reference', params, (model._index[start:stop], query, min(k, stop-start)))
+                    for start, stop in ranges[wave:wave+len(self._pool.devices)]]))
             distances, indices = _merge(parts, ranges, end-first, k)
             if method == 'kneighbors':
                 indices = indices.astype('<i8')
