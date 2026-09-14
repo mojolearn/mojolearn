@@ -379,7 +379,6 @@ _NOT_YET = {
     "cholesky": "cholesky/checks/cholesky_check.mojo (potrf, trsm, logdet and solve gated; reached only inside the GP build, bindings/build_gp.sh)",
     "IVFIndex": "ivf/checks/ivf_check.mojo (layout sabotage and large-k gates; Apple evidence only, no NVIDIA or AMD leg)",
     "Embedding": "embedding/checks/embedding_check.mojo (Apple and AMD card, no NVIDIA leg, no sabotage arm ever built)",
-    "MultinomialLogisticRegression": "glm/impl/qn/glm_softmax.mojo (implemented and dispatched; glm/estimator.mojo hardcodes the binary loss and glm/checks/multinomial_check.mojo has no invoker)",
 }
 
 
