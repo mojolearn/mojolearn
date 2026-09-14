@@ -74,11 +74,15 @@ BUILDER = "bindings/build_host_family.sh"
 #: was diffed against until 2026-09-14 afternoon; the 136-lane record at
 #: 4048e1b51 (the 2712/2713 fix, the sixteen one-device par-* lanes) is the
 #: one now; the manifest step of the workflow fails, before any build, when a
-#: column named here is not in the checkout.
+#: column named here is not in the checkout. Its AMD column is the MI325X one
+#: (DigitalOcean, gfx942): the MI300X column of the same record is incomplete
+#: (the 60-minute Hot Aisle cap cut it before iforest, iforest-tuned and five
+#: par-* lanes), and iforest is a covered lane, so require-columns 4 could not
+#: hold against it.
 TRAINING_GPU_COLUMNS = (
     "bench/results/identity_break/2026-09-14_136-lanes/apple-m4.json",
     "bench/results/identity_break/2026-09-14_136-lanes/nvidia-h100-sm_90a.json",
-    "bench/results/identity_break/2026-09-14_136-lanes/amd-mi300x-gfx942.json",
+    "bench/results/identity_break/2026-09-14_136-lanes/amd-mi325x-gfx942.json",
 )
 
 #: The GPU columns the classical INFERENCE gate compares each host identity

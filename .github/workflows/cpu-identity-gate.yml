@@ -380,7 +380,8 @@ jobs:
 
       # The tool loads on this CPU and the three committed GPU columns still
       # diff to IDENTICAL x3 on all 1224 train cells (the 2026-09-14 136-lane record at 4048e1b51,
-      # the 2712/2713 fix and the sixteen one-device par-* lanes). The exact summary token is
+      # the 2712/2713 fix and the sixteen one-device par-* lanes; the AMD column is the MI325X one,
+      # which carries every lane). The exact summary token is
       # required: a diff that printed nothing, or fewer cells, is a failure.
       - name: identity_break --diff over the three committed GPU columns (require 3)
         if: always()
@@ -388,8 +389,8 @@ jobs:
           set -o pipefail
           python3 tools/identity_break.py --diff $GPU_COLUMNS --require-columns 3 2>&1 \
             | tee "$GATE_OUT/diff_gpu3.txt"
-          grep -F 'summary: IDENTICAL=423' "$GATE_OUT/diff_gpu3.txt"
-          grep -F 'summary (infer/model): IDENTICAL=585, N/A=261' "$GATE_OUT/diff_gpu3.txt"
+          grep -F 'summary: IDENTICAL=1224' "$GATE_OUT/diff_gpu3.txt"
+          grep -F 'summary (infer/model): IDENTICAL=1665, N/A=783' "$GATE_OUT/diff_gpu3.txt"
 
       # The control for the step above: demanding a fourth real hash on a lane
       # no CPU column has covered must FAIL. If it passes, --require-columns

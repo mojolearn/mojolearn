@@ -1,3 +1,4 @@
+NOTE: column amd-gfx942 is INCOMPLETE (the run was killed); lanes after the last one written are absent, not clean
 | lane/fixture                 | verdict    | apple-m4         | nvidia-nvidia-h100-80gb-hbm3-sm_90a | amd-gfx942       |
 |------------------------------|------------|------------------|------------------|------------------|
 | agglomerative/base           | IDENTICAL x3 | ad11b976bfbfc20b | ad11b976bfbfc20b | ad11b976bfbfc20b |
@@ -396,24 +397,24 @@
 | holtwinters/odd              | IDENTICAL x3 | 8fb4dd76d8080a46 | 8fb4dd76d8080a46 | 8fb4dd76d8080a46 |
 | holtwinters/ties             | IDENTICAL x3 | b2a5df45db1395b0 | b2a5df45db1395b0 | b2a5df45db1395b0 |
 | holtwinters/wide             | IDENTICAL x3 | 560cdc45a69cc987 | 560cdc45a69cc987 | 560cdc45a69cc987 |
-| iforest-tuned/base           | IDENTICAL x3 | 0a149db6290bacd6 | 0a149db6290bacd6 | 0a149db6290bacd6 |
-| iforest-tuned/denormal       | IDENTICAL x3 | 760dacdb8d26ad32 | 760dacdb8d26ad32 | 760dacdb8d26ad32 |
-| iforest-tuned/denormal_ftz   | IDENTICAL x3 | 760dacdb8d26ad32 | 760dacdb8d26ad32 | 760dacdb8d26ad32 |
-| iforest-tuned/dupes          | IDENTICAL x3 | cf1224bee78e2e10 | cf1224bee78e2e10 | cf1224bee78e2e10 |
-| iforest-tuned/hashed         | IDENTICAL x3 | 46897d2134eb25a8 | 46897d2134eb25a8 | 46897d2134eb25a8 |
-| iforest-tuned/negative       | IDENTICAL x3 | e8719530b4c1542e | e8719530b4c1542e | e8719530b4c1542e |
-| iforest-tuned/odd            | IDENTICAL x3 | 55a9927fb2f6741d | 55a9927fb2f6741d | 55a9927fb2f6741d |
-| iforest-tuned/ties           | IDENTICAL x3 | 8f43ab374b0ab900 | 8f43ab374b0ab900 | 8f43ab374b0ab900 |
-| iforest-tuned/wide           | IDENTICAL x3 | 0a149db6290bacd6 | 0a149db6290bacd6 | 0a149db6290bacd6 |
-| iforest/base                 | IDENTICAL x3 | 8703d4a008ffd13d | 8703d4a008ffd13d | 8703d4a008ffd13d |
-| iforest/denormal             | IDENTICAL x3 | 54ea9b5c8c3fc38b | 54ea9b5c8c3fc38b | 54ea9b5c8c3fc38b |
-| iforest/denormal_ftz         | IDENTICAL x3 | 54ea9b5c8c3fc38b | 54ea9b5c8c3fc38b | 54ea9b5c8c3fc38b |
-| iforest/dupes                | IDENTICAL x3 | b879bcf3dcf99f38 | b879bcf3dcf99f38 | b879bcf3dcf99f38 |
-| iforest/hashed               | IDENTICAL x3 | 72260557474879ae | 72260557474879ae | 72260557474879ae |
-| iforest/negative             | IDENTICAL x3 | a5b7676e39778af5 | a5b7676e39778af5 | a5b7676e39778af5 |
-| iforest/odd                  | IDENTICAL x3 | 9b849a13c8d35adb | 9b849a13c8d35adb | 9b849a13c8d35adb |
-| iforest/ties                 | IDENTICAL x3 | 5043855ee14799da | 5043855ee14799da | 5043855ee14799da |
-| iforest/wide                 | IDENTICAL x3 | 8703d4a008ffd13d | 8703d4a008ffd13d | 8703d4a008ffd13d |
+| iforest-tuned/base           | IDENTICAL x2 | 0a149db6290bacd6 | 0a149db6290bacd6 | (not run)        |
+| iforest-tuned/denormal       | IDENTICAL x2 | 760dacdb8d26ad32 | 760dacdb8d26ad32 | (not run)        |
+| iforest-tuned/denormal_ftz   | IDENTICAL x2 | 760dacdb8d26ad32 | 760dacdb8d26ad32 | (not run)        |
+| iforest-tuned/dupes          | IDENTICAL x2 | cf1224bee78e2e10 | cf1224bee78e2e10 | (not run)        |
+| iforest-tuned/hashed         | IDENTICAL x2 | 46897d2134eb25a8 | 46897d2134eb25a8 | (not run)        |
+| iforest-tuned/negative       | IDENTICAL x2 | e8719530b4c1542e | e8719530b4c1542e | (not run)        |
+| iforest-tuned/odd            | IDENTICAL x2 | 55a9927fb2f6741d | 55a9927fb2f6741d | (not run)        |
+| iforest-tuned/ties           | IDENTICAL x2 | 8f43ab374b0ab900 | 8f43ab374b0ab900 | (not run)        |
+| iforest-tuned/wide           | IDENTICAL x2 | 0a149db6290bacd6 | 0a149db6290bacd6 | (not run)        |
+| iforest/base                 | IDENTICAL x2 | 8703d4a008ffd13d | 8703d4a008ffd13d | (not run)        |
+| iforest/denormal             | IDENTICAL x2 | 54ea9b5c8c3fc38b | 54ea9b5c8c3fc38b | (not run)        |
+| iforest/denormal_ftz         | IDENTICAL x2 | 54ea9b5c8c3fc38b | 54ea9b5c8c3fc38b | (not run)        |
+| iforest/dupes                | IDENTICAL x2 | b879bcf3dcf99f38 | b879bcf3dcf99f38 | (not run)        |
+| iforest/hashed               | IDENTICAL x2 | 72260557474879ae | 72260557474879ae | (not run)        |
+| iforest/negative             | IDENTICAL x2 | a5b7676e39778af5 | a5b7676e39778af5 | (not run)        |
+| iforest/odd                  | IDENTICAL x2 | 9b849a13c8d35adb | 9b849a13c8d35adb | (not run)        |
+| iforest/ties                 | IDENTICAL x2 | 5043855ee14799da | 5043855ee14799da | (not run)        |
+| iforest/wide                 | IDENTICAL x2 | 8703d4a008ffd13d | 8703d4a008ffd13d | (not run)        |
 | kde-cosine-minkowski/base    | IDENTICAL x3 | 2cc7fbd9d26fe15f | 2cc7fbd9d26fe15f | 2cc7fbd9d26fe15f |
 | kde-cosine-minkowski/denormal | IDENTICAL x3 | 5a2cee4f1a1ebbd5 | 5a2cee4f1a1ebbd5 | 5a2cee4f1a1ebbd5 |
 | kde-cosine-minkowski/denormal_ftz | IDENTICAL x3 | 5a2cee4f1a1ebbd5 | 5a2cee4f1a1ebbd5 | 5a2cee4f1a1ebbd5 |
@@ -801,15 +802,15 @@
 | optim-sgd/odd                | IDENTICAL x3 | 6a3e4267566a2a03 | 6a3e4267566a2a03 | 6a3e4267566a2a03 |
 | optim-sgd/ties               | IDENTICAL x3 | 6a3e4267566a2a03 | 6a3e4267566a2a03 | 6a3e4267566a2a03 |
 | optim-sgd/wide               | IDENTICAL x3 | 6a3e4267566a2a03 | 6a3e4267566a2a03 | 6a3e4267566a2a03 |
-| par-arima/base               | IDENTICAL x3 | 377790cb117abb61 | 377790cb117abb61 | 377790cb117abb61 |
-| par-arima/denormal           | IDENTICAL x3 | 7dbefd70378dfac6 | 7dbefd70378dfac6 | 7dbefd70378dfac6 |
-| par-arima/denormal_ftz       | IDENTICAL x3 | 7dbefd70378dfac6 | 7dbefd70378dfac6 | 7dbefd70378dfac6 |
-| par-arima/dupes              | IDENTICAL x3 | 377790cb117abb61 | 377790cb117abb61 | 377790cb117abb61 |
-| par-arima/hashed             | IDENTICAL x3 | d4ed8b9405da9691 | d4ed8b9405da9691 | d4ed8b9405da9691 |
-| par-arima/negative           | IDENTICAL x3 | 29f18fa209679839 | 29f18fa209679839 | 29f18fa209679839 |
-| par-arima/odd                | IDENTICAL x3 | 20bf64323fc5fa12 | 20bf64323fc5fa12 | 20bf64323fc5fa12 |
-| par-arima/ties               | IDENTICAL x3 | 990e96a6d7fd2874 | 990e96a6d7fd2874 | 990e96a6d7fd2874 |
-| par-arima/wide               | IDENTICAL x3 | 440f5eba6a3ddede | 440f5eba6a3ddede | 440f5eba6a3ddede |
+| par-arima/base               | IDENTICAL x2 | 377790cb117abb61 | 377790cb117abb61 | (not run)        |
+| par-arima/denormal           | IDENTICAL x2 | 7dbefd70378dfac6 | 7dbefd70378dfac6 | (not run)        |
+| par-arima/denormal_ftz       | IDENTICAL x2 | 7dbefd70378dfac6 | 7dbefd70378dfac6 | (not run)        |
+| par-arima/dupes              | IDENTICAL x2 | 377790cb117abb61 | 377790cb117abb61 | (not run)        |
+| par-arima/hashed             | IDENTICAL x2 | d4ed8b9405da9691 | d4ed8b9405da9691 | (not run)        |
+| par-arima/negative           | IDENTICAL x2 | 29f18fa209679839 | 29f18fa209679839 | (not run)        |
+| par-arima/odd                | IDENTICAL x2 | 20bf64323fc5fa12 | 20bf64323fc5fa12 | (not run)        |
+| par-arima/ties               | IDENTICAL x2 | 990e96a6d7fd2874 | 990e96a6d7fd2874 | (not run)        |
+| par-arima/wide               | IDENTICAL x2 | 440f5eba6a3ddede | 440f5eba6a3ddede | (not run)        |
 | par-boosting/base            | IDENTICAL x3 | 56560dec5bdb6cb9 | 56560dec5bdb6cb9 | 56560dec5bdb6cb9 |
 | par-boosting/denormal        | IDENTICAL x3 | 56560dec5bdb6cb9 | 56560dec5bdb6cb9 | 56560dec5bdb6cb9 |
 | par-boosting/denormal_ftz    | IDENTICAL x3 | 56560dec5bdb6cb9 | 56560dec5bdb6cb9 | 56560dec5bdb6cb9 |
@@ -819,15 +820,15 @@
 | par-boosting/odd             | IDENTICAL x3 | 0836bd47530040d0 | 0836bd47530040d0 | 0836bd47530040d0 |
 | par-boosting/ties            | IDENTICAL x3 | b32c469f812adf25 | b32c469f812adf25 | b32c469f812adf25 |
 | par-boosting/wide            | IDENTICAL x3 | bc0084b9b1e30f87 | bc0084b9b1e30f87 | bc0084b9b1e30f87 |
-| par-byte-lm/base             | IDENTICAL x3 | eb83c1c233f68756 | eb83c1c233f68756 | eb83c1c233f68756 |
-| par-byte-lm/denormal         | IDENTICAL x3 | c958c8af2e505ca0 | c958c8af2e505ca0 | c958c8af2e505ca0 |
-| par-byte-lm/denormal_ftz     | IDENTICAL x3 | aedc78ea66ef018c | aedc78ea66ef018c | aedc78ea66ef018c |
-| par-byte-lm/dupes            | IDENTICAL x3 | dc65953fd8966eb3 | dc65953fd8966eb3 | dc65953fd8966eb3 |
-| par-byte-lm/hashed           | IDENTICAL x3 | ddb13a422e4d2858 | ddb13a422e4d2858 | ddb13a422e4d2858 |
-| par-byte-lm/negative         | IDENTICAL x3 | 63db87a288142b29 | 63db87a288142b29 | 63db87a288142b29 |
-| par-byte-lm/odd              | IDENTICAL x3 | eb83c1c233f68756 | eb83c1c233f68756 | eb83c1c233f68756 |
-| par-byte-lm/ties             | IDENTICAL x3 | 3b5c2f34bf09e8c9 | 3b5c2f34bf09e8c9 | 3b5c2f34bf09e8c9 |
-| par-byte-lm/wide             | IDENTICAL x3 | 7ab80fd955e23d77 | 7ab80fd955e23d77 | 7ab80fd955e23d77 |
+| par-byte-lm/base             | IDENTICAL x2 | eb83c1c233f68756 | eb83c1c233f68756 | (not run)        |
+| par-byte-lm/denormal         | IDENTICAL x2 | c958c8af2e505ca0 | c958c8af2e505ca0 | (not run)        |
+| par-byte-lm/denormal_ftz     | IDENTICAL x2 | aedc78ea66ef018c | aedc78ea66ef018c | (not run)        |
+| par-byte-lm/dupes            | IDENTICAL x2 | dc65953fd8966eb3 | dc65953fd8966eb3 | (not run)        |
+| par-byte-lm/hashed           | IDENTICAL x2 | ddb13a422e4d2858 | ddb13a422e4d2858 | (not run)        |
+| par-byte-lm/negative         | IDENTICAL x2 | 63db87a288142b29 | 63db87a288142b29 | (not run)        |
+| par-byte-lm/odd              | IDENTICAL x2 | eb83c1c233f68756 | eb83c1c233f68756 | (not run)        |
+| par-byte-lm/ties             | IDENTICAL x2 | 3b5c2f34bf09e8c9 | 3b5c2f34bf09e8c9 | (not run)        |
+| par-byte-lm/wide             | IDENTICAL x2 | 7ab80fd955e23d77 | 7ab80fd955e23d77 | (not run)        |
 | par-cd/base                  | IDENTICAL x3 | 2fa3301e45a46091 | 2fa3301e45a46091 | 2fa3301e45a46091 |
 | par-cd/denormal              | IDENTICAL x3 | 5374b434a96382d6 | 5374b434a96382d6 | 5374b434a96382d6 |
 | par-cd/denormal_ftz          | IDENTICAL x3 | 5374b434a96382d6 | 5374b434a96382d6 | 5374b434a96382d6 |
@@ -882,15 +883,15 @@
 | par-gram/odd                 | IDENTICAL x3 | bdaf14e02a8f07ec | bdaf14e02a8f07ec | bdaf14e02a8f07ec |
 | par-gram/ties                | IDENTICAL x3 | 42410e35cdae30cb | 42410e35cdae30cb | 42410e35cdae30cb |
 | par-gram/wide                | IDENTICAL x3 | 7215c2605901cdc6 | 7215c2605901cdc6 | 7215c2605901cdc6 |
-| par-iforest/base             | IDENTICAL x3 | 8703d4a008ffd13d | 8703d4a008ffd13d | 8703d4a008ffd13d |
-| par-iforest/denormal         | IDENTICAL x3 | 54ea9b5c8c3fc38b | 54ea9b5c8c3fc38b | 54ea9b5c8c3fc38b |
-| par-iforest/denormal_ftz     | IDENTICAL x3 | 54ea9b5c8c3fc38b | 54ea9b5c8c3fc38b | 54ea9b5c8c3fc38b |
-| par-iforest/dupes            | IDENTICAL x3 | b879bcf3dcf99f38 | b879bcf3dcf99f38 | b879bcf3dcf99f38 |
-| par-iforest/hashed           | IDENTICAL x3 | 72260557474879ae | 72260557474879ae | 72260557474879ae |
-| par-iforest/negative         | IDENTICAL x3 | a5b7676e39778af5 | a5b7676e39778af5 | a5b7676e39778af5 |
-| par-iforest/odd              | IDENTICAL x3 | 9b849a13c8d35adb | 9b849a13c8d35adb | 9b849a13c8d35adb |
-| par-iforest/ties             | IDENTICAL x3 | 5043855ee14799da | 5043855ee14799da | 5043855ee14799da |
-| par-iforest/wide             | IDENTICAL x3 | 8703d4a008ffd13d | 8703d4a008ffd13d | 8703d4a008ffd13d |
+| par-iforest/base             | IDENTICAL x2 | 8703d4a008ffd13d | 8703d4a008ffd13d | (not run)        |
+| par-iforest/denormal         | IDENTICAL x2 | 54ea9b5c8c3fc38b | 54ea9b5c8c3fc38b | (not run)        |
+| par-iforest/denormal_ftz     | IDENTICAL x2 | 54ea9b5c8c3fc38b | 54ea9b5c8c3fc38b | (not run)        |
+| par-iforest/dupes            | IDENTICAL x2 | b879bcf3dcf99f38 | b879bcf3dcf99f38 | (not run)        |
+| par-iforest/hashed           | IDENTICAL x2 | 72260557474879ae | 72260557474879ae | (not run)        |
+| par-iforest/negative         | IDENTICAL x2 | a5b7676e39778af5 | a5b7676e39778af5 | (not run)        |
+| par-iforest/odd              | IDENTICAL x2 | 9b849a13c8d35adb | 9b849a13c8d35adb | (not run)        |
+| par-iforest/ties             | IDENTICAL x2 | 5043855ee14799da | 5043855ee14799da | (not run)        |
+| par-iforest/wide             | IDENTICAL x2 | 8703d4a008ffd13d | 8703d4a008ffd13d | (not run)        |
 | par-kmeans/base              | IDENTICAL x3 | 5aa44cc11034dec9 | 5aa44cc11034dec9 | 5aa44cc11034dec9 |
 | par-kmeans/denormal          | IDENTICAL x3 | 993fe5caff144b0c | 993fe5caff144b0c | 993fe5caff144b0c |
 | par-kmeans/denormal_ftz      | IDENTICAL x3 | 993fe5caff144b0c | 993fe5caff144b0c | 993fe5caff144b0c |
@@ -909,24 +910,24 @@
 | par-logistic/odd             | IDENTICAL x3 | 3c0d0924516a37e8 | 3c0d0924516a37e8 | 3c0d0924516a37e8 |
 | par-logistic/ties            | IDENTICAL x3 | aa9b1fa93dc2ad08 | aa9b1fa93dc2ad08 | aa9b1fa93dc2ad08 |
 | par-logistic/wide            | IDENTICAL x3 | 4e980d6d6bb17dd2 | 4e980d6d6bb17dd2 | 4e980d6d6bb17dd2 |
-| par-mlp/base                 | IDENTICAL x3 | 6e5cde4953362927 | 6e5cde4953362927 | 6e5cde4953362927 |
-| par-mlp/denormal             | IDENTICAL x3 | 64ac01c75bdea784 | 64ac01c75bdea784 | 64ac01c75bdea784 |
-| par-mlp/denormal_ftz         | IDENTICAL x3 | 64ac01c75bdea784 | 64ac01c75bdea784 | 64ac01c75bdea784 |
-| par-mlp/dupes                | IDENTICAL x3 | 6e5cde4953362927 | 6e5cde4953362927 | 6e5cde4953362927 |
-| par-mlp/hashed               | IDENTICAL x3 | b4f42303ba798b0e | b4f42303ba798b0e | b4f42303ba798b0e |
-| par-mlp/negative             | IDENTICAL x3 | 56b21a0ca0bc4606 | 56b21a0ca0bc4606 | 56b21a0ca0bc4606 |
-| par-mlp/odd                  | IDENTICAL x3 | 939248cda720463f | 939248cda720463f | 939248cda720463f |
-| par-mlp/ties                 | IDENTICAL x3 | 17c96192227e43f1 | 17c96192227e43f1 | 17c96192227e43f1 |
-| par-mlp/wide                 | IDENTICAL x3 | aee8950c7eb25df8 | aee8950c7eb25df8 | aee8950c7eb25df8 |
-| par-samba/base               | IDENTICAL x3 | 359834bee4b2789a | 359834bee4b2789a | 359834bee4b2789a |
-| par-samba/denormal           | IDENTICAL x3 | c04ab1019588d438 | c04ab1019588d438 | c04ab1019588d438 |
-| par-samba/denormal_ftz       | IDENTICAL x3 | afc67288c7c3a521 | afc67288c7c3a521 | afc67288c7c3a521 |
-| par-samba/dupes              | IDENTICAL x3 | bbe199c298e7016f | bbe199c298e7016f | bbe199c298e7016f |
-| par-samba/hashed             | IDENTICAL x3 | 78027e9d4a9ee36a | 78027e9d4a9ee36a | 78027e9d4a9ee36a |
-| par-samba/negative           | IDENTICAL x3 | 3cacebe716d76ff0 | 3cacebe716d76ff0 | 3cacebe716d76ff0 |
-| par-samba/odd                | IDENTICAL x3 | 359834bee4b2789a | 359834bee4b2789a | 359834bee4b2789a |
-| par-samba/ties               | IDENTICAL x3 | f3eb2f9e54c68bf7 | f3eb2f9e54c68bf7 | f3eb2f9e54c68bf7 |
-| par-samba/wide               | IDENTICAL x3 | b9a6f11655fecdf2 | b9a6f11655fecdf2 | b9a6f11655fecdf2 |
+| par-mlp/base                 | IDENTICAL x2 | 6e5cde4953362927 | 6e5cde4953362927 | (not run)        |
+| par-mlp/denormal             | IDENTICAL x2 | 64ac01c75bdea784 | 64ac01c75bdea784 | (not run)        |
+| par-mlp/denormal_ftz         | IDENTICAL x2 | 64ac01c75bdea784 | 64ac01c75bdea784 | (not run)        |
+| par-mlp/dupes                | IDENTICAL x2 | 6e5cde4953362927 | 6e5cde4953362927 | (not run)        |
+| par-mlp/hashed               | IDENTICAL x2 | b4f42303ba798b0e | b4f42303ba798b0e | (not run)        |
+| par-mlp/negative             | IDENTICAL x2 | 56b21a0ca0bc4606 | 56b21a0ca0bc4606 | (not run)        |
+| par-mlp/odd                  | IDENTICAL x2 | 939248cda720463f | 939248cda720463f | (not run)        |
+| par-mlp/ties                 | IDENTICAL x2 | 17c96192227e43f1 | 17c96192227e43f1 | (not run)        |
+| par-mlp/wide                 | IDENTICAL x2 | aee8950c7eb25df8 | aee8950c7eb25df8 | (not run)        |
+| par-samba/base               | IDENTICAL x2 | 359834bee4b2789a | 359834bee4b2789a | (not run)        |
+| par-samba/denormal           | IDENTICAL x2 | c04ab1019588d438 | c04ab1019588d438 | (not run)        |
+| par-samba/denormal_ftz       | IDENTICAL x2 | afc67288c7c3a521 | afc67288c7c3a521 | (not run)        |
+| par-samba/dupes              | IDENTICAL x2 | bbe199c298e7016f | bbe199c298e7016f | (not run)        |
+| par-samba/hashed             | IDENTICAL x2 | 78027e9d4a9ee36a | 78027e9d4a9ee36a | (not run)        |
+| par-samba/negative           | IDENTICAL x2 | 3cacebe716d76ff0 | 3cacebe716d76ff0 | (not run)        |
+| par-samba/odd                | IDENTICAL x2 | 359834bee4b2789a | 359834bee4b2789a | (not run)        |
+| par-samba/ties               | IDENTICAL x2 | f3eb2f9e54c68bf7 | f3eb2f9e54c68bf7 | (not run)        |
+| par-samba/wide               | IDENTICAL x2 | b9a6f11655fecdf2 | b9a6f11655fecdf2 | (not run)        |
 | par-scaler/base              | IDENTICAL x3 | c4cc661617a4b9a7 | c4cc661617a4b9a7 | c4cc661617a4b9a7 |
 | par-scaler/denormal          | IDENTICAL x3 | bada066f93657c5e | bada066f93657c5e | bada066f93657c5e |
 | par-scaler/denormal_ftz      | IDENTICAL x3 | bada066f93657c5e | bada066f93657c5e | bada066f93657c5e |
@@ -2021,42 +2022,42 @@ summary: IDENTICAL=1224
 | holtwinters/ties             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
 | holtwinters/wide             | infer  | IDENTICAL x3 | 5df1cfaa8f4b4e78 | 5df1cfaa8f4b4e78 | 5df1cfaa8f4b4e78 |
 | holtwinters/wide             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
-| iforest-tuned/base           | infer  | IDENTICAL x3 | bcbf71b247c3951c | bcbf71b247c3951c | bcbf71b247c3951c |
-| iforest-tuned/base           | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
-| iforest-tuned/denormal       | infer  | IDENTICAL x3 | 7eb9b5890a6a932a | 7eb9b5890a6a932a | 7eb9b5890a6a932a |
-| iforest-tuned/denormal       | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
-| iforest-tuned/denormal_ftz   | infer  | IDENTICAL x3 | 7eb9b5890a6a932a | 7eb9b5890a6a932a | 7eb9b5890a6a932a |
-| iforest-tuned/denormal_ftz   | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
-| iforest-tuned/dupes          | infer  | IDENTICAL x3 | b6c59cfe033236ce | b6c59cfe033236ce | b6c59cfe033236ce |
-| iforest-tuned/dupes          | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
-| iforest-tuned/hashed         | infer  | IDENTICAL x3 | 043d1749e42fd0da | 043d1749e42fd0da | 043d1749e42fd0da |
-| iforest-tuned/hashed         | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
-| iforest-tuned/negative       | infer  | IDENTICAL x3 | e9cb81dac0aed7a2 | e9cb81dac0aed7a2 | e9cb81dac0aed7a2 |
-| iforest-tuned/negative       | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
-| iforest-tuned/odd            | infer  | IDENTICAL x3 | 5420ba75304c5329 | 5420ba75304c5329 | 5420ba75304c5329 |
-| iforest-tuned/odd            | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
-| iforest-tuned/ties           | infer  | IDENTICAL x3 | 9f8aee8ed2215f71 | 9f8aee8ed2215f71 | 9f8aee8ed2215f71 |
-| iforest-tuned/ties           | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
-| iforest-tuned/wide           | infer  | IDENTICAL x3 | bcbf71b247c3951c | bcbf71b247c3951c | bcbf71b247c3951c |
-| iforest-tuned/wide           | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
-| iforest/base                 | infer  | IDENTICAL x3 | c4247bb3a6c4675e | c4247bb3a6c4675e | c4247bb3a6c4675e |
-| iforest/base                 | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
-| iforest/denormal             | infer  | IDENTICAL x3 | f3dcde6748050803 | f3dcde6748050803 | f3dcde6748050803 |
-| iforest/denormal             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
-| iforest/denormal_ftz         | infer  | IDENTICAL x3 | f3dcde6748050803 | f3dcde6748050803 | f3dcde6748050803 |
-| iforest/denormal_ftz         | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
-| iforest/dupes                | infer  | IDENTICAL x3 | db8a00a8aa424f7c | db8a00a8aa424f7c | db8a00a8aa424f7c |
-| iforest/dupes                | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
-| iforest/hashed               | infer  | IDENTICAL x3 | e4d04598e6d55395 | e4d04598e6d55395 | e4d04598e6d55395 |
-| iforest/hashed               | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
-| iforest/negative             | infer  | IDENTICAL x3 | 99572e40ada83cdf | 99572e40ada83cdf | 99572e40ada83cdf |
-| iforest/negative             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
-| iforest/odd                  | infer  | IDENTICAL x3 | 7b104f74d47a6e15 | 7b104f74d47a6e15 | 7b104f74d47a6e15 |
-| iforest/odd                  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
-| iforest/ties                 | infer  | IDENTICAL x3 | 288c5e41c62cddea | 288c5e41c62cddea | 288c5e41c62cddea |
-| iforest/ties                 | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
-| iforest/wide                 | infer  | IDENTICAL x3 | a8612e7e09b4983b | a8612e7e09b4983b | a8612e7e09b4983b |
-| iforest/wide                 | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| iforest-tuned/base           | infer  | IDENTICAL x2 | bcbf71b247c3951c | bcbf71b247c3951c | (not run)        |
+| iforest-tuned/base           | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| iforest-tuned/denormal       | infer  | IDENTICAL x2 | 7eb9b5890a6a932a | 7eb9b5890a6a932a | (not run)        |
+| iforest-tuned/denormal       | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| iforest-tuned/denormal_ftz   | infer  | IDENTICAL x2 | 7eb9b5890a6a932a | 7eb9b5890a6a932a | (not run)        |
+| iforest-tuned/denormal_ftz   | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| iforest-tuned/dupes          | infer  | IDENTICAL x2 | b6c59cfe033236ce | b6c59cfe033236ce | (not run)        |
+| iforest-tuned/dupes          | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| iforest-tuned/hashed         | infer  | IDENTICAL x2 | 043d1749e42fd0da | 043d1749e42fd0da | (not run)        |
+| iforest-tuned/hashed         | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| iforest-tuned/negative       | infer  | IDENTICAL x2 | e9cb81dac0aed7a2 | e9cb81dac0aed7a2 | (not run)        |
+| iforest-tuned/negative       | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| iforest-tuned/odd            | infer  | IDENTICAL x2 | 5420ba75304c5329 | 5420ba75304c5329 | (not run)        |
+| iforest-tuned/odd            | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| iforest-tuned/ties           | infer  | IDENTICAL x2 | 9f8aee8ed2215f71 | 9f8aee8ed2215f71 | (not run)        |
+| iforest-tuned/ties           | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| iforest-tuned/wide           | infer  | IDENTICAL x2 | bcbf71b247c3951c | bcbf71b247c3951c | (not run)        |
+| iforest-tuned/wide           | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| iforest/base                 | infer  | IDENTICAL x2 | c4247bb3a6c4675e | c4247bb3a6c4675e | (not run)        |
+| iforest/base                 | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| iforest/denormal             | infer  | IDENTICAL x2 | f3dcde6748050803 | f3dcde6748050803 | (not run)        |
+| iforest/denormal             | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| iforest/denormal_ftz         | infer  | IDENTICAL x2 | f3dcde6748050803 | f3dcde6748050803 | (not run)        |
+| iforest/denormal_ftz         | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| iforest/dupes                | infer  | IDENTICAL x2 | db8a00a8aa424f7c | db8a00a8aa424f7c | (not run)        |
+| iforest/dupes                | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| iforest/hashed               | infer  | IDENTICAL x2 | e4d04598e6d55395 | e4d04598e6d55395 | (not run)        |
+| iforest/hashed               | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| iforest/negative             | infer  | IDENTICAL x2 | 99572e40ada83cdf | 99572e40ada83cdf | (not run)        |
+| iforest/negative             | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| iforest/odd                  | infer  | IDENTICAL x2 | 7b104f74d47a6e15 | 7b104f74d47a6e15 | (not run)        |
+| iforest/odd                  | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| iforest/ties                 | infer  | IDENTICAL x2 | 288c5e41c62cddea | 288c5e41c62cddea | (not run)        |
+| iforest/ties                 | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| iforest/wide                 | infer  | IDENTICAL x2 | a8612e7e09b4983b | a8612e7e09b4983b | (not run)        |
+| iforest/wide                 | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
 | kde-cosine-minkowski/base    | infer  | IDENTICAL x3 | e2af54529a08a7be | e2af54529a08a7be | e2af54529a08a7be |
 | kde-cosine-minkowski/base    | model  | IDENTICAL x3 | 3f69c1096d5277d6 | 3f69c1096d5277d6 | 3f69c1096d5277d6 |
 | kde-cosine-minkowski/denormal | infer  | IDENTICAL x3 | a8de2c3520c4d82c | a8de2c3520c4d82c | a8de2c3520c4d82c |
@@ -2831,24 +2832,24 @@ summary: IDENTICAL=1224
 | optim-sgd/ties               | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
 | optim-sgd/wide               | infer  | N/A          | n/a:function     | n/a:function     | n/a:function     |
 | optim-sgd/wide               | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
-| par-arima/base               | infer  | IDENTICAL x3 | 9f76be0396a666ca | 9f76be0396a666ca | 9f76be0396a666ca |
-| par-arima/base               | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
-| par-arima/denormal           | infer  | IDENTICAL x3 | aab930a9e876ec1e | aab930a9e876ec1e | aab930a9e876ec1e |
-| par-arima/denormal           | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
-| par-arima/denormal_ftz       | infer  | IDENTICAL x3 | aab930a9e876ec1e | aab930a9e876ec1e | aab930a9e876ec1e |
-| par-arima/denormal_ftz       | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
-| par-arima/dupes              | infer  | IDENTICAL x3 | 9f76be0396a666ca | 9f76be0396a666ca | 9f76be0396a666ca |
-| par-arima/dupes              | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
-| par-arima/hashed             | infer  | IDENTICAL x3 | 06461dad67cfb784 | 06461dad67cfb784 | 06461dad67cfb784 |
-| par-arima/hashed             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
-| par-arima/negative           | infer  | IDENTICAL x3 | 4e0defb4e0feb99f | 4e0defb4e0feb99f | 4e0defb4e0feb99f |
-| par-arima/negative           | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
-| par-arima/odd                | infer  | IDENTICAL x3 | 4aa662dbcc728e65 | 4aa662dbcc728e65 | 4aa662dbcc728e65 |
-| par-arima/odd                | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
-| par-arima/ties               | infer  | IDENTICAL x3 | e699bca0934688f0 | e699bca0934688f0 | e699bca0934688f0 |
-| par-arima/ties               | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
-| par-arima/wide               | infer  | IDENTICAL x3 | 956bebc3f45a1c69 | 956bebc3f45a1c69 | 956bebc3f45a1c69 |
-| par-arima/wide               | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| par-arima/base               | infer  | IDENTICAL x2 | 9f76be0396a666ca | 9f76be0396a666ca | (not run)        |
+| par-arima/base               | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| par-arima/denormal           | infer  | IDENTICAL x2 | aab930a9e876ec1e | aab930a9e876ec1e | (not run)        |
+| par-arima/denormal           | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| par-arima/denormal_ftz       | infer  | IDENTICAL x2 | aab930a9e876ec1e | aab930a9e876ec1e | (not run)        |
+| par-arima/denormal_ftz       | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| par-arima/dupes              | infer  | IDENTICAL x2 | 9f76be0396a666ca | 9f76be0396a666ca | (not run)        |
+| par-arima/dupes              | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| par-arima/hashed             | infer  | IDENTICAL x2 | 06461dad67cfb784 | 06461dad67cfb784 | (not run)        |
+| par-arima/hashed             | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| par-arima/negative           | infer  | IDENTICAL x2 | 4e0defb4e0feb99f | 4e0defb4e0feb99f | (not run)        |
+| par-arima/negative           | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| par-arima/odd                | infer  | IDENTICAL x2 | 4aa662dbcc728e65 | 4aa662dbcc728e65 | (not run)        |
+| par-arima/odd                | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| par-arima/ties               | infer  | IDENTICAL x2 | e699bca0934688f0 | e699bca0934688f0 | (not run)        |
+| par-arima/ties               | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| par-arima/wide               | infer  | IDENTICAL x2 | 956bebc3f45a1c69 | 956bebc3f45a1c69 | (not run)        |
+| par-arima/wide               | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
 | par-boosting/base            | infer  | IDENTICAL x3 | e1db044dc82354ac | e1db044dc82354ac | e1db044dc82354ac |
 | par-boosting/base            | model  | IDENTICAL x3 | ee776c33f052679a | ee776c33f052679a | ee776c33f052679a |
 | par-boosting/denormal        | infer  | IDENTICAL x3 | e1db044dc82354ac | e1db044dc82354ac | e1db044dc82354ac |
@@ -2867,24 +2868,24 @@ summary: IDENTICAL=1224
 | par-boosting/ties            | model  | IDENTICAL x3 | d01adab1226baf49 | d01adab1226baf49 | d01adab1226baf49 |
 | par-boosting/wide            | infer  | IDENTICAL x3 | 9f7630d079f43f07 | 9f7630d079f43f07 | 9f7630d079f43f07 |
 | par-boosting/wide            | model  | IDENTICAL x3 | 1cdaebf93c86aa45 | 1cdaebf93c86aa45 | 1cdaebf93c86aa45 |
-| par-byte-lm/base             | infer  | N/A          | n/a:function     | n/a:function     | n/a:function     |
-| par-byte-lm/base             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
-| par-byte-lm/denormal         | infer  | N/A          | n/a:function     | n/a:function     | n/a:function     |
-| par-byte-lm/denormal         | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
-| par-byte-lm/denormal_ftz     | infer  | N/A          | n/a:function     | n/a:function     | n/a:function     |
-| par-byte-lm/denormal_ftz     | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
-| par-byte-lm/dupes            | infer  | N/A          | n/a:function     | n/a:function     | n/a:function     |
-| par-byte-lm/dupes            | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
-| par-byte-lm/hashed           | infer  | N/A          | n/a:function     | n/a:function     | n/a:function     |
-| par-byte-lm/hashed           | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
-| par-byte-lm/negative         | infer  | N/A          | n/a:function     | n/a:function     | n/a:function     |
-| par-byte-lm/negative         | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
-| par-byte-lm/odd              | infer  | N/A          | n/a:function     | n/a:function     | n/a:function     |
-| par-byte-lm/odd              | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
-| par-byte-lm/ties             | infer  | N/A          | n/a:function     | n/a:function     | n/a:function     |
-| par-byte-lm/ties             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
-| par-byte-lm/wide             | infer  | N/A          | n/a:function     | n/a:function     | n/a:function     |
-| par-byte-lm/wide             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| par-byte-lm/base             | infer  | N/A          | n/a:function     | n/a:function     | (not run)        |
+| par-byte-lm/base             | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| par-byte-lm/denormal         | infer  | N/A          | n/a:function     | n/a:function     | (not run)        |
+| par-byte-lm/denormal         | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| par-byte-lm/denormal_ftz     | infer  | N/A          | n/a:function     | n/a:function     | (not run)        |
+| par-byte-lm/denormal_ftz     | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| par-byte-lm/dupes            | infer  | N/A          | n/a:function     | n/a:function     | (not run)        |
+| par-byte-lm/dupes            | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| par-byte-lm/hashed           | infer  | N/A          | n/a:function     | n/a:function     | (not run)        |
+| par-byte-lm/hashed           | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| par-byte-lm/negative         | infer  | N/A          | n/a:function     | n/a:function     | (not run)        |
+| par-byte-lm/negative         | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| par-byte-lm/odd              | infer  | N/A          | n/a:function     | n/a:function     | (not run)        |
+| par-byte-lm/odd              | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| par-byte-lm/ties             | infer  | N/A          | n/a:function     | n/a:function     | (not run)        |
+| par-byte-lm/ties             | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| par-byte-lm/wide             | infer  | N/A          | n/a:function     | n/a:function     | (not run)        |
+| par-byte-lm/wide             | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
 | par-cd/base                  | infer  | IDENTICAL x3 | 7334b38e7b651e27 | 7334b38e7b651e27 | 7334b38e7b651e27 |
 | par-cd/base                  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
 | par-cd/denormal              | infer  | IDENTICAL x3 | b92e9bfda9b725b4 | b92e9bfda9b725b4 | b92e9bfda9b725b4 |
@@ -2993,24 +2994,24 @@ summary: IDENTICAL=1224
 | par-gram/ties                | model  | IDENTICAL x3 | 824a2e3b44b31af4 | 824a2e3b44b31af4 | 824a2e3b44b31af4 |
 | par-gram/wide                | infer  | IDENTICAL x3 | cc8d5d1192f32b52 | cc8d5d1192f32b52 | cc8d5d1192f32b52 |
 | par-gram/wide                | model  | IDENTICAL x3 | 2869ff3b7b3a7558 | 2869ff3b7b3a7558 | 2869ff3b7b3a7558 |
-| par-iforest/base             | infer  | IDENTICAL x3 | c4247bb3a6c4675e | c4247bb3a6c4675e | c4247bb3a6c4675e |
-| par-iforest/base             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
-| par-iforest/denormal         | infer  | IDENTICAL x3 | f3dcde6748050803 | f3dcde6748050803 | f3dcde6748050803 |
-| par-iforest/denormal         | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
-| par-iforest/denormal_ftz     | infer  | IDENTICAL x3 | f3dcde6748050803 | f3dcde6748050803 | f3dcde6748050803 |
-| par-iforest/denormal_ftz     | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
-| par-iforest/dupes            | infer  | IDENTICAL x3 | db8a00a8aa424f7c | db8a00a8aa424f7c | db8a00a8aa424f7c |
-| par-iforest/dupes            | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
-| par-iforest/hashed           | infer  | IDENTICAL x3 | e4d04598e6d55395 | e4d04598e6d55395 | e4d04598e6d55395 |
-| par-iforest/hashed           | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
-| par-iforest/negative         | infer  | IDENTICAL x3 | 99572e40ada83cdf | 99572e40ada83cdf | 99572e40ada83cdf |
-| par-iforest/negative         | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
-| par-iforest/odd              | infer  | IDENTICAL x3 | 7b104f74d47a6e15 | 7b104f74d47a6e15 | 7b104f74d47a6e15 |
-| par-iforest/odd              | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
-| par-iforest/ties             | infer  | IDENTICAL x3 | 288c5e41c62cddea | 288c5e41c62cddea | 288c5e41c62cddea |
-| par-iforest/ties             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
-| par-iforest/wide             | infer  | IDENTICAL x3 | a8612e7e09b4983b | a8612e7e09b4983b | a8612e7e09b4983b |
-| par-iforest/wide             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| par-iforest/base             | infer  | IDENTICAL x2 | c4247bb3a6c4675e | c4247bb3a6c4675e | (not run)        |
+| par-iforest/base             | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| par-iforest/denormal         | infer  | IDENTICAL x2 | f3dcde6748050803 | f3dcde6748050803 | (not run)        |
+| par-iforest/denormal         | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| par-iforest/denormal_ftz     | infer  | IDENTICAL x2 | f3dcde6748050803 | f3dcde6748050803 | (not run)        |
+| par-iforest/denormal_ftz     | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| par-iforest/dupes            | infer  | IDENTICAL x2 | db8a00a8aa424f7c | db8a00a8aa424f7c | (not run)        |
+| par-iforest/dupes            | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| par-iforest/hashed           | infer  | IDENTICAL x2 | e4d04598e6d55395 | e4d04598e6d55395 | (not run)        |
+| par-iforest/hashed           | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| par-iforest/negative         | infer  | IDENTICAL x2 | 99572e40ada83cdf | 99572e40ada83cdf | (not run)        |
+| par-iforest/negative         | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| par-iforest/odd              | infer  | IDENTICAL x2 | 7b104f74d47a6e15 | 7b104f74d47a6e15 | (not run)        |
+| par-iforest/odd              | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| par-iforest/ties             | infer  | IDENTICAL x2 | 288c5e41c62cddea | 288c5e41c62cddea | (not run)        |
+| par-iforest/ties             | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| par-iforest/wide             | infer  | IDENTICAL x2 | a8612e7e09b4983b | a8612e7e09b4983b | (not run)        |
+| par-iforest/wide             | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
 | par-kmeans/base              | infer  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
 | par-kmeans/base              | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
 | par-kmeans/denormal          | infer  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
@@ -3047,42 +3048,42 @@ summary: IDENTICAL=1224
 | par-logistic/ties            | model  | IDENTICAL x3 | eff4803be10700c8 | eff4803be10700c8 | eff4803be10700c8 |
 | par-logistic/wide            | infer  | IDENTICAL x3 | 0b4e034053a507a6 | 0b4e034053a507a6 | 0b4e034053a507a6 |
 | par-logistic/wide            | model  | IDENTICAL x3 | 576c92b63ada584d | 576c92b63ada584d | 576c92b63ada584d |
-| par-mlp/base                 | infer  | IDENTICAL x3 | b7659ff90ae1ea39 | b7659ff90ae1ea39 | b7659ff90ae1ea39 |
-| par-mlp/base                 | model  | IDENTICAL x3 | fb3977c1ab222cea | fb3977c1ab222cea | fb3977c1ab222cea |
-| par-mlp/denormal             | infer  | IDENTICAL x3 | 0659617762bde850 | 0659617762bde850 | 0659617762bde850 |
-| par-mlp/denormal             | model  | IDENTICAL x3 | c2e7a5157a96fb28 | c2e7a5157a96fb28 | c2e7a5157a96fb28 |
-| par-mlp/denormal_ftz         | infer  | IDENTICAL x3 | 0659617762bde850 | 0659617762bde850 | 0659617762bde850 |
-| par-mlp/denormal_ftz         | model  | IDENTICAL x3 | c2e7a5157a96fb28 | c2e7a5157a96fb28 | c2e7a5157a96fb28 |
-| par-mlp/dupes                | infer  | IDENTICAL x3 | b7659ff90ae1ea39 | b7659ff90ae1ea39 | b7659ff90ae1ea39 |
-| par-mlp/dupes                | model  | IDENTICAL x3 | fb3977c1ab222cea | fb3977c1ab222cea | fb3977c1ab222cea |
-| par-mlp/hashed               | infer  | IDENTICAL x3 | c56d5f921c229a7e | c56d5f921c229a7e | c56d5f921c229a7e |
-| par-mlp/hashed               | model  | IDENTICAL x3 | 84bdac86c5a7e68a | 84bdac86c5a7e68a | 84bdac86c5a7e68a |
-| par-mlp/negative             | infer  | IDENTICAL x3 | 4781497699af0fc9 | 4781497699af0fc9 | 4781497699af0fc9 |
-| par-mlp/negative             | model  | IDENTICAL x3 | bfd1ffd05f0141be | bfd1ffd05f0141be | bfd1ffd05f0141be |
-| par-mlp/odd                  | infer  | IDENTICAL x3 | ed981f80c3527a61 | ed981f80c3527a61 | ed981f80c3527a61 |
-| par-mlp/odd                  | model  | IDENTICAL x3 | 0d99a719dc720e03 | 0d99a719dc720e03 | 0d99a719dc720e03 |
-| par-mlp/ties                 | infer  | IDENTICAL x3 | e1e5086334bdb736 | e1e5086334bdb736 | e1e5086334bdb736 |
-| par-mlp/ties                 | model  | IDENTICAL x3 | 49ac83c7d65f98af | 49ac83c7d65f98af | 49ac83c7d65f98af |
-| par-mlp/wide                 | infer  | IDENTICAL x3 | 657d8e4662358a6a | 657d8e4662358a6a | 657d8e4662358a6a |
-| par-mlp/wide                 | model  | IDENTICAL x3 | 058b5a50342ac66a | 058b5a50342ac66a | 058b5a50342ac66a |
-| par-samba/base               | infer  | IDENTICAL x3 | c663dd4766895890 | c663dd4766895890 | c663dd4766895890 |
-| par-samba/base               | model  | IDENTICAL x3 | c4b392904ff448dd | c4b392904ff448dd | c4b392904ff448dd |
-| par-samba/denormal           | infer  | IDENTICAL x3 | fb72fcf2fb2ad224 | fb72fcf2fb2ad224 | fb72fcf2fb2ad224 |
-| par-samba/denormal           | model  | IDENTICAL x3 | 62bebcec12644705 | 62bebcec12644705 | 62bebcec12644705 |
-| par-samba/denormal_ftz       | infer  | IDENTICAL x3 | f3e42b50f51378ce | f3e42b50f51378ce | f3e42b50f51378ce |
-| par-samba/denormal_ftz       | model  | IDENTICAL x3 | c1d52ed8e918208b | c1d52ed8e918208b | c1d52ed8e918208b |
-| par-samba/dupes              | infer  | IDENTICAL x3 | 2853920460831149 | 2853920460831149 | 2853920460831149 |
-| par-samba/dupes              | model  | IDENTICAL x3 | 616c641186ef1771 | 616c641186ef1771 | 616c641186ef1771 |
-| par-samba/hashed             | infer  | IDENTICAL x3 | cd09020cd23ba0bb | cd09020cd23ba0bb | cd09020cd23ba0bb |
-| par-samba/hashed             | model  | IDENTICAL x3 | cbed7b567fb51d11 | cbed7b567fb51d11 | cbed7b567fb51d11 |
-| par-samba/negative           | infer  | IDENTICAL x3 | 13993c81dbf7c04f | 13993c81dbf7c04f | 13993c81dbf7c04f |
-| par-samba/negative           | model  | IDENTICAL x3 | a7bb67f1cb6b72d0 | a7bb67f1cb6b72d0 | a7bb67f1cb6b72d0 |
-| par-samba/odd                | infer  | IDENTICAL x3 | c663dd4766895890 | c663dd4766895890 | c663dd4766895890 |
-| par-samba/odd                | model  | IDENTICAL x3 | c4b392904ff448dd | c4b392904ff448dd | c4b392904ff448dd |
-| par-samba/ties               | infer  | IDENTICAL x3 | a8df84421515d634 | a8df84421515d634 | a8df84421515d634 |
-| par-samba/ties               | model  | IDENTICAL x3 | 10dad1656d005743 | 10dad1656d005743 | 10dad1656d005743 |
-| par-samba/wide               | infer  | IDENTICAL x3 | 561cbc9176182841 | 561cbc9176182841 | 561cbc9176182841 |
-| par-samba/wide               | model  | IDENTICAL x3 | 0648fadbf15b833f | 0648fadbf15b833f | 0648fadbf15b833f |
+| par-mlp/base                 | infer  | IDENTICAL x2 | b7659ff90ae1ea39 | b7659ff90ae1ea39 | (not run)        |
+| par-mlp/base                 | model  | IDENTICAL x2 | fb3977c1ab222cea | fb3977c1ab222cea | (not run)        |
+| par-mlp/denormal             | infer  | IDENTICAL x2 | 0659617762bde850 | 0659617762bde850 | (not run)        |
+| par-mlp/denormal             | model  | IDENTICAL x2 | c2e7a5157a96fb28 | c2e7a5157a96fb28 | (not run)        |
+| par-mlp/denormal_ftz         | infer  | IDENTICAL x2 | 0659617762bde850 | 0659617762bde850 | (not run)        |
+| par-mlp/denormal_ftz         | model  | IDENTICAL x2 | c2e7a5157a96fb28 | c2e7a5157a96fb28 | (not run)        |
+| par-mlp/dupes                | infer  | IDENTICAL x2 | b7659ff90ae1ea39 | b7659ff90ae1ea39 | (not run)        |
+| par-mlp/dupes                | model  | IDENTICAL x2 | fb3977c1ab222cea | fb3977c1ab222cea | (not run)        |
+| par-mlp/hashed               | infer  | IDENTICAL x2 | c56d5f921c229a7e | c56d5f921c229a7e | (not run)        |
+| par-mlp/hashed               | model  | IDENTICAL x2 | 84bdac86c5a7e68a | 84bdac86c5a7e68a | (not run)        |
+| par-mlp/negative             | infer  | IDENTICAL x2 | 4781497699af0fc9 | 4781497699af0fc9 | (not run)        |
+| par-mlp/negative             | model  | IDENTICAL x2 | bfd1ffd05f0141be | bfd1ffd05f0141be | (not run)        |
+| par-mlp/odd                  | infer  | IDENTICAL x2 | ed981f80c3527a61 | ed981f80c3527a61 | (not run)        |
+| par-mlp/odd                  | model  | IDENTICAL x2 | 0d99a719dc720e03 | 0d99a719dc720e03 | (not run)        |
+| par-mlp/ties                 | infer  | IDENTICAL x2 | e1e5086334bdb736 | e1e5086334bdb736 | (not run)        |
+| par-mlp/ties                 | model  | IDENTICAL x2 | 49ac83c7d65f98af | 49ac83c7d65f98af | (not run)        |
+| par-mlp/wide                 | infer  | IDENTICAL x2 | 657d8e4662358a6a | 657d8e4662358a6a | (not run)        |
+| par-mlp/wide                 | model  | IDENTICAL x2 | 058b5a50342ac66a | 058b5a50342ac66a | (not run)        |
+| par-samba/base               | infer  | IDENTICAL x2 | c663dd4766895890 | c663dd4766895890 | (not run)        |
+| par-samba/base               | model  | IDENTICAL x2 | c4b392904ff448dd | c4b392904ff448dd | (not run)        |
+| par-samba/denormal           | infer  | IDENTICAL x2 | fb72fcf2fb2ad224 | fb72fcf2fb2ad224 | (not run)        |
+| par-samba/denormal           | model  | IDENTICAL x2 | 62bebcec12644705 | 62bebcec12644705 | (not run)        |
+| par-samba/denormal_ftz       | infer  | IDENTICAL x2 | f3e42b50f51378ce | f3e42b50f51378ce | (not run)        |
+| par-samba/denormal_ftz       | model  | IDENTICAL x2 | c1d52ed8e918208b | c1d52ed8e918208b | (not run)        |
+| par-samba/dupes              | infer  | IDENTICAL x2 | 2853920460831149 | 2853920460831149 | (not run)        |
+| par-samba/dupes              | model  | IDENTICAL x2 | 616c641186ef1771 | 616c641186ef1771 | (not run)        |
+| par-samba/hashed             | infer  | IDENTICAL x2 | cd09020cd23ba0bb | cd09020cd23ba0bb | (not run)        |
+| par-samba/hashed             | model  | IDENTICAL x2 | cbed7b567fb51d11 | cbed7b567fb51d11 | (not run)        |
+| par-samba/negative           | infer  | IDENTICAL x2 | 13993c81dbf7c04f | 13993c81dbf7c04f | (not run)        |
+| par-samba/negative           | model  | IDENTICAL x2 | a7bb67f1cb6b72d0 | a7bb67f1cb6b72d0 | (not run)        |
+| par-samba/odd                | infer  | IDENTICAL x2 | c663dd4766895890 | c663dd4766895890 | (not run)        |
+| par-samba/odd                | model  | IDENTICAL x2 | c4b392904ff448dd | c4b392904ff448dd | (not run)        |
+| par-samba/ties               | infer  | IDENTICAL x2 | a8df84421515d634 | a8df84421515d634 | (not run)        |
+| par-samba/ties               | model  | IDENTICAL x2 | 10dad1656d005743 | 10dad1656d005743 | (not run)        |
+| par-samba/wide               | infer  | IDENTICAL x2 | 561cbc9176182841 | 561cbc9176182841 | (not run)        |
+| par-samba/wide               | model  | IDENTICAL x2 | 0648fadbf15b833f | 0648fadbf15b833f | (not run)        |
 | par-scaler/base              | infer  | IDENTICAL x3 | fa0fbdef7ccae250 | fa0fbdef7ccae250 | fa0fbdef7ccae250 |
 | par-scaler/base              | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
 | par-scaler/denormal          | infer  | IDENTICAL x3 | d0a324ba42db1e9c | d0a324ba42db1e9c | d0a324ba42db1e9c |
@@ -3679,4 +3680,139 @@ summary: IDENTICAL=1224
 | umap/wide                    | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
 
 summary (infer/model): IDENTICAL=1665, N/A=783
-require-columns 3 over ['agglomerative', 'arima', 'arima-011', 'arima-seasonal-c', 'byte-lm', 'byte-lm-host-infer', 'byte-lm-host-infer-threaded', 'byte-lm-host-train', 'byte-lm-resident', 'cross-entropy-arms', 'cross-val', 'dbscan', 'dbscan-brute-l1', 'dbscan-weighted', 'elasticnet', 'elasticnet-l2end-no-intercept', 'et-clf', 'et-clf-entropy-bestfirst', 'et-reg', 'et-reg-bootstrap-parallel', 'gbdt-adapter-clf', 'gbdt-adapter-reg', 'gbdt-categorical-ctr', 'gbdt-depthwise', 'gbdt-exact-mae', 'gbdt-feature-freq', 'gbdt-lossguide', 'gbdt-lossguide-newtoncosine', 'gbdt-multiclass', 'gbdt-nan-modes', 'gbdt-onevsall', 'gbdt-ordered-rmse', 'gbdt-parametric-losses', 'gbdt-pointwise-l2-bayesian-eval', 'gbdt-rmse', 'gbdt-symmetric', 'gemm-pinned', 'gemm-transposed', 'gp', 'gp-matern12', 'gp-matern32', 'gp-matern52-ard', 'holtwinters', 'holtwinters-multiplicative', 'iforest', 'iforest-tuned', 'kde', 'kde-cosine-minkowski', 'kde-epanechnikov-l1', 'kde-exponential-chebyshev', 'kde-linear-cosine', 'kde-tophat-sqeuclidean', 'kde-weighted', 'kmeans', 'kmeans-array', 'kmeans-random', 'kmeans-weighted', 'knn', 'knn-chebyshev', 'knn-clf', 'knn-clf-distance', 'knn-cosine', 'knn-manhattan', 'knn-minkowski-p3', 'knn-rbc', 'knn-reg', 'knn-reg-distance', 'knn-sqeuclidean', 'kpss', 'lasso', 'logistic', 'logistic-elasticnet', 'logistic-l1', 'logistic-multiclass', 'logistic-unpenalized-no-intercept', 'mamba1', 'mamba2', 'mamba2-dtlimit', 'mamba3', 'metrics', 'metrics-classification', 'minmax-scaler', 'minmax-scaler-clip', 'mlp', 'ols', 'ols-no-intercept', 'ols-weighted', 'optim-adam-clip', 'optim-sgd', 'par-arima', 'par-boosting', 'par-byte-lm', 'par-cd', 'par-dbscan', 'par-forest', 'par-forest-et', 'par-gp', 'par-gram', 'par-iforest', 'par-kmeans', 'par-logistic', 'par-mlp', 'par-samba', 'par-scaler', 'par-svm', 'pca', 'pca-full-whiten', 'pca-whiten', 'radius', 'radius-chebyshev', 'radius-manhattan', 'radius-minkowski-p3', 'rf-clf', 'rf-clf-balanced-parallel', 'rf-clf-entropy-log2-noboot', 'rf-reg', 'rf-reg-gamma-ig', 'rf-reg-poisson', 'ridge', 'ridge-no-intercept', 'samba', 'samba-untied-dropout-accum', 'spectral', 'spectral-precomputed', 'standard-scaler', 'standard-scaler-no-mean', 'standard-scaler-no-std', 'svc', 'svc-linear', 'svr', 'svr-linear', 'tokenizer', 'transformer', 'transformer-window', 'tsvd', 'umap']: OK
+REQUIRE FAIL iforest-tuned/base train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL iforest-tuned/denormal train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL iforest-tuned/denormal_ftz train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL iforest-tuned/dupes train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL iforest-tuned/hashed train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL iforest-tuned/negative train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL iforest-tuned/odd train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL iforest-tuned/ties train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL iforest-tuned/wide train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL iforest/base train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL iforest/denormal train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL iforest/denormal_ftz train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL iforest/dupes train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL iforest/hashed train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL iforest/negative train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL iforest/odd train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL iforest/ties train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL iforest/wide train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-arima/base train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-arima/denormal train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-arima/denormal_ftz train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-arima/dupes train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-arima/hashed train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-arima/negative train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-arima/odd train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-arima/ties train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-arima/wide train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-byte-lm/base train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-byte-lm/denormal train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-byte-lm/denormal_ftz train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-byte-lm/dupes train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-byte-lm/hashed train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-byte-lm/negative train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-byte-lm/odd train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-byte-lm/ties train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-byte-lm/wide train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-iforest/base train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-iforest/denormal train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-iforest/denormal_ftz train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-iforest/dupes train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-iforest/hashed train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-iforest/negative train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-iforest/odd train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-iforest/ties train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-iforest/wide train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-mlp/base train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-mlp/denormal train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-mlp/denormal_ftz train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-mlp/dupes train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-mlp/hashed train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-mlp/negative train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-mlp/odd train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-mlp/ties train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-mlp/wide train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-samba/base train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-samba/denormal train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-samba/denormal_ftz train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-samba/dupes train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-samba/hashed train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-samba/negative train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-samba/odd train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-samba/ties train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-samba/wide train: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL iforest-tuned/base infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL iforest-tuned/denormal infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL iforest-tuned/denormal_ftz infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL iforest-tuned/dupes infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL iforest-tuned/hashed infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL iforest-tuned/negative infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL iforest-tuned/odd infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL iforest-tuned/ties infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL iforest-tuned/wide infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL iforest/base infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL iforest/denormal infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL iforest/denormal_ftz infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL iforest/dupes infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL iforest/hashed infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL iforest/negative infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL iforest/odd infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL iforest/ties infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL iforest/wide infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-arima/base infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-arima/denormal infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-arima/denormal_ftz infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-arima/dupes infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-arima/hashed infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-arima/negative infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-arima/odd infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-arima/ties infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-arima/wide infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-iforest/base infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-iforest/denormal infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-iforest/denormal_ftz infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-iforest/dupes infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-iforest/hashed infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-iforest/negative infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-iforest/odd infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-iforest/ties infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-iforest/wide infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-mlp/base infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-mlp/base model: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-mlp/denormal infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-mlp/denormal model: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-mlp/denormal_ftz infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-mlp/denormal_ftz model: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-mlp/dupes infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-mlp/dupes model: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-mlp/hashed infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-mlp/hashed model: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-mlp/negative infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-mlp/negative model: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-mlp/odd infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-mlp/odd model: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-mlp/ties infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-mlp/ties model: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-mlp/wide infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-mlp/wide model: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-samba/base infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-samba/base model: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-samba/denormal infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-samba/denormal model: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-samba/denormal_ftz infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-samba/denormal_ftz model: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-samba/dupes infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-samba/dupes model: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-samba/hashed infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-samba/hashed model: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-samba/negative infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-samba/negative model: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-samba/odd infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-samba/odd model: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-samba/ties infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-samba/ties model: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-samba/wide infer: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL par-samba/wide model: IDENTICAL x2 rests on 2 real hash(es), --require-columns 3 demands that many; a column that should cover this lane is refusing, which is not a pass
+require-columns 3 over ['agglomerative', 'arima', 'arima-011', 'arima-seasonal-c', 'byte-lm', 'byte-lm-host-infer', 'byte-lm-host-infer-threaded', 'byte-lm-host-train', 'byte-lm-resident', 'cross-entropy-arms', 'cross-val', 'dbscan', 'dbscan-brute-l1', 'dbscan-weighted', 'elasticnet', 'elasticnet-l2end-no-intercept', 'et-clf', 'et-clf-entropy-bestfirst', 'et-reg', 'et-reg-bootstrap-parallel', 'gbdt-adapter-clf', 'gbdt-adapter-reg', 'gbdt-categorical-ctr', 'gbdt-depthwise', 'gbdt-exact-mae', 'gbdt-feature-freq', 'gbdt-lossguide', 'gbdt-lossguide-newtoncosine', 'gbdt-multiclass', 'gbdt-nan-modes', 'gbdt-onevsall', 'gbdt-ordered-rmse', 'gbdt-parametric-losses', 'gbdt-pointwise-l2-bayesian-eval', 'gbdt-rmse', 'gbdt-symmetric', 'gemm-pinned', 'gemm-transposed', 'gp', 'gp-matern12', 'gp-matern32', 'gp-matern52-ard', 'holtwinters', 'holtwinters-multiplicative', 'iforest', 'iforest-tuned', 'kde', 'kde-cosine-minkowski', 'kde-epanechnikov-l1', 'kde-exponential-chebyshev', 'kde-linear-cosine', 'kde-tophat-sqeuclidean', 'kde-weighted', 'kmeans', 'kmeans-array', 'kmeans-random', 'kmeans-weighted', 'knn', 'knn-chebyshev', 'knn-clf', 'knn-clf-distance', 'knn-cosine', 'knn-manhattan', 'knn-minkowski-p3', 'knn-rbc', 'knn-reg', 'knn-reg-distance', 'knn-sqeuclidean', 'kpss', 'lasso', 'logistic', 'logistic-elasticnet', 'logistic-l1', 'logistic-multiclass', 'logistic-unpenalized-no-intercept', 'mamba1', 'mamba2', 'mamba2-dtlimit', 'mamba3', 'metrics', 'metrics-classification', 'minmax-scaler', 'minmax-scaler-clip', 'mlp', 'ols', 'ols-no-intercept', 'ols-weighted', 'optim-adam-clip', 'optim-sgd', 'par-arima', 'par-boosting', 'par-byte-lm', 'par-cd', 'par-dbscan', 'par-forest', 'par-forest-et', 'par-gp', 'par-gram', 'par-iforest', 'par-kmeans', 'par-logistic', 'par-mlp', 'par-samba', 'par-scaler', 'par-svm', 'pca', 'pca-full-whiten', 'pca-whiten', 'radius', 'radius-chebyshev', 'radius-manhattan', 'radius-minkowski-p3', 'rf-clf', 'rf-clf-balanced-parallel', 'rf-clf-entropy-log2-noboot', 'rf-reg', 'rf-reg-gamma-ig', 'rf-reg-poisson', 'ridge', 'ridge-no-intercept', 'samba', 'samba-untied-dropout-accum', 'spectral', 'spectral-precomputed', 'standard-scaler', 'standard-scaler-no-mean', 'standard-scaler-no-std', 'svc', 'svc-linear', 'svr', 'svr-linear', 'tokenizer', 'transformer', 'transformer-window', 'tsvd', 'umap']: 135 short
