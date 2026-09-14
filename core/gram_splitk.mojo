@@ -150,6 +150,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.memory import stack_allocation
+from std.sys.compile import is_defined
 
 from checks.hardware_matrix import gram_splitk_is_target_arm
 from checks.kernel_matrix import (
@@ -172,6 +173,41 @@ from neighbors.impl.distance.detail.pairwise_distance_base import (
 
 
 comptime GRAM_TPB = lib_block_size_for[K_LIB_GRAM_SPLITK, TARGET_COLUMN]()
+
+#: DEVIATION 2711 (2026-09-14, lane sm120a-jacobi). THE STRIDED-SINGLES ARM
+#: HAS TWO SPELLINGS AND THIS PICKS THE SHIPPED ONE.
+#:
+#: 0 is the arm as shipped: one `SIMD[float32, CELLS]` accumulator, and per
+#: staged row a `comptime for c` that updates lane `c` under its own guard
+#: `tid + c * GRAM_TPB < mn`. 1 is the per-cell scalar loop: for each live
+#: cell its own scalar accumulator walks the staged rows alone, so no two
+#: lanes are updated in one loop body; the indices are plain integers
+#: computed from the cell, not lanes of an int32 vector. EVERY cell's chain
+#: is the same products in the same k-ascending order through the same
+#: `identical_mul_add`, so the two arms are the same bits wherever the old
+#: arm computes what it says; the Apple M4 holds them equal (the probe's
+#: STAGE lines). Only the arm that ragged widths take is touched: the
+#: register-tile arm and the uniform-jj arm are the same code either way.
+#:
+#: WHY IT EXISTS, MEASURED. RunPod RTX 5090 (sm_120a, driver 580.126.16,
+#: Mojo 1.0.0 ed45d567), 2026-09-14 10:50Z,
+#: bench/results/e1g/2026-09-14_105031-nvidia-rtx5090-jacobi-probe: the
+#: binary AOT-built with `--target-accelerator sm_120a` writes cells 0..32
+#: of the 17 x 17 Gram wrong, exactly the `c = 0` cells of the 33 threads
+#: whose `c = 1` cell (256..288) is also live, while those threads' `c = 1`
+#: cells and every cell of a thread with one live lane are right; the same
+#: source run JIT (`mojo run`) on the same GPU is bit-identical to the Mac
+#: on every cell, and the wrong cells repeat bit for bit within the binary.
+#: Not a race and not a rounding: a lane of the accumulator is corrupted by
+#: the AOT compilation of arm 0 for that target. The four sm_120a refusals
+#: (pca, tsvd, ols, ridge on `odd`) are the Jacobi being handed that matrix.
+#:
+#: The default stays 0 until the 5090 leg holds arm 1 right on that target
+#: (docs/lanes/BRIEF_sm120a_jacobi_2026-09-14.md section 10). Build with
+#: `-D MOJOLEARN_2711_GRAM_STRIDED_SCALAR=1` to ship arm 1.
+comptime GRAM_STRIDED_ARM = (
+    1 if is_defined["MOJOLEARN_2711_GRAM_STRIDED_SCALAR"]() else 0
+)
 
 #: Rows of X staged in shared memory per barrier. 32 rows keeps the staging
 #: tile at `32 * GRAM_MAX_COLS * 4 = 16 KB`, half of Metal's 32 KB
@@ -440,7 +476,9 @@ def gram_splitk_applies(m: Int, n: Int, k: Int) raises -> Bool:
 
 
 @always_inline
-def _gram_splitk_partial_body[CELLS: Int, CENTERED: Bool](
+def _gram_splitk_partial_body[
+    CELLS: Int, CENTERED: Bool, STRIDED_ARM: Int = GRAM_STRIDED_ARM
+](
     partials: MutPointer[Float32, MutAnyOrigin],
     x: MutPointer[Float32, MutAnyOrigin],
     mu: MutPointer[Float32, MutAnyOrigin],
@@ -520,6 +558,9 @@ def _gram_splitk_partial_body[CELLS: Int, CENTERED: Bool](
                 jj[c] = Int32(cell % m)
 
     var acc = SIMD[DType.float32, CELLS](0.0)
+    # DEVIATION 2711, arm 1 only: one scalar per cell, never a lane. Dead
+    # under arm 0 and removed by the compiler there.
+    var accs = InlineArray[Float32, CELLS](fill=Float32(0.0))
 
     # FLOOR KNOB (SCOREBOARD_2026-08-19 item 5, first knob). When the block's
     # thread count is an exact multiple of m AND the register-tile arm
@@ -656,21 +697,41 @@ def _gram_splitk_partial_body[CELLS: Int, CENTERED: Bool](
                             tile[base + Int(ii[c])], xj, acc[c]
                         )
         else:
-            for r in range(rows):
-                var base = r * m
+            comptime if STRIDED_ARM == 1:
+                # DEVIATION 2711, arm 1: each live cell walks the staged
+                # rows with its own scalar. Same products, same i-first
+                # operand order, same k-ascending chain, same seam as arm
+                # 0 below; only the register that holds the sum and the
+                # shape of the loop differ (see `GRAM_STRIDED_ARM`).
                 comptime for c in range(CELLS):
-                    if tid + c * GRAM_TPB < mn:
-                        # DEVIATION 522 / row 9, same seam, strided arm.
-                        # The i-operand stays FIRST in every arm: the
-                        # module's BITWISE SYMMETRY argument rests on cells
-                        # (i,j) and (j,i) forming the same two loads in
-                        # commuted order, and `fma(a,b,c)` is exactly as
-                        # commutative in a and b as `a*b` was.
-                        acc[c] = identical_mul_add(
-                            tile[base + Int(ii[c])],
-                            tile[base + Int(jj[c])],
-                            acc[c],
-                        )
+                    var cell_c = tid + c * GRAM_TPB
+                    if cell_c < mn:
+                        var ic = cell_c // m
+                        var jc = cell_c - ic * m
+                        var a_c = accs[c]
+                        for r in range(rows):
+                            var base = r * m
+                            a_c = identical_mul_add(
+                                tile[base + ic], tile[base + jc], a_c
+                            )
+                        accs[c] = a_c
+            else:
+                for r in range(rows):
+                    var base = r * m
+                    comptime for c in range(CELLS):
+                        if tid + c * GRAM_TPB < mn:
+                            # DEVIATION 522 / row 9, same seam, strided
+                            # arm. The i-operand stays FIRST in every arm:
+                            # the module's BITWISE SYMMETRY argument rests
+                            # on cells (i,j) and (j,i) forming the same two
+                            # loads in commuted order, and `fma(a,b,c)` is
+                            # exactly as commutative in a and b as `a*b`
+                            # was.
+                            acc[c] = identical_mul_add(
+                                tile[base + Int(ii[c])],
+                                tile[base + Int(jj[c])],
+                                acc[c],
+                            )
         barrier()
         t += rows
 
@@ -693,7 +754,28 @@ def _gram_splitk_partial_body[CELLS: Int, CENTERED: Bool](
         comptime for c in range(CELLS):
             var cell = tid + c * GRAM_TPB
             if cell < mn:
-                partials.unsafe_store(chunk * mn + cell, ftz(acc[c]))
+                var val = acc[c]
+                comptime if STRIDED_ARM == 1:
+                    # The uniform-jj arm still accumulates in `acc`; only
+                    # the strided arm moved to `accs`.
+                    if not uniform_jj:
+                        val = accs[c]
+                partials.unsafe_store(chunk * mn + cell, ftz(val))
+
+
+def gram_splitk_partial_kernel_arm[CELLS: Int, ARM: Int](
+    partials: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    m_in: Int32,
+    k_in: Int32,
+    chunk_rows_in: Int32,
+):
+    """The plain partial kernel at a NAMED strided arm (DEVIATION 2711), so
+    a probe can launch arm 0 and arm 1 in one binary and compare; the
+    shipped entry below takes `GRAM_STRIDED_ARM`."""
+    _gram_splitk_partial_body[CELLS, False, ARM](
+        partials, x, x, m_in, k_in, chunk_rows_in
+    )
 
 
 def gram_splitk_partial_kernel[CELLS: Int](

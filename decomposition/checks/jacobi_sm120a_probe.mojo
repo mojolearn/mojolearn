@@ -65,6 +65,14 @@ from checks.numerics import (
     numeric_mode_name,
 )
 from core.gemm import gemm_tn
+from core.gram_splitk import (
+    GRAM_STRIDED_ARM,
+    GRAM_TPB,
+    _splitk_chunk_rows,
+    gram_splitk_chunk_count,
+    gram_splitk_partial_kernel_arm,
+    gram_splitk_reduce_kernel,
+)
 from core.column_stats import diagonal_to_vector_kernel
 from decomposition.impl.linalg.detail.pca import compute_covariance
 from decomposition.checks.jacobi_eigh_device import (
@@ -537,6 +545,106 @@ def _run_case(ctx: DeviceContext, tag: String, a: List[Float32], n: Int) raises:
         )
 
 
+def _stage_report[ARM: Int](
+    ctx: DeviceContext,
+    x: List[Float32],
+    mut xd: DeviceBuffer[DType.float32],
+    n_rows: Int,
+    n_cols: Int,
+    gemm_out: List[Float32],
+) raises:
+    """The split-K Gram BY STAGE, one strided arm: every chunk's partial
+    against a Float64 host partial over the same rows, then the reduce.
+
+    DEVIATION 2711 (the 5090 leg of 2026-09-14 10:50Z): the AOT sm_120a
+    build wrote cells 0..32 of the 17 x 17 Gram wrong, exactly the `c = 0`
+    cells of the 33 threads whose `c = 1` cell (256..288) is also live,
+    and those threads' `c = 1` cells right. This prints, per arm, how many
+    chunks carry a wrong partial and which cells of the first wrong chunk,
+    so the leg that confirms the fix also says where the old arm breaks.
+    """
+    var m = n_cols
+    var mn = m * m
+    var n_chunks = gram_splitk_chunk_count()
+    var kc = _splitk_chunk_rows(n_rows, n_chunks)
+    var partials = ctx.enqueue_create_buffer[DType.float32](n_chunks * mn)
+    var z = ctx.enqueue_create_buffer[DType.float32](mn)
+    ctx.synchronize()
+    partials.enqueue_fill(Float32(0.0))
+    ctx.synchronize()
+    comptime kern = gram_splitk_partial_kernel_arm[4, ARM]
+    ctx.enqueue_function[kern](
+        partials.unsafe_ptr(),
+        xd.unsafe_ptr(),
+        Int32(m),
+        Int32(n_rows),
+        Int32(kc),
+        grid_dim=(n_chunks, 1, 1),
+        block_dim=(GRAM_TPB, 1, 1),
+    )
+    ctx.synchronize()
+    var hp = _to_host(ctx, partials, n_chunks * mn)
+    var bad_chunks = 0
+    var first_bad = -1
+    var bad_cells_first = String("")
+    var worst = Float64(0.0)
+    for c in range(n_chunks):
+        var r0 = c * kc
+        var r1 = r0 + kc
+        if r1 > n_rows:
+            r1 = n_rows
+        var bad_here = 0
+        for i in range(m):
+            for j in range(m):
+                var h = Float64(0.0)
+                var r = r0
+                while r < r1:
+                    h += Float64(x[r * m + i]) * Float64(x[r * m + j])
+                    r += 1
+                var d = Float64(hp[c * mn + i * m + j])
+                var tol = 1.0e-3 * (abs(h) if abs(h) > 1.0 else 1.0)
+                var e = abs(d - h)
+                if e > worst:
+                    worst = e
+                if e > tol:
+                    bad_here += 1
+                    if first_bad < 0 or first_bad == c:
+                        if bad_cells_first.byte_length() > 0:
+                            bad_cells_first += ","
+                        bad_cells_first += String(i * m + j)
+        if bad_here > 0:
+            bad_chunks += 1
+            if first_bad < 0:
+                first_bad = c
+    ctx.enqueue_function[gram_splitk_reduce_kernel](
+        z.unsafe_ptr(),
+        partials.unsafe_ptr(),
+        Int32(mn),
+        Int32(n_chunks),
+        grid_dim=((mn + GRAM_TPB - 1) // GRAM_TPB, 1, 1),
+        block_dim=(GRAM_TPB, 1, 1),
+    )
+    ctx.synchronize()
+    var hz = _to_host(ctx, z, mn)
+    var moved = 0
+    for i in range(mn):
+        if bitcast[DType.uint32](hz[i]) != bitcast[DType.uint32](gemm_out[i]):
+            moved += 1
+    print(
+        "STAGE arm=" + String(ARM),
+        "shipped_arm=" + String(GRAM_STRIDED_ARM),
+        "chunks=" + String(n_chunks),
+        "chunk_rows=" + String(kc),
+        "partials_hash=" + _hex64(_fnv1a64(hp, 0, n_chunks * mn)),
+        "bad_chunks=" + String(bad_chunks),
+        "first_bad_chunk=" + String(first_bad),
+        "worst_partial_abs_err=" + String(worst),
+        "bad_cells_of_first_bad_chunk=" + bad_cells_first,
+        "reduce_hash=" + _hex64(_fnv1a64(hz, 0, mn)),
+        "reduce_equals_gemm_tn=" + ("yes" if moved == 0 else "NO:" + String(moved)),
+    )
+
+
 def _host_cov64(x: List[Float32], n_rows: Int, n_cols: Int, centered: Bool, scale: Float64) -> List[Float64]:
     """Float64 host `X^T X` (or the centered covariance) for the error columns."""
     var mu = List[Float64](length=n_cols, fill=Float64(0.0))
@@ -631,6 +739,12 @@ def main() raises:
     var gram_h = _to_host(ctx, gram, n_cols * n_cols)
     _matrix_report("tsvd.gram", gram_h, n_cols, ref_gram)
     _run_case(ctx, "tsvd.gram", gram_h, n_cols)
+
+    # THE GRAM BY STAGE, both strided arms (DEVIATION 2711): the old
+    # SIMD-lane accumulation and the per-cell scalar loop, each chunk's
+    # partial against a Float64 host partial, then the reduce.
+    _stage_report[0](ctx, x, xd, n_rows, n_cols, gram_h)
+    _stage_report[1](ctx, x, xd, n_rows, n_cols, gram_h)
 
     # CASE 3: ols. The same Gram, equilibrated on the device exactly as
     # `lstsq_eig` does it (host power-of-two scales from the diagonal bits,

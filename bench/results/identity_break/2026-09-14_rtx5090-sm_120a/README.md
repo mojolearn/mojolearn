@@ -29,5 +29,13 @@ from an off-diagonal ratio of 0.0343. The reading the Mac lines add to the findi
 and `tsvd.gram` are the same matrix up to one power-of-two scale (all 17 scales are `0x3c000000`) and
 the Jacobi is exactly invariant to that scale (same `v_hash` and the same host ratio at every sweep),
 so a deterministic violation on the 5090 could not have reported 0.505 for ols and 0.0012 for tsvd.
-The 5090 run of the probe is owed: brief `docs/lanes/BRIEF_sm120a_jacobi_2026-09-14.md`, wrapper body
-`tools/jacobi_sm120a_probe_leg.sh`.
+The 5090 run of the probe (2026-09-14 10:59Z, `jacobi_probe.rtx5090-sm_120a.gate.txt` here, full
+outputs at `bench/results/e1g/2026-09-14_105031-nvidia-rtx5090-jacobi-probe/`) settled the site:
+the same source run JIT on the 5090 is bit-identical to the Mac on every line, while the binary
+AOT-built with `--target-accelerator sm_120a` writes cells 0..32 of the 17 x 17 Gram wrong (the
+`c = 0` cells of the 33 threads whose `c = 1` cell is also live in the split-K kernel's strided
+arm), repeatably, and the Jacobi handed a correct matrix in that same binary matches the Mac. The
+four refusals are the Jacobi being handed that Gram; the sentence above calling it a contract
+violation in the sweep is superseded. Brief `docs/lanes/BRIEF_sm120a_jacobi_2026-09-14.md`
+sections 9 and 10; the fix arm is `-D MOJOLEARN_2711_GRAM_STRIDED_SCALAR=1` in
+`core/gram_splitk.mojo`, its 5090 confirmation owed through `tools/jacobi_sm120a_probe_leg.sh`.

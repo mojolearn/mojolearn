@@ -1,8 +1,11 @@
 # BRIEF: the sm_120a Jacobi refusals (DEVIATION 2711), 2026-09-14
 
-Lane `lane/sm120a-jacobi`. Status: READ and PROBED on the Mac; the RTX 5090 run of the probe is OWED
-(section 6). Nothing here claims a cause. Section 3 is the one deduction the reading and the Mac
-measurement together support, and it narrows the kind of failure, not its site.
+Lane `lane/sm120a-jacobi`. Status: the 5090 leg of the probe RAN (section 9): the Jacobi is not the
+site, the 17-wide split-K Gram is, and only when the source is AOT-compiled for `sm_120a`; the same
+source run JIT on the same GPU is bit-identical to the Mac. A second arm of the Gram's strided loop is
+on the branch behind `-D MOJOLEARN_2711_GRAM_STRIDED_SCALAR=1` (section 10), held equal to the shipped
+arm on the M4, and the 5090 leg that confirms it is OWED (section 10). Sections 1 to 8 are the state
+before that leg and are kept as written; where the leg superseded a sentence, section 9 says so.
 
 ## 1. The finding
 
@@ -193,3 +196,99 @@ Statements read for this brief and found false or superseded:
 No statement in `checks/kernel_matrix.mojo`, `checks/hardware_matrix.mojo`,
 `decomposition/checks/jacobi_eigh_device.mojo`, `core/gram_splitk.mojo` or `SUPPORT_MATRIX.md:99-104`
 was found false by this reading.
+
+## 9. The 5090 leg of the probe (measured 2026-09-14 10:59Z)
+
+`bench/results/e1g/2026-09-14_105031-nvidia-rtx5090-jacobi-probe/remote/jacobi_probe/` (RunPod
+RTX 5090, driver 580.126.16, compute capability 12.0 resolved to `sm_120a`, Mojo 1.0.0 ed45d567, no
+`MODULAR_NVPTX_COMPILER_PATH`, commit d0b132d0a); its `gate.txt` is kept beside the Mac reference as
+`jacobi_probe.rtx5090-sm_120a.gate.txt`. The wrapper built the probe twice from one source: AOT
+(`mojo build --target-accelerator sm_120a`, the binding build's flags) and JIT (`mojo run`).
+
+**JIT: bit-identical to the Mac on every line.** `pca.cov` 2345be8d29a6e663, `tsvd.gram`
+643c4667f795927f, `ols.equilibrated` b2cb137a38ea7700, all 17 ols scales `0x3c000000`, 0 asymmetric
+cells everywhere, every case converged in 5 sweeps to the Mac's final hashes.
+
+**AOT: the Gram is wrong, deterministically; the Jacobi is right.**
+
+| line | AOT sm_120a | Mac |
+|---|---|---|
+| `pca.cov` | hash 34a8dcbdc84f3782, 60 asymmetric cells, max error 1.0086 vs host64, repeat identical | 0 asymmetric, error 4.5e-7 |
+| `tsvd.gram` | 60 asymmetric, max asymmetry 350.4, error 12,450 vs host64, repeat identical | 0, 5.3e-3 |
+| `ols.scales` | `3e000000,3f800000,3c000000,...` (2^-3, 1, then 2^-7 x 15) | 2^-7 x 17 |
+| `ols.equilibrated` | 15 sweeps, not converged, ratio 0.0138, fold oscillating 23.3, 0.028, 0.46, 13.5, ... | converged in 5 |
+| `host64.cov.f32` (Jacobi with no device Gram) | IDENTICAL to the Mac, every sweep, final dcdc77a61a836d8e | same |
+| `pca.cov`, `tsvd.gram` (Jacobi on the wrong Gram) | converged in 5 sweeps, `shipped_repeat_identical=yes` | |
+
+Cell by cell (`diff_cells.py` over the CELLS lines, AOT against the Mac; JIT differs in 0 cells):
+`pca.cov` and `tsvd.gram` differ in exactly cells 0..32, row 0 whole and row 1 through column 15;
+`pca.cov.16` in cells 0..31. Those are precisely the `c = 0` cells of the 33 threads whose `c = 1`
+cell (256..288, rows 15 and 16) is ALSO live under `CELLS = 4`, and those threads' `c = 1` cells are
+right, as is every cell of a thread with one live lane. The wrong values are not any recognizable
+chain: for each wrong cell, no product `sum x_a x_b` over all rows, over the first, second, third or
+one-row tail tiles of every chunk, for any pair among the cell's and its partner's indices, matches
+(closest candidates miss by 10 to 50 percent). The lane is corrupted, not redirected. `ols` is the
+same 33 cells plus every (k,0) scaled by exactly 16 and every (k,1) by exactly 128: the wrong diagonal
+cells (0,0) = 48.2 and (1,1) = -113.4 (true 12,193 and 12,337) set two wrong power-of-two scales.
+The 60 asymmetric cells are (0,k) against (k,0) for k = 1..16 and (1,k) against (k,1) for k = 2..15.
+
+**What this settles.** The Jacobi kernel is not the site: handed a correct matrix it is bit-identical
+to the Mac in the same AOT binary. The site is the split-K Gram's strided-singles arm
+(`core/gram_splitk.mojo`, the `else` branch of the accumulation), and only as AOT-compiled for
+`sm_120a`. It is not a race and not a missing barrier: the wrong cells repeat bit for bit within the
+binary (`repeat_identical=yes` on both products and `shipped_repeat_identical=yes` on every Jacobi
+case), and a race would show in the JIT compilation of the same source on the same part, which is
+clean. The reading offered on 2026-09-14 that Blackwell consumer warp scheduling exposes a missing
+barrier that Hopper and the MI300X hide is therefore contradicted by the measurement; so is section
+3's inference of a race (the ols against tsvd ratio disagreement it rested on is explained by the two
+wrong scales, not by non-determinism). The identity leg's refusal of `pca` and `tsvd` after 15 sweeps
+against this leg's convergence in 5 on the same GPU type is two AOT builds (commits 6796ceff9 and
+d0b132d0a) producing two different wrong Grams, each repeatable; the Jacobi's fate on a corrupted
+matrix is whatever that matrix makes it.
+
+What is NOT settled: which pass of the AOT pipeline for `sm_120a` (the Mojo lowering, the embedded
+PTX-to-SASS compiler of driver 580, or the `a`-suffixed target itself) miscompiles the loop. The
+modular checkout at `/Users/andrewhendel/CascadeProjects/upstream/modular` carries `max/` only, no
+stdlib, so how the stdlib classifies `sm_120a` was not read. No SASS was captured. Every other
+kernel on the 5090 (410 cells, the 8 GEMM gates) is right, so the trigger is specific to this loop's
+shape: a `SIMD[float32, CELLS]` accumulator whose lanes are updated one at a time inside a
+`comptime for` under per-lane runtime guards, with lane indices read from `SIMD[int32, CELLS]`
+vectors.
+
+## 10. The fix arm, and the leg that confirms it (OWED)
+
+`core/gram_splitk.mojo`: `GRAM_STRIDED_ARM` (0 shipped, 1 with `-D MOJOLEARN_2711_GRAM_STRIDED_SCALAR=1`)
+selects the strided-singles arm of `_gram_splitk_partial_body`. Arm 1 gives each live cell its own
+scalar accumulator (`InlineArray[Float32, CELLS]`) and its own pass over the staged rows, with the
+cell's row and column as plain integers; no two lanes are updated in one loop body and no int32
+vector is indexed. Every cell's chain is the same products in the same k-ascending order through the
+same `identical_mul_add`, so where arm 0 computes what it says the two arms are the same bits, and
+the M4 holds that: `STAGE arm=0` and `STAGE arm=1` in `jacobi_probe.apple-m4.txt` share
+`partials_hash=5043c2a4194223e8` and `reduce_hash=643c4667f795927f`, equal to `gemm_tn`'s output, 0
+bad chunks against the Float64 host partial per chunk (worst 5.6e-5). The tiled arm and the
+uniform-jj arm are untouched. `gram_splitk_partial_kernel_arm[CELLS, ARM]` launches either arm by
+name; the shipped entries take the define. The default stays 0 until the leg below holds arm 1 right
+on `sm_120a`; flipping it is one line.
+
+The probe now prints, per arm, `STAGE` lines: chunk count, partials hash, how many of the 128 chunk
+partials differ from a Float64 host partial over the same rows, the cells of the first wrong chunk,
+the reduce hash and whether the reduce equals `gemm_tn`. The wrapper builds the probe three ways: AOT
+at the shipped arm, AOT with the define (so `compute_covariance` and `gemm_tn` themselves take arm 1
+in the pca, tsvd and ols cases), and JIT.
+
+    MOJOLEARN_GEMM_LEG_EXTRA=tools/jacobi_sm120a_probe_leg.sh \
+    tools/gemm_remote_leg.sh nvidia --payload gemm --gpu "NVIDIA GeForce RTX 5090" --rent --minutes 40
+
+Read `gate.txt` in this order: (1) `== probe_aot`, `STAGE arm=0`: expected `bad_chunks` > 0 with
+`bad_cells_of_first_bad_chunk` naming cells 0..32, the defect reproduced at the stage; (2) the same
+binary's `STAGE arm=1`: `bad_chunks=0` and a `reduce_hash` of 643c4667f795927f is the fix holding in
+the AOT compilation; (3) `== probe_aot_arm1`: `MATRIX pca.cov` hash 2345be8d29a6e663 with 0
+asymmetric cells, `tsvd.gram` 643c4667f795927f, `ols.scales` all `3c000000`, every `PROBE case`
+converged in 5 with the Mac's final hashes, which is the shipped paths through arm 1; (4) `== probe_jit`
+unchanged. Anything else in (2) or (3) means the miscompile is not confined to the lane update and
+the arm is not the fix.
+
+After a green leg: flip `GRAM_STRIDED_ARM`'s default to 1, rebuild the 25 bindings for `sm_120a`
+and rerun `tools/identity_three_columns_leg.sh` on the 5090 (the four refused cells must read
+IDENTICAL x4 against the 2026-09-14 record), then correct `SUPPORT_MATRIX.md:99-104`, which still
+describes the symptom as the Jacobi not converging, to name the AOT Gram compilation.
