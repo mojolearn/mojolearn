@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Reference partitions with the native IDENTICAL top-k composite ordering."""
 import copy
+import ctypes
 import heapq
 import struct
 
@@ -44,7 +45,6 @@ def _merge(parts, ranges, n_queries, k):
             memcopy(db + (row * k + j) * 4,
                     addr_ro(parts[rank][0], name='distance shard') + offset, 4)
             packed = struct.pack('<I', index)
-            import ctypes
             ctypes.memmove(ib + (row * k + j) * 4, packed, 4)
     return distances, indices
 
@@ -95,7 +95,7 @@ def _vote(model, distances, indices, method):
 class ReferenceShardedNeighbors:
     """Partition a fitted brute-force KNN reference matrix across GPU workers.
 
-    No worker receives the complete reference matrix. Whole-feature distance
+    Workers receive only their assigned reference shard. Whole-feature distance
     cells and the native (distance-bit key, global index) ordering are retained.
     Each reference shard plus the original native workspace must fit on a GPU.
     The complete input lives on the host. Classification/regression currently
