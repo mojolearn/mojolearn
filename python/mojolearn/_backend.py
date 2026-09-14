@@ -202,6 +202,21 @@ _MODULES = (
     # NAME with the build command instead of a wrong-tier binary
     # answering under the right label (DEVIATION 869, the header above).
     "_mojolearn_transformer",
+    # Workstream D, 2026-09-14 (docs/lanes/BRIEF_claim_surface_census_2026-09-14.md
+    # section 4): four families that were built and identity-gated with no
+    # public door. Each is its own binding and build script, IDENTICAL only,
+    # listed here and in `_build_script` both so an unbuilt one raises BY
+    # NAME with the build command (DEVIATION 869). Compile-checked on one
+    # Apple M4 the day they were written; no box has run them through the
+    # Python door yet, and the identity_break lanes and three columns are
+    # owed (docs/lanes/LANE_BODY_*.py). The Cholesky door is inside
+    # `_mojolearn_gp` (bindings/build_gp.sh already links cholesky/); IVF is
+    # prepared (bindings/_mojolearn_ivf.mojo) and deliberately NOT listed
+    # until its NVIDIA and AMD legs run.
+    "_mojolearn_kernel_methods",
+    "_mojolearn_mixture",
+    "_mojolearn_hdbscan",
+    "_mojolearn_resample",
 )
 
 #: ONE RULE FOR TIERS (DEVIATION 2490, 2026-09-10): THE TREE LANES SHIP
@@ -1513,6 +1528,10 @@ def _build_script(name):
         "_mojolearn_gp": "build_gp.sh",
         "_mojolearn_mamba": "build_mamba.sh",
         "_mojolearn_transformer": "build_transformer.sh",
+        "_mojolearn_kernel_methods": "build_kernel_methods.sh",
+        "_mojolearn_mixture": "build_mixture.sh",
+        "_mojolearn_hdbscan": "build_hdbscan.sh",
+        "_mojolearn_resample": "build_resample.sh",
     }.get(name, "build" + name[len("_mojolearn"):] + ".sh")
 
 
