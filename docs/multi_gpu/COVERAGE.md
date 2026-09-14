@@ -8,9 +8,11 @@ distributed fit of one estimator.
 
 ## Compute and memory are separate requirements
 
-The implemented neural drivers replicate parameters and optimizer state.
+The byte-LM driver pools AdamW moments and rollback copies in disjoint device
+ranges; parameters, gradients and activations remain replicated. The SmallMLP
+and Samba drivers still replicate optimizer state.
 Forests replicate training data; KMeans retains full-data work on the root.
-These paths do not pool GPU memory. A model or dataset that exceeds one GPU's
+These remaining allocations limit capacity. A model or dataset that exceeds one GPU's
 memory needs additional partitioning and a memory-bounded replay mechanism.
 Neural model capacity and performance scaling have not been qualified. A separate
 reference-sharded KNN path has passed a 96 GiB host-staged index gate on two
@@ -26,7 +28,7 @@ and histogram paths have two-H100 evidence only.
 
 | Surface | Current multi-GPU coverage | Remaining numerical work |
 | --- | --- | --- |
-| SmallByteLanguageModelTrainer / LanguageModelTrainer | Concurrent microbatch waves with ordered replay and resident replicas | Memory partitioning and capacity qualification |
+| SmallByteLanguageModelTrainer / LanguageModelTrainer | Concurrent microbatch waves, ordered replay and pooled AdamW moments/rollback copies | Weight/activation partitioning; larger capacity and cross-vendor qualification |
 | SmallMLPTrainer | Concurrent microbatch gradients, ordered update | Larger shapes; memory partitioning |
 | SambaStack | Concurrent microbatch gradients, ordered update | Broader block/configuration coverage; memory partitioning |
 | RandomForestClassifier / RandomForestRegressor | Global tree-ID ranges over full data | Larger forests; data partitioning |

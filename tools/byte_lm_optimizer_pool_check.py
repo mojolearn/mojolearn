@@ -38,6 +38,7 @@ def main():
                 p[row['offset']:row['offset'] + row['size']] += np.float32(1)
         seed = Trainer(p, shape=shape, data_schedule={'corpus_sha256': hashlib.sha256(corpus).hexdigest()})
         initial = seed.state_dict()
+        assert Parallel(initial).pool_optimizer is True
         # Exercise nonzero restored moments, bias correction and decay.
         initial['m'] = rng.normal(0, .001, shape.n_total).astype('<f4')
         initial['v'] = rng.uniform(.0001, .001, shape.n_total).astype('<f4')

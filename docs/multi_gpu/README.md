@@ -20,7 +20,7 @@ qualify their subsequent kernel-row paths on two H100s.
 
 | Surface | Partition | Numerical contract |
 | --- | --- | --- |
-| Byte language model | Logical microbatches across resident device replicas | Copy gradient 0; left-fold gradients 1..K-1; one update per replica |
+| Byte language model | Logical microbatches across resident device replicas | Copy gradient 0; left-fold gradients 1..K-1; disjoint AdamW updates and parameter broadcast |
 | SmallMLPTrainer | Frozen microbatch snapshots on concurrent GPU workers | Same ordered sum; one update on the first selected GPU |
 | SambaStack (Mamba/attention blocks) | Frozen microbatch snapshots on concurrent GPU workers | Same ordered sum; explicit logical dropout stream/offsets |
 | RandomForest classifier/regressor | Whole trees over full replicated data | Original global tree IDs, seed and quantiles; original prediction order |
@@ -223,7 +223,7 @@ receive only their partitions, but beyond-single-GPU capacity is not qualified.
 The user's requested order is neural training, forests/ExtraTrees, then
 boosting and classical estimators. The following remain unimplemented:
 
-- Full-PCA solver paths and larger Gram configurations need further
+- Wide full-PCA transpose QR and larger Gram configurations need further
   partitions and qualification; the root eigensolver state still requires one GPU.
 - Broader neighbor/density/graph configurations, resident reference and graph
   pooling, and native-only surfaces need additional partitions and qualification.
@@ -440,3 +440,25 @@ panels) and eight public fitted-state/transform/inverse-transform cases with
 and without whitening. Evidence: `bench/results/multi_gpu/2026-09-14/qr-h100/`.
 Root input and solver state remain resident; this does not establish pooled
 capacity, performance scaling or new cross-vendor identity.
+
+
+### Byte-LM optimizer-state pooling
+
+`ParallelByteLanguageModelTrainer` owns AdamW moment buffers and rollback
+copies in disjoint contiguous parameter ranges by default. Each GPU computes
+the original microbatch gradient; the existing ordered full-gradient sum stays
+unchanged. All ranges are snapshotted before any update. Each owner runs the
+original elementwise AdamW kernel, then broadcasts its updated parameter slice.
+On failure the group restores every owned range before rebuilding replicas.
+
+`optimizer_ownership()` reports actual native ranges and allocated moment and
+rollback bytes. Across K devices these buffers total 20 bytes per parameter,
+compared with 20*K for complete optimizer replicas. Parameters, full gradients,
+model weight copies and activations remain replicated; this is optimizer-state
+pooling, not full pooled model capacity. `pool_optimizer=False` retains the
+replicated optimizer path for direct checks. Portable checkpoints contain full
+canonical state and can reopen with a different physical device count.
+
+The byte-LM optimizer admits AdamW without clipping. Extending pooling to
+SmallMLP/Samba requires preserving their global clipping and per-tensor optimizer
+contracts; those drivers still use their existing replicated updates.

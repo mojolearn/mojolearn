@@ -14,14 +14,17 @@ from ._buffer import addr, addr_ro, empty
 
 
 class ParallelByteLanguageModelTrainer:
-    """Resident replicas with a fixed left fold and one optimizer update.
+    """Resident model replicas with pooled optimizer state and a fixed left fold.
 
     Construct from a SmallByteLanguageModelTrainer.state_dict(). devices=(0,)
     replays the same logical shards on one GPU with one resident model. No GPU
     is opened until the first step/export. Import does no device work.
+    AdamW moments and rollback copies are owned in disjoint device ranges by
+    default; model parameters, gradients and activations remain replicated.
+    pool_optimizer=False retains complete optimizer replicas for comparison.
     """
 
-    def __init__(self, state, *, devices=(0,), logical_shards=1, pool_optimizer=False):
+    def __init__(self, state, *, devices=(0,), logical_shards=1, pool_optimizer=True):
         devices = tuple(devices)
         if (type(logical_shards) is not int or not 1 <= logical_shards <= 1024
                 or not 1 <= len(devices) <= logical_shards):
@@ -154,7 +157,7 @@ class ParallelByteLanguageModelTrainer:
                     state=self.state_dict())
 
     @classmethod
-    def from_checkpoint(cls, checkpoint, *, devices=(0,), pool_optimizer=False):
+    def from_checkpoint(cls, checkpoint, *, devices=(0,), pool_optimizer=True):
         if (checkpoint.get('schema') != 'mojolearn.parallel-byte-lm.v1'
                 or checkpoint.get('reduction') != 'ordered_sum'):
             raise ValueError('unsupported parallel checkpoint contract')
