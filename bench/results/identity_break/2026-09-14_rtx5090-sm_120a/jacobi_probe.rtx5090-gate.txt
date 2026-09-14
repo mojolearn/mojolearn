@@ -1,0 +1,170 @@
+started=2026-09-14T11:28:57Z
+commit=
+device=NVIDIA GeForce RTX 5090, 580.126.16, 12.0, 32607 MiB 
+mojo=934 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x113000000000, nodemask=1)
+MODULAR_NVPTX_COMPILER_PATH=<none>
+gpu_archs_resolved=sm_120a
+fixture=shape (12345, 17) float32 sha256 595dda3a45cf8a3ece941d8c3565249e752294a2cf790862f7d1c4673b13eec4 bytes 839460 
+build_aot_exit=0 seconds=24
+probe_aot_exit=0
+build_aot_arm1_exit=0 seconds=23
+probe_aot_arm1_exit=0
+probe_jit_exit=0
+== probe_aot
+PROBE_DEVICE name=NVIDIA GeForce RTX 5090 compute_capability=120 column=nvidia mode=IDENTICAL rot_tpb=256 fold_tpb=32 sweeps=15 tol=1e-07 x_hash=552ad56e8cb9dc63
+MATRIX pca.cov n=17 hash=34a8dcbdc84f3782 asymmetric_cells=60 max_asymmetry=0.028509313240647316 max_abs_err_vs_host64=1.0085792826572537 ref_max_abs=1.0232683521175667 rel_offdiag_host64=0.03323454280459297
+MATRIX pca.input_cells_changed_by_compute_covariance=0
+MATRIX pca.cov.repeat hash=34a8dcbdc84f3782 repeat_identical=yes
+PROBE case=pca.cov n=17 shipped_converged=1 shipped_executed=5 shipped_rel=2.4382514e-08 shipped_a_hash=c97d3fa4cf6f0eed shipped_v_hash=9a55f94a28857df4 probe_equals_shipped=yes shipped_repeat_identical=yes repeat_rel=2.4382514e-08 repeat_executed=5
+MATRIX tsvd.gram n=17 hash=9250767ae49a2a4b asymmetric_cells=60 max_asymmetry=350.44786071777344 max_abs_err_vs_host64=12450.290979380108 ref_max_abs=12632.715093698629 rel_offdiag_host64=0.03324436832771193
+PROBE case=tsvd.gram n=17 shipped_converged=1 shipped_executed=5 shipped_rel=2.3857528e-08 shipped_a_hash=796637ecb5984524 shipped_v_hash=a05a65817337cea7 probe_equals_shipped=yes shipped_repeat_identical=yes repeat_rel=2.3857528e-08 repeat_executed=5
+STAGE arm=0 shipped_arm=0 chunks=128 chunk_rows=97 partials_hash=d22d52400571b0c7 bad_chunks=128 first_bad_chunk=0 worst_partial_abs_err=145.73535447735088 bad_cells_of_first_bad_chunk=0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32 reduce_hash=9250767ae49a2a4b reduce_equals_gemm_tn=yes
+STAGE arm=1 shipped_arm=0 chunks=128 chunk_rows=97 partials_hash=5043c2a4194223e8 bad_chunks=0 first_bad_chunk=-1 worst_partial_abs_err=5.583245436469042e-05 bad_cells_of_first_bad_chunk= reduce_hash=643c4667f795927f reduce_equals_gemm_tn=NO:33
+MATRIX tsvd.gram.repeat hash=9250767ae49a2a4b repeat_identical=yes
+MATRIX ols.scales bits=3e000000,3f800000,3c000000,3c000000,3c000000,3c000000,3c000000,3c000000,3c000000,3c000000,3c000000,3c000000,3c000000,3c000000,3c000000,3c000000,3c000000
+MATRIX ols.equilibrated n=17 hash=8ba02e9d01f83f2b asymmetric_cells=60 max_asymmetry=3.290963649749756 max_abs_err_vs_host64=12450.290979380108 ref_max_abs=12336.925668711163 rel_offdiag_host64=0.06010995955061254
+PROBE case=ols.equilibrated n=17 shipped_converged=0 shipped_executed=15 shipped_rel=0.013849871 shipped_a_hash=926f3cee56c18eb3 shipped_v_hash=64060accee304479 probe_equals_shipped=yes shipped_repeat_identical=yes repeat_rel=0.013849871 repeat_executed=15
+MATRIX host64.cov.f32 n=17 hash=40c3ce6a00608857 asymmetric_cells=0 max_asymmetry=0.0 max_abs_err_vs_host64=5.6552329930070755e-08 ref_max_abs=1.0232683521175667 rel_offdiag_host64=0.03425987999923297
+PROBE case=host64.cov.f32 n=17 shipped_converged=1 shipped_executed=5 shipped_rel=2.665582e-09 shipped_a_hash=dcdc77a61a836d8e shipped_v_hash=096f4fe6687d675b probe_equals_shipped=yes shipped_repeat_identical=yes repeat_rel=2.665582e-09 repeat_executed=5
+MATRIX pca.cov.16 n=16 hash=39d7ced41bfffd54 asymmetric_cells=58 max_asymmetry=0.028509313240647316 max_abs_err_vs_host64=1.0085792826572537 ref_max_abs=1.0232683521175667 rel_offdiag_host64=0.03275797472951474
+PROBE case=pca.cov.16 n=16 shipped_converged=1 shipped_executed=5 shipped_rel=6.210692e-09 shipped_a_hash=f99e44035a9faf47 shipped_v_hash=22fd955b11f0c12d probe_equals_shipped=yes shipped_repeat_identical=yes repeat_rel=6.210692e-09 repeat_executed=5
+PROBE_DONE
+case=pca.cov sweep=0 fold_off_bits=3c08db9d rel_host64=0.03323454280459297
+case=pca.cov sweep=1 fold_off_bits=3ac2f1ec rel_host64=0.014023803373824566
+case=pca.cov sweep=2 fold_off_bits=3940e9ce rel_host64=0.004932258341349424
+case=pca.cov sweep=3 fold_off_bits=369c45c8 rel_host64=0.0007847493608218856
+case=pca.cov sweep=4 fold_off_bits=305c9af7 rel_host64=1.0301545523930149e-05
+case=pca.cov sweep=5 fold_off_bits=27a1fc62 rel_host64=2.438248606958412e-08
+case=tsvd.gram sweep=0 fold_off_bits=499b7db0 rel_host64=0.03324436832771193
+case=tsvd.gram sweep=1 fold_off_bits=485cf7a2 rel_host64=0.01401149352206887
+case=tsvd.gram sweep=2 fold_off_bits=46e337ce rel_host64=0.0050233877153586575
+case=tsvd.gram sweep=3 fold_off_bits=44319557 rel_host64=0.0007850571179172068
+case=tsvd.gram sweep=4 fold_off_bits=3e38ba2f rel_host64=1.2510810812222413e-05
+case=tsvd.gram sweep=5 fold_off_bits=35301898 rel_host64=2.385749201185556e-08
+case=ols.equilibrated sweep=0 fold_off_bits=41ba66e1 rel_host64=0.06010995955061254
+case=ols.equilibrated sweep=1 fold_off_bits=3ce347ee rel_host64=0.0020742093963409896
+case=ols.equilibrated sweep=2 fold_off_bits=3eec52bf rel_host64=0.008460264132040578
+case=ols.equilibrated sweep=3 fold_off_bits=41575bb7 rel_host64=0.045686293343540296
+case=ols.equilibrated sweep=4 fold_off_bits=3f99bc03 rel_host64=0.01364725792202153
+case=ols.equilibrated sweep=5 fold_off_bits=402a2f88 rel_host64=0.02030653739118592
+case=ols.equilibrated sweep=6 fold_off_bits=3ea866de rel_host64=0.0071417119569483845
+case=ols.equilibrated sweep=7 fold_off_bits=40d1088b rel_host64=0.03182705586295112
+case=ols.equilibrated sweep=8 fold_off_bits=3f85cf5b rel_host64=0.01273216899651518
+case=ols.equilibrated sweep=9 fold_off_bits=3f70bea0 rel_host64=0.012075944189766678
+case=ols.equilibrated sweep=10 fold_off_bits=3db1b7a9 rel_host64=0.0036682793340322463
+case=ols.equilibrated sweep=11 fold_off_bits=40a6cb52 rel_host64=0.0284300541237792
+case=ols.equilibrated sweep=12 fold_off_bits=3ebc5dd1 rel_host64=0.007553159141793789
+case=ols.equilibrated sweep=13 fold_off_bits=3f33ccf5 rel_host64=0.010436069731412107
+case=ols.equilibrated sweep=14 fold_off_bits=3f9e5502 rel_host64=0.013849703364726441
+case=ols.equilibrated sweep=15 fold_off_bits=3ec2bc7f rel_host64=0.007679782946439522
+case=host64.cov.f32 sweep=0 fold_off_bits=3c246e3b rel_host64=0.03425987999923297
+case=host64.cov.f32 sweep=1 fold_off_bits=3b0b071e rel_host64=0.015751262007811868
+case=host64.cov.f32 sweep=2 fold_off_bits=397b65e0 rel_host64=0.0052952361713595264
+case=host64.cov.f32 sweep=3 fold_off_bits=36523bbf rel_host64=0.0006052923281315683
+case=host64.cov.f32 sweep=4 fold_off_bits=3086ba68 rel_host64=1.0707257607279674e-05
+case=host64.cov.f32 sweep=5 fold_off_bits=248c16d8 rel_host64=2.665578412123342e-09
+case=pca.cov.16 sweep=0 fold_off_bits=3bf82ea0 rel_host64=0.03275797472951474
+case=pca.cov.16 sweep=1 fold_off_bits=3aa01a84 rel_host64=0.013155344739751608
+case=pca.cov.16 sweep=2 fold_off_bits=39161f08 rel_host64=0.00450378541537155
+case=pca.cov.16 sweep=3 fold_off_bits=361f2c74 rel_host64=0.000579698430045316
+case=pca.cov.16 sweep=4 fold_off_bits=2e677140 rel_host64=2.7305356625493686e-06
+case=pca.cov.16 sweep=5 fold_off_bits=259cf0e1 rel_host64=6.210685718278572e-09
+== probe_aot_arm1
+PROBE_DEVICE name=NVIDIA GeForce RTX 5090 compute_capability=120 column=nvidia mode=IDENTICAL rot_tpb=256 fold_tpb=32 sweeps=15 tol=1e-07 x_hash=552ad56e8cb9dc63
+MATRIX pca.cov n=17 hash=2345be8d29a6e663 asymmetric_cells=0 max_asymmetry=0.0 max_abs_err_vs_host64=4.4764309359290877e-07 ref_max_abs=1.0232683521175667 rel_offdiag_host64=0.03425988152286613
+MATRIX pca.input_cells_changed_by_compute_covariance=0
+MATRIX pca.cov.repeat hash=2345be8d29a6e663 repeat_identical=yes
+PROBE case=pca.cov n=17 shipped_converged=1 shipped_executed=5 shipped_rel=2.6776081e-09 shipped_a_hash=8ae8ea7142bcef95 shipped_v_hash=935eab1f79b39614 probe_equals_shipped=yes shipped_repeat_identical=yes repeat_rel=2.6776081e-09 repeat_executed=5
+MATRIX tsvd.gram n=17 hash=643c4667f795927f asymmetric_cells=0 max_asymmetry=0.0 max_abs_err_vs_host64=0.005305999497068115 ref_max_abs=12632.715093698629 rel_offdiag_host64=0.03425395737669673
+PROBE case=tsvd.gram n=17 shipped_converged=1 shipped_executed=5 shipped_rel=1.1391657e-09 shipped_a_hash=ec761ef062512c36 shipped_v_hash=cf8cd71633e61ea1 probe_equals_shipped=yes shipped_repeat_identical=yes repeat_rel=1.1391657e-09 repeat_executed=5
+STAGE arm=0 shipped_arm=1 chunks=128 chunk_rows=97 partials_hash=d22d52400571b0c7 bad_chunks=128 first_bad_chunk=0 worst_partial_abs_err=145.73535447735088 bad_cells_of_first_bad_chunk=0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32 reduce_hash=9250767ae49a2a4b reduce_equals_gemm_tn=NO:33
+STAGE arm=1 shipped_arm=1 chunks=128 chunk_rows=97 partials_hash=5043c2a4194223e8 bad_chunks=0 first_bad_chunk=-1 worst_partial_abs_err=5.583245436469042e-05 bad_cells_of_first_bad_chunk= reduce_hash=643c4667f795927f reduce_equals_gemm_tn=yes
+MATRIX tsvd.gram.repeat hash=643c4667f795927f repeat_identical=yes
+MATRIX ols.scales bits=3c000000,3c000000,3c000000,3c000000,3c000000,3c000000,3c000000,3c000000,3c000000,3c000000,3c000000,3c000000,3c000000,3c000000,3c000000,3c000000,3c000000
+MATRIX ols.equilibrated n=17 hash=b2cb137a38ea7700 asymmetric_cells=0 max_asymmetry=0.0 max_abs_err_vs_host64=3.238525083659738e-07 ref_max_abs=0.7710397396056292 rel_offdiag_host64=0.03425395737669673
+PROBE case=ols.equilibrated n=17 shipped_converged=1 shipped_executed=5 shipped_rel=1.1391657e-09 shipped_a_hash=69f5311387f2d1fc shipped_v_hash=cf8cd71633e61ea1 probe_equals_shipped=yes shipped_repeat_identical=yes repeat_rel=1.1391657e-09 repeat_executed=5
+MATRIX host64.cov.f32 n=17 hash=40c3ce6a00608857 asymmetric_cells=0 max_asymmetry=0.0 max_abs_err_vs_host64=5.6552329930070755e-08 ref_max_abs=1.0232683521175667 rel_offdiag_host64=0.03425987999923297
+PROBE case=host64.cov.f32 n=17 shipped_converged=1 shipped_executed=5 shipped_rel=2.665582e-09 shipped_a_hash=dcdc77a61a836d8e shipped_v_hash=096f4fe6687d675b probe_equals_shipped=yes shipped_repeat_identical=yes repeat_rel=2.665582e-09 repeat_executed=5
+MATRIX pca.cov.16 n=16 hash=17698e310014dd51 asymmetric_cells=0 max_asymmetry=0.0 max_abs_err_vs_host64=4.4764309359290877e-07 ref_max_abs=1.0232683521175667 rel_offdiag_host64=0.033931611877234716
+PROBE case=pca.cov.16 n=16 shipped_converged=1 shipped_executed=5 shipped_rel=2.2176252e-09 shipped_a_hash=15f9f468c2d65beb shipped_v_hash=8b421cfd2fc49bb1 probe_equals_shipped=yes shipped_repeat_identical=yes repeat_rel=2.2176252e-09 repeat_executed=5
+PROBE_DONE
+case=pca.cov sweep=0 fold_off_bits=3c246e3a rel_host64=0.03425988152286613
+case=pca.cov sweep=1 fold_off_bits=3b0b073b rel_host64=0.015751289536153092
+case=pca.cov sweep=2 fold_off_bits=397b6688 rel_host64=0.005295265005028909
+case=pca.cov sweep=3 fold_off_bits=36524b44 rel_host64=0.0006053796584126629
+case=pca.cov sweep=4 fold_off_bits=3086b89e rel_host64=1.0706981794540475e-05
+case=pca.cov sweep=5 fold_off_bits=248d5b2c rel_host64=2.677604967843978e-09
+case=tsvd.gram sweep=0 fold_off_bits=49baa492 rel_host64=0.03425395737669673
+case=tsvd.gram sweep=1 fold_off_bits=489f9c31 rel_host64=0.015838178859248816
+case=tsvd.gram sweep=2 fold_off_bits=4710b398 rel_host64=0.005331710521695982
+case=tsvd.gram sweep=3 fold_off_bits=43d44d11 rel_host64=0.0005708221575529308
+case=tsvd.gram sweep=4 fold_off_bits=3d82c204 rel_host64=6.999684871629412e-06
+case=tsvd.gram sweep=5 fold_off_bits=30e86a25 rel_host64=1.1391641461249056e-09
+case=ols.equilibrated sweep=0 fold_off_bits=3bbaa492 rel_host64=0.03425395737669673
+case=ols.equilibrated sweep=1 fold_off_bits=3a9f9c31 rel_host64=0.015838178859248816
+case=ols.equilibrated sweep=2 fold_off_bits=3910b398 rel_host64=0.005331710521695982
+case=ols.equilibrated sweep=3 fold_off_bits=35d44d11 rel_host64=0.0005708221575529308
+case=ols.equilibrated sweep=4 fold_off_bits=2f82c204 rel_host64=6.999684871629412e-06
+case=ols.equilibrated sweep=5 fold_off_bits=22e86a25 rel_host64=1.1391641461249056e-09
+case=host64.cov.f32 sweep=0 fold_off_bits=3c246e3b rel_host64=0.03425987999923297
+case=host64.cov.f32 sweep=1 fold_off_bits=3b0b071e rel_host64=0.015751262007811868
+case=host64.cov.f32 sweep=2 fold_off_bits=397b65e0 rel_host64=0.0052952361713595264
+case=host64.cov.f32 sweep=3 fold_off_bits=36523bbf rel_host64=0.0006052923281315683
+case=host64.cov.f32 sweep=4 fold_off_bits=3086ba68 rel_host64=1.0707257607279674e-05
+case=host64.cov.f32 sweep=5 fold_off_bits=248c16d8 rel_host64=2.665578412123342e-09
+case=pca.cov.16 sweep=0 fold_off_bits=3c17c719 rel_host64=0.033931611877234716
+case=pca.cov.16 sweep=1 fold_off_bits=3affde28 rel_host64=0.015576265826785026
+case=pca.cov.16 sweep=2 fold_off_bits=3944c450 rel_host64=0.004829324739324938
+case=pca.cov.16 sweep=3 fold_off_bits=37524b1d rel_host64=0.0012481393608430133
+case=pca.cov.16 sweep=4 fold_off_bits=3146e115 rel_host64=1.8965517306417082e-05
+case=pca.cov.16 sweep=5 fold_off_bits=24367add rel_host64=2.2176222084961e-09
+== probe_jit
+PROBE_DEVICE name=NVIDIA GeForce RTX 5090 compute_capability=120 column=nvidia mode=IDENTICAL rot_tpb=256 fold_tpb=32 sweeps=15 tol=1e-07 x_hash=552ad56e8cb9dc63
+MATRIX pca.cov n=17 hash=2345be8d29a6e663 asymmetric_cells=0 max_asymmetry=0.0 max_abs_err_vs_host64=4.4764309359290877e-07 ref_max_abs=1.0232683521175667 rel_offdiag_host64=0.03425988152286613
+MATRIX pca.input_cells_changed_by_compute_covariance=0
+MATRIX pca.cov.repeat hash=2345be8d29a6e663 repeat_identical=yes
+PROBE case=pca.cov n=17 shipped_converged=1 shipped_executed=5 shipped_rel=2.6776081e-09 shipped_a_hash=8ae8ea7142bcef95 shipped_v_hash=935eab1f79b39614 probe_equals_shipped=yes shipped_repeat_identical=yes repeat_rel=2.6776081e-09 repeat_executed=5
+MATRIX tsvd.gram n=17 hash=643c4667f795927f asymmetric_cells=0 max_asymmetry=0.0 max_abs_err_vs_host64=0.005305999497068115 ref_max_abs=12632.715093698629 rel_offdiag_host64=0.03425395737669673
+PROBE case=tsvd.gram n=17 shipped_converged=1 shipped_executed=5 shipped_rel=1.1391657e-09 shipped_a_hash=ec761ef062512c36 shipped_v_hash=cf8cd71633e61ea1 probe_equals_shipped=yes shipped_repeat_identical=yes repeat_rel=1.1391657e-09 repeat_executed=5
+STAGE arm=0 shipped_arm=0 chunks=128 chunk_rows=97 partials_hash=5043c2a4194223e8 bad_chunks=0 first_bad_chunk=-1 worst_partial_abs_err=5.583245436469042e-05 bad_cells_of_first_bad_chunk= reduce_hash=643c4667f795927f reduce_equals_gemm_tn=yes
+STAGE arm=1 shipped_arm=0 chunks=128 chunk_rows=97 partials_hash=5043c2a4194223e8 bad_chunks=0 first_bad_chunk=-1 worst_partial_abs_err=5.583245436469042e-05 bad_cells_of_first_bad_chunk= reduce_hash=643c4667f795927f reduce_equals_gemm_tn=yes
+MATRIX tsvd.gram.repeat hash=643c4667f795927f repeat_identical=yes
+MATRIX ols.scales bits=3c000000,3c000000,3c000000,3c000000,3c000000,3c000000,3c000000,3c000000,3c000000,3c000000,3c000000,3c000000,3c000000,3c000000,3c000000,3c000000,3c000000
+MATRIX ols.equilibrated n=17 hash=b2cb137a38ea7700 asymmetric_cells=0 max_asymmetry=0.0 max_abs_err_vs_host64=3.238525083659738e-07 ref_max_abs=0.7710397396056292 rel_offdiag_host64=0.03425395737669673
+PROBE case=ols.equilibrated n=17 shipped_converged=1 shipped_executed=5 shipped_rel=1.1391657e-09 shipped_a_hash=69f5311387f2d1fc shipped_v_hash=cf8cd71633e61ea1 probe_equals_shipped=yes shipped_repeat_identical=yes repeat_rel=1.1391657e-09 repeat_executed=5
+MATRIX host64.cov.f32 n=17 hash=40c3ce6a00608857 asymmetric_cells=0 max_asymmetry=0.0 max_abs_err_vs_host64=5.6552329930070755e-08 ref_max_abs=1.0232683521175667 rel_offdiag_host64=0.03425987999923297
+PROBE case=host64.cov.f32 n=17 shipped_converged=1 shipped_executed=5 shipped_rel=2.665582e-09 shipped_a_hash=dcdc77a61a836d8e shipped_v_hash=096f4fe6687d675b probe_equals_shipped=yes shipped_repeat_identical=yes repeat_rel=2.665582e-09 repeat_executed=5
+MATRIX pca.cov.16 n=16 hash=17698e310014dd51 asymmetric_cells=0 max_asymmetry=0.0 max_abs_err_vs_host64=4.4764309359290877e-07 ref_max_abs=1.0232683521175667 rel_offdiag_host64=0.033931611877234716
+PROBE case=pca.cov.16 n=16 shipped_converged=1 shipped_executed=5 shipped_rel=2.2176252e-09 shipped_a_hash=15f9f468c2d65beb shipped_v_hash=8b421cfd2fc49bb1 probe_equals_shipped=yes shipped_repeat_identical=yes repeat_rel=2.2176252e-09 repeat_executed=5
+PROBE_DONE
+case=pca.cov sweep=0 fold_off_bits=3c246e3a rel_host64=0.03425988152286613
+case=pca.cov sweep=1 fold_off_bits=3b0b073b rel_host64=0.015751289536153092
+case=pca.cov sweep=2 fold_off_bits=397b6688 rel_host64=0.005295265005028909
+case=pca.cov sweep=3 fold_off_bits=36524b44 rel_host64=0.0006053796584126629
+case=pca.cov sweep=4 fold_off_bits=3086b89e rel_host64=1.0706981794540475e-05
+case=pca.cov sweep=5 fold_off_bits=248d5b2c rel_host64=2.677604967843978e-09
+case=tsvd.gram sweep=0 fold_off_bits=49baa492 rel_host64=0.03425395737669673
+case=tsvd.gram sweep=1 fold_off_bits=489f9c31 rel_host64=0.015838178859248816
+case=tsvd.gram sweep=2 fold_off_bits=4710b398 rel_host64=0.005331710521695982
+case=tsvd.gram sweep=3 fold_off_bits=43d44d11 rel_host64=0.0005708221575529308
+case=tsvd.gram sweep=4 fold_off_bits=3d82c204 rel_host64=6.999684871629412e-06
+case=tsvd.gram sweep=5 fold_off_bits=30e86a25 rel_host64=1.1391641461249056e-09
+case=ols.equilibrated sweep=0 fold_off_bits=3bbaa492 rel_host64=0.03425395737669673
+case=ols.equilibrated sweep=1 fold_off_bits=3a9f9c31 rel_host64=0.015838178859248816
+case=ols.equilibrated sweep=2 fold_off_bits=3910b398 rel_host64=0.005331710521695982
+case=ols.equilibrated sweep=3 fold_off_bits=35d44d11 rel_host64=0.0005708221575529308
+case=ols.equilibrated sweep=4 fold_off_bits=2f82c204 rel_host64=6.999684871629412e-06
+case=ols.equilibrated sweep=5 fold_off_bits=22e86a25 rel_host64=1.1391641461249056e-09
+case=host64.cov.f32 sweep=0 fold_off_bits=3c246e3b rel_host64=0.03425987999923297
+case=host64.cov.f32 sweep=1 fold_off_bits=3b0b071e rel_host64=0.015751262007811868
+case=host64.cov.f32 sweep=2 fold_off_bits=397b65e0 rel_host64=0.0052952361713595264
+case=host64.cov.f32 sweep=3 fold_off_bits=36523bbf rel_host64=0.0006052923281315683
+case=host64.cov.f32 sweep=4 fold_off_bits=3086ba68 rel_host64=1.0707257607279674e-05
+case=host64.cov.f32 sweep=5 fold_off_bits=248c16d8 rel_host64=2.665578412123342e-09
+case=pca.cov.16 sweep=0 fold_off_bits=3c17c719 rel_host64=0.033931611877234716
+case=pca.cov.16 sweep=1 fold_off_bits=3affde28 rel_host64=0.015576265826785026
+case=pca.cov.16 sweep=2 fold_off_bits=3944c450 rel_host64=0.004829324739324938
+case=pca.cov.16 sweep=3 fold_off_bits=37524b1d rel_host64=0.0012481393608430133
+case=pca.cov.16 sweep=4 fold_off_bits=3146e115 rel_host64=1.8965517306417082e-05
+case=pca.cov.16 sweep=5 fold_off_bits=24367add rel_host64=2.2176222084961e-09
+finished=2026-09-14T11:30:14Z
