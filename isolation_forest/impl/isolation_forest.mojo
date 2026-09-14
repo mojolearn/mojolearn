@@ -1050,7 +1050,7 @@ def _fit_tree_shards(ctx: DeviceContext, input_colmajor: List[Float32],
         var local = IsolationForestModel(device)
         var config = params.copy()
         config.n_estimators = width
-        shards.append(IFTreeShard(device^, local^, config, first))
+        shards.append(IFTreeShard(device^, local^, config^, first))
     var failures = List[Int](length=active, fill=0)
     var sp = rebind[MutPointer[IFTreeShard, MutUntrackedOrigin]](shards.unsafe_ptr())
     var fp = rebind[MutPointer[Int, MutUntrackedOrigin]](failures.unsafe_ptr())
