@@ -1498,11 +1498,22 @@ def check_card_is_emitted() raises:
         stab_tpb=64, select_tpb=64,
     )
     var diff = first_divergence(pa, pb)
-    if diff != "":
-        raise Error(
-            "check_card_is_emitted [" + _mode_name() + "]: two cards from"
-            " two launch shapes disagree at " + diff
-        )
+    # Launch-shape equality of the card is the IDENTICAL contract only, as
+    # in resample_check.mojo. FAST promises no bits: on the MI300X (gfx942)
+    # at e95fce13b the FAST card moved at knn.out_dist between tile 256 and
+    # 64 while the IDENTICAL card held, so FAST reports instead of raising.
+    comptime if IDENTICAL_BUILD:
+        if diff != "":
+            raise Error(
+                "check_card_is_emitted [IDENTICAL]: two cards from"
+                " two launch shapes disagree at " + diff
+            )
+    else:
+        if diff != "":
+            print(
+                "check_card_is_emitted REPORT [FAST]: two launch shapes,"
+                " first divergence " + diff
+            )
     if ta.seq < 20:
         raise Error(
             "check_card_is_emitted [" + _mode_name() + "]: the card holds"
@@ -1514,8 +1525,9 @@ def check_card_is_emitted() raises:
     print(
         "check_card_is_emitted OK [" + _mode_name() + "]: "
         + String(ta.seq) + " stages recorded, and two cards taken at two"
-        " launch shapes are record-for-record identical (" + pa + ", "
-        + pb + ")"
+        " launch shapes are "
+        + ("record-for-record identical" if diff == "" else "not identical (FAST, reported above)")
+        + " (" + pa + ", " + pb + ")"
     )
 
 
