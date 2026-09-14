@@ -206,6 +206,18 @@ TRAINING_LANE_NAMES = {
     "gp-matern12": "the Gaussian process with a Matern kernel at nu 0.5",
     "gp-matern32": "the Gaussian process with a Matern kernel at nu 1.5",
     "gp-matern52-ard": "the Gaussian process with an ARD Matern kernel at nu 2.5",
+    # Workstream E batch 3 (2026-09-14): gradient boosting on its default
+    # symmetric tree with the Logloss loss trains through
+    # gbdt/host/gbdt_oracle.mojo, the device trainer restated on the host,
+    # exported under the GPU binding's names from the gbdt family's own host
+    # binding. The other GBDT lanes refuse by name. A prediction until the
+    # four-column diff reads IDENTICAL.
+    "gbdt-symmetric": "gradient boosting on symmetric trees with the Logloss loss",
+    # Workstream E batch 3 (2026-09-14): the same tree with the RMSE loss
+    # trains through gbdt/host/gbdt_oracle_rmse.mojo (the seeded cursor and
+    # the searcher's own leaves, DEVIATION 64) from the same binding. A
+    # prediction until the four-column diff reads IDENTICAL.
+    "gbdt-rmse": "gradient boosting on symmetric trees with the RMSE loss",
 }
 
 #: The lanes with NO CPU path of any kind, as the README states them. A
@@ -215,7 +227,7 @@ NO_CPU_PATH = (
     "UMAP",
     "ARIMA",
     "the neural blocks",
-    "gradient boosting training",
+    "gradient boosting training other than symmetric trees with the Logloss or RMSE loss",
 )
 
 #: The read-back trio every host binding exports under its own prefix,
@@ -615,6 +627,35 @@ FAMILIES = (
             "gp_host_sabotage", "gp_vendor", "gp_numeric_mode",
             "gpr_fit", "gpr_predict", "cholesky_profile_jitter",
             "cholesky_factor", "cholesky_solve",
+        ),
+        gate="tools/identity_break.py (cpu-identity-gate.yml)",
+        ships_in_wheel=True,
+    ),
+    dict(
+        # Workstream E batch 3 (2026-09-14): the GradientBoosting family's
+        # host binding. It routes `_mojolearn_gbdt` on a CPU-only install
+        # with the GPU binding's fit, predict, model-dim and sigmoid names;
+        # gbdt_fit refuses by name every value outside the gbdt-symmetric
+        # and gbdt-rmse configurations, and the multi-dimensional predict, the ordered and
+        # FeatureFreq fits and the adapters' device transforms stay absent.
+        # Not the forest host binding: that one is loaded by path under its
+        # own names and takes the model as flat arrays.
+        family="gbdt",
+        binding="_mojolearn_gbdt_host",
+        routes="_mojolearn_gbdt",
+        loaded_by="_backend._HOST_MODULES",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=("gbdt-symmetric", "gbdt-rmse"),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=("GradientBoosting",),
+        display="gradient boosting on symmetric trees with the Logloss or RMSE loss",
+        host_modules=("gbdt/host/gbdt_oracle.mojo", "gbdt/host/gbdt_oracle_rmse.mojo",
+                      "core/gbdt_host_predict.mojo"),
+        exports=(
+            "gbdt_host_numeric_mode", "gbdt_host_vendor", "gbdt_host_column",
+            "gbdt_host_sabotage", "gbdt_vendor", "gbdt_numeric_mode",
+            "gbdt_fit", "gbdt_predict", "gbdt_model_dim", "gbdt_sigmoid",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=True,

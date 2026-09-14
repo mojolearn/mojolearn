@@ -979,6 +979,18 @@ def host_families_built():
 #:     cholesky_solve and cholesky_profile_jitter over the same chol_oracle;
 #:     gp_parallel_available is absent, so the ordered multi-GPU driver
 #:     refuses by name.
+#:   _mojolearn_gbdt -> _mojolearn_gbdt_host (gbdt-symmetric, gbdt-rmse;
+#:     workstream E batch 3, 2026-09-14): gbdt_fit over
+#:     gbdt/host/gbdt_oracle.mojo::gbdt_host_fit (the device trainer
+#:     restated on the host for SymmetricTree, Logloss, Cosine and Newton
+#:     leaves) and gbdt/host/gbdt_oracle_rmse.mojo::gbdt_rmse_host_fit (the
+#:     same tree with RMSE and the searcher's leaves; every other option
+#:     value refuses by name inside gbdt_fit),
+#:     gbdt_predict and gbdt_model_dim over the model text and
+#:     core/gbdt_host_predict.mojo, and gbdt_sigmoid; gbdt_predict_multi,
+#:     the ordered and FeatureFreq fits and the adapters' binary transforms
+#:     are absent. Its own family for the reason the rf family is: the
+#:     forest host binding exports other names under another contract.
 _HOST_MODULES = host_surface.routed_modules()
 
 #: The env switch the CPU identity gate sets to load a host binding built
