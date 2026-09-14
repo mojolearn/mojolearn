@@ -132,19 +132,39 @@ TRAINING_LANE_NAMES = {
     "ols": "linear regression",
     "ridge": "ridge",
     "dbscan": "DBSCAN",
+    # Workstream E batch 2 (lane/cpu-training-e2, 2026-09-14): k-means trains
+    # through cluster/host/kmeans_oracle.mojo, exported as kmeans_fit from
+    # the core host binding. Simulated IDENTICAL x3 on the base fixture on
+    # the M4's CPU path; the seven-runner gate result is owed.
+    "kmeans": "k-means",
+    # Workstream E batch 2: the five metrics of the lane (accuracy, ARI,
+    # v-measure, r2, silhouette) through metrics/host/metrics_oracle.mojo,
+    # the metrics family's own host binding; the lane also fits a KMeans,
+    # served by the core family above.
+    "metrics": "the metrics",
+    # The spectral lane, same batch: the spectral host oracle moved to
+    # spectral/host/spectral_oracle.mojo with the k-NN graph, the symmetrize
+    # kernel and the k-means recluster restated, exported as
+    # spectral_fit_predict_dataset from the metrics host binding.
+    "spectral": "spectral clustering",
+    # The two scaler lanes, same batch: preprocessing/host/scaler_oracle.mojo
+    # through the preprocessing family's own host binding.
+    "standard-scaler": "the standard scaler",
+    "minmax-scaler": "the min-max scaler",
+    # The logistic lane, same batch: glm/host/qn_oracle.mojo, the L-BFGS
+    # arm of the quasi-Newton solver, exported as qn_fit from the
+    # estimators host binding.
+    "logistic": "logistic regression",
 }
 
 #: The lanes with NO CPU path of any kind, as the README states them. A
 #: lane leaves this list the day its host lane merges; docs_facts fails the
 #: README until the marked span is rewritten.
 NO_CPU_PATH = (
-    "k-means",
-    "spectral clustering",
     "UMAP",
     "the Gaussian process",
     "ARIMA",
     "the neural blocks",
-    "logistic regression training",
     "training for the random forests and gradient boosting",
 )
 
@@ -247,16 +267,19 @@ FAMILIES = (
         routes="_mojolearn",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("knn", "knn-clf", "knn-reg"),
+        training_lanes=("knn", "knn-clf", "knn-reg", "kmeans"),
         inference_lanes=("knn", "knn-clf", "knn-reg"),
         forest_kinds=(),
-        classes=("NearestNeighbors", "KNeighborsClassifier", "KNeighborsRegressor"),
+        classes=("NearestNeighbors", "KNeighborsClassifier", "KNeighborsRegressor", "KMeans"),
         display="nearest neighbors, k-NN classification and k-NN regression",
-        host_modules=("core/knn_host_predict.mojo", "bindings/host_helpers.mojo"),
+        host_modules=(
+            "core/knn_host_predict.mojo", "bindings/host_helpers.mojo",
+            "cluster/host/kmeans_oracle.mojo",
+        ),
         exports=(
             "core_host_numeric_mode", "core_host_vendor", "core_host_column",
             "core_host_sabotage", "mojolearn_vendor", "mojolearn_numeric_mode",
-            "knn_search", "knn_classify", "knn_regress", "transpose_f32",
+            "knn_search", "knn_classify", "knn_regress", "kmeans_fit", "transpose_f32",
             "cast_colmajor_f64_to_f32", "cast_f64_to_f32", "all_finite_f32",
             "all_finite_f64", "gather_i64", "gather_f64", "argmax_rows_f32",
             "argmax_rows_f64", "column_mean_f64", "center_columns_f32",
@@ -291,7 +314,7 @@ FAMILIES = (
         routes="_mojolearn_estimators",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("kde", "pca", "pca-whiten", "tsvd", "ols", "ridge", "dbscan"),
+        training_lanes=("kde", "pca", "pca-whiten", "tsvd", "ols", "ridge", "dbscan", "logistic"),
         inference_lanes=("ols", "ridge", "tsvd", "logistic", "logistic-multiclass", "pca", "pca-whiten", "kde"),
         forest_kinds=(),
         classes=(
@@ -302,18 +325,83 @@ FAMILIES = (
         host_modules=(
             "kde/host/kde_oracle.mojo", "core/classical_host_predict.mojo",
             "decomposition/host/pca_oracle.mojo", "glm/host/glm_oracle.mojo",
-            "dbscan/host/dbscan_oracle.mojo",
+            "dbscan/host/dbscan_oracle.mojo", "glm/host/qn_oracle.mojo",
         ),
         exports=(
             "estimators_host_numeric_mode", "estimators_host_vendor",
             "estimators_host_column", "estimators_host_sabotage",
             "estimators_vendor", "estimators_numeric_mode", "kde_score_samples",
-            "pca_fit", "tsvd_fit", "ols_fit", "ridge_fit", "dbscan_fit",
+            "pca_fit", "tsvd_fit", "ols_fit", "ridge_fit", "dbscan_fit", "qn_fit",
             "ols_predict", "tsvd_transform", "pca_transform",
             "pca_whiten_transform", "pca_whiten_inverse_transform",
             "qn_decision_function", "qn_sigmoid", "qn_softmax",
         ),
         gate="tools/identity_break.py and tools/classical_host_gate.py (cpu-identity-gate.yml)",
+        ships_in_wheel=False,
+    ),
+    dict(
+        # Workstream E batch 2 (lane/cpu-training-e2, 2026-09-14): the
+        # metrics family's first host binding. It routes `_mojolearn_metrics`
+        # on a CPU-only install and carries the five metrics the identity
+        # harness's metrics lane computes plus the four label metrics that
+        # share their integer kernels; the spectral, UMAP and remaining
+        # metric entries stay absent and refuse by name.
+        family="metrics",
+        binding="_mojolearn_metrics_host",
+        routes="_mojolearn_metrics",
+        loaded_by="_backend._HOST_MODULES",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=("metrics", "spectral"),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=(
+            "SpectralClustering",
+            "metrics.accuracy_score", "metrics.adjusted_rand_score",
+            "metrics.entropy", "metrics.mutual_info_score",
+            "metrics.homogeneity_score", "metrics.completeness_score",
+            "metrics.v_measure_score", "metrics.r2_score",
+            "metrics.silhouette_score", "metrics.silhouette_samples",
+        ),
+        display="the label, r2 and silhouette metrics and spectral clustering",
+        host_modules=(
+            "metrics/host/metrics_oracle.mojo",
+            "spectral/host/spectral_oracle.mojo",
+            "cluster/host/kmeans_oracle.mojo",
+            "core/knn_host_predict.mojo",
+        ),
+        exports=(
+            "metrics_host_numeric_mode", "metrics_host_vendor",
+            "metrics_host_column", "metrics_host_sabotage", "metrics_vendor",
+            "metrics_numeric_mode", "accuracy_score", "adjusted_rand_score",
+            "entropy", "mutual_info_score", "homogeneity_score",
+            "completeness_score", "v_measure_score", "r2_score", "silhouette",
+            "spectral_fit_predict_dataset",
+        ),
+        gate="tools/identity_break.py (cpu-identity-gate.yml)",
+        ships_in_wheel=False,
+    ),
+    dict(
+        # Workstream E batch 2 (lane/cpu-training-e2, 2026-09-14): the
+        # preprocessing family's host binding, the whole GPU binding's
+        # surface (four entries) restated.
+        family="preprocessing",
+        binding="_mojolearn_preprocessing_host",
+        routes="_mojolearn_preprocessing",
+        loaded_by="_backend._HOST_MODULES",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=("standard-scaler", "minmax-scaler"),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=("StandardScaler", "MinMaxScaler"),
+        display="the standard and min-max scalers",
+        host_modules=("preprocessing/host/scaler_oracle.mojo",),
+        exports=(
+            "preprocessing_host_numeric_mode", "preprocessing_host_vendor",
+            "preprocessing_host_column", "preprocessing_host_sabotage",
+            "preprocessing_numeric_mode", "preprocessing_vendor",
+            "standard_fit", "standard_transform", "minmax_fit", "minmax_transform",
+        ),
+        gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=False,
     ),
     dict(

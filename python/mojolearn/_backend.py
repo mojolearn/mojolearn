@@ -892,8 +892,9 @@ def host_families_built():
 #:     all_finite_*, gather_*, argmax_rows_*, so _buffer._native and _labels
 #:     resolve on a CPU-only install) and the knn host inference lane's
 #:     (2026-09-14) knn_search, knn_classify, knn_regress over
-#:     core/knn_host_predict.mojo; kmeans_fit, rbc_knn_search and
-#:     radius_neighbors_* are absent.
+#:     core/knn_host_predict.mojo, and (workstream E batch 2, 2026-09-14)
+#:     the training entry kmeans_fit over cluster/host/kmeans_oracle.mojo;
+#:     rbc_knn_search and radius_neighbors_* are absent.
 #:   _mojolearn_linalg -> _mojolearn_linalg_host: gemm over
 #:     gemm/host/gemm_oracle.mojo::gemm_oracle, the profile's definition.
 #:   _mojolearn_estimators -> _mojolearn_estimators_host: kde_score_samples
@@ -903,9 +904,24 @@ def host_families_built():
 #:     core/classical_host_predict.mojo, and (workstream E, 2026-09-14) the
 #:     training entries pca_fit and tsvd_fit over
 #:     decomposition/host/pca_oracle.mojo and ols_fit and ridge_fit over
-#:     glm/host/glm_oracle.mojo and dbscan_fit over
-#:     dbscan/host/dbscan_oracle.mojo; pca_fit_full, inverse_transform,
-#:     qn_fit are absent.
+#:     glm/host/glm_oracle.mojo, dbscan_fit over
+#:     dbscan/host/dbscan_oracle.mojo and (batch 2) qn_fit over
+#:     glm/host/qn_oracle.mojo (the L-BFGS arm; softmax, l1 and
+#:     sample_weight refuse by name); pca_fit_full and inverse_transform
+#:     are absent.
+#:   _mojolearn_metrics -> _mojolearn_metrics_host (workstream E batch 2,
+#:     2026-09-14): accuracy_score, adjusted_rand_score, entropy,
+#:     mutual_info_score, homogeneity_score, completeness_score,
+#:     v_measure_score, r2_score and silhouette over
+#:     metrics/host/metrics_oracle.mojo, and spectral_fit_predict_dataset
+#:     over spectral/host/spectral_oracle.mojo (the spectral lane);
+#:     rand_score, the ranking and classification metrics, the regression
+#:     errors, kl_divergence, trustworthiness, spectral_fit_predict_graph
+#:     and the UMAP entries are absent.
+#:   _mojolearn_preprocessing -> _mojolearn_preprocessing_host (workstream
+#:     E batch 2, 2026-09-14): standard_fit, standard_transform, minmax_fit
+#:     and minmax_transform over preprocessing/host/scaler_oracle.mojo, the
+#:     whole GPU binding's surface.
 #:   _mojolearn_tsa -> _mojolearn_tsa_host: holtwinters_fit and
 #:     holtwinters_forecast over holtwinters/host/hw_oracle.mojo; kpss_test
 #:     and select_d (ARIMA's) are absent.

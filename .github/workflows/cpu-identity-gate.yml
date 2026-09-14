@@ -86,6 +86,14 @@ on:
       - "decomposition/host/pca_oracle.mojo"
       - "glm/host/glm_oracle.mojo"
       - "dbscan/host/dbscan_oracle.mojo"
+      - "cluster/host/kmeans_oracle.mojo"
+      - "metrics/host/metrics_oracle.mojo"
+      - "spectral/host/spectral_oracle.mojo"
+      - "preprocessing/host/scaler_oracle.mojo"
+      - "glm/host/qn_oracle.mojo"
+      - "spectral/checks/symmetric_eig_host.mojo"
+      - "core/knn_host_predict.mojo"
+      - "cluster/host/kmeans_oracle.mojo"
       - "bench/results/classical_host/**"
       - "tools/cpu_identity_gate_check.py"
       - "bench/results/identity_break/2026-09-13_three-columns/**"
@@ -114,7 +122,9 @@ env:
   #                       host gate. Since workstream E (2026-09-14) the knn,
   #                       pca, pca-whiten, tsvd, ols and ridge lanes train on
   #                       the host too and sit in both lists, and dbscan
-  #                       trains on the host.
+  #                       trains on the host; batch 2 adds logistic (the
+  #                       binary L-BFGS arm) to the training list, so only
+  #                       logistic-multiclass stays inference-only.
   #   HOST_FAMILIES       the routed (phase 1) families, space separated; each
   #                       is built by bindings/build_<family>_host.sh (a shim
   #                       over bindings/build_host_family.sh) into
@@ -450,8 +460,14 @@ jobs:
       # edge keys descending (the maximum spanning tree), in pcg_rng by one
       # extra draw on every keyed stream (every ExtraTrees threshold), and
       # in xorwow by one extra step before every split fraction (every
-      # isolation tree); each further phase 1 binding names the fold its
-      # arm moves), loaded through
+      # isolation tree, in kmeans_oracle by one extra unit in every
+      # quantized centroid-sum cell, in metrics_oracle by shifting every
+      # slab tree's chunk boundaries by one value, in spectral_oracle by
+      # seeding the recluster one draw off, in scaler_oracle by the same
+      # shifted tree plus the min-max offset's subtraction as an addition,
+      # and in qn_oracle by walking the solver's dot chains descending);
+      # each further phase 1
+      # binding names the fold its arm moves), loaded through
       # MOJOLEARN_HOST_DIR with MOJOLEARN_HOST_ALLOW_SABOTAGE=1, run on the
       # covered lanes, and the four-way diff must exit non-zero with
       # DIVERGENT on them. Every covered cell must still be STABLE (a wrong
