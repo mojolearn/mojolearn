@@ -993,9 +993,11 @@ def _(ml, X, yc, yr, Xh=None):
 
 def _save_load(est):
     """The (save method, load classmethod, suffix) an estimator offers.
-    `save`/`load` on the forests and the boosting lanes, written to `.npz`
-    as always, or `save_checkpoint`/`from_checkpoint` on the trainers and
-    SambaStack (2026-09-13), a JSON envelope. None where it has neither."""
+    `save`/`load` on the forests, the boosting lanes and, since the
+    classical host inference lane (2026-09-13 evening), ols, ridge, tsvd,
+    logistic and pca, written to `.npz` as always, or
+    `save_checkpoint`/`from_checkpoint` on the trainers and SambaStack
+    (2026-09-13), a JSON envelope. None where it has neither."""
     if est is None:
         return None
     for s, l, suffix in (("save", "load", ".npz"), ("save_checkpoint", "from_checkpoint", ".json")):

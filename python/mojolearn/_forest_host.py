@@ -226,13 +226,20 @@ class HostForest:
 def host_model(path):
     """The host model for a saved file, by its `format` member: a
     `HostForest` for a forest archive, a `HostGBDT` (`_gbdt_host.py`) for a
-    `GradientBoosting.save` archive. Any other format is refused with the
-    tag it carries."""
+    `GradientBoosting.save` archive, a host subclass of LinearRegression,
+    Ridge, TruncatedSVD, LogisticRegression or PCA (`_classical_host.py`,
+    the classical host inference lane, 2026-09-13) for one of their
+    archives. Any other format is refused with the tag it carries."""
+    from ._classical_host import CLASSICAL_FORMATS
+    from ._classical_host import host_model as classical_host_model
     from ._gbdt_host import GBDT_FORMAT, HostGBDT
-    accepted = tuple(_FORMATS) + tuple(f + _GROVES_SUFFIX for f in _FORMATS) + (GBDT_FORMAT,)
+    accepted = (tuple(_FORMATS) + tuple(f + _GROVES_SUFFIX for f in _FORMATS)
+                + (GBDT_FORMAT,) + CLASSICAL_FORMATS)
     fmt = _serialize.scalar_str(_serialize.read_npz(path, accepted), 'format')
     if fmt == GBDT_FORMAT:
         return HostGBDT.from_file(path)
+    if fmt in CLASSICAL_FORMATS:
+        return classical_host_model(path)
     return HostForest.from_file(path)
 
 

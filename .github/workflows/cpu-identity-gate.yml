@@ -82,7 +82,12 @@ env:
   # The identity_break lanes with a CPU implementation, comma separated, no
   # spaces. A lane listed here must read STABLE on every fixture and
   # IDENTICAL x4 against the three GPU columns; a lane not listed must read
-  # REFUSED by name.
+  # REFUSED by name. The INFERENCE-ONLY lanes (ols, ridge, tsvd, logistic,
+  # pca; the classical host inference lane, 2026-09-13) are deliberately
+  # NOT here: their train cell refuses by name on the CPU column, so
+  # `--require-columns 4` cannot hold on it. Their gate is
+  # tools/classical_host_gate.py over bench/results/classical_host/, the
+  # same shape as the forest host gate.
   COVERED_LANES: "gemm-pinned,kde,holtwinters,lasso,elasticnet,svc"
   # The phase 1 host binding families, space separated: each is built by
   # bindings/build_<family>_host.sh into MOJOLEARN_<FAMILY>_HOST_OUTDIR (the
