@@ -49,6 +49,7 @@ from max.gpu.sync import barrier
 
 from core.gemm import gemm_nt
 from core.multi_gpu import peer_clone
+from core.step_phase import STEP_PHASE_TIMERS
 from std.os import getenv
 from max.algorithm import sync_parallelize
 from gemm.checks.gemm_identical import (
@@ -421,6 +422,9 @@ def _kernel_rows(ctx: DeviceContext, kp: KernelParams,
     """
     ctx.synchronize()
     var active = min(count, m)
+    comptime if STEP_PHASE_TIMERS:
+        if active > 1:
+            raise Error("parallel SVM cannot use process-global GEMM phase counters")
     var shards = List[SVMKernelShard]()
     for rank in range(active):
         var first = m * rank // active
