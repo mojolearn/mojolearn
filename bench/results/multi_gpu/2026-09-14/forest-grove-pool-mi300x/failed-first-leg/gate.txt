@@ -1,0 +1,25 @@
+started=2026-09-14T21:46:37Z commit=81120c4edf5d13cf7451d8cb135648782b09ed49
+arch=gfx942 gpus=2 nproc=192 mem=2267G
+pixi-warm exit=0 seconds=1
+native-separate exit=0 seconds=10
+native-packed exit=1 seconds=11
+build-rf-separate exit=0 seconds=23
+build-et-separate exit=0 seconds=23
+public-separate exit=1 seconds=2
+fault-packed exit=1 seconds=10
+fault-separate exit=0 seconds=17
+build-et-packed exit=0 seconds=24
+build-rf-packed exit=0 seconds=25
+public-packed exit=1 seconds=1
+resident-separate exit=0 seconds=10
+resident-packed exit=0 seconds=15
+native-separate PASS_lines=76 witness=2
+native-packed PASS_lines=14 witness=0
+fault-separate PASS_lines=76 witness=2
+fault-packed PASS_lines=3 witness=0
+public-separate: ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn.so, which is not built. Build it with|    raise ImportError(|ImportError: mojolearn: the base binding has no `argmax_rows_f32`; the compiled _mojolearn extension is older than this Python layer, or the identical set is not built. Rebuild it with|
+public-packed: ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn.so, which is not built. Build it with|    raise ImportError(|ImportError: mojolearn: the base binding has no `argmax_rows_f32`; the compiled _mojolearn extension is older than this Python layer, or the identical set is not built. Rebuild it with|
+resident-separate: WORKSPACE_PASS RF_INPUT True cached/uncached resize/reuse/empty/changed-input/close|WORKSPACE_PASS RF_INPUT False cached/uncached resize/reuse/empty/changed-input/close|RESIDENT_FOREST_PASS repeated borrowed/List/transient/stump, release/stale/newID, dimensions/finite input+output/graph, destruction|
+resident-packed: WORKSPACE_PASS RF_INPUT True cached/uncached resize/reuse/empty/changed-input/close|WORKSPACE_PASS RF_INPUT False cached/uncached resize/reuse/empty/changed-input/close|RESIDENT_FOREST_PASS repeated borrowed/List/transient/stump, release/stale/newID, dimensions/finite input+output/graph, destruction|
+public compare failed [Errno 2] No such file or directory: '/root/gemm_leg_out/forest/public-separate.json'
+finished=2026-09-14T21:47:42Z

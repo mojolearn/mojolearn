@@ -57,6 +57,7 @@ class DevicePool:
                     env['MOJOLEARN_GLM_DEVICE_COUNT'] = str(len(group))
                     env['MOJOLEARN_SOLVER_DEVICE_COUNT'] = str(len(group))
                     env['MOJOLEARN_IFOREST_DEVICE_COUNT'] = str(len(group))
+                    env['MOJOLEARN_FOREST_DEVICE_COUNT'] = str(len(group))
                     env['MOJOLEARN_SVM_DEVICE_COUNT'] = str(len(group))
                     env['MOJOLEARN_GP_DEVICE_COUNT'] = str(len(group))
                     env['MOJOLEARN_GMM_DEVICE_COUNT'] = str(len(group))
