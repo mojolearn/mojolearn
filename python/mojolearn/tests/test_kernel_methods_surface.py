@@ -111,7 +111,7 @@ def arm_refusals(rep):
     rep.raises("REFUSE", Exception, "", "Nystroem n_components > n, refused on the Mojo host", km.Nystroem(kernel="linear", n_components=17).fit, x)
     rep.raises("REFUSE", ValueError, "scale", "RBFSampler gamma='scale' by name", km.RBFSampler(gamma="scale").fit, x)
     rep.raises("REFUSE", Exception, "gamma", "RBFSampler gamma=0, refused on the Mojo host by name", km.RBFSampler(gamma=0.0, n_components=4).fit, x)
-    rep.raises("REFUSE", Exception, "n_components", "RBFSampler n_components=0, refused on the Mojo host by name", km.RBFSampler(gamma=0.5, n_components=0).fit, x)
+    rep.raises("REFUSE", ValueError, "n_components", "RBFSampler n_components=0, refused by name before any buffer is made", km.RBFSampler(gamma=0.5, n_components=0).fit, x)
     rep.raises("REFUSE", TypeError, "degree", "a float degree", km.KernelRidge(kernel="poly", gamma=0.5, degree=2.5).fit, x, y)
 
 
