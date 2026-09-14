@@ -1401,3 +1401,64 @@ runs the same steps on seven runners), the commands are these.
 
 The three 2026-09-14 47-lane GPU columns already carry every one of these
 lanes, so no new GPU record is needed for the first diff.
+
+## Workstream E batch 2 (2026-09-14): kmeans, SIMULATED IDENTICAL x3 ON base, GATE OWED
+
+Branch `lane/cpu-training-e2`, off `origin/main` at 2b7f991b6. The gate has
+not run; what is measured is one fixture on one box, stated as such.
+
+- kmeans. `cluster/host/kmeans_oracle.mojo`, the fit restated from its
+  kernels in the order `kmeans_fit` then `fit_predict` reach them: the
+  splitmix64 `HostRng`, `plan_sum_scale` and `choose_scale` (the latter
+  imported, it is host code already), `row_norm_kernel` at NORM_TPB with
+  the halving tree, the fused assignment (one ascending fma chain per cell,
+  the epilog, the self-neighbor guard, `argmin_op`'s total order),
+  `_sum_device`'s two-stage fold at REDUCE_BY_KEY_TPB with the map inside,
+  the three-stage device scan with the library block scan replayed at a
+  32-wide warp (Hillis-Steele inside the warp, the warp totals scanned by
+  warp 0, max/v26.5.0's `block.mojo:672` and `warp.mojo:1084`), the binary
+  search, the classic k-means++ over the candidates (the pinned `gemm_nt`
+  cell, `candidate_cost_kernel`'s chains, the Float64 argmin), k-means||
+  (the counter-hash uniforms, `scalable_keep`, the flag scan and stable
+  scatter, the float count histogram, the recluster under fresh defaults
+  with the inner scales), the quantized Int32 scatter-add,
+  `finalize_centroids_kernel`, the shift test, the post-loop assignment and
+  the weighted inertia, then `fit_predict`'s fresh assignment. Exported as
+  `kmeans_fit` from `bindings/_mojolearn_core_host.mojo` with the GPU
+  binding's ten-value params list; `KMeans.fit` is unchanged.
+- THE ONE DEVICE FACT THE SOURCE DID NOT SAY. The first host build read
+  DIVERGENT on every column. The Apple M4 GPU (the Sep 13 base binding,
+  which reproduces the record's `kmeans/base` hashes) was traced with
+  `MOJOLEARN_IDENTITY_TRACE` and its candidate norms dumped: 132 candidates
+  against the host's 134, round 0 of k-means|| identical (19 of 19 rows),
+  round 1 disjoint. The round seed crosses to `sample_flags_kernel` as two
+  Int32 halves and the kernel's `lo.cast[uint32]().cast[uint64]()`
+  SIGN-EXTENDS on the device, so the seed it hashes is `(hi << 32) |
+  sext64(lo)`; round 0's low half was positive and round 1's negative.
+  `host_round_seed_as_the_device_reassembles_it` spells that value. With
+  it the host card and the Apple card agree on all 1190 stages
+  (`tools/identity_trace_diff.py`, `fit.x_norm` through `fit.labels`, the
+  recluster included) and the lane reads IDENTICAL against the Apple,
+  NVIDIA and AMD 47-lane columns on `base` (one fixture, one repeat, the
+  CPU-only path forced through MOJOLEARN_HOST_DIR). The three GPU columns
+  agree on every k-means cell, so the three vendors share the reassembly;
+  a host with the whole 64-bit draw is the side that is wrong.
+- The block scan's warp width. The library scan folds at the hardware
+  width (64 on the MI300X), so the AMD `csum` may differ from the 32-wide
+  replay in bits that reach `binary_search_kernel` only when a target lands
+  inside that gap; the three GPU columns' agreement on every k-means cell
+  is the evidence that it did not on the seven fixtures. Stated in the
+  oracle's header, not claimed away.
+- The sabotage arm is the core family's `-D MOJOLEARN_HOST_SABOTAGE=1`,
+  under which every quantized centroid-sum cell carries one extra unit
+  (an order walked differently would not reliably move an argmin or an
+  Int32 sum). On the M4 the sabotage build read DIVERGENT on `centers` and
+  `labels` against all three columns on `base`.
+- kmeans-random, kmeans-array and kmeans-weighted share the entry (`init`
+  random and array, supplied weights are restated) but the 47-lane record
+  carries no cell for them, so they are not declared covered; they wait
+  for a GPU record that carries them.
+- The test module is `cd python && python3 -m mojolearn.tests.test_cpu_training_e2`.
+
+The measurement owed is the seven-runner CPU identity gate on the lane
+(`--require-columns 4 --lanes ... kmeans`), every fixture, two repeats.

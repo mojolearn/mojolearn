@@ -40,10 +40,21 @@ sabotage define reaches them (every distance chain walked descending) and
 (euclidean/l2, sqeuclidean) and refuses every other metric BY NAME; the
 returned "query tile" is 1, the batch the host runs.
 
-The base binding's OTHER estimator entries (`kmeans_fit`, `rbc_knn_search`,
+The base binding's OTHER estimator entries (`rbc_knn_search`,
 `radius_neighbors_*`) and its other helpers are deliberately ABSENT here, so
-the kmeans, rbc and radius lanes keep refusing BY NAME through
-`_HostBinding` until a lane lands them.
+the rbc and radius lanes keep refusing BY NAME through `_HostBinding` until
+a lane lands them.
+
+THE k-MEANS TRAINING ENTRY (workstream E batch 2, lane/cpu-training-e2,
+2026-09-14): `kmeans_fit` is exported under the GPU binding's name with the
+GPU binding's address contract (the ten-value `params` list, repeated in
+its docstring), so `python/mojolearn/cluster.py::KMeans.fit` runs unchanged
+on a CPU-only install. Its arithmetic is `cluster/host/kmeans_oracle.mojo`,
+the statement-for-statement restatement of the k-means|| init, the fused
+assignment, the fixed-point centroid update and the shift test; that
+file's header names every original by file and line. IT HAS A FOLD AND A
+QUANTIZATION, so the sabotage define reaches it (one extra unit in every
+quantized centroid-sum cell) and `core_host_sabotage()` reports it.
 
 Workstream E (lane/cpu-training-e, 2026-09-14) adds the three centering
 helpers of `linear_model.py` (`column_mean_f64`, `center_columns_f32`,
@@ -85,6 +96,12 @@ from checks.kernel_matrix import (
     column_name,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE
+from cluster.host.kmeans_oracle import (
+    INIT_ARRAY,
+    KMEANS_ORACLE_HOST_SABOTAGE,
+    host_kmeans_fit,
+    host_kmeans_validate,
+)
 from core.knn_host_predict import (
     KNN_HOST_SABOTAGE,
     KNN_HOST_WEIGHTS_DISTANCE,
@@ -144,10 +161,15 @@ def core_host_column_binding() raises -> PythonObject:
 
 def core_host_sabotage_binding() raises -> PythonObject:
     """Whether this binary was built with -D MOJOLEARN_HOST_SABOTAGE=1: the
-    helpers are untouched by it (byte moves have no fold) and the three
-    k-NN entries walk every distance chain descending under it (the gate's
+    helpers are untouched by it (byte moves have no fold), the three k-NN
+    entries walk every distance chain descending under it and the k-means
+    fit adds one unit to every quantized centroid-sum cell (the gate's
     negative control); refused outside the gate as one set."""
-    return PythonObject(CORE_HOST_SABOTAGE_DEFINE or KNN_HOST_SABOTAGE)
+    return PythonObject(
+        CORE_HOST_SABOTAGE_DEFINE
+        or KNN_HOST_SABOTAGE
+        or KMEANS_ORACLE_HOST_SABOTAGE
+    )
 
 
 # The base binding's names, same contract.
@@ -527,6 +549,96 @@ def knn_regress_binding(
     return PythonObject(KNN_HOST_QUERY_TILE)
 
 
+# ===========================================================================
+# THE k-MEANS TRAINING ENTRY (workstream E batch 2, 2026-09-14). The GPU
+# binding's name, arity and `params` list (`bindings/_mojolearn.mojo:365`).
+# ===========================================================================
+
+
+def kmeans_fit_binding(
+    x_addr: PythonObject,
+    out_centroids_addr: PythonObject,
+    out_labels_addr: PythonObject,
+    weights_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """Fit k-means on the host. Returns [inertia, n_iter, sum_scale,
+    weight_scale], the GPU binding's four.
+
+    `params` is, in this exact order:
+
+        0  n_samples
+        1  n_features
+        2  n_clusters
+        3  n_weights   (0 means unit weights; weights_addr is then unread)
+        4  max_iter
+        5  tol         (float)
+        6  seed
+        7  n_init
+        8  init
+        9  metric
+
+    `out_centroids_addr` is `n_clusters x n_features` float32 and is
+    written; on `init == INIT_ARRAY` it is read first as the start.
+    `out_labels_addr` is `n_samples` uint32 (the caller's int32 array is
+    the same bytes), the assignment against the FINAL centroids. The shape
+    refusals are `kmeans_fit`'s, raised BEFORE any address is read."""
+    if len(params) != 10:
+        raise Error(
+            "kmeans_fit: params must hold 10 values, got "
+            + String(len(params))
+        )
+    var x_address = _index(x_addr)
+    var centroids_address = _index(out_centroids_addr)
+    var lp = u32_ptr(_index(out_labels_addr))
+    var weights_address = _index(weights_addr)
+    var ns = _index(params[0])
+    var nf = _index(params[1])
+    var nc = _index(params[2])
+    var nw = _index(params[3])
+    var mi = _index(params[4])
+    var tl = Float64(py=params[5])
+    var sd = UInt64(_index(params[6]))
+    var ninit = _index(params[7])
+    var ii = _index(params[8])
+    var mm = _index(params[9])
+    var inertia = Float64(0.0)
+    var n_iter = 0
+    var sum_scale = Float64(0.0)
+    var weight_scale = Float64(0.0)
+    with GILReleased(Python()):
+        host_kmeans_validate(ns, nf, nc, nw)
+        var x = read_f32(x_address, ns * nf)
+        var centroids: List[Float32]
+        if ii == INIT_ARRAY:
+            centroids = read_f32(centroids_address, nc * nf)
+        else:
+            centroids = List[Float32](length=nc * nf, fill=Float32(0.0))
+        var weights = List[Float32]()
+        if nw != 0:
+            weights = read_f32(weights_address, nw)
+        var labels = List[UInt32](length=ns, fill=UInt32(0))
+        var r = host_kmeans_fit(
+            x, ns, nf, nc, centroids, labels, weights, nw, mi, tl, sd,
+            ninit, ii, mm,
+        )
+        var cp = f32_ptr(centroids_address)
+        for i in range(nc * nf):
+            cp[i] = centroids[i]
+        for i in range(ns):
+            lp[i] = labels[i]
+        inertia = r.inertia
+        n_iter = r.n_iter
+        sum_scale = r.sum_scale
+        weight_scale = r.weight_scale
+    var out = Python.list()
+    out.append(PythonObject(inertia))
+    out.append(PythonObject(n_iter))
+    out.append(PythonObject(sum_scale))
+    out.append(PythonObject(weight_scale))
+    return out
+
+
 @export
 def PyInit__mojolearn_core_host() abi("C") -> PythonObject:
     try:
@@ -540,6 +652,7 @@ def PyInit__mojolearn_core_host() abi("C") -> PythonObject:
         module.def_function[knn_search_binding]("knn_search")
         module.def_function[knn_classify_binding]("knn_classify")
         module.def_function[knn_regress_binding]("knn_regress")
+        module.def_function[kmeans_fit_binding]("kmeans_fit")
         module.def_function[transpose_f32_binding]("transpose_f32")
         module.def_function[cast_colmajor_f64_to_f32_binding]("cast_colmajor_f64_to_f32")
         module.def_function[cast_f64_to_f32_binding]("cast_f64_to_f32")

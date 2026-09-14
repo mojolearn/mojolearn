@@ -132,13 +132,17 @@ TRAINING_LANE_NAMES = {
     "ols": "linear regression",
     "ridge": "ridge",
     "dbscan": "DBSCAN",
+    # Workstream E batch 2 (lane/cpu-training-e2, 2026-09-14): k-means trains
+    # through cluster/host/kmeans_oracle.mojo, exported as kmeans_fit from
+    # the core host binding. Simulated IDENTICAL x3 on the base fixture on
+    # the M4's CPU path; the seven-runner gate result is owed.
+    "kmeans": "k-means",
 }
 
 #: The lanes with NO CPU path of any kind, as the README states them. A
 #: lane leaves this list the day its host lane merges; docs_facts fails the
 #: README until the marked span is rewritten.
 NO_CPU_PATH = (
-    "k-means",
     "spectral clustering",
     "UMAP",
     "the Gaussian process",
@@ -247,16 +251,19 @@ FAMILIES = (
         routes="_mojolearn",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("knn", "knn-clf", "knn-reg"),
+        training_lanes=("knn", "knn-clf", "knn-reg", "kmeans"),
         inference_lanes=("knn", "knn-clf", "knn-reg"),
         forest_kinds=(),
-        classes=("NearestNeighbors", "KNeighborsClassifier", "KNeighborsRegressor"),
+        classes=("NearestNeighbors", "KNeighborsClassifier", "KNeighborsRegressor", "KMeans"),
         display="nearest neighbors, k-NN classification and k-NN regression",
-        host_modules=("core/knn_host_predict.mojo", "bindings/host_helpers.mojo"),
+        host_modules=(
+            "core/knn_host_predict.mojo", "bindings/host_helpers.mojo",
+            "cluster/host/kmeans_oracle.mojo",
+        ),
         exports=(
             "core_host_numeric_mode", "core_host_vendor", "core_host_column",
             "core_host_sabotage", "mojolearn_vendor", "mojolearn_numeric_mode",
-            "knn_search", "knn_classify", "knn_regress", "transpose_f32",
+            "knn_search", "knn_classify", "knn_regress", "kmeans_fit", "transpose_f32",
             "cast_colmajor_f64_to_f32", "cast_f64_to_f32", "all_finite_f32",
             "all_finite_f64", "gather_i64", "gather_f64", "argmax_rows_f32",
             "argmax_rows_f64", "column_mean_f64", "center_columns_f32",

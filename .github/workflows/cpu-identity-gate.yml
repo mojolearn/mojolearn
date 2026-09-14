@@ -86,6 +86,7 @@ on:
       - "decomposition/host/pca_oracle.mojo"
       - "glm/host/glm_oracle.mojo"
       - "dbscan/host/dbscan_oracle.mojo"
+      - "cluster/host/kmeans_oracle.mojo"
       - "bench/results/classical_host/**"
       - "tools/cpu_identity_gate_check.py"
       - "bench/results/identity_break/2026-09-13_three-columns/**"
@@ -450,8 +451,9 @@ jobs:
       # edge keys descending (the maximum spanning tree), in pcg_rng by one
       # extra draw on every keyed stream (every ExtraTrees threshold), and
       # in xorwow by one extra step before every split fraction (every
-      # isolation tree); each further phase 1 binding names the fold its
-      # arm moves), loaded through
+      # isolation tree, and in kmeans_oracle by one extra unit in every
+      # quantized centroid-sum cell); each further phase 1 binding names the
+      # fold its arm moves), loaded through
       # MOJOLEARN_HOST_DIR with MOJOLEARN_HOST_ALLOW_SABOTAGE=1, run on the
       # covered lanes, and the four-way diff must exit non-zero with
       # DIVERGENT on them. Every covered cell must still be STABLE (a wrong
