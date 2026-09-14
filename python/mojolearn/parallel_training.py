@@ -199,7 +199,9 @@ class ParallelNeuralTrainer:
     """Ordered multi-GPU gradients for SmallMLPTrainer and SambaStack.
 
     Workers evaluate frozen snapshots concurrently; the first selected GPU
-    reduces and applies one update before publishing the owner state. Host transport preserves bytes. This trades
+    reduces and clips the complete registry; devices then update disjoint ranges
+    of parameters and moments before publishing the owner state. Host transport
+    preserves bytes. This trades
     transport cost for reuse of the existing public kernels and optimizer.
     Treat the supplied model as exclusively owned until close().
     """
@@ -226,6 +228,7 @@ class ParallelNeuralTrainer:
         if len(self._pool.devices) > logical_shards:
             self._pool.close()
             raise ValueError('physical device count exceeds logical shard count')
+        self._update_pool = DevicePool(self._pool.devices, cooperative=True)
         self.model = model
         self.logical_shards = logical_shards
         self._lock = threading.RLock()
@@ -264,9 +267,9 @@ class ParallelNeuralTrainer:
                 update_state = snapshot
                 if self._operation == 'samba_gradient':
                     update_state = dict(snapshot, rng=self.model.generator.state_dict())
-                # Reduction and update run on the FIRST selected GPU, even
-                # when the caller's process default device is not selected.
-                updated, retained, step = self._pool.map([(
+                # The first selected GPU retains the original reduction and clip;
+                # the cooperative worker partitions the optimizer update.
+                updated, retained, step = self._update_pool.map([(
                     self._operation.replace('_gradient', '_update'), update_state,
                     [part[1] for part in results])])[0]
                 result = dict(losses=losses, completed_steps=step,
@@ -315,6 +318,7 @@ class ParallelNeuralTrainer:
         with self._lock:
             self._closed = True
             self._pool.close()
+            self._update_pool.close()
 
     def __enter__(self):
         return self
