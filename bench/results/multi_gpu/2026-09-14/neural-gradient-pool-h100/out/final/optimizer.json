@@ -1,0 +1,810 @@
+{
+  "status": "PASS",
+  "checks": [
+    {
+      "sizes": [
+        1
+      ],
+      "kind": 0,
+      "momentum": 0.0,
+      "dampening": 0.0,
+      "nesterov": 0,
+      "clip": 0.0,
+      "sha256": "fbabb96651e30688e878ee97421dba79c8337865612029d131f01429718028f8"
+    },
+    {
+      "sizes": [
+        1
+      ],
+      "kind": 0,
+      "momentum": 0.0,
+      "dampening": 0.0,
+      "nesterov": 0,
+      "clip": 0.01,
+      "sha256": "a75e99887ae46ccf4599098cd9c1f790a2b2a398626a7ba33e19392a6dc61d75"
+    },
+    {
+      "sizes": [
+        1
+      ],
+      "kind": 0,
+      "momentum": 0.0,
+      "dampening": 0.0,
+      "nesterov": 0,
+      "clip": 100.0,
+      "sha256": "9b211255ab7e36af3b69cc2bb71980d9093a31a8b8a0d68769de6c55772e5310"
+    },
+    {
+      "sizes": [
+        1
+      ],
+      "kind": 0,
+      "momentum": 0.9,
+      "dampening": 0.2,
+      "nesterov": 0,
+      "clip": 0.0,
+      "sha256": "0f14870d994d8dbea9db97f00109b91510f1212281c3aa278176ee3e6e71f37e"
+    },
+    {
+      "sizes": [
+        1
+      ],
+      "kind": 0,
+      "momentum": 0.9,
+      "dampening": 0.2,
+      "nesterov": 0,
+      "clip": 0.01,
+      "sha256": "bdae99f4e2681bb21451c8fac0bad5961a516282a8c2e7c6e5a1b2395bb828e2"
+    },
+    {
+      "sizes": [
+        1
+      ],
+      "kind": 0,
+      "momentum": 0.9,
+      "dampening": 0.2,
+      "nesterov": 0,
+      "clip": 100.0,
+      "sha256": "451e9530b5a56d3ce1654f6a1298249ee1a4ff0a6372dfd4080d6689043fe2fd"
+    },
+    {
+      "sizes": [
+        1
+      ],
+      "kind": 0,
+      "momentum": 0.9,
+      "dampening": 0.0,
+      "nesterov": 1,
+      "clip": 0.0,
+      "sha256": "b06437bc47939f48c180d8d7b65153e30ed1a078db91f0c7e4172f802030669c"
+    },
+    {
+      "sizes": [
+        1
+      ],
+      "kind": 0,
+      "momentum": 0.9,
+      "dampening": 0.0,
+      "nesterov": 1,
+      "clip": 0.01,
+      "sha256": "6395fc1e722385f532055c20016d10dcf627e9719521708272d8cd716caf9f6e"
+    },
+    {
+      "sizes": [
+        1
+      ],
+      "kind": 0,
+      "momentum": 0.9,
+      "dampening": 0.0,
+      "nesterov": 1,
+      "clip": 100.0,
+      "sha256": "d59aaa5540795727423a683bd138a6740accf532a616f735cc64833b11316f4a"
+    },
+    {
+      "sizes": [
+        1
+      ],
+      "kind": 1,
+      "momentum": 0.0,
+      "dampening": 0.0,
+      "nesterov": 0,
+      "clip": 0.0,
+      "sha256": "df0aba86b0cdce4fa41175b10e6a9dcc697e1885b48d8408b107cea0e87fb000"
+    },
+    {
+      "sizes": [
+        1
+      ],
+      "kind": 1,
+      "momentum": 0.0,
+      "dampening": 0.0,
+      "nesterov": 0,
+      "clip": 0.01,
+      "sha256": "b6c20a2b6311f1cab3a469465fd116cee35aa5038216b801d3fa345212c50b33"
+    },
+    {
+      "sizes": [
+        1
+      ],
+      "kind": 1,
+      "momentum": 0.0,
+      "dampening": 0.0,
+      "nesterov": 0,
+      "clip": 100.0,
+      "sha256": "2c1d37ba6823b4495f5c5931a83d7708ca785cb67eab0d35d270bce79ad30b06"
+    },
+    {
+      "sizes": [
+        1
+      ],
+      "kind": 2,
+      "momentum": 0.0,
+      "dampening": 0.0,
+      "nesterov": 0,
+      "clip": 0.0,
+      "sha256": "d920ed4fc74b9aa8758914cfce565d42a36522df2253c5571613f6c44daa6b1f"
+    },
+    {
+      "sizes": [
+        1
+      ],
+      "kind": 2,
+      "momentum": 0.0,
+      "dampening": 0.0,
+      "nesterov": 0,
+      "clip": 0.01,
+      "sha256": "8980192a714686e0114a783970c53f3e3e0ce1a80acb0a80c0bc105c40886e01"
+    },
+    {
+      "sizes": [
+        1
+      ],
+      "kind": 2,
+      "momentum": 0.0,
+      "dampening": 0.0,
+      "nesterov": 0,
+      "clip": 100.0,
+      "sha256": "d121ca1691295d296180c7dcdd9b804eb8100d61945c8cd77b560431317e7c66"
+    },
+    {
+      "sizes": [
+        3,
+        11,
+        7,
+        80
+      ],
+      "kind": 0,
+      "momentum": 0.0,
+      "dampening": 0.0,
+      "nesterov": 0,
+      "clip": 0.0,
+      "sha256": "4f4aa8ecddd0853a4151fa8fa2bb3d25efd06ff521148a0c4dbeba1e8cd5b393"
+    },
+    {
+      "sizes": [
+        3,
+        11,
+        7,
+        80
+      ],
+      "kind": 0,
+      "momentum": 0.0,
+      "dampening": 0.0,
+      "nesterov": 0,
+      "clip": 0.01,
+      "sha256": "b9d4c6e30bf387f2090425476ab96736a09ab6e04cc05eca9dcb97581d6f8325"
+    },
+    {
+      "sizes": [
+        3,
+        11,
+        7,
+        80
+      ],
+      "kind": 0,
+      "momentum": 0.0,
+      "dampening": 0.0,
+      "nesterov": 0,
+      "clip": 100.0,
+      "sha256": "4c465c8ed4be3738c95bc37768509056344082ffbcb842eafff2d1b2acd779df"
+    },
+    {
+      "sizes": [
+        3,
+        11,
+        7,
+        80
+      ],
+      "kind": 0,
+      "momentum": 0.9,
+      "dampening": 0.2,
+      "nesterov": 0,
+      "clip": 0.0,
+      "sha256": "d8b772dd33d9415b361639fb427abfc317d636d0cdda0d772c5986c56c3d1cef"
+    },
+    {
+      "sizes": [
+        3,
+        11,
+        7,
+        80
+      ],
+      "kind": 0,
+      "momentum": 0.9,
+      "dampening": 0.2,
+      "nesterov": 0,
+      "clip": 0.01,
+      "sha256": "5b9ac7f93ec2d4e9c30254ed3611184ecf0586b7ed0048a3caea85593d272dc2"
+    },
+    {
+      "sizes": [
+        3,
+        11,
+        7,
+        80
+      ],
+      "kind": 0,
+      "momentum": 0.9,
+      "dampening": 0.2,
+      "nesterov": 0,
+      "clip": 100.0,
+      "sha256": "a9deaeba82451cbff8998463120adde2b0eb04938a58f2fa48c0d1e7a3b20975"
+    },
+    {
+      "sizes": [
+        3,
+        11,
+        7,
+        80
+      ],
+      "kind": 0,
+      "momentum": 0.9,
+      "dampening": 0.0,
+      "nesterov": 1,
+      "clip": 0.0,
+      "sha256": "0c4a9571daa38b2627ad86570c2c3f17bfed2f328fda2627edbe3f233e510113"
+    },
+    {
+      "sizes": [
+        3,
+        11,
+        7,
+        80
+      ],
+      "kind": 0,
+      "momentum": 0.9,
+      "dampening": 0.0,
+      "nesterov": 1,
+      "clip": 0.01,
+      "sha256": "3d4935dbbd14950c5d5a2cb213a3b112ab83d3d151597d619c03e7fe58759435"
+    },
+    {
+      "sizes": [
+        3,
+        11,
+        7,
+        80
+      ],
+      "kind": 0,
+      "momentum": 0.9,
+      "dampening": 0.0,
+      "nesterov": 1,
+      "clip": 100.0,
+      "sha256": "3a16a0b3fff5948f613918f0f88ff0d5ad64fb436824b533461fa8f80df0f0c9"
+    },
+    {
+      "sizes": [
+        3,
+        11,
+        7,
+        80
+      ],
+      "kind": 1,
+      "momentum": 0.0,
+      "dampening": 0.0,
+      "nesterov": 0,
+      "clip": 0.0,
+      "sha256": "6e4c45f91a73cc2394d82f5f212feaa216bf7eef19e0782f7b0b4856b3fd4368"
+    },
+    {
+      "sizes": [
+        3,
+        11,
+        7,
+        80
+      ],
+      "kind": 1,
+      "momentum": 0.0,
+      "dampening": 0.0,
+      "nesterov": 0,
+      "clip": 0.01,
+      "sha256": "36cac5fc9a3324405197037ae4ba73ab3ddd6fb9df14fc86d7b9d0bf7d9d39dd"
+    },
+    {
+      "sizes": [
+        3,
+        11,
+        7,
+        80
+      ],
+      "kind": 1,
+      "momentum": 0.0,
+      "dampening": 0.0,
+      "nesterov": 0,
+      "clip": 100.0,
+      "sha256": "2eedc8c114e6304343da2e288095bc5735795c0c332ff2b9148809cf19a2757d"
+    },
+    {
+      "sizes": [
+        3,
+        11,
+        7,
+        80
+      ],
+      "kind": 2,
+      "momentum": 0.0,
+      "dampening": 0.0,
+      "nesterov": 0,
+      "clip": 0.0,
+      "sha256": "177199157fe9742dbf5758bf1a237e6fae741d5ee4ee9d724ca5c74b9df2fc3a"
+    },
+    {
+      "sizes": [
+        3,
+        11,
+        7,
+        80
+      ],
+      "kind": 2,
+      "momentum": 0.0,
+      "dampening": 0.0,
+      "nesterov": 0,
+      "clip": 0.01,
+      "sha256": "99833262f18d3741247c04d1cb77ce96f7725f115f323b64452f7c28ea4b6537"
+    },
+    {
+      "sizes": [
+        3,
+        11,
+        7,
+        80
+      ],
+      "kind": 2,
+      "momentum": 0.0,
+      "dampening": 0.0,
+      "nesterov": 0,
+      "clip": 100.0,
+      "sha256": "a1df451f0a58e129b2056c2d11a928626cd2f2d7119c7f50a6890b49cff7e1e4"
+    },
+    {
+      "sizes": [
+        129,
+        3,
+        513,
+        17,
+        65
+      ],
+      "kind": 0,
+      "momentum": 0.0,
+      "dampening": 0.0,
+      "nesterov": 0,
+      "clip": 0.0,
+      "sha256": "44d3f731c450b85dee1183f70907608543ed57d9f16a11f53c8ccd566f7d68ca"
+    },
+    {
+      "sizes": [
+        129,
+        3,
+        513,
+        17,
+        65
+      ],
+      "kind": 0,
+      "momentum": 0.0,
+      "dampening": 0.0,
+      "nesterov": 0,
+      "clip": 0.01,
+      "sha256": "6b1eb696381ba6dd6baa0da850e681f32933ac90c68d2b6d8499460d49ddcd36"
+    },
+    {
+      "sizes": [
+        129,
+        3,
+        513,
+        17,
+        65
+      ],
+      "kind": 0,
+      "momentum": 0.0,
+      "dampening": 0.0,
+      "nesterov": 0,
+      "clip": 100.0,
+      "sha256": "a672be81557a091f6727450412cbba4f848bdde746a1f0a4727570aa438a15b4"
+    },
+    {
+      "sizes": [
+        129,
+        3,
+        513,
+        17,
+        65
+      ],
+      "kind": 0,
+      "momentum": 0.9,
+      "dampening": 0.2,
+      "nesterov": 0,
+      "clip": 0.0,
+      "sha256": "574757780defe7d828a43c3690967088a87abfdc64149332b707e8890e96f6e8"
+    },
+    {
+      "sizes": [
+        129,
+        3,
+        513,
+        17,
+        65
+      ],
+      "kind": 0,
+      "momentum": 0.9,
+      "dampening": 0.2,
+      "nesterov": 0,
+      "clip": 0.01,
+      "sha256": "ee5927506c82d2d38d778197372499aebcae99c62d160652724354c46aa13af4"
+    },
+    {
+      "sizes": [
+        129,
+        3,
+        513,
+        17,
+        65
+      ],
+      "kind": 0,
+      "momentum": 0.9,
+      "dampening": 0.2,
+      "nesterov": 0,
+      "clip": 100.0,
+      "sha256": "3e7e83ffabd0d751f0dcacdff03e1191b9d679c9f525995d6b00671046455953"
+    },
+    {
+      "sizes": [
+        129,
+        3,
+        513,
+        17,
+        65
+      ],
+      "kind": 0,
+      "momentum": 0.9,
+      "dampening": 0.0,
+      "nesterov": 1,
+      "clip": 0.0,
+      "sha256": "bb4e0931733190e3e55db2b8b0f7ac323f2c7fd48bba8a15638d6781568f94ef"
+    },
+    {
+      "sizes": [
+        129,
+        3,
+        513,
+        17,
+        65
+      ],
+      "kind": 0,
+      "momentum": 0.9,
+      "dampening": 0.0,
+      "nesterov": 1,
+      "clip": 0.01,
+      "sha256": "670465c4792f18e0d9cb691dc81fc1a6405d2fc9b5268733718624f53eecc0f8"
+    },
+    {
+      "sizes": [
+        129,
+        3,
+        513,
+        17,
+        65
+      ],
+      "kind": 0,
+      "momentum": 0.9,
+      "dampening": 0.0,
+      "nesterov": 1,
+      "clip": 100.0,
+      "sha256": "959c689a6c8e10ef6bf6a30ce5091a0904ab32e2fc77e0d375851af09c254ba5"
+    },
+    {
+      "sizes": [
+        129,
+        3,
+        513,
+        17,
+        65
+      ],
+      "kind": 1,
+      "momentum": 0.0,
+      "dampening": 0.0,
+      "nesterov": 0,
+      "clip": 0.0,
+      "sha256": "2f25f0c0353c34750f84002993c61981feb1f372d4483de318969d10821035d2"
+    },
+    {
+      "sizes": [
+        129,
+        3,
+        513,
+        17,
+        65
+      ],
+      "kind": 1,
+      "momentum": 0.0,
+      "dampening": 0.0,
+      "nesterov": 0,
+      "clip": 0.01,
+      "sha256": "a919ae55720e036efe74d9792216c35d1405d5d7cef1a9bb8f0a8bdd6ba8e2c7"
+    },
+    {
+      "sizes": [
+        129,
+        3,
+        513,
+        17,
+        65
+      ],
+      "kind": 1,
+      "momentum": 0.0,
+      "dampening": 0.0,
+      "nesterov": 0,
+      "clip": 100.0,
+      "sha256": "507de27fbf4dd64b44c8604486bf42183aab97552bd08907ea1a442f7839f11a"
+    },
+    {
+      "sizes": [
+        129,
+        3,
+        513,
+        17,
+        65
+      ],
+      "kind": 2,
+      "momentum": 0.0,
+      "dampening": 0.0,
+      "nesterov": 0,
+      "clip": 0.0,
+      "sha256": "2e721f5a8904bc0ca0c74e082f187bc7b5cf0dfa59d0471a58baab9f963ada8c"
+    },
+    {
+      "sizes": [
+        129,
+        3,
+        513,
+        17,
+        65
+      ],
+      "kind": 2,
+      "momentum": 0.0,
+      "dampening": 0.0,
+      "nesterov": 0,
+      "clip": 0.01,
+      "sha256": "25120dfa5728951402564b4187bbab383baf291875940950459045cf7dfef770"
+    },
+    {
+      "sizes": [
+        129,
+        3,
+        513,
+        17,
+        65
+      ],
+      "kind": 2,
+      "momentum": 0.0,
+      "dampening": 0.0,
+      "nesterov": 0,
+      "clip": 100.0,
+      "sha256": "5b60a1e0e09512ec7249b11fe3737db3283ce022c4c3ff384fc92a10e976edc3"
+    },
+    {
+      "sizes": [
+        1025,
+        7,
+        3
+      ],
+      "kind": 0,
+      "momentum": 0.0,
+      "dampening": 0.0,
+      "nesterov": 0,
+      "clip": 0.0,
+      "sha256": "00bfca9aecce47c58a2fa551a1895ba8cdc857a016682b3683f81c21d5013c83"
+    },
+    {
+      "sizes": [
+        1025,
+        7,
+        3
+      ],
+      "kind": 0,
+      "momentum": 0.0,
+      "dampening": 0.0,
+      "nesterov": 0,
+      "clip": 0.01,
+      "sha256": "d9c468424ef18552a0628563362698bf3c7ee2f39cfd278cbb2617b7312a893c"
+    },
+    {
+      "sizes": [
+        1025,
+        7,
+        3
+      ],
+      "kind": 0,
+      "momentum": 0.0,
+      "dampening": 0.0,
+      "nesterov": 0,
+      "clip": 100.0,
+      "sha256": "94c0c55bf0e7b1f58c6977c7c3bcc4b2c32c5c95f51cdfd3194f13929f3a9b22"
+    },
+    {
+      "sizes": [
+        1025,
+        7,
+        3
+      ],
+      "kind": 0,
+      "momentum": 0.9,
+      "dampening": 0.2,
+      "nesterov": 0,
+      "clip": 0.0,
+      "sha256": "85fa43c61dd59196d67529ecd0ade082ef356549c1a1484da2c00961e6c161fb"
+    },
+    {
+      "sizes": [
+        1025,
+        7,
+        3
+      ],
+      "kind": 0,
+      "momentum": 0.9,
+      "dampening": 0.2,
+      "nesterov": 0,
+      "clip": 0.01,
+      "sha256": "99e204805037c836609423b906e0145040ec977f27260d858f7020d59fc95a1e"
+    },
+    {
+      "sizes": [
+        1025,
+        7,
+        3
+      ],
+      "kind": 0,
+      "momentum": 0.9,
+      "dampening": 0.2,
+      "nesterov": 0,
+      "clip": 100.0,
+      "sha256": "6606b9c82d10218a00ace6b2d519fdf9dcb04e650485275b44463fb4a16d33cd"
+    },
+    {
+      "sizes": [
+        1025,
+        7,
+        3
+      ],
+      "kind": 0,
+      "momentum": 0.9,
+      "dampening": 0.0,
+      "nesterov": 1,
+      "clip": 0.0,
+      "sha256": "cd619460abf7dfe7de9912e99308f1371110d167b75803678de8d4e7ee9e75a1"
+    },
+    {
+      "sizes": [
+        1025,
+        7,
+        3
+      ],
+      "kind": 0,
+      "momentum": 0.9,
+      "dampening": 0.0,
+      "nesterov": 1,
+      "clip": 0.01,
+      "sha256": "d0721c8bd88f548e6a436356eaaaed0b180ef2823bae77afcf189b9172b45b75"
+    },
+    {
+      "sizes": [
+        1025,
+        7,
+        3
+      ],
+      "kind": 0,
+      "momentum": 0.9,
+      "dampening": 0.0,
+      "nesterov": 1,
+      "clip": 100.0,
+      "sha256": "869923a37c8e7204e18c52a7a34df1dba281c06709a867b89faa55c67c884238"
+    },
+    {
+      "sizes": [
+        1025,
+        7,
+        3
+      ],
+      "kind": 1,
+      "momentum": 0.0,
+      "dampening": 0.0,
+      "nesterov": 0,
+      "clip": 0.0,
+      "sha256": "ee2f0ba51ec4fb94c15633ea75da4f26369d54f10bbe8eaca4df7c8d801131dd"
+    },
+    {
+      "sizes": [
+        1025,
+        7,
+        3
+      ],
+      "kind": 1,
+      "momentum": 0.0,
+      "dampening": 0.0,
+      "nesterov": 0,
+      "clip": 0.01,
+      "sha256": "00792a9b47a5803a9b100436d708eafda6d69896062cc1975a203246daab9b01"
+    },
+    {
+      "sizes": [
+        1025,
+        7,
+        3
+      ],
+      "kind": 1,
+      "momentum": 0.0,
+      "dampening": 0.0,
+      "nesterov": 0,
+      "clip": 100.0,
+      "sha256": "19fb80403a850b7732cec9607ff11db958a5f44253629082b53f95de91da1d32"
+    },
+    {
+      "sizes": [
+        1025,
+        7,
+        3
+      ],
+      "kind": 2,
+      "momentum": 0.0,
+      "dampening": 0.0,
+      "nesterov": 0,
+      "clip": 0.0,
+      "sha256": "4ebae0414b2f019bf10fea714a43f31b41efa69cc8bb4c4a814b9af77dd3a645"
+    },
+    {
+      "sizes": [
+        1025,
+        7,
+        3
+      ],
+      "kind": 2,
+      "momentum": 0.0,
+      "dampening": 0.0,
+      "nesterov": 0,
+      "clip": 0.01,
+      "sha256": "3825ed0afefb9e335878e52b8f5f5ec55db8a887b630b4e46dfede6d7c06437c"
+    },
+    {
+      "sizes": [
+        1025,
+        7,
+        3
+      ],
+      "kind": 2,
+      "momentum": 0.0,
+      "dampening": 0.0,
+      "nesterov": 0,
+      "clip": 100.0,
+      "sha256": "aca204cfc7a37399c5b50e4f1a493b3f47e3c54193b35cb4883192514ff76ec0"
+    }
+  ],
+  "refusals": [
+    "nonfinite_0",
+    "nonfinite_1",
+    "nonfinite_2",
+    "nonfinite_3",
+    "devices_0",
+    "devices_65",
+    "devices_3"
+  ],
+  "scope": "Two H100s: all SGD/Adam/AdamW outputs, global clip, split momentum flags and atomic refusal. Host staged optimizer ranges; no full-model capacity claim."
+}
