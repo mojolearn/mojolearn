@@ -111,6 +111,15 @@ from gaussian_process.estimator import (
     gpr_fit_host,
     gpr_predict_host,
 )
+# The Cholesky door (workstream D, 2026-09-14). `cholesky/` is already
+# linked into this binary because the GP factors through it; exposing the
+# one-shot host entries here adds no kernel and no second build.
+from cholesky.estimator import (
+    CholeskyFactor,
+    cholesky_factor_host,
+    cholesky_profile_jitter,
+    cholesky_solve_host,
+)
 
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
@@ -575,6 +584,161 @@ def gpr_predict_binding(
     return PythonObject(n_clamped)
 
 
+# ===========================================================================
+# THE CHOLESKY DOOR (workstream D, 2026-09-14). `cholesky/estimator.mojo`'s
+# one-shot host entries, reached through THIS binding because the GP build
+# already links the whole of `cholesky/` (bindings/build_gp.sh's blob table
+# lists its potrf, trsm, logdet and jitter kernels). Nothing new is
+# compiled; a second binding would be a second copy of the same kernels.
+# The ABI is the GP's: two lists, an address list and a params list, each
+# length-checked, orders written out here and mirrored in
+# python/mojolearn/_cholesky_impl.py.
+# ===========================================================================
+
+
+def cholesky_profile_jitter_binding() raises -> PythonObject:
+    """The profile's pinned ridge (`chol_jitter_pinned`, DEVIATION 1637),
+    as a Python float. The Python side reads it here so its default is the
+    NAME and never a literal that can drift from the pin."""
+    return PythonObject(Float64(cholesky_profile_jitter()))
+
+
+def _cholesky_factor_run(
+    a: List[Float32],
+    n: Int,
+    jitter: Float32,
+    lp: MutPointer[Float32, MutUntrackedOrigin],
+    sp: MutPointer[Float64, MutUntrackedOrigin],
+) raises -> Int:
+    """The GIL-free half of `cholesky_factor_binding`."""
+    var f = cholesky_factor_host(a, n, jitter)
+    copy_f32(f.l.unsafe_ptr(), lp, n * n)
+    # info, nb, logdet, jitter -- in that order, mirrored in
+    # `_cholesky_impl.py::Cholesky.fit`. Each widens to float64 exactly.
+    sp.unsafe_store(0, Float64(f.info))
+    sp.unsafe_store(1, Float64(f.nb))
+    sp.unsafe_store(2, Float64(f.logdet))
+    sp.unsafe_store(3, Float64(f.jitter))
+    return f.info
+
+
+def cholesky_factor_binding(
+    addrs: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """`cholesky_factor_host(a, n, jitter)`: `A + jitter I = L L^T`, host
+    in and host out. Returns LAPACK's `info`, a RESULT and not an exception
+    (DEVIATION 1634): 0 means `l_out` holds the factor, `k > 0` that the
+    leading minor of order `k` was not positive definite and `l_out` holds
+    a partial result.
+
+    `addrs`, in this exact order:
+
+        0  a               n * n float32, row-major, read
+        1  l_out           n * n float32, WRITTEN (lower triangle L, strict
+                            upper +0.0)
+        2  scalars_out     4 float64, WRITTEN: info, nb, logdet, jitter
+
+    `params`, in this exact order:
+
+        0  n
+        1  jitter          (float; crosses UNCLAMPED so chol_validate_jitter
+                            refuses an unpinned value by name, DEVIATION 1637)
+
+    Non-finite and non-symmetric matrices are refused by name on the Mojo
+    host BEFORE any upload (`chol_validate_matrix`, DEVIATION 1638); nothing
+    is judged here except the two list lengths.
+    """
+    if len(addrs) != 3:
+        raise Error(
+            "cholesky_factor: addrs must contain 3 addresses (a, l_out,"
+            " scalars_out), got "
+            + String(len(addrs))
+        )
+    if len(params) != 2:
+        raise Error(
+            "cholesky_factor: params must contain 2 values (n, jitter), got "
+            + String(len(params))
+        )
+    var ap = _f32_ptr(Int(py=addrs[0]))
+    var lp = _f32_ptr(Int(py=addrs[1]))
+    var sp = _f64_ptr(Int(py=addrs[2]))
+    var n = Int(py=params[0])
+    var jitter = Float32(Float64(py=params[1]))
+    var a = read_f32(Int(ap), max(0, n * n))
+    var info = 0
+    with GILReleased(Python()):
+        info = _cholesky_factor_run(a, n, jitter, lp, sp)
+    return PythonObject(info)
+
+
+def _cholesky_solve_run(
+    factor: CholeskyFactor,
+    b: List[Float32],
+    nrhs: Int,
+    xp: MutPointer[Float32, MutUntrackedOrigin],
+) raises:
+    """The GIL-free half of `cholesky_solve_binding`."""
+    var x = cholesky_solve_host(factor, b, nrhs)
+    copy_f32(x.unsafe_ptr(), xp, factor.n * nrhs)
+
+
+def cholesky_solve_binding(
+    addrs: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """`cholesky_solve_host(factor, b, nrhs)`: `A X = B` from the factor
+    `cholesky_factor` returned. cuSOLVER's `potrs`. Returns 0.
+
+    `addrs`, in this exact order:
+
+        0  l               n * n float32, the factor, read
+        1  b               n * nrhs float32, row-major, read
+        2  x_out           n * nrhs float32, WRITTEN
+
+    `params`, in this exact order:
+
+        0  n
+        1  nrhs
+        2  info            LAPACK's info from the factorization, PASSED
+                            THROUGH so `cholesky_solve_host`'s refusal to
+                            solve against a FAILED factor (DEVIATION 1634)
+                            fires from Python exactly as it fires from Mojo
+        3  nb              the panel width that ran (part of the profile)
+        4  logdet
+        5  jitter
+
+    Slot 2 is the trap in this list and it is deliberate, for the reason
+    `gpr_predict_binding` gives about its own `info` slot: a binding that
+    judged it, or zero-filled it, would make that refusal unreachable.
+    """
+    if len(addrs) != 3:
+        raise Error(
+            "cholesky_solve: addrs must contain 3 addresses (l, b, x_out),"
+            " got "
+            + String(len(addrs))
+        )
+    if len(params) != 6:
+        raise Error(
+            "cholesky_solve: params must contain 6 values (n, nrhs, info,"
+            " nb, logdet, jitter), got "
+            + String(len(params))
+        )
+    var lp = _f32_ptr(Int(py=addrs[0]))
+    var bp = _f32_ptr(Int(py=addrs[1]))
+    var xp = _f32_ptr(Int(py=addrs[2]))
+    var n = Int(py=params[0])
+    var nrhs = Int(py=params[1])
+    var info = Int(py=params[2])
+    var nb = Int(py=params[3])
+    var logdet = Float32(Float64(py=params[4]))
+    var jitter = Float32(Float64(py=params[5]))
+    var l = read_f32(Int(lp), max(0, n * n))
+    var b = read_f32(Int(bp), max(0, n * nrhs))
+    var factor = CholeskyFactor(l^, n, info, logdet, nb, jitter)
+    with GILReleased(Python()):
+        _cholesky_solve_run(factor, b, nrhs, xp)
+    return PythonObject(0)
+
+
 def gp_parallel_available() raises -> PythonObject:
     return PythonObject(1)
 
@@ -588,6 +752,10 @@ def PyInit__mojolearn_gp() abi("C") -> PythonObject:
         m.def_function[gp_numeric_mode_binding]("gp_numeric_mode")
         m.def_function[gpr_fit_binding]("gpr_fit")
         m.def_function[gpr_predict_binding]("gpr_predict")
+        # The Cholesky door (workstream D, 2026-09-14).
+        m.def_function[cholesky_profile_jitter_binding]("cholesky_profile_jitter")
+        m.def_function[cholesky_factor_binding]("cholesky_factor")
+        m.def_function[cholesky_solve_binding]("cholesky_solve")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_gp: ", e))
