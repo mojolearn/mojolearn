@@ -62,6 +62,14 @@ on:
       - "bindings/hostptr.mojo"
       - "core/forest_host_predict.mojo"
       - "core/gbdt_host_predict.mojo"
+      - "hierarchy/checks/linkage_oracle.mojo"
+      - "isolation_forest/checks/if_oracle.mojo"
+      - "isolation_forest/impl/rng/xorwow.mojo"
+      - "extratrees/checks/pcg_rng.mojo"
+      - "extratrees/estimator.mojo"
+      - "extratrees/impl/randomforest/randomforest.mojo"
+      - "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo"
+      - "python/mojolearn/_labels.py"
       - "training/byte_lm_host.mojo"
       - "training/byte_lm_host_backward.mojo"
       - "python/mojolearn/_backend.py"
@@ -416,8 +424,12 @@ jobs:
       # lane whose host oracle folds through gemm_oracle_cell, and in
       # kde_oracle by summing every logsumexp row descending, in hw_oracle
       # by splitting the SSE fused multiply-add, in smo_oracle by walking
-      # its GEMM leaf descending; each further phase 1 binding names the
-      # fold its arm moves), loaded through
+      # its GEMM leaf descending, in linkage_oracle by walking the sorted
+      # edge keys descending (the maximum spanning tree), in pcg_rng by one
+      # extra draw on every keyed stream (every ExtraTrees threshold), and
+      # in xorwow by one extra step before every split fraction (every
+      # isolation tree); each further phase 1 binding names the fold its
+      # arm moves), loaded through
       # MOJOLEARN_HOST_DIR with MOJOLEARN_HOST_ALLOW_SABOTAGE=1, run on the
       # covered lanes, and the four-way diff must exit non-zero with
       # DIVERGENT on them. Every covered cell must still be STABLE (a wrong

@@ -128,8 +128,10 @@ from extratrees.impl.decisiontree.decisiontree import (
 )
 from extratrees.impl.randomforest.randomforest import (
     Forest,
+    class_ids_for,
     fit_classification,
     fit_classification_device,
+    fit_forest_exact,
     fit_regression,
     fit_regression_device,
 )
@@ -741,10 +743,16 @@ def fit_extra_trees_regressor_device(
     **What is NOT identical to the host arm, and it is deviation 135's ruling
     rather than a defect:** the device trainer consumes labels QUANTIZED to
     fixed point, so `quantize_labels` derives the scale here, the tree
-    STRUCTURE is bit-identical to the host arm's (the split decision is made
-    on integer sums on both sides, deviations 135 and 189), and the LEAF
-    VALUES differ by at most one quantization step -- they are means of
-    quantized labels where the host's are `Float64` means.
+    STRUCTURE is bit-identical to the host arm's ON THE CHECK'S FIXTURES
+    (the device orders candidates by cuML's exact `Int64` MSE key over the
+    quantized labels, deviation 189; the host arm `node_split_random_mse`
+    orders by sklearn's `Float64` proxy, deviation 153; the two agree in
+    exact arithmetic and can disagree bit for bit on a near-tie the
+    device's node-uniform shift turns into an exact tie, which is why the
+    CPU column runs `fit_extra_trees_regressor_host_exact` and not this
+    arm's host twin), and the LEAF VALUES differ by at most one
+    quantization step -- they are means of quantized labels where the
+    host's are `Float64` means.
     `device_regression_check` asserts all three against THIS entry point, and
     uses the leaf-value difference as the REACH proof that this arm fits on
     the device at all: an arm that silently served the host fit would return
@@ -766,6 +774,83 @@ def fit_extra_trees_regressor_device(
         plan.n_sampled_rows,
         x_addr=x_addr,
         x_row_major=x_row_major,
+    )
+    var bound = depth_cap_bound(forest, plan)
+    return FitResult(forest^, plan, bound)
+
+
+def fit_extra_trees_classifier_host_exact(
+    x_col_major: List[Float32],
+    labels: List[Float32],
+    n_rows: Int32,
+    n_features: Int32,
+    n_classes: Int32,
+    config: ExtraTreesConfig,
+) raises -> FitResult:
+    """THE CPU COLUMN'S CLASSIFIER FIT (the CPU training lane, phase 1,
+    et-clf, 2026-09-14): `fit_extra_trees_classifier_device` restated on
+    the host, over `fit_forest_exact` (the block comment above
+    `train_tree_exact` in `batched_levelalgo/builder.mojo`). The plan is
+    `classifier_plan`, the same resolver both GPU arms call, so every
+    refusal is theirs; the label plane is `class_ids_for`, the device's
+    cast with its range refusal. Takes no DeviceContext; what
+    `bindings/_mojolearn_trees_host.mojo` runs, and what
+    `tools/identity_break.py --diff ... --require-columns 4` holds to the
+    three GPU columns."""
+    var plan = classifier_plan(config, n_rows, n_features)
+    var class_ids = class_ids_for(labels, n_rows, n_classes)
+    var forest = fit_forest_exact(
+        x_col_major,
+        labels,
+        class_ids,
+        n_rows,
+        n_features,
+        n_classes,
+        plan.params,
+        plan.n_trees,
+        config.random_state,
+        True,
+        Float32(1.0),
+        plan.bootstrap,
+        plan.n_sampled_rows,
+    )
+    var bound = depth_cap_bound(forest, plan)
+    return FitResult(forest^, plan, bound)
+
+
+def fit_extra_trees_regressor_host_exact(
+    x_col_major: List[Float32],
+    y: List[Float32],
+    n_rows: Int32,
+    n_features: Int32,
+    config: ExtraTreesConfig,
+) raises -> FitResult:
+    """THE CPU COLUMN'S REGRESSOR FIT (et-reg, 2026-09-14):
+    `fit_extra_trees_regressor_device` restated on the host. The labels
+    are QUANTIZED by `quantize_labels` exactly as the device arm quantizes
+    them (DEVIATION 135), the search is the device's exact `Int64` MSE key
+    over those integers (DEVIATION 189) and the leaves are means of the
+    quantized labels rescaled by `Float32(1 / scale)` as `leaf_kernel`
+    computes them (DEVIATION 179), so the leaf VALUES are the device's,
+    where `fit_extra_trees_regressor_reference` returns Float64 means that
+    differ from the device by up to one quantization step and cannot be
+    the CPU column. Takes no DeviceContext."""
+    var plan = regressor_plan(config, n_rows, n_features)
+    var ql = quantize_labels(y, n_rows)
+    var forest = fit_forest_exact(
+        x_col_major,
+        y,
+        ql[0],
+        n_rows,
+        n_features,
+        Int32(1),
+        plan.params,
+        plan.n_trees,
+        config.random_state,
+        False,
+        Float32(1.0 / ql[1]),
+        plan.bootstrap,
+        plan.n_sampled_rows,
     )
     var bound = depth_cap_bound(forest, plan)
     return FitResult(forest^, plan, bound)

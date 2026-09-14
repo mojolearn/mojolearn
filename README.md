@@ -249,13 +249,17 @@ model: <!--fact:host_inference_surfaces-->random forests, Extra Trees and the fo
 34782452584, [fixtures](bench/results/forest_host/README.md); the classical
 estimators: Apple M4, NVIDIA H100 and AMD MI300X recordings of the first
 five, 45 fixtures each, and Apple M4 recordings of kernel density, SVC,
-whitened PCA and the three k-NN classes, with the NVIDIA and AMD recordings
-of those owed, reproduced on the CPU path,
-[fixtures](bench/results/classical_host/)). Training on a CPU:
-<!--fact:host_training_lanes-->pinned GEMM, kernel density, Holt-Winters, lasso, elasticnet and SVC<!--/fact-->,
-every cell of those lanes in the 46-lane harness identical to the three GPU
-columns on seven CPUs ([gate](.github/workflows/cpu-identity-gate.yml)). The
-whole CPU surface is declared once, in
+whitened PCA and the three k-NN classes, 54 fixtures each, reproduced on
+the CPU path, [fixtures](bench/results/classical_host/)). Training on a CPU:
+<!--fact:host_training_lanes-->pinned GEMM, kernel density, Holt-Winters, lasso, elasticnet, SVC, agglomerative clustering, the Extra Trees classifier, the Extra Trees regressor and the isolation forest<!--/fact-->,
+the first six identical to the three GPU columns on seven CPUs
+([gate](.github/workflows/cpu-identity-gate.yml)) and, since 2026-09-14,
+agglomerative clustering, Extra Trees (classifier and regressor, the saved
+model bytes included) and the isolation forest identical to the three GPU
+columns on the Apple M4 host path with the seven-runner run of the same
+gate pending
+([columns](bench/results/identity_break/2026-09-14_cpu-phase1b/README.md)).
+The whole CPU surface is declared once, in
 [python/mojolearn/host_surface.py](python/mojolearn/host_surface.py), and the
 [support matrix](SUPPORT_MATRIX.md) carries it as a table. The byte LM
 has two CPU surfaces of its own. `LanguageModelInference` runs the forward
@@ -270,7 +274,7 @@ shape, and identity is claimed per shape because the weight gradients contract
 over the token count. Of all these, only the byte LM host binding ships in the
 wheels; the others build from source with `bindings/build_*_host.sh` (each a
 shim over `bindings/build_host_family.sh <family>`). Every lane not named here has
-no CPU path at all: <!--fact:no_cpu_path-->k-means, DBSCAN, isolation forest, agglomerative and spectral clustering, UMAP, the Gaussian process, ARIMA, the neural blocks and training for the forests, gradient boosting and k-NN<!--/fact-->.
+no CPU path at all: <!--fact:no_cpu_path-->k-means, DBSCAN, spectral clustering, UMAP, the Gaussian process, ARIMA, the neural blocks and training for the random forests, gradient boosting and k-NN<!--/fact-->.
 Run the diagnostic command before depending on a new machine:
 
 ```sh

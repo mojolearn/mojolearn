@@ -6,6 +6,28 @@ the shipped default are under `2026-09-13_three-columns/` (its README names
 the boxes and the commits). The older files at this level predate the infer
 and model columns and diff on the train column only.
 
+## The infer column on the lanes that have no held-out rows (2026-09-14)
+
+The newest three-vendor record is `2026-09-14_46-lanes/` (414 train and 459
+infer/model cells IDENTICAL). Nine of its 46 lanes record `n/a:<reason>` in
+the infer column, and each reason was checked against the public class on
+2026-09-14:
+
+| lane | infer | why, verified in the class |
+|---|---|---|
+| kmeans | `n/a:no-predict` | `cluster.py::KMeans` has `fit` and `fit_predict` only, no `predict` or `transform` |
+| dbscan, agglomerative | `n/a:transductive` | `fit` and `fit_predict` only; the labels belong to the fitted rows |
+| spectral | `n/a:transductive` | `SpectralClustering.predict` raises `NotImplementedError` by design |
+| gemm-pinned, metrics | `n/a:function` | not estimators |
+| holtwinters, arima | a hash since 2026-09-14 | `forecast(h)` (and ARIMA's `predict(n_obs, n_obs + h)`) IS the out-of-sample output; the held-out axis is time, `FORECAST_HORIZON` = 512 steps, the fitted length; the train column keeps its 24 steps |
+| iforest | a hash since 2026-09-13 | `score_samples` and `predict` on the held-out rows; IDENTICAL x3 in `2026-09-14_46-lanes/`; no save/load, so `model` is `n/a:no-save` |
+
+A JSON recorded before the forecast probes carries `n/a:forecast` on those
+18 cells and reads ONE-COLUMN, never DIVERGENT, against a newer one. The
+Apple column of the two probes is under `2026-09-14_infer-probes/`; the
+NVIDIA and AMD columns are owed (the leg commands are in that directory's
+README).
+
 ## The fourth column, a CPU (the CPU training lane, 2026-09-13)
 
 `.github/workflows/cpu-identity-gate.yml` runs the tool on the seven free
@@ -26,16 +48,20 @@ carries
 | `host.routed` | the `_HOST_MODULES` table the run resolved through |
 
 The workflow's `COVERED_LANES` is the list of lanes with a CPU
-implementation; it is EMPTY until phase 1 of
-`docs/lanes/BRIEF_cpu_training_2026-09-13.md` lands the first (gemm-pinned).
-A covered lane must read STABLE on every fixture and `IDENTICAL x4` against
-the three GPU columns (`--diff ... --require-columns 4 --lanes <covered>`),
-because `IDENTICAL x3` on a lane the CPU column should cover is the CPU
-binding refusing, not a pass.
+implementation: gemm-pinned, kde, holtwinters, lasso, elasticnet and svc
+(phase 1 of `docs/lanes/BRIEF_cpu_training_2026-09-13.md`, 2026-09-13) and
+agglomerative, et-clf, et-reg and iforest (phase 1b, 2026-09-14). A covered
+lane must read STABLE on every fixture and `IDENTICAL x4` against the three
+GPU columns (`--diff ... --require-columns 4 --lanes <covered>`), because
+`IDENTICAL x3` on a lane the CPU column should cover is the CPU binding
+refusing, not a pass.
 
 A CPU column enters the brief's certified table only after its uploaded
-JSON is read and its `host.cpu_model` names the CPU. Nothing in this
-directory is a CPU column yet.
+JSON is read and its `host.cpu_model` names the CPU. The CPU columns in
+this directory are the Apple M4's, run on the development Mac through the
+host path (`2026-09-14_cpu-phase1b/`, its README names the runs, the
+diffs and the sabotage arms); the seven-runner columns are workflow
+artifacts, read per run, and none is committed here.
 
 ## Provenance rules for every column since 2026-09-13
 

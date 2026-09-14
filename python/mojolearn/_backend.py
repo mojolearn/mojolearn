@@ -903,10 +903,24 @@ def host_families_built():
 #:     holtwinters_forecast over holtwinters/host/hw_oracle.mojo; kpss_test
 #:     and select_d (ARIMA's) are absent.
 #:   _mojolearn_solver -> _mojolearn_solver_host: cd_fit and cd_predict over
-#:     solver/host/cd_oracle.mojo and gemm_oracle; linkage_fit is absent.
+#:     solver/host/cd_oracle.mojo and gemm_oracle; agglomerative (phase 1b,
+#:     2026-09-14) adds linkage_fit over hierarchy/checks/linkage_oracle.mojo
+#:     (the pinned distances, Kruskal under the device's total order, the
+#:     dendrogram and the cut).
 #:   _mojolearn_svm -> _mojolearn_svm_host: svc_fit and svc_predict over
-#:     svm/host/smo_oracle.mojo; svr_fit, svr_predict and iforest_run are
-#:     absent.
+#:     svm/host/smo_oracle.mojo; iforest (phase 1b, 2026-09-14) adds
+#:     iforest_run over isolation_forest/checks/if_oracle.mojo (the
+#:     fit-on-every-call surface kept, DEVIATION 874); svr_fit and
+#:     svr_predict are absent.
+#:   _mojolearn_trees -> _mojolearn_trees_host (et-clf, et-reg; phase 1b,
+#:     2026-09-14): the eight et_*_fit entries over
+#:     extratrees/estimator.mojo::fit_extra_trees_classifier_host_exact and
+#:     fit_extra_trees_regressor_host_exact (the device trainer restated on
+#:     the host, exact keys and quantized leaves), forest_export,
+#:     forest_export_legacy, forest_export_release and et_predict over
+#:     core/forest_host_predict.mojo; et_predict_gpu_parallel and the
+#:     resident forest_* entries are absent (inference_engine=
+#:     'parallel_groves' is a GPU engine).
 _HOST_MODULES = host_surface.routed_modules()
 
 #: The env switch the CPU identity gate sets to load a host binding built

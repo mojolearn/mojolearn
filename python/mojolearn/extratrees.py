@@ -29,7 +29,13 @@ TWO DEVIATIONS FROM sklearn'S CONTRACT, STATED RATHER THAN HIDDEN:
   default. Pass an int to choose a different seed.
 * `device="gpu"` is retained for constructor compatibility. CPU training is
   retired from the public API; host reference trainers exist only for checks.
-  GPU regression uses fixed-point quantized labels (deviation 135).
+  GPU regression uses fixed-point quantized labels (deviation 135). On a
+  CPU-ONLY INSTALL (no GPU set, `mojolearn/host/_mojolearn_trees_host.so`
+  built; the CPU training lane, 2026-09-14) the same calls route to
+  `bindings/_mojolearn_trees_host.mojo`, the device trainer restated on the
+  host, whose forests are bit identical to the GPU's on
+  `tools/identity_break.py`'s fixtures; `device` still reads `"gpu"` there
+  because the fit is the GPU's fit, computed elsewhere.
 
 BOOTSTRAP (DEVIATION 460): `bootstrap=True` draws each tree's rows with
 replacement through cuML's own sampler (the fnv1a32 `(seed, tree)` chain

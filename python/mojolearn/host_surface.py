@@ -87,6 +87,8 @@ CLASSICAL_RECORDED = (
     "bench/results/classical_host/2026-09-14-amd-mi300x",
     "bench/results/classical_host/2026-09-14-apple-m4-kde-svc",
     "bench/results/classical_host/2026-09-14-apple-m4-knn",
+    "bench/results/classical_host/2026-09-14-nvidia-h100-b",
+    "bench/results/classical_host/2026-09-14-amd-mi300x-b",
 )
 
 #: The forest inference recordings: every directory under this root whose
@@ -102,6 +104,10 @@ TRAINING_LANE_NAMES = {
     "lasso": "lasso",
     "elasticnet": "elasticnet",
     "svc": "SVC",
+    "agglomerative": "agglomerative clustering",
+    "et-clf": "the Extra Trees classifier",
+    "et-reg": "the Extra Trees regressor",
+    "iforest": "the isolation forest",
 }
 
 #: The lanes with NO CPU path of any kind, as the README states them. A
@@ -110,13 +116,12 @@ TRAINING_LANE_NAMES = {
 NO_CPU_PATH = (
     "k-means",
     "DBSCAN",
-    "isolation forest",
-    "agglomerative and spectral clustering",
+    "spectral clustering",
     "UMAP",
     "the Gaussian process",
     "ARIMA",
     "the neural blocks",
-    "training for the forests, gradient boosting and k-NN",
+    "training for the random forests, gradient boosting and k-NN",
 )
 
 #: The read-back trio every host binding exports under its own prefix,
@@ -278,15 +283,19 @@ FAMILIES = (
         routes="_mojolearn_solver",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("lasso", "elasticnet"),
+        training_lanes=("lasso", "elasticnet", "agglomerative"),
         inference_lanes=(),
         forest_kinds=(),
-        classes=("Lasso", "ElasticNet"),
-        display="lasso and elasticnet",
-        host_modules=("solver/host/cd_oracle.mojo", "gemm/host/gemm_oracle.mojo"),
+        classes=("Lasso", "ElasticNet", "AgglomerativeClustering"),
+        display="lasso, elasticnet and agglomerative clustering",
+        host_modules=(
+            "solver/host/cd_oracle.mojo", "gemm/host/gemm_oracle.mojo",
+            "hierarchy/checks/linkage_oracle.mojo",
+        ),
         exports=(
             "solver_host_numeric_mode", "solver_host_vendor", "solver_host_column",
             "solver_host_sabotage", "solver_vendor", "cd_fit", "cd_predict",
+            "linkage_fit",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=False,
@@ -297,18 +306,50 @@ FAMILIES = (
         routes="_mojolearn_svm",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("svc",),
+        training_lanes=("svc", "iforest"),
         inference_lanes=("svc",),
         forest_kinds=(),
-        classes=("SVC",),
+        classes=("SVC", "IsolationForest"),
         display="SVC",
-        host_modules=("svm/host/smo_oracle.mojo", "gemm/host/gemm_oracle.mojo"),
+        host_modules=(
+            "svm/host/smo_oracle.mojo", "gemm/host/gemm_oracle.mojo",
+            "isolation_forest/checks/if_oracle.mojo",
+            "isolation_forest/impl/rng/xorwow.mojo",
+        ),
         exports=(
             "svm_host_numeric_mode", "svm_host_vendor", "svm_host_column",
             "svm_host_sabotage", "svm_vendor", "svm_numeric_mode", "svc_fit",
-            "svc_predict",
+            "svc_predict", "iforest_run",
         ),
         gate="tools/identity_break.py and tools/classical_host_gate.py (cpu-identity-gate.yml)",
+        ships_in_wheel=False,
+    ),
+    dict(
+        family="trees",
+        binding="_mojolearn_trees_host",
+        routes="_mojolearn_trees",
+        loaded_by="_backend._HOST_MODULES",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=("et-clf", "et-reg"),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=("ExtraTreesClassifier", "ExtraTreesRegressor"),
+        display="the Extra Trees classifier and regressor",
+        host_modules=(
+            "extratrees/estimator.mojo", "extratrees/checks/pcg_rng.mojo",
+            "core/forest_host_predict.mojo",
+        ),
+        exports=(
+            "trees_host_numeric_mode", "trees_host_vendor", "trees_host_column",
+            "trees_host_sabotage", "trees_vendor", "trees_numeric_mode",
+            "et_classifier_fit", "et_classifier_fit_export",
+            "et_classifier_fit_rowmajor", "et_classifier_fit_rowmajor_export",
+            "et_regressor_fit", "et_regressor_fit_export",
+            "et_regressor_fit_rowmajor", "et_regressor_fit_rowmajor_export",
+            "forest_export", "forest_export_legacy", "forest_export_release",
+            "et_predict",
+        ),
+        gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=False,
     ),
 )
@@ -358,13 +399,21 @@ def routed_bindings():
 
 
 def covered_lanes():
-    """The identity_break lanes with a CPU TRAINING path, in gate order."""
-    out = []
+    """The identity_break lanes with a CPU TRAINING path, in the gate's
+    order (TRAINING_LANE_NAMES' order, the order the lanes landed in). Every
+    lane a family declares must have a name there, and the reverse."""
+    declared = []
     for f in FAMILIES:
         for lane in f["training_lanes"]:
-            if lane not in out:
-                out.append(lane)
-    return out
+            if lane not in declared:
+                declared.append(lane)
+    named = list(TRAINING_LANE_NAMES)
+    if sorted(named) != sorted(declared):
+        raise RuntimeError(
+            f"host_surface: TRAINING_LANE_NAMES {named} and the families' training lanes "
+            f"{declared} disagree"
+        )
+    return named
 
 
 def inference_lanes():

@@ -1,0 +1,49 @@
+{
+  "commit": null,
+  "estimator": "KNeighborsClassifier",
+  "gpu_arch": null,
+  "host": {
+    "cpu": "Intel(R) Xeon(R) Platinum 8470",
+    "family": "6",
+    "isa": [
+      "avx2",
+      "avx512f",
+      "fma"
+    ],
+    "machine": "x86_64",
+    "model": "143",
+    "python": "3.14.7",
+    "release": "6.8.0-90-generic",
+    "stepping": "8",
+    "system": "Linux",
+    "vendor": "GenuineIntel"
+  },
+  "kind": "ties",
+  "lane": "knn-clf",
+  "model_sha256": "02aa0eb5e36cffee9c5b06b72a4d9b92cda43a5fb00be86fe781cdfa00dd2aa7",
+  "numeric_mode": "identical",
+  "predictions": {
+    "identity_hash": "d7292e53ec625170",
+    "predict": {
+      "dtype": "<i8",
+      "sha256": "1be5313fbc435d141e7ba734cac7c14db925e0ff3d85c7aafd6a0bd3ab453eee",
+      "shape": [
+        64
+      ]
+    },
+    "predict_proba": {
+      "dtype": "<f4",
+      "sha256": "3440416ed5cb95d5eca06aef1c40acb54b329e27e7fd8b587f9bcda17c6985b0",
+      "shape": [
+        64,
+        2
+      ]
+    },
+    "seconds": 0.001471
+  },
+  "recorded_at": "2026-09-14T10:13:27+0000",
+  "reload_equal": true,
+  "status": "RECORDED",
+  "vendor": "cuda",
+  "x_sha256": "cb717abc7fdea535547b185d7f6b53f113cbab5b15e61b6f0f7c62e31ea62f5e"
+}
