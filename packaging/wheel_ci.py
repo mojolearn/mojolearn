@@ -120,9 +120,6 @@ def inventory(argv):
             for a, b in documented.findall(md.read_text(encoding="utf-8")):
                 if (a or b) in present:
                     queue.append(a or b)
-    # A module a package module launches as `python -m <pkg>.<module>` (the
-    # multi-GPU pool starts `-m mojolearn._parallel_worker`) is reached by
-    # that module, though no import statement names it.
     # A module PREPARED for a later exposure (IVF-FLAT's `_ivf_impl.py`,
     # workstream D) ships on purpose and raises by name until exposed. It
     # counts only when BOTH hold: its docstring's first line says
@@ -133,6 +130,9 @@ def inventory(argv):
         doc = ast.get_docstring(ast.parse(path.read_text(encoding="utf-8"))) or ""
         if "PREPARED AND NOT EXPOSED" in doc.split("\n", 1)[0] and f"`{stem}.py`" in init_text:
             queue.append(stem)
+    # A module a package module launches as `python -m <pkg>.<module>` (the
+    # multi-GPU pool starts `-m mojolearn._parallel_worker`) is reached by
+    # that module, though no import statement names it.
     launched = re.compile(r"""['"]-m['"]\s*,\s*['"]""" + q + r"""\.([A-Za-z_][A-Za-z0-9_]*)['"]""")
     # A standalone top-level module may pull package modules in too.
     for f in extra_roots:
