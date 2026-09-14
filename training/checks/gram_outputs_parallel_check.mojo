@@ -4,6 +4,7 @@ from std.os import getenv, setenv
 from std.memory import bitcast
 from max.gpu.host import DeviceContext
 from core.gemm import gemm_tn_identical_v1, gemm_nt_gram
+from core.gram_multi_gpu import parallel_gram_outputs
 from metrics.checks.device_io import upload_f32, download_f32
 
 
@@ -59,3 +60,26 @@ def main() raises:
     for m in rows:
         for k in features:
             check(m,k,False)
+
+    var ctx = DeviceContext()
+    var x = ctx.enqueue_create_buffer[DType.float32](1)
+    var z = ctx.enqueue_create_buffer[DType.float32](1)
+    ctx.synchronize()
+    _ = setenv("MOJOLEARN_GRAM_DEVICE_COUNT","2",True)
+    for arm in range(2):
+        var refused = False
+        try:
+            if arm == 0:
+                _ = parallel_gram_outputs[False](ctx,z,x,50000,1)
+            else:
+                _ = parallel_gram_outputs[True](ctx,z,x,129,20000000)
+        except e:
+            if String(e).find("signed 32-bit") < 0:
+                raise Error("unexpected refusal: " + String(e))
+            refused = True
+        if not refused:
+            raise Error("oversized Gram shape accepted")
+    _ = z^
+    _ = x^
+    ctx.synchronize()
+    print("PASS Gram indexing-limit refusals")

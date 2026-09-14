@@ -76,6 +76,11 @@ def parallel_gram_outputs[tn: Bool](ctx: DeviceContext,
         raise Error("parallel Gram outputs require IDENTICAL and 1..64 devices")
     comptime if STEP_PHASE_TIMERS:
         raise Error("parallel Gram cannot use process-global GEMM phase counters")
+    if m < 1 or k < 1 or m > 2147483647//m:
+        raise Error("parallel Gram output exceeds signed 32-bit cell indexing")
+    comptime if tn:
+        if k > 2147483647//m:
+            raise Error("parallel Gram input exceeds signed 32-bit copy indexing")
     count = min(count,m)
     ctx.synchronize()
     var shards = List[GramOutputShard]()
