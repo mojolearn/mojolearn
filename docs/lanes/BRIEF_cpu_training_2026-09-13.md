@@ -1496,3 +1496,38 @@ The measurement owed is the seven-runner CPU identity gate on the lane
   is what the gate requires).
 - The test module is `cd python && python3 -m mojolearn.tests.test_cpu_training_e2`
   (the kmeans checks and these in one file).
+
+## Workstream E batch 2 (2026-09-14): spectral, SIMULATED IDENTICAL x3 ON base, GATE OWED
+
+- spectral. The host oracle `spectral/checks/spectral_oracle.mojo`, the
+  bit-for-bit reference the device Lanczos is gated against, MOVED to
+  `spectral/host/spectral_oracle.mojo` (the checks file re-exports it and
+  keeps the dense Float64 cross-check, whose Jacobi import the host binding
+  does not carry); its imports are host modules only, with the three Lanczos
+  clamps and `lanczos_v0` spelled in the host file rather than imported
+  from the device Lanczos module, and `contract_leaf_size` from
+  `gemm/host/gemm_oracle.mojo`. Around it the fit is restated from
+  `spectral/impl/cluster/detail/spectral.mojo` and `spectral/impl/
+  preprocessing/detail/spectral_embedding.mojo`: the k-NN self-join through
+  `core/knn_host_predict.mojo::host_knn_search` at L2SqrtExpanded, the
+  `(i, neighbor, 1.0)` COO, `coo_symmetrize_kernel` row by row over the
+  zero-filled `2 nnz` output, `coo_sort` and `coo_remove_scalar(0)` (host
+  code already), `oracle_embedding` (`norm_laplacian` true, `drop_first`
+  false), then k-means on the row-major embedding exactly as
+  `fit_predict_graph` sets it up (`plan_sum_scale` over the embedding,
+  `choose_scale(n, n)`, unit weights, cuVS defaults with the seed, `n_init`
+  and `oversampling_factor = 0.0`, the classic k-means++) through
+  `cluster/host/kmeans_oracle.mojo::host_fit_main` and the fresh
+  assignment. Exported as `spectral_fit_predict_dataset` from the metrics
+  host binding under the GPU binding's name and params list;
+  `spectral_fit_predict_graph` (the `spectral-precomputed` lane, absent
+  from the 47-lane record) stays absent.
+- On the M4's CPU-only path the lane reads IDENTICAL against the Apple,
+  NVIDIA and AMD 47-lane columns on `base`, one fixture, one repeat, at the
+  first build. The gate has not run.
+- The sabotage arm is the family's `-D MOJOLEARN_HOST_SABOTAGE=1`, under
+  which the recluster is seeded one draw off (on top of the core family's
+  extra unit per quantized cell, which `host_fit_main` carries into this
+  binding); on the M4 the sabotage set read DIVERGENT on `labels` against
+  all three columns on `base`.
+- The test module is `cd python && python3 -m mojolearn.tests.test_cpu_training_e2`.

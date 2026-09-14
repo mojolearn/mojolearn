@@ -911,9 +911,11 @@ def host_families_built():
 #:     2026-09-14): accuracy_score, adjusted_rand_score, entropy,
 #:     mutual_info_score, homogeneity_score, completeness_score,
 #:     v_measure_score, r2_score and silhouette over
-#:     metrics/host/metrics_oracle.mojo; rand_score, the ranking and
-#:     classification metrics, the regression errors, kl_divergence,
-#:     trustworthiness, the spectral and UMAP entries are absent.
+#:     metrics/host/metrics_oracle.mojo, and spectral_fit_predict_dataset
+#:     over spectral/host/spectral_oracle.mojo (the spectral lane);
+#:     rand_score, the ranking and classification metrics, the regression
+#:     errors, kl_divergence, trustworthiness, spectral_fit_predict_graph
+#:     and the UMAP entries are absent.
 #:   _mojolearn_tsa -> _mojolearn_tsa_host: holtwinters_fit and
 #:     holtwinters_forecast over holtwinters/host/hw_oracle.mojo; kpss_test
 #:     and select_d (ARIMA's) are absent.
