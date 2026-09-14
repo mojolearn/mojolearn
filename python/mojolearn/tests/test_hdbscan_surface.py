@@ -8,7 +8,10 @@ name). The arithmetic is gated by `pixi run check-hdbscan`.
     cd python && python3 -m mojolearn.tests.test_hdbscan_surface
 
 Exit 2 naming `bindings/build_hdbscan.sh` when unbuilt. Written on one
-Apple M4 with no built binary in the worktree; the first run is owed.
+Apple M4 with no built binary in the worktree. Its first GPU run is still
+owed: on the Hot Aisle MI300X at 2b2f568b0 (2026-09-14) the binding did not
+build, the compiler crashed in AMDGPU instruction selection (the gfx942
+banner in `hdbscan/impl/detail/stabilities.mojo`).
 """
 import sys
 

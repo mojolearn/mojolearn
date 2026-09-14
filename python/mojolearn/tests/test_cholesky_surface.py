@@ -10,8 +10,9 @@ fit to solve, and every refusal made to fire by name.
     cd python && python3 -m mojolearn.tests.test_cholesky_surface
 
 Exit 2 naming `bindings/build_gp.sh` when the binding is unbuilt. Written
-on one Apple M4 with no built binary in the worktree; the first run is
-owed on a box.
+on one Apple M4 with no built binary in the worktree. First run: Hot Aisle
+MI300X gfx942 at 2b2f568b0, 2026-09-14, GREEN with 23 checks (the leg
+directory bench/results/e1g/2026-09-14_164307-amd-mi300x-hotaisle-expose-d, not in the repository).
 """
 import sys
 

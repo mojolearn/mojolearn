@@ -9,7 +9,9 @@ gated by `pixi run check-mixture`.
     cd python && python3 -m mojolearn.tests.test_mixture_surface
 
 Exit 2 naming `bindings/build_mixture.sh` when unbuilt. Written on one
-Apple M4 with no built binary in the worktree; the first run is owed.
+Apple M4 with no built binary in the worktree. First run: Hot Aisle MI300X
+gfx942 at 2b2f568b0, 2026-09-14, RED on one check, the random-init
+separation assert, which is now a report (see arm_fit).
 """
 import sys
 
@@ -64,7 +66,7 @@ def arm_fit(rep):
     # covariances a small mean split grows slowly there, the per-sample
     # lower bound can move less than tol=1e-3 in an iteration, and EM may
     # stop "converged" before the symmetry breaks. The report row below
-    # prints n_iter_ and both lower bounds so the next run shows which. So the
+    # prints n_iter_ and both lower bounds so the next run shows which. The
     # arm asserts what the code promises (a finite model, the seed reaching
     # the draw, the same seed giving the same bits) and REPORTS separation.
     m2 = GaussianMixture(n_components=2, max_iter=50, random_state=0, init_params="random").fit(x)

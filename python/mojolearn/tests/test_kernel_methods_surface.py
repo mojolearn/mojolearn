@@ -9,7 +9,11 @@ to predict/transform, and every refusal by name. The arithmetic is gated by
     cd python && python3 -m mojolearn.tests.test_kernel_methods_surface
 
 Exit 2 naming `bindings/build_kernel_methods.sh` when unbuilt. Written on
-one Apple M4 with no built binary in the worktree; the first run is owed.
+one Apple M4 with no built binary in the worktree. First run: Hot Aisle
+MI300X gfx942 at 2b2f568b0, 2026-09-14, RED on two checks, the square
+Nystroem Gram (a code defect, corrected in `kernel_methods/estimator.mojo::
+_singular_value_f32`) and RBFSampler n_components=0 (now refused by name
+in the Python class).
 """
 import sys
 
