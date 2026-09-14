@@ -8,16 +8,21 @@ section).
 HOST ONLY. Nothing here imports `max.gpu`, `std.gpu`, a `DeviceContext` or a
 module that defines a kernel. The library imports are the `checks/numerics`
 seams and the GPU-free host modules the device fit ITSELF runs on the host,
-unchanged: the GreedyLogSum border search and the NaN mode
-(`gbdt/data/quantization.mojo`, `gbdt/grid_creator/binarization.mojo`), the
+unchanged: the pieces of the GreedyLogSum border search and the NaN mode
+(`gbdt/data/quantization.mojo`, `gbdt/grid_creator/binarization.mojo`; the
+two entry functions are restated, because the device calls them on a worker
+thread that reads subnormals as zero and the host oracle calls them on its
+own thread, `_calc_quantization_phase_b`), the
 compressed-index layout and the policy blocks
 (`gbdt/gpu_data/compressed_index_builder.mojo`,
 `gbdt/gpu_data/feature_blocks.mojo`, `gbdt/gpu_data/grid_policy.mojo`) and
 CatBoost's host `TRandom` (`gbdt/data/permutation.mojo`). Reusing them is not
 a shared-bug risk the rf oracle's rule guards against: they are host code on
 the device path too, so the host binding runs the SAME function the GPU
-binding runs. Every device KERNEL the fit reaches is RESTATED below, with
-the file and line it MIRRORS.
+binding runs (the SAME function is not the SAME bits when the calling thread
+differs, which is what the border search taught; see
+`_calc_quantization_phase_b`). Every device KERNEL the fit reaches is
+RESTATED below, with the file and line it MIRRORS.
 
 THE CONFIGURATION THIS COVERS, and it is the lane's, by name
 (tools/identity_break.py `gbdt-symmetric`: 20 trees, depth 6, Logloss, every
@@ -43,7 +48,9 @@ quantize OFF, 2581 group width ON, 2030 fused move OFF)
      border subsample of `sample_indices_for_borders` (`:595-664`) when the
      row count exceeds `border_build_max_samples`, the device radix sort
      (`gbdt/gpu_util/kernel/radix_sort.mojo:299-395`, the twiddled key
-     order) otherwise, then `calc_quantization` per float column, imported.
+     order) otherwise, then `calc_quantization` per float column, RESTATED
+     as `_calc_quantization_phase_b` with the subnormal flush the device's
+     phase B workers apply (measured on the `denormal` fixture; see there).
   2. `_build_cindex_from_columns` + `binarize_float_feature_kernel`
      (`gbdt/train.mojo:549-592`, `gbdt/gpu_data/kernel/binarize.mojo:83-160`):
      the bin is the count of borders the value exceeds, OR-ed into the word.
@@ -131,9 +138,23 @@ from gbdt.data.quantization import (
     NAN_TREATMENT_AS_FALSE,
     NAN_TREATMENT_AS_IS,
     NAN_TREATMENT_AS_TRUE,
-    calc_quantization,
+    compute_nan_mode,
+    has_nans,
     nan_substitution,
     nan_value_treatment,
+)
+from gbdt.grid_creator.binarization import (
+    TFeatureBin,
+    _heap_pop,
+    _heap_push,
+    _sort_ascending,
+    _update_best_split,
+)
+from gbdt.options.data_processing_options import (
+    NAN_MODE_FORBIDDEN,
+    NAN_MODE_MAX,
+    NAN_MODE_MIN,
+    nan_mode_from_name,
 )
 from gbdt.gpu_data.compressed_index_builder import (
     CompressedIndexLayout,
@@ -145,7 +166,6 @@ from gbdt.gpu_data.grid_policy import (
     POLICY_HALF_BYTE,
     POLICY_ONE_BYTE,
 )
-from gbdt.options.data_processing_options import nan_mode_from_name
 
 
 #: The gate's negative control (see THE NEGATIVE CONTROL above).
@@ -497,6 +517,135 @@ def _sorted_by_twiddled_key(values: List[Float32]) -> List[Float32]:
     return out^
 
 
+def _best_split_phase_b(
+    var values: List[Float32], max_borders_count: Int
+) raises -> List[Float32]:
+    """`best_split` (`gbdt/grid_creator/binarization.mojo:203-289`) as it
+    computes inside the device fit's phase B worker, statement for
+    statement, with every subnormal flushed to its signed zero BY BITS: the
+    values as they enter, both halves of the midpoint and the midpoint.
+
+    The comparisons of `_update_best_split` and the prelude sort then see
+    every subnormal as the signed zero a denormals-as-zero reader sees, the
+    radix sort keeps the sign classes in the positions the unflushed bit
+    order gives them, and the heap scores are Float64 over integer bin sizes
+    that no flush reaches. See `_calc_quantization_phase_b` for why."""
+    # their `filterNans`, then the flush
+    var clean = List[Float32]()
+    for i in range(len(values)):
+        if values[i] == values[i]:
+            clean.append(ftz(values[i]))
+    if len(clean) == 0:
+        return List[Float32]()
+
+    _sort_ascending(clean)
+
+    var root = TFeatureBin()
+    root.bin_start = 0
+    root.bin_end = len(clean)
+    root.best_split = 0
+    root.best_score = 0.0
+    _update_best_split(root, clean)
+
+    var bins = List[TFeatureBin]()
+    _heap_push(bins, root)
+
+    while len(bins) <= max_borders_count and bins[0].can_split():
+        var top = bins[0].copy()
+        _heap_pop(bins)
+
+        var left = TFeatureBin()
+        left.bin_start = top.bin_start
+        left.bin_end = top.best_split
+        _update_best_split(left, clean)
+
+        top.bin_start = top.best_split
+        _update_best_split(top, clean)
+
+        _heap_push(bins, left)
+        _heap_push(bins, top)
+
+    var borders = List[Float32]()
+    for i in range(len(bins)):
+        if bins[i].is_first():
+            continue
+        var s = bins[i].bin_start
+        var half_below = ftz(Float32(0.5) * clean[s - 1])
+        var half_above = ftz(Float32(0.5) * clean[s])
+        borders.append(ftz(half_below + half_above))
+    _sort_ascending(borders)
+
+    var out = List[Float32]()
+    for i in range(len(borders)):
+        if i == 0 or borders[i] != borders[i - 1]:
+            out.append(borders[i])
+    return out^
+
+
+def _calc_quantization_phase_b(
+    var values: List[Float32], border_count: Int, nan_mode_option: Int
+) raises -> Tuple[List[Float32], Int]:
+    """`calc_quantization` (`gbdt/data/quantization.mojo:136-177`) as the
+    device fit's PHASE B computes it: inside `_dp_task` on a
+    `sync_parallelize` worker (`gbdt/train.mojo:2189-2208`), where every
+    subnormal reads as a signed zero.
+
+    MEASURED, NOT DESIGNED. CPU identity gate run 34893018288 at 9e3a04d70:
+    the `denormal` fixture's saved gbdt-symmetric model hashes
+    4f2c8b24bbe2eb42 on the Apple M4, the H100 and the MI325X, which is the
+    `denormal_ftz` model on all four columns, while every one of the seven
+    CPU runners hashed c41cbc306cf7f609 through the imported
+    `calc_quantization`. The column's 5000 subnormals are distinct values,
+    so an unflushed GreedyLogSum search spends 32 of column 0's 128 borders
+    inside them and moves the normal borders beside them (a float32
+    simulation of `best_split` reproduces this; flushing the INPUTS gives
+    the `denormal_ftz` grid exactly, flushing only the midpoints does not).
+    Training and held-out predictions agreed, so the extra borders never
+    decided a split on this lane; the saved `feature` records did not.
+
+    No statement on the device path flushes the column: the radix sort is
+    an integer sort of the twiddled bits (`radix_sort.mojo:337-395`), the
+    staging and `_dp_task` copies are loads and stores, and `best_split`
+    has no `ftz`. The one border build that runs `best_split` on the
+    CALLING thread, `train_ordered_rmse` (`gbdt/train.mojo:2274-2283`),
+    keeps the subnormals on the same three columns (gbdt-ordered-rmse
+    `denormal` and `denormal_ftz` differ in the train, infer and model
+    columns). The worker thread's floating point mode is therefore the
+    reading the records support, and this restatement models it BY BITS
+    (`ftz`, `checks/numerics.mojo:73`; the host family is IDENTICAL only)
+    so the CPU column does not depend on any runner's MXCSR or FPCR. The
+    flushed midpoint halves are that model's consequence for a normal
+    below 2^-125 whose half is subnormal; no fixture plants one, so that
+    arm is unmeasured."""
+    # Upstream CalcQuantizationAndNanMode checks this BEFORE BestSplit
+    # filters NaNs (54a8143a, libs/data/quantization.cpp:315-320).
+    if nan_mode_option == NAN_MODE_FORBIDDEN and has_nans(values):
+        raise Error(
+            "There are nan factors and nan values for float features are"
+            " not allowed. Set nan_mode != Forbidden."
+        )
+    var nan_mode = compute_nan_mode(values, nan_mode_option)
+
+    var non_nan_border_count = border_count
+    if nan_mode != NAN_MODE_FORBIDDEN:
+        non_nan_border_count -= 1
+
+    var borders = List[Float32]()
+    if non_nan_border_count > 0:
+        borders = _best_split_phase_b(values^, non_nan_border_count)
+
+    if nan_mode == NAN_MODE_MIN:
+        var with_nan = List[Float32]()
+        with_nan.append(Float32(-3.4028234663852886e38))
+        for i in range(len(borders)):
+            with_nan.append(borders[i])
+        borders = with_nan^
+    elif nan_mode == NAN_MODE_MAX:
+        borders.append(Float32(3.4028234663852886e38))
+
+    return (borders^, nan_mode)
+
+
 def gbdt_host_grid(
     x_colmajor: List[Float32],
     n_rows: Int,
@@ -510,7 +659,9 @@ def gbdt_host_grid(
     (`gbdt/train.mojo:1966-2241`). The full-data path hands
     `calc_quantization` the device-sorted column; the sampled path hands it
     the shared subsample, with the device's NaN seed into the sample
-    (`:2019-2034`). `calc_quantization` is the imported host function."""
+    (`:2019-2034`). The per-column border search is
+    `_calc_quantization_phase_b`, not the imported `calc_quantization`: see
+    its docstring for the subnormal flush the device fit's phase B applies."""
     var border_sample_n = n_rows
     if border_build_max_samples > 0 and border_build_max_samples < n_rows:
         border_sample_n = border_build_max_samples
@@ -547,7 +698,7 @@ def gbdt_host_grid(
                         break
                 if not sample_has:
                     col[0] = Float32(0.0) / Float32(0.0)
-        var q = calc_quantization(col^, border_count, nan_mode)
+        var q = _calc_quantization_phase_b(col^, border_count, nan_mode)
         var nb = len(q[0])
         if nb > border_count + 1:
             raise Error(

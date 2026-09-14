@@ -16,7 +16,7 @@ column check keys on; the oracle imports no GPU module, and the gbdt host
 modules it reuses import none either; the oracle spells the device
 constructs a bit claim rests on (the pinned 32, the dithered quantizer, the
 row-count scale limit, the half-byte block partial flush, the Newton epsilon,
-the fused cursor update); the sabotage define reaches the leaf walker and
+the fused cursor update, the phase B border search's subnormal flush); the sabotage define reaches the leaf walker and
 the binding reads it back; the CPU identity gate workflow triggers on the
 oracle.
 
@@ -111,7 +111,8 @@ def test_oracle_imports_no_gpu_module():
     assert imports == [
         "checks.numerics", "gbdt.data.permutation", "gbdt.data.quantization",
         "gbdt.gpu_data.compressed_index_builder", "gbdt.gpu_data.feature_blocks",
-        "gbdt.gpu_data.grid_policy", "gbdt.options.data_processing_options",
+        "gbdt.gpu_data.grid_policy", "gbdt.grid_creator.binarization",
+        "gbdt.options.data_processing_options",
         "std.math", "std.memory", "std.sys.compile",
     ], imports
     for rel in REUSED_HOST_MODULES:
@@ -133,6 +134,11 @@ def test_oracle_spells_the_bit_carrying_constructs():
     assert "identical_mul_add(estimated[leaf], lr, cursor[row])" in text
     assert "if function_value <= next_value:" in text, "AnyImprovement"
     assert "if left_sz < right_sz:" in text, "the sibling tie computes the right child"
+    assert "clean.append(ftz(values[i]))" in text, "the phase B border search input flush"
+    assert "borders.append(ftz(half_below + half_above))" in text, "the phase B border midpoint flush"
+    assert "var q = _calc_quantization_phase_b(col^, border_count, nan_mode)" in text, (
+        "the grid must take the phase B border search, not the imported calc_quantization"
+    )
 
 
 def test_sabotage_define_moves_the_leaf_walker():
