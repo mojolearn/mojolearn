@@ -94,6 +94,27 @@ def inventory(argv):
     # user needs to diagnose.
     roots = ["__init__", "__main__"]
     queue = [r for r in roots if r in present]
+    # A submodule the user documentation tells people to import by its own
+    # path is public, not abandoned: the multi-GPU drivers are reached as
+    # `from mojolearn.parallel_ensemble import fit_forest`
+    # (docs/multi_gpu/README.md) and never through __init__. Only a literal
+    # `from <pkg>.<module> import` line in a docs/**/*.md file counts, so a
+    # module whose last documented import is deleted is an orphan again. The
+    # other spelling that counts is a qualified call in backticks,
+    # `mojolearn.parallel_graph.fit_graph(...)`.
+    docs = pkgdir.parent.parent / "docs"
+    q = re.escape(pkg)
+    documented = re.compile(r'^\s*from ' + q + r'\.([A-Za-z_][A-Za-z0-9_]*) import\b'
+                            r'|`' + q + r'\.([A-Za-z_][A-Za-z0-9_]*)\.[A-Za-z_][A-Za-z0-9_]*\(', re.M)
+    if docs.is_dir():
+        for md in sorted(docs.rglob("*.md")):
+            for a, b in documented.findall(md.read_text(encoding="utf-8")):
+                if (a or b) in present:
+                    queue.append(a or b)
+    # A module a package module launches as `python -m <pkg>.<module>` (the
+    # multi-GPU pool starts `-m mojolearn._parallel_worker`) is reached by
+    # that module, though no import statement names it.
+    launched = re.compile(r"""['"]-m['"]\s*,\s*['"]""" + q + r"""\.([A-Za-z_][A-Za-z0-9_]*)['"]""")
     # A standalone top-level module may pull package modules in too.
     for f in extra_roots:
         queue.extend(_intra_package_imports(f, pkg))
@@ -106,6 +127,7 @@ def inventory(argv):
         reached.add(name)
         if name in present:
             queue.extend(_intra_package_imports(present[name], pkg))
+            queue.extend(launched.findall(present[name].read_text(encoding="utf-8")))
 
     orphans = sorted(set(present) - reached)
     if orphans:
