@@ -43,9 +43,22 @@ def main():
                        grow_policy=policy, random_state=491,
                        random_strength=0.1 if policy == 'SymmetricTree' else 0.0,
                        numeric_mode='identical', bootstrap_type='No', use_pointwise_searcher=True)
+        trace_root = args.report.parent / ('trace-' + str(len(checks)))
+        trace_root.mkdir(exist_ok=True)
+        os.environ['MOJOLEARN_IDENTITY_TRACE_DUMP'] = '.hist.'
+        os.environ['MOJOLEARN_IDENTITY_TRACE'] = str(trace_root / 'one.trace')
         serial = GradientBoosting(**options).fit(X, y, sample_weight=weights)
+        os.environ['MOJOLEARN_IDENTITY_TRACE'] = str(trace_root / 'many.trace')
         parallel = fit_boosting(GradientBoosting(**options), X, y,
                                devices=(0, 1), sample_weight=weights)
+        os.environ.pop('MOJOLEARN_IDENTITY_TRACE', None)
+        os.environ.pop('MOJOLEARN_IDENTITY_TRACE_DUMP', None)
+        records = lambda p: [line for line in p.read_text().splitlines() if line and not line.startswith('#')]
+        assert records(trace_root / 'one.trace') == records(trace_root / 'many.trace')
+        dumps = list(trace_root.glob('one.trace.*.bin'))
+        assert dumps, 'pointwise histogram seam was not reached'
+        for dump in dumps:
+            assert dump.read_bytes() == dump.with_name(dump.name.replace('one.trace.', 'many.trace.', 1)).read_bytes()
         fixture = [rows, policy, border, loss]
         assert serial.model_ == parallel.model_, (fixture, 'model')
         assert serial.loss_curve_.tobytes() == parallel.loss_curve_.tobytes(), (fixture, 'loss curve')

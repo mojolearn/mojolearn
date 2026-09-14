@@ -71,13 +71,13 @@ def execute(request):
         X, weights = args
         state.fit(X, sample_weight=weights)
         return state
-    if operation == 'gbdt_fit':
+    if operation in ('gbdt_fit', 'ordered_rmse_fit'):
         model = state
         binding = model._bind('_mojolearn_gbdt')
         if (not callable(getattr(binding, 'gbdt_parallel_available', None))
                 or binding.gbdt_parallel_available() != 1):
             raise ImportError('rebuild GBDT binding for feature-parallel training')
-        if getattr(model, 'use_pointwise_searcher', False):
+        if operation == 'ordered_rmse_fit' or getattr(model, 'use_pointwise_searcher', False):
             if not callable(getattr(binding, 'pointwise_parallel_available', None)) or binding.pointwise_parallel_available() != 1:
                 raise ImportError('rebuild GBDT binding for parallel pointwise histograms')
         X, y, kwargs = args

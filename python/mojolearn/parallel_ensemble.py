@@ -131,3 +131,24 @@ def score_isolation_forest(estimator, X, *, devices=(0,), method='score_samples'
         return pool.map([('iforest_score', estimator, (X, method))])[0]
     finally:
         pool.close()
+
+
+def fit_ordered_rmse(estimator, X, y, *, permutation, devices=(0,), sample_weight=None):
+    """Partition pointwise feature groups; retain the complete ordered folds.
+
+    The original permutation, growing-prefix approximations and leaf updates
+    stay on the root. Full training and histogram state still fit one GPU.
+    """
+    from .ensemble import OrderedRMSE
+    if type(estimator) is not OrderedRMSE:
+        raise TypeError('requires mojolearn.OrderedRMSE')
+    if estimator.numeric_mode not in (None, 'identical'):
+        raise ValueError('parallel OrderedRMSE requires IDENTICAL numeric mode')
+    pool = DevicePool(devices, cooperative=True)
+    try:
+        result = pool.map([('ordered_rmse_fit', estimator,
+            (X, y, dict(permutation=permutation, sample_weight=sample_weight)))])[0]
+    finally:
+        pool.close()
+    estimator.__dict__ = result.__dict__.copy()
+    return estimator
