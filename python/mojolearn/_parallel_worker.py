@@ -118,6 +118,26 @@ def execute(request):
                 raise ImportError('rebuild estimators binding for parallel QR panels')
         state.fit(X, y, **kwargs)
         return state
+    if operation in ('cholesky_fit', 'cholesky_solve'):
+        import os
+        native = state._extension()
+        if (not callable(getattr(native, 'cholesky_parallel_available', None))
+                or native.cholesky_parallel_available() != 1):
+            raise ImportError('rebuild GP binding for operation-level multi-GPU Cholesky')
+        # Scoped to this operation: the GP and GaussianMixture workers keep
+        # their own root factorization paths.
+        previous = os.environ.get('MOJOLEARN_CHOLESKY_DEVICE_COUNT')
+        os.environ['MOJOLEARN_CHOLESKY_DEVICE_COUNT'] = os.environ.get('MOJOLEARN_GP_DEVICE_COUNT', '1')
+        try:
+            if operation == 'cholesky_fit':
+                state.fit(*args)
+                return state
+            return state.solve(*args)
+        finally:
+            if previous is None:
+                os.environ.pop('MOJOLEARN_CHOLESKY_DEVICE_COUNT', None)
+            else:
+                os.environ['MOJOLEARN_CHOLESKY_DEVICE_COUNT'] = previous
     if operation in ('gp_fit', 'gp_predict'):
         native = state._extension()
         if (not callable(getattr(native, 'gp_parallel_available', None))

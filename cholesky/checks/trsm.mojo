@@ -66,7 +66,15 @@ with its own banner saying it is unreachable from any identity path here.
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
+from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
+from core.multi_gpu import peer_clone
+from cholesky.multi_gpu import (
+    CholSolveShard,
+    chol_device_count,
+    chol_gather_columns,
+    chol_scatter_columns,
+)
 
 from core.identity_trace import IdentityTrace
 from cholesky.checks.chol_sabotage import (
@@ -392,5 +400,72 @@ def cho_solve(
     host entry (`cholesky/estimator.mojo`) refuses that case by name, and
     this device-level form trusts its caller exactly as `potrs` does.
     """
+    var owners = chol_device_count()
+    if owners > 1 and nrhs > 1:
+        if sabotage != CHOL_SAB_NONE:
+            raise Error("multi-GPU cho_solve does not execute sabotage probes")
+        _cho_solve_columns(ctx, l, b, n, nrhs, trace, tpb, owners)
+        return
     trsm_lower(ctx, l, b, n, nrhs, trace, "chol.solve.forward", tpb, sabotage)
     trsm_upper(ctx, l, b, n, nrhs, trace, "chol.solve.back", tpb, sabotage)
+
+
+def _cho_solve_columns(
+    ctx: DeviceContext,
+    mut l: DeviceBuffer[DType.float32],
+    mut b: DeviceBuffer[DType.float32],
+    n: Int,
+    nrhs: Int,
+    mut trace: IdentityTrace,
+    tpb: Int,
+    count: Int,
+) raises:
+    """`cho_solve` with whole right-hand-side columns on owners.
+
+    Each column's forward and back substitutions are the original kernels on
+    its owner; results are copied as bytes into their original columns, and
+    both card stages are recorded on the root after each gather.
+    """
+    if len(l) < n * n or len(b) < n * nrhs:
+        raise Error("multi-GPU cho_solve: a buffer is shorter than its shape")
+    if n > 2147483647 // nrhs:
+        raise Error("multi-GPU cho_solve exceeds signed 32-bit indexing")
+    var active = min(count, nrhs)
+    ctx.synchronize()
+    var shards = List[CholSolveShard]()
+    for rank in range(active):
+        var first = nrhs * rank // active
+        var width = nrhs * (rank + 1) // active - first
+        var source = first
+        comptime if is_defined["MOJOLEARN_CHOLESKY_PARALLEL_SABOTAGE"]():
+            if rank > 0:
+                source = first - 1
+        var device = DeviceContext(device_id=rank)
+        var packed = chol_gather_columns(ctx, b, n, nrhs, source, width)
+        var sb = peer_clone(ctx, device, packed)
+        _ = packed^
+        var sl = peer_clone(ctx, device, l)
+        shards.append(CholSolveShard(device^, sl^, sb^, first, width))
+    var quiet = IdentityTrace.disabled()
+    for stage in range(2):
+        for rank in range(active):
+            ref s = shards[rank]
+            if stage == 0:
+                trsm_lower(s.ctx, s.l, s.b, n, s.width, quiet, "chol.solve.forward", tpb)
+            else:
+                trsm_upper(s.ctx, s.l, s.b, n, s.width, quiet, "chol.solve.back", tpb)
+        for rank in range(active):
+            ref s = shards[rank]
+            s.ctx.synchronize()
+            var staged = ctx.enqueue_create_buffer[DType.float32](n * s.width)
+            ctx.synchronize()
+            s.b.enqueue_copy_to(staged)
+            s.ctx.synchronize()
+            chol_scatter_columns(ctx, b, staged, n, nrhs, s.first, s.width)
+            _ = staged^
+        if stage == 0:
+            trace.record_device(ctx, "chol.solve.forward", b, n * nrhs)
+        else:
+            trace.record_device(ctx, "chol.solve.back", b, n * nrhs)
+    _ = shards^
+    ctx.synchronize()

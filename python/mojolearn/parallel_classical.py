@@ -295,3 +295,45 @@ def fit_dbscan(estimator, X, *, devices=(0,), sample_weight=None):
         pool.close()
     estimator.__dict__ = result.__dict__.copy()
     return estimator
+
+
+def _admit_cholesky(estimator):
+    from ._cholesky_impl import Cholesky
+    if type(estimator) is not Cholesky:
+        raise TypeError('requires mojolearn.Cholesky')
+    if getattr(estimator, 'numeric_mode', None) not in (None, 'identical'):
+        raise ValueError('parallel Cholesky requires IDENTICAL numeric mode')
+
+
+def fit_cholesky(estimator, A, *, devices=(0,)):
+    """Factor with whole trailing-update output rows on the selected GPUs.
+
+    Each panel's factorization, info read-back, panel solve and subtraction
+    stay on the root in the original panel order; only the rows of each
+    panel's L21 L21^T product move. The full matrix stays on the root.
+    """
+    _admit_cholesky(estimator)
+    A, _ = as_f32_c(A, ndim=2, name='A')
+    pool = DevicePool(devices, cooperative=True)
+    try:
+        result = pool.map([('cholesky_fit', estimator, (A,))])[0]
+    finally:
+        pool.close()
+    estimator.__dict__ = result.__dict__.copy()
+    return estimator
+
+
+def solve_cholesky(estimator, B, *, devices=(0,)):
+    """Solve with whole right-hand-side columns on the selected GPUs.
+
+    A single right-hand side is sequential in its rows and runs on one GPU.
+    """
+    _admit_cholesky(estimator)
+    if not hasattr(estimator, 'L_'):
+        raise ValueError('Cholesky is not fitted')
+    B, _ = as_f32_c(B, ndim=None, name='B')
+    pool = DevicePool(devices, cooperative=True)
+    try:
+        return pool.map([('cholesky_solve', estimator, (B,))])[0]
+    finally:
+        pool.close()
