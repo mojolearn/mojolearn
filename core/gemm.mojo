@@ -170,7 +170,7 @@ def gemm_nt_gram(
             Int32(n),
             Int32(k),
             Int32(0),
-            Int32(m*n),
+            Int32(0),  # full original extent; do not narrow m*n to Int32
             grid_dim=((m * n + PINNED_GEMM_TPB - 1) // PINNED_GEMM_TPB, 1, 1),
             block_dim=(PINNED_GEMM_TPB, 1, 1),
         )
