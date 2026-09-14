@@ -1462,3 +1462,37 @@ not run; what is measured is one fixture on one box, stated as such.
 
 The measurement owed is the seven-runner CPU identity gate on the lane
 (`--require-columns 4 --lanes ... kmeans`), every fixture, two repeats.
+
+## Workstream E batch 2 (2026-09-14): metrics, SIMULATED IDENTICAL x3 ON base, GATE OWED
+
+- metrics. `metrics/host/metrics_oracle.mojo`, the five metrics of the lane
+  and the four label metrics that share their integer kernels, restated
+  from `metrics/impl/stats/detail/`: the integer count, histogram and
+  contingency matrix as serial loops (their device forms are integer
+  atomics whose sums no order moves), DEVIATION 653's slab tree
+  (`PINNED_SUM_W` 256, the halving fold, the chunk totals ascending) for
+  every float sum, `r2_epilogue` with DEVIATION 657, the IDENTICAL Float32
+  arms of entropy and mutual information (host code on the GPU path too),
+  homogeneity, completeness and the v-measure in Float64, and the batched
+  silhouette row by row (DEVIATION 654's per-cluster tree, the positional
+  min, `sil_op` with DEVIATION 656, the tree over the scores). A new host
+  family, `metrics`: `bindings/_mojolearn_metrics_host.mojo` exports the
+  nine entries under the GPU binding's names with its `params` lists,
+  `bindings/build_metrics_host.sh` is the shim, and the manifest routes
+  `_mojolearn_metrics` to it, so `mojolearn.metrics` runs unchanged. The
+  spectral, UMAP, ranking, classification, regression-error, KL and
+  trustworthiness entries stay absent and refuse by name.
+- On the M4's CPU-only path the lane (its KMeans through the core host
+  binding, then the five metrics) reads IDENTICAL against the Apple, NVIDIA
+  and AMD 47-lane columns on `base`, one fixture, one repeat. The gate has
+  not run.
+- The sabotage arm is the family's `-D MOJOLEARN_HOST_SABOTAGE=1`, under
+  which every slab tree's chunk boundaries shift by one value
+  (`pinned_sum.mojo::sabotage_shifted_host_tree_sum`'s partition, the one
+  its check measured to move a sum where a rotation inside a chunk cannot);
+  it reaches r2 and the silhouette, and the integer metrics do not move. On
+  the M4 the sabotage set read DIVERGENT on `silhouette` against all three
+  columns on `base` (r2 did not move on that fixture's target; the summary
+  is what the gate requires).
+- The test module is `cd python && python3 -m mojolearn.tests.test_cpu_training_e2`
+  (the kmeans checks and these in one file).

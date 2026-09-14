@@ -907,6 +907,13 @@ def host_families_built():
 #:     glm/host/glm_oracle.mojo and dbscan_fit over
 #:     dbscan/host/dbscan_oracle.mojo; pca_fit_full, inverse_transform,
 #:     qn_fit are absent.
+#:   _mojolearn_metrics -> _mojolearn_metrics_host (workstream E batch 2,
+#:     2026-09-14): accuracy_score, adjusted_rand_score, entropy,
+#:     mutual_info_score, homogeneity_score, completeness_score,
+#:     v_measure_score, r2_score and silhouette over
+#:     metrics/host/metrics_oracle.mojo; rand_score, the ranking and
+#:     classification metrics, the regression errors, kl_divergence,
+#:     trustworthiness, the spectral and UMAP entries are absent.
 #:   _mojolearn_tsa -> _mojolearn_tsa_host: holtwinters_fit and
 #:     holtwinters_forecast over holtwinters/host/hw_oracle.mojo; kpss_test
 #:     and select_d (ARIMA's) are absent.
