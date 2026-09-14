@@ -106,6 +106,8 @@ def chol_trailing_rows(
         ctx.synchronize()
         _ = left_view^
         var right = peer_clone(ctx, device, packed)
+        device.synchronize()
+        ctx.synchronize()
         shards.append(CholTrailingShard(device^, left^, right^, output^, workspace^, first, width))
     for rank in range(active):
         ref s = shards[rank]
@@ -117,6 +119,7 @@ def chol_trailing_rows(
         var target = g.create_sub_buffer[DType.float32](s.first * n_trail, s.width * n_trail)
         s.output.enqueue_copy_to(target)
         s.ctx.synchronize()
+        ctx.synchronize()
         _ = target^
     _ = shards^
     ctx.synchronize()
