@@ -118,6 +118,18 @@ def execute(request):
                 raise ImportError('rebuild estimators binding for parallel QR panels')
         state.fit(X, y, **kwargs)
         return state
+    if operation in ('gmm_fit', 'gmm_predict'):
+        native = state._extension()
+        if (not callable(getattr(native, 'gmm_parallel_available', None))
+                or native.gmm_parallel_available() != 1):
+            raise ImportError('rebuild mixture binding for row-sharded GaussianMixture E-steps')
+        if operation == 'gmm_fit':
+            state.fit(*args)
+            return state
+        method, X = args
+        if method not in ('score_samples', 'predict_proba', 'predict'):
+            raise ValueError('invalid GaussianMixture prediction operation')
+        return getattr(state, method)(X)
     if operation in ('gp_fit', 'gp_predict'):
         native = state._extension()
         if (not callable(getattr(native, 'gp_parallel_available', None))

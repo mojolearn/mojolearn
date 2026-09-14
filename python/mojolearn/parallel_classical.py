@@ -295,3 +295,51 @@ def fit_dbscan(estimator, X, *, devices=(0,), sample_weight=None):
         pool.close()
     estimator.__dict__ = result.__dict__.copy()
     return estimator
+
+
+def _admit_gaussian_mixture(estimator):
+    from .mixture import GaussianMixture
+    if type(estimator) is not GaussianMixture:
+        raise TypeError('requires mojolearn.GaussianMixture')
+    if getattr(estimator, 'numeric_mode', None) not in (None, 'identical'):
+        raise ValueError('parallel GaussianMixture requires IDENTICAL numeric mode')
+
+
+def fit_gaussian_mixture(estimator, X, *, devices=(0,)):
+    """Row-shard every E-step; retain the root M-step, Cholesky and convergence test.
+
+    Whole sample rows run the original E-step on their owners and are copied
+    back into their original positions; the mean log likelihood is folded on
+    the root over the complete gathered rows. The KMeans initialization uses
+    its row-tile assignment driver. Full data, responsibilities and the M-step
+    still have to fit on the root GPU. covariance_type other than 'full' and
+    the refused knobs are refused by the estimator itself, by name.
+    """
+    _admit_gaussian_mixture(estimator)
+    X, _ = as_f32_c(X, ndim=2, name='X')
+    pool = DevicePool(devices, cooperative=True)
+    try:
+        result = pool.map([('gmm_fit', estimator, (X,))])[0]
+    finally:
+        pool.close()
+    estimator.__dict__ = result.__dict__.copy()
+    return estimator
+
+
+def predict_gaussian_mixture(estimator, X, *, devices=(0,), method='predict'):
+    """Row-shard the scoring E-step of a fitted GaussianMixture.
+
+    method is 'predict', 'predict_proba' or 'score_samples'; the original
+    per-row argmax and host exponential are unchanged.
+    """
+    _admit_gaussian_mixture(estimator)
+    if method not in ('score_samples', 'predict_proba', 'predict'):
+        raise ValueError('method must be predict, predict_proba or score_samples')
+    if not hasattr(estimator, 'weights_'):
+        raise ValueError('GaussianMixture is not fitted')
+    X, _ = as_f32_c(X, ndim=2, name='X')
+    pool = DevicePool(devices, cooperative=True)
+    try:
+        return pool.map([('gmm_predict', estimator, (method, X))])[0]
+    finally:
+        pool.close()

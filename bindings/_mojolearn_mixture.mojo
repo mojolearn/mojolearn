@@ -76,6 +76,12 @@ def mixture_parallel_available() raises -> PythonObject:
     return PythonObject(1)
 
 
+def gmm_parallel_available() raises -> PythonObject:
+    """1: every E-step (fit and scoring) reads MOJOLEARN_GMM_DEVICE_COUNT and
+    row-shards through mixture/multi_gpu.mojo::gmm_e_step_dispatch."""
+    return PythonObject(1)
+
+
 def _gmm_fit_run(
     x: List[Float32],
     n: Int,
@@ -328,6 +334,7 @@ def PyInit__mojolearn_mixture() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_mixture")
         m.def_function[mixture_parallel_available]("mixture_parallel_available")
+        m.def_function[gmm_parallel_available]("gmm_parallel_available")
         m.def_function[mixture_vendor_binding]("mixture_vendor")
         m.def_function[mixture_numeric_mode_binding]("mixture_numeric_mode")
         m.def_function[gmm_fit_binding]("gmm_fit")
