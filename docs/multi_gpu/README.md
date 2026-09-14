@@ -715,3 +715,14 @@ The final Samba checkpoint gate passes trained-model continuation, seven
 corruption refusals before model construction, failed-publication atomicity,
 legacy loading and a 415,293,679-byte archive roundtrip. Full evidence is in
 `bench/results/multi_gpu/2026-09-14/samba-stream-checkpoint-h100/`.
+
+### Resampling by global IDs
+
+`mojolearn.parallel_classical.bootstrap`, `permutation_test` and
+`monte_carlo_integrate` take the public resample arguments plus `devices`.
+Owners compute contiguous global replicate or permutation ranges (the
+`r_first` handle) or whole 256-sample chunk ranges (`i_first`); the root
+assembles them in order and runs the original sort, interval, standard error,
+p-value and partial fold. Design: [resample.md](resample.md). Two-H100 and
+two-MI300X receipts pass 66 native cases, sabotage builds that fail in each
+family, and 36 public configurations whose reports are equal across vendors.
