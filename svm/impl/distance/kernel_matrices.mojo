@@ -48,6 +48,9 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
 from core.gemm import gemm_nt
+from core.multi_gpu import peer_clone
+from std.os import getenv
+from max.algorithm import sync_parallelize
 from gemm.checks.gemm_identical import (
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
@@ -342,6 +345,7 @@ def kernel_op(
     mut norm_a: DeviceBuffer[DType.float32],
     mut norm_b: DeviceBuffer[DType.float32],
     mut ws: DeviceBuffer[DType.float32],
+    distribute: Bool = True,
 ) raises:
     """`KernelOp(handle, kernel, x1, n1, n_cols, x2, n2, out, norm_x1,
     norm_x2)`: `out[m x n] = K(a_i, b_j)`, row-major. `GramMatrixBase::
@@ -350,6 +354,14 @@ def kernel_op(
     `kernel_workspace_floats(m, n, k)` floats."""
     if m <= 0 or n <= 0:
         return
+    if distribute:
+        var setting = String(getenv("MOJOLEARN_SVM_DEVICE_COUNT"))
+        if setting != "" and setting != "1":
+            var count = Int(setting)
+            if count < 1 or count > 64 or GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+                raise Error("parallel SVM kernels require IDENTICAL and 1..64 devices")
+            _kernel_rows(ctx, kp, out, a, b, m, n, k, norm_a, norm_b, count)
+            return
     # DEVIATION 2492: FAST RBF in one fused kernel when k fits a register row.
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST:
         if kp.kernel == KERNEL_RBF and k <= RBF_FUSED_KREG:
@@ -367,3 +379,89 @@ def kernel_op(
         )
     elif kp.kernel != KERNEL_LINEAR:
         raise Error("svm kernel_op: unimplemented kernel " + String(kp.kernel))
+
+
+@fieldwise_init
+struct SVMKernelShard(Movable):
+    var ctx: DeviceContext
+    var a: DeviceBuffer[DType.float32]
+    var b: DeviceBuffer[DType.float32]
+    var norm_a: DeviceBuffer[DType.float32]
+    var norm_b: DeviceBuffer[DType.float32]
+    var out: DeviceBuffer[DType.float32]
+    var ws: DeviceBuffer[DType.float32]
+    var first: Int
+    var rows: Int
+
+    def __deinit__(deinit self):
+        _ = self.a^
+        _ = self.b^
+        _ = self.norm_a^
+        _ = self.norm_b^
+        _ = self.out^
+        _ = self.ws^
+        try:
+            self.ctx.synchronize()
+        except:
+            pass
+        _ = self.ctx^
+
+
+def _kernel_rows(ctx: DeviceContext, kp: KernelParams,
+    mut out: DeviceBuffer[DType.float32], mut a: DeviceBuffer[DType.float32],
+    mut b: DeviceBuffer[DType.float32], m: Int, n: Int, k: Int,
+    mut norm_a: DeviceBuffer[DType.float32], mut norm_b: DeviceBuffer[DType.float32],
+    count: Int,
+) raises:
+    """Partition output rows, retaining each original FP32-v1 contraction.
+
+    The feature axis is never split or padded. Original norm bytes and the
+    original RBF epilogue are reused. The SMO working set, updates and stopping
+    rules remain on the root. Per-call staging is not a speed/capacity claim.
+    """
+    ctx.synchronize()
+    var active = min(count, m)
+    var shards = List[SVMKernelShard]()
+    for rank in range(active):
+        var first = m * rank // active
+        var rows = m * (rank + 1) // active - first
+        var device = DeviceContext(device_id=rank)
+        var av = a.create_sub_buffer[DType.float32](first * k, rows * k)
+        var bv = b.create_sub_buffer[DType.float32](0, n * k)
+        var na = norm_a.create_sub_buffer[DType.float32](first if kp.kernel == KERNEL_RBF else 0,
+                                                        rows if kp.kernel == KERNEL_RBF else 1)
+        var nb = norm_b.create_sub_buffer[DType.float32](0, n if kp.kernel == KERNEL_RBF else 1)
+        var local_a = peer_clone(ctx, device, av)
+        var local_b = peer_clone(ctx, device, bv)
+        var local_na = peer_clone(ctx, device, na)
+        var local_nb = peer_clone(ctx, device, nb)
+        var output = device.enqueue_create_buffer[DType.float32](rows * n)
+        var workspace = device.enqueue_create_buffer[DType.float32](kernel_workspace_floats(rows, n, k))
+        device.synchronize()
+        shards.append(SVMKernelShard(device^, local_a^, local_b^, local_na^, local_nb^,
+                                     output^, workspace^, first, rows))
+    var failures = List[Int](length=active, fill=0)
+    var sp = rebind[MutPointer[SVMKernelShard, MutUntrackedOrigin]](shards.unsafe_ptr())
+    var fp = rebind[MutPointer[Int, MutUntrackedOrigin]](failures.unsafe_ptr())
+    def task(rank: Int) {imm sp, imm fp, imm kp, imm n, imm k}:
+        try:
+            ref shard = sp[rank]
+            kernel_op(shard.ctx, kp, shard.out, shard.a, shard.b, shard.rows, n, k,
+                      shard.norm_a, shard.norm_b, shard.ws, False)
+            shard.ctx.synchronize()
+        except:
+            fp[rank] = 1
+    if active == 1:
+        task(0)
+    else:
+        sync_parallelize(task, active)
+    for rank in range(active):
+        if failures[rank] != 0:
+            raise Error("SVM kernel row shard failed: " + String(rank))
+    for rank in range(active):
+        ref shard = shards[rank]
+        var destination = out.create_sub_buffer[DType.float32](shard.first * n, shard.rows * n)
+        shard.out.enqueue_copy_to(destination)
+        shard.ctx.synchronize()
+    _ = shards^
+    ctx.synchronize()

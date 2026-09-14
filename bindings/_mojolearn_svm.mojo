@@ -536,6 +536,10 @@ def svm_vendor_binding() raises -> PythonObject:
     return PythonObject(String(COMPILED_VENDOR))
 
 
+def svm_parallel_available() raises -> PythonObject:
+    return PythonObject(1)
+
+
 def iforest_parallel_available() raises -> PythonObject:
     return PythonObject(1)
 
@@ -544,6 +548,7 @@ def iforest_parallel_available() raises -> PythonObject:
 def PyInit__mojolearn_svm() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_svm")
+        m.def_function[svm_parallel_available]("svm_parallel_available")
         m.def_function[iforest_parallel_available]("iforest_parallel_available")
         m.def_function[svm_vendor_binding]("svm_vendor")
         m.def_function[svm_numeric_mode_binding]("svm_numeric_mode")

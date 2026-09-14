@@ -203,3 +203,41 @@ def fit_coordinate_descent(estimator, X, y, *, devices=(0,)):
         pool.close()
     estimator.__dict__ = result.__dict__.copy()
     return estimator
+
+
+def fit_svm(estimator, X, y, *, devices=(0,), sample_weight=None):
+    """Distribute linear/RBF kernel rows, retaining the original SVC/SVR solver.
+
+    Full data, working-set state and output kernel tile remain on the root.
+    A one-row kernel operation has only one active device.
+    """
+    from ._svm_impl import SVC, SVR
+    if type(estimator) not in (SVC, SVR):
+        raise TypeError('requires mojolearn.SVC or SVR')
+    if estimator.numeric_mode not in (None, 'identical'):
+        raise ValueError('parallel SVM requires IDENTICAL')
+    if sample_weight is not None:
+        raise NotImplementedError('SVC/SVR do not implement sample_weight')
+    pool = DevicePool(devices, cooperative=True)
+    try:
+        result = pool.map([('svm_fit', estimator, (X, y))])[0]
+    finally:
+        pool.close()
+    estimator.__dict__ = result.__dict__.copy()
+    return estimator
+
+
+def predict_svm(estimator, X, *, devices=(0,), method='predict'):
+    """Distribute prediction kernel rows; retain the original support-vector fold."""
+    from ._svm_impl import SVC, SVR
+    if type(estimator) not in (SVC, SVR):
+        raise TypeError('requires mojolearn.SVC or SVR')
+    if estimator.numeric_mode not in (None, 'identical'):
+        raise ValueError('parallel SVM requires IDENTICAL')
+    if method not in ('predict', 'decision_function') or (type(estimator) is SVR and method != 'predict'):
+        raise ValueError('method must be predict, or decision_function for SVC')
+    pool = DevicePool(devices, cooperative=True)
+    try:
+        return pool.map([('svm_predict', estimator, (X, method))])[0]
+    finally:
+        pool.close()

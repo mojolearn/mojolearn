@@ -77,6 +77,19 @@ def execute(request):
         X, y, kwargs = args
         state.fit(X, y, **kwargs)
         return state
+    if operation in ('svm_fit', 'svm_predict'):
+        from ._svm_impl import _extension
+        native = _extension('identical')
+        if (not callable(getattr(native, 'svm_parallel_available', None))
+                or native.svm_parallel_available() != 1):
+            raise ImportError('rebuild SVM binding for distributed kernel rows')
+        if operation == 'svm_fit':
+            state.fit(*args)
+            return state
+        X, method = args
+        if method not in ('predict', 'decision_function'):
+            raise ValueError('invalid SVM prediction operation')
+        return getattr(state, method)(X)
     if operation in ('iforest_fit', 'iforest_score'):
         from ._svm_impl import _extension
         native = _extension('identical')
