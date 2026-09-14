@@ -137,6 +137,13 @@ def execute(request):
             raise ImportError('rebuild estimators binding for parallel GLM gradients')
         state.fit(*args)
         return state
+    if operation == 'neighbor_reference':
+        from .neighbors import NearestNeighbors
+        index, query, k = args
+        return NearestNeighbors(**state).fit(index).kneighbors(query, n_neighbors=k)
+    if operation == 'neighbor_vote':
+        from .parallel_neighbors_reference import _vote
+        return _vote(state, *args)
     if operation == 'neighbor_query':
         from .parallel_neighbors import _methods
         X, method, kwargs = args

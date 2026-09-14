@@ -1679,4 +1679,3 @@ def knn_regress_neighbors_binding(
         var ctx = DeviceContext()
         knn_regressor_from_neighbors(ctx, dp, xp, ni, nq, kk, yp, no, op, dt[2])
     return PythonObject(0)
-
