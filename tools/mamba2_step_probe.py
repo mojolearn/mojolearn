@@ -178,7 +178,7 @@ def cmd_run(args):
         print(f"ORDER-DEPENDENT {p}: " + " ".join(f"{o}={h}" for o, h in sorted(v.items())))
     for k, r in moved:
         print(f"MOVED in process: {k} at repeat {r}: {hashes[k][0]} vs {hashes[k][r]}")
-    np.savez(args.out, **{k.replace("/", "__"): v for k, v in arrays.items()},
+    np.savez_compressed(args.out, **{k.replace("/", "__"): v for k, v in arrays.items()},
              __hashes=np.asarray([f"{k}={','.join(v)}" for k, v in sorted(hashes.items())]),
              __info=np.asarray([f"{k}={v}" for k, v in sorted(info.items())]))
     print(f"# saved {args.out}: {len(arrays)} arrays; in-process moved={len(moved)} order-dependent parts={len(dep)}")

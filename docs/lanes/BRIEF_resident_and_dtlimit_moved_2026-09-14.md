@@ -126,7 +126,8 @@ array of the first repeat with a hash per repeat, and diffs two runs element by 
   source, an unwritten buffer;
 - a part that differs between two BOXES only is a device-dependent path.
 
-On the Apple M4 (`bench/results/mamba2_probe/2026-09-14-apple-m4.npz`): 86 arrays, no
+On the Apple M4 (regenerated on demand, ten seconds, see
+`bench/results/mamba2_probe/README.md`; the `.npz` is not stored, it is 6.9 MB): 86 arrays, no
 in-process move, no order dependence, and a second process equal on all 86. Owed on the
 Hot Aisle MI300X and the DigitalOcean MI325X:
 
@@ -134,7 +135,7 @@ Hot Aisle MI300X and the DigitalOcean MI325X:
 MOJOLEARN_NUMERIC_MODE=identical python3 tools/mamba2_step_probe.py run amd-<box>-1.npz --repeats 20
 MOJOLEARN_NUMERIC_MODE=identical python3 tools/mamba2_step_probe.py run amd-<box>-2.npz --repeats 20
 python3 tools/mamba2_step_probe.py diff amd-<box>-1.npz amd-<box>-2.npz
-python3 tools/mamba2_step_probe.py diff bench/results/mamba2_probe/2026-09-14-apple-m4.npz amd-<box>-1.npz
+python3 tools/mamba2_step_probe.py diff apple-m4.npz amd-<box>-1.npz     # apple-m4.npz regenerated on the Mac
 ```
 
 The `run` exit code is 1 on any in-process move or order dependence; the first DIFFER line
