@@ -78,6 +78,14 @@ def kernel_methods_vendor_binding() raises -> PythonObject:
     return PythonObject(String(COMPILED_VENDOR))
 
 
+def kernel_methods_rows_parallel_available() raises -> PythonObject:
+    """1: km_kernel_matrix reaches svm kernel_op, which reads
+    MOJOLEARN_SVM_DEVICE_COUNT, and potrf_lower/cho_solve read
+    MOJOLEARN_CHOLESKY_DEVICE_COUNT; parallel_classical.fit_kernel_method and
+    apply_kernel_method set both inside their cooperative worker."""
+    return PythonObject(1)
+
+
 def kernel_methods_parallel_available() raises -> PythonObject:
     return PythonObject(1)
 
@@ -566,6 +574,9 @@ def rbf_sampler_transform_binding(
 def PyInit__mojolearn_kernel_methods() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_kernel_methods")
+        m.def_function[kernel_methods_rows_parallel_available](
+            "kernel_methods_rows_parallel_available"
+        )
         m.def_function[kernel_methods_parallel_available](
             "kernel_methods_parallel_available"
         )
