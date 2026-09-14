@@ -141,3 +141,30 @@ python3 tools/mamba2_step_probe.py diff apple-m4.npz amd-<box>-1.npz     # apple
 The `run` exit code is 1 on any in-process move or order dependence; the first DIFFER line
 of the Apple diff names the part and the first differing element, which is the address to
 read the kernel at.
+
+### 3.1 The probe's first AMD results (2026-09-14, peer session; rows in `bench/results/mamba2_probe/README.md`)
+
+Hot Aisle MI300X, the SAME 8core VM type and 22.04 container as the divergent column, at
+cdcaf7890: two processes of 20 repeats, in-process moved 0, order-dependent parts 0, the
+two processes equal on all 86 arrays, and equal to a fresh Apple reference on all 86. So a
+COLD process on that box computes the Apple bits through every call order. What differs
+from the 120-lane run is what ran before: the identity run reaches mamba2 after about a
+hundred lanes in one process. That reads as a read of device memory the lane never
+initializes (a working stage, or a neighbor of the carried state) whose contents depend on
+the process's earlier allocations; not a launch-order race between step and backward,
+which the five orders would have shown.
+
+DigitalOcean MI325X (24.04 ROCm image): both runs abort at the FIRST launch with "Memory
+access fault by GPU node-1 ... Reason: Unknown", exit 134, the same fault that ended the
+120-lane run there right after mamba1. Deterministic on that image, so it is not the 2712
+race and gets its own deviation number: a kernel of the mamba2 path reading past an
+allocation that the MI300X's allocator happens to back.
+
+The probe's `--warm` option (same day) tests the uninitialized-read reading directly:
+`--warm "poison:8"` allocates and frees eight 2048 x 2048 NaN GEMMs before the orders, so a
+read of unwritten device memory becomes a NaN the diff cannot miss; `--warm "lanes:<names>"`
+runs other identity_break lanes first in the same process, and the exact condition of the
+120-lane run is the list of every lane that precedes mamba2 in LANES order. On the Apple M4
+a warm run (five lanes plus four poison rounds) equals a cold run on all 86 arrays. Owed on
+the MI300X: cold, `poison:8`, and the full preceding-lane list, each diffed against cold;
+the first DIFFER line names the part and the element, and a NaN there is the read.

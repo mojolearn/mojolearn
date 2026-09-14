@@ -19,7 +19,17 @@ ORDERS, repeats each in one process, saves every array of the first repeat
 and a hash per repeat, and diffs two saved runs element by element.
 
     MOJOLEARN_NUMERIC_MODE=identical python3 tools/mamba2_step_probe.py run OUT.npz [--repeats 20] [--fixture base] [--dt-limit 0.01,0.1]
+    MOJOLEARN_NUMERIC_MODE=identical python3 tools/mamba2_step_probe.py run WARM.npz --warm "lanes:kmeans,rf-clf,byte-lm;poison:8"
     python3 tools/mamba2_step_probe.py diff A.npz B.npz
+
+--warm (2026-09-14, after the MI300X ran cold equal to Apple on all 86 arrays while
+the 120-lane run on the same VM type had mamba2 diverge after a hundred lanes):
+run other identity_break lanes first in THIS process (`lanes:<names>`, base
+fixture, one fit each), or allocate and free device memory holding a NaN
+pattern (`poison:<rounds>`, each a 2048 x 2048 NaN GEMM through linalg.matmul,
+so any later read of unwritten device memory is a NaN the diff cannot miss),
+or both, `;`-separated. A cold run and a warm run that differ name a read of
+memory the lane did not initialize; the first DIFFER line is the part.
 
 Orders (each on a FRESH block and a fresh state):
     lane           forward, prefill(state), step(state), backward  -- the identity_break lane
@@ -132,6 +142,37 @@ def _device(ml, ib):
     return info
 
 
+def _warm(ml, ib, spec):
+    """What ran in this process before the orders; returns a list of one
+    line per warming step for the record."""
+    done = []
+    X, yc, yr = ib.fixture("base")
+    Xh = ib.heldout("base")
+    for item in spec.split(";"):
+        item = item.strip()
+        if not item:
+            continue
+        kind, _, arg = item.partition(":")
+        if kind == "lanes":
+            for name in [n for n in arg.split(",") if n]:
+                if name not in ib.LANES:
+                    raise SystemExit(f"--warm lanes: no lane {name!r}")
+                p = ib.LANES[name](ml, X, yc, yr, Xh.copy())
+                done.append(f"lane {name} {ib._h(np.frombuffer('|'.join(f'{k}={v}' for k, v in sorted(p.items())).encode(), dtype=np.uint8))}")
+                print(f"# warm: ran lane {name}")
+        elif kind == "poison":
+            rounds = int(arg or "4")
+            a = np.full((2048, 2048), np.nan, dtype=np.float32)
+            for r in range(rounds):
+                c = np.asarray(ml.linalg.matmul(a, a, identical=True))
+                done.append(f"poison round {r} nan={int(np.isnan(c).sum())} of {c.size}")
+                del c
+            print(f"# warm: {rounds} NaN GEMM rounds of 2048 x 2048 allocated and freed")
+        else:
+            raise SystemExit(f"--warm: unknown item {item!r}; use lanes:<names> or poison:<rounds>")
+    return done
+
+
 def cmd_run(args):
     import mojolearn as ml
     ib = _harness()
@@ -143,6 +184,7 @@ def cmd_run(args):
     x = ib._seq(X, 2, 16, dm)
     g = ib._seq(X, 2, 16, dm, skip=1024)
     dt_limit = tuple(float(v) for v in args.dt_limit.split(",")) if args.dt_limit else None
+    warmed = _warm(ml, ib, args.warm) if args.warm else []
     orders = [o for o in args.orders.split(",") if o]
     bad = [o for o in orders if o not in ORDERS]
     if bad:
@@ -160,7 +202,8 @@ def cmd_run(args):
                     moved.append((k, r))
         print(f"# {order}: {args.repeats} repeats, parts {sorted(set(k.split('/', 1)[1] for k in got))}")
     info = _device(ml, ib)
-    info.update(fixture=args.fixture, repeats=str(args.repeats), dt_limit=args.dt_limit or "default", orders=",".join(orders))
+    info.update(fixture=args.fixture, repeats=str(args.repeats), dt_limit=args.dt_limit or "default", orders=",".join(orders),
+                warm=args.warm or "cold", warmed=";".join(warmed) or "none")
     print("# " + " ".join(f"{k}={v}" for k, v in info.items() if k != "bindings"))
     W = 44
     print(f"| {'part':<{W}} | repeat 0         | in-process |")
@@ -189,7 +232,7 @@ def cmd_diff(args):
     a, b = np.load(args.a), np.load(args.b)
     ia = dict(s.split("=", 1) for s in a["__info"].tolist())
     ib_ = dict(s.split("=", 1) for s in b["__info"].tolist())
-    for k in ("vendor", "gpu_arch", "device", "host", "cpu_count", "commit", "dt_limit", "fixture", "orders"):
+    for k in ("vendor", "gpu_arch", "device", "host", "cpu_count", "commit", "dt_limit", "fixture", "orders", "warm"):
         print(f"# {k}: {ia.get(k, '?')}  |  {ib_.get(k, '?')}")
     keys = sorted(k for k in a.files if not k.startswith("__"))
     same, differ = 0, []
@@ -222,6 +265,7 @@ def main():
     r = sub.add_parser("run"); r.add_argument("out"); r.add_argument("--repeats", type=int, default=20)
     r.add_argument("--fixture", default="base"); r.add_argument("--dt-limit", default="")
     r.add_argument("--orders", default=",".join(ORDERS))
+    r.add_argument("--warm", default="", help="lanes:<names> and/or poison:<rounds>, ;-separated; see the docstring")
     d = sub.add_parser("diff"); d.add_argument("a"); d.add_argument("b")
     args = ap.parse_args()
     sys.exit(cmd_run(args) if args.cmd == "run" else cmd_diff(args))
