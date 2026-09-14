@@ -92,6 +92,8 @@ on:
       - "preprocessing/host/scaler_oracle.mojo"
       - "glm/host/qn_oracle.mojo"
       - "ensemble/host/rf_oracle.mojo"
+      - "arima/host/arima_oracle.mojo"
+      - "arima/impl/tsa/arima_common.mojo"
       - "spectral/checks/symmetric_eig_host.mojo"
       - "core/knn_host_predict.mojo"
       - "cluster/host/kmeans_oracle.mojo"
@@ -470,9 +472,10 @@ jobs:
       # slab tree's chunk boundaries by one value, in spectral_oracle by
       # seeding the recluster one draw off, in scaler_oracle by the same
       # shifted tree plus the min-max offset's subtraction as an addition,
-      # in qn_oracle by walking the solver's dot chains descending, and in
+      # in qn_oracle by walking the solver's dot chains descending, in
       # rf_oracle by drawing every bootstrap row from the next Philox
-      # subsequence);
+      # subsequence, and in arima_oracle by doubling the finite-difference
+      # step);
       # each further phase 1
       # binding names the fold its arm moves), loaded through
       # MOJOLEARN_HOST_DIR with MOJOLEARN_HOST_ALLOW_SABOTAGE=1, run on the

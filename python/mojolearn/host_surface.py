@@ -167,6 +167,14 @@ TRAINING_LANE_NAMES = {
     # binding. A prediction until the four-column diff reads IDENTICAL.
     "rf-clf": "the random forest classifier",
     "rf-reg": "the random forest regressor",
+    # Workstream E (lane/cpu-training-arima, 2026-09-14): batched ARIMA
+    # trains and forecasts through arima/host/arima_oracle.mojo, the device
+    # lane restated on the host, exported under the GPU binding's names from
+    # the arima family's own host binding. par-arima is not declared. A
+    # prediction until the four-column diff reads IDENTICAL.
+    "arima": "ARIMA",
+    "arima-011": "differenced ARIMA",
+    "arima-seasonal-c": "seasonal ARIMA",
 }
 
 #: The lanes with NO CPU path of any kind, as the README states them. A
@@ -175,7 +183,6 @@ TRAINING_LANE_NAMES = {
 NO_CPU_PATH = (
     "UMAP",
     "the Gaussian process",
-    "ARIMA",
     "the neural blocks",
     "gradient boosting training",
 )
@@ -538,6 +545,32 @@ FAMILIES = (
             "rf_regressor_fit_rowmajor", "rf_regressor_fit_rowmajor_export",
             "forest_export", "forest_export_legacy", "forest_export_release",
             "rf_predict_proba", "rf_predict_reg",
+        ),
+        gate="tools/identity_break.py (cpu-identity-gate.yml)",
+        ships_in_wheel=False,
+    ),
+    dict(
+        # Workstream E (lane/cpu-training-arima, 2026-09-14): batched
+        # ARIMA's host binding. It routes `_mojolearn_arima` on a CPU-only
+        # install with the GPU binding's whole surface (fit, predict,
+        # forecast); p, q or P above 1, any Q, d + D of 2, p + q + k of 0
+        # and an in-sample prediction refuse by name. par-arima is not
+        # declared.
+        family="arima",
+        binding="_mojolearn_arima_host",
+        routes="_mojolearn_arima",
+        loaded_by="_backend._HOST_MODULES",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=("arima", "arima-011", "arima-seasonal-c"),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=("ARIMA",),
+        display="batched ARIMA",
+        host_modules=("arima/host/arima_oracle.mojo",),
+        exports=(
+            "arima_host_numeric_mode", "arima_host_vendor", "arima_host_column",
+            "arima_host_sabotage", "arima_vendor", "arima_numeric_mode",
+            "arima_fit", "arima_predict", "arima_forecast",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=False,

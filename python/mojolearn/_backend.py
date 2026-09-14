@@ -968,6 +968,14 @@ def host_families_built():
 #:     POISSON, GAMMA and INVERSE_GAUSSIAN criteria and the GPU engines
 #:     refuse by name. This is its own family, not the forest host binding
 #:     named above, because it exports the GPU binding's names.
+#:   _mojolearn_arima -> _mojolearn_arima_host (arima, arima-011,
+#:     arima-seasonal-c; workstream E, 2026-09-14): arima_fit,
+#:     arima_predict and arima_forecast over arima/host/arima_oracle.mojo
+#:     (estimate_x0, the Jones transform, the batched L-BFGS over the
+#:     finite-difference Kalman likelihood, the undifferenced forecast), the
+#:     GPU binding's whole surface; p, q or P above 1, any Q, d + D of 2,
+#:     p + q + k of 0 and an in-sample prediction (start < n_obs) refuse by
+#:     name.
 _HOST_MODULES = host_surface.routed_modules()
 
 #: The env switch the CPU identity gate sets to load a host binding built
