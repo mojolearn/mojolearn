@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Workstream E batch 2, CPU training for the kmeans lane
+"""Workstream E batch 2, CPU training for the kmeans and metrics lanes
 (lane/cpu-training-e2, 2026-09-14), checked from SOURCE so it runs on a box
-with nothing built, plus one runtime check that runs only where the core
-host binding is built and the package took the CPU-only path.
+with nothing built, plus runtime checks that run only where the core and
+metrics host bindings are built and the package took the CPU-only path.
 
 What the source checks hold: the manifest lists kmeans as a core training
 lane and names it for the docs, and no longer names k-means as a lane with
@@ -34,6 +34,10 @@ from mojolearn import _backend, host_surface
 ROOT = Path(__file__).resolve().parents[3]
 
 ORACLE = "cluster/host/kmeans_oracle.mojo"
+METRICS_ORACLE = "metrics/host/metrics_oracle.mojo"
+METRICS_EXPORTS = ("accuracy_score", "adjusted_rand_score", "entropy", "mutual_info_score",
+                   "homogeneity_score", "completeness_score", "v_measure_score", "r2_score",
+                   "silhouette")
 GPU_IMPORTS = re.compile(r"^\s*from\s+(max\.gpu|std\.gpu)", re.M)
 
 
@@ -93,6 +97,67 @@ def test_oracle_spells_the_device_seed_reassembly():
 def test_workflow_triggers_on_the_oracle():
     text = _read(".github/workflows/cpu-identity-gate.yml")
     assert f'- "{ORACLE}"' in text, f"cpu-identity-gate.yml does not trigger on {ORACLE}"
+    assert f'- "{METRICS_ORACLE}"' in text, f"cpu-identity-gate.yml does not trigger on {METRICS_ORACLE}"
+
+
+def test_manifest_covers_metrics():
+    assert "metrics" in host_surface.covered_lanes(), "metrics is not a covered training lane"
+    fam = host_surface.family("metrics")
+    assert fam["routes"] == "_mojolearn_metrics"
+    assert fam["training_lanes"] == ("metrics",)
+    assert METRICS_ORACLE in fam["host_modules"]
+    assert (ROOT / METRICS_ORACLE).is_file()
+    assert (ROOT / "bindings/build_metrics_host.sh").is_file()
+    assert (ROOT / host_surface.binding_source("metrics")).is_file()
+    assert "_mojolearn_metrics" in host_surface.routed_modules()
+
+
+def test_metrics_binding_registers_the_lane_entries():
+    src = _read(host_surface.binding_source("metrics"))
+    exports = host_surface.family("metrics")["exports"]
+    for name in METRICS_EXPORTS + ("metrics_vendor", "metrics_numeric_mode"):
+        assert f'("{name}")' in src, f"the metrics host binding does not register {name}"
+        assert name in exports, f"the manifest does not list {name} for metrics"
+    for absent in ("rand_score", "trustworthiness", "spectral_fit_predict_dataset", "umap_fit_transform",
+                   "kl_divergence", "log_loss", "confusion_matrix"):
+        assert f'("{absent}")' not in src, f"{absent} must stay absent so it refuses by name"
+
+
+def test_metrics_oracle_imports_no_gpu_and_carries_the_sabotage_arm():
+    text = _read(METRICS_ORACLE)
+    assert not GPU_IMPORTS.search(text), f"{METRICS_ORACLE} imports a GPU module"
+    assert not re.search(r"^\s*from .*import.*DeviceContext", text, re.M)
+    assert "from checks.numerics import" in text
+    assert "comptime PINNED_SUM_W = 256" in text, "the slab width is the tree; it must be 256"
+    define = host_surface.sabotage_define("metrics")
+    assert f'is_defined["{define}"]()' in text
+    assert "comptime if METRICS_ORACLE_HOST_SABOTAGE:" in text
+    assert "values[(i + 1) % n]" in text, "the sabotage arm does not shift the chunk boundaries"
+    assert "METRICS_ORACLE_HOST_SABOTAGE" in _read(host_surface.binding_source("metrics"))
+
+
+def test_metrics_run_on_the_host_when_built():
+    if _backend._CPU_ONLY is None:
+        print("SKIP: a GPU set loaded; the host route is not taken here")
+        return
+    if "_mojolearn_metrics_host" not in _backend.host_families_built():
+        print("SKIP: the metrics host binding is not built")
+        return
+    import numpy as np
+    module = _backend.load_host_module("_mojolearn_metrics_host")
+    assert not bool(module.metrics_host_sabotage()), "a sabotage build loaded outside the gate"
+    mt = mojolearn.metrics
+    rng = np.random.default_rng(1)
+    x = rng.standard_normal((300, 3)).astype(np.float32)
+    yt = (rng.integers(0, 3, 300)).astype(np.int32)
+    yp = (yt + (rng.random(300) < 0.2)).astype(np.int32) % 3
+    got = [(mt.accuracy_score(yt, yp), mt.adjusted_rand_score(yt, yp), mt.v_measure_score(yt, yp),
+            mt.r2_score(x[:, 0], x[:, 0] * np.float32(0.9)), mt.silhouette_score(x, yp))
+           for _ in range(2)]
+    assert got[0] == got[1], "two host runs returned different values"
+    acc, ari, vm, r2, sil = got[0]
+    assert acc == float((yt == yp).sum()) / 300.0 or abs(acc - (yt == yp).mean()) < 1e-6
+    assert -0.5 <= ari <= 1.0 and 0.0 <= vm <= 1.0 and 0.0 <= r2 <= 1.0 and -1.0 <= sil <= 1.0
 
 
 def test_kmeans_fit_runs_on_the_host_when_built():

@@ -1,0 +1,402 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+"""CPU binding for the `_mojolearn_metrics` family: the label, regression
+and silhouette metrics (workstream E batch 2, lane/cpu-training-e2,
+2026-09-14; brief docs/lanes/BRIEF_cpu_training_2026-09-13.md section 1.1
+"metrics" and 3.2).
+
+HOST ONLY. No DeviceContext, no kernel launch, no GPU. The arithmetic is
+`metrics/host/metrics_oracle.mojo`, the second spelling of the integer
+kernels (a count, a histogram, a contingency matrix) as serial loops and
+of DEVIATION 653's slab tree for every float sum; that file's header names
+every original by file and line. The validation is the GPU entry's, in the
+GPU entry's words (`metrics/estimator.mojo`'s length checks, then the
+kernels' own refusals), so a bad call raises the same error and nothing is
+written on a refusal.
+
+THE EXPORTED NAMES ARE THE GPU BINDING'S NAMES for what this covers
+(`bindings/_mojolearn_metrics.mojo`): `accuracy_score`,
+`adjusted_rand_score`, `entropy`, `mutual_info_score`,
+`homogeneity_score`, `completeness_score`, `v_measure_score`, `r2_score`
+and `silhouette`, each with the SAME address contract and `params` list
+(repeated in the docstrings below and mirrored in
+`python/mojolearn/_metrics_impl.py`), so `mojolearn.metrics` runs
+unchanged on a CPU-only install through `_backend._HOST_MODULES`
+(`"_mojolearn_metrics": "_mojolearn_metrics_host"`). The read-backs
+`metrics_vendor` ("cpu") and `metrics_numeric_mode` (1) are the ones
+`_metrics_impl._get_binding` and `_backend` consult.
+
+The GPU binding's OTHER entries (`rand_score`, `roc_auc_score`,
+`precision_recall_curve`, `log_loss`, `confusion_matrix`,
+`precision_recall_fscore`, the three regression errors, `kl_divergence`,
+`trustworthiness`, the two `spectral_fit_predict_*` entries, the UMAP
+entries and `graph_parallel_available`) are deliberately ABSENT here, so
+every lane that reaches them keeps refusing BY NAME through `_HostBinding`
+until a lane lands them.
+"""
+from std.os import abort
+from std.python import Python, PythonObject
+from std.python._cpython import GILReleased
+from std.python.bindings import PythonModuleBuilder
+
+from bindings.hostptr import f32_ptr, read_f32, read_i32
+from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
+from checks.numerics import GLOBAL_NUMERIC_MODE
+from metrics.host.metrics_oracle import (
+    DISTANCE_L2_SQRT_UNEXPANDED,
+    METRICS_ORACLE_HOST_SABOTAGE,
+    host_accuracy_score,
+    host_adjusted_rand_score,
+    host_entropy,
+    host_homogeneity_score,
+    host_mutual_info,
+    host_r2_score,
+    host_silhouette,
+    host_v_measure,
+)
+
+
+def _index(value: PythonObject) raises -> Int:
+    var type_name = String(py=value.__class__.__name__)
+    if type_name == "bool" or type_name == "bool_":
+        raise Error("metrics host: integers expected, not booleans")
+    var operator_module = Python.import_module("operator")
+    return Int(py=operator_module.index(value))
+
+
+def _want(name: String, params: PythonObject, k: Int) raises:
+    """`_want`, `bindings/_mojolearn_metrics.mojo`, verbatim."""
+    if len(params) != k:
+        raise Error(
+            name + ": params must contain " + String(k) + " values, got "
+            + String(len(params))
+        )
+
+
+def _check_pair(y_true: List[Int32], y_pred: List[Int32], n: Int) raises:
+    """`_check_pair`, `metrics/estimator.mojo`, verbatim."""
+    if n <= 0:
+        raise Error("metrics: n must be positive, got " + String(n))
+    if len(y_true) < n or len(y_pred) < n:
+        raise Error(
+            "metrics: labels_true holds " + String(len(y_true))
+            + " and labels_pred holds " + String(len(y_pred))
+            + " entries, both must hold at least n = " + String(n)
+        )
+
+
+def _check_float_pair(a: List[Float32], b: List[Float32], n: Int) raises:
+    if n <= 0:
+        raise Error("metrics: n must be positive, got " + String(n))
+    if len(a) < n or len(b) < n:
+        raise Error(
+            "metrics: the two float arrays hold " + String(len(a)) + " and "
+            + String(len(b)) + " entries, both must hold at least n = "
+            + String(n)
+        )
+
+
+def _check_range(lower: Int32, upper: Int32) raises:
+    if upper < lower:
+        raise Error(
+            "metrics: upper_class_range (" + String(upper)
+            + ") is below lower_class_range (" + String(lower) + ")"
+        )
+
+
+def metrics_host_numeric_mode_binding() raises -> PythonObject:
+    return PythonObject(GLOBAL_NUMERIC_MODE)
+
+
+def metrics_host_vendor_binding() raises -> PythonObject:
+    return PythonObject(String("cpu"))
+
+
+def metrics_host_column_binding() raises -> PythonObject:
+    """`column_name(TARGET_COLUMN)`, the comptime assert's witness: "cpu".
+    THE COLUMN IS THE CPU COLUMN, OR THIS DOES NOT BUILD; the assert lives
+    in a function body PyInit registers, so it is compiled in every build.
+    `bindings/build_metrics_host.sh` passes -D MOJOLEARN_COLUMN_CPU."""
+    comptime assert TARGET_COLUMN == COLUMN_CPU, (
+        "metrics host: this binding compiles the CPU column only; pass"
+        " -D MOJOLEARN_COLUMN_CPU (bindings/build_metrics_host.sh does)"
+    )
+    return PythonObject(column_name(TARGET_COLUMN))
+
+
+# There is no `metrics_host_detected_column` read-back, for the reason
+# 8d16ce2f removed it from the forest and byte LM host bindings: the detected
+# column folds to the GPU of the machine that ran the build, so its name
+# would land in the vendor-neutral binary. The comptime assert above is the
+# check.
+
+
+def metrics_host_sabotage_binding() raises -> PythonObject:
+    """Whether this binary was built with -D MOJOLEARN_HOST_SABOTAGE=1 (the
+    gate's negative control): every slab tree's chunk boundaries shifted by
+    one value, which moves r2 and the silhouette; refused outside the gate
+    as one set."""
+    return PythonObject(METRICS_ORACLE_HOST_SABOTAGE)
+
+
+# The GPU binding's names, same contract.
+
+
+def metrics_vendor_binding() raises -> PythonObject:
+    """"cpu". On a CPU-only install `_backend.vendor()` is "cpu" and the
+    read-back cross-check expects that string from every host binding."""
+    return PythonObject(String("cpu"))
+
+
+def metrics_numeric_mode_binding() raises -> PythonObject:
+    """THE BUILD'S TIER as the `NUMERIC_*` code: always 1 here, a host
+    binding is IDENTICAL only (the build script refuses any other)."""
+    return PythonObject(GLOBAL_NUMERIC_MODE)
+
+
+# ===========================================================================
+# Group A: the label metrics. int32 labels, one shape each.
+# ===========================================================================
+
+
+def accuracy_score_binding(
+    y_true_addr: PythonObject,
+    y_pred_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`ML::Metrics::accuracy_score_py` on the host. `params`: `0 n`."""
+    _want(String("accuracy_score"), params, 1)
+    var n = _index(params[0])
+    var yt = read_i32(_index(y_true_addr), n)
+    var yp = read_i32(_index(y_pred_addr), n)
+    var out = Float32(0.0)
+    with GILReleased(Python()):
+        _check_pair(yt, yp, n)
+        out = host_accuracy_score(yt, yp, n)
+    return PythonObject(Float64(out))
+
+
+def adjusted_rand_score_binding(
+    y_true_addr: PythonObject,
+    y_pred_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`ML::Metrics::adjusted_rand_index` on the host, RAW labels.
+    `params`: `0 n`."""
+    _want(String("adjusted_rand_score"), params, 1)
+    var n = _index(params[0])
+    var yt = read_i32(_index(y_true_addr), n)
+    var yp = read_i32(_index(y_pred_addr), n)
+    var out = Float64(0.0)
+    with GILReleased(Python()):
+        _check_pair(yt, yp, n)
+        out = host_adjusted_rand_score(yt, yp, n)
+    return PythonObject(out)
+
+
+def entropy_binding(
+    labels_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`ML::Metrics::entropy` on the host, in NATS. `params`: `0 n, 1
+    lower_class_range, 2 upper_class_range`."""
+    _want(String("entropy"), params, 3)
+    var n = _index(params[0])
+    var lower = Int32(_index(params[1]))
+    var upper = Int32(_index(params[2]))
+    var lab = read_i32(_index(labels_addr), n)
+    var out = Float64(0.0)
+    with GILReleased(Python()):
+        if n <= 0:
+            raise Error("entropy: n must be positive, got " + String(n))
+        if len(lab) < n:
+            raise Error(
+                "entropy: labels holds " + String(len(lab))
+                + " entries, needs at least n = " + String(n)
+            )
+        _check_range(lower, upper)
+        out = host_entropy(lab, n, lower, upper)
+    return PythonObject(out)
+
+
+def mutual_info_score_binding(
+    y_true_addr: PythonObject,
+    y_pred_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`ML::Metrics::mutual_info_score` on the host, in NATS. `params`:
+    `0 n, 1 lower_class_range, 2 upper_class_range`."""
+    _want(String("mutual_info_score"), params, 3)
+    var n = _index(params[0])
+    var lower = Int32(_index(params[1]))
+    var upper = Int32(_index(params[2]))
+    var yt = read_i32(_index(y_true_addr), n)
+    var yp = read_i32(_index(y_pred_addr), n)
+    var out = Float64(0.0)
+    with GILReleased(Python()):
+        _check_pair(yt, yp, n)
+        _check_range(lower, upper)
+        out = host_mutual_info(yt, yp, n, lower, upper)
+    return PythonObject(out)
+
+
+def homogeneity_score_binding(
+    y_true_addr: PythonObject,
+    y_pred_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`ML::Metrics::homogeneity_score` on the host. `params`: `0 n, 1
+    lower_class_range, 2 upper_class_range`."""
+    _want(String("homogeneity_score"), params, 3)
+    var n = _index(params[0])
+    var lower = Int32(_index(params[1]))
+    var upper = Int32(_index(params[2]))
+    var yt = read_i32(_index(y_true_addr), n)
+    var yp = read_i32(_index(y_pred_addr), n)
+    var out = Float64(0.0)
+    with GILReleased(Python()):
+        _check_pair(yt, yp, n)
+        _check_range(lower, upper)
+        out = host_homogeneity_score(yt, yp, n, lower, upper)
+    return PythonObject(out)
+
+
+def completeness_score_binding(
+    y_true_addr: PythonObject,
+    y_pred_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`ML::Metrics::completeness_score` on the host, the homogeneity of the
+    swapped arrays. `params`: `0 n, 1 lower_class_range, 2
+    upper_class_range`."""
+    _want(String("completeness_score"), params, 3)
+    var n = _index(params[0])
+    var lower = Int32(_index(params[1]))
+    var upper = Int32(_index(params[2]))
+    var yt = read_i32(_index(y_true_addr), n)
+    var yp = read_i32(_index(y_pred_addr), n)
+    var out = Float64(0.0)
+    with GILReleased(Python()):
+        _check_pair(yt, yp, n)
+        _check_range(lower, upper)
+        out = host_homogeneity_score(yp, yt, n, lower, upper)
+    return PythonObject(out)
+
+
+def v_measure_score_binding(
+    y_true_addr: PythonObject,
+    y_pred_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`ML::Metrics::v_measure` on the host with `beta` honored. `params`:
+    `0 n, 1 lower_class_range, 2 upper_class_range, 3 beta (float)`."""
+    _want(String("v_measure_score"), params, 4)
+    var n = _index(params[0])
+    var lower = Int32(_index(params[1]))
+    var upper = Int32(_index(params[2]))
+    var beta = Float64(py=params[3])
+    var yt = read_i32(_index(y_true_addr), n)
+    var yp = read_i32(_index(y_pred_addr), n)
+    var out = Float64(0.0)
+    with GILReleased(Python()):
+        _check_pair(yt, yp, n)
+        _check_range(lower, upper)
+        out = host_v_measure(yt, yp, n, lower, upper, beta)
+    return PythonObject(out)
+
+
+# ===========================================================================
+# Group B: r2. float32 in, float32 out.
+# ===========================================================================
+
+
+def r2_score_binding(
+    y_true_addr: PythonObject,
+    y_pred_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`ML::Metrics::r2_score_py` on the host, the float overload
+    (DEVIATIONS 653, 657). `params`: `0 n`."""
+    _want(String("r2_score"), params, 1)
+    var n = _index(params[0])
+    var y = read_f32(_index(y_true_addr), n)
+    var yh = read_f32(_index(y_pred_addr), n)
+    var out = Float32(0.0)
+    with GILReleased(Python()):
+        _check_float_pair(y, yh, n)
+        out = host_r2_score(y, yh, n)
+    return PythonObject(Float64(out))
+
+
+# ===========================================================================
+# Group C: silhouette. Writes n_rows per-sample scores, returns their mean.
+# ===========================================================================
+
+
+def silhouette_binding(
+    x_addr: PythonObject,
+    labels_addr: PythonObject,
+    scores_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`ML::Metrics::Batched::silhouette_score` on the host (DEVIATIONS 654,
+    656). Writes `n_rows` float32 per-sample coefficients to `scores_addr`
+    and returns their mean. `params`: `0 n_rows, 1 n_cols, 2 n_labels
+    (labels mapped onto [0, n_labels-1]), 3 chunksize (validated >= 1,
+    scheduling only)`."""
+    _want(String("silhouette"), params, 4)
+    var n_rows = _index(params[0])
+    var n_cols = _index(params[1])
+    var n_labels = _index(params[2])
+    var chunk = _index(params[3])
+    var x = read_f32(_index(x_addr), n_rows * n_cols)
+    var lab = read_i32(_index(labels_addr), n_rows)
+    var sp = f32_ptr(_index(scores_addr))
+    var scores = List[Float32]()
+    var mean = Float32(0.0)
+    with GILReleased(Python()):
+        if n_rows <= 0:
+            raise Error("silhouette: n_rows must be positive, got " + String(n_rows))
+        if n_cols <= 0:
+            raise Error("silhouette: n_cols must be positive, got " + String(n_cols))
+        if len(x) < n_rows * n_cols:
+            raise Error(
+                "silhouette: X holds " + String(len(x)) + " floats, needs "
+                + String(n_rows * n_cols)
+            )
+        if len(lab) < n_rows:
+            raise Error(
+                "silhouette: labels holds " + String(len(lab))
+                + " entries, needs n_rows = " + String(n_rows)
+            )
+        mean = host_silhouette(
+            x, lab, n_rows, n_cols, n_labels, chunk,
+            DISTANCE_L2_SQRT_UNEXPANDED, scores,
+        )
+        for i in range(n_rows):
+            sp.unsafe_store(i, scores[i])
+    return PythonObject(Float64(mean))
+
+
+@export
+def PyInit__mojolearn_metrics_host() abi("C") -> PythonObject:
+    try:
+        var module = PythonModuleBuilder("_mojolearn_metrics_host")
+        module.def_function[metrics_host_numeric_mode_binding]("metrics_host_numeric_mode")
+        module.def_function[metrics_host_vendor_binding]("metrics_host_vendor")
+        module.def_function[metrics_host_column_binding]("metrics_host_column")
+        module.def_function[metrics_host_sabotage_binding]("metrics_host_sabotage")
+        module.def_function[metrics_vendor_binding]("metrics_vendor")
+        module.def_function[metrics_numeric_mode_binding]("metrics_numeric_mode")
+        module.def_function[accuracy_score_binding]("accuracy_score")
+        module.def_function[adjusted_rand_score_binding]("adjusted_rand_score")
+        module.def_function[entropy_binding]("entropy")
+        module.def_function[mutual_info_score_binding]("mutual_info_score")
+        module.def_function[homogeneity_score_binding]("homogeneity_score")
+        module.def_function[completeness_score_binding]("completeness_score")
+        module.def_function[v_measure_score_binding]("v_measure_score")
+        module.def_function[r2_score_binding]("r2_score")
+        module.def_function[silhouette_binding]("silhouette")
+        return module.finalize()
+    except error:
+        abort(String("failed to create _mojolearn_metrics_host: ", error))

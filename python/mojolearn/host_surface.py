@@ -137,6 +137,11 @@ TRAINING_LANE_NAMES = {
     # the core host binding. Simulated IDENTICAL x3 on the base fixture on
     # the M4's CPU path; the seven-runner gate result is owed.
     "kmeans": "k-means",
+    # Workstream E batch 2: the five metrics of the lane (accuracy, ARI,
+    # v-measure, r2, silhouette) through metrics/host/metrics_oracle.mojo,
+    # the metrics family's own host binding; the lane also fits a KMeans,
+    # served by the core family above.
+    "metrics": "the metrics",
 }
 
 #: The lanes with NO CPU path of any kind, as the README states them. A
@@ -321,6 +326,40 @@ FAMILIES = (
             "qn_decision_function", "qn_sigmoid", "qn_softmax",
         ),
         gate="tools/identity_break.py and tools/classical_host_gate.py (cpu-identity-gate.yml)",
+        ships_in_wheel=False,
+    ),
+    dict(
+        # Workstream E batch 2 (lane/cpu-training-e2, 2026-09-14): the
+        # metrics family's first host binding. It routes `_mojolearn_metrics`
+        # on a CPU-only install and carries the five metrics the identity
+        # harness's metrics lane computes plus the four label metrics that
+        # share their integer kernels; the spectral, UMAP and remaining
+        # metric entries stay absent and refuse by name.
+        family="metrics",
+        binding="_mojolearn_metrics_host",
+        routes="_mojolearn_metrics",
+        loaded_by="_backend._HOST_MODULES",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=("metrics",),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=(
+            "metrics.accuracy_score", "metrics.adjusted_rand_score",
+            "metrics.entropy", "metrics.mutual_info_score",
+            "metrics.homogeneity_score", "metrics.completeness_score",
+            "metrics.v_measure_score", "metrics.r2_score",
+            "metrics.silhouette_score", "metrics.silhouette_samples",
+        ),
+        display="the label, r2 and silhouette metrics",
+        host_modules=("metrics/host/metrics_oracle.mojo",),
+        exports=(
+            "metrics_host_numeric_mode", "metrics_host_vendor",
+            "metrics_host_column", "metrics_host_sabotage", "metrics_vendor",
+            "metrics_numeric_mode", "accuracy_score", "adjusted_rand_score",
+            "entropy", "mutual_info_score", "homogeneity_score",
+            "completeness_score", "v_measure_score", "r2_score", "silhouette",
+        ),
+        gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=False,
     ),
     dict(
