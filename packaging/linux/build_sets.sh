@@ -96,29 +96,39 @@ tier_scripts() {
   printf '%s' "$SCRIPTS"
   if [[ "$1" = identical ]]; then printf ' %s' "$IDENTICAL_ONLY_SCRIPTS"; fi
   if [[ "$PACKAGE_BYTE_LM" = 1 && "$1" = identical ]]; then printf ' build_byte_lm.sh'; fi
-  # THE CPU TRAINING BINDING IS BUILT HERE, in the identical tier's pass,
-  # because identical is the only tier it supports. It appears in tier_SCRIPTS
-  # and deliberately NOT in tier_NAMES: tier_names drives the per-tier
-  # read-back loop and the staging move, and this binary is neither a tier
-  # member nor a vendor member -- it answers 'cpu', carries no GPU code, and
-  # is staged once beside the tiers in <set>/host/.
+  # THE HOST (CPU) BINDINGS ARE BUILT HERE, in the identical tier's pass,
+  # because identical is the only tier they support. They appear in
+  # tier_SCRIPTS and deliberately NOT in tier_NAMES: tier_names drives the
+  # per-tier read-back loop and the staging move, and these binaries are
+  # neither tier members nor vendor members -- each answers 'cpu', carries
+  # no GPU code, and is staged once beside the tiers in <set>/host/.
   #
   # Omitting this line is what failed the first 0.8.4 gfx942 leg: everything
   # downstream (read-back, arch read-back, staging, the build-provenance
   # host_extension accounting) was in place around a build that never ran, so
   # the leg reached its own assertion with nothing to count and refused.
-  if [[ "$PACKAGE_BYTE_LM" = 1 && "$1" = identical ]]; then printf ' build_byte_lm_host.sh'; fi
+  if [[ "$PACKAGE_BYTE_LM" = 1 && "$1" = identical ]]; then
+    for f in $HOST_FAMILIES; do printf ' build_%s_host.sh' "$f"; done
+  fi
   printf '\n'
 }
-# THE CPU TRAINING BINDING IS NOT A TIER MEMBER AND NOT A VENDOR MEMBER.
-# It has no GPU code, answers 'cpu' when asked its vendor, and the runtime
-# loads it from <package>/host/ through its own path helper rather than
-# through _backend.binding(), so it belongs in neither tier_names nor the
-# per-vendor directories. It is carried once, beside them, and every check
-# below that assumes "vendor binary in a tier" is given an explicit
+# THE HOST BINDINGS ARE NOT TIER MEMBERS AND NOT VENDOR MEMBERS. Each has
+# no GPU code, answers 'cpu' when asked its vendor, and the runtime loads it
+# from <package>/host/ (by path, or through _backend.load_host_module) rather
+# than through _backend.binding(), so they belong in neither tier_names nor
+# the per-vendor directories. They are carried once, beside them, and every
+# check below that assumes "vendor binary in a tier" is given an explicit
 # exception rather than being loosened for everything.
-HOST_NAME="_mojolearn_byte_lm_host"
-HOST_SO="python/mojolearn/host/$HOST_NAME.so"
+#
+# WHICH FAMILIES is not written here. Since 0.8.6 (the packaging lane,
+# 2026-09-14) every host family the manifest declares ships in the wheel, and
+# the list is READ from python/mojolearn/host_surface.py, the one declaration
+# of the CPU surface; packaging/check_ext_lists.py fails this file if it ever
+# carries a host list of its own. Until 0.8.5 the byte LM's was the only one.
+HOST_FAMILIES=$(python3 python/mojolearn/host_surface.py --wheel-families) || exit 2
+HOST_NAMES=$(python3 python/mojolearn/host_surface.py --wheel-bindings) || exit 2
+[[ -n "$HOST_FAMILIES" && -n "$HOST_NAMES" ]] || { echo 'the manifest names no wheel host family' >&2; exit 2; }
+host_so() { printf 'python/mojolearn/host/%s.so' "$1"; }
 say() { echo "[$(date +%T) build_sets] $*"; }
 
 say "repo $REPO, dest $DEST, tiers: $TIERS, jobs: $JOBS"
@@ -133,11 +143,11 @@ for t in $TIERS; do
   case "$t" in fast) d=python/mojolearn ;; *) d=python/mojolearn/$t ;; esac
   rm -f "$d"/_mojolearn*.so
 done
-# The CPU training binding sits BESIDE the tiers, so the loop above never
-# reaches it, and bindings/build_byte_lm_host.sh REFUSES to overwrite an
-# existing output rather than silently replacing it. A leftover from an
-# earlier leg would therefore fail this build instead of being reused.
-rm -f "$HOST_SO"
+# The host bindings sit BESIDE the tiers, so the loop above never reaches
+# them, and bindings/build_host_family.sh REFUSES to overwrite an existing
+# output rather than silently replacing it. A leftover from an earlier leg
+# would therefore fail this build instead of being reused.
+for n in $HOST_NAMES; do rm -f "$(host_so "$n")"; done
 
 # ---------------------------------------------------------------- builds
 build_one() {
@@ -145,20 +155,23 @@ build_one() {
   local log="$DEST/build_logs/${tier}_${s%.sh}.log"
   local rc=0
   { echo "start $(date -u +%FT%TZ)"; } > "$log"
-  if [[ "$s" = build_byte_lm_host.sh ]]; then
-    # THE HOST BUILD MUST NOT SEE AN ACCELERATOR TARGET. Every release leg
-    # exports MOJOLEARN_GPU_ARCHS (gfx942, sm_89, sm_90a) and this binding has
-    # no device code, so bindings/build_byte_lm_host.sh refuses that variable
-    # BY NAME on Linux. Its output directory is unset for the same reason the
+  if [[ "$s" = build_*_host.sh ]]; then
+    # A HOST BUILD MUST NOT SEE AN ACCELERATOR TARGET. Every release leg
+    # exports MOJOLEARN_GPU_ARCHS (gfx942, sm_89, sm_90a) and a host binding
+    # has no device code, so bindings/build_host_family.sh refuses that
+    # variable BY NAME on Linux. Its output directories (the family's own and
+    # the shared MOJOLEARN_HOST_OUTDIR) are unset for the same reason the
     # byte LM build unsets its own, so the binary lands at
     # python/mojolearn/host/ where the staging move below looks for it.
     # It compiles the CPU column (COLUMN_CPU, the CPU training lane
     # 2026-09-13) and refuses any other MOJOLEARN_TARGET_COLUMN by name, while
     # tools/release061_remote_build.sh exports the leg's GPU column to every
     # build; the 0.8.5 H100 leg failed here with "MOJOLEARN_TARGET_COLUMN=
-    # nvidia is refused", so the column is pinned to cpu for this one build.
+    # nvidia is refused", so the column is pinned to cpu for every host build.
+    local fam="${s#build_}"; fam="${fam%_host.sh}"
+    local FAM; FAM=$(printf '%s' "$fam" | tr 'a-z' 'A-Z')
     MOJOLEARN_NUMERIC_MODE=$tier MOJOLEARN_SKIP_BUILD_GATE=1 MOJOLEARN_TARGET_COLUMN=cpu \
-      env -u MOJOLEARN_GPU_ARCHS -u MOJOLEARN_BYTE_LM_HOST_OUTDIR \
+      env -u MOJOLEARN_GPU_ARCHS -u MOJOLEARN_HOST_OUTDIR -u "MOJOLEARN_${FAM}_HOST_OUTDIR" \
       pixi run -e "$PIXI_ENV" bash "bindings/$s" >> "$log" 2>&1 || rc=$?
   else
     MOJOLEARN_NUMERIC_MODE=$tier MOJOLEARN_SKIP_BUILD_GATE=1 \
@@ -231,27 +244,35 @@ PY
     echo "$t $n $v" >> "$READBACK"
   done
 done
-# The host binding is asked the same question by the same mechanism, and it
-# must answer 'cpu'. A GPU vendor here would mean the CPU-only build picked up
-# an accelerator target, which is the one way this binary could be wrong in a
-# way that still loads.
+# Every host binding is asked the same question by the same mechanism, and
+# each must answer 'cpu'. A GPU vendor here would mean the CPU-only build
+# picked up an accelerator target, which is the one way such a binary could
+# be wrong in a way that still loads. The read-back trio is the manifest's
+# (`<prefix>_numeric_mode` 1, `<prefix>_vendor` cpu, `<prefix>_column` cpu);
+# the column is the build-time witness that the binding compiled as the
+# kernel matrix's CPU column and never as the leg's GPU column.
 if [[ "$PACKAGE_BYTE_LM" = 1 ]]; then
-  if [[ -f "$HOST_SO" ]]; then
-    hv=$(pixi run -e "$PIXI_ENV" python3 - "$HOST_SO" "$HOST_NAME" <<'PY' 2>&1 | tail -1
+  for n in $HOST_NAMES; do
+    so=$(host_so "$n")
+    if [[ -f "$so" ]]; then
+      hv=$(pixi run -e "$PIXI_ENV" python3 - "$so" "$n" <<'PY' 2>&1 | tail -1
 import importlib.machinery, importlib.util, sys
 so, name = sys.argv[1], sys.argv[2]
+prefix = name[len("_mojolearn_"):]
 loader = importlib.machinery.ExtensionFileLoader(name, so)
 spec = importlib.util.spec_from_loader(name, loader, origin=so)
 m = importlib.util.module_from_spec(spec)
 loader.exec_module(m)
-assert m.byte_lm_host_numeric_mode() == 1, 'CPU training binding must be IDENTICAL'
-print(str(m.byte_lm_host_vendor()))
+assert getattr(m, prefix + "_numeric_mode")() == 1, name + ' must be IDENTICAL'
+assert str(getattr(m, prefix + "_column")()) == 'cpu', name + ' must compile as the CPU column'
+print(str(getattr(m, prefix + "_vendor")()))
 PY
 )
-    echo "host $HOST_NAME $hv" >> "$READBACK"
-  else
-    echo "host $HOST_NAME MISSING" >> "$READBACK"
-  fi
+      echo "host $n $hv" >> "$READBACK"
+    else
+      echo "host $n MISSING" >> "$READBACK"
+    fi
+  done
 fi
 say "vendor read-back per binary:"
 sed 's/^/    /' "$READBACK"
@@ -286,25 +307,28 @@ for t in $TIERS; do
     echo "$t $n ${a:-NONE}" >> "$ARCHBACK"
   done
 done
-# NONE IS THE CORRECT ANSWER FOR THE HOST BINDING, and the only one. Every
+# NONE IS THE CORRECT ANSWER FOR A HOST BINDING, and the only one. Every
 # check below reads $3, and an empty architecture is refused there by design
-# because for a GPU binary it means the device code was suppressed. This
+# because for a GPU binary it means the device code was suppressed. A host
 # binary has no device code to suppress, so it is recorded with a value that
 # says so in words and is excluded from the architecture agreement checks by
 # name rather than by being allowed to look like a GPU set.
 if [[ "$PACKAGE_BYTE_LM" = 1 ]]; then
-  if [[ -f "$HOST_SO" ]]; then
-    ha=$(arch_of "$HOST_SO")
-    if [[ -n "$ha" ]]; then
-      say "REFUSING: the CPU training binding names GPU architectures ($ha)."
-      say "  It is built with no accelerator target, so device code in it means"
-      say "  MOJOLEARN_GPU_ARCHS reached a build that must never see it."
-      exit 4
+  for n in $HOST_NAMES; do
+    so=$(host_so "$n")
+    if [[ -f "$so" ]]; then
+      ha=$(arch_of "$so")
+      if [[ -n "$ha" ]]; then
+        say "REFUSING: the host binding $n names GPU architectures ($ha)."
+        say "  It is built with no accelerator target, so device code in it means"
+        say "  MOJOLEARN_GPU_ARCHS reached a build that must never see it."
+        exit 4
+      fi
+      echo "host $n NONE-BY-DESIGN" >> "$ARCHBACK"
+    else
+      echo "host $n MISSING" >> "$ARCHBACK"
     fi
-    echo "host $HOST_NAME NONE-BY-DESIGN" >> "$ARCHBACK"
-  else
-    echo "host $HOST_NAME MISSING" >> "$ARCHBACK"
-  fi
+  done
 fi
 say "GPU architectures embedded, per binary:"
 awk '{print $3}' "$ARCHBACK" | sort | uniq -c | sort -rn | sed 's/^/    /'
@@ -384,10 +408,12 @@ for t in $TIERS; do
   done
 done
 # host/ sits beside the tiers, not inside one, mirroring where the runtime
-# looks for it in an installed package.
-if [[ "$PACKAGE_BYTE_LM" = 1 && -f "$HOST_SO" ]]; then
+# looks for them in an installed package.
+if [[ "$PACKAGE_BYTE_LM" = 1 ]]; then
   mkdir -p "$SET/host"
-  mv "$HOST_SO" "$SET/host/$HOST_NAME.so"
+  for n in $HOST_NAMES; do
+    [[ -f "$(host_so "$n")" ]] && mv "$(host_so "$n")" "$SET/host/$n.so"
+  done
 fi
 cp "$READBACK" "$SET/readback.txt"
 cp "$ARCHBACK" "$SET/arch_readback.txt"

@@ -41,10 +41,19 @@ class ReleaseInventory(unittest.TestCase):
                     binary.parent.mkdir(parents=True, exist_ok=True)
                     binary.write_bytes(rel.encode())  # inert bytes; never loaded
                     files[rel] = binary
-            # DEVIATION 2680: the sixth element is this leg's CPU TRAINING
-            # binding, None when the leg built none. These fixtures build no
-            # host binary, which is the absent case the packer must still pack.
-            sets.append((vendor, arch, files, {}, {}, None))
+            # DEVIATION 2680: the sixth element is this leg's host bindings,
+            # basename -> path ({} or None when the leg built none). The
+            # release profile requires every binding the manifest ships
+            # (since 0.8.6), so these fixtures build one inert file per
+            # manifest name, the same bytes on every leg; the absent case is
+            # the generic profile's and is not what release_inventory packs.
+            hosts = {}
+            for name in packer.HOST_NAMES:
+                binary = root / f'{vendor}/{arch}/host/{name}.so'
+                binary.parent.mkdir(parents=True, exist_ok=True)
+                binary.write_bytes(f'inert host {name}'.encode())
+                hosts[name] = binary
+            sets.append((vendor, arch, files, {}, {}, hosts))
             proof = root / f'{vendor}-{arch}.json'
             proof.write_text(json.dumps(dict(
                 schema='mojolearn.linux.build-provenance.v1', complete=True,
@@ -63,12 +72,14 @@ class ReleaseInventory(unittest.TestCase):
             self.assertEqual(result['version'], version)
             self.assertEqual(result['assembly_profile'], packer.RELEASE_PROFILE)
             # Three tree lanes in each of fast and deterministic, and all
-            # seventeen identical-tier names (the three trees, the thirteen
-            # identical-only bindings, and the byte LM), so 23 per architecture
+            # twenty-one identical-tier names (the three trees, the seventeen
+            # identical-only bindings, and the byte LM), so 27 per architecture
             # across three architectures. Counted from tier_names rather than
             # written out, so the number cannot drift from the packer again.
+            # 23 until workstream D (2026-09-14) added kernel_methods, mixture,
+            # hdbscan and resample.
             per_arch = sum(len(packer.tier_names(mode, True)) for mode in packer.TIERS)
-            self.assertEqual(per_arch, 23)
+            self.assertEqual(per_arch, 27)
             self.assertEqual(len(result['extensions']), per_arch * 3)
             self.assertTrue(result['optional_native']['_mojolearn_byte_lm']['included'])
             self.assertEqual(result['optional_native']['_mojolearn_byte_lm']['unsupported_modes'],

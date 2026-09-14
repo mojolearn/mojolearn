@@ -1879,6 +1879,20 @@ def check_launch_invariance() raises:
             for j in range(d):
                 one.append(x[i * d + j])
             var alone = gaussian_mixture_score_samples(a, one, 1)
+            if not _same_bits(alone[0], batch[i]) and _mode_name() != "IDENTICAL":
+                # DEVIATION 1739 is the IDENTICAL contract. FAST promises no
+                # bits: on the H100 at 654a5b733 the FAST build scored row 0
+                # alone as 0xc06f3f03 and inside a batch of 24 as 0xc06fae63,
+                # while the IDENTICAL build passed this arm on the same box
+                # (leg 2026-09-14 nvidia-h100-d-followup). FAST reports it.
+                print(
+                    "check_launch_invariance REPORT [" + _mode_name() + "] on "
+                    + gmm_fixture_name(which) + ": row " + String(i)
+                    + " scored alone gives " + _hex32(alone[0])
+                    + " and inside a batch of " + String(n) + " gives "
+                    + _hex32(batch[i])
+                )
+                break
             if not _same_bits(alone[0], batch[i]):
                 raise Error(
                     "check_launch_invariance FAILED on "

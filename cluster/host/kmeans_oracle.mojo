@@ -1136,6 +1136,7 @@ def host_kmeans_fit(
     n_init: Int,
     init: Int,
     metric: Int,
+    oversampling_factor: Float64 = DEFAULT_OVERSAMPLING,
 ) raises -> KMeansHostResult:
     """`kmeans_fit` then `fit_predict` (module docstring). `centroids` is
     `k x d`, read first on INIT_ARRAY; `labels` is `n`, the assignment
@@ -1193,7 +1194,7 @@ def host_kmeans_fit(
     var trace = KMeansHostTrace()
     var result = host_fit_main(
         x, n, d, weights, k, centroids, labels, init, seed, n_init, max_iter,
-        tol, metric, DEFAULT_OVERSAMPLING, Float32(sum_scale),
+        tol, metric, oversampling_factor, Float32(sum_scale),
         Float32(weight_scale), trace, String(""),
     )
 
