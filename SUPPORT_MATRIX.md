@@ -90,8 +90,11 @@ the live flag, all three vendors give the Apple column's bits on every fixture
 and column (fixed arm base 7d9c56b51213cb42, hashed 9d97a55431b6f8e0; the old
 code, selectable with `-D MOJOLEARN_2710_TENSOR_ACC_DEAD=1`, reproduces each
 vendor's wrong hashes), see
-`docs/lanes/BRIEF_feature_freq_divergence_2026-09-13.md`. The fix is on main
-and ships in 0.8.5; 0.8.4 carries the defect on this estimator.
+`docs/lanes/BRIEF_feature_freq_divergence_2026-09-13.md`. The fix shipped in 0.8.5;
+0.8.4 carries the defect on this estimator. Verified after the fix on 2026-09-14: the 46-lane
+three-column rerun reads IDENTICAL x3 on every cell of every lane, this one included
+(`bench/results/identity_break/2026-09-14_46-lanes/README.md`, 414 train and 459 infer and
+model cells on an Apple M4, an NVIDIA H100 and an AMD MI300X, no one-column cell).
 
 | Surface | Public availability | Strongest retained identity evidence | Important open work |
 |---|---|---|---|

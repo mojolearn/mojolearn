@@ -137,7 +137,10 @@ framework, or on a device that has not passed the same checks.
   on an Apple M4, an NVIDIA H100 and an AMD MI325X, plus 189 cells of
   predictions on rows the model never saw and 72 cells of saved model bytes
   for the forest and GBDT lanes, all identical across the three
-  ([record](bench/results/identity_break/2026-09-13_three-columns/README.md)).
+  ([record](bench/results/identity_break/2026-09-13_three-columns/README.md)); the
+  next day, at the 0.8.5 default, all 46 public lanes with every column filled, 414 training
+  cells and 459 inference and saved-model cells identical on an Apple M4, an NVIDIA H100 and an
+  AMD MI300X ([record](bench/results/identity_break/2026-09-14_46-lanes/README.md)).
   Fourth, the same day, CPUs with no GPU at all: random forests, Extra Trees
   and the four gradient boosting variants trained on each of the three GPUs
   save the same model bytes, and a CPU-only binding reproduces every
