@@ -3,7 +3,19 @@
 This file records release-level changes, not the development diary. Git history and archived evidence
 contain the detailed investigation record.
 
-## 0.8.5 (unreleased 2026-09-13)
+## 0.8.5 (published 2026-09-14)
+
+Linux x86-64 wheel (CUDA sm_89, CUDA sm_90a, HIP gfx942) and macOS arm64 wheel, both from
+commit 8d16ce2f (tags alpha-api-0.8.5-20260913 and v0.8.5), on PyPI 2026-09-14 00:27Z and 00:36Z
+(release runs 34792675705 and 34792714668). Not installed and qualified on GPUs; both wheels
+install and import from PyPI on a clean amd64 Linux container and on the Mac. The HIP set was
+built on a Hot Aisle MI300X inside the 22.04 ROCm container, as for 0.8.4. The release legs caught
+two packaging regressions from the CPU training phase 0 merge, both fixed before the tag: the
+Linux and macOS wheel builders now pin the CPU training binding's build to the cpu column (the
+binding refuses any other column by name and the legs export the GPU column to every build), and
+the two host bindings no longer carry a detected-column read-back, which had folded the build
+machine's GPU name into a vendor-neutral binary so the NVIDIA and AMD legs' copies disagreed by
+43 bytes and the packer refused the wheel. With it gone the three legs' copies are byte-identical.
 
 - `ExperimentalTwoLevelFeatureFreq` gave different predictions on the three GPU vendors, and
   occasionally two different answers on one machine, because its histogram accumulator was sized
