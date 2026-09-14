@@ -832,3 +832,41 @@ def compute_path_lengths_global_kernel(
     if n_trees > 0:
         out = ftz(total_path / Float32(n_trees))
     path_lengths.unsafe_store(sample_idx, out)
+
+
+def compute_path_lengths_range_kernel(
+    data: MutPointer[Float32, MutAnyOrigin],
+    n_samples_in: Int64,
+    n_cols_in: Int32,
+    node_feature: MutPointer[Int32, MutAnyOrigin],
+    node_threshold: MutPointer[Float32, MutAnyOrigin],
+    node_left: MutPointer[Int32, MutAnyOrigin],
+    node_right: MutPointer[Int32, MutAnyOrigin],
+    tree_offsets: MutPointer[Int32, MutAnyOrigin],
+    n_local_trees: Int32,
+    n_global_trees: Int32,
+    finalize: Int32,
+    path_lengths: MutPointer[Float32, MutAnyOrigin],
+):
+    """Continue the original serial tree fold; divide only after its last tree.
+
+    The incoming value is the accumulator after every preceding global tree,
+    not a separately rounded shard sum. Traversal and each FTZ add are the
+    same operations as compute_path_lengths_global_kernel.
+    """
+    var sample_idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if sample_idx >= Int(n_samples_in):
+        return
+    var sample = data.unsafe_offset(sample_idx * Int(n_cols_in))
+    var total_path = path_lengths.unsafe_load(sample_idx)
+    for t in range(Int(n_local_trees)):
+        var off = Int(tree_offsets.unsafe_load(t))
+        total_path = ftz(
+            total_path
+            + traverse_global_tree(
+                node_feature, node_threshold, node_left, node_right, off, sample
+            )
+        )
+    if finalize != 0:
+        total_path = ftz(total_path / Float32(n_global_trees))
+    path_lengths.unsafe_store(sample_idx, total_path)
