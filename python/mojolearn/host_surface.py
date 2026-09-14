@@ -206,6 +206,61 @@ TRAINING_LANE_NAMES = {
     "gp-matern12": "the Gaussian process with a Matern kernel at nu 0.5",
     "gp-matern32": "the Gaussian process with a Matern kernel at nu 1.5",
     "gp-matern52-ard": "the Gaussian process with an ARD Matern kernel at nu 2.5",
+    # CPU training batch 3 (lane/cpu-training-batch3, 2026-09-14): option
+    # variants of families that already had a host path, every one in the
+    # 136-lane record and IDENTICAL x4 against its three GPU columns on the
+    # M4's CPU column (one core) before the gate ran. Served by the host
+    # entries as they stood: the k-NN squared euclidean metric and the
+    # distance-weighted vote and mean (core), the transposed GEMM ops
+    # (linalg), brute-force L1 DBSCAN, the five kernel and metric pairs and
+    # the weighted KDE, OLS without an intercept and with weights, ridge
+    # without an intercept, unpenalized logistic regression without an
+    # intercept (estimators), elasticnet at the l2 end without an intercept
+    # (solver), the multiplicative Holt-Winters (tsa), the linear SVC and the
+    # tuned isolation forest (svm).
+    "knn-sqeuclidean": "nearest neighbors under squared euclidean distance",
+    "knn-clf-distance": "the distance-weighted k-NN classifier",
+    "knn-reg-distance": "the distance-weighted k-NN regressor",
+    "gemm-transposed": "the transposed GEMM ops",
+    "dbscan-brute-l1": "brute-force DBSCAN under manhattan distance",
+    "kde-tophat-sqeuclidean": "kernel density with the tophat kernel under squared euclidean distance",
+    "kde-epanechnikov-l1": "kernel density with the Epanechnikov kernel under manhattan distance",
+    "kde-exponential-chebyshev": "kernel density with the exponential kernel under chebyshev distance",
+    "kde-linear-cosine": "kernel density with the linear kernel under cosine distance",
+    "kde-cosine-minkowski": "kernel density with the cosine kernel under minkowski distance",
+    "kde-weighted": "weighted kernel density",
+    "ols-no-intercept": "linear regression without an intercept",
+    "ols-weighted": "weighted linear regression",
+    "ridge-no-intercept": "ridge without an intercept",
+    "logistic-unpenalized-no-intercept": "unpenalized logistic regression without an intercept",
+    "elasticnet-l2end-no-intercept": "elasticnet at the l2 end without an intercept",
+    "holtwinters-multiplicative": "multiplicative Holt-Winters",
+    "svc-linear": "the linear SVC",
+    "iforest-tuned": "the tuned isolation forest",
+    # Same batch, each needing a host restatement it did not have: the
+    # cosine, manhattan, chebyshev and minkowski k-NN metrics
+    # (core/knn_host_predict.mojo over metric_distance_kernel's cores), the
+    # ball cover's radius and k-NN queries as an exhaustive scan (the cover
+    # prunes exactly), the weighted DBSCAN core test
+    # (dbscan/host/dbscan_oracle.mojo), the OWL-QN arm and the softmax loss
+    # (glm/host/qn_oracle.mojo), the KPSS test (tsa/checks/kpss_oracle.mojo),
+    # and epsilon-SVR (svm/host/smo_oracle.mojo's regression arm).
+    "knn-manhattan": "nearest neighbors under manhattan distance",
+    "knn-chebyshev": "nearest neighbors under chebyshev distance",
+    "knn-cosine": "nearest neighbors under cosine distance",
+    "knn-minkowski-p3": "nearest neighbors under minkowski distance at p 3",
+    "knn-rbc": "nearest neighbors over the random ball cover",
+    "radius": "radius neighbors",
+    "radius-manhattan": "radius neighbors under manhattan distance",
+    "radius-chebyshev": "radius neighbors under chebyshev distance",
+    "radius-minkowski-p3": "radius neighbors under minkowski distance at p 3",
+    "dbscan-weighted": "weighted DBSCAN",
+    "logistic-l1": "l1-penalized logistic regression",
+    "logistic-elasticnet": "elasticnet-penalized logistic regression",
+    "logistic-multiclass": "multiclass logistic regression",
+    "kpss": "the KPSS stationarity test",
+    "svr": "SVR",
+    "svr-linear": "the linear SVR",
 }
 
 #: The lanes with NO CPU path of any kind, as the README states them. A
@@ -319,11 +374,16 @@ FAMILIES = (
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=(
             "knn", "knn-clf", "knn-reg", "kmeans", "kmeans-random", "kmeans-array",
-            "kmeans-weighted",
+            "kmeans-weighted", "knn-sqeuclidean", "knn-clf-distance", "knn-reg-distance",
+            "knn-manhattan", "knn-chebyshev", "knn-cosine", "knn-minkowski-p3", "knn-rbc",
+            "radius", "radius-manhattan", "radius-chebyshev", "radius-minkowski-p3",
         ),
         inference_lanes=("knn", "knn-clf", "knn-reg"),
         forest_kinds=(),
-        classes=("NearestNeighbors", "KNeighborsClassifier", "KNeighborsRegressor", "KMeans"),
+        classes=(
+            "NearestNeighbors", "KNeighborsClassifier", "KNeighborsRegressor", "KMeans",
+            "RadiusNeighbors",
+        ),
         display="nearest neighbors, k-NN classification and k-NN regression",
         host_modules=(
             "core/knn_host_predict.mojo", "bindings/host_helpers.mojo",
@@ -332,7 +392,8 @@ FAMILIES = (
         exports=(
             "core_host_numeric_mode", "core_host_vendor", "core_host_column",
             "core_host_sabotage", "mojolearn_vendor", "mojolearn_numeric_mode",
-            "knn_search", "knn_classify", "knn_regress", "kmeans_fit", "transpose_f32",
+            "knn_search", "knn_classify", "knn_regress", "kmeans_fit",
+            "radius_neighbors_count", "radius_neighbors_fill", "rbc_knn_search", "transpose_f32",
             "cast_colmajor_f64_to_f32", "nonzero_f64_count", "nonzero_f64_fill", "cast_f64_to_f32", "all_finite_f32",
             "all_finite_f64", "gather_i64", "gather_f64", "argmax_rows_f32",
             "argmax_rows_f64", "column_mean_f64", "center_columns_f32",
@@ -347,7 +408,7 @@ FAMILIES = (
         routes="_mojolearn_linalg",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("gemm-pinned",),
+        training_lanes=("gemm-pinned", "gemm-transposed"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("linalg.gemm", "linalg.gemv"),
@@ -367,7 +428,14 @@ FAMILIES = (
         routes="_mojolearn_estimators",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("kde", "pca", "pca-whiten", "tsvd", "ols", "ridge", "dbscan", "logistic"),
+        training_lanes=(
+            "kde", "pca", "pca-whiten", "tsvd", "ols", "ridge", "dbscan", "logistic",
+            "dbscan-brute-l1", "kde-tophat-sqeuclidean", "kde-epanechnikov-l1",
+            "kde-exponential-chebyshev", "kde-linear-cosine", "kde-cosine-minkowski",
+            "kde-weighted", "ols-no-intercept", "ols-weighted", "ridge-no-intercept",
+            "logistic-unpenalized-no-intercept", "dbscan-weighted", "logistic-l1",
+            "logistic-elasticnet", "logistic-multiclass",
+        ),
         inference_lanes=("ols", "ridge", "tsvd", "logistic", "logistic-multiclass", "pca", "pca-whiten", "kde"),
         forest_kinds=(),
         classes=(
@@ -466,16 +534,16 @@ FAMILIES = (
         routes="_mojolearn_tsa",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("holtwinters",),
+        training_lanes=("holtwinters", "holtwinters-multiplicative", "kpss"),
         inference_lanes=(),
         forest_kinds=(),
-        classes=("ExponentialSmoothing",),
+        classes=("ExponentialSmoothing", "kpss_test"),
         display="Holt-Winters",
-        host_modules=("holtwinters/host/hw_oracle.mojo",),
+        host_modules=("holtwinters/host/hw_oracle.mojo", "tsa/checks/kpss_oracle.mojo"),
         exports=(
             "tsa_host_numeric_mode", "tsa_host_vendor", "tsa_host_column",
             "tsa_host_sabotage", "tsa_vendor", "holtwinters_fit",
-            "holtwinters_forecast",
+            "holtwinters_forecast", "kpss_test",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=True,
@@ -486,7 +554,7 @@ FAMILIES = (
         routes="_mojolearn_solver",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("lasso", "elasticnet", "agglomerative"),
+        training_lanes=("lasso", "elasticnet", "agglomerative", "elasticnet-l2end-no-intercept"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("Lasso", "ElasticNet", "AgglomerativeClustering"),
@@ -509,10 +577,10 @@ FAMILIES = (
         routes="_mojolearn_svm",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("svc", "iforest"),
+        training_lanes=("svc", "iforest", "svc-linear", "iforest-tuned", "svr", "svr-linear"),
         inference_lanes=("svc",),
         forest_kinds=(),
-        classes=("SVC", "IsolationForest"),
+        classes=("SVC", "IsolationForest", "SVR"),
         display="SVC",
         host_modules=(
             "svm/host/smo_oracle.mojo", "gemm/host/gemm_oracle.mojo",
@@ -522,7 +590,7 @@ FAMILIES = (
         exports=(
             "svm_host_numeric_mode", "svm_host_vendor", "svm_host_column",
             "svm_host_sabotage", "svm_vendor", "svm_numeric_mode", "svc_fit",
-            "svc_predict", "iforest_run",
+            "svc_predict", "svr_fit", "svr_predict", "iforest_run",
         ),
         gate="tools/identity_break.py and tools/classical_host_gate.py (cpu-identity-gate.yml)",
         ships_in_wheel=True,

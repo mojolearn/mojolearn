@@ -378,15 +378,16 @@ def qn_fit_binding(
     info_addr: PythonObject,
     params: PythonObject,
 ) raises -> PythonObject:
-    """`qnFit` on the host by `host_qn_fit` (the L-BFGS arm, the binary
-    logistic loss). params: n_rows, n_features, n_classes, penalty_l1,
-    penalty_l2, grad_tol, change_tol, max_iter, linesearch_max_iter,
-    lbfgs_memory, fit_intercept, penalty_normalized, has_sample_weight,
-    and an OPTIONAL 14th, the loss id (QN_LOSS_LOGISTIC, the value a
-    13-field call gets). `coef_addr` holds `n_features + fit_intercept`
-    floats, written; `info_addr[0]` receives the objective, `[1]` the
-    OPT_RETCODE; returns num_iters. The softmax loss, an l1 penalty and
-    `sample_weight` are refused BY NAME before any address is read."""
+    """`qnFit` on the host by `host_qn_fit` (L-BFGS, or OWL-QN when the
+    l1 penalty is nonzero; the binary logistic loss, or the softmax loss at
+    `n_classes > 2`, lane/cpu-training-batch3). params: n_rows, n_features,
+    n_classes, penalty_l1, penalty_l2, grad_tol, change_tol, max_iter,
+    linesearch_max_iter, lbfgs_memory, fit_intercept, penalty_normalized,
+    has_sample_weight, and an OPTIONAL 14th, the loss id (QN_LOSS_LOGISTIC,
+    the value a 13-field call gets). `coef_addr` holds `n_targets *
+    (n_features + fit_intercept)` floats, written; `info_addr[0]` receives
+    the objective, `[1]` the OPT_RETCODE; returns num_iters.
+    `sample_weight` is refused BY NAME."""
     if len(params) != 13 and len(params) != 14:
         raise Error("qn_fit: params must carry the 13 qn_params fields, plus an optional 14th, the loss id")
     var x_address = _index(x_addr)
@@ -437,8 +438,9 @@ def dbscan_fit_binding(
     max_iter, eps_nn_method, metric`; `weight_addr` 0 for no weights),
     `n_rows` int32 labels written, the propagation pass count returned
     (the one-thread schedule's; no column hashes it). `weight_addr != 0`
-    and `budget_mb != 0` are refused BY NAME: the weighted core fold and
-    the device-sized batch have no host restatement yet."""
+    reads `n_rows` float32 weights and takes the weighted core test
+    (`host_weighted_degree`, lane/cpu-training-batch3). `budget_mb != 0` is
+    refused BY NAME: the device-sized batch has no host restatement."""
     if len(params) != 8:
         raise Error(
             "dbscan_fit: params must contain 8 values, got "
@@ -455,14 +457,6 @@ def dbscan_fit_binding(
     var max_iter = _index(params[5])
     var eps_nn_method = _index(params[6])
     var metric = _index(params[7])
-    if wa != 0:
-        raise Error(
-            "mojolearn: no CPU implementation of DBSCAN.fit with sample_weight"
-            " yet; the weighted core test is a pinned float fold over the"
-            " neighbor list in the device's write order and is owed with a"
-            " GPU record that carries the dbscan-weighted lane"
-            " (docs/lanes/BRIEF_cpu_training_2026-09-13.md)"
-        )
     if budget != 0:
         raise Error(
             "mojolearn: no CPU implementation of DBSCAN.fit with"
@@ -479,8 +473,12 @@ def dbscan_fit_binding(
                 + String(nf)
             )
         var x = read_f32(x_address, nr * nf)
+        var weights = List[Float32]()
+        if wa != 0:
+            weights = read_f32(wa, nr)
         var fit = host_dbscan_fit(
-            x, nr, nf, eps, min_samples, max_iter, eps_nn_method, metric
+            x, nr, nf, eps, min_samples, max_iter, eps_nn_method, metric,
+            weights, wa != 0,
         )
         for i in range(nr):
             lp[i] = fit.labels[i]

@@ -910,8 +910,10 @@ def host_families_built():
 #:     core/knn_host_predict.mojo, and (workstream E batch 2, 2026-09-14)
 #:     the training entry kmeans_fit over cluster/host/kmeans_oracle.mojo,
 #:     and (the spectral-precomputed lane, 2026-09-14) the dense affinity's
-#:     COO scan nonzero_f64_count and nonzero_f64_fill;
-#:     rbc_knn_search and radius_neighbors_* are absent.
+#:     COO scan nonzero_f64_count and nonzero_f64_fill, and (batch 3,
+#:     2026-09-14) the cosine, manhattan, chebyshev and minkowski metrics
+#:     of the k-NN entries and the ball cover's radius_neighbors_count,
+#:     radius_neighbors_fill and rbc_knn_search as an exhaustive scan.
 #:   _mojolearn_linalg -> _mojolearn_linalg_host: gemm over
 #:     gemm/host/gemm_oracle.mojo::gemm_oracle, the profile's definition.
 #:   _mojolearn_estimators -> _mojolearn_estimators_host: kde_score_samples
@@ -923,9 +925,10 @@ def host_families_built():
 #:     decomposition/host/pca_oracle.mojo and ols_fit and ridge_fit over
 #:     glm/host/glm_oracle.mojo, dbscan_fit over
 #:     dbscan/host/dbscan_oracle.mojo and (batch 2) qn_fit over
-#:     glm/host/qn_oracle.mojo (the L-BFGS arm; softmax, l1 and
-#:     sample_weight refuse by name); pca_fit_full and inverse_transform
-#:     are absent.
+#:     glm/host/qn_oracle.mojo (the L-BFGS arm; batch 3, 2026-09-14, adds
+#:     the OWL-QN arm, the softmax loss and DBSCAN's sample_weight;
+#:     qn's sample_weight refuses by name); pca_fit_full and
+#:     inverse_transform are absent.
 #:   _mojolearn_metrics -> _mojolearn_metrics_host (workstream E batch 2,
 #:     2026-09-14): accuracy_score, adjusted_rand_score, entropy,
 #:     mutual_info_score, homogeneity_score, completeness_score,
@@ -941,8 +944,9 @@ def host_families_built():
 #:     and minmax_transform over preprocessing/host/scaler_oracle.mojo, the
 #:     whole GPU binding's surface.
 #:   _mojolearn_tsa -> _mojolearn_tsa_host: holtwinters_fit and
-#:     holtwinters_forecast over holtwinters/host/hw_oracle.mojo; kpss_test
-#:     and select_d (ARIMA's) are absent.
+#:     holtwinters_forecast over holtwinters/host/hw_oracle.mojo, and
+#:     (batch 3, 2026-09-14) kpss_test over tsa/checks/kpss_oracle.mojo;
+#:     select_d (ARIMA's) is absent.
 #:   _mojolearn_solver -> _mojolearn_solver_host: cd_fit and cd_predict over
 #:     solver/host/cd_oracle.mojo and gemm_oracle; agglomerative (phase 1b,
 #:     2026-09-14) adds linkage_fit over hierarchy/checks/linkage_oracle.mojo
@@ -951,8 +955,8 @@ def host_families_built():
 #:   _mojolearn_svm -> _mojolearn_svm_host: svc_fit and svc_predict over
 #:     svm/host/smo_oracle.mojo; iforest (phase 1b, 2026-09-14) adds
 #:     iforest_run over isolation_forest/checks/if_oracle.mojo (the
-#:     fit-on-every-call surface kept, DEVIATION 874); svr_fit and
-#:     svr_predict are absent.
+#:     fit-on-every-call surface kept, DEVIATION 874); batch 3 (2026-09-14)
+#:     adds svr_fit and svr_predict over the oracle's EPSILON_SVR arm.
 #:   _mojolearn_trees -> _mojolearn_trees_host (et-clf, et-reg; phase 1b,
 #:     2026-09-14): the eight et_*_fit entries over
 #:     extratrees/estimator.mojo::fit_extra_trees_classifier_host_exact and

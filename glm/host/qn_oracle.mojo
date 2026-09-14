@@ -73,11 +73,51 @@ WHAT IS RESTATED, AND WHERE THE ORIGINAL IS.
                            `invalid C` refusal), `l2` and `l1` divided by n
                            when normalized, `w` zero-initialized.
 
-WHAT IS REFUSED BY NAME. The softmax loss (`QN_LOSS_SOFTMAX`, the
-multinomial arm), `l1 != 0` (OWL-QN, DEVIATION 552), and `sample_weight`:
-each raises with the sentence naming it, so the logistic-multiclass,
-logistic-l1 and logistic-elasticnet lanes read REFUSED here and never a
-hash of something else.
+THE OWL-QN ARM (lane/cpu-training-batch3, 2026-09-14, lanes logistic-l1 and
+logistic-elasticnet). `l1 != 0` takes `min_owlqn` (`glm/impl/qn/
+qn_solvers.mojo`), restated as `host_min_owlqn` over the pieces above plus:
+  `host_nrm1`              `nrm1_kernel` (`glm_linear.mojo`): STATS_TPB
+                           strided partials `acc = ftz(acc + abs(u))`, the
+                           tree, `ftz`.
+  `host_owlqn_objective`   `owlqn_objective` (`qn_linesearch.mojo`): the
+                           loss and its gradient, then `ftz(loss + ftz(l1 *
+                           nrm1(w[:pg_limit])))`; the gradient stays the
+                           loss's.
+  `host_get_pseudo_grad`, `host_update_pseudo`
+                           `get_pseudo_grad`, `pseudo_grad_kernel` and
+                           `update_pseudo` (`qn_util.mojo`): the bias entry
+                           past `pg_limit` copies the raw gradient.
+  `host_project_orth`, `host_project_direction`
+                           `project_orth` and `project_neg_kernel`.
+  `host_ls_backtrack_projected`
+                           `ls_backtrack_projected` with
+                           `projected_step_kernel` (`qn_linesearch.mojo`),
+                           the Armijo test against the pseudo-gradient.
+
+THE SOFTMAX LOSS (lane/cpu-training-batch3, 2026-09-14, the
+logistic-multiclass lane's train cell). `QN_LOSS_SOFTMAX` with `C =
+n_classes > 2` is `HostGLM` at `C > 1`, the `C > 1` arms of `glm_base.mojo`
+and `glm_softmax.mojo`:
+  `linear_fwd`             `host_qn_decision_multi` (`core/
+                           classical_host_predict.mojo`), the forward the
+                           multiclass INFERENCE gate already holds to the
+                           device: `transpose_w_kernel`, the pinned
+                           `gemm_nt`, `add_bias_multi_kernel`.
+  `get_loss_and_dz`        `softmax_loss_dz_kernel` per row (the max as a
+                           strict `>` from SOFTMAX_MAX_SEED, the label's
+                           logit, `lse = ftz(max + ftz(log(sum exp(z -
+                           max))))` ascending, `dz = ftz(exp(z - lse) - [c ==
+                           label])`, the term `ftz(ftz(lse - eta_y) / N)`),
+                           then `sum_terms_kernel`.
+  `linear_bwd`             `xtdz_multi_kernel` (one STATS_TPB block per `(c,
+                           j)` cell over the rows, `fma` with no flush
+                           inside), `gemm_epilogue_kernel` over `C*D` cells,
+                           `mean_rows_multi_kernel` per class.
+  `evaluate`               Tikhonov over the first `C*D` entries, the bias
+                           column left alone.
+
+WHAT IS REFUSED BY NAME. `sample_weight`: it raises with the sentence
+naming it.
 
 THE NEGATIVE CONTROL. `-D MOJOLEARN_HOST_SABOTAGE=1` reaches this file
 through `host_pinned_cell` (every forward product's feature chain walked
@@ -92,7 +132,7 @@ from std.math import isinf, isnan, sqrt
 from std.sys.compile import is_defined
 
 from checks.numerics import ftz, identical_exp, identical_log, identical_mul_add
-from core.classical_host_predict import host_pinned_cell
+from core.classical_host_predict import host_pinned_cell, host_qn_decision_multi
 from decomposition.host.pca_oracle import STATS_TPB, host_halving_sum
 from glm.host.glm_oracle import host_xty
 
@@ -218,12 +258,18 @@ def host_logistic_dlz(y: Float32, z: Float32) -> Float32:
     return ftz(q - y)
 
 
+#: `SOFTMAX_MAX_SEED`, `glm/impl/qn/glm_softmax.mojo`.
+comptime HOST_SOFTMAX_MAX_SEED = Float32(-1e9)
+
+
 struct HostGLM(Movable):
-    """`GLMWithData` at `C == 1` with the logistic loss: the data, the
-    dims, `l2`, and the `z` and `loss_terms` scratch."""
+    """`GLMWithData`: the logistic loss at `C == 1`, or the softmax loss at
+    `C > 1`; the data, the dims, `l2`, and the `z` and `loss_terms`
+    scratch."""
 
     var n_rows: Int
     var d: Int
+    var c: Int
     var fit_intercept: Bool
     var n_param: Int
     var l2: Float32
@@ -241,21 +287,28 @@ struct HostGLM(Movable):
         d: Int,
         fit_intercept: Bool,
         l2: Float32,
+        n_targets: Int = 1,
     ):
         self.n_rows = n_rows
         self.d = d
+        self.c = n_targets
         self.fit_intercept = fit_intercept
-        self.n_param = d + (1 if fit_intercept else 0)
+        self.n_param = (d + (1 if fit_intercept else 0)) * n_targets
         self.l2 = l2
         self.x = x^
         self.y = y^
-        self.z = List[Float32](length=n_rows, fill=Float32(0.0))
+        self.z = List[Float32](length=n_rows * n_targets, fill=Float32(0.0))
         self.loss_terms = List[Float32](length=n_rows, fill=Float32(0.0))
         self.n_evals = 0
 
     def linear_fwd(mut self, w: List[Float32]):
-        """`linear_fwd` at `C == 1`: the pinned gemv over `w[0:D]`, then the
-        bias."""
+        """`linear_fwd`: at `C == 1` the pinned gemv over `w[0:D]`, then the
+        bias; at `C > 1` the multiclass forward (module docstring)."""
+        if self.c > 1:
+            self.z = host_qn_decision_multi(
+                self.x, w, self.n_rows, self.d, self.c, self.fit_intercept
+            )
+            return
         for i in range(self.n_rows):
             self.z[i] = host_pinned_cell(self.x, i * self.d, w, 0, self.d)
         if self.fit_intercept:
@@ -264,14 +317,44 @@ struct HostGLM(Movable):
                 self.z[i] = ftz(self.z[i] + b)
 
     def get_loss_and_dz(mut self) -> Float32:
-        """`get_loss_and_dz`, the logistic arm, then `sum_terms_kernel`."""
+        """`get_loss_and_dz`, the logistic or the softmax arm, then
+        `sum_terms_kernel`."""
         var n = self.n_rows
         var normalization = Float32(1.0 / Float64(n))
-        for i in range(n):
-            var yi = self.y[i]
-            var zi = self.z[i]
-            self.loss_terms[i] = ftz(host_logistic_lz(yi, zi) * normalization)
-            self.z[i] = host_logistic_dlz(yi, zi)
+        if self.c > 1:
+            var C = self.c
+            for i in range(n):
+                var label = self.y[i]
+                var eta_max = HOST_SOFTMAX_MAX_SEED
+                for c in range(C):
+                    var v = self.z[c + C * i]
+                    if v > eta_max:
+                        eta_max = v
+                var delta = False
+                var eta_y = Float32(0.0)
+                for c in range(C):
+                    if Float32(c) == label:
+                        delta = True
+                        eta_y = self.z[c + C * i]
+                var sm = Float32(0.0)
+                for c in range(C):
+                    var e = ftz(identical_exp(ftz(self.z[c + C * i] - eta_max)))
+                    sm = ftz(sm + e)
+                var lse = ftz(eta_max + ftz(identical_log(sm)))
+                for c in range(C):
+                    var pr = ftz(identical_exp(ftz(self.z[c + C * i] - lse)))
+                    var dd = Float32(1.0) if Float32(c) == label else Float32(0.0)
+                    self.z[c + C * i] = ftz(pr - dd)
+                var loss_val = Float32(0.0)
+                if delta:
+                    loss_val = ftz(ftz(lse - eta_y) / Float32(n))
+                self.loss_terms[i] = loss_val
+        else:
+            for i in range(n):
+                var yi = self.y[i]
+                var zi = self.z[i]
+                self.loss_terms[i] = ftz(host_logistic_lz(yi, zi) * normalization)
+                self.z[i] = host_logistic_dlz(yi, zi)
         var partials = List[Float32](length=STATS_TPB, fill=Float32(0.0))
         for t in range(STATS_TPB):
             var acc = Float32(0.0)
@@ -287,6 +370,41 @@ struct HostGLM(Movable):
         mean."""
         var n = self.n_rows
         var alpha = Float32(1.0 / Float64(n))
+        if self.c > 1:
+            var C = self.c
+            var D = self.d
+            var cd = C * D
+            for b in range(cd):
+                var cc = b % C
+                var j = b // C
+                var partials = List[Float32](length=STATS_TPB, fill=Float32(0.0))
+                for t in range(STATS_TPB):
+                    var acc = Float32(0.0)
+                    var r = t
+                    while r < n:
+                        acc = identical_mul_add(self.x[r * D + j], self.z[cc + C * r], acc)
+                        r += STATS_TPB
+                    partials[t] = acc
+                var prod = ftz(host_halving_sum(partials))
+                var sc = ftz(alpha * prod)
+                if set_zero:
+                    g[b] = sc
+                else:
+                    g[b] = ftz(sc + g[b])
+            if self.fit_intercept:
+                var ratio = Float32(1.0) / Float32(n)
+                for cc in range(C):
+                    var partials = List[Float32](length=STATS_TPB, fill=Float32(0.0))
+                    for t in range(STATS_TPB):
+                        var acc = Float32(0.0)
+                        var i = t
+                        while i < n:
+                            acc = ftz(acc + self.z[cc + C * i])
+                            i += STATS_TPB
+                        partials[t] = acc
+                    var s0 = ftz(host_halving_sum(partials))
+                    g[cd + cc] = ftz(s0 * ratio)
+            return
         var xtdz = host_xty(self.x, self.z, n, self.d)
         for j in range(self.d):
             var s = ftz(alpha * xtdz[j])
@@ -321,13 +439,14 @@ struct HostGLM(Movable):
             return self.loss_grad(w, g, True)
         for j in range(self.n_param):
             g[j] = Float32(0.0)
-        # tikhonov_reg_grad_kernel over the first D weights
+        # tikhonov_reg_grad_kernel over the first C*D weights
         var half_l2 = ftz(Float32(0.5) * self.l2)
+        var n_weights = self.c * self.d
         var partials = List[Float32](length=STATS_TPB, fill=Float32(0.0))
         for t in range(STATS_TPB):
             var acc = Float32(0.0)
             var j = t
-            while j < self.d:
+            while j < n_weights:
                 var wj = w[j]
                 g[j] = ftz(self.l2 * wj)
                 var tt = ftz(half_l2 * wj)
@@ -661,6 +780,199 @@ def host_min_lbfgs(
 
 
 # ---------------------------------------------------------------------------
+# The OWL-QN arm (lane/cpu-training-batch3): qn_util.mojo, qn_linesearch.mojo,
+# qn_solvers.mojo::min_owlqn
+# ---------------------------------------------------------------------------
+
+
+def host_nrm1(u: List[Float32], n: Int) -> Float32:
+    """`nrm1_kernel`: STATS_TPB strided partials of `ftz(acc + abs(u))`,
+    the halving tree, `ftz` of the total."""
+    var partials = List[Float32](length=STATS_TPB, fill=Float32(0.0))
+    for t in range(STATS_TPB):
+        var acc = Float32(0.0)
+        var i = t
+        while i < n:
+            acc = ftz(acc + abs(u[i]))
+            i += STATS_TPB
+        partials[t] = acc
+    return ftz(host_halving_sum(partials))
+
+
+def host_owlqn_objective(
+    mut f: HostGLM, x: List[Float32], mut grad: List[Float32], l1: Float32,
+    pg_limit: Int,
+) -> Float32:
+    """`owlqn_objective`: the value carries the l1 term, `grad` does not."""
+    var tmp = f.evaluate(x, grad)
+    var pen = host_nrm1(x, pg_limit)
+    return ftz(tmp + ftz(l1 * pen))
+
+
+@always_inline
+def host_get_pseudo_grad(x: Float32, dlossx: Float32, c: Float32) -> Float32:
+    """`get_pseudo_grad`, `qn_util.mojo`: `sgn` as an exact +-1 (0 for a
+    NaN), one rounding per branch."""
+    if x != Float32(0.0):
+        var sgn = (
+            Float32(1.0) if Float32(0.0) < x
+            else (Float32(-1.0) if x < Float32(0.0) else Float32(0.0))
+        )
+        return ftz(dlossx + ftz(sgn * c))
+    var dplus = ftz(dlossx + c)
+    var dmins = ftz(dlossx - c)
+    if dmins > Float32(0.0):
+        return dmins
+    if dplus < Float32(0.0):
+        return dplus
+    return Float32(0.0)
+
+
+def host_update_pseudo(
+    x: List[Float32], grad: List[Float32], l1: Float32, pg_limit: Int,
+    mut pseudo: List[Float32], n: Int,
+):
+    """`update_pseudo`: past `pg_limit` (the bias) the raw gradient."""
+    var lim = pg_limit if n > pg_limit else n
+    for i in range(n):
+        if i < lim:
+            pseudo[i] = ftz(host_get_pseudo_grad(x[i], grad[i], l1))
+        else:
+            pseudo[i] = grad[i]
+
+
+@always_inline
+def host_project_orth(x: Float32, y: Float32) -> Float32:
+    """`project_orth`: `ftz(x * y) <= 0 ? 0 : x`."""
+    return Float32(0.0) if ftz(x * y) <= Float32(0.0) else x
+
+
+def host_project_direction(mut drt: List[Float32], pseudo: List[Float32], n: Int):
+    """`project_neg_kernel`: `drt[i] = project_orth(drt[i], -1 * pseudo[i])`."""
+    for i in range(n):
+        var y = ftz(Float32(-1.0) * pseudo[i])
+        drt[i] = host_project_orth(drt[i], y)
+
+
+def host_ls_backtrack_projected(
+    param: HostLBFGSParam,
+    mut f: HostGLM,
+    mut fx: Float32,
+    mut x: List[Float32],
+    mut grad: List[Float32],
+    pseudo_grad: List[Float32],
+    mut step: Float32,
+    drt: List[Float32],
+    xp: List[Float32],
+    l1: Float32,
+    pg_limit: Int,
+    n: Int,
+    mut ls_iters: Int,
+) -> Int:
+    """`ls_backtrack_projected`, `qn_linesearch.mojo`, with
+    `projected_step_kernel` inline."""
+    if step <= Float32(0.0):
+        return LS_INVALID_STEP
+    var fx_init = fx
+    var dg_init = host_dot(pseudo_grad, drt, n)
+    if dg_init > Float32(0.0):
+        return LS_INVALID_DIR
+    var dg_test = param.ftol * dg_init
+    var width = Float32(0.0)
+    ls_iters = 0
+    for _ in range(param.max_linesearch):
+        for i in range(n):
+            var xpi = xp[i]
+            var xi = ftz(-pseudo_grad[i]) if xpi == Float32(0.0) else xpi
+            var moved = ftz(identical_mul_add(step, drt[i], xpi))
+            x[i] = host_project_orth(moved, xi)
+        fx = host_owlqn_objective(f, x, grad, l1, pg_limit)
+        ls_iters += 1
+        if host_ls_success(
+            param, fx_init, dg_init, fx, dg_test, step, pseudo_grad, drt, n, width
+        ):
+            return LS_SUCCESS
+        if step < param.min_step:
+            return LS_INVALID_STEP_MIN
+        if step > param.max_step:
+            return LS_INVALID_STEP_MAX
+        step *= width
+    return LS_MAX_ITERS_REACHED
+
+
+def host_min_owlqn(
+    param: HostLBFGSParam, mut f: HostGLM, l1: Float32, pg_limit: Int,
+    mut x: List[Float32], n: Int,
+) raises -> HostQNResult:
+    """`min_owlqn`, `qn_solvers.mojo`, in its order."""
+    if param.check_param() != 0:
+        raise Error(
+            "OWL-QN: invalid parameter (check_param code "
+            + String(param.check_param()) + ")"
+        )
+    if not (pg_limit <= n and pg_limit > 0):
+        raise Error(
+            "OWL-QN: Invalid pseudo grad limit parameter (pg_limit "
+            + String(pg_limit) + ", n " + String(n) + ")"
+        )
+    var S = List[List[Float32]]()
+    var Y = List[List[Float32]]()
+    for _ in range(param.m):
+        S.append(List[Float32](length=n, fill=Float32(0.0)))
+        Y.append(List[Float32](length=n, fill=Float32(0.0)))
+    var xp = List[Float32](length=n, fill=Float32(0.0))
+    var grad = List[Float32](length=n, fill=Float32(0.0))
+    var gradp = List[Float32](length=n, fill=Float32(0.0))
+    var drt = List[Float32](length=n, fill=Float32(0.0))
+    var pseudo = List[Float32](length=n, fill=Float32(0.0))
+    var ys = List[Float32](length=param.m, fill=Float32(0.0))
+    var alpha = List[Float32](length=param.m, fill=Float32(0.0))
+    var fx_hist = List[Float32](length=(param.past if param.past > 0 else 0), fill=Float32(0.0))
+
+    var k = 0
+    var fx = host_owlqn_objective(f, x, grad, l1, pg_limit)
+    var gnorm = f.grad_norm(grad)
+    host_update_pseudo(x, grad, l1, pg_limit, pseudo, n)
+    if param.past > 0:
+        fx_hist[0] = fx
+    if host_check_convergence(param, k, fx, gnorm, fx_hist):
+        return HostQNResult(fx, k, OPT_SUCCESS)
+    host_ax(drt, Float32(-1.0), pseudo, n)
+    var d_nrm = host_nrm2(drt, n)
+    var step = Float32(1.0) / (d_nrm if d_nrm > Float32(1.0) else Float32(1.0))
+    var fxp = fx
+
+    k = 1
+    var end = 0
+    var n_vec = 0
+    var retcode = OPT_MAX_ITERS_REACHED
+    var lsret = LS_SUCCESS
+    var ls_iters = 0
+    while k <= param.max_iterations:
+        for i in range(n):
+            xp[i] = x[i]
+            gradp[i] = grad[i]
+        fxp = fx
+        lsret = host_ls_backtrack_projected(
+            param, f, fx, x, grad, pseudo, step, drt, xp, l1, pg_limit, n, ls_iters
+        )
+        gnorm = f.grad_norm(grad)
+        var stop = host_update_and_check(
+            param, k, lsret, fx, fxp, gnorm, x, xp, grad, gradp, fx_hist, retcode, n
+        )
+        if stop:
+            return HostQNResult(fx, k, retcode)
+        host_update_pseudo(x, grad, l1, pg_limit, pseudo, n)
+        host_axpy(S[end], Float32(-1.0), xp, x, n)
+        host_axpy(Y[end], Float32(-1.0), gradp, grad, n)
+        end = host_lbfgs_search_dir(param, n_vec, end, S, Y, pseudo, drt, ys, alpha, n)
+        host_project_direction(drt, pseudo, n)
+        step = Float32(1.0)
+        k += 1
+    return HostQNResult(fx, k, OPT_MAX_ITERS_REACHED)
+
+
+# ---------------------------------------------------------------------------
 # qn.mojo and glm/estimator.mojo
 # ---------------------------------------------------------------------------
 
@@ -702,20 +1014,16 @@ def host_qn_fit(
             "qn_fit: loss " + String(loss) + " is not routed from this entry;"
             " QN_LOSS_LOGISTIC (0) and QN_LOSS_SOFTMAX (2) are"
         )
-    if loss == QN_LOSS_SOFTMAX:
-        raise Error(
-            "qn_fit: no CPU implementation of the softmax loss (QN_LOSS_SOFTMAX,"
-            " the multinomial arm) yet; the host trains the binary logistic loss"
-            " only (glm/host/qn_oracle.mojo)"
-        )
     if has_sample_weight:
         raise Error(
             "qn: sample_weight is NOT IMPLEMENTED (GLMBase::add_sample_weights,"
             " glm_base.cuh:115-122, and the weighted arm of getLossAndDZ);"
             " refused by name. See glm/NOT_IMPLEMENTED.tsv"
         )
-    if n_classes != 2:
+    if loss == QN_LOSS_LOGISTIC and n_classes != 2:
         raise Error("qn.h: logistic loss invalid C")
+    if loss == QN_LOSS_SOFTMAX and not (n_classes > 2):
+        raise Error("qn.h: softmax invalid C")
     if n_rows <= 0 or n_features <= 0:
         raise Error(
             "qn_fit: n_rows and n_features must be positive, got "
@@ -728,17 +1036,17 @@ def host_qn_fit(
     var l1 = Float32(penalty_l1)
     if penalty_normalized:
         l1 = l1 / Float32(n_rows)
-    if l1 != Float32(0.0):
-        raise Error(
-            "qn_fit: no CPU implementation of OWL-QN (an l1 or elasticnet"
-            " penalty, DEVIATION 552) yet; the host trains the L-BFGS arm"
-            " only (glm/host/qn_oracle.mojo)"
-        )
-    var n_param = n_features + (1 if fit_intercept else 0)
+    var n_targets = 1 if loss == QN_LOSS_LOGISTIC else n_classes
+    var n_param = (n_features + (1 if fit_intercept else 0)) * n_targets
     coef = List[Float32](length=n_param, fill=Float32(0.0))
     var param = HostLBFGSParam.from_params(
         grad_tol, change_tol, max_iter, linesearch_max_iter, lbfgs_memory
     )
-    var f = HostGLM(x.copy(), y.copy(), n_rows, n_features, fit_intercept, l2)
+    var f = HostGLM(x.copy(), y.copy(), n_rows, n_features, fit_intercept, l2, n_targets)
+    # `qn_minimize`: L-BFGS when `l1 == 0` (exact), OWL-QN otherwise, with
+    # `pg_limit = D * C` (C == 1 on the binary logistic loss).
+    if l1 != Float32(0.0):
+        var ro = host_min_owlqn(param, f, l1, n_features * n_targets, coef, n_param)
+        return HostQNFit(ro.fx, ro.retcode, ro.n_iter)
     var r = host_min_lbfgs(param, f, coef, n_param)
     return HostQNFit(r.fx, r.retcode, r.n_iter)

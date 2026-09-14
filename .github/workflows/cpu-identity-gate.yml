@@ -89,6 +89,7 @@ on:
       - "cluster/host/kmeans_oracle.mojo"
       - "metrics/host/metrics_oracle.mojo"
       - "spectral/host/spectral_oracle.mojo"
+      - "tsa/checks/kpss_oracle.mojo"
       - "preprocessing/host/scaler_oracle.mojo"
       - "glm/host/qn_oracle.mojo"
       - "ensemble/host/rf_oracle.mojo"
@@ -127,8 +128,10 @@ env:
   #                       pca, pca-whiten, tsvd, ols and ridge lanes train on
   #                       the host too and sit in both lists, and dbscan
   #                       trains on the host; batch 2 adds logistic (the
-  #                       binary L-BFGS arm) to the training list, so only
-  #                       logistic-multiclass stays inference-only.
+  #                       binary L-BFGS arm) to the training list, and batch
+  #                       3 (lane/cpu-training-batch3) adds
+  #                       logistic-multiclass (the softmax loss), so no
+  #                       classical lane is inference-only any more.
   #   HOST_FAMILIES       the routed (phase 1) families, space separated; each
   #                       is built by bindings/build_<family>_host.sh (a shim
   #                       over bindings/build_host_family.sh) into
@@ -461,7 +464,8 @@ jobs:
       # -D MOJOLEARN_HOST_SABOTAGE=1 into its own directory (honored in
       # gemm_oracle by walking every leaf DESCENDING, which reaches every
       # lane whose host oracle folds through gemm_oracle_cell, and in
-      # kde_oracle by summing every logsumexp row descending, in hw_oracle
+      # kde_oracle by summing every logsumexp row descending from one extra
+      # unit (the tophat kernel sums exact integers), in hw_oracle
       # by splitting the SSE fused multiply-add, in smo_oracle by walking
       # its GEMM leaf descending, in linkage_oracle by walking the sorted
       # edge keys descending (the maximum spanning tree), in pcg_rng by one
@@ -473,6 +477,11 @@ jobs:
       # seeding the recluster one draw off, in scaler_oracle by the same
       # shifted tree plus the min-max offset's subtraction as an addition,
       # in qn_oracle by walking the solver's dot chains descending, in
+      # kpss_oracle by walking every strided series partial descending, in
+      # knn_host_predict by walking the unexpanded, cosine and ball cover
+      # distance chains descending (Chebyshev: the next float above the
+      # maximum), in dbscan_oracle by one more neighbor or unit of weight
+      # to be core, in
       # rf_oracle by drawing every bootstrap row from the next Philox
       # subsequence, and in gpr_oracle by walking the scaled distance's
       # feature axis descending);
