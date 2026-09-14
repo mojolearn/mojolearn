@@ -4,13 +4,32 @@
 The group snapshots every shard before updating any, then broadcasts disjoint
 parameter slices. Full model weights/activations and gradients remain replicated.
 """
-from max.gpu.host import DeviceContext
+from std.os import getenv
+from std.sys import is_defined
+from max.gpu.host import DeviceContext, DeviceBuffer
 from training.byte_lm import (
-    ByteTrainer, byte_glue_update_launch, _maybe_fault,
+    ByteTrainer, byte_glue_update_launch, _fault_plant,
     _FAULT_NAN, _FAULT_INF, _FAULT_MINUS_ONE, _require_device_finite,
 )
 from training.checks.train_loop import _copy_into
 from training.checks.optimizer import OPT_RECORD_INTERMEDIATES
+
+
+comptime BYTE_POOL_FAULT_INJECT = is_defined["MOJOLEARN_BYTE_POOL_FAULT_INJECT"]()
+
+
+def pool_fault_available() -> Int:
+    return 1 if BYTE_POOL_FAULT_INJECT else 0
+
+
+def pool_maybe_fault(ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32],
+    name: String, idx: Int, bits: UInt32, first: Int) raises:
+    # A separate trial flag: the original fault build is deliberately refused
+    # with NVIDIA's shipped out-of-place update. This pool always snapshots.
+    comptime if BYTE_POOL_FAULT_INJECT:
+        if String(getenv("MOJOLEARN_BYTE_POOL_FAULT", "")) == name:
+            if Int(getenv("MOJOLEARN_BYTE_POOL_FAULT_FIRST", "0")) == first:
+                _fault_plant(ctx, buf, idx, bits)
 
 
 def pool_snapshot(ctx: DeviceContext, mut tr: ByteTrainer) raises:
@@ -32,14 +51,14 @@ def pool_update(ctx: DeviceContext, mut tr: ByteTrainer) raises:
     var first = tr.buffers.optimizer_first
     var p = tr.buffers.param.create_sub_buffer[DType.float32](first, n)
     var g = tr.buffers.grad.create_sub_buffer[DType.float32](first, n)
-    _maybe_fault(ctx, tr.buffers.m_state, "opt_refuse", min(5,n-1), _FAULT_NAN)
+    pool_maybe_fault(ctx, tr.buffers.m_state, "opt_refuse", min(5,n-1), _FAULT_NAN, first)
     _require_device_finite(ctx, tr.scan, tr.buffers.m_state, n, "first moments")
     byte_glue_update_launch(ctx, p, g, tr.buffers.m_state, tr.buffers.v_state,
         tr.buffers.shadow_p, tr.buffers.shadow_m, tr.buffers.shadow_v,
         tr.buffers.denom_out, tr.buffers.q_out, n, tr.optimizer,
         tr.completed_steps + 1, False)
-    _maybe_fault(ctx, tr.buffers.v_state, "after_nonfinite", min(3,n-1), _FAULT_INF)
-    _maybe_fault(ctx, tr.buffers.v_state, "after_negative", min(3,n-1), _FAULT_MINUS_ONE)
+    pool_maybe_fault(ctx, tr.buffers.v_state, "after_nonfinite", min(3,n-1), _FAULT_INF, first)
+    pool_maybe_fault(ctx, tr.buffers.v_state, "after_negative", min(3,n-1), _FAULT_MINUS_ONE, first)
     tr.validate_device_state(ctx, tr.completed_steps + 1)
 
 

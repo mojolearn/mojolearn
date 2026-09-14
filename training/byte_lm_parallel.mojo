@@ -14,9 +14,9 @@ from checks.numerics import ftz, identical_mul_add
 from training.byte_lm import (
     ByteTrainer, byte_gradient_device, byte_update_device,
     byte_validate_tokens, byte_rollback, _require_device_finite,
-    _maybe_fault, _FAULT_NAN,
+    _FAULT_NAN,
 )
-from training.byte_lm_optimizer_pool import pool_snapshot, pool_update, pool_restore
+from training.byte_lm_optimizer_pool import pool_snapshot, pool_update, pool_restore, pool_maybe_fault
 from training.checks.optimizer import OPT_RECORD_INTERMEDIATES
 from training.byte_lm_config import ByteConfig
 from training.checks.optimizer_oracle import OptimizerConfig
@@ -236,7 +236,7 @@ struct ByteParallelTrainer(Movable, Writable):
                 self.total.value().enqueue_copy_to(self.trainers[i].buffers.grad)
                 self.contexts[0].synchronize()
                 if self.pool_optimizer:
-                    _maybe_fault(self.contexts[i], self.trainers[i].buffers.grad, "grad_nonfinite", 0, _FAULT_NAN)
+                    pool_maybe_fault(self.contexts[i], self.trainers[i].buffers.grad, "grad_nonfinite", 0, _FAULT_NAN, self.trainers[i].buffers.optimizer_first)
                 _require_device_finite(self.contexts[i], self.trainers[i].scan,
                     self.trainers[i].buffers.grad, n, "summed gradients")
             if self.pool_optimizer:

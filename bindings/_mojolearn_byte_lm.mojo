@@ -50,6 +50,7 @@ from training.byte_lm import (
     byte_validate_state, byte_validate_optimizer,
     byte_validate_tokens, byte_lm_fault_inject_available,
 )
+from training.byte_lm_optimizer_pool import pool_fault_available
 from training.byte_lm_parallel import ByteParallelTrainer
 from training.byte_lm_logits import (
     BYTE_LOGITS_MAX_BATCH,
@@ -1318,6 +1319,10 @@ def byte_lm_parallel_export_binding(session: PythonObject, addresses: PythonObje
     return PythonObject(tr.completed_steps)
 
 
+def byte_lm_pool_fault_available_binding() raises -> PythonObject:
+    return PythonObject(pool_fault_available())
+
+
 def byte_lm_parallel_ownership_binding(session: PythonObject) raises -> PythonObject:
     var owner = session.downcast_value_ptr[ByteParallelTrainer]()
     owner[].require_open()
@@ -1376,6 +1381,7 @@ def PyInit__mojolearn_byte_lm() abi("C") -> PythonObject:
         module.def_function[byte_lm_parallel_close_binding]("byte_lm_parallel_close")
         module.def_function[byte_lm_parallel_open_binding[False]]("byte_lm_parallel_open")
         module.def_function[byte_lm_parallel_open_binding[True]]("byte_lm_parallel_open_pooled")
+        module.def_function[byte_lm_pool_fault_available_binding]("byte_lm_pool_fault_available")
         module.def_function[byte_lm_parallel_ownership_binding]("byte_lm_parallel_ownership")
         module.def_function[byte_lm_parallel_step_binding]("byte_lm_parallel_step")
         module.def_function[byte_lm_parallel_export_binding]("byte_lm_parallel_export")
