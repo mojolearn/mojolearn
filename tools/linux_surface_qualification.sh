@@ -125,8 +125,10 @@ byte_members = [n for n in outputs if n.endswith('/_mojolearn_byte_lm.so')]
 assert len(byte_members) == (1 if byte_lm == '1' and (action == 'build' or os.environ.get('MOJOLEARN_BUILD_TIERS') == 'identical') else 0), 'Incorrect byte-LM inventory'
 assert all('/identical/' in n for n in byte_members), 'Byte-LM is IDENTICAL only'
 host_members = sorted(host_outputs)
-assert all(n.endswith('/host/_mojolearn_byte_lm_host.so') for n in host_members), ('Unexpected host binding', host_members)
-assert len(host_members) == (1 if byte_lm == '1' and (action == 'build' or os.environ.get('MOJOLEARN_BUILD_TIERS') == 'identical') else 0), 'Incorrect CPU training binding inventory'
+from verify_linux_surface_qualification import wheel_host_bindings
+want_host = {n + '.so' for n in wheel_host_bindings()} if byte_lm == '1' and (action == 'build' or os.environ.get('MOJOLEARN_BUILD_TIERS') == 'identical') else set()
+assert all('/host/' + n.rsplit('/', 1)[1] == n[n.index('/host/'):] for n in host_members), ('Unexpected host binding', host_members)
+assert {n.rsplit('/', 1)[1] for n in host_members} == want_host and len(host_members) == len(want_host), ('Incorrect host binding inventory', host_members, sorted(want_host))
 record = dict(schema='mojolearn.linux.build-provenance.v1', source_commit=commit, action=action, build_exit=status,
               source_inventory=files, source_sha256=hashlib.sha256(json.dumps(files, separators=(',', ':')).encode()).hexdigest(),
               extensions=outputs, host_extension=host_outputs,
@@ -185,6 +187,9 @@ names = {'_mojolearn', '_mojolearn_gbdt', '_mojolearn_estimators', '_mojolearn_r
 sets = {}
 extension_hashes = {}
 host_extension_hashes = {}
+sys.path.insert(0, str(root / 'tools'))
+from verify_linux_surface_qualification import wheel_host_members
+host_members_wanted = set(wheel_host_members())
 proof_path = pathlib.Path(provenance)
 proof = json.loads(proof_path.read_text())
 assert proof.get('schema') == 'mojolearn.linux.build-provenance.v1' and proof.get('complete') is True
@@ -222,14 +227,14 @@ with zipfile.ZipFile(wheel) as z:
                 assert p in proof['extensions'], ('Unproven extension', p)
                 assert hashlib.sha256(z.read(p)).hexdigest() == proof['extensions'][p], ('Built/wheel binary differs', p)
             sets.setdefault((vendor, arch, mode or 'fast'), set()).add(extension)
-        elif p == 'mojolearn/host/_mojolearn_byte_lm_host.so':
-            # DEVIATION 2680. The wheel carries ONE vendor-neutral copy of the
-            # CPU training binding; each architecture leg proves its own under
+        elif p in host_members_wanted:
+            # DEVIATION 2680. The wheel carries ONE vendor-neutral copy of each
+            # host binding; each architecture leg proves its own under
             # <vendor>/<arch>/host/, so this is proven BY DIGEST, not by name.
             digest = hashlib.sha256(z.read(p)).hexdigest()
             host_extension_hashes[p.removeprefix('mojolearn/')] = digest
             proven = proof.get('host_extension') or {}
-            assert len(proven) == 1 and digest in proven.values(), ('Unproven CPU training binding', p)
+            assert proven.get(next((k for k in proven if k.endswith('/host/' + p.rsplit('/', 1)[1])), None)) == digest, ('Unproven host binding', p)
         elif p.endswith('.so') and '/_mojolearn' in p:
             raise AssertionError('Unexpected extension location: ' + p)
     vendors = {v for v, _, _ in sets}
@@ -238,6 +243,7 @@ with zipfile.ZipFile(wheel) as z:
         for mode in ('fast', 'deterministic', 'identical'):
             assert sets.get((vendor, arch, mode)) == names, ('Incomplete set', vendor, arch, mode)
     assert set(proof['extensions']) == {p for p in paths if p.startswith('mojolearn/' + required_vendor + '/') and p.endswith('.so') and '/_mojolearn' in p}, 'Provenance/wheel vendor coverage differs'
+    assert {'mojolearn/' + m for m in host_extension_hashes} == host_members_wanted, ('Wheel host binding inventory differs from the manifest', sorted(host_extension_hashes))
     # Current wrappers must match the source whose tests will execute.
     for source in (root / 'python/mojolearn').glob('*.py'):
         assert z.read('mojolearn/' + source.name) == source.read_bytes(), ('Stale wrapper', source.name)
@@ -343,6 +349,26 @@ if release_profile and mojolearn.numeric_mode() == 'identical':
         'CPU training binding has no train step; the wheel carries an inference-only build'
     record['installed_host_binding'] = {'path': str(host_path), 'sha256': host_digest,
                                         'numeric_mode': 1, 'vendor': 'cpu'}
+    # EVERY host binding the manifest ships (the packaging lane, 2026-09-14),
+    # each loaded through the package's own host loader and read back as
+    # vendor cpu, IDENTICAL and the CPU column, each with the digest of the
+    # installed file, which must be the audited wheel's member.
+    from mojolearn import _backend, host_surface
+    rows = {}
+    for name in host_surface.wheel_bindings():
+        path = pathlib.Path(_backend.host_module_path(name)).resolve()
+        assert path.is_relative_to(installed.parent), ('Noninstalled host binding', path)
+        member = path.relative_to(installed.parent).as_posix()
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        assert audit.get('host_extension_hashes', {}).get(member) == digest, ('Installed host binding differs from wheel', member)
+        module = _backend.load_host_module(name)
+        prefix = name[len('_mojolearn_'):]
+        rows[name] = {'path': str(path), 'sha256': digest,
+                      'numeric_mode': int(getattr(module, prefix + '_numeric_mode')()),
+                      'vendor': str(getattr(module, prefix + '_vendor')()),
+                      'column': str(getattr(module, prefix + '_column')())}
+        assert rows[name]['numeric_mode'] == 1 and rows[name]['vendor'] == 'cpu' and rows[name]['column'] == 'cpu', ('Host binding read-back', name, rows[name])
+    record['installed_host_bindings'] = rows
 record.update(architecture)
 pathlib.Path(os.environ['MOJOLEARN_INSTALLED_RECORD']).write_text(json.dumps(record, indent=2) + '\n')
 print(json.dumps(record), flush=True)

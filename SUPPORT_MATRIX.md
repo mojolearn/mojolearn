@@ -64,18 +64,18 @@ refuses by name every function it does not list.
 <!--fact:host_surface_table-->| family | binding under `mojolearn/host/` | routes (CPU-only install) | trains on a CPU (identity_break lanes) | predicts on a CPU from a saved model | gate | in a wheel |
 |---|---|---|---|---|---|---|
 | byte_lm | `_mojolearn_byte_lm_host.so` | loaded by path | no | LanguageModelInference, LanguageModelHostTrainer | .github/workflows/byte-lm-cpu-gate.yml | yes |
-| forest | `_mojolearn_forest_host.so` | loaded by path | no | RandomForestClassifier, RandomForestRegressor, ExtraTreesClassifier, ExtraTreesRegressor, GradientBoosting (rf_classifier, rf_regressor, et_classifier, et_regressor, gbdt_symmetric, gbdt_depthwise, gbdt_lossguide, gbdt_rmse) | tools/forest_host_gate.py (.github/workflows/forest-host-gate.yml) | no, `bindings/build_forest_host.sh` |
-| tokenizer | `_mojolearn_tokenizer_host.so` | loaded by path | no | GPT2Tokenizer | pixi run check-tokenizer and python/mojolearn/tests/test_tokenizer_surface.py | no, `bindings/build_tokenizer_host.sh` |
-| core | `_mojolearn_core_host.so` | `_mojolearn` | knn, knn-clf, knn-reg, kmeans | NearestNeighbors, KNeighborsClassifier, KNeighborsRegressor, KMeans (knn, knn-clf, knn-reg) | tools/classical_host_gate.py (cpu-identity-gate.yml) | no, `bindings/build_core_host.sh` |
-| linalg | `_mojolearn_linalg_host.so` | `_mojolearn_linalg` | gemm-pinned | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_linalg_host.sh` |
-| estimators | `_mojolearn_estimators_host.so` | `_mojolearn_estimators` | kde, pca, pca-whiten, tsvd, ols, ridge, dbscan, logistic | LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, KernelDensity, DBSCAN (ols, ridge, tsvd, logistic, logistic-multiclass, pca, pca-whiten, kde) | tools/identity_break.py and tools/classical_host_gate.py (cpu-identity-gate.yml) | no, `bindings/build_estimators_host.sh` |
-| metrics | `_mojolearn_metrics_host.so` | `_mojolearn_metrics` | metrics, spectral | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_metrics_host.sh` |
-| preprocessing | `_mojolearn_preprocessing_host.so` | `_mojolearn_preprocessing` | standard-scaler, minmax-scaler | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_preprocessing_host.sh` |
-| tsa | `_mojolearn_tsa_host.so` | `_mojolearn_tsa` | holtwinters | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_tsa_host.sh` |
-| solver | `_mojolearn_solver_host.so` | `_mojolearn_solver` | lasso, elasticnet, agglomerative | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_solver_host.sh` |
-| svm | `_mojolearn_svm_host.so` | `_mojolearn_svm` | svc, iforest | SVC, IsolationForest (svc) | tools/identity_break.py and tools/classical_host_gate.py (cpu-identity-gate.yml) | no, `bindings/build_svm_host.sh` |
-| trees | `_mojolearn_trees_host.so` | `_mojolearn_trees` | et-clf, et-reg | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_trees_host.sh` |
-| rf | `_mojolearn_rf_host.so` | `_mojolearn_rf` | rf-clf, rf-reg | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_rf_host.sh` |<!--/fact-->
+| forest | `_mojolearn_forest_host.so` | loaded by path | no | RandomForestClassifier, RandomForestRegressor, ExtraTreesClassifier, ExtraTreesRegressor, GradientBoosting (rf_classifier, rf_regressor, et_classifier, et_regressor, gbdt_symmetric, gbdt_depthwise, gbdt_lossguide, gbdt_rmse) | tools/forest_host_gate.py (.github/workflows/forest-host-gate.yml) | yes |
+| tokenizer | `_mojolearn_tokenizer_host.so` | loaded by path | no | GPT2Tokenizer | pixi run check-tokenizer and python/mojolearn/tests/test_tokenizer_surface.py | yes |
+| core | `_mojolearn_core_host.so` | `_mojolearn` | knn, knn-clf, knn-reg, kmeans | NearestNeighbors, KNeighborsClassifier, KNeighborsRegressor, KMeans (knn, knn-clf, knn-reg) | tools/classical_host_gate.py (cpu-identity-gate.yml) | yes |
+| linalg | `_mojolearn_linalg_host.so` | `_mojolearn_linalg` | gemm-pinned | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
+| estimators | `_mojolearn_estimators_host.so` | `_mojolearn_estimators` | kde, pca, pca-whiten, tsvd, ols, ridge, dbscan, logistic | LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, KernelDensity, DBSCAN (ols, ridge, tsvd, logistic, logistic-multiclass, pca, pca-whiten, kde) | tools/identity_break.py and tools/classical_host_gate.py (cpu-identity-gate.yml) | yes |
+| metrics | `_mojolearn_metrics_host.so` | `_mojolearn_metrics` | metrics, spectral | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
+| preprocessing | `_mojolearn_preprocessing_host.so` | `_mojolearn_preprocessing` | standard-scaler, minmax-scaler | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
+| tsa | `_mojolearn_tsa_host.so` | `_mojolearn_tsa` | holtwinters | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
+| solver | `_mojolearn_solver_host.so` | `_mojolearn_solver` | lasso, elasticnet, agglomerative | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
+| svm | `_mojolearn_svm_host.so` | `_mojolearn_svm` | svc, iforest | SVC, IsolationForest (svc) | tools/identity_break.py and tools/classical_host_gate.py (cpu-identity-gate.yml) | yes |
+| trees | `_mojolearn_trees_host.so` | `_mojolearn_trees` | et-clf, et-reg | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
+| rf | `_mojolearn_rf_host.so` | `_mojolearn_rf` | rf-clf, rf-reg | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |<!--/fact-->
 
 Before publishing a release, validate the installed wheel rather than only the
 source tree. Import it in a clean environment, load every shipped extension in

@@ -94,6 +94,15 @@ def inventory(argv):
     # user needs to diagnose.
     roots = ["__init__", "__main__"]
     queue = [r for r in roots if r in present]
+    # BUILD-TIME COPIES REACHED THROUGH importlib, NOT A STATIC IMPORT (the
+    # packaging lane, 2026-09-14). `_verify.load_differ` imports
+    # `mojolearn._identity_trace_diff` and `_identity.load_harness` imports
+    # `mojolearn._identity_break` by name at run time, because each is a copy
+    # of a tools/ file made by the wheel build and is absent from a checkout
+    # (python/.gitignore). ast cannot see those edges, so they are declared
+    # here, keyed by the importer, and only count when the importer itself is
+    # reached; an unrelated copy left in the package still fails as an orphan.
+    dynamic = {"_verify": ["_identity_trace_diff"], "_identity": ["_identity_break"]}
     # A submodule the user documentation tells people to import by its own
     # path is public, not abandoned: the multi-GPU drivers are reached as
     # `from mojolearn.parallel_ensemble import fit_forest`
@@ -111,9 +120,6 @@ def inventory(argv):
             for a, b in documented.findall(md.read_text(encoding="utf-8")):
                 if (a or b) in present:
                     queue.append(a or b)
-    # A module a package module launches as `python -m <pkg>.<module>` (the
-    # multi-GPU pool starts `-m mojolearn._parallel_worker`) is reached by
-    # that module, though no import statement names it.
     # A module PREPARED for a later exposure (IVF-FLAT's `_ivf_impl.py`,
     # workstream D) ships on purpose and raises by name until exposed. It
     # counts only when BOTH hold: its docstring's first line says
@@ -124,6 +130,9 @@ def inventory(argv):
         doc = ast.get_docstring(ast.parse(path.read_text(encoding="utf-8"))) or ""
         if "PREPARED AND NOT EXPOSED" in doc.split("\n", 1)[0] and f"`{stem}.py`" in init_text:
             queue.append(stem)
+    # A module a package module launches as `python -m <pkg>.<module>` (the
+    # multi-GPU pool starts `-m mojolearn._parallel_worker`) is reached by
+    # that module, though no import statement names it.
     launched = re.compile(r"""['"]-m['"]\s*,\s*['"]""" + q + r"""\.([A-Za-z_][A-Za-z0-9_]*)['"]""")
     # A standalone top-level module may pull package modules in too.
     for f in extra_roots:
@@ -137,6 +146,7 @@ def inventory(argv):
         reached.add(name)
         if name in present:
             queue.extend(_intra_package_imports(present[name], pkg))
+            queue.extend(dynamic.get(name, []))
             queue.extend(launched.findall(present[name].read_text(encoding="utf-8")))
 
     orphans = sorted(set(present) - reached)

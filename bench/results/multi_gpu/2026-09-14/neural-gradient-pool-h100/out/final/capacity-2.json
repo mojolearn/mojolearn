@@ -1,0 +1,17 @@
+{
+  "devices": 2,
+  "n": 1500000001,
+  "steps": 16,
+  "parts_bytes": 96000000064,
+  "scope": "Gradient accumulation buffer capacity only; not full-model training or throughput.",
+  "status": "PASS",
+  "verified_cells": 1500000001,
+  "sha256": "6cded5c6e714aa73487d33819fcc44f394587e4118d047852e386fb8916e4c7f",
+  "numpy_madvise_hugepage": "0",
+  "sampled_peak_mib": {
+    "0": 69393,
+    "1": 69393
+  },
+  "elapsed_seconds": 110.81431935355067,
+  "hardware": "name, memory.total [MiB], driver_version\nNVIDIA H100 80GB HBM3, 81559 MiB, 580.126.09\nNVIDIA H100 80GB HBM3, 81559 MiB, 580.126.09\n"
+}

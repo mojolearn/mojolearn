@@ -113,6 +113,30 @@ from mojolearn import LanguageModelHostTrainer, ByteLanguageModelConfig
 _shape = ByteLanguageModelConfig()
 LanguageModelHostTrainer([0.0] * _shape.n_total, lr=1e-3)
 print('PASS installed CPU training binding')
+# EVERY HOST BINDING THE MANIFEST SHIPS (the packaging lane, 2026-09-14),
+# from the installed wheel, through the package's own host loader, which
+# refuses a binding that does not read back vendor cpu, IDENTICAL and the
+# CPU kernel-matrix column. The list is the manifest's, never a copy here.
+from mojolearn import _backend, host_surface
+for _name in host_surface.wheel_bindings():
+    _so = package / 'host' / (_name + '.so')
+    assert _so.exists(), f'installed wheel has no host binding at {_so}'
+    assert pathlib.Path(_backend.host_module_path(_name)).resolve() == _so
+    _m = _backend.load_host_module(_name)
+    _p = _name[len('_mojolearn_'):]
+    assert getattr(_m, _p + '_vendor')() == 'cpu' and getattr(_m, _p + '_numeric_mode')() == 1
+    assert str(getattr(_m, _p + '_column')()) == 'cpu', f'{_name} did not compile as the CPU column'
+print(f'PASS installed host bindings: {len(host_surface.wheel_bindings())} ({", ".join(host_surface.wheel_families())})')
+# THE IDENTITY PAYLOAD from the installed wheel: the comparator and the
+# reference card directory `verify` reads, and the harness, the three
+# columns and the commit witness `identity` reads. `identity --check` runs
+# no fit; it resolves every file and exits 0 or says which is missing.
+import subprocess
+subprocess.run([sys.executable, '-m', 'mojolearn', 'identity', '--check'], check=True)
+from mojolearn import _verify
+_verify.load_differ()
+assert pathlib.Path(_verify.reference_dir()).is_dir(), 'installed wheel has no reference_cards/'
+print('PASS installed identity payload')
 print('Byte LM IDENTICAL-only native available; numerical training qualification separate')
 PYBYTE
         ); then :; else

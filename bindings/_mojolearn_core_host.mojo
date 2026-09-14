@@ -583,9 +583,12 @@ def kmeans_fit_binding(
     `out_labels_addr` is `n_samples` uint32 (the caller's int32 array is
     the same bytes), the assignment against the FINAL centroids. The shape
     refusals are `kmeans_fit`'s, raised BEFORE any address is read."""
-    if len(params) != 10:
+    # 10 or 11, as the GPU binding: workstream D (2026-09-14) appended
+    # oversampling_factor as params[10] (cluster.py packs it on every fit),
+    # and the 10-only check read REFUSED for every kmeans cell on the CPU gate.
+    if len(params) != 10 and len(params) != 11:
         raise Error(
-            "kmeans_fit: params must hold 10 values, got "
+            "kmeans_fit: params must hold 10 or 11 values, got "
             + String(len(params))
         )
     var x_address = _index(x_addr)
@@ -602,6 +605,9 @@ def kmeans_fit_binding(
     var ninit = _index(params[7])
     var ii = _index(params[8])
     var mm = _index(params[9])
+    var ovs = Float64(2.0)
+    if len(params) == 11:
+        ovs = Float64(py=params[10])
     var inertia = Float64(0.0)
     var n_iter = 0
     var sum_scale = Float64(0.0)
@@ -620,7 +626,7 @@ def kmeans_fit_binding(
         var labels = List[UInt32](length=ns, fill=UInt32(0))
         var r = host_kmeans_fit(
             x, ns, nf, nc, centroids, labels, weights, nw, mi, tl, sd,
-            ninit, ii, mm,
+            ninit, ii, mm, ovs,
         )
         var cp = f32_ptr(centroids_address)
         for i in range(nc * nf):

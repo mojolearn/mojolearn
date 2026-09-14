@@ -642,3 +642,12 @@ allocates only its local stacked inputs and reduction scratch; the host still
 holds full input/output arrays. The original global norm clip remains on the
 first device. This is another pooled allocation in the neural training path,
 not a complete resident Samba model or a throughput claim.
+
+The two-H100 cloud gate passes 30 exact accumulation cases, post-compute
+failure atomicity/recovery, and unchanged optimizer/MLP/Samba receipts. A
+16-microbatch fixture with 1,500,000,001 columns (96,000,000,064 input bytes)
+refuses allocation on one H100 and passes on two, checking every output cell
+bitwise with 69393 MiB sampled peak per GPU. This establishes gradient-buffer
+component capacity, not a 1.5B-parameter training run. Full evidence and failed
+attempts are in
+`bench/results/multi_gpu/2026-09-14/neural-gradient-pool-h100/`.

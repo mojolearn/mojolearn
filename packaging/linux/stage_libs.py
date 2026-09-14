@@ -48,7 +48,12 @@ tool on the Mac and this plan runs nothing there beyond a pure-Python zip):
 
     <set root>/_mojolearn_x.so           $ORIGIN/.libs:$ORIGIN/../.libs:$ORIGIN/../../.libs
     <set root>/<tier>/_mojolearn_x.so    $ORIGIN/../.libs:$ORIGIN/../../.libs:$ORIGIN/../../../.libs
+    <set root>/host/_mojolearn_x_host.so $ORIGIN/../.libs:$ORIGIN/../cuda/.libs:$ORIGIN/../hip/.libs:$ORIGIN/.libs
     .libs/lib*.so                        $ORIGIN
+
+The host row (2026-09-14) is the vendor-neutral CPU bindings, packed ONCE at
+`mojolearn/host/` rather than under a vendor, so its candidates are the
+package root's shared closure and either vendor's.
 
 The set root is `<vendor>/<arch>/` in the wheel (the architecture axis,
 2026-08-30), so the candidates cover a `.libs/` inside the set, one beside
@@ -222,6 +227,17 @@ def main():
         exts += sorted((root / tier).glob("_mojolearn*.so"))
     if not exts:
         raise SystemExit(f"stage_libs: no _mojolearn*.so under {root}")
+    # THE HOST BINDINGS TOO (the packaging lane, 2026-09-14). They sit at
+    # <set>/host/ beside the tiers and until 0.8.5 this glob never reached
+    # them, so the Linux wheel's byte LM host binding shipped with whatever
+    # RUNPATH `mojo build` left in it (the pixi environment of the box that
+    # built it) and was never part of the closure check; the macOS build
+    # stages the same binding through stage_dylibs.py like every other
+    # extension. They join the closure and get the host RUNPATH below. The
+    # same patch on every leg keeps the copies byte-identical, which
+    # pack_wheel.py requires.
+    hosts = sorted((root / "host").glob("_mojolearn_*_host.so")) if (root / "host").is_dir() else []
+    exts += hosts
 
     libs = root / ".libs"
     if libs.exists():
@@ -242,6 +258,13 @@ def main():
         if ext.parent == root:
             rp = "$ORIGIN/.libs:$ORIGIN/../.libs:$ORIGIN/../../.libs"
             tier = "fast"
+        elif ext.parent.name == "host":
+            # mojolearn/host/<name>.so in the wheel: the shared closure is
+            # mojolearn/.libs (one level up); the per-vendor layout keeps a
+            # vendor-neutral binding's closure under either vendor, and the
+            # two were measured byte-identical, so either resolves it.
+            rp = "$ORIGIN/../.libs:$ORIGIN/../cuda/.libs:$ORIGIN/../hip/.libs:$ORIGIN/.libs"
+            tier = "host"
         else:
             rp = "$ORIGIN/../.libs:$ORIGIN/../../.libs:$ORIGIN/../../../.libs"
             tier = ext.parent.name
