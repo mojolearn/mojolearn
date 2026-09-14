@@ -132,6 +132,8 @@ import os
 import re
 import sys
 
+from . import host_surface
+
 # DEVIATION 869, 2026-08-24. THIS TUPLE AND `_build_script` BELOW MUST LIST
 # EVERY EXTENSION, AND THE COST OF FORGETTING ONE IS A MISLABELLED
 # MEASUREMENT RATHER THAN A FAILURE.
@@ -865,67 +867,47 @@ def host_families_built():
 #: `_MODULES` name -> the basename of the host binding under mojolearn/host/
 #: that exports the SAME function names the GPU binding exports for the fits
 #: it covers, plus `<prefix>_vendor()` answering "cpu", `<prefix>_numeric_mode()`
-#: answering 1 and `<prefix>_column()` answering "cpu". Phase 1 of the CPU
-#: training brief adds a family per lane as its host fit lands (gemm-pinned
-#: first, 2026-09-13); every family not listed here refuses BY NAME on a
-#: CPU-only install. The two host bindings that
-#: exist today, `_mojolearn_byte_lm_host` and `_mojolearn_forest_host`, export
-#: their own names (`byte_lm_host_*`, `forest_host_*`) for surfaces of their
-#: own (LanguageModelInference, LanguageModelHostTrainer, HostForest,
-#: HostGBDT), are loaded by path in `_byte_lm_host.py` and `_forest_host.py`,
-#: and are deliberately NOT in this table: mapping `_mojolearn_rf` to the
-#: forest host binding would route RandomForestClassifier.predict to an
-#: entry with a different address contract under the GPU entry's name.
-_HOST_MODULES = {
-    # The base binding's HOST HELPERS (phase 1, 2026-09-13):
-    # bindings/_mojolearn_core_host.mojo carries transpose_f32,
-    # cast_colmajor_f64_to_f32, cast_f64_to_f32, all_finite_*, gather_*,
-    # argmax_rows_* under the base binding's names, so _buffer._native and
-    # _labels resolve on a CPU-only install. The knn host inference lane
-    # (2026-09-14) adds the INFERENCE entries knn_search, knn_classify and
-    # knn_regress over core/knn_host_predict.mojo (the L2 expanded pair,
-    # both weightings), so a saved NearestNeighbors, KNeighborsClassifier
-    # or KNeighborsRegressor predicts here; the other estimator entries
-    # (kmeans_fit, rbc_knn_search, radius_neighbors_*) are absent and
-    # refuse by name.
-    "_mojolearn": "_mojolearn_core_host",
-    # gemm-pinned (phase 1, 2026-09-13): bindings/_mojolearn_linalg_host.mojo
-    # over gemm/checks/gemm_oracle.mojo::gemm_oracle, the profile's
-    # definition; exports gemm, linalg_numeric_mode, linalg_vendor,
-    # linalg_profile_version under the GPU binding's contract.
-    "_mojolearn_linalg": "_mojolearn_linalg_host",
-    # kde (phase 1, 2026-09-13): bindings/_mojolearn_estimators_host.mojo
-    # over kde/checks/kde_oracle.mojo::oracle_score_samples; exports
-    # kde_score_samples, estimators_numeric_mode, estimators_vendor. The
-    # classical host inference lane (2026-09-13) adds the INFERENCE entries
-    # ols_predict, tsvd_transform, qn_decision_function, qn_sigmoid and
-    # pca_transform over core/classical_host_predict.mojo, so a saved
-    # LinearRegression, Ridge, TruncatedSVD, LogisticRegression or PCA
-    # predicts here; the kde svc host lane (2026-09-14) adds the whitened
-    # pair pca_whiten_transform and pca_whiten_inverse_transform, and the
-    # save/load that lets a GPU-fitted KernelDensity score here. Every other
-    # _mojolearn_estimators function (dbscan_fit, pca_fit, tsvd_fit,
-    # inverse_transform, ols_fit, ridge_fit, qn_fit, ...) is absent and
-    # refuses by name.
-    "_mojolearn_estimators": "_mojolearn_estimators_host",
-    # holtwinters (phase 1, 2026-09-13): bindings/_mojolearn_tsa_host.mojo
-    # over holtwinters/checks/hw_oracle.mojo::oracle_fit[float32] and
-    # oracle_forecast; exports holtwinters_fit, holtwinters_forecast,
-    # tsa_vendor. kpss_test and select_d (ARIMA's) are absent and refuse.
-    "_mojolearn_tsa": "_mojolearn_tsa_host",
-    # lasso, elasticnet (phase 1, 2026-09-13): bindings/_mojolearn_solver_host.mojo
-    # over solver/checks/cd_oracle.mojo::cd_oracle_fit and gemm_oracle for
-    # the predict; exports cd_fit, cd_predict, solver_vendor. linkage_fit
-    # is absent until the agglomerative lane lands and refuses by name.
-    "_mojolearn_solver": "_mojolearn_solver_host",
-    # svc (phase 1, 2026-09-13): bindings/_mojolearn_svm_host.mojo over
-    # svm/checks/smo_oracle.mojo::smo_oracle_fit and smo_oracle_decision;
-    # exports svc_fit, svc_predict, svm_vendor, svm_numeric_mode; a saved
-    # GPU-fitted SVC predicts through svc_predict here (the kde svc host
-    # lane, 2026-09-14). svr_fit, svr_predict and iforest_run are absent and
-    # refuse by name until their lanes land.
-    "_mojolearn_svm": "_mojolearn_svm_host",
-}
+#: answering 1 and `<prefix>_column()` answering "cpu". THE TABLE IS READ FROM
+#: THE MANIFEST (`host_surface.py`, the host surface manifest lane,
+#: 2026-09-14): one file declares every host family, what it routes, which
+#: lanes it covers for training and serves for inference, and what it
+#: exports; `tests/test_host_surface.py` holds the bindings to it. Every
+#: family not routed there refuses BY NAME on a CPU-only install. The two
+#: bindings loaded by path, `_mojolearn_byte_lm_host` and
+#: `_mojolearn_forest_host`, export their own names (`byte_lm_host_*`,
+#: `forest_host_*`) for surfaces of their own (LanguageModelInference,
+#: LanguageModelHostTrainer, HostForest, HostGBDT), are loaded in
+#: `_byte_lm_host.py`, `_forest_host.py` and `_gbdt_host.py`, and are
+#: deliberately NOT routed: mapping `_mojolearn_rf` to the forest host
+#: binding would route RandomForestClassifier.predict to an entry with a
+#: different address contract under the GPU entry's name.
+#:
+#: What each routed binding carries, and what it leaves absent so the
+#: refusal stays by name:
+#:   _mojolearn -> _mojolearn_core_host: the base binding's HOST HELPERS
+#:     (transpose_f32, cast_colmajor_f64_to_f32, cast_f64_to_f32,
+#:     all_finite_*, gather_*, argmax_rows_*, so _buffer._native and _labels
+#:     resolve on a CPU-only install) and the knn host inference lane's
+#:     (2026-09-14) knn_search, knn_classify, knn_regress over
+#:     core/knn_host_predict.mojo; kmeans_fit, rbc_knn_search and
+#:     radius_neighbors_* are absent.
+#:   _mojolearn_linalg -> _mojolearn_linalg_host: gemm over
+#:     gemm/host/gemm_oracle.mojo::gemm_oracle, the profile's definition.
+#:   _mojolearn_estimators -> _mojolearn_estimators_host: kde_score_samples
+#:     over kde/host/kde_oracle.mojo, and the classical inference entries
+#:     ols_predict, tsvd_transform, pca_transform, pca_whiten_transform,
+#:     pca_whiten_inverse_transform, qn_decision_function, qn_sigmoid over
+#:     core/classical_host_predict.mojo; dbscan_fit, pca_fit, tsvd_fit,
+#:     inverse_transform, ols_fit, ridge_fit, qn_fit are absent.
+#:   _mojolearn_tsa -> _mojolearn_tsa_host: holtwinters_fit and
+#:     holtwinters_forecast over holtwinters/host/hw_oracle.mojo; kpss_test
+#:     and select_d (ARIMA's) are absent.
+#:   _mojolearn_solver -> _mojolearn_solver_host: cd_fit and cd_predict over
+#:     solver/host/cd_oracle.mojo and gemm_oracle; linkage_fit is absent.
+#:   _mojolearn_svm -> _mojolearn_svm_host: svc_fit and svc_predict over
+#:     svm/host/smo_oracle.mojo; svr_fit, svr_predict and iforest_run are
+#:     absent.
+_HOST_MODULES = host_surface.routed_modules()
 
 #: The env switch the CPU identity gate sets to load a host binding built
 #: with `-D MOJOLEARN_HOST_SABOTAGE=1`; refused otherwise.
