@@ -118,6 +118,16 @@ def execute(request):
                 raise ImportError('rebuild estimators binding for parallel QR panels')
         state.fit(X, y, **kwargs)
         return state
+    if operation == 'hdbscan_fit':
+        from .hdbscan import HDBSCAN
+        if type(state) is not HDBSCAN:
+            raise TypeError('requires mojolearn.HDBSCAN')
+        native = state._extension()
+        if (not callable(getattr(native, 'hdbscan_rows_parallel_available', None))
+                or native.hdbscan_rows_parallel_available() != 1):
+            raise ImportError('rebuild HDBSCAN binding for distributed neighbor and distance rows')
+        state.fit(*args)
+        return state
     if operation in ('gp_fit', 'gp_predict'):
         native = state._extension()
         if (not callable(getattr(native, 'gp_parallel_available', None))
