@@ -575,10 +575,15 @@ def gpr_predict_binding(
     return PythonObject(n_clamped)
 
 
+def gp_parallel_available() raises -> PythonObject:
+    return PythonObject(1)
+
+
 @export
 def PyInit__mojolearn_gp() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_gp")
+        m.def_function[gp_parallel_available]("gp_parallel_available")
         m.def_function[gp_vendor_binding]("gp_vendor")
         m.def_function[gp_numeric_mode_binding]("gp_numeric_mode")
         m.def_function[gpr_fit_binding]("gpr_fit")

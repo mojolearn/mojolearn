@@ -77,6 +77,17 @@ def execute(request):
         X, y, kwargs = args
         state.fit(X, y, **kwargs)
         return state
+    if operation in ('gp_fit', 'gp_predict'):
+        native = state._extension()
+        if (not callable(getattr(native, 'gp_parallel_available', None))
+                or native.gp_parallel_available() != 1):
+            raise ImportError('rebuild GP binding for distributed covariance rows')
+        if operation == 'gp_fit':
+            state.fit(*args)
+            return state
+        X, return_std = args
+        result = state.predict(X, return_std=return_std)
+        return result, (state.clamped_, state.n_clamped_) if return_std else None
     if operation in ('svm_fit', 'svm_predict'):
         from ._svm_impl import _extension
         native = _extension('identical')

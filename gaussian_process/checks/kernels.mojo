@@ -99,6 +99,9 @@ number of roundings and the order they happen in. sklearn's `Sum` and
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
+from core.multi_gpu import peer_clone
+from std.os import getenv
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 from core.identity_trace import IdentityTrace
 from gaussian_process.checks.gp_sabotage import (
@@ -801,6 +804,7 @@ def gp_white_kernel(
     n_in: Int32,
     noise: Float32,
     is_self_in: Int32,
+    global_row_start: Int32 = 0,
 ):
     """`WhiteKernel.__call__`, sklearn `kernels.py:1406-1419`.
 
@@ -817,7 +821,7 @@ def gp_white_kernel(
         return
     var i = t // n
     var j = t - i * n
-    if Int(is_self_in) != 0 and i == j:
+    if Int(is_self_in) != 0 and i + Int(global_row_start) == j:
         out_k.unsafe_store(t, ftz(noise))
     else:
         out_k.unsafe_store(t, Float32(0.0))
@@ -1078,6 +1082,8 @@ def gp_kernel_matrix(
     tag: StringSlice,
     elem_tpb: Int = GP_ELEM_TPB,
     sabotage: Int = GP_SAB_NONE,
+    distribute: Bool = True,
+    global_row_start: Int = 0,
 ) raises:
     """`out[m x n] = k(x[m x d], y[n x d])`, row-major, on the device.
 
@@ -1142,6 +1148,18 @@ def gp_kernel_matrix(
             " gp_kernel_stack_floats"
         )
 
+    if distribute:
+        var setting = String(getenv("MOJOLEARN_GP_DEVICE_COUNT"))
+        if setting != "" and setting != "1":
+            var count = Int(setting)
+            if count < 1 or count > 64 or GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+                raise Error("parallel GP requires IDENTICAL and 1..64 devices")
+            if sabotage != GP_SAB_NONE:
+                raise Error("parallel GP does not execute sabotage probes")
+            _gp_rows(ctx, out, x, y, dls, m, n, d, spec, is_self, elem_tpb, count)
+            trace.record_device(ctx, tag, out, m * n)
+            return
+
     var cells = m * n
     var grid = (cells + elem_tpb - 1) // elem_tpb
     var sab_kernels = gp_sabotage_touches_kernel_matrix(sabotage)
@@ -1200,6 +1218,7 @@ def gp_kernel_matrix(
                 Int32(n),
                 spec.params[t],
                 self_flag,
+                Int32(global_row_start),
                 grid_dim=(grid, 1, 1),
                 block_dim=(elem_tpb, 1, 1),
             )
@@ -1357,3 +1376,71 @@ def gp_predictive_variance(
     trace.record_device(ctx, "gp.var", var_out, n_star)
     trace.record_device(ctx, "gp.clamped", clamped, n_star)
     trace.record_device(ctx, "gp.std", std_out, n_star)
+
+
+@fieldwise_init
+struct GPRowShard(Movable):
+    var ctx: DeviceContext
+    var x: DeviceBuffer[DType.float32]
+    var y: DeviceBuffer[DType.float32]
+    var ls: DeviceBuffer[DType.float32]
+    var output: DeviceBuffer[DType.float32]
+    var stack: DeviceBuffer[DType.float32]
+    var first: Int
+    var rows: Int
+
+    def __deinit__(deinit self):
+        _ = self.x^
+        _ = self.y^
+        _ = self.ls^
+        _ = self.output^
+        _ = self.stack^
+        try:
+            self.ctx.synchronize()
+        except:
+            pass
+        _ = self.ctx^
+
+
+def _gp_rows(ctx: DeviceContext, mut output: DeviceBuffer[DType.float32],
+    mut x: DeviceBuffer[DType.float32], mut y: DeviceBuffer[DType.float32],
+    mut ls: DeviceBuffer[DType.float32], m: Int, n: Int, d: Int,
+    spec: GPKernelSpec, is_self: Bool, tpb: Int, count: Int,
+) raises:
+    """Disjoint covariance rows with original expression and feature order.
+
+    WhiteKernel's structural diagonal uses the original global row index.
+    The Cholesky/solve/likelihood and predictive variance remain on the root.
+    Full covariance and root expression workspace still have to fit there.
+    """
+    ctx.synchronize()
+    var active = min(count, m)
+    var shards = List[GPRowShard]()
+    for rank in range(active):
+        var first = m * rank // active
+        var rows = m * (rank + 1) // active - first
+        var device = DeviceContext(device_id=rank)
+        var xv = x.create_sub_buffer[DType.float32](first * d, rows * d)
+        var yv = y.create_sub_buffer[DType.float32](0, n * d)
+        var local_x = peer_clone(ctx, device, xv)
+        var local_y = peer_clone(ctx, device, yv)
+        var local_ls = peer_clone(ctx, device, ls)
+        var out = device.enqueue_create_buffer[DType.float32](rows * n)
+        var stack = device.enqueue_create_buffer[DType.float32](gp_kernel_stack_floats(rows, n))
+        device.synchronize()
+        shards.append(GPRowShard(device^, local_x^, local_y^, local_ls^, out^, stack^, first, rows))
+    # These calls enqueue only; no trace or synchronization joins one device
+    # before the other device's original expression kernels are submitted.
+    for rank in range(active):
+        ref shard = shards[rank]
+        var trace = IdentityTrace.disabled()
+        gp_kernel_matrix(shard.ctx, shard.output, shard.x, shard.y, shard.ls, shard.stack,
+                         shard.rows, n, d, spec, is_self, trace, "parallel.gp",
+                         tpb, GP_SAB_NONE, False, shard.first)
+    for rank in range(active):
+        ref shard = shards[rank]
+        var destination = output.create_sub_buffer[DType.float32](shard.first * n, shard.rows * n)
+        shard.output.enqueue_copy_to(destination)
+        shard.ctx.synchronize()
+    _ = shards^
+    ctx.synchronize()

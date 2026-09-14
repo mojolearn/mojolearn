@@ -241,3 +241,38 @@ def predict_svm(estimator, X, *, devices=(0,), method='predict'):
         return pool.map([('svm_predict', estimator, (X, method))])[0]
     finally:
         pool.close()
+
+
+def fit_gaussian_process(estimator, X, y, *, devices=(0,)):
+    """Distribute covariance rows; retain the original Cholesky and solve order."""
+    from ._gp_impl import GaussianProcessRegressor
+    if type(estimator) is not GaussianProcessRegressor:
+        raise TypeError('requires mojolearn.GaussianProcessRegressor')
+    if estimator.numeric_mode not in (None, 'identical'):
+        raise ValueError('parallel Gaussian processes require IDENTICAL')
+    pool = DevicePool(devices, cooperative=True)
+    try:
+        result = pool.map([('gp_fit', estimator, (X, y))])[0]
+    finally:
+        pool.close()
+    estimator.__dict__ = result.__dict__.copy()
+    return estimator
+
+
+def predict_gaussian_process(estimator, X, *, devices=(0,), return_std=False):
+    """Distribute cross-covariance rows; retain root prediction/variance folds."""
+    from ._gp_impl import GaussianProcessRegressor
+    if type(estimator) is not GaussianProcessRegressor:
+        raise TypeError('requires mojolearn.GaussianProcessRegressor')
+    if estimator.numeric_mode not in (None, 'identical'):
+        raise ValueError('parallel Gaussian processes require IDENTICAL')
+    if type(return_std) is not bool:
+        raise ValueError('return_std must be bool')
+    pool = DevicePool(devices, cooperative=True)
+    try:
+        result, diagnostic = pool.map([('gp_predict', estimator, (X, return_std))])[0]
+    finally:
+        pool.close()
+    if return_std:
+        estimator.clamped_, estimator.n_clamped_ = diagnostic
+    return result
