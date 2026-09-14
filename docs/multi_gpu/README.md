@@ -21,6 +21,7 @@ qualify their subsequent kernel-row paths on two H100s.
 | Surface | Partition | Numerical contract |
 | --- | --- | --- |
 | Pooled byte language model | Decoder layers and their model/optimizer state; embedding/head on the first device | Original layer kernels, ordered logical gradient sums and atomic owned AdamW updates |
+| Offloaded byte language model replay | One decoder layer at a time on one GPU, canonical state on the host | Same ordered logical gradients and staged atomic AdamW updates |
 | Byte language model | Logical microbatches across resident device replicas | Copy gradient 0; left-fold gradients 1..K-1; disjoint AdamW updates and parameter broadcast |
 | SmallMLPTrainer | Frozen microbatch snapshots on concurrent GPU workers | Same ordered sum; original global clipping and disjoint host-staged optimizer updates |
 | SambaStack (Mamba/attention blocks) | Frozen microbatch snapshots on concurrent GPU workers | Same ordered sum; explicit logical dropout stream/offsets |
@@ -564,3 +565,47 @@ fixture completes a step on two RTX 5090s while the same driver runs out of
 memory on one; resident use is 21766/21732 MiB. These are NVIDIA architecture
 checks, with no AMD/Apple qualification or throughput claim. This does not extend model pooling to MLP/Samba
 or eliminate the remaining root allocations in classical/tree estimators.
+
+### One-GPU replay with host offload
+
+`mojolearn.offload_training.OffloadedByteLanguageModelTrainer` replays the same
+ordered checkpoint while keeping canonical parameters, moments, gradient sums
+and saved layer inputs in host memory. It loads one decoder layer at a time;
+backward reconstructs that layer's original forward stages from the saved
+input and unchanged weights. Embedding/head buffers remain on the selected GPU.
+All arithmetic, including each sequential gradient add and AdamW update, uses
+the existing GPU kernels. Host work copies bytes and stages the transaction.
+
+```python
+from mojolearn.offload_training import OffloadedByteLanguageModelTrainer
+
+with OffloadedByteLanguageModelTrainer.from_checkpoint(
+    checkpoint, devices=(0,),
+) as replay:
+    replay.train_step(next_microbatches)
+    continued = replay.checkpoint()
+```
+
+Exactly one physical device is required. Logical microbatch count, order,
+shape, optimizer configuration and corpus bytes must agree with the pooled
+run. Each decoder layer plus the embedding/head must fit the GPU, and host
+memory must hold the full state, gradient sums, saved inputs and transaction
+copies. This is a capacity/replay path with extra transfers and recomputation;
+no throughput claim is made. It does not offload a single oversized layer.
+
+Updates run one canonical chunk at a time and stage their results in separate
+host arrays. The trainer publishes the new state only after all chunks pass
+the existing device scans. Failure leaves the previous state intact; failure
+to publish a successful native result restores the retained host snapshot.
+The checkpoint contract is shared with both resident byte-LM trainers.
+
+Cloud gates are `tools/byte_lm_offload_check.py`,
+`training/checks/byte_lm_offload_check.mojo` and
+`tools/byte_lm_offload_capacity_check.py`. Qualification receipts are in
+`bench/results/multi_gpu/2026-09-14/byte-offload-h100/`.
+
+The earlier parallel-driver baseline also has a separate
+[AMD/NVIDIA/Apple identity record](../../bench/results/identity_break/2026-09-14_136-lanes/README.md):
+sixteen parallel lanes on two MI300X GPUs and two H100s match single-device
+AMD/Apple replay for 144 training cells. That frozen record predates the new
+layer-pooling/offload implementations and does not qualify their added paths.

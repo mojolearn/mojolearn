@@ -35,12 +35,17 @@ Initial fixtures cover two RTX 4090s and two H100s. A frozen-source replay on
 two RTX 5090s matches all 16 H100 receipt groups for pooled neural optimizers,
 MLP/Samba, boosting, wider Gram and tall full PCA. Pointwise histogram dump
 bytes and OrderedRMSE trace records also match across those architectures.
-This is NVIDIA architecture coverage; other continued families still have
-H100-only evidence, and new AMD/Apple multi-device qualification remains owed.
+Those receipts cover NVIDIA architectures. A separate earlier-source
+[136-lane identity record](../../bench/results/identity_break/2026-09-14_136-lanes/README.md)
+now covers sixteen parallel-driver lanes on two MI300X GPUs and two H100s,
+matching their single-device AMD and Apple replay columns. Its 144 training
+cells establish cross-vendor equality for those fixtures, not every later
+pooling change or parameter combination. The new layer-pool and offload
+implementations still require their own AMD/Apple qualification.
 
 | Surface | Current multi-GPU coverage | Remaining numerical work |
 | --- | --- | --- |
-| SmallByteLanguageModelTrainer / LanguageModelTrainer | Replica training with pooled optimizer/reduction buffers; separate layer-owned model trainer with RTX 5090 capacity and H100/5090 ordered-replay gates | Broader shapes; memory-bounded single-GPU replay when the model exceeds VRAM; AMD/Apple qualification |
+| SmallByteLanguageModelTrainer / LanguageModelTrainer | Replica training with pooled optimizer/reduction buffers; separate layer-owned model trainer with RTX 5090 capacity and H100/5090 ordered-replay gates; host-offloaded single-GPU replay | Broader shapes; RTX5090 and AMD/Apple qualification of host-offloaded replay; eight-device qualification |
 | SmallMLPTrainer | Concurrent microbatch gradients, ordered sum and host-staged optimizer ranges | Larger shapes; resident state and model/activation pooling |
 | SambaStack | Concurrent microbatch gradients, ordered sum, original global clipping and host-staged optimizer ranges | Broader configurations; resident state and model/activation pooling |
 | RandomForestClassifier / RandomForestRegressor | Global tree-ID ranges over full data | Larger forests; data partitioning |
