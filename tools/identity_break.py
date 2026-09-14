@@ -68,8 +68,9 @@ disagreeing with itself and a DIVERGENT column is two vendors disagreeing.
             offer `save_checkpoint`/`from_checkpoint` instead; that pair
             feeds the same column (2026-09-13).
 
-THE LANES, 118 (2026-09-14; 46 on 2026-09-13, pca-whiten the same night, and
-71 on 2026-09-14 from the claim-surface census). One per public estimator
+THE LANES, 120 (2026-09-14; 46 on 2026-09-13, pca-whiten the same night, 71
+on 2026-09-14 from the claim-surface census, then logistic-multiclass and
+tokenizer the same day when those two got their doors). One per public estimator
 plus linalg and metrics, then one per public constructor VALUE that selects
 a different numeric path and no earlier lane pins (a kernel, an objective, a
 sampler, a solver, a metric, a reduction).
@@ -98,12 +99,12 @@ sampler, a solver, a metric, a reduction).
                dbscan-weighted kde-<kernel>-<metric> x5 kde-weighted pca-full-whiten
                ols-no-intercept ols-weighted ridge-no-intercept logistic-l1
                logistic-elasticnet logistic-unpenalized-no-intercept
-               elasticnet-l2end-no-intercept svc-linear svr-linear knn-<metric> x5
+               logistic-multiclass elasticnet-l2end-no-intercept svc-linear svr-linear knn-<metric> x5
                knn-rbc knn-clf-distance knn-reg-distance radius-<metric> x3
                standard-scaler-no-mean standard-scaler-no-std minmax-scaler-clip
                spectral-precomputed holtwinters-multiplicative kpss arima-011
                arima-seasonal-c gp-matern12 gp-matern32 gp-matern52-ard
-      functions gemm-transposed metrics-classification cross-val
+      functions gemm-transposed metrics-classification tokenizer cross-val
 
 The 18 lanes added on 2026-09-13 (svr through samba above) are fed the SAME
 fixture bytes in the shape their estimator wants; the derivation rules are
@@ -1545,6 +1546,21 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(coef=_h(m.coef_), proba=_h(m.predict_proba(X[:256]))), m, lambda e: (e.predict_proba(Xh[:256]),))
 
 
+@lane("logistic-multiclass")
+def _(ml, X, yc, yr, Xh=None):
+    """More than two classes route through the softmax loss (the
+    logistic-multiclass lane, docs/lanes/BRIEF_logistic_multiclass_2026-09-14.md
+    section 5). Three classes from the fixture's own labels: the binary
+    rule plus one for rows whose column 5 is above its median. Column 5 is
+    one no fixture perturbs (denormal rewrites 0-2, dupes 14-15, the labels
+    read 3-4), and the median split keeps all three classes present on
+    every fixture (a sign split leaves `negative` with two)."""
+    y3 = (yc + (X[:, 5] > np.median(X[:, 5]))).astype(np.int32)
+    m = ml.LogisticRegression(max_iter=50).fit(X, y3)
+    return _fit(dict(coef=_h(m.coef_), proba=_h(m.predict_proba(X[:256]))), m,
+                lambda e: (e.predict_proba(Xh[:256]), e.predict(Xh[:256])))
+
+
 @lane("logistic-elasticnet")
 def _(ml, X, yc, yr, Xh=None):
     m = ml.LogisticRegression(penalty="elasticnet", l1_ratio=0.5, max_iter=50).fit(X, yc)
@@ -1775,6 +1791,26 @@ def _(ml, X, yc, yr, Xh=None):
     parts["trustworthiness"] = _h(np.float64(mt.trustworthiness(X[:512, :4], X[:512, :2], n_neighbors=5)))
     parts["silhouette_samples"] = _h(np.asarray(mt.silhouette_samples(X[:n, :4], labels)))
     return _fit(parts)
+
+
+@lane("tokenizer")
+def _(ml, X, yc, yr, Xh=None):
+    """GPT2Tokenizer (python/mojolearn/tokenizer.py), host integers and
+    tables through _mojolearn_tokenizer_host; no float arithmetic, so
+    cross-vendor identity is by construction and what this measures is
+    that the SAME binary bytes were built on every box. The fixture bytes
+    are the first 4,096 bytes of X viewed as bytes (the byte-lm lane's
+    derivation without _ids' modulus), encoded with <|endoftext|> allowed,
+    then decoded back; the held-out probe encodes Xh's first 4,096 bytes
+    (docs/lanes/BRIEF_expose_tokenizer_2026-09-14.md section 3)."""
+    tok = ml.GPT2Tokenizer()
+    raw = np.ascontiguousarray(X).tobytes()[:4096]
+    ids = np.asarray(tok.encode_bytes(raw, allow_endoftext=True), dtype=np.int32)
+    back = np.frombuffer(tok.decode_bytes(ids.tolist()), dtype=np.uint8)
+    assert back.tobytes() == raw, "tokenizer lane: decode(encode(x)) != x"
+    return _fit(dict(ids=_h(ids), decoded=_h(back), n_vocab=_h(np.int64(tok.n_vocab))),
+                tok, lambda e: (np.asarray(e.encode_bytes(np.ascontiguousarray(Xh).tobytes()[:4096],
+                                                          allow_endoftext=True), dtype=np.int32),))
 
 
 @lane("cross-val")
