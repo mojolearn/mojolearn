@@ -33,7 +33,6 @@ from std.python.bindings import PythonModuleBuilder
 from bindings.hostptr import f32_ptr, read_f32
 from checks.kernel_matrix import (
     COLUMN_CPU,
-    DETECTED_COLUMN,
     TARGET_COLUMN,
     column_name,
 )
@@ -75,10 +74,10 @@ def estimators_host_column_binding() raises -> PythonObject:
     return PythonObject(column_name(TARGET_COLUMN))
 
 
-def estimators_host_detected_column_binding() raises -> PythonObject:
-    """`column_name(DETECTED_COLUMN)`: what the accelerator predicates fold
-    to in THIS build, with no define."""
-    return PythonObject(column_name(DETECTED_COLUMN))
+# There is no `estimators_host_detected_column` read-back, for the reason 8d16ce2f
+# removed it from the forest and byte LM host bindings: the detected column
+# folds to the GPU of the machine that ran the build, so its name would land
+# in the vendor-neutral binary. The comptime assert above is the check.
 
 
 def estimators_host_sabotage_binding() raises -> PythonObject:
@@ -175,7 +174,6 @@ def PyInit__mojolearn_estimators_host() abi("C") -> PythonObject:
         module.def_function[estimators_host_numeric_mode_binding]("estimators_host_numeric_mode")
         module.def_function[estimators_host_vendor_binding]("estimators_host_vendor")
         module.def_function[estimators_host_column_binding]("estimators_host_column")
-        module.def_function[estimators_host_detected_column_binding]("estimators_host_detected_column")
         module.def_function[estimators_host_sabotage_binding]("estimators_host_sabotage")
         module.def_function[estimators_vendor_binding]("estimators_vendor")
         module.def_function[estimators_numeric_mode_binding]("estimators_numeric_mode")
