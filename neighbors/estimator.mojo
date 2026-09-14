@@ -844,6 +844,25 @@ def knn_classifier_predict(
         metric_arg,
     )
 
+    _knn_classifier_vote(ctx, trace, retained_indices, h_dist.unsafe_ptr(),
+        n_index, n_queries, k, y_ptr, n_outputs, n_classes, out_labels_ptr,
+        out_proba_ptr, out_uniq_ptr, want_proba, weighted)
+    _ = h_dist^
+    _ = h_idx^
+    return used_tile
+
+
+def _knn_classifier_vote(
+    ctx: DeviceContext, mut trace: IdentityTrace,
+    mut retained_indices: List[DeviceBuffer[DType.uint32]],
+    dist_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_index: Int, n_queries: Int, k: Int,
+    y_ptr: MutPointer[Int32, MutUntrackedOrigin], n_outputs: Int,
+    n_classes: List[Int], out_labels_ptr: MutPointer[Int32, MutUntrackedOrigin],
+    out_proba_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    out_uniq_ptr: MutPointer[Int32, MutUntrackedOrigin], want_proba: Bool,
+    weighted: Bool,
+) raises:
     # DEVIATION 554: the weights are computed on the HOST, over the sorted
     # distances the search just wrote, exactly as scikit-learn computes
     # them in numpy over the same matrix. `distance_weights.mojo` carries
@@ -858,7 +877,7 @@ def knn_classifier_predict(
         # the size of the answer the caller is already receiving.
         var d_in = List[Float32](capacity=n_queries * k)
         for i in range(n_queries * k):
-            d_in.append(h_dist.unsafe_ptr().unsafe_load(i))
+            d_in.append(dist_ptr.unsafe_load(i))
         var wl = host_distance_weights(d_in, n_queries, k)
         var h_w = ctx.enqueue_create_host_buffer[DType.float32](
             n_queries * k
@@ -944,12 +963,9 @@ def knn_classifier_predict(
             out_uniq_ptr.unsafe_store(off + j, uniq[i][j])
         off += len(uniq[i])
 
-    _ = h_dist^
-    _ = h_idx^
     _ = d_idx^
     _ = d_w^
     _ = y^
-    return used_tile
 
 
 def _check_class_counts(got: List[List[Int32]], want: List[Int]) raises:
@@ -1029,6 +1045,21 @@ def knn_regressor_predict(
         metric_arg,
     )
 
+    _knn_regressor_vote(ctx, trace, h_dist.unsafe_ptr(), h_idx.unsafe_ptr(),
+                        n_index, n_queries, k, y_ptr, n_outputs, out_ptr, weighted)
+    _ = h_dist^
+    _ = h_idx^
+    return used_tile
+
+
+def _knn_regressor_vote(
+    ctx: DeviceContext, mut trace: IdentityTrace,
+    dist_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    idx_ptr: MutPointer[UInt32, MutUntrackedOrigin],
+    n_index: Int, n_queries: Int, k: Int,
+    y_ptr: MutPointer[Float32, MutUntrackedOrigin], n_outputs: Int,
+    out_ptr: MutPointer[Float32, MutUntrackedOrigin], weighted: Bool,
+) raises:
     var d_w = ctx.enqueue_create_buffer[DType.float32](n_queries * k)
     if weighted:
         # HOST LISTS ACROSS THE BOUNDARY, not pointers: `archive/plans/UNWIRED.md:31`
@@ -1038,7 +1069,7 @@ def knn_regressor_predict(
         # the size of the answer the caller is already receiving.
         var d_in = List[Float32](capacity=n_queries * k)
         for i in range(n_queries * k):
-            d_in.append(h_dist.unsafe_ptr().unsafe_load(i))
+            d_in.append(dist_ptr.unsafe_load(i))
         var wl = host_distance_weights(d_in, n_queries, k)
         var h_w = ctx.enqueue_create_host_buffer[DType.float32](
             n_queries * k
@@ -1060,7 +1091,7 @@ def knn_regressor_predict(
         y.append(ctx.enqueue_create_buffer[DType.float32](n_index))
     var out = ctx.enqueue_create_buffer[DType.float32](n_queries * n_outputs)
     ctx.synchronize()
-    ctx.enqueue_copy(dst_buf=d_idx, src_ptr=h_idx.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=d_idx, src_ptr=idx_ptr)
     for i in range(n_outputs):
         ctx.enqueue_copy(
             dst_buf=y[i], src_ptr=y_ptr.unsafe_offset(i * n_index)
@@ -1080,11 +1111,8 @@ def knn_regressor_predict(
     _ = h^
     _ = out^
     _ = d_w^
-    _ = h_dist^
-    _ = h_idx^
     _ = d_idx^
     _ = y^
-    return used_tile
 
 
 # ---------------------------------------------------------------------------
@@ -1649,3 +1677,57 @@ def rbc_knn_search(
     _ = dist_count^
     _ = hc^
     return total
+
+
+# The reference-sharded driver supplies the same sorted top-k arrays as search.
+# These entries reuse the original vote bodies; no new floating-point fold.
+def _validate_neighbors(idx_ptr: MutPointer[UInt32, MutUntrackedOrigin],
+                       n_index: Int, n_queries: Int, k: Int,
+                       n_outputs: Int, weights: Int) raises:
+    if n_index < 1 or n_queries < 1 or k < 1 or k > n_index or n_outputs < 1:
+        raise Error("precomputed neighbors: invalid shape")
+    if weights != WEIGHTS_UNIFORM and weights != WEIGHTS_DISTANCE:
+        raise Error("precomputed neighbors: unsupported weights")
+    for i in range(n_queries * k):
+        if UInt64(idx_ptr[i]) >= UInt64(n_index):
+            raise Error("precomputed neighbor index outside reference data")
+
+
+def knn_classifier_from_neighbors(
+    ctx: DeviceContext, dist_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    idx_ptr: MutPointer[UInt32, MutUntrackedOrigin],
+    n_index: Int, n_queries: Int, k: Int,
+    y_ptr: MutPointer[Int32, MutUntrackedOrigin], n_outputs: Int,
+    n_classes: List[Int], out_labels_ptr: MutPointer[Int32, MutUntrackedOrigin],
+    out_proba_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    out_uniq_ptr: MutPointer[Int32, MutUntrackedOrigin], want_proba: Bool,
+    weights: Int,
+) raises:
+    _validate_neighbors(idx_ptr, n_index, n_queries, k, n_outputs, weights)
+    if len(n_classes) != n_outputs:
+        raise Error("precomputed neighbors: class-count shape mismatch")
+    for count in n_classes:
+        if count < 1:
+            raise Error("precomputed neighbors: class counts must be positive")
+    var trace = IdentityTrace()
+    var retained = List[DeviceBuffer[DType.uint32]]()
+    var indices = ctx.enqueue_create_buffer[DType.uint32](n_queries * k)
+    ctx.enqueue_copy(dst_buf=indices, src_ptr=idx_ptr)
+    ctx.synchronize()
+    retained.append(indices^)
+    _knn_classifier_vote(ctx, trace, retained, dist_ptr, n_index, n_queries, k,
+        y_ptr, n_outputs, n_classes, out_labels_ptr, out_proba_ptr,
+        out_uniq_ptr, want_proba, weights == WEIGHTS_DISTANCE)
+
+
+def knn_regressor_from_neighbors(
+    ctx: DeviceContext, dist_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    idx_ptr: MutPointer[UInt32, MutUntrackedOrigin],
+    n_index: Int, n_queries: Int, k: Int,
+    y_ptr: MutPointer[Float32, MutUntrackedOrigin], n_outputs: Int,
+    out_ptr: MutPointer[Float32, MutUntrackedOrigin], weights: Int,
+) raises:
+    _validate_neighbors(idx_ptr, n_index, n_queries, k, n_outputs, weights)
+    var trace = IdentityTrace()
+    _knn_regressor_vote(ctx, trace, dist_ptr, idx_ptr, n_index, n_queries, k,
+                        y_ptr, n_outputs, out_ptr, weights == WEIGHTS_DISTANCE)
