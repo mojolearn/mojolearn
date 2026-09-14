@@ -4,7 +4,7 @@
 
 Profile `mojolearn.identical.gemm.fp32.v1`. Contract
 `gemm/IDENTICAL_FP32_CONTRACT.md`; kernel `gemm/checks/gemm_identical.mojo`;
-oracle `gemm/checks/gemm_oracle.mojo::gemm_oracle`.
+oracle `gemm/host/gemm_oracle.mojo::gemm_oracle`.
 
 Everything else this package exposes is an estimator. This is a numerical
 primitive, and its audience is anyone who needs a matrix product that returns
@@ -100,7 +100,7 @@ PROFILE_VERSION = 1
 PROFILE = f"{PROFILE_FAMILY}.v{PROFILE_VERSION}"
 
 #: The three operations of contract section 0.1, and their `op` codes as
-#: `gemm/checks/gemm_oracle.mojo` defines them. `gemv` is `OP_NT` at
+#: `gemm/host/gemm_oracle.mojo` defines them. `gemv` is `OP_NT` at
 #: `n == 1` and is NOT a fourth operation.
 OP_NN = 0
 OP_NT = 1
@@ -194,7 +194,7 @@ def profile():
         "ops": ("OP_NN", "OP_NT", "OP_TN"),
         "contract": "gemm/IDENTICAL_FP32_CONTRACT.md",
         "kernel": "gemm/checks/gemm_identical.mojo",
-        "oracle": "gemm/checks/gemm_oracle.mojo::gemm_oracle",
+        "oracle": "gemm/host/gemm_oracle.mojo::gemm_oracle",
         # The measured extent of the claim, not the extent of the API. Both
         # numbers are the lane's own, from gemm/README.md; read it rather than
         # quoting these.

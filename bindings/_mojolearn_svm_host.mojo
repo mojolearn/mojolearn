@@ -5,7 +5,7 @@ lane, phase 1, 2026-09-13; brief docs/lanes/BRIEF_cpu_training_2026-09-13.md
 sections 1.1 svc and 3.2).
 
 HOST ONLY. No DeviceContext, no kernel launch, no GPU. The fit is
-`svm/checks/smo_oracle.mojo::smo_oracle_fit[DType.float32]`, "the SAME SMO,
+`svm/host/smo_oracle.mojo::smo_oracle_fit[DType.float32]`, "the SAME SMO,
 serial ... one thread, one loop, ascending", the arm
 `svc_check::check_device_matches_oracle` holds the device to bit for bit
 under IDENTICAL (working-set sequence, alpha and f per outer iteration, b,
@@ -71,7 +71,7 @@ from isolation_forest.impl.rng.xorwow import (
     XORWOW_HOST_SABOTAGE,
     build_xorwow_tables,
 )
-from svm.checks.smo_oracle import (
+from svm.host.smo_oracle import (
     SMO_ORACLE_HOST_SABOTAGE,
     OracleResult,
     smo_oracle_decision,
