@@ -25,6 +25,12 @@ epilogue on the result. No second spelling of the matrix product exists in
 `kernel_methods/`, and `mojolearn.identical.gemm.fp32.v1` is the only
 contraction any kernel here rides.
 
+UNDER FAST THE CALL IS `kernel_op`'s LINES RATHER THAN `kernel_op` ITSELF
+(`_svm_kernel_op`, 2026-09-14), because svm's FAST-only fused RBF tile made every FAST
+build that names `kernel_op` compile sixteen extra device kernels, and
+`km_check.mojo` stopped compiling inside 25 minutes. The table above is what
+runs in every mode; the fused tile is not in it.
+
 THE NAME COLLIDES WITH `checks/kernel_matrix.mojo` AT THE REPOSITORY ROOT
 AND THE TWO ARE UNRELATED. That file is the per-vendor TUNABLES matrix
 (`lib_block_size_for`, `TARGET_COLUMN`); this one is about kernel matrices in
@@ -120,14 +126,20 @@ from kernel_methods.impl.distance.kernel_matrices import (
     polynomial_epilogue_kernel,
     tanh_epilogue_kernel,
 )
+from std.os import getenv
+
 from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_FAST,
     ftz,
     identical_exp,
     identical_mul,
 )
+from core.gemm import gemm_nt
 from svm.impl.distance.kernel_matrices import (
     kernel_op,
     kernel_workspace_floats,
+    rbf_kernel_expanded_kernel,
     row_norms_l2sq,
 )
 from svm.impl.svm_parameter import (
@@ -412,6 +424,88 @@ def laplacian_epilogue_kernel(
 
 
 # ===========================================================================
+# The svm call, and why FAST does not take the fused RBF tile
+# ===========================================================================
+
+#: `svm/impl/distance/kernel_matrices.mojo`'s `KM_TPB`, the block width
+#: `kernel_op` launches `rbf_kernel_expanded_kernel` at. SCHEDULING, since that
+#: kernel is one thread per output cell with no fold across threads.
+comptime _SVM_EPILOGUE_TPB = 256
+
+
+def _svm_kernel_op(
+    ctx: DeviceContext,
+    kp: KernelParams,
+    mut out: DeviceBuffer[DType.float32],
+    mut a: DeviceBuffer[DType.float32],
+    mut b: DeviceBuffer[DType.float32],
+    m: Int,
+    n: Int,
+    k: Int,
+    mut norm_a: DeviceBuffer[DType.float32],
+    mut norm_b: DeviceBuffer[DType.float32],
+    mut ws: DeviceBuffer[DType.float32],
+) raises:
+    """`kernel_op`, CALLED, under IDENTICAL and DETERMINISTIC. Under FAST,
+    `kernel_op`'s own non-fused lines, called one by one.
+
+    **WHY FAST DOES NOT CALL `kernel_op`, WHICH IS COMPILE TIME.** Since
+    DEVIATION 2492 (svm, 2026-09-10) `kernel_op` carries, under FAST only, a
+    run-time branch into `rbf_fused_tile`, which instantiates
+    `rbf_fused_tile_kernel[KPAD]` at all 16 register widths 4, 8, ..., 64,
+    sixteen device kernels, each with two `comptime for` loops unrolled
+    KPAD statements long (1,088 unrolled statements in all) around two
+    `barrier()` phases. The branch is chosen at run time, so every build
+    that NAMES `kernel_op` under FAST compiles all sixteen whatever `k` is.
+    The binding builds IDENTICAL only and never compiles them, and neither
+    does `cholesky/checks/cholesky_check.mojo`, which does not reach
+    `kernel_op`; `km_check.mojo` under FAST did, and on the MI300X and the
+    H100 its compile passed 25 minutes (legs 2026-09-14 d-followup) where
+    it had compiled in all three modes on 2026-09-10 before 2492 landed.
+
+    **WHY NO IDENTICAL OR DETERMINISTIC BIT CAN MOVE.** In those modes this
+    function is the one `kernel_op` call it replaced, same arguments, same
+    order; the FAST branch below is not compiled.
+
+    **WHAT FAST RUNS INSTEAD, AND IT IS WHAT FAST RAN BEFORE 2492.** Exactly
+    the lines `kernel_op` executes under FAST when its fused branch declines:
+    the device count refusal, `gemm_nt` over `k`, then
+    `rbf_kernel_expanded_kernel` for RBF, the refusal of any other
+    non-linear kernel. The LINEAR kernel, the POLYNOMIAL and SIGMOID dots and
+    the RBF-under-a-copy dot never took the fused branch (it requires
+    `kp.kernel == KERNEL_RBF`), so their FAST bits are unchanged too. Only
+    the production RBF kernel matrix under FAST at `k <= 64` changes route,
+    from the fused tile back to `gemm_nt` plus svm's expansion epilogue,
+    which is the route this file's header table and
+    `check_km_sabotage_copies_agree`'s copy both describe. FAST makes no bit
+    claim, and `bindings/build_kernel_methods.sh` builds IDENTICAL only, so
+    no shipped bit moves.
+    """
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST:
+        if m <= 0 or n <= 0:
+            return
+        var setting = String(getenv("MOJOLEARN_SVM_DEVICE_COUNT"))
+        if setting != "" and setting != "1":
+            # `kernel_op`'s refusal, which under FAST fires on every value
+            # that parses (and `Int` raises on one that does not).
+            var count = Int(setting)
+            _ = count
+            raise Error("parallel SVM kernels require IDENTICAL and 1..64 devices")
+        gemm_nt(ctx, out, a, b, m, n, k)
+        if kp.kernel == KERNEL_RBF:
+            ctx.enqueue_function[rbf_kernel_expanded_kernel](
+                out.unsafe_ptr(), Int32(m), Int32(n),
+                norm_a.unsafe_ptr(), norm_b.unsafe_ptr(), Float32(kp.gamma),
+                grid_dim=(m * n + _SVM_EPILOGUE_TPB - 1) // _SVM_EPILOGUE_TPB,
+                block_dim=_SVM_EPILOGUE_TPB,
+            )
+        elif kp.kernel != KERNEL_LINEAR:
+            raise Error("svm kernel_op: unimplemented kernel " + String(kp.kernel))
+    else:
+        kernel_op(ctx, kp, out, a, b, m, n, k, norm_a, norm_b, ws)
+
+
+# ===========================================================================
 # The dispatcher
 # ===========================================================================
 
@@ -511,20 +605,21 @@ def km_kernel_matrix(
     if kp.kernel == KM_KERNEL_LINEAR:
         # THEIR CODE, CALLED, and there is no epilogue to sabotage: a linear
         # kernel IS the pinned GEMM, whose own six sabotages live in the gemm
-        # lane and are not this lane's to re-drive.
-        kernel_op(ctx, kp, out, a, b, m, n, k, norm_a, norm_b, ws)
+        # lane and are not this lane's to re-drive. `_svm_kernel_op` is
+        # `kernel_op` outside FAST; see it for what FAST runs and why.
+        _svm_kernel_op(ctx, kp, out, a, b, m, n, k, norm_a, norm_b, ws)
         return
 
     if kp.kernel == KM_KERNEL_RBF and not via_copy:
         # THEIR CODE, CALLED. `kernel_op` issues the pinned GEMM and svm's
         # implemented expansion epilogue in one call.
-        kernel_op(ctx, kp, out, a, b, m, n, k, norm_a, norm_b, ws)
+        _svm_kernel_op(ctx, kp, out, a, b, m, n, k, norm_a, norm_b, ws)
         return
 
     # RBF-under-a-copy, POLYNOMIAL and SIGMOID all start from the dot alone,
     # and they get it from the SAME `kernel_op` at a LINEAR parameter block.
     var dot_only = KernelParams(KM_KERNEL_LINEAR, kp.degree, kp.gamma, kp.coef0)
-    kernel_op(ctx, dot_only, out, a, b, m, n, k, norm_a, norm_b, ws)
+    _svm_kernel_op(ctx, dot_only, out, a, b, m, n, k, norm_a, norm_b, ws)
 
     if kp.kernel == KM_KERNEL_RBF:
         ctx.enqueue_function[sabotage_rbf_epilogue_kernel](
