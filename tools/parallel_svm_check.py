@@ -29,8 +29,8 @@ def main():
             y = raw[20000:20065].astype('<f4')
             y = (y.astype('<i4') % 2) if cls is SVC else y / np.float32(255)
             for kernel in ('linear', 'rbf'):
-                params = dict(kernel=kernel, gamma='scale', C=0.7, max_iter=5,
-                              cache_size=0, numeric_mode='identical')
+                params = dict(kernel=kernel, gamma='auto', C=0.7, max_iter=5,
+                              cache_size=1, numeric_mode='identical')
                 one = cls(**params).fit(X, y)
                 many = fit_svm(cls(**params), X, y, devices=(0, 1))
                 digest = hashlib.sha256()

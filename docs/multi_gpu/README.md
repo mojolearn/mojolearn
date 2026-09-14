@@ -30,6 +30,8 @@ record the merged Gram default and the subsequent whole-tree driver on two H100s
 | LinearRegression / Ridge / covariance PCA / TruncatedSVD | Original 128 Gram chunks at 1..128 features | Original chunk partials copied to global positions; unchanged final fold and root solver |
 | LogisticRegression | QN gradient feature columns | Original per-cell row reduction; unchanged root objective, line search and optimizer |
 | Lasso / ElasticNet | Whole FP32-v1 dot leaves during cyclic coordinate descent | Original balanced tree; unchanged coordinate and convergence order |
+| SVC / SVR | Linear/RBF kernel output rows during fit and prediction | Original per-cell FP32-v1 dot and RBF epilogue; original root working-set and update order |
+| GaussianProcessRegressor | Covariance and cross-covariance output rows | Original postfix expression and feature order; global WhiteKernel diagonal; root factorization/solve/variance |
 | StandardScaler / MinMaxScaler | Independent feature columns, fit and transforms | Original row chunks and final per-column fold; output bytes copied into column order |
 
 The gates exercise particular configurations, not all parameter combinations.
@@ -129,7 +131,8 @@ from mojolearn.parallel_ensemble import (
 )
 from mojolearn.parallel_classical import (
     fit_arima, fit_exponential_smoothing, fit_gram_estimator, fit_logistic,
-    fit_coordinate_descent,
+    fit_coordinate_descent, fit_svm, predict_svm,
+    fit_gaussian_process, predict_gaussian_process,
 )
 from mojolearn.parallel_preprocessing import fit_scaler, transform_scaler
 
@@ -141,6 +144,10 @@ fit_exponential_smoothing(holtwinters, devices=(0, 1), series_per_shard=2)
 fit_gram_estimator(ridge, X, y, devices=(0, 1))
 fit_logistic(logistic, X, labels, devices=(0, 1))
 fit_coordinate_descent(lasso, X, y, devices=(0, 1))
+fit_svm(svc, X, labels, devices=(0, 1))
+predicted = predict_svm(svc, queries, devices=(0, 1))
+fit_gaussian_process(gp, X, y, devices=(0, 1))
+mean, std = predict_gaussian_process(gp, queries, devices=(0, 1), return_std=True)
 fit_scaler(scaler, X, devices=(0, 1), columns_per_shard=16)
 scaled = transform_scaler(scaler, X, devices=(0, 1), columns_per_shard=16)
 ```
@@ -167,6 +174,20 @@ Python estimator rebuilds trees on each scoring call, so use the explicit
 `score_isolation_forest` entry to distribute that rebuild too. Scoring itself
 keeps the original root reduction and contamination threshold. Diagnostic
 trace capture is refused by the distributed path.
+
+SVC/SVR distribute output rows of their linear/RBF kernel matrices, including
+prediction kernels. The complete data, working-set state and assembled kernel
+tile remain on the root. One-row operations use only one device. Concurrent
+kernels refuse builds with process-global GEMM phase counters enabled.
+
+Gaussian processes distribute covariance rows, preserving global row indices
+for WhiteKernel's structural training diagonal. Cross-covariance retains its
+zero WhiteKernel contribution even for identical query/training coordinates.
+The kernel expression keeps its original postfix order. Full covariance,
+Cholesky, solves, likelihood and prediction variance remain on the root. Only
+the existing fixed-hyperparameter surface is supported; sabotage probes are
+refused by the distributed entry. Returned standard deviations also publish
+the existing variance-clamp diagnostics on the supplied estimator.
 
 Gram, logistic and coordinate-descent paths retain full root data/solver state.
 The coordinate-descent partition applies to automatic dot scheduling; explicit
@@ -205,7 +226,7 @@ boosting and classical estimators. The following remain unimplemented:
   depend on preceding predictions, so the forest tree-range driver is invalid.
   A dedicated feature/histogram partition must preserve quantization, global
   scales, row order, split tie breaks, leaf estimates and categorical state.
-- Wider/full-solver Gram paths and SVM:
+- Wider/full-solver Gram paths:
   distribute the appropriate matrix or objective work without changing its
   reduction tree or solver trajectory.
 - Neighbors/density, graph/manifold methods, mixture models
@@ -241,6 +262,10 @@ and a RunPod environment marker and should only be invoked on the pod:
 - `training/checks/dot_parallel_check.mojo`: distributed dots against the FP32-v1 oracle.
 - `tools/parallel_iforest_check.py`: bootstrap/features/contamination, scores, labels and failed-fit publication.
 - `training/checks/iforest_parallel_check.mojo`: all eight native tree buffers.
+- `tools/parallel_svm_check.py`: SVC/SVR fitted state, predictions and failed-fit publication.
+- `training/checks/svm_parallel_check.mojo`: linear/RBF kernel cells across feature-leaf boundaries.
+- `tools/parallel_gp_check.py`: GP factors, duals, likelihood, mean/std and clamp diagnostics.
+- `training/checks/gp_parallel_check.mojo`: covariance cells and structural diagonal indexing.
 - Existing `tools/byte_lm_session_check.py --run` for the refactored step.
 
 Every report's scope is limited to the hardware, inputs and configurations

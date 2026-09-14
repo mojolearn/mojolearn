@@ -31,7 +31,7 @@ def main():
                    ConstantKernel(0.8) * RBF(0.9) + WhiteKernel(0.1)]
         kernels += [Matern([0.7, 1.0, 1.3], nu=nu) + WhiteKernel(0.1) for nu in (0.5, 1.5, 2.5)]
         for kernel in kernels:
-            params = dict(kernel=kernel, alpha=0.2, numeric_mode='identical')
+            params = dict(kernel=kernel, alpha=2.0 ** -20, numeric_mode='identical')
             one = GaussianProcessRegressor(**params).fit(X, y)
             many = fit_gaussian_process(GaussianProcessRegressor(**params), X, y, devices=(0, 1))
             assert one.info_ == many.info_ == 0
