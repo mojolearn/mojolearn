@@ -45,6 +45,14 @@ The base binding's OTHER estimator entries (`kmeans_fit`, `rbc_knn_search`,
 the kmeans, rbc and radius lanes keep refusing BY NAME through
 `_HostBinding` until a lane lands them.
 
+Workstream E (lane/cpu-training-e, 2026-09-14) adds the three centering
+helpers of `linear_model.py` (`column_mean_f64`, `center_columns_f32`,
+`scale_rows_f32`, in `bindings/host_helpers.mojo`), which the ols and ridge
+host fits reach through `_buffer._native` before the estimators host
+binding is called; the seven-runner gate refused both lanes at
+`_mojolearn.column_mean_f64` until they were here. Sequential float64
+chains and per-cell operations, no fold to sabotage.
+
 `transpose_f32` and `cast_colmajor_f64_to_f32` MIRROR
 `bindings/_mojolearn.mojo::_tiled_transpose_to_f32` (DEVIATIONS 2471,
 2472) element for element, `dst[c * rows + r] = Float32(src[r * cols +
@@ -64,8 +72,11 @@ from bindings.host_helpers import (
     argmax_rows_f32_binding,
     argmax_rows_f64_binding,
     cast_f64_to_f32_binding,
+    center_columns_f32_binding,
+    column_mean_f64_binding,
     gather_f64_binding,
     gather_i64_binding,
+    scale_rows_f32_binding,
 )
 from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32, u32_ptr
 from checks.kernel_matrix import (
@@ -538,6 +549,9 @@ def PyInit__mojolearn_core_host() abi("C") -> PythonObject:
         module.def_function[gather_f64_binding]("gather_f64")
         module.def_function[argmax_rows_f32_binding]("argmax_rows_f32")
         module.def_function[argmax_rows_f64_binding]("argmax_rows_f64")
+        module.def_function[column_mean_f64_binding]("column_mean_f64")
+        module.def_function[center_columns_f32_binding]("center_columns_f32")
+        module.def_function[scale_rows_f32_binding]("scale_rows_f32")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_core_host: ", error))

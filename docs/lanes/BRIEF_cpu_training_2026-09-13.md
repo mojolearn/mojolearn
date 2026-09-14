@@ -1373,6 +1373,20 @@ section is a bit result; the four-column diff has not run. What exists follows.
   inert by construction, it has no Gram); production runs twice gave the
   same bytes and agreed with numpy at 1e-6 relative. That is a plumbing
   check, not identity.
+- The seven-runner gate (run 34869406147) refused ols and ridge on every
+  runner at `_mojolearn.column_mean_f64`, the centering helper
+  `linear_model.py` reaches through `_buffer._native` before the estimators
+  host binding is called; on a CPU-only install that resolves to the core
+  host binding, which did not carry it. `column_mean_f64`,
+  `center_columns_f32` and `scale_rows_f32` now live in
+  `bindings/host_helpers.mojo` (the base binding's definitions on the
+  calling thread, the same chains in the same order) and are exported by
+  `_mojolearn_core_host`. The Mac reproduced the refusal first (the same
+  ImportError, by name, with the CPU-only path forced through
+  `MOJOLEARN_HOST_DIR` on a worktree with no GPU set) and, with the fix,
+  all nine lane bodies on the `base` fixture read IDENTICAL against the
+  three 47-lane GPU columns (train parts and infer hash, one fixture, one
+  repeat; a witness, not the gate).
 - The test module is `cd python && python3 -m mojolearn.tests.test_cpu_training_e`.
 
 To measure, on each GPU box and on a CPU-only box (the CPU identity gate

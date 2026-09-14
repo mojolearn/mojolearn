@@ -71,6 +71,20 @@ def test_binding_registers_the_four_fits():
         assert f'("{absent}")' not in src, f"{absent} must stay absent so it refuses by name"
 
 
+def test_core_host_carries_the_centering_helpers():
+    """Run 34869406147: ols and ridge REFUSED on every runner at
+    `_mojolearn.column_mean_f64` because the Python centering step reaches
+    the base binding through `_buffer._native`, which on a CPU-only install
+    is the core host binding. The three helpers must be registered there
+    and listed in the manifest."""
+    src = _read(host_surface.binding_source("core"))
+    exports = host_surface.family("core")["exports"]
+    for name in ("column_mean_f64", "center_columns_f32", "scale_rows_f32"):
+        assert f'("{name}")' in src, f"the core host binding does not register {name}"
+        assert name in exports, f"the manifest does not list {name} for core"
+        assert f"def {name}_binding(" in _read("bindings/host_helpers.mojo"), f"{name} has no host body"
+
+
 def test_oracles_import_no_gpu():
     for rel in ORACLES_E:
         text = _read(rel)
