@@ -11,6 +11,8 @@ verified against the dataset manifest. See the
 The later concurrent-byte, boosting and classical changes have separate
 [two-H100 evidence](../../bench/results/multi_gpu/2026-09-14/continued-h100/README.md);
 they have not received a new same-source cross-architecture qualification.
+[Main integration and IsolationForest receipts](../../bench/results/multi_gpu/2026-09-14/integration-h100/README.md)
+record the merged Gram default and the subsequent whole-tree driver on two H100s.
 
 ## Available paths
 
@@ -21,6 +23,7 @@ they have not received a new same-source cross-architecture qualification.
 | SambaStack (Mamba/attention blocks) | Frozen microbatch snapshots on concurrent GPU workers | Same ordered sum; explicit logical dropout stream/offsets |
 | RandomForest classifier/regressor | Whole trees over full replicated data | Original global tree IDs, seed and quantiles; original prediction order |
 | ExtraTrees classifier/regressor | Whole trees over full replicated data | Original global tree IDs and full-data label quantization; original prediction order |
+| IsolationForest | Whole tree ranges during fit and score-time rebuild | Original global RNG IDs, tree-local node indices, score order and contamination threshold |
 | KMeans | Whole row tiles during distance/assignment | Original per-row feature/centroid arithmetic; original initialization, full-data updates and convergence |
 | GradientBoosting, greedy symmetric/depthwise/lossguide | Whole packed feature groups during histogram construction | Original row-reduction geometry and global scale; disjoint histogram-column copies |
 | ARIMA / ExponentialSmoothing | Independent series assigned to workers | Original per-series initialization, solver and likelihood arithmetic |
@@ -121,7 +124,9 @@ fit_kmeans(kmeans, X, devices=(0, 1), sample_weight=weights)
 Additional entries:
 
 ```python
-from mojolearn.parallel_ensemble import fit_boosting
+from mojolearn.parallel_ensemble import (
+    fit_boosting, fit_isolation_forest, score_isolation_forest,
+)
 from mojolearn.parallel_classical import (
     fit_arima, fit_exponential_smoothing, fit_gram_estimator, fit_logistic,
     fit_coordinate_descent,
@@ -129,6 +134,8 @@ from mojolearn.parallel_classical import (
 from mojolearn.parallel_preprocessing import fit_scaler, transform_scaler
 
 fit_boosting(boosting, X, y, devices=(0, 1), sample_weight=weights)
+fit_isolation_forest(isolation, X, devices=(0, 1))
+anomaly_scores = score_isolation_forest(isolation, queries, devices=(0, 1))
 fit_arima(arima, series, devices=(0, 1), series_per_shard=2)
 fit_exponential_smoothing(holtwinters, devices=(0, 1), series_per_shard=2)
 fit_gram_estimator(ridge, X, y, devices=(0, 1))
@@ -152,6 +159,14 @@ must fit on one GPU. ARIMA prediction currently uses the existing single-GPU
 methods; scalers provide an explicit distributed transform entry. No run beyond
 one GPU's memory capacity has been qualified. These new paths have two-H100
 equality evidence, not new AMD/Apple or NVIDIA cross-architecture qualification.
+
+IsolationForest builds tree ranges concurrently, then copies node buffers into
+global tree order. Every worker receives the full training data; build scratch
+is partitioned, and the complete forest is assembled on the root. Its existing
+Python estimator rebuilds trees on each scoring call, so use the explicit
+`score_isolation_forest` entry to distribute that rebuild too. Scoring itself
+keeps the original root reduction and contamination threshold. Diagnostic
+trace capture is refused by the distributed path.
 
 Gram, logistic and coordinate-descent paths retain full root data/solver state.
 The coordinate-descent partition applies to automatic dot scheduling; explicit
@@ -193,8 +208,8 @@ boosting and classical estimators. The following remain unimplemented:
 - Wider/full-solver Gram paths and SVM:
   distribute the appropriate matrix or objective work without changing its
   reduction tree or solver trajectory.
-- Neighbors/density, graph/manifold methods, mixture models,
-  IsolationForest and other classical surfaces: each needs its
+- Neighbors/density, graph/manifold methods, mixture models
+  and other classical surfaces: each needs its
   own partition and qualification. Some have little training work to split.
 - Resident staging reuse, larger models,
   eight physical GPUs, H100/5090 replay, AMD/Apple cross-vendor evidence,
@@ -218,6 +233,14 @@ and a RunPod environment marker and should only be invoked on the pod:
   weighted inputs, classification/regression and failed-fit publication.
 - `tools/parallel_arima_check.py`: independent-series fits, forecasts and rollback.
 - `tools/parallel_preprocessing_check.py`: column fits, transforms, inverse and refusal.
+- `tools/parallel_gram_check.py`: OLS/Ridge/covariance PCA/SVD fitted state and outputs.
+- `training/checks/gram_parallel_check.mojo`: every original Gram partial and final result.
+- `tools/parallel_logistic_check.py`: binary/multiclass QN and failed-fit publication.
+- `tools/parallel_holtwinters_check.py`: additive/multiplicative fits and forecasts.
+- `tools/parallel_solver_check.py`: Lasso/ElasticNet fits and predictions.
+- `training/checks/dot_parallel_check.mojo`: distributed dots against the FP32-v1 oracle.
+- `tools/parallel_iforest_check.py`: bootstrap/features/contamination, scores, labels and failed-fit publication.
+- `training/checks/iforest_parallel_check.mojo`: all eight native tree buffers.
 - Existing `tools/byte_lm_session_check.py --run` for the refactored step.
 
 Every report's scope is limited to the hardware, inputs and configurations

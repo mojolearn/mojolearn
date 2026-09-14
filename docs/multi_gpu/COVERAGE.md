@@ -45,7 +45,7 @@ and histogram paths have two-H100 evidence only.
 | AgglomerativeClustering | None | Distance tiles and global merge/tie order |
 | SpectralClustering | None | Affinity tiles, eigensolver and downstream clustering |
 | UMAP | None | Neighbor graph and globally ordered optimizer/RNG updates |
-| IsolationForest | None | Global tree seed schedule, model merge and score order |
+| IsolationForest | Global tree ranges during fit and score-time rebuild; two-H100 full-model and scoring gates pass | Full-data replication and assembled root model; broader configurations and cross-vendor qualification |
 | GaussianProcessRegressor | None | Kernel tiles, factorization, solves and optimizer trajectory |
 | ARIMA | Independent-series fit; two-H100 fit/forecast equality gates passed | Broader orders, large-memory and cross-vendor qualification; distributed prediction |
 | ExponentialSmoothing | Independent-series additive/multiplicative fit; two-H100 fit/forecast gates pass | Distributed prediction; broader configurations and capacity qualification |

@@ -1,0 +1,37 @@
+1323 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x589c40000000, nodemask=2)
+1502 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x389380000000, nodemask=2)
+PASS LinearRegression 7 {'fit_intercept': False, 'numeric_mode': 'identical'}
+Traceback (most recent call last):
+  File "/root/mojolearn/python/mojolearn/_buffer.py", line 759, in _native
+    fn = getattr(_backend.binding("_mojolearn", mode="identical"), key)
+                 ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_backend.py", line 1425, in binding
+    module = getattr(selected, name)
+  File "/root/mojolearn/python/mojolearn/_backend.py", line 1293, in __getattr__
+    raise ImportError(
+    ...<5 lines>...
+    )
+ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn.so, which is not built. Build it with
+    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build.sh
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/parallel_gram_check.py", line 64, in <module>
+    main()
+    ~~~~^^
+  File "/root/mojolearn/tools/parallel_gram_check.py", line 37, in main
+    serial = cls(**params).fit(X, target, **kwargs)
+  File "/root/mojolearn/python/mojolearn/linear_model.py", line 588, in fit
+    weights = _check_sample_weight(sample_weight, rows, "LinearRegression")
+  File "/root/mojolearn/python/mojolearn/linear_model.py", line 466, in _check_sample_weight
+    if not all_finite(w):
+           ~~~~~~~~~~^^^
+  File "/root/mojolearn/python/mojolearn/_buffer.py", line 727, in all_finite
+    fn = _native("all_finite_f32" if arr.dtype == "<f4" else "all_finite_f64")
+  File "/root/mojolearn/python/mojolearn/_buffer.py", line 770, in _native
+    raise ImportError(
+    ...<4 lines>...
+    ) from exc
+ImportError: mojolearn: the base binding has no `all_finite_f32`; the compiled _mojolearn extension is older than this Python layer, or the identical set is not built. Rebuild it with
+    MOJOLEARN_NUMERIC_MODE=identical sh bindings/build.sh

@@ -1,0 +1,44 @@
+4547 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x78fa40000000, nodemask=2)
+Imported from /root/mojolearn/training/checks/iforest_parallel_check.mojo:6:
+/root/mojolearn/core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/training/checks/iforest_parallel_check.mojo:7:
+/root/mojolearn/isolation_forest/impl/isolation_forest.mojo:1063:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ref shard = sp[rank]
+                        ~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/iforest_parallel_check.mojo:7:
+/root/mojolearn/isolation_forest/impl/isolation_forest.mojo:1067:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    data.append(xp[i])
+                                ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/iforest_parallel_check.mojo:7:
+/root/mojolearn/isolation_forest/impl/isolation_forest.mojo:1073:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            fp[rank] = 1
+            ~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/iforest_parallel_check.mojo:6:
+/root/mojolearn/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/training/checks/iforest_parallel_check.mojo:6:
+/root/mojolearn/core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/training/checks/iforest_parallel_check.mojo:6:
+/root/mojolearn/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+PASS complete forest buffers 0 3
+PASS complete forest buffers 0 7
+PASS complete forest buffers 1 3
+PASS complete forest buffers 1 7

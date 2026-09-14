@@ -1,0 +1,111 @@
+{
+  "status": "PASS",
+  "checks": [
+    {
+      "params": {
+        "n_estimators": 1,
+        "max_samples": 33,
+        "max_depth": 5,
+        "max_features": 1.0,
+        "bootstrap": false,
+        "contamination": "auto",
+        "random_state": 42,
+        "numeric_mode": "identical"
+      },
+      "sha256": "aa6ca524d2d31d6a0486eede95613379f9df6984853ded550a34b8577d4cd34e"
+    },
+    {
+      "params": {
+        "n_estimators": 1,
+        "max_samples": 33,
+        "max_depth": 5,
+        "max_features": 1.0,
+        "bootstrap": false,
+        "contamination": 0.2,
+        "random_state": 42,
+        "numeric_mode": "identical"
+      },
+      "sha256": "c495c05147f766e9b47900c0807ada466e1cd41e90e082244b4ebdab1c729c91"
+    },
+    {
+      "params": {
+        "n_estimators": 1,
+        "max_samples": 33,
+        "max_depth": 5,
+        "max_features": 0.6,
+        "bootstrap": true,
+        "contamination": "auto",
+        "random_state": 42,
+        "numeric_mode": "identical"
+      },
+      "sha256": "8805d5acab1c2f6463bb88919040741893b1e14374a9d77d96af2ad274c9a9b6"
+    },
+    {
+      "params": {
+        "n_estimators": 1,
+        "max_samples": 33,
+        "max_depth": 5,
+        "max_features": 0.6,
+        "bootstrap": true,
+        "contamination": 0.2,
+        "random_state": 42,
+        "numeric_mode": "identical"
+      },
+      "sha256": "876a10830eef0e2a90a3b4bbb8f830d2bde20fd7068dd5fe3ff7a831c76a1306"
+    },
+    {
+      "params": {
+        "n_estimators": 5,
+        "max_samples": 33,
+        "max_depth": 5,
+        "max_features": 1.0,
+        "bootstrap": false,
+        "contamination": "auto",
+        "random_state": 42,
+        "numeric_mode": "identical"
+      },
+      "sha256": "e28461f080161d2be9d04941bd22841909e7e6ca7133f95aa2eb9f53fd5ad4a1"
+    },
+    {
+      "params": {
+        "n_estimators": 5,
+        "max_samples": 33,
+        "max_depth": 5,
+        "max_features": 1.0,
+        "bootstrap": false,
+        "contamination": 0.2,
+        "random_state": 42,
+        "numeric_mode": "identical"
+      },
+      "sha256": "b029f9e672b25ab6a7a46b7cb9e7b4b0c8d89a8df3a64cfce0cfd2772fc7b0c5"
+    },
+    {
+      "params": {
+        "n_estimators": 5,
+        "max_samples": 33,
+        "max_depth": 5,
+        "max_features": 0.6,
+        "bootstrap": true,
+        "contamination": "auto",
+        "random_state": 42,
+        "numeric_mode": "identical"
+      },
+      "sha256": "69bda31765d769f7933054ac8643172cf5a82c0d91e0574548d84481ffebbad1"
+    },
+    {
+      "params": {
+        "n_estimators": 5,
+        "max_samples": 33,
+        "max_depth": 5,
+        "max_features": 0.6,
+        "bootstrap": true,
+        "contamination": 0.2,
+        "random_state": 42,
+        "numeric_mode": "identical"
+      },
+      "sha256": "9714d9dabfd2b39f0ed43f8617999512178fcee08c38a1e72a4d064a635aa05f"
+    }
+  ],
+  "corpus_sha256": "2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8",
+  "scope": "Two H100s; whole-tree builds and original scoring; full data replicated and assembled model on root"
+}
