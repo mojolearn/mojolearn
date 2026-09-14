@@ -40,7 +40,7 @@ and histogram paths have two-H100 evidence only.
 | PCA / TruncatedSVD | Original Gram chunks at 1..128 features; covariance PCA and SVD gates pass | Other solver paths, larger widths and root-state partitioning |
 | NearestNeighbors / RadiusNeighbors | Whole-query shards; brute/RBC KNN and ragged radius gates pass on two H100s | Pooled reference index; larger shapes/metrics and cross-vendor qualification |
 | KNeighborsClassifier / KNeighborsRegressor | Whole-query shards with original voting/weighting; single/multi-target two-H100 gates pass | Pooled reference index; broader configurations and cross-vendor qualification |
-| DBSCAN | None | Distance tiles and global connectivity/label semantics |
+| DBSCAN | Brute L2/L1 and RBC neighborhood rows; two-H100 adjacency/CSR, core-stage and full-fit gates pass | Root graph/index partitioning; larger shapes and cross-vendor qualification |
 | KernelDensity | Whole-query shards; six kernels with/without positive weights pass on two H100s | Pooled reference index; broader metrics/shapes and cross-vendor qualification |
 | AgglomerativeClustering | None | Distance tiles and global merge/tie order |
 | SpectralClustering | None | Affinity tiles, eigensolver and downstream clustering |

@@ -1,0 +1,5 @@
+# dbscan n=1025 d=3 eps=0.2 min_pts=5 batches=6 metric=manhattan weighted=False
+# format: mojolearn-identity-trace v1
+0	dbscan.core	u8	1025	b6b300ddeca30f61
+1	dbscan.labels.merged	i32	1025	174b1ab933be5659
+2	dbscan.labels.final	i32	1025	2898c8898d6ed949

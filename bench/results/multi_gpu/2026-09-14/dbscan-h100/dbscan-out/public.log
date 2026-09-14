@@ -1,0 +1,66 @@
+15870 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x398900000000, nodemask=2)
+16049 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3328c0000000, nodemask=1)
+16049 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x39afc0000000, nodemask=2)
+16230 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x782880000000, nodemask=2)
+PASS 41-rbc-euclidean-none
+16408 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x38fac0000000, nodemask=2)
+16589 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x588380000000, nodemask=2)
+PASS 41-rbc-euclidean-uniform
+16767 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3a0c40000000, nodemask=2)
+16948 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x59fc40000000, nodemask=2)
+PASS 41-rbc-euclidean-signed
+17126 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x39c980000000, nodemask=2)
+17307 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1859c0000000, nodemask=2)
+PASS 41-brute-euclidean-none
+17485 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7af300000000, nodemask=2)
+17666 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x18fb00000000, nodemask=2)
+PASS 41-brute-euclidean-uniform
+17844 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7b2740000000, nodemask=2)
+17844 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x700100000000, nodemask=1)
+18025 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x132f80000000, nodemask=1)
+18025 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1b4340000000, nodemask=2)
+PASS 41-brute-euclidean-signed
+18203 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x787b40000000, nodemask=2)
+18384 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1ad680000000, nodemask=2)
+PASS 41-brute-manhattan-none
+18562 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x397b40000000, nodemask=2)
+18743 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5aafc0000000, nodemask=2)
+PASS 41-brute-manhattan-uniform
+18921 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x39d780000000, nodemask=2)
+19102 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1a2f80000000, nodemask=2)
+19102 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x32c980000000, nodemask=1)
+PASS 41-brute-manhattan-signed
+15870 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x526840000000, nodemask=1)
+19280 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x12a700000000, nodemask=1)
+19280 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x788a40000000, nodemask=2)
+19461 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1a5700000000, nodemask=2)
+PASS 1025-rbc-euclidean-none
+19639 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7b2a80000000, nodemask=2)
+19639 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x118440000000, nodemask=1)
+19820 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x70de40000000, nodemask=1)
+19820 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x780bc0000000, nodemask=2)
+PASS 1025-rbc-euclidean-uniform
+19998 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x319b00000000, nodemask=1)
+19998 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3b6200000000, nodemask=2)
+20179 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x78bf00000000, nodemask=2)
+PASS 1025-rbc-euclidean-signed
+20357 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5a1900000000, nodemask=2)
+20538 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x32aec0000000, nodemask=1)
+20538 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1b3540000000, nodemask=2)
+PASS 1025-brute-euclidean-none
+20716 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x335d40000000, nodemask=1)
+20897 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x509740000000, nodemask=1)
+PASS 1025-brute-euclidean-uniform
+21075 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3aa3c0000000, nodemask=2)
+21256 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x583b80000000, nodemask=2)
+PASS 1025-brute-euclidean-signed
+21434 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7a9100000000, nodemask=2)
+21615 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5046c0000000, nodemask=1)
+PASS 1025-brute-manhattan-none
+21793 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x103b00000000, nodemask=1)
+21793 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x592b40000000, nodemask=2)
+21974 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x58d800000000, nodemask=2)
+PASS 1025-brute-manhattan-uniform
+22152 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x790480000000, nodemask=2)
+22333 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5adac0000000, nodemask=2)
+PASS 1025-brute-manhattan-signed

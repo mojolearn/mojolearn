@@ -1,0 +1,155 @@
+22628 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3b44c0000000, nodemask=2)
+/root/mojolearn/training/checks/dbscan_rows_check.mojo:23:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if x.unsafe_ptr()[i] != y.unsafe_ptr()[i]:
+           ~~~~~~~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/training/checks/dbscan_rows_check.mojo:23:47: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if x.unsafe_ptr()[i] != y.unsafe_ptr()[i]:
+                                ~~~~~~~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/dbscan_rows_check.mojo:8:
+/root/mojolearn/dbscan/impl/multi_gpu.mojo:289:42: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var edges = Int(host.unsafe_ptr()[0])
+                        ~~~~~~~~~~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/dbscan_rows_check.mojo:8:
+/root/mojolearn/dbscan/impl/multi_gpu.mojo:294:22: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    host.unsafe_ptr()[0] = Int32(total)
+    ~~~~~~~~~~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/dbscan_rows_check.mojo:8:
+/root/mojolearn/dbscan/impl/multi_gpu.mojo:98:45: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            edges = Int(root_ia.unsafe_ptr()[first + nr]) - Int(root_ia.unsafe_ptr()[first])
+                        ~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/dbscan_rows_check.mojo:8:
+/root/mojolearn/dbscan/impl/multi_gpu.mojo:98:85: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            edges = Int(root_ia.unsafe_ptr()[first + nr]) - Int(root_ia.unsafe_ptr()[first])
+                                                                ~~~~~~~~~~~~~~~~~~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/dbscan_rows_check.mojo:8:
+/root/mojolearn/dbscan/impl/multi_gpu.mojo:108:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                local_ptr.unsafe_ptr()[i] = root_ia.unsafe_ptr()[first + i] - root_ia.unsafe_ptr()[first]
+                ~~~~~~~~~~~~~~~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/dbscan_rows_check.mojo:8:
+/root/mojolearn/dbscan/impl/multi_gpu.mojo:108:65: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                local_ptr.unsafe_ptr()[i] = root_ia.unsafe_ptr()[first + i] - root_ia.unsafe_ptr()[first]
+                                            ~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/dbscan_rows_check.mojo:8:
+/root/mojolearn/dbscan/impl/multi_gpu.mojo:108:99: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                local_ptr.unsafe_ptr()[i] = root_ia.unsafe_ptr()[first + i] - root_ia.unsafe_ptr()[first]
+                                                                              ~~~~~~~~~~~~~~~~~~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/dbscan_rows_check.mojo:8:
+/root/mojolearn/dbscan/impl/multi_gpu.mojo:118:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ref s = sp[rank]
+                    ~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/dbscan_rows_check.mojo:8:
+/root/mojolearn/dbscan/impl/multi_gpu.mojo:133:48: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                s.edges = Int(host.unsafe_ptr()[0])
+                              ~~~~~~~~~~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/dbscan_rows_check.mojo:8:
+/root/mojolearn/dbscan/impl/multi_gpu.mojo:136:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            fp[rank] = 1
+            ~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/dbscan_rows_check.mojo:8:
+/root/mojolearn/dbscan/impl/multi_gpu.mojo:153:37: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                root_ia.unsafe_ptr()[s.first + i] = ptr.unsafe_ptr()[i] + Int32(total)
+                ~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/dbscan_rows_check.mojo:8:
+/root/mojolearn/dbscan/impl/multi_gpu.mojo:153:69: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                root_ia.unsafe_ptr()[s.first + i] = ptr.unsafe_ptr()[i] + Int32(total)
+                                                    ~~~~~~~~~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/dbscan_rows_check.mojo:8:
+/root/mojolearn/dbscan/impl/multi_gpu.mojo:168:69: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        ctx.enqueue_copy(dst_buf=tail, src_ptr=root_ia.unsafe_ptr() + rows)
+                                               ~~~~~~~~~~~~~~~~~~~~~^~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn/training/checks/dbscan_rows_check.mojo:8:
+Imported from /root/mojolearn/dbscan/impl/multi_gpu.mojo:13:
+Imported from /root/mojolearn/dbscan/impl/vertexdeg/algo.mojo:173:
+/root/mojolearn/dbscan/impl/neighbors/epsilon_neighborhood.mojo:372:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            sx[r * GEMM_SMEM_STRIDE + c] = v
+            ~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/dbscan_rows_check.mojo:8:
+Imported from /root/mojolearn/dbscan/impl/multi_gpu.mojo:13:
+Imported from /root/mojolearn/dbscan/impl/vertexdeg/algo.mojo:173:
+/root/mojolearn/dbscan/impl/neighbors/epsilon_neighborhood.mojo:381:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            sy[r2 * GEMM_SMEM_STRIDE + c2] = v2
+            ~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/dbscan_rows_check.mojo:8:
+Imported from /root/mojolearn/dbscan/impl/multi_gpu.mojo:13:
+Imported from /root/mojolearn/dbscan/impl/vertexdeg/algo.mojo:173:
+/root/mojolearn/dbscan/impl/neighbors/epsilon_neighborhood.mojo:393:29: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                regy[j] = sy[
+                          ~~^
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/dbscan_rows_check.mojo:8:
+Imported from /root/mojolearn/dbscan/impl/multi_gpu.mojo:13:
+Imported from /root/mojolearn/dbscan/impl/vertexdeg/algo.mojo:173:
+/root/mojolearn/dbscan/impl/neighbors/epsilon_neighborhood.mojo:419:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                sx[(accrowid + 0 * GEMM_ACC_TH_ROWS) * GEMM_SMEM_STRIDE + kk],
+                ~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/dbscan_rows_check.mojo:8:
+Imported from /root/mojolearn/dbscan/impl/multi_gpu.mojo:13:
+Imported from /root/mojolearn/dbscan/impl/vertexdeg/algo.mojo:173:
+/root/mojolearn/dbscan/impl/neighbors/epsilon_neighborhood.mojo:424:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                sx[(accrowid + 1 * GEMM_ACC_TH_ROWS) * GEMM_SMEM_STRIDE + kk],
+                ~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/dbscan_rows_check.mojo:8:
+Imported from /root/mojolearn/dbscan/impl/multi_gpu.mojo:13:
+Imported from /root/mojolearn/dbscan/impl/vertexdeg/algo.mojo:173:
+/root/mojolearn/dbscan/impl/neighbors/epsilon_neighborhood.mojo:429:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                sx[(accrowid + 2 * GEMM_ACC_TH_ROWS) * GEMM_SMEM_STRIDE + kk],
+                ~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/dbscan_rows_check.mojo:8:
+Imported from /root/mojolearn/dbscan/impl/multi_gpu.mojo:13:
+Imported from /root/mojolearn/dbscan/impl/vertexdeg/algo.mojo:173:
+/root/mojolearn/dbscan/impl/neighbors/epsilon_neighborhood.mojo:434:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                sx[(accrowid + 3 * GEMM_ACC_TH_ROWS) * GEMM_SMEM_STRIDE + kk],
+                ~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/dbscan_rows_check.mojo:6:
+Imported from /root/mojolearn/neighbors/impl/ball_cover/ball_cover.mojo:179:
+/root/mojolearn/neighbors/impl/ball_cover/registers.mojo:814:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/training/checks/dbscan_rows_check.mojo:6:
+Imported from /root/mojolearn/neighbors/impl/ball_cover/ball_cover.mojo:179:
+/root/mojolearn/neighbors/impl/ball_cover/registers.mojo:998:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/training/checks/dbscan_rows_check.mojo:6:
+Imported from /root/mojolearn/neighbors/impl/ball_cover/ball_cover.mojo:179:
+Imported from /root/mojolearn/neighbors/impl/ball_cover/registers.mojo:129:
+/root/mojolearn/neighbors/checks/ball_cover_canonical_order.mojo:167:5: warning: '@parameter if' is deprecated; use 'comptime if'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+PASS DBSCAN neighborhood arrays 1 3 0.01
+PASS DBSCAN neighborhood arrays 1 3 100.0
+PASS DBSCAN neighborhood arrays 1 129 0.01
+PASS DBSCAN neighborhood arrays 1 129 100.0
+22628 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x121e40000000, nodemask=1)
+PASS DBSCAN neighborhood arrays 3 3 0.01
+PASS DBSCAN neighborhood arrays 3 3 100.0
+PASS DBSCAN neighborhood arrays 3 129 0.01
+PASS DBSCAN neighborhood arrays 3 129 100.0
+PASS DBSCAN neighborhood arrays 17 3 0.01
+PASS DBSCAN neighborhood arrays 17 3 100.0
+PASS DBSCAN neighborhood arrays 17 129 0.01
+PASS DBSCAN neighborhood arrays 17 129 100.0

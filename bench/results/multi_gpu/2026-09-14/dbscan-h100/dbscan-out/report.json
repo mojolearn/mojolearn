@@ -1,0 +1,241 @@
+{
+  "status": "PASS",
+  "checks": [
+    {
+      "rows": 41,
+      "algorithm": "rbc",
+      "metric": "euclidean",
+      "weights": "none",
+      "iterations": 2,
+      "sha256": "135708d2de9717a79475143bb0ab2617ae7db8606bd763720b2837125d67e75f",
+      "stages": [
+        "0\tdbscan.core\tu8\t41\tc2e1075342781939",
+        "1\tdbscan.labels.merged\ti32\t41\t07fc12654b17d919",
+        "2\tdbscan.labels.final\ti32\t41\t5a21ef5914956c89"
+      ]
+    },
+    {
+      "rows": 41,
+      "algorithm": "rbc",
+      "metric": "euclidean",
+      "weights": "uniform",
+      "iterations": 2,
+      "sha256": "135708d2de9717a79475143bb0ab2617ae7db8606bd763720b2837125d67e75f",
+      "stages": [
+        "0\tdbscan.core\tu8\t41\tc2e1075342781939",
+        "1\tdbscan.labels.merged\ti32\t41\t07fc12654b17d919",
+        "2\tdbscan.labels.final\ti32\t41\t5a21ef5914956c89"
+      ]
+    },
+    {
+      "rows": 41,
+      "algorithm": "rbc",
+      "metric": "euclidean",
+      "weights": "signed",
+      "iterations": 2,
+      "sha256": "135708d2de9717a79475143bb0ab2617ae7db8606bd763720b2837125d67e75f",
+      "stages": [
+        "0\tdbscan.core\tu8\t41\tc2e1075342781939",
+        "1\tdbscan.labels.merged\ti32\t41\t07fc12654b17d919",
+        "2\tdbscan.labels.final\ti32\t41\t5a21ef5914956c89"
+      ]
+    },
+    {
+      "rows": 41,
+      "algorithm": "brute",
+      "metric": "euclidean",
+      "weights": "none",
+      "iterations": 2,
+      "sha256": "135708d2de9717a79475143bb0ab2617ae7db8606bd763720b2837125d67e75f",
+      "stages": [
+        "0\tdbscan.core\tu8\t41\tc2e1075342781939",
+        "1\tdbscan.labels.merged\ti32\t41\t07fc12654b17d919",
+        "2\tdbscan.labels.final\ti32\t41\t5a21ef5914956c89"
+      ]
+    },
+    {
+      "rows": 41,
+      "algorithm": "brute",
+      "metric": "euclidean",
+      "weights": "uniform",
+      "iterations": 2,
+      "sha256": "135708d2de9717a79475143bb0ab2617ae7db8606bd763720b2837125d67e75f",
+      "stages": [
+        "0\tdbscan.core\tu8\t41\tc2e1075342781939",
+        "1\tdbscan.labels.merged\ti32\t41\t07fc12654b17d919",
+        "2\tdbscan.labels.final\ti32\t41\t5a21ef5914956c89"
+      ]
+    },
+    {
+      "rows": 41,
+      "algorithm": "brute",
+      "metric": "euclidean",
+      "weights": "signed",
+      "iterations": 2,
+      "sha256": "135708d2de9717a79475143bb0ab2617ae7db8606bd763720b2837125d67e75f",
+      "stages": [
+        "0\tdbscan.core\tu8\t41\tc2e1075342781939",
+        "1\tdbscan.labels.merged\ti32\t41\t07fc12654b17d919",
+        "2\tdbscan.labels.final\ti32\t41\t5a21ef5914956c89"
+      ]
+    },
+    {
+      "rows": 41,
+      "algorithm": "brute",
+      "metric": "manhattan",
+      "weights": "none",
+      "iterations": 2,
+      "sha256": "135708d2de9717a79475143bb0ab2617ae7db8606bd763720b2837125d67e75f",
+      "stages": [
+        "0\tdbscan.core\tu8\t41\tc2e1075342781939",
+        "1\tdbscan.labels.merged\ti32\t41\t07fc12654b17d919",
+        "2\tdbscan.labels.final\ti32\t41\t5a21ef5914956c89"
+      ]
+    },
+    {
+      "rows": 41,
+      "algorithm": "brute",
+      "metric": "manhattan",
+      "weights": "uniform",
+      "iterations": 2,
+      "sha256": "135708d2de9717a79475143bb0ab2617ae7db8606bd763720b2837125d67e75f",
+      "stages": [
+        "0\tdbscan.core\tu8\t41\tc2e1075342781939",
+        "1\tdbscan.labels.merged\ti32\t41\t07fc12654b17d919",
+        "2\tdbscan.labels.final\ti32\t41\t5a21ef5914956c89"
+      ]
+    },
+    {
+      "rows": 41,
+      "algorithm": "brute",
+      "metric": "manhattan",
+      "weights": "signed",
+      "iterations": 2,
+      "sha256": "135708d2de9717a79475143bb0ab2617ae7db8606bd763720b2837125d67e75f",
+      "stages": [
+        "0\tdbscan.core\tu8\t41\tc2e1075342781939",
+        "1\tdbscan.labels.merged\ti32\t41\t07fc12654b17d919",
+        "2\tdbscan.labels.final\ti32\t41\t5a21ef5914956c89"
+      ]
+    },
+    {
+      "rows": 1025,
+      "algorithm": "rbc",
+      "metric": "euclidean",
+      "weights": "none",
+      "iterations": 12,
+      "sha256": "226f74e36fc03f31cadd80410916ab7aa931b76e59ab14ce99a656415bdbc3d8",
+      "stages": [
+        "0\tdbscan.core\tu8\t1025\tb6b300ddeca30f61",
+        "1\tdbscan.labels.merged\ti32\t1025\t174b1ab933be5659",
+        "2\tdbscan.labels.final\ti32\t1025\t2898c8898d6ed949"
+      ]
+    },
+    {
+      "rows": 1025,
+      "algorithm": "rbc",
+      "metric": "euclidean",
+      "weights": "uniform",
+      "iterations": 12,
+      "sha256": "226f74e36fc03f31cadd80410916ab7aa931b76e59ab14ce99a656415bdbc3d8",
+      "stages": [
+        "0\tdbscan.core\tu8\t1025\tb6b300ddeca30f61",
+        "1\tdbscan.labels.merged\ti32\t1025\t174b1ab933be5659",
+        "2\tdbscan.labels.final\ti32\t1025\t2898c8898d6ed949"
+      ]
+    },
+    {
+      "rows": 1025,
+      "algorithm": "rbc",
+      "metric": "euclidean",
+      "weights": "signed",
+      "iterations": 12,
+      "sha256": "226f74e36fc03f31cadd80410916ab7aa931b76e59ab14ce99a656415bdbc3d8",
+      "stages": [
+        "0\tdbscan.core\tu8\t1025\tb6b300ddeca30f61",
+        "1\tdbscan.labels.merged\ti32\t1025\t174b1ab933be5659",
+        "2\tdbscan.labels.final\ti32\t1025\t2898c8898d6ed949"
+      ]
+    },
+    {
+      "rows": 1025,
+      "algorithm": "brute",
+      "metric": "euclidean",
+      "weights": "none",
+      "iterations": 12,
+      "sha256": "226f74e36fc03f31cadd80410916ab7aa931b76e59ab14ce99a656415bdbc3d8",
+      "stages": [
+        "0\tdbscan.core\tu8\t1025\tb6b300ddeca30f61",
+        "1\tdbscan.labels.merged\ti32\t1025\t174b1ab933be5659",
+        "2\tdbscan.labels.final\ti32\t1025\t2898c8898d6ed949"
+      ]
+    },
+    {
+      "rows": 1025,
+      "algorithm": "brute",
+      "metric": "euclidean",
+      "weights": "uniform",
+      "iterations": 12,
+      "sha256": "226f74e36fc03f31cadd80410916ab7aa931b76e59ab14ce99a656415bdbc3d8",
+      "stages": [
+        "0\tdbscan.core\tu8\t1025\tb6b300ddeca30f61",
+        "1\tdbscan.labels.merged\ti32\t1025\t174b1ab933be5659",
+        "2\tdbscan.labels.final\ti32\t1025\t2898c8898d6ed949"
+      ]
+    },
+    {
+      "rows": 1025,
+      "algorithm": "brute",
+      "metric": "euclidean",
+      "weights": "signed",
+      "iterations": 12,
+      "sha256": "226f74e36fc03f31cadd80410916ab7aa931b76e59ab14ce99a656415bdbc3d8",
+      "stages": [
+        "0\tdbscan.core\tu8\t1025\tb6b300ddeca30f61",
+        "1\tdbscan.labels.merged\ti32\t1025\t174b1ab933be5659",
+        "2\tdbscan.labels.final\ti32\t1025\t2898c8898d6ed949"
+      ]
+    },
+    {
+      "rows": 1025,
+      "algorithm": "brute",
+      "metric": "manhattan",
+      "weights": "none",
+      "iterations": 12,
+      "sha256": "226f74e36fc03f31cadd80410916ab7aa931b76e59ab14ce99a656415bdbc3d8",
+      "stages": [
+        "0\tdbscan.core\tu8\t1025\tb6b300ddeca30f61",
+        "1\tdbscan.labels.merged\ti32\t1025\t174b1ab933be5659",
+        "2\tdbscan.labels.final\ti32\t1025\t2898c8898d6ed949"
+      ]
+    },
+    {
+      "rows": 1025,
+      "algorithm": "brute",
+      "metric": "manhattan",
+      "weights": "uniform",
+      "iterations": 12,
+      "sha256": "226f74e36fc03f31cadd80410916ab7aa931b76e59ab14ce99a656415bdbc3d8",
+      "stages": [
+        "0\tdbscan.core\tu8\t1025\tb6b300ddeca30f61",
+        "1\tdbscan.labels.merged\ti32\t1025\t174b1ab933be5659",
+        "2\tdbscan.labels.final\ti32\t1025\t2898c8898d6ed949"
+      ]
+    },
+    {
+      "rows": 1025,
+      "algorithm": "brute",
+      "metric": "manhattan",
+      "weights": "signed",
+      "iterations": 12,
+      "sha256": "226f74e36fc03f31cadd80410916ab7aa931b76e59ab14ce99a656415bdbc3d8",
+      "stages": [
+        "0\tdbscan.core\tu8\t1025\tb6b300ddeca30f61",
+        "1\tdbscan.labels.merged\ti32\t1025\t174b1ab933be5659",
+        "2\tdbscan.labels.final\ti32\t1025\t2898c8898d6ed949"
+      ]
+    }
+  ],
+  "corpus_sha256": "2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8",
+  "scope": "Two H100s; neighborhood row partitions and original root weighted core/label merges; replicated index"
+}

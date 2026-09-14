@@ -1,0 +1,12 @@
+15710 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3b2c80000000, nodemask=2)
+check_dbscan OK: 3/3 blobs each one whole cluster with ids exactly {0, 1, 2}, 0 merges, 12/12 isolated points labelled -1 as scikit-learn does, converged in 2 propagation passes
+check_dbscan_batching_agrees OK: 5 batches with 4 merge_labels folds give labels identical to one batch, in an adj buffer 4x smaller than the unbatched run needs
+check_dbscan_tiny_budget_agrees OK (rbc): max_mbytes_per_batch = 1 forced 19 batches (38 passes vs 2 for one batch) and all 1932 labels match one batch: 6 blobs whole with ids 0..5, 12 noise points at -1
+check_dbscan_tiny_budget_agrees OK (brute): max_mbytes_per_batch = 1 forced 19 batches (38 passes vs 2 for one batch) and all 1932 labels match one batch: 6 blobs whole with ids 0..5, 12 noise points at -1
+check_dbscan_rbc_two_loop_arms OK: the one-pass arm (3 clusters) and the two-pass fallback (2 clusters) both label identically to unbatched brute force, and algo.cuh:119's guard provably selects each upstream arm
+check_dbscan_manhattan_changes_the_labels OK: euclidean gives 1 cluster over 6 points, manhattan gives 2 split at the planted diagonal bridge (L2 0.98995 in, L1 1.4 out, eps 1)
+check_dbscan_weighted_degree_matches_host_oracle OK: 37 rows (24-110 neighbours each, 2231 edges), both arms match their own pinned host folds (which the planted mask separates, 1.000015 against 1.0000151, and which disagreed on 27 of 37 fixture rows), the planted fold sabotage separates the two orders (1.0000151 against 1.0), and the two arms are bit-identical on integer weights
+check_dbscan_weighted_fold_is_pinned OK: WVD_TPB = 128, listed as a float fold, a power of two, and the width demonstrably moves the sum -- 1.0000151 at 128, 1.000015 at 64, 1.0 left to right
+check_dbscan_uniform_weight_matches_unweighted OK on brute and rbc: all 612 labels identical at weight 1.0, and the sabotage arm turned all 12 noise points core at weight 5
+check_dbscan_duplicate_equals_weight_two OK on brute and rbc: duplicating point 0 and giving it weight 2 give the same labelling on all 8 shared points, and the weight-1.5 sabotage falls back to noise as it must
+DBSCAN neighborhood gates PASS

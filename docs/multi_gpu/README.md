@@ -305,3 +305,25 @@ radius results, self edges, weighted/multi-target predictions, all six density
 kernels, failed worker waves and restart. Receipts are in
 `bench/results/multi_gpu/2026-09-14/neighbors-h100/`. This is not new
 cross-vendor or pooled-index capacity qualification.
+
+
+### DBSCAN neighborhood rows
+
+`mojolearn.parallel_classical.fit_dbscan(model, X, devices=(0, 1),
+sample_weight=weights)` distributes the original brute-force L2/L1 or RBC L2
+neighborhood rows. Brute adjacency and degrees, and RBC count/fill/bounded
+one-pass CSR arrays, are assembled in their original row order using integer
+offsets. Weighted degrees keep the original root reduction; core points,
+connectivity propagation and label merges retain the original batch order.
+Every fit publishes its fitted state only after successful completion.
+
+Cloud checks on two H100s passed 18 full fits (including signed/zero weights),
+12 complete neighborhood-array cases, and nine existing native gate groups
+on both one and two devices. The native groups cover both RBC loop arms,
+small memory budgets, batching and weighted-oracle/sabotage checks. Receipts:
+`bench/results/multi_gpu/2026-09-14/dbscan-h100/`.
+
+The complete reference data/index, batch graph and label state remain on the
+root. Per-call contexts also replicate the reference index. This is distributed
+neighborhood computation; it establishes neither pooled-index capacity nor a
+speedup or new cross-vendor qualification.
