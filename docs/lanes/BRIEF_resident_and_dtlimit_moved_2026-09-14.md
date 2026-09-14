@@ -66,6 +66,23 @@ kernel of the step and the download of `y_step` on HIP, where a copy issued befo
 last launch retires would read a partially written output once in a while; one cell in
 eighteen on one vendor is that shape too.
 
+Addendum, 2026-09-14 afternoon. The clean 120-lane rerun at 65ae7612f read 1080 of 1080
+stable on the Apple M4 and on the H100 (zero moved), so section 1's fix and the `_h`
+refusal hold. Its AMD column fell back to a DigitalOcean MI325X (Ubuntu 24.04 ROCm image)
+and ABORTED after the mamba1 lane, before mamba2 and mamba2-dtlimit, with "Memory access
+fault by GPU node-1 ... Reason: Unknown", exit 134, 102 rows in
+(`bench/results/e1g/2026-09-14_130705-amd-mi325x-do-identity-120-lanes-clean`, partial JSON
+and log beside the record as `amd-mi325x-gfx942.partial.*`). The Hot Aisle MI300X (22.04
+container) ran those lanes three times the same day without a fault. Checked against the
+out-of-bounds reading above: `m2_buffer_update_kernel`'s source row is
+`src = t_work - r + t` with `r = t_work mod Q` and `t < r` (`mamba2.mojo:1128-1131`), so
+`src >= 0` and in range at every l, including l = 1; that kernel is not an out-of-bounds
+read. The fault's site is between mamba1's last download and mamba2's first launch and is
+not attributed; the 24.04 image's driver is the other candidate (the same image linked the
+vendor-neutral CPU binding differently on 2026-09-13). So the probe below runs on BOTH a
+Hot Aisle MI300X and a DigitalOcean MI325X, and a fault on the MI325X alone is an image
+finding, a MOVED on the MI300X alone is the race.
+
 Probe, for the box that showed it (MI300X): run the `mamba2-dtlimit` and `mamba2` lanes
 on `base` with `--repeats 20`; if `step` moves again, dump `state.h` and the conv window
 after `m2_buffer_update_kernel` for two runs and diff by element to name the index, then
