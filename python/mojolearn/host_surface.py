@@ -167,6 +167,28 @@ TRAINING_LANE_NAMES = {
     # binding. A prediction until the four-column diff reads IDENTICAL.
     "rf-clf": "the random forest classifier",
     "rf-reg": "the random forest regressor",
+    # CPU training batch 2 declared (lane/cpu-training-batch2-declare,
+    # 2026-09-14): lanes the host bindings above already serve that the
+    # 47-lane record lacked, so they could not be declared against it; the
+    # 136-lane record carries every one, IDENTICAL on its three columns.
+    # k-means with the random start (three restarts), an explicit start and
+    # sample weights, all through the core family's kmeans_fit and
+    # host_fit_main, whose quantized accumulation carries the sabotage unit.
+    "kmeans-random": "k-means with a random start",
+    "kmeans-array": "k-means from given centroids",
+    "kmeans-weighted": "weighted k-means",
+    # The scalers without centering, without scaling, and with a
+    # non-default range and the clamp, through the preprocessing family's
+    # host binding (the shifted slab tree reaches the first two, the
+    # min-max offset arm the third).
+    "standard-scaler-no-mean": "the standard scaler without centering",
+    "standard-scaler-no-std": "the standard scaler without scaling",
+    "minmax-scaler-clip": "the clipped min-max scaler",
+    # Spectral clustering on a precomputed affinity: spectral_fit_predict_graph
+    # in the metrics host binding over host_spectral_fit_predict_coo, and the
+    # dense affinity's COO scan (nonzero_f64_count, nonzero_f64_fill) in the
+    # core host binding.
+    "spectral-precomputed": "spectral clustering on a precomputed affinity",
 }
 
 #: The lanes with NO CPU path of any kind, as the README states them. A
@@ -279,7 +301,10 @@ FAMILIES = (
         routes="_mojolearn",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("knn", "knn-clf", "knn-reg", "kmeans"),
+        training_lanes=(
+            "knn", "knn-clf", "knn-reg", "kmeans", "kmeans-random", "kmeans-array",
+            "kmeans-weighted",
+        ),
         inference_lanes=("knn", "knn-clf", "knn-reg"),
         forest_kinds=(),
         classes=("NearestNeighbors", "KNeighborsClassifier", "KNeighborsRegressor", "KMeans"),
@@ -292,7 +317,7 @@ FAMILIES = (
             "core_host_numeric_mode", "core_host_vendor", "core_host_column",
             "core_host_sabotage", "mojolearn_vendor", "mojolearn_numeric_mode",
             "knn_search", "knn_classify", "knn_regress", "kmeans_fit", "transpose_f32",
-            "cast_colmajor_f64_to_f32", "cast_f64_to_f32", "all_finite_f32",
+            "cast_colmajor_f64_to_f32", "nonzero_f64_count", "nonzero_f64_fill", "cast_f64_to_f32", "all_finite_f32",
             "all_finite_f64", "gather_i64", "gather_f64", "argmax_rows_f32",
             "argmax_rows_f64", "column_mean_f64", "center_columns_f32",
             "scale_rows_f32",
@@ -363,7 +388,7 @@ FAMILIES = (
         routes="_mojolearn_metrics",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("metrics", "spectral"),
+        training_lanes=("metrics", "spectral", "spectral-precomputed"),
         inference_lanes=(),
         forest_kinds=(),
         classes=(
@@ -387,7 +412,7 @@ FAMILIES = (
             "metrics_numeric_mode", "accuracy_score", "adjusted_rand_score",
             "entropy", "mutual_info_score", "homogeneity_score",
             "completeness_score", "v_measure_score", "r2_score", "silhouette",
-            "spectral_fit_predict_dataset",
+            "spectral_fit_predict_dataset", "spectral_fit_predict_graph",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=False,
@@ -401,7 +426,10 @@ FAMILIES = (
         routes="_mojolearn_preprocessing",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("standard-scaler", "minmax-scaler"),
+        training_lanes=(
+            "standard-scaler", "minmax-scaler", "standard-scaler-no-mean",
+            "standard-scaler-no-std", "minmax-scaler-clip",
+        ),
         inference_lanes=(),
         forest_kinds=(),
         classes=("StandardScaler", "MinMaxScaler"),

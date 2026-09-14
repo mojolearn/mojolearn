@@ -908,7 +908,9 @@ def host_families_built():
 #:     resolve on a CPU-only install) and the knn host inference lane's
 #:     (2026-09-14) knn_search, knn_classify, knn_regress over
 #:     core/knn_host_predict.mojo, and (workstream E batch 2, 2026-09-14)
-#:     the training entry kmeans_fit over cluster/host/kmeans_oracle.mojo;
+#:     the training entry kmeans_fit over cluster/host/kmeans_oracle.mojo,
+#:     and (the spectral-precomputed lane, 2026-09-14) the dense affinity's
+#:     COO scan nonzero_f64_count and nonzero_f64_fill;
 #:     rbc_knn_search and radius_neighbors_* are absent.
 #:   _mojolearn_linalg -> _mojolearn_linalg_host: gemm over
 #:     gemm/host/gemm_oracle.mojo::gemm_oracle, the profile's definition.
@@ -928,11 +930,12 @@ def host_families_built():
 #:     2026-09-14): accuracy_score, adjusted_rand_score, entropy,
 #:     mutual_info_score, homogeneity_score, completeness_score,
 #:     v_measure_score, r2_score and silhouette over
-#:     metrics/host/metrics_oracle.mojo, and spectral_fit_predict_dataset
-#:     over spectral/host/spectral_oracle.mojo (the spectral lane);
-#:     rand_score, the ranking and classification metrics, the regression
-#:     errors, kl_divergence, trustworthiness, spectral_fit_predict_graph
-#:     and the UMAP entries are absent.
+#:     metrics/host/metrics_oracle.mojo, spectral_fit_predict_dataset
+#:     over spectral/host/spectral_oracle.mojo (the spectral lane) and
+#:     spectral_fit_predict_graph over the same oracle (the
+#:     spectral-precomputed lane, 2026-09-14); rand_score, the ranking and
+#:     classification metrics, the regression errors, kl_divergence,
+#:     trustworthiness and the UMAP entries are absent.
 #:   _mojolearn_preprocessing -> _mojolearn_preprocessing_host (workstream
 #:     E batch 2, 2026-09-14): standard_fit, standard_transform, minmax_fit
 #:     and minmax_transform over preprocessing/host/scaler_oracle.mojo, the

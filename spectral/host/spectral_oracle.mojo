@@ -841,3 +841,111 @@ def host_spectral_fit_predict_dataset(
         graph, n_clusters, n_components, n_init, eigen_tol, seed, labels,
         embedding_out,
     )
+
+
+def host_spectral_fit_predict_coo(
+    rows: List[Int32],
+    cols: List[Int32],
+    vals: List[Float32],
+    n_samples: Int,
+    n_clusters: Int,
+    n_components: Int,
+    n_init: Int,
+    n_neighbors: Int,
+    eigen_tol: Float32,
+    seed: UInt64,
+    mut labels: List[Int32],
+    mut embedding_out: List[Float32],
+) raises -> Int:
+    """`spectral_fit_predict_graph_host`, `spectral/estimator.mojo:189`, then
+    `fit_predict_graph` (the spectral-precomputed lane, 2026-09-14): the
+    affinity graph is GIVEN as COO triples, so no k-NN runs and
+    `n_neighbors` is validated and read by nobody. Returns `n_out`.
+
+    The refusals are the device path's, in its words: the estimator's
+    three and `_config`'s, `fit_predict_graph`'s `n_clusters` (inside
+    `host_spectral_fit_predict_graph`), `transform_graph`'s non-finite and
+    negative value refusals (`spectral/impl/preprocessing/detail/
+    spectral_embedding.mojo:328-339`), `compute_graph_laplacian`'s index
+    range (`spectral/impl/sparse/linalg/detail/laplacian.mojo:183-191`),
+    and the Lanczos entry's shape (`spectral/impl/sparse/solver/detail/
+    lanczos.mojo:689-694`), which `oracle_embedding` does not restate and
+    without which a host Lanczos with `ncv <= k + 1` would index past its
+    basis. The repeated-key refusal is `host_laplacian`'s. The one order
+    difference: the device reaches the repeated-key refusal before the
+    Lanczos shape refusal, the host after, so an input wrong in both ways
+    names the other one first. No value moves.
+
+    The arithmetic is `host_spectral_fit_predict_graph` on a `CooGraph` of
+    copies, exactly as the device entry builds its graph; the sabotage
+    arms (`seed + 1` for the recluster, the extra quantized unit in
+    `host_fit_main`) are reached on this path as on the dataset one."""
+    if n_samples <= 0:
+        raise Error(
+            "spectral clustering: n_samples must be positive, got "
+            + String(n_samples)
+        )
+    var nnz = len(vals)
+    if nnz <= 0:
+        raise Error(
+            "spectral clustering: the connectivity graph has no entries"
+        )
+    if len(rows) != nnz or len(cols) != nnz:
+        raise Error(
+            "spectral clustering: rows, cols and vals must be the same"
+            " length, got " + String(len(rows)) + ", " + String(len(cols))
+            + ", " + String(nnz)
+        )
+    host_spectral_config_validate(n_init, n_neighbors, eigen_tol)
+    if n_clusters < 1 or n_clusters > n_samples:
+        raise Error(
+            "spectral clustering: n_clusters=" + String(n_clusters)
+            + " must satisfy 1 <= n_clusters <= n_samples"
+        )
+    for i in range(nnz):
+        var v = vals[i]
+        if not isfinite(v):
+            raise Error(
+                "spectral: connectivity_graph has a non-finite value at entry "
+                + String(i) + " -- refused by name"
+            )
+        if v < Float32(0.0):
+            raise Error(
+                "spectral: connectivity_graph has a negative value at entry "
+                + String(i) + " -- refused by name (sqrt of a negative degree is NaN in theirs)"
+            )
+    for i in range(nnz):
+        var r = Int(rows[i])
+        var c = Int(cols[i])
+        if r < 0 or r >= n_samples or c < 0 or c >= n_samples:
+            raise Error(
+                "connectivity_graph: entry " + String(i) + " has (row, col) = ("
+                + String(r) + ", " + String(c) + ") outside [0, "
+                + String(n_samples) + ")"
+            )
+    var k = n_components
+    if n_samples - k > 0:
+        var ncv_hi = 2 * k + 1
+        if ncv_hi < 20:
+            ncv_hi = 20
+        var ncv = n_samples - k
+        if ncv_hi < ncv:
+            ncv = ncv_hi
+        if k < 1:
+            raise Error(
+                "lanczos: need 1 <= n_components < n, got " + String(k)
+                + " for n=" + String(n_samples)
+            )
+        if ncv <= k + 1 or ncv > n_samples:
+            raise Error(
+                "lanczos: need n_components + 1 < ncv <= n, got ncv=" + String(ncv)
+                + " n_components=" + String(k) + " n=" + String(n_samples)
+            )
+    var r_copy = rows.copy()
+    var c_copy = cols.copy()
+    var v_copy = vals.copy()
+    var graph = CooGraph(n_samples, r_copy^, c_copy^, v_copy^)
+    return host_spectral_fit_predict_graph(
+        graph, n_clusters, n_components, n_init, eigen_tol, seed, labels,
+        embedding_out,
+    )

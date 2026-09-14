@@ -70,6 +70,12 @@ chains and per-cell operations, no fold to sabotage.
 c])`; the tiling there is a cache order, not a value, so a plain loop
 writes the same bytes. The seven others are `bindings/host_helpers.mojo`,
 the forest host lane's, shared.
+
+The spectral-precomputed lane (2026-09-14) adds `nonzero_f64_count` and
+`nonzero_f64_fill`, the base binding's dense-to-COO scan (DEVIATION 2489)
+that `_spectral_impl._coo_triples` reaches through `_native` on a dense
+precomputed affinity; bodies copied from `bindings/_mojolearn.mojo`, a
+comparison and one narrowing per kept value, no fold to sabotage.
 """
 from std.os import abort
 from std.python import Python, PythonObject
@@ -262,6 +268,104 @@ def cast_colmajor_f64_to_f32_binding(
     with GILReleased(Python()):
         _transpose_to_f32(sp, dp, nr, nc)
     return PythonObject(0)
+
+
+# ===========================================================================
+# THE DENSE AFFINITY'S COO SCAN (the spectral-precomputed lane, 2026-09-14).
+# `python/mojolearn/_spectral_impl.py::_coo_triples` reaches these two
+# through `_buffer._native` on a dense precomputed affinity before the
+# metrics host binding's `spectral_fit_predict_graph` is called; without
+# them the lane refuses at `_mojolearn.nonzero_f64_count`. Both bodies are
+# `bindings/_mojolearn.mojo::nonzero_f64_count_binding` and
+# `nonzero_f64_fill_binding` (DEVIATION 2489) with this binding's `_index`
+# and `bindings/hostptr.mojo`'s pointers: a comparison, a row-major scan
+# and one narrowing per kept value, no fold, so no sabotage arm here (the
+# lane's arms are the spectral oracle's).
+# ===========================================================================
+
+
+def nonzero_f64_count_binding(
+    src_addr: PythonObject, n: PythonObject
+) raises -> PythonObject:
+    """How many of the `n` float64 values at `src` are nonzero under the
+    test `v != 0.0` (DEVIATION 2489): -0.0 is a zero and NaN is NOT. An
+    empty input reads nothing; a negative count is refused."""
+    var count = _index(n)
+    if count < 0:
+        raise Error(
+            "nonzero_f64_count: n must be non-negative, got " + String(count)
+        )
+    if count == 0:
+        return PythonObject(0)
+    var sp = f64_ptr(_index(src_addr))
+    var nz = 0
+    with GILReleased(Python()):
+        for i in range(count):
+            if sp.unsafe_load(i) != 0.0:
+                nz += 1
+    return PythonObject(nz)
+
+
+def nonzero_f64_fill_binding(
+    src_addr: PythonObject,
+    rows: PythonObject,
+    cols: PythonObject,
+    outs: PythonObject,
+    capacity: PythonObject,
+) raises -> PythonObject:
+    """COO triples of a C-contiguous float64 `[rows, cols]` matrix at `src`
+    (DEVIATION 2489): for every entry with `v != 0.0`, in row-major scan
+    order, its row to `outs[0]` (int32), its column to `outs[1]` (int32)
+    and `Float32(v)` to `outs[2]` (float32). Returns the number written.
+    The fill STOPS and raises if the matrix holds more than `capacity`
+    nonzeros, so a stale count cannot write past the buffers."""
+    var nr = _index(rows)
+    var nc = _index(cols)
+    var cap = _index(capacity)
+    if nr < 0 or nc < 0:
+        raise Error(
+            "nonzero_f64_fill: rows and cols must be non-negative, got "
+            + String(nr) + " x " + String(nc)
+        )
+    if cap < 0:
+        raise Error(
+            "nonzero_f64_fill: capacity must be non-negative, got "
+            + String(cap)
+        )
+    if len(outs) != 3:
+        raise Error(
+            "nonzero_f64_fill: outs must hold 3 addresses, got "
+            + String(len(outs))
+        )
+    if nr == 0 or nc == 0:
+        return PythonObject(0)
+    var sp = f64_ptr(_index(src_addr))
+    var rp = i32_ptr(_index(outs[0]))
+    var cp = i32_ptr(_index(outs[1]))
+    var vp = f32_ptr(_index(outs[2]))
+    var k = 0
+    var overflow = False
+    with GILReleased(Python()):
+        for r in range(nr):
+            var base = r * nc
+            for c in range(nc):
+                var v = sp.unsafe_load(base + c)
+                if v != 0.0:
+                    if k >= cap:
+                        overflow = True
+                        break
+                    rp.unsafe_store(k, Int32(r))
+                    cp.unsafe_store(k, Int32(c))
+                    vp.unsafe_store(k, v.cast[DType.float32]())
+                    k += 1
+            if overflow:
+                break
+    if overflow:
+        raise Error(
+            "nonzero_f64_fill: more than " + String(cap)
+            + " nonzero entries; count first with nonzero_f64_count"
+        )
+    return PythonObject(k)
 
 
 # ===========================================================================
@@ -661,6 +765,8 @@ def PyInit__mojolearn_core_host() abi("C") -> PythonObject:
         module.def_function[kmeans_fit_binding]("kmeans_fit")
         module.def_function[transpose_f32_binding]("transpose_f32")
         module.def_function[cast_colmajor_f64_to_f32_binding]("cast_colmajor_f64_to_f32")
+        module.def_function[nonzero_f64_count_binding]("nonzero_f64_count")
+        module.def_function[nonzero_f64_fill_binding]("nonzero_f64_fill")
         module.def_function[cast_f64_to_f32_binding]("cast_f64_to_f32")
         module.def_function[all_finite_f32_binding]("all_finite_f32")
         module.def_function[all_finite_f64_binding]("all_finite_f64")
