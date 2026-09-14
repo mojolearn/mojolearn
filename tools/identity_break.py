@@ -1916,7 +1916,10 @@ def _par_devices():
     hash equal, cell for cell, to the one-device column of the same commit;
     that equality is the drivers' whole claim."""
     raw = os.environ.get("MOJOLEARN_PAR_DEVICES", "0").strip() or "0"
-    devs = tuple(int(x) for x in raw.split(",") if x.strip() != "")
+    try:
+        devs = tuple(int(x) for x in raw.split(",") if x.strip() != "")
+    except ValueError:
+        devs = ()
     if not devs or len(set(devs)) != len(devs) or any(d < 0 for d in devs):
         raise SystemExit(f"REFUSING: MOJOLEARN_PAR_DEVICES={raw!r} is not a list of distinct nonnegative device indices")
     return devs
