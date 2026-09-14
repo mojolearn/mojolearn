@@ -892,8 +892,9 @@ def host_families_built():
 #:     all_finite_*, gather_*, argmax_rows_*, so _buffer._native and _labels
 #:     resolve on a CPU-only install) and the knn host inference lane's
 #:     (2026-09-14) knn_search, knn_classify, knn_regress over
-#:     core/knn_host_predict.mojo; kmeans_fit, rbc_knn_search and
-#:     radius_neighbors_* are absent.
+#:     core/knn_host_predict.mojo, and (workstream E batch 2, 2026-09-14)
+#:     the training entry kmeans_fit over cluster/host/kmeans_oracle.mojo;
+#:     rbc_knn_search and radius_neighbors_* are absent.
 #:   _mojolearn_linalg -> _mojolearn_linalg_host: gemm over
 #:     gemm/host/gemm_oracle.mojo::gemm_oracle, the profile's definition.
 #:   _mojolearn_estimators -> _mojolearn_estimators_host: kde_score_samples
