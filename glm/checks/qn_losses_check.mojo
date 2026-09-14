@@ -27,7 +27,8 @@ losses". Every check runs over ALL SIX losses. The checks:
                                        objective below 8 perturbed points
     check_losses_refuses_by_name       each loss with the wrong `C`
                                        (`qn.h: ... invalid C`, their text),
-                                       l1, sample_weight
+                                       sample_weight; l1 does NOT raise
+                                       (OWL-QN, DEVIATION 552)
     check_losses_device_equals_host    ONE objective evaluation per loss (loss,
                                        every gradient entry, every dZ cell) and
                                        the loss's gradNorm (`nrm1`,
@@ -496,15 +497,20 @@ def check_losses_refuses_by_name() raises:
         var m = _fit_raises(ctx, _params(loss, 1.0, True, True), wrong_c, False)
         if m.find("invalid C") < 0:
             raise Error(_loss_name(loss) + " with C=" + String(wrong_c) + " did not raise their text; got: " + m)
+    # l1 USED TO RAISE HERE and must not any more (DEVIATION 552, 2026-09-01):
+    # `min_owlqn` is implemented and `qn_minimize` dispatches to it on
+    # `l1 != 0`. This file had no invoker and kept the refusal until
+    # 2026-09-14 (the first `pixi run check-glm-qn-losses` was RED here).
+    # Kept, inverted, so a regression to the refusal is caught.
     var p1 = _params(QN_LOSS_SQUARED, 1.0, True, True)
     p1.penalty_l1 = 0.5
     var m1 = _fit_raises(ctx, p1, 1, False)
-    if m1.find("min_owlqn") < 0:
-        raise Error("l1 did not raise by name; got: " + m1)
+    if m1 != "":
+        raise Error("an l1 penalty RAISED, and min_owlqn is implemented; got: " + m1)
     var m2 = _fit_raises(ctx, _params(QN_LOSS_SVR_L2, 1.0, True, True), 1, True)
     if m2.find("sample_weight is NOT IMPLEMENTED") < 0:
         raise Error("sample_weight did not raise by name; got: " + m2)
-    print("check_losses_refuses_by_name OK: each loss with the wrong C (their `invalid C` text), l1 (OWL-QN) and sample_weight RAISE by name")
+    print("check_losses_refuses_by_name OK: each loss with the wrong C (their `invalid C` text) and sample_weight RAISE by name; an l1 penalty does NOT (it takes the implemented OWL-QN arm)")
 
 
 # ---------------------------------------------------------------------------

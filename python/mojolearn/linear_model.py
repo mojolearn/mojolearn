@@ -893,8 +893,13 @@ class LogisticRegression(NumericModeMixin):
                                   split is l1 = l1_ratio / C,
                                   l2 = (1 - l1_ratio) / C
         solver          'qn' only the only value cuML accepts either
-        > 2 classes     refused   softmax (glm_softmax.cuh) is not implemented;
-                                  the Mojo layer raises by name
+        > 2 classes     refused   at THIS door. The softmax loss IS
+                                  implemented and gated (glm/impl/qn/
+                                  glm_softmax.mojo, DEVIATIONS 705-711,
+                                  `pixi run check-glm-multinomial`); the
+                                  binding hard-codes QN_LOSS_LOGISTIC
+                                  (glm/estimator.mojo) and nothing routes
+                                  more than two classes to it yet
         warm_start      absent    cuML's QN has it, LogisticRegression
                                   does not expose it; w0 = 0 always
 
@@ -1013,8 +1018,10 @@ class LogisticRegression(NumericModeMixin):
         if n_classes > 2:
             raise NotImplementedError(
                 f"mojolearn LogisticRegression: {n_classes} classes need the "
-                "softmax loss (glm_softmax.cuh, QN_LOSS_SOFTMAX), which is NOT "
-                "IMPLEMENTED; binary only. See glm/NOT_IMPLEMENTED.tsv"
+                "softmax loss (QN_LOSS_SOFTMAX), which is implemented and gated "
+                "in glm/impl/qn/glm_softmax.mojo but NOT ROUTED from this "
+                "estimator (the binding fits QN_LOSS_LOGISTIC only); binary "
+                "only. See glm/NOT_IMPLEMENTED.tsv"
             )
         if n_classes < 2:
             raise ValueError("mojolearn LogisticRegression: y has one class")

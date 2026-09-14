@@ -1133,6 +1133,12 @@ check-mixture = "mojo run -I . mixture/checks/gmm_check.mojo"
 mixture-main = "mojo run -I . mixture/mixture_main.mojo"
 check-svm = "mojo run -I . svm/svc_main.mojo"
 check-svm-oracle = "mojo run -I . svm/svc_main.mojo -- oracle"
+# The QN softmax loss (multinomial logistic, DEVIATIONS 705-711) and the six
+# one-target QN losses (707-708, 712-713). Both gates existed since
+# 2026-08-23 with NO invoker (no task, no tools/ script, no workflow) until
+# 2026-09-14; both build for the IDENTICAL tier the shipped estimators bind.
+check-glm-multinomial = "mojo run -j 2 -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 glm/checks/multinomial_check.mojo"
+check-glm-qn-losses = "mojo run -j 2 -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 glm/checks/qn_losses_check.mojo"
 check-metrics-labels = "mojo run -I . metrics/checks/label_metrics_check.mojo"
 check-metrics-regression = "mojo run -I . metrics/checks/regression_metrics_check.mojo"
 check-regression-errors = "sh tools/check_regression_errors.sh"
