@@ -21,13 +21,16 @@ class ParallelByteLanguageModelTrainer:
     is opened until the first step/export. Import does no device work.
     """
 
-    def __init__(self, state, *, devices=(0,), logical_shards=1):
+    def __init__(self, state, *, devices=(0,), logical_shards=1, pool_optimizer=False):
         devices = tuple(devices)
         if (type(logical_shards) is not int or not 1 <= logical_shards <= 1024
                 or not 1 <= len(devices) <= logical_shards):
             raise ValueError('require 1 <= device count <= logical_shards <= 1024')
         if any(type(i) is not int or i < 0 for i in devices) or len(set(devices)) != len(devices):
             raise ValueError('devices must be distinct nonnegative integer indices')
+        if type(pool_optimizer) is not bool:
+            raise ValueError("pool_optimizer must be bool")
+        self.pool_optimizer = pool_optimizer
         self.devices = devices
         self.logical_shards = logical_shards
         self._state = _validate_state(state)
@@ -55,13 +58,17 @@ class ParallelByteLanguageModelTrainer:
         for name in ('create', 'open', 'close', 'step', 'export', 'rollback'):
             if not callable(getattr(binding, 'byte_lm_parallel_' + name, None)):
                 raise ImportError('rebuild bindings/build_byte_lm.sh for parallel training')
+        open_name = 'byte_lm_parallel_open_pooled' if self.pool_optimizer else 'byte_lm_parallel_open'
+        opener = getattr(binding, open_name, None)
+        if not callable(opener):
+            raise ImportError('rebuild bindings/build_byte_lm.sh for optimizer pooling')
         cfg = seed['config']
         params = [0, self.step_, cfg['kind'], cfg['lr'], cfg['beta1'], cfg['beta2'],
                   cfg['eps'], cfg['weight_decay'], cfg['momentum'], cfg['dampening'],
                   int(cfg['nesterov']), cfg['max_norm']]
         session = binding.byte_lm_parallel_create()
         try:
-            completed = binding.byte_lm_parallel_open(session,
+            completed = opener(session,
                 [addr_ro(seed[k], name=k) for k in ('parameters', 'm', 'v', 'flags')],
                 params, list(self._shape.native_shape), list(self.devices), self.logical_shards)
             if completed != self.step_:
@@ -131,6 +138,15 @@ class ParallelByteLanguageModelTrainer:
                 raise RuntimeError('parallel gradient export returned wrong step')
             return out
 
+    def optimizer_ownership(self):
+        """Actual native ranges and resident moment/rollback bytes per device."""
+        with self._lock:
+            self._open()
+            rows = self._binding.byte_lm_parallel_ownership(self._session)
+            return tuple(dict(device=device, first=int(row[0]), count=int(row[1]),
+                              moment_bytes=int(row[2]), rollback_bytes=int(row[3]))
+                         for device, row in zip(self.devices, rows))
+
     def checkpoint(self):
         """Portable state plus the logical reduction contract required for replay."""
         return dict(schema='mojolearn.parallel-byte-lm.v1',
@@ -138,12 +154,12 @@ class ParallelByteLanguageModelTrainer:
                     state=self.state_dict())
 
     @classmethod
-    def from_checkpoint(cls, checkpoint, *, devices=(0,)):
+    def from_checkpoint(cls, checkpoint, *, devices=(0,), pool_optimizer=False):
         if (checkpoint.get('schema') != 'mojolearn.parallel-byte-lm.v1'
                 or checkpoint.get('reduction') != 'ordered_sum'):
             raise ValueError('unsupported parallel checkpoint contract')
         return cls(checkpoint['state'], devices=devices,
-                   logical_shards=checkpoint['logical_shards'])
+                   logical_shards=checkpoint['logical_shards'], pool_optimizer=pool_optimizer)
 
     def close(self):
         """Release device resources. Export/checkpoint before closing to retain state."""

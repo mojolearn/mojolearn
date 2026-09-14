@@ -14,7 +14,10 @@ from checks.numerics import ftz, identical_mul_add
 from training.byte_lm import (
     ByteTrainer, byte_gradient_device, byte_update_device,
     byte_validate_tokens, byte_rollback, _require_device_finite,
+    _maybe_fault, _FAULT_NAN,
 )
+from training.byte_lm_optimizer_pool import pool_snapshot, pool_update, pool_restore
+from training.checks.optimizer import OPT_RECORD_INTERMEDIATES
 from training.byte_lm_config import ByteConfig
 from training.checks.optimizer_oracle import OptimizerConfig
 from training.checks.train_loop import _copy_into
@@ -34,6 +37,7 @@ struct ByteParallelTrainer(Movable, Writable):
     var trainers: List[ByteTrainer]
     var total: Optional[DeviceBuffer[DType.float32]]
     var incoming: Optional[DeviceBuffer[DType.float32]]
+    var pool_optimizer: Bool
     var logical_shards: Int
     var busy: Bool
     var usable: Bool
@@ -43,6 +47,7 @@ struct ByteParallelTrainer(Movable, Writable):
         self.trainers = List[ByteTrainer]()
         self.total = Optional[DeviceBuffer[DType.float32]]()
         self.incoming = Optional[DeviceBuffer[DType.float32]]()
+        self.pool_optimizer = False
         self.logical_shards = 0
         self.busy = False
         self.usable = False
@@ -79,7 +84,7 @@ struct ByteParallelTrainer(Movable, Writable):
     def open(mut self, devices: List[Int], shards: Int,
              p: List[Float32], m: List[Float32], v: List[Float32],
              flags: List[Bool], completed: Int, opt: OptimizerConfig,
-             shape: ByteConfig) raises:
+             shape: ByteConfig, pool_optimizer: Bool = False) raises:
         if self.busy or len(self.contexts) != 0:
             raise Error("byte LM parallel: already open")
         if shards < 1 or shards > 1024 or len(devices) < 1 or len(devices) > shards:
@@ -93,13 +98,21 @@ struct ByteParallelTrainer(Movable, Writable):
             for j in range(i):
                 if devices[i] == devices[j]:
                     raise Error("byte LM parallel: duplicate device index")
+        if pool_optimizer and len(devices) > shape.n_total():
+            raise Error("byte LM optimizer pool: empty ownership range")
+        comptime if OPT_RECORD_INTERMEDIATES:
+            if pool_optimizer:
+                raise Error("byte LM optimizer pool: recorded intermediates are unsupported")
+        self.pool_optimizer = pool_optimizer
         self.logical_shards = shards
         # Each physical replica begins from exactly the same host bytes.
         try:
             for i in range(len(devices)):
                 self.contexts.append(DeviceContext(device_id=devices[i]))
                 self.trainers.append(ByteTrainer(self.contexts[i], p, m, v,
-                    flags, completed, opt, shape))
+                    flags, completed, opt, shape,
+                    shape.n_total()*i//len(devices) if pool_optimizer else 0,
+                    shape.n_total()*(i+1)//len(devices)-shape.n_total()*i//len(devices) if pool_optimizer else -1))
             self.total = self.contexts[0].enqueue_create_buffer[DType.float32](shape.n_total())
             self.incoming = self.contexts[0].enqueue_create_buffer[DType.float32](shape.n_total())
             self.contexts[0].synchronize()
@@ -112,6 +125,22 @@ struct ByteParallelTrainer(Movable, Writable):
         if self.busy or not self.usable or len(self.trainers) == 0:
             raise Error("byte LM parallel: closed, busy or lost; restore an export")
 
+    def broadcast_parameters(mut self) raises:
+        # Every source range is authoritative on exactly one device. Copies
+        # never overwrite another device's owned range.
+        for source in range(len(self.trainers)):
+            var first = self.trainers[source].buffers.optimizer_first
+            var n = self.trainers[source].buffers.optimizer_count
+            var part = self.trainers[source].buffers.param.create_sub_buffer[DType.float32](first,n)
+            for target in range(len(self.trainers)):
+                if target == source:
+                    continue
+                var dest = self.trainers[target].buffers.param.create_sub_buffer[DType.float32](first,n)
+                part.enqueue_copy_to(dest)
+                self.contexts[source].synchronize()
+        for rank in range(len(self.trainers)):
+            self.contexts[rank].synchronize()
+
     def rollback(mut self) raises:
         # Attempt EVERY replica even when one device is lost. Never expose a
         # surviving subset as a usable group after partial recovery.
@@ -119,11 +148,20 @@ struct ByteParallelTrainer(Movable, Writable):
         for i in range(len(self.trainers)):
             try:
                 self.trainers[i].grad_step = -1
-                if self.trainers[i].shadow_valid:
+                if self.pool_optimizer:
+                    pool_restore(self.contexts[i], self.trainers[i])
+                elif self.trainers[i].shadow_valid:
                     _ = byte_rollback(self.contexts[i], self.trainers[i])
                 else:
                     self.trainers[i].validate_device_state(self.contexts[i], self.trainers[i].completed_steps)
                 self.trainers[i].healthy = True
+            except:
+                lost = True
+        if self.pool_optimizer and not lost:
+            try:
+                self.broadcast_parameters()
+                for i in range(len(self.trainers)):
+                    self.trainers[i].validate_device_state(self.contexts[i], self.trainers[i].completed_steps)
             except:
                 lost = True
         if lost:
@@ -197,10 +235,24 @@ struct ByteParallelTrainer(Movable, Writable):
             for i in range(len(self.trainers)):
                 self.total.value().enqueue_copy_to(self.trainers[i].buffers.grad)
                 self.contexts[0].synchronize()
+                if self.pool_optimizer:
+                    _maybe_fault(self.contexts[i], self.trainers[i].buffers.grad, "grad_nonfinite", 0, _FAULT_NAN)
                 _require_device_finite(self.contexts[i], self.trainers[i].scan,
                     self.trainers[i].buffers.grad, n, "summed gradients")
-            for i in range(len(self.trainers)):
-                byte_update_device(self.contexts[i], self.trainers[i])
+            if self.pool_optimizer:
+                for i in range(len(self.trainers)):
+                    pool_snapshot(self.contexts[i], self.trainers[i])
+                for i in range(len(self.trainers)):
+                    pool_update(self.contexts[i], self.trainers[i])
+                self.broadcast_parameters()
+                for i in range(len(self.trainers)):
+                    self.trainers[i].validate_device_state(self.contexts[i], completed + 1)
+                for i in range(len(self.trainers)):
+                    self.trainers[i].completed_steps = completed + 1
+                    self.trainers[i].grad_step = completed + 1
+            else:
+                for i in range(len(self.trainers)):
+                    byte_update_device(self.contexts[i], self.trainers[i])
             for i in range(len(self.trainers)):
                 self.contexts[i].synchronize()
                 self.trainers[i].healthy = True

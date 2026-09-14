@@ -1216,7 +1216,7 @@ def byte_lm_parallel_close_binding(session: PythonObject) raises -> PythonObject
     return PythonObject(0)
 
 
-def byte_lm_parallel_open_binding(session: PythonObject, addresses: PythonObject,
+def byte_lm_parallel_open_binding[pooled: Bool = False](session: PythonObject, addresses: PythonObject,
     params: PythonObject, shape: PythonObject, devices: PythonObject, shard_count: PythonObject) raises -> PythonObject:
     _require_binding_profile()
     var cfg_shape = _byte_config(shape)
@@ -1235,7 +1235,7 @@ def byte_lm_parallel_open_binding(session: PythonObject, addresses: PythonObject
         device_ids.append(Int(py=devices[i]))
     var owner = session.downcast_value_ptr[ByteParallelTrainer]()
     # Retain the GIL: it is also the native object's exclusion lock.
-    owner[].open(device_ids, Int(py=shard_count), p, m, v, flags, completed, cfg, cfg_shape)
+    owner[].open(device_ids, Int(py=shard_count), p, m, v, flags, completed, cfg, cfg_shape, pooled)
     return PythonObject(completed)
 
 
@@ -1288,6 +1288,9 @@ def byte_lm_parallel_export_binding(session: PythonObject, addresses: PythonObje
         cells.append(tr.config.n_tensors() if i == 3 else n)
     _validate_slot_table(addr, cells, 0)
     tr.validate_device_state(ctx, tr.completed_steps)
+    if owner[].pool_optimizer:
+        for i in range(len(owner[].trainers)):
+            owner[].trainers[i].validate_device_state(owner[].contexts[i], tr.completed_steps)
     if gradients:
         if tr.grad_step != tr.completed_steps:
             raise Error("byte LM parallel: no committed gradient")
@@ -1295,13 +1298,39 @@ def byte_lm_parallel_export_binding(session: PythonObject, addresses: PythonObje
         copy_f32(g.unsafe_ptr(), f32_ptr(addr[0]), n)
     else:
         var p = download_f32(ctx, tr.buffers.param, n)
-        var m = download_f32(ctx, tr.buffers.m_state, n)
-        var v = download_f32(ctx, tr.buffers.v_state, n)
+        var m = List[Float32]()
+        var v = List[Float32]()
+        if owner[].pool_optimizer:
+            for i in range(len(owner[].trainers)):
+                var owned = owner[].trainers[i].buffers.optimizer_count
+                var local_m = download_f32(owner[].contexts[i], owner[].trainers[i].buffers.m_state, owned)
+                var local_v = download_f32(owner[].contexts[i], owner[].trainers[i].buffers.v_state, owned)
+                for j in range(owned):
+                    m.append(local_m[j])
+                    v.append(local_v[j])
+        else:
+            m = download_f32(ctx, tr.buffers.m_state, n)
+            v = download_f32(ctx, tr.buffers.v_state, n)
         copy_f32(p.unsafe_ptr(), f32_ptr(addr[0]), n)
         copy_f32(m.unsafe_ptr(), f32_ptr(addr[1]), n)
         copy_f32(v.unsafe_ptr(), f32_ptr(addr[2]), n)
         _write_flags(addr[3], tr.buffers.buf_initialized)
     return PythonObject(tr.completed_steps)
+
+
+def byte_lm_parallel_ownership_binding(session: PythonObject) raises -> PythonObject:
+    var owner = session.downcast_value_ptr[ByteParallelTrainer]()
+    owner[].require_open()
+    var out = Python.list()
+    for i in range(len(owner[].trainers)):
+        ref b = owner[].trainers[i].buffers
+        var row = Python.list()
+        row.append(PythonObject(b.optimizer_first))
+        row.append(PythonObject(b.optimizer_count))
+        row.append(PythonObject(4*(len(b.m_state)+len(b.v_state))))
+        row.append(PythonObject(4*(len(b.shadow_p)+len(b.shadow_m)+len(b.shadow_v))))
+        out.append(row)
+    return out
 
 
 def byte_lm_parallel_rollback_binding(session: PythonObject) raises -> PythonObject:
@@ -1345,7 +1374,9 @@ def PyInit__mojolearn_byte_lm() abi("C") -> PythonObject:
         _ = module.add_type[ByteParallelTrainer]("_ByteParallelTrainer")
         module.def_function[byte_lm_parallel_create_binding]("byte_lm_parallel_create")
         module.def_function[byte_lm_parallel_close_binding]("byte_lm_parallel_close")
-        module.def_function[byte_lm_parallel_open_binding]("byte_lm_parallel_open")
+        module.def_function[byte_lm_parallel_open_binding[False]]("byte_lm_parallel_open")
+        module.def_function[byte_lm_parallel_open_binding[True]]("byte_lm_parallel_open_pooled")
+        module.def_function[byte_lm_parallel_ownership_binding]("byte_lm_parallel_ownership")
         module.def_function[byte_lm_parallel_step_binding]("byte_lm_parallel_step")
         module.def_function[byte_lm_parallel_export_binding]("byte_lm_parallel_export")
         module.def_function[byte_lm_parallel_rollback_binding]("byte_lm_parallel_rollback")

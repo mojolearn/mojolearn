@@ -335,6 +335,9 @@ struct ByteBuffers(Movable):
     """Configured buffers; flat arrays are authoritative, weights are copies."""
     var config: ByteConfig
     var n_total: Int
+    var optimizer_first: Int
+    var optimizer_count: Int
+    var optimizer_pooled: Bool
     var offsets: List[Int]
 
     var param: DeviceBuffer[DType.float32]
@@ -401,7 +404,8 @@ struct ByteBuffers(Movable):
 
     def __init__(out self, ctx: DeviceContext, initial_params: List[Float32],
                  initial_m: List[Float32], initial_v: List[Float32], flags: List[Bool],
-                 config: ByteConfig = ByteConfig()) raises:
+                 config: ByteConfig = ByteConfig(), optimizer_first: Int = 0,
+                 optimizer_count: Int = -1) raises:
         _byte_validate_allocations(config)
         self.config = config.copy()
         var M = config.batch * config.length
@@ -412,10 +416,25 @@ struct ByteBuffers(Movable):
         self.n_total = config.n_total()
         var n = self.n_total
 
+        self.optimizer_pooled = optimizer_count >= 0
+        self.optimizer_first = optimizer_first
+        self.optimizer_count = n if optimizer_count < 0 else optimizer_count
+        var owned = self.optimizer_count
+        if optimizer_first < 0 or owned < 1 or optimizer_first > n - owned:
+            raise Error("byte LM: invalid optimizer ownership range")
         self.param = _upload(ctx, initial_params)
         self.grad = _zeros(ctx, n)
-        self.m_state = _upload(ctx, initial_m)
-        self.v_state = _upload(ctx, initial_v)
+        if self.optimizer_pooled:
+            var local_m = List[Float32]()
+            var local_v = List[Float32]()
+            for i in range(optimizer_first, optimizer_first + owned):
+                local_m.append(initial_m[i])
+                local_v.append(initial_v[i])
+            self.m_state = _upload(ctx, local_m)
+            self.v_state = _upload(ctx, local_v)
+        else:
+            self.m_state = _upload(ctx, initial_m)
+            self.v_state = _upload(ctx, initial_v)
         # Recording kernels write one intermediate per parameter.
         var record_n = 1
         comptime if OPT_RECORD_INTERMEDIATES:
@@ -488,9 +507,9 @@ struct ByteBuffers(Movable):
         self.emb_perm = _zeros_i32(ctx, M)
 
         self.buf_initialized = flags.copy()
-        self.shadow_p = _zeros(ctx, n)
-        self.shadow_m = _zeros(ctx, n)
-        self.shadow_v = _zeros(ctx, n)
+        self.shadow_p = _zeros(ctx, owned)
+        self.shadow_m = _zeros(ctx, owned)
+        self.shadow_v = _zeros(ctx, owned)
         self.flags_before = flags.copy()
 
 
@@ -579,7 +598,8 @@ struct ByteTrainer(Movable):
     def __init__(out self, ctx: DeviceContext, initial_params: List[Float32],
                  initial_m: List[Float32], initial_v: List[Float32],
                  flags: List[Bool], completed_steps: Int, optimizer: OptimizerConfig,
-                 config: ByteConfig = ByteConfig()) raises:
+                 config: ByteConfig = ByteConfig(), optimizer_first: Int = 0,
+                 optimizer_count: Int = -1) raises:
         # All supplied host state/configuration admitted before first allocation.
         _require_profile()
         _byte_validate_allocations(config)
@@ -593,7 +613,7 @@ struct ByteTrainer(Movable):
         self.shadow_step = -1
         self.grad_step = -1
         self.scan = DeviceScanScratch(ctx)
-        self.buffers = ByteBuffers(ctx, initial_params, initial_m, initial_v, flags, config)
+        self.buffers = ByteBuffers(ctx, initial_params, initial_m, initial_v, flags, config, optimizer_first, optimizer_count)
         self.weights = List[LlamaDeviceWeights]()
         self.forward = List[LlamaDeviceStages]()
         self.backward = List[LlamaBackwardStages]()
@@ -613,6 +633,18 @@ struct ByteTrainer(Movable):
         """`byte_validate_device_state` over this trainer's buffers with the
         given step (the binding calls it before an export; the step body
         calls it with the NEXT step after the update)."""
+        if self.buffers.optimizer_pooled:
+            var n = self.buffers.optimizer_count
+            if completed < 0 or completed >= 1000000:
+                raise Error("byte LM: completed step must be in [0,1000000)")
+            if len(self.buffers.m_state) != n or len(self.buffers.v_state) != n:
+                raise Error("byte LM: optimizer ownership length mismatch")
+            _require_device_finite(ctx, self.scan, self.buffers.param, self.config.n_total(), "parameters")
+            _require_device_finite(ctx, self.scan, self.buffers.m_state, n, "first moments")
+            _require_device_finite(ctx, self.scan, self.buffers.v_state, n, "second moments")
+            if self.scan.first_negative(ctx, self.buffers.v_state, n) >= 0:
+                raise Error("byte LM: negative second moment")
+            return
         byte_validate_device_state(ctx, self.scan, self.buffers.param, self.buffers.m_state,
             self.buffers.v_state, self.buffers.buf_initialized, completed, self.config)
 
@@ -784,6 +816,8 @@ def byte_rollback(ctx: DeviceContext, mut tr: ByteTrainer) raises -> Bool:
     (no step reached the shadow point, or it was already rolled back);
     True after a restore. Raises "byte LM: session lost ..." and leaves
     `healthy` False if the re-scan raises."""
+    if tr.buffers.optimizer_pooled:
+        raise Error("byte LM: pooled optimizer requires its group rollback")
     if not tr.shadow_valid:
         return False
     var config = tr.config.copy()
@@ -1003,6 +1037,8 @@ def byte_gradient_device(ctx: DeviceContext, mut tr: ByteTrainer,
 
 def byte_update_device(ctx: DeviceContext, mut tr: ByteTrainer) raises:
     """Internal update half, including gradient scan, shadow and validation."""
+    if tr.buffers.optimizer_pooled:
+        raise Error("byte LM: pooled optimizer requires its group update")
     var config = tr.config.copy()
     var ton = timing_on()
     var tk = Int(perf_counter_ns())
