@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Cloud-only raw graph distance and KNN selection identity."""
 from std.os import getenv
+from std.memory import bitcast
 from max.gpu.host import DeviceContext, DeviceBuffer
 from metrics.checks.device_io import upload_f32
 from neighbors.impl.multi_gpu import parallel_knn_rows
@@ -20,7 +21,7 @@ def equal[dt: DType](ctx: DeviceContext, mut a: DeviceBuffer[dt],
     ctx.enqueue_copy(dst_ptr=y.unsafe_ptr(), src_buf=b)
     ctx.synchronize()
     for i in range(n):
-        if x.unsafe_ptr()[i].bitcast[DType.uint32]() != y.unsafe_ptr()[i].bitcast[DType.uint32]():
+        if bitcast[DType.uint32](x.unsafe_ptr()[i]) != bitcast[DType.uint32](y.unsafe_ptr()[i]):
             raise Error("graph raw bits differ at " + String(i))
 
 
