@@ -39,7 +39,7 @@ and histogram paths have two-H100 evidence only.
 | LogisticRegression | QN gradient feature columns; binary/multiclass two-H100 gates pass | Root-state partitioning; broader configurations and cross-vendor qualification |
 | ElasticNet / Lasso | Original dot leaves across GPUs; cyclic fit and FP32 oracle gates pass on two H100s | Resident shard reuse; root-state partitioning and cross-vendor qualification |
 | SVC / SVR | Linear/RBF kernel rows during fit/prediction; two-H100 cell/full-fit gates pass | Root-state partitioning, broader configurations and cross-vendor qualification |
-| PCA / TruncatedSVD | Original Gram chunks and wider v1 output rows; covariance PCA/SVD gates pass through 257 features | Full-PCA solver partitioning; larger shapes and root-state pooling |
+| PCA / TruncatedSVD | Original Gram chunks and wider v1 output rows; covariance PCA/SVD through 257 features and tall full-PCA TSQR panels pass on two H100s | Wide full-PCA transpose QR; larger shapes, root-state pooling and cross-vendor qualification |
 | NearestNeighbors / RadiusNeighbors | Whole-query brute/RBC and radius; brute KNN reference shards with a 96 GiB host-staged index gate on two H100s | Resident index pooling; RBC/radius reference partitioning; larger shapes/metrics and cross-vendor qualification |
 | KNeighborsClassifier / KNeighborsRegressor | Query and brute reference shards with original voting/weighting; single/multi-target two-H100 gates pass | Resident index/target pooling; broader configurations and cross-vendor qualification |
 | DBSCAN | Brute L2/L1 and RBC neighborhood rows; two-H100 adjacency/CSR, core-stage and full-fit gates pass | Root graph/index partitioning; larger shapes and cross-vendor qualification |

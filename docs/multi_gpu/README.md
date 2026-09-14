@@ -425,3 +425,18 @@ whitened covariance PCA and TruncatedSVD. Receipts and exact source archives:
 
 Full root data, eigensolver matrices and model state remain. This is compute
 partitioning, not pooled model/state capacity or new cross-vendor qualification.
+
+
+### Tall full PCA
+
+`fit_gram_estimator` also accepts tall `PCA(svd_solver="full")`. It assigns
+original TSQR panels to devices, gathers each panel's R and destroyed input in
+the original positions, then runs the original stacked-R factorization on the
+root. Panel boundaries, lane reductions and the one-panel path remain unchanged.
+Wide full PCA's transpose-QR route is still refused by this driver.
+
+Two-H100 gates compare complete native QR state for five shapes (1 through 64
+panels) and eight public fitted-state/transform/inverse-transform cases with
+and without whitening. Evidence: `bench/results/multi_gpu/2026-09-14/qr-h100/`.
+Root input and solver state remain resident; this does not establish pooled
+capacity, performance scaling or new cross-vendor identity.

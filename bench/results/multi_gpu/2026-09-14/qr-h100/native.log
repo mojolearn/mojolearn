@@ -1,0 +1,36 @@
+40942 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x51a780000000, nodemask=1)
+Imported from /root/mojolearn/training/checks/qr_parallel_check.mojo:7:
+/root/mojolearn/core/device_zero.mojo:98:16: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            p8 + n_vec * 16, Int32(tail),
+            ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn/training/checks/qr_parallel_check.mojo:6:
+Imported from /root/mojolearn/core/householder_qr.mojo:167:
+/root/mojolearn/core/pinned_reduce.mojo:125:8: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    red[tid] = value
+    ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/qr_parallel_check.mojo:6:
+Imported from /root/mojolearn/core/householder_qr.mojo:167:
+/root/mojolearn/core/pinned_reduce.mojo:130:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            v[j] = red[tid + j * P]
+                   ~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/qr_parallel_check.mojo:6:
+Imported from /root/mojolearn/core/householder_qr.mojo:167:
+/root/mojolearn/core/pinned_reduce.mojo:136:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        red[tid] = v[0]
+        ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/qr_parallel_check.mojo:6:
+Imported from /root/mojolearn/core/householder_qr.mojo:167:
+/root/mojolearn/core/pinned_reduce.mojo:140:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        w[t] = red[t]
+               ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+40942 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1a3640000000, nodemask=2)
+PASS TSQR bits 17 7 1
+PASS TSQR bits 259 7 8
+PASS TSQR bits 259 17 2
+PASS TSQR bits 1025 65 2
+PASS TSQR bits 4099 7 64
