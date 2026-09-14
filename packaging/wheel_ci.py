@@ -167,8 +167,24 @@ def pins(argv):
         print("FAIL no bindings/build*.sh found", file=sys.stderr)
         return 1
     bad = 0
+    # A wrapper whose whole body is one `exec sh "$(dirname -- "$0")/<b>.sh" ...`
+    # line pins nothing itself; the builder it execs does (the twelve
+    # build_<family>_host.sh wrappers over build_host_family.sh since 8c61806a6).
+    # Check the builder's text in the wrapper's name, and only when that
+    # builder is itself one of the scanned build*.sh files.
+    wrapper = re.compile(r'^exec sh "\$\(dirname -- "\$0"\)/(build[A-Za-z0-9_]*\.sh)"( .*)?$')
     for s in scripts:
         text = s.read_text(encoding="utf-8")
+        body = [ln for ln in text.splitlines() if ln.strip() and not ln.lstrip().startswith("#")]
+        m = wrapper.match(body[0]) if len(body) == 1 else None
+        if m:
+            target_script = s.parent / m.group(1)
+            if target_script not in scripts or target_script == s:
+                print(f"FAIL {s.name}: execs {m.group(1)}, which is not a scanned "
+                      f"bindings/build*.sh", file=sys.stderr)
+                bad += 1
+                continue
+            text = target_script.read_text(encoding="utf-8")
         floor = re.search(r'^MACOS_FLOOR="([^"]+)"', text, re.M)
         if not floor:
             print(f"FAIL {s.name}: no MACOS_FLOOR", file=sys.stderr); bad += 1
