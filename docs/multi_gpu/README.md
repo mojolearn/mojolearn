@@ -230,7 +230,7 @@ boosting and classical estimators. The following remain unimplemented:
   partitions and qualification; the root eigensolver state still requires one GPU.
 - Broader neighbor/density/graph configurations, resident reference and graph
   pooling, and native-only surfaces need additional partitions and qualification.
-- Full MLP/Samba model partitioning, resident staging reuse, additional model shapes,
+- Full Samba model partitioning, resident staging reuse, additional admitted fixtures,
   eight physical GPUs, AMD/Apple cross-vendor evidence,
   injected lost-device recovery, and throughput/cost measurements.
 
