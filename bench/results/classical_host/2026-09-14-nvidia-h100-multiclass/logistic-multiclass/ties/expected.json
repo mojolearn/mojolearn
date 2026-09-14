@@ -1,0 +1,57 @@
+{
+  "commit": null,
+  "estimator": "LogisticRegression",
+  "gpu_arch": null,
+  "host": {
+    "cpu": "Intel(R) Xeon(R) Platinum 8470",
+    "family": "6",
+    "isa": [
+      "avx2",
+      "avx512f",
+      "fma"
+    ],
+    "machine": "x86_64",
+    "model": "143",
+    "python": "3.14.7",
+    "release": "6.8.0-90-generic",
+    "stepping": "8",
+    "system": "Linux",
+    "vendor": "GenuineIntel"
+  },
+  "kind": "ties",
+  "lane": "logistic-multiclass",
+  "model_sha256": "61105df92f03899bd4410dd60c4614e10b928b7adc142bd81bc4ccac925cb5f9",
+  "numeric_mode": "identical",
+  "predictions": {
+    "decision_function": {
+      "dtype": "<f4",
+      "sha256": "065d463ae832b67ff5c392e3017fcb64d1fbdb089894f3e6f6a96e46ae4d6500",
+      "shape": [
+        256,
+        3
+      ]
+    },
+    "identity_hash": "ec57465dcbb52769",
+    "predict": {
+      "dtype": "<i8",
+      "sha256": "96589cd9f9fbcd3c30614fc05a3cda8200b0918bfc17244bbdc1d32f23b46e38",
+      "shape": [
+        256
+      ]
+    },
+    "predict_proba": {
+      "dtype": "<f8",
+      "sha256": "d2f6326c66e85bc272acae7cc403528ab1c3038d046b9a8dee1e65ceb3b6ea72",
+      "shape": [
+        256,
+        3
+      ]
+    },
+    "seconds": 0.000661
+  },
+  "recorded_at": "2026-09-14T11:32:05+0000",
+  "reload_equal": true,
+  "status": "RECORDED",
+  "vendor": "cuda",
+  "x_sha256": "cb717abc7fdea535547b185d7f6b53f113cbab5b15e61b6f0f7c62e31ea62f5e"
+}
