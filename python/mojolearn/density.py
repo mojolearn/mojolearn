@@ -2,10 +2,14 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Density-based clustering on the GPU, mirroring cuML's DBSCAN."""
 
-from . import _mojolearn_estimators
+from . import _mojolearn_estimators, _serialize
+from ._array import Array
 from ._buffer import addr, addr_ro, all_finite, as_f32_c, empty
 from ._mode import NumericModeMixin
-from .linear_model import _shape_of
+from .linear_model import _check_saved_by, _restore_mode, _saved_mode, _shape_of
+
+#: `KernelDensity.save`'s format tag (the kde svc host lane, 2026-09-14).
+_KDE_FORMAT = "mojolearn-kde-1"
 
 EPS_NN_BRUTE_FORCE = 0
 EPS_NN_RBC = 1
@@ -502,3 +506,70 @@ class KernelDensity(NumericModeMixin):
         raise NotImplementedError(
             "mojolearn KernelDensity: sample() is not implemented (cuML has none)"
         )
+
+    def save(self, path):
+        """Write the fitted model to `path` as an npz: the training matrix
+        `_x` as fitted (float32, the whole fitted state of a brute-force
+        KDE), `weights` (float32, present only when `fit` took a
+        `sample_weight`), `bandwidth` `<f8`, `kernel` and `metric` as the
+        names `score_samples` passes to the binding, `meta` `<i8`
+        [n_features_in_, n_samples_fit_, has_weights] (the kde svc host
+        lane, 2026-09-14). `mojolearn.host_model(path)` scores from it on a
+        CPU with no GPU through `_mojolearn_estimators_host.kde_score_samples`."""
+        if not hasattr(self, "_x"):
+            raise RuntimeError("this estimator is not fitted yet")
+        arrays = {
+            "format": _KDE_FORMAT,
+            "estimator": type(self).__name__,
+            "numeric_mode": _saved_mode(self),
+            "kernel": str(self.kernel),
+            "metric": str(self.metric),
+            "x": self._x,
+            "bandwidth": Array.from_list([float(self.bandwidth)], "<f8"),
+            "meta": Array.from_list(
+                [int(self.n_features_in_), int(self.n_samples_fit_),
+                 1 if self._w is not None else 0],
+                "<i8",
+            ),
+        }
+        if self._w is not None:
+            arrays["weights"] = self._w
+        return _serialize.write_npz(path, arrays)
+
+    @classmethod
+    def load(cls, path):
+        """Load a model saved by `save`. The result scores; every array is
+        read at its saved dtype and never cast."""
+        arrays = _serialize.read_npz(path, _KDE_FORMAT)
+        _check_saved_by(arrays, path, cls)
+        meta = _serialize.exact(arrays, "meta", "<i8")
+        if meta.size != 3:
+            raise ValueError(f"mojolearn: {path!r} meta holds {meta.size} fields, 3 are needed")
+        bandwidth = _serialize.exact(arrays, "bandwidth", "<f8")
+        if bandwidth.size != 1:
+            raise ValueError(f"mojolearn: {path!r} bandwidth must hold one value")
+        obj = cls(
+            bandwidth=float(bandwidth[0]),
+            kernel=_serialize.scalar_str(arrays, "kernel"),
+            metric=_serialize.scalar_str(arrays, "metric"),
+        )
+        _restore_mode(obj, arrays)
+        nf, n_fit, has_weights = int(meta[0]), int(meta[1]), int(meta[2])
+        x = _serialize.exact(arrays, "x", "<f4")
+        if x.ndim != 2 or tuple(x.shape) != (n_fit, nf):
+            raise ValueError(
+                f"mojolearn: {path!r} x shape {tuple(x.shape)} is not ({n_fit}, {nf})"
+            )
+        obj._x = x
+        if has_weights:
+            w = _serialize.exact(arrays, "weights", "<f4")
+            if w.ndim != 1 or w.size != n_fit:
+                raise ValueError(f"mojolearn: {path!r} weights do not match n_samples_fit_")
+            obj._w = w
+        elif "weights" in arrays:
+            raise ValueError(f"mojolearn: {path!r} carries weights its meta says it lacks")
+        else:
+            obj._w = None
+        obj.n_features_in_ = nf
+        obj.n_samples_fit_ = n_fit
+        return obj

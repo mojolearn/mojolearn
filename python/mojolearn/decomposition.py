@@ -420,8 +420,8 @@ class PCA(NumericModeMixin):
         as float64, `meta` `<i8` [n_components_, n_features_in_,
         n_samples_, whiten] and `svd_solver` (the classical host inference
         lane, 2026-09-13). `mojolearn.host_model(path)` transforms from it
-        on a CPU with no GPU when `whiten` is False; the whitened transform
-        has no host entry and refuses by name."""
+        on a CPU with no GPU, whitened or not (the whitened pair joined the
+        host binding in the kde svc host lane, 2026-09-14)."""
         if not hasattr(self, "components_"):
             raise RuntimeError("this estimator is not fitted yet")
         arrays = {

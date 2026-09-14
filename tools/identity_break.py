@@ -515,6 +515,16 @@ def _(ml, X, yc, yr, Xh=None):
                 m, lambda e: (e.transform(Xh[:256]),))
 
 
+@lane("pca-whiten")
+def _(ml, X, yc, yr, Xh=None):
+    # The whitened transform (the kde svc host lane, 2026-09-14): the same
+    # fit as `pca` with `whiten=True`, so the whiten scale kernel and its
+    # host restatement have a cell of their own on every column.
+    m = ml.PCA(n_components=4, whiten=True).fit(X)
+    return _fit(dict(components=_h(m.components_), variance=_h(m.explained_variance_), transform=_h(m.transform(X[:256]))),
+                m, lambda e: (e.transform(Xh[:256]),))
+
+
 @lane("tsvd")
 def _(ml, X, yc, yr, Xh=None):
     m = ml.TruncatedSVD(n_components=4).fit(X)
@@ -995,7 +1005,8 @@ def _save_load(est):
     """The (save method, load classmethod, suffix) an estimator offers.
     `save`/`load` on the forests, the boosting lanes and, since the
     classical host inference lane (2026-09-13 evening), ols, ridge, tsvd,
-    logistic and pca, written to `.npz` as always, or
+    logistic and pca, plus kde and svc since the kde svc host lane
+    (2026-09-14), written to `.npz` as always, or
     `save_checkpoint`/`from_checkpoint` on the trainers and SambaStack
     (2026-09-13), a JSON envelope. None where it has neither."""
     if est is None:

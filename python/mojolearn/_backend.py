@@ -896,9 +896,12 @@ _HOST_MODULES = {
     # ols_predict, tsvd_transform, qn_decision_function, qn_sigmoid and
     # pca_transform over core/classical_host_predict.mojo, so a saved
     # LinearRegression, Ridge, TruncatedSVD, LogisticRegression or PCA
-    # predicts here. Every other _mojolearn_estimators function (dbscan_fit,
-    # pca_fit, pca_whiten_transform, tsvd_fit, inverse_transform, ols_fit,
-    # ridge_fit, qn_fit, ...) is absent and refuses by name.
+    # predicts here; the kde svc host lane (2026-09-14) adds the whitened
+    # pair pca_whiten_transform and pca_whiten_inverse_transform, and the
+    # save/load that lets a GPU-fitted KernelDensity score here. Every other
+    # _mojolearn_estimators function (dbscan_fit, pca_fit, tsvd_fit,
+    # inverse_transform, ols_fit, ridge_fit, qn_fit, ...) is absent and
+    # refuses by name.
     "_mojolearn_estimators": "_mojolearn_estimators_host",
     # holtwinters (phase 1, 2026-09-13): bindings/_mojolearn_tsa_host.mojo
     # over holtwinters/checks/hw_oracle.mojo::oracle_fit[float32] and
@@ -912,9 +915,10 @@ _HOST_MODULES = {
     "_mojolearn_solver": "_mojolearn_solver_host",
     # svc (phase 1, 2026-09-13): bindings/_mojolearn_svm_host.mojo over
     # svm/checks/smo_oracle.mojo::smo_oracle_fit and smo_oracle_decision;
-    # exports svc_fit, svc_predict, svm_vendor, svm_numeric_mode. svr_fit,
-    # svr_predict and iforest_run are absent and refuse by name until their
-    # lanes land.
+    # exports svc_fit, svc_predict, svm_vendor, svm_numeric_mode; a saved
+    # GPU-fitted SVC predicts through svc_predict here (the kde svc host
+    # lane, 2026-09-14). svr_fit, svr_predict and iforest_run are absent and
+    # refuse by name until their lanes land.
     "_mojolearn_svm": "_mojolearn_svm_host",
 }
 
