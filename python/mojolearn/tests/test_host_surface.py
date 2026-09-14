@@ -126,9 +126,57 @@ def test_host_modules_exist():
             assert (ROOT / m).is_file(), f"{f['family']}: host module {m} does not exist"
 
 
+def _loop_registered_lanes(text):
+    """The lanes tools/identity_break.py registers in a module-level loop,
+    `for _name, _nu, _ls in (("matern12", ...), ...): lane(f"gp-{_name}")(...)`,
+    which the `@lane("...")` pattern cannot see (the gp Matern lanes, the kde
+    kernel and metric pairs, the knn and radius metrics). Read from the AST:
+    each literal tuple of the loop binds the target names, and the f-string
+    is spelled out from the string constants it binds."""
+    import ast
+
+    out = set()
+    for node in ast.parse(text).body:
+        if not isinstance(node, ast.For) or not isinstance(node.iter, (ast.Tuple, ast.List)):
+            continue
+        targets = node.target.elts if isinstance(node.target, ast.Tuple) else [node.target]
+        names = [t.id if isinstance(t, ast.Name) else None for t in targets]
+        for stmt in node.body:
+            call = getattr(stmt, "value", None)
+            if not (isinstance(call, ast.Call) and isinstance(call.func, ast.Call)
+                    and isinstance(call.func.func, ast.Name) and call.func.func.id == "lane"
+                    and call.func.args and isinstance(call.func.args[0], ast.JoinedStr)):
+                continue
+            for element in node.iter.elts:
+                values = element.elts if isinstance(element, ast.Tuple) else [element]
+                bound = {
+                    n: v.value for n, v in zip(names, values)
+                    if n and isinstance(v, ast.Constant) and isinstance(v.value, str)
+                }
+                parts = []
+                for piece in call.func.args[0].values:
+                    if isinstance(piece, ast.Constant):
+                        parts.append(str(piece.value))
+                    elif isinstance(piece, ast.FormattedValue) and isinstance(piece.value, ast.Name) \
+                            and piece.value.id in bound:
+                        parts.append(bound[piece.value.id])
+                    else:
+                        parts = None
+                        break
+                if parts is not None:
+                    out.add("".join(parts))
+    return out
+
+
 def test_covered_lanes_are_identity_break_lanes():
-    defined = set(re.findall(r'^@lane\("([a-z0-9-]+)"\)', _read("tools/identity_break.py"), re.M))
+    text = _read("tools/identity_break.py")
+    defined = set(re.findall(r'^@lane\("([a-z0-9-]+)"\)', text, re.M))
     assert defined, "no @lane registrations found in tools/identity_break.py"
+    looped = _loop_registered_lanes(text)
+    assert {"gp-matern12", "gp-matern32", "gp-matern52-ard"} <= looped, (
+        f"the loop reader no longer sees the gp Matern lanes: {sorted(looped)}"
+    )
+    defined |= looped
     missing = [lane for lane in host_surface.covered_lanes() if lane not in defined]
     assert missing == [], f"covered lanes unknown to tools/identity_break.py: {missing}"
 

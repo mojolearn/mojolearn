@@ -1661,3 +1661,65 @@ and rf-reg):
     MOJOLEARN_HOST_OUTDIR=<sab> MOJOLEARN_BUILD_EXTRA_DEFINES="-D MOJOLEARN_HOST_SABOTAGE=1" sh bindings/build_rf_host.sh
     MOJOLEARN_HOST_DIR=<sab> MOJOLEARN_HOST_ALLOW_SABOTAGE=1 python3 tools/identity_break.py --lanes rf-clf,rf-reg --json <cpu-sab>.json
     (the diff of <cpu-sab>.json against the three GPU columns must exit non-zero with DIVERGENT)
+
+## Workstream E, the gp host lane (2026-09-14): gp, gp-matern12, gp-matern32, gp-matern52-ard, WRITTEN, NOT COMPILED, NOT MEASURED
+
+Branch `lane/cpu-training-gp`, off `origin/fix/d-merge-regressions` at
+57465b6b3. Nothing in this section is a bit result. No build, simulation or
+test ran on the Mac; the first compile and the first four-column diff are
+owed to the seven-runner gate and the commands below.
+
+- There is no optimizer to mirror. `GaussianProcessRegressor` refuses every
+  optimizer but None, `n_restarts_optimizer != 0` and `normalize_y=True` on
+  every column (DEVIATIONS 1761 and 1764), so the fit on the device is one
+  kernel matrix, one ridge, one blocked Cholesky, one solve and three
+  scalars, and that is what the host restates.
+- `cholesky/host/chol_oracle.mojo` restates the Cholesky profile the GP
+  factors through: `chol_validate_matrix` and `chol_validate_jitter`, the
+  pinned panel width 32, `jitter_diag_kernel`, `panel_factor_kernel` with
+  its early exit, `trsm_panel_kernel`, the trailing update through
+  `gemm_oracle_cell` at OP_NT on the lower triangle, `zero_upper_kernel`,
+  `logdet_kernel`, and `cho_solve`'s two substitutions. Roots through
+  `identical_sqrt` (DEVIATION 258), divides through `identical_div`.
+- `gaussian_process/host/gpr_oracle.mojo` restates the host constructors and
+  validators of `kernels.mojo` and `estimator.mojo`, `gp_kernel_matrix`'s
+  postfix walk over the scaled distance, the const, white, RBF, Matern and
+  combine kernels, `_y_dot_alpha`, the pinned lml order, `gp_kernel_diag`,
+  the posterior mean through `gemm_oracle` at OP_TN, the in-place forward
+  solve and `gp_variance_kernel`'s clamp.
+- A family of its own, `gp`: `bindings/_mojolearn_gp_host.mojo` (shim
+  `bindings/build_gp_host.sh`) routes `_mojolearn_gp` with the GPU binding's
+  names and address contract (`gpr_fit`, `gpr_predict`, and the Cholesky
+  door's `cholesky_factor`, `cholesky_solve`, `cholesky_profile_jitter`).
+  `gp_parallel_available` is absent and refuses by name. The cholesky lane
+  is served but not declared covered: the 136-lane record predates it.
+- The sabotage arm is the routed set's `-D MOJOLEARN_HOST_SABOTAGE=1`: the
+  scaled distance walks the feature axis descending, and `gemm_oracle`'s leaf
+  walks descending with it.
+- `python/mojolearn/tests/test_host_surface.py` now reads the lanes
+  `tools/identity_break.py` registers in a module-level loop (the gp Matern
+  lanes are three of them), so a covered lane defined that way is not
+  reported unknown.
+- The test module is `cd python && python3 -m mojolearn.tests.test_cpu_training_gp`.
+
+RISKS FOR BIT IDENTITY NOT RESOLVABLE BY READING. (1) The trailing update
+and the mean trust that `identical_gemm_into` equals `gemm_oracle` on the
+three columns at k = 32 (one leaf) and k = 256 (two leaves); the gemm lane's
+gates claim it and the GP columns agree with each other, but no host GP
+card has been compared. (2) A host compiler contracting `ftz(d + jitter)`,
+`ftz(av + bv)` or `ftz(t1 + t2) + t3` into a neighbour; every product is an
+explicit `identical_mul` or `identical_mul_add`, as on the device. (3) The
+panel's early exit on a failed pivot: no GP fixture is expected to fail,
+but a `dupes` or `denormal` cell that reads DIVERGENT on `L` with equal
+`info` is the first place to look. (4) `portable_expf` and `portable_logf`
+are host code on both paths already, so the transcendental seams are not a
+new risk.
+
+To measure (the 136-lane GPU columns carry all four lanes):
+
+    MOJOLEARN_HOST_OUTDIR=<dir> sh bindings/build_gp_host.sh
+    MOJOLEARN_HOST_DIR=<dir> python3 tools/identity_break.py --lanes gp,gp-matern12,gp-matern32,gp-matern52-ard --json <cpu>.json
+    python3 tools/identity_break.py --diff <apple> <nvidia> <amd> <cpu>.json --require-columns 4 --lanes gp,gp-matern12,gp-matern32,gp-matern52-ard
+    MOJOLEARN_HOST_OUTDIR=<sab> MOJOLEARN_BUILD_EXTRA_DEFINES="-D MOJOLEARN_HOST_SABOTAGE=1" sh bindings/build_gp_host.sh
+    MOJOLEARN_HOST_DIR=<sab> MOJOLEARN_HOST_ALLOW_SABOTAGE=1 python3 tools/identity_break.py --lanes gp,gp-matern12,gp-matern32,gp-matern52-ard --json <cpu-sab>.json
+    (the diff of <cpu-sab>.json against the three GPU columns must exit non-zero with DIVERGENT)

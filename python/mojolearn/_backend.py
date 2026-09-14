@@ -971,6 +971,14 @@ def host_families_built():
 #:     POISSON, GAMMA and INVERSE_GAUSSIAN criteria and the GPU engines
 #:     refuse by name. This is its own family, not the forest host binding
 #:     named above, because it exports the GPU binding's names.
+#:   _mojolearn_gp -> _mojolearn_gp_host (gp, gp-matern12, gp-matern32,
+#:     gp-matern52-ard; workstream E, 2026-09-14): gpr_fit and gpr_predict
+#:     over gaussian_process/host/gpr_oracle.mojo (the kernel matrix, the
+#:     Cholesky profile of cholesky/host/chol_oracle.mojo and gemm_oracle's
+#:     posterior mean), and the Cholesky door's cholesky_factor,
+#:     cholesky_solve and cholesky_profile_jitter over the same chol_oracle;
+#:     gp_parallel_available is absent, so the ordered multi-GPU driver
+#:     refuses by name.
 _HOST_MODULES = host_surface.routed_modules()
 
 #: The env switch the CPU identity gate sets to load a host binding built
