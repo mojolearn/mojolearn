@@ -46,7 +46,7 @@ from glm.impl.ols import (
 )
 from glm.impl.qn.qn import qn_decision_function, qn_fit_x
 from glm.impl.ridge import RIDGE_ALGO_EIG, ridge_fit_traced
-from glm.impl.linear_model.qn import QN_LOSS_LOGISTIC, QNParams
+from glm.impl.linear_model.qn import QN_LOSS_LOGISTIC, QN_LOSS_SOFTMAX, QNParams
 from checks.numerics import ftz, identical_exp64
 
 
@@ -300,15 +300,26 @@ def qn_fit_host(
     fit_intercept: Bool,
     penalty_normalized: Bool,
     has_sample_weight: Bool,
+    loss: Int = QN_LOSS_LOGISTIC,
 ) raises -> Int:
     """`qnFit` (`qn.cuh:176-193`) for a dense row-major `X`, through
-    `qn_fit_x`'s loss switch (QN_LOSS_LOGISTIC; everything else refused by
-    name there). `coef_ptr` holds `n_features + fit_intercept` floats: the
-    weights then the bias, cuML's `W` layout, zero-initialized here as
-    `solvers/qn.pyx:552-554` does (no warm start). `info_ptr[0]` receives
-    the final objective, `info_ptr[1]` the `OPT_RETCODE`; the return value
-    is `num_iters`. Carries the identity card (`qn.*`)."""
-    var n_param = n_features + (1 if fit_intercept else 0)
+    `qn_fit_x`'s loss switch. `loss` (lane/logistic-multiclass, 2026-09-14)
+    is QN_LOSS_LOGISTIC, the default and the only value until that day, or
+    QN_LOSS_SOFTMAX with `n_classes > 2`; every other id is refused here by
+    name before a buffer exists. `coef_ptr` holds `n_targets * (n_features
+    + fit_intercept)` floats, cuML's column-major `W` (`w[c + C*j]`, the
+    bias column last; `n_targets` is 1 for the logistic loss), zero-
+    initialized here as `solvers/qn.pyx:552-554` does (no warm start).
+    `info_ptr[0]` receives the final objective, `info_ptr[1]` the
+    `OPT_RETCODE`; the return value is `num_iters`. Carries the identity
+    card (`qn.*`); the logistic header line is the string it always was."""
+    if loss != QN_LOSS_LOGISTIC and loss != QN_LOSS_SOFTMAX:
+        raise Error(
+            "qn_fit: loss " + String(loss) + " is not routed from this entry;"
+            " QN_LOSS_LOGISTIC (0) and QN_LOSS_SOFTMAX (2) are"
+        )
+    var n_targets = 1 if n_classes == 2 else n_classes
+    var n_param = (n_features + (1 if fit_intercept else 0)) * n_targets
     var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
     var y = ctx.enqueue_create_buffer[DType.float32](n_rows)
     var w = ctx.enqueue_create_buffer[DType.float32](n_param)
@@ -317,7 +328,7 @@ def qn_fit_host(
     ctx.enqueue_memset(w, Float32(0.0))
     ctx.synchronize()
     var pams = QNParams.default()
-    pams.loss = QN_LOSS_LOGISTIC
+    pams.loss = loss
     pams.penalty_l1 = penalty_l1
     pams.penalty_l2 = penalty_l2
     pams.grad_tol = grad_tol
@@ -330,8 +341,9 @@ def qn_fit_host(
     var trace = IdentityTrace()
     if trace.enabled:
         trace.header(
-            String("logistic n=") + String(n_rows) + " d=" + String(n_features)
-            + " loss=" + String(QN_LOSS_LOGISTIC)
+            String("logistic n=" if loss == QN_LOSS_LOGISTIC else "softmax n=")
+            + String(n_rows) + " d=" + String(n_features)
+            + " loss=" + String(loss)
         )
     var fx = Float32(0.0)
     var iters = 0
@@ -358,25 +370,34 @@ def qn_decision_function_host(
     n_rows: Int,
     n_features: Int,
     fit_intercept: Bool,
+    n_classes: Int = 1,
 ) raises:
     """`qnDecisionFunction` (`qn.cuh:231-243`): `scores = X w + b` on the
-    device, the fitted `W` layout in. `predict` is `z > 0` and
-    `predict_proba` is the sigmoid, both below / in the Python layer."""
-    var n_param = n_features + (1 if fit_intercept else 0)
+    device, the fitted `W` layout in. `n_classes` (lane/logistic-multiclass,
+    2026-09-14) is 1 for the binary logistic shape, the default and the
+    only value until that day: `n_targets = 1`, `scores` is `n_rows`
+    floats, `predict` is `z > 0` and `predict_proba` the sigmoid, both in
+    the Python layer. `n_classes > 2` is the softmax shape: `w` is the
+    column-major `C x dims` block, `n_targets = C`, and `scores` is
+    `n_rows * C` floats, `scores[i*C + c]` (row-major, which IS cuML's
+    column-major `z[c + C*i]`, `glm_base.mojo::linear_fwd`); `predict` is
+    the row argmax and `predict_proba` the softmax (`qn_softmax_host`)."""
+    var n_targets = n_classes if n_classes > 2 else 1
+    var n_param = (n_features + (1 if fit_intercept else 0)) * n_targets
     var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
     var w = ctx.enqueue_create_buffer[DType.float32](n_param)
-    var scores = ctx.enqueue_create_buffer[DType.float32](n_rows)
+    var scores = ctx.enqueue_create_buffer[DType.float32](n_rows * n_targets)
     ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
     ctx.enqueue_copy(dst_buf=w, src_ptr=coef_ptr)
     ctx.synchronize()
     var pams = QNParams.default()
-    pams.loss = QN_LOSS_LOGISTIC
+    pams.loss = QN_LOSS_SOFTMAX if n_targets > 1 else QN_LOSS_LOGISTIC
     pams.fit_intercept = fit_intercept
-    qn_decision_function(ctx, pams, x, n_rows, n_features, w, scores)
-    var hs = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
+    qn_decision_function(ctx, pams, x, n_rows, n_features, w, scores, n_targets)
+    var hs = ctx.enqueue_create_host_buffer[DType.float32](n_rows * n_targets)
     ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=scores)
     ctx.synchronize()
-    for i in range(n_rows):
+    for i in range(n_rows * n_targets):
         out_ptr.unsafe_store(i, hs.unsafe_ptr().unsafe_load(i))
     _ = hs^
 
@@ -403,3 +424,39 @@ def qn_sigmoid_host(
         var p = 1.0 / (1.0 + identical_exp64(-z))
         out_ptr.unsafe_store(2 * i, 1.0 - p)
         out_ptr.unsafe_store(2 * i + 1, p)
+
+
+def qn_softmax_host(
+    scores_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    out_ptr: MutPointer[Float64, MutUntrackedOrigin],
+    n_rows: Int,
+    n_classes: Int,
+):
+    """The multinomial `predict_proba` link (lane/logistic-multiclass,
+    2026-09-14), the softmax of each row of the `(n_rows, n_classes)`
+    float32 decision function, computed ON THE HOST in Float64 through
+    `identical_exp64`, the standing rule for a probability link
+    (`qn_sigmoid_host` above, DEVIATION 549; cuML's Python layer takes the
+    softmax in cupy float32 on the device, `logistic_regression.py`). Per
+    row: `m` is the first maximum under a strict `>` from the first entry
+    (the positional rule of `softmax_row_max`, so a tie and a signed zero
+    are decided by index, never by a hardware max); `s` is the serial
+    ascending sum of `exp(z_c - m)`; `p_c = exp(z_c - m) / s`, one
+    correctly rounded division per cell. No `log`, no fused multiply-add
+    site. `core/classical_host_predict.mojo::host_qn_softmax` spells the
+    same statements for the CPU binding and the gate holds the two to a
+    bit."""
+    for i in range(n_rows):
+        var base = i * n_classes
+        var m = Float64(scores_ptr.unsafe_load(base))
+        for c in range(1, n_classes):
+            var v = Float64(scores_ptr.unsafe_load(base + c))
+            if v > m:
+                m = v
+        var s = 0.0
+        for c in range(n_classes):
+            var z = Float64(scores_ptr.unsafe_load(base + c))
+            s = s + identical_exp64(z - m)
+        for c in range(n_classes):
+            var z = Float64(scores_ptr.unsafe_load(base + c))
+            out_ptr.unsafe_store(base + c, identical_exp64(z - m) / s)

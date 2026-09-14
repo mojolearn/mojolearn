@@ -38,6 +38,7 @@ from glm.estimator import (
     qn_decision_function_host,
     qn_fit_host,
     qn_sigmoid_host,
+    qn_softmax_host,
     ridge_fit_host,
 )
 from decomposition.impl.linalg.detail.svd_full import pca_full_validate
@@ -438,13 +439,17 @@ def qn_fit_binding(
     info_addr: PythonObject,
     params: PythonObject,
 ) raises -> PythonObject:
-    """`qnFit`, QN_LOSS_LOGISTIC (DEVIATIONS 546-549). params: n_rows,
-    n_features, n_classes, penalty_l1, penalty_l2, grad_tol, change_tol,
-    max_iter, linesearch_max_iter, lbfgs_memory, fit_intercept,
-    penalty_normalized, has_sample_weight -- cuML's `qn_params` in its
-    field order. Returns num_iters; info[0] = objective, info[1] = retcode."""
-    if len(params) != 13:
-        raise Error("qn_fit: params must carry the 13 qn_params fields")
+    """`qnFit` (DEVIATIONS 546-549). params: n_rows, n_features,
+    n_classes, penalty_l1, penalty_l2, grad_tol, change_tol, max_iter,
+    linesearch_max_iter, lbfgs_memory, fit_intercept, penalty_normalized,
+    has_sample_weight -- cuML's `qn_params` in its field order -- and,
+    since lane/logistic-multiclass (2026-09-14), an OPTIONAL 14th, the loss
+    id: QN_LOSS_LOGISTIC (0) with `n_classes == 2`, the value a 13-field
+    call gets, or QN_LOSS_SOFTMAX (2) with `n_classes > 2`, the coef buffer
+    then `n_classes * (n_features + fit_intercept)` floats. Returns
+    num_iters; info[0] = objective, info[1] = retcode."""
+    if len(params) != 13 and len(params) != 14:
+        raise Error("qn_fit: params must carry the 13 qn_params fields, plus an optional 14th, the loss id")
     var xp = _f32_ptr(Int(py=x_addr))
     var yp = _f32_ptr(Int(py=y_addr))
     var wp = _f32_ptr(Int(py=coef_addr))
@@ -462,12 +467,13 @@ def qn_fit_binding(
     var fit_intercept = Int(py=params[10]) != 0
     var normalized = Int(py=params[11]) != 0
     var has_sw = Int(py=params[12]) != 0
+    var loss = Int(py=params[13]) if len(params) == 14 else 0
     var iters = 0
     with GILReleased(Python()):
         var ctx = DeviceContext()
         iters = qn_fit_host(
             ctx, xp, yp, wp, ip, nr, nf, nc, l1, l2, grad_tol, change_tol,
-            max_iter, ls_max, mem, fit_intercept, normalized, has_sw,
+            max_iter, ls_max, mem, fit_intercept, normalized, has_sw, loss,
         )
     return PythonObject(iters)
 
@@ -479,18 +485,22 @@ def qn_decision_function_binding(
     params: PythonObject,
 ) raises -> PythonObject:
     """`qnDecisionFunction`: scores = X w + b. params: n_rows, n_features,
-    fit_intercept."""
-    if len(params) != 3:
-        raise Error("qn_decision_function: params must contain n_rows, n_features, fit_intercept")
+    fit_intercept and, since lane/logistic-multiclass (2026-09-14), an
+    OPTIONAL 4th, n_classes: absent or below 3 is the binary shape (out is
+    n_rows floats, the contract every 3-field caller has), `n_classes > 2`
+    the softmax shape (out is `n_rows * n_classes` floats, row-major)."""
+    if len(params) != 3 and len(params) != 4:
+        raise Error("qn_decision_function: params must contain n_rows, n_features, fit_intercept and an optional n_classes")
     var xp = _f32_ptr(Int(py=x_addr))
     var cp = _f32_ptr(Int(py=coef_addr))
     var op = _f32_ptr(Int(py=out_addr))
     var nr = Int(py=params[0])
     var nf = Int(py=params[1])
     var fi = Int(py=params[2]) != 0
+    var nc = Int(py=params[3]) if len(params) == 4 else 1
     with GILReleased(Python()):
         var ctx = DeviceContext()
-        qn_decision_function_host(ctx, xp, cp, op, nr, nf, fi)
+        qn_decision_function_host(ctx, xp, cp, op, nr, nf, fi, nc)
     return PythonObject(0)
 
 
@@ -508,6 +518,28 @@ def qn_sigmoid_binding(
     var nr = Int(py=params[0])
     with GILReleased(Python()):
         qn_sigmoid_host(sp, op, nr)
+    return PythonObject(0)
+
+
+def qn_softmax_binding(
+    scores_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """The multinomial predict_proba link on the host through
+    identical_exp64 (lane/logistic-multiclass, 2026-09-14,
+    `qn_softmax_host`): scores is float32 (n_rows, n_classes) row-major,
+    out is float64 (n_rows, n_classes). params: n_rows, n_classes."""
+    if len(params) != 2:
+        raise Error("qn_softmax: params must contain n_rows, n_classes")
+    var sp = _f32_ptr(Int(py=scores_addr))
+    var op = _f64_ptr(Int(py=out_addr))
+    var nr = Int(py=params[0])
+    var nc = Int(py=params[1])
+    if nc < 3:
+        raise Error("qn_softmax: n_classes must be at least 3; the binary link is qn_sigmoid")
+    with GILReleased(Python()):
+        qn_softmax_host(sp, op, nr, nc)
     return PythonObject(0)
 
 
@@ -611,6 +643,7 @@ def PyInit__mojolearn_estimators() abi("C") -> PythonObject:
         m.def_function[qn_fit_binding]("qn_fit")
         m.def_function[qn_decision_function_binding]("qn_decision_function")
         m.def_function[qn_sigmoid_binding]("qn_sigmoid")
+        m.def_function[qn_softmax_binding]("qn_softmax")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_estimators: ", e))

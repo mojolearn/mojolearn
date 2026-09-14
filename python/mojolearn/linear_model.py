@@ -25,8 +25,8 @@ from ._buffer import (
     addr, addr_ro, all_finite, as_f32_c, as_f64_c, empty, view, zeros,
 )
 from ._labels import (
-    classes_from_member, classes_member, decode_labels, flatten_labels,
-    sorted_classes,
+    argmax_rows, classes_from_member, classes_member, decode_labels,
+    flatten_labels, sorted_classes,
 )
 from ._mode import NumericModeMixin
 
@@ -833,6 +833,31 @@ _QN_OPT_RETCODE = {0: "OPT_SUCCESS", 1: "OPT_NUMERIC_ERROR",
                    4: "OPT_INVALID_ARGS"}
 
 
+#: `glm/impl/linear_model/qn.mojo`'s ids, the 14th `qn_fit` field.
+_QN_LOSS_LOGISTIC = 0
+_QN_LOSS_SOFTMAX = 2
+
+
+def _coef_from_w(w, cols, n_targets, fit_intercept):
+    """`coef_` and `intercept_` from the fitted `W` block. One target: the
+    first `cols` entries and the last (a slice of an Array COPIES, the
+    _array contract, so both are detached from `_w`). C targets: cuML's
+    column-major `w[c + C*j]`, the bias column at `j == cols`, unpacked by
+    an O(C * n_features) Python loop over the parameters, not the rows."""
+    if n_targets == 1:
+        coef = w[:cols].reshape((1, cols))
+        intercept = w[cols:cols + 1] if fit_intercept else zeros((1,), "<f4")
+        return coef, intercept
+    values = w.tolist()
+    coef = Array.from_list(
+        [[values[c + n_targets * j] for j in range(cols)] for c in range(n_targets)],
+        "<f4",
+    )
+    intercept = (Array.from_list([values[c + n_targets * cols] for c in range(n_targets)], "<f4")
+                 if fit_intercept else zeros((n_targets,), "<f4"))
+    return coef, intercept
+
+
 def _log_or_inf(p):
     """`np.log` on one probability: `log(p)` for `p > 0`, `-inf` at exactly
     zero (NumPy's answer, minus its warning), NaN for a negative."""
@@ -893,13 +918,25 @@ class LogisticRegression(NumericModeMixin):
                                   split is l1 = l1_ratio / C,
                                   l2 = (1 - l1_ratio) / C
         solver          'qn' only the only value cuML accepts either
-        > 2 classes     refused   at THIS door. The softmax loss IS
-                                  implemented and gated (glm/impl/qn/
+        > 2 classes     honored   since lane/logistic-multiclass
+                                  (2026-09-14): the softmax loss
+                                  (QN_LOSS_SOFTMAX, glm/impl/qn/
                                   glm_softmax.mojo, DEVIATIONS 705-711,
-                                  `pixi run check-glm-multinomial`); the
-                                  binding hard-codes QN_LOSS_LOGISTIC
-                                  (glm/estimator.mojo) and nothing routes
-                                  more than two classes to it yet
+                                  gated by `pixi run check-glm-multinomial`)
+                                  through the same L-BFGS; `coef_` is
+                                  (C, n_features), `intercept_` (C,),
+                                  `decision_function` (n, C) float32,
+                                  `predict_proba` the softmax of each row
+                                  in float64 on the host (`qn_softmax`,
+                                  the rule of DEVIATION 549), `predict`
+                                  the row argmax with the FIRST maximum
+                                  winning a tie (the lowest class index,
+                                  `_labels.argmax_rows`, the positional
+                                  rule of `softmax_row_max`). REFUSED by
+                                  name with more than two classes: an l1
+                                  or elasticnet penalty (OWL-QN on the
+                                  softmax objective runs but has no
+                                  identity gate; ENGINEERING_RULES 8)
         warm_start      absent    cuML's QN has it, LogisticRegression
                                   does not expose it; w0 = 0 always
 
@@ -917,8 +954,10 @@ class LogisticRegression(NumericModeMixin):
     l1-penalized, exactly as it is not l2-penalized (`pg_limit = D * C`,
     `qn_solvers.cuh:447`).
 
-    OUTPUTS: `coef_` (1, n_features) float32, `intercept_` (1,) float32,
-    `classes_` (the two labels, sorted, a Python LIST -- DEVIATION 2364),
+    OUTPUTS: `coef_` (1, n_features) float32, `intercept_` (1,) float32
+    (with C > 2 classes: (C, n_features) and (C,), row c the class
+    `classes_[c]`, from cuML's column-major `W` block `w[c + C*j]`),
+    `classes_` (the labels, sorted, a Python LIST -- DEVIATION 2364),
     `n_iter_` an int64 Array `[k]`, plus `objective_` (the final value of
     the objective the solver minimized) and `retcode_` (cuML's OPT_RETCODE,
     0 = converged). `predict` is `classes_[score > 0]`, `predict_proba` is
@@ -1015,22 +1054,26 @@ class LogisticRegression(NumericModeMixin):
         # (`_labels.sorted_classes`, DEVIATION 2340): a Python list.
         self.classes_, codes = sorted_classes(labels)
         n_classes = len(self.classes_)
-        if n_classes > 2:
-            raise NotImplementedError(
-                f"mojolearn LogisticRegression: {n_classes} classes need the "
-                "softmax loss (QN_LOSS_SOFTMAX), which is implemented and gated "
-                "in glm/impl/qn/glm_softmax.mojo but NOT ROUTED from this "
-                "estimator (the binding fits QN_LOSS_LOGISTIC only); binary "
-                "only. See glm/NOT_IMPLEMENTED.tsv"
-            )
         if n_classes < 2:
             raise ValueError("mojolearn LogisticRegression: y has one class")
-        # Label encoding, the permitted O(rows) Python loop: code 1 is
-        # `classes_[1]`, the class the solver maps to +1.
+        # `qn.cuh:106`: one target for two classes (the logistic loss, code
+        # 1 is `classes_[1]`, the class the solver maps to +1), C targets
+        # for C > 2 (the softmax loss, code c is `classes_[c]`).
+        n_targets = 1 if n_classes == 2 else n_classes
+        loss = _QN_LOSS_LOGISTIC if n_targets == 1 else _QN_LOSS_SOFTMAX
+        # Label encoding, the permitted O(rows) Python loop.
         y_enc = Array.from_list([float(c) for c in codes], "<f4")
         l1, l2 = self._get_qn_params()
+        if n_targets > 1 and l1 != 0.0:
+            raise NotImplementedError(
+                f"mojolearn LogisticRegression: penalty={self.penalty!r} with "
+                f"{n_classes} classes selects OWL-QN on the softmax objective, "
+                "which runs but has no identity gate (glm/checks/"
+                "multinomial_check.mojo gates l2 and no penalty); refused by "
+                "name until it is gated (ENGINEERING_RULES.md section 8)"
+            )
         n_param = cols + (1 if self.fit_intercept else 0)
-        w = zeros((n_param,), "<f4")
+        w = zeros((n_param * n_targets,), "<f4")
         info = zeros((2,), "<f4")
         n_iter = self._bind("_mojolearn_estimators").qn_fit(
             addr_ro(x, name="X"), addr_ro(y_enc, name="y"),
@@ -1039,14 +1082,10 @@ class LogisticRegression(NumericModeMixin):
              float(l1), float(l2), float(self.tol), float(self.tol * 0.01),
              int(self.max_iter), int(self.linesearch_max_iter),
              int(self.lbfgs_memory), 1 if self.fit_intercept else 0,
-             1 if self.penalty_normalized else 0, 0],
+             1 if self.penalty_normalized else 0, 0, loss],
         )
         self._w = w
-        # A slice of an Array COPIES (the _array contract), so these are
-        # detached from `_w` exactly as `.copy()` detached them before.
-        self.coef_ = w[:cols].reshape((1, cols))
-        self.intercept_ = (w[cols:cols + 1] if self.fit_intercept
-                           else zeros((1,), "<f4"))
+        self.coef_, self.intercept_ = _coef_from_w(w, cols, n_targets, self.fit_intercept)
         self.n_iter_ = Array.from_list([int(n_iter)], "<i8")
         self.objective_ = float(info[0])
         self.retcode_ = int(info[1])
@@ -1059,28 +1098,59 @@ class LogisticRegression(NumericModeMixin):
         x, _ = as_f32_c(X, ndim=2, name="X")
         if x.shape[1] != self.n_features_in_:
             raise ValueError("mojolearn LogisticRegression feature count differs from fit")
-        out = empty((x.shape[0],), "<f4")
+        n_targets = self._n_targets()
+        if n_targets == 1:
+            out = empty((x.shape[0],), "<f4")
+            self._bind("_mojolearn_estimators").qn_decision_function(
+                addr_ro(x, name="X"), addr_ro(self._w, name="coef_"),
+                addr(out, name="scores"),
+                [x.shape[0], x.shape[1], 1 if self.fit_intercept else 0],
+            )
+            return out
+        # C > 2: `(n, C)` float32, `scores[i, c]` the class-c logit, the
+        # 4-field call of the same entry (lane/logistic-multiclass).
+        out = empty((x.shape[0], n_targets), "<f4")
         self._bind("_mojolearn_estimators").qn_decision_function(
             addr_ro(x, name="X"), addr_ro(self._w, name="coef_"),
             addr(out, name="scores"),
-            [x.shape[0], x.shape[1], 1 if self.fit_intercept else 0],
+            [x.shape[0], x.shape[1], 1 if self.fit_intercept else 0, n_targets],
         )
         return out
+
+    def _n_targets(self):
+        """`qn.cuh:106`: 1 for two classes, C for C > 2."""
+        n_classes = len(self.classes_)
+        return 1 if n_classes == 2 else n_classes
 
     def predict(self, X):
         """`qn_predict`: `z > 0 ? 1 : 0` (qn.cuh:276), mapped to classes_.
         An int64 / float64 Array for int / float labels, a Python list for
-        anything else (DEVIATION 2364)."""
+        anything else (DEVIATION 2364). With C > 2 classes the row argmax
+        of the decision function, the FIRST maximum winning a tie (the
+        lowest class index, `_labels.argmax_rows`; the same rule the
+        device's `softmax_row_max` applies to a tie and to `+0.0` against
+        `-0.0`, and cuML's `qn_predict` argmax over `C` scores)."""
         scores = self.decision_function(X)
-        return decode_labels(self.classes_,
-                             [1 if s > 0.0 else 0 for s in scores.tolist()])
+        if self._n_targets() == 1:
+            return decode_labels(self.classes_,
+                                 [1 if s > 0.0 else 0 for s in scores.tolist()])
+        return decode_labels(self.classes_, argmax_rows(scores))
 
     def predict_proba(self, X):
         scores = self.decision_function(X)
-        out = empty((scores.shape[0], 2), "<f8")
-        self._bind("_mojolearn_estimators").qn_sigmoid(
+        n_targets = self._n_targets()
+        if n_targets == 1:
+            out = empty((scores.shape[0], 2), "<f8")
+            self._bind("_mojolearn_estimators").qn_sigmoid(
+                addr_ro(scores, name="scores"), addr(out, name="proba"),
+                [scores.shape[0]])
+            return out
+        # C > 2: the softmax of each row in float64 on the host through
+        # `identical_exp64` (`qn_softmax_host`, the rule of DEVIATION 549).
+        out = empty((scores.shape[0], n_targets), "<f8")
+        self._bind("_mojolearn_estimators").qn_softmax(
             addr_ro(scores, name="scores"), addr(out, name="proba"),
-            [scores.shape[0]])
+            [scores.shape[0], n_targets])
         return out
 
     def predict_log_proba(self, X):
@@ -1095,8 +1165,8 @@ class LogisticRegression(NumericModeMixin):
         later; recorded here so it is not mistaken for a design.
         """
         return Array.from_list(
-            [[_log_or_inf(a), _log_or_inf(b)]
-             for a, b in self.predict_proba(X).tolist()],
+            [[_log_or_inf(p) for p in row]
+             for row in self.predict_proba(X).tolist()],
             "<f8",
         )
 
@@ -1107,10 +1177,12 @@ class LogisticRegression(NumericModeMixin):
 
     def save(self, path):
         """Write the fitted model to `path` as an npz: `_w` as fitted (the
-        `n_features + fit_intercept` float32 vector inference reads; `coef_`
-        and `intercept_` are its copies and are rebuilt by `load`),
-        `classes_` as `_labels.classes_member`, the feature count and
-        `fit_intercept` (the classical host inference lane, 2026-09-13)."""
+        `n_targets * (n_features + fit_intercept)` float32 block inference
+        reads; `coef_` and `intercept_` are its copies and are rebuilt by
+        `load`), `classes_` as `_labels.classes_member` (its length is the
+        class count, so a C > 2 model needs no extra field), the feature
+        count and `fit_intercept` (the classical host inference lane,
+        2026-09-13; C > 2 since lane/logistic-multiclass, 2026-09-14)."""
         if not hasattr(self, "_w"):
             raise RuntimeError("this estimator is not fitted yet")
         arrays = {
@@ -1137,15 +1209,14 @@ class LogisticRegression(NumericModeMixin):
         obj = cls(fit_intercept=bool(int(meta[1])))
         _restore_mode(obj, arrays)
         cols = int(meta[0])
-        w = _serialize.exact(arrays, "w", "<f4")
-        if w.ndim != 1 or w.size != cols + (1 if obj.fit_intercept else 0):
-            raise ValueError(f"mojolearn: {path!r} w does not match n_features_in_ and fit_intercept")
-        obj._w = w
-        obj.coef_ = w[:cols].reshape((1, cols))
-        obj.intercept_ = (w[cols:cols + 1] if obj.fit_intercept
-                          else zeros((1,), "<f4"))
         obj.classes_ = classes_from_member(arrays["classes"])
-        if len(obj.classes_) != 2:
-            raise ValueError(f"mojolearn: {path!r} must carry exactly two classes")
+        if len(obj.classes_) < 2:
+            raise ValueError(f"mojolearn: {path!r} must carry at least two classes")
+        n_targets = obj._n_targets()
+        w = _serialize.exact(arrays, "w", "<f4")
+        if w.ndim != 1 or w.size != (cols + (1 if obj.fit_intercept else 0)) * n_targets:
+            raise ValueError(f"mojolearn: {path!r} w does not match n_features_in_, fit_intercept and the class count")
+        obj._w = w
+        obj.coef_, obj.intercept_ = _coef_from_w(w, cols, n_targets, obj.fit_intercept)
         obj.n_features_in_ = cols
         return obj
