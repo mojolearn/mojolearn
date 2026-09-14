@@ -2,6 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Five data sets, and every bit of every one of them is accounted for.
 
+Plus one sabotage-only data set outside `KM_FIXTURE_COUNT`, `km_zero_row_x`,
+which exists so `KMSAB_NO_EIGEN_CLIP` has a basis kernel with an eigenvalue
+that is exactly zero (added 2026-09-14; see `KM_ZERO_ROW_N`).
+
 NO REFERENCE FILE. cuML's kernel-ridge test (`python/cuml/tests/test_kernel_ridge.py`)
 is a hypothesis-driven comparison against scikit-learn at
 `assert_allclose(..., rtol=1e-3)`, which is the right test for a library
@@ -79,7 +83,11 @@ comptime FIX_KM_RBF = 1
 
 #: EXACT DUPLICATE ROWS. Two pairs of them, in different panels. Every
 #: kernel matrix over it is singular, so it is the fixture that drives
-#: DEVIATION 1662's refusal and Nystroem's eigenvalue clip.
+#: DEVIATION 1662's refusal. It is NOT relied on to reach Nystroem's
+#: eigenvalue clip: a float32 Jacobi leaves a duplicate pair's zero
+#: eigenvalue near `eps32 * ||K||`, the clip reads `|lambda|` since
+#: 2026-09-14, and the M4 FAST run at 834ba18dc read `KMSAB_NO_EIGEN_CLIP`
+#: INERT here. `km_zero_row_x` is the basis that reaches the clip.
 comptime FIX_KM_DUP = 2
 
 #: SIGNED ZEROS planted in `X` and in `y`. IDENTITY_PATHS row 39 territory,
@@ -92,6 +100,14 @@ comptime FIX_KM_SIGNED = 3
 comptime FIX_KM_MIXED = 4
 
 comptime KM_FIXTURE_COUNT = 5
+
+#: A SIXTH DATA SET THAT IS NOT A FIXTURE ID, and it stays outside
+#: `KM_FIXTURE_COUNT` on purpose: every sweep over the five, the card and
+#: `kernel_methods_main.mojo`'s by-name selection read that count, so adding
+#: an id would move their streams. It exists for ONE sabotage arm,
+#: `KMSAB_NO_EIGEN_CLIP`, and `km_zero_row_x` says why it reaches the clip.
+comptime KM_ZERO_ROW_N = 12
+comptime KM_ZERO_ROW_D = 6
 
 
 # ===========================================================================
@@ -367,6 +383,74 @@ def km_fixture_x(which: Int, salt: Int) raises -> List[Float32]:
     for i in range(n):
         for k in range(d):
             out.append(bits_value(chol_mix64(i, k, salt + 37), True))
+    return out^
+
+
+def km_zero_row_x(zero_row: Int, salt: Int) raises -> List[Float32]:
+    """`X`, `KM_ZERO_ROW_N x KM_ZERO_ROW_D` row-major: hashed SIGNED rows
+    (`FIX_KM_DUP`'s construction at its own salt) with row `zero_row` set to
+    `+0.0` in every column. Host-independent for the same reason the other
+    inexact fixtures are: integer fields and a copy, no host arithmetic.
+
+    WHY A LINEAR BASIS KERNEL OVER IT HAS AN EIGENVALUE THAT IS EXACTLY ZERO,
+    and not merely small. The caller puts `zero_row` in the Nystroem basis.
+
+    - Every cell of row and column `zero_row` of `K = B B^T` is a fold of
+      products with a `+0.0` factor, so it is `+-0.0` under ANY summation
+      order, fold width or contraction: there is no rounding for a vendor or
+      a mode to decide.
+    - `jacobi_eigh_kernel` keeps that row and column zero. A rotation on a
+      pair that contains `zero_row` sees `apq == 0` and takes `c = 1, s = 0`
+      (`jacobi_rotation_cs`), so `_rotate_pair_block` stores
+      `1 * (+-0) - 0 * a` and `0 * a + 1 * (+-0)` style values back, all
+      `+-0.0` for finite `a`; a rotation on any other pair updates the
+      `zero_row` cells as `c * (+-0) - s * (+-0)`, again `+-0.0`. So the
+      diagonal cell stays `+-0.0` and row `zero_row` of the basis stays the
+      unit vector it was initialized to.
+    - `_singular_value_f32(+-0.0)` is `+0.0`, below `_eigen_clip_f32()`'s
+      `1e-12`, so the production fit clips it to `1e-12` and
+      `KMSAB_NO_EIGEN_CLIP` divides by `sqrt(0) = 0` instead.
+
+    The other `KM_ZERO_ROW_N - 1` rows are hashed in `[0.5, 2)` magnitude, so
+    the rest of the basis kernel is generic and its eigenvalues are far above
+    the clip. The production answer stays FINITE and is sklearn's: their SVD
+    gives the zero singular value the null vector `e_zero_row`, the clip
+    makes its normalization entry `1e6`, and every input's embedding feature
+    for that basis row is `K(x, 0) * 1e6 = 0`.
+    """
+    var n = KM_ZERO_ROW_N
+    var d = KM_ZERO_ROW_D
+    if zero_row < 0 or zero_row >= n:
+        raise Error(
+            "km_zero_row_x: zero_row must be in [0, "
+            + String(n)
+            + "), got "
+            + String(zero_row)
+        )
+    var out = List[Float32]()
+    for i in range(n):
+        for k in range(d):
+            if i == zero_row:
+                out.append(Float32(0.0))
+            else:
+                out.append(bits_value(chol_mix64(i, k, salt + 89), True))
+    return out^
+
+
+def km_zero_row_y(n_targets: Int, salt: Int) raises -> List[Float32]:
+    """`y` for `km_zero_row_x`, `KM_ZERO_ROW_N x n_targets`, hashed
+    quarter-integers. The arm it serves does not read `y`; the shared
+    signature fits a kernel ridge on it, and an `alpha` of 0.5 keeps that
+    solve positive definite whatever the zero row does to `K`."""
+    if n_targets <= 0:
+        raise Error(
+            "km_zero_row_y: n_targets must be positive, got "
+            + String(n_targets)
+        )
+    var out = List[Float32]()
+    for i in range(KM_ZERO_ROW_N):
+        for t in range(n_targets):
+            out.append(exact_offdiag(chol_mix64(i, t, salt + 97)))
     return out^
 
 
