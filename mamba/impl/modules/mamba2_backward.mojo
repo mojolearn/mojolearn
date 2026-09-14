@@ -40,7 +40,7 @@ from mamba.checks.mamba2_backward import (
     mamba2_backward_reduce_workspace_max_floats,
 )
 from mamba.checks.mamba2_fixture import Mamba2Dims
-from mamba.impl.modeling.modeling_mamba import pinned_mul
+from mamba.impl.modeling.modeling_mamba import mamba_scratch, pinned_mul
 
 
 comptime M2_BWD_TPB = 128
@@ -218,36 +218,36 @@ struct Mamba2BackwardTail(Movable):
         var nw = dims.d_model * dims.d_inner
         if nw < 1:
             nw = 1
-        self.d_gnorm = ctx.enqueue_create_buffer[DType.float32](ng)
-        self.d_w_out = ctx.enqueue_create_buffer[DType.float32](nw)
-        self.d_gate = ctx.enqueue_create_buffer[DType.float32](ng)
-        self.d_skip = ctx.enqueue_create_buffer[DType.float32](ng)
-        self.d_z = ctx.enqueue_create_buffer[DType.float32](ng)
-        self.d_scan = ctx.enqueue_create_buffer[DType.float32](ng)
-        self.d_x_from_d = ctx.enqueue_create_buffer[DType.float32](ng)
+        self.d_gnorm = mamba_scratch(ctx, ng)
+        self.d_w_out = mamba_scratch(ctx, nw)
+        self.d_gate = mamba_scratch(ctx, ng)
+        self.d_skip = mamba_scratch(ctx, ng)
+        self.d_z = mamba_scratch(ctx, ng)
+        self.d_scan = mamba_scratch(ctx, ng)
+        self.d_x_from_d = mamba_scratch(ctx, ng)
         var ndp = m * dims.nheads
         if ndp < 1:
             ndp = 1
-        self.d_d_product = ctx.enqueue_create_buffer[DType.float32](ndp)
+        self.d_d_product = mamba_scratch(ctx, ndp)
         var nd = dims.nheads
         if nd < 1:
             nd = 1
-        self.d_d = ctx.enqueue_create_buffer[DType.float32](nd)
-        self.d_in_proj = ctx.enqueue_create_buffer[DType.float32](m*dims.d_in_proj())
-        self.d_norm = ctx.enqueue_create_buffer[DType.float32](m*dims.d_model)
-        self.d_w_in = ctx.enqueue_create_buffer[DType.float32](dims.d_in_proj()*dims.d_model)
-        self.d_block_x = ctx.enqueue_create_buffer[DType.float32](m*dims.d_model)
-        self.d_block_w = ctx.enqueue_create_buffer[DType.float32](dims.d_model)
-        self.block_product = ctx.enqueue_create_buffer[DType.float32](m*dims.d_model)
+        self.d_d = mamba_scratch(ctx, nd)
+        self.d_in_proj = mamba_scratch(ctx, m*dims.d_in_proj())
+        self.d_norm = mamba_scratch(ctx, m*dims.d_model)
+        self.d_w_in = mamba_scratch(ctx, dims.d_in_proj()*dims.d_model)
+        self.d_block_x = mamba_scratch(ctx, m*dims.d_model)
+        self.d_block_w = mamba_scratch(ctx, dims.d_model)
+        self.block_product = mamba_scratch(ctx, m*dims.d_model)
         var ngw = dims.d_inner
         if ngw < 1:
             ngw = 1
-        self.d_gnorm_w = ctx.enqueue_create_buffer[DType.float32](ngw)
-        self.gnorm_weight_product = ctx.enqueue_create_buffer[DType.float32](ng)
+        self.d_gnorm_w = mamba_scratch(ctx, ngw)
+        self.gnorm_weight_product = mamba_scratch(ctx, ng)
         var no = mamba2_backward_ones_floats(m)
         if no < 1:
             no = 1
-        self.ones = ctx.enqueue_create_buffer[DType.float32](no)
+        self.ones = mamba_scratch(ctx, no)
         self.ones.enqueue_fill(Float32(1.0))
         var wa = mamba2_backward_proj_a_workspace_max_floats(
             PROJ2_OUT, dims, m
@@ -266,13 +266,13 @@ struct Mamba2BackwardTail(Movable):
             ws = wb
         if ws < 1:
             ws = 1
-        self.workspace = ctx.enqueue_create_buffer[DType.float32](ws)
+        self.workspace = mamba_scratch(ctx, ws)
         var rws = mamba2_backward_reduce_workspace_max_floats(
             RED2_GNORM_W, dims, m
         )
         if rws < 1:
             rws = 1
-        self.reduction_workspace = ctx.enqueue_create_buffer[DType.float32](rws)
+        self.reduction_workspace = mamba_scratch(ctx, rws)
 
 
 def mamba2_backward_tail_into(

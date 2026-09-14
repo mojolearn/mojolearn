@@ -1,0 +1,1 @@
+PASS complete original byte-LM receipt unchanged; fault recovery retains all model-pool state, gradient and loss hashes

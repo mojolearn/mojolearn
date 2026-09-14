@@ -113,6 +113,9 @@ IDENTICAL_ONLY_NAMES = (
     "_mojolearn_solver", "_mojolearn_metrics", "_mojolearn_preprocessing",
     "_mojolearn_tsa", "_mojolearn_linalg", "_mojolearn_arima", "_mojolearn_gp",
     "_mojolearn_training", "_mojolearn_mamba", "_mojolearn_transformer",
+    # Workstream D, 2026-09-14: the four door-less families given a binding.
+    "_mojolearn_kernel_methods", "_mojolearn_mixture", "_mojolearn_hdbscan",
+    "_mojolearn_resample",
 )
 TIERS = ("fast", "deterministic", "identical")
 
@@ -163,8 +166,15 @@ RELEASE_HOPPER_ALTS = {("cuda", "sm_90"), ("cuda", "sm_90a")}
 sys.path.append(str(REPO / "tools"))
 from verify_linux_surface_qualification import (  # noqa: E402
     RELEASE_PROFILE, RELEASE_PROFILES, release_version, wheel_host_bindings)
-sys.path.insert(0, str(PY_DIR))
-from mojolearn import host_surface  # noqa: E402  (imports nothing from the package)
+# BY FILE PATH, not `from mojolearn import host_surface`: importing a
+# submodule runs the package's __init__, which selects a backend and refuses
+# on a box with no built binary (the release inventory test, Wheel CI).
+# host_surface.py itself imports nothing from the package.
+import importlib.util  # noqa: E402
+_hs_spec = importlib.util.spec_from_file_location("mojolearn_host_surface", PY_DIR / "mojolearn" / "host_surface.py")
+host_surface = importlib.util.module_from_spec(_hs_spec)
+sys.modules[_hs_spec.name] = host_surface
+_hs_spec.loader.exec_module(host_surface)
 
 
 def release_inventory(sets, proof_paths, version, source_root=REPO):

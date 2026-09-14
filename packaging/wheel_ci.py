@@ -103,6 +103,37 @@ def inventory(argv):
     # here, keyed by the importer, and only count when the importer itself is
     # reached; an unrelated copy left in the package still fails as an orphan.
     dynamic = {"_verify": ["_identity_trace_diff"], "_identity": ["_identity_break"]}
+    # A submodule the user documentation tells people to import by its own
+    # path is public, not abandoned: the multi-GPU drivers are reached as
+    # `from mojolearn.parallel_ensemble import fit_forest`
+    # (docs/multi_gpu/README.md) and never through __init__. Only a literal
+    # `from <pkg>.<module> import` line in a docs/**/*.md file counts, so a
+    # module whose last documented import is deleted is an orphan again. The
+    # other spelling that counts is a qualified call in backticks,
+    # `mojolearn.parallel_graph.fit_graph(...)`.
+    docs = pkgdir.parent.parent / "docs"
+    q = re.escape(pkg)
+    documented = re.compile(r'^\s*from ' + q + r'\.([A-Za-z_][A-Za-z0-9_]*) import\b'
+                            r'|`' + q + r'\.([A-Za-z_][A-Za-z0-9_]*)\.[A-Za-z_][A-Za-z0-9_]*\(', re.M)
+    if docs.is_dir():
+        for md in sorted(docs.rglob("*.md")):
+            for a, b in documented.findall(md.read_text(encoding="utf-8")):
+                if (a or b) in present:
+                    queue.append(a or b)
+    # A module a package module launches as `python -m <pkg>.<module>` (the
+    # multi-GPU pool starts `-m mojolearn._parallel_worker`) is reached by
+    # that module, though no import statement names it.
+    # A module PREPARED for a later exposure (IVF-FLAT's `_ivf_impl.py`,
+    # workstream D) ships on purpose and raises by name until exposed. It
+    # counts only when BOTH hold: its docstring's first line says
+    # "PREPARED AND NOT EXPOSED", and __init__.py names the file, so the
+    # package root states the decision where a reader of the imports sees it.
+    init_text = present["__init__"].read_text(encoding="utf-8")
+    for stem, path in present.items():
+        doc = ast.get_docstring(ast.parse(path.read_text(encoding="utf-8"))) or ""
+        if "PREPARED AND NOT EXPOSED" in doc.split("\n", 1)[0] and f"`{stem}.py`" in init_text:
+            queue.append(stem)
+    launched = re.compile(r"""['"]-m['"]\s*,\s*['"]""" + q + r"""\.([A-Za-z_][A-Za-z0-9_]*)['"]""")
     # A standalone top-level module may pull package modules in too.
     for f in extra_roots:
         queue.extend(_intra_package_imports(f, pkg))
@@ -116,6 +147,7 @@ def inventory(argv):
         if name in present:
             queue.extend(_intra_package_imports(present[name], pkg))
             queue.extend(dynamic.get(name, []))
+            queue.extend(launched.findall(present[name].read_text(encoding="utf-8")))
 
     orphans = sorted(set(present) - reached)
     if orphans:
@@ -177,8 +209,24 @@ def pins(argv):
         print("FAIL no bindings/build*.sh found", file=sys.stderr)
         return 1
     bad = 0
+    # A wrapper whose whole body is one `exec sh "$(dirname -- "$0")/<b>.sh" ...`
+    # line pins nothing itself; the builder it execs does (the twelve
+    # build_<family>_host.sh wrappers over build_host_family.sh since 8c61806a6).
+    # Check the builder's text in the wrapper's name, and only when that
+    # builder is itself one of the scanned build*.sh files.
+    wrapper = re.compile(r'^exec sh "\$\(dirname -- "\$0"\)/(build[A-Za-z0-9_]*\.sh)"( .*)?$')
     for s in scripts:
         text = s.read_text(encoding="utf-8")
+        body = [ln for ln in text.splitlines() if ln.strip() and not ln.lstrip().startswith("#")]
+        m = wrapper.match(body[0]) if len(body) == 1 else None
+        if m:
+            target_script = s.parent / m.group(1)
+            if target_script not in scripts or target_script == s:
+                print(f"FAIL {s.name}: execs {m.group(1)}, which is not a scanned "
+                      f"bindings/build*.sh", file=sys.stderr)
+                bad += 1
+                continue
+            text = target_script.read_text(encoding="utf-8")
         floor = re.search(r'^MACOS_FLOOR="([^"]+)"', text, re.M)
         if not floor:
             print(f"FAIL {s.name}: no MACOS_FLOOR", file=sys.stderr); bad += 1

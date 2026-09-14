@@ -1127,6 +1127,13 @@ check-hdbscan = "mojo run -I . hdbscan/checks/hdbscan_check.mojo"
 hdbscan-main = "mojo run -I . hdbscan/hdbscan_main.mojo"
 check-gaussian-process = "mojo run -I . gaussian_process/checks/gp_check.mojo"
 gaussian-process-main = "mojo run -I . gaussian_process/gp_main.mojo"
+# THE EMBEDDING LANE (workstream D, 2026-09-14). `check-embedding` is the
+# clean gate, clause (a) on Apple and AMD so far and NO NVIDIA leg;
+# `check-embedding-sabotage` builds the sixteen MOJOLEARN_EMB_SABOTAGE_*
+# arms and requires each to FAIL by name (tools/embedding_sabotage_arm.sh),
+# which the lane's own header says was never done. Not for the Mac.
+check-embedding = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . embedding/checks/embedding_check.mojo"
+check-embedding-sabotage = "bash tools/embedding_sabotage_arm.sh /tmp/mojolearn-embedding-sabotage"
 check-kernel-methods = "mojo run -I . kernel_methods/checks/km_check.mojo"
 kernel-methods-main = "mojo run -I . kernel_methods/kernel_methods_main.mojo"
 check-mixture = "mojo run -I . mixture/checks/gmm_check.mojo"
@@ -1158,6 +1165,9 @@ check-mamba-decode = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . mamba/check
 check-mamba-block = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . mamba/checks/mamba_check.mojo"
 check-mamba2-block = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . mamba/checks/mamba2_check.mojo"
 check-mamba3-block = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . mamba/checks/mamba3_check.mojo"
+# DEVIATION 2712: the four Mamba lanes cold on a binding whose scratch buffers
+# hold NaN; every cell must equal the committed record (tools/mamba_poison_gate.sh)
+check-mamba-poison = "sh tools/mamba_poison_gate.sh"
 # COMPILE ONLY, and the name says so. Builds the mamba backward's routing
 # layer AND, since 2026-09-03, its two kernel files
 # (mamba/impl/ops/selective_scan_backward.mojo and

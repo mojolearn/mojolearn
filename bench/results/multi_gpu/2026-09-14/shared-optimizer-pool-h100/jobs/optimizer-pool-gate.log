@@ -1,0 +1,1 @@
+/root/jobs/optimizer-pool-gate.sh: line 7: 44023 Segmentation fault      (core dumped) pixi run python tools/parallel_optimizer_check.py --cloud --report /root/optimizer-pool-out/report.json > /root/optimizer-pool-out/public.log 2>&1

@@ -3,7 +3,7 @@
 This file records release-level changes, not the development diary. Git history and archived evidence
 contain the detailed investigation record.
 
-## 0.8.6 (unreleased 2026-09-14)
+## Unreleased (0.8.6 prep; the freeze commit names it 0.8.6 with the version bump)
 
 Packaging release. Nothing in a kernel moves; what changes is what the two wheels carry and
 what a user can check from a pip install. The freeze checks of docs/RELEASE_CHECKLIST.md,

@@ -130,7 +130,9 @@ COLUMN_DEFINE=""
 # served nobody. `bindings/build_byte_lm.sh` has refused the same way since
 # the byte LM landed; this is that rule applied to the rest of the lane.
 MODE_DEFINE="-D MOJOLEARN_NUMERIC_IDENTICAL=1"
-OUTDIR="python/mojolearn/identical"
+# MOJOLEARN_MAMBA_OUTDIR: build somewhere other than the package (the poison
+# gate builds into a copy so no mapped binding is rewritten in place).
+OUTDIR="${MOJOLEARN_MAMBA_OUTDIR:-python/mojolearn/identical}"
 if [ "${MOJOLEARN_NUMERIC_MODE:-identical}" != "identical" ]; then
     echo "$(basename "$0"): this lane supports only MOJOLEARN_NUMERIC_MODE=identical (got '${MOJOLEARN_NUMERIC_MODE}')" >&2
     exit 2
@@ -151,7 +153,7 @@ out="$tmpdir/_mojolearn_mamba.so"
 # function".
 # shellcheck disable=SC2086  # the flag strings are deliberately word-split
 pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib \
-    $TARGET_FLAGS $COLUMN_DEFINE $MODE_DEFINE \
+    $TARGET_FLAGS $COLUMN_DEFINE $MODE_DEFINE ${MOJOLEARN_MAMBA_DEFINES:-} \
     $LINK_FLAGS \
     -I . -I bindings \
     bindings/_mojolearn_mamba.mojo \

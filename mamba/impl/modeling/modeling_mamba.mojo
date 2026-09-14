@@ -432,14 +432,14 @@ def mamba_upload(
     var n_buf = n
     if n_buf < 1:
         n_buf = 1
-    var dev = ctx.enqueue_create_buffer[DType.float32](n_buf)
+    var dev = mamba_device_alloc(ctx, n_buf)
     var host = ctx.enqueue_create_host_buffer[DType.float32](n_buf)
     ctx.synchronize()
     for i in range(n):
         host.unsafe_ptr().unsafe_store(i, values[i])
     for i in range(n, n_buf):
         host.unsafe_ptr().unsafe_store(i, Float32(0.0))
-    ctx.enqueue_copy(dst_buf=dev, src_ptr=host.unsafe_ptr())
+    mamba_copy_in(ctx, dev, host.unsafe_ptr(), n_buf)
     ctx.synchronize()
     _ = host^
     return dev^
@@ -471,8 +471,103 @@ def mamba_zeros(
     var n_buf = n
     if n_buf < 1:
         n_buf = 1
-    var dev = ctx.enqueue_create_buffer[DType.float32](n_buf)
-    dev.enqueue_fill(Float32(0.0))
+    var dev = mamba_device_alloc(ctx, n_buf)
+    comptime if MAMBA_GUARD > 0:
+        var body = dev.create_sub_buffer[DType.float32](0, n_buf)
+        body.enqueue_fill(Float32(0.0))
+    else:
+        dev.enqueue_fill(Float32(0.0))
+    ctx.synchronize()
+    return dev^
+
+
+# DEVIATION 2712 (2026-09-14). The Mamba-2 backward allocated sixty device
+# buffers with `enqueue_create_buffer` and no fill. CUDA and HIP handed those
+# back holding zeros in every run so far; Metal, in a warm process whose
+# allocation history had touched the same pages, handed back a quiet NaN,
+# and the identity lane's step and every backward gradient read NaN in one
+# Apple M4 column of the 120-lane record while three other vendors and every
+# other record carried the canonical hash. A buffer a kernel reads before
+# any kernel wrote it is a wrong answer that depends on the box; the fix is
+# that no Mamba device buffer is ever handed out unfilled.
+#
+# Two fills, one meaning each:
+#   mamba_zeros    the ZERO is the value: accumulators, partial writes that
+#                  a later kernel sums in full. Zero always.
+#   mamba_scratch  every element is WRITTEN before it is read, by contract.
+#                  Zero in production. Under `-D MOJOLEARN_MAMBA_POISON=1`
+#                  it is filled with the canonical quiet NaN 0x7fc00000, so
+#                  a kernel that reads an element nobody wrote turns the
+#                  lane's hash into a NaN hash instead of a box-dependent
+#                  one: `pixi run check-mamba-poison` runs the Mamba lanes
+#                  cold on the poison build and requires their canonical
+#                  hashes. That gate is how the remaining reads are found.
+# (d_c_yoff and d_dacs_yoff, whose constructor comment said the launcher
+# writes only real T rows while the merge kernel sums the chunk extent, were
+# given a zero fill first; the poison run with that fill removed carried the
+# canonical hashes, so no unwritten row of theirs is read and they are
+# scratch like the rest. The gate's sabotage 1 is the fix itself removed,
+# `-D MOJOLEARN_MAMBA_2712_UNBOUNDED=1`, the unbounded X_d read.)
+#
+# THE GUARD BAND. A fill inside a buffer cannot see a read PAST it, and the
+# step's read (the l = 1 resumption, whose every input is zeroed or
+# uploaded) and DEVIATION 2713 (the MI325X faulting at the first forward
+# launch) are reads past a buffer's end into adjacent memory. So under the
+# poison define every Mamba allocation, zeros, scratch, partial and upload,
+# carries MAMBA_GUARD extra elements holding the NaN after its logical
+# length; the logical length is what every kernel and download is given,
+# and a read past it turns the lane's hash into a NaN hash cold. The band's
+# own sabotage is a planted read of the first band element in
+# m2_assemble_xbc_kernel (-D MOJOLEARN_MAMBA_POISON_OVERREAD=1) that stores
+# NaN only when it reads NaN: with the band the gate must fail, and with
+# -D MOJOLEARN_MAMBA_POISON_NOBAND=1 it must pass, which is the proof that
+# the band, not the fill, is what catches a read past the end.
+comptime MAMBA_POISON = is_defined["MOJOLEARN_MAMBA_POISON"]()
+comptime MAMBA_POISON_OVERREAD = is_defined["MOJOLEARN_MAMBA_POISON_OVERREAD"]()
+comptime MAMBA_POISON_BITS = UInt32(0x7FC00000)
+comptime MAMBA_GUARD = (
+    0 if is_defined["MOJOLEARN_MAMBA_POISON_NOBAND"]() else 4096
+) if MAMBA_POISON else 0
+
+
+def mamba_device_alloc(
+    ctx: DeviceContext, n_buf: Int
+) raises -> DeviceBuffer[DType.float32]:
+    """Every Mamba device allocation: `n_buf` (at least 1) logical elements
+    plus the guard band. Under poison the whole buffer, band included, is
+    filled with the canonical NaN before the caller writes its part."""
+    var dev = ctx.enqueue_create_buffer[DType.float32](n_buf + MAMBA_GUARD)
+    comptime if MAMBA_POISON:
+        dev.enqueue_fill(bitcast[DType.float32](MAMBA_POISON_BITS))
+    return dev^
+
+
+def mamba_copy_in[
+    origin: MutOrigin
+](
+    ctx: DeviceContext,
+    mut dev: DeviceBuffer[DType.float32],
+    src: UnsafePointer[Float32, origin],
+    n_buf: Int,
+) raises:
+    """`n_buf` host elements into the logical part of a banded buffer. A
+    whole-buffer copy would read `MAMBA_GUARD` host elements past `src`."""
+    comptime if MAMBA_GUARD > 0:
+        var body = dev.create_sub_buffer[DType.float32](0, n_buf)
+        ctx.enqueue_copy(dst_buf=body, src_ptr=src)
+    else:
+        ctx.enqueue_copy(dst_buf=dev, src_ptr=src)
+
+
+def mamba_scratch(
+    ctx: DeviceContext, n: Int
+) raises -> DeviceBuffer[DType.float32]:
+    var n_buf = n
+    if n_buf < 1:
+        n_buf = 1
+    var dev = mamba_device_alloc(ctx, n_buf)
+    comptime if not MAMBA_POISON:
+        dev.enqueue_fill(Float32(0.0))
     ctx.synchronize()
     return dev^
 

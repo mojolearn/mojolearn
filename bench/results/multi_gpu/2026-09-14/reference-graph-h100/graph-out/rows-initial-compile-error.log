@@ -1,0 +1,16 @@
+42433 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7924c0000000, nodemask=2)
+/root/mojolearn/training/checks/graph_rows_check.mojo:23:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if x.unsafe_ptr()[i].bitcast[DType.uint32]() != y.unsafe_ptr()[i].bitcast[DType.uint32]():
+           ~~~~~~~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/training/checks/graph_rows_check.mojo:23:29: error: 'Scalar[dt]' value has no attribute 'bitcast'
+        if x.unsafe_ptr()[i].bitcast[DType.uint32]() != y.unsafe_ptr()[i].bitcast[DType.uint32]():
+           ~~~~~~~~~~~~~~~~~^
+/root/mojolearn/training/checks/graph_rows_check.mojo:23:71: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if x.unsafe_ptr()[i].bitcast[DType.uint32]() != y.unsafe_ptr()[i].bitcast[DType.uint32]():
+                                                        ~~~~~~~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/training/checks/graph_rows_check.mojo:23:74: error: 'Scalar[dt]' value has no attribute 'bitcast'
+        if x.unsafe_ptr()[i].bitcast[DType.uint32]() != y.unsafe_ptr()[i].bitcast[DType.uint32]():
+                                                        ~~~~~~~~~~~~~~~~~^
+/root/mojolearn/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module

@@ -1,0 +1,9 @@
+33115 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5394c0000000, nodemask=1)
+capacity fixture one 958746624
+Traceback (most recent call last):
+  File "/root/gradient-pool/tools/byte_lm_model_pool_capacity_check.py", line 71, in <module>
+    main()
+    ~~~~^^
+  File "/root/gradient-pool/tools/byte_lm_model_pool_capacity_check.py", line 31, in main
+    seed = Trainer(parameters, shape=shape)
+TypeError: SmallByteLanguageModelTrainer.__init__() missing 1 required keyword-only argument: 'data_schedule'

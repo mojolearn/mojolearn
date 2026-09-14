@@ -1,0 +1,201 @@
+{
+  "status": "PASS",
+  "checks": [
+    [
+      "LinearRegression",
+      7,
+      {
+        "fit_intercept": false,
+        "numeric_mode": "identical"
+      }
+    ],
+    [
+      "LinearRegression",
+      7,
+      {
+        "fit_intercept": true,
+        "numeric_mode": "identical"
+      }
+    ],
+    [
+      "Ridge",
+      7,
+      {
+        "alpha": 0.25,
+        "fit_intercept": true,
+        "numeric_mode": "identical"
+      }
+    ],
+    [
+      "PCA",
+      7,
+      {
+        "n_components": 3,
+        "svd_solver": "covariance_eigh",
+        "whiten": true,
+        "numeric_mode": "identical"
+      }
+    ],
+    [
+      "TruncatedSVD",
+      7,
+      {
+        "n_components": 3,
+        "numeric_mode": "identical"
+      }
+    ],
+    [
+      "LinearRegression",
+      16,
+      {
+        "fit_intercept": false,
+        "numeric_mode": "identical"
+      }
+    ],
+    [
+      "LinearRegression",
+      16,
+      {
+        "fit_intercept": true,
+        "numeric_mode": "identical"
+      }
+    ],
+    [
+      "Ridge",
+      16,
+      {
+        "alpha": 0.25,
+        "fit_intercept": true,
+        "numeric_mode": "identical"
+      }
+    ],
+    [
+      "PCA",
+      16,
+      {
+        "n_components": 3,
+        "svd_solver": "covariance_eigh",
+        "whiten": true,
+        "numeric_mode": "identical"
+      }
+    ],
+    [
+      "TruncatedSVD",
+      16,
+      {
+        "n_components": 3,
+        "numeric_mode": "identical"
+      }
+    ],
+    [
+      "LinearRegression",
+      65,
+      {
+        "fit_intercept": false,
+        "numeric_mode": "identical"
+      }
+    ],
+    [
+      "LinearRegression",
+      65,
+      {
+        "fit_intercept": true,
+        "numeric_mode": "identical"
+      }
+    ],
+    [
+      "Ridge",
+      65,
+      {
+        "alpha": 0.25,
+        "fit_intercept": true,
+        "numeric_mode": "identical"
+      }
+    ],
+    [
+      "PCA",
+      65,
+      {
+        "n_components": 3,
+        "svd_solver": "covariance_eigh",
+        "whiten": true,
+        "numeric_mode": "identical"
+      }
+    ],
+    [
+      "TruncatedSVD",
+      65,
+      {
+        "n_components": 3,
+        "numeric_mode": "identical"
+      }
+    ],
+    [
+      "LinearRegression",
+      128,
+      {
+        "fit_intercept": false,
+        "numeric_mode": "identical"
+      }
+    ],
+    [
+      "LinearRegression",
+      128,
+      {
+        "fit_intercept": true,
+        "numeric_mode": "identical"
+      }
+    ],
+    [
+      "Ridge",
+      128,
+      {
+        "alpha": 0.25,
+        "fit_intercept": true,
+        "numeric_mode": "identical"
+      }
+    ],
+    [
+      "PCA",
+      128,
+      {
+        "n_components": 3,
+        "svd_solver": "covariance_eigh",
+        "whiten": true,
+        "numeric_mode": "identical"
+      }
+    ],
+    [
+      "TruncatedSVD",
+      128,
+      {
+        "n_components": 3,
+        "numeric_mode": "identical"
+      }
+    ]
+  ],
+  "hashes": [
+    "1011579f5d280b720d9a77619cb551d78265ef180bb543864f70dd7c864db71c",
+    "22978cf3893ee0edae09ffdf741b81d4d8aed4bffd224bd49d89be104ebe118b",
+    "15c26289487ad78fbd94b0d36df4701b9ff0b876a76a0ce688045309e95c2bbf",
+    "9ad1166c2bdfe2528a63a2c84080f5ada17deefe746a8845d968dfcb558b277e",
+    "6daf4f3948fadb45f8df0ddf471302415d924b5556ca4234e518d0ce280039c4",
+    "d47b544d3b5881a10c9dfbf680a2639c8eb56e14c622d91fb2eee82db66a00e8",
+    "e20d03d2733abd716707bd72bd8b3b584154757a10304be08a6504387d6775eb",
+    "03c605f8579dd740ed8ebac2934fc54636c60714a2bfb2f7694f7140258c4320",
+    "fd91fdefa946de031d80c2f6795419c0887098ffddf67a0b8f04939cff5d9c6f",
+    "b361f5aa02056602093ab88dfbf4640ad9579ffce08689331b18a1a816a35489",
+    "eb5868f9f1f747785d11f41bfd4fe67a04e3ecace0e7762e3f8fa74d2267443b",
+    "1932fbd0e84bbff7b5e812512f32919462116b312f365d18dc83ca9326ca8941",
+    "96bc5340e9f5039b3b1f468815057881c154d040ca29922a2e545ac6456b0351",
+    "73fd5010de33fbe7db76bb2fcf3963e3a8dee52506de9817af44630798fbc5fe",
+    "fc4b96d9425531fbc07569babc7e4055bf66dfd5c671897ccadd1235c420d38d",
+    "205b7fc6ab573f575aef8ec0f6c65acea8ab2e734c68819aa47ae455df48211b",
+    "c8dc1b8a82091f40270e5acaf53d7f114292e240c5408163cb450e5bea81fa6b",
+    "58aea1c5190dcc41b62550a6b5ac010643e1d7b1b7b2ef0db13c4a3f4b4ba805",
+    "5ebaf26af57d50f80351024fbe5c022088104c6b11b9479f1a018766c993ba09",
+    "7648fa6eea7b3dfb6de41d444df4674b0c01204b3fa6db14684ae3c6e03b400a"
+  ],
+  "corpus_sha256": "2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8",
+  "scope": "Two GPUs; original 128 Gram chunks; 7/16/65/128 columns; no pooled root-memory or cross-vendor claim"
+}

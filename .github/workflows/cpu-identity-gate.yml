@@ -83,11 +83,24 @@ on:
       - "tools/classical_host_gate.py"
       - "python/mojolearn/_classical_host.py"
       - "core/classical_host_predict.mojo"
+      - "decomposition/host/pca_oracle.mojo"
+      - "glm/host/glm_oracle.mojo"
+      - "dbscan/host/dbscan_oracle.mojo"
+      - "cluster/host/kmeans_oracle.mojo"
+      - "metrics/host/metrics_oracle.mojo"
+      - "spectral/host/spectral_oracle.mojo"
+      - "preprocessing/host/scaler_oracle.mojo"
+      - "glm/host/qn_oracle.mojo"
+      - "ensemble/host/rf_oracle.mojo"
+      - "spectral/checks/symmetric_eig_host.mojo"
+      - "core/knn_host_predict.mojo"
+      - "cluster/host/kmeans_oracle.mojo"
       - "bench/results/classical_host/**"
       - "tools/cpu_identity_gate_check.py"
       - "bench/results/identity_break/2026-09-13_three-columns/**"
       - "bench/results/identity_break/2026-09-14_46-lanes/**"
       - "bench/results/identity_break/2026-09-14_47-lanes/**"
+      - "bench/results/identity_break/2026-09-14_136-lanes/**"
       - "bench/results/forest_host/**"
       - ".github/workflows/cpu-identity-gate.yml"
 
@@ -102,14 +115,18 @@ env:
   #                       comma separated. A lane listed must read STABLE on
   #                       every fixture and IDENTICAL x4 against the three
   #                       GPU columns; a lane not listed must read REFUSED by
-  #                       name. The INFERENCE-ONLY lanes (ols, ridge, tsvd,
-  #                       logistic, pca, pca-whiten, knn, knn-clf, knn-reg)
-  #                       are deliberately not there: their train cell
-  #                       refuses by name on the CPU column, so
-  #                       `--require-columns 4` cannot hold on it. Their gate
-  #                       is tools/classical_host_gate.py over
+  #                       name. The INFERENCE-ONLY lanes (logistic,
+  #                       logistic-multiclass) are deliberately not there:
+  #                       their train cell refuses by name on the CPU column,
+  #                       so `--require-columns 4` cannot hold on it. Their
+  #                       gate is tools/classical_host_gate.py over
   #                       CLASSICAL_RECORDED, the same shape as the forest
-  #                       host gate.
+  #                       host gate. Since workstream E (2026-09-14) the knn,
+  #                       pca, pca-whiten, tsvd, ols and ridge lanes train on
+  #                       the host too and sit in both lists, and dbscan
+  #                       trains on the host; batch 2 adds logistic (the
+  #                       binary L-BFGS arm) to the training list, so only
+  #                       logistic-multiclass stays inference-only.
   #   HOST_FAMILIES       the routed (phase 1) families, space separated; each
   #                       is built by bindings/build_<family>_host.sh (a shim
   #                       over bindings/build_host_family.sh) into
@@ -193,6 +210,7 @@ jobs:
             /bench/results/identity_break/2026-09-13_three-columns/
             /bench/results/identity_break/2026-09-14_46-lanes/
             /bench/results/identity_break/2026-09-14_47-lanes/
+            /bench/results/identity_break/2026-09-14_136-lanes/
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
@@ -362,7 +380,9 @@ jobs:
             --report "$GATE_OUT/classical_gate_prod.json" 2>&1 | tee "$GATE_OUT/classical_gate_prod.log"
 
       # The tool loads on this CPU and the three committed GPU columns still
-      # diff to IDENTICAL x3 on all 423 train cells (the 2026-09-14 47-lane record). The exact summary token is
+      # diff to IDENTICAL x3 on all 1224 train cells (the 2026-09-14 136-lane record at 4048e1b51,
+      # the 2712/2713 fix and the sixteen one-device par-* lanes; the AMD column is the MI325X one,
+      # which carries every lane). The exact summary token is
       # required: a diff that printed nothing, or fewer cells, is a failure.
       - name: identity_break --diff over the three committed GPU columns (require 3)
         if: always()
@@ -370,8 +390,8 @@ jobs:
           set -o pipefail
           python3 tools/identity_break.py --diff $GPU_COLUMNS --require-columns 3 2>&1 \
             | tee "$GATE_OUT/diff_gpu3.txt"
-          grep -F 'summary: IDENTICAL=423' "$GATE_OUT/diff_gpu3.txt"
-          grep -F 'summary (infer/model): IDENTICAL=585, N/A=261' "$GATE_OUT/diff_gpu3.txt"
+          grep -F 'summary: IDENTICAL=1224' "$GATE_OUT/diff_gpu3.txt"
+          grep -F 'summary (infer/model): IDENTICAL=1665, N/A=783' "$GATE_OUT/diff_gpu3.txt"
 
       # The control for the step above: demanding a fourth real hash on a lane
       # no CPU column has covered must FAIL. If it passes, --require-columns
@@ -445,8 +465,16 @@ jobs:
       # edge keys descending (the maximum spanning tree), in pcg_rng by one
       # extra draw on every keyed stream (every ExtraTrees threshold), and
       # in xorwow by one extra step before every split fraction (every
-      # isolation tree); each further phase 1 binding names the fold its
-      # arm moves), loaded through
+      # isolation tree, in kmeans_oracle by one extra unit in every
+      # quantized centroid-sum cell, in metrics_oracle by shifting every
+      # slab tree's chunk boundaries by one value, in spectral_oracle by
+      # seeding the recluster one draw off, in scaler_oracle by the same
+      # shifted tree plus the min-max offset's subtraction as an addition,
+      # in qn_oracle by walking the solver's dot chains descending, and in
+      # rf_oracle by drawing every bootstrap row from the next Philox
+      # subsequence);
+      # each further phase 1
+      # binding names the fold its arm moves), loaded through
       # MOJOLEARN_HOST_DIR with MOJOLEARN_HOST_ALLOW_SABOTAGE=1, run on the
       # covered lanes, and the four-way diff must exit non-zero with
       # DIVERGENT on them. Every covered cell must still be STABLE (a wrong

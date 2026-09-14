@@ -1,0 +1,12 @@
+1403 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x73e480000000, nodemask=1)
+1403 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x18f140000000, nodemask=2)
+1593 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x32db80000000, nodemask=1)
+1600 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5be300000000, nodemask=2)
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/parallel_pointwise_check.py", line 85, in <module>
+    main()
+    ~~~~^^
+  File "/root/mojolearn/tools/parallel_pointwise_check.py", line 57, in main
+    assert records(trace_root / 'one.trace') == records(trace_root / 'many.trace')
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError

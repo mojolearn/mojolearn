@@ -14,20 +14,26 @@ from ._buffer import addr, addr_ro, empty
 
 
 class ParallelByteLanguageModelTrainer:
-    """Resident replicas with a fixed left fold and one optimizer update.
+    """Resident model replicas with pooled optimizer state and a fixed left fold.
 
     Construct from a SmallByteLanguageModelTrainer.state_dict(). devices=(0,)
     replays the same logical shards on one GPU with one resident model. No GPU
     is opened until the first step/export. Import does no device work.
+    AdamW moments and rollback copies are owned in disjoint device ranges by
+    default; model parameters, gradients and activations remain replicated.
+    pool_optimizer=False retains complete optimizer replicas for comparison.
     """
 
-    def __init__(self, state, *, devices=(0,), logical_shards=1):
+    def __init__(self, state, *, devices=(0,), logical_shards=1, pool_optimizer=True):
         devices = tuple(devices)
         if (type(logical_shards) is not int or not 1 <= logical_shards <= 1024
                 or not 1 <= len(devices) <= logical_shards):
             raise ValueError('require 1 <= device count <= logical_shards <= 1024')
         if any(type(i) is not int or i < 0 for i in devices) or len(set(devices)) != len(devices):
             raise ValueError('devices must be distinct nonnegative integer indices')
+        if type(pool_optimizer) is not bool:
+            raise ValueError("pool_optimizer must be bool")
+        self.pool_optimizer = pool_optimizer
         self.devices = devices
         self.logical_shards = logical_shards
         self._state = _validate_state(state)
@@ -55,13 +61,21 @@ class ParallelByteLanguageModelTrainer:
         for name in ('create', 'open', 'close', 'step', 'export', 'rollback'):
             if not callable(getattr(binding, 'byte_lm_parallel_' + name, None)):
                 raise ImportError('rebuild bindings/build_byte_lm.sh for parallel training')
+        open_name = 'byte_lm_parallel_open_pooled' if self.pool_optimizer else 'byte_lm_parallel_open'
+        opener = getattr(binding, open_name, None)
+        if not callable(opener):
+            raise ImportError('rebuild bindings/build_byte_lm.sh for optimizer pooling')
+        if not callable(getattr(binding, 'byte_lm_parallel_reduction_pool_available', None)):
+            raise ImportError('rebuild bindings/build_byte_lm.sh for distributed reduction buffers')
+        if binding.byte_lm_parallel_reduction_pool_available() != 1:
+            raise RuntimeError('binding refused distributed reduction availability')
         cfg = seed['config']
         params = [0, self.step_, cfg['kind'], cfg['lr'], cfg['beta1'], cfg['beta2'],
                   cfg['eps'], cfg['weight_decay'], cfg['momentum'], cfg['dampening'],
                   int(cfg['nesterov']), cfg['max_norm']]
         session = binding.byte_lm_parallel_create()
         try:
-            completed = binding.byte_lm_parallel_open(session,
+            completed = opener(session,
                 [addr_ro(seed[k], name=k) for k in ('parameters', 'm', 'v', 'flags')],
                 params, list(self._shape.native_shape), list(self.devices), self.logical_shards)
             if completed != self.step_:
@@ -131,6 +145,16 @@ class ParallelByteLanguageModelTrainer:
                 raise RuntimeError('parallel gradient export returned wrong step')
             return out
 
+    def optimizer_ownership(self):
+        """Actual native ownership and moment/rollback/reduction bytes per device."""
+        with self._lock:
+            self._open()
+            rows = self._binding.byte_lm_parallel_ownership(self._session)
+            return tuple(dict(device=device, first=int(row[0]), count=int(row[1]),
+                              moment_bytes=int(row[2]), rollback_bytes=int(row[3]),
+                              reduction_bytes=int(row[4]))
+                         for device, row in zip(self.devices, rows))
+
     def checkpoint(self):
         """Portable state plus the logical reduction contract required for replay."""
         return dict(schema='mojolearn.parallel-byte-lm.v1',
@@ -138,12 +162,12 @@ class ParallelByteLanguageModelTrainer:
                     state=self.state_dict())
 
     @classmethod
-    def from_checkpoint(cls, checkpoint, *, devices=(0,)):
+    def from_checkpoint(cls, checkpoint, *, devices=(0,), pool_optimizer=True):
         if (checkpoint.get('schema') != 'mojolearn.parallel-byte-lm.v1'
                 or checkpoint.get('reduction') != 'ordered_sum'):
             raise ValueError('unsupported parallel checkpoint contract')
         return cls(checkpoint['state'], devices=devices,
-                   logical_shards=checkpoint['logical_shards'])
+                   logical_shards=checkpoint['logical_shards'], pool_optimizer=pool_optimizer)
 
     def close(self):
         """Release device resources. Export/checkpoint before closing to retain state."""
@@ -180,7 +204,9 @@ class ParallelNeuralTrainer:
     """Ordered multi-GPU gradients for SmallMLPTrainer and SambaStack.
 
     Workers evaluate frozen snapshots concurrently; the first selected GPU
-    reduces and applies one update before publishing the owner state. Host transport preserves bytes. This trades
+    reduces and clips the complete registry; devices then update disjoint ranges
+    of parameters and moments before publishing the owner state. Host transport
+    preserves bytes. This trades
     transport cost for reuse of the existing public kernels and optimizer.
     Treat the supplied model as exclusively owned until close().
     """
@@ -207,6 +233,7 @@ class ParallelNeuralTrainer:
         if len(self._pool.devices) > logical_shards:
             self._pool.close()
             raise ValueError('physical device count exceeds logical shard count')
+        self._update_pool = DevicePool(self._pool.devices, cooperative=True)
         self.model = model
         self.logical_shards = logical_shards
         self._lock = threading.RLock()
@@ -245,9 +272,9 @@ class ParallelNeuralTrainer:
                 update_state = snapshot
                 if self._operation == 'samba_gradient':
                     update_state = dict(snapshot, rng=self.model.generator.state_dict())
-                # Reduction and update run on the FIRST selected GPU, even
-                # when the caller's process default device is not selected.
-                updated, retained, step = self._pool.map([(
+                # The first selected GPU retains the original reduction and clip;
+                # the cooperative worker partitions the optimizer update.
+                updated, retained, step = self._update_pool.map([(
                     self._operation.replace('_gradient', '_update'), update_state,
                     [part[1] for part in results])])[0]
                 result = dict(losses=losses, completed_steps=step,
@@ -296,6 +323,7 @@ class ParallelNeuralTrainer:
         with self._lock:
             self._closed = True
             self._pool.close()
+            self._update_pool.close()
 
     def __enter__(self):
         return self

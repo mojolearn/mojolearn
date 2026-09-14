@@ -70,6 +70,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.vendor import COMPILED_VENDOR
 from max.gpu.host import DeviceContext
 
+from training.optimizer_multi_gpu import parallel_optimizer_step_host
 from training.estimator import (
     identical_ce_loss_host,
     identical_clip_grad_norm_host,
@@ -126,6 +127,10 @@ def training_vendor_binding() raises -> PythonObject:
     import when this disagrees with the vendor directory the set was loaded
     from."""
     return PythonObject(String(COMPILED_VENDOR))
+
+
+def optimizer_parallel_available_binding() raises -> PythonObject:
+    return PythonObject(1)
 
 
 def optimizer_step_binding(
@@ -220,7 +225,7 @@ def optimizer_step_binding(
     var n_total = 0
     with GILReleased(Python()):
         var ctx = DeviceContext()
-        n_total = identical_optimizer_step_host(
+        n_total = parallel_optimizer_step_host(
             ctx, pp, gp, mp, vp, op, ip, fp, n_tensors, kind, t, nesterov,
             lr, beta1, beta2, eps, weight_decay, momentum, dampening,
             max_norm,
@@ -659,6 +664,7 @@ def PyInit__mojolearn_training() abi("C") -> PythonObject:
         var m = PythonModuleBuilder("_mojolearn_training")
         m.def_function[training_vendor_binding]("training_vendor")
         m.def_function[training_numeric_mode_binding]("training_numeric_mode")
+        m.def_function[optimizer_parallel_available_binding]("optimizer_parallel_available")
         m.def_function[optimizer_step_binding]("optimizer_step")
         m.def_function[clip_grad_norm_binding]("clip_grad_norm")
         m.def_function[ce_loss_binding]("ce_loss")

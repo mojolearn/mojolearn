@@ -1,0 +1,164 @@
+{
+  "status": "PASS",
+  "logical_reference_bytes": 103079215104,
+  "shape": [
+    100663296,
+    256
+  ],
+  "max_reference_shard_bytes": 6442450944,
+  "devices": [
+    0,
+    1
+  ],
+  "shards": [
+    {
+      "query_start": 0,
+      "query_end": 1,
+      "reference_start": 0,
+      "reference_end": 6291456,
+      "reference_bytes": 6442450944,
+      "device": 0
+    },
+    {
+      "query_start": 0,
+      "query_end": 1,
+      "reference_start": 6291456,
+      "reference_end": 12582912,
+      "reference_bytes": 6442450944,
+      "device": 1
+    },
+    {
+      "query_start": 0,
+      "query_end": 1,
+      "reference_start": 12582912,
+      "reference_end": 18874368,
+      "reference_bytes": 6442450944,
+      "device": 0
+    },
+    {
+      "query_start": 0,
+      "query_end": 1,
+      "reference_start": 18874368,
+      "reference_end": 25165824,
+      "reference_bytes": 6442450944,
+      "device": 1
+    },
+    {
+      "query_start": 0,
+      "query_end": 1,
+      "reference_start": 25165824,
+      "reference_end": 31457280,
+      "reference_bytes": 6442450944,
+      "device": 0
+    },
+    {
+      "query_start": 0,
+      "query_end": 1,
+      "reference_start": 31457280,
+      "reference_end": 37748736,
+      "reference_bytes": 6442450944,
+      "device": 1
+    },
+    {
+      "query_start": 0,
+      "query_end": 1,
+      "reference_start": 37748736,
+      "reference_end": 44040192,
+      "reference_bytes": 6442450944,
+      "device": 0
+    },
+    {
+      "query_start": 0,
+      "query_end": 1,
+      "reference_start": 44040192,
+      "reference_end": 50331648,
+      "reference_bytes": 6442450944,
+      "device": 1
+    },
+    {
+      "query_start": 0,
+      "query_end": 1,
+      "reference_start": 50331648,
+      "reference_end": 56623104,
+      "reference_bytes": 6442450944,
+      "device": 0
+    },
+    {
+      "query_start": 0,
+      "query_end": 1,
+      "reference_start": 56623104,
+      "reference_end": 62914560,
+      "reference_bytes": 6442450944,
+      "device": 1
+    },
+    {
+      "query_start": 0,
+      "query_end": 1,
+      "reference_start": 62914560,
+      "reference_end": 69206016,
+      "reference_bytes": 6442450944,
+      "device": 0
+    },
+    {
+      "query_start": 0,
+      "query_end": 1,
+      "reference_start": 69206016,
+      "reference_end": 75497472,
+      "reference_bytes": 6442450944,
+      "device": 1
+    },
+    {
+      "query_start": 0,
+      "query_end": 1,
+      "reference_start": 75497472,
+      "reference_end": 81788928,
+      "reference_bytes": 6442450944,
+      "device": 0
+    },
+    {
+      "query_start": 0,
+      "query_end": 1,
+      "reference_start": 81788928,
+      "reference_end": 88080384,
+      "reference_bytes": 6442450944,
+      "device": 1
+    },
+    {
+      "query_start": 0,
+      "query_end": 1,
+      "reference_start": 88080384,
+      "reference_end": 94371840,
+      "reference_bytes": 6442450944,
+      "device": 0
+    },
+    {
+      "query_start": 0,
+      "query_end": 1,
+      "reference_start": 94371840,
+      "reference_end": 100663296,
+      "reference_bytes": 6442450944,
+      "device": 1
+    }
+  ],
+  "individual_gpu_bytes": [
+    85520809984,
+    85520809984
+  ],
+  "gpu_info": "NVIDIA H100 80GB HBM3, 81559\nNVIDIA H100 80GB HBM3, 81559\n",
+  "seconds": 293.9886589050293,
+  "parent_peak_rss_kib": 127447276,
+  "indices": [
+    [
+      100663295,
+      7,
+      71,
+      135,
+      199
+    ]
+  ],
+  "distance_bytes": "00000000b204a541b204a541b204a541b204a541",
+  "output_sha256": "610d98af653732fe8cc247fb1af054f024edeeab5ac47ca148874aa08fbb9cc6",
+  "corpus_sha256": "2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8",
+  "construction": "64 corpus-derived rows repeated, final row zero, zero query, k=5; exact 257-row GPU oracle",
+  "scope": "Host-staged reference partitions; logical index exceeds one GPU for 96 GiB run. Not an all-resident VRAM pool or speedup measurement."
+}

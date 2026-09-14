@@ -596,6 +596,7 @@ def PyInit__mojolearn_gbdt() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_gbdt")
         m.def_function[gbdt_parallel_available_binding]("gbdt_parallel_available")
+        m.def_function[gbdt_parallel_available_binding]("pointwise_parallel_available")
         m.def_function[gbdt_vendor_binding]("gbdt_vendor")
         m.def_function[gbdt_fit_binding]("gbdt_fit")
         m.def_function[gbdt_fit_ordered_rmse_binding]("gbdt_fit_ordered_rmse")

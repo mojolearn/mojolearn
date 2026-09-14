@@ -76,13 +76,19 @@ BUILDER = "bindings/build_host_family.sh"
 #: predates the kde and svc model cells and the holtwinters infer cells the
 #: CPU column now carries, so gate run 34832840859 at 7bf4f4cc9 failed on
 #: all seven runners with "require-columns 4 ... 27 short". The 47-lane
-#: record taken at 7bf4f4cc9 (pca-whiten included) is the one this surface
-#: is diffed against; the manifest step of the workflow fails, before any
-#: build, when a column named here is not in the checkout.
+#: record taken at 7bf4f4cc9 (pca-whiten included) was the one this surface
+#: was diffed against until 2026-09-14 afternoon; the 136-lane record at
+#: 4048e1b51 (the 2712/2713 fix, the sixteen one-device par-* lanes) is the
+#: one now; the manifest step of the workflow fails, before any build, when a
+#: column named here is not in the checkout. Its AMD column is the MI325X one
+#: (DigitalOcean, gfx942): the MI300X column of the same record is incomplete
+#: (the 60-minute Hot Aisle cap cut it before iforest, iforest-tuned and five
+#: par-* lanes), and iforest is a covered lane, so require-columns 4 could not
+#: hold against it.
 TRAINING_GPU_COLUMNS = (
-    "bench/results/identity_break/2026-09-14_47-lanes/apple-m4.json",
-    "bench/results/identity_break/2026-09-14_47-lanes/nvidia-h100-sm_90a.json",
-    "bench/results/identity_break/2026-09-14_47-lanes/amd-mi300x-gfx942.json",
+    "bench/results/identity_break/2026-09-14_136-lanes/apple-m4.json",
+    "bench/results/identity_break/2026-09-14_136-lanes/nvidia-h100-sm_90a.json",
+    "bench/results/identity_break/2026-09-14_136-lanes/amd-mi325x-gfx942.json",
 )
 
 #: The GPU columns the classical INFERENCE gate compares each host identity
@@ -123,20 +129,61 @@ TRAINING_LANE_NAMES = {
     "et-clf": "the Extra Trees classifier",
     "et-reg": "the Extra Trees regressor",
     "iforest": "the isolation forest",
+    # Workstream E (lane/cpu-training-e, 2026-09-14). The k-NN lanes' fit
+    # stores the index and their train cell is the host search the knn host
+    # inference lane already serves; pca, pca-whiten, tsvd, ols and ridge
+    # train through decomposition/host/pca_oracle.mojo and
+    # glm/host/glm_oracle.mojo. Each is a prediction until the four-column
+    # diff reads IDENTICAL on every cell.
+    "knn": "nearest neighbors",
+    "knn-clf": "the k-NN classifier",
+    "knn-reg": "the k-NN regressor",
+    "pca": "PCA",
+    "pca-whiten": "whitened PCA",
+    "tsvd": "truncated SVD",
+    "ols": "linear regression",
+    "ridge": "ridge",
+    "dbscan": "DBSCAN",
+    # Workstream E batch 2 (lane/cpu-training-e2, 2026-09-14): k-means trains
+    # through cluster/host/kmeans_oracle.mojo, exported as kmeans_fit from
+    # the core host binding. Simulated IDENTICAL x3 on the base fixture on
+    # the M4's CPU path; the seven-runner gate result is owed.
+    "kmeans": "k-means",
+    # Workstream E batch 2: the five metrics of the lane (accuracy, ARI,
+    # v-measure, r2, silhouette) through metrics/host/metrics_oracle.mojo,
+    # the metrics family's own host binding; the lane also fits a KMeans,
+    # served by the core family above.
+    "metrics": "the metrics",
+    # The spectral lane, same batch: the spectral host oracle moved to
+    # spectral/host/spectral_oracle.mojo with the k-NN graph, the symmetrize
+    # kernel and the k-means recluster restated, exported as
+    # spectral_fit_predict_dataset from the metrics host binding.
+    "spectral": "spectral clustering",
+    # The two scaler lanes, same batch: preprocessing/host/scaler_oracle.mojo
+    # through the preprocessing family's own host binding.
+    "standard-scaler": "the standard scaler",
+    "minmax-scaler": "the min-max scaler",
+    # The logistic lane, same batch: glm/host/qn_oracle.mojo, the L-BFGS
+    # arm of the quasi-Newton solver, exported as qn_fit from the
+    # estimators host binding.
+    "logistic": "logistic regression",
+    # Workstream E batch 3 (2026-09-14): the random forests train through
+    # ensemble/host/rf_oracle.mojo, the device trainer restated on the host,
+    # exported under the GPU binding's names from the rf family's own host
+    # binding. A prediction until the four-column diff reads IDENTICAL.
+    "rf-clf": "the random forest classifier",
+    "rf-reg": "the random forest regressor",
 }
 
 #: The lanes with NO CPU path of any kind, as the README states them. A
 #: lane leaves this list the day its host lane merges; docs_facts fails the
 #: README until the marked span is rewritten.
 NO_CPU_PATH = (
-    "k-means",
-    "DBSCAN",
-    "spectral clustering",
     "UMAP",
     "the Gaussian process",
     "ARIMA",
     "the neural blocks",
-    "training for the random forests, gradient boosting and k-NN",
+    "gradient boosting training",
 )
 
 #: The read-back trio every host binding exports under its own prefix,
@@ -238,19 +285,23 @@ FAMILIES = (
         routes="_mojolearn",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=(),
+        training_lanes=("knn", "knn-clf", "knn-reg", "kmeans"),
         inference_lanes=("knn", "knn-clf", "knn-reg"),
         forest_kinds=(),
-        classes=("NearestNeighbors", "KNeighborsClassifier", "KNeighborsRegressor"),
+        classes=("NearestNeighbors", "KNeighborsClassifier", "KNeighborsRegressor", "KMeans"),
         display="nearest neighbors, k-NN classification and k-NN regression",
-        host_modules=("core/knn_host_predict.mojo", "bindings/host_helpers.mojo"),
+        host_modules=(
+            "core/knn_host_predict.mojo", "bindings/host_helpers.mojo",
+            "cluster/host/kmeans_oracle.mojo",
+        ),
         exports=(
             "core_host_numeric_mode", "core_host_vendor", "core_host_column",
             "core_host_sabotage", "mojolearn_vendor", "mojolearn_numeric_mode",
-            "knn_search", "knn_classify", "knn_regress", "transpose_f32",
+            "knn_search", "knn_classify", "knn_regress", "kmeans_fit", "transpose_f32",
             "cast_colmajor_f64_to_f32", "cast_f64_to_f32", "all_finite_f32",
             "all_finite_f64", "gather_i64", "gather_f64", "argmax_rows_f32",
-            "argmax_rows_f64",
+            "argmax_rows_f64", "column_mean_f64", "center_columns_f32",
+            "scale_rows_f32",
         ),
         gate="tools/classical_host_gate.py (cpu-identity-gate.yml)",
         ships_in_wheel=True,
@@ -281,24 +332,94 @@ FAMILIES = (
         routes="_mojolearn_estimators",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("kde",),
+        training_lanes=("kde", "pca", "pca-whiten", "tsvd", "ols", "ridge", "dbscan", "logistic"),
         inference_lanes=("ols", "ridge", "tsvd", "logistic", "logistic-multiclass", "pca", "pca-whiten", "kde"),
         forest_kinds=(),
         classes=(
             "LinearRegression", "Ridge", "TruncatedSVD", "LogisticRegression",
-            "PCA", "KernelDensity",
+            "PCA", "KernelDensity", "DBSCAN",
         ),
         display="linear regression, ridge, truncated SVD, logistic regression, PCA with and without whitening and kernel density",
-        host_modules=("kde/host/kde_oracle.mojo", "core/classical_host_predict.mojo"),
+        host_modules=(
+            "kde/host/kde_oracle.mojo", "core/classical_host_predict.mojo",
+            "decomposition/host/pca_oracle.mojo", "glm/host/glm_oracle.mojo",
+            "dbscan/host/dbscan_oracle.mojo", "glm/host/qn_oracle.mojo",
+        ),
         exports=(
             "estimators_host_numeric_mode", "estimators_host_vendor",
             "estimators_host_column", "estimators_host_sabotage",
             "estimators_vendor", "estimators_numeric_mode", "kde_score_samples",
+            "pca_fit", "tsvd_fit", "ols_fit", "ridge_fit", "dbscan_fit", "qn_fit",
             "ols_predict", "tsvd_transform", "pca_transform",
             "pca_whiten_transform", "pca_whiten_inverse_transform",
             "qn_decision_function", "qn_sigmoid", "qn_softmax",
         ),
         gate="tools/identity_break.py and tools/classical_host_gate.py (cpu-identity-gate.yml)",
+        ships_in_wheel=True,
+    ),
+    dict(
+        # Workstream E batch 2 (lane/cpu-training-e2, 2026-09-14): the
+        # metrics family's first host binding. It routes `_mojolearn_metrics`
+        # on a CPU-only install and carries the five metrics the identity
+        # harness's metrics lane computes plus the four label metrics that
+        # share their integer kernels; the spectral, UMAP and remaining
+        # metric entries stay absent and refuse by name.
+        family="metrics",
+        binding="_mojolearn_metrics_host",
+        routes="_mojolearn_metrics",
+        loaded_by="_backend._HOST_MODULES",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=("metrics", "spectral"),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=(
+            "SpectralClustering",
+            "metrics.accuracy_score", "metrics.adjusted_rand_score",
+            "metrics.entropy", "metrics.mutual_info_score",
+            "metrics.homogeneity_score", "metrics.completeness_score",
+            "metrics.v_measure_score", "metrics.r2_score",
+            "metrics.silhouette_score", "metrics.silhouette_samples",
+        ),
+        display="the label, r2 and silhouette metrics and spectral clustering",
+        host_modules=(
+            "metrics/host/metrics_oracle.mojo",
+            "spectral/host/spectral_oracle.mojo",
+            "cluster/host/kmeans_oracle.mojo",
+            "core/knn_host_predict.mojo",
+        ),
+        exports=(
+            "metrics_host_numeric_mode", "metrics_host_vendor",
+            "metrics_host_column", "metrics_host_sabotage", "metrics_vendor",
+            "metrics_numeric_mode", "accuracy_score", "adjusted_rand_score",
+            "entropy", "mutual_info_score", "homogeneity_score",
+            "completeness_score", "v_measure_score", "r2_score", "silhouette",
+            "spectral_fit_predict_dataset",
+        ),
+        gate="tools/identity_break.py (cpu-identity-gate.yml)",
+        ships_in_wheel=True,
+    ),
+    dict(
+        # Workstream E batch 2 (lane/cpu-training-e2, 2026-09-14): the
+        # preprocessing family's host binding, the whole GPU binding's
+        # surface (four entries) restated.
+        family="preprocessing",
+        binding="_mojolearn_preprocessing_host",
+        routes="_mojolearn_preprocessing",
+        loaded_by="_backend._HOST_MODULES",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=("standard-scaler", "minmax-scaler"),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=("StandardScaler", "MinMaxScaler"),
+        display="the standard and min-max scalers",
+        host_modules=("preprocessing/host/scaler_oracle.mojo",),
+        exports=(
+            "preprocessing_host_numeric_mode", "preprocessing_host_vendor",
+            "preprocessing_host_column", "preprocessing_host_sabotage",
+            "preprocessing_numeric_mode", "preprocessing_vendor",
+            "standard_fit", "standard_transform", "minmax_fit", "minmax_transform",
+        ),
+        gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=True,
     ),
     dict(
@@ -392,6 +513,37 @@ FAMILIES = (
             "et_regressor_fit_rowmajor", "et_regressor_fit_rowmajor_export",
             "forest_export", "forest_export_legacy", "forest_export_release",
             "et_predict",
+        ),
+        gate="tools/identity_break.py (cpu-identity-gate.yml)",
+        ships_in_wheel=True,
+    ),
+    dict(
+        # Workstream E batch 3 (2026-09-14): the RandomForest family's host
+        # binding. It routes `_mojolearn_rf` on a CPU-only install with the
+        # GPU binding's fit, export and predict names; the class-weighted and
+        # shard fits and the GPU engines stay absent and refuse by name. Not
+        # the forest host binding: that one is loaded by path under its own
+        # names, and `_backend` must not route `_mojolearn_rf` to it.
+        family="rf",
+        binding="_mojolearn_rf_host",
+        routes="_mojolearn_rf",
+        loaded_by="_backend._HOST_MODULES",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=("rf-clf", "rf-reg"),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=("RandomForestClassifier", "RandomForestRegressor"),
+        display="the random forest classifier and regressor",
+        host_modules=("ensemble/host/rf_oracle.mojo", "core/forest_host_predict.mojo"),
+        exports=(
+            "rf_host_numeric_mode", "rf_host_vendor", "rf_host_column",
+            "rf_host_sabotage", "rf_vendor", "rf_numeric_mode",
+            "rf_classifier_fit", "rf_classifier_fit_export",
+            "rf_classifier_fit_rowmajor", "rf_classifier_fit_rowmajor_export",
+            "rf_regressor_fit", "rf_regressor_fit_export",
+            "rf_regressor_fit_rowmajor", "rf_regressor_fit_rowmajor_export",
+            "forest_export", "forest_export_legacy", "forest_export_release",
+            "rf_predict_proba", "rf_predict_reg",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=True,

@@ -22,6 +22,7 @@ from checks.numerics import (
     identical_mul_add,
 )
 from std.sys.compile import is_defined
+from core.gram_multi_gpu import pinned_gemm_nt_gram_kernel, parallel_gram_outputs
 
 from gemm.checks.gemm_identical import (
     identical_gemm,
@@ -62,32 +63,6 @@ def pinned_gemm_nt_kernel(
     z.unsafe_store(cell, ftz(Float32(0.0) + ftz(acc)))
 
 
-def pinned_gemm_nt_gram_kernel(
-    z: MutPointer[Float32, MutAnyOrigin],
-    x: MutPointer[Float32, MutAnyOrigin],
-    m_in: Int32,
-    n_in: Int32,
-    k_in: Int32,
-):
-    """`z[m x n] = x[m x k] ."""
-    var m = Int(m_in)
-    var n = Int(n_in)
-    var k = Int(k_in)
-    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if cell >= m * n:
-        return
-    var i = cell // n
-    var j = cell % n
-    var acc = Float32(0.0)
-    for p in range(k):
-        acc = ftz(
-            identical_mul_add(
-                ftz(x.unsafe_load(i * k + p)),
-                ftz(x.unsafe_load(j * k + p)),
-                acc,
-            )
-        )
-    z.unsafe_store(cell, ftz(Float32(0.0) + ftz(acc)))
 
 
 def pinned_gemv_n_kernel(
@@ -186,12 +161,16 @@ def gemm_nt_gram(
         )
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
         var xtm = xt
+        if m == n and parallel_gram_outputs[False](ctx,z,xtm,m,k):
+            return
         ctx.enqueue_function[pinned_gemm_nt_gram_kernel](
             z.unsafe_ptr(),
             xtm.unsafe_ptr(),
             Int32(m),
             Int32(n),
             Int32(k),
+            Int32(0),
+            Int32(0),  # full original extent; do not narrow m*n to Int32
             grid_dim=((m * n + PINNED_GEMM_TPB - 1) // PINNED_GEMM_TPB, 1, 1),
             block_dim=(PINNED_GEMM_TPB, 1, 1),
         )
@@ -258,6 +237,8 @@ def gemm_tn_identical_v1(
     split-K capacity is a fused tile plan needing no workspace at all, so
     the allocate-and-wait branch below is the guard, not the path.
     """
+    if parallel_gram_outputs[True](ctx,z,x,m,k):
+        return
     var x2 = x
     var need = identical_gemm_workspace_max_floats(m, m, k)
     if need <= k * m:

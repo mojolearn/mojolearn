@@ -26,10 +26,19 @@
 # a git CLONE of the repository (a source archive carries no bench/results
 # and no .git). Needs: python3 with pip, git, and one supported GPU (a Metal
 # Apple silicon Mac, CUDA sm_89 or sm_90a, HIP gfx942; other architectures
-# are not in the wheel and the import refuses by name). The wheel may be
-# older than the record's commit; lanes one side lacks read NOT-COMPARED,
-# and a lane the newer harness calls in a way the older wheel does not
-# answer reads REFUSED in your column, which this script then reports.
+# are not in the wheel and the import refuses by name).
+#
+# THE RECORD AND THE WHEEL MUST COME FROM THE SAME COMMIT. This script
+# checks the harness out at the record's commit on purpose, so the lanes
+# and fixtures are the record's; if the wheel was built from an older
+# commit, a lane the newer harness calls in a way the older wheel does not
+# answer reads REFUSED in your column and the verdict is FAIL. That is a
+# real mismatch, not a false alarm, and there is deliberately no switch to
+# run an older harness against a newer record (the second outsider run on
+# 2026-09-14 hit exactly this: six radius cells refused because the 0.8.5
+# wheel predates the harness fix at c3e6dcd37). The script warns when the
+# record's commit is not the wheel's release tag. From 0.8.6 the wheel
+# ships the columns of a record taken at its own commit.
 set -eu
 LABEL=${1:?box label, e.g. nvidia-rtx4090-sm_89}
 HERE=$(cd "$(dirname "$0")/.." && pwd)
@@ -44,6 +53,11 @@ python3 -m pip install --quiet numpy "mojolearn==$VERSION"
 # the ESTIMATORS are the installed wheel's, which is the point
 if [ ! -d "$OUT/src/.git" ]; then git clone --quiet https://github.com/mojolearn/mojolearn.git "$OUT/src"; fi
 git -C "$OUT/src" checkout --quiet "$COMMIT"
+TAG_COMMIT=$(git -C "$OUT/src" rev-parse "v$VERSION^{commit}" 2>/dev/null || echo unknown)
+if [ "$TAG_COMMIT" != "$COMMIT" ]; then
+    echo "WARNING: the record was made at $COMMIT but wheel $VERSION is tagged at $TAG_COMMIT;" \
+         "a REFUSED cell below may be harness/wheel skew, not a divergence. Use a record taken at the wheel's commit."
+fi
 python3 -c "import mojolearn, sys; print('loaded', mojolearn.__version__, 'vendor', mojolearn.vendor(), 'mode', mojolearn.numeric_mode(), 'from', mojolearn.__file__)"
 # provenance: the harness reads the commit from the clone; every loaded binding's sha256 lands in the JSON
 MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_COMMIT="$COMMIT" \

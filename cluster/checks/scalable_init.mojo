@@ -67,6 +67,14 @@ def scalable_uniform(seed_lo: Int32, seed_hi: Int32, i: Int) -> Float32:
     top 24 bits scaled by 2^-24, so the value is exactly representable and
     identical on host and device.
     """
+    # DEVIATION 2714 (IDENTITY_PATHS.md ledger): this is the int-widening
+    # trap, ON PURPOSE. The low half's int32 -> uint32 -> uint64 chain
+    # SIGN-EXTENDS on every vendor, so the seed hashed is
+    # (hi << 32) | sext64(lo), and the host oracle spells exactly that
+    # (cluster/host/kmeans_oracle.mojo::host_round_seed_as_the_device_
+    # reassembles_it). A zero-extension would move every recorded kmeans
+    # cell and every lane seeded from it for no gain; it is a v2 profile
+    # with a full rerun, never a fix. Do not "correct" this line.
     var seed = (
         seed_hi.cast[DType.uint32]().cast[DType.uint64]() << 32
     ) | seed_lo.cast[DType.uint32]().cast[DType.uint64]()

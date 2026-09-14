@@ -68,9 +68,12 @@ disagreeing with itself and a DIVERGENT column is two vendors disagreeing.
             offer `save_checkpoint`/`from_checkpoint` instead; that pair
             feeds the same column (2026-09-13).
 
-THE LANES, 120 (2026-09-14; 46 on 2026-09-13, pca-whiten the same night, 71
-on 2026-09-14 from the claim-surface census, then logistic-multiclass and
-tokenizer the same day when those two got their doors). One per public estimator
+THE LANES, 151 (2026-09-14; 46 on 2026-09-13, pca-whiten the same night, 71
+on 2026-09-14 from the claim-surface census, logistic-multiclass and
+tokenizer the same day when those two got their doors, 16 `par-*` lanes that
+evening for the ordered multi-GPU drivers run on ONE device, and 15 lanes for
+the doors workstream D opened: Cholesky, the kernel methods, the Gaussian
+mixture, HDBSCAN, resampling, the training primitives and the KMeans arms). One per public estimator
 plus linalg and metrics, then one per public constructor VALUE that selects
 a different numeric path and no earlier lane pins (a kernel, an objective, a
 sampler, a solver, a metric, a reduction).
@@ -105,6 +108,15 @@ sampler, a solver, a metric, a reduction).
                spectral-precomputed holtwinters-multiplicative kpss arima-011
                arima-seasonal-c gp-matern12 gp-matern32 gp-matern52-ard
       functions gemm-transposed metrics-classification tokenizer cross-val
+    2026-09-14 evening, workstream D (docs/lanes/LANE_BODY_*.py)
+      cholesky kernel-ridge nystroem rbf-sampler gmm gmm-random-init hdbscan
+               hdbscan-leaf bootstrap permutation-test monte-carlo
+               training-primitives kmeans-sqrt kmeans-classic-pp
+               kmeans-cosine (the refusal sentence is its cell)
+    2026-09-14 evening (docs/multi_gpu/README.md, run with devices=(0,))
+      par-forest par-forest-et par-boosting par-kmeans par-gram par-logistic
+               par-cd par-svm par-gp par-dbscan par-scaler par-arima par-mlp
+               par-samba par-byte-lm par-iforest (last, with iforest)
 
 The 18 lanes added on 2026-09-13 (svr through samba above) are fed the SAME
 fixture bytes in the shape their estimator wants; the derivation rules are
@@ -1892,6 +1904,492 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 
+# ---------------------------------------------------------------- lanes (2026-09-14 evening, workstream D, the doors)
+# The eight families that had oracles and no door (the claim-surface census,
+# section 4) plus the six training primitives and the KMeans arms, given
+# bindings and classes on lane/expose-d; the lane bodies were written there
+# as docs/lanes/LANE_BODY_<family>.py and merged here by the harness's owner
+# without changing their arithmetic. Every derived input follows the
+# fixed-order host rule (`_affinity`, `_hw`, `_ids`, `_seq`).
+
+def _cauchy_spd(P):
+    Q = P.astype(np.float64)
+    d2 = np.zeros((Q.shape[0], Q.shape[0]), dtype=np.float64)
+    for j in range(Q.shape[1]):
+        c = Q[:, j]
+        d2 += (c[:, None] - c[None, :]) ** 2
+    A = 1.0 / (1.0 + d2)
+    A[np.arange(Q.shape[0]), np.arange(Q.shape[0])] += 1.0
+    return np.ascontiguousarray(A.astype(np.float32))
+
+
+@lane("cholesky")
+def _(ml, X, yc, yr, Xh=None):
+    """Cholesky (python/mojolearn/_cholesky_impl.py) through _mojolearn_gp:
+    potrf, logdet and potrs on a 256 x 256 Cauchy-kernel SPD matrix at the
+    profile's pinned ridge. The GP lane already covers the same kernels
+    behind a kernel matrix; this lane covers the door and the bare solve."""
+    A = _cauchy_spd(X[:256, :4])
+    c = ml.Cholesky().fit(A)
+    assert c.info_ == 0, "cholesky lane: the Cauchy matrix did not factor (info=%d)" % c.info_
+    B = np.ascontiguousarray(np.stack([yr[:256], yr[256:512]], 1).astype(np.float32))
+    return _fit(dict(L=_h(c.L_), logdet=_h(np.float64(c.logdet_)), info=_h(np.int64(c.info_)),
+                     nb=_h(np.int64(c.nb_)), jitter=_h(np.float32(c.jitter_)), solve=_h(c.solve(B))),
+                c, lambda e: (e.solve(np.ascontiguousarray(Xh[:256, :2])),))
+
+
+@lane("kernel-ridge")
+def _(ml, X, yc, yr, Xh=None):
+    """KernelRidge (python/mojolearn/kernel_methods.py) at the rbf kernel:
+    the kernel matrix, the ridge, potrf and potrs, and the identical GEMM
+    at OP_NN in predict. Train hashes dual_coef_ and the predictions on
+    the training rows; infer predicts 64 held-out rows; the model column
+    is n/a:no-save."""
+    m = ml.KernelRidge(alpha=0.1, kernel="rbf", gamma=0.5).fit(X[:256, :4], yr[:256])
+    return _fit(dict(dual=_h(m.dual_coef_), info=_h(np.int64(m.info_)), predict=_h(m.predict(X[256:320, :4]))),
+                m, lambda e: (e.predict(Xh[:64, :4]),))
+
+
+@lane("nystroem")
+def _(ml, X, yc, yr, Xh=None):
+    """Nystroem at the rbf kernel with 32 components of 256 rows: the
+    device permutation (km_basis_indices), the basis kernel, the Jacobi
+    eigensolver with its sweep count, the sign flip, the clip and the
+    transposed normalization (DEVIATION 1674). Train hashes every model
+    array the estimator carries; infer transforms 64 held-out rows."""
+    m = ml.Nystroem(kernel="rbf", gamma=0.5, n_components=32, random_state=7).fit(X[:256, :4])
+    return _fit(dict(components=_h(m.components_), indices=_h(m.component_indices_), normalization=_h(m.normalization_),
+                     eigenvalues=_h(m.eigenvalues_), eigenvectors=_h(m.eigenvectors_), sweeps=_h(np.int64(m.sweeps_)),
+                     transform=_h(m.transform(X[256:320, :4]))),
+                m, lambda e: (e.transform(Xh[:64, :4]),))
+
+
+@lane("rbf-sampler")
+def _(ml, X, yc, yr, Xh=None):
+    """RBFSampler with 64 random Fourier features over the 16 fixture
+    columns: the Philox draws (weights and offsets), sigma and scale, and
+    the identical GEMM at OP_NN plus cos in transform. The fit reads only
+    n_features, so the train column's draws are the same on every fixture
+    and only the transform moves with the data."""
+    m = ml.RBFSampler(gamma=0.5, n_components=64, random_state=1).fit(X)
+    return _fit(dict(weights=_h(m.random_weights_), offset=_h(m.random_offset_),
+                     sigma=_h(np.float32(m.sigma_)), scale=_h(np.float32(m.scale_)), transform=_h(m.transform(X[:256]))),
+                m, lambda e: (e.transform(Xh[:256]),))
+
+
+@lane("gmm")
+def _(ml, X, yc, yr, Xh=None):
+    """GaussianMixture (python/mojolearn/mixture.py), full covariance,
+    four components, init through the identity-certified k-means. Train
+    hashes every model array plus n_iter_, converged_ and lower_bound_
+    (the estimator's header: part of the card); infer scores and labels
+    64 held-out rows; the model column is n/a:no-save."""
+    m = ml.GaussianMixture(n_components=4, max_iter=30, random_state=3).fit(X[:6000, :4])
+    return _fit(dict(weights=_h(m.weights_), means=_h(m.means_), covariances=_h(m.covariances_),
+                     precisions=_h(m.precisions_cholesky_), logdet=_h(m.log_det_chol_),
+                     n_iter=_h(np.int64(m.n_iter_)), converged=_h(np.int64(int(m.converged_))),
+                     lower_bound=_h(np.float32(m.lower_bound_)),
+                     labels=_h(m.predict(X[:6000, :4])), proba=_h(m.predict_proba(X[:256, :4]))),
+                m, lambda e: (e.score_samples(Xh[:64, :4]), e.predict(Xh[:64, :4]), e.predict_proba(Xh[:64, :4])))
+
+
+@lane("gmm-random-init")
+def _(ml, X, yc, yr, Xh=None):
+    """The same fit under init_params='random' (position-mapped Philox
+    responsibilities, DEVIATION 1733), the other implemented init."""
+    m = ml.GaussianMixture(n_components=4, max_iter=30, random_state=3, init_params="random").fit(X[:6000, :4])
+    return _fit(dict(weights=_h(m.weights_), means=_h(m.means_), covariances=_h(m.covariances_),
+                     n_iter=_h(np.int64(m.n_iter_)), lower_bound=_h(np.float32(m.lower_bound_)),
+                     labels=_h(m.predict(X[:6000, :4]))),
+                m, lambda e: (e.score_samples(Xh[:64, :4]),))
+
+
+@lane("hdbscan")
+def _(ml, X, yc, yr, Xh=None):
+    """HDBSCAN (python/mojolearn/hdbscan.py), cuML's runner path at its
+    defaults with excess-of-mass selection: the core distances, the
+    Boruvka MST, single linkage, the condensed tree and the labels.
+    Train hashes the labels, the core distances and the four integers the
+    fit reports (cluster, outlier, Boruvka round and condensed cluster
+    counts); the integer stages are where a divergence first shows."""
+    m = ml.HDBSCAN(min_cluster_size=5).fit(X[:6000, :4])
+    return _fit(dict(labels=_h(m.labels_), core=_h(m.core_distances_),
+                     counts=_h(np.asarray([m.n_clusters_, m.n_outliers_, m.n_boruvka_rounds_, m.n_condensed_clusters_], dtype=np.int64))),
+                m, "n/a:transductive")
+
+
+@lane("hdbscan-leaf")
+def _(ml, X, yc, yr, Xh=None):
+    """The same fit under cluster_selection_method='leaf' with
+    min_samples below min_cluster_size and allow_single_cluster, the
+    other selection arm and the two knobs that change which condensed
+    clusters become labels."""
+    m = ml.HDBSCAN(min_cluster_size=8, min_samples=3, cluster_selection_method="leaf", allow_single_cluster=True).fit(X[:6000, :4])
+    return _fit(dict(labels=_h(m.labels_), core=_h(m.core_distances_),
+                     counts=_h(np.asarray([m.n_clusters_, m.n_outliers_, m.n_boruvka_rounds_, m.n_condensed_clusters_], dtype=np.int64))),
+                m, "n/a:transductive")
+
+
+@lane("bootstrap")
+def _(ml, X, yc, yr, Xh=None):
+    """resample.bootstrap over the first 4096 values of yr, 2048
+    replicates: the Philox index map, the per-replicate folds (mean,
+    std), the segmented sort (quantile), the paired two-column statistics
+    (pearson, diff_means), the percentile and basic intervals and the
+    standard error. Every distribution and every scalar is hashed; the
+    r_first slice equality is asserted, as the surface promises it."""
+    rs = ml.resample
+    x = np.ascontiguousarray(yr[:4096])
+    two = np.ascontiguousarray(np.stack([yr[:4096], X[:4096, 3]], 1).astype(np.float32))
+    parts = {}
+    for name, kw in (("mean", dict(data=x, statistic="mean")),
+                     ("std", dict(data=x, statistic="std", method="basic")),
+                     ("quantile", dict(data=x, statistic="quantile", q_or_prop=0.25, alternative="less")),
+                     ("trimmed", dict(data=x, statistic="trimmed_mean", q_or_prop=0.1, alternative="greater")),
+                     ("pearson", dict(data=two, statistic="pearson")),
+                     ("diff", dict(data=two, statistic="diff_means", method="basic"))):
+        b = rs.bootstrap(n_resamples=2048, random_state=3, **kw)
+        parts[name] = _h(b.distribution, b.sorted_distribution,
+                         np.asarray([b.point_estimate, b.standard_error, b.confidence_interval[0], b.confidence_interval[1]], dtype=np.float64),
+                         np.asarray([b.order_low, b.order_high], dtype=np.int64))
+    whole = np.asarray(rs.bootstrap(x, n_resamples=1024, random_state=3).distribution)
+    part = np.asarray(rs.bootstrap(x, n_resamples=512, random_state=3, r_first=256).distribution)
+    assert np.array_equal(whole[256:768].view(np.uint32), part.view(np.uint32)), "bootstrap lane: r_first slice is not bit-identical"
+    parts["r_first"] = _h(part)
+    return _fit(parts)
+
+
+@lane("permutation-test")
+def _(ml, X, yc, yr, Xh=None):
+    """resample.permutation_test between the fixture's two label groups
+    of yr (the first 2048 rows of each), 2048 permutations, three
+    alternatives: the pooled Philox permutation map, the between-group
+    fold and the conservative p-value (DEVIATION 1702)."""
+    rs = ml.resample
+    a = np.ascontiguousarray(yr[:4096][yc[:4096] == 0][:2048])
+    b = np.ascontiguousarray(yr[:4096][yc[:4096] == 1][:2048])
+    if a.size < 8 or b.size < 8:
+        a, b = np.ascontiguousarray(yr[:2048]), np.ascontiguousarray(yr[2048:4096])
+    parts = {}
+    for alt in ("two-sided", "less", "greater"):
+        p = rs.permutation_test(a, b, statistic="diff_means", n_resamples=2048, random_state=3, alternative=alt)
+        parts[alt] = _h(p.null_distribution, np.asarray([p.statistic, p.pvalue], dtype=np.float64),
+                        np.asarray([p.count_less, p.count_greater], dtype=np.int64))
+    return _fit(parts)
+
+
+@lane("monte-carlo")
+def _(ml, X, yc, yr, Xh=None):
+    """resample.monte_carlo_integrate, the three compiled integrands over
+    a box whose corners come from the fixture's first two column minima
+    and maxima (host min and max, exact), 65536 draws: the position-mapped
+    Philox points and the chunked pinned fold. The closed forms are
+    hashed beside the estimates."""
+    rs = ml.resample
+    lo = [float(np.min(X[:, 0])), float(np.min(X[:, 1]))]
+    hi = [float(np.max(X[:, 0])), float(np.max(X[:, 1]))]
+    if not (hi[0] > lo[0] and hi[1] > lo[1]):
+        lo, hi = [0.0, 0.0], [1.0, 2.0]
+    parts = {}
+    for f in ("const", "sum", "product"):
+        r = rs.monte_carlo_integrate(f, lo, hi, 65536, random_state=1)
+        parts[f] = _h(np.asarray([r.integral, r.mean, r.volume, r.closed_form], dtype=np.float64))
+    return _fit(parts)
+
+
+@lane("training-primitives")
+def _(ml, X, yc, yr, Xh=None):
+    """embedding_forward/backward (the gather and the run-sorted fold),
+    rms_norm_forward/backward, linear_forward/backward (the identical
+    GEMM at OP_NT and the two backward products). Every output hashed;
+    the probe runs the three forwards on a held-out slab."""
+    T = ml.training
+    V, D, N, K = 64, 32, 64, 16
+    w_emb = _hw((V, D), "prim:emb", -0.25, 0.25)
+    ids = (_ids(X, 1, N).reshape(N) % V).astype(np.int32)
+    x = np.ascontiguousarray(_seq(X, 1, N, D).reshape(N, D))
+    g = np.ascontiguousarray(np.abs(_hw((D,), "prim:rms", 0.5, 1.5)))
+    w_lin = _hw((K, D), "prim:lin", -0.25, 0.25)
+    dy = _hw((N, D), "prim:dy", -1.0, 1.0)
+    dc = _hw((N, K), "prim:dc", -1.0, 1.0)
+    emb = T.embedding_forward(w_emb, ids)
+    demb = T.embedding_backward(dy, ids, V)
+    rms = T.rms_norm_forward(x, g, 1e-5)
+    dx, dg = T.rms_norm_backward(dy, x, g, 1e-5)
+    lin = T.linear_forward(x, w_lin)
+    da, dw = T.linear_backward(dc, x, w_lin)
+    parts = dict(emb=_h(np.asarray(emb)), demb=_h(np.asarray(demb)), rms=_h(np.asarray(rms)),
+                 drms=_h(np.asarray(dx), np.asarray(dg)), lin=_h(np.asarray(lin)), dlin=_h(np.asarray(da), np.asarray(dw)))
+    xh = np.ascontiguousarray(_seq(Xh, 1, N, D).reshape(N, D))
+    idh = (_ids(Xh, 1, N).reshape(N) % V).astype(np.int32)
+    return _fit(parts, T, lambda e: (np.asarray(e.embedding_forward(w_emb, idh)), np.asarray(e.rms_norm_forward(xh, g, 1e-5)),
+                                     np.asarray(e.linear_forward(xh, w_lin))))
+
+
+@lane("kmeans-sqrt")
+def _(ml, X, yc, yr, Xh=None):
+    """metric='l2_sqrt_expanded': cuVS's L2SqrtExpanded, the root taken in
+    the assignment norms and the inertia (`metric_is_sqrt`); a different
+    inertia_ and a different sum_scale_ from the squared arm."""
+    m = ml.KMeans(n_clusters=8, random_state=3, metric="l2_sqrt_expanded").fit(X)
+    return _fit(dict(centers=_h(m.cluster_centers_), labels=_h(m.labels_),
+                     inertia=_h(np.float64(m.inertia_)), scales=_h(np.asarray([m.sum_scale_, m.weight_scale_], dtype=np.float64))),
+                m, "n/a:no-predict")
+
+
+@lane("kmeans-classic-pp")
+def _(ml, X, yc, yr, Xh=None):
+    """oversampling_factor=0.0: the classic sequential k-means++ seeding
+    (detail/kmeans.cuh:910-915's `== 0` arm), a different algorithm from
+    the scalable k-means|| the default selects."""
+    m = ml.KMeans(n_clusters=8, random_state=3, oversampling_factor=0.0).fit(X)
+    return _fit(dict(centers=_h(m.cluster_centers_), labels=_h(m.labels_), inertia=_h(np.float64(m.inertia_))),
+                m, "n/a:no-predict")
+
+
+@lane("kmeans-cosine")
+def _(ml, X, yc, yr, Xh=None):
+    """metric='cosine' is routed and REFUSED BY NAME on the Mojo host
+    (cluster/impl/kmeans_params.mojo::validate): the expected cell is the
+    refusal sentence on every column, never a hash. A column that hashes
+    here means the refusal was lifted without a fused cosine arm."""
+    try:
+        m = ml.KMeans(n_clusters=8, random_state=3, metric="cosine").fit(X)
+    except Exception as exc:
+        # the expected outcome: the cell is the hash of the refusal sentence
+        # (harness owner, 2026-09-14), so a record carries it STABLE and a
+        # lifted refusal reads DIVERGENT against it instead of vanishing
+        # into a permanent REFUSED count
+        text = f"{type(exc).__name__}: {exc}"
+        return _fit(dict(refusal=_h(np.frombuffer(text.encode(), dtype=np.uint8))))
+    return _fit(dict(centers=_h(m.cluster_centers_)), m, "n/a:no-predict")
+
+
+# ---------------------------------------------------------------- lanes (2026-09-14 evening, the multi-GPU drivers on ONE device)
+# The ordered multi-GPU drivers (docs/multi_gpu/README.md) promise that a fit
+# split into K logical shards or tree ranges reduces, in a fixed order, to
+# the bits of the same fit on one device, and that the physical GPU count
+# never selects the reduction order. So every driver has a lane here that
+# runs with devices=_par_devices() and the smallest sharding that exercises the split,
+# on every vendor including this Mac; where the driver's contract is
+# equality to the plain fit, the lane holds the two to the same bytes and
+# reads REFUSED with the pair named if they differ. A two-device run on the
+# same commit must then hash equal to these cells, which is the claim the
+# drivers' own two-H100 gates make and no three-vendor record has held yet.
+
+def _par_devices():
+    """The device tuple the par-* lanes hand the drivers: MOJOLEARN_PAR_DEVICES,
+    comma-separated device indices, default "0". A two-device column names
+    itself through the `package.par_devices` field the run records, and must
+    hash equal, cell for cell, to the one-device column of the same commit;
+    that equality is the drivers' whole claim."""
+    raw = os.environ.get("MOJOLEARN_PAR_DEVICES", "0").strip() or "0"
+    try:
+        devs = tuple(int(x) for x in raw.split(",") if x.strip() != "")
+    except ValueError:
+        devs = ()
+    if not devs or len(set(devs)) != len(devs) or any(d < 0 for d in devs):
+        raise SystemExit(f"REFUSING: MOJOLEARN_PAR_DEVICES={raw!r} is not a list of distinct nonnegative device indices")
+    return devs
+
+
+@lane("par-forest")
+def _(ml, X, yc, yr, Xh=None):
+    """fit_forest, 16 trees in four ranges of four, held to the plain
+    RandomForestClassifier fit of the rf-clf lane."""
+    from mojolearn.parallel_ensemble import fit_forest
+    kw = dict(n_estimators=16, max_depth=8, random_state=7)
+    par = fit_forest(ml.RandomForestClassifier(**kw), X, yc, devices=_par_devices(), trees_per_shard=4)
+    plain = ml.RandomForestClassifier(**kw).fit(X, yc)
+    _same_bytes("fit_forest predict_proba", par.predict_proba(X[:2048]), "plain predict_proba", plain.predict_proba(X[:2048]))
+    return _fit(dict(predict=_h(par.predict(X)), proba=_h(par.predict_proba(X))),
+                par, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
+
+
+@lane("par-forest-et")
+def _(ml, X, yc, yr, Xh=None):
+    from mojolearn.parallel_ensemble import fit_forest
+    kw = dict(n_estimators=16, max_depth=8, random_state=7)
+    par = fit_forest(ml.ExtraTreesRegressor(**kw), X, yr, devices=_par_devices(), trees_per_shard=4)
+    plain = ml.ExtraTreesRegressor(**kw).fit(X, yr)
+    _same_bytes("fit_forest predict", par.predict(X[:2048]), "plain predict", plain.predict(X[:2048]))
+    return _fit(dict(predict=_h(par.predict(X))), par, lambda e: (e.predict(Xh),))
+
+
+@lane("par-boosting")
+def _(ml, X, yc, yr, Xh=None):
+    """fit_boosting on the gbdt-symmetric configuration, feature histograms
+    partitioned, held to the plain fit."""
+    from mojolearn.parallel_ensemble import fit_boosting
+    kw = dict(n_estimators=20, max_depth=6, loss="Logloss")
+    par = fit_boosting(ml.GradientBoosting(**kw), X, yc, devices=_par_devices())
+    plain = ml.GradientBoosting(**kw).fit(X, yc)
+    _same_bytes("fit_boosting predict", par.predict(X[:2048]), "plain predict", plain.predict(X[:2048]))
+    return _fit(dict(predict=_h(par.predict(X)), proba=_h(par.predict_proba(X))),
+                par, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
+
+
+@lane("par-kmeans")
+def _(ml, X, yc, yr, Xh=None):
+    from mojolearn.parallel_classical import fit_kmeans
+    par = fit_kmeans(ml.KMeans(n_clusters=8, random_state=3), X, devices=_par_devices())
+    plain = ml.KMeans(n_clusters=8, random_state=3).fit(X)
+    _same_bytes("fit_kmeans centers", par.cluster_centers_, "plain centers", plain.cluster_centers_)
+    return _fit(dict(centers=_h(par.cluster_centers_), labels=_h(par.labels_)), par, "n/a:no-predict")
+
+
+@lane("par-gram")
+def _(ml, X, yc, yr, Xh=None):
+    """fit_gram_estimator on Ridge: the 128 pinned Gram chunks distributed."""
+    from mojolearn.parallel_classical import fit_gram_estimator
+    par = fit_gram_estimator(ml.Ridge(alpha=1.0), X, yr, devices=_par_devices())
+    plain = ml.Ridge(alpha=1.0).fit(X, yr)
+    _same_bytes("fit_gram_estimator coef", par.coef_, "plain coef", plain.coef_)
+    return _fit(dict(coef=_h(par.coef_), predict=_h(par.predict(X[:256]))), par, lambda e: (e.predict(Xh[:256]),))
+
+
+@lane("par-logistic")
+def _(ml, X, yc, yr, Xh=None):
+    from mojolearn.parallel_classical import fit_logistic
+    par = fit_logistic(ml.LogisticRegression(max_iter=50), X, yc, devices=_par_devices())
+    plain = ml.LogisticRegression(max_iter=50).fit(X, yc)
+    _same_bytes("fit_logistic coef", par.coef_, "plain coef", plain.coef_)
+    return _fit(dict(coef=_h(par.coef_), proba=_h(par.predict_proba(X[:256]))), par, lambda e: (e.predict_proba(Xh[:256]),))
+
+
+@lane("par-cd")
+def _(ml, X, yc, yr, Xh=None):
+    from mojolearn.parallel_classical import fit_coordinate_descent
+    par = fit_coordinate_descent(ml.Lasso(alpha=0.01, max_iter=200), X, yr, devices=_par_devices())
+    plain = ml.Lasso(alpha=0.01, max_iter=200).fit(X, yr)
+    _same_bytes("fit_coordinate_descent coef", par.coef_, "plain coef", plain.coef_)
+    return _fit(dict(coef=_h(par.coef_), predict=_h(par.predict(X[:256]))), par, lambda e: (e.predict(Xh[:256]),))
+
+
+@lane("par-svm")
+def _(ml, X, yc, yr, Xh=None):
+    from mojolearn.parallel_classical import fit_svm, predict_svm
+    kw = dict(C=1.0, kernel="rbf", max_iter=200)
+    par = fit_svm(ml.SVC(**kw), X[:2000], yc[:2000], devices=_par_devices())
+    plain = ml.SVC(**kw).fit(X[:2000], yc[:2000])
+    dec = predict_svm(par, X[2000:2256], devices=_par_devices(), method="decision_function")
+    _same_bytes("predict_svm decision", dec, "plain decision", plain.decision_function(X[2000:2256]))
+    return _fit(dict(decision=_h(dec), predict=_h(predict_svm(par, X[2000:2256], devices=_par_devices(), method="predict"))),
+                par, lambda e: (e.decision_function(Xh[:256]), e.predict(Xh[:256])))
+
+
+@lane("par-gp")
+def _(ml, X, yc, yr, Xh=None):
+    from mojolearn.parallel_classical import fit_gaussian_process, predict_gaussian_process
+    k = ml.ConstantKernel(1.0) * ml.RBF(1.0) + ml.WhiteKernel(0.1)
+    par = fit_gaussian_process(ml.GaussianProcessRegressor(kernel=k), X[:256, :4], yr[:256], devices=_par_devices())
+    plain = ml.GaussianProcessRegressor(kernel=k).fit(X[:256, :4], yr[:256])
+    mean, std = predict_gaussian_process(par, X[256:320, :4], devices=_par_devices(), return_std=True)
+    pm, ps = plain.predict(X[256:320, :4], return_std=True)
+    _same_bytes("predict_gaussian_process mean", mean, "plain mean", pm)
+    return _fit(dict(alpha=_h(par.alpha_), L=_h(par.L_), mean=_h(mean), std=_h(std)),
+                par, lambda e: e.predict(Xh[:64, :4], return_std=True))
+
+
+@lane("par-dbscan")
+def _(ml, X, yc, yr, Xh=None):
+    from mojolearn.parallel_classical import fit_dbscan
+    par = fit_dbscan(ml.DBSCAN(eps=0.9, min_samples=5), X[:6000, :4], devices=_par_devices())
+    plain = ml.DBSCAN(eps=0.9, min_samples=5).fit(X[:6000, :4])
+    _same_bytes("fit_dbscan labels", par.labels_, "plain labels", plain.labels_)
+    return _fit(dict(labels=_h(par.labels_)), par, "n/a:transductive")
+
+
+@lane("par-scaler")
+def _(ml, X, yc, yr, Xh=None):
+    """fit_scaler and transform_scaler with four columns per shard, so the
+    16-column fixture is four shards, held to the plain scaler."""
+    from mojolearn.parallel_preprocessing import fit_scaler, transform_scaler
+    par = fit_scaler(ml.StandardScaler(), X, devices=_par_devices(), columns_per_shard=4)
+    plain = ml.StandardScaler().fit(X)
+    t = transform_scaler(par, X[:256], devices=_par_devices(), columns_per_shard=4)
+    _same_bytes("transform_scaler", t, "plain transform", plain.transform(X[:256]))
+    return _fit(dict(mean=_h(par.mean_), var=_h(par.var_), transform=_h(t),
+                     inverse=_h(transform_scaler(par, t, devices=_par_devices(), columns_per_shard=4, inverse=True))),
+                par, lambda e: (e.transform(Xh[:256]),))
+
+
+@lane("par-arima")
+def _(ml, X, yc, yr, Xh=None):
+    """fit_arima with two series per shard over the arima lane's four series."""
+    from mojolearn.parallel_classical import fit_arima
+    series = np.ascontiguousarray(X[:512, :4].T)
+    par = fit_arima(ml.ARIMA(order=(1, 0, 0)), series, devices=_par_devices(), series_per_shard=2)
+    plain = ml.ARIMA(order=(1, 0, 0)).fit(series)
+    _same_bytes("fit_arima ar", par.ar_, "plain ar", plain.ar_)
+    return _fit(dict(ar=_h(par.ar_), mu=_h(par.mu_), sigma2=_h(par.sigma2_), forecast=_h(par.forecast(24))),
+                par, lambda e: _same_bytes("forecast(h)", e.forecast(FORECAST_HORIZON),
+                                           "predict(n_obs, n_obs + h)", e.predict(e.n_obs_, e.n_obs_ + FORECAST_HORIZON)))
+
+
+@lane("par-mlp")
+def _(ml, X, yc, yr, Xh=None):
+    """ParallelNeuralTrainer over the mlp lane's trainer: three logical
+    shards of 64 rows, one ordered update per step, three steps; its
+    contract is equality to its own one-device replay, not to a plain
+    step over 192 rows, so the parts are hashed and not held to mlp."""
+    from mojolearn.parallel_training import ParallelNeuralTrainer
+    w = [((np.arange(int(np.prod(s)), dtype=np.float32) % 7 - 3) / 32).reshape(s).astype(np.float32)
+         for s in ((16, 8), (16,), (3, 16), (3,))]
+    m = ml.SmallMLPTrainer(*w, data_schedule={"dataset": "identity_break", "order": "sequential"})
+    Xm = np.ascontiguousarray(X[:576, :8])
+    t = _three_class(X[:576])
+    with ParallelNeuralTrainer(m, devices=_par_devices(), logical_shards=3) as tr:
+        for step in range(3):
+            base = 192 * step
+            tr.train_step([(Xm[base + 64 * k: base + 64 * (k + 1)], t[base + 64 * k: base + 64 * (k + 1)]) for k in range(3)])
+        ck = tr.checkpoint()
+    return _fit(dict(weights=_h(*[np.asarray(m.weights_[k]) for k in sorted(m.weights_)]),
+                     logits=_h(np.asarray(m.predict_logits(Xm[:256]))),
+                     shards=_h(np.int64(ck["logical_shards"]))),
+                m, lambda e: (np.asarray(e.predict_logits(np.ascontiguousarray(Xh[:256, :8]))),))
+
+
+@lane("par-samba")
+def _(ml, X, yc, yr, Xh=None):
+    """ParallelNeuralTrainer over the samba lane's stack, two logical shards
+    of (2, 17) windows per step, two steps."""
+    from mojolearn.parallel_training import ParallelNeuralTrainer
+    cfg = ml.SambaConfig(vocab=256, d_model=32, layers=("mamba3", "attention"), n_heads=2, intermediate=64)
+    m = ml.SambaStack(cfg, generator=ml.training.Generator(1), lr=1e-3)
+    ids = _ids(X, 8, 17)
+    with ParallelNeuralTrainer(m, devices=_par_devices(), logical_shards=2) as tr:
+        for step in range(2):
+            tr.train_step([(ids[4 * step + 2 * k: 4 * step + 2 * k + 2, :-1], ids[4 * step + 2 * k: 4 * step + 2 * k + 2, 1:])
+                           for k in range(2)])
+    params = m.parameters()
+    return _fit(dict(logits=_h(np.asarray(m.forward(ids[:2, :-1]))),
+                     params=_h(*[np.asarray(params[k]) for k in sorted(params)])),
+                m, lambda e: (np.asarray(e.forward(_ids(Xh, 2, 16))),))
+
+
+@lane("par-byte-lm")
+def _(ml, X, yc, yr, Xh=None):
+    """ParallelByteLanguageModelTrainer from the byte-lm lane's starting
+    state, two logical shards on one device, three steps; the state after
+    and the per-shard losses are the parts."""
+    from mojolearn.parallel_training import ParallelByteLanguageModelTrainer
+    shape = ml.ByteLanguageModelConfig()
+    named, _ = _byte_lm_params(shape)
+    seed = ml.SmallByteLanguageModelTrainer(named, data_schedule={"dataset": "identity_break", "order": "sequential"},
+                                            shape=shape)
+    ids = _ids(X, 6 * shape.batch, shape.length + 1)
+    losses = []
+    with ParallelByteLanguageModelTrainer(seed.state_dict(), devices=_par_devices(), logical_shards=2) as tr:
+        for step in range(3):
+            res = tr.train_step([ids[4 * step: 4 * step + 2], ids[4 * step + 2: 4 * step + 4]])
+            losses.append([np.float64(v) for v in res["losses"]])      # a dict: losses, completed_steps
+        state = tr.state_dict()
+    return _fit(dict(loss=_h(np.asarray(losses)), params=_h(np.asarray(state["parameters"])),
+                     m=_h(np.asarray(state["m"]))))
+
+
+
 # LAST ON PURPOSE (2026-08-29): on a RunPod RTX 4090 the isolation forest
 # binding hung at its first fit in every tier (a second DeviceContext beside
 # the caller's deadlocked at teardown on sm_89; fixed by DEVIATION 1944, the
@@ -1920,6 +2418,19 @@ def _(ml, X, yc, yr, Xh=None):
                            bootstrap=True, contamination=0.1, max_depth=6).fit(X)
     return _fit(dict(scores=_h(m.score_samples(X)), predict=_h(m.predict(X[:512]))),
                 m, lambda e: (e.score_samples(Xh), e.predict(Xh[:512])))
+
+@lane("par-iforest")
+def _(ml, X, yc, yr, Xh=None):
+    """fit_isolation_forest and score_isolation_forest on the iforest lane's
+    configuration, tree ranges on one device, held to the plain fit; after
+    iforest-tuned for the reason iforest runs last."""
+    from mojolearn.parallel_ensemble import fit_isolation_forest, score_isolation_forest
+    par = fit_isolation_forest(ml.IsolationForest(n_estimators=16, random_state=5), X, devices=_par_devices())
+    plain = ml.IsolationForest(n_estimators=16, random_state=5).fit(X)
+    scores = score_isolation_forest(par, X, devices=_par_devices(), method="score_samples")
+    _same_bytes("score_isolation_forest", scores, "plain score_samples", plain.score_samples(X))
+    return _fit(dict(scores=_h(scores), predict=_h(par.predict(X[:512]))),
+                par, lambda e: (e.score_samples(Xh), e.predict(Xh[:512])))
 
 
 # ---------------------------------------------------------------- run / diff
@@ -2015,7 +2526,8 @@ def run(args):
     commit, commit_source = commit_witness()
     host = host_record(ml) if ml.vendor() == "cpu" else None
     package = dict(version=getattr(ml, "__version__", "unknown"), package_dir=os.path.dirname(ml.__file__),
-                   numpy=np.__version__, python=platform.python_version())
+                   numpy=np.__version__, python=platform.python_version(),
+                   par_devices=",".join(str(d) for d in _par_devices()))
     print(f"# vendor={vendor} commit={commit} ({commit_source})"
           + (f" host.cpu_model={host['cpu_model']!r} host.column={host['column']} "
              f"host.families={sorted(host['families'])}" if host else ""))

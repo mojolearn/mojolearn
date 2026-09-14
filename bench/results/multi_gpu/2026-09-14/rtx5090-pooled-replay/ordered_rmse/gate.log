@@ -1,0 +1,56 @@
+8735 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7a5ec0000000, nodemask=2)
+8735 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x70dc80000000, nodemask=1)
+8903 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x124d40000000, nodemask=1)
+9074 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x131880000000, nodemask=1)
+PASS ordered RMSE 65 1 False
+9240 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x113100000000, nodemask=1)
+9412 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x196c00000000, nodemask=2)
+9412 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x713c40000000, nodemask=1)
+PASS ordered RMSE 65 1 True
+9578 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x591340000000, nodemask=2)
+9749 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1acfc0000000, nodemask=2)
+9749 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x538b00000000, nodemask=1)
+PASS ordered RMSE 65 7 False
+9915 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x51d140000000, nodemask=1)
+10086 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x731180000000, nodemask=1)
+PASS ordered RMSE 65 7 True
+10253 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x702540000000, nodemask=1)
+10424 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x709280000000, nodemask=1)
+PASS ordered RMSE 65 31 False
+10590 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x53bf00000000, nodemask=1)
+10590 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x398180000000, nodemask=2)
+10761 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3a8dc0000000, nodemask=2)
+PASS ordered RMSE 65 31 True
+10927 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x18fa00000000, nodemask=2)
+11099 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x381080000000, nodemask=2)
+PASS ordered RMSE 65 254 False
+11265 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x523f40000000, nodemask=1)
+11436 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x10df40000000, nodemask=1)
+PASS ordered RMSE 65 254 True
+11602 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x316340000000, nodemask=1)
+11602 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5a3480000000, nodemask=2)
+11774 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5940c0000000, nodemask=2)
+PASS ordered RMSE 513 1 False
+11940 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x133640000000, nodemask=1)
+12111 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x719040000000, nodemask=1)
+PASS ordered RMSE 513 1 True
+12277 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x537880000000, nodemask=1)
+12448 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x31cc80000000, nodemask=1)
+PASS ordered RMSE 513 7 False
+12615 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x327b40000000, nodemask=1)
+12786 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x520ec0000000, nodemask=1)
+PASS ordered RMSE 513 7 True
+12952 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x506800000000, nodemask=1)
+13123 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x12b2c0000000, nodemask=1)
+PASS ordered RMSE 513 31 False
+13289 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x71f2c0000000, nodemask=1)
+13474 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3387c0000000, nodemask=1)
+PASS ordered RMSE 513 31 True
+13641 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x39a080000000, nodemask=2)
+13827 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x38c340000000, nodemask=2)
+13827 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x33d400000000, nodemask=1)
+PASS ordered RMSE 513 254 False
+13993 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x33ddc0000000, nodemask=1)
+14184 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7afd00000000, nodemask=2)
+14184 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x735b80000000, nodemask=1)
+PASS ordered RMSE 513 254 True

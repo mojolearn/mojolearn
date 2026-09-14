@@ -1,0 +1,105 @@
+{
+  "status": "PASS",
+  "checks": [
+    {
+      "layers": 2,
+      "logical_shards": 1,
+      "parameters": 12096,
+      "ownership": [
+        {
+          "device": 0,
+          "first": 0,
+          "count": 4096,
+          "parameter_bytes": 16384,
+          "moment_bytes": 32768,
+          "rollback_bytes": 49152,
+          "gradient_bytes": 16384
+        },
+        {
+          "device": 0,
+          "first": 4096,
+          "count": 1952,
+          "parameter_bytes": 7808,
+          "moment_bytes": 15616,
+          "rollback_bytes": 23424,
+          "gradient_bytes": 7808
+        },
+        {
+          "device": 1,
+          "first": 6048,
+          "count": 1952,
+          "parameter_bytes": 7808,
+          "moment_bytes": 15616,
+          "rollback_bytes": 23424,
+          "gradient_bytes": 7808
+        },
+        {
+          "device": 0,
+          "first": 8000,
+          "count": 4096,
+          "parameter_bytes": 16384,
+          "moment_bytes": 32768,
+          "rollback_bytes": 49152,
+          "gradient_bytes": 16384
+        }
+      ],
+      "state_sha256": "3aabb33bad5787a2c3e3fc88121fd4c6334e57be19da7644c4cae82f4d281fdb",
+      "native_faults": false
+    },
+    {
+      "layers": 3,
+      "logical_shards": 1,
+      "parameters": 25680,
+      "ownership": [
+        {
+          "device": 0,
+          "first": 0,
+          "count": 6144,
+          "parameter_bytes": 24576,
+          "moment_bytes": 49152,
+          "rollback_bytes": 73728,
+          "gradient_bytes": 24576
+        },
+        {
+          "device": 0,
+          "first": 6144,
+          "count": 4464,
+          "parameter_bytes": 17856,
+          "moment_bytes": 35712,
+          "rollback_bytes": 53568,
+          "gradient_bytes": 17856
+        },
+        {
+          "device": 0,
+          "first": 10608,
+          "count": 4464,
+          "parameter_bytes": 17856,
+          "moment_bytes": 35712,
+          "rollback_bytes": 53568,
+          "gradient_bytes": 17856
+        },
+        {
+          "device": 1,
+          "first": 15072,
+          "count": 4464,
+          "parameter_bytes": 17856,
+          "moment_bytes": 35712,
+          "rollback_bytes": 53568,
+          "gradient_bytes": 17856
+        },
+        {
+          "device": 0,
+          "first": 19536,
+          "count": 6144,
+          "parameter_bytes": 24576,
+          "moment_bytes": 49152,
+          "rollback_bytes": 73728,
+          "gradient_bytes": 24576
+        }
+      ],
+      "state_sha256": "b27ecfb67564100a55b39d84855a26d0b5777a270586dba2287ce04a0b396ed2",
+      "native_faults": false
+    }
+  ],
+  "scope": "Two RTX 5090 GPUs: layer-owned model and optimizer state, ordered replay, portable checkpoints and recovery. No throughput or beyond-one-GPU capacity claim."
+}

@@ -7,17 +7,15 @@ from ._bufcheck import memcopy
 
 
 def fit_boosting(estimator, X, y, *, devices=(0,), sample_weight=None, eval_set=None):
-    """Partition packed feature groups during greedy-tree histogram construction.
+    """Partition packed feature groups during greedy or pointwise histograms.
 
     Boosting rounds, row reductions, quantization scales, split selection and
     leaf estimation retain their original global order. Only publish a full
     successful fitted model. Root state still has to fit on the first GPU.
     """
-    from .ensemble import GradientBoosting
-    if type(estimator) is not GradientBoosting:
-        raise TypeError('fit_boosting currently requires GradientBoosting or its classifier/regressor aliases')
-    if estimator.use_pointwise_searcher:
-        raise ValueError('pointwise searcher does not yet implement feature-parallel histograms')
+    from .ensemble import GradientBoosting, GradientBoostingClassifier, GradientBoostingRegressor
+    if type(estimator) not in (GradientBoosting, GradientBoostingClassifier, GradientBoostingRegressor):
+        raise TypeError('fit_boosting currently requires GradientBoosting, GradientBoostingClassifier or GradientBoostingRegressor')
     if estimator.numeric_mode not in (None, 'identical'):
         raise ValueError('parallel boosting requires IDENTICAL numeric mode')
     pool = DevicePool(devices, cooperative=True)
@@ -133,3 +131,45 @@ def score_isolation_forest(estimator, X, *, devices=(0,), method='score_samples'
         return pool.map([('iforest_score', estimator, (X, method))])[0]
     finally:
         pool.close()
+
+
+def fit_ordered_rmse(estimator, X, y, *, permutation, devices=(0,), sample_weight=None):
+    """Partition pointwise feature groups; retain the complete ordered folds.
+
+    The original permutation, growing-prefix approximations and leaf updates
+    stay on the root. Full training and histogram state still fit one GPU.
+    """
+    from .ensemble import OrderedRMSE
+    if type(estimator) is not OrderedRMSE:
+        raise TypeError('requires mojolearn.OrderedRMSE')
+    if estimator.numeric_mode not in (None, 'identical'):
+        raise ValueError('parallel OrderedRMSE requires IDENTICAL numeric mode')
+    pool = DevicePool(devices, cooperative=True)
+    try:
+        result = pool.map([('ordered_rmse_fit', estimator,
+            (X, y, dict(permutation=permutation, sample_weight=sample_weight)))])[0]
+    finally:
+        pool.close()
+    estimator.__dict__ = result.__dict__.copy()
+    return estimator
+
+
+def fit_feature_freq(estimator, X, y, *, devices=(0,), sample_weight=None):
+    """Distribute both levels' greedy histograms after original CTR generation.
+
+    Candidate generation, source IDs, level transitions and leaf estimates
+    retain their original order. Root candidate/data/model state is replicated.
+    """
+    from .ensemble import ExperimentalTwoLevelFeatureFreq
+    if type(estimator) is not ExperimentalTwoLevelFeatureFreq:
+        raise TypeError('requires mojolearn.ExperimentalTwoLevelFeatureFreq')
+    if estimator.numeric_mode not in (None, 'identical'):
+        raise ValueError('parallel FeatureFreq requires IDENTICAL numeric mode')
+    pool = DevicePool(devices, cooperative=True)
+    try:
+        result = pool.map([('gbdt_fit', estimator,
+            (X, y, dict(sample_weight=sample_weight)))])[0]
+    finally:
+        pool.close()
+    estimator.__dict__ = result.__dict__.copy()
+    return estimator

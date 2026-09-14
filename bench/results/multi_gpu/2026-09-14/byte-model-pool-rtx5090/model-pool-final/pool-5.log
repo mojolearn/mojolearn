@@ -1,0 +1,149 @@
+36432 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1323c0000000, nodemask=1)
+{
+  "status": "PASS",
+  "checks": [
+    {
+      "layers": 1,
+      "logical_shards": 5,
+      "parameters": 10144,
+      "ownership": [
+        {
+          "device": 0,
+          "first": 0,
+          "count": 4096,
+          "parameter_bytes": 16384,
+          "moment_bytes": 32768,
+          "rollback_bytes": 49152,
+          "gradient_bytes": 16384
+        },
+        {
+          "device": 1,
+          "first": 4096,
+          "count": 1952,
+          "parameter_bytes": 7808,
+          "moment_bytes": 15616,
+          "rollback_bytes": 23424,
+          "gradient_bytes": 7808
+        },
+        {
+          "device": 0,
+          "first": 6048,
+          "count": 4096,
+          "parameter_bytes": 16384,
+          "moment_bytes": 32768,
+          "rollback_bytes": 49152,
+          "gradient_bytes": 16384
+        }
+      ],
+      "state_sha256": "4fcb4ee90927020fa90cbbc67caf9e10aab17c7bb2cec2c76678847e3d5b857a",
+      "gradient_sha256": "a49739d290b9f45b132f2aac0aa5ce2af3c39d298dba1f99387882073140a980",
+      "loss_sha256": "a5d28724a2db9f52edd83348510edc60a685475fefa39e0071aa9ad6b2112972",
+      "native_faults": false
+    },
+    {
+      "layers": 2,
+      "logical_shards": 5,
+      "parameters": 12096,
+      "ownership": [
+        {
+          "device": 0,
+          "first": 0,
+          "count": 4096,
+          "parameter_bytes": 16384,
+          "moment_bytes": 32768,
+          "rollback_bytes": 49152,
+          "gradient_bytes": 16384
+        },
+        {
+          "device": 0,
+          "first": 4096,
+          "count": 1952,
+          "parameter_bytes": 7808,
+          "moment_bytes": 15616,
+          "rollback_bytes": 23424,
+          "gradient_bytes": 7808
+        },
+        {
+          "device": 1,
+          "first": 6048,
+          "count": 1952,
+          "parameter_bytes": 7808,
+          "moment_bytes": 15616,
+          "rollback_bytes": 23424,
+          "gradient_bytes": 7808
+        },
+        {
+          "device": 0,
+          "first": 8000,
+          "count": 4096,
+          "parameter_bytes": 16384,
+          "moment_bytes": 32768,
+          "rollback_bytes": 49152,
+          "gradient_bytes": 16384
+        }
+      ],
+      "state_sha256": "09c3f9ea02011b1f75a9a46b9d6bc4ba18eb299356829675c19f38cb70200a39",
+      "gradient_sha256": "f66bd787ca70f8739895c4206d2dbf906dce3020607a2c7c0520a1e46fce1ff7",
+      "loss_sha256": "6568425388b363f9191e23fa2f996b193eece075732124f6f887c2d2107922ce",
+      "native_faults": false
+    },
+    {
+      "layers": 3,
+      "logical_shards": 5,
+      "parameters": 25680,
+      "ownership": [
+        {
+          "device": 0,
+          "first": 0,
+          "count": 6144,
+          "parameter_bytes": 24576,
+          "moment_bytes": 49152,
+          "rollback_bytes": 73728,
+          "gradient_bytes": 24576
+        },
+        {
+          "device": 0,
+          "first": 6144,
+          "count": 4464,
+          "parameter_bytes": 17856,
+          "moment_bytes": 35712,
+          "rollback_bytes": 53568,
+          "gradient_bytes": 17856
+        },
+        {
+          "device": 1,
+          "first": 10608,
+          "count": 4464,
+          "parameter_bytes": 17856,
+          "moment_bytes": 35712,
+          "rollback_bytes": 53568,
+          "gradient_bytes": 17856
+        },
+        {
+          "device": 1,
+          "first": 15072,
+          "count": 4464,
+          "parameter_bytes": 17856,
+          "moment_bytes": 35712,
+          "rollback_bytes": 53568,
+          "gradient_bytes": 17856
+        },
+        {
+          "device": 0,
+          "first": 19536,
+          "count": 6144,
+          "parameter_bytes": 24576,
+          "moment_bytes": 49152,
+          "rollback_bytes": 73728,
+          "gradient_bytes": 24576
+        }
+      ],
+      "state_sha256": "34ec414aeadd68bae64abeb085775426289a082558e72f048b74f1167a0f6cf4",
+      "gradient_sha256": "4b849baa1d4746205470789371088a48acdbf3004d4e7f72332a5c0506c3af8c",
+      "loss_sha256": "0c4ece72101cde4fef6c06fa09aeedacc1f6f237936d5fd18f8ebefd229cf4c6",
+      "native_faults": false
+    }
+  ],
+  "scope": "Two GPUs: layer-owned model and optimizer state, ordered replay, portable checkpoints and recovery. No throughput or beyond-one-GPU capacity claim."
+}
+

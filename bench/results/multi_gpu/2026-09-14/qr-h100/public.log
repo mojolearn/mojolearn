@@ -1,0 +1,19 @@
+41067 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x72d9c0000000, nodemask=1)
+41259 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x716b80000000, nodemask=1)
+PASS full PCA 17 7 False
+41312 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7ad500000000, nodemask=2)
+41312 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x52bf00000000, nodemask=1)
+PASS full PCA 17 7 True
+41365 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x536100000000, nodemask=1)
+PASS full PCA 259 7 False
+41419 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x78d240000000, nodemask=2)
+41419 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x738700000000, nodemask=1)
+PASS full PCA 259 7 True
+41473 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3064c0000000, nodemask=1)
+PASS full PCA 259 17 False
+41527 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x395a80000000, nodemask=2)
+PASS full PCA 259 17 True
+41581 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x79f7c0000000, nodemask=2)
+PASS full PCA 1025 65 False
+41637 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x594500000000, nodemask=2)
+PASS full PCA 1025 65 True

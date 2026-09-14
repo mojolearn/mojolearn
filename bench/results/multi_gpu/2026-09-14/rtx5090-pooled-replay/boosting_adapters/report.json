@@ -1,0 +1,26 @@
+{
+  "status": "PASS",
+  "checks": [
+    {
+      "estimator": "GradientBoostingClassifier",
+      "pointwise": false,
+      "sha256": "ab4cf209c5f9c8608c54213ec76ef5498c72ce5fa033251f6204354fb4438db5"
+    },
+    {
+      "estimator": "GradientBoostingClassifier",
+      "pointwise": true,
+      "sha256": "ab4cf209c5f9c8608c54213ec76ef5498c72ce5fa033251f6204354fb4438db5"
+    },
+    {
+      "estimator": "GradientBoostingRegressor",
+      "pointwise": false,
+      "sha256": "6607e2a30ad590a7cba4ab606d5cdae57fa88ae448494f3ba574626ecffb8e5d"
+    },
+    {
+      "estimator": "GradientBoostingRegressor",
+      "pointwise": true,
+      "sha256": "6607e2a30ad590a7cba4ab606d5cdae57fa88ae448494f3ba574626ecffb8e5d"
+    }
+  ],
+  "corpus_sha256": "2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8"
+}

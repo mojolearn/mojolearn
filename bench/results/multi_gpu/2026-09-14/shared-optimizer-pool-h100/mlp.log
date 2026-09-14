@@ -1,0 +1,57 @@
+45628 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x791200000000, nodemask=2)
+45806 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x79f0c0000000, nodemask=2)
+45805 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x580b00000000, nodemask=2)
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/parallel_training_check.py", line 150, in <module>
+    main()
+    ~~~~^^
+  File "/root/mojolearn/tools/parallel_training_check.py", line 66, in main
+    equal(multi.train_step(shards), replay.train_step(shards))
+          ~~~~~~~~~~~~~~~~^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/parallel_training.py", line 265, in train_step
+    results = self._pool.map(requests)
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 98, in map
+    raise error
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 93, in map
+    result.append(future.result())
+                  ~~~~~~~~~~~~~^^
+  File "/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/_base.py", line 447, in result
+    return self.__get_result()
+           ~~~~~~~~~~~~~~~~~^^
+  File "/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/_base.py", line 396, in __get_result
+    raise self._exception
+  File "/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/thread.py", line 86, in run
+    result = ctx.run(self.task)
+  File "/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/thread.py", line 73, in run
+    return fn(*args, **kwargs)
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 78, in _call
+    raise RuntimeError('GPU worker failed:\n' + value)
+RuntimeError: GPU worker failed:
+Traceback (most recent call last):
+  File "/root/mojolearn/python/mojolearn/_parallel_worker.py", line 210, in main
+    response = (True, execute(request))
+                      ~~~~~~~^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_parallel_worker.py", line 25, in execute
+    return model.loss_and_grads(*args)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_mlp_impl.py", line 397, in loss_and_grads
+    loss, _, grads, _ = self._gradient(x, y, self._opt.params, self._binding())
+                                                               ~~~~~~~~~~~~~^^
+  File "/root/mojolearn/python/mojolearn/_mlp_impl.py", line 315, in _binding
+    _linalg_impl.require_identical()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/root/mojolearn/python/mojolearn/_linalg_impl.py", line 215, in require_identical
+    loaded = numeric_mode()
+  File "/root/mojolearn/python/mojolearn/_linalg_impl.py", line 150, in numeric_mode
+    binding = _load()
+  File "/root/mojolearn/python/mojolearn/_linalg_impl.py", line 131, in _load
+    _binding_cache = _backend.binding(_MODULE_NAME)
+  File "/root/mojolearn/python/mojolearn/_backend.py", line 1425, in binding
+    module = getattr(selected, name)
+  File "/root/mojolearn/python/mojolearn/_backend.py", line 1293, in __getattr__
+    raise ImportError(
+    ...<5 lines>...
+    )
+ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_linalg.so, which is not built. Build it with
+    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_linalg.sh
+

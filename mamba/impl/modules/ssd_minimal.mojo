@@ -91,6 +91,7 @@ def pinned_mul(a: Float32, b: Float32) -> Float32:
 # Sabotage arms (see header).
 # ===========================================================================
 
+comptime SAB_2712_UNBOUNDED = is_defined["MOJOLEARN_MAMBA_2712_UNBOUNDED"]()
 comptime SAB_SEGSUM_DESCENDING = is_defined[
     "MOJOLEARN_MAMBA2_SABOTAGE_SEGSUM_DESCENDING"
 ]()
@@ -472,11 +473,22 @@ def m2_ydiag_kernel(
             # STRUCTURAL zero above the diagonal (DEVIATION 782): +0.0,
             # never a computed product -- the oracle's zero-filled M.
             m_ij = Float32(0.0)
-        var xv = ftz(
-            xd.unsafe_load(
-                (((bb * t_work) + (c * qv + jj)) * nh + hh) * M2_HEADDIM + p
+        # DEVIATION 2712 / 2713: X_d is [B, T, H, P] and this loop runs to
+        # Q, so rows c * Q + jj >= T are PAST the sequence. Their m_ij is the
+        # structural +0.0, and 0 x finite garbage is 0, which is why every
+        # CUDA and HIP run and every cold Metal run carried the same bits;
+        # 0 x NaN (Metal, warm process) is NaN, and the row past the last
+        # allocation is an unmapped page on the MI325X (the launch fault).
+        # A row past T contributes +0.0 x +0.0, the bits the record carries.
+        var xv = Float32(0.0)
+        # -D MOJOLEARN_MAMBA_2712_UNBOUNDED=1 restores the unbounded read: the
+        # poison gate's sabotage 1, which must fail (the band is NaN there).
+        if c * qv + jj < t_work or SAB_2712_UNBOUNDED:
+            xv = ftz(
+                xd.unsafe_load(
+                    (((bb * t_work) + (c * qv + jj)) * nh + hh) * M2_HEADDIM + p
+                )
             )
-        )
         comptime if SAB_FOLD_SERIAL_ZERO_SEED:
             # SABOTAGE: one serial chain across the whole k = Q, the fold
             # levels erased (the gemm lane's F5 alternative).

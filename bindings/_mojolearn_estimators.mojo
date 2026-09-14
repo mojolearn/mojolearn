@@ -627,6 +627,8 @@ def PyInit__mojolearn_estimators() abi("C") -> PythonObject:
         var m = PythonModuleBuilder("_mojolearn_estimators")
         m.def_function[dbscan_parallel_available_binding]("dbscan_parallel_available")
         m.def_function[gram_parallel_available_binding]("gram_parallel_available")
+        m.def_function[gram_parallel_available_binding]("gram_outputs_parallel_available")
+        m.def_function[gram_parallel_available_binding]("qr_parallel_available")
         m.def_function[glm_parallel_available_binding]("glm_parallel_available")
         m.def_function[estimators_vendor_binding]("estimators_vendor")
         m.def_function[estimators_numeric_mode_binding]("estimators_numeric_mode")

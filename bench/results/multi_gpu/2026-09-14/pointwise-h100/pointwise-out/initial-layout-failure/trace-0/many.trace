@@ -1,0 +1,22 @@
+# mojolearn train(): borders + SymmetricTree fit
+# format: mojolearn-identity-trace v1
+0	borders.counts	i32	73	3bcedbe8beb74da4
+1	borders.values	f32	73	116156e76b883631
+2	tree000.depth00.hist.BinaryFeatures	f32	146	86ac51cfa3a7c58b
+3	tree000.depth01.hist.BinaryFeatures	f32	292	feca651bf1db7474
+4	tree000.depth02.hist.BinaryFeatures	f32	584	ec73db195da5e174
+5	tree000.winners.ids	u32	6	81d23fd7003c2305
+6	tree000.winners.scores	f32	6	33c7d5cfd7c26c6d
+7	tree000.leaves.estimated	f32	2	144a97fb6ec0bb68
+8	tree001.depth00.hist.BinaryFeatures	f32	146	5a98804493bf0d64
+9	tree001.depth01.hist.BinaryFeatures	f32	292	2470c03751bf4421
+10	tree001.depth02.hist.BinaryFeatures	f32	584	e1c46beba28f1b61
+11	tree001.winners.ids	u32	6	81d23fd7003c2305
+12	tree001.winners.scores	f32	6	33c7d5cfd7c26c6d
+13	tree001.leaves.estimated	f32	2	2864b68f0979231c
+14	tree002.depth00.hist.BinaryFeatures	f32	146	8f3af9b8926eee5b
+15	tree002.depth01.hist.BinaryFeatures	f32	292	d091d001dadfb957
+16	tree002.depth02.hist.BinaryFeatures	f32	584	43d216af67a0b3d7
+17	tree002.winners.ids	u32	6	81d23fd7003c2305
+18	tree002.winners.scores	f32	6	33c7d5cfd7c26c6d
+19	tree002.leaves.estimated	f32	2	8dad175bbf5f654b

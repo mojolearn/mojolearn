@@ -202,6 +202,21 @@ _MODULES = (
     # NAME with the build command instead of a wrong-tier binary
     # answering under the right label (DEVIATION 869, the header above).
     "_mojolearn_transformer",
+    # Workstream D, 2026-09-14 (docs/lanes/BRIEF_claim_surface_census_2026-09-14.md
+    # section 4): four families that were built and identity-gated with no
+    # public door. Each is its own binding and build script, IDENTICAL only,
+    # listed here and in `_build_script` both so an unbuilt one raises BY
+    # NAME with the build command (DEVIATION 869). Compile-checked on one
+    # Apple M4 the day they were written; no box has run them through the
+    # Python door yet, and the identity_break lanes and three columns are
+    # owed (docs/lanes/LANE_BODY_*.py). The Cholesky door is inside
+    # `_mojolearn_gp` (bindings/build_gp.sh already links cholesky/); IVF is
+    # prepared (bindings/_mojolearn_ivf.mojo) and deliberately NOT listed
+    # until its NVIDIA and AMD legs run.
+    "_mojolearn_kernel_methods",
+    "_mojolearn_mixture",
+    "_mojolearn_hdbscan",
+    "_mojolearn_resample",
 )
 
 #: ONE RULE FOR TIERS (DEVIATION 2490, 2026-09-10): THE TREE LANES SHIP
@@ -892,16 +907,36 @@ def host_families_built():
 #:     all_finite_*, gather_*, argmax_rows_*, so _buffer._native and _labels
 #:     resolve on a CPU-only install) and the knn host inference lane's
 #:     (2026-09-14) knn_search, knn_classify, knn_regress over
-#:     core/knn_host_predict.mojo; kmeans_fit, rbc_knn_search and
-#:     radius_neighbors_* are absent.
+#:     core/knn_host_predict.mojo, and (workstream E batch 2, 2026-09-14)
+#:     the training entry kmeans_fit over cluster/host/kmeans_oracle.mojo;
+#:     rbc_knn_search and radius_neighbors_* are absent.
 #:   _mojolearn_linalg -> _mojolearn_linalg_host: gemm over
 #:     gemm/host/gemm_oracle.mojo::gemm_oracle, the profile's definition.
 #:   _mojolearn_estimators -> _mojolearn_estimators_host: kde_score_samples
-#:     over kde/host/kde_oracle.mojo, and the classical inference entries
+#:     over kde/host/kde_oracle.mojo, the classical inference entries
 #:     ols_predict, tsvd_transform, pca_transform, pca_whiten_transform,
 #:     pca_whiten_inverse_transform, qn_decision_function, qn_sigmoid over
-#:     core/classical_host_predict.mojo; dbscan_fit, pca_fit, tsvd_fit,
-#:     inverse_transform, ols_fit, ridge_fit, qn_fit are absent.
+#:     core/classical_host_predict.mojo, and (workstream E, 2026-09-14) the
+#:     training entries pca_fit and tsvd_fit over
+#:     decomposition/host/pca_oracle.mojo and ols_fit and ridge_fit over
+#:     glm/host/glm_oracle.mojo, dbscan_fit over
+#:     dbscan/host/dbscan_oracle.mojo and (batch 2) qn_fit over
+#:     glm/host/qn_oracle.mojo (the L-BFGS arm; softmax, l1 and
+#:     sample_weight refuse by name); pca_fit_full and inverse_transform
+#:     are absent.
+#:   _mojolearn_metrics -> _mojolearn_metrics_host (workstream E batch 2,
+#:     2026-09-14): accuracy_score, adjusted_rand_score, entropy,
+#:     mutual_info_score, homogeneity_score, completeness_score,
+#:     v_measure_score, r2_score and silhouette over
+#:     metrics/host/metrics_oracle.mojo, and spectral_fit_predict_dataset
+#:     over spectral/host/spectral_oracle.mojo (the spectral lane);
+#:     rand_score, the ranking and classification metrics, the regression
+#:     errors, kl_divergence, trustworthiness, spectral_fit_predict_graph
+#:     and the UMAP entries are absent.
+#:   _mojolearn_preprocessing -> _mojolearn_preprocessing_host (workstream
+#:     E batch 2, 2026-09-14): standard_fit, standard_transform, minmax_fit
+#:     and minmax_transform over preprocessing/host/scaler_oracle.mojo, the
+#:     whole GPU binding's surface.
 #:   _mojolearn_tsa -> _mojolearn_tsa_host: holtwinters_fit and
 #:     holtwinters_forecast over holtwinters/host/hw_oracle.mojo; kpss_test
 #:     and select_d (ARIMA's) are absent.
@@ -924,6 +959,15 @@ def host_families_built():
 #:     core/forest_host_predict.mojo; et_predict_gpu_parallel and the
 #:     resident forest_* entries are absent (inference_engine=
 #:     'parallel_groves' is a GPU engine).
+#:   _mojolearn_rf -> _mojolearn_rf_host (rf-clf, rf-reg; workstream E
+#:     batch 3, 2026-09-14): the eight rf_*_fit entries over
+#:     ensemble/host/rf_oracle.mojo::rf_host_fit (the device trainer
+#:     restated on the host), forest_export, forest_export_legacy,
+#:     forest_export_release, and rf_predict_proba and rf_predict_reg over
+#:     core/forest_host_predict.mojo; the class-weighted and shard fits, the
+#:     POISSON, GAMMA and INVERSE_GAUSSIAN criteria and the GPU engines
+#:     refuse by name. This is its own family, not the forest host binding
+#:     named above, because it exports the GPU binding's names.
 _HOST_MODULES = host_surface.routed_modules()
 
 #: The env switch the CPU identity gate sets to load a host binding built
@@ -1513,6 +1557,10 @@ def _build_script(name):
         "_mojolearn_gp": "build_gp.sh",
         "_mojolearn_mamba": "build_mamba.sh",
         "_mojolearn_transformer": "build_transformer.sh",
+        "_mojolearn_kernel_methods": "build_kernel_methods.sh",
+        "_mojolearn_mixture": "build_mixture.sh",
+        "_mojolearn_hdbscan": "build_hdbscan.sh",
+        "_mojolearn_resample": "build_resample.sh",
     }.get(name, "build" + name[len("_mojolearn"):] + ".sh")
 
 

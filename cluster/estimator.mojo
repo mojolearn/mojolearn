@@ -223,6 +223,7 @@ def kmeans_fit(
     init: Int = INIT_KMEANS_PLUS_PLUS,
     metric: Int = METRIC_L2_EXPANDED,
     requested_sum_scale: Float64 = 0.0,
+    oversampling_factor: Float64 = 2.0,
 ) raises -> KMeansFitResult:
     """Fit k-means on host-resident row-major data. See THE POLICY CHOICES.
 
@@ -236,6 +237,13 @@ def kmeans_fit(
     read and any pointer will do; otherwise it must equal `n_samples`.
     `requested_sum_scale` of 0.0 means compute it from the data; pass a value
     from `plan_sum_scale` to skip the host pass.
+
+    `oversampling_factor` is cuVS's (`kmeans.hpp`, default 2.0) and is an
+    ALGORITHM SWITCH, not a knob: `0.0` selects the classic sequential
+    k-means++ seeding, anything positive the scalable k-means|| one
+    (`KMeansParams.uses_scalable_plus_plus`, `detail/kmeans.cuh:910-915`).
+    Routed from Python since 2026-09-14 (workstream D); the default is
+    unchanged, so every recorded cell keeps its bits.
     """
     if n_samples < 1 or n_features < 1 or n_clusters < 1:
         raise Error(
@@ -345,6 +353,7 @@ def kmeans_fit(
     params.tol = tol
     params.seed = seed
     params.n_init = n_init
+    params.oversampling_factor = oversampling_factor
 
     var result = fit_predict(
         ctx,

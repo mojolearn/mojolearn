@@ -1,0 +1,4 @@
+poison gate: defines [-D MOJOLEARN_MAMBA_POISON=1 -D MOJOLEARN_MAMBA_POISON_OVERREAD=1 -D MOJOLEARN_MAMBA_POISON_NOBAND=1] set python/mojolearn/identical record bench/results/identity_break/2026-09-14_120-lanes-2711flip copy /tmp/mojolearn-poison.7OYM2T/python
+cells=36 stable=36 moved=0 refused=0
+poison column: 36 of 36 Mamba training rows IDENTICAL x4
+check-mamba-poison SABOTAGE 3 (control): the planted over-read is INVISIBLE without the band, as expected

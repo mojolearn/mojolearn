@@ -15,7 +15,9 @@ ROOT = Path(__file__).resolve().parents[1]
 #: tests are what keeps a later edit from quietly putting a lane back into
 #: all three.
 EVERY_TIER = 3
-IDENTICAL_ONLY = 13
+# 13 until workstream D (2026-09-14) added kernel_methods, mixture, hdbscan
+# and resample, all identical only.
+IDENTICAL_ONLY = 17
 
 #: The CPU training binding (DEVIATION 2680, 2026-09-12). It builds in the
 #: identical tier only, and it is named in tier_SCRIPTS but deliberately NOT in
@@ -23,6 +25,13 @@ IDENTICAL_ONLY = 13
 #: reason and for what goes wrong when a name-keyed list picks it up.
 HOST_NAME = '_mojolearn_byte_lm_host'
 HOST_SCRIPT = 'build_byte_lm_host.sh'
+#: Since 0.8.6 (the packaging lane) EVERY host family's binding builds in the
+#: identical pass, in the manifest's order (build_sets.sh reads
+#: `host_surface.py --wheel-families`); the byte LM's is first.
+HOST_FAMILIES = subprocess.run(
+    ['python3', str(ROOT / 'python/mojolearn/host_surface.py'), '--wheel-families'],
+    capture_output=True, text=True, check=True, timeout=30,
+).stdout.split()
 
 
 class OptionalBuildLayoutTests(unittest.TestCase):
@@ -37,7 +46,8 @@ class OptionalBuildLayoutTests(unittest.TestCase):
         program = ('set -eu\nEXT_NAMES=' + repr(names) + '\nSCRIPTS=' + repr(scripts)
                    + '\nIDENTICAL_ONLY_NAMES=' + repr(identical_only_names)
                    + '\nIDENTICAL_ONLY_SCRIPTS=' + repr(identical_only_scripts)
-                   + '\nPACKAGE_BYTE_LM=' + str(enabled) + '\n' + body
+                   + '\nPACKAGE_BYTE_LM=' + str(enabled)
+                   + '\nHOST_FAMILIES=' + repr(' '.join(HOST_FAMILIES)) + '\n' + body
                    + '\nfor tier in fast deterministic identical; do ' + function + ' "$tier"; done\n')
         result = subprocess.run(['bash', '-c', program], capture_output=True, text=True,
                                 timeout=5, check=True)
@@ -87,11 +97,13 @@ class OptionalBuildLayoutTests(unittest.TestCase):
         # gets it refused as a non-GPU vendor, so it carries named checks of
         # its own instead -- tools/test_build_sets_host_reductions.py is the
         # one that keeps the read-back REDUCTIONS excluding its row.
+        host_scripts = [f'build_{f}_host.sh' for f in HOST_FAMILIES]
+        self.assertEqual(host_scripts[0], HOST_SCRIPT)
         self.assertEqual([len(row) for row in scripts],
-                         [EVERY_TIER, EVERY_TIER, full + 1])
+                         [EVERY_TIER, EVERY_TIER, full + len(host_scripts)])
         self.assertNotIn(HOST_NAME, names[2])
-        self.assertEqual(scripts[2][-1], HOST_SCRIPT)
-        self.assertEqual(scripts[2][-2], 'build_byte_lm.sh')
+        self.assertEqual(scripts[2][full:], host_scripts)
+        self.assertEqual(scripts[2][full - 1], 'build_byte_lm.sh')
         for row in (names[0], names[1], scripts[0], scripts[1]):
             self.assertNotIn(HOST_NAME, row)
             self.assertNotIn(HOST_SCRIPT, row)
