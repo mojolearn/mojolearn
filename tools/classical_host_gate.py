@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
 """Classical host inference gate (the classical host inference lane,
 2026-09-13): LinearRegression, Ridge, TruncatedSVD, LogisticRegression and
-PCA predicted on a CPU from a model fitted on a GPU, compared bit for bit.
+PCA predicted on a CPU from a model fitted on a GPU, compared bit for bit;
+since the kde svc host lane (2026-09-14) also KernelDensity, SVC and the
+whitened PCA (`pca-whiten`, an identity_break lane of its own), and since the
+knn host inference lane (2026-09-14) NearestNeighbors (`kneighbors`: distances
+and indices), KNeighborsClassifier (`predict`, `predict_proba`) and
+KNeighborsRegressor (`predict`), lanes knn, knn-clf and knn-reg, through
+`mojolearn/host/_mojolearn_core_host.so`.
 
 Two halves over tools/identity_break.py's own nine fixtures, so the
 held-out rows here ARE the rows behind the `infer` column of the committed
@@ -53,7 +59,9 @@ from forest_host_gate import (  # noqa: E402
 PROBE_ROWS = 256
 #: lane -> (estimator, identity_break probe, extra surfaces). The identity
 #: probe is the tuple `identity_break` hashes for the `infer` column, in its
-#: order; the extras are hashed on their own and are not part of that cell.
+#: order (the knn lanes probe `Xh[:64]`, as `identity_break` does); the
+#: first element is digested under PROBE_NAMES, the extras are hashed on
+#: their own and are not part of that cell.
 LANES = {
     'ols': ('LinearRegression', lambda e, X: (e.predict(X),), {}),
     'ridge': ('Ridge', lambda e, X: (e.predict(X),), {}),
@@ -62,9 +70,28 @@ LANES = {
                  {'predict': lambda e, X: e.predict(X),
                   'decision_function': lambda e, X: e.decision_function(X)}),
     'pca': ('PCA', lambda e, X: (e.transform(X),), {}),
+    # The kde svc host lane (2026-09-14). kde's identity_break lane fits and
+    # probes the first four columns; svc's probe is the pair (decision,
+    # predict), the labels hashed as an extra too; pca-whiten adds the
+    # whitened inverse as an extra, the second half of the host pair.
+    'kde': ('KernelDensity', lambda e, X: (e.score_samples(X[:, :4]),), {}),
+    'svc': ('SVC', lambda e, X: (e.decision_function(X), e.predict(X)),
+            {'predict': lambda e, X: e.predict(X)}),
+    'pca-whiten': ('PCA', lambda e, X: (e.transform(X),),
+                   {'inverse_transform': lambda e, X: e.inverse_transform(e.transform(X))}),
+    'knn': ('NearestNeighbors', lambda e, X: e.kneighbors(X[:64]),
+            {'kneighbors_indices': lambda e, X: e.kneighbors(X[:64])[1]}),
+    'knn-clf': ('KNeighborsClassifier',
+                lambda e, X: (e.predict(X[:64]), e.predict_proba(X[:64])),
+                {'predict_proba': lambda e, X: e.predict_proba(X[:64])}),
+    'knn-reg': ('KNeighborsRegressor', lambda e, X: (e.predict(X[:64]),), {}),
 }
 PROBE_NAMES = {'ols': 'predict', 'ridge': 'predict', 'tsvd': 'transform',
-               'logistic': 'predict_proba', 'pca': 'transform'}
+               'logistic': 'predict_proba', 'pca': 'transform',
+               'kde': 'score_samples', 'svc': 'decision_function',
+               'pca-whiten': 'transform',
+               'knn': 'kneighbors_distances', 'knn-clf': 'predict',
+               'knn-reg': 'predict'}
 
 
 def identity_tool():
@@ -189,7 +216,7 @@ def do_check(args):
     try:
         ib = identity_tool()
         import mojolearn
-        from mojolearn._classical_host import binary_path, host_model
+        from mojolearn._classical_host import binary_path, binary_paths, host_model
     except Exception as exc:
         print(f'gate: import failed: {type(exc).__name__}: {exc}', file=sys.stderr)
         return 2
@@ -281,7 +308,7 @@ def do_check(args):
         verdict = 'IDENTICAL' if verdict_ok else 'MISMATCH'
         code = 0 if verdict_ok else 1
     report = dict(verdict=verdict, expect_mismatch=bool(args.expect_mismatch), exit=code,
-                  binary=binary_path(), vendor=mojolearn.vendor(), host=host_info(),
+                  binary=binary_path(), binaries=binary_paths(), vendor=mojolearn.vendor(), host=host_info(),
                   gpu_columns=[label for label, _ in columns], commit=git_commit(),
                   checked_at=time.strftime('%Y-%m-%dT%H:%M:%S%z'), fixtures=results)
     if args.report:

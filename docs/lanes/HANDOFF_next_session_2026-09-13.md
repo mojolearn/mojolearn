@@ -78,12 +78,24 @@ served by the phase 1 solver host binding. DONE 2026-09-14: the NVIDIA (H100, sm
 `.../2026-09-14-amd-mi300x/`), each checked on the Mac's CPU path IDENTICAL against the three
 2026-09-14 GPU columns (45 fixtures each), and the saved model bytes of every lane are the same
 file on all three vendors. OWED: a `cpu-identity-gate.yml` step running `check` on the seven
-runners (commands in the lane commit a0dc36f13). Still not started: kde, svc, knn, iforest, and pca whiten=True.
+runners (commands in the lane commit a0dc36f13). DONE 2026-09-14 on lane/kde-svc-host-inference: kde
+and svc (phase 1 already served their inference IDENTICAL x4; the lane added save/load, host
+subclasses and gate lanes) and pca whiten=True (the whitened pair restated in the host binding,
+a `pca-whiten` identity_break lane), Apple M4 record and check IDENTICAL on 27 fixtures, sabotage
+caught (`bench/results/classical_host/2026-09-14-apple-m4-kde-svc/`). DONE 2026-09-14 on
+lane/knn-host-inference: knn, knn-clf and knn-reg (`knn_search`, `knn_classify`, `knn_regress` in
+`bindings/_mojolearn_core_host.mojo` over `core/knn_host_predict.mojo`, save/load on the three
+classes), Apple M4 record and host check IDENTICAL against the three 2026-09-14 GPU infer columns
+on all 27 fixtures, sabotage caught (`bench/results/classical_host/2026-09-14-apple-m4-knn/`).
+OWED for both: NVIDIA and AMD `record` runs (the classical leg body with `--lanes
+kde,svc,pca-whiten` and `--lanes knn,knn-clf,knn-reg`) and `identity_break --lanes pca-whiten`
+on the three GPUs. Still not started: iforest.
 
 Original costing: Brief section "Classical lanes: what CPU inference needs" in
 `docs/lanes/BRIEF_forest_host_inference_2026-09-13.md`: ols/ridge 4-6 h, tsvd 3-4,
 lasso/elasticnet 3-4, logistic 4-6, pca 4-6, kde 8-12, svc 10-16, knn 12-20, iforest 20-30
-(no fitted model exists; it refits every call). None of the 13 has save/load. Also owed on the
+(no fitted model exists; it refits every call). None of the 13 had save/load when it was
+costed; the five merged lanes and the three knn classes have one now. Also owed on the
 forest lane: `transpose_f32` in `bindings/host_helpers.mojo`.
 
 ### 4. Small owed items

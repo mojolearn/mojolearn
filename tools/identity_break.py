@@ -42,10 +42,21 @@ disagreeing with itself and a DIVERGENT column is two vendors disagreeing.
             whose estimator has no out-of-sample method records
             `n/a:<reason>` and never a hash of training-row output.
             transductive means the labels belong to the fitted rows only
-            (DBSCAN, agglomerative, spectral); no-predict means KMeans has
-            no predict or transform; forecast means Holt-Winters and ARIMA
-            take no new rows; function means the lane is not an estimator
-            (linalg, metrics).
+            (DBSCAN, agglomerative, spectral: `fit` and `fit_predict`, and
+            SpectralClustering.predict raises NotImplementedError by
+            design); no-predict means KMeans has `fit` and `fit_predict`
+            only, no predict or transform (`cluster.py`, verified
+            2026-09-14); function means the lane is not an estimator
+            (linalg, metrics). THE FORECASTERS (holtwinters, arima; the
+            infer probes of 2026-09-14) take no new rows, so their held-out
+            axis is TIME: the infer column hashes the forecast beyond the
+            fitted series at FORECAST_HORIZON steps, the fitted length, a
+            horizon the train column (24 steps) does not hash, through
+            every public out-of-sample entry (`forecast`, and ARIMA's
+            `predict(n_obs, n_obs + h)`, which its docstring says is the
+            same answer; the probe holds it to that). Until then those
+            two lanes recorded `n/a:forecast`; a JSON that predates the
+            probe reads ONE-COLUMN against a new one, never DIVERGENT.
     model   sha256 of the bytes `save(path)` wrote, for every estimator that
             has `save` and `load` (the random forests, the extra trees and
             every GradientBoosting lane). It supports ARTIFACT identity, the
@@ -288,6 +299,12 @@ N, D = 20000, 16
 #: the seed of the held-out draw; the training draw is seed 0
 HELDOUT_SEED = 1
 
+#: the forecasters' held-out axis is time: steps beyond the fitted series
+#: in the infer column, equal to the fitted length (the two lanes fit 512
+#: observations per series), as the held-out row counts mirror the
+#: training row counts elsewhere. The train column keeps its 24 steps.
+FORECAST_HORIZON = 512
+
 
 def _hashed_uniform(n, d, seed):
     """Values from sha256 of the index, so no RNG-family assumption and no
@@ -515,6 +532,16 @@ def _(ml, X, yc, yr, Xh=None):
                 m, lambda e: (e.transform(Xh[:256]),))
 
 
+@lane("pca-whiten")
+def _(ml, X, yc, yr, Xh=None):
+    # The whitened transform (the kde svc host lane, 2026-09-14): the same
+    # fit as `pca` with `whiten=True`, so the whiten scale kernel and its
+    # host restatement have a cell of their own on every column.
+    m = ml.PCA(n_components=4, whiten=True).fit(X)
+    return _fit(dict(components=_h(m.components_), variance=_h(m.explained_variance_), transform=_h(m.transform(X[:256]))),
+                m, lambda e: (e.transform(Xh[:256]),))
+
+
 @lane("tsvd")
 def _(ml, X, yc, yr, Xh=None):
     m = ml.TruncatedSVD(n_components=4).fit(X)
@@ -583,8 +610,28 @@ def _(ml, X, yc, yr, Xh=None):
     series = (np.cumsum(X[:512, 0]) + 50.0).astype(np.float32)
     series = series - series.min() + 1.0     # positive, for the multiplicative path
     m = ml.ExponentialSmoothing(series, seasonal="additive", seasonal_periods=12).fit()
-    # the forecast is already the train column; there are no new rows to feed
-    return _fit(dict(forecast=_h(m.forecast(24))), m, "n/a:forecast")
+    # ExponentialSmoothing takes endog in the constructor and has no
+    # predict(X): the only out-of-sample output is the forecast, and its
+    # held-out axis is the horizon. The train column keeps forecast(24) as
+    # it has always been; the infer column (2026-09-14) asks for
+    # FORECAST_HORIZON steps through both return paths, the flat
+    # single-series buffer and the `index=0` strided read.
+    return _fit(dict(forecast=_h(m.forecast(24))), m,
+                lambda e: _same_bytes("forecast(h)", e.forecast(FORECAST_HORIZON),
+                                      "forecast(h, index=0)", e.forecast(FORECAST_HORIZON, index=0)))
+
+
+def _same_bytes(name_a, a, name_b, b):
+    """The forecasters' infer probe: two public entries the estimator
+    documents as the same answer. Returns both for hashing when their bytes
+    agree; raises, naming the pair and the byte count, when they do not, so
+    the infer column reads REFUSED with the message instead of a hash that
+    hides which of the two moved."""
+    ba, bb = np.asarray(a).ravel().tobytes(), np.asarray(b).ravel().tobytes()
+    if ba != bb:
+        n = sum(x != y for x, y in zip(ba, bb)) + abs(len(ba) - len(bb))
+        raise ValueError(f"{name_a} and {name_b} differ: {n} bytes of {max(len(ba), len(bb))}")
+    return a, b
 
 
 @lane("gemm-pinned")
@@ -748,12 +795,19 @@ def _(ml, X, yc, yr, Xh=None):
 def _(ml, X, yc, yr, Xh=None):
     """Four series of 512 observations, the first four columns of the
     fixture, transposed. ARIMA's docstring says the three-vendor card
-    covers the filter and the fit is one vendor. Like holtwinters there are no new
-    rows to feed, the forecast is the train column."""
+    covers the filter and the fit is one vendor. Like holtwinters there
+    are no new rows to feed: the held-out axis is the horizon. The train
+    column keeps forecast(24); the infer column (2026-09-14) asks for
+    FORECAST_HORIZON steps through both public out-of-sample entries,
+    `forecast(h)` and `predict(n_obs, n_obs + h)`, which `_arima_impl.py`
+    says are the same answer; `_same_bytes` holds it to that, so a byte
+    between them reads REFUSED with its name, never a quiet hash."""
     series = np.ascontiguousarray(X[:512, :4].T)
     m = ml.ARIMA(order=(1, 0, 0)).fit(series)
     return _fit(dict(ar=_h(m.ar_), mu=_h(m.mu_), sigma2=_h(m.sigma2_), forecast=_h(m.forecast(24))),
-                m, "n/a:forecast")
+                m, lambda e: _same_bytes("forecast(h)", e.forecast(FORECAST_HORIZON),
+                                         "predict(n_obs, n_obs + h)",
+                                         e.predict(e.n_obs_, e.n_obs_ + FORECAST_HORIZON)))
 
 
 @lane("gp")
@@ -995,7 +1049,8 @@ def _save_load(est):
     """The (save method, load classmethod, suffix) an estimator offers.
     `save`/`load` on the forests, the boosting lanes and, since the
     classical host inference lane (2026-09-13 evening), ols, ridge, tsvd,
-    logistic and pca, written to `.npz` as always, or
+    logistic and pca, plus kde and svc since the kde svc host lane
+    (2026-09-14), written to `.npz` as always, or
     `save_checkpoint`/`from_checkpoint` on the trainers and SambaStack
     (2026-09-13), a JSON envelope. None where it has neither."""
     if est is None:

@@ -239,18 +239,35 @@ Mamba and Transformer APIs, including UMAP transform and CSR support. Newer
 Python API exposure does not inherit every numerical certificate. See
 [CHANGELOG.md](CHANGELOG.md) and the
 [support matrix](SUPPORT_MATRIX.md) for exact artifacts and limits.
-There is no CPU fallback for the estimators. The byte LM is the exception, and
-it has two CPU surfaces, both needing no GPU at all. `LanguageModelInference`
-runs the forward pass; see
-[docs/BYTE_LM_CPU_INFERENCE.md](docs/BYTE_LM_CPU_INFERENCE.md) for the CPUs it
-is certified on. `LanguageModelHostTrainer` runs one training step, forward,
-backward and the AdamW update, and reproduces the recorded GPU bytes of the
-retained three-vendor capture for all 128 of its steps, the gradient and the
-loss and the post-step parameters and both Adam moments alike; see
-[docs/BYTE_LM_CPU_TRAINING.md](docs/BYTE_LM_CPU_TRAINING.md), which also states
-what it does not claim. Both are one model profile at one batch shape, and
-identity is claimed per shape because the weight gradients contract over the
-token count.
+There is no silent CPU fallback. Every estimator trains on a GPU by default,
+and the library refuses rather than running a fit elsewhere. Beside that, a
+CPU-only binding exists for some lanes, and each is held to the same
+bit-identity gate against the Apple, NVIDIA and AMD columns as the GPU builds,
+with a sabotage build required to fail it. Inference on a CPU from a saved
+model: random forests, Extra Trees and the four gradient boosting variants
+(24 three-GPU recordings reproduced on seven CPUs, workflow run 34782452584,
+[fixtures](bench/results/forest_host/README.md)); linear regression, ridge,
+truncated SVD, logistic regression and PCA without whitening (Apple M4,
+NVIDIA H100 and AMD MI300X recordings, 45 fixtures each, reproduced on the
+CPU path, [fixtures](bench/results/classical_host/)); and lasso, elasticnet,
+kernel density and SVC through the training bindings next. Training on a CPU:
+pinned GEMM, kernel density, Holt-Winters, lasso, elasticnet and SVC, every
+cell of those lanes in the 46-lane harness identical to the three GPU columns
+on seven CPUs ([gate](.github/workflows/cpu-identity-gate.yml)). The byte LM
+has two CPU surfaces of its own. `LanguageModelInference` runs the forward
+pass; see [docs/BYTE_LM_CPU_INFERENCE.md](docs/BYTE_LM_CPU_INFERENCE.md) for
+the CPUs it is certified on. `LanguageModelHostTrainer` runs one training
+step, forward, backward and the AdamW update, and reproduces the recorded GPU
+bytes of the retained three-vendor capture for all 128 of its steps, the
+gradient and the loss and the post-step parameters and both Adam moments
+alike; see [docs/BYTE_LM_CPU_TRAINING.md](docs/BYTE_LM_CPU_TRAINING.md), which
+also states what it does not claim. Both are one model profile at one batch
+shape, and identity is claimed per shape because the weight gradients contract
+over the token count. Of all these, only the byte LM host binding ships in the
+wheels; the others build from source with `bindings/build_*_host.sh`. Every
+lane not named here has no CPU path at all: k-means, k-NN, DBSCAN, isolation
+forest, agglomerative and spectral clustering, UMAP, the Gaussian process,
+ARIMA, the neural blocks, and training for the forests and gradient boosting.
 Run the diagnostic command before depending on a new machine:
 
 ```sh
@@ -453,10 +470,12 @@ under `bench/results/` and `archive/` are evidence, not current guidance.
 
 What will get in your way first:
 
-- GPU hardware is required for every estimator and for training. There is no
-  CPU fallback for them, and the library refuses rather than silently running
-  elsewhere. The one exception is byte LM inference, which runs on certified
-  CPUs through its own explicitly named class.
+- GPU hardware is required to train every estimator, except the six lanes
+  and the byte LM named under "There is no silent CPU fallback" above. The
+  library refuses rather than silently running elsewhere. Inference without a
+  GPU exists only for the forests, gradient boosting, five classical
+  estimators and the byte LM, each through an explicitly named host class or
+  binding that needs its own build.
 - mojolearn is not a drop-in replacement for scikit-learn, CatBoost or cuML.
   Parameter coverage is intentionally smaller than any of them, and
   unsupported parameters raise.

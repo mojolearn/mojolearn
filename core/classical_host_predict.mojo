@@ -48,13 +48,42 @@ kernel it mirrors and keeps its statements in its order:
                            not restated.
   `host_tsvd_transform`    `tsvd_transform_host`, `decomposition/estimator.mojo:
                            265-281`: one `gemm_nt`.
+  `host_whiten_scalar`     `whiten_scalar`, `decomposition/impl/linalg/detail/
+                           pca.mojo:366-375`: `Float32(sqrt(Float64(n_fit_rows
+                           - 1)))` forward, its Float64 reciprocal inverse; the
+                           Float64 sqrt is correctly rounded on every host.
+  `host_whiten_components` `whiten_scale_kernel` through `whiten_components`
+                           (`pca.mojo:377-430`), one cell per statement: `v =
+                           ftz(identical_mul(src, scalar))`, kept when the
+                           component's singular value is below
+                           WHITEN_SKIP_ZERO, else `ftz(identical_div(v, s))`
+                           forward and `ftz(identical_mul(v, s))` inverse.
+  `host_pca_whiten_transform`
+                           `pca_whiten_transform_host`, `decomposition/
+                           estimator.mojo:339-396` (the kde svc host lane,
+                           2026-09-14): whiten the components forward, then
+                           `pca_transform` over the whitened copy.
+  `host_pca_whiten_inverse_transform`
+                           `pca_whiten_inverse_transform_host`, `:399-455`:
+                           whiten inverse, `transpose_kernel` (data movement,
+                           restated as an index swap), `gemm_nt(out, scores,
+                           components_t, n_rows, n_features, n_components)`,
+                           then `shift_columns_kernel` at sign +1.0.
 
 The restatement is a prediction until measured. tools/classical_host_gate.py
 is the measurement, and the brief records what it has shown.
 """
 from std.sys.compile import is_defined
 
-from checks.numerics import ftz, identical_exp64, identical_mul_add
+from std.math import sqrt
+
+from checks.numerics import (
+    ftz,
+    identical_div,
+    identical_exp64,
+    identical_mul,
+    identical_mul_add,
+)
 
 
 #: The gate's negative control, the phase 1 host bindings' define
@@ -197,3 +226,89 @@ def host_tsvd_transform(
     """`tsvd_transform_host` (`decomposition/estimator.mojo:265-281`): one
     `gemm_nt(out, x, components, n_rows, n_components, n_features)`."""
     return host_gemm_nt(x, components, n_rows, n_components, n_cols)
+
+
+#: `decomposition/impl/linalg/detail/pca.mojo::WHITEN_SKIP_ZERO`, cuML's
+#: skip-zero threshold, spelled a second time so this file imports nothing
+#: from a module that imports `max.gpu`.
+comptime HOST_WHITEN_SKIP_ZERO = 1.0e-10
+
+
+def host_whiten_scalar(n_fit_rows: Int, inverse: Bool) -> Float32:
+    """`whiten_scalar` (`pca.mojo:366-375`): `sqrt(n_fit_rows - 1)` forward,
+    `1 / sqrt(n_fit_rows - 1)` inverse, both in Float64 and rounded once to
+    Float32; 0.0 when the guard upstream wrote fires."""
+    var d = Float64(n_fit_rows - 1)
+    if d <= 0.0:
+        return Float32(0.0)
+    var r = sqrt(d)
+    if inverse:
+        return Float32(1.0 / r)
+    return Float32(r)
+
+
+def host_whiten_components(
+    components: List[Float32], singular: List[Float32],
+    n_components: Int, n_cols: Int, n_fit_rows: Int, inverse: Bool,
+) -> List[Float32]:
+    """`whiten_components` (`pca.mojo:400-430`) launching `whiten_scale_kernel`
+    (`:377-397`) over `n_components * n_cols` cells, `c = i // n_cols`:
+
+        var s = singular[c]
+        var v = ftz(identical_mul(src[i], scalar))
+        if abs(s) < WHITEN_SKIP_ZERO:  dst[i] = v
+        elif divide:                   dst[i] = ftz(identical_div(v, s))
+        else:                          dst[i] = ftz(identical_mul(v, s))
+
+    `divide` is 1 forward and 0 inverse, as `whiten_components` sets it."""
+    var scalar = host_whiten_scalar(n_fit_rows, inverse)
+    var divide = not inverse
+    var cells = n_components * n_cols
+    var dst = List[Float32](length=cells, fill=Float32(0.0))
+    for i in range(cells):
+        var c = i // n_cols
+        var s = singular[c]
+        var v = ftz(identical_mul(components[i], scalar))
+        if abs(s) < Float32(HOST_WHITEN_SKIP_ZERO):
+            dst[i] = v
+        elif divide:
+            dst[i] = ftz(identical_div(v, s))
+        else:
+            dst[i] = ftz(identical_mul(v, s))
+    return dst^
+
+
+def host_pca_whiten_transform(
+    x: List[Float32], mu: List[Float32], components: List[Float32],
+    singular: List[Float32], n_rows: Int, n_cols: Int, n_components: Int,
+    n_fit_rows: Int,
+) -> List[Float32]:
+    """`pca_whiten_transform_host` (`decomposition/estimator.mojo:339-396`):
+    `whiten_components(..., inverse=False)` into a copy, then `pca_transform`
+    over that copy, the caller's components untouched."""
+    var components_w = host_whiten_components(
+        components, singular, n_components, n_cols, n_fit_rows, False
+    )
+    return host_pca_transform(x, mu, components_w, n_rows, n_cols, n_components)
+
+
+def host_pca_whiten_inverse_transform(
+    scores: List[Float32], components: List[Float32], singular: List[Float32],
+    mu: List[Float32], n_rows: Int, n_cols: Int, n_components: Int,
+    n_fit_rows: Int,
+) -> List[Float32]:
+    """`pca_whiten_inverse_transform_host` (`decomposition/estimator.mojo:
+    399-455`): `whiten_components(..., inverse=True)`, `transpose_kernel`
+    (`components_t[f * n_components + c] = components_w[c * n_cols + f]`, a
+    copy and no arithmetic), `gemm_nt(out, scores, components_t, n_rows,
+    n_features, n_components)`, then `shift_columns_kernel` with sign +1.0
+    over the product, which `host_center` spells."""
+    var components_w = host_whiten_components(
+        components, singular, n_components, n_cols, n_fit_rows, True
+    )
+    var components_t = List[Float32](length=n_cols * n_components, fill=Float32(0.0))
+    for c in range(n_components):
+        for f in range(n_cols):
+            components_t[f * n_components + c] = components_w[c * n_cols + f]
+    var product = host_gemm_nt(scores, components_t, n_rows, n_cols, n_components)
+    return host_center(product, mu, n_rows, n_cols, Float32(1.0))
