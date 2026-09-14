@@ -5,8 +5,8 @@
     "_mojolearn_svm": "/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a7f9e8ee660892f3f/python/mojolearn/host/_mojolearn_svm_host.so"
   },
   "binary": "/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a7f9e8ee660892f3f/python/mojolearn/host/_mojolearn_estimators_host.so",
-  "checked_at": "2026-09-14T07:03:33-0400",
-  "commit": "bba81880d1496870320c1275a47abe98aeeb6d1c",
+  "checked_at": "2026-09-14T07:07:26-0400",
+  "commit": "7676100d5c9bb41e1119157712a95c25bfee8f4b",
   "exit": 0,
   "expect_mismatch": false,
   "fixtures": [
@@ -72,7 +72,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.003112
+      "seconds": 0.002725
     },
     {
       "cases": [
@@ -136,7 +136,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.000961
+      "seconds": 0.000798
     },
     {
       "cases": [
@@ -200,7 +200,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.001207
+      "seconds": 0.000649
     },
     {
       "cases": [
@@ -264,7 +264,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.001072
+      "seconds": 0.000825
     },
     {
       "cases": [
@@ -328,7 +328,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.001009
+      "seconds": 0.001281
     },
     {
       "cases": [
@@ -392,7 +392,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.000873
+      "seconds": 0.000673
     },
     {
       "cases": [
@@ -456,7 +456,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.000886
+      "seconds": 0.000632
     },
     {
       "cases": [
@@ -520,7 +520,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.000826
+      "seconds": 0.000697
     },
     {
       "cases": [
@@ -584,7 +584,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.00088
+      "seconds": 0.000838
     }
   ],
   "gpu_columns": [],

@@ -5,8 +5,10 @@ fitted on the Metal path and predicted through the CPU binding
 `python/mojolearn/host/_mojolearn_estimators_host.so`, compared bit for bit
 over `tools/identity_break.py`'s nine fixtures. Box: one Apple M4 (macOS
 26.5.2, arm64), the same machine for both halves; commit bba81880d for the
-recordings (the host binding was built from the working tree of the commit
-that adds this directory).
+recordings; both check reports were taken with the host binding rebuilt from
+the tree merged with origin/main at 7676100d5 (the sabotage set built the
+same way into a scratch directory), after an earlier pair on the pre-merge
+build gave the same 36 EQUAL and the same 27 DIFFER / 9 EQUAL.
 
     tools/classical_host_gate.py record  bench/results/classical_host/2026-09-14-apple-m4-multiclass --lanes logistic-multiclass
     tools/classical_host_gate.py check   bench/results/classical_host/2026-09-14-apple-m4-multiclass --report check_apple-m4_host.json

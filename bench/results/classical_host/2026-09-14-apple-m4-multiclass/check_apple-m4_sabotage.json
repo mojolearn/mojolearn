@@ -5,8 +5,8 @@
     "_mojolearn_svm": "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/efc56304-19ac-4d4f-b875-6a7805b7bb05/scratchpad/sabotage_host/_mojolearn_svm_host.so"
   },
   "binary": "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/efc56304-19ac-4d4f-b875-6a7805b7bb05/scratchpad/sabotage_host/_mojolearn_estimators_host.so",
-  "checked_at": "2026-09-14T07:04:10-0400",
-  "commit": "bba81880d1496870320c1275a47abe98aeeb6d1c",
+  "checked_at": "2026-09-14T07:08:04-0400",
+  "commit": "7676100d5c9bb41e1119157712a95c25bfee8f4b",
   "exit": 0,
   "expect_mismatch": true,
   "fixtures": [
@@ -72,7 +72,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.009163
+      "seconds": 0.004757
     },
     {
       "cases": [
@@ -136,7 +136,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.000994
+      "seconds": 0.001198
     },
     {
       "cases": [
@@ -200,7 +200,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.000853
+      "seconds": 0.00095
     },
     {
       "cases": [
@@ -264,7 +264,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.000843
+      "seconds": 0.000983
     },
     {
       "cases": [
@@ -328,7 +328,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.000908
+      "seconds": 0.001142
     },
     {
       "cases": [
@@ -392,7 +392,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.000882
+      "seconds": 0.001063
     },
     {
       "cases": [
@@ -456,7 +456,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.00163
+      "seconds": 0.000952
     },
     {
       "cases": [
@@ -520,7 +520,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.001809
+      "seconds": 0.000937
     },
     {
       "cases": [
@@ -584,7 +584,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.000917
+      "seconds": 0.000893
     }
   ],
   "gpu_columns": [],
