@@ -102,6 +102,24 @@ IDENTICAL_ONLY_NAMES="_mojolearn _mojolearn_estimators _mojolearn_svm _mojolearn
 PACKAGE_BYTE_LM=${MOJOLEARN_PACKAGE_BYTE_LM:-0}
 case "$PACKAGE_BYTE_LM" in 0|1) ;; *) echo 'MOJOLEARN_PACKAGE_BYTE_LM must be 0 or 1' >&2; exit 2 ;; esac
 unset MOJOLEARN_BYTE_LM_OUTDIR
+# THE HOST (CPU) BINDINGS, one per family, under python/mojolearn/host/.
+# Since 0.8.6 (the packaging lane, 2026-09-14) every host family the manifest
+# declares ships in the wheel, and WHICH families is READ from
+# python/mojolearn/host_surface.py rather than written here;
+# packaging/check_ext_lists.py fails this file if it ever carries a host list
+# of its own. Until 0.8.5 the byte LM's was the only one, named by hand in
+# four places. They build with the release profile (PACKAGE_BYTE_LM=1), in
+# the identical tier alone, with no accelerator target, pinned to the CPU
+# column, and each is read back below.
+HOST_FAMILIES=$(python3 python/mojolearn/host_surface.py --wheel-families) || exit 2
+HOST_NAMES=$(python3 python/mojolearn/host_surface.py --wheel-bindings) || exit 2
+[ -n "$HOST_FAMILIES" ] && [ -n "$HOST_NAMES" ] || { echo 'the manifest names no wheel host family' >&2; exit 2; }
+if [ "$PACKAGE_BYTE_LM" = 1 ]; then
+    # bindings/build_host_family.sh refuses an existing output rather than
+    # overwriting it, so a host .so left by an earlier local build fails the
+    # build instead of being reused; remove them first, as build_sets.sh does.
+    for n in $HOST_NAMES; do rm -f "$PKG/host/$n.so"; done
+fi
 
 # THE PER-SCRIPT GATES ARE OFF HERE, AND THE REASON IS A CLEAN CHECKOUT.
 # Each bindings/build_*.sh ends by copying python/mojolearn/ aside and
@@ -189,10 +207,12 @@ build_pairs() {
         for script in $BUILD_SCRIPTS; do printf '%s %s\n' "$mode" "$script"; done
         for script in $IDENTICAL_ONLY_SCRIPTS; do printf '%s %s\n' "$mode" "$script"; done
         if [ "$PACKAGE_BYTE_LM" = 1 ]; then printf '%s %s\n' "$mode" build_byte_lm.sh; fi
-        # The CPU training binding. Identical only, and built with no
-        # accelerator target, which is why it is named here rather than added
-        # to a tier list: it is not a tier member and not a vendor member.
-        if [ "$PACKAGE_BYTE_LM" = 1 ]; then printf '%s %s\n' "$mode" build_byte_lm_host.sh; fi
+        # The host bindings. Identical only, and built with no accelerator
+        # target, which is why they are named here rather than added to a
+        # tier list: none is a tier member or a vendor member.
+        if [ "$PACKAGE_BYTE_LM" = 1 ]; then
+            for f in $HOST_FAMILIES; do printf '%s %s\n' "$mode" "build_${f}_host.sh"; done
+        fi
     done
     for mode in $MODES; do
         [ "$mode" = identical ] && continue
@@ -204,25 +224,28 @@ build_pairs | xargs -P "$BUILD_JOBS" -n 2 sh -c '
     logs=$1; mode=$2; script=$3; log="$logs/${mode}_${script%.sh}.log"
     # The byte LM build keeps its own gate on, as it always did here.
     skip=1; [ "$script" = build_byte_lm.sh ] && skip=
-    # The host build must never see an accelerator target: it has no device
+    # A host build must never see an accelerator target: it has no device
     # code, and MOJOLEARN_GPU_ARCHS reaching it is the one way it can be
-    # silently wrong. Its own output directory is unset for the same reason
-    # the byte LM build unsets it, so it lands in the package tree.
-    # It compiles the CPU column only and refuses any other
-    # MOJOLEARN_TARGET_COLUMN by name, so the column is pinned to cpu here
-    # (packaging/linux/build_sets.sh does the same; the Linux legs export the
-    # GPU column to every build).
-    if [ "$script" = build_byte_lm_host.sh ]; then
+    # silently wrong. Both output directory variables (the per-family one and
+    # the shared MOJOLEARN_HOST_OUTDIR) are unset for the same reason the byte
+    # LM build unsets its own (NO APOSTROPHE IN THIS BLOCK: it is one
+    # single-quoted sh -c string), so it lands in the package tree. It compiles the CPU
+    # column only and refuses any other MOJOLEARN_TARGET_COLUMN by name, so
+    # the column is pinned to cpu here (packaging/linux/build_sets.sh does the
+    # same; the Linux legs export the GPU column to every build).
+    case "$script" in build_*_host.sh)
+        fam="${script#build_}"; fam="${fam%_host.sh}"
+        FAM=$(printf "%s" "$fam" | tr "a-z" "A-Z")
         if MOJOLEARN_NUMERIC_MODE=$mode MOJOLEARN_SKIP_BUILD_GATE=$skip MOJOLEARN_TARGET_COLUMN=cpu \
-             env -u MOJOLEARN_GPU_ARCHS -u MOJOLEARN_BYTE_LM_HOST_OUTDIR \
+             env -u MOJOLEARN_GPU_ARCHS -u MOJOLEARN_HOST_OUTDIR -u "MOJOLEARN_${FAM}_HOST_OUTDIR" \
              bash "./bindings/$script" > "$log" 2>&1; then
             { echo "== $script ($mode) OK"; cat "$log"; }
         else
             { echo "== $script ($mode) FAILED"; cat "$log"; }
             exit 1
         fi
-        exit 0
-    fi
+        exit 0 ;;
+    esac
     if MOJOLEARN_NUMERIC_MODE=$mode MOJOLEARN_SKIP_BUILD_GATE=$skip bash "./bindings/$script" > "$log" 2>&1; then
         { echo "== $script ($mode) OK"; cat "$log"; }
     else
@@ -254,24 +277,33 @@ case " $MODES " in *" identical "*)
     for n in $IDENTICAL_ONLY_NAMES; do ALL_SOS="$ALL_SOS $PKG/identical/$n.so"; done ;;
 esac
 if [ "$PACKAGE_BYTE_LM" = 1 ]; then
-    # The CPU training binding is gated for existence and staleness like every
-    # other extension, but it is asked a different question: it must report
-    # 'cpu', because a GPU vendor here would mean the CPU-only build saw an
-    # accelerator target, and that is the one way this binary loads while being
-    # wrong. It lives beside the tiers, in host/, which is where the runtime's
-    # own path helper looks rather than through _backend.binding().
-    ALL_SOS="$ALL_SOS $PKG/host/_mojolearn_byte_lm_host.so"
-    pixi run -e pkg python - "$PKG/host/_mojolearn_byte_lm_host.so" <<'PYHOST'
+    # Every host binding is gated for existence and staleness like every
+    # other extension, but each is asked a different question: it must report
+    # 'cpu' as its vendor AND as its kernel-matrix column, because a GPU
+    # vendor here would mean the CPU-only build saw an accelerator target, and
+    # a GPU column would mean the build box's GPU name was folded into a
+    # vendor-neutral binary (the 0.8.5 freeze caught exactly that: the NVIDIA
+    # and AMD legs' copies differed by 43 bytes and the packer refused the
+    # wheel). They live beside the tiers, in host/, which is where the
+    # runtime looks rather than through _backend.binding().
+    for n in $HOST_NAMES; do
+        ALL_SOS="$ALL_SOS $PKG/host/$n.so"
+        pixi run -e pkg python - "$PKG/host/$n.so" "$n" <<'PYHOST'
 import importlib.util, json, sys
-spec = importlib.util.spec_from_file_location('_mojolearn_byte_lm_host', sys.argv[1])
+path, name = sys.argv[1], sys.argv[2]
+prefix = name[len('_mojolearn_'):]
+spec = importlib.util.spec_from_file_location(name, path)
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
-assert module.byte_lm_host_numeric_mode() == 1, 'CPU training binding must be IDENTICAL'
-assert module.byte_lm_host_vendor() == 'cpu', 'CPU training binding must report cpu'
-print(json.dumps(dict(extension='_mojolearn_byte_lm_host', native_vendor='cpu',
+assert getattr(module, prefix + '_numeric_mode')() == 1, name + ' must be IDENTICAL'
+assert getattr(module, prefix + '_vendor')() == 'cpu', name + ' must report cpu'
+assert str(getattr(module, prefix + '_column')()) == 'cpu', name + ' must compile as the CPU column'
+assert not bool(getattr(module, prefix + '_sabotage')()), name + ' is a sabotage build'
+print(json.dumps(dict(extension=name, native_vendor='cpu', column='cpu',
     numeric_mode=1, supported_modes=['identical'],
     unsupported_modes=['fast', 'deterministic'])))
 PYHOST
+    done
     ALL_SOS="$ALL_SOS $PKG/identical/_mojolearn_byte_lm.so"
     pixi run -e pkg python - "$PKG/identical/_mojolearn_byte_lm.so" <<'PYBYTE'
 import importlib.util, json, sys
@@ -368,26 +400,52 @@ pixi run -e pkg python "$here/packaging/isa_baseline.py" $ALL_SOS
 # a wheel that imports and then dies on the first fit. That shipped once, as
 # TestPyPI 0.1.0a2. See packaging/macos/check_gpu_embedded.py.
 #
-# EVERY EXTENSION EXCEPT THE CPU TRAINING BINDING (DEVIATION 2680). That one is
-# built with `env -u MOJOLEARN_GPU_ARCHS`, contains no device code by design and
-# reads back vendor 'cpu', so it has ZERO AIR markers and this gate refuses it
+# EVERY EXTENSION EXCEPT THE HOST BINDINGS (DEVIATION 2680). Those are built
+# with `env -u MOJOLEARN_GPU_ARCHS`, contain no device code by design and read
+# back vendor 'cpu', so they have ZERO AIR markers and this gate refuses them
 # correctly. The exclusion is HERE, at the call site, and NOT inside
 # check_gpu_embedded.py: that script exists because 0.1.0a2 shipped a host-only
 # build that passed every other gate, so teaching it to skip a file whose name
-# looks host-like would reopen the hole it was written to close. Every other
-# consumer of ALL_SOS still sees the host binding, and must: stage_dylibs.py
-# wipes and rebuilds the one .dylibs directory, the minos loop keeps the wheel
-# tag honest as the floor of everything inside, and isa_baseline.py is a
-# HOST-code check, which is precisely what this binary is.
+# looks host-like would reopen the hole it was written to close. The exclusion
+# is by the exact names the manifest lists, never by a host-like pattern.
+# Every other consumer of ALL_SOS still sees the host bindings, and must:
+# stage_dylibs.py wipes and rebuilds the one .dylibs directory, the minos loop
+# keeps the wheel tag honest as the floor of everything inside, and
+# isa_baseline.py is a HOST-code check, which is precisely what they are.
 GPU_SOS=""
 for so in $ALL_SOS; do
-    case "$so" in
-        *"/host/_mojolearn_byte_lm_host.so") ;;
-        *) GPU_SOS="$GPU_SOS $so" ;;
-    esac
+    is_host=0
+    for n in $HOST_NAMES; do
+        [ "$so" = "$PKG/host/$n.so" ] && is_host=1
+    done
+    [ "$is_host" = 1 ] || GPU_SOS="$GPU_SOS $so"
 done
 # shellcheck disable=SC2086
 pixi run -e pkg python "$here/packaging/macos/check_gpu_embedded.py" $GPU_SOS
+
+# THE IDENTITY PAYLOAD (the packaging lane, 2026-09-14; docs/VERIFY.md).
+# `python -m mojolearn verify` needs the one card comparator and
+# mojolearn/reference_cards/; `python -m mojolearn identity` needs
+# tools/identity_break.py, the three training GPU columns the manifest
+# names, and a commit witness (an installed wheel has no git, and
+# identity_break refuses to write a column with an empty commit). All are
+# COPIES made here of files that live once in git, so the wheel has no
+# second implementation of anything; python/.gitignore keeps the copies out
+# of the checkout. The Linux packer (packaging/linux/pack_wheel.py) reads
+# the same sources straight into the archive.
+rm -f "$PKG/_identity_trace_diff.py" "$PKG/_identity_break.py"
+rm -rf "$PKG/identity_columns"
+cp "$here/tools/identity_trace_diff.py" "$PKG/_identity_trace_diff.py"
+cp "$here/tools/identity_break.py" "$PKG/_identity_break.py"
+RECORD=$(python3 python/mojolearn/host_surface.py --training-gpu-column-record) || exit 1
+mkdir -p "$PKG/identity_columns/$RECORD"
+for col in $(python3 python/mojolearn/host_surface.py --training-gpu-columns); do
+    [ -f "$here/$col" ] || { echo "ERROR: the manifest names $col, which is not in this checkout" >&2; exit 1; }
+    cp "$here/$col" "$PKG/identity_columns/$RECORD/$(basename "$col")"
+done
+COMMIT=$(git -C "$here" rev-parse HEAD) || { echo "ERROR: no commit witness; the wheel's identity columns need one" >&2; exit 1; }
+printf '%s\n' "$COMMIT" > "$PKG/identity_columns/COMMIT"
+echo "identity payload: $(ls "$PKG/identity_columns/$RECORD" | wc -l | tr -d ' ') columns from $RECORD, commit $COMMIT"
 
 cd "$here/python"
 rm -rf dist build ./*.egg-info
