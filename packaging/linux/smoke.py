@@ -109,6 +109,10 @@ PER_BINDING = {
     "_mojolearn_kernel_methods": lambda ml: ml.KernelRidge(),
     "_mojolearn_mixture": lambda ml: ml.GaussianMixture(),
     "_mojolearn_hdbscan": lambda ml: ml.HDBSCAN(),
+    # 2026-09-14: IVFIndex takes a trivial constructor; Embedding needs its
+    # table, and a 1 x 1 one is enough to resolve the binding.
+    "_mojolearn_ivf": lambda ml: ml.IVFIndex(n_lists=1, n_probes=1),
+    "_mojolearn_embedding": lambda ml: ml.Embedding(1, 1, weight=[[0.0]]),
 }
 # THIS LIST SHIPPED SHORT, THE SAME WAY pack_wheel.py's DID.
 #
@@ -134,7 +138,7 @@ ALL_BINDINGS = (
     "_mojolearn_mamba", "_mojolearn_transformer",
     # Workstream D, 2026-09-14: the four door-less families given a binding.
     "_mojolearn_kernel_methods", "_mojolearn_mixture", "_mojolearn_hdbscan",
-    "_mojolearn_resample",
+    "_mojolearn_resample", "_mojolearn_ivf", "_mojolearn_embedding",
 )
 
 #: EVERY BINDING BUT THE THREE TREE LANES BUILDS IDENTICAL ONLY (DEVIATION
@@ -157,7 +161,7 @@ IDENTICAL_ONLY_BINDINGS = frozenset({
     "_mojolearn_training", "_mojolearn_mamba", "_mojolearn_transformer",
     "_mojolearn_byte_lm",
     "_mojolearn_kernel_methods", "_mojolearn_mixture", "_mojolearn_hdbscan",
-    "_mojolearn_resample",
+    "_mojolearn_resample", "_mojolearn_ivf", "_mojolearn_embedding",
 })
 
 

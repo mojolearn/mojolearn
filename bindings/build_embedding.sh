@@ -1,6 +1,6 @@
 #!/bin/sh
-# Build the IVF-FLAT CPython extension (mojolearn.IVFIndex) into
-# python/mojolearn/_mojolearn_ivf.so. Run from anywhere; requires pixi.
+# Build the Embedding CPython extension into
+# python/mojolearn/_mojolearn_embedding.so. Run from anywhere; requires pixi.
 # Mirrors bindings/build_gp.sh line for line except where this family is named.
 #
 # MOJOLEARN_BUILD_EXTRA_DEFINES (optional, empty by default): extra flags
@@ -9,10 +9,11 @@
 # `-D MOJOLEARN_GEMM_ARM_TRIAL=1`, tools/gemm_ksplit_classical_leg.sh); a
 # release build leaves it unset.
 #
-# THIS EXTENSION IS ivf/ AND NOTHING ELSE (workstream D, 2026-09-14),
-# in _MODULES and every packaging list since lane/expose-ivf-embedding. It
-# reaches cluster/'s k-means (the quantizer) and
-# neighbors/'s pinned distance tile through their own entry points.
+# THIS EXTENSION IS embedding/ AND NOTHING ELSE (2026-09-14): the gather
+# and the ascending fold of profile mojolearn.identical.embedding.fp32.v1,
+# with padding_idx and the microbatch carry. The training binding's
+# embedding_forward and embedding_backward reach the same two entry points
+# with neither knob.
 #
 # THE FLAGS BELOW ARE NOT ORNAMENTAL. Every one of them is a bug somebody
 # already shipped. The full write-ups live in `bindings/build.sh` and
@@ -118,7 +119,7 @@ COLUMN_DEFINE=""
 # here, by name, is what keeps this an unshipped tier rather than an
 # unchecked one (ENGINEERING_RULES.md section 0b-iii and section 8).
 [ "${MOJOLEARN_NUMERIC_MODE:-identical}" = identical ] || {
-    echo 'build_ivf.sh: only the tree lanes (gbdt, rf, trees) ship fast and deterministic; every other binding builds MOJOLEARN_NUMERIC_MODE=identical only (DEVIATION 2490, 0.8.0).' >&2
+    echo 'build_embedding.sh: only the tree lanes (gbdt, rf, trees) ship fast and deterministic; every other binding builds MOJOLEARN_NUMERIC_MODE=identical only (DEVIATION 2490, 0.8.0).' >&2
     exit 2; }
 MODE_DEFINE=""
 OUTDIR="python/mojolearn"
@@ -145,12 +146,12 @@ if [ -n "${MOJOLEARN_TARGET_COLUMN:-}" ]; then
     COLUMN_DEFINE="-D MOJOLEARN_COLUMN_$(printf %s "$MOJOLEARN_TARGET_COLUMN" | tr '[:lower:]' '[:upper:]')"
 fi
 
-tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/mojolearn-ivf.XXXXXX")
+tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/mojolearn-embedding.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT INT TERM
-out="$tmpdir/_mojolearn_ivf.so"
+out="$tmpdir/_mojolearn_embedding.so"
 
 # --emit shared-lib, not an executable: CPython dlopens this and calls
-# PyInit__mojolearn_ivf. The FILE NAME must match that symbol's suffix or
+# PyInit__mojolearn_embedding. The FILE NAME must match that symbol's suffix or
 # the import fails with "dynamic module does not define module export
 # function".
 # shellcheck disable=SC2086  # the flag strings are deliberately word-split
@@ -159,7 +160,7 @@ pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib \
     ${MOJOLEARN_BUILD_EXTRA_DEFINES:-} \
     $LINK_FLAGS \
     -I . -I bindings \
-    bindings/_mojolearn_ivf.mojo \
+    bindings/_mojolearn_embedding.mojo \
     -o "$out"
 
 air_blobs() {
@@ -174,8 +175,8 @@ air_blobs() {
 # not-yet-built .so files; and the AIR/otool checks are Mach-O only. The
 # caller that sets MOJOLEARN_SKIP_BUILD_GATE owns end-to-end verification.
 if [ -n "${MOJOLEARN_SKIP_BUILD_GATE:-}" ] || [ "$(uname)" != "Darwin" ]; then
-    mv "$out" "$OUTDIR/_mojolearn_ivf.so"
-    echo "built $OUTDIR/_mojolearn_ivf.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)"
+    mv "$out" "$OUTDIR/_mojolearn_embedding.so"
+    echo "built $OUTDIR/_mojolearn_embedding.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)"
     exit 0
 fi
 
@@ -210,12 +211,12 @@ fi
 _air=$(air_blobs "$out")
 _total=$(printf '%s\n' "$_air" | grep -c . || true)
 printf '  AIR blobs by subsystem (total %s):\n' "$_total"
-for _sub in ivf cluster neighbors core; do
+for _sub in embedding core; do
     printf '    %-18s %s\n' "$_sub" "$(printf '%s\n' "$_air" | grep -c "^${_sub}" || true)"
 done
 
 _failed=0
-for _pair in ivf:1; do
+for _pair in embedding:1; do
     _s=${_pair%%:*}
     _min=${_pair#*:}
     _n=$(printf '%s\n' "$_air" | grep -c "^${_s}" || true)
@@ -260,18 +261,20 @@ pkg = os.path.join(tmp, "mojolearn")
 shutil.copytree("python/mojolearn", pkg,
                 ignore=shutil.ignore_patterns("__pycache__"))
 shutil.copyfile(os.environ["MOJOLEARN_SMOKE_SO"],
-                os.path.join(pkg, "_mojolearn_ivf.so"))
+                os.path.join(pkg, "_mojolearn_embedding.so"))
 sys.path.insert(0, tmp)
 import numpy as np
 
-from mojolearn import IVFIndex
-rng = np.random.default_rng(0)
-x = rng.random((256, 4), dtype=np.float32)
-d, i = IVFIndex(n_lists=4, n_probes=2, n_neighbors=4).fit(x).search(x[:8])
-assert d.shape == (8, 4) and i.shape == (8, 4)
-print("  smoke: IVFIndex build and search on 256 rows")
+from mojolearn import Embedding
+w = np.arange(12, dtype=np.float32).reshape(4, 3)
+e = Embedding.from_pretrained(w, padding_idx=1)
+y = e.forward(np.array([3, 1, 1, 0], np.int32))
+assert np.array_equal(y, w[[3, 1, 1, 0]])
+dw = e.backward(np.array([3, 1, 1, 0], np.int32), np.ones((4, 3), np.float32))
+assert dw.shape == (4, 3) and float(dw[1].sum()) == 0.0 and float(dw[3, 0]) == 1.0
+print("  smoke: Embedding forward gather and backward fold, padding row stored +0.0")
 shutil.rmtree(tmp, ignore_errors=True)
 PY
 
-mv "$out" "$OUTDIR/_mojolearn_ivf.so"
-echo "built $OUTDIR/_mojolearn_ivf.so ($_total AIR blobs, minos $MACOS_FLOOR)"
+mv "$out" "$OUTDIR/_mojolearn_embedding.so"
+echo "built $OUTDIR/_mojolearn_embedding.so ($_total AIR blobs, minos $MACOS_FLOOR)"

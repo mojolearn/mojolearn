@@ -210,13 +210,19 @@ _MODULES = (
     # Apple M4 the day they were written; no box has run them through the
     # Python door yet, and the identity_break lanes and three columns are
     # owed (docs/lanes/LANE_BODY_*.py). The Cholesky door is inside
-    # `_mojolearn_gp` (bindings/build_gp.sh already links cholesky/); IVF is
-    # prepared (bindings/_mojolearn_ivf.mojo) and deliberately NOT listed
-    # until its NVIDIA and AMD legs run.
+    # `_mojolearn_gp` (bindings/build_gp.sh already links cholesky/).
     "_mojolearn_kernel_methods",
     "_mojolearn_mixture",
     "_mojolearn_hdbscan",
     "_mojolearn_resample",
+    # 2026-09-14, lane/expose-ivf-embedding: the two `_NOT_YET` entries given
+    # their doors. IVFIndex (bindings/_mojolearn_ivf.mojo, prepared earlier
+    # the same day and listed now that check-ivf reads ALL OK with one card
+    # on Apple, NVIDIA and AMD) and Embedding (bindings/_mojolearn_embedding.mojo,
+    # profile mojolearn.identical.embedding.fp32.v1 with padding_idx and the
+    # microbatch carry). IDENTICAL only, like every non-tree binding.
+    "_mojolearn_ivf",
+    "_mojolearn_embedding",
 )
 
 #: ONE RULE FOR TIERS (DEVIATION 2490, 2026-09-10): THE TREE LANES SHIP
@@ -1594,6 +1600,8 @@ def _build_script(name):
         "_mojolearn_mixture": "build_mixture.sh",
         "_mojolearn_hdbscan": "build_hdbscan.sh",
         "_mojolearn_resample": "build_resample.sh",
+        "_mojolearn_ivf": "build_ivf.sh",
+        "_mojolearn_embedding": "build_embedding.sh",
     }.get(name, "build" + name[len("_mojolearn"):] + ".sh")
 
 

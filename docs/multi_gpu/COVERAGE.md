@@ -83,9 +83,9 @@ implementations still require their own AMD/Apple qualification.
 | Cholesky | Public factor/solve surface has no parallel driver | Factorization/solve design, matrix pooling and operation-level qualification |
 
 The newer binding availability flags do not establish complete estimator
-dispatch or qualification. Prepared IVFFlat remains unexposed and disabled in
-the backend; track its future distributed build/search and index storage
-separately. Public `resample` bootstrap, permutation tests and Monte Carlo integration
+dispatch or qualification. IVF-FLAT is public as `mojolearn.IVFIndex` since
+2026-09-14 and has no parallel driver; track its future distributed
+build/search and index storage separately. Public `resample` bootstrap, permutation tests and Monte Carlo integration
 now have distributed entries in `parallel_classical` that move whole global
 replicate, permutation and 256-sample chunk ranges and keep the sort,
 interval, p-value and fold on the root; their one-device equality passes on

@@ -170,10 +170,7 @@ from .tokenizer import GPT2Tokenizer
 # package importable and raises BY NAME with the build command when
 # touched. Compile-checked on one Apple M4; no box has run them through
 # the Python door, and their identity_break lanes and three columns are
-# owed (docs/lanes/LANE_BODY_*.py). IVF and the embedding lane stay out:
-# IVF is prepared in `_ivf_impl.py`; its check now has Apple, NVIDIA and AMD
-# runs with one IDENTICAL card (bench/results/ivf_embed_km_legs_2026-09-14/),
-# and exposing it is a shipping decision not taken in that round.
+# owed (docs/lanes/LANE_BODY_*.py).
 from ._cholesky_impl import Cholesky
 from . import kernel_methods
 from .kernel_methods import KernelRidge, Nystroem, RBFSampler
@@ -182,6 +179,22 @@ from .mixture import GaussianMixture
 from . import hdbscan
 from .hdbscan import HDBSCAN
 from . import resample
+
+# `IVFIndex` and `Embedding` JOINED 2026-09-14 (lane/expose-ivf-embedding),
+# the two entries `_NOT_YET` held since the claim-surface census. IVFIndex
+# is cuVS `ivf_flat` build plus search under one card
+# (`bindings/_mojolearn_ivf.mojo`); `pixi run check-ivf` reads ALL OK with
+# one IDENTICAL card on Apple, NVIDIA and AMD
+# (bench/results/ivf_embed_km_legs_2026-09-14/README.md). Embedding is
+# profile mojolearn.identical.embedding.fp32.v1's gather and ascending fold
+# with padding_idx and the microbatch carry (`bindings/_mojolearn_embedding.mojo`);
+# its clause (a) card is byte-identical on the three columns and its
+# sabotage arms are resolved in the same branch. The identity_break lanes
+# `ivf` and `embedding` and their three columns are in
+# bench/results/identity_break/2026-09-14_ivf-embedding/.
+from ._ivf_impl import IVFIndex
+from . import embedding
+from .embedding import Embedding
 
 # `GaussianProcessRegressor` JOINED 2026-09-01, the last name deleted from
 # `_NOT_YET` below and the only one held for a reason other than a missing
@@ -290,6 +303,9 @@ __all__ = [
     "RBFSampler",
     "GaussianMixture",
     "HDBSCAN",
+    "IVFIndex",
+    "Embedding",
+    "embedding",
     "kernel_methods",
     "mixture",
     "hdbscan",
@@ -376,10 +392,10 @@ __all__ = [
 # interesting and short. Each value names the thing that EXISTS and where it
 # stops.
 #
-# It holds two entries today, IVFIndex and Embedding, added by the
-# claim-surface census on 2026-09-14 (both finished underneath with no
-# Python door; their reasons are the values below). Before them it was EMPTY,
-# and that was the point. Four entries have been deleted from it
+# It is EMPTY today, and that is the point. IVFIndex and Embedding were
+# added by the claim-surface census on 2026-09-14 (both finished underneath
+# with no Python door) and deleted the same day when their doors were
+# written. Before them four entries had been deleted from it
 # and none was ever reworded: `KNeighborsClassifier` / `KNeighborsRegressor`
 # on 2026-08-23, `SVR` on 2026-09-01, `ARIMA` the same day, and
 # `GaussianProcessRegressor` the same day again. The first three said the
@@ -400,14 +416,7 @@ __all__ = [
 # and unreachable from Python belongs in here, by name, not left to an
 # AttributeError -- and so does the next lane withheld on purpose, with the
 # purpose written out the way the GP's was.
-_NOT_YET = {
-    # Finished underneath, gated in checks/, unreachable from Python (the
-    # claim-surface census, docs/lanes/BRIEF_claim_surface_census_2026-09-14.md
-    # section 4). Each stops at its last gated stage; the door is a binding,
-    # a class here, an identity_break lane and three vendor columns.
-    "IVFIndex": "ivf/checks/ivf_check.mojo (layout sabotage and large-k gates; ALL OK with one IDENTICAL card on Apple M4, NVIDIA H100 and AMD MI300X at 171752af4; no binding, class door or identity_break lane)",
-    "Embedding": "embedding/checks/embedding_check.mojo (clause (a) card byte-identical on Apple M4, NVIDIA H100 and AMD MI300X; sabotage arms run on all three, eleven of sixteen shown to bite on NVIDIA and AMD and ten on Apple, bench/results/ivf_embed_km_legs_2026-09-14/README.md)",
-}
+_NOT_YET = {}
 
 
 def __getattr__(name):

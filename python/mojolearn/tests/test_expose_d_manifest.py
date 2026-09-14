@@ -1,12 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Workstream D's place in the tree (2026-09-14), checked from SOURCE so it
-runs on a box with nothing built: the four new bindings are registered in
-both places `_backend` needs (DEVIATION 869), the five packaging lists
+runs on a box with nothing built: the six new bindings (the four workstream
+D families, then IVF and Embedding when they left `_NOT_YET`) are registered
+in both places `_backend` needs (DEVIATION 869), the five packaging lists
 agree, every binding source exports exactly the names its Python half
 calls, the build scripts exist and name their binding, the classes are
 exported, the alpha API and the support matrix name them, the lane bodies
-parse, IVF stays unexposed, and the embedding sabotage script names every
+parse, `_NOT_YET` is empty, and the embedding sabotage script names every
 arm `embedding_identical.mojo` defines.
 
     cd python && python3 -m mojolearn.tests.test_expose_d_manifest
@@ -27,8 +28,10 @@ NEW = {
     "_mojolearn_mixture": ("build_mixture.sh", "python/mojolearn/mixture.py"),
     "_mojolearn_hdbscan": ("build_hdbscan.sh", "python/mojolearn/hdbscan.py"),
     "_mojolearn_resample": ("build_resample.sh", "python/mojolearn/resample.py"),
+    "_mojolearn_ivf": ("build_ivf.sh", "python/mojolearn/_ivf_impl.py"),
+    "_mojolearn_embedding": ("build_embedding.sh", "python/mojolearn/embedding.py"),
 }
-CLASSES = ("Cholesky", "KernelRidge", "Nystroem", "RBFSampler", "GaussianMixture", "HDBSCAN")
+CLASSES = ("Cholesky", "KernelRidge", "Nystroem", "RBFSampler", "GaussianMixture", "HDBSCAN", "IVFIndex", "Embedding")
 LANE_BODIES = ("cholesky", "kernel_methods", "mixture", "hdbscan", "resample", "ivf", "training_primitives", "kmeans")
 
 
@@ -49,7 +52,7 @@ def test_backend_registers_both_places():
         assert name in _backend._MODULES, name
         assert _backend._build_script(name) == script, (name, _backend._build_script(name))
         assert name in _backend._IDENTICAL_ONLY, name + " must be identical only"
-    assert "_mojolearn_ivf" not in _backend._MODULES, "IVF is prepared, not exposed"
+    assert mojolearn._NOT_YET == {}, sorted(mojolearn._NOT_YET)
 
 
 def test_packaging_lists_agree():
@@ -73,6 +76,7 @@ def test_binding_exports_match_python_calls():
         "bindings/_mojolearn_hdbscan.mojo": ("python/mojolearn/hdbscan.py", r"_extension\(\)\.(\w+)\("),
         "bindings/_mojolearn_resample.mojo": ("python/mojolearn/resample.py", r"_extension\(numeric_mode\)\.(\w+)\("),
         "bindings/_mojolearn_ivf.mojo": ("python/mojolearn/_ivf_impl.py", r"_extension\(\)\.(\w+)\("),
+        "bindings/_mojolearn_embedding.mojo": ("python/mojolearn/embedding.py", r"_extension\(\)\.(\w+)\("),
     }
     for binding, (py, pat) in pairs.items():
         exported, called = _exports(binding), _calls(py, pat)
@@ -93,19 +97,17 @@ def test_build_scripts_exist_and_name_their_binding():
         text = p.read_text()
         assert f"bindings/{name}.mojo" in text and f"{name}.so" in text, script
         assert "MOJOLEARN_NUMERIC_MODE=identical only" in text or "identical only" in text, script
-    assert (ROOT / "bindings/build_ivf.sh").exists()
 
 
 def test_classes_exported():
     for name in CLASSES:
         assert name in mojolearn.__all__, name
         assert hasattr(mojolearn, name), name
-    for mod in ("kernel_methods", "mixture", "hdbscan", "resample"):
+    for mod in ("kernel_methods", "mixture", "hdbscan", "resample", "embedding"):
         assert mod in mojolearn.__all__, mod
     assert "Cholesky" in mojolearn.linalg.__all__
     for fn in ("embedding_forward", "embedding_backward", "rms_norm_forward", "rms_norm_backward", "linear_forward", "linear_backward"):
         assert fn in mojolearn.training.__all__, fn
-    assert "IVFFlat" not in mojolearn.__all__
 
 
 def test_docs_name_the_surfaces():

@@ -2,33 +2,36 @@
 # THE EMBEDDING LANE'S SABOTAGE ARM (workstream D, 2026-09-14). First run on an H100 and an
 # MI300X at b163b76ba (bench/results/ivf_embed_km_legs_2026-09-14/README.md).
 #
-# embedding/checks/embedding_check.mojo has run clause (a) on Apple and AMD
-# (cards md5 c7f824c3, 6,887 cells) and ITS OWN HEADER SAYS NO SABOTAGE ARM
-# WAS EVER BUILT, so the gate has never been shown capable of failing. The
-# sixteen arms exist in embedding/checks/embedding_identical.mojo as
-# `is_defined` switches (MOJOLEARN_EMB_SABOTAGE_*) and the check refuses a
-# binary whose armed name is not the one the caller expected
-# (MOJOLEARN_EMB_EXPECT_SABOTAGE, DEVIATION 1510), which is what makes a
-# misspelled -D a failure instead of a silent clean build.
+# embedding/checks/embedding_check.mojo carries clause (a) (card md5
+# c7f824c3, 6,887 cells, identical on Apple, NVIDIA and AMD) and clause (g),
+# the sabotage verdicts. The sixteen arms exist in
+# embedding/checks/embedding_identical.mojo as `is_defined` switches
+# (MOJOLEARN_EMB_SABOTAGE_*) and the check refuses a binary whose armed name
+# is not the one the caller expected (MOJOLEARN_EMB_EXPECT_SABOTAGE,
+# DEVIATION 1510), which is what makes a misspelled -D a failure instead of
+# a silent clean build.
 #
 # This script builds the clean check once and REQUIRES IT TO PASS, then
-# builds every arm below and REQUIRES EACH TO FAIL with its own name in the
-# log. A run in which an arm passes is the finding this file exists to
-# make, and it is printed by name rather than folded into a count.
+# builds every arm below and requires clause (g) to show each one BIT, or,
+# for NO_FLUSH_ACC on a device that flushes the raw add, asserted INERT. An
+# arm that raises is the finding this file exists to make, and it is printed
+# by name rather than folded into a count.
 #
 #     tools/embedding_sabotage_arm.sh OUTPUT_DIRECTORY [ARM ...]
 #
 # Run inside an activated IDENTICAL toolchain, or set MOJO to its mojo
 # binary (the shape of tools/check_embedding_plan_sort.sh). With no ARM
-# arguments every arm runs. NEVER RUN ON THE MAC UNDER THE NO-HEAVY-LOCAL-
-# COMPUTE RULE; the owed legs are the NVIDIA one (which has never run this
-# lane at all) and a rerun of the AMD and Apple columns with the arms.
+# arguments every arm runs. On the Mac run it on one core
+# (MOJOLEARN_COMPILE_JOBS=1): clean plus sixteen arms took 122 seconds on
+# the M4 on 2026-09-14. Per-column verdicts:
+# bench/results/ivf_embed_km_legs_2026-09-14/ (the first round, five
+# findings) and bench/results/embedding_sabotage_2026-09-14/ (after they
+# were resolved).
 #
 # THE ARMS AND THEIR WITNESS FIXTURES are embedding_check.mojo's: two of
-# the eighteen contract arms are not built (its header's findings (1) and
-# (2) name FOLD_READS_LAUNCH's block-size dependence and RANK_BY_ARRIVAL's
-# two-block requirement, both of which the check drives itself), and the
-# sort negative control has its own script. Sixteen defines below.
+# the eighteen contract arms are not built (EMB_FOLD_VIA_GEMM_ONEHOT and
+# EMB_SORT_KEY_ID_ONLY_UNSTABLE), and the sort negative control has its own
+# script. Sixteen defines below.
 set -euo pipefail
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 out=${1:?usage: embedding_sabotage_arm.sh OUTPUT_DIRECTORY [ARM ...]}
@@ -76,9 +79,17 @@ echo "   clean: PASS ($(wc -l < "$out/clean.log") log lines)"
 #                 CLEAN build computes the by-add result itself and asserts it
 #                 moves the straddling rows and nothing else. Its verdict is
 #                 the clean binary run with MOJOLEARN_EMB_CHECK_CLAUSE_E=1.
-#   GATHER_CLAMP_OOR  the check refuses it as having NO RUNNABLE WITNESS
-#                 (contract section 8); recorded as not runnable, not counted
+#   NO_FLUSH_ACC  on a column whose DEVICE flushes the raw add (Apple) the
+#                 check asserts the arm inert on every case (contract 9.3)
+#                 and exits 0 with an "INERT ON THIS COLUMN" line; recorded
+#                 as inert on this column, not counted as bit and not a
+#                 failure. Its reach is shown on NVIDIA and AMD.
+#   GATHER_CLAMP_OOR  runnable since the arm also drops the device entry
+#                 point's id refusal (it was unrunnable while the refusal
+#                 stood in front of the clamp); an older binary that still
+#                 says NO RUNNABLE WITNESS is recorded as not runnable.
 failed=0
+inert_arms=""
 bit_arms=""
 raised_arms=""
 unshown_arms=""
@@ -115,6 +126,10 @@ for arm in $arms; do
             echo "   $arm: BIT ($(grep -m1 "^clause (g): $arm BIT on" "$out/$arm.log" | cut -c13-120))"
             echo "$arm: bit" >> "$out/verdicts.tmp"
             bit_arms="$bit_arms $arm"
+        elif grep -q "^clause (g): $arm INERT ON THIS COLUMN" "$out/$arm.log"; then
+            echo "   $arm: INERT ON THIS COLUMN, asserted ($(grep -m1 "^device probe:" "$out/$arm.log" | cut -c1-120))"
+            echo "$arm: inert on this column (device flushes the raw add, asserted on every case)" >> "$out/verdicts.tmp"
+            inert_arms="$inert_arms $arm"
         else
             echo "   $arm: exit 0 but no clause (g) BIT line; NOT SHOWN" >&2
             echo "$arm: NOT SHOWN (exit 0, no BIT line)" >> "$out/verdicts.tmp"
@@ -146,7 +161,7 @@ done
 rm -f "$out/verdicts.tmp"
 cat "$out/verdict.txt"
 if [ "$failed" -ne 0 ]; then
-    echo "FAIL: $failed arm(s) not shown; raised:${raised_arms:- none}; not shown:${unshown_arms:- none}; not runnable (not counted):${norun_arms:- none}" >&2
+    echo "FAIL: $failed arm(s) not shown; raised:${raised_arms:- none}; not shown:${unshown_arms:- none}; inert on this column:${inert_arms:- none}; not runnable (not counted):${norun_arms:- none}" >&2
     exit 1
 fi
-echo "PASS: the clean check passes and every requested arm BIT under clause (g); not runnable (not counted):${norun_arms:- none}"
+echo "PASS: the clean check passes; BIT:${bit_arms:- none}; inert on this column (asserted, contract 9.3):${inert_arms:- none}; not runnable (not counted):${norun_arms:- none}"
