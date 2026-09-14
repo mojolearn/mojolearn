@@ -7,7 +7,8 @@ panel's factor, solve and trailing stage), equal factor bits, info, nb and
 logdet. Solve with whole right-hand-side columns and require equal traces and
 solution bits. A non-positive-definite matrix must fail at the same info with
 the same partial factor. Build with -D MOJOLEARN_CHOLESKY_PARALLEL_SABOTAGE=1
-to see this gate fail.
+to see this gate fail; MOJOLEARN_CHOLESKY_CHECK_FACTOR_ONLY=1 skips the
+solves so that build shows the trailing-row partition failing on its own.
 """
 from std.os import getenv, setenv
 from std.memory import bitcast
@@ -87,6 +88,9 @@ def run_case(n: Int, nrhs: Int, broken: Bool, jitter: Float32, count: Int, root:
         raise Error(name + " info or nb differs")
     if bitcast[DType.uint32](one.logdet) != bitcast[DType.uint32](many.logdet):
         raise Error(name + " logdet differs")
+    if String(getenv("MOJOLEARN_CHOLESKY_CHECK_FACTOR_ONLY", "0")) == "1":
+        print("PASS cholesky factor", n, "info", one.info, "devices", count)
+        return
     if broken:
         if one.info == 0:
             raise Error(name + " broken matrix factored")
