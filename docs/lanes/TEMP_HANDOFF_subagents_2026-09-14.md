@@ -121,20 +121,46 @@ spectral-precomputed and the scaler twins share the host entries but were not de
 covered because the 47-lane record lacks them; the 136-lane record carries them, so
 after section 4 lands they can join training_lanes with one gate run.
 
-## 4. Kept by mojolearn-ea: the 136-lane record and the gate switch
+## 4. The 136-lane record and the gate switch: ALSO YOURS (Andrew, 14:50 ET: "keep nothing")
 
-bench/results/identity_break/2026-09-14_136-lanes/ at 4048e1b51: apple-m4 (1224 stable),
-nvidia-h100-sm_90a (1224 stable, IDENTICAL=1224 and infer/model 1665 with Apple),
-nvidia-2xh100-sm_90a.par-devices-0-1 (144/144 IDENTICAL x3 with Apple and the one-device
-H100 over the sixteen par lanes; same-vendor two-device result), amd-mi300x-gfx942 whose
-last seven lanes (iforest, iforest-tuned, par-arima, par-byte-lm, par-iforest, par-mlp,
-par-samba) are on a Hot Aisle box now (the 8core VM needs more than the 60-minute cap
-for 136 lanes; the two runs merge only if their binding digests match, stated in the
-README). Then host_surface.py TRAINING_GPU_COLUMNS and the workflow move to it in the
-same commit and mojolearn-ea signals you. The AMD two-device column (Hot Aisle
-MOJOLEARN_HOTAISLE_SPEC=2gpu MOJOLEARN_HOTAISLE_GPU_ONLY=1, body like
-handoff_subagents_2026-09-14/par2_wrap_h100.sh with the arch read from rocminfo) is
-yours; it diffs against Apple and the one-device MI300X column of this record.
+Branch lane/136-lane-record (595c58691, pushed, off main) holds everything staged:
+bench/results/identity_break/2026-09-14_136-lanes/ with apple-m4.json (1224 stable),
+nvidia-h100-sm_90a.json (1224 stable; diff.apple-h100.txt IDENTICAL=1224, infer/model
+IDENTICAL=1665 N/A=783), nvidia-2xh100-sm_90a.par-devices-0-1.json (144/144 IDENTICAL x3
+with Apple and the one-device H100 over the sixteen par lanes, diff.par-two-devices.txt,
+same-vendor two-device result), amd-mi300x-gfx942.json INCOMPLETE (1161 of 1224, its
+process cut by the 60-minute cap before iforest, iforest-tuned, par-arima, par-byte-lm,
+par-iforest, par-mlp, par-samba; complete=false), the README with the rows so far,
+python/mojolearn/host_surface.py TRAINING_GPU_COLUMNS switched to this record, and
+.github/workflows/cpu-identity-gate.yml with the paths and sparse checkout switched and
+the comment updated BUT the two `grep -F 'summary: ...'` lines of the "--diff over the
+three committed GPU columns" step still saying IDENTICAL=423 and IDENTICAL=585, N/A=261.
+
+Two legs are running on this machine at 4048e1b51 and finish on their own (never cancel
+them); their runners' logs and output directories:
+- Hot Aisle MI300X 8core, the four fast missing lanes (iforest, iforest-tuned, par-arima,
+  par-iforest): log /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/efc56304-19ac-4d4f-b875-6a7805b7bb05/scratchpad/identity136_tail4_mi300x.log,
+  output under /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/efc56304-19ac-4d4f-b875-6a7805b7bb05/scratchpad/wt-leg-9ade/bench/results/e1g/*-amd-mi300x-hotaisle-identity-136-tail4/remote/identity_break.tail4.json
+  (done when the log says "balance at the end"). The three neural par lanes
+  (par-byte-lm, par-mlp, par-samba) do not fit the 8core VM's cap even alone with the
+  builds; leave them out of the MI300X column and say so.
+- DigitalOcean MI325X (gfx942, 24.04 image), a FULL 136-lane column: log
+  /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/efc56304-19ac-4d4f-b875-6a7805b7bb05/scratchpad/identity136_leg_mi325x.log,
+  output under .../scratchpad/wt-leg-9ade/bench/results/e1g/*-amd-mi325x-do-identity-136-lanes/remote/identity/identity_break.amd-gfx942.json
+  (done when the log shows the post-destroy 404).
+
+To finish: (a) merge the tail4 cells into amd-mi300x-gfx942.json ONLY if its
+package.bindings sha256 list equals the first run's (both built at 4048e1b51; state
+"two processes, identical binding digests" in the README; keep complete=false and name
+the three absent lanes); (b) add the MI325X column as amd-mi325x-gfx942.json, the AMD
+column that carries every lane including the three neural par lanes, and diff it
+against apple-m4 and nvidia-h100-sm_90a; (c) run
+`PYTHONPATH=python python3 tools/identity_break.py --diff <apple> <h100> <mi300x> --require-columns 3`
+and put its two `summary` lines verbatim into the workflow's two grep lines (the CPU
+gate's covered lanes are all in the MI300X column, so require-columns holds); (d) one
+commit: record, README, host_surface.py, workflow; rebase on main; push; the gate runs
+on the push and must be green on seven runners before anything else moves. Then the
+AMD two-device column diffs against apple-m4 and the one-device AMD columns here.
 
 ## 5. Leg-body traps learned today (every body in handoff_subagents_2026-09-14/ already avoids them)
 
