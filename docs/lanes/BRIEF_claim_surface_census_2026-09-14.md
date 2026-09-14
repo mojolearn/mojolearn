@@ -53,6 +53,11 @@ classes). The host surface is measured by `tools/forest_host_gate.py` and
    but minkowski (documented at `python/mojolearn/neighbors.py:439-442`, so this one is
    stated); `cross_val_score(groups=)` (warned and ignored,
    `python/mojolearn/model_selection.py:135-137`).
+   RESOLVED (2026-09-14): all three now refuse by name. GBDT and `cross_val_score` in
+   1217ed7bb; NearestNeighbors, KNeighborsClassifier, KNeighborsRegressor and
+   RadiusNeighbors refuse a `p` other than the default 2 under a metric that does not read
+   it (`_refuse_inert_p` in `python/mojolearn/neighbors.py`), all
+   covered by `cd python && python3 -m mojolearn.tests.test_refuse_ignored_knobs`.
 
 ## 3. Proposed lanes, 57
 
