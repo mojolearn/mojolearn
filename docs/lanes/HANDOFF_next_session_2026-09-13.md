@@ -37,7 +37,7 @@ This section said "never started, delete the branch". That was wrong: the agent 
 deleting the branch would have thrown them away. It is merged to main (the merge commit that
 carries this correction). What landed, per the brief's "Phase 1 results" and each lane commit:
 
-| lane | host binding | evidence (on the M4, CPU-only package view) |
+| lane | host binding | evidence (on the M4, CPU-only package view; the seven-runner gate below agrees) |
 |---|---|---|
 | gemm-pinned | `_mojolearn_linalg_host` over `gemm_oracle` | 9 cells IDENTICAL x4, `9996bfe5` |
 | kde | `_mojolearn_estimators_host` over `oracle_score_samples` | 9 train + 9 infer IDENTICAL x4, sabotage 9/9 DIVERGENT, `ece85079` |
@@ -51,9 +51,11 @@ put the builder's GPU name into a vendor-neutral binary. None of the six is pack
 wheel builders build only the byte LM host binding.
 
 Still owed:
-- **The seven-runner CPU identity gate has never run these lanes.** `cpu-identity-gate.yml`
-  lists them in `COVERED_LANES`; read its uploaded JSON (host.cpu_model) before calling any
-  of them certified off the Mac.
+- Nothing on the gate: run 34793118831 on the merged tree (`fb58f7a8`, code identical to main)
+  is green on all seven free runners (Neoverse-N2, Apple M1, EPYC 7763 on three draws, EPYC
+  9V74, Xeon 6973P-C): the six lanes cells=54 stable=54, `require-columns 4` OK against the
+  three GPU columns, the sabotage build caught. The run before it (34792310859) failed only the
+  plumbing smoke, which passed every covered lane to a two-lane run; fixed in `fb58f7a8`.
 - The remaining lanes, in the brief's order: agglomerative (`linkage_fit` in the solver
   family, refuses by name today), et-clf, et-reg, iforest.
 - The six `bindings/build_*_host.sh` scripts are one script with the family renamed; fold
