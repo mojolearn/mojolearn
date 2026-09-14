@@ -56,9 +56,14 @@ summary (infer/model): IDENTICAL=<m>, N/A=<k>
 diff exit 0
 ```
 
-with no DIVERGENT, MOVED or ONE-COLUMN line. Exit 0 means every cell of your
-column equals the three committed columns. Time: about an hour on an H100 or an
-M4; longer on a 4090.
+and a last line `VERDICT: PASS`. The verdict is positive: the script exits 0
+only when your column has no REFUSED and no MOVED cell and the diff found every
+compared cell identical. A diff that reports nothing divergent over a column of
+refusals is not a pass; the first outsider run (an H100 on 2026-09-14,
+`bench/results/verify_external/`) had six refused radius cells behind a clean
+diff, which is why the verdict is computed from your column too. Run the
+script from a git clone, never from a source archive. Time: about an hour on
+an H100 or an M4; longer on a 4090.
 
 To do it by hand instead of through the script:
 
