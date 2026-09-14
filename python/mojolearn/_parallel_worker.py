@@ -73,7 +73,11 @@ def execute(request):
         return state
     if operation in ('gbdt_fit', 'ordered_rmse_fit'):
         model = state
-        binding = model._bind('_mojolearn_gbdt')
+        if callable(getattr(model, '_bind', None)):
+            binding = model._bind('_mojolearn_gbdt')
+        else:
+            from . import _backend
+            binding = _backend.binding('_mojolearn_gbdt', 'identical')
         if (not callable(getattr(binding, 'gbdt_parallel_available', None))
                 or binding.gbdt_parallel_available() != 1):
             raise ImportError('rebuild GBDT binding for feature-parallel training')

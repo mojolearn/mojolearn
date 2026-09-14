@@ -13,9 +13,9 @@ def fit_boosting(estimator, X, y, *, devices=(0,), sample_weight=None, eval_set=
     leaf estimation retain their original global order. Only publish a full
     successful fitted model. Root state still has to fit on the first GPU.
     """
-    from .ensemble import GradientBoosting
-    if type(estimator) is not GradientBoosting:
-        raise TypeError('fit_boosting currently requires GradientBoosting or its classifier/regressor aliases')
+    from .ensemble import GradientBoosting, GradientBoostingClassifier, GradientBoostingRegressor
+    if type(estimator) not in (GradientBoosting, GradientBoostingClassifier, GradientBoostingRegressor):
+        raise TypeError('fit_boosting currently requires GradientBoosting, GradientBoostingClassifier or GradientBoostingRegressor')
     if estimator.numeric_mode not in (None, 'identical'):
         raise ValueError('parallel boosting requires IDENTICAL numeric mode')
     pool = DevicePool(devices, cooperative=True)
