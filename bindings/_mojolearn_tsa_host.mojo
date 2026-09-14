@@ -6,7 +6,7 @@ docs/lanes/BRIEF_cpu_training_2026-09-13.md sections 1.1 holtwinters and
 3.2).
 
 HOST ONLY. No DeviceContext, no kernel launch, no GPU. The arithmetic is
-`holtwinters/checks/hw_oracle.mojo::oracle_fit[DType.float32]` and
+`holtwinters/host/hw_oracle.mojo::oracle_fit[DType.float32]` and
 `oracle_forecast`, "HoltWintersFitHelper on the host: transpose,
 decompose, BFGS, final eval", the float32 arm the device is held to BIT
 FOR BIT under IDENTICAL by `hw_check::check_hw_device_equals_oracle`
@@ -40,7 +40,7 @@ from checks.kernel_matrix import (
     column_name,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from holtwinters.checks.hw_oracle import (
+from holtwinters.host.hw_oracle import (
     HW_ORACLE_HOST_SABOTAGE,
     HWOracleFit,
     oracle_fit,

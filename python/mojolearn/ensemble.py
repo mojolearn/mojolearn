@@ -690,6 +690,24 @@ class GradientBoosting(NumericModeMixin):
                 "mojolearn: bootstrap_type='Bayesian' does not support "
                 "subsample; it takes bagging_temperature"
             )
+        # A knob no sampler reads is refused, not ignored (the claim-surface
+        # census, 2026-09-14): with no bootstrap_type the trainer sets
+        # boot_kind = -1 and never reads either (gbdt/train.mojo::_bootstrap),
+        # Bernoulli and Poisson read subsample only, Bayesian reads
+        # bagging_temperature only. Accepting the other one silently would
+        # hand a caller a model that ignores what they asked for.
+        if bagging_temperature != 1.0 and bootstrap_type != "Bayesian":
+            raise ValueError(
+                "mojolearn: bagging_temperature is read only by "
+                "bootstrap_type='Bayesian'; with bootstrap_type="
+                f"{bootstrap_type!r} it would be ignored, so it is refused"
+            )
+        if subsample is not None and bootstrap_type not in ("Bernoulli", "Poisson"):
+            raise ValueError(
+                "mojolearn: subsample is read only by bootstrap_type="
+                "'Bernoulli' or 'Poisson'; with bootstrap_type="
+                f"{bootstrap_type!r} it would be ignored, so it is refused"
+            )
         if leaf_estimation_method is not None:
             if leaf_estimation_method not in _LEAF_ESTIMATION_NAMES:
                 raise ValueError(

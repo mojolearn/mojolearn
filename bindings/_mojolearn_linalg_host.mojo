@@ -6,7 +6,7 @@ docs/lanes/BRIEF_cpu_training_2026-09-13.md sections 1.1 gemm-pinned and
 3.2).
 
 HOST ONLY. No DeviceContext, no kernel, no GPU. The arithmetic is
-`gemm/checks/gemm_oracle.mojo::gemm_oracle`, the NORMATIVE answer of the
+`gemm/host/gemm_oracle.mojo::gemm_oracle`, the NORMATIVE answer of the
 profile ("logical leaves at contract_leaf_size(k), combined by
 fold_balanced_tree's FIXED BALANCED TREE. Not close to; the same bits"),
 which already compiles host-only inside the byte LM host binding. The GPU
@@ -38,7 +38,7 @@ from checks.kernel_matrix import (
     column_name,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from gemm.checks.gemm_oracle import (
+from gemm.host.gemm_oracle import (
     GEMM_ORACLE_HOST_SABOTAGE,
     OP_NN,
     OP_NT,

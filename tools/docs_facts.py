@@ -35,6 +35,13 @@ GitHub and PyPI included.
     version_date    CHANGELOG.md                   newest "## X (published D)"
     default_mode    python/mojolearn/_backend.py   requested_mode()'s fallback
     doi             CITATION.cff                   doi:
+    host_training_lanes, host_inference_surfaces, no_cpu_path, host_surface_table
+                    python/mojolearn/host_surface.py   the CPU surface manifest
+                    (the host surface manifest lane, 2026-09-14): what trains
+                    on a CPU, what predicts on a CPU from a saved model, what
+                    has no CPU path, and the whole surface as one table. The
+                    README said k-NN had no CPU path the day after the k-NN
+                    host lane merged; these spans cannot drift that way.
 
 ## What --check settles
 
@@ -51,6 +58,7 @@ GitHub and PyPI included.
 It does not read prose for meaning. A claim about what a measurement showed
 still needs a person, and a checker that guesses produces false alarms.
 """
+import importlib.util
 import pathlib
 import re
 import sys
@@ -61,7 +69,20 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 #: `python/README.md` is absent deliberately: it is gitignored and
 #: `packaging/macos/build_release_wheel.sh` overwrites it with this README at
 #: wheel-build time, so it is an artifact, not a source.
-DOCS = ("README.md", "CONTRIBUTING.md", "docs/RELEASE_CHECKLIST.md")
+#: SUPPORT_MATRIX.md and docs/BYTE_LM_CPU_TRAINING.md carry the CPU surface
+#: table (`host_surface_table`) and are held to the same marker check.
+DOCS = ("README.md", "CONTRIBUTING.md", "docs/RELEASE_CHECKLIST.md",
+        "SUPPORT_MATRIX.md", "docs/BYTE_LM_CPU_TRAINING.md")
+
+
+def _host_surface():
+    """The CPU surface manifest, loaded by path so this tool needs no
+    package import (and no built binding) to run."""
+    path = ROOT / "python" / "mojolearn" / "host_surface.py"
+    spec = importlib.util.spec_from_file_location("mojolearn_host_surface", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 MARKER = re.compile(
     r"<!--fact:(?P<name>[a-z_]+)-->(?P<value>.*?)<!--/fact-->", re.DOTALL
@@ -106,6 +127,12 @@ def facts():
 
     m = re.search(r'^version\s*=\s*"([^"]+)"', _read("python/pyproject.toml"), re.M)
     out["pyproject_version"] = m.group(1) if m else ""
+
+    hs = _host_surface()
+    out["host_training_lanes"] = hs.training_sentence()
+    out["host_inference_surfaces"] = hs.inference_sentence()
+    out["no_cpu_path"] = hs.no_cpu_path_sentence()
+    out["host_surface_table"] = hs.markdown_table()
 
     return out
 
@@ -222,7 +249,7 @@ def main(argv):
         return write()
     if mode == "--print":
         for k, v in sorted(facts().items()):
-            print(f"{k:20} {v}")
+            print(f"{k:24} {v}")
         return 0
     print(__doc__)
     return 2

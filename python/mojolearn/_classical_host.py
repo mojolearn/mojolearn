@@ -21,8 +21,8 @@ names under the GPU binding's address contracts
 intercept and bias epilogues, the centering kernel and the host sigmoid)
 and `core/knn_host_predict.mojo` (the pinned distance tile, the halving
 tree row norm, the composite-key selection, the vote and the mean),
-`kde/checks/kde_oracle.mojo` (`oracle_score_samples`) and
-`svm/checks/smo_oracle.mojo` (`smo_oracle_decision`).
+`kde/host/kde_oracle.mojo` (`oracle_score_samples`) and
+`svm/host/smo_oracle.mojo` (`smo_oracle_decision`).
 
 On a CPU-only install none of this is needed: `_backend._HOST_MODULES`
 routes each family to its host binding and the plain classes' `load` and
