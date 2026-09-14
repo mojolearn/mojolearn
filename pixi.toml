@@ -1158,6 +1158,9 @@ check-mamba-decode = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . mamba/check
 check-mamba-block = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . mamba/checks/mamba_check.mojo"
 check-mamba2-block = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . mamba/checks/mamba2_check.mojo"
 check-mamba3-block = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . mamba/checks/mamba3_check.mojo"
+# DEVIATION 2712: the four Mamba lanes cold on a binding whose scratch buffers
+# hold NaN; every cell must equal the committed record (tools/mamba_poison_gate.sh)
+check-mamba-poison = "sh tools/mamba_poison_gate.sh"
 # COMPILE ONLY, and the name says so. Builds the mamba backward's routing
 # layer AND, since 2026-09-03, its two kernel files
 # (mamba/impl/ops/selective_scan_backward.mojo and

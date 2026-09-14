@@ -158,12 +158,14 @@ from mamba.checks.mamba_fixture import (
 )
 from mamba.impl.modeling.modeling_mamba import (
     BLOCK_ANY_SABOTAGE,
+    mamba_block_forward,
+    mamba_copy_in,
+    mamba_device_alloc,
+    mamba_download,
+    mamba_upload,
     MambaDeviceStages,
     MambaDeviceState,
     MambaDeviceWeights,
-    mamba_block_forward,
-    mamba_download,
-    mamba_upload,
 )
 from mamba.impl.modules.mamba_simple import mamba_step
 from mamba.checks.mamba2_fixture import (
@@ -246,12 +248,12 @@ def _m3_upload_addr(ctx: DeviceContext, addr: Int, n: Int) raises -> DeviceBuffe
     else:
         var src = _f32_ptr(addr)
         var count = max(n, 1)
-        var dev = ctx.enqueue_create_buffer[DType.float32](count)
+        var dev = mamba_device_alloc(ctx, count)
         # DeviceContext accepts ordinary host pointers; the Python frame
         # retains each NumPy array until the synchronized copy completes.
         comptime if not is_defined["MOJOLEARN_MAMBA3_LEGACY_CALLER_TRANSFER"]():
             if n > 0:
-                ctx.enqueue_copy(dst_buf=dev, src_ptr=src)
+                mamba_copy_in(ctx, dev, src, count)
                 ctx.synchronize()
                 return dev^
         var host = ctx.enqueue_create_host_buffer[DType.float32](count)
@@ -260,7 +262,7 @@ def _m3_upload_addr(ctx: DeviceContext, addr: Int, n: Int) raises -> DeviceBuffe
             memcpy(dest=host.unsafe_ptr(), src=src, count=n)
         else:
             host.unsafe_ptr().unsafe_store(0, Float32(0.0))
-        ctx.enqueue_copy(dst_buf=dev, src_ptr=host.unsafe_ptr())
+        mamba_copy_in(ctx, dev, host.unsafe_ptr(), count)
         ctx.synchronize()
         _ = host^
         return dev^

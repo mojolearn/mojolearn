@@ -113,8 +113,9 @@ from std.memory import bitcast
 from std.sys import argv
 from max.gpu.host import DeviceBuffer, DeviceContext
 from mamba.impl.modeling.modeling_mamba import (
-    MambaDeviceStages, MambaDeviceState, MambaDeviceWeights,
     mamba_block_forward,
+    MAMBA_GUARD,
+    MambaDeviceStages, MambaDeviceState, MambaDeviceWeights,
 )
 
 from core.identity_trace import IdentityTrace
@@ -190,7 +191,9 @@ def mamba_step(
     The same block kernels serve prefill and decode. The block validates
     that stages and state match B and L=1 before launching any work.
     """
-    if len(hidden_states) != b * w.dims.d_model:
+    # the poison build carries MAMBA_GUARD band elements after the logical
+    # length (DEVIATION 2712); in production the band is 0 and this is exact
+    if len(hidden_states) != b * w.dims.d_model + MAMBA_GUARD:
         raise Error("mamba_step: expected exactly one token per batch row")
     mamba_block_forward(
         ctx, stages, state, w, hidden_states, b, DECODE_TOKENS, trace, prefix,
