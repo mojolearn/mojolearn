@@ -744,3 +744,23 @@ Full host model storage and replicated query tiles remain. Every complete
 grove must fit its owner, and existing integer limits still apply. Pooling
 model buffers for prediction does not partition training data. Owners are
 currently evaluated sequentially; no throughput improvement is claimed.
+
+A failed native prediction closes the persistent driver; construct a fresh
+predictor to recover. Parent-side shape/method admission failures leave it
+usable. Existing single-device model caches owned by the source estimator are
+independent of the worker snapshot and remain live until their owner releases
+them. Construct the pooled driver from a fitted host model before preparing
+an additional complete single-device snapshot when measuring capacity.
+
+Worker RPC temporaries are released after each response is serialized. This
+avoids retaining incidental neural state/gradient messages while workers are
+idle; explicitly prepared forest snapshots remain alive until release.
+
+The two-H100 qualification passes both model layouts: 74 production/fault
+native fixtures plus two supplemental within-grove order witnesses, existing
+resident lifecycle checks and 16 public configurations per layout. Complete
+packed/separate prediction receipts agree, and neural worker replay receipts
+remain unchanged. See
+`bench/results/multi_gpu/2026-09-14/forest-grove-pool-h100/` for source, failures
+and full results. Cross-vendor and beyond-one-device capacity checks remain
+separate requirements.
