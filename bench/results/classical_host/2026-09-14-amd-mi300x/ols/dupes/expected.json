@@ -1,0 +1,41 @@
+{
+  "commit": null,
+  "estimator": "LinearRegression",
+  "gpu_arch": null,
+  "host": {
+    "cpu": "Intel(R) Xeon(R) Platinum 8470",
+    "family": "6",
+    "isa": [
+      "avx2",
+      "avx512f",
+      "fma"
+    ],
+    "machine": "x86_64",
+    "model": "143",
+    "python": "3.14.7",
+    "release": "6.8.0-124-generic",
+    "stepping": "8",
+    "system": "Linux",
+    "vendor": "GenuineIntel"
+  },
+  "kind": "dupes",
+  "lane": "ols",
+  "model_sha256": "ef68b4364cd0fa2d2ef54513509e1710cbcd58d048fe9b380c37a0acc2791824",
+  "numeric_mode": "identical",
+  "predictions": {
+    "identity_hash": "09ac924358918527",
+    "predict": {
+      "dtype": "<f4",
+      "sha256": "16aaba20aa580efd3e39577954b65c30117759dbd40244a2f58bf1657a0807c7",
+      "shape": [
+        256
+      ]
+    },
+    "seconds": 0.001113
+  },
+  "recorded_at": "2026-09-14T01:35:39+0000",
+  "reload_equal": true,
+  "status": "RECORDED",
+  "vendor": "hip",
+  "x_sha256": "e31c19919dd0d22a22c740be1b69d4029a2203b50921ee428a485970456fcfa7"
+}

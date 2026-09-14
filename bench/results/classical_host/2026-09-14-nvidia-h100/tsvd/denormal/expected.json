@@ -1,0 +1,42 @@
+{
+  "commit": null,
+  "estimator": "TruncatedSVD",
+  "gpu_arch": null,
+  "host": {
+    "cpu": "Intel(R) Xeon(R) Platinum 8470",
+    "family": "6",
+    "isa": [
+      "avx2",
+      "avx512f",
+      "fma"
+    ],
+    "machine": "x86_64",
+    "model": "143",
+    "python": "3.14.7",
+    "release": "6.8.0-90-generic",
+    "stepping": "8",
+    "system": "Linux",
+    "vendor": "GenuineIntel"
+  },
+  "kind": "denormal",
+  "lane": "tsvd",
+  "model_sha256": "3ddbcba0a9ba339d92f3f43edb58514f82ae2006f5e9ad689945799705f5a2fa",
+  "numeric_mode": "identical",
+  "predictions": {
+    "identity_hash": "fc4af18e4659ab46",
+    "seconds": 0.000193,
+    "transform": {
+      "dtype": "<f4",
+      "sha256": "9147798c548168cc70eaec6945241e5d11d665653572b27b0c6329efae2f50e6",
+      "shape": [
+        256,
+        4
+      ]
+    }
+  },
+  "recorded_at": "2026-09-14T01:30:59+0000",
+  "reload_equal": true,
+  "status": "RECORDED",
+  "vendor": "cuda",
+  "x_sha256": "a67775cb50fa4e97d03889cd219ee75e0b531598a6674bd6ab4ad2e2d51ed998"
+}

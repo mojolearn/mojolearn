@@ -1,0 +1,2624 @@
+{
+  "binary": "/Users/andrewhendel/CascadeProjects/mojolearn/python/mojolearn/host/_mojolearn_estimators_host.so",
+  "checked_at": "2026-09-13T21:36:39-0400",
+  "commit": "5e7acf79d0b1106f784c7fb187077fe8a2ab4330",
+  "exit": 0,
+  "expect_mismatch": false,
+  "fixtures": [
+    {
+      "cases": [
+        {
+          "case": "decision_function",
+          "equal": true,
+          "got": "1a0e162e46f3a2dea7032164e3edc2ac601c77d5bbf1270760e4ee144de0a664",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256
+          ],
+          "want": "1a0e162e46f3a2dea7032164e3edc2ac601c77d5bbf1270760e4ee144de0a664",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256
+          ]
+        },
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "d004c5e0bba1854ee0bc8d11f4435967b01de9a36aa657ea1c659f76603e73e1",
+          "got_dtype": "<i8",
+          "got_shape": [
+            256
+          ],
+          "want": "d004c5e0bba1854ee0bc8d11f4435967b01de9a36aa657ea1c659f76603e73e1",
+          "want_dtype": "<i8",
+          "want_shape": [
+            256
+          ]
+        },
+        {
+          "case": "predict_proba",
+          "equal": true,
+          "got": "6f5fc8fadacd540d0c522d8c2a2b15bf708b408f0cf94a40445d8a3a6133e588",
+          "got_dtype": "<f8",
+          "got_shape": [
+            256,
+            2
+          ],
+          "want": "6f5fc8fadacd540d0c522d8c2a2b15bf708b408f0cf94a40445d8a3a6133e588",
+          "want_dtype": "<f8",
+          "want_shape": [
+            256,
+            2
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "103f76e4a2b23c03",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": true,
+          "infer": "103f76e4a2b23c03",
+          "vendor": "nvidia-nvidia-h100-80gb-hbm3-sm_90a"
+        },
+        {
+          "column": "amd-mi300x-gfx942.json",
+          "equal": true,
+          "infer": "103f76e4a2b23c03",
+          "vendor": "amd-gfx942"
+        }
+      ],
+      "estimator": "LogisticRegression",
+      "identity_hash": {
+        "equal": true,
+        "got": "103f76e4a2b23c03",
+        "want": "103f76e4a2b23c03"
+      },
+      "kind": "base",
+      "lane": "logistic",
+      "model_sha256": "1b51b4eabdcf59e2bc242e382e6bbf9fa72f211c746993a00ce5cb29a5ef4f8c",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "cuda",
+      "seconds": 0.681334
+    },
+    {
+      "cases": [
+        {
+          "case": "decision_function",
+          "equal": true,
+          "got": "7929b0f5c5b793c8f2b9572c08c0e6dc92e60ea3faef704e56081bb3f3c1df24",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256
+          ],
+          "want": "7929b0f5c5b793c8f2b9572c08c0e6dc92e60ea3faef704e56081bb3f3c1df24",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256
+          ]
+        },
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "f136fccc6393799d1e86ef1f8e080427fa498c05874848ecc5b0abf81d9e0286",
+          "got_dtype": "<i8",
+          "got_shape": [
+            256
+          ],
+          "want": "f136fccc6393799d1e86ef1f8e080427fa498c05874848ecc5b0abf81d9e0286",
+          "want_dtype": "<i8",
+          "want_shape": [
+            256
+          ]
+        },
+        {
+          "case": "predict_proba",
+          "equal": true,
+          "got": "ccd53a297b38459ab95f1412070b97863e0eb34af5203ae3cede93f9ff9d071b",
+          "got_dtype": "<f8",
+          "got_shape": [
+            256,
+            2
+          ],
+          "want": "ccd53a297b38459ab95f1412070b97863e0eb34af5203ae3cede93f9ff9d071b",
+          "want_dtype": "<f8",
+          "want_shape": [
+            256,
+            2
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "2092f79961286d8a",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": true,
+          "infer": "2092f79961286d8a",
+          "vendor": "nvidia-nvidia-h100-80gb-hbm3-sm_90a"
+        },
+        {
+          "column": "amd-mi300x-gfx942.json",
+          "equal": true,
+          "infer": "2092f79961286d8a",
+          "vendor": "amd-gfx942"
+        }
+      ],
+      "estimator": "LogisticRegression",
+      "identity_hash": {
+        "equal": true,
+        "got": "2092f79961286d8a",
+        "want": "2092f79961286d8a"
+      },
+      "kind": "denormal",
+      "lane": "logistic",
+      "model_sha256": "0f11207a162b3b64c6fce2f221c4c0e5d3f4f8000f520002c825af9654c70411",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "cuda",
+      "seconds": 0.000381
+    },
+    {
+      "cases": [
+        {
+          "case": "decision_function",
+          "equal": true,
+          "got": "7929b0f5c5b793c8f2b9572c08c0e6dc92e60ea3faef704e56081bb3f3c1df24",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256
+          ],
+          "want": "7929b0f5c5b793c8f2b9572c08c0e6dc92e60ea3faef704e56081bb3f3c1df24",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256
+          ]
+        },
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "f136fccc6393799d1e86ef1f8e080427fa498c05874848ecc5b0abf81d9e0286",
+          "got_dtype": "<i8",
+          "got_shape": [
+            256
+          ],
+          "want": "f136fccc6393799d1e86ef1f8e080427fa498c05874848ecc5b0abf81d9e0286",
+          "want_dtype": "<i8",
+          "want_shape": [
+            256
+          ]
+        },
+        {
+          "case": "predict_proba",
+          "equal": true,
+          "got": "ccd53a297b38459ab95f1412070b97863e0eb34af5203ae3cede93f9ff9d071b",
+          "got_dtype": "<f8",
+          "got_shape": [
+            256,
+            2
+          ],
+          "want": "ccd53a297b38459ab95f1412070b97863e0eb34af5203ae3cede93f9ff9d071b",
+          "want_dtype": "<f8",
+          "want_shape": [
+            256,
+            2
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "2092f79961286d8a",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": true,
+          "infer": "2092f79961286d8a",
+          "vendor": "nvidia-nvidia-h100-80gb-hbm3-sm_90a"
+        },
+        {
+          "column": "amd-mi300x-gfx942.json",
+          "equal": true,
+          "infer": "2092f79961286d8a",
+          "vendor": "amd-gfx942"
+        }
+      ],
+      "estimator": "LogisticRegression",
+      "identity_hash": {
+        "equal": true,
+        "got": "2092f79961286d8a",
+        "want": "2092f79961286d8a"
+      },
+      "kind": "denormal_ftz",
+      "lane": "logistic",
+      "model_sha256": "0f11207a162b3b64c6fce2f221c4c0e5d3f4f8000f520002c825af9654c70411",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "cuda",
+      "seconds": 0.000315
+    },
+    {
+      "cases": [
+        {
+          "case": "decision_function",
+          "equal": true,
+          "got": "2e832ea1b95a18e086dc894483ee86feae5fdbee74eb8119b1991ac1647a1fad",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256
+          ],
+          "want": "2e832ea1b95a18e086dc894483ee86feae5fdbee74eb8119b1991ac1647a1fad",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256
+          ]
+        },
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "0b38797815f52142f850347375da661435947c1b75ea64366cd4bb4ca58f940b",
+          "got_dtype": "<i8",
+          "got_shape": [
+            256
+          ],
+          "want": "0b38797815f52142f850347375da661435947c1b75ea64366cd4bb4ca58f940b",
+          "want_dtype": "<i8",
+          "want_shape": [
+            256
+          ]
+        },
+        {
+          "case": "predict_proba",
+          "equal": true,
+          "got": "2c7c2438a0e054ef9eed232d89dc979e01248140ec2280bfa41e69351672bd43",
+          "got_dtype": "<f8",
+          "got_shape": [
+            256,
+            2
+          ],
+          "want": "2c7c2438a0e054ef9eed232d89dc979e01248140ec2280bfa41e69351672bd43",
+          "want_dtype": "<f8",
+          "want_shape": [
+            256,
+            2
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "df012d0cb1286818",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": true,
+          "infer": "df012d0cb1286818",
+          "vendor": "nvidia-nvidia-h100-80gb-hbm3-sm_90a"
+        },
+        {
+          "column": "amd-mi300x-gfx942.json",
+          "equal": true,
+          "infer": "df012d0cb1286818",
+          "vendor": "amd-gfx942"
+        }
+      ],
+      "estimator": "LogisticRegression",
+      "identity_hash": {
+        "equal": true,
+        "got": "df012d0cb1286818",
+        "want": "df012d0cb1286818"
+      },
+      "kind": "dupes",
+      "lane": "logistic",
+      "model_sha256": "4b387ce327c969d6791b60c0d5571bcd1190599f3625ec59bc5cc3600b0538a9",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "cuda",
+      "seconds": 0.000263
+    },
+    {
+      "cases": [
+        {
+          "case": "decision_function",
+          "equal": true,
+          "got": "922fcf1791c91039927d8be0d4ed4b8d52af71bf1a640ffc104ddf0837e906ec",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256
+          ],
+          "want": "922fcf1791c91039927d8be0d4ed4b8d52af71bf1a640ffc104ddf0837e906ec",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256
+          ]
+        },
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "f24d01f28740f5e8d0b59c2214b8440d7eff87026cfcccfd85840d08c57b2426",
+          "got_dtype": "<i8",
+          "got_shape": [
+            256
+          ],
+          "want": "f24d01f28740f5e8d0b59c2214b8440d7eff87026cfcccfd85840d08c57b2426",
+          "want_dtype": "<i8",
+          "want_shape": [
+            256
+          ]
+        },
+        {
+          "case": "predict_proba",
+          "equal": true,
+          "got": "a97f4c1e328fdd30694fec50aa5934ed3bc79add8c97284f6ca709263117c5cf",
+          "got_dtype": "<f8",
+          "got_shape": [
+            256,
+            2
+          ],
+          "want": "a97f4c1e328fdd30694fec50aa5934ed3bc79add8c97284f6ca709263117c5cf",
+          "want_dtype": "<f8",
+          "want_shape": [
+            256,
+            2
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "dfe219d0b67a77ca",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": true,
+          "infer": "dfe219d0b67a77ca",
+          "vendor": "nvidia-nvidia-h100-80gb-hbm3-sm_90a"
+        },
+        {
+          "column": "amd-mi300x-gfx942.json",
+          "equal": true,
+          "infer": "dfe219d0b67a77ca",
+          "vendor": "amd-gfx942"
+        }
+      ],
+      "estimator": "LogisticRegression",
+      "identity_hash": {
+        "equal": true,
+        "got": "dfe219d0b67a77ca",
+        "want": "dfe219d0b67a77ca"
+      },
+      "kind": "hashed",
+      "lane": "logistic",
+      "model_sha256": "ee3cb3e174ae7c73137bf7be329794ff5cd52005971dc4a41a903e76aabb4d70",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "cuda",
+      "seconds": 0.00036
+    },
+    {
+      "cases": [
+        {
+          "case": "decision_function",
+          "equal": true,
+          "got": "1ac4cf6710393105fce88571d5030bfab6b6211b160e5580ea3e6b491e630735",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256
+          ],
+          "want": "1ac4cf6710393105fce88571d5030bfab6b6211b160e5580ea3e6b491e630735",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256
+          ]
+        },
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "de4da1d85ff204beab87448c9a35784bd8f4fcb5ac0a7ecb35a69f7ffaec13c0",
+          "got_dtype": "<i8",
+          "got_shape": [
+            256
+          ],
+          "want": "de4da1d85ff204beab87448c9a35784bd8f4fcb5ac0a7ecb35a69f7ffaec13c0",
+          "want_dtype": "<i8",
+          "want_shape": [
+            256
+          ]
+        },
+        {
+          "case": "predict_proba",
+          "equal": true,
+          "got": "96b5fa35fd27efbeb8941684cd544a7aeb2bde4b4d6aa3d004f560f63ac1aba8",
+          "got_dtype": "<f8",
+          "got_shape": [
+            256,
+            2
+          ],
+          "want": "96b5fa35fd27efbeb8941684cd544a7aeb2bde4b4d6aa3d004f560f63ac1aba8",
+          "want_dtype": "<f8",
+          "want_shape": [
+            256,
+            2
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "00fff477b42c65a0",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": true,
+          "infer": "00fff477b42c65a0",
+          "vendor": "nvidia-nvidia-h100-80gb-hbm3-sm_90a"
+        },
+        {
+          "column": "amd-mi300x-gfx942.json",
+          "equal": true,
+          "infer": "00fff477b42c65a0",
+          "vendor": "amd-gfx942"
+        }
+      ],
+      "estimator": "LogisticRegression",
+      "identity_hash": {
+        "equal": true,
+        "got": "00fff477b42c65a0",
+        "want": "00fff477b42c65a0"
+      },
+      "kind": "negative",
+      "lane": "logistic",
+      "model_sha256": "61cb0a45d1792d44c4159cabfcba38736e0b8ae0568f1f69f0325e4deb992520",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "cuda",
+      "seconds": 0.000442
+    },
+    {
+      "cases": [
+        {
+          "case": "decision_function",
+          "equal": true,
+          "got": "60f77f79146c25db2278a9c1a1fa26d77ecb23981dee0773f4da8155d5a8005b",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256
+          ],
+          "want": "60f77f79146c25db2278a9c1a1fa26d77ecb23981dee0773f4da8155d5a8005b",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256
+          ]
+        },
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "7b68b44ef5fb83b64c0800bef8d95f98d443d258002ceed2987cbbacafb13d30",
+          "got_dtype": "<i8",
+          "got_shape": [
+            256
+          ],
+          "want": "7b68b44ef5fb83b64c0800bef8d95f98d443d258002ceed2987cbbacafb13d30",
+          "want_dtype": "<i8",
+          "want_shape": [
+            256
+          ]
+        },
+        {
+          "case": "predict_proba",
+          "equal": true,
+          "got": "3c007e5c3f70d876414ffbb4708315d10cb62c4ba602d7a8b8400d3164a5ecfa",
+          "got_dtype": "<f8",
+          "got_shape": [
+            256,
+            2
+          ],
+          "want": "3c007e5c3f70d876414ffbb4708315d10cb62c4ba602d7a8b8400d3164a5ecfa",
+          "want_dtype": "<f8",
+          "want_shape": [
+            256,
+            2
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "7540ab14779d65c6",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": true,
+          "infer": "7540ab14779d65c6",
+          "vendor": "nvidia-nvidia-h100-80gb-hbm3-sm_90a"
+        },
+        {
+          "column": "amd-mi300x-gfx942.json",
+          "equal": true,
+          "infer": "7540ab14779d65c6",
+          "vendor": "amd-gfx942"
+        }
+      ],
+      "estimator": "LogisticRegression",
+      "identity_hash": {
+        "equal": true,
+        "got": "7540ab14779d65c6",
+        "want": "7540ab14779d65c6"
+      },
+      "kind": "odd",
+      "lane": "logistic",
+      "model_sha256": "1be05ca406afb6a555d1fff771e396f54c4a5095e44c4be8aa83a1c7b5ff2959",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "cuda",
+      "seconds": 0.000334
+    },
+    {
+      "cases": [
+        {
+          "case": "decision_function",
+          "equal": true,
+          "got": "8feaf8ef74b3c5b6113a45025ca244248aec8b8b0b15f6fdfcdbcb9b0b9bc170",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256
+          ],
+          "want": "8feaf8ef74b3c5b6113a45025ca244248aec8b8b0b15f6fdfcdbcb9b0b9bc170",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256
+          ]
+        },
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "878faaca7d90b46a627e9c6cb998c13e1b92c9f599ec424dfa1c0c0f4925751d",
+          "got_dtype": "<i8",
+          "got_shape": [
+            256
+          ],
+          "want": "878faaca7d90b46a627e9c6cb998c13e1b92c9f599ec424dfa1c0c0f4925751d",
+          "want_dtype": "<i8",
+          "want_shape": [
+            256
+          ]
+        },
+        {
+          "case": "predict_proba",
+          "equal": true,
+          "got": "171e9a05d249d0ebf8f83fea6b7b59f7fc73ba848a5f460bb8fed68f98f7383c",
+          "got_dtype": "<f8",
+          "got_shape": [
+            256,
+            2
+          ],
+          "want": "171e9a05d249d0ebf8f83fea6b7b59f7fc73ba848a5f460bb8fed68f98f7383c",
+          "want_dtype": "<f8",
+          "want_shape": [
+            256,
+            2
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "31ae5dc087daddea",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": true,
+          "infer": "31ae5dc087daddea",
+          "vendor": "nvidia-nvidia-h100-80gb-hbm3-sm_90a"
+        },
+        {
+          "column": "amd-mi300x-gfx942.json",
+          "equal": true,
+          "infer": "31ae5dc087daddea",
+          "vendor": "amd-gfx942"
+        }
+      ],
+      "estimator": "LogisticRegression",
+      "identity_hash": {
+        "equal": true,
+        "got": "31ae5dc087daddea",
+        "want": "31ae5dc087daddea"
+      },
+      "kind": "ties",
+      "lane": "logistic",
+      "model_sha256": "eff4803be10700c887d1e6bfa07b7db3258a44872b3cd79d25add2e996595b3b",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "cuda",
+      "seconds": 0.000275
+    },
+    {
+      "cases": [
+        {
+          "case": "decision_function",
+          "equal": true,
+          "got": "6935eece0f9d76e6f4ad3ba285613e6fe27478c2bdf5fc4dddb9e0799b02766b",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256
+          ],
+          "want": "6935eece0f9d76e6f4ad3ba285613e6fe27478c2bdf5fc4dddb9e0799b02766b",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256
+          ]
+        },
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "dd6402e1f3455899e5d9562793b46d0a588168faecf1a60d0d57b4b1d811f3fb",
+          "got_dtype": "<i8",
+          "got_shape": [
+            256
+          ],
+          "want": "dd6402e1f3455899e5d9562793b46d0a588168faecf1a60d0d57b4b1d811f3fb",
+          "want_dtype": "<i8",
+          "want_shape": [
+            256
+          ]
+        },
+        {
+          "case": "predict_proba",
+          "equal": true,
+          "got": "39cb55ce7e9a07858e543cae1f27e016a531eaaf7908962a6f874aa7d425dc7a",
+          "got_dtype": "<f8",
+          "got_shape": [
+            256,
+            2
+          ],
+          "want": "39cb55ce7e9a07858e543cae1f27e016a531eaaf7908962a6f874aa7d425dc7a",
+          "want_dtype": "<f8",
+          "want_shape": [
+            256,
+            2
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "0b4e034053a507a6",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": true,
+          "infer": "0b4e034053a507a6",
+          "vendor": "nvidia-nvidia-h100-80gb-hbm3-sm_90a"
+        },
+        {
+          "column": "amd-mi300x-gfx942.json",
+          "equal": true,
+          "infer": "0b4e034053a507a6",
+          "vendor": "amd-gfx942"
+        }
+      ],
+      "estimator": "LogisticRegression",
+      "identity_hash": {
+        "equal": true,
+        "got": "0b4e034053a507a6",
+        "want": "0b4e034053a507a6"
+      },
+      "kind": "wide",
+      "lane": "logistic",
+      "model_sha256": "576c92b63ada584d1acdaa4ba42954b9e22c473467630adfebd3ff2e570ce774",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "cuda",
+      "seconds": 0.000288
+    },
+    {
+      "cases": [
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "6d9a2a0055f9fd1c668bd524d3e0b70dff9575061ec25f2c63771882ff640198",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256
+          ],
+          "want": "6d9a2a0055f9fd1c668bd524d3e0b70dff9575061ec25f2c63771882ff640198",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "2546a13c03838433",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": true,
+          "infer": "2546a13c03838433",
+          "vendor": "nvidia-nvidia-h100-80gb-hbm3-sm_90a"
+        },
+        {
+          "column": "amd-mi300x-gfx942.json",
+          "equal": true,
+          "infer": "2546a13c03838433",
+          "vendor": "amd-gfx942"
+        }
+      ],
+      "estimator": "LinearRegression",
+      "identity_hash": {
+        "equal": true,
+        "got": "2546a13c03838433",
+        "want": "2546a13c03838433"
+      },
+      "kind": "base",
+      "lane": "ols",
+      "model_sha256": "a84289377ea9180fa5dd230f29d4c01dd89e648e7890d0998c95f0722fb68e60",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "cuda",
+      "seconds": 8.4e-05
+    },
+    {
+      "cases": [
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "cebab95126ca869ea12fb3ac1b2a313f7375e4daa7b83789608928501324d6a1",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256
+          ],
+          "want": "cebab95126ca869ea12fb3ac1b2a313f7375e4daa7b83789608928501324d6a1",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "050118359943fcd8",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": true,
+          "infer": "050118359943fcd8",
+          "vendor": "nvidia-nvidia-h100-80gb-hbm3-sm_90a"
+        },
+        {
+          "column": "amd-mi300x-gfx942.json",
+          "equal": true,
+          "infer": "050118359943fcd8",
+          "vendor": "amd-gfx942"
+        }
+      ],
+      "estimator": "LinearRegression",
+      "identity_hash": {
+        "equal": true,
+        "got": "050118359943fcd8",
+        "want": "050118359943fcd8"
+      },
+      "kind": "denormal",
+      "lane": "ols",
+      "model_sha256": "1c22cb64d07612e44d22f594bfa15d0b2a2352a3c95b4a1c6ef72c9cb889ffff",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "cuda",
+      "seconds": 7.8e-05
+    },
+    {
+      "cases": [
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "cebab95126ca869ea12fb3ac1b2a313f7375e4daa7b83789608928501324d6a1",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256
+          ],
+          "want": "cebab95126ca869ea12fb3ac1b2a313f7375e4daa7b83789608928501324d6a1",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "050118359943fcd8",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": true,
+          "infer": "050118359943fcd8",
+          "vendor": "nvidia-nvidia-h100-80gb-hbm3-sm_90a"
+        },
+        {
+          "column": "amd-mi300x-gfx942.json",
+          "equal": true,
+          "infer": "050118359943fcd8",
+          "vendor": "amd-gfx942"
+        }
+      ],
+      "estimator": "LinearRegression",
+      "identity_hash": {
+        "equal": true,
+        "got": "050118359943fcd8",
+        "want": "050118359943fcd8"
+      },
+      "kind": "denormal_ftz",
+      "lane": "ols",
+      "model_sha256": "1c22cb64d07612e44d22f594bfa15d0b2a2352a3c95b4a1c6ef72c9cb889ffff",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "cuda",
+      "seconds": 8.4e-05
+    },
+    {
+      "cases": [
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "16aaba20aa580efd3e39577954b65c30117759dbd40244a2f58bf1657a0807c7",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256
+          ],
+          "want": "16aaba20aa580efd3e39577954b65c30117759dbd40244a2f58bf1657a0807c7",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "09ac924358918527",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": true,
+          "infer": "09ac924358918527",
+          "vendor": "nvidia-nvidia-h100-80gb-hbm3-sm_90a"
+        },
+        {
+          "column": "amd-mi300x-gfx942.json",
+          "equal": true,
+          "infer": "09ac924358918527",
+          "vendor": "amd-gfx942"
+        }
+      ],
+      "estimator": "LinearRegression",
+      "identity_hash": {
+        "equal": true,
+        "got": "09ac924358918527",
+        "want": "09ac924358918527"
+      },
+      "kind": "dupes",
+      "lane": "ols",
+      "model_sha256": "ef68b4364cd0fa2d2ef54513509e1710cbcd58d048fe9b380c37a0acc2791824",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "cuda",
+      "seconds": 7.6e-05
+    },
+    {
+      "cases": [
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "91d8e03b1787ee4daa4a28a74e372328ee2d15765579be64350eba8d036f365a",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256
+          ],
+          "want": "91d8e03b1787ee4daa4a28a74e372328ee2d15765579be64350eba8d036f365a",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "73b6c23acb537f4f",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": true,
+          "infer": "73b6c23acb537f4f",
+          "vendor": "nvidia-nvidia-h100-80gb-hbm3-sm_90a"
+        },
+        {
+          "column": "amd-mi300x-gfx942.json",
+          "equal": true,
+          "infer": "73b6c23acb537f4f",
+          "vendor": "amd-gfx942"
+        }
+      ],
+      "estimator": "LinearRegression",
+      "identity_hash": {
+        "equal": true,
+        "got": "73b6c23acb537f4f",
+        "want": "73b6c23acb537f4f"
+      },
+      "kind": "hashed",
+      "lane": "ols",
+      "model_sha256": "5de64f00889bfe52a56245091a60f4d44c6f3af4ba020d43ce89d0ed7cf44429",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "cuda",
+      "seconds": 0.000131
+    },
+    {
+      "cases": [
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "4ec61716162bd9177a4d14fef29d67c9d067b1bf9c49d879f65b99143ebc5e48",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256
+          ],
+          "want": "4ec61716162bd9177a4d14fef29d67c9d067b1bf9c49d879f65b99143ebc5e48",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "ddf1f9ebb606db70",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": true,
+          "infer": "ddf1f9ebb606db70",
+          "vendor": "nvidia-nvidia-h100-80gb-hbm3-sm_90a"
+        },
+        {
+          "column": "amd-mi300x-gfx942.json",
+          "equal": true,
+          "infer": "ddf1f9ebb606db70",
+          "vendor": "amd-gfx942"
+        }
+      ],
+      "estimator": "LinearRegression",
+      "identity_hash": {
+        "equal": true,
+        "got": "ddf1f9ebb606db70",
+        "want": "ddf1f9ebb606db70"
+      },
+      "kind": "negative",
+      "lane": "ols",
+      "model_sha256": "f534c0184e2b735f0757571f936d63f98345f154911e90400f8fc02b20407cd1",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "cuda",
+      "seconds": 0.000102
+    },
+    {
+      "cases": [
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "b1f281d2ca395163963e66051b6f9f024f39fefdcbd0a77102538f293b41167a",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256
+          ],
+          "want": "b1f281d2ca395163963e66051b6f9f024f39fefdcbd0a77102538f293b41167a",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "60eb6ff64dfbea28",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": true,
+          "infer": "60eb6ff64dfbea28",
+          "vendor": "nvidia-nvidia-h100-80gb-hbm3-sm_90a"
+        },
+        {
+          "column": "amd-mi300x-gfx942.json",
+          "equal": true,
+          "infer": "60eb6ff64dfbea28",
+          "vendor": "amd-gfx942"
+        }
+      ],
+      "estimator": "LinearRegression",
+      "identity_hash": {
+        "equal": true,
+        "got": "60eb6ff64dfbea28",
+        "want": "60eb6ff64dfbea28"
+      },
+      "kind": "odd",
+      "lane": "ols",
+      "model_sha256": "fcd41cbad6561bbb45645f3d29320a14fa57a92900533c53f1f126c71340ee8d",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "cuda",
+      "seconds": 0.000184
+    },
+    {
+      "cases": [
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "2b457777ae45fa42cb190dda3ba88411b3989ca83cf4d3aa1ad81f3a542517da",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256
+          ],
+          "want": "2b457777ae45fa42cb190dda3ba88411b3989ca83cf4d3aa1ad81f3a542517da",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "55f61f34cae7e5ff",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": true,
+          "infer": "55f61f34cae7e5ff",
+          "vendor": "nvidia-nvidia-h100-80gb-hbm3-sm_90a"
+        },
+        {
+          "column": "amd-mi300x-gfx942.json",
+          "equal": true,
+          "infer": "55f61f34cae7e5ff",
+          "vendor": "amd-gfx942"
+        }
+      ],
+      "estimator": "LinearRegression",
+      "identity_hash": {
+        "equal": true,
+        "got": "55f61f34cae7e5ff",
+        "want": "55f61f34cae7e5ff"
+      },
+      "kind": "ties",
+      "lane": "ols",
+      "model_sha256": "b25d3a2214bc6196f5e389d7b9a3a8f80d43d6ebcdb74141ef2ccfa5a0c81cda",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "cuda",
+      "seconds": 0.000104
+    },
+    {
+      "cases": [
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "3eb63f6a2d4b402e178aa311305a26a83f34e9243e6bb4c1b164ac213cfe7015",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256
+          ],
+          "want": "3eb63f6a2d4b402e178aa311305a26a83f34e9243e6bb4c1b164ac213cfe7015",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "c40c1d99f114c282",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": true,
+          "infer": "c40c1d99f114c282",
+          "vendor": "nvidia-nvidia-h100-80gb-hbm3-sm_90a"
+        },
+        {
+          "column": "amd-mi300x-gfx942.json",
+          "equal": true,
+          "infer": "c40c1d99f114c282",
+          "vendor": "amd-gfx942"
+        }
+      ],
+      "estimator": "LinearRegression",
+      "identity_hash": {
+        "equal": true,
+        "got": "c40c1d99f114c282",
+        "want": "c40c1d99f114c282"
+      },
+      "kind": "wide",
+      "lane": "ols",
+      "model_sha256": "926f863307451ea0a1c3457299f51306a3d963ac3a340be790405c260b1e2de6",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "cuda",
+      "seconds": 0.0001
+    },
+    {
+      "cases": [
+        {
+          "case": "transform",
+          "equal": true,
+          "got": "df8807e8fc9b0ebba9c14423940b360ab48defed8d4779aba8bee2cb54b87378",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256,
+            4
+          ],
+          "want": "df8807e8fc9b0ebba9c14423940b360ab48defed8d4779aba8bee2cb54b87378",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256,
+            4
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "5ec98c317c9314a6",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": true,
+          "infer": "5ec98c317c9314a6",
+          "vendor": "nvidia-nvidia-h100-80gb-hbm3-sm_90a"
+        },
+        {
+          "column": "amd-mi300x-gfx942.json",
+          "equal": true,
+          "infer": "5ec98c317c9314a6",
+          "vendor": "amd-gfx942"
+        }
+      ],
+      "estimator": "PCA",
+      "identity_hash": {
+        "equal": true,
+        "got": "5ec98c317c9314a6",
+        "want": "5ec98c317c9314a6"
+      },
+      "kind": "base",
+      "lane": "pca",
+      "model_sha256": "b41a408ef6ffb8c971dc339a4640ef6e7e4deb257ffccb728f0b923ac897a19d",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "cuda",
+      "seconds": 0.000202
+    },
+    {
+      "cases": [
+        {
+          "case": "transform",
+          "equal": true,
+          "got": "d2d05371373cc0424efbb0ba521558b1830dad56ac0e2f4612873ca81e08a8bc",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256,
+            4
+          ],
+          "want": "d2d05371373cc0424efbb0ba521558b1830dad56ac0e2f4612873ca81e08a8bc",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256,
+            4
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "d28a4176d38a79ad",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": true,
+          "infer": "d28a4176d38a79ad",
+          "vendor": "nvidia-nvidia-h100-80gb-hbm3-sm_90a"
+        },
+        {
+          "column": "amd-mi300x-gfx942.json",
+          "equal": true,
+          "infer": "d28a4176d38a79ad",
+          "vendor": "amd-gfx942"
+        }
+      ],
+      "estimator": "PCA",
+      "identity_hash": {
+        "equal": true,
+        "got": "d28a4176d38a79ad",
+        "want": "d28a4176d38a79ad"
+      },
+      "kind": "denormal",
+      "lane": "pca",
+      "model_sha256": "85752b8d4fc03a2280898c5ca3df0678d4acc1fdc196e74d35891d8b73fbd8bc",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "cuda",
+      "seconds": 0.000154
+    },
+    {
+      "cases": [
+        {
+          "case": "transform",
+          "equal": true,
+          "got": "d2d05371373cc0424efbb0ba521558b1830dad56ac0e2f4612873ca81e08a8bc",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256,
+            4
+          ],
+          "want": "d2d05371373cc0424efbb0ba521558b1830dad56ac0e2f4612873ca81e08a8bc",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256,
+            4
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "d28a4176d38a79ad",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": true,
+          "infer": "d28a4176d38a79ad",
+          "vendor": "nvidia-nvidia-h100-80gb-hbm3-sm_90a"
+        },
+        {
+          "column": "amd-mi300x-gfx942.json",
+          "equal": true,
+          "infer": "d28a4176d38a79ad",
+          "vendor": "amd-gfx942"
+        }
+      ],
+      "estimator": "PCA",
+      "identity_hash": {
+        "equal": true,
+        "got": "d28a4176d38a79ad",
+        "want": "d28a4176d38a79ad"
+      },
+      "kind": "denormal_ftz",
+      "lane": "pca",
+      "model_sha256": "85752b8d4fc03a2280898c5ca3df0678d4acc1fdc196e74d35891d8b73fbd8bc",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "cuda",
+      "seconds": 0.000296
+    },
+    {
+      "cases": [
+        {
+          "case": "transform",
+          "equal": true,
+          "got": "a4de4e81cd222acd47b5c3bf8b620bb2d4fb5c8b311aa9d8113f1bab98ad81b7",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256,
+            4
+          ],
+          "want": "a4de4e81cd222acd47b5c3bf8b620bb2d4fb5c8b311aa9d8113f1bab98ad81b7",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256,
+            4
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "25b7f77104e4b5b3",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": true,
+          "infer": "25b7f77104e4b5b3",
+          "vendor": "nvidia-nvidia-h100-80gb-hbm3-sm_90a"
+        },
+        {
+          "column": "amd-mi300x-gfx942.json",
+          "equal": true,
+          "infer": "25b7f77104e4b5b3",
+          "vendor": "amd-gfx942"
+        }
+      ],
+      "estimator": "PCA",
+      "identity_hash": {
+        "equal": true,
+        "got": "25b7f77104e4b5b3",
+        "want": "25b7f77104e4b5b3"
+      },
+      "kind": "dupes",
+      "lane": "pca",
+      "model_sha256": "9c5913e3831259e42bd6b0892cd8955054fd90adf4155f949b0e7197fa59b3f9",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "cuda",
+      "seconds": 0.000151
+    },
+    {
+      "cases": [
+        {
+          "case": "transform",
+          "equal": true,
+          "got": "66e577921277d8cc2f9cb5ddc46110767611d20616ebc515230a35c33e55a54f",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256,
+            4
+          ],
+          "want": "66e577921277d8cc2f9cb5ddc46110767611d20616ebc515230a35c33e55a54f",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256,
+            4
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "da7f8a40931a091a",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": true,
+          "infer": "da7f8a40931a091a",
+          "vendor": "nvidia-nvidia-h100-80gb-hbm3-sm_90a"
+        },
+        {
+          "column": "amd-mi300x-gfx942.json",
+          "equal": true,
+          "infer": "da7f8a40931a091a",
+          "vendor": "amd-gfx942"
+        }
+      ],
+      "estimator": "PCA",
+      "identity_hash": {
+        "equal": true,
+        "got": "da7f8a40931a091a",
+        "want": "da7f8a40931a091a"
+      },
+      "kind": "hashed",
+      "lane": "pca",
+      "model_sha256": "a9bcbe53314d1a0035fa753516537ebe182adb4da6c7f6ae3930edfed7f0b0cf",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "cuda",
+      "seconds": 0.00017
+    },
+    {
+      "cases": [
+        {
+          "case": "transform",
+          "equal": true,
+          "got": "f0d15fd9399543749a5200a29e4c0c671768d9a41a9c531e2e0b82ac60eaa0ab",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256,
+            4
+          ],
+          "want": "f0d15fd9399543749a5200a29e4c0c671768d9a41a9c531e2e0b82ac60eaa0ab",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256,
+            4
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "bed836c726c23255",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": true,
+          "infer": "bed836c726c23255",
+          "vendor": "nvidia-nvidia-h100-80gb-hbm3-sm_90a"
+        },
+        {
+          "column": "amd-mi300x-gfx942.json",
+          "equal": true,
+          "infer": "bed836c726c23255",
+          "vendor": "amd-gfx942"
+        }
+      ],
+      "estimator": "PCA",
+      "identity_hash": {
+        "equal": true,
+        "got": "bed836c726c23255",
+        "want": "bed836c726c23255"
+      },
+      "kind": "negative",
+      "lane": "pca",
+      "model_sha256": "2a61ff40547fab89acfdb261f61659b67d6975cc0a45d2905c127d58b1b68c4f",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "cuda",
+      "seconds": 0.000207
+    },
+    {
+      "cases": [
+        {
+          "case": "transform",
+          "equal": true,
+          "got": "cf3d3fa0d63a12bb96423770ad8570f071aceb66b69858010bef8e32a26b6686",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256,
+            4
+          ],
+          "want": "cf3d3fa0d63a12bb96423770ad8570f071aceb66b69858010bef8e32a26b6686",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256,
+            4
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "9f765336b6cbcc11",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": true,
+          "infer": "9f765336b6cbcc11",
+          "vendor": "nvidia-nvidia-h100-80gb-hbm3-sm_90a"
+        },
+        {
+          "column": "amd-mi300x-gfx942.json",
+          "equal": true,
+          "infer": "9f765336b6cbcc11",
+          "vendor": "amd-gfx942"
+        }
+      ],
+      "estimator": "PCA",
+      "identity_hash": {
+        "equal": true,
+        "got": "9f765336b6cbcc11",
+        "want": "9f765336b6cbcc11"
+      },
+      "kind": "odd",
+      "lane": "pca",
+      "model_sha256": "87d34e709375c9b5b82ac7760408ccce62e25c152feb949a15ecae42614053b3",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "cuda",
+      "seconds": 0.000198
+    },
+    {
+      "cases": [
+        {
+          "case": "transform",
+          "equal": true,
+          "got": "f71125dfb7bb8ca9d22fc8778d8da0b0042785df46cad60c40f7a064aa9a0bbe",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256,
+            4
+          ],
+          "want": "f71125dfb7bb8ca9d22fc8778d8da0b0042785df46cad60c40f7a064aa9a0bbe",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256,
+            4
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "470065a905e144bf",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": true,
+          "infer": "470065a905e144bf",
+          "vendor": "nvidia-nvidia-h100-80gb-hbm3-sm_90a"
+        },
+        {
+          "column": "amd-mi300x-gfx942.json",
+          "equal": true,
+          "infer": "470065a905e144bf",
+          "vendor": "amd-gfx942"
+        }
+      ],
+      "estimator": "PCA",
+      "identity_hash": {
+        "equal": true,
+        "got": "470065a905e144bf",
+        "want": "470065a905e144bf"
+      },
+      "kind": "ties",
+      "lane": "pca",
+      "model_sha256": "e3f6772a15daedcd5ad052a7f167e00b3c15057de28ba65953e7d25125ea4602",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "cuda",
+      "seconds": 0.000263
+    },
+    {
+      "cases": [
+        {
+          "case": "transform",
+          "equal": true,
+          "got": "ebcceda6891508bfe2b56d78a331f907b85b83fb92e8d542924270bf4a438be7",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256,
+            4
+          ],
+          "want": "ebcceda6891508bfe2b56d78a331f907b85b83fb92e8d542924270bf4a438be7",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256,
+            4
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "abbcfa36cfc4cc81",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": true,
+          "infer": "abbcfa36cfc4cc81",
+          "vendor": "nvidia-nvidia-h100-80gb-hbm3-sm_90a"
+        },
+        {
+          "column": "amd-mi300x-gfx942.json",
+          "equal": true,
+          "infer": "abbcfa36cfc4cc81",
+          "vendor": "amd-gfx942"
+        }
+      ],
+      "estimator": "PCA",
+      "identity_hash": {
+        "equal": true,
+        "got": "abbcfa36cfc4cc81",
+        "want": "abbcfa36cfc4cc81"
+      },
+      "kind": "wide",
+      "lane": "pca",
+      "model_sha256": "dec2221e136875c86bf7085700e91ce01ea9c6cf0909204a02502786c2098d64",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "cuda",
+      "seconds": 0.000178
+    },
+    {
+      "cases": [
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "7c3980f66d9d01423b5c5129fcc6c9004c8e0b1da6089300e6f0d101ccc9efe1",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256
+          ],
+          "want": "7c3980f66d9d01423b5c5129fcc6c9004c8e0b1da6089300e6f0d101ccc9efe1",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "a5a404bb201b0eeb",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": true,
+          "infer": "a5a404bb201b0eeb",
+          "vendor": "nvidia-nvidia-h100-80gb-hbm3-sm_90a"
+        },
+        {
+          "column": "amd-mi300x-gfx942.json",
+          "equal": true,
+          "infer": "a5a404bb201b0eeb",
+          "vendor": "amd-gfx942"
+        }
+      ],
+      "estimator": "Ridge",
+      "identity_hash": {
+        "equal": true,
+        "got": "a5a404bb201b0eeb",
+        "want": "a5a404bb201b0eeb"
+      },
+      "kind": "base",
+      "lane": "ridge",
+      "model_sha256": "efada80fdc2d425938bf7e0609674e9a7305b8ca957e09845ab3d4b653f247df",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "cuda",
+      "seconds": 0.000123
+    },
+    {
+      "cases": [
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "dd06e66fa19e3b9bf910dab319893bf761bdd36f07f2bbbb95aee719e2e06114",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256
+          ],
+          "want": "dd06e66fa19e3b9bf910dab319893bf761bdd36f07f2bbbb95aee719e2e06114",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "4233d399ae41d2e6",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": true,
+          "infer": "4233d399ae41d2e6",
+          "vendor": "nvidia-nvidia-h100-80gb-hbm3-sm_90a"
+        },
+        {
+          "column": "amd-mi300x-gfx942.json",
+          "equal": true,
+          "infer": "4233d399ae41d2e6",
+          "vendor": "amd-gfx942"
+        }
+      ],
+      "estimator": "Ridge",
+      "identity_hash": {
+        "equal": true,
+        "got": "4233d399ae41d2e6",
+        "want": "4233d399ae41d2e6"
+      },
+      "kind": "denormal",
+      "lane": "ridge",
+      "model_sha256": "80113efe9b48cc79988b6f4618c6fbc2decd5b581dadf8a3a13b3c043b2b3fcd",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "cuda",
+      "seconds": 0.000167
+    },
+    {
+      "cases": [
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "dd06e66fa19e3b9bf910dab319893bf761bdd36f07f2bbbb95aee719e2e06114",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256
+          ],
+          "want": "dd06e66fa19e3b9bf910dab319893bf761bdd36f07f2bbbb95aee719e2e06114",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "4233d399ae41d2e6",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": true,
+          "infer": "4233d399ae41d2e6",
+          "vendor": "nvidia-nvidia-h100-80gb-hbm3-sm_90a"
+        },
+        {
+          "column": "amd-mi300x-gfx942.json",
+          "equal": true,
+          "infer": "4233d399ae41d2e6",
+          "vendor": "amd-gfx942"
+        }
+      ],
+      "estimator": "Ridge",
+      "identity_hash": {
+        "equal": true,
+        "got": "4233d399ae41d2e6",
+        "want": "4233d399ae41d2e6"
+      },
+      "kind": "denormal_ftz",
+      "lane": "ridge",
+      "model_sha256": "80113efe9b48cc79988b6f4618c6fbc2decd5b581dadf8a3a13b3c043b2b3fcd",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "cuda",
+      "seconds": 0.000103
+    },
+    {
+      "cases": [
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "3a305d7a4ce78f9ed2560b886789c053dffcbb96b12b543dfd1f932100348b4c",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256
+          ],
+          "want": "3a305d7a4ce78f9ed2560b886789c053dffcbb96b12b543dfd1f932100348b4c",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "3e10053ac0b9fbd4",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": true,
+          "infer": "3e10053ac0b9fbd4",
+          "vendor": "nvidia-nvidia-h100-80gb-hbm3-sm_90a"
+        },
+        {
+          "column": "amd-mi300x-gfx942.json",
+          "equal": true,
+          "infer": "3e10053ac0b9fbd4",
+          "vendor": "amd-gfx942"
+        }
+      ],
+      "estimator": "Ridge",
+      "identity_hash": {
+        "equal": true,
+        "got": "3e10053ac0b9fbd4",
+        "want": "3e10053ac0b9fbd4"
+      },
+      "kind": "dupes",
+      "lane": "ridge",
+      "model_sha256": "11e592057872c1e0a3f3c2e2d7804f8a0451c3252ea61520f216a1879d49951c",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "cuda",
+      "seconds": 0.000162
+    },
+    {
+      "cases": [
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "c5a70f1f1a960bec6f545417c0f808cf0afe579e3306a14518a9ea76e864518e",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256
+          ],
+          "want": "c5a70f1f1a960bec6f545417c0f808cf0afe579e3306a14518a9ea76e864518e",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "1f692bf67099df47",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": true,
+          "infer": "1f692bf67099df47",
+          "vendor": "nvidia-nvidia-h100-80gb-hbm3-sm_90a"
+        },
+        {
+          "column": "amd-mi300x-gfx942.json",
+          "equal": true,
+          "infer": "1f692bf67099df47",
+          "vendor": "amd-gfx942"
+        }
+      ],
+      "estimator": "Ridge",
+      "identity_hash": {
+        "equal": true,
+        "got": "1f692bf67099df47",
+        "want": "1f692bf67099df47"
+      },
+      "kind": "hashed",
+      "lane": "ridge",
+      "model_sha256": "05a9504a256753f0cacde8ca94a58c8d46b3cca97ea6fe9075415a2c382003d9",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "cuda",
+      "seconds": 0.000172
+    },
+    {
+      "cases": [
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "7abafe5cf06ed76a2088ecb1177bc3c8a9543ee9a145aa9f5b8e13a191acba9c",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256
+          ],
+          "want": "7abafe5cf06ed76a2088ecb1177bc3c8a9543ee9a145aa9f5b8e13a191acba9c",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "174ab0d4049ee591",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": true,
+          "infer": "174ab0d4049ee591",
+          "vendor": "nvidia-nvidia-h100-80gb-hbm3-sm_90a"
+        },
+        {
+          "column": "amd-mi300x-gfx942.json",
+          "equal": true,
+          "infer": "174ab0d4049ee591",
+          "vendor": "amd-gfx942"
+        }
+      ],
+      "estimator": "Ridge",
+      "identity_hash": {
+        "equal": true,
+        "got": "174ab0d4049ee591",
+        "want": "174ab0d4049ee591"
+      },
+      "kind": "negative",
+      "lane": "ridge",
+      "model_sha256": "ad885ca7374525bd189b332340183bc78c758fc92b8d2057e34f492e519fa0c3",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "cuda",
+      "seconds": 0.000152
+    },
+    {
+      "cases": [
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "f49cd4c578f0c77584d608261ca11827d56c86e918fb2f7c8a9e046dcad44779",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256
+          ],
+          "want": "f49cd4c578f0c77584d608261ca11827d56c86e918fb2f7c8a9e046dcad44779",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "83420de0d62b5c95",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": true,
+          "infer": "83420de0d62b5c95",
+          "vendor": "nvidia-nvidia-h100-80gb-hbm3-sm_90a"
+        },
+        {
+          "column": "amd-mi300x-gfx942.json",
+          "equal": true,
+          "infer": "83420de0d62b5c95",
+          "vendor": "amd-gfx942"
+        }
+      ],
+      "estimator": "Ridge",
+      "identity_hash": {
+        "equal": true,
+        "got": "83420de0d62b5c95",
+        "want": "83420de0d62b5c95"
+      },
+      "kind": "odd",
+      "lane": "ridge",
+      "model_sha256": "3f77c9c16c29bd84d641e958f95aeb61ab623a80a44dd5f936584bdb6cf2db4c",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "cuda",
+      "seconds": 0.000102
+    },
+    {
+      "cases": [
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "180398e7a24a9841aa756d1c26d39c7e964112a52ce9c15bc7f30f51b37eba06",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256
+          ],
+          "want": "180398e7a24a9841aa756d1c26d39c7e964112a52ce9c15bc7f30f51b37eba06",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "d23a652e5f82906f",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": true,
+          "infer": "d23a652e5f82906f",
+          "vendor": "nvidia-nvidia-h100-80gb-hbm3-sm_90a"
+        },
+        {
+          "column": "amd-mi300x-gfx942.json",
+          "equal": true,
+          "infer": "d23a652e5f82906f",
+          "vendor": "amd-gfx942"
+        }
+      ],
+      "estimator": "Ridge",
+      "identity_hash": {
+        "equal": true,
+        "got": "d23a652e5f82906f",
+        "want": "d23a652e5f82906f"
+      },
+      "kind": "ties",
+      "lane": "ridge",
+      "model_sha256": "824a2e3b44b31af40196de331af2cfadb59a32f2a871ca7cc0b35c96b432f275",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "cuda",
+      "seconds": 0.000246
+    },
+    {
+      "cases": [
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "32cfd9cb02d99f83659093dfa169441452c19f86928509a92ea61c231e8670d3",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256
+          ],
+          "want": "32cfd9cb02d99f83659093dfa169441452c19f86928509a92ea61c231e8670d3",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "cc8d5d1192f32b52",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": true,
+          "infer": "cc8d5d1192f32b52",
+          "vendor": "nvidia-nvidia-h100-80gb-hbm3-sm_90a"
+        },
+        {
+          "column": "amd-mi300x-gfx942.json",
+          "equal": true,
+          "infer": "cc8d5d1192f32b52",
+          "vendor": "amd-gfx942"
+        }
+      ],
+      "estimator": "Ridge",
+      "identity_hash": {
+        "equal": true,
+        "got": "cc8d5d1192f32b52",
+        "want": "cc8d5d1192f32b52"
+      },
+      "kind": "wide",
+      "lane": "ridge",
+      "model_sha256": "2869ff3b7b3a75581a5576b7b3240d890d0468c6ae553638708839b1e915eaa3",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "cuda",
+      "seconds": 0.00011
+    },
+    {
+      "cases": [
+        {
+          "case": "transform",
+          "equal": true,
+          "got": "fa9a8785b2b1acb0217d452a1b05039472c4b3b6e34b3bb73c39210ced94ad73",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256,
+            4
+          ],
+          "want": "fa9a8785b2b1acb0217d452a1b05039472c4b3b6e34b3bb73c39210ced94ad73",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256,
+            4
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "36793a22ecfc11d9",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": true,
+          "infer": "36793a22ecfc11d9",
+          "vendor": "nvidia-nvidia-h100-80gb-hbm3-sm_90a"
+        },
+        {
+          "column": "amd-mi300x-gfx942.json",
+          "equal": true,
+          "infer": "36793a22ecfc11d9",
+          "vendor": "amd-gfx942"
+        }
+      ],
+      "estimator": "TruncatedSVD",
+      "identity_hash": {
+        "equal": true,
+        "got": "36793a22ecfc11d9",
+        "want": "36793a22ecfc11d9"
+      },
+      "kind": "base",
+      "lane": "tsvd",
+      "model_sha256": "dad8484c8148cc3a1b26b17758ba122ffae0ed559a500a152bcf0a8deeb46d0d",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "cuda",
+      "seconds": 0.000192
+    },
+    {
+      "cases": [
+        {
+          "case": "transform",
+          "equal": true,
+          "got": "9147798c548168cc70eaec6945241e5d11d665653572b27b0c6329efae2f50e6",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256,
+            4
+          ],
+          "want": "9147798c548168cc70eaec6945241e5d11d665653572b27b0c6329efae2f50e6",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256,
+            4
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "fc4af18e4659ab46",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": true,
+          "infer": "fc4af18e4659ab46",
+          "vendor": "nvidia-nvidia-h100-80gb-hbm3-sm_90a"
+        },
+        {
+          "column": "amd-mi300x-gfx942.json",
+          "equal": true,
+          "infer": "fc4af18e4659ab46",
+          "vendor": "amd-gfx942"
+        }
+      ],
+      "estimator": "TruncatedSVD",
+      "identity_hash": {
+        "equal": true,
+        "got": "fc4af18e4659ab46",
+        "want": "fc4af18e4659ab46"
+      },
+      "kind": "denormal",
+      "lane": "tsvd",
+      "model_sha256": "3ddbcba0a9ba339d92f3f43edb58514f82ae2006f5e9ad689945799705f5a2fa",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "cuda",
+      "seconds": 0.000189
+    },
+    {
+      "cases": [
+        {
+          "case": "transform",
+          "equal": true,
+          "got": "9147798c548168cc70eaec6945241e5d11d665653572b27b0c6329efae2f50e6",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256,
+            4
+          ],
+          "want": "9147798c548168cc70eaec6945241e5d11d665653572b27b0c6329efae2f50e6",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256,
+            4
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "fc4af18e4659ab46",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": true,
+          "infer": "fc4af18e4659ab46",
+          "vendor": "nvidia-nvidia-h100-80gb-hbm3-sm_90a"
+        },
+        {
+          "column": "amd-mi300x-gfx942.json",
+          "equal": true,
+          "infer": "fc4af18e4659ab46",
+          "vendor": "amd-gfx942"
+        }
+      ],
+      "estimator": "TruncatedSVD",
+      "identity_hash": {
+        "equal": true,
+        "got": "fc4af18e4659ab46",
+        "want": "fc4af18e4659ab46"
+      },
+      "kind": "denormal_ftz",
+      "lane": "tsvd",
+      "model_sha256": "3ddbcba0a9ba339d92f3f43edb58514f82ae2006f5e9ad689945799705f5a2fa",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "cuda",
+      "seconds": 0.000134
+    },
+    {
+      "cases": [
+        {
+          "case": "transform",
+          "equal": true,
+          "got": "a877efe4afb34bcb46b6a9eb73a74182c8faa24577b5628f26a9ac419ac4d66f",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256,
+            4
+          ],
+          "want": "a877efe4afb34bcb46b6a9eb73a74182c8faa24577b5628f26a9ac419ac4d66f",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256,
+            4
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "b20d1e18ded5c227",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": true,
+          "infer": "b20d1e18ded5c227",
+          "vendor": "nvidia-nvidia-h100-80gb-hbm3-sm_90a"
+        },
+        {
+          "column": "amd-mi300x-gfx942.json",
+          "equal": true,
+          "infer": "b20d1e18ded5c227",
+          "vendor": "amd-gfx942"
+        }
+      ],
+      "estimator": "TruncatedSVD",
+      "identity_hash": {
+        "equal": true,
+        "got": "b20d1e18ded5c227",
+        "want": "b20d1e18ded5c227"
+      },
+      "kind": "dupes",
+      "lane": "tsvd",
+      "model_sha256": "0ccf336c88307c6c6cd87c6752dfa0169e4ac78cdcc5ea1b1d7b8ff4cde4396a",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "cuda",
+      "seconds": 0.000252
+    },
+    {
+      "cases": [
+        {
+          "case": "transform",
+          "equal": true,
+          "got": "f1f81619e8801a044367a20c5c8ae6c2a2f02229c1ae5e4d87c640f06e4f5bef",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256,
+            4
+          ],
+          "want": "f1f81619e8801a044367a20c5c8ae6c2a2f02229c1ae5e4d87c640f06e4f5bef",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256,
+            4
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "a253da0a489ff1d7",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": true,
+          "infer": "a253da0a489ff1d7",
+          "vendor": "nvidia-nvidia-h100-80gb-hbm3-sm_90a"
+        },
+        {
+          "column": "amd-mi300x-gfx942.json",
+          "equal": true,
+          "infer": "a253da0a489ff1d7",
+          "vendor": "amd-gfx942"
+        }
+      ],
+      "estimator": "TruncatedSVD",
+      "identity_hash": {
+        "equal": true,
+        "got": "a253da0a489ff1d7",
+        "want": "a253da0a489ff1d7"
+      },
+      "kind": "hashed",
+      "lane": "tsvd",
+      "model_sha256": "9b2cd491dca9241a1443ff796d65638a649748511a6d2dd7647ab557351b34df",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "cuda",
+      "seconds": 0.000187
+    },
+    {
+      "cases": [
+        {
+          "case": "transform",
+          "equal": true,
+          "got": "9d3c94f82701ccc910b1d7d4ebb71e3fe385c27d59d97e8cc54d3525f3b81dfb",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256,
+            4
+          ],
+          "want": "9d3c94f82701ccc910b1d7d4ebb71e3fe385c27d59d97e8cc54d3525f3b81dfb",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256,
+            4
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "47e1b7225f50fa55",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": true,
+          "infer": "47e1b7225f50fa55",
+          "vendor": "nvidia-nvidia-h100-80gb-hbm3-sm_90a"
+        },
+        {
+          "column": "amd-mi300x-gfx942.json",
+          "equal": true,
+          "infer": "47e1b7225f50fa55",
+          "vendor": "amd-gfx942"
+        }
+      ],
+      "estimator": "TruncatedSVD",
+      "identity_hash": {
+        "equal": true,
+        "got": "47e1b7225f50fa55",
+        "want": "47e1b7225f50fa55"
+      },
+      "kind": "negative",
+      "lane": "tsvd",
+      "model_sha256": "27c536a4f0a5c61956067439741f98de6e7de18bc5dd3d8f0e0d10fca921cf8f",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "cuda",
+      "seconds": 0.000209
+    },
+    {
+      "cases": [
+        {
+          "case": "transform",
+          "equal": true,
+          "got": "3da7ed229ad929e80468015caef61727a48f32f75d075286acdfa533f85d173c",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256,
+            4
+          ],
+          "want": "3da7ed229ad929e80468015caef61727a48f32f75d075286acdfa533f85d173c",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256,
+            4
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "4ca5ee061209a589",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": true,
+          "infer": "4ca5ee061209a589",
+          "vendor": "nvidia-nvidia-h100-80gb-hbm3-sm_90a"
+        },
+        {
+          "column": "amd-mi300x-gfx942.json",
+          "equal": true,
+          "infer": "4ca5ee061209a589",
+          "vendor": "amd-gfx942"
+        }
+      ],
+      "estimator": "TruncatedSVD",
+      "identity_hash": {
+        "equal": true,
+        "got": "4ca5ee061209a589",
+        "want": "4ca5ee061209a589"
+      },
+      "kind": "odd",
+      "lane": "tsvd",
+      "model_sha256": "efe0b4a3e0f314b8f5fc801f9cb4db42289a2ae5e32b25e1a1f182f83b2dab5c",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "cuda",
+      "seconds": 0.000163
+    },
+    {
+      "cases": [
+        {
+          "case": "transform",
+          "equal": true,
+          "got": "4a51454630b0cc793140664d60f5f8f2fe55aa70f6b0a59af906afb226032ed2",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256,
+            4
+          ],
+          "want": "4a51454630b0cc793140664d60f5f8f2fe55aa70f6b0a59af906afb226032ed2",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256,
+            4
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "441e224141ca3ef4",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": true,
+          "infer": "441e224141ca3ef4",
+          "vendor": "nvidia-nvidia-h100-80gb-hbm3-sm_90a"
+        },
+        {
+          "column": "amd-mi300x-gfx942.json",
+          "equal": true,
+          "infer": "441e224141ca3ef4",
+          "vendor": "amd-gfx942"
+        }
+      ],
+      "estimator": "TruncatedSVD",
+      "identity_hash": {
+        "equal": true,
+        "got": "441e224141ca3ef4",
+        "want": "441e224141ca3ef4"
+      },
+      "kind": "ties",
+      "lane": "tsvd",
+      "model_sha256": "5aa8d4139303b4c288d44977856b8b08a97521a04fa73ef0b2516411f83b6e24",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "cuda",
+      "seconds": 0.000159
+    },
+    {
+      "cases": [
+        {
+          "case": "transform",
+          "equal": true,
+          "got": "e56bd3529e020c92196fb3c57538bb0729e715b56184c6d1db3eb64adc057d5a",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256,
+            4
+          ],
+          "want": "e56bd3529e020c92196fb3c57538bb0729e715b56184c6d1db3eb64adc057d5a",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256,
+            4
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "cef9d6af2957dea2",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": true,
+          "infer": "cef9d6af2957dea2",
+          "vendor": "nvidia-nvidia-h100-80gb-hbm3-sm_90a"
+        },
+        {
+          "column": "amd-mi300x-gfx942.json",
+          "equal": true,
+          "infer": "cef9d6af2957dea2",
+          "vendor": "amd-gfx942"
+        }
+      ],
+      "estimator": "TruncatedSVD",
+      "identity_hash": {
+        "equal": true,
+        "got": "cef9d6af2957dea2",
+        "want": "cef9d6af2957dea2"
+      },
+      "kind": "wide",
+      "lane": "tsvd",
+      "model_sha256": "d1350f18d6205fbb6476dedefa6ccf0f166c6133ccaf87c009ef0b7bf85cba59",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "cuda",
+      "seconds": 0.000171
+    }
+  ],
+  "gpu_columns": [
+    "apple-m4.json",
+    "nvidia-h100-sm_90a.json",
+    "amd-mi300x-gfx942.json"
+  ],
+  "host": {
+    "cpu": "Apple M4",
+    "machine": "arm64",
+    "python": "3.13.15",
+    "release": "25.5.0",
+    "system": "Darwin"
+  },
+  "vendor": "metal",
+  "verdict": "IDENTICAL"
+}

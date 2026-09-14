@@ -73,9 +73,12 @@ Merged 2026-09-13 night from lane/classical-host-inference: `ols_predict`, `tsvd
 `tools/classical_host_gate.py` (record on a GPU box, check on the host, sabotage control),
 Apple M4 record and check IDENTICAL against the three 2026-09-13 GPU infer columns
 (`bench/results/classical_host/2026-09-13-apple-m4/`). Lasso and elasticnet predict were already
-served by the phase 1 solver host binding. OWED: the NVIDIA and AMD `record` runs and a
-`cpu-identity-gate.yml` step running `check` on the seven runners (commands in the merge's lane
-commit a0dc36f13). Still not started: kde, svc, knn, iforest, and pca whiten=True.
+served by the phase 1 solver host binding. DONE 2026-09-14: the NVIDIA (H100, sm_90a) and AMD
+(MI300X, gfx942) `record` runs at 5e7acf79 (`bench/results/classical_host/2026-09-14-nvidia-h100/`,
+`.../2026-09-14-amd-mi300x/`), each checked on the Mac's CPU path IDENTICAL against the three
+2026-09-14 GPU columns (45 fixtures each), and the saved model bytes of every lane are the same
+file on all three vendors. OWED: a `cpu-identity-gate.yml` step running `check` on the seven
+runners (commands in the lane commit a0dc36f13). Still not started: kde, svc, knn, iforest, and pca whiten=True.
 
 Original costing: Brief section "Classical lanes: what CPU inference needs" in
 `docs/lanes/BRIEF_forest_host_inference_2026-09-13.md`: ols/ridge 4-6 h, tsvd 3-4,
