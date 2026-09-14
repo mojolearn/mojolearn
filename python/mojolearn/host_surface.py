@@ -167,6 +167,17 @@ TRAINING_LANE_NAMES = {
     # binding. A prediction until the four-column diff reads IDENTICAL.
     "rf-clf": "the random forest classifier",
     "rf-reg": "the random forest regressor",
+    # Workstream E, the gp host lane (2026-09-14): the Gaussian process fit
+    # and predict through gaussian_process/host/gpr_oracle.mojo over
+    # cholesky/host/chol_oracle.mojo and gemm_oracle, exported under the GPU
+    # binding's names from the gp family's own host binding. There is no
+    # optimizer on any column (DEVIATION 1761), so the fit is the kernel
+    # matrix, the ridge, the factorization, the solve and three scalars. A
+    # prediction until the four-column diff reads IDENTICAL.
+    "gp": "the Gaussian process with an RBF kernel",
+    "gp-matern12": "the Gaussian process with a Matern kernel at nu 0.5",
+    "gp-matern32": "the Gaussian process with a Matern kernel at nu 1.5",
+    "gp-matern52-ard": "the Gaussian process with an ARD Matern kernel at nu 2.5",
 }
 
 #: The lanes with NO CPU path of any kind, as the README states them. A
@@ -174,7 +185,6 @@ TRAINING_LANE_NAMES = {
 #: README until the marked span is rewritten.
 NO_CPU_PATH = (
     "UMAP",
-    "the Gaussian process",
     "ARIMA",
     "the neural blocks",
     "gradient boosting training",
@@ -538,6 +548,39 @@ FAMILIES = (
             "rf_regressor_fit_rowmajor", "rf_regressor_fit_rowmajor_export",
             "forest_export", "forest_export_legacy", "forest_export_release",
             "rf_predict_proba", "rf_predict_reg",
+        ),
+        gate="tools/identity_break.py (cpu-identity-gate.yml)",
+        ships_in_wheel=False,
+    ),
+    dict(
+        # Workstream E, the gp host lane (2026-09-14): the Gaussian process
+        # family's host binding. It routes `_mojolearn_gp` on a CPU-only
+        # install with the GPU binding's gpr_fit and gpr_predict and the
+        # Cholesky door workstream D put on the same binding
+        # (cholesky_factor, cholesky_solve, cholesky_profile_jitter; the
+        # cholesky lane is not declared covered because the 136-lane record
+        # predates it). gp_parallel_available stays absent, so the ordered
+        # multi-GPU driver refuses by name.
+        family="gp",
+        binding="_mojolearn_gp_host",
+        routes="_mojolearn_gp",
+        loaded_by="_backend._HOST_MODULES",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=("gp", "gp-matern12", "gp-matern32", "gp-matern52-ard"),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=("GaussianProcessRegressor", "Cholesky"),
+        display="the Gaussian process regressor and the Cholesky door",
+        host_modules=(
+            "gaussian_process/host/gpr_oracle.mojo",
+            "cholesky/host/chol_oracle.mojo",
+            "gemm/host/gemm_oracle.mojo",
+        ),
+        exports=(
+            "gp_host_numeric_mode", "gp_host_vendor", "gp_host_column",
+            "gp_host_sabotage", "gp_vendor", "gp_numeric_mode",
+            "gpr_fit", "gpr_predict", "cholesky_profile_jitter",
+            "cholesky_factor", "cholesky_solve",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=False,
