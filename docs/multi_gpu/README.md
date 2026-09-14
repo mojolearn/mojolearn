@@ -106,8 +106,10 @@ with ParallelNeuralTrainer.from_checkpoint(checkpoint, devices=(0,)) as replay:
 ```
 
 The supplied model is exclusively owned while wrapped. Workers receive a
-frozen snapshot and compute gradients concurrently; the first selected GPU
-reduces and applies one update, then publishes the owner state. Parameters, moments and RNG state are restored on a failed step.
+frozen snapshot and compute gradients concurrently. A cooperative worker
+partitions gradient columns and optimizer ranges across the selected GPUs,
+retains the original complete-registry clipping operation on the first GPU,
+and publishes the owner state after every owner succeeds. Parameters, moments and RNG state are restored on a failed step.
 Samba requires `accumulation_steps=1` because `logical_shards` owns the new
 accumulation contract. Every logical shard has its own loss normalization;
 ignored-target semantics remain the existing Samba semantics.
@@ -620,3 +622,23 @@ Observed GPU-memory samples peak at 2621 MiB on the offload device versus
 RTX5090 stock for this leg, so actual RTX5090 and AMD/Apple offload execution
 remain unqualified. These measurements establish capacity and exact replay
 for the recorded fixtures, with no throughput or all-estimator pooling claim.
+
+
+### Pooled neural gradient buffers
+
+MLP/Samba's cooperative update worker partitions accumulation columns across
+its selected GPUs. Each owner receives every microbatch for its assigned
+columns in the original order and calls the existing accumulation kernel.
+Column ownership changes storage and launch geometry; it does not combine
+per-device partial sums. The original per-column balanced tree is unchanged.
+`ParallelNeuralTrainer` still invokes that kernel as a pair add at each step
+of its defined logical left fold. Standalone accumulation retains its own
+balanced-tree and token-alignment contract.
+
+The result stays in host staging until all GPU owners join successfully.
+Native admission scans the complete input before starting workers, and a
+failed worker cannot publish another worker's completed columns. Each GPU
+allocates only its local stacked inputs and reduction scratch; the host still
+holds full input/output arrays. The original global norm clip remains on the
+first device. This is another pooled allocation in the neural training path,
+not a complete resident Samba model or a throughput claim.
