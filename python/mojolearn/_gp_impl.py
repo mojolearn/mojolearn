@@ -63,10 +63,11 @@ that keeps `SVR`'s epsilon refusals reachable.
 THE LANE'S STANDING: gated on the Apple M4 in both tiers, eleven checks
 each, nine sabotage arms driven at run time; the IDENTICAL card
 byte-identical Apple M4 against AMD MI325X on every shipped-path line
-(two vendors, at `9835094e`'s reading of the 2026-08-28 cards). An NVIDIA
-H100 compiled and ran the lane under FAST on 2026-08-26, which is a speed
-leg, not an identity one, so there is NO identity card on a third column
-and this module does not claim one. The gp SPEED ladder is UNRUN
+(at `9835094e`'s reading of the 2026-08-28 cards). The third column came
+later: the identity harness's 136-lane record at 4048e1b51
+(bench/results/identity_break/2026-09-14_136-lanes/diff.three-columns.txt)
+reads IDENTICAL x3 on all 36 gp training cells and 36 infer cells across
+the Apple M4, an NVIDIA H100 and an AMD MI325X under IDENTICAL. The gp SPEED ladder is UNRUN
 (HANDOFF_2026-09-01.md section 5): exposure is a correctness claim, not a
 speed claim.
 """
@@ -307,10 +308,11 @@ class GaussianProcessRegressor(NumericModeMixin):
     CROSS-VENDOR STANDING: the IDENTICAL card is byte-identical Apple M4
     against AMD MI325X on every shipped-path line (the 8-line divergence
     reading was withdrawn at `9835094e`: those lines are the sabotaged half
-    of a `GP_SAB_STD_EXP` pair). There is NO identity card on NVIDIA -- the
-    H100 leg was a FAST speed run -- so this class claims two vendors, not
-    three. That property belongs to `numeric_mode='identical'`; the FAST
-    default makes no cross-vendor claim at all.
+    of a `GP_SAB_STD_EXP` pair). The NVIDIA column is the identity
+    harness's: the 136-lane record at 4048e1b51 reads IDENTICAL x3 on every
+    gp training and infer cell across the Apple M4, an H100 and an MI325X.
+    That property belongs to `numeric_mode='identical'`; the FAST default
+    makes no cross-vendor claim at all.
 
     Attributes
     ----------
