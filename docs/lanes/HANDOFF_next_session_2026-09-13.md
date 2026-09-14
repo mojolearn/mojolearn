@@ -29,16 +29,38 @@ answer. The branch is merged to main, SUPPORT_MATRIX says found and fixed, CHANG
 or on the Mac under the two-core cap one at a time), then cut 0.8.5 by the release checklist
 with the HIP set on Hot Aisle in the 22.04 container (never the DigitalOcean 24.04 image).
 
-### 2. CPU training phase 1, never started
+### 2. CPU training phase 1, six of ten lanes MERGED, four to go
 
-`lane/cpu-training-phase1` was created by an agent that died on the spend limit before its
-first commit; delete that worktree branch and start again from `main`. The spec is
-`docs/lanes/BRIEF_cpu_training_2026-09-13.md` "Phase 1" plus the phase 0 report's last
-paragraph: gemm-pinned first (a `_mojolearn_linalg_host` binding around `gemm_oracle`,
-`_HOST_MODULES` entry, `COVERED_LANES: "gemm-pinned"`), then kde, holtwinters, lasso and
-elasticnet, svc, agglomerative, et-clf, et-reg, iforest. Each lane passes only when
-`identity_break.py --diff <gpu columns> <cpu json> --lanes <lane> --require-columns 4` reads
-IDENTICAL on every cell. Two-core cap on the Mac, one host build at a time.
+This section said "never started, delete the branch". That was wrong: the agent on
+`lane/cpu-training-phase1` committed five lanes (17:39 to 18:02) before the spend limit, and
+deleting the branch would have thrown them away. It is merged to main (the merge commit that
+carries this correction). What landed, per the brief's "Phase 1 results" and each lane commit:
+
+| lane | host binding | evidence (on the M4, CPU-only package view) |
+|---|---|---|
+| gemm-pinned | `_mojolearn_linalg_host` over `gemm_oracle` | 9 cells IDENTICAL x4, `9996bfe5` |
+| kde | `_mojolearn_estimators_host` over `oracle_score_samples` | 9 train + 9 infer IDENTICAL x4, sabotage 9/9 DIVERGENT, `ece85079` |
+| holtwinters | `_mojolearn_tsa_host` over `hw_oracle` | 9 IDENTICAL x4, sabotage 6/9 (three fixtures converge either way), `89e069dc` |
+| lasso, elasticnet | `_mojolearn_solver_host` over `cd_oracle_fit`, plus `_mojolearn_core_host` for the base binding's input helpers | 36 cells IDENTICAL x4, sabotage 9/9 per lane, `1b319230` |
+| svc | `_mojolearn_svm_host` over `smo_oracle` | 9 train + 9 infer IDENTICAL x4, sabotage 8/9, `87514264` |
+
+Before the merge `b20a014a` dropped the `<prefix>_detected_column` read-back from all six
+bindings, the same witness `8d16ce2f` removed from the forest and byte LM bindings because it
+put the builder's GPU name into a vendor-neutral binary. None of the six is packaged; the
+wheel builders build only the byte LM host binding.
+
+Still owed:
+- **The seven-runner CPU identity gate has never run these lanes.** `cpu-identity-gate.yml`
+  lists them in `COVERED_LANES`; read its uploaded JSON (host.cpu_model) before calling any
+  of them certified off the Mac.
+- The remaining lanes, in the brief's order: agglomerative (`linkage_fit` in the solver
+  family, refuses by name today), et-clf, et-reg, iforest.
+- The six `bindings/build_*_host.sh` scripts are one script with the family renamed; fold
+  them into one parameterized builder before a seventh copy appears.
+
+Each lane passes only when `identity_break.py --diff <gpu columns> <cpu json> --lanes <lane>
+--require-columns 4` reads IDENTICAL on every cell. Two-core cap on the Mac, one host build at
+a time. The spec is `docs/lanes/BRIEF_cpu_training_2026-09-13.md` "Phase 1".
 
 ### 3. CPU inference for the classical lanes, costed, not started
 
