@@ -1,0 +1,31 @@
+{
+  "status": "PASS",
+  "checks": [
+    {
+      "rows": 65,
+      "border": 7,
+      "reverse": false,
+      "sha256": "ebb98e85162e0ba5fe783a1926c46740ce7579ef4ce922777540e655eaa22a98"
+    },
+    {
+      "rows": 65,
+      "border": 7,
+      "reverse": true,
+      "sha256": "ebb98e85162e0ba5fe783a1926c46740ce7579ef4ce922777540e655eaa22a98"
+    },
+    {
+      "rows": 513,
+      "border": 7,
+      "reverse": false,
+      "sha256": "63c112f49d1ec7c6aa1f843e0f02362cb56006f871b72c55653bd8bcdb082ede"
+    },
+    {
+      "rows": 513,
+      "border": 7,
+      "reverse": true,
+      "sha256": "63c112f49d1ec7c6aa1f843e0f02362cb56006f871b72c55653bd8bcdb082ede"
+    }
+  ],
+  "corpus_sha256": "2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8",
+  "scope": "Two H100s; original categorical generation and both levels with greedy feature-group histograms; no pooled state claim"
+}

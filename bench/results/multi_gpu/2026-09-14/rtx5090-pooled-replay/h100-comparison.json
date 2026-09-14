@@ -1,0 +1,70 @@
+{
+  "source": "same frozen H100 working tree, target sm_120 vs sm_90a",
+  "scope": "H100 vs RTX 5090, two NVIDIA architectures; no AMD/Apple claim",
+  "checks": [
+    {
+      "name": "optimizer",
+      "status": "IDENTICAL"
+    },
+    {
+      "name": "byte-lm",
+      "status": "IDENTICAL"
+    },
+    {
+      "name": "byte-pool",
+      "status": "IDENTICAL"
+    },
+    {
+      "name": "mlp",
+      "status": "IDENTICAL"
+    },
+    {
+      "name": "samba",
+      "status": "IDENTICAL"
+    },
+    {
+      "name": "samba-attention",
+      "status": "IDENTICAL"
+    },
+    {
+      "name": "samba-clip",
+      "status": "IDENTICAL"
+    },
+    {
+      "name": "samba-attention-clip",
+      "status": "IDENTICAL"
+    },
+    {
+      "name": "pointwise",
+      "status": "IDENTICAL"
+    },
+    {
+      "name": "ordered_rmse",
+      "status": "IDENTICAL"
+    },
+    {
+      "name": "feature_freq",
+      "status": "IDENTICAL"
+    },
+    {
+      "name": "boosting_adapters",
+      "status": "IDENTICAL"
+    },
+    {
+      "name": "boosting",
+      "status": "IDENTICAL"
+    },
+    {
+      "name": "gram_wide",
+      "status": "IDENTICAL"
+    },
+    {
+      "name": "gram",
+      "status": "IDENTICAL"
+    },
+    {
+      "name": "pca_full",
+      "status": "IDENTICAL"
+    }
+  ]
+}

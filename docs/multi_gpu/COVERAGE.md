@@ -24,8 +24,12 @@ during fit and transform; those workers receive only their assigned data.
 ## Public estimator inventory
 
 Status refers to the implementation, not every configuration of the class.
-Initial fixtures cover two RTX 4090s and two H100s. The continued classical
-and histogram paths have two-H100 evidence only.
+Initial fixtures cover two RTX 4090s and two H100s. A frozen-source replay on
+two RTX 5090s matches all 16 H100 receipt groups for pooled neural optimizers,
+MLP/Samba, boosting, wider Gram and tall full PCA. Pointwise histogram dump
+bytes and OrderedRMSE trace records also match across those architectures.
+This is NVIDIA architecture coverage; other continued families still have
+H100-only evidence, and new AMD/Apple multi-device qualification remains owed.
 
 | Surface | Current multi-GPU coverage | Remaining numerical work |
 | --- | --- | --- |
