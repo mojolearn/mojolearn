@@ -51,6 +51,7 @@ from training.byte_lm import (
     byte_validate_tokens, byte_lm_fault_inject_available,
 )
 from training.byte_lm_optimizer_pool import pool_fault_available
+from training.byte_lm_model_pool import ByteModelPool
 from training.byte_lm_parallel import ByteParallelTrainer
 from training.byte_lm_logits import (
     BYTE_LOGITS_MAX_BATCH,
@@ -1355,6 +1356,124 @@ def byte_lm_parallel_rollback_binding(session: PythonObject) raises -> PythonObj
     return PythonObject(owner[].trainers[0].completed_steps)
 
 
+def byte_lm_model_pool_create_binding() raises -> PythonObject:
+    return PythonObject(alloc=ByteModelPool())
+
+
+def byte_lm_model_pool_close_binding(session: PythonObject) raises -> PythonObject:
+    var owner = session.downcast_value_ptr[ByteModelPool]()
+    owner[].close()
+    return PythonObject(0)
+
+
+def byte_lm_model_pool_open_binding(session: PythonObject, addresses: PythonObject,
+    params: PythonObject, shape: PythonObject, devices: PythonObject, shard_count: PythonObject) raises -> PythonObject:
+    _require_binding_profile()
+    var cfg_shape = _byte_config(shape)
+    var completed = _params_completed(params)
+    var cfg = _params_optimizer(params)
+    var addr = _read_addresses(addresses, 4)
+    var cells: List[Int] = [cfg_shape.n_total(), cfg_shape.n_total(), cfg_shape.n_total(), cfg_shape.n_tensors()]
+    _validate_slot_table(addr, cells, 4)
+    var p = _read_f32(addr[0], cells[0])
+    var m = _read_f32(addr[1], cells[1])
+    var v = _read_f32(addr[2], cells[2])
+    var flags = _read_flags(addr[3], cells[3])
+    byte_validate_state(p, m, v, flags, completed, cfg_shape)
+    var device_ids = List[Int]()
+    for i in range(Int(py=devices.__len__())):
+        device_ids.append(Int(py=devices[i]))
+    var owner = session.downcast_value_ptr[ByteModelPool]()
+    # Retain the GIL: it is also the native object's exclusion lock.
+    owner[].open(device_ids, Int(py=shard_count), p, m, v, flags, completed, cfg, cfg_shape)
+    return PythonObject(completed)
+
+
+def byte_lm_model_pool_step_binding(session: PythonObject, addresses: PythonObject,
+    completed_arg: PythonObject) raises -> PythonObject:
+    var completed = Int(py=completed_arg)
+    _require_binding_profile()
+    var owner = session.downcast_value_ptr[ByteModelPool]()
+    owner[].require_open()
+    if completed != owner[].completed:
+        raise Error("byte LM parallel: completed-step mismatch")
+    var count = owner[].logical_shards
+    var addr = _read_addresses(addresses, count)
+    var shape = owner[].config.copy()
+    var n_ids = shape.batch * (shape.length + 1)
+    var cells = List[Int]()
+    for i in range(count):
+        cells.append(n_ids)
+    _validate_slot_table(addr, cells, count)
+    var shards = List[List[Int32]]()
+    for i in range(count):
+        shards.append(_read_ids(addr[i], n_ids))
+    var losses = owner[].step(shards)
+    var out = Python.list()
+    try:
+        for i in range(len(losses)):
+            out.append(PythonObject(losses[i]))
+    except error:
+        owner[].rollback()
+        raise error
+    return out
+
+
+def byte_lm_model_pool_export_binding(session: PythonObject, addresses: PythonObject,
+    rank_arg: PythonObject, gradients_arg: PythonObject) raises -> PythonObject:
+    _require_binding_profile()
+    var owner = session.downcast_value_ptr[ByteModelPool]()
+    owner[].require_open()
+    if Int(py=rank_arg) != 0:
+        raise Error("byte model pool: canonical export has no replica rank; use rank=0")
+    var gradients = Bool(gradients_arg)
+    var n = owner[].config.n_total()
+    var count = 1 if gradients else 4
+    var addr = _read_addresses(addresses,count)
+    var cells = List[Int]()
+    for i in range(count):
+        cells.append(owner[].config.n_tensors() if i == 3 else n)
+    _validate_slot_table(addr,cells,0)
+    if gradients:
+        var g = owner[].export_values(3)
+        copy_f32(g.unsafe_ptr(),f32_ptr(addr[0]),n)
+    else:
+        # Complete and validate all readbacks before publishing any output.
+        var p = owner[].export_values(0)
+        var m = owner[].export_values(1)
+        var v = owner[].export_values(2)
+        copy_f32(p.unsafe_ptr(),f32_ptr(addr[0]),n)
+        copy_f32(m.unsafe_ptr(),f32_ptr(addr[1]),n)
+        copy_f32(v.unsafe_ptr(),f32_ptr(addr[2]),n)
+        _write_flags(addr[3],owner[].flags)
+    return PythonObject(owner[].completed)
+
+
+def byte_lm_model_pool_rollback_binding(session: PythonObject) raises -> PythonObject:
+    var owner = session.downcast_value_ptr[ByteModelPool]()
+    owner[].require_open()
+    owner[].rollback()
+    return PythonObject(owner[].completed)
+
+
+def byte_lm_model_pool_ownership_binding(session: PythonObject) raises -> PythonObject:
+    var owner = session.downcast_value_ptr[ByteModelPool]()
+    owner[].require_open()
+    var out = Python.list()
+    for i in range(len(owner[].chunks)):
+        ref chunk = owner[].chunks[i]
+        var row = Python.list()
+        row.append(PythonObject(chunk.owner))
+        row.append(PythonObject(chunk.first))
+        row.append(PythonObject(len(chunk.p)))
+        row.append(PythonObject(4*len(chunk.p)))
+        row.append(PythonObject(4*(len(chunk.m)+len(chunk.v))))
+        row.append(PythonObject(4*(len(chunk.shadow_p)+len(chunk.shadow_m)+len(chunk.shadow_v))))
+        row.append(PythonObject(4*len(chunk.g)))
+        out.append(row)
+    return out
+
+
 @export
 def PyInit__mojolearn_byte_lm() abi("C") -> PythonObject:
     try:
@@ -1397,6 +1516,14 @@ def PyInit__mojolearn_byte_lm() abi("C") -> PythonObject:
         module.def_function[byte_lm_parallel_step_binding]("byte_lm_parallel_step")
         module.def_function[byte_lm_parallel_export_binding]("byte_lm_parallel_export")
         module.def_function[byte_lm_parallel_rollback_binding]("byte_lm_parallel_rollback")
+        _ = module.add_type[ByteModelPool]("_ByteModelPool")
+        module.def_function[byte_lm_model_pool_create_binding]("byte_lm_model_pool_create")
+        module.def_function[byte_lm_model_pool_open_binding]("byte_lm_model_pool_open")
+        module.def_function[byte_lm_model_pool_close_binding]("byte_lm_model_pool_close")
+        module.def_function[byte_lm_model_pool_step_binding]("byte_lm_model_pool_step")
+        module.def_function[byte_lm_model_pool_export_binding]("byte_lm_model_pool_export")
+        module.def_function[byte_lm_model_pool_rollback_binding]("byte_lm_model_pool_rollback")
+        module.def_function[byte_lm_model_pool_ownership_binding]("byte_lm_model_pool_ownership")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_byte_lm: ", error))
