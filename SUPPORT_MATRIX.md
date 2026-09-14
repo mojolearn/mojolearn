@@ -96,6 +96,13 @@ three-column rerun reads IDENTICAL x3 on every cell of every lane, this one incl
 (`bench/results/identity_break/2026-09-14_46-lanes/README.md`, 414 train and 459 infer and
 model cells on an Apple M4, an NVIDIA H100 and an AMD MI300X, no one-column cell).
 
+**RTX 5090 (sm_120a), 2026-09-14, DEVIATION 2711, open.** The first leg on a Blackwell consumer
+part: 410 of 414 training cells and every inference and model cell carry the same bits as the
+Apple M4, H100 and MI300X record, and four cells refuse: pca, tsvd, ols and ridge on the 17-column
+`odd` fixture, where the device Jacobi eigen solver does not converge in 15 sweeps on that
+architecture only (`bench/results/identity_break/2026-09-14_rtx5090-sm_120a/README.md`). No wheel
+targets sm_120a; the finding is about the contract, and it is being diagnosed.
+
 | Surface | Public availability | Strongest retained identity evidence | Important open work |
 |---|---|---|---|
 | Gradient boosting | Beta | Three-vendor cards for recorded configurations | Numeric single-permutation ordered RMSE passes AMD/NVIDIA at `6dd44ac5`, with 130 bitwise-matching records. Broader categorical/CTR coverage and external parity remain. |
