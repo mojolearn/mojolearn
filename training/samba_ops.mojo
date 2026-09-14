@@ -365,19 +365,8 @@ def samba_tree_level_kernel(
     dst.unsafe_store(i, ftz(identical_mul_add(Float32(1.0), left, right)))
 
 
-def samba_accumulate_host(
-    ctx: DeviceContext,
-    out_ptr: MutPointer[Float32, MutUntrackedOrigin],
-    parts_ptr: MutPointer[Float32, MutUntrackedOrigin],
-    n: Int,
-    a: Int,
-    t_tokens: Int,
-) raises -> Int:
-    """`out[n] = tree(parts[0], ..., parts[a-1])`, `parts` being `a`
-    consecutive blocks of `n` floats in ascending microbatch index.
-    `t_tokens >= 1` asks for clause 9.2's alignment predicate and refuses a
-    misaligned split BY NAME; `t_tokens < 0` makes no alignment claim (the
-    residual or tied-weight pair add). Returns `n`."""
+def samba_validate_accumulation(n: Int, a: Int, t_tokens: Int) raises:
+    """Shared shape/alignment admission before any accumulation allocation."""
     if n < 1:
         raise Error("mojolearn samba ops: accumulate n must be at least 1")
     if a < 1:
@@ -401,6 +390,22 @@ def samba_accumulate_host(
             " T mod L, A divides P, A a power of two); this accumulation"
             " would be a different numerical experiment from the unsplit step"
         )
+
+
+def samba_accumulate_host(
+    ctx: DeviceContext,
+    out_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    parts_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n: Int,
+    a: Int,
+    t_tokens: Int,
+) raises -> Int:
+    """`out[n] = tree(parts[0], ..., parts[a-1])`, `parts` being `a`
+    consecutive blocks of `n` floats in ascending microbatch index.
+    `t_tokens >= 1` asks for clause 9.2's alignment predicate and refuses a
+    misaligned split BY NAME; `t_tokens < 0` makes no alignment claim (the
+    residual or tied-weight pair add). Returns `n`."""
+    samba_validate_accumulation(n, a, t_tokens)
     _refuse_nonfinite("accumulate parts", parts_ptr, n * a)
     if a == 1:
         for i in range(n):

@@ -12,10 +12,12 @@ def execute(request):
         if int(os.environ.get('MOJOLEARN_OPTIMIZER_DEVICE_COUNT', '1')) > 1:
             from ._training_impl import _load
             binding = _load('identical')
-            if not callable(getattr(binding, 'optimizer_parallel_available', None)):
-                raise ImportError('rebuild training binding for pooled optimizer updates')
-            if binding.optimizer_parallel_available() != 1:
-                raise RuntimeError('training binding refused parallel optimizer availability')
+            for name in ('optimizer_parallel_available', 'accumulate_parallel_available'):
+                function = getattr(binding, name, None)
+                if not callable(function):
+                    raise ImportError('rebuild training binding for pooled neural gradients and updates')
+                if function() != 1:
+                    raise RuntimeError('training binding refused ' + name)
     if operation in ('mlp_gradient', 'mlp_update'):
         from ._mlp_impl import SmallMLPTrainer, _validate_state
         weights, _, config, schedule = _validate_state(state)
