@@ -944,6 +944,15 @@ def host_families_built():
 #:     core/forest_host_predict.mojo; et_predict_gpu_parallel and the
 #:     resident forest_* entries are absent (inference_engine=
 #:     'parallel_groves' is a GPU engine).
+#:   _mojolearn_rf -> _mojolearn_rf_host (rf-clf, rf-reg; workstream E
+#:     batch 3, 2026-09-14): the eight rf_*_fit entries over
+#:     ensemble/host/rf_oracle.mojo::rf_host_fit (the device trainer
+#:     restated on the host), forest_export, forest_export_legacy,
+#:     forest_export_release, and rf_predict_proba and rf_predict_reg over
+#:     core/forest_host_predict.mojo; the class-weighted and shard fits, the
+#:     POISSON, GAMMA and INVERSE_GAUSSIAN criteria and the GPU engines
+#:     refuse by name. This is its own family, not the forest host binding
+#:     named above, because it exports the GPU binding's names.
 _HOST_MODULES = host_surface.routed_modules()
 
 #: The env switch the CPU identity gate sets to load a host binding built

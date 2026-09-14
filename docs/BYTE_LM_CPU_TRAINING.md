@@ -357,7 +357,8 @@ per family.
 | tsa | `_mojolearn_tsa_host.so` | `_mojolearn_tsa` | holtwinters | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_tsa_host.sh` |
 | solver | `_mojolearn_solver_host.so` | `_mojolearn_solver` | lasso, elasticnet, agglomerative | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_solver_host.sh` |
 | svm | `_mojolearn_svm_host.so` | `_mojolearn_svm` | svc, iforest | SVC, IsolationForest (svc) | tools/identity_break.py and tools/classical_host_gate.py (cpu-identity-gate.yml) | no, `bindings/build_svm_host.sh` |
-| trees | `_mojolearn_trees_host.so` | `_mojolearn_trees` | et-clf, et-reg | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_trees_host.sh` |<!--/fact-->
+| trees | `_mojolearn_trees_host.so` | `_mojolearn_trees` | et-clf, et-reg | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_trees_host.sh` |
+| rf | `_mojolearn_rf_host.so` | `_mojolearn_rf` | rf-clf, rf-reg | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_rf_host.sh` |<!--/fact-->
 
 ## The import question, measured
 

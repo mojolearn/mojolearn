@@ -1595,3 +1595,69 @@ The measurement owed is the seven-runner CPU identity gate on the lane
   DIVERGENT on `coef` and `proba` and on the infer cell against all three
   columns on `base`.
 - The test module is `cd python && python3 -m mojolearn.tests.test_cpu_training_e2`.
+
+## Workstream E batch 3 (2026-09-14): rf-clf, rf-reg, WRITTEN, NOT COMPILED, NOT MEASURED
+
+Branch `lane/cpu-training-e3-trees`, off `origin/main` at 576c908d6. Nothing in
+this section is a bit result. The agent that wrote it ran no build, no
+simulation and no test on the Mac; the first compile and the first
+four-column diff are owed to the seven-runner gate and the commands below.
+
+- rf-clf, rf-reg. `ensemble/host/rf_oracle.mojo`, the host restatement the
+  census found missing (section 1.1 rf, verdict NONE), written as a second
+  spelling of the device trainer that imports only the `checks/numerics.mojo`
+  seams. It mirrors, in `fit_forest`'s order: the `n_bins` clamp and
+  `n_sampled_rows_for`; DEVIATION 1942's in-place flush of X; `compute_quantiles`
+  (the shared PCG row sample with the uint64 Lemire draw, CUB's twiddled key
+  order, the Float64 bin index table, the `ftz`-compared unique); DEVIATION
+  314's binned matrix through the clamped `lower_bound`; per tree the
+  bootstrap rows of `uniform_int_kernel` (Philox4x32-10, one generator per
+  index at stride 110592, the FNV tree seed with DEVIATION 400's high-half
+  round); per batch the FIFO `NodeQueue`, the sampling rounds and the node
+  column sample (the per-node FNV seed, minstd keys, the Feistel cycle walk);
+  the integer and fixed-point histograms and their prefix sums; the per-thread
+  `Gain` (Gini, Entropy, MSE through `ftz`, `identical_mul_add` and
+  `identical_log`); DEVIATION 2502's purity mark and the pure-node leaf rule;
+  DEVIATION 404's pinned width-32 reduction and `_publish_to_global`'s
+  midpoint and slot `update`; the retry of invalid, non-terminal nodes;
+  `count_local_left_kernel` and the scan writer's stable partition;
+  `NodeQueue.push`; the leaf pass and `SetLeafVector`. Class weights and the
+  POISSON, GAMMA and INVERSE_GAUSSIAN criteria refuse by name.
+- A family of its own, `rf`: `bindings/_mojolearn_rf_host.mojo` (shim
+  `bindings/build_rf_host.sh`) routes `_mojolearn_rf` on a CPU-only install
+  with the GPU binding's names (the eight fit entries, the three export
+  entries, `rf_predict_proba` and `rf_predict_reg` over
+  `core/forest_host_predict.mojo`), so `python/mojolearn/randomforest.py` runs
+  unchanged. The batch 3 prompt named the forest host binding as the home;
+  that binding is loaded by path under `forest_host_*` names and `_backend`
+  deliberately does not route `_mojolearn_rf` to it, so the lane took the
+  shape the Extra Trees lane took with `trees`.
+- The sabotage arm is the routed set's `-D MOJOLEARN_HOST_SABOTAGE=1`: every
+  bootstrap row is drawn from the next Philox subsequence. An arm on a fold
+  could not fail here, because every histogram is an integer sum.
+- The test module is `cd python && python3 -m mojolearn.tests.test_cpu_training_e3`.
+
+RISKS FOR BIT IDENTITY NOT RESOLVABLE BY READING. (1) Mojo compiling a
+host `ftz(a * b)` or the Gini chain with a contraction the device does not
+make; every product is stored through `ftz` as on the device, and the three
+accumulations are explicit `identical_mul_add`. (2) `Int32(Float32)` in
+the regression quantizer and `Float32(Int32)` in the dequantizer rounding
+the same way on seven CPUs as on the three GPUs. (3) The feature sampler's
+Feistel walk and the Philox and PCG generators restated rather than
+imported; a one-bit slip in any of them moves every tree, which the first
+diff would show on every cell and `MOJOLEARN_IDENTITY_TRACE` against the
+Apple GPU binding (`tree<N>.rows`, `...colsamples`, `forest.quantiles.*`,
+`forest.binned`) would name. (4) The pinned reduction's range merge is not
+associative (DEVIATION 105); the host replays the device's step order
+exactly, so it should agree, but a tie that reaches the merge is the first
+place to look on a DIVERGENT `ties` or `dupes` cell.
+
+To measure (the three 2026-09-14 47-lane GPU columns already carry rf-clf
+and rf-reg):
+
+    MOJOLEARN_HOST_OUTDIR=<dir> sh bindings/build_rf_host.sh
+    MOJOLEARN_HOST_DIR=<dir> python3 tools/identity_break.py --lanes rf-clf,rf-reg --json <cpu>.json
+    python3 tools/identity_break.py --diff <apple> <nvidia> <amd> <cpu>.json --require-columns 4 --lanes rf-clf,rf-reg
+    MOJOLEARN_HOST_OUTDIR=<sab> MOJOLEARN_BUILD_EXTRA_DEFINES="-D MOJOLEARN_HOST_SABOTAGE=1" sh bindings/build_rf_host.sh
+    MOJOLEARN_HOST_DIR=<sab> MOJOLEARN_HOST_ALLOW_SABOTAGE=1 python3 tools/identity_break.py --lanes rf-clf,rf-reg --json <cpu-sab>.json
+    (the diff of <cpu-sab>.json against the three GPU columns must exit non-zero with DIVERGENT)
