@@ -47,3 +47,22 @@ the wheel, the harness's `_ragged` reads the wheel's ragged container by index
 and length, and every column records its python and numpy versions under
 `package`. **Rerun owed at a harness with the by-index `_ragged`**, as the
 second row here; it is one command on the next H100 box.
+
+## Second run (same day, 17:09Z), harness with the positive verdict
+
+Same recipe on a fresh RunPod H100 pod, clone at 2b7f991b6 (the script with
+`VERDICT: PASS|FAIL`, numpy installed with the wheel), the same 47-lane record
+and wheel 0.8.5. Column `nvidia-h100-sm_90a.run2.json`, log `verify_external2.log`.
+
+| what | value |
+|---|---|
+| training cells | 423 (417 stable, 0 moved, 6 REFUSED: the same six radius fixtures, same ValueError) |
+| diff | IDENTICAL=423 over the stable cells, exit 0 |
+| script verdict | `VERDICT: FAIL`, exit 1 (the six refused cells now fail the run, as they should) |
+
+Why radius still refuses: the script runs the HARNESS AT THE RECORD'S COMMIT
+(7bf4f4cc9, so the lanes are the record's), and the by-index `_ragged` fix
+lives at c3e6dcd37 and later. A record taken at a commit that carries the fix
+closes it; the next outsider run should use such a record, and a release
+should ship the columns of a record taken at its own commit so the harness,
+the wheel and the record agree (0.8.6 plan).
