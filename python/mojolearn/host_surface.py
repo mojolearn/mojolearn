@@ -155,6 +155,12 @@ TRAINING_LANE_NAMES = {
     # arm of the quasi-Newton solver, exported as qn_fit from the
     # estimators host binding.
     "logistic": "logistic regression",
+    # Workstream E batch 3 (2026-09-14): the random forests train through
+    # ensemble/host/rf_oracle.mojo, the device trainer restated on the host,
+    # exported under the GPU binding's names from the rf family's own host
+    # binding. A prediction until the four-column diff reads IDENTICAL.
+    "rf-clf": "the random forest classifier",
+    "rf-reg": "the random forest regressor",
 }
 
 #: The lanes with NO CPU path of any kind, as the README states them. A
@@ -165,7 +171,7 @@ NO_CPU_PATH = (
     "the Gaussian process",
     "ARIMA",
     "the neural blocks",
-    "training for the random forests and gradient boosting",
+    "gradient boosting training",
 )
 
 #: The read-back trio every host binding exports under its own prefix,
@@ -495,6 +501,37 @@ FAMILIES = (
             "et_regressor_fit_rowmajor", "et_regressor_fit_rowmajor_export",
             "forest_export", "forest_export_legacy", "forest_export_release",
             "et_predict",
+        ),
+        gate="tools/identity_break.py (cpu-identity-gate.yml)",
+        ships_in_wheel=False,
+    ),
+    dict(
+        # Workstream E batch 3 (2026-09-14): the RandomForest family's host
+        # binding. It routes `_mojolearn_rf` on a CPU-only install with the
+        # GPU binding's fit, export and predict names; the class-weighted and
+        # shard fits and the GPU engines stay absent and refuse by name. Not
+        # the forest host binding: that one is loaded by path under its own
+        # names, and `_backend` must not route `_mojolearn_rf` to it.
+        family="rf",
+        binding="_mojolearn_rf_host",
+        routes="_mojolearn_rf",
+        loaded_by="_backend._HOST_MODULES",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=("rf-clf", "rf-reg"),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=("RandomForestClassifier", "RandomForestRegressor"),
+        display="the random forest classifier and regressor",
+        host_modules=("ensemble/host/rf_oracle.mojo", "core/forest_host_predict.mojo"),
+        exports=(
+            "rf_host_numeric_mode", "rf_host_vendor", "rf_host_column",
+            "rf_host_sabotage", "rf_vendor", "rf_numeric_mode",
+            "rf_classifier_fit", "rf_classifier_fit_export",
+            "rf_classifier_fit_rowmajor", "rf_classifier_fit_rowmajor_export",
+            "rf_regressor_fit", "rf_regressor_fit_export",
+            "rf_regressor_fit_rowmajor", "rf_regressor_fit_rowmajor_export",
+            "forest_export", "forest_export_legacy", "forest_export_release",
+            "rf_predict_proba", "rf_predict_reg",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=False,
