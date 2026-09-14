@@ -14,6 +14,7 @@ def main():
     p.add_argument('--report', type=Path, required=True)
     p.add_argument('--lane', choices=('mlp', 'samba', 'forest'), required=True)
     p.add_argument('--attention-dropout', action='store_true')
+    p.add_argument('--max-norm', type=float)
     args = p.parse_args()
     if not os.environ.get('RUNPOD_POD_ID'):
         raise SystemExit('RunPod environment required; no local execution')
@@ -118,8 +119,8 @@ def main():
                               n_heads=4, n_kv_heads=2, head_dim=8, intermediate=64, dropout=.1)
                   if args.attention_dropout else
                   SambaConfig(vocab=256, d_model=32, layers=('mamba3',), dropout=0))
-        left = SambaStack(config, generator=Generator(946, 'identical'), numeric_mode='identical')
-        right = SambaStack(config, generator=Generator(946, 'identical'), numeric_mode='identical')
+        left = SambaStack(config, generator=Generator(946, 'identical'), numeric_mode='identical', max_norm=args.max_norm)
+        right = SambaStack(config, generator=Generator(946, 'identical'), numeric_mode='identical', max_norm=args.max_norm)
         shards = [(data[i*16:(i+1)*16].astype('<i4').reshape(2, 8),
                    data[i*16+1:(i+1)*16+1].astype('<i4').reshape(2, 8)) for i in range(3)]
         with ParallelNeuralTrainer(left, devices=(0, 1), logical_shards=3) as multi, \
