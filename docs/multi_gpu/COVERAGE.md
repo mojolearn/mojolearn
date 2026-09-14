@@ -9,8 +9,9 @@ distributed fit of one estimator.
 ## Compute and memory are separate requirements
 
 The byte-LM driver pools AdamW moments and rollback copies in disjoint device
-ranges; parameters, gradients and activations remain replicated. The SmallMLP
-and Samba drivers still replicate optimizer state.
+ranges; parameters, gradients and activations remain replicated. SmallMLP
+and Samba use host-staged disjoint optimizer ranges after the original global
+clip. Their gradient computations still require a complete model per worker.
 Forests replicate training data; KMeans retains full-data work on the root.
 These remaining allocations limit capacity. A model or dataset that exceeds one GPU's
 memory needs additional partitioning and a memory-bounded replay mechanism.
@@ -29,8 +30,8 @@ and histogram paths have two-H100 evidence only.
 | Surface | Current multi-GPU coverage | Remaining numerical work |
 | --- | --- | --- |
 | SmallByteLanguageModelTrainer / LanguageModelTrainer | Concurrent microbatch waves, ordered replay and pooled AdamW moments/rollback copies | Weight/activation partitioning; larger capacity and cross-vendor qualification |
-| SmallMLPTrainer | Concurrent microbatch gradients, ordered update | Larger shapes; memory partitioning |
-| SambaStack | Concurrent microbatch gradients, ordered update | Broader block/configuration coverage; memory partitioning |
+| SmallMLPTrainer | Concurrent microbatch gradients, ordered sum and host-staged optimizer ranges | Larger shapes; resident state and model/activation pooling |
+| SambaStack | Concurrent microbatch gradients, ordered sum, original global clipping and host-staged optimizer ranges | Broader configurations; resident state and model/activation pooling |
 | RandomForestClassifier / RandomForestRegressor | Global tree-ID ranges over full data | Larger forests; data partitioning |
 | ExtraTreesClassifier / ExtraTreesRegressor | Global tree-ID ranges over full data | Larger forests; data partitioning |
 | GradientBoosting / GradientBoostingClassifier / GradientBoostingRegressor | Greedy and pointwise feature groups; full histogram bytes and adapter contracts pass on two H100s | Broader configurations; root-state memory partitioning; cross-vendor qualification |

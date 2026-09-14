@@ -459,6 +459,29 @@ pooling, not full pooled model capacity. `pool_optimizer=False` retains the
 replicated optimizer path for direct checks. Portable checkpoints contain full
 canonical state and can reopen with a different physical device count.
 
-The byte-LM optimizer admits AdamW without clipping. Extending pooling to
-SmallMLP/Samba requires preserving their global clipping and per-tensor optimizer
-contracts; those drivers still use their existing replicated updates.
+The byte-LM optimizer admits AdamW without clipping. SmallMLP/Samba use the shared host-staged optimizer path below, which preserves
+their global clipping and per-tensor optimizer contracts.
+
+
+### Shared neural optimizer pooling
+
+`ParallelNeuralTrainer` uses a cooperative update worker across its selected
+devices. The first selected GPU retains the original ordered gradient sum and,
+when enabled, the original complete-registry global-norm clip. Disjoint
+parameter/moment ranges then use the existing SGD, Adam or AdamW step with
+clipping disabled because it has already run. SGD ranges retain each original
+tensor's momentum flag, including when a tensor spans multiple devices.
+
+The update is host staged: each GPU allocates only its parameter, gradient and
+moment range during that phase. The full-gradient clipping allocation is freed
+before those updates. Full host arrays stage all results, and caller state is
+published only after every worker succeeds. This is not persistent optimizer
+residency or pooled model weights/activations. SmallMLP and Samba gradient
+workers still need a complete model.
+
+The native entry selects this path with `MOJOLEARN_OPTIMIZER_DEVICE_COUNT`;
+cooperative workers set it to their selected device count, and one device
+retains the original entry. `tools/parallel_optimizer_check.py` compares all
+state, clipped gradients and norm/coefficients for SGD (including dampening
+and Nesterov), Adam and AdamW; `tools/parallel_training_check.py` exercises
+full MLP and Samba training, including clipping and attention/dropout.

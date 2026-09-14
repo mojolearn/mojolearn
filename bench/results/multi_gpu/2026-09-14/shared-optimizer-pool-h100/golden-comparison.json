@@ -1,0 +1,14 @@
+{
+  "mlp": {
+    "hashes": true,
+    "state_hashes": true
+  },
+  "samba": {
+    "hashes": true,
+    "state_hashes": true
+  },
+  "samba-attention": {
+    "hashes": true,
+    "state_hashes": true
+  }
+}
