@@ -218,6 +218,12 @@ TRAINING_LANE_NAMES = {
     # the searcher's own leaves, DEVIATION 64) from the same binding. A
     # prediction until the four-column diff reads IDENTICAL.
     "gbdt-rmse": "gradient boosting on symmetric trees with the RMSE loss",
+    # Same batch: the Depthwise and Lossguide policies with the Logloss loss
+    # train through gbdt/host/gbdt_oracle_depthwise.mojo (the non-symmetric
+    # driver) and gbdt/host/gbdt_oracle_lossguide.mojo, in the same binding.
+    # A prediction until the four-column diff reads IDENTICAL.
+    "gbdt-depthwise": "gradient boosting on depthwise trees with the Logloss loss",
+    "gbdt-lossguide": "gradient boosting on lossguide trees with the Logloss loss",
 }
 
 #: The lanes with NO CPU path of any kind, as the README states them. A
@@ -227,7 +233,7 @@ NO_CPU_PATH = (
     "UMAP",
     "ARIMA",
     "the neural blocks",
-    "gradient boosting training other than symmetric trees with the Logloss or RMSE loss",
+    "gradient boosting training other than symmetric trees with the Logloss or RMSE loss and depthwise and lossguide trees with the Logloss loss",
 )
 
 #: The read-back trio every host binding exports under its own prefix,
@@ -635,8 +641,8 @@ FAMILIES = (
         # Workstream E batch 3 (2026-09-14): the GradientBoosting family's
         # host binding. It routes `_mojolearn_gbdt` on a CPU-only install
         # with the GPU binding's fit, predict, model-dim and sigmoid names;
-        # gbdt_fit refuses by name every value outside the gbdt-symmetric
-        # and gbdt-rmse configurations, and the multi-dimensional predict, the ordered and
+        # gbdt_fit refuses by name every value outside the gbdt-symmetric,
+        # gbdt-rmse, gbdt-depthwise and gbdt-lossguide configurations, and the multi-dimensional predict, the ordered and
         # FeatureFreq fits and the adapters' device transforms stay absent.
         # Not the forest host binding: that one is loaded by path under its
         # own names and takes the model as flat arrays.
@@ -645,13 +651,16 @@ FAMILIES = (
         routes="_mojolearn_gbdt",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("gbdt-symmetric", "gbdt-rmse"),
+        training_lanes=("gbdt-symmetric", "gbdt-rmse", "gbdt-depthwise", "gbdt-lossguide"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("GradientBoosting",),
-        display="gradient boosting on symmetric trees with the Logloss or RMSE loss",
-        host_modules=("gbdt/host/gbdt_oracle.mojo", "gbdt/host/gbdt_oracle_rmse.mojo",
-                      "core/gbdt_host_predict.mojo"),
+        display="gradient boosting on symmetric trees with the Logloss or RMSE loss and depthwise and lossguide trees with the Logloss loss",
+        host_modules=(
+            "gbdt/host/gbdt_oracle.mojo", "gbdt/host/gbdt_oracle_rmse.mojo",
+            "gbdt/host/gbdt_oracle_depthwise.mojo", "gbdt/host/gbdt_oracle_lossguide.mojo",
+            "core/gbdt_host_predict.mojo",
+        ),
         exports=(
             "gbdt_host_numeric_mode", "gbdt_host_vendor", "gbdt_host_column",
             "gbdt_host_sabotage", "gbdt_vendor", "gbdt_numeric_mode",

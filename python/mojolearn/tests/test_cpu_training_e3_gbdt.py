@@ -22,8 +22,8 @@ oracle.
 
 The runtime check (skipped, and SAID to be skipped, when the binding is
 absent or a GPU set loaded): a small Logloss fit runs twice through the host
-binding and returns the same model text and predictions, and a Depthwise fit
-refuses by name. It is a plumbing check. The bit claim against the GPU
+binding and returns the same model text and predictions, and a Lossguide fit
+with the Cosine score refuses by name. It is a plumbing check. The bit claim against the GPU
 columns is the CPU identity gate's, not this file's.
 
     cd python && python3 -m mojolearn.tests.test_cpu_training_e3_gbdt
@@ -59,17 +59,17 @@ def _read(rel):
 def test_manifest_declares_the_gbdt_family():
     fam = host_surface.family("gbdt")
     assert fam["routes"] == "_mojolearn_gbdt"
-    assert "gbdt-symmetric" in fam["training_lanes"]
+    assert fam["training_lanes"][0] == "gbdt-symmetric"
     assert ORACLE in fam["host_modules"] and (ROOT / ORACLE).is_file()
     assert (ROOT / host_surface.build_shim("gbdt")).is_file()
     assert (ROOT / host_surface.binding_source("gbdt")).is_file()
     assert host_surface.routed_modules()["_mojolearn_gbdt"] == "_mojolearn_gbdt_host"
     covered = host_surface.covered_lanes()
     assert "gbdt-symmetric" in covered
-    for lane in ("gbdt-depthwise", "gbdt-lossguide"):
+    for lane in ():
         assert lane not in covered, f"{lane} is declared covered and has no host trainer"
     sentence = host_surface.no_cpu_path_sentence()
-    assert "gradient boosting training other than symmetric trees" in sentence, sentence
+    assert "gradient boosting training other than symmetric" in sentence, sentence
     # The forest host binding stays loaded by path, never routed.
     assert host_surface.family("forest")["routes"] is None
 
@@ -178,11 +178,11 @@ def test_gradient_boosting_fits_on_the_host_when_built():
     assert proba.shape == (600, 2) and float(proba.min()) >= 0.0 and float(proba.max()) <= 1.0
     try:
         mojolearn.GradientBoosting(n_estimators=2, max_depth=3, loss="Logloss",
-                                   grow_policy="Depthwise").fit(x, y)
+                                   grow_policy="Lossguide", score_function="Cosine").fit(x, y)
     except Exception as exc:  # the binding's Error crosses as a Python exception
         assert "no CPU implementation of" in str(exc), str(exc)
     else:
-        raise AssertionError("a Depthwise fit did not refuse on the host binding")
+        raise AssertionError("a Lossguide Cosine fit did not refuse on the host binding")
 
 
 if __name__ == "__main__":
