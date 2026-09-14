@@ -88,6 +88,7 @@ on:
       - "bench/results/identity_break/2026-09-13_three-columns/**"
       - "bench/results/identity_break/2026-09-14_46-lanes/**"
       - "bench/results/identity_break/2026-09-14_47-lanes/**"
+      - "bench/results/identity_break/2026-09-14_136-lanes/**"
       - "bench/results/forest_host/**"
       - ".github/workflows/cpu-identity-gate.yml"
 
@@ -193,6 +194,7 @@ jobs:
             /bench/results/identity_break/2026-09-13_three-columns/
             /bench/results/identity_break/2026-09-14_46-lanes/
             /bench/results/identity_break/2026-09-14_47-lanes/
+            /bench/results/identity_break/2026-09-14_136-lanes/
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
@@ -362,7 +364,8 @@ jobs:
             --report "$GATE_OUT/classical_gate_prod.json" 2>&1 | tee "$GATE_OUT/classical_gate_prod.log"
 
       # The tool loads on this CPU and the three committed GPU columns still
-      # diff to IDENTICAL x3 on all 423 train cells (the 2026-09-14 47-lane record). The exact summary token is
+      # diff to IDENTICAL x3 on all 1224 train cells (the 2026-09-14 136-lane record at 4048e1b51,
+      # the 2712/2713 fix and the sixteen one-device par-* lanes). The exact summary token is
       # required: a diff that printed nothing, or fewer cells, is a failure.
       - name: identity_break --diff over the three committed GPU columns (require 3)
         if: always()
