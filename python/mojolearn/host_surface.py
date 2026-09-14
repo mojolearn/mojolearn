@@ -117,6 +117,20 @@ TRAINING_LANE_NAMES = {
     "et-clf": "the Extra Trees classifier",
     "et-reg": "the Extra Trees regressor",
     "iforest": "the isolation forest",
+    # Workstream E (lane/cpu-training-e, 2026-09-14). The k-NN lanes' fit
+    # stores the index and their train cell is the host search the knn host
+    # inference lane already serves; pca, pca-whiten, tsvd, ols and ridge
+    # train through decomposition/host/pca_oracle.mojo and
+    # glm/host/glm_oracle.mojo. Each is a prediction until the four-column
+    # diff reads IDENTICAL on every cell.
+    "knn": "nearest neighbors",
+    "knn-clf": "the k-NN classifier",
+    "knn-reg": "the k-NN regressor",
+    "pca": "PCA",
+    "pca-whiten": "whitened PCA",
+    "tsvd": "truncated SVD",
+    "ols": "linear regression",
+    "ridge": "ridge",
 }
 
 #: The lanes with NO CPU path of any kind, as the README states them. A
@@ -130,7 +144,8 @@ NO_CPU_PATH = (
     "the Gaussian process",
     "ARIMA",
     "the neural blocks",
-    "training for the random forests, gradient boosting and k-NN",
+    "logistic regression training",
+    "training for the random forests and gradient boosting",
 )
 
 #: The read-back trio every host binding exports under its own prefix,
@@ -232,7 +247,7 @@ FAMILIES = (
         routes="_mojolearn",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=(),
+        training_lanes=("knn", "knn-clf", "knn-reg"),
         inference_lanes=("knn", "knn-clf", "knn-reg"),
         forest_kinds=(),
         classes=("NearestNeighbors", "KNeighborsClassifier", "KNeighborsRegressor"),
@@ -275,7 +290,7 @@ FAMILIES = (
         routes="_mojolearn_estimators",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("kde",),
+        training_lanes=("kde", "pca", "pca-whiten", "tsvd", "ols", "ridge"),
         inference_lanes=("ols", "ridge", "tsvd", "logistic", "logistic-multiclass", "pca", "pca-whiten", "kde"),
         forest_kinds=(),
         classes=(
@@ -283,11 +298,15 @@ FAMILIES = (
             "PCA", "KernelDensity",
         ),
         display="linear regression, ridge, truncated SVD, logistic regression, PCA with and without whitening and kernel density",
-        host_modules=("kde/host/kde_oracle.mojo", "core/classical_host_predict.mojo"),
+        host_modules=(
+            "kde/host/kde_oracle.mojo", "core/classical_host_predict.mojo",
+            "decomposition/host/pca_oracle.mojo", "glm/host/glm_oracle.mojo",
+        ),
         exports=(
             "estimators_host_numeric_mode", "estimators_host_vendor",
             "estimators_host_column", "estimators_host_sabotage",
             "estimators_vendor", "estimators_numeric_mode", "kde_score_samples",
+            "pca_fit", "tsvd_fit", "ols_fit", "ridge_fit",
             "ols_predict", "tsvd_transform", "pca_transform",
             "pca_whiten_transform", "pca_whiten_inverse_transform",
             "qn_decision_function", "qn_sigmoid", "qn_softmax",

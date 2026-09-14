@@ -35,10 +35,17 @@ than two classes), and, since the kde svc host lane (2026-09-14), the whitened p
 `pca_whiten_transform` and `pca_whiten_inverse_transform`, with the SAME
 address contracts as `bindings/_mojolearn_estimators.mojo` (each docstring
 below repeats its params list), `estimators_numeric_mode` and
-`estimators_vendor` (answering "cpu"). Every other function of the GPU
-binding (dbscan_fit, pca_fit, pca_fit_full, tsvd_fit, inverse_transform,
-ols_fit, ridge_fit, qn_fit, ...) is deliberately absent, so those surfaces
-refuse BY NAME through `_HostBinding` and never hash something else.
+`estimators_vendor` (answering "cpu"). Since workstream E
+(lane/cpu-training-e, 2026-09-14) the TRAINING entries `pca_fit`,
+`tsvd_fit`, `ols_fit` and `ridge_fit` as well, over
+`decomposition/host/pca_oracle.mojo` (the column mean, the split-K Gram,
+the Float32 Jacobi at the device's settings, the sign flip and the Float64
+tail, each restated from its kernel) and `glm/host/glm_oracle.mojo` (the
+equilibrated pseudo-inverse of `lstsq_eig` and the `svd_eig` plus
+`ridge_solve` pair). Every other function of the GPU binding (dbscan_fit,
+pca_fit_full, inverse_transform, qn_fit, ...) is deliberately absent, so
+those surfaces refuse BY NAME through `_HostBinding` and never hash
+something else.
 """
 from std.math import isfinite
 from std.os import abort
@@ -65,6 +72,13 @@ from core.classical_host_predict import (
     host_qn_softmax,
     host_tsvd_transform,
 )
+from decomposition.host.pca_oracle import (
+    PCA_ORACLE_HOST_SABOTAGE,
+    host_pca_fit,
+    host_pca_validate,
+    host_tsvd_fit,
+)
+from glm.host.glm_oracle import host_ols_fit, host_ridge_fit
 from kde.host.kde_oracle import KDE_ORACLE_HOST_SABOTAGE, oracle_score_samples
 from kde.impl.neighbors.kernel_density import (
     kde_fit_validate,
@@ -109,10 +123,15 @@ def estimators_host_column_binding() raises -> PythonObject:
 
 
 def estimators_host_sabotage_binding() raises -> PythonObject:
-    """Whether this binary sums every logsumexp row and walks every dot
-    product descending on purpose (-D MOJOLEARN_HOST_SABOTAGE=1, the gate's
-    negative control; one define, both arithmetics)."""
-    return PythonObject(KDE_ORACLE_HOST_SABOTAGE or CLASSICAL_HOST_SABOTAGE)
+    """Whether this binary sums every logsumexp row, walks every dot
+    product descending and folds the split-K Gram's chunks descending on
+    purpose (-D MOJOLEARN_HOST_SABOTAGE=1, the gate's negative control; one
+    define, every arithmetic this binding carries)."""
+    return PythonObject(
+        KDE_ORACLE_HOST_SABOTAGE
+        or CLASSICAL_HOST_SABOTAGE
+        or PCA_ORACLE_HOST_SABOTAGE
+    )
 
 
 # The GPU binding's names, same contract.
@@ -194,6 +213,147 @@ def kde_score_samples_binding(
         for i in range(n_query):
             op[i] = stages.scores[i]
     return PythonObject(n_query)
+
+
+# ===========================================================================
+# THE TRAINING ENTRIES (workstream E, lane/cpu-training-e, 2026-09-14): the
+# GPU binding's `pca_fit`, `tsvd_fit`, `ols_fit` and `ridge_fit`, same
+# names, same arity, same params lists, over decomposition/host/pca_oracle.mojo
+# and glm/host/glm_oracle.mojo. `pca_fit_full` (the R-SVD arm), `qn_fit`,
+# `dbscan_fit` and `inverse_transform` stay absent and refuse BY NAME.
+# ===========================================================================
+
+
+def pca_fit_binding(
+    x_addr: PythonObject,
+    components_addr: PythonObject,
+    mean_addr: PythonObject,
+    explained_addr: PythonObject,
+    ratio_addr: PythonObject,
+    singular_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`PCA.fit` (svd_solver 'auto', 'covariance_eigh', 'jacobi') on the
+    host by `host_pca_fit`: the GPU binding's contract, params `n_rows,
+    n_features, n_components`, the five public arrays written, the noise
+    variance returned. The shape refusals are `pca_validate`'s, raised
+    BEFORE anything is read."""
+    if len(params) != 3:
+        raise Error("pca_fit: params must contain n_rows, n_features, n_components")
+    var x_address = _index(x_addr)
+    var cp = f32_ptr(_index(components_addr))
+    var mp = f32_ptr(_index(mean_addr))
+    var ep = f32_ptr(_index(explained_addr))
+    var rp = f32_ptr(_index(ratio_addr))
+    var sp = f32_ptr(_index(singular_addr))
+    var nr = _index(params[0])
+    var nf = _index(params[1])
+    var nc = _index(params[2])
+    var noise = Float64(0.0)
+    with GILReleased(Python()):
+        host_pca_validate_first(nr, nf, nc)
+        var x = read_f32(x_address, nr * nf)
+        var fit = host_pca_fit(x, nr, nf, nc)
+        for i in range(nc * nf):
+            cp[i] = Float32(fit.result.components[i])
+        for i in range(nc):
+            ep[i] = Float32(fit.result.explained_var[i])
+            rp[i] = Float32(fit.result.explained_var_ratio[i])
+            sp[i] = Float32(fit.result.singular_vals[i])
+        for i in range(nf):
+            mp[i] = fit.mean[i]
+        noise = fit.result.noise_var
+    return PythonObject(noise)
+
+
+def host_pca_validate_first(nr: Int, nf: Int, nc: Int) raises:
+    """`pca_validate` before the read, so a refused shape reads no address;
+    the fit validates again on entry, the device order."""
+    host_pca_validate(nr, nf, nc)
+
+
+def tsvd_fit_binding(
+    x_addr: PythonObject,
+    components_addr: PythonObject,
+    singular_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`TruncatedSVD.fit` on the host by `host_tsvd_fit`: params `n_rows,
+    n_features, n_components`; components and singular values written.
+    Returns 0."""
+    if len(params) != 3:
+        raise Error("tsvd_fit: params must contain 3 values")
+    var x_address = _index(x_addr)
+    var cp = f32_ptr(_index(components_addr))
+    var sp = f32_ptr(_index(singular_addr))
+    var nr = _index(params[0])
+    var nf = _index(params[1])
+    var nc = _index(params[2])
+    with GILReleased(Python()):
+        host_pca_validate_first(nr, nf, nc)
+        var x = read_f32(x_address, nr * nf)
+        var result = host_tsvd_fit(x, nr, nf, nc)
+        for i in range(nc * nf):
+            cp[i] = Float32(result.components[i])
+        for i in range(nc):
+            sp[i] = Float32(result.singular_vals[i])
+    return PythonObject(0)
+
+
+def ols_fit_binding(
+    x_addr: PythonObject,
+    y_addr: PythonObject,
+    coef_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`LinearRegression.fit` on the host by `host_ols_fit` (the centered
+    and, when weighted, root-scaled design the Python layer hands over, as
+    on the GPU): params `n_rows, n_features`; `n_features` coefficients
+    written. Returns 0."""
+    if len(params) != 2:
+        raise Error("ols_fit: params must contain n_rows, n_features")
+    var x_address = _index(x_addr)
+    var y_address = _index(y_addr)
+    var wp = f32_ptr(_index(coef_addr))
+    var nr = _index(params[0])
+    var nf = _index(params[1])
+    with GILReleased(Python()):
+        _positive(nr, "n_rows")
+        _positive(nf, "n_features")
+        var x = read_f32(x_address, nr * nf)
+        var y = read_f32(y_address, nr)
+        var w = host_ols_fit(x, y, nr, nf)
+        for i in range(nf):
+            wp[i] = w[i]
+    return PythonObject(0)
+
+
+def ridge_fit_binding(
+    x_addr: PythonObject,
+    y_addr: PythonObject,
+    coef_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`Ridge.fit` (the eig arm, DEVIATION 545) on the host by
+    `host_ridge_fit`: params `n_rows, n_features, alpha` (`alpha` a float,
+    `Float32(Float64(...))` as in the GPU binding). Returns 0."""
+    if len(params) != 3:
+        raise Error("ridge_fit: params must contain n_rows, n_features, alpha")
+    var x_address = _index(x_addr)
+    var y_address = _index(y_addr)
+    var wp = f32_ptr(_index(coef_addr))
+    var nr = _index(params[0])
+    var nf = _index(params[1])
+    var alpha = Float32(Float64(py=params[2]))
+    with GILReleased(Python()):
+        _positive(nr, "n_rows")
+        _positive(nf, "n_features")
+        var x = read_f32(x_address, nr * nf)
+        var y = read_f32(y_address, nr)
+        var w = host_ridge_fit(x, y, nr, nf, alpha)
+        for i in range(nf):
+            wp[i] = w[i]
+    return PythonObject(0)
 
 
 # The classical inference entries (the classical host inference lane,
@@ -505,6 +665,10 @@ def PyInit__mojolearn_estimators_host() abi("C") -> PythonObject:
         module.def_function[estimators_vendor_binding]("estimators_vendor")
         module.def_function[estimators_numeric_mode_binding]("estimators_numeric_mode")
         module.def_function[kde_score_samples_binding]("kde_score_samples")
+        module.def_function[pca_fit_binding]("pca_fit")
+        module.def_function[tsvd_fit_binding]("tsvd_fit")
+        module.def_function[ols_fit_binding]("ols_fit")
+        module.def_function[ridge_fit_binding]("ridge_fit")
         module.def_function[ols_predict_binding]("ols_predict")
         module.def_function[tsvd_transform_binding]("tsvd_transform")
         module.def_function[pca_transform_binding]("pca_transform")
