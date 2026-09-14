@@ -18,7 +18,7 @@ merge. 0.8.4 is on PyPI (Linux 20:35Z, macOS 20:45Z, tags at `0dcc1204`).
 
 ## Open lanes and how to restart them
 
-### 1. DEVIATION 2710, feature-freq: MERGED, 0.8.5 owed
+### 1. DEVIATION 2710, feature-freq: MERGED and SHIPPED in 0.8.5
 
 The third NVIDIA leg landed (`2026-09-13_221232-nvidia-h100-feature-freq-2710` on the branch,
 now on main): dead arm reproduces the H100's Sep 13 hashes, fixed arm equals the Apple column on
@@ -26,8 +26,9 @@ every fixture and column, fixed_again equals fixed. With the AMD leg that is thr
 answer. The branch is merged to main, SUPPORT_MATRIX says found and fixed, CHANGELOG has the
 0.8.5 entry. Still owed: rerun the two edited checks (`checks/tensor_sync_state_check.mojo`,
 `checks/tree_ctr_slice_check.mojo`, each compiles the whole gbdt package, do it on a rented box
-or on the Mac under the two-core cap one at a time), then cut 0.8.5 by the release checklist
-with the HIP set on Hot Aisle in the 22.04 container (never the DigitalOcean 24.04 image).
+or on the Mac under the two-core cap one at a time). 0.8.5 is on PyPI (Linux 00:27Z, macOS
+00:36Z on 2026-09-14, both from `8d16ce2f`, record `fc5590be`); no commit since says those two
+checks were rerun, so they stay owed.
 
 ### 2. CPU training phase 1, six of ten lanes MERGED, four to go
 
