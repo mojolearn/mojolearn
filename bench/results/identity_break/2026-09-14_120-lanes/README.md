@@ -17,14 +17,17 @@ flip's.
 IDENTICAL=1476, N/A=684`. Every column is stable inside itself (no MOVED anywhere, the first
 120-lane run with none), and the nine divergent cells are ONE lane:
 
-- `mamba2` (the default dt_limit Mamba-2 lane) on all nine fixtures: the MI300X column's `step`
-  and `backward` parts differ from the Apple and H100 columns, which agree with each other;
-  `forward` and `prefill` agree on all three. The same lane was IDENTICAL x3 on the MI300X in the
-  47-lane record (7bf4f4cc9) and in both 120-lane runs earlier today (71faae781 and 83380ca6d), so
-  the AMD `step` path gives a different answer from one run to the next while repeating within a
-  run. That is the race the claim-surface session read in the l = 1 step path
-  (docs/lanes/BRIEF_resident_and_dtlimit_moved_2026-09-14.md), now seen on the default lane too and
-  on a second MI300X VM. DEVIATION 2712, open: the Mamba-2 step and its backward on AMD.
+- `mamba2` (the default dt_limit Mamba-2 lane) on all nine fixtures: the APPLE M4 column's `step`
+  and `backward` parts differ from the H100 and MI300X columns, which agree with each other AND with
+  every earlier record on all three vendors (base cell 5b05a3ecbd70248e, step 3fa40f29231409be,
+  backward f252b3fc19f5f9f5; this Apple column has b09925d3d8b074a2 / 16508d9095dbaa6a /
+  7c3fda003a3a0464). CORRECTED 2026-09-14 afternoon: this README first said the MI300X column
+  differed; the per-column hashes say the Apple column did. Reproduced on the M4 with the harness's
+  per-fit dump: after the 42 preceding lanes in one process the step output and every backward
+  gradient are canonical NaN in every element, inputs and state equal to a cold run. DEVIATION
+  2712, open: an uninitialized device read in the Mamba-2 step and backward, visible where the
+  allocator hands back non-zero memory (`docs/lanes/BRIEF_resident_and_dtlimit_moved_2026-09-14.md`
+  section 3.2).
 
 A first attempt at the AMD column on a DigitalOcean MI325X (24.04 ROCm image) aborted with a GPU
 memory access fault right after the mamba1 lane, before mamba2 (`amd-mi325x-gfx942.partial.*`,

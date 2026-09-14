@@ -168,3 +168,57 @@ runs other identity_break lanes first in the same process, and the exact conditi
 a warm run (five lanes plus four poison rounds) equals a cold run on all 86 arrays. Owed on
 the MI300X: cold, `poison:8`, and the full preceding-lane list, each diffed against cold;
 the first DIFFER line names the part and the element, and a NaN there is the read.
+
+### 3.2 CORRECTION and diagnosis (2026-09-14 afternoon): 2712 is the Apple column, a NaN from unwritten device memory
+
+Sections 3 and 3.1 attributed the divergence to the MI300X. The per-column hashes say otherwise.
+In every record on main (46, 47, 118, 120-2711flip) all three vendors carry `mamba2/base` cell
+5b05a3ecbd70248e, step 3fa40f29231409be, backward f252b3fc19f5f9f5. In the 65ae7612f record the
+H100 and the MI300X carry exactly those; the APPLE M4 column carries b09925d3d8b074a2 /
+16508d9095dbaa6a / 7c3fda003a3a0464 (forward 22f79ee009fd9884 everywhere). Every AMD run since
+(the cold and warm probes, the 8core and 13core dumps) carried the canonical values and read
+DIVERGENT only because the diff held them against that Apple column. No AMD box ever diverged on
+this lane. The peer session confirmed and stopped the AMD legs.
+
+Reproduced on the Apple M4 (this Mac, a clean worktree build, the canonical Mamba binding
+41962f89, single-threaded): `identity_break.py --lanes <the 42 lanes that precede mamba2>,mamba2
+--fixtures base --repeats 2` with `MOJOLEARN_IDENTITY_DUMP_DIR` set gives mamba2/base
+b09925d3d8b074a2, both fits, the Apple column's value. The same lane alone in a cold process gives
+5b05a3ecbd70248e. Element diff of the warm dump against the cold dump: `x`, `g`, `forward`,
+`prefill`, and the carried state after prefill and after step (h, conv_window, buffer_xbc,
+buffer_dtraw) are EQUAL; `step` (64 of 64) and EVERY backward gradient (x, block_norm.weight,
+in_proj.weight, conv1d.weight, conv1d.bias, dt_bias, A_log, D, norm.weight, out_proj.weight; all
+elements) are NaN, and every NaN is the canonical quiet NaN 0x7fc00000. Bisection: the first 21
+lanes then mamba2 gives the canonical value; lanes 22 to 42 then mamba2 gives the canonical value;
+all 42 give the NaN. So it is not one lane; it is the process's device-allocation history, which is
+the signature of a read of device memory nothing wrote (an allocator that hands back a recycled
+block still holding a NaN, on Metal; CUDA and HIP handed back zeros in every run so far, and a
+zero read is invisible).
+
+Ruled out on the way, each by a check that could have failed: a launch-order race (five call orders
+equal, section 3.1); a device-dependent path (the cold probe equal to Apple on both MI300X VM
+types); runtime launch geometry (none in `mamba/`); the numpy view of a block output outliving
+its buffer (`Array` pins its store through the buffer protocol; hash unchanged after freeing the
+output and allocating 2000 NaN blocks); an asynchronous download (`mamba_download` synchronizes
+before and after and copies through a host list); the Mamba binding's bytes (the 33b9b74e build
+from the 2711 worktree made the bad Apple column AND the good 2711flip column; 41962f89 reproduces
+the bad value warm and the good value cold).
+
+Where the read is. Backward: `mamba/impl/ops/mamba2_ssd_backward.mojo` allocates FORTY device
+buffers with `enqueue_create_buffer` and no fill (lines 63-78, 379-384 and the discretize and
+conv backward states), one of them `d_c_yoff` sized `b * nc * 256 * N` with the comment "the
+launcher writes only real T rows", and `mamba2_postconv_merge_kernel` (`:553-562`) sums
+`d_c_yoff` over its full `c_cells` extent; `mamba/impl/modules/mamba2_backward.mojo` allocates 20
+more the same way. Every forward stage, by contrast, is `mamba_zeros` (`mamba2.mojo:244-320`).
+Step: not located yet. Every buffer the l = 1 resumption reads is zero-filled or uploaded, and
+the assembly kernels index the M-sized stages correctly (`m2_assemble_xbc_kernel`); the remaining
+candidates are the kernels that map chunk rows back to the M output rows (`m2_skip_kernel`,
+`m2_gate_kernel`, the out-proj and residual at row q0 + li) reading a row beyond M or beyond
+t_work, and DEVIATION 2713 (the MI325X faulting at the FIRST mamba2 launch, a plain forward) says
+an out-of-bounds read exists on the forward path too, benign where the page is mapped.
+
+The fix that cannot be argued with: allocate every Mamba-2 device buffer through `mamba_zeros`
+(60 call sites), then a POISON build (`-D MOJOLEARN_MAMBA_POISON=1`: fill every fresh device
+buffer with 0x7fc00000 instead of 0) under which the identity lane must read the canonical
+hashes cold on every vendor; a lane that still reads NaN under poison names the remaining read.
+Owner: the peer session (Mojo, three vendors); the harness side is done.
