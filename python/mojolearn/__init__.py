@@ -400,12 +400,6 @@ _NOT_YET = {
     # claim-surface census, docs/lanes/BRIEF_claim_surface_census_2026-09-14.md
     # section 4). Each stops at its last gated stage; the door is a binding,
     # a class here, an identity_break lane and three vendor columns.
-    "HDBSCAN": "hdbscan/checks/hdbscan_check.mojo (oracle and sabotage gated, no binding, no vendor card)",
-    "GaussianMixture": "mixture/checks/gmm_check.mojo (E-step, M-step and sabotage gated, no binding; ledger rows 86-91 reserved)",
-    "KernelRidge": "kernel_methods/checks/km_check.mojo (kernel matrix and random features gated, no binding; ledger rows 78-85 reserved)",
-    "RandomFourierFeatures": "kernel_methods/checks/km_check.mojo (the random-features half of the same lane)",
-    "Bootstrap": "resample/checks/resample_check.mojo (index map, intervals and statistics gated, no binding)",
-    "cholesky": "cholesky/checks/cholesky_check.mojo (potrf, trsm, logdet and solve gated; reached only inside the GP build, bindings/build_gp.sh)",
     "IVFIndex": "ivf/checks/ivf_check.mojo (layout sabotage and large-k gates; Apple evidence only, no NVIDIA or AMD leg)",
     "Embedding": "embedding/checks/embedding_check.mojo (Apple and AMD card, no NVIDIA leg, no sabotage arm ever built)",
 }
