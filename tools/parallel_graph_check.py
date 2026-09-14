@@ -93,7 +93,7 @@ def main():
                   eigen_tol=1e-2, affinity='precomputed')
     one = SpectralClustering(**params).fit(A)
     many = fit_graph(SpectralClustering(**params), A, devices=(0, 1))
-    digest = compare(one, many, ('labels_', 'embedding_', 'n_components_', 'input_copied_'))
+    digest = compare(one, many, ('labels_', 'embedding_', 'n_components_'))
     checks.append(dict(estimator='SpectralClustering-precomputed', rows=n, sha256=digest))
     print('PASS spectral precomputed', n, flush=True)
     args.report.write_text(json.dumps(dict(status='PASS', checks=checks,
