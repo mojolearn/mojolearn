@@ -701,6 +701,26 @@ def gbdt_predict_binding(
             n_trees, 1, False, len(m.split_feature), len(m.leaves), m.bias,
             out,
         )
+        # KEEP-ALIVE. Every pointer above is an untracked `unsafe_ptr()`, which
+        # is not a use of its list, and Mojo frees a value at its LAST USE: the
+        # last use of `m` was the `m.bias` argument and of each local copy its
+        # `unsafe_ptr()`, so all of them were freed before the walk ran and
+        # `gbdt_host_predict` read the allocator's free-list word through
+        # `tree_offsets_p[0]`, refusing every fixture on all seven runners of
+        # gate run 34889886781 ("tree_offsets must start at 0 and end at
+        # n_splits"). `_parse_model` makes that check true by construction
+        # (one `split` per level, `cur_splits == cur_depth` enforced per tree),
+        # so only a dangling read could fail it. A use after the call keeps
+        # every list alive until the walk has returned.
+        _ = split_feature^
+        _ = split_bin^
+        _ = split_take_bin^
+        _ = node_left^
+        _ = node_right^
+        _ = borders^
+        _ = leaves^
+        _ = x^
+        _ = m^
         for i in range(n_rows):
             op[i] = out[i]
     return PythonObject(n_rows)
