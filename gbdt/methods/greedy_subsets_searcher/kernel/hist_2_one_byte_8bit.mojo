@@ -98,7 +98,7 @@ def h8_add_point(
         var f = (tid + i) & 3
         var bin = Int((ci >> UInt32(24 - 8 * f)) & UInt32(255))
         var cell = slice_base + (bin << 3) + (f << 1)
-        # DEVIATION 1898: upstream's atomicAdd is relaxed; the non-Apple Mojo
+        # DEVIATION 1898: the reference's atomicAdd is relaxed; the non-Apple Mojo
         # default is seq_cst.
         _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
             smem.unsafe_offset(cell), q1
@@ -171,7 +171,7 @@ def h8_reduce_and_flush(
                         + fold_off
                     )
                     if active_block_count > 1:
-                        # DEVIATION 1898: upstream's atomicAdd is relaxed; the
+                        # DEVIATION 1898: the reference's atomicAdd is relaxed; the
                         # non-Apple Mojo default is seq_cst.
                         _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
                             acc_i32.unsafe_offset(dst_base + fold), q

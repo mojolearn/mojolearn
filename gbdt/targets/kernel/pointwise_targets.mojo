@@ -225,7 +225,7 @@ def objective_from_name(name: String) raises -> Int:
     The spellings are theirs exactly (`enums.h`, `ELossFunction`), because
     a user who reads CatBoost's documentation must be able to paste the
     name across. Anything not listed raises rather than falling back to a
-    default, mirroring their `Init` (`pointwise_target_impl.h:295-297`).
+    default, following their `Init` (`pointwise_target_impl.h:295-297`).
     """
     if name == "RMSE":
         return OBJECTIVE_RMSE

@@ -54,8 +54,8 @@ unordered against it and any of them may land its `0.0` AFTER. `d_y_p[0]`
 can therefore come back 0.0 instead of the prediction or the sentinel, on
 their hardware, for any batch of more than one series. It is a genuine
 data race with an observable result, it is in `arima/NOT_IMPLEMENTED.tsv` as an
-upstream defect, and the statement is not implemented: `assume-our-code-is-
-broken`'s rule is to fix their bug rather than mirror it, and the fix here
+reference defect, and the statement is not implemented: `assume-our-code-is-
+broken`'s rule is to fix their bug rather than copy it, and the fix here
 is to not write the cell at all.
 """
 
@@ -225,7 +225,7 @@ def in_sample_prediction_kernel(
     period2_in: Int32,
 ):
     """`:206-228`, one thread per series (DEVIATION 676 for the sentinel);
-    their `d_y_p[0] = 0.0` (`:207`) is the upstream race above, not implemented."""
+    their `d_y_p[0] = 0.0` (`:207`) is the reference race above, not implemented."""
     var bid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if bid >= Int(batch_size_in):
         return

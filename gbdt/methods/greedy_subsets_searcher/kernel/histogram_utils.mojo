@@ -194,7 +194,7 @@ def hist2_smem_add[
 
     @parameter
     if dt == DType.int32:
-        # DEVIATION 1898: upstream's atomicAdd is relaxed; the non-Apple Mojo
+        # DEVIATION 1898: the reference's atomicAdd is relaxed; the non-Apple Mojo
         # default is seq_cst.
         _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
             smem.unsafe_offset(offset), rebind[Scalar[dt]](qval)
@@ -265,7 +265,7 @@ def scan_histograms_kernel(
 ):
     """`ScanHistogramsImpl`, restructured for a block scan.
 
-    DEVIATION (archive/reference/PORTING.md 8): CatBoost scans with `cub::WarpScan<double>` and
+    DEVIATION: CatBoost scans with `cub::WarpScan<double>` and
     `cub::ShuffleIndex<32>` (`histogram_utils.cu:381`, `:413`, `:423`). Those
     are the ONLY warp shuffles in the whole oblivious path, and Mojo 1.0 has
     no warp primitives. Substituted with a serial scan by one thread per

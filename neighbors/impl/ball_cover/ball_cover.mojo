@@ -70,8 +70,8 @@ landmark matrix is small enough to stay in cache for every query row.
 **This also makes the build and the query agree arithmetically.** Their
 brute_force under `L2SqrtExpanded` uses the expanded identity
 `||a||^2 + ||b||^2 - 2ab`, while their query kernel's `EuclideanSqFunc` sums
-the differences directly. `archive/reference/PORTING.md 21` already records what the expanded
-identity costs in float32 — for collinear points the closest-pair distance
+the differences directly. The expanded
+identity has a known cost in float32 — for collinear points the closest-pair distance
 falls below the ulp of the norms at any scale — and here the two formulas are
 being COMPARED to each other, `R_radius` from one against `cur_R_dist` from
 the other. Ours sums the differences directly in both, so `R_1nn_dists` and

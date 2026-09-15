@@ -409,7 +409,7 @@ def eps_neighborhood_kernel(
     unfused implementation of a step that is already unfused is not, which is
     why `core/gemm.mojo`'s standalone contraction is gone and this is not.
 
-    It has no upstream counterpart: cuML never materializes this matrix.
+    It has no reference counterpart: cuML never materializes this matrix.
     Nothing in `dbscan/gbdt/` calls it and nothing should.
     """
     var n_cols = Int(n_cols_in)

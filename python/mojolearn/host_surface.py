@@ -141,6 +141,12 @@ CLASSICAL_RECORDED = (
     "bench/results/classical_host/2026-09-14-nvidia-h100-b",
     "bench/results/classical_host/2026-09-14-amd-mi300x-b",
     "bench/results/classical_host/2026-09-14-apple-m4-multiclass",
+    # lane/inference-linear-svm (2026-09-15): the 17 saved-model lanes that
+    # joined the estimators family's inference lanes, recorded on the M4's
+    # Metal set on three fixtures. The NVIDIA and AMD recordings of these
+    # lanes are owed to the next release record; their infer cells in the
+    # 166-lane record are the cross-vendor comparison until then.
+    "bench/results/classical_host/2026-09-15-apple-m4-linear-kernel",
 )
 
 #: The forest inference recordings: every directory under this root whose
@@ -320,6 +326,12 @@ TRAINING_LANE_NAMES = {
     # contingency matrix, host_fowlkes_mallows in
     # metrics/host/metrics_oracle.mojo, exported under the GPU binding's name.
     "metrics-fowlkes-mallows": "the Fowlkes-Mallows index",
+    # The weighted score lanes (lane/cpu-training-small-gaps, 2026-09-15):
+    # score(X, y, sample_weight) of the gradient boosting adapters and the
+    # random forests through host_weighted_accuracy and host_weighted_r2 in
+    # metrics/host/metrics_oracle.mojo, exported from the metrics host binding.
+    "gbdt-adapter-score-weighted": "the weighted scores of the gradient boosting classifier and regressor",
+    "rf-score-weighted": "the weighted scores of the random forest classifier and regressor",
     # The mlp lane (lane/cpu-training-mlp, 2026-09-14): SmallMLPTrainer's
     # step through the training family's host binding (the three MLP
     # operations in training/host/mlp_oracle.mojo, the loss and AdamW over
@@ -729,6 +741,39 @@ FAMILIES = (
         ships_in_wheel=True,
     ),
     dict(
+        # lane/inference-tokenizer-neural, 2026-09-15. The INFERENCE half of
+        # the training and transformer families (which stay source reference
+        # builds): the small MLP's logits and the TransformerBlock stateless
+        # prefill, forward only, loaded by path and shipped. No optimizer,
+        # loss, backward or decode export, so none of that is compiled in.
+        # The mlp, transformer and transformer-window lanes' held-out and
+        # batch cells run through MLPInference and TransformerBlockInference
+        # on a CPU column; their training rows stay the training and
+        # transformer families' covered lanes.
+        family="neural",
+        binding="_mojolearn_neural_host",
+        routes=None,
+        loaded_by="python/mojolearn/neural_inference.py",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=(),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=("MLPInference", "TransformerBlockInference"),
+        display="the small MLP's logits and the Transformer block's stateless forward (inference only)",
+        host_modules=(
+            "training/host/mlp_oracle.mojo",
+            "transformer/host/transformer_block_host.mojo",
+            "transformer/checks/transformer_oracle.mojo",
+            "gemm/host/gemm_oracle.mojo",
+        ),
+        exports=(
+            "neural_host_numeric_mode", "neural_host_vendor", "neural_host_column",
+            "neural_host_sabotage", "mlp_forward_logits", "transformer_forward_fresh",
+        ),
+        gate="python/mojolearn/tests/test_neural_inference.py and tools/identity_break.py (mlp, transformer, transformer-window)",
+        ships_in_wheel=True,
+    ),
+    dict(
         family="core",
         binding="_mojolearn_core_host",
         routes="_mojolearn",
@@ -774,16 +819,23 @@ FAMILIES = (
         routes="_mojolearn_linalg",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("gemm-pinned", "gemm-transposed"),
+        # The Cholesky door joined this family on
+        # lane/inference-embedding-ivf-cholesky (2026-09-15) so that public
+        # CPU Cholesky inference (a saved factor, or a factor of a given
+        # matrix, then solve) ships: this family is in the wheel and gp is
+        # not. On a CPU-only install `Cholesky` binds `_mojolearn_linalg`,
+        # so the cholesky lane reads through this binding.
+        training_lanes=("gemm-pinned", "gemm-transposed", "cholesky"),
         inference_lanes=(),
         forest_kinds=(),
-        classes=("linalg.gemm", "linalg.gemv"),
-        display="pinned GEMM",
-        host_modules=("gemm/host/gemm_oracle.mojo",),
+        classes=("linalg.gemm", "linalg.gemv", "Cholesky"),
+        display="pinned GEMM and the Cholesky factorization and solve",
+        host_modules=("gemm/host/gemm_oracle.mojo", "cholesky/host/chol_oracle.mojo"),
         exports=(
             "linalg_host_numeric_mode", "linalg_host_vendor", "linalg_host_column",
             "linalg_host_sabotage", "linalg_vendor", "linalg_numeric_mode",
-            "linalg_profile_version", "gemm",
+            "linalg_profile_version", "gemm", "cholesky_profile_jitter",
+            "cholesky_factor", "cholesky_solve",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=True,
@@ -803,18 +855,37 @@ FAMILIES = (
             "logistic-elasticnet", "logistic-multiclass", "pca-full-whiten",
             "par-queries-kde",
         ),
-        inference_lanes=("ols", "ridge", "tsvd", "logistic", "logistic-multiclass", "pca", "pca-whiten", "kde"),
+        # lane/inference-linear-svm (2026-09-15): the option variants of
+        # ols, ridge and logistic load through the same formats; the
+        # scalers, lasso and elasticnet and the three kernel methods load
+        # through formats of their own, and their transform and predict
+        # entries are served here (the reference-only preprocessing, solver
+        # and kernel_methods bindings keep the fits).
+        inference_lanes=(
+            "ols", "ridge", "tsvd", "logistic", "logistic-multiclass", "pca", "pca-whiten", "kde",
+            "ols-no-intercept", "ols-weighted", "ridge-no-intercept", "logistic-l1",
+            "logistic-elasticnet", "logistic-unpenalized-no-intercept",
+            "standard-scaler", "standard-scaler-no-mean", "standard-scaler-no-std",
+            "minmax-scaler", "minmax-scaler-clip", "lasso", "elasticnet",
+            "elasticnet-l2end-no-intercept", "kernel-ridge", "nystroem", "rbf-sampler",
+        ),
         forest_kinds=(),
         classes=(
             "LinearRegression", "Ridge", "TruncatedSVD", "LogisticRegression",
-            "PCA", "KernelDensity", "DBSCAN",
+            "PCA", "KernelDensity", "DBSCAN", "StandardScaler", "MinMaxScaler",
+            "Lasso", "ElasticNet", "KernelRidge", "Nystroem", "RBFSampler",
         ),
-        display="linear regression, ridge, truncated SVD, logistic regression, PCA with and without whitening and kernel density",
+        display="linear regression, ridge, truncated SVD, logistic regression, PCA with and without whitening, kernel density, the standard and min-max scalers, lasso, elasticnet, kernel ridge, the Nystroem approximation and random Fourier features",
         host_modules=(
             "kde/host/kde_oracle.mojo", "core/classical_host_predict.mojo",
             "decomposition/host/pca_oracle.mojo", "glm/host/glm_oracle.mojo",
             "dbscan/host/dbscan_oracle.mojo", "glm/host/qn_oracle.mojo",
             "decomposition/host/pca_full_oracle.mojo",
+            "preprocessing/host/scaler_oracle.mojo",
+            "kernel_methods/host/km_host_oracle.mojo",
+            "kernel_methods/checks/random_features.mojo",
+            "cholesky/host/chol_oracle.mojo",
+            "gemm/host/gemm_oracle.mojo",
         ),
         exports=(
             "estimators_host_numeric_mode", "estimators_host_vendor",
@@ -824,6 +895,8 @@ FAMILIES = (
             "ols_predict", "tsvd_transform", "pca_transform",
             "pca_whiten_transform", "pca_whiten_inverse_transform",
             "qn_decision_function", "qn_sigmoid", "qn_softmax",
+            "standard_transform", "minmax_transform", "cd_predict",
+            "kernel_ridge_predict", "nystroem_transform", "rbf_sampler_transform",
         ),
         gate="tools/identity_break.py and tools/classical_host_gate.py (cpu-identity-gate.yml)",
         ships_in_wheel=True,
@@ -885,6 +958,7 @@ FAMILIES = (
             "root_mean_squared_error", "roc_auc_score", "precision_recall_curve",
             "log_loss", "confusion_matrix", "precision_recall_fscore",
             "kl_divergence", "trustworthiness", "fowlkes_mallows_score",
+            "accuracy_score_weighted", "r2_score_weighted",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=True,
@@ -1027,7 +1101,7 @@ FAMILIES = (
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=(
             "rf-clf", "rf-reg", "rf-clf-entropy-log2-noboot", "rf-clf-balanced-parallel",
-            "rf-reg-poisson", "rf-reg-gamma-ig", "par-forest",
+            "rf-reg-poisson", "rf-reg-gamma-ig", "par-forest", "rf-score-weighted",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -1062,17 +1136,21 @@ FAMILIES = (
         # cholesky lane, which the 136-lane record predated, is covered since
         # lane/cpu-training-d-estimators (2026-09-15) against the 166-lane
         # record. gp_parallel_available stays absent, so the ordered
-        # multi-GPU driver refuses by name.
+        # multi-GPU driver refuses by name. Since
+        # lane/inference-embedding-ivf-cholesky (2026-09-15) the cholesky
+        # lane and the Cholesky class are the linalg family's: a CPU-only
+        # install binds Cholesky to `_mojolearn_linalg`, which ships. This
+        # binding still exports the three door names for its own GP.
         family="gp",
         binding="_mojolearn_gp_host",
         routes="_mojolearn_gp",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("gp", "gp-matern12", "gp-matern32", "gp-matern52-ard", "cholesky"),
+        training_lanes=("gp", "gp-matern12", "gp-matern32", "gp-matern52-ard"),
         inference_lanes=(),
         forest_kinds=(),
-        classes=("GaussianProcessRegressor", "Cholesky"),
-        display="the Gaussian process regressor and the Cholesky door",
+        classes=("GaussianProcessRegressor",),
+        display="the Gaussian process regressor",
         host_modules=(
             "gaussian_process/host/gpr_oracle.mojo",
             "cholesky/host/chol_oracle.mojo",
@@ -1218,6 +1296,7 @@ FAMILIES = (
             "gbdt-lossguide-newtoncosine", "gbdt-multiclass", "gbdt-onevsall",
             "gbdt-ordered-rmse", "gbdt-feature-freq",
             "gbdt-pointwise-l2-bayesian-eval", "gbdt-categorical-ctr",
+            "gbdt-adapter-score-weighted",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -1456,7 +1535,7 @@ def public_reference_lanes():
     Full CPU training verification uses source bindings and covered_lanes().
     These probes need only public inference dependencies, including linalg.
     """
-    return ["gemm-pinned", "kde", "ols", "ridge", "knn", "svc", "pca"]
+    return ["gemm-pinned", "kde", "ols", "ridge", "knn", "svc", "pca", "cholesky"]
 
 
 def training_gpu_column_record():

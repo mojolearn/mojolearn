@@ -130,7 +130,7 @@ def attention_scale(head_dim: Int) -> Float32:
 
 
 struct TransformerWeights(Copyable, Movable):
-    """One decoder block's parameters, host side, in the UPSTREAM shapes. That is exactly a `gemm.fp32.v1` `OP_NT` cell with the weight as the right operand and no transpose anywhere, which is why contract S5 can say "the GEMM refuses no shape" and mean it."""
+    """One decoder block's parameters, host side, in the REFERENCE shapes. That is exactly a `gemm.fp32.v1` `OP_NT` cell with the weight as the right operand and no transpose anywhere, which is why contract S5 can say "the GEMM refuses no shape" and mean it."""
 
     var dims: TransformerDims
     var norm1_w: List[Float32]

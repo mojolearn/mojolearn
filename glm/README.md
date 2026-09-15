@@ -3,7 +3,7 @@
 GPU linear-model primitives and estimators: ordinary least squares and ridge
 (`glm/estimator.mojo`), and the quasi-Newton family (`glm/impl/qn/`, cuML's
 `qnFit`: L-BFGS, and OWL-QN on `l1 != 0` since 2026-09-01, DEVIATION 552).
-The TSV ledgers define upstream derivation and unsupported behavior.
+The TSV ledgers define reference derivation and unsupported behavior.
 
 ```bash
 mojo run -I . glm/ols_main.mojo

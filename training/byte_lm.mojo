@@ -892,7 +892,7 @@ def _byte_forward_loss(ctx: DeviceContext, mut tr: ByteTrainer,
         # Move the current stages out while borrowing the preceding residual.
         # No extra activation copy; restore canonical layer order after the call.
         var stages = tr.forward.pop(layer)
-        # Upstream modeling_llama.py:402-412 visits independent decoder layers.
+        # The reference modeling_llama.py:402-412 visits independent decoder layers.
         # Training always starts a full prefill: s=0 makes kv_append_kernel
         # read only fresh K/V. Reuse storage, never another layer's history.
         # Backward reads the per-layer stages.k_cache/v_cache, not this scratch.
@@ -986,7 +986,7 @@ def byte_gradient_device(ctx: DeviceContext, mut tr: ByteTrainer,
     ctx.synchronize()
     pg.tick(ctx, "gemm.head_dB")
     timing_tick(ctx, ton, tk, "step.head_backward_db")
-    # Keep inter-layer cotangents on device, as the upstream tensor graph
+    # Keep inter-layer cotangents on device, as the reference tensor graph
     # does (transformers/models/llama/modeling_llama.py:402-412). Each
     # backward call synchronizes before its borrowed buffers are reinserted.
     for layer in range(config.n_layers - 1, -1, -1):

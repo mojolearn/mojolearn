@@ -221,7 +221,7 @@ def mutual_reachability_dense(
 # weight, a NaN `delta`, and `1.0 / NaN` is a NaN lambda that
 # `stabilities_functor` then `atomicAdd`s. `probabilities_functor`
 # (`kernels/membership.cuh:44`) even tests `isnan(child_lambda)`
-# explicitly, so upstream KNOWS a NaN gets that far.
+# explicitly, so the reference KNOWS a NaN gets that far.
 #
 # WHY OURS CANNOT. A computed NaN carries the VENDOR'S payload
 # (IDENTITY_PATHS row 39, measured: Apple 0x7fc00000, NVIDIA 0x7fffffff,

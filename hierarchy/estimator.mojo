@@ -48,7 +48,7 @@ BY NAME. So the default here is cuML's C++ default and scikit-learn's dense
 graph, and their Python default is the arm that raises.
 
 Recorded as a deviation rather than left implicit because it is a DEFAULT
-that differs from the upstream estimator this class mirrors, and a caller
+that differs from the reference estimator, and a caller
 implementing a cuML script gets a different graph without asking for one.
 
 THE PYTHON PATH EMITS NO IDENTITY CARD, AND THAT IS OWED

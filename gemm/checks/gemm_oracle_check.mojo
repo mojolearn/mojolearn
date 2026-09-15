@@ -642,10 +642,10 @@ def check_implemented_policy_matches_reference() raises:
     would catch a transcription that stopped parsing.
 
     (2) `core/gemm.mojo:195-208` carries `Policy4x4<float, 4>` flattened into
-    seven hand-copied integers. Two transcriptions of one upstream table is
+    seven hand-copied integers. Two transcriptions of one reference table is
     two chances to mis-copy it, so the parameterized one is required to agree
     with the flattened one. If they ever disagree, ONE of them is wrong and
-    upstream decides which -- `ENGINEERING_RULES.md` 0c.
+    the reference decides which -- `ENGINEERING_RULES.md` 0c.
     """
     # Policy4x4<float, 4>, the one RAFT's float distance kernels instantiate.
     _eq("Policy4x4 Nthreads", Policy4x4Float.nthreads, 256)

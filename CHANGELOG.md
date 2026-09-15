@@ -10,6 +10,24 @@ what a user can check from a pip install. The freeze checks of docs/RELEASE_CHEC
 the per-vendor GPU-box build and the byte compare of the host bindings across the three
 Linux legs are OWED before this heading reads published.
 
+- CPU inference from saved models for StandardScaler, MinMaxScaler, Lasso, ElasticNet,
+  KernelRidge (linear and rbf kernels), Nystroem (linear and rbf) and RBFSampler: each
+  gains `save` and `load`, and `mojolearn.host_model(path)` transforms or predicts on a
+  CPU-only install. The shipped estimators host binding serves the six entries
+  (`standard_transform`, `minmax_transform`, `cd_predict`, `kernel_ridge_predict`,
+  `nystroem_transform`, `rbf_sampler_transform`); the preprocessing, solver and
+  kernel_methods reference bindings still do not ship. The saved-model classical lanes
+  grow from 12 to 29, adding the ols, ridge and logistic option variants. On a CPU-only
+  install `StandardScaler.fit`, `MinMaxScaler.fit`, `Lasso.fit` and `ElasticNet.fit` now
+  refuse by name outside the internal reference scope, as every other estimator fit does.
+- Public CPU `Cholesky` inference. On a CPU-only install `Cholesky().fit(A)` factors a given
+  matrix and `solve` answers from it, and `Cholesky.save` / `Cholesky.load` (or
+  `mojolearn.host_model`, which returns a `HostCholesky`) carry a factor from a GPU box to a
+  CPU. The door moved into the linalg host binding, which ships in the inference wheel; the
+  `cholesky` identity lane is now the linalg family's and a public CPU reference probe. Apple
+  M4 CPU column: train, infer and batch IDENTICAL x4 against the 166-lane record, the new
+  saved-factor model cells OWED to the release record, the sabotage build DIVERGENT on every
+  train and owed cell.
 - New `GPT2Tokenizer.encode_batch(documents, allow_endoftext=False)`, `decode_batch` and
   `decode_bytes_batch`. `encode_batch` is one call into the tokenizer host binding
   (`gpt2_encode_batch`) that encodes each document alone, so every document's ids equal
@@ -18,8 +36,27 @@ Linux legs are OWED before this heading reads published.
   are unchanged against the three committed GPU columns. A new
   `-D MOJOLEARN_TOKENIZER_BATCH_SABOTAGE=1` build must read BATCH_MOVED. Apple M4 CPU
   column only; the GPU columns' batch cells are owed to the release record.
-
-- New `mojolearn.metrics.fowlkes_mallows_score`, mirroring scikit-learn's definition (cuML
+- New public CPU neural inference from GPU-trained weights: `MLPInference` (the small
+  8-16-3 MLP's `predict_logits`, from `SmallMLPTrainer.save_checkpoint` files or the four
+  weights) and `TransformerBlockInference` (`TransformerBlock.forward` from a zero state,
+  full causal or sliding window, ragged `lengths` included). Both run on a new shipped host
+  binding, `_mojolearn_neural_host`, that exports forward entries only (no optimizer, loss,
+  backward or decode step is compiled in). On a CPU column the `mlp`, `transformer` and
+  `transformer-window` identity lanes now ask their held-out and batch cells through these
+  classes: against the three committed GPU columns every train, infer, model and batch cell
+  reads IDENTICAL (nine fixtures each), and a `-D MOJOLEARN_HOST_SABOTAGE=1` build of the new
+  binding reads DIVERGENT on all 27 infer and 27 batch cells with every train cell unchanged.
+  Training on the CPU stays internal to the verifier.
+- `score(X, y, sample_weight=...)` on `GradientBoostingClassifier`, `GradientBoostingRegressor`,
+  the random forests and the Extra Trees, and `sample_weight` on `metrics.accuracy_score` and
+  `metrics.r2_score`, all of which refused weights. They follow scikit-learn's reference definitions of weighted
+  accuracy (`np.average(y == y_pred, weights=w)`) and weighted R2 (`force_finite=True`) in
+  Float32 on the pinned-sum path (`metrics/impl/weighted_scores.mojo`); weights are 1-D,
+  finite, non-negative and of positive total. Both metrics bindings export the weighted arms;
+  the new `gbdt-adapter-score-weighted` and `rf-score-weighted` identity lanes cover them, with
+  the metrics host sabotage build required to read DIVERGENT. Apple M4 Metal and CPU columns
+  only; NVIDIA and AMD columns are owed to the release record.
+- New `mojolearn.metrics.fowlkes_mallows_score`, following the scikit-learn reference definition (cuML
   has none): the device integer contingency matrix, exact Int64 pair counts, then
   `sqrt(tk / pk) * sqrt(tk / qk)` in Float64, 0.0 when `tk == 0` (no samples, one sample,
   all singletons). It was a named absence. The metrics GPU binding and the metrics host

@@ -341,7 +341,7 @@ sampler, a solver, a metric, a reduction).
     2026-09-15 (lane/embedding-owed, PLAN_SORT through Embedding(plan="sort"))
       embedding-sort
     2026-09-15 (lane/cpu-training-small-gaps)
-      metrics-fowlkes-mallows
+      metrics-fowlkes-mallows gbdt-adapter-score-weighted rf-score-weighted
 
 The 18 lanes added on 2026-09-13 (svr through samba above) are fed the SAME
 fixture bytes in the shape their estimator wants; the derivation rules are
@@ -1277,7 +1277,7 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(loss=_h(np.asarray(losses)),
                      weights=_h(*[np.asarray(m.weights_[k]) for k in sorted(m.weights_)]),
                      logits=_h(np.asarray(m.predict_logits(Xm)))),
-                m, lambda e: (np.asarray(e.predict_logits(np.ascontiguousarray(Xh[:256, :8]))),))
+                m, lambda e: (np.asarray(_neural_inference(ml, "mlp", e).predict_logits(np.ascontiguousarray(Xh[:256, :8]))),))
 
 
 @lane("byte-lm")
@@ -1384,7 +1384,7 @@ def _(ml, X, yc, yr, Xh=None):
         ones=("input_layernorm.weight", "post_attention_layernorm.weight"))
     blk = ml.TransformerBlock(w, n_heads=nh, n_kv_heads=nkv)
     parts = _block_fit(blk, _seq(X, 2, 16, dm), _seq(X, 2, 16, dm, skip=1024), dict(max_tokens=32))
-    return _fit(parts, blk, lambda e: (np.asarray(e.forward(_seq(Xh, 2, 16, dm))),))
+    return _fit(parts, blk, lambda e: (np.asarray(_neural_inference(ml, "transformer", e).forward(_seq(Xh, 2, 16, dm))),))
 
 
 @lane("samba")
@@ -1638,6 +1638,50 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(predict=_h(m.predict(X))), m, lambda e: (e.predict(Xh),))
 
 
+def _weighted_score_parts(clf, reg, X, yc, yr, tag):
+    """score(X, y, sample_weight) on 1024 rows the fit did not see: hashed
+    weights on [0.25, 4), the same weights with every seventh zeroed, unit
+    weights, and the unweighted score beside them. Weights come from the
+    hashed stream, never from the fixture's own floats."""
+    lo, hi = 2000, 3024
+    Xs = np.ascontiguousarray(X[lo:hi])
+    ycs = np.ascontiguousarray(yc[lo:hi])
+    yrs = np.ascontiguousarray(yr[lo:hi])
+    w = _hw((hi - lo,), f"{tag}:w", 0.25, 4.0)
+    wz = w.copy()
+    wz[::7] = np.float32(0.0)
+    ones = np.ones(hi - lo, dtype=np.float32)
+    parts = {}
+    for kind, m, y in (("clf", clf, ycs), ("reg", reg, yrs)):
+        parts[f"{kind}_weighted"] = _h(np.float64(m.score(Xs, y, sample_weight=w)))
+        parts[f"{kind}_zeroed"] = _h(np.float64(m.score(Xs, y, sample_weight=wz)))
+        parts[f"{kind}_unit"] = _h(np.float64(m.score(Xs, y, sample_weight=ones)))
+        parts[f"{kind}_unweighted"] = _h(np.float64(m.score(Xs, y)))
+    return parts
+
+
+@lane("gbdt-adapter-score-weighted")
+def _(ml, X, yc, yr, Xh=None):
+    """GradientBoostingClassifier.score and GradientBoostingRegressor.score
+    with sample_weight (lane/cpu-training-small-gaps, 2026-09-15): scikit-
+    learn's weighted accuracy and R2 on the pinned-sum path. A lane of its
+    own so the adapter lanes' committed hashes do not move; 2000 training
+    rows."""
+    clf = ml.GradientBoostingClassifier(n_estimators=20, max_depth=6).fit(X[:2000], yc[:2000])
+    reg = ml.GradientBoostingRegressor(n_estimators=20, max_depth=6).fit(X[:2000], yr[:2000])
+    return _fit(_weighted_score_parts(clf, reg, X, yc, yr, "gbdt-adapter-score-weighted"))
+
+
+@lane("rf-score-weighted")
+def _(ml, X, yc, yr, Xh=None):
+    """RandomForestClassifier.score and RandomForestRegressor.score with
+    sample_weight (lane/cpu-training-small-gaps, 2026-09-15), through the
+    forest protocol's score that the Extra Trees share; 2000 training rows."""
+    clf = ml.RandomForestClassifier(n_estimators=16, max_depth=8, random_state=7).fit(X[:2000], yc[:2000])
+    reg = ml.RandomForestRegressor(n_estimators=16, max_depth=8, random_state=7).fit(X[:2000], yr[:2000])
+    return _fit(_weighted_score_parts(clf, reg, X, yc, yr, "rf-score-weighted"))
+
+
 # -- neural
 
 @lane("mamba2-dtlimit")
@@ -1669,7 +1713,7 @@ def _(ml, X, yc, yr, Xh=None):
         ones=("input_layernorm.weight", "post_attention_layernorm.weight"))
     blk = ml.TransformerBlock(w, n_heads=nh, n_kv_heads=nkv, window=8)
     parts = _block_fit(blk, _seq(X, 2, 16, dm), _seq(X, 2, 16, dm, skip=1024), dict(max_tokens=32))
-    return _fit(parts, blk, lambda e: (np.asarray(e.forward(_seq(Xh, 2, 16, dm))),))
+    return _fit(parts, blk, lambda e: (np.asarray(_neural_inference(ml, "transformer-window", e).forward(_seq(Xh, 2, 16, dm))),))
 
 
 @lane("byte-lm-resident")
@@ -3373,6 +3417,26 @@ def _(ml, X, yc, yr, Xh=None):
                 m, lambda e: (transform_rbf_sampler(e, Xh[:256], devices=_par_devices(), rows_per_shard=100),))
 
 
+def _neural_inference(ml, lane_name, est):
+    """The estimator a neural lane's held-out and batch cells ask
+    (lane/inference-tokenizer-neural, 2026-09-15). On a CPU column
+    (`ml.vendor() == "cpu"`) it is the PUBLIC inference class built from the
+    fitted model: `MLPInference.from_checkpoint` on the trainer's saved
+    checkpoint, or `TransformerBlockInference` on the block's nine weights,
+    both over the shipped `_mojolearn_neural_host`. On a GPU column it is the
+    fitted estimator itself, as before, so no GPU cell changes meaning. The
+    train rows never go through here."""
+    if ml.vendor() != "cpu":
+        return est
+    if lane_name == "mlp":
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "mlp.json")
+            est.save_checkpoint(path)
+            return ml.MLPInference.from_checkpoint(path)
+    return ml.TransformerBlockInference(dict(zip(est._W_NAMES, est._w)), n_heads=est.n_heads,
+                                        n_kv_heads=est.n_kv_heads, head_dim=est.head_dim, window=est.window)
+
+
 # ---------------------------------------------------------------- the batch part (2026-09-14)
 # See the `batch` part in the module docstring. A declaration per lane, kept
 # OUT of the lane bodies so no train, infer or model hash can move because
@@ -4100,6 +4164,10 @@ PAR_BYTE_LM_BATCH_NA = ("n/a:driver-step (ParallelByteLanguageModelTrainer and i
 _batch_decl(PAR_BYTE_LM_BATCH_NA, "par-byte-lm")
 # metrics.fowlkes_mallows_score (lane/cpu-training-small-gaps) keeps the reason main gave it
 _batch_decl("n/a:function", "metrics-fowlkes-mallows")
+_batch_decl("n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is "
+            "handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and "
+            "predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, "
+            "rf-clf and rf-reg)", "gbdt-adapter-score-weighted", "rf-score-weighted")
 
 
 def _batch_cross_entropy(ml, e, Xh):
@@ -4147,7 +4215,9 @@ _batch_decl(_batch_ivf, "ivf", "ivf-euclidean")
 _batch_decl(_batch_embedding, "embedding", "embedding-sort")
 _batch_decl(_batch_cross_entropy, "cross-entropy-arms")
 _batch_decl(_batch_training_primitives, "training-primitives")
-_batch_decl(_rows_calls("predict_logits", sl=(slice(0, 256), slice(0, 8))), "mlp", "par-mlp")
+_batch_decl(lambda ml, e, Xh: _rows_calls("predict_logits", sl=(slice(0, 256), slice(0, 8)))(
+    ml, _neural_inference(ml, "mlp", e), Xh), "mlp")
+_batch_decl(_rows_calls("predict_logits", sl=(slice(0, 256), slice(0, 8))), "par-mlp")
 
 #: the sequence models' held-out batch: 8 sequences of 16, so eight rows alone
 SEQ_BATCH, SEQ_LEN = 8, 16
@@ -4177,7 +4247,9 @@ def _batch_block(ml, e, Xh):
                          axis=1)]
 
 
-_batch_decl(_batch_block, "mamba1", "mamba2", "mamba3", "mamba2-dtlimit", "transformer", "transformer-window")
+_batch_decl(_batch_block, "mamba1", "mamba2", "mamba3", "mamba2-dtlimit")
+_batch_decl(lambda ml, e, Xh: _batch_block(ml, _neural_inference(ml, "transformer", e), Xh),
+            "transformer", "transformer-window")
 
 
 def _batch_samba(ml, e, Xh):

@@ -3,8 +3,11 @@
 LogisticRegression and PCA models (the classical host inference lane,
 2026-09-13; brief docs/lanes/BRIEF_forest_host_inference_2026-09-13.md,
 "Classical lanes"), since the kde svc host lane (2026-09-14) saved
-KernelDensity and SVC models, and since the knn host inference lane
-(2026-09-14) NearestNeighbors, KNeighborsClassifier and KNeighborsRegressor.
+KernelDensity and SVC models, since the knn host inference lane
+(2026-09-14) NearestNeighbors, KNeighborsClassifier and KNeighborsRegressor,
+and since lane/inference-linear-svm (2026-09-15) StandardScaler,
+MinMaxScaler, ElasticNet, Lasso, KernelRidge, Nystroem and RBFSampler, whose
+entries the estimators host binding serves.
 
 `host_model(path)` loads a file written by one of those classes' `save` and
 returns an instance of a HOST SUBCLASS of the same class: the same Python
@@ -39,9 +42,15 @@ measured; the brief records on which CPUs that has passed.
 import hashlib
 
 from . import _backend, _serialize
+from ._cholesky_impl import _CHOLESKY_FORMAT, HostCholesky
+from ._solver_impl import ElasticNet, Lasso, _CD_FORMAT
 from ._svm_impl import SVC, _SVC_FORMAT
 from .decomposition import PCA, TruncatedSVD, _PCA_FORMAT, _TSVD_FORMAT
 from .density import KernelDensity, _KDE_FORMAT
+from .kernel_methods import (
+    KernelRidge, Nystroem, RBFSampler, _KERNEL_RIDGE_FORMAT, _NYSTROEM_FORMAT,
+    _RBF_SAMPLER_FORMAT,
+)
 from .linear_model import (
     LinearRegression, LogisticRegression, Ridge, _LINEAR_FORMAT,
     _LOGISTIC_FORMAT,
@@ -49,13 +58,23 @@ from .linear_model import (
 from .neighbors import (
     KNeighborsClassifier, KNeighborsRegressor, NearestNeighbors, _KNN_FORMAT,
 )
+from .preprocessing import MinMaxScaler, StandardScaler, _SCALER_FORMAT
 
 _HOST_BASENAME = "_mojolearn_estimators_host"
-#: GPU family -> the host binding a host subclass of that family binds.
+#: GPU family -> the host binding a host subclass of that family binds. The
+#: scalers, coordinate descent and the kernel methods have reference-only
+#: training bindings that do not ship in a wheel; their saved-model entries
+#: (`standard_transform`, `minmax_transform`, `cd_predict`,
+#: `kernel_ridge_predict`, `nystroem_transform`, `rbf_sampler_transform`)
+#: are served by the shipped estimators host binding
+#: (lane/inference-linear-svm, 2026-09-15).
 _HOST_BASENAMES = {
     "_mojolearn_estimators": _HOST_BASENAME,
     "_mojolearn_svm": "_mojolearn_svm_host",
     "_mojolearn": "_mojolearn_core_host",
+    "_mojolearn_preprocessing": _HOST_BASENAME,
+    "_mojolearn_solver": _HOST_BASENAME,
+    "_mojolearn_kernel_methods": _HOST_BASENAME,
 }
 
 
@@ -199,9 +218,85 @@ class HostKNeighborsRegressor(_HostKNN, KNeighborsRegressor):
     _HOST_ARRAYS = ("_index", "_y_cols")
 
 
+class _HostScaler(_HostBound):
+    """The scalers ask for their binding through `_binding(mode)` with the
+    fitted mode; the host answers the estimators host binding for an
+    IDENTICAL model and refuses any other mode by name."""
+
+    _BINDING = "_mojolearn_preprocessing"
+
+    def _binding(self, mode):
+        if mode != "identical":
+            raise ValueError(
+                f"mojolearn: {type(self).__name__} runs IDENTICAL only on the "
+                f"host; this model was saved {mode!r}"
+            )
+        return self._bind(self._BINDING)
+
+
+class HostStandardScaler(_HostScaler, StandardScaler):
+    _HOST_ARRAYS = ("mean_", "var_", "scale_")
+
+
+class HostMinMaxScaler(_HostScaler, MinMaxScaler):
+    _HOST_ARRAYS = ("data_min_", "data_max_", "data_range_", "scale_", "min_")
+
+
+class _HostCD(_HostBound):
+    _BINDING = "_mojolearn_solver"
+    _HOST_ARRAYS = ("coef_",)
+
+    def _solver(self):
+        return self._bind(self._BINDING)
+
+
+class HostElasticNet(_HostCD, ElasticNet):
+    pass
+
+
+class HostLasso(_HostCD, Lasso):
+    pass
+
+
+class _HostKernelMethod(_HostBound):
+    """The kernel methods' host classes. The host restatement serves the
+    linear and rbf kernels; a model saved with another kernel is refused by
+    name at load, not at the first predict."""
+
+    _BINDING = "_mojolearn_kernel_methods"
+
+    def _host_refusals(self):
+        from .kernel_methods import KERNEL_LINEAR, KERNEL_RBF
+        kernel = self._kernel_params[0]
+        if kernel not in (KERNEL_LINEAR, KERNEL_RBF):
+            raise ImportError(
+                f"mojolearn: no CPU implementation of {type(self).__name__} with "
+                f"kernel code {kernel}; the host serves the linear and rbf kernels only"
+            )
+
+
+class HostKernelRidge(_HostKernelMethod, KernelRidge):
+    _HOST_ARRAYS = ("X_fit_", "dual_coef_")
+
+
+class HostNystroem(_HostKernelMethod, Nystroem):
+    _HOST_ARRAYS = ("components_", "component_indices_", "normalization_",
+                    "eigenvalues_", "eigenvectors_")
+
+
+class HostRBFSampler(_HostBound, RBFSampler):
+    _BINDING = "_mojolearn_kernel_methods"
+    _HOST_ARRAYS = ("random_weights_", "random_offset_")
+
+
 #: format tag -> (estimator name, host class). A file whose `estimator`
 #: member names another class is refused by that class's own `load`.
 _FORMATS = {
+    _SCALER_FORMAT: {"StandardScaler": HostStandardScaler, "MinMaxScaler": HostMinMaxScaler},
+    _CD_FORMAT: {"ElasticNet": HostElasticNet, "Lasso": HostLasso},
+    _KERNEL_RIDGE_FORMAT: {"KernelRidge": HostKernelRidge},
+    _NYSTROEM_FORMAT: {"Nystroem": HostNystroem},
+    _RBF_SAMPLER_FORMAT: {"RBFSampler": HostRBFSampler},
     _LINEAR_FORMAT: {"LinearRegression": HostLinearRegression, "Ridge": HostRidge},
     _LOGISTIC_FORMAT: {"LogisticRegression": HostLogisticRegression},
     _TSVD_FORMAT: {"TruncatedSVD": HostTruncatedSVD},
@@ -213,6 +308,9 @@ _FORMATS = {
         "KNeighborsClassifier": HostKNeighborsClassifier,
         "KNeighborsRegressor": HostKNeighborsRegressor,
     },
+    # A saved Cholesky factor (lane/inference-embedding-ivf-cholesky,
+    # 2026-09-15): `HostCholesky` solves on `_mojolearn_linalg_host`.
+    _CHOLESKY_FORMAT: {"Cholesky": HostCholesky},
 }
 CLASSICAL_FORMATS = tuple(_FORMATS)
 
