@@ -823,7 +823,7 @@ before a CPU column can say anything about it.
 | SVR (`_svm_impl.py:643`) | no card found, only the SVC card `bench/results/e1/2026-08-24_184912-*/lanes/svm.identical.card`; audit `docs/CROSS_VENDOR_FEATURE_IDENTITY_AUDIT.md:90` | yes, `smo_oracle_fit` solves EPSILON_SVR through the same loop (`svm/checks/smo_oracle.mojo:40-49`) | 4 after svc |
 | ARIMA (`_arima_impl.py:174`) | yes, Apple and AMD cards `bench/results/e1/2026-08-28_*/lanes/arima.identical.card`, three-vendor claim at `IDENTITY_PATHS.md:361` (its cited `CERT_2026-08-31.md` is not in this worktree) | yes, `arima/checks/kalman_oracle.mojo`, `fit_oracle.mojo`, no GPU import | 12 |
 | GaussianProcessRegressor (`_gp_impl.py:213`) | Apple and AMD cards `gp.identical.card`, no NVIDIA (audit `:95`) | yes, `gaussian_process/checks/gp_oracle.mojo:69-91` over the Cholesky and GEMM oracles | 8 |
-| UMAP (`_umap_impl.py:42`) | no card found; Apple verdict only `bench/results/identity_continuation_2026-09-10/umap-apple/verdict.txt` | yes, the portable host math and serial optimizer (`umap/PORTABLE_HOST_MATH.md`), but the IDENTICAL contract is the DEVICE optimizer (`checks/kernel_matrix.mojo:1177`, "The two produce DIFFERENT bits") | 24, the device epoch fold must be restated, the host loop is not it |
+| UMAP (`_umap_impl.py:42`) | no card found; Apple verdict only `bench/results/identity_continuation_2026-09-10/umap-apple/verdict.txt` | yes, the portable host math and serial optimizer (`umap/PORTABLE_HOST_MATH.md`), but the IDENTICAL contract is the DEVICE optimizer (`checks/kernel_matrix.mojo:1177`, "The two produce DIFFERENT bits") | 24, the device epoch fold must be restated, the host loop is not it. DONE 2026-09-14 (lane/cpu-training-umap-b, section "The umap host lane" at the end): the fold restated in `umap/host/umap_oracle.mojo`, IDENTICAL x4 on the first host run |
 | RadiusNeighbors (`neighbors.py:909`) | no card found; two-vendor text leg `bench/results/identity/RBC_551_APPLE_M4.txt`, eps 8.0 diverged on AMD (`IDENTITY_PATHS.md:364`) | inside a GPU check, `_host_dist_sq` `neighbors/checks/radius_check.mojo:72` | 6 after knn |
 | StandardScaler, MinMaxScaler (`preprocessing.py:183, 69`) | no card found; Apple smokes only, "no throughput or cross-vendor qualification" (`bench/results/standard_scaler_2026-09-10/RESULTS.md`) | none found; `preprocessing/estimator.mojo:4` imports `max.gpu.host` and every `*_host` entry opens a context, `preprocessing/checks/` is empty | 6 for both, two column folds |
 | SambaStack (`_samba_impl.py:181`) | no card found | none found; `training/samba_ops.mojo:15-17` imports the GPU, only `tools/samba_torch_reference.py` | 40 |
@@ -1977,3 +1977,45 @@ IDENTICAL x3 on every fixture):
     MOJOLEARN_HOST_OUTDIR=<sab> MOJOLEARN_BUILD_EXTRA_DEFINES="-D MOJOLEARN_HOST_SABOTAGE=1" sh bindings/build_arima_host.sh
     MOJOLEARN_HOST_DIR=<sab> MOJOLEARN_HOST_ALLOW_SABOTAGE=1 python3 tools/identity_break.py --lanes arima,arima-011,arima-seasonal-c --json <cpu-sab>.json
     (the diff of <cpu-sab>.json against the three GPU columns must exit non-zero with DIVERGENT)
+
+## The umap host lane (lane/cpu-training-umap-b, 2026-09-14)
+
+WHAT LANDED. `umap/host/umap_oracle.mojo` restates the IDENTICAL UMAP fit
+and transform with no device, and the metrics host binding exports it under
+the GPU binding's names (`umap_fit_transform`, `umap_transform`,
+`umap_numeric_mode`), so `python/mojolearn/_umap_impl.py` runs unchanged on
+a CPU-only install. The stages:
+
+- the exact k-NN self-join is `core/knn_host_predict.mojo::host_knn_search`
+  at the device call's defaults (L2, sqrt), the restatement the knn and
+  spectral lanes already gate;
+- `canonicalize_self_neighbors`, `sparse_fuzzy_simplicial_graph` and
+  `fit_umap_curve` are host code on every GPU column already (no device
+  import) and are imported as they are;
+- the spectral initialization is `spectral/host/spectral_oracle.mojo::
+  oracle_embedding` at `n_components + 1`, the normalized Laplacian,
+  `drop_first` and cuVS's default tolerance 1e-5, then
+  `spectral_init.mojo`'s sign and scale post-pass;
+- the optimizer is `umap_identical_epoch_kernel` restated vertex by vertex
+  over an epoch snapshot (the kernel is a pure function of the snapshot with
+  one writer per vertex, so a serial loop over the vertices is the same
+  function), with Philox4x32-10 restated from `core/philox.mojo`. The serial
+  host loop in `umap/sparse_optimizer.mojo` is NOT used;
+- the transform's host functions (`transform_memberships`,
+  `initialize_transform`, `refine_transform`) are restated verbatim because
+  `umap/transform.mojo` imports `max.gpu.host`.
+
+The sabotage arm (`-D MOJOLEARN_HOST_SABOTAGE=1`) keys every negative draw
+one epoch late, in the fit and in the transform refinement.
+
+MEASURED on the M4 host path, one core, shared machine (worktree at
+e2d770ba8 plus this lane): `tools/identity_break.py --lanes umap` then the
+four-way diff against the 136-lane record read all nine train cells and all
+nine infer cells IDENTICAL x4 on the first run; the sabotage build read all
+eighteen DIVERGENT. No device code changed. The seven-runner gate is the
+claim.
+
+    MOJOLEARN_HOST_OUTDIR=<dir> sh bindings/build_metrics_host.sh
+    MOJOLEARN_HOST_OUTDIR=<dir> sh bindings/build_core_host.sh
+    MOJOLEARN_HOST_DIR=<dir> python3 tools/identity_break.py --lanes umap --json <cpu>.json
+    python3 tools/identity_break.py --diff $(python3 python/mojolearn/host_surface.py --training-gpu-columns) <cpu>.json --require-columns 4 --lanes umap

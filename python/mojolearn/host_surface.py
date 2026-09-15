@@ -84,11 +84,16 @@ BUILDER = "bindings/build_host_family.sh"
 #: (DigitalOcean, gfx942): the MI300X column of the same record is incomplete
 #: (the 60-minute Hot Aisle cap cut it before iforest, iforest-tuned and five
 #: par-* lanes), and iforest is a covered lane, so require-columns 4 could not
-#: hold against it.
+#: hold against it. Since 2026-09-14 night the 166-lane record at 1eea14f80
+#: (the batch part, fifteen more par-* lanes, every lane complete on all three
+#: columns, the AMD column MI325X again) is the one; it carries one DIVERGENT
+#: training cell, kmeans-sqrt/wide (the H100 inertia stands alone,
+#: docs/lanes/BRIEF_kmeans_sqrt_wide_h100_inertia_2026-09-14.md), on a lane no
+#: CPU column covers, and the workflow asserts that count exactly.
 TRAINING_GPU_COLUMNS = (
-    "bench/results/identity_break/2026-09-14_136-lanes/apple-m4.json",
-    "bench/results/identity_break/2026-09-14_136-lanes/nvidia-h100-sm_90a.json",
-    "bench/results/identity_break/2026-09-14_136-lanes/amd-mi325x-gfx942.json",
+    "bench/results/identity_break/2026-09-14_166-lanes/apple-m4.json",
+    "bench/results/identity_break/2026-09-14_166-lanes/nvidia-h100-sm_90a.json",
+    "bench/results/identity_break/2026-09-14_166-lanes/amd-mi325x-gfx942.json",
 )
 
 #: The GPU columns the classical INFERENCE gate compares each host identity
@@ -313,13 +318,22 @@ TRAINING_LANE_NAMES = {
     "arima": "ARIMA",
     "arima-011": "differenced ARIMA",
     "arima-seasonal-c": "seasonal ARIMA",
+    # The umap host lane (lane/cpu-training-umap-b, 2026-09-14): UMAP fits
+    # and transforms through umap/host/umap_oracle.mojo, exported under the
+    # GPU binding's names from the metrics host binding. The fit's optimizer
+    # is the IDENTICAL DEVICE epoch fold (kernel-matrix row
+    # umap_device_optimizer_for) restated vertex by vertex, not the serial
+    # host loop, which produces different bits. Gate run 34914545371 at
+    # 5988700d9 (136-lane record): all nine train and nine infer cells
+    # IDENTICAL x4 on the seven runners, the sabotage build DIVERGENT on all
+    # eighteen; the 166-lane record carries the same umap hashes.
+    "umap": "UMAP",
 }
 
 #: The lanes with NO CPU path of any kind, as the README states them. A
 #: lane leaves this list the day its host lane merges; docs_facts fails the
 #: README until the marked span is rewritten.
 NO_CPU_PATH = (
-    "UMAP",
     "the neural blocks",
     "gradient boosting training other than symmetric trees with the Logloss or RMSE loss and depthwise and lossguide trees with the Logloss loss",
 )
@@ -517,18 +531,20 @@ FAMILIES = (
         # metrics family's first host binding. It routes `_mojolearn_metrics`
         # on a CPU-only install and carries the five metrics the identity
         # harness's metrics lane computes plus the four label metrics that
-        # share their integer kernels; the spectral, UMAP and remaining
-        # metric entries stay absent and refuse by name.
+        # share their integer kernels; the spectral entries joined in the
+        # same batch and the UMAP entries on lane/cpu-training-umap-b
+        # (umap_fit_transform, umap_transform, umap_numeric_mode); the
+        # remaining metric entries stay absent and refuse by name.
         family="metrics",
         binding="_mojolearn_metrics_host",
         routes="_mojolearn_metrics",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("metrics", "spectral", "spectral-precomputed", "metrics-classification"),
+        training_lanes=("metrics", "spectral", "spectral-precomputed", "umap", "metrics-classification"),
         inference_lanes=(),
         forest_kinds=(),
         classes=(
-            "SpectralClustering",
+            "SpectralClustering", "UMAP",
             "metrics.accuracy_score", "metrics.adjusted_rand_score",
             "metrics.entropy", "metrics.mutual_info_score",
             "metrics.homogeneity_score", "metrics.completeness_score",
@@ -541,13 +557,18 @@ FAMILIES = (
             "metrics.root_mean_squared_error", "metrics.kl_divergence",
             "metrics.trustworthiness",
         ),
-        display="the label, classification, ranking, regression, r2, KL, silhouette and trustworthiness metrics and spectral clustering",
+        display="the label, classification, ranking, regression, r2, KL, silhouette and trustworthiness metrics, spectral clustering and UMAP",
         host_modules=(
             "metrics/host/metrics_oracle.mojo",
             "metrics/host/classification_oracle.mojo",
             "spectral/host/spectral_oracle.mojo",
             "cluster/host/kmeans_oracle.mojo",
             "core/knn_host_predict.mojo",
+            "umap/host/umap_oracle.mojo",
+            "umap/sparse_graph.mojo",
+            "umap/graph.mojo",
+            "umap/curve.mojo",
+            "umap/params.mojo",
         ),
         exports=(
             "metrics_host_numeric_mode", "metrics_host_vendor",
@@ -556,6 +577,7 @@ FAMILIES = (
             "entropy", "mutual_info_score", "homogeneity_score",
             "completeness_score", "v_measure_score", "r2_score", "silhouette",
             "spectral_fit_predict_dataset", "spectral_fit_predict_graph",
+            "umap_fit_transform", "umap_transform", "umap_numeric_mode",
             "rand_score", "mean_squared_error", "mean_absolute_error",
             "root_mean_squared_error", "roc_auc_score", "precision_recall_curve",
             "log_loss", "confusion_matrix", "precision_recall_fscore",

@@ -944,11 +944,13 @@ def host_families_built():
 #:     metrics/host/metrics_oracle.mojo, spectral_fit_predict_dataset
 #:     over spectral/host/spectral_oracle.mojo (the spectral lane) and
 #:     spectral_fit_predict_graph over the same oracle (the
-#:     spectral-precomputed lane, 2026-09-14), and (the
+#:     spectral-precomputed lane, 2026-09-14), umap_fit_transform,
+#:     umap_transform and umap_numeric_mode over umap/host/umap_oracle.mojo
+#:     (the umap lane, lane/cpu-training-umap-b, 2026-09-14: the IDENTICAL
+#:     device epoch fold restated on the host), and (the
 #:     metrics-classification lane, 2026-09-14) rand_score, the ranking and
 #:     classification metrics, the three regression errors, kl_divergence
-#:     and trustworthiness over metrics/host/classification_oracle.mojo; the
-#:     UMAP entries are absent.
+#:     and trustworthiness over metrics/host/classification_oracle.mojo.
 #:   _mojolearn_preprocessing -> _mojolearn_preprocessing_host (workstream
 #:     E batch 2, 2026-09-14): standard_fit, standard_transform, minmax_fit
 #:     and minmax_transform over preprocessing/host/scaler_oracle.mojo, the

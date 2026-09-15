@@ -6,11 +6,13 @@ shipped in the wheel (the packaging lane, 2026-09-14).
 
 `python -m mojolearn verify` asks one pinned k-means fit one question. This
 asks EVERY lane of the record the manifest names (python/mojolearn/
-host_surface.py, `TRAINING_GPU_COLUMNS`; 47 lanes over 9 hostile fixtures
-as of the 2026-09-14 record) the same question the release did: does this
-box, running the installed binaries, produce the same train, infer and
-model hashes as the Apple M4, the NVIDIA H100 and the AMD MI300X did at the
-recorded commit. It is the fourth column of `tools/identity_break.py`, run
+host_surface.py, `TRAINING_GPU_COLUMNS`; 166 lanes over 9 hostile fixtures
+in the 2026-09-14 166-lane record) the same question the release did: does
+this box, running the installed binaries, produce the same train, infer and
+model hashes as the Apple M4, the NVIDIA H100 and the AMD MI325X did at the
+recorded commit. That record's three columns themselves disagree on one
+cell, kmeans-sqrt/wide (the H100 inertia), so a box that runs that lane
+reads MISMATCH there whatever it computes. It is the fourth column of `tools/identity_break.py`, run
 where the user is.
 
 WHAT SHIPS AND WHERE IT COMES FROM. The wheel carries a COPY of
