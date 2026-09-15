@@ -126,14 +126,14 @@ disagreeing with itself and a DIVERGENT column is two vendors disagreeing.
             whole-batch answer (one ulp) and stamps `batch_sabotage: true`
             in the JSON.
 
-THE LANES, 173 (2026-09-14; 46 on 2026-09-13, pca-whiten the same night, 71
+THE LANES, 178 (2026-09-14; 46 on 2026-09-13, pca-whiten the same night, 71
 on 2026-09-14 from the claim-surface census, logistic-multiclass and
 tokenizer the same day when those two got their doors, 16 `par-*` lanes that
 evening for the ordered multi-GPU drivers run on ONE device, and 15 lanes for
 the doors workstream D opened: Cholesky, the kernel methods, the Gaussian
 mixture, HDBSCAN, resampling, the training primitives and the KMeans arms,
 then 15 more `par-*` lanes that night for the multi-GPU drivers the first 16
-missed, then `par-forest-pool`, `par-gmm`, `par-resample` and `par-hdbscan` for the drivers the multigpu lane added, and `ivf` and `embedding` when IVFIndex and Embedding left `_NOT_YET`, then `ivf-euclidean` when its metric stopped being refused). One per public estimator
+missed, then `par-forest-pool`, `par-gmm`, `par-resample` and `par-hdbscan` for the drivers the multigpu lane added, and `ivf` and `embedding` when IVFIndex and Embedding left `_NOT_YET`, then `ivf-euclidean` when its metric stopped being refused, then `embedding-sort` for PLAN_SORT, and `par-cholesky`, `par-kernel-ridge`, `par-nystroem` and `par-rbf-sampler` on 2026-09-15). One per public estimator
 plus linalg and metrics, then one per public constructor VALUE that selects
 a different numeric path and no earlier lane pins (a kernel, an objective, a
 sampler, a solver, a metric, a reduction).
@@ -185,10 +185,14 @@ sampler, a solver, a metric, a reduction).
                par-byte-lm-offload par-samba-clip
     2026-09-14 night (drivers added by the multigpu lane; devices=_par_devices())
       par-forest-pool par-gmm par-resample par-hdbscan
+    2026-09-15 (the Cholesky and kernel-method drivers; devices=_par_devices())
+      par-cholesky par-kernel-ridge par-nystroem par-rbf-sampler
     2026-09-14 night (lane/expose-ivf-embedding, the last two _NOT_YET doors)
       ivf embedding
     2026-09-14 night (fix/ivf-l2sqrt, metric='euclidean' no longer refused)
       ivf-euclidean
+    2026-09-15 (lane/embedding-owed, PLAN_SORT through Embedding(plan="sort"))
+      embedding-sort
 
 The 18 lanes added on 2026-09-13 (svr through samba above) are fed the SAME
 fixture bytes in the shape their estimator wants; the derivation rules are
@@ -433,6 +437,16 @@ def _hfile(path):
 # multi-block. Sizes are fixed so a hash means the same thing on every box.
 
 N, D = 20000, 16
+
+#: AUDIT ONLY. MOJOLEARN_IDENTITY_N scales the fixture row count (for example to
+#: push the par-* lanes' device-to-device buffers above 1 MiB). A column run
+#: with it records `package.fixture_n`, hashes a DIFFERENT fixture, and must
+#: never be diffed against a record at the default; `--diff` refuses a mix.
+FIXTURE_N_ENV = "MOJOLEARN_IDENTITY_N"
+if os.environ.get(FIXTURE_N_ENV, "").strip():
+    N = int(os.environ[FIXTURE_N_ENV])
+    if N < 8192:
+        raise SystemExit(f"{FIXTURE_N_ENV}={N}: the lanes slice up to 8192 fixture rows")
 
 #: the seed of the held-out draw; the training draw is seed 0
 HELDOUT_SEED = 1
@@ -2282,6 +2296,37 @@ def _(ml, X, yc, yr, Xh=None):
                 e, lambda m: (np.asarray(m.forward(idh)),))
 
 
+@lane("embedding-sort")
+def _(ml, X, yc, yr, Xh=None):
+    """Embedding(plan="sort"), contract section 6.2's PLAN_SORT (the device
+    total-key bitonic sort) instead of PLAN_SCAN, on the `embedding` lane's
+    exact inputs: V=128, d=16, T=512, padding_idx=3, the same fold without a
+    padding row, and the carry split at t0=171. The plan is an execution plan
+    and not the specification, so the lane also runs plan="scan" in the same
+    process and the train cell reads REFUSED naming the pair unless every
+    sort gradient equals its scan twin byte for byte (contract 11(d)); the
+    recorded hashes are therefore the `embedding` lane's hashes too. The
+    probe gathers 512 held-out ids."""
+    V, Dm, T = 128, 16, 512
+    w = _hw((V, Dm), "emb:w", -0.25, 0.25)
+    ids = (_ids(X, 1, T).reshape(T) % V).astype(np.int32)
+    dy = np.ascontiguousarray(_seq(X, 1, T, Dm).reshape(T, Dm))
+    e = ml.Embedding(V, Dm, padding_idx=3, weight=w, plan="sort")
+    y = np.asarray(e.forward(ids))
+    dw = np.asarray(e.backward(ids, dy))
+    t0 = 171
+    g1 = e.backward(ids[:t0], dy[:t0])
+    g2 = np.asarray(e.backward(ids[t0:], dy[t0:], grad=g1))
+    _same_bytes("sort carried dW (t0=171)", g2, "sort unsplit dW", dw)
+    dw_nopad = np.asarray(ml.Embedding(V, Dm, weight=w, plan="sort").backward(ids, dy))
+    _same_bytes("sort dW", dw, "scan dW", np.asarray(ml.Embedding(V, Dm, padding_idx=3, weight=w).backward(ids, dy)))
+    _same_bytes("sort dW without padding", dw_nopad, "scan dW without padding",
+                np.asarray(ml.Embedding(V, Dm, weight=w).backward(ids, dy)))
+    idh = (_ids(Xh, 1, T).reshape(T) % V).astype(np.int32)
+    return _fit(dict(fwd=_h(y), dw=_h(dw), dw_nopad=_h(dw_nopad)),
+                e, lambda m: (np.asarray(m.forward(idh)),))
+
+
 @lane("kmeans-sqrt")
 def _(ml, X, yc, yr, Xh=None):
     """metric='l2_sqrt_expanded': cuVS's L2SqrtExpanded, the root taken on
@@ -2333,6 +2378,26 @@ def _(ml, X, yc, yr, Xh=None):
 # reads REFUSED with the pair named if they differ. A two-device run on the
 # same commit must then hash equal to these cells, which is the claim the
 # drivers' own two-H100 gates make and no three-vendor record has held yet.
+
+#: AUDIT ONLY. MOJOLEARN_IDENTITY_WIDE=1 widens the neural par-* lanes'
+#: models (byte LM d_model 256, head_dim 64, intermediate 1024; Samba d_model
+#: 256, intermediate 1280) so their pooled gradient, optimizer and clipping
+#: buffers pass 1 MiB. Recorded as `package.wide`; `--diff` refuses a mix.
+WIDE_ENV = "MOJOLEARN_IDENTITY_WIDE"
+PAR_WIDE = os.environ.get(WIDE_ENV, "0").strip() == "1"
+
+
+def _par_byte_lm_config(ml):
+    if PAR_WIDE:
+        return ml.ByteLanguageModelConfig(d_model=256, n_heads=4, n_kv=2, head_dim=64, intermediate=1024)
+    return ml.ByteLanguageModelConfig()
+
+
+def _par_samba_config(ml):
+    if PAR_WIDE:
+        return ml.SambaConfig(vocab=256, d_model=256, layers=("mamba3", "attention"), n_heads=2, intermediate=1280)
+    return ml.SambaConfig(vocab=256, d_model=32, layers=("mamba3", "attention"), n_heads=2, intermediate=64)
+
 
 def _par_devices():
     """The device tuple the par-* lanes hand the drivers: MOJOLEARN_PAR_DEVICES,
@@ -2512,7 +2577,7 @@ def _(ml, X, yc, yr, Xh=None):
     """ParallelNeuralTrainer over the samba lane's stack, two logical shards
     of (2, 17) windows per step, two steps."""
     from mojolearn.parallel_training import ParallelNeuralTrainer
-    cfg = ml.SambaConfig(vocab=256, d_model=32, layers=("mamba3", "attention"), n_heads=2, intermediate=64)
+    cfg = _par_samba_config(ml)
     m = ml.SambaStack(cfg, generator=ml.training.Generator(1), lr=1e-3)
     ids = _ids(X, 8, 17)
     with ParallelNeuralTrainer(m, devices=_par_devices(), logical_shards=2) as tr:
@@ -2531,7 +2596,7 @@ def _(ml, X, yc, yr, Xh=None):
     state, two logical shards on one device, three steps; the state after
     and the per-shard losses are the parts."""
     from mojolearn.parallel_training import ParallelByteLanguageModelTrainer
-    shape = ml.ByteLanguageModelConfig()
+    shape = _par_byte_lm_config(ml)
     named, _ = _byte_lm_params(shape)
     seed = ml.SmallByteLanguageModelTrainer(named, data_schedule={"dataset": "identity_break", "order": "sequential"},
                                             shape=shape)
@@ -2783,7 +2848,7 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 def _byte_lm_seed(ml):
-    shape = ml.ByteLanguageModelConfig()
+    shape = _par_byte_lm_config(ml)
     named, _ = _byte_lm_params(shape)
     seed = ml.SmallByteLanguageModelTrainer(named, data_schedule={"dataset": "identity_break", "order": "sequential"},
                                             shape=shape)
@@ -2857,7 +2922,7 @@ def _(ml, X, yc, yr, Xh=None):
     (whole tensors on owners, the cross-tensor norm on the first device);
     two logical shards of (2, 17) windows, two steps."""
     from mojolearn.parallel_training import ParallelNeuralTrainer
-    cfg = ml.SambaConfig(vocab=256, d_model=32, layers=("mamba3", "attention"), n_heads=2, intermediate=64)
+    cfg = _par_samba_config(ml)
     m = ml.SambaStack(cfg, generator=ml.training.Generator(1), lr=1e-3, max_norm=0.5)
     ids = _ids(X, 8, 17)
     with ParallelNeuralTrainer(m, devices=_par_devices(), logical_shards=2) as tr:
@@ -3011,6 +3076,88 @@ def _(ml, X, yc, yr, Xh=None):
                      counts=_h(np.asarray([par.n_clusters_, par.n_outliers_, par.n_boruvka_rounds_,
                                            par.n_condensed_clusters_], dtype=np.int64))),
                 par, "n/a:transductive")
+
+
+# ---------------------------------------------------------------- lanes (2026-09-15, the kernel-method and Cholesky drivers)
+# fit_cholesky / solve_cholesky, fit_kernel_method / apply_kernel_method and
+# transform_rbf_sampler. The shapes sit ABOVE 1 MiB on purpose: a 600 x 600
+# float32 factor is 1.44 MiB, the size at which the device-to-device column
+# solve read wrong columns on two MI300X
+# (bench/results/multi_gpu/2026-09-14/cholesky-mi300x-diag/). Same rules as
+# the par-* lanes above.
+
+@lane("par-cholesky")
+def _(ml, X, yc, yr, Xh=None):
+    """fit_cholesky and solve_cholesky on a 600 x 600 Cauchy-kernel SPD
+    matrix with three right-hand sides (whole trailing-update rows and whole
+    right-hand-side columns on _par_devices()), held to the plain fit's
+    factor and solve."""
+    from mojolearn.parallel_classical import fit_cholesky, solve_cholesky
+    dev = _par_devices()
+    A = _cauchy_spd(X[:600, :4])
+    par = fit_cholesky(ml.Cholesky(), A, devices=dev)
+    plain = ml.Cholesky().fit(A)
+    assert par.info_ == 0, "par-cholesky lane: the Cauchy matrix did not factor (info=%d)" % par.info_
+    _same_bytes("fit_cholesky L_", par.L_, "plain L_", plain.L_)
+    B = np.ascontiguousarray(np.stack([yr[:600], yr[600:1200], yr[1200:1800]], 1).astype(np.float32))
+    x = solve_cholesky(par, B, devices=dev)
+    _same_bytes("solve_cholesky", x, "plain solve", plain.solve(B))
+    return _fit(dict(L=_h(par.L_), logdet=_h(np.float64(par.logdet_)), info=_h(np.int64(par.info_)),
+                     nb=_h(np.int64(par.nb_)), jitter=_h(np.float32(par.jitter_)), solve=_h(x)),
+                par, lambda e: (solve_cholesky(e, np.ascontiguousarray(Xh[:600, :3]), devices=_par_devices()),))
+
+
+@lane("par-kernel-ridge")
+def _(ml, X, yc, yr, Xh=None):
+    """fit_kernel_method and apply_kernel_method on a KernelRidge at the rbf
+    kernel over 600 rows with two targets (kernel rows through the SVM seam,
+    factor rows and target columns through the Cholesky driver), held to the
+    plain fit's dual coefficients and predictions."""
+    from mojolearn.parallel_classical import fit_kernel_method, apply_kernel_method
+    dev = _par_devices()
+    kw = dict(alpha=0.1, kernel="rbf", gamma=0.5)
+    Y = np.ascontiguousarray(np.stack([yr[:600], yr[600:1200]], 1).astype(np.float32))
+    par = fit_kernel_method(ml.KernelRidge(**kw), X[:600, :4], Y, devices=dev)
+    plain = ml.KernelRidge(**kw).fit(X[:600, :4], Y)
+    _same_bytes("fit_kernel_method dual_coef_", par.dual_coef_, "plain dual_coef_", plain.dual_coef_)
+    pred = apply_kernel_method(par, X[600:856, :4], devices=dev)
+    _same_bytes("apply_kernel_method predict", pred, "plain predict", plain.predict(X[600:856, :4]))
+    return _fit(dict(dual=_h(par.dual_coef_), info=_h(np.int64(par.info_)), predict=_h(pred)),
+                par, lambda e: (apply_kernel_method(e, Xh[:64, :4], devices=_par_devices()),))
+
+
+@lane("par-nystroem")
+def _(ml, X, yc, yr, Xh=None):
+    """fit_kernel_method and apply_kernel_method on a Nystroem at the rbf
+    kernel with 32 components of 600 rows (kernel rows on _par_devices(),
+    the Jacobi eigensolver on the root), held to the plain fit's model
+    arrays and transform."""
+    from mojolearn.parallel_classical import fit_kernel_method, apply_kernel_method
+    dev = _par_devices()
+    kw = dict(kernel="rbf", gamma=0.5, n_components=32, random_state=7)
+    par = fit_kernel_method(ml.Nystroem(**kw), X[:600, :4], devices=dev)
+    plain = ml.Nystroem(**kw).fit(X[:600, :4])
+    _same_bytes("fit_kernel_method components_", par.components_, "plain components_", plain.components_)
+    _same_bytes("fit_kernel_method normalization_", par.normalization_, "plain normalization_", plain.normalization_)
+    out = apply_kernel_method(par, X[600:1624, :4], devices=dev)
+    _same_bytes("apply_kernel_method transform", out, "plain transform", plain.transform(X[600:1624, :4]))
+    return _fit(dict(components=_h(par.components_), indices=_h(par.component_indices_),
+                     normalization=_h(par.normalization_), eigenvalues=_h(par.eigenvalues_),
+                     eigenvectors=_h(par.eigenvectors_), sweeps=_h(np.int64(par.sweeps_)), transform=_h(out)),
+                par, lambda e: (apply_kernel_method(e, Xh[:64, :4], devices=_par_devices()),))
+
+
+@lane("par-rbf-sampler")
+def _(ml, X, yc, yr, Xh=None):
+    """transform_rbf_sampler with 1024 random Fourier features over 1000
+    rows in shards of 300 rows (each shard's output 1.17 MiB) on
+    _par_devices(), held to the one-call transform."""
+    from mojolearn.parallel_classical import transform_rbf_sampler
+    m = ml.RBFSampler(gamma=0.5, n_components=1024, random_state=1).fit(X)
+    out = transform_rbf_sampler(m, X[:1000], devices=_par_devices(), rows_per_shard=300)
+    _same_bytes("transform_rbf_sampler", out, "plain transform", m.transform(X[:1000]))
+    return _fit(dict(weights=_h(m.random_weights_), offset=_h(m.random_offset_), transform=_h(out)),
+                m, lambda e: (transform_rbf_sampler(e, Xh[:256], devices=_par_devices(), rows_per_shard=100),))
 
 
 # ---------------------------------------------------------------- the batch part (2026-09-14)
@@ -3497,7 +3644,7 @@ def _batch_embedding(ml, e, Xh):
 
 
 _batch_decl(_batch_ivf, "ivf", "ivf-euclidean")
-_batch_decl(_batch_embedding, "embedding")
+_batch_decl(_batch_embedding, "embedding", "embedding-sort")
 _batch_decl(_batch_cross_entropy, "cross-entropy-arms")
 _batch_decl(_batch_training_primitives, "training-primitives")
 _batch_decl(_rows_calls("predict_logits", sl=(slice(0, 256), slice(0, 8))), "mlp", "par-mlp")
@@ -3602,6 +3749,17 @@ _batch_decl(_rows_calls("predict", "predict_proba"), "par-forest-pool")
 _batch_decl(_rows_calls("score_samples", "predict", sl=(slice(0, 64), slice(0, 4))), "par-gmm")
 _batch_decl("n/a:function", "par-resample")
 _batch_decl("n/a:transductive", "par-hdbscan")
+_batch_decl(_rows_calls("predict", sl=(slice(0, 64), slice(0, 4))), "par-kernel-ridge")
+_batch_decl(_rows_calls("transform", sl=(slice(0, 64), slice(0, 4))), "par-nystroem")
+_batch_decl(_rows_calls("transform", sl=slice(0, 256)), "par-rbf-sampler")
+def _batch_par_cholesky(ml, e, Xh):
+    """_batch_cholesky at the par-cholesky lane's 600-row factor."""
+    B = np.ascontiguousarray(Xh[:600, :2])
+    return [_BatchRows("solve (right-hand sides)", B.T,
+                       lambda r: (np.asarray(e.solve(np.ascontiguousarray(r.T))).reshape(B.shape[0], -1).T,))]
+
+
+_batch_decl(_batch_par_cholesky, "par-cholesky")
 
 
 # ---------------------------------------------------------------- run / diff
@@ -3699,6 +3857,10 @@ def run(args):
     package = dict(version=getattr(ml, "__version__", "unknown"), package_dir=os.path.dirname(ml.__file__),
                    numpy=np.__version__, python=platform.python_version(),
                    par_devices=",".join(str(d) for d in _par_devices()))
+    if N != 20000:
+        package["fixture_n"] = N
+    if PAR_WIDE:
+        package["wide"] = True
     print(f"# vendor={vendor} commit={commit} ({commit_source})"
           + (f" host.cpu_model={host['cpu_model']!r} host.column={host['column']} "
              f"host.families={sorted(host['families'])}" if host else ""))
@@ -3984,6 +4146,11 @@ def diff(paths, require_columns=0, require_lanes=None):
         if n is not None and n < require_columns:
             short.append((key, col, verdict, n))
 
+    fixture_ns = set(((j.get("package") or {}).get("fixture_n", 20000), bool((j.get("package") or {}).get("wide")))
+                     for _, j in cols)
+    if len(fixture_ns) > 1:
+        raise SystemExit(f"REFUSING TO DIFF: the columns hash different fixture sizes {sorted(fixture_ns)} "
+                         f"({FIXTURE_N_ENV}, {WIDE_ENV}); their cells are different questions")
     for n_, (_, j) in zip(names, cols):
         if j.get("host"):
             h = j["host"]

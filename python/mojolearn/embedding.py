@@ -27,6 +27,13 @@ The semantics are `torch.nn.Embedding`'s forward and its dense
 `padding_idx` follows torch: a negative value counts from the end, the
 forward gathers that row like any other, and the backward drops its
 positions at the source and STORES +0.0 in its row (contract section 8).
+`plan` selects the backward's execution plan for the run structure (contract
+section 6): "scan" (PLAN_SCAN, the default) or "sort" (PLAN_SORT, the device
+total-key bitonic sort). The plan is not the specification: both enumerate
+each row's contributors in ascending position, and the contract's clause (d)
+holds counts, perm and dW bit-identical across the two. No dispatch threshold
+is measured, so nothing picks "sort" for you.
+
 `backward(ids, dy, grad=...)` is the microbatch CARRY (contract 7.4): the
 fold continues from `grad`'s bits, so microbatches presented in ascending
 position order reproduce the unsplit gradient bit for bit.
@@ -42,6 +49,8 @@ from ._mode import NumericModeMixin
 
 _MODE_CODE = {"fast": 0, "identical": 1, "deterministic": 2}
 _NO_PADDING = -1
+#: ORDER MATCHES embedding/checks/embedding_sort.mojo's PLAN_SCAN = 0, PLAN_SORT = 1.
+_PLAN_CODE = {"scan": 0, "sort": 1}
 
 
 class Embedding(NumericModeMixin):
@@ -62,6 +71,9 @@ class Embedding(NumericModeMixin):
         Only False.
     weight : array-like (num_embeddings, embedding_dim), required
         The table, copied to float32 C order at construction.
+    plan : {"scan", "sort"}, default "scan"
+        The backward's run-structure execution plan (contract section 6).
+        Both give the same bits; anything else is refused by name.
 
     Attributes
     ----------
@@ -71,7 +83,7 @@ class Embedding(NumericModeMixin):
     _BINDING = "_mojolearn_embedding"
 
     def __init__(self, num_embeddings, embedding_dim, padding_idx=None, max_norm=None,
-                 norm_type=2.0, scale_grad_by_freq=False, sparse=False, weight=None):
+                 norm_type=2.0, scale_grad_by_freq=False, sparse=False, weight=None, plan="scan"):
         for name, v in (("num_embeddings", num_embeddings), ("embedding_dim", embedding_dim)):
             if isinstance(v, bool) or not isinstance(v, int):
                 raise TypeError(f"mojolearn Embedding: {name} must be an int, got {type(v).__name__}")
@@ -92,6 +104,11 @@ class Embedding(NumericModeMixin):
             )
         if sparse:
             raise ValueError("mojolearn Embedding: sparse=True is REFUSED (DEVIATION 1314: the dense (V, d) gradient only)")
+        if not isinstance(plan, str) or plan not in _PLAN_CODE:
+            raise ValueError(
+                f"mojolearn Embedding: plan must be 'scan' or 'sort' (contract section 6's "
+                f"PLAN_SCAN and PLAN_SORT), got {plan!r}"
+            )
         if padding_idx is not None:
             if isinstance(padding_idx, bool) or not isinstance(padding_idx, int):
                 raise TypeError(f"mojolearn Embedding: padding_idx must be an int or None, got {type(padding_idx).__name__}")
@@ -119,17 +136,18 @@ class Embedding(NumericModeMixin):
         self.norm_type = norm_type
         self.scale_grad_by_freq = scale_grad_by_freq
         self.sparse = sparse
+        self.plan = plan
         self.weight = w
 
     @classmethod
     def from_pretrained(cls, embeddings, padding_idx=None, max_norm=None, norm_type=2.0,
-                        scale_grad_by_freq=False, sparse=False, numeric_mode=None):
+                        scale_grad_by_freq=False, sparse=False, numeric_mode=None, plan="scan"):
         """torch's `Embedding.from_pretrained` without `freeze` (nothing here trains the table)."""
         w, _ = as_f32_c(embeddings, ndim=2, name="embeddings")
         v, d = (int(s) for s in w.shape)
         return cls(v, d, padding_idx=padding_idx, max_norm=max_norm, norm_type=norm_type,
                    scale_grad_by_freq=scale_grad_by_freq, sparse=sparse, weight=w,
-                   numeric_mode=numeric_mode)
+                   numeric_mode=numeric_mode, plan=plan)
 
     def _extension(self):
         mod = self._bind()
@@ -189,8 +207,8 @@ class Embedding(NumericModeMixin):
             # ORDER MATCHES bindings/_mojolearn_embedding.mojo::embedding_backward_binding.
             # dy, ids, dw (read first when accumulate)
             [addr_ro(g, name="dy"), addr_ro(flat, name="ids"), addr(dw, name="dw")],
-            # V, d, T, padding_idx, accumulate
-            [v, d, t, pad, accumulate],
+            # V, d, T, padding_idx, accumulate, plan
+            [v, d, t, pad, accumulate, _PLAN_CODE[self.plan]],
         )
         return dw.reshape((v, d))
 

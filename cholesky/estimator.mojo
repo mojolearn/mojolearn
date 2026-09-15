@@ -2,11 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Host-pointer surface for the Cholesky lane: what three lanes will call.
 
-**NOT YET WIRED** into `bindings/_mojolearn_estimators.mojo` or
-`python/mojolearn/` -- those directories are not this lane's. The README's
-WHAT THE ORCHESTRATOR MUST WIRE names the tasks; this file is the entry a
-binding, a Gaussian process, a kernel-ridge solver or a Gaussian mixture
-should reach, shaped like `kde/estimator.mojo::kde_score_samples_host` and
+Wired: `bindings/_mojolearn_gp.mojo` (built by `bindings/build_gp.sh`)
+calls this file, and `python/mojolearn/_cholesky_impl.py` exposes it as
+`mojolearn.Cholesky`; the Gaussian process, kernel ridge and Gaussian
+mixture lanes reach it too. This file is the entry they reach, shaped like `kde/estimator.mojo::kde_score_samples_host` and
 `glm/estimator.mojo::ols_fit_host`.
 
 THE SURFACE IS DESIGNED FOR THREE CALLERS THAT DO NOT EXIST YET, so its shape

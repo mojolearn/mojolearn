@@ -57,10 +57,6 @@ def resample_vendor_binding() raises -> PythonObject:
     return PythonObject(String(COMPILED_VENDOR))
 
 
-def resample_parallel_available() raises -> PythonObject:
-    return PythonObject(1)
-
-
 # ===========================================================================
 # bootstrap
 # ===========================================================================
@@ -382,7 +378,6 @@ def monte_carlo_integrate_binding(
 def PyInit__mojolearn_resample() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_resample")
-        m.def_function[resample_parallel_available]("resample_parallel_available")
         m.def_function[resample_ranges_parallel_available]("resample_ranges_parallel_available")
         m.def_function[resample_vendor_binding]("resample_vendor")
         m.def_function[resample_numeric_mode_binding]("resample_numeric_mode")

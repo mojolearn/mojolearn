@@ -86,10 +86,6 @@ def kernel_methods_rows_parallel_available() raises -> PythonObject:
     return PythonObject(1)
 
 
-def kernel_methods_parallel_available() raises -> PythonObject:
-    return PythonObject(1)
-
-
 # ===========================================================================
 # KernelRidge
 # ===========================================================================
@@ -576,9 +572,6 @@ def PyInit__mojolearn_kernel_methods() abi("C") -> PythonObject:
         var m = PythonModuleBuilder("_mojolearn_kernel_methods")
         m.def_function[kernel_methods_rows_parallel_available](
             "kernel_methods_rows_parallel_available"
-        )
-        m.def_function[kernel_methods_parallel_available](
-            "kernel_methods_parallel_available"
         )
         m.def_function[kernel_methods_vendor_binding]("kernel_methods_vendor")
         m.def_function[kernel_methods_numeric_mode_binding](

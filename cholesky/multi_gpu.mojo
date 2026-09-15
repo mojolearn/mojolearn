@@ -26,7 +26,7 @@ from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from core.multi_gpu import peer_clone, copy_columns_kernel
+from core.multi_gpu import copy_columns_kernel, transfer_bytes
 from core.step_phase import STEP_PHASE_TIMERS
 from gemm.checks.gemm_identical import (
     identical_gemm_into,
@@ -101,11 +101,16 @@ def chol_trailing_rows(
         var need = identical_gemm_workspace_max_floats(width, n_trail, w)
         var workspace = device.enqueue_create_buffer[DType.float32](need if need > 0 else 1)
         device.synchronize()
+        # Owner copies go through transfer_bytes, which stages them through
+        # host memory on AMD: on two MI300X the trailing update at n=4500 read
+        # wrong factor cells with device copies
+        # (bench/results/multi_gpu/2026-09-15/transport-audit/).
         var left_view = packed.create_sub_buffer[DType.float32](source * w, width * w)
-        left_view.enqueue_copy_to(left)
-        ctx.synchronize()
+        transfer_bytes(ctx, device, left_view, left, width * w, True)
         _ = left_view^
-        var right = peer_clone(ctx, device, packed)
+        var right = device.enqueue_create_buffer[DType.float32](len(packed))
+        device.synchronize()
+        transfer_bytes(ctx, device, packed, right, len(packed), True)
         device.synchronize()
         ctx.synchronize()
         shards.append(CholTrailingShard(device^, left^, right^, output^, workspace^, first, width))
@@ -117,8 +122,7 @@ def chol_trailing_rows(
         ref s = shards[rank]
         s.ctx.synchronize()
         var target = g.create_sub_buffer[DType.float32](s.first * n_trail, s.width * n_trail)
-        s.output.enqueue_copy_to(target)
-        s.ctx.synchronize()
+        transfer_bytes(s.ctx, ctx, s.output, target, s.width * n_trail, True)
         ctx.synchronize()
         _ = target^
     _ = shards^
