@@ -1,0 +1,230 @@
+NOTE: --lanes scopes this diff to 5 lane(s); 161 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-amd-epyc-9654-96-core-processor is a CPU column: cpu_model='AMD EPYC 9654 96-Core Processor' column=cpu families=['_mojolearn_arima_host', '_mojolearn_core_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_metrics_host'] commit=2b393b378890fa7ab816cccc4f2e8aa9851e063f
+| lane/fixture                 | verdict    | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-amd-epyc-9654-96-core-processor |
+|------------------------------|------------|------------------|------------------|------------------|------------------|
+| arima-011/base               | DIVERGENT  | parts differ: ma,sigma2,forecast; agree: - | 444512355dd3dcc7 | 444512355dd3dcc7 | 0b6e27da8bbe4b81 |
+| arima-011/denormal           | DIVERGENT  | parts differ: ma,sigma2,forecast; agree: - | 1ec68f0334b2a8f7 | 1ec68f0334b2a8f7 | 80ef7e31e6e0f7bb |
+| arima-011/denormal_ftz       | DIVERGENT  | parts differ: ma,sigma2,forecast; agree: - | 1ec68f0334b2a8f7 | 1ec68f0334b2a8f7 | 80ef7e31e6e0f7bb |
+| arima-011/dupes              | DIVERGENT  | parts differ: ma,sigma2,forecast; agree: - | 444512355dd3dcc7 | 444512355dd3dcc7 | 0b6e27da8bbe4b81 |
+| arima-011/hashed             | DIVERGENT  | parts differ: ma,sigma2,forecast; agree: - | ed2fc6041b9e6b34 | ed2fc6041b9e6b34 | 0e5bb0b39db3b353 |
+| arima-011/negative           | DIVERGENT  | parts differ: ma,sigma2,forecast; agree: - | 4510d9cca33c3880 | 4510d9cca33c3880 | 5110ab29e5875164 |
+| arima-011/odd                | DIVERGENT  | parts differ: ma,sigma2,forecast; agree: - | fe873ed580ec36a5 | fe873ed580ec36a5 | 86c3fc7bf07f8c85 |
+| arima-011/ties               | DIVERGENT  | parts differ: ma,sigma2,forecast; agree: - | 18ad2790f8b3319b | 18ad2790f8b3319b | 5ad64b2afdd0c5ec |
+| arima-011/wide               | DIVERGENT  | parts differ: forecast; agree: ma,sigma2 | dcaecce707040ce1 | dcaecce707040ce1 | 18e31d813867910c |
+| arima-seasonal-c/base        | DIVERGENT  | parts differ: ar,sar,mu,sigma2,forecast; agree: - | 192cac65b75a4e9d | 192cac65b75a4e9d | 42be56eb08618d06 |
+| arima-seasonal-c/denormal    | DIVERGENT  | parts differ: ar,sar,mu,sigma2,forecast; agree: - | e22ec2fed1a5f9a0 | e22ec2fed1a5f9a0 | 1463a682faf73788 |
+| arima-seasonal-c/denormal_ftz | DIVERGENT  | parts differ: ar,sar,mu,sigma2,forecast; agree: - | e22ec2fed1a5f9a0 | e22ec2fed1a5f9a0 | 1463a682faf73788 |
+| arima-seasonal-c/dupes       | DIVERGENT  | parts differ: ar,sar,mu,sigma2,forecast; agree: - | 192cac65b75a4e9d | 192cac65b75a4e9d | 42be56eb08618d06 |
+| arima-seasonal-c/hashed      | DIVERGENT  | parts differ: ar,sar,mu,sigma2,forecast; agree: - | 2c8f2249375b77da | 2c8f2249375b77da | 7ae4ecfec9e44629 |
+| arima-seasonal-c/negative    | DIVERGENT  | parts differ: ar,sar,mu,sigma2,forecast; agree: - | fa010819b07e078a | fa010819b07e078a | ba4b9b3e3f974781 |
+| arima-seasonal-c/odd         | DIVERGENT  | parts differ: ar,sar,mu,sigma2,forecast; agree: - | 638697a3196b80ea | 638697a3196b80ea | bbb1934530f8d29f |
+| arima-seasonal-c/ties        | DIVERGENT  | parts differ: ar,sar,mu,sigma2,forecast; agree: - | 226754a32af96ebb | 226754a32af96ebb | 3f4310ed2ca1916c |
+| arima-seasonal-c/wide        | DIVERGENT  | parts differ: mu,forecast; agree: ar,sar,sigma2 | 79f2c8172e739a12 | 79f2c8172e739a12 | 19ff67a69ef4bde5 |
+| arima/base                   | DIVERGENT  | parts differ: mu,sigma2,forecast; agree: ar | 377790cb117abb61 | 377790cb117abb61 | 0e77d6dec9ac0689 |
+| arima/denormal               | DIVERGENT  | parts differ: mu,sigma2,forecast; agree: ar | 7dbefd70378dfac6 | 7dbefd70378dfac6 | c88a9a51d81c9c09 |
+| arima/denormal_ftz           | DIVERGENT  | parts differ: mu,sigma2,forecast; agree: ar | 7dbefd70378dfac6 | 7dbefd70378dfac6 | c88a9a51d81c9c09 |
+| arima/dupes                  | DIVERGENT  | parts differ: mu,sigma2,forecast; agree: ar | 377790cb117abb61 | 377790cb117abb61 | 0e77d6dec9ac0689 |
+| arima/hashed                 | DIVERGENT  | parts differ: ar,mu,sigma2,forecast; agree: - | d4ed8b9405da9691 | d4ed8b9405da9691 | 6fd55408eee875db |
+| arima/negative               | DIVERGENT  | parts differ: ar,mu,sigma2,forecast; agree: - | 29f18fa209679839 | 29f18fa209679839 | 1a85a1ccb25278ed |
+| arima/odd                    | DIVERGENT  | parts differ: ar,mu,sigma2,forecast; agree: - | 20bf64323fc5fa12 | 20bf64323fc5fa12 | ac4f3463abb74bd1 |
+| arima/ties                   | DIVERGENT  | parts differ: ar,mu,sigma2,forecast; agree: - | 990e96a6d7fd2874 | 990e96a6d7fd2874 | 3cdff2f04901ea07 |
+| arima/wide                   | DIVERGENT  | parts differ: mu,forecast; agree: ar,sigma2 | 440f5eba6a3ddede | 440f5eba6a3ddede | 4e033b14b8c2203a |
+| pca-full-whiten/base         | DIVERGENT  | parts differ: components,variance,transform; agree: - | 45270a0e8f27cd6d | 45270a0e8f27cd6d | 263229c8bf758f64 |
+| pca-full-whiten/denormal     | DIVERGENT  | parts differ: components,variance,transform; agree: - | 61cf181eed072841 | 61cf181eed072841 | e9acbca977c3bd21 |
+| pca-full-whiten/denormal_ftz | DIVERGENT  | parts differ: components,variance,transform; agree: - | 61cf181eed072841 | 61cf181eed072841 | e9acbca977c3bd21 |
+| pca-full-whiten/dupes        | DIVERGENT  | parts differ: components,variance,transform; agree: - | 56ac0f3579ac6d83 | 56ac0f3579ac6d83 | 9f973aa5564734d3 |
+| pca-full-whiten/hashed       | DIVERGENT  | parts differ: components,variance,transform; agree: - | 3ac062517b27d389 | 3ac062517b27d389 | 71d453b980fe45f2 |
+| pca-full-whiten/negative     | DIVERGENT  | parts differ: components,variance,transform; agree: - | 1b0f14140ed067ef | 1b0f14140ed067ef | 7808a51ab3dfa419 |
+| pca-full-whiten/odd          | DIVERGENT  | parts differ: components,variance,transform; agree: - | 99b78b139f8fc21b | 99b78b139f8fc21b | 45283c44dfeacbc4 |
+| pca-full-whiten/ties         | DIVERGENT  | parts differ: components,variance,transform; agree: - | 2af64405abd586d8 | 2af64405abd586d8 | 42837424055d6928 |
+| pca-full-whiten/wide         | DIVERGENT  | parts differ: components,transform; agree: variance | 218cc831a9e9a64a | 218cc831a9e9a64a | a13128cd7b9d2fde |
+| umap/base                    | DIVERGENT  | parts differ: embedding; agree: - | ab4c3cd4fd49687a | ab4c3cd4fd49687a | 53c7ef0567198e8d |
+| umap/denormal                | DIVERGENT  | parts differ: embedding; agree: - | cbe8436743821717 | cbe8436743821717 | 1f3d964de410f957 |
+| umap/denormal_ftz            | DIVERGENT  | parts differ: embedding; agree: - | cbe8436743821717 | cbe8436743821717 | 1f3d964de410f957 |
+| umap/dupes                   | DIVERGENT  | parts differ: embedding; agree: - | ab4c3cd4fd49687a | ab4c3cd4fd49687a | 53c7ef0567198e8d |
+| umap/hashed                  | DIVERGENT  | parts differ: embedding; agree: - | 599b7220e7521ae8 | 599b7220e7521ae8 | 44465fdb53048c89 |
+| umap/negative                | DIVERGENT  | parts differ: embedding; agree: - | 21f603efa2721d85 | 21f603efa2721d85 | f0814f6a537f6a8f |
+| umap/odd                     | DIVERGENT  | parts differ: embedding; agree: - | 957d02d6d6f9dc71 | 957d02d6d6f9dc71 | 9f81c33a7cd2338d |
+| umap/ties                    | DIVERGENT  | parts differ: embedding; agree: - | f8e184c57a909342 | f8e184c57a909342 | 13702c5f06a1eae8 |
+| umap/wide                    | DIVERGENT  | parts differ: embedding; agree: - | fc649bf2d55856cd | fc649bf2d55856cd | 5562492bcee64ba5 |
+
+summary: DIVERGENT=45
+
+| lane/fixture                 | column | verdict      | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-amd-epyc-9654-96-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
+| arima-011/base               | infer  | DIVERGENT    | 436e34843e2d7277 | 436e34843e2d7277 | 436e34843e2d7277 | 145816653fec7fd3 |
+| arima-011/base               | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | b1b6f1a2ed8f9122 |
+| arima-011/base               | batch  | DIVERGENT    | 91fcd2a61774b596 | 91fcd2a61774b596 | 91fcd2a61774b596 | 8ce71130c0f6fbba |
+| arima-011/denormal           | infer  | DIVERGENT    | 395747692aa405a7 | 395747692aa405a7 | 395747692aa405a7 | dcb1d85e8551b79f |
+| arima-011/denormal           | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 794a4b1c8cb69ef7 |
+| arima-011/denormal           | batch  | DIVERGENT    | e3462e27f217a8a9 | e3462e27f217a8a9 | e3462e27f217a8a9 | c483ea9c2f787229 |
+| arima-011/denormal_ftz       | infer  | DIVERGENT    | 395747692aa405a7 | 395747692aa405a7 | 395747692aa405a7 | dcb1d85e8551b79f |
+| arima-011/denormal_ftz       | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 2ecee0035daad3b3 |
+| arima-011/denormal_ftz       | batch  | DIVERGENT    | e3462e27f217a8a9 | e3462e27f217a8a9 | e3462e27f217a8a9 | c483ea9c2f787229 |
+| arima-011/dupes              | infer  | DIVERGENT    | 436e34843e2d7277 | 436e34843e2d7277 | 436e34843e2d7277 | 145816653fec7fd3 |
+| arima-011/dupes              | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | b1b6f1a2ed8f9122 |
+| arima-011/dupes              | batch  | DIVERGENT    | 91fcd2a61774b596 | 91fcd2a61774b596 | 91fcd2a61774b596 | 8ce71130c0f6fbba |
+| arima-011/hashed             | infer  | DIVERGENT    | 7ff4a9e790ef0f8b | 7ff4a9e790ef0f8b | 7ff4a9e790ef0f8b | 09bb0059269f1d78 |
+| arima-011/hashed             | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 268bf5ac3551682d |
+| arima-011/hashed             | batch  | DIVERGENT    | 903c1a2ac7948d1d | 903c1a2ac7948d1d | 903c1a2ac7948d1d | 0a323ceb0860107f |
+| arima-011/negative           | infer  | DIVERGENT    | 126a57415caeead2 | 126a57415caeead2 | 126a57415caeead2 | 54efd978c80d9dc5 |
+| arima-011/negative           | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | b54615c830a08caf |
+| arima-011/negative           | batch  | DIVERGENT    | 17db770f01fb74e1 | 17db770f01fb74e1 | 17db770f01fb74e1 | 1e9f483caa6ae9e7 |
+| arima-011/odd                | infer  | DIVERGENT    | b17ec31edbdbf345 | b17ec31edbdbf345 | b17ec31edbdbf345 | d32d78636bb025a1 |
+| arima-011/odd                | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 4ed7bfd219262249 |
+| arima-011/odd                | batch  | DIVERGENT    | f37f4bc3878ceacb | f37f4bc3878ceacb | f37f4bc3878ceacb | 9022e5e501ad6ff9 |
+| arima-011/ties               | infer  | DIVERGENT    | b18657cbfbe91ac6 | b18657cbfbe91ac6 | b18657cbfbe91ac6 | d3829b8c838ea27d |
+| arima-011/ties               | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 54ec6afbb7f2398d |
+| arima-011/ties               | batch  | DIVERGENT    | 26e5f53b13398024 | 26e5f53b13398024 | 26e5f53b13398024 | 95d5835f01e1d074 |
+| arima-011/wide               | infer  | DIVERGENT    | f566c47f48821c72 | f566c47f48821c72 | f566c47f48821c72 | 02d9728614aa5f93 |
+| arima-011/wide               | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 31a0b15339c4c4d6 |
+| arima-011/wide               | batch  | DIVERGENT    | 8d82402c30a63f76 | 8d82402c30a63f76 | 8d82402c30a63f76 | a5dc1f3a8143065e |
+| arima-seasonal-c/base        | infer  | DIVERGENT    | 51863aef53c592d2 | 51863aef53c592d2 | 51863aef53c592d2 | 1371409bb3b2a902 |
+| arima-seasonal-c/base        | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | eb42b659f6dd72a3 |
+| arima-seasonal-c/base        | batch  | DIVERGENT    | c9f23e9e56d51e65 | c9f23e9e56d51e65 | c9f23e9e56d51e65 | 63bdb26d3454553c |
+| arima-seasonal-c/denormal    | infer  | DIVERGENT    | dd8a852ab073617c | dd8a852ab073617c | dd8a852ab073617c | 66fffa4b9871796c |
+| arima-seasonal-c/denormal    | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | c45c99d6a68d9c8b |
+| arima-seasonal-c/denormal    | batch  | DIVERGENT    | 9317d76faabd662c | 9317d76faabd662c | 9317d76faabd662c | b717ce314d706831 |
+| arima-seasonal-c/denormal_ftz | infer  | DIVERGENT    | dd8a852ab073617c | dd8a852ab073617c | dd8a852ab073617c | 66fffa4b9871796c |
+| arima-seasonal-c/denormal_ftz | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 00d243102ad6d999 |
+| arima-seasonal-c/denormal_ftz | batch  | DIVERGENT    | 9317d76faabd662c | 9317d76faabd662c | 9317d76faabd662c | b717ce314d706831 |
+| arima-seasonal-c/dupes       | infer  | DIVERGENT    | 51863aef53c592d2 | 51863aef53c592d2 | 51863aef53c592d2 | 1371409bb3b2a902 |
+| arima-seasonal-c/dupes       | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | eb42b659f6dd72a3 |
+| arima-seasonal-c/dupes       | batch  | DIVERGENT    | c9f23e9e56d51e65 | c9f23e9e56d51e65 | c9f23e9e56d51e65 | 63bdb26d3454553c |
+| arima-seasonal-c/hashed      | infer  | DIVERGENT    | fa0e863d9ac994d8 | fa0e863d9ac994d8 | fa0e863d9ac994d8 | 0f6ecca2a794c9c2 |
+| arima-seasonal-c/hashed      | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | ed2b07a0a64ced2a |
+| arima-seasonal-c/hashed      | batch  | DIVERGENT    | 1f446b75dd151172 | 1f446b75dd151172 | 1f446b75dd151172 | a0059c0d857f9ff8 |
+| arima-seasonal-c/negative    | infer  | DIVERGENT    | 6e18078db22d851f | 6e18078db22d851f | 6e18078db22d851f | 7ac3c9d00c5290ec |
+| arima-seasonal-c/negative    | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 8566ec4fe40c094e |
+| arima-seasonal-c/negative    | batch  | DIVERGENT    | f83eb3f3f676182b | f83eb3f3f676182b | f83eb3f3f676182b | 40747a3341e09c01 |
+| arima-seasonal-c/odd         | infer  | DIVERGENT    | f4ef2ece26c02783 | f4ef2ece26c02783 | f4ef2ece26c02783 | 7b490940a1a68a86 |
+| arima-seasonal-c/odd         | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 9efe622f0df5e791 |
+| arima-seasonal-c/odd         | batch  | DIVERGENT    | 0da2e77d1a656b25 | 0da2e77d1a656b25 | 0da2e77d1a656b25 | 02c3af6c2e3442a4 |
+| arima-seasonal-c/ties        | infer  | DIVERGENT    | d75b867e7900df54 | d75b867e7900df54 | d75b867e7900df54 | 8416822759ed1958 |
+| arima-seasonal-c/ties        | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 1a755972346e0056 |
+| arima-seasonal-c/ties        | batch  | DIVERGENT    | aa51c6b43366533d | aa51c6b43366533d | aa51c6b43366533d | 920c2f772d238774 |
+| arima-seasonal-c/wide        | infer  | DIVERGENT    | a60f83352adc3c98 | a60f83352adc3c98 | a60f83352adc3c98 | 4e8d7d152e657d21 |
+| arima-seasonal-c/wide        | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | b20ba8deedd6fc2d |
+| arima-seasonal-c/wide        | batch  | DIVERGENT    | 10421c6b3abc2563 | 10421c6b3abc2563 | 10421c6b3abc2563 | c9fbda1ea057894e |
+| arima/base                   | infer  | DIVERGENT    | 9f76be0396a666ca | 9f76be0396a666ca | 9f76be0396a666ca | 8ff14f7006a4ae70 |
+| arima/base                   | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 4ca0c4f897e15925 |
+| arima/base                   | batch  | DIVERGENT    | cef3c859431cbbaf | cef3c859431cbbaf | cef3c859431cbbaf | f95958dba3b0d046 |
+| arima/denormal               | infer  | DIVERGENT    | aab930a9e876ec1e | aab930a9e876ec1e | aab930a9e876ec1e | 7eb45f8e1f3d9c73 |
+| arima/denormal               | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 4451ef6781abca38 |
+| arima/denormal               | batch  | DIVERGENT    | a5e918e8c07deeeb | a5e918e8c07deeeb | a5e918e8c07deeeb | 1257a68dee30204b |
+| arima/denormal_ftz           | infer  | DIVERGENT    | aab930a9e876ec1e | aab930a9e876ec1e | aab930a9e876ec1e | 7eb45f8e1f3d9c73 |
+| arima/denormal_ftz           | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 575b9193256f82ed |
+| arima/denormal_ftz           | batch  | DIVERGENT    | a5e918e8c07deeeb | a5e918e8c07deeeb | a5e918e8c07deeeb | 1257a68dee30204b |
+| arima/dupes                  | infer  | DIVERGENT    | 9f76be0396a666ca | 9f76be0396a666ca | 9f76be0396a666ca | 8ff14f7006a4ae70 |
+| arima/dupes                  | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 4ca0c4f897e15925 |
+| arima/dupes                  | batch  | DIVERGENT    | cef3c859431cbbaf | cef3c859431cbbaf | cef3c859431cbbaf | f95958dba3b0d046 |
+| arima/hashed                 | infer  | DIVERGENT    | 06461dad67cfb784 | 06461dad67cfb784 | 06461dad67cfb784 | 137ad4f926c4ad6b |
+| arima/hashed                 | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 1f2b00542dae0e14 |
+| arima/hashed                 | batch  | DIVERGENT    | 4d744e464df6b3d6 | 4d744e464df6b3d6 | 4d744e464df6b3d6 | f56c42ee8084e8f6 |
+| arima/negative               | infer  | DIVERGENT    | 4e0defb4e0feb99f | 4e0defb4e0feb99f | 4e0defb4e0feb99f | 2df456ea93e3daee |
+| arima/negative               | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | bb25e7f4b8c9ffb3 |
+| arima/negative               | batch  | DIVERGENT    | a00b86402bf13b42 | a00b86402bf13b42 | a00b86402bf13b42 | e244f0e028fc8fcb |
+| arima/odd                    | infer  | DIVERGENT    | 4aa662dbcc728e65 | 4aa662dbcc728e65 | 4aa662dbcc728e65 | b2cd105ff6980135 |
+| arima/odd                    | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | c63b2a5dcaee321a |
+| arima/odd                    | batch  | DIVERGENT    | 8e0a0c4068873ad7 | 8e0a0c4068873ad7 | 8e0a0c4068873ad7 | 0c1e20f22dbbe8b3 |
+| arima/ties                   | infer  | DIVERGENT    | e699bca0934688f0 | e699bca0934688f0 | e699bca0934688f0 | a4a38096b6fafec7 |
+| arima/ties                   | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | d72cc103aa88c720 |
+| arima/ties                   | batch  | DIVERGENT    | 7abdf42416059c68 | 7abdf42416059c68 | 7abdf42416059c68 | 41c9a97af5a23c8f |
+| arima/wide                   | infer  | DIVERGENT    | 956bebc3f45a1c69 | 956bebc3f45a1c69 | 956bebc3f45a1c69 | f2e7390bc129bdce |
+| arima/wide                   | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 6656bfa0084eafda |
+| arima/wide                   | batch  | DIVERGENT    | 9103785606065f64 | 9103785606065f64 | 9103785606065f64 | c48049e5ef61bf24 |
+| pca-full-whiten/base         | infer  | DIVERGENT    | 3ccd30a2642983c5 | 3ccd30a2642983c5 | 3ccd30a2642983c5 | 80830ef90ff4d83e |
+| pca-full-whiten/base         | model  | DIVERGENT    | 54a4ab300cb790c3 | 54a4ab300cb790c3 | 54a4ab300cb790c3 | fe9c2f93241ab0ed |
+| pca-full-whiten/base         | batch  | DIVERGENT    | dbd184bd6ef6cc1b | dbd184bd6ef6cc1b | dbd184bd6ef6cc1b | 4eadd60edd4c4ecb |
+| pca-full-whiten/denormal     | infer  | DIVERGENT    | b535e39677821151 | b535e39677821151 | b535e39677821151 | cb143b0be377593c |
+| pca-full-whiten/denormal     | model  | DIVERGENT    | 56b7dcfd41448c7b | 56b7dcfd41448c7b | 56b7dcfd41448c7b | 8b6733bfe401fcbf |
+| pca-full-whiten/denormal     | batch  | DIVERGENT    | 89b41b67a9542107 | 89b41b67a9542107 | 89b41b67a9542107 | a671d26589ea859d |
+| pca-full-whiten/denormal_ftz | infer  | DIVERGENT    | b535e39677821151 | b535e39677821151 | b535e39677821151 | cb143b0be377593c |
+| pca-full-whiten/denormal_ftz | model  | DIVERGENT    | 56b7dcfd41448c7b | 56b7dcfd41448c7b | 56b7dcfd41448c7b | 8b6733bfe401fcbf |
+| pca-full-whiten/denormal_ftz | batch  | DIVERGENT    | 89b41b67a9542107 | 89b41b67a9542107 | 89b41b67a9542107 | a671d26589ea859d |
+| pca-full-whiten/dupes        | infer  | DIVERGENT    | d43bf917dbd688b3 | d43bf917dbd688b3 | d43bf917dbd688b3 | d8eb9fb31970754d |
+| pca-full-whiten/dupes        | model  | DIVERGENT    | 810988d17082be93 | 810988d17082be93 | 810988d17082be93 | f9e1d3fe8e6182a5 |
+| pca-full-whiten/dupes        | batch  | DIVERGENT    | 4f7124df29a568c4 | 4f7124df29a568c4 | 4f7124df29a568c4 | 58bdb18fdc6dc83c |
+| pca-full-whiten/hashed       | infer  | DIVERGENT    | 4bbd98a59bc7b338 | 4bbd98a59bc7b338 | 4bbd98a59bc7b338 | f12cc87030cdbcd7 |
+| pca-full-whiten/hashed       | model  | DIVERGENT    | 6428a6396b1354a5 | 6428a6396b1354a5 | 6428a6396b1354a5 | e87e533129539823 |
+| pca-full-whiten/hashed       | batch  | DIVERGENT    | 5ebf09d89aabb248 | 5ebf09d89aabb248 | 5ebf09d89aabb248 | 00c237a95a01692d |
+| pca-full-whiten/negative     | infer  | DIVERGENT    | 5cbd3f28356522a4 | 5cbd3f28356522a4 | 5cbd3f28356522a4 | 62c3f5aa9b8e912a |
+| pca-full-whiten/negative     | model  | DIVERGENT    | 5ec1e8221dcfb910 | 5ec1e8221dcfb910 | 5ec1e8221dcfb910 | 9bcd00bed872d1ee |
+| pca-full-whiten/negative     | batch  | DIVERGENT    | d11bc595a9fd062e | d11bc595a9fd062e | d11bc595a9fd062e | e7c70220e96acb34 |
+| pca-full-whiten/odd          | infer  | DIVERGENT    | 9131931086b674f3 | 9131931086b674f3 | 9131931086b674f3 | 38137e67c86ac1f9 |
+| pca-full-whiten/odd          | model  | DIVERGENT    | cee2a2baed48b91d | cee2a2baed48b91d | cee2a2baed48b91d | cb82caaf40508791 |
+| pca-full-whiten/odd          | batch  | DIVERGENT    | 19ef3f7d235f8905 | 19ef3f7d235f8905 | 19ef3f7d235f8905 | 04361ec5457d845e |
+| pca-full-whiten/ties         | infer  | DIVERGENT    | fedaf5cfb53bfb56 | fedaf5cfb53bfb56 | fedaf5cfb53bfb56 | 9f33088fc1888290 |
+| pca-full-whiten/ties         | model  | DIVERGENT    | 86b9349a03a32b9f | 86b9349a03a32b9f | 86b9349a03a32b9f | 80e5a04ad24518a3 |
+| pca-full-whiten/ties         | batch  | DIVERGENT    | daff7b2a4e2e9a91 | daff7b2a4e2e9a91 | daff7b2a4e2e9a91 | 33611036fe7b8d8e |
+| pca-full-whiten/wide         | infer  | DIVERGENT    | 189abcd8ba5402d7 | 189abcd8ba5402d7 | 189abcd8ba5402d7 | 6083b8d354288bba |
+| pca-full-whiten/wide         | model  | DIVERGENT    | 69a5aaf10e20b62b | 69a5aaf10e20b62b | 69a5aaf10e20b62b | 7da3d4b65fb01442 |
+| pca-full-whiten/wide         | batch  | DIVERGENT    | 9510680ddf796f71 | 9510680ddf796f71 | 9510680ddf796f71 | cc8b2f51c235c3c3 |
+| umap/base                    | infer  | DIVERGENT    | 5a4ef62db605973a | 5a4ef62db605973a | 5a4ef62db605973a | 6e273c7716e5ae67 |
+| umap/base                    | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | c6a6f70c17fcf855 |
+| umap/base                    | batch  | N/A          | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo:44,66 batch-mean sigma floor, :141 batch-max edge schedule, :146,154 batch-local RNG edge ordinal; cuML couples the same) |
+| umap/denormal                | infer  | DIVERGENT    | 278fb3d51d1c9b82 | 278fb3d51d1c9b82 | 278fb3d51d1c9b82 | b45f55fa3f65430f |
+| umap/denormal                | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 3492b3c35766c791 |
+| umap/denormal                | batch  | N/A          | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo:44,66 batch-mean sigma floor, :141 batch-max edge schedule, :146,154 batch-local RNG edge ordinal; cuML couples the same) |
+| umap/denormal_ftz            | infer  | DIVERGENT    | 278fb3d51d1c9b82 | 278fb3d51d1c9b82 | 278fb3d51d1c9b82 | b45f55fa3f65430f |
+| umap/denormal_ftz            | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 42aab6f989a37d8e |
+| umap/denormal_ftz            | batch  | N/A          | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo:44,66 batch-mean sigma floor, :141 batch-max edge schedule, :146,154 batch-local RNG edge ordinal; cuML couples the same) |
+| umap/dupes                   | infer  | DIVERGENT    | 5a4ef62db605973a | 5a4ef62db605973a | 5a4ef62db605973a | 6e273c7716e5ae67 |
+| umap/dupes                   | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | c6a6f70c17fcf855 |
+| umap/dupes                   | batch  | N/A          | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo:44,66 batch-mean sigma floor, :141 batch-max edge schedule, :146,154 batch-local RNG edge ordinal; cuML couples the same) |
+| umap/hashed                  | infer  | DIVERGENT    | aa9e7249278630e5 | aa9e7249278630e5 | aa9e7249278630e5 | 7b698579a6939de3 |
+| umap/hashed                  | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 461fec9b725dafd6 |
+| umap/hashed                  | batch  | N/A          | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo:44,66 batch-mean sigma floor, :141 batch-max edge schedule, :146,154 batch-local RNG edge ordinal; cuML couples the same) |
+| umap/negative                | infer  | DIVERGENT    | 96a457e7da0684ae | 96a457e7da0684ae | 96a457e7da0684ae | c6f67f8c347f4f56 |
+| umap/negative                | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 8f4a4bfabfbe012d |
+| umap/negative                | batch  | N/A          | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo:44,66 batch-mean sigma floor, :141 batch-max edge schedule, :146,154 batch-local RNG edge ordinal; cuML couples the same) |
+| umap/odd                     | infer  | DIVERGENT    | 4a46872567fef4d1 | 4a46872567fef4d1 | 4a46872567fef4d1 | f82daf2492d4958b |
+| umap/odd                     | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | cdcb354fe0f7be30 |
+| umap/odd                     | batch  | N/A          | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo:44,66 batch-mean sigma floor, :141 batch-max edge schedule, :146,154 batch-local RNG edge ordinal; cuML couples the same) |
+| umap/ties                    | infer  | DIVERGENT    | cfe8cc2494350a30 | cfe8cc2494350a30 | cfe8cc2494350a30 | 1a86227b078d95b7 |
+| umap/ties                    | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 2111d2a079e445cf |
+| umap/ties                    | batch  | N/A          | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo:44,66 batch-mean sigma floor, :141 batch-max edge schedule, :146,154 batch-local RNG edge ordinal; cuML couples the same) |
+| umap/wide                    | infer  | DIVERGENT    | 99d9533a655689c9 | 99d9533a655689c9 | 99d9533a655689c9 | aa382aba54661e68 |
+| umap/wide                    | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | e403435412d4f924 |
+| umap/wide                    | batch  | N/A          | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo:44,66 batch-mean sigma floor, :141 batch-max edge schedule, :146,154 batch-local RNG edge ordinal; cuML couples the same) |
+
+summary (infer/model): DIVERGENT=54, ONE-COLUMN=36
+summary (batch): DIVERGENT=36, N/A=9
+summary (rlpair): 
+REQUIRE FAIL arima-011/base model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/denormal model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/denormal_ftz model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/dupes model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/hashed model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/negative model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/odd model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/ties model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/wide model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/base model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/denormal model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/denormal_ftz model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/dupes model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/hashed model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/negative model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/odd model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/ties model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/wide model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/base model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/denormal model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/denormal_ftz model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/dupes model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/hashed model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/negative model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/odd model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/ties model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/wide model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL umap/base model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL umap/denormal model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL umap/denormal_ftz model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL umap/dupes model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL umap/hashed model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL umap/negative model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL umap/odd model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL umap/ties model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL umap/wide model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+require-columns 4 over ['arima', 'arima-011', 'arima-seasonal-c', 'pca-full-whiten', 'umap']: 36 short
