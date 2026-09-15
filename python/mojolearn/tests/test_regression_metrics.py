@@ -35,9 +35,19 @@ class Binding:
 
 @pytest.fixture
 def binding(monkeypatch):
+    """Plant the fake for `_mojolearn_metrics` ONLY. Every other name goes to
+    the real resolver: the input path's finiteness check asks
+    `_backend.binding("_mojolearn", mode="identical")` for `all_finite_f32`
+    (`_buffer._native`), and since 97d087fc6 removed its Python fallback a
+    fake answering that lookup refused every call that reached it. Through
+    the real resolver it is the identical base binding on a GPU install and
+    the core host binding on a CPU-only one."""
     fake = Binding()
+    real = _backend.binding
     monkeypatch.setattr(_backend, "default_mode", lambda: "fast")
-    monkeypatch.setattr(_backend, "binding", lambda name, mode=None: fake)
+    monkeypatch.setattr(
+        _backend, "binding",
+        lambda name, mode=None: fake if name == "_mojolearn_metrics" else real(name, mode))
     return fake
 
 
@@ -118,10 +128,15 @@ def test_shared_loader_resolves_live_default_and_explicit_mode(monkeypatch):
     """`_mojolearn_metrics` is identical only (DEVIATION 2490): the live
     default resolves the identical set, an explicit 'identical' does too,
     and any lower tier, explicit or as the process default, refuses BY NAME
-    before `load_set` is reached."""
+    before `load_set` is reached.
+
+    This is the GPU install's resolution, so the CPU-only marker is cleared:
+    on a CPU-only install `binding()` never reaches `load_set` (it serves
+    the host proxy, see the test below)."""
     fake = Binding("identical")
     loaded = []
     current = ["identical"]
+    monkeypatch.setattr(_backend, "_CPU_ONLY", None)
     monkeypatch.setattr(_backend, "default_mode", lambda: current[0])
     # The input path's finiteness check resolves from the identical base
     # binding through the same `binding()`; plant it so this test sees only
@@ -144,3 +159,31 @@ def test_shared_loader_resolves_live_default_and_explicit_mode(monkeypatch):
         with pytest.raises(ValueError, match="tree lanes"):
             metrics.mean_squared_error(x, x, numeric_mode=explicit)
     assert loaded == ["identical", "identical"], "a lower tier reached load_set"
+
+
+def test_cpu_only_install_serves_the_installed_module_without_load_set(monkeypatch):
+    """On a CPU-only install (`_backend._CPU_ONLY` set by `_select_cpu_only`)
+    `binding()` answers with the module installed under the canonical name,
+    the host proxy of the metrics host binding (e3dcae470), and never opens a
+    tier directory; a lower tier still refuses by name before anything
+    resolves."""
+    import sys
+    from mojolearn import _buffer
+    fake = Binding("identical")
+    monkeypatch.setattr(_backend, "_CPU_ONLY", "no GPU binding on this box (test)")
+    monkeypatch.setattr(_backend, "default_mode", lambda: "identical")
+    monkeypatch.setitem(sys.modules, "mojolearn._mojolearn_metrics", fake)
+    monkeypatch.setitem(_buffer._NATIVE, "all_finite_f32", lambda addr, n: 1)
+
+    def load(mode):
+        raise AssertionError(f"load_set({mode!r}) reached on a CPU-only install")
+
+    monkeypatch.setattr(_backend, "load_set", load)
+    x = np.arange(3, dtype=np.float32)
+    assert metrics.mean_squared_error(x, x) == 2.5
+    assert metrics.mean_squared_error(x, x, numeric_mode="identical") == 2.5
+    assert [c[0] for c in fake.calls] == ["mean_squared_error"] * 2
+    for explicit in ("fast", "deterministic"):
+        with pytest.raises(ValueError, match="tree lanes"):
+            metrics.mean_squared_error(x, x, numeric_mode=explicit)
+    assert len(fake.calls) == 2

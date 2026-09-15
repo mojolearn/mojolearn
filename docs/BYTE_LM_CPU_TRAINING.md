@@ -362,7 +362,10 @@ byte LM's. Each also builds from source through
 | svm | `_mojolearn_svm_host.so` | `_mojolearn_svm` | svc, iforest, svc-linear, iforest-tuned, svr, svr-linear | SVC, IsolationForest, SVR (svc) | tools/identity_break.py and tools/classical_host_gate.py (cpu-identity-gate.yml) | yes |
 | trees | `_mojolearn_trees_host.so` | `_mojolearn_trees` | et-clf, et-reg | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
 | rf | `_mojolearn_rf_host.so` | `_mojolearn_rf` | rf-clf, rf-reg | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
-| gp | `_mojolearn_gp_host.so` | `_mojolearn_gp` | gp, gp-matern12, gp-matern32, gp-matern52-ard | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
+| gp | `_mojolearn_gp_host.so` | `_mojolearn_gp` | gp, gp-matern12, gp-matern32, gp-matern52-ard, cholesky | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
+| kernel_methods | `_mojolearn_kernel_methods_host.so` | `_mojolearn_kernel_methods` | rbf-sampler, kernel-ridge, nystroem | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
+| mixture | `_mojolearn_mixture_host.so` | `_mojolearn_mixture` | gmm, gmm-random-init | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
+| hdbscan | `_mojolearn_hdbscan_host.so` | `_mojolearn_hdbscan` | hdbscan, hdbscan-leaf | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
 | gbdt | `_mojolearn_gbdt_host.so` | `_mojolearn_gbdt` | gbdt-symmetric, gbdt-rmse, gbdt-depthwise, gbdt-lossguide, cross-val | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
 | training | `_mojolearn_training_host.so` | `_mojolearn_training` | mlp, optim-sgd, optim-adam-clip, cross-entropy-arms, training-primitives | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
 | resample | `_mojolearn_resample_host.so` | `_mojolearn_resample` | bootstrap, permutation-test, monte-carlo | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
