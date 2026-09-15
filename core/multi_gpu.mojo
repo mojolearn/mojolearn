@@ -30,14 +30,24 @@ def transfer_bytes[dt: DType](source_ctx: DeviceContext, target_ctx: DeviceConte
     comptime if has_amd_gpu_accelerator():
         if cross_device:
             var host = source_ctx.enqueue_create_host_buffer[dt](cells)
-            var sv = source.create_sub_buffer[dt](0, cells)
-            source_ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=sv)
+            # A whole buffer is copied as itself, so a caller's sub-buffer is
+            # never viewed again.
+            if cells == len(source):
+                source_ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=source)
+            else:
+                var sv = source.create_sub_buffer[dt](0, cells)
+                source_ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=sv)
+                source_ctx.synchronize()
+                _ = sv^
             source_ctx.synchronize()
-            var tv = target.create_sub_buffer[dt](0, cells)
-            target_ctx.enqueue_copy(dst_buf=tv, src_ptr=host.unsafe_ptr())
+            if cells == len(target):
+                target_ctx.enqueue_copy(dst_buf=target, src_ptr=host.unsafe_ptr())
+            else:
+                var tv = target.create_sub_buffer[dt](0, cells)
+                target_ctx.enqueue_copy(dst_buf=tv, src_ptr=host.unsafe_ptr())
+                target_ctx.synchronize()
+                _ = tv^
             target_ctx.synchronize()
-            _ = tv^
-            _ = sv^
             _ = host^
             return
     # Unchanged from the call sites this replaces: the device copy and a
