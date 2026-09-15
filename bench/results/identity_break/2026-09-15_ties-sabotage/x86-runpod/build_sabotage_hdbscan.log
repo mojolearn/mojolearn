@@ -1,0 +1,20 @@
+Imported from /root/mojolearn/bindings/_mojolearn_hdbscan_host.mojo:35:
+./bindings/hostptr.mojo:58:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_hdbscan_host.mojo:35:
+./bindings/hostptr.mojo:69:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+/root/mojolearn/bindings/_mojolearn_hdbscan_host.mojo:136:22: warning: assignment to 'n_clusters' was never used; assign to '_' instead?
+    var n_clusters = 0
+                     ^
+/root/mojolearn/bindings/_mojolearn_hdbscan_host.mojo:210:16: warning: assignment to 'n_ex' was never used; assign to '_' instead?
+    var n_ex = 0
+               ^
+built python/mojolearn/host-sabotage/_mojolearn_hdbscan_host.so
+BINCACHE negative-miss+built-uploaded bindings/build_hdbscan_host.sh key=d12a5a6c86781122 seconds=21.0

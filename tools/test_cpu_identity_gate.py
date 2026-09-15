@@ -337,5 +337,93 @@ class BuildListTests(unittest.TestCase):
         self.assertIn('leaves out _mojolearn_ivf_search_host', out.getvalue())
 
 
+class SabotageDefinesTests(unittest.TestCase):
+    """The sabotage host set's per-family defines and the CTR table lanes'
+    saved models, read from python/mojolearn/host_surface.py
+    (lane/cpu-verifier-gaps-7, 2026-09-15)."""
+
+    def setUp(self):
+        self.manifest = gate.load_manifest()
+
+    def test_every_family_carries_the_host_define_and_two_carry_their_own(self):
+        own = {}
+        for family in self.manifest['families']():
+            defines = self.manifest['sabotage_build_defines'](family).split()
+            self.assertEqual(defines[:2], ['-D', 'MOJOLEARN_HOST_SABOTAGE=1'], family)
+            if len(defines) > 2:
+                own[family] = defines[2:]
+        self.assertEqual(own, {'forest': ['-D', 'MOJOLEARN_GBDT_CTR_HOST_SABOTAGE=1'],
+                               'tokenizer': ['-D', 'MOJOLEARN_TOKENIZER_HOST_SABOTAGE=1']})
+
+    def test_lanes_resting_on_their_own_define_are_covered(self):
+        covered = self.manifest['covered_lanes']()
+        for family in self.manifest['GATE_SABOTAGE_OWN_DEFINES']:
+            lanes = self.manifest['family'](family)['training_lanes']
+            self.assertTrue(lanes, f'{family} carries an own sabotage define but covers no lane')
+            self.assertTrue(set(lanes) <= set(covered), family)
+
+    def test_ctr_models_directory_is_the_lanes_directory(self):
+        d = Path(__file__).resolve().parents[1] / self.manifest['GBDT_CTR_MODELS_DIR']
+        for lane in self.manifest['GBDT_CTR_MODEL_LANES']:
+            self.assertTrue(sorted(d.glob(f'{lane}.*.npz')), f'no saved model for {lane} under {d}')
+
+    def test_ctr_saved_model_cpu_model_part_is_na(self):
+        """A CPU column that LOADED the GPU column's file hashes no model
+        part: the sabotage arm could never move the file's hash, and the owed
+        check would fail on it."""
+        text = Path(__file__).with_name('identity_break.py').read_text()
+        body = text.split('def _probe_saved_host(', 1)[1].split('\ndef ', 1)[0]
+        self.assertIn('"n/a:gpu-saved-file', body)
+        self.assertNotIn('_hfile(path)', body)
+        self.assertIn('if reload != infer:', body)
+
+def load_classical_gate():
+    spec = importlib.util.spec_from_file_location(
+        'classical_host_gate', Path(__file__).resolve().parent / 'classical_host_gate.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class SabotageVerdictTests(unittest.TestCase):
+    """classical_host_gate's --expect-mismatch rules (lane/ties-sabotage,
+    2026-09-15). The fixture shape is the one the old IVF arms left: the
+    lane moved on base and stayed EQUAL on ties."""
+
+    def setUp(self):
+        self.verdict = load_classical_gate().sabotage_verdict
+        self.moved = ['ivf/base', 'radius/base', 'radius/ties']
+        self.unmoved = ['ivf/ties']
+
+    def test_every_lane_passes_one_unmoved_fixture(self):
+        verdict, code, _ = self.verdict(False, self.moved, self.unmoved, every_lane=True)
+        self.assertEqual((verdict, code), ('EXPECTED MISMATCH SEEN', 0))
+
+    def test_every_fixture_fails_one_unmoved_fixture(self):
+        verdict, code, lines = self.verdict(False, self.moved, self.unmoved, every_fixture=True)
+        self.assertEqual(code, 1)
+        self.assertEqual(verdict, 'SABOTAGE NOT CAUGHT ON FIXTURES ivf/ties')
+        self.assertIn('check ivf/ties did not move', '\n'.join(lines))
+
+    def test_every_fixture_passes_when_all_move(self):
+        verdict, code, lines = self.verdict(False, self.moved + self.unmoved, [], every_fixture=True)
+        self.assertEqual((verdict, code, lines), ('EXPECTED MISMATCH SEEN', 0, []))
+
+    def test_lane_rule_only_keeps_the_looser_rule_by_name(self):
+        verdict, code, _ = self.verdict(False, self.moved, self.unmoved, every_fixture=True, lane_rule_only=['ivf'])
+        self.assertEqual((verdict, code), ('EXPECTED MISMATCH SEEN', 0))
+        # the exemption names a lane, and does not excuse a lane that moved nowhere
+        verdict, code, _ = self.verdict(False, ['radius/base'], ['ivf/base', 'ivf/ties'],
+                                        every_fixture=True, lane_rule_only=['ivf'])
+        self.assertEqual((verdict, code), ('SABOTAGE NOT CAUGHT ON LANES ivf', 1))
+        verdict, code, _ = self.verdict(False, self.moved, self.unmoved, every_fixture=True, lane_rule_only=['radius'])
+        self.assertEqual(code, 1)
+
+    def test_nothing_moved_is_never_a_catch(self):
+        verdict, code, _ = self.verdict(True, [], ['ivf/base'], every_fixture=True, lane_rule_only=['ivf'])
+        self.assertEqual(code, 1)
+        self.assertNotEqual(verdict, 'EXPECTED MISMATCH SEEN')
+
+
 if __name__ == '__main__':
     unittest.main()

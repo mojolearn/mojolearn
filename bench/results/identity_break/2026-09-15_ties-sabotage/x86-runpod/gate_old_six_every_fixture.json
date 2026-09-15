@@ -1,0 +1,1984 @@
+{
+  "binaries": {
+    "_mojolearn": "/tmp/oldsab/_mojolearn_core_host.so",
+    "_mojolearn_arima": "/tmp/oldsab/_mojolearn_forecast_host.so",
+    "_mojolearn_embedding": "/tmp/oldsab/_mojolearn_embedding_infer_host.so",
+    "_mojolearn_estimators": "/tmp/oldsab/_mojolearn_estimators_host.so",
+    "_mojolearn_gp": "/tmp/oldsab/_mojolearn_gp_infer_host.so",
+    "_mojolearn_hdbscan": "/tmp/oldsab/_mojolearn_hdbscan_infer_host.so",
+    "_mojolearn_ivf": "/tmp/oldsab/_mojolearn_ivf_search_host.so",
+    "_mojolearn_kernel_methods": "/tmp/oldsab/_mojolearn_estimators_host.so",
+    "_mojolearn_metrics": "/tmp/oldsab/_mojolearn_metrics_host.so",
+    "_mojolearn_mixture": "/tmp/oldsab/_mojolearn_mixture_infer_host.so",
+    "_mojolearn_preprocessing": "/tmp/oldsab/_mojolearn_estimators_host.so",
+    "_mojolearn_solver": "/tmp/oldsab/_mojolearn_estimators_host.so",
+    "_mojolearn_svm": "/tmp/oldsab/_mojolearn_svm_host.so",
+    "_mojolearn_tsa": "/tmp/oldsab/_mojolearn_forecast_host.so"
+  },
+  "binary": "/tmp/oldsab/_mojolearn_estimators_host.so",
+  "checked_at": "2026-09-15T22:55:14+0000",
+  "commit": null,
+  "exit": 1,
+  "expect_mismatch": true,
+  "fixtures": [
+    {
+      "cases": [
+        {
+          "case": "list_data",
+          "equal": true,
+          "got": "52a60692ffca4a47f66f0604294a7e438ae87532081d9b1c087bbf89ce0b71c7",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4096,
+            16
+          ],
+          "want": "52a60692ffca4a47f66f0604294a7e438ae87532081d9b1c087bbf89ce0b71c7",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4096,
+            16
+          ]
+        },
+        {
+          "case": "list_indices",
+          "equal": true,
+          "got": "5a126d85066053fa4d19bed480b18a25dd7ee383eab937720d02aa89180b475a",
+          "got_dtype": "<i4",
+          "got_shape": [
+            4096
+          ],
+          "want": "5a126d85066053fa4d19bed480b18a25dd7ee383eab937720d02aa89180b475a",
+          "want_dtype": "<i4",
+          "want_shape": [
+            4096
+          ]
+        },
+        {
+          "case": "search_distances",
+          "equal": false,
+          "got": "4e9c7264614a8a41765a71bbdb7973c948c2f4acd38595b326a8da9015c3809b",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "cb47ead4a848848fda16a31207bf84c05ca7560690ae7b8d79889c037dade2e2",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        },
+        {
+          "case": "search_second_batch_ids",
+          "equal": true,
+          "got": "3a04dd9448c4c23966a12f0ae548b89f60ce9f90fc93f2df4578ce46f693b7ef",
+          "got_dtype": "<i4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "3a04dd9448c4c23966a12f0ae548b89f60ce9f90fc93f2df4578ce46f693b7ef",
+          "want_dtype": "<i4",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "IVFIndex",
+      "identity_hash": {
+        "equal": false,
+        "got": "4f7b030ff5e6cf9c",
+        "want": "f6f71f391727d74a"
+      },
+      "kind": "base",
+      "lane": "ivf-euclidean",
+      "model_sha256": "2c7ef8ed2b7dc5410d9d92f5d62fb23684bc1ce8cf87b27e714228641ffb40cd",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.115317
+    },
+    {
+      "cases": [
+        {
+          "case": "list_data",
+          "equal": true,
+          "got": "71bee9e334b98581c67083daf3febbfc1e7b45989a0eb3b3a2a9c3d4cf4740d5",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4096,
+            16
+          ],
+          "want": "71bee9e334b98581c67083daf3febbfc1e7b45989a0eb3b3a2a9c3d4cf4740d5",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4096,
+            16
+          ]
+        },
+        {
+          "case": "list_indices",
+          "equal": true,
+          "got": "d78a7069b31f669db35a980f78592eccb0b26075fe0739c63145f1f31aa51e4d",
+          "got_dtype": "<i4",
+          "got_shape": [
+            4096
+          ],
+          "want": "d78a7069b31f669db35a980f78592eccb0b26075fe0739c63145f1f31aa51e4d",
+          "want_dtype": "<i4",
+          "want_shape": [
+            4096
+          ]
+        },
+        {
+          "case": "search_distances",
+          "equal": false,
+          "got": "df37f5268f606f6302c17c1ccad3fccd503e032b9eeb002ffdda83dd4edb8a14",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "5f44d681b690b96eacf966f54414f73f6ab374b75a928729d80f603268fc9521",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        },
+        {
+          "case": "search_second_batch_ids",
+          "equal": true,
+          "got": "c6c033b5d68be190f04775ae9f1659bd444566e8a4fbd9064e0f7a556b31c412",
+          "got_dtype": "<i4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "c6c033b5d68be190f04775ae9f1659bd444566e8a4fbd9064e0f7a556b31c412",
+          "want_dtype": "<i4",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "IVFIndex",
+      "identity_hash": {
+        "equal": false,
+        "got": "2b450b0f80d4e8f5",
+        "want": "ab8f3fc0fb8f010c"
+      },
+      "kind": "denormal",
+      "lane": "ivf-euclidean",
+      "model_sha256": "095ed72f60fec6ce46ecea153040d8fa7abbfea7343bb77b00a1fc067e6bdfc9",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.02393
+    },
+    {
+      "cases": [
+        {
+          "case": "list_data",
+          "equal": true,
+          "got": "b29fa2ea98bd0ebf8d60f444c6062f76be91231ee9dc25e2116d89de3fa82448",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4096,
+            16
+          ],
+          "want": "b29fa2ea98bd0ebf8d60f444c6062f76be91231ee9dc25e2116d89de3fa82448",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4096,
+            16
+          ]
+        },
+        {
+          "case": "list_indices",
+          "equal": true,
+          "got": "d78a7069b31f669db35a980f78592eccb0b26075fe0739c63145f1f31aa51e4d",
+          "got_dtype": "<i4",
+          "got_shape": [
+            4096
+          ],
+          "want": "d78a7069b31f669db35a980f78592eccb0b26075fe0739c63145f1f31aa51e4d",
+          "want_dtype": "<i4",
+          "want_shape": [
+            4096
+          ]
+        },
+        {
+          "case": "search_distances",
+          "equal": false,
+          "got": "df37f5268f606f6302c17c1ccad3fccd503e032b9eeb002ffdda83dd4edb8a14",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "5f44d681b690b96eacf966f54414f73f6ab374b75a928729d80f603268fc9521",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        },
+        {
+          "case": "search_second_batch_ids",
+          "equal": true,
+          "got": "c6c033b5d68be190f04775ae9f1659bd444566e8a4fbd9064e0f7a556b31c412",
+          "got_dtype": "<i4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "c6c033b5d68be190f04775ae9f1659bd444566e8a4fbd9064e0f7a556b31c412",
+          "want_dtype": "<i4",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "IVFIndex",
+      "identity_hash": {
+        "equal": false,
+        "got": "2b450b0f80d4e8f5",
+        "want": "ab8f3fc0fb8f010c"
+      },
+      "kind": "denormal_ftz",
+      "lane": "ivf-euclidean",
+      "model_sha256": "5c190ab95e7501cdc4b6dcf50c6c62f02b1c5462ed360e030349693ca8f1f63e",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.023736
+    },
+    {
+      "cases": [
+        {
+          "case": "list_data",
+          "equal": true,
+          "got": "d3e0e9ef217473c3c48cd0f4d5644bd7d2ce89b9760dca9806b0ed7747589f68",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4096,
+            16
+          ],
+          "want": "d3e0e9ef217473c3c48cd0f4d5644bd7d2ce89b9760dca9806b0ed7747589f68",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4096,
+            16
+          ]
+        },
+        {
+          "case": "list_indices",
+          "equal": true,
+          "got": "e0c73e12c2324b7f16fe1167f093dca01f1d2e13b64d006d9d992c64112f602f",
+          "got_dtype": "<i4",
+          "got_shape": [
+            4096
+          ],
+          "want": "e0c73e12c2324b7f16fe1167f093dca01f1d2e13b64d006d9d992c64112f602f",
+          "want_dtype": "<i4",
+          "want_shape": [
+            4096
+          ]
+        },
+        {
+          "case": "search_distances",
+          "equal": false,
+          "got": "a2f58c8f1533608e74376f74da8f5929b3cab29c05db6abb7bbb723aa960d124",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "71f804509137eae810ea69b820ff1a7de28aa4dd27401b8ab403431a77fbcf62",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        },
+        {
+          "case": "search_second_batch_ids",
+          "equal": true,
+          "got": "777851231d6f1452a4ae3865287d26b9b76546453a49c358c062064c2af2677a",
+          "got_dtype": "<i4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "777851231d6f1452a4ae3865287d26b9b76546453a49c358c062064c2af2677a",
+          "want_dtype": "<i4",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "IVFIndex",
+      "identity_hash": {
+        "equal": false,
+        "got": "1262a741aeede393",
+        "want": "5fb3dd756fa6a835"
+      },
+      "kind": "dupes",
+      "lane": "ivf-euclidean",
+      "model_sha256": "1d65036f19dde9e90a5946b73cb3a4098d6b320972d6510ab8cd004b58855dd4",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.023675
+    },
+    {
+      "cases": [
+        {
+          "case": "list_data",
+          "equal": true,
+          "got": "be83f579a22f4db44fc58e1b5443287c4eccd05baaf28336ca77f20fb9d676ef",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4096,
+            16
+          ],
+          "want": "be83f579a22f4db44fc58e1b5443287c4eccd05baaf28336ca77f20fb9d676ef",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4096,
+            16
+          ]
+        },
+        {
+          "case": "list_indices",
+          "equal": true,
+          "got": "e66ca205ea38377a0bd110b1ecd9bdb4a01c930aaba37d119ffd69f27d78313c",
+          "got_dtype": "<i4",
+          "got_shape": [
+            4096
+          ],
+          "want": "e66ca205ea38377a0bd110b1ecd9bdb4a01c930aaba37d119ffd69f27d78313c",
+          "want_dtype": "<i4",
+          "want_shape": [
+            4096
+          ]
+        },
+        {
+          "case": "search_distances",
+          "equal": false,
+          "got": "5dca61f76cd4f1771c167d93d738d664726620223f08679901025c07e49c618e",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "b93f0c34704faf6c1543fc07fe82679d892326f37a07525b5df19aeca13c5002",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        },
+        {
+          "case": "search_second_batch_ids",
+          "equal": true,
+          "got": "3455a673415e2f1728f87c649d4092eaa9c2538224f8ff83b6eb3bd317f6959f",
+          "got_dtype": "<i4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "3455a673415e2f1728f87c649d4092eaa9c2538224f8ff83b6eb3bd317f6959f",
+          "want_dtype": "<i4",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "IVFIndex",
+      "identity_hash": {
+        "equal": false,
+        "got": "bc172e49592a4906",
+        "want": "7d8a8506eeb9a78e"
+      },
+      "kind": "hashed",
+      "lane": "ivf-euclidean",
+      "model_sha256": "1c67c6b91b2e570be1c9b533ff4b08ed80daa2b90c0574979fc8544ddfcbe2f7",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.023495
+    },
+    {
+      "cases": [
+        {
+          "case": "list_data",
+          "equal": true,
+          "got": "b2677a29216da1858de47775895803452210a162c9d1719cf5f59f006d69f49e",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4096,
+            16
+          ],
+          "want": "b2677a29216da1858de47775895803452210a162c9d1719cf5f59f006d69f49e",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4096,
+            16
+          ]
+        },
+        {
+          "case": "list_indices",
+          "equal": true,
+          "got": "1685934e7d788826d0e7c65b5e02ec8a21d9570aaef22c8de16bd9df49c5cae5",
+          "got_dtype": "<i4",
+          "got_shape": [
+            4096
+          ],
+          "want": "1685934e7d788826d0e7c65b5e02ec8a21d9570aaef22c8de16bd9df49c5cae5",
+          "want_dtype": "<i4",
+          "want_shape": [
+            4096
+          ]
+        },
+        {
+          "case": "search_distances",
+          "equal": false,
+          "got": "b04efc10c7db92ebb83bffc7c5883e091759ed87018c2ee55016814df7977e67",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "c1bc41a9906e53af738a40180e54664b45470a8da6b9083c8c6fe5e03acd394f",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        },
+        {
+          "case": "search_second_batch_ids",
+          "equal": true,
+          "got": "59958f6c8c12487b83332fba659e218442963d8becbb46e308c8c0b61da13992",
+          "got_dtype": "<i4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "59958f6c8c12487b83332fba659e218442963d8becbb46e308c8c0b61da13992",
+          "want_dtype": "<i4",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "IVFIndex",
+      "identity_hash": {
+        "equal": false,
+        "got": "ca6b28e8e370e81d",
+        "want": "eacf2587f37d56cb"
+      },
+      "kind": "negative",
+      "lane": "ivf-euclidean",
+      "model_sha256": "65dfdf6d49abc120857d973d2e3bc3a21ceb45b092ad45b41a828c607f788574",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.025644
+    },
+    {
+      "cases": [
+        {
+          "case": "list_data",
+          "equal": true,
+          "got": "ac2bf533e9ddd7473431f718f1fa0cf4d67c01dcfc9f572b57358d7638aec95b",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4096,
+            17
+          ],
+          "want": "ac2bf533e9ddd7473431f718f1fa0cf4d67c01dcfc9f572b57358d7638aec95b",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4096,
+            17
+          ]
+        },
+        {
+          "case": "list_indices",
+          "equal": true,
+          "got": "4a01ca0edc6b11a1716ccab79605552686a80492c66c40eb9024c6ecd8f1c528",
+          "got_dtype": "<i4",
+          "got_shape": [
+            4096
+          ],
+          "want": "4a01ca0edc6b11a1716ccab79605552686a80492c66c40eb9024c6ecd8f1c528",
+          "want_dtype": "<i4",
+          "want_shape": [
+            4096
+          ]
+        },
+        {
+          "case": "search_distances",
+          "equal": false,
+          "got": "ae258ec32c5874525f2dd4b4bb653d854a91ccaf59740500ee3974f77eb71e1a",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "b5428615848a78ecc2a53b3319089fa99f64a6bcab2b0b906a9c9777a2365703",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        },
+        {
+          "case": "search_second_batch_ids",
+          "equal": true,
+          "got": "14fc97d5144681992dff9439f9014d2a75ace3558a5b28af27b51d9435c322f6",
+          "got_dtype": "<i4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "14fc97d5144681992dff9439f9014d2a75ace3558a5b28af27b51d9435c322f6",
+          "want_dtype": "<i4",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "IVFIndex",
+      "identity_hash": {
+        "equal": false,
+        "got": "c360b57ee3cf4766",
+        "want": "247b6a2b733e9ff2"
+      },
+      "kind": "odd",
+      "lane": "ivf-euclidean",
+      "model_sha256": "997e755024716b18a0d7a5b8aa1b8019d6c62d977f30800ca5870c815c473033",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.024618
+    },
+    {
+      "cases": [
+        {
+          "case": "list_data",
+          "equal": true,
+          "got": "667f5d62b7dd3781bd99351f1b210b7ea9f99d37d96becdc903170d3ec3d87ca",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4096,
+            16
+          ],
+          "want": "667f5d62b7dd3781bd99351f1b210b7ea9f99d37d96becdc903170d3ec3d87ca",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4096,
+            16
+          ]
+        },
+        {
+          "case": "list_indices",
+          "equal": true,
+          "got": "da5bc05e9b6feab6cfe0c8d686168fb4415ac2896a2b66b717b10b7f0f435e45",
+          "got_dtype": "<i4",
+          "got_shape": [
+            4096
+          ],
+          "want": "da5bc05e9b6feab6cfe0c8d686168fb4415ac2896a2b66b717b10b7f0f435e45",
+          "want_dtype": "<i4",
+          "want_shape": [
+            4096
+          ]
+        },
+        {
+          "case": "search_distances",
+          "equal": true,
+          "got": "d380e065d77229e57770e831bf5d075ebfa907c8158ea2f9095cd432efe025d4",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "d380e065d77229e57770e831bf5d075ebfa907c8158ea2f9095cd432efe025d4",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        },
+        {
+          "case": "search_second_batch_ids",
+          "equal": true,
+          "got": "3dddac462d0cbb8212ac4d7ce89cee0dbe19e96cfcc8f24e412ebfbbe73b7210",
+          "got_dtype": "<i4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "3dddac462d0cbb8212ac4d7ce89cee0dbe19e96cfcc8f24e412ebfbbe73b7210",
+          "want_dtype": "<i4",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "IVFIndex",
+      "identity_hash": {
+        "equal": true,
+        "got": "6ce659c7ea10311d",
+        "want": "6ce659c7ea10311d"
+      },
+      "kind": "ties",
+      "lane": "ivf-euclidean",
+      "model_sha256": "3632c01ae6112aca780d29fb348124076d8e2e23878d276463649b9c382f121d",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.041833
+    },
+    {
+      "cases": [
+        {
+          "case": "list_data",
+          "equal": true,
+          "got": "d1abb4e50fbee5c7998aeb2dfebd64927a9ea1a00b897ec76cb50dcd16afe737",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4096,
+            16
+          ],
+          "want": "d1abb4e50fbee5c7998aeb2dfebd64927a9ea1a00b897ec76cb50dcd16afe737",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4096,
+            16
+          ]
+        },
+        {
+          "case": "list_indices",
+          "equal": true,
+          "got": "9425ceb958d406f7fb9e3e7fe5efaca50ee0a29aeb1ee8309283e54ac49b5377",
+          "got_dtype": "<i4",
+          "got_shape": [
+            4096
+          ],
+          "want": "9425ceb958d406f7fb9e3e7fe5efaca50ee0a29aeb1ee8309283e54ac49b5377",
+          "want_dtype": "<i4",
+          "want_shape": [
+            4096
+          ]
+        },
+        {
+          "case": "search_distances",
+          "equal": false,
+          "got": "ffd2a3f7ceb2619e575980e0bf4ca4ab913fcfd8e10a5589752188989669a7de",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "8b5d02a140111e711f980dca47d3b5fa6453f389020f08eff22ed243a42ece9d",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        },
+        {
+          "case": "search_second_batch_ids",
+          "equal": true,
+          "got": "4f0ca2b0a1a0dbb662d3966f46478e60ffa3474dc29a8941297fecfa7a4d535b",
+          "got_dtype": "<i4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "4f0ca2b0a1a0dbb662d3966f46478e60ffa3474dc29a8941297fecfa7a4d535b",
+          "want_dtype": "<i4",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "IVFIndex",
+      "identity_hash": {
+        "equal": false,
+        "got": "0d8a53b207503e02",
+        "want": "ee34cd995ead59ba"
+      },
+      "kind": "wide",
+      "lane": "ivf-euclidean",
+      "model_sha256": "74da9b4decbbf211fb760b3d71c383a2a3af594a0362e4e341bac2aece095a0a",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.032545
+    },
+    {
+      "cases": [
+        {
+          "case": "list_data",
+          "equal": true,
+          "got": "06aac5cb34d00cb4d9b42ad6b1278de2feba6328d39d61ce91460c975650a05e",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4096,
+            16
+          ],
+          "want": "06aac5cb34d00cb4d9b42ad6b1278de2feba6328d39d61ce91460c975650a05e",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4096,
+            16
+          ]
+        },
+        {
+          "case": "list_indices",
+          "equal": true,
+          "got": "8e0999c3c9e2b6d10eef0986ec9e6a64ab57ca4dc5ff4b91668a4a75e608a6fc",
+          "got_dtype": "<i4",
+          "got_shape": [
+            4096
+          ],
+          "want": "8e0999c3c9e2b6d10eef0986ec9e6a64ab57ca4dc5ff4b91668a4a75e608a6fc",
+          "want_dtype": "<i4",
+          "want_shape": [
+            4096
+          ]
+        },
+        {
+          "case": "search_distances",
+          "equal": false,
+          "got": "1dd7ef3b8921c1dbbe754bc575722984a7e5113cf39080f8d1f42c6e1b557da7",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "24c645ef1e78c8ceb746c504397ccc72e94a7492b3ec8374712a35dce3a8e28d",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        },
+        {
+          "case": "search_second_batch_ids",
+          "equal": true,
+          "got": "107ae8d3ec8de9bdccf1506f73761e3d342fd7155566e1eda44a2419d6576ff1",
+          "got_dtype": "<i4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "107ae8d3ec8de9bdccf1506f73761e3d342fd7155566e1eda44a2419d6576ff1",
+          "want_dtype": "<i4",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "IVFIndex",
+      "identity_hash": {
+        "equal": false,
+        "got": "c5a7211e59623bc4",
+        "want": "fd6eed35b1338d17"
+      },
+      "kind": "base",
+      "lane": "ivf",
+      "model_sha256": "dcfefe31adc21c6c62d48359e7ca9253f176937f75cf938e9f46d5c7fb79db79",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.023482
+    },
+    {
+      "cases": [
+        {
+          "case": "list_data",
+          "equal": true,
+          "got": "27e7e68b4fe2b233626c155361cc8f9f6f1a39d3287e34637779c7e644cb911c",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4096,
+            16
+          ],
+          "want": "27e7e68b4fe2b233626c155361cc8f9f6f1a39d3287e34637779c7e644cb911c",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4096,
+            16
+          ]
+        },
+        {
+          "case": "list_indices",
+          "equal": true,
+          "got": "df8c995616f4b49372c2f9f8d50f46ce1e3aebc5ea66d99fa60b52c8786a280f",
+          "got_dtype": "<i4",
+          "got_shape": [
+            4096
+          ],
+          "want": "df8c995616f4b49372c2f9f8d50f46ce1e3aebc5ea66d99fa60b52c8786a280f",
+          "want_dtype": "<i4",
+          "want_shape": [
+            4096
+          ]
+        },
+        {
+          "case": "search_distances",
+          "equal": false,
+          "got": "49f3e80203c340f382055f6c95d6810116aa2279668f774327f2e7906e735156",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "fccb6d29996114e9f22fb1fb0dadab48d5bfdf4f2ddcd4a48ea6053deed74739",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        },
+        {
+          "case": "search_second_batch_ids",
+          "equal": true,
+          "got": "29692e8e4b8ae4de6c21317910ee04d35f5400acdc0d439c9c6de38ed51fb51c",
+          "got_dtype": "<i4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "29692e8e4b8ae4de6c21317910ee04d35f5400acdc0d439c9c6de38ed51fb51c",
+          "want_dtype": "<i4",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "IVFIndex",
+      "identity_hash": {
+        "equal": false,
+        "got": "d284171e5a4de109",
+        "want": "3ff4c07c575048cf"
+      },
+      "kind": "denormal",
+      "lane": "ivf",
+      "model_sha256": "c3a1727313e239837c368887d47ff4da75a61ab08419e3ac72ffaf56b56292ad",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.023662
+    },
+    {
+      "cases": [
+        {
+          "case": "list_data",
+          "equal": true,
+          "got": "00a542d799a5f9bb950b8be4056693288501c2e2c06818efa7515592e07c6df9",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4096,
+            16
+          ],
+          "want": "00a542d799a5f9bb950b8be4056693288501c2e2c06818efa7515592e07c6df9",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4096,
+            16
+          ]
+        },
+        {
+          "case": "list_indices",
+          "equal": true,
+          "got": "df8c995616f4b49372c2f9f8d50f46ce1e3aebc5ea66d99fa60b52c8786a280f",
+          "got_dtype": "<i4",
+          "got_shape": [
+            4096
+          ],
+          "want": "df8c995616f4b49372c2f9f8d50f46ce1e3aebc5ea66d99fa60b52c8786a280f",
+          "want_dtype": "<i4",
+          "want_shape": [
+            4096
+          ]
+        },
+        {
+          "case": "search_distances",
+          "equal": false,
+          "got": "49f3e80203c340f382055f6c95d6810116aa2279668f774327f2e7906e735156",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "fccb6d29996114e9f22fb1fb0dadab48d5bfdf4f2ddcd4a48ea6053deed74739",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        },
+        {
+          "case": "search_second_batch_ids",
+          "equal": true,
+          "got": "29692e8e4b8ae4de6c21317910ee04d35f5400acdc0d439c9c6de38ed51fb51c",
+          "got_dtype": "<i4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "29692e8e4b8ae4de6c21317910ee04d35f5400acdc0d439c9c6de38ed51fb51c",
+          "want_dtype": "<i4",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "IVFIndex",
+      "identity_hash": {
+        "equal": false,
+        "got": "d284171e5a4de109",
+        "want": "3ff4c07c575048cf"
+      },
+      "kind": "denormal_ftz",
+      "lane": "ivf",
+      "model_sha256": "1f2b8dd1cf726bc0db6d26adbcbadefdb0dd08f652ad1ee1f37eb6adf9a75d72",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.023685
+    },
+    {
+      "cases": [
+        {
+          "case": "list_data",
+          "equal": true,
+          "got": "0ab8708bd310994179512f5e1759618c34b325cdd3a4616f29ca930051888158",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4096,
+            16
+          ],
+          "want": "0ab8708bd310994179512f5e1759618c34b325cdd3a4616f29ca930051888158",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4096,
+            16
+          ]
+        },
+        {
+          "case": "list_indices",
+          "equal": true,
+          "got": "fc8a37bf493aa11249fc35ad1b26b8fddd55eae33018a988ef18172dc3da00a5",
+          "got_dtype": "<i4",
+          "got_shape": [
+            4096
+          ],
+          "want": "fc8a37bf493aa11249fc35ad1b26b8fddd55eae33018a988ef18172dc3da00a5",
+          "want_dtype": "<i4",
+          "want_shape": [
+            4096
+          ]
+        },
+        {
+          "case": "search_distances",
+          "equal": false,
+          "got": "afc45a959bdc69517c75889daa0e6ab33e487f5ee9384bb019526ba05a23e507",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "e3d410ebd35ff66ecf74ce6a318ebec6b572cd47c347032ae241307b74e5e5bf",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        },
+        {
+          "case": "search_second_batch_ids",
+          "equal": true,
+          "got": "c95f7316f7b314e70eef424e2b3748f5e9c40f25342af0311676e2d46cba11a1",
+          "got_dtype": "<i4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "c95f7316f7b314e70eef424e2b3748f5e9c40f25342af0311676e2d46cba11a1",
+          "want_dtype": "<i4",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "IVFIndex",
+      "identity_hash": {
+        "equal": false,
+        "got": "03577b0936dc1639",
+        "want": "4ae50eab359ba1e9"
+      },
+      "kind": "dupes",
+      "lane": "ivf",
+      "model_sha256": "3163ed44a2b28c0787b42e5833ac12845d6dfc71e201e8bcdbfd4849de7614aa",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.023751
+    },
+    {
+      "cases": [
+        {
+          "case": "list_data",
+          "equal": true,
+          "got": "df4e0ac498c22e75c8bace0759891e33cd529aebc5645998cab5c83b867a5278",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4096,
+            16
+          ],
+          "want": "df4e0ac498c22e75c8bace0759891e33cd529aebc5645998cab5c83b867a5278",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4096,
+            16
+          ]
+        },
+        {
+          "case": "list_indices",
+          "equal": true,
+          "got": "609f19b5e8e01a297030d329d515e1ee0476c9a9c6b42c8ac46663538f1c7e34",
+          "got_dtype": "<i4",
+          "got_shape": [
+            4096
+          ],
+          "want": "609f19b5e8e01a297030d329d515e1ee0476c9a9c6b42c8ac46663538f1c7e34",
+          "want_dtype": "<i4",
+          "want_shape": [
+            4096
+          ]
+        },
+        {
+          "case": "search_distances",
+          "equal": false,
+          "got": "f4b1b59aad653ee4de66b595a1930fab43d0ad2143ce6b119e815eeac883d638",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "e3f5ecf328f3844ec9052aded0904355c36dea1d0f4b820120b1fe9f8c8a7ad6",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        },
+        {
+          "case": "search_second_batch_ids",
+          "equal": true,
+          "got": "deb5867724a4e4dfcce06fb03f5c26ad01a991411892e3aaf0b6dad3befc2e2e",
+          "got_dtype": "<i4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "deb5867724a4e4dfcce06fb03f5c26ad01a991411892e3aaf0b6dad3befc2e2e",
+          "want_dtype": "<i4",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "IVFIndex",
+      "identity_hash": {
+        "equal": false,
+        "got": "50e1498c71302757",
+        "want": "49c22df302ee0334"
+      },
+      "kind": "hashed",
+      "lane": "ivf",
+      "model_sha256": "9d809fde4ffc96ccf1d93fc62b2d985edea0ace752c27a1870565af5319acd88",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.023492
+    },
+    {
+      "cases": [
+        {
+          "case": "list_data",
+          "equal": true,
+          "got": "13d7898c09dec113765cc73bc6c1b77d57762e10d8c131442a866bce5d2bc623",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4096,
+            16
+          ],
+          "want": "13d7898c09dec113765cc73bc6c1b77d57762e10d8c131442a866bce5d2bc623",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4096,
+            16
+          ]
+        },
+        {
+          "case": "list_indices",
+          "equal": true,
+          "got": "738bb41f33677d1f01161bc30372f01df5e28bc6f70783748f8a0d369d22a95b",
+          "got_dtype": "<i4",
+          "got_shape": [
+            4096
+          ],
+          "want": "738bb41f33677d1f01161bc30372f01df5e28bc6f70783748f8a0d369d22a95b",
+          "want_dtype": "<i4",
+          "want_shape": [
+            4096
+          ]
+        },
+        {
+          "case": "search_distances",
+          "equal": false,
+          "got": "0e731f60581d611ef7d7f2b07247c2d17c2171a14a8592b7dbbe8cbe1c4b0e8f",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "35f7962c6093d94962dc8456f78fdf0f3af9e32209ed9a10aabb9ba748fdb1f8",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        },
+        {
+          "case": "search_second_batch_ids",
+          "equal": true,
+          "got": "f78a7864b252908a9841c428704793d6c836a26c744f431fc65d015fe67e0cbc",
+          "got_dtype": "<i4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "f78a7864b252908a9841c428704793d6c836a26c744f431fc65d015fe67e0cbc",
+          "want_dtype": "<i4",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "IVFIndex",
+      "identity_hash": {
+        "equal": false,
+        "got": "8cb4835ef89a86da",
+        "want": "71333eccc89915b1"
+      },
+      "kind": "negative",
+      "lane": "ivf",
+      "model_sha256": "ec79d31b3169a98460af79211e31a8ff5fad28b6a2d34f091faff0cd3235784b",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.024167
+    },
+    {
+      "cases": [
+        {
+          "case": "list_data",
+          "equal": true,
+          "got": "f04d517da579b9d1d432d5fa38be50085e41f84fd9ce5a91d7f7ca6b1547d1ff",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4096,
+            17
+          ],
+          "want": "f04d517da579b9d1d432d5fa38be50085e41f84fd9ce5a91d7f7ca6b1547d1ff",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4096,
+            17
+          ]
+        },
+        {
+          "case": "list_indices",
+          "equal": true,
+          "got": "03e598ed9b79d8225e87c8605f76c880fb5ae83324bf4fa6b8fc06fc1dbe6aed",
+          "got_dtype": "<i4",
+          "got_shape": [
+            4096
+          ],
+          "want": "03e598ed9b79d8225e87c8605f76c880fb5ae83324bf4fa6b8fc06fc1dbe6aed",
+          "want_dtype": "<i4",
+          "want_shape": [
+            4096
+          ]
+        },
+        {
+          "case": "search_distances",
+          "equal": false,
+          "got": "2ae357e5c325cb8df3c8355bf754220b78a4a929ae51065610e7920641d7a6c0",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "0155b8caf3ed04d42e6076c84efc91cabcb3601164b3a36c4ce17c91eac8d431",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        },
+        {
+          "case": "search_second_batch_ids",
+          "equal": true,
+          "got": "8a25d1fcb66f67444052ba05ec865bd11de2df4398f127798657ce4c9db9818e",
+          "got_dtype": "<i4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "8a25d1fcb66f67444052ba05ec865bd11de2df4398f127798657ce4c9db9818e",
+          "want_dtype": "<i4",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "IVFIndex",
+      "identity_hash": {
+        "equal": false,
+        "got": "2c6b2d53394c2d77",
+        "want": "1e0c2401db49a53d"
+      },
+      "kind": "odd",
+      "lane": "ivf",
+      "model_sha256": "2ab1fd5fac4563e2e532fd74ac1cf8623a9cdc3c31b117f8a20ece844fd72885",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.024329
+    },
+    {
+      "cases": [
+        {
+          "case": "list_data",
+          "equal": true,
+          "got": "e2462eb9ed0a57b6829efd6a2350b2212219d88404ff8d4d987e0e2017606400",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4096,
+            16
+          ],
+          "want": "e2462eb9ed0a57b6829efd6a2350b2212219d88404ff8d4d987e0e2017606400",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4096,
+            16
+          ]
+        },
+        {
+          "case": "list_indices",
+          "equal": true,
+          "got": "dad928ff4663eb652e65329e7c925fe69b6bc3b9dbf6e2970dd07c83024105d3",
+          "got_dtype": "<i4",
+          "got_shape": [
+            4096
+          ],
+          "want": "dad928ff4663eb652e65329e7c925fe69b6bc3b9dbf6e2970dd07c83024105d3",
+          "want_dtype": "<i4",
+          "want_shape": [
+            4096
+          ]
+        },
+        {
+          "case": "search_distances",
+          "equal": true,
+          "got": "f9c3d9a20692b075fef91ef6ee91978a0b12160499b6a52b3533b11850f7a14b",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "f9c3d9a20692b075fef91ef6ee91978a0b12160499b6a52b3533b11850f7a14b",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        },
+        {
+          "case": "search_second_batch_ids",
+          "equal": true,
+          "got": "bed27250252b2066485a338ce15b55137680cc6cc9892a0291d48abbe1b71664",
+          "got_dtype": "<i4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "bed27250252b2066485a338ce15b55137680cc6cc9892a0291d48abbe1b71664",
+          "want_dtype": "<i4",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "IVFIndex",
+      "identity_hash": {
+        "equal": true,
+        "got": "c62b1be91d40fc43",
+        "want": "c62b1be91d40fc43"
+      },
+      "kind": "ties",
+      "lane": "ivf",
+      "model_sha256": "2254dcdb3f209c1df3b12091585cb1ac10cd11136daaade6dbd349aaf2145e27",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.041883
+    },
+    {
+      "cases": [
+        {
+          "case": "list_data",
+          "equal": true,
+          "got": "43ada4ffcc3c6706d62e1cc7485f2161a7eb8d34ef195e52cba143440267cfc1",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4096,
+            16
+          ],
+          "want": "43ada4ffcc3c6706d62e1cc7485f2161a7eb8d34ef195e52cba143440267cfc1",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4096,
+            16
+          ]
+        },
+        {
+          "case": "list_indices",
+          "equal": true,
+          "got": "03d25d10451ae89673a86ac26a7eb0486e78988e4e0454700927053576d4103b",
+          "got_dtype": "<i4",
+          "got_shape": [
+            4096
+          ],
+          "want": "03d25d10451ae89673a86ac26a7eb0486e78988e4e0454700927053576d4103b",
+          "want_dtype": "<i4",
+          "want_shape": [
+            4096
+          ]
+        },
+        {
+          "case": "search_distances",
+          "equal": false,
+          "got": "41d25e5ac8e6c64d022bf8f8804ccb56b78fce271b958b2b050295b72b7b619f",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "45ca8c54c2e1b3bc843e0952216b0bec5a69e714fa72725641ded174a3976c40",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        },
+        {
+          "case": "search_second_batch_ids",
+          "equal": true,
+          "got": "4f0ca2b0a1a0dbb662d3966f46478e60ffa3474dc29a8941297fecfa7a4d535b",
+          "got_dtype": "<i4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "4f0ca2b0a1a0dbb662d3966f46478e60ffa3474dc29a8941297fecfa7a4d535b",
+          "want_dtype": "<i4",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "IVFIndex",
+      "identity_hash": {
+        "equal": false,
+        "got": "b0699db536ad83be",
+        "want": "2bfe5d9bde8a2564"
+      },
+      "kind": "wide",
+      "lane": "ivf",
+      "model_sha256": "809bc63c73b2c0930d4ff3c8346ba07bcb89da2bd08be4a8b30d4a4221b21f2c",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.026827
+    },
+    {
+      "cases": [
+        {
+          "case": "kneighbors_distances",
+          "equal": false,
+          "got": "0e4783ffa1f4a768174c3c4c6c3bc1fd90acffb97268888b18541785428b44bd",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "c225f2d38f0c4946992022749c9bcc627135909a2a86b83a72d2c003e0254054",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        },
+        {
+          "case": "kneighbors_indices",
+          "equal": true,
+          "got": "0bf15978f5cc21217ba2d4dcb2216b83236d72c41740f27830c9d73251a9d13a",
+          "got_dtype": "<i8",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "0bf15978f5cc21217ba2d4dcb2216b83236d72c41740f27830c9d73251a9d13a",
+          "want_dtype": "<i8",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "NearestNeighbors",
+      "identity_hash": {
+        "equal": false,
+        "got": "b182831ece764a8a",
+        "want": "45f87790aaba81b4"
+      },
+      "kind": "base",
+      "lane": "knn-cosine",
+      "model_sha256": "a6427c8352b608b887ca95d2db50d8af3438bc17d69556c307b389c849aa47ed",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.04331
+    },
+    {
+      "cases": [
+        {
+          "case": "kneighbors_distances",
+          "equal": false,
+          "got": "aa85b8104eb01ff9b9b332ef752480a60bc26d36042d66be36d2d494b0441d9e",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "5a4a3ab15daddcb6444560428de0ba831bc57c0359be06c238f8ad6a60e9509b",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        },
+        {
+          "case": "kneighbors_indices",
+          "equal": true,
+          "got": "7332bd5b416fbc9cf4e4f6065df246c78748dd3f97dde3a5889a2b10a415fd50",
+          "got_dtype": "<i8",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "7332bd5b416fbc9cf4e4f6065df246c78748dd3f97dde3a5889a2b10a415fd50",
+          "want_dtype": "<i8",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "NearestNeighbors",
+      "identity_hash": {
+        "equal": false,
+        "got": "723470a9c2187373",
+        "want": "ed02b98206dc7b42"
+      },
+      "kind": "dupes",
+      "lane": "knn-cosine",
+      "model_sha256": "8b93c8f69f7f0dc1af52779d59ee800ded4d71aff6ae4d2360d9d4940f3f3dc1",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.042627
+    },
+    {
+      "cases": [
+        {
+          "case": "kneighbors_distances",
+          "equal": true,
+          "got": "4d543bb6c710d2f58e531d0853f028aa8962b06a06029ae7b88541dd4f4e5d3a",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "4d543bb6c710d2f58e531d0853f028aa8962b06a06029ae7b88541dd4f4e5d3a",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        },
+        {
+          "case": "kneighbors_indices",
+          "equal": true,
+          "got": "215e7263be89d857690db575765c46c7ce2812becfc161e5ec73e8c412d4934a",
+          "got_dtype": "<i8",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "215e7263be89d857690db575765c46c7ce2812becfc161e5ec73e8c412d4934a",
+          "want_dtype": "<i8",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "NearestNeighbors",
+      "identity_hash": {
+        "equal": true,
+        "got": "ef08d9ae912ae104",
+        "want": "ef08d9ae912ae104"
+      },
+      "kind": "ties",
+      "lane": "knn-cosine",
+      "model_sha256": "af099d8dc056f48b5e29767ee219f74c967f02cc3022fc7e27aa622c39fdd34f",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.134964
+    },
+    {
+      "cases": [
+        {
+          "case": "kneighbors_distances",
+          "equal": false,
+          "got": "74395243fa84cada8059e843076813582fe7d3bf2ed36babe0243ddcbe72afee",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "08140346caf789b338985372740a702656b125d1188b74ce69f9e3f36eece68a",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        },
+        {
+          "case": "kneighbors_indices",
+          "equal": true,
+          "got": "04b93c070a3589038db8d86a53ed10a01ef8b6aa125d2f0c82877920af8aab19",
+          "got_dtype": "<i8",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "04b93c070a3589038db8d86a53ed10a01ef8b6aa125d2f0c82877920af8aab19",
+          "want_dtype": "<i8",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "NearestNeighbors",
+      "identity_hash": {
+        "equal": false,
+        "got": "c333a72e5cd41499",
+        "want": "94547b3dc58e2d86"
+      },
+      "kind": "base",
+      "lane": "knn-rbc",
+      "model_sha256": "88fe338f22e892ce102dd4fd778a866437c19c20898903e172cb3bc39f51df57",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.030079
+    },
+    {
+      "cases": [
+        {
+          "case": "kneighbors_distances",
+          "equal": false,
+          "got": "d9a67e3c35ad7fe9b33585f2289272060abca99aa77f6de94d7fbd68f6ec0912",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "6b780f139dc1acd3d2dfbea8eb02340838972d61aeffdf3cfe41ffba73718794",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        },
+        {
+          "case": "kneighbors_indices",
+          "equal": true,
+          "got": "377e1835cc559b72efb3af295a7191ebaed81c2c98b2a519a2a9e32db54ef693",
+          "got_dtype": "<i8",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "377e1835cc559b72efb3af295a7191ebaed81c2c98b2a519a2a9e32db54ef693",
+          "want_dtype": "<i8",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "NearestNeighbors",
+      "identity_hash": {
+        "equal": false,
+        "got": "faddd503d1f5891d",
+        "want": "590cec8ee362b9d0"
+      },
+      "kind": "dupes",
+      "lane": "knn-rbc",
+      "model_sha256": "71980f97cd4c3be79050df818a397b2e639f380631e09c96a6b82bcd282069f9",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.02973
+    },
+    {
+      "cases": [
+        {
+          "case": "kneighbors_distances",
+          "equal": true,
+          "got": "d02c0dfa9406459e2fdd51d66fbaffb13967980f096c5a4f119b918393a7142d",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "d02c0dfa9406459e2fdd51d66fbaffb13967980f096c5a4f119b918393a7142d",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        },
+        {
+          "case": "kneighbors_indices",
+          "equal": true,
+          "got": "76d7c0886140718ae5ed58b7035ca12b26cc9311b75968cccc815b57f037372a",
+          "got_dtype": "<i8",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "76d7c0886140718ae5ed58b7035ca12b26cc9311b75968cccc815b57f037372a",
+          "want_dtype": "<i8",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "NearestNeighbors",
+      "identity_hash": {
+        "equal": true,
+        "got": "234e9e649f45c983",
+        "want": "234e9e649f45c983"
+      },
+      "kind": "ties",
+      "lane": "knn-rbc",
+      "model_sha256": "0184787f1d03ee52ac4030129df5f003e955751790d1e787bf7d2076ec89387e",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.09113
+    },
+    {
+      "cases": [
+        {
+          "case": "radius_neighbors_counts",
+          "equal": true,
+          "got": "9bb53c961c18cee14698441da0ed4f22ebe8b6073e476a7cd4e97857a557f5d8",
+          "got_dtype": "int64",
+          "got_shape": [
+            64
+          ],
+          "want": "9bb53c961c18cee14698441da0ed4f22ebe8b6073e476a7cd4e97857a557f5d8",
+          "want_dtype": "int64",
+          "want_shape": [
+            64
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "RadiusNeighbors",
+      "identity_hash": {
+        "equal": false,
+        "got": "3178dabc72e296bb",
+        "want": "51e361a7911b9eb7"
+      },
+      "kind": "base",
+      "lane": "radius-manhattan",
+      "model_sha256": "a57f1f07d75f73e1fc87bf0e7c4bd52f4277ac8ed2985c6fee710bdb21e0e73e",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.033375
+    },
+    {
+      "cases": [
+        {
+          "case": "radius_neighbors_counts",
+          "equal": true,
+          "got": "07acedcd9147efbcf85ed47b7fde2488607df9eafca68f693756457487a854ad",
+          "got_dtype": "int64",
+          "got_shape": [
+            64
+          ],
+          "want": "07acedcd9147efbcf85ed47b7fde2488607df9eafca68f693756457487a854ad",
+          "want_dtype": "int64",
+          "want_shape": [
+            64
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "RadiusNeighbors",
+      "identity_hash": {
+        "equal": false,
+        "got": "6fbfa7d61edcb0e0",
+        "want": "b3ebfcda94a96aa3"
+      },
+      "kind": "dupes",
+      "lane": "radius-manhattan",
+      "model_sha256": "d1c5d251599b18300a9eefc002080e6bb1e30efc083e2b3ebd8287370c4cb126",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.033211
+    },
+    {
+      "cases": [
+        {
+          "case": "radius_neighbors_counts",
+          "equal": true,
+          "got": "7fb13696b9e716db8a1949925f8ec15be4c8d5945d4df1c9abccb3d3e51f3c31",
+          "got_dtype": "int64",
+          "got_shape": [
+            64
+          ],
+          "want": "7fb13696b9e716db8a1949925f8ec15be4c8d5945d4df1c9abccb3d3e51f3c31",
+          "want_dtype": "int64",
+          "want_shape": [
+            64
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "RadiusNeighbors",
+      "identity_hash": {
+        "equal": true,
+        "got": "c641c75dd063a967",
+        "want": "c641c75dd063a967"
+      },
+      "kind": "ties",
+      "lane": "radius-manhattan",
+      "model_sha256": "d893a0c29ba99797888d608c087bea1f09c617f8e26aaa90af3e36e602eb033f",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.110847
+    },
+    {
+      "cases": [
+        {
+          "case": "radius_neighbors_counts",
+          "equal": true,
+          "got": "f5e41cec17190606fa43c0485c3231aa8f8f098e46afa6fa1a4ea8655a188027",
+          "got_dtype": "int64",
+          "got_shape": [
+            64
+          ],
+          "want": "f5e41cec17190606fa43c0485c3231aa8f8f098e46afa6fa1a4ea8655a188027",
+          "want_dtype": "int64",
+          "want_shape": [
+            64
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "RadiusNeighbors",
+      "identity_hash": {
+        "equal": false,
+        "got": "7f1f617b0b1360de",
+        "want": "3eb3a2ab621fbb97"
+      },
+      "kind": "base",
+      "lane": "radius",
+      "model_sha256": "2ee81955e923d21fe8084764ffe120b8988eda0bd16976ae091d9a3299718ce4",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.033277
+    },
+    {
+      "cases": [
+        {
+          "case": "radius_neighbors_counts",
+          "equal": true,
+          "got": "5d192ef6e30c82ad7f5ccfac1fa7afadfb81d68e3628e4d8332c8b0995e6833e",
+          "got_dtype": "int64",
+          "got_shape": [
+            64
+          ],
+          "want": "5d192ef6e30c82ad7f5ccfac1fa7afadfb81d68e3628e4d8332c8b0995e6833e",
+          "want_dtype": "int64",
+          "want_shape": [
+            64
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "RadiusNeighbors",
+      "identity_hash": {
+        "equal": false,
+        "got": "430a6fd062ddcb9f",
+        "want": "469e7731aa72a0fd"
+      },
+      "kind": "dupes",
+      "lane": "radius",
+      "model_sha256": "5167cd08ec11b8bd2d65e300a37fbee0d28204d4d0d6569fc078ac6e95b440c3",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.033076
+    },
+    {
+      "cases": [
+        {
+          "case": "radius_neighbors_counts",
+          "equal": true,
+          "got": "2a96101d2abd2592a825eca57a601067b9ab1425476ed96f7be2b089b6909dab",
+          "got_dtype": "int64",
+          "got_shape": [
+            64
+          ],
+          "want": "2a96101d2abd2592a825eca57a601067b9ab1425476ed96f7be2b089b6909dab",
+          "want_dtype": "int64",
+          "want_shape": [
+            64
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "RadiusNeighbors",
+      "identity_hash": {
+        "equal": true,
+        "got": "5f3eec45e2afb437",
+        "want": "5f3eec45e2afb437"
+      },
+      "kind": "ties",
+      "lane": "radius",
+      "model_sha256": "57306f414d5af0b443a04abd7c7d5ec402f5131e504e571736c33f44a81e6824",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.093917
+    }
+  ],
+  "gpu_columns": [],
+  "host": {
+    "cpu": "AMD EPYC 9754 128-Core Processor",
+    "family": "25",
+    "isa": [
+      "avx2",
+      "avx512f",
+      "fma"
+    ],
+    "machine": "x86_64",
+    "model": "160",
+    "python": "3.14.7",
+    "release": "5.15.0-94-generic",
+    "stepping": "2",
+    "system": "Linux",
+    "vendor": "AuthenticAMD"
+  },
+  "unmoved": [
+    "ivf-euclidean/ties",
+    "ivf/ties",
+    "knn-cosine/ties",
+    "knn-rbc/ties",
+    "radius-manhattan/ties",
+    "radius/ties"
+  ],
+  "vendor": "cpu",
+  "verdict": "SABOTAGE NOT CAUGHT ON FIXTURES ivf-euclidean/ties,ivf/ties,knn-cosine/ties,knn-rbc/ties,radius-manhattan/ties,radius/ties"
+}

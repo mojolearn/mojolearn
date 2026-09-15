@@ -1,0 +1,15 @@
+# vendor=apple-m4 commit=a76c02d27c95b8fcdbca8d29fd159ea34829c6e0 (git rev-parse HEAD)
+# identity_break  mode=identical  2026-09-15 19:02:42  macOS-26.5.2-arm64-arm-64bit-Mach-O
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | negative         |
+|------------------------|------------------|
+| gbdt-categorical-ctr-tables | 1bc75b82705d1b39 |
+| gbdt-categorical-ctr-tables infer | ad6465f38360fd0c |
+| gbdt-categorical-ctr-tables model | 182c3af211932dae |
+| gbdt-categorical-ctr-tables batch | ca5eabccae08c416 |
+
+cells=1 stable=1 moved=0 refused=0
+infer: stable=1
+model: stable=1
+batch: stable=1
+wrote /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/gaps7/metal/categorical-negative.json

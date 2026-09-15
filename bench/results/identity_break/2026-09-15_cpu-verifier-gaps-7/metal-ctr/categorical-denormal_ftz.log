@@ -1,0 +1,15 @@
+# vendor=apple-m4 commit=a76c02d27c95b8fcdbca8d29fd159ea34829c6e0 (git rev-parse HEAD)
+# identity_break  mode=identical  2026-09-15 19:01:51  macOS-26.5.2-arm64-arm-64bit-Mach-O
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | denormal_ftz     |
+|------------------------|------------------|
+| gbdt-categorical-ctr-tables | 9aef0c9ccfa6907c |
+| gbdt-categorical-ctr-tables infer | a624d9f200295ebd |
+| gbdt-categorical-ctr-tables model | caf6bc21aff5297d |
+| gbdt-categorical-ctr-tables batch | d37a90de0b078e27 |
+
+cells=1 stable=1 moved=0 refused=0
+infer: stable=1
+model: stable=1
+batch: stable=1
+wrote /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/gaps7/metal/categorical-denormal_ftz.json

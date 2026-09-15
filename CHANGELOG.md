@@ -10,6 +10,27 @@ what a user can check from a pip install. The freeze checks of docs/RELEASE_CHEC
 the per-vendor GPU-box build and the byte compare of the host bindings across the three
 Linux legs are OWED before this heading reads published.
 
+- The full CPU identity verification covers every one-device lane (lane/cpu-verifier-gaps-7,
+  for 0.8.7). Seven lanes had a CPU host function and no manifest entry, so the gate did not
+  run them: gmm-sample and gmm-random-init-sample (the mixture family), gp-sample-y and
+  gp-sample-y-normalize (gp), tokenizer, and the two CTR table lanes, whose CPU cells are the
+  forest binding's predictions from Metal-saved models because CPU training of CTR tables
+  refuses by name. The gate's sabotage host set now builds each family with the defines the
+  manifest gives it (`host_surface.sabotage_build_defines`), so the tokenizer binding carries
+  its own define and the forest binding the CTR arm, which `MOJOLEARN_HOST_SABOTAGE` does not
+  reach; the covered sabotage run names that set's forest binary. A CPU column that loads a
+  GPU-saved model reports the model part n/a (the file is the GPU column's bytes) and refuses a
+  reload that predicts differently. On one x86 CPU pod all 63 cells read STABLE, the four-column
+  diff is OK with 189 OWED parts and nothing DIVERGENT, and every one of those parts moves under
+  the sabotage set. Evidence: `bench/results/identity_break/2026-09-15_cpu-verifier-gaps-7`.
+- Sabotage value arms for the neighbor and IVF host oracles (lane/ties-sabotage, for 0.8.7).
+  A fold walked in the other order is exact on the integer `ties` fixture, so the sabotage
+  build left the ties cells of knn-cosine, knn-rbc, radius, radius-manhattan, ivf and
+  ivf-euclidean unmoved. Sabotage builds now also move every returned distance's bits;
+  production builds are unchanged (IDENTICAL to the committed records on all nine fixtures).
+  `tools/classical_host_gate.py check` gains `--every-fixture` and `--lane-rule-only LANE`,
+  and the CPU identity gate's saved-model sabotage step requires every fixture of every lane.
+  Evidence: `bench/results/identity_break/2026-09-15_ties-sabotage`.
 - Public CPU inference from a saved Holt-Winters model (lane/inference-holtwinters, for 0.8.7).
   `ExponentialSmoothing` gains `save` and `load` (format `mojolearn-holtwinters-1`) and
   `predict(start, end)`, the in-sample one-step predictions (NaN before `2 * seasonal_periods`,

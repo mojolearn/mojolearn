@@ -1,0 +1,35 @@
+# vendor=cpu-amd-epyc-9754-128-core-processor commit=1475db2741c6678e1327b4aa53e4235db401332c (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9754 128-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-15 22:54:24  Linux-5.15.0-94-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+| radius                 | 7a80f98790de16b4 | 4378bd18a4417347 | a54cc13d4f329fa8 | 203f0bb5d631b8bd | 95f2753a672eb80f | 95f2753a672eb80f | aa904b6f90fc056c | 22d9ae2980ce1db2 | 8dadfcf2ccac4456 |
+| radius infer           | 8ac250b160faa1ad | f38e5a5f8e548593 | 1bb5411e06613a75 | 28ff4de07253986f | 8f2092f6a78426a2 | 8f2092f6a78426a2 | 3a2bc59a1b2cf16a | 3215be91df5b0eb1 | bfd80c18eaca70b5 |
+| radius model           | 2ee81955e923d21f | 57306f414d5af0b4 | d6588b0e2d717746 | 76078d052fa5fc25 | c6abf4949fd3ef45 | 83650c2063c0b192 | 5167cd08ec11b8bd | 5f50d73e7a4f1146 | 86a355173ea5999a |
+| radius batch           | 0facd2ecedfa31eb | 9654cb1b7df471d2 | 18c39111789802cc | bde7dc3c94bfd7c2 | d7bdafbe34cd6bb4 | d7bdafbe34cd6bb4 | 664e20a11d2606d6 | 76d8a48b79335562 | ca24346519317cd4 |
+| knn-cosine             | a2168dd2785ade5a | 36c4f0bde58a4f6d | 25ca6b3bbad97ce0 | ad86f8bf60f668cb | 4463908ea9f293f2 | 4463908ea9f293f2 | 3c32234930ba09ea | 7435296f23263db7 | eb1e1dd808baa42a |
+| knn-cosine infer       | 445e9638f9311d26 | f10d128c7a918202 | 9986c4933a374882 | 443ccdf5e62274f7 | 33bf40903f8405e1 | 33bf40903f8405e1 | d37458399b7495a6 | 6a1b5eb3aa8d9bf5 | 5df8345ea03531ac |
+| knn-cosine model       | a6427c8352b608b8 | af099d8dc056f48b | f0b5ec3e5c1ef41f | 359d5ba839ede73e | ec7c6213c976454a | 3be498ee096ad3ea | 8b93c8f69f7f0dc1 | 355934afd7db6e52 | 8a8c8987151691c5 |
+| knn-cosine batch       | edb47608b4da8147 | 6a3128827a559770 | d500075d830c9088 | 18f4e6aa9a515b9c | 75bf168a8c5f80b1 | 75bf168a8c5f80b1 | 6419db973c543f38 | ec3b125e42c287c1 | edccbb076760d3fb |
+| knn-rbc                | ec6785a9981e513b | b167e88878740968 | bd1c758fa948dc71 | dba847bf4c7e4eaf | bc942ca25415ee36 | bc942ca25415ee36 | a08950ce46940c2e | d17ac2a8b879b0c1 | e7aed2e35eafd47a |
+| knn-rbc infer          | a284995bbd99ee78 | f9b862e752244037 | 00fdb4362c80890c | 31a87311783352f5 | e304ab12f4b8eff5 | e304ab12f4b8eff5 | 5d97197dc90f5690 | cc55da6235796032 | 999b5da0ccde84b7 |
+| knn-rbc model          | 88fe338f22e892ce | 0184787f1d03ee52 | 74e1d4bf6383b153 | db0673aa3230762c | 89332bf156119399 | 2f6461a7cebcf9cd | 71980f97cd4c3be7 | 36649907ba5db9d5 | 60a968568084d660 |
+| knn-rbc batch          | 9022458c8b0c8629 | 65fc5cfd494f4a96 | 7116eab29ec0e097 | 1ba21f8487ad6263 | 10898ad3fde58071 | 10898ad3fde58071 | 6fdacc89c9314ab9 | 6f8c2b6fac8b1697 | f080d9deed4cb96c |
+| radius-manhattan       | c2dd2b34c59205a6 | c97e6b70473d531b | 468c2a6f87f6d237 | e2604226e1b67939 | 9d5911fe7c1f9950 | 9d5911fe7c1f9950 | 2a63122dcce2a77d | 90d238f85eadfaa3 | 1130e48669ffef12 |
+| radius-manhattan infer | fd9d3b5377c37030 | eb916d0ed21e27bf | 9636637e6eb882c3 | 3df75cd77b2b90fd | dd67dbaee9094c10 | dd67dbaee9094c10 | e685b525207aeabb | 3f33101b92890c80 | d7c2c5167e015cc2 |
+| radius-manhattan model | a57f1f07d75f73e1 | d893a0c29ba99797 | d9fb91586aa3aa55 | f4956308528d332e | 06e4242143d325b2 | 18e8bdf07ef319ba | d1c5d251599b1830 | 3440191387c43af8 | 80b5baa8c1aabd6b |
+| radius-manhattan batch | 013041c2861a861d | c407f80a19585253 | 03d8438d6a23b6c9 | 913092e509b5ee2c | 97f1d182c415b22b | 97f1d182c415b22b | 061608d8511b9d46 | 1731b5b92da301da | 8953b9438e3c8624 |
+| ivf                    | 12a96491ac23a096 | db1a6e575d22f738 | 1896f6f1916e6961 | 2695a5fb42630e71 | be33f80dfafef6ca | be33f80dfafef6ca | 394f77976147476c | 94b7bf3263086bd6 | 9d5df2611030dc14 |
+| ivf infer              | c70054c87bc14b51 | 28a4efa8fd16effe | d24165713f5bde63 | 0d9d440d64740116 | a3e9f461b75a4582 | a3e9f461b75a4582 | 4cca8082fa8b66c0 | 021835f7fa236cf6 | 1c66507898cd8068 |
+| ivf model              | 8be9721baf4bc593 | 7424044bcde7c82c | 693757dd240b6558 | 9e17286190ae60a2 | 3bf5c4035097e768 | 6edc73f973d5ad4d | a9eb68460d90a4d4 | 3552a7183a2dfbfd | cbd2f25ceda56d98 |
+| ivf batch              | 5d81f90a98cceddf | 84110bc5d655c212 | beb5f0900867a25b | 295b5ddc42363e01 | 3be82649e88d2b6d | 3be82649e88d2b6d | 2aae7bc241665360 | cac339d2163c2441 | 214c1e73d21115e2 |
+| ivf-euclidean          | ec3b49e2321ce799 | e366368f7eddba6b | 94a0a03d902cbd45 | 3a6a1e1d195e7066 | 4a1aefe7b2282405 | 4a1aefe7b2282405 | d53525a94c0e5f3b | 9c3eac5b01652303 | 84ae01c54807be6b |
+| ivf-euclidean infer    | a5441fcbdab31fbc | a32a6f6c0cf76fb6 | 38d7de8ea81e107f | 5d25133f85d35456 | 29953228784870b1 | 29953228784870b1 | b6da14af30de9ab1 | 7a85ce2deb2fe795 | 436f2897f78dd3ba |
+| ivf-euclidean model    | 65ff5553a259242f | 441fd888195979d9 | 9b00d87139953e1d | e7e6840323ba6218 | f0cdbf5c755333fd | 807ac7d4fdf2c213 | 3a9cc8201f02572b | 0a905ad9348bed32 | 653c166eb3bf3158 |
+| ivf-euclidean batch    | 69aa46e0904cb448 | 25c6feac6e8e10df | 7ece70d7587a46b4 | 91893d61850b8f23 | 19880c63f63d701d | 19880c63f63d701d | f4f0123b4475139a | 0a3901b7a2bfaaaa | 51c30199ef9edba2 |
+
+cells=54 stable=54 moved=0 refused=0
+infer: stable=54
+model: stable=54
+batch: stable=54
+wrote /root/leg_out/cpu-x86.sabotage-new.json
