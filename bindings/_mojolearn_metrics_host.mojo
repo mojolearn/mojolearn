@@ -85,6 +85,7 @@ from metrics.host.metrics_oracle import (
     host_accuracy_score,
     host_adjusted_rand_score,
     host_entropy,
+    host_fowlkes_mallows,
     host_homogeneity_score,
     host_mutual_info,
     host_r2_score,
@@ -291,6 +292,27 @@ def mutual_info_score_binding(
         _check_pair(yt, yp, n)
         _check_range(lower, upper)
         out = host_mutual_info(yt, yp, n, lower, upper)
+    return PythonObject(out)
+
+
+def fowlkes_mallows_score_binding(
+    y_true_addr: PythonObject,
+    y_pred_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """scikit-learn `fowlkes_mallows_score` on the host. `params`: `0 n, 1
+    lower_class_range, 2 upper_class_range`."""
+    _want(String("fowlkes_mallows_score"), params, 3)
+    var n = _index(params[0])
+    var lower = Int32(_index(params[1]))
+    var upper = Int32(_index(params[2]))
+    var yt = read_i32(_index(y_true_addr), n)
+    var yp = read_i32(_index(y_pred_addr), n)
+    var out = Float64(0.0)
+    with GILReleased(Python()):
+        _check_pair(yt, yp, n)
+        _check_range(lower, upper)
+        out = host_fowlkes_mallows(yt, yp, n, lower, upper)
     return PythonObject(out)
 
 
@@ -946,6 +968,7 @@ def PyInit__mojolearn_metrics_host() abi("C") -> PythonObject:
         module.def_function[adjusted_rand_score_binding]("adjusted_rand_score")
         module.def_function[entropy_binding]("entropy")
         module.def_function[mutual_info_score_binding]("mutual_info_score")
+        module.def_function[fowlkes_mallows_score_binding]("fowlkes_mallows_score")
         module.def_function[homogeneity_score_binding]("homogeneity_score")
         module.def_function[completeness_score_binding]("completeness_score")
         module.def_function[v_measure_score_binding]("v_measure_score")

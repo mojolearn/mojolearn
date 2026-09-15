@@ -597,6 +597,27 @@ own prior-art notes go, is CROSS-VENDOR bitwise identity of the block, which
 is a different property and the one the profile name is about. That reading
 of vLLM was not re-verified by this lane and the entry it rests on is dated.
 
+### 7.5 Ragged, right-padded batches are 7.3 and 7.4 together, with no new arithmetic (2026-09-15)
+
+`TransformerBlock.forward(x, lengths=...)` takes a batch whose row `i` is
+real at positions `[0, lengths[i])` and padding after. The profile adds no
+mask for it. A real query at position `t < lengths[i]` sees keys `[0, t]`
+(or its window) and nothing else, so the padding keys of its row are
+exactly the masked tail of 7.1, and its bits are the bits of the same row
+run alone at length `lengths[i]` by 7.3 (length) and 7.4 (composition). The
+surface (`python/mojolearn/_ragged.py`) is two copies: the padding inputs
+are replaced by `+0.0` before the ordinary call, so a non-finite padding
+value never reaches `llama_refuse_bad_call`, and the padding outputs are
+overwritten with `+0.0` after it. Two consequences are stated rather than
+left to the reader. First, 7.1's DEVIATION 1327 hole (a `-0.0` S19
+accumulator) is the same hole here as for a shorter call, no wider. Second,
+this is a statement about FORWARD only: the backward's weight gradients
+contract over all `B*L` tokens (`_route_b`, k' = the token count), which a
+padded call changes, so no `lengths` backward is offered. With a carried
+state `lengths` is refused by name, because a ragged decode continuation
+would need a position per row. The gate is the `ragged` part of
+tools/identity_break.py and python/mojolearn/tests/test_ragged_lengths.py.
+
 ## 8. NaN, infinity, signed zero, denormals
 
 - A NaN or infinity in any input or weight is REFUSED BY NAME before any

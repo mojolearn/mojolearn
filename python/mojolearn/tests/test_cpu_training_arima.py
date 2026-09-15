@@ -15,8 +15,7 @@ and nothing from `arima/` or any other package beyond the
 claim rests on (DEVIATION 687's step, the two-rounding Jones association,
 test_invparams' one-rounding association, the perturbation and the reset by
 copy, the refusals by name); the sabotage define reaches the step and the
-binding reads it back; the CPU identity gate workflow triggers on the
-oracle.
+binding reads it back.
 
 The runtime check (skipped, and SAID to be skipped, when the binding is
 absent or a GPU set loaded): the three lane orders fit twice on a small draw
@@ -113,10 +112,6 @@ def test_sabotage_define_moves_the_step():
     assert "comptime AH_FIT_H_SABOTAGE = Float32(0.001953125)" in text
     assert "ARIMA_ORACLE_HOST_SABOTAGE" in _read(host_surface.binding_source("arima"))
 
-
-def test_workflow_triggers_on_the_oracle():
-    text = _read(".github/workflows/cpu-identity-gate.yml")
-    assert f'- "{ORACLE}"' in text, f"cpu-identity-gate.yml does not trigger on {ORACLE}"
 
 
 @reference_training()

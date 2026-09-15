@@ -14,7 +14,7 @@ the `<=` terminal size test, the right child at `leavesCount + i`, the
 Lossguide argmin with no sign test, the NewtonL2 plane, the host scale, the
 64-bit weight tokens); the binding dispatches on the policy, refuses the
 other score functions and the non-symmetric knobs by name, and its predict
-parser reads `ntree` and `node` records; the workflow triggers on both files.
+parser reads `ntree` and `node` records; the CPU identity gate runs by hand since 2026-09-15 (no push trigger).
 
 The runtime check (skipped, and SAID to be skipped, when the binding is
 absent or a GPU set loaded): a small Depthwise fit and a small Lossguide fit
@@ -120,11 +120,6 @@ def test_sabotage_reaches_both_policies():
     assert "_estimate_leaves(" in text, "both policies estimate through the sabotaged walker"
     assert "lambda_reg = lambda_reg + 1.0" in _read("gbdt/host/gbdt_oracle.mojo")
 
-
-def test_workflow_triggers_on_both_files():
-    text = _read(".github/workflows/cpu-identity-gate.yml")
-    for rel in (DRIVER, LOSSGUIDE):
-        assert f'- "{rel}"' in text, f"cpu-identity-gate.yml does not trigger on {rel}"
 
 
 @reference_training()

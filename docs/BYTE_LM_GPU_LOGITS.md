@@ -8,7 +8,14 @@ training and without changing any state.
 trainer = mojolearn.LanguageModelTrainer(parameters, data_schedule=schedule, resident=True)
 scores = trainer.logits(ids)        # int32 [batch, length] -> float32 [batch, length, 256]
 nxt = trainer.next_bytes(ids)       # the greedy next byte after each row
+lens = [32, 5, 17]                  # a ragged, right-padded batch (2026-09-15)
+scores = trainer.logits(ids, lengths=lens)      # padding positions read +0.0
+nxt = trainer.next_bytes(ids, lengths=lens)     # the byte after each row's last real position
 ```
+
+With `lengths`, each row's real positions are byte for byte the row run alone
+at its own length and the padding holds any int32 value
+(`python/mojolearn/_ragged.py`).
 
 Before this the GPU side could train and report a loss, so the model's own
 predictions could only be read on the CPU, through
