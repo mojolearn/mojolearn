@@ -2601,6 +2601,10 @@ struct _LSReplay(ImplicitlyCopyable, Movable):
     var last1: Float32
     var last2: Float32
     var last3: Float32
+    #: the loss of the stored trial and of the last trial (the reduction
+    #: DEVIATION 2717 buys on this line search is last_loss - pick_loss)
+    var pick_loss: Float32
+    var last_loss: Float32
 
 
 @always_inline
@@ -2649,7 +2653,7 @@ def _replay_first_linesearch(o: HWOracleFit[DType.float32], s: Int, ls_limit: In
         p3 = -g3
     var pp = _rdot3(p1, p2, p3, p1, p2, p3)
     if pp == zero:
-        return _LSReplay(False, False, 0, x1, x2, x3, x1, x2, x3)
+        return _LSReplay(False, False, 0, x1, x2, x3, x1, x2, x3, Float32(0.0), Float32(0.0))
     var step = ftz(HW_LS_INITIAL / identical_sqrt(pp))
     var cauchy = ftz(prm.linesearch_c * _rdot3(g1, g2, g3, p1, p2, p3))
     var loss_ref = oracle_sse_at[DType.float32](o, s, x1, x2, x3)
@@ -2677,7 +2681,9 @@ def _replay_first_linesearch(o: HWOracleFit[DType.float32], s: Int, ls_limit: In
         for j in range(1, len(tl)):
             if tl[j] < tl[pick]:
                 pick = j
-    return _LSReplay(True, hit, len(tl), t1[pick], t2[pick], t3[pick], t1[last], t2[last], t3[last])
+    return _LSReplay(
+        True, hit, len(tl), t1[pick], t2[pick], t3[pick], t1[last], t2[last], t3[last], tl[pick], tl[last]
+    )
 
 
 def _device_iter0(
@@ -2773,6 +2779,10 @@ def check_hw_linesearch_limit_keeps_best() raises:
     var n_hit = 0
     var n_disc = 0
     var n_bad = 0
+    var n_lower = 0
+    var sum_red = Float64(0.0)
+    var sum_last = Float64(0.0)
+    var max_rel = Float64(0.0)
     var first_bad = String("")
     for k in range(2):
         var seasonal = SEASONAL_ADDITIVE if k == 0 else SEASONAL_MULTIPLICATIVE
@@ -2800,6 +2810,14 @@ def check_hw_linesearch_limit_keeps_best() raises:
                         if (_bits_differ(r.exp1, r.last1) or _bits_differ(r.exp2, r.last2)
                                 or _bits_differ(r.exp3, r.last3)):
                             n_disc += 1
+                            if r.pick_loss < r.last_loss:
+                                n_lower += 1
+                                var red = Float64(r.last_loss) - Float64(r.pick_loss)
+                                var rel = red / Float64(r.last_loss)
+                                sum_red += red
+                                sum_last += Float64(r.last_loss)
+                                if rel > max_rel:
+                                    max_rel = rel
                     var dev_hit = (Int(ddec[s]) & HW_DEC_LS_LIMIT) != 0
                     var ora_hit = (o.decisions[s] & HW_DEC_LS_LIMIT) != 0
                     var msg = String("")
@@ -2840,6 +2858,15 @@ def check_hw_linesearch_limit_keeps_best() raises:
         + " ran a line search, " + String(n_hit) + " reached the limit, " + String(n_disc)
         + " of those with a last trial that is not the best trial, " + String(n_bad)
         + " disagreeing with the replay"
+    )
+    # The loss the fix buys, from the fit's own SSE at iteration 0: on the
+    # limit series whose last trial is not the best, the stored trial's SSE
+    # against the last trial's (what the reference stores).
+    print(
+        "  line-search limit loss: " + String(n_lower) + " of " + String(n_disc)
+        + " separating series store a strictly lower SSE; total SSE of the last trials "
+        + String(sum_last) + ", reduced by " + String(sum_red) + "; largest relative reduction "
+        + String(max_rel)
     )
     if n_bad > 0:
         var bad = (
