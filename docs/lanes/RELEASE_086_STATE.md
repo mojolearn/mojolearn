@@ -1,11 +1,26 @@
-# 0.8.6 release: state at the Mac restart (2026-09-15)
+# 0.8.6 release: resumable state (2026-09-15 evening)
 
-Written before Andrew's approved restart of the release Mac, which clears the degraded
-Metal GPU (a Metal command-queue leak made fits about 20x slow, per
-`~/mojolearn-evidence/gbdt-metal-slowdown-2026-09-15`). The restart ends every session,
-agent and local driver; everything under `/private/tmp` is gone afterwards. This file is
-what a fresh session needs to resume. Publishing needs Andrew's separate explicit "ship";
-nothing here has been published.
+What a session needs to resume the 0.8.6 release, whether or not this one survives.
+Publishing needs Andrew's separate explicit "ship"; nothing here has been published.
+
+**The Metal slowdown, corrected at 19:38 EDT.** No restart is required. `ioclasscount
+AGXCommandQueue` reads 34 to 41 at rest, not the 6754 first reported: that number came from
+`ioreg -l -c AGXCommandQueue`, which lists no nodes of the class, so two different populations
+were being subtracted. The real fault is one process crossing the machine's ~512 command-queue
+limit WITHIN ITS OWN LIFETIME (the leak lane watched a single `mojo` process hold 1211 of 1243
+queues, climb to 2491, and the count fall to 34 about 15 s after it exited). Queues are released
+on process exit, so a long identity run degrades and a short one does not. **Mitigation until
+the per-call `DeviceContext` fix lands: run each lane group as its OWN process**, which
+`scripts/resume_apple_record.sh` already does (one `python` invocation per chunk).
+
+**Health confirmed 2026-09-15 evening, no restart taken.** Like for like on the same
+`gbdt_direct.py` at 20,000 rows: SymmetricTree 8.289, 7.735 and 8.288 s against 21.5 to 23.4 s
+while degraded; Depthwise 11.848, 14.082 and 13.373 s against 27.0 to 30.4 s. Queue counts held
+flat at 34 across eleven fits in two processes. Evidence:
+`~/mojolearn-evidence/metal-queue-leak-2026-09-15/gbdt-metal-health.log`, branch
+`lane/metal-queue-leak` at be12003b8. What this shows is that the degraded state is GONE; it
+does NOT establish a healthy per-fit figure, because no pre-slowdown GBDT Metal timing is
+committed anywhere in the repo. Do not quote a "healthy" per-fit number in the record or here.
 
 ## Branch and commits
 
@@ -26,10 +41,10 @@ nothing here has been published.
   - 68906d504 `verify_wheel.sh` passes the identity check child `env=dict(os.environ)`
 - Main carries each fix alone: c25fc046c, 81cc87979, 3f8b5bd69 (and the lanes' own merges).
 
-## Artifacts kept across the restart (`~/mojolearn-evidence/release-0.8.6/`)
+## Artifacts kept outside the scratchpad (`~/mojolearn-evidence/release-0.8.6/`)
 
-Nothing release-critical is under `/private/tmp`; the session scratchpad, its worktrees and the
-Apple venv are gone after the restart and are not needed.
+Nothing release-critical is under `/private/tmp`, so a restart or a lost session costs nothing:
+the session scratchpad, its worktrees and the Apple venv are all rebuildable and are not needed.
 
 | path | what |
 |---|---|
@@ -40,7 +55,7 @@ Apple venv are gone after the restart and are not needed.
 | `linux-builds/hip-gfx942-hotaisle-8core-g/`, `h100-sm_90a-2f53960ca-refused/`, `h100-sm_90a-65a9e9302-verifier-reference/` | superseded builds kept as evidence |
 | `apple-record/apple-m4.chunk00.json`, `chunk00.log`, `chunk00.rowtimes.tsv`, `chunk00.remaining.txt` | Apple chunk 00 recorded under the Metal slowdown, its log, per-lane timestamps, the lanes it did not reach |
 | `apple-record/lanes.txt`, `lanes.00` to `lanes.06` | the 192 lanes of the wheel's harness and the seven lane groups |
-| `scripts/resume_apple_record.sh` | resumes the Apple record after the restart (slowdown rerun and compare, remaining lanes, merge) |
+| `scripts/resume_apple_record.sh` | runs the rest of the Apple record: the slowdown rerun and its bit-for-bit compare, the remaining lanes, then the merge, each chunk its own process |
 | `scripts/check_sets_against_proofs.py` | checks each fetched set against its own proof and compares host bindings across legs |
 | `scripts/record_body.template.sh`, `make_record_body.sh` | the AMD and NVIDIA record leg body from the installed Linux wheel (R2 presigned GET) |
 | `scripts/hip_build_body_h.sh`, `amd_idle_body_b.sh` | the gfx942 build body at db9047b9f, the idle GPU 1 body for a 2x MI300X VM |
@@ -99,7 +114,8 @@ From the saved macOS wheel in a clean python3.11 venv, the wheel's own harness c
 2 fits per cell, batch part on, one core, in groups of 30 lanes, each group through the
 Metal lock.
 
-**Chunk 00** ran on the degraded GPU from 18:16:12 and was stopped after a whole lane,
+**Chunk 00** ran from 18:16:12 in one process that slowed as it went (the command-queue limit
+above) and was stopped after a whole lane,
 never mid-lane: the stop waited for gbdt-lossguide's row and for the JSON to hold its 9 cells
 with a stable size, then ended the process at 18:54:23; the Metal lock was released.
 
@@ -116,7 +132,7 @@ with a stable size, then ended the process at 18:54:23; the Metal lock was relea
 Chunk 00's lanes: rf-clf, rf-reg, et-clf, et-reg, gbdt-symmetric, gbdt-depthwise,
 gbdt-lossguide, gbdt-rmse, kmeans, knn, knn-clf, knn-reg, dbscan, pca, pca-whiten, tsvd, ols,
 ridge, logistic, lasso, elasticnet, svc, kde, agglomerative, spectral, holtwinters,
-gemm-pinned, metrics, svr, arima. Timing on the degraded GPU: rf-clf 86 s, rf-reg 68 s,
+gemm-pinned, metrics, svr, arima. Timing in that one slowing process: rf-clf 86 s, rf-reg 68 s,
 et-clf 25 s, et-reg 33 s, gbdt-symmetric 488 s (about 27 s per fit over 18 fits, including
 the infer, model and batch parts), gbdt-depthwise 657 s, gbdt-lossguide 923 s (about 51 s per
 fit); the GBDT lanes slowed lane by lane, consistent with the Metal command-queue leak.
@@ -130,11 +146,13 @@ fit); the GBDT lanes slowed lane by lane, consistent with the Metal command-queu
 - chunk 05 (30): kmeans-cosine, par-forest, par-forest-et, par-boosting, par-kmeans, par-gram, par-logistic, par-cd, par-svm, par-gp, par-dbscan, par-scaler, par-arima, par-mlp, par-samba, par-byte-lm, par-queries-knn, par-queries-radius, par-queries-kde, par-reference-knn, par-reference-knn-reg, par-graph-agglomerative, par-graph-spectral, par-graph-umap, par-ordered-rmse, par-feature-freq, par-boosting-pointwise, par-holtwinters, par-byte-lm-model-pool, par-byte-lm-offload
 - chunk 06 (12): par-samba-clip, iforest, iforest-tuned, par-iforest, par-forest-pool, par-gmm, par-resample, par-hdbscan, par-cholesky, par-kernel-ridge, par-nystroem, par-rbf-sampler
 
-**Slowdown rule for the resuming session.** The finished chunk 00 lanes were written whole
-under the exclusive lock, but they were recorded on a degraded GPU. After the restart, RERUN
-every one of them and compare it bit for bit with the saved JSON (train hashes, infer, model,
+**Slowdown rule.** The finished chunk 00 lanes were written whole under the exclusive lock,
+but they were recorded by a process that had crossed the command-queue limit and slowed lane
+by lane (27 s per fit at gbdt-symmetric, 51 s by gbdt-lossguide). RERUN every one of them in a
+fresh process and compare it bit for bit with the saved JSON (train hashes, infer, model,
 reload and batch parts of every cell). Keep the rerun as the column; a mismatch is a finding
-to report, never a reason to pick one run.
+to report, never a reason to pick one run. Run every chunk as its own process for the same
+reason, one chunk at a time under the Metal lock.
 
 **The exact command** (does the rerun and comparison, chunk 00's remaining lanes, chunks 01
 to 06, and the merge; a finished part is skipped when rerun):
@@ -143,7 +161,7 @@ to 06, and the merge; a finished part is skipped when rerun):
       ~/mojolearn-evidence/release-0.8.6/scripts/mac_slot.sh <release/0.8.6 checkout>
 
 (`scripts/mac_slot.sh` is the saved copy of the session's Metal and CPU slot helper; the
-lock directory `/tmp/mojolearn-metal-slot` does not survive the restart, which is correct.)
+lock directory `/tmp/mojolearn-metal-slot` is rebuilt on first use, so losing it is harmless.)
 
 ## Linux wheel packed, audited and in R2 (2026-09-15 19:12)
 
@@ -167,6 +185,34 @@ Packed from the three db9047b9f sets and proofs with `--profile release-linux3` 
   by `scripts/make_record_body.sh`, whose key and sha256 are in `linux-wheel/r2-key.txt` and
   `linux-wheel/r2-sha256.txt`.
 
+## Records taken so far (from the installed final Linux wheel)
+
+**AMD leg 1**, Hot Aisle 1x MI300X 8-core, 2026-09-15 19:16 to 19:57, $2.10 (balance $39.24 to
+$37.14), VM 34c731dc deleted and verified gone (HTTP 204 then GET 404). Evidence:
+`~/mojolearn-evidence/release-0.8.6/records/amd-leg-1/` (column
+`remote/identity/identity_break.amd-mi300x-gfx942.json`, sha256 starts f928d4003a578b99).
+
+- On the box, from the R2 wheel (sha256 checked on arrival): `pip` exit 0, import reads
+  0.8.6 vendor hip, harness copy equal to the checkout's `tools/identity_break.py`,
+  `identity --check` exit 0 (3 columns, 166 lanes, wheel COMMIT witness), `verify --quick`
+  VERIFIED (94 IDENTICAL, 0 DIVERGENT, 1 OWED, 13 N/A), `host_surface.py` imports and
+  declares 15 wheel bindings.
+- Column: vendor amd-mi300x-gfx942, commit db9047b9f, 558 cells, **62 of 192 lanes complete**,
+  no partial lane. Verdicts: train 558 STABLE; infer 531 STABLE, 27 N/A; model 459 STABLE,
+  99 N/A; batch 522 STABLE, 36 N/A. No MOVED, DIVERGENT or REFUSED cell.
+- It stopped at its 2400 s bound (`identity_break_exit=124`), which is a clean partial: the
+  harness writes the JSON after every lane. The 130 lanes still owed on AMD are in
+  `~/mojolearn-evidence/release-0.8.6/records/amd-remaining-after-leg1.txt`; the next leg
+  skips the 62 by passing that column as `<done-json>`.
+- **Finding, same as macOS:** the `sys.executable` probe reads
+  `changed False child BASE` on Linux too, so the Mojo runtime's C-level `PYTHONEXECUTABLE`
+  moves a child process out of its venv there as well. The package's own children pass an
+  explicit environment, so only callers that do not are affected
+  (`bench/results/releases/2026-09-16-macos-0.8.6/runtime-environment-finding.md`).
+
+Legs rent only from a CLEAN checkout: both runners refuse a dirty tree, so commit state-file
+edits before renting.
+
 ## Pending steps, in order
 
 1. DONE: byte compare of the 15 host bindings across the three Linux sets at db9047b9f
@@ -184,7 +230,8 @@ Packed from the three db9047b9f sets and proofs with `--profile release-linux3` 
    `scripts/make_record_body.sh` (presigned GET, `--skip` of lanes already recorded, plus
    `identity --check`, `verify --quick`, the `host_surface.py` import and the
    `sys.executable` probe).
-7. Apple chunks 01 to 06 after the restart (command below).
+7. Apple chunk 00's rerun and remaining lanes, then chunks 01 to 06 (command below), one chunk
+   per process under the Metal lock.
 8. Diff: three GPU columns plus a CPU column, `identity_break.py --diff ... --require-columns 4`
    and the batch summaries; every OWED cell must now be recorded (565 distinct owed parts over
    56 lanes in the 2026-09-15 owed files, plus the 27 tokenizer cells); a DIVERGENT cell is a
@@ -196,6 +243,60 @@ Packed from the three db9047b9f sets and proofs with `--profile release-linux3` 
     macOS repack; final content audit on both wheels; `host_surface.py` import and
     `verify --quick` from each installed final wheel.
 11. STOP before publish. Report readiness against the checklist Finish line.
+
+## Exact commands to resume
+
+Everything below runs from a clean checkout of `release/0.8.6` (a fresh
+`git worktree add --detach <dir> origin/release/0.8.6`, since a new session has no worktree
+under `/private/tmp`). `E=~/mojolearn-evidence/release-0.8.6`.
+
+**The wheel the record legs install** (already in R2, nothing to re-upload):
+
+- local: `$E/linux-wheel/dist/final/mojolearn-0.8.6-py3-none-manylinux_2_35_x86_64.whl`
+- R2 key: `releases/0.8.6/mojolearn-0.8.6-py3-none-manylinux_2_35_x86_64.whl` (`$E/linux-wheel/r2-key.txt`)
+- sha256: `7cab1aa3cfcde2f82123ce465410cc1b2d7d971dc4f46cc11084fb78b5cd7ecf` (`$E/linux-wheel/r2-sha256.txt`)
+
+**1. Fill a record leg body** (mints a short-lived presigned GET; the body is never committed).
+`<done-json>` is the merged column so far, so the leg skips lanes already recorded, or `none`:
+
+    bash $E/scripts/make_record_body.sh <label> \
+      $E/linux-wheel/dist/final/mojolearn-0.8.6-py3-none-manylinux_2_35_x86_64.whl \
+      "$(cat $E/linux-wheel/r2-key.txt)" 2400 <done-json|none> /tmp/record_body.sh
+
+Labels: `amd-mi300x-gfx942`, `nvidia-h100-sm_90a`. The body installs the wheel into a clean venv,
+runs `identity --check`, `verify --quick`, the `host_surface.py` import and the `sys.executable`
+probe, then one identity_break process over the lanes not yet recorded.
+
+**2a. NVIDIA record leg (DigitalOcean H100, the simplest body runner; about $4.41/h, 60-minute cap):**
+
+    MOJOLEARN_GPU_ARCHS=sm_90a MOJOLEARN_GEMM_LEG_EXTRA=/tmp/record_body.sh \
+    MOJOLEARN_GEMM_LEG_OUT=bench/results/identity_break/2026-09-16_release-0.8.6/nvidia-leg-1 \
+      bash tools/do_extra_leg.sh nv --minutes 60 --skip-gates        # add --dry-run first
+
+(The RunPod path would be `gemm_remote_leg.sh nvidia --payload gemm` with
+`MOJOLEARN_GEMM_LEG_EXTRA`, but that payload also builds an Apple reference card locally unless
+`MOJOLEARN_GEMM_LEG_LOCAL_CARD` names an existing one, so prefer DigitalOcean here.)
+
+**2b. AMD record leg (Hot Aisle; 13core when in stock, else 8core):**
+
+    MOJOLEARN_HOTAISLE_SPEC=8core MOJOLEARN_GPU_ARCHS=gfx942 \
+    MOJOLEARN_GEMM_LEG_EXTRA=/tmp/record_body.sh \
+    MOJOLEARN_GEMM_LEG_OUT=bench/results/identity_break/2026-09-16_release-0.8.6/amd-leg-N \
+    MOJOLEARN_HOTAISLE_LANE=release086-record-amdN \
+      bash tools/hotaisle_leg.sh amd --rent --skip-gates             # dry run: drop --rent
+
+Each leg's evidence lands under `<out>/remote/identity/`: the column JSON
+`identity_break.<label>.json`, `identity_break.log`, `record.txt`, `identity_check.log`,
+`verify_quick.json`, `host_surface_import.txt`, `sys_executable.txt`, `installed_sha256.txt`.
+Copy each leg's directory to `$E/records/` as soon as it is home.
+
+**3. Merge a vendor's parts** into one column before the diff:
+
+    python3 tools/identity_break.py --merge <part JSONs> --json <vendor>.json
+
+**4. Apple chunks:** `scripts/resume_apple_record.sh` (above).
+
+**5. Diff, record commit, final pack and audit:** pending steps 8 to 11 below.
 
 ## Rules in force
 
@@ -214,6 +315,8 @@ Packed from the three db9047b9f sets and proofs with `--profile release-linux3` 
   branch before every commit; never type a full SHA.
 - Never dispatch workflows; `release-provenance.yml` is the publish step and is not run.
 - Stop before publish.
+- Andrew, 2026-09-15 19:50 ET: **no more new lanes.** Finishing 0.8.6 is existing work and
+  continues; nothing new opens around it.
 
 ## Known issues to carry into the report
 
