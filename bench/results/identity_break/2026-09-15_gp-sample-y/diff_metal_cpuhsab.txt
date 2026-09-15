@@ -1,0 +1,85 @@
+NOTE: --lanes scopes this diff to 2 lane(s); 5 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-x86-x86_64 is a CPU column: cpu_model='AMD EPYC 9754 128-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_gp_host', '_mojolearn_preprocessing_host'] commit=607d797940e9318f5f8f2072a4c373102f452c46
+| lane/fixture                 | verdict    | arm64            | cpu-x86-x86_64   |
+|------------------------------|------------|------------------|------------------|
+| gp-sample-y-normalize/base   | DIVERGENT  | parts differ: sample; agree: - | 24c44714c0bfdc6d |
+| gp-sample-y-normalize/denormal | DIVERGENT  | parts differ: sample; agree: - | 92637b32697fc263 |
+| gp-sample-y-normalize/denormal_ftz | DIVERGENT  | parts differ: sample; agree: - | 92637b32697fc263 |
+| gp-sample-y-normalize/dupes  | DIVERGENT  | parts differ: sample; agree: - | 1dc07c929ff949b0 |
+| gp-sample-y-normalize/hashed | DIVERGENT  | parts differ: sample; agree: - | f2469eee30c6234d |
+| gp-sample-y-normalize/negative | DIVERGENT  | parts differ: sample; agree: - | 21ed9a6c18c4cb1a |
+| gp-sample-y-normalize/odd    | DIVERGENT  | parts differ: sample; agree: - | f7358f4658b17ce7 |
+| gp-sample-y-normalize/ties   | DIVERGENT  | parts differ: sample; agree: - | eca685cc01bf16e1 |
+| gp-sample-y-normalize/wide   | DIVERGENT  | parts differ: sample; agree: - | 2f9c09fb42347cb0 |
+| gp-sample-y/base             | DIVERGENT  | parts differ: sample; agree: - | 82c5d5c45a0b1c4c |
+| gp-sample-y/denormal         | DIVERGENT  | parts differ: sample; agree: - | 8bdc4f536645721b |
+| gp-sample-y/denormal_ftz     | DIVERGENT  | parts differ: sample; agree: - | 8bdc4f536645721b |
+| gp-sample-y/dupes            | DIVERGENT  | parts differ: sample; agree: - | 7f2067db1b4538d5 |
+| gp-sample-y/hashed           | DIVERGENT  | parts differ: sample; agree: - | f3146e81af7d6eb6 |
+| gp-sample-y/negative         | DIVERGENT  | parts differ: sample; agree: - | 4b33a5084d1db7b4 |
+| gp-sample-y/odd              | DIVERGENT  | parts differ: sample; agree: - | 849c51fb1f1d7c96 |
+| gp-sample-y/ties             | DIVERGENT  | parts differ: sample; agree: - | 036c0a0f1ed44ae5 |
+| gp-sample-y/wide             | DIVERGENT  | parts differ: sample; agree: - | 59446f9972b8537f |
+
+summary: DIVERGENT=18
+
+| lane/fixture                 | column | verdict      | arm64            | cpu-x86-x86_64   |
+|------------------------------|--------|--------------|------------------|------------------|
+| gp-sample-y-normalize/base   | infer  | DIVERGENT    | 0c4beaeb3b1aeb90 | 6b82af601b0adc8b |
+| gp-sample-y-normalize/base   | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gp-sample-y-normalize/base   | batch  | N/A          | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y-normalize/denormal | infer  | DIVERGENT    | d83e1344b5034607 | 4dfea0e75d850c9b |
+| gp-sample-y-normalize/denormal | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gp-sample-y-normalize/denormal | batch  | N/A          | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y-normalize/denormal_ftz | infer  | DIVERGENT    | d83e1344b5034607 | 4dfea0e75d850c9b |
+| gp-sample-y-normalize/denormal_ftz | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gp-sample-y-normalize/denormal_ftz | batch  | N/A          | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y-normalize/dupes  | infer  | DIVERGENT    | 64889722931adde7 | bdb29f021c93dcf9 |
+| gp-sample-y-normalize/dupes  | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gp-sample-y-normalize/dupes  | batch  | N/A          | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y-normalize/hashed | infer  | DIVERGENT    | c0c2a3bec4606a09 | b7f350a61edb3e85 |
+| gp-sample-y-normalize/hashed | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gp-sample-y-normalize/hashed | batch  | N/A          | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y-normalize/negative | infer  | DIVERGENT    | de0542b579ff2843 | 9ec234c851663079 |
+| gp-sample-y-normalize/negative | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gp-sample-y-normalize/negative | batch  | N/A          | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y-normalize/odd    | infer  | DIVERGENT    | 1ed38e7596ec035d | 883ddedd7af0d531 |
+| gp-sample-y-normalize/odd    | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gp-sample-y-normalize/odd    | batch  | N/A          | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y-normalize/ties   | infer  | DIVERGENT    | 37a77ee22082dc29 | e027031ed45b0a8a |
+| gp-sample-y-normalize/ties   | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gp-sample-y-normalize/ties   | batch  | N/A          | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y-normalize/wide   | infer  | DIVERGENT    | 296d00db02a3dc55 | 22fea7e857d40dcb |
+| gp-sample-y-normalize/wide   | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gp-sample-y-normalize/wide   | batch  | N/A          | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y/base             | infer  | DIVERGENT    | b7cef1a89e642972 | 9462337d24b65264 |
+| gp-sample-y/base             | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gp-sample-y/base             | batch  | N/A          | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y/denormal         | infer  | DIVERGENT    | 41aae3173e5800f3 | 966f537e0f7d5d87 |
+| gp-sample-y/denormal         | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gp-sample-y/denormal         | batch  | N/A          | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y/denormal_ftz     | infer  | DIVERGENT    | 41aae3173e5800f3 | 966f537e0f7d5d87 |
+| gp-sample-y/denormal_ftz     | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gp-sample-y/denormal_ftz     | batch  | N/A          | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y/dupes            | infer  | DIVERGENT    | 1ecf65597b149dc3 | cc109f64c5ee81de |
+| gp-sample-y/dupes            | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gp-sample-y/dupes            | batch  | N/A          | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y/hashed           | infer  | DIVERGENT    | 1512a8f232028314 | a9b65ada50af2e08 |
+| gp-sample-y/hashed           | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gp-sample-y/hashed           | batch  | N/A          | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y/negative         | infer  | DIVERGENT    | 4adb5317401462a1 | 7be986534146333e |
+| gp-sample-y/negative         | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gp-sample-y/negative         | batch  | N/A          | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y/odd              | infer  | DIVERGENT    | 88b3eef5cfb3f1e8 | e054b835c9e607cf |
+| gp-sample-y/odd              | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gp-sample-y/odd              | batch  | N/A          | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y/ties             | infer  | DIVERGENT    | 0811d434a92222cc | bfa8c2511f846320 |
+| gp-sample-y/ties             | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gp-sample-y/ties             | batch  | N/A          | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y/wide             | infer  | DIVERGENT    | eb0dc965d1fb9854 | 8cd47b3598650d83 |
+| gp-sample-y/wide             | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gp-sample-y/wide             | batch  | N/A          | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+
+summary (infer/model): DIVERGENT=18, N/A=18
+summary (batch): N/A=18
+summary (rlpair): 

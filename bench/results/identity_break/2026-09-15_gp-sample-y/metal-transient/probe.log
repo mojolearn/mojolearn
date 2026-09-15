@@ -1,0 +1,55 @@
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+# vendor=apple-m4 commit=607d797940e9318f5f8f2072a4c373102f452c46 (git rev-parse HEAD)
+# identity_break  mode=identical  2026-09-15 13:50:46  macOS-26.5.2-arm64-arm-64bit-Mach-O
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+| gp                     | ea70c56b99a74791 | c92496318cb78403 | f01c58a79fb1af27 | ca779c84b786d493 | f0986dd9686ae3c2 | MOVED 664fff57   | MOVED 664fff57   | 96ec7127b1bf9354 | 96ec7127b1bf9354 |
+| gp infer               | 1e032c58b3e9cd14 | 22b0b528124de8d0 | 6eec04108625b28e | 890cda1ff831faab | 353cd97119d0e754 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 |
+| gp batch               | 305bfd4eaf79a5fa | 42c01186900b0c68 | f18ced6112fb55e8 | d3e6783a8a000e56 | BATCH_MOVED      | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc |
+| standard-scaler        | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+| standard-scaler infer  | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+| standard-scaler model  | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+| standard-scaler batch  | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+| gp-matern52-ard        | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 |
+| gp-matern52-ard infer  | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 |
+| gp-matern52-ard batch  | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc |
+
+cells=27 stable=16 moved=2 refused=9
+infer: stable=18
+model: n/a=18
+batch: stable=17 batch_moved=1
+n/a: gp model n/a:no-save, gp-matern52-ard model n/a:no-save
+MOVED   gp/denormal_ftz: ['664fff57bdbe381a', '96ec7127b1bf9354']
+MOVED   gp/dupes: ['664fff57bdbe381a', '96ec7127b1bf9354']
+REFUSED standard-scaler/base: Exception: StandardScaler: invalid variance or scale
+REFUSED standard-scaler/ties: Exception: StandardScaler: invalid variance or scale
+REFUSED standard-scaler/hashed: Exception: StandardScaler: invalid variance or scale
+REFUSED standard-scaler/wide: Exception: StandardScaler: invalid variance or scale
+REFUSED standard-scaler/denormal: Exception: StandardScaler: invalid variance or scale
+REFUSED standard-scaler/denormal_ftz: Exception: StandardScaler: invalid variance or scale
+REFUSED standard-scaler/dupes: Exception: StandardScaler: invalid variance or scale
+REFUSED standard-scaler/odd: Exception: StandardScaler: invalid variance or scale
+REFUSED standard-scaler/negative: Exception: StandardScaler: invalid variance or scale
+BATCH_MOVED gp/denormal: BATCH_MOVED:predict(return_std=True):row 12 of 64 alone:output 0 element 0: whole 0x3fe9a730 vs alone 0x00000000
+wrote /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/gpsy_ev2/probe.json
