@@ -128,6 +128,7 @@ def dbscan_fit(
     eps_nn_method: Int = EPS_NN_RBC,
     metric: Int = DBSCAN_METRIC_L2,
     sample_weight_addr: Int = 0,
+    out_core_addr: Int = 0,
 ) raises -> Int:
     """Cluster host-resident row-major data. Returns the PROPAGATION PASSES.
 
@@ -236,6 +237,7 @@ def dbscan_fit(
         False,
         metric,
         has_weights,
+        out_core_addr,
     )
 
     var hl = ctx.enqueue_create_host_buffer[DType.int32](n_samples)

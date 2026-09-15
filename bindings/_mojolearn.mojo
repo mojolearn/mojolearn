@@ -94,7 +94,7 @@ from checks.vendor import COMPILED_VENDOR
 
 from max.gpu.host import DeviceContext
 
-from cluster.estimator import kmeans_fit, kmeans_predict
+from cluster.estimator import kmeans_fit, kmeans_predict, kmeans_transform
 from neighbors.impl.detail.knn_brute_force import KNN_METHOD_AUTO
 from neighbors.estimator import (
     knn_classifier_predict,
@@ -477,6 +477,36 @@ def kmeans_predict_binding(
     with GILReleased(Python()):
         var ctx = DeviceContext()
         kmeans_predict(ctx, xp, ns, nf, nc, cp, lp, mm)
+    return PythonObject(ns)
+
+
+def kmeans_transform_binding(
+    x_addr: PythonObject,
+    centroids_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """The distance from every row to every centroid (cuML's
+    `KMeans.transform`). Returns n_samples.
+
+    `params` is, in this exact order: 0 n_samples, 1 n_features,
+    2 n_clusters, 3 metric. `out_addr` is `n_samples x n_clusters` float32,
+    row-major (`cluster/estimator.mojo::kmeans_transform`)."""
+    if len(params) != 4:
+        raise Error(
+            "kmeans_transform: params must hold 4 values, got "
+            + String(len(params))
+        )
+    var xp = _f32_ptr(Int(py=x_addr))
+    var cp = _f32_ptr(Int(py=centroids_addr))
+    var op = _f32_ptr(Int(py=out_addr))
+    var ns = Int(py=params[0])
+    var nf = Int(py=params[1])
+    var nc = Int(py=params[2])
+    var mm = Int(py=params[3])
+    with GILReleased(Python()):
+        var ctx = DeviceContext()
+        kmeans_transform(ctx, xp, ns, nf, nc, cp, op, mm)
     return PythonObject(ns)
 
 
@@ -1604,6 +1634,7 @@ def PyInit__mojolearn() abi("C") -> PythonObject:
         m.def_function[knn_regress_binding]("knn_regress")
         m.def_function[kmeans_fit_binding]("kmeans_fit")
         m.def_function[kmeans_predict_binding]("kmeans_predict")
+        m.def_function[kmeans_transform_binding]("kmeans_transform")
         m.def_function[radius_neighbors_count_binding](
             "radius_neighbors_count"
         )

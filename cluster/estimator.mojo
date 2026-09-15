@@ -111,7 +111,17 @@ WHAT IS NOT HERE YET, NAMED SO IT IS NOT MISTAKEN FOR DONE
 from max.algorithm import sync_parallelize
 from max.gpu.host import DeviceContext
 
-from cluster.impl.detail.kmeans_common import centroid_norms_take_sqrt
+from cluster.impl.detail.kmeans_common import (
+    centroid_norms_take_sqrt,
+    metric_is_sqrt,
+)
+from cluster.impl.detail.kmeans_transform import (
+    TRANSFORM_TPB,
+    kmeans_transform_kernel,
+)
+from cluster.impl.detail.min_cluster_distance_compute import (
+    compute_centroid_norms,
+)
 from cluster.impl.kmeans import fit_predict, predict
 from core.device_zero import enqueue_fill
 from core.row_norms import NORM_TPB, row_norm_kernel
@@ -478,4 +488,88 @@ def kmeans_predict(
         n_features,
     )
     ctx.enqueue_copy(dst_ptr=out_labels_ptr, src_buf=labels)
+    ctx.synchronize()
+
+
+def kmeans_transform(
+    ctx: DeviceContext,
+    x_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_samples: Int,
+    n_features: Int,
+    n_clusters: Int,
+    centroids_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    out_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    metric: Int = METRIC_L2_EXPANDED,
+) raises:
+    """The distance from every row to every centroid under the model's
+    metric: cuML's `KMeans.transform`, cuVS `kmeans_transform`
+    (`detail/kmeans.cuh:1178-1219`). `out_ptr` is written row-major
+    `n_samples x n_clusters` float32: squared distances for
+    `METRIC_L2_EXPANDED`, their roots for `METRIC_L2_SQRT_EXPANDED`.
+
+    The norms are `kmeans_predict`'s (`row_norm_kernel` with the same
+    `centroid_norms_take_sqrt` flag, then `compute_centroid_norms`), and the
+    cell is the fused kernel's epilog
+    (`cluster/impl/detail/kmeans_transform.mojo`), so the cell at
+    `kmeans_predict`'s label is the row minimum. The metric is refused by
+    name as the fit refuses it (`KMeansParams.validate`).
+    """
+    if n_samples < 1 or n_features < 1 or n_clusters < 1:
+        raise Error(
+            "kmeans_transform needs n_samples, n_features and n_clusters >= 1: got "
+            + String(n_samples)
+            + ", "
+            + String(n_features)
+            + ", "
+            + String(n_clusters)
+        )
+    var params = KMeansParams.default()
+    params.n_clusters = n_clusters
+    params.metric = metric
+    params.validate()
+
+    var x = ctx.enqueue_create_buffer[DType.float32](n_samples * n_features)
+    var centroids = ctx.enqueue_create_buffer[DType.float32](
+        n_clusters * n_features
+    )
+    var x_norm = ctx.enqueue_create_buffer[DType.float32](n_samples)
+    var centroid_norm = ctx.enqueue_create_buffer[DType.float32](n_clusters)
+    var out = ctx.enqueue_create_buffer[DType.float32](n_samples * n_clusters)
+    ctx.synchronize()
+    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+    ctx.enqueue_copy(dst_buf=centroids, src_ptr=centroids_ptr)
+    var take_sqrt = Int32(0)
+    if centroid_norms_take_sqrt(metric):
+        take_sqrt = Int32(1)
+    ctx.enqueue_function[row_norm_kernel](
+        x_norm.unsafe_ptr(),
+        x.unsafe_ptr(),
+        Int32(n_features),
+        take_sqrt,
+        grid_dim=(n_samples, 1, 1),
+        block_dim=(NORM_TPB, 1, 1),
+    )
+    compute_centroid_norms(
+        ctx, centroids, centroid_norm, n_clusters, n_features, metric
+    )
+    ctx.synchronize()
+    var cells = n_samples * n_clusters
+    var is_sqrt = Int32(0)
+    if metric_is_sqrt(metric):
+        is_sqrt = Int32(1)
+    ctx.enqueue_function[kmeans_transform_kernel](
+        out.unsafe_ptr(),
+        x.unsafe_ptr(),
+        centroids.unsafe_ptr(),
+        x_norm.unsafe_ptr(),
+        centroid_norm.unsafe_ptr(),
+        Int32(n_samples),
+        Int32(n_clusters),
+        Int32(n_features),
+        is_sqrt,
+        grid_dim=((cells + TRANSFORM_TPB - 1) // TRANSFORM_TPB, 1, 1),
+        block_dim=(TRANSFORM_TPB, 1, 1),
+    )
+    ctx.synchronize()
+    ctx.enqueue_copy(dst_ptr=out_ptr, src_buf=out)
     ctx.synchronize()

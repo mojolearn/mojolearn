@@ -1,0 +1,85 @@
+NOTE: --lanes scopes this diff to 2 lane(s); 164 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-apple-m4 is a CPU column: cpu_model='Apple M4' column=cpu families=['_mojolearn_core_host', '_mojolearn_mamba_host', '_mojolearn_training_host', '_mojolearn_transformer_host'] commit=4cc3609e29decd335496e069032d3fcfc266b0d6
+| lane/fixture                 | verdict    | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-apple-m4     |
+|------------------------------|------------|------------------|------------------|------------------|------------------|
+| samba-untied-dropout-accum/base | DIVERGENT  | parts differ: loss,logits,params; agree: - | 4610c84719bc1a25 | 4610c84719bc1a25 | 5e9dfe1c2e886e69 |
+| samba-untied-dropout-accum/denormal | DIVERGENT  | parts differ: loss,logits,params; agree: - | 70a608ce179e03dd | 70a608ce179e03dd | d6dbce2443f1652c |
+| samba-untied-dropout-accum/denormal_ftz | DIVERGENT  | parts differ: loss,logits,params; agree: - | eb0dc6c31a737411 | eb0dc6c31a737411 | 6026c92e13c142aa |
+| samba-untied-dropout-accum/dupes | DIVERGENT  | parts differ: loss,logits,params; agree: - | 9a7b9c31419aa4b9 | 9a7b9c31419aa4b9 | c7f71971bbe08510 |
+| samba-untied-dropout-accum/hashed | DIVERGENT  | parts differ: loss,logits,params; agree: - | 18a317bc4260eb9a | 18a317bc4260eb9a | c39463f4db3ca240 |
+| samba-untied-dropout-accum/negative | DIVERGENT  | parts differ: loss,logits,params; agree: - | 42e27eabc8c4706f | 42e27eabc8c4706f | 9e64037f8544b1ac |
+| samba-untied-dropout-accum/odd | DIVERGENT  | parts differ: loss,logits,params; agree: - | 4610c84719bc1a25 | 4610c84719bc1a25 | 5e9dfe1c2e886e69 |
+| samba-untied-dropout-accum/ties | DIVERGENT  | parts differ: loss,logits,params; agree: - | 603f4c03dcbe47c9 | 603f4c03dcbe47c9 | 96c668b61df5950a |
+| samba-untied-dropout-accum/wide | DIVERGENT  | parts differ: loss,logits,params; agree: - | 70d8b0c335b40464 | 70d8b0c335b40464 | fd0e7ac314dd7632 |
+| samba/base                   | DIVERGENT  | parts differ: loss,logits,params; agree: - | 037e7701daa7fc7c | 037e7701daa7fc7c | 11a5e5834bc26fdc |
+| samba/denormal               | DIVERGENT  | parts differ: loss,logits,params; agree: - | 97c929c9824ede42 | 97c929c9824ede42 | 1402c7ddfb1502b5 |
+| samba/denormal_ftz           | DIVERGENT  | parts differ: loss,logits,params; agree: - | 2dc833bbce3de194 | 2dc833bbce3de194 | 8a62e377f750bcd4 |
+| samba/dupes                  | DIVERGENT  | parts differ: loss,logits,params; agree: - | daa904c0d89aefde | daa904c0d89aefde | a6e9a3978a0c4b50 |
+| samba/hashed                 | DIVERGENT  | parts differ: loss,logits,params; agree: - | 0fb42364f4c84411 | 0fb42364f4c84411 | 38ed9559a5e00ac8 |
+| samba/negative               | DIVERGENT  | parts differ: logits,params; agree: loss | 8c6bfc3b26396833 | 8c6bfc3b26396833 | acee93b88b515508 |
+| samba/odd                    | DIVERGENT  | parts differ: loss,logits,params; agree: - | 037e7701daa7fc7c | 037e7701daa7fc7c | 11a5e5834bc26fdc |
+| samba/ties                   | DIVERGENT  | parts differ: loss,logits,params; agree: - | e02c7412e926a415 | e02c7412e926a415 | b22c84e23737d1b2 |
+| samba/wide                   | DIVERGENT  | parts differ: loss,logits,params; agree: - | 68e2e32002737938 | 68e2e32002737938 | 2b606d014654985c |
+
+summary: DIVERGENT=18
+
+| lane/fixture                 | column | verdict      | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-apple-m4     |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
+| samba-untied-dropout-accum/base | infer  | DIVERGENT    | 43f7860a7ff7a633 | 43f7860a7ff7a633 | 43f7860a7ff7a633 | a1e17985b7f98365 |
+| samba-untied-dropout-accum/base | model  | DIVERGENT    | 4c6bb23f04af6858 | 4c6bb23f04af6858 | 4c6bb23f04af6858 | ad123e2b8725d493 |
+| samba-untied-dropout-accum/base | batch  | DIVERGENT    | 94c79045f8d92d80 | 94c79045f8d92d80 | 94c79045f8d92d80 | d4f4cd8c9df93472 |
+| samba-untied-dropout-accum/denormal | infer  | DIVERGENT    | 24c7e0e923e369e0 | 24c7e0e923e369e0 | 24c7e0e923e369e0 | 019e26279b17ede4 |
+| samba-untied-dropout-accum/denormal | model  | DIVERGENT    | 10a8d940bbce9051 | 10a8d940bbce9051 | 10a8d940bbce9051 | 746adafd208a56bc |
+| samba-untied-dropout-accum/denormal | batch  | DIVERGENT    | 52f4c864f4e177ed | 52f4c864f4e177ed | 52f4c864f4e177ed | 6b44f5082265edbd |
+| samba-untied-dropout-accum/denormal_ftz | infer  | DIVERGENT    | d815951934e104a6 | d815951934e104a6 | d815951934e104a6 | 54596da06d2f04cb |
+| samba-untied-dropout-accum/denormal_ftz | model  | DIVERGENT    | 35a817ce8929a5d6 | 35a817ce8929a5d6 | 35a817ce8929a5d6 | 5f175f8e4fc42df5 |
+| samba-untied-dropout-accum/denormal_ftz | batch  | DIVERGENT    | eb52194ccef805e4 | eb52194ccef805e4 | eb52194ccef805e4 | ac4b20fe320b99c1 |
+| samba-untied-dropout-accum/dupes | infer  | DIVERGENT    | 3ca26c5ae1819ebc | 3ca26c5ae1819ebc | 3ca26c5ae1819ebc | a1461bf9620b7641 |
+| samba-untied-dropout-accum/dupes | model  | DIVERGENT    | 4bea33bdf66a23bc | 4bea33bdf66a23bc | 4bea33bdf66a23bc | ae9c5f24f667ed9e |
+| samba-untied-dropout-accum/dupes | batch  | DIVERGENT    | 95236c32031b7ace | 95236c32031b7ace | 95236c32031b7ace | 3cd53a1d410187b7 |
+| samba-untied-dropout-accum/hashed | infer  | DIVERGENT    | 87796cb8024bd934 | 87796cb8024bd934 | 87796cb8024bd934 | 4d226436c28b9252 |
+| samba-untied-dropout-accum/hashed | model  | DIVERGENT    | 148bfe51d04c1d98 | 148bfe51d04c1d98 | 148bfe51d04c1d98 | fc3b11c2205bc3bf |
+| samba-untied-dropout-accum/hashed | batch  | DIVERGENT    | 9e101ad04c649179 | 9e101ad04c649179 | 9e101ad04c649179 | 22b2386d110524d6 |
+| samba-untied-dropout-accum/negative | infer  | DIVERGENT    | 55ec2d1c5eccef2d | 55ec2d1c5eccef2d | 55ec2d1c5eccef2d | e79ff1f0d63a511b |
+| samba-untied-dropout-accum/negative | model  | DIVERGENT    | ecaf3ac775bac83b | ecaf3ac775bac83b | ecaf3ac775bac83b | 9384899e5de86d6c |
+| samba-untied-dropout-accum/negative | batch  | DIVERGENT    | dcc15ae7885b0699 | dcc15ae7885b0699 | dcc15ae7885b0699 | 96c56c6883e89320 |
+| samba-untied-dropout-accum/odd | infer  | DIVERGENT    | 43f7860a7ff7a633 | 43f7860a7ff7a633 | 43f7860a7ff7a633 | a1e17985b7f98365 |
+| samba-untied-dropout-accum/odd | model  | DIVERGENT    | 4c6bb23f04af6858 | 4c6bb23f04af6858 | 4c6bb23f04af6858 | ad123e2b8725d493 |
+| samba-untied-dropout-accum/odd | batch  | DIVERGENT    | 94c79045f8d92d80 | 94c79045f8d92d80 | 94c79045f8d92d80 | d4f4cd8c9df93472 |
+| samba-untied-dropout-accum/ties | infer  | DIVERGENT    | bb32b8aebf4dc90e | bb32b8aebf4dc90e | bb32b8aebf4dc90e | 1e0ec2936491700f |
+| samba-untied-dropout-accum/ties | model  | DIVERGENT    | 9818c749c2dfc7ea | 9818c749c2dfc7ea | 9818c749c2dfc7ea | 006c1f6f90fede2b |
+| samba-untied-dropout-accum/ties | batch  | DIVERGENT    | 4130d70c2c138b0e | 4130d70c2c138b0e | 4130d70c2c138b0e | 75574cafc9c859c6 |
+| samba-untied-dropout-accum/wide | infer  | DIVERGENT    | 21601e087bd7d274 | 21601e087bd7d274 | 21601e087bd7d274 | 2a0b863e0875d701 |
+| samba-untied-dropout-accum/wide | model  | DIVERGENT    | 98b807c41ebff82a | 98b807c41ebff82a | 98b807c41ebff82a | a11049f221a20dec |
+| samba-untied-dropout-accum/wide | batch  | DIVERGENT    | fb9e91204daaf37e | fb9e91204daaf37e | fb9e91204daaf37e | 8625b93f4c70c5b4 |
+| samba/base                   | infer  | DIVERGENT    | 77db10c414ebd846 | 77db10c414ebd846 | 77db10c414ebd846 | 59c7e730bf07c84b |
+| samba/base                   | model  | DIVERGENT    | 674582804fcf1a50 | 674582804fcf1a50 | 674582804fcf1a50 | 8338c744fb220f4b |
+| samba/base                   | batch  | DIVERGENT    | aacbe0585755bc0f | aacbe0585755bc0f | aacbe0585755bc0f | 910ebabefcc1317b |
+| samba/denormal               | infer  | DIVERGENT    | ca618a38cf786fa4 | ca618a38cf786fa4 | ca618a38cf786fa4 | d181a9df1d332ad3 |
+| samba/denormal               | model  | DIVERGENT    | f7f05521e7cdfec7 | f7f05521e7cdfec7 | f7f05521e7cdfec7 | 11e2e3f3e930186f |
+| samba/denormal               | batch  | DIVERGENT    | f5880effe032ad0f | f5880effe032ad0f | f5880effe032ad0f | 72da1e05e4c1b305 |
+| samba/denormal_ftz           | infer  | DIVERGENT    | b728af86ccc442fb | b728af86ccc442fb | b728af86ccc442fb | 9d002fe3737b96ba |
+| samba/denormal_ftz           | model  | DIVERGENT    | f34e7e4227d3ab4b | f34e7e4227d3ab4b | f34e7e4227d3ab4b | 7cd4d980542c3746 |
+| samba/denormal_ftz           | batch  | DIVERGENT    | d765507d7d144423 | d765507d7d144423 | d765507d7d144423 | 8ee2c3323b6fbc84 |
+| samba/dupes                  | infer  | DIVERGENT    | 3bb2585d8a536f77 | 3bb2585d8a536f77 | 3bb2585d8a536f77 | 4e90e44e85173f51 |
+| samba/dupes                  | model  | DIVERGENT    | 5113ff087cd1d774 | 5113ff087cd1d774 | 5113ff087cd1d774 | f8d4f7f3db22bc6b |
+| samba/dupes                  | batch  | DIVERGENT    | a77ce9563430eca6 | a77ce9563430eca6 | a77ce9563430eca6 | de9c1f5d2b9f5d2b |
+| samba/hashed                 | infer  | DIVERGENT    | b0b897d724d5a625 | b0b897d724d5a625 | b0b897d724d5a625 | 4d2fd8aac887e7f0 |
+| samba/hashed                 | model  | DIVERGENT    | 284aef669039f101 | 284aef669039f101 | 284aef669039f101 | 050f192d7046befe |
+| samba/hashed                 | batch  | DIVERGENT    | 685cfa1d3a50b038 | 685cfa1d3a50b038 | 685cfa1d3a50b038 | af2dba27a718fcd9 |
+| samba/negative               | infer  | DIVERGENT    | 3a11eda41792501b | 3a11eda41792501b | 3a11eda41792501b | e5f86972e1fb56cd |
+| samba/negative               | model  | DIVERGENT    | bf0a203a904b24cf | bf0a203a904b24cf | bf0a203a904b24cf | 94923912f9dce6ec |
+| samba/negative               | batch  | DIVERGENT    | 87de84abeab25d86 | 87de84abeab25d86 | 87de84abeab25d86 | ebaef5dfd115c638 |
+| samba/odd                    | infer  | DIVERGENT    | 77db10c414ebd846 | 77db10c414ebd846 | 77db10c414ebd846 | 59c7e730bf07c84b |
+| samba/odd                    | model  | DIVERGENT    | 674582804fcf1a50 | 674582804fcf1a50 | 674582804fcf1a50 | 8338c744fb220f4b |
+| samba/odd                    | batch  | DIVERGENT    | aacbe0585755bc0f | aacbe0585755bc0f | aacbe0585755bc0f | 910ebabefcc1317b |
+| samba/ties                   | infer  | DIVERGENT    | a777e99f0a27b647 | a777e99f0a27b647 | a777e99f0a27b647 | bf803ec760b7226c |
+| samba/ties                   | model  | DIVERGENT    | 1e49500f833e02a1 | 1e49500f833e02a1 | 1e49500f833e02a1 | fecd6ae511642205 |
+| samba/ties                   | batch  | DIVERGENT    | ca83b11a24eb8695 | ca83b11a24eb8695 | ca83b11a24eb8695 | ee5e08df09c2f5fa |
+| samba/wide                   | infer  | DIVERGENT    | a9c9aafd145646b1 | a9c9aafd145646b1 | a9c9aafd145646b1 | c11c4fd9d4b6e660 |
+| samba/wide                   | model  | DIVERGENT    | 6adcd1530cd32c5e | 6adcd1530cd32c5e | 6adcd1530cd32c5e | e23d787db4603fe1 |
+| samba/wide                   | batch  | DIVERGENT    | 609a185bf1638192 | 609a185bf1638192 | 609a185bf1638192 | 9da558fd8a63a325 |
+
+summary (infer/model): DIVERGENT=36
+summary (batch): DIVERGENT=18
+require-columns 4 over ['samba', 'samba-untied-dropout-accum']: OK

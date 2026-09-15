@@ -55,7 +55,8 @@ from ._solver_impl import ElasticNet, Lasso, _CD_FORMAT
 from ._svm_impl import SVC, _SVC_FORMAT
 from ._umap_impl import UMAP, _UMAP_FORMAT
 from .decomposition import PCA, TruncatedSVD, _PCA_FORMAT, _TSVD_FORMAT
-from .density import KernelDensity, _KDE_FORMAT
+from ._hierarchy_impl import AgglomerativeClustering, _AGGLOMERATIVE_FORMAT
+from .density import DBSCAN, KernelDensity, _DBSCAN_FORMAT, _KDE_FORMAT
 from .kernel_methods import (
     KernelRidge, Nystroem, RBFSampler, _KERNEL_RIDGE_FORMAT, _NYSTROEM_FORMAT,
     _RBF_SAMPLER_FORMAT,
@@ -202,6 +203,19 @@ class HostSVC(_HostBound, SVC):
     _HOST_ARRAYS = ("dual_coef_", "support_vectors_", "intercept_")
 
 
+class HostDBSCAN(_HostBound, DBSCAN):
+    """`DBSCAN.predict` from a saved `prediction_data=True` model through
+    `_mojolearn_estimators_host.labeled_reference_predict`
+    (lane/inference-transductive-predict, 2026-09-15, DEVIATION 2740)."""
+    _HOST_ARRAYS = ("components_", "core_sample_indices_", "_core_labels")
+
+
+class HostAgglomerativeClustering(_HostBound, AgglomerativeClustering):
+    """`AgglomerativeClustering.predict` from a saved model through the
+    estimators host binding; the fit's solver family does not ship."""
+    _HOST_ARRAYS = ("_fit_X", "labels_")
+
+
 class _HostKNN(_HostBound):
     """The three k-NN host classes' shared refusal: the random ball cover
     arm has no host entry (`rbc_knn_search` is absent from the core host
@@ -329,6 +343,8 @@ _FORMATS = {
     _PCA_FORMAT: {"PCA": HostPCA},
     _KDE_FORMAT: {"KernelDensity": HostKernelDensity},
     _SVC_FORMAT: {"SVC": HostSVC},
+    _DBSCAN_FORMAT: {"DBSCAN": HostDBSCAN},
+    _AGGLOMERATIVE_FORMAT: {"AgglomerativeClustering": HostAgglomerativeClustering},
     _KNN_FORMAT: {
         "NearestNeighbors": HostNearestNeighbors,
         "KNeighborsClassifier": HostKNeighborsClassifier,

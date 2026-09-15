@@ -1,0 +1,79 @@
+NOTE: --lanes scopes this diff to 4 lane(s); 0 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-x86-x86_64 is a CPU column: cpu_model='AMD EPYC 9654 96-Core Processor' column=cpu families=['_mojolearn_mixture_host'] commit=0c65514b938bce4098adfe6dd13c8b20d1dbd0bc
+NOTE: column cpu-x86-x86_64 is a CPU column: cpu_model='AMD EPYC 9654 96-Core Processor' column=cpu families=['_mojolearn_mixture_host'] commit=0c65514b938bce4098adfe6dd13c8b20d1dbd0bc
+NOTE: column cpu-x86-x86_64 ran with MOJOLEARN_IDENTITY_BATCH_SABOTAGE ON; its batch cells are a sabotage run and must read BATCH_MOVED, they are not evidence
+| lane/fixture                 | verdict    | cpu-x86-x86_64   | cpu-x86-x86_64   |
+|------------------------------|------------|------------------|------------------|
+| gmm-random-init-sample/base  | IDENTICAL x2 | e8402fa2c29319b0 | e8402fa2c29319b0 |
+| gmm-random-init-sample/denormal | IDENTICAL x2 | 53c4c0b31627c1f7 | 53c4c0b31627c1f7 |
+| gmm-random-init-sample/odd   | IDENTICAL x2 | 71ed1c1caf8e6874 | 71ed1c1caf8e6874 |
+| gmm-random-init-sample/ties  | IDENTICAL x2 | 101197bb7831587c | 101197bb7831587c |
+| gmm-random-init/base         | IDENTICAL x2 | fc8ac51adc1813b2 | fc8ac51adc1813b2 |
+| gmm-random-init/denormal     | IDENTICAL x2 | 6675c8b44ac323d1 | 6675c8b44ac323d1 |
+| gmm-random-init/odd          | IDENTICAL x2 | b678139187174269 | b678139187174269 |
+| gmm-random-init/ties         | IDENTICAL x2 | 01978ea4fe0c8e33 | 01978ea4fe0c8e33 |
+| gmm-sample/base              | IDENTICAL x2 | 2995412dbe6ede62 | 2995412dbe6ede62 |
+| gmm-sample/denormal          | IDENTICAL x2 | b0719a23f1750cd0 | b0719a23f1750cd0 |
+| gmm-sample/odd               | IDENTICAL x2 | 2a8e73e4b6764522 | 2a8e73e4b6764522 |
+| gmm-sample/ties              | IDENTICAL x2 | 4f5c80e0a98f2fb7 | 4f5c80e0a98f2fb7 |
+| gmm/base                     | IDENTICAL x2 | bf646caedaf7a508 | bf646caedaf7a508 |
+| gmm/denormal                 | IDENTICAL x2 | c2920674c1f91bb0 | c2920674c1f91bb0 |
+| gmm/odd                      | IDENTICAL x2 | 70e1fb9e39156be1 | 70e1fb9e39156be1 |
+| gmm/ties                     | IDENTICAL x2 | 2f07a729352d2581 | 2f07a729352d2581 |
+
+summary: IDENTICAL=16
+
+| lane/fixture                 | column | verdict      | cpu-x86-x86_64   | cpu-x86-x86_64   |
+|------------------------------|--------|--------------|------------------|------------------|
+| gmm-random-init-sample/base  | infer  | IDENTICAL x2 | a460febf045cb5ed | a460febf045cb5ed |
+| gmm-random-init-sample/base  | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gmm-random-init-sample/base  | batch  | N/A          | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-random-init-sample/denormal | infer  | IDENTICAL x2 | aaa5ba26b5120d24 | aaa5ba26b5120d24 |
+| gmm-random-init-sample/denormal | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gmm-random-init-sample/denormal | batch  | N/A          | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-random-init-sample/odd   | infer  | IDENTICAL x2 | 0360f4cd3fa1dc5a | 0360f4cd3fa1dc5a |
+| gmm-random-init-sample/odd   | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gmm-random-init-sample/odd   | batch  | N/A          | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-random-init-sample/ties  | infer  | IDENTICAL x2 | c9f89c3987186292 | c9f89c3987186292 |
+| gmm-random-init-sample/ties  | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gmm-random-init-sample/ties  | batch  | N/A          | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-random-init/base         | infer  | IDENTICAL x2 | 87226624dfab0f10 | 87226624dfab0f10 |
+| gmm-random-init/base         | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gmm-random-init/base         | batch  | BATCH_MOVED  | 15233a5b0b86b9b2 | BATCH_MOVED      |
+| gmm-random-init/denormal     | infer  | IDENTICAL x2 | c9bd6b5bcb2c805a | c9bd6b5bcb2c805a |
+| gmm-random-init/denormal     | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gmm-random-init/denormal     | batch  | BATCH_MOVED  | 81f3e8a1665f0f1e | BATCH_MOVED      |
+| gmm-random-init/odd          | infer  | IDENTICAL x2 | 057c020ccbbda789 | 057c020ccbbda789 |
+| gmm-random-init/odd          | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gmm-random-init/odd          | batch  | BATCH_MOVED  | f20bd8076248b527 | BATCH_MOVED      |
+| gmm-random-init/ties         | infer  | IDENTICAL x2 | 5c4f620623f43daf | 5c4f620623f43daf |
+| gmm-random-init/ties         | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gmm-random-init/ties         | batch  | BATCH_MOVED  | 6f7b606277388c47 | BATCH_MOVED      |
+| gmm-sample/base              | infer  | IDENTICAL x2 | e3cad76ce9a060d0 | e3cad76ce9a060d0 |
+| gmm-sample/base              | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gmm-sample/base              | batch  | N/A          | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-sample/denormal          | infer  | IDENTICAL x2 | e50606c37c34da5a | e50606c37c34da5a |
+| gmm-sample/denormal          | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gmm-sample/denormal          | batch  | N/A          | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-sample/odd               | infer  | IDENTICAL x2 | e0258bef7ebd4e21 | e0258bef7ebd4e21 |
+| gmm-sample/odd               | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gmm-sample/odd               | batch  | N/A          | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-sample/ties              | infer  | IDENTICAL x2 | aa785d8205811e0f | aa785d8205811e0f |
+| gmm-sample/ties              | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gmm-sample/ties              | batch  | N/A          | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm/base                     | infer  | IDENTICAL x2 | 140095763edf6c53 | 140095763edf6c53 |
+| gmm/base                     | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gmm/base                     | batch  | BATCH_MOVED  | 599d547e666f29b2 | BATCH_MOVED      |
+| gmm/denormal                 | infer  | IDENTICAL x2 | 153bd7fcdaf1dc92 | 153bd7fcdaf1dc92 |
+| gmm/denormal                 | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gmm/denormal                 | batch  | BATCH_MOVED  | 366cc287f0ec48ae | BATCH_MOVED      |
+| gmm/odd                      | infer  | IDENTICAL x2 | fc5c09b04e8fb4aa | fc5c09b04e8fb4aa |
+| gmm/odd                      | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gmm/odd                      | batch  | BATCH_MOVED  | ae74761cf87024a2 | BATCH_MOVED      |
+| gmm/ties                     | infer  | IDENTICAL x2 | dbb412e155fd4fb2 | dbb412e155fd4fb2 |
+| gmm/ties                     | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gmm/ties                     | batch  | BATCH_MOVED  | 60796a07f79e71e9 | BATCH_MOVED      |
+
+summary (infer/model): IDENTICAL=16, N/A=16
+summary (batch): BATCH_MOVED=8, N/A=8
+summary (rlpair): 

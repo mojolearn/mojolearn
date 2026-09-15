@@ -42,3 +42,24 @@ or least-squares symbol), and the test wheel was 1,593,235 bytes compressed. The
 Owed to the release record: NVIDIA and AMD model cells for the four new save formats, and NVIDIA
 and AMD recordings of the in-sample and straddling ARIMA predictions. Owed to the workflow's
 owner: building the forecast family in the CPU identity gate and checking `FORECAST_RECORDED`.
+
+## Confirmation after the push, x86-64 Linux (`x86-runpod-confirm/`)
+
+Run after the group reached main, on the merged main commit 2b393b378 (it contains this lane's
+merge 3012d4873), through `tools/runpod_cpu_leg.sh` on one RunPod CPU pod (AMD EPYC 9654,
+8 vCPU, $0.24/hr): pod dfrcau5pwncl7s, 264 s billed, $0.0176, DELETE verified (HTTP 404,
+absent from the listing; `teardown.txt`). The pod built core, estimators, metrics, arima and
+forecast host bindings, clean and with `-D MOJOLEARN_HOST_SABOTAGE=1` (`so_sha256.txt`), and ran
+`leg_cmd.sh`.
+
+| file | verdict |
+|---|---|
+| `cpu-x86.json`, `diff.record-vs-cpu.txt` | cells=45 stable over 2 repeats; against the three 166-lane GPU columns: `summary: IDENTICAL=45`, `summary (infer/model): IDENTICAL=54, OWED=36`, `summary (batch): IDENTICAL=36, N/A=9`, `require-columns 4 ... OK (36 OWED)`, the same verdicts as the M4 column |
+| `cpu-x86.sabotage.json`, `diff.record-vs-cpu-sabotage.txt` | `summary: DIVERGENT=45`, `summary (infer/model): DIVERGENT=54`, `summary (batch): DIVERGENT=36`; the diff exits 1 |
+| `owed_sabotage_check.log` | `owed verdict OK (36 of 36 owed cell part(s) moved, 0 failure(s))` |
+| `classical_gate_cpu.json` | the M4 Metal recordings (`2026-09-15-apple-m4-umap-pca`, `2026-09-15-apple-m4-arima`) through the x86 host bindings: `gate verdict IDENTICAL (45 fixtures, 3 GPU columns, exit 0)` |
+| `classical_gate_sab.json` | the sabotage set: `EXPECTED MISMATCH SEEN (45 fixtures)` |
+
+`step_exit_codes.txt` holds every step's exit code, each as expected. The leg's overall exit
+was 2 from the command file's last line only, a `grep` whose input glob included the log it
+was writing (`input file is also the output`); no verdict step failed.

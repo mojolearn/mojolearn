@@ -1,0 +1,991 @@
+{
+ "mode": "identical",
+ "repeats": 2,
+ "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+ "vendor": "cpu-apple-m4",
+ "commit": "4cc3609e29decd335496e069032d3fcfc266b0d6",
+ "commit_source": "MOJOLEARN_COMMIT",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  },
+  "ties": {
+   "X": "186fe2109fc34ad5",
+   "y_clf": "f33cf521f758ae3c",
+   "y_reg": "047d4652a4d56bc3"
+  },
+  "hashed": {
+   "X": "c93497b26fe65cda",
+   "y_clf": "d104ead2f62bdd03",
+   "y_reg": "ce4959d8070bb069"
+  },
+  "wide": {
+   "X": "35f6a8481e649eb8",
+   "y_clf": "276ebacc29267948",
+   "y_reg": "611fc5dd6367bef5"
+  },
+  "denormal": {
+   "X": "752323c375a1cbf5",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "denormal_ftz": {
+   "X": "34c156b0d0e8a891",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "dupes": {
+   "X": "9d9d9db7c7785a14",
+   "y_clf": "d390ee2944b13e1d",
+   "y_reg": "135ce10f2a0817fe"
+  },
+  "odd": {
+   "X": "93d9611a09107bb9",
+   "y_clf": "273a388a705a4f40",
+   "y_reg": "25f3d126c81ca0ec"
+  },
+  "negative": {
+   "X": "08106ffff3256313",
+   "y_clf": "294ce4d7dadaf0bb",
+   "y_reg": "ce1914d5f78f5707"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  },
+  "ties": {
+   "X": "d1ba686494256660"
+  },
+  "hashed": {
+   "X": "9dc786ade4574aff"
+  },
+  "wide": {
+   "X": "d52a1af18a3c2f1c"
+  },
+  "denormal": {
+   "X": "5061056b118d07d0"
+  },
+  "denormal_ftz": {
+   "X": "a8c3d1a560b5cabb"
+  },
+  "dupes": {
+   "X": "e4b16c115962dfcd"
+  },
+  "odd": {
+   "X": "32ea0bbed60b8e6c"
+  },
+  "negative": {
+   "X": "45b539a3f66ce25d"
+  }
+ },
+ "cells": {
+  "samba/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "037e7701daa7fc7c",
+    "037e7701daa7fc7c"
+   ],
+   "parts": [
+    {
+     "loss": "a4ec77c75e14345b",
+     "logits": "0fe4484b8ae121c4",
+     "params": "925e00879ea7d1b2"
+    },
+    {
+     "loss": "a4ec77c75e14345b",
+     "logits": "0fe4484b8ae121c4",
+     "params": "925e00879ea7d1b2"
+    }
+   ],
+   "infer": [
+    "77db10c414ebd846",
+    "77db10c414ebd846"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "674582804fcf1a50",
+    "674582804fcf1a50"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "77db10c414ebd846",
+    "77db10c414ebd846"
+   ],
+   "batch": [
+    "aacbe0585755bc0f",
+    "aacbe0585755bc0f"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "samba/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "e02c7412e926a415",
+    "e02c7412e926a415"
+   ],
+   "parts": [
+    {
+     "loss": "ea5c009d27c49712",
+     "logits": "1f6dc0c81773f75d",
+     "params": "a76c4fe209566a16"
+    },
+    {
+     "loss": "ea5c009d27c49712",
+     "logits": "1f6dc0c81773f75d",
+     "params": "a76c4fe209566a16"
+    }
+   ],
+   "infer": [
+    "a777e99f0a27b647",
+    "a777e99f0a27b647"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "1e49500f833e02a1",
+    "1e49500f833e02a1"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "a777e99f0a27b647",
+    "a777e99f0a27b647"
+   ],
+   "batch": [
+    "ca83b11a24eb8695",
+    "ca83b11a24eb8695"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "samba/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "0fb42364f4c84411",
+    "0fb42364f4c84411"
+   ],
+   "parts": [
+    {
+     "loss": "9f1aa537af2475c9",
+     "logits": "186aaf3187ecd023",
+     "params": "a7a4032f361162d9"
+    },
+    {
+     "loss": "9f1aa537af2475c9",
+     "logits": "186aaf3187ecd023",
+     "params": "a7a4032f361162d9"
+    }
+   ],
+   "infer": [
+    "b0b897d724d5a625",
+    "b0b897d724d5a625"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "284aef669039f101",
+    "284aef669039f101"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "b0b897d724d5a625",
+    "b0b897d724d5a625"
+   ],
+   "batch": [
+    "685cfa1d3a50b038",
+    "685cfa1d3a50b038"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "samba/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "68e2e32002737938",
+    "68e2e32002737938"
+   ],
+   "parts": [
+    {
+     "loss": "26531085ace68276",
+     "logits": "bad9b4cbae2391aa",
+     "params": "2112c0aafee5224c"
+    },
+    {
+     "loss": "26531085ace68276",
+     "logits": "bad9b4cbae2391aa",
+     "params": "2112c0aafee5224c"
+    }
+   ],
+   "infer": [
+    "a9c9aafd145646b1",
+    "a9c9aafd145646b1"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "6adcd1530cd32c5e",
+    "6adcd1530cd32c5e"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "a9c9aafd145646b1",
+    "a9c9aafd145646b1"
+   ],
+   "batch": [
+    "609a185bf1638192",
+    "609a185bf1638192"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "samba/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "97c929c9824ede42",
+    "97c929c9824ede42"
+   ],
+   "parts": [
+    {
+     "loss": "62b23d29a741ac74",
+     "logits": "f5f9f47d0ec3e5e5",
+     "params": "94c84d18dc20fa5c"
+    },
+    {
+     "loss": "62b23d29a741ac74",
+     "logits": "f5f9f47d0ec3e5e5",
+     "params": "94c84d18dc20fa5c"
+    }
+   ],
+   "infer": [
+    "ca618a38cf786fa4",
+    "ca618a38cf786fa4"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "f7f05521e7cdfec7",
+    "f7f05521e7cdfec7"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "ca618a38cf786fa4",
+    "ca618a38cf786fa4"
+   ],
+   "batch": [
+    "f5880effe032ad0f",
+    "f5880effe032ad0f"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "samba/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2dc833bbce3de194",
+    "2dc833bbce3de194"
+   ],
+   "parts": [
+    {
+     "loss": "f75f1e70aa4e703a",
+     "logits": "236dc22d343ee72d",
+     "params": "b5bef64e7de1ac22"
+    },
+    {
+     "loss": "f75f1e70aa4e703a",
+     "logits": "236dc22d343ee72d",
+     "params": "b5bef64e7de1ac22"
+    }
+   ],
+   "infer": [
+    "b728af86ccc442fb",
+    "b728af86ccc442fb"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "f34e7e4227d3ab4b",
+    "f34e7e4227d3ab4b"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "b728af86ccc442fb",
+    "b728af86ccc442fb"
+   ],
+   "batch": [
+    "d765507d7d144423",
+    "d765507d7d144423"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "samba/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "daa904c0d89aefde",
+    "daa904c0d89aefde"
+   ],
+   "parts": [
+    {
+     "loss": "29d5432e0b75276a",
+     "logits": "5c182db098f59cbb",
+     "params": "6bb6696530a15b22"
+    },
+    {
+     "loss": "29d5432e0b75276a",
+     "logits": "5c182db098f59cbb",
+     "params": "6bb6696530a15b22"
+    }
+   ],
+   "infer": [
+    "3bb2585d8a536f77",
+    "3bb2585d8a536f77"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "5113ff087cd1d774",
+    "5113ff087cd1d774"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "3bb2585d8a536f77",
+    "3bb2585d8a536f77"
+   ],
+   "batch": [
+    "a77ce9563430eca6",
+    "a77ce9563430eca6"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "samba/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "037e7701daa7fc7c",
+    "037e7701daa7fc7c"
+   ],
+   "parts": [
+    {
+     "loss": "a4ec77c75e14345b",
+     "logits": "0fe4484b8ae121c4",
+     "params": "925e00879ea7d1b2"
+    },
+    {
+     "loss": "a4ec77c75e14345b",
+     "logits": "0fe4484b8ae121c4",
+     "params": "925e00879ea7d1b2"
+    }
+   ],
+   "infer": [
+    "77db10c414ebd846",
+    "77db10c414ebd846"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "674582804fcf1a50",
+    "674582804fcf1a50"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "77db10c414ebd846",
+    "77db10c414ebd846"
+   ],
+   "batch": [
+    "aacbe0585755bc0f",
+    "aacbe0585755bc0f"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "samba/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "8c6bfc3b26396833",
+    "8c6bfc3b26396833"
+   ],
+   "parts": [
+    {
+     "loss": "8b50535cb7622257",
+     "logits": "010202cbb30c9c75",
+     "params": "b5de12584bf6e56c"
+    },
+    {
+     "loss": "8b50535cb7622257",
+     "logits": "010202cbb30c9c75",
+     "params": "b5de12584bf6e56c"
+    }
+   ],
+   "infer": [
+    "3a11eda41792501b",
+    "3a11eda41792501b"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "bf0a203a904b24cf",
+    "bf0a203a904b24cf"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "3a11eda41792501b",
+    "3a11eda41792501b"
+   ],
+   "batch": [
+    "87de84abeab25d86",
+    "87de84abeab25d86"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "samba-untied-dropout-accum/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "4610c84719bc1a25",
+    "4610c84719bc1a25"
+   ],
+   "parts": [
+    {
+     "loss": "5e82d5357d084426",
+     "logits": "f1a775afe812bd4b",
+     "params": "d28a060fcb9c4f35"
+    },
+    {
+     "loss": "5e82d5357d084426",
+     "logits": "f1a775afe812bd4b",
+     "params": "d28a060fcb9c4f35"
+    }
+   ],
+   "infer": [
+    "43f7860a7ff7a633",
+    "43f7860a7ff7a633"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "4c6bb23f04af6858",
+    "4c6bb23f04af6858"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "43f7860a7ff7a633",
+    "43f7860a7ff7a633"
+   ],
+   "batch": [
+    "94c79045f8d92d80",
+    "94c79045f8d92d80"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "samba-untied-dropout-accum/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "603f4c03dcbe47c9",
+    "603f4c03dcbe47c9"
+   ],
+   "parts": [
+    {
+     "loss": "e9abc56392257295",
+     "logits": "40675cdece413319",
+     "params": "72c02cfae8749d71"
+    },
+    {
+     "loss": "e9abc56392257295",
+     "logits": "40675cdece413319",
+     "params": "72c02cfae8749d71"
+    }
+   ],
+   "infer": [
+    "bb32b8aebf4dc90e",
+    "bb32b8aebf4dc90e"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "9818c749c2dfc7ea",
+    "9818c749c2dfc7ea"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "bb32b8aebf4dc90e",
+    "bb32b8aebf4dc90e"
+   ],
+   "batch": [
+    "4130d70c2c138b0e",
+    "4130d70c2c138b0e"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "samba-untied-dropout-accum/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "18a317bc4260eb9a",
+    "18a317bc4260eb9a"
+   ],
+   "parts": [
+    {
+     "loss": "c2882ca5bcc33c37",
+     "logits": "f5d53745fd0ebb8b",
+     "params": "2709a6309498336d"
+    },
+    {
+     "loss": "c2882ca5bcc33c37",
+     "logits": "f5d53745fd0ebb8b",
+     "params": "2709a6309498336d"
+    }
+   ],
+   "infer": [
+    "87796cb8024bd934",
+    "87796cb8024bd934"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "148bfe51d04c1d98",
+    "148bfe51d04c1d98"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "87796cb8024bd934",
+    "87796cb8024bd934"
+   ],
+   "batch": [
+    "9e101ad04c649179",
+    "9e101ad04c649179"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "samba-untied-dropout-accum/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "70d8b0c335b40464",
+    "70d8b0c335b40464"
+   ],
+   "parts": [
+    {
+     "loss": "e9726ac8e6dbcfb5",
+     "logits": "571530c03f76d0c4",
+     "params": "b04a08e0b404080e"
+    },
+    {
+     "loss": "e9726ac8e6dbcfb5",
+     "logits": "571530c03f76d0c4",
+     "params": "b04a08e0b404080e"
+    }
+   ],
+   "infer": [
+    "21601e087bd7d274",
+    "21601e087bd7d274"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "98b807c41ebff82a",
+    "98b807c41ebff82a"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "21601e087bd7d274",
+    "21601e087bd7d274"
+   ],
+   "batch": [
+    "fb9e91204daaf37e",
+    "fb9e91204daaf37e"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "samba-untied-dropout-accum/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "70a608ce179e03dd",
+    "70a608ce179e03dd"
+   ],
+   "parts": [
+    {
+     "loss": "779e600db4671456",
+     "logits": "52ce71d9b03b5d80",
+     "params": "1145a29636495f93"
+    },
+    {
+     "loss": "779e600db4671456",
+     "logits": "52ce71d9b03b5d80",
+     "params": "1145a29636495f93"
+    }
+   ],
+   "infer": [
+    "24c7e0e923e369e0",
+    "24c7e0e923e369e0"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "10a8d940bbce9051",
+    "10a8d940bbce9051"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "24c7e0e923e369e0",
+    "24c7e0e923e369e0"
+   ],
+   "batch": [
+    "52f4c864f4e177ed",
+    "52f4c864f4e177ed"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "samba-untied-dropout-accum/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "eb0dc6c31a737411",
+    "eb0dc6c31a737411"
+   ],
+   "parts": [
+    {
+     "loss": "ebede16dfd432fa6",
+     "logits": "fcd2654eddc8b643",
+     "params": "1b0e9a2e241e1c5d"
+    },
+    {
+     "loss": "ebede16dfd432fa6",
+     "logits": "fcd2654eddc8b643",
+     "params": "1b0e9a2e241e1c5d"
+    }
+   ],
+   "infer": [
+    "d815951934e104a6",
+    "d815951934e104a6"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "35a817ce8929a5d6",
+    "35a817ce8929a5d6"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "d815951934e104a6",
+    "d815951934e104a6"
+   ],
+   "batch": [
+    "eb52194ccef805e4",
+    "eb52194ccef805e4"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "samba-untied-dropout-accum/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "9a7b9c31419aa4b9",
+    "9a7b9c31419aa4b9"
+   ],
+   "parts": [
+    {
+     "loss": "2b8eb43c4cdf2b8e",
+     "logits": "8610a76a16903f78",
+     "params": "8b4fa705fb904ccf"
+    },
+    {
+     "loss": "2b8eb43c4cdf2b8e",
+     "logits": "8610a76a16903f78",
+     "params": "8b4fa705fb904ccf"
+    }
+   ],
+   "infer": [
+    "3ca26c5ae1819ebc",
+    "3ca26c5ae1819ebc"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "4bea33bdf66a23bc",
+    "4bea33bdf66a23bc"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "3ca26c5ae1819ebc",
+    "3ca26c5ae1819ebc"
+   ],
+   "batch": [
+    "95236c32031b7ace",
+    "95236c32031b7ace"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "samba-untied-dropout-accum/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "4610c84719bc1a25",
+    "4610c84719bc1a25"
+   ],
+   "parts": [
+    {
+     "loss": "5e82d5357d084426",
+     "logits": "f1a775afe812bd4b",
+     "params": "d28a060fcb9c4f35"
+    },
+    {
+     "loss": "5e82d5357d084426",
+     "logits": "f1a775afe812bd4b",
+     "params": "d28a060fcb9c4f35"
+    }
+   ],
+   "infer": [
+    "43f7860a7ff7a633",
+    "43f7860a7ff7a633"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "4c6bb23f04af6858",
+    "4c6bb23f04af6858"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "43f7860a7ff7a633",
+    "43f7860a7ff7a633"
+   ],
+   "batch": [
+    "94c79045f8d92d80",
+    "94c79045f8d92d80"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "samba-untied-dropout-accum/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "42e27eabc8c4706f",
+    "42e27eabc8c4706f"
+   ],
+   "parts": [
+    {
+     "loss": "8e16a1f9d338d289",
+     "logits": "aaf23394cee02399",
+     "params": "9156ae39723c1dba"
+    },
+    {
+     "loss": "8e16a1f9d338d289",
+     "logits": "aaf23394cee02399",
+     "params": "9156ae39723c1dba"
+    }
+   ],
+   "infer": [
+    "55ec2d1c5eccef2d",
+    "55ec2d1c5eccef2d"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "ecaf3ac775bac83b",
+    "ecaf3ac775bac83b"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "55ec2d1c5eccef2d",
+    "55ec2d1c5eccef2d"
+   ],
+   "batch": [
+    "dcc15ae7885b0699",
+    "dcc15ae7885b0699"
+   ],
+   "batch_verdict": "STABLE"
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": false,
+ "host": {
+  "cpu_model": "Apple M4",
+  "arch": "arm64",
+  "target_cpu": "unrecorded",
+  "mojo_version": "unrecorded",
+  "python": "3.14.6",
+  "column": "cpu",
+  "routed": {
+   "_mojolearn": "_mojolearn_core_host",
+   "_mojolearn_linalg": "_mojolearn_linalg_host",
+   "_mojolearn_estimators": "_mojolearn_estimators_host",
+   "_mojolearn_metrics": "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing": "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa": "_mojolearn_tsa_host",
+   "_mojolearn_solver": "_mojolearn_solver_host",
+   "_mojolearn_svm": "_mojolearn_svm_host",
+   "_mojolearn_trees": "_mojolearn_trees_host",
+   "_mojolearn_rf": "_mojolearn_rf_host",
+   "_mojolearn_gp": "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods": "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture": "_mojolearn_mixture_host",
+   "_mojolearn_hdbscan": "_mojolearn_hdbscan_host",
+   "_mojolearn_gbdt": "_mojolearn_gbdt_host",
+   "_mojolearn_training": "_mojolearn_training_host",
+   "_mojolearn_resample": "_mojolearn_resample_host",
+   "_mojolearn_mamba": "_mojolearn_mamba_host",
+   "_mojolearn_arima": "_mojolearn_arima_host",
+   "_mojolearn_transformer": "_mojolearn_transformer_host"
+  },
+  "surface": "python/mojolearn/host_surface.py",
+  "declared": [
+   "_mojolearn_byte_lm_host",
+   "_mojolearn_forest_host",
+   "_mojolearn_tokenizer_host",
+   "_mojolearn_core_host",
+   "_mojolearn_linalg_host",
+   "_mojolearn_estimators_host",
+   "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa_host",
+   "_mojolearn_solver_host",
+   "_mojolearn_svm_host",
+   "_mojolearn_trees_host",
+   "_mojolearn_rf_host",
+   "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture_host",
+   "_mojolearn_hdbscan_host",
+   "_mojolearn_gbdt_host",
+   "_mojolearn_training_host",
+   "_mojolearn_resample_host",
+   "_mojolearn_mamba_host",
+   "_mojolearn_arima_host",
+   "_mojolearn_transformer_host"
+  ],
+  "covered_lanes": [
+   "gemm-pinned",
+   "kde",
+   "holtwinters",
+   "lasso",
+   "elasticnet",
+   "svc",
+   "agglomerative",
+   "et-clf",
+   "et-reg",
+   "iforest",
+   "knn",
+   "knn-clf",
+   "knn-reg",
+   "pca",
+   "pca-whiten",
+   "tsvd",
+   "ols",
+   "ridge",
+   "dbscan",
+   "kmeans",
+   "metrics",
+   "spectral",
+   "standard-scaler",
+   "minmax-scaler",
+   "logistic",
+   "rf-clf",
+   "rf-reg",
+   "kmeans-random",
+   "kmeans-array",
+   "kmeans-weighted",
+   "standard-scaler-no-mean",
+   "standard-scaler-no-std",
+   "minmax-scaler-clip",
+   "spectral-precomputed",
+   "gp",
+   "gp-matern12",
+   "gp-matern32",
+   "gp-matern52-ard",
+   "knn-sqeuclidean",
+   "knn-clf-distance",
+   "knn-reg-distance",
+   "gemm-transposed",
+   "dbscan-brute-l1",
+   "kde-tophat-sqeuclidean",
+   "kde-epanechnikov-l1",
+   "kde-exponential-chebyshev",
+   "kde-linear-cosine",
+   "kde-cosine-minkowski",
+   "kde-weighted",
+   "ols-no-intercept",
+   "ols-weighted",
+   "ridge-no-intercept",
+   "logistic-unpenalized-no-intercept",
+   "elasticnet-l2end-no-intercept",
+   "holtwinters-multiplicative",
+   "svc-linear",
+   "iforest-tuned",
+   "knn-manhattan",
+   "knn-chebyshev",
+   "knn-cosine",
+   "knn-minkowski-p3",
+   "knn-rbc",
+   "radius",
+   "radius-manhattan",
+   "radius-chebyshev",
+   "radius-minkowski-p3",
+   "dbscan-weighted",
+   "logistic-l1",
+   "logistic-elasticnet",
+   "logistic-multiclass",
+   "kpss",
+   "svr",
+   "svr-linear",
+   "pca-full-whiten",
+   "metrics-classification",
+   "mlp",
+   "gbdt-symmetric",
+   "gbdt-rmse",
+   "gbdt-depthwise",
+   "gbdt-lossguide",
+   "gbdt-nan-modes",
+   "gbdt-adapter-clf",
+   "gbdt-adapter-reg",
+   "gbdt-parametric-losses",
+   "gbdt-exact-mae",
+   "gbdt-lossguide-newtoncosine",
+   "gbdt-multiclass",
+   "gbdt-onevsall",
+   "arima",
+   "arima-011",
+   "arima-seasonal-c",
+   "umap",
+   "kmeans-sqrt",
+   "kmeans-classic-pp",
+   "kmeans-cosine",
+   "cross-val",
+   "bootstrap",
+   "permutation-test",
+   "monte-carlo",
+   "optim-sgd",
+   "optim-adam-clip",
+   "cross-entropy-arms",
+   "training-primitives",
+   "cholesky",
+   "rbf-sampler",
+   "kernel-ridge",
+   "nystroem",
+   "gmm",
+   "gmm-random-init",
+   "hdbscan",
+   "hdbscan-leaf",
+   "rf-clf-entropy-log2-noboot",
+   "rf-clf-balanced-parallel",
+   "rf-reg-poisson",
+   "rf-reg-gamma-ig",
+   "et-clf-entropy-bestfirst",
+   "et-reg-bootstrap-parallel",
+   "mamba2",
+   "mamba2-dtlimit",
+   "mamba1",
+   "mamba3",
+   "transformer",
+   "transformer-window"
+  ],
+  "families": {
+   "_mojolearn_core_host": {
+    "column": "cpu",
+    "sabotage": false
+   },
+   "_mojolearn_mamba_host": {
+    "column": "cpu",
+    "sabotage": false
+   },
+   "_mojolearn_training_host": {
+    "column": "cpu",
+    "sabotage": false
+   },
+   "_mojolearn_transformer_host": {
+    "column": "cpu",
+    "sabotage": false
+   }
+  }
+ },
+ "package": {
+  "version": "0.8.5",
+  "package_dir": "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/4e8829df-5da1-4c85-8680-6b52df16132c/scratchpad/wt-cpusamba/python/mojolearn",
+  "numpy": "2.4.4",
+  "python": "3.14.6",
+  "par_devices": "0",
+  "bindings": []
+ }
+}
