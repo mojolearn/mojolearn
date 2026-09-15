@@ -41,6 +41,19 @@ Linux legs are OWED before this heading reads published.
   grow from 12 to 29, adding the ols, ridge and logistic option variants. On a CPU-only
   install `StandardScaler.fit`, `MinMaxScaler.fit`, `Lasso.fit` and `ElasticNet.fit` now
   refuse by name outside the internal reference scope, as every other estimator fit does.
+- Public CPU inference for saved `IVFIndex` indexes and `Embedding` tables.
+  - `IVFIndex.fit` now builds the index and `search` answers from it, as two
+    binding calls. The train, infer and batch hashes are unchanged against
+    the committed Apple, NVIDIA and AMD columns, on Metal and on the CPU.
+  - `IVFIndex.save` / `load` (`mojolearn-ivf-flat-1`) and `Embedding.save` /
+    `load` (`mojolearn-embedding-1`) carry GPU-built state to a CPU, and
+    `mojolearn.host_model` returns a host instance for either file.
+  - Two new host bindings ship in the wheels, `_mojolearn_ivf_search_host`
+    (search only) and `_mojolearn_embedding_infer_host` (lookup only). Each
+    serves its family on a CPU-only install that has no reference binding.
+  - `Embedding.backward` refuses on a CPU-only install outside the internal
+    verifier.
+  - Evidence: bench/results/identity_break/2026-09-15_ivf-embedding-cpu-inference/.
 - Public CPU `Cholesky` inference. On a CPU-only install `Cholesky().fit(A)` factors a given
   matrix and `solve` answers from it, and `Cholesky.save` / `Cholesky.load` (or
   `mojolearn.host_model`, which returns a `HostCholesky`) carry a factor from a GPU box to a
