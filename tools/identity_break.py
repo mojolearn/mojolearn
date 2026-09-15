@@ -6117,13 +6117,19 @@ def _probe_fit_host(fit, name):
 def _probe_saved_host(fit, name):
     """The infer, model and reload columns of a CPU fit that LOADED a GPU
     column's saved file (GBDT_CTR_MODELS_ENV): the held-out probe of a fresh
-    `host_model(<file>)`, the file's hash, and the probe of a second fresh
-    load (a load that predicts differently reads RELOAD-MOVED). The same
-    binary guard as `_probe_fit_host`."""
+    `host_model(<file>)`, the model part n/a, and the probe of a second fresh
+    load. The same binary guard as `_probe_fit_host`.
+
+    The model part is n/a on a CPU column since lane/cpu-verifier-gaps-7
+    (2026-09-15): the file is the GPU column's bytes, which the CPU column
+    did not write, so its hash is not a CPU cell, and the CPU gate's
+    sabotage arm could never move it (every OWED part must move). The GPU
+    columns still hash the file they wrote. A second load that predicts
+    differently from the first is refused (the model part reads REFUSED),
+    because an n/a model part skips the RELOAD-MOVED comparison."""
     from mojolearn._forest_host import binary_path, host_model
     path = fit.est.identity_saved_path
     try:
-        model = _hfile(path)
         host = host_model(path)
         bound = getattr(getattr(host, "_binding", None), "__file__", None)
         if bound is not None and os.path.realpath(bound) != os.path.realpath(binary_path()):
@@ -6136,7 +6142,10 @@ def _probe_saved_host(fit, name):
         reload = _h(*fit.probe(host_model(path)))
     except Exception as exc:
         return infer, None, None, f"model (saved model): {type(exc).__name__}: {exc}"
-    return infer, model, reload, None
+    if reload != infer:
+        return infer, None, None, (f"model (saved model): a second host_model load of {path} predicts "
+                                   f"{reload}, the first {infer}")
+    return infer, "n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none)", None, None
 
 
 def _probe_fit(fit, name):

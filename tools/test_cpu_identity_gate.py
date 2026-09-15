@@ -337,5 +337,46 @@ class BuildListTests(unittest.TestCase):
         self.assertIn('leaves out _mojolearn_ivf_search_host', out.getvalue())
 
 
+class SabotageDefinesTests(unittest.TestCase):
+    """The sabotage host set's per-family defines and the CTR table lanes'
+    saved models, read from python/mojolearn/host_surface.py
+    (lane/cpu-verifier-gaps-7, 2026-09-15)."""
+
+    def setUp(self):
+        self.manifest = gate.load_manifest()
+
+    def test_every_family_carries_the_host_define_and_two_carry_their_own(self):
+        own = {}
+        for family in self.manifest['families']():
+            defines = self.manifest['sabotage_build_defines'](family).split()
+            self.assertEqual(defines[:2], ['-D', 'MOJOLEARN_HOST_SABOTAGE=1'], family)
+            if len(defines) > 2:
+                own[family] = defines[2:]
+        self.assertEqual(own, {'forest': ['-D', 'MOJOLEARN_GBDT_CTR_HOST_SABOTAGE=1'],
+                               'tokenizer': ['-D', 'MOJOLEARN_TOKENIZER_HOST_SABOTAGE=1']})
+
+    def test_lanes_resting_on_their_own_define_are_covered(self):
+        covered = self.manifest['covered_lanes']()
+        for family in self.manifest['GATE_SABOTAGE_OWN_DEFINES']:
+            lanes = self.manifest['family'](family)['training_lanes']
+            self.assertTrue(lanes, f'{family} carries an own sabotage define but covers no lane')
+            self.assertTrue(set(lanes) <= set(covered), family)
+
+    def test_ctr_models_directory_is_the_lanes_directory(self):
+        d = Path(__file__).resolve().parents[1] / self.manifest['GBDT_CTR_MODELS_DIR']
+        for lane in self.manifest['GBDT_CTR_MODEL_LANES']:
+            self.assertTrue(sorted(d.glob(f'{lane}.*.npz')), f'no saved model for {lane} under {d}')
+
+    def test_ctr_saved_model_cpu_model_part_is_na(self):
+        """A CPU column that LOADED the GPU column's file hashes no model
+        part: the sabotage arm could never move the file's hash, and the owed
+        check would fail on it."""
+        text = Path(__file__).with_name('identity_break.py').read_text()
+        body = text.split('def _probe_saved_host(', 1)[1].split('\ndef ', 1)[0]
+        self.assertIn('"n/a:gpu-saved-file', body)
+        self.assertNotIn('_hfile(path)', body)
+        self.assertIn('if reload != infer:', body)
+
+
 if __name__ == '__main__':
     unittest.main()

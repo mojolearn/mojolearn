@@ -735,7 +735,65 @@ TRAINING_LANE_NAMES = {
     # logits (ADAPTED_MODULES below). Both lanes are in the 166-lane record.
     "byte-lm": "the byte LM trainer",
     "byte-lm-resident": "the byte LM trainer on its resident session",
+    # lane/cpu-verifier-gaps-7 (2026-09-15): seven one-device lanes whose CPU
+    # host functions had merged with their own lanes, and which the gate now
+    # runs. GaussianMixture.sample through the mixture host binding's
+    # gmm_sample (mixture/checks/sample.mojo) on the gmm lanes' host fits;
+    # GaussianProcessRegressor.sample_y through the gp host binding's
+    # gpr_sample_y (gaussian_process/checks/sample_y.mojo), the normalized
+    # arm over the preprocessing binding's folds. No committed GPU record
+    # carries them, so their cells are OWED against the record.
+    "gmm-sample": "samples from the Gaussian mixture",
+    "gmm-random-init-sample": "samples from the Gaussian mixture with a random start",
+    "gp-sample-y": "posterior draws from the Gaussian process",
+    "gp-sample-y-normalize": "posterior draws from the Gaussian process with normalized targets",
+    # The tokenizer lane: host integers and tables through the tokenizer
+    # binding, the synthetic vocabulary at identity_break's
+    # LANE_REVISIONS["tokenizer"], so the record's older cells read as
+    # absent and every part is OWED. The gate's sabotage set builds this
+    # binding with its own define (GATE_SABOTAGE_OWN_DEFINES).
+    "tokenizer": "the byte-level BPE tokenizer (inference, host integers)",
+    # The CTR table lanes: CPU TRAINING of CTR tables refuses by name
+    # (NO_CPU_PATH), so the CPU column LOADS the Metal-saved model of each
+    # fixture from GBDT_CTR_MODELS_DIR and predicts through the forest host
+    # binding's CTR and tensor CTR step (HostGBDT). What the CPU column
+    # computes is the prediction from a GPU-fitted model, not a fit.
+    "gbdt-categorical-ctr-tables": "predictions of Metal-saved gradient boosting models with CTR tables (inference)",
+    "gbdt-tensor-ctr-tables": "predictions of Metal-saved gradient boosting models with tensor CTRs (inference)",
 }
+
+#: The saved models the CTR table lanes load on a CPU column, one
+#: `<lane>.<fixture>.npz` per lane and fixture, each written by the Apple M4
+#: Metal column (identity_break's GBDT_CTR_MODELS_ENV, repeat 0): base, ties
+#: and odd by lane/inference-gbdt-ctr-tables at 1386833b4, the other six
+#: fixtures by lane/cpu-verifier-gaps-7 from that lane's same Metal build.
+#: The CPU identity gate exports it as MOJOLEARN_IDENTITY_GBDT_CTR_MODELS.
+GBDT_CTR_MODELS_DIR = "bench/results/identity_break/2026-09-15_gbdt-ctr-tables/models"
+GBDT_CTR_MODEL_LANES = ("gbdt-categorical-ctr-tables", "gbdt-tensor-ctr-tables")
+
+#: Families the CPU identity gate's sabotage host set builds with a define of
+#: their own BESIDE -D MOJOLEARN_HOST_SABOTAGE=1 (lane/cpu-verifier-gaps-7,
+#: 2026-09-15), because MOJOLEARN_HOST_SABOTAGE reaches nothing in them and a
+#: covered lane rests on them. The tokenizer's reverses every encoded
+#: document's ids (the tokenizer lane's train, infer and batch parts); the
+#: forest's CTR arm rotates every CTR table's counts by one category (the CTR
+#: table lanes' train, infer and batch parts), which leaves every other
+#: forest and GBDT prediction alone. byte_lm keeps building clean here.
+GATE_SABOTAGE_OWN_DEFINES = {
+    "forest": "MOJOLEARN_GBDT_CTR_HOST_SABOTAGE",
+    "tokenizer": "MOJOLEARN_TOKENIZER_HOST_SABOTAGE",
+}
+
+
+def sabotage_build_defines(name):
+    """The MOJOLEARN_BUILD_EXTRA_DEFINES of family `name` in the CPU identity
+    gate's sabotage host set."""
+    family(name)
+    defines = ["-D MOJOLEARN_HOST_SABOTAGE=1"]
+    own = GATE_SABOTAGE_OWN_DEFINES.get(name)
+    if own:
+        defines.append(f"-D {own}=1")
+    return " ".join(defines)
 
 #: GPU binding families a CPU-only install serves through a Python adapter
 #: over a host binding loaded by path, rather than through a routed host
@@ -815,7 +873,12 @@ FAMILIES = (
         routes=None,
         loaded_by="python/mojolearn/_forest_host.py, python/mojolearn/_gbdt_host.py",
         sabotage_define="MOJOLEARN_FOREST_HOST_SABOTAGE",
-        training_lanes=(),
+        # The CTR table lanes (lane/cpu-verifier-gaps-7, 2026-09-15): their
+        # CPU cells are this binding's predictions from the Metal-saved
+        # models under GBDT_CTR_MODELS_DIR (no CPU fit; see
+        # TRAINING_LANE_NAMES), moved in the gate by the CTR arm
+        # (GATE_SABOTAGE_OWN_DEFINES).
+        training_lanes=GBDT_CTR_MODEL_LANES,
         inference_lanes=(),
         forest_kinds=(
             "rf_classifier", "rf_regressor", "et_classifier", "et_regressor",
@@ -865,20 +928,15 @@ FAMILIES = (
         routes=None,
         loaded_by="python/mojolearn/tokenizer.py",
         sabotage_define="MOJOLEARN_TOKENIZER_HOST_SABOTAGE",
-        # REFUSED from the covered lanes (lane/cpu-training-host-only-lanes,
-        # 2026-09-15), though the `tokenizer` lane reads IDENTICAL x4 against
-        # the 166-lane record on the M4 (9 infer and model cells). The full
-        # CPU gate's sabotage step points MOJOLEARN_HOST_DIR at a set built
-        # from byte_lm, forest and the routed families only, so this binding
-        # is absent there: the lane read REFUSED on all nine fixtures
-        # ("_mojolearn_tokenizer_host.so is not built"), and
-        # cpu_identity_gate_check.py fails a covered lane that is not
-        # STABLE. Even built into that set it could not be caught: the
-        # binding holds integers and tables with no float fold, and
-        # MOJOLEARN_HOST_SABOTAGE reaches nothing here (only this family's
-        # define reverses gpt2_encode's ids). Covering it needs the gate to
-        # build the tokenizer binding with its own define into the sabotage
-        # set; until then test_tokenizer_surface.py is its gate.
+        # A covered lane since lane/cpu-verifier-gaps-7 (2026-09-15). It was
+        # kept out (lane/cpu-training-host-only-lanes) because the gate's
+        # sabotage set held no tokenizer binding (the lane read REFUSED
+        # there) and MOJOLEARN_HOST_SABOTAGE reaches nothing in it: the
+        # binding holds integers and tables with no float fold. The gate now
+        # builds every family into that set and this one with its own define
+        # (GATE_SABOTAGE_OWN_DEFINES), which reverses the ids of gpt2_encode
+        # and of every document of gpt2_encode_batch, so the train, infer and
+        # batch parts move.
         # mojolearn ships no vocabulary (2026-09-15): the lane loads the
         # synthetic one (python/mojolearn/_tokenizer_synthetic.py) at
         # identity_break's LANE_REVISIONS["tokenizer"], so the records above
@@ -886,7 +944,7 @@ FAMILIES = (
         # gpt2_encode_batch (lane/inference-tokenizer-neural, 2026-09-15)
         # has its own negative control, -D MOJOLEARN_TOKENIZER_BATCH_SABOTAGE=1,
         # which the lane's batch part reads BATCH_MOVED.
-        training_lanes=(),
+        training_lanes=("tokenizer",),
         inference_lanes=(),
         forest_kinds=(),
         classes=("GPT2Tokenizer",),
@@ -1358,7 +1416,7 @@ FAMILIES = (
         # lane/gaussian-process-classifier (2026-09-15): gpc_fit and
         # gpc_predict under the GPU binding's contract.
         training_lanes=("gp", "gp-matern12", "gp-matern32", "gp-matern52-ard", "gp-normalize-y",
-                        "gpc", "gpc-multiclass"),
+                        "gpc", "gpc-multiclass", "gp-sample-y", "gp-sample-y-normalize"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("GaussianProcessRegressor", "GaussianProcessClassifier"),
@@ -1427,7 +1485,7 @@ FAMILIES = (
         routes="_mojolearn_mixture",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("gmm", "gmm-random-init"),
+        training_lanes=("gmm", "gmm-random-init", "gmm-sample", "gmm-random-init-sample"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("GaussianMixture",),
@@ -2032,10 +2090,11 @@ def public_reference_lanes():
     return ["gemm-pinned", "kde", "ols", "ridge", "knn", "svc", "pca", "cholesky"] + list(PUBLIC_HOST_ONLY_LANES)
 
 
-#: Public reference lanes that are not CPU training lanes, {lane: family}: a
-#: shipped host family with no GPU path to cover (2026-09-15). The tokenizer
-#: lane loads the synthetic vocabulary the harness trains itself, so it needs
-#: no vocabulary file on the install.
+#: Public reference lanes of a shipped host family with no GPU path to cover,
+#: {lane: family} (2026-09-15). The tokenizer lane loads the synthetic
+#: vocabulary the harness trains itself, so it needs no vocabulary file on the
+#: install. Since lane/cpu-verifier-gaps-7 it is also a covered lane, which
+#: the full CPU gate runs; this list is the inference wheel's reference set.
 PUBLIC_HOST_ONLY_LANES = {"tokenizer": "tokenizer"}
 
 
@@ -2227,6 +2286,8 @@ def as_dict():
         forest_recorded_root=FOREST_RECORDED_ROOT,
         no_cpu_path=list(NO_CPU_PATH),
         adapted_modules={k: dict(v) for k, v in ADAPTED_MODULES.items()},
+        gbdt_ctr_models_dir=GBDT_CTR_MODELS_DIR,
+        sabotage_build_defines={name: sabotage_build_defines(name) for name in families()},
     )
 
 
@@ -2252,8 +2313,17 @@ def main(argv=None):
     g.add_argument("--training-fix-columns", action="store_true", help="the GPU columns the training gate diffs --fix-covered-lanes against")
     g.add_argument("--markdown", action="store_true", help="the surface as a Markdown table")
     g.add_argument("--json", action="store_true", help="the whole manifest as JSON")
+    g.add_argument("--gbdt-ctr-models", action="store_true", help="the saved-model directory the CTR table lanes load on a CPU column")
+    g.add_argument("--sabotage-build-defines", metavar="FAMILY", default=None,
+                   help="MOJOLEARN_BUILD_EXTRA_DEFINES of FAMILY in the gate's sabotage host set")
     p.add_argument("--sep", default=None, help="separator for list output (default: comma for lanes and kinds, space otherwise)")
     args = p.parse_args(argv)
+    if args.sabotage_build_defines is not None:
+        print(sabotage_build_defines(args.sabotage_build_defines))
+        return 0
+    if args.gbdt_ctr_models:
+        print(GBDT_CTR_MODELS_DIR)
+        return 0
     if args.json:
         print(json.dumps(as_dict(), indent=2, sort_keys=True))
         return 0

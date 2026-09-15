@@ -206,6 +206,11 @@ def test_covered_lanes_are_identity_break_lanes():
     text = _read("tools/identity_break.py")
     defined = set(re.findall(r'^@lane\("([a-z0-9-]+)"\)', text, re.M))
     assert defined, "no @lane registrations found in tools/identity_break.py"
+    # Module-level call registrations, `lane("gmm-sample")(_gmm_sample_lane("kmeans"))`
+    # (the sample and sample_y lanes; lane/cpu-verifier-gaps-7, 2026-09-15).
+    called = set(re.findall(r'^lane\("([a-z0-9-]+)"\)\(', text, re.M))
+    assert {"gmm-sample", "gp-sample-y"} <= called, f"the call reader no longer sees the sample lanes: {sorted(called)}"
+    defined |= called
     looped = _loop_registered_lanes(text)
     assert {"gp-matern12", "gp-matern32", "gp-matern52-ard"} <= looped, (
         f"the loop reader no longer sees the gp Matern lanes: {sorted(looped)}"
@@ -376,3 +381,79 @@ def test_command_line_agrees_with_the_api(capsys):
 def test_training_lane_names_cover_every_covered_lane():
     missing = [lane for lane in host_surface.covered_lanes() if lane not in host_surface.TRAINING_LANE_NAMES]
     assert missing == [], f"no doc name for covered lanes {missing}"
+
+
+#: lane/cpu-verifier-gaps-7 (2026-09-15): the seven one-device lanes that had a
+#: CPU host function and no gate wiring, by the family whose binding computes
+#: their CPU cells.
+GAPS_7 = {
+    "gmm-sample": "mixture", "gmm-random-init-sample": "mixture",
+    "gp-sample-y": "gp", "gp-sample-y-normalize": "gp",
+    "tokenizer": "tokenizer",
+    "gbdt-categorical-ctr-tables": "forest", "gbdt-tensor-ctr-tables": "forest",
+}
+
+
+def test_gaps_7_are_covered_by_their_families():
+    covered = host_surface.covered_lanes()
+    record = host_surface.record_covered_lanes()
+    for lane, fam in GAPS_7.items():
+        assert lane in covered, f"{lane} is not a covered lane"
+        assert lane in record, f"{lane} is not diffed against the training GPU columns (OWED there)"
+        assert lane in host_surface.family(fam)["training_lanes"], f"{lane} is not declared by {fam}"
+
+
+def test_gate_sabotage_defines_reach_the_tokenizer_and_the_ctr_arm():
+    """MOJOLEARN_HOST_SABOTAGE reaches nothing in the tokenizer binding and
+    only the CTR arm moves a CTR table lane without touching every other
+    forest prediction, so the gate's sabotage set builds both with their own
+    define, and the define must exist in the binding source."""
+    assert host_surface.sabotage_build_defines("tokenizer").split() == [
+        "-D", "MOJOLEARN_HOST_SABOTAGE=1", "-D", "MOJOLEARN_TOKENIZER_HOST_SABOTAGE=1"]
+    assert host_surface.sabotage_build_defines("forest").split() == [
+        "-D", "MOJOLEARN_HOST_SABOTAGE=1", "-D", "MOJOLEARN_GBDT_CTR_HOST_SABOTAGE=1"]
+    for name in host_surface.families():
+        if name not in host_surface.GATE_SABOTAGE_OWN_DEFINES:
+            assert host_surface.sabotage_build_defines(name) == "-D MOJOLEARN_HOST_SABOTAGE=1", name
+    sources = {"tokenizer": ["bindings/_mojolearn_tokenizer_host.mojo"],
+               "forest": ["core/gbdt_host_ctr.mojo", "bindings/_mojolearn_forest_host.mojo"]}
+    for name, define in host_surface.GATE_SABOTAGE_OWN_DEFINES.items():
+        text = "".join(_read(rel) for rel in sources[name])
+        assert f'is_defined["{define}"]' in text, f"{define} is read by no {name} source"
+    with pytest.raises(KeyError):
+        host_surface.sabotage_build_defines("nonesuch")
+
+
+def test_gbdt_ctr_models_cover_every_fixture():
+    """The CTR table lanes' CPU cells load one Metal-saved model per lane and
+    fixture; a missing file reads REFUSED on the CPU column and fails the gate."""
+    text = _read("tools/identity_break.py")
+    m = re.search(r"^FIXTURES = \[(.*?)\]", text, re.M)
+    assert m, "no FIXTURES list in tools/identity_break.py"
+    fixtures = re.findall(r'"([a-z_]+)"', m.group(1))
+    assert len(fixtures) == 9, fixtures
+    assert 'GBDT_CTR_MODELS_ENV = "MOJOLEARN_IDENTITY_GBDT_CTR_MODELS"' in text
+    d = ROOT / host_surface.GBDT_CTR_MODELS_DIR
+    missing = [f"{lane}.{fx}.npz" for lane in host_surface.GBDT_CTR_MODEL_LANES for fx in fixtures
+               if not (d / f"{lane}.{fx}.npz").is_file()]
+    assert missing == [], f"{d} lacks {missing}"
+    assert set(host_surface.GBDT_CTR_MODEL_LANES) == set(host_surface.family("forest")["training_lanes"])
+
+
+def test_workflow_wires_the_gaps_7_lanes():
+    text = _read(".github/workflows/cpu-identity-gate.yml")
+    assert "/" + host_surface.GBDT_CTR_MODELS_DIR.rsplit("/", 1)[0] + "/" in text, "the models are not checked out"
+    assert "MOJOLEARN_IDENTITY_GBDT_CTR_MODELS=$GITHUB_WORKSPACE/$(python3 $manifest --gbdt-ctr-models)" in text
+    assert '--sabotage-build-defines "$family"' in text
+    assert 'MOJOLEARN_BUILD_EXTRA_DEFINES: "-D MOJOLEARN_HOST_SABOTAGE=1"' not in text, (
+        "a step-level sabotage define list would override the manifest's per-family defines")
+    sab_run = text.split("covered lanes must diverge under MOJOLEARN_HOST_SABOTAGE", 1)[1].split("- name:", 1)[0]
+    assert 'MOJOLEARN_FOREST_HOST_BINARY="${{ runner.temp }}/host-sab/_mojolearn_forest_host.so"' in sab_run
+    assert "MOJOLEARN_FOREST_HOST_ALLOW_SABOTAGE=1" in sab_run
+
+
+def test_command_line_prints_the_gaps_7_wiring(capsys):
+    assert host_surface.main(["--gbdt-ctr-models"]) == 0
+    assert capsys.readouterr().out.strip() == host_surface.GBDT_CTR_MODELS_DIR
+    assert host_surface.main(["--sabotage-build-defines", "tokenizer"]) == 0
+    assert capsys.readouterr().out.strip() == host_surface.sabotage_build_defines("tokenizer")
