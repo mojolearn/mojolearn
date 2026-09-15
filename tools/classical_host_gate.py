@@ -57,6 +57,24 @@ from forest_host_gate import (  # noqa: E402
 
 #: Held-out rows each lane probes, `identity_break.py`'s `Xh[:256]`.
 PROBE_ROWS = 256
+
+
+def _forecast_pair(e):
+    """identity_break's forecaster infer probe, the same call and the same
+    byte check (`_same_bytes`), so its hash is that column's cell."""
+    ib = identity_tool()
+    h = ib.FORECAST_HORIZON
+    return ib._same_bytes("forecast(h)", e.forecast(h),
+                          "predict(n_obs, n_obs + h)", e.predict(e.n_obs_, e.n_obs_ + h))
+
+
+#: The surfaces every ARIMA lane adds beside its identity probe.
+_ARIMA_EXTRAS = {
+    'predict_in_sample': lambda e, X: e.predict(0, e.n_obs_),
+    'predict_straddle': lambda e, X: e.predict(e.n_obs_ - 16, e.n_obs_ + 16),
+    'params': lambda e, X: e.params_,
+    'sigma2': lambda e, X: e.sigma2_,
+}
 #: lane -> (estimator, identity_break probe, extra surfaces). The identity
 #: probe is the tuple `identity_break` hashes for the `infer` column, in its
 #: order (the knn lanes probe `Xh[:64]`, as `identity_break` does); the
@@ -93,6 +111,24 @@ LANES = {
                             lambda e, X: (e.predict_proba(X), e.predict(X)),
                             {'predict': lambda e, X: e.predict(X),
                              'decision_function': lambda e, X: e.decision_function(X)}),
+    # lane/inference-forecast-umap-pca (2026-09-15). pca-full-whiten is the
+    # dense SVD fit with the whitened pair. umap probes identity_break's
+    # batch of 64 held-out rows in one call: the transform's answer depends
+    # on the batch, so the claim is the same bytes for the same batch.
+    'pca-full-whiten': ('PCA', lambda e, X: (e.transform(X),),
+                        {'inverse_transform': lambda e, X: e.inverse_transform(e.transform(X))}),
+    'umap': ('UMAP', lambda e, X: (e.transform(X[:64, :8]),), {}),
+    # The forecasters take no rows: the probe is identity_break's pair,
+    # forecast(H) and predict(n_obs, n_obs + H), held to the same bytes. The
+    # extras are what the CPU inference surface adds beyond that cell: the
+    # in-sample prediction, a prediction straddling the end of the series,
+    # and the fitted-state accessors of the loaded model.
+    'arima': ('ARIMA', lambda e, X: _forecast_pair(e), dict(
+        _ARIMA_EXTRAS, ar=lambda e, X: e.ar_, mu=lambda e, X: e.mu_)),
+    'arima-011': ('ARIMA', lambda e, X: _forecast_pair(e), dict(
+        _ARIMA_EXTRAS, ma=lambda e, X: e.ma_)),
+    'arima-seasonal-c': ('ARIMA', lambda e, X: _forecast_pair(e), dict(
+        _ARIMA_EXTRAS, ar=lambda e, X: e.ar_, sar=lambda e, X: e.sar_, mu=lambda e, X: e.mu_)),
     # lane/inference-linear-svm (2026-09-15): the option variants of ols,
     # ridge and logistic through the formats above, and the scalers,
     # coordinate descent and the kernel methods through formats of their
@@ -133,6 +169,8 @@ PROBE_NAMES = {'ols': 'predict', 'ridge': 'predict', 'tsvd': 'transform',
                'pca-whiten': 'transform',
                'knn': 'kneighbors_distances', 'knn-clf': 'predict',
                'knn-reg': 'predict', 'logistic-multiclass': 'predict_proba',
+               'pca-full-whiten': 'transform', 'umap': 'transform',
+               'arima': 'forecast', 'arima-011': 'forecast', 'arima-seasonal-c': 'forecast',
                'ols-no-intercept': 'predict', 'ols-weighted': 'predict',
                'ridge-no-intercept': 'predict', 'logistic-l1': 'predict_proba',
                'logistic-elasticnet': 'predict_proba',

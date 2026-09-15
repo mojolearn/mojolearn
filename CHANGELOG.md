@@ -10,6 +10,18 @@ what a user can check from a pip install. The freeze checks of docs/RELEASE_CHEC
 the per-vendor GPU-box build and the byte compare of the host bindings across the three
 Linux legs are OWED before this heading reads published.
 
+- Public CPU inference for saved ARIMA models, UMAP embeddings and the whitened full-SVD PCA.
+  `ARIMA.save`/`load` and `UMAP.save`/`load` are new; `mojolearn.host_model(path)`, or the
+  classes on a CPU-only install, predict (in sample and out of sample), forecast and read the
+  fitted ARIMA attributes, and transform with a saved UMAP embedding. A UMAP transform's answer
+  depends on the query batch by its contract; the CPU answers the GPU's bytes for the same batch.
+  ARIMA inference ships in a new host binding, `_mojolearn_forecast_host`, which carries
+  predict and forecast and no fit (about 270 KB on macOS arm64); the ARIMA fit stays a source
+  reference build. `ExponentialSmoothing.fit` now refuses on a CPU-only install outside the
+  internal reference context, as every other CPU fit does. Apple M4 CPU column against the
+  committed Apple, NVIDIA and AMD columns; the model cells of the new save formats are owed to
+  the release record.
+
 - CPU inference from saved models for StandardScaler, MinMaxScaler, Lasso, ElasticNet,
   KernelRidge (linear and rbf kernels), Nystroem (linear and rbf) and RBFSampler: each
   gains `save` and `load`, and `mojolearn.host_model(path)` transforms or predicts on a
