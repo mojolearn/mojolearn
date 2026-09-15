@@ -11,100 +11,105 @@ Evidence from this lane (outside the repo, survives a restart): /Users/andrewhen
 
 ## Status
 
-Phase 1 (code reading, read-only counters, script) is done. Phase 2 (GPU
-measurement on the clean GPU after the Mac restart) is NOT started.
+Phase 1 (code reading, read-only counters, script and reproduction) is done.
+Phase 2 (measurement on a quiet GPU) is NOT started, and waits for the
+coordinator. The machine has NOT restarted, and on the evidence below it may
+not need to.
 
-## Phase 1 findings
+## How to count queues (two counters, one trap)
 
-### Where a command queue is created
+- `ioclasscount AGXCommandQueue` is the kernel's live queue count, all
+  processes. This is the real total.
+- The `AppUsage` entries on each AGXDeviceUserClient, keyed by the client's
+  `IOUserClientCreator` pid, give the per-process share. Checked at both ends
+  of the range: while one process gained queues, its AppUsage entries and the
+  kernel total both rose by exactly 36 in 20 s (557 to 593, 579 to 615); at the
+  quiet floor the AppUsage entries summed to 33 against a total of 35.
+- THE TRAP: `ioreg -l -c AGXCommandQueue` does NOT list command queues. Queues
+  are not registry entries, so that command prints zero AGXCommandQueue nodes,
+  and the `IOUserClientCreator` lines in its output belong to unrelated classes
+  (IOHIDEventServiceUserClient 140, RootDomainUserClient 117,
+  AppleKeyStoreUserClient 79, AGXDeviceUserClient 48). Counting those lines
+  produces a table that looks like queue attribution and is not one. An earlier
+  reading of this lane, and the "about 300 of 6754 queues name a live process,
+  the other 6400 name none" figure, came from that command and do not show that
+  queues outlive their creator.
+
+## What the counters actually showed (Sep 15, read only, no GPU work)
+
+| time  | AGXCommandQueue | note |
+|---|---:|---|
+| 18:25 | 471 to 615 | climbing with NO mojolearn GPU process alive |
+| 18:27 | 654 to 692 | `VTDecoderXPCService` (pid 88848) held 632 to 670 of them, gaining about 1.8 a second |
+| later | 6591 to 6754 | coordinator, still climbing |
+| after `killall VTDecoderXPCService` | 6591, 6631 at +5 s, 6754 at +60 s | no immediate drop |
+| 19:27 | 127, then 35 | back to a normal floor, with NO reboot (uptime 9 days, 11:49; boot Sep 6) |
+
+Reading: the queues were reclaimed after the holding process died, but LAZILY,
+minutes later, not at exit. The coordinator's samples at 5 s and 60 s were too
+early to see it. The machine returned to a 35 queue floor on its own.
+
+So the large pileup tracked one Apple system service
+(`VTDecoderXPCService`, VideoToolbox decode, started 17:29), which is not
+mojolearn and which nothing in this repo drives. The 5041 kernel message could
+not be tied to a pid: `log show` over 12 h no longer returns those lines.
+
+## Where a command queue is created in our code
 
 - The Mojo runtime creates ONE Metal command queue per `DeviceContext`.
   `libKGENCompilerRTShared.dylib` carries `MLRT/lib/Driver/DeviceContext/Metal/MetalDeviceContext.cpp`,
   `newCommandQueue` and the error "Failed to create Metal command queue for
-  context." No source is shipped; whether the context's destructor releases the
-  queue cannot be read, only measured.
-- Every Python binding call builds a fresh `DeviceContext` inside
-  `GILReleased` and lets it go out of scope at the end of the call. GBDT:
-  `bindings/_mojolearn_gbdt.mojo` `gbdt_fit_binding` (405),
-  `gbdt_predict_binding` (455), `gbdt_predict_multi_binding` (501),
-  `gbdt_fit_two_level_feature_freq_binding` (545), and
-  `gbdt_fit_ordered_rmse_binding` (601, `with DeviceContext() as ctx`). The
-  file's own docstring says "A `DeviceContext` is constructed per call". The
-  same shape holds for every binding (constructions per file: training 14,
-  estimators 13, `_mojolearn` 10, gbdt 5, byte_lm 4, trees/solver/rf/mamba 3,
-  transformer/metrics/hdbscan/embedding 2, linalg/ivf 1).
-- Contexts built inside a fit: `gbdt/binary_prediction.mojo:49`, and one per
-  shard in `gbdt/methods/pointwise_multi_gpu.mojo:90` and
-  `gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo:6001`
-  (`DeviceContext(device_id=rank)`; on the Mac only rank 0, and only when the
-  multi-GPU path is taken). Long-lived holders: `core/forest_inference_model.mojo:88`,
+  context." No source ships, so whether dropping a context releases its queue
+  can only be measured.
+- Every Python binding call builds a fresh `DeviceContext` inside `GILReleased`
+  and drops it when the call returns: `bindings/_mojolearn_gbdt.mojo` at 405
+  (fit), 455 (predict), 501 (predict multi), 545 and 601. That file's docstring
+  says "A `DeviceContext` is constructed per call". Constructions per binding
+  file: training 14, estimators 13, `_mojolearn` 10, gbdt 5, byte_lm 4,
+  trees/solver/rf/mamba 3, transformer/metrics/hdbscan/embedding 2, linalg/ivf 1.
+- Inside a fit: `gbdt/binary_prediction.mojo:49`, and one per shard in
+  `gbdt/methods/pointwise_multi_gpu.mojo:90` and
+  `gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo:6001`. Long
+  lived holders: `core/forest_inference_model.mojo:88`,
   `core/forest_inference_pool.mojo:117`, the `training/byte_lm_*` pools.
-- No Python module constructs a context; Python reaches the GPU only through the
-  bindings.
-- `tools/identity_break.py` runs every lane, fixture and repeat (fit, infer,
-  model reload, batch probes) in ONE Python process, so one identity run is
-  hundreds to thousands of binding calls, hence contexts, in one process. That
-  is the long-lived-process shape a per-context leak would punish.
+- No Python module builds a context; Python reaches the GPU only through the
+  bindings. `tools/identity_break.py` runs every lane, fixture and repeat in
+  ONE process, so one identity run makes hundreds to thousands of contexts.
 
-### Leak hypothesis
+## Hypotheses going into phase 2
 
-H1 (ours or the runtime's): a `DeviceContext` going out of scope does not
-release its `MTLCommandQueue`, so a long-lived process gains at least one
-queue per binding call and, past about 512, queue creation fails or slows.
+H1, ours: a dropped `DeviceContext` does not release its queue, so a long-lived
+process gains a queue per binding call. Untested. The `inproc` arm and the
+reproduction measure it directly. Nothing so far either supports or refutes it,
+because no mojolearn process was sampled while fitting.
 
-H2 (not ours): another process holds the queues. At 18:25 ET on Sep 15, with
-NO mojolearn GPU process alive, `ioclasscount AGXCommandQueue` read 471, then
-543, 579, 615 over a few minutes. Almost all of them (557, then 593) sit on
-the AGXDeviceUserClient created by pid 88848 `VTDecoderXPCService` (Apple's
-VideoToolbox decode service, started 17:29:18), growing about 1.8 queues per
-second, in lockstep with the kernel total. Samples in `queue-samples.txt` in
-the evidence directory. Its client was not identified (its own log is empty).
-A system video decode service that is leaking queues is a live candidate for
-the Sep 15 kernel messages and the slowdown, independent of mojolearn.
+H2, not ours: the Sep 15 pileup belonged to `VTDecoderXPCService`. Supported by
+the table above, and by the count returning to 35 once that process was gone.
 
-The kernel log lines themselves were no longer retrievable (`log show` over 12h
-returned none), so the 5041 count cannot be attributed to a pid from here.
+H3, kernel reclaim is lazy: confirmed. Queues counted minutes after their
+process died were freed later without a reboot. Phase 2 must therefore wait
+generously after a process exits before calling anything a leak.
 
-Neither hypothesis excludes the other; phase 2 decides H1.
+## Phase 2 plan (only when the coordinator says go)
 
-### Measurement: `tools/diag/metal_queue_leak.py`
-
-Two counters, both read without touching the GPU:
-- system: `ioclasscount AGXCommandQueue` (all processes; noisy, see H2);
-- process: the count of `AppUsage` entries on the AGXDeviceUserClient whose
-  creator is the measured pid. On Sep 15 this matched the kernel total step for
-  step (+36 and +36 in 20 s), so it is the per-process queue count, immune to
-  other processes.
-
-Arms: `inproc` (one child, N sequential GBDT fit plus predict, sampled every
-`--every` fits, then system count after exit), `ctxonly` (one fitted model,
-N small predicts), `subproc` (N processes, one fit each). Each prints a table
-and a `VERDICT` line: process and system queues per fit, first and last fit
-seconds, whether the system count returned to baseline.
-
-## Phase 2 plan (after the restart)
-
-1. Before anything: `ioclasscount AGXCommandQueue` and the per-pid table
-   (script's `process_queues`), with no GPU job running. If VTDecoderXPCService
-   is climbing again, note which app is playing or capturing video, and quit it.
-2. Build nothing in the shared checkout. Use a built package (the shared
-   checkout's `python/` if its GBDT binding is current, otherwise build in this
-   worktree with `bindings/build_gbdt.sh`).
-3. Run alone on the GPU:
-   `bash $SP/mac_slot.sh metal .pixi/envs/test/bin/python tools/diag/metal_queue_leak.py --pkg <pkg> --arm inproc --fits 200 --every 20`,
-   then `--arm ctxonly --fits 200`, then `--arm subproc --fits 20 --every 5`.
-   If the scratchpad helper is gone: `nice -n 19` one process, after
-   `pgrep -fl mojo` shows no other GPU job.
-4. If process queues per fit is about 0 and the system count returns to
-   baseline: mojolearn does not leak; the Sep 15 queues were another process
-   (H2). Record and close.
-5. If process queues grow per fit: write a minimal Mojo reproduction (a loop
-   creating and dropping `DeviceContext()` with one `synchronize`, counting
-   AppUsage entries), to tell the runtime from our bindings. If the runtime
-   leaks, write a report for Modular (do not send) and add a workaround: one
-   process-lifetime context per binding module, reused across calls (GPU
-   agnostic, `max.gpu.host` only).
-6. Prove any fix: process queues flat over 200 fits, per-fit seconds stable,
-   and a base-fixture `identity_break.py` spot check of a few GBDT lanes against
-   the committed Apple column. Then `python3 tools/docs_facts.py --check`,
-   `python3 packaging/wheel_ci.py pins .`, merge, push HEAD:main.
+1. Record the floor first: `ioclasscount AGXCommandQueue` with no GPU job
+   running.
+2. Build `checks/device_context_queue_repro.mojo` in this worktree (never the
+   shared checkout) and run `ITERS=200` under
+   `tools/diag/metal_queue_leak.py --watch <pid>`, then the `-D ONE_CTX=1`
+   build the same way. Three outcomes: flat (the runtime reuses one queue),
+   grows then falls back after exit (a per-process leak that context reuse
+   bounds), grows and stays for a long time after exit (kernel side).
+3. Then the estimator arms alone on the GPU via `mac_slot.sh metal`, or
+   `nice -n 19` once `pgrep -fl mojo` shows no other GPU job:
+   `--arm inproc --fits 200 --every 20`, `--arm ctxonly --fits 200`,
+   `--arm subproc --fits 20 --every 5`.
+4. If our bindings add queues per call, reuse one context per process (a module
+   level context in each binding, `max.gpu.host` only, GPU agnostic) and
+   re-measure. Say plainly whether that stops the growth or only slows it.
+5. If the runtime leaks regardless of our shape, write the report for Modular
+   from the reproduction's numbers. Do not contact anyone.
+6. Prove any fix: queues flat over 200 fits, per-fit seconds stable, and a
+   base-fixture `identity_break.py` spot check of a few GBDT lanes against the
+   committed Apple column. Then `python3 tools/docs_facts.py --check`,
+   `python3 packaging/wheel_ci.py pins .`, merge and push HEAD:main.
