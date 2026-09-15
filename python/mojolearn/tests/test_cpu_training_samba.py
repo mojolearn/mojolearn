@@ -110,6 +110,11 @@ def test_every_entry_samba_reaches_is_on_the_host():
 
 def test_gate_triggers_on_the_samba_sources():
     wf = _read(".github/workflows/cpu-identity-gate.yml")
+    # Since Sep 15 the gate has no push trigger (it runs by hand, weekly or
+    # from the release workflow), so there is no path filter to check; a
+    # push trigger, if one returns, must still list the samba sources.
+    if "\n  push:" not in wf:
+        return
     for rel in ("core/philox.mojo", "core/philox_neural.mojo", "python/mojolearn/_samba_impl.py",
                 "mamba/host/**", "tools/mamba_host_gen.py"):
         assert f'- "{rel}"' in wf, rel
