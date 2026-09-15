@@ -121,14 +121,14 @@ def ivf_flat_build_and_search_binding(
 @export
 def PyInit__mojolearn_ivf_host() abi("C") -> PythonObject:
     try:
-        var mb = PythonModuleBuilder("_mojolearn_ivf_host")
-        mb.def_function[ivf_host_numeric_mode_binding]("ivf_host_numeric_mode")
-        mb.def_function[ivf_host_vendor_binding]("ivf_host_vendor")
-        mb.def_function[ivf_host_column_binding]("ivf_host_column")
-        mb.def_function[ivf_host_sabotage_binding]("ivf_host_sabotage")
-        mb.def_function[ivf_vendor_binding]("ivf_vendor")
-        mb.def_function[ivf_numeric_mode_binding]("ivf_numeric_mode")
-        mb.def_function[ivf_flat_build_and_search_binding]("ivf_flat_build_and_search")
-        return mb.finalize()
+        var m = PythonModuleBuilder("_mojolearn_ivf_host")
+        m.def_function[ivf_host_numeric_mode_binding]("ivf_host_numeric_mode")
+        m.def_function[ivf_host_vendor_binding]("ivf_host_vendor")
+        m.def_function[ivf_host_column_binding]("ivf_host_column")
+        m.def_function[ivf_host_sabotage_binding]("ivf_host_sabotage")
+        m.def_function[ivf_vendor_binding]("ivf_vendor")
+        m.def_function[ivf_numeric_mode_binding]("ivf_numeric_mode")
+        m.def_function[ivf_flat_build_and_search_binding]("ivf_flat_build_and_search")
+        return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_ivf_host: ", e))

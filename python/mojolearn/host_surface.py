@@ -115,12 +115,33 @@ TRAINING_GPU_COLUMNS = (
 #: this list the day TRAINING_GPU_COLUMNS names a record taken after its
 #: fix. `python -m mojolearn identity` diffs against TRAINING_GPU_COLUMNS
 #: alone, so on a CPU-only install it runs `record_covered_lanes()`.
+#:
+#: The same list also carries covered lanes the record does not have at all
+#: (lane/cpu-training-embedding-ivf, 2026-09-15): embedding and
+#: embedding-sort, whose three GPU columns are
+#: bench/results/identity_break/2026-09-15_embedding-sort (Apple M4, H100,
+#: MI325X at ba4a108bb and e2d770ba8), and ivf and ivf-euclidean, whose three
+#: are bench/results/identity_break/2026-09-14_ivf-euclidean (Apple M4, H100,
+#: MI300X at 76a170dcf, after the L2SqrtExpanded fix). `identity_break --diff`
+#: takes every JSON here at once: a column that lacks a lane reads "(not
+#: run)" on its cells and is not counted, so each of these lanes rests on
+#: its own record's three GPU hashes plus the CPU column's, which
+#: `--require-columns 4` demands, and a JSON that carried a lane it should
+#: not would add a fifth hash to the cell rather than hide one. They leave
+#: this list the day TRAINING_GPU_COLUMNS names a record that carries them
+#: (lane/identity-record-next's 178-lane record does).
 TRAINING_FIX_COLUMNS = (
     "bench/results/identity_break/2026-09-14_kmeans-sqrt-fix/apple-m4.json",
     "bench/results/identity_break/2026-09-14_kmeans-sqrt-fix/nvidia-h100-sm_90a.json",
     "bench/results/identity_break/2026-09-14_kmeans-sqrt-fix/amd-mi325x-gfx942.json",
+    "bench/results/identity_break/2026-09-15_embedding-sort/identity_break.apple-m4.json",
+    "bench/results/identity_break/2026-09-15_embedding-sort/identity_break.nvidia-nvidia-h100-80gb-hbm3-sm_90a.json",
+    "bench/results/identity_break/2026-09-15_embedding-sort/identity_break.amd-gfx942.json",
+    "bench/results/identity_break/2026-09-14_ivf-euclidean/identity_break.apple-m4.json",
+    "bench/results/identity_break/2026-09-14_ivf-euclidean/identity_break.nvidia-nvidia-h100-80gb-hbm3-sm_90a.json",
+    "bench/results/identity_break/2026-09-14_ivf-euclidean/identity_break.amd-mi300x-gfx942.json",
 )
-TRAINING_FIX_LANES = ("kmeans-sqrt",)
+TRAINING_FIX_LANES = ("kmeans-sqrt", "embedding", "embedding-sort", "ivf", "ivf-euclidean")
 
 #: The GPU columns the classical INFERENCE gate compares each host identity
 #: hash against (tools/classical_host_gate.py check --gpu-column).

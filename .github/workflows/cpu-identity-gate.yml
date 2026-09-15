@@ -157,6 +157,15 @@ on:
       - "bench/results/identity_break/2026-09-14_136-lanes/**"
       - "bench/results/identity_break/2026-09-14_166-lanes/**"
       - "bench/results/identity_break/2026-09-14_kmeans-sqrt-fix/**"
+      - "bench/results/identity_break/2026-09-15_embedding-sort/**"
+      - "bench/results/identity_break/2026-09-14_ivf-euclidean/**"
+      - "embedding/host/embedding_host.mojo"
+      - "python/mojolearn/embedding.py"
+      - "ivf/host/ivf_host.mojo"
+      - "ivf/checks/list_layout.mojo"
+      - "ivf/impl/neighbors/ivf_common.mojo"
+      - "ivf/impl/neighbors/ivf_flat/ivf_flat_index.mojo"
+      - "python/mojolearn/_ivf_impl.py"
       - "bench/results/forest_host/**"
       - ".github/workflows/cpu-identity-gate.yml"
 
@@ -271,6 +280,8 @@ jobs:
             /bench/results/identity_break/2026-09-14_136-lanes/
             /bench/results/identity_break/2026-09-14_166-lanes/
             /bench/results/identity_break/2026-09-14_kmeans-sqrt-fix/
+            /bench/results/identity_break/2026-09-15_embedding-sort/
+            /bench/results/identity_break/2026-09-14_ivf-euclidean/
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
@@ -559,8 +570,10 @@ jobs:
       # the four-way diff with --require-columns 4 on exactly those lanes:
       # RECORD_COVERED_LANES against GPU_COLUMNS, and FIX_COVERED_LANES (the
       # covered lanes whose record cells predate a fix on every column,
-      # kmeans-sqrt) against FIX_COLUMNS, the same boxes after the fix
-      # (python/mojolearn/host_surface.py, TRAINING_FIX_LANES).
+      # kmeans-sqrt, and the covered lanes the record does not carry,
+      # embedding, embedding-sort, ivf and ivf-euclidean) against FIX_COLUMNS,
+      # every JSON of their own records at once, each lane resting on its own
+      # three GPU hashes (python/mojolearn/host_surface.py, TRAINING_FIX_LANES).
       # Empty COVERED_LANES runs nothing and says so; that is a statement about
       # phase 1, not a pass.
       - name: The CPU column, covered lanes (every fixture)
