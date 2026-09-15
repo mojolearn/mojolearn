@@ -1,0 +1,4 @@
+# cholesky solve: n=513 nrhs=2
+# format: mojolearn-identity-trace v1
+0	chol.solve.forward	f32	1026	9e249d211a9cf9d4
+1	chol.solve.back	f32	1026	d271c1c3331ac431
