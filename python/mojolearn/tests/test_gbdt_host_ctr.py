@@ -35,7 +35,7 @@ HEADER = "format mojolearn-model 2\n"
 #: 0.25 unseen, 0.5 the category seen once, 1.0 the frequent ones.
 CTR_TEXT = HEADER + (
     "features 1 0\ntrees 1\nlosses 0\nctr_columns 1\n"
-    "feature 0 folds 2 one_hot 0 type ctr nan as_is borders 2 0.05/3e4ccccd 0.2/3e4ccccd\n"
+    "feature 0 folds 2 one_hot 0 type ctr nan as_is borders 2 0.05/3d4ccccd 0.2/3e4ccccd\n"
     "ctr_table 0 source 0 type FeatureFreq prior_num 0/00000000 prior_denom 1/3f800000 "
     "shift 0/00000000 scale 1/3f800000 denom 10 classes 0 target_border 0 entries 3\n"
     "ctr_entry 0 0 6\nctr_entry 0 1 3\nctr_entry 0 2 1\n"
@@ -53,7 +53,7 @@ TENSOR_TEXT = HEADER + (
     "classes 0 target_border -1 prior_bits 0 1065353216 denominator 10 counts 4 5 3 1 1\n"
     "feature 0 folds 1 one_hot 1 type cat nan as_is borders 1 0.5/3f000000\n"
     "feature 1 folds 1 one_hot 1 type cat nan as_is borders 1 0.5/3f000000\n"
-    "feature 2 folds 2 one_hot 0 type tensor_ctr nan as_is borders 2 0.05/3e4ccccd 0.2/3e4ccccd\n"
+    "feature 2 folds 2 one_hot 0 type tensor_ctr nan as_is borders 2 0.05/3d4ccccd 0.2/3e4ccccd\n"
     "tree 0 depth 2 dim 1 weights 0\nsplit 0 0 2 0\nsplit 0 1 2 1\n"
     "leaf 0 0 0.25/3e800000\nleaf 0 1 0.5/3f000000\nleaf 0 2 0.75/3f400000\nleaf 0 3 1/3f800000\n"
 )
