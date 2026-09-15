@@ -1277,7 +1277,7 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(loss=_h(np.asarray(losses)),
                      weights=_h(*[np.asarray(m.weights_[k]) for k in sorted(m.weights_)]),
                      logits=_h(np.asarray(m.predict_logits(Xm)))),
-                m, lambda e: (np.asarray(e.predict_logits(np.ascontiguousarray(Xh[:256, :8]))),))
+                m, lambda e: (np.asarray(_neural_inference(ml, "mlp", e).predict_logits(np.ascontiguousarray(Xh[:256, :8]))),))
 
 
 @lane("byte-lm")
@@ -1384,7 +1384,7 @@ def _(ml, X, yc, yr, Xh=None):
         ones=("input_layernorm.weight", "post_attention_layernorm.weight"))
     blk = ml.TransformerBlock(w, n_heads=nh, n_kv_heads=nkv)
     parts = _block_fit(blk, _seq(X, 2, 16, dm), _seq(X, 2, 16, dm, skip=1024), dict(max_tokens=32))
-    return _fit(parts, blk, lambda e: (np.asarray(e.forward(_seq(Xh, 2, 16, dm))),))
+    return _fit(parts, blk, lambda e: (np.asarray(_neural_inference(ml, "transformer", e).forward(_seq(Xh, 2, 16, dm))),))
 
 
 @lane("samba")
@@ -1669,7 +1669,7 @@ def _(ml, X, yc, yr, Xh=None):
         ones=("input_layernorm.weight", "post_attention_layernorm.weight"))
     blk = ml.TransformerBlock(w, n_heads=nh, n_kv_heads=nkv, window=8)
     parts = _block_fit(blk, _seq(X, 2, 16, dm), _seq(X, 2, 16, dm, skip=1024), dict(max_tokens=32))
-    return _fit(parts, blk, lambda e: (np.asarray(e.forward(_seq(Xh, 2, 16, dm))),))
+    return _fit(parts, blk, lambda e: (np.asarray(_neural_inference(ml, "transformer-window", e).forward(_seq(Xh, 2, 16, dm))),))
 
 
 @lane("byte-lm-resident")
@@ -3373,6 +3373,26 @@ def _(ml, X, yc, yr, Xh=None):
                 m, lambda e: (transform_rbf_sampler(e, Xh[:256], devices=_par_devices(), rows_per_shard=100),))
 
 
+def _neural_inference(ml, lane_name, est):
+    """The estimator a neural lane's held-out and batch cells ask
+    (lane/inference-tokenizer-neural, 2026-09-15). On a CPU column
+    (`ml.vendor() == "cpu"`) it is the PUBLIC inference class built from the
+    fitted model: `MLPInference.from_checkpoint` on the trainer's saved
+    checkpoint, or `TransformerBlockInference` on the block's nine weights,
+    both over the shipped `_mojolearn_neural_host`. On a GPU column it is the
+    fitted estimator itself, as before, so no GPU cell changes meaning. The
+    train rows never go through here."""
+    if ml.vendor() != "cpu":
+        return est
+    if lane_name == "mlp":
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "mlp.json")
+            est.save_checkpoint(path)
+            return ml.MLPInference.from_checkpoint(path)
+    return ml.TransformerBlockInference(dict(zip(est._W_NAMES, est._w)), n_heads=est.n_heads,
+                                        n_kv_heads=est.n_kv_heads, head_dim=est.head_dim, window=est.window)
+
+
 # ---------------------------------------------------------------- the batch part (2026-09-14)
 # See the `batch` part in the module docstring. A declaration per lane, kept
 # OUT of the lane bodies so no train, infer or model hash can move because
@@ -4147,7 +4167,9 @@ _batch_decl(_batch_ivf, "ivf", "ivf-euclidean")
 _batch_decl(_batch_embedding, "embedding", "embedding-sort")
 _batch_decl(_batch_cross_entropy, "cross-entropy-arms")
 _batch_decl(_batch_training_primitives, "training-primitives")
-_batch_decl(_rows_calls("predict_logits", sl=(slice(0, 256), slice(0, 8))), "mlp", "par-mlp")
+_batch_decl(lambda ml, e, Xh: _rows_calls("predict_logits", sl=(slice(0, 256), slice(0, 8)))(
+    ml, _neural_inference(ml, "mlp", e), Xh), "mlp")
+_batch_decl(_rows_calls("predict_logits", sl=(slice(0, 256), slice(0, 8))), "par-mlp")
 
 #: the sequence models' held-out batch: 8 sequences of 16, so eight rows alone
 SEQ_BATCH, SEQ_LEN = 8, 16
@@ -4177,7 +4199,9 @@ def _batch_block(ml, e, Xh):
                          axis=1)]
 
 
-_batch_decl(_batch_block, "mamba1", "mamba2", "mamba3", "mamba2-dtlimit", "transformer", "transformer-window")
+_batch_decl(_batch_block, "mamba1", "mamba2", "mamba3", "mamba2-dtlimit")
+_batch_decl(lambda ml, e, Xh: _batch_block(ml, _neural_inference(ml, "transformer", e), Xh),
+            "transformer", "transformer-window")
 
 
 def _batch_samba(ml, e, Xh):

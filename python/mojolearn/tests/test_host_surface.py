@@ -246,9 +246,10 @@ def test_public_inference_bindings_ship_and_packaging_reads_the_manifest():
     from mojolearn import _backend
     shipped = set(host_surface.wheel_bindings())
     assert set(_backend._HOST_MODULES.values()) <= set(host_surface.bindings())
-    assert {"_mojolearn_byte_lm_host", "_mojolearn_forest_host", "_mojolearn_tokenizer_host"} <= shipped
+    assert {"_mojolearn_byte_lm_host", "_mojolearn_forest_host", "_mojolearn_tokenizer_host",
+            "_mojolearn_neural_host"} <= shipped
     assert set(host_surface.wheel_families()) == {
-        "byte_lm", "forest", "tokenizer", "core", "linalg", "estimators", "metrics", "svm",
+        "byte_lm", "forest", "tokenizer", "neural", "core", "linalg", "estimators", "metrics", "svm",
     }
     assert len(host_surface.families()) > len(host_surface.wheel_families())
     assert host_surface.training_gpu_column_record() == host_surface.TRAINING_GPU_COLUMNS[0].rsplit("/", 2)[1]
