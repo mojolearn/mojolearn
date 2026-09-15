@@ -10,6 +10,14 @@ what a user can check from a pip install. The freeze checks of docs/RELEASE_CHEC
 the per-vendor GPU-box build and the byte compare of the host bindings across the three
 Linux legs are OWED before this heading reads published.
 
+- Sabotage value arms for the neighbor and IVF host oracles (lane/ties-sabotage, for 0.8.7).
+  A fold walked in the other order is exact on the integer `ties` fixture, so the sabotage
+  build left the ties cells of knn-cosine, knn-rbc, radius, radius-manhattan, ivf and
+  ivf-euclidean unmoved. Sabotage builds now also move every returned distance's bits;
+  production builds are unchanged (IDENTICAL to the committed records on all nine fixtures).
+  `tools/classical_host_gate.py check` gains `--every-fixture` and `--lane-rule-only LANE`,
+  and the CPU identity gate's saved-model sabotage step requires every fixture of every lane.
+  Evidence: `bench/results/identity_break/2026-09-15_ties-sabotage`.
 - Public CPU inference from a saved Holt-Winters model (lane/inference-holtwinters, for 0.8.7).
   `ExponentialSmoothing` gains `save` and `load` (format `mojolearn-holtwinters-1`) and
   `predict(start, end)`, the in-sample one-step predictions (NaN before `2 * seasonal_periods`,
