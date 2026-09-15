@@ -29,7 +29,10 @@ Host bindings built fresh from this tree.
 | `owed.json` | the 12 OWED parts: the model cell of the four radius lanes on each fixture (no GPU column saved a RadiusNeighbors before this branch) |
 | `diff.four-columns.txt` | the same CPU column against the whole record: the same verdicts, plus 408 `REQUIRE FAIL` lines that each say the CPU column has no cell, all on the six fixtures not run |
 | `cpu-apple-m4.sabotage.json`, `diff.four-columns.base-ties-dupes.sabotage.txt` | `summary: DIVERGENT=51, IDENTICAL=3`, `summary (infer/model): DIVERGENT=50, IDENTICAL=46, ONE-COLUMN=12`, `summary (batch): DIVERGENT=50, IDENTICAL=4` |
-| `installed_wheel_check.txt` | the recordings checked from an isolated installed test wheel (see the iforest, GMM and HDBSCAN directory's README for the wheel) |
+| `cpu-x86.neighbors-density.json` | the same 18 lanes on one RunPod CPU pod (x86-64-v3 host bindings built there, commit f1d9feecb), leg `bench/results/runpod_cpu/2026-09-15_171130-inference-neighbors-density` (untracked) |
+| `diff.x86.base-ties-dupes.txt`, `owed.x86.json` | x86 against the record cut to the three fixtures: `summary: IDENTICAL=54`, `summary (infer/model): IDENTICAL=96, OWED=12`, `summary (batch): IDENTICAL=54`, require-columns 4 OK (12 OWED, the radius model cells) |
+| `diff.cpu-m4-vs-cpu-x86.txt` | the M4 and x86 CPU columns: `summary: IDENTICAL=54`, `summary (infer/model): IDENTICAL=108`, `summary (batch): IDENTICAL=54` |
+| `installed_wheel_check.txt`, `installed_wheel_check.json` | the recordings checked from an isolated installed test wheel (see the iforest, GMM and HDBSCAN directory's README for the wheel) |
 
 The cells the sabotage does not move are the infer and batch cells of knn-cosine, knn-rbc,
 radius and radius-manhattan on `ties`, the integer fixture, where the reversed distance fold

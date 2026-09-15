@@ -1,0 +1,2131 @@
+{
+  "binaries": {
+    "_mojolearn": "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/nd/wheel/target/mojolearn/host/_mojolearn_core_host.so",
+    "_mojolearn_arima": "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/nd/wheel/target/mojolearn/host/_mojolearn_forecast_host.so",
+    "_mojolearn_estimators": "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/nd/wheel/target/mojolearn/host/_mojolearn_estimators_host.so",
+    "_mojolearn_hdbscan": "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/nd/wheel/target/mojolearn/host/_mojolearn_hdbscan_infer_host.so",
+    "_mojolearn_kernel_methods": "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/nd/wheel/target/mojolearn/host/_mojolearn_estimators_host.so",
+    "_mojolearn_metrics": "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/nd/wheel/target/mojolearn/host/_mojolearn_metrics_host.so",
+    "_mojolearn_mixture": "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/nd/wheel/target/mojolearn/host/_mojolearn_mixture_infer_host.so",
+    "_mojolearn_preprocessing": "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/nd/wheel/target/mojolearn/host/_mojolearn_estimators_host.so",
+    "_mojolearn_solver": "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/nd/wheel/target/mojolearn/host/_mojolearn_estimators_host.so",
+    "_mojolearn_svm": "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/nd/wheel/target/mojolearn/host/_mojolearn_svm_host.so"
+  },
+  "binary": "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/nd/wheel/target/mojolearn/host/_mojolearn_estimators_host.so",
+  "checked_at": "2026-09-15T13:20:16-0400",
+  "commit": "f1d9feecb137ab688cb826fdd12682e63665a7d9",
+  "exit": 0,
+  "expect_mismatch": false,
+  "fixtures": [
+    {
+      "cases": [
+        {
+          "case": "score_samples",
+          "equal": true,
+          "got": "c42ef91602968965f7ae95a004e395be9ae7a1ceac80f8ad909951a5c6503cda",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256
+          ],
+          "want": "c42ef91602968965f7ae95a004e395be9ae7a1ceac80f8ad909951a5c6503cda",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "KernelDensity",
+      "identity_hash": {
+        "equal": true,
+        "got": "e2af54529a08a7be",
+        "want": "e2af54529a08a7be"
+      },
+      "kind": "base",
+      "lane": "kde-cosine-minkowski",
+      "model_sha256": "3f69c1096d5277d6bf9d49c7fd236816ff515cacb443b6c433190c70897613e1",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.290159
+    },
+    {
+      "cases": [
+        {
+          "case": "score_samples",
+          "equal": true,
+          "got": "c42ef91602968965f7ae95a004e395be9ae7a1ceac80f8ad909951a5c6503cda",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256
+          ],
+          "want": "c42ef91602968965f7ae95a004e395be9ae7a1ceac80f8ad909951a5c6503cda",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "KernelDensity",
+      "identity_hash": {
+        "equal": true,
+        "got": "e2af54529a08a7be",
+        "want": "e2af54529a08a7be"
+      },
+      "kind": "dupes",
+      "lane": "kde-cosine-minkowski",
+      "model_sha256": "3f69c1096d5277d6bf9d49c7fd236816ff515cacb443b6c433190c70897613e1",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.083418
+    },
+    {
+      "cases": [
+        {
+          "case": "score_samples",
+          "equal": true,
+          "got": "648489c920819668f1b9149293fd95dbc19637d9d1f503de1a2308f2cc38791c",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256
+          ],
+          "want": "648489c920819668f1b9149293fd95dbc19637d9d1f503de1a2308f2cc38791c",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "KernelDensity",
+      "identity_hash": {
+        "equal": true,
+        "got": "a33c2e206e5a28eb",
+        "want": "a33c2e206e5a28eb"
+      },
+      "kind": "ties",
+      "lane": "kde-cosine-minkowski",
+      "model_sha256": "fd7e7226ebe1d3de7162b7b5413b2690cb311b3c595aee8118084bb336bfdb40",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.083004
+    },
+    {
+      "cases": [
+        {
+          "case": "score_samples",
+          "equal": true,
+          "got": "425cd949dd1ca6c9339794e8b771334ef784e451a9a95dc3a5508956926d2d95",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256
+          ],
+          "want": "425cd949dd1ca6c9339794e8b771334ef784e451a9a95dc3a5508956926d2d95",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "KernelDensity",
+      "identity_hash": {
+        "equal": true,
+        "got": "33f8a3ca1a52a0b4",
+        "want": "33f8a3ca1a52a0b4"
+      },
+      "kind": "base",
+      "lane": "kde-epanechnikov-l1",
+      "model_sha256": "a39cb2033ade3b6ff45975068a80767d6a44a86745cd0740adcfada1f088ef0b",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.020807
+    },
+    {
+      "cases": [
+        {
+          "case": "score_samples",
+          "equal": true,
+          "got": "425cd949dd1ca6c9339794e8b771334ef784e451a9a95dc3a5508956926d2d95",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256
+          ],
+          "want": "425cd949dd1ca6c9339794e8b771334ef784e451a9a95dc3a5508956926d2d95",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "KernelDensity",
+      "identity_hash": {
+        "equal": true,
+        "got": "33f8a3ca1a52a0b4",
+        "want": "33f8a3ca1a52a0b4"
+      },
+      "kind": "dupes",
+      "lane": "kde-epanechnikov-l1",
+      "model_sha256": "a39cb2033ade3b6ff45975068a80767d6a44a86745cd0740adcfada1f088ef0b",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.020858
+    },
+    {
+      "cases": [
+        {
+          "case": "score_samples",
+          "equal": true,
+          "got": "4c2089317fac72f8a5694ba8bffa90247eb6640be2486ea35565bb2a94b4c3df",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256
+          ],
+          "want": "4c2089317fac72f8a5694ba8bffa90247eb6640be2486ea35565bb2a94b4c3df",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "KernelDensity",
+      "identity_hash": {
+        "equal": true,
+        "got": "b32f12fa353fa102",
+        "want": "b32f12fa353fa102"
+      },
+      "kind": "ties",
+      "lane": "kde-epanechnikov-l1",
+      "model_sha256": "607371bac93ff1c3efd819941e17bb9ffc321252d0fbbe6c3a682e3389c9a9e7",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.020897
+    },
+    {
+      "cases": [
+        {
+          "case": "score_samples",
+          "equal": true,
+          "got": "84d0b205983dcf634cc7f69a1a895700c844f27b9df6aea82224f20b19daa95f",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256
+          ],
+          "want": "84d0b205983dcf634cc7f69a1a895700c844f27b9df6aea82224f20b19daa95f",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "KernelDensity",
+      "identity_hash": {
+        "equal": true,
+        "got": "9265e066af938ddd",
+        "want": "9265e066af938ddd"
+      },
+      "kind": "base",
+      "lane": "kde-exponential-chebyshev",
+      "model_sha256": "a8b0414787a342542b982e006e0e92118eb090e526d8b72ced4aa0b0b06b469b",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.017965
+    },
+    {
+      "cases": [
+        {
+          "case": "score_samples",
+          "equal": true,
+          "got": "84d0b205983dcf634cc7f69a1a895700c844f27b9df6aea82224f20b19daa95f",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256
+          ],
+          "want": "84d0b205983dcf634cc7f69a1a895700c844f27b9df6aea82224f20b19daa95f",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "KernelDensity",
+      "identity_hash": {
+        "equal": true,
+        "got": "9265e066af938ddd",
+        "want": "9265e066af938ddd"
+      },
+      "kind": "dupes",
+      "lane": "kde-exponential-chebyshev",
+      "model_sha256": "a8b0414787a342542b982e006e0e92118eb090e526d8b72ced4aa0b0b06b469b",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.01794
+    },
+    {
+      "cases": [
+        {
+          "case": "score_samples",
+          "equal": true,
+          "got": "b6fd59750316dfe117e8844bdffe0bcc8b76f1ed1bc4ba885b4f03eb3ee67fce",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256
+          ],
+          "want": "b6fd59750316dfe117e8844bdffe0bcc8b76f1ed1bc4ba885b4f03eb3ee67fce",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "KernelDensity",
+      "identity_hash": {
+        "equal": true,
+        "got": "1ca4af3183ffe6b3",
+        "want": "1ca4af3183ffe6b3"
+      },
+      "kind": "ties",
+      "lane": "kde-exponential-chebyshev",
+      "model_sha256": "3d563f03a2174bfd21d30cf50e7b528608b93a29d5a73dd2b5de8299d76fc638",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.018097
+    },
+    {
+      "cases": [
+        {
+          "case": "score_samples",
+          "equal": true,
+          "got": "22b1a49f6a4c6f5fe362f00b2c2c4434cc64863a3c408ff1b71dc1e8c9b782bc",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256
+          ],
+          "want": "22b1a49f6a4c6f5fe362f00b2c2c4434cc64863a3c408ff1b71dc1e8c9b782bc",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "KernelDensity",
+      "identity_hash": {
+        "equal": true,
+        "got": "abf3fbff5c858cef",
+        "want": "abf3fbff5c858cef"
+      },
+      "kind": "base",
+      "lane": "kde-linear-cosine",
+      "model_sha256": "13cf8ce7fe202391a44314f4530ca6257fa594c561ddfb64e457bc3d0dfc1822",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.044134
+    },
+    {
+      "cases": [
+        {
+          "case": "score_samples",
+          "equal": true,
+          "got": "22b1a49f6a4c6f5fe362f00b2c2c4434cc64863a3c408ff1b71dc1e8c9b782bc",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256
+          ],
+          "want": "22b1a49f6a4c6f5fe362f00b2c2c4434cc64863a3c408ff1b71dc1e8c9b782bc",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "KernelDensity",
+      "identity_hash": {
+        "equal": true,
+        "got": "abf3fbff5c858cef",
+        "want": "abf3fbff5c858cef"
+      },
+      "kind": "dupes",
+      "lane": "kde-linear-cosine",
+      "model_sha256": "13cf8ce7fe202391a44314f4530ca6257fa594c561ddfb64e457bc3d0dfc1822",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.044209
+    },
+    {
+      "cases": [
+        {
+          "case": "score_samples",
+          "equal": true,
+          "got": "dc92974a8fc04193f787e34b7c80b50ab0472112b6fe6c40af22a280e4819ae8",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256
+          ],
+          "want": "dc92974a8fc04193f787e34b7c80b50ab0472112b6fe6c40af22a280e4819ae8",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "KernelDensity",
+      "identity_hash": {
+        "equal": true,
+        "got": "07c4969f173c9414",
+        "want": "07c4969f173c9414"
+      },
+      "kind": "ties",
+      "lane": "kde-linear-cosine",
+      "model_sha256": "799ff55929e006b74b16c1f9045ecadffdd00b7ef739b32e03f504464ac785ec",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.044044
+    },
+    {
+      "cases": [
+        {
+          "case": "score_samples",
+          "equal": true,
+          "got": "60065a2f04e87e50ef8917ff597c2309981f3681effa90cad2694911a202e79a",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256
+          ],
+          "want": "60065a2f04e87e50ef8917ff597c2309981f3681effa90cad2694911a202e79a",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "KernelDensity",
+      "identity_hash": {
+        "equal": true,
+        "got": "1b5d5d663fef4284",
+        "want": "1b5d5d663fef4284"
+      },
+      "kind": "base",
+      "lane": "kde-tophat-sqeuclidean",
+      "model_sha256": "c993389731292ddf09bc61621b2754606a99878645f0a9c2702539e9f06f35cc",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.02489
+    },
+    {
+      "cases": [
+        {
+          "case": "score_samples",
+          "equal": true,
+          "got": "60065a2f04e87e50ef8917ff597c2309981f3681effa90cad2694911a202e79a",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256
+          ],
+          "want": "60065a2f04e87e50ef8917ff597c2309981f3681effa90cad2694911a202e79a",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "KernelDensity",
+      "identity_hash": {
+        "equal": true,
+        "got": "1b5d5d663fef4284",
+        "want": "1b5d5d663fef4284"
+      },
+      "kind": "dupes",
+      "lane": "kde-tophat-sqeuclidean",
+      "model_sha256": "c993389731292ddf09bc61621b2754606a99878645f0a9c2702539e9f06f35cc",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.024954
+    },
+    {
+      "cases": [
+        {
+          "case": "score_samples",
+          "equal": true,
+          "got": "ef6e0123eb3b73e7a60893596e0771664d5d71d88310606ac9fe4e269fa94b0d",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256
+          ],
+          "want": "ef6e0123eb3b73e7a60893596e0771664d5d71d88310606ac9fe4e269fa94b0d",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "KernelDensity",
+      "identity_hash": {
+        "equal": true,
+        "got": "6a97220daf14cf5c",
+        "want": "6a97220daf14cf5c"
+      },
+      "kind": "ties",
+      "lane": "kde-tophat-sqeuclidean",
+      "model_sha256": "87fae666d3f610e70ce5aa5ddc13198b321b87043a1a89f2c8de85224deb98ff",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.02487
+    },
+    {
+      "cases": [
+        {
+          "case": "score_samples",
+          "equal": true,
+          "got": "1e05952e10db275e581475c5917664b519080dcc90234cc9e4e2ddf58e4528fb",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256
+          ],
+          "want": "1e05952e10db275e581475c5917664b519080dcc90234cc9e4e2ddf58e4528fb",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "KernelDensity",
+      "identity_hash": {
+        "equal": true,
+        "got": "4f090c7438ab89c4",
+        "want": "4f090c7438ab89c4"
+      },
+      "kind": "base",
+      "lane": "kde-weighted",
+      "model_sha256": "ed3ad9a95b60986da463720bf746c6942b6d0a433be369c686934cef7dd8ca41",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.041809
+    },
+    {
+      "cases": [
+        {
+          "case": "score_samples",
+          "equal": true,
+          "got": "1e05952e10db275e581475c5917664b519080dcc90234cc9e4e2ddf58e4528fb",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256
+          ],
+          "want": "1e05952e10db275e581475c5917664b519080dcc90234cc9e4e2ddf58e4528fb",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "KernelDensity",
+      "identity_hash": {
+        "equal": true,
+        "got": "4f090c7438ab89c4",
+        "want": "4f090c7438ab89c4"
+      },
+      "kind": "dupes",
+      "lane": "kde-weighted",
+      "model_sha256": "ed3ad9a95b60986da463720bf746c6942b6d0a433be369c686934cef7dd8ca41",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.041946
+    },
+    {
+      "cases": [
+        {
+          "case": "score_samples",
+          "equal": true,
+          "got": "8df78f2b4c714d81a81d5670df8a6fe3cfde2d4872cec6176e0321c6a97d6ce2",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256
+          ],
+          "want": "8df78f2b4c714d81a81d5670df8a6fe3cfde2d4872cec6176e0321c6a97d6ce2",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "KernelDensity",
+      "identity_hash": {
+        "equal": true,
+        "got": "fd50122f27e7a79d",
+        "want": "fd50122f27e7a79d"
+      },
+      "kind": "ties",
+      "lane": "kde-weighted",
+      "model_sha256": "baee26310e103854d1b28315ca460a0c458fac15e1f79d9f05cc3decd0e5653d",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.041925
+    },
+    {
+      "cases": [
+        {
+          "case": "kneighbors_distances",
+          "equal": true,
+          "got": "206ba4aab49778019f6922b7b8f570473301cee6f90133e1c53555344cb9b6d2",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "206ba4aab49778019f6922b7b8f570473301cee6f90133e1c53555344cb9b6d2",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        },
+        {
+          "case": "kneighbors_indices",
+          "equal": true,
+          "got": "cf1dc171b973254b01c02e8e11a1c8fb12f33d18a4cd976fcc3249e9344192ba",
+          "got_dtype": "<i8",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "cf1dc171b973254b01c02e8e11a1c8fb12f33d18a4cd976fcc3249e9344192ba",
+          "want_dtype": "<i8",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "NearestNeighbors",
+      "identity_hash": {
+        "equal": true,
+        "got": "85bf9daf0386b59f",
+        "want": "85bf9daf0386b59f"
+      },
+      "kind": "base",
+      "lane": "knn-chebyshev",
+      "model_sha256": "9fcdb70c0e9f5be8a2493a0b02cbac7b0dad77854883b770775007a78ac66581",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.179682
+    },
+    {
+      "cases": [
+        {
+          "case": "kneighbors_distances",
+          "equal": true,
+          "got": "131299967af6d60b4299f2cfeb4ba5ee6b2e3b0737f4a2a2306672dc82d19dd2",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "131299967af6d60b4299f2cfeb4ba5ee6b2e3b0737f4a2a2306672dc82d19dd2",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        },
+        {
+          "case": "kneighbors_indices",
+          "equal": true,
+          "got": "a4273ab7bc48b06289499e39082b2e60f3e97044919d2188397e9104ec7baf3b",
+          "got_dtype": "<i8",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "a4273ab7bc48b06289499e39082b2e60f3e97044919d2188397e9104ec7baf3b",
+          "want_dtype": "<i8",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "NearestNeighbors",
+      "identity_hash": {
+        "equal": true,
+        "got": "42aa74427e3c4f6a",
+        "want": "42aa74427e3c4f6a"
+      },
+      "kind": "dupes",
+      "lane": "knn-chebyshev",
+      "model_sha256": "dd5631e90586bfcfe8dae8d3192ab787d79e7d5b1262ecb50982dac67d0589d4",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.015075
+    },
+    {
+      "cases": [
+        {
+          "case": "kneighbors_distances",
+          "equal": true,
+          "got": "06c9d05cd2f901c05f64af134b251d2c92782038df226619ad7d960c0d695341",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "06c9d05cd2f901c05f64af134b251d2c92782038df226619ad7d960c0d695341",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        },
+        {
+          "case": "kneighbors_indices",
+          "equal": true,
+          "got": "84938e11bde5ebb4a69445b013f0cbe0c380541c11e0fc451b3f3d3158caae1f",
+          "got_dtype": "<i8",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "84938e11bde5ebb4a69445b013f0cbe0c380541c11e0fc451b3f3d3158caae1f",
+          "want_dtype": "<i8",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "NearestNeighbors",
+      "identity_hash": {
+        "equal": true,
+        "got": "61fdcb8274d164a4",
+        "want": "61fdcb8274d164a4"
+      },
+      "kind": "ties",
+      "lane": "knn-chebyshev",
+      "model_sha256": "5243539c628d22381986e1bf8765dd5dc52fb93818b41afc61ad3a8d8fc966fe",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.014992
+    },
+    {
+      "cases": [
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "c68702afa82324c02dc08fb4c4e2ba32f6e31eb916fee3ba75a2ed7a230f0514",
+          "got_dtype": "<i8",
+          "got_shape": [
+            64
+          ],
+          "want": "c68702afa82324c02dc08fb4c4e2ba32f6e31eb916fee3ba75a2ed7a230f0514",
+          "want_dtype": "<i8",
+          "want_shape": [
+            64
+          ]
+        },
+        {
+          "case": "predict_proba",
+          "equal": true,
+          "got": "2b7b2f3804d58710643e638ec0cdd211718b68f2535a465cdc67e32626fb0afa",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            2
+          ],
+          "want": "2b7b2f3804d58710643e638ec0cdd211718b68f2535a465cdc67e32626fb0afa",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            2
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "KNeighborsClassifier",
+      "identity_hash": {
+        "equal": true,
+        "got": "27345d180c69e075",
+        "want": "27345d180c69e075"
+      },
+      "kind": "base",
+      "lane": "knn-clf-distance",
+      "model_sha256": "13ba9e3acab2179f78874546f652c8634abc3066a99346972f0c20f249997b0c",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.060756
+    },
+    {
+      "cases": [
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "74be1c2b40968af2d3310c7ed13da26047a7e9d9f2c8231ee478b193ff0cb86c",
+          "got_dtype": "<i8",
+          "got_shape": [
+            64
+          ],
+          "want": "74be1c2b40968af2d3310c7ed13da26047a7e9d9f2c8231ee478b193ff0cb86c",
+          "want_dtype": "<i8",
+          "want_shape": [
+            64
+          ]
+        },
+        {
+          "case": "predict_proba",
+          "equal": true,
+          "got": "06fc68c1d4581d2d599ab782183e62c519641559e501e08602a9d830f1b4f07b",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            2
+          ],
+          "want": "06fc68c1d4581d2d599ab782183e62c519641559e501e08602a9d830f1b4f07b",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            2
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "KNeighborsClassifier",
+      "identity_hash": {
+        "equal": true,
+        "got": "df3825c0aa9b0795",
+        "want": "df3825c0aa9b0795"
+      },
+      "kind": "dupes",
+      "lane": "knn-clf-distance",
+      "model_sha256": "7dd29e4d99cb3e1d2e760365b0873a0cf8c8b5ce498aeaf74be382eb44c8b5ac",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.061183
+    },
+    {
+      "cases": [
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "89a7fdeea995333647ee93c0cf40d506932b73c02c29cc4d397a11ad4923ebbc",
+          "got_dtype": "<i8",
+          "got_shape": [
+            64
+          ],
+          "want": "89a7fdeea995333647ee93c0cf40d506932b73c02c29cc4d397a11ad4923ebbc",
+          "want_dtype": "<i8",
+          "want_shape": [
+            64
+          ]
+        },
+        {
+          "case": "predict_proba",
+          "equal": true,
+          "got": "b79455b2aca12da064376d9802c3d0c553e8cd9453995cd8effd5b3a33ad56e2",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            2
+          ],
+          "want": "b79455b2aca12da064376d9802c3d0c553e8cd9453995cd8effd5b3a33ad56e2",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            2
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "KNeighborsClassifier",
+      "identity_hash": {
+        "equal": true,
+        "got": "51fbb53f70ef95fe",
+        "want": "51fbb53f70ef95fe"
+      },
+      "kind": "ties",
+      "lane": "knn-clf-distance",
+      "model_sha256": "9d81f24bb5a3a46d8d2fef8f0fc2f27574e2de14eb221124ce2b9374e799f4b5",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.063103
+    },
+    {
+      "cases": [
+        {
+          "case": "kneighbors_distances",
+          "equal": true,
+          "got": "c225f2d38f0c4946992022749c9bcc627135909a2a86b83a72d2c003e0254054",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "c225f2d38f0c4946992022749c9bcc627135909a2a86b83a72d2c003e0254054",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        },
+        {
+          "case": "kneighbors_indices",
+          "equal": true,
+          "got": "0bf15978f5cc21217ba2d4dcb2216b83236d72c41740f27830c9d73251a9d13a",
+          "got_dtype": "<i8",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "0bf15978f5cc21217ba2d4dcb2216b83236d72c41740f27830c9d73251a9d13a",
+          "want_dtype": "<i8",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "NearestNeighbors",
+      "identity_hash": {
+        "equal": true,
+        "got": "45f87790aaba81b4",
+        "want": "45f87790aaba81b4"
+      },
+      "kind": "base",
+      "lane": "knn-cosine",
+      "model_sha256": "a6427c8352b608b887ca95d2db50d8af3438bc17d69556c307b389c849aa47ed",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.04003
+    },
+    {
+      "cases": [
+        {
+          "case": "kneighbors_distances",
+          "equal": true,
+          "got": "5a4a3ab15daddcb6444560428de0ba831bc57c0359be06c238f8ad6a60e9509b",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "5a4a3ab15daddcb6444560428de0ba831bc57c0359be06c238f8ad6a60e9509b",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        },
+        {
+          "case": "kneighbors_indices",
+          "equal": true,
+          "got": "7332bd5b416fbc9cf4e4f6065df246c78748dd3f97dde3a5889a2b10a415fd50",
+          "got_dtype": "<i8",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "7332bd5b416fbc9cf4e4f6065df246c78748dd3f97dde3a5889a2b10a415fd50",
+          "want_dtype": "<i8",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "NearestNeighbors",
+      "identity_hash": {
+        "equal": true,
+        "got": "ed02b98206dc7b42",
+        "want": "ed02b98206dc7b42"
+      },
+      "kind": "dupes",
+      "lane": "knn-cosine",
+      "model_sha256": "8b93c8f69f7f0dc1af52779d59ee800ded4d71aff6ae4d2360d9d4940f3f3dc1",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.040786
+    },
+    {
+      "cases": [
+        {
+          "case": "kneighbors_distances",
+          "equal": true,
+          "got": "4d543bb6c710d2f58e531d0853f028aa8962b06a06029ae7b88541dd4f4e5d3a",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "4d543bb6c710d2f58e531d0853f028aa8962b06a06029ae7b88541dd4f4e5d3a",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        },
+        {
+          "case": "kneighbors_indices",
+          "equal": true,
+          "got": "215e7263be89d857690db575765c46c7ce2812becfc161e5ec73e8c412d4934a",
+          "got_dtype": "<i8",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "215e7263be89d857690db575765c46c7ce2812becfc161e5ec73e8c412d4934a",
+          "want_dtype": "<i8",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "NearestNeighbors",
+      "identity_hash": {
+        "equal": true,
+        "got": "ef08d9ae912ae104",
+        "want": "ef08d9ae912ae104"
+      },
+      "kind": "ties",
+      "lane": "knn-cosine",
+      "model_sha256": "af099d8dc056f48b5e29767ee219f74c967f02cc3022fc7e27aa622c39fdd34f",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.041417
+    },
+    {
+      "cases": [
+        {
+          "case": "kneighbors_distances",
+          "equal": true,
+          "got": "42c8627a7597e58022800ff3b56c59659272ea07362cff891504d9513a5fd666",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "42c8627a7597e58022800ff3b56c59659272ea07362cff891504d9513a5fd666",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        },
+        {
+          "case": "kneighbors_indices",
+          "equal": true,
+          "got": "2d94a054e58f374a9dacb3882438038a22ade79f38d57f99e35be1b3934968dc",
+          "got_dtype": "<i8",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "2d94a054e58f374a9dacb3882438038a22ade79f38d57f99e35be1b3934968dc",
+          "want_dtype": "<i8",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "NearestNeighbors",
+      "identity_hash": {
+        "equal": true,
+        "got": "0c50c33ce8d101a4",
+        "want": "0c50c33ce8d101a4"
+      },
+      "kind": "base",
+      "lane": "knn-manhattan",
+      "model_sha256": "cd79f58159bc6f6287df7e09e702b50b2bd8f90498c28a62a2deffde100b6f7a",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.033934
+    },
+    {
+      "cases": [
+        {
+          "case": "kneighbors_distances",
+          "equal": true,
+          "got": "f26fb8d62c736ea5780e3716f0d2d04b73f5af36ec06791d93ae6ce38e3858e6",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "f26fb8d62c736ea5780e3716f0d2d04b73f5af36ec06791d93ae6ce38e3858e6",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        },
+        {
+          "case": "kneighbors_indices",
+          "equal": true,
+          "got": "7664d2ac5e3bc066ac8604d5e1dd8cbb86d652ee59a56ce3b4b8a92eea61d32b",
+          "got_dtype": "<i8",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "7664d2ac5e3bc066ac8604d5e1dd8cbb86d652ee59a56ce3b4b8a92eea61d32b",
+          "want_dtype": "<i8",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "NearestNeighbors",
+      "identity_hash": {
+        "equal": true,
+        "got": "e281a4103fbaaef2",
+        "want": "e281a4103fbaaef2"
+      },
+      "kind": "dupes",
+      "lane": "knn-manhattan",
+      "model_sha256": "4236e13a4f7525bdefd0f1ffaf82f068b08d74eb1b39d1535dcbc25518a6ad2f",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.033201
+    },
+    {
+      "cases": [
+        {
+          "case": "kneighbors_distances",
+          "equal": true,
+          "got": "f76489c28d5e27936f102e00b9813620b82e91b50c004a4d833289aa5988720b",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "f76489c28d5e27936f102e00b9813620b82e91b50c004a4d833289aa5988720b",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        },
+        {
+          "case": "kneighbors_indices",
+          "equal": true,
+          "got": "7a7117ff9438c870b0faaa06cccf4cdcc887a5734c49d433dcf7b0792ca7d0e2",
+          "got_dtype": "<i8",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "7a7117ff9438c870b0faaa06cccf4cdcc887a5734c49d433dcf7b0792ca7d0e2",
+          "want_dtype": "<i8",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "NearestNeighbors",
+      "identity_hash": {
+        "equal": true,
+        "got": "e1e159dd9c916c14",
+        "want": "e1e159dd9c916c14"
+      },
+      "kind": "ties",
+      "lane": "knn-manhattan",
+      "model_sha256": "1016d1125951292d006f0b6691a2148682d10ea13d204f87cf2d39c277351870",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.034299
+    },
+    {
+      "cases": [
+        {
+          "case": "kneighbors_distances",
+          "equal": true,
+          "got": "0b86402a81c973844a1d0f1d6b271380c10ec6ae51e896d629ff237e6332232f",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "0b86402a81c973844a1d0f1d6b271380c10ec6ae51e896d629ff237e6332232f",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        },
+        {
+          "case": "kneighbors_indices",
+          "equal": true,
+          "got": "c9ec732ee7ec7f5b45fa3cf1700a53bc5e634b5b3662612a6ae2d30185502175",
+          "got_dtype": "<i8",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "c9ec732ee7ec7f5b45fa3cf1700a53bc5e634b5b3662612a6ae2d30185502175",
+          "want_dtype": "<i8",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "NearestNeighbors",
+      "identity_hash": {
+        "equal": true,
+        "got": "b10c67db8cf2d93f",
+        "want": "b10c67db8cf2d93f"
+      },
+      "kind": "base",
+      "lane": "knn-minkowski-p3",
+      "model_sha256": "2e10324808b3d9d22213a0acbe796e70475c79ebd4f2bd043c9d0cc946d91fef",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.13465
+    },
+    {
+      "cases": [
+        {
+          "case": "kneighbors_distances",
+          "equal": true,
+          "got": "f07a7cf39f4be8067660df0e44433164e49bff9da09eb59b01e2067a5d5fa53d",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "f07a7cf39f4be8067660df0e44433164e49bff9da09eb59b01e2067a5d5fa53d",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        },
+        {
+          "case": "kneighbors_indices",
+          "equal": true,
+          "got": "b27973fafe00e6bf918152380345ea46512180b72c3d9616ea42e3a8d4172f7a",
+          "got_dtype": "<i8",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "b27973fafe00e6bf918152380345ea46512180b72c3d9616ea42e3a8d4172f7a",
+          "want_dtype": "<i8",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "NearestNeighbors",
+      "identity_hash": {
+        "equal": true,
+        "got": "8763bf8d122dfa14",
+        "want": "8763bf8d122dfa14"
+      },
+      "kind": "dupes",
+      "lane": "knn-minkowski-p3",
+      "model_sha256": "41955aa18f1ba9550b7a37cc1d69e9d0704857112e2b5290c3404cc2fbd38835",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.125816
+    },
+    {
+      "cases": [
+        {
+          "case": "kneighbors_distances",
+          "equal": true,
+          "got": "89cb7c194a94e5fd7bbb23931c8da450ead929a15fad29df6768439778d2fc2f",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "89cb7c194a94e5fd7bbb23931c8da450ead929a15fad29df6768439778d2fc2f",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        },
+        {
+          "case": "kneighbors_indices",
+          "equal": true,
+          "got": "95f0d5ce9feaa7fa0e4cb8af699e5432360306048fb8a92925679693a55b8a42",
+          "got_dtype": "<i8",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "95f0d5ce9feaa7fa0e4cb8af699e5432360306048fb8a92925679693a55b8a42",
+          "want_dtype": "<i8",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "NearestNeighbors",
+      "identity_hash": {
+        "equal": true,
+        "got": "8a62d9a7de10894d",
+        "want": "8a62d9a7de10894d"
+      },
+      "kind": "ties",
+      "lane": "knn-minkowski-p3",
+      "model_sha256": "ca7e170fd4dbb3671dc0673972da7f0c8460d67cca72bf37a8fdb0bec8447ef9",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.134284
+    },
+    {
+      "cases": [
+        {
+          "case": "kneighbors_distances",
+          "equal": true,
+          "got": "08140346caf789b338985372740a702656b125d1188b74ce69f9e3f36eece68a",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "08140346caf789b338985372740a702656b125d1188b74ce69f9e3f36eece68a",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        },
+        {
+          "case": "kneighbors_indices",
+          "equal": true,
+          "got": "04b93c070a3589038db8d86a53ed10a01ef8b6aa125d2f0c82877920af8aab19",
+          "got_dtype": "<i8",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "04b93c070a3589038db8d86a53ed10a01ef8b6aa125d2f0c82877920af8aab19",
+          "want_dtype": "<i8",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "NearestNeighbors",
+      "identity_hash": {
+        "equal": true,
+        "got": "94547b3dc58e2d86",
+        "want": "94547b3dc58e2d86"
+      },
+      "kind": "base",
+      "lane": "knn-rbc",
+      "model_sha256": "88fe338f22e892ce102dd4fd778a866437c19c20898903e172cb3bc39f51df57",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.030753
+    },
+    {
+      "cases": [
+        {
+          "case": "kneighbors_distances",
+          "equal": true,
+          "got": "6b780f139dc1acd3d2dfbea8eb02340838972d61aeffdf3cfe41ffba73718794",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "6b780f139dc1acd3d2dfbea8eb02340838972d61aeffdf3cfe41ffba73718794",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        },
+        {
+          "case": "kneighbors_indices",
+          "equal": true,
+          "got": "377e1835cc559b72efb3af295a7191ebaed81c2c98b2a519a2a9e32db54ef693",
+          "got_dtype": "<i8",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "377e1835cc559b72efb3af295a7191ebaed81c2c98b2a519a2a9e32db54ef693",
+          "want_dtype": "<i8",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "NearestNeighbors",
+      "identity_hash": {
+        "equal": true,
+        "got": "590cec8ee362b9d0",
+        "want": "590cec8ee362b9d0"
+      },
+      "kind": "dupes",
+      "lane": "knn-rbc",
+      "model_sha256": "71980f97cd4c3be79050df818a397b2e639f380631e09c96a6b82bcd282069f9",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.030945
+    },
+    {
+      "cases": [
+        {
+          "case": "kneighbors_distances",
+          "equal": true,
+          "got": "d02c0dfa9406459e2fdd51d66fbaffb13967980f096c5a4f119b918393a7142d",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "d02c0dfa9406459e2fdd51d66fbaffb13967980f096c5a4f119b918393a7142d",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        },
+        {
+          "case": "kneighbors_indices",
+          "equal": true,
+          "got": "76d7c0886140718ae5ed58b7035ca12b26cc9311b75968cccc815b57f037372a",
+          "got_dtype": "<i8",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "76d7c0886140718ae5ed58b7035ca12b26cc9311b75968cccc815b57f037372a",
+          "want_dtype": "<i8",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "NearestNeighbors",
+      "identity_hash": {
+        "equal": true,
+        "got": "234e9e649f45c983",
+        "want": "234e9e649f45c983"
+      },
+      "kind": "ties",
+      "lane": "knn-rbc",
+      "model_sha256": "0184787f1d03ee52ac4030129df5f003e955751790d1e787bf7d2076ec89387e",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.031254
+    },
+    {
+      "cases": [
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "8f2794b47ae2415f37cead0d79c16dec92211df94a6635cfdaf6713821604dff",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64
+          ],
+          "want": "8f2794b47ae2415f37cead0d79c16dec92211df94a6635cfdaf6713821604dff",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "KNeighborsRegressor",
+      "identity_hash": {
+        "equal": true,
+        "got": "4fd5cf34814e724c",
+        "want": "4fd5cf34814e724c"
+      },
+      "kind": "base",
+      "lane": "knn-reg-distance",
+      "model_sha256": "b82ff06f8b739f98f3eba0759815cbad3b5c2b9f1529883113fcb9db6519542c",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.020645
+    },
+    {
+      "cases": [
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "3a0ce39547042a31a099127295590738a87a385daa56bb142a6fb4841857a4c0",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64
+          ],
+          "want": "3a0ce39547042a31a099127295590738a87a385daa56bb142a6fb4841857a4c0",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "KNeighborsRegressor",
+      "identity_hash": {
+        "equal": true,
+        "got": "26f173ab47f2a29b",
+        "want": "26f173ab47f2a29b"
+      },
+      "kind": "dupes",
+      "lane": "knn-reg-distance",
+      "model_sha256": "661b72798b99c3962ad606abe891bd8b53cfa1f0a2b4bb859aff2951811e9c01",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.020484
+    },
+    {
+      "cases": [
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "d7ac7b1d8fd44f4763276a9518323800dc4506fa256b663ca0863f45ca6f9098",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64
+          ],
+          "want": "d7ac7b1d8fd44f4763276a9518323800dc4506fa256b663ca0863f45ca6f9098",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "KNeighborsRegressor",
+      "identity_hash": {
+        "equal": true,
+        "got": "1b019d878594bccc",
+        "want": "1b019d878594bccc"
+      },
+      "kind": "ties",
+      "lane": "knn-reg-distance",
+      "model_sha256": "7070fd3a026689f1f902850a18a83077db959705c748e4659867e55d752df3cd",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.020296
+    },
+    {
+      "cases": [
+        {
+          "case": "kneighbors_distances",
+          "equal": true,
+          "got": "58566f7434d82d0b054edf6d4778c08de24e9275138d4950688e49e1304d441f",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "58566f7434d82d0b054edf6d4778c08de24e9275138d4950688e49e1304d441f",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        },
+        {
+          "case": "kneighbors_indices",
+          "equal": true,
+          "got": "04b93c070a3589038db8d86a53ed10a01ef8b6aa125d2f0c82877920af8aab19",
+          "got_dtype": "<i8",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "04b93c070a3589038db8d86a53ed10a01ef8b6aa125d2f0c82877920af8aab19",
+          "want_dtype": "<i8",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "NearestNeighbors",
+      "identity_hash": {
+        "equal": true,
+        "got": "76baacee7d15c095",
+        "want": "76baacee7d15c095"
+      },
+      "kind": "base",
+      "lane": "knn-sqeuclidean",
+      "model_sha256": "220a6df6b7f08ecb0f489e5a0daccdfeaa7355c0bb4af83159ae3a3c6b0e8786",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.030936
+    },
+    {
+      "cases": [
+        {
+          "case": "kneighbors_distances",
+          "equal": true,
+          "got": "9b2acdb2552d149792a333738e085c709be9729d42205eefece084102dbd6833",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "9b2acdb2552d149792a333738e085c709be9729d42205eefece084102dbd6833",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        },
+        {
+          "case": "kneighbors_indices",
+          "equal": true,
+          "got": "377e1835cc559b72efb3af295a7191ebaed81c2c98b2a519a2a9e32db54ef693",
+          "got_dtype": "<i8",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "377e1835cc559b72efb3af295a7191ebaed81c2c98b2a519a2a9e32db54ef693",
+          "want_dtype": "<i8",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "NearestNeighbors",
+      "identity_hash": {
+        "equal": true,
+        "got": "5de321ac7c644998",
+        "want": "5de321ac7c644998"
+      },
+      "kind": "dupes",
+      "lane": "knn-sqeuclidean",
+      "model_sha256": "a106a8dd4166ef57f2cca5130564832afe702026b8e3e50390794fa7bddfb68d",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.030991
+    },
+    {
+      "cases": [
+        {
+          "case": "kneighbors_distances",
+          "equal": true,
+          "got": "7b31c4dfc5fe58647fbaa2c89d6d50246368a3c824f21373a2dbcb3c21df9e64",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "7b31c4dfc5fe58647fbaa2c89d6d50246368a3c824f21373a2dbcb3c21df9e64",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        },
+        {
+          "case": "kneighbors_indices",
+          "equal": true,
+          "got": "76d7c0886140718ae5ed58b7035ca12b26cc9311b75968cccc815b57f037372a",
+          "got_dtype": "<i8",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "76d7c0886140718ae5ed58b7035ca12b26cc9311b75968cccc815b57f037372a",
+          "want_dtype": "<i8",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "NearestNeighbors",
+      "identity_hash": {
+        "equal": true,
+        "got": "8b1d0d2c178dcbc9",
+        "want": "8b1d0d2c178dcbc9"
+      },
+      "kind": "ties",
+      "lane": "knn-sqeuclidean",
+      "model_sha256": "8096f29c3e671db0c948fb24e35bf3a2d25b404d17c9d43ec114c47b88293868",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.030956
+    },
+    {
+      "cases": [
+        {
+          "case": "radius_neighbors_counts",
+          "equal": true,
+          "got": "f5e41cec17190606fa43c0485c3231aa8f8f098e46afa6fa1a4ea8655a188027",
+          "got_dtype": "int64",
+          "got_shape": [
+            64
+          ],
+          "want": "f5e41cec17190606fa43c0485c3231aa8f8f098e46afa6fa1a4ea8655a188027",
+          "want_dtype": "int64",
+          "want_shape": [
+            64
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "RadiusNeighbors",
+      "identity_hash": {
+        "equal": true,
+        "got": "3eb3a2ab621fbb97",
+        "want": "3eb3a2ab621fbb97"
+      },
+      "kind": "base",
+      "lane": "radius",
+      "model_sha256": "2ee81955e923d21fe8084764ffe120b8988eda0bd16976ae091d9a3299718ce4",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.030615
+    },
+    {
+      "cases": [
+        {
+          "case": "radius_neighbors_counts",
+          "equal": true,
+          "got": "5d192ef6e30c82ad7f5ccfac1fa7afadfb81d68e3628e4d8332c8b0995e6833e",
+          "got_dtype": "int64",
+          "got_shape": [
+            64
+          ],
+          "want": "5d192ef6e30c82ad7f5ccfac1fa7afadfb81d68e3628e4d8332c8b0995e6833e",
+          "want_dtype": "int64",
+          "want_shape": [
+            64
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "RadiusNeighbors",
+      "identity_hash": {
+        "equal": true,
+        "got": "469e7731aa72a0fd",
+        "want": "469e7731aa72a0fd"
+      },
+      "kind": "dupes",
+      "lane": "radius",
+      "model_sha256": "5167cd08ec11b8bd2d65e300a37fbee0d28204d4d0d6569fc078ac6e95b440c3",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.032013
+    },
+    {
+      "cases": [
+        {
+          "case": "radius_neighbors_counts",
+          "equal": true,
+          "got": "2a96101d2abd2592a825eca57a601067b9ab1425476ed96f7be2b089b6909dab",
+          "got_dtype": "int64",
+          "got_shape": [
+            64
+          ],
+          "want": "2a96101d2abd2592a825eca57a601067b9ab1425476ed96f7be2b089b6909dab",
+          "want_dtype": "int64",
+          "want_shape": [
+            64
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "RadiusNeighbors",
+      "identity_hash": {
+        "equal": true,
+        "got": "5f3eec45e2afb437",
+        "want": "5f3eec45e2afb437"
+      },
+      "kind": "ties",
+      "lane": "radius",
+      "model_sha256": "57306f414d5af0b443a04abd7c7d5ec402f5131e504e571736c33f44a81e6824",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.030578
+    },
+    {
+      "cases": [
+        {
+          "case": "radius_neighbors_counts",
+          "equal": true,
+          "got": "b6c3574d2189655a54039cde7fcd600e6adaf9160eaf1a7991e265585f858033",
+          "got_dtype": "int64",
+          "got_shape": [
+            64
+          ],
+          "want": "b6c3574d2189655a54039cde7fcd600e6adaf9160eaf1a7991e265585f858033",
+          "want_dtype": "int64",
+          "want_shape": [
+            64
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "RadiusNeighbors",
+      "identity_hash": {
+        "equal": true,
+        "got": "47f179252c05327e",
+        "want": "47f179252c05327e"
+      },
+      "kind": "base",
+      "lane": "radius-chebyshev",
+      "model_sha256": "8574229ff00211a8e083e0a5cd47f9faf81954010479a9b5e977ba6dd90fb8b3",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.017919
+    },
+    {
+      "cases": [
+        {
+          "case": "radius_neighbors_counts",
+          "equal": true,
+          "got": "125c518e26b25cf6db9a7703a001549f5b1757f06793da92d9efca1fdf53fa9f",
+          "got_dtype": "int64",
+          "got_shape": [
+            64
+          ],
+          "want": "125c518e26b25cf6db9a7703a001549f5b1757f06793da92d9efca1fdf53fa9f",
+          "want_dtype": "int64",
+          "want_shape": [
+            64
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "RadiusNeighbors",
+      "identity_hash": {
+        "equal": true,
+        "got": "4f42e54d861fc686",
+        "want": "4f42e54d861fc686"
+      },
+      "kind": "dupes",
+      "lane": "radius-chebyshev",
+      "model_sha256": "368e386bc9afc1cebc5f26176c56b0439ec082fd7ae7ac8f991872965a513889",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.018878
+    },
+    {
+      "cases": [
+        {
+          "case": "radius_neighbors_counts",
+          "equal": true,
+          "got": "eae26e365d11068f56f2d1c0b849b56150dbc3211fb153c4c37d068cf9363703",
+          "got_dtype": "int64",
+          "got_shape": [
+            64
+          ],
+          "want": "eae26e365d11068f56f2d1c0b849b56150dbc3211fb153c4c37d068cf9363703",
+          "want_dtype": "int64",
+          "want_shape": [
+            64
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "RadiusNeighbors",
+      "identity_hash": {
+        "equal": true,
+        "got": "7b5a2419abc8f304",
+        "want": "7b5a2419abc8f304"
+      },
+      "kind": "ties",
+      "lane": "radius-chebyshev",
+      "model_sha256": "bf872c24d7a8d1fec7c33351a1acf5706700e0659684df08fa9d04edcf30d983",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.024547
+    },
+    {
+      "cases": [
+        {
+          "case": "radius_neighbors_counts",
+          "equal": true,
+          "got": "9bb53c961c18cee14698441da0ed4f22ebe8b6073e476a7cd4e97857a557f5d8",
+          "got_dtype": "int64",
+          "got_shape": [
+            64
+          ],
+          "want": "9bb53c961c18cee14698441da0ed4f22ebe8b6073e476a7cd4e97857a557f5d8",
+          "want_dtype": "int64",
+          "want_shape": [
+            64
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "RadiusNeighbors",
+      "identity_hash": {
+        "equal": true,
+        "got": "51e361a7911b9eb7",
+        "want": "51e361a7911b9eb7"
+      },
+      "kind": "base",
+      "lane": "radius-manhattan",
+      "model_sha256": "a57f1f07d75f73e1fc87bf0e7c4bd52f4277ac8ed2985c6fee710bdb21e0e73e",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.030142
+    },
+    {
+      "cases": [
+        {
+          "case": "radius_neighbors_counts",
+          "equal": true,
+          "got": "07acedcd9147efbcf85ed47b7fde2488607df9eafca68f693756457487a854ad",
+          "got_dtype": "int64",
+          "got_shape": [
+            64
+          ],
+          "want": "07acedcd9147efbcf85ed47b7fde2488607df9eafca68f693756457487a854ad",
+          "want_dtype": "int64",
+          "want_shape": [
+            64
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "RadiusNeighbors",
+      "identity_hash": {
+        "equal": true,
+        "got": "b3ebfcda94a96aa3",
+        "want": "b3ebfcda94a96aa3"
+      },
+      "kind": "dupes",
+      "lane": "radius-manhattan",
+      "model_sha256": "d1c5d251599b18300a9eefc002080e6bb1e30efc083e2b3ebd8287370c4cb126",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.031399
+    },
+    {
+      "cases": [
+        {
+          "case": "radius_neighbors_counts",
+          "equal": true,
+          "got": "7fb13696b9e716db8a1949925f8ec15be4c8d5945d4df1c9abccb3d3e51f3c31",
+          "got_dtype": "int64",
+          "got_shape": [
+            64
+          ],
+          "want": "7fb13696b9e716db8a1949925f8ec15be4c8d5945d4df1c9abccb3d3e51f3c31",
+          "want_dtype": "int64",
+          "want_shape": [
+            64
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "RadiusNeighbors",
+      "identity_hash": {
+        "equal": true,
+        "got": "c641c75dd063a967",
+        "want": "c641c75dd063a967"
+      },
+      "kind": "ties",
+      "lane": "radius-manhattan",
+      "model_sha256": "d893a0c29ba99797888d608c087bea1f09c617f8e26aaa90af3e36e602eb033f",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.032996
+    },
+    {
+      "cases": [
+        {
+          "case": "radius_neighbors_counts",
+          "equal": true,
+          "got": "24d44012e29a4ff966fc66230c11562c9c0c45c14f8e8445a5db3282ed526113",
+          "got_dtype": "int64",
+          "got_shape": [
+            64
+          ],
+          "want": "24d44012e29a4ff966fc66230c11562c9c0c45c14f8e8445a5db3282ed526113",
+          "want_dtype": "int64",
+          "want_shape": [
+            64
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "RadiusNeighbors",
+      "identity_hash": {
+        "equal": true,
+        "got": "2d41cf8a43dd0a2c",
+        "want": "2d41cf8a43dd0a2c"
+      },
+      "kind": "base",
+      "lane": "radius-minkowski-p3",
+      "model_sha256": "a0553fab96a1dc7b09d8889b2365c059dbfef6f42e057bb99e98f672d123c122",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.134936
+    },
+    {
+      "cases": [
+        {
+          "case": "radius_neighbors_counts",
+          "equal": true,
+          "got": "7322c6b48e13402d307838d1a8a02e8415b24450108fb354eb84a25ec4b66eca",
+          "got_dtype": "int64",
+          "got_shape": [
+            64
+          ],
+          "want": "7322c6b48e13402d307838d1a8a02e8415b24450108fb354eb84a25ec4b66eca",
+          "want_dtype": "int64",
+          "want_shape": [
+            64
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "RadiusNeighbors",
+      "identity_hash": {
+        "equal": true,
+        "got": "6853e189dcd43a88",
+        "want": "6853e189dcd43a88"
+      },
+      "kind": "dupes",
+      "lane": "radius-minkowski-p3",
+      "model_sha256": "2eab5f990f27ab24568f5e911dafbe7849a0545a82199c9f6bc05d0fc44b614c",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.126773
+    },
+    {
+      "cases": [
+        {
+          "case": "radius_neighbors_counts",
+          "equal": true,
+          "got": "fe9a3d848e42eb9587d6c971d6312d40f30a563750810a74b0120c396aec4f4a",
+          "got_dtype": "int64",
+          "got_shape": [
+            64
+          ],
+          "want": "fe9a3d848e42eb9587d6c971d6312d40f30a563750810a74b0120c396aec4f4a",
+          "want_dtype": "int64",
+          "want_shape": [
+            64
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "RadiusNeighbors",
+      "identity_hash": {
+        "equal": true,
+        "got": "e5a4d7644387eab9",
+        "want": "e5a4d7644387eab9"
+      },
+      "kind": "ties",
+      "lane": "radius-minkowski-p3",
+      "model_sha256": "dcecf77c7d1453914052a9bd23b75440934218c55d6a43b17dfe5bbee90b5db6",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.161653
+    }
+  ],
+  "gpu_columns": [],
+  "host": {
+    "cpu": "Apple M4",
+    "machine": "arm64",
+    "python": "3.14.7",
+    "release": "25.5.0",
+    "system": "Darwin"
+  },
+  "vendor": "cpu",
+  "verdict": "IDENTICAL"
+}

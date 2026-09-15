@@ -1,0 +1,230 @@
+NOTE: --lanes scopes this diff to 18 lane(s); 0 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-apple-m4 is a CPU column: cpu_model='Apple M4' column=cpu families=['_mojolearn_core_host', '_mojolearn_estimators_host'] commit=59cbcedd2b3c7bb809ffd3b28dc26a2d7791c8fa
+NOTE: column cpu-amd-epyc-7713-64-core-processor is a CPU column: cpu_model='AMD EPYC 7713 64-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_estimators_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_svm_host'] commit=b5d4417d066e7bdbbfbb00d142f38631ec8d0fb5
+| lane/fixture                 | verdict    | cpu-apple-m4     | cpu-amd-epyc-7713-64-core-processor |
+|------------------------------|------------|------------------|------------------|
+| kde-cosine-minkowski/base    | IDENTICAL x2 | 2cc7fbd9d26fe15f | 2cc7fbd9d26fe15f |
+| kde-cosine-minkowski/dupes   | IDENTICAL x2 | 2cc7fbd9d26fe15f | 2cc7fbd9d26fe15f |
+| kde-cosine-minkowski/ties    | IDENTICAL x2 | 23587f0f79cdce9e | 23587f0f79cdce9e |
+| kde-epanechnikov-l1/base     | IDENTICAL x2 | f8f65516ba475fa2 | f8f65516ba475fa2 |
+| kde-epanechnikov-l1/dupes    | IDENTICAL x2 | f8f65516ba475fa2 | f8f65516ba475fa2 |
+| kde-epanechnikov-l1/ties     | IDENTICAL x2 | 9d61f71062dcd4c2 | 9d61f71062dcd4c2 |
+| kde-exponential-chebyshev/base | IDENTICAL x2 | 4955944cfce4cc2e | 4955944cfce4cc2e |
+| kde-exponential-chebyshev/dupes | IDENTICAL x2 | 4955944cfce4cc2e | 4955944cfce4cc2e |
+| kde-exponential-chebyshev/ties | IDENTICAL x2 | 771fafe72c84a4f4 | 771fafe72c84a4f4 |
+| kde-linear-cosine/base       | IDENTICAL x2 | afa97b36fbe911fb | afa97b36fbe911fb |
+| kde-linear-cosine/dupes      | IDENTICAL x2 | afa97b36fbe911fb | afa97b36fbe911fb |
+| kde-linear-cosine/ties       | IDENTICAL x2 | 038d0662d8a2348a | 038d0662d8a2348a |
+| kde-tophat-sqeuclidean/base  | IDENTICAL x2 | cde93651e40f745f | cde93651e40f745f |
+| kde-tophat-sqeuclidean/dupes | IDENTICAL x2 | cde93651e40f745f | cde93651e40f745f |
+| kde-tophat-sqeuclidean/ties  | IDENTICAL x2 | 3c1cc56f542820e3 | 3c1cc56f542820e3 |
+| kde-weighted/base            | IDENTICAL x2 | 5f9d58891c2141db | 5f9d58891c2141db |
+| kde-weighted/dupes           | IDENTICAL x2 | 5f9d58891c2141db | 5f9d58891c2141db |
+| kde-weighted/ties            | IDENTICAL x2 | eed19bb187e30ec9 | eed19bb187e30ec9 |
+| knn-chebyshev/base           | IDENTICAL x2 | 216fff8aa5989758 | 216fff8aa5989758 |
+| knn-chebyshev/dupes          | IDENTICAL x2 | e99889dfad36b7f9 | e99889dfad36b7f9 |
+| knn-chebyshev/ties           | IDENTICAL x2 | ffb6231807d08ca5 | ffb6231807d08ca5 |
+| knn-clf-distance/base        | IDENTICAL x2 | 5d6f66edfe15362c | 5d6f66edfe15362c |
+| knn-clf-distance/dupes       | IDENTICAL x2 | 65656a96c0304161 | 65656a96c0304161 |
+| knn-clf-distance/ties        | IDENTICAL x2 | 5f7ed9edc31eb1ec | 5f7ed9edc31eb1ec |
+| knn-cosine/base              | IDENTICAL x2 | be2fe881dd0df53e | be2fe881dd0df53e |
+| knn-cosine/dupes             | IDENTICAL x2 | 283e29961c629516 | 283e29961c629516 |
+| knn-cosine/ties              | IDENTICAL x2 | 206c8bdc271bc1e7 | 206c8bdc271bc1e7 |
+| knn-manhattan/base           | IDENTICAL x2 | df1cd4d404b1a5c0 | df1cd4d404b1a5c0 |
+| knn-manhattan/dupes          | IDENTICAL x2 | df38b77bd3ed392d | df38b77bd3ed392d |
+| knn-manhattan/ties           | IDENTICAL x2 | 8fef9cc1bfef43c5 | 8fef9cc1bfef43c5 |
+| knn-minkowski-p3/base        | IDENTICAL x2 | 29ae306635a3f3fb | 29ae306635a3f3fb |
+| knn-minkowski-p3/dupes       | IDENTICAL x2 | d38f7d7bbd7402ec | d38f7d7bbd7402ec |
+| knn-minkowski-p3/ties        | IDENTICAL x2 | bdcd5a382d301db9 | bdcd5a382d301db9 |
+| knn-rbc/base                 | IDENTICAL x2 | 1d3aafd15744f092 | 1d3aafd15744f092 |
+| knn-rbc/dupes                | IDENTICAL x2 | 48f8078b7abf02f5 | 48f8078b7abf02f5 |
+| knn-rbc/ties                 | IDENTICAL x2 | 23daf3a923d4c74f | 23daf3a923d4c74f |
+| knn-reg-distance/base        | IDENTICAL x2 | c52330c7caf6200d | c52330c7caf6200d |
+| knn-reg-distance/dupes       | IDENTICAL x2 | bcaba27f35bbd28b | bcaba27f35bbd28b |
+| knn-reg-distance/ties        | IDENTICAL x2 | 084f6006e76cc290 | 084f6006e76cc290 |
+| knn-sqeuclidean/base         | IDENTICAL x2 | 8516edaa4529c5de | 8516edaa4529c5de |
+| knn-sqeuclidean/dupes        | IDENTICAL x2 | b65d62b3b0dfe602 | b65d62b3b0dfe602 |
+| knn-sqeuclidean/ties         | IDENTICAL x2 | e1330827a49fa48c | e1330827a49fa48c |
+| radius-chebyshev/base        | IDENTICAL x2 | 1be89376fd4bbea3 | 1be89376fd4bbea3 |
+| radius-chebyshev/dupes       | IDENTICAL x2 | 99b1b6404107eda5 | 99b1b6404107eda5 |
+| radius-chebyshev/ties        | IDENTICAL x2 | 93e842a257c1cbb1 | 93e842a257c1cbb1 |
+| radius-manhattan/base        | IDENTICAL x2 | adbab4c619ab70dc | adbab4c619ab70dc |
+| radius-manhattan/dupes       | IDENTICAL x2 | f57dcac1b9d84889 | f57dcac1b9d84889 |
+| radius-manhattan/ties        | IDENTICAL x2 | f4469b7cc5451c2b | f4469b7cc5451c2b |
+| radius-minkowski-p3/base     | IDENTICAL x2 | b132db7ad58141aa | b132db7ad58141aa |
+| radius-minkowski-p3/dupes    | IDENTICAL x2 | 570ca9be0cd30129 | 570ca9be0cd30129 |
+| radius-minkowski-p3/ties     | IDENTICAL x2 | 1ffd20a4b0de4753 | 1ffd20a4b0de4753 |
+| radius/base                  | IDENTICAL x2 | b4fa4ebf9623f5d0 | b4fa4ebf9623f5d0 |
+| radius/dupes                 | IDENTICAL x2 | ad02d42d5b3fded7 | ad02d42d5b3fded7 |
+| radius/ties                  | IDENTICAL x2 | d4e4484a004f4042 | d4e4484a004f4042 |
+
+summary: IDENTICAL=54
+
+| lane/fixture                 | column | verdict      | cpu-apple-m4     | cpu-amd-epyc-7713-64-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|
+| kde-cosine-minkowski/base    | infer  | IDENTICAL x2 | e2af54529a08a7be | e2af54529a08a7be |
+| kde-cosine-minkowski/base    | model  | IDENTICAL x2 | 3f69c1096d5277d6 | 3f69c1096d5277d6 |
+| kde-cosine-minkowski/base    | batch  | IDENTICAL x2 | f21fcb8f05b35e5c | f21fcb8f05b35e5c |
+| kde-cosine-minkowski/dupes   | infer  | IDENTICAL x2 | e2af54529a08a7be | e2af54529a08a7be |
+| kde-cosine-minkowski/dupes   | model  | IDENTICAL x2 | 3f69c1096d5277d6 | 3f69c1096d5277d6 |
+| kde-cosine-minkowski/dupes   | batch  | IDENTICAL x2 | f21fcb8f05b35e5c | f21fcb8f05b35e5c |
+| kde-cosine-minkowski/ties    | infer  | IDENTICAL x2 | a33c2e206e5a28eb | a33c2e206e5a28eb |
+| kde-cosine-minkowski/ties    | model  | IDENTICAL x2 | fd7e7226ebe1d3de | fd7e7226ebe1d3de |
+| kde-cosine-minkowski/ties    | batch  | IDENTICAL x2 | df36b50d65a3adf5 | df36b50d65a3adf5 |
+| kde-epanechnikov-l1/base     | infer  | IDENTICAL x2 | 33f8a3ca1a52a0b4 | 33f8a3ca1a52a0b4 |
+| kde-epanechnikov-l1/base     | model  | IDENTICAL x2 | a39cb2033ade3b6f | a39cb2033ade3b6f |
+| kde-epanechnikov-l1/base     | batch  | IDENTICAL x2 | 703f14a4e3090576 | 703f14a4e3090576 |
+| kde-epanechnikov-l1/dupes    | infer  | IDENTICAL x2 | 33f8a3ca1a52a0b4 | 33f8a3ca1a52a0b4 |
+| kde-epanechnikov-l1/dupes    | model  | IDENTICAL x2 | a39cb2033ade3b6f | a39cb2033ade3b6f |
+| kde-epanechnikov-l1/dupes    | batch  | IDENTICAL x2 | 703f14a4e3090576 | 703f14a4e3090576 |
+| kde-epanechnikov-l1/ties     | infer  | IDENTICAL x2 | b32f12fa353fa102 | b32f12fa353fa102 |
+| kde-epanechnikov-l1/ties     | model  | IDENTICAL x2 | 607371bac93ff1c3 | 607371bac93ff1c3 |
+| kde-epanechnikov-l1/ties     | batch  | IDENTICAL x2 | c529724d75630610 | c529724d75630610 |
+| kde-exponential-chebyshev/base | infer  | IDENTICAL x2 | 9265e066af938ddd | 9265e066af938ddd |
+| kde-exponential-chebyshev/base | model  | IDENTICAL x2 | a8b0414787a34254 | a8b0414787a34254 |
+| kde-exponential-chebyshev/base | batch  | IDENTICAL x2 | e4598d44cb7542c8 | e4598d44cb7542c8 |
+| kde-exponential-chebyshev/dupes | infer  | IDENTICAL x2 | 9265e066af938ddd | 9265e066af938ddd |
+| kde-exponential-chebyshev/dupes | model  | IDENTICAL x2 | a8b0414787a34254 | a8b0414787a34254 |
+| kde-exponential-chebyshev/dupes | batch  | IDENTICAL x2 | e4598d44cb7542c8 | e4598d44cb7542c8 |
+| kde-exponential-chebyshev/ties | infer  | IDENTICAL x2 | 1ca4af3183ffe6b3 | 1ca4af3183ffe6b3 |
+| kde-exponential-chebyshev/ties | model  | IDENTICAL x2 | 3d563f03a2174bfd | 3d563f03a2174bfd |
+| kde-exponential-chebyshev/ties | batch  | IDENTICAL x2 | f9107a2d207a84a7 | f9107a2d207a84a7 |
+| kde-linear-cosine/base       | infer  | IDENTICAL x2 | abf3fbff5c858cef | abf3fbff5c858cef |
+| kde-linear-cosine/base       | model  | IDENTICAL x2 | 13cf8ce7fe202391 | 13cf8ce7fe202391 |
+| kde-linear-cosine/base       | batch  | IDENTICAL x2 | 9b366c6405ab66a7 | 9b366c6405ab66a7 |
+| kde-linear-cosine/dupes      | infer  | IDENTICAL x2 | abf3fbff5c858cef | abf3fbff5c858cef |
+| kde-linear-cosine/dupes      | model  | IDENTICAL x2 | 13cf8ce7fe202391 | 13cf8ce7fe202391 |
+| kde-linear-cosine/dupes      | batch  | IDENTICAL x2 | 9b366c6405ab66a7 | 9b366c6405ab66a7 |
+| kde-linear-cosine/ties       | infer  | IDENTICAL x2 | 07c4969f173c9414 | 07c4969f173c9414 |
+| kde-linear-cosine/ties       | model  | IDENTICAL x2 | 799ff55929e006b7 | 799ff55929e006b7 |
+| kde-linear-cosine/ties       | batch  | IDENTICAL x2 | 5131de9bc1acdacd | 5131de9bc1acdacd |
+| kde-tophat-sqeuclidean/base  | infer  | IDENTICAL x2 | 1b5d5d663fef4284 | 1b5d5d663fef4284 |
+| kde-tophat-sqeuclidean/base  | model  | IDENTICAL x2 | c993389731292ddf | c993389731292ddf |
+| kde-tophat-sqeuclidean/base  | batch  | IDENTICAL x2 | 021dad334c77050a | 021dad334c77050a |
+| kde-tophat-sqeuclidean/dupes | infer  | IDENTICAL x2 | 1b5d5d663fef4284 | 1b5d5d663fef4284 |
+| kde-tophat-sqeuclidean/dupes | model  | IDENTICAL x2 | c993389731292ddf | c993389731292ddf |
+| kde-tophat-sqeuclidean/dupes | batch  | IDENTICAL x2 | 021dad334c77050a | 021dad334c77050a |
+| kde-tophat-sqeuclidean/ties  | infer  | IDENTICAL x2 | 6a97220daf14cf5c | 6a97220daf14cf5c |
+| kde-tophat-sqeuclidean/ties  | model  | IDENTICAL x2 | 87fae666d3f610e7 | 87fae666d3f610e7 |
+| kde-tophat-sqeuclidean/ties  | batch  | IDENTICAL x2 | 9c81669a5405c91a | 9c81669a5405c91a |
+| kde-weighted/base            | infer  | IDENTICAL x2 | 4f090c7438ab89c4 | 4f090c7438ab89c4 |
+| kde-weighted/base            | model  | IDENTICAL x2 | ed3ad9a95b60986d | ed3ad9a95b60986d |
+| kde-weighted/base            | batch  | IDENTICAL x2 | 34d189cd0f66077c | 34d189cd0f66077c |
+| kde-weighted/dupes           | infer  | IDENTICAL x2 | 4f090c7438ab89c4 | 4f090c7438ab89c4 |
+| kde-weighted/dupes           | model  | IDENTICAL x2 | ed3ad9a95b60986d | ed3ad9a95b60986d |
+| kde-weighted/dupes           | batch  | IDENTICAL x2 | 34d189cd0f66077c | 34d189cd0f66077c |
+| kde-weighted/ties            | infer  | IDENTICAL x2 | fd50122f27e7a79d | fd50122f27e7a79d |
+| kde-weighted/ties            | model  | IDENTICAL x2 | baee26310e103854 | baee26310e103854 |
+| kde-weighted/ties            | batch  | IDENTICAL x2 | 0ab991b75295e9b0 | 0ab991b75295e9b0 |
+| knn-chebyshev/base           | infer  | IDENTICAL x2 | 85bf9daf0386b59f | 85bf9daf0386b59f |
+| knn-chebyshev/base           | model  | IDENTICAL x2 | 9fcdb70c0e9f5be8 | 9fcdb70c0e9f5be8 |
+| knn-chebyshev/base           | batch  | IDENTICAL x2 | 683144a1f2f526f5 | 683144a1f2f526f5 |
+| knn-chebyshev/dupes          | infer  | IDENTICAL x2 | 42aa74427e3c4f6a | 42aa74427e3c4f6a |
+| knn-chebyshev/dupes          | model  | IDENTICAL x2 | dd5631e90586bfcf | dd5631e90586bfcf |
+| knn-chebyshev/dupes          | batch  | IDENTICAL x2 | 12c632e392a08c4f | 12c632e392a08c4f |
+| knn-chebyshev/ties           | infer  | IDENTICAL x2 | 61fdcb8274d164a4 | 61fdcb8274d164a4 |
+| knn-chebyshev/ties           | model  | IDENTICAL x2 | 5243539c628d2238 | 5243539c628d2238 |
+| knn-chebyshev/ties           | batch  | IDENTICAL x2 | 17b22dbfae124fbb | 17b22dbfae124fbb |
+| knn-clf-distance/base        | infer  | IDENTICAL x2 | 27345d180c69e075 | 27345d180c69e075 |
+| knn-clf-distance/base        | model  | IDENTICAL x2 | 13ba9e3acab2179f | 13ba9e3acab2179f |
+| knn-clf-distance/base        | batch  | IDENTICAL x2 | 71f774c6a3805384 | 71f774c6a3805384 |
+| knn-clf-distance/dupes       | infer  | IDENTICAL x2 | df3825c0aa9b0795 | df3825c0aa9b0795 |
+| knn-clf-distance/dupes       | model  | IDENTICAL x2 | 7dd29e4d99cb3e1d | 7dd29e4d99cb3e1d |
+| knn-clf-distance/dupes       | batch  | IDENTICAL x2 | 5dff5de2207656c1 | 5dff5de2207656c1 |
+| knn-clf-distance/ties        | infer  | IDENTICAL x2 | 51fbb53f70ef95fe | 51fbb53f70ef95fe |
+| knn-clf-distance/ties        | model  | IDENTICAL x2 | 9d81f24bb5a3a46d | 9d81f24bb5a3a46d |
+| knn-clf-distance/ties        | batch  | IDENTICAL x2 | 2affda44a6cf9d5a | 2affda44a6cf9d5a |
+| knn-cosine/base              | infer  | IDENTICAL x2 | 45f87790aaba81b4 | 45f87790aaba81b4 |
+| knn-cosine/base              | model  | IDENTICAL x2 | a6427c8352b608b8 | a6427c8352b608b8 |
+| knn-cosine/base              | batch  | IDENTICAL x2 | 2f90783542f65771 | 2f90783542f65771 |
+| knn-cosine/dupes             | infer  | IDENTICAL x2 | ed02b98206dc7b42 | ed02b98206dc7b42 |
+| knn-cosine/dupes             | model  | IDENTICAL x2 | 8b93c8f69f7f0dc1 | 8b93c8f69f7f0dc1 |
+| knn-cosine/dupes             | batch  | IDENTICAL x2 | 7cb6ce3730f7e0f8 | 7cb6ce3730f7e0f8 |
+| knn-cosine/ties              | infer  | IDENTICAL x2 | ef08d9ae912ae104 | ef08d9ae912ae104 |
+| knn-cosine/ties              | model  | IDENTICAL x2 | af099d8dc056f48b | af099d8dc056f48b |
+| knn-cosine/ties              | batch  | IDENTICAL x2 | 128d2cd0620be187 | 128d2cd0620be187 |
+| knn-manhattan/base           | infer  | IDENTICAL x2 | 0c50c33ce8d101a4 | 0c50c33ce8d101a4 |
+| knn-manhattan/base           | model  | IDENTICAL x2 | cd79f58159bc6f62 | cd79f58159bc6f62 |
+| knn-manhattan/base           | batch  | IDENTICAL x2 | 10b3a84533d40806 | 10b3a84533d40806 |
+| knn-manhattan/dupes          | infer  | IDENTICAL x2 | e281a4103fbaaef2 | e281a4103fbaaef2 |
+| knn-manhattan/dupes          | model  | IDENTICAL x2 | 4236e13a4f7525bd | 4236e13a4f7525bd |
+| knn-manhattan/dupes          | batch  | IDENTICAL x2 | edfd0b9b563f8873 | edfd0b9b563f8873 |
+| knn-manhattan/ties           | infer  | IDENTICAL x2 | e1e159dd9c916c14 | e1e159dd9c916c14 |
+| knn-manhattan/ties           | model  | IDENTICAL x2 | 1016d1125951292d | 1016d1125951292d |
+| knn-manhattan/ties           | batch  | IDENTICAL x2 | 59958372d6c83bfa | 59958372d6c83bfa |
+| knn-minkowski-p3/base        | infer  | IDENTICAL x2 | b10c67db8cf2d93f | b10c67db8cf2d93f |
+| knn-minkowski-p3/base        | model  | IDENTICAL x2 | 2e10324808b3d9d2 | 2e10324808b3d9d2 |
+| knn-minkowski-p3/base        | batch  | IDENTICAL x2 | 1577ac7a8b38cc11 | 1577ac7a8b38cc11 |
+| knn-minkowski-p3/dupes       | infer  | IDENTICAL x2 | 8763bf8d122dfa14 | 8763bf8d122dfa14 |
+| knn-minkowski-p3/dupes       | model  | IDENTICAL x2 | 41955aa18f1ba955 | 41955aa18f1ba955 |
+| knn-minkowski-p3/dupes       | batch  | IDENTICAL x2 | 354baf95da2fa04e | 354baf95da2fa04e |
+| knn-minkowski-p3/ties        | infer  | IDENTICAL x2 | 8a62d9a7de10894d | 8a62d9a7de10894d |
+| knn-minkowski-p3/ties        | model  | IDENTICAL x2 | ca7e170fd4dbb367 | ca7e170fd4dbb367 |
+| knn-minkowski-p3/ties        | batch  | IDENTICAL x2 | 8caf1dd2918bcb6c | 8caf1dd2918bcb6c |
+| knn-rbc/base                 | infer  | IDENTICAL x2 | 94547b3dc58e2d86 | 94547b3dc58e2d86 |
+| knn-rbc/base                 | model  | IDENTICAL x2 | 88fe338f22e892ce | 88fe338f22e892ce |
+| knn-rbc/base                 | batch  | IDENTICAL x2 | 31bc51bc2d9dfaa4 | 31bc51bc2d9dfaa4 |
+| knn-rbc/dupes                | infer  | IDENTICAL x2 | 590cec8ee362b9d0 | 590cec8ee362b9d0 |
+| knn-rbc/dupes                | model  | IDENTICAL x2 | 71980f97cd4c3be7 | 71980f97cd4c3be7 |
+| knn-rbc/dupes                | batch  | IDENTICAL x2 | 352ec9eda2d42de9 | 352ec9eda2d42de9 |
+| knn-rbc/ties                 | infer  | IDENTICAL x2 | 234e9e649f45c983 | 234e9e649f45c983 |
+| knn-rbc/ties                 | model  | IDENTICAL x2 | 0184787f1d03ee52 | 0184787f1d03ee52 |
+| knn-rbc/ties                 | batch  | IDENTICAL x2 | be9dd86463c63469 | be9dd86463c63469 |
+| knn-reg-distance/base        | infer  | IDENTICAL x2 | 4fd5cf34814e724c | 4fd5cf34814e724c |
+| knn-reg-distance/base        | model  | IDENTICAL x2 | b82ff06f8b739f98 | b82ff06f8b739f98 |
+| knn-reg-distance/base        | batch  | IDENTICAL x2 | 895dc1515fbc5e66 | 895dc1515fbc5e66 |
+| knn-reg-distance/dupes       | infer  | IDENTICAL x2 | 26f173ab47f2a29b | 26f173ab47f2a29b |
+| knn-reg-distance/dupes       | model  | IDENTICAL x2 | 661b72798b99c396 | 661b72798b99c396 |
+| knn-reg-distance/dupes       | batch  | IDENTICAL x2 | c77624500d626e72 | c77624500d626e72 |
+| knn-reg-distance/ties        | infer  | IDENTICAL x2 | 1b019d878594bccc | 1b019d878594bccc |
+| knn-reg-distance/ties        | model  | IDENTICAL x2 | 7070fd3a026689f1 | 7070fd3a026689f1 |
+| knn-reg-distance/ties        | batch  | IDENTICAL x2 | a83d7cb4bb21993d | a83d7cb4bb21993d |
+| knn-sqeuclidean/base         | infer  | IDENTICAL x2 | 76baacee7d15c095 | 76baacee7d15c095 |
+| knn-sqeuclidean/base         | model  | IDENTICAL x2 | 220a6df6b7f08ecb | 220a6df6b7f08ecb |
+| knn-sqeuclidean/base         | batch  | IDENTICAL x2 | db82b7dc7bcec3ea | db82b7dc7bcec3ea |
+| knn-sqeuclidean/dupes        | infer  | IDENTICAL x2 | 5de321ac7c644998 | 5de321ac7c644998 |
+| knn-sqeuclidean/dupes        | model  | IDENTICAL x2 | a106a8dd4166ef57 | a106a8dd4166ef57 |
+| knn-sqeuclidean/dupes        | batch  | IDENTICAL x2 | e5f0e0e9136d840b | e5f0e0e9136d840b |
+| knn-sqeuclidean/ties         | infer  | IDENTICAL x2 | 8b1d0d2c178dcbc9 | 8b1d0d2c178dcbc9 |
+| knn-sqeuclidean/ties         | model  | IDENTICAL x2 | 8096f29c3e671db0 | 8096f29c3e671db0 |
+| knn-sqeuclidean/ties         | batch  | IDENTICAL x2 | 6e306c2669600f8f | 6e306c2669600f8f |
+| radius-chebyshev/base        | infer  | IDENTICAL x2 | 47f179252c05327e | 47f179252c05327e |
+| radius-chebyshev/base        | model  | IDENTICAL x2 | 8574229ff00211a8 | 8574229ff00211a8 |
+| radius-chebyshev/base        | batch  | IDENTICAL x2 | 49212cdc3335248f | 49212cdc3335248f |
+| radius-chebyshev/dupes       | infer  | IDENTICAL x2 | 4f42e54d861fc686 | 4f42e54d861fc686 |
+| radius-chebyshev/dupes       | model  | IDENTICAL x2 | 368e386bc9afc1ce | 368e386bc9afc1ce |
+| radius-chebyshev/dupes       | batch  | IDENTICAL x2 | d12572b1d2b4c056 | d12572b1d2b4c056 |
+| radius-chebyshev/ties        | infer  | IDENTICAL x2 | 7b5a2419abc8f304 | 7b5a2419abc8f304 |
+| radius-chebyshev/ties        | model  | IDENTICAL x2 | bf872c24d7a8d1fe | bf872c24d7a8d1fe |
+| radius-chebyshev/ties        | batch  | IDENTICAL x2 | 5f798a0fb8253a07 | 5f798a0fb8253a07 |
+| radius-manhattan/base        | infer  | IDENTICAL x2 | 51e361a7911b9eb7 | 51e361a7911b9eb7 |
+| radius-manhattan/base        | model  | IDENTICAL x2 | a57f1f07d75f73e1 | a57f1f07d75f73e1 |
+| radius-manhattan/base        | batch  | IDENTICAL x2 | 2b54e52e49b2b3c9 | 2b54e52e49b2b3c9 |
+| radius-manhattan/dupes       | infer  | IDENTICAL x2 | b3ebfcda94a96aa3 | b3ebfcda94a96aa3 |
+| radius-manhattan/dupes       | model  | IDENTICAL x2 | d1c5d251599b1830 | d1c5d251599b1830 |
+| radius-manhattan/dupes       | batch  | IDENTICAL x2 | d8ac4219b67b2a4c | d8ac4219b67b2a4c |
+| radius-manhattan/ties        | infer  | IDENTICAL x2 | c641c75dd063a967 | c641c75dd063a967 |
+| radius-manhattan/ties        | model  | IDENTICAL x2 | d893a0c29ba99797 | d893a0c29ba99797 |
+| radius-manhattan/ties        | batch  | IDENTICAL x2 | e7b7266b64bcfa5a | e7b7266b64bcfa5a |
+| radius-minkowski-p3/base     | infer  | IDENTICAL x2 | 2d41cf8a43dd0a2c | 2d41cf8a43dd0a2c |
+| radius-minkowski-p3/base     | model  | IDENTICAL x2 | a0553fab96a1dc7b | a0553fab96a1dc7b |
+| radius-minkowski-p3/base     | batch  | IDENTICAL x2 | 84477c7df1b3807f | 84477c7df1b3807f |
+| radius-minkowski-p3/dupes    | infer  | IDENTICAL x2 | 6853e189dcd43a88 | 6853e189dcd43a88 |
+| radius-minkowski-p3/dupes    | model  | IDENTICAL x2 | 2eab5f990f27ab24 | 2eab5f990f27ab24 |
+| radius-minkowski-p3/dupes    | batch  | IDENTICAL x2 | d0aca4463baeb5ad | d0aca4463baeb5ad |
+| radius-minkowski-p3/ties     | infer  | IDENTICAL x2 | e5a4d7644387eab9 | e5a4d7644387eab9 |
+| radius-minkowski-p3/ties     | model  | IDENTICAL x2 | dcecf77c7d145391 | dcecf77c7d145391 |
+| radius-minkowski-p3/ties     | batch  | IDENTICAL x2 | bef0bf1314b15764 | bef0bf1314b15764 |
+| radius/base                  | infer  | IDENTICAL x2 | 3eb3a2ab621fbb97 | 3eb3a2ab621fbb97 |
+| radius/base                  | model  | IDENTICAL x2 | 2ee81955e923d21f | 2ee81955e923d21f |
+| radius/base                  | batch  | IDENTICAL x2 | 82dc025f5d11958f | 82dc025f5d11958f |
+| radius/dupes                 | infer  | IDENTICAL x2 | 469e7731aa72a0fd | 469e7731aa72a0fd |
+| radius/dupes                 | model  | IDENTICAL x2 | 5167cd08ec11b8bd | 5167cd08ec11b8bd |
+| radius/dupes                 | batch  | IDENTICAL x2 | 4d7333803753c329 | 4d7333803753c329 |
+| radius/ties                  | infer  | IDENTICAL x2 | 5f3eec45e2afb437 | 5f3eec45e2afb437 |
+| radius/ties                  | model  | IDENTICAL x2 | 57306f414d5af0b4 | 57306f414d5af0b4 |
+| radius/ties                  | batch  | IDENTICAL x2 | 92534521f997d952 | 92534521f997d952 |
+
+summary (infer/model): IDENTICAL=108
+summary (batch): IDENTICAL=54
+summary (rlpair): 

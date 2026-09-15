@@ -31,7 +31,11 @@ Linux legs are OWED before this heading reads published.
   M4, one core: the 54 neighbor and KDE models saved by the Metal classes predict IDENTICAL
   on the CPU against their recordings and the 166-lane record's Apple, NVIDIA and AMD infer
   cells, and the host sabotage build reads DIVERGENT on 50 of 54
-  (bench/results/identity_break/2026-09-15_inference-neighbors-density). The NVIDIA and AMD
+  (bench/results/identity_break/2026-09-15_inference-neighbors-density). The 16 iforest,
+  gmm and hdbscan models saved by the Metal classes predict IDENTICAL through the
+  inference-only bindings against their recordings and every committed infer cell, and the
+  sabotage build reads DIVERGENT on all 16
+  (bench/results/identity_break/2026-09-15_inference-iforest-gmm-hdbscan). The NVIDIA and AMD
   recordings, and a CPU identity gate workflow that builds the inference-only families, are
   owed.
 - Public CPU inference for saved ARIMA models, UMAP embeddings and the whitened full-SVD PCA.
