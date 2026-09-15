@@ -211,7 +211,7 @@ def test_manifest_covers_the_neural_lanes():
         assert oracle in text, oracle
     assert f'- "{SAMBA_ORACLE}"' in _read(".github/workflows/cpu-identity-gate.yml")
     sentence = host_surface.no_cpu_path_sentence()
-    assert "neural blocks" not in sentence and "Transformer, Mamba and Samba blocks" in sentence, sentence
+    assert "neural blocks" not in sentence and "Mamba and Samba blocks" in sentence, sentence
 
 
 def _cpu_only_with(basename):

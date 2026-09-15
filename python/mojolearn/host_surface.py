@@ -472,6 +472,17 @@ TRAINING_LANE_NAMES = {
     "rf-reg-gamma-ig": "the random forest regressor with the gamma and inverse Gaussian criteria",
     "et-clf-entropy-bestfirst": "the best-first Extra Trees classifier with entropy splits",
     "et-reg-bootstrap-parallel": "the bootstrapped Extra Trees regressor with the parallel groves engine",
+    # The Transformer block lanes (lane/cpu-training-transformer,
+    # 2026-09-15). TransformerBlock's forward (the stateless prefill, the
+    # carried-state prefill and the decode step) and its zero-state prefill
+    # backward run through the lane's own host oracles,
+    # transformer/checks/transformer_oracle.mojo and
+    # transformer_backward_oracle.mojo, composed by
+    # transformer/host/transformer_block_host.mojo, which also converts the KV
+    # cache between the device's packed (or ring) layout and the oracle's.
+    # The sliding window is the same oracles' window argument.
+    "transformer": "the Transformer block",
+    "transformer-window": "the sliding-window Transformer block",
     # The byte LM host lanes (lane/cpu-training-host-only-lanes, 2026-09-15).
     # Host code on every box, so the 166-lane record's three columns are the
     # host CPUs of the Apple M4, the H100 box and the MI325X box, IDENTICAL x3
@@ -501,7 +512,7 @@ TRAINING_LANE_NAMES = {
 #: lane leaves this list the day its host lane merges; docs_facts fails the
 #: README until the marked span is rewritten.
 NO_CPU_PATH = (
-    "the Transformer, Mamba and Samba blocks",
+    "the Mamba and Samba blocks",
     "the Embedding layer",
     "gradient boosting training outside its declared lanes (the ordered RMSE and feature-frequency fits, categorical features, sample weights, eval sets and the pointwise searcher among them)",
 )
@@ -1218,6 +1229,36 @@ FAMILIES = (
             "arima_fit", "arima_predict", "arima_forecast",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
+        ships_in_wheel=False,
+    ),
+    dict(
+        family="transformer",
+        binding="_mojolearn_transformer_host",
+        routes="_mojolearn_transformer",
+        loaded_by="_backend._HOST_MODULES",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=("transformer", "transformer-window"),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=("TransformerBlock",),
+        display="the Transformer block forward, decode step and backward",
+        host_modules=(
+            "transformer/host/transformer_block_host.mojo",
+            "transformer/checks/transformer_oracle.mojo",
+            "transformer/checks/transformer_backward_oracle.mojo",
+            "transformer/checks/transformer_fixture.mojo",
+            "gemm/host/gemm_oracle.mojo",
+        ),
+        exports=(
+            "transformer_host_numeric_mode", "transformer_host_vendor",
+            "transformer_host_column", "transformer_host_sabotage",
+            "transformer_vendor", "transformer_numeric_mode",
+            "transformer_forward", "transformer_forward_fresh",
+            "transformer_decode_step", "transformer_backward",
+        ),
+        gate="tools/identity_break.py (cpu-identity-gate.yml)",
+        # Training-only reference family: source builds for internal bitwise
+        # verification, not shipped (docs/lanes/CPU_INFERENCE_BOUNDARY_2026-09-15.md).
         ships_in_wheel=False,
     ),
 )
