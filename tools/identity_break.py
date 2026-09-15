@@ -3610,12 +3610,226 @@ def _batch_gemm_transposed(ml, e, Xh):
 
 _batch_decl(_batch_gemm_pinned, "gemm-pinned")
 _batch_decl(_batch_gemm_transposed, "gemm-transposed")
-_batch_decl("n/a:function", "metrics", "metrics-classification", "cross-val", "bootstrap", "permutation-test",
-            "monte-carlo")
-_batch_decl("n/a:no-batch-axis", "tokenizer")
-_batch_decl("n/a:optimizer-step", "optim-sgd", "optim-adam-clip")
-_batch_decl("n/a:training-step", "byte-lm-host-train")
-_batch_decl("n/a:no-model", "par-byte-lm")
+# The function, tokenizer, optimizer and byte LM trainer lanes
+# (lane/cpu-training-batch-fill-func, 2026-09-15). Each lane was read against
+# its public API for an axis whose elements may not read their neighbors; the
+# ones that have one declare it below, the rest name the missing method.
+
+#: the batch of global replicate, fold or parameter-row indices these parts ask
+BATCH_RANGE_ROWS = 64
+
+
+def _range_rows(label, n, fn, min_batch=1, refusal=None):
+    """A _BatchRows over the global indices [0, n) of a call whose `first`
+    handle addresses a contiguous range (resample's r_first). The harness
+    only ever hands contiguous windows R[a:b], so a window is the call
+    `fn(first=a, count=b - a)`; anything else is refused, not re-indexed."""
+    idx = np.arange(n, dtype=np.int64).reshape(n, 1)
+
+    def call(r):
+        first, count = int(r[0, 0]), int(r.shape[0])
+        if not np.array_equal(r[:, 0], np.arange(first, first + count, dtype=np.int64)):
+            raise ValueError(f"{label}: a range call needs a contiguous window, got {r[:, 0].tolist()}")
+        return fn(first, count)
+    return _BatchRows(label, idx, call, min_batch, refusal)
+
+
+#: bootstrap refuses ONE replicate by name, because its standard error is the
+#: ddof=1 deviation of the distribution (resample/checks/intervals.mojo); its
+#: replicates are asked in windows of two, as the coordinate descent predict is
+BOOTSTRAP_ONE_REFUSAL = "the standard error needs at least 2 resamples"
+
+
+def _batch_resample_inputs(Xh):
+    """The bootstrap and permutation-test lanes' inputs, derived from the
+    held-out rows by the same rules (labels_for's targets): yr's first 4096
+    values, yr paired with column 3, and the two label groups' first 512
+    rows (the lane's fallback when a group is short). Column 3 alone is
+    constant over the first 1024 denormal rows, where pearson refuses by
+    name; the lane's pairing is not."""
+    ych, yrh = labels_for(Xh, HELDOUT_SEED)
+    x = np.ascontiguousarray(yrh[:4096]).astype(np.float32)
+    two = np.ascontiguousarray(np.stack([yrh[:4096], Xh[:4096, 3]], 1).astype(np.float32))
+    a = np.ascontiguousarray(yrh[:4096][ych[:4096] == 0][:512])
+    b = np.ascontiguousarray(yrh[:4096][ych[:4096] == 1][:512])
+    if a.size < 8 or b.size < 8:
+        a, b = np.ascontiguousarray(yrh[:512]), np.ascontiguousarray(yrh[512:1024])
+    return x, two, a, b
+
+
+#: bootstrap statistics asked by the batch part: every STATISTICS arm, the
+#: two sorted ones (quantile, trimmed_mean) and the two paired ones included
+BATCH_BOOTSTRAP_ARMS = (("mean", dict(statistic="mean")), ("std", dict(statistic="std")),
+                        ("quantile", dict(statistic="quantile", q_or_prop=0.25)),
+                        ("trimmed_mean", dict(statistic="trimmed_mean", q_or_prop=0.1)),
+                        ("pearson", dict(statistic="pearson")), ("diff_means", dict(statistic="diff_means")))
+
+
+def _batch_resample(bootstrap, permutation_test, prefix=""):
+    """resample's own batch-invariance handle (python/mojolearn/resample.py
+    module docstring: "replicates [r_first, r_first + n_resamples) of one run
+    are bit-identical to the corresponding slice of a whole run"): replicate
+    r of `distribution` and permutation r of `null_distribution` alone
+    (n_resamples=1, r_first=r) against 64 of them and the split 1, 7, 56.
+    The point estimate, interval, standard error and p-value are reductions
+    over the run and are not asked."""
+    def spec(ml, e, Xh):
+        x, two, a, b = _batch_resample_inputs(Xh)
+        calls = []
+        for name, kw in BATCH_BOOTSTRAP_ARMS:
+            data = two if kw["statistic"] in ("pearson", "diff_means") else x
+            calls.append(_range_rows(
+                f"{prefix}bootstrap {name} distribution", BATCH_RANGE_ROWS,
+                lambda first, count, data=data, kw=kw: (np.asarray(bootstrap(
+                    data, n_resamples=count, r_first=first, random_state=3, **kw).distribution),),
+                min_batch=2, refusal=BOOTSTRAP_ONE_REFUSAL))
+        calls.append(_range_rows(
+            f"{prefix}permutation_test diff_means null_distribution", BATCH_RANGE_ROWS,
+            lambda first, count: (np.asarray(permutation_test(
+                a, b, statistic="diff_means", n_resamples=count, r_first=first, random_state=3).null_distribution),)))
+        return calls
+    return spec
+
+
+def _batch_bootstrap_lane(ml, e, Xh):
+    return _batch_resample(ml.resample.bootstrap, ml.resample.permutation_test)(ml, e, Xh)[:-1]
+
+
+def _batch_permutation_lane(ml, e, Xh):
+    return _batch_resample(ml.resample.bootstrap, ml.resample.permutation_test)(ml, e, Xh)[-1:]
+
+
+def _batch_par_resample(ml, e, Xh):
+    """The parallel driver through the same r_first handle on _par_devices()
+    (parallel_classical.bootstrap: "Replicate r is a pure function of (seed,
+    r, data) (the r_first handle)"); the mean and quantile arms the lane
+    fits, and the permutation null."""
+    from mojolearn import parallel_classical as pc
+    dev = _par_devices()
+    calls = _batch_resample(lambda d, **kw: pc.bootstrap(d, devices=dev, **kw),
+                            lambda a, b, **kw: pc.permutation_test(a, b, devices=dev, **kw),
+                            prefix="parallel ")(ml, e, Xh)
+    return [c for c in calls if " mean " in c.label or " quantile " in c.label or "permutation" in c.label]
+
+
+def _batch_silhouette_chunks(ml, e, Xh):
+    """silhouette_samples' batch is cuML's chunk, not a row subset: a
+    sample's coefficient reads every other row, so rows alone would be a
+    different input. The docstring (_metrics_impl.py::silhouette_score,
+    chunksize) says chunk sizes are "gated to one byte pattern", and both the
+    GPU binding and metrics/host/metrics_oracle.mojo take the chunk. A window
+    [a, b) is therefore the whole sample scored at chunksize = b - a with rows
+    [a, b) read back: row i at chunksize 1 and at 1, 7 and 248 against 256."""
+    X4 = np.ascontiguousarray(Xh[:256, :4]).astype(np.float32)
+    labels = (np.arange(256) % 4).astype(np.int32)
+    idx = np.arange(256, dtype=np.int64).reshape(256, 1)
+
+    def fn(r):
+        a, b = int(r[0, 0]), int(r[-1, 0]) + 1
+        s = np.asarray(ml.metrics.silhouette_samples(X4, labels, chunksize=b - a))
+        return (np.ascontiguousarray(s[a:b]),)
+    return [_BatchRows("silhouette_samples (chunksize = window rows)", idx, fn)]
+
+
+def _batch_cross_val(ml, e, Xh):
+    """cross_val_score's batch is its folds: a fresh clone per fold
+    (model_selection.py, "fitting a fresh clone serially"), so fold k's
+    score may not read the other folds. Three explicit unshuffled folds of
+    768 held-out rows (column 0 the target, columns 1.. the features), passed
+    as the index pairs `cv` accepts; each fold alone against the three."""
+    Xf = np.ascontiguousarray(Xh[:768, 1:]).astype(np.float32)
+    y = np.ascontiguousarray(Xh[:768, 0]).astype(np.float32)
+    rows = np.arange(768)
+    folds = [(np.ascontiguousarray(np.concatenate([rows[:256 * k], rows[256 * (k + 1):]])),
+              np.ascontiguousarray(rows[256 * k:256 * (k + 1)])) for k in range(3)]
+    idx = np.arange(3, dtype=np.int64).reshape(3, 1)
+    return [_BatchRows("cross_val_score (folds)", idx, lambda r: (np.asarray(ml.model_selection.cross_val_score(
+        ml.GradientBoostingRegressor(n_estimators=8, max_depth=4), Xf, y,
+        cv=[folds[int(k)] for k in r[:, 0]]), dtype=np.float64),))]
+
+
+def _batch_optim_rows(label, seed, make, steps):
+    """An optimizer over ONE (64, 8) parameter tensor: rows of the tensor
+    are the batch (the optimizer contract's parameter-count invariance clause
+    is stated for max_norm=None, _training_impl.py::_Optimizer.step, so no
+    call here clips; clip_grad_norm_ and max_norm are a function of every
+    gradient in the registry by contract 3.5 and have no such axis). A
+    window of rows is a fresh optimizer over those rows' parameters, stepped
+    with those rows' gradients; the parameters and both moment buffers after
+    the steps are compared row by row."""
+    P = _hw((BATCH_RANGE_ROWS, 8), f"batch:{seed}:p", -0.5, 0.5)
+    G = [_hw((BATCH_RANGE_ROWS, 8), f"batch:{seed}:g{j}", -1.0, 1.0) for j in range(4)]
+    idx = np.arange(BATCH_RANGE_ROWS, dtype=np.int64).reshape(BATCH_RANGE_ROWS, 1)
+
+    def fn(r):
+        k = r[:, 0]
+        p = np.ascontiguousarray(P[k])
+        o = make(p)
+        steps(o, [np.ascontiguousarray(g[k]) for g in G])
+        n = p.shape[0]
+        return (p, np.asarray(o.exp_avg).reshape(n, 8), np.asarray(o.exp_avg_sq).reshape(n, 8))
+    return _BatchRows(label, idx, fn)
+
+
+def _two_steps(o, g):
+    o.step([g[0]])
+    o.step([g[1]])
+
+
+def _batch_optim_sgd(ml, e, Xh):
+    """The optim-sgd lane's two SGD arms without the clip."""
+    T = ml.training
+    return [_batch_optim_rows("SGD nesterov weight_decay ConstantLR warmup", "sgd-nesterov",
+                              lambda p: T.SGD([p], lr=1e-2, momentum=0.9, dampening=0.0, nesterov=True,
+                                              weight_decay=0.01, lr_schedule=T.ConstantLR(1e-2, warmup_steps=2)),
+                              _two_steps),
+            _batch_optim_rows("SGD dampening", "sgd-dampening",
+                              lambda p: T.SGD([p], lr=1e-2, momentum=0.9, dampening=0.5, nesterov=False),
+                              _two_steps)]
+
+
+def _batch_optim_adam(ml, e, Xh):
+    """The optim-adam-clip lane's Adam and accumulated AdamW arms without
+    the clip (T = 256 at A = 2, the lane's split)."""
+    T = ml.training
+    return [_batch_optim_rows("Adam weight_decay WarmupLinearLR", "adam",
+                              lambda p: T.Adam([p], lr=1e-3, weight_decay=0.01,
+                                               lr_schedule=T.WarmupLinearLR(1e-3, warmup_steps=2, total_steps=8,
+                                                                            min_lr=0.0)),
+                              _two_steps),
+            _batch_optim_rows("AdamW step_accumulated A=2", "adamw0",
+                              lambda p: T.AdamW([p], lr=1e-3, weight_decay=0.0, accumulation_steps=2),
+                              lambda o, g: (o.step_accumulated([[g[0]], [g[1]]], 256),
+                                            o.step_accumulated([[g[2]], [g[3]]], 256)))]
+
+
+_batch_decl("n/a:scalar-reduction (accuracy_score, adjusted_rand_score, v_measure_score, r2_score and "
+            "silhouette_score each return one float over every row, python/mojolearn/_metrics_impl.py; the "
+            "per-sample silhouette_samples is asked on metrics-classification)", "metrics")
+_batch_decl(_batch_silhouette_chunks, "metrics-classification")
+_batch_decl(_batch_cross_val, "cross-val")
+_batch_decl(_batch_bootstrap_lane, "bootstrap")
+_batch_decl(_batch_permutation_lane, "permutation-test")
+_batch_decl("n/a:scalar-fold (resample.monte_carlo_integrate returns only integral, mean, volume and closed_form "
+            "folded over [i_first, i_first + n_samples) by the pinned chunk tree, python/mojolearn/resample.py:196; "
+            "no per-sample output exists to compare an i_first range against)", "monte-carlo")
+_batch_decl("n/a:no-batch-api (GPT2Tokenizer has encode_bytes, encode, decode_bytes and decode over ONE stream, "
+            "python/mojolearn/tokenizer.py:143-205, and no list-of-documents entry; byte-level BPE over a "
+            "concatenation is not the concatenation of the pieces' encodings, and decode_bytes returns no "
+            "per-id byte lengths to split its output by)", "tokenizer")
+_batch_decl(_batch_optim_sgd, "optim-sgd")
+_batch_decl(_batch_optim_adam, "optim-adam-clip")
+_batch_decl("n/a:mean-reduction-fixed-batch (LanguageModelHostTrainer has train_step and loss only, and loss IS a "
+            "step, python/mojolearn/_byte_lm_host.py:373-410; one loss and one update from mean cross-entropy "
+            "over ids of the profile's fixed (batch, length + 1), so no output belongs to one sequence; the "
+            "per-sequence logits are asked by byte-lm-host-infer)", "byte-lm-host-train")
+#: the three multi-GPU byte LM trainers: the same reason, one string
+PAR_BYTE_LM_BATCH_NA = ("n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses "
+                        "have train_step, state_dict, export_gradients and checkpoint only, "
+                        "python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses "
+                        "and one update from the shard-mean gradient, so no output belongs to one sequence, and "
+                        "the shard split is held to the replica trainer by the train column)")
+_batch_decl(PAR_BYTE_LM_BATCH_NA, "par-byte-lm")
 
 
 def _batch_cross_entropy(ml, e, Xh):
@@ -3760,10 +3974,10 @@ _batch_decl(_rows_calls("predict", prep=_coded), "par-feature-freq")
 _batch_decl(_rows_calls("predict", "predict_proba"), "par-boosting-pointwise")
 _batch_decl(lambda ml, e, Xh: [_BatchPrefix("forecast", FORECAST_HORIZON, lambda h: (e.forecast(h),), axis=0)],
             "par-holtwinters")
-_batch_decl("n/a:no-model", "par-byte-lm-model-pool", "par-byte-lm-offload")
+_batch_decl(PAR_BYTE_LM_BATCH_NA, "par-byte-lm-model-pool", "par-byte-lm-offload")
 _batch_decl(_rows_calls("predict", "predict_proba"), "par-forest-pool")
 _batch_decl(_rows_calls("score_samples", "predict", sl=(slice(0, 64), slice(0, 4))), "par-gmm")
-_batch_decl("n/a:function", "par-resample")
+_batch_decl(_batch_par_resample, "par-resample")
 _batch_decl("n/a:transductive", "par-hdbscan")
 _batch_decl(_rows_calls("predict", sl=(slice(0, 64), slice(0, 4))), "par-kernel-ridge")
 _batch_decl(_rows_calls("transform", sl=(slice(0, 64), slice(0, 4))), "par-nystroem")
