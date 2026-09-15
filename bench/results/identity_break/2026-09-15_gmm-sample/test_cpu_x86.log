@@ -1,0 +1,21 @@
+  ok    SHAPE      X is float32 (n_samples, n_features)
+  ok    SHAPE      y is int32 (n_samples,)
+  ok    SHAPE      y is grouped by component ascending, as scikit-learn stacks it
+  ok    SHAPE      every sampled value is finite
+  ok    SHAPE      sample(1) is one row
+  ok    REPEAT     two calls with one random_state give the same bits
+  ok    REPEAT     another random_state gives other rows
+  ok    REPEAT     the largest random_state is a valid key
+  ok    MOMENTS    component 0: count within 5 sd of n * weight
+  ok    MOMENTS    component 0: sample mean within 6 standard errors of means_
+  ok    MOMENTS    component 0: sample covariance within 0.1 correlation units of covariances_
+  ok    MOMENTS    component 1: count within 5 sd of n * weight
+  ok    MOMENTS    component 1: sample mean within 6 standard errors of means_
+  ok    MOMENTS    component 1: sample covariance within 0.1 correlation units of covariances_
+  ok    WHITEN     (X - mean) P is standard normal: the draw solves P^T y = z
+  ok    REFUSE     sample before fit
+  ok    REFUSE     n_samples=0 is refused by name in Mojo
+  ok    REFUSE     a float n_samples
+  ok    REFUSE     a negative random_state
+
+test_gmm_sample: GREEN under numeric_mode=identical, 19 checks. One box, one vendor; no bit is claimed for any other.

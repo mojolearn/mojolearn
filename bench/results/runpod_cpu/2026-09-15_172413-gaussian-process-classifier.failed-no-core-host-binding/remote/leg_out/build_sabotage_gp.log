@@ -1,0 +1,28 @@
+Imported from /root/mojolearn/bindings/_mojolearn_gp_host.mojo:52:
+./bindings/hostptr.mojo:58:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+/root/mojolearn/bindings/_mojolearn_gp_host.mojo:324:16: warning: assignment to 'info' was never used; assign to '_' instead?
+    var info = 0
+               ^
+/root/mojolearn/bindings/_mojolearn_gp_host.mojo:420:21: warning: assignment to 'n_clamped' was never used; assign to '_' instead?
+    var n_clamped = 0
+                    ^
+/root/mojolearn/bindings/_mojolearn_gp_host.mojo:515:18: warning: assignment to 'n_iter' was never used; assign to '_' instead?
+    var n_iter = 0
+                 ^
+/root/mojolearn/bindings/_mojolearn_gp_host.mojo:604:14: warning: assignment to 'rc' was never used; assign to '_' instead?
+    var rc = 0
+             ^
+/root/mojolearn/bindings/_mojolearn_gp_host.mojo:673:16: warning: assignment to 'info' was never used; assign to '_' instead?
+    var info = 0
+               ^
+Included from /root/mojolearn/bindings/_mojolearn_gp_host.mojo:85:
+Included from ./gaussian_process/host/gpc_oracle.mojo:35:
+./gaussian_process/host/gpc_steps.mojo:420:31: warning: assignment to 'integral' was never used; assign to '_' instead?
+        var integral = Float64(0.0)
+                              ^
+built python/mojolearn/host-sabotage/_mojolearn_gp_host.so
+BINCACHE negative-miss+built-uploaded bindings/build_gp_host.sh key=6852acc98b87e7bb seconds=13.8

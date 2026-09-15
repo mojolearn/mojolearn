@@ -72,11 +72,14 @@ the Apple M4, an NVIDIA H100 and an AMD MI325X under IDENTICAL. The gp SPEED lad
 speed claim.
 """
 
+import math
+
 from . import _backend
 from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, empty
 from ._mode import NumericModeMixin
-from .linear_model import _flatten, _r2_sums, _shape_of
+from .linear_model import _flatten, _r2_sums, _round_f32, _shape_of
+from .preprocessing import StandardScaler
 
 #: `checks/numerics.mojo` codes, duplicated from `_backend._MODE_CODE` on
 #: purpose, for `_arima_impl.py`'s reason: the read-back must not share a
@@ -110,6 +113,18 @@ def _as_length_scale(length_scale, what):
             "scalar (isotropic) or n_features values (ARD)"
         )
     return ls
+
+
+#: FLT_MIN, the smallest normal binary32; `_ftz` flushes anything below it.
+_FLT_MIN = 1.1754943508222875e-38
+
+
+def _ftz(x):
+    """`checks/numerics.mojo::ftz` on a binary32 value held in a Python
+    float: a subnormal becomes a zero of the same sign."""
+    if x != 0.0 and abs(x) < _FLT_MIN:
+        return math.copysign(0.0, x)
+    return x
 
 
 class Kernel:
@@ -249,10 +264,20 @@ class GaussianProcessRegressor(NumericModeMixin):
                                   kernel_ is therefore the kernel you passed
         n_restarts_     refused   anything but 0; it exists to serve the
           optimizer               refused optimizer
-        normalize_y     refused   anything truthy. NOT IMPLEMENTED: it centers
-                                  and scales y with host reductions whose
-                                  last bits would sit inside a cross-vendor
-                                  identity claim (DEVIATION 1764 names it)
+        normalize_y     honored   scikit-learn's `_gpr.py:275-285`: y is
+                                  centered and scaled by its mean and
+                                  standard deviation before the fit, and
+                                  the predictive mean and std are scaled
+                                  back. The two folds are StandardScaler's
+                                  pinned Float32 reductions in this
+                                  estimator's tier (a zero std scales by
+                                  one, scikit-learn's 1-D arm); the
+                                  un-normalization is `std * mean + y_mean`
+                                  and `sqrt(var * std**2)`, each one
+                                  correctly rounded binary32 operation on
+                                  the host, flushed like `ftz`. y_train_ is
+                                  the normalized y, as scikit-learn stores
+                                  it
         copy_X_train    refused   anything but True. This surface ALWAYS
                                   copies: X crosses to float32 C-order host
                                   memory and then to the device, so the
@@ -302,8 +327,9 @@ class GaussianProcessRegressor(NumericModeMixin):
     reason plus a normal stream inside a reproducibility claim
     (`gaussian_process/estimator.mojo::gpr_sample_y_host` carries the
     closure condition). GP CLASSIFICATION is a different algorithm (a
-    Laplace approximation with a data-dependent Newton iteration) and is
-    not here at all (DEVIATION 1766).
+    Laplace approximation with a Newton iteration) and lives in
+    `_gpc_impl.py` as `GaussianProcessClassifier` (DEVIATION 2830 closes
+    DEVIATION 1766).
 
     CROSS-VENDOR STANDING: the IDENTICAL card is byte-identical Apple M4
     against AMD MI325X on every shipped-path line (the 8-line divergence
@@ -389,14 +415,10 @@ class GaussianProcessRegressor(NumericModeMixin):
                 f"{n_restarts_optimizer!r} is refused; it restarts the "
                 "optimizer, and the optimizer is refused (DEVIATION 1761)"
             )
-        if normalize_y:
-            raise NotImplementedError(
-                "mojolearn GaussianProcessRegressor: normalize_y=True is "
-                "refused; NOT IMPLEMENTED (DEVIATION 1764). It centers and "
-                "scales y with host reductions whose last bits would sit "
-                "inside a cross-vendor identity claim. Normalize y yourself "
-                "and pass the result, so the numbers that ran are numbers "
-                "you made"
+        if not isinstance(normalize_y, (bool, int)) or normalize_y not in (0, 1):
+            raise TypeError(
+                "mojolearn GaussianProcessRegressor: normalize_y must be a bool, "
+                f"got {normalize_y!r}"
             )
         if not copy_X_train:
             raise NotImplementedError(
@@ -429,7 +451,7 @@ class GaussianProcessRegressor(NumericModeMixin):
         self.alpha = float(alpha)
         self.optimizer = None
         self.n_restarts_optimizer = 0
-        self.normalize_y = False
+        self.normalize_y = bool(normalize_y)
         self.copy_X_train = True
         self.n_targets = None
         self.random_state = None
@@ -504,6 +526,18 @@ class GaussianProcessRegressor(NumericModeMixin):
                 f"mojolearn GaussianProcessRegressor: y has {targets.shape[0]} "
                 f"entries, X has {n_rows} rows"
             )
+        if self.normalize_y:
+            # sklearn `_gpr.py:275-280`. StandardScaler's pinned folds in
+            # this estimator's tier; for 1-D y scikit-learn's
+            # `_handle_zeros_in_scale` takes its scalar arm (`std == 0 -> 1`),
+            # StandardScaler's exact-zero rule.
+            column = targets.reshape((n_rows, 1))
+            scaler = StandardScaler(numeric_mode=self.numeric_mode_used()).fit(column)
+            y_mean = float(scaler.mean_[0])
+            y_std = float(scaler.scale_[0])
+            targets = scaler.transform(column).reshape((n_rows,))
+        else:
+            y_mean, y_std = 0.0, 1.0
         kinds, kparams, ls_len, ls, n_ls = self._kernel_arrays()
 
         # EVERY SIZE IS A FUNCTION OF (n_rows, n_cols) ALONE; nothing here
@@ -537,6 +571,9 @@ class GaussianProcessRegressor(NumericModeMixin):
         )
         self.X_train_ = x
         self.y_train_ = targets
+        self._y_train_mean = y_mean
+        self._y_train_std = y_std
+        self.normalize_y_ = bool(self.normalize_y)
         self.kernel_ = self.kernel
         self.n_features_in_ = n_cols
         self.L_ = l_out.reshape((n_rows, n_rows))
@@ -617,6 +654,23 @@ class GaussianProcessRegressor(NumericModeMixin):
             [n_train, self.n_features_in_, n_star, int(kinds.shape[0]),
              n_ls, 1 if return_std else 0, self.info_],
         )
+        if getattr(self, "normalize_y_", False):
+            # sklearn `_gpr.py:450` and `:494`: y_mean = std * y_mean + mean;
+            # y_var = y_var * std**2, then sqrt. Each is ONE correctly
+            # rounded binary32 operation on the host (the product or sum of
+            # two binary32 values is exact in a Python float before its one
+            # rounding, and the binary32 square root is correctly rounded
+            # through the binary64 one), flushed like `ftz`, so every column
+            # computes the same bits.
+            s_ = self._y_train_std
+            mu = self._y_train_mean
+            mean = Array.from_list(
+                [_ftz(_round_f32(_ftz(_round_f32(s_ * v)) + mu)) for v in mean.tolist()], "<f4")
+            if return_std:
+                s2 = _ftz(_round_f32(s_ * s_))
+                std = Array.from_list(
+                    [_ftz(_round_f32(math.sqrt(_ftz(_round_f32(v * s2))))) for v in var.tolist()],
+                    "<f4")
         if return_std:
             self.clamped_ = clamped
             self.n_clamped_ = int(n_clamped)

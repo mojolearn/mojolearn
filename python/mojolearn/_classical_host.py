@@ -53,6 +53,7 @@ from ._arima_impl import ARIMA, _ARIMA_FORMAT
 from ._cholesky_impl import _CHOLESKY_FORMAT, HostCholesky
 from ._ivf_impl import IVFIndex, _IVF_FORMAT
 from .embedding import Embedding, _EMBEDDING_FORMAT
+from ._gpc_impl import _GPC_FORMAT, HostGaussianProcessClassifier
 from ._solver_impl import ElasticNet, Lasso, _CD_FORMAT
 from ._svm_impl import SVC, _SVC_FORMAT
 from ._umap_impl import UMAP, _UMAP_FORMAT
@@ -372,6 +373,9 @@ _FORMATS = {
     _CHOLESKY_FORMAT: {"Cholesky": HostCholesky},
     _IVF_FORMAT: {"IVFIndex": HostIVFIndex},
     _EMBEDDING_FORMAT: {"Embedding": HostEmbedding},
+    # A saved GaussianProcessClassifier (lane/gaussian-process-classifier,
+    # 2026-09-15): predicts on `_mojolearn_gp_host`.
+    _GPC_FORMAT: {"GaussianProcessClassifier": HostGaussianProcessClassifier},
 }
 CLASSICAL_FORMATS = tuple(_FORMATS)
 

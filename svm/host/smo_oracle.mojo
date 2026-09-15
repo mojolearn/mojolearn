@@ -70,11 +70,12 @@ from gemm.host.gemm_oracle import (
     leaf_count,
     leaf_end,
 )
-from checks.numerics import ftz, identical_exp, identical_mul_add
+from checks.numerics import ftz, identical_exp, identical_mul, identical_mul_add
 from svm.impl.smosolver import fold_order_for, hash_f32_list
 from svm.impl.svm_parameter import (
     EPSILON_SVR,
     KERNEL_LINEAR,
+    KERNEL_POLYNOMIAL,
     KERNEL_RBF,
     KernelParams,
     SvmParameter,
@@ -118,6 +119,16 @@ def _mad[dt: DType](a: Scalar[dt], b: Scalar[dt], c: Scalar[dt]) -> Scalar[dt]:
         )
     else:
         return a * b + c
+
+
+@always_inline
+def _mul[dt: DType](a: Scalar[dt], b: Scalar[dt]) -> Scalar[dt]:
+    comptime if dt == DType.float32:
+        return rebind[Scalar[dt]](
+            identical_mul(rebind[Float32](a), rebind[Float32](b))
+        )
+    else:
+        return a * b
 
 
 @always_inline
@@ -240,6 +251,23 @@ def _kernel_cell[
     var dot = _dot[dt](xa, ia, xb, ib, na, nb, k)
     if kp.kernel == KERNEL_LINEAR:
         return dot
+    if kp.kernel == KERNEL_POLYNOMIAL:
+        # `polynomial_epilogue_kernel` (kernel_methods, DEVIATION 1663):
+        # t = ftz(fma(gain, ftz(dot), offset)); acc = 1; acc = ftz(acc * t),
+        # `degree` times, ascending.
+        var t = _flush[dt](
+            _mad[dt](Scalar[dt](kp.gamma), _flush[dt](dot), Scalar[dt](kp.coef0))
+        )
+        var acc = Scalar[dt](1)
+        for _ in range(kp.degree):
+            acc = _flush[dt](_mul[dt](acc, t))
+        comptime if SMO_ORACLE_HOST_SABOTAGE:
+            # THE POLYNOMIAL SABOTAGE ARM: half a unit added to every kernel
+            # cell. Wrong on purpose; the leaf-order arm in _dot cannot move
+            # an integer-grid fixture, whose dot products are exact in
+            # either order.
+            acc = _flush[dt](acc + Scalar[dt](0.5))
+        return acc
     var gain = Scalar[dt](kp.gamma)
     var s = _flush[dt](
         _flush[dt](_flush[dt](norm_a[ia]) + _flush[dt](norm_b[ib]))

@@ -1,0 +1,195 @@
+NOTE: --lanes scopes this diff to 3 lane(s); 165 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-amd-epyc-7713-64-core-processor is a CPU column: cpu_model='AMD EPYC 7713 64-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_gp_host'] commit=a3357cd9857cd79035f25d0c5147dbe592309252
+| lane/fixture                 | verdict    | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-amd-epyc-7713-64-core-processor |
+|------------------------------|------------|------------------|------------------|------------------|------------------|
+| gp/base                      | IDENTICAL x4 | ea70c56b99a74791 | ea70c56b99a74791 | ea70c56b99a74791 | ea70c56b99a74791 |
+| gp/denormal                  | IDENTICAL x4 | f0986dd9686ae3c2 | f0986dd9686ae3c2 | f0986dd9686ae3c2 | f0986dd9686ae3c2 |
+| gp/denormal_ftz              | IDENTICAL x4 | f0986dd9686ae3c2 | f0986dd9686ae3c2 | f0986dd9686ae3c2 | f0986dd9686ae3c2 |
+| gp/dupes                     | IDENTICAL x4 | fba9e6f4ea05af2c | fba9e6f4ea05af2c | fba9e6f4ea05af2c | fba9e6f4ea05af2c |
+| gp/hashed                    | IDENTICAL x4 | f01c58a79fb1af27 | f01c58a79fb1af27 | f01c58a79fb1af27 | f01c58a79fb1af27 |
+| gp/negative                  | IDENTICAL x4 | 40fd2f479f775ec4 | 40fd2f479f775ec4 | 40fd2f479f775ec4 | 40fd2f479f775ec4 |
+| gp/odd                       | IDENTICAL x4 | cbdbd1248c92a3f8 | cbdbd1248c92a3f8 | cbdbd1248c92a3f8 | cbdbd1248c92a3f8 |
+| gp/ties                      | IDENTICAL x4 | c92496318cb78403 | c92496318cb78403 | c92496318cb78403 | c92496318cb78403 |
+| gp/wide                      | IDENTICAL x4 | ca779c84b786d493 | ca779c84b786d493 | ca779c84b786d493 | ca779c84b786d493 |
+| gpc-multiclass/base          | OWED x1    | (not run)        | (not run)        | (not run)        | 03d42b186d3d23de |
+| gpc-multiclass/denormal      | OWED x1    | (not run)        | (not run)        | (not run)        | e2879b5eb341003a |
+| gpc-multiclass/denormal_ftz  | OWED x1    | (not run)        | (not run)        | (not run)        | e2879b5eb341003a |
+| gpc-multiclass/dupes         | OWED x1    | (not run)        | (not run)        | (not run)        | 03d42b186d3d23de |
+| gpc-multiclass/hashed        | OWED x1    | (not run)        | (not run)        | (not run)        | 181acf0aafcb8d7f |
+| gpc-multiclass/negative      | OWED x1    | (not run)        | (not run)        | (not run)        | eba4fef6bf4f1391 |
+| gpc-multiclass/odd           | OWED x1    | (not run)        | (not run)        | (not run)        | 12702bc35db689d4 |
+| gpc-multiclass/ties          | OWED x1    | (not run)        | (not run)        | (not run)        | 1de9790fa6022bd1 |
+| gpc-multiclass/wide          | OWED x1    | (not run)        | (not run)        | (not run)        | 6ef9cd023801b550 |
+| gpc/base                     | OWED x1    | (not run)        | (not run)        | (not run)        | 8b68b996d36775e7 |
+| gpc/denormal                 | OWED x1    | (not run)        | (not run)        | (not run)        | 9b41ad56958c3286 |
+| gpc/denormal_ftz             | OWED x1    | (not run)        | (not run)        | (not run)        | 9b41ad56958c3286 |
+| gpc/dupes                    | OWED x1    | (not run)        | (not run)        | (not run)        | 8b68b996d36775e7 |
+| gpc/hashed                   | OWED x1    | (not run)        | (not run)        | (not run)        | 8df82eb703a3d9a8 |
+| gpc/negative                 | OWED x1    | (not run)        | (not run)        | (not run)        | e159f0086dea6ea3 |
+| gpc/odd                      | OWED x1    | (not run)        | (not run)        | (not run)        | 2390c88bdb274c27 |
+| gpc/ties                     | OWED x1    | (not run)        | (not run)        | (not run)        | c49b12da8e54b073 |
+| gpc/wide                     | OWED x1    | (not run)        | (not run)        | (not run)        | 0660ecee79edde49 |
+
+summary: IDENTICAL=9, OWED=18
+
+| lane/fixture                 | column | verdict      | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-amd-epyc-7713-64-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
+| gp/base                      | infer  | IDENTICAL x4 | 1e032c58b3e9cd14 | 1e032c58b3e9cd14 | 1e032c58b3e9cd14 | 1e032c58b3e9cd14 |
+| gp/base                      | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| gp/base                      | batch  | IDENTICAL x4 | 305bfd4eaf79a5fa | 305bfd4eaf79a5fa | 305bfd4eaf79a5fa | 305bfd4eaf79a5fa |
+| gp/denormal                  | infer  | IDENTICAL x4 | 353cd97119d0e754 | 353cd97119d0e754 | 353cd97119d0e754 | 353cd97119d0e754 |
+| gp/denormal                  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| gp/denormal                  | batch  | IDENTICAL x4 | 9305dbeb22908e4a | 9305dbeb22908e4a | 9305dbeb22908e4a | 9305dbeb22908e4a |
+| gp/denormal_ftz              | infer  | IDENTICAL x4 | 353cd97119d0e754 | 353cd97119d0e754 | 353cd97119d0e754 | 353cd97119d0e754 |
+| gp/denormal_ftz              | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| gp/denormal_ftz              | batch  | IDENTICAL x4 | 9305dbeb22908e4a | 9305dbeb22908e4a | 9305dbeb22908e4a | 9305dbeb22908e4a |
+| gp/dupes                     | infer  | IDENTICAL x4 | 52e6b306c452f16c | 52e6b306c452f16c | 52e6b306c452f16c | 52e6b306c452f16c |
+| gp/dupes                     | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| gp/dupes                     | batch  | IDENTICAL x4 | 3caf5f428c1e5112 | 3caf5f428c1e5112 | 3caf5f428c1e5112 | 3caf5f428c1e5112 |
+| gp/hashed                    | infer  | IDENTICAL x4 | 6eec04108625b28e | 6eec04108625b28e | 6eec04108625b28e | 6eec04108625b28e |
+| gp/hashed                    | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| gp/hashed                    | batch  | IDENTICAL x4 | f18ced6112fb55e8 | f18ced6112fb55e8 | f18ced6112fb55e8 | f18ced6112fb55e8 |
+| gp/negative                  | infer  | IDENTICAL x4 | b2713d53a58fa4c9 | b2713d53a58fa4c9 | b2713d53a58fa4c9 | b2713d53a58fa4c9 |
+| gp/negative                  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| gp/negative                  | batch  | IDENTICAL x4 | 0284440d2cd65731 | 0284440d2cd65731 | 0284440d2cd65731 | 0284440d2cd65731 |
+| gp/odd                       | infer  | IDENTICAL x4 | 9e3f1cf6c455f0fa | 9e3f1cf6c455f0fa | 9e3f1cf6c455f0fa | 9e3f1cf6c455f0fa |
+| gp/odd                       | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| gp/odd                       | batch  | IDENTICAL x4 | e3e6d237ca783492 | e3e6d237ca783492 | e3e6d237ca783492 | e3e6d237ca783492 |
+| gp/ties                      | infer  | IDENTICAL x4 | 22b0b528124de8d0 | 22b0b528124de8d0 | 22b0b528124de8d0 | 22b0b528124de8d0 |
+| gp/ties                      | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| gp/ties                      | batch  | IDENTICAL x4 | 42c01186900b0c68 | 42c01186900b0c68 | 42c01186900b0c68 | 42c01186900b0c68 |
+| gp/wide                      | infer  | IDENTICAL x4 | 890cda1ff831faab | 890cda1ff831faab | 890cda1ff831faab | 890cda1ff831faab |
+| gp/wide                      | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| gp/wide                      | batch  | IDENTICAL x4 | d3e6783a8a000e56 | d3e6783a8a000e56 | d3e6783a8a000e56 | d3e6783a8a000e56 |
+| gpc-multiclass/base          | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 84db38aa85e9efe3 |
+| gpc-multiclass/base          | model  | OWED x1      | (not run)        | (not run)        | (not run)        | a7da75ab43e33d59 |
+| gpc-multiclass/base          | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | 772762bf3af9d5ab |
+| gpc-multiclass/denormal      | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | fb65a74653a8c928 |
+| gpc-multiclass/denormal      | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 6a06c6e9e1b52fbd |
+| gpc-multiclass/denormal      | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | 0b6b909883561caf |
+| gpc-multiclass/denormal_ftz  | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | fb65a74653a8c928 |
+| gpc-multiclass/denormal_ftz  | model  | OWED x1      | (not run)        | (not run)        | (not run)        | ec9bd2135d89a38a |
+| gpc-multiclass/denormal_ftz  | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | 0b6b909883561caf |
+| gpc-multiclass/dupes         | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 84db38aa85e9efe3 |
+| gpc-multiclass/dupes         | model  | OWED x1      | (not run)        | (not run)        | (not run)        | a7da75ab43e33d59 |
+| gpc-multiclass/dupes         | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | 772762bf3af9d5ab |
+| gpc-multiclass/hashed        | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | ea81a2c3a726ff07 |
+| gpc-multiclass/hashed        | model  | OWED x1      | (not run)        | (not run)        | (not run)        | ad095c88a27ebcc8 |
+| gpc-multiclass/hashed        | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | 29ed3923c985a394 |
+| gpc-multiclass/negative      | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | d35fed113ef73176 |
+| gpc-multiclass/negative      | model  | OWED x1      | (not run)        | (not run)        | (not run)        | dec1293907b2b18f |
+| gpc-multiclass/negative      | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | 5fc9640b35c5fd5d |
+| gpc-multiclass/odd           | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | f57fd8a7a5d1e719 |
+| gpc-multiclass/odd           | model  | OWED x1      | (not run)        | (not run)        | (not run)        | e09bd84a508af322 |
+| gpc-multiclass/odd           | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | b117ad2778d35fd5 |
+| gpc-multiclass/ties          | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 5f34edf8c694f013 |
+| gpc-multiclass/ties          | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 3b3ac4079026dcdb |
+| gpc-multiclass/ties          | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | f212e023f26bc35c |
+| gpc-multiclass/wide          | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | b3674a9463aa4f92 |
+| gpc-multiclass/wide          | model  | OWED x1      | (not run)        | (not run)        | (not run)        | bde361487f19df87 |
+| gpc-multiclass/wide          | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | 7ad6723007e8de0c |
+| gpc/base                     | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | fc0b4c2f28c2e079 |
+| gpc/base                     | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 81b8bb9e635d8e83 |
+| gpc/base                     | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | b46f1f9043e091a8 |
+| gpc/denormal                 | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | cd21375d6187b126 |
+| gpc/denormal                 | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 1ed2aed7cb4ce5f2 |
+| gpc/denormal                 | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | ba78f499f85cae98 |
+| gpc/denormal_ftz             | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | cd21375d6187b126 |
+| gpc/denormal_ftz             | model  | OWED x1      | (not run)        | (not run)        | (not run)        | b91daefb85705ccd |
+| gpc/denormal_ftz             | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | ba78f499f85cae98 |
+| gpc/dupes                    | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | fc0b4c2f28c2e079 |
+| gpc/dupes                    | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 81b8bb9e635d8e83 |
+| gpc/dupes                    | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | b46f1f9043e091a8 |
+| gpc/hashed                   | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 9da411da0b1e3037 |
+| gpc/hashed                   | model  | OWED x1      | (not run)        | (not run)        | (not run)        | f4c2aca55d9362f2 |
+| gpc/hashed                   | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | 0419fbbe5d340ea4 |
+| gpc/negative                 | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | b7e320a5c79c2f12 |
+| gpc/negative                 | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 42456472e82844f7 |
+| gpc/negative                 | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | c2f1bdf1ba2a74f9 |
+| gpc/odd                      | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 1af8d13ad9045833 |
+| gpc/odd                      | model  | OWED x1      | (not run)        | (not run)        | (not run)        | d5a786c8bdd995bf |
+| gpc/odd                      | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | 1d0177239abe0a3c |
+| gpc/ties                     | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | ede5baa0c8969b06 |
+| gpc/ties                     | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 7b9bf869ad365c26 |
+| gpc/ties                     | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | c5069c7b59de4ee1 |
+| gpc/wide                     | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 209675fda33ccf51 |
+| gpc/wide                     | model  | OWED x1      | (not run)        | (not run)        | (not run)        | a3ba1f8be78a6a1e |
+| gpc/wide                     | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | e8e16299ce5b249c |
+
+summary (infer/model): IDENTICAL=9, N/A=9, OWED=36
+summary (batch): IDENTICAL=9, OWED=18
+summary (rlpair): 
+require-columns 4 over ['gp', 'gpc', 'gpc-multiclass']: OK (72 OWED)
+OWED gpc-multiclass/base train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc-multiclass/denormal train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc-multiclass/denormal_ftz train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc-multiclass/dupes train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc-multiclass/hashed train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc-multiclass/negative train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc-multiclass/odd train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc-multiclass/ties train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc-multiclass/wide train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc/base train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc/denormal train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc/denormal_ftz train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc/dupes train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc/hashed train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc/negative train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc/odd train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc/ties train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc/wide train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc-multiclass/base infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc-multiclass/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc-multiclass/base batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc-multiclass/denormal infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc-multiclass/denormal model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc-multiclass/denormal batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc-multiclass/denormal_ftz infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc-multiclass/denormal_ftz model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc-multiclass/denormal_ftz batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc-multiclass/dupes infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc-multiclass/dupes model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc-multiclass/dupes batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc-multiclass/hashed infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc-multiclass/hashed model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc-multiclass/hashed batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc-multiclass/negative infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc-multiclass/negative model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc-multiclass/negative batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc-multiclass/odd infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc-multiclass/odd model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc-multiclass/odd batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc-multiclass/ties infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc-multiclass/ties model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc-multiclass/ties batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc-multiclass/wide infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc-multiclass/wide model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc-multiclass/wide batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc/base infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc/base batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc/denormal infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc/denormal model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc/denormal batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc/denormal_ftz infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc/denormal_ftz model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc/denormal_ftz batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc/dupes infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc/dupes model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc/dupes batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc/hashed infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc/hashed model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc/hashed batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc/negative infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc/negative model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc/negative batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc/odd infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc/odd model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc/odd batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc/ties infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc/ties model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc/ties batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc/wide infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc/wide model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gpc/wide batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+summary (owed): OWED=72; the next release record owes exactly these cell parts; wrote /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-gpc/bench/results/identity_break/2026-09-15_gpc/owed.json

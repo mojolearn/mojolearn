@@ -574,6 +574,15 @@ def main():
     for card in sorted((PKG / "reference_cards").iterdir()):
         if card.is_file():
             entries[f"mojolearn/reference_cards/{card.name}"] = card
+    # `python -m mojolearn verify --all` (2026-09-15): the reference hash
+    # table and the portable models, tracked files, the same globs as
+    # pyproject.toml's package-data.
+    verify_ref = PKG / "verify_reference"
+    if not (verify_ref / "table.json").is_file():
+        raise SystemExit("pack_wheel: python/mojolearn/verify_reference/table.json is missing")
+    for src in sorted(verify_ref.glob("*.json")) + sorted((verify_ref / "models").glob("*")):
+        if src.is_file():
+            entries[f"mojolearn/{src.relative_to(PKG).as_posix()}"] = src
     record_dir = host_surface.training_gpu_column_record()
     for col in host_surface.TRAINING_GPU_COLUMNS:
         src = REPO / col

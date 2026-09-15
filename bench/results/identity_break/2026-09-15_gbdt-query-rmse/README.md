@@ -62,5 +62,36 @@ of `dcg.cu` are not implemented yet (gbdt/NOT_IMPLEMENTED.tsv).
 on the CPU route. `test_host_surface` and `test_gbdt_search_option_guards` pass on the Metal
 route. `docs_facts --check` and `wheel_ci pins` pass.
 
+## Post-push confirmation on the merged commit cdedec870 (`confirm-cdedec870/`)
+
+Stage 2 was pushed to main at cdedec870 under the coordinator's merge rule; then both
+columns were rerun on that commit.
+
+Metal, M4, one core through a shared Mac slot, `_mojolearn_gbdt.so` rebuilt from cdedec870
+(sha256 275dfad94a169130):
+
+| check | result | file |
+|---|---|---|
+| gbdt-query-rmse vs the stage 2 Metal column, two repeats | IDENTICAL on all 12 cells | `diff-metal-vs-stage2.txt` |
+| the 16 existing gbdt lanes vs the stage 2 Metal column | IDENTICAL 186, N/A 6 | `diff-metal-existing-16-vs-stage2.txt` |
+
+CPU on x86-64 Linux, a RunPod CPU pod through `tools/runpod_cpu_leg.sh` (AMD EPYC 7713, pod
+yitb9ce0nowf1y, 365 s billed, $0.024, deleted and verified gone: DELETE 204, then GET 404 and
+absent from the pod listing). Host bindings built on the pod from cdedec870 (sha256
+`_mojolearn_gbdt_host.so` 5c53cc94da4ff3c1, `_mojolearn_core_host.so` 1334c40234eeb8cb):
+
+| check | result | file |
+|---|---|---|
+| gbdt-query-rmse: Metal, M4 CPU and x86-64 CPU (`--require-columns 3`) | IDENTICAL x3 on all 12 cells | `diff-metal-m4cpu-x86.txt` |
+| the 16 existing gbdt lanes, x86-64 CPU vs Metal | IDENTICAL 186, N/A 6 (none refused; the ordered lane's host coverage merged) | `diff-x86-existing-16-vs-metal.txt` |
+| test_gbdt_query_rmse and test_gbdt_group_id on the pod | 20 passed | `pytest-x86-64.log` |
+
+The pod's sabotage arm DID NOT RUN, and its column is kept under a name that says so
+(`cpu-x86-64-runpod.sabotage-refused.json`). The leg built only the `gbdt` sabotage binding
+into `host-sabotage/`, not `core`, so `_mojolearn.transpose_f32` had no CPU path and every
+cell refused before any GBDT arithmetic ("no CPU implementation of _mojolearn.transpose_f32").
+That was a defect in the leg command, not a result. The negative control for this lane is the
+M4 run above, where the host sabotage build read DIVERGENT on all 12 cells.
+
 Not run here: NVIDIA and AMD columns (owed to the next release record), and the fixtures
 other than base, ties and odd.

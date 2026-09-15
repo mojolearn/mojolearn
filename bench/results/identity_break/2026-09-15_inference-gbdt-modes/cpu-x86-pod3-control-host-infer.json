@@ -1,0 +1,1314 @@
+{
+ "mode": "identical",
+ "repeats": 1,
+ "platform": "Linux-5.15.0-94-generic-x86_64-with-glibc2.35",
+ "vendor": "cpu-amd-epyc-9754-128-core-processor",
+ "commit": "6beb3d394baf21dad5381f2ca11cc043c774dbcf",
+ "commit_source": "MOJOLEARN_COMMIT",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  },
+  "ties": {
+   "X": "186fe2109fc34ad5",
+   "y_clf": "f33cf521f758ae3c",
+   "y_reg": "047d4652a4d56bc3"
+  },
+  "hashed": {
+   "X": "c93497b26fe65cda",
+   "y_clf": "d104ead2f62bdd03",
+   "y_reg": "ce4959d8070bb069"
+  },
+  "wide": {
+   "X": "35f6a8481e649eb8",
+   "y_clf": "276ebacc29267948",
+   "y_reg": "611fc5dd6367bef5"
+  },
+  "denormal": {
+   "X": "752323c375a1cbf5",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "denormal_ftz": {
+   "X": "34c156b0d0e8a891",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "dupes": {
+   "X": "9d9d9db7c7785a14",
+   "y_clf": "d390ee2944b13e1d",
+   "y_reg": "135ce10f2a0817fe"
+  },
+  "odd": {
+   "X": "93d9611a09107bb9",
+   "y_clf": "273a388a705a4f40",
+   "y_reg": "25f3d126c81ca0ec"
+  },
+  "negative": {
+   "X": "08106ffff3256313",
+   "y_clf": "294ce4d7dadaf0bb",
+   "y_reg": "ce1914d5f78f5707"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  },
+  "ties": {
+   "X": "d1ba686494256660"
+  },
+  "hashed": {
+   "X": "9dc786ade4574aff"
+  },
+  "wide": {
+   "X": "d52a1af18a3c2f1c"
+  },
+  "denormal": {
+   "X": "5061056b118d07d0"
+  },
+  "denormal_ftz": {
+   "X": "a8c3d1a560b5cabb"
+  },
+  "dupes": {
+   "X": "e4b16c115962dfcd"
+  },
+  "odd": {
+   "X": "32ea0bbed60b8e6c"
+  },
+  "negative": {
+   "X": "45b539a3f66ce25d"
+  }
+ },
+ "cells": {
+  "gbdt-ordered-rmse/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a6e77b5224108785"
+   ],
+   "parts": [
+    {
+     "predict": "36cc868b84bc489d"
+    }
+   ],
+   "infer": [
+    "3113f83d552f6e3e"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "43540d21322226ab"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "3113f83d552f6e3e"
+   ],
+   "batch": [
+    "5cd33ee932513206"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gbdt-ordered-rmse/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "563f339900c22c9d"
+   ],
+   "parts": [
+    {
+     "predict": "0ae2c331fda34cd2"
+    }
+   ],
+   "infer": [
+    "ca0189610e51bc17"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "f9192cb03ecc6ece"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "ca0189610e51bc17"
+   ],
+   "batch": [
+    "7fa28c2d36832787"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gbdt-ordered-rmse/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "30d789002f114183"
+   ],
+   "parts": [
+    {
+     "predict": "a6385f7c9aeef8ab"
+    }
+   ],
+   "infer": [
+    "405de4dd63f5341a"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "e3e28f37057e2029"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "405de4dd63f5341a"
+   ],
+   "batch": [
+    "c24af09f63a1ff94"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gbdt-ordered-rmse/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "356a38c2904749c0"
+   ],
+   "parts": [
+    {
+     "predict": "5c75200438837537"
+    }
+   ],
+   "infer": [
+    "7172e83c3f745933"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "a9b709a9373fae6f"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "7172e83c3f745933"
+   ],
+   "batch": [
+    "6b8ccb2798f6e41f"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gbdt-ordered-rmse/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "67483c1b821234ac"
+   ],
+   "parts": [
+    {
+     "predict": "d5a3046ed9162590"
+    }
+   ],
+   "infer": [
+    "52d52c2862c2d480"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "ba60376e07b69433"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "52d52c2862c2d480"
+   ],
+   "batch": [
+    "37faad1b0ae508e9"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gbdt-ordered-rmse/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2a44bb38f86cd4ec"
+   ],
+   "parts": [
+    {
+     "predict": "9447b33ca5e8a937"
+    }
+   ],
+   "infer": [
+    "9f09dbf44c4ea866"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "7997d9773285efc3"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "9f09dbf44c4ea866"
+   ],
+   "batch": [
+    "ccafd9d9faa33059"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gbdt-ordered-rmse/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "1e39bd4034194fb0"
+   ],
+   "parts": [
+    {
+     "predict": "3530ab915580b625"
+    }
+   ],
+   "infer": [
+    "957a66a8423c3f6d"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "c73190381d66d9bf"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "957a66a8423c3f6d"
+   ],
+   "batch": [
+    "0526edd73c9b9280"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gbdt-ordered-rmse/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "d83c83930af5d802"
+   ],
+   "parts": [
+    {
+     "predict": "eac5655ecc731f63"
+    }
+   ],
+   "infer": [
+    "c7f0cb99b920a716"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "4d02412a6fa569f9"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "c7f0cb99b920a716"
+   ],
+   "batch": [
+    "c05993b79c89e09a"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gbdt-ordered-rmse/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "50eaef5f0c669042"
+   ],
+   "parts": [
+    {
+     "predict": "b23457cc54a4a679"
+    }
+   ],
+   "infer": [
+    "82e128c769eb2778"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "91ecd6c2cdf861d2"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "82e128c769eb2778"
+   ],
+   "batch": [
+    "c325266510844f36"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gbdt-feature-freq/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "7d9c56b51213cb42"
+   ],
+   "parts": [
+    {
+     "predict": "1b921d15d43a233a"
+    }
+   ],
+   "infer": [
+    "95b976d85efc7f2d"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "b2959e177eb6e088"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "95b976d85efc7f2d"
+   ],
+   "batch": [
+    "272537bbe18b712b"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gbdt-feature-freq/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "57ff9964d1af1d4a"
+   ],
+   "parts": [
+    {
+     "predict": "c465cde6889d9777"
+    }
+   ],
+   "infer": [
+    "41371bafcf6397a3"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "a7417c31e1b422b4"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "41371bafcf6397a3"
+   ],
+   "batch": [
+    "2de7d484a30cee05"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gbdt-feature-freq/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "9d97a55431b6f8e0"
+   ],
+   "parts": [
+    {
+     "predict": "026dcfe511e236cc"
+    }
+   ],
+   "infer": [
+    "cf308a4c656bfbdc"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "bf3222bbcdf1f476"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "cf308a4c656bfbdc"
+   ],
+   "batch": [
+    "77ce3ccc6c9f7e94"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gbdt-feature-freq/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c6d7fccba2483372"
+   ],
+   "parts": [
+    {
+     "predict": "59f5065c10f008df"
+    }
+   ],
+   "infer": [
+    "2a4274996f907f13"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "6b7d9eddfa4b79b6"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "2a4274996f907f13"
+   ],
+   "batch": [
+    "367ed0852797c66b"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gbdt-feature-freq/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "e7f1da14d1a9794b"
+   ],
+   "parts": [
+    {
+     "predict": "f8991988fa9b3ed8"
+    }
+   ],
+   "infer": [
+    "973775798c10da25"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "d6c30648533bdf45"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "973775798c10da25"
+   ],
+   "batch": [
+    "ba9644901c99745d"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gbdt-feature-freq/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "e7f1da14d1a9794b"
+   ],
+   "parts": [
+    {
+     "predict": "f8991988fa9b3ed8"
+    }
+   ],
+   "infer": [
+    "973775798c10da25"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "d6c30648533bdf45"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "973775798c10da25"
+   ],
+   "batch": [
+    "ba9644901c99745d"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gbdt-feature-freq/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "e8c61a9407503755"
+   ],
+   "parts": [
+    {
+     "predict": "00b48bbfa920c96e"
+    }
+   ],
+   "infer": [
+    "3a9423e4f0d23cad"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "531909ad2026b783"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "3a9423e4f0d23cad"
+   ],
+   "batch": [
+    "47618d01ef0a41e1"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gbdt-feature-freq/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c481331145bfb998"
+   ],
+   "parts": [
+    {
+     "predict": "df2bbd823829e900"
+    }
+   ],
+   "infer": [
+    "711887d930537c47"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "53a4160101e38573"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "711887d930537c47"
+   ],
+   "batch": [
+    "bfe39e4c9f5bacc7"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gbdt-feature-freq/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "75028913a14bb938"
+   ],
+   "parts": [
+    {
+     "predict": "2d034abad7fe6b90"
+    }
+   ],
+   "infer": [
+    "5a5944c8b884be8c"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "0794be87633fd36b"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "5a5944c8b884be8c"
+   ],
+   "batch": [
+    "d92c8eb873f86399"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gbdt-pointwise-l2-bayesian-eval/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2ac238ddce22e2ef"
+   ],
+   "parts": [
+    {
+     "predict": "0f20336cd0a3d8e5",
+     "proba": "f6d24467da551246"
+    }
+   ],
+   "infer": [
+    "2754757c200872f3"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "c29dddb945d072a8"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "2754757c200872f3"
+   ],
+   "batch": [
+    "3fd0fe4443273a54"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gbdt-pointwise-l2-bayesian-eval/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "84ba6825b4967e89"
+   ],
+   "parts": [
+    {
+     "predict": "c3212b1d6aac91e9",
+     "proba": "2465cee122d56a88"
+    }
+   ],
+   "infer": [
+    "92b20ebae1dabad7"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "293e124b96e008e4"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "92b20ebae1dabad7"
+   ],
+   "batch": [
+    "405d98bc60e93077"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gbdt-pointwise-l2-bayesian-eval/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "d9ff6008c1161f15"
+   ],
+   "parts": [
+    {
+     "predict": "ef8e939f1a02f066",
+     "proba": "56ae823efadf7246"
+    }
+   ],
+   "infer": [
+    "c873cc2813bbb900"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "bc91bc55d5b974b4"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "c873cc2813bbb900"
+   ],
+   "batch": [
+    "aaa3c0c9e9ff0239"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gbdt-pointwise-l2-bayesian-eval/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "b677c76dcdb5e233"
+   ],
+   "parts": [
+    {
+     "predict": "a5476b5e5ce47f00",
+     "proba": "1b4b7ad7c5ee8974"
+    }
+   ],
+   "infer": [
+    "194456fd0ea51325"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "9ca08d3b891657ed"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "194456fd0ea51325"
+   ],
+   "batch": [
+    "86f88156299d777e"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gbdt-pointwise-l2-bayesian-eval/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2ac238ddce22e2ef"
+   ],
+   "parts": [
+    {
+     "predict": "0f20336cd0a3d8e5",
+     "proba": "f6d24467da551246"
+    }
+   ],
+   "infer": [
+    "2754757c200872f3"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "cc76fd996e83a163"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "2754757c200872f3"
+   ],
+   "batch": [
+    "3fd0fe4443273a54"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gbdt-pointwise-l2-bayesian-eval/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2ac238ddce22e2ef"
+   ],
+   "parts": [
+    {
+     "predict": "0f20336cd0a3d8e5",
+     "proba": "f6d24467da551246"
+    }
+   ],
+   "infer": [
+    "2754757c200872f3"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "cc76fd996e83a163"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "2754757c200872f3"
+   ],
+   "batch": [
+    "3fd0fe4443273a54"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gbdt-pointwise-l2-bayesian-eval/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "86fffcdb2023b393"
+   ],
+   "parts": [
+    {
+     "predict": "fb1d0eb33b2e2e0d",
+     "proba": "18179545508ff2e4"
+    }
+   ],
+   "infer": [
+    "9c447c2e24529fa4"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "fee0ed429e482b4f"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "9c447c2e24529fa4"
+   ],
+   "batch": [
+    "6e7098112cfe3ef6"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gbdt-pointwise-l2-bayesian-eval/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "59cf66d7ddc936b4"
+   ],
+   "parts": [
+    {
+     "predict": "0e52429b42007697",
+     "proba": "1b9503a1e410d955"
+    }
+   ],
+   "infer": [
+    "e1aec5dad8dc37f0"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "6ea8282d329c6c7e"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "e1aec5dad8dc37f0"
+   ],
+   "batch": [
+    "149b530e8adbf44b"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gbdt-pointwise-l2-bayesian-eval/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "4d75d6379c698eb9"
+   ],
+   "parts": [
+    {
+     "predict": "e9682513102ca410",
+     "proba": "0b2cf5c3de43e7b3"
+    }
+   ],
+   "infer": [
+    "69fe3fa629a1097d"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "f98af47bb5375e00"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "69fe3fa629a1097d"
+   ],
+   "batch": [
+    "dee639c44dd07990"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gbdt-categorical-ctr/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "3c492b90c998f095"
+   ],
+   "parts": [
+    {
+     "predict": "7f15e34e477a4eae"
+    }
+   ],
+   "infer": [
+    "01fd6a33928b42a8"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "d1bc6890d23ce613"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "01fd6a33928b42a8"
+   ],
+   "batch": [
+    "8c08c90af3b9bafd"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gbdt-categorical-ctr/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "b19fd4bbd5430219"
+   ],
+   "parts": [
+    {
+     "predict": "0b37dac6f9a74eef"
+    }
+   ],
+   "infer": [
+    "7e2f6402af40601a"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "e65f09cb2a1e7754"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "7e2f6402af40601a"
+   ],
+   "batch": [
+    "2adbd46492fefdf1"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gbdt-categorical-ctr/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "107f80749876299b"
+   ],
+   "parts": [
+    {
+     "predict": "3ec72bd2ac039293"
+    }
+   ],
+   "infer": [
+    "59ada771e335830b"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "f9caff45f0d43d88"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "59ada771e335830b"
+   ],
+   "batch": [
+    "8ec393a7a64c5a33"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gbdt-categorical-ctr/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "d2746faae8d63897"
+   ],
+   "parts": [
+    {
+     "predict": "a1310ee3f3097bd0"
+    }
+   ],
+   "infer": [
+    "4904fc9a408f2e1e"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "192effc19beb0214"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "4904fc9a408f2e1e"
+   ],
+   "batch": [
+    "c69fa1a241cda669"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gbdt-categorical-ctr/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "3c492b90c998f095"
+   ],
+   "parts": [
+    {
+     "predict": "7f15e34e477a4eae"
+    }
+   ],
+   "infer": [
+    "01fd6a33928b42a8"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "cc6b3c93fed4b10a"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "01fd6a33928b42a8"
+   ],
+   "batch": [
+    "8c08c90af3b9bafd"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gbdt-categorical-ctr/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "3c492b90c998f095"
+   ],
+   "parts": [
+    {
+     "predict": "7f15e34e477a4eae"
+    }
+   ],
+   "infer": [
+    "01fd6a33928b42a8"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "cc6b3c93fed4b10a"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "01fd6a33928b42a8"
+   ],
+   "batch": [
+    "8c08c90af3b9bafd"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gbdt-categorical-ctr/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "ee68c4c16449a9d5"
+   ],
+   "parts": [
+    {
+     "predict": "be41b80c859e28dc"
+    }
+   ],
+   "infer": [
+    "ebf616782020460e"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "a54a7179f5f55506"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "ebf616782020460e"
+   ],
+   "batch": [
+    "6c4abca5e06509e8"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gbdt-categorical-ctr/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "3f1f7468b711f825"
+   ],
+   "parts": [
+    {
+     "predict": "74f53d751b2e2560"
+    }
+   ],
+   "infer": [
+    "6db4a8fb8ffcc4df"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "ca74bdd7ef688c0d"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "6db4a8fb8ffcc4df"
+   ],
+   "batch": [
+    "ee6e7cfed828deb2"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gbdt-categorical-ctr/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "8b6ff846e24d5317"
+   ],
+   "parts": [
+    {
+     "predict": "09a743afd099b676"
+    }
+   ],
+   "infer": [
+    "9b0045ff2be0ff78"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "75733da36563fa3a"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "9b0045ff2be0ff78"
+   ],
+   "batch": [
+    "d19606059eb16d0f"
+   ],
+   "batch_verdict": "STABLE"
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": false,
+ "rlpair_protocol": {
+  "seqs": 5,
+  "prompt": 4,
+  "decode": 12,
+  "trainer_split": [
+   2,
+   "n"
+  ],
+  "joiner": 4,
+  "join_at": 3,
+  "join_row": 2,
+  "leaver": 1,
+  "leave_after": 8,
+  "block_vocab": 48,
+  "logprob": "training.cross_entropy(reduction='none')",
+  "enabled": true
+ },
+ "rlpair_sabotage": false,
+ "host_infer": [
+  "gbdt-categorical-ctr",
+  "gbdt-feature-freq",
+  "gbdt-ordered-rmse",
+  "gbdt-pointwise-l2-bayesian-eval"
+ ],
+ "host": {
+  "cpu_model": "AMD EPYC 9754 128-Core Processor",
+  "arch": "x86_64",
+  "target_cpu": "unrecorded",
+  "mojo_version": "unrecorded",
+  "python": "3.14.7",
+  "column": "cpu",
+  "routed": {
+   "_mojolearn": "_mojolearn_core_host",
+   "_mojolearn_linalg": "_mojolearn_linalg_host",
+   "_mojolearn_estimators": "_mojolearn_estimators_host",
+   "_mojolearn_metrics": "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing": "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa": "_mojolearn_tsa_host",
+   "_mojolearn_solver": "_mojolearn_solver_host",
+   "_mojolearn_svm": "_mojolearn_svm_host",
+   "_mojolearn_trees": "_mojolearn_trees_host",
+   "_mojolearn_rf": "_mojolearn_rf_host",
+   "_mojolearn_gp": "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods": "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture": "_mojolearn_mixture_host",
+   "_mojolearn_hdbscan": "_mojolearn_hdbscan_host",
+   "_mojolearn_gbdt": "_mojolearn_gbdt_host",
+   "_mojolearn_training": "_mojolearn_training_host",
+   "_mojolearn_resample": "_mojolearn_resample_host",
+   "_mojolearn_mamba": "_mojolearn_mamba_host",
+   "_mojolearn_arima": "_mojolearn_arima_host",
+   "_mojolearn_embedding": "_mojolearn_embedding_host",
+   "_mojolearn_ivf": "_mojolearn_ivf_host",
+   "_mojolearn_transformer": "_mojolearn_transformer_host"
+  },
+  "surface": "python/mojolearn/host_surface.py",
+  "declared": [
+   "_mojolearn_byte_lm_host",
+   "_mojolearn_forest_host",
+   "_mojolearn_tokenizer_host",
+   "_mojolearn_neural_host",
+   "_mojolearn_core_host",
+   "_mojolearn_linalg_host",
+   "_mojolearn_estimators_host",
+   "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa_host",
+   "_mojolearn_solver_host",
+   "_mojolearn_svm_host",
+   "_mojolearn_trees_host",
+   "_mojolearn_rf_host",
+   "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture_host",
+   "_mojolearn_hdbscan_host",
+   "_mojolearn_gbdt_host",
+   "_mojolearn_training_host",
+   "_mojolearn_resample_host",
+   "_mojolearn_mamba_host",
+   "_mojolearn_arima_host",
+   "_mojolearn_embedding_host",
+   "_mojolearn_ivf_host",
+   "_mojolearn_forecast_host",
+   "_mojolearn_transformer_host"
+  ],
+  "covered_lanes": [
+   "gemm-pinned",
+   "kde",
+   "holtwinters",
+   "lasso",
+   "elasticnet",
+   "svc",
+   "agglomerative",
+   "et-clf",
+   "et-reg",
+   "iforest",
+   "knn",
+   "knn-clf",
+   "knn-reg",
+   "pca",
+   "pca-whiten",
+   "tsvd",
+   "ols",
+   "ridge",
+   "dbscan",
+   "kmeans",
+   "metrics",
+   "spectral",
+   "standard-scaler",
+   "minmax-scaler",
+   "logistic",
+   "rf-clf",
+   "rf-reg",
+   "kmeans-random",
+   "kmeans-array",
+   "kmeans-weighted",
+   "standard-scaler-no-mean",
+   "standard-scaler-no-std",
+   "minmax-scaler-clip",
+   "spectral-precomputed",
+   "gp",
+   "gp-matern12",
+   "gp-matern32",
+   "gp-matern52-ard",
+   "knn-sqeuclidean",
+   "knn-clf-distance",
+   "knn-reg-distance",
+   "gemm-transposed",
+   "dbscan-brute-l1",
+   "kde-tophat-sqeuclidean",
+   "kde-epanechnikov-l1",
+   "kde-exponential-chebyshev",
+   "kde-linear-cosine",
+   "kde-cosine-minkowski",
+   "kde-weighted",
+   "ols-no-intercept",
+   "ols-weighted",
+   "ridge-no-intercept",
+   "logistic-unpenalized-no-intercept",
+   "elasticnet-l2end-no-intercept",
+   "holtwinters-multiplicative",
+   "svc-linear",
+   "iforest-tuned",
+   "knn-manhattan",
+   "knn-chebyshev",
+   "knn-cosine",
+   "knn-minkowski-p3",
+   "knn-rbc",
+   "radius",
+   "radius-manhattan",
+   "radius-chebyshev",
+   "radius-minkowski-p3",
+   "dbscan-weighted",
+   "logistic-l1",
+   "logistic-elasticnet",
+   "logistic-multiclass",
+   "kpss",
+   "svr",
+   "svr-linear",
+   "pca-full-whiten",
+   "metrics-classification",
+   "metrics-fowlkes-mallows",
+   "gbdt-adapter-score-weighted",
+   "rf-score-weighted",
+   "mlp",
+   "gbdt-symmetric",
+   "gbdt-rmse",
+   "gbdt-depthwise",
+   "gbdt-lossguide",
+   "gbdt-nan-modes",
+   "gbdt-adapter-clf",
+   "gbdt-adapter-reg",
+   "gbdt-parametric-losses",
+   "gbdt-exact-mae",
+   "gbdt-lossguide-newtoncosine",
+   "gbdt-multiclass",
+   "gbdt-onevsall",
+   "gbdt-ordered-rmse",
+   "gbdt-feature-freq",
+   "gbdt-pointwise-l2-bayesian-eval",
+   "gbdt-categorical-ctr",
+   "gbdt-query-rmse",
+   "arima",
+   "arima-011",
+   "arima-seasonal-c",
+   "umap",
+   "kmeans-sqrt",
+   "kmeans-classic-pp",
+   "kmeans-cosine",
+   "cross-val",
+   "bootstrap",
+   "permutation-test",
+   "monte-carlo",
+   "optim-sgd",
+   "optim-adam-clip",
+   "cross-entropy-arms",
+   "training-primitives",
+   "cholesky",
+   "rbf-sampler",
+   "kernel-ridge",
+   "nystroem",
+   "gmm",
+   "gmm-random-init",
+   "hdbscan",
+   "hdbscan-leaf",
+   "rf-clf-entropy-log2-noboot",
+   "rf-clf-balanced-parallel",
+   "rf-reg-poisson",
+   "rf-reg-gamma-ig",
+   "et-clf-entropy-bestfirst",
+   "et-reg-bootstrap-parallel",
+   "mamba2",
+   "mamba2-dtlimit",
+   "mamba1",
+   "mamba3",
+   "transformer",
+   "transformer-window",
+   "samba",
+   "samba-untied-dropout-accum",
+   "byte-lm-host-infer",
+   "byte-lm-host-infer-threaded",
+   "byte-lm-host-train",
+   "par-scaler",
+   "par-arima",
+   "par-holtwinters",
+   "par-queries-knn",
+   "par-queries-radius",
+   "par-queries-kde",
+   "par-reference-knn",
+   "par-reference-knn-reg",
+   "par-forest",
+   "par-forest-et",
+   "par-mlp",
+   "embedding",
+   "embedding-sort",
+   "ivf",
+   "ivf-euclidean",
+   "byte-lm",
+   "byte-lm-resident"
+  ],
+  "families": {
+   "_mojolearn_core_host": {
+    "column": "cpu",
+    "sha256": "502d5fbc9a560c5fca90d955d51447dfa85c345af7365fa4ae661b54ee26f21d",
+    "size": 594488,
+    "sabotage": false
+   },
+   "_mojolearn_forest_host": {
+    "column": "cpu",
+    "sha256": "d5e079b861febf529cb9d72081f7a0b6b27767ac91958c1189db2b05ad8a5b5e",
+    "size": 301768,
+    "sabotage": false
+   },
+   "_mojolearn_gbdt_host": {
+    "column": "cpu",
+    "sha256": "5c53cc94da4ff3c1bb4c3e4189d1eaa7d607aa00dc628aa127efd9dcbaa43753",
+    "size": 1324632,
+    "sabotage": false
+   }
+  }
+ },
+ "package": {
+  "version": "0.8.5",
+  "package_dir": "/root/mojolearn/python/mojolearn",
+  "numpy": "2.5.2",
+  "python": "3.14.7",
+  "par_devices": "0",
+  "bindings": []
+ }
+}

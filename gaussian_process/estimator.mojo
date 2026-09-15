@@ -1116,28 +1116,20 @@ def gpr_classify_host(
     y: List[Int32],
     kernel: GPKernelSpec,
 ) raises -> List[Int32]:
-    """`GaussianProcessClassifier`, scikit-learn `_gpc.py`. **NOT IMPLEMENTED.**
-
-    Always raises. DEVIATION 1766.
+    """The regressor's classification door. It still raises, and names
+    where classification lives: `gaussian_process/classifier.mojo::
+    gpc_fit_binary_host` and `gpc_predict_binary_host`, exposed as
+    `mojolearn.GaussianProcessClassifier`. DEVIATION 1766's refusal is
+    closed by DEVIATION 2830 (the Newton loop's stop test reads an identical
+    float32 likelihood, so its iteration count is the same on every column).
     """
     raise Error(
-        "gpr_classify_host: Gaussian process CLASSIFICATION is NOT IMPLEMENTED"
-        " (DEVIATION 1766, gaussian_process/NOT_IMPLEMENTED.tsv). This lane is"
-        " rung 1: exact dense REGRESSION only.\n"
-        "  It is not a thin wrapper over the regressor. scikit-learn's"
-        " _gpc.py fits a LAPLACE APPROXIMATION to the posterior"
-        " (_gpc.py::_posterior_mode), a Newton iteration that runs until"
-        " the approximate log marginal likelihood stops improving --"
-        " a DATA-DEPENDENT ITERATION COUNT, which is the same objection"
-        " DEVIATION 1761 makes to the hyperparameter optimizer and for"
-        " the same reason: two vendors agreeing on every step still"
-        " return two different models if one takes 9 iterations and the"
-        " other 10. It also needs the logistic link and its derivatives,"
-        " and a one-versus-rest wrapper for more than two classes.\n"
-        "  To close this, pin the Newton loop's convergence test the way"
-        " an optimizer's would have to be pinned, and gate it. There is"
-        " no partial answer to hand back in the meantime, which is why"
-        " this raises rather than returning something"
+        "gpr_classify_host: the REGRESSOR does not classify. Gaussian process"
+        " classification is a Laplace approximation (scikit-learn _gpc.py"
+        " _posterior_mode), not a wrapper over this fit: it is"
+        " gaussian_process/classifier.mojo (gpc_fit_binary_host,"
+        " gpc_predict_binary_host), mojolearn.GaussianProcessClassifier in"
+        " Python. DEVIATION 1766 is closed by DEVIATION 2830"
     )
 
 
