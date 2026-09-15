@@ -7,10 +7,44 @@ from ._array import Array
 from ._buffer import _materialize, all_finite, empty, zeros, full, as_f32_c
 from ._labels import is_bool
 
-from . import _backend
+from . import _backend, _serialize
 from ._arrays import _addr, _addr_ro
 
 __all__ = ['MinMaxScaler', 'StandardScaler']
+
+#: The saved-model format of both scalers (lane/inference-linear-svm,
+#: 2026-09-15): `mojolearn.host_model(path)` transforms from it on a CPU.
+_SCALER_FORMAT = "mojolearn-scaler-1"
+
+
+def _require_training(estimator):
+    """The CPU inference boundary for the scalers, which do not inherit
+    `NumericModeMixin`'s guard: on a CPU-only install `fit` refuses outside
+    `mojolearn._cpu_reference.reference_training()`."""
+    from ._cpu_reference import require_training
+    require_training(estimator)
+
+
+def _saved_statistic(arrays, name, d, path):
+    value = _serialize.exact(arrays, name, "<f4")
+    if value.ndim != 1 or value.size != d:
+        raise ValueError(f"mojolearn: {path!r} {name} does not match n_features_in_")
+    return value
+
+
+def _scaler_header(arrays, path, cls, fields):
+    """The format, estimator, numeric mode and `meta` checks both loads
+    share; returns `(mode, meta)`."""
+    saved_as = _serialize.scalar_str(arrays, "estimator")
+    if saved_as not in (c.__name__ for c in cls.__mro__):
+        raise ValueError(f"mojolearn: {path!r} was saved by {saved_as}, not {cls.__name__}")
+    mode = _serialize.scalar_str(arrays, "numeric_mode")
+    if mode not in ("fast", "deterministic", "identical"):
+        raise ValueError(f"mojolearn: invalid saved numeric_mode {mode!r}")
+    meta = _serialize.exact(arrays, "meta", "<i8")
+    if meta.size != fields:
+        raise ValueError(f"mojolearn: {path!r} meta holds {meta.size} fields, {fields} are needed")
+    return mode, meta
 
 
 class _ScalerProtocol:
@@ -120,6 +154,7 @@ class MinMaxScaler(_ScalerProtocol):
 
 
     def fit(self, X, y=None, sample_weight=None):
+        _require_training(self)
         lower, upper = self._configuration()
         # Once a new fit begins, a failed fit cannot expose stale statistics.
         for name in list(self.__dict__):
@@ -179,6 +214,49 @@ class MinMaxScaler(_ScalerProtocol):
     def inverse_transform(self, X):
         return self._transform(X, True)
 
+    def save(self, path):
+        """Write the fitted scaler to `path` as an npz: the five fitted
+        Float32 vectors, `feature_range_` as float64, `meta` `<i8`
+        [n_features_in_, n_samples_seen_, clip_] and the numeric mode the fit
+        resolved. `mojolearn.host_model(path)` transforms from it on a CPU
+        with no GPU."""
+        if not self.__sklearn_is_fitted__():
+            raise RuntimeError("this estimator is not fitted yet")
+        arrays = {
+            "format": _SCALER_FORMAT,
+            "estimator": type(self).__name__,
+            "numeric_mode": self.numeric_mode_,
+            "data_min": self.data_min_,
+            "data_max": self.data_max_,
+            "data_range": self.data_range_,
+            "scale": self.scale_,
+            "min": self.min_,
+            "feature_range": Array.from_list([float(v) for v in self.feature_range_], "<f8"),
+            "meta": Array.from_list(
+                [int(self.n_features_in_), int(self.n_samples_seen_), int(self.clip_)], "<i8"),
+        }
+        return _serialize.write_npz(path, arrays)
+
+    @classmethod
+    def load(cls, path):
+        """Load a scaler saved by `save`. The result transforms; every
+        array is read at its saved dtype and never cast."""
+        arrays = _serialize.read_npz(path, _SCALER_FORMAT)
+        mode, meta = _scaler_header(arrays, path, cls, 3)
+        bounds = _serialize.exact(arrays, "feature_range", "<f8")
+        if bounds.size != 2:
+            raise ValueError(f"mojolearn: {path!r} feature_range must hold two values")
+        obj = cls(feature_range=(float(bounds[0]), float(bounds[1])), clip=bool(int(meta[2])))
+        d = int(meta[0])
+        for name in ("data_min", "data_max", "data_range", "scale", "min"):
+            setattr(obj, name + "_", _saved_statistic(arrays, name, d, path))
+        obj.n_features_in_ = d
+        obj.n_samples_seen_ = int(meta[1])
+        obj.numeric_mode_ = mode
+        obj.feature_range_ = (float(bounds[0]), float(bounds[1]))
+        obj.clip_ = bool(int(meta[2]))
+        return obj
+
 
 class StandardScaler(_ScalerProtocol):
     """GPU population standardization of dense finite Float32 matrices.
@@ -212,6 +290,7 @@ class StandardScaler(_ScalerProtocol):
             raise ValueError('numeric_mode must be fast, deterministic, identical or None')
 
     def fit(self, X, y=None, sample_weight=None):
+        _require_training(self)
         self._configuration()
         for name in list(self.__dict__):
             if name.endswith('_'):
@@ -275,3 +354,47 @@ class StandardScaler(_ScalerProtocol):
 
     def inverse_transform(self, X, copy=None):
         return self._transform(X, True, copy)
+
+    def save(self, path):
+        """Write the fitted scaler to `path` as an npz: `mean_` (present
+        when the fit kept it), `var_` and `scale_` (present with
+        `with_std`), `meta` `<i8` [n_features_in_, n_samples_seen_,
+        with_mean_, with_std_] and the numeric mode the fit resolved.
+        `mojolearn.host_model(path)` transforms from it on a CPU with no
+        GPU."""
+        if not self.__sklearn_is_fitted__():
+            raise RuntimeError("this estimator is not fitted yet")
+        arrays = {
+            "format": _SCALER_FORMAT,
+            "estimator": type(self).__name__,
+            "numeric_mode": self.numeric_mode_,
+            "meta": Array.from_list(
+                [int(self.n_features_in_), int(self.n_samples_seen_),
+                 int(self.with_mean_), int(self.with_std_)], "<i8"),
+        }
+        for name in ("mean", "var", "scale"):
+            value = getattr(self, name + "_")
+            if value is not None:
+                arrays[name] = value
+        return _serialize.write_npz(path, arrays)
+
+    @classmethod
+    def load(cls, path):
+        """Load a scaler saved by `save`. The result transforms; every
+        array is read at its saved dtype and never cast."""
+        arrays = _serialize.read_npz(path, _SCALER_FORMAT)
+        mode, meta = _scaler_header(arrays, path, cls, 4)
+        with_mean, with_std = bool(int(meta[2])), bool(int(meta[3]))
+        obj = cls(with_mean=with_mean, with_std=with_std)
+        d = int(meta[0])
+        kept = {"mean": with_mean or with_std, "var": with_std, "scale": with_std}
+        for name, present in kept.items():
+            if present != (name in arrays):
+                raise ValueError(f"mojolearn: {path!r} {name} does not match with_mean and with_std")
+            setattr(obj, name + "_", _saved_statistic(arrays, name, d, path) if present else None)
+        obj.n_features_in_ = d
+        obj.n_samples_seen_ = int(meta[1])
+        obj.numeric_mode_ = mode
+        obj.with_mean_ = with_mean
+        obj.with_std_ = with_std
+        return obj

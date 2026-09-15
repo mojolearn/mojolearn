@@ -462,7 +462,13 @@ class ExponentialSmoothing:
         >= 2`, `start_periods >= 2`, `seasonal_periods >= start_periods`,
         `eps > 0`, `n >= 1`, `n >= start_periods * seasonal_periods`. They
         are not restated here, so there is one place they can drift from.
+
+        On a CPU-only install this refuses by name outside the internal
+        reference context, as every other CPU fit does
+        (docs/lanes/CPU_INFERENCE_BOUNDARY_2026-09-15.md).
         """
+        from ._cpu_reference import require_training
+        require_training(self)
         data, n = self._check_dims(self.endog)
         self._data = data  # kept alive across the call (_buffer.py)
         components_len = (n - self.seasonal_periods) * self.ts_num
