@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`prepare_data`: difference a batch before a test or a filter.
 
-FOLLOWS `cuml/cpp/src_prims/timeSeries/arima_helpers.cuh` at cuML 265b9da6
-(v26.08.00), lines 194-240 ONLY (`prepare_data`). The stationarity test is
+Reference: `cuml/cpp/src_prims/timeSeries/arima_helpers.cuh` (cuML 265b9da6,
+v26.08.00), lines 194-240 ONLY (`prepare_data`). The stationarity test is
 its one caller in this lane (`stationarity.cuh:330`). The rest of the file
 -- `reduced_polynomial`, `prepare_future_data`, `finalize_forecast` /
 `_undiff_kernel`, `batched_jones_transform` -- is reached by the ARIMA lane

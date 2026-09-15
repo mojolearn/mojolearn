@@ -2,11 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The covariance functions of profile `mojolearn.identical.gp.fp32.v1`.
 
-**NO REFERENCE FILE, AND THERE IS NOTHING TO IMPLEMENTATION.** cuML, cuVS and RAFT implement
-no Gaussian process at any of the pinned commits; `gaussian_process/
- `ENGINEERING_RULES.md`
+**NO REFERENCE FILE.** cuML, cuVS and RAFT implement
+no Gaussian process at any of the pinned commits; `ENGINEERING_RULES.md`
 0b therefore points at nothing here, and every design question in this lane
-was ours to answer. scikit-learn's `sklearn/gaussian_process/kernels.py` is the
+was answered in this lane. scikit-learn's `sklearn/gaussian_process/kernels.py` is the
 SEMANTICS reference and the ORACLE and is never the design source: it is
 CPU, LAPACK-shaped and float64, and it is cited below line by line so that
 what our parameters MEAN is checkable against a file rather than against a
@@ -878,7 +877,7 @@ def gp_matern_kernel(
     sqrt5: Float32,
 ):
     """`Matern.__call__`, the three closed forms, sklearn
-    `kernels.py:1720-1730`, transcribed in their order.
+    `kernels.py:1720-1730`, in the reference order.
 
         d      = euclidean(X / l, Y / l)          = sqrt(sqeuclidean)
         nu=0.5 K = exp(-d)
@@ -893,7 +892,7 @@ def gp_matern_kernel(
     definition of each constant in the lane and the oracle reads the same
     one.
 
-    `K**2 / 3.0` is transcribed as a DIVIDE (`identical_div`), not as a
+    `K**2 / 3.0` is spelled as a DIVIDE (`identical_div`), not as a
     multiply by a stored one-third: sklearn divides, and `x * (1/3)` is two
     roundings where a divide is one. Same argument as DEVIATION 1643 in the
     triangular solves.

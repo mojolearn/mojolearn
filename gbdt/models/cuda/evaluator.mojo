@@ -3,8 +3,8 @@
 """CatBoost's GPU model evaluator, implemented: quantize once, then every tree
 over cache-resident buckets.
 
-FOLLOWS `catboost/libs/model/cuda/evaluator.cu` + `.cuh` at CatBoost
-`54a8143a`. Followed statement for statement.
+Reference: `catboost/libs/model/cuda/evaluator.cu` + `.cuh` (CatBoost
+`54a8143a`).
 
 WHY THIS EXISTS BESIDE `predict`. `doc_parallel_boosting.predict` walks the
 TRAINING-side apply (`AddObliviousTreeImpl`), one kernel per tree over the
@@ -14,8 +14,8 @@ CatBoost's CPU evaluator on 800k x 100 (bench/interleaved, 2026-08-20).
 CatBoost's own inference path is THIS file: quantize the raw floats ONCE
 into a doc-tiled bucket layout, then evaluate blocks of trees against
 buckets that stay resident in cache -- the traffic no longer multiplies by
-the tree count. That is their design for exactly the problem we measured,
-so it is implemented rather than reinvented (vendor rule).
+the tree count. The reference addresses exactly the problem we measured,
+so this implementation uses the same approach (vendor rule).
 
 THE BUCKET LAYOUT (`TCudaQuantizationBucket = uchar4`): docs are tiled in
 groups of 128 = 32 lanes x 4 docs; one packed 4-byte word holds one
@@ -263,7 +263,7 @@ def _calc_tree_index[
     bucket load per level. `unroll_depth > 0` is their comptime-unrolled
     6/7/8 arm; 0 is the generic loop. Their `+=` instead of `|=` is an
     A100 compiler workaround (MLTOOLS-6839) and either is exact here;
-    `+=` is kept verbatim.
+    `+=` is kept.
 
     `need_xor_mask` is their CPU evaluator's template parameter
     (`cpu/evaluator_impl.cpp:16`, `:257`): under `False` this is their GPU

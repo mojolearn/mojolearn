@@ -7,7 +7,7 @@
 they take and return `List[Float32]` and a `TrainedModel`, so every existing
 caller is a check or a benchmark that built its own lists in Mojo.
 
-Nothing here is an implementation. `gbdt/` mirrors CatBoost and is governed by COPY, DO
+Nothing here is an implementation. `gbdt/` implements the CatBoost reference and is governed by COPY, DO
 NOT IMPROVE; this file is host-side policy in the same category as
 `checks/`, following `neighbors/estimator.mojo` and `cluster/estimator.mojo`
 -- including their convention that data crosses as raw pointers plus lengths

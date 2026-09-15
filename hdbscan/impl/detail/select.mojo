@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Cluster selection: Excess of Mass, Leaf, and the negation BFS.
 
-FOLLOWS `cuml-v26.08.00/cpp/src/hdbscan/detail/select.cuh`
+Reference: `cuml-v26.08.00/cpp/src/hdbscan/detail/select.cuh`
 (cuML `265b9da`): `perform_bfs` (`:57-91`), `excess_of_mass` (`:148-252`),
 `leaf` (`:264-286`) and `select_clusters` (`:379-452`), plus
 `detail/kernels/select.cuh::propagate_cluster_negation_kernel`
@@ -134,7 +134,7 @@ def propagate_cluster_negation_kernel(
     is_cluster: MutPointer[Int32, MutAnyOrigin],
     n_clusters_in: Int32,
 ):
-    """`kernels/select.cuh:24-45`, followed statement for statement.
+    """Reference: `kernels/select.cuh:24-45`.
 
     NO ORDER TO PIN. Every write is a CONSTANT (`false` into `frontier`
     and `is_cluster`, `true` into `next_frontier`), so two threads that

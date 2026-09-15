@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`getUniquelabels` and `make_monotonic` for ARBITRARY int32 class labels.
 
-FOLLOWS `raft/label/detail/classlabels.cuh::getUniquelabels` (`:50-82`),
-`map_label_kernel` (`:122-140`) and `make_monotonic` (`:164-200`) at RAFT
-`661a3b8`. Followed statement for statement except where the DEVIATION BLOCK below says so. Do
+Reference: `raft/label/detail/classlabels.cuh::getUniquelabels` (`:50-82`),
+`map_label_kernel` (`:122-140`) and `make_monotonic` (`:164-200`) (RAFT
+`661a3b8`). Behavior matches except where the DEVIATION BLOCK below says so. Do
 not improve.
 
 WHY THIS IS A SECOND TREATMENT OF THE SAME HEADER, AND NOT A REUSE

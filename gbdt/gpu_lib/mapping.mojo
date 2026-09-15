@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """How a buffer's objects are spread over the devices.
 
-FOLLOWS `catboost/cuda/cuda_lib/mapping.h` at CatBoost `54a8143a`.
-Followed statement for statement where it follow statement for statements. See the DEVIATION BLOCK.
+Reference: `catboost/cuda/cuda_lib/mapping.h` (CatBoost `54a8143a`).
+Differences from the reference are listed in the DEVIATION BLOCK.
 
 A mapping answers, in `TSlice`, three questions about a buffer:
 

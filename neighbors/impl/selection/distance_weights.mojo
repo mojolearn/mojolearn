@@ -11,7 +11,7 @@ cuML REFUSES this parameter. `kneighbors_classifier.pyx:191-193` and
 `kneighbors_regressor.pyx:188-190` both raise "Only uniform weighting
 strategy is supported currently", and `_params_from_cpu` (`:134-135` /
 `:146-147`) raises `UnsupportedOnGPU` at the scikit-learn boundary. There
-is no cuVS kernel, no RAFT primitive and no cuML C++ entry to follow statement for statement.
+is no cuVS kernel, no RAFT primitive and no cuML C++ entry to cite as a reference.
 `neighbors/NOT_IMPLEMENTED.tsv` carried a row saying exactly that, and the
 row's REASON -- "there is no upstream GPU kernel to implement" -- was withdrawn
 on 2026-09-01: a refusal is legitimate only when the thing is genuinely
@@ -54,8 +54,8 @@ The consumers, also scikit-learn's:
                                         / sum_j w[row,j]
 
 THE UNIFORM ARM IS NOT TOUCHED. `class_probs_kernel` and
-`regress_avg_kernel` in `neighbors/impl/selection/knn.mojo` are cuML's,
-followed statement for statement, and they still run byte for byte when `weights='uniform'`.
+`regress_avg_kernel` in `neighbors/impl/selection/knn.mojo` match the cuML
+reference, and they still run byte for byte when `weights='uniform'`.
 Their `1/k` per slot is PRE-normalized where the weighted kernels here
 accumulate raw and normalize afterwards, which is the difference between
 cuML's formulation and scikit-learn's; making one call the other would

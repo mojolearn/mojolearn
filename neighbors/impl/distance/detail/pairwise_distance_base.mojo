@@ -2,12 +2,12 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`launchConfigGenerator`: the grid shape is COMPUTED, never a constant.
 
-FOLLOWS `cuvs/cpp/src/distance/detail/pairwise_distance_base.cuh:295-322`
-at cuVS `94c2819`. Partial (the `PairwiseDistances` struct itself is inlined
+Reference: `cuvs/cpp/src/distance/detail/pairwise_distance_base.cuh:295-322`
+(cuVS `94c2819`). Partial (the `PairwiseDistances` struct itself is inlined
 into `fused_l2_knn.mojo`; this file is its launch computation). Do not
 improve.
 
-Their computation, transcribed branch for branch below:
+The reference computation, implemented branch for branch below:
 
     numSMs        = cudaDevAttrMultiProcessorCount          (:300-301)
     numBlocksPerSm= cudaOccupancyMaxActiveBlocksPerMultiprocessor(

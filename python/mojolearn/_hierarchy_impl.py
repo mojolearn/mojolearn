@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Single-linkage agglomerative clustering on the GPU, mirroring cuML's
+"""Single-linkage agglomerative clustering on the GPU. Reference: cuML's
 `AgglomerativeClustering` (`cuml/cpp/src/hierarchy/linkage.cu` down through
 cuVS's `cluster/detail/*` to RAFT's Boruvka MST).
 
@@ -49,7 +49,7 @@ PAIRWISE_MAX_ROWS = 46340
 class AgglomerativeClustering:
     """Single-linkage agglomerative clustering on the GPU.
 
-    Mirrors `cuml.cluster.AgglomerativeClustering` on top of cuML's
+    Reference: `cuml.cluster.AgglomerativeClustering` and
     `ML::linkage::single_linkage`; the Mojo entry is
     `hierarchy/impl/linkage.mojo` and the host surface is
     `hierarchy/estimator.mojo`.

@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """cuML's `ML::linkage::single_linkage`, the C++ entry.
 
-FOLLOWS `cuml/cpp/src/hierarchy/linkage.cu` and
-`cuml/cpp/include/cuml/cluster/linkage.hpp`, cuML `00094f7` (the
+Reference: `cuml/cpp/src/hierarchy/linkage.cu` and
+`cuml/cpp/include/cuml/cluster/linkage.hpp` (cuML `00094f7`; the
 `cuml-v26.08.00` checkout carries the same two files). cuML's file is a
 forwarder: it builds the mdspan views and calls
 `cuvs::cluster::agglomerative::single_linkage` with

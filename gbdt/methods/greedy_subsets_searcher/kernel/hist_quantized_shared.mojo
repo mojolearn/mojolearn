@@ -13,7 +13,7 @@ implementation of `hist_one_byte.cu`:
   `CreateRoundingFactor`, `histogram.cu:90-115` -- recon_xgboost_gpu.md a),
   and LightGBM packs the discretized pair into ONE word per row so the hist
   kernel loads it in one instruction (`cuda_histogram_constructor.cu:291-294`
-  -- recon_lightgbm_cuda.md b2). `quantize_pair_kernel` mirrors the DESIGN
+  -- recon_lightgbm_cuda.md b2). `quantize_pair_kernel` applies the same idea
   on this implementation's planes: both stat planes of a row become two Int32 through
   the SAME `hist2_quantize(stat, fixed_scale, hist2_dither(position))` the
   shared-Int32 arms already apply inline -- same scale (`choose_scale`'s

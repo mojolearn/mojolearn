@@ -111,7 +111,7 @@ def accumulate_centroid_sums_kernel(
 ):
     """`reduce_rows_by_key`, as a quantized scatter-add.
 
-    This mirrors the arm THEIR dispatch takes at k-means' nkeys: the
+    This is the arm the reference dispatch takes at k-means' nkeys: the
     small-nkeys kernel is gated `nkeys <= 4`, everything else falls to
     `sum_rows_by_key_large_nkeys_rowmajor` (`raft/linalg/detail/
     reduce_rows_by_key.cuh:354-363`). Measured contention-bound at the 4M

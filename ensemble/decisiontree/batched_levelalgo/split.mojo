@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The split candidate, and the total order that makes a forest reproducible.
 
-MIRRORS `cpp/src/decisiontree/batched-levelalgo/split.cuh` at rapidsai/cuml
+Reference: `cpp/src/decisiontree/batched-levelalgo/split.cuh` at rapidsai/cuml
 `v26.08.00` (`265b9da6a0e75dbef071a3168398b993a5ff6f0e`), checked out
 read-only at `~/CascadeProjects/upstream/cuml-v26.08.00`.
 
@@ -51,12 +51,12 @@ and the measurement was right.
 ================= DEVIATION BLOCK (whole file) =================
 
 DEVIATION 104. `raft::WarpSize` is a hardcoded 32 in their source
-(`split.cuh:210, 236-238`). This implementation does not transcribe the constant; it
+(`split.cuh:210, 236-238`). This implementation does not hardcode the constant; it
 uses Mojo's queried `WARP_SIZE`, per this repository's standing rule that
 no wavefront width may be assumed (32 on NVIDIA and Apple, 64 on AMD CDNA,
 32 on AMD RDNA).
 
-The reduction SHAPE is transcribed exactly: their loop is
+The reduction SHAPE matches exactly: the reference loop is
 `for (i = WarpSize/2; i >= 1; i /= 2) { update(shfl(field, lane + i)); }`
 (`:209-219`), a rotate-and-reduce where `lane + i` wraps modulo the warp
 width, so after the loop EVERY lane holds the reduction of the whole warp.
@@ -102,7 +102,7 @@ comment at `:123-125` says the midpoint rule exists "so deterministic
 tie-breaking does not pick an edge", so determinism is plainly their
 INTENT.
 
-THIS IMPLEMENTATION DOES NOT ACT ON THIS. Their structure is transcribed verbatim,
+THIS IMPLEMENTATION DOES NOT ACT ON THIS. The reference structure is kept as is,
 non-associativity included, because rule 0b says not to redesign it and because a
 "fix" here would be an invention that silently diverges from their answer
 in the common case too. It is recorded as an OPEN item in
@@ -589,7 +589,7 @@ struct Split[dtype: DType](TrivialRegisterPassable):
         split."
 
         The mutex handoff is DEVIATION 106; see the module docstring. The
-        rest is transcribed: only warp 0 does the second reduction, lanes
+        rest matches the reference: only warp 0 does the second reduction, lanes
         beyond `nWarps` seed a default `Split`, and only thread 0 takes the
         lock, applies `select_split_range_midpoint`, and publishes.
         """

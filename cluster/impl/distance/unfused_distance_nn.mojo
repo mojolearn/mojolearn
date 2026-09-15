@@ -2,10 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Distance and 1-nearest-neighbor, GEMM first and reduction second.
 
-FOLLOWS the non-fused arm of `minClusterAndDistanceCompute`,
-`cuvs/src/cluster/detail/kmeans_common.cuh:450-491`, at cuVS `94c2819`.
+Reference: the non-fused arm of `minClusterAndDistanceCompute`,
+`cuvs/src/cluster/detail/kmeans_common.cuh:450-491` (cuVS `94c2819`).
 (There is no `unfused_distance_nn.cuh` in cuVS.)
-Followed statement for statement.
 
 cuVS has two paths to "which centroid is nearest, and how far". The FUSED one
 keeps the distance tile in registers and never writes the `n x k` matrix; the

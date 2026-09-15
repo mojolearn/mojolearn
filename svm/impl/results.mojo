@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`Results`: dual coefficients, support vectors, and the intercept `b`.
 
-FOLLOWS `cuml/cpp/src/svm/results.cuh` at cuML v26.08.00: `Get`,
+Reference: `cuml/cpp/src/svm/results.cuh` (cuML v26.08.00): `Get`,
 `CombineCoefs`, `GetDualCoefs`, `GetSupportVectorIndices`,
 `CollectSupportVectorMatrix` (dense arm), `CalcB`, `SelectUnboundSV`,
 `SelectByCoef`, `SelectReduce`, and the SVR `raft::linalg::add(coef, coef +

@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Segmented scan: their two CTR entry points, three-phase and decoupled.
 
-FOLLOWS `catboost/cuda/cuda_util/kernel/segmented_scan.cu:22`
+Reference: `catboost/cuda/cuda_util/kernel/segmented_scan.cu:22`
 (`SegmentedScanCub`, reached from `cuda_util/segmented_scan.h:8`
 `SegmentedScanVector`) and `cuda_util/kernel/scan.cu:47`
 (`SegmentedScanAndScatterNonNegativeVector`, reached from
@@ -49,8 +49,8 @@ parameter, which is the same two instantiations their two operators are.
 
 ## Their exclusive scan is an INCLUSIVE scan written one slot to the right
 
-This is the part that is easy to get wrong by paraphrase, so it is
-transcribed rather than described. Neither entry point runs an exclusive
+This is the part that is easy to get wrong by paraphrase, so the reference
+code is quoted rather than described. Neither entry point runs an exclusive
 scan. Both run `cub::DeviceScan::InclusiveScan` and then shift:
 
   * `SegmentedScanVector` exclusive (`segmented_scan.cu:33-45`) uses
@@ -350,7 +350,7 @@ def zero_segment_starts_kernel(
     size_in: Int32,
     output: MutPointer[Float32, MutAnyOrigin],
 ):
-    """`ZeroSegmentStartsImpl` (`segmented_scan.cu:11-19`), followed statement for statement.
+    """`ZeroSegmentStartsImpl` (`segmented_scan.cu:11-19`).
 
     Runs AFTER the shift, and it is what makes the exclusive answer 0 at
     every segment start.

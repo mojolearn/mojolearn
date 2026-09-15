@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The overfitting detector's options, and the dispatch that picks its type.
 
-FOLLOWS `catboost/private/libs/options/overfitting_detector_options.{h,cpp}`
-at CatBoost `54a8143a`. Followed statement for statement.
+Reference: `catboost/private/libs/options/overfitting_detector_options.{h,cpp}`
+(CatBoost `54a8143a`).
 
 ## Why a file for three numbers
 

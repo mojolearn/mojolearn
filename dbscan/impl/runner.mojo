@@ -2,11 +2,11 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The DBSCAN driver: neighborhood, core points, CSR, label propagation.
 
-FOLLOWS `cuml/cpp/src/dbscan/runner.cuh::run` at cuML `00094f7`. Partial
+Reference: `cuml/cpp/src/dbscan/runner.cuh::run` (cuML `00094f7`). Partial
 (single GPU).
 
-THEIR STRUCTURE, WHICH IS TWO LOOPS OVER THE BATCHES AND NOT ONE
-----------------------------------------------------------------
+THE REFERENCE STRUCTURE, WHICH IS TWO LOOPS OVER THE BATCHES AND NOT ONE
+------------------------------------------------------------------------
     loop 1, batches n-1 .. 0 (REVERSED):
         VertexDeg   -> adj (boolean, batch x N) and vd (degrees, batch + 1)
         read vd[n_points] back to the host: the batch's edge count
@@ -22,8 +22,8 @@ THEIR STRUCTURE, WHICH IS TWO LOOPS OVER THE BATCHES AND NOT ONE
     final_relabel   -> monotonic 0..k-1
     relabelForSkl   -> MAX_LABEL becomes -1, everything else loses one
 
-Their comment at `runner.cuh:245-246` explains the reversal and it is copied
-rather than paraphrased:
+The reference comment at `runner.cuh:245-246` explains the reversal and is
+quoted rather than paraphrased:
 
     // 1. Compute the part owned by this worker (reversed order of batches to
     // keep the batch 0 in memory)

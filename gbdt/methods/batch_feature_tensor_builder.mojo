@@ -4,10 +4,10 @@
 source actually is, and the loop that enumerates one per categorical
 feature.
 
-MIRRORS `catboost/cuda/data/feature.h:89-188` (`TFeatureTensor`, and the
+Reference: `catboost/cuda/data/feature.h:89-188` (`TFeatureTensor`, and the
 `THash` specialisation under it) and
-`catboost/cuda/methods/batch_feature_tensor_builder.{h,cpp}` at CatBoost
-`54a8143a`. Followed statement for statement.
+`catboost/cuda/methods/batch_feature_tensor_builder.{h,cpp}` (CatBoost
+`54a8143a`).
 
 ## What a tensor is, and why it cannot be a preprocessing pass
 
@@ -49,7 +49,7 @@ changed here; see the file's tail comment for what would have to move.
 
 3. **A HASH**, `MultiHash(TVecHash<TBinarySplit>()(Splits),
    VecCityHash(CatFeatures))` (`feature.h:161-163`). Two different mixers
-   on the two halves, both transcribed below.
+   on the two halves, both implemented below.
 
 4. **A COMPLEXITY**, and it is not what it looks like:
    `CatFeatures.size() + min(Splits.size(), 1)` (`feature.h:181-183`).
@@ -155,11 +155,11 @@ holds whatever the previous batch left in it until `SetIndices` resets it.
 
 ## DEVIATION 116: this file holds `TFeatureTensor`, and its splits are `Int32`
 
-THEIRS: `TFeatureTensor` and `TBinarySplit` are both in
+REFERENCE: `TFeatureTensor` and `TBinarySplit` are both in
 `catboost/cuda/data/feature.h`, and both members of `TBinarySplit` are
 `ui32`.
 
-OURS: `TBinarySplit` landed earlier in `gbdt/models/oblivious_model.mojo`
+HERE: `TBinarySplit` landed earlier in `gbdt/models/oblivious_model.mojo`
 with `Int32` fields, because the model is where this implementation first needed it.
 `TFeatureTensor` remains here beside the builder that consumes it; there is
 no second feature-model definition to drift from it.
@@ -176,11 +176,11 @@ fix and belongs to whoever next touches the model.
 
 ## DEVIATION 117: `RequestStream` returns a batch width, not a stream
 
-THEIRS: `RequestStream` calls `GetCudaManager().RequestStream()` once per
+REFERENCE: `RequestStream` calls `GetCudaManager().RequestStream()` once per
 new slot and hands each `TCtrBinBuilder` its stream id, so the `j` loop
 submits `buildStreams` independent bin builds concurrently.
 
-OURS: there are no streams. `ctx.stream()` raises on Metal (ENGINEERING_RULES
+HERE: there are no streams. `ctx.stream()` raises on Metal (ENGINEERING_RULES
 rule 4) and this implementation runs one queue, so `builder_streams[j]` holds the
 slot index `j` and the batch is built serially. The BATCH WIDTH is kept
 and so is the two-loop structure, because `buildStreams` decides the
@@ -194,13 +194,13 @@ COST: none in output, `buildStreams` passes of latency instead of one.
 
 ## DEVIATION 118: dense cat codes, and no `currentBins` cache
 
-THEIRS: the builder reads `TCompressedCatFeatureDataSet` (packed `ui64`
+REFERENCE: the builder reads `TCompressedCatFeatureDataSet` (packed `ui64`
 blocks, GPU or CPU resident) and calls
 `AddCompressedBinsWithCurrentBinsCache(currentBins, ...)`
 (`ctr_bins_builder.h:113-125`), passing the `currentBins` computed ONCE
 before the loop.
 
-OURS: `gbdt/ctrs/ctr_bins_builder.mojo` holds dense category codes rather
+HERE: `gbdt/ctrs/ctr_bins_builder.mojo` holds dense category codes rather
 than their packed blocks -- that decompression deviation is already
 recorded there -- and its `add_cat_feature_bins` is their
 `ProceedNewBins(uniqueValues)`, the arm that recomputes `CurrentBins` from

@@ -2,10 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The host symmetric eigensolver that stands where RAFT calls cuSOLVER.
 
-NO SINGLE FILE TO FOLLOW. `raft/sparse/solver/detail/lanczos.cuh:175`
+NO SINGLE REFERENCE FILE. `raft/sparse/solver/detail/lanczos.cuh:175`
 (`lanczos_solve_ritz`) hands the `ncv x ncv` projected matrix to
 `raft::linalg::eig_dc`, which is cuSOLVER `syevd` -- CLOSED, no source to
-follow statement for statement (ENGINEERING_RULES 0b-i's one exception). What it returns is
+read (ENGINEERING_RULES 0b-i's one exception). What it returns is
 eigenvalues ASCENDING and eigenvectors in COLUMNS with a sign the solver
 chose. This file returns the same three things from one host routine whose
 every floating-point operation is spelled through `checks/numerics.mojo`,
@@ -15,13 +15,13 @@ HOST IS PART OF THE NUMERICAL PLAN: `spectral/README.md` says so in those
 words, and this file is why.
 
 ============ DEVIATION 770: THE EIGENVECTOR SIGN IS PINNED BY A RULE ======
-THEIRS: `syevd` leaves each eigenvector's sign to the solver. The sign
+REFERENCE: `syevd` leaves each eigenvector's sign to the solver. The sign
 propagates into the Ritz vectors (`V^T e`), into the restart (the Ritz
 vectors become `V[0..k)` of the next pass), and into the embedding, so two
 vendors' cuSOLVER builds -- or one vendor's two versions -- can return an
 embedding that differs by a column sign and a different Lanczos trajectory
 after the first restart.
-OURS: after the solve and the ascending (value, index) sort, every column is
+HERE: after the solve and the ascending (value, index) sort, every column is
 flipped so that ITS FIRST NONZERO COMPONENT IN INDEX ORDER IS POSITIVE.
 "Nonzero" is `x != 0.0`, which is false for both `+0.0` and `-0.0`, so a
 leading signed zero is skipped rather than consulted for its sign bit
@@ -31,8 +31,8 @@ MEASURED: `check_spectral_device_equals_oracle` with the sabotage
 `MOJOLEARN_SPECTRAL_SABOTAGE_SIGN_FLIP` (the device arm re-flips after the
 shared solve) FAILS at the first Ritz-vector stage -- README, sabotage (b).
 ============ DEVIATION 771: cuSOLVER syevd -> HOST CYCLIC JACOBI ==========
-THEIRS: divide-and-conquer on the device, closed.
-OURS: cyclic Jacobi (Numerical Recipes `jacobi`, the classical rotation with
+REFERENCE: divide-and-conquer on the device, closed.
+HERE: cyclic Jacobi (Numerical Recipes `jacobi`, the classical rotation with
 the `tresh` skip for the first three sweeps and the relative-size annihilation
 after the fourth), on the host, in the dtype asked for. Under IDENTICAL the
 Float32 arm routes every multiply-add through `identical_mul_add`, every
@@ -59,7 +59,7 @@ Contract section 5.3, seam J4.
 This is one of the TWO clauses that survive DEVIATION 780's correction of
 2026-08-23. Three of that deviation's original five were struck once cuVS
 26.08 was checked out and turned out to spell them verbatim; this one
-stands, because this solver is not a mirror of anything. It stands where
+stands, because this solver has no reference source. It stands where
 cuSOLVER `syevd` is called, and the cap is a number nobody upstream ever
 had to pick.
 `max_sweeps = 60`, where NR's `jacobi` uses 50 and calls `nrerror` when it

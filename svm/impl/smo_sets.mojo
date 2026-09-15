@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`in_upper` / `in_lower`: which KKT set a training vector is in.
 
-FOLLOWS `cuml/cpp/src/svm/smo_sets.cuh` at cuML v26.08.00, both functions
-character for character. The comments are theirs: the long forms
+Reference: `cuml/cpp/src/svm/smo_sets.cuh` (cuML v26.08.00), both functions.
+As the reference comments note, the long forms
 `(0 < a && a < C) || (y == 1 && a == 0) || (y == -1 && a == C)` collapse to
 the two-clause forms because `a` is always clipped into `[0, C]`.
 

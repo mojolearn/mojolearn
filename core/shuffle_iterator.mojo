@@ -5,9 +5,9 @@
 NO CUML FILE MIRRORS THIS. It is CCCL -- NVIDIA's CUDA Core Compute
 Libraries, the home of Thrust, CUB and libcu++ -- which this tree does not
 mirror file for file, the same way `cluster/checks/` holds implemented RAFT
-primitives rather than a RAFT directory. CCCL is open source, so it is a
+primitives rather than a RAFT directory. CCCL is open source, so it is an
 IMPLEMENTATION target and not a substitution target, and every construct below cites
-the header it was transcribed from.
+its reference header.
 
 PIN. CCCL **3.4.3**, commit `9d65c77f9763cfec20452e4071128d3f0bd2625b`,
 checked out read-only at `~/CascadeProjects/upstream/cccl-3.4.3`. cuML does
@@ -53,7 +53,7 @@ DEVIATION 121 (CLOSED by this file; it was opened in
 `kernels/builder_kernels.mojo` as "not implemented, and open").
 
 NO ALGORITHMIC DEVIATION. Every constant, every shift width, every
-truncation and the do-while cycle walk are transcribed from CCCL 3.4.3 and
+truncation and the do-while cycle walk match CCCL 3.4.3 and
 are held to their compiled output by `shuffle_check.mojo`.
 
 Three SPELLING notes, none of which change a value:
@@ -66,16 +66,16 @@ Three SPELLING notes, none of which change a value:
    both: the oracle was run against an explicitly 64-bit-result-type engine
    as well and produced bit-identical keys and permutations.
 
-2. Their `__feistel_bijection` stores its 24 keys in a member array built
-   in the constructor; ours computes them into a fixed-size stack array in
+2. The reference `__feistel_bijection` stores its 24 keys in a member array built
+   in the constructor; this implementation computes them into a fixed-size stack array in
    the same order. Same values, same order, no heap either way.
 
-3. Their `operator[]` is `bijection(current_ + k)` on an iterator holding
-   `current_ = start` (`shuffle_iterator.h:135-141`, `:156-162`). Ours is a
+3. The reference `operator[]` is `bijection(current_ + k)` on an iterator holding
+   `current_ = start` (`shuffle_iterator.h:135-141`, `:156-162`). Here it is a
    free function taking `(start + k)` directly, because there is no
    iterator protocol to satisfy here -- cuML only ever subscripts it.
 
-ONE PRECONDITION THEIRS DOCUMENTS AND DOES NOT ENFORCE IN RELEASE BUILDS,
+ONE PRECONDITION THE REFERENCE DOCUMENTS AND DOES NOT ENFORCE IN RELEASE BUILDS,
 kept and made loud here. `random_bijection::operator()` cycle-walks with a
 do-while (`random_bijection.h:73-85`) and its own header warns at `:76-77`
 that a start index >= `num_elements` MAY LOOP FOREVER -- the orbit through
@@ -179,7 +179,7 @@ def key_stream_next(mut x: UInt64) -> UInt32:
     The rejection fires with probability about 3.05e-5 per draw
     (`(2147483646 - 2147418112) / 2147483646`), which is roughly once in
     33,000 -- often enough to matter over a forest, rare enough that a small
-    test suite never sees it. It is transcribed rather than dropped for
+    test suite never sees it. It is implemented rather than dropped for
     exactly that reason, and `shuffle_check.mojo` reaches it deliberately.
     """
     var sp = UInt64(0)
@@ -248,7 +248,7 @@ struct FeistelBijection(Copyable, Movable):
     def _round_trip(self, val: UInt64) -> UInt64:
         """`feistel_bijection.h:80-100`, one full pass of 24 rounds.
 
-        Transcribed with its oddities intact, because they are the
+        Implemented with its oddities intact, because they are the
         algorithm and not blemishes:
 
         - `L` is taken as `val >> R_bits` and is NOT masked on entry.
@@ -307,7 +307,7 @@ def shuffled_feature(
     too: `sample_features` constructs a fresh `shuffle_iterator` inside the
     per-`sample_idx` lambda (`builder_kernels.cuh:90-92`), so every one of a
     node's `k` threads redraws all 24 keys and reruns the cycle walk. That
-    is redundant work by construction and it is transcribed rather than
+    is redundant work by construction and it is kept rather than
     hoisted. Hoisting it per node would be a
     deviation with a measurement attached, and no measurement is being taken
     this round.

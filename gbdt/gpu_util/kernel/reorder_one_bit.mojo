@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Stable partition by one bit: their scan-plus-reorder path.
 
-FOLLOWS `catboost/cuda/cuda_util/kernel/reorder_one_bit_impl.cuh:127`
+Reference: `catboost/cuda/cuda_util/kernel/reorder_one_bit_impl.cuh:127`
 (`ReorderOneBitImpl`) and the `SortWithoutCub` driver that calls it,
 `catboost/cuda/methods/greedy_subsets_searcher/kernel/split_points.cu:692`.
 
@@ -28,7 +28,7 @@ living in `cuda_util/kernel/`, not a vendor call. Reading only the CUB call in
 1. `cub::DeviceScan::ExclusiveSum` over the flag bits, per leaf
 2. `ReorderOneBitImpl<bool, ui32, N=1, blockSize=512>`
 
-Step 2 is followed statement for statement below. Step 1 has no CatBoost implementation to implement
+Step 2 is implemented below. Step 1 has no CatBoost source to read
 -- it IS the vendor call -- and `nn.cumsum` ships CPU-only (re-checked against
 the docs 2026-08-19: one overload, no `ctx`, no `target`), so the DEVICE-WIDE
 scan is written here as the standard two-level decoupled scan. That is what
@@ -164,7 +164,7 @@ def reorder_one_bit_kernel(
     base_in: Int32,
     size_in: Int32,
 ):
-    """`ReorderOneBitImpl` (`reorder_one_bit_impl.cuh:127`), followed statement for statement.
+    """`ReorderOneBitImpl` (`reorder_one_bit_impl.cuh:127`).
 
     `base` is ours: their pointers are pre-offset to the leaf by the caller,
     and carrying the offset as an argument keeps one launch able to serve a
