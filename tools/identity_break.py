@@ -5640,7 +5640,63 @@ def _real_count(verdict):
     return None
 
 
-def diff(paths, require_columns=0, require_lanes=None):
+#: the per-column verdicts that are already a failure on their own; a cell
+#: carrying one is never OWED
+_OWED_BLOCKING = ("MOVED", "RELOAD-MOVED", "REFUSED", "BATCH_MOVED", "RLPAIR_MOVED")
+
+
+def _owed_status(cols, key, col):
+    """Whether a cell part that rests on fewer real hashes than
+    --require-columns demands is OWED rather than short (2026-09-15,
+    lane/cpu-gate-owed-cells). GPU records are taken only at PyPI releases,
+    so a CPU lane can carry a cell part no committed GPU record hashes yet.
+    DERIVED, never hand-listed: the part is OWED only when
+      - every CPU column (a JSON with `host`) hashes it STABLE over at least
+        two repeats, and at least one CPU column is given;
+      - every other column either hashes it or has NO hash for it: the cell
+        is absent (a lane not in that record), the part key is absent, or
+        the part is n/a;
+      - no column REFUSED the cell or the part and none reads MOVED,
+        RELOAD-MOVED, BATCH_MOVED or RLPAIR_MOVED.
+    Agreement among the columns that do hash it is the caller's verdict:
+    DIVERGENT is never short and never OWED. Returns (missing column names,
+    "") when OWED, else ([], the reason it is not)."""
+    missing, cpu_seen = [], False
+    for name, j in cols:
+        c = j["cells"].get(key)
+        is_cpu = bool(j.get("host"))
+        if c is None:
+            if is_cpu:
+                return [], f"CPU column {name} has no cell"
+            missing.append(name); continue
+        if c.get("verdict") == "REFUSED":
+            return [], f"column {name} REFUSED the cell"
+        if col == "train":
+            v, values = c.get("verdict"), c.get("hashes") or []
+        elif f"{col}_verdict" not in c:
+            if is_cpu:
+                return [], f"CPU column {name} carries no {col} part"
+            missing.append(name); continue
+        else:
+            v, values = c[f"{col}_verdict"], c.get(col) or []
+        if v in _OWED_BLOCKING:
+            return [], f"column {name} reads {v}"
+        if v == "N/A":
+            if is_cpu:
+                return [], f"CPU column {name} reads N/A"
+            missing.append(name); continue
+        if is_cpu:
+            cpu_seen = True
+            if v != "STABLE" or len(values) < 2 or len(set(values)) != 1:
+                return [], f"CPU column {name} is not STABLE over two or more repeats ({v}, {len(values)} repeat(s))"
+    if not cpu_seen:
+        return [], "no CPU column hashes it"
+    if not missing:
+        return [], "no column lacks a hash"
+    return missing, ""
+
+
+def diff(paths, require_columns=0, require_lanes=None, owed_json=None):
     cols = []
     for p in paths:
         with open(p) as fh:
@@ -5659,14 +5715,28 @@ def diff(paths, require_columns=0, require_lanes=None):
     if require_columns and require_columns > len(cols):
         print(f"REQUIRE FAIL: --require-columns {require_columns} with {len(cols)} JSONs given")
     required = set(require_lanes) if require_lanes else (set(k.split("/")[0] for k in keys) if require_columns else set())
-    short = []
+    short, owed = [], []
+    if owed_json and not require_columns:
+        raise SystemExit("REFUSING: --owed-json needs --require-columns (OWED is a cell short of that count)")
 
     def require(key, col, verdict):
+        """Records a short cell part and returns the verdict to count and
+        print: `OWED xK` for a part --owed-json admits (K real hashes, all
+        equal), else the verdict unchanged."""
         if not require_columns or key.split("/")[0] not in required:
-            return
+            return verdict
         n = _real_count(verdict)
         if n is not None and n < require_columns:
-            short.append((key, col, verdict, n))
+            why = ""
+            if owed_json and n > 0:
+                missing_cols, why = _owed_status(cols, key, col)
+                if missing_cols:
+                    lane_name, fixture = key.split("/", 1)
+                    owed.append(dict(lane=lane_name, fixture=fixture, part=col, missing=missing_cols,
+                                     present=[nm for nm, _ in cols if nm not in missing_cols], real_hashes=n))
+                    return f"OWED x{n}"
+            short.append((key, col, verdict, n, why))
+        return verdict
 
     fixture_ns = set(((j.get("package") or {}).get("fixture_n", 20000), bool((j.get("package") or {}).get("wide")))
                      for _, j in cols)
@@ -5764,8 +5834,8 @@ def diff(paths, require_columns=0, require_lanes=None):
             agreeing = [pk for pk, pv in per.items() if len(set(pv)) == 1]
             if per:
                 shown[0] = f"parts differ: {','.join(diverging) or '?'}; agree: {','.join(agreeing) or '-'}"
+        verdict = require(k, "train", verdict)
         counts[verdict.split(" ")[0]] = counts.get(verdict.split(" ")[0], 0) + 1
-        require(k, "train", verdict)
         print(f"| {k:<28} | {verdict:<10} | " + " | ".join(f"{s:<16}" for s in shown) + " |")
     print()
     print("summary: " + ", ".join(f"{k}={v}" for k, v in sorted(counts.items())))
@@ -5800,9 +5870,9 @@ def diff(paths, require_columns=0, require_lanes=None):
             verdict, shown = _diff_column(cols, k, col)
             if verdict in ("MOVED", "DIVERGENT", "RELOAD-MOVED", "BATCH_MOVED", "RLPAIR_MOVED"):
                 bad += 1
+            verdict = require(k, col, verdict)
             c2 = counts2[group]
             c2[verdict.split(" ")[0]] = c2.get(verdict.split(" ")[0], 0) + 1
-            require(k, col, verdict)
             rows.append((k, col, verdict, shown))
     print()
     if rows:
@@ -5821,16 +5891,27 @@ def diff(paths, require_columns=0, require_lanes=None):
     if require_columns:
         if require_columns > len(cols):
             bad += 1
-        for key, col, verdict, n in short:
+        for key, col, verdict, n, why in short:
             print(f"REQUIRE FAIL {key} {col}: {verdict} rests on {n} real hash(es), "
                   f"--require-columns {require_columns} demands that many; a column that "
-                  "should cover this lane is refusing, which is not a pass")
+                  "should cover this lane is refusing, which is not a pass"
+                  + (f" (not OWED: {why})" if why else ""))
         missing = sorted(required - set(k.split("/")[0] for k in keys))
         for lane_name in missing:
             print(f"REQUIRE FAIL {lane_name}: no JSON carries a cell for this lane")
         bad += len(short) + len(missing)
         print(f"require-columns {require_columns} over {sorted(required)}: "
-              f"{'OK' if not short and not missing else str(len(short) + len(missing)) + ' short'}")
+              f"{'OK' if not short and not missing else str(len(short) + len(missing)) + ' short'}"
+              + (f" ({len(owed)} OWED)" if owed_json else ""))
+    if owed_json:
+        for o in owed:
+            print(f"OWED {o['lane']}/{o['fixture']} {o['part']}: no hash in {','.join(o['missing'])}; "
+                  f"rests on {o['real_hashes']} ({','.join(o['present'])})")
+        with open(owed_json, "w") as fh:
+            json.dump(dict(columns=names, require_columns=require_columns,
+                           lanes=sorted(required), owed=owed), fh, indent=1)
+        print(f"summary (owed): OWED={len(owed)}; the next release record owes exactly these cell parts; "
+              f"wrote {owed_json}")
     return 1 if bad else 0
 
 
@@ -5959,6 +6040,12 @@ def main():
                     help="with --diff: exit non-zero unless every compared cell of the lanes named by "
                          "--lanes (every lane when --lanes is empty) rests on at least N real hashes; "
                          "--lanes also scopes which cells --diff compares at all")
+    ap.add_argument("--owed-json", default="", metavar="PATH",
+                    help="with --diff --require-columns: a cell part short ONLY because a record has no hash "
+                         "for it (cell absent, part absent or n/a) reads OWED xK instead of failing, when every "
+                         "CPU column hashes it STABLE over two or more repeats, no column refused or moved it, "
+                         "and the columns that hash it agree; the owed cell parts are written to PATH. Their "
+                         "sabotage check is tools/cpu_identity_gate_check.py owed")
     ap.add_argument("--merge", nargs="+", default=None, metavar="JSON",
                     help="join the parts of ONE column (same vendor, commit, fixtures, build) into --json")
     ap.add_argument("--allow-separate-builds", action="store_true",
@@ -5975,7 +6062,7 @@ def main():
             unknown = [n for n in lanes if n not in LANES]
             if unknown:
                 raise SystemExit(f"REFUSING: --lanes names no lane: {unknown}; lanes are {sorted(LANES)}")
-        return diff(args.diff, args.require_columns, lanes)
+        return diff(args.diff, args.require_columns, lanes, args.owed_json or None)
     return run(args)
 
 
