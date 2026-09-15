@@ -107,5 +107,23 @@ predict arithmetic did not change after that commit.
 - **Threshold margin.** The smallest `|1 + theta|` on any lane is 0.43
   (precomputed), far above the 1e-3 threshold.
 
-Identity columns, sabotage and the installed wheel: see
-`bench/results/identity_break/2026-09-15_spectral-predict/README.md`.
+### Identity, sabotage and the wheel
+
+- **CPU.** Nine fixtures on x86: train IDENTICAL x4 against the 166-lane
+  Apple, NVIDIA and AMD columns. The 54 new infer, model and batch parts are
+  OWED.
+- **Metal.** Base and ties:
+  - train IDENTICAL x4 against the record;
+  - Metal against CPU IDENTICAL on train, infer, model and batch;
+  - `par-graph-spectral` base IDENTICAL x4.
+- **Host sabotage.** The predict-only arm negates embedding column 1. It moves
+  every infer and batch cell (18 and 18). An earlier arm on column 0 was
+  inert, because the trivial column is constant after the degree division.
+- **Batch sabotage.** BATCH_MOVED on both lanes on CPU and on Metal.
+- **The installed test wheel** reproduces four saved models through
+  `host_model` and `load`.
+- **A Metal defect found and fixed.** Predict first handed `knn_search`
+  memory backed by Mojo `List`s and segfaulted; it now stages through runtime
+  host buffers.
+
+Details: `bench/results/identity_break/2026-09-15_spectral-predict/README.md`.

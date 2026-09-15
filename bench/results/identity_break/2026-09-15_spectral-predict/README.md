@@ -47,8 +47,21 @@ Three RunPod CPU pods, one at a time, each verified deleted
 - **Leg 3** (33ac888dd, 227 s billed). The host sabotage column with the fixed
   arm, plus a production recheck on base and ties.
 
-Metal (Apple M4) runs through the exclusive Metal slot. Its result is added
-below when it lands.
+**Metal column** (Apple M4, `metal/`). Every Metal process ran through the
+exclusive Metal slot, one short chunk at a time. Under the narrowed scope that
+means `spectral` and `spectral-precomputed` on base and ties (two repeats),
+plus a base-fixture spot check of `par-graph-spectral`.
+
+- **The crash.** The first Metal binding (36355ac74) segfaulted on the first
+  nearest_neighbors predict (`metal/probe.b2-segfault.txt`: a plain fit and a
+  `prediction_data=True` fit succeeded). It had handed `knn_search` memory
+  backed by Mojo `List`s.
+- **The fix** (b886dbc97). The search is staged through
+  `enqueue_create_host_buffer` buffers, as `create_connectivity_graph` and
+  `umap/transform.mojo` stage theirs.
+- **Scope of the fix.** The binding at b886dbc97 produced every Metal cell
+  below. The fix touches only the device predict path. The CPU host columns,
+  which never call `knn_search` on a device, stand at their commits.
 
 ## Results
 
@@ -60,6 +73,12 @@ below when it lands.
 | `diff.cpu-vs-batch-sabotage.*.txt` | `MOJOLEARN_IDENTITY_BATCH_SABOTAGE=1`, base: BATCH_MOVED on both lanes |
 | `diff.leg2-vs-leg3-prod.txt` | Production CPU cells at 33ac888dd equal leg 2 at 0a6957015 on base and ties (IDENTICAL=4 train, 8 infer and model, 4 batch). The sabotage fix is in a comptime-false branch |
 | `wheel/wheel_models.json` | Installed test wheel (15 shipped families, RECORD sha256 checked, extracted into `/tmp/target`, `MOJOLEARN_HOST_DIR` unset). Four saved models (both lanes, base and ties) through `mojolearn.host_model` and `SpectralClustering.load` give the saving process's label and embedding hashes: all_equal True |
+| `metal/apple-m4.json` | Metal, base and ties: cells=4 stable=4; infer, model and batch stable=4 |
+| `metal/diff.metal-vs-cpu.txt` | Metal against the x86 CPU column: train IDENTICAL=4, infer and model IDENTICAL=8, batch IDENTICAL=4 (the other seven fixtures are CPU only) |
+| `metal/diff.metal-vs-record-train.txt` | Against the three 166-lane columns: `spectral` and `spectral-precomputed` train on base and ties IDENTICAL x4, so `prediction_data=True` moved no committed Metal fit hash. The REQUIRE FAIL lines name the seven fixtures this narrowed Metal column does not run |
+| `metal/diff.par-graph-spectral-base-vs-record.txt` | `par-graph-spectral` base (the fit path this lane edited, no predict), train IDENTICAL x4 against the record |
+| `metal/diff.metal-vs-batch-sabotage.*.txt` | `MOJOLEARN_IDENTITY_BATCH_SABOTAGE=1` on Metal, base: BATCH_MOVED on both lanes |
+| `metal/test_spectral_predict.metal.txt` | GREEN, 39 checks, on Metal. Its HOST arm is REPORT only here (no host dir given); the CPU host bytes are the pod columns |
 | `sabotage-arm-check/` | Why the first sabotage arm was inert: column 0 is the trivial eigenvector, constant after the degree division. Negating it moves every query equally far from every centroid, and moved 0 of 4 label hashes; the column 1 arm moves 4 of 4 (M4 CPU host, the four saved models) |
 
 ## Training rows (self-consistency)
@@ -85,10 +104,19 @@ Identical columns make the number the same on every device.
 - **Threshold margin.** The smallest `|1 + theta|` is 0.43, far from the
   threshold.
 
+The test module's blob fixture reports:
+- training-row agreement of 0.9917 (nearest_neighbors) and 1.0000
+  (precomputed), and 1.0000 with every row duplicated;
+- a training-row embedding gap of 2.0e-2.
+
 ## Owed
 
-- The Metal column (in progress at the time of writing).
 - The NVIDIA and AMD infer, model and batch cells of both lanes (`owed.json`,
   54 parts), at the next release record.
+- The Metal infer, model and batch cells on the seven fixtures this narrowed
+  column did not run (hashed, wide, denormal, denormal_ftz, dupes, odd,
+  negative), and Metal train cells on those seven. Their CPU cells read
+  IDENTICAL x4 on train against the record.
+- The two-device `par-graph-spectral` cells.
 
 No GPU box was rented.

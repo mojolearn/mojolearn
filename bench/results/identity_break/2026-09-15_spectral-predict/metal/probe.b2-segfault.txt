@@ -1,0 +1,7 @@
+fit plain
+fit prediction_data
+fit ok [-2.3850567743011197e-08, -0.042763981968164444, -0.05254843086004257]
+predict one row
+/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/mac_slot.sh: line 78:  3047 Segmentation fault: 11  nice -n 19 env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 MOJOLEARN_CPU_THREADS=1 MOJOLEARN_COMPILE_JOBS=1 MOJOLEARN_BUILD_JOBS=1 MODULAR_THREAD_BUSY_WAIT_US=0 "$@"
+
+[exited with code 0]
