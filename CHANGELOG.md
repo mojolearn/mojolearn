@@ -10,6 +10,13 @@ what a user can check from a pip install. The freeze checks of docs/RELEASE_CHEC
 the per-vendor GPU-box build and the byte compare of the host bindings across the three
 Linux legs are OWED before this heading reads published.
 
+- `NearestNeighbors.kneighbors(X=None)`, the all-kNN query (lane/neighbors-rest, for 0.8.7).
+  The fitted data against itself with each point excluded from its own neighbour list, on
+  both algorithms: the search runs at `k + 1` and each row drops its own index, or its first
+  column where duplicate points crowded that index out, which is scikit-learn's rule and its
+  corner case. It selects among values the search already returned, so the bits are the
+  search's. `RadiusNeighbors.radius_neighbors(X=None)` still keeps the self edge, which is
+  cuVS's policy and DBSCAN's requirement, and both docstrings now say which rule they follow.
 - Seven more brute force k-NN metrics (lane/neighbors-rest, for 0.8.7). `NearestNeighbors`,
   `KNeighborsClassifier` and `KNeighborsRegressor` take `metric='canberra'`, `'correlation'`,
   `'jensenshannon'`, `'inner_product'`, `'braycurtis'` and scikit-learn's `'hamming'` and

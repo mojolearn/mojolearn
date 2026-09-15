@@ -1,0 +1,41 @@
+{
+  "commit": "783e214415f99070da3f3ca55425f740f8d03184",
+  "estimator": "NearestNeighbors",
+  "gpu_arch": null,
+  "host": {
+    "cpu": "Apple M4",
+    "machine": "arm64",
+    "python": "3.14.6",
+    "release": "25.5.0",
+    "system": "Darwin"
+  },
+  "kind": "hashed",
+  "lane": "knn-jensenshannon",
+  "model_sha256": "6502880e0e1dd6d5359bfd72e0e6fff3670cc9c932c7b12ad5f4c9403c17f305",
+  "numeric_mode": "identical",
+  "predictions": {
+    "identity_hash": "4ea93086e8cbdd3f",
+    "kneighbors_distances": {
+      "dtype": "<f4",
+      "sha256": "cf8683c1eddda31e7f9670ee9cd89025197cd37f8a2c040785d0a21c6ecdfa0f",
+      "shape": [
+        64,
+        8
+      ]
+    },
+    "kneighbors_indices": {
+      "dtype": "<i8",
+      "sha256": "276826e5d57085b263537fedf1c2ecade0628bc85ad3c49da00354850b8d876c",
+      "shape": [
+        64,
+        8
+      ]
+    },
+    "seconds": 0.048202
+  },
+  "recorded_at": "2026-09-15T19:29:08-0400",
+  "reload_equal": true,
+  "status": "RECORDED",
+  "vendor": "metal",
+  "x_sha256": "610f791343247286a120f012f4d03fb2d0bbc4500feb992df2fb844a344e4986"
+}

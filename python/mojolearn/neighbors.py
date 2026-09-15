@@ -476,6 +476,40 @@ def _resolve_rbc_metric(cls_name, metric, p):
     return value, arg
 
 
+def _drop_self_neighbours(dist, ind, k, n_queries):
+    """scikit-learn's `kneighbors(X=None)` post-pass (`_base.py:868-889`),
+    over a search that ran at `k + 1`.
+
+        sample_mask = neigh_ind != sample_range
+        dup_gr_nbrs = np.all(sample_mask, axis=1)
+        sample_mask[:, 0][dup_gr_nbrs] = False
+        neigh_ind = np.reshape(neigh_ind[sample_mask], (n_queries, k))
+
+    Each row drops its OWN index; a row that does not contain its own index
+    (duplicate points filled the list before it) drops its FIRST column
+    instead, which is their corner case and their comment. INTEGER
+    BOOKKEEPING over `n_queries * (k + 1)` slots: it selects among values the
+    search already returned and computes no float, so the result's bits are
+    the search's bits and `kneighbors(X=None)` is identical wherever
+    `kneighbors(X)` is.
+    """
+    d_rows = dist.tolist()
+    i_rows = ind.tolist()
+    out_d = []
+    out_i = []
+    for row in range(n_queries):
+        di = d_rows[row]
+        ii = i_rows[row]
+        keep = [j for j in range(len(ii)) if int(ii[j]) != row]
+        if len(keep) == len(ii):
+            # the row's own index is not in the list: drop the first column
+            keep = list(range(1, len(ii)))
+        keep = keep[:k]
+        out_d.append([di[j] for j in keep])
+        out_i.append([int(ii[j]) for j in keep])
+    return Array.from_list(out_d, "<f4"), Array.from_list(out_i, "<i8")
+
+
 class NearestNeighbors(NumericModeMixin):
     """Exact k-NN by brute force. Reference: cuVS's fused L2 kernel.
 
@@ -681,7 +715,7 @@ class NearestNeighbors(NumericModeMixin):
         self.n_features_in_ = idx.shape[1]
         return self
 
-    def kneighbors(self, X, n_neighbors=None, return_distance=True):
+    def kneighbors(self, X=None, n_neighbors=None, return_distance=True):
         """Distances and indices of the nearest neighbours, nearest first.
 
         Returns `(distances, indices)` when `return_distance`, else
@@ -691,11 +725,30 @@ class NearestNeighbors(NumericModeMixin):
         distances and the square root is taken on the way out, over
         `n_queries * k` values rather than `n_queries * n_index`, so it is not
         on the hot path.
+
+        `X=None` IS THE ALL-kNN QUERY: the fitted data against itself with
+        each point excluded from its own neighbour list, which is what
+        scikit-learn does (`_base.py:868-889`) and what cuVS's
+        `rbc_all_knn_query` convenience overload does NOT (it keeps the self
+        edge). The search runs at `k + 1` and each row then drops its own
+        index, or its FIRST column when duplicate points crowded that index
+        out of the list, which is their rule and their corner case. It works
+        on both algorithms ('brute' and 'rbc').
+
+        `RadiusNeighbors.radius_neighbors(X=None)` KEEPS the self edge, and
+        that difference is deliberate: DBSCAN counts a point as its own
+        neighbour and the CSR every other consumer sees carries it. Each
+        surface says which it does rather than quietly agreeing with
+        neither reference.
         """
         if self._index is None:
             raise ValueError("mojolearn: call fit before kneighbors")
         k = self.n_neighbors if n_neighbors is None else n_neighbors
-        q, _ = as_f32_c(X, ndim=2, name="X")
+        query_is_train = X is None
+        if query_is_train:
+            q = self._index
+        else:
+            q, _ = as_f32_c(X, ndim=2, name="X")
         if q.shape[1] != self.n_features_in_:
             raise ValueError(
                 f"mojolearn: X has {q.shape[1]} features, index has "
@@ -706,6 +759,15 @@ class NearestNeighbors(NumericModeMixin):
                 f"mojolearn: n_neighbors must be in [1, {self.n_samples_fit_}]"
                 f", got {k}"
             )
+        # WITH THE SELF EDGE DROPPED there are only n_samples_fit_ - 1 other
+        # points, so the search needs k + 1 and k must leave room for it.
+        if query_is_train and k + 1 > self.n_samples_fit_:
+            raise ValueError(
+                f"mojolearn: kneighbors(X=None) excludes each point from its "
+                f"own neighbour list, so n_neighbors must be in "
+                f"[1, {self.n_samples_fit_ - 1}], got {k}"
+            )
+        k_search = k + 1 if query_is_train else k
 
         nq = q.shape[0]
 
@@ -719,8 +781,8 @@ class NearestNeighbors(NumericModeMixin):
                 type(self).__name__, self.metric, self.p
             )
             idx = self._index
-            rind = empty((nq, k), "<i4")
-            rdist = empty((nq, k), "<f4")
+            rind = empty((nq, k_search), "<i4")
+            rdist = empty((nq, k_search), "<f4")
             self.n_candidate_distances_ = self._bind(
                 "_mojolearn"
             ).rbc_knn_search(
@@ -728,7 +790,7 @@ class NearestNeighbors(NumericModeMixin):
                 # ORDER MATCHES bindings/_mojolearn.mojo::
                 # rbc_knn_search_binding. n_index, n_queries, n_features, k,
                 # metric, metric_arg
-                [idx.shape[0], nq, idx.shape[1], k, mvalue, marg],
+                [idx.shape[0], nq, idx.shape[1], k_search, mvalue, marg],
             )
             # The index is built inside the call, so `used_query_tile_` has
             # no meaning on this arm and is set to None rather than left
@@ -742,12 +804,17 @@ class NearestNeighbors(NumericModeMixin):
                     "refuses that before launching, so this means the "
                     "arrays changed under the call."
                 )
+            if query_is_train:
+                sdist, sind = _drop_self_neighbours(rdist, rind, k, nq)
+                if return_distance:
+                    return sdist, sind
+                return sind
             if return_distance:
                 return rdist, rind.astype("<i8")
             return rind.astype("<i8")
 
-        dist = empty((nq, k), "<f4")
-        ind = empty((nq, k), "<u4")
+        dist = empty((nq, k_search), "<f4")
+        ind = empty((nq, k_search), "<u4")
 
         # Every array named here stays in a local for the whole call. That is
         # the contract `_buffer` documents and the reason it is spelled out.
@@ -759,11 +826,16 @@ class NearestNeighbors(NumericModeMixin):
             addr(ind, name="ind"),
             # ORDER MATCHES bindings/_mojolearn.mojo::knn_search_binding.
             # n_index, n_queries, n_features, k, return_sqrt, query_tile
-            [idx.shape[0], nq, idx.shape[1], k, 1, self.query_tile],
+            [idx.shape[0], nq, idx.shape[1], k_search, 1, self.query_tile],
             # metric, metric_arg, weights -- see _dist_triple there.
             self._dist_params(),
         )
 
+        if query_is_train:
+            sdist, sind = _drop_self_neighbours(dist, ind, k, nq)
+            if return_distance:
+                return sdist, sind
+            return sind
         if return_distance:
             return dist, ind.astype("<i8")
         return ind.astype("<i8")

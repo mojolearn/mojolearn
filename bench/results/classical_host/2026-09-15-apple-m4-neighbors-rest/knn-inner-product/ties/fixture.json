@@ -1,0 +1,8 @@
+{
+  "estimator": "NearestNeighbors",
+  "heldout_seed": 1,
+  "kind": "ties",
+  "lane": "knn-inner-product",
+  "probe_rows": 256,
+  "x_sha256": "cb717abc7fdea535547b185d7f6b53f113cbab5b15e61b6f0f7c62e31ea62f5e"
+}

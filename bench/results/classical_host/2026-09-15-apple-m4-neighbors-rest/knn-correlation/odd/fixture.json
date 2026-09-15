@@ -1,0 +1,8 @@
+{
+  "estimator": "NearestNeighbors",
+  "heldout_seed": 1,
+  "kind": "odd",
+  "lane": "knn-correlation",
+  "probe_rows": 256,
+  "x_sha256": "a000619abf2e78b511b82f4a2ba73ce0a68c0d919f5f66f0f49f3c1b00e9ad0a"
+}

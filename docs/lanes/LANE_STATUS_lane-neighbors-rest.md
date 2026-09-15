@@ -6,14 +6,27 @@ implement what a scikit-learn or cuML user would call, bitwise identical on
 the GPU with the CPU verifier and public CPU inference, and give every other
 row an exact reason.
 
-Classes: (a) a user-facing feature (a parameter, method, metric or algorithm
-option); (b) internal reference plumbing we do not need; (c) intentionally
-excluded (nondeterministic or approximate by nature, deprecated, or a
-reference bug).
+**STOPPED ON PURPOSE, NOT FINISHED.** The M4's Metal command queue was
+leaking (AGXCommandQueue 6754 against a limit of 512, every fit roughly 20x
+slow) and a restart was due within the hour, so this lane stopped queuing
+for the GPU, pushed everything it could prove, and wrote the resume steps
+below. No RunPod pod was ever rented, so nothing is owed on a box and
+nothing needs reaping.
 
-## Triage (stage 0, read only)
+## Where it is
 
-Counts: (a) 2 rows, (b) 20 rows, (c) 9 rows.
+Branch `lane/neighbors-rest`, pushed. Nothing merged to main: the CPU column
+is owed, and unrun code stays on its branch.
+
+    973f2e01e  triage of the 31 rows
+    08ab0b3d0  item 1: the seven brute force metrics
+    783e21441  classical_host_gate: record no longer dies on --lane-rule-only
+    (this commit)  item 2: kneighbors(X=None), evidence and this status
+
+## Triage (all 31 rows)
+
+Counts: (a) user-facing 2, (b) internal reference plumbing 20,
+(c) intentionally excluded 9.
 
 | # | Row (reference symbol) | Class | Decision |
 |---|---|---|---|
@@ -26,123 +39,126 @@ Counts: (a) 2 rows, (b) 20 rows, (c) 9 rows.
 | 7 | raft select_warpsort `kMaxGridDimY` loop | b | host chunking for a CUDA grid cap |
 | 8 | raft select_radix multi-block `radix_topk` | b | one very long row; brute force is one block per query |
 | 9 | cuVS `DistanceEpilogue` hook | b | C++ template hook |
-| 10 | cuVS brute_force index/search API | b | the C++ index object; what a user calls (a fitted index saved and loaded, searched on a CPU) ships as `NearestNeighbors.save`/`load` and `host_model` |
-| 11 | cuVS ivf_flat, ivf_pq, cagra | c | the row is stale for ivf_flat (`IVFIndex` ships); ivf_pq and CAGRA are approximate by construction |
+| 10 | cuVS brute_force index/search API | b | the C++ index object; the capability (save, load, search on a CPU) ships. Row rewritten to name what is actually absent: their precomputed index norms |
+| 11 | cuVS ivf_flat, ivf_pq, cagra | c | split: ivf_flat SHIPS as `IVFIndex`; ivf_pq and CAGRA stay out of scope, approximate by construction |
 | 12 | cuML `precomp_lbls=true` | b | MNMG reduction arm |
 | 13 | cuML `class_vote_kernel` label_cache | b | where a label array is read from; scheduling |
 | 14 | cuML `get_next_usable_stream` | b | CUDA streams |
 | 15 | raft `getUniquelabels` on device | b | host sort stands in; same set |
-| 16 | cuML `approx_knn_build_index` / `approx_knn_search` (`algorithm='ivfflat'/'ivfpq'`) | c | an approximate search behind the exact class's name; the capability is `IVFIndex` |
+| 16 | cuML `approx_knn_build_index` / `approx_knn_search` | c | an approximate search behind the exact class's name; the capability is `IVFIndex`, asked for by name |
 | 17 | cuVS Policy4x4 tile | b | speed only |
 | 18 | cuVS `cosine_cutlass_op` | b | CUTLASS hook |
 | 19 | cuVS `expensive_inner_loop` | b | compiler hint |
-| 20 | cuVS distance table: Canberra, Correlation, Hellinger, JensenShannon, Hamming, KLDivergence, RussellRao, BrayCurtis, InnerProduct, Haversine | **a** | **item 1** below |
+| 20 | cuVS distance table (10 metrics) | **a** | **ITEM 1, DONE (evidence partly owed):** canberra, correlation, jensenshannon, inner_product, braycurtis, hamming, russellrao implemented; haversine refused by name (needs an arcsine no pinned primitive provides); hellinger, kldivergence, jaccard, dice split into their own row, reachable by no public metric name in either reference |
 | 21 | cuVS fused arm for L2Unexpanded | b | a missing arm, same distance |
-| 22 | cuVS fused arm powf post-processing | c | dead code in the reference plus a reference bug on multi-partition input |
+| 22 | cuVS fused arm powf post-processing | c | dead code plus a reference bug on multi-partition input |
 | 23 | scikit-learn kd_tree / ball_tree | c | engineering refusal; `algorithm='rbc'` serves the request |
-| 24 | cuVS `rbc_all_knn_query` (all-kNN, `kneighbors(X=None)`) | **a** | **item 2** below |
+| 24 | cuVS `rbc_all_knn_query` | **a** | **ITEM 2, WRITTEN (evidence owed):** `kneighbors(X=None)` is scikit-learn's all-kNN query on both algorithms; only their convenience overload stays absent |
 | 25 | cuVS ball cover `z` (Ptolemaic) bound | b | speed only; the triangle bound is exact |
-| 26 | cuVS ball cover post-filter registers | b | only needed by the approximate mode |
+| 26 | cuVS ball cover post-filter registers | b | only the approximate mode needs it |
 | 27 | cuVS ball cover `weight` / `perform_post_filtering` | c | approximate mode |
-| 28 | cuVS ball cover asserts (`n <= 3`, `n_landmarks >= k`) | b | guards staging this implementation does not do |
-| 29 | RadiusNeighbors / rbc metric='cosine', 'sqeuclidean', Lp p < 1 | c | not metrics; the cover prunes on the triangle inequality |
-| 30 | `core/row_norms.mojo` stdlib sqrt | b | the row is stale: the defect is fixed (`identical_sqrt`); collapsing `cosine_row_norm_kernel` into a call is plumbing |
-| 31 | scikit-learn `weights=<callable>` | c | the vote is a pinned kernel; a Python function's arithmetic is outside any identity claim |
+| 28 | cuVS ball cover asserts | b | guards staging this implementation does not do |
+| 29 | rbc metric='cosine', 'sqeuclidean', Lp p < 1 | c | not metrics; the cover prunes on the triangle inequality |
+| 30 | `core/row_norms.mojo` stdlib sqrt | b | row was stale: the defect is FIXED; only the duplicated cosine norm kernel remains, and collapsing it moves no bit |
+| 31 | scikit-learn `weights=<callable>` | c | reason sharpened: the weights already form on the host, so the real reason is that a caller's arbitrary Python arithmetic cannot carry this tree's identity claim |
 
-## Plan for the (a) items, in order of user value
+## Item 1: the seven brute force metrics (code done, CPU column owed)
 
-### Item 1: the missing brute force metrics
+`metric='canberra'`, `'correlation'`, `'jensenshannon'`, `'inner_product'`,
+`'braycurtis'`, `'hamming'`, `'russellrao'` on `NearestNeighbors`,
+`KNeighborsClassifier` and `KNeighborsRegressor`, on the GPU and from a
+saved model on a CPU with no GPU. Each is a core and an epilogue in
+`metric_distance_kernel`, one thread per cell, features ascending, every
+primitive from `checks/numerics.mojo`; the tiled arm's `use_norms = false`
+branch takes all seven in both modes, so there is no new arm. The host
+oracle calls the same cores over its `List` boundary.
+DEVIATIONS 2898 to 2901 (`distance_ops.mojo`, THE SEVEN METRICS): correlation's
+in-cell row statistics with the constant-row and flushed-variance refusals,
+jensenshannon's negative-entry refusal and rectifier, russellrao's boolean
+reading and braycurtis's zero rules, and inner product's select-max as an
+ascending select over the stored negation with `weights='distance'` refused.
 
-Which names. The ones a caller can type into cuML's dense
-`NearestNeighbors` (VALID_METRICS['brute']) or scikit-learn's brute
-NearestNeighbors and that the cuVS op table computes:
+PROVEN (on the M4, one core; `bench/results/identity_break/2026-09-15_neighbors-rest/README.md`
+has the numbers): the Apple column, 63 cells STABLE across train, infer,
+model and batch, taken twice and agreeing byte for byte; `check-metric-identical`
+with 15 DistanceType values x 1961 cells, 29,415 bit-equal, 0 differ, and every
+metric priced against a float64 reference; 14 Python tests; the saved-model
+recording, 63 of 63 RECORDED with `reload_equal`; and the existing neighbor and
+KDE lanes unchanged on the `base` fixture (0 DIVERGENT, 0 MOVED).
 
-| name | reference op | notes |
-|---|---|---|
-| canberra | `canberra.cuh` | `add != 0 ? |x-y|/(|x|+|y|) : 0` per feature |
-| correlation | `correlation.cuh` + `distance.cuh` row sums and squared norms | `1 - (k sxy - sx sy)/sqrt((k sxx - sx^2)(k syy - sy^2))`; zero-variance rows refused by name |
-| jensenshannon | `jensen_shannon.cuh` | natural log, rows not renormalized (the reference); negative entries refused by name; rectifier before the root (DEVIATION) |
-| inner_product | InnerProduct, `select_min = false` | the largest inner products first; the kernel stores the exact negation and the binding negates back |
-| braycurtis | none in cuVS (cuML TODO) | scikit-learn's `sum|x-y| / sum|x+y|`, `0/0 -> 0` |
-| hamming | `hamming.cuh` | `count(x != y) * (1/k)` |
-| russellrao | `russel_rao.cuh` | scikit-learn's boolean reading, `(k - count(x != 0 and y != 0)) * (1/k)` |
+## Item 2: `kneighbors(X=None)` (code written, NOTHING measured)
 
-Not implemented, with the reason carried to the TSV: haversine (needs an
-identical asin, which `checks/numerics.mojo` does not have), hellinger and
-kldivergence (no public name reaches them in either reference's dense
-NearestNeighbors). The ball cover keeps refusing every new name.
+The all-kNN query: search at `k + 1`, drop each row's own index, drop the
+FIRST column instead where duplicates crowded it out (scikit-learn
+`_base.py:868-889`), on both 'brute' and 'rbc'. Integer bookkeeping over
+slots the search already returned, so no float moves.
+`RadiusNeighbors.radius_neighbors(X=None)` still keeps the self edge
+(cuVS's policy, DBSCAN's requirement) and both docstrings say so.
+`python/mojolearn/tests/test_knn_self_query.py` is written and HAS NOT RUN:
+it was queued for the Metal slot when the lane stopped.
 
-How. Each op is a core and an epilogue in
-`neighbors/impl/distance/detail/distance_ops.mojo::metric_distance_kernel`,
-one thread per cell, features ascending, every primitive from
-`checks/numerics.mojo`. The tiled brute force already sends every
-`use_norms = false` metric to that kernel in both modes, so no new arm. The
-host oracle calls the same cores (`core/knn_host_predict.mojo`), in a new
-function beside `host_metric_cell` so the ties-sabotage lane's arms are not
-edited; its value sabotage helper is reused once that lane lands. Identity
-lanes `knn-<name>` with batch declarations, saved-model host inference,
-tests.
+## RESUME, for a session with none of this context
 
-### Item 2: `kneighbors(X=None)`
+Worktree: `git worktree add -b lane/neighbors-rest <dir> origin/lane/neighbors-rest`
+(the old one lived in a session scratchpad under /private/tmp and is gone
+after the restart). Build once, one core:
 
-scikit-learn's all-kNN query: the fitted data against itself with each
-point excluded from its own list (query `k + 1`; drop the row's own index;
-when duplicates push it out of the list, drop the first column). Host
-bookkeeping over an identical search, on both the GPU class and the host
-class.
+    MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_SKIP_BUILD_GATE=1 bash bindings/build.sh
+    MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_TARGET_COLUMN=cpu bash bindings/build_core_host.sh
 
-## Evidence per item
+1. ITEM 2 IS UNMEASURED. Run its tests first; if any fail, fix before anything else:
 
-Small fixtures: Metal and CPU IDENTICAL, new cells OWED, value sabotage
-moves every new cell, existing neighbor lanes unchanged on a base fixture
-spot check. CPU columns and sabotage on one RunPod CPU pod at a time.
+       cd python && python3 -m mojolearn.tests.test_knn_self_query
+       cd python && python3 -m mojolearn.tests.test_knn_extended_metrics
 
-## Done
+2. ITEM 2 HAS NO IDENTITY CELL. Either add a lane or decide, in writing, that
+   the equality test above is the claim (the search is the same call, so a
+   lane would hash the same arithmetic twice). If a lane is added, it needs a
+   batch declaration and a `KNN_METRIC_INPUT`-style entry is NOT needed.
 
-### Item 1, written (evidence owed)
+3. THE CPU COLUMN AND THE SABOTAGE COLUMN (the only thing standing between
+   item 1 and main). One RunPod CPU pod, from this branch:
 
-- `neighbors/impl/distance/detail/distance_ops.mojo`: the seven cuVS values
-  (InnerProduct 6, Canberra 8, CorrelationExpanded 10, BrayCurtis 14,
-  JensenShannon 15, HammingUnexpanded 16, RusselRaoExpanded 18), a core and
-  an epilogue each, `neighbors_rest_cell` in `metric_distance_kernel`, the
-  input refusals (`refuse_neighbors_rest_inputs`, and the `_list` twin for
-  the host boundary, raising the same sentences), and
-  `refuse_similarity_weights`. DEVIATIONS 2898 to 2901 in the module
-  docstring: correlation's row sums folded in the cell with the constant-row
-  and flushed-variance refusals, jensenshannon's negative-entry refusal and
-  rectifier, russellrao's boolean reading and braycurtis's zero rules, and
-  inner product's select-max as an ascending select over the stored
-  negation.
-- `neighbors/estimator.mojo`: the seven names in `knn_metric_from_name`
-  (haversine refused by name with the arcsine reason), the input refusals in
-  `knn_search_traced`, the inner product restore after the host sort, and
-  the weights refusal in both `knn_classifier_predict` and
-  `knn_regressor_predict`.
-- `core/knn_host_predict.mojo`: `host_neighbors_rest_cell` (the same cores
-  and epilogues over the host's `List` boundary, with the ties-sabotage
-  value flip) and the seven metrics in `host_resolve_metric` and
-  `host_knn_search`; `bindings/_mojolearn_core_host.mojo` refuses the
-  similarity weighting too.
-- `python/mojolearn/neighbors.py`: the names in `_METRIC_TABLE`,
-  `_BRUTE_ONLY_METRICS` refused on the ball cover with the inequality as the
-  reason, `_UNSUPPORTED_METRICS` down to haversine, and
-  `_refuse_similarity_weights`.
-- Gates and lanes: `metric_check.mojo` runs all 15 DistanceType values
-  against the float32 oracle and the float64 reference (`metric_oracle.mojo`
-  spells the seven a second and a third time) and its refusal arm now
-  resolves 19 names; identity lanes knn-canberra, knn-braycurtis,
-  knn-correlation, knn-jensenshannon, knn-hamming, knn-russellrao and
-  knn-inner-product with batch declarations, three of them on a transformed
-  fixture (`KNN_METRIC_INPUT`); `tools/classical_host_gate.py` probes and
-  `python/mojolearn/host_surface.py` lane lists; the TSV rows for the seven,
-  for haversine, and for the stale rows (the brute force index API, ivf_flat,
-  the cuML approximate facade, the row_norms defect, weights=callable);
-  `python/mojolearn/tests/test_knn_extended_metrics.py`.
+       bash tools/runpod_cpu_leg.sh --lane neighbors-rest \
+         --cmd-file <the script below> --worktree <this worktree> \
+         --include bench/results/identity_break/2026-09-15_neighbors-rest \
+         --include bench/results/classical_host/2026-09-15-apple-m4-neighbors-rest \
+         --include bench/results/identity_break/2026-09-14_166-lanes \
+         --build core --sabotage-build core --vcpu 8 --lease 90 \
+         --envs default,test --out <out dir>        # add --rent to create it
 
-Builds on the M4, one core: the GPU `_mojolearn` binding and the core host
-binding compile.
+   The pod script (it was `scratchpad/nr/pod_leg_cmd.sh`, now gone; rewrite it
+   from these steps) must run, with `NEW` the seven lane names:
+   `identity_break --lanes $NEW --repeats 2` for the CPU column; the same
+   under `MOJOLEARN_HOST_DIR=python/mojolearn/host-sabotage
+   MOJOLEARN_HOST_ALLOW_SABOTAGE=1` for the sabotage column;
+   `identity_break --diff bench/results/identity_break/2026-09-15_neighbors-rest/apple-m4.json <cpu json>
+   --lanes $NEW --owed-json owed.json`; `tools/cpu_identity_gate_check.py owed`
+   with the production and sabotage JSONs; `classical_host_gate.py check
+   bench/results/classical_host/2026-09-15-apple-m4-neighbors-rest` and the
+   same with `--expect-mismatch --every-fixture` under the sabotage host set;
+   and `python3 -m mojolearn.tests.test_knn_extended_metrics`,
+   `test_knn_self_query` and `pytest python/mojolearn/tests/test_host_surface.py`.
+   WHAT IT MUST READ: Apple vs CPU IDENTICAL on all 63 cells with NVIDIA and
+   AMD OWED; every production cell part MOVED by the sabotage build; the gate
+   green in production and mismatching on every fixture under sabotage.
 
-## Resume
+4. THEN MERGE. `git merge origin/main`, `python3 tools/docs_facts.py --check`,
+   `python3 packaging/wheel_ci.py pins .`,
+   `python3 packaging/wheel_ci.py inventory python/mojolearn`, push HEAD:main,
+   confirm it landed, and remove the worktree.
 
-Worktree `wt-neighbors-rest` in the session scratchpad, branch
-`lane/neighbors-rest`.
+5. OWED BEYOND THIS LANE: the NVIDIA and AMD recordings and columns for the
+   seven lanes, at the next release record (no GPU box is rented between
+   releases). Evidence goes under
+   `bench/results/identity_break/2026-09-15_neighbors-rest/` (columns, with the
+   README there) and
+   `bench/results/classical_host/2026-09-15-apple-m4-neighbors-rest/` (the
+   saved-model recording, one directory per lane and fixture).
+
+## Not done, and not started
+
+`kneighbors_graph` / `radius_neighbors_graph` (scikit-learn's CSR wrappers
+over the two queries) are not in the TSV and were not attempted; they are
+pure host bookkeeping over calls that already exist, and scipy is not a
+dependency, so the return type would have to be decided first.

@@ -1,0 +1,313 @@
+NOTE: column apple-m4 hashed tokenizer at an older lane revision (LANE_REVISIONS); its 9 cell(s) there are not compared and read as absent
+NOTE: --lanes scopes this diff to 7 lane(s); 158 other lane(s) the JSONs carry are not compared
+FIXTURE MISMATCH on 'denormal': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    arm64: None
+FIXTURE MISMATCH on 'denormal_ftz': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    arm64: None
+FIXTURE MISMATCH on 'dupes': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+    arm64: None
+FIXTURE MISMATCH on 'hashed': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    arm64: None
+FIXTURE MISMATCH on 'negative': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    arm64: None
+FIXTURE MISMATCH on 'odd': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    arm64: None
+FIXTURE MISMATCH on 'ties': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '186fe2109fc34ad5', 'y_clf': 'f33cf521f758ae3c', 'y_reg': '047d4652a4d56bc3'}
+    arm64: None
+FIXTURE MISMATCH on 'wide': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    arm64: None
+HELD-OUT MISMATCH on 'denormal': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '5061056b118d07d0'}
+    arm64: None
+HELD-OUT MISMATCH on 'denormal_ftz': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'a8c3d1a560b5cabb'}
+    arm64: None
+HELD-OUT MISMATCH on 'dupes': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'e4b16c115962dfcd'}
+    arm64: None
+HELD-OUT MISMATCH on 'hashed': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '9dc786ade4574aff'}
+    arm64: None
+HELD-OUT MISMATCH on 'negative': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '45b539a3f66ce25d'}
+    arm64: None
+HELD-OUT MISMATCH on 'odd': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '32ea0bbed60b8e6c'}
+    arm64: None
+HELD-OUT MISMATCH on 'ties': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'd1ba686494256660'}
+    arm64: None
+HELD-OUT MISMATCH on 'wide': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'd52a1af18a3c2f1c'}
+    arm64: None
+| lane/fixture                 | verdict    | apple-m4         | arm64            |
+|------------------------------|------------|------------------|------------------|
+| kde/base                     | ONE-COLUMN | e0d6e3d0623d6112 | REFUSED          |
+| kde/denormal                 | ONE-COLUMN | 2128392fe1eb228a | (not run)        |
+| kde/denormal_ftz             | ONE-COLUMN | 2128392fe1eb228a | (not run)        |
+| kde/dupes                    | ONE-COLUMN | e0d6e3d0623d6112 | (not run)        |
+| kde/hashed                   | ONE-COLUMN | dc279c30b7c5d070 | (not run)        |
+| kde/negative                 | ONE-COLUMN | 84ca35b6a157c265 | (not run)        |
+| kde/odd                      | ONE-COLUMN | 8a2b6beee09a98f3 | (not run)        |
+| kde/ties                     | ONE-COLUMN | 0a800c7b3cca66e4 | (not run)        |
+| kde/wide                     | ONE-COLUMN | 36c3cbb2ef71f768 | (not run)        |
+| knn-clf/base                 | IDENTICAL x2 | 7fb71bb7ee2b9cbf | 7fb71bb7ee2b9cbf |
+| knn-clf/denormal             | ONE-COLUMN | eb1e9c1b10e931a6 | (not run)        |
+| knn-clf/denormal_ftz         | ONE-COLUMN | eb1e9c1b10e931a6 | (not run)        |
+| knn-clf/dupes                | ONE-COLUMN | 855703a33d6460e5 | (not run)        |
+| knn-clf/hashed               | ONE-COLUMN | 9ddcb99c00d6b865 | (not run)        |
+| knn-clf/negative             | ONE-COLUMN | 14109bcae1b2b950 | (not run)        |
+| knn-clf/odd                  | ONE-COLUMN | b875a97832653115 | (not run)        |
+| knn-clf/ties                 | ONE-COLUMN | e49edb14ac08e443 | (not run)        |
+| knn-clf/wide                 | ONE-COLUMN | a3167e29faf6ab4f | (not run)        |
+| knn-cosine/base              | IDENTICAL x2 | be2fe881dd0df53e | be2fe881dd0df53e |
+| knn-cosine/denormal          | ONE-COLUMN | 418429e14db4ffde | (not run)        |
+| knn-cosine/denormal_ftz      | ONE-COLUMN | 418429e14db4ffde | (not run)        |
+| knn-cosine/dupes             | ONE-COLUMN | 283e29961c629516 | (not run)        |
+| knn-cosine/hashed            | ONE-COLUMN | 262d2662ebe6917c | (not run)        |
+| knn-cosine/negative          | ONE-COLUMN | 5daef21e2ef055c5 | (not run)        |
+| knn-cosine/odd               | ONE-COLUMN | 1b728c25890ac7d2 | (not run)        |
+| knn-cosine/ties              | ONE-COLUMN | 206c8bdc271bc1e7 | (not run)        |
+| knn-cosine/wide              | ONE-COLUMN | dbc33d7526b1322b | (not run)        |
+| knn-minkowski-p3/base        | IDENTICAL x2 | 29ae306635a3f3fb | 29ae306635a3f3fb |
+| knn-minkowski-p3/denormal    | ONE-COLUMN | 7a2a07ae9152e078 | (not run)        |
+| knn-minkowski-p3/denormal_ftz | ONE-COLUMN | 7a2a07ae9152e078 | (not run)        |
+| knn-minkowski-p3/dupes       | ONE-COLUMN | d38f7d7bbd7402ec | (not run)        |
+| knn-minkowski-p3/hashed      | ONE-COLUMN | a1f9bd7e2edb78b7 | (not run)        |
+| knn-minkowski-p3/negative    | ONE-COLUMN | eb221aadbb301af9 | (not run)        |
+| knn-minkowski-p3/odd         | ONE-COLUMN | 69c6535e725897e8 | (not run)        |
+| knn-minkowski-p3/ties        | ONE-COLUMN | bdcd5a382d301db9 | (not run)        |
+| knn-minkowski-p3/wide        | ONE-COLUMN | ec4a1f13d1b508e1 | (not run)        |
+| knn-reg/base                 | IDENTICAL x2 | 33e7da5c3fdd343c | 33e7da5c3fdd343c |
+| knn-reg/denormal             | ONE-COLUMN | 4c84ea510c9509c5 | (not run)        |
+| knn-reg/denormal_ftz         | ONE-COLUMN | 4c84ea510c9509c5 | (not run)        |
+| knn-reg/dupes                | ONE-COLUMN | 3bb71dcd3b676bd6 | (not run)        |
+| knn-reg/hashed               | ONE-COLUMN | 81f9b8890b3f8185 | (not run)        |
+| knn-reg/negative             | ONE-COLUMN | b34860cd7e03c8fe | (not run)        |
+| knn-reg/odd                  | ONE-COLUMN | 4fddd38927851559 | (not run)        |
+| knn-reg/ties                 | ONE-COLUMN | 556283a80ad1e387 | (not run)        |
+| knn-reg/wide                 | ONE-COLUMN | 0d128580a2408383 | (not run)        |
+| knn/base                     | IDENTICAL x2 | 6869ae45e01fcb7a | 6869ae45e01fcb7a |
+| knn/denormal                 | ONE-COLUMN | c5404ea40ba502da | (not run)        |
+| knn/denormal_ftz             | ONE-COLUMN | c5404ea40ba502da | (not run)        |
+| knn/dupes                    | ONE-COLUMN | 55dffcfe5d6aa112 | (not run)        |
+| knn/hashed                   | ONE-COLUMN | 96db6b5a57d4d248 | (not run)        |
+| knn/negative                 | ONE-COLUMN | b73513bc451075d0 | (not run)        |
+| knn/odd                      | ONE-COLUMN | f4ddd08c4744ae8d | (not run)        |
+| knn/ties                     | ONE-COLUMN | 23daf3a923d4c74f | (not run)        |
+| knn/wide                     | ONE-COLUMN | 3956d623d56e1786 | (not run)        |
+| radius/base                  | IDENTICAL x2 | b4fa4ebf9623f5d0 | b4fa4ebf9623f5d0 |
+| radius/denormal              | ONE-COLUMN | b31c83097872381e | (not run)        |
+| radius/denormal_ftz          | ONE-COLUMN | b31c83097872381e | (not run)        |
+| radius/dupes                 | ONE-COLUMN | ad02d42d5b3fded7 | (not run)        |
+| radius/hashed                | ONE-COLUMN | cdc57602d696879d | (not run)        |
+| radius/negative              | ONE-COLUMN | 4b7b50fe64e2d7af | (not run)        |
+| radius/odd                   | ONE-COLUMN | 99a3e94304f0d55a | (not run)        |
+| radius/ties                  | ONE-COLUMN | d4e4484a004f4042 | (not run)        |
+| radius/wide                  | ONE-COLUMN | 4ea06c29cad72c3a | (not run)        |
+
+summary: IDENTICAL=6, ONE-COLUMN=57
+
+| lane/fixture                 | column | verdict      | apple-m4         | arm64            |
+|------------------------------|--------|--------------|------------------|------------------|
+| kde/base                     | infer  | ONE-COLUMN   | 1a2c3054b661b72a | REFUSED          |
+| kde/base                     | model  | ONE-COLUMN   | cd5469f3b8854867 | REFUSED          |
+| kde/base                     | batch  | ONE-COLUMN   | 6651a609fb572c44 | REFUSED          |
+| kde/denormal                 | infer  | ONE-COLUMN   | 21caf753bc5b6352 | (not run)        |
+| kde/denormal                 | model  | ONE-COLUMN   | ddc0470537b3c6d1 | (not run)        |
+| kde/denormal                 | batch  | ONE-COLUMN   | 3057d72e4203ed59 | (not run)        |
+| kde/denormal_ftz             | infer  | ONE-COLUMN   | 21caf753bc5b6352 | (not run)        |
+| kde/denormal_ftz             | model  | ONE-COLUMN   | 6e413286a1f8aebb | (not run)        |
+| kde/denormal_ftz             | batch  | ONE-COLUMN   | 3057d72e4203ed59 | (not run)        |
+| kde/dupes                    | infer  | ONE-COLUMN   | 1a2c3054b661b72a | (not run)        |
+| kde/dupes                    | model  | ONE-COLUMN   | cd5469f3b8854867 | (not run)        |
+| kde/dupes                    | batch  | ONE-COLUMN   | 6651a609fb572c44 | (not run)        |
+| kde/hashed                   | infer  | ONE-COLUMN   | f0d1cae79c88ca8a | (not run)        |
+| kde/hashed                   | model  | ONE-COLUMN   | 9d8fc4cff3c9ae8e | (not run)        |
+| kde/hashed                   | batch  | ONE-COLUMN   | e2fba14a5348aab0 | (not run)        |
+| kde/negative                 | infer  | ONE-COLUMN   | 30a64b99c13a89c4 | (not run)        |
+| kde/negative                 | model  | ONE-COLUMN   | 14b5ed33ef52d808 | (not run)        |
+| kde/negative                 | batch  | ONE-COLUMN   | 652c907c19e1f656 | (not run)        |
+| kde/odd                      | infer  | ONE-COLUMN   | e49f797e443af916 | (not run)        |
+| kde/odd                      | model  | ONE-COLUMN   | eaf7436bbd4ff68f | (not run)        |
+| kde/odd                      | batch  | ONE-COLUMN   | 0c6fa88005d660ff | (not run)        |
+| kde/ties                     | infer  | ONE-COLUMN   | 63b4da91ce458ab7 | (not run)        |
+| kde/ties                     | model  | ONE-COLUMN   | c6b86284b81d2eea | (not run)        |
+| kde/ties                     | batch  | ONE-COLUMN   | 42cfc4523132cd86 | (not run)        |
+| kde/wide                     | infer  | ONE-COLUMN   | 39622885a3c508a9 | (not run)        |
+| kde/wide                     | model  | ONE-COLUMN   | 4d511b1377a350b9 | (not run)        |
+| kde/wide                     | batch  | ONE-COLUMN   | ff463469d5431eea | (not run)        |
+| knn-clf/base                 | infer  | IDENTICAL x2 | 8381d6badb2ee31b | 8381d6badb2ee31b |
+| knn-clf/base                 | model  | IDENTICAL x2 | f0b9be0fd408466b | f0b9be0fd408466b |
+| knn-clf/base                 | batch  | IDENTICAL x2 | ae9a520d4ce52431 | ae9a520d4ce52431 |
+| knn-clf/denormal             | infer  | ONE-COLUMN   | 3b26081dcfb54057 | (not run)        |
+| knn-clf/denormal             | model  | ONE-COLUMN   | 3ae6ad51532e6887 | (not run)        |
+| knn-clf/denormal             | batch  | ONE-COLUMN   | d72e6008f74ab0fa | (not run)        |
+| knn-clf/denormal_ftz         | infer  | ONE-COLUMN   | 3b26081dcfb54057 | (not run)        |
+| knn-clf/denormal_ftz         | model  | ONE-COLUMN   | 02916106bd5f4a5c | (not run)        |
+| knn-clf/denormal_ftz         | batch  | ONE-COLUMN   | d72e6008f74ab0fa | (not run)        |
+| knn-clf/dupes                | infer  | ONE-COLUMN   | 20ea108e0746b7e5 | (not run)        |
+| knn-clf/dupes                | model  | ONE-COLUMN   | 937c7d9ac1a87689 | (not run)        |
+| knn-clf/dupes                | batch  | ONE-COLUMN   | 6dc9aed4d01ef3d6 | (not run)        |
+| knn-clf/hashed               | infer  | ONE-COLUMN   | 7e895e275d390d17 | (not run)        |
+| knn-clf/hashed               | model  | ONE-COLUMN   | e87300eff71e3476 | (not run)        |
+| knn-clf/hashed               | batch  | ONE-COLUMN   | aaf1244bb82e7340 | (not run)        |
+| knn-clf/negative             | infer  | ONE-COLUMN   | 4a407720c8a6509a | (not run)        |
+| knn-clf/negative             | model  | ONE-COLUMN   | 1043a59bb6257373 | (not run)        |
+| knn-clf/negative             | batch  | ONE-COLUMN   | b63e40ed33fd3d37 | (not run)        |
+| knn-clf/odd                  | infer  | ONE-COLUMN   | a593e7cc3b0f8144 | (not run)        |
+| knn-clf/odd                  | model  | ONE-COLUMN   | d52a45a13c74a487 | (not run)        |
+| knn-clf/odd                  | batch  | ONE-COLUMN   | 07d7acdc3bdcce71 | (not run)        |
+| knn-clf/ties                 | infer  | ONE-COLUMN   | d7292e53ec625170 | (not run)        |
+| knn-clf/ties                 | model  | ONE-COLUMN   | 02aa0eb5e36cffee | (not run)        |
+| knn-clf/ties                 | batch  | ONE-COLUMN   | 1135607d7c883ed4 | (not run)        |
+| knn-clf/wide                 | infer  | ONE-COLUMN   | b128c6dd4d428648 | (not run)        |
+| knn-clf/wide                 | model  | ONE-COLUMN   | 1823e75c34d7670f | (not run)        |
+| knn-clf/wide                 | batch  | ONE-COLUMN   | 76f0fdd33c616ffb | (not run)        |
+| knn-cosine/base              | infer  | IDENTICAL x2 | 45f87790aaba81b4 | 45f87790aaba81b4 |
+| knn-cosine/base              | model  | IDENTICAL x2 | a6427c8352b608b8 | a6427c8352b608b8 |
+| knn-cosine/base              | batch  | IDENTICAL x2 | 2f90783542f65771 | 2f90783542f65771 |
+| knn-cosine/denormal          | infer  | ONE-COLUMN   | b2cb64372b84fdec | (not run)        |
+| knn-cosine/denormal          | model  | ONE-COLUMN   | ec7c6213c976454a | (not run)        |
+| knn-cosine/denormal          | batch  | ONE-COLUMN   | b054dc4352bf7fc1 | (not run)        |
+| knn-cosine/denormal_ftz      | infer  | ONE-COLUMN   | b2cb64372b84fdec | (not run)        |
+| knn-cosine/denormal_ftz      | model  | ONE-COLUMN   | 3be498ee096ad3ea | (not run)        |
+| knn-cosine/denormal_ftz      | batch  | ONE-COLUMN   | b054dc4352bf7fc1 | (not run)        |
+| knn-cosine/dupes             | infer  | ONE-COLUMN   | ed02b98206dc7b42 | (not run)        |
+| knn-cosine/dupes             | model  | ONE-COLUMN   | 8b93c8f69f7f0dc1 | (not run)        |
+| knn-cosine/dupes             | batch  | ONE-COLUMN   | 7cb6ce3730f7e0f8 | (not run)        |
+| knn-cosine/hashed            | infer  | ONE-COLUMN   | 4d957fb8ee856b7f | (not run)        |
+| knn-cosine/hashed            | model  | ONE-COLUMN   | f0b5ec3e5c1ef41f | (not run)        |
+| knn-cosine/hashed            | batch  | ONE-COLUMN   | d1f6abda6f6933c8 | (not run)        |
+| knn-cosine/negative          | infer  | ONE-COLUMN   | e77cde5b09677ccb | (not run)        |
+| knn-cosine/negative          | model  | ONE-COLUMN   | 8a8c8987151691c5 | (not run)        |
+| knn-cosine/negative          | batch  | ONE-COLUMN   | 8b42ec13d87c8f1a | (not run)        |
+| knn-cosine/odd               | infer  | ONE-COLUMN   | 1187c6eebfa94235 | (not run)        |
+| knn-cosine/odd               | model  | ONE-COLUMN   | 355934afd7db6e52 | (not run)        |
+| knn-cosine/odd               | batch  | ONE-COLUMN   | 8790fff09ffbf24f | (not run)        |
+| knn-cosine/ties              | infer  | ONE-COLUMN   | ef08d9ae912ae104 | (not run)        |
+| knn-cosine/ties              | model  | ONE-COLUMN   | af099d8dc056f48b | (not run)        |
+| knn-cosine/ties              | batch  | ONE-COLUMN   | 128d2cd0620be187 | (not run)        |
+| knn-cosine/wide              | infer  | ONE-COLUMN   | 9f12a3eef1a18272 | (not run)        |
+| knn-cosine/wide              | model  | ONE-COLUMN   | 359d5ba839ede73e | (not run)        |
+| knn-cosine/wide              | batch  | ONE-COLUMN   | 26c0c4fe7ae8e3fc | (not run)        |
+| knn-minkowski-p3/base        | infer  | IDENTICAL x2 | b10c67db8cf2d93f | b10c67db8cf2d93f |
+| knn-minkowski-p3/base        | model  | IDENTICAL x2 | 2e10324808b3d9d2 | 2e10324808b3d9d2 |
+| knn-minkowski-p3/base        | batch  | IDENTICAL x2 | 1577ac7a8b38cc11 | 1577ac7a8b38cc11 |
+| knn-minkowski-p3/denormal    | infer  | ONE-COLUMN   | 98b8e77bc62484ca | (not run)        |
+| knn-minkowski-p3/denormal    | model  | ONE-COLUMN   | eda94d85fdc805a8 | (not run)        |
+| knn-minkowski-p3/denormal    | batch  | ONE-COLUMN   | 505da58bc23f7818 | (not run)        |
+| knn-minkowski-p3/denormal_ftz | infer  | ONE-COLUMN   | 98b8e77bc62484ca | (not run)        |
+| knn-minkowski-p3/denormal_ftz | model  | ONE-COLUMN   | cd0481cdfbb1ff69 | (not run)        |
+| knn-minkowski-p3/denormal_ftz | batch  | ONE-COLUMN   | 505da58bc23f7818 | (not run)        |
+| knn-minkowski-p3/dupes       | infer  | ONE-COLUMN   | 8763bf8d122dfa14 | (not run)        |
+| knn-minkowski-p3/dupes       | model  | ONE-COLUMN   | 41955aa18f1ba955 | (not run)        |
+| knn-minkowski-p3/dupes       | batch  | ONE-COLUMN   | 354baf95da2fa04e | (not run)        |
+| knn-minkowski-p3/hashed      | infer  | ONE-COLUMN   | 4466d12af0551e09 | (not run)        |
+| knn-minkowski-p3/hashed      | model  | ONE-COLUMN   | 86f268788d10f4e4 | (not run)        |
+| knn-minkowski-p3/hashed      | batch  | ONE-COLUMN   | 3bc4b7d4ff4a6bfc | (not run)        |
+| knn-minkowski-p3/negative    | infer  | ONE-COLUMN   | b48193f231cf831a | (not run)        |
+| knn-minkowski-p3/negative    | model  | ONE-COLUMN   | c6d62b82aba926ab | (not run)        |
+| knn-minkowski-p3/negative    | batch  | ONE-COLUMN   | c0f52f99a060ebbc | (not run)        |
+| knn-minkowski-p3/odd         | infer  | ONE-COLUMN   | 887742009da6b7bc | (not run)        |
+| knn-minkowski-p3/odd         | model  | ONE-COLUMN   | 9445d0f2e3fceb97 | (not run)        |
+| knn-minkowski-p3/odd         | batch  | ONE-COLUMN   | 9a7673ced9f48131 | (not run)        |
+| knn-minkowski-p3/ties        | infer  | ONE-COLUMN   | 8a62d9a7de10894d | (not run)        |
+| knn-minkowski-p3/ties        | model  | ONE-COLUMN   | ca7e170fd4dbb367 | (not run)        |
+| knn-minkowski-p3/ties        | batch  | ONE-COLUMN   | 8caf1dd2918bcb6c | (not run)        |
+| knn-minkowski-p3/wide        | infer  | ONE-COLUMN   | ca5b4480fc62c85a | (not run)        |
+| knn-minkowski-p3/wide        | model  | ONE-COLUMN   | cafdbe43eeca7368 | (not run)        |
+| knn-minkowski-p3/wide        | batch  | ONE-COLUMN   | bd5e8966f4b13a72 | (not run)        |
+| knn-reg/base                 | infer  | IDENTICAL x2 | 12b3c8b2763ae645 | 12b3c8b2763ae645 |
+| knn-reg/base                 | model  | IDENTICAL x2 | 7404b5d0a3a97d83 | 7404b5d0a3a97d83 |
+| knn-reg/base                 | batch  | IDENTICAL x2 | b8ade478bb62bf5e | b8ade478bb62bf5e |
+| knn-reg/denormal             | infer  | ONE-COLUMN   | 511f71a64fa48d7a | (not run)        |
+| knn-reg/denormal             | model  | ONE-COLUMN   | cb7e52aa73863e31 | (not run)        |
+| knn-reg/denormal             | batch  | ONE-COLUMN   | 87fa301773236d1d | (not run)        |
+| knn-reg/denormal_ftz         | infer  | ONE-COLUMN   | 511f71a64fa48d7a | (not run)        |
+| knn-reg/denormal_ftz         | model  | ONE-COLUMN   | 5b7edbee629a2813 | (not run)        |
+| knn-reg/denormal_ftz         | batch  | ONE-COLUMN   | 87fa301773236d1d | (not run)        |
+| knn-reg/dupes                | infer  | ONE-COLUMN   | 0e04bd5ca4150340 | (not run)        |
+| knn-reg/dupes                | model  | ONE-COLUMN   | dd4b16d90ea35aff | (not run)        |
+| knn-reg/dupes                | batch  | ONE-COLUMN   | bc58853db91cdeff | (not run)        |
+| knn-reg/hashed               | infer  | ONE-COLUMN   | 4223804b361954e6 | (not run)        |
+| knn-reg/hashed               | model  | ONE-COLUMN   | 0ed94f6eaca5e6f1 | (not run)        |
+| knn-reg/hashed               | batch  | ONE-COLUMN   | e9c4afd946b506a0 | (not run)        |
+| knn-reg/negative             | infer  | ONE-COLUMN   | ca725c74b7aec59b | (not run)        |
+| knn-reg/negative             | model  | ONE-COLUMN   | 66c3df348fcdf3b4 | (not run)        |
+| knn-reg/negative             | batch  | ONE-COLUMN   | 80ad7ed317afc40e | (not run)        |
+| knn-reg/odd                  | infer  | ONE-COLUMN   | e53e4bfa78bd428a | (not run)        |
+| knn-reg/odd                  | model  | ONE-COLUMN   | abb699bdbb2dd963 | (not run)        |
+| knn-reg/odd                  | batch  | ONE-COLUMN   | 218893ea011aba99 | (not run)        |
+| knn-reg/ties                 | infer  | ONE-COLUMN   | fcbc1a112c60d1d0 | (not run)        |
+| knn-reg/ties                 | model  | ONE-COLUMN   | 059724706575c43d | (not run)        |
+| knn-reg/ties                 | batch  | ONE-COLUMN   | 449e141f98be2c2c | (not run)        |
+| knn-reg/wide                 | infer  | ONE-COLUMN   | 4b2e95d49bb291c5 | (not run)        |
+| knn-reg/wide                 | model  | ONE-COLUMN   | 42c9143b5b930be3 | (not run)        |
+| knn-reg/wide                 | batch  | ONE-COLUMN   | 15a5a7f409deb7f8 | (not run)        |
+| knn/base                     | infer  | IDENTICAL x2 | da53642fe53493ad | da53642fe53493ad |
+| knn/base                     | model  | IDENTICAL x2 | 2262556d652b5187 | 2262556d652b5187 |
+| knn/base                     | batch  | IDENTICAL x2 | b943759962b58dd3 | b943759962b58dd3 |
+| knn/denormal                 | infer  | ONE-COLUMN   | 32426a86a46b417f | (not run)        |
+| knn/denormal                 | model  | ONE-COLUMN   | d2ef07879ac4916e | (not run)        |
+| knn/denormal                 | batch  | ONE-COLUMN   | d84a33018ec03c57 | (not run)        |
+| knn/denormal_ftz             | infer  | ONE-COLUMN   | 32426a86a46b417f | (not run)        |
+| knn/denormal_ftz             | model  | ONE-COLUMN   | 771d0d3df6d1d2ac | (not run)        |
+| knn/denormal_ftz             | batch  | ONE-COLUMN   | d84a33018ec03c57 | (not run)        |
+| knn/dupes                    | infer  | ONE-COLUMN   | 6776f2a2ef1528ee | (not run)        |
+| knn/dupes                    | model  | ONE-COLUMN   | 0f847e465f0fce2d | (not run)        |
+| knn/dupes                    | batch  | ONE-COLUMN   | c3ca00def42aa6e6 | (not run)        |
+| knn/hashed                   | infer  | ONE-COLUMN   | 906e8d5ef7d91305 | (not run)        |
+| knn/hashed                   | model  | ONE-COLUMN   | 924ef8b2b10467f0 | (not run)        |
+| knn/hashed                   | batch  | ONE-COLUMN   | 36f87a74d8e63d7e | (not run)        |
+| knn/negative                 | infer  | ONE-COLUMN   | aa5dd33322e1cb78 | (not run)        |
+| knn/negative                 | model  | ONE-COLUMN   | 5f934babcd0bc097 | (not run)        |
+| knn/negative                 | batch  | ONE-COLUMN   | 463c61ecae0ba9ba | (not run)        |
+| knn/odd                      | infer  | ONE-COLUMN   | ef7c64cd35cc99ad | (not run)        |
+| knn/odd                      | model  | ONE-COLUMN   | 8e7ac0d7c257cac6 | (not run)        |
+| knn/odd                      | batch  | ONE-COLUMN   | 40a0d676a63306ea | (not run)        |
+| knn/ties                     | infer  | ONE-COLUMN   | 234e9e649f45c983 | (not run)        |
+| knn/ties                     | model  | ONE-COLUMN   | 4049122e7b37a94e | (not run)        |
+| knn/ties                     | batch  | ONE-COLUMN   | be9dd86463c63469 | (not run)        |
+| knn/wide                     | infer  | ONE-COLUMN   | 3173e563e425be1c | (not run)        |
+| knn/wide                     | model  | ONE-COLUMN   | 244f616088763b08 | (not run)        |
+| knn/wide                     | batch  | ONE-COLUMN   | 2a40f9f684c1406d | (not run)        |
+| radius/base                  | infer  | IDENTICAL x2 | 3eb3a2ab621fbb97 | 3eb3a2ab621fbb97 |
+| radius/base                  | model  | ONE-COLUMN   | n/a:no-save      | 2ee81955e923d21f |
+| radius/base                  | batch  | IDENTICAL x2 | 82dc025f5d11958f | 82dc025f5d11958f |
+| radius/denormal              | infer  | ONE-COLUMN   | 0d8e5847c0de67f1 | (not run)        |
+| radius/denormal              | model  | N/A          | n/a:no-save      | (not run)        |
+| radius/denormal              | batch  | ONE-COLUMN   | 077d53f576613c46 | (not run)        |
+| radius/denormal_ftz          | infer  | ONE-COLUMN   | 0d8e5847c0de67f1 | (not run)        |
+| radius/denormal_ftz          | model  | N/A          | n/a:no-save      | (not run)        |
+| radius/denormal_ftz          | batch  | ONE-COLUMN   | 077d53f576613c46 | (not run)        |
+| radius/dupes                 | infer  | ONE-COLUMN   | 469e7731aa72a0fd | (not run)        |
+| radius/dupes                 | model  | N/A          | n/a:no-save      | (not run)        |
+| radius/dupes                 | batch  | ONE-COLUMN   | 4d7333803753c329 | (not run)        |
+| radius/hashed                | infer  | ONE-COLUMN   | 362bee6da9e01a6a | (not run)        |
+| radius/hashed                | model  | N/A          | n/a:no-save      | (not run)        |
+| radius/hashed                | batch  | ONE-COLUMN   | 61666507b6f28324 | (not run)        |
+| radius/negative              | infer  | ONE-COLUMN   | 9a8506316edc0a0a | (not run)        |
+| radius/negative              | model  | N/A          | n/a:no-save      | (not run)        |
+| radius/negative              | batch  | ONE-COLUMN   | 232527c96d938269 | (not run)        |
+| radius/odd                   | infer  | ONE-COLUMN   | ef0450b6bc48f488 | (not run)        |
+| radius/odd                   | model  | N/A          | n/a:no-save      | (not run)        |
+| radius/odd                   | batch  | ONE-COLUMN   | a47b832ad72fd8ef | (not run)        |
+| radius/ties                  | infer  | ONE-COLUMN   | 5f3eec45e2afb437 | (not run)        |
+| radius/ties                  | model  | N/A          | n/a:no-save      | (not run)        |
+| radius/ties                  | batch  | ONE-COLUMN   | 92534521f997d952 | (not run)        |
+| radius/wide                  | infer  | ONE-COLUMN   | 2561486a5ba9ea00 | (not run)        |
+| radius/wide                  | model  | N/A          | n/a:no-save      | (not run)        |
+| radius/wide                  | batch  | ONE-COLUMN   | 512219b638664e57 | (not run)        |
+
+summary (infer/model): IDENTICAL=11, N/A=8, ONE-COLUMN=107
+summary (batch): IDENTICAL=6, ONE-COLUMN=57
+summary (rlpair): 
