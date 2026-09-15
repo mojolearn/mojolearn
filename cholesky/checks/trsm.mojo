@@ -68,13 +68,7 @@ with its own banner saying it is unreachable from any identity path here.
 from std.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
-from core.multi_gpu import peer_clone
-from cholesky.multi_gpu import (
-    CholSolveShard,
-    chol_device_count,
-    chol_gather_columns,
-    chol_scatter_columns,
-)
+from cholesky.multi_gpu import CholSolveShard, chol_device_count
 
 from core.identity_trace import IdentityTrace
 from cholesky.checks.chol_sabotage import (
@@ -410,40 +404,6 @@ def cho_solve(
     trsm_upper(ctx, l, b, n, nrhs, trace, "chol.solve.back", tpb, sabotage)
 
 
-def _transport_diag(
-    ctx: DeviceContext,
-    device: DeviceContext,
-    mut source: DeviceBuffer[DType.float32],
-    mut target: DeviceBuffer[DType.float32],
-    rank: Int,
-    what: String,
-) raises:
-    """Check-only (MOJOLEARN_CHOLESKY_TRANSPORT_DIAG): download a root buffer
-    and its owner copy and print how many cells differ."""
-    var n = len(source)
-    var hs = ctx.enqueue_create_host_buffer[DType.float32](n)
-    var ht = device.enqueue_create_host_buffer[DType.float32](n)
-    ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=source)
-    device.enqueue_copy(dst_ptr=ht.unsafe_ptr(), src_buf=target)
-    ctx.synchronize()
-    device.synchronize()
-    var bad = 0
-    var first = -1
-    var zeros = 0
-    for i in range(n):
-        var a = hs.unsafe_ptr()[i]
-        var b = ht.unsafe_ptr()[i]
-        if b == Float32(0.0):
-            zeros += 1
-        if a != b:
-            bad += 1
-            if first < 0:
-                first = i
-    print("TRANSPORT rank", rank, what, "cells", n, "differing", bad, "first", first, "target zeros", zeros)
-    _ = hs^
-    _ = ht^
-
-
 def _cho_solve_columns(
     ctx: DeviceContext,
     mut l: DeviceBuffer[DType.float32],
@@ -465,6 +425,20 @@ def _cho_solve_columns(
     if n > 2147483647 // nrhs:
         raise Error("multi-GPU cho_solve exceeds signed 32-bit indexing")
     var active = min(count, nrhs)
+    # HOST STAGED. The factor and the right-hand sides are read back once;
+    # every owner receives its bytes from host memory through its own
+    # context, and every owner's result comes back to host memory before it
+    # is scattered. No device-to-device copy and no root gather kernel is
+    # involved: the device-to-device form diverged on two MI300X for every
+    # factor above 1 MiB (n >= 513) in the columns owned by device 1, and
+    # passed when the owner's copies were read back before the solve
+    # (bench/results/multi_gpu/2026-09-14/cholesky-mi300x-diag/).
+    var host_l = ctx.enqueue_create_host_buffer[DType.float32](n * n)
+    var host_b = ctx.enqueue_create_host_buffer[DType.float32](n * nrhs)
+    var lv = l.create_sub_buffer[DType.float32](0, n * n)
+    var bv = b.create_sub_buffer[DType.float32](0, n * nrhs)
+    ctx.enqueue_copy(dst_ptr=host_l.unsafe_ptr(), src_buf=lv)
+    ctx.enqueue_copy(dst_ptr=host_b.unsafe_ptr(), src_buf=bv)
     ctx.synchronize()
     var shards = List[CholSolveShard]()
     for rank in range(active):
@@ -475,19 +449,16 @@ def _cho_solve_columns(
             if rank > 0:
                 source = first - 1
         var device = DeviceContext(device_id=rank)
-        var packed = chol_gather_columns(ctx, b, n, nrhs, source, width)
-        var sb = peer_clone(ctx, device, packed)
-        var sl = peer_clone(ctx, device, l)
-        # Both ends drain before the gathered source is released: a
-        # cross-device copy is not known to be complete when only its source
-        # stream has drained (the MI300X leg of 2026-09-14 23:05Z diverged in
-        # the forward stage at n=513, two right-hand sides, with the source
-        # released first).
+        var packed = device.enqueue_create_host_buffer[DType.float32](n * width)
         device.synchronize()
-        ctx.synchronize()
-        comptime if is_defined["MOJOLEARN_CHOLESKY_TRANSPORT_DIAG"]():
-            _transport_diag(ctx, device, packed, sb, rank, "columns")
-            _transport_diag(ctx, device, l, sl, rank, "factor")
+        for i in range(n):
+            for c in range(width):
+                packed.unsafe_ptr()[i * width + c] = host_b.unsafe_ptr()[i * nrhs + source + c]
+        var sb = device.enqueue_create_buffer[DType.float32](n * width)
+        var sl = device.enqueue_create_buffer[DType.float32](n * n)
+        device.enqueue_copy(dst_buf=sb, src_ptr=packed.unsafe_ptr())
+        device.enqueue_copy(dst_buf=sl, src_ptr=host_l.unsafe_ptr())
+        device.synchronize()
         _ = packed^
         shards.append(CholSolveShard(device^, sl^, sb^, first, width))
     var quiet = IdentityTrace.disabled()
@@ -500,17 +471,22 @@ def _cho_solve_columns(
                 trsm_upper(s.ctx, s.l, s.b, n, s.width, quiet, "chol.solve.back", tpb)
         for rank in range(active):
             ref s = shards[rank]
+            var result = s.ctx.enqueue_create_host_buffer[DType.float32](n * s.width)
+            s.ctx.enqueue_copy(dst_ptr=result.unsafe_ptr(), src_buf=s.b)
             s.ctx.synchronize()
-            var staged = ctx.enqueue_create_buffer[DType.float32](n * s.width)
-            ctx.synchronize()
-            s.b.enqueue_copy_to(staged)
-            s.ctx.synchronize()
-            ctx.synchronize()
-            chol_scatter_columns(ctx, b, staged, n, nrhs, s.first, s.width)
-            _ = staged^
+            for i in range(n):
+                for c in range(s.width):
+                    host_b.unsafe_ptr()[i * nrhs + s.first + c] = result.unsafe_ptr()[i * s.width + c]
+            _ = result^
+        ctx.enqueue_copy(dst_buf=bv, src_ptr=host_b.unsafe_ptr())
+        ctx.synchronize()
         if stage == 0:
             trace.record_device(ctx, "chol.solve.forward", b, n * nrhs)
         else:
             trace.record_device(ctx, "chol.solve.back", b, n * nrhs)
     _ = shards^
+    _ = lv^
+    _ = bv^
+    _ = host_l^
+    _ = host_b^
     ctx.synchronize()
