@@ -49,7 +49,7 @@ propagation and the relabel; `sample_weight` and an explicit
 `qn_fit` over `glm/host/qn_oracle.mojo` (the L-BFGS arm of cuML's
 quasi-Newton solver with the binary logistic loss; the softmax loss, an l1
 or elasticnet penalty and `sample_weight` refused by name). Every other
-function of the GPU binding (pca_fit_full, inverse_transform, ...) is
+function of the GPU binding (inverse_transform, ...) is
 deliberately absent, so those surfaces refuse BY NAME through
 `_HostBinding` and never hash something else.
 """
@@ -87,6 +87,10 @@ from decomposition.host.pca_oracle import (
     host_pca_fit,
     host_pca_validate,
     host_tsvd_fit,
+)
+from decomposition.host.pca_full_oracle import (
+    host_pca_fit_full,
+    host_pca_full_validate,
 )
 from glm.host.glm_oracle import host_ols_fit, host_ridge_fit
 from glm.host.qn_oracle import QN_ORACLE_HOST_SABOTAGE, host_qn_fit
@@ -234,8 +238,9 @@ def kde_score_samples_binding(
 # GPU binding's `pca_fit`, `tsvd_fit`, `ols_fit` and `ridge_fit`, same
 # names, same arity, same params lists, over decomposition/host/pca_oracle.mojo
 # and glm/host/glm_oracle.mojo; batch 2 adds `qn_fit` over
-# glm/host/qn_oracle.mojo. `pca_fit_full` (the R-SVD arm) and
-# `inverse_transform` stay absent and refuse BY NAME.
+# glm/host/qn_oracle.mojo; the pca-full-whiten lane adds `pca_fit_full`
+# (the R-SVD arm, tall matrices) over decomposition/host/pca_full_oracle.mojo.
+# `inverse_transform` stays absent and refuses BY NAME.
 # ===========================================================================
 
 
@@ -269,6 +274,49 @@ def pca_fit_binding(
         host_pca_validate_first(nr, nf, nc)
         var x = read_f32(x_address, nr * nf)
         var fit = host_pca_fit(x, nr, nf, nc)
+        for i in range(nc * nf):
+            cp[i] = Float32(fit.result.components[i])
+        for i in range(nc):
+            ep[i] = Float32(fit.result.explained_var[i])
+            rp[i] = Float32(fit.result.explained_var_ratio[i])
+            sp[i] = Float32(fit.result.singular_vals[i])
+        for i in range(nf):
+            mp[i] = fit.mean[i]
+        noise = fit.result.noise_var
+    return PythonObject(noise)
+
+
+def pca_fit_full_binding(
+    x_addr: PythonObject,
+    components_addr: PythonObject,
+    mean_addr: PythonObject,
+    explained_addr: PythonObject,
+    ratio_addr: PythonObject,
+    singular_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`PCA.fit` with svd_solver='full' on the host by `host_pca_fit_full`
+    (decomposition/host/pca_full_oracle.mojo, the pca-full-whiten lane): the
+    GPU binding's contract, params `n_rows, n_features, n_components`, the
+    five public arrays written, the noise variance returned. The shape
+    refusals are `pca_full_validate`'s, raised BEFORE anything is read; a
+    wide matrix is refused by name (the host carries the tall route only)."""
+    if len(params) != 3:
+        raise Error("pca_fit_full: params must contain n_rows, n_features, n_components")
+    var x_address = _index(x_addr)
+    var cp = f32_ptr(_index(components_addr))
+    var mp = f32_ptr(_index(mean_addr))
+    var ep = f32_ptr(_index(explained_addr))
+    var rp = f32_ptr(_index(ratio_addr))
+    var sp = f32_ptr(_index(singular_addr))
+    var nr = _index(params[0])
+    var nf = _index(params[1])
+    var nc = _index(params[2])
+    host_pca_full_validate(nr, nf, nc)
+    var noise = Float64(0.0)
+    with GILReleased(Python()):
+        var x = read_f32(x_address, nr * nf)
+        var fit = host_pca_fit_full(x, nr, nf, nc)
         for i in range(nc * nf):
             cp[i] = Float32(fit.result.components[i])
         for i in range(nc):
@@ -378,15 +426,16 @@ def qn_fit_binding(
     info_addr: PythonObject,
     params: PythonObject,
 ) raises -> PythonObject:
-    """`qnFit` on the host by `host_qn_fit` (the L-BFGS arm, the binary
-    logistic loss). params: n_rows, n_features, n_classes, penalty_l1,
-    penalty_l2, grad_tol, change_tol, max_iter, linesearch_max_iter,
-    lbfgs_memory, fit_intercept, penalty_normalized, has_sample_weight,
-    and an OPTIONAL 14th, the loss id (QN_LOSS_LOGISTIC, the value a
-    13-field call gets). `coef_addr` holds `n_features + fit_intercept`
-    floats, written; `info_addr[0]` receives the objective, `[1]` the
-    OPT_RETCODE; returns num_iters. The softmax loss, an l1 penalty and
-    `sample_weight` are refused BY NAME before any address is read."""
+    """`qnFit` on the host by `host_qn_fit` (L-BFGS, or OWL-QN when the
+    l1 penalty is nonzero; the binary logistic loss, or the softmax loss at
+    `n_classes > 2`, lane/cpu-training-batch3). params: n_rows, n_features,
+    n_classes, penalty_l1, penalty_l2, grad_tol, change_tol, max_iter,
+    linesearch_max_iter, lbfgs_memory, fit_intercept, penalty_normalized,
+    has_sample_weight, and an OPTIONAL 14th, the loss id (QN_LOSS_LOGISTIC,
+    the value a 13-field call gets). `coef_addr` holds `n_targets *
+    (n_features + fit_intercept)` floats, written; `info_addr[0]` receives
+    the objective, `[1]` the OPT_RETCODE; returns num_iters.
+    `sample_weight` is refused BY NAME."""
     if len(params) != 13 and len(params) != 14:
         raise Error("qn_fit: params must carry the 13 qn_params fields, plus an optional 14th, the loss id")
     var x_address = _index(x_addr)
@@ -437,8 +486,9 @@ def dbscan_fit_binding(
     max_iter, eps_nn_method, metric`; `weight_addr` 0 for no weights),
     `n_rows` int32 labels written, the propagation pass count returned
     (the one-thread schedule's; no column hashes it). `weight_addr != 0`
-    and `budget_mb != 0` are refused BY NAME: the weighted core fold and
-    the device-sized batch have no host restatement yet."""
+    reads `n_rows` float32 weights and takes the weighted core test
+    (`host_weighted_degree`, lane/cpu-training-batch3). `budget_mb != 0` is
+    refused BY NAME: the device-sized batch has no host restatement."""
     if len(params) != 8:
         raise Error(
             "dbscan_fit: params must contain 8 values, got "
@@ -455,14 +505,6 @@ def dbscan_fit_binding(
     var max_iter = _index(params[5])
     var eps_nn_method = _index(params[6])
     var metric = _index(params[7])
-    if wa != 0:
-        raise Error(
-            "mojolearn: no CPU implementation of DBSCAN.fit with sample_weight"
-            " yet; the weighted core test is a pinned float fold over the"
-            " neighbor list in the device's write order and is owed with a"
-            " GPU record that carries the dbscan-weighted lane"
-            " (docs/lanes/BRIEF_cpu_training_2026-09-13.md)"
-        )
     if budget != 0:
         raise Error(
             "mojolearn: no CPU implementation of DBSCAN.fit with"
@@ -479,8 +521,12 @@ def dbscan_fit_binding(
                 + String(nf)
             )
         var x = read_f32(x_address, nr * nf)
+        var weights = List[Float32]()
+        if wa != 0:
+            weights = read_f32(wa, nr)
         var fit = host_dbscan_fit(
-            x, nr, nf, eps, min_samples, max_iter, eps_nn_method, metric
+            x, nr, nf, eps, min_samples, max_iter, eps_nn_method, metric,
+            weights, wa != 0,
         )
         for i in range(nr):
             lp[i] = fit.labels[i]
@@ -798,6 +844,7 @@ def PyInit__mojolearn_estimators_host() abi("C") -> PythonObject:
         module.def_function[estimators_numeric_mode_binding]("estimators_numeric_mode")
         module.def_function[kde_score_samples_binding]("kde_score_samples")
         module.def_function[pca_fit_binding]("pca_fit")
+        module.def_function[pca_fit_full_binding]("pca_fit_full")
         module.def_function[tsvd_fit_binding]("tsvd_fit")
         module.def_function[ols_fit_binding]("ols_fit")
         module.def_function[ridge_fit_binding]("ridge_fit")
