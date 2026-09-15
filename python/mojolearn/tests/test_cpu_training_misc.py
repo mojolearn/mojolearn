@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CPU training for the misc lanes (lane/cpu-training-misc, 2026-09-15):
-kmeans-sqrt, kmeans-classic-pp, kmeans-cosine and cross-val, checked from
+kmeans-sqrt, kmeans-classic-pp, kmeans-cosine, cross-val, bootstrap,
+permutation-test and monte-carlo, checked from
 SOURCE so it runs on a box with nothing built, plus runtime checks that run
 only where the host bindings are built and the package took the CPU-only
 path.
@@ -18,12 +19,17 @@ in the covered step and in the sabotage step; `python -m mojolearn identity`
 runs only the record set on a CPU-only install; the core host binding
 registers `gather_rows_bytes` (cross_val_score's fold rows) under the base
 binding's name, and the oracle refuses the cosine metric in the device's
-words.
+words; the resample family routes `_mojolearn_resample` to its own host
+binding, which registers the GPU binding's three entries and read-backs and
+not the multi-GPU range probe, and whose oracle imports no GPU module, calls
+the device path's own host stages and carries the sabotage arm.
 
 The runtime checks (skipped, and SAID to be skipped, when a binding is
 absent or a GPU set loaded): `KMeans(metric='cosine')` refuses with the
 device's sentence; the fold-row gather returns the rows a Python index
-returns, byte for byte, and refuses an out-of-range index before writing.
+returns, byte for byte, and refuses an out-of-range index before writing;
+a bootstrap run twice returns the same bytes and its `r_first` slice equals
+the whole run's, and the range probe refuses by name.
 The bit claim against the GPU columns is the CPU identity gate's.
 
     cd python && python3 -m mojolearn.tests.test_cpu_training_misc
@@ -40,6 +46,9 @@ ROOT = Path(__file__).resolve().parents[3]
 
 KMEANS_LANES = ("kmeans-sqrt", "kmeans-classic-pp", "kmeans-cosine")
 KMEANS_ORACLE = "cluster/host/kmeans_oracle.mojo"
+RESAMPLE_ORACLE = "resample/host/resample_host.mojo"
+RESAMPLE_LANES = ("bootstrap", "permutation-test", "monte-carlo")
+GPU_IMPORTS = re.compile(r"^\s*from\s+(max\.gpu|std\.gpu)", re.M)
 COSINE_REFUSAL = "kmeans only supports L2Expanded or L2SqrtExpanded distance metrics."
 FIXTURES = ("base", "ties", "hashed", "wide", "denormal", "denormal_ftz", "dupes", "odd", "negative")
 
@@ -131,6 +140,40 @@ def test_oracle_refuses_cosine_in_the_device_words():
     assert COSINE_REFUSAL in params, "the device's refusal sentence moved; the oracle must follow it"
 
 
+def test_manifest_covers_the_resample_lanes():
+    fam = host_surface.family("resample")
+    assert host_surface.routed_modules()["_mojolearn_resample"] == "_mojolearn_resample_host"
+    for lane in RESAMPLE_LANES:
+        assert lane in host_surface.record_covered_lanes(), f"{lane} is not a record-covered lane"
+        assert lane in fam["training_lanes"]
+    assert RESAMPLE_ORACLE in fam["host_modules"] and (ROOT / RESAMPLE_ORACLE).is_file()
+    src = _read(host_surface.binding_source("resample"))
+    gpu = _read("bindings/_mojolearn_resample.mojo")
+    for name in ("bootstrap", "permutation_test", "monte_carlo_integrate", "resample_numeric_mode", "resample_vendor"):
+        assert f'("{name}")' in src and f'("{name}")' in gpu, name
+        assert name in fam["exports"], name
+    assert '("resample_ranges_parallel_available")' in gpu
+    assert "resample_ranges_parallel_available" not in re.findall(r'def_function\[\w+\]\("(\w+)"\)', src)
+    assert (ROOT / host_surface.build_shim("resample")).is_file()
+
+
+def test_resample_oracle_is_host_only_and_sabotaged():
+    text = _read(RESAMPLE_ORACLE)
+    assert not GPU_IMPORTS.search(text), f"{RESAMPLE_ORACLE} imports a GPU module"
+    assert not re.search(r"^\s*from .*import.*DeviceContext", text, re.M)
+    assert not re.search(r"^\s*from resample\.estimator import", text, re.M), "the oracle must not import the device entry points"
+    for stage in ("permutation_pvalue", "distribution_standard_error", "percentile_interval",
+                  "basic_interval", "narrow_for_alternative", "mc_finish_host", "draw_row_index",
+                  "draw_permutation_key", "draw_uniform_in", "float_to_sortable"):
+        assert stage in text, f"{RESAMPLE_ORACLE} does not call {stage}"
+    define = host_surface.sabotage_define("resample")
+    assert f'is_defined["{define}"]()' in text
+    assert "comptime if RESAMPLE_HOST_SABOTAGE:" in text
+    assert "RESAMPLE_HOST_SABOTAGE" in _read(host_surface.binding_source("resample"))
+    wf = _read(".github/workflows/cpu-identity-gate.yml")
+    assert f'- "{RESAMPLE_ORACLE}"' in wf
+
+
 def _cpu_only_with(basename):
     if _backend._CPU_ONLY is None:
         print("SKIP: a GPU set loaded; the host route is not taken here")
@@ -174,6 +217,34 @@ def test_fold_gather_matches_python_indexing_when_built():
         assert not out.any(), "a refused gather wrote rows"
         return
     raise AssertionError("an out-of-range fold index was gathered")
+
+
+def test_bootstrap_runs_on_the_host_when_built():
+    if not _cpu_only_with("_mojolearn_resample_host"):
+        return
+    import numpy as np
+    module = _backend.load_host_module("_mojolearn_resample_host")
+    assert not bool(module.resample_host_sabotage()), "a sabotage build loaded outside the gate"
+    assert str(module.resample_host_column()) == "cpu"
+    rs = mojolearn.resample
+    x = np.random.default_rng(2).standard_normal(300).astype(np.float32)
+    a = rs.bootstrap(x, n_resamples=64, random_state=5)
+    b = rs.bootstrap(x, n_resamples=64, random_state=5)
+    assert np.asarray(a.distribution).tobytes() == np.asarray(b.distribution).tobytes()
+    part = rs.bootstrap(x, n_resamples=16, random_state=5, r_first=8)
+    assert np.asarray(part.distribution).tobytes() == np.asarray(a.distribution)[8:24].tobytes()
+    s = np.asarray(a.sorted_distribution)
+    assert (s[1:] >= s[:-1]).all()
+    p = rs.permutation_test(x[:40], x[40:90], n_resamples=32, random_state=1)
+    assert 0.0 < p.pvalue <= 1.0
+    m = rs.monte_carlo_integrate("const", [0.0, 0.0], [1.0, 2.0], 1000)
+    assert m.integral == 2.0 and m.closed_form == 2.0
+    try:
+        _backend.binding("_mojolearn_resample").resample_ranges_parallel_available
+    except ImportError as exc:
+        assert "resample_ranges_parallel_available" in str(exc)
+    else:
+        raise AssertionError("the host binding exported the multi-GPU range probe")
 
 
 if __name__ == "__main__":

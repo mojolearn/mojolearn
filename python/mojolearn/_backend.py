@@ -1008,6 +1008,13 @@ def host_families_built():
 #:     the ordered and FeatureFreq fits and the adapters' binary transforms
 #:     are absent. Its own family for the reason the rf family is: the
 #:     forest host binding exports other names under another contract.
+#:   _mojolearn_resample -> _mojolearn_resample_host (bootstrap,
+#:     permutation-test, monte-carlo; lane/cpu-training-misc, 2026-09-15):
+#:     bootstrap, permutation_test and monte_carlo_integrate over
+#:     resample/host/resample_host.mojo (resample/estimator.mojo's entry
+#:     points with the replicate and chunk kernels restated on the host);
+#:     resample_ranges_parallel_available is absent, so the multi-GPU range
+#:     drivers refuse by name.
 #:   _mojolearn_arima -> _mojolearn_arima_host (arima, arima-011,
 #:     arima-seasonal-c; workstream E, 2026-09-14): arima_fit,
 #:     arima_predict and arima_forecast over arima/host/arima_oracle.mojo

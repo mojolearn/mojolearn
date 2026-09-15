@@ -358,6 +358,17 @@ TRAINING_LANE_NAMES = {
     "kmeans-classic-pp": "k-means from the classic k-means++ start",
     "kmeans-cosine": "the refusal of k-means under cosine distance",
     "cross-val": "cross-validation of gradient boosting",
+    # lane/cpu-training-misc batch 2 (2026-09-15): the resampling functions
+    # through the resample family's own host binding
+    # (resample/host/resample_host.mojo: the bootstrap replicate folds and
+    # the sorted order statistics, the permutation ranks and masked folds,
+    # the Monte Carlo chunk trees, restated from resample/estimator.mojo's
+    # kernels, and the host finish that file already runs). On the M4, one
+    # core: all 27 train cells IDENTICAL x4 against the 166-lane record
+    # before the gate ran.
+    "bootstrap": "the bootstrap",
+    "permutation-test": "the permutation test",
+    "monte-carlo": "Monte Carlo integration",
 }
 
 #: The lanes with NO CPU path of any kind, as the README states them. A
@@ -820,6 +831,34 @@ FAMILIES = (
             "gbdt_host_numeric_mode", "gbdt_host_vendor", "gbdt_host_column",
             "gbdt_host_sabotage", "gbdt_vendor", "gbdt_numeric_mode",
             "gbdt_fit", "gbdt_predict", "gbdt_model_dim", "gbdt_sigmoid",
+        ),
+        gate="tools/identity_break.py (cpu-identity-gate.yml)",
+        ships_in_wheel=True,
+    ),
+    dict(
+        # lane/cpu-training-misc batch 2 (2026-09-15): the resampling
+        # family's host binding. It routes `_mojolearn_resample` on a
+        # CPU-only install with the GPU binding's bootstrap,
+        # permutation_test and monte_carlo_integrate over
+        # resample/host/resample_host.mojo (resample/estimator.mojo's entry
+        # points with every device kernel restated on the host);
+        # resample_ranges_parallel_available is absent, so the multi-GPU
+        # range drivers refuse by name.
+        family="resample",
+        binding="_mojolearn_resample_host",
+        routes="_mojolearn_resample",
+        loaded_by="_backend._HOST_MODULES",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=("bootstrap", "permutation-test", "monte-carlo"),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=("resample.bootstrap", "resample.permutation_test", "resample.monte_carlo_integrate"),
+        display="bootstrap, the permutation test and Monte Carlo integration",
+        host_modules=("resample/host/resample_host.mojo",),
+        exports=(
+            "resample_host_numeric_mode", "resample_host_vendor", "resample_host_column",
+            "resample_host_sabotage", "resample_vendor", "resample_numeric_mode",
+            "bootstrap", "permutation_test", "monte_carlo_integrate",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=True,

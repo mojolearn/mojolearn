@@ -75,6 +75,12 @@ on:
       - "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo"
       - "python/mojolearn/_labels.py"
       - "python/mojolearn/model_selection.py"
+      - "python/mojolearn/resample.py"
+      - "resample/host/resample_host.mojo"
+      - "resample/checks/index_map.mojo"
+      - "resample/checks/intervals.mojo"
+      - "resample/checks/statistics.mojo"
+      - "metrics/checks/pinned_sum.mojo"
       - "python/mojolearn/_identity.py"
       - "training/byte_lm_host.mojo"
       - "training/byte_lm_host_backward.mojo"
@@ -559,8 +565,10 @@ jobs:
       # feature axis descending, in gbdt_oracle by adding 1.0 to the
       # Newton leaf walker's Hessian regularizer, in gbdt_oracle_rmse by
       # adding 1.0 to the searcher's leaf regularizer, in arima_oracle by
-      # doubling the finite-difference step, and in umap_oracle by keying
-      # every negative draw one epoch late);
+      # doubling the finite-difference step, in umap_oracle by keying
+      # every negative draw one epoch late, and in resample_host by
+      # shifting every per-replicate and per-chunk tree's chunk boundaries
+      # by one value);
       # each further phase 1
       # binding names the fold its arm moves), loaded through
       # MOJOLEARN_HOST_DIR with MOJOLEARN_HOST_ALLOW_SABOTAGE=1, run on the
