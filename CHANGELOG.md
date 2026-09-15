@@ -32,7 +32,7 @@ Linux legs are OWED before this heading reads published.
 - New `python -m mojolearn identity`. It runs the identity_break lanes on the local box under
   the identical tier and diffs the column against the three training GPU columns shipped in
   the wheel (the Apple M4, NVIDIA H100 and AMD MI325X columns of the record the manifest
-  names, `bench/results/identity_break/2026-09-14_136-lanes`, copied to
+  names, `bench/results/identity_break/2026-09-14_166-lanes` since the 166-lane record, copied to
   `mojolearn/identity_columns/<record>/` with a commit witness), requiring IDENTICAL x4 on
   every train cell it ran and IDENTICAL x4 or N/A on the infer and model cells. On a CPU-only
   install only the lanes with a CPU training path run. `--check` resolves the harness, the

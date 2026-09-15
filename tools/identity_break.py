@@ -3945,6 +3945,14 @@ def diff(paths, require_columns=0, require_lanes=None):
             j = json.load(fh)
         cols.append((j.get("vendor") or os.path.basename(p), j))
     keys = sorted(set(k for _, j in cols for k in j["cells"]))
+    if require_lanes:
+        # --lanes SCOPES the diff (2026-09-14 night): the verdicts, the
+        # summaries and the exit status are over the named lanes only. Until
+        # then it scoped only --require-columns, so a DIVERGENT cell on a lane
+        # a CPU column does not cover failed the CPU gate's covered-lanes diff.
+        outside = len(set(k.split("/")[0] for k in keys) - set(require_lanes))
+        keys = [k for k in keys if k.split("/")[0] in set(require_lanes)]
+        print(f"NOTE: --lanes scopes this diff to {len(set(require_lanes))} lane(s); {outside} other lane(s) the JSONs carry are not compared")
     names = [c for c, _ in cols]
     if require_columns and require_columns > len(cols):
         print(f"REQUIRE FAIL: --require-columns {require_columns} with {len(cols)} JSONs given")
@@ -4186,7 +4194,8 @@ def main():
                     help="compare JSONs cell by cell: the train column, then infer and model where carried")
     ap.add_argument("--require-columns", type=int, default=0, metavar="N",
                     help="with --diff: exit non-zero unless every compared cell of the lanes named by "
-                         "--lanes (every lane when --lanes is empty) rests on at least N real hashes")
+                         "--lanes (every lane when --lanes is empty) rests on at least N real hashes; "
+                         "--lanes also scopes which cells --diff compares at all")
     ap.add_argument("--merge", nargs="+", default=None, metavar="JSON",
                     help="join the parts of ONE column (same vendor, commit, fixtures, build) into --json")
     ap.add_argument("--allow-separate-builds", action="store_true",
