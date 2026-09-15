@@ -1,0 +1,31 @@
+CatBoost 1.2.10 CPU reference vs our Metal fit
+
+base: 20000 rows, 2328 queries (reference 2328)
+  learn loss, ours vs QueryRMSE^2, 20 iterations:
+    first  ours 2.04515859  reference 2.04515868  diff -8.391e-08
+    last   ours 1.44505322  reference 1.44505319  diff +3.225e-08
+    largest |diff| at iteration 3: -1.353e-07 (relative 7.059e-08)
+  final QueryRMSE  ours 1.20210365  reference 1.20210365  diff +2.379e-09
+  final NDCG       ours 0.964550779  reference 0.964550779  diff +7.772e-16
+  final DCG        ours 7.30794295  reference 7.30794295  diff +7.994e-15
+  first 8 raw predictions, largest |diff| 5.937e-08
+
+odd: 12345 rows, 1438 queries (reference 1438)
+  learn loss, ours vs QueryRMSE^2, 20 iterations:
+    first  ours 2.03587422  reference 2.03587429  diff -7.355e-08
+    last   ours 1.41972458  reference 1.41972459  diff -7.273e-09
+    largest |diff| at iteration 11: +1.392e-07 (relative 8.564e-08)
+  final QueryRMSE  ours 1.19152196  reference 1.19152196  diff -6.426e-10
+  final NDCG       ours 0.965687217  reference 0.965687217  diff +0.000e+00
+  final DCG        ours 7.31864922  reference 7.31864922  diff +2.665e-15
+  first 8 raw predictions, largest |diff| 3.999e-08
+
+ties: 20000 rows, 2328 queries (reference 2328)
+  learn loss, ours vs QueryRMSE^2, 20 iterations:
+    first  ours 1.26550186  reference 1.26550188  diff -2.574e-08
+    last   ours 0.903100781  reference 0.903100743  diff +3.798e-08
+    largest |diff| at iteration 2: +8.640e-08 (relative 7.126e-08)
+  final QueryRMSE  ours 0.950316129  reference 0.950316128  diff +8.841e-10
+  final NDCG       ours 0.995983167  reference 0.995983167  diff +2.220e-16
+  final DCG        ours 12.657164  reference 12.657164  diff -5.507e-14
+  first 8 raw predictions, largest |diff| 2.627e-08

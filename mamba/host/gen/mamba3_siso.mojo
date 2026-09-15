@@ -7,7 +7,7 @@
 four report pieces -- under profile `mojolearn.identical.mamba3.siso.fp32.v1`
 (`mamba/IDENTICAL_MAMBA3_CONTRACT.md`).
 
-Upstream: the chunked schedule SHAPE is
+Reference: the chunked schedule SHAPE is
 `mamba_ssm/ops/triton/mamba3/mamba3_siso_fwd.py::mamba3_siso_fwd_kernel`
 (state-spaces/mamba `e9594ce`; phase 1 :276-351, phase 2 :353-451, the
 final-state pick :709-729) with the VALUES pinned to

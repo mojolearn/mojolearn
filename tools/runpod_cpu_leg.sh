@@ -73,7 +73,7 @@ SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLeve
 LANE=""; CMD=""; CMD_FILE=""; WORKTREE=""; INCLUDES=""; BUILD=""; SAB_BUILD=""
 SAB_DEFINES="-D MOJOLEARN_HOST_SABOTAGE=1"; ENVS="default"; VCPU=8; FLAVORS="cpu3c,cpu5c"
 LEASE=60; JOBS=8; IMAGE="runpod/base:1.3.1-ubuntu2204"; DISK=40; OUT=""; BINCACHE=1; ENVCACHE=0
-MAX_PODS=2; RENT=0
+MAX_PODS=${MOJOLEARN_RUNPOD_CPU_MAX_PODS:-8}; RENT=0
 
 say() { printf '[%s cpu-leg] %s\n' "$(date +%T)" "$*"; }
 die() { printf '\nREFUSED: %s\n' "$*" >&2; exit 1; }
@@ -248,7 +248,7 @@ for _n in "$VCPU" "$LEASE" "$JOBS" "$DISK" "$MAX_PODS"; do
 done
 [ "$VCPU" -ge 2 ] && [ "$VCPU" -le 32 ] || die "--vcpu must be 2..32"
 [ "$LEASE" -ge 10 ] && [ "$LEASE" -le 180 ] || die "--lease must be 10..180 minutes"
-[ "$MAX_PODS" -ge 1 ] && [ "$MAX_PODS" -le 2 ] || die "--max-pods must be 1 or 2"
+[ "$MAX_PODS" -ge 1 ] && [ "$MAX_PODS" -le 12 ] || die "--max-pods must be 1..12"
 printf '%s' "$FLAVORS" | grep -Eq '^cpu[35][cgm](,cpu[35][cgm])*$' || die "--flavors must be cpu3c/cpu3g/cpu3m/cpu5c/cpu5g/cpu5m, comma separated"
 printf '%s' "$ENVS" | grep -Eq '^[a-z0-9_-]+(,[a-z0-9_-]+)*$' || die "--envs is a comma separated list of pixi env names"
 case ",$ENVS," in *,default,*) ;; *) die "--envs must include default (the build and the command use its python and mojo)" ;; esac
@@ -398,6 +398,7 @@ done
 for f in $(echo "@SABBUILD@" | tr , ' '); do
     t=$(date +%s)
     env MOJOLEARN_BUILD_EXTRA_DEFINES="@SABDEFINES@" MOJOLEARN_HOST_OUTDIR=python/mojolearn/host-sabotage \
+        MOJOLEARN_FOREST_HOST_OUTDIR=python/mojolearn/host-sabotage MOJOLEARN_BYTE_LM_HOST_OUTDIR=python/mojolearn/host-sabotage \
         MOJOLEARN_BINCACHE_NEGATIVE=1 "$PY" tools/bincache.py build "bindings/build_${f}_host.sh" > "$OUT/build_sabotage_$f.log" 2>&1
     printf 'sabotage-build\t%s\t%s\t%s\n' "$f" "$?" "$(( $(date +%s) - t ))" >> "$OUT/status.tsv"
 done

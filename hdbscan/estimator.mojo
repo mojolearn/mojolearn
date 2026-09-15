@@ -40,6 +40,10 @@ from max.gpu.host import DeviceContext
 
 from core.identity_trace import IdentityTrace
 from hdbscan.impl.detail.predict import approximate_predict
+from hdbscan.impl.detail.soft_clustering import (
+    all_points_membership_vectors,
+    membership_vector,
+)
 from hdbscan.impl.prediction_data import PredictionData
 from hdbscan.impl.runner import (
     GRAPH_BUILD_BRUTE_FORCE_KNN,
@@ -198,6 +202,81 @@ def hdbscan_approximate_predict_host(
     for i in range(n_prediction_points):
         labels_out.unsafe_store(i, out.labels[i])
         probs_out.unsafe_store(i, out.probabilities[i])
+
+
+def hdbscan_membership_vector_host(
+    ctx: DeviceContext,
+    x_train: List[Float32],
+    m: Int,
+    n: Int,
+    core_dists: List[Float32],
+    labels: List[Int32],
+    parents: List[Int32],
+    tree_lambdas: List[Float32],
+    n_edges: Int,
+    n_clusters: Int,
+    deaths: List[Float32],
+    selected_clusters: List[Int32],
+    index_into_children: List[Int32],
+    exemplar_idx: List[Int32],
+    exemplar_label_offsets: List[Int32],
+    queries: List[Float32],
+    n_prediction_points: Int,
+    min_samples: Int,
+    out_ptr: MutPointer[Float32, MutUntrackedOrigin],
+) raises:
+    """`membership_vector` (cuML `hdbscan.pyx:1180`,
+    `soft_clustering.cuh:501-627`) through
+    `hdbscan/impl/detail/soft_clustering.mojo` (DEVIATION 1616). Writes
+    `n_prediction_points x n_selected` Float32 to `out`."""
+    var n_selected = len(selected_clusters)
+    var pd = PredictionData(
+        n_rows_leaves(m), n_edges, n_clusters, n_selected, len(exemplar_idx),
+        deaths.copy(), exemplar_idx.copy(), exemplar_label_offsets.copy(),
+        selected_clusters.copy(), index_into_children.copy(),
+    )
+    var trace = IdentityTrace()
+    var mv = membership_vector(
+        ctx, trace, x_train, m, n, core_dists, labels, parents, tree_lambdas,
+        pd, queries, n_prediction_points, min_samples,
+    )
+    for i in range(n_prediction_points * n_selected):
+        out_ptr.unsafe_store(i, mv[i])
+
+
+def hdbscan_all_points_membership_vectors_host(
+    ctx: DeviceContext,
+    x_train: List[Float32],
+    m: Int,
+    n: Int,
+    parents: List[Int32],
+    tree_lambdas: List[Float32],
+    n_edges: Int,
+    n_clusters: Int,
+    deaths: List[Float32],
+    selected_clusters: List[Int32],
+    index_into_children: List[Int32],
+    exemplar_idx: List[Int32],
+    exemplar_label_offsets: List[Int32],
+    row0: Int,
+    n_rows: Int,
+    out_ptr: MutPointer[Float32, MutUntrackedOrigin],
+) raises:
+    """`all_points_membership_vectors` (cuML `hdbscan.pyx:1114`,
+    `soft_clustering.cuh:385-482`) for training rows `row0 .. row0 + n_rows
+    - 1`. Writes `n_rows x n_selected` Float32 to `out`."""
+    var n_selected = len(selected_clusters)
+    var pd = PredictionData(
+        n_rows_leaves(m), n_edges, n_clusters, n_selected, len(exemplar_idx),
+        deaths.copy(), exemplar_idx.copy(), exemplar_label_offsets.copy(),
+        selected_clusters.copy(), index_into_children.copy(),
+    )
+    var trace = IdentityTrace()
+    var mv = all_points_membership_vectors(
+        ctx, trace, x_train, m, n, parents, tree_lambdas, pd, row0, n_rows,
+    )
+    for i in range(n_rows * n_selected):
+        out_ptr.unsafe_store(i, mv[i])
 
 
 def n_rows_leaves(m: Int) -> Int:

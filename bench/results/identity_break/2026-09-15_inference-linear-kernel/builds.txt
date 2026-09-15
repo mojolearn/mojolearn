@@ -1,0 +1,16 @@
+<scratchpad>/inf/logs/base_build.out:build estimators rc=0 39s
+<scratchpad>/inf/logs/new_build.out:build estimators rc=0 46s
+<scratchpad>/inf/logs/builds2.out:build preprocessing rc=0 42s
+<scratchpad>/inf/logs/builds2.out:build solver rc=0 40s
+<scratchpad>/inf/logs/builds2.out:build kernel_methods rc=0 37s
+<scratchpad>/inf/logs/builds2.out:build estimators rc=0 52s
+<scratchpad>/inf/logs/builds2.out:build preprocessing rc=0 34s
+<scratchpad>/inf/logs/builds2.out:build solver rc=0 38s
+<scratchpad>/inf/logs/builds2.out:build kernel_methods rc=0 41s
+-rwxr-xr-x  1 andrewhendel  wheel  534192 Sep 15 12:36 <scratchpad>/inf/host-base/_mojolearn_estimators_host.so
+-rwxr-xr-x  1 andrewhendel  wheel  604592 Sep 15 12:51 <scratchpad>/inf/host-new/_mojolearn_estimators_host.so
+base commit 59cbcedd2
+installed test wheel members under mojolearn/host/:
+  mojolearn/host/_mojolearn_core_host.so 581400
+  mojolearn/host/_mojolearn_estimators_host.so 604592
+  mojolearn/host/_mojolearn_linalg_host.so 210888

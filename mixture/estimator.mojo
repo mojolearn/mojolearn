@@ -84,6 +84,11 @@ from mixture.checks.estep import (
     gmm_predict_labels,
 )
 from mixture.multi_gpu import gmm_e_step_dispatch
+from mixture.checks.sample import (
+    GMM_SAMPLE_TPB,
+    gmm_sample_components,
+    gmm_sample_kernel,
+)
 from mixture.checks.gmm_sabotage import (
     GMM_SAB_NONE,
     GMM_SAB_TOL_ULP,
@@ -1315,6 +1320,60 @@ def gaussian_mixture_aic(
         )
     )
     return ftz(a + ftz(identical_mul(Float32(2.0), Float32(p))))
+
+
+def gaussian_mixture_sample(
+    model: GaussianMixtureModel,
+    n_samples: Int,
+    seed: UInt64,
+    mut labels: List[Int32],
+) raises -> List[Float32]:
+    """`sample(n_samples)`, scikit-learn `_base.py` `BaseMixture.sample`:
+    `n_samples x n_features` float32 rows grouped by component ascending,
+    and `labels` (length `n_samples`) filled with each row's component.
+
+    The counts come from `mixture/checks/sample.mojo::gmm_sample_components`
+    on the host (DEVIATION 2791: position-mapped Philox categorical draws,
+    integer tallies), and every row is one thread of `gmm_sample_kernel`
+    (DEVIATION 2791's Box-Muller normals, DEVIATION 2792's forward
+    substitution through the fitted `precisions_cholesky`)."""
+    var d = model.n_features
+    var k = model.n_components
+    var rows = gmm_sample_components(model.weights, k, n_samples, seed)
+    var ctx = DeviceContext()
+    var dmeans = _upload(ctx, model.means)
+    var dprec = _upload(ctx, model.precisions_cholesky)
+    var dcomp = ctx.enqueue_create_buffer[DType.int32](n_samples)
+    var hcomp = ctx.enqueue_create_host_buffer[DType.int32](n_samples)
+    var dx = ctx.enqueue_create_buffer[DType.float32](n_samples * d)
+    ctx.synchronize()
+    for i in range(n_samples):
+        hcomp.unsafe_ptr().unsafe_store(i, rows[i])
+        labels[i] = rows[i]
+    ctx.enqueue_copy(dst_buf=dcomp, src_ptr=hcomp.unsafe_ptr())
+    ctx.synchronize()
+    ctx.enqueue_function[gmm_sample_kernel](
+        dx.unsafe_ptr(),
+        dcomp.unsafe_ptr(),
+        dmeans.unsafe_ptr(),
+        dprec.unsafe_ptr(),
+        Int32(n_samples),
+        Int32(d),
+        UInt32(seed & 0xFFFFFFFF).cast[DType.int32](),
+        UInt32((seed >> 32) & 0xFFFFFFFF).cast[DType.int32](),
+        grid_dim=((n_samples + GMM_SAMPLE_TPB - 1) // GMM_SAMPLE_TPB, 1, 1),
+        block_dim=(GMM_SAMPLE_TPB, 1, 1),
+    )
+    ctx.synchronize()
+    var out = _download(ctx, dx, n_samples * d)
+    _ = hcomp^
+    _ = dcomp^
+    _ = dmeans^
+    _ = dprec^
+    _ = dx^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
+    return out^
 
 
 def gmm_mode_name() -> String:

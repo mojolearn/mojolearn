@@ -1,0 +1,45 @@
+  ok    DBSCAN     prediction_data=True fits the same labels_ bytes as the default
+  ok    DBSCAN     the default fit stores no prediction data
+  ok    DBSCAN     core_sample_indices_ int32 and components_ float32 (n_core, d)
+  ok    DBSCAN     components_ are the training rows at core_sample_indices_
+  ok    DBSCAN     core_sample_indices_ ascending
+  ok    DBSCAN     the fixture fits two clusters and two noise points
+  ok    DBSCAN     predict returns int32 (n,)
+  ok    DBSCAN     every core training row predicts its fitted label
+  ok    DBSCAN     every noise training row predicts -1 (algorithm='brute')
+  ok    DBSCAN     [REPORT, not asserted] 8 border rows predict their fitted label (not promised by the rule): same
+  ok    DBSCAN     a query exactly at eps from a core row takes that row's cluster (acc <= thresh)
+  ok    DBSCAN     a query one ulp past eps is noise
+  ok    DBSCAN     an exact tie between two clusters goes to the lowest (distance, core index)
+  ok    DBSCAN     far points are noise
+  ok    DBSCAN     a float64 query returns the float32 query's labels
+  ok    DBSCAN     rows alone and reversed query order give the batch's bytes
+  ok    DBSCAN     duplicated rows (distance-0 ties): core rows still predict their fitted label
+  ok    DBSCAN     algorithm='rbc': core rows predict their fitted label
+  ok    DBSCAN     metric='manhattan': the L1 sum against Float32(eps), at eps inside and past it outside
+  ok    DBSCAN     uniform sample_weight predicts the unweighted labels
+  ok    DBSCAN     a fit with no core sample predicts noise
+  ok    DBSCAN     save and load predict the same bytes
+  ok    DBSCAN     predict without prediction data refused by name
+  ok    DBSCAN     save without prediction data refused by name
+  ok    DBSCAN     predict before fit refused by name
+  ok    DBSCAN     a query with the wrong feature count
+  ok    DBSCAN     a NaN query refused by name
+  ok    DBSCAN     an empty query refused by name (as_f32_c)
+  ok    DBSCAN     prediction_data must be a bool
+  ok    AGGLOM     prediction_data=True fits the same labels_ and children_ bytes
+  ok    AGGLOM     every training row predicts its fitted label
+  ok    AGGLOM     a query equidistant from two clusters goes to the lowest cluster label
+  ok    AGGLOM     a query takes the cluster of its nearest training row
+  ok    AGGLOM     duplicated rows: every row still predicts its fitted label
+  ok    AGGLOM     n_clusters=17 of 18 distinct rows (singletons): every row predicts its fitted label
+  ok    AGGLOM     rows alone give the batch's bytes
+  ok    AGGLOM     save and load predict the same bytes and keep children_
+  ok    AGGLOM     predict without prediction data refused by name
+  ok    AGGLOM     predict before fit refused by name
+  ok    AGGLOM     a query with the wrong feature count
+  ok    AGGLOM     prediction_data must be a bool
+  ok    HOST       [REPORT, not asserted] host binding not loadable (mojolearn: /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/pod1/none/_mojolearn_estimators_host.so is not built. Build it with bindings/build_estimators_host.sh); set MOJOLEARN_HOST_DIR: MOVED
+  ok    PROVENANCE DBSCAN and AgglomerativeClustering exported
+
+test_transductive_predict: GREEN under numeric_mode=identical, 43 checks. One box, one vendor; no bit is claimed for any other.

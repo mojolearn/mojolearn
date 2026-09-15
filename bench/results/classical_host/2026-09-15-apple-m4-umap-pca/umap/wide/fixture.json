@@ -1,0 +1,8 @@
+{
+  "estimator": "UMAP",
+  "heldout_seed": 1,
+  "kind": "wide",
+  "lane": "umap",
+  "probe_rows": 256,
+  "x_sha256": "59d135742b776f0076a22efd2c8bcd684bffe06ee5664c2790f22f21e8be72bf"
+}

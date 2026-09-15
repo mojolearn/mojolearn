@@ -91,6 +91,9 @@ from ._mode import NumericModeMixin
 # are cuML's own (`arima.pyx:944-946`).
 _METHODS = {"ml": 0, "css": 1, "css-ml": 2}
 
+#: The saved-model format tag (`ARIMA.save`, lane/inference-forecast-umap-pca).
+_ARIMA_FORMAT = "mojolearn-arima-1"
+
 #: What `arima_numeric_mode()` answers per tier, the `NUMERIC_*` constant in
 #: `checks/numerics.mojo`. Duplicated from `_backend._MODE_CODE` on purpose:
 #: the cross-check below is worth nothing if it reads its expectation from
@@ -716,6 +719,97 @@ class ARIMA(NumericModeMixin):
              self.k_, _n_exog(exog), 0],
         )
         return out.reshape((self.batch_size_, steps))
+
+    # -- saved models (lane/inference-forecast-umap-pca, 2026-09-15) --------
+
+    def save(self, path):
+        """Write the fitted model to `path` as an npz: the series `y` the
+        filter runs over (`(batch_size, n_obs)` float32), `params` in the
+        packed fitted order, `x`, `x0`, `fx` (float32), `n_iter`, `retcode`
+        (int32), `llf`, `aic`, `bic` (float64), `meta` `<i8` [p, d, q, P, D,
+        Q, s, k, batch_size, n_obs, maxiter, input_copied], `trend`, `method`
+        and `numeric_mode`.
+
+        A loaded model predicts and forecasts and answers every fitted
+        attribute (`params_`, `ar_`, `ma_`, `sar_`, `sma_`, `mu_`,
+        `sigma2_`, `llf_`, `aic_`, `bic_`, `n_iter_`, `retcode_`); it does
+        not refit. On a CPU-only install that is public inference through the
+        host binding (`mojolearn.host_model(path)`, or `ARIMA.load(path)`),
+        with no GPU and no CPU training."""
+        self._check_fitted("save")
+        from . import _serialize
+        from .decomposition import _saved_mode
+        p, d, q = self.order
+        P, D, Q, s = self.seasonal_order
+        b, n = int(self.batch_size_), int(self.n_obs_)
+        arrays = {
+            "format": _ARIMA_FORMAT,
+            "estimator": type(self).__name__,
+            "numeric_mode": _saved_mode(self),
+            "trend": "none" if self.trend is None else str(self.trend).lower(),
+            "method": str(self.method),
+            "y": self._y.reshape((b, n)),
+            "params": self.params_,
+            "x": self.x_,
+            "x0": self.x0_,
+            "fx": self.fx_,
+            "n_iter": self.n_iter_,
+            "retcode": self.retcode_,
+            "llf": self.llf_,
+            "aic": self.aic_,
+            "bic": self.bic_,
+            "meta": Array.from_list(
+                [p, d, q, P, D, Q, s, int(self.k_), b, n, int(self.maxiter),
+                 1 if getattr(self, "input_copied_", False) else 0],
+                "<i8",
+            ),
+        }
+        return _serialize.write_npz(path, arrays)
+
+    @classmethod
+    def load(cls, path):
+        """Load a model saved by `save`. The result predicts, forecasts and
+        answers the fitted attributes; it does not refit."""
+        from . import _serialize
+        from .decomposition import _check_saved_by, _restore_mode
+        arrays = _serialize.read_npz(path, _ARIMA_FORMAT)
+        _check_saved_by(arrays, path, cls)
+        meta = _serialize.exact(arrays, "meta", "<i8")
+        if meta.size != 12:
+            raise ValueError(f"mojolearn: {path!r} meta holds {meta.size} fields, 12 are needed")
+        p, d, q, P, D, Q, s, k, b, n, maxiter, copied = (int(meta[i]) for i in range(12))
+        trend = _serialize.scalar_str(arrays, "trend")
+        obj = cls(order=(p, d, q), seasonal_order=(P, D, Q, s),
+                  trend=None if trend == "none" else trend,
+                  method=_serialize.scalar_str(arrays, "method"), maxiter=maxiter)
+        if obj.k_ != k:
+            raise ValueError(f"mojolearn: {path!r} records k={k}, its trend {trend!r} resolves to {obj.k_}")
+        _restore_mode(obj, arrays)
+        N = obj.complexity_
+        shapes = {"y": ("<f4", (b, n)), "params": ("<f4", (b, N)), "x": ("<f4", (b, N)),
+                  "x0": ("<f4", (b, N)), "fx": ("<f4", (b,)), "n_iter": ("<i4", (b,)),
+                  "retcode": ("<i4", (b,)), "llf": ("<f8", (b,)), "aic": ("<f8", (b,)),
+                  "bic": ("<f8", (b,))}
+        got = {}
+        for name, (dtype, shape) in shapes.items():
+            value = _serialize.exact(arrays, name, dtype)
+            if tuple(value.shape) != shape:
+                raise ValueError(f"mojolearn: {path!r} {name} has shape {tuple(value.shape)}, not {shape}")
+            got[name] = value
+        obj.batch_size_ = b
+        obj.n_obs_ = n
+        obj.input_copied_ = bool(copied)
+        obj._y = got["y"]
+        obj.params_ = got["params"]
+        obj.x_ = got["x"]
+        obj.x0_ = got["x0"]
+        obj.fx_ = got["fx"]
+        obj.n_iter_ = got["n_iter"]
+        obj.retcode_ = got["retcode"]
+        obj.llf_ = got["llf"]
+        obj.aic_ = got["aic"]
+        obj.bic_ = got["bic"]
+        return obj
 
     def __repr__(self):
         return (
