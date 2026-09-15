@@ -2435,11 +2435,14 @@ def _(ml, X, yc, yr, Xh=None):
     counts); the integer stages are where a divergence first shows.
     The fit keeps prediction_data (2026-09-15), which moves no train byte;
     infer is approximate_predict's labels and probabilities on 256
-    held-out rows (hdbscan.pyx:1264, predict.cuh:220-262)."""
+    held-out rows (hdbscan.pyx:1264, predict.cuh:220-262), then
+    membership_vector on the same rows and all_points_membership_vectors
+    (hdbscan.pyx:1180, :1114, soft_clustering.cuh:385-627, DEVIATION 1616)."""
     m = ml.HDBSCAN(min_cluster_size=5, prediction_data=True).fit(X[:6000, :4])
     return _fit(dict(labels=_h(m.labels_), core=_h(m.core_distances_),
                      counts=_h(np.asarray([m.n_clusters_, m.n_outliers_, m.n_boruvka_rounds_, m.n_condensed_clusters_], dtype=np.int64))),
-                m, lambda e: tuple(ml.hdbscan.approximate_predict(e, Xh[:256, :4])))
+                m, lambda e: tuple(ml.hdbscan.approximate_predict(e, Xh[:256, :4]))
+                + (ml.hdbscan.membership_vector(e, Xh[:256, :4]), ml.hdbscan.all_points_membership_vectors(e)))
 
 
 @lane("hdbscan-leaf")
@@ -2452,7 +2455,8 @@ def _(ml, X, yc, yr, Xh=None):
                    prediction_data=True).fit(X[:6000, :4])
     return _fit(dict(labels=_h(m.labels_), core=_h(m.core_distances_),
                      counts=_h(np.asarray([m.n_clusters_, m.n_outliers_, m.n_boruvka_rounds_, m.n_condensed_clusters_], dtype=np.int64))),
-                m, lambda e: tuple(ml.hdbscan.approximate_predict(e, Xh[:256, :4])))
+                m, lambda e: tuple(ml.hdbscan.approximate_predict(e, Xh[:256, :4]))
+                + (ml.hdbscan.membership_vector(e, Xh[:256, :4]), ml.hdbscan.all_points_membership_vectors(e)))
 
 
 @lane("bootstrap")
@@ -3833,10 +3837,10 @@ _batch_decl("n/a:fit-refused", "kmeans-cosine")
 #     fit_predict (:239) only.
 #   HDBSCAN is NOT transductive since 2026-09-15: HDBSCAN(prediction_data=True)
 #     and mojolearn.hdbscan.approximate_predict (cuML hdbscan.pyx:1264,
-#     predict.cuh:220-262) on both bindings, below. membership_vector (:1180)
-#     and all_points_membership_vectors (:1114) are still NOT IMPLEMENTED and
-#     refuse by name (hdbscan/NOT_IMPLEMENTED.tsv), so the part asks
-#     approximate_predict only.
+#     predict.cuh:220-262) on both bindings, below, and since the same day
+#     membership_vector (:1180, soft_clustering.cuh:501-627, DEVIATION 1616),
+#     which the part asks too. all_points_membership_vectors (:1114) has no
+#     held-out rows; the lanes' infer probe hashes it.
 _batch_decl(_rows_calls("predict", sl=np.s_[:64, :4]),
             "dbscan", "dbscan-brute-l1", "dbscan-weighted", "par-dbscan", "agglomerative")
 _batch_decl("n/a:transductive (SpectralClustering.predict raises NotImplementedError; cuML has none either)",
@@ -3844,8 +3848,10 @@ _batch_decl("n/a:transductive (SpectralClustering.predict raises NotImplementedE
 
 
 def _batch_hdbscan(ml, e, Xh):
-    """approximate_predict's labels and probabilities, 64 held-out rows."""
-    return [_BatchRows("approximate_predict", Xh[:64, :4], lambda r: tuple(ml.hdbscan.approximate_predict(e, r)))]
+    """approximate_predict's labels and probabilities and membership_vector's
+    rows, 64 held-out rows."""
+    return [_BatchRows("approximate_predict", Xh[:64, :4], lambda r: tuple(ml.hdbscan.approximate_predict(e, r))),
+            _BatchRows("membership_vector", Xh[:64, :4], lambda r: (ml.hdbscan.membership_vector(e, r),))]
 
 
 _batch_decl(_batch_hdbscan, "hdbscan", "hdbscan-leaf")
