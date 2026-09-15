@@ -1,0 +1,17 @@
+python/mojolearn/host:
+total 1208
+drwxr-xr-x 2 root root    116 Sep 15 17:40 .
+drwxr-xr-x 7 root root   4096 Sep 15 17:40 ..
+-rwxr-xr-x 1 root root 594488 Sep 15 17:40 _mojolearn_core_host.so
+-rwxr-xr-x 1 root root 231328 Sep 15 17:40 _mojolearn_linalg_host.so
+-rwxr-xr-x 1 root root 399480 Sep 15 17:40 _mojolearn_svm_host.so
+
+python/mojolearn/host-sabotage:
+total 1208
+drwxr-xr-x 2 root root    116 Sep 15 17:40 .
+drwxr-xr-x 7 root root   4096 Sep 15 17:40 ..
+-rwxr-xr-x 1 root root 594488 Sep 15 17:40 _mojolearn_core_host.so
+-rwxr-xr-x 1 root root 231328 Sep 15 17:40 _mojolearn_linalg_host.so
+-rwxr-xr-x 1 root root 399480 Sep 15 17:40 _mojolearn_svm_host.so
+dfe8e7345a4600a277388c368136a8e9ea450f199fef17bf10cb7f23bb09ffd7  python/mojolearn/host/_mojolearn_svm_host.so
+72e77bd96ec804bc71ce9a7e0c82e543102378e2b349f418c8b7c974e8f08824  python/mojolearn/host-sabotage/_mojolearn_svm_host.so

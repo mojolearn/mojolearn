@@ -91,6 +91,10 @@ from svm.impl.svm_parameter import (
 #: against the GPU columns. Passed by the host build scripts only; a host
 #: binding that carries it says so through `<prefix>_sabotage()` and is
 #: refused outside the gate (`python/mojolearn/_backend.py::load_host_module`).
+#: Since lane/inference-svm (2026-09-15) the same define also adds half a
+#: unit to the fitted intercept (`smo_oracle_fit`) and to every decision
+#: value (`smo_oracle_decision`): the leaf order cannot move an integer-grid
+#: fixture such as `ties`, and a saved model's file and predictions must.
 comptime SMO_ORACLE_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
 comptime ORACLE_WS_SIZE = 1024
@@ -824,6 +828,12 @@ def smo_oracle_fit[
             if nu == 0 or nl == 0:
                 raise Error("Incorrect training: cannot calculate the constant (oracle)")
             res.b = _flush[dt](-_flush[dt](b_up + b_low) / Scalar[dt](2))
+    comptime if SMO_ORACLE_HOST_SABOTAGE:
+        # THE INTERCEPT SABOTAGE ARM (lane/inference-svm, 2026-09-15): half a
+        # unit added to the fitted intercept. Wrong on purpose; on an
+        # integer-grid fixture the leaf-order arm leaves every fit byte in
+        # place, so a saved model's file would not move without it.
+        res.b = _flush[dt](res.b + Scalar[dt](0.5))
     res.alpha = alpha^
     res.f = f^
     res.n_iter = n_iter
@@ -895,6 +905,13 @@ def smo_oracle_decision[
         for j in range(ns):
             var kij = _kernel_cell[dt](kp, xq, norm_q, i, sv_rows, norm_sv, j, nq, ns, k)
             acc = _flush[dt](_mad[dt](kij, res.dual_coefs[j], acc))
+        comptime if SMO_ORACLE_HOST_SABOTAGE:
+            # THE DECISION SABOTAGE ARM (lane/inference-svm, 2026-09-15): half
+            # a unit added to every decision value. Wrong on purpose; the
+            # leaf-order arm in _dot cannot move an integer-grid fixture, so
+            # without this a saved linear or rbf model could predict the same
+            # bytes on the sabotage build.
+            acc = _flush[dt](acc + Scalar[dt](0.5))
         out.append(_flush[dt](acc + res.b))
     return out^
 

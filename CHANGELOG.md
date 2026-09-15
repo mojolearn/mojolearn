@@ -94,6 +94,16 @@ Linux legs are OWED before this heading reads published.
   - `Embedding.backward` refuses on a CPU-only install outside the internal
     verifier.
   - Evidence: bench/results/identity_break/2026-09-15_ivf-embedding-cpu-inference/.
+- CPU inference from saved SVM models for `SVC(kernel='linear')`, `SVC(kernel='poly')`,
+  `SVR` and `SVR(kernel='linear')`: `SVR` gains `save` and `load` (format
+  `mojolearn-svr-1`), and `mojolearn.host_model(path)`, or the classes on a CPU-only
+  install, answer `decision_function` and `predict` through the shipped svm host binding's
+  `svc_predict` and `svr_predict`. No entry was added to that binding. The svm family's
+  saved-model lanes grow from one (`svc`) to five. The svm host sabotage build gains an
+  intercept arm in the fit and a decision arm in predict, so on an integer-grid fixture
+  such as `ties` a saved model's file and its predictions now move there too. Apple M4 Metal recording checked on an x86 CPU against the committed Apple,
+  NVIDIA and AMD columns; the SVR model cells and every `svc-poly` GPU cell are owed to the
+  release record.
 - Public CPU `Cholesky` inference. On a CPU-only install `Cholesky().fit(A)` factors a given
   matrix and `solve` answers from it, and `Cholesky.save` / `Cholesky.load` (or
   `mojolearn.host_model`, which returns a `HostCholesky`) carry a factor from a GPU box to a

@@ -193,6 +193,15 @@ LANES = {
     'ivf': ('IVFIndex', lambda e, X: _ivf_probe(e, X[:64]), _IVF_EXTRAS),
     'ivf-euclidean': ('IVFIndex', lambda e, X: _ivf_probe(e, X[:64]), _IVF_EXTRAS),
     'embedding': ('Embedding', lambda e, X: _embedding_probe(e, X), {}),
+    # lane/inference-svm (2026-09-15): SVC's linear and polynomial kernels
+    # through the svc format, and SVR (rbf and linear) through its own. Each
+    # probe is its identity_break lane's infer probe.
+    'svc-linear': ('SVC', lambda e, X: (e.decision_function(X), e.predict(X)),
+                   {'predict': lambda e, X: e.predict(X)}),
+    'svc-poly': ('SVC', lambda e, X: (e.decision_function(X), e.predict(X)),
+                 {'predict': lambda e, X: e.predict(X)}),
+    'svr': ('SVR', lambda e, X: (e.predict(X),), {}),
+    'svr-linear': ('SVR', lambda e, X: (e.predict(X),), {}),
 }
 PROBE_NAMES = {'ols': 'predict', 'ridge': 'predict', 'tsvd': 'transform',
                'logistic': 'predict_proba', 'pca': 'transform',
@@ -211,7 +220,9 @@ PROBE_NAMES = {'ols': 'predict', 'ridge': 'predict', 'tsvd': 'transform',
                'minmax-scaler-clip': 'transform', 'lasso': 'predict', 'elasticnet': 'predict',
                'elasticnet-l2end-no-intercept': 'predict', 'kernel-ridge': 'predict',
                'nystroem': 'transform', 'rbf-sampler': 'transform',
-               'ivf': 'search_distances', 'ivf-euclidean': 'search_distances', 'embedding': 'forward'}
+               'ivf': 'search_distances', 'ivf-euclidean': 'search_distances', 'embedding': 'forward',
+               'svc-linear': 'decision_function', 'svc-poly': 'decision_function',
+               'svr': 'predict', 'svr-linear': 'predict'}
 
 
 def _fit_logistic_multiclass(ml, X, yc, yr, Xh=None):

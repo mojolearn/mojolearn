@@ -7,7 +7,9 @@ KernelDensity and SVC models, since the knn host inference lane
 (2026-09-14) NearestNeighbors, KNeighborsClassifier and KNeighborsRegressor,
 and since lane/inference-linear-svm (2026-09-15) StandardScaler,
 MinMaxScaler, ElasticNet, Lasso, KernelRidge, Nystroem and RBFSampler, whose
-entries the estimators host binding serves.
+entries the estimators host binding serves, and since lane/inference-svm
+(2026-09-15) SVR (rbf and linear) beside SVC's linear and polynomial
+kernels, through the svm host binding's `svr_predict` and `svc_predict`.
 
 `host_model(path)` loads a file written by one of those classes' `save` and
 returns an instance of a HOST SUBCLASS of the same class: the same Python
@@ -55,7 +57,7 @@ from ._ivf_impl import IVFIndex, _IVF_FORMAT
 from .embedding import Embedding, _EMBEDDING_FORMAT
 from ._gpc_impl import _GPC_FORMAT, HostGaussianProcessClassifier
 from ._solver_impl import ElasticNet, Lasso, _CD_FORMAT
-from ._svm_impl import SVC, _SVC_FORMAT
+from ._svm_impl import SVC, SVR, _SVC_FORMAT, _SVR_FORMAT
 from ._umap_impl import UMAP, _UMAP_FORMAT
 from .decomposition import PCA, TruncatedSVD, _PCA_FORMAT, _TSVD_FORMAT
 from ._hierarchy_impl import AgglomerativeClustering, _AGGLOMERATIVE_FORMAT
@@ -205,6 +207,12 @@ class HostKernelDensity(_HostBound, KernelDensity):
 
 
 class HostSVC(_HostBound, SVC):
+    _HOST_ARRAYS = ("dual_coef_", "support_vectors_", "intercept_")
+
+
+class HostSVR(_HostBound, SVR):
+    """`SVR.predict` from a saved model through
+    `_mojolearn_svm_host.svr_predict` (lane/inference-svm, 2026-09-15)."""
     _HOST_ARRAYS = ("dual_coef_", "support_vectors_", "intercept_")
 
 
@@ -361,6 +369,7 @@ _FORMATS = {
     _PCA_FORMAT: {"PCA": HostPCA},
     _KDE_FORMAT: {"KernelDensity": HostKernelDensity},
     _SVC_FORMAT: {"SVC": HostSVC},
+    _SVR_FORMAT: {"SVR": HostSVR},
     _DBSCAN_FORMAT: {"DBSCAN": HostDBSCAN},
     _AGGLOMERATIVE_FORMAT: {"AgglomerativeClustering": HostAgglomerativeClustering},
     _KNN_FORMAT: {
