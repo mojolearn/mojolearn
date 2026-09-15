@@ -33,6 +33,7 @@ import math
 from ._training_impl import _round_f32
 
 from . import _backend
+from . import _ragged
 from . import _training_impl as T
 from ._mamba_impl import Mamba3Block
 from ._transformer_impl import TransformerBlock
@@ -317,7 +318,7 @@ class SambaStack(object):
         return {"ids": ids, "key": key, "xs": xs, "h": x, "hn": hn,
                 "logits": logits}
 
-    def forward(self, inputs, state=None):
+    def forward(self, inputs, state=None, *, lengths=None):
         """`(B, L)` ids in, `(B, L, vocab)` float32 logits out, no dropout.
 
         `state=None` is the TRAINING forward: the same `_forward` that
@@ -325,7 +326,23 @@ class SambaStack(object):
         Pass a `SambaState` (`allocate_state`) to carry the decode state
         instead: every block's own state is read at entry and updated in
         place, so a later `forward` or `step` on that state continues the
-        sequence (2026-09-15, the rlpair part of tools/identity_break.py)."""
+        sequence (2026-09-15, the rlpair part of tools/identity_break.py).
+
+        `lengths` (2026-09-15) makes the batch RAGGED: `B` integers in
+        `[1, L]`, row `i` real at positions `[0, lengths[i])` and padding
+        after. Every real position's logits are byte for byte the row run
+        alone at its own length (the stack is a per-token embedding, causal
+        blocks, a per-token norm and head; no arithmetic changes,
+        `_ragged.py` says why) and every padding position's logits are
+        exactly `+0.0`, whatever id the input held there. It applies to the
+        stateless forward only; `lengths` with a `state` is refused."""
+        if lengths is not None:
+            if state is not None:
+                raise ValueError("mojolearn.SambaStack.forward: lengths= applies to the "
+                                 "stateless forward only; pass state=None")
+            ids = self._ids(inputs, "inputs")
+            return _ragged.ragged_forward(self.forward, ids, None, lengths, "<i4",
+                                          "SambaStack.forward")[0]
         if state is not None:
             return self._forward_state(inputs, state, step=False)
         acts = self._forward(inputs)

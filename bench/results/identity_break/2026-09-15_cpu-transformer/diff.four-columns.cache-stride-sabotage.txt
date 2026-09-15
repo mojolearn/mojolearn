@@ -1,0 +1,85 @@
+NOTE: --lanes scopes this diff to 2 lane(s); 164 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-apple-m4 is a CPU column: cpu_model='Apple M4' column=cpu families=['_mojolearn_transformer_host'] commit=df617c6997cdf9f794c073c2d027dc68c9b1191f
+| lane/fixture                 | verdict    | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-apple-m4     |
+|------------------------------|------------|------------------|------------------|------------------|------------------|
+| transformer-window/base      | IDENTICAL x4 | 49ffb2316f238e6d | 49ffb2316f238e6d | 49ffb2316f238e6d | 49ffb2316f238e6d |
+| transformer-window/denormal  | IDENTICAL x4 | 4f8ec13b57260957 | 4f8ec13b57260957 | 4f8ec13b57260957 | 4f8ec13b57260957 |
+| transformer-window/denormal_ftz | IDENTICAL x4 | 4f8ec13b57260957 | 4f8ec13b57260957 | 4f8ec13b57260957 | 4f8ec13b57260957 |
+| transformer-window/dupes     | IDENTICAL x4 | 44fa7ec52d690ee9 | 44fa7ec52d690ee9 | 44fa7ec52d690ee9 | 44fa7ec52d690ee9 |
+| transformer-window/hashed    | IDENTICAL x4 | af2bffef90669cb5 | af2bffef90669cb5 | af2bffef90669cb5 | af2bffef90669cb5 |
+| transformer-window/negative  | IDENTICAL x4 | e1f21e879b6d8fa9 | e1f21e879b6d8fa9 | e1f21e879b6d8fa9 | e1f21e879b6d8fa9 |
+| transformer-window/odd       | IDENTICAL x4 | 49ffb2316f238e6d | 49ffb2316f238e6d | 49ffb2316f238e6d | 49ffb2316f238e6d |
+| transformer-window/ties      | IDENTICAL x4 | 4cc1690c572f7931 | 4cc1690c572f7931 | 4cc1690c572f7931 | 4cc1690c572f7931 |
+| transformer-window/wide      | IDENTICAL x4 | 44a2b49da1619c85 | 44a2b49da1619c85 | 44a2b49da1619c85 | 44a2b49da1619c85 |
+| transformer/base             | DIVERGENT  | parts differ: step; agree: forward,prefill,backward | 295d4e62d4c78b14 | 295d4e62d4c78b14 | 491a91db09feee4f |
+| transformer/denormal         | DIVERGENT  | parts differ: step; agree: forward,prefill,backward | da87cbc4fb93d086 | da87cbc4fb93d086 | 9602f34b3b7eb957 |
+| transformer/denormal_ftz     | DIVERGENT  | parts differ: step; agree: forward,prefill,backward | da87cbc4fb93d086 | da87cbc4fb93d086 | 9602f34b3b7eb957 |
+| transformer/dupes            | DIVERGENT  | parts differ: step; agree: forward,prefill,backward | e48bc0a8545b1a29 | e48bc0a8545b1a29 | 964a8890d3054af7 |
+| transformer/hashed           | DIVERGENT  | parts differ: step; agree: forward,prefill,backward | 7d565e3a35324caa | 7d565e3a35324caa | 6a523b9411d4af93 |
+| transformer/negative         | DIVERGENT  | parts differ: step; agree: forward,prefill,backward | 79d66e219ac996a9 | 79d66e219ac996a9 | 2e20ae8a794f0e91 |
+| transformer/odd              | DIVERGENT  | parts differ: step; agree: forward,prefill,backward | 295d4e62d4c78b14 | 295d4e62d4c78b14 | 491a91db09feee4f |
+| transformer/ties             | DIVERGENT  | parts differ: step; agree: forward,prefill,backward | 251eb6369ef11d70 | 251eb6369ef11d70 | 26629404ca6d4681 |
+| transformer/wide             | DIVERGENT  | parts differ: step; agree: forward,prefill,backward | ecbe59229197362b | ecbe59229197362b | ae7eace23009d406 |
+
+summary: DIVERGENT=9, IDENTICAL=9
+
+| lane/fixture                 | column | verdict      | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-apple-m4     |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
+| transformer-window/base      | infer  | IDENTICAL x4 | a35cf82209713d66 | a35cf82209713d66 | a35cf82209713d66 | a35cf82209713d66 |
+| transformer-window/base      | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer-window/base      | batch  | IDENTICAL x4 | e0499610bd0279e1 | e0499610bd0279e1 | e0499610bd0279e1 | e0499610bd0279e1 |
+| transformer-window/denormal  | infer  | IDENTICAL x4 | 82b8315aa5e3eff3 | 82b8315aa5e3eff3 | 82b8315aa5e3eff3 | 82b8315aa5e3eff3 |
+| transformer-window/denormal  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer-window/denormal  | batch  | IDENTICAL x4 | 7c86487e6c8de244 | 7c86487e6c8de244 | 7c86487e6c8de244 | 7c86487e6c8de244 |
+| transformer-window/denormal_ftz | infer  | IDENTICAL x4 | 82b8315aa5e3eff3 | 82b8315aa5e3eff3 | 82b8315aa5e3eff3 | 82b8315aa5e3eff3 |
+| transformer-window/denormal_ftz | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer-window/denormal_ftz | batch  | IDENTICAL x4 | 7c86487e6c8de244 | 7c86487e6c8de244 | 7c86487e6c8de244 | 7c86487e6c8de244 |
+| transformer-window/dupes     | infer  | IDENTICAL x4 | c8727f6975c294a0 | c8727f6975c294a0 | c8727f6975c294a0 | c8727f6975c294a0 |
+| transformer-window/dupes     | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer-window/dupes     | batch  | IDENTICAL x4 | 2609e898b7c93177 | 2609e898b7c93177 | 2609e898b7c93177 | 2609e898b7c93177 |
+| transformer-window/hashed    | infer  | IDENTICAL x4 | 980b88a5ef026b11 | 980b88a5ef026b11 | 980b88a5ef026b11 | 980b88a5ef026b11 |
+| transformer-window/hashed    | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer-window/hashed    | batch  | IDENTICAL x4 | 235440a27bc0150e | 235440a27bc0150e | 235440a27bc0150e | 235440a27bc0150e |
+| transformer-window/negative  | infer  | IDENTICAL x4 | 4d10337584b45e49 | 4d10337584b45e49 | 4d10337584b45e49 | 4d10337584b45e49 |
+| transformer-window/negative  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer-window/negative  | batch  | IDENTICAL x4 | bda185330c5accc5 | bda185330c5accc5 | bda185330c5accc5 | bda185330c5accc5 |
+| transformer-window/odd       | infer  | IDENTICAL x4 | a35cf82209713d66 | a35cf82209713d66 | a35cf82209713d66 | a35cf82209713d66 |
+| transformer-window/odd       | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer-window/odd       | batch  | IDENTICAL x4 | e0499610bd0279e1 | e0499610bd0279e1 | e0499610bd0279e1 | e0499610bd0279e1 |
+| transformer-window/ties      | infer  | IDENTICAL x4 | 22a7a20579fe94db | 22a7a20579fe94db | 22a7a20579fe94db | 22a7a20579fe94db |
+| transformer-window/ties      | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer-window/ties      | batch  | IDENTICAL x4 | 27cdeafedfb90f1a | 27cdeafedfb90f1a | 27cdeafedfb90f1a | 27cdeafedfb90f1a |
+| transformer-window/wide      | infer  | IDENTICAL x4 | 75cf7df2cce4aea9 | 75cf7df2cce4aea9 | 75cf7df2cce4aea9 | 75cf7df2cce4aea9 |
+| transformer-window/wide      | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer-window/wide      | batch  | IDENTICAL x4 | 68798687c33a64ff | 68798687c33a64ff | 68798687c33a64ff | 68798687c33a64ff |
+| transformer/base             | infer  | IDENTICAL x4 | d658bafd272776e1 | d658bafd272776e1 | d658bafd272776e1 | d658bafd272776e1 |
+| transformer/base             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer/base             | batch  | IDENTICAL x4 | 321df8136b576084 | 321df8136b576084 | 321df8136b576084 | 321df8136b576084 |
+| transformer/denormal         | infer  | IDENTICAL x4 | 2dd718be6601b4be | 2dd718be6601b4be | 2dd718be6601b4be | 2dd718be6601b4be |
+| transformer/denormal         | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer/denormal         | batch  | IDENTICAL x4 | aad837e59ba3f9c6 | aad837e59ba3f9c6 | aad837e59ba3f9c6 | aad837e59ba3f9c6 |
+| transformer/denormal_ftz     | infer  | IDENTICAL x4 | 2dd718be6601b4be | 2dd718be6601b4be | 2dd718be6601b4be | 2dd718be6601b4be |
+| transformer/denormal_ftz     | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer/denormal_ftz     | batch  | IDENTICAL x4 | aad837e59ba3f9c6 | aad837e59ba3f9c6 | aad837e59ba3f9c6 | aad837e59ba3f9c6 |
+| transformer/dupes            | infer  | IDENTICAL x4 | cc0485bd3463891b | cc0485bd3463891b | cc0485bd3463891b | cc0485bd3463891b |
+| transformer/dupes            | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer/dupes            | batch  | IDENTICAL x4 | 4b51e3c2db7f9667 | 4b51e3c2db7f9667 | 4b51e3c2db7f9667 | 4b51e3c2db7f9667 |
+| transformer/hashed           | infer  | IDENTICAL x4 | 33aa6df81aac0bcd | 33aa6df81aac0bcd | 33aa6df81aac0bcd | 33aa6df81aac0bcd |
+| transformer/hashed           | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer/hashed           | batch  | IDENTICAL x4 | 10988a93701693a8 | 10988a93701693a8 | 10988a93701693a8 | 10988a93701693a8 |
+| transformer/negative         | infer  | IDENTICAL x4 | 0804b57610d9b1f5 | 0804b57610d9b1f5 | 0804b57610d9b1f5 | 0804b57610d9b1f5 |
+| transformer/negative         | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer/negative         | batch  | IDENTICAL x4 | 55ca8b3a54e10ffa | 55ca8b3a54e10ffa | 55ca8b3a54e10ffa | 55ca8b3a54e10ffa |
+| transformer/odd              | infer  | IDENTICAL x4 | d658bafd272776e1 | d658bafd272776e1 | d658bafd272776e1 | d658bafd272776e1 |
+| transformer/odd              | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer/odd              | batch  | IDENTICAL x4 | 321df8136b576084 | 321df8136b576084 | 321df8136b576084 | 321df8136b576084 |
+| transformer/ties             | infer  | IDENTICAL x4 | f222fca146b15f94 | f222fca146b15f94 | f222fca146b15f94 | f222fca146b15f94 |
+| transformer/ties             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer/ties             | batch  | IDENTICAL x4 | 8548d6f52de06b7b | 8548d6f52de06b7b | 8548d6f52de06b7b | 8548d6f52de06b7b |
+| transformer/wide             | infer  | IDENTICAL x4 | 976e818c75ac481c | 976e818c75ac481c | 976e818c75ac481c | 976e818c75ac481c |
+| transformer/wide             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer/wide             | batch  | IDENTICAL x4 | a487428103ce49a8 | a487428103ce49a8 | a487428103ce49a8 | a487428103ce49a8 |
+
+summary (infer/model): IDENTICAL=18, N/A=18
+summary (batch): IDENTICAL=18
+require-columns 4 over ['transformer', 'transformer-window']: OK
