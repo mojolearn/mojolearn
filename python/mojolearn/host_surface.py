@@ -471,6 +471,15 @@ TRAINING_LANE_NAMES = {
     "rf-reg-gamma-ig": "the random forest regressor with the gamma and inverse Gaussian criteria",
     "et-clf-entropy-bestfirst": "the best-first Extra Trees classifier with entropy splits",
     "et-reg-bootstrap-parallel": "the bootstrapped Extra Trees regressor with the parallel groves engine",
+    # The Embedding layer and IVFIndex (lane/cpu-training-embedding-ivf,
+    # 2026-09-15). Embedding's gather and fold, both execution plans, the
+    # padding row and the microbatch carry, through
+    # embedding/host/embedding_host.mojo (the device launch restated, not
+    # the contract's oracle) in the embedding family's own host binding.
+    # Their GPU cells are not in the 166-lane record; they are diffed against
+    # TRAINING_EXTRA_RECORDS below.
+    "embedding": "the Embedding layer",
+    "embedding-sort": "the Embedding layer on its sorted execution plan",
 }
 
 #: The lanes with NO CPU path of any kind, as the README states them. A
@@ -478,7 +487,6 @@ TRAINING_LANE_NAMES = {
 #: README until the marked span is rewritten.
 NO_CPU_PATH = (
     "the Transformer, Mamba and Samba blocks",
-    "the Embedding layer",
     "gradient boosting training outside its declared lanes (the ordered RMSE and feature-frequency fits, categorical features, sample weights, eval sets and the pointwise searcher among them)",
 )
 
@@ -1167,6 +1175,35 @@ FAMILIES = (
             "arima_host_numeric_mode", "arima_host_vendor", "arima_host_column",
             "arima_host_sabotage", "arima_vendor", "arima_numeric_mode",
             "arima_fit", "arima_predict", "arima_forecast",
+        ),
+        gate="tools/identity_break.py (cpu-identity-gate.yml)",
+        ships_in_wheel=True,
+    ),
+    dict(
+        # lane/cpu-training-embedding-ivf (2026-09-15): the Embedding
+        # layer's host binding. It routes `_mojolearn_embedding` on a
+        # CPU-only install with the GPU binding's whole surface
+        # (embedding_forward, embedding_backward and the two read-backs),
+        # the refusals in its words and order.
+        family="embedding",
+        binding="_mojolearn_embedding_host",
+        routes="_mojolearn_embedding",
+        loaded_by="_backend._HOST_MODULES",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=("embedding", "embedding-sort"),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=("Embedding",),
+        display="the Embedding layer",
+        host_modules=(
+            "embedding/host/embedding_host.mojo",
+            "embedding/checks/embedding_oracle.mojo",
+        ),
+        exports=(
+            "embedding_host_numeric_mode", "embedding_host_vendor",
+            "embedding_host_column", "embedding_host_sabotage",
+            "embedding_vendor", "embedding_numeric_mode",
+            "embedding_forward", "embedding_backward",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=True,
