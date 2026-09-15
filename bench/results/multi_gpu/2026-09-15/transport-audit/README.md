@@ -64,15 +64,28 @@ scatters) use it.
   cells of the three byte-LM lanes (`byte-lm-fix-default.vs-166.txt`:
   IDENTICAL=27), so the default path's bits did not move.
 
+## The drivers the lanes reach only at small shapes (`drivers-mi300x/`)
+
+`tools/transport_audit_check.py` runs each driver on devices (0,) and (0, 1)
+in one process and compares every output byte for byte, on two MI300X
+(pod `wrn6t5ocqrlzo5`, source `3250fcb5b`): DBSCAN on 40000x8 (1.22 MiB),
+SVM fit on 4096x16 and decision/predict on 1904 rows, ParallelQueries and
+ReferenceShardedNeighbors over a 64000x16 reference (3.91 MiB), HDBSCAN on
+12000x4, coordinate descent on 80000x16 (4.88 MiB), a Gaussian process on
+1024 rows (a 4 MiB covariance), and the isolation forest on 160000x16
+(9.77 MiB). All eight read EQUAL (`audit.txt`). The SVM and HDBSCAN inputs are
+below 1 MiB; their kernel and distance rows are not. With
+`MOJOLEARN_TRANSPORT_AUDIT_SABOTAGE=1` the cd and gp cases read DIFFERS and
+the tool exits 1 (`audit-sabotage.txt`), so the comparison can fail.
+
 ## What this does not cover
 
-- Only the lanes above ran above 1 MiB. The DBSCAN, neighbors, hierarchy
-  (HDBSCAN), SVM kernel-row, Householder QR, split Gram, coordinate-descent
-  and isolation-forest drivers, and the Cholesky trailing rows, have two-MI300X
-  receipts only at the sizes of their existing gates, and those gates do not
-  establish that their buffers passed 1 MiB. GaussianMixture and resampling
-  were asked above 1 MiB on two MI300X on 2026-09-14/15 (`../large-buffers/`)
-  and passed.
+- The Householder QR and split Gram (PCA) drivers, and the Cholesky trailing
+  rows, have two-MI300X receipts only at the sizes of their existing gates.
+  GaussianMixture and resampling were asked above 1 MiB on two MI300X on
+  2026-09-14/15 (`../large-buffers/`) and passed.
+- The drivers audit prints the input size, not the size of each device
+  buffer a driver moves.
 - A passing lane does not prove a driver immune: the failure depends on
   timing (the wide par-samba and par-samba-clip lanes, the layer-owned byte-LM
   pool and every classical lane passed on the same boxes).
