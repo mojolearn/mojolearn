@@ -31,7 +31,7 @@ from checks.kernel_matrix import (
     column_name,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from bindings.ivf_host_search import ivf_flat_search_binding
+from bindings.ivf_host_search import ivf_flat_extend_binding, ivf_flat_search_binding
 from ivf.host.ivf_host import IVF_HOST_SABOTAGE
 
 
@@ -83,6 +83,7 @@ def PyInit__mojolearn_ivf_search_host() abi("C") -> PythonObject:
         module.def_function[ivf_vendor_binding]("ivf_vendor")
         module.def_function[ivf_numeric_mode_binding]("ivf_numeric_mode")
         module.def_function[ivf_flat_search_binding]("ivf_flat_search")
+        module.def_function[ivf_flat_extend_binding]("ivf_flat_extend")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_ivf_search_host: ", error))

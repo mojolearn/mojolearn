@@ -81,7 +81,23 @@ is no GPU-built index to save. Required:
   into an isolated target, load a GPU-saved index and embedding table from
   fixtures committed under `bench/results/`, search and look up, compare bytes.
 
-## Stage 2 design: `IVFIndex.extend`
+## Stage 2: `IVFIndex.extend` (done)
+
+- The GPU path is `ivf_flat_extend` (the build's `predict`); the CPU path is
+  `host_ivf_extend` (`host_assign`, plus a sabotage arm that sends every new
+  row to the next list). Both use `extend_list_layout`, and the new ids are
+  `n_rows, n_rows + 1, ...`.
+- `ivf_flat_extend` is on the GPU binding, the reference ivf binding and the
+  shipped ivf_search binding. There is a new lane `ivf-extend` with a batch
+  declaration, and a new classical gate lane with its Metal recording.
+- Evidence: `bench/results/identity_break/2026-09-15_ivf-extend/README.md`.
+  - Metal and CPU agree on all 9 ivf-extend cells (OWED x2).
+  - ivf and ivf-euclidean stay IDENTICAL to the records.
+  - Host sabotage moves 54 of 54 owed parts; batch sabotage moves 9 of 9.
+  - The saved GPU-extended index matched on the shipped binding and on an
+    installed wheel.
+
+## Stage 2 design as written before the work
 
 Reference: cuVS `ivf_flat::extend` (`ivf_flat_build.cuh:180-345`). It predicts
 labels for the new vectors with `kmeans::predict` against the FIXED centers
@@ -118,4 +134,19 @@ Behavior here:
 - The CPU identity gate workflow builds neither shipped inference family and
   does not check `SEARCH_LOOKUP_RECORDED`. That is owed to the workflow's
   owner; this lane does not edit workflows.
-- Stage 2 (`IVFIndex.extend`): in progress.
+- Stage 2 ivf-extend cells on Apple (a record column), NVIDIA and AMD: the next release record.
+- An intermittent Metal failure seen once on the M4 (2026-09-15 about 13:45 ET)
+  needs its own lane.
+  - What was seen: one identity_break process over ivf, ivf-euclidean and
+    ivf-extend read correct cells on the first five `ivf` fixtures. It then read
+    zero distances, `merge_probed_lists: list 0 appears at probe 0 and probe 1`
+    and batch cells that moved, on every later cell. Another agent's Metal GBDT
+    run was live on the same GPU.
+  - What it was not: a rerun of the `ivf` lane alone, with that GBDT run still
+    live, read 9 of 9 cells STABLE and IDENTICAL to the committed Apple, NVIDIA
+    and AMD columns. No GPU-path Mojo source changed on main between the clean
+    stage 1 runs and that failure.
+  - The suspects are device state accumulating across many `DeviceContext`s in
+    one long process, or device contention. The stage 2 Metal columns were
+    therefore taken one process per lane. The failure itself is not diagnosed
+    here.

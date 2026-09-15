@@ -1,0 +1,25 @@
+# macOS arm64 host builds from 73b1b4e7d (M4, one core through mac_slot.sh)
+# command: nm <so> | grep -i -o -E '[A-Za-z0-9_]*(gpr_|gpc_|chol_|lml|laplace|newton|gmmh_|gmm_sample)[A-Za-z0-9_]*' | sort | uniq -c
+# the predict-side names appear, so the listing can match; no gpr_host_fit, gpc_host_fit, chol_host_potrf, lml, Newton, gmmh_m_step or gmmh_e_step appears
+== _mojolearn_gp_infer_host.so 288184 bytes, 428 symbols
+  20 gpr_oracle
+   3 gpc_steps
+   2 gpr_predict_binding
+   2 gpc_predict_binding
+   2 chol_oracle
+   1 gpr_host_validate_kernel
+   1 gpr_host_validate_data
+   1 gpr_host_kernel_stack_depth
+   1 gpr_host_kernel_matrix
+   1 gpr_host_kernel_diag
+   1 gpc_scale_rows
+   1 gpc_residual
+   1 gpc_latent_var
+   1 chol_host_trsm_lower
+   1 chol_host_hex32_bits
+   1 _gpr_predict_run
+   1 _gpc_predict_run
+== _mojolearn_mixture_infer_host.so 251872 bytes, 334 symbols
+   1 gmmh_score_samples
+   1 gmm_sample_host
+   1 gmm_sample_binding

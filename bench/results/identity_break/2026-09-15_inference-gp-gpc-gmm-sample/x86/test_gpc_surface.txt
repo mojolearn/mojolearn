@@ -1,0 +1,4 @@
+PASS test_classification_is_no_longer_not_implemented
+PASS test_constructor_refuses_by_name
+PASS test_degenerate_classes
+PASS test_repeat_batch_save_load_and_host_model

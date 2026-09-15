@@ -1,0 +1,778 @@
+{
+ "mode": "identical",
+ "repeats": 2,
+ "platform": "Linux-7.0.0-30-generic-x86_64-with-glibc2.35",
+ "vendor": "cpu-amd-epyc-9655p-96-core-processor",
+ "commit": "2ce48b333b8442d8994909f71d0d12d2d6418ecb",
+ "commit_source": "MOJOLEARN_COMMIT",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  },
+  "ties": {
+   "X": "186fe2109fc34ad5",
+   "y_clf": "f33cf521f758ae3c",
+   "y_reg": "047d4652a4d56bc3"
+  },
+  "hashed": {
+   "X": "c93497b26fe65cda",
+   "y_clf": "d104ead2f62bdd03",
+   "y_reg": "ce4959d8070bb069"
+  },
+  "wide": {
+   "X": "35f6a8481e649eb8",
+   "y_clf": "276ebacc29267948",
+   "y_reg": "611fc5dd6367bef5"
+  },
+  "denormal": {
+   "X": "752323c375a1cbf5",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "denormal_ftz": {
+   "X": "34c156b0d0e8a891",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "dupes": {
+   "X": "9d9d9db7c7785a14",
+   "y_clf": "d390ee2944b13e1d",
+   "y_reg": "135ce10f2a0817fe"
+  },
+  "odd": {
+   "X": "93d9611a09107bb9",
+   "y_clf": "273a388a705a4f40",
+   "y_reg": "25f3d126c81ca0ec"
+  },
+  "negative": {
+   "X": "08106ffff3256313",
+   "y_clf": "294ce4d7dadaf0bb",
+   "y_reg": "ce1914d5f78f5707"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  },
+  "ties": {
+   "X": "d1ba686494256660"
+  },
+  "hashed": {
+   "X": "9dc786ade4574aff"
+  },
+  "wide": {
+   "X": "d52a1af18a3c2f1c"
+  },
+  "denormal": {
+   "X": "5061056b118d07d0"
+  },
+  "denormal_ftz": {
+   "X": "a8c3d1a560b5cabb"
+  },
+  "dupes": {
+   "X": "e4b16c115962dfcd"
+  },
+  "odd": {
+   "X": "32ea0bbed60b8e6c"
+  },
+  "negative": {
+   "X": "45b539a3f66ce25d"
+  }
+ },
+ "cells": {
+  "ivf-extend/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "ba53c112142a07c4",
+    "ba53c112142a07c4"
+   ],
+   "parts": [
+    {
+     "offsets": "0a2cf14619b4d06a",
+     "carry": "9bd1a34adf4d9722",
+     "data": "392c5dafed26b71f",
+     "lists": "2a362a540f7fec7b",
+     "dist": "5e9b2853dd6a202e",
+     "idx": "279456db012929ad",
+     "cand": "84c1bb1add93e7c7"
+    },
+    {
+     "offsets": "0a2cf14619b4d06a",
+     "carry": "9bd1a34adf4d9722",
+     "data": "392c5dafed26b71f",
+     "lists": "2a362a540f7fec7b",
+     "dist": "5e9b2853dd6a202e",
+     "idx": "279456db012929ad",
+     "cand": "84c1bb1add93e7c7"
+    }
+   ],
+   "infer": [
+    "21a84397fed9cb7b",
+    "21a84397fed9cb7b"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "6814e84fcb72ca37",
+    "6814e84fcb72ca37"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "21a84397fed9cb7b",
+    "21a84397fed9cb7b"
+   ],
+   "batch": [
+    "BATCH_MOVED:extend (new-row lists):row 0 of 64 alone:output 0 element 0: whole 0x0000000c vs alone 0x0000000d",
+    "BATCH_MOVED:extend (new-row lists):row 0 of 64 alone:output 0 element 0: whole 0x0000000c vs alone 0x0000000d"
+   ],
+   "batch_verdict": "BATCH_MOVED"
+  },
+  "ivf-extend/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "0da4a663917d249c",
+    "0da4a663917d249c"
+   ],
+   "parts": [
+    {
+     "offsets": "79190e3b07f6beec",
+     "carry": "1902d77e80a139df",
+     "data": "cd3d7fde53731f18",
+     "lists": "dad2957afa2e29c9",
+     "dist": "08ce4da42c21fbbc",
+     "idx": "1e50fd8c1b20f55f",
+     "cand": "af9caf3a2de132f3"
+    },
+    {
+     "offsets": "79190e3b07f6beec",
+     "carry": "1902d77e80a139df",
+     "data": "cd3d7fde53731f18",
+     "lists": "dad2957afa2e29c9",
+     "dist": "08ce4da42c21fbbc",
+     "idx": "1e50fd8c1b20f55f",
+     "cand": "af9caf3a2de132f3"
+    }
+   ],
+   "infer": [
+    "ee7fa6ee3ed98541",
+    "ee7fa6ee3ed98541"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "0d954140e0a9c674",
+    "0d954140e0a9c674"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "ee7fa6ee3ed98541",
+    "ee7fa6ee3ed98541"
+   ],
+   "batch": [
+    "BATCH_MOVED:extend (new-row lists):row 0 of 64 alone:output 0 element 0: whole 0x0000000e vs alone 0x0000000f",
+    "BATCH_MOVED:extend (new-row lists):row 0 of 64 alone:output 0 element 0: whole 0x0000000e vs alone 0x0000000f"
+   ],
+   "batch_verdict": "BATCH_MOVED"
+  },
+  "ivf-extend/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "f669e9076c62ef24",
+    "f669e9076c62ef24"
+   ],
+   "parts": [
+    {
+     "offsets": "1aa4cbbb7dab259d",
+     "carry": "71e913f240c5318d",
+     "data": "8f98244f1ce09426",
+     "lists": "aaa2cad6727632d5",
+     "dist": "b4d96602ceb77304",
+     "idx": "6d9c158753b392f0",
+     "cand": "8ba4d6bf1dcf25a3"
+    },
+    {
+     "offsets": "1aa4cbbb7dab259d",
+     "carry": "71e913f240c5318d",
+     "data": "8f98244f1ce09426",
+     "lists": "aaa2cad6727632d5",
+     "dist": "b4d96602ceb77304",
+     "idx": "6d9c158753b392f0",
+     "cand": "8ba4d6bf1dcf25a3"
+    }
+   ],
+   "infer": [
+    "9d0f275ae985056d",
+    "9d0f275ae985056d"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "e96813401e1670f0",
+    "e96813401e1670f0"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "9d0f275ae985056d",
+    "9d0f275ae985056d"
+   ],
+   "batch": [
+    "BATCH_MOVED:extend (new-row lists):row 0 of 64 alone:output 0 element 0: whole 0x00000009 vs alone 0x00000008",
+    "BATCH_MOVED:extend (new-row lists):row 0 of 64 alone:output 0 element 0: whole 0x00000009 vs alone 0x00000008"
+   ],
+   "batch_verdict": "BATCH_MOVED"
+  },
+  "ivf-extend/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "b215fd8f707cd94c",
+    "b215fd8f707cd94c"
+   ],
+   "parts": [
+    {
+     "offsets": "68d88b3b9275540d",
+     "carry": "f0d92533e8b5be20",
+     "data": "2d4a4ecfb72e4d23",
+     "lists": "f27e7bdf5617cc27",
+     "dist": "061a7e3aa15e67c7",
+     "idx": "e463939cf2b2842a",
+     "cand": "f6a57930ff139d4b"
+    },
+    {
+     "offsets": "68d88b3b9275540d",
+     "carry": "f0d92533e8b5be20",
+     "data": "2d4a4ecfb72e4d23",
+     "lists": "f27e7bdf5617cc27",
+     "dist": "061a7e3aa15e67c7",
+     "idx": "e463939cf2b2842a",
+     "cand": "f6a57930ff139d4b"
+    }
+   ],
+   "infer": [
+    "c6fd06dc0c84cdd5",
+    "c6fd06dc0c84cdd5"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "c9793933012960e5",
+    "c9793933012960e5"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "c6fd06dc0c84cdd5",
+    "c6fd06dc0c84cdd5"
+   ],
+   "batch": [
+    "BATCH_MOVED:extend (new-row lists):row 0 of 64 alone:output 0 element 0: whole 0x0000000b vs alone 0x0000000a",
+    "BATCH_MOVED:extend (new-row lists):row 0 of 64 alone:output 0 element 0: whole 0x0000000b vs alone 0x0000000a"
+   ],
+   "batch_verdict": "BATCH_MOVED"
+  },
+  "ivf-extend/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "60a84eeca95632ba",
+    "60a84eeca95632ba"
+   ],
+   "parts": [
+    {
+     "offsets": "e4a5a8e4581a3213",
+     "carry": "1d50435094011ade",
+     "data": "9d07373844bb073f",
+     "lists": "62b07e9b7f51dce3",
+     "dist": "4780b426ffecf1df",
+     "idx": "9e6e7dc32b73568a",
+     "cand": "f5f93cbaa5f24a88"
+    },
+    {
+     "offsets": "e4a5a8e4581a3213",
+     "carry": "1d50435094011ade",
+     "data": "9d07373844bb073f",
+     "lists": "62b07e9b7f51dce3",
+     "dist": "4780b426ffecf1df",
+     "idx": "9e6e7dc32b73568a",
+     "cand": "f5f93cbaa5f24a88"
+    }
+   ],
+   "infer": [
+    "3da4f22de1f06f6e",
+    "3da4f22de1f06f6e"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "7a4a7782b32da3a0",
+    "7a4a7782b32da3a0"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "3da4f22de1f06f6e",
+    "3da4f22de1f06f6e"
+   ],
+   "batch": [
+    "BATCH_MOVED:extend (new-row lists):row 0 of 64 alone:output 0 element 0: whole 0x0000000f vs alone 0x0000000e",
+    "BATCH_MOVED:extend (new-row lists):row 0 of 64 alone:output 0 element 0: whole 0x0000000f vs alone 0x0000000e"
+   ],
+   "batch_verdict": "BATCH_MOVED"
+  },
+  "ivf-extend/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "5aadb50ae8c47074",
+    "5aadb50ae8c47074"
+   ],
+   "parts": [
+    {
+     "offsets": "e4a5a8e4581a3213",
+     "carry": "1d50435094011ade",
+     "data": "43b5b1b7e50c7cfe",
+     "lists": "62b07e9b7f51dce3",
+     "dist": "4780b426ffecf1df",
+     "idx": "9e6e7dc32b73568a",
+     "cand": "f5f93cbaa5f24a88"
+    },
+    {
+     "offsets": "e4a5a8e4581a3213",
+     "carry": "1d50435094011ade",
+     "data": "43b5b1b7e50c7cfe",
+     "lists": "62b07e9b7f51dce3",
+     "dist": "4780b426ffecf1df",
+     "idx": "9e6e7dc32b73568a",
+     "cand": "f5f93cbaa5f24a88"
+    }
+   ],
+   "infer": [
+    "3da4f22de1f06f6e",
+    "3da4f22de1f06f6e"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "4defe96aca4c8e11",
+    "4defe96aca4c8e11"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "3da4f22de1f06f6e",
+    "3da4f22de1f06f6e"
+   ],
+   "batch": [
+    "BATCH_MOVED:extend (new-row lists):row 0 of 64 alone:output 0 element 0: whole 0x0000000f vs alone 0x0000000e",
+    "BATCH_MOVED:extend (new-row lists):row 0 of 64 alone:output 0 element 0: whole 0x0000000f vs alone 0x0000000e"
+   ],
+   "batch_verdict": "BATCH_MOVED"
+  },
+  "ivf-extend/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "1585900d93cb8c88",
+    "1585900d93cb8c88"
+   ],
+   "parts": [
+    {
+     "offsets": "a15247ed2b76eb46",
+     "carry": "833185fe48bf1b2a",
+     "data": "52bfd23b3a5b5594",
+     "lists": "bc9dc7733112db81",
+     "dist": "1d62d67ded72f54d",
+     "idx": "768429a2eb68c0c8",
+     "cand": "7e797925ef47677d"
+    },
+    {
+     "offsets": "a15247ed2b76eb46",
+     "carry": "833185fe48bf1b2a",
+     "data": "52bfd23b3a5b5594",
+     "lists": "bc9dc7733112db81",
+     "dist": "1d62d67ded72f54d",
+     "idx": "768429a2eb68c0c8",
+     "cand": "7e797925ef47677d"
+    }
+   ],
+   "infer": [
+    "802c8f83c4e8dddd",
+    "802c8f83c4e8dddd"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "667918778ad720e3",
+    "667918778ad720e3"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "802c8f83c4e8dddd",
+    "802c8f83c4e8dddd"
+   ],
+   "batch": [
+    "BATCH_MOVED:extend (new-row lists):row 0 of 64 alone:output 0 element 0: whole 0x00000009 vs alone 0x00000008",
+    "BATCH_MOVED:extend (new-row lists):row 0 of 64 alone:output 0 element 0: whole 0x00000009 vs alone 0x00000008"
+   ],
+   "batch_verdict": "BATCH_MOVED"
+  },
+  "ivf-extend/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "940ef92d230837ed",
+    "940ef92d230837ed"
+   ],
+   "parts": [
+    {
+     "offsets": "deb42ee1f3873378",
+     "carry": "1417fa34d80fb3a4",
+     "data": "0d7703a109fdbab1",
+     "lists": "c06aede9e915235d",
+     "dist": "96bc2fdaf282caf1",
+     "idx": "68ba93ce83e637e3",
+     "cand": "951e80c0f6242eb5"
+    },
+    {
+     "offsets": "deb42ee1f3873378",
+     "carry": "1417fa34d80fb3a4",
+     "data": "0d7703a109fdbab1",
+     "lists": "c06aede9e915235d",
+     "dist": "96bc2fdaf282caf1",
+     "idx": "68ba93ce83e637e3",
+     "cand": "951e80c0f6242eb5"
+    }
+   ],
+   "infer": [
+    "a8b712ff1a5e3ef1",
+    "a8b712ff1a5e3ef1"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "26b97c27cd22d526",
+    "26b97c27cd22d526"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "a8b712ff1a5e3ef1",
+    "a8b712ff1a5e3ef1"
+   ],
+   "batch": [
+    "BATCH_MOVED:extend (new-row lists):row 0 of 64 alone:output 0 element 0: whole 0x00000005 vs alone 0x00000004",
+    "BATCH_MOVED:extend (new-row lists):row 0 of 64 alone:output 0 element 0: whole 0x00000005 vs alone 0x00000004"
+   ],
+   "batch_verdict": "BATCH_MOVED"
+  },
+  "ivf-extend/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "38f0489facb80eaa",
+    "38f0489facb80eaa"
+   ],
+   "parts": [
+    {
+     "offsets": "21fad59c7efa8cda",
+     "carry": "c57cbefb515b2031",
+     "data": "6ab16e87d5d7130e",
+     "lists": "d9515800d4d6317b",
+     "dist": "2b6d17de6978be38",
+     "idx": "7203ead4945a9515",
+     "cand": "85d1960eb1bca129"
+    },
+    {
+     "offsets": "21fad59c7efa8cda",
+     "carry": "c57cbefb515b2031",
+     "data": "6ab16e87d5d7130e",
+     "lists": "d9515800d4d6317b",
+     "dist": "2b6d17de6978be38",
+     "idx": "7203ead4945a9515",
+     "cand": "85d1960eb1bca129"
+    }
+   ],
+   "infer": [
+    "d5badddd236f4f6f",
+    "d5badddd236f4f6f"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "fd1e311bb478d024",
+    "fd1e311bb478d024"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "d5badddd236f4f6f",
+    "d5badddd236f4f6f"
+   ],
+   "batch": [
+    "BATCH_MOVED:extend (new-row lists):row 0 of 64 alone:output 0 element 0: whole 0x00000001 vs alone 0x00000000",
+    "BATCH_MOVED:extend (new-row lists):row 0 of 64 alone:output 0 element 0: whole 0x00000001 vs alone 0x00000000"
+   ],
+   "batch_verdict": "BATCH_MOVED"
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": true,
+ "rlpair_protocol": {
+  "seqs": 5,
+  "prompt": 4,
+  "decode": 12,
+  "trainer_split": [
+   2,
+   "n"
+  ],
+  "joiner": 4,
+  "join_at": 3,
+  "join_row": 2,
+  "leaver": 1,
+  "leave_after": 8,
+  "block_vocab": 48,
+  "logprob": "training.cross_entropy(reduction='none')",
+  "enabled": true
+ },
+ "rlpair_sabotage": false,
+ "host": {
+  "cpu_model": "AMD EPYC 9655P 96-Core Processor",
+  "arch": "x86_64",
+  "target_cpu": "unrecorded",
+  "mojo_version": "unrecorded",
+  "python": "3.14.7",
+  "column": "cpu",
+  "routed": {
+   "_mojolearn": "_mojolearn_core_host",
+   "_mojolearn_linalg": "_mojolearn_linalg_host",
+   "_mojolearn_estimators": "_mojolearn_estimators_host",
+   "_mojolearn_metrics": "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing": "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa": "_mojolearn_tsa_host",
+   "_mojolearn_solver": "_mojolearn_solver_host",
+   "_mojolearn_svm": "_mojolearn_svm_host",
+   "_mojolearn_trees": "_mojolearn_trees_host",
+   "_mojolearn_rf": "_mojolearn_rf_host",
+   "_mojolearn_gp": "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods": "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture": "_mojolearn_mixture_host",
+   "_mojolearn_hdbscan": "_mojolearn_hdbscan_host",
+   "_mojolearn_gbdt": "_mojolearn_gbdt_host",
+   "_mojolearn_training": "_mojolearn_training_host",
+   "_mojolearn_resample": "_mojolearn_resample_host",
+   "_mojolearn_mamba": "_mojolearn_mamba_host",
+   "_mojolearn_arima": "_mojolearn_arima_host",
+   "_mojolearn_embedding": "_mojolearn_embedding_host",
+   "_mojolearn_ivf": "_mojolearn_ivf_host",
+   "_mojolearn_transformer": "_mojolearn_transformer_host"
+  },
+  "surface": "python/mojolearn/host_surface.py",
+  "declared": [
+   "_mojolearn_byte_lm_host",
+   "_mojolearn_forest_host",
+   "_mojolearn_tokenizer_host",
+   "_mojolearn_neural_host",
+   "_mojolearn_core_host",
+   "_mojolearn_linalg_host",
+   "_mojolearn_estimators_host",
+   "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa_host",
+   "_mojolearn_solver_host",
+   "_mojolearn_svm_host",
+   "_mojolearn_trees_host",
+   "_mojolearn_rf_host",
+   "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture_host",
+   "_mojolearn_hdbscan_host",
+   "_mojolearn_gbdt_host",
+   "_mojolearn_training_host",
+   "_mojolearn_resample_host",
+   "_mojolearn_mamba_host",
+   "_mojolearn_arima_host",
+   "_mojolearn_embedding_host",
+   "_mojolearn_embedding_infer_host",
+   "_mojolearn_ivf_host",
+   "_mojolearn_ivf_search_host",
+   "_mojolearn_forecast_host",
+   "_mojolearn_transformer_host"
+  ],
+  "covered_lanes": [
+   "gemm-pinned",
+   "kde",
+   "holtwinters",
+   "lasso",
+   "elasticnet",
+   "svc",
+   "agglomerative",
+   "et-clf",
+   "et-reg",
+   "iforest",
+   "knn",
+   "knn-clf",
+   "knn-reg",
+   "pca",
+   "pca-whiten",
+   "tsvd",
+   "ols",
+   "ridge",
+   "dbscan",
+   "kmeans",
+   "metrics",
+   "spectral",
+   "standard-scaler",
+   "minmax-scaler",
+   "logistic",
+   "rf-clf",
+   "rf-reg",
+   "kmeans-random",
+   "kmeans-array",
+   "kmeans-weighted",
+   "standard-scaler-no-mean",
+   "standard-scaler-no-std",
+   "minmax-scaler-clip",
+   "spectral-precomputed",
+   "gp",
+   "gp-matern12",
+   "gp-matern32",
+   "gp-matern52-ard",
+   "gp-normalize-y",
+   "gpc",
+   "gpc-multiclass",
+   "knn-sqeuclidean",
+   "knn-clf-distance",
+   "knn-reg-distance",
+   "gemm-transposed",
+   "dbscan-brute-l1",
+   "kde-tophat-sqeuclidean",
+   "kde-epanechnikov-l1",
+   "kde-exponential-chebyshev",
+   "kde-linear-cosine",
+   "kde-cosine-minkowski",
+   "kde-weighted",
+   "ols-no-intercept",
+   "ols-weighted",
+   "ridge-no-intercept",
+   "logistic-unpenalized-no-intercept",
+   "elasticnet-l2end-no-intercept",
+   "holtwinters-multiplicative",
+   "svc-linear",
+   "svc-poly",
+   "iforest-tuned",
+   "knn-manhattan",
+   "knn-chebyshev",
+   "knn-cosine",
+   "knn-minkowski-p3",
+   "knn-rbc",
+   "radius",
+   "radius-manhattan",
+   "radius-chebyshev",
+   "radius-minkowski-p3",
+   "dbscan-weighted",
+   "logistic-l1",
+   "logistic-elasticnet",
+   "logistic-multiclass",
+   "kpss",
+   "svr",
+   "svr-linear",
+   "pca-full-whiten",
+   "metrics-classification",
+   "metrics-fowlkes-mallows",
+   "gbdt-adapter-score-weighted",
+   "rf-score-weighted",
+   "mlp",
+   "gbdt-symmetric",
+   "gbdt-rmse",
+   "gbdt-depthwise",
+   "gbdt-lossguide",
+   "gbdt-nan-modes",
+   "gbdt-adapter-clf",
+   "gbdt-adapter-reg",
+   "gbdt-parametric-losses",
+   "gbdt-exact-mae",
+   "gbdt-lossguide-newtoncosine",
+   "gbdt-multiclass",
+   "gbdt-onevsall",
+   "gbdt-ordered-rmse",
+   "gbdt-feature-freq",
+   "gbdt-pointwise-l2-bayesian-eval",
+   "gbdt-categorical-ctr",
+   "gbdt-query-rmse",
+   "arima",
+   "arima-011",
+   "arima-seasonal-c",
+   "umap",
+   "kmeans-sqrt",
+   "kmeans-classic-pp",
+   "kmeans-cosine",
+   "cross-val",
+   "bootstrap",
+   "permutation-test",
+   "monte-carlo",
+   "optim-sgd",
+   "optim-adam-clip",
+   "cross-entropy-arms",
+   "training-primitives",
+   "cholesky",
+   "rbf-sampler",
+   "kernel-ridge",
+   "nystroem",
+   "gmm",
+   "gmm-random-init",
+   "hdbscan",
+   "hdbscan-leaf",
+   "rf-clf-entropy-log2-noboot",
+   "rf-clf-balanced-parallel",
+   "rf-reg-poisson",
+   "rf-reg-gamma-ig",
+   "et-clf-entropy-bestfirst",
+   "et-reg-bootstrap-parallel",
+   "mamba2",
+   "mamba2-dtlimit",
+   "mamba1",
+   "mamba3",
+   "transformer",
+   "transformer-window",
+   "samba",
+   "samba-untied-dropout-accum",
+   "byte-lm-host-infer",
+   "byte-lm-host-infer-threaded",
+   "byte-lm-host-train",
+   "par-scaler",
+   "par-arima",
+   "par-holtwinters",
+   "par-queries-knn",
+   "par-queries-radius",
+   "par-queries-kde",
+   "par-reference-knn",
+   "par-reference-knn-reg",
+   "par-forest",
+   "par-forest-et",
+   "par-mlp",
+   "embedding",
+   "embedding-sort",
+   "ivf",
+   "ivf-euclidean",
+   "ivf-extend",
+   "byte-lm",
+   "byte-lm-resident"
+  ],
+  "families": {
+   "_mojolearn_ivf_host": {
+    "column": "cpu",
+    "sha256": "7fbbf2f91da21ed691d63589f68fc63230e5c63ba511c5c08055240e69a516ad",
+    "size": 433024,
+    "sabotage": false
+   },
+   "_mojolearn_ivf_search_host": {
+    "column": "cpu",
+    "sha256": "1125bed9c2ce0ed56af6bd1120d5d255f77135dbcd5bc7ad80d1cd2d6d189d7f",
+    "size": 272688,
+    "sabotage": false
+   }
+  }
+ },
+ "package": {
+  "version": "0.8.5",
+  "package_dir": "/root/mojolearn/python/mojolearn",
+  "numpy": "2.5.2",
+  "python": "3.14.7",
+  "par_devices": "0",
+  "bindings": []
+ }
+}

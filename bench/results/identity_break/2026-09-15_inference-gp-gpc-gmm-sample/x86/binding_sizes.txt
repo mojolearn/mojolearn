@@ -1,0 +1,9 @@
+594488 python/mojolearn/host/_mojolearn_core_host.so
+653856 python/mojolearn/host/_mojolearn_estimators_host.so
+376888 python/mojolearn/host/_mojolearn_gp_host.so
+282816 python/mojolearn/host/_mojolearn_gp_infer_host.so
+429864 python/mojolearn/host/_mojolearn_hdbscan_host.so
+273384 python/mojolearn/host/_mojolearn_hdbscan_infer_host.so
+424024 python/mojolearn/host/_mojolearn_mixture_host.so
+242064 python/mojolearn/host/_mojolearn_mixture_infer_host.so
+399480 python/mojolearn/host/_mojolearn_svm_host.so

@@ -1,0 +1,205 @@
+NOTE: --lanes scopes this diff to 6 lane(s); 165 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-amd-epyc-9754-128-core-processor is a CPU column: cpu_model='AMD EPYC 9754 128-Core Processor' column=cpu families=['_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_svm_host'] commit=afd1dcd2af4ff33e2e4bddfaae58df0798732580
+FIXTURE MISMATCH on 'denormal': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    arm64: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-amd-epyc-9754-128-core-processor: None
+FIXTURE MISMATCH on 'denormal_ftz': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    arm64: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-amd-epyc-9754-128-core-processor: None
+FIXTURE MISMATCH on 'hashed': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    arm64: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    cpu-amd-epyc-9754-128-core-processor: None
+FIXTURE MISMATCH on 'negative': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    arm64: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    cpu-amd-epyc-9754-128-core-processor: None
+FIXTURE MISMATCH on 'odd': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    arm64: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    cpu-amd-epyc-9754-128-core-processor: None
+FIXTURE MISMATCH on 'wide': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    arm64: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    cpu-amd-epyc-9754-128-core-processor: None
+HELD-OUT MISMATCH on 'denormal': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '5061056b118d07d0'}
+    arm64: {'X': '5061056b118d07d0'}
+    cpu-amd-epyc-9754-128-core-processor: None
+HELD-OUT MISMATCH on 'denormal_ftz': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'a8c3d1a560b5cabb'}
+    arm64: {'X': 'a8c3d1a560b5cabb'}
+    cpu-amd-epyc-9754-128-core-processor: None
+HELD-OUT MISMATCH on 'hashed': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '9dc786ade4574aff'}
+    arm64: {'X': '9dc786ade4574aff'}
+    cpu-amd-epyc-9754-128-core-processor: None
+HELD-OUT MISMATCH on 'negative': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '45b539a3f66ce25d'}
+    arm64: {'X': '45b539a3f66ce25d'}
+    cpu-amd-epyc-9754-128-core-processor: None
+HELD-OUT MISMATCH on 'odd': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '32ea0bbed60b8e6c'}
+    arm64: {'X': '32ea0bbed60b8e6c'}
+    cpu-amd-epyc-9754-128-core-processor: None
+HELD-OUT MISMATCH on 'wide': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'd52a1af18a3c2f1c'}
+    arm64: {'X': 'd52a1af18a3c2f1c'}
+    cpu-amd-epyc-9754-128-core-processor: None
+| lane/fixture                 | verdict    | apple-m4         | arm64            | cpu-amd-epyc-9754-128-core-processor |
+|------------------------------|------------|------------------|------------------|------------------|
+| gp-matern12/base             | DIVERGENT  | parts differ: alpha,L,mean,std; agree: lml | (not run)        | 8180fb5bef5e7c94 |
+| gp-matern12/dupes            | DIVERGENT  | parts differ: alpha,L,lml,mean,std; agree: - | (not run)        | dcaf8f5d256f8a56 |
+| gp-matern12/ties             | DIVERGENT  | parts differ: alpha,L,lml,mean,std; agree: - | (not run)        | d2cd6791de5848ef |
+| gp-matern32/base             | DIVERGENT  | parts differ: alpha,L,lml,mean,std; agree: - | (not run)        | d7f6ac56e12eea27 |
+| gp-matern32/dupes            | DIVERGENT  | parts differ: alpha,L,mean,std; agree: lml | (not run)        | 9a93a9e005c1511b |
+| gp-matern32/ties             | DIVERGENT  | parts differ: alpha,L,lml,mean,std; agree: - | (not run)        | ed88389ba1684e88 |
+| gp-matern52-ard/base         | DIVERGENT  | parts differ: alpha,L,lml,mean,std; agree: - | (not run)        | d145834b9f4b5aff |
+| gp-matern52-ard/dupes        | DIVERGENT  | parts differ: alpha,L,lml,mean,std; agree: - | (not run)        | 6aaa9bdeb116b9a5 |
+| gp-matern52-ard/ties         | DIVERGENT  | parts differ: alpha,L,lml,mean,std; agree: - | (not run)        | fd5fc76665b72005 |
+| gp/base                      | DIVERGENT  | parts differ: alpha,L,lml,mean,std; agree: - | ea70c56b99a74791 | e15b5efc40ea26f8 |
+| gp/denormal                  | ONE-COLUMN | (not run)        | f0986dd9686ae3c2 | (not run)        |
+| gp/denormal_ftz              | ONE-COLUMN | (not run)        | f0986dd9686ae3c2 | (not run)        |
+| gp/dupes                     | DIVERGENT  | parts differ: alpha,L,lml,mean,std; agree: - | fba9e6f4ea05af2c | 2e2a10344363b280 |
+| gp/hashed                    | ONE-COLUMN | (not run)        | f01c58a79fb1af27 | (not run)        |
+| gp/negative                  | ONE-COLUMN | (not run)        | 40fd2f479f775ec4 | (not run)        |
+| gp/odd                       | ONE-COLUMN | (not run)        | cbdbd1248c92a3f8 | (not run)        |
+| gp/ties                      | DIVERGENT  | parts differ: alpha,L,lml,mean,std; agree: - | c92496318cb78403 | bebf0692fc6e2b8c |
+| gp/wide                      | ONE-COLUMN | (not run)        | ca779c84b786d493 | (not run)        |
+| gpc-multiclass/base          | ONE-COLUMN | (not run)        | 03d42b186d3d23de | REFUSED          |
+| gpc-multiclass/denormal      | ONE-COLUMN | (not run)        | e2879b5eb341003a | (not run)        |
+| gpc-multiclass/denormal_ftz  | ONE-COLUMN | (not run)        | e2879b5eb341003a | (not run)        |
+| gpc-multiclass/dupes         | ONE-COLUMN | (not run)        | 03d42b186d3d23de | REFUSED          |
+| gpc-multiclass/hashed        | ONE-COLUMN | (not run)        | 181acf0aafcb8d7f | (not run)        |
+| gpc-multiclass/negative      | ONE-COLUMN | (not run)        | eba4fef6bf4f1391 | (not run)        |
+| gpc-multiclass/odd           | ONE-COLUMN | (not run)        | 12702bc35db689d4 | (not run)        |
+| gpc-multiclass/ties          | ONE-COLUMN | (not run)        | 1de9790fa6022bd1 | REFUSED          |
+| gpc-multiclass/wide          | ONE-COLUMN | (not run)        | 6ef9cd023801b550 | (not run)        |
+| gpc/base                     | ONE-COLUMN | (not run)        | 8b68b996d36775e7 | REFUSED          |
+| gpc/denormal                 | ONE-COLUMN | (not run)        | 9b41ad56958c3286 | (not run)        |
+| gpc/denormal_ftz             | ONE-COLUMN | (not run)        | 9b41ad56958c3286 | (not run)        |
+| gpc/dupes                    | ONE-COLUMN | (not run)        | 8b68b996d36775e7 | REFUSED          |
+| gpc/hashed                   | ONE-COLUMN | (not run)        | 8df82eb703a3d9a8 | (not run)        |
+| gpc/negative                 | ONE-COLUMN | (not run)        | e159f0086dea6ea3 | (not run)        |
+| gpc/odd                      | ONE-COLUMN | (not run)        | 2390c88bdb274c27 | (not run)        |
+| gpc/ties                     | ONE-COLUMN | (not run)        | c49b12da8e54b073 | REFUSED          |
+| gpc/wide                     | ONE-COLUMN | (not run)        | 0660ecee79edde49 | (not run)        |
+
+summary: DIVERGENT=12, ONE-COLUMN=24
+
+| lane/fixture                 | column | verdict      | apple-m4         | arm64            | cpu-amd-epyc-9754-128-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|------------------|
+| gp-matern12/base             | infer  | DIVERGENT    | 4f79f8b5efa024a7 | (not run)        | 51626ae722df1855 |
+| gp-matern12/base             | model  | ONE-COLUMN   | n/a:no-save      | (not run)        | 3b45f5e3bf6c2921 |
+| gp-matern12/base             | batch  | DIVERGENT    | 60ba7e42986f842e | (not run)        | 5f601759524a71d8 |
+| gp-matern12/dupes            | infer  | DIVERGENT    | f28fbf34f5e2f5e4 | (not run)        | 0de1e4a242f54447 |
+| gp-matern12/dupes            | model  | ONE-COLUMN   | n/a:no-save      | (not run)        | b9c40ab3fafe5cf1 |
+| gp-matern12/dupes            | batch  | DIVERGENT    | 9298e4ad500ce168 | (not run)        | 4fa9b735e22d51fb |
+| gp-matern12/ties             | infer  | DIVERGENT    | a001b7e2647b5504 | (not run)        | c21cc45438dbb17c |
+| gp-matern12/ties             | model  | ONE-COLUMN   | n/a:no-save      | (not run)        | 6ef97a01533b32b0 |
+| gp-matern12/ties             | batch  | DIVERGENT    | afa881afdf169ffe | (not run)        | d9d87be4382a66ee |
+| gp-matern32/base             | infer  | DIVERGENT    | a89afc94af5f084c | (not run)        | e23d42256a8da751 |
+| gp-matern32/base             | model  | ONE-COLUMN   | n/a:no-save      | (not run)        | f29d6940edc60bb2 |
+| gp-matern32/base             | batch  | DIVERGENT    | 4d0c75f26ce30a17 | (not run)        | 7349b58aedf7bd68 |
+| gp-matern32/dupes            | infer  | DIVERGENT    | e0a8a2dff9f3e703 | (not run)        | d9176ff65f39f0ac |
+| gp-matern32/dupes            | model  | ONE-COLUMN   | n/a:no-save      | (not run)        | 78b568cdf28a7320 |
+| gp-matern32/dupes            | batch  | DIVERGENT    | 314fbd59f78d11be | (not run)        | 414750872d5493e3 |
+| gp-matern32/ties             | infer  | DIVERGENT    | d4ebe9e3a969d687 | (not run)        | c8e605510198be7c |
+| gp-matern32/ties             | model  | ONE-COLUMN   | n/a:no-save      | (not run)        | 44a595fb1904e489 |
+| gp-matern32/ties             | batch  | DIVERGENT    | e0f8d36884ec439b | (not run)        | 69c884e53692cfb6 |
+| gp-matern52-ard/base         | infer  | DIVERGENT    | 7ed07da2d9a2b815 | (not run)        | acdc25586811fec5 |
+| gp-matern52-ard/base         | model  | ONE-COLUMN   | n/a:no-save      | (not run)        | b60b8d3e1b5c489c |
+| gp-matern52-ard/base         | batch  | DIVERGENT    | b67e8be0fee4333d | (not run)        | 27a384845ae2455d |
+| gp-matern52-ard/dupes        | infer  | DIVERGENT    | 4cb708614a14be4f | (not run)        | 00d303830e1f776d |
+| gp-matern52-ard/dupes        | model  | ONE-COLUMN   | n/a:no-save      | (not run)        | fb874f5e8ed11f80 |
+| gp-matern52-ard/dupes        | batch  | DIVERGENT    | 2d242b760df0c661 | (not run)        | c70b9e2b3ec7fde2 |
+| gp-matern52-ard/ties         | infer  | DIVERGENT    | d9e5f730b649eff6 | (not run)        | 7c6c6666d873325f |
+| gp-matern52-ard/ties         | model  | ONE-COLUMN   | n/a:no-save      | (not run)        | dbaf38651699a067 |
+| gp-matern52-ard/ties         | batch  | DIVERGENT    | 8d902360cd06f9c6 | (not run)        | 2731d769f342551d |
+| gp/base                      | infer  | DIVERGENT    | 1e032c58b3e9cd14 | 1e032c58b3e9cd14 | 8e7139702b9e9c32 |
+| gp/base                      | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | f7db3402cc8897cf |
+| gp/base                      | batch  | DIVERGENT    | 305bfd4eaf79a5fa | 305bfd4eaf79a5fa | 2dd95259cddc4efe |
+| gp/denormal                  | infer  | ONE-COLUMN   | (not run)        | 353cd97119d0e754 | (not run)        |
+| gp/denormal                  | model  | N/A          | (not run)        | n/a:no-save      | (not run)        |
+| gp/denormal                  | batch  | ONE-COLUMN   | (not run)        | 9305dbeb22908e4a | (not run)        |
+| gp/denormal_ftz              | infer  | ONE-COLUMN   | (not run)        | 353cd97119d0e754 | (not run)        |
+| gp/denormal_ftz              | model  | N/A          | (not run)        | n/a:no-save      | (not run)        |
+| gp/denormal_ftz              | batch  | ONE-COLUMN   | (not run)        | 9305dbeb22908e4a | (not run)        |
+| gp/dupes                     | infer  | DIVERGENT    | 52e6b306c452f16c | 52e6b306c452f16c | a32b7a94d0af7d89 |
+| gp/dupes                     | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | 7d0455dd26768cfd |
+| gp/dupes                     | batch  | DIVERGENT    | 3caf5f428c1e5112 | 3caf5f428c1e5112 | 6a4d743577528bba |
+| gp/hashed                    | infer  | ONE-COLUMN   | (not run)        | 6eec04108625b28e | (not run)        |
+| gp/hashed                    | model  | N/A          | (not run)        | n/a:no-save      | (not run)        |
+| gp/hashed                    | batch  | ONE-COLUMN   | (not run)        | f18ced6112fb55e8 | (not run)        |
+| gp/negative                  | infer  | ONE-COLUMN   | (not run)        | b2713d53a58fa4c9 | (not run)        |
+| gp/negative                  | model  | N/A          | (not run)        | n/a:no-save      | (not run)        |
+| gp/negative                  | batch  | ONE-COLUMN   | (not run)        | 0284440d2cd65731 | (not run)        |
+| gp/odd                       | infer  | ONE-COLUMN   | (not run)        | 9e3f1cf6c455f0fa | (not run)        |
+| gp/odd                       | model  | N/A          | (not run)        | n/a:no-save      | (not run)        |
+| gp/odd                       | batch  | ONE-COLUMN   | (not run)        | e3e6d237ca783492 | (not run)        |
+| gp/ties                      | infer  | DIVERGENT    | 22b0b528124de8d0 | 22b0b528124de8d0 | 7df6cdfa2c7e252d |
+| gp/ties                      | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | 395663fc6ff27a49 |
+| gp/ties                      | batch  | DIVERGENT    | 42c01186900b0c68 | 42c01186900b0c68 | 846c1ab1a4386ddb |
+| gp/wide                      | infer  | ONE-COLUMN   | (not run)        | 890cda1ff831faab | (not run)        |
+| gp/wide                      | model  | N/A          | (not run)        | n/a:no-save      | (not run)        |
+| gp/wide                      | batch  | ONE-COLUMN   | (not run)        | d3e6783a8a000e56 | (not run)        |
+| gpc-multiclass/base          | infer  | ONE-COLUMN   | (not run)        | 84db38aa85e9efe3 | REFUSED          |
+| gpc-multiclass/base          | model  | ONE-COLUMN   | (not run)        | a7da75ab43e33d59 | REFUSED          |
+| gpc-multiclass/base          | batch  | ONE-COLUMN   | (not run)        | 772762bf3af9d5ab | REFUSED          |
+| gpc-multiclass/denormal      | infer  | ONE-COLUMN   | (not run)        | fb65a74653a8c928 | (not run)        |
+| gpc-multiclass/denormal      | model  | ONE-COLUMN   | (not run)        | 6a06c6e9e1b52fbd | (not run)        |
+| gpc-multiclass/denormal      | batch  | ONE-COLUMN   | (not run)        | 0b6b909883561caf | (not run)        |
+| gpc-multiclass/denormal_ftz  | infer  | ONE-COLUMN   | (not run)        | fb65a74653a8c928 | (not run)        |
+| gpc-multiclass/denormal_ftz  | model  | ONE-COLUMN   | (not run)        | ec9bd2135d89a38a | (not run)        |
+| gpc-multiclass/denormal_ftz  | batch  | ONE-COLUMN   | (not run)        | 0b6b909883561caf | (not run)        |
+| gpc-multiclass/dupes         | infer  | ONE-COLUMN   | (not run)        | 84db38aa85e9efe3 | REFUSED          |
+| gpc-multiclass/dupes         | model  | ONE-COLUMN   | (not run)        | a7da75ab43e33d59 | REFUSED          |
+| gpc-multiclass/dupes         | batch  | ONE-COLUMN   | (not run)        | 772762bf3af9d5ab | REFUSED          |
+| gpc-multiclass/hashed        | infer  | ONE-COLUMN   | (not run)        | ea81a2c3a726ff07 | (not run)        |
+| gpc-multiclass/hashed        | model  | ONE-COLUMN   | (not run)        | ad095c88a27ebcc8 | (not run)        |
+| gpc-multiclass/hashed        | batch  | ONE-COLUMN   | (not run)        | 29ed3923c985a394 | (not run)        |
+| gpc-multiclass/negative      | infer  | ONE-COLUMN   | (not run)        | d35fed113ef73176 | (not run)        |
+| gpc-multiclass/negative      | model  | ONE-COLUMN   | (not run)        | dec1293907b2b18f | (not run)        |
+| gpc-multiclass/negative      | batch  | ONE-COLUMN   | (not run)        | 5fc9640b35c5fd5d | (not run)        |
+| gpc-multiclass/odd           | infer  | ONE-COLUMN   | (not run)        | f57fd8a7a5d1e719 | (not run)        |
+| gpc-multiclass/odd           | model  | ONE-COLUMN   | (not run)        | e09bd84a508af322 | (not run)        |
+| gpc-multiclass/odd           | batch  | ONE-COLUMN   | (not run)        | b117ad2778d35fd5 | (not run)        |
+| gpc-multiclass/ties          | infer  | ONE-COLUMN   | (not run)        | 5f34edf8c694f013 | REFUSED          |
+| gpc-multiclass/ties          | model  | ONE-COLUMN   | (not run)        | 3b3ac4079026dcdb | REFUSED          |
+| gpc-multiclass/ties          | batch  | ONE-COLUMN   | (not run)        | f212e023f26bc35c | REFUSED          |
+| gpc-multiclass/wide          | infer  | ONE-COLUMN   | (not run)        | b3674a9463aa4f92 | (not run)        |
+| gpc-multiclass/wide          | model  | ONE-COLUMN   | (not run)        | bde361487f19df87 | (not run)        |
+| gpc-multiclass/wide          | batch  | ONE-COLUMN   | (not run)        | 7ad6723007e8de0c | (not run)        |
+| gpc/base                     | infer  | ONE-COLUMN   | (not run)        | fc0b4c2f28c2e079 | REFUSED          |
+| gpc/base                     | model  | ONE-COLUMN   | (not run)        | 81b8bb9e635d8e83 | REFUSED          |
+| gpc/base                     | batch  | ONE-COLUMN   | (not run)        | b46f1f9043e091a8 | REFUSED          |
+| gpc/denormal                 | infer  | ONE-COLUMN   | (not run)        | cd21375d6187b126 | (not run)        |
+| gpc/denormal                 | model  | ONE-COLUMN   | (not run)        | 1ed2aed7cb4ce5f2 | (not run)        |
+| gpc/denormal                 | batch  | ONE-COLUMN   | (not run)        | ba78f499f85cae98 | (not run)        |
+| gpc/denormal_ftz             | infer  | ONE-COLUMN   | (not run)        | cd21375d6187b126 | (not run)        |
+| gpc/denormal_ftz             | model  | ONE-COLUMN   | (not run)        | b91daefb85705ccd | (not run)        |
+| gpc/denormal_ftz             | batch  | ONE-COLUMN   | (not run)        | ba78f499f85cae98 | (not run)        |
+| gpc/dupes                    | infer  | ONE-COLUMN   | (not run)        | fc0b4c2f28c2e079 | REFUSED          |
+| gpc/dupes                    | model  | ONE-COLUMN   | (not run)        | 81b8bb9e635d8e83 | REFUSED          |
+| gpc/dupes                    | batch  | ONE-COLUMN   | (not run)        | b46f1f9043e091a8 | REFUSED          |
+| gpc/hashed                   | infer  | ONE-COLUMN   | (not run)        | 9da411da0b1e3037 | (not run)        |
+| gpc/hashed                   | model  | ONE-COLUMN   | (not run)        | f4c2aca55d9362f2 | (not run)        |
+| gpc/hashed                   | batch  | ONE-COLUMN   | (not run)        | 0419fbbe5d340ea4 | (not run)        |
+| gpc/negative                 | infer  | ONE-COLUMN   | (not run)        | b7e320a5c79c2f12 | (not run)        |
+| gpc/negative                 | model  | ONE-COLUMN   | (not run)        | 42456472e82844f7 | (not run)        |
+| gpc/negative                 | batch  | ONE-COLUMN   | (not run)        | c2f1bdf1ba2a74f9 | (not run)        |
+| gpc/odd                      | infer  | ONE-COLUMN   | (not run)        | 1af8d13ad9045833 | (not run)        |
+| gpc/odd                      | model  | ONE-COLUMN   | (not run)        | d5a786c8bdd995bf | (not run)        |
+| gpc/odd                      | batch  | ONE-COLUMN   | (not run)        | 1d0177239abe0a3c | (not run)        |
+| gpc/ties                     | infer  | ONE-COLUMN   | (not run)        | ede5baa0c8969b06 | REFUSED          |
+| gpc/ties                     | model  | ONE-COLUMN   | (not run)        | 7b9bf869ad365c26 | REFUSED          |
+| gpc/ties                     | batch  | ONE-COLUMN   | (not run)        | c5069c7b59de4ee1 | REFUSED          |
+| gpc/wide                     | infer  | ONE-COLUMN   | (not run)        | 209675fda33ccf51 | (not run)        |
+| gpc/wide                     | model  | ONE-COLUMN   | (not run)        | a3ba1f8be78a6a1e | (not run)        |
+| gpc/wide                     | batch  | ONE-COLUMN   | (not run)        | e8e16299ce5b249c | (not run)        |
+
+summary (infer/model): DIVERGENT=12, N/A=6, ONE-COLUMN=54
+summary (batch): DIVERGENT=12, ONE-COLUMN=24
+summary (rlpair): 

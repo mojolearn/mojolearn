@@ -73,7 +73,7 @@ from cluster.impl.kmeans_params import (
 )
 from core.identity_trace import IdentityTrace
 from core.row_norms import NORM_TPB, row_norm_kernel
-from ivf.checks.list_layout import build_list_layout
+from ivf.checks.list_layout import build_list_layout, extend_list_layout
 from ivf.impl.neighbors.ivf_flat.ivf_flat_index import (
     IvfFlatIndex,
     IvfFlatIndexParams,
@@ -374,4 +374,67 @@ def ivf_flat_build(
         layout.list_indices.copy(),
         layout.list_data.copy(),
         host_labels^,
+    )
+
+
+def ivf_flat_extend(
+    ctx: DeviceContext,
+    index: IvfFlatIndex,
+    new_x: List[Float32],
+    n_new: Int,
+) raises -> IvfFlatIndex:
+    """`ivf_flat::extend`, `ivf_flat_build.cuh:180-345`, with
+    `adaptive_centers = false` (the only arm implemented; refused by name in
+    `ivf_index_params_validate`) (lane/inference-embedding-ivf-cholesky,
+    2026-09-15).
+
+    Theirs predicts a label for every new vector with `kmeans::predict`
+    against the original centroids, adds the histogram of the new labels to
+    the list sizes, resizes the lists and inserts each vector with the id the
+    caller passes. Here: the build's own `predict` launch (the same
+    `KMeansParams` the build uses, so the same fused argmin and its
+    `(distance, list id)` total order, DEVIATION 1789) over the squared row
+    norms, then `extend_list_layout`, which appends each new row to its list
+    under the id `n_rows + j`. The ids are not a parameter: an id chosen by
+    the caller would need a merge to keep each list ascending, and a
+    sequential id keeps the index a function of the rows alone. The centres
+    and their norms do not move.
+    """
+    ivf_validate_data(new_x, n_new, index.dim, "extension rows")
+    var dim = index.dim
+    var n_lists = index.n_lists
+    var kp = KMeansParams.default()
+    kp.n_clusters = n_lists
+    kp.init = INIT_KMEANS_PLUS_PLUS
+    kp.metric = index.metric
+    kp.n_init = 1
+
+    var dx = upload_f32(ctx, new_x)
+    var x_norm = ctx.enqueue_create_buffer[DType.float32](n_new)
+    var centroids = upload_f32(ctx, index.centers)
+    var labels = ctx.enqueue_create_buffer[DType.uint32](n_new)
+    var min_dist = ctx.enqueue_create_buffer[DType.float32](n_new)
+    ctx.synchronize()
+    compute_row_norms(ctx, dx, x_norm, n_new, dim)
+    ctx.synchronize()
+    predict(ctx, dx, x_norm, centroids, labels, min_dist, kp, n_new, dim)
+    ctx.synchronize()
+    var new_labels = download_u32(ctx, labels, n_new)
+    _ = dx^
+    _ = x_norm^
+    _ = centroids^
+    _ = labels^
+    _ = min_dist^
+
+    var layout = extend_list_layout(
+        index.list_offsets, index.list_indices, index.list_data, index.n_rows,
+        dim, n_lists, new_labels, new_x, n_new,
+    )
+    var all_labels = index.labels.copy()
+    for j in range(n_new):
+        all_labels.append(new_labels[j])
+    return IvfFlatIndex(
+        n_lists, dim, index.n_rows + n_new, index.metric, index.centers.copy(),
+        index.center_norms.copy(), layout.offsets.copy(), layout.list_indices.copy(),
+        layout.list_data.copy(), all_labels^,
     )

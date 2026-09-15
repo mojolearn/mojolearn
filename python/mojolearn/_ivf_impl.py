@@ -49,7 +49,7 @@ searches the metric; the identity_break lane is `ivf-euclidean`.
 """
 from . import _backend, _serialize
 from ._array import Array
-from ._buffer import addr, addr_ro, as_f32_c, empty
+from ._buffer import addr, addr_ro, as_f32_c, empty, frombytes
 from ._mode import NumericModeMixin
 
 _MODE_CODE = {"fast": 0, "identical": 1, "deterministic": 2}
@@ -212,6 +212,79 @@ class IVFIndex(NumericModeMixin):
         )
         self.n_candidates_ = cand
         return dist.reshape((m, k)), idx.reshape((m, k))
+
+    # -- extend (lane/inference-embedding-ivf-cholesky stage 2, 2026-09-15) --
+
+    def extend(self, X):
+        """Add the rows of `X` to the built index. Returns `self`.
+
+        Reference: cuVS `ivf_flat::extend` with `adaptive_centers = false`
+        (`ivf_flat_build.cuh:180-345`). Each new row is assigned to the FIXED
+        centres by the build's own assignment, with the build's tie rule (the
+        lower list id wins an exact tie), and appended to its list. The new rows
+        take the ids `n_rows_, n_rows_ + 1, ...` in the order given; cuVS takes
+        caller-supplied ids, which are not a parameter here, because an arbitrary
+        id would need a merge to keep every list ascending in its carried ids
+        (DEVIATION 1783). So extending by a set of rows in one call, or in
+        several calls over the same rows in the same order, gives the same index
+        bytes, and a search afterwards is the same on every column. The centres
+        and their norms do not move. `extend_labels_` (int32, one per new row)
+        holds the list each new row went to.
+
+        Public on a CPU-only install: assignment against saved centres trains
+        nothing, and `_mojolearn_ivf_search_host` carries it."""
+        if not hasattr(self, "list_data_"):
+            raise ValueError("mojolearn IVFIndex: call fit (or load) before extend")
+        x, _ = as_f32_c(X, ndim=2, name="X")
+        m, dim = (int(v) for v in x.shape)
+        if dim != self.n_features_in_:
+            raise ValueError(f"mojolearn IVFIndex: X has {dim} features, the index has {self.n_features_in_}")
+        if self._metric_code() != self.metric_code_:
+            raise ValueError(
+                f"mojolearn IVFIndex: metric {self.metric!r} does not name the metric this index was "
+                f"built under ({_METRIC_NAMES[self.metric_code_]!r}); a built index has one metric"
+            )
+        n, n_lists = self.n_rows_, self.n_lists_
+        total = n + m
+        offsets = empty((n_lists + 1,), "<i4")
+        indices = empty((total,), "<i4")
+        data = empty((total * dim,), "<f4")
+        labels = empty((m,), "<i4")
+        centers = self.centers_.reshape((n_lists * dim,))
+        old_data = self.list_data_.reshape((n * dim,))
+        self._entry(self._extension(), "ivf_flat_extend")(
+            # ORDER MATCHES bindings/ivf_index_arrays.mojo (ivf_flat_extend).
+            # centers, center_norms, offsets, indices, list_data, new_x, offsets_out, indices_out, list_data_out, labels_out
+            [addr_ro(centers, name="centers_"), addr_ro(self.center_norms_, name="center_norms_"),
+             addr_ro(self.list_offsets_, name="list_offsets_"), addr_ro(self.list_indices_, name="list_indices_"),
+             addr_ro(old_data, name="list_data_"), addr_ro(x, name="X"),
+             addr(offsets, name="list_offsets_"), addr(indices, name="list_indices_"),
+             addr(data, name="list_data_"), addr(labels, name="extend_labels_")],
+            # n, dim, n_lists, metric, n_new
+            [n, dim, n_lists, self.metric_code_, m],
+        )
+        self.list_offsets_ = offsets
+        self.list_indices_ = indices
+        self.list_data_ = data.reshape((total, dim))
+        self.n_rows_ = total
+        self.extend_labels_ = labels
+        return self
+
+    def _clone(self):
+        """A new instance holding copies of this index's arrays (cuVS
+        `ivf_flat::clone`'s role), so an extend on it leaves this one as it
+        was."""
+        if not hasattr(self, "list_data_"):
+            raise ValueError("mojolearn IVFIndex: call fit (or load) before _clone")
+        c = type(self)(n_lists=self.n_lists, n_probes=self.n_probes, n_neighbors=self.n_neighbors,
+                       kmeans_n_iters=self.kmeans_n_iters, metric=self.metric, random_state=self.random_state)
+        c.numeric_mode = getattr(self, "numeric_mode", None)
+        for name, dtype in _INDEX_ARRAYS:
+            a = getattr(self, name)
+            setattr(c, name, frombytes(a.tobytes(), dtype, tuple(a.shape)))
+        c.n_features_in_, c.n_rows_, c.n_lists_, c.metric_code_ = (
+            self.n_features_in_, self.n_rows_, self.n_lists_, self.metric_code_)
+        return c
 
     # -- saved indexes (lane/inference-embedding-ivf-cholesky, 2026-09-15) --
 

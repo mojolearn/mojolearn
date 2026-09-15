@@ -34,6 +34,8 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
 from bindings.ivf_index_arrays import (
     ivf_build_extents,
+    ivf_extend_count,
+    ivf_write_extended_arrays,
     ivf_read_index_arrays,
     ivf_search_extents,
     ivf_write_index_arrays,
@@ -42,6 +44,7 @@ from bindings.ivf_index_arrays import (
 from ivf.estimator import (
     ivf_flat_build_and_search_host,
     ivf_flat_build_host,
+    ivf_flat_extend_host,
     ivf_flat_search_host,
 )
 from ivf.impl.neighbors.ivf_flat.ivf_flat_index import IvfFlatIndex
@@ -265,6 +268,46 @@ def ivf_flat_search_binding(
     return PythonObject(0)
 
 
+def _labels_from_arrays(offsets: List[Int32], list_indices: List[UInt32], n_lists: Int, n_rows: Int) -> List[UInt32]:
+    """The assignment an admitted index describes, from its carried ids."""
+    var labels = List[UInt32](length=n_rows, fill=UInt32(0))
+    for l in range(n_lists):
+        for s in range(Int(offsets[l]), Int(offsets[l + 1])):
+            labels[Int(list_indices[s])] = UInt32(l)
+    return labels^
+
+
+def ivf_flat_extend_binding(
+    addrs: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """`ivf_flat::extend` over a built index handed back as five arrays
+    (stage 2 of lane/inference-embedding-ivf-cholesky, 2026-09-15). Returns 0.
+    See `bindings/ivf_index_arrays.mojo` for the lists."""
+    var arrays = ivf_read_index_arrays(addrs, params, String("ivf_flat_extend"), 10, 5)
+    var n_new = ivf_extend_count(params, arrays.n_rows, arrays.dim)
+    var new_x = read_f32(Int(py=addrs[5]), n_new * arrays.dim)
+    var labels = _labels_from_arrays(arrays.offsets, arrays.list_indices, arrays.n_lists, arrays.n_rows)
+    var index = IvfFlatIndex(
+        arrays.n_lists, arrays.dim, arrays.n_rows, arrays.metric,
+        arrays.centers.copy(), arrays.center_norms.copy(), arrays.offsets.copy(),
+        arrays.list_indices.copy(), arrays.list_data.copy(), labels^,
+    )
+    var ctx = DeviceContext()
+    var out = ivf_flat_extend_host(ctx, index, new_x, n_new)
+    ctx.synchronize()
+    var new_labels = List[UInt32](capacity=n_new)
+    for j in range(n_new):
+        new_labels.append(out.labels[arrays.n_rows + j])
+    ivf_write_extended_arrays(
+        addrs, out.n_rows, out.dim, out.n_lists, out.list_offsets,
+        out.list_indices, out.list_data, new_labels, n_new,
+    )
+    _ = out^
+    _ = index^
+    _ = ctx^
+    return PythonObject(0)
+
+
 @export
 def PyInit__mojolearn_ivf() abi("C") -> PythonObject:
     try:
@@ -276,6 +319,7 @@ def PyInit__mojolearn_ivf() abi("C") -> PythonObject:
         )
         m.def_function[ivf_flat_build_binding]("ivf_flat_build")
         m.def_function[ivf_flat_search_binding]("ivf_flat_search")
+        m.def_function[ivf_flat_extend_binding]("ivf_flat_extend")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_ivf: ", e))

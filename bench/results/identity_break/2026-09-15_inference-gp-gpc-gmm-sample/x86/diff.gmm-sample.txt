@@ -1,0 +1,78 @@
+NOTE: --lanes scopes this diff to 2 lane(s); 9 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-x86-x86_64 is a CPU column: cpu_model='AMD EPYC 9654 96-Core Processor' column=cpu families=['_mojolearn_mixture_host'] commit=0c65514b938bce4098adfe6dd13c8b20d1dbd0bc
+NOTE: column cpu-amd-epyc-9754-128-core-processor is a CPU column: cpu_model='AMD EPYC 9754 128-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_estimators_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_svm_host'] commit=afd1dcd2af4ff33e2e4bddfaae58df0798732580
+FIXTURE MISMATCH on 'denormal': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-x86-x86_64: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-amd-epyc-9754-128-core-processor: None
+FIXTURE MISMATCH on 'dupes': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    cpu-x86-x86_64: None
+    cpu-amd-epyc-9754-128-core-processor: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+FIXTURE MISMATCH on 'odd': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    cpu-x86-x86_64: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    cpu-amd-epyc-9754-128-core-processor: None
+HELD-OUT MISMATCH on 'denormal': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '5061056b118d07d0'}
+    cpu-x86-x86_64: {'X': '5061056b118d07d0'}
+    cpu-amd-epyc-9754-128-core-processor: None
+HELD-OUT MISMATCH on 'dupes': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    cpu-x86-x86_64: None
+    cpu-amd-epyc-9754-128-core-processor: {'X': 'e4b16c115962dfcd'}
+HELD-OUT MISMATCH on 'odd': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '32ea0bbed60b8e6c'}
+    cpu-x86-x86_64: {'X': '32ea0bbed60b8e6c'}
+    cpu-amd-epyc-9754-128-core-processor: None
+| lane/fixture                 | verdict    | apple-m4         | cpu-x86-x86_64   | cpu-amd-epyc-9754-128-core-processor |
+|------------------------------|------------|------------------|------------------|------------------|
+| gmm-random-init-sample/base  | IDENTICAL x3 | e8402fa2c29319b0 | e8402fa2c29319b0 | e8402fa2c29319b0 |
+| gmm-random-init-sample/denormal | IDENTICAL x2 | 53c4c0b31627c1f7 | 53c4c0b31627c1f7 | (not run)        |
+| gmm-random-init-sample/dupes | ONE-COLUMN | (not run)        | (not run)        | e8402fa2c29319b0 |
+| gmm-random-init-sample/odd   | IDENTICAL x2 | 71ed1c1caf8e6874 | 71ed1c1caf8e6874 | (not run)        |
+| gmm-random-init-sample/ties  | IDENTICAL x3 | 101197bb7831587c | 101197bb7831587c | 101197bb7831587c |
+| gmm-sample/base              | IDENTICAL x3 | 2995412dbe6ede62 | 2995412dbe6ede62 | 2995412dbe6ede62 |
+| gmm-sample/denormal          | IDENTICAL x2 | b0719a23f1750cd0 | b0719a23f1750cd0 | (not run)        |
+| gmm-sample/dupes             | ONE-COLUMN | (not run)        | (not run)        | 2995412dbe6ede62 |
+| gmm-sample/odd               | IDENTICAL x2 | 2a8e73e4b6764522 | 2a8e73e4b6764522 | (not run)        |
+| gmm-sample/ties              | IDENTICAL x3 | 4f5c80e0a98f2fb7 | 4f5c80e0a98f2fb7 | 4f5c80e0a98f2fb7 |
+
+summary: IDENTICAL=8, ONE-COLUMN=2
+
+| lane/fixture                 | column | verdict      | apple-m4         | cpu-x86-x86_64   | cpu-amd-epyc-9754-128-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|------------------|
+| gmm-random-init-sample/base  | infer  | IDENTICAL x3 | a460febf045cb5ed | a460febf045cb5ed | a460febf045cb5ed |
+| gmm-random-init-sample/base  | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | de637910417c0f6a |
+| gmm-random-init-sample/base  | batch  | N/A          | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-random-init-sample/denormal | infer  | IDENTICAL x2 | aaa5ba26b5120d24 | aaa5ba26b5120d24 | (not run)        |
+| gmm-random-init-sample/denormal | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| gmm-random-init-sample/denormal | batch  | N/A          | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | (not run)        |
+| gmm-random-init-sample/dupes | infer  | ONE-COLUMN   | (not run)        | (not run)        | a460febf045cb5ed |
+| gmm-random-init-sample/dupes | model  | ONE-COLUMN   | (not run)        | (not run)        | de637910417c0f6a |
+| gmm-random-init-sample/dupes | batch  | N/A          | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-random-init-sample/odd   | infer  | IDENTICAL x2 | 0360f4cd3fa1dc5a | 0360f4cd3fa1dc5a | (not run)        |
+| gmm-random-init-sample/odd   | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| gmm-random-init-sample/odd   | batch  | N/A          | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | (not run)        |
+| gmm-random-init-sample/ties  | infer  | IDENTICAL x3 | c9f89c3987186292 | c9f89c3987186292 | c9f89c3987186292 |
+| gmm-random-init-sample/ties  | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | 4bf7497302af00ff |
+| gmm-random-init-sample/ties  | batch  | N/A          | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-sample/base              | infer  | IDENTICAL x3 | e3cad76ce9a060d0 | e3cad76ce9a060d0 | e3cad76ce9a060d0 |
+| gmm-sample/base              | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | c4a997dc3ae320a2 |
+| gmm-sample/base              | batch  | N/A          | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-sample/denormal          | infer  | IDENTICAL x2 | e50606c37c34da5a | e50606c37c34da5a | (not run)        |
+| gmm-sample/denormal          | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| gmm-sample/denormal          | batch  | N/A          | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | (not run)        |
+| gmm-sample/dupes             | infer  | ONE-COLUMN   | (not run)        | (not run)        | e3cad76ce9a060d0 |
+| gmm-sample/dupes             | model  | ONE-COLUMN   | (not run)        | (not run)        | c4a997dc3ae320a2 |
+| gmm-sample/dupes             | batch  | N/A          | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-sample/odd               | infer  | IDENTICAL x2 | e0258bef7ebd4e21 | e0258bef7ebd4e21 | (not run)        |
+| gmm-sample/odd               | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| gmm-sample/odd               | batch  | N/A          | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | (not run)        |
+| gmm-sample/ties              | infer  | IDENTICAL x3 | aa785d8205811e0f | aa785d8205811e0f | aa785d8205811e0f |
+| gmm-sample/ties              | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | fa63a34d1b2e5088 |
+| gmm-sample/ties              | batch  | N/A          | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+
+summary (infer/model): IDENTICAL=8, N/A=4, ONE-COLUMN=8
+summary (batch): N/A=10
+summary (rlpair): 

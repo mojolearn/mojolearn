@@ -31,8 +31,17 @@ THE CONTRACT, mirrored in `python/mojolearn/_ivf_impl.py`.
             8 cand_out (m int32), WRITTEN
     params  0 n, 1 dim, 2 n_lists, 3 metric, 4 m, 5 k, 6 n_probes
 
+`ivf_flat_extend(addrs, params)` (2026-09-15, stage 2 of the same lane):
+
+    addrs   0 to 4 the index as for search (read), 5 new_x (n_new * dim
+            float32, read), 6 offsets_out (n_lists + 1 int32), 7 indices_out
+            (n + n_new int32), 8 list_data_out ((n + n_new) * dim float32),
+            9 labels_out (n_new int32, the list each new row went to), WRITTEN
+    params  0 n, 1 dim, 2 n_lists, 3 metric, 4 n_new
+
+The centres and their norms do not change under extend and are not written.
 The index arrays are refused by name unless `ivf_validate_index_arrays`
-admits them, before any search statement runs.
+admits them, before any search or extend statement runs.
 """
 from std.python import PythonObject
 
@@ -79,20 +88,24 @@ def ivf_arrays_check_cells(a: Int, b: Int, what: String) raises:
 
 
 def ivf_read_index_arrays(
-    addrs: PythonObject, params: PythonObject, what: String
+    addrs: PythonObject,
+    params: PythonObject,
+    what: String,
+    n_addrs: Int = 9,
+    n_params: Int = 7,
 ) raises -> IvfIndexArrays:
-    """`ivf_flat_search`'s addresses 0 to 4 and params 0 to 3, read and
-    admitted (module docstring)."""
-    if len(addrs) != 9:
+    """Addresses 0 to 4 and params 0 to 3 of `ivf_flat_search` (9 addresses,
+    7 params) or `ivf_flat_extend` (10 and 5), read and admitted (module
+    docstring)."""
+    if len(addrs) != n_addrs:
         raise Error(
-            what + ": addrs must contain 9 addresses (centers, center_norms,"
-            " offsets, indices, list_data, queries, dist_out, idx_out,"
-            " cand_out), got " + String(len(addrs))
+            what + ": addrs must contain " + String(n_addrs) + " addresses"
+            " (see bindings/ivf_index_arrays.mojo), got " + String(len(addrs))
         )
-    if len(params) != 7:
+    if len(params) != n_params:
         raise Error(
-            what + ": params must contain 7 values (n, dim, n_lists, metric,"
-            " m, k, n_probes), got " + String(len(params))
+            what + ": params must contain " + String(n_params) + " values"
+            " (see bindings/ivf_index_arrays.mojo), got " + String(len(params))
         )
     var n = ivf_arrays_extent(params[0], String("n"))
     var dim = ivf_arrays_extent(params[1], String("dim"))
@@ -212,3 +225,45 @@ def ivf_write_index_arrays(
         ip.unsafe_store(i, Int32(Int(list_indices[i])))
     for i in range(n_rows * dim):
         lp.unsafe_store(i, list_data[i])
+
+
+def ivf_extend_count(params: PythonObject, n_rows: Int, dim: Int) raises -> Int:
+    """`ivf_flat_extend`'s param 4, `n_new`: at least one row, the extended
+    row count below 2^31 (the ids cross as int32) and `(n + n_new) * dim`
+    below 2^40."""
+    var n_new = ivf_arrays_extent(params[4], String("n_new"))
+    if n_new < 1:
+        raise Error("ivf_flat_extend: n_new must be at least 1, got " + String(n_new))
+    if n_new > IVF_ARRAYS_MAX_ROWS - n_rows:
+        raise Error(
+            "ivf_flat_extend: n + n_new = " + String(n_rows) + " + " + String(n_new)
+            + " would carry an id past 2^31 - 1"
+        )
+    ivf_arrays_check_cells(n_rows + n_new, dim, String("(n + n_new) * dim"))
+    return n_new
+
+
+def ivf_write_extended_arrays(
+    addrs: PythonObject,
+    n_total: Int,
+    dim: Int,
+    n_lists: Int,
+    offsets: List[Int32],
+    list_indices: List[UInt32],
+    list_data: List[Float32],
+    new_labels: List[UInt32],
+    n_new: Int,
+) raises:
+    """Addresses 6 to 9 of `ivf_flat_extend`, from the extended index."""
+    var op = i32_ptr(Int(py=addrs[6]))
+    var ip = i32_ptr(Int(py=addrs[7]))
+    var lp = f32_ptr(Int(py=addrs[8]))
+    var bp = i32_ptr(Int(py=addrs[9]))
+    for i in range(n_lists + 1):
+        op.unsafe_store(i, offsets[i])
+    for i in range(n_total):
+        ip.unsafe_store(i, Int32(Int(list_indices[i])))
+    for i in range(n_total * dim):
+        lp.unsafe_store(i, list_data[i])
+    for j in range(n_new):
+        bp.unsafe_store(j, Int32(Int(new_labels[j])))

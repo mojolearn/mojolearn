@@ -1,0 +1,77 @@
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+# vendor=apple-m4 commit=607d797940e9318f5f8f2072a4c373102f452c46 (git rev-parse HEAD)
+# identity_break  mode=identical  2026-09-15 13:49:27  macOS-26.5.2-arm64-arm-64bit-Mach-O
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+| gp                     | ea70c56b99a74791 | c92496318cb78403 | f01c58a79fb1af27 | ca779c84b786d493 | f0986dd9686ae3c2 | f0986dd9686ae3c2 | fba9e6f4ea05af2c | cbdbd1248c92a3f8 | 40fd2f479f775ec4 |
+| gp infer               | 1e032c58b3e9cd14 | 22b0b528124de8d0 | 6eec04108625b28e | 890cda1ff831faab | 353cd97119d0e754 | 353cd97119d0e754 | 52e6b306c452f16c | 9e3f1cf6c455f0fa | b2713d53a58fa4c9 |
+| gp batch               | 305bfd4eaf79a5fa | 42c01186900b0c68 | f18ced6112fb55e8 | d3e6783a8a000e56 | 9305dbeb22908e4a | 9305dbeb22908e4a | 3caf5f428c1e5112 | e3e6d237ca783492 | 0284440d2cd65731 |
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+| gp-normalize-y         | 295a3a943bb1e6c1 | dcd3de359f3c2074 | b3faa0b97f15bcba | 3f637d262c88b131 | 563ede6c2700528e | 563ede6c2700528e | 56127db3c25510e4 | c3c46d3bdd248167 | c162a835d708df60 |
+| gp-normalize-y infer   | 7c5123dc7a512038 | 0e6c262796044cb8 | b77bf4a2d0da8736 | 13332a5abc671f44 | c9c056f09a65ff3b | c9c056f09a65ff3b | 3c0b639788527068 | e8873986c9e0f24f | e8c9793a64ffecd4 |
+| gp-normalize-y batch   | 10f20ff36a173c93 | d3aaf331f5414e4b | 83463eae32c0bbe9 | f83ca2d738dfbae9 | 00079f14e3f462fc | 00079f14e3f462fc | cd8dc4dd4d12cb25 | 290d32315445165d | d4b37ced285cc86d |
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+| gp-sample-y            | d698872d7e33df6e | 15f827dc671917f0 | 1f0e45838e5c52d2 | ce0c19926bcf9dbf | MOVED 37e84481   | REFUSED          | REFUSED          | eaff6a93fa6bc01d | REFUSED          |
+| gp-sample-y infer      | b7cef1a89e642972 | 0811d434a92222cc | 1512a8f232028314 | eb0dc965d1fb9854 | MOVED 41aae317   | REFUSED          | REFUSED          | 03750c611431c01d | REFUSED          |
+| gp-sample-y model      | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      | REFUSED          | REFUSED          | n/a:no-save      | REFUSED          |
+| gp-sample-y batch      | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) | REFUSED          | REFUSED          | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) | REFUSED          |
+| gp-sample-y-normalize  | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+| gp-sample-y-normalize infer | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+| gp-sample-y-normalize model | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+| gp-sample-y-normalize batch | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+| gp-matern12            | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 |
+| gp-matern12 infer      | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 |
+| gp-matern12 batch      | BATCH_MOVED      | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc |
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+| gp-matern32            | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 |
+| gp-matern32 infer      | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 |
+| gp-matern32 batch      | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc |
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+| gp-matern52-ard        | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 |
+| gp-matern52-ard infer  | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 |
+| gp-matern52-ard batch  | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc |
+
+cells=63 stable=50 moved=1 refused=12
+infer: stable=50 moved=1
+model: n/a=51
+batch: stable=44 batch_moved=1 n/a=6
+n/a: gp model n/a:no-save, gp-matern12 model n/a:no-save, gp-matern32 model n/a:no-save, gp-matern52-ard model n/a:no-save, gp-normalize-y model n/a:no-save, gp-sample-y batch n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior), gp-sample-y model n/a:no-save
+MOVED   gp-sample-y/denormal: ['37e844812b3bd076', 'eaff6a93fa6bc01d']
+MOVED   gp-sample-y/denormal: infer=MOVED ['41aae3173e5800f3', '03750c611431c01d'] model=N/A ['n/a:no-save', 'n/a:no-save']
+REFUSED gp-sample-y/denormal_ftz: Exception: cholesky: the matrix contains NaN at [0, 0]; refused by name before any launch, because a NaN carries the VENDOR's payload and every stage here is a certified card stage (IDENTITY_PATHS row 39)
+REFUSED gp-sample-y/dupes: Exception: cholesky: the matrix contains NaN at [0, 0]; refused by name before any launch, because a NaN carries the VENDOR's payload and every stage here is a certified card stage (IDENTITY_PATHS row 39)
+REFUSED gp-sample-y/negative: Exception: cholesky: the matrix contains NaN at [0, 0]; refused by name before any launch, because a NaN carries the VENDOR's payload and every stage here is a certified card stage (IDENTITY_PATHS row 39)
+REFUSED gp-sample-y-normalize/base: Exception: StandardScaler: invalid variance or scale
+REFUSED gp-sample-y-normalize/ties: Exception: StandardScaler: invalid variance or scale
+REFUSED gp-sample-y-normalize/hashed: Exception: StandardScaler: invalid variance or scale
+REFUSED gp-sample-y-normalize/wide: Exception: StandardScaler: invalid variance or scale
+REFUSED gp-sample-y-normalize/denormal: Exception: StandardScaler: invalid variance or scale
+REFUSED gp-sample-y-normalize/denormal_ftz: Exception: StandardScaler: invalid variance or scale
+REFUSED gp-sample-y-normalize/dupes: Exception: StandardScaler: invalid variance or scale
+REFUSED gp-sample-y-normalize/odd: Exception: StandardScaler: invalid variance or scale
+REFUSED gp-sample-y-normalize/negative: Exception: StandardScaler: invalid variance or scale
+BATCH_MOVED gp-matern12/base: BATCH_MOVED:predict(return_std=True):row 11 of 64 alone:output 0 element 0: whole 0x00000000 vs alone 0x7fc00000
+wrote /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/gpsy_ev2/apple-m4.rerun.json

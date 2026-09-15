@@ -1,0 +1,19 @@
+owed metrics-fowlkes-mallows/base train: production 2cc16b7a5cb0caa4 sabotage 5a0a271424ec3bbf MOVED
+owed metrics-fowlkes-mallows/denormal train: production 2cc16b7a5cb0caa4 sabotage 5a0a271424ec3bbf MOVED
+owed metrics-fowlkes-mallows/denormal_ftz train: production 2cc16b7a5cb0caa4 sabotage 5a0a271424ec3bbf MOVED
+owed metrics-fowlkes-mallows/dupes train: production 2cc16b7a5cb0caa4 sabotage 5a0a271424ec3bbf MOVED
+owed metrics-fowlkes-mallows/hashed train: production 39299bfd4fafd06f sabotage 10886bf80e92f4d3 MOVED
+owed metrics-fowlkes-mallows/negative train: production bf17710ae346249e sabotage 5ab8a191481d4508 MOVED
+owed metrics-fowlkes-mallows/odd train: production 6ea7091579a40238 sabotage 469d96600ac7eb8c MOVED
+owed metrics-fowlkes-mallows/ties train: production 7a26ee9f258fb0a8 sabotage c9e066b48dae2812 MOVED
+owed metrics-fowlkes-mallows/wide train: production f3260f403bc50af5 sabotage 307cb4fb29cc6611 MOVED
+owed FAIL: metrics-classification/base batch: DID NOT MOVE under the sabotage host set (7ad4c2154ecfc2b1); an owed cell that sabotage cannot move rests on nothing
+owed FAIL: metrics-classification/denormal batch: DID NOT MOVE under the sabotage host set (9eff2140c98aabc3); an owed cell that sabotage cannot move rests on nothing
+owed FAIL: metrics-classification/denormal_ftz batch: DID NOT MOVE under the sabotage host set (9eff2140c98aabc3); an owed cell that sabotage cannot move rests on nothing
+owed FAIL: metrics-classification/dupes batch: DID NOT MOVE under the sabotage host set (7ad4c2154ecfc2b1); an owed cell that sabotage cannot move rests on nothing
+owed FAIL: metrics-classification/hashed batch: DID NOT MOVE under the sabotage host set (1d1071f2c508d40b); an owed cell that sabotage cannot move rests on nothing
+owed FAIL: metrics-classification/negative batch: DID NOT MOVE under the sabotage host set (a717c35664360555); an owed cell that sabotage cannot move rests on nothing
+owed FAIL: metrics-classification/odd batch: DID NOT MOVE under the sabotage host set (10d07741c1238b7b); an owed cell that sabotage cannot move rests on nothing
+owed FAIL: metrics-classification/ties batch: DID NOT MOVE under the sabotage host set (59ae3e19c610247a); an owed cell that sabotage cannot move rests on nothing
+owed FAIL: metrics-classification/wide batch: DID NOT MOVE under the sabotage host set (6b5c02ff40efbb18); an owed cell that sabotage cannot move rests on nothing
+owed verdict FAIL (9 of 18 owed cell part(s) moved, 9 failure(s))

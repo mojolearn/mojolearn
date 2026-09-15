@@ -1,0 +1,773 @@
+{
+ "columns": [
+  "arm64",
+  "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+  "amd-gfx942",
+  "arm64",
+  "cpu-amd-epyc-9655p-96-core-processor"
+ ],
+ "require_columns": 4,
+ "lanes": [
+  "ivf",
+  "ivf-euclidean",
+  "ivf-extend"
+ ],
+ "owed": [
+  {
+   "lane": "ivf-extend",
+   "fixture": "base",
+   "part": "train",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf-extend",
+   "fixture": "denormal",
+   "part": "train",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf-extend",
+   "fixture": "denormal_ftz",
+   "part": "train",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf-extend",
+   "fixture": "dupes",
+   "part": "train",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf-extend",
+   "fixture": "hashed",
+   "part": "train",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf-extend",
+   "fixture": "negative",
+   "part": "train",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf-extend",
+   "fixture": "odd",
+   "part": "train",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf-extend",
+   "fixture": "ties",
+   "part": "train",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf-extend",
+   "fixture": "wide",
+   "part": "train",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf-euclidean",
+   "fixture": "base",
+   "part": "model",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf-euclidean",
+   "fixture": "denormal",
+   "part": "model",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf-euclidean",
+   "fixture": "denormal_ftz",
+   "part": "model",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf-euclidean",
+   "fixture": "dupes",
+   "part": "model",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf-euclidean",
+   "fixture": "hashed",
+   "part": "model",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf-euclidean",
+   "fixture": "negative",
+   "part": "model",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf-euclidean",
+   "fixture": "odd",
+   "part": "model",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf-euclidean",
+   "fixture": "ties",
+   "part": "model",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf-euclidean",
+   "fixture": "wide",
+   "part": "model",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf-extend",
+   "fixture": "base",
+   "part": "infer",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf-extend",
+   "fixture": "base",
+   "part": "model",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf-extend",
+   "fixture": "base",
+   "part": "batch",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf-extend",
+   "fixture": "denormal",
+   "part": "infer",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf-extend",
+   "fixture": "denormal",
+   "part": "model",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf-extend",
+   "fixture": "denormal",
+   "part": "batch",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf-extend",
+   "fixture": "denormal_ftz",
+   "part": "infer",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf-extend",
+   "fixture": "denormal_ftz",
+   "part": "model",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf-extend",
+   "fixture": "denormal_ftz",
+   "part": "batch",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf-extend",
+   "fixture": "dupes",
+   "part": "infer",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf-extend",
+   "fixture": "dupes",
+   "part": "model",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf-extend",
+   "fixture": "dupes",
+   "part": "batch",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf-extend",
+   "fixture": "hashed",
+   "part": "infer",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf-extend",
+   "fixture": "hashed",
+   "part": "model",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf-extend",
+   "fixture": "hashed",
+   "part": "batch",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf-extend",
+   "fixture": "negative",
+   "part": "infer",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf-extend",
+   "fixture": "negative",
+   "part": "model",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf-extend",
+   "fixture": "negative",
+   "part": "batch",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf-extend",
+   "fixture": "odd",
+   "part": "infer",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf-extend",
+   "fixture": "odd",
+   "part": "model",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf-extend",
+   "fixture": "odd",
+   "part": "batch",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf-extend",
+   "fixture": "ties",
+   "part": "infer",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf-extend",
+   "fixture": "ties",
+   "part": "model",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf-extend",
+   "fixture": "ties",
+   "part": "batch",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf-extend",
+   "fixture": "wide",
+   "part": "infer",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf-extend",
+   "fixture": "wide",
+   "part": "model",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf-extend",
+   "fixture": "wide",
+   "part": "batch",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf",
+   "fixture": "base",
+   "part": "model",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf",
+   "fixture": "denormal",
+   "part": "model",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf",
+   "fixture": "denormal_ftz",
+   "part": "model",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf",
+   "fixture": "dupes",
+   "part": "model",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf",
+   "fixture": "hashed",
+   "part": "model",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf",
+   "fixture": "negative",
+   "part": "model",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf",
+   "fixture": "odd",
+   "part": "model",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf",
+   "fixture": "ties",
+   "part": "model",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "ivf",
+   "fixture": "wide",
+   "part": "model",
+   "missing": [
+    "arm64",
+    "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+    "amd-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9655p-96-core-processor"
+   ],
+   "real_hashes": 2
+  }
+ ]
+}

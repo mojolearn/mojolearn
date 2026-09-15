@@ -69,7 +69,7 @@ from max.gpu.host import DeviceContext
 
 from cluster.impl.kmeans_params import METRIC_L2_EXPANDED
 from core.identity_trace import IdentityTrace
-from ivf.impl.neighbors.ivf_flat.ivf_flat_build import ivf_flat_build
+from ivf.impl.neighbors.ivf_flat.ivf_flat_build import ivf_flat_build, ivf_flat_extend
 from ivf.impl.neighbors.ivf_flat.ivf_flat_index import (
     IvfFlatIndex,
     IvfFlatIndexParams,
@@ -183,3 +183,20 @@ def ivf_flat_build_and_search_host(
     return ivf_flat_search_traced(
         ctx, trace, index, sp, queries, n_queries, k, tile_tpb, expand_tpb
     )
+
+
+def ivf_flat_extend_host(
+    ctx: DeviceContext,
+    index: IvfFlatIndex,
+    new_x: List[Float32],
+    n_new: Int,
+) raises -> IvfFlatIndex:
+    """`ivf_flat::extend`, host list in, extended index out
+    (lane/inference-embedding-ivf-cholesky, 2026-09-15). The new rows are
+    assigned to the FIXED centres by the build's own `predict` launch and
+    appended to their lists under the ids `n_rows, n_rows + 1, ...`, so one
+    call over a set of rows and several calls over the same rows in the same
+    order give the same index bytes. See `ivf_flat_build.mojo::ivf_flat_extend`.
+    """
+    ivf_refuse_algorithm(String("ivf_flat"))
+    return ivf_flat_extend(ctx, index, new_x, n_new)

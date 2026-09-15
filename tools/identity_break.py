@@ -284,7 +284,7 @@ evening for the ordered multi-GPU drivers run on ONE device, and 15 lanes for
 the doors workstream D opened: Cholesky, the kernel methods, the Gaussian
 mixture, HDBSCAN, resampling, the training primitives and the KMeans arms,
 then 15 more `par-*` lanes that night for the multi-GPU drivers the first 16
-missed, then `par-forest-pool`, `par-gmm`, `par-resample` and `par-hdbscan` for the drivers the multigpu lane added, and `ivf` and `embedding` when IVFIndex and Embedding left `_NOT_YET`, then `ivf-euclidean` when its metric stopped being refused, then `embedding-sort` for PLAN_SORT, and `par-cholesky`, `par-kernel-ridge`, `par-nystroem` and `par-rbf-sampler` on 2026-09-15, then `gmm-sample` and `gmm-random-init-sample` for GaussianMixture.sample the same day). One per public estimator
+missed, then `par-forest-pool`, `par-gmm`, `par-resample` and `par-hdbscan` for the drivers the multigpu lane added, and `ivf` and `embedding` when IVFIndex and Embedding left `_NOT_YET`, then `ivf-euclidean` when its metric stopped being refused, then `embedding-sort` for PLAN_SORT, and `par-cholesky`, `par-kernel-ridge`, `par-nystroem` and `par-rbf-sampler` on 2026-09-15, then `gmm-sample` and `gmm-random-init-sample` for GaussianMixture.sample the same day, then `gp-sample-y` and `gp-sample-y-normalize` for GaussianProcessRegressor.sample_y). One per public estimator
 plus linalg and metrics, then one per public constructor VALUE that selects
 a different numeric path and no earlier lane pins (a kernel, an objective, a
 sampler, a solver, a metric, a reduction).
@@ -340,6 +340,8 @@ sampler, a solver, a metric, a reduction).
       par-cholesky par-kernel-ridge par-nystroem par-rbf-sampler
     2026-09-15 (GaussianMixture.sample, DEVIATIONS 2791 and 2792)
       gmm-sample gmm-random-init-sample
+    2026-09-15 (GaussianProcessRegressor.sample_y, DEVIATION 2793)
+      gp-sample-y gp-sample-y-normalize
     2026-09-14 night (lane/expose-ivf-embedding, the last two _NOT_YET doors)
       ivf embedding
     2026-09-14 night (fix/ivf-l2sqrt, metric='euclidean' no longer refused)
@@ -2317,6 +2319,30 @@ def _(ml, X, yc, yr, Xh=None):
                 m, lambda e: e.predict(Xh[:64, :4], return_std=True))
 
 
+def _gp_sample_y_lane(normalize_y):
+    def body(ml, X, yc, yr, Xh=None):
+        k = ml.ConstantKernel(1.0) * ml.RBF(1.0) + ml.WhiteKernel(0.1)
+        y = yr[:256]
+        if normalize_y:
+            y = np.ascontiguousarray(yr[:256] + np.float32(50.0)).astype(np.float32)
+        m = ml.GaussianProcessRegressor(kernel=k, normalize_y=normalize_y).fit(X[:256, :4], y)
+        s = m.sample_y(X[256:320, :4], n_samples=3, random_state=11)
+        _same_bytes("sample_y(n_samples=3)", s, "sample_y(n_samples=3) again",
+                    m.sample_y(X[256:320, :4], n_samples=3, random_state=11))
+        return _fit(dict(sample=_h(s)), m,
+                    lambda e: (e.sample_y(Xh[:64, :4], n_samples=4, random_state=2 ** 40 + 5),))
+    body.__doc__ = (f"GaussianProcessRegressor.sample_y (2026-09-15) on the gp{'-normalize-y' if normalize_y else ''} "
+                    "lane's fit: train hashes sample_y over 64 rows, 3 draws, held to a second call bit for bit; "
+                    "infer hashes 4 draws over 64 held-out rows with a key whose high word is set. The posterior "
+                    "covariance is factored by the identical Cholesky at 2^-20 and the normals are position-mapped "
+                    "Philox (DEVIATION 2793). Separate lanes so the gp lanes' recorded cells do not move.")
+    return body
+
+
+lane("gp-sample-y")(_gp_sample_y_lane(False))
+lane("gp-sample-y-normalize")(_gp_sample_y_lane(True))
+
+
 for _name, _nu, _ls in (("matern12", 0.5, 1.0), ("matern32", 1.5, 1.0), ("matern52-ard", 2.5, [1.0, 2.0, 0.5, 4.0])):
     lane(f"gp-{_name}")(_gp_lane(_nu, _ls))
 
@@ -2719,6 +2745,33 @@ def _(ml, X, yc, yr, Xh=None):
     d, i = m.search(X[4096:4160])
     return _fit(dict(dist=_h(d), idx=_h(i), cand=_h(m.n_candidates_)),
                 m, lambda e: e.search(Xh[:64]) + (e.n_candidates_,))
+
+
+@lane("ivf-extend")
+def _(ml, X, yc, yr, Xh=None):
+    """IVFIndex.extend (python/mojolearn/_ivf_impl.py; lane/inference-embedding-
+    ivf-cholesky stage 2, 2026-09-15), cuVS ivf_flat::extend with fixed
+    centres. The `ivf` lane's index (16 lists, random_state 3) built on rows
+    0..3072, extended by rows 3072..4096 in ONE call and, from a clone of the
+    same built index, in TWO calls split at 3584: the two extended indexes
+    must be the same bytes, and the new rows' lists the same, or the train
+    cell reads REFUSED naming the array. Then 64 queries with 4 probes. Train
+    hashes the extended CSR arrays, the new rows' lists and the search; the
+    model column saves the extended index; the probe searches 64 held-out
+    rows."""
+    base = ml.IVFIndex(n_lists=16, n_probes=4, n_neighbors=8, random_state=3).fit(X[:3072])
+    one = base._clone().extend(X[3072:4096])
+    two = base._clone().extend(X[3072:3584])
+    first = np.asarray(two.extend_labels_).copy()
+    two.extend(X[3584:4096])
+    for name in ("centers_", "center_norms_", "list_offsets_", "list_indices_", "list_data_"):
+        _same_bytes(f"one-call extend {name}", getattr(one, name), f"two-call extend {name}", getattr(two, name))
+    _same_bytes("one-call new-row lists", one.extend_labels_, "two-call new-row lists",
+                np.concatenate([first, np.asarray(two.extend_labels_)]))
+    d, i = one.search(X[4096:4160])
+    return _fit(dict(offsets=_h(one.list_offsets_), carry=_h(one.list_indices_), data=_h(one.list_data_),
+                     lists=_h(one.extend_labels_), dist=_h(d), idx=_h(i), cand=_h(one.n_candidates_)),
+                one, lambda e: e.search(Xh[:64]) + (e.n_candidates_,))
 
 
 @lane("embedding")
@@ -4032,6 +4085,12 @@ def _batch_gp(ml, e, Xh):
 
 
 _batch_decl(_batch_gp, "gp", "gp-matern12", "gp-matern32", "gp-matern52-ard", "par-gp", "gp-normalize-y")
+# GaussianProcessRegressor.sample_y factors the posterior covariance over ALL
+# the rows of one call, so a row's draw depends on every other row asked with
+# it: splitting the rows changes the covariance, by the reference's contract
+# (gaussian_process/checks/sample_y.mojo, DEVIATION 2793)
+_batch_decl("n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior)",
+            "gp-sample-y", "gp-sample-y-normalize")
 # UMAP.transform is batch-dependent BY ITS OWN CONTRACT: umap/transform.mojo's
 # module docstring says "Query batching may change results (global sigma
 # floor, edge weighting and RNG ordinals)", and the part measured it on the
@@ -4417,6 +4476,19 @@ def _batch_embedding(ml, e, Xh):
 
 
 _batch_decl(_batch_ivf, "ivf", "ivf-euclidean")
+
+
+def _batch_ivf_extend(ml, e, Xh):
+    """extend is row-wise in the new rows' LISTS: a row's list comes from the
+    fixed centres alone, so each held-out row extended alone, and in pieces,
+    must name the list it names inside the whole batch of 64. Every call
+    extends a fresh clone of the fitted index; the ids are not compared,
+    because a row's id is its position in the extension by contract."""
+    return [_BatchRows("extend (new-row lists)", Xh[:64],
+                       lambda r: (np.asarray(e._clone().extend(r).extend_labels_),))]
+
+
+_batch_decl(_batch_ivf_extend, "ivf-extend")
 _batch_decl(_batch_embedding, "embedding", "embedding-sort")
 _batch_decl(_batch_cross_entropy, "cross-entropy-arms")
 _batch_decl(_batch_training_primitives, "training-primitives")

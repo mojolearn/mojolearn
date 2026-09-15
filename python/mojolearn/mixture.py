@@ -24,11 +24,20 @@ are part of the model and of the identity card.
 
 NO SPEED CLAIM. The lane has no published number and this door adds none.
 """
-from . import _backend
+from . import _backend, _serialize
+from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, empty
 from ._mode import NumericModeMixin
 
 _MODE_CODE = {"fast": 0, "identical": 1, "deterministic": 2}
+
+#: The model file (the neighbors and density inference lane, 2026-09-15):
+#: `weights`, `means`, `covariances`, `precisions_cholesky` and
+#: `log_det_chol` as flat `<f4` in the order the scoring entries address
+#: them, `ints` `<i8` [n_components, n_features, n_iter_, converged_,
+#: max_iter, random_state], `reals` `<f8` [lower_bound_, tol, reg_covar],
+#: `covariance_type` and `init_params` as text.
+_GMM_FORMAT = "mojolearn-gmm-1"
 
 #: Refused by absence on the Mojo side (`GmmParams` has no such field,
 #: DEVIATION 1734), so refused by NAME here rather than accepted and
@@ -240,6 +249,69 @@ class GaussianMixture(NumericModeMixin):
 
     def fit_predict(self, X, y=None):
         return self.fit(X).predict(X)
+
+    def save(self, path):
+        """Write the fitted model to `path` as an npz (`_GMM_FORMAT`, the
+        neighbors and density inference lane, 2026-09-15): every array the
+        scoring entries read, as fitted, plus `n_iter_`, `converged_` and
+        `lower_bound_`, which the binding's model rebuild takes too.
+        `mojolearn.host_model(path)` scores it on a CPU with no GPU."""
+        if not hasattr(self, "weights_"):
+            raise RuntimeError("this estimator is not fitted yet")
+        from .linear_model import _saved_mode
+        k, d = self.means_.shape
+        return _serialize.write_npz(path, {
+            "format": _GMM_FORMAT,
+            "estimator": type(self).__name__,
+            "numeric_mode": _saved_mode(self),
+            "covariance_type": str(self.covariance_type),
+            "init_params": str(self.init_params),
+            "weights": self.weights_,
+            "means": self.means_.reshape((k * d,)),
+            "covariances": self.covariances_.reshape((k * d * d,)),
+            "precisions_cholesky": self.precisions_cholesky_.reshape((k * d * d,)),
+            "log_det_chol": self.log_det_chol_,
+            "ints": Array.from_list([k, d, int(self.n_iter_), 1 if self.converged_ else 0,
+                                     int(self.max_iter), int(self.random_state)], "<i8"),
+            "reals": Array.from_list([float(self.lower_bound_), float(self.tol), float(self.reg_covar)], "<f8"),
+        })
+
+    @classmethod
+    def load(cls, path):
+        """Load a model saved by `save`; every array at its saved dtype,
+        never cast. The result answers score_samples, predict_proba,
+        predict, score, bic and aic."""
+        from .linear_model import _check_saved_by, _restore_mode
+        arrays = _serialize.read_npz(path, _GMM_FORMAT)
+        _check_saved_by(arrays, path, cls)
+        ints = _serialize.exact(arrays, "ints", "<i8")
+        reals = _serialize.exact(arrays, "reals", "<f8")
+        if ints.size != 6 or reals.size != 3:
+            raise ValueError(f"mojolearn: {path!r} holds {ints.size} ints and {reals.size} reals, 6 and 3 are needed")
+        k, d, n_iter, converged, max_iter, seed = (int(ints[i]) for i in range(6))
+        if k < 1 or d < 1:
+            raise ValueError(f"mojolearn: {path!r} holds an empty model")
+        obj = cls(n_components=k, covariance_type=_serialize.scalar_str(arrays, "covariance_type"),
+                  tol=float(reals[1]), reg_covar=float(reals[2]), max_iter=max_iter,
+                  init_params=_serialize.scalar_str(arrays, "init_params"), random_state=seed)
+        _restore_mode(obj, arrays)
+        sizes = dict(weights=k, means=k * d, covariances=k * d * d, precisions_cholesky=k * d * d, log_det_chol=k)
+        got = {}
+        for name, size in sizes.items():
+            a = _serialize.exact(arrays, name, "<f4")
+            if a.ndim != 1 or a.size != size:
+                raise ValueError(f"mojolearn: {path!r} {name} holds {a.size} values, {size} are needed")
+            got[name] = a
+        obj.n_features_in_ = d
+        obj.weights_ = got["weights"]
+        obj.means_ = got["means"].reshape((k, d))
+        obj.covariances_ = got["covariances"].reshape((k, d, d))
+        obj.precisions_cholesky_ = got["precisions_cholesky"].reshape((k, d, d))
+        obj.log_det_chol_ = got["log_det_chol"]
+        obj.n_iter_ = n_iter
+        obj.converged_ = bool(converged)
+        obj.lower_bound_ = float(reals[0])
+        return obj
 
     def _score_bic_aic(self, X):
         x, _ = as_f32_c(X, ndim=2, name="X")
