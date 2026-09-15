@@ -70,7 +70,10 @@ Lanczos pairs satisfy the eigen-equation only to `eigen_tol`. So
 
 THE NEGATIVE CONTROL. `-D MOJOLEARN_HOST_SABOTAGE=1` (the metrics family's
 define) or `-D MOJOLEARN_SPECTRAL_PREDICT_SABOTAGE=1` (this pass alone)
-negates embedding column 0 of every query, a value and not an order.
+negates embedding column 1 of every query (column 0 when `k == 1`), a value
+and not an order. Column 0 is the trivial column: constant after the degree
+division, so negating it moves every query equally far from every centroid
+and no label (measured inert on 18 cells before this arm moved to column 1).
 """
 from std.sys.compile import is_defined
 
@@ -292,7 +295,10 @@ def host_spectral_nystrom(
             var e = identical_div(identical_div(acc, mu[c]), sd)
             comptime if SPECTRAL_PREDICT_HOST_SABOTAGE:
                 # THE NEGATIVE CONTROL: wrong on purpose (module docstring).
-                if c == 0:
+                # Column 0 is the trivial column (a constant after the
+                # degree division), whose negation shifts every query the
+                # same distance from every centroid and moves no label.
+                if c == (1 if k > 1 else 0):
                     e = -e
             out[q * k + c] = e
     return out^

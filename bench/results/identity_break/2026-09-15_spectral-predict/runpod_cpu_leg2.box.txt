@@ -1,0 +1,21 @@
+commit=0a6957015651d05a9dff94668ac843b8202a3c23 nproc=8
+20:52:14 cols-prod rc=0
+prod 39s
+20:52:32 cols-hostsab rc=0
+hostsab 18s
+20:52:33 cols-batchsab rc=1
+batchsab 1s
+20:52:33 diff-record rc=0
+20:52:34 diff-hostsab rc=0
+20:52:34 diff-batchsab rc=1
+20:52:43 agree rc=0
+agree 9s
+pytest test_host_surface rc=1 1 failed, 143 passed in 0.36s
+pytest test_cpu_inference_boundary rc=0 10 passed in 0.07s
+20:52:46 wheel rc=0
+20:52:46 install rc=0
+20:52:47 wheel-models rc=0
+20:52:47 pytest-wheel rc=0
+10 passed in 0.05s
+20:53:16 gpu-compile-check rc=1
+gpu-compile-check 29s

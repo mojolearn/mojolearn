@@ -199,7 +199,7 @@ def metrics_host_sabotage_binding() raises -> PythonObject:
     entropy, mutual information, r2 and the silhouette
     (`metrics/host/metrics_oracle.mojo`, THE NEGATIVE CONTROL), and the spectral
     recluster seeded one draw off, every UMAP negative draw keyed one
-    epoch late, and spectral predict's embedding column 0 negated (also
+    epoch late, and spectral predict's first non-trivial embedding column negated (also
     alone under -D MOJOLEARN_SPECTRAL_PREDICT_SABOTAGE=1); refused outside
     the gate as one set."""
     return PythonObject(
