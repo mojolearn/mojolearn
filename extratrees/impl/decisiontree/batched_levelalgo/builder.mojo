@@ -1368,10 +1368,10 @@ def train_regression(
 # leaves are means of quantized labels, which the older
 # `fit_extra_trees_regressor_reference` cannot give.
 #
-# What is refused here BY NAME rather than restated: best-first growth
-# (`max_leaf_nodes`, DEVIATION 466), because its device driver has no host
-# restatement on the exact key yet. The CPU column's ET lanes fit at the
-# default (depth-wise), and a host binding asked for best-first refuses.
+# Best-first growth (`max_leaf_nodes`, DEVIATION 466) was refused here by
+# name until 2026-09-15; `train_tree_exact_bestfirst` below now restates
+# the device's best-first cycle on the same exact search, and
+# `train_tree_exact` dispatches to it.
 # ==========================================================================
 
 
@@ -1554,10 +1554,11 @@ def train_tree_exact(
     is the class count or 1; `inv_scale` is `Float32(1 / scale)` or 1)."""
     validity_check(params)
     if params.max_leaf_nodes != -1:
-        raise Error(
-            "train_tree_exact: max_leaf_nodes (best-first growth, DEVIATION"
-            " 466) is REFUSED BY NAME on the host restatement of the device"
-            " trainer; only depth-wise growth is restated"
+        # DEVIATION 466's growth mode, restated on the exact key
+        # (et-clf-entropy-bestfirst, 2026-09-15): see the function below.
+        return train_tree_exact_bestfirst(
+            dataset, labels_q, params, tree_id, seed, is_classification,
+            n_acc, inv_scale,
         )
     if Int(dataset.num_outputs) != n_acc:
         raise Error(
@@ -1618,6 +1619,115 @@ def train_tree_exact(
             ):
                 partition_samples(dataset, split, item)
         queue.push(work_items, splits)
+    var tree = queue.get_tree()
+    set_leaf_predictions_exact(
+        dataset, labels_q, tree, queue.node_instances, inv_scale, is_classification
+    )
+    return tree^
+
+
+def _exact_search_one(
+    dataset: Dataset,
+    labels_q: MutPointer[Int32, MutAnyOrigin],
+    item: NodeWorkItem,
+    params: DecisionTreeParams,
+    tree_id: Int32,
+    seed: UInt64,
+    is_classification: Bool,
+    n_acc: Int,
+    k: Int32,
+) raises -> Split:
+    """One node's search as `search_batch` answers it for member `i` of any
+    batch, on the host: the column sample keyed by (seed, tree, node)
+    (`sample_features` over a one-item batch draws the columns the same item
+    draws in a wide one), `_exact_node_split`, then DEVIATION 205's rescue
+    keyed as the device keys it. `train_tree_exact`'s inner loop, one item
+    at a time."""
+    var colids = List[Int32](length=Int(k), fill=Int32(0))
+    var one_item = List[NodeWorkItem]()
+    one_item.append(item)
+    _ = sample_features(colids, one_item, tree_id, seed, Int(dataset.n), Int(k))
+    var split = _exact_node_split(
+        dataset, labels_q, item, colids, n_acc, is_classification,
+        params.split_criterion, params.min_samples_leaf, seed, tree_id,
+    )
+    if item.instances.count > 0 and _exact_all_constant(dataset, item, colids):
+        var nonconst = rescue_columns(dataset, item)
+        if len(nonconst) > 0:
+            var u = rescue_pick(
+                rescue_key(seed, tree_id, UInt32(Int(item.idx))), len(nonconst)
+            )
+            var one = List[Int32]()
+            one.append(nonconst[u])
+            split = _exact_node_split(
+                dataset, labels_q, item, one, n_acc, is_classification,
+                params.split_criterion, params.min_samples_leaf, seed, tree_id,
+            )
+    return split
+
+
+def train_tree_exact_bestfirst(
+    dataset: Dataset,
+    labels_q: MutPointer[Int32, MutAnyOrigin],
+    params: DecisionTreeParams,
+    tree_id: Int32,
+    seed: UInt64,
+    is_classification: Bool,
+    n_acc: Int,
+    inv_scale: Float32,
+) raises -> TreeMetaDataNode[DType.float32]:
+    """One tree grown BEST-FIRST as the device grows it (DEVIATION 466), on
+    the host and on the exact key (the CPU training lane,
+    et-clf-entropy-bestfirst, 2026-09-15).
+
+    The device driver (`train_forest_classification_device_timed` and its
+    regression twin, the `if bestfirst:` arms) runs, per tree, a cycle of
+    SEARCH the nodes admitted-but-unsearched (the roots on cycle 0, the
+    children of the last expansion after), ADMIT each through
+    `bestfirst_admit` in batch order, POP this tree's best record, PARTITION
+    its row range (`partition_*_kernel`, a stable split of the range on
+    `value <= quesval`, which `partition_samples` is on the host), then
+    EXPAND it through `bestfirst_expand`, whose returned children are the
+    next cycle's search. Every draw is keyed by (seed, tree, node, column),
+    the frontier and its total order are per tree, and a node's rows move
+    only under its own or an ancestor's partition, so other trees sharing
+    the merged batch change nothing; this loop is that cycle for one tree.
+    The search is `_exact_search_one` (the key the device's reduction
+    orders by, not sklearn's splitter, which `train_classification_bestfirst`
+    uses and which is why that oracle cannot be the CPU column) and the leaf
+    pass is `set_leaf_predictions_exact`, as in `train_tree_exact`."""
+    if Int(dataset.num_outputs) != n_acc:
+        raise Error(
+            "train_tree_exact_bestfirst: dataset.num_outputs is "
+            + String(dataset.num_outputs)
+            + " but n_acc is "
+            + String(n_acc)
+        )
+    if params.max_batch_size < 2:
+        # The device's refusal, in its words (DEVIATION 469).
+        raise Error(
+            "max_leaf_nodes needs max_batch_size >= 2: a best-first cycle"
+            " searches both children of the node it expands, and a batch of"
+            " one cannot hold them (DEVIATION 469). Got max_batch_size "
+            + String(params.max_batch_size)
+        )
+    var k = n_sampled_cols_for(params, dataset.n)
+    var queue = NodeQueue[DType.float32](
+        params, dataset.n_sampled_rows, Int32(n_acc), tree_id
+    )
+    var pending = queue.bestfirst_seed()
+    while True:
+        for i in range(len(pending)):
+            var split = _exact_search_one(
+                dataset, labels_q, pending[i], params, tree_id, seed,
+                is_classification, n_acc, k,
+            )
+            _ = queue.bestfirst_admit(pending[i], split, tree_id)
+        if not queue.bestfirst_can_pop():
+            break
+        var rec = queue.bestfirst_pop()
+        partition_samples(dataset, rec.split, rec.item)
+        pending = queue.bestfirst_expand(rec.item, rec.split)
     var tree = queue.get_tree()
     set_leaf_predictions_exact(
         dataset, labels_q, tree, queue.node_instances, inv_scale, is_classification

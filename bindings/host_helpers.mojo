@@ -32,6 +32,7 @@ are not changed and keep their own copies, so neither certified artifact
 moves. A change to one of these bodies belongs in all three places.
 """
 from std.math import isfinite
+from std.memory import memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
@@ -158,6 +159,44 @@ def gather_f64_binding(
                 dp.unsafe_store(i, tp.unsafe_load(Int(cp.unsafe_load(i))))
     if bad:
         raise Error("gather_f64: code out of range")
+    return PythonObject(0)
+
+
+def gather_rows_bytes_binding(
+    src_addr: PythonObject, dst_addr: PythonObject, indices_addr: PythonObject,
+    source_rows: PythonObject, output_rows: PythonObject, row_bytes: PythonObject,
+) raises -> PythonObject:
+    """`dst[r] = src[indices[r]]`, one fixed-width row of bytes at a time
+    (`python/mojolearn/model_selection.py::_take_rows`, the fold rows of
+    `cross_val_score`; the cross-val lane, lane/cpu-training-misc,
+    2026-09-15). A byte copy: no arithmetic, so the fold rows are the same
+    bytes on every column. Every index is checked before any write."""
+    var ns = Int(py=source_rows)
+    var no = Int(py=output_rows)
+    var width = Int(py=row_bytes)
+    if ns < 0 or no < 0 or width < 0:
+        raise Error("gather_rows_bytes: dimensions must be non-negative")
+    if no == 0 or width == 0:
+        return PythonObject(0)
+    if Int(py=src_addr) == 0 or Int(py=dst_addr) == 0 or Int(py=indices_addr) == 0:
+        raise Error("gather_rows_bytes: null buffer address")
+    var src = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=src_addr))
+    var dst = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=dst_addr))
+    var idx = _i64_ptr(Int(py=indices_addr))
+    var invalid = False
+    with GILReleased(Python()):
+        # Validate all indices before any output mutation.
+        for r in range(no):
+            var index = Int(idx.unsafe_load(r))
+            if index < 0 or index >= ns:
+                invalid = True
+                break
+        if not invalid:
+            for r in range(no):
+                var index = Int(idx.unsafe_load(r))
+                memcpy(dest=dst + r * width, src=src + index * width, count=width)
+    if invalid:
+        raise Error("gather_rows_bytes: row index out of bounds")
     return PythonObject(0)
 
 

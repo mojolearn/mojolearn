@@ -48,6 +48,9 @@ This file imports nothing from the package on purpose. It runs by path
 before the package can import (the gate runner has no binding built yet):
 
     python3 python/mojolearn/host_surface.py --covered-lanes
+    python3 python/mojolearn/host_surface.py --record-covered-lanes
+    python3 python/mojolearn/host_surface.py --fix-covered-lanes
+    python3 python/mojolearn/host_surface.py --training-fix-columns
     python3 python/mojolearn/host_surface.py --routed-families
     python3 python/mojolearn/host_surface.py --bindings --sep ,
     python3 python/mojolearn/host_surface.py --classical-recorded
@@ -98,6 +101,26 @@ TRAINING_GPU_COLUMNS = (
     "bench/results/identity_break/2026-09-14_166-lanes/nvidia-h100-sm_90a.json",
     "bench/results/identity_break/2026-09-14_166-lanes/amd-mi325x-gfx942.json",
 )
+
+#: The covered lanes whose cells in TRAINING_GPU_COLUMNS predate a fix of
+#: the lane on every GPU column, and the three columns of the same boxes
+#: taken after the fix, which the training gate diffs those lanes against
+#: instead (--require-columns 4, the same verdict rule). kmeans-sqrt is the
+#: one (lane/cpu-training-misc, 2026-09-15): the 166-lane record carries its
+#: pre-fix labels on all three columns and the H100's pre-fix inertia on
+#: `wide` (DEVIATIONS 2716 and 2715), the fix record at 9fde8f5f7 carries the
+#: fixed cells IDENTICAL x3, and the host oracle was fixed in the same
+#: commit, so the CPU column reads IDENTICAL x4 against the fix record and
+#: DIVERGENT on all nine fixtures against the 166-lane record. A lane leaves
+#: this list the day TRAINING_GPU_COLUMNS names a record taken after its
+#: fix. `python -m mojolearn identity` diffs against TRAINING_GPU_COLUMNS
+#: alone, so on a CPU-only install it runs `record_covered_lanes()`.
+TRAINING_FIX_COLUMNS = (
+    "bench/results/identity_break/2026-09-14_kmeans-sqrt-fix/apple-m4.json",
+    "bench/results/identity_break/2026-09-14_kmeans-sqrt-fix/nvidia-h100-sm_90a.json",
+    "bench/results/identity_break/2026-09-14_kmeans-sqrt-fix/amd-mi325x-gfx942.json",
+)
+TRAINING_FIX_LANES = ("kmeans-sqrt",)
 
 #: The GPU columns the classical INFERENCE gate compares each host identity
 #: hash against (tools/classical_host_gate.py check --gpu-column).
@@ -372,13 +395,90 @@ TRAINING_LANE_NAMES = {
     # IDENTICAL x4 on the seven runners, the sabotage build DIVERGENT on all
     # eighteen; the 166-lane record carries the same umap hashes.
     "umap": "UMAP",
+    # lane/cpu-training-misc batch 1 (2026-09-15): the two k-means option
+    # lanes the core family's kmeans_fit already serves through
+    # cluster/host/kmeans_oracle.mojo (the rooted euclidean metric, fixed
+    # with the device in 9fde8f5f7, and the classic sequential k-means++
+    # start), the cosine metric's refusal, which the oracle raises in the
+    # device's words so the cell is the same refusal sentence on every
+    # column, and cross_val_score over the gbdt family's RMSE fit, the core
+    # family's fold-row gather (gather_rows_bytes) and the metrics family's
+    # r2. On the M4, one core: all 36 cells IDENTICAL x4 (kmeans-sqrt
+    # against TRAINING_FIX_COLUMNS), and the sabotage set DIVERGENT on
+    # kmeans-sqrt, kmeans-classic-pp and cross-val on every fixture.
+    "kmeans-sqrt": "k-means under the rooted euclidean metric",
+    "kmeans-classic-pp": "k-means from the classic k-means++ start",
+    "kmeans-cosine": "the refusal of k-means under cosine distance",
+    "cross-val": "cross-validation of gradient boosting",
+    # lane/cpu-training-misc batch 2 (2026-09-15): the resampling functions
+    # through the resample family's own host binding
+    # (resample/host/resample_host.mojo: the bootstrap replicate folds and
+    # the sorted order statistics, the permutation ranks and masked folds,
+    # the Monte Carlo chunk trees, restated from resample/estimator.mojo's
+    # kernels, and the host finish that file already runs). On the M4, one
+    # core: all 27 train cells IDENTICAL x4 against the 166-lane record
+    # before the gate ran.
+    "bootstrap": "the bootstrap",
+    "permutation-test": "the permutation test",
+    "monte-carlo": "Monte Carlo integration",
+    # lane/cpu-training-misc batch 3 (2026-09-15): the neural primitives
+    # through the training family's host binding. optim-sgd and
+    # cross-entropy-arms reach optimizer_step and ce_loss (the mlp lane's
+    # entries); optim-adam-clip adds clip_grad_norm over
+    # training/checks/optimizer_oracle.mojo and accumulate over
+    # training/host/samba_ops_oracle.mojo; training-primitives adds the
+    # embedding, RMSNorm and linear operations over the same file (the
+    # embedding and GEMM oracles and the RMSNorm kernels' statements with
+    # the caller's eps). On the M4, one core: all 36 train, 9 infer and 18
+    # batch cells IDENTICAL x4 before the gate ran.
+    "optim-sgd": "SGD with momentum, Nesterov and dampening",
+    "optim-adam-clip": "Adam and AdamW with the gradient clip and accumulation",
+    "cross-entropy-arms": "the cross-entropy loss arms",
+    "training-primitives": "the embedding, RMSNorm and linear training primitives",
+    # CPU training for the workstream D estimators
+    # (lane/cpu-training-d-estimators, 2026-09-15). The Cholesky door through
+    # the gp host binding's cholesky_factor and cholesky_solve (the factor is
+    # now chol_host_potrf over chol_host_factor_lower, same bits); KernelRidge,
+    # Nystroem and RBFSampler through kernel_methods/host/km_host_oracle.mojo;
+    # GaussianMixture through mixture/host/gmm_host_oracle.mojo; HDBSCAN
+    # through hdbscan/host/hdbscan_host_oracle.mojo (the Boruvka round count
+    # included). On the M4's CPU column (one core, shared machine) every
+    # train, infer and batch cell of the eight lanes read IDENTICAL x4
+    # against the 166-lane record's three GPU columns before the gate ran,
+    # and each family's sabotage build read DIVERGENT on every train cell.
+    "cholesky": "the Cholesky factorization and solve",
+    "rbf-sampler": "random Fourier features",
+    "kernel-ridge": "kernel ridge",
+    "nystroem": "the Nystroem kernel approximation",
+    "gmm": "the Gaussian mixture",
+    "gmm-random-init": "the Gaussian mixture with a random start",
+    "hdbscan": "HDBSCAN",
+    "hdbscan-leaf": "HDBSCAN with leaf selection",
+    # The forest variant lanes (lane/cpu-training-forest-variants,
+    # 2026-09-15). rf-clf-entropy-log2-noboot was already served by
+    # ensemble/host/rf_oracle.mojo (entropy, log2 features, no bootstrap, the
+    # level-order leaf cap); the oracle gained the POISSON, GAMMA and
+    # INVERSE_GAUSSIAN gains and the class-weighted bootstrap, the rf binding
+    # rf_classifier_fit_weighted, and both forest bindings the resident
+    # parallel_groves entries over core/forest_host_groves.mojo; ExtraTrees'
+    # best-first growth fits through train_tree_exact_bestfirst. On the M4's
+    # CPU column (one core), all 54 train, 108 infer and model and 54 batch
+    # cells IDENTICAL x4 against the 166-lane record before the gate ran, and
+    # the sabotage build DIVERGENT on every one.
+    "rf-clf-entropy-log2-noboot": "the random forest classifier with entropy splits, log2 features and no bootstrap",
+    "rf-clf-balanced-parallel": "the class-weighted random forest classifier with the parallel groves engine",
+    "rf-reg-poisson": "the random forest regressor with the Poisson criterion",
+    "rf-reg-gamma-ig": "the random forest regressor with the gamma and inverse Gaussian criteria",
+    "et-clf-entropy-bestfirst": "the best-first Extra Trees classifier with entropy splits",
+    "et-reg-bootstrap-parallel": "the bootstrapped Extra Trees regressor with the parallel groves engine",
 }
 
 #: The lanes with NO CPU path of any kind, as the README states them. A
 #: lane leaves this list the day its host lane merges; docs_facts fails the
 #: README until the marked span is rewritten.
 NO_CPU_PATH = (
-    "the neural blocks",
+    "the Transformer, Mamba and Samba blocks",
+    "the Embedding layer",
     "gradient boosting training outside its declared lanes (the ordered RMSE and feature-frequency fits, categorical features, sample weights, eval sets and the pointwise searcher among them)",
 )
 
@@ -486,6 +586,7 @@ FAMILIES = (
             "kmeans-weighted", "knn-sqeuclidean", "knn-clf-distance", "knn-reg-distance",
             "knn-manhattan", "knn-chebyshev", "knn-cosine", "knn-minkowski-p3", "knn-rbc",
             "radius", "radius-manhattan", "radius-chebyshev", "radius-minkowski-p3",
+            "kmeans-sqrt", "kmeans-classic-pp", "kmeans-cosine",
         ),
         inference_lanes=("knn", "knn-clf", "knn-reg"),
         forest_kinds=(),
@@ -504,7 +605,7 @@ FAMILIES = (
             "knn_search", "knn_classify", "knn_regress", "kmeans_fit",
             "radius_neighbors_count", "radius_neighbors_fill", "rbc_knn_search", "transpose_f32",
             "cast_colmajor_f64_to_f32", "nonzero_f64_count", "nonzero_f64_fill", "cast_f64_to_f32", "all_finite_f32",
-            "all_finite_f64", "gather_i64", "gather_f64", "argmax_rows_f32",
+            "all_finite_f64", "gather_i64", "gather_f64", "gather_rows_bytes", "argmax_rows_f32",
             "argmax_rows_f64", "column_mean_f64", "center_columns_f32",
             "scale_rows_f32", "probability_rows_f32",
         ),
@@ -730,14 +831,14 @@ FAMILIES = (
         routes="_mojolearn_trees",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("et-clf", "et-reg"),
+        training_lanes=("et-clf", "et-reg", "et-clf-entropy-bestfirst", "et-reg-bootstrap-parallel"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("ExtraTreesClassifier", "ExtraTreesRegressor"),
         display="the Extra Trees classifier and regressor",
         host_modules=(
             "extratrees/estimator.mojo", "extratrees/checks/pcg_rng.mojo",
-            "core/forest_host_predict.mojo",
+            "core/forest_host_predict.mojo", "core/forest_host_groves.mojo",
         ),
         exports=(
             "trees_host_numeric_mode", "trees_host_vendor", "trees_host_column",
@@ -747,7 +848,8 @@ FAMILIES = (
             "et_regressor_fit", "et_regressor_fit_export",
             "et_regressor_fit_rowmajor", "et_regressor_fit_rowmajor_export",
             "forest_export", "forest_export_legacy", "forest_export_release",
-            "et_predict",
+            "et_predict", "forest_prepare_gpu", "forest_predict_resident_reuse_gpu",
+            "forest_release_gpu",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=True,
@@ -764,12 +866,18 @@ FAMILIES = (
         routes="_mojolearn_rf",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("rf-clf", "rf-reg"),
+        training_lanes=(
+            "rf-clf", "rf-reg", "rf-clf-entropy-log2-noboot", "rf-clf-balanced-parallel",
+            "rf-reg-poisson", "rf-reg-gamma-ig",
+        ),
         inference_lanes=(),
         forest_kinds=(),
         classes=("RandomForestClassifier", "RandomForestRegressor"),
         display="the random forest classifier and regressor",
-        host_modules=("ensemble/host/rf_oracle.mojo", "core/forest_host_predict.mojo"),
+        host_modules=(
+            "ensemble/host/rf_oracle.mojo", "core/forest_host_predict.mojo",
+            "core/forest_host_groves.mojo",
+        ),
         exports=(
             "rf_host_numeric_mode", "rf_host_vendor", "rf_host_column",
             "rf_host_sabotage", "rf_vendor", "rf_numeric_mode",
@@ -779,6 +887,8 @@ FAMILIES = (
             "rf_regressor_fit_rowmajor", "rf_regressor_fit_rowmajor_export",
             "forest_export", "forest_export_legacy", "forest_export_release",
             "rf_predict_proba", "rf_predict_reg",
+            "rf_classifier_fit_weighted", "rf_classifier_fit_weighted_export",
+            "forest_prepare_gpu", "forest_predict_resident_reuse_gpu", "forest_release_gpu",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=True,
@@ -788,16 +898,17 @@ FAMILIES = (
         # family's host binding. It routes `_mojolearn_gp` on a CPU-only
         # install with the GPU binding's gpr_fit and gpr_predict and the
         # Cholesky door workstream D put on the same binding
-        # (cholesky_factor, cholesky_solve, cholesky_profile_jitter; the
-        # cholesky lane is not declared covered because the 136-lane record
-        # predates it). gp_parallel_available stays absent, so the ordered
+        # (cholesky_factor, cholesky_solve, cholesky_profile_jitter). The
+        # cholesky lane, which the 136-lane record predated, is covered since
+        # lane/cpu-training-d-estimators (2026-09-15) against the 166-lane
+        # record. gp_parallel_available stays absent, so the ordered
         # multi-GPU driver refuses by name.
         family="gp",
         binding="_mojolearn_gp_host",
         routes="_mojolearn_gp",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("gp", "gp-matern12", "gp-matern32", "gp-matern52-ard"),
+        training_lanes=("gp", "gp-matern12", "gp-matern32", "gp-matern52-ard", "cholesky"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("GaussianProcessRegressor", "Cholesky"),
@@ -812,6 +923,108 @@ FAMILIES = (
             "gp_host_sabotage", "gp_vendor", "gp_numeric_mode",
             "gpr_fit", "gpr_predict", "cholesky_profile_jitter",
             "cholesky_factor", "cholesky_solve",
+        ),
+        gate="tools/identity_break.py (cpu-identity-gate.yml)",
+        ships_in_wheel=True,
+    ),
+    dict(
+        # CPU training for the workstream D estimators
+        # (lane/cpu-training-d-estimators, 2026-09-15): the kernel methods
+        # family's host binding. It routes `_mojolearn_kernel_methods` on a
+        # CPU-only install with the GPU binding's fit, predict and transform
+        # names for KernelRidge, Nystroem and RBFSampler at the linear and
+        # rbf kernels; the polynomial, sigmoid and laplacian kernels refuse
+        # by name, and kernel_methods_rows_parallel_available stays absent,
+        # so the multi-GPU driver refuses by name.
+        family="kernel_methods",
+        binding="_mojolearn_kernel_methods_host",
+        routes="_mojolearn_kernel_methods",
+        loaded_by="_backend._HOST_MODULES",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=("rbf-sampler", "kernel-ridge", "nystroem"),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=("KernelRidge", "Nystroem", "RBFSampler"),
+        display="kernel ridge, the Nystroem approximation and random Fourier features",
+        host_modules=(
+            "kernel_methods/host/km_host_oracle.mojo",
+            "kernel_methods/checks/random_features.mojo",
+            "cholesky/host/chol_oracle.mojo",
+            "decomposition/host/pca_oracle.mojo",
+            "gemm/host/gemm_oracle.mojo",
+        ),
+        exports=(
+            "kernel_methods_host_numeric_mode", "kernel_methods_host_vendor",
+            "kernel_methods_host_column", "kernel_methods_host_sabotage",
+            "kernel_methods_vendor", "kernel_methods_numeric_mode",
+            "kernel_ridge_fit", "kernel_ridge_predict", "nystroem_fit",
+            "nystroem_transform", "rbf_sampler_fit", "rbf_sampler_transform",
+        ),
+        gate="tools/identity_break.py (cpu-identity-gate.yml)",
+        ships_in_wheel=True,
+    ),
+    dict(
+        # CPU training for the workstream D estimators
+        # (lane/cpu-training-d-estimators, 2026-09-15): the Gaussian mixture
+        # family's host binding. It routes `_mojolearn_mixture` on a CPU-only
+        # install with the GPU binding's fit and scoring names;
+        # gmm_parallel_available stays absent, so the multi-GPU driver
+        # refuses by name.
+        family="mixture",
+        binding="_mojolearn_mixture_host",
+        routes="_mojolearn_mixture",
+        loaded_by="_backend._HOST_MODULES",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=("gmm", "gmm-random-init"),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=("GaussianMixture",),
+        display="the Gaussian mixture",
+        host_modules=(
+            "mixture/host/gmm_host_oracle.mojo",
+            "cluster/host/kmeans_oracle.mojo",
+            "cholesky/host/chol_oracle.mojo",
+            "gemm/host/gemm_oracle.mojo",
+        ),
+        exports=(
+            "mixture_host_numeric_mode", "mixture_host_vendor",
+            "mixture_host_column", "mixture_host_sabotage",
+            "mixture_vendor", "mixture_numeric_mode", "gmm_fit",
+            "gmm_score_samples", "gmm_predict_proba", "gmm_predict",
+            "gmm_score_bic_aic",
+        ),
+        gate="tools/identity_break.py (cpu-identity-gate.yml)",
+        ships_in_wheel=True,
+    ),
+    dict(
+        # CPU training for the workstream D estimators
+        # (lane/cpu-training-d-estimators, 2026-09-15): the HDBSCAN family's
+        # host binding. It routes `_mojolearn_hdbscan` on a CPU-only install
+        # with the GPU binding's fit name; hdbscan_rows_parallel_available
+        # stays absent, so the multi-GPU driver refuses by name.
+        family="hdbscan",
+        binding="_mojolearn_hdbscan_host",
+        routes="_mojolearn_hdbscan",
+        loaded_by="_backend._HOST_MODULES",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=("hdbscan", "hdbscan-leaf"),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=("HDBSCAN",),
+        display="HDBSCAN",
+        host_modules=(
+            "hdbscan/host/hdbscan_host_oracle.mojo",
+            "core/knn_host_predict.mojo",
+            "hierarchy/checks/linkage_oracle.mojo",
+            "hdbscan/impl/detail/condense.mojo",
+            "hdbscan/impl/detail/extract.mojo",
+            "hdbscan/impl/detail/utils.mojo",
+            "hdbscan/impl/condensed_hierarchy.mojo",
+        ),
+        exports=(
+            "hdbscan_host_numeric_mode", "hdbscan_host_vendor",
+            "hdbscan_host_column", "hdbscan_host_sabotage",
+            "hdbscan_vendor", "hdbscan_numeric_mode", "hdbscan_fit",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=True,
@@ -833,14 +1046,17 @@ FAMILIES = (
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=(
-            "gbdt-symmetric", "gbdt-rmse", "gbdt-depthwise", "gbdt-lossguide",
+            "gbdt-symmetric", "gbdt-rmse", "gbdt-depthwise", "gbdt-lossguide", "cross-val",
             "gbdt-nan-modes", "gbdt-adapter-clf", "gbdt-adapter-reg",
             "gbdt-parametric-losses", "gbdt-exact-mae",
             "gbdt-lossguide-newtoncosine", "gbdt-multiclass", "gbdt-onevsall",
         ),
         inference_lanes=(),
         forest_kinds=(),
-        classes=("GradientBoosting", "GradientBoostingClassifier", "GradientBoostingRegressor"),
+        classes=(
+            "GradientBoosting", "GradientBoostingClassifier", "GradientBoostingRegressor",
+            "model_selection.cross_val_score",
+        ),
         display="gradient boosting on symmetric trees with the pointwise and multiclass losses, either NaN mode and the classifier and regressor adapters, and on depthwise and lossguide trees with the Logloss loss",
         host_modules=(
             "gbdt/host/gbdt_oracle.mojo", "gbdt/host/gbdt_oracle_rmse.mojo",
@@ -862,29 +1078,69 @@ FAMILIES = (
         # family's host binding. It routes `_mojolearn_training` on a
         # CPU-only install with the GPU binding's optimizer_step, ce_loss and
         # the three small MLP operations, so SmallMLPTrainer (and the
-        # optimizers and cross_entropy on their own) run unchanged; the clip
-        # on its own, the accumulation, the Samba operations, the neural RNG
+        # optimizers and cross_entropy on their own) run unchanged;
+        # lane/cpu-training-misc batch 3 (2026-09-15) adds clip_grad_norm,
+        # accumulate, accumulation_is_aligned and the embedding, RMSNorm and
+        # linear forward and backward. The Samba operations, the neural RNG
         # and the multi-GPU probes stay absent and refuse by name.
         family="training",
         binding="_mojolearn_training_host",
         routes="_mojolearn_training",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("mlp",),
+        training_lanes=("mlp", "optim-sgd", "optim-adam-clip", "cross-entropy-arms", "training-primitives"),
         inference_lanes=(),
         forest_kinds=(),
-        classes=("SmallMLPTrainer", "SGD", "Adam", "AdamW", "cross_entropy"),
-        display="the small MLP trainer, the optimizers and the cross-entropy loss",
+        classes=(
+            "SmallMLPTrainer", "SGD", "Adam", "AdamW", "cross_entropy", "clip_grad_norm_",
+            "accumulate_grads", "embedding_forward", "embedding_backward", "rms_norm_forward",
+            "rms_norm_backward", "linear_forward", "linear_backward",
+        ),
+        display="the small MLP trainer, the optimizers, the gradient clip, the cross-entropy loss and the training primitives",
         host_modules=(
             "training/host/mlp_oracle.mojo",
             "training/checks/loss_oracle.mojo",
             "training/checks/optimizer_oracle.mojo",
+            "training/host/samba_ops_oracle.mojo",
+            "embedding/checks/embedding_oracle.mojo",
+            "gemm/host/gemm_oracle.mojo",
         ),
         exports=(
             "training_host_numeric_mode", "training_host_vendor",
             "training_host_column", "training_host_sabotage",
             "training_numeric_mode", "training_vendor", "optimizer_step",
             "ce_loss", "mlp_bias_activation", "mlp_relu_backward", "mlp_sum_rows",
+            "clip_grad_norm", "accumulate", "accumulation_is_aligned",
+            "embedding_forward", "embedding_backward", "rms_norm_forward",
+            "rms_norm_backward", "linear_forward", "linear_backward",
+        ),
+        gate="tools/identity_break.py (cpu-identity-gate.yml)",
+        ships_in_wheel=True,
+    ),
+    dict(
+        # lane/cpu-training-misc batch 2 (2026-09-15): the resampling
+        # family's host binding. It routes `_mojolearn_resample` on a
+        # CPU-only install with the GPU binding's bootstrap,
+        # permutation_test and monte_carlo_integrate over
+        # resample/host/resample_host.mojo (resample/estimator.mojo's entry
+        # points with every device kernel restated on the host);
+        # resample_ranges_parallel_available is absent, so the multi-GPU
+        # range drivers refuse by name.
+        family="resample",
+        binding="_mojolearn_resample_host",
+        routes="_mojolearn_resample",
+        loaded_by="_backend._HOST_MODULES",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=("bootstrap", "permutation-test", "monte-carlo"),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=("resample.bootstrap", "resample.permutation_test", "resample.monte_carlo_integrate"),
+        display="bootstrap, the permutation test and Monte Carlo integration",
+        host_modules=("resample/host/resample_host.mojo",),
+        exports=(
+            "resample_host_numeric_mode", "resample_host_vendor", "resample_host_column",
+            "resample_host_sabotage", "resample_vendor", "resample_numeric_mode",
+            "bootstrap", "permutation_test", "monte_carlo_integrate",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=True,
@@ -1005,6 +1261,23 @@ def covered_lanes():
     return named
 
 
+def fix_covered_lanes():
+    """The covered lanes the training gate diffs against
+    TRAINING_FIX_COLUMNS, in the gate's order. Every one must be covered."""
+    covered = covered_lanes()
+    unknown = [lane for lane in TRAINING_FIX_LANES if lane not in covered]
+    if unknown:
+        raise RuntimeError(f"host_surface: TRAINING_FIX_LANES names uncovered lanes {unknown}")
+    return [lane for lane in covered if lane in TRAINING_FIX_LANES]
+
+
+def record_covered_lanes():
+    """The covered lanes the training gate diffs against
+    TRAINING_GPU_COLUMNS: every covered lane not in TRAINING_FIX_LANES."""
+    fixed = fix_covered_lanes()
+    return [lane for lane in covered_lanes() if lane not in fixed]
+
+
 def inference_lanes():
     """The classical gate lanes served from a saved model, in gate order."""
     out = []
@@ -1079,11 +1352,14 @@ def as_dict():
         families=[dict(f) for f in FAMILIES],
         routed=routed_modules(),
         covered_lanes=covered_lanes(),
+        record_covered_lanes=record_covered_lanes(),
+        fix_covered_lanes=fix_covered_lanes(),
         inference_lanes=inference_lanes(),
         forest_kinds=forest_kinds(),
         classical_recorded=list(CLASSICAL_RECORDED),
         classical_gpu_columns=list(CLASSICAL_GPU_COLUMNS),
         training_gpu_columns=list(TRAINING_GPU_COLUMNS),
+        training_fix_columns=list(TRAINING_FIX_COLUMNS),
         training_gpu_column_record=training_gpu_column_record(),
         wheel_families=wheel_families(),
         wheel_bindings=wheel_bindings(),
@@ -1100,6 +1376,8 @@ def main(argv=None):
     g.add_argument("--bindings", action="store_true", help="every host binding basename")
     g.add_argument("--routed-bindings", action="store_true", help="the routed families' basenames")
     g.add_argument("--covered-lanes", action="store_true", help="identity_break lanes with a CPU training path (comma separated)")
+    g.add_argument("--record-covered-lanes", action="store_true", help="covered lanes diffed against --training-gpu-columns (comma separated)")
+    g.add_argument("--fix-covered-lanes", action="store_true", help="covered lanes diffed against --training-fix-columns (comma separated)")
     g.add_argument("--inference-lanes", action="store_true", help="classical gate lanes served from a saved model (comma separated)")
     g.add_argument("--forest-kinds", action="store_true", help="forest gate kinds (comma separated)")
     g.add_argument("--wheel-families", action="store_true", help="families whose host binding ships in the wheels")
@@ -1108,6 +1386,7 @@ def main(argv=None):
     g.add_argument("--classical-recorded", action="store_true", help="classical gate recording directories")
     g.add_argument("--classical-gpu-columns", action="store_true", help="the GPU columns the classical gate compares against")
     g.add_argument("--training-gpu-columns", action="store_true", help="the GPU columns the training gate diffs against")
+    g.add_argument("--training-fix-columns", action="store_true", help="the GPU columns the training gate diffs --fix-covered-lanes against")
     g.add_argument("--markdown", action="store_true", help="the surface as a Markdown table")
     g.add_argument("--json", action="store_true", help="the whole manifest as JSON")
     p.add_argument("--sep", default=None, help="separator for list output (default: comma for lanes and kinds, space otherwise)")
@@ -1118,7 +1397,8 @@ def main(argv=None):
     if args.markdown:
         print(markdown_table())
         return 0
-    comma = (args.covered_lanes or args.inference_lanes or args.forest_kinds)
+    comma = (args.covered_lanes or args.record_covered_lanes or args.fix_covered_lanes
+             or args.inference_lanes or args.forest_kinds)
     sep = args.sep if args.sep is not None else ("," if comma else " ")
     if args.families:
         items = families()
@@ -1136,6 +1416,12 @@ def main(argv=None):
         items = [training_gpu_column_record()]
     elif args.covered_lanes:
         items = covered_lanes()
+    elif args.record_covered_lanes:
+        items = record_covered_lanes()
+    elif args.fix_covered_lanes:
+        items = fix_covered_lanes()
+    elif args.training_fix_columns:
+        items = list(TRAINING_FIX_COLUMNS)
     elif args.inference_lanes:
         items = inference_lanes()
     elif args.forest_kinds:
