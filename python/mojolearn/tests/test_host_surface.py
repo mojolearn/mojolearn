@@ -201,7 +201,8 @@ def test_forest_kinds_are_the_forest_gate_kinds():
 
 
 def test_recordings_and_columns_exist():
-    for rel in (host_surface.CLASSICAL_RECORDED + host_surface.FORECAST_RECORDED + host_surface.CLASSICAL_GPU_COLUMNS
+    for rel in (host_surface.CLASSICAL_RECORDED + host_surface.FORECAST_RECORDED + host_surface.SEARCH_LOOKUP_RECORDED
+                + host_surface.CLASSICAL_GPU_COLUMNS
                 + (host_surface.FOREST_RECORDED_ROOT,)):
         assert (ROOT / rel).exists(), f"the manifest names {rel}, which is not in the tree"
 

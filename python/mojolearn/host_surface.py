@@ -182,6 +182,17 @@ FORECAST_RECORDED = (
     "bench/results/classical_host/2026-09-15-apple-m4-arima",
 )
 
+#: The saved IVF-Flat index and embedding table recordings
+#: (lane/inference-embedding-ivf-cholesky, 2026-09-15), checked with
+#: `tools/classical_host_gate.py check` like FORECAST_RECORDED and kept apart
+#: from CLASSICAL_RECORDED for the same reason: they bind
+#: `_mojolearn_ivf_search_host` and `_mojolearn_embedding_infer_host`,
+#: families with no route, which the CPU identity gate workflow does not build
+#: today. The workflow reading this list is owed to its owner.
+SEARCH_LOOKUP_RECORDED = (
+    "bench/results/classical_host/2026-09-15-apple-m4-ivf-embedding",
+)
+
 #: The forest inference recordings: every directory under this root whose
 #: expected.json says RECORDED (the workflows sort them at run time).
 FOREST_RECORDED_ROOT = "bench/results/forest_host"
@@ -1974,6 +1985,7 @@ def as_dict():
         forest_kinds=forest_kinds(),
         classical_recorded=list(CLASSICAL_RECORDED),
         forecast_recorded=list(FORECAST_RECORDED),
+        search_lookup_recorded=list(SEARCH_LOOKUP_RECORDED),
         classical_gpu_columns=list(CLASSICAL_GPU_COLUMNS),
         training_gpu_columns=list(TRAINING_GPU_COLUMNS),
         training_fix_columns=list(TRAINING_FIX_COLUMNS),
