@@ -481,6 +481,7 @@ def fit_forest_exact(
     inv_scale: Float32,
     bootstrap: Bool = BOOTSTRAP_DEFAULT,
     n_sampled_rows: Int32 = 0,
+    tree_start: Int = 0,
 ) raises -> Forest:
     """The forest loop of `fit_classification` / `fit_regression` over
     `train_tree_exact`, the HOST RESTATEMENT OF THE DEVICE TRAINER (the CPU
@@ -492,7 +493,16 @@ def fit_forest_exact(
     float plane the `Dataset` carries beside it; the exact search never
     reads it. The device's own refusal on the class count
     (`train_forest_classification_device`, DEVIATION 172) is restated so a
-    fit the device refuses is refused here in the same words."""
+    fit the device refuses is refused here in the same words.
+
+    `tree_start` is the device arms' global tree ID offset
+    (`fit_classification_device` / `fit_regression_device`, the
+    `tree_ids` list): tree `i` of this call is tree `tree_start + i` of the
+    whole forest in both its row sample and its split key, which is what a
+    `parallel_ensemble.fit_forest` shard asks for (lane/cpu-training-par-wave2,
+    2026-09-15). At 0 the loop is the one it was."""
+    if tree_start < 0 or tree_start + Int(n_trees) > 2147483647:
+        raise Error("invalid global tree range")
     error_checking(n_rows, n_cols, n_trees)
     validity_check(params)
     if num_outputs < 1:
@@ -514,7 +524,7 @@ def fit_forest_exact(
     var labels_q_p = labels_q.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin]()
     for tree_id in range(Int(n_trees)):
         var row_ids = row_sample_for(
-            n_rows, bootstrap, n_sampled, seed, Int32(tree_id)
+            n_rows, bootstrap, n_sampled, seed, Int32(tree_start + tree_id)
         )
         var dataset = Dataset(
             rebind[MutPointer[Float32, MutUntrackedOrigin]](
@@ -534,7 +544,7 @@ def fit_forest_exact(
         )
         forest.trees.append(
             train_tree_exact(
-                dataset, labels_q_p, params, Int32(tree_id), seed,
+                dataset, labels_q_p, params, Int32(tree_start + tree_id), seed,
                 is_classification, Int(num_outputs), inv_scale,
             )
         )

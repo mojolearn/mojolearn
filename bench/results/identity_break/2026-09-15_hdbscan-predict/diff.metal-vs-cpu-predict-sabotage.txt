@@ -1,0 +1,37 @@
+NOTE: --lanes scopes this diff to 2 lane(s); 0 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-apple-m4 is a CPU column: cpu_model='Apple M4' column=cpu families=['_mojolearn_core_host', '_mojolearn_hdbscan_host'] commit=5938bac95560a3c089f7d8328b1b2d405abd1062
+| lane/fixture                 | verdict    | apple-m4         | cpu-apple-m4     |
+|------------------------------|------------|------------------|------------------|
+| hdbscan-leaf/base            | IDENTICAL x2 | a69a1f87d6fad7d2 | a69a1f87d6fad7d2 |
+| hdbscan-leaf/dupes           | IDENTICAL x2 | a69a1f87d6fad7d2 | a69a1f87d6fad7d2 |
+| hdbscan-leaf/ties            | IDENTICAL x2 | 41045554964e4bd8 | 41045554964e4bd8 |
+| hdbscan/base                 | IDENTICAL x2 | 1032d54b827b0e0c | 1032d54b827b0e0c |
+| hdbscan/dupes                | IDENTICAL x2 | 1032d54b827b0e0c | 1032d54b827b0e0c |
+| hdbscan/ties                 | IDENTICAL x2 | 444bc82f0a607cfb | 444bc82f0a607cfb |
+
+summary: IDENTICAL=6
+
+| lane/fixture                 | column | verdict      | apple-m4         | cpu-apple-m4     |
+|------------------------------|--------|--------------|------------------|------------------|
+| hdbscan-leaf/base            | infer  | DIVERGENT    | 72404979b3191f8d | 3948f87b9056763b |
+| hdbscan-leaf/base            | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| hdbscan-leaf/base            | batch  | DIVERGENT    | 88b044992cd41342 | 6cdcde593d89e2c7 |
+| hdbscan-leaf/dupes           | infer  | DIVERGENT    | 72404979b3191f8d | 3948f87b9056763b |
+| hdbscan-leaf/dupes           | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| hdbscan-leaf/dupes           | batch  | DIVERGENT    | 88b044992cd41342 | 6cdcde593d89e2c7 |
+| hdbscan-leaf/ties            | infer  | DIVERGENT    | e796aec36f4eda67 | 188e3d3a2b448129 |
+| hdbscan-leaf/ties            | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| hdbscan-leaf/ties            | batch  | DIVERGENT    | cad94e47463e9d27 | 594ec6de72c5b9cf |
+| hdbscan/base                 | infer  | DIVERGENT    | a104cfe065750353 | cd8e246f44b3e802 |
+| hdbscan/base                 | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| hdbscan/base                 | batch  | DIVERGENT    | d49a36bc7e6177b4 | 590c81587ee105c3 |
+| hdbscan/dupes                | infer  | DIVERGENT    | a104cfe065750353 | cd8e246f44b3e802 |
+| hdbscan/dupes                | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| hdbscan/dupes                | batch  | DIVERGENT    | d49a36bc7e6177b4 | 590c81587ee105c3 |
+| hdbscan/ties                 | infer  | DIVERGENT    | 324146f46faedded | 17c9da1d3da51b66 |
+| hdbscan/ties                 | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| hdbscan/ties                 | batch  | DIVERGENT    | c67a80723b373687 | c3b1228d3dd3b451 |
+
+summary (infer/model): DIVERGENT=6, N/A=6
+summary (batch): DIVERGENT=6
+summary (rlpair): 

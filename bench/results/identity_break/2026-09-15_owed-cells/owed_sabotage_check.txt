@@ -1,0 +1,26 @@
+owed kmeans-array/base infer: production b0e1e0e15756eb6c sabotage a2bde287204ef583 MOVED
+owed kmeans-array/base batch: production c031eae95609c744 sabotage 5c33a209cddeab44 MOVED
+owed kmeans-array/odd infer: production e23895c420b80215 sabotage c3ee6092434e3711 MOVED
+owed kmeans-array/odd batch: production 6b332575d6403b7d sabotage d43ca75d7cd5adff MOVED
+owed kmeans-classic-pp/base infer: production 9933c62acd4bbde8 sabotage f20c50c274b5ca00 MOVED
+owed kmeans-classic-pp/base batch: production 2bf16d90cfe65678 sabotage 440ed787be95d7fa MOVED
+owed kmeans-classic-pp/odd infer: production 70d10d0be6535590 sabotage f7f7dfaa91b8edfb MOVED
+owed kmeans-classic-pp/odd batch: production 011d067387d7ef5d sabotage 82dfe6b32dec5aad MOVED
+owed kmeans-random/base infer: production 456c4915b48a291c sabotage 09d881b1deab3427 MOVED
+owed kmeans-random/base batch: production 6b9bf5684fdeeae1 sabotage fab25183921fad0e MOVED
+owed kmeans-random/odd infer: production c415e79de2c2d102 sabotage 6ff8986a6562098e MOVED
+owed kmeans-random/odd batch: production bddbcb7ae1fdbba9 sabotage 24a59db996580407 MOVED
+owed kmeans-weighted/base infer: production b3757aeee5a4565d sabotage 854b5292ad3fb991 MOVED
+owed kmeans-weighted/base batch: production 23d7741ac2b47c06 sabotage 853d302af9093abd MOVED
+owed kmeans-weighted/odd infer: production ef7a458b978799ab sabotage fbc8b35b98d1fd83 MOVED
+owed kmeans-weighted/odd batch: production d8a260999d921bc6 sabotage 89f52542d6854714 MOVED
+owed kmeans/base infer: production b9a7dd27a045bc21 sabotage 2192d61e07429ef3 MOVED
+owed kmeans/base batch: production 2dc7903bd0a181f5 sabotage 013600980331b37c MOVED
+owed kmeans/odd infer: production bc82439049a4e870 sabotage 9f2ed3771e60b681 MOVED
+owed kmeans/odd batch: production eb91feb5618b7fe2 sabotage be0b949f99082bfa MOVED
+owed verdict OK (20 of 20 owed cell part(s) moved, 0 failure(s))
+owed kmeans-sqrt/base infer: production 3b648e50c114da3c sabotage 1d6502d886cd2e02 MOVED
+owed kmeans-sqrt/base batch: production a44ce4484c90c89d sabotage 0f2e55a7cd725968 MOVED
+owed kmeans-sqrt/odd infer: production db19ea8a99baebc2 sabotage eb8fff06b43713ea MOVED
+owed kmeans-sqrt/odd batch: production 5d46fd602108b99c sabotage afcd5bbb18184504 MOVED
+owed verdict OK (4 of 4 owed cell part(s) moved, 0 failure(s))

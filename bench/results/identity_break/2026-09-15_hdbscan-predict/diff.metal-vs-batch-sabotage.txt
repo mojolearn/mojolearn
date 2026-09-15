@@ -1,0 +1,37 @@
+NOTE: --lanes scopes this diff to 2 lane(s); 0 other lane(s) the JSONs carry are not compared
+NOTE: column apple-m4 ran with MOJOLEARN_IDENTITY_BATCH_SABOTAGE ON; its batch cells are a sabotage run and must read BATCH_MOVED, they are not evidence
+| lane/fixture                 | verdict    | apple-m4         | apple-m4         |
+|------------------------------|------------|------------------|------------------|
+| hdbscan-leaf/base            | IDENTICAL x2 | a69a1f87d6fad7d2 | a69a1f87d6fad7d2 |
+| hdbscan-leaf/dupes           | IDENTICAL x2 | a69a1f87d6fad7d2 | a69a1f87d6fad7d2 |
+| hdbscan-leaf/ties            | IDENTICAL x2 | 41045554964e4bd8 | 41045554964e4bd8 |
+| hdbscan/base                 | IDENTICAL x2 | 1032d54b827b0e0c | 1032d54b827b0e0c |
+| hdbscan/dupes                | IDENTICAL x2 | 1032d54b827b0e0c | 1032d54b827b0e0c |
+| hdbscan/ties                 | IDENTICAL x2 | 444bc82f0a607cfb | 444bc82f0a607cfb |
+
+summary: IDENTICAL=6
+
+| lane/fixture                 | column | verdict      | apple-m4         | apple-m4         |
+|------------------------------|--------|--------------|------------------|------------------|
+| hdbscan-leaf/base            | infer  | IDENTICAL x2 | 72404979b3191f8d | 72404979b3191f8d |
+| hdbscan-leaf/base            | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| hdbscan-leaf/base            | batch  | BATCH_MOVED  | 88b044992cd41342 | BATCH_MOVED      |
+| hdbscan-leaf/dupes           | infer  | IDENTICAL x2 | 72404979b3191f8d | 72404979b3191f8d |
+| hdbscan-leaf/dupes           | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| hdbscan-leaf/dupes           | batch  | BATCH_MOVED  | 88b044992cd41342 | BATCH_MOVED      |
+| hdbscan-leaf/ties            | infer  | IDENTICAL x2 | e796aec36f4eda67 | e796aec36f4eda67 |
+| hdbscan-leaf/ties            | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| hdbscan-leaf/ties            | batch  | BATCH_MOVED  | cad94e47463e9d27 | BATCH_MOVED      |
+| hdbscan/base                 | infer  | IDENTICAL x2 | a104cfe065750353 | a104cfe065750353 |
+| hdbscan/base                 | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| hdbscan/base                 | batch  | BATCH_MOVED  | d49a36bc7e6177b4 | BATCH_MOVED      |
+| hdbscan/dupes                | infer  | IDENTICAL x2 | a104cfe065750353 | a104cfe065750353 |
+| hdbscan/dupes                | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| hdbscan/dupes                | batch  | BATCH_MOVED  | d49a36bc7e6177b4 | BATCH_MOVED      |
+| hdbscan/ties                 | infer  | IDENTICAL x2 | 324146f46faedded | 324146f46faedded |
+| hdbscan/ties                 | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| hdbscan/ties                 | batch  | BATCH_MOVED  | c67a80723b373687 | BATCH_MOVED      |
+
+summary (infer/model): IDENTICAL=6, N/A=6
+summary (batch): BATCH_MOVED=6
+summary (rlpair): 

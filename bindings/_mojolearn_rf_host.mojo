@@ -271,10 +271,12 @@ def _rf_fit[
     params: PythonObject,
     criterion: PythonObject,
     weights_addr: Int = 0,
+    tree_start: Int = 0,
 ) raises -> PythonObject:
     """`_rf_classifier_fit` / `_rf_regressor_fit` of the GPU binding: the same
     slot checks in the same words, then the host fit. `weights_addr` is the
-    weighted classifier's Float32 row weights (0: none)."""
+    weighted classifier's Float32 row weights (0: none); `tree_start` the
+    GPU binding's global tree ID offset (the shard fits below)."""
     comptime entry = "rf_classifier_fit" if CLASSIFIER else "rf_regressor_fit"
     if len(params) != N_RF_FIT_PARAMS:
         raise Error(
@@ -322,7 +324,7 @@ def _rf_fit[
             var y = read_i32(y_address, n_rows)
             forest = rf_host_fit(
                 x^, y, List[Float32](), n_rows, n_cols, n_classes, True, p,
-                Float32(1.0), 0, weights,
+                Float32(1.0), tree_start, weights,
             )
         else:
             var y = read_f32(y_address, n_rows)
@@ -336,6 +338,7 @@ def _rf_fit[
             var scale = Float32(choose_scale(mag, n_rows))
             forest = rf_host_fit(
                 x^, List[Int32](), y, n_rows, n_cols, 1, False, p, scale,
+                tree_start,
             )
     comptime if EXPORT:
         return _retain_rf_export(forest^)
@@ -422,6 +425,31 @@ def rf_regressor_fit_rowmajor_export_binding(
     params: PythonObject, criterion: PythonObject,
 ) raises -> PythonObject:
     return _rf_fit[False, True, True](x_addr, y_addr, params, criterion)
+
+
+def rf_classifier_fit_shard_binding(
+    x_addr: PythonObject, y_addr: PythonObject,
+    params: PythonObject, criterion: PythonObject, tree_start: PythonObject,
+    weights_addr: PythonObject,
+) raises -> PythonObject:
+    """`bindings/_mojolearn_rf.mojo::rf_classifier_fit_shard_binding`: the
+    column-major fit of trees `tree_start .. tree_start + n_estimators` of
+    the whole forest, weighted when `weights_addr` is nonzero
+    (`parallel_ensemble.fit_forest`'s shard; lane/cpu-training-par-wave2,
+    2026-09-15)."""
+    return _rf_fit[True, False, False](
+        x_addr, y_addr, params, criterion, _index(weights_addr), _index(tree_start)
+    )
+
+
+def rf_regressor_fit_shard_binding(
+    x_addr: PythonObject, y_addr: PythonObject,
+    params: PythonObject, criterion: PythonObject, tree_start: PythonObject,
+) raises -> PythonObject:
+    """`bindings/_mojolearn_rf.mojo::rf_regressor_fit_shard_binding`."""
+    return _rf_fit[False, False, False](
+        x_addr, y_addr, params, criterion, 0, _index(tree_start)
+    )
 
 
 def rf_forest_export_binding(
@@ -599,6 +627,8 @@ def PyInit__mojolearn_rf_host() abi("C") -> PythonObject:
         module.def_function[rf_regressor_fit_export_binding]("rf_regressor_fit_export")
         module.def_function[rf_regressor_fit_rowmajor_binding]("rf_regressor_fit_rowmajor")
         module.def_function[rf_regressor_fit_rowmajor_export_binding]("rf_regressor_fit_rowmajor_export")
+        module.def_function[rf_classifier_fit_shard_binding]("rf_classifier_fit_shard")
+        module.def_function[rf_regressor_fit_shard_binding]("rf_regressor_fit_shard")
         module.def_function[rf_forest_export_binding]("forest_export")
         module.def_function[rf_forest_export_legacy_binding]("forest_export_legacy")
         module.def_function[rf_forest_export_release_binding]("forest_export_release")

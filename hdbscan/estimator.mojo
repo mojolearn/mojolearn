@@ -39,8 +39,11 @@ WHAT IS REFUSED, AND WHERE
 from max.gpu.host import DeviceContext
 
 from core.identity_trace import IdentityTrace
+from hdbscan.impl.detail.predict import approximate_predict
+from hdbscan.impl.prediction_data import PredictionData
 from hdbscan.impl.runner import (
     GRAPH_BUILD_BRUTE_FORCE_KNN,
+    HDBSCANOutput,
     HDBSCANParams,
     fit_hdbscan,
 )
@@ -86,6 +89,39 @@ def hdbscan_fit_host(
                                        which is the length `stabilities`
                                        and `is_cluster` would have)
     """
+    var out = hdbscan_fit_host_output(
+        ctx, x_ptr, n_rows, n_cols, min_samples, min_cluster_size,
+        max_cluster_size, alpha, allow_single_cluster,
+        cluster_selection_method, cluster_selection_epsilon, metric,
+    )
+    for i in range(n_rows):
+        labels_ptr.unsafe_store(i, out.labels[i])
+        core_dists_ptr.unsafe_store(i, out.core_dists[i])
+    info_ptr.unsafe_store(0, Int32(out.n_clusters))
+    info_ptr.unsafe_store(1, Int32(out.n_outliers))
+    info_ptr.unsafe_store(2, Int32(out.n_boruvka_rounds))
+    info_ptr.unsafe_store(3, Int32(out.condensed.n_clusters))
+    return out.n_clusters
+
+
+def hdbscan_fit_host_output(
+    ctx: DeviceContext,
+    x_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    n_cols: Int,
+    min_samples: Int = 5,
+    min_cluster_size: Int = 5,
+    max_cluster_size: Int = 0,
+    alpha: Float32 = Float32(1.0),
+    allow_single_cluster: Bool = False,
+    cluster_selection_method: Int = CLUSTER_SELECTION_EOM,
+    cluster_selection_epsilon: Float32 = Float32(0.0),
+    metric: Int = DISTANCE_L2_SQRT_EXPANDED,
+) raises -> HDBSCANOutput:
+    """`hdbscan_fit_host`'s body, returning the whole `HDBSCANOutput` (the
+    condensed tree and `inverse_label_map` included) so the binding can
+    hand `prediction_data=True` what `generate_prediction_data` reads. The
+    fit is the same call either way; this split moved no stage."""
     if n_rows < 2:
         raise Error(
             "hdbscan_fit_host needs n_rows >= 2, got " + String(n_rows)
@@ -119,18 +155,55 @@ def hdbscan_fit_host(
         ctx, trace, x_host, x, n_rows, n_cols, metric, params
     )
 
-    for i in range(n_rows):
-        labels_ptr.unsafe_store(i, out.labels[i])
-        core_dists_ptr.unsafe_store(i, out.core_dists[i])
-    info_ptr.unsafe_store(0, Int32(out.n_clusters))
-    info_ptr.unsafe_store(1, Int32(out.n_outliers))
-    info_ptr.unsafe_store(2, Int32(out.n_boruvka_rounds))
-    info_ptr.unsafe_store(3, Int32(out.condensed.n_clusters))
-
     # [[mojo-buffer-freed-at-last-use]]: every buffer outlives the queue.
     _ = x^
     _ = x_host^
-    return out.n_clusters
+    return out^
+
+
+def hdbscan_approximate_predict_host(
+    ctx: DeviceContext,
+    x_train: List[Float32],
+    m: Int,
+    n: Int,
+    core_dists: List[Float32],
+    labels: List[Int32],
+    tree_lambdas: List[Float32],
+    n_edges: Int,
+    n_clusters: Int,
+    deaths: List[Float32],
+    selected_clusters: List[Int32],
+    index_into_children: List[Int32],
+    queries: List[Float32],
+    n_prediction_points: Int,
+    min_samples: Int,
+    labels_out: MutPointer[Int32, MutUntrackedOrigin],
+    probs_out: MutPointer[Float32, MutUntrackedOrigin],
+) raises:
+    """`approximate_predict` (cuML `hdbscan.pyx:1264`, `predict.cuh:220-262`)
+    through `hdbscan/impl/detail/predict.mojo`. The fitted state arrives as
+    the host arrays `prediction_data=True` kept; the exemplar arrays are not
+    read by this pass and are not passed."""
+    var n_selected = len(selected_clusters)
+    var pd = PredictionData(
+        n_rows_leaves(m), n_edges, n_clusters, n_selected, 0,
+        deaths.copy(), List[Int32](), List[Int32](), selected_clusters.copy(),
+        index_into_children.copy(),
+    )
+    var trace = IdentityTrace()
+    var out = approximate_predict(
+        ctx, trace, x_train, m, n, core_dists, labels, tree_lambdas, pd,
+        queries, n_prediction_points, min_samples,
+    )
+    for i in range(n_prediction_points):
+        labels_out.unsafe_store(i, out.labels[i])
+        probs_out.unsafe_store(i, out.probabilities[i])
+
+
+def n_rows_leaves(m: Int) -> Int:
+    """The condensed tree's `n_leaves` is the training row count
+    (`condensed_hierarchy.cu:51-61`)."""
+    return m
 
 
 def hdbscan_probabilities_host(n_rows: Int) raises:
