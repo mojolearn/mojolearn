@@ -23,6 +23,12 @@ def reference_training():
 
 def require_training(estimator):
     from . import _backend
+    # A class whose `fit` computes an inference answer rather than training
+    # a model says so by name. `Cholesky` is the one: its fit factors a
+    # given matrix, the public CPU inference surface of
+    # lane/inference-embedding-ivf-cholesky (2026-09-15).
+    if getattr(type(estimator), "_CPU_FIT_IS_INFERENCE", False) is True:
+        return
     is_cpu = _backend._CPU_ONLY is not None or getattr(estimator, "_HOST_INFERENCE_ONLY", False)
     if is_cpu and not _active.get():
         raise NotImplementedError(

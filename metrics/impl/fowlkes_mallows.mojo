@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The Fowlkes-Mallows index. cuML 26.08 ships no Fowlkes-Mallows entry
 (`cpp/src/metrics/` has none and `cuml.metrics.cluster` exports none), so
-this MIRRORS scikit-learn `sklearn/metrics/cluster/_supervised.py`
+this follows the scikit-learn reference `sklearn/metrics/cluster/_supervised.py`
 `fowlkes_mallows_score` on the repository's integer contingency kernel:
 
     c  = contingency_matrix(labels_true, labels_pred).astype(np.int64)

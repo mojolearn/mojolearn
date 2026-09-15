@@ -9,7 +9,7 @@ sampler's first Python caller (the `extratrees` surface refuses
 `bootstrap=True` by name because its copy has no caller).
 
 THE DEFAULTS ARE cuML's, NOT scikit-learn's, per the package rule
-("the defaults follow the upstream each algorithm mirrors") -- with no
+("the defaults follow each algorithm's reference") -- with no
 exception since 2026-09-01, when DEVIATION 409 (this surface shipped
 cuML's RETIRED pre-26.08 `max_depth=16`) was CLOSED by aligning; full
 history at the constant below. Two notes for an sklearn user,

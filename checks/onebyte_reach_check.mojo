@@ -4,7 +4,7 @@
 
 WHY THIS EXISTS
 ---------------
-`archive/reference/PORTING.md` 108 recorded that `bench/oracle254.txt` "is the only one that
+It was recorded that `bench/oracle254.txt` "is the only one that
 reaches the 8-bit kernel at all", and that is how the `fixed_scale` defect
 was found: three fixtures, three kernels, and a whole fourth kernel that no
 differential had ever run. The same sentence is a warning about the other
@@ -219,7 +219,7 @@ def claim_counts(
         # The 8-bit accumulator is Int32 fixed point (DEVIATION 93), so a
         # scale of 1.0 would quantize this fixture's gradients to zero and
         # make an ENTERED kernel look like a skipped one -- which is
-        # `archive/reference/PORTING.md` 108's defect wearing a different hat. 1024 is well
+        # the `fixed_scale` defect wearing a different hat. 1024 is well
         # inside Int32 for 4096 rows of this target.
         var scale = Float32(1024.0)
 

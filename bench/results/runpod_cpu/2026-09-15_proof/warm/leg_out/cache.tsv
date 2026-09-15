@@ -1,0 +1,5 @@
+pixi	restored	version=0.77.0
+env:default	restored	install_rc=0	restore_s=37	pixi_install_s=0
+env:test	miss	install_rc=0	restore_s=1	pixi_install_s=5
+toolchain	ok	462 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x39f8c0000000, nodemask=2)
+env:test	uploaded	bytes=559044165	seconds=48

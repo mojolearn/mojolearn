@@ -6,7 +6,7 @@ Adam state and workspaces. The public API default remains reconstruction per cal
 target-model and target-GPU timing qualification. No numerical kernel, fold,
 tolerance or attention dispatch changed. Trees untouched.
 
-Upstream LlamaModel owns its layers in
+The reference LlamaModel owns its layers in
 `upstream/transformers/src/transformers/models/llama/modeling_llama.py:348-359`
 and reuses them in its forward loop at 402-412. The native object uses Mojo's
 [Python type binding and owned-value support](https://mojolang.org/docs/manual/python/mojo-from-python/).

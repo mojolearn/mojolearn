@@ -377,7 +377,7 @@ class TransformerBlock(NumericModeMixin):
     APPLE M4, with its NVIDIA and AMD columns OWED.
 
     WEIGHTS IN, AS GIVEN BITS. The constructor takes a dict keyed by the
-    upstream parameter names (modeling_llama.py's; the same names the
+    reference parameter names (modeling_llama.py's; the same names the
     lane's refusals use); there is no initializer, deliberately --
     bit-reproducing torch's RNG is a refused validation target
     (the mamba parity table's standing reason), and a cross-check hands

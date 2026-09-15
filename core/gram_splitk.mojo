@@ -31,8 +31,8 @@ equivalent is MEASURED unusable at this shape:
   `naive_batched_matmul_kernel` (`bmm.mojo:899-925`) -- a scalar per-thread
   k-loop with no shared-memory tiling whose B accesses under `transpose_b`
   stride by k floats, uncoalesced -- and expressing the Gram as k-chunked
-  batches would ADD a materialized chunk-major copy of X (twice, archive/reference/PORTING.md
-  24) plus its write-and-re-read traffic. The MAX routes are exhausted.
+  batches would ADD a materialized chunk-major copy of X (twice)
+  plus its write-and-re-read traffic. The MAX routes are exhausted.
 
 WHAT THIS KERNEL DOES
 ---------------------
@@ -234,7 +234,7 @@ comptime GRAM_STAGE_FLOATS = GRAM_ROWS_TILE * GRAM_MAX_COLS
 #: Floats per global load/store in the staging copy's vector arm: a
 #: 16-byte `SIMD[float32, 4]`. Scalar global loads cost ~3x on this device
 #: (LANE_kmeans-kernel, assignment kernel 63 -> 21 ms from vectorizing
-#: reads; upstream's scalar reads lean on NVIDIA warp-coalescing Apple
+#: reads; the reference's scalar reads lean on NVIDIA warp-coalescing Apple
 #: does not replicate). DATA MOVEMENT ONLY: the arm split never touches
 #: accumulation arithmetic or order.
 comptime GRAM_STAGE_W = 4

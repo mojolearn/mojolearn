@@ -12,7 +12,7 @@ subsets, the histogram state machine -- was correct and reached by nothing
 until this file existed (`archive/plans/UNWIRED.md`).
 
 It is also the learner CatBoost runs for single-target symmetric trees at
-`boosting_type=Plain` (`archive/reference/PORTING.md` 91 F), which is the arm every matched
+`boosting_type=Plain`, which is the arm every matched
 benchmark in this repository pins CatBoost to. The other symmetric learner
 in this tree, `greedy_subsets_searcher`, is the one CatBoost runs for
 MULTICLASS symmetric trees.
@@ -65,14 +65,14 @@ doc-parallel `CreateSubsets` hard-codes `FoldCount = 0; FoldBits = 0`
 (`pointwise_optimization_subsets.cpp:12-14`) and nothing can give it folds:
 `TDocParallelObliviousTreeSearcher` is built by `TDocParallelObliviousTree`,
 which `TBoosting` (`doc_parallel_boosting.h`) drives, and that is the PLAIN
-learner (`archive/reference/PORTING.md` 91 F). Ordered boosting lives ONLY in
+learner. Ordered boosting lives ONLY in
 `TFeatureParallelObliviousTreeSearcher`, which is
 `gbdt/methods/oblivious_tree_structure_searcher.mojo`.
 
 So the `folds` parameter below is a DEVIATION to be DELETED, not a feature.
 What is NOT a deviation is everything under it -- `create_fold_based_subsets`,
 `make_fold_doc_indices`, the fold stripe, the histogram fold axis and the
-dynamic scorer -- because both searchers share that stack (`archive/reference/PORTING.md` 91 B)
+dynamic scorer -- because both searchers share that stack
 and it is implemented from the feature-parallel side. Moving the arm is three
 lines in the other searcher's `Fit`; until someone does, this one refuses at
 DEVIATION 126 anyway and can never grow a tree.
@@ -291,7 +291,7 @@ def fit_oblivious_tree_structure_traced(
     """`TDocParallelObliviousTreeSearcher::FitImpl` (`:12-160`), the
     structure half.
 
-    The weak target arrives as TWO buffers, which is `TL2Target` upstream
+    The weak target arrives as TWO buffers, which is `TL2Target` in the reference
     and is forced here besides: the histogram kernels take `target` and
     `weight` on independent origins and Mojo refuses two views of one buffer
     at a launch (DEVIATION 97.2, found at exactly this wiring step).
@@ -329,7 +329,7 @@ def fit_oblivious_tree_structure_traced(
         # `FindOptimalSplitDynamic` (`pointwise_scores.cu:443-473`) has TWO
         # arms and a `default: throw std::exception()`. Four of the seven
         # score functions -- L2, NewtonL2, SatL2, LOOL2 -- have no
-        # ordered-boosting kernel upstream at all. Refused HERE rather than
+        # ordered-boosting kernel in the reference at all. Refused HERE rather than
         # at the launch so the refusal names the option the caller set
         # instead of a kernel it never asked for, and so a tree is never
         # half-grown before it fires.
@@ -753,7 +753,7 @@ def split_stat_planes(
 ]:
     """Two columns of one buffer into two buffers, because they have to be.
 
-    NO CATBOOST COUNTERPART -- upstream `TL2Target` is already two separate
+    NO CATBOOST COUNTERPART -- the reference's `TL2Target` is already two separate
     `TCudaBuffer<float>` and no split is needed. It exists because THIS tree
     carries the weak target as one two-plane buffer everywhere else
     (`greedy_search_helper`'s `stats`, plane 0 the weight and plane 1 the

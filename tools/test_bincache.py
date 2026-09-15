@@ -265,12 +265,14 @@ class BuildFlowTests(unittest.TestCase):
         self.trees[name] = make_repo(repo)
         return repo
 
-    def write_map(self, name, keys=(), leg="leg1"):
+    def write_map(self, name, keys=(), leg="leg1", skeys=()):
         d = self.base / ("map-" + name)
         d.mkdir()
         lines = ["#partition\tsm_89/runpod-img", "#image\trunpod:img", "#leg\t" + leg]
         for k in keys:
             lines.append("get\t%s\tfile://%s/%s.tar.gz" % (k, self.store, k))
+        for k in skeys:
+            lines.append("sget\t%s\tfile://%s/%s.tar.gz" % (k, self.store, k))
         for i in range(3):
             lines.append("put\t%03d\tfile://%s/inbox/%s/%03d.tar.gz" % (i, self.store, leg, i))
         (d / "urls.tsv").write_text("\n".join(lines) + "\n")
@@ -374,6 +376,62 @@ class BuildFlowTests(unittest.TestCase):
         self.assertTrue((b / "ran.txt").exists())
         self.assertFalse((out_b / "uploads.tsv").exists())
         self.assertFalse(list((out_b / "keys").glob("*.json")))
+
+    def test_negative_control_has_its_own_namespace_and_never_serves_production(self):
+        # tools/runpod_cpu_leg.sh, 2026-09-15: MOJOLEARN_BINCACHE_NEGATIVE=1
+        # caches a sabotage build, under variant=sabotage and its own prefix.
+        sab = {"MOJOLEARN_BUILD_EXTRA_DEFINES": "-D MOJOLEARN_HOST_SABOTAGE=1",
+               "MOJOLEARN_BINCACHE_NEGATIVE": "1"}
+        a = self.tree("a")
+        out_a = self.base / "out-a"
+        self.build(a, self.write_map("a"), out_a)
+        self.promote_locally(out_a)
+        prod_key = self.provenance(out_a)[0][3]
+        so_prod = (a / "python/mojolearn/identical/_mojolearn_fake.so").read_bytes()
+
+        b = self.tree("b")
+        out_b = self.base / "out-b"
+        self.assertEqual(self.build(b, self.write_map("b", [prod_key]), out_b, sab), 0)
+        prov = self.provenance(out_b)
+        self.assertEqual(prov[0][2], "negative-miss+built-uploaded")
+        sab_key = prov[0][3]
+        self.assertNotEqual(sab_key, prod_key)
+        self.assertTrue((b / "ran.txt").exists(), "a production entry must never serve a sabotage build")
+        row = (out_b / "uploads.tsv").read_text().splitlines()[0]
+        self.assertTrue(row.endswith("sabotage=1"), row)
+        leg, slot, dest, key = bc.check_upload_row(row, out_b / "keys")
+        self.assertTrue(dest.startswith(bc.SABOTAGE_PREFIX + "/"), dest)
+        with self.assertRaises(ValueError):
+            bc.check_upload_row(row.replace("sabotage=1", "sabotage=0"), out_b / "keys")
+        with self.assertRaises(ValueError):
+            bc.check_upload_row(row.replace(bc.SABOTAGE_PREFIX, bc.OBJECT_PREFIX), out_b / "keys")
+        self.promote_locally(out_b)
+        so_sab = (b / "python/mojolearn/identical/_mojolearn_fake.so").read_bytes()
+
+        # the negative control is served from its namespace only
+        c = self.tree("c")
+        out_c = self.base / "out-c"
+        self.assertEqual(self.build(c, self.write_map("c", keys=[sab_key]), out_c, sab), 0)
+        self.assertEqual(self.provenance(out_c)[0][2], "negative-miss+built-uploaded")
+        d = self.tree("d")
+        out_d = self.base / "out-d"
+        self.assertEqual(self.build(d, self.write_map("d", skeys=[sab_key]), out_d, sab), 0)
+        self.assertEqual(self.provenance(out_d)[0][2], "negative-hit")
+        self.assertFalse((d / "ran.txt").exists())
+        self.assertEqual((d / "python/mojolearn/identical/_mojolearn_fake.so").read_bytes(), so_sab)
+
+        # a production build never reads an sget row, and a sabotage archive
+        # planted under the production key is rejected on its fields
+        e = self.tree("e")
+        out_e = self.base / "out-e"
+        self.assertEqual(self.build(e, self.write_map("e", skeys=[prod_key]), out_e), 0)
+        self.assertEqual(self.provenance(out_e)[0][2], "miss+built-uploaded")
+        shutil.copyfile(self.store / (sab_key + ".tar.gz"), self.store / (prod_key + ".tar.gz"))
+        f = self.tree("f")
+        out_f = self.base / "out-f"
+        self.assertEqual(self.build(f, self.write_map("f", keys=[prod_key]), out_f), 0)
+        self.assertTrue(self.provenance(out_f)[0][2].startswith("rejected:key mismatch"), self.provenance(out_f)[0][2])
+        self.assertEqual((f / "python/mojolearn/identical/_mojolearn_fake.so").read_bytes(), so_prod)
 
     def test_off_is_a_pass_through(self):
         a = self.tree("a")

@@ -279,8 +279,8 @@ def mamba_block_oracle(
     #  pre-sequence position reads the state WINDOW (zeros on prefill ==
     #  the zero padding). MAX's causal_conv1d.mojo:190-205 is this exact
     #  shape; the decode step (mamba_simple.py:216-220) is the same chain
-    #  by construction -- DEVIATION 721 records that its upstream "sum then
-    #  + bias" order is NOT mirrored, the prefill's bias-seed is.
+    #  by construction -- DEVIATION 721 records that its reference "sum then
+    #  + bias" order is NOT followed, the prefill's bias-seed is.
     var new_win = List[Float32]()
     for bb in range(b):
         for d in range(di):

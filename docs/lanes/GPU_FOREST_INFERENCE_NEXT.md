@@ -243,9 +243,9 @@ bottleneck by themselves.
 A bounded candidate should prepare the packed representation once per immutable
 resident snapshot, preserving tree IDs and the fixed grove reduction. Reuse the
 existing graph/finite validation and RF/ET comparison policy. Explicitly handle
-root-only trees and retain raw `<=` threshold routing; copying upstream `<`
+root-only trees and retain raw `<=` threshold routing; copying the reference's `<`
 without its threshold conversion is incorrect. If nodes are reordered for
-upstream's depth-first layout, rewrite child/root indices and compact leaf
+the reference's depth-first layout, rewrite child/root indices and compact leaf
 vectors without reordering trees or changing any leaf bits. Keep archives in
 their existing representation; device packing is a derived cache.
 
@@ -260,7 +260,7 @@ layout and compact leaf vectors. It is enabled only in diagnostic builds with
 Resident preparation packs once, while the transient path stays a direct-layout
 reference. The fixed grove kernels and comparison arithmetic are shared.
 
-This bounded candidate retains sibling order rather than implementing upstream's
+This bounded candidate retains sibling order rather than implementing the reference's
 default depth-first ordering. Each node uses four Int32 words (threshold bits or
 leaf ID, local left child, feature ID, padding); field loads avoid the recorded
 Metal whole-struct load issue. Only leaves occupy the output buffer. Device model
@@ -282,4 +282,4 @@ large HIGGS/Year/Covtype preparation, memory and complete prediction calls. The
 existing transient-versus-resident harness now reports native resident layout,
 but cannot isolate layout cost because its transient arm also reuploads models.
 Do not use that comparison alone to promote this candidate. Depth-first node
-reordering remains a separate upstream layout slice.
+reordering remains a separate reference layout slice.

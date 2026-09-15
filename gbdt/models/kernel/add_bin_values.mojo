@@ -182,7 +182,7 @@ def compute_bins_kernel(
 # =========================================================================
 #
 # Added by the DEPTHWISE lane, 2026-08-22, at the FOOT of this file behind
-# its own header. It is the same upstream file as the two kernels above and
+# its own header. It is the same reference file as the two kernels above and
 # the same job -- give every row its leaf -- for a tree whose leaves do not
 # share a split list.
 #

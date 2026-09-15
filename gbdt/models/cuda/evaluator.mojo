@@ -58,10 +58,10 @@ and their predicate (`libs/model/cpu/evaluator_impl.cpp:38`):
 one branch-free form covers both predicates and a float split keeps the
 identical arithmetic under `xorMask == 0`. Their CPU dispatch templates
 the mask away when no split needs it (`NeedXorMask`,
-`evaluator_impl.cpp:16`, `:257`); this file mirrors that with a comptime
+`evaluator_impl.cpp:16`, `:257`); this file follows that with a comptime
 kernel parameter picked from the model, so a float-only model runs the
-byte-for-byte kernel it ran before this arm existed. Recorded as a
-deviation in `archive/reference/PORTING.md`, because their GPU evaluator declines the case
+byte-for-byte kernel it ran before this arm existed. This is a
+deviation, because their GPU evaluator declines the case
 and ours takes it.
 
 DEVIATIONS, all stated:

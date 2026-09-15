@@ -91,7 +91,7 @@ def launch_config_generator(
     # `grid.y = yChunks > minGridSize ? minGridSize : yChunks;` `:311`
     var grid_y = min_grid_size if y_chunks > min_grid_size else y_chunks
     # `grid.x = (minGridSize - grid.y) <= 0 ? 1 : xChunks;` `:312`
-    # (unsigned upstream; `grid.y <= minGridSize` always, so `<= 0` is `== 0`)
+    # (unsigned in the reference; `grid.y <= minGridSize` always, so `<= 0` is `== 0`)
     var grid_x = 1 if (min_grid_size - grid_y) <= 0 else x_chunks
     # `:313-319`
     if grid_x != 1:

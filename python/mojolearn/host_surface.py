@@ -141,6 +141,12 @@ CLASSICAL_RECORDED = (
     "bench/results/classical_host/2026-09-14-nvidia-h100-b",
     "bench/results/classical_host/2026-09-14-amd-mi300x-b",
     "bench/results/classical_host/2026-09-14-apple-m4-multiclass",
+    # lane/inference-linear-svm (2026-09-15): the 17 saved-model lanes that
+    # joined the estimators family's inference lanes, recorded on the M4's
+    # Metal set on three fixtures. The NVIDIA and AMD recordings of these
+    # lanes are owed to the next release record; their infer cells in the
+    # 166-lane record are the cross-vendor comparison until then.
+    "bench/results/classical_host/2026-09-15-apple-m4-linear-kernel",
 )
 
 #: The forest inference recordings: every directory under this root whose
@@ -320,6 +326,12 @@ TRAINING_LANE_NAMES = {
     # contingency matrix, host_fowlkes_mallows in
     # metrics/host/metrics_oracle.mojo, exported under the GPU binding's name.
     "metrics-fowlkes-mallows": "the Fowlkes-Mallows index",
+    # The weighted score lanes (lane/cpu-training-small-gaps, 2026-09-15):
+    # score(X, y, sample_weight) of the gradient boosting adapters and the
+    # random forests through host_weighted_accuracy and host_weighted_r2 in
+    # metrics/host/metrics_oracle.mojo, exported from the metrics host binding.
+    "gbdt-adapter-score-weighted": "the weighted scores of the gradient boosting classifier and regressor",
+    "rf-score-weighted": "the weighted scores of the random forest classifier and regressor",
     # The mlp lane (lane/cpu-training-mlp, 2026-09-14): SmallMLPTrainer's
     # step through the training family's host binding (the three MLP
     # operations in training/host/mlp_oracle.mojo, the loss and AdamW over
@@ -380,6 +392,42 @@ TRAINING_LANE_NAMES = {
     "gbdt-lossguide-newtoncosine": "gradient boosting on lossguide trees with the NewtonCosine score and the searcher options",
     "gbdt-multiclass": "multiclass gradient boosting",
     "gbdt-onevsall": "one-vs-all gradient boosting",
+    # lane/cpu-training-gbdt-ordered (2026-09-15): OrderedRMSE trains
+    # through gbdt/host/gbdt_oracle_ordered.mojo (the pointwise searcher's
+    # fold arm, its 8-bit fixed-point and half-byte float histograms, the
+    # dynamic cosine scorer and the ordered Newton leaves restated on the
+    # host) and ExperimentalTwoLevelFeatureFreq through
+    # gbdt/host/gbdt_oracle_feature_freq.mojo (the synchronized two-level
+    # tensor search over the symmetric oracle's histograms), exported as
+    # gbdt_fit_ordered_rmse and gbdt_fit_two_level_feature_freq from the
+    # gbdt host binding; sample_weight refuses by name on both. On the M4's
+    # CPU column (one core) both lanes read all 18 train, 36 infer and model
+    # and 18 batch cells IDENTICAL x4 against the 166-lane columns before
+    # the gate ran, and the sabotage build DIVERGENT on every cell.
+    "gbdt-ordered-rmse": "ordered boosting with the RMSE loss (OrderedRMSE)",
+    "gbdt-feature-freq": "the two-level FeatureFreq estimator",
+    # The same lane branch: the pointwise searcher with L2 scores, the
+    # Bayesian bootstrap, boost from average on Logloss, row weights and an
+    # eval set with the Iter detector and best-model truncation trains
+    # through gbdt/host/gbdt_oracle_pointwise.mojo (the ordered oracle's
+    # single-task structure search with the plain L2 scorer, the weighted
+    # Newton walker, the bootstrap draws and the test arm restated on the
+    # host) inside gbdt_fit's use_pointwise_searcher arm, which refuses every
+    # other value of those options by name. IDENTICAL x4 on all 9 train, 18
+    # infer and model and 9 batch cells on the M4's CPU column (one core)
+    # before the gate ran, and the sabotage build DIVERGENT on every cell.
+    "gbdt-pointwise-l2-bayesian-eval": "gradient boosting with the pointwise searcher, L2 scores, the Bayesian bootstrap and an eval set",
+    # The same lane branch: gradient boosting with categorical and one-hot
+    # columns trains through gbdt/host/gbdt_oracle_onehot.mojo (the flags,
+    # train's categorical validation, the one-hot grid inside
+    # gbdt_oracle.mojo's fit, the cat model records). The lane's categorical
+    # column has two categories, so train makes it one-hot and no CTR column
+    # is built on any fixture (the model texts carry no ctr record); a
+    # categorical column above one_hot_max_size refuses by name. IDENTICAL
+    # x4 on all 9 train, 18 infer and model and 9 batch cells on the M4's
+    # CPU column (one core) before the gate ran, the sabotage build
+    # DIVERGENT on every cell.
+    "gbdt-categorical-ctr": "gradient boosting with one-hot categorical columns",
     # Workstream E (lane/cpu-training-arima, 2026-09-14): batched ARIMA
     # trains and forecasts through arima/host/arima_oracle.mojo, the device
     # lane restated on the host, exported under the GPU binding's names from
@@ -557,7 +605,7 @@ TRAINING_LANE_NAMES = {
 NO_CPU_PATH = (
     "the Samba blocks",
     "the Embedding layer",
-    "gradient boosting training outside its declared lanes (the ordered RMSE and feature-frequency fits, categorical features, sample weights, eval sets and the pointwise searcher among them)",
+    "gradient boosting training outside its declared lanes (CTR categorical features, and sample weights, eval sets and the pointwise searcher outside the gbdt-pointwise-l2-bayesian-eval configuration, among them)",
 )
 
 #: The read-back trio every host binding exports under its own prefix,
@@ -659,6 +707,9 @@ FAMILIES = (
         # define reverses gpt2_encode's ids). Covering it needs the gate to
         # build the tokenizer binding with its own define into the sabotage
         # set; until then test_tokenizer_surface.py is its gate.
+        # gpt2_encode_batch (lane/inference-tokenizer-neural, 2026-09-15)
+        # has its own negative control, -D MOJOLEARN_TOKENIZER_BATCH_SABOTAGE=1,
+        # which the lane's batch part reads BATCH_MOVED.
         training_lanes=(),
         inference_lanes=(),
         forest_kinds=(),
@@ -672,9 +723,43 @@ FAMILIES = (
         exports=(
             "tokenizer_host_numeric_mode", "tokenizer_host_vendor",
             "tokenizer_host_column", "tokenizer_host_sabotage", "gpt2_load",
-            "gpt2_n_vocab", "gpt2_max_token_bytes", "gpt2_encode", "gpt2_decode",
+            "gpt2_n_vocab", "gpt2_max_token_bytes", "gpt2_encode", "gpt2_encode_batch",
+            "gpt2_decode",
         ),
         gate="pixi run check-tokenizer and python/mojolearn/tests/test_tokenizer_surface.py",
+        ships_in_wheel=True,
+    ),
+    dict(
+        # lane/inference-tokenizer-neural, 2026-09-15. The INFERENCE half of
+        # the training and transformer families (which stay source reference
+        # builds): the small MLP's logits and the TransformerBlock stateless
+        # prefill, forward only, loaded by path and shipped. No optimizer,
+        # loss, backward or decode export, so none of that is compiled in.
+        # The mlp, transformer and transformer-window lanes' held-out and
+        # batch cells run through MLPInference and TransformerBlockInference
+        # on a CPU column; their training rows stay the training and
+        # transformer families' covered lanes.
+        family="neural",
+        binding="_mojolearn_neural_host",
+        routes=None,
+        loaded_by="python/mojolearn/neural_inference.py",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=(),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=("MLPInference", "TransformerBlockInference"),
+        display="the small MLP's logits and the Transformer block's stateless forward (inference only)",
+        host_modules=(
+            "training/host/mlp_oracle.mojo",
+            "transformer/host/transformer_block_host.mojo",
+            "transformer/checks/transformer_oracle.mojo",
+            "gemm/host/gemm_oracle.mojo",
+        ),
+        exports=(
+            "neural_host_numeric_mode", "neural_host_vendor", "neural_host_column",
+            "neural_host_sabotage", "mlp_forward_logits", "transformer_forward_fresh",
+        ),
+        gate="python/mojolearn/tests/test_neural_inference.py and tools/identity_break.py (mlp, transformer, transformer-window)",
         ships_in_wheel=True,
     ),
     dict(
@@ -723,16 +808,23 @@ FAMILIES = (
         routes="_mojolearn_linalg",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("gemm-pinned", "gemm-transposed"),
+        # The Cholesky door joined this family on
+        # lane/inference-embedding-ivf-cholesky (2026-09-15) so that public
+        # CPU Cholesky inference (a saved factor, or a factor of a given
+        # matrix, then solve) ships: this family is in the wheel and gp is
+        # not. On a CPU-only install `Cholesky` binds `_mojolearn_linalg`,
+        # so the cholesky lane reads through this binding.
+        training_lanes=("gemm-pinned", "gemm-transposed", "cholesky"),
         inference_lanes=(),
         forest_kinds=(),
-        classes=("linalg.gemm", "linalg.gemv"),
-        display="pinned GEMM",
-        host_modules=("gemm/host/gemm_oracle.mojo",),
+        classes=("linalg.gemm", "linalg.gemv", "Cholesky"),
+        display="pinned GEMM and the Cholesky factorization and solve",
+        host_modules=("gemm/host/gemm_oracle.mojo", "cholesky/host/chol_oracle.mojo"),
         exports=(
             "linalg_host_numeric_mode", "linalg_host_vendor", "linalg_host_column",
             "linalg_host_sabotage", "linalg_vendor", "linalg_numeric_mode",
-            "linalg_profile_version", "gemm",
+            "linalg_profile_version", "gemm", "cholesky_profile_jitter",
+            "cholesky_factor", "cholesky_solve",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=True,
@@ -752,18 +844,37 @@ FAMILIES = (
             "logistic-elasticnet", "logistic-multiclass", "pca-full-whiten",
             "par-queries-kde",
         ),
-        inference_lanes=("ols", "ridge", "tsvd", "logistic", "logistic-multiclass", "pca", "pca-whiten", "kde"),
+        # lane/inference-linear-svm (2026-09-15): the option variants of
+        # ols, ridge and logistic load through the same formats; the
+        # scalers, lasso and elasticnet and the three kernel methods load
+        # through formats of their own, and their transform and predict
+        # entries are served here (the reference-only preprocessing, solver
+        # and kernel_methods bindings keep the fits).
+        inference_lanes=(
+            "ols", "ridge", "tsvd", "logistic", "logistic-multiclass", "pca", "pca-whiten", "kde",
+            "ols-no-intercept", "ols-weighted", "ridge-no-intercept", "logistic-l1",
+            "logistic-elasticnet", "logistic-unpenalized-no-intercept",
+            "standard-scaler", "standard-scaler-no-mean", "standard-scaler-no-std",
+            "minmax-scaler", "minmax-scaler-clip", "lasso", "elasticnet",
+            "elasticnet-l2end-no-intercept", "kernel-ridge", "nystroem", "rbf-sampler",
+        ),
         forest_kinds=(),
         classes=(
             "LinearRegression", "Ridge", "TruncatedSVD", "LogisticRegression",
-            "PCA", "KernelDensity", "DBSCAN",
+            "PCA", "KernelDensity", "DBSCAN", "StandardScaler", "MinMaxScaler",
+            "Lasso", "ElasticNet", "KernelRidge", "Nystroem", "RBFSampler",
         ),
-        display="linear regression, ridge, truncated SVD, logistic regression, PCA with and without whitening and kernel density",
+        display="linear regression, ridge, truncated SVD, logistic regression, PCA with and without whitening, kernel density, the standard and min-max scalers, lasso, elasticnet, kernel ridge, the Nystroem approximation and random Fourier features",
         host_modules=(
             "kde/host/kde_oracle.mojo", "core/classical_host_predict.mojo",
             "decomposition/host/pca_oracle.mojo", "glm/host/glm_oracle.mojo",
             "dbscan/host/dbscan_oracle.mojo", "glm/host/qn_oracle.mojo",
             "decomposition/host/pca_full_oracle.mojo",
+            "preprocessing/host/scaler_oracle.mojo",
+            "kernel_methods/host/km_host_oracle.mojo",
+            "kernel_methods/checks/random_features.mojo",
+            "cholesky/host/chol_oracle.mojo",
+            "gemm/host/gemm_oracle.mojo",
         ),
         exports=(
             "estimators_host_numeric_mode", "estimators_host_vendor",
@@ -773,6 +884,8 @@ FAMILIES = (
             "ols_predict", "tsvd_transform", "pca_transform",
             "pca_whiten_transform", "pca_whiten_inverse_transform",
             "qn_decision_function", "qn_sigmoid", "qn_softmax",
+            "standard_transform", "minmax_transform", "cd_predict",
+            "kernel_ridge_predict", "nystroem_transform", "rbf_sampler_transform",
         ),
         gate="tools/identity_break.py and tools/classical_host_gate.py (cpu-identity-gate.yml)",
         ships_in_wheel=True,
@@ -834,6 +947,7 @@ FAMILIES = (
             "root_mean_squared_error", "roc_auc_score", "precision_recall_curve",
             "log_loss", "confusion_matrix", "precision_recall_fscore",
             "kl_divergence", "trustworthiness", "fowlkes_mallows_score",
+            "accuracy_score_weighted", "r2_score_weighted",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=True,
@@ -976,7 +1090,7 @@ FAMILIES = (
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=(
             "rf-clf", "rf-reg", "rf-clf-entropy-log2-noboot", "rf-clf-balanced-parallel",
-            "rf-reg-poisson", "rf-reg-gamma-ig", "par-forest",
+            "rf-reg-poisson", "rf-reg-gamma-ig", "par-forest", "rf-score-weighted",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -1011,17 +1125,21 @@ FAMILIES = (
         # cholesky lane, which the 136-lane record predated, is covered since
         # lane/cpu-training-d-estimators (2026-09-15) against the 166-lane
         # record. gp_parallel_available stays absent, so the ordered
-        # multi-GPU driver refuses by name.
+        # multi-GPU driver refuses by name. Since
+        # lane/inference-embedding-ivf-cholesky (2026-09-15) the cholesky
+        # lane and the Cholesky class are the linalg family's: a CPU-only
+        # install binds Cholesky to `_mojolearn_linalg`, which ships. This
+        # binding still exports the three door names for its own GP.
         family="gp",
         binding="_mojolearn_gp_host",
         routes="_mojolearn_gp",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("gp", "gp-matern12", "gp-matern32", "gp-matern52-ard", "cholesky"),
+        training_lanes=("gp", "gp-matern12", "gp-matern32", "gp-matern52-ard"),
         inference_lanes=(),
         forest_kinds=(),
-        classes=("GaussianProcessRegressor", "Cholesky"),
-        display="the Gaussian process regressor and the Cholesky door",
+        classes=("GaussianProcessRegressor",),
+        display="the Gaussian process regressor",
         host_modules=(
             "gaussian_process/host/gpr_oracle.mojo",
             "cholesky/host/chol_oracle.mojo",
@@ -1145,11 +1263,15 @@ FAMILIES = (
         # Workstream E batch 3 (2026-09-14): the GradientBoosting family's
         # host binding. It routes `_mojolearn_gbdt` on a CPU-only install
         # with the GPU binding's fit, predict, model-dim and sigmoid names;
-        # gbdt_fit refuses by name every value outside the twelve declared
-        # GBDT configurations; the ordered and FeatureFreq fits stay absent.
-        # The classifier adapter's binary probability and class transforms
-        # and the multi-dimensional predict are exported since 2026-09-15
-        # (lane/cpu-training-gbdt-losses).
+        # gbdt_fit refuses by name every value outside the declared GBDT
+        # configurations. The classifier adapter's binary probability and
+        # class transforms and the multi-dimensional predict are exported
+        # since 2026-09-15 (lane/cpu-training-gbdt-losses);
+        # gbdt_fit_ordered_rmse and gbdt_fit_two_level_feature_freq train the
+        # gbdt-ordered-rmse and gbdt-feature-freq lanes, gbdt_fit's
+        # use_pointwise_searcher arm the gbdt-pointwise-l2-bayesian-eval lane
+        # and its one-hot categorical columns the gbdt-categorical-ctr lane
+        # (lane/cpu-training-gbdt-ordered, 2026-09-15).
         # Not the forest host binding: that one is loaded by path under its
         # own names and takes the model as flat arrays.
         family="gbdt",
@@ -1162,18 +1284,23 @@ FAMILIES = (
             "gbdt-nan-modes", "gbdt-adapter-clf", "gbdt-adapter-reg",
             "gbdt-parametric-losses", "gbdt-exact-mae",
             "gbdt-lossguide-newtoncosine", "gbdt-multiclass", "gbdt-onevsall",
+            "gbdt-ordered-rmse", "gbdt-feature-freq",
+            "gbdt-pointwise-l2-bayesian-eval", "gbdt-categorical-ctr",
+            "gbdt-adapter-score-weighted",
         ),
         inference_lanes=(),
         forest_kinds=(),
         classes=(
             "GradientBoosting", "GradientBoostingClassifier", "GradientBoostingRegressor",
-            "model_selection.cross_val_score",
+            "model_selection.cross_val_score", "OrderedRMSE", "ExperimentalTwoLevelFeatureFreq",
         ),
-        display="gradient boosting on symmetric trees with the pointwise and multiclass losses, either NaN mode and the classifier and regressor adapters, and on depthwise and lossguide trees with the Logloss loss",
+        display="gradient boosting on symmetric trees with the pointwise and multiclass losses, either NaN mode and the classifier and regressor adapters, and on depthwise and lossguide trees with the Logloss loss; one-hot categorical columns, the pointwise searcher with L2 scores, the Bayesian bootstrap and an eval set, OrderedRMSE and the two-level FeatureFreq estimator",
         host_modules=(
             "gbdt/host/gbdt_oracle.mojo", "gbdt/host/gbdt_oracle_rmse.mojo",
             "gbdt/host/gbdt_oracle_depthwise.mojo", "gbdt/host/gbdt_oracle_lossguide.mojo",
             "gbdt/host/gbdt_oracle_losses.mojo", "gbdt/host/gbdt_oracle_multiclass.mojo",
+            "gbdt/host/gbdt_oracle_ordered.mojo", "gbdt/host/gbdt_oracle_feature_freq.mojo",
+            "gbdt/host/gbdt_oracle_pointwise.mojo", "gbdt/host/gbdt_oracle_onehot.mojo",
             "core/gbdt_host_predict.mojo",
         ),
         exports=(
@@ -1181,6 +1308,7 @@ FAMILIES = (
             "gbdt_host_sabotage", "gbdt_vendor", "gbdt_numeric_mode",
             "gbdt_fit", "gbdt_predict", "gbdt_predict_multi", "gbdt_model_dim",
             "gbdt_sigmoid", "gbdt_binary_probabilities", "gbdt_binary_classes",
+            "gbdt_fit_ordered_rmse", "gbdt_fit_two_level_feature_freq",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=False,
@@ -1397,7 +1525,7 @@ def public_reference_lanes():
     Full CPU training verification uses source bindings and covered_lanes().
     These probes need only public inference dependencies, including linalg.
     """
-    return ["gemm-pinned", "kde", "ols", "ridge", "knn", "svc", "pca"]
+    return ["gemm-pinned", "kde", "ols", "ridge", "knn", "svc", "pca", "cholesky"]
 
 
 def training_gpu_column_record():

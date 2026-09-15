@@ -418,7 +418,7 @@ def check_dbscan_refuses_truncated_propagation() raises:
     `max_iterations = 1` cannot settle this fixture: the bridge is a long
     chain and a label has to walk it. Under IDENTICAL the run must RAISE --
     the labels it would return are a snapshot of the atomic order on this
-    machine. Under FAST it must return upstream's truncated answer, which
+    machine. Under FAST it must return the reference's truncated answer, which
     this check requires to DIFFER from the converged one, because a
     refusal that costs nothing would not be worth having.
     """
