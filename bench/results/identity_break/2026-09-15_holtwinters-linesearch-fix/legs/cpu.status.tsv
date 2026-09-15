@@ -1,0 +1,12 @@
+build	core	0	0
+build	tsa	0	1
+sabotage-build	core	0	1
+sabotage-build	tsa	0	0
+readback	0
+run-column	0
+column-check	0
+diff-four	0
+run-column-sab	0
+column-check-sab	0
+diff-four-sab-expect-nonzero	1
+owed-sab	0
