@@ -1,0 +1,23 @@
+== cpu Tue Sep 15 17:18:29 UTC 2026
+cpu exit 0
+== cpu_bsab Tue Sep 15 17:18:33 UTC 2026
+cpu_bsab exit 1
+== cpu_hsab Tue Sep 15 17:18:35 UTC 2026
+cpu_hsab exit 0
+== test_cpu Tue Sep 15 17:18:37 UTC 2026
+test_cpu exit 0
+---- cpu
+cells=16 stable=16 moved=0 refused=0
+infer: stable=16
+batch: stable=8 n/a=8
+---- cpu_bsab
+cells=16 stable=16 moved=0 refused=0
+infer: stable=16
+batch: batch_moved=8 n/a=8
+---- cpu_hsab
+cells=16 stable=16 moved=0 refused=0
+infer: stable=16
+batch: stable=8 n/a=8
+  ok    REFUSE     a negative random_state
+
+test_gmm_sample: GREEN under numeric_mode=identical, 19 checks. One box, one vendor; no bit is claimed for any other.
