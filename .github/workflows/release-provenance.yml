@@ -92,6 +92,13 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  cpu_certification:
+    name: Full CPU reference certification
+    if: inputs.publish != 'none'
+    uses: ./.github/workflows/cpu-identity-gate.yml
+    permissions:
+      contents: read
+
   build:
     name: Build and verify the wheel
     if: inputs.alpha_candidate_tag == ''
@@ -441,7 +448,7 @@ jobs:
 
   publish:
     name: Publish to ${{ inputs.publish }}
-    needs: build
+    needs: [build, cpu_certification]
     if: inputs.publish != 'none' && inputs.alpha_candidate_tag == ''
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -606,7 +613,7 @@ jobs:
 
   publish_alpha:
     name: Publish alpha API artifacts to ${{ inputs.publish }}
-    needs: alpha_stage
+    needs: [alpha_stage, cpu_certification]
     if: inputs.publish != 'none' && inputs.alpha_candidate_tag != ''
     runs-on: ubuntu-latest
     timeout-minutes: 15
