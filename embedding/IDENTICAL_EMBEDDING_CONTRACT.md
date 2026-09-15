@@ -4,8 +4,13 @@
 
 ## Eighteen arms, clauses (b), (c) and (f) on every clean build, and PLAN_SORT through the door (2026-09-15)
 
-Lane `lane/embedding-owed` closed OWED items 1 to 3 as they stood on 2026-09-14.
-Per-column evidence is in `bench/results/embedding_owed_2026-09-15/README.md`.
+Lane `lane/embedding-owed` closed OWED items 1 to 3 as they stood on 2026-09-14,
+at ba4a108bb, on three columns: the Apple M4, an NVIDIA H100 and an AMD MI325X.
+The clean card is still `c7f824c3`, and on every column clauses (a) to (f) pass
+and every one of the eighteen arms bites (`NO_FLUSH_ACC` is asserted inert on
+the M4, as 9.3 predicts). The lanes `embedding` and `embedding-sort` read
+IDENTICAL x3. Evidence is in
+`bench/results/embedding_owed_2026-09-15/README.md`.
 
 - **The two unbuilt rows of 11.1 are built.** `EMB_FOLD_VIA_GEMM_ONEHOT` routes
   the backward through `identical_gemm` (`op = OP_TN`, `m = V`, `n = d`, `k = T`)
@@ -1005,7 +1010,7 @@ result.**
 - **Not BF16, FP16, FP8, TF32 or any quantization.** Not FP64 on device.
 - **No optimizer, no weight update, no clipping, no loss scaling, no
   distributed all-reduce.**
-- **PLAN_SORT performance and additional vendor evidence remain owed.**
+- **PLAN_SORT performance remains owed** (its three-column identity through the door is recorded 2026-09-15).
 - **No performance number.** Section 10 is derivation.
 - **TWO columns is not a cross-vendor claim, and this lane's two are exactly
   the pair that has fooled this repository before.** Apple and AMD agreed bit
@@ -1053,17 +1058,19 @@ Cited from elsewhere and never redefined: 621, 1505, 1938.
 
 **OWED.**
 
-1. **The sabotage arms.** All sixteen buildable arms were built and run on
-   the Apple M4, an NVIDIA H100 and an AMD MI300X on 2026-09-14, and the five
-   findings of that round are resolved in the check (the status section at
-   the top). Still owed: the two unbuilt rows, `EMB_FOLD_VIA_GEMM_ONEHOT` and
-   `EMB_SORT_KEY_ID_ONLY_UNSTABLE`.
-2. **Clauses (b), (c) and (f) on every column.** The NVIDIA leg ran on
-   2026-09-14 (clause (a), card `c7f824c3`), and clause (e) runs in every
-   sabotage round as `EMB_ACCUM_BY_ADD`'s witness.
-3. **PLAN_SORT is implemented.** Clause (d) now exercises both real plans
-   and three launch geometries. Additional vendor evidence and a measured
-   dispatch crossover remain owed; the production default stays PLAN_SCAN.
+1. **The sabotage arms. CLOSED 2026-09-15.** All eighteen rows of 11.1 have
+   a switch, and all bite on the M4, the H100 and the MI325X
+   (`NO_FLUSH_ACC` is asserted inert on the M4). Evidence is in
+   `bench/results/embedding_owed_2026-09-15/`.
+2. **Clauses (b), (c) and (f) on every column. CLOSED 2026-09-15.** They run on
+   every clean build, and (d) and (e) run in the sabotage script's clean run.
+   All six passed on the three columns. Clause (f) holds the refusing device
+   entry points (DEVIATION 1506 is closed for them); the `_into` forms stay
+   caller-refused.
+3. **PLAN_SORT. The door is CLOSED 2026-09-15.** `Embedding(plan="sort")`
+   reaches it, `test_embedding_surface` holds it bit-identical to scan, and the
+   lane `embedding-sort` reads IDENTICAL x3. Still owed: a measured dispatch
+   crossover (the default stays `"scan"`) and the shipped shape on AMD.
 4. **A `pixi.toml` task, an `embedding/README.md`, a `NOT_IMPLEMENTED.tsv`.** Every other lane carries all four.
 5. **An `IDENTITY_PATHS.md` row**, DEVIATION 1300. It must record what the
    rounds closed: clause (a) with the card byte-identical on Apple, NVIDIA and
